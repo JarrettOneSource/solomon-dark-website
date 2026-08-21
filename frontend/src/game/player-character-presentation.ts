@@ -234,12 +234,16 @@ export function createPlayerCharacterDrawPlan(
   staffActionPose: PlayerStaffAttachmentPose | null = null,
   secondaryCastActive = false,
 ): PlayerCharacterDrawPlan {
+  const castElement = selectedPrimaryCastElement(
+    state.primaryCast.selectedPrimaryId,
+    state.config.element,
+  )
   const attachmentPose = secondaryCastActive
     ? 9
     : staffActionPose ?? primaryCastPose(
         state.primaryCast.actionTick,
         state.primaryCast.channelActive,
-        state.config.element,
+        castElement,
       )
   const staffFront = playerCharacterStaffIsFront(state.headingIndex, attachmentPose)
   return {
@@ -263,13 +267,26 @@ export function createPlayerCharacterDrawPlan(
           state.headingIndex,
           state.primaryCast.actionTick,
           state.primaryCast.channelActive,
-          state.config.element,
+          castElement,
         )
         : playerStaffAttachmentOffset(state.headingIndex, staffActionPose),
     orbZIndex: staffFront ? 6 : 2,
     robePose: playerCharacterRobePose(state.walkCyclePrimary),
     staffFront,
   }
+}
+
+function selectedPrimaryCastElement(
+  skillId: number,
+  fallback: WizardElement,
+): WizardElement {
+  if (skillId === 8) return 'ether'
+  if (skillId === 16) return 'fire'
+  if (skillId === 24) return 'air'
+  if (skillId === 32) return 'water'
+  if (skillId === 40) return 'earth'
+  if (skillId >= 1000 && skillId <= 1009) return 'fire'
+  return fallback
 }
 
 export function playerCharacterStaffOrbOffset(headingIndex: number): Vector2 {
@@ -300,7 +317,6 @@ export function playerCharacterStaffIsFront(
     : attachmentPose === 4
         || attachmentPose === 5
         || attachmentPose === 6
-        || attachmentPose === 9
       ? MELEE_ALT_STAFF_FRONT
       : STAFF_FRONT
   return bank[normalizedIndex(headingIndex, bank.length)]

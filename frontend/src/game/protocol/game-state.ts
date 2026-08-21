@@ -98,7 +98,6 @@ export interface ProtocolPlayerSkillOffer {
 }
 
 export interface ProtocolPlayerProgression {
-  activeWeldBuildId: number | null
   coldSlowTicksRemaining: number
   concentrationSkillIds: readonly [number | null, number | null]
   currentHealth: number
@@ -118,14 +117,15 @@ export interface ProtocolPlayerProgression {
   lastDamageTick: number | null
   nextThreshold: number
   pendingOffer: ProtocolPlayerSkillOffer | null
-  primarySkillId: number
   poisonDamagePerTick: number
   poisonTicksRemaining: number
   previousThreshold: number
   revision: number
+  selectedPrimarySkillId: number
   sorcerorsCharmAvailable: boolean
-  secondaryBelt: readonly (number | null)[]
   splitMind: boolean
+  skillQuickbar: readonly (number | null)[]
+  weldBuildId: number | null
 }
 
 export type NativeSecondarySnapshotState = Omit<

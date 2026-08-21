@@ -79,11 +79,11 @@ function gameplayInput(
   movement: { x: number; y: number },
   aim: { x: number; y: number } | null = null,
   primary = false,
-  secondary: number | null = null,
+  quickbar: number | null = null,
 ): PlayerCharacterInput {
   return {
     aim,
-    cast: { primary, secondary },
+    cast: { primary, quickbar },
     movement,
   }
 }
@@ -297,6 +297,31 @@ test('game host routes inventory commands without disconnecting on a stale or un
   assert.deepEqual(await pong, { type: 'server-pong', nonce: 73 })
 })
 
+test('game host authoritatively binds and replicates a native primary quickbar entry', async (context) => {
+  const host = await startGameHost({
+    authentication: SHARED_AUTHENTICATION,
+    snapshotRate: 100,
+  })
+  context.after(() => host.close())
+  const client = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
+  context.after(() => client.socket.close())
+  const playerId = client.welcome.playerId
+  const bound = nextMessage(client.socket, (message) => (
+    message.type === 'server-snapshot'
+    && message.snapshot.players[playerId].progression.skillQuickbar[7] === 8
+  ))
+  client.socket.send(encodeGameMessage({
+    type: 'client-skill-quickbar-bind',
+    skillId: 8,
+    slot: 7,
+  }))
+  const snapshot = await bound
+  assert.equal(snapshot.type, 'server-snapshot')
+  assert.deepEqual(snapshot.snapshot.players[playerId].progression.skillQuickbar, [
+    11, null, null, null, null, null, null, 8,
+  ])
+})
+
 test('game host pauses a leveling player and authoritatively books the offered skill', async (context) => {
   const host = await startGameHost({
     authentication: SHARED_AUTHENTICATION,
@@ -438,7 +463,7 @@ test('game host validates and broadcasts the complete Sorceror action sequence',
   assert.equal(saved.snapshot.players[playerId].progression.sorcerorsCharmAvailable, true)
 })
 
-test('game host authoritatively projects each player skill belt and rejects unlearned selections', async (context) => {
+test('game host authoritatively projects each player quickbar and rejects unlearned selections', async (context) => {
   const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
   context.after(() => host.close())
   const first = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
@@ -448,21 +473,21 @@ test('game host authoritatively projects each player skill belt and rejects unle
 
   const assigned = nextMessage(first.socket, (message) => (
     message.type === 'server-snapshot'
-    && message.snapshot.players[first.welcome.playerId].progression.secondaryBelt[7] === 11
+    && message.snapshot.players[first.welcome.playerId].progression.skillQuickbar[7] === 11
   ))
   first.socket.send(encodeGameMessage({
-    type: 'client-assign-belt-skill',
+    type: 'client-skill-quickbar-bind',
     skillId: 11,
     slot: 7,
   }))
   const assignedSnapshot = await assigned
   assert.equal(assignedSnapshot.type, 'server-snapshot')
   assert.deepEqual(
-    assignedSnapshot.snapshot.players[first.welcome.playerId].progression.secondaryBelt,
+    assignedSnapshot.snapshot.players[first.welcome.playerId].progression.skillQuickbar,
     [11, null, null, null, null, null, null, 11],
   )
   assert.deepEqual(
-    assignedSnapshot.snapshot.players[second.welcome.playerId].progression.secondaryBelt,
+    assignedSnapshot.snapshot.players[second.welcome.playerId].progression.skillQuickbar,
     [35, null, null, null, null, null, null, null],
   )
 
@@ -474,7 +499,7 @@ test('game host authoritatively projects each player skill belt and rejects unle
   assert.deepEqual(await rejected, {
     type: 'server-disconnect',
     code: 'invalid-message',
-    reason: 'The concentration skill is unavailable.',
+    reason: 'The concentration is unavailable.',
   })
 })
 

@@ -488,13 +488,13 @@ export default function HubScene({
             }
           }}
           onMapClick={beginMatch}
-  partyMemberIds={partyState?.party.memberPlayerIds}
-  onSkillsClick={() => {
+          partyMemberIds={partyState?.party.memberPlayerIds}
+          onSkillsClick={() => {
             if (!inputBlocked && !pickerOpen && !transitionActive) {
               setHubUiSurface(null)
               onOpenSkills()
             }
-  }}
+          }}
           playerId={playerId}
           progression={progression}
           subscribePing={subscribePing}

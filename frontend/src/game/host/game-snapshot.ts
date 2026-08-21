@@ -16,6 +16,7 @@ import { playerLightDriveActive } from '../core-kernels/player-lighting.ts'
 import {
   playerEntityDisplayHealth,
   playerLightingAt,
+  playerSkillRuntimeAt,
 } from '../core-server/player-entity-store.ts'
 import type { BoneyardEnemySemanticEvent } from '../core-server/boneyard-enemy-store.ts'
 import type {
@@ -220,6 +221,8 @@ function protocolPlayerState(
   const lighting = playerLightingAt(state.playerEntities, playerId)
   if (!lighting) throw new Error(`game simulation has no player lighting ${playerId}`)
   const skillBook = getPlayerSkillBook(state, playerId)
+  const skillRuntime = playerSkillRuntimeAt(state.playerEntities, playerId)
+  if (!skillRuntime) throw new Error(`game simulation has no player skill runtime ${playerId}`)
   const learnedSkills: Array<readonly [number, number, number]> = []
   for (let skillId = 0; skillId < skillBook.permanentRanks.length; skillId += 1) {
     const permanentRank = skillBook.permanentRanks[skillId] ?? 0
@@ -267,11 +270,10 @@ function protocolPlayerState(
       overlayEffectPhase: lighting.overlayEffectPhase,
     },
     progression: {
-      activeWeldBuildId: skillBook.activeWeldBuildId,
       coldSlowTicksRemaining: progression.coldSlowTicksRemaining,
-      concentrationSkillIds: [...skillBook.concentrationSkillIds] as [
-        number | null,
-        number | null,
+      concentrationSkillIds: [
+        skillRuntime.concentrationSkillIdA,
+        skillRuntime.concentrationSkillIdB,
       ],
       currentHealth: playerEntityDisplayHealth(state.playerEntities, playerId) ?? 0,
       currentMana: progression.currentMana,
@@ -290,14 +292,15 @@ function protocolPlayerState(
       lastDamageTick: progression.lastDamageTick,
       nextThreshold: progression.nextThreshold,
       pendingOffer: progression.pendingOffer,
-      primarySkillId: skillBook.primarySkillId,
       poisonDamagePerTick: progression.poisonDamagePerTick,
       poisonTicksRemaining: progression.poisonTicksRemaining,
       previousThreshold: progression.previousThreshold,
       revision: progression.revision,
+      selectedPrimarySkillId: skillBook.primarySkillId,
       sorcerorsCharmAvailable: progression.sorcerorsCharmAvailable,
-      secondaryBelt: [...skillBook.secondaryBelt],
       splitMind: economy.ownedPerkSelectors.includes(SPLIT_MIND_CHARM_SELECTOR),
+      skillQuickbar: [...skillBook.skillQuickbar],
+      weldBuildId: skillBook.weldBuildId,
     },
   }
 }

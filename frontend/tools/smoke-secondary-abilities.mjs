@@ -161,7 +161,7 @@ try {
     'secondary player state did not materialize',
   )
 
-  armBelt(host, playerId, baseSkillBook, NATIVE_SECONDARY_ABILITY_IDS.slice(0, 8))
+  armQuickbar(host, playerId, baseSkillBook, NATIVE_SECONDARY_ABILITY_IDS.slice(0, 8))
   await page.waitForFunction(() => (
     [...document.querySelectorAll('.hub-hud-secondary-slot')]
       .every((slot) => slot.querySelector('.hub-hud-secondary-skill-icon'))
@@ -199,7 +199,7 @@ try {
     await waitForFlashClear(page)
     await waitForStableHostCadence(host)
     armMaximumSet(host, playerId, contract.skillId, baseEquipment)
-    armBelt(
+    armQuickbar(
       host,
       playerId,
       baseSkillBook,
@@ -531,7 +531,7 @@ async function enterHub(page, baseUrl) {
   await page.waitForTimeout(250)
 }
 
-function armBelt(host, playerId, baseSkillBook, skillIds, rank = 1) {
+function armQuickbar(host, playerId, baseSkillBook, skillIds, rank = 1) {
   const state = host.state()
   const index = state.playerEntities.identities.findIndex((identity) => (
     identity.playerId === playerId
@@ -543,7 +543,7 @@ function armBelt(host, playerId, baseSkillBook, skillIds, rank = 1) {
     permanentRanks[skillId] = rank
     effectiveRanks[skillId] = rank
   }
-  const secondaryBelt = Object.freeze(Array.from(
+  const skillQuickbar = Object.freeze(Array.from(
     { length: 8 },
     (_, slot) => skillIds[slot] ?? null,
   ))
@@ -552,7 +552,7 @@ function armBelt(host, playerId, baseSkillBook, skillIds, rank = 1) {
     ...baseSkillBook,
     effectiveRanks: Object.freeze(effectiveRanks),
     permanentRanks: Object.freeze(permanentRanks),
-    secondaryBelt,
+    skillQuickbar,
   }
   const progressions = [...state.playerEntities.progressions]
   progressions[index] = {

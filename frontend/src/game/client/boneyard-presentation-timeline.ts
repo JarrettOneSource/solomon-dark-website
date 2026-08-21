@@ -657,7 +657,7 @@ function copyPlayer(player: ProtocolPlayerState): ProtocolPlayerState {
     progression: {
       ...player.progression,
       learnedSkills: player.progression.learnedSkills.map((entry) => [...entry]),
-      secondaryBelt: [...player.progression.secondaryBelt],
+      skillQuickbar: [...player.progression.skillQuickbar],
     },
     velocity: { ...player.velocity },
   }

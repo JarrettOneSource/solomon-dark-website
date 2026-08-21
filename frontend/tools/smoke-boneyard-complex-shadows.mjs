@@ -168,7 +168,7 @@ try {
             position,
             primaryCast: playerModule.createIdlePlayerPrimaryCast(),
             progression: {
-              activeWeldBuildId: null,
+              weldBuildId: null,
               coldSlowTicksRemaining: 0,
               currentHealth: 50,
               currentMana: 100,
@@ -436,7 +436,7 @@ try {
           },
           primaryCast: playerModule.createIdlePlayerPrimaryCast(),
           progression: {
-            activeWeldBuildId: null,
+            weldBuildId: null,
             coldSlowTicksRemaining: 0,
             currentHealth: 50,
             currentMana: 100,

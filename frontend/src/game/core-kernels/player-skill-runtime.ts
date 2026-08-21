@@ -619,7 +619,7 @@ export function setPlayerConcentration(
     throw new RangeError(`skill ${skillId} cannot be concentrated by this player`)
   }
   if (source.concentrationSkillIdA === skillId || source.concentrationSkillIdB === skillId) {
-    throw new Error(`skill ${skillId} is already concentrated`)
+    return { runtime: source, skillBook }
   }
   const splitMind = economy.ownedPerkSelectors.includes(21)
   const slot = source.concentrationSkillIdA === null

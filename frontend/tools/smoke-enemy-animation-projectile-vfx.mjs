@@ -415,7 +415,7 @@ try {
           position: playerPosition,
           primaryCast: playerModule.createIdlePlayerPrimaryCast(),
           progression: {
-            activeWeldBuildId: null,
+            weldBuildId: null,
             coldSlowTicksRemaining: 0,
             currentHealth: 50,
             currentMana: 100,
@@ -436,7 +436,7 @@ try {
             previousThreshold: 0,
             revision: 0,
             sorcerorsCharmAvailable: false,
-            secondaryBelt: [null, null, null, null, null, null, null, null],
+            skillQuickbar: [null, null, null, null, null, null, null, null],
           },
           velocity: { x: 0, y: 0 },
           walkCyclePrimary: 0,

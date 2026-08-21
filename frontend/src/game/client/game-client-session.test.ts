@@ -42,11 +42,11 @@ function gameplayInput(
   movement: { x: number; y: number },
   aim: { x: number; y: number } | null = null,
   primary = false,
-  secondary: number | null = null,
+  quickbar: number | null = null,
 ): PlayerCharacterInput {
   return {
     aim,
-    cast: { primary, secondary },
+    cast: { primary, quickbar },
     movement,
   }
 }
@@ -171,9 +171,9 @@ test('client carries character config, publishes authority, and tears down', asy
     type: 'client-hub-action',
     action: { type: 'buy-fomentius', itemId: stockItemId },
   })
-  session.assignBeltSkill(7, 11)
+  session.bindSkillQuickbar(11, 7)
   assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
-    type: 'client-assign-belt-skill',
+    type: 'client-skill-quickbar-bind',
     skillId: 11,
     slot: 7,
   })
@@ -182,8 +182,8 @@ test('client carries character config, publishes authority, and tears down', asy
     type: 'client-select-primary-skill',
     skillId: 8,
   })
-  assert.throws(() => session.assignBeltSkill(1, 8), /cannot be assigned/)
-  assert.throws(() => session.selectConcentration(57), /cannot be selected/)
+  assert.throws(() => session.bindSkillQuickbar(16, 1), /unavailable/)
+  assert.throws(() => session.selectConcentration(57), /unavailable/)
   session.startMatch('default-random')
   assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
     type: 'client-start-match',
@@ -278,7 +278,6 @@ test('client projects authoritative gameplay pause and blocks input until releas
     type: 'client-gameplay-pause',
     paused: true,
   })
-
   const received: Array<ReturnType<typeof session.getGameplayPause>> = []
   const removePause = session.onGameplayPause((pause) => received.push(pause))
   const pause = {
@@ -633,6 +632,51 @@ test('client suppresses gameplay input while a skill offer is pending and submit
   session.destroy()
 })
 
+test('client submits native quickbar bindings and primary selection against learned rows', async () => {
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    credential: 'spawn-secret',
+    transport,
+  })
+  const snapshot = createGameSnapshot(createGameSimulation({ 'player-1': CHARACTER }), 'player-1')
+  const player = snapshot.players['player-1']!
+  receiveWelcome(transport, {
+    ...snapshot,
+    players: {
+      ...snapshot.players,
+      'player-1': {
+        ...player,
+        progression: {
+          ...player.progression,
+          learnedSkills: [...player.progression.learnedSkills, [57, 1, 1]],
+          learnedSkillOrder: [...player.progression.learnedSkillOrder, 57],
+        },
+      },
+    },
+  })
+  const session = await connecting
+  session.bindSkillQuickbar(8, 7)
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-skill-quickbar-bind',
+    skillId: 8,
+    slot: 7,
+  })
+  session.selectPrimarySkill(8)
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-select-primary-skill',
+    skillId: 8,
+  })
+  session.selectConcentration(57)
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-select-concentration',
+    skillId: 57,
+  })
+  assert.throws(() => session.bindSkillQuickbar(57, 1), /unavailable/)
+  assert.throws(() => session.selectPrimarySkill(16), /unavailable/)
+  session.destroy()
+})
+
 test('client submits the exact Sorceror action for the current offer only', async () => {
   const transport = new MemoryTransport()
   const connecting = connectGameClientSession({
@@ -967,6 +1011,18 @@ test('client accepts cast-owned heading and prevents movement prediction from re
       'player-1': {
         ...initialSnapshot.players['player-1'],
         headingIndex: castHeadingIndex,
+        progression: {
+          ...initialSnapshot.players['player-1'].progression,
+          learnedSkills: [
+            ...initialSnapshot.players['player-1'].progression.learnedSkills,
+            [16, 1, 1],
+          ],
+          learnedSkillOrder: [
+            ...initialSnapshot.players['player-1'].progression.learnedSkillOrder,
+            16,
+          ],
+          selectedPrimarySkillId: 16,
+        },
         lighting: {
           ...initialSnapshot.players['player-1'].lighting,
           driveActive: true,

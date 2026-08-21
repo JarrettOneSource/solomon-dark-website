@@ -111,12 +111,12 @@ test('bootGame rejects non-loopback addresses presented as desktop-local servers
 
 function inertSession() {
   return {
-    assignBeltSkill() {},
+    acceptPartyInvitation() {},
+    bindSkillQuickbar() {},
     boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' as const }],
     isHost: true,
     playerId: 'p',
     resumeToken: 'r',
-    acceptPartyInvitation() {},
     confirmLoadout() {},
     executeLua: async () => ({ error: null, ok: true, output: [], values: [] }),
     destroy() {},

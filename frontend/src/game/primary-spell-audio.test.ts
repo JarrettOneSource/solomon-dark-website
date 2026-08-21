@@ -130,7 +130,7 @@ function castInput(state: GameSimulationState, primary: boolean): PlayerCharacte
   return {
     ...createIdlePlayerCharacterInput(),
     aim: { x: player.position.x, y: player.position.y - 200 },
-    cast: { primary, secondary: null },
+    cast: { primary, quickbar: null },
   }
 }
 
@@ -1272,7 +1272,8 @@ function weldedSnapshot(
         primaryCast: { ...player.primaryCast, ...primaryCast },
         progression: {
           ...player.progression,
-          activeWeldBuildId: buildId,
+          selectedPrimarySkillId: 52,
+          weldBuildId: buildId,
         },
       },
     },

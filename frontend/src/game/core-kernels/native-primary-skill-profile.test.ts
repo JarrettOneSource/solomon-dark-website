@@ -179,7 +179,7 @@ test('resolves the selected welded build ahead of the elemental primary', () => 
     52: 1,
   })
   const profile = nativePrimarySkillProfile(
-    { ...source, activeWeldBuildId: 1000 },
+    { ...source, primarySkillId: 52, weldBuildId: 1000 },
     playerStatBook(),
     FACTORS,
   )
@@ -203,7 +203,7 @@ test('resolves the selected welded build ahead of the elemental primary', () => 
   ])
 
   const boosted = nativePrimarySkillProfile(
-    { ...source, activeWeldBuildId: 1000 },
+    { ...source, primarySkillId: 52, weldBuildId: 1000 },
     playerStatBook(),
     {
       ...FACTORS,

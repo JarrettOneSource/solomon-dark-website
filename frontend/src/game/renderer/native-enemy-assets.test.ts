@@ -22,6 +22,10 @@ import {
   type NativeEnemyVisualSnapshot,
 } from './native-enemy-presentation.ts'
 import { nativeEnemyProjectilePlan } from './native-enemy-projectile-presentation.ts'
+import {
+  NATIVE_WELD_BADGUYS_RECORDS,
+  NATIVE_WELD_DEADHAWG_RECORDS,
+} from './primary-spell-weld-native.ts'
 
 const manifests: Readonly<Record<NativeEnemyAtlas, AtlasManifest>> = {
   BadGuys: manifest('../../editor/manifest/badguys.json'),
@@ -88,7 +92,7 @@ test('every reachable native enemy plan uses a shipped nonempty atlas record', (
   )
 })
 
-test('every reachable enemy projectile record is selected for Boneyard preload', async () => {
+test('every reachable projectile and welded painter record is selected for preload', async () => {
   const server = await createServer({
     appType: 'custom',
     logLevel: 'silent',
@@ -130,8 +134,10 @@ test('every reachable enemy projectile record is selected for Boneyard preload',
       'BadGuys:15',
       ...atlasRecordKeys('BadGuys', 110, 112),
       ...atlasRecordKeys('BadGuys', 251, 282),
+      ...NATIVE_WELD_BADGUYS_RECORDS.map((record) => `BadGuys:${record}`),
       'DeadHawg:0',
       ...atlasRecordKeys('DeadHawg', 46, 77),
+      ...NATIVE_WELD_DEADHAWG_RECORDS.map((record) => `DeadHawg:${record}`),
     ])
     const sampled = new Set<string>()
     for (const projectile of enemyProjectileAssetSamples()) {
@@ -152,7 +158,7 @@ test('every reachable enemy projectile record is selected for Boneyard preload',
       const record = assetModule.nativeEnemySpriteRecord(atlas, Number(entry))
       assert.ok(record.source.length > 0, key)
     }
-    assert.equal(required.size, 70)
+    assert.equal(required.size, 102)
 
     const deathEffectRecords = [
       ...[10, 11, 15, 21, 27, 49, 55, 69, 86]

@@ -4,11 +4,10 @@ import test from 'node:test'
 import type { PlayerCharacterConfig } from './player-character.ts'
 import {
   applyPlayerSkillChoice,
+  bindPlayerSkillQuickbar,
   createPlayerProgression,
   createPlayerSkillBook,
   effectiveSecondaryAbilityRankStats,
-  equipPlayerSecondaryAbility,
-  selectPlayerConcentrationSkill,
   selectPlayerPrimarySkill,
   type PlayerProgressionComponent,
   type PlayerSkillBookComponent,
@@ -21,19 +20,19 @@ const ETHER_ARCANE: PlayerCharacterConfig = {
 }
 
 test('a native player starts with one element secondary in right-mouse slot zero', () => {
-  assert.deepEqual(createPlayerSkillBook(ETHER_ARCANE).secondaryBelt, [
+  assert.deepEqual(createPlayerSkillBook(ETHER_ARCANE).skillQuickbar, [
     11, null, null, null, null, null, null, null,
   ])
-  assert.deepEqual(createPlayerSkillBook({ ...ETHER_ARCANE, element: 'fire' }).secondaryBelt, [
+  assert.deepEqual(createPlayerSkillBook({ ...ETHER_ARCANE, element: 'fire' }).skillQuickbar, [
     21, null, null, null, null, null, null, null,
   ])
-  assert.deepEqual(createPlayerSkillBook({ ...ETHER_ARCANE, element: 'air' }).secondaryBelt, [
+  assert.deepEqual(createPlayerSkillBook({ ...ETHER_ARCANE, element: 'air' }).skillQuickbar, [
     27, null, null, null, null, null, null, null,
   ])
-  assert.deepEqual(createPlayerSkillBook({ ...ETHER_ARCANE, element: 'water' }).secondaryBelt, [
+  assert.deepEqual(createPlayerSkillBook({ ...ETHER_ARCANE, element: 'water' }).skillQuickbar, [
     35, null, null, null, null, null, null, null,
   ])
-  assert.deepEqual(createPlayerSkillBook({ ...ETHER_ARCANE, element: 'earth' }).secondaryBelt, [
+  assert.deepEqual(createPlayerSkillBook({ ...ETHER_ARCANE, element: 'earth' }).skillQuickbar, [
     45, null, null, null, null, null, null, null,
   ])
 })
@@ -41,42 +40,49 @@ test('a native player starts with one element secondary in right-mouse slot zero
 test('learning a secondary fills one empty slot while rank-ups never duplicate it', () => {
   const initial = createPlayerSkillBook(ETHER_ARCANE)
   const learned = choose(initial, 48, 1)
-  assert.deepEqual(learned.secondaryBelt, [11, 48, null, null, null, null, null, null])
+  assert.deepEqual(learned.skillQuickbar, [11, 48, null, null, null, null, null, null])
 
   const ranked = choose(learned, 48, 2)
-  assert.deepEqual(ranked.secondaryBelt, learned.secondaryBelt)
-  assert.equal(ranked.secondaryBelt.filter((skillId) => skillId === 48).length, 1)
+  assert.deepEqual(ranked.skillQuickbar, learned.skillQuickbar)
+  assert.equal(ranked.skillQuickbar.filter((skillId) => skillId === 48).length, 1)
 })
 
-test('equipping a learned secondary replaces only the addressed stock belt slot', () => {
+test('binding overwrites only the destination and preserves native duplicates', () => {
   const learned = choose(choose(createPlayerSkillBook(ETHER_ARCANE), 48, 1), 49, 1)
-  const moved = equipPlayerSecondaryAbility(learned, 48, 7)
-  assert.deepEqual(moved.secondaryBelt, [11, 48, 49, null, null, null, null, 48])
-  const displaced = equipPlayerSecondaryAbility(moved, 49, 0)
-  assert.deepEqual(displaced.secondaryBelt, [49, 48, 49, null, null, null, null, 48])
+  const duplicated = bindPlayerSkillQuickbar(learned, 48, 7)
+  assert.deepEqual(duplicated.skillQuickbar, [11, 48, 49, null, null, null, null, 48])
+  const overwritten = bindPlayerSkillQuickbar(duplicated, 49, 0)
+  assert.deepEqual(overwritten.skillQuickbar, [49, 48, 49, null, null, null, null, 48])
 
-  assert.throws(() => equipPlayerSecondaryAbility(learned, 50, 4), /not learned/)
-  assert.throws(() => equipPlayerSecondaryAbility(learned, 48, 8), /slot/)
-  assert.throws(() => equipPlayerSecondaryAbility(learned, 8, 1), /secondary/)
+  assert.throws(() => bindPlayerSkillQuickbar(learned, 50, 4), /not learned/)
+  assert.throws(() => bindPlayerSkillQuickbar(learned, 48, 8), /slot/)
 })
 
-test('primary and concentration interactions validate learned rows and native replacement order', () => {
+test('quickbar accepts learned primaries and primary selection is independent of a learned weld', () => {
+  const initial = createPlayerSkillBook(ETHER_ARCANE)
+  const bound = bindPlayerSkillQuickbar(initial, 8, 1)
+  assert.deepEqual(bound.skillQuickbar, [11, 8, null, null, null, null, null, null])
+  assert.throws(() => bindPlayerSkillQuickbar(initial, 16, 1), /not learned/)
+
+  const concentration = withLearnedRank(initial, 57, 1)
+  assert.throws(() => bindPlayerSkillQuickbar(concentration, 57, 1), /quickbar skill/)
+
+  const welded = {
+    ...withLearnedRank(initial, 52, 1),
+    weldBuildId: 1000,
+  } satisfies PlayerSkillBookComponent
+  const selectedWeld = selectPlayerPrimarySkill(welded, 52)
+  assert.equal(selectedWeld.primarySkillId, 52)
+  assert.equal(selectedWeld.weldBuildId, 1000)
+  const selectedMissile = selectPlayerPrimarySkill(selectedWeld, 8)
+  assert.equal(selectedMissile.primarySkillId, 8)
+  assert.equal(selectedMissile.weldBuildId, 1000)
+})
+
+test('primary interactions validate learned rows independently of quickbar bindings', () => {
   let book = choose(createPlayerSkillBook(ETHER_ARCANE), 16, 1)
   book = selectPlayerPrimarySkill(book, 16)
   assert.equal(book.primarySkillId, 16)
-
-  book = choose(book, 57, 1)
-  book = choose(book, 65, 1)
-  book = choose(book, 58, 1)
-  book = selectPlayerConcentrationSkill(book, 57, true, 0)
-  assert.deepEqual(book.concentrationSkillIds, [57, null])
-  book = selectPlayerConcentrationSkill(book, 65, true, 0)
-  assert.deepEqual(book.concentrationSkillIds, [57, 65])
-  book = selectPlayerConcentrationSkill(book, 58, true, 0)
-  assert.deepEqual(book.concentrationSkillIds, [58, 65])
-  assert.equal(book.nextConcentrationSlot, 1)
-  assert.throws(() => selectPlayerConcentrationSkill(book, 57, true, 1), /Mind Chug/)
-  assert.throws(() => selectPlayerConcentrationSkill(book, 65, true, 0), /already selected/)
 })
 
 test('all 23 secondaries resolve their authored rank-one payload without substitution', () => {

@@ -94,14 +94,20 @@ export class PrimarySpellAudioSynchronizer {
           playerId,
         )
         if (volume === null) continue
-        const weldBuildId = activeWeldBuildId(player.progression.activeWeldBuildId)
+        const activeWeldBuildId = player.progression.selectedPrimarySkillId === 52
+          ? nativeWeldBuildId(player.progression.weldBuildId)
+          : null
+        const primaryElement = selectedPrimaryElement(
+          player.progression.selectedPrimarySkillId,
+          player.config.element,
+        )
         if (player.primaryCast.castSequence > previous.primaryCast.castSequence) {
-          if (weldBuildId !== null) {
-            if (!isWeldOneShot(weldBuildId)) {
+          if (activeWeldBuildId !== null) {
+            if (!isWeldOneShot(activeWeldBuildId)) {
               for (let sequence = previous.primaryCast.castSequence;
                 sequence < player.primaryCast.castSequence;
                 sequence += 1) {
-                for (const cue of nativeWeldCastSoundCues(weldBuildId, null)) {
+                for (const cue of nativeWeldCastSoundCues(activeWeldBuildId, null)) {
                   this.audio.playSound(cue, {
                     playbackRate: player.primaryCast.lastWeldPlaybackRate ?? 1,
                     volume,
@@ -110,7 +116,7 @@ export class PrimarySpellAudioSynchronizer {
               }
             }
           } else {
-            switch (player.config.element) {
+            switch (primaryElement) {
               case 'air': this.audio.playSound('lightning-start', { volume }); break
               case 'earth': this.audio.playSound('start-boulder', { volume }); break
               case 'water': this.audio.playSound('ice-start', { volume }); break
@@ -121,31 +127,31 @@ export class PrimarySpellAudioSynchronizer {
           }
         }
         if (player.primaryCast.fizzleSequence > previous.primaryCast.fizzleSequence) {
-          const earthVolume = player.config.element === 'earth'
+          const earthVolume = primaryElement === 'earth'
             ? this.earthFizzleVolume(snapshot, playerId, volume)
             : volume
           this.audio.playSound('fizzle', {
-            playbackRate: player.config.element === 'earth' ? 0.5 : 1,
+            playbackRate: primaryElement === 'earth' ? 0.5 : 1,
             volume: earthVolume,
           })
         }
         if (player.primaryCast.emissionSequence > previous.primaryCast.emissionSequence) {
-          if (weldBuildId !== null && isWeldOneShot(weldBuildId)) {
+          if (activeWeldBuildId !== null && isWeldOneShot(activeWeldBuildId)) {
             const playbackRate = player.primaryCast.lastWeldPlaybackRate
             if (playbackRate === null) {
-              throw new Error(`weld build ${weldBuildId} emitted without native playback rate`)
+              throw new Error(`weld build ${activeWeldBuildId} emitted without native playback rate`)
             }
             const count = player.primaryCast.emissionSequence
               - previous.primaryCast.emissionSequence
             for (let emission = 0; emission < count; emission += 1) {
               for (const cue of nativeWeldCastSoundCues(
-                weldBuildId,
+                activeWeldBuildId,
                 player.primaryCast.lastWeldSoundVariant,
               )) this.audio.playSound(cue, { playbackRate, volume })
             }
-          } else if (weldBuildId === null) {
+          } else if (activeWeldBuildId === null) {
             const playbackRate = player.primaryCast.underpowered ? 0.75 : 1
-            switch (player.config.element) {
+            switch (primaryElement) {
               case 'ether': this.audio.playSound('magic-missile', { playbackRate, volume }); break
               case 'fire': this.audio.playSound('throw-fire', { playbackRate, volume }); break
               case 'air':
@@ -420,11 +426,13 @@ export class PrimarySpellAudioSynchronizer {
           playerId,
         )
         if (attenuation === null) continue
-        const weldBuildId = activeWeldBuildId(player.progression.activeWeldBuildId)
-        if (weldBuildId !== null) {
-          for (const cue of nativeWeldLoopCues(weldBuildId)) {
+        const activeWeldBuildId = player.progression.selectedPrimarySkillId === 52
+          ? nativeWeldBuildId(player.progression.weldBuildId)
+          : null
+        if (activeWeldBuildId !== null) {
+          for (const cue of nativeWeldLoopCues(activeWeldBuildId)) {
             desired.get(cue)!.set(owner, {
-              playbackRate: weldBuildId === 1007 && player.primaryCast.underpowered
+              playbackRate: activeWeldBuildId === 1007 && player.primaryCast.underpowered
                 ? 0.75
                 : 1,
               volume: attenuation,
@@ -432,7 +440,10 @@ export class PrimarySpellAudioSynchronizer {
           }
           continue
         }
-        switch (player.config.element) {
+        switch (selectedPrimaryElement(
+          player.progression.selectedPrimarySkillId,
+          player.config.element,
+        )) {
           case 'air':
             desired.get('lightning-loop')!.set(owner, {
               playbackRate: 1,
@@ -580,10 +591,22 @@ export class PrimarySpellAudioSynchronizer {
   }
 }
 
-function activeWeldBuildId(value: number | null): NativeWeldBuildId | null {
+function nativeWeldBuildId(value: number | null): NativeWeldBuildId | null {
   return Number.isInteger(value) && value !== null && value >= 1000 && value <= 1009
     ? value as NativeWeldBuildId
     : null
+}
+
+function selectedPrimaryElement(
+  skillId: number,
+  fallback: 'air' | 'earth' | 'ether' | 'fire' | 'water',
+): typeof fallback {
+  if (skillId === 8) return 'ether'
+  if (skillId === 16) return 'fire'
+  if (skillId === 24) return 'air'
+  if (skillId === 32) return 'water'
+  if (skillId === 40) return 'earth'
+  return fallback
 }
 
 function isWeldOneShot(buildId: NativeWeldBuildId): boolean {

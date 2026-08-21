@@ -31,6 +31,7 @@ import {
 import {
   applyPlayerPotionEffect,
   applyPlayerSkillChoice,
+  bindPlayerSkillQuickbar,
   createPlayerProgression,
   createPlayerSkillBook,
   deferPlayerSkillChoice,
@@ -40,7 +41,6 @@ import {
   playerStatBook,
   rerollPlayerSkillOffer,
   resetPlayerPotionEffects,
-  equipPlayerSecondaryAbility,
   stepPlayerPotionEffects,
   selectPlayerPrimarySkill,
   synchronizePlayerLevelMilestone,
@@ -223,6 +223,7 @@ export function importPlayerEntity(
     primaryCasts: [...target.primaryCasts, importedCharacter.primaryCast],
     progressions: [...target.progressions, source.progressions[index]!],
     skillBooks: [...target.skillBooks, source.skillBooks[index]!],
+    skillRuntimes: [...target.skillRuntimes, source.skillRuntimes[index]!],
     statBooks: [...target.statBooks, source.statBooks[index]!],
   }
 }
@@ -295,21 +296,6 @@ export function playerSkillBookAt(
   return index < 0 ? null : source.skillBooks[index] ?? null
 }
 
-export function assignPlayerEntitySecondaryBelt(
-  source: PlayerEntityStore,
-  playerId: string,
-  slot: number,
-  skillId: number,
-): PlayerEntityStore {
-  const index = playerEntityIndex(source, playerId)
-  if (index < 0) throw new Error(`player ${playerId} is absent`)
-  return replacePlayerSkillBook(
-    source,
-    index,
-    equipPlayerSecondaryAbility(source.skillBooks[index]!, skillId, slot),
-  )
-}
-
 export function playerSkillRuntimeAt(
   source: PlayerEntityStore,
   playerId: string,
@@ -370,18 +356,52 @@ export function selectPlayerEntityConcentration(
   )
 }
 
+export function bindPlayerEntitySkillQuickbar(
+  source: PlayerEntityStore,
+  playerId: string,
+  skillId: number,
+  slot: number,
+): PlayerEntityStore {
+  const index = playerEntityIndex(source, playerId)
+  if (index < 0) return source
+  const skillBook = bindPlayerSkillQuickbar(source.skillBooks[index]!, skillId, slot)
+  const skillBooks = [...source.skillBooks]
+  skillBooks[index] = skillBook
+  return { ...source, skillBooks }
+}
+
 export function selectPlayerEntityPrimarySkill(
   source: PlayerEntityStore,
   playerId: string,
   skillId: number,
 ): PlayerEntityStore {
   const index = playerEntityIndex(source, playerId)
-  if (index < 0) throw new Error(`player ${playerId} is absent`)
-  return replacePlayerSkillBook(
+  if (index < 0) return source
+  const skillBook = selectPlayerPrimarySkill(source.skillBooks[index]!, skillId)
+  if (skillBook === source.skillBooks[index]) return source
+  const selected = replacePlayerSkillState(
     source,
     index,
-    selectPlayerPrimarySkill(source.skillBooks[index]!, skillId),
+    skillBook,
+    source.skillRuntimes[index]!,
+    source.economies[index]!,
   )
+  const primaryCasts = [...selected.primaryCasts]
+  primaryCasts[index] = {
+    ...primaryCasts[index]!,
+    actionTick: -1,
+    channelActive: false,
+    held: false,
+    lastWeldPlaybackRate: null,
+    lastWeldSoundVariant: null,
+    selectedPrimaryAgeTicks: 0,
+    selectedPrimaryId: skillBook.primarySkillId === 52
+      ? skillBook.weldBuildId!
+      : skillBook.primarySkillId,
+    targetId: null,
+    underpowered: false,
+  }
+  return { ...selected, primaryCasts }
 }
 
 export function selectPlayerEntityConcentrationSkill(
@@ -999,21 +1019,6 @@ export function deferPlayerEntitySkillChoice(
 
 function withoutIndex<T>(source: readonly T[], index: number): T[] {
   return [...source.slice(0, index), ...source.slice(index + 1)]
-}
-
-function replacePlayerSkillBook(
-  source: PlayerEntityStore,
-  index: number,
-  skillBook: PlayerSkillBookComponent,
-): PlayerEntityStore {
-  const skillBooks = [...source.skillBooks]
-  const progressions = [...source.progressions]
-  skillBooks[index] = skillBook
-  progressions[index] = {
-    ...progressions[index]!,
-    revision: progressions[index]!.revision + 1,
-  }
-  return { ...source, progressions, skillBooks }
 }
 
 function replacePlayerProgression(

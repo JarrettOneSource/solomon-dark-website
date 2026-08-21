@@ -46,10 +46,11 @@ export function skillPickerCardCenters(optionCount: number): readonly number[] {
   throw new RangeError('native skill picker requires three or four options')
 }
 
-export function skillPickerRootTint(root: number): number {
-  const tint = SKILL_PICKER_ROOT_TINTS[root]
-  if (tint === undefined) throw new RangeError(`unknown native skill root ${root}`)
-  return tint
+export function skillPickerRootTint(root: number | null): number {
+  if (root === null || SKILL_PICKER_ROOT_TINTS[root] === undefined) {
+    throw new RangeError(`unknown native skill root ${String(root)}`)
+  }
+  return SKILL_PICKER_ROOT_TINTS[root]
 }
 
 export function skillPickerPanelBounds(optionCount: number): SkillPickerPanelBounds {

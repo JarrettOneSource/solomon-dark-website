@@ -17,7 +17,7 @@ export interface PlayerCharacterInput {
   aim: Vector2 | null
   cast: {
     primary: boolean
-    secondary: number | null
+    quickbar: number | null
   }
   movement: Vector2
 }
@@ -76,7 +76,7 @@ export const PLAYER_CHARACTER_FOOTSTEP_TICK_INTERVAL = 25
 export function createIdlePlayerCharacterInput(): PlayerCharacterInput {
   return {
     aim: null,
-    cast: { primary: false, secondary: null },
+    cast: { primary: false, quickbar: null },
     movement: { x: 0, y: 0 },
   }
 }

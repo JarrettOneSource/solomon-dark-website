@@ -30,7 +30,7 @@ import type { HubParticipantState } from '../core-kernels/hub-regions.ts'
 import type { ProtocolPlayerState } from '../protocol/game-state.ts'
 import type { HubInventoryAction } from '../core-kernels/hub-economy.ts'
 import type { LocalPartyState } from '../protocol/party-state.ts'
-import { NATIVE_SECONDARY_ABILITY_IDS } from '../core-kernels/native-secondary-ability-contract.ts'
+import { nativeSkillCategory } from '../core-kernels/player-progression.ts'
 import type { GameTransport } from './game-transport.ts'
 import {
   GameConnectionFailure,
@@ -73,7 +73,7 @@ export interface GameClientSession {
   readonly isHost: boolean
   readonly playerId: string
   readonly resumeToken: string
-  assignBeltSkill(slot: number, skillId: number): void
+  bindSkillQuickbar(skillId: number, slot: number): void
   confirmLoadout(): void
   destroy(): void
   denyPartyInvitation(invitationId: string): void
@@ -390,6 +390,24 @@ export function connectGameClientSession(
           invitationId,
         }))
       },
+      bindSkillQuickbar(skillId, slot) {
+        if (!welcome || !snapshot || destroyed) return
+        const progression = snapshot.players[welcome.playerId]?.progression
+        const category = nativeSkillCategory(skillId)
+        if (
+          !Number.isInteger(slot)
+          || slot < 0
+          || slot > 7
+          || (category !== 1 && category !== 2)
+          || (progression?.learnedSkills.find(([id]) => id === skillId)?.[1] ?? 0) < 1
+        ) throw new Error('The quickbar skill is unavailable.')
+        session.sendInput(STOPPED_INPUT)
+        options.transport.send(encodeGameMessage({
+          type: 'client-skill-quickbar-bind',
+          skillId,
+          slot,
+        }))
+      },
       confirmLoadout() {
         if (!welcome || !snapshot || destroyed || !session.isHost) return
         if (snapshot.run.phase !== 'loadout') return
@@ -577,14 +595,14 @@ export function connectGameClientSession(
         if (
           typeof requestedInput.cast.primary !== 'boolean'
           || (
-            requestedInput.cast.secondary !== null
+            requestedInput.cast.quickbar !== null
             && (
-              !Number.isInteger(requestedInput.cast.secondary)
-              || requestedInput.cast.secondary < 0
-              || requestedInput.cast.secondary > 7
+              !Number.isInteger(requestedInput.cast.quickbar)
+              || requestedInput.cast.quickbar < 0
+              || requestedInput.cast.quickbar > 7
             )
           )
-        ) throw new Error('game input must contain a primary level and native secondary belt slot')
+        ) throw new Error('game input must contain a primary level and native skill quickbar slot')
         const input: PlayerCharacterInput = {
           aim: requestedInput.aim ? { ...requestedInput.aim } : null,
           cast: { ...requestedInput.cast },
@@ -683,48 +701,33 @@ export function connectGameClientSession(
           offerSequence,
         }))
       },
-      assignBeltSkill(slot, skillId) {
+      selectConcentration(skillId) {
         if (!welcome || !snapshot || destroyed) return
         const progression = snapshot.players[welcome.playerId]?.progression
         if (
-          !Number.isInteger(slot)
-          || slot < 0
-          || slot > 7
-          || !(NATIVE_SECONDARY_ABILITY_IDS as readonly number[]).includes(skillId)
-          || (progression?.learnedSkills.find(([id]) => id === skillId)?.[1] ?? 0) < 1
-        ) throw new Error('The secondary skill cannot be assigned to that belt slot.')
+          !progression
+          || nativeSkillCategory(skillId) !== 3
+          || progression.mindChugTicksRemaining !== 0
+          || progression.concentrationSkillIds.includes(skillId)
+          || (progression.learnedSkills.find(([id]) => id === skillId)?.[1] ?? 0) < 1
+        ) throw new Error('The concentration is unavailable.')
         session.sendInput(STOPPED_INPUT)
         options.transport.send(encodeGameMessage({
-          type: 'client-assign-belt-skill',
+          type: 'client-select-concentration',
           skillId,
-          slot,
         }))
       },
       selectPrimarySkill(skillId) {
         if (!welcome || !snapshot || destroyed) return
         const progression = snapshot.players[welcome.playerId]?.progression
         if (
-          ![8, 16, 24, 32, 40].includes(skillId)
+          nativeSkillCategory(skillId) !== 1
           || (progression?.learnedSkills.find(([id]) => id === skillId)?.[1] ?? 0) < 1
-        ) throw new Error('The primary skill cannot be selected.')
+          || (skillId === 52 && progression?.weldBuildId === null)
+        ) throw new Error('The primary skill is unavailable.')
         session.sendInput(STOPPED_INPUT)
         options.transport.send(encodeGameMessage({
           type: 'client-select-primary-skill',
-          skillId,
-        }))
-      },
-      selectConcentration(skillId) {
-        if (!welcome || !snapshot || destroyed) return
-        const progression = snapshot.players[welcome.playerId]?.progression
-        if (
-          ![57, 58, 59, 60, 61, 62, 63, 65, 66, 67, 68, 69, 70, 71].includes(skillId)
-          || progression?.mindChugTicksRemaining !== 0
-          || progression.concentrationSkillIds.includes(skillId)
-          || (progression.learnedSkills.find(([id]) => id === skillId)?.[1] ?? 0) < 1
-        ) throw new Error('The concentration skill cannot be selected.')
-        session.sendInput(STOPPED_INPUT)
-        options.transport.send(encodeGameMessage({
-          type: 'client-select-concentration',
           skillId,
         }))
       },
@@ -1050,7 +1053,7 @@ function copyPlayer(player: ProtocolPlayerState): ProtocolPlayerState {
     progression: {
       ...player.progression,
       learnedSkills: player.progression.learnedSkills.map((entry) => [...entry]),
-      secondaryBelt: [...player.progression.secondaryBelt],
+      skillQuickbar: [...player.progression.skillQuickbar],
       pendingOffer: player.progression.pendingOffer
         ? {
             ...player.progression.pendingOffer,
@@ -1103,5 +1106,5 @@ function sameInput(first: PlayerCharacterInput, second: PlayerCharacterInput): b
 
 function sameCast(first: PlayerCharacterInput, second: PlayerCharacterInput): boolean {
   return first.cast.primary === second.cast.primary
-    && first.cast.secondary === second.cast.secondary
+    && first.cast.quickbar === second.cast.quickbar
 }

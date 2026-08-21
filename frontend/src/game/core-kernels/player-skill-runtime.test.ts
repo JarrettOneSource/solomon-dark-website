@@ -167,13 +167,15 @@ test('Split Mind owns two distinct selections and replacement alternates A then 
     state.runtime.concentrationSkillIdB,
     state.runtime.nextConcentrationReplacementSlot,
   ], [61, 59, 'b'])
-  assert.throws(() => setPlayerConcentration(
+  const unchanged = setPlayerConcentration(
     state.runtime,
     state.skillBook,
     statBook,
     economy,
     59,
-  ), /already concentrated/)
+  )
+  assert.equal(unchanged.runtime, state.runtime)
+  assert.equal(unchanged.skillBook, state.skillBook)
 })
 
 test('equipment skill effects compose before Mindstar and refresh back to permanent state', () => {

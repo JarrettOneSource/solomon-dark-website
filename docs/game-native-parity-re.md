@@ -25433,3 +25433,37 @@ The executable writes feature bits `0x20/0x40/0x80/0x100/0x200` for named
 Embers-to-Imps, Disintegration, Ether-Charge, Harden, and Rock-Surge maximum
 effects, but contains no reader for any of them. They are shipped inert; the
 Website must retain the catalog/bit identity without inventing gameplay or VFX.
+
+### 2026-08-21 v46 Skill Screen and mixed quickbar closure
+
+Clean stock capture plus the `SkillScreen`, `SkillPage`, `HoverButton`,
+`SkillDragger`, `BeltButton`, and `Skills_Quickbar` call chains replace the
+Website's secondary-only belt assumption:
+
+- the native quickbar has eight slots and accepts learned category-1 primaries
+  and category-2 secondary casts;
+- duplicate skill IDs are valid; drop resolver `0x005C7090` overwrites only
+  the destination `BeltButton` and never removes an earlier copy;
+- new category-1/category-2 rows enter only the first empty slot when first
+  learned; rank-ups do not auto-add another binding;
+- a category-1 slot edge selects that primary, while a category-2 edge invokes
+  the secondary ability and its shared skill-owned cooldown/toggle state;
+- category-1 Skill Screen cards also select on an ordinary click through
+  `0x00674110 -> 0x005D5600`; category-2 cards deliberately do not cast on
+  click;
+- learned Weld recipe identity is independent of the selected primary. Row 52
+  selects the learned weld; selecting an elemental primary retains the recipe
+  for later use;
+- the selected primary can differ from the wizard's creation element. Spell
+  cadence, Staff pose/socket, mana, projectiles, audio, HUD icon, and Magic
+  Trap selector follow the selected row; robe/hat appearance stays with the
+  creation element.
+
+The authoritative component is now `skillQuickbar`; input is `cast.quickbar`,
+protocol 43 replicates the selected primary, learned acquisition order,
+concentrations, learned Weld recipe, and duplicate-capable quickbar, and the
+host owns bind/select mutations. The stock `1600x900` Skill Screen uses the
+native leather, chain, statue, card, dependency-arrow, icon-frame, font, and
+bottom-HUD records, rebuilds pages from the complete learned dependency graph,
+and exposes the authored hover tooltip. This screen is the user-facing owner of
+the catalog audit rather than a static two-card mock.

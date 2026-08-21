@@ -177,6 +177,7 @@ import {
   NATIVE_SECONDARY_ABILITY_IDS,
   type NativeSecondaryAbilityId,
 } from '../core-kernels/native-secondary-ability-contract.ts'
+import { nativeSkillCategory } from '../core-kernels/player-progression.ts'
 import {
   BOUNDED_ENEMY_COLD_SLOW_TICKS,
   NATIVE_WRAITH_DAZZLE_TICKS,
@@ -267,7 +268,7 @@ export type {
   LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
 
-export const GAME_PROTOCOL_VERSION = 42
+export const GAME_PROTOCOL_VERSION = 43
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const GAME_CONNECTION_TIMEOUT_CLOSE_CODE = 4000
 export const GAME_HOST_ENDED_SESSION_CLOSE_CODE = 4001
@@ -399,6 +400,22 @@ export interface ClientSelectSkillMessage {
   skillId: number
 }
 
+export interface ClientSkillQuickbarBindMessage {
+  type: 'client-skill-quickbar-bind'
+  skillId: number
+  slot: number
+}
+
+export interface ClientSelectPrimarySkillMessage {
+  type: 'client-select-primary-skill'
+  skillId: number
+}
+
+export interface ClientSelectConcentrationMessage {
+  type: 'client-select-concentration'
+  skillId: number
+}
+
 export interface ClientLevelUpActionMessage {
   type: 'client-level-up-action'
   action: 'reroll' | 'save'
@@ -423,22 +440,6 @@ export interface ClientPartyAcceptMessage {
 export interface ClientPartyDenyMessage {
   type: 'client-party-deny'
   invitationId: string
-}
-
-export interface ClientAssignBeltSkillMessage {
-  type: 'client-assign-belt-skill'
-  skillId: number
-  slot: number
-}
-
-export interface ClientSelectPrimarySkillMessage {
-  type: 'client-select-primary-skill'
-  skillId: number
-}
-
-export interface ClientSelectConcentrationMessage {
-  type: 'client-select-concentration'
-  skillId: number
 }
 
 export interface ClientPingMessage {
@@ -477,7 +478,6 @@ export interface ClientLuaExecuteMessage {
 }
 
 export type ClientGameMessage =
-  | ClientAssignBeltSkillMessage
   | ClientConfirmLoadoutMessage
   | ClientGameplayPauseMessage
   | ClientHelloMessage
@@ -491,6 +491,7 @@ export type ClientGameMessage =
   | ClientSelectConcentrationMessage
   | ClientSelectPrimarySkillMessage
   | ClientSelectSkillMessage
+  | ClientSkillQuickbarBindMessage
   | ClientPingMessage
   | ClientSnapshotAckMessage
   | ClientStartMatchMessage
@@ -664,28 +665,6 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
       invitationId: partyIdentifier(value.invitationId, 'invitationId'),
     }
   }
-  if (value.type === 'client-assign-belt-skill') {
-    onlyKeys(value, 'message', ['type', 'skillId', 'slot'])
-    return {
-      type: 'client-assign-belt-skill',
-      skillId: authoredPublicSkillId(value.skillId, 'skillId'),
-      slot: boundedInteger(value.slot, 'slot', 0, 7),
-    }
-  }
-  if (value.type === 'client-select-primary-skill') {
-    onlyKeys(value, 'message', ['type', 'skillId'])
-    return {
-      type: 'client-select-primary-skill',
-      skillId: authoredPublicSkillId(value.skillId, 'skillId'),
-    }
-  }
-  if (value.type === 'client-select-concentration') {
-    onlyKeys(value, 'message', ['type', 'skillId'])
-    return {
-      type: 'client-select-concentration',
-      skillId: authoredPublicSkillId(value.skillId, 'skillId'),
-    }
-  }
   if (value.type === 'client-select-skill') {
     onlyKeys(value, 'message', ['type', 'choiceIndex', 'offerSequence', 'skillId'])
     const choiceIndex = nonnegativeInteger(value.choiceIndex, 'choiceIndex')
@@ -698,6 +677,33 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
       offerSequence: nonnegativeInteger(value.offerSequence, 'offerSequence'),
       skillId,
     }
+  }
+  if (value.type === 'client-skill-quickbar-bind') {
+    onlyKeys(value, 'message', ['type', 'skillId', 'slot'])
+    const skillId = nonnegativeInteger(value.skillId, 'skillId')
+    const slot = nonnegativeInteger(value.slot, 'slot')
+    const category = nativeSkillCategory(skillId)
+    if (category !== 1 && category !== 2) {
+      throw new GameProtocolError('skillId is not a native quickbar skill')
+    }
+    if (slot > 7) throw new GameProtocolError('slot is out of range')
+    return { type: 'client-skill-quickbar-bind', skillId, slot }
+  }
+  if (value.type === 'client-select-primary-skill') {
+    onlyKeys(value, 'message', ['type', 'skillId'])
+    const skillId = nonnegativeInteger(value.skillId, 'skillId')
+    if (nativeSkillCategory(skillId) !== 1) {
+      throw new GameProtocolError('skillId is not a native primary attack')
+    }
+    return { type: 'client-select-primary-skill', skillId }
+  }
+  if (value.type === 'client-select-concentration') {
+    onlyKeys(value, 'message', ['type', 'skillId'])
+    const skillId = nonnegativeInteger(value.skillId, 'skillId')
+    if (nativeSkillCategory(skillId) !== 3) {
+      throw new GameProtocolError('skillId is not a native concentration')
+    }
+    return { type: 'client-select-concentration', skillId }
   }
   if (value.type === 'client-level-up-action') {
     onlyKeys(value, 'message', ['type', 'action', 'offerSequence'])
@@ -1087,10 +1093,6 @@ function pingNonce(value: unknown): number {
   return result
 }
 
-function authoredPublicSkillId(value: unknown, field: string): number {
-  return boundedInteger(value, field, 8, 79)
-}
-
 function luaRequestId(value: unknown): number {
   const result = positiveInteger(value, 'requestId')
   if (result > 0x7fffffff) throw new GameProtocolError('requestId is out of range')
@@ -1102,7 +1104,7 @@ function boolean(value: unknown, field: string): boolean {
   return value
 }
 
-function secondaryBeltSlot(value: unknown, field: string): number | null {
+function skillQuickbarSlot(value: unknown, field: string): number | null {
   if (value === null) return null
   const slot = integer(value, field)
   if (slot < 0 || slot > 7) {
@@ -1250,12 +1252,12 @@ function playerCharacterInput(value: unknown, field: string): PlayerCharacterInp
   const source = record(value, field)
   onlyKeys(source, field, ['aim', 'cast', 'movement'])
   const cast = record(source.cast, `${field}.cast`)
-  onlyKeys(cast, `${field}.cast`, ['primary', 'secondary'])
+  onlyKeys(cast, `${field}.cast`, ['primary', 'quickbar'])
   return {
     aim: source.aim === null ? null : vector(source.aim, `${field}.aim`),
     cast: {
       primary: boolean(cast.primary, `${field}.cast.primary`),
-      secondary: secondaryBeltSlot(cast.secondary, `${field}.cast.secondary`),
+      quickbar: skillQuickbarSlot(cast.quickbar, `${field}.cast.quickbar`),
     },
     movement: unitVector(source.movement, `${field}.movement`),
   }
@@ -1443,7 +1445,8 @@ function playerSnapshotFrame(value: unknown, field: string): ProtocolPlayerSnaps
     source.primaryCast,
     `${field}.primaryCast`,
     config.element,
-    progression.activeWeldBuildId,
+    progression.selectedPrimarySkillId,
+    progression.weldBuildId,
   )
   const lighting = playerLighting(source.lighting, `${field}.lighting`)
   if (lighting.driveActive !== playerLightDriveActive(primaryCast, progression.lifeState)) {
@@ -2051,8 +2054,10 @@ function playerPrimaryCastState(
   value: unknown,
   field: string,
   element: PlayerCharacterConfig['element'],
-  activeWeldBuildId: number | null,
+  selectedPrimarySkillId: number,
+  weldBuildId: number | null,
 ): ProtocolPlayerState['primaryCast'] {
+  const activeWeldBuildId = selectedPrimarySkillId === 52 ? weldBuildId : null
   const source = record(value, field)
   onlyKeys(source, field, [
     'actionTick',
@@ -2071,16 +2076,17 @@ function playerPrimaryCastState(
   ])
   const actionTick = finite(source.actionTick, `${field}.actionTick`)
   const channelActive = boolean(source.channelActive, `${field}.channelActive`)
+  const castElement = selectedPrimaryElement(selectedPrimarySkillId, element)
   if (channelActive && (actionTick < 0 || actionTick > 1)) {
     throw new GameProtocolError(`${field}.actionTick is outside the Staff Constant program`)
   }
-  if (!channelActive && (actionTick < -1 || actionTick >= primaryCastActionEndTick(element))) {
+  if (!channelActive && (actionTick < -1 || actionTick >= primaryCastActionEndTick(castElement))) {
     throw new GameProtocolError(`${field}.actionTick is outside the Staff Cast 1 program`)
   }
   const targetId = source.targetId === null
     ? null
     : limitedString(source.targetId, `${field}.targetId`, 256)
-  if (element !== 'air' && activeWeldBuildId !== 1003 && targetId !== null) {
+  if (selectedPrimarySkillId !== 24 && activeWeldBuildId !== 1003 && targetId !== null) {
     throw new GameProtocolError(`${field}.targetId is only valid for Air`)
   }
   const lastWeldSoundVariant = source.lastWeldSoundVariant === null
@@ -2117,13 +2123,7 @@ function playerPrimaryCastState(
     -1,
     1009,
   )
-  const expectedPrimaryId = activeWeldBuildId ?? ({
-    air: 24,
-    earth: 40,
-    ether: 8,
-    fire: 16,
-    water: 32,
-  } as const)[element]
+  const expectedPrimaryId = activeWeldBuildId ?? selectedPrimarySkillId
   if (selectedPrimaryId !== -1 && selectedPrimaryId !== expectedPrimaryId) {
     throw new GameProtocolError(`${field}.selectedPrimaryId does not match progression`)
   }
@@ -2153,14 +2153,26 @@ function playerPrimaryCastState(
   }
 }
 
+function selectedPrimaryElement(
+  skillId: number,
+  fallback: PlayerCharacterConfig['element'],
+): PlayerCharacterConfig['element'] {
+  if (skillId === 8) return 'ether'
+  if (skillId === 16) return 'fire'
+  if (skillId === 24) return 'air'
+  if (skillId === 32) return 'water'
+  if (skillId === 40) return 'earth'
+  return fallback
+}
+
 function playerProgression(value: unknown, field: string): ProtocolPlayerProgression {
   const source = record(value, field)
   onlyKeys(source, field, [
-    'activeWeldBuildId',
+    'weldBuildId',
     'coldSlowTicksRemaining',
+    'concentrationSkillIds',
     'currentHealth',
     'currentMana',
-    'concentrationSkillIds',
     'deferredSkillChoices',
     'dazzleTicksRemaining',
     'deathEpoch',
@@ -2173,16 +2185,16 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
     'lastDamageTick',
     'maximumHealth',
     'maximumMana',
+    'mindChugTicksRemaining',
     'nextThreshold',
     'pendingOffer',
-    'primarySkillId',
     'poisonDamagePerTick',
     'poisonTicksRemaining',
     'previousThreshold',
     'revision',
-    'mindChugTicksRemaining',
+    'selectedPrimarySkillId',
     'sorcerorsCharmAvailable',
-    'secondaryBelt',
+    'skillQuickbar',
     'splitMind',
   ])
   const maximumHealth = positiveFinite(source.maximumHealth, `${field}.maximumHealth`)
@@ -2249,49 +2261,31 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
     source.learnedSkillOrder,
     `${field}.learnedSkillOrder`,
     72,
-  ).map((entry, index) => authoredPublicSkillId(
-    entry,
-    `${field}.learnedSkillOrder[${index}]`,
-  ))
+  ).map((entry, index) => {
+    const skillId = nonnegativeInteger(entry, `${field}.learnedSkillOrder[${index}]`)
+    if (skillId < 8 || skillId > 79) {
+      throw new GameProtocolError(`${field}.learnedSkillOrder[${index}] is out of range`)
+    }
+    return skillId
+  })
   if (
     new Set(learnedSkillOrder).size !== learnedSkillOrder.length
     || learnedSkillOrder.length !== learnedPermanentIds.length
     || learnedPermanentIds.some((skillId) => !learnedSkillOrder.includes(skillId))
   ) throw new GameProtocolError(`${field}.learnedSkillOrder must contain every learned public skill`)
-  const primarySkillId = authoredPublicSkillId(source.primarySkillId, `${field}.primarySkillId`)
-  if (
-    ![8, 16, 24, 32, 40].includes(primarySkillId)
-    || (learnedSkills.find(([id]) => id === primarySkillId)?.[1] ?? 0) < 1
-  ) throw new GameProtocolError(`${field}.primarySkillId is not a learned primary`)
-  const secondaryBelt = limitedArray(source.secondaryBelt, `${field}.secondaryBelt`, 8)
-    .map((entry, index) => {
-      if (entry === null) return null
-      const skillId = nonnegativeInteger(entry, `${field}.secondaryBelt[${index}]`)
-      if (!(NATIVE_SECONDARY_ABILITY_IDS as readonly number[]).includes(skillId)) {
-        throw new GameProtocolError(`${field}.secondaryBelt[${index}] is not a secondary ability`)
-      }
-      if ((learnedSkills.find(([id]) => id === skillId)?.[1] ?? 0) < 1) {
-        throw new GameProtocolError(`${field}.secondaryBelt[${index}] is not learned`)
-      }
-      return skillId
-    })
-  if (secondaryBelt.length !== 8) {
-    throw new GameProtocolError(`${field}.secondaryBelt must contain exactly eight slots`)
-  }
-  const splitMind = boolean(source.splitMind, `${field}.splitMind`)
   const concentrationSkillIds = limitedArray(
     source.concentrationSkillIds,
     `${field}.concentrationSkillIds`,
     2,
   ).map((entry, index) => {
     if (entry === null) return null
-    const skillId = authoredPublicSkillId(entry, `${field}.concentrationSkillIds[${index}]`)
+    const skillId = nonnegativeInteger(entry, `${field}.concentrationSkillIds[${index}]`)
     if (
-      ![57, 58, 59, 60, 61, 62, 63, 65, 66, 67, 68, 69, 70, 71].includes(skillId)
+      nativeSkillCategory(skillId) !== 3
       || (learnedSkills.find(([id]) => id === skillId)?.[1] ?? 0) < 1
     ) throw new GameProtocolError(`${field}.concentrationSkillIds[${index}] is not eligible`)
     return skillId
-  }) as [number | null, number | null]
+  })
   if (concentrationSkillIds.length !== 2) {
     throw new GameProtocolError(`${field}.concentrationSkillIds must contain two slots`)
   }
@@ -2299,29 +2293,56 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
     concentrationSkillIds[0] !== null
     && concentrationSkillIds[0] === concentrationSkillIds[1]
   ) throw new GameProtocolError(`${field}.concentrationSkillIds must be unique`)
+  const splitMind = boolean(source.splitMind, `${field}.splitMind`)
   if (!splitMind && concentrationSkillIds[1] !== null) {
     throw new GameProtocolError(`${field}.concentrationSkillIds B requires Split Mind`)
   }
-  const activeWeldBuildId = source.activeWeldBuildId === null
+  const skillQuickbar = limitedArray(source.skillQuickbar, `${field}.skillQuickbar`, 8)
+    .map((entry, index) => {
+      if (entry === null) return null
+      const skillId = nonnegativeInteger(entry, `${field}.skillQuickbar[${index}]`)
+      const category = nativeSkillCategory(skillId)
+      if (category !== 1 && category !== 2) {
+        throw new GameProtocolError(`${field}.skillQuickbar[${index}] is not a quickbar skill`)
+      }
+      if ((learnedSkills.find(([id]) => id === skillId)?.[1] ?? 0) < 1) {
+        throw new GameProtocolError(`${field}.skillQuickbar[${index}] is not learned`)
+      }
+      return skillId
+    })
+  if (skillQuickbar.length !== 8) {
+    throw new GameProtocolError(`${field}.skillQuickbar must contain exactly eight slots`)
+  }
+  const weldBuildId = source.weldBuildId === null
     ? null
-    : integer(source.activeWeldBuildId, `${field}.activeWeldBuildId`)
-  if (activeWeldBuildId !== null && (activeWeldBuildId < 1000 || activeWeldBuildId > 1009)) {
-    throw new GameProtocolError(`${field}.activeWeldBuildId is out of range`)
+    : integer(source.weldBuildId, `${field}.weldBuildId`)
+  if (weldBuildId !== null && (weldBuildId < 1000 || weldBuildId > 1009)) {
+    throw new GameProtocolError(`${field}.weldBuildId is out of range`)
   }
   const spellWeldingRank = learnedSkills.find(([skillId]) => skillId === 52)?.[1] ?? 0
-  if ((activeWeldBuildId === null) !== (spellWeldingRank === 0)) {
-    throw new GameProtocolError(`${field}.activeWeldBuildId does not match Spell Welding`)
+  if ((weldBuildId === null) !== (spellWeldingRank === 0)) {
+    throw new GameProtocolError(`${field}.weldBuildId does not match Spell Welding`)
+  }
+  const selectedPrimarySkillId = nonnegativeInteger(
+    source.selectedPrimarySkillId,
+    `${field}.selectedPrimarySkillId`,
+  )
+  if (
+    nativeSkillCategory(selectedPrimarySkillId) !== 1
+    || (learnedSkills.find(([id]) => id === selectedPrimarySkillId)?.[1] ?? 0) < 1
+    || (selectedPrimarySkillId === 52 && weldBuildId === null)
+  ) {
+    throw new GameProtocolError(`${field}.selectedPrimarySkillId is not a learned primary`)
   }
   const lifeState = limitedString(source.lifeState, `${field}.lifeState`, 32)
   if (!(PLAYER_LIFE_STATES as readonly string[]).includes(lifeState)) {
     throw new GameProtocolError(`${field}.lifeState is not supported`)
   }
   return {
-    activeWeldBuildId,
     coldSlowTicksRemaining,
+    concentrationSkillIds: concentrationSkillIds as [number | null, number | null],
     currentHealth,
     currentMana,
-    concentrationSkillIds,
     deferredSkillChoices: nonnegativeInteger(
       source.deferredSkillChoices,
       `${field}.deferredSkillChoices`,
@@ -2339,11 +2360,14 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
       : nonnegativeInteger(source.lastDamageTick, `${field}.lastDamageTick`),
     maximumHealth,
     maximumMana,
+    mindChugTicksRemaining: nonnegativeInteger(
+      source.mindChugTicksRemaining,
+      `${field}.mindChugTicksRemaining`,
+    ),
     nextThreshold: nonnegativeInteger(source.nextThreshold, `${field}.nextThreshold`),
     pendingOffer: source.pendingOffer === null
       ? null
       : playerSkillOffer(source.pendingOffer, `${field}.pendingOffer`, level),
-    primarySkillId,
     poisonDamagePerTick,
     poisonTicksRemaining: nonnegativeInteger(
       source.poisonTicksRemaining,
@@ -2354,16 +2378,14 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
       `${field}.previousThreshold`,
     ),
     revision: nonnegativeInteger(source.revision, `${field}.revision`),
-    mindChugTicksRemaining: nonnegativeInteger(
-      source.mindChugTicksRemaining,
-      `${field}.mindChugTicksRemaining`,
-    ),
+    selectedPrimarySkillId,
     sorcerorsCharmAvailable: boolean(
       source.sorcerorsCharmAvailable,
       `${field}.sorcerorsCharmAvailable`,
     ),
-    secondaryBelt,
+    skillQuickbar,
     splitMind,
+    weldBuildId,
   }
 }
 
@@ -3643,7 +3665,7 @@ function nativeSecondaryPlayer(value: unknown, field: string): NativeSecondaryPl
     ? null
     : nonnegativeInteger(source.heldSlot, `${field}.heldSlot`)
   if (heldSlot !== null && heldSlot >= 8) {
-    throw new GameProtocolError(`${field}.heldSlot is outside the secondary belt`)
+    throw new GameProtocolError(`${field}.heldSlot is outside the skill quickbar`)
   }
   const lastSkillId = source.lastSkillId === null
     ? null

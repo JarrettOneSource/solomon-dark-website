@@ -332,7 +332,7 @@ export function stepPlayerStaffCombatSystem(
       || player.primaryCast.actionTick >= 0
       || player.primaryCast.channelActive
       || input?.cast.primary === true
-      || input?.cast.secondary != null
+      || input?.cast.quickbar != null
     ) continue
     const admitted = nativeStaffAdmissionTarget({
       collisionRadius: PLAYER_CHARACTER_RADIUS,

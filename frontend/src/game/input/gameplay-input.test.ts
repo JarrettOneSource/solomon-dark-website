@@ -40,11 +40,11 @@ class FakeVisibilityTarget extends EventTarget {
 function expectedInput(
   aim: { x: number; y: number } | null,
   primary: boolean,
-  secondary: number | null,
+  quickbar: number | null,
 ): PlayerCharacterInput {
   return {
     aim,
-    cast: { primary, secondary },
+    cast: { primary, quickbar },
     movement: { x: 0, y: 0 },
   }
 }
@@ -177,7 +177,7 @@ test('reprojects held aim while sampling and synchronously clears every lane on 
     device: 'touch',
     input: {
       aim: { x: 201, y: 0 },
-      cast: { primary: true, secondary: 0 },
+      cast: { primary: true, quickbar: 0 },
       movement: { x: 1, y: 0 },
     },
   })
@@ -250,7 +250,7 @@ test('blocking owns input immediately and drops barrier-time state', () => {
   assert.equal(input.sample().device, 'touch')
   assert.deepEqual(input.sample().input, {
     aim: { x: 60, y: 70 },
-    cast: { primary: false, secondary: 0 },
+    cast: { primary: false, quickbar: 0 },
     movement: { x: 0, y: 1 },
   })
   input.destroy()
@@ -275,7 +275,7 @@ test('touch primary reprojects held direction, retains released aim, and coexist
   input.setTouchPrimary({ x: 2, y: 0 })
   assert.deepEqual(published.at(-1), {
     aim: { x: 110, y: 200 },
-    cast: { primary: true, secondary: null },
+    cast: { primary: true, quickbar: null },
     movement: { x: -1, y: 0 },
   })
   assert.equal(input.sample().device, 'touch')
@@ -283,14 +283,14 @@ test('touch primary reprojects held direction, retains released aim, and coexist
   playerX = 300
   assert.deepEqual(input.sample().input, {
     aim: { x: 310, y: 200 },
-    cast: { primary: true, secondary: null },
+    cast: { primary: true, quickbar: null },
     movement: { x: -1, y: 0 },
   })
 
   input.setTouchPrimary({ x: 0, y: 0 })
   assert.deepEqual(published.at(-1), {
     aim: { x: 310, y: 200 },
-    cast: { primary: false, secondary: null },
+    cast: { primary: false, quickbar: null },
     movement: { x: -1, y: 0 },
   })
   input.destroy()
@@ -322,7 +322,7 @@ test('touch and mouse primary levels compose without stealing each other release
   input.destroy()
 })
 
-test('right mouse and digits one through seven address all native secondary belt slots', () => {
+test('right mouse and digits one through seven address all native skill quickbar slots', () => {
   const mouseTarget = new EventTarget()
   const target = new EventTarget()
   const published: PlayerCharacterInput[] = []
@@ -337,22 +337,22 @@ test('right mouse and digits one through seven address all native secondary belt
   })
 
   mouseTarget.dispatchEvent(new FakeMouseEvent('mousedown', 2, 20, 30))
-  assert.equal(published.at(-1)?.cast.secondary, 0)
+  assert.equal(published.at(-1)?.cast.quickbar, 0)
 
   target.dispatchEvent(new FakeKeyboardEvent('keydown', 'Digit1'))
-  assert.equal(published.at(-1)?.cast.secondary, 1)
+  assert.equal(published.at(-1)?.cast.quickbar, 1)
   const afterFirstEdge = published.length
   target.dispatchEvent(new FakeKeyboardEvent('keydown', 'Digit1', true))
   assert.equal(published.length, afterFirstEdge)
 
   target.dispatchEvent(new FakeKeyboardEvent('keydown', 'Digit7'))
-  assert.equal(published.at(-1)?.cast.secondary, 7)
+  assert.equal(published.at(-1)?.cast.quickbar, 7)
   target.dispatchEvent(new FakeKeyboardEvent('keyup', 'Digit7'))
-  assert.equal(published.at(-1)?.cast.secondary, 1)
+  assert.equal(published.at(-1)?.cast.quickbar, 1)
   target.dispatchEvent(new FakeKeyboardEvent('keyup', 'Digit1'))
-  assert.equal(published.at(-1)?.cast.secondary, 0)
+  assert.equal(published.at(-1)?.cast.quickbar, 0)
   target.dispatchEvent(new FakeMouseEvent('mouseup', 2, 20, 30))
-  assert.equal(published.at(-1)?.cast.secondary, null)
+  assert.equal(published.at(-1)?.cast.quickbar, null)
 
   const afterRelease = published.length
   target.dispatchEvent(new FakeKeyboardEvent('keydown', 'Digit0'))

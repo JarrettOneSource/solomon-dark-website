@@ -83,94 +83,10 @@ function loadedBoneyardFixture(runId: string): LoadedBoneyard {
 
 test('client protocol validates character, input, lifecycle, Lua, and ping messages', () => {
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
-    type: 'client-lua-execute',
-    code: 'return sd.runtime.get_frame_state()',
-    requestId: 9,
-  })), {
-    type: 'client-lua-execute',
-    code: 'return sd.runtime.get_frame_state()',
-    requestId: 9,
-  })
-  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
-    type: 'client-hello',
-    protocolVersion: GAME_PROTOCOL_VERSION,
-    credential: 'spawn-secret',
-    character: CHARACTER,
-    resumeToken: 'reserved-token',
-  })), {
-    type: 'client-hello',
-    protocolVersion: GAME_PROTOCOL_VERSION,
-    credential: 'spawn-secret',
-    character: CHARACTER,
-    resumeToken: 'reserved-token',
-  })
-  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
-    type: 'client-input',
-    input: {
-      aim: { x: 800, y: 450 },
-      cast: { primary: true, secondary: 7 },
-      movement: { x: 1, y: 0 },
-    },
-    sequence: 4,
-    targetTick: 19,
-  })), {
-    type: 'client-input',
-    input: {
-      aim: { x: 800, y: 450 },
-      cast: { primary: true, secondary: 7 },
-      movement: { x: 1, y: 0 },
-    },
-    sequence: 4,
-    targetTick: 19,
-  })
-  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
-    type: 'client-start-match',
-    boneyardId: 'default-random',
-  })), {
-    type: 'client-start-match',
-    boneyardId: 'default-random',
-  })
-  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
-    type: 'client-confirm-loadout',
-  })), {
-    type: 'client-confirm-loadout',
-  })
-  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
-    type: 'client-gameplay-pause',
-    paused: true,
-  })), {
-    type: 'client-gameplay-pause',
-    paused: true,
-  })
-  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
-    type: 'client-select-skill',
-    choiceIndex: 2,
-    offerSequence: 7,
-    skillId: 48,
-  })), {
-    type: 'client-select-skill',
-    choiceIndex: 2,
-    offerSequence: 7,
-    skillId: 48,
-  })
-  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
-    type: 'client-level-up-action',
-    action: 'reroll',
-    offerSequence: 8,
-  })), {
-    type: 'client-level-up-action',
-    action: 'reroll',
-    offerSequence: 8,
-  })
-  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
-    type: 'client-assign-belt-skill',
-    skillId: 11,
+    type: 'client-skill-quickbar-bind',
+    skillId: 8,
     slot: 7,
-  })), {
-    type: 'client-assign-belt-skill',
-    skillId: 11,
-    slot: 7,
-  })
+  })), { type: 'client-skill-quickbar-bind', skillId: 8, slot: 7 })
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
     type: 'client-select-primary-skill',
     skillId: 8,
@@ -179,6 +95,86 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
     type: 'client-select-concentration',
     skillId: 57,
   })), { type: 'client-select-concentration', skillId: 57 })
+  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
+    type: 'client-lua-execute',
+    code: 'return sd.runtime.get_frame_state()',
+    requestId: 9,
+  })), {
+    type: 'client-lua-execute',
+    code: 'return sd.runtime.get_frame_state()',
+    requestId: 9,
+  })
+  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
+    type: 'client-hello',
+    protocolVersion: GAME_PROTOCOL_VERSION,
+    credential: 'spawn-secret',
+    character: CHARACTER,
+    resumeToken: 'reserved-token',
+  })), {
+    type: 'client-hello',
+    protocolVersion: GAME_PROTOCOL_VERSION,
+    credential: 'spawn-secret',
+    character: CHARACTER,
+    resumeToken: 'reserved-token',
+  })
+  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
+    type: 'client-input',
+    input: {
+      aim: { x: 800, y: 450 },
+      cast: { primary: true, quickbar: 7 },
+      movement: { x: 1, y: 0 },
+    },
+    sequence: 4,
+    targetTick: 19,
+  })), {
+    type: 'client-input',
+    input: {
+      aim: { x: 800, y: 450 },
+      cast: { primary: true, quickbar: 7 },
+      movement: { x: 1, y: 0 },
+    },
+    sequence: 4,
+    targetTick: 19,
+  })
+  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
+    type: 'client-start-match',
+    boneyardId: 'default-random',
+  })), {
+    type: 'client-start-match',
+    boneyardId: 'default-random',
+  })
+  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
+    type: 'client-confirm-loadout',
+  })), {
+    type: 'client-confirm-loadout',
+  })
+  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
+    type: 'client-gameplay-pause',
+    paused: true,
+  })), {
+    type: 'client-gameplay-pause',
+    paused: true,
+  })
+  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
+    type: 'client-select-skill',
+    choiceIndex: 2,
+    offerSequence: 7,
+    skillId: 48,
+  })), {
+    type: 'client-select-skill',
+    choiceIndex: 2,
+    offerSequence: 7,
+    skillId: 48,
+  })
+  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
+    type: 'client-level-up-action',
+    action: 'reroll',
+    offerSequence: 8,
+  })), {
+    type: 'client-level-up-action',
+    action: 'reroll',
+    offerSequence: 8,
+  })
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
     type: 'client-snapshot-ack',
     requireKeyframe: false,
@@ -404,7 +400,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
     overlayEffectPhase: 0,
   })
   assert.deepEqual(welcome.snapshot.players['player-1'].progression, {
-    activeWeldBuildId: null,
+    weldBuildId: null,
     concentrationSkillIds: [null, null],
     currentHealth: 50,
     currentMana: 100,
@@ -424,14 +420,14 @@ test('server welcome round-trips content, kernel, character, and world ownership
     mindChugTicksRemaining: 0,
     nextThreshold: 90,
     pendingOffer: null,
-    primarySkillId: 8,
     poisonDamagePerTick: 0,
     poisonTicksRemaining: 0,
     previousThreshold: 0,
     revision: 0,
+    selectedPrimarySkillId: 8,
     sorcerorsCharmAvailable: false,
-    secondaryBelt: [11, null, null, null, null, null, null, null],
     splitMind: false,
+    skillQuickbar: [11, null, null, null, null, null, null, null],
   })
   assert.deepEqual(welcome.snapshot.run, {
     eligiblePlayerIds: [],
@@ -921,8 +917,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v42 carries party denial, Hall archives, secondary gates, and existing gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 42)
+test('protocol v43 carries party denial, Hall archives, the mixed-skill quickbar, secondary gates, and existing gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 43)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -1514,7 +1510,7 @@ test('protocol rejects legacy, malformed, and unsupported discriminated payloads
     type: 'client-input',
     input: {
       aim: null,
-      cast: { primary: false, secondary: null },
+      cast: { primary: false, quickbar: null },
       movement: { x: 2, y: 0 },
     },
     sequence: 1,
@@ -1524,7 +1520,7 @@ test('protocol rejects legacy, malformed, and unsupported discriminated payloads
     type: 'client-input',
     input: {
       aim: { x: 1, y: Number.POSITIVE_INFINITY },
-      cast: { primary: false, secondary: null },
+      cast: { primary: false, quickbar: null },
       movement: { x: 0, y: 0 },
     },
     sequence: 1,
@@ -1534,7 +1530,7 @@ test('protocol rejects legacy, malformed, and unsupported discriminated payloads
     type: 'client-input',
     input: {
       aim: null,
-      cast: { primary: 1, secondary: null },
+      cast: { primary: 1, quickbar: null },
       movement: { x: 0, y: 0 },
     },
     sequence: 1,

@@ -7,10 +7,13 @@ import type {
   ProtocolPlayerEconomy,
   ProtocolPlayerProgression,
 } from './protocol/game-state.ts'
-import { playerExperienceProgress } from './core-kernels/player-progression.ts'
+import {
+  NATIVE_SKILL_CATALOG,
+  playerExperienceProgress,
+} from './core-kernels/player-progression.ts'
 import { subscribeGamePresentationFrames } from './game-presentation-frame-loop.ts'
 import GameAccountName from './GameAccountName.tsx'
-import SecondaryAbilityBelt from './SecondaryAbilityBelt.tsx'
+import SkillQuickbar from './SkillQuickbar.tsx'
 import type { GameSnapshot } from './protocol/game-protocol.ts'
 
 interface GameHudProps {
@@ -126,30 +129,32 @@ export default function GameHud({
     const next = snapshot.players[playerId]?.economy
     if (next) setEconomy((current) => current.revision === next.revision ? current : next)
   }), [playerId, subscribeSnapshot])
-  const [secondaryHud, setSecondaryHud] = useState(() => ({
-    belt: initialSnapshot.players[playerId]!.progression.secondaryBelt,
+  const [quickbarHud, setQuickbarHud] = useState(() => ({
     playerState: initialSnapshot.secondaryAbilities.players[playerId],
+    quickbar: initialSnapshot.players[playerId]!.progression.skillQuickbar,
+    selectedPrimarySkillId: initialSnapshot.players[playerId]!.progression.selectedPrimarySkillId,
   }))
   useEffect(() => subscribeSnapshot((snapshot) => {
     const player = snapshot.players[playerId]
     if (!player) return
-    setSecondaryHud({
-      belt: player.progression.secondaryBelt,
+    setQuickbarHud({
       playerState: snapshot.secondaryAbilities.players[playerId],
+      quickbar: player.progression.skillQuickbar,
+      selectedPrimarySkillId: player.progression.selectedPrimarySkillId,
     })
   }), [playerId, subscribeSnapshot])
   const xpProgress = playerExperienceProgress(progression)
   const healthProgress = clampUnit(progression.currentHealth / progression.maximumHealth) ** 2
   const manaProgress = clampUnit(progression.currentMana / progression.maximumMana)
-  const shieldProgress = secondaryHud.playerState === undefined
+  const shieldProgress = quickbarHud.playerState === undefined
     ? 0
     : clampUnit(
-        secondaryHud.playerState.magicShieldAbsorb
-          / secondaryHud.playerState.magicShieldMaximum,
+        quickbarHud.playerState.magicShieldAbsorb
+          / quickbarHud.playerState.magicShieldMaximum,
       )
-  const reserveProgress = secondaryHud.playerState === undefined
+  const reserveProgress = quickbarHud.playerState === undefined
     ? 0
-    : clampUnit(secondaryHud.playerState.reservedMana / progression.maximumMana)
+    : clampUnit(quickbarHud.playerState.reservedMana / progression.maximumMana)
   const healthLayers = [
     { className: 'hub-hud-meter-fill', progress: healthProgress, shield: false },
     ...(shieldProgress > 0
@@ -182,7 +187,7 @@ export default function GameHud({
               src={hub.hud.barRed}
               style={{ clipPath: `inset(0 ${(1 - layer.progress) * 100}% 0 0)` }}
               alt={layer.shield
-                ? `Magic shield ${secondaryHud.playerState!.magicShieldAbsorb} of ${secondaryHud.playerState!.magicShieldMaximum}`
+                ? `Magic shield ${quickbarHud.playerState!.magicShieldAbsorb} of ${quickbarHud.playerState!.magicShieldMaximum}`
                 : `Health ${progression.currentHealth} of ${progression.maximumHealth}`}
             />
           ))}
@@ -201,7 +206,7 @@ export default function GameHud({
                 backgroundImage: `url("${hub.hud.manaReserve}")`,
                 width: `${reserveProgress * 100}px`,
               }}
-              aria-label={`${secondaryHud.playerState!.reservedMana} mana reserved`}
+                aria-label={`${quickbarHud.playerState!.reservedMana} mana reserved`}
             />
           ) : null}
         </div>
@@ -214,15 +219,20 @@ export default function GameHud({
           />
         </filter>
       </svg>
-      <img className="hub-hud-primary" src={hub.primary[element]} alt={`${element} primary spell`} />
+      <img
+        className="hub-hud-primary"
+        src={hub.primary[selectedPrimaryElement(quickbarHud.selectedPrimarySkillId, element)]}
+        alt={`${NATIVE_SKILL_CATALOG[quickbarHud.selectedPrimarySkillId]?.name ?? element} primary spell`}
+      />
       {mode === 'hub' ? (
         <img className="hub-hud-help" src={hub.hud.help} alt="Help" />
       ) : null}
 
-      <SecondaryAbilityBelt
-        belt={secondaryHud.belt}
+      <SkillQuickbar
         mode={mode}
-        playerState={secondaryHud.playerState}
+        playerState={quickbarHud.playerState}
+        quickbar={quickbarHud.quickbar}
+        selectedPrimarySkillId={quickbarHud.selectedPrimarySkillId}
       />
 
       {mode === 'hub' ? (
@@ -306,4 +316,13 @@ function inventoryQuantity(
 
 function clampUnit(value: number): number {
   return Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0
+}
+
+function selectedPrimaryElement(skillId: number, fallback: WizardElement): WizardElement {
+  if (skillId === 8) return 'ether'
+  if (skillId === 16) return 'fire'
+  if (skillId === 24) return 'air'
+  if (skillId === 32) return 'water'
+  if (skillId === 40) return 'earth'
+  return fallback
 }

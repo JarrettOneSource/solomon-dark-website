@@ -147,7 +147,7 @@ function book(
   }
   return {
     ...source,
-    activeWeldBuildId: buildId,
+    weldBuildId: buildId,
     effectiveRanks,
     permanentRanks,
   }

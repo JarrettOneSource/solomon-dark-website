@@ -56,7 +56,7 @@ export function createBrowserGameplayInput({
 }: BrowserGameplayInputOptions): BrowserGameplayInput {
   let aim: Vector2 | null = null
   let mousePrimary = false
-  let heldSecondarySlots: number[] = []
+  let heldQuickbarSlots: number[] = []
   let touchPrimaryDirection: Vector2 | null = null
   let capturedPointer: Vector2 | null = null
   let blocked = false
@@ -67,7 +67,7 @@ export function createBrowserGameplayInput({
     onStop: () => {
       aim = null
       mousePrimary = false
-      heldSecondarySlots = []
+      heldQuickbarSlots = []
       touchPrimaryDirection = null
       capturedPointer = null
       onInput(createIdlePlayerCharacterInput())
@@ -85,7 +85,7 @@ export function createBrowserGameplayInput({
     }
     if (touchPrimaryDirection) {
       aim = projectDirection(touchPrimaryDirection) ?? aim
-    } else if (capturedPointer && (mousePrimary || heldSecondarySlots.length > 0)) {
+    } else if (capturedPointer && (mousePrimary || heldQuickbarSlots.length > 0)) {
       aim = projectPointer(capturedPointer) ?? aim
     }
     const movementSample = movement.sample()
@@ -95,7 +95,7 @@ export function createBrowserGameplayInput({
         aim: aim ? { ...aim } : null,
         cast: {
           primary: mousePrimary || touchPrimaryDirection !== null,
-          secondary: heldSecondarySlots.at(-1) ?? null,
+          quickbar: heldQuickbarSlots.at(-1) ?? null,
         },
         movement: { ...movementSample.movement },
       },
@@ -122,7 +122,7 @@ export function createBrowserGameplayInput({
   }
   const mouseMove: EventListener = (event) => {
     if (blocked) return
-    if (!mousePrimary && heldSecondarySlots.length === 0) return
+    if (!mousePrimary && heldQuickbarSlots.length === 0) return
     const mouse = mouseEvent(event)
     if (!mouse) return
     capturedPointer = mouse
@@ -135,7 +135,7 @@ export function createBrowserGameplayInput({
     const mouse = mouseEvent(event)
     const lane = mouse && castLane(mouse.button)
     if (!mouse || !lane) return
-    if (lane === 'primary' ? !mousePrimary : !heldSecondarySlots.includes(0)) return
+    if (lane === 'primary' ? !mousePrimary : !heldQuickbarSlots.includes(0)) return
     capturedPointer = mouse
     aim = projectPointer(mouse) ?? aim
     if (lane === 'primary') mousePrimary = false
@@ -148,7 +148,7 @@ export function createBrowserGameplayInput({
     if (blocked) return
     const keyboard = keyboardEvent(event)
     const slot = keyboard && secondaryKeyboardSlot(keyboard.code)
-    if (slot === null || keyboard!.repeat || heldSecondarySlots.includes(slot)) return
+    if (slot === null || keyboard!.repeat || heldQuickbarSlots.includes(slot)) return
     holdSecondarySlot(slot)
     event.preventDefault()
     publish()
@@ -157,18 +157,18 @@ export function createBrowserGameplayInput({
     if (blocked) return
     const keyboard = keyboardEvent(event)
     const slot = keyboard && secondaryKeyboardSlot(keyboard.code)
-    if (slot === null || !heldSecondarySlots.includes(slot)) return
+    if (slot === null || !heldQuickbarSlots.includes(slot)) return
     releaseSecondarySlot(slot)
     event.preventDefault()
     publish()
   }
 
   function holdSecondarySlot(slot: number): void {
-    heldSecondarySlots = [...heldSecondarySlots.filter((entry) => entry !== slot), slot]
+    heldQuickbarSlots = [...heldQuickbarSlots.filter((entry) => entry !== slot), slot]
   }
 
   function releaseSecondarySlot(slot: number): void {
-    heldSecondarySlots = heldSecondarySlots.filter((entry) => entry !== slot)
+    heldQuickbarSlots = heldQuickbarSlots.filter((entry) => entry !== slot)
   }
 
   mouseTarget.addEventListener('mousedown', mouseDown)

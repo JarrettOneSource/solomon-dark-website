@@ -734,6 +734,7 @@ export default function MainMenuScene({
     setGameplayPause(null)
     setPartyState(null)
     setGameplaySettingsOpen(false)
+    setSkillBookOpen(false)
     setScreen('root')
   }
 
@@ -779,7 +780,11 @@ export default function MainMenuScene({
   }, [audio, levelUpBarrierId, runtimeProgression?.pendingOffer])
 
   return (
-    <div className="main-menu-page" data-game-scene={gameScene}>
+    <div
+      className="main-menu-page"
+      data-game-scene={gameScene}
+      data-skill-book-open={skillBookOpen}
+    >
       <section
         ref={stageRef}
         className="main-menu-stage"
@@ -934,13 +939,15 @@ export default function MainMenuScene({
           <Suspense fallback={null}>
             <SkillBook
               economy={runtimeSnapshot!.players[session.playerId]!.economy}
-              onAssignBeltSkill={session.assignBeltSkill}
+              onAssignQuickbarSkill={session.bindSkillQuickbar}
               onClose={() => setSkillBookOpen(false)}
               onOpenInventory={() => setInventoryRequestSequence((sequence) => sequence + 1)}
               onSelectConcentration={session.selectConcentration}
               onSelectPrimarySkill={session.selectPrimarySkill}
+              playerId={session.playerId}
               progression={runtimeProgression}
               style={nativeStageStyle}
+              subscribeSnapshot={session.onSnapshot}
               topMost
             />
           </Suspense>

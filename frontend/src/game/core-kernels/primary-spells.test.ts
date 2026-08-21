@@ -132,7 +132,7 @@ function input(state: GameSimulationState, primary: boolean): PlayerCharacterInp
   return {
     ...createIdlePlayerCharacterInput(),
     aim: { x: player.position.x, y: player.position.y - 200 },
-    cast: { primary, secondary: null },
+    cast: { primary, quickbar: null },
   }
 }
 
@@ -236,7 +236,7 @@ function stepSpellKernel(
       [PLAYER_ID]: {
         ...createIdlePlayerCharacterInput(),
         aim: { x: player.position.x, y: player.position.y - 200 },
-        cast: { primary, secondary: null },
+        cast: { primary, quickbar: null },
       },
     },
     players: state.players,
@@ -844,7 +844,7 @@ test('Ether snapshots the forward-probe target and steers after its first moveme
     worldKeyForPlayer: () => 'hub:courtyard',
   }).spells.projectiles[0]
   assert.equal(flagChanged.kind, 'ether')
-  assert.equal(flagChanged.targetId, target.id)
+  assert.equal(flagChanged.targetId, null)
 
   const inactiveTarget = { ...target, active: false, actorFlags: 0 }
   const finalTracked = stepPrimarySpells({
@@ -863,14 +863,8 @@ test('Ether snapshots the forward-probe target and steers after its first moveme
   }).spells.projectiles[0]
   assert.equal(finalTracked.kind, 'ether')
   assert.equal(finalTracked.targetId, null)
-  assert.equal(
-    finalTracked.headingDegrees,
-    Math.fround(flagChanged.headingDegrees + 2 * flagChanged.turnAccumulator),
-  )
-  assert.equal(
-    finalTracked.turnAccumulator,
-    Math.fround(flagChanged.turnAccumulator + ETHER_PRIMARY_TURN_FAST_STEP),
-  )
+  assert.equal(finalTracked.headingDegrees, flagChanged.headingDegrees)
+  assert.equal(finalTracked.turnAccumulator, flagChanged.turnAccumulator)
 
   const lost = stepPrimarySpells({
     ...EMPTY_SPELL_WORLD,
@@ -1336,7 +1330,7 @@ test('one-shot casts retain accepted facing against movement through projectile 
     }
     const castInput = (primary: boolean): PlayerCharacterInput => ({
       aim: eastAim,
-      cast: { primary, secondary: null },
+      cast: { primary, quickbar: null },
       movement: { x: -1, y: 0 },
     })
 
@@ -1436,7 +1430,7 @@ test('Water wiggle uses the shared authority tick when player ids interleave', (
     Object.entries(playerCharacterRecords(state.playerEntities)).map(([playerId, player]) => [playerId, {
       ...createIdlePlayerCharacterInput(),
       aim: { x: player.position.x, y: player.position.y - 200 },
-      cast: { primary: true, secondary: null },
+      cast: { primary: true, quickbar: null },
     }]),
   )
 
@@ -1527,7 +1521,7 @@ test('Earth resamples world aim while held and freezes the last sample on releas
       x: player.position.x + 200,
       y: player.position.y - 25 / 1.2,
     },
-    cast: { primary: true, secondary: null },
+    cast: { primary: true, quickbar: null },
   }
   state = stepGameSimulationTick(state, { [PLAYER_ID]: eastInput })
   const retargeted = state.primarySpells.projectiles[0]

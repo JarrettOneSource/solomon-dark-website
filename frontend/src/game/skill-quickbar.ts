@@ -44,24 +44,24 @@ export interface NativeBeltBindingLayout {
   glyphs: readonly NativeBeltBindingGlyph[]
 }
 
-export interface NativeSecondaryCooldownPresentation {
+export interface NativeSkillQuickbarCooldownPresentation {
   capacity: number
   remaining: number
 }
 
-export const NATIVE_SECONDARY_BELT_FONT: NativeBeltFontData = nativeFontData
-export const NATIVE_SECONDARY_BELT_SLOT_OFFSETS = Object.freeze([
+export const NATIVE_SKILL_QUICKBAR_FONT: NativeBeltFontData = nativeFontData
+export const NATIVE_SKILL_QUICKBAR_SLOT_OFFSETS = Object.freeze([
   -332, -272, -212, -152, 98, 158, 218, 278,
 ])
 
 const SLOT_SIZE = 53
 const SECTOR_CENTER = SLOT_SIZE / 2
 
-export function nativeSecondaryCooldownPresentation(
+export function nativeSkillQuickbarCooldownPresentation(
   rowRemaining: number,
   rowCapacity: number,
   globalRemaining: number,
-): NativeSecondaryCooldownPresentation {
+): NativeSkillQuickbarCooldownPresentation {
   if (!(rowCapacity > 0)) return { capacity: 0, remaining: 0 }
   if (rowRemaining > 0 && globalRemaining <= rowRemaining) {
     return { capacity: rowCapacity, remaining: rowRemaining }
@@ -72,16 +72,16 @@ export function nativeSecondaryCooldownPresentation(
   }
 }
 
-export function layoutNativeSecondaryBinding(text: string): NativeBeltBindingLayout {
+export function layoutNativeQuickbarBinding(text: string): NativeBeltBindingLayout {
   const glyphs: Array<NativeBeltBindingGlyph & { cursor: number }> = []
   let cursor = 0
   let previousGlyphId: number | null = null
 
   for (const char of text) {
-    const glyph = NATIVE_SECONDARY_BELT_FONT.glyphs[char]
+    const glyph = NATIVE_SKILL_QUICKBAR_FONT.glyphs[char]
     if (glyph) {
       if (previousGlyphId !== null) {
-        cursor += NATIVE_SECONDARY_BELT_FONT.kerning[
+        cursor += NATIVE_SKILL_QUICKBAR_FONT.kerning[
           `${previousGlyphId}:${glyph.glyphId}`
         ] ?? 0
       }
@@ -97,7 +97,7 @@ export function layoutNativeSecondaryBinding(text: string): NativeBeltBindingLay
       })
       cursor += glyph.advance
     } else if (char === ' ') {
-      cursor += NATIVE_SECONDARY_BELT_FONT.header[1] ?? 0
+      cursor += NATIVE_SKILL_QUICKBAR_FONT.header[1] ?? 0
     }
     previousGlyphId = char.codePointAt(0) ?? null
   }

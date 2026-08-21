@@ -3,14 +3,17 @@ import type { CSSProperties } from 'react'
 import nativeAssetsJson from '../assets/game/skill-picker-native-assets.json' with { type: 'json' }
 import { hub } from '../lib/assets.ts'
 import type { NativeSecondaryPlayerState } from './core-kernels/native-secondary-abilities.ts'
-import { NATIVE_SKILL_CATALOG } from './core-kernels/player-progression.ts'
 import {
-  layoutNativeSecondaryBinding,
+  NATIVE_SKILL_CATALOG,
+  nativeSkillCategory,
+} from './core-kernels/player-progression.ts'
+import {
+  layoutNativeQuickbarBinding,
   nativeCooldownSectorPath,
-  nativeSecondaryCooldownPresentation,
-  NATIVE_SECONDARY_BELT_FONT,
-  NATIVE_SECONDARY_BELT_SLOT_OFFSETS,
-} from './secondary-ability-belt.ts'
+  nativeSkillQuickbarCooldownPresentation,
+  NATIVE_SKILL_QUICKBAR_FONT,
+  NATIVE_SKILL_QUICKBAR_SLOT_OFFSETS,
+} from './skill-quickbar.ts'
 
 interface AtlasRecord {
   frame: readonly [number, number, number, number]
@@ -30,46 +33,53 @@ const nativeAssets = nativeAssetsJson as unknown as NativeAssetManifest
 const ATLAS_WIDTH = 1024
 const ATLAS_HEIGHT = 512
 
-interface SecondaryAbilityBeltProps {
-  belt: readonly (number | null)[]
+interface SkillQuickbarProps {
   mode: 'hub' | 'run'
   playerState: NativeSecondaryPlayerState | undefined
+  quickbar: readonly (number | null)[]
+  selectedPrimarySkillId: number
 }
 
-export default function SecondaryAbilityBelt({
-  belt,
+export default function SkillQuickbar({
   mode,
   playerState,
-}: SecondaryAbilityBeltProps) {
+  quickbar,
+  selectedPrimarySkillId,
+}: SkillQuickbarProps) {
   return (
     <div
-      className="hub-hud-secondary-belt"
+      className="hub-hud-skill-quickbar"
       data-mode={mode}
-      aria-label="Secondary ability belt"
+      aria-label="Skill quickbar"
     >
-      {NATIVE_SECONDARY_BELT_SLOT_OFFSETS.map((offset, slot) => {
-        const skillId = belt[slot] ?? null
+      {NATIVE_SKILL_QUICKBAR_SLOT_OFFSETS.map((offset, slot) => {
+        const skillId = quickbar[slot] ?? null
         const skill = skillId === null ? undefined : NATIVE_SKILL_CATALOG[skillId]
-        const { capacity, remaining } = skillId === null
+        const secondary = skillId !== null && nativeSkillCategory(skillId) === 2
+        const { capacity, remaining } = !secondary
           ? { capacity: 0, remaining: 0 }
-          : nativeSecondaryCooldownPresentation(
+          : nativeSkillQuickbarCooldownPresentation(
               playerState?.cooldownTicksBySkill[skillId] ?? 0,
               playerState?.cooldownMaximumTicksBySkill[skillId] ?? 0,
               playerState?.globalCooldownTicks ?? 0,
             )
         const input = slot === 0 ? 'right mouse button' : `key ${slot}`
-        const active = skillId !== null && secondaryAbilityActive(skillId, playerState)
+        const active = skillId !== null && (
+          skillId === selectedPrimarySkillId
+          || secondaryAbilityActive(skillId, playerState)
+        )
         const label = skill === undefined
-          ? `Empty secondary slot ${slot + 1}, ${input}`
+          ? `Empty quickbar slot ${slot + 1}, ${input}`
           : `${skill.name}, ${input}${remaining > 0
             ? `, ${formatCooldown(remaining)} seconds cooldown remaining`
             : ''}${active ? ', active' : ''}`
         return (
           <div
-            className="hub-hud-secondary-slot"
+            className="hub-hud-quickbar-slot"
             data-slot={slot}
+            data-active={active}
             key={slot}
-            style={{ '--secondary-slot-offset': `${offset}px` } as CSSProperties}
+            style={{ '--quickbar-slot-offset': `${offset}px` } as CSSProperties}
             aria-label={label}
           >
             {remaining > 0 && capacity > 0 ? (
@@ -83,7 +93,7 @@ export default function SecondaryAbilityBelt({
             )}
             {slot === 0 && skill !== undefined ? (
               <img
-                className="hub-hud-secondary-input-mouse"
+                className="hub-hud-quickbar-input-mouse"
                 src={hub.hud.mouseRight}
                 alt=""
               />
@@ -106,7 +116,7 @@ function NativeSkillIcon({ cooldown, record }: { cooldown: boolean; record: numb
   const [trimX, trimY] = definition.trimOrigin
   return (
     <span
-      className="hub-hud-secondary-skill-icon"
+      className="hub-hud-quickbar-skill-icon"
       data-record={record}
       style={{
         backgroundImage: `url("${hub.trader.skillsAtlas}")`,
@@ -123,21 +133,21 @@ function NativeSkillIcon({ cooldown, record }: { cooldown: boolean; record: numb
 
 function CooldownSector({ capacity, remaining }: { capacity: number; remaining: number }) {
   return (
-    <svg className="hub-hud-secondary-cooldown" viewBox="0 0 53 53" aria-hidden>
+    <svg className="hub-hud-quickbar-cooldown" viewBox="0 0 53 53" aria-hidden>
       <path d={nativeCooldownSectorPath(remaining, capacity)} />
     </svg>
   )
 }
 
 function NativeKeyboardBinding({ text }: { text: string }) {
-  const layout = layoutNativeSecondaryBinding(text)
+  const layout = layoutNativeQuickbarBinding(text)
   const maskImage = `url("${hub.hud.fontAtlas}")`
   const backingImage = `url("${hub.hud.keyBacking}")`
-  const maskSize = `${NATIVE_SECONDARY_BELT_FONT.atlasWidth}px ${NATIVE_SECONDARY_BELT_FONT.atlasHeight}px`
+  const maskSize = `${NATIVE_SKILL_QUICKBAR_FONT.atlasWidth}px ${NATIVE_SKILL_QUICKBAR_FONT.atlasHeight}px`
   return (
     <>
       <span
-        className="hub-hud-secondary-key-backing"
+        className="hub-hud-quickbar-key-backing"
         style={{
           left: layout.backingLeft,
           width: layout.backingWidth,
@@ -164,7 +174,7 @@ function NativeKeyboardBinding({ text }: { text: string }) {
       {layout.glyphs.map((glyph, index) => (
         <span
           key={`${index}:${glyph.char}`}
-          className="hub-hud-secondary-key-glyph"
+          className="hub-hud-quickbar-key-glyph"
           style={{
             height: glyph.height,
             left: glyph.left,

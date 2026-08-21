@@ -1,6 +1,8 @@
-import type {
-  PlayerSkillBookComponent,
-  PlayerStatBookComponent,
+import {
+  activePlayerWeldBuildId,
+  SPELL_WELDING_SKILL_ID,
+  type PlayerSkillBookComponent,
+  type PlayerStatBookComponent,
 } from './player-progression.ts'
 import {
   validateOffensiveFactors,
@@ -110,7 +112,7 @@ export function nativePrimarySkillProfile(
 ): NativePrimarySkillProfile {
   validateOffensiveFactors(factors)
   const skillId = skillBook.primarySkillId
-  if (skillBook.activeWeldBuildId !== null) {
+  if (skillId === SPELL_WELDING_SKILL_ID) {
     return nativeWeldPrimarySkillProfile(
       skillBook,
       statBook,
@@ -286,7 +288,7 @@ export function nativeWeldPrimarySkillProfile(
   weldEffect = 1,
 ): NativeWeldPrimarySkillProfile {
   validateOffensiveFactors(factors)
-  const buildId = skillBook.activeWeldBuildId
+  const buildId = activePlayerWeldBuildId(skillBook)
   if (buildId === null) throw new RangeError('player has no active native weld build')
   const vector = nativeWeldPrimaryVector(skillBook, statBook, buildId, weldEffect)
   const rank = effectiveRank(skillBook, 52, true)

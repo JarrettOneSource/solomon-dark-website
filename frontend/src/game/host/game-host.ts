@@ -18,8 +18,8 @@ import {
   GAME_FIXED_TICK_SECONDS,
   GAME_TICK_RATE,
   addPlayerCharacter,
-  assignGameSimulationPlayerBeltSkill,
   applyGameSimulationHubAction,
+  bindGameSimulationPlayerSkillQuickbar,
   confirmGameSimulationLoadout,
   createGameSimulation,
   enterBoneyardWorld,
@@ -29,9 +29,9 @@ import {
   returnGameSimulationToHub,
   rerollGameSimulationPlayerSkill,
   saveGameSimulationPlayerSkill,
-  selectGameSimulationPlayerSkill,
   selectGameSimulationPlayerConcentration,
   selectGameSimulationPlayerPrimarySkill,
+  selectGameSimulationPlayerSkill,
   stepGameSimulationTick,
   type GameSimulationState,
   type PlayerId,
@@ -734,6 +734,58 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         publishSaveCheckpoint('skill-selected')
         return
       }
+      if (message.type === 'client-skill-quickbar-bind') {
+        const bound = bindGameSimulationPlayerSkillQuickbar(
+          state,
+          client.playerId,
+          message.skillId,
+          message.slot,
+        )
+        if (!bound) {
+          disconnect(socket, 'invalid-message', 'The quickbar skill is unavailable.')
+          return
+        }
+        state = bound
+        client.activeInput = createIdlePlayerCharacterInput()
+        client.queuedInputs.clear()
+        broadcastSnapshot()
+        publishSaveCheckpoint('skill-quickbar-bound')
+        return
+      }
+      if (message.type === 'client-select-primary-skill') {
+        const selected = selectGameSimulationPlayerPrimarySkill(
+          state,
+          client.playerId,
+          message.skillId,
+        )
+        if (!selected) {
+          disconnect(socket, 'invalid-message', 'The primary skill is unavailable.')
+          return
+        }
+        state = selected
+        client.activeInput = createIdlePlayerCharacterInput()
+        client.queuedInputs.clear()
+        broadcastSnapshot()
+        publishSaveCheckpoint('primary-skill-selected')
+        return
+      }
+      if (message.type === 'client-select-concentration') {
+        const selected = selectGameSimulationPlayerConcentration(
+          state,
+          client.playerId,
+          message.skillId,
+        )
+        if (!selected) {
+          disconnect(socket, 'invalid-message', 'The concentration is unavailable.')
+          return
+        }
+        state = selected
+        client.activeInput = createIdlePlayerCharacterInput()
+        client.queuedInputs.clear()
+        broadcastSnapshot()
+        publishSaveCheckpoint('concentration-selected')
+        return
+      }
       if (message.type === 'client-level-up-action') {
         const activeState = stateForPlayer(client.playerId)
         const barrierBefore = activeState.levelUpBarrier
@@ -752,58 +804,6 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         }
         broadcastSnapshot()
         publishSaveCheckpoint('level-up-action')
-        return
-      }
-      if (message.type === 'client-assign-belt-skill') {
-        const next = assignGameSimulationPlayerBeltSkill(
-          state,
-          client.playerId,
-          message.slot,
-          message.skillId,
-        )
-        if (!next) {
-          disconnect(socket, 'invalid-message', 'The belt skill is not learned or selectable.')
-          return
-        }
-        state = next
-        client.activeInput = createIdlePlayerCharacterInput()
-        client.queuedInputs.clear()
-        broadcastSnapshot()
-        publishSaveCheckpoint('skill-belt-assigned')
-        return
-      }
-      if (message.type === 'client-select-primary-skill') {
-        const next = selectGameSimulationPlayerPrimarySkill(
-          state,
-          client.playerId,
-          message.skillId,
-        )
-        if (!next) {
-          disconnect(socket, 'invalid-message', 'The primary skill is not learned or selectable.')
-          return
-        }
-        state = next
-        client.activeInput = createIdlePlayerCharacterInput()
-        client.queuedInputs.clear()
-        broadcastSnapshot()
-        publishSaveCheckpoint('primary-skill-selected')
-        return
-      }
-      if (message.type === 'client-select-concentration') {
-        const next = selectGameSimulationPlayerConcentration(
-          state,
-          client.playerId,
-          message.skillId,
-        )
-        if (!next) {
-          disconnect(socket, 'invalid-message', 'The concentration skill is unavailable.')
-          return
-        }
-        state = next
-        client.activeInput = createIdlePlayerCharacterInput()
-        client.queuedInputs.clear()
-        broadcastSnapshot()
-        publishSaveCheckpoint('concentration-selected')
         return
       }
       if (message.type === 'client-hub-action') {
@@ -2186,7 +2186,7 @@ function newestQueuedInput(
 
 function sameCast(first: PlayerCharacterInput, second: PlayerCharacterInput): boolean {
   return first.cast.primary === second.cast.primary
-    && first.cast.secondary === second.cast.secondary
+    && first.cast.quickbar === second.cast.quickbar
 }
 
 function sameCharacter(first: PlayerCharacterConfig, second: PlayerCharacterConfig): boolean {

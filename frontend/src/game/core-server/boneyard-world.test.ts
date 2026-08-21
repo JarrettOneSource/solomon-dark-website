@@ -36,7 +36,7 @@ import {
 function movementInput(x: number, y: number) {
   return {
     aim: null,
-    cast: { primary: false, secondary: null },
+    cast: { primary: false, quickbar: null },
     movement: { x, y },
   }
 }

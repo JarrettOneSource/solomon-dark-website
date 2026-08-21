@@ -124,7 +124,7 @@ test('every member pins the complete native art and audio ownership census', () 
   )
   assert.deepEqual(
     NATIVE_SECONDARY_AUDIO_CUES.filter((cue) => !contractedCues.has(cue)),
-    ['fizzle'],
+    ['flash-spell', 'fizzle'],
   )
   assert.deepEqual(
     [...contractedCues].filter((cue) => !NATIVE_SECONDARY_AUDIO_CUES.includes(
@@ -134,7 +134,7 @@ test('every member pins the complete native art and audio ownership census', () 
   )
 })
 
-test('the native secondary belt maps right mouse and all seven keyboard slots', () => {
+test('the native skill quickbar maps right mouse and all seven keyboard slots', () => {
   assert.equal(NATIVE_SECONDARY_BELT_SLOT_COUNT, 8)
   assert.equal(NATIVE_SECONDARY_RIGHT_MOUSE_SLOT, 0)
   assert.deepEqual(NATIVE_SECONDARY_KEYBOARD_SLOTS, [1, 2, 3, 4, 5, 6, 7])

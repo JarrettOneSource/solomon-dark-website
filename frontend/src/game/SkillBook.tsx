@@ -5,8 +5,8 @@ import {
   useRef,
   useState,
   type CSSProperties,
-  type DragEvent,
   type KeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
 } from 'react'
 
 import { NATIVE_SKILL_CATALOG } from './core-kernels/player-progression.ts'
@@ -15,6 +15,7 @@ import type {
   ProtocolPlayerEconomy,
   ProtocolPlayerProgression,
 } from './protocol/game-state.ts'
+import type { GameSnapshot } from './protocol/game-protocol.ts'
 import {
   createSkillBookRenderer,
   type SkillBookRenderer,
@@ -29,32 +30,39 @@ import './skill-book.css'
 
 interface SkillBookProps {
   economy: ProtocolPlayerEconomy
-  onAssignBeltSkill: (slot: number, skillId: number) => void
+  onAssignQuickbarSkill: (skillId: number, slot: number) => void
   onClose: () => void
   onOpenInventory: () => void
   onSelectConcentration: (skillId: number) => void
   onSelectPrimarySkill: (skillId: number) => void
+  playerId: string
   progression: ProtocolPlayerProgression
   style: CSSProperties
+  subscribeSnapshot: (listener: (snapshot: GameSnapshot) => void) => () => void
   topMost: boolean
 }
 
-const ELEMENTAL_PRIMARY_SKILL_IDS = new Set([8, 16, 24, 32, 40])
-
 export default function SkillBook({
-  economy,
-  onAssignBeltSkill,
+  economy: initialEconomy,
+  onAssignQuickbarSkill,
   onClose,
   onOpenInventory,
   onSelectConcentration,
   onSelectPrimarySkill,
-  progression,
+  playerId,
+  progression: initialProgression,
   style,
+  subscribeSnapshot,
   topMost,
 }: SkillBookProps) {
+  const [{ economy, progression }, setModel] = useState(() => ({
+    economy: initialEconomy,
+    progression: initialProgression,
+  }))
   const pages = useMemo(() => nativeSkillBookPages(progression), [progression])
   const placements = useMemo(() => nativeSkillBookPagePlacements(pages), [pages])
-  const [targetBeltSlot, setTargetBeltSlot] = useState(0)
+  const [targetQuickbarSlot, setTargetQuickbarSlot] = useState(0)
+  const [draggedSkillId, setDraggedSkillId] = useState<number | null>(null)
   const [hoveredSkillId, setHoveredSkillId] = useState<number | null>(null)
   const [openProgress, setOpenProgress] = useState(0)
   const [phase, setPhase] = useState<'opening' | 'settled' | 'closing'>('opening')
@@ -67,21 +75,37 @@ export default function SkillBook({
   const closeCompletedRef = useRef(false)
   const closeTargetRef = useRef<'closed' | 'inventory'>('closed')
   const presentationRef = useRef<SkillBookRendererPresentation>({
-    hoveredSkillId,
+    draggedSkillId,
     economy,
+    hoveredSkillId,
     openProgress,
     placements,
     progression,
-    targetBeltSlot,
+    targetQuickbarSlot,
   })
   presentationRef.current = {
-    hoveredSkillId,
+    draggedSkillId,
     economy,
+    hoveredSkillId,
     openProgress,
     placements,
     progression,
-    targetBeltSlot,
+    targetQuickbarSlot,
   }
+
+  useEffect(() => subscribeSnapshot((snapshot) => {
+    const player = snapshot.players[playerId]
+    if (!player) return
+    setModel((current) => sameSkillBookModel(
+      current.economy,
+      current.progression,
+      player.economy,
+      player.progression,
+    ) ? current : {
+      economy: player.economy,
+      progression: player.progression,
+    })
+  }), [playerId, subscribeSnapshot])
 
   useEffect(() => subscribeGamePresentationFrames((nowMs) => {
     if (phase === 'settled') return
@@ -136,11 +160,31 @@ export default function SkillBook({
 
   useEffect(() => {
     rendererRef.current?.setPresentation(presentationRef.current)
-  }, [economy, hoveredSkillId, openProgress, placements, progression, targetBeltSlot])
+  }, [
+    draggedSkillId,
+    economy,
+    hoveredSkillId,
+    openProgress,
+    placements,
+    progression,
+    rendererState,
+    targetQuickbarSlot,
+  ])
 
-  const assign = (slot: number, skillId: number) => {
-    onAssignBeltSkill(slot, skillId)
-    setTargetBeltSlot(slot)
+  const assign = (skillId: number, slot: number) => {
+    onAssignQuickbarSkill(skillId, slot)
+    setTargetQuickbarSlot(slot)
+    setDraggedSkillId(null)
+  }
+  const quickbarSlotAt = (clientX: number, clientY: number): number | null => {
+    const actions = rootRef.current?.querySelectorAll<HTMLElement>('.skill-book-quickbar-action')
+    if (!actions) return null
+    for (let slot = 0; slot < actions.length; slot += 1) {
+      const rect = actions[slot]!.getBoundingClientRect()
+      if (clientX >= rect.left && clientX <= rect.right
+        && clientY >= rect.top && clientY <= rect.bottom) return slot
+    }
+    return null
   }
 
   const beginClose = (target: 'closed' | 'inventory' = 'closed') => {
@@ -167,7 +211,8 @@ export default function SkillBook({
     const slot = event.key >= '1' && event.key <= '7' ? Number(event.key) : null
     if (slot !== null) {
       event.preventDefault()
-      setTargetBeltSlot(slot)
+      event.stopPropagation()
+      setTargetQuickbarSlot(slot)
     }
   }
 
@@ -205,27 +250,35 @@ export default function SkillBook({
                 key={row.id}
                 index={index}
                 row={row}
-                selected={row.id === progression.primarySkillId
+                selected={row.id === progression.selectedPrimarySkillId
                   || progression.concentrationSkillIds.includes(row.id)}
-                onAssign={() => assign(targetBeltSlot, row.id)}
+                onDragChange={setDraggedSkillId}
                 onHover={setHoveredSkillId}
+                onPointerDrop={(skillId, clientX, clientY) => {
+                  const slot = quickbarSlotAt(clientX, clientY)
+                  if (slot !== null) assign(skillId, slot)
+                }}
+                onPointerTarget={(clientX, clientY) => {
+                  const slot = quickbarSlotAt(clientX, clientY)
+                  if (slot !== null) setTargetQuickbarSlot(slot)
+                }}
                 onSelectConcentration={() => onSelectConcentration(row.id)}
                 onSelectPrimary={() => onSelectPrimarySkill(row.id)}
+                concentrationLocked={progression.mindChugTicksRemaining > 0}
               />
             ))}
           </section>
         ))}
       </div>
       <span className="skill-book-semantic-help">
-        hover over a skill icon for more information about a skill.
-        touch and hold a skill icon for more information about a skill.
-        skills with a gold or green border can be dragged into your belt
+        Hover over a skill icon for more information about a skill.
+        Skills with a gold or green border can be dragged into your belt.
       </span>
-      <SkillBeltEditor
+      <SkillQuickbarEditor
+        draggedSkillId={draggedSkillId}
+        onTarget={setTargetQuickbarSlot}
         progression={progression}
-        targetSlot={targetBeltSlot}
-        onTarget={setTargetBeltSlot}
-        onAssign={assign}
+        targetSlot={targetQuickbarSlot}
       />
       {rendererState === 'error' ? (
         <p className="skill-book-error" role="alert">Skills renderer unavailable.</p>
@@ -234,99 +287,154 @@ export default function SkillBook({
   )
 }
 
+function sameSkillBookModel(
+  currentEconomy: ProtocolPlayerEconomy,
+  currentProgression: ProtocolPlayerProgression,
+  nextEconomy: ProtocolPlayerEconomy,
+  nextProgression: ProtocolPlayerProgression,
+): boolean {
+  return currentEconomy.revision === nextEconomy.revision
+    && currentProgression.revision === nextProgression.revision
+    && currentProgression.selectedPrimarySkillId === nextProgression.selectedPrimarySkillId
+    && currentProgression.weldBuildId === nextProgression.weldBuildId
+    && currentProgression.mindChugTicksRemaining === nextProgression.mindChugTicksRemaining
+    && currentProgression.splitMind === nextProgression.splitMind
+    && currentProgression.skillQuickbar.every((skillId, index) => (
+      skillId === nextProgression.skillQuickbar[index]
+    ))
+    && currentProgression.concentrationSkillIds.every((skillId, index) => (
+      skillId === nextProgression.concentrationSkillIds[index]
+    ))
+}
+
 function SkillBookEntry({
+  concentrationLocked,
   index,
-  onAssign,
+  onDragChange,
   onHover,
+  onPointerDrop,
+  onPointerTarget,
   onSelectConcentration,
   onSelectPrimary,
   row,
   selected,
 }: {
+  concentrationLocked: boolean
   index: number
-  onAssign: () => void
+  onDragChange: (skillId: number | null) => void
   onHover: (skillId: number | null) => void
+  onPointerDrop: (skillId: number, clientX: number, clientY: number) => void
+  onPointerTarget: (clientX: number, clientY: number) => void
   onSelectConcentration: () => void
   onSelectPrimary: () => void
   row: NativeSkillBookRow
   selected: boolean
 }) {
-  const isPrimary = ELEMENTAL_PRIMARY_SKILL_IDS.has(row.id)
-  const action = row.category === 2
-    ? onAssign
-    : isPrimary
-      ? onSelectPrimary
-      : row.category === 3 && !selected
-        ? onSelectConcentration
-        : undefined
-  const dragStart = (event: DragEvent<HTMLButtonElement>) => {
-    if (row.category !== 2) {
-      event.preventDefault()
-      return
+  const draggable = row.category === 1 || row.category === 2
+  const selectable = row.category === 1
+    || (row.category === 3 && !selected && !concentrationLocked)
+  const pressRef = useRef<{
+    dragging: boolean
+    pointerId: number
+    x: number
+    y: number
+  } | null>(null)
+  const suppressClickRef = useRef(false)
+  const finishPointer = (event: ReactPointerEvent<HTMLButtonElement>, cancelled: boolean) => {
+    const press = pressRef.current
+    if (!press || press.pointerId !== event.pointerId) return
+    if (press.dragging && !cancelled) onPointerDrop(row.id, event.clientX, event.clientY)
+    onDragChange(null)
+    pressRef.current = null
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
     }
-    event.dataTransfer.setData('application/x-solomon-skill-id', `${row.id}`)
-    event.dataTransfer.effectAllowed = 'copy'
   }
   return (
     <button
       type="button"
       className="skill-book-entry-action"
       style={{ left: index === 0 ? 56.5 : 236.5 + 160 * (index - 1) }}
-      aria-label={`${row.name}, rank ${row.effectiveRank}`}
-      aria-disabled={action === undefined}
+      aria-label={`${row.name}, rank ${row.effectiveRank}${draggable ? ', assign to selected quickbar slot' : ''}`}
+      aria-disabled={!draggable && !selectable}
       aria-pressed={selected}
       data-category={row.category}
       data-dependency-ids={row.dependencyIds.join(',')}
       data-skill-id={row.id}
-      draggable={row.category === 2}
-      onClick={action}
-      onDragStart={dragStart}
-      onFocus={() => onHover(row.id)}
+      draggable={false}
       onBlur={() => onHover(null)}
+      onClick={(event) => {
+        if (suppressClickRef.current) {
+          suppressClickRef.current = false
+          event.preventDefault()
+          return
+        }
+        if (row.category === 1) onSelectPrimary()
+        if (row.category === 3 && !selected && !concentrationLocked) onSelectConcentration()
+      }}
+      onFocus={() => onHover(row.id)}
       onPointerEnter={() => onHover(row.id)}
       onPointerLeave={() => onHover(null)}
+      onPointerCancel={(event) => finishPointer(event, true)}
+      onPointerDown={(event) => {
+        if (!draggable || event.button !== 0) return
+        pressRef.current = {
+          dragging: false,
+          pointerId: event.pointerId,
+          x: event.clientX,
+          y: event.clientY,
+        }
+        event.currentTarget.setPointerCapture(event.pointerId)
+      }}
+      onPointerMove={(event) => {
+        const press = pressRef.current
+        if (!press || press.pointerId !== event.pointerId) return
+        if (!press.dragging) {
+          const dx = event.clientX - press.x
+          const dy = event.clientY - press.y
+          if (dx * dx + dy * dy <= 16) return
+          press.dragging = true
+          suppressClickRef.current = true
+          onDragChange(row.id)
+        }
+        onPointerTarget(event.clientX, event.clientY)
+      }}
+      onPointerUp={(event) => finishPointer(event, false)}
     />
   )
 }
 
-function SkillBeltEditor({
-  onAssign,
+function SkillQuickbarEditor({
+  draggedSkillId,
   onTarget,
   progression,
   targetSlot,
 }: {
-  onAssign: (slot: number, skillId: number) => void
+  draggedSkillId: number | null
   onTarget: (slot: number) => void
   progression: ProtocolPlayerProgression
   targetSlot: number
 }) {
   return (
-    <div className="skill-book-belt-actions" aria-label="Eight slot skill belt">
-      {progression.secondaryBelt.map((skillId, slot) => {
+    <div className="skill-book-quickbar-actions" aria-label="Eight slot skill quickbar">
+      {progression.skillQuickbar.map((skillId, slot) => {
         const skill = skillId === null ? null : NATIVE_SKILL_CATALOG[skillId]
         return (
           <button
             key={slot}
             type="button"
-            className="skill-book-belt-action"
+            className="skill-book-quickbar-action"
             aria-label={skill
-              ? `Belt ${slot + 1}, ${skill.name}${slot === 0 ? ', right mouse button' : `, key ${slot}`}`
-              : `Belt ${slot + 1}, empty${slot === 0 ? ', right mouse button' : `, key ${slot}`}`}
+              ? `Quickbar ${slot + 1}, ${skill.name}${slot === 0 ? ', right mouse button' : `, key ${slot}`}`
+              : `Quickbar ${slot + 1}, empty${slot === 0 ? ', right mouse button' : `, key ${slot}`}`}
             aria-pressed={slot === targetSlot}
             data-target={slot === targetSlot || undefined}
             onClick={() => onTarget(slot)}
-            onDragOver={(event) => {
-              if (event.dataTransfer.types.includes('application/x-solomon-skill-id')) {
-                event.preventDefault()
-                event.dataTransfer.dropEffect = 'copy'
-              }
-            }}
-            onDrop={(event) => {
-              event.preventDefault()
-              const droppedSkillId = Number(event.dataTransfer.getData('application/x-solomon-skill-id'))
-              if (Number.isSafeInteger(droppedSkillId)) onAssign(slot, droppedSkillId)
-            }}
-          />
+          >
+            {draggedSkillId !== null && slot === targetSlot ? (
+              <span className="skill-book-drop-target">Drop skill</span>
+            ) : null}
+          </button>
         )
       })}
     </div>

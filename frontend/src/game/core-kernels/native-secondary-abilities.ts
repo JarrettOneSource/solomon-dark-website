@@ -15,8 +15,10 @@ import {
 } from './player-character.ts'
 import { actorHeadingIndex } from './actor-heading.ts'
 import {
+  activePlayerWeldBuildId,
   effectiveElementalPrimarySkillRankStats,
   effectiveSecondaryAbilityRankStats,
+  nativeSkillCategory,
   nativeWeldBuild,
   playerStatBook,
   type NativeSecondaryAbilityRankStats,
@@ -3449,11 +3451,12 @@ export function stepNativeSecondaryAbilities(
       }
     }
 
-    const slot = authority.input.cast.secondary
+    const slot = authority.input.cast.quickbar
     const pressed = slot !== null && slot !== player.heldSlot
     if (pressed) {
-      const skillId = authority.skillBook.secondaryBelt[slot]
-      if (skillId !== null) {
+      const quickbarSkillId = authority.skillBook.skillQuickbar[slot]
+      if (quickbarSkillId !== null && nativeSkillCategory(quickbarSkillId) === 2) {
+        const skillId = quickbarSkillId as NativeSecondaryAbilityId
         const cast = castAbility(state, player, playerId, skillId, authority, context)
         state = cast.state
         player = cast.player
@@ -5987,7 +5990,7 @@ function nativeMagicTrapSelector(
   authority: NativeSecondaryPlayerAuthority,
   rng: NativeRngState,
 ): { readonly rng: NativeRngState; readonly selector: number } {
-  const weldBuildId = authority.skillBook.activeWeldBuildId
+  const weldBuildId = activePlayerWeldBuildId(authority.skillBook)
   if (weldBuildId !== null) {
     const build = nativeWeldBuild(weldBuildId)
     if (build === null) throw new RangeError(`unknown native weld build ${weldBuildId}`)

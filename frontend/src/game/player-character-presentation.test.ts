@@ -301,6 +301,23 @@ test('player draw plan holds native Staff Cast 2 pose nine during a secondary ac
   assert.equal(plan.staffFront, false)
 })
 
+test('selected primary, not creation element, owns the Staff cast pose bank', () => {
+  const plan = createPlayerCharacterDrawPlan({
+    config: { ...FIRE_CONFIG, element: 'ether' },
+    gaitDegrees: 0,
+    headingIndex: 7,
+    primaryCast: {
+      ...createIdlePlayerPrimaryCast(),
+      actionTick: 37,
+      selectedPrimaryId: 16,
+    },
+    velocity: { x: 0, y: 0 },
+    walkCyclePrimary: 0,
+  })
+  assert.equal(plan.attachmentPose, 7)
+  assert.deepEqual(plan.orbOffset, { x: 41.5, y: -0.5 })
+})
+
 test('player draw plan holds the sustained Staff Constant pose bank', () => {
   const insertion = createPlayerCharacterDrawPlan({
     config: FIRE_CONFIG,

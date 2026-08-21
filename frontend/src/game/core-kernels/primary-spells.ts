@@ -72,6 +72,7 @@ import {
 import {
   AIR_PRIMARY_TARGET_Y_OFFSET,
   ETHER_PRIMARY_INITIAL_TURN,
+  NATIVE_PRIMARY_HOSTILE_FLAG,
   airPrimaryBoltGeometry,
   advanceEtherPrimaryHoming,
   directionFromHeading,
@@ -548,14 +549,6 @@ export const PRIMARY_SPELL_RANK_ONE_MANA_COSTS = {
   water: 0.125,
 } as const satisfies Readonly<Record<WizardElement, number>>
 
-const PRIMARY_SKILL_ID_BY_ELEMENT = {
-  air: 24,
-  earth: 40,
-  ether: 8,
-  fire: 16,
-  water: 32,
-} as const satisfies Readonly<Record<WizardElement, number>>
-
 export type PlayerStaffAttachmentPose = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
 
 const STAFF_PRIMARY_EMITTER_OFFSETS: Readonly<Record<
@@ -756,12 +749,13 @@ export function primaryCastEmissionTick(element: WizardElement): number {
 
 export function primarySpellEmitter(
   player: Pick<PlayerCharacterState, 'config' | 'headingIndex' | 'position' | 'primaryCast'>,
+  selectedElement: WizardElement = player.config.element,
 ): Vector2 {
   const offset = primarySpellEmitterOffset(
     player.headingIndex,
     player.primaryCast.actionTick,
     player.primaryCast.channelActive,
-    player.config.element,
+    selectedElement,
   )
   return {
     x: player.position.x + offset.x,
@@ -1090,9 +1084,12 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
     const previous = context.previousPlayers[playerId] ?? player
     const input = context.inputs[playerId]
     const authority = context.castAuthority[playerId]
-    if (authority) assertPrimarySkillMatchesElement(player.config.element, authority.primarySkill)
+    const primaryElement = authority?.primarySkill.kind === 'weld'
+      ? null
+      : authority?.primarySkill.kind ?? null
+    const castClockElement = primaryElement ?? 'fire'
     const manaCost = authority
-      ? primarySpellManaCost(player.config.element, authority.primarySkill)
+      ? primarySpellManaCost(castClockElement, authority.primarySkill)
       : 0
     let availableMana = authority?.availableMana ?? 0
     manaSpent[playerId] = 0
@@ -1120,27 +1117,20 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
     const released = !rawHeld && previous.primaryCast.held
     const oneShotPrimary = authority?.primarySkill.kind === 'weld'
       ? authority.primarySkill.castKind === 'one-shot'
-      : player.config.element === 'ether' || player.config.element === 'fire'
+      : primaryElement === 'ether' || primaryElement === 'fire'
     const acceptedCast = rawHeld
       && previous.primaryCast.actionTick < 0
       && (pressed || (oneShotPrimary && previous.primaryCast.castSequence > 0))
       && authority?.eligible === true
     const sustainedPrimary = authority?.primarySkill.kind === 'weld'
       ? authority.primarySkill.castKind !== 'one-shot'
-      : (
-          player.config.element === 'air'
-          || player.config.element === 'water'
-          || player.config.element === 'earth'
-        )
+      : primaryElement === 'air' || primaryElement === 'water' || primaryElement === 'earth'
     const aimSamplesInput = rawHeld && (
       sustainedPrimary || previous.primaryCast.actionTick < 0
     )
     const aimDirection = aimSamplesInput && input?.aim
       ? primarySpellAimDirection(player.position, input.aim, context.viewScale)
       : previous.primaryCast.aimDirection
-    const castClockElement = authority?.primarySkill.kind === 'weld'
-      ? 'fire'
-      : player.config.element
     let primaryCast = advancePrimaryCast(
       previous.primaryCast,
       rawHeld,
@@ -1164,7 +1154,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
     const worldKey = context.worldKeyForPlayer(playerId)
 
     if (authority?.eligible !== true) {
-      if (player.config.element === 'earth') {
+      if (primaryElement === 'earth') {
         projectiles = projectiles.filter((spell) => !(
           spell.kind === 'earth'
           && spell.ownerId === playerId
@@ -1203,7 +1193,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           nextPlayer = { ...nextPlayer, primaryCast }
         }
       } else {
-      switch (player.config.element) {
+      switch (primaryElement) {
         case 'air':
         case 'water':
           primaryCast = { ...nextPlayer.primaryCast, channelActive: true }
@@ -1229,7 +1219,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
               : nextPlayer.primaryCast.emissionSequence,
           }
           nextPlayer = { ...nextPlayer, primaryCast }
-          const emitter = primarySpellEmitter(nextPlayer)
+          const emitter = primarySpellEmitter(nextPlayer, castClockElement)
           const initialCharge = surged
             ? earthSkill.maximumCharge
             : advanceNativeEarthBoulderCharge(
@@ -1303,7 +1293,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
         ? spawnNativeWeldOneShot({
             aimDirection,
             firstId: nextId,
-            origin: primarySpellEmitter(nextPlayer),
+            origin: primarySpellEmitter(nextPlayer, castClockElement),
             ownerId: playerId,
             primarySkill: authority.primarySkill,
             registerLightProvider,
@@ -1316,7 +1306,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             nextId,
             playerId,
             nextPlayer,
-            player.config.element as 'ether' | 'fire',
+            primaryElement as 'ether' | 'fire',
             authority.primarySkill,
             worldKey,
             context.spellTargets(playerId),
@@ -1445,7 +1435,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
       }
     }
 
-    const earthReleaseEligible = player.config.element === 'earth' && projectiles.some((spell) => (
+    const earthReleaseEligible = primaryElement === 'earth' && projectiles.some((spell) => (
       spell.kind === 'earth'
       && spell.ownerId === playerId
       && spell.phase === 'held'
@@ -1458,7 +1448,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           // Native persistent group/slot actors are released with the cast.
         } else {
           const underpowered = debitMana()
-          const emitter = primarySpellEmitter(nextPlayer)
+          const emitter = primarySpellEmitter(nextPlayer, castClockElement)
           const buildId = authority.primarySkill.buildId
           if (isChannelBuild(buildId)) {
             const lightning = buildId === 1003
@@ -1784,14 +1774,14 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           }
         }
       } else {
-      switch (player.config.element) {
+      switch (primaryElement) {
         case 'air': {
           if (authority.primarySkill.kind !== 'air') {
             throw new Error('Air caster does not own an Air primary payload')
           }
           if (!rawHeld) break
           const underpowered = debitMana()
-          const emitter = primarySpellEmitter(nextPlayer)
+          const emitter = primarySpellEmitter(nextPlayer, castClockElement)
           const air = createAirTransient(
             playerId,
             nextPlayer,
@@ -1846,7 +1836,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           }
           if (!rawHeld) break
           const underpowered = debitMana()
-          const emitter = primarySpellEmitter(nextPlayer)
+          const emitter = primarySpellEmitter(nextPlayer, castClockElement)
           channelEmissions.push({
             damage: primarySpellChannelDamage(authority.primarySkill, underpowered),
             direction: { ...aimDirection },
@@ -1916,7 +1906,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             if (spell.kind !== 'earth' || spell.ownerId !== playerId || spell.phase !== 'held') {
               return spell
             }
-            const emitter = primarySpellEmitter(nextPlayer)
+            const emitter = primarySpellEmitter(nextPlayer, castClockElement)
             const charge = acceptedCast || (!rawHeld && (
               spell.charge >= PRIMARY_SPELL_EARTH_MIN_RELEASE_CHARGE
             )) || (underpowered && spell.charge > PRIMARY_SPELL_EARTH_MIN_RELEASE_CHARGE)
@@ -1990,13 +1980,13 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
     const shouldEndChannel = nextPlayer.primaryCast.channelActive && (
       authority.primarySkill.kind === 'weld'
         ? released
-        : player.config.element === 'earth'
+        : primaryElement === 'earth'
           ? !rawHeld && earthReleaseEligible
           : released
     )
 
     if (shouldEndChannel) {
-      if (player.config.element === 'earth') {
+      if (primaryElement === 'earth') {
         const released = releaseHeldEarthProjectiles(
           projectiles,
           playerId,
@@ -2302,7 +2292,7 @@ function createOneShotProjectiles(
     primarySkill.damageRollCount,
   )
   const aimDirection = player.primaryCast.aimDirection
-  const emitter = primarySpellEmitter(player)
+  const emitter = primarySpellEmitter(player, kind)
   if (kind === 'fire') {
     if (primarySkill.kind !== 'fire') throw new Error('Expected a Fire primary profile')
     const privateSeed = drawNativeFirePrivateSeed(damageDraw.rng)
@@ -2441,18 +2431,6 @@ function primarySpellChannelDamage(
 ): number {
   return primarySkill.damageMinimum / PRIMARY_SPELL_TICKS_PER_SECOND
     * (underpowered ? 0.5 : 1)
-}
-
-function assertPrimarySkillMatchesElement(
-  element: WizardElement,
-  primarySkill: NativePrimarySkillProfile,
-): void {
-  if (primarySkill.kind === 'weld') return
-  if (primarySkill.skillId !== PRIMARY_SKILL_ID_BY_ELEMENT[element]) {
-    throw new Error(
-      `primary skill ${primarySkill.skillId} does not match ${element} caster`,
-    )
-  }
 }
 
 function advanceProjectile(

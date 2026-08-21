@@ -75,6 +75,7 @@ import {
 import {
   boneyardEnemyExperienceAward,
   NATIVE_SKILL_CATALOG,
+  nativeSkillCategory,
   type PlayerLevelUpBarrierState,
   type PlayerProgressionComponent,
   type PlayerSkillBookComponent,
@@ -166,9 +167,9 @@ import {
 import type { HubStudentPopulationState } from './hub-students.ts'
 import {
   addPlayerEntity,
-  assignPlayerEntitySecondaryBelt,
   applyPlayerEntityPotionEffect,
   applyPlayerEntitySkillChoice,
+  bindPlayerEntitySkillQuickbar,
   coldSlowPlayerEntity,
   consumePlayerEntityWizardKey,
   createPlayerEntityStore,
@@ -198,13 +199,13 @@ import {
   removePlayerEntity,
   rerollPlayerEntitySkillOffer,
   resetPlayerEntitiesForNewRun,
+  selectPlayerEntityPrimarySkill,
   deferPlayerEntitySkillChoice,
   restorePlayerEntityHealth,
   restorePlayerEntityMana,
   setPlayerEntityMana,
   setPlayerEntityMindstar,
   selectPlayerEntityConcentrationSkill,
-  selectPlayerEntityPrimarySkill,
   setPlayerEntitySpectating,
   stepPlayerEntityCombatTick,
   stepPlayerEntityOverlayLightingTick,
@@ -707,21 +708,21 @@ export function getPlayerSkillBook(
   return skillBook
 }
 
-export function assignGameSimulationPlayerBeltSkill(
+export function bindGameSimulationPlayerSkillQuickbar(
   state: GameSimulationState,
   playerId: PlayerId,
-  slot: number,
   skillId: number,
+  slot: number,
 ): GameSimulationState | null {
   if (!gameSimulationPlayerCanEditBooks(state, playerId)) return null
   try {
     return {
       ...state,
-      playerEntities: assignPlayerEntitySecondaryBelt(
+      playerEntities: bindPlayerEntitySkillQuickbar(
         state.playerEntities,
         playerId,
-        slot,
         skillId,
+        slot,
       ),
     }
   } catch {
@@ -982,7 +983,7 @@ export function stepGameSimulationTick(
     return [playerId, staffActionOwnerIds.has(playerId)
       ? {
           ...input,
-          cast: { primary: false, secondary: null },
+          cast: { primary: false, quickbar: null },
           movement: { x: 0, y: 0 },
         }
       : input]
@@ -1095,6 +1096,7 @@ function finishGameSimulationTick(
   let secondaryAbilities = previous.secondaryAbilities
   let levelUpBarrier = previous.levelUpBarrier
   let nextLevelUpBarrierId = previous.nextLevelUpBarrierId
+  const unsteppedSecondaryActorIds = new Set<number>()
   const lethalObserver: BoneyardEnemyLethalObserver = {
     onReward: ({ enemy, playerId }) => {
       if (world.kind !== 'boneyard' || playerId === null) return
@@ -1122,30 +1124,6 @@ function finishGameSimulationTick(
         },
       }
 
-      const progressionState: GameSimulationState = {
-        ...previous,
-        levelUpBarrier,
-        nextLevelUpBarrierId,
-        playerEntities,
-        world,
-      }
-      const participantIds = levelUpParticipantIds(progressionState)
-      if (participantIds.includes(playerId)) {
-        const creditedExperience = boneyardEnemyExperienceAward({
-          arenaPlayerCount: participantIds.length,
-          evaluatedActorReward: enemy.experience,
-          receiverLevel: before.level,
-        })
-        const awarded = grantSharedGameSimulationExperience(
-          progressionState,
-          playerId,
-          creditedExperience,
-        )
-        playerEntities = awarded.playerEntities
-        levelUpBarrier = awarded.levelUpBarrier
-        nextLevelUpBarrierId = awarded.nextLevelUpBarrierId
-      }
-
       const after = playerProgressionAt(playerEntities, playerId)
       const currentRun = world.kind === 'boneyard'
         ? world.hallOfFameRuns[playerId]
@@ -1170,7 +1148,6 @@ function finishGameSimulationTick(
       }
     },
   }
-  const unsteppedSecondaryActorIds = new Set<number>()
   const playerDamage = result.playerDamage ?? []
   const playerDamageSoundEvents: BoneyardEnemySemanticEvent[] = []
   const appliedPlayerDamage: (typeof playerDamage)[number][] = []
@@ -1604,13 +1581,22 @@ function finishGameSimulationTick(
     postStaffInputs = Object.fromEntries(Object.entries(inputs).map(([playerId, input]) => [
       playerId,
       staff.actingPlayerIds.has(playerId)
-        ? { ...input, cast: { primary: false, secondary: null } }
+        ? { ...input, cast: { primary: false, quickbar: null } }
         : input,
     ]))
   }
   const unsteppedSecondaryActors = secondaryAbilities.actors.filter(({ id }) => (
     unsteppedSecondaryActorIds.has(id)
   ))
+  for (const [playerId, input] of Object.entries(postStaffInputs)) {
+    const slot = input.cast.quickbar
+    if (slot === null) continue
+    const skillBook = playerSkillBookAt(playerEntities, playerId)
+    const skillId = skillBook?.skillQuickbar[slot] ?? null
+    if (skillId !== null && nativeSkillCategory(skillId) === 1) {
+      playerEntities = selectPlayerEntityPrimarySkill(playerEntities, playerId, skillId)
+    }
+  }
   const secondaryResult = stepNativeSecondaryAbilities({
     ...secondaryAbilities,
     actors: secondaryAbilities.actors.filter(({ id }) => !unsteppedSecondaryActorIds.has(id)),

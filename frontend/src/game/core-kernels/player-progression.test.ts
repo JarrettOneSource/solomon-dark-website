@@ -3,8 +3,8 @@ import test from 'node:test'
 
 import './native-secondary-ability-contract.test.ts'
 import './native-secondary-abilities.test.ts'
-import './secondary-ability-loadout.test.ts'
 import '../skill-book.test.ts'
+import './skill-quickbar.test.ts'
 import './native-primary-skill-profile.test.ts'
 
 import {
@@ -161,9 +161,9 @@ test('a fresh wizard owns independent 83-row skill bookkeeping and the stock roo
     [0, 7, 8, 11],
   )
   assert.deepEqual(first.permanentRanks, first.effectiveRanks)
-  assert.equal(first.activeWeldBuildId, null)
+  assert.equal(first.weldBuildId, null)
   assert.equal(first.primarySkillId, 8)
-  assert.deepEqual(first.secondaryBelt, [11, null, null, null, null, null, null, null])
+  assert.deepEqual(first.skillQuickbar, [11, null, null, null, null, null, null, null])
   const progression = createPlayerProgression(0)
   assert.equal(progression.offerCycle, 0)
   assert.equal(progression.weldOfferMarker, 9_999)
@@ -564,9 +564,15 @@ test('every offered row applies only its addressed player-book entry', () => {
     assert.equal(applied.progression.currentMana, 61)
     assert.equal(applied.skillBook.elementRoot, skillBook.elementRoot)
     assert.equal(applied.skillBook.disciplineRoot, skillBook.disciplineRoot)
-    assert.equal(applied.skillBook.primarySkillId, skillBook.primarySkillId)
-    if (nativeSkillCategory(skillId) !== 2 || beforeRanks[skillId]! > 0) {
-      assert.equal(applied.skillBook.secondaryBelt, skillBook.secondaryBelt)
+    assert.equal(
+      applied.skillBook.primarySkillId,
+      skillId === SPELL_WELDING_SKILL_ID ? SPELL_WELDING_SKILL_ID : skillBook.primarySkillId,
+    )
+    if (
+      (nativeSkillCategory(skillId) !== 1 && nativeSkillCategory(skillId) !== 2)
+      || beforeRanks[skillId]! > 0
+    ) {
+      assert.equal(applied.skillBook.skillQuickbar, skillBook.skillQuickbar)
     }
     assert.equal(applied.skillBook.advancedUnlocks, skillBook.advancedUnlocks)
     assert.equal(
@@ -578,8 +584,8 @@ test('every offered row applies only its addressed player-book entry', () => {
       skillId === SPELL_WELDING_SKILL_ID ? 1 : (beforeRanks[skillId] ?? 0) + 1,
     )
     assert.equal(
-      applied.skillBook.activeWeldBuildId,
-      skillId === SPELL_WELDING_SKILL_ID ? 1000 : skillBook.activeWeldBuildId,
+      applied.skillBook.weldBuildId,
+      skillId === SPELL_WELDING_SKILL_ID ? 1000 : skillBook.weldBuildId,
     )
     assert.equal(NATIVE_SKILL_CATALOG[skillId]?.id, skillId)
   }
@@ -607,7 +613,7 @@ test('Creativity Insight applies the selected skill twice without duplicating lo
   })
   assert.ok(applied)
   assert.equal(applied.skillBook.permanentRanks[57], 3)
-  assert.equal(applied.skillBook.secondaryBelt, skillBook.secondaryBelt)
+  assert.equal(applied.skillBook.skillQuickbar, skillBook.skillQuickbar)
 })
 
 test('offer fill preserves the native category collision guards', () => {
@@ -758,7 +764,9 @@ test('a second primary arms Spell Welding and choosing a synthetic build only bo
   assert.ok(welded)
   assert.equal(welded.skillBook.permanentRanks[SPELL_WELDING_SKILL_ID], 1)
   assert.equal(welded.skillBook.effectiveRanks[SPELL_WELDING_SKILL_ID], 1)
-  assert.equal(welded.skillBook.activeWeldBuildId, 1000)
+  assert.equal(welded.skillBook.weldBuildId, 1000)
+  assert.equal(welded.skillBook.primarySkillId, SPELL_WELDING_SKILL_ID)
+  assert.equal(welded.skillBook.skillQuickbar[2], SPELL_WELDING_SKILL_ID)
   assert.deepEqual(welded.skillBook.learnedSkillOrder, [8, 11, 16, SPELL_WELDING_SKILL_ID])
   assert.deepEqual(
     welded.skillBook.permanentRanks.flatMap((rank, id) => rank !== beforeRanks[id] ? [id] : []),

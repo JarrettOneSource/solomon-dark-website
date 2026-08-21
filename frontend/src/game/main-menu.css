@@ -166,6 +166,10 @@
   right: calc(8px + min(5cqw, 8.888889cqh));
 }
 
+.main-menu-page[data-skill-book-open='true'] .game-fullscreen-control {
+  display: none;
+}
+
 .game-fullscreen-button {
   display: grid;
   box-sizing: border-box;

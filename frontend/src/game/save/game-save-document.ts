@@ -39,6 +39,7 @@ export interface RestoredGameSaveDocument {
 
 const SIMULATION_KEYS = [
   'accumulatorSeconds',
+  'combatRng',
   'gameRng',
   'hallOfFameClockStartedAtTick',
   'levelUpBarrier',
@@ -62,6 +63,7 @@ const PLAYER_STORE_KEYS = [
   'primaryCasts',
   'progressions',
   'skillBooks',
+  'skillRuntimes',
   'statBooks',
 ] as const
 const HUB_WORLD_KEYS = [

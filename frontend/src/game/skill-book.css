@@ -1,15 +1,3 @@
-.native-skill-icon {
-  position: relative;
-  display: inline-block;
-  flex: none;
-  overflow: hidden;
-}
-
-.native-skill-icon-crop {
-  display: block;
-  image-rendering: auto;
-}
-
 .main-menu-native-stage.skill-book-stage {
   z-index: 75;
   overflow: hidden;
@@ -29,7 +17,7 @@
 }
 
 .skill-book-pages,
-.skill-book-belt-actions {
+.skill-book-quickbar-actions {
   position: absolute;
   inset: 0;
   pointer-events: none;
@@ -47,9 +35,7 @@
   cursor: pointer;
 }
 
-.skill-book-page-actions {
-  position: absolute;
-}
+.skill-book-page-actions { position: absolute; }
 
 .skill-book-entry-action {
   position: absolute;
@@ -62,12 +48,15 @@
   background: transparent;
   cursor: pointer;
   pointer-events: auto;
+  touch-action: none;
 }
 
-.skill-book-entry-action:focus,
-.skill-book-belt-action:focus { outline: none; }
+.skill-book-entry-action[aria-disabled='true'] { cursor: default; }
 
-.skill-book-belt-action {
+.skill-book-entry-action:focus,
+.skill-book-quickbar-action:focus { outline: none; }
+
+.skill-book-quickbar-action {
   position: absolute;
   bottom: 14.5px;
   width: 53px;
@@ -80,17 +69,18 @@
   pointer-events: auto;
 }
 
-.skill-book-belt-action:nth-child(1) { left: calc(50% - 332px); }
-.skill-book-belt-action:nth-child(2) { left: calc(50% - 272px); }
-.skill-book-belt-action:nth-child(3) { left: calc(50% - 212px); }
-.skill-book-belt-action:nth-child(4) { left: calc(50% - 152px); }
-.skill-book-belt-action:nth-child(5) { left: calc(50% + 98px); }
-.skill-book-belt-action:nth-child(6) { left: calc(50% + 158px); }
-.skill-book-belt-action:nth-child(7) { left: calc(50% + 218px); }
-.skill-book-belt-action:nth-child(8) { left: calc(50% + 278px); }
+.skill-book-quickbar-action:nth-child(1) { left: calc(50% - 332px); }
+.skill-book-quickbar-action:nth-child(2) { left: calc(50% - 272px); }
+.skill-book-quickbar-action:nth-child(3) { left: calc(50% - 212px); }
+.skill-book-quickbar-action:nth-child(4) { left: calc(50% - 152px); }
+.skill-book-quickbar-action:nth-child(5) { left: calc(50% + 98px); }
+.skill-book-quickbar-action:nth-child(6) { left: calc(50% + 158px); }
+.skill-book-quickbar-action:nth-child(7) { left: calc(50% + 218px); }
+.skill-book-quickbar-action:nth-child(8) { left: calc(50% + 278px); }
 
 .skill-book-semantic-title,
-.skill-book-semantic-help {
+.skill-book-semantic-help,
+.skill-book-drop-target {
   position: absolute;
   width: 1px;
   height: 1px;

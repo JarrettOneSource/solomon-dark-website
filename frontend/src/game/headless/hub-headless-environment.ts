@@ -34,7 +34,7 @@ export class HubHeadlessEnvironment {
   readonly observationLength: number
   private readonly action: PlayerCharacterInput = {
     aim: null,
-    cast: { primary: false, secondary: null },
+    cast: { primary: false, quickbar: null },
     movement: { x: 0, y: 0 },
   }
   private readonly maximumStudents: number
@@ -83,7 +83,7 @@ export class HubHeadlessEnvironment {
       ? { x: aimX, y: aimY }
       : null
     this.action.cast.primary = actions[offset + 4] > 0
-    this.action.cast.secondary = actions[offset + 5] > 0 ? 0 : null
+    this.action.cast.quickbar = actions[offset + 5] > 0 ? 0 : null
     const inputs = { [HEADLESS_PLAYER_ID]: this.action }
     for (let tick = 0; tick < ticks; tick += 1) {
       this.simulation = stepGameSimulationTick(this.simulation, inputs)

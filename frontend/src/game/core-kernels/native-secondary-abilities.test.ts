@@ -84,7 +84,7 @@ function book(
     ...source,
     effectiveRanks: Object.freeze(effectiveRanks),
     permanentRanks: Object.freeze(permanentRanks),
-    secondaryBelt: Object.freeze([
+    skillQuickbar: Object.freeze([
       skillId, null, null, null, null, null, null, null,
     ]),
   }
@@ -94,7 +94,7 @@ function input(slot: number | null, aim = { x: 100, y: 0 }): PlayerCharacterInpu
   return {
     ...createIdlePlayerCharacterInput(),
     aim,
-    cast: { primary: false, secondary: slot },
+    cast: { primary: false, quickbar: slot },
   }
 }
 
@@ -169,7 +169,7 @@ function context(
         maximumRingOfIce: false,
         manaRecoveryPerTick: 0.1,
         offensiveFactors: { damage: 1, manaCost: 1 },
-        secondaryRechargeFactor: 1,
+        secondaryRechargeFactor: learnedSkillIds.includes(60) ? 2 : 1,
         skillBook: book(skillId, learnedSkillIds, rank),
         worldKey: 'boneyard:test',
       },
@@ -1152,7 +1152,7 @@ test('Planewalker overrides only the active duration and releases the configured
         ...activeContext.players.player!,
         input: {
           ...activeContext.players.player!.input,
-          cast: { primary: true, secondary: null },
+          cast: { primary: true, quickbar: null },
         },
       },
     },
@@ -1169,7 +1169,7 @@ test('Planewalker overrides only the active duration and releases the configured
         ...expiryContext.players.player!,
         input: {
           ...expiryContext.players.player!.input,
-          cast: { primary: true, secondary: null },
+          cast: { primary: true, quickbar: null },
         },
       },
     },
@@ -1639,7 +1639,7 @@ test('Magic Trap weld dispatch uses host RNG and Plane Orb preserves the selecte
     players: {
       player: {
         ...weldAuthority,
-        skillBook: { ...weldSkillBook, activeWeldBuildId: 1000 },
+        skillBook: { ...weldSkillBook, primarySkillId: 52, weldBuildId: 1000 },
       },
     },
   }).state
@@ -1688,7 +1688,7 @@ test('Plane Orb damage sums only the seven native Ether-line ranks', () => {
     ...sourceBook,
     effectiveRanks: Object.freeze(effectiveRanks),
     permanentRanks: Object.freeze(permanentRanks),
-    secondaryBelt: Object.freeze([
+    skillQuickbar: Object.freeze([
       12, null, null, null, null, null, null, null,
     ]),
   }
@@ -1716,7 +1716,7 @@ test('Plane Orb damage sums only the seven native Ether-line ranks', () => {
         ...orbContext.players.player!,
         input: {
           ...orbContext.players.player!.input,
-          cast: { primary: true, secondary: null },
+          cast: { primary: true, quickbar: null },
         },
         skillBook,
       },
@@ -1737,7 +1737,7 @@ test('Plane Orb birth owns its 181-word constructor/burst, exact audio, flash, a
         ...authority,
         input: {
           ...authority.input,
-          cast: { primary: true, secondary: null },
+          cast: { primary: true, quickbar: null },
         },
       },
     },
@@ -1819,7 +1819,7 @@ test('Plane Orb birth owns its 181-word constructor/burst, exact audio, flash, a
         ...steppedAuthority,
         input: {
           ...steppedAuthority.input,
-          cast: { primary: true, secondary: null },
+          cast: { primary: true, quickbar: null },
         },
       },
     },
@@ -1855,7 +1855,7 @@ test('Plane Orb uses the exact sixth-update contact center, enhanced five-word m
         enhancedEffects,
         input: {
           ...base.players.player!.input,
-          cast: { primary: true, secondary: null },
+          cast: { primary: true, quickbar: null },
         },
       },
     },
@@ -2131,7 +2131,7 @@ test('secondary input is a held edge and the shared cooldown gate is silent', ()
 })
 
 test('Focus accelerates retained cooldowns and its concentration owns one instant roll', () => {
-  const acceleratedContext = context(15, 1, 0)
+  const acceleratedContext = context(48, 1, 0)
   const acceleratedPlayer = {
     ...acceleratedContext.players.player!,
     secondaryRechargeFactor: 2,
@@ -2140,20 +2140,27 @@ test('Focus accelerates retained cooldowns and its concentration owns one instan
     ...acceleratedContext,
     players: { player: acceleratedPlayer },
   })
-  assert.equal(result.state.players.player?.cooldownTicksBySkill[15], 100)
-  const recoveryContext = context(15, 2, null)
+  assert.equal(result.state.players.player?.cooldownTicksBySkill[48], 6_000)
+  const recoveryContext = context(48, 2, null)
   result = stepNativeSecondaryAbilities(result.state, {
     ...recoveryContext,
     players: {
       player: { ...recoveryContext.players.player!, secondaryRechargeFactor: 2 },
     },
   })
-  assert.equal(result.state.players.player?.cooldownTicksBySkill[15], 98)
+  assert.equal(result.state.players.player?.cooldownTicksBySkill[48], 5_998)
 
   let seed = 0
-  while (drawNativeInteger(createNativeRng(seed), 100).value < 75) seed += 1
-  const chance = drawNativeInteger(createNativeRng(seed), 100)
-  const instantContext = context(15, 1, 0)
+  let chanceState = drawNativeFloat(createNativeRng(seed), 360).state
+  chanceState = drawNativeFloat(chanceState, 360).state
+  let chance = drawNativeInteger(chanceState, 100)
+  while (chance.value < 75) {
+    seed += 1
+    chanceState = drawNativeFloat(createNativeRng(seed), 360).state
+    chanceState = drawNativeFloat(chanceState, 360).state
+    chance = drawNativeInteger(chanceState, 100)
+  }
+  const instantContext = context(48, 1, 0)
   result = stepNativeSecondaryAbilities(
     { ...createNativeSecondarySimulation(), rng: createNativeRng(seed) },
     {
@@ -2166,7 +2173,7 @@ test('Focus accelerates retained cooldowns and its concentration owns one instan
       },
     },
   )
-  assert.equal(result.state.players.player?.cooldownTicksBySkill[15], 0)
+  assert.equal(result.state.players.player?.cooldownTicksBySkill[48], 0)
   assert.deepEqual(result.state.rng, chance.state)
 })
 

@@ -404,7 +404,6 @@ export function resolveBoneyardSpellCombat(
         if (!damaged.accepted) continue
         enemies = damaged.store
         events.push(...damaged.events)
-        events.push(...damaged.events)
         remainingDamage = contact.remainingPool
         hits.push(spellHit(projectile, actor.id, amount, damaged.killed, tick))
       }
@@ -468,6 +467,7 @@ export function resolveBoneyardSpellCombat(
         ? projectile.damage * validatedDamageMultiplier(damageMultiplier(actor.id, 'air'))
         : projectile.damage
       const damaged = damageBoneyardEnemy(enemies, {
+        lethalObserver,
         actorId: actor.id,
         amount,
         sourcePlayerId: projectile.ownerId,
@@ -496,6 +496,7 @@ export function resolveBoneyardSpellCombat(
             })
           }
           const radial = damageBoneyardEnemy(enemies, {
+            lethalObserver,
             actorId: row.actor.id,
             amount: radialDamage,
             sourcePlayerId: projectile.ownerId,
@@ -559,6 +560,7 @@ export function resolveBoneyardSpellCombat(
       )
       const amount = nativeFireDirectDamage(projectile.damage, projectile.explodeDamage)
       const damaged = damageBoneyardEnemy(enemies, {
+        lethalObserver,
         actorId: actor.id,
         amount,
         sourcePlayerId: projectile.ownerId,
@@ -651,6 +653,7 @@ export function resolveBoneyardSpellCombat(
           effect.toughness,
         )
         const damaged = damageBoneyardEnemy(enemies, {
+          lethalObserver,
           actorId: actor.id,
           amount: contact.damage,
           sourcePlayerId: effect.ownerId,
@@ -775,6 +778,7 @@ export function resolveBoneyardSpellCombat(
             ? amount
             : amount / effect.toughness
           const damaged = damageBoneyardEnemy(enemies, {
+            lethalObserver,
             actorId: currentActor.id,
             amount,
             sourcePlayerId: effect.ownerId,
@@ -838,6 +842,7 @@ export function resolveBoneyardSpellCombat(
       if (!actor) continue
       queueBurn(actor.id, effect.ownerId, effect.burnDamage)
       const damaged = damageBoneyardEnemy(enemies, {
+        lethalObserver,
         actorId: actor.id,
         amount: effect.damage,
         sourcePlayerId: effect.ownerId,
@@ -882,6 +887,7 @@ export function resolveBoneyardSpellCombat(
         0x2,
       )) {
         const damaged = damageBoneyardEnemy(enemies, {
+          lethalObserver,
           actorId: row.actor.id,
           amount: pulse.amount,
           sourcePlayerId: effect.ownerId,
@@ -927,6 +933,7 @@ export function resolveBoneyardSpellCombat(
     for (const { actor } of rows) {
       queueBurn(actor.id, effect.ownerId, effect.burnDamage)
       const damaged = damageBoneyardEnemy(enemies, {
+        lethalObserver,
         actorId: actor.id,
         amount: effect.damage,
         sourcePlayerId: effect.ownerId,
@@ -961,6 +968,7 @@ export function resolveBoneyardSpellCombat(
       const amount = contact.amount
         * validatedDamageMultiplier(damageMultiplier(actor.id, contact.kind))
       const damaged = damageBoneyardEnemy(enemies, {
+        lethalObserver,
         actorId: actor.id,
         amount,
         sourcePlayerId: contact.ownerId,
@@ -1031,6 +1039,7 @@ export function resolveBoneyardSpellCombat(
           emission.ownerId,
           tick,
           disintegrate,
+          lethalObserver,
         )
         enemies = contact.enemies
         events.push(...contact.events)
@@ -1115,6 +1124,7 @@ export function resolveBoneyardSpellCombat(
               damageMultiplier(row.actor.id, 'air'),
             )
             const damaged = damageBoneyardEnemy(enemies, {
+              lethalObserver,
               actorId: row.actor.id,
               amount,
               sourcePlayerId: emission.ownerId,
@@ -1252,6 +1262,7 @@ export function resolveBoneyardSpellCombat(
                 damageMultiplier(row.actor.id, 'air'),
               )
               const damaged = damageBoneyardEnemy(enemies, {
+                lethalObserver,
                 actorId: row.actor.id,
                 amount,
                 sourcePlayerId: emission.ownerId,
@@ -1474,6 +1485,7 @@ export function resolveBoneyardSpellCombat(
       )
       rng = hailDamage.rng
       const hailContact = damageBoneyardEnemy(enemies, {
+        lethalObserver,
         actorId: row.actor.id,
         amount: hailDamage.value,
         sourcePlayerId: emission.ownerId,
@@ -1680,6 +1692,7 @@ function applyDamageWithDisintegrate(
   ownerId: string,
   tick: number,
   disintegrate: boolean,
+  lethalObserver: BoneyardEnemyLethalObserver | undefined,
 ): {
   readonly accepted: boolean
   readonly amount: number
@@ -1688,6 +1701,7 @@ function applyDamageWithDisintegrate(
   readonly killed: boolean
 } {
   const ordinary = damageBoneyardEnemy(source, {
+    lethalObserver,
     actorId,
     amount,
     sourcePlayerId: ownerId,
@@ -1723,6 +1737,7 @@ function applyDamageWithDisintegrate(
     }
   }
   const executed = damageBoneyardEnemy(ordinary.store, {
+    lethalObserver,
     actorId,
     amount: executeAmount,
     sourcePlayerId: ownerId,

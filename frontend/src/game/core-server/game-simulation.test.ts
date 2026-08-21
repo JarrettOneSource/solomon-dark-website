@@ -3,7 +3,6 @@ import test from 'node:test'
 
 import { actorHeadingFromVector, actorHeadingIndex } from '../core-kernels/actor-heading.ts'
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
-import { actorHeadingIndex } from '../core-kernels/actor-heading.ts'
 import {
   BONEYARD_GAME_OVER_AUTOMATIC_ACCEPT_TICK,
   BONEYARD_GAME_OVER_EXIT_FADE_TICKS,
@@ -36,6 +35,7 @@ import {
 import {
   addPlayerCharacter,
   applyGameSimulationHubAction,
+  bindGameSimulationPlayerSkillQuickbar,
   BONEYARD_ENEMY_EVENT_LANE_CAPACITY,
   confirmGameSimulationLoadout,
   createGameSimulation,
@@ -75,7 +75,7 @@ import {
 function gameplayInput(x: number, y: number) {
   return {
     aim: null,
-    cast: { primary: false, secondary: null },
+    cast: { primary: false, quickbar: null },
     movement: { x, y },
   }
 }
@@ -264,7 +264,7 @@ test('same-tick player primary actors register before projectiles spawned by lat
   state = stepGameSimulationTick(state, {
     caster: {
       aim: { x: player.position.x, y: 0 },
-      cast: { primary: true, secondary: null },
+      cast: { primary: true, quickbar: null },
       movement: { x: 0, y: 0 },
     },
   })
@@ -326,7 +326,7 @@ test('same-tick wave actors register before player primary actors', () => {
   state = stepGameSimulationTick(state, {
     caster: {
       aim: { x: player.position.x, y: 0 },
-      cast: { primary: true, secondary: null },
+      cast: { primary: true, quickbar: null },
       movement: { x: 0, y: 0 },
     },
   })
@@ -881,7 +881,7 @@ test('disconnect and world replacement clean spell actors and cast ownership', (
       x: getPlayerCharacter(state, 'caster').position.x,
       y: getPlayerCharacter(state, 'caster').position.y - 200,
     },
-    cast: { primary, secondary: null },
+    cast: { primary, quickbar: null },
     movement: { x: 0, y: 0 },
   })
   state = stepGameSimulationTick(state, { caster: cast(true) })
@@ -912,7 +912,7 @@ test('authoritative player ticks reset and decay StaffConstant lighting before p
     const player = getPlayerCharacter(state, 'caster')
     return {
       aim: { x: player.position.x, y: player.position.y - 200 },
-      cast: { primary, secondary: null },
+      cast: { primary, quickbar: null },
       movement: { x: 0, y: 0 },
     }
   }
@@ -949,7 +949,7 @@ test('Boneyard Air falls back to a Gravestone and publishes the native curved se
   const player = getPlayerCharacter(state, 'caster')
   state = stepGameSimulationTick(state, { caster: {
     aim: { x: 250, y: 50 },
-    cast: { primary: true, secondary: null },
+    cast: { primary: true, quickbar: null },
     movement: { x: 0, y: 0 },
   } })
 
@@ -1000,7 +1000,7 @@ test('sealed generated Arena clips player spell range at the retired entrance bo
 
   state = stepGameSimulationTick(state, { caster: {
     aim: { x: 250, y: 0 },
-    cast: { primary: true, secondary: null },
+    cast: { primary: true, quickbar: null },
     movement: { x: 0, y: 0 },
   } })
 
@@ -1021,7 +1021,7 @@ test('booked primary ranks feed new casts while existing projectile payloads sta
     const player = getPlayerCharacter(state, 'caster')
     return {
       aim: { x: player.position.x, y: player.position.y - 200 },
-      cast: { primary, secondary: null },
+      cast: { primary, quickbar: null },
       movement: { x: 0, y: 0 },
     }
   }
@@ -1065,7 +1065,7 @@ test('Battle and Siege factors reach the authoritative primary payment and birth
     const player = getPlayerCharacter(state, 'caster')
     return {
       aim: { x: player.position.x, y: player.position.y - 200 },
-      cast: { primary: true, secondary: null },
+      cast: { primary: true, quickbar: null },
       movement: { x: 0, y: 0 },
     }
   }
@@ -1128,7 +1128,7 @@ test('Boneyard simulation debits mana, applies spell contact, and begins enemy d
 
   const cast = (primary: boolean) => ({
     aim: { x: 250, y: 0 },
-    cast: { primary, secondary: null },
+    cast: { primary, quickbar: null },
     movement: { x: 0, y: 0 },
   })
   const initialMana = getPlayerProgression(state, 'caster').currentMana
@@ -1155,17 +1155,19 @@ test('Boneyard simulation debits mana, applies spell contact, and begins enemy d
   assert.equal(hallRun.monstersKilled, 1)
   assert.equal(hallRun.awesomestKill, 'Skeleton')
   assert.ok(hallRun.awesomeness >= 72 && hallRun.awesomeness <= 76)
-  assert.equal(getPlayerProgression(state, 'caster').experience - initialExperience, 4.25)
+  assert.equal(getPlayerProgression(state, 'caster').experience, initialExperience)
   assert.ok(state.world.enemyEvents.some((event) => (
     event.type === 'enemy-damage-sound' && event.sound === 'bone-crack'
   )))
   assert.deepEqual(state.primarySpells.projectiles, [])
 
-  const experienceAfterLethalContact = getPlayerProgression(state, 'caster').experience
+  state = stepGameSimulationTick(state, { caster: cast(false) })
+  assert.equal(getPlayerProgression(state, 'caster').experience - initialExperience, 4.25)
+  const experienceAfterReward = getPlayerProgression(state, 'caster').experience
   state = stepGameSimulationTick(state, { caster: cast(false) })
   assert.equal(
     getPlayerProgression(state, 'caster').experience,
-    experienceAfterLethalContact,
+    experienceAfterReward,
   )
 })
 
@@ -2026,6 +2028,22 @@ test('one dead player spectates until all-dead Game Over returns the session thr
   }
 })
 
+test('a primary quickbar edge selects the learned primary before cast authority is built', () => {
+  let state = withPlayerSkillRank(createGameSimulation(), 'local-player', 16, 1)
+  const bound = bindGameSimulationPlayerSkillQuickbar(state, 'local-player', 16, 7)
+  assert.ok(bound)
+  state = stepGameSimulationTick(bound, {
+    'local-player': {
+      aim: null,
+      cast: { primary: false, quickbar: 7 },
+      movement: { x: 0, y: 0 },
+    },
+  })
+  assert.equal(getPlayerSkillBook(state).primarySkillId, 16)
+  assert.equal(getPlayerSkillBook(state).skillQuickbar[7], 16)
+  assert.equal(getPlayerCharacter(state).primaryCast.selectedPrimaryId, 16)
+})
+
 function withRottenZombieAtPlayer(state: GameSimulationState): GameSimulationState {
   if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
   const player = getPlayerCharacter(state)
@@ -2152,6 +2170,9 @@ function withPlayerSkillRank(
   skillBooks[index] = {
     ...sourceBook,
     effectiveRanks: Object.freeze(effectiveRanks),
+    learnedSkillOrder: rank > 0 && !sourceBook.learnedSkillOrder.includes(skillId)
+      ? Object.freeze([...sourceBook.learnedSkillOrder, skillId])
+      : sourceBook.learnedSkillOrder,
     permanentRanks: Object.freeze(permanentRanks),
   }
   const playerEntities = replacePlayerEconomy({

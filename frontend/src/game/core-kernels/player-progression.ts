@@ -79,15 +79,18 @@ export interface NativePrimarySkillRankStats {
   readonly skillId: number
 }
 
-export type PlayerSecondaryAbilityBelt = readonly [
-  NativeSecondaryAbilityId | null,
-  NativeSecondaryAbilityId | null,
-  NativeSecondaryAbilityId | null,
-  NativeSecondaryAbilityId | null,
-  NativeSecondaryAbilityId | null,
-  NativeSecondaryAbilityId | null,
-  NativeSecondaryAbilityId | null,
-  NativeSecondaryAbilityId | null,
+export type NativePlayerPrimarySkillId = 8 | 16 | 24 | 32 | 40 | 52
+export type NativeSkillQuickbarId = NativePlayerPrimarySkillId | NativeSecondaryAbilityId
+
+export type PlayerSkillQuickbar = readonly [
+  NativeSkillQuickbarId | null,
+  NativeSkillQuickbarId | null,
+  NativeSkillQuickbarId | null,
+  NativeSkillQuickbarId | null,
+  NativeSkillQuickbarId | null,
+  NativeSkillQuickbarId | null,
+  NativeSkillQuickbarId | null,
+  NativeSkillQuickbarId | null,
 ]
 
 export interface NativeSecondaryAbilityRankStats {
@@ -97,17 +100,15 @@ export interface NativeSecondaryAbilityRankStats {
 }
 
 export interface PlayerSkillBookComponent {
-  readonly activeWeldBuildId: number | null
   readonly advancedUnlocks: readonly boolean[]
-  readonly concentrationSkillIds: readonly [number | null, number | null]
   readonly disciplineRoot: number
   readonly effectiveRanks: readonly number[]
   readonly elementRoot: number
   readonly learnedSkillOrder: readonly number[]
-  readonly nextConcentrationSlot: 0 | 1
   readonly permanentRanks: readonly number[]
-  readonly primarySkillId: number
-  readonly secondaryBelt: PlayerSecondaryAbilityBelt
+  readonly primarySkillId: NativePlayerPrimarySkillId
+  readonly skillQuickbar: PlayerSkillQuickbar
+  readonly weldBuildId: number | null
 }
 
 export interface PlayerSkillOfferOption {
@@ -207,7 +208,10 @@ const DISCIPLINE_ROOT: Readonly<Record<WizardDiscipline, number>> = {
   mind: 6,
   arcane: 7,
 }
-const STARTING_SKILLS: Readonly<Record<WizardElement, readonly [number, number]>> = {
+const STARTING_SKILLS: Readonly<Record<
+  WizardElement,
+  readonly [NativePlayerPrimarySkillId, NativeSecondaryAbilityId]
+>> = {
   ether: [8, 11],
   fire: [16, 21],
   air: [24, 27],
@@ -347,25 +351,25 @@ export function effectiveSecondaryAbilityRankStats(
   })
 }
 
-export function equipPlayerSecondaryAbility(
+export function bindPlayerSkillQuickbar(
   skillBook: PlayerSkillBookComponent,
   skillId: number,
   slot: number,
 ): PlayerSkillBookComponent {
   if (!Number.isInteger(slot) || slot < 0 || slot >= 8) {
-    throw new RangeError(`secondary belt slot ${slot} is outside 0..7`)
+    throw new RangeError(`skill quickbar slot ${slot} is outside 0..7`)
   }
-  if (!(NATIVE_SECONDARY_ABILITY_IDS as readonly number[]).includes(skillId)) {
-    throw new RangeError(`skill ${skillId} is not a native secondary`)
+  if (nativeSkillCategory(skillId) !== 1 && nativeSkillCategory(skillId) !== 2) {
+    throw new RangeError(`skill ${skillId} is not a native quickbar skill`)
   }
   if ((skillBook.permanentRanks[skillId] ?? 0) < 1) {
-    throw new Error(`secondary skill ${skillId} is not learned`)
+    throw new Error(`quickbar skill ${skillId} is not learned`)
   }
-  const belt = [...skillBook.secondaryBelt] as (NativeSecondaryAbilityId | null)[]
-  belt[slot] = skillId as NativeSecondaryAbilityId
+  const quickbar = [...skillBook.skillQuickbar]
+  quickbar[slot] = skillId as NativeSkillQuickbarId
   return {
     ...skillBook,
-    secondaryBelt: freezeSecondaryBelt(belt),
+    skillQuickbar: freezeSkillQuickbar(quickbar),
   }
 }
 
@@ -373,49 +377,26 @@ export function selectPlayerPrimarySkill(
   skillBook: PlayerSkillBookComponent,
   skillId: number,
 ): PlayerSkillBookComponent {
-  if (!(ELEMENTAL_PRIMARY_SKILL_IDS as readonly number[]).includes(skillId)) {
-    throw new RangeError(`skill ${skillId} is not an elemental primary`)
+  if (nativeSkillCategory(skillId) !== 1) {
+    throw new RangeError(`skill ${skillId} is not a native primary attack`)
   }
   if ((skillBook.permanentRanks[skillId] ?? 0) < 1) {
     throw new Error(`primary skill ${skillId} is not learned`)
   }
+  if (skillId === SPELL_WELDING_SKILL_ID && skillBook.weldBuildId === null) {
+    throw new Error('Spell Welding has no learned native build')
+  }
   return skillBook.primarySkillId === skillId
     ? skillBook
-    : { ...skillBook, primarySkillId: skillId }
+    : { ...skillBook, primarySkillId: skillId as NativePlayerPrimarySkillId }
 }
 
-export function selectPlayerConcentrationSkill(
+export function activePlayerWeldBuildId(
   skillBook: PlayerSkillBookComponent,
-  skillId: number,
-  splitMind: boolean,
-  mindChugTicksRemaining: number,
-): PlayerSkillBookComponent {
-  if (mindChugTicksRemaining > 0) {
-    throw new Error('concentration cannot change while Mind Chug is active')
-  }
-  if (nativeSkillCategory(skillId) !== 3 || (skillBook.permanentRanks[skillId] ?? 0) < 1) {
-    throw new Error(`concentration skill ${skillId} is not learned`)
-  }
-  const [first, second] = skillBook.concentrationSkillIds
-  if (first === skillId || second === skillId) {
-    throw new Error(`concentration skill ${skillId} is already selected`)
-  }
-  let concentrationSkillIds: [number | null, number | null]
-  let nextConcentrationSlot = skillBook.nextConcentrationSlot
-  if (first === null) concentrationSkillIds = [skillId, splitMind ? second : null]
-  else if (splitMind && second === null) concentrationSkillIds = [first, skillId]
-  else {
-    const slot = splitMind ? nextConcentrationSlot : 0
-    concentrationSkillIds = splitMind
-      ? slot === 0 ? [skillId, second] : [first, skillId]
-      : [skillId, null]
-    nextConcentrationSlot = splitMind ? slot === 0 ? 1 : 0 : 0
-  }
-  return {
-    ...skillBook,
-    concentrationSkillIds: Object.freeze(concentrationSkillIds),
-    nextConcentrationSlot,
-  }
+): number | null {
+  return skillBook.primarySkillId === SPELL_WELDING_SKILL_ID
+    ? skillBook.weldBuildId
+    : null
 }
 
 export function refreshPlayerSkillBookMindstar(
@@ -492,17 +473,14 @@ export function createPlayerSkillBook(config: PlayerCharacterConfig): PlayerSkil
   permanentRanks[primarySkillId] = 1
   permanentRanks[secondarySkillId] = 1
   return {
-    activeWeldBuildId: null,
     advancedUnlocks: Object.freeze(new Array<boolean>(8).fill(false)),
-    concentrationSkillIds: Object.freeze([null, null]),
     disciplineRoot,
     effectiveRanks: Object.freeze([...permanentRanks]),
     elementRoot,
     learnedSkillOrder: Object.freeze([primarySkillId, secondarySkillId]),
-    nextConcentrationSlot: 0,
     permanentRanks: Object.freeze(permanentRanks),
     primarySkillId,
-    secondaryBelt: freezeSecondaryBelt([
+    skillQuickbar: freezeSkillQuickbar([
       secondarySkillId as NativeSecondaryAbilityId,
       null,
       null,
@@ -512,6 +490,7 @@ export function createPlayerSkillBook(config: PlayerCharacterConfig): PlayerSkil
       null,
       null,
     ]),
+    weldBuildId: null,
   }
 }
 
@@ -832,15 +811,20 @@ export function applyPlayerSkillChoice(
   effectiveRanks[chosen.skillId] = nextRank
   const nextBook: PlayerSkillBookComponent = {
     ...skillBook,
-    activeWeldBuildId: weldBuild?.id ?? skillBook.activeWeldBuildId,
-    permanentRanks: Object.freeze(permanentRanks),
-    effectiveRanks: Object.freeze(effectiveRanks),
-    learnedSkillOrder: rank === 0 && chosen.skillId >= 8 && chosen.skillId <= 79
+    learnedSkillOrder: rank === 0
       ? Object.freeze([...skillBook.learnedSkillOrder, chosen.skillId])
       : skillBook.learnedSkillOrder,
-    secondaryBelt: rank === 0 && nativeSkillCategory(chosen.skillId) === 2
-      ? autofillSecondaryBelt(skillBook.secondaryBelt, chosen.skillId)
-      : skillBook.secondaryBelt,
+    permanentRanks: Object.freeze(permanentRanks),
+    primarySkillId: weldBuild === null
+      ? skillBook.primarySkillId
+      : SPELL_WELDING_SKILL_ID,
+    effectiveRanks: Object.freeze(effectiveRanks),
+    skillQuickbar: rank === 0
+      && (nativeSkillCategory(chosen.skillId) === 1
+        || nativeSkillCategory(chosen.skillId) === 2)
+      ? autofillSkillQuickbar(skillBook.skillQuickbar, chosen.skillId)
+      : skillBook.skillQuickbar,
+    weldBuildId: weldBuild?.id ?? skillBook.weldBuildId,
   }
   let nextProgression: PlayerProgressionComponent = {
     ...progression,
@@ -1179,7 +1163,7 @@ function drawSpellWeldingOption(
   const candidates = NATIVE_WELD_BUILDS.filter((build) => (
     build.primarySkillIds.every((skillId) => learned(skillBook, skillId))
     && (!progression.excludeActiveWeldBuildFromOffers
-      || build.id !== skillBook.activeWeldBuildId)
+      || build.id !== skillBook.weldBuildId)
   ))
   if (candidates.length === 0) return { option: null, rng: initialRng }
   const draw = drawNativeInteger(initialRng, candidates.length)
@@ -1271,7 +1255,7 @@ function hasDependenciesAndUnlock(id: number, book: PlayerSkillBookComponent): b
     id >= 72
     && id <= 79
     && !book.advancedUnlocks[id - 72]
-    && !(id === 72 && book.secondaryBelt.includes(72))
+    && !(id === 72 && book.skillQuickbar.includes(72))
   ) return false
   if (rule.all?.some((required) => !learned(book, required))) return false
   if (rule.any && !rule.any.some((required) => learned(book, required))) return false
@@ -1279,23 +1263,22 @@ function hasDependenciesAndUnlock(id: number, book: PlayerSkillBookComponent): b
   return true
 }
 
-function autofillSecondaryBelt(
-  source: PlayerSecondaryAbilityBelt,
+function autofillSkillQuickbar(
+  source: PlayerSkillQuickbar,
   skillId: number,
-): PlayerSecondaryAbilityBelt {
-  if (source.includes(skillId as NativeSecondaryAbilityId)) return source
+): PlayerSkillQuickbar {
   const slot = source.indexOf(null)
   if (slot < 0) return source
-  const belt = [...source]
-  belt[slot] = skillId as NativeSecondaryAbilityId
-  return freezeSecondaryBelt(belt)
+  const quickbar = [...source]
+  quickbar[slot] = skillId as NativeSkillQuickbarId
+  return freezeSkillQuickbar(quickbar)
 }
 
-function freezeSecondaryBelt(
-  entries: readonly (NativeSecondaryAbilityId | null)[],
-): PlayerSecondaryAbilityBelt {
-  if (entries.length !== 8) throw new RangeError('secondary belt requires exactly eight slots')
-  return Object.freeze([...entries]) as PlayerSecondaryAbilityBelt
+function freezeSkillQuickbar(
+  entries: readonly (NativeSkillQuickbarId | null)[],
+): PlayerSkillQuickbar {
+  if (entries.length !== 8) throw new RangeError('skill quickbar requires exactly eight slots')
+  return Object.freeze([...entries]) as PlayerSkillQuickbar
 }
 
 function isSpellWeldingEligible(level: number, book: PlayerSkillBookComponent): boolean {

@@ -14,8 +14,6 @@ export const NATIVE_SKILL_SCREEN_PAGE_REGION_TOP = 50
 export const NATIVE_SKILL_SCREEN_ROW_INSET = 10
 export const NATIVE_SKILL_SCREEN_ROW_OFFSET_Y = 22
 
-const ELEMENTAL_PRIMARY_SKILL_IDS = new Set([8, 16, 24, 32, 40])
-
 export interface NativeSkillBookRow {
   readonly category: number
   readonly dependencyIds: readonly number[]
@@ -67,7 +65,7 @@ export function nativeSkillBookPages(
       id,
       name: skill.name,
       permanentRank,
-      weldBuildId: id === 52 ? progression.activeWeldBuildId : null,
+      weldBuildId: id === 52 ? progression.weldBuildId : null,
     })]
   })
   const byId = new Map(learnedRows.map((row) => [row.id, row] as const))
@@ -122,37 +120,40 @@ export function nativeSkillBookPagePlacements(
   const placements: NativeSkillBookPagePlacement[] = []
   rows.forEach((row, rowIndex) => {
     let x = xOrigin
-    row.forEach((page) => {
+    for (const page of row) {
       placements.push(Object.freeze({
         page,
         x,
         y: yOrigin + rowIndex * NATIVE_SKILL_PAGE_HEIGHT,
       }))
       x += page.width
-    })
+    }
   })
   return Object.freeze(placements)
+}
+
+export function nativeSkillBookRows(
+  progression: ProtocolPlayerProgression,
+): readonly NativeSkillBookRow[] {
+  return [...new Map(nativeSkillBookPages(progression)
+    .flatMap((page) => page.rows)
+    .map((row) => [row.id, row] as const)).values()]
 }
 
 export function selectableSecondarySkillRows(
   progression: ProtocolPlayerProgression,
 ): readonly NativeSkillBookRow[] {
-  return uniquePageRows(progression).filter(({ category }) => category === 2)
+  return nativeSkillBookRows(progression).filter(({ category }) => category === 2)
 }
 
 export function selectableConcentrationSkillRows(
   progression: ProtocolPlayerProgression,
 ): readonly NativeSkillBookRow[] {
-  return uniquePageRows(progression).filter(({ category }) => category === 3)
+  return nativeSkillBookRows(progression).filter(({ category }) => category === 3)
 }
 
 export function selectablePrimarySkillRows(
   progression: ProtocolPlayerProgression,
 ): readonly NativeSkillBookRow[] {
-  return uniquePageRows(progression).filter(({ id }) => ELEMENTAL_PRIMARY_SKILL_IDS.has(id))
-}
-
-function uniquePageRows(progression: ProtocolPlayerProgression): readonly NativeSkillBookRow[] {
-  const rows = nativeSkillBookPages(progression).flatMap((page) => page.rows)
-  return [...new Map(rows.map((row) => [row.id, row] as const)).values()]
+  return nativeSkillBookRows(progression).filter(({ category }) => category === 1)
 }

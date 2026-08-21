@@ -690,6 +690,7 @@ function stormStrikeTransient(
       ? { x: endpoint.x / length, y: endpoint.y / length }
       : { x: 1, y: 0 },
     endpoint,
+    hurricaneCharge: 0,
     id: actor.id,
     kind: 'air',
     midpoint,
