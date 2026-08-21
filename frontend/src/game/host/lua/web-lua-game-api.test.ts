@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { resolve as resolvePath } from 'node:path'
+import { parse, resolve } from 'node:path'
 import test from 'node:test'
 import { pathToFileURL } from 'node:url'
 
@@ -14,22 +14,22 @@ import {
 import { resolveWebLuaWasmPath } from './web-lua-wasm-path.ts'
 
 test('web Lua resolves source and deployed WASM ownership without directory-name assumptions', () => {
-  const fixtureRoot = resolvePath('web-lua-path-fixture')
-  const sourceEntry = resolvePath(
-    fixtureRoot,
-    'repo/frontend/src/game/host/run-game-host.ts',
-  )
-  const deployedEntry = resolvePath(
-    fixtureRoot,
-    'opt/solomon-dark-revived/GameHost/game-host.mjs',
+  const root = parse(process.cwd()).root
+  const sourceEntry = resolve(root, 'repo', 'frontend', 'src', 'game', 'host', 'run-game-host.ts')
+  const deployedEntry = resolve(
+    root,
+    'opt',
+    'solomon-dark-revived',
+    'GameHost',
+    'game-host.mjs',
   )
   assert.equal(
     resolveWebLuaWasmPath(pathToFileURL(sourceEntry).href),
-    resolvePath(fixtureRoot, 'repo/frontend/node_modules/wasmoon/dist/glue.wasm'),
+    resolve(root, 'repo', 'frontend', 'node_modules', 'wasmoon', 'dist', 'glue.wasm'),
   )
   assert.equal(
     resolveWebLuaWasmPath(pathToFileURL(deployedEntry).href),
-    resolvePath(fixtureRoot, 'opt/solomon-dark-revived/GameHost/lua54.wasm'),
+    resolve(root, 'opt', 'solomon-dark-revived', 'GameHost', 'lua54.wasm'),
   )
 })
 
