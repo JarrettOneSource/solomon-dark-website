@@ -635,6 +635,49 @@ test('Ether snapshots the forward-probe target and steers after its first moveme
   assert.equal(advanced.kind, 'ether')
   assert.ok(advanced.position.x > firstPosition.x)
 
+  const flagChanged = stepPrimarySpells({
+    ...EMPTY_SPELL_WORLD,
+    canPlaceProjectile: () => true,
+    canTraverseProjectile: () => true,
+    castAuthority,
+    inputs: {},
+    players: {},
+    previousPlayers: {},
+    spellTargets: () => [{ ...target, actorFlags: 0 }],
+    spells: { nextId: spells.nextId, projectiles: [advanced], transients: [] },
+    tick: PRIMARY_CAST_ETHER_EMISSION_TICK + 3,
+    viewScale: 1.2,
+    worldKeyForPlayer: () => 'hub:courtyard',
+  }).spells.projectiles[0]
+  assert.equal(flagChanged.kind, 'ether')
+  assert.equal(flagChanged.targetId, target.id)
+
+  const inactiveTarget = { ...target, active: false, actorFlags: 0 }
+  const finalTracked = stepPrimarySpells({
+    ...EMPTY_SPELL_WORLD,
+    canPlaceProjectile: () => true,
+    canTraverseProjectile: () => true,
+    castAuthority,
+    inputs: {},
+    players: {},
+    previousPlayers: {},
+    spellTargets: () => [inactiveTarget],
+    spells: { nextId: spells.nextId, projectiles: [flagChanged], transients: [] },
+    tick: PRIMARY_CAST_ETHER_EMISSION_TICK + 4,
+    viewScale: 1.2,
+    worldKeyForPlayer: () => 'hub:courtyard',
+  }).spells.projectiles[0]
+  assert.equal(finalTracked.kind, 'ether')
+  assert.equal(finalTracked.targetId, null)
+  assert.equal(
+    finalTracked.headingDegrees,
+    Math.fround(flagChanged.headingDegrees + 2 * flagChanged.turnAccumulator),
+  )
+  assert.equal(
+    finalTracked.turnAccumulator,
+    Math.fround(flagChanged.turnAccumulator + ETHER_PRIMARY_TURN_FAST_STEP),
+  )
+
   const lost = stepPrimarySpells({
     ...EMPTY_SPELL_WORLD,
     canPlaceProjectile: () => true,
@@ -643,13 +686,14 @@ test('Ether snapshots the forward-probe target and steers after its first moveme
     inputs: {},
     players: {},
     previousPlayers: {},
-    spells: { nextId: spells.nextId, projectiles: [advanced], transients: [] },
-    tick: PRIMARY_CAST_ETHER_EMISSION_TICK + 3,
+    spells: { nextId: spells.nextId, projectiles: [finalTracked], transients: [] },
+    tick: PRIMARY_CAST_ETHER_EMISSION_TICK + 5,
     viewScale: 1.2,
     worldKeyForPlayer: () => 'hub:courtyard',
   }).spells.projectiles[0]
   assert.equal(lost.kind, 'ether')
   assert.equal(lost.targetId, null)
+  assert.equal(lost.turnAccumulator, finalTracked.turnAccumulator)
 
   const noRankOneRetarget = stepPrimarySpells({
     ...EMPTY_SPELL_WORLD,
@@ -661,7 +705,7 @@ test('Ether snapshots the forward-probe target and steers after its first moveme
     previousPlayers: {},
     spellTargets: () => [target],
     spells: { nextId: spells.nextId, projectiles: [lost], transients: [] },
-    tick: PRIMARY_CAST_ETHER_EMISSION_TICK + 4,
+    tick: PRIMARY_CAST_ETHER_EMISSION_TICK + 6,
     viewScale: 1.2,
     worldKeyForPlayer: () => 'hub:courtyard',
   }).spells.projectiles[0]

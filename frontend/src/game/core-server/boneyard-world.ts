@@ -205,9 +205,8 @@ export function boneyardPrimarySpellTargets(
 ): readonly PrimarySpellTarget[] {
   const enemyRegistrationBase = world.scenerySpellTargets.length
   const actors = world.enemies.actors
-    .filter((enemy) => enemy.lifeState === 'alive')
     .map((enemy) => ({
-      active: true,
+      active: enemy.lifeState === 'alive',
       actorFlags: enemy.config.enemyToken === 'COFFIN' ? 0 : 0x2,
       attachment: { x: 0, y: 0 },
       bodyRadius: enemy.config.collisionRadius,
@@ -218,9 +217,8 @@ export function boneyardPrimarySpellTargets(
       position: { ...enemy.position },
     }))
   const maggots = world.enemies.maggots
-    .filter((enemy) => enemy.lifeState === 'alive')
     .map((enemy) => ({
-      active: true,
+      active: enemy.lifeState === 'alive',
       actorFlags: 0x2,
       attachment: { x: 0, y: 0 },
       bodyRadius: enemy.collisionRadius,

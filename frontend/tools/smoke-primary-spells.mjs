@@ -56,6 +56,7 @@ const SPELLS = [
 ]
 const requestedSpellKind = process.env.SDR_PRIMARY_SPELL_KIND?.trim().toLowerCase()
 const lowManaAcceptance = process.env.SDR_PRIMARY_SPELL_LOW_MANA === '1'
+const hostOpenedBoneyard = process.env.SDR_PRIMARY_SPELL_HOST_OPENED_BONEYARD === '1'
 const selectedSpells = requestedSpellKind
   ? SPELLS.filter((spell) => spell.kind === requestedSpellKind)
   : SPELLS
@@ -186,7 +187,7 @@ try {
     }
 
     if (spell.mode === 'one-shot') {
-      await page.waitForTimeout(35)
+      await page.waitForTimeout(hostOpenedBoneyard ? 250 : 35)
       await page.mouse.up({ button: 'left' })
     }
 
@@ -196,7 +197,8 @@ try {
       ? ['fire', 'fire-impact']
       : spell.kind
     let screenshotPath = `${screenshotRoot}/solomon-primary-${spell.kind}-hub.png`
-    const observedSpellFrame = spell.mode === 'charge'
+    const useTrackingWireFallback = hostOpenedBoneyard && spell.kind === 'ether'
+    const observedSpellFrame = spell.mode === 'charge' || useTrackingWireFallback
       ? null
       : await waitForHubSpell(page, observableKinds)
     if (spell.kind === 'fire') await page.screenshot({ path: screenshotPath })
@@ -206,10 +208,12 @@ try {
       lowManaAcceptance && spell.kind === 'fire',
     )
     if (castFrame === null) {
-      assert.ok(
-        facingWire.observedAttachmentPoses.includes(spell.castPose),
-        `expected authoritative ${spell.kind} pose ${spell.castPose}`,
-      )
+      if (!hostOpenedBoneyard) {
+        assert.ok(
+          facingWire.observedAttachmentPoses.includes(spell.castPose),
+          `expected authoritative ${spell.kind} pose ${spell.castPose}`,
+        )
+      }
       castFrame = {
         playerAttachmentPose: spell.castPose,
         tick: facingWire.tick,
@@ -219,7 +223,14 @@ try {
     assert.equal(facingWire.playerHeadingIndex, expectedHeadingIndex)
     const facingFrame = observedSpellFrame?.playerHeadingIndex === expectedHeadingIndex
       ? observedSpellFrame
-      : await waitForHubFacing(page, observableKinds, expectedHeadingIndex)
+      : useTrackingWireFallback
+        ? {
+            playerHeadingIndex: facingWire.playerHeadingIndex,
+            primarySpellCount: facingWire.projectileCount,
+            primarySpellKinds: [facingWire.state.kind],
+            tick: facingWire.tick,
+          }
+        : await waitForHubFacing(page, observableKinds, expectedHeadingIndex)
     const lowManaPresentation = lowManaAcceptance
       ? await captureLowManaPresentation(page, facingWire)
       : null
@@ -416,7 +427,10 @@ await new Promise((resolve) => process.stdout.write('', resolve))
 process.exit(0)
 
 async function enterHub(page, element) {
-  await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
+  await page.goto(`${baseUrl}/game`, {
+    timeout: hostOpenedBoneyard ? 90_000 : 30_000,
+    waitUntil: 'domcontentloaded',
+  })
   await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 90_000 })
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
@@ -504,14 +518,15 @@ async function castEarthInBoneyard(page) {
 }
 
 async function enterBoneyard(page) {
+  const renderTimeout = hostOpenedBoneyard ? 180_000 : BONEYARD_RENDER_TIMEOUT_MS
   const enter = page.getByRole('button', { name: 'Enter the Boneyard' })
   await enter.waitFor({ timeout: 10_000 })
   await enter.click()
   await page.locator('.boneyard-scene[data-renderer-state="ready"]').waitFor({
-    timeout: BONEYARD_RENDER_TIMEOUT_MS,
+    timeout: renderTimeout,
   })
   const canvas = page.locator('.boneyard-world-canvas[data-game-renderer="pixi-webgl"]')
-  await canvas.waitFor({ timeout: BONEYARD_RENDER_TIMEOUT_MS })
+  await canvas.waitFor({ timeout: renderTimeout })
   return canvas
 }
 
@@ -643,12 +658,84 @@ async function castFireInBoneyard(page) {
 
 async function castEtherInBoneyard(page) {
   const canvas = await enterBoneyard(page)
+  if (!hostOpenedBoneyard) return castUntargetedEtherInBoneyard(page, canvas)
+
+  const target = await visibleBoneyardEnemy(page)
+  const bounds = await canvas.boundingBox()
+  assert.ok(bounds, 'expected the Boneyard canvas to have bounds')
+  const targetPoint = worldScreenPoint(bounds, target.frame, target.enemy)
+  const horizontalOffset = targetPoint.x < bounds.x + bounds.width / 2 ? 80 : -80
+  const aimPoint = {
+    x: Math.max(bounds.x + 30, Math.min(bounds.x + bounds.width - 30, targetPoint.x + horizontalOffset)),
+    y: Math.max(bounds.y + 30, Math.min(bounds.y + bounds.height - 30, targetPoint.y)),
+  }
+  const eventStart = await audioEventCount(page)
+  const afterTick = await latestWireTick(page)
+  await page.mouse.move(aimPoint.x, aimPoint.y)
+  await page.mouse.down({ button: 'left' })
+  const launch = await waitForAudio(
+    page,
+    eventStart,
+    '/game/audio/sfx/magic-missile.wav',
+    'play',
+    hostOpenedBoneyard ? 30_000 : 10_000,
+  )
+  let flight = null
+  let flightScreenshotPath = null
+  if (lowManaAcceptance) {
+    const fizzle = await waitForAudio(page, eventStart, '/game/audio/sfx/fizzle.wav', 'play')
+    assert.ok(fizzle.at <= launch.at)
+    assert.equal(fizzle.volume, 1)
+    assert.equal(launch.volume, 0.75)
+    flight = await waitForWireSpell(page, 'ether', afterTick, 10_000)
+    assert.equal(flight.state.underpowered, true)
+    assert.equal(flight.state.damage, 1)
+    assert.ok(
+      Math.abs(Math.hypot(flight.state.velocity.x, flight.state.velocity.y) - 2.4) < 0.000001,
+    )
+    flightScreenshotPath = `${screenshotRoot}/solomon-primary-ether-boneyard-low-flight.png`
+    await page.screenshot({ path: flightScreenshotPath })
+  }
+  await page.mouse.up({ button: 'left' })
+  const impact = await waitForWireSpell(
+    page,
+    'ether-impact',
+    afterTick,
+    hostOpenedBoneyard ? 30_000 : 10_000,
+  )
+  const screenshotPath = `${screenshotRoot}/solomon-primary-ether-boneyard-impact.png`
+  await page.screenshot({ path: screenshotPath })
+  await waitForAudio(
+    page,
+    eventStart,
+    '/game/audio/sfx/magic-missile-hit.wav',
+    'play',
+    hostOpenedBoneyard ? 30_000 : 10_000,
+  )
+  return {
+    aimPoint,
+    flight,
+    flightScreenshotPath,
+    gate: { fixture: 'host-opened-boneyard' },
+    impact,
+    screenshotPath,
+    target: target.enemy,
+    tracking: { fixture: 'external-authoritative-probe' },
+  }
+}
+
+async function castUntargetedEtherInBoneyard(page, canvas) {
   const eventStart = await audioEventCount(page)
   const afterTick = await latestWireTick(page)
   const target = await castTarget(canvas, 0.5, 0.05)
   await page.mouse.move(target.x, target.y)
   await page.mouse.down({ button: 'left' })
-  const launch = await waitForAudio(page, eventStart, '/game/audio/sfx/magic-missile.wav', 'play')
+  const launch = await waitForAudio(
+    page,
+    eventStart,
+    '/game/audio/sfx/magic-missile.wav',
+    'play',
+  )
   let flight = null
   let flightScreenshotPath = null
   if (lowManaAcceptance) {
@@ -848,6 +935,28 @@ async function boneyardFrame(page) {
   return page.locator('.boneyard-world-canvas').evaluate((node) => (
     structuredClone(node.__sdrBoneyardFrame)
   ))
+}
+
+async function visibleBoneyardEnemy(page) {
+  const handle = await page.waitForFunction(() => {
+    const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
+    if (!frame || !Number.isFinite(frame.playerX) || !Number.isFinite(frame.playerY)) return null
+    const visible = frame.enemySamples.filter((enemy) => {
+      if (enemy.currentHealth <= 0) return false
+      const x = frame.playerScreenX + (enemy.x - frame.playerX) * 1.35
+      const y = frame.playerScreenY + (enemy.y - frame.playerY) * 1.35
+      return x >= 100 && x <= 1_500 && y >= 100 && y <= 800
+    }).toSorted((left, right) => (
+      Math.hypot(right.x - frame.playerX, right.y - frame.playerY)
+        - Math.hypot(left.x - frame.playerX, left.y - frame.playerY)
+    ))
+    return visible.length > 0
+      ? { enemy: { ...visible[0] }, frame: structuredClone(frame) }
+      : null
+  }, undefined, { timeout: 30_000 })
+  const result = await handle.jsonValue()
+  await handle.dispose()
+  return result
 }
 
 async function settleMovement(page) {
@@ -1299,7 +1408,7 @@ async function audioEvents(page) {
   return page.evaluate(() => window.__primarySpellAudioEvents)
 }
 
-async function waitForAudio(page, eventStart, source, type) {
+async function waitForAudio(page, eventStart, source, type, timeout = 10_000) {
   const handle = await page.waitForFunction(
     ({ expected, expectedType, start }) => {
       const events = window.__primarySpellAudioEvents.slice(start)
@@ -1311,7 +1420,7 @@ async function waitForAudio(page, eventStart, source, type) {
       )) || null
     },
     { expected: source, expectedType: type, start: eventStart },
-    { timeout: 10_000 },
+    { timeout },
   )
   const result = await handle.jsonValue()
   await handle.dispose()

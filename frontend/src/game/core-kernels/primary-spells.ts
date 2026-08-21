@@ -38,10 +38,8 @@ import { NATIVE_ETHER_IMPACT_VISIBLE_TICKS } from './primary-spell-ether-native.
 import {
   AIR_PRIMARY_TARGET_Y_OFFSET,
   ETHER_PRIMARY_INITIAL_TURN,
-  NATIVE_PRIMARY_HOSTILE_FLAG,
   airPrimaryBoltGeometry,
   advanceEtherPrimaryHoming,
-  nativePrimaryTargetEligible,
   selectAirPrimaryTarget,
   selectEtherPrimaryTarget,
   type PrimarySpellTarget,
@@ -1247,12 +1245,9 @@ function advanceProjectile(
     return { ...spell, ageTicks: spell.ageTicks + 1 }
   }
   if (spell.kind === 'ether') {
-    const candidate = spell.targetId === null
+    const target = spell.targetId === null
       ? undefined
       : targets.find(({ id }) => id === spell.targetId)
-    const target = candidate && nativePrimaryTargetEligible(candidate, NATIVE_PRIMARY_HOSTILE_FLAG)
-      ? candidate
-      : undefined
     const advanced = advanceEtherPrimaryHoming({
       headingDegrees: spell.headingDegrees,
       movementScalar: 1,
@@ -1269,7 +1264,7 @@ function advanceProjectile(
       flightTicks: spell.flightTicks + 1,
       headingDegrees: advanced.headingDegrees,
       position: advanced.position,
-      targetId: target?.id ?? null,
+      targetId: target?.active ? target.id : null,
       turnAccumulator: advanced.turnAccumulator,
       velocity: {
         x: Math.fround(advanced.direction.x * (

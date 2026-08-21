@@ -265,13 +265,13 @@ export function advanceEtherPrimaryHoming(
     input.targetPosition.x - position.x,
     input.targetPosition.y - position.y,
   )
-  const signedDelta = signedHeadingDelta(heading, desired)
+  const turnDirection = nativeHeadingTurnDirection(heading, desired)
   const turnAccumulator = Math.fround(input.turnAccumulator)
   const turn = Math.fround(
     input.turnInput
     * turnAccumulator
     * input.movementScalar
-    * signedDelta,
+    * turnDirection,
   )
   const headingDegrees = normalizeDegrees(Math.fround(heading + turn))
   const step = turnAccumulator > ETHER_PRIMARY_TURN_THRESHOLD
@@ -287,6 +287,17 @@ export function advanceEtherPrimaryHoming(
       Math.fround(turnAccumulator + step),
     ),
   }
+}
+
+export function nativeHeadingTurnDirection(current: number, desired: number): -1 | 0 | 1 {
+  const normalizedCurrent = normalizeDegrees(current)
+  const normalizedDesired = normalizeDegrees(desired)
+  const gap = Math.abs(normalizedCurrent - normalizedDesired)
+  if (gap <= 1 || gap >= 359) return 0
+  if (normalizedDesired <= normalizedCurrent) {
+    return normalizedCurrent - normalizedDesired <= 180 ? -1 : 1
+  }
+  return normalizedDesired - normalizedCurrent > 180 ? -1 : 1
 }
 
 export function directionFromHeading(headingDegrees: number): Vector2 {
@@ -313,10 +324,6 @@ function dot(left: Vector2, right: Vector2): number {
 
 function normalizeDegrees(degrees: number): number {
   return ((degrees % 360) + 360) % 360
-}
-
-function signedHeadingDelta(current: number, desired: number): number {
-  return ((desired - current + 540) % 360) - 180
 }
 
 function nativeRegistrationOrder(

@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { actorHeadingFromVector } from './actor-heading.ts'
 import {
   AIR_PRIMARY_CONE_HALF_ANGLE_DEGREES,
   AIR_PRIMARY_RETAIN_DOT,
@@ -12,6 +11,7 @@ import {
   airPrimaryBoltGeometry,
   advanceEtherPrimaryHoming,
   firstNativePrimaryPointContact,
+  nativeHeadingTurnDirection,
   nativePrimaryConeTargets,
   nativePrimaryRootTargets,
   selectAirPrimaryTarget,
@@ -174,13 +174,28 @@ test('Magic Missile moves on the old heading then applies native steering to the
     turnInput: ETHER_PRIMARY_TURN_INPUT,
   })
   assert.deepEqual(advanced.position, { x: 0, y: -3 })
-  assert.ok(advanced.headingDegrees > 1.8 && advanced.headingDegrees < 1.9)
+  assert.equal(advanced.headingDegrees, Math.fround(0.02))
   assert.equal(
     advanced.turnAccumulator,
     Math.fround(ETHER_PRIMARY_INITIAL_TURN + ETHER_PRIMARY_TURN_FAST_STEP),
   )
   assert.ok(advanced.direction.x > 0)
   assert.ok(advanced.direction.y < 0)
+})
+
+test('Magic Missile uses the native sign gate, inclusive cyclic deadband, and 180-degree tie order', () => {
+  assert.equal(nativeHeadingTurnDirection(0, 90), 1)
+  assert.equal(nativeHeadingTurnDirection(0, 270), -1)
+  assert.equal(nativeHeadingTurnDirection(359, 1), 1)
+  assert.equal(nativeHeadingTurnDirection(1, 359), -1)
+
+  assert.equal(nativeHeadingTurnDirection(0, 1), 0)
+  assert.equal(nativeHeadingTurnDirection(1, 0), 0)
+  assert.equal(nativeHeadingTurnDirection(0, 359), 0)
+  assert.equal(nativeHeadingTurnDirection(359, 0), 0)
+
+  assert.equal(nativeHeadingTurnDirection(0, 180), 1)
+  assert.equal(nativeHeadingTurnDirection(180, 0), -1)
 })
 
 test('underpowered Magic Missile combines its 0.75 turn lane with the 0.8 speed lane', () => {
@@ -203,12 +218,51 @@ test('underpowered Magic Missile combines its 0.75 turn lane with the 0.8 speed 
     turnInput: Math.fround(1.2),
   })
   assert.deepEqual(weak.position, { x: 0, y: Math.fround(-2.4) })
-  const weakDesired = actorHeadingFromVector(100, Math.fround(2.4))
   assert.equal(
     weak.headingDegrees,
-    Math.fround(Math.fround(1.2) * ETHER_PRIMARY_INITIAL_TURN * weakDesired),
+    Math.fround(Math.fround(1.2) * ETHER_PRIMARY_INITIAL_TURN),
   )
   assert.ok(weak.headingDegrees < full.headingDegrees)
+})
+
+test('Magic Missile grows its accumulator only while a target handle resolves', () => {
+  const base = {
+    headingDegrees: 0,
+    movementScalar: 1,
+    position: { x: 0, y: 0 },
+    speed: 3,
+    turnInput: ETHER_PRIMARY_TURN_INPUT,
+  }
+  const noTarget = advanceEtherPrimaryHoming({
+    ...base,
+    targetPosition: null,
+    turnAccumulator: ETHER_PRIMARY_INITIAL_TURN,
+  })
+  assert.equal(noTarget.turnAccumulator, ETHER_PRIMARY_INITIAL_TURN)
+
+  const atThreshold = advanceEtherPrimaryHoming({
+    ...base,
+    targetPosition: { x: 100, y: 0 },
+    turnAccumulator: 1,
+  })
+  assert.equal(atThreshold.turnAccumulator, Math.fround(1 + ETHER_PRIMARY_TURN_FAST_STEP))
+
+  const aboveThreshold = advanceEtherPrimaryHoming({
+    ...base,
+    targetPosition: { x: 100, y: 0 },
+    turnAccumulator: atThreshold.turnAccumulator,
+  })
+  assert.equal(
+    aboveThreshold.turnAccumulator,
+    Math.fround(atThreshold.turnAccumulator + 0.0020000000949949026),
+  )
+
+  const capped = advanceEtherPrimaryHoming({
+    ...base,
+    targetPosition: { x: 100, y: 0 },
+    turnAccumulator: Math.fround(9.999),
+  })
+  assert.equal(capped.turnAccumulator, 10)
 })
 
 test('native point contact uses trunc0 cells, strict radii, and projected slot order', () => {

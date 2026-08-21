@@ -1005,10 +1005,13 @@ test('primary spell targets use live authoritative enemy actors and owned Maggot
   })
   world = { ...world, enemies: killed.store }
 
-  assert.deepEqual(
-    boneyardPrimarySpellTargets(world).map(({ id }) => id),
-    world.enemies.maggots.map(({ id }) => `enemy:${id}`),
-  )
+  const targets = boneyardPrimarySpellTargets(world)
+  assert.deepEqual(targets.map(({ id }) => id), [
+    `enemy:${coffin.id}`,
+    ...world.enemies.maggots.map(({ id }) => `enemy:${id}`),
+  ])
+  assert.equal(targets[0]?.active, false)
+  assert.ok(targets.slice(1).every(({ active }) => active))
 })
 
 test('mod Boneyards retain opaque script ownership instead of receiving retail waves', () => {
