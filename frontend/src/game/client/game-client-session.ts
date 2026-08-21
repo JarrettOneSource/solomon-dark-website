@@ -708,7 +708,6 @@ export function connectGameClientSession(
           !progression
           || nativeSkillCategory(skillId) !== 3
           || progression.mindChugTicksRemaining !== 0
-          || progression.concentrationSkillIds.includes(skillId)
           || (progression.learnedSkills.find(([id]) => id === skillId)?.[1] ?? 0) < 1
         ) throw new Error('The concentration is unavailable.')
         session.sendInput(STOPPED_INPUT)

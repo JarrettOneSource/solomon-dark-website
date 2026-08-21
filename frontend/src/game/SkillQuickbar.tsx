@@ -108,7 +108,7 @@ export default function SkillQuickbar({
   )
 }
 
-function NativeSkillIcon({ cooldown, record }: { cooldown: boolean; record: number }) {
+export function NativeSkillIcon({ cooldown, record }: { cooldown: boolean; record: number }) {
   const definition = nativeAssets.atlases.Skills.records[`${record}`]
   if (!definition) throw new Error(`Missing native Skills record ${record}`)
   const [x, y] = definition.frame

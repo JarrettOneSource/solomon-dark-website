@@ -255,6 +255,61 @@
   text-transform: uppercase;
 }
 
+.game-settings-dialog-gameplay { width: min(760px, 100%); }
+
+.game-settings-skill-selectors {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.game-settings-skill-selector {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgb(205 177 105 / 0.42);
+}
+
+.game-settings-skill-selector h3 {
+  margin: 0 0 10px;
+  color: #fff0b7;
+  font: 700 16px var(--font-display);
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.game-settings-skill-options {
+  display: grid;
+  max-height: 220px;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  overflow-y: auto;
+}
+
+.game-settings-skill-options > button {
+  position: relative;
+  min-height: 82px;
+  padding: 58px 4px 6px;
+  border: 1px solid #665b42;
+  color: #d9cfb0;
+  background: #100e13;
+  font: 600 11px var(--font-display);
+  cursor: pointer;
+}
+
+.game-settings-skill-options > button[aria-pressed='true'] {
+  border-color: #75cf79;
+  color: #e8ffe9;
+}
+
+.game-settings-skill-options > button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+@media (max-width: 700px) {
+  .game-settings-skill-selectors { grid-template-columns: 1fr; }
+}
+
 .game-settings-toggle {
   display: flex;
   align-items: flex-start;

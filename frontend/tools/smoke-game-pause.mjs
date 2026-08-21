@@ -10,7 +10,12 @@ import { WebSocket } from 'ws'
 import {
   GAME_FIXED_TICK_SECONDS,
   gameSimulationPlayerRecords,
+  getPlayerEconomy,
 } from '../src/game/core-server/game-simulation.ts'
+import {
+  playerSkillRuntimeAt,
+  replacePlayerEconomy,
+} from '../src/game/core-server/player-entity-store.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 import {
   GAME_PROTOCOL_VERSION,
@@ -26,6 +31,8 @@ const screenshots = {
     || '/tmp/solomon-dark-pause-boneyard-waiting.png',
   hubOwner: process.env.SDR_GAME_PAUSE_OWNER_SCREENSHOT
     || '/tmp/solomon-dark-pause-hub-owner.png',
+  skillSettings: process.env.SDR_GAME_SKILL_SETTINGS_SCREENSHOT
+    || '/tmp/solomon-dark-pause-skill-settings.png',
   hubWaiting: process.env.SDR_GAME_PAUSE_WAITING_SCREENSHOT
     || '/tmp/solomon-dark-pause-hub-waiting.png',
   leavePressed: process.env.SDR_GAME_PAUSE_LEAVE_PRESSED_SCREENSHOT
@@ -81,6 +88,7 @@ try {
     window.solomonDarkRuntime = configuration
   }, runtime)
   await enterHub(page, 'Fire')
+  grantLearnedSkill(57)
 
   peer = await joinRaw({
     discipline: 'mind',
@@ -212,6 +220,21 @@ try {
   const settingsDialog = page.getByRole('dialog', { name: 'Settings' })
   await settingsDialog.waitFor()
   await settingsPause.waitFor({ state: 'detached' })
+  const concentrationSelector = settingsDialog.getByRole('region', {
+    name: 'Select Concentration',
+  })
+  await concentrationSelector.getByRole('button', { name: 'Channel Mana' }).click()
+  await waitForHost(() => (
+    playerSkillRuntimeAt(host.state().playerEntities, host.hostPlayerId())
+      ?.concentrationSkillIdA === 57
+  ), 'concentration selection')
+  const primarySelector = settingsDialog.getByRole('region', { name: 'Select Primary Attack' })
+  assert.equal(
+    await primarySelector.getByRole('button', { name: 'Fireball, selected' })
+      .getAttribute('aria-pressed'),
+    'true',
+  )
+  await page.screenshot({ path: screenshots.skillSettings })
   const settingsHeldHub = simulationReceipt()
   await page.waitForTimeout(550)
   assert.deepEqual(simulationReceipt(), settingsHeldHub)
@@ -440,6 +463,37 @@ function simulationReceipt() {
     tick: state.tick,
     world: JSON.stringify(state.world),
   }
+}
+
+function grantLearnedSkill(skillId) {
+  const state = host.state()
+  const playerId = host.hostPlayerId()
+  const index = state.playerEntities.identities.findIndex(({ playerId: id }) => id === playerId)
+  const sourceBook = state.playerEntities.skillBooks[index]
+  const permanentRanks = [...sourceBook.permanentRanks]
+  const effectiveRanks = [...sourceBook.effectiveRanks]
+  permanentRanks[skillId] = 1
+  effectiveRanks[skillId] = 1
+  const skillBooks = [...state.playerEntities.skillBooks]
+  const progressions = [...state.playerEntities.progressions]
+  skillBooks[index] = {
+    ...sourceBook,
+    effectiveRanks,
+    learnedSkillOrder: [...sourceBook.learnedSkillOrder, skillId],
+    permanentRanks,
+  }
+  progressions[index] = {
+    ...progressions[index],
+    revision: progressions[index].revision + 1,
+  }
+  Object.assign(state, {
+    ...state,
+    playerEntities: replacePlayerEconomy({
+      ...state.playerEntities,
+      progressions,
+      skillBooks,
+    }, playerId, getPlayerEconomy(state, playerId)),
+  })
 }
 
 async function canvasFrame(page, selector) {

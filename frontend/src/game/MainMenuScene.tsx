@@ -1010,6 +1010,10 @@ export default function MainMenuScene({
                 setGameplaySettingsOpen(false)
                 session.requestGameplayPause(false)
               }}
+              onSelectConcentration={session.selectConcentration}
+              onSelectPrimarySkill={session.selectPrimarySkill}
+              progression={runtimeProgression
+                ?? runtimeSnapshot!.players[session.playerId]!.progression}
               settings={gameSettings}
             />
           ) : null}
@@ -1136,4 +1140,10 @@ function sameRuntimeProgression(
     && current.lifeState === next.lifeState
     && current.poisonDamagePerTick === next.poisonDamagePerTick
     && current.poisonTicksRemaining === next.poisonTicksRemaining
+    && current.selectedPrimarySkillId === next.selectedPrimarySkillId
+    && current.weldBuildId === next.weldBuildId
+    && current.skillQuickbar.every((skillId, index) => skillId === next.skillQuickbar[index])
+    && current.concentrationSkillIds.every((skillId, index) => (
+      skillId === next.concentrationSkillIds[index]
+    ))
 }

@@ -25467,3 +25467,11 @@ native leather, chain, statue, card, dependency-arrow, icon-frame, font, and
 bottom-HUD records, rebuilds pages from the complete learned dependency graph,
 and exposes the authored hover tooltip. This screen is the user-facing owner of
 the catalog audit rather than a static two-card mock.
+
+The separately recovered `Skills_Quickbar` settings path is also live. Game
+Settings exposes the learned category-1 `SELECT PRIMARY ATTACK` list and the
+learned category-3 `SELECT CONCENTRATION` list; both submit authoritative
+protocol-43 actions. Concentration selection preserves the native one-slot or
+Split Mind two-slot replacement policy, treats a currently selected row as a
+no-op, and remains blocked during Mind Chug. It is not incorrectly folded into
+the Skill Screen's gold/green drag membership.
