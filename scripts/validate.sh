@@ -101,6 +101,7 @@ run_all() {
     run_lint
 
     printf 'Running frontend tests\n'
+    npm --prefix frontend run test:library
     npm --prefix frontend run test:loot
     npm --prefix frontend run test:boneyard
     npm --prefix frontend run test:parties

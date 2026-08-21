@@ -19,7 +19,9 @@ export default function Mods() {
   const [sort, setSort] = useState<ModSort>('newest')
   const [page, setPage] = useState(1)
   const [subscribing, setSubscribing] = useState<string | null>(null)
+  const [unsubscribing, setUnsubscribing] = useState<string | null>(null)
   const [subscriptionError, setSubscriptionError] = useState<string | null>(null)
+  const [unsubscribeError, setUnsubscribeError] = useState<string | null>(null)
   const pageSize = 12
 
   // Selected tags live in the URL so /mods?tag=boneyard deep-links to a shelf.
@@ -51,8 +53,9 @@ export default function Mods() {
     () => user ? api.mods.subscriptions.list() : Promise.resolve({ items: [] }),
     [user?.id],
   )
+  const subscribedMods = subscriptions.data?.items ?? []
   const subscribedSlugs = new Set(
-    subscriptions.data?.items.map(subscription => subscription.mod.slug) ?? [],
+    subscribedMods.map(subscription => subscription.mod.slug),
   )
 
   const subscribe = async (mod: ModSummary) => {
@@ -69,6 +72,19 @@ export default function Mods() {
       setSubscriptionError(error instanceof Error ? error.message : 'The subscription failed.')
     } finally {
       setSubscribing(null)
+    }
+  }
+
+  const unsubscribe = async (mod: ModSummary) => {
+    setUnsubscribing(mod.slug)
+    setUnsubscribeError(null)
+    try {
+      await api.mods.subscriptions.unsubscribe(mod.slug)
+      await subscriptions.reload()
+    } catch (error) {
+      setUnsubscribeError(error instanceof Error ? error.message : 'The unsubscribe failed.')
+    } finally {
+      setUnsubscribing(null)
     }
   }
 
@@ -107,6 +123,56 @@ export default function Mods() {
           </div>
         </div>
       </Reveal>
+
+      <section className="mt-9" aria-labelledby="subscribed-mods-heading">
+        <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <div className="kicker mb-1">Your collection</div>
+            <h2 id="subscribed-mods-heading" className="h-display text-xl">Subscribed Mods</h2>
+            <p className="text-fell mt-1 max-w-xl text-sm text-bone-dim">
+              Your saved tomes. Enable or disable them from Explore the Dark Cloud before play.
+            </p>
+          </div>
+          {user && subscribedMods.length > 0 ? (
+            <span className="font-mono text-xs text-bone-dim/60">
+              {subscribedMods.length} subscribed
+            </span>
+          ) : null}
+        </div>
+
+        {!user ? (
+          <div className="panel flex flex-wrap items-center justify-between gap-4 p-5">
+            <p className="text-fell text-sm text-bone-dim">
+              Sign in to keep a personal list of subscribed mods.
+            </p>
+            <Link to="/login" className="btn btn-stone">Sign in</Link>
+          </div>
+        ) : subscriptions.loading ? (
+          <Spinner label="Reading your subscriptions…" />
+        ) : subscriptions.error ? (
+          <ErrorNote message={subscriptions.error} />
+        ) : subscribedMods.length === 0 ? (
+          <EmptyState
+            title="No subscribed mods"
+            line="Choose Subscribe on a tome below and it will appear here."
+          />
+        ) : (
+          <>
+            {unsubscribeError ? <ErrorNote message={unsubscribeError} /> : null}
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {subscribedMods.map((subscription, index) => (
+                <Reveal key={subscription.mod.id} delay={Math.min(index, 6) * 60}>
+                  <ModCard
+                    mod={subscription.mod}
+                    onUnsubscribe={unsubscribe}
+                    unsubscribing={unsubscribing === subscription.mod.slug}
+                  />
+                </Reveal>
+              ))}
+            </div>
+          </>
+        )}
+      </section>
 
       <PopularStrip className="mt-8" />
 

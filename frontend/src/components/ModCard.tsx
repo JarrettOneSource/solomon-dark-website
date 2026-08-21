@@ -7,17 +7,36 @@ import { TagBadge } from './ui'
 interface ModCardProps {
   mod: ModSummary
   onSubscribe?: (mod: ModSummary) => void
+  onUnsubscribe?: (mod: ModSummary) => void
   subscribed?: boolean
   subscribing?: boolean
+  unsubscribing?: boolean
 }
 
 export default function ModCard({
   mod,
   onSubscribe,
+  onUnsubscribe,
   subscribed = false,
   subscribing = false,
+  unsubscribing = false,
 }: ModCardProps) {
   const navigate = useNavigate()
+  const subscriptionAction = onUnsubscribe
+    ? {
+        className: 'btn-stone',
+        disabled: unsubscribing,
+        label: unsubscribing ? 'Unsubscribing…' : 'Unsubscribe',
+        run: onUnsubscribe,
+      }
+    : onSubscribe
+      ? {
+          className: subscribed ? 'btn-stone' : 'btn-gold',
+          disabled: subscribed || subscribing,
+          label: subscribed ? 'Subscribed' : subscribing ? 'Subscribing…' : 'Subscribe',
+          run: onSubscribe,
+        }
+      : null
   // Two wide chips crush the byline, so a long pair shows one chip + count.
   const shownTags =
     (mod.tags[0]?.length ?? 0) + (mod.tags[1]?.length ?? 0) > 18
@@ -42,18 +61,18 @@ export default function ModCard({
             className="h-14 opacity-25 transition-opacity group-hover:opacity-40"
           />
         )}
-        {onSubscribe ? (
+        {subscriptionAction ? (
           <button
             type="button"
-            className={`btn absolute right-3 top-3 !px-3 !py-1.5 !text-[10px] ${subscribed ? 'btn-stone' : 'btn-gold'}`}
-            disabled={subscribed || subscribing}
+            className={`btn absolute right-3 top-3 !px-3 !py-1.5 !text-[10px] ${subscriptionAction.className}`}
+            disabled={subscriptionAction.disabled}
             onClick={(event) => {
               event.preventDefault()
               event.stopPropagation()
-              onSubscribe(mod)
+              subscriptionAction.run(mod)
             }}
           >
-            {subscribed ? 'Subscribed' : subscribing ? 'Subscribing…' : 'Subscribe'}
+            {subscriptionAction.label}
           </button>
         ) : null}
       </div>
