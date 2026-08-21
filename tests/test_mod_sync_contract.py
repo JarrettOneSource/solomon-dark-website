@@ -6,6 +6,7 @@ import hashlib
 import hmac
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import io
 import json
 import os
@@ -14,6 +15,7 @@ import socket
 import sqlite3
 import subprocess
 import tempfile
+import threading
 import time
 import unittest
 import urllib.error
@@ -63,6 +65,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
 
         cls.jwt_secret = "website-mod-sync-contract-secret-at-least-thirty-two-bytes"
         cls.leaderboard_secret = "leaderboard-contract-secret-at-least-thirty-two-bytes"
+        cls.start_supervisor_stub()
         cls.environment = os.environ.copy()
         cls.environment.update(
             {
@@ -71,6 +74,8 @@ class WebsiteModSyncContractTests(unittest.TestCase):
                 "Storage__Root": cls.temp.name,
                 "Jwt__Secret": cls.jwt_secret,
                 "GameSessions__AdminSecret": cls.leaderboard_secret,
+                "GameSessions__PublicWebSocketOrigin": "wss://game.example.invalid",
+                "GameSessions__SupervisorUrl": cls.supervisor_origin,
             }
         )
         cls.build_server()
@@ -143,6 +148,64 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             raise RuntimeError(f"website did not start within 60 seconds:\n{output}")
 
     @classmethod
+    def start_supervisor_stub(cls) -> None:
+        secret = cls.leaderboard_secret
+
+        class SupervisorHandler(BaseHTTPRequestHandler):
+            def reply(self, status: int, body: object) -> None:
+                encoded = json.dumps(body, separators=(",", ":")).encode()
+                self.send_response(status)
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(encoded)))
+                self.end_headers()
+                self.wfile.write(encoded)
+
+            def authorized(self) -> bool:
+                return self.headers.get("Authorization") == f"Bearer {secret}"
+
+            def do_GET(self) -> None:
+                if not self.authorized():
+                    self.reply(401, {"error": "Unauthorized."})
+                elif self.path == "/health":
+                    self.reply(200, {"players": 0, "parties": 0, "runs": 0})
+                elif self.path == "/admin/hub/parties":
+                    self.reply(
+                        200,
+                        {
+                            "items": [
+                                {
+                                    "id": "party-7",
+                                    "leader": "Hagatha",
+                                    "members": ["Hagatha", "Luthacus"],
+                                    "memberCount": 2,
+                                    "maxMembers": 16,
+                                    "status": "playing",
+                                    "boneyardName": "The Survival Grounds",
+                                }
+                            ]
+                        },
+                    )
+                else:
+                    self.reply(404, {"error": "Not found."})
+
+            def do_POST(self) -> None:
+                self.reply(503, {"error": "Unavailable."})
+
+            def log_message(self, _format: str, *_args: object) -> None:
+                pass
+
+        cls.supervisor = ThreadingHTTPServer(("127.0.0.1", 0), SupervisorHandler)
+        supervisor_port = cls.supervisor.server_address[1]
+        cls.supervisor_origin = f"http://127.0.0.1:{supervisor_port}"
+        cls.supervisor_thread = threading.Thread(
+            target=cls.supervisor.serve_forever,
+            name="sdr-supervisor-contract-stub",
+            daemon=True,
+        )
+        cls.supervisor_thread.start()
+
+    @classmethod
     def stop_server(cls) -> None:
         cls.server.terminate()
         try:
@@ -157,6 +220,10 @@ class WebsiteModSyncContractTests(unittest.TestCase):
     def tearDownClass(cls) -> None:
         if hasattr(cls, "server"):
             cls.stop_server()
+        if hasattr(cls, "supervisor"):
+            cls.supervisor.shutdown()
+            cls.supervisor.server_close()
+            cls.supervisor_thread.join(timeout=5)
         if hasattr(cls, "temp"):
             cls.temp.cleanup()
 
@@ -291,7 +358,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             headers=headers,
         )
 
-    def test_game_session_provisioning_fails_closed_when_unconfigured(self) -> None:
+    def test_game_session_provisioning_fails_closed_when_supervisor_rejects(self) -> None:
         status, response = self.request("POST", "/api/game/sessions")
         self.assertEqual(status, 400)
         self.assertEqual(response, {"error": "The game session request is invalid."})
@@ -330,6 +397,29 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         ):
             status, _ = self.request(method, path)
             self.assertEqual(status, 404)
+
+    def test_public_party_directory_exposes_only_the_safe_supervisor_projection(self) -> None:
+        status, response = self.request("GET", "/api/game/parties")
+        self.assertEqual(status, 200)
+        self.assertEqual(
+            response,
+            {
+                "items": [
+                    {
+                        "id": "party-7",
+                        "leader": "Hagatha",
+                        "members": ["Hagatha", "Luthacus"],
+                        "memberCount": 2,
+                        "maxMembers": 16,
+                        "status": "playing",
+                        "boneyardName": "The Survival Grounds",
+                    }
+                ]
+            },
+        )
+        serialized = json.dumps(response)
+        for private_member in ("playerId", "invitation", "credential", "manifest"):
+            self.assertNotIn(private_member, serialized)
 
 
 

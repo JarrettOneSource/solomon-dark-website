@@ -898,7 +898,7 @@ export default function MainMenuScene({
             </div>
           </>
         ) : screen === 'dark-cloud' ? (
-          <div className="main-menu-native-stage dark-cloud-stage" style={nativeStageStyle}>
+          <div className="main-menu-native-stage dark-cloud-stage">
             <DarkCloudScene
               accountUsername={accountUsername}
               onBack={() => transitionTo('root')}

@@ -109,6 +109,8 @@ test('game session supervisor admits independent players to one shared Hub and r
   })
   context.after(() => supervisor.close())
 
+  assert.equal((await fetch(`${supervisor.address.url}/admin/hub/parties`)).status, 401)
+
   const endpoints = await Promise.all([
     admitHub(supervisor.address.url, MOD_CONTENT, 42),
     admitHub(supervisor.address.url, MOD_CONTENT, 43),
@@ -138,6 +140,7 @@ test('game session supervisor admits independent players to one shared Hub and r
       }],
     })
   }
+  assert.deepEqual(await readPublicParties(supervisor.address.url), [])
 
   const firstParty = await first.next((message) => (
     message.type === 'server-party-state'
@@ -188,6 +191,18 @@ test('game session supervisor admits independent players to one shared Hub and r
   }))
   await Promise.all([acceptedForFirst, acceptedForSecond])
 
+  const hubDirectory = await readPublicParties(supervisor.address.url)
+  assert.deepEqual(hubDirectory, [{
+    boneyardName: null,
+    id: 'party-1',
+    leader: CHARACTER.displayName,
+    maxMembers: 16,
+    memberCount: 2,
+    members: [CHARACTER.displayName, CHARACTER.displayName],
+    status: 'hub',
+  }])
+  assert.doesNotMatch(JSON.stringify(hubDirectory), /player-|invitation|credential|manifest/i)
+
   const firstLoaded = first.next((message) => message.type === 'server-boneyard-loaded')
   const secondLoaded = second.next((message) => message.type === 'server-boneyard-loaded')
   const thirdHub = third.next((message) => (
@@ -206,6 +221,13 @@ test('game session supervisor admits independent players to one shared Hub and r
   assert.equal(secondRun.type, 'server-boneyard-loaded')
   assert.equal(firstRun.boneyard.runId, secondRun.boneyard.runId)
   assert.equal(thirdFrame.type === 'server-snapshot' && thirdFrame.frame.world.kind, 'hub')
+  assert.deepEqual(await readPublicParties(supervisor.address.url), [{
+    ...hubDirectory[0]!,
+    boneyardName: firstRun.type === 'server-boneyard-loaded'
+      ? firstRun.boneyard.choice.name
+      : null,
+    status: 'playing',
+  }])
 
   const health = await readHealth(supervisor.address.url)
   assert.equal(health.hubPlayers, 1)
@@ -425,6 +447,27 @@ interface SupervisorHealth {
   runs: number
   sessions: number
   status: string
+}
+
+interface PublicPartyDirectoryEntry {
+  boneyardName: string | null
+  id: string
+  leader: string
+  maxMembers: number
+  memberCount: number
+  members: string[]
+  status: 'hub' | 'playing'
+}
+
+async function readPublicParties(supervisorUrl: string): Promise<PublicPartyDirectoryEntry[]> {
+  const response = await fetch(`${supervisorUrl}/admin/hub/parties`, {
+    headers: { authorization: `Bearer ${ADMIN_SECRET}` },
+  })
+  assert.equal(response.status, 200)
+  assert.equal(response.headers.get('cache-control'), 'no-store')
+  const value = await response.json() as { items?: PublicPartyDirectoryEntry[] }
+  assert.ok(Array.isArray(value.items))
+  return value.items
 }
 
 async function provision(supervisorUrl: string): Promise<ProvisionedEndpoint> {

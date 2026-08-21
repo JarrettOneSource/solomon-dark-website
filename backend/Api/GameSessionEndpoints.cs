@@ -8,10 +8,36 @@ public static class GameSessionEndpoints
 
     public static void Map(IEndpointRouteBuilder app)
     {
+        app.MapGet("/api/game/parties", ListPublicPartiesAsync);
         app.MapPost("/api/game/sessions", ProvisionAsync)
             .RequireRateLimiting("game-sessions");
         app.MapPost("/api/game/hub", EnterHubAsync)
             .RequireRateLimiting("game-sessions");
+    }
+
+    private static async Task<IResult> ListPublicPartiesAsync(
+        HttpContext context,
+        GameSessionProvisioner provisioner,
+        ILogger<GameSessionProvisioner> logger,
+        CancellationToken cancellationToken)
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        try
+        {
+            return Results.Ok(new
+            {
+                items = await provisioner.ListPublicPartiesAsync(cancellationToken)
+            });
+        }
+        catch (Exception exception) when (exception is
+            GameSessionUnavailableException or HttpRequestException or OperationCanceledException)
+        {
+            logger.LogWarning(exception, "The public party directory could not be read.");
+            context.Response.Headers.RetryAfter = "5";
+            return Results.Json(
+                new { error = "The public party directory is not available right now." },
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
     }
 
     private static async Task<IResult> ProvisionAsync(

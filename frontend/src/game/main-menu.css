@@ -161,6 +161,16 @@
   bottom: 8px;
 }
 
+.main-menu-page[data-game-scene='dark-cloud'] .game-fullscreen-control {
+  top: 8px;
+  right: 8px;
+}
+
+.main-menu-page:has(.dark-cloud-modal-backdrop) .game-fullscreen-control,
+.main-menu-page:has(.dark-cloud-detail-backdrop) .game-fullscreen-control {
+  display: none;
+}
+
 .main-menu-page[data-game-scene='create'] .game-fullscreen-control {
   top: min(0.625cqw, 1.111111cqh);
   right: calc(8px + min(5cqw, 8.888889cqh));

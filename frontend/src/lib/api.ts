@@ -136,6 +136,16 @@ export interface Stats {
   downloadsTotal: number
 }
 
+export interface PublicGameParty {
+  id: string
+  leader: string
+  members: string[]
+  memberCount: number
+  maxMembers: number
+  status: 'hub' | 'playing'
+  boneyardName: string | null
+}
+
 export interface WebGameSave {
   slot: number
   formatVersion: number
@@ -328,6 +338,10 @@ export const api = {
   },
 
   stats: () => request<Stats>('/api/stats'),
+
+  gameParties: {
+    list: () => request<{ items: PublicGameParty[] }>('/api/game/parties'),
+  },
 
   gameSaves: {
     get: (slot: number) => request<{ save: WebGameSave | null }>(

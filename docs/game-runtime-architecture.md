@@ -29,18 +29,23 @@ still provide local solo play with local identity and an empty content set, but
 the Website no longer owns a DLL loader, custom-protocol launcher hand-off,
 native-lobby directory, or native-save ZIP service.
 
-Browser play has no lobby directory or join-by-lobby URL. New Game requests one
-single-use shared-Hub admission ticket, and the authoritative host registers a
-singleton party when the completed character authenticates. Players discover
-one another in the Courtyard itself, inspect a name-only profile, and exchange
-party invitations over the gameplay protocol. The current party leader alone
-can launch; that transition freezes the current party roster and moves exactly
-those player entities into a party-scoped Boneyard instance while unrelated
-Hub residents keep ticking in the shared Hub instance.
+Browser play has no launcher lobby directory or join-by-lobby URL. New Game
+requests one single-use shared-Hub admission ticket, and the authoritative host
+registers a singleton party when the completed character authenticates.
+Players discover one another in the Courtyard itself, inspect a name-only
+profile, and exchange party invitations over the gameplay protocol. The
+current party leader alone can launch; that transition freezes the current
+party roster and moves exactly those player entities into a party-scoped
+Boneyard instance while unrelated Hub residents keep ticking in the shared Hub
+instance.
 
-The shared Hub and its in-world party system are the only Website multiplayer
-discovery path. No launcher transport participates in the rebuilt browser
-game's party model.
+The shared Hub and its in-world party system remain the only Website
+multiplayer authority and entry path. The Dark Cloud browser may read a public
+directory projected from that owner: it lists safe multi-member party summaries
+and sends the player through ordinary shared-Hub admission. It does not expose
+internal singleton memberships, invitations, credentials, content manifests,
+private sessions, or a direct join edge. No launcher transport participates in
+the rebuilt browser game's party model.
 
 ## Shared identities and boundaries
 
@@ -98,6 +103,9 @@ Leaving or a failed heartbeat removes the participant from its world and party;
 an empty run retires independently, and an empty shared Hub remains ready for
 the next ticket. Health reports active players, parties, and runs so deployment
 safety does not mistake an empty resident Hub process for an occupied session.
+The host also owns the safe public-party projection. A bearer-protected
+supervisor control-plane read exposes that projection to the Website backend;
+public clients receive only the bounded DTO from `GET /api/game/parties`.
 Private per-session provisioning remains an explicit operations/test seam and
 is not a browser New Game path.
 

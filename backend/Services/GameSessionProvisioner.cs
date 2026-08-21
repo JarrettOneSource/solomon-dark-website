@@ -92,6 +92,37 @@ public sealed partial class GameSessionProvisioner
         }
     }
 
+    public async Task<IReadOnlyList<PublicGameParty>> ListPublicPartiesAsync(
+        CancellationToken cancellationToken)
+    {
+        EnsurePrivateSessionsConfigured();
+        using var request = CreateAdminRequest(HttpMethod.Get, "/admin/hub/parties");
+        using var response = await httpClient.SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new GameSessionUnavailableException(
+                $"The game session supervisor returned {(int)response.StatusCode}.");
+        }
+        try
+        {
+            var directory = await response.Content.ReadFromJsonAsync<PublicGamePartyDirectory>(
+                    JsonOptions,
+                    cancellationToken)
+                ?? throw new JsonException("The response was empty.");
+            if (!ValidPublicPartyDirectory(directory.Items))
+            {
+                throw new JsonException("The public party directory was invalid.");
+            }
+            return directory.Items;
+        }
+        catch (JsonException exception)
+        {
+            throw new GameSessionUnavailableException(
+                "The game session supervisor returned an invalid public party directory.",
+                exception);
+        }
+    }
+
     private HttpRequestMessage CreateAdminRequest(HttpMethod method, string path)
     {
         var request = new HttpRequestMessage(method, new Uri(supervisorUrl!, path));
@@ -128,6 +159,25 @@ public sealed partial class GameSessionProvisioner
 
     private bool Configured() =>
         !string.IsNullOrEmpty(adminSecret) && supervisorUrl is not null && publicWebSocketOrigin is not null;
+
+    private static bool ValidPublicPartyDirectory(PublicGameParty[]? items)
+    {
+        if (items is null || items.Select(party => party.Id).Distinct(StringComparer.Ordinal).Count() != items.Length)
+        {
+            return false;
+        }
+        return items.All(party =>
+            !string.IsNullOrWhiteSpace(party.Id) &&
+            !string.IsNullOrWhiteSpace(party.Leader) &&
+            party.Members is not null &&
+            party.MemberCount == party.Members.Length &&
+            party.MemberCount >= 2 &&
+            party.MaxMembers >= party.MemberCount &&
+            party.Members.Contains(party.Leader, StringComparer.Ordinal) &&
+            party.Members.All(member => !string.IsNullOrWhiteSpace(member)) &&
+            party.Status is "hub" or "playing" &&
+            (party.Status == "playing" || party.BoneyardName is null));
+    }
 
     private static async Task<SupervisorProvisionResponse> ReadPrivateProvisionResponseAsync(
         HttpResponseMessage response,
@@ -174,6 +224,17 @@ public sealed partial class GameSessionProvisioner
 public sealed record ProvisionedGameEndpoint(string Url, string Credential);
 
 public sealed record SharedHubStats(int Players, int Parties, int Runs);
+
+public sealed record PublicGameParty(
+    string Id,
+    string Leader,
+    string[] Members,
+    int MemberCount,
+    int MaxMembers,
+    string Status,
+    string? BoneyardName);
+
+public sealed record PublicGamePartyDirectory(PublicGameParty[] Items);
 
 public sealed class GameSessionUnavailableException : Exception
 {

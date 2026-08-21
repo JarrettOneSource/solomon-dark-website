@@ -92,6 +92,10 @@ import { createGameLeaderboardReceipt } from './game-leaderboard-receipt.ts'
 import { MAX_WEB_GAME_SAVE_BYTES } from '../save/game-save-contract.ts'
 import { partyForPlayer, projectPartyState } from './party-system.ts'
 import {
+  projectPublicPartyDirectory,
+  type PublicPartyDirectoryEntry,
+} from './public-party-directory.ts'
+import {
   acceptSharedPartyInvitation,
   addSharedHubPlayer,
   confirmSharedPartyLoadout,
@@ -178,6 +182,7 @@ export interface GameHost {
   playerCount(): number
   loadedBoneyard(): LoadedBoneyard | null
   partyCount(): number
+  publicParties(): readonly PublicPartyDirectoryEntry[]
   state(): GameSimulationState
   runCount(): number
 }
@@ -2221,6 +2226,17 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     playerCount: () => clients.size,
     loadedBoneyard: () => loadedBoneyard,
     partyCount: () => sharedWorlds?.parties.parties.length ?? 0,
+    publicParties: () => sharedWorlds
+      ? projectPublicPartyDirectory({
+          memberships: sharedWorlds.parties.parties,
+          runs: sharedWorlds.runs.map(run => ({
+            boneyardName: run.loadedBoneyard.choice.name,
+            partyId: run.partyId,
+          })),
+        }, new Map(
+          [...clients.values()].map(({ displayName, playerId }) => [playerId, displayName]),
+        ), maxPlayers)
+      : [],
     state: () => state,
     runCount: () => sharedWorlds?.runs.length ?? Number(state.world.kind === 'boneyard'),
   }

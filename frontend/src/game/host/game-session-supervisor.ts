@@ -185,6 +185,10 @@ export async function startGameSessionSupervisor(
       sendJson(response, 401, { error: 'Unauthorized.' })
       return
     }
+    if (request.method === 'GET' && path === '/admin/hub/parties') {
+      sendJson(response, 200, { items: hubHost.publicParties() })
+      return
+    }
     if (request.method === 'POST' && path === '/admin/sessions') {
       void readJsonObject(request).then((body) => {
         provisionIntoResponse(response, materializeGameAdmission(body))
