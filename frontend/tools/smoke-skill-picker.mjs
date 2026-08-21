@@ -12,7 +12,9 @@ import {
   getPlayerProgression,
   getPlayerSkillBook,
   grantGameSimulationPlayerExperience,
+  stepGameSimulationTick,
 } from '../src/game/core-server/game-simulation.ts'
+import { BONEYARD_WAVE_ENEMY_TYPES } from '../src/game/core-kernels/boneyard-wave-schema.ts'
 import { replacePlayerEconomy } from '../src/game/core-server/player-entity-store.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 
@@ -21,6 +23,8 @@ const screenshotPath = process.env.SDR_SKILL_PICKER_SMOKE_SCREENSHOT
   || '/tmp/solomon-dark-skill-picker-smoke.png'
 const revealScreenshotPath = process.env.SDR_SKILL_PICKER_REVEAL_SMOKE_SCREENSHOT
   || screenshotPath.replace(/\.png$/i, '-reveal.png')
+const boneyardScreenshotPath = process.env.SDR_SKILL_PICKER_BONEYARD_SMOKE_SCREENSHOT
+  || screenshotPath.replace(/\.png$/i, '-boneyard.png')
 const credential = randomBytes(32).toString('base64url')
 const pageErrors = []
 const consoleErrors = []
@@ -119,11 +123,11 @@ try {
       presentationId: canvas.dataset.levelUpPresentationId,
     }))
     presentationSamples.push(sample)
-    if (sample.dynamicSuppressed === 'true' && sample.particleCount > 0) break
+    if (sample.dynamicSuppressed === 'false' && sample.particleCount > 0) break
     await page.waitForTimeout(20)
   }
   const livePresentation = presentationSamples.find((sample) => (
-    sample.dynamicSuppressed === 'true' && sample.particleCount > 0
+    sample.dynamicSuppressed === 'false' && sample.particleCount > 0
   ))
   try {
     await Promise.all([
@@ -163,7 +167,7 @@ try {
     ...settledPresentation,
     particleCount: Math.max(...presentationSamples.map(({ particleCount }) => particleCount)),
   }
-  assert.equal(presentationReceipt.dynamicSuppressed, 'true')
+  assert.equal(presentationReceipt.dynamicSuppressed, 'false')
   if (livePresentation) assert.equal(livePresentation.presentationId, '1')
   const pickerCanvas = page.locator('.skill-picker-canvas[data-game-renderer="pixi-webgl"]')
   const pickerRenderer = await pickerCanvas.evaluate((canvas) => ({
@@ -268,7 +272,7 @@ try {
   const firstQueuedWaitReceiptPromise = observeQueuedWait(page)
   await picker.locator('.skill-picker-action').first().click()
   await page.locator('.skill-picker-stage[data-picker-phase="closing"]').waitFor()
-  assert.equal(await hubCanvas.getAttribute('data-level-up-dynamic-suppressed'), 'true')
+  assert.equal(await hubCanvas.getAttribute('data-level-up-dynamic-suppressed'), 'false')
   await waitForHost(() => (
     getPlayerProgression(host.state(), playerId).pendingOffer?.sequence !== firstCloseSequence
   ), 'queued offer after card selection')
@@ -367,11 +371,68 @@ try {
   assert.deepEqual(openPanelSoundRates, [1, 0.75, 0.75, 0.75, 1, 0.75, 0.75])
   assert.deepEqual(unlockSkillSoundRates, [1, 1, 1])
 
+  await page.getByRole('button', { name: 'Enter the Boneyard' }).click()
+  await page.locator('.boneyard-scene[data-renderer-state="ready"]').waitFor({ timeout: 90_000 })
+  const boneyardCanvas = page.locator('.boneyard-world-canvas[data-game-renderer="pixi-webgl"]')
+  await boneyardCanvas.waitFor({ timeout: 90_000 })
+  const boneyardState = host.state()
+  if (boneyardState.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+  const boneyardPlayer = getPlayerCharacter(boneyardState, playerId)
+  const withEnemy = stepGameSimulationTick(boneyardState, {}, {
+    enemySpawnIntents: [{
+      enemyToken: 'SKELETON',
+      flags: [],
+      id: 9001,
+      locationPolicy: 'anywhere',
+      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.SKELETON,
+      position: { x: boneyardPlayer.position.x + 120, y: boneyardPlayer.position.y },
+      spawnTick: boneyardState.tick + 1,
+      waveOrdinal: 1,
+    }],
+  })
+  const boneyardProgression = getPlayerProgression(withEnemy, playerId)
+  const boneyardLevelUp = grantGameSimulationPlayerExperience(
+    withEnemy,
+    playerId,
+    boneyardProgression.nextThreshold - boneyardProgression.experience + 1,
+  )
+  assert.ok(boneyardLevelUp.levelUpBarrier, 'expected a Boneyard level-up barrier')
+  assert.ok(
+    getPlayerProgression(boneyardLevelUp, playerId).pendingOffer,
+    'expected a Boneyard skill offer',
+  )
+  Object.assign(host.state(), boneyardLevelUp)
+  const boneyardPicker = page.getByRole('dialog', { name: /Select a skill/ })
+  await page.getByRole('button', { name: /Use health potion/ }).click()
+  await boneyardPicker.waitFor({ timeout: 30_000 })
+  await page.waitForFunction(() => (
+    document.querySelector('.skill-picker-stage')?.getAttribute('data-reveal-interactive')
+      === 'true'
+  ), undefined, { timeout: 30_000 })
+  await page.waitForFunction(() => {
+    const canvas = document.querySelector('.boneyard-world-canvas')
+    return canvas?.dataset.levelUpDynamicSuppressed === 'false'
+      && Number(canvas.dataset.enemyCount) >= 1
+  }, undefined, { timeout: 30_000 })
+  const boneyardBackgroundReceipt = await boneyardCanvas.evaluate((canvas) => ({
+    dynamicSuppressed: canvas.dataset.levelUpDynamicSuppressed,
+    enemyCount: Number(canvas.dataset.enemyCount),
+    renderer: canvas.dataset.gameRenderer,
+  }))
+  assert.deepEqual(boneyardBackgroundReceipt, {
+    dynamicSuppressed: 'false',
+    enemyCount: 1,
+    renderer: 'pixi-webgl',
+  })
+  await page.screenshot({ path: boneyardScreenshotPath })
+
   assert.deepEqual(pageErrors, [])
   assert.deepEqual(consoleErrors, [])
   process.stdout.write(`${JSON.stringify({
     actionReceipt,
     bookedRank: getPlayerSkillBook(host.state(), playerId).permanentRanks[selectedSkillId],
+    boneyardBackgroundReceipt,
+    boneyardScreenshotPath,
     earlyRevealObserved,
     livePresentationObserved: livePresentation !== undefined,
     openPanelSoundRates,

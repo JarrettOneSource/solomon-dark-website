@@ -286,16 +286,18 @@ test('client projects authoritative gameplay pause and blocks input until releas
   const session = await connecting
   assert.equal(session.getGameplayPause(), null)
 
-  session.requestGameplayPause(true)
+  session.requestGameplayPause('inventory')
   assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
     type: 'client-gameplay-pause',
     paused: true,
+    source: 'inventory',
   })
   const received: Array<ReturnType<typeof session.getGameplayPause>> = []
   const removePause = session.onGameplayPause((pause) => received.push(pause))
   const pause = {
     ownerDisplayName: CHARACTER.displayName,
     ownerPlayerId: session.playerId,
+    source: 'inventory' as const,
   }
   transport.receive(encodeGameMessage({ type: 'server-gameplay-pause', pause }))
   assert.deepEqual(session.getGameplayPause(), pause)
@@ -313,6 +315,48 @@ test('client projects authoritative gameplay pause and blocks input until releas
   assert.equal(decodeClientGameMessage(transport.sent.at(-1)!).type, 'client-input')
 
   removePause()
+  session.destroy()
+})
+
+test('client replaces only its own modal pause source and emits a strict release', async () => {
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    credential: 'spawn-secret',
+    transport,
+  })
+  receiveWelcome(
+    transport,
+    createGameSnapshot(createGameSimulation({ 'player-1': CHARACTER }), 'player-1'),
+  )
+  const session = await connecting
+  const inventoryPause = {
+    ownerDisplayName: CHARACTER.displayName,
+    ownerPlayerId: session.playerId,
+    source: 'inventory' as const,
+  }
+  transport.receive(encodeGameMessage({ type: 'server-gameplay-pause', pause: inventoryPause }))
+
+  session.requestGameplayPause('skill-book')
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    paused: true,
+    source: 'skill-book',
+    type: 'client-gameplay-pause',
+  })
+  session.requestGameplayPause(null)
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    paused: false,
+    type: 'client-gameplay-pause',
+  })
+
+  transport.receive(encodeGameMessage({
+    type: 'server-gameplay-pause',
+    pause: { ...inventoryPause, ownerPlayerId: 'player-2' },
+  }))
+  const messageCount = transport.sent.length
+  session.requestGameplayPause('skill-book')
+  session.requestGameplayPause(null)
+  assert.equal(transport.sent.length, messageCount)
   session.destroy()
 })
 

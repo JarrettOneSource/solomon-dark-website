@@ -168,7 +168,6 @@ export class HubWorldScene {
       playerScreenY: number
       presentationId: number
     } | null = null,
-    modalActive = false,
   ): void {
     const ambient = snapshot.world.ambient
     const colors = hubSealColors(ambient)
@@ -208,23 +207,6 @@ export class HubWorldScene {
     this.primarySpells.promoteOwnerOverlays((ownerId) => (
       this.players.get(ownerId)?.container.zIndex
     ))
-    for (const [id, view] of this.players) {
-      view.container.renderable = !modalActive || id === localPlayerId
-    }
-    for (const view of this.students.values()) view.container.renderable = !modalActive
-    for (const actor of this.nonPlayerActors) actor.renderable = !modalActive
-    for (const particle of this.fountain.values()) particle.renderable = !modalActive
-    this.hagatha.container.renderable = !modalActive
-    this.luthacus.container.renderable = !modalActive
-    this.potion.actor.renderable = !modalActive
-    this.potion.balloons.renderable = !modalActive
-    this.potion.marker.renderable = !modalActive
-    this.teacher.container.renderable = !modalActive
-    this.astronomer.behind.renderable = !modalActive
-    this.astronomer.telescope.renderable = !modalActive
-    this.astronomer.front.renderable = !modalActive
-    this.primarySpells.setRenderable(!modalActive)
-    this.secondaryAbilities.setRenderable(!modalActive)
     const player = snapshot.players[localPlayerId]
     const playerView = this.players.get(localPlayerId)
     const levelUpFrame = levelUpPresentation === null

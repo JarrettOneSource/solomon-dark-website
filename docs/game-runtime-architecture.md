@@ -146,12 +146,12 @@ dependencies without revisiting this release invariant.
   resources, inventory, and Bonus state are committed at the session-owned
   player-entity boundary after that one accepted pickup.
 - Gameplay Pause Menu state is world-instance-owned rather than client-local.
-  A party run may hold its own authoritative simulation without pausing the
-  shared Hub or another run. The shared multiplayer Hub itself cannot be
-  globally paused by one participant; its menu is presentation-local. A pause
-  owner disconnect releases only that instance barrier. Resumption resets that
-  instance's fixed-tick deadline, so elapsed pause time never becomes catch-up
-  simulation.
+  The ESC menu, player Inventory, and Skill Book share one source-qualified
+  first-request barrier. A shared-Hub pause freezes every Hub resident while
+  party Boneyard instances keep ticking; a party-run pause freezes every party
+  member without pausing the shared Hub or another run. A pause owner closes
+  its matching modal or disconnects to release only that world-instance
+  barrier. Resumption never turns elapsed pause time into catch-up simulation.
 - The shared player input record carries normalized movement, a nullable world
   aim point, and independent primary/secondary held levels. Browser mouse edges
   publish immediately; the authoritative queue preserves each level transition
@@ -239,7 +239,9 @@ rank so the client can render the stock rank suffix without reconstructing or
 mutating book state. A skill-choice command names both the offer
 sequence and skill ID; the host accepts it only for that connection's current
 authoritative offer. While a choice is pending the server ignores normal player
-input, matching the mandatory native pause boundary.
+input, matching the mandatory native pause boundary. Renderers continue
+presenting the complete frozen world behind the SkillPicker curtain; the
+barrier stops simulation, not world membership or painter traversal.
 
 Each client acknowledges the newest complete snapshot sequence it has
 reconstructed. The host computes entity spawn, retire, and dynamic samples
@@ -314,7 +316,7 @@ never accepted from a gameplay packet or exposed in a snapshot.
 
 When the authoritative simulation archives a completed Hall row, the host
 serializes the immutable row with that account id and signs the opaque payload
-with a domain-separated HMAC. Protocol 46 carries only the signed receipt to
+with a domain-separated HMAC. Protocol 47 carries only the signed receipt to
 the matching client. The leaderboard API accepts only that receipt, verifies
 its signature and account id against the caller's JWT, revalidates every Hall
 bound, and persists the sealed values. The browser cannot choose score fields,

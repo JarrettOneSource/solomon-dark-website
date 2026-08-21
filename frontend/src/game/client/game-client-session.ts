@@ -20,6 +20,7 @@ import {
   type BoneyardChoice,
   type BoneyardEnemyEventSnapshot,
   type GameSnapshot,
+  type GameplayPauseSource,
   type GameplayPauseState,
   type LoadedBoneyard,
   type ServerLuaResultMessage,
@@ -97,7 +98,7 @@ export interface GameClientSession {
   sampleBoneyardPresentation(nowMs?: number): BoneyardPresentationFrame
   samplePresentation(nowMs?: number): HubPresentationFrame
   rerollSkill(offerSequence: number): void
-  requestGameplayPause(paused: boolean): void
+  requestGameplayPause(source: GameplayPauseSource | null): void
   saveSkill(offerSequence: number): void
   selectConcentration(skillId: number): void
   selectPrimarySkill(skillId: number): void
@@ -662,19 +663,24 @@ export function connectGameClientSession(
           enabled,
         }))
       },
-      requestGameplayPause(paused) {
+      requestGameplayPause(source) {
         if (!welcome || !snapshot || destroyed) return
-        if (paused) {
+        if (source !== null) {
           if (
-            gameplayPause !== null
-            || snapshot.levelUpBarrier !== null
+            snapshot.levelUpBarrier !== null
             || (snapshot.run.phase !== 'hub' && snapshot.run.phase !== 'active')
           ) return
+          if (
+            gameplayPause !== null
+            && (
+              gameplayPause.ownerPlayerId !== welcome.playerId
+              || gameplayPause.source === source
+            )
+          ) return
         } else if (gameplayPause?.ownerPlayerId !== welcome.playerId) return
-        options.transport.send(encodeGameMessage({
-          type: 'client-gameplay-pause',
-          paused,
-        }))
+        options.transport.send(encodeGameMessage(source === null
+          ? { type: 'client-gameplay-pause', paused: false }
+          : { type: 'client-gameplay-pause', paused: true, source }))
       },
       selectSkill(choiceIndex, offerSequence, skillId) {
         if (!welcome || !snapshot || destroyed) return

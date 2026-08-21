@@ -88,7 +88,7 @@ export interface HubWorldRenderer {
   destroy(): void
   render(snapshot: HubPresentationFrame): void
   resize(viewport: GameViewportLayout, devicePixelRatio?: number): void
-  setLevelUpPresentation(presentationId: number | null, modalActive: boolean): void
+  setLevelUpPresentation(presentationId: number | null): void
 }
 
 interface HubWorldRendererOptions {
@@ -193,7 +193,6 @@ export async function createHubWorldRenderer(
   let armedLevelUpPresentationId: number | null = null
   let lastLevelUpPresentationId: number | null = null
   let levelUpPresentationStartedAt: number | null = null
-  let levelUpModalActive = false
   let resolution = initialResolution
   let sampledStudentCount = -1
   const frameDiagnostics: HubFrameDiagnostics = {
@@ -365,14 +364,12 @@ export async function createHubWorldRenderer(
         options.playerId,
         frameCount,
         levelUpPresentation,
-        levelUpModalActive,
       )
       privateRoomScene.update(
         snapshot,
         options.playerId,
         frameCount,
         levelUpPresentation,
-        levelUpModalActive,
       )
       const inCourtyard = participant.region === 'courtyard'
       courtyardScene.stage.visible = inCourtyard
@@ -503,7 +500,7 @@ export async function createHubWorldRenderer(
           includePlayer: (playerId) => (
             snapshot.world.participants[playerId]?.region === participant.region
           ),
-          renderable: !levelUpModalActive,
+          renderable: true,
         },
       )
       secondaryScreenFlash.alpha = screenOverlay?.alpha ?? 0
@@ -518,7 +515,7 @@ export async function createHubWorldRenderer(
       canvas.dataset.hubRegion = participant.region
       canvas.dataset.transitionAlpha = `${fadeCover.alpha}`
       canvas.dataset.transitionPhase = participant.transition?.phase ?? 'none'
-      canvas.dataset.levelUpDynamicSuppressed = `${levelUpModalActive}`
+      canvas.dataset.levelUpDynamicSuppressed = 'false'
       canvas.dataset.levelUpParticleCount = `${frameDiagnostics.levelUpParticleCount}`
       application.render()
       updateFrameDiagnostics(snapshot)
@@ -549,9 +546,8 @@ export async function createHubWorldRenderer(
       canvas.dataset.viewportHeight = `${viewport.height}`
       canvas.dataset.viewportWidth = `${viewport.width}`
     },
-    setLevelUpPresentation(presentationId, modalActive) {
+    setLevelUpPresentation(presentationId) {
       if (destroyed) return
-      levelUpModalActive = modalActive
       if (
         presentationId !== null
         && presentationId !== lastLevelUpPresentationId
@@ -563,7 +559,7 @@ export async function createHubWorldRenderer(
       canvas.dataset.levelUpPresentationId = armedLevelUpPresentationId === null
         ? 'none'
         : `${armedLevelUpPresentationId}`
-      canvas.dataset.levelUpDynamicSuppressed = `${modalActive}`
+      canvas.dataset.levelUpDynamicSuppressed = 'false'
     },
     destroy() {
       if (destroyed) return

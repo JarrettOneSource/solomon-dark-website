@@ -136,6 +136,7 @@ export default function GameplayPauseMenu({
       style={style}
       data-gameplay-pause-owner-id={pause.ownerPlayerId}
       data-gameplay-pause-owner-name={pause.ownerDisplayName}
+      data-gameplay-pause-source={pause.source}
       data-gameplay-pause-pressed={pressedAction ?? 'none'}
       data-gameplay-pause-reveal={reveal}
       data-gameplay-pause-view={presentation.kind}

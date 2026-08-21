@@ -336,7 +336,7 @@ export interface BoneyardWorldRenderer {
   destroy(): void
   render(snapshot: GameSnapshot): void
   resize(viewport: GameViewportLayout, devicePixelRatio?: number): void
-  setLevelUpPresentation(presentationId: number | null, modalActive: boolean): void
+  setLevelUpPresentation(presentationId: number | null): void
   spectatorStatus(snapshot: GameSnapshot): BoneyardSpectatorStatusPresentation | null
 }
 
@@ -532,7 +532,6 @@ export async function createBoneyardWorldRenderer(
   let armedLevelUpPresentationId: number | null = null
   let lastLevelUpPresentationId: number | null = null
   let levelUpPresentationStartedAt: number | null = null
-  let levelUpModalActive = false
   let resolution = initialResolution
   let spectatorCamera: BoneyardSpectatorCameraState =
     INITIAL_BONEYARD_SPECTATOR_CAMERA_STATE
@@ -748,7 +747,6 @@ export async function createBoneyardWorldRenderer(
               ),
               presentationId: armedLevelUpPresentationId,
             },
-        levelUpModalActive,
         camera,
         viewport,
       )
@@ -831,7 +829,7 @@ export async function createBoneyardWorldRenderer(
           },
           viewport,
         ),
-        { renderable: !levelUpModalActive },
+        { renderable: true },
       )
       const screenOverlay = secondaryScreenFeedback.sample(snapshot.tick)
       secondaryScreenFlash.alpha = screenOverlay?.alpha ?? 0
@@ -1043,9 +1041,8 @@ export async function createBoneyardWorldRenderer(
       canvas.style.width = `${viewport.width}px`
       canvas.style.height = `${viewport.height}px`
     },
-    setLevelUpPresentation(presentationId, modalActive) {
+    setLevelUpPresentation(presentationId) {
       if (destroyed) return
-      levelUpModalActive = modalActive
       if (
         presentationId !== null
         && presentationId !== lastLevelUpPresentationId
@@ -1057,7 +1054,7 @@ export async function createBoneyardWorldRenderer(
       canvas.dataset.levelUpPresentationId = armedLevelUpPresentationId === null
         ? 'none'
         : `${armedLevelUpPresentationId}`
-      canvas.dataset.levelUpDynamicSuppressed = `${modalActive}`
+      canvas.dataset.levelUpDynamicSuppressed = 'false'
     },
     destroy() {
       if (destroyed) return
@@ -1266,7 +1263,6 @@ class BoneyardDynamicScene {
       playerScreenY: number
       presentationId: number
     } | null,
-    modalActive: boolean,
     camera: Camera,
     viewport: GameViewportLayout,
   ): BoneyardPainterFrame {
@@ -1350,21 +1346,6 @@ class BoneyardDynamicScene {
     const mageLightningPainterLayers = this.mageLightningPulses.painterLayers()
     this.playerDeathBursts.update(snapshot)
     this.playerDeathWeapons.update(snapshot)
-    for (const [id, view] of this.players) {
-      view.container.renderable = !modalActive || id === localPlayerId
-    }
-    this.primarySpells.setRenderable(!modalActive)
-    this.secondaryAbilities.setRenderable(!modalActive)
-    this.enemies.setRenderable(!modalActive)
-    this.enemyDeathEffects.setRenderable(!modalActive)
-    this.enemyProjectiles.setRenderable(!modalActive)
-    this.maggots.setRenderable(!modalActive)
-    this.loot.setRenderable(!modalActive)
-    this.goodies.setRenderable(!modalActive)
-    this.mageLightningPulses.setRenderable(!modalActive)
-    this.playerDeathBursts.setRenderable(!modalActive)
-    this.playerDeathWeapons.setRenderable(!modalActive)
-    this.solomon?.setActorRenderable(!modalActive)
     this.visibleEnemyFamilies = [...new Set(
       enemySnapshots.map((enemy) => enemy.enemyToken),
     )].sort().join(',')
@@ -1380,7 +1361,6 @@ class BoneyardDynamicScene {
     lightSourceCandidates.length = 0
     let localPlayerLight: NativeBoneyardLightSource | null = null
     for (const playerId in snapshot.players) {
-      if (modalActive && playerId !== localPlayerId) continue
       const player = snapshot.players[playerId]
       const playerLight = nativePlayerLightSource({
         ...player,
@@ -1400,141 +1380,139 @@ class BoneyardDynamicScene {
         })
       }
     }
-    if (!modalActive) {
-      for (const enemy of snapshot.world.enemies) {
-        const sources = nativeEnemyLightSources(enemy, presentationFrame)
-        if (sources.length === 0) continue
+    for (const enemy of snapshot.world.enemies) {
+      const sources = nativeEnemyLightSources(enemy, presentationFrame)
+      if (sources.length === 0) continue
+      lightProviderOwners.push({
+        registration: requiredLightRegistration(
+          enemy.lightRegistration,
+          `enemy ${enemy.id}`,
+        ),
+        sources,
+      })
+    }
+    for (const spell of snapshot.primarySpells.projectiles) {
+      if (spell.worldKey !== `boneyard:${snapshot.world.runId}`) continue
+      let source: NativeBoneyardLightSource
+      switch (spell.kind) {
+        case 'earth':
+          source = nativeBoulderLightSource(spell)
+          break
+        case 'ether':
+          source = nativeMissileLightSource(spell, presentationFrame)
+          break
+        case 'fire':
+          source = nativeFireballLightSource(spell, presentationFrame)
+          break
+        case 'weld':
+          source = nativeWeldProjectileLightSource(spell, presentationFrame)
+          break
+      }
+      lightProviderOwners.push({
+        registration: spell.lightRegistration,
+        sources: [source],
+      })
+    }
+    for (const projectile of snapshot.world.enemyProjectiles) {
+      const candidate = nativeEnemyProjectileLightProvider(
+        projectile,
+        presentationFrame,
+      )
+      if (!candidate) continue
+      const registration = requiredLightRegistration(
+        projectile.lightRegistration,
+        `enemy projectile ${projectile.id}`,
+      )
+      if (registration.managerLane !== candidate.lane) {
+        throw new Error(`enemy projectile ${projectile.id} changed native light-manager lane`)
+      }
+      lightProviderOwners.push({ registration, sources: [candidate.source] })
+    }
+    for (const effect of snapshot.primarySpells.transients) {
+      if (
+        effect.kind === 'weld-meteor'
+        && effect.worldKey === `boneyard:${snapshot.world.runId}`
+      ) {
+        const source = nativeWeldMeteorLightSource(effect)
         lightProviderOwners.push({
-          registration: requiredLightRegistration(
-            enemy.lightRegistration,
-            `enemy ${enemy.id}`,
-          ),
-          sources,
+          registration: effect.lightRegistration,
+          sources: source === null ? [] : [source],
         })
+        continue
       }
-      for (const spell of snapshot.primarySpells.projectiles) {
-        if (spell.worldKey !== `boneyard:${snapshot.world.runId}`) continue
-        let source: NativeBoneyardLightSource
-        switch (spell.kind) {
-          case 'earth':
-            source = nativeBoulderLightSource(spell)
-            break
-          case 'ether':
-            source = nativeMissileLightSource(spell, presentationFrame)
-            break
-          case 'fire':
-            source = nativeFireballLightSource(spell, presentationFrame)
-            break
-          case 'weld':
-            source = nativeWeldProjectileLightSource(spell, presentationFrame)
-            break
-        }
+      if (
+        effect.kind === 'weld-persistent'
+        && (effect.buildId === 1006 || effect.buildId === 1008)
+        && effect.worldKey === `boneyard:${snapshot.world.runId}`
+      ) {
         lightProviderOwners.push({
-          registration: spell.lightRegistration,
-          sources: [source],
+          registration: effect.lightRegistration,
+          sources: [nativeWeldRockLightSource(effect)],
         })
+        continue
       }
-      for (const projectile of snapshot.world.enemyProjectiles) {
-        const candidate = nativeEnemyProjectileLightProvider(
-          projectile,
-          presentationFrame,
-        )
-        if (!candidate) continue
-        const registration = requiredLightRegistration(
-          projectile.lightRegistration,
-          `enemy projectile ${projectile.id}`,
-        )
-        if (registration.managerLane !== candidate.lane) {
-          throw new Error(`enemy projectile ${projectile.id} changed native light-manager lane`)
-        }
-        lightProviderOwners.push({ registration, sources: [candidate.source] })
-      }
-      for (const effect of snapshot.primarySpells.transients) {
-        if (
-          effect.kind === 'weld-meteor'
-          && effect.worldKey === `boneyard:${snapshot.world.runId}`
-        ) {
-          const source = nativeWeldMeteorLightSource(effect)
-          lightProviderOwners.push({
-            registration: effect.lightRegistration,
-            sources: source === null ? [] : [source],
-          })
-          continue
-        }
-        if (
-          effect.kind === 'weld-persistent'
-          && (effect.buildId === 1006 || effect.buildId === 1008)
-          && effect.worldKey === `boneyard:${snapshot.world.runId}`
-        ) {
-          lightProviderOwners.push({
-            registration: effect.lightRegistration,
-            sources: [nativeWeldRockLightSource(effect)],
-          })
-          continue
-        }
-        if (
-          effect.kind === 'fire-good-imp'
-          && effect.worldKey === `boneyard:${snapshot.world.runId}`
-        ) {
-          lightProviderOwners.push({
-            registration: effect.lightRegistration,
-            sources: [nativeFireGoodImpLightSource(effect, presentationFrame)],
-          })
-          continue
-        }
-        if (
-          effect.kind === 'ether-impact'
-          && effect.worldKey === `boneyard:${snapshot.world.runId}`
-        ) {
-          lightProviderOwners.push({
-            registration: effect.lightRegistration,
-            sources: [etherPrimaryImpactLightSource(effect)],
-          })
-          continue
-        }
-        if (
-          effect.kind === 'fire-impact'
-          && effect.worldKey === `boneyard:${snapshot.world.runId}`
-        ) {
-          lightProviderOwners.push({
-            registration: effect.lightRegistration,
-            sources: [nativeFireImpactLightSource(effect)],
-          })
-          continue
-        }
-        if (
-          effect.kind !== 'air'
-          || effect.worldKey !== `boneyard:${snapshot.world.runId}`
-        ) continue
-        const contactLight = buildNativeAirContactLightSource({
-          ageTicks: effect.ageTicks,
-          endpoint: {
-            x: effect.endpoint.x - effect.origin.x,
-            y: effect.endpoint.y - effect.origin.y,
-          },
-          id: effect.id,
-          origin: effect.origin,
-          underpowered: effect.underpowered,
-        })
-        if (contactLight) {
-          lightProviderOwners.push({
-            registration: effect.lightRegistration,
-            sources: [contactLight],
-          })
-        }
-      }
-      for (const actor of snapshot.secondaryAbilities.actors) {
-        if (actor.worldKey !== `boneyard:${snapshot.world.runId}`) continue
-        const source = nativeSecondaryProviderLightSource(actor, presentationFrame)
-        if (!source) continue
+      if (
+        effect.kind === 'fire-good-imp'
+        && effect.worldKey === `boneyard:${snapshot.world.runId}`
+      ) {
         lightProviderOwners.push({
-          registration: requiredLightRegistration(
-            actor.lightRegistration,
-            `secondary ${actor.kind} ${actor.id}`,
-          ),
-          sources: [source],
+          registration: effect.lightRegistration,
+          sources: [nativeFireGoodImpLightSource(effect, presentationFrame)],
+        })
+        continue
+      }
+      if (
+        effect.kind === 'ether-impact'
+        && effect.worldKey === `boneyard:${snapshot.world.runId}`
+      ) {
+        lightProviderOwners.push({
+          registration: effect.lightRegistration,
+          sources: [etherPrimaryImpactLightSource(effect)],
+        })
+        continue
+      }
+      if (
+        effect.kind === 'fire-impact'
+        && effect.worldKey === `boneyard:${snapshot.world.runId}`
+      ) {
+        lightProviderOwners.push({
+          registration: effect.lightRegistration,
+          sources: [nativeFireImpactLightSource(effect)],
+        })
+        continue
+      }
+      if (
+        effect.kind !== 'air'
+        || effect.worldKey !== `boneyard:${snapshot.world.runId}`
+      ) continue
+      const contactLight = buildNativeAirContactLightSource({
+        ageTicks: effect.ageTicks,
+        endpoint: {
+          x: effect.endpoint.x - effect.origin.x,
+          y: effect.endpoint.y - effect.origin.y,
+        },
+        id: effect.id,
+        origin: effect.origin,
+        underpowered: effect.underpowered,
+      })
+      if (contactLight) {
+        lightProviderOwners.push({
+          registration: effect.lightRegistration,
+          sources: [contactLight],
         })
       }
+    }
+    for (const actor of snapshot.secondaryAbilities.actors) {
+      if (actor.worldKey !== `boneyard:${snapshot.world.runId}`) continue
+      const source = nativeSecondaryProviderLightSource(actor, presentationFrame)
+      if (!source) continue
+      lightProviderOwners.push({
+        registration: requiredLightRegistration(
+          actor.lightRegistration,
+          `secondary ${actor.kind} ${actor.id}`,
+        ),
+        sources: [source],
+      })
     }
     if (lanternLight) {
       lightProviderOwners.push({
@@ -1556,76 +1534,74 @@ class BoneyardDynamicScene {
     lightMiscBatches.length = 0
     const lightMiscTailCandidates = this.lightMiscTailCandidates
     lightMiscTailCandidates.length = 0
-    if (!modalActive) {
-      for (const effect of snapshot.primarySpells.transients) {
-        if (
-          effect.kind !== 'air'
-          || effect.ageTicks !== 0
-          || effect.worldKey !== `boneyard:${snapshot.world.runId}`
-        ) continue
-        const pathSources = buildNativeAirPathLightSources({
-          birthTick: effect.birthTick,
-          endpoint: effect.endpoint,
-          id: effect.id,
-          midpoint: effect.midpoint,
-          origin: effect.origin,
-          weakCast: effect.underpowered,
-        })
-        if (pathSources.length === 0) continue
-        const owner = snapshot.players[effect.ownerId]
-        if (!owner) throw new Error(`Air MiscLight owner ${effect.ownerId} is unavailable`)
-        lightMiscBatches.push({
-          birthTick: effect.birthTick,
-          id: effect.id,
-          miscLightAppendOrdinal: 0,
-          registration: owner.lighting.lightRegistration,
-          sources: pathSources,
-        })
+    for (const effect of snapshot.primarySpells.transients) {
+      if (
+        effect.kind !== 'air'
+        || effect.ageTicks !== 0
+        || effect.worldKey !== `boneyard:${snapshot.world.runId}`
+      ) continue
+      const pathSources = buildNativeAirPathLightSources({
+        birthTick: effect.birthTick,
+        endpoint: effect.endpoint,
+        id: effect.id,
+        midpoint: effect.midpoint,
+        origin: effect.origin,
+        weakCast: effect.underpowered,
+      })
+      if (pathSources.length === 0) continue
+      const owner = snapshot.players[effect.ownerId]
+      if (!owner) throw new Error(`Air MiscLight owner ${effect.ownerId} is unavailable`)
+      lightMiscBatches.push({
+        birthTick: effect.birthTick,
+        id: effect.id,
+        miscLightAppendOrdinal: 0,
+        registration: owner.lighting.lightRegistration,
+        sources: pathSources,
+      })
+    }
+    for (const actor of snapshot.secondaryAbilities.actors) {
+      if (actor.worldKey !== `boneyard:${snapshot.world.runId}`) continue
+      const source = nativeSecondaryMiscLightSource(actor)
+      if (!source) continue
+      if (actor.miscLightAppendOrdinal === null) {
+        throw new Error(`secondary ${actor.kind} ${actor.id} lost its MiscLight append order`)
       }
-      for (const actor of snapshot.secondaryAbilities.actors) {
-        if (actor.worldKey !== `boneyard:${snapshot.world.runId}`) continue
-        const source = nativeSecondaryMiscLightSource(actor)
-        if (!source) continue
-        if (actor.miscLightAppendOrdinal === null) {
-          throw new Error(`secondary ${actor.kind} ${actor.id} lost its MiscLight append order`)
-        }
-        lightMiscBatches.push({
-          birthTick: snapshot.tick - actor.ageTicks,
-          id: actor.id,
-          miscLightAppendOrdinal: actor.miscLightAppendOrdinal,
-          registration: requiredLightRegistration(
-            actor.lightRegistration,
-            `secondary ${actor.kind} ${actor.id}`,
-          ),
-          sources: [source],
-        })
-      }
-      const enemyLightRegistrations = new Map(snapshot.world.enemies.map((enemy) => [
-        enemy.id,
-        enemy.lightRegistration,
-      ]))
-      for (const batch of this.mageLightningPulses.pathLightBatches) {
-        const miscLightAppendOrdinal = snapshot.secondaryAbilities.actors.reduce(
-          (nextOrdinal, actor) => (
-            actor.targetId === batch.ownerActorId
-            && actor.worldKey === `boneyard:${snapshot.world.runId}`
-            && nativeSecondaryMiscLightSource(actor) !== null
-              ? Math.max(nextOrdinal, (actor.miscLightAppendOrdinal ?? -1) + 1)
-              : nextOrdinal
-          ),
-          0,
-        )
-        lightMiscBatches.push({
-          birthTick: batch.birthTick,
-          id: batch.id,
-          miscLightAppendOrdinal,
-          registration: requiredLightRegistration(
-            enemyLightRegistrations.get(batch.ownerActorId) ?? null,
-            `Mage Air factory ${batch.ownerActorId}`,
-          ),
-          sources: batch.sources,
-        })
-      }
+      lightMiscBatches.push({
+        birthTick: snapshot.tick - actor.ageTicks,
+        id: actor.id,
+        miscLightAppendOrdinal: actor.miscLightAppendOrdinal,
+        registration: requiredLightRegistration(
+          actor.lightRegistration,
+          `secondary ${actor.kind} ${actor.id}`,
+        ),
+        sources: [source],
+      })
+    }
+    const enemyLightRegistrations = new Map(snapshot.world.enemies.map((enemy) => [
+      enemy.id,
+      enemy.lightRegistration,
+    ]))
+    for (const batch of this.mageLightningPulses.pathLightBatches) {
+      const miscLightAppendOrdinal = snapshot.secondaryAbilities.actors.reduce(
+        (nextOrdinal, actor) => (
+          actor.targetId === batch.ownerActorId
+          && actor.worldKey === `boneyard:${snapshot.world.runId}`
+          && nativeSecondaryMiscLightSource(actor) !== null
+            ? Math.max(nextOrdinal, (actor.miscLightAppendOrdinal ?? -1) + 1)
+            : nextOrdinal
+        ),
+        0,
+      )
+      lightMiscBatches.push({
+        birthTick: batch.birthTick,
+        id: batch.id,
+        miscLightAppendOrdinal,
+        registration: requiredLightRegistration(
+          enemyLightRegistrations.get(batch.ownerActorId) ?? null,
+          `Mage Air factory ${batch.ownerActorId}`,
+        ),
+        sources: batch.sources,
+      })
     }
     const appendOrderedMiscBatches = lightMiscBatches.toSorted((first, second) => (
       first.miscLightAppendOrdinal - second.miscLightAppendOrdinal
@@ -1651,7 +1627,6 @@ class BoneyardDynamicScene {
       position,
       this.lightIndex,
     ))
-    this.weatherView.setRenderable(!modalActive)
     let maxMainLightScalar = 0
     let minMainLightScalar = 1
     for (const resident of visibleMainResidents) {

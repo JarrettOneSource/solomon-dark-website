@@ -269,7 +269,7 @@ export type {
   LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
 
-export const GAME_PROTOCOL_VERSION = 46
+export const GAME_PROTOCOL_VERSION = 47
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
 export const GAME_CONNECTION_TIMEOUT_CLOSE_CODE = 4000
@@ -373,9 +373,12 @@ export interface PlayerCharacterKernelParameters {
   playerRadius: number
 }
 
+export type GameplayPauseSource = 'inventory' | 'pause-menu' | 'skill-book'
+
 export interface GameplayPauseState {
   ownerDisplayName: string
   ownerPlayerId: string
+  source: GameplayPauseSource
 }
 
 export interface ClientHelloMessage {
@@ -469,10 +472,9 @@ export interface ClientConfirmLoadoutMessage {
   type: 'client-confirm-loadout'
 }
 
-export interface ClientGameplayPauseMessage {
-  type: 'client-gameplay-pause'
-  paused: boolean
-}
+export type ClientGameplayPauseMessage =
+  | { type: 'client-gameplay-pause'; paused: false }
+  | { type: 'client-gameplay-pause'; paused: true; source: GameplayPauseSource }
 
 export interface ClientCheatModeMessage {
   type: 'client-cheat-mode'
@@ -758,11 +760,13 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
     return { type: 'client-confirm-loadout' }
   }
   if (value.type === 'client-gameplay-pause') {
-    onlyKeys(value, 'message', ['type', 'paused'])
-    return {
-      type: 'client-gameplay-pause',
-      paused: boolean(value.paused, 'paused'),
+    const paused = boolean(value.paused, 'paused')
+    if (!paused) {
+      onlyKeys(value, 'message', ['type', 'paused'])
+      return { type: 'client-gameplay-pause', paused }
     }
+    onlyKeys(value, 'message', ['type', 'paused', 'source'])
+    return { type: 'client-gameplay-pause', paused, source: gameplayPauseSource(value.source) }
   }
   if (value.type === 'client-cheat-mode') {
     onlyKeys(value, 'message', ['type', 'enabled'])
@@ -1373,11 +1377,17 @@ function playerCharacterConfig(value: unknown, field: string): PlayerCharacterCo
 
 function gameplayPauseState(value: unknown, field: string): GameplayPauseState {
   const source = record(value, field)
-  onlyKeys(source, field, ['ownerDisplayName', 'ownerPlayerId'])
+  onlyKeys(source, field, ['ownerDisplayName', 'ownerPlayerId', 'source'])
   return {
     ownerDisplayName: limitedString(source.ownerDisplayName, `${field}.ownerDisplayName`, 64),
     ownerPlayerId: validatedPlayerId(source.ownerPlayerId, `${field}.ownerPlayerId`),
+    source: gameplayPauseSource(source.source),
   }
+}
+
+function gameplayPauseSource(value: unknown): GameplayPauseSource {
+  if (value === 'inventory' || value === 'pause-menu' || value === 'skill-book') return value
+  throw new GameProtocolError('gameplay pause source is not supported')
 }
 
 function hubInventoryAction(value: unknown): HubInventoryAction {

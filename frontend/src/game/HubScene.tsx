@@ -67,12 +67,12 @@ interface HubSceneProps {
   initialSnapshot: GameSnapshot
   inputBlocked: boolean
   inventoryRequestSequence: number
-  levelUpModalActive: boolean
   levelUpPresentationId: number | null
   onInput: (input: PlayerCharacterInput) => void
   onAcceptPartyInvitation: (invitationId: string) => void
   onDenyPartyInvitation: (invitationId: string) => void
   onHubAction: (action: HubInventoryAction) => void
+  onInventoryOpenChange: (open: boolean) => void
   onInvitePlayer: (playerId: string) => void
   onLoadingError: () => void
   onOpenSkills: () => void
@@ -106,12 +106,12 @@ export default function HubScene({
   initialSnapshot,
   inputBlocked,
   inventoryRequestSequence,
-  levelUpModalActive,
   levelUpPresentationId,
   onInput,
   onAcceptPartyInvitation,
   onDenyPartyInvitation,
   onHubAction,
+  onInventoryOpenChange,
   onInvitePlayer,
   onLoadingError,
   onOpenSkills,
@@ -139,13 +139,11 @@ export default function HubScene({
   const inputBlockedRef = useRef(inputBlocked)
   const presentationPausedRef = useRef(presentationPaused)
   const modalOpenRef = useRef(false)
-  const levelUpModalActiveRef = useRef(levelUpModalActive)
   const levelUpPresentationIdRef = useRef(levelUpPresentationId)
   const onLoadingErrorRef = useRef(onLoadingError)
   const onReadyRef = useRef(onReady)
   inputBlockedRef.current = inputBlocked
   presentationPausedRef.current = presentationPaused
-  levelUpModalActiveRef.current = levelUpModalActive
   levelUpPresentationIdRef.current = levelUpPresentationId
   onLoadingErrorRef.current = onLoadingError
   onReadyRef.current = onReady
@@ -174,6 +172,10 @@ export default function HubScene({
   ))
   const modalOpen = pickerOpen || hubUiSurface !== null || selectedPlayerId !== null
   modalOpenRef.current = modalOpen
+
+  useEffect(() => {
+    onInventoryOpenChange(hubUiSurface?.kind === 'inventory')
+  }, [hubUiSurface?.kind, onInventoryOpenChange])
 
   useEffect(() => {
     if (inventoryRequestRef.current === inventoryRequestSequence) return
@@ -244,11 +246,8 @@ export default function HubScene({
   }, [inputBlocked, modalOpen, onPauseRequest, transitionActive])
 
   useLayoutEffect(() => {
-    rendererRef.current?.setLevelUpPresentation(
-      levelUpPresentationId,
-      levelUpModalActive,
-    )
-  }, [levelUpModalActive, levelUpPresentationId])
+    rendererRef.current?.setLevelUpPresentation(levelUpPresentationId)
+  }, [levelUpPresentationId])
 
   useEffect(() => {
     const footstepAudio = new PlayerFootstepAudioSynchronizer(
@@ -346,10 +345,7 @@ export default function HubScene({
         return
       }
       rendererRef.current = renderer
-      renderer.setLevelUpPresentation(
-        levelUpPresentationIdRef.current,
-        levelUpModalActiveRef.current,
-      )
+      renderer.setLevelUpPresentation(levelUpPresentationIdRef.current)
       host.replaceChildren(renderer.canvas)
       renderer.resize(viewportRef.current)
       setRendererState('ready')

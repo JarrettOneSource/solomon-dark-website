@@ -100,6 +100,32 @@ test('party launch partitions exactly its members while the shared Hub keeps tic
   assert.equal(worlds.runs[0]!.state.tick, runTick + 1)
 })
 
+test('shared Hub pause freezes Hub residents while independent party runs keep ticking', () => {
+  let worlds = createSharedGameWorlds()
+  worlds = addSharedHubPlayer(worlds, 'player-a', character('Aurelia'))
+  worlds = addSharedHubPlayer(worlds, 'player-b', character('Basil'))
+  worlds = inviteSharedPartyPlayer(worlds, 'player-a', 'player-b', 4).state
+  worlds = acceptSharedPartyInvitation(
+    worlds,
+    'player-b',
+    worlds.parties.invitations[0]!.id,
+    4,
+  ).state
+  worlds = startSharedPartyRun(
+    worlds,
+    'player-a',
+    loadedBoneyardFixture('party-run'),
+  ).state
+  worlds = addSharedHubPlayer(worlds, 'player-c', character('Cassia'))
+
+  const hub = worlds.hub
+  const runTick = worlds.runs[0]!.state.tick
+  worlds = stepSharedGameWorlds(worlds, {}, new Set(), new Map(), true)
+
+  assert.equal(worlds.hub, hub)
+  assert.equal(worlds.runs[0]!.state.tick, runTick + 1)
+})
+
 test('only a Courtyard party leader can launch and a running member cannot be invited', () => {
   let worlds = createSharedGameWorlds()
   worlds = addSharedHubPlayer(worlds, 'player-a', character('Aurelia'))

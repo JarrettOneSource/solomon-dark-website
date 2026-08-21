@@ -160,9 +160,11 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
     type: 'client-gameplay-pause',
     paused: true,
+    source: 'inventory',
   })), {
     type: 'client-gameplay-pause',
     paused: true,
+    source: 'inventory',
   })
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
     type: 'client-select-skill',
@@ -227,12 +229,14 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
     pause: {
       ownerDisplayName: 'Helvidius',
       ownerPlayerId: 'player-1',
+      source: 'skill-book',
     },
   })), {
     type: 'server-gameplay-pause',
     pause: {
       ownerDisplayName: 'Helvidius',
       ownerPlayerId: 'player-1',
+      source: 'skill-book',
     },
   })
   assert.deepEqual(decodeServerGameMessage(encodeGameMessage({
@@ -244,8 +248,17 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
   })
   assert.throws(() => decodeServerGameMessage(JSON.stringify({
     type: 'server-gameplay-pause',
-    pause: { ownerDisplayName: '', ownerPlayerId: 'player-1' },
+    pause: { ownerDisplayName: '', ownerPlayerId: 'player-1', source: 'pause-menu' },
   })), /ownerDisplayName/)
+  assert.throws(() => decodeClientGameMessage(JSON.stringify({
+    type: 'client-gameplay-pause',
+    paused: true,
+  })), /source/)
+  assert.throws(() => decodeClientGameMessage(JSON.stringify({
+    type: 'client-gameplay-pause',
+    paused: true,
+    source: 'dialogue',
+  })), /source/)
 })
 
 test('server protocol carries only one bounded opaque leaderboard receipt', () => {
@@ -940,8 +953,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v46 carries party denial, Hall archives, the mixed-skill quickbar, secondary gates, and existing gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 46)
+test('protocol v47 carries leaderboard authority, modal pause identity, and existing gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 47)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),

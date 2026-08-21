@@ -158,9 +158,18 @@ export function gameplayPausePresentation(
   playerId: string,
 ): GameplayPausePresentation {
   if (pause.ownerPlayerId === playerId) return { kind: 'owner', label: 'Game paused' }
+  const activity = pause.source === 'inventory'
+    ? 'Inventory'
+    : pause.source === 'skill-book'
+      ? 'the Skill Book'
+      : null
   return {
-    detail: `Waiting for ${pause.ownerDisplayName} to resume.`,
+    detail: activity
+      ? `Waiting for ${pause.ownerDisplayName} to close ${activity}.`
+      : `Waiting for ${pause.ownerDisplayName} to resume.`,
     kind: 'waiting',
-    label: `${pause.ownerDisplayName} has paused the game.`,
+    label: activity
+      ? `${pause.ownerDisplayName} is using ${activity}.`
+      : `${pause.ownerDisplayName} has paused the game.`,
   }
 }

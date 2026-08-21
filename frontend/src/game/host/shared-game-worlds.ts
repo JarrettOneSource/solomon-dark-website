@@ -236,10 +236,13 @@ export function stepSharedGameWorlds(
   inputs: Readonly<Record<PlayerId, PlayerCharacterInput>>,
   pausedPartyIds: ReadonlySet<string> = new Set(),
   enemySpawnIntents: ReadonlyMap<string, readonly BoneyardEnemySpawnIntent[]> = new Map(),
+  hubPaused = false,
 ): SharedGameWorldsState {
   return {
     ...state,
-    hub: stepGameSimulationTick(state.hub, inputsForState(state.hub, inputs)),
+    hub: hubPaused
+      ? state.hub
+      : stepGameSimulationTick(state.hub, inputsForState(state.hub, inputs)),
     runs: state.runs.map((run) => pausedPartyIds.has(run.partyId)
       ? run
       : {

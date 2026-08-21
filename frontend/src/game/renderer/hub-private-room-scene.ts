@@ -62,7 +62,6 @@ export class HubPrivateRoomScene {
   private readonly livePlayerIds = new Set<string>()
   private readonly derivedTextures: Texture[] = []
   private readonly roomFlames = new Map<PrivateHubRegionId, readonly Sprite[]>()
-  private readonly mortuaryMemorialGlows: readonly Sprite[]
   private readonly textures: HubWorldTextures
   private memoratorBody!: Sprite
   private memoratorMarker!: Sprite
@@ -87,7 +86,7 @@ export class HubPrivateRoomScene {
       storeroom: this.createStoreroom(),
       office: this.createOffice(),
     }
-    this.mortuaryMemorialGlows = this.addMortuaryMemorialGlows(this.rooms.mortuary)
+    this.addMortuaryMemorialGlows(this.rooms.mortuary)
     this.primarySpells = Object.fromEntries(PRIVATE_HUB_REGIONS.map((region) => [
       region,
       new PrimarySpellWorldView(this.rooms[region], textures, {
@@ -118,7 +117,6 @@ export class HubPrivateRoomScene {
       playerScreenY: number
       presentationId: number
     } | null = null,
-    modalActive = false,
   ): void {
     const localParticipant = snapshot.world.participants[localPlayerId]
     if (!localParticipant || localParticipant.region === 'courtyard') return
@@ -140,18 +138,6 @@ export class HubPrivateRoomScene {
       )
     }
     this.updateRoomPresentation(snapshot, localPlayerId, localParticipant.region)
-    for (const [playerId, view] of this.players) {
-      view.container.renderable = !modalActive || playerId === localPlayerId
-    }
-    for (const region of PRIVATE_HUB_REGIONS) {
-      this.primarySpells[region].setRenderable(!modalActive)
-      this.secondaryAbilities[region].setRenderable(!modalActive)
-      for (const actor of this.nonPlayerActors[region]) actor.renderable = !modalActive
-      for (const flame of this.roomFlames.get(region) ?? []) {
-        flame.renderable = !modalActive
-      }
-    }
-    for (const glow of this.mortuaryMemorialGlows) glow.renderable = !modalActive
     const room = this.rooms[localParticipant.region]
     if (this.levelUp.container.parent !== room) {
       this.levelUp.container.parent?.removeChild(this.levelUp.container)

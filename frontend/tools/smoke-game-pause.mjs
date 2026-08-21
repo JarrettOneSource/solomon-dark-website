@@ -31,6 +31,8 @@ const screenshots = {
     || '/tmp/solomon-dark-pause-boneyard-waiting.png',
   hubOwner: process.env.SDR_GAME_PAUSE_OWNER_SCREENSHOT
     || '/tmp/solomon-dark-pause-hub-owner.png',
+  inventoryOwner: process.env.SDR_GAME_PAUSE_INVENTORY_SCREENSHOT
+    || '/tmp/solomon-dark-pause-inventory-owner.png',
   skillSettings: process.env.SDR_GAME_SKILL_SETTINGS_SCREENSHOT
     || '/tmp/solomon-dark-pause-skill-settings.png',
   hubWaiting: process.env.SDR_GAME_PAUSE_WAITING_SCREENSHOT
@@ -41,6 +43,8 @@ const screenshots = {
     || '/tmp/solomon-dark-pause-resume-pressed.png',
   settingsPressed: process.env.SDR_GAME_PAUSE_SETTINGS_PRESSED_SCREENSHOT
     || '/tmp/solomon-dark-pause-settings-pressed.png',
+  skillBookOwner: process.env.SDR_GAME_PAUSE_SKILL_BOOK_SCREENSHOT
+    || '/tmp/solomon-dark-pause-skill-book-owner.png',
 }
 const errors = []
 
@@ -96,6 +100,52 @@ try {
     element: 'water',
   })
   assert.equal(host.playerCount(), 2)
+
+  const modalPauseEdges = []
+  const observeModalPause = (data) => {
+    const message = decodeServerGameMessage(data.toString())
+    if (message.type === 'server-gameplay-pause') modalPauseEdges.push(message.pause?.source ?? null)
+  }
+  peer.socket.on('message', observeModalPause)
+  const peerSawInventoryPause = nextRawMessage(peer.socket, (message) => (
+    message.type === 'server-gameplay-pause' && message.pause?.source === 'inventory'
+  ))
+  await page.getByRole('button', { name: /Open inventory/ }).click()
+  const inventory = page.getByRole('dialog', { name: 'Inventory' })
+  await inventory.waitFor()
+  const inventoryPause = await peerSawInventoryPause
+  assert.equal(inventoryPause.type, 'server-gameplay-pause')
+  assert.equal(inventoryPause.pause.ownerPlayerId, host.hostPlayerId())
+  assert.equal(await page.locator('.gameplay-pause-stage').count(), 0)
+  const heldBookWorld = simulationReceipt()
+  await page.waitForTimeout(350)
+  assert.deepEqual(simulationReceipt(), heldBookWorld)
+  await page.screenshot({ path: screenshots.inventoryOwner })
+
+  const peerSawSkillBookPause = nextRawMessage(peer.socket, (message) => (
+    message.type === 'server-gameplay-pause' && message.pause?.source === 'skill-book'
+  ))
+  await page.keyboard.press('t')
+  const skillBook = page.getByRole('dialog', { name: 'Skills' })
+  await skillBook.waitFor()
+  await peerSawSkillBookPause
+  await inventory.waitFor({ state: 'detached' })
+  assert.equal(await page.locator('.gameplay-pause-stage').count(), 0)
+  await page.waitForTimeout(350)
+  assert.deepEqual(simulationReceipt(), heldBookWorld)
+  await page.screenshot({ path: screenshots.skillBookOwner })
+
+  const peerSawBookResume = nextRawMessage(peer.socket, (message) => (
+    message.type === 'server-gameplay-pause' && message.pause === null
+  ))
+  await skillBook.getByRole('button', { name: 'Close skills' }).click()
+  await Promise.all([
+    peerSawBookResume,
+    skillBook.waitFor({ state: 'detached' }),
+  ])
+  peer.socket.off('message', observeModalPause)
+  assert.deepEqual(modalPauseEdges, ['inventory', 'skill-book', null])
+  await assertNormalResumeRate(page)
 
   const peerSawOwnerPause = nextRawMessage(peer.socket, (message) => (
     message.type === 'server-gameplay-pause' && message.pause !== null
@@ -281,7 +331,11 @@ try {
   const peerPause = nextRawMessage(peer.socket, (message) => (
     message.type === 'server-gameplay-pause' && message.pause?.ownerPlayerId === peer.welcome.playerId
   ))
-  peer.socket.send(encodeGameMessage({ type: 'client-gameplay-pause', paused: true }))
+  peer.socket.send(encodeGameMessage({
+    type: 'client-gameplay-pause',
+    paused: true,
+    source: 'pause-menu',
+  }))
   await peerPause
   const hubWaiting = page.locator(
     '.gameplay-pause-stage[data-gameplay-pause-view="waiting"]',
@@ -346,7 +400,11 @@ try {
   const peerBoneyardPause = nextRawMessage(peer.socket, (message) => (
     message.type === 'server-gameplay-pause' && message.pause?.ownerPlayerId === peer.welcome.playerId
   ))
-  peer.socket.send(encodeGameMessage({ type: 'client-gameplay-pause', paused: true }))
+  peer.socket.send(encodeGameMessage({
+    type: 'client-gameplay-pause',
+    paused: true,
+    source: 'pause-menu',
+  }))
   await peerBoneyardPause
   const boneyardWaiting = page.locator(
     '.gameplay-pause-stage[data-gameplay-pause-view="waiting"]',
@@ -414,6 +472,7 @@ async function joinRaw(character) {
   socket.send(encodeGameMessage({
     type: 'client-hello',
     character,
+    cheatsEnabled: false,
     credential,
     protocolVersion: GAME_PROTOCOL_VERSION,
   }))

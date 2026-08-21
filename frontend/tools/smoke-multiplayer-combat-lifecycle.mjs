@@ -539,8 +539,8 @@ async function proveSharedLevelUpAndEnemyEffects({
   await waiting.waitFor({ timeout: 15_000 })
   assert.equal(
     (await levelUpPresentationReceipt(hostPage)).dynamicSuppressed,
-    true,
-    'the shared waiting barrier must keep Boneyard dynamic clutter suppressed',
+    false,
+    'the shared waiting barrier must retain the frozen Boneyard background',
   )
   assert.equal(await guestPicker.count(), 1)
   assert.deepEqual(host.state().levelUpBarrier?.pendingPlayerIds, [guestPlayerId])
@@ -1251,7 +1251,7 @@ async function levelUpAudioReceipt(page) {
 async function waitForLevelUpPresentation(page) {
   await page.waitForFunction(() => {
     const canvas = document.querySelector('.boneyard-world-canvas')
-    return canvas?.dataset.levelUpDynamicSuppressed === 'true'
+    return canvas?.dataset.levelUpDynamicSuppressed === 'false'
       && Number(canvas.dataset.levelUpParticleCount) > 0
   }, undefined, { timeout: 15_000 })
   return levelUpPresentationReceipt(page)

@@ -52,6 +52,18 @@ const SECOND_CHARACTER = {
 } as const
 const SHARED_AUTHENTICATION = { kind: 'shared', credential: 'test-secret' } as const
 const LEADERBOARD_RECEIPT_SECRET = 'leaderboard-receipt-test-secret-that-is-long-enough'
+const EMPTY_SHARED_CONTENT = {
+  boneyards: [],
+  manifest: { manifestSha256: '0'.repeat(64), mods: [] },
+  modSources: [],
+  summary: { manifestSha256: '0'.repeat(64), mods: [] },
+} as const
+const SHARED_HUB_AUTHENTICATION = {
+  kind: 'tickets',
+  claim: (credential: string) => credential.startsWith('ticket-')
+    ? { content: EMPTY_SHARED_CONTENT, leaderboardUserId: null }
+    : null,
+} as const
 const require = createRequire(import.meta.url)
 const luaWasmPath = require.resolve('wasmoon/dist/glue.wasm')
 
@@ -141,13 +153,18 @@ test('Hub pause is first-request owned, survives late join, and releases on owne
   const secondPaused = nextMessage(second.socket, (message) => (
     message.type === 'server-gameplay-pause' && message.pause !== null
   ))
-  first.socket.send(encodeGameMessage({ type: 'client-gameplay-pause', paused: true }))
+  first.socket.send(encodeGameMessage({
+    type: 'client-gameplay-pause',
+    paused: true,
+    source: 'inventory',
+  }))
   const [pauseA, pauseB] = await Promise.all([firstPaused, secondPaused])
   assert.equal(pauseA.type, 'server-gameplay-pause')
   assert.equal(pauseB.type, 'server-gameplay-pause')
   assert.deepEqual(pauseA.pause, {
     ownerDisplayName: FIRST_CHARACTER.displayName,
     ownerPlayerId: first.welcome.playerId,
+    source: 'inventory',
   })
   assert.deepEqual(pauseB.pause, pauseA.pause)
 
@@ -156,6 +173,39 @@ test('Hub pause is first-request owned, survives late join, and releases on owne
   await new Promise((resolve) => setTimeout(resolve, 100))
   assert.equal(host.state().tick, heldTick)
   assert.equal(JSON.stringify(gameSimulationPlayerRecords(host.state())), heldPlayers)
+
+  const economyBefore = getPlayerEconomy(host.state(), first.welcome.playerId)
+  const potion = economyBefore.backpack.find((item) => (
+    item.nativeTypeId === 7001 && item.nativeSubtype === 0
+  ))
+  assert.ok(potion)
+  const inventoryApplied = nextMessage(first.socket, (message) => (
+    message.type === 'server-snapshot'
+    && message.snapshot.players[first.welcome.playerId].economy.revision
+      > economyBefore.revision
+  ))
+  first.socket.send(encodeGameMessage({
+    type: 'client-hub-action',
+    action: { type: 'consume', itemId: potion.id },
+  }))
+  await inventoryApplied
+  assert.equal(host.state().tick, heldTick)
+
+  const firstReplaced = nextMessage(first.socket, (message) => (
+    message.type === 'server-gameplay-pause' && message.pause?.source === 'skill-book'
+  ))
+  const secondReplaced = nextMessage(second.socket, (message) => (
+    message.type === 'server-gameplay-pause' && message.pause?.source === 'skill-book'
+  ))
+  first.socket.send(encodeGameMessage({
+    type: 'client-gameplay-pause',
+    paused: true,
+    source: 'skill-book',
+  }))
+  const [replacementA, replacementB] = await Promise.all([firstReplaced, secondReplaced])
+  assert.equal(replacementA.type, 'server-gameplay-pause')
+  assert.equal(replacementB.type, 'server-gameplay-pause')
+  assert.deepEqual(replacementB.pause, replacementA.pause)
 
   const pausedLuaResult = nextMessage(first.socket, (message) => (
     message.type === 'server-lua-result' && message.requestId === 99
@@ -171,14 +221,18 @@ test('Hub pause is first-request owned, survives late join, and releases on owne
   assert.match(luaResult.error ?? '', /paused/)
   assert.equal((await hostHealth(host.address.url)).lua, null)
 
-  second.socket.send(encodeGameMessage({ type: 'client-gameplay-pause', paused: true }))
+  second.socket.send(encodeGameMessage({
+    type: 'client-gameplay-pause',
+    paused: true,
+    source: 'skill-book',
+  }))
   second.socket.send(encodeGameMessage({ type: 'client-gameplay-pause', paused: false }))
   await new Promise((resolve) => setTimeout(resolve, 60))
   assert.equal(host.state().tick, heldTick)
 
   const late = await join(host.address.url, 'test-secret', SECOND_CHARACTER)
   context.after(() => late.socket.close())
-  assert.deepEqual(late.welcome.gameplayPause, pauseA.pause)
+  assert.deepEqual(late.welcome.gameplayPause, replacementA.pause)
   assert.equal(late.welcome.snapshot.tick, heldTick)
 
   const releasedSecond = nextMessage(second.socket, (message) => (
@@ -218,13 +272,18 @@ test('Boneyard pause holds the complete world and only its owner can resume', as
   const pausedB = nextMessage(second.socket, (message) => (
     message.type === 'server-gameplay-pause' && message.pause !== null
   ))
-  second.socket.send(encodeGameMessage({ type: 'client-gameplay-pause', paused: true }))
+  second.socket.send(encodeGameMessage({
+    type: 'client-gameplay-pause',
+    paused: true,
+    source: 'skill-book',
+  }))
   const [pauseA, pauseB] = await Promise.all([pausedA, pausedB])
   assert.equal(pauseA.type, 'server-gameplay-pause')
   assert.equal(pauseB.type, 'server-gameplay-pause')
   assert.deepEqual(pauseA.pause, {
     ownerDisplayName: SECOND_CHARACTER.displayName,
     ownerPlayerId: second.welcome.playerId,
+    source: 'skill-book',
   })
 
   const heldTick = host.state().tick
@@ -248,6 +307,54 @@ test('Boneyard pause holds the complete world and only its owner can resume', as
   second.socket.send(encodeGameMessage({ type: 'client-gameplay-pause', paused: false }))
   await Promise.all([releasedA, releasedB])
   assert.ok(host.state().tick - heldTick <= 10, 'Boneyard release must not replay paused wall time')
+  await waitFor(() => host.state().tick > heldTick)
+})
+
+test('shared Hub book pause freezes every Hub resident and resumes without catch-up', async (context) => {
+  const host = await startGameHost({
+    authentication: SHARED_HUB_AUTHENTICATION,
+    sharedHub: true,
+    snapshotRate: 100,
+  })
+  context.after(() => host.close())
+  const first = await join(host.address.url, 'ticket-first', FIRST_CHARACTER)
+  const second = await join(host.address.url, 'ticket-second', SECOND_CHARACTER)
+  context.after(() => first.socket.close())
+  context.after(() => second.socket.close())
+
+  const pausedA = nextMessage(first.socket, (message) => (
+    message.type === 'server-gameplay-pause' && message.pause?.source === 'inventory'
+  ))
+  const pausedB = nextMessage(second.socket, (message) => (
+    message.type === 'server-gameplay-pause' && message.pause?.source === 'inventory'
+  ))
+  first.socket.send(encodeGameMessage({
+    type: 'client-gameplay-pause',
+    paused: true,
+    source: 'inventory',
+  }))
+  const [pauseA, pauseB] = await Promise.all([pausedA, pausedB])
+  assert.equal(pauseA.type, 'server-gameplay-pause')
+  assert.equal(pauseB.type, 'server-gameplay-pause')
+  assert.deepEqual(pauseB.pause, pauseA.pause)
+
+  const heldTick = host.state().tick
+  const heldPlayers = JSON.stringify(gameSimulationPlayerRecords(host.state()))
+  await new Promise((resolve) => setTimeout(resolve, 100))
+  assert.equal(host.state().tick, heldTick)
+  assert.equal(JSON.stringify(gameSimulationPlayerRecords(host.state())), heldPlayers)
+
+  const resumedA = nextMessage(first.socket, (message) => (
+    message.type === 'server-gameplay-pause' && message.pause === null
+  ))
+  const resumedB = nextMessage(second.socket, (message) => (
+    message.type === 'server-gameplay-pause' && message.pause === null
+  ))
+  const resumeStartedAt = performance.now()
+  first.socket.send(encodeGameMessage({ type: 'client-gameplay-pause', paused: false }))
+  await Promise.all([resumedA, resumedB])
+  assert.ok(host.state().tick - heldTick <= 10)
+  assert.ok(performance.now() - resumeStartedAt < 500)
   await waitFor(() => host.state().tick > heldTick)
 })
 
@@ -351,7 +458,11 @@ test('game host pauses a leveling player and authoritatively books the offered s
     }
   }
   client.socket.on('message', observePause)
-  client.socket.send(encodeGameMessage({ type: 'client-gameplay-pause', paused: true }))
+  client.socket.send(encodeGameMessage({
+    type: 'client-gameplay-pause',
+    paused: true,
+    source: 'pause-menu',
+  }))
   await new Promise((resolve) => setTimeout(resolve, 25))
   client.socket.off('message', observePause)
   assert.equal(gameplayPauseMessages, 0)

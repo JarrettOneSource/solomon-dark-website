@@ -94,11 +94,11 @@ interface BoneyardSceneProps {
   initialSnapshot: GameSnapshot
   inputBlocked: boolean
   inventoryRequestSequence: number
-  levelUpModalActive: boolean
   levelUpPresentationId: number | null
   onInput: (input: PlayerCharacterInput) => void
   onLoadingError: () => void
   onHubAction: (action: HubInventoryAction) => void
+  onInventoryOpenChange: (open: boolean) => void
   onOpenSkills: () => void
   onPauseRequest: () => void
   onReady: () => void
@@ -131,11 +131,11 @@ export default function BoneyardScene({
   initialSnapshot,
   inputBlocked,
   inventoryRequestSequence,
-  levelUpModalActive,
   levelUpPresentationId,
   onInput,
   onLoadingError,
   onHubAction,
+  onInventoryOpenChange,
   onOpenSkills,
   onPauseRequest,
   onReady,
@@ -163,6 +163,10 @@ export default function BoneyardScene({
   )
   const sceneInputBlocked = inputBlocked || inventorySurface !== null
 
+  useEffect(() => {
+    onInventoryOpenChange(inventorySurface?.kind === 'inventory')
+  }, [inventorySurface?.kind, onInventoryOpenChange])
+
   const sceneRef = useRef<HTMLDivElement>(null)
   const hostRef = useRef<HTMLDivElement>(null)
   const environmentLightCanvasRef = useRef<HTMLCanvasElement>(null)
@@ -178,13 +182,11 @@ export default function BoneyardScene({
   const digAudioCursorRef = useRef<SolomonDigAudioCursor | null>(null)
   const inputBlockedRef = useRef(sceneInputBlocked)
   const presentationPausedRef = useRef(presentationPaused)
-  const levelUpModalActiveRef = useRef(levelUpModalActive)
   const levelUpPresentationIdRef = useRef(levelUpPresentationId)
   const onLoadingErrorRef = useRef(onLoadingError)
   const onReadyRef = useRef(onReady)
   inputBlockedRef.current = sceneInputBlocked
   presentationPausedRef.current = presentationPaused
-  levelUpModalActiveRef.current = levelUpModalActive
   levelUpPresentationIdRef.current = levelUpPresentationId
   onLoadingErrorRef.current = onLoadingError
   onReadyRef.current = onReady
@@ -405,11 +407,8 @@ export default function BoneyardScene({
   }, [sceneInputBlocked])
 
   useLayoutEffect(() => {
-    rendererRef.current?.setLevelUpPresentation(
-      levelUpPresentationId,
-      levelUpModalActive,
-    )
-  }, [levelUpModalActive, levelUpPresentationId])
+    rendererRef.current?.setLevelUpPresentation(levelUpPresentationId)
+  }, [levelUpPresentationId])
 
   useEffect(() => {
     const host = hostRef.current
@@ -488,10 +487,7 @@ export default function BoneyardScene({
         return
       }
       rendererRef.current = renderer
-      renderer.setLevelUpPresentation(
-        levelUpPresentationIdRef.current,
-        levelUpModalActiveRef.current,
-      )
+      renderer.setLevelUpPresentation(levelUpPresentationIdRef.current)
       const pendingEnemyEvents = pendingEnemyPresentationEventsRef.current
       pendingEnemyPresentationEventsRef.current = []
       for (const event of pendingEnemyEvents) {

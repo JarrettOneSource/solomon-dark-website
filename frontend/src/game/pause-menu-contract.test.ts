@@ -24,6 +24,7 @@ import {
 const PAUSE = {
   ownerDisplayName: 'Helvidius',
   ownerPlayerId: 'player-1',
+  source: 'pause-menu',
 } as const
 const pauseCss = readFileSync(new URL('./gameplay-pause-menu.css', import.meta.url), 'utf8')
 const pauseComponent = readFileSync(new URL('./GameplayPauseMenu.tsx', import.meta.url), 'utf8')
@@ -196,6 +197,16 @@ test('pause presentation gives actions only to the authoritative owner', () => {
     detail: 'Waiting for Helvidius to resume.',
     kind: 'waiting',
     label: 'Helvidius has paused the game.',
+  })
+  assert.deepEqual(gameplayPausePresentation({ ...PAUSE, source: 'inventory' }, 'player-2'), {
+    detail: 'Waiting for Helvidius to close Inventory.',
+    kind: 'waiting',
+    label: 'Helvidius is using Inventory.',
+  })
+  assert.deepEqual(gameplayPausePresentation({ ...PAUSE, source: 'skill-book' }, 'player-2'), {
+    detail: 'Waiting for Helvidius to close the Skill Book.',
+    kind: 'waiting',
+    label: 'Helvidius is using the Skill Book.',
   })
 })
 

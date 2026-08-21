@@ -65,6 +65,7 @@ import {
 import type {
   GameContentIdentity,
   GameSnapshot,
+  GameplayPauseSource,
   GameplayPauseState,
   LoadedBoneyard,
 } from './protocol/game-protocol.ts'
@@ -288,6 +289,7 @@ export default function MainMenuScene({
   const levelUpSoundBarrierRef = useRef<number | null>(null)
   const [levelUpPickerClosing, setLevelUpPickerClosing] = useState(false)
   const [skillBookOpen, setSkillBookOpen] = useState(false)
+  const [inventoryScreenOpen, setInventoryScreenOpen] = useState(false)
   const [inventoryRequestSequence, setInventoryRequestSequence] = useState(0)
   const [loading, setLoading] = useState<MatchLoadingState | null>(null)
   const loadingRef = useRef<MatchLoadingState | null>(null)
@@ -380,7 +382,7 @@ export default function MainMenuScene({
       if (event.key !== 'Escape') return
       if (gameplaySettingsOpen) {
         setGameplaySettingsOpen(false)
-        session?.requestGameplayPause(false)
+        session?.requestGameplayPause(null)
       } else setSettingsOpen(false)
     }
     window.addEventListener('keydown', closeOnEscape)
@@ -733,7 +735,7 @@ export default function MainMenuScene({
   }
 
   const requestGameplayPause = useCallback(() => {
-    session?.requestGameplayPause(true)
+    session?.requestGameplayPause('pause-menu')
   }, [session])
 
   const leaveGameplay = () => {
@@ -747,6 +749,7 @@ export default function MainMenuScene({
     setPartyState(null)
     setGameplaySettingsOpen(false)
     setSkillBookOpen(false)
+    setInventoryScreenOpen(false)
     setScreen('root')
   }
 
@@ -760,22 +763,52 @@ export default function MainMenuScene({
   const levelUpPickerPresentationId = levelUpBarrierId
     ?? levelUpPickerPresentationRef.current
   const levelUpModalActive = Boolean(runtimeSnapshot?.levelUpBarrier) || levelUpPickerClosing
+  const ownsBookPause = gameplayPause !== null
+    && gameplayPause.ownerPlayerId === session?.playerId
+    && gameplayPause.source !== 'pause-menu'
+  const ownsActiveInventoryPause = ownsBookPause
+    && gameplayPause?.source === 'inventory'
+    && inventoryScreenOpen
+  const sceneInputBlocked = loading !== null
+    || levelUpModalActive
+    || skillBookOpen
+    || (gameplayPause !== null && !ownsActiveInventoryPause)
+  const desiredBookPauseSource: GameplayPauseSource | null = skillBookOpen
+    ? 'skill-book'
+    : inventoryScreenOpen
+      ? 'inventory'
+      : null
   const openSkillBook = useCallback(() => {
     if (
       !session
       || loading !== null
       || levelUpModalActive
-      || gameplayPause !== null
+      || (gameplayPause !== null && !ownsBookPause)
       || (runtimeRunPhase !== 'hub' && runtimeRunPhase !== 'active')
     ) return
     setSkillBookOpen(true)
-  }, [gameplayPause, levelUpModalActive, loading, runtimeRunPhase, session])
+  }, [gameplayPause, levelUpModalActive, loading, ownsBookPause, runtimeRunPhase, session])
 
   useEffect(() => {
-    if (loading !== null || levelUpModalActive || gameplayPause !== null) {
+    if (
+      loading !== null
+      || levelUpModalActive
+      || (gameplayPause !== null && !ownsBookPause)
+    ) {
       setSkillBookOpen(false)
+      setInventoryScreenOpen(false)
     }
-  }, [gameplayPause, levelUpModalActive, loading])
+  }, [gameplayPause, levelUpModalActive, loading, ownsBookPause])
+  useEffect(() => {
+    if (!session) return
+    if (desiredBookPauseSource !== null) {
+      if (gameplayPause === null || ownsBookPause) {
+        session.requestGameplayPause(desiredBookPauseSource)
+      }
+      return
+    }
+    if (ownsBookPause) session.requestGameplayPause(null)
+  }, [desiredBookPauseSource, gameplayPause, ownsBookPause, session])
   useEffect(() => {
     if (levelUpBarrierId === null) {
       levelUpSoundBarrierRef.current = null
@@ -894,15 +927,15 @@ export default function MainMenuScene({
               audio={audio}
               boneyard={loadedBoneyard}
               getPingMs={session.getPingMs}
-              inputBlocked={loading !== null || levelUpModalActive || gameplayPause !== null || skillBookOpen}
+              inputBlocked={sceneInputBlocked}
               inventoryRequestSequence={inventoryRequestSequence}
-              levelUpModalActive={levelUpModalActive}
               levelUpPresentationId={levelUpPresentationId}
               playerId={session.playerId}
               initialSnapshot={runtimeSnapshot}
               onInput={session.sendInput}
               onLoadingError={cancelBoneyardLoading}
               onHubAction={session.sendHubAction}
+              onInventoryOpenChange={setInventoryScreenOpen}
               onOpenSkills={openSkillBook}
               onPauseRequest={requestGameplayPause}
               onReady={finishBoneyardLoading}
@@ -921,9 +954,8 @@ export default function MainMenuScene({
               audio={audio}
               boneyards={session.boneyards}
               getPingMs={session.getPingMs}
-              inputBlocked={loading !== null || levelUpModalActive || gameplayPause !== null || skillBookOpen}
+              inputBlocked={sceneInputBlocked}
               inventoryRequestSequence={inventoryRequestSequence}
-              levelUpModalActive={levelUpModalActive}
               levelUpPresentationId={levelUpPresentationId}
               playerId={session.playerId}
               progression={runtimeProgression ?? runtimeSnapshot.players[session.playerId]!.progression}
@@ -932,6 +964,7 @@ export default function MainMenuScene({
               onAcceptPartyInvitation={session.acceptPartyInvitation}
               onDenyPartyInvitation={session.denyPartyInvitation}
               onHubAction={session.sendHubAction}
+              onInventoryOpenChange={setInventoryScreenOpen}
               onInvitePlayer={session.inviteToParty}
               onLoadingError={cancelHubLoading}
               onOpenSkills={openSkillBook}
@@ -953,7 +986,10 @@ export default function MainMenuScene({
               economy={runtimeSnapshot!.players[session.playerId]!.economy}
               onAssignQuickbarSkill={session.bindSkillQuickbar}
               onClose={() => setSkillBookOpen(false)}
-              onOpenInventory={() => setInventoryRequestSequence((sequence) => sequence + 1)}
+              onOpenInventory={() => {
+                setInventoryScreenOpen(true)
+                setInventoryRequestSequence((sequence) => sequence + 1)
+              }}
               onSelectConcentration={session.selectConcentration}
               onSelectPrimarySkill={session.selectPrimarySkill}
               playerId={session.playerId}
@@ -1001,11 +1037,17 @@ export default function MainMenuScene({
             </div>
           ) : null}
 
-        {session && gameplayPause && !gameplaySettingsOpen ? (
+        {session
+          && gameplayPause
+          && !gameplaySettingsOpen
+          && (
+            gameplayPause.source === 'pause-menu'
+            || gameplayPause.ownerPlayerId !== session.playerId
+          ) ? (
           <GameplayPauseMenu
             audio={audio}
             onLeave={leaveGameplay}
-            onResume={() => session.requestGameplayPause(false)}
+            onResume={() => session.requestGameplayPause(null)}
             onSettings={() => setGameplaySettingsOpen(true)}
             pause={gameplayPause}
             playerId={session.playerId}
@@ -1020,7 +1062,7 @@ export default function MainMenuScene({
               onChange={updateGameSettings}
               onClose={() => {
                 setGameplaySettingsOpen(false)
-                session.requestGameplayPause(false)
+                session.requestGameplayPause(null)
               }}
               onSelectConcentration={session.selectConcentration}
               onSelectPrimarySkill={session.selectPrimarySkill}

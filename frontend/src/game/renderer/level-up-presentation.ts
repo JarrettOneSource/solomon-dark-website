@@ -43,18 +43,18 @@ export interface NativeLevelUpPresentationFrame {
   readonly tick: number
 }
 
-export const NATIVE_LEVEL_UP_MODAL_VISIBILITY = Object.freeze({
-  enemyDeathEffects: false,
-  enemyLightning: false,
-  enemyProjectiles: false,
-  enemies: false,
+export const LEVEL_UP_PICKER_BACKGROUND_VISIBILITY = Object.freeze({
+  enemyDeathEffects: true,
+  enemyLightning: true,
+  enemyProjectiles: true,
+  enemies: true,
   localPlayer: true,
   localPlayerLevelUpEffect: true,
-  maggots: false,
-  nonPlayerActors: false,
-  playerDeathBursts: false,
-  primarySpells: false,
-  remotePlayers: false,
+  maggots: true,
+  nonPlayerActors: true,
+  playerDeathBursts: true,
+  primarySpells: true,
+  remotePlayers: true,
   scenery: true,
 })
 

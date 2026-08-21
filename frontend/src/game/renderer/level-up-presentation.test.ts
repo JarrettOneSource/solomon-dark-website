@@ -4,7 +4,7 @@ import test from 'node:test'
 
 import {
   NATIVE_LEVEL_UP_EFFECT_TICKS,
-  NATIVE_LEVEL_UP_MODAL_VISIBILITY,
+  LEVEL_UP_PICKER_BACKGROUND_VISIBILITY,
   NATIVE_LEVEL_UP_PARTICLE_MAX_TICKS,
   NATIVE_LEVEL_UP_PRESENTATION_DURATION_MS,
   NATIVE_SKILL_PICKER_REVEAL_TICKS,
@@ -107,24 +107,24 @@ test('replays the exact BadGuys-73 birth geometry, decay, and sine envelopes', (
   )
 })
 
-test('keeps the local threshold owner and scenery while suppressing modal clutter', () => {
-  assert.deepEqual(NATIVE_LEVEL_UP_MODAL_VISIBILITY, {
-    enemyDeathEffects: false,
-    enemyLightning: false,
-    enemyProjectiles: false,
-    enemies: false,
+test('keeps the complete frozen world visible behind the level-up picker', () => {
+  assert.deepEqual(LEVEL_UP_PICKER_BACKGROUND_VISIBILITY, {
+    enemyDeathEffects: true,
+    enemyLightning: true,
+    enemyProjectiles: true,
+    enemies: true,
     localPlayer: true,
     localPlayerLevelUpEffect: true,
-    maggots: false,
-    nonPlayerActors: false,
-    playerDeathBursts: false,
-    primarySpells: false,
-    remotePlayers: false,
+    maggots: true,
+    nonPlayerActors: true,
+    playerDeathBursts: true,
+    primarySpells: true,
+    remotePlayers: true,
     scenery: true,
   })
 })
 
-test('wires modal suppression through Hub, private rooms, and the complete Boneyard dynamic family', () => {
+test('retains picker presentation without any Hub, private-room, or Boneyard suppression branch', () => {
   const source = (relativePath: string) => readFileSync(
     new URL(relativePath, import.meta.url),
     'utf8',
@@ -139,7 +139,7 @@ test('wires modal suppression through Hub, private rooms, and the complete Boney
   assert.match(main, /const levelUpModalActive = Boolean\(runtimeSnapshot\?\.levelUpBarrier\)/)
   assert.ok(main.includes('|| levelUpPickerClosing'))
   assert.ok(main.includes('&& (runtimeProgression?.pendingOffer || levelUpPickerClosing)'))
-  assert.equal((main.match(/levelUpModalActive=\{levelUpModalActive\}/g) ?? []).length, 2)
+  assert.equal((main.match(/levelUpModalActive=\{levelUpModalActive\}/g) ?? []).length, 0)
   assert.equal((picker.match(/audio\.playSound\('pick-skill'/g) ?? []).length, 1)
   assert.equal((picker.match(/audio\.playSound\('click'/g) ?? []).length, 1)
   assert.match(picker, /audio\.playSound\('summon', \{ playbackRate: 0\.8 \}\)/)
@@ -150,51 +150,42 @@ test('wires modal suppression through Hub, private rooms, and the complete Boney
   assert.ok(picker.includes('setContentVisible(false)'))
   assert.match(picker, /const offerContentVisible = phase !== 'queued-wait'/)
   assert.ok(pickerRenderer.includes('offerLayer.visible = visible'))
-  for (const witness of [
-    'this.primarySpells.setRenderable(!modalActive)',
-    'this.enemies.setRenderable(!modalActive)',
-    'this.enemyDeathEffects.setRenderable(!modalActive)',
-    'this.enemyProjectiles.setRenderable(!modalActive)',
-    'this.maggots.setRenderable(!modalActive)',
-    'this.mageLightningPulses.setRenderable(!modalActive)',
-    'this.playerDeathBursts.setRenderable(!modalActive)',
-    'this.solomon?.setActorRenderable(!modalActive)',
-  ]) {
-    assert.ok(boneyard.includes(witness), `missing Boneyard modal witness: ${witness}`)
-  }
   assert.ok(boneyard.includes('(levelUpFrame.lightRadius - 2.6)'))
   assert.equal(boneyard.includes('levelUpEffectTicksRemaining'), false)
   assert.ok(boneyard.includes('camera.y - viewport.height / (2 * camera.zoom)'))
-  assert.ok(boneyard.includes('view.container.renderable = !modalActive || id === localPlayerId'))
   assert.ok(hub.includes('levelUpPresentation.playerScreenY'))
-  assert.ok(hub.includes('view.container.renderable = !modalActive || id === localPlayerId'))
-  for (const witness of [
-    'for (const view of this.students.values()) view.container.renderable = !modalActive',
-    'for (const actor of this.nonPlayerActors) actor.renderable = !modalActive',
-    'for (const particle of this.fountain.values()) particle.renderable = !modalActive',
-    'this.hagatha.container.renderable = !modalActive',
-    'this.luthacus.container.renderable = !modalActive',
-    'this.potion.actor.renderable = !modalActive',
-    'this.potion.balloons.renderable = !modalActive',
-    'this.potion.marker.renderable = !modalActive',
-    'this.teacher.container.renderable = !modalActive',
-    'this.astronomer.behind.renderable = !modalActive',
-    'this.astronomer.telescope.renderable = !modalActive',
-    'this.astronomer.front.renderable = !modalActive',
-    'this.primarySpells.setRenderable(!modalActive)',
-  ]) {
-    assert.ok(hub.includes(witness), `missing Hub modal witness: ${witness}`)
+  for (const [label, implementation] of [
+    ['Boneyard', boneyard],
+    ['Hub', hub],
+    ['private room', privateRooms],
+  ] as const) {
+    assert.doesNotMatch(implementation, /modalActive/,
+      `${label} still contains a level-up modal suppression branch`)
   }
-  assert.ok(privateRooms.includes('view.container.renderable = !modalActive || playerId === localPlayerId'))
-  for (const witness of [
-    'for (const actor of this.nonPlayerActors[region]) actor.renderable = !modalActive',
-    'flame.renderable = !modalActive',
-    'this.nonPlayerActors.mortuary.push(memorator)',
-    'this.nonPlayerActors.library.push(librarian)',
-    'this.nonPlayerActors.library.push(dowser)',
-    'this.nonPlayerActors.office.push(archChancellor)',
-    'this.primarySpells[region].setRenderable(!modalActive)',
-  ]) {
-    assert.ok(privateRooms.includes(witness), `missing private-room modal witness: ${witness}`)
-  }
+  for (const member of [
+    'this.enemies.update(',
+    'this.enemyDeathEffects.update(',
+    'this.enemyProjectiles.update(',
+    'this.maggots.update(',
+    'this.loot.update(',
+    'this.goodies.update(',
+    'this.mageLightningPulses.update(',
+    'this.playerDeathBursts.update(',
+    'this.playerDeathWeapons.update(',
+    'this.weatherView.update(',
+    'this.solomon?.update(',
+  ]) assert.ok(boneyard.includes(member), `missing live Boneyard member: ${member}`)
+  for (const member of [
+    'this.updateStudents(snapshot)',
+    'this.updatePlayers(snapshot)',
+    'this.updateFountain(snapshot)',
+    'this.primarySpells.update(',
+    'this.secondaryAbilities.update(',
+  ]) assert.ok(hub.includes(member), `missing live Hub member: ${member}`)
+  for (const member of [
+    'this.updatePlayers(snapshot, localParticipant.region)',
+    'this.updateRoomPresentation(snapshot, localPlayerId, localParticipant.region)',
+    'this.primarySpells[region].update(',
+    'this.secondaryAbilities[region].update(',
+  ]) assert.ok(privateRooms.includes(member), `missing live private-room member: ${member}`)
 })
