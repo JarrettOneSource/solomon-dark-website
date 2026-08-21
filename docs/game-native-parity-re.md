@@ -25595,8 +25595,8 @@ bytes. Focused coverage pins both charge edges, 16+1 RNG budgets, fast-distance
 force, strict boundary, hostile/Maggot target ownership, friendly GoodImp
 force, cooldown decrement/reset, low-charge sound suppression, both painter
 branches, exact atlas records, interpolation, protocol validation, and shared
-ambient-loop start/stop. A rendered browser/Mac Hurricane journey remains a
-final acceptance receipt rather than being inferred from the canonical gate.
+ambient-loop start/stop. Rendered Windows and Mac receipts are recorded in the
+v50 acceptance section below rather than inferred from the canonical gate.
 
 ### 2026-08-21 v49 complete 82-row effect and presentation ledger
 
@@ -25699,3 +25699,40 @@ not orphaned effects: Harden has its player-runtime cache, while the remaining
 values are retained intermediates for consumed movement, threshold, duration,
 and damage fields. CFG `mBonus` values are display-format strings, not missing
 numeric gameplay inputs. No other property-only gap remains after Hurricane.
+
+### 2026-08-21 v50 cross-platform all-skill acceptance
+
+Commit `8b87f0ae2b190c0acfe6a94160c86ad4c765dc5a` was checked out independently
+on native Windows and the arm64 Mac mini. Both platforms ran the unchanged
+canonical `./scripts/validate.sh` entrypoint with the pinned Node `22.17.0`, npm
+`10.9.2`, and .NET SDK `10.0.302` toolchain. Each passed:
+
+- 24 backend contracts plus backend Release build/formatting;
+- lint and game architecture boundaries (only the eight pre-existing Fast
+  Refresh warnings);
+- 41 loot tests and 201 focused pretests, including the enforced 82-row
+  effect/light/audio ledger;
+- all 1,189 broad Boneyard, host, protocol, combat, rendering, and lifecycle
+  tests;
+- level-up, diagnostics, Hub UI, and desktop auxiliary suites;
+- production Vite and game-host builds, production media policy, and bundle
+  budget at 287,819 raw bytes and 79,097 gzip bytes.
+
+The first disposable Windows clone revealed one POSIX-only test fixture:
+`file:///repo/...` is not an absolute Win32 file URL. Production resolver code
+was unchanged; the test now constructs platform-native paths with
+`pathToFileURL` and `resolve`. A fresh LF checkout then passed the complete
+native Windows gate. The acceptance directory owns an isolated SDK install;
+no system-wide SDK or shared Website checkout was changed.
+
+The exact-head `smoke:game:hurricane` journey also passed on both platforms.
+It created a real Air wizard, refreshed learned Hurricane rank one through the
+host-owned skill state, held real Lightning beyond charge `0.5`, inspected the
+protocol-45 actor, rendered WebGL at `1600x900`, and released through complete
+decay/teardown. Both receipts proved eight lanes, damage range `10..20`, the
+one-step charge/contact split, positive phase, one shared steady-wind loop and
+balanced stop, zero page/console/network errors, and no retained actor after
+release. Windows sampled `125 FPS / 5 ms` in the visual receipt and wrote
+`C:\Users\User\codex-acceptance\solomon-hurricane-win-final.png`; macOS
+26.4.1 arm64 sampled `60 FPS / 0 ms` and wrote
+`/Users/jarrett/codex-acceptance/solomon-hurricane-mac-final.png`.
