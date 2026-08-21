@@ -22,11 +22,19 @@ public static class ModEndpoints
     public static void Map(IEndpointRouteBuilder app)
     {
         app.MapGet("/api/mods", ListAsync);
-        app.MapPost("/api/mods/resolve", ResolveAsync);
-        app.MapPost("/api/mods/updates", UpdatesAsync);
+        app.MapGet("/api/mods/subscriptions", ListSubscriptionsAsync)
+            .RequireAuthorization();
+        app.MapGet("/api/mods/active", ActiveModsAsync)
+            .RequireAuthorization();
         app.MapGet("/api/tags", ListTagsAsync);
         app.MapGet("/api/mods/popular", PopularAsync);
         app.MapGet("/api/mods/{slug}", DetailAsync);
+        app.MapPut("/api/mods/{slug}/subscription", SubscribeAsync)
+            .RequireAuthorization();
+        app.MapPatch("/api/mods/{slug}/subscription", SetSubscriptionEnabledAsync)
+            .RequireAuthorization();
+        app.MapDelete("/api/mods/{slug}/subscription", UnsubscribeAsync)
+            .RequireAuthorization();
         app.MapGet("/api/mods/{slug}/comments", ListCommentsAsync);
         app.MapPost("/api/mods/{slug}/comments", CreateCommentAsync)
             .RequireAuthorization()
@@ -49,196 +57,6 @@ public static class ModEndpoints
             .RequireAuthorization();
         app.MapPatch("/api/mods/{slug}", PatchAsync).RequireAuthorization();
         app.MapDelete("/api/mods/{slug}", DeleteAsync).RequireAuthorization();
-        app.MapGet("/api/mods/{slug}/download", DownloadLatestAsync);
-        app.MapGet("/api/mods/{slug}/versions/{versionId:int}/download", DownloadVersionAsync);
-    }
-
-    private static async Task<IResult> ResolveAsync(
-        ResolveModsRequest request,
-        AppDb db,
-        CancellationToken cancellationToken)
-    {
-        var required = request.Mods ?? [];
-        if (required.Length > 128)
-        {
-            return ApiErrors.BadRequest("At most 128 exact mods may be resolved at once.");
-        }
-
-        var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var mod in required)
-        {
-            if (mod is null ||
-                !IsValidLauncherModId(mod.Id) ||
-                !StorageService.IsSafeVersion(mod.Version ?? string.Empty) ||
-                !IsSha256(mod.ContentSha256))
-            {
-                return ApiErrors.BadRequest(
-                    "Every requested mod must include a valid id, version, and contentSha256.");
-            }
-
-            if (!seenIds.Add(mod.Id!))
-            {
-                return ApiErrors.BadRequest($"The requested mod id is duplicated: {mod.Id}");
-            }
-        }
-
-        var requestedIds = required.Select(mod => mod.Id!).ToArray();
-        var candidates = await db.Mods.AsNoTracking()
-            .Where(mod => mod.LauncherModId != null && requestedIds.Contains(mod.LauncherModId))
-            .Include(mod => mod.Versions)
-            .ToArrayAsync(cancellationToken);
-
-        var resolved = new List<object>();
-        var missing = new List<object>();
-        var incompatible = new List<object>();
-        foreach (var requirement in required)
-        {
-            var mod = candidates.SingleOrDefault(candidate => string.Equals(
-                candidate.LauncherModId,
-                requirement.Id,
-                StringComparison.OrdinalIgnoreCase));
-            var version = mod?.Versions.SingleOrDefault(candidate =>
-                string.Equals(candidate.ManifestVersion, requirement.Version, StringComparison.Ordinal) &&
-                string.Equals(candidate.ContentSha256, requirement.ContentSha256, StringComparison.OrdinalIgnoreCase) &&
-                candidate.PackageSha256 is not null);
-            if (mod is null || version is null)
-            {
-                missing.Add(new
-                {
-                    id = requirement.Id,
-                    version = requirement.Version,
-                    contentSha256 = requirement.ContentSha256?.ToLowerInvariant()
-                });
-                continue;
-            }
-
-            if (!SupportsLoader(version, request.LoaderVersion))
-            {
-                incompatible.Add(new
-                {
-                    id = mod.LauncherModId,
-                    version = version.ManifestVersion,
-                    minimumLoaderVersion = version.MinimumLoaderVersion
-                });
-                continue;
-            }
-
-            resolved.Add(new
-            {
-                id = mod.LauncherModId,
-                version = version.ManifestVersion,
-                contentSha256 = version.ContentSha256,
-                packageSha256 = version.PackageSha256,
-                mod.Slug,
-                mod.Name,
-                versionId = version.Id,
-                version.FileSize,
-                version.MinimumLoaderVersion,
-                downloadUrl = $"api/mods/{mod.Slug}/versions/{version.Id}/download"
-            });
-        }
-
-        return Results.Ok(new
-        {
-            mods = resolved,
-            missing,
-            incompatible
-        });
-    }
-
-    private static async Task<IResult> UpdatesAsync(
-        UpdateModsRequest request,
-        AppDb db,
-        CancellationToken cancellationToken)
-    {
-        var installed = request.Mods ?? [];
-        if (installed.Length > 128)
-        {
-            return ApiErrors.BadRequest("At most 128 installed mods may be checked at once.");
-        }
-
-        var installedVersions = new Dictionary<string, SemanticVersion>(
-            StringComparer.OrdinalIgnoreCase);
-        foreach (var mod in installed)
-        {
-            if (mod is null ||
-                !IsValidLauncherModId(mod.Id) ||
-                !SemanticVersion.TryParse(mod.Version, out var version))
-            {
-                return ApiErrors.BadRequest(
-                    "Every installed mod must include a valid id and semantic version.");
-            }
-
-            if (!installedVersions.TryAdd(mod.Id!, version!))
-            {
-                return ApiErrors.BadRequest($"The installed mod id is duplicated: {mod.Id}");
-            }
-        }
-
-        if (installed.Length == 0)
-        {
-            return Results.Ok(new { updates = Array.Empty<object>() });
-        }
-
-        var requestedIds = installed.Select(mod => mod!.Id!).ToArray();
-        var candidates = await db.Mods.AsNoTracking()
-            .Where(mod => mod.LauncherModId != null && requestedIds.Contains(mod.LauncherModId))
-            .Include(mod => mod.Versions)
-            .ToArrayAsync(cancellationToken);
-
-        var updates = new List<object>();
-        foreach (var requirement in installed)
-        {
-            var mod = candidates.SingleOrDefault(candidate => string.Equals(
-                candidate.LauncherModId,
-                requirement!.Id,
-                StringComparison.OrdinalIgnoreCase));
-            if (mod is null)
-            {
-                continue;
-            }
-
-            ModVersion? latest = null;
-            SemanticVersion? latestVersion = null;
-            foreach (var candidate in mod.Versions)
-            {
-                if (!SemanticVersion.TryParse(candidate.ManifestVersion, out var candidateVersion) ||
-                    !IsSha256(candidate.ContentSha256) ||
-                    !IsSha256(candidate.PackageSha256) ||
-                    !SupportsLoader(candidate, request.LoaderVersion))
-                {
-                    continue;
-                }
-
-                var comparison = latestVersion is null
-                    ? 1
-                    : candidateVersion!.CompareTo(latestVersion);
-                if (comparison > 0 ||
-                    comparison == 0 && candidate.Id > latest!.Id)
-                {
-                    latest = candidate;
-                    latestVersion = candidateVersion;
-                }
-            }
-
-            if (latest is null ||
-                latestVersion!.CompareTo(installedVersions[requirement!.Id!]) <= 0)
-            {
-                continue;
-            }
-
-            updates.Add(new
-            {
-                id = mod.LauncherModId,
-                version = latest.ManifestVersion,
-                contentSha256 = latest.ContentSha256,
-                packageSha256 = latest.PackageSha256,
-                latest.MinimumLoaderVersion,
-                downloadUrl = $"api/mods/{mod.Slug}/versions/{latest.Id}/download"
-            });
-        }
-
-        return Results.Ok(new { updates });
     }
 
     private static async Task<IResult> ListAsync(
@@ -369,6 +187,155 @@ public static class ModEndpoints
         return mod is null
             ? ApiErrors.NotFound("That tome is missing from the library.")
             : Results.Ok(ToDetail(mod));
+    }
+
+    private static async Task<IResult> ListSubscriptionsAsync(
+        HttpContext context,
+        AppDb db,
+        CancellationToken cancellationToken)
+    {
+        var userId = TokenService.GetUserId(context.User)!.Value;
+        var subscriptions = await db.ModSubscriptions.AsNoTracking()
+            .Where(subscription => subscription.UserId == userId)
+            .Include(subscription => subscription.Mod)
+                .ThenInclude(mod => mod.Author)
+            .Include(subscription => subscription.Mod)
+                .ThenInclude(mod => mod.Tags)
+            .Include(subscription => subscription.Mod)
+                .ThenInclude(mod => mod.Versions)
+            .Include(subscription => subscription.Mod)
+                .ThenInclude(mod => mod.Screenshots)
+            .AsSplitQuery()
+            .OrderByDescending(subscription => subscription.UpdatedAtUtc)
+            .ThenBy(subscription => subscription.Mod.Name)
+            .ToArrayAsync(cancellationToken);
+        return Results.Ok(new
+        {
+            items = subscriptions.Select(ToSubscription).ToArray()
+        });
+    }
+
+    private static async Task<IResult> ActiveModsAsync(
+        HttpContext context,
+        WebModContentService contentService,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var content = await contentService.ResolveAsync(
+                TokenService.GetUserId(context.User),
+                cancellationToken: cancellationToken);
+            return Results.Ok(new
+            {
+                content.ManifestSha256,
+                mods = content.Mods.Select(mod => new
+                {
+                    mod.Id,
+                    mod.Name,
+                    mod.Slug,
+                    mod.Version,
+                    mod.ContentSha256,
+                    mod.Priority,
+                    hasLua = mod.EntryScript is not null,
+                    boneyardCount = mod.Boneyards.Count
+                }).ToArray()
+            });
+        }
+        catch (WebModContentException exception)
+        {
+            return Results.Conflict(new { error = exception.Message });
+        }
+    }
+
+    private static async Task<IResult> SubscribeAsync(
+        string slug,
+        HttpContext context,
+        AppDb db,
+        CancellationToken cancellationToken)
+    {
+        var mod = await db.Mods
+            .Include(candidate => candidate.Versions)
+            .SingleOrDefaultAsync(candidate => candidate.Slug == slug, cancellationToken);
+        if (mod is null)
+        {
+            return ApiErrors.NotFound("That tome is missing from the library.");
+        }
+        if (LatestVersion(mod) is null || string.IsNullOrWhiteSpace(mod.PackageId))
+        {
+            return Results.Conflict(new { error = "That mod has no web-port package to subscribe to." });
+        }
+
+        var userId = TokenService.GetUserId(context.User)!.Value;
+        var subscription = await db.ModSubscriptions.SingleOrDefaultAsync(
+            candidate => candidate.UserId == userId && candidate.ModId == mod.Id,
+            cancellationToken);
+        var created = subscription is null;
+        var now = DateTime.UtcNow;
+        if (subscription is null)
+        {
+            subscription = new ModSubscription
+            {
+                UserId = userId,
+                ModId = mod.Id,
+                Enabled = true,
+                CreatedAtUtc = now,
+                UpdatedAtUtc = now
+            };
+            db.ModSubscriptions.Add(subscription);
+        }
+        else
+        {
+            subscription.Enabled = true;
+            subscription.UpdatedAtUtc = now;
+        }
+        await db.SaveChangesAsync(cancellationToken);
+        return Results.Json(
+            new { enabled = subscription.Enabled, mod.Slug, subscribed = true },
+            statusCode: created ? StatusCodes.Status201Created : StatusCodes.Status200OK);
+    }
+
+    private static async Task<IResult> SetSubscriptionEnabledAsync(
+        string slug,
+        SetSubscriptionRequest request,
+        HttpContext context,
+        AppDb db,
+        CancellationToken cancellationToken)
+    {
+        var userId = TokenService.GetUserId(context.User)!.Value;
+        var subscription = await db.ModSubscriptions
+            .Include(candidate => candidate.Mod)
+            .SingleOrDefaultAsync(
+                candidate => candidate.UserId == userId && candidate.Mod.Slug == slug,
+                cancellationToken);
+        if (subscription is null)
+        {
+            return ApiErrors.NotFound("Subscribe to that mod before changing its Dark Cloud state.");
+        }
+        subscription.Enabled = request.Enabled;
+        subscription.UpdatedAtUtc = DateTime.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
+        return Results.Ok(new { enabled = subscription.Enabled, subscription.Mod.Slug });
+    }
+
+    private static async Task<IResult> UnsubscribeAsync(
+        string slug,
+        HttpContext context,
+        AppDb db,
+        CancellationToken cancellationToken)
+    {
+        var userId = TokenService.GetUserId(context.User)!.Value;
+        var subscription = await db.ModSubscriptions
+            .Include(candidate => candidate.Mod)
+            .SingleOrDefaultAsync(
+                candidate => candidate.UserId == userId && candidate.Mod.Slug == slug,
+                cancellationToken);
+        if (subscription is null)
+        {
+            return Results.NoContent();
+        }
+        db.ModSubscriptions.Remove(subscription);
+        await db.SaveChangesAsync(cancellationToken);
+        return Results.NoContent();
     }
 
     private static async Task<IResult> ListCommentsAsync(
@@ -881,26 +848,26 @@ public static class ModEndpoints
             return ApiErrors.Conflict("That version is already in the library.");
         }
 
-        if (mod.LauncherModId is null)
+        if (mod.PackageId is null)
         {
             if (await db.Mods.AnyAsync(
                     candidate => candidate.Id != mod.Id &&
-                                 candidate.LauncherModId == package.LauncherModId,
+                                 candidate.PackageId == package.PackageId,
                     cancellationToken))
             {
                 return ApiErrors.Conflict(
-                    $"A website mod already uses manifest.id '{package.LauncherModId}'.");
+                    $"A website mod already uses manifest.id '{package.PackageId}'.");
             }
 
-            mod.LauncherModId = package.LauncherModId;
+            mod.PackageId = package.PackageId;
         }
         else if (!string.Equals(
-                     mod.LauncherModId,
-                     package.LauncherModId,
+                     mod.PackageId,
+                     package.PackageId,
                      StringComparison.Ordinal))
         {
             return ApiErrors.BadRequest(
-                $"Every version of this website mod must use manifest.id '{mod.LauncherModId}'.");
+                $"Every version of this website mod must use manifest.id '{mod.PackageId}'.");
         }
 
         var now = DateTime.UtcNow;
@@ -908,7 +875,6 @@ public static class ModEndpoints
         {
             Version = versionName,
             ManifestVersion = package.ManifestVersion,
-            MinimumLoaderVersion = package.MinimumLoaderVersion,
             PackageSha256 = package.PackageSha256,
             ContentSha256 = package.ContentSha256,
             Changelog = form["changelog"].ToString(),
@@ -1054,70 +1020,6 @@ public static class ModEndpoints
         return Results.NoContent();
     }
 
-    private static Task<IResult> DownloadLatestAsync(
-        string slug,
-        AppDb db,
-        StorageService storage,
-        CancellationToken cancellationToken) =>
-        DownloadAsync(slug, null, db, storage, cancellationToken);
-
-    private static Task<IResult> DownloadVersionAsync(
-        string slug,
-        int versionId,
-        AppDb db,
-        StorageService storage,
-        CancellationToken cancellationToken) =>
-        DownloadAsync(slug, versionId, db, storage, cancellationToken);
-
-    private static async Task<IResult> DownloadAsync(
-        string slug,
-        int? versionId,
-        AppDb db,
-        StorageService storage,
-        CancellationToken cancellationToken)
-    {
-        var mod = await db.Mods
-            .Include(candidate => candidate.Versions)
-            .SingleOrDefaultAsync(candidate => candidate.Slug == slug, cancellationToken);
-        if (mod is null)
-        {
-            return ApiErrors.NotFound("That tome is missing from the library.");
-        }
-
-        var version = versionId is null
-            ? LatestVersion(mod)
-            : mod.Versions.SingleOrDefault(candidate => candidate.Id == versionId.Value);
-        if (version is null)
-        {
-            return ApiErrors.NotFound("That version is missing from the library.");
-        }
-
-        var path = storage.GetModFilePath(version.FileName);
-        if (!File.Exists(path))
-        {
-            return ApiErrors.NotFound("The archive for that version is missing.");
-        }
-
-        version.Downloads++;
-        mod.Downloads++;
-        db.ModDownloadEvents.Add(new ModDownloadEvent
-        {
-            ModId = mod.Id,
-            DownloadedAtUtc = DateTime.UtcNow
-        });
-        await db.SaveChangesAsync(cancellationToken);
-
-        var pruneBefore = DateTime.UtcNow.AddDays(-100);
-        await db.ModDownloadEvents
-            .Where(e => e.DownloadedAtUtc < pruneBefore)
-            .ExecuteDeleteAsync(cancellationToken);
-
-        return Results.File(
-            path,
-            contentType: "application/zip",
-            fileDownloadName: $"{mod.Slug}-{version.Version}.zip",
-            enableRangeProcessing: true);
-    }
 
     internal static async Task<Mod?> LoadModAsync(
         AppDb db,
@@ -1141,7 +1043,7 @@ public static class ModEndpoints
             mod.Slug,
             mod.Name,
             mod.Summary,
-            mod.LauncherModId,
+            mod.PackageId,
             tags = mod.Tags.Select(tag => tag.Name).OrderBy(name => name, StringComparer.Ordinal).ToArray(),
             author = new { mod.Author.Id, mod.Author.Username, mod.Author.School },
             latestVersion = latest?.Version,
@@ -1163,7 +1065,7 @@ public static class ModEndpoints
             mod.Slug,
             mod.Name,
             mod.Summary,
-            mod.LauncherModId,
+            mod.PackageId,
             tags = mod.Tags.Select(tag => tag.Name).OrderBy(name => name, StringComparer.Ordinal).ToArray(),
             author = new { mod.Author.Id, mod.Author.Username, mod.Author.School },
             latestVersion = latest?.Version,
@@ -1189,7 +1091,6 @@ public static class ModEndpoints
                     version.Id,
                     version.Version,
                     version.ManifestVersion,
-                    version.MinimumLoaderVersion,
                     version.PackageSha256,
                     version.ContentSha256,
                     version.Changelog,
@@ -1207,6 +1108,14 @@ public static class ModEndpoints
         comment.Body,
         comment.CreatedAtUtc,
         author = new { comment.Author.Id, comment.Author.Username, comment.Author.School }
+    };
+
+    private static object ToSubscription(ModSubscription subscription) => new
+    {
+        subscription.Enabled,
+        subscription.CreatedAtUtc,
+        subscription.UpdatedAtUtc,
+        mod = ToItem(subscription.Mod)
     };
 
     private static ModVersion? LatestVersion(Mod mod) =>
@@ -1330,27 +1239,6 @@ public static class ModEndpoints
     private static int ParseInt(string value, int fallback) =>
         int.TryParse(value, out var parsed) ? parsed : fallback;
 
-    private static bool IsValidLauncherModId(string? value) =>
-        value is { Length: >= 1 and <= 128 } &&
-        char.IsAsciiLetterOrDigit(value[0]) &&
-        value.All(character => char.IsAsciiLetterOrDigit(character) || character is '.' or '_' or '-');
-
-    private static bool IsSha256(string? value) =>
-        value is { Length: 64 } && value.All(character =>
-            character is >= '0' and <= '9' or >= 'a' and <= 'f' or >= 'A' and <= 'F');
-
-    private static bool SupportsLoader(ModVersion version, string? loaderVersion)
-    {
-        if (string.IsNullOrWhiteSpace(version.MinimumLoaderVersion))
-        {
-            return true;
-        }
-
-        return SemanticVersion.TryParse(loaderVersion, out var current) &&
-               SemanticVersion.TryParse(version.MinimumLoaderVersion, out var minimum) &&
-               current!.CompareTo(minimum) >= 0;
-    }
-
     public sealed record PatchModRequest(
         string? Name,
         string? Summary,
@@ -1361,11 +1249,6 @@ public static class ModEndpoints
 
     public sealed record CommentRequest(string? Body);
 
-    public sealed record ResolveModsRequest(string? LoaderVersion, ResolveModRequest[]? Mods);
+    public sealed record SetSubscriptionRequest(bool Enabled);
 
-    public sealed record ResolveModRequest(string? Id, string? Version, string? ContentSha256);
-
-    public sealed record UpdateModsRequest(string? LoaderVersion, InstalledModRequest[]? Mods);
-
-    public sealed record InstalledModRequest(string? Id, string? Version);
 }

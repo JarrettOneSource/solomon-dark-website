@@ -12,6 +12,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react'
 import CreateMenuScene from './CreateMenuScene.tsx'
+import DarkCloudScene from './DarkCloudScene.tsx'
 import type { GameClientSession } from './client/game-client-session.ts'
 import type {
   PlayerCharacterConfig,
@@ -29,6 +30,7 @@ import type { GameRunPhase } from './core-kernels/game-run.ts'
 import type { GameConnectionStage } from './engine.ts'
 import GameAccountName from './GameAccountName.tsx'
 import GameFullscreenButton from './GameFullscreenButton.tsx'
+import GameSaveModMismatchDialog from './GameSaveModMismatchDialog.tsx'
 import GameplayPauseMenu from './GameplayPauseMenu.tsx'
 import GameSettingsDialog from './GameSettingsDialog.tsx'
 import { installGameLuaConsole } from './game-lua-console.ts'
@@ -50,6 +52,7 @@ import {
   type MatchLoadingState,
 } from './match-loading.ts'
 import type {
+  GameContentIdentity,
   GameSnapshot,
   GameplayPauseState,
   LoadedBoneyard,
@@ -60,6 +63,7 @@ import type {
   GameSaveCheckpoint,
   ResumableGameSave,
 } from './save/game-save-contract.ts'
+import { gameSaveModMismatch, type GameSaveModMismatch } from './save/game-save-mods.ts'
 import {
   GAME_VIEWPORT_MIN_HEIGHT,
   GAME_VIEWPORT_MIN_WIDTH,
@@ -80,7 +84,7 @@ const SkillPicker = lazy(loadSkillPicker)
 const loadSkillBook = () => import('./SkillBook.tsx')
 const SkillBook = lazy(loadSkillBook)
 
-type MenuScreen = 'root' | 'play' | 'create' | 'hub'
+type MenuScreen = 'root' | 'play' | 'dark-cloud' | 'create' | 'hub'
 type FadeState = 'idle' | 'covering' | 'revealing'
 
 interface MenuButtonProps {
@@ -171,15 +175,16 @@ interface ActionGroupProps {
 
 function RootActions({
   onHighlight,
+  onExplore,
   onPlay,
   onPress,
   onPressState,
   onSettings,
-}: ActionGroupProps & { onPlay: () => void; onSettings: () => void }) {
+}: ActionGroupProps & { onExplore: () => void; onPlay: () => void; onSettings: () => void }) {
   return (
     <>
       <MenuButton action="play" accessibleLabel="Play" defaultFocus onClick={onPlay} onHighlight={onHighlight} onPress={onPress} onPressState={onPressState} />
-      <MenuButton action="explore" accessibleLabel="Explore the Dark Cloud" onHighlight={onHighlight} onPress={onPress} onPressState={onPressState} />
+      <MenuButton action="explore" accessibleLabel="Explore the Dark Cloud" onClick={onExplore} onHighlight={onHighlight} onPress={onPress} onPressState={onPressState} />
       <MenuButton action="settings" accessibleLabel="Settings" onClick={onSettings} onHighlight={onHighlight} onPress={onPress} onPressState={onPressState} />
       <MenuButton action="hall" accessibleLabel="Hall of Fame" onHighlight={onHighlight} onPress={onPress} onPressState={onPressState} />
     </>
@@ -211,12 +216,14 @@ function PlayActions({
 }
 
 interface MainMenuSceneProps {
+  activeMods: readonly GameContentIdentity[]
   accountUsername: string | null
   displayName: string
   connectSession: (
     character: PlayerCharacterConfig,
     onProgress: (stage: GameConnectionStage) => void,
     saveDocument?: string,
+    allowModMismatch?: boolean,
   ) => Promise<GameClientSession>
   initialScreen?: 'create' | 'root'
   onCancelCreate: () => Promise<void>
@@ -226,6 +233,7 @@ interface MainMenuSceneProps {
 }
 
 export default function MainMenuScene({
+  activeMods,
   accountUsername,
   connectSession,
   displayName,
@@ -267,6 +275,7 @@ export default function MainMenuScene({
   const [hoveredTitleAction, setHoveredTitleAction] = useState<TitleMenuAction | null>(null)
   const [pressedTitleAction, setPressedTitleAction] = useState<TitleMenuAction | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [modMismatch, setModMismatch] = useState<GameSaveModMismatch | null>(null)
   const [gameSettings, setLocalGameSettings] = useState(readGameSettings)
   const [fixedViewport, setFixedViewport] = useState(() => (
     fixedGameViewportLayout(GAME_VIEWPORT_MIN_WIDTH, GAME_VIEWPORT_MIN_HEIGHT)
@@ -510,10 +519,10 @@ export default function MainMenuScene({
   }, [audio, session])
 
   useEffect(() => {
-    if (screen === 'hub' || settingsOpen || !stageRef.current) return
+    if (screen === 'hub' || settingsOpen || modMismatch || !stageRef.current) return
     const navigation = createGamepadMenuNavigation({ root: stageRef.current })
     return () => navigation.destroy()
-  }, [screen, settingsOpen])
+  }, [modMismatch, screen, settingsOpen])
 
   const transitionTo = (target: MenuScreen) => {
     if (fadeState !== 'idle') return
@@ -593,7 +602,7 @@ export default function MainMenuScene({
     setScreen('hub')
   }
 
-  const resumeLastGame = async () => {
+  const resumeLastGame = async (allowModMismatch = false) => {
     if (!resumeSave || preparing || connecting) return
     const flow: MatchLoadingFlow = resumeSave.summary.worldKind === 'boneyard'
       ? 'boneyard'
@@ -615,6 +624,7 @@ export default function MainMenuScene({
         resumeSave.summary.character,
         advanceLoading,
         resumeSave.document,
+        allowModMismatch,
       )
       activateSession(nextSession)
     } catch (error) {
@@ -623,6 +633,16 @@ export default function MainMenuScene({
     } finally {
       setConnecting(false)
     }
+  }
+
+  const requestResumeLastGame = () => {
+    if (!resumeSave) return
+    const mismatch = gameSaveModMismatch(resumeSave.mods, activeMods)
+    if (mismatch) {
+      setModMismatch(mismatch)
+      return
+    }
+    void resumeLastGame()
   }
 
   const startHub = async (
@@ -755,6 +775,7 @@ export default function MainMenuScene({
                 {screen === 'root' ? (
                   <RootActions
                     onHighlight={setHoveredTitleAction}
+                    onExplore={() => transitionTo('dark-cloud')}
                     onPlay={() => setScreen('play')}
                     onPress={() => audio.playSound('click')}
                     onPressState={setPressedTitleAction}
@@ -765,7 +786,7 @@ export default function MainMenuScene({
                     canResume={resumeSave !== null}
                     onBack={() => setScreen('root')}
                     onHighlight={setHoveredTitleAction}
-                    onLastGame={() => { void resumeLastGame() }}
+                    onLastGame={requestResumeLastGame}
                     onNewGame={() => { void beginNewGame() }}
                     onPress={() => audio.playSound('click')}
                     onPressState={setPressedTitleAction}
@@ -787,6 +808,14 @@ export default function MainMenuScene({
               </div>
             </div>
           </>
+        ) : screen === 'dark-cloud' ? (
+          <div className="main-menu-native-stage dark-cloud-stage" style={nativeStageStyle}>
+            <DarkCloudScene
+              accountUsername={accountUsername}
+              onBack={() => transitionTo('root')}
+              onEnterSharedHub={() => { void beginNewGame() }}
+            />
+          </div>
         ) : screen === 'create' ? (
           <CreateMenuScene
             audio={audio}
@@ -949,6 +978,18 @@ export default function MainMenuScene({
             onChange={updateGameSettings}
             onClose={() => setSettingsOpen(false)}
             settings={gameSettings}
+          />
+        ) : null}
+
+        {modMismatch ? (
+          <GameSaveModMismatchDialog
+            mismatch={modMismatch}
+            onCancel={() => setModMismatch(null)}
+            onContinue={() => {
+              setModMismatch(null)
+              void resumeLastGame(true)
+            }}
+            style={nativeStageStyle}
           />
         ) : null}
 

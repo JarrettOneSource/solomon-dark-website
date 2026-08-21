@@ -2,9 +2,7 @@
 from __future__ import annotations
 
 import hashlib
-import base64
 from contextlib import closing
-import hmac
 import io
 import json
 import os
@@ -17,7 +15,6 @@ import time
 import unittest
 import urllib.error
 import urllib.request
-import urllib.parse
 import uuid
 import zipfile
 from pathlib import Path
@@ -43,48 +40,6 @@ def content_hash(package_bytes: bytes) -> str:
             digest = hashlib.sha256(archive.read(name)).hexdigest()
             aggregate.update(f"{name}\0{digest}\n".encode())
     return aggregate.hexdigest()
-
-
-def crash_package(metadata: dict[str, object], artifacts: dict[str, bytes]) -> bytes:
-    artifact_details = [
-        {
-            "path": path,
-            "size": len(content),
-            "sha256": hashlib.sha256(content).hexdigest(),
-        }
-        for path, content in artifacts.items()
-    ]
-    buffer = io.BytesIO()
-    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
-        archive.writestr(
-            "report.json",
-            json.dumps({"report": metadata, "artifactDetails": artifact_details}),
-        )
-        for path, content in artifacts.items():
-            archive.writestr(path, content)
-    return buffer.getvalue()
-
-
-def save_package(slot: int, name: str, files: dict[str, bytes]) -> bytes:
-    manifest = {
-        "schemaVersion": 1,
-        "slot": slot,
-        "name": name,
-        "files": [
-            {
-                "path": path,
-                "size": len(content),
-                "sha256": hashlib.sha256(content).hexdigest(),
-            }
-            for path, content in sorted(files.items())
-        ],
-    }
-    buffer = io.BytesIO()
-    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
-        archive.writestr("manifest.json", json.dumps(manifest, separators=(",", ":")))
-        for path, content in files.items():
-            archive.writestr(f"savegames/{path}", content)
-    return buffer.getvalue()
 
 
 def free_port() -> int:
@@ -291,96 +246,6 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             },
         )
 
-    @classmethod
-    def steam_token(cls, steam_id: str, linked_user_id: int | None = None) -> str:
-        def encode(value: bytes) -> bytes:
-            return base64.urlsafe_b64encode(value).rstrip(b"=")
-
-        header = encode(json.dumps({"alg": "HS256", "typ": "JWT"}, separators=(",", ":")).encode())
-        claims = {
-            "sub": f"steam:{steam_id}",
-            "jti": uuid.uuid4().hex,
-            "sdr_token_type": "steam-directory",
-            "steam_id": steam_id,
-            "steam_appid": "3362180",
-            "exp": int(time.time()) + 900,
-        }
-        if linked_user_id is not None:
-            claims["sdr_linked_user_id"] = str(linked_user_id)
-        payload = encode(json.dumps(claims, separators=(",", ":")).encode())
-        signing_input = header + b"." + payload
-        signature = encode(
-            hmac.new(cls.jwt_secret.encode(), signing_input, hashlib.sha256).digest()
-        )
-        return b".".join((header, payload, signature)).decode()
-
-    @classmethod
-    def crash_upload(
-        cls,
-        metadata: dict[str, object],
-        archive: bytes,
-        token: str | None,
-    ) -> tuple[int, object]:
-        boundary = f"----sdr-crash-{uuid.uuid4().hex}"
-        parts = [
-            (
-                f"--{boundary}\r\n"
-                'Content-Disposition: form-data; name="metadata"\r\n'
-                "Content-Type: application/json\r\n\r\n"
-                f"{json.dumps(metadata, separators=(',', ':'))}\r\n"
-            ).encode(),
-            (
-                f"--{boundary}\r\n"
-                'Content-Disposition: form-data; name="archive"; filename="crash-report.zip"\r\n'
-                "Content-Type: application/zip\r\n\r\n"
-            ).encode()
-            + archive
-            + b"\r\n",
-            f"--{boundary}--\r\n".encode(),
-        ]
-        headers = {"Content-Type": f"multipart/form-data; boundary={boundary}"}
-        if token is not None:
-            headers["Authorization"] = f"Bearer {token}"
-        return cls.request(
-            "POST",
-            "/api/crash-reports",
-            body=b"".join(parts),
-            headers=headers,
-        )
-
-    @classmethod
-    def diagnostic_upload(
-        cls,
-        metadata: dict[str, object],
-        archive: bytes,
-        token: str | None,
-    ) -> tuple[int, object]:
-        boundary = f"----sdr-diagnostic-{uuid.uuid4().hex}"
-        parts = [
-            (
-                f"--{boundary}\r\n"
-                'Content-Disposition: form-data; name="metadata"\r\n'
-                "Content-Type: application/json\r\n\r\n"
-                f"{json.dumps(metadata, separators=(',', ':'))}\r\n"
-            ).encode(),
-            (
-                f"--{boundary}\r\n"
-                'Content-Disposition: form-data; name="archive"; filename="diagnostic-log.zip"\r\n'
-                "Content-Type: application/zip\r\n\r\n"
-            ).encode()
-            + archive
-            + b"\r\n",
-            f"--{boundary}--\r\n".encode(),
-        ]
-        headers = {"Content-Type": f"multipart/form-data; boundary={boundary}"}
-        if token is not None:
-            headers["Authorization"] = f"Bearer {token}"
-        return cls.request(
-            "POST",
-            "/api/diagnostics/logs",
-            body=b"".join(parts),
-            headers=headers,
-        )
 
     @classmethod
     def browser_game_diagnostic_upload(
@@ -418,195 +283,30 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         )
 
         status, response = self.request(
-            "POST",
-            "/api/game/hub",
+            "POST", "/api/game/hub",
+        )
+        self.assertEqual(status, 400)
+        self.assertEqual(
+            response,
+            {"error": "The shared Hub request is invalid."},
+        )
+
+        status, response = self.request(
+            "POST", "/api/game/hub",
             headers={"X-Solomon-Dark-Session": "enter-hub"},
         )
         self.assertEqual(status, 503)
-        self.assertEqual(
-            response,
-            {"error": "The shared Hub is not available right now."},
-        )
+        self.assertEqual(response, {"error": "The shared Hub is not available right now."})
 
         for method, path in (
             ("GET", "/api/game/lobbies"),
             ("POST", "/api/game/lobbies"),
             ("POST", "/api/game/lobbies/retired/join"),
         ):
-            status, _response = self.request(method, path)
+            status, _ = self.request(method, path)
             self.assertEqual(status, 404)
 
-    def test_crash_reports_are_private_persisted_and_attributed(self) -> None:
-        now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-        client_report_id = str(uuid.uuid4())
-        metadata = {
-            "clientReportId": client_report_id,
-            "launchToken": "0123456789abcdef0123456789abcdef",
-            "startedAtUtc": now,
-            "crashedAtUtc": now,
-            "exitCode": -1073741819,
-            "launcherVersion": "0.1.0-contract",
-            "loaderVersion": "0.1.0-contract",
-            "gameVersion": "0.72.5",
-            "runtimeProfile": "release",
-            "operatingSystem": "Windows contract",
-            "processArchitecture": "X64",
-            "dotnetRuntime": ".NET contract",
-            "enabledMods": [{"id": "tests.enabled", "version": "1.0.0"}],
-            "hasCrashLog": True,
-            "minidumpCount": 1,
-            "artifacts": ["logs/crash.log", "dumps/crash.dmp"],
-        }
-        artifacts = {
-            "logs/crash.log": b"unhandled exception",
-            "dumps/crash.dmp": b"MDMP",
-        }
-        archive = crash_package(metadata, artifacts)
 
-        status, _ = self.crash_upload(metadata, archive, token=None)
-        self.assertEqual(status, 401)
-
-        steam_id = "76561198000009999"
-        token = self.steam_token(steam_id)
-        status, receipt = self.crash_upload(metadata, archive, token)
-        self.assertEqual(status, 201, receipt)
-        uuid.UUID(receipt["reportId"])
-        self.assertTrue(receipt["submittedAtUtc"].endswith("Z"))
-
-        database_path = Path(self.temp.name) / "sdr.db"
-        with closing(sqlite3.connect(database_path)) as database, database:
-            row = database.execute(
-                """
-                SELECT SubmitterUserId, SubmitterSteamId, ClientReportId,
-                       ExitCode, ArchivePath, ArchiveSize, ArchiveSha256,
-                       HasCrashLog, MinidumpCount
-                FROM CrashReports
-                WHERE PublicId = ?
-                """,
-                (receipt["reportId"],),
-            ).fetchone()
-        self.assertIsNotNone(row)
-        self.assertIsNone(row[0])
-        self.assertEqual(row[1], steam_id)
-        self.assertEqual(row[2], client_report_id)
-        self.assertEqual(row[3], metadata["exitCode"])
-        stored_archive = Path(self.temp.name) / "crash-reports" / row[4]
-        self.assertEqual(stored_archive.read_bytes(), archive)
-        self.assertEqual(row[5], len(archive))
-        self.assertEqual(row[6], hashlib.sha256(archive).hexdigest())
-        self.assertEqual(row[7:], (1, 1))
-
-        status, duplicate = self.crash_upload(metadata, archive, token)
-        self.assertEqual(status, 200, duplicate)
-        self.assertEqual(duplicate["reportId"], receipt["reportId"])
-
-        account_metadata = {**metadata, "clientReportId": str(uuid.uuid4())}
-        account_archive = crash_package(account_metadata, artifacts)
-        status, account_receipt = self.crash_upload(
-            account_metadata,
-            account_archive,
-            self.token,
-        )
-        self.assertEqual(status, 201, account_receipt)
-        with closing(sqlite3.connect(database_path)) as database, database:
-            account_row = database.execute(
-                """
-                SELECT SubmitterUserId, SubmitterSteamId
-                FROM CrashReports
-                WHERE PublicId = ?
-                """,
-                (account_receipt["reportId"],),
-            ).fetchone()
-        self.assertIsNotNone(account_row[0])
-        self.assertIsNone(account_row[1])
-
-        null_token_metadata = {
-            **metadata,
-            "clientReportId": str(uuid.uuid4()),
-            "launchToken": None,
-        }
-        status, _ = self.crash_upload(
-            null_token_metadata,
-            crash_package(null_token_metadata, artifacts),
-            self.steam_token("76561198000009998"),
-        )
-        self.assertEqual(status, 400)
-
-        mismatched_metadata = {**metadata, "clientReportId": str(uuid.uuid4())}
-        status, _ = self.crash_upload(
-            mismatched_metadata,
-            archive,
-            self.steam_token("76561198000009997"),
-        )
-        self.assertEqual(status, 400)
-        with closing(sqlite3.connect(database_path)) as database, database:
-            mismatched_count = database.execute(
-                "SELECT COUNT(*) FROM CrashReports WHERE ClientReportId = ?",
-                (mismatched_metadata["clientReportId"],),
-            ).fetchone()[0]
-            self.assertEqual(mismatched_count, 0)
-
-    def test_diagnostic_logs_are_private_persisted_and_attributed(self) -> None:
-        client_log_id = str(uuid.uuid4())
-        metadata = {
-            "clientLogId": client_log_id,
-            "capturedAtUtc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            "launcherVersion": "0.1.0-contract",
-            "operatingSystem": "Windows contract",
-            "processArchitecture": "X64",
-            "dotnetRuntime": ".NET contract",
-            "launchToken": "0123456789abcdef0123456789abcdef",
-            "artifacts": ["launcher/transcript.txt", "loader/modloader.log"],
-        }
-        buffer = io.BytesIO()
-        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
-            archive.writestr("launcher/transcript.txt", "contract transcript")
-            archive.writestr("loader/modloader.log", "contract loader log")
-        package_bytes = buffer.getvalue()
-
-        status, _ = self.diagnostic_upload(metadata, package_bytes, token=None)
-        self.assertEqual(status, 401)
-
-        steam_id = "76561198000005555"
-        status, receipt = self.diagnostic_upload(
-            metadata,
-            package_bytes,
-            self.steam_token(steam_id),
-        )
-        self.assertEqual(status, 201, receipt)
-        uuid.UUID(receipt["logId"])
-        self.assertTrue(receipt["submittedAtUtc"].endswith(("Z", "+00:00")))
-
-        database_path = Path(self.temp.name) / "sdr.db"
-        with closing(sqlite3.connect(database_path)) as database, database:
-            row = database.execute(
-                """
-                SELECT SubmitterUserId, SubmitterSteamId, ClientLogId,
-                       LauncherVersion, LaunchToken, ArchivePath,
-                       ArchiveSize, ArchiveSha256
-                FROM DiagnosticLogs
-                WHERE PublicId = ?
-                """,
-                (receipt["logId"],),
-            ).fetchone()
-        self.assertIsNotNone(row)
-        self.assertIsNone(row[0])
-        self.assertEqual(row[1], steam_id)
-        self.assertEqual(row[2], client_log_id)
-        self.assertEqual(row[3], metadata["launcherVersion"])
-        self.assertEqual(row[4], metadata["launchToken"])
-        stored_archive = Path(self.temp.name) / "diagnostic-logs" / row[5]
-        self.assertEqual(stored_archive.read_bytes(), package_bytes)
-        self.assertEqual(row[6], len(package_bytes))
-        self.assertEqual(row[7], hashlib.sha256(package_bytes).hexdigest())
-
-        status, duplicate = self.diagnostic_upload(
-            metadata,
-            package_bytes,
-            self.steam_token(steam_id),
-        )
-        self.assertEqual(status, 200, duplicate)
-        self.assertEqual(duplicate["logId"], receipt["logId"])
 
     def test_browser_game_diagnostics_are_consent_driven_bounded_and_guest_capable(self) -> None:
         client_log_id = str(uuid.uuid4())
@@ -661,8 +361,8 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         with closing(sqlite3.connect(database_path)) as database:
             row = database.execute(
                 """
-                SELECT SubmitterUserId, SubmitterSteamId, ClientLogId,
-                       LauncherVersion, LaunchToken, ArchivePath,
+                SELECT SubmitterUserId, ClientLogId, ClientVersion,
+                       LaunchToken, ArchivePath,
                        ArchiveSize, ArchiveSha256
                 FROM DiagnosticLogs
                 WHERE PublicId = ?
@@ -671,12 +371,11 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             ).fetchone()
         self.assertIsNotNone(row)
         self.assertIsNone(row[0])
-        self.assertIsNone(row[1])
-        self.assertEqual(row[2], client_log_id)
-        self.assertEqual(row[3], "browser-game/21")
-        self.assertIsNone(row[4])
+        self.assertEqual(row[1], client_log_id)
+        self.assertEqual(row[2], "browser-game/21")
+        self.assertIsNone(row[3])
 
-        stored_archive = Path(self.temp.name) / "diagnostic-logs" / row[5]
+        stored_archive = Path(self.temp.name) / "diagnostic-logs" / row[4]
         with zipfile.ZipFile(stored_archive) as archive:
             self.assertEqual(archive.namelist(), ["browser/game-client.json"])
             stored_report = json.loads(archive.read("browser/game-client.json"))
@@ -686,9 +385,9 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             self.assertEqual(entry["atUtc"].replace("+00:00", "Z"), captured_at)
             entry["atUtc"] = captured_at
         self.assertEqual(stored_report, report)
-        self.assertEqual(row[6], stored_archive.stat().st_size)
+        self.assertEqual(row[5], stored_archive.stat().st_size)
         self.assertEqual(
-            row[7],
+            row[6],
             hashlib.sha256(stored_archive.read_bytes()).hexdigest(),
         )
 
@@ -696,194 +395,6 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         self.assertEqual(status, 200, duplicate)
         self.assertEqual(duplicate["logId"], receipt["logId"])
 
-    def test_cloud_saves_are_zip_validated_and_require_a_current_steam_link(self) -> None:
-        files = {
-            "solomondark/darkdata.cfg": b"dark-data",
-            "solomondark/savegames/_survival/gamestate.sav": b"game-state",
-            "solomondark/savegames/_survival/Region0._cache": b"region-cache",
-        }
-        archive = save_package(0, "Contract Run", files)
-        website_headers = {
-            "Authorization": f"Bearer {self.token}",
-            "Content-Type": "application/zip",
-        }
-
-        status, rejected = self.request(
-            "PUT",
-            "/api/saves/0",
-            body=archive,
-            headers=website_headers,
-        )
-        self.assertEqual(status, 401, rejected)
-        status, rejected = self.request(
-            "GET",
-            "/api/saves",
-            headers={"Authorization": f"Bearer {self.token}"},
-        )
-        self.assertEqual(status, 401, rejected)
-
-        steam_id = "76561198000007777"
-        database_path = Path(self.temp.name) / "sdr.db"
-        with closing(sqlite3.connect(database_path)) as database, database:
-            database.execute(
-                "UPDATE Users SET SteamId = ? WHERE Id = ?",
-                (steam_id, self.user_id),
-            )
-            database.commit()
-
-        status, uploaded = self.request(
-            "PUT",
-            "/api/saves/0",
-            body=archive,
-            headers=website_headers,
-        )
-        self.assertEqual(status, 200, uploaded)
-        self.assertEqual(uploaded["name"], "Contract Run")
-        self.assertEqual(uploaded["fileCount"], len(files))
-        self.assertEqual(uploaded["formatVersion"], 1)
-        self.assertEqual(uploaded["uncompressedSize"], sum(map(len, files.values())))
-        self.assertEqual(uploaded["sha256"], hashlib.sha256(archive).hexdigest())
-
-        status, saves = self.request(
-            "GET",
-            "/api/saves",
-            headers={"Authorization": f"Bearer {self.token}"},
-        )
-        self.assertEqual(status, 200, saves)
-        self.assertEqual([save["slot"] for save in saves], [0])
-
-        status, downloaded, response_headers = self.request_bytes(
-            "GET",
-            "/api/saves/0",
-            headers={"Authorization": f"Bearer {self.token}"},
-        )
-        self.assertEqual(status, 200)
-        self.assertEqual(downloaded, archive)
-        self.assertEqual(response_headers["Content-Type"], "application/zip")
-        self.assertIn("solomon-dark-save-1.zip", response_headers["Content-Disposition"])
-
-        linked_token = self.steam_token(steam_id, self.user_id)
-        linked_archive = save_package(1, "Steam-linked Run", files)
-        status, linked_upload = self.request(
-            "PUT",
-            "/api/saves/1",
-            body=linked_archive,
-            headers={
-                "Authorization": f"Bearer {linked_token}",
-                "Content-Type": "application/zip",
-            },
-        )
-        self.assertEqual(status, 200, linked_upload)
-        self.assertEqual(linked_upload["name"], "Steam-linked Run")
-
-        status, _ = self.request(
-            "GET",
-            "/api/saves",
-            headers={"Authorization": f"Bearer {self.steam_token(steam_id)}"},
-        )
-        self.assertEqual(status, 403)
-
-        status, rejected = self.request(
-            "GET",
-            "/api/saves",
-            headers={
-                "Authorization": f"Bearer {self.steam_token('76561198000008888', self.user_id)}"
-            },
-        )
-        self.assertEqual(status, 401, rejected)
-
-        with closing(sqlite3.connect(database_path)) as database, database:
-            database.execute("UPDATE Users SET SteamId = NULL WHERE Id = ?", (self.user_id,))
-            database.commit()
-        status, rejected = self.request(
-            "GET",
-            "/api/saves",
-            headers={"Authorization": f"Bearer {linked_token}"},
-        )
-        self.assertEqual(status, 401, rejected)
-
-        with closing(sqlite3.connect(database_path)) as database, database:
-            database.execute(
-                "UPDATE Users SET SteamId = ? WHERE Id = ?",
-                (steam_id, self.user_id),
-            )
-            database.commit()
-
-        bad_hash = save_package(
-            2,
-            "Bad Hash",
-            {"solomondark/darkdata.cfg": b"integrity"},
-        )
-        with zipfile.ZipFile(io.BytesIO(bad_hash)) as source:
-            manifest = json.loads(source.read("manifest.json"))
-            manifest["files"][0]["sha256"] = "0" * 64
-        buffer = io.BytesIO()
-        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as invalid:
-            invalid.writestr("manifest.json", json.dumps(manifest))
-            invalid.writestr("savegames/solomondark/darkdata.cfg", b"integrity")
-        status, rejected = self.request(
-            "PUT",
-            "/api/saves/2",
-            body=buffer.getvalue(),
-            headers=website_headers,
-        )
-        self.assertEqual(status, 400, rejected)
-        self.assertIn("integrity", rejected["error"].lower())
-
-        traversal = save_package(
-            3,
-            "Traversal",
-            {"solomondark/../outside.sav": b"no"},
-        )
-        status, rejected = self.request(
-            "PUT",
-            "/api/saves/3",
-            body=traversal,
-            headers=website_headers,
-        )
-        self.assertEqual(status, 400, rejected)
-        self.assertIn("unsafe", rejected["error"].lower())
-
-        unsafe_name = save_package(
-            5,
-            "unsafe\u0001name",
-            {"solomondark/darkdata.cfg": b"no"},
-        )
-        status, rejected = self.request(
-            "PUT",
-            "/api/saves/5",
-            body=unsafe_name,
-            headers=website_headers,
-        )
-        self.assertEqual(status, 400, rejected)
-        self.assertIn("manifest", rejected["error"].lower())
-
-        status, rejected = self.request(
-            "PUT",
-            "/api/saves/4",
-            body=archive,
-            headers={
-                "Authorization": f"Bearer {self.token}",
-                "Content-Type": "application/octet-stream",
-            },
-        )
-        self.assertEqual(status, 415, rejected)
-
-        status, _ = self.request(
-            "DELETE",
-            "/api/saves/0",
-            headers={"Authorization": f"Bearer {self.token}"},
-        )
-        self.assertEqual(status, 204)
-        status, _ = self.request(
-            "GET",
-            "/api/saves/0",
-            headers={"Authorization": f"Bearer {self.token}"},
-        )
-        self.assertEqual(status, 404)
-        with closing(sqlite3.connect(database_path)) as database, database:
-            database.execute("UPDATE Users SET SteamId = NULL WHERE Id = ?", (self.user_id,))
-            database.commit()
 
     def test_browser_game_slot_is_account_owned_hashed_and_revision_conditional(self) -> None:
         document = json.dumps(
@@ -976,547 +487,163 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         self.assertEqual(status, 200, missing)
         self.assertIsNone(missing["save"])
 
-    def test_lobby_capacity_honors_the_steam_limit(self) -> None:
-        def announce(max_players: int, lobby_suffix: str) -> tuple[int, object]:
-            return self.request(
-                "POST",
-                "/api/lobbies/announce",
-                headers={"X-SDR-Lobby-Secret": lobby_suffix * 64},
-                json_body={
-                    "lobbyId": f"7656119800000010{lobby_suffix}",
-                    "hostSteamId": f"7656119800000020{lobby_suffix}",
-                    "hostPlayer": "Capacity Host",
-                    "privacy": "public",
-                    "friendSteamIds": [],
-                    "players": 1,
-                    "maxPlayers": max_players,
-                    "build": {
-                        "appId": 3362180,
-                        "protocolVersion": 81,
-                        "manifestSha256": "cd" * 32,
-                        "loaderVersion": "contract-test",
-                    },
-                    "game": {"phase": "hub"},
-                    "mods": [],
-                },
-            )
 
-        status, accepted = announce(250, "1")
-        self.assertEqual(status, 200, accepted)
 
-        status, rejected = announce(251, "2")
-        self.assertEqual(status, 400, rejected)
-        self.assertIn("2–250", rejected["error"])
 
-    def test_lobby_directory_uses_private_parties_wire_field(self) -> None:
-        lobby_id = "76561198000000801"
-        secret = "81" * 32
-        status, announced = self.request(
-            "POST",
-            "/api/lobbies/announce",
-            headers={"X-SDR-Lobby-Secret": secret},
-            json_body={
-                "lobbyId": lobby_id,
-                "hostSteamId": "76561198000000802",
-                "hostPlayer": "Friends Only Host",
-                "privacy": "friendsOnly",
-                "friendSteamIds": [],
-                "players": 2,
-                "maxPlayers": 4,
-                "build": {
-                    "appId": 3362180,
-                    "protocolVersion": 81,
-                    "manifestSha256": "81" * 32,
-                    "loaderVersion": "contract-test",
-                },
-                "game": {"phase": "hub"},
-                "mods": [],
-            },
-        )
-        self.assertEqual(status, 200, announced)
-
-        try:
-            status, lobbies = self.request("GET", "/api/lobbies")
-            self.assertEqual(status, 200, lobbies)
-            self.assertEqual(
-                set(lobbies),
-                {"items", "privateParties", "playerCount"},
-            )
-            self.assertIn(
-                {"players": 2, "maxPlayers": 4},
-                lobbies["privateParties"],
-            )
-            self.assertFalse(
-                any(
-                    (item.get("join") or {}).get("lobbyId") == lobby_id
-                    for item in lobbies["items"]
-                )
-            )
-        finally:
-            self.request(
-                "DELETE",
-                f"/api/lobbies/{lobby_id}",
-                headers={"X-SDR-Lobby-Secret": secret},
-            )
-
-    def test_lobby_picking_loadout_status_roundtrips_and_advances(self) -> None:
-        lobby_id = "76561198000000901"
-        secret = "91" * 32
-
-        def announce(phase: str, status_text: str) -> tuple[int, object]:
-            return self.request(
-                "POST",
-                "/api/lobbies/announce",
-                headers={"X-SDR-Lobby-Secret": secret},
-                json_body={
-                    "lobbyId": lobby_id,
-                    "hostSteamId": "76561198000000902",
-                    "hostPlayer": "Loadout Host",
-                    "privacy": "public",
-                    "friendSteamIds": [],
-                    "players": 1,
-                    "maxPlayers": 4,
-                    "build": {
-                        "appId": 3362180,
-                        "protocolVersion": 89,
-                        "manifestSha256": "89" * 32,
-                        "loaderVersion": "loadout-contract",
-                    },
-                    "game": {
-                        "phase": phase,
-                        "statusText": status_text,
-                    },
-                    "mods": [],
-                },
-            )
-
-        for phase, status_text in (
-            ("picking-loadout", "Picking Loadout"),
-            ("hub", "In Hub"),
-            ("session", "In Match"),
-            ("picking-loadout", "Picking Loadout"),
-        ):
-            status, response = announce(phase, status_text)
-            self.assertEqual(status, 200, response)
-            status, lobbies = self.request("GET", "/api/lobbies")
-            self.assertEqual(status, 200, lobbies)
-            lobby = next(
-                item
-                for item in lobbies["items"]
-                if (item.get("join") or {}).get("lobbyId") == lobby_id
-            )
-            self.assertEqual(lobby["game"]["phase"], phase)
-            self.assertEqual(lobby["game"]["statusText"], status_text)
-
-        status, response = self.request(
-            "DELETE",
-            f"/api/lobbies/{lobby_id}",
-            headers={"X-SDR-Lobby-Secret": secret},
-        )
-        self.assertEqual(status, 204, response)
-        status, lobbies = self.request("GET", "/api/lobbies")
-        self.assertEqual(status, 200, lobbies)
-        self.assertFalse(
-            any(
-                (item.get("join") or {}).get("lobbyId") == lobby_id
-                for item in lobbies["items"]
-            )
-        )
-
-    def test_package_shapes_exact_resolution_and_lobby_join_manifest(self) -> None:
-        boneyard_manifest = {
-            "id": "tests.blank-boneyard",
-            "name": "Blank Boneyard",
+    def test_subscriptions_are_account_owned_enabled_and_dependency_resolved(self) -> None:
+        dependency_manifest = {
+            "id": "tests.web-dependency",
+            "name": "Web Dependency",
             "version": "1.0.0",
             "priority": 10,
-            "overlays": [
-                {
-                    "target": "sandbox/DarkCloud/mylevels/Blank Test.boneyard",
-                    "source": "files/Blank Test.boneyard",
-                    "format": "boneyard",
-                }
-            ],
-        }
-        fixture = BONEYARD_FIXTURE.read_bytes()
-        boneyard_zip = package({"files/Blank Test.boneyard": fixture}, boneyard_manifest)
-        status, boneyard = self.upload("Blank Boneyard", "1.0.0", boneyard_zip)
-        self.assertEqual(status, 201, boneyard)
-        self.assertEqual(boneyard["launcherModId"], boneyard_manifest["id"])
-        boneyard_version = boneyard["versions"][0]
-        self.assertEqual(boneyard_version["packageSha256"], hashlib.sha256(boneyard_zip).hexdigest())
-        self.assertEqual(boneyard_version["contentSha256"], content_hash(boneyard_zip))
-
-        lua_manifest = {
-            "id": "tests.lua-only",
-            "name": "Lua Only",
-            "version": "1.0.0",
             "runtime": {
-                "apiVersion": "0.2.0",
+                "apiVersion": "0.1.0",
                 "entryScript": "scripts/main.lua",
-                "requiredCapabilities": [],
-                "optionalCapabilities": ["ui"],
             },
         }
-        lua_zip = package({"scripts/main.lua": b"return true\n"}, lua_manifest)
-        status, lua = self.upload("Lua Only", "1.0.0", lua_zip)
-        self.assertEqual(status, 201, lua)
-
-        art_manifest = {
-            "id": "tests.art-only",
-            "name": "Art Only",
-            "version": "1.0.0",
-            "overlays": [
-                {
-                    "target": "images/Skills.png",
-                    "source": "files/Skills.png",
-                }
-            ],
-        }
-        art_zip = package(
-            {"files/Skills.png": b"\x89PNG\r\n\x1a\nart-contract-fixture"},
-            art_manifest,
+        status, dependency = self.upload(
+            "Web Dependency",
+            "1.0.0",
+            package({"scripts/main.lua": b"sd.state.set('loaded', true)\n"}, dependency_manifest),
         )
-        status, art = self.upload("Art Only", "1.0.0", art_zip)
-        self.assertEqual(status, 201, art)
+        self.assertEqual(status, 201, dependency)
 
         combined_manifest = {
-            "id": "tests.combined",
-            "name": "Combined",
+            "id": "tests.web-combined",
+            "name": "Web Combined",
             "version": "2.0.0",
+            "priority": 20,
             "overlays": [
                 {
-                    "target": "data/levels/survival.boneyard",
-                    "source": "files/survival.boneyard",
-                },
-                {
-                    "target": "images/Skills.png",
-                    "source": "files/Skills.png",
+                    "target": "sandbox/DarkCloud/mylevels/Contract.boneyard",
+                    "source": "files/Contract.boneyard",
+                    "format": "boneyard",
                 }
             ],
             "runtime": {
-                "apiVersion": "0.2.0",
+                "apiVersion": "0.1.0",
                 "entryScript": "scripts/main.lua",
             },
-            "requiredMods": ["tests.lua-only"],
+            "requiredMods": ["tests.web-dependency"],
         }
-        combined_zip = package(
-            {
-                "files/survival.boneyard": fixture,
-                "files/Skills.png": b"\x89PNG\r\n\x1a\ncombined-art-contract-fixture",
-                "scripts/main.lua": b"return true\n",
-            },
-            combined_manifest,
+        status, combined = self.upload(
+            "Web Combined",
+            "2.0.0",
+            package(
+                {
+                    "files/Contract.boneyard": BONEYARD_FIXTURE.read_bytes(),
+                    "scripts/main.lua": b"sd.state.set('combined', true)\n",
+                },
+                combined_manifest,
+            ),
         )
-        status, combined = self.upload("Combined Mod", "2.0.0", combined_zip)
         self.assertEqual(status, 201, combined)
 
-        invalid_manifest = {
-            "id": "tests.invalid-boneyard",
-            "name": "Invalid Boneyard",
+        authorization = {"Authorization": f"Bearer {self.token}"}
+        status, subscribed = self.request(
+            "PUT",
+            f"/api/mods/{combined['slug']}/subscription",
+            headers=authorization,
+        )
+        self.assertEqual(status, 201, subscribed)
+        self.assertTrue(subscribed["enabled"])
+
+        status, missing_dependency = self.request(
+            "GET",
+            "/api/mods/active",
+            headers=authorization,
+        )
+        self.assertEqual(status, 409, missing_dependency)
+        self.assertIn("tests.web-dependency", missing_dependency["error"])
+
+        status, _ = self.request(
+            "PUT",
+            f"/api/mods/{dependency['slug']}/subscription",
+            headers=authorization,
+        )
+        self.assertEqual(status, 201)
+        status, active = self.request("GET", "/api/mods/active", headers=authorization)
+        self.assertEqual(status, 200, active)
+        self.assertEqual(
+            [mod["id"] for mod in active["mods"]],
+            ["tests.web-dependency", "tests.web-combined"],
+        )
+        self.assertEqual(active["mods"][0]["hasLua"], True)
+        self.assertEqual(active["mods"][1]["boneyardCount"], 1)
+        self.assertRegex(active["manifestSha256"], r"^[a-f0-9]{64}$")
+
+        status, subscriptions = self.request(
+            "GET",
+            "/api/mods/subscriptions",
+            headers=authorization,
+        )
+        self.assertEqual(status, 200, subscriptions)
+        self.assertEqual(
+            {entry["mod"]["slug"] for entry in subscriptions["items"]},
+            {dependency["slug"], combined["slug"]},
+        )
+
+        status, disabled = self.request(
+            "PATCH",
+            f"/api/mods/{dependency['slug']}/subscription",
+            headers=authorization,
+            json_body={"enabled": False},
+        )
+        self.assertEqual(status, 200, disabled)
+        self.assertFalse(disabled["enabled"])
+        status, missing_dependency = self.request(
+            "GET",
+            "/api/mods/active",
+            headers=authorization,
+        )
+        self.assertEqual(status, 409, missing_dependency)
+
+        status, second = self.request(
+            "POST",
+            "/api/auth/register",
+            json_body={
+                "username": "emptycloud",
+                "email": "emptycloud@example.invalid",
+                "password": "correct-horse-battery-staple",
+            },
+        )
+        self.assertEqual(status, 201, second)
+        status, second_subscriptions = self.request(
+            "GET",
+            "/api/mods/subscriptions",
+            headers={"Authorization": f"Bearer {second['token']}"},
+        )
+        self.assertEqual(status, 200, second_subscriptions)
+        self.assertEqual(second_subscriptions["items"], [])
+
+        status, _ = self.request(
+            "DELETE",
+            f"/api/mods/{combined['slug']}/subscription",
+            headers=authorization,
+        )
+        self.assertEqual(status, 204)
+        status, _ = self.request(
+            "DELETE",
+            f"/api/mods/{combined['slug']}/subscription",
+            headers=authorization,
+        )
+        self.assertEqual(status, 204)
+
+        art_manifest = {
+            "id": "tests.native-art-is-retired",
+            "name": "Native Art Is Retired",
             "version": "1.0.0",
             "overlays": [
-                {
-                    "target": "data/levels/survival.boneyard",
-                    "source": "files/survival.boneyard",
-                    "format": "boneyard",
-                }
+                {"target": "images/Skills.png", "source": "files/Skills.png"}
             ],
         }
-        status, _ = self.upload(
-            "Invalid Boneyard",
+        status, rejected = self.upload(
+            "Native Art Is Retired",
             "1.0.0",
-            package({"files/survival.boneyard": b""}, invalid_manifest),
+            package({"files/Skills.png": b"not-web-art"}, art_manifest),
         )
-        self.assertEqual(status, 400)
-
-        legacy_target_manifest = {
-            **invalid_manifest,
-            "id": "tests.legacy-boneyard-target",
-            "name": "Legacy Boneyard Target",
-            "overlays": [
-                {
-                    "target": "DarkCloud/mylevels/Legacy.boneyard",
-                    "source": "files/Legacy.boneyard",
-                    "format": "boneyard",
-                }
-            ],
-        }
-        status, _ = self.upload(
-            "Legacy Boneyard Target",
-            "1.0.0",
-            package({"files/Legacy.boneyard": fixture}, legacy_target_manifest),
-        )
-        self.assertEqual(status, 400)
-
-        exact = []
-        for item in (boneyard, lua, art, combined):
-            version = item["versions"][0]
-            exact.append(
-                {
-                    "id": item["launcherModId"],
-                    "version": version["manifestVersion"],
-                    "contentSha256": version["contentSha256"],
-                }
-            )
-
-        status, resolution = self.request("POST", "/api/mods/resolve", json_body={"mods": exact})
-        self.assertEqual(status, 200, resolution)
-        self.assertEqual(len(resolution["mods"]), 4)
-        self.assertEqual(resolution["missing"], [])
-        self.assertTrue(all(not mod["downloadUrl"].startswith("/") for mod in resolution["mods"]))
-
-        status, announce = self.request(
-            "POST",
-            "/api/lobbies/announce",
-            headers={"X-SDR-Lobby-Secret": "ab" * 32},
-            json_body={
-                "lobbyId": "76561198000000001",
-                "hostSteamId": "76561198000000002",
-                "hostPlayer": "Contract Host",
-                "privacy": "public",
-                "friendSteamIds": [],
-                "players": 1,
-                "maxPlayers": 4,
-                "build": {
-                    "appId": 3362180,
-                    "protocolVersion": 69,
-                    "manifestSha256": "cd" * 32,
-                    "loaderVersion": "contract-test",
-                },
-                "game": {"phase": "hub"},
-                "mods": exact,
-            },
-        )
-        self.assertEqual(status, 200, announce)
-
-        status, lobbies = self.request("GET", "/api/lobbies")
-        self.assertEqual(status, 200, lobbies)
-        lobby = next(
-            item
-            for item in lobbies["items"]
-            if item["join"] is not None
-            and item["join"]["lobbyId"] == "76561198000000001"
-        )
-        self.assertEqual(lobby["mods"], sorted(exact, key=lambda mod: mod["id"]))
-        self.assertTrue(lobby["join"]["launchUri"].startswith("solomondarkrevived://join/"))
-        self.assertIn("directory=http%3A%2F%2F127.0.0.1", lobby["join"]["launchUri"])
-
-        status, join_manifest = self.request(
-            "GET", "/api/lobbies/76561198000000001/join-manifest"
-        )
-        self.assertEqual(status, 200, join_manifest)
-        self.assertEqual(join_manifest["mods"], sorted(exact, key=lambda mod: mod["id"]))
-
-    def test_mod_updates_return_only_newer_semantic_versions(self) -> None:
-        mod_id = "tests.update-resolution"
-
-        def upload_version(version: str, slug: str | None = None) -> tuple[int, object]:
-            manifest = {
-                "id": mod_id,
-                "name": "Update Resolution",
-                "version": version,
-                "runtime": {
-                    "apiVersion": "0.2.0",
-                    "entryScript": "scripts/main.lua",
-                },
-            }
-            archive = package(
-                {"scripts/main.lua": f'return "{version}"\n'.encode()},
-                manifest,
-            )
-            return self.upload("Update Resolution", version, archive, slug=slug)
-
-        status, created = upload_version("1.0.0")
-        self.assertEqual(status, 201, created)
-        slug = created["slug"]
-
-        status, version_two = upload_version("2.0.0", slug)
-        self.assertEqual(status, 201, version_two)
-        expected = next(
-            version
-            for version in version_two["versions"]
-            if version["manifestVersion"] == "2.0.0"
-        )
-
-        status, out_of_order = upload_version("1.5.0", slug)
-        self.assertEqual(status, 201, out_of_order)
-
-        status, updates = self.request(
-            "POST",
-            "/api/mods/updates",
-            json_body={
-                "mods": [
-                    {"id": mod_id, "version": "1.0.0"},
-                    {"id": "tests.not-published", "version": "1.0.0"},
-                ]
-            },
-        )
-        self.assertEqual(status, 200, updates)
-        self.assertEqual(
-            updates,
-            {
-                "updates": [
-                    {
-                        "id": mod_id,
-                        "version": "2.0.0",
-                        "contentSha256": expected["contentSha256"],
-                        "packageSha256": expected["packageSha256"],
-                        "minimumLoaderVersion": None,
-                        "downloadUrl": (
-                            f"api/mods/{slug}/versions/{expected['id']}/download"
-                        ),
-                    }
-                ]
-            },
-        )
-
-        for installed_version in ("2.0.0", "3.0.0", "2.0.0+local"):
-            status, current = self.request(
-                "POST",
-                "/api/mods/updates",
-                json_body={"mods": [{"id": mod_id, "version": installed_version}]},
-            )
-            self.assertEqual(status, 200, current)
-            self.assertEqual(current, {"updates": []})
-
-        status, invalid = self.request(
-            "POST",
-            "/api/mods/updates",
-            json_body={"mods": [{"id": mod_id, "version": "1.0"}]},
-        )
-        self.assertEqual(status, 400, invalid)
-
-        status, duplicate = self.request(
-            "POST",
-            "/api/mods/updates",
-            json_body={
-                "mods": [
-                    {"id": mod_id, "version": "1.0.0"},
-                    {"id": mod_id.upper(), "version": "1.0.0"},
-                ]
-            },
-        )
-        self.assertEqual(status, 400, duplicate)
-
-    def test_minimum_loader_gates_resolution_and_updates(self) -> None:
-        mod_id = "tests.beta20-settings"
-        manifest = {
-            "id": mod_id,
-            "name": "Beta 20 Settings",
-            "version": "1.0.0",
-            "minimumLoaderVersion": "0.1.0-beta.20",
-            "enabled": False,
-            "runtime": {
-                "apiVersion": "0.2.0",
-                "entryScript": "scripts/main.lua",
-                "requiredCapabilities": ["settings.self", "settings.list"],
-            },
-            "provides": ["tests.beta20-settings.v1"],
-            "settings": {
-                "version": 1,
-                "entries": [
-                    {
-                        "key": "roster",
-                        "type": "list",
-                        "scope": "host",
-                        "default": [],
-                        "item": {"fields": []},
-                    }
-                ],
-            },
-        }
-        archive = package({"scripts/main.lua": b"return true\n"}, manifest)
-        status, created = self.upload("Beta 20 Settings", "1.0.0", archive)
-        self.assertEqual(status, 201, created)
-        published = created["versions"][0]
-        self.assertEqual(
-            published["minimumLoaderVersion"],
-            "0.1.0-beta.20",
-        )
-        exact = [
-            {
-                "id": mod_id,
-                "version": "1.0.0",
-                "contentSha256": published["contentSha256"],
-            }
-        ]
-
-        for loader_version in (None, "0.1.0-beta.19"):
-            body = {"mods": exact}
-            if loader_version is not None:
-                body["loaderVersion"] = loader_version
-            status, resolution = self.request(
-                "POST",
-                "/api/mods/resolve",
-                json_body=body,
-            )
-            self.assertEqual(status, 200, resolution)
-            self.assertEqual(resolution["mods"], [])
-            self.assertEqual(resolution["missing"], [])
-            self.assertEqual(
-                resolution["incompatible"],
-                [
-                    {
-                        "id": mod_id,
-                        "version": "1.0.0",
-                        "minimumLoaderVersion": "0.1.0-beta.20",
-                    }
-                ],
-            )
-
-            status, updates = self.request(
-                "POST",
-                "/api/mods/updates",
-                json_body={
-                    **(
-                        {"loaderVersion": loader_version}
-                        if loader_version is not None
-                        else {}
-                    ),
-                    "mods": [{"id": mod_id, "version": "0.9.0"}],
-                },
-            )
-            self.assertEqual(status, 200, updates)
-            self.assertEqual(updates, {"updates": []})
-
-        status, resolution = self.request(
-            "POST",
-            "/api/mods/resolve",
-            json_body={"loaderVersion": "0.1.0-beta.20", "mods": exact},
-        )
-        self.assertEqual(status, 200, resolution)
-        self.assertEqual(len(resolution["mods"]), 1)
-        self.assertEqual(
-            resolution["mods"][0]["minimumLoaderVersion"],
-            "0.1.0-beta.20",
-        )
-        self.assertEqual(resolution["incompatible"], [])
-
-        status, updates = self.request(
-            "POST",
-            "/api/mods/updates",
-            json_body={
-                "loaderVersion": "0.1.0-beta.20",
-                "mods": [{"id": mod_id, "version": "0.9.0"}],
-            },
-        )
-        self.assertEqual(status, 200, updates)
-        self.assertEqual(
-            updates["updates"][0]["minimumLoaderVersion"],
-            "0.1.0-beta.20",
-        )
-
-        invalid_manifest = {
-            **manifest,
-            "id": "tests.invalid-minimum-loader",
-            "minimumLoaderVersion": "beta.20",
-        }
-        status, _ = self.upload(
-            "Invalid Minimum Loader",
-            "1.0.0",
-            package({"scripts/main.lua": b"return true\n"}, invalid_manifest),
-        )
-        self.assertEqual(status, 400)
+        self.assertEqual(status, 400, rejected)
+        self.assertIn("Web-port overlays", rejected["error"])
 
     def test_upload_rejects_unsafe_or_inconsistent_packages(self) -> None:
         native_manifest = {
@@ -1607,107 +734,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         )
         self.assertEqual(status, 400)
 
-    def test_password_ticket_guards_join_manifest(self) -> None:
-        database_path = Path(self.temp.name) / "sdr.db"
-        with closing(sqlite3.connect(database_path, timeout=10)) as database, database:
-            database.execute(
-                "UPDATE Users SET SteamId = ? WHERE Username = ?",
-                ("76561198000000003", "modsync"),
-            )
-            database.commit()
 
-        salt = bytes.fromhex("12" * 16)
-        password_hash = hashlib.pbkdf2_hmac(
-            "sha256",
-            b"open-sesame",
-            salt,
-            210_000,
-        ).hex()
-        status, announce = self.request(
-            "POST",
-            "/api/lobbies/announce",
-            headers={"X-SDR-Lobby-Secret": "ef" * 32},
-            json_body={
-                "lobbyId": "76561198000000011",
-                "hostSteamId": "76561198000000012",
-                "hostPlayer": "Warded Host",
-                "privacy": "passwordProtected",
-                "password": {
-                    "algorithm": "pbkdf2-sha256",
-                    "iterations": 210_000,
-                    "salt": salt.hex(),
-                    "hash": password_hash,
-                },
-                "friendSteamIds": [],
-                "players": 1,
-                "maxPlayers": 4,
-                "build": {
-                    "appId": 3362180,
-                    "protocolVersion": 69,
-                    "manifestSha256": "34" * 32,
-                    "loaderVersion": "contract-test",
-                },
-                "game": {"phase": "hub"},
-                "mods": [],
-            },
-        )
-        self.assertEqual(status, 200, announce)
-
-        status, _ = self.request(
-            "GET", "/api/lobbies/76561198000000011/join-manifest"
-        )
-        self.assertEqual(status, 403)
-
-        status, grant = self.request(
-            "POST",
-            f"/api/lobbies/{announce['id']}/authorize",
-            headers={"Authorization": f"Bearer {self.token}"},
-            json_body={"passwordHash": password_hash},
-        )
-        self.assertEqual(status, 200, grant)
-        self.assertTrue(grant["launchUri"].startswith("solomondarkrevived://join/"))
-        self.assertIn("directory=", grant["launchUri"])
-        self.assertIn("ticket=", grant["launchUri"])
-
-        query = urllib.parse.urlencode({"ticket": grant["ticket"]})
-        status, manifest = self.request(
-            "GET",
-            f"/api/lobbies/76561198000000011/join-manifest?{query}",
-        )
-        self.assertEqual(status, 200, manifest)
-        self.assertEqual(manifest["mods"], [])
-
-        tampered = grant["ticket"][:-1] + ("0" if grant["ticket"][-1] != "0" else "1")
-        status, _ = self.request(
-            "GET",
-            "/api/lobbies/76561198000000011/join-manifest?"
-            + urllib.parse.urlencode({"ticket": tampered}),
-        )
-        self.assertEqual(status, 403)
-
-    def test_steam_session_can_unlink_its_linked_account(self) -> None:
-        steam_id = "76561198000006666"
-        database_path = Path(self.temp.name) / "sdr.db"
-        with closing(sqlite3.connect(database_path)) as database, database:
-            database.execute(
-                "UPDATE Users SET SteamId = ? WHERE Id = ?",
-                (steam_id, self.user_id),
-            )
-            database.commit()
-
-        status, response = self.request(
-            "DELETE",
-            "/api/auth/steam",
-            headers={"Authorization": f"Bearer {self.steam_token(steam_id)}"},
-        )
-        self.assertEqual(status, 204, response)
-
-        with closing(sqlite3.connect(database_path)) as database, database:
-            linked_steam_id = database.execute(
-                "SELECT SteamId FROM Users WHERE Id = ?",
-                (self.user_id,),
-            ).fetchone()[0]
-        self.assertIsNone(linked_steam_id)
 
     def test_z_database_schema_upgrades_existing_rows(self) -> None:
         type(self).stop_server()
@@ -1715,16 +742,14 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         with closing(sqlite3.connect(database_path)) as database, database:
             database.executescript(
                 """
-                DROP INDEX IX_Mods_LauncherModId;
-                ALTER TABLE Mods DROP COLUMN LauncherModId;
+                DROP INDEX IX_Mods_PackageId;
+                ALTER TABLE Mods RENAME COLUMN PackageId TO LauncherModId;
                 DROP INDEX IX_ModVersions_ModId_ManifestVersion_ContentSha256;
                 ALTER TABLE ModVersions DROP COLUMN ManifestVersion;
                 ALTER TABLE ModVersions DROP COLUMN PackageSha256;
                 ALTER TABLE ModVersions DROP COLUMN ContentSha256;
-                ALTER TABLE Lobbies DROP COLUMN ActiveModsJson;
-                ALTER TABLE CloudSaves DROP COLUMN UncompressedSize;
-                ALTER TABLE CloudSaves DROP COLUMN FileCount;
-                ALTER TABLE CloudSaves DROP COLUMN FormatVersion;
+                ALTER TABLE ModVersions ADD COLUMN MinimumLoaderVersion TEXT NULL;
+                DROP TABLE ModSubscriptions;
                 """
             )
         type(self).start_server()
@@ -1735,89 +760,19 @@ class WebsiteModSyncContractTests(unittest.TestCase):
                     row[1]
                     for row in database.execute(f"PRAGMA table_info({table})")
                 }
-                for table in ("Mods", "ModVersions", "Lobbies", "CloudSaves", "CrashReports")
+                for table in ("Mods", "ModVersions", "ModSubscriptions")
             }
-        self.assertIn("LauncherModId", columns["Mods"])
+        self.assertIn("PackageId", columns["Mods"])
+        self.assertNotIn("LauncherModId", columns["Mods"])
         self.assertTrue(
             {"ManifestVersion", "PackageSha256", "ContentSha256"}
             <= columns["ModVersions"]
         )
-        self.assertIn("ActiveModsJson", columns["Lobbies"])
+        self.assertNotIn("MinimumLoaderVersion", columns["ModVersions"])
         self.assertTrue(
-            {"UncompressedSize", "FileCount", "FormatVersion"}
-            <= columns["CloudSaves"]
+            {"UserId", "ModId", "Enabled", "CreatedAtUtc", "UpdatedAtUtc"}
+            <= columns["ModSubscriptions"]
         )
-        self.assertTrue(
-            {"SubmitterUserId", "SubmitterSteamId", "SubmittedAtUtc", "ArchivePath"}
-            <= columns["CrashReports"]
-        )
-
-    def test_zz_lobby_event_stream_allows_graceful_shutdown(self) -> None:
-        server_path = ROOT / "backend/bin/Debug/net10.0/Server.dll"
-        self.assertTrue(server_path.is_file())
-
-        with tempfile.TemporaryDirectory(prefix="sdr-website-shutdown-") as storage_root:
-            port = free_port()
-            origin = f"http://127.0.0.1:{port}"
-            environment = self.environment.copy()
-            environment.update(
-                {
-                    "ASPNETCORE_URLS": origin,
-                    "Storage__Root": storage_root,
-                }
-            )
-            server = subprocess.Popen(
-                [self.dotnet, str(server_path)],
-                cwd=ROOT,
-                env=environment,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-            )
-            stream = None
-            try:
-                deadline = time.monotonic() + 20
-                while time.monotonic() < deadline:
-                    if server.poll() is not None:
-                        output = server.stdout.read() if server.stdout else ""
-                        self.fail(f"shutdown-contract server exited during startup:\n{output}")
-                    try:
-                        with urllib.request.urlopen(
-                            origin + "/api/stats",
-                            timeout=1,
-                        ) as response:
-                            if response.status == 200:
-                                break
-                    except OSError:
-                        time.sleep(0.1)
-                else:
-                    self.fail("shutdown-contract server did not start")
-
-                stream = urllib.request.urlopen(
-                    origin + "/api/lobbies/events",
-                    timeout=5,
-                )
-                self.assertEqual(stream.headers["Content-Type"], "text/event-stream")
-                self.assertEqual(stream.readline(), b"event: lobbies\n")
-                self.assertTrue(stream.readline().startswith(b"data:"))
-
-                started = time.monotonic()
-                server.terminate()
-                try:
-                    server.wait(timeout=3)
-                except subprocess.TimeoutExpired:
-                    server.kill()
-                    server.wait(timeout=5)
-                    self.fail("an open lobby event stream blocked graceful shutdown")
-                self.assertLess(time.monotonic() - started, 3)
-            finally:
-                if stream is not None:
-                    stream.close()
-                if server.poll() is None:
-                    server.kill()
-                    server.wait(timeout=5)
-                if server.stdout:
-                    server.stdout.close()
 
 
 if __name__ == "__main__":

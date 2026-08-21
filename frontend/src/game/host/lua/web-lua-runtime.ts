@@ -108,6 +108,7 @@ export class WebLuaRuntime {
   #tickBudgetWarningTick = -1
   #tickLuaWorkMs = 0
   #tickFrame: WebLuaFrameState | null = null
+  readonly mod: WebLuaModIdentity
 
   static async create(options: WebLuaRuntimeOptions): Promise<WebLuaRuntime> {
     const startedAt = (options.now ?? performance.now.bind(performance))()
@@ -139,6 +140,7 @@ export class WebLuaRuntime {
     this.#log = options.log ?? (() => {})
     this.#now = options.now ?? performance.now.bind(performance)
     this.#initializedAtMs = 0
+    this.mod = Object.freeze(options.mod ?? WEB_LUA_DEV_CONSOLE_MOD)
     for (const name of WEB_LUA_EVENT_NAMES) this.#callbacks.set(name, new Map())
     this.#api = new WebLuaApi({
       addCallback: (name, callback) => this.#addCallback(name, callback),
@@ -161,7 +163,21 @@ export class WebLuaRuntime {
       now: () => this.#now(),
       print: (values) => this.#print(values),
       queueCommand: (command) => this.#queueCommand(command),
-    }, options.mod ?? WEB_LUA_DEV_CONSOLE_MOD)
+    }, this.mod)
+  }
+
+  runEntrypoint(code: string): void {
+    if (this.#closed) throw new Error('Lua runtime is closed')
+    const result = this.#execute(code, null)
+    if (!result.ok) throw new Error(result.error ?? `${this.mod.id} entry script failed`)
+  }
+
+  snapshotState(): Readonly<Record<string, LuaConsoleValue>> {
+    return this.#api.snapshotState()
+  }
+
+  restoreState(source: Readonly<Record<string, LuaConsoleValue>>): void {
+    this.#api.restoreState(source)
   }
 
   enqueueExecution(request: WebLuaExecutionRequest): boolean {
@@ -271,7 +287,7 @@ export class WebLuaRuntime {
     return this.#tickFrame
   }
 
-  #execute(code: string, playerId: string): WebLuaExecutionResult {
+  #execute(code: string, playerId: string | null): WebLuaExecutionResult {
     const output: string[] = []
     this.#activeOutput = output
     this.#activeOutputBytes = 0

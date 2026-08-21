@@ -463,6 +463,35 @@ export function enterBoneyardWorld(
   }
 }
 
+export function returnGameSimulationToHub(state: GameSimulationState): GameSimulationState {
+  const world = createHubWorld(state.playerEntities.identities.map(({ playerId }) => playerId))
+  const lightProviderOrder = createNativeLightProviderOrder()
+  const playerLightRegistrations = Object.fromEntries(
+    state.playerEntities.identities.map(({ playerId }) => [
+      playerId,
+      lightProviderOrder.register('actor'),
+    ]),
+  )
+  const placements = Object.fromEntries(state.playerEntities.identities.map(({ playerId }, index) => {
+    const config = state.playerEntities.configs[index]!
+    return [playerId, createPlayerCharacter(config, hubSpawnPoint())]
+  }))
+  return {
+    ...state,
+    levelUpBarrier: null,
+    lightProviderOrder: lightProviderOrder.state(),
+    playerEntities: clearPlayerEntityMindstars(resetPlayerEntitiesForNewRun(
+      state.playerEntities,
+      placements,
+      playerLightRegistrations,
+    )),
+    primarySpells: createPrimarySpellSimulation(),
+    secondaryAbilities: resetNativeSecondaryWorld(state.secondaryAbilities),
+    run: createGameRunLifecycle(),
+    world,
+  }
+}
+
 function enterPostRunLoadout(
   state: GameSimulationState,
   run: GameRunLifecycleState,

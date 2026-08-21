@@ -17,6 +17,7 @@ public static class GameSessionEndpoints
     private static async Task<IResult> ProvisionAsync(
         HttpContext context,
         GameSessionProvisioner provisioner,
+        WebModContentService contentService,
         ILogger<GameSessionProvisioner> logger,
         CancellationToken cancellationToken)
     {
@@ -27,7 +28,11 @@ public static class GameSessionEndpoints
         }
         try
         {
-            var endpoint = await provisioner.ProvisionAsync(cancellationToken);
+            var content = await contentService.ResolveAsync(
+                TokenService.GetUserId(context.User),
+                recordDownloads: true,
+                cancellationToken: cancellationToken);
+            var endpoint = await provisioner.ProvisionAsync(content, cancellationToken);
             return Results.Ok(new
             {
                 kind = "remote",
@@ -39,6 +44,10 @@ public static class GameSessionEndpoints
         {
             logger.LogWarning(exception, "A browser game session could not be provisioned.");
             return PrivateSessionUnavailable(context);
+        }
+        catch (WebModContentException exception)
+        {
+            return Results.Conflict(new { error = exception.Message });
         }
         catch (HttpRequestException exception)
         {
@@ -55,6 +64,7 @@ public static class GameSessionEndpoints
     private static async Task<IResult> EnterHubAsync(
         HttpContext context,
         GameSessionProvisioner provisioner,
+        WebModContentService contentService,
         ILogger<GameSessionProvisioner> logger,
         CancellationToken cancellationToken)
     {
@@ -65,7 +75,11 @@ public static class GameSessionEndpoints
         }
         try
         {
-            var endpoint = await provisioner.AdmitSharedHubAsync(cancellationToken);
+            var content = await contentService.ResolveAsync(
+                TokenService.GetUserId(context.User),
+                recordDownloads: true,
+                cancellationToken: cancellationToken);
+            var endpoint = await provisioner.AdmitSharedHubAsync(content, cancellationToken);
             return Results.Created("/api/game/hub", new
             {
                 kind = "remote",
@@ -77,6 +91,10 @@ public static class GameSessionEndpoints
         {
             logger.LogWarning(exception, "A shared Hub admission could not be issued.");
             return HubUnavailable(context);
+        }
+        catch (WebModContentException exception)
+        {
+            return Results.Conflict(new { error = exception.Message });
         }
         catch (HttpRequestException exception)
         {

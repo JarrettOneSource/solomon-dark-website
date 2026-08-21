@@ -79,8 +79,8 @@ export default function ModUpload() {
         <div className="kicker mb-1.5">Acquisitions department</div>
         <h1 className="h-display text-3xl">Contribute a Tome</h1>
         <p className="text-fell mt-2 text-bone-dim">
-          Upload a launcher package with <code>manifest.json</code> at the ZIP root. Packages may
-          contain data overlays and Boneyards, sandboxed Lua, or both.{' '}
+          Upload a web-port package with <code>manifest.json</code> at the ZIP root. Packages may
+          contain typed Boneyards, sandboxed Lua, or both.{' '}
           <a href="/mod-package-format.md" className="link-arcane">Read the package format</a>
           {' '}or <a href="/mod-manifest.schema.json" className="link-arcane">open the JSON Schema</a>.
         </p>

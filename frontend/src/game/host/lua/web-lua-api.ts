@@ -176,6 +176,15 @@ export class WebLuaApi {
     return 2 + this.#stateEntryBytesTotal + Math.max(0, this.#state.size - 1)
   }
 
+  snapshotState(): Readonly<Record<string, LuaConsoleValue>> {
+    return Object.fromEntries(this.#state)
+  }
+
+  restoreState(source: Readonly<Record<string, LuaConsoleValue>>): void {
+    this.#clearState()
+    for (const [key, value] of Object.entries(source)) this.#setState(key, value)
+  }
+
   close(): void {
     this.#state.clear()
     this.#stateEntryBytes.clear()

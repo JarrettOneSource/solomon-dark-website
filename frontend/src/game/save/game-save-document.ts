@@ -1,5 +1,6 @@
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import type { PlayerCharacterConfig } from '../core-kernels/player-character.ts'
+import type { GameContentIdentity, LuaConsoleValue } from '../protocol/game-protocol.ts'
 import {
   removePlayerCharacter,
   type GameSimulationState,
@@ -22,12 +23,16 @@ import {
 
 export interface CreateGameSaveDocumentOptions {
   readonly loadedBoneyard: LoadedBoneyard | null
+  readonly mods: readonly GameContentIdentity[]
+  readonly modState: Readonly<Record<string, Readonly<Record<string, LuaConsoleValue>>>>
   readonly playerId: string
   readonly state: GameSimulationState
 }
 
 export interface RestoredGameSaveDocument {
   readonly loadedBoneyard: LoadedBoneyard | null
+  readonly mods: readonly GameContentIdentity[]
+  readonly modState: Readonly<Record<string, Readonly<Record<string, LuaConsoleValue>>>>
   readonly playerId: string
   readonly state: GameSimulationState
 }
@@ -106,6 +111,8 @@ export function createGameSaveDocument(
   }
   const document = JSON.stringify({
     loadedBoneyard: options.loadedBoneyard,
+    mods: options.mods,
+    modState: options.modState,
     schemaVersion: WEB_GAME_SAVE_SCHEMA_VERSION,
     simulation,
     summary: {
@@ -126,6 +133,10 @@ export function restoreGameSaveDocument(document: string): RestoredGameSaveDocum
   const parsed = parseGameSaveDocument(document)
   assertBoundedJsonTree(JSON.parse(document))
   const rawState = record(parsed.simulation, 'game save simulation')
+  const modIds = new Set(parsed.mods.map(mod => mod.id.toLowerCase()))
+  if (Object.keys(parsed.modState).some(modId => !modIds.has(modId.toLowerCase()))) {
+    throw new Error('game save state belongs to an inactive mod')
+  }
   onlyKeys(rawState, 'game save simulation', SIMULATION_KEYS)
   const playerEntities = validatePlayerStore(rawState.playerEntities, parsed.summary.playerId)
   const rawRun = record(rawState.run, 'game save run')
@@ -181,7 +192,13 @@ export function restoreGameSaveDocument(document: string): RestoredGameSaveDocum
     throw new Error('game save owner character summary drifted')
   }
   createGameSnapshot(state, parsed.summary.playerId)
-  return { loadedBoneyard, playerId: parsed.summary.playerId, state }
+  return {
+    loadedBoneyard,
+    mods: parsed.mods,
+    modState: parsed.modState,
+    playerId: parsed.summary.playerId,
+    state,
+  }
 }
 
 function serializeHubWorld(world: HubWorldState): Omit<HubWorldState, 'runtime' | 'studentPopulation'> & {

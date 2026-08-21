@@ -60,6 +60,11 @@ export interface WebLuaModIdentity {
   readonly version: string
 }
 
+export interface WebLuaModSource {
+  readonly entryScript: string
+  readonly identity: WebLuaModIdentity
+}
+
 export const WEB_LUA_STOCK_ENEMIES = [
   { base: 'coffin', key: 'coffin', native_type_id: BONEYARD_WAVE_ENEMY_TYPES.COFFIN, token: 'COFFIN' },
   { base: 'demon', key: 'demon', native_type_id: BONEYARD_WAVE_ENEMY_TYPES.DEMON, token: 'DEMON' },

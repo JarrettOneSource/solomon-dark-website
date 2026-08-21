@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "/mod-manifest.schema.json",
-  "title": "Solomon Darker website mod manifest",
-  "description": "The root manifest for a website-distributed data/Boneyard overlay, images/ art overlay, and/or sandboxed Lua mod.",
+  "title": "Solomon Dark web-port mod manifest",
+  "description": "A Website-distributed sandboxed Lua mod, typed Boneyard package, or both.",
   "type": "object",
   "additionalProperties": false,
   "required": ["id", "name", "version"],
@@ -21,13 +21,6 @@
       "maxLength": 64,
       "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]*$"
     },
-    "minimumLoaderVersion": {
-      "type": "string",
-      "minLength": 5,
-      "maxLength": 64,
-      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$"
-    },
-    "enabled": { "type": "boolean" },
     "priority": { "type": "integer", "minimum": -100000, "maximum": 100000 },
     "overlays": {
       "type": "array",
@@ -41,25 +34,22 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 240,
-            "anyOf": [
-              { "pattern": "^data/.+" },
-              { "pattern": "^images/.+" },
-              { "pattern": "^sandbox/DarkCloud/mylevels/.+\\.boneyard$" }
-            ]
+            "pattern": "^(data/levels|sandbox/DarkCloud/mylevels)/.+\\.boneyard$"
           },
           "source": {
             "type": "string",
             "minLength": 7,
             "maxLength": 240,
-            "pattern": "^files/.+"
+            "pattern": "^files/.+\\.boneyard$"
           },
-          "format": { "type": "string", "maxLength": 256 }
+          "format": { "const": "boneyard" }
         }
       }
     },
     "runtime": {
       "type": "object",
       "additionalProperties": false,
+      "required": ["apiVersion", "entryScript"],
       "properties": {
         "apiVersion": { "type": "string", "minLength": 1, "maxLength": 64 },
         "entryScript": {
@@ -67,28 +57,7 @@
           "minLength": 13,
           "maxLength": 240,
           "pattern": "^scripts/.+\\.lua$"
-        },
-        "requiredCapabilities": {
-          "type": "array",
-          "uniqueItems": true,
-          "maxItems": 256,
-          "items": {
-            "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
-          }
-        },
-        "optionalCapabilities": {
-          "type": "array",
-          "uniqueItems": true,
-          "maxItems": 256,
-          "items": {
-            "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
-          }
         }
-      },
-      "dependentRequired": {
-        "entryScript": ["apiVersion"]
       }
     },
     "requiredMods": {
@@ -99,28 +68,6 @@
         "type": "string",
         "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
       }
-    },
-    "provides": {
-      "type": "array",
-      "uniqueItems": true,
-      "maxItems": 256,
-      "items": {
-        "type": "string",
-        "pattern": "^[a-z0-9][a-z0-9._:-]{0,127}$"
-      }
-    },
-    "requires": {
-      "type": "array",
-      "uniqueItems": true,
-      "maxItems": 256,
-      "items": {
-        "type": "string",
-        "pattern": "^[a-z0-9][a-z0-9._:-]{0,127}$"
-      }
-    },
-    "settings": {
-      "type": "object",
-      "description": "Launcher-owned settings declaration. The launcher validates the complete settings schema and values."
     }
   },
   "anyOf": [
@@ -128,11 +75,6 @@
       "required": ["overlays"],
       "properties": { "overlays": { "minItems": 1 } }
     },
-    {
-      "required": ["runtime"],
-      "properties": {
-        "runtime": { "required": ["apiVersion", "entryScript"] }
-      }
-    }
+    { "required": ["runtime"] }
   ]
 }

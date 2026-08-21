@@ -23,11 +23,11 @@ distributed or lockstep simulation.
 | Web multiplayer party | Shared browser clients | The same shared Hub host, then one party-scoped Boneyard run instance |
 | Dedicated | Any compatible client | The same server bundle run headlessly |
 
-The website is an optional control plane for browser admission, account
-identity, cloud saves, and published content. The packaged
-desktop client must still provide local profiles, local saves, solo play, LAN
-or direct joining, hosting, and locally installed content while the website is
-unreachable.
+The website is the control plane for browser admission, account identity,
+subscribed content, cloud saves, and publishing. A packaged web-port client may
+still provide local solo play with local identity and an empty content set, but
+the Website no longer owns a DLL loader, custom-protocol launcher hand-off,
+native-lobby directory, or native-save ZIP service.
 
 Browser play has no lobby directory or join-by-lobby URL. New Game requests one
 single-use shared-Hub admission ticket, and the authoritative host registers a
@@ -38,10 +38,9 @@ can launch; that transition freezes the current party roster and moves exactly
 those player entities into a party-scoped Boneyard instance while unrelated
 Hub residents keep ticking in the shared Hub instance.
 
-Steam/launcher discovery is a separate product and transport. It continues to
-use Steam's platform-level lobby primitive, `/api/lobbies`, and the registered
-`solomondarkrevived://` hand-off. Those names do not describe or participate in
-the rebuilt browser game's party model.
+The shared Hub and its in-world party system are the only Website multiplayer
+discovery path. No launcher transport participates in the rebuilt browser
+game's party model.
 
 ## Shared identities and boundaries
 
@@ -250,8 +249,8 @@ authoritative world snapshot.
 - The first browser slot is always zero. An authenticated website account uses
   its owner-scoped transactional database row; an anonymous browser uses an
   IndexedDB row on that device. Both adapters store the same host-authored
-  document and revision contract. The launcher's eight native ZIP slots remain
-  a separate native-preservation surface.
+  document and revision contract. Retired launcher-native ZIP slots are not a
+  browser-save surface.
 - `Last Game` gives the stored document to a fresh game host during the
   authenticated handshake. The host bounds, validates, and revives its
   simulation and loaded-Boneyard state before issuing the welcome checkpoint.
@@ -262,19 +261,35 @@ authoritative world snapshot.
   the completed run cannot be resumed or recreated by an older in-flight
   checkpoint.
 - Website slot writes use optimistic revision checks and a content hash. The
-  document is capped at 8 MiB and has no mod-list field in schema version one.
+  document is capped at 8 MiB. Schema version two carries the immutable session
+  content manifest and one bounded normalized `sd.state` snapshot per active
+  Lua mod.
 - Local profiles and direct-host identities require no website account. Website
   or platform identities are optional attestations; public rankings can only
   trust sessions whose authority and identity they can verify.
 - The handshake reserves the exact active content set as
   `(id, version, content SHA-256)`. This follows the existing host-manifest
   contract.
-- Authoritative-state mods execute on the host or are host-loaded data.
-  Desktop hosts may distribute hash-verified data and art to joining desktop
-  clients without the website.
-- Executable content from an arbitrary peer is never automatically installed.
-  Client code or scripts require an explicit trusted installation path. Browser
-  instances accept only the web service's published subset.
+- A Website account owns `ModSubscription` rows. Subscription controls Library
+  membership; `enabled` controls the next admission snapshot. The backend
+  resolves exact latest published versions, validates the complete dependency
+  graph, reopens and hashes every package, and sends only accepted Lua and typed
+  Boneyard members with the single-use Hub ticket or private-session request.
+- In the shared Hub, each admitted player retains that immutable content
+  payload. Party launch requires every member to have the same exact manifest;
+  the run then owns one isolated Lua VM per active Lua member and a party-local
+  Boneyard catalog. Other Hub residents and other party runs cannot observe or
+  mutate that content. Subscription changes affect only a later admission.
+- On resume, the title owner compares the save manifest with the next-admission
+  manifest before requesting a ticket. Exact matches restore matching mod
+  state. Added mods start empty; removed or version/content-changed mods discard
+  their old state only after explicit Continue. Cancel leaves the save and
+  active subscriptions untouched.
+- The web package contract rejects DLL entry points, native `images/`
+  replacement overlays, and arbitrary untyped native `data/` overlays. Those
+  mechanisms require a mutable process filesystem and compiled native atlas
+  destinations that the browser authority does not own. Accepted packages are
+  sandboxed Lua, typed Boneyards, or both.
 
 ## Rendering boundary
 
@@ -776,16 +791,17 @@ southern-bank children, and the Astronomer ensemble without errors.
 ## Web Lua extension boundary
 
 Lua is an authority extension, not another world model. The portable Node game
-host owns one lazily initialized Lua 5.4 VM for the browser developer console;
-future resolved mods receive separate VM lifetimes behind the same interface.
-The VM imports `core-server` only through `host/lua` semantic adapters. Core
-kernels, protocol codecs, snapshots, clients, React, and Pixi never import the
-VM.
+host owns one lazily initialized Lua 5.4 VM for the browser developer console
+and one VM for each active mod in a private session or launched shared-Hub
+party. Every VM imports `core-server` only through `host/lua` semantic adapters.
+Core kernels, protocol codecs, snapshots, clients, React, and Pixi never import
+a VM. Mod VMs never share globals, callbacks, timers, command queues, or state
+maps.
 
 The fixed-tick order is:
 
 ```text
-accepted host console requests + due Lua timers + runtime.tick callbacks
+accepted host console requests + per-mod due Lua timers + runtime.tick callbacks
   -> validate and apply queued semantic player commands
   -> pass queued enemy spawn intents into the existing Boneyard materializer
   -> authoritative simulation tick
@@ -802,20 +818,24 @@ Authoritative gameplay pause freezes this fixed-tick Lua lane together with the
 world; new console requests fail immediately while paused instead of waiting on
 a tick that cannot run.
 
-The VM is cold by default. Its JavaScript bridge is bundled into both portable
-server entry points and its immutable Lua 5.4 WASM sits beside them. Lazy
-creation, callback/timer registries, UTF-8/JSON wire expansion, output capture,
-state, queued commands, and the allocator all have explicit bounds.
-Instruction hooks interrupt both fresh chunks and stored callbacks. An unused
-runtime adds no dispatch loop, worker, VM allocation, or browser bytes; an
-initialized idle VM does not project players or actors.
+The developer VM is cold by default. Private-session mod VMs initialize before
+the host listens; shared-Hub mod VMs initialize in canonical
+dependency/priority/id order while the launching party is frozen, before that
+party enters its run. Every entry script runs exactly once per runtime lifetime.
+The JavaScript bridge is bundled into both portable server entry points and its
+immutable Lua 5.4 WASM sits beside them. Creation, callback/timer registries,
+UTF-8/JSON wire expansion, output capture, state, queued commands, and every
+allocator have explicit per-VM and aggregate bounds. Instruction hooks
+interrupt both entry chunks and stored callbacks. A package with no Lua member
+creates no VM.
 
 The first API version exposes only semantic owners already implemented in
 `/game`: runtime/state/events/timer, run seed, scene/gameplay/Hub reads,
 player resource reads/mutations, world/wave reads, and the bounded stock-enemy
-descriptor/spawn subset. Client
-presentation, durable mod storage/settings, multi-mod bus, raw Lua networking,
-dynamic content registries, bots, input synthesis, time scaling, navigation,
-and every native-memory/debug path remain absent until their web owners exist.
+descriptor/spawn subset. `sd.state` is the only durable mod-owned value domain;
+schema-two checkpoints snapshot it as bounded JSON and restore it only for an
+exact identity match. Client presentation, a cross-mod bus, raw Lua networking,
+bots, input synthesis, time scaling, navigation, and every native-memory/debug
+path remain absent until their web owners exist.
 The complete disposition is recorded in `game-native-parity-re.md` and the Mod
 Loader's `web-lua-runtime-parity-contract.md`.

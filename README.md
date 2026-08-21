@@ -76,12 +76,12 @@ both from `frontend/`:
 npm run dev:game -- --host 127.0.0.1 --port 4178
 ```
 
-The launcher starts a separate Node server on an OS-assigned loopback port,
-waits for its readiness message, gives Vite the URL and development credential,
-and shuts both processes down together. This is the real socket and protocol
-boundary the packaged desktop client will supervise; the browser never runs an
-in-tab server. Direct `npm run dev` intentionally leaves `/game` without a
-session unless a trusted launcher supplies `VITE_GAME_SERVER_URL` and
+The development script starts a separate Node server on an OS-assigned loopback
+port, waits for its readiness message, gives Vite the URL and development
+credential, and shuts both processes down together. This is the real socket
+and protocol boundary; the browser never runs an in-tab server. Direct
+`npm run dev` intentionally leaves `/game` without a session unless a trusted
+platform shell supplies `VITE_GAME_SERVER_URL` and
 `VITE_GAME_BOOTSTRAP_CREDENTIAL`.
 
 For a LAN-visible development page, bind Vite to `0.0.0.0` and provide the
@@ -147,68 +147,22 @@ those modes.
 ## Mod packages
 
 Community mod ZIPs require `manifest.json` at the archive root. Website
-packages may contain data overlays/Boneyards, root `images/` art overlays,
-sandboxed Lua, or any combination of those three. See the [authoring
+packages may contain typed Boneyards, sandboxed Lua, or both. Native DLL,
+arbitrary data-tree, and `images/` replacement mods are not web-port content.
+See the [authoring
 guide](frontend/public/mod-package-format.md),
 [JSON Schema](frontend/public/mod-manifest.schema.json), and the
 [copyable examples](frontend/public/examples/).
 
-Website Join Game links give the launcher the lobby directory origin. The
-launcher fetches the host's exact active mod identities, reuses exact manual or
-cached copies, downloads missing website versions, verifies both package and
-content hashes, and stages only the host set. Direct Steam invites and direct
-lobby-ID joins use the configured website the same way when its lobby metadata
-is available. If it is unavailable, the launcher falls back to the locally
-enabled set and the native exact-compatibility handshake, so manual P2P play
-does not depend on this service.
+Subscribe in the Library and enable mods from Explore the Dark Cloud. Session
+provisioning resolves exact latest versions, validates dependencies and hashes,
+starts one isolated Lua VM per active script, and adds active package
+Boneyards to that session only. Browser lobby rows advertise the exact host
+manifest before joining. Save schema 2 records that manifest and bounded
+per-mod state.
 
 Run the backend integration contract with a .NET 10 SDK:
 
 ```bash
 python3 -m unittest tests.test_mod_sync_contract -v
 ```
-
-## Crash reports
-
-The launcher submits crash diagnostics only after explicit user consent. It
-authenticates with a short-lived Steam directory session and posts a bounded
-ZIP plus metadata to `POST /api/crash-reports`. The backend validates that the
-embedded report matches the submitted metadata, stores the archive under the
-private storage root at `crash-reports/<year>/<month>/`, and records the Steam
-or linked website identity, submission/crash times, versions, enabled mods,
-exit code, artifact counts, archive size, and SHA-256 in `CrashReports`.
-
-Crash archives are not exposed by the static-file middleware. They may contain
-minidumps and logs and must be handled as private diagnostics.
-
-## Steam ticket authentication
-
-The backend requires a standard Steam Web API user key to verify the tickets created by the mod loader. Register a key at [steamcommunity.com/dev/apikey](https://steamcommunity.com/dev/apikey) using a real domain you control.
-
-Configure the key only on the backend:
-
-```env
-Steam__WebApiKey=YOUR_STEAM_WEB_API_KEY
-```
-
-ASP.NET maps `Steam__WebApiKey` to `Steam:WebApiKey`. Never commit the key or expose it to the frontend or mod loader.
-
-The backend validates launcher tickets through `ISteamUserAuth/AuthenticateUserTicket` for Steam AppID `3362180` with the ticket identity `solomon-dark-directory-v1`. If the key is missing, `POST /api/auth/steam/session` returns `503 Service Unavailable` and authenticated lobby discovery is unavailable.
-
-The domain entered during key registration is the key's administrative association, not a request-origin restriction. Changing the website domain does not require an application change; the key may be regenerated later to keep that registration current.
-
-## Launcher cloud saves
-
-The launcher keeps eight save slots under its own local application-data root;
-it never runs from or writes into the retail game's save directory. After a
-local slot changes, the launcher obtains a short-lived Steam Web API session
-and uploads a validated ZIP snapshot to `/api/saves/{slot}`.
-
-Cloud backup turns on automatically when the active Steam ID is linked to an
-Solomon Darker account on the Account page. The launcher does not receive the website
-password or store a website bearer token. Cloud-save access from both the
-launcher and the Account page remains disabled until that Steam link exists.
-
-Cloud is a backup, not the live save location. Launches continue from local
-disk when the website is unavailable, and cloud snapshots are restored only
-after an explicit user action.

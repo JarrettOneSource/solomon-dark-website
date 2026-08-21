@@ -10,7 +10,6 @@ import { useApi } from '../lib/useApi'
 import { useAuth } from '../lib/auth'
 import { formatBytes, formatCount, formatDate, timeAgo } from '../lib/format'
 import { art, elementWords } from '../lib/assets'
-import { launcherInstallUri } from '../lib/links'
 import { playSound } from '../fx/sounds'
 
 /** Marginalia: notes other wizards left in this tome's margins. */
@@ -318,8 +317,14 @@ export default function ModDetail() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const mod = useApi(() => api.mods.get(slug), [slug])
+  const subscriptions = useApi(
+    () => user ? api.mods.subscriptions.list() : Promise.resolve({ items: [] }),
+    [user?.id],
+  )
   const [deleting, setDeleting] = useState(false)
   const [stamp, setStamp] = useState(0)
+  const [subscribing, setSubscribing] = useState(false)
+  const [subscriptionError, setSubscriptionError] = useState<string | null>(null)
 
   if (mod.loading) return <Spinner label="Fetching the tome…" />
   if (mod.error || !mod.data) {
@@ -340,6 +345,28 @@ export default function ModDetail() {
   const m = mod.data
   const isOwner = user != null && user.id === m.author.id
   const latest = m.versions[0]
+  const subscribed = subscriptions.data?.items.some(
+    subscription => subscription.mod.slug === m.slug,
+  ) ?? false
+
+  const subscribe = async () => {
+    if (!user) {
+      navigate('/login')
+      return
+    }
+    setSubscribing(true)
+    setSubscriptionError(null)
+    try {
+      await api.mods.subscriptions.subscribe(m.slug)
+      await subscriptions.reload()
+      setStamp((count) => count + 1)
+      playSound('tomeGet', 0.3)
+    } catch (error) {
+      setSubscriptionError(error instanceof Error ? error.message : 'The subscription failed.')
+    } finally {
+      setSubscribing(false)
+    }
+  }
 
   const remove = async () => {
     if (!window.confirm(`Burn “${m.name}” from the Library? This cannot be undone.`)) return
@@ -419,16 +446,14 @@ export default function ModDetail() {
 
         <aside className="space-y-6">
           <div className="panel panel-ornate p-6 text-center">
-            <a
-              href={launcherInstallUri(m.slug)}
+            <button
+              type="button"
               className="btn btn-gold relative w-full !py-4 !text-sm"
-              title="Sends this tome to the Solomon Dark launcher, which downloads and installs it"
-              onClick={() => {
-                setStamp((k) => k + 1)
-                playSound('tomeGet', 0.3)
-              }}
+              disabled={subscribed || subscribing}
+              title="Adds this mod to your account; enable it from Explore the Dark Cloud"
+              onClick={() => { void subscribe() }}
             >
-              ⬩ Install via Launcher
+              {subscribed ? '✓ Subscribed' : subscribing ? 'Subscribing…' : '⬩ Subscribe'}
               {stamp > 0 && (
                 <img
                   key={stamp}
@@ -439,14 +464,13 @@ export default function ModDetail() {
                   onAnimationEnd={() => setStamp(0)}
                 />
               )}
-            </a>
-            <a
-              href={api.mods.downloadUrl(m.slug)}
-              className="btn btn-stone mt-3 w-full !py-2 !text-[11px]"
-              title="Downloads the raw mod package"
-            >
-              Download the .zip instead
-            </a>
+            </button>
+            {subscriptionError ? <ErrorNote message={subscriptionError} /> : null}
+            <p className="mt-3 text-xs text-bone-dim">
+              {subscribed
+                ? 'Manage activation from Explore the Dark Cloud before starting a game.'
+                : 'Subscribed mods are downloaded and verified when your next game starts.'}
+            </p>
             <p className="mt-3 font-mono text-xs text-bone-dim">
               v{latest?.version ?? m.latestVersion} · {latest ? formatBytes(latest.fileSize) : ''} ·
               ↓ {formatCount(m.downloads)} total

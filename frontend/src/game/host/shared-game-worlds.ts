@@ -1,4 +1,5 @@
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
+import type { BoneyardEnemySpawnIntent } from '../core-kernels/boneyard-wave-director.ts'
 import type {
   PlayerCharacterConfig,
   PlayerCharacterInput,
@@ -221,6 +222,7 @@ export function stepSharedGameWorlds(
   state: SharedGameWorldsState,
   inputs: Readonly<Record<PlayerId, PlayerCharacterInput>>,
   pausedPartyIds: ReadonlySet<string> = new Set(),
+  enemySpawnIntents: ReadonlyMap<string, readonly BoneyardEnemySpawnIntent[]> = new Map(),
 ): SharedGameWorldsState {
   return {
     ...state,
@@ -229,7 +231,11 @@ export function stepSharedGameWorlds(
       ? run
       : {
           ...run,
-          state: stepGameSimulationTick(run.state, inputsForState(run.state, inputs)),
+          state: stepGameSimulationTick(
+            run.state,
+            inputsForState(run.state, inputs),
+            { enemySpawnIntents: enemySpawnIntents.get(run.partyId) ?? [] },
+          ),
         }),
   }
 }

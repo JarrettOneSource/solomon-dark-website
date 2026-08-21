@@ -21,64 +21,42 @@ EF Core, SQLite, JWT bearer authentication, and filesystem storage rooted at
 
 ## API groups
 
-- `/api/auth/*` manages website accounts, JWTs, schools, and Steam links.
+- `/api/auth/*` manages website accounts, JWTs, and schools.
 - `/api/mods*`, `/api/tags`, and `/api/users/{username}` provide the Library,
-  package validation, downloads, comments, screenshots, and public profiles.
-- `/api/lobbies*` provides the optional Steam Search Parties directory and join
-  tickets.
+  package validation, account subscriptions, comments, screenshots, and public
+  profiles.
 - `/api/game/hub` issues one single-use admission to the resident shared browser
   Hub. `/api/game/sessions` remains the non-discoverable private operations seam.
-- `/api/saves*` provides user-scoped cloud save slots.
+- `/api/game/saves*` provides the authoritative browser cloud slot.
 - `/api/boneyards*` provides user-scoped Boneyard editor drafts and publication.
 - `/api/stats` provides public aggregate counts.
 
-`GET /api/lobbies` returns `items`, `privateParties`, and `playerCount`.
-`privateParties` contains player and capacity counts for friends-only parties
-that the current viewer cannot inspect; it does not expose their lobby details.
+The rebuilt browser game has no lobby namespace, directory, or join URL.
+`POST /api/game/hub` resolves the authenticated account's active mod content
+and returns a `Cache-Control: no-store` credentialed WSS endpoint. The
+supervisor consumes that admission once, and the authoritative host creates
+party membership only after the completed character authenticates.
 
-`/api/lobbies` is exclusively the Steam/launcher directory and returns
-`solomondarkrevived://` joins. The rebuilt browser game has no lobby namespace,
-directory, or join URL. `POST /api/game/hub` returns a `Cache-Control: no-store`
-credentialed WSS endpoint; the supervisor consumes that admission once, and
-the authoritative host creates party membership only after the completed
-character authenticates.
+## Web mod subscriptions and sessions
 
-## Launcher cloud saves
+`ModSubscription` binds one account to one Library mod and stores the enabled
+state for the next admission. `GET /api/mods/subscriptions` lists membership;
+`PUT`, `PATCH`, and `DELETE /api/mods/{slug}/subscription` subscribe, change
+activation, and unsubscribe. `GET /api/mods/active` reopens the exact latest
+packages, validates hashes and dependency order, and returns the manifest the
+game-session endpoints will provision.
 
-`POST /api/auth/steam/session` verifies the launcher ticket and looks up the
-verified Steam ID in `Users.SteamId`. Its short-lived JWT includes a linked
-user claim only when that mapping exists, and the response exposes the linked
-account's id and username. The launcher therefore discovers a website link
-without receiving website credentials.
-
-The `cloud-save` policy accepts website JWTs and Steam sessions with that
-linked-user claim. Every endpoint additionally requires the website account to
-have a current Steam link. Steam-session operations recheck the exact
-user/Steam-ID mapping, so unlinking takes effect even while a previously issued
-15-minute session is still valid.
-
-Cloud saves are local-first backup snapshots. There are eight slots, numbered
-0 through 7:
-
-- `GET /api/saves` lists snapshot metadata.
-- `PUT /api/saves/{slot}` replaces a snapshot with an
-  `application/zip` launcher archive.
-- `GET /api/saves/{slot}` downloads the ZIP.
-- `DELETE /api/saves/{slot}` removes the remote backup only.
-
-Archives are limited to 16 MiB compressed, 64 MiB expanded, and 256 files.
-They contain `manifest.json` plus regular files below
-`savegames/solomondark/`. The manifest has schema version 1, the route slot,
-an optional 40-character name, and the exact size and SHA-256 of every file.
-The server rejects traversal, duplicate paths, links, unlisted files, and
-digest mismatches before replacing the prior snapshot. Stored metadata records
-compressed and expanded sizes, file count, format version, archive SHA-256,
-and the UTC update time.
+Only sandboxed Lua and typed Boneyard overlays are accepted. The backend sends
+the resolved payload with the single-use shared-Hub ticket or private session
+request. Content remains immutable for that player; a party can launch only
+when all members carry the same exact manifest. Each party run owns isolated
+Lua VMs and a content-local Boneyard catalog. Browser save schema 2 carries the
+exact manifest and bounded per-mod `sd.state`.
 
 ## Revision log
 
 - REVISION 9: Adds owner-scoped Boneyard editor drafts, disk-backed autosave,
-  native container validation, launcher-valid Library publication, development
+  native container validation, web-port Library publication, development
   examples, and the stock survival tome seed. Library summaries now allow 160
   characters so the supplied stock-tome copy remains verbatim.
 

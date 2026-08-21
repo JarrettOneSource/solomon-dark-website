@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { art } from '../lib/assets'
-import { MOD_LOADER_DOWNLOAD_URL } from '../lib/links'
 import AmbientHaunts from '../fx/Haunts'
 import { CrawlerStroll } from '../fx/Critters'
 import MenuSolomon from '../fx/MenuSolomon'
@@ -347,15 +346,12 @@ export default function Hero() {
               >
                 Join the Discord
               </a>
-              <a
-                href={MOD_LOADER_DOWNLOAD_URL}
-                target="_blank"
-                rel="noreferrer"
-                title="Download the mod loader from GitHub"
+              <Link
+                to="/game"
                 className="btn-plaque !px-4 !py-2.5 !text-[12px] !tracking-[0.18em] sm:flex sm:flex-1 sm:items-center sm:justify-center"
               >
-                Download the Mod Loader
-              </a>
+                Play in Browser
+              </Link>
               <Link
                 to="/mods"
                 className="btn-plaque !px-4 !py-2.5 !text-[12px] !tracking-[0.18em] sm:flex sm:flex-1 sm:items-center sm:justify-center"

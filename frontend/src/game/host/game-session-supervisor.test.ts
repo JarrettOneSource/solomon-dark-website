@@ -19,6 +19,20 @@ const CHARACTER = {
   displayName: 'Helvidius',
   element: 'ether',
 } as const
+const EMPTY_CONTENT = { manifestSha256: '0'.repeat(64), mods: [] } as const
+const MOD_CONTENT = {
+  manifestSha256: '1'.repeat(64),
+  mods: [{
+    boneyards: [],
+    contentSha256: 'a'.repeat(64),
+    entryScript: null,
+    id: 'tests.shared-content',
+    name: 'Shared Content',
+    priority: 0,
+    slug: 'shared-content',
+    version: '1.0.0',
+  }],
+} as const
 
 test('game session supervisor provisions isolated authenticated game sessions', async (context) => {
   const supervisor = await startGameSessionSupervisor({
@@ -64,7 +78,11 @@ test('game session supervisor enforces private capacity and expires unclaimed se
   await provision(supervisor.address.url)
   const full = await fetch(`${supervisor.address.url}/admin/sessions`, {
     method: 'POST',
-    headers: { authorization: `Bearer ${ADMIN_SECRET}` },
+    headers: {
+      authorization: `Bearer ${ADMIN_SECRET}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ content: EMPTY_CONTENT }),
   })
   assert.equal(full.status, 503)
 
@@ -82,9 +100,9 @@ test('game session supervisor admits independent players to one shared Hub and r
   context.after(() => supervisor.close())
 
   const endpoints = await Promise.all([
-    admitHub(supervisor.address.url),
-    admitHub(supervisor.address.url),
-    admitHub(supervisor.address.url),
+    admitHub(supervisor.address.url, MOD_CONTENT),
+    admitHub(supervisor.address.url, MOD_CONTENT),
+    admitHub(supervisor.address.url, MOD_CONTENT),
   ])
   assert.deepEqual(new Set(endpoints.map(({ path }) => path)), new Set(['/game-hub']))
   assert.equal(new Set(endpoints.map(({ credential }) => credential)).size, 3)
@@ -100,6 +118,16 @@ test('game session supervisor admits independent players to one shared Hub and r
     second.welcome.playerId,
     third.welcome.playerId,
   ]).size, 3)
+  for (const client of [first, second, third]) {
+    assert.deepEqual(client.welcome.content, {
+      manifestSha256: MOD_CONTENT.manifestSha256,
+      mods: [{
+        contentSha256: MOD_CONTENT.mods[0].contentSha256,
+        id: MOD_CONTENT.mods[0].id,
+        version: MOD_CONTENT.mods[0].version,
+      }],
+    })
+  }
 
   const firstParty = await first.next((message) => (
     message.type === 'server-party-state'
@@ -155,6 +183,60 @@ test('game session supervisor admits independent players to one shared Hub and r
   assert.equal((await fetch(`${supervisor.address.url}/admin/lobbies`, {
     headers: { authorization: `Bearer ${ADMIN_SECRET}` },
   })).status, 404)
+})
+
+test('shared Hub refuses a party launch when member mod manifests differ', async (context) => {
+  const supervisor = await startGameSessionSupervisor({
+    adminSecret: ADMIN_SECRET,
+    allowedOrigins: [BROWSER_ORIGIN],
+    snapshotRate: 100,
+  })
+  context.after(() => supervisor.close())
+
+  const changedContent = {
+    ...MOD_CONTENT,
+    manifestSha256: '2'.repeat(64),
+    mods: [{ ...MOD_CONTENT.mods[0], contentSha256: 'b'.repeat(64), version: '2.0.0' }],
+  } as const
+  const first = await join(
+    supervisor.address.url,
+    await admitHub(supervisor.address.url, MOD_CONTENT),
+    BROWSER_ORIGIN,
+  )
+  const second = await join(
+    supervisor.address.url,
+    await admitHub(supervisor.address.url, changedContent),
+    BROWSER_ORIGIN,
+  )
+  context.after(() => closeSocket(first.socket))
+  context.after(() => closeSocket(second.socket))
+
+  const invitation = second.next((message) => (
+    message.type === 'server-party-state' && message.state.invitations.length === 1
+  ))
+  first.socket.send(encodeGameMessage({
+    type: 'client-party-invite',
+    targetPlayerId: second.welcome.playerId,
+  }))
+  const invited = await invitation
+  assert.equal(invited.type, 'server-party-state')
+  const joined = first.next((message) => (
+    message.type === 'server-party-state' && message.state.party.memberPlayerIds.length === 2
+  ))
+  second.socket.send(encodeGameMessage({
+    type: 'client-party-accept',
+    invitationId: invited.state.invitations[0]!.id,
+  }))
+  await joined
+
+  const rejected = first.next((message) => message.type === 'server-disconnect')
+  first.socket.send(encodeGameMessage({
+    type: 'client-start-match',
+    boneyardId: 'default-random',
+  }))
+  const message = await rejected
+  assert.equal(message.type, 'server-disconnect')
+  assert.match(message.reason, /same mods/)
 })
 
 test('shared Hub admissions are single-use and expire before authentication', async (context) => {
@@ -304,6 +386,7 @@ interface ProvisionedEndpoint {
 interface SupervisorHealth {
   hubPlayers: number
   parties: number
+  players: number
   privateSessions: number
   protocol: string
   runs: number
@@ -314,7 +397,11 @@ interface SupervisorHealth {
 async function provision(supervisorUrl: string): Promise<ProvisionedEndpoint> {
   const response = await fetch(`${supervisorUrl}/admin/sessions`, {
     method: 'POST',
-    headers: { authorization: `Bearer ${ADMIN_SECRET}` },
+    headers: {
+      authorization: `Bearer ${ADMIN_SECRET}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ content: EMPTY_CONTENT }),
   })
   assert.equal(response.status, 201)
   assert.equal(response.headers.get('cache-control'), 'no-store')
@@ -327,10 +414,17 @@ async function provision(supervisorUrl: string): Promise<ProvisionedEndpoint> {
   }
 }
 
-async function admitHub(supervisorUrl: string): Promise<ProvisionedEndpoint> {
+async function admitHub(
+  supervisorUrl: string,
+  content: typeof EMPTY_CONTENT | typeof MOD_CONTENT = EMPTY_CONTENT,
+): Promise<ProvisionedEndpoint> {
   const response = await fetch(`${supervisorUrl}/admin/hub/tickets`, {
     method: 'POST',
-    headers: { authorization: `Bearer ${ADMIN_SECRET}` },
+    headers: {
+      authorization: `Bearer ${ADMIN_SECRET}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ content }),
   })
   assert.equal(response.status, 201)
   const value = await response.json() as Record<string, unknown>
@@ -439,9 +533,9 @@ function messageQueue(socket: WebSocket) {
 }
 
 async function waitFor(predicate: () => boolean | Promise<boolean>): Promise<void> {
-  const deadline = Date.now() + 3000
+  const deadline = performance.now() + 5000
   while (!await predicate()) {
-    if (Date.now() >= deadline) throw new Error('timed out waiting for condition')
+    if (performance.now() >= deadline) throw new Error('timed out waiting for condition')
     await new Promise((resolve) => setTimeout(resolve, 10))
   }
 }

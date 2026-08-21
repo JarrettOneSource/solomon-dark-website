@@ -307,6 +307,7 @@ export interface GameplayPauseState {
 }
 
 export interface ClientHelloMessage {
+  allowModMismatch?: boolean
   type: 'client-hello'
   protocolVersion: number
   credential: string
@@ -525,6 +526,7 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
   if (value.type === 'client-hello') {
     onlyKeys(value, 'message', [
       'type',
+      'allowModMismatch',
       'protocolVersion',
       'credential',
       'character',
@@ -536,6 +538,9 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
       protocolVersion: integer(value.protocolVersion, 'protocolVersion'),
       credential: limitedString(value.credential, 'credential', 512),
       character: playerCharacterConfig(value.character, 'character'),
+      ...(value.allowModMismatch === undefined
+        ? {}
+        : { allowModMismatch: boolean(value.allowModMismatch, 'allowModMismatch') }),
       ...(value.resumeToken === undefined
         ? {}
         : { resumeToken: limitedString(value.resumeToken, 'resumeToken', 512) }),

@@ -8,7 +8,6 @@ export interface User {
   username: string
   email?: string
   school: School | null
-  steamId: string | null
   createdAtUtc: string
 }
 
@@ -37,7 +36,7 @@ export interface ModSummary {
   slug: string
   name: string
   summary: string
-  launcherModId: string | null
+  packageId: string | null
   tags: string[]
   author: { id: number; username: string; school: School | null }
   latestVersion: string
@@ -74,6 +73,29 @@ export interface ModList {
   pageSize: number
 }
 
+export interface ModSubscription {
+  enabled: boolean
+  createdAtUtc: string
+  updatedAtUtc: string
+  mod: ModSummary
+}
+
+export interface ActiveWebMod {
+  id: string
+  name: string
+  slug: string
+  version: string
+  contentSha256: string
+  priority: number
+  hasLua: boolean
+  boneyardCount: number
+}
+
+export interface ActiveWebModSet {
+  manifestSha256: string
+  mods: ActiveWebMod[]
+}
+
 export interface ModComment {
   id: number
   body: string
@@ -86,90 +108,6 @@ export interface WizardProfile {
   modCount: number
   downloadsTotal: number
   mods: ModSummary[]
-}
-
-export type LobbyPrivacy = 'public' | 'passwordProtected' | 'friendsOnly'
-export type LobbyAccess = 'public' | 'password' | 'friend'
-export type LobbyPhase = 'picking-loadout' | 'hub' | 'loading' | 'session' | 'results'
-
-export interface LobbyBuild {
-  appId: number
-  protocolVersion: number
-  manifestSha256: string
-  loaderVersion: string
-}
-
-export interface LobbyGame {
-  phase: LobbyPhase
-  boneyardId: string | null
-  boneyardName: string | null
-  boneyardSha256: string | null
-  wave: number | null
-  difficulty: string | null
-  elapsedSeconds: number | null
-  statusText: string | null
-}
-
-/** Public KDF parameters for a warded lobby — never the hash itself. */
-export interface LobbyPasswordInfo {
-  algorithm: string
-  iterations: number
-  salt: string
-}
-
-export interface LobbyJoinInfo {
-  lobbyId: string
-  launchUri: string
-}
-
-export interface LobbyMod {
-  id: string
-  version: string
-  contentSha256: string
-}
-
-export interface Lobby {
-  id: number
-  hostPlayer: string
-  hostSteamId: string
-  privacy: LobbyPrivacy
-  access: LobbyAccess
-  players: number
-  maxPlayers: number
-  lastSeenUtc: string
-  expiresAtUtc: string
-  build: LobbyBuild
-  game: LobbyGame
-  mods: LobbyMod[]
-  password: LobbyPasswordInfo | null
-  /** Withheld for password lobbies until authorization succeeds. */
-  join: LobbyJoinInfo | null
-}
-
-/** A friends-only party the viewer is not privy to — seat counts and nothing else. */
-export interface PrivateParty {
-  players: number
-  maxPlayers: number
-}
-
-export interface LobbyList {
-  items: Lobby[]
-  /** Friends-only parties withheld from this viewer (absent on older backends). */
-  privateParties?: PrivateParty[]
-  playerCount: number
-}
-
-export interface LobbyAuthorization {
-  lobbyId: string
-  steamId: string
-  ticket: string
-  expiresAtUtc: string
-  launchUri: string
-}
-
-export interface SteamLinkStart {
-  authorizationUrl: string
-  expiresAtUtc: string
 }
 
 /** A Boneyard editor draft as listed (bodies omitted; see BONEYARD_API.md). */
@@ -196,17 +134,6 @@ export interface Stats {
   savesSynced: number
   enrolled: number
   downloadsTotal: number
-}
-
-export interface CloudSave {
-  slot: number
-  name: string | null
-  size: number
-  uncompressedSize: number
-  fileCount: number
-  formatVersion: number
-  sha256: string
-  updatedAtUtc: string
 }
 
 export interface WebGameSave {
@@ -297,6 +224,24 @@ export const api = {
     /** The most-taken tomes inside a 30/60/90-day window, at most eight. */
     popular: (days: 30 | 60 | 90 = 30) =>
       request<{ days: number; items: ModSummary[] }>(`/api/mods/popular?days=${days}`),
+    subscriptions: {
+      list: () => request<{ items: ModSubscription[] }>('/api/mods/subscriptions'),
+      active: () => request<ActiveWebModSet>('/api/mods/active'),
+      subscribe: (slug: string) =>
+        request<{ enabled: boolean; slug: string; subscribed: boolean }>(
+          `/api/mods/${encodeURIComponent(slug)}/subscription`,
+          { method: 'PUT' },
+        ),
+      setEnabled: (slug: string, enabled: boolean) =>
+        request<{ enabled: boolean; slug: string }>(
+          `/api/mods/${encodeURIComponent(slug)}/subscription`,
+          { ...json({ enabled }), method: 'PATCH' },
+        ),
+      unsubscribe: (slug: string) =>
+        request<void>(`/api/mods/${encodeURIComponent(slug)}/subscription`, {
+          method: 'DELETE',
+        }),
+    },
     create: (form: FormData) => request<ModDetail>('/api/mods', { method: 'POST', body: form }),
     update: (
       slug: string,
@@ -309,9 +254,6 @@ export const api = {
     addVersion: (slug: string, form: FormData) =>
       request<ModDetail>(`/api/mods/${encodeURIComponent(slug)}/versions`, { method: 'POST', body: form }),
     remove: (slug: string) => request<void>(`/api/mods/${encodeURIComponent(slug)}`, { method: 'DELETE' }),
-    downloadUrl: (slug: string) => `/api/mods/${encodeURIComponent(slug)}/download`,
-    versionDownloadUrl: (slug: string, versionId: number) =>
-      `/api/mods/${encodeURIComponent(slug)}/versions/${versionId}/download`,
     comments: {
       list: (slug: string) =>
         request<{ items: ModComment[]; total: number }>(
@@ -346,19 +288,6 @@ export const api = {
       request<WizardProfile>(`/api/users/${encodeURIComponent(username)}`),
   },
 
-  lobbies: {
-    list: () => request<LobbyList>('/api/lobbies'),
-    eventsUrl: '/api/lobbies/events',
-    authorize: (id: number, passwordHash: string) =>
-      request<LobbyAuthorization>(`/api/lobbies/${id}/authorize`, json({ passwordHash })),
-  },
-
-
-  steam: {
-    link: (returnPath: string) =>
-      request<SteamLinkStart>('/api/auth/steam/link', json({ returnPath })),
-    unlink: () => request<void>('/api/auth/steam', { method: 'DELETE' }),
-  },
 
   /** The Boneyard editor's cloud drafts (JWT, owner-only). */
   boneyards: {
@@ -377,12 +306,6 @@ export const api = {
   },
 
   stats: () => request<Stats>('/api/stats'),
-
-  saves: {
-    list: () => request<CloudSave[]>('/api/saves'),
-    remove: (slot: number) => request<void>(`/api/saves/${slot}`, { method: 'DELETE' }),
-    downloadUrl: (slot: number) => `/api/saves/${slot}`,
-  },
 
   gameSaves: {
     get: (slot: number) => request<{ save: WebGameSave | null }>(

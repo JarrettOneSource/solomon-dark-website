@@ -10,8 +10,12 @@ import type { Duplex } from 'node:stream'
 import { WebSocket, WebSocketServer } from 'ws'
 
 import { GAME_PROTOCOL_NAME } from '../protocol/game-protocol.ts'
-import type { BoneyardCatalog } from './boneyard-catalog.ts'
+import { createBoneyardCatalog, type BoneyardCatalog } from './boneyard-catalog.ts'
 import { startGameHost, type GameHost } from './game-host.ts'
+import {
+  materializeWebSessionContent,
+  type MaterializedWebSessionContent,
+} from './web-mod-content.ts'
 import {
   monitorWebSocketHeartbeat,
   resolveGameHeartbeatInterval,
@@ -30,6 +34,7 @@ const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost'])
 const DEFAULT_MAX_CONNECTIONS_PER_SESSION = 16
 const DEFAULT_MAX_SESSIONS = 64
 const DEFAULT_UNCLAIMED_TIMEOUT_MS = 2 * 60 * 1000
+const MAX_PROVISION_REQUEST_BYTES = 48 * 1024 * 1024
 
 export interface GameSessionSupervisorOptions {
   adminSecret: string
@@ -92,16 +97,19 @@ export async function startGameSessionSupervisor(
   )
   const maxSessions = positiveInteger(options.maxSessions ?? DEFAULT_MAX_SESSIONS, 'maxSessions')
   const sessions = new Map<string, SessionRecord>()
-  const hubTickets = new Map<string, number>()
+  const hubTickets = new Map<string, {
+    content: MaterializedWebSessionContent
+    expiresAt: number
+  }>()
   const downstreamSockets = new Set<WebSocket>()
   let closed = false
   let provisioning = 0
   const logDetails = (details: Readonly<Record<string, unknown>> = {}) => details
-  const claimHubTicket = (credential: string): boolean => {
-    const expiresAt = hubTickets.get(credential)
-    if (expiresAt === undefined) return false
+  const claimHubTicket = (credential: string): MaterializedWebSessionContent | null => {
+    const ticket = hubTickets.get(credential)
+    if (ticket === undefined) return null
     hubTickets.delete(credential)
-    return expiresAt > Date.now()
+    return ticket.expiresAt > Date.now() ? ticket.content : null
   }
   const hubHost = await startGameHost({
     authentication: { kind: 'tickets', claim: claimHubTicket },
@@ -152,6 +160,7 @@ export async function startGameSessionSupervisor(
         hubPlayers: hubHost.hubPlayerCount(),
         parties: hubHost.partyCount(),
         runs: hubHost.runCount(),
+        players: hubHost.playerCount(),
       })
       return
     }
@@ -173,21 +182,33 @@ export async function startGameSessionSupervisor(
       return
     }
     if (request.method === 'POST' && path === '/admin/sessions') {
-      provisionIntoResponse(response)
+      void readJsonObject(request).then((body) => {
+        provisionIntoResponse(response, materializeWebSessionContent(body.content))
+      }).catch(() => {
+        sendJson(response, 400, { error: 'A valid web content manifest is required.' })
+      })
       return
     }
     if (request.method === 'POST' && path === '/admin/hub/tickets') {
-      pruneHubTickets()
-      if (hubHost.playerCount() + hubTickets.size >= maxConnectionsPerSession) {
-        sendJson(response, 503, { error: 'The shared Hub is full.' }, { 'retry-after': '5' })
-        return
-      }
-      const credential = randomBytes(32).toString('base64url')
-      hubTickets.set(credential, Date.now() + unclaimedTimeoutMs)
-      sendJson(response, 201, {
-        credential,
-        path: GAME_HUB_PATH,
-        protocol: GAME_PROTOCOL_NAME,
+      void readJsonObject(request).then((body) => {
+        const content = materializeWebSessionContent(body.content)
+        pruneHubTickets()
+        if (hubHost.playerCount() + hubTickets.size >= maxConnectionsPerSession) {
+          sendJson(response, 503, { error: 'The shared Hub is full.' }, { 'retry-after': '5' })
+          return
+        }
+        const credential = randomBytes(32).toString('base64url')
+        hubTickets.set(credential, {
+          content,
+          expiresAt: Date.now() + unclaimedTimeoutMs,
+        })
+        sendJson(response, 201, {
+          credential,
+          path: GAME_HUB_PATH,
+          protocol: GAME_PROTOCOL_NAME,
+        })
+      }).catch(() => {
+        sendJson(response, 400, { error: 'A valid web content manifest is required.' })
       })
       return
     }
@@ -206,13 +227,16 @@ export async function startGameSessionSupervisor(
     if (!socket.destroyed) socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n')
   })
 
-  function provisionIntoResponse(response: ServerResponse): void {
+  function provisionIntoResponse(
+    response: ServerResponse,
+    content: MaterializedWebSessionContent,
+  ): void {
     if (sessions.size + provisioning >= maxSessions) {
       sendJson(response, 503, { error: 'Game session capacity is exhausted.' }, { 'retry-after': '5' })
       return
     }
     provisioning += 1
-    void provisionSession().then((session) => {
+    void provisionSession(content).then((session) => {
       sendJson(response, 201, {
         credential: session.hostCredential,
         path: `${GAME_SESSION_PATH_PREFIX}${session.id}`,
@@ -280,7 +304,9 @@ export async function startGameSessionSupervisor(
     proxyUpgrade(request, socket, head, session)
   })
 
-  async function provisionSession(): Promise<SessionRecord> {
+  async function provisionSession(
+    content: MaterializedWebSessionContent,
+  ): Promise<SessionRecord> {
     if (closed) throw new Error('The game session supervisor is closed')
     const id = randomBytes(24).toString('base64url')
     const hostCredential = randomBytes(32).toString('base64url')
@@ -290,6 +316,8 @@ export async function startGameSessionSupervisor(
       log: options.log,
       logContext: { sessionId: id, sessionKind: 'private' },
       luaWasmPath: options.luaWasmPath,
+      content: content.manifest,
+      mods: content.modSources,
       maxPlayers: maxConnectionsPerSession,
       onPlayerCountChanged: (playerCount) => {
         const session = sessions.get(id)
@@ -300,7 +328,10 @@ export async function startGameSessionSupervisor(
         }
         closeClaimedSessionIfEmpty(session)
       },
-      ...(options.boneyards === undefined ? {} : { boneyards: options.boneyards }),
+      boneyards: createBoneyardCatalog([
+        ...(options.boneyards?.modEntries.values() ?? []),
+        ...content.boneyards,
+      ]),
       ...(options.snapshotRate === undefined ? {} : { snapshotRate: options.snapshotRate }),
     })
     const session: SessionRecord = {
@@ -488,8 +519,8 @@ export async function startGameSessionSupervisor(
   }
 
   function pruneHubTickets(now = Date.now()): void {
-    for (const [credential, expiresAt] of hubTickets) {
-      if (expiresAt <= now) hubTickets.delete(credential)
+    for (const [credential, ticket] of hubTickets) {
+      if (ticket.expiresAt <= now) hubTickets.delete(credential)
     }
   }
 
@@ -587,6 +618,22 @@ export async function startGameSessionSupervisor(
     },
     sessionCount: () => sessions.size + Number(hubHost.playerCount() > 0),
   }
+}
+
+async function readJsonObject(request: IncomingMessage): Promise<Record<string, unknown>> {
+  const chunks: Buffer[] = []
+  let size = 0
+  for await (const chunk of request) {
+    const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+    size += bytes.length
+    if (size > MAX_PROVISION_REQUEST_BYTES) throw new Error('request body is too large')
+    chunks.push(bytes)
+  }
+  const value = JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('request body must be an object')
+  }
+  return value as Record<string, unknown>
 }
 
 function sendJson(

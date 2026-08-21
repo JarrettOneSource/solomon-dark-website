@@ -1,11 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import Reveal from '../fx/Reveal'
 import { ErrorNote, Spinner, TagBadge } from '../components/ui'
 import {
   api,
   ApiError,
-  type CloudSave,
   type ModSummary,
   type School,
   type WebGameSave,
@@ -15,9 +14,6 @@ import { useAuth } from '../lib/auth'
 import { art, elementWords } from '../lib/assets'
 import { SCHOOLS } from '../fx/SchoolBursts'
 import { formatBytes, formatCount, formatDate, timeAgo } from '../lib/format'
-
-const SLOTS = [0, 1, 2, 3, 4, 5, 6, 7]
-const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII']
 
 const SCHOOL_LORE: Record<School, string> = {
   fire: 'Every click, a small act of arson.',
@@ -89,178 +85,6 @@ function SchoolPicker() {
   )
 }
 
-function SteamRegistrar() {
-  const { user, refresh } = useAuth()
-  const [busy, setBusy] = useState(false)
-  const [note, setNote] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [searchParams, setSearchParams] = useSearchParams()
-  const consumedResult = useRef(false)
-
-  // Steam's OpenID round-trip lands back here with ?steamLink=<result>.
-  useEffect(() => {
-    if (consumedResult.current) return
-    const result = searchParams.get('steamLink')
-    if (!result) return
-    consumedResult.current = true
-    if (result === 'linked') {
-      setNote('Your Steam self is now on record.')
-      refresh()
-    } else if (result === 'conflict') {
-      setError('That Steam profile is already bound to another wizard.')
-    } else {
-      setError('Steam declined the ritual. Try the link again.')
-    }
-    searchParams.delete('steamLink')
-    setSearchParams(searchParams, { replace: true })
-  }, [searchParams, setSearchParams, refresh])
-
-  if (!user) return null
-
-  const link = async () => {
-    setBusy(true)
-    setError(null)
-    try {
-      const start = await api.steam.link('/account')
-      window.location.assign(start.authorizationUrl)
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'The Registrar’s door stuck. Try again.')
-      setBusy(false)
-    }
-  }
-
-  const unlink = async () => {
-    if (!window.confirm('Strike your Steam profile from the record? Friends-only parties and warded-lobby tickets will stop working until you relink.')) return
-    setBusy(true)
-    setError(null)
-    try {
-      await api.steam.unlink()
-      setNote(null)
-      await refresh()
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'The record resisted erasure. Try again.')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <section className="mt-12">
-      <Reveal>
-        <div className="kicker mb-1.5">The Registrar</div>
-        <h2 className="h-display text-xl">Steam Linkage</h2>
-        <p className="text-fell mt-2 max-w-2xl text-sm text-bone-dim">
-          Bind your Steam self to your Solomon Darker account. The Registrar uses it to show you
-          friends-only parties and to cut join tickets for warded ones. The rite happens
-          on Steam’s own doorstep.
-        </p>
-      </Reveal>
-      <div className="mt-6">
-        {user.steamId ? (
-          <div className="slab flex flex-wrap items-center gap-x-5 gap-y-2 rounded px-4 py-3">
-            <span className="badge badge-arcane">Linked</span>
-            <span className="font-mono text-xs text-bone-dim">{user.steamId}</span>
-            <a
-              href={`https://steamcommunity.com/profiles/${user.steamId}`}
-              target="_blank"
-              rel="noreferrer"
-              className="link-arcane text-[11px] uppercase tracking-wider"
-            >
-              view profile
-            </a>
-            <button
-              type="button"
-              className="ml-auto text-[11px] uppercase tracking-wider text-blood/80 hover:text-blood"
-              onClick={unlink}
-              disabled={busy}
-            >
-              unlink
-            </button>
-          </div>
-        ) : (
-          <button type="button" className="btn btn-gold" onClick={link} disabled={busy}>
-            {busy ? 'Opening Steam…' : 'Link Steam profile'}
-          </button>
-        )}
-        {note && <p className="mt-3 text-sm text-moss">{note}</p>}
-        {error && <div className="mt-3"><ErrorNote message={error} /></div>}
-      </div>
-    </section>
-  )
-}
-
-async function downloadSave(slot: number, name: string | null) {
-  const res = await fetch(api.saves.downloadUrl(slot), {
-    headers: { Authorization: `Bearer ${localStorage.getItem('sdr.token') ?? ''}` },
-  })
-  if (!res.ok) throw new ApiError(res.status, 'Could not fetch the save')
-  const blob = await res.blob()
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `${(name ?? `slot-${slot + 1}`).replace(/[^\w-]+/g, '_')}.zip`
-  a.click()
-  URL.revokeObjectURL(url)
-}
-
-function SaveSlot({ slot, save, onChanged }: { slot: number; save?: CloudSave; onChanged: () => void }) {
-  const [busy, setBusy] = useState(false)
-
-  if (!save) {
-    return (
-      <div className="flex min-h-36 flex-col items-center justify-center rounded border border-dashed border-gold/15 bg-[#0b0910]/60 p-4 text-center">
-        <div className="font-display text-lg text-gold/25">{ROMAN[slot]}</div>
-        <div className="text-fell mt-1 text-xs text-bone-dim/50">Unwritten</div>
-      </div>
-    )
-  }
-
-  const remove = async () => {
-    if (!window.confirm(`Erase save ${ROMAN[slot]} (“${save.name ?? 'unnamed'}”) from the Annals?`)) return
-    setBusy(true)
-    try {
-      await api.saves.remove(slot)
-      onChanged()
-    } catch (e) {
-      alert(e instanceof ApiError ? e.message : 'Failed to erase')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <div className="panel panel-ornate flex min-h-36 flex-col p-4">
-      <div className="flex items-start justify-between">
-        <span className="font-display text-lg text-gold">{ROMAN[slot]}</span>
-        <span className="font-mono text-[10px] text-bone-dim/60">
-          {save.fileCount} files · {formatBytes(save.size)}
-        </span>
-      </div>
-      <div className="mt-1 truncate font-display text-sm font-bold tracking-wide text-bone" title={save.name ?? undefined}>
-        {save.name ?? 'Unnamed run'}
-      </div>
-      <div className="mt-0.5 text-xs text-bone-dim">{timeAgo(save.updatedAtUtc)}</div>
-      <div className="mt-auto flex items-center gap-3 pt-3">
-        <button
-          type="button"
-          className="link-arcane text-[11px] uppercase tracking-wider"
-          onClick={() => downloadSave(slot, save.name).catch((e) => alert(e.message))}
-        >
-          download
-        </button>
-        <button
-          type="button"
-          className="text-[11px] uppercase tracking-wider text-blood/80 hover:text-blood"
-          onClick={remove}
-          disabled={busy}
-        >
-          erase
-        </button>
-      </div>
-    </div>
-  )
-}
-
 function BrowserGameSaveSlot({
   save,
   onChanged,
@@ -318,21 +142,16 @@ export default function Account() {
     if (!loading && !user) navigate('/login', { replace: true })
   }, [user, loading, navigate])
 
-  const saves = useApi(
-    () => user?.steamId ? api.saves.list() : Promise.resolve<CloudSave[]>([]),
-    [user?.id, user?.steamId],
-  )
   const browserSave = useApi(
     () => user ? api.gameSaves.get(0) : Promise.resolve(null),
     [user?.id],
   )
-  // v1: no author filter on the mods API yet — pull a page and filter client-side.
+  // The public index has no author filter, so pull one page and filter client-side.
   const mods = useApi(() => api.mods.list({ pageSize: 50, sort: 'newest' }), [user?.id])
 
   if (loading || !user) return <Spinner label="Consulting the Annals…" />
 
   const myMods: ModSummary[] = (mods.data?.items ?? []).filter((m) => m.author.id === user.id)
-  const saveBySlot = new Map((saves.data ?? []).map((s) => [s.slot, s]))
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6">
@@ -358,8 +177,6 @@ export default function Account() {
         </div>
       </Reveal>
 
-      <SteamRegistrar />
-
       <SchoolPicker />
 
       {/* Memoratorium — cloud saves */}
@@ -378,31 +195,6 @@ export default function Account() {
             <ErrorNote message={browserSave.error} />
           ) : (
             <BrowserGameSaveSlot save={browserSave.data} onChanged={browserSave.reload} />
-          )}
-        </div>
-        <Reveal>
-          <div className="mt-8 font-display text-xs font-bold uppercase tracking-[0.18em] text-gold/80">
-            Launcher saves
-          </div>
-          <p className="text-fell mt-1 max-w-2xl text-sm text-bone-dim">
-            Eight launcher-owned native slots, backed up after they change.
-          </p>
-        </Reveal>
-        <div className="mt-4">
-          {!user.steamId ? (
-            <div className="slab rounded px-5 py-6 text-sm text-bone-dim">
-              Launcher cloud saves are disabled until this account is linked to Steam above.
-            </div>
-          ) : saves.loading ? (
-            <Spinner label="Unlocking the vault…" />
-          ) : saves.error ? (
-            <ErrorNote message={saves.error} />
-          ) : (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {SLOTS.map((slot) => (
-                <SaveSlot key={slot} slot={slot} save={saveBySlot.get(slot)} onChanged={saves.reload} />
-              ))}
-            </div>
           )}
         </div>
       </section>
@@ -449,23 +241,6 @@ export default function Account() {
         </div>
       </section>
 
-      {/* game sync hint */}
-      <section className="mt-12">
-        <Reveal>
-          <div className="flex items-start gap-4 rounded border border-gold/15 bg-[#0b0910] p-5">
-            <img src={art.parchment} alt="" className="h-14 flex-none opacity-80" />
-            <div>
-              <div className="font-display text-xs font-bold uppercase tracking-[0.18em] text-gold/80">
-                Syncing from the game
-              </div>
-              <p className="mt-1 text-sm leading-relaxed text-bone-dim">
-                Link your Steam profile above, then open the launcher while signed into
-                that Steam account — it picks up the linkage on its own.
-              </p>
-            </div>
-          </div>
-        </Reveal>
-      </section>
     </div>
   )
 }

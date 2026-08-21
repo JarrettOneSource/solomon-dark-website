@@ -136,12 +136,7 @@ export default function ModVersions() {
               <span className="text-xs text-bone-dim">{formatDate(latest.createdAtUtc)}</span>
               <span className="font-mono text-xs text-bone-dim">{formatBytes(latest.fileSize)}</span>
               <span className="font-mono text-xs text-bone-dim">↓ {formatCount(latest.downloads)}</span>
-              <a
-                href={api.mods.versionDownloadUrl(m.slug, latest.id)}
-                className="btn btn-gold ml-auto !px-4 !py-2.5 !text-[11px]"
-              >
-                ⬩ Download
-              </a>
+              <span className="ml-auto text-xs text-bone-dim">Used by subscribers on their next launch</span>
             </div>
             <p className="mt-4 whitespace-pre-wrap text-[15px] leading-relaxed text-bone/90">
               {latest.changelog || 'No changelog. The scribe was terse.'}
@@ -169,12 +164,6 @@ export default function ModVersions() {
                       {v.changelog}
                     </span>
                   )}
-                  <a
-                    href={api.mods.versionDownloadUrl(m.slug, v.id)}
-                    className="link-arcane ml-auto text-xs uppercase tracking-wider"
-                  >
-                    download
-                  </a>
                 </div>
               ))}
             </div>

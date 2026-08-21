@@ -37,6 +37,7 @@ import { startGameHost } from './game-host.ts'
 import type { GameServerLogEntry } from './game-server-logger.ts'
 import { SOLOMON_DIG_FRAME_PROGRAM } from './project-boneyard.ts'
 import { GAME_WEBSOCKET_COMPRESSION } from './websocket-compression.ts'
+import { createGameSaveDocument } from '../save/game-save-document.ts'
 
 const FIRST_CHARACTER = {
   discipline: 'arcane',
@@ -957,7 +958,9 @@ test('host emits an owner checkpoint and revives it before a fresh welcome', asy
   context.after(() => secondHost.close())
   const secondSocket = await openSocket(secondHost.address.url)
   context.after(() => secondSocket.close())
-  const resumedMessage = nextMessage(secondSocket, (message) => message.type === 'server-welcome')
+  const resumedMessage = nextMessage(secondSocket, (message) => (
+    message.type === 'server-welcome' || message.type === 'server-disconnect'
+  ))
   secondSocket.send(encodeGameMessage({
     type: 'client-hello',
     protocolVersion: GAME_PROTOCOL_VERSION,
@@ -966,11 +969,77 @@ test('host emits an owner checkpoint and revives it before a fresh welcome', asy
     save: checkpoint.save,
   }))
   const resumed = await resumedMessage
-  assert.equal(resumed.type, 'server-welcome')
+  assert.equal(resumed.type, 'server-welcome', JSON.stringify(resumed))
   assert.equal(resumed.playerId, welcomed.playerId)
   assert.equal(resumed.snapshot.tick, welcomed.snapshot.tick)
   assert.deepEqual(resumed.snapshot.players[resumed.playerId].config, FIRST_CHARACTER)
   assert.equal(resumed.snapshot.world.kind, 'hub')
+})
+
+test('host rejects an unconfirmed save mod mismatch and accepts an explicit continuation', async (context) => {
+  const savedMod = {
+    contentSha256: 'a'.repeat(64),
+    id: 'tests.saved-mod',
+    version: '1.0.0',
+  }
+  const activeMod = {
+    contentSha256: 'b'.repeat(64),
+    id: 'tests.active-mod',
+    version: '2.0.0',
+  }
+  const save = createGameSaveDocument({
+    loadedBoneyard: null,
+    mods: [savedMod],
+    modState: { 'tests.saved-mod': { retained: true } },
+    playerId: 'saved-owner',
+    state: createGameSimulation({ 'saved-owner': FIRST_CHARACTER }),
+  })
+  const options = {
+    authentication: SHARED_AUTHENTICATION,
+    content: { manifestSha256: 'c'.repeat(64), mods: [activeMod] },
+    snapshotRate: 100,
+  } as const
+
+  const rejectingHost = await startGameHost(options)
+  context.after(() => rejectingHost.close())
+  const rejectedSocket = await openSocket(rejectingHost.address.url)
+  context.after(() => rejectedSocket.close())
+  const rejectedMessage = nextMessage(
+    rejectedSocket,
+    message => message.type === 'server-disconnect',
+  )
+  rejectedSocket.send(encodeGameMessage({
+    type: 'client-hello',
+    protocolVersion: GAME_PROTOCOL_VERSION,
+    credential: 'test-secret',
+    character: FIRST_CHARACTER,
+    save,
+  }))
+  const rejected = await rejectedMessage
+  assert.equal(rejected.type, 'server-disconnect')
+  assert.match(rejected.reason, /Confirm the mismatch/)
+
+  const continuingHost = await startGameHost(options)
+  context.after(() => continuingHost.close())
+  const continuedSocket = await openSocket(continuingHost.address.url)
+  context.after(() => continuedSocket.close())
+  const continuedMessage = nextMessage(
+    continuedSocket,
+    message => message.type === 'server-welcome',
+  )
+  continuedSocket.send(encodeGameMessage({
+    type: 'client-hello',
+    allowModMismatch: true,
+    protocolVersion: GAME_PROTOCOL_VERSION,
+    credential: 'test-secret',
+    character: FIRST_CHARACTER,
+    save,
+  }))
+  const continued = await continuedMessage
+  assert.equal(continued.type, 'server-welcome')
+  assert.equal(continued.playerId, 'saved-owner')
+  assert.deepEqual(continued.content.mods, [activeMod])
+  assert.equal(continued.snapshot.world.kind, 'hub')
 })
 
 test('host clears the resumable document on the first authoritative Game Over edge', async (context) => {
@@ -1364,9 +1433,9 @@ function closeSocket(socket: WebSocket): Promise<void> {
 }
 
 async function waitFor(predicate: () => boolean): Promise<void> {
-  const deadline = Date.now() + 3000
+  const deadline = performance.now() + 5000
   while (!predicate()) {
-    if (Date.now() >= deadline) throw new Error('timed out waiting for condition')
+    if (performance.now() >= deadline) throw new Error('timed out waiting for condition')
     await new Promise((resolve) => setTimeout(resolve, 10))
   }
 }

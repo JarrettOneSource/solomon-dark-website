@@ -9,7 +9,7 @@ internal static class BoneyardPackageBuilder
     public const string InitialVersion = "1.0.0";
 
     public static MemoryStream Create(
-        string launcherModId,
+        string packageId,
         string name,
         string slug,
         ReadOnlySpan<byte> boneyard,
@@ -39,7 +39,7 @@ internal static class BoneyardPackageBuilder
         }
         var manifest = new
         {
-            id = launcherModId,
+            id = packageId,
             name,
             version = InitialVersion,
             priority = 100,

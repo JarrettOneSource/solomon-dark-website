@@ -17,9 +17,6 @@ using SolomonDarkRevived.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 var isDevelopment = builder.Environment.IsDevelopment();
-builder.Logging.AddFilter(
-    "System.Net.Http.HttpClient.SteamTicketVerifier",
-    LogLevel.Warning);
 
 var configuredStorageRoot = builder.Configuration["Storage:Root"];
 if (string.IsNullOrWhiteSpace(configuredStorageRoot))
@@ -35,8 +32,9 @@ builder.Services.AddSingleton(storage);
 builder.Services.AddDbContext<AppDb>(options =>
     options.UseSqlite($"Data Source={storage.DatabasePath}"));
 builder.Services.AddScoped<ModPublishingService>();
+builder.Services.AddScoped<WebModContentService>();
 builder.Services.AddHttpClient<GameSessionProvisioner>(client =>
-    client.Timeout = TimeSpan.FromSeconds(5));
+    client.Timeout = TimeSpan.FromSeconds(30));
 
 var jwtSecret = builder.Configuration["Jwt:Secret"];
 var generatedJwtSecret = false;
@@ -53,14 +51,6 @@ if (string.IsNullOrWhiteSpace(jwtSecret))
 
 var jwtExpiryDays = builder.Configuration.GetValue<int?>("Jwt:ExpiryDays") ?? 7;
 builder.Services.AddSingleton(new TokenService(jwtSecret, jwtExpiryDays));
-builder.Services.AddSingleton<LobbyJoinTicketService>();
-builder.Services.AddHttpClient<SteamOpenIdService>(client =>
-    client.Timeout = TimeSpan.FromSeconds(10));
-builder.Services.AddHttpClient<SteamTicketVerifier>(client =>
-{
-    client.BaseAddress = new Uri("https://api.steampowered.com/");
-    client.Timeout = TimeSpan.FromSeconds(10);
-});
 
 // SQLite round-trips lose DateTimeKind, so DB-read timestamps would serialize
 // without the trailing Z and browsers would misparse them as local time.
@@ -105,26 +95,6 @@ builder.Services.AddAuthorization(options =>
         .RequireAuthenticatedUser()
         .RequireAssertion(context => TokenService.GetUserId(context.User) is not null)
         .Build();
-    options.AddPolicy("lobby-viewer", policy => policy
-        .RequireAuthenticatedUser()
-        .RequireAssertion(context =>
-            TokenService.GetUserId(context.User) is not null ||
-            TokenService.GetSteamSessionId(context.User) is not null));
-    options.AddPolicy("crash-submitter", policy => policy
-        .RequireAuthenticatedUser()
-        .RequireAssertion(context =>
-            TokenService.GetUserId(context.User) is not null ||
-            TokenService.GetSteamSessionId(context.User) is not null));
-    options.AddPolicy("steam-unlink", policy => policy
-        .RequireAuthenticatedUser()
-        .RequireAssertion(context =>
-            TokenService.GetUserId(context.User) is not null ||
-            TokenService.GetSteamSessionId(context.User) is not null));
-    options.AddPolicy("cloud-save", policy => policy
-        .RequireAuthenticatedUser()
-        .RequireAssertion(context =>
-            TokenService.GetUserId(context.User) is not null ||
-            TokenService.GetLinkedUserId(context.User) is not null));
 });
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
@@ -159,23 +129,9 @@ builder.Services.AddRateLimiter(options =>
             ? "The ink must dry before you add another marginal note. Try again in a minute."
             : string.Equals(
                 requestPath,
-                "/api/crash-reports",
+                "/api/game/diagnostics",
                 StringComparison.OrdinalIgnoreCase)
-                ? "Too many crash reports were submitted; try again later."
-            : string.Equals(
-                requestPath,
-                "/api/diagnostics/logs",
-                StringComparison.OrdinalIgnoreCase)
-                || string.Equals(
-                    requestPath,
-                    "/api/game/diagnostics",
-                    StringComparison.OrdinalIgnoreCase)
                 ? "Too many log uploads; try again later."
-            : string.Equals(
-                requestPath,
-                "/api/auth/steam/session",
-                StringComparison.OrdinalIgnoreCase)
-                ? "Too many Steam authentication attempts; try again in a minute."
             : string.Equals(
                 requestPath,
                 "/api/game/sessions",
@@ -185,45 +141,12 @@ builder.Services.AddRateLimiter(options =>
                 requestPath,
                 "/api/game/hub",
                 StringComparison.OrdinalIgnoreCase)
-                ? "Too many shared Hub admissions were requested; try again in a minute."
-                : "Too many match announcements; try again in a minute.";
+                ? "Too many shared Hub requests were made; try again in a minute."
+                : "Too many requests were made; try again in a minute.";
         await context.HttpContext.Response.WriteAsJsonAsync(
             new { error = message },
             cancellationToken);
     };
-    options.AddPolicy("lobby-announcements", context =>
-        RateLimitPartition.GetFixedWindowLimiter(
-            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-            _ => new FixedWindowRateLimiterOptions
-            {
-                PermitLimit = 30,
-                Window = TimeSpan.FromMinutes(1),
-                QueueLimit = 0,
-                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-                AutoReplenishment = true
-            }));
-    options.AddPolicy("lobby-passwords", context =>
-        RateLimitPartition.GetFixedWindowLimiter(
-            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-            _ => new FixedWindowRateLimiterOptions
-            {
-                PermitLimit = 20,
-                Window = TimeSpan.FromMinutes(1),
-                QueueLimit = 0,
-                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-                AutoReplenishment = true
-            }));
-    options.AddPolicy("steam-ticket-auth", context =>
-        RateLimitPartition.GetFixedWindowLimiter(
-            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-            _ => new FixedWindowRateLimiterOptions
-            {
-                PermitLimit = 10,
-                Window = TimeSpan.FromMinutes(1),
-                QueueLimit = 0,
-                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-                AutoReplenishment = true
-            }));
     options.AddPolicy("mod-comments", context =>
         RateLimitPartition.GetFixedWindowLimiter(
             context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
@@ -237,7 +160,6 @@ builder.Services.AddRateLimiter(options =>
             }));
     options.AddPolicy("diagnostic-logs", context =>
         RateLimitPartition.GetFixedWindowLimiter(
-            TokenService.GetSteamSessionId(context.User) ??
             TokenService.GetUserId(context.User)?.ToString() ??
             context.Connection.RemoteIpAddress?.ToString() ??
             "unknown",
@@ -246,20 +168,6 @@ builder.Services.AddRateLimiter(options =>
                 PermitLimit = 10,
                 Window = TimeSpan.FromHours(1),
                 QueueLimit = 0,
-                AutoReplenishment = true
-            }));
-    options.AddPolicy("crash-reports", context =>
-        RateLimitPartition.GetFixedWindowLimiter(
-            TokenService.GetSteamSessionId(context.User) ??
-            TokenService.GetUserId(context.User)?.ToString() ??
-            context.Connection.RemoteIpAddress?.ToString() ??
-            "unknown",
-            _ => new FixedWindowRateLimiterOptions
-            {
-                PermitLimit = 5,
-                Window = TimeSpan.FromHours(1),
-                QueueLimit = 0,
-                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
                 AutoReplenishment = true
             }));
     options.AddPolicy("game-sessions", context =>
@@ -390,14 +298,10 @@ app.UseAuthorization();
 app.UseRateLimiter();
 
 AuthEndpoints.Map(app);
-SteamAuthEndpoints.Map(app);
 ModEndpoints.Map(app);
 BoneyardEndpoints.Map(app);
-LobbyEndpoints.Map(app);
-SaveEndpoints.Map(app);
 WebGameSaveEndpoints.Map(app);
 StatsEndpoints.Map(app);
-CrashReportEndpoints.Map(app);
 DiagnosticLogEndpoints.Map(app);
 GameSessionEndpoints.Map(app);
 

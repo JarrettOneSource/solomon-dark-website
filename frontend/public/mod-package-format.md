@@ -1,16 +1,17 @@
-# Solomon Darker mod package format
+# Solomon Dark web-port mod package format
 
-Website mods are ZIP archives whose root contains `manifest.json`. The ZIP may
-contain data/Boneyard overlays, root `images/` art replacements, sandboxed Lua,
-or any combination of those three.
+Library mods are ZIP archives with `manifest.json` at the root. A package may
+contain sandboxed Lua, typed Boneyards, or both. DLLs, native `images/`
+replacement trees, and arbitrary native `data/` overlays are not web-port
+content and are rejected.
 
-The website validates every upload against this contract. It calculates the
-package and extracted-content SHA-256 values itself. The version entered on the
-upload form must exactly match `manifest.version`.
+The Website validates every upload, calculates package and extracted-content
+SHA-256 values itself, and requires the submitted version to exactly match
+`manifest.version`.
 
 ## Package layouts
 
-### Boneyard or data-overlay only
+### Boneyard only
 
 ```text
 manifest.json
@@ -18,18 +19,7 @@ files/
   Survival Arena.boneyard
 ```
 
-Use the [Boneyard-only manifest example](/examples/boneyard-only-manifest.json).
-
-### Art only
-
-```text
-manifest.json
-files/
-  Skills.png
-  Skills.bundle
-```
-
-Use the [art-only manifest example](/examples/art-only-manifest.json).
+Use the [Boneyard example](/examples/boneyard-only-manifest.json).
 
 ### Lua only
 
@@ -39,80 +29,59 @@ scripts/
   main.lua
 ```
 
-Use the [Lua-only manifest example](/examples/lua-only-manifest.json).
+Use the [Lua example](/examples/lua-only-manifest.json).
 
-### Combined Boneyard, art, and Lua
+### Combined
 
 ```text
 manifest.json
 files/
   survival.boneyard
-  Skills.png
-  Skills.bundle
 scripts/
   main.lua
 ```
 
-Use the [combined manifest example](/examples/combined-manifest.json).
+Use the [combined example](/examples/combined-manifest.json).
 
 ## Manifest fields
 
-- `id` is the permanent launcher identity. It is case-insensitively unique on
-  the website and must not change between versions.
-- `name` is the in-launcher display name.
-- `version` is the exact version identity used by multiplayer joins.
-- `minimumLoaderVersion` is an optional semantic-version floor. Resolution and
-  automatic updates do not offer that version to an older launcher.
-- `priority` controls overlay order. Higher-priority mods are applied later.
-- `overlays` copies each `source` under `files/` to its staged-game `target`.
-  Website packages may target files under `data/` or the native root
-  `images/` tree; custom Boneyards may also target
-  `sandbox/DarkCloud/mylevels/*.boneyard`. The `sandbox/` prefix is part of the
-  staged game path; the native path resolver supplies the matching
-  player-profile sandbox root at runtime.
-- `runtime.entryScript` names a `.lua` file under `scripts/`.
-- `runtime.apiVersion` declares the Lua API contract used by the script.
-- `requiredCapabilities` and `optionalCapabilities` declare requested sandbox
-  capabilities.
-- `requiredMods` lists launcher IDs that must be active with this mod.
-- `provides` and `requires` declare Lua runtime contracts.
-- `settings` declares launcher-rendered mod settings. The launcher owns the
-  complete settings schema and value validation.
+- `id` is the permanent, case-insensitively unique package identity. It must
+  remain the same across versions.
+- `name` is the player-facing name shown in the Library and Dark Cloud.
+- `version` is the exact session and save identity.
+- `priority` orders independent mods and Boneyard target overrides. Higher
+  values materialize later.
+- `overlays` may target only `data/levels/*.boneyard` or
+  `sandbox/DarkCloud/mylevels/*.boneyard`. Every source must be an existing
+  `.boneyard` under `files/`.
+- `runtime.entryScript` names an existing `.lua` file under `scripts/`.
+- `runtime.apiVersion` declares the web Lua API used by that script.
+- `requiredMods` lists package IDs which must also be subscribed and enabled.
 
-Paths use `/`, are relative, and must match the case of files inside the ZIP.
-Do not wrap the package in an extra top-level directory.
+Paths use `/`, are relative, and must match archive case. Do not wrap the
+package in another top-level directory.
 
-Every `.boneyard` overlay is parsed during upload using the native SyncBuffer
-container grammar and the 13-section Arena / 14-section RegionLayout envelopes.
-Empty, truncated, trailing, or otherwise malformed files are rejected before
-publication.
-
-Native atlas art is a decoded image page plus `.bundle` metadata contract, not
-a dynamically named asset registry. PNG is the stock convention but not the
-only native decoder input, and `_alpha` companion images are supported. A
-compatible replacement preserves bundle record count/order, descriptor
-geometry, page selection, and compiled selector destinations. For the common
-image-only replacement, retain the stock page dimensions and layout so the
-unchanged bundle rectangles still select the intended pixels. Adding a new
-file or extra bundle record does not make it addressable by stock game code.
+Every Boneyard is parsed during upload with the native SyncBuffer grammar and
+again when a session is provisioned. Empty, malformed, trailing, oversized, or
+path-conflicting content fails closed.
 
 The complete machine-readable contract is
 [mod-manifest.schema.json](/mod-manifest.schema.json).
 
-## Distribution and multiplayer
+## Subscription, launch, and multiplayer
 
-Native DLL entry points are supported for manual local mods but are not
-accepted for website auto-downloads. Website Join Game links, direct Steam
-invites, and manual lobby-ID joins all fetch the host's exact `id` + `version` +
-content-hash set when the configured website can provide it. The launcher
-reuses exact manual installations or its local download cache, downloads only
-missing website packages, verifies package and extracted-content hashes, and
-stages only that set for the join. This session-scoped host set may contain
-Boneyards/data, art, Lua, or any combination; it does not rewrite the player's
-persistent enabled-mod choices.
+Subscribe on the Library page. Explore the Dark Cloud in `/game` to enable or
+disable each subscribed mod. Starting a game freezes the account's enabled set,
+reopens and hash-verifies every exact latest package, validates the complete
+dependency graph, and provisions only that immutable set.
 
-The website remains optional. If its lobby metadata is unavailable, the
-launcher keeps the locally enabled set. When all players manually install and
-enable the same mods, direct P2P joining therefore works without a website. The
-multiplayer compatibility handshake still rejects any version, content,
-loader, or game-build mismatch.
+Each Lua mod receives an isolated bounded VM. Boneyards enter only that
+party run's catalog. Each shared-Hub admission carries that account's immutable
+ordered `id`/`version`/content-hash manifest. A party may launch only when every
+member has the same exact manifest; there is no browser lobby directory or
+join-by-lobby URL.
+
+Browser save schema 2 stores the exact manifest and bounded `sd.state` for each
+Lua mod. A changed save manifest requires explicit Continue or Cancel. On
+Continue, exact-match state is restored, added mods start empty, and missing or
+changed mod state is discarded.

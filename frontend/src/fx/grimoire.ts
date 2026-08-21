@@ -1,4 +1,4 @@
-// The console grimoire. The mod loader exposes a Lua `sd.*` API in-game, so
+// The console grimoire. The web game exposes a Lua `sd.*` API in-game, so
 // the site exposes one to anybody who opens the inspector. Every spell routes
 // through the bus; the return strings are the console's reply.
 

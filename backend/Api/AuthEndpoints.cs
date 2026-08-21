@@ -124,9 +124,7 @@ public static class AuthEndpoints
         }
 
         var modCount = await db.Mods.CountAsync(mod => mod.AuthorId == user.Id, cancellationToken);
-        var saveCount = await db.CloudSaves.CountAsync(
-            save => save.UserId == user.Id,
-            cancellationToken) + await db.WebGameSaves.CountAsync(
+        var saveCount = await db.WebGameSaves.CountAsync(
             save => save.UserId == user.Id,
             cancellationToken);
 
@@ -172,7 +170,6 @@ public static class AuthEndpoints
         user.Username,
         user.Email,
         user.School,
-        user.SteamId,
         user.CreatedAtUtc
     };
 

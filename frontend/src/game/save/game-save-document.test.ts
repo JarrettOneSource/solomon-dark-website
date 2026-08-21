@@ -29,6 +29,14 @@ const GUEST = {
   displayName: 'Vibia',
   element: 'water',
 } as const
+const MODS = [{
+  contentSha256: 'a'.repeat(64),
+  id: 'tests.save-mod',
+  version: '1.2.3',
+}] as const
+const MOD_STATE = {
+  'tests.save-mod': { enabled_encounters: 7, greeting: 'hello' },
+} as const
 
 test('host save documents round-trip the complete owner state and revive Hub runtimes', () => {
   let state = createGameSimulation({ owner: OWNER, guest: GUEST }, {
@@ -44,11 +52,14 @@ test('host save documents round-trip the complete owner state and revive Hub run
 
   const document = createGameSaveDocument({
     loadedBoneyard: null,
+    mods: MODS,
+    modState: MOD_STATE,
     playerId: 'owner',
     state,
   })
   const encoded = JSON.parse(document) as Record<string, unknown>
-  assert.equal('mods' in encoded, false)
+  assert.deepEqual(encoded.mods, MODS)
+  assert.deepEqual(encoded.modState, MOD_STATE)
   assert.equal(new TextEncoder().encode(document).byteLength <= MAX_WEB_GAME_SAVE_BYTES, true)
   assert.deepEqual(readGameSaveSummary(document), {
     character: OWNER,
@@ -60,6 +71,8 @@ test('host save documents round-trip the complete owner state and revive Hub run
 
   const restored = restoreGameSaveDocument(document)
   assert.equal(restored.playerId, 'owner')
+  assert.deepEqual(restored.mods, MODS)
+  assert.deepEqual(restored.modState, MOD_STATE)
   assert.equal(restored.loadedBoneyard, null)
   assert.equal(restored.state.tick, state.tick)
   assert.deepEqual(restored.state.playerEntities.identities, [{ playerId: 'owner' }])
@@ -90,7 +103,13 @@ test('host save documents retain the active Boneyard and its authoritative run i
     createGameSimulation({ owner: OWNER }),
     loadedBoneyard,
   )
-  const document = createGameSaveDocument({ loadedBoneyard, playerId: 'owner', state })
+  const document = createGameSaveDocument({
+    loadedBoneyard,
+    mods: MODS,
+    modState: MOD_STATE,
+    playerId: 'owner',
+    state,
+  })
   const restored = restoreGameSaveDocument(document)
 
   assert.deepEqual(restored.loadedBoneyard, loadedBoneyard)
@@ -104,17 +123,19 @@ test('host save documents retain the active Boneyard and its authoritative run i
 test('host save documents fail closed for unknown schema, extra fields, owner drift, and size', () => {
   const document = createGameSaveDocument({
     loadedBoneyard: null,
+    mods: MODS,
+    modState: MOD_STATE,
     playerId: 'owner',
     state: createGameSimulation({ owner: OWNER }),
   })
   const parsed = JSON.parse(document)
 
   assert.throws(
-    () => restoreGameSaveDocument(JSON.stringify({ ...parsed, schemaVersion: 2 })),
+    () => restoreGameSaveDocument(JSON.stringify({ ...parsed, schemaVersion: 1 })),
     /schema version/,
   )
   assert.throws(
-    () => restoreGameSaveDocument(JSON.stringify({ ...parsed, mods: [] })),
+    () => restoreGameSaveDocument(JSON.stringify({ ...parsed, surprise: true })),
     /unexpected field/,
   )
   assert.throws(

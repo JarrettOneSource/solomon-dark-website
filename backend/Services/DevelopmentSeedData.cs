@@ -88,7 +88,7 @@ public static class DevelopmentSeedData
             cancellationToken);
 
         if (!await db.Mods.AnyAsync(
-                mod => mod.Slug == SurvivalSlug || mod.LauncherModId == SurvivalSlug,
+                mod => mod.Slug == SurvivalSlug || mod.PackageId == SurvivalSlug,
                 cancellationToken))
         {
             await publisher.PublishBoneyardAsync(

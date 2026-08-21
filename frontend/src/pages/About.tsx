@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom'
 import Reveal from '../fx/Reveal'
 import { art } from '../lib/assets'
-import { MOD_LOADER_DOWNLOAD_URL, MOD_LOADER_REPO_URL } from '../lib/links'
 
 const HALL_OF_FAME = [
   'Basilo, Lord of Ice',
@@ -59,36 +58,28 @@ export default function About() {
 
           <h2>The resurrection</h2>
           <p>
-            Solomon Darker is a community project that raises the beta from the
-            dead, properly: a mod launcher, an embedded Lua runtime with the{' '}
+            Solomon Darker is a community web port that raises the unfinished game
+            directly in the browser: an authoritative multiplayer runtime, a sandboxed Lua grimoire with the{' '}
             <span className="font-mono text-sm">sd.*</span> API for community mods,
-            and — the headline act — <strong>Steam multiplayer</strong>, rebuilt into
-            a game that never had it.
+            cloud saves, and the Dark Cloud content browser the beta only hinted at.
           </p>
           <ul>
-            <li><strong>Search Parties</strong> — a live master list of multiplayer manhunts.</li>
-            <li><strong>The Library</strong> — community mods, uploaded and versioned.</li>
-            <li><strong>The Annals</strong> — Solomon Darker accounts with cloud saves synced from the launcher.</li>
-            <li>
-              <strong>Steam P2P</strong> — host and invite friends directly, with no
-              website or account in the loop.
-            </li>
+            <li><strong>Play</strong> — the complete authoritative game running directly in the browser.</li>
+            <li><strong>Explore the Dark Cloud</strong> — subscribed mods, Boneyards, and browser lobbies in the stock game’s own style.</li>
+            <li><strong>The Library</strong> — community web mods, uploaded, versioned, and subscribed by account.</li>
+            <li><strong>The Annals</strong> — account-owned cloud saves with exact mod-list provenance.</li>
           </ul>
 
           <h2>Credits &amp; thanks</h2>
           <ul>
             <li><strong>Raptisoft</strong> — for the games. This is a love letter, not a heist.</li>
             <li><strong>The preservation community</strong> — for keeping the builds alive.</li>
-            <li><strong>The Solomon Darker project</strong> — loader, launcher, Lua runtime, multiplayer.</li>
+            <li><strong>The Solomon Darker project</strong> — reverse engineering, web runtime, Lua mods, and multiplayer.</li>
           </ul>
           <p>
             Sources:{' '}
             <a href="https://github.com/JayMcArthur/Raptisoft-Solomon" target="_blank" rel="noreferrer">
               the preservation archive
-            </a>
-            {' '}and{' '}
-            <a href={MOD_LOADER_REPO_URL} target="_blank" rel="noreferrer">
-              the loader’s own repository
             </a>
             .
           </p>
@@ -137,15 +128,12 @@ export default function About() {
             <p className="text-fell mt-1 text-sm text-bone-dim">The dead are waiting. They’re patient like that.</p>
           </div>
           <div className="flex flex-none gap-3">
-            <a
-              href={MOD_LOADER_DOWNLOAD_URL}
-              target="_blank"
-              rel="noreferrer"
-              title="Download the mod loader from GitHub"
+            <Link
+              to="/game"
               className="btn btn-gold"
             >
-              Download
-            </a>
+              Play
+            </Link>
             <Link to="/mods" className="btn btn-stone">
               Browse the Library
             </Link>

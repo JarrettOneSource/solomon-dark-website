@@ -10,28 +10,6 @@ public static class DatabaseSchema
         CancellationToken cancellationToken = default)
     {
         await db.Database.EnsureCreatedAsync(cancellationToken);
-        await db.Database.ExecuteSqlRawAsync(
-            """
-            CREATE TABLE IF NOT EXISTS CloudSaves (
-                Id INTEGER NOT NULL CONSTRAINT PK_CloudSaves PRIMARY KEY AUTOINCREMENT,
-                UserId INTEGER NOT NULL,
-                Slot INTEGER NOT NULL,
-                Name TEXT NULL,
-                Size INTEGER NOT NULL,
-                UncompressedSize INTEGER NOT NULL DEFAULT 0,
-                FileCount INTEGER NOT NULL DEFAULT 0,
-                FormatVersion INTEGER NOT NULL DEFAULT 0,
-                Sha256 TEXT NOT NULL,
-                UpdatedAtUtc TEXT NOT NULL,
-                CONSTRAINT FK_CloudSaves_Users_UserId
-                    FOREIGN KEY (UserId) REFERENCES Users (Id) ON DELETE CASCADE
-            );
-            CREATE UNIQUE INDEX IF NOT EXISTS IX_CloudSaves_UserId_Slot
-                ON CloudSaves (UserId, Slot);
-            CREATE INDEX IF NOT EXISTS IX_CloudSaves_UserId
-                ON CloudSaves (UserId);
-            """,
-            cancellationToken);
 
         await db.Database.ExecuteSqlRawAsync(
             """
@@ -55,37 +33,29 @@ public static class DatabaseSchema
             """,
             cancellationToken);
 
-        if (!await HasColumnAsync(db, "CloudSaves", "UncompressedSize", cancellationToken))
+
+        if (!await HasColumnAsync(db, "DiagnosticLogs", "ClientVersion", cancellationToken) &&
+            await HasColumnAsync(db, "DiagnosticLogs", "LauncherVersion", cancellationToken))
         {
             await db.Database.ExecuteSqlRawAsync(
-                "ALTER TABLE CloudSaves ADD COLUMN UncompressedSize INTEGER NOT NULL DEFAULT 0;",
-                cancellationToken);
-        }
-        if (!await HasColumnAsync(db, "CloudSaves", "FileCount", cancellationToken))
-        {
-            await db.Database.ExecuteSqlRawAsync(
-                "ALTER TABLE CloudSaves ADD COLUMN FileCount INTEGER NOT NULL DEFAULT 0;",
-                cancellationToken);
-        }
-        if (!await HasColumnAsync(db, "CloudSaves", "FormatVersion", cancellationToken))
-        {
-            await db.Database.ExecuteSqlRawAsync(
-                "ALTER TABLE CloudSaves ADD COLUMN FormatVersion INTEGER NOT NULL DEFAULT 0;",
+                "ALTER TABLE DiagnosticLogs RENAME COLUMN LauncherVersion TO ClientVersion;",
                 cancellationToken);
         }
 
-        if (!await HasColumnAsync(db, "Users", "SteamId", cancellationToken))
+        if (!await HasColumnAsync(db, "Mods", "PackageId", cancellationToken))
         {
-            await db.Database.ExecuteSqlRawAsync(
-                "ALTER TABLE Users ADD COLUMN SteamId TEXT NULL;",
-                cancellationToken);
-        }
-
-        if (!await HasColumnAsync(db, "Mods", "LauncherModId", cancellationToken))
-        {
-            await db.Database.ExecuteSqlRawAsync(
-                "ALTER TABLE Mods ADD COLUMN LauncherModId TEXT NULL;",
-                cancellationToken);
+            if (await HasColumnAsync(db, "Mods", "LauncherModId", cancellationToken))
+            {
+                await db.Database.ExecuteSqlRawAsync(
+                    "ALTER TABLE Mods RENAME COLUMN LauncherModId TO PackageId;",
+                    cancellationToken);
+            }
+            else
+            {
+                await db.Database.ExecuteSqlRawAsync(
+                    "ALTER TABLE Mods ADD COLUMN PackageId TEXT NULL;",
+                    cancellationToken);
+            }
         }
 
         if (!await HasColumnAsync(db, "ModVersions", "ManifestVersion", cancellationToken))
@@ -102,10 +72,10 @@ public static class DatabaseSchema
                 cancellationToken);
         }
 
-        if (!await HasColumnAsync(db, "ModVersions", "MinimumLoaderVersion", cancellationToken))
+        if (await HasColumnAsync(db, "ModVersions", "MinimumLoaderVersion", cancellationToken))
         {
             await db.Database.ExecuteSqlRawAsync(
-                "ALTER TABLE ModVersions ADD COLUMN MinimumLoaderVersion TEXT NULL;",
+                "ALTER TABLE ModVersions DROP COLUMN MinimumLoaderVersion;",
                 cancellationToken);
         }
 
@@ -118,64 +88,14 @@ public static class DatabaseSchema
 
         await db.Database.ExecuteSqlRawAsync(
             """
-            CREATE UNIQUE INDEX IF NOT EXISTS IX_Users_SteamId
-            ON Users (SteamId)
-            WHERE SteamId IS NOT NULL;
-
-            CREATE UNIQUE INDEX IF NOT EXISTS IX_Mods_LauncherModId
-            ON Mods (LauncherModId COLLATE NOCASE)
-            WHERE LauncherModId IS NOT NULL;
+            DROP INDEX IF EXISTS IX_Mods_LauncherModId;
+            CREATE UNIQUE INDEX IF NOT EXISTS IX_Mods_PackageId
+            ON Mods (PackageId COLLATE NOCASE)
+            WHERE PackageId IS NOT NULL;
 
             CREATE UNIQUE INDEX IF NOT EXISTS IX_ModVersions_ModId_ManifestVersion_ContentSha256
             ON ModVersions (ModId, ManifestVersion, ContentSha256)
             WHERE ManifestVersion IS NOT NULL AND ContentSha256 IS NOT NULL;
-
-            CREATE TABLE IF NOT EXISTS Lobbies (
-                Id INTEGER NOT NULL CONSTRAINT PK_Lobbies PRIMARY KEY AUTOINCREMENT,
-                LobbyId TEXT NOT NULL,
-                HostSteamId TEXT NOT NULL,
-                HostPlayer TEXT NOT NULL,
-                Privacy TEXT NOT NULL,
-                Secret TEXT NOT NULL,
-                PasswordSalt TEXT NULL,
-                PasswordHash TEXT NULL,
-                FriendSteamIdsJson TEXT NOT NULL,
-                ActiveModsJson TEXT NOT NULL,
-                Players INTEGER NOT NULL,
-                MaxPlayers INTEGER NOT NULL,
-                AppId INTEGER NOT NULL,
-                ProtocolVersion INTEGER NOT NULL,
-                ManifestSha256 TEXT NOT NULL,
-                LoaderVersion TEXT NOT NULL,
-                Phase TEXT NOT NULL,
-                BoneyardId TEXT NULL,
-                BoneyardName TEXT NULL,
-                BoneyardSha256 TEXT NULL,
-                Wave INTEGER NULL,
-                Difficulty TEXT NULL,
-                ElapsedSeconds INTEGER NULL,
-                StatusText TEXT NULL,
-                FirstSeenUtc TEXT NOT NULL,
-                LastSeenUtc TEXT NOT NULL
-            );
-            CREATE UNIQUE INDEX IF NOT EXISTS IX_Lobbies_LobbyId ON Lobbies (LobbyId);
-            CREATE INDEX IF NOT EXISTS IX_Lobbies_LastSeenUtc ON Lobbies (LastSeenUtc);
-
-            CREATE TABLE IF NOT EXISTS SteamLinkAttempts (
-                Id INTEGER NOT NULL CONSTRAINT PK_SteamLinkAttempts PRIMARY KEY AUTOINCREMENT,
-                UserId INTEGER NOT NULL,
-                StateHash TEXT NOT NULL,
-                ReturnPath TEXT NOT NULL,
-                ExpiresAtUtc TEXT NOT NULL,
-                CONSTRAINT FK_SteamLinkAttempts_Users_UserId
-                    FOREIGN KEY (UserId) REFERENCES Users (Id) ON DELETE CASCADE
-            );
-            CREATE UNIQUE INDEX IF NOT EXISTS IX_SteamLinkAttempts_StateHash
-                ON SteamLinkAttempts (StateHash);
-            CREATE INDEX IF NOT EXISTS IX_SteamLinkAttempts_ExpiresAtUtc
-                ON SteamLinkAttempts (ExpiresAtUtc);
-            CREATE INDEX IF NOT EXISTS IX_SteamLinkAttempts_UserId
-                ON SteamLinkAttempts (UserId);
 
             CREATE TABLE IF NOT EXISTS ModTags (
                 Id INTEGER NOT NULL CONSTRAINT PK_ModTags PRIMARY KEY AUTOINCREMENT,
@@ -200,6 +120,25 @@ public static class DatabaseSchema
             CREATE INDEX IF NOT EXISTS IX_ModDownloadEvents_ModId_DownloadedAtUtc
                 ON ModDownloadEvents (ModId, DownloadedAtUtc);
 
+            CREATE TABLE IF NOT EXISTS ModSubscriptions (
+                Id INTEGER NOT NULL CONSTRAINT PK_ModSubscriptions PRIMARY KEY AUTOINCREMENT,
+                UserId INTEGER NOT NULL,
+                ModId INTEGER NOT NULL,
+                Enabled INTEGER NOT NULL,
+                CreatedAtUtc TEXT NOT NULL,
+                UpdatedAtUtc TEXT NOT NULL,
+                CONSTRAINT FK_ModSubscriptions_Users_UserId
+                    FOREIGN KEY (UserId) REFERENCES Users (Id) ON DELETE CASCADE,
+                CONSTRAINT FK_ModSubscriptions_Mods_ModId
+                    FOREIGN KEY (ModId) REFERENCES Mods (Id) ON DELETE CASCADE
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS IX_ModSubscriptions_UserId_ModId
+                ON ModSubscriptions (UserId, ModId);
+            CREATE INDEX IF NOT EXISTS IX_ModSubscriptions_UserId_Enabled
+                ON ModSubscriptions (UserId, Enabled);
+            CREATE INDEX IF NOT EXISTS IX_ModSubscriptions_ModId
+                ON ModSubscriptions (ModId);
+
             CREATE TABLE IF NOT EXISTS BoneyardDrafts (
                 Id INTEGER NOT NULL CONSTRAINT PK_BoneyardDrafts PRIMARY KEY AUTOINCREMENT,
                 UserId INTEGER NOT NULL,
@@ -214,50 +153,14 @@ public static class DatabaseSchema
             CREATE INDEX IF NOT EXISTS IX_BoneyardDrafts_UserId_UpdatedAtUtc
                 ON BoneyardDrafts (UserId, UpdatedAtUtc);
 
-            CREATE TABLE IF NOT EXISTS CrashReports (
-                Id INTEGER NOT NULL CONSTRAINT PK_CrashReports PRIMARY KEY AUTOINCREMENT,
-                PublicId TEXT NOT NULL,
-                ClientReportId TEXT NOT NULL,
-                SubmitterUserId INTEGER NULL,
-                SubmitterSteamId TEXT NULL,
-                SubmittedAtUtc TEXT NOT NULL,
-                CrashedAtUtc TEXT NOT NULL,
-                LaunchToken TEXT NOT NULL,
-                ExitCode INTEGER NULL,
-                LauncherVersion TEXT NOT NULL,
-                LoaderVersion TEXT NOT NULL,
-                GameVersion TEXT NOT NULL,
-                RuntimeProfile TEXT NOT NULL,
-                EnabledModsJson TEXT NOT NULL,
-                MetadataJson TEXT NOT NULL,
-                HasCrashLog INTEGER NOT NULL,
-                MinidumpCount INTEGER NOT NULL,
-                ArchivePath TEXT NOT NULL,
-                ArchiveSize INTEGER NOT NULL,
-                ArchiveSha256 TEXT NOT NULL,
-                CONSTRAINT FK_CrashReports_Users_SubmitterUserId
-                    FOREIGN KEY (SubmitterUserId) REFERENCES Users (Id) ON DELETE SET NULL
-            );
-            CREATE UNIQUE INDEX IF NOT EXISTS IX_CrashReports_PublicId
-                ON CrashReports (PublicId);
-            CREATE UNIQUE INDEX IF NOT EXISTS IX_CrashReports_ClientReportId
-                ON CrashReports (ClientReportId);
-            CREATE INDEX IF NOT EXISTS IX_CrashReports_SubmittedAtUtc
-                ON CrashReports (SubmittedAtUtc);
-            CREATE INDEX IF NOT EXISTS IX_CrashReports_SubmitterSteamId
-                ON CrashReports (SubmitterSteamId);
-            CREATE INDEX IF NOT EXISTS IX_CrashReports_SubmitterUserId
-                ON CrashReports (SubmitterUserId);
-
             CREATE TABLE IF NOT EXISTS DiagnosticLogs (
                 Id INTEGER NOT NULL CONSTRAINT PK_DiagnosticLogs PRIMARY KEY AUTOINCREMENT,
                 PublicId TEXT NOT NULL,
                 ClientLogId TEXT NOT NULL,
                 SubmitterUserId INTEGER NULL,
-                SubmitterSteamId TEXT NULL,
                 SubmittedAtUtc TEXT NOT NULL,
                 CapturedAtUtc TEXT NOT NULL,
-                LauncherVersion TEXT NOT NULL,
+                ClientVersion TEXT NOT NULL,
                 LaunchToken TEXT NULL,
                 MetadataJson TEXT NOT NULL,
                 ArchivePath TEXT NOT NULL,
@@ -272,17 +175,9 @@ public static class DatabaseSchema
                 ON DiagnosticLogs (ClientLogId);
             CREATE INDEX IF NOT EXISTS IX_DiagnosticLogs_SubmittedAtUtc
                 ON DiagnosticLogs (SubmittedAtUtc);
-            CREATE INDEX IF NOT EXISTS IX_DiagnosticLogs_SubmitterSteamId
-                ON DiagnosticLogs (SubmitterSteamId);
             """,
             cancellationToken);
 
-        if (!await HasColumnAsync(db, "Lobbies", "ActiveModsJson", cancellationToken))
-        {
-            await db.Database.ExecuteSqlRawAsync(
-                "ALTER TABLE Lobbies ADD COLUMN ActiveModsJson TEXT NOT NULL DEFAULT '[]';",
-                cancellationToken);
-        }
 
         if (await HasColumnAsync(db, "Mods", "Type", cancellationToken))
         {

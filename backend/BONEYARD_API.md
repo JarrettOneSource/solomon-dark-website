@@ -144,7 +144,7 @@ the draft. Screenshots begin empty and may be added through the existing mod
 screenshot API.
 
 Publication refuses a missing compiled body and validates a present body with
-the existing `BoneyardFileInspector`. The generated launcher package has this
+the existing `BoneyardFileInspector`. The generated web-port package has this
 layout:
 
 ```text
@@ -153,7 +153,7 @@ files/
   <portable name>.boneyard
 ```
 
-The manifest uses version `1.0.0`, the final Library slug as its launcher id,
+The manifest uses version `1.0.0`, the final Library slug as its package id,
 format `boneyard`, and the custom-level target:
 
 ```text
@@ -162,7 +162,7 @@ sandbox/DarkCloud/mylevels/<portable name>.boneyard
 
 The generated ZIP is then passed through the same `ModPackageInspector` and
 Library publication service as an ordinary upload. Package SHA-256,
-content SHA-256, storage, download counting, and launcher resolution metadata
+content SHA-256, storage, subscription, and web-session metadata
 therefore use the existing Library path.
 
 Published editor tomes carry the `boneyard` tag. The current Library taxonomy

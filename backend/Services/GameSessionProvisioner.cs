@@ -24,10 +24,12 @@ public sealed partial class GameSessionProvisioner
     }
 
     public async Task<ProvisionedGameEndpoint> ProvisionAsync(
+        WebSessionContent content,
         CancellationToken cancellationToken)
     {
         EnsurePrivateSessionsConfigured();
         using var request = CreateAdminRequest(HttpMethod.Post, "/admin/sessions");
+        request.Content = JsonContent.Create(new { content });
         using var response = await httpClient.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
@@ -40,10 +42,12 @@ public sealed partial class GameSessionProvisioner
     }
 
     public async Task<ProvisionedGameEndpoint> AdmitSharedHubAsync(
+        WebSessionContent content,
         CancellationToken cancellationToken)
     {
         EnsurePrivateSessionsConfigured();
         using var request = CreateAdminRequest(HttpMethod.Post, "/admin/hub/tickets");
+        request.Content = JsonContent.Create(new { content });
         using var response = await httpClient.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
@@ -58,6 +62,32 @@ public sealed partial class GameSessionProvisioner
                 "The game session supervisor returned an invalid shared Hub endpoint.");
         }
         return BuildEndpoint(provisioned.Path, provisioned.Credential, GameHubPath());
+    }
+
+    public async Task<SharedHubStats> GetSharedHubStatsAsync(
+        CancellationToken cancellationToken)
+    {
+        EnsurePrivateSessionsConfigured();
+        using var request = CreateAdminRequest(HttpMethod.Get, "/health");
+        using var response = await httpClient.SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new GameSessionUnavailableException(
+                $"The game session supervisor returned {(int)response.StatusCode}.");
+        }
+        try
+        {
+            return await response.Content.ReadFromJsonAsync<SharedHubStats>(
+                    JsonOptions,
+                    cancellationToken)
+                ?? throw new JsonException("The response was empty.");
+        }
+        catch (JsonException exception)
+        {
+            throw new GameSessionUnavailableException(
+                "The game session supervisor returned invalid shared Hub stats.",
+                exception);
+        }
     }
 
     private HttpRequestMessage CreateAdminRequest(HttpMethod method, string path)
@@ -140,6 +170,8 @@ public sealed partial class GameSessionProvisioner
 }
 
 public sealed record ProvisionedGameEndpoint(string Url, string Credential);
+
+public sealed record SharedHubStats(int Players, int Parties, int Runs);
 
 public sealed class GameSessionUnavailableException : Exception
 {

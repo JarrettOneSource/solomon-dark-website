@@ -1,14 +1,10 @@
-import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import Hero from './Hero'
 import Reveal from '../fx/Reveal'
-import LobbyPasswordDialog from '../components/LobbyPasswordDialog'
-import LobbyTable from '../components/LobbyTable'
 import PopularStrip from '../components/PopularStrip'
-import { EmptyState, SectionHead, Spinner, StatTile } from '../components/ui'
-import { api, type Lobby } from '../lib/api'
+import { SectionHead, StatTile } from '../components/ui'
+import { api } from '../lib/api'
 import { useApi } from '../lib/useApi'
-import { useLobbies } from '../lib/useLobbies'
 import { useAuth } from '../lib/auth'
 import { art, skillIcons } from '../lib/assets'
 import { formatCount } from '../lib/format'
@@ -18,7 +14,7 @@ const FEATURES = [
     icon: skillIcons.door,
     title: 'Search Parties',
     body:
-      'Live co-op through the Solomon Darker launcher, with a master list of every party out hunting Solomon Dark. Bring backup — he’s done for ten of the junior faculty so far.',
+      'Live browser co-op in one shared College Hub. Meet in the Courtyard, inspect another wizard, and form a party before hunting Solomon Dark.',
     to: '/parties',
     label: 'Join the hunt',
   },
@@ -26,7 +22,7 @@ const FEATURES = [
     icon: skillIcons.book,
     title: 'The Lua Grimoire',
     body:
-      'An embedded Lua runtime exposing the sd.* API. Community tomes install through the loader in one click.',
+      'A sandboxed authoritative Lua runtime exposing the sd.* API. Subscribe in the Library, then enable each tome in the Dark Cloud.',
     to: '/mods',
     label: 'Enter the Library',
   },
@@ -43,15 +39,6 @@ const FEATURES = [
 export default function Home() {
   const { user } = useAuth()
   const stats = useApi(() => api.stats(), [], 30_000)
-  const lobbies = useLobbies()
-  const [knock, setKnock] = useState<Lobby | null>(null)
-
-  const liveLobbies = (lobbies.data?.items ?? []).slice(0, 5)
-  // Veiled parties fill whatever of the five preview rows is left.
-  const veiledParties = (lobbies.data?.privateParties ?? []).slice(
-    0,
-    Math.max(0, 5 - liveLobbies.length),
-  )
 
   return (
     <div>
@@ -130,18 +117,14 @@ export default function Home() {
               </Link>
             }
           />
-          {lobbies.loading ? (
-            <Spinner label="Scrying for parties…" />
-          ) : lobbies.error ? (
-            <EmptyState title="The crystal ball is cloudy" line={lobbies.error} />
-          ) : liveLobbies.length === 0 && veiledParties.length === 0 ? (
-            <EmptyState
-              title="No parties afield"
-              line="Solomon, for the record, is not resting. Host one from the Solomon Darker launcher."
-            />
-          ) : (
-            <LobbyTable lobbies={liveLobbies} veiled={veiledParties} onKnock={setKnock} />
-          )}
+          <div className="panel panel-ornate flex flex-wrap items-center gap-5 p-6">
+            <img src={skillIcons.door} alt="" className="h-12 w-12" />
+            <p className="text-fell min-w-0 flex-1 text-bone-dim">
+              Parties are no longer a lobby list. Enter the shared Hub, meet in the
+              Courtyard, and invite the wizard standing beside you.
+            </p>
+            <Link to="/game" className="btn btn-gold">Enter the Hub</Link>
+          </div>
         </Reveal>
       </section>
 
@@ -169,8 +152,8 @@ export default function Home() {
                     <em>Solomon Dark</em> — the third Solomon game — would never be
                     finished. On Halloween 2016 the unfinished beta escaped for a
                     single day, and fans mirrored it before midnight. This project
-                    keeps those builds alive: a mod loader, an embedded Lua runtime,
-                    Steam multiplayer, and this hall of records.
+                    turns the preserved evidence into an authoritative web port with
+                    subscribed Lua mods, browser multiplayer, and this hall of records.
                   </p>
                 </div>
                 <Link to="/about" className="btn btn-stone mt-6">
@@ -185,7 +168,7 @@ export default function Home() {
                   ['2015', 'Raptisoft confirms Solomon Dark will never be finished. The tower goes quiet.'],
                   ['2016', 'The unfinished beta escapes for one Halloween. Fans preserve it before midnight.'],
                   ['2022', 'A community archive gathers the surviving builds — 0.71.0, 0.72.0, 0.72.5.'],
-                  ['2026', 'The Solomon Darker project awakens: Lua runtime, Steam multiplayer, this site. You are here.'],
+                  ['2026', 'The Solomon Darker web port awakens: subscribed mods, browser multiplayer, and cloud saves. You are here.'],
                 ].map(([year, line]) => (
                   <li key={year} className="relative">
                     <span className="absolute -left-[27px] top-1.5 h-2 w-2 rounded-full bg-gold shadow-[0_0_8px_rgba(200,168,98,.8)]" />
@@ -229,7 +212,6 @@ export default function Home() {
         </Reveal>
       </section>
 
-      {knock && <LobbyPasswordDialog lobby={knock} onClose={() => setKnock(null)} />}
     </div>
   )
 }

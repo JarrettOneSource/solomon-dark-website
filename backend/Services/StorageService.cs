@@ -10,17 +10,13 @@ public sealed partial class StorageService
         RootPath = Path.GetFullPath(rootPath);
         ModsPath = Path.Combine(RootPath, "uploads", "mods");
         ScreenshotsPath = Path.Combine(RootPath, "uploads", "screenshots");
-        SavesPath = Path.Combine(RootPath, "saves");
         BoneyardDraftsPath = Path.Combine(RootPath, "drafts", "boneyards");
-        CrashReportsPath = Path.Combine(RootPath, "crash-reports");
         DiagnosticLogsPath = Path.Combine(RootPath, "diagnostic-logs");
 
         Directory.CreateDirectory(RootPath);
         Directory.CreateDirectory(ModsPath);
         Directory.CreateDirectory(ScreenshotsPath);
-        Directory.CreateDirectory(SavesPath);
         Directory.CreateDirectory(BoneyardDraftsPath);
-        Directory.CreateDirectory(CrashReportsPath);
         Directory.CreateDirectory(DiagnosticLogsPath);
     }
 
@@ -28,9 +24,7 @@ public sealed partial class StorageService
     public string DatabasePath => Path.Combine(RootPath, "sdr.db");
     public string ModsPath { get; }
     public string ScreenshotsPath { get; }
-    public string SavesPath { get; }
     public string BoneyardDraftsPath { get; }
-    public string CrashReportsPath { get; }
     public string DiagnosticLogsPath { get; }
 
     public static bool IsSafeVersion(string version) =>
@@ -67,35 +61,7 @@ public sealed partial class StorageService
         return fileName;
     }
 
-    public async Task<string> SaveCloudSaveAsync(
-        int userId,
-        int slot,
-        ReadOnlyMemory<byte> bytes,
-        CancellationToken cancellationToken = default)
-    {
-        var path = GetCloudSavePath(userId, slot);
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-
-        var temporaryPath = path + ".tmp";
-        await File.WriteAllBytesAsync(temporaryPath, bytes.ToArray(), cancellationToken);
-        File.Move(temporaryPath, path, true);
-        return Sha256(bytes.Span);
-    }
-
-    public Task<StoredCrashReportFile> SaveCrashReportAsync(
-        DateTime submittedAtUtc,
-        string publicId,
-        Stream source,
-        CancellationToken cancellationToken = default) =>
-        SaveArchiveAsync(
-            CrashReportsPath,
-            "Crash report",
-            submittedAtUtc,
-            publicId,
-            source,
-            cancellationToken);
-
-    public Task<StoredCrashReportFile> SaveDiagnosticLogAsync(
+    public Task<StoredDiagnosticLogFile> SaveDiagnosticLogAsync(
         DateTime submittedAtUtc,
         string publicId,
         Stream source,
@@ -108,7 +74,7 @@ public sealed partial class StorageService
             source,
             cancellationToken);
 
-    private static async Task<StoredCrashReportFile> SaveArchiveAsync(
+    private static async Task<StoredDiagnosticLogFile> SaveArchiveAsync(
         string rootPath,
         string archiveKind,
         DateTime submittedAtUtc,
@@ -146,7 +112,7 @@ public sealed partial class StorageService
                     .ToLowerInvariant();
             }
             File.Move(temporaryPath, path, overwrite: false);
-            return new StoredCrashReportFile(relativePath, size, sha256);
+            return new StoredDiagnosticLogFile(relativePath, size, sha256);
         }
         finally
         {
@@ -201,17 +167,11 @@ public sealed partial class StorageService
 
     public string GetModFilePath(string fileName) => ResolvePath(ModsPath, fileName);
 
-    public string GetCloudSavePath(int userId, int slot) =>
-        ResolvePath(SavesPath, $"{userId}/{slot}.bin");
-
     public string GetBoneyardDraftDocumentPath(int userId, int draftId) =>
         ResolveBoneyardDraftPath(userId, draftId, "document.json");
 
     public string GetBoneyardDraftCompiledPath(int userId, int draftId) =>
         ResolveBoneyardDraftPath(userId, draftId, "compiled.boneyard");
-
-    public string GetCrashReportPath(string relativePath) =>
-        ResolvePath(CrashReportsPath, relativePath);
 
     public string GetDiagnosticLogPath(string relativePath) =>
         ResolvePath(DiagnosticLogsPath, relativePath);
@@ -252,15 +212,6 @@ public sealed partial class StorageService
         }
     }
 
-    public void DeleteCloudSave(int userId, int slot)
-    {
-        var path = GetCloudSavePath(userId, slot);
-        if (File.Exists(path))
-        {
-            File.Delete(path);
-        }
-    }
-
     public void DeleteBoneyardDraftCompiled(int userId, int draftId)
     {
         var path = GetBoneyardDraftCompiledPath(userId, draftId);
@@ -276,15 +227,6 @@ public sealed partial class StorageService
         if (Directory.Exists(directory))
         {
             Directory.Delete(directory, true);
-        }
-    }
-
-    public void DeleteCrashReport(string relativePath)
-    {
-        var path = ResolvePath(CrashReportsPath, relativePath);
-        if (File.Exists(path))
-        {
-            File.Delete(path);
         }
     }
 
@@ -372,7 +314,7 @@ public sealed partial class StorageService
     private static partial Regex SafeScreenshotTokenRegex();
 }
 
-public sealed record StoredCrashReportFile(
+public sealed record StoredDiagnosticLogFile(
     string RelativePath,
     long Size,
     string Sha256);

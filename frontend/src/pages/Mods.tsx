@@ -1,22 +1,25 @@
 import { useEffect, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import ModCard from '../components/ModCard'
 import PopularStrip from '../components/PopularStrip'
 import Reveal from '../fx/Reveal'
 import { TomeFlybys } from '../fx/Critters'
 import { EmptyState, ErrorNote, Spinner, TagBadge } from '../components/ui'
 import { api } from '../lib/api'
-import type { ModSort } from '../lib/api'
+import type { ModSort, ModSummary } from '../lib/api'
 import { useApi } from '../lib/useApi'
 import { useAuth } from '../lib/auth'
 
 export default function Mods() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
   const [search, setSearch] = useState('')
   const [debounced, setDebounced] = useState('')
   const [sort, setSort] = useState<ModSort>('newest')
   const [page, setPage] = useState(1)
+  const [subscribing, setSubscribing] = useState<string | null>(null)
+  const [subscriptionError, setSubscriptionError] = useState<string | null>(null)
   const pageSize = 12
 
   // Selected tags live in the URL so /mods?tag=boneyard deep-links to a shelf.
@@ -44,6 +47,30 @@ export default function Mods() {
     () => api.mods.list({ search: debounced, tags: selected, sort, page, pageSize }),
     [debounced, selectedKey, sort, page],
   )
+  const subscriptions = useApi(
+    () => user ? api.mods.subscriptions.list() : Promise.resolve({ items: [] }),
+    [user?.id],
+  )
+  const subscribedSlugs = new Set(
+    subscriptions.data?.items.map(subscription => subscription.mod.slug) ?? [],
+  )
+
+  const subscribe = async (mod: ModSummary) => {
+    if (!user) {
+      navigate('/login')
+      return
+    }
+    setSubscribing(mod.slug)
+    setSubscriptionError(null)
+    try {
+      await api.mods.subscriptions.subscribe(mod.slug)
+      await subscriptions.reload()
+    } catch (error) {
+      setSubscriptionError(error instanceof Error ? error.message : 'The subscription failed.')
+    } finally {
+      setSubscribing(null)
+    }
+  }
 
   const total = mods.data?.total ?? 0
   const maxPage = Math.max(1, Math.ceil(total / pageSize))
@@ -138,6 +165,7 @@ export default function Mods() {
       )}
 
       <div className="mt-6">
+        {subscriptionError ? <ErrorNote message={subscriptionError} /> : null}
         {mods.loading ? (
           <Spinner label="Consulting the index…" />
         ) : mods.error ? (
@@ -158,7 +186,12 @@ export default function Mods() {
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {mods.data!.items.map((m, i) => (
                 <Reveal key={m.id} delay={Math.min(i, 6) * 60}>
-                  <ModCard mod={m} />
+                  <ModCard
+                    mod={m}
+                    onSubscribe={subscribe}
+                    subscribed={subscribedSlugs.has(m.slug)}
+                    subscribing={subscribing === m.slug}
+                  />
                 </Reveal>
               ))}
             </div>

@@ -24,7 +24,7 @@ import MainMenuScene from '../game/MainMenuScene'
 import NativeLoader from '../game/NativeLoader'
 import GameRuntimeError from '../game/GameRuntimeError.tsx'
 import { useAuth } from '../lib/auth'
-import { getToken } from '../lib/api.ts'
+import { api, getToken } from '../lib/api.ts'
 import { GameSaveCoordinator } from '../game/save/game-save-coordinator.ts'
 import {
   createCloudGameSaveStore,
@@ -32,10 +32,11 @@ import {
   type StoredGameSave,
 } from '../game/save/game-save-store.ts'
 import {
-  readGameSaveSummary,
+  parseGameSaveDocument,
   type GameSaveCheckpoint,
   type ResumableGameSave,
 } from '../game/save/game-save-contract.ts'
+import type { GameContentIdentity } from '../game/protocol/game-protocol.ts'
 
 type Readiness = 'loading' | 'ready'
 
@@ -49,6 +50,8 @@ export default function Game() {
   const [loadProgress, setLoadProgress] = useState(initialGameStartupProgress)
   const [fatal, setFatal] = useState<GameConnectionFailure | null>(null)
   const [saveReady, setSaveReady] = useState(false)
+  const [modsReady, setModsReady] = useState(false)
+  const [activeMods, setActiveMods] = useState<readonly GameContentIdentity[]>([])
   const [resumeSave, setResumeSave] = useState<ResumableGameSave | null>(null)
   const saveCoordinator = useRef<GameSaveCoordinator | null>(null)
 
@@ -70,9 +73,11 @@ export default function Game() {
         return
       }
       try {
+        const parsed = parseGameSaveDocument(record.document)
         setResumeSave({
           document: record.document,
-          summary: readGameSaveSummary(record.document),
+          mods: parsed.mods,
+          summary: parsed.summary,
         })
       } catch (error) {
         setResumeSave(null)
@@ -106,6 +111,36 @@ export default function Game() {
       cancelled = true
       if (saveCoordinator.current === coordinator) saveCoordinator.current = null
     }
+  }, [authLoading, diagnostics, user])
+
+  useEffect(() => {
+    if (authLoading) return
+    let cancelled = false
+    setModsReady(false)
+    if (!user) {
+      setActiveMods([])
+      setModsReady(true)
+      return
+    }
+    void api.mods.subscriptions.active().then((content) => {
+      if (!cancelled) setActiveMods(content.mods.map(mod => ({
+        contentSha256: mod.contentSha256,
+        id: mod.id,
+        version: mod.version,
+      })))
+    }).catch((error: unknown) => {
+      if (!cancelled) {
+        const failure = GameConnectionFailure.from(
+          error instanceof Error ? error : new Error('Subscribed mods could not be loaded.'),
+          'asset-load-failed',
+        )
+        diagnostics.error('mods.load_failed', failure.message, failure.stack)
+        setFatal(failure)
+      }
+    }).finally(() => {
+      if (!cancelled) setModsReady(true)
+    })
+    return () => { cancelled = true }
   }, [authLoading, diagnostics, user])
 
   useEffect(() => {
@@ -179,11 +214,13 @@ export default function Game() {
     character: PlayerCharacterConfig,
     onProgress: (stage: GameConnectionStage) => void,
     saveDocument?: string,
+    allowModMismatch?: boolean,
   ): Promise<GameSession> => {
     try {
       const endpoint = preparedEndpoint.current
       if (!endpoint) throw new Error('The shared Hub admission was not prepared.')
       const session = await bootGame({
+        ...(allowModMismatch ? { allowModMismatch: true } : {}),
         character,
         diagnostics,
         endpoint,
@@ -216,9 +253,10 @@ export default function Game() {
   }
   return (
     <>
-      {readiness === 'ready' && !authLoading && saveReady
+      {readiness === 'ready' && !authLoading && saveReady && modsReady
         ? (
             <MainMenuScene
+              activeMods={activeMods}
               accountUsername={accountUsername}
               connectSession={connectSession}
               displayName={displayName}
@@ -236,7 +274,9 @@ export default function Game() {
                 ? assetDisplayName(loadProgress.activeSource)
                 : null}
               progress={readiness === 'ready' ? 1 : progress}
-              stage={readiness === 'ready' ? 'Loading save' : gameStartupStageLabel(loadProgress)}
+              stage={readiness === 'ready'
+                ? !modsReady ? 'Loading subscribed mods' : 'Loading save'
+                : gameStartupStageLabel(loadProgress)}
               total={loadProgress.total}
             />
           )}

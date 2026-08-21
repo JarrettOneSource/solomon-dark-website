@@ -31,6 +31,7 @@ export type GameEndpoint =
     }
 
 export interface SessionOptions {
+  allowModMismatch?: boolean
   character: PlayerCharacterConfig
   diagnostics?: GameClientDiagnostics
   endpoint: GameEndpoint
@@ -71,6 +72,7 @@ export async function bootGame(options: SessionOptions): Promise<GameSession> {
     'Authenticating the game session.',
   )
   const session = await connectSession({
+    ...(options.allowModMismatch ? { allowModMismatch: true } : {}),
     character: options.character,
     transport,
     credential: options.endpoint.credential,

@@ -1,0 +1,29 @@
+.game-save-mod-mismatch-stage {
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, .82);
+  color: #d7bd78;
+  font-family: Cinzel, serif;
+}
+
+.game-save-mod-mismatch {
+  width: 720px;
+  max-height: 720px;
+  overflow: auto;
+  padding: 34px 46px;
+  border: 3px solid #c8a75b;
+  background: #0b0a09 url('../assets/game/dark-cloud/leather.png') repeat;
+  box-shadow: 0 0 0 10px #050505, 0 20px 70px #000, inset 0 0 60px #000;
+}
+
+.game-save-mod-mismatch h2 { margin: 0; text-align: center; font-size: 27px; }
+.game-save-mod-mismatch > p { color: #c6b990; text-align: center; font: 17px 'IM FELL English', serif; }
+.game-save-mod-mismatch-groups { display: grid; gap: 12px; margin: 24px 0; }
+.game-save-mod-mismatch-groups section { border: 1px solid #4f452e; padding: 12px 16px; background: rgba(0, 0, 0, .45); }
+.game-save-mod-mismatch-groups h3 { margin: 0 0 7px; font-size: 13px; letter-spacing: .16em; }
+.game-save-mod-mismatch-groups ul { margin: 0; padding-left: 18px; color: #eee0bc; font: 14px ui-monospace, monospace; }
+.game-save-mod-mismatch .game-save-mod-mismatch-warning { color: #d5997e; font-size: 15px; }
+.game-save-mod-mismatch-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 25px; }
+.game-save-mod-mismatch-actions button { height: 54px; border: 2px solid #8e773e; color: #d7bd78; background: #090908; font: 700 16px Cinzel, serif; cursor: pointer; }
+.game-save-mod-mismatch-actions button:last-child { border-color: #74926e; color: #d8efcf; background: #1c2c1c; }

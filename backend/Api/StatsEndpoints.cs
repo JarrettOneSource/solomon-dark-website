@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using SolomonDarkRevived.Data;
+using SolomonDarkRevived.Services;
 
 namespace SolomonDarkRevived.Api;
 
@@ -12,18 +13,23 @@ public static class StatsEndpoints
 
     private static async Task<IResult> GetAsync(
         AppDb db,
+        GameSessionProvisioner provisioner,
         CancellationToken cancellationToken)
     {
-        var liveCutoff = DateTime.UtcNow.AddSeconds(-120);
-        var matchesLive = await db.Lobbies.CountAsync(
-            lobby => lobby.LastSeenUtc >= liveCutoff,
-            cancellationToken);
-        var wizardsOnline = await db.Lobbies
-            .Where(lobby => lobby.LastSeenUtc >= liveCutoff)
-            .SumAsync(lobby => (int?)lobby.Players, cancellationToken) ?? 0;
+        SharedHubStats sharedHub;
+        try
+        {
+            sharedHub = await provisioner.GetSharedHubStatsAsync(cancellationToken);
+        }
+        catch (Exception exception) when (exception is
+            GameSessionUnavailableException or HttpRequestException or OperationCanceledException)
+        {
+            sharedHub = new SharedHubStats(0, 0, 0);
+        }
+        var matchesLive = sharedHub.Parties;
+        var wizardsOnline = sharedHub.Players;
         var tomes = await db.Mods.CountAsync(cancellationToken);
-        var savesSynced = await db.CloudSaves.CountAsync(cancellationToken)
-            + await db.WebGameSaves.CountAsync(cancellationToken);
+        var savesSynced = await db.WebGameSaves.CountAsync(cancellationToken);
         var enrolled = await db.Users.CountAsync(cancellationToken);
         var downloadsTotal = await db.Mods
             .SumAsync(mod => (long?)mod.Downloads, cancellationToken) ?? 0;

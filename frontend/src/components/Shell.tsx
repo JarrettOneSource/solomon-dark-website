@@ -20,24 +20,18 @@ import {
 } from '../fx/jukebox'
 import { useAuth } from '../lib/auth'
 import { art } from '../lib/assets'
-import { MOD_LOADER_DOWNLOAD_URL } from '../lib/links'
 import '../game/game-surface.css'
 
 // The Boneyard editor left the navbar deliberately: it is a maker's tool,
 // reached from the Library's drafting-table CTA and the footer passages.
 //
-// /game is unlinked on purpose too, and more strictly — no nav entry, no
-// passage, no home-page card. The route exists and works if you type it, but
-// the game announces itself only when the owner decides it is ready to be
-// found.
 const NAV = [
   { to: '/', label: 'Home', end: true },
+  { to: '/game', label: 'Play' },
   { to: '/parties', label: 'Search Parties' },
   { to: '/mods', label: 'Library' },
   { to: '/about', label: 'About' },
 ]
-
-const DOWNLOAD_TITLE = 'Download the mod loader from GitHub'
 
 function NavItem({ to, label, end }: { to: string; label: string; end?: boolean }) {
   return (
@@ -247,15 +241,12 @@ export default function Shell() {
                 }}
               />
             </div>
-            <a
-              href={MOD_LOADER_DOWNLOAD_URL}
-              target="_blank"
-              rel="noreferrer"
-              title={DOWNLOAD_TITLE}
+            <Link
+              to="/game"
               className="btn btn-gold hidden !px-3.5 !py-2.5 !text-[11px] sm:inline-flex"
             >
-              Download
-            </a>
+              Play
+            </Link>
             {user ? (
               <div className="hidden items-center gap-2 md:flex">
                 <Link
@@ -311,15 +302,12 @@ export default function Shell() {
               ) : (
                 <NavItem to="/login" label="Sign in" />
               )}
-              <a
-                href={MOD_LOADER_DOWNLOAD_URL}
-                target="_blank"
-                rel="noreferrer"
-                title={DOWNLOAD_TITLE}
+              <Link
+                to="/game"
                 className="btn btn-gold w-fit !text-[11px]"
               >
-                Download
-              </a>
+                Play
+              </Link>
             </div>
           </nav>
         )}
@@ -357,11 +345,6 @@ export default function Shell() {
                 </a>
               </li>
               <li>
-                <a href={MOD_LOADER_DOWNLOAD_URL} target="_blank" rel="noreferrer" className="link-arcane">
-                  Mod loader ↗
-                </a>
-              </li>
-              <li>
                 <a href="https://github.com/JayMcArthur/Raptisoft-Solomon" target="_blank" rel="noreferrer" className="link-arcane">
                   Preservation archive ↗
                 </a>
@@ -375,7 +358,7 @@ export default function Shell() {
               <span className="text-bone-dim">— the Archchancellor, over brandy</span>
             </p>
             <p className="mt-6 font-mono text-[11px] text-bone-dim/60">
-              beta 0.72.5 · mod loader v0.1.0-beta.3
+              beta 0.72.5 · web port
             </p>
           </div>
         </div>

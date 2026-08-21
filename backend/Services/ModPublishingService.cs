@@ -131,12 +131,12 @@ public sealed class ModPublishingService(AppDb db, StorageService storage)
         }
 
         if (await db.Mods.AnyAsync(
-                candidate => candidate.LauncherModId == package.LauncherModId,
+                candidate => candidate.PackageId == package.PackageId,
                 cancellationToken))
         {
             throw new ModPublishingException(
                 StatusCodes.Status409Conflict,
-                $"A website mod already uses manifest.id '{package.LauncherModId}'.");
+                $"A website mod already uses manifest.id '{package.PackageId}'.");
         }
 
         var now = DateTime.UtcNow;
@@ -146,7 +146,7 @@ public sealed class ModPublishingService(AppDb db, StorageService storage)
             Name = name,
             Summary = summary,
             Description = request.Description,
-            LauncherModId = package.LauncherModId,
+            PackageId = package.PackageId,
             AuthorId = request.AuthorId,
             CreatedAtUtc = now,
             UpdatedAtUtc = now,
@@ -156,7 +156,6 @@ public sealed class ModPublishingService(AppDb db, StorageService storage)
         {
             Version = versionName,
             ManifestVersion = package.ManifestVersion,
-            MinimumLoaderVersion = package.MinimumLoaderVersion,
             PackageSha256 = package.PackageSha256,
             ContentSha256 = package.ContentSha256,
             Changelog = request.Changelog,

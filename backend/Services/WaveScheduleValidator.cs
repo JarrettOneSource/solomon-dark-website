@@ -2,7 +2,7 @@ namespace SolomonDarkRevived.Services;
 
 /// <summary>
 /// Validates an authored data/wave.txt schedule with the same acceptance rules
-/// as the mod loader's wave reader (wave_intelligence.cpp), so a published
+/// as the recovered native wave reader, so a published
 /// package can never fail Lua-engine initialization on players' machines:
 /// WAVE/ENDWAVE blocks, NEXT/SPAWN/SPAWNDELAY/WAVEDELAY/MAXENEMIES/ZOMBIEWAVE
 /// directives, GROUP/FORMATION monster lines, the eight retail enemy tokens,

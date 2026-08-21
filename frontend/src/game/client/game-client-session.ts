@@ -57,6 +57,7 @@ import {
 } from '../protocol/entity-replication.ts'
 
 export interface GameClientSessionOptions {
+  allowModMismatch?: boolean
   character: PlayerCharacterConfig
   credential: string
   diagnostics?: GameClientDiagnostics
@@ -748,6 +749,7 @@ export function connectGameClientSession(
 
     options.transport.send(encodeGameMessage({
       type: 'client-hello',
+      ...(options.allowModMismatch ? { allowModMismatch: true } : {}),
       protocolVersion: GAME_PROTOCOL_VERSION,
       credential: options.credential,
       character: options.character,

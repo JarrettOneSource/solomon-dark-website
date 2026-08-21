@@ -1,145 +1,23 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
-import LobbyPasswordDialog from '../components/LobbyPasswordDialog'
-import LobbyTable from '../components/LobbyTable'
+import { Link } from 'react-router-dom'
+
 import Reveal from '../fx/Reveal'
-import { EmptyState, ErrorNote, Spinner } from '../components/ui'
-import type { Lobby } from '../lib/api'
-import { useAuth } from '../lib/auth'
-import { useLobbies } from '../lib/useLobbies'
+import { art } from '../lib/assets'
 
 export default function SearchParties() {
-  const [search, setSearch] = useState('')
-  const [openSeats, setOpenSeats] = useState(false)
-  const [knock, setKnock] = useState<Lobby | null>(null)
-  const { user } = useAuth()
-  const { data, error, loading } = useLobbies()
-  const [searchParams, setSearchParams] = useSearchParams()
-  const consumedDeepLink = useRef(false)
-
-  // sdr hand-off: /parties?lobby=<id> (and the legacy /classes alias) opens
-  // the knock dialog for that party.
-  useEffect(() => {
-    if (consumedDeepLink.current || !data) return
-    const wanted = searchParams.get('lobby')
-    if (!wanted) return
-    consumedDeepLink.current = true
-    const target = data.items.find((item) => String(item.id) === wanted)
-    if (target?.access === 'password') setKnock(target)
-    setSearchParams({}, { replace: true })
-  }, [data, searchParams, setSearchParams])
-
-  const filtered = useMemo(() => {
-    let items = data?.items ?? []
-    if (search.trim()) {
-      const q = search.trim().toLowerCase()
-      items = items.filter(
-        (lobby) =>
-          lobby.hostPlayer.toLowerCase().includes(q) ||
-          (lobby.game.boneyardName ?? '').toLowerCase().includes(q),
-      )
-    }
-    if (openSeats) items = items.filter((lobby) => lobby.players < lobby.maxPlayers)
-    return items
-  }, [data, search, openSeats])
-
-  // Veiled parties carry nothing searchable and no seat you could claim, so
-  // they only show on the unfiltered view.
-  const veiledAll = data?.privateParties ?? []
-  const veiled = search.trim() || openSeats ? [] : veiledAll
   return (
-    <div className="mx-auto max-w-5xl px-4 py-14 sm:px-6">
+    <div className="mx-auto max-w-3xl px-4 py-20 text-center sm:px-6">
       <Reveal>
-        <div className="mb-2 flex items-center gap-3">
-          <span className="orb orb-on [animation:banner-pulse_2.2s_ease-in-out_infinite]" />
-          <span className="font-mono text-xs text-moss">
-            {data
-              ? `${data.items.length + veiledAll.length} live · ${data.playerCount} wizards afield`
-              : '…'}
-          </span>
-          <span className="ml-auto font-mono text-[10px] uppercase tracking-wider text-bone-dim/50">
-            live
-          </span>
-        </div>
-        <h1 className="h-display text-3xl">Search Parties</h1>
-        <p className="text-fell mt-2 max-w-xl text-bone-dim">
-          “Find Solomon Dark and bring him to justice. The reputation of the
-          university is counting on you.” — the Archchancellor, to every party
-          below. Enlistment is voluntary; survival is chronicled.
+        <img src={art.skullGold} alt="" className="mx-auto h-14 opacity-70" />
+        <div className="kicker mb-2 mt-6">Parties moved into the game</div>
+        <h1 className="h-display text-3xl">Enter the Shared Hub</h1>
+        <p className="text-fell mx-auto mt-4 max-w-xl text-bone-dim">
+          Browser parties now form face to face in the College Courtyard. Enter the
+          shared Hub, inspect another wizard, send an invitation, and let the party
+          leader choose the Boneyard. Your exact enabled mod set travels with your
+          admission and must match the party before launch.
         </p>
+        <Link to="/game" className="btn btn-gold mt-8">Play Solomon Dark</Link>
       </Reveal>
-
-      <div className="mt-8">
-        <div className="mb-4 flex flex-wrap items-center gap-3">
-          <input
-            className="input max-w-xs"
-            placeholder="Search hosts and boneyards…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          <label className="flex cursor-pointer items-center gap-2 text-xs uppercase tracking-wider text-bone-dim">
-            <input
-              type="checkbox"
-              checked={openSeats}
-              onChange={(e) => setOpenSeats(e.target.checked)}
-              className="accent-[#c8a862]"
-            />
-            open seats only
-          </label>
-        </div>
-
-        <section aria-labelledby="launcher-parties-title">
-          <div className="mb-4">
-            <div className="kicker mb-1.5">LIVE LAUNCHER</div>
-            <h2 id="launcher-parties-title" className="h-display text-xl">
-              Solomon Darker Launcher
-            </h2>
-          </div>
-
-          {loading ? (
-            <Spinner label="Scrying for search parties…" />
-          ) : error ? (
-            <ErrorNote message={error} />
-          ) : filtered.length === 0 && veiled.length === 0 ? (
-            <EmptyState
-              title="No parties afield"
-              line={
-                search || openSeats
-                  ? 'Nothing matches. Loosen the filters — or lower your standards.'
-                  : 'The faculty deny all knowledge. Host one from the Solomon Darker launcher.'
-              }
-            />
-          ) : (
-            <LobbyTable lobbies={filtered} veiled={veiled} onKnock={setKnock} />
-          )}
-        </section>
-
-        <p className="text-fell mt-6 text-center text-xs text-bone-dim/70">
-          {user?.steamId ? (
-            <>
-              Veiled parties unmask when the host counts you among their Steam friends.
-            </>
-          ) : user ? (
-            <>
-              Veiled parties unmask for the host’s Steam friends —{' '}
-              <Link to="/account" className="link-arcane">
-                link your Steam self in the Annals
-              </Link>
-              .
-            </>
-          ) : (
-            <>
-              Veiled parties are warded to their host’s Steam circle — they unmask for{' '}
-              <Link to="/login" className="link-arcane">
-                signed-in wizards
-              </Link>{' '}
-              the host counts as friends.
-            </>
-          )}
-        </p>
-      </div>
-
-      {knock && <LobbyPasswordDialog lobby={knock} onClose={() => setKnock(null)} />}
     </div>
   )
 }

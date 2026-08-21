@@ -4,7 +4,19 @@ import { formatCount, timeAgo } from '../lib/format'
 import { art, elementWords } from '../lib/assets'
 import { TagBadge } from './ui'
 
-export default function ModCard({ mod }: { mod: ModSummary }) {
+interface ModCardProps {
+  mod: ModSummary
+  onSubscribe?: (mod: ModSummary) => void
+  subscribed?: boolean
+  subscribing?: boolean
+}
+
+export default function ModCard({
+  mod,
+  onSubscribe,
+  subscribed = false,
+  subscribing = false,
+}: ModCardProps) {
   const navigate = useNavigate()
   // Two wide chips crush the byline, so a long pair shows one chip + count.
   const shownTags =
@@ -30,6 +42,20 @@ export default function ModCard({ mod }: { mod: ModSummary }) {
             className="h-14 opacity-25 transition-opacity group-hover:opacity-40"
           />
         )}
+        {onSubscribe ? (
+          <button
+            type="button"
+            className={`btn absolute right-3 top-3 !px-3 !py-1.5 !text-[10px] ${subscribed ? 'btn-stone' : 'btn-gold'}`}
+            disabled={subscribed || subscribing}
+            onClick={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              onSubscribe(mod)
+            }}
+          >
+            {subscribed ? 'Subscribed' : subscribing ? 'Subscribing…' : 'Subscribe'}
+          </button>
+        ) : null}
       </div>
 
       <div className="p-4">

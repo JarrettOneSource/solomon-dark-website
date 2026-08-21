@@ -1,10 +1,7 @@
 import { GAME_PROTOCOL_NAME } from '../protocol/game-protocol.ts'
 import { createGameSimulation } from '../core-server/game-simulation.ts'
 import { createHubStudentFixturePopulation } from '../core-server/hub-student-fixtures.ts'
-import {
-  createBoneyardCatalog,
-  loadModBoneyardsFromStageReport,
-} from './boneyard-catalog.ts'
+import { createBoneyardCatalog } from './boneyard-catalog.ts'
 import { startGameHost } from './game-host.ts'
 import { resolveWebLuaWasmPath } from './lua/web-lua-wasm-path.ts'
 import {
@@ -56,10 +53,7 @@ const benchmarkStudentSeed = parseBenchmarkStudentSeed(
   process.env.SDR_HUB_BENCH_SEED,
   benchmarkStudentCount,
 )
-const stageReport = process.env.SDR_GAME_STAGE_REPORT?.trim()
-const boneyards = createBoneyardCatalog(
-  stageReport ? await loadModBoneyardsFromStageReport(stageReport) : [],
-)
+const boneyards = createBoneyardCatalog()
 
 const server = await startGameHost({
   authentication: { kind: 'shared', credential },

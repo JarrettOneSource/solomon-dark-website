@@ -295,3 +295,30 @@ test('web Lua trivial execution stays below the fixed-tick budget', async () => 
     harness.runtime.close()
   }
 })
+
+test('mod entry scripts and state remain isolated and restore by VM', async () => {
+  const create = async (id: string, value: number) => {
+    const runtime = await WebLuaRuntime.create({
+      bindings: {
+        getAuthorityPlayerId: () => 'player-1',
+        getFrame: () => frame(),
+      },
+      mod: { id, name: id, version: '1.0.0' },
+      wasmPath,
+    })
+    runtime.runEntrypoint(`sd.state.set('value', ${value})`)
+    return runtime
+  }
+  const first = await create('tests.first', 1)
+  const second = await create('tests.second', 2)
+  try {
+    assert.deepEqual(first.snapshotState(), { value: 1 })
+    assert.deepEqual(second.snapshotState(), { value: 2 })
+    first.restoreState({ restored: true, value: 7 })
+    assert.deepEqual(first.snapshotState(), { restored: true, value: 7 })
+    assert.deepEqual(second.snapshotState(), { value: 2 })
+  } finally {
+    first.close()
+    second.close()
+  }
+})
