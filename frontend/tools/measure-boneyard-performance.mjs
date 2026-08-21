@@ -6,6 +6,8 @@ const baseUrl = process.env.SDR_GAME_PERF_URL
   || process.env.SDR_GAME_SMOKE_URL
   || 'http://127.0.0.1:4181'
 const cdpUrl = process.env.SDR_GAME_CDP_URL?.trim()
+const gameEndpoint = process.env.SDR_GAME_PERF_ENDPOINT?.trim()
+const gameCredential = process.env.SDR_GAME_PERF_CREDENTIAL?.trim()
 const minimumFps = Number(process.env.SDR_GAME_MIN_FPS || 0)
 const sampleMs = Number(process.env.SDR_GAME_PERF_SAMPLE_MS || 5_000)
 const viewport = parseViewport(process.env.SDR_GAME_PERF_VIEWPORT || '1600x900')
@@ -40,6 +42,20 @@ page.on('pageerror', (error) => errors.push(error.message))
 page.on('console', (message) => {
   if (message.type() === 'error') errors.push(message.text())
 })
+if (Boolean(gameEndpoint) !== Boolean(gameCredential)) {
+  throw new Error('SDR_GAME_PERF_ENDPOINT and SDR_GAME_PERF_CREDENTIAL must be configured together')
+}
+if (gameEndpoint && gameCredential) {
+  await page.addInitScript(({ credential, endpoint }) => {
+    window.solomonDarkRuntime = {
+      gameEndpoint: {
+        credential,
+        kind: new URL(endpoint).protocol === 'wss:' ? 'remote' : 'localhost',
+        url: endpoint,
+      },
+    }
+  }, { credential: gameCredential, endpoint: gameEndpoint })
+}
 
 try {
   if (!Number.isFinite(cpuThrottleRate) || cpuThrottleRate < 1 || cpuThrottleRate > 20) {
