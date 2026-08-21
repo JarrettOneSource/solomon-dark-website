@@ -7,6 +7,7 @@ import { NATIVE_SKILL_CATALOG } from './core-kernels/player-progression.ts'
 import {
   layoutNativeSecondaryBinding,
   nativeCooldownSectorPath,
+  nativeSecondaryCooldownPresentation,
   NATIVE_SECONDARY_BELT_FONT,
   NATIVE_SECONDARY_BELT_SLOT_OFFSETS,
 } from './secondary-ability-belt.ts'
@@ -49,12 +50,13 @@ export default function SecondaryAbilityBelt({
       {NATIVE_SECONDARY_BELT_SLOT_OFFSETS.map((offset, slot) => {
         const skillId = belt[slot] ?? null
         const skill = skillId === null ? undefined : NATIVE_SKILL_CATALOG[skillId]
-        const remaining = skillId === null
-          ? 0
-          : playerState?.cooldownTicksBySkill[skillId] ?? 0
-        const capacity = skillId === null
-          ? 0
-          : playerState?.cooldownMaximumTicksBySkill[skillId] ?? 0
+        const { capacity, remaining } = skillId === null
+          ? { capacity: 0, remaining: 0 }
+          : nativeSecondaryCooldownPresentation(
+              playerState?.cooldownTicksBySkill[skillId] ?? 0,
+              playerState?.cooldownMaximumTicksBySkill[skillId] ?? 0,
+              playerState?.globalCooldownTicks ?? 0,
+            )
         const input = slot === 0 ? 'right mouse button' : `key ${slot}`
         const active = skillId !== null && secondaryAbilityActive(skillId, playerState)
         const label = skill === undefined

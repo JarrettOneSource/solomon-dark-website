@@ -527,8 +527,8 @@ export class HubPrivateRoomScene {
         view.container.parent?.removeChild(view.container)
         room.addChild(view.container)
       }
-      view.update(player, snapshot.tick)
       view.setSecondaryState(snapshot.secondaryAbilities.players[playerId], snapshot.tick)
+      view.update(player, snapshot.tick)
     }
     for (const [playerId, view] of this.players) {
       if (live.has(playerId)) continue

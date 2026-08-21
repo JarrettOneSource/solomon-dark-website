@@ -9,6 +9,7 @@ import {
   createBoneyardCollisionWorld,
   firstBoneyardLineObstruction,
   firstBoneyardPathBlockProgress,
+  NATIVE_FIREBALL_TERRAIN_EXCLUSION_MASK,
   nativeSpawnRingSampleCount,
   resolveBoneyardMovement,
   resolveBoneyardSpawnPosition,
@@ -42,19 +43,77 @@ test('materializes native props and posts while moving gates remain world-owned'
   assert.equal(world.polygons.length, 4)
   assert.equal(world.circles.length, 6)
   assert.deepEqual(world.circles.slice(0, 3), [
-    { center: { x: 0, y: 0 }, radius: 12 },
-    { center: { x: 700, y: 700 }, radius: 1, sourceId: 'scenery:grave' },
-    { center: { x: 1100, y: 1100 }, radius: 8 },
+    { center: { x: 0, y: 0 }, nativeLineMask: 0x700, radius: 12 },
+    {
+      center: { x: 700, y: 700 },
+      nativeLineMask: 0x600,
+      radius: 1,
+      sourceId: 'scenery:grave',
+    },
+    { center: { x: 1100, y: 1100 }, nativeLineMask: 0x700, radius: 8 },
+  ])
+  assert.deepEqual(world.polygons.map(({ nativeLineMask }) => nativeLineMask ?? 0), [
+    0, 0x600, 0, 0x700,
   ])
   assert.equal(world.segments.length, 1)
+  assert.equal(world.segments[0]?.nativeLineMask, 0x100)
   const gateLeaves = createBoneyardGateLeaves(scene.fences, 'gate-collision-seed')
   const dynamicWorld = withBoneyardGateCollision(world, gateLeaves)
   assert.equal(dynamicWorld.segments.length, 3)
   assert.deepEqual(dynamicWorld.segments.slice(1), gateLeaves.map((leaf) => ({
     start: leaf.hinge,
     end: leaf.tip,
+    nativeLineMask: 0x100,
     radius: 0,
   })))
+})
+
+test('Fireball terrain lookahead ignores grave, fence, post, tree, and Goodie masks', () => {
+  assert.equal(NATIVE_FIREBALL_TERRAIN_EXCLUSION_MASK, 0x700)
+  const bounds = { x: 0, y: 0, w: 500, h: 200 }
+  const world = {
+    circles: [{
+      center: { x: 80, y: 100 },
+      nativeLineMask: 0x700,
+      radius: 10,
+    }],
+    polygons: [{
+      nativeLineMask: 0x600,
+      points: [
+        { x: 120, y: 80 }, { x: 140, y: 80 },
+        { x: 140, y: 120 }, { x: 120, y: 120 },
+      ],
+    }],
+    segments: [
+      {
+        end: { x: 180, y: 180 },
+        nativeLineMask: 0x100,
+        radius: 0,
+        start: { x: 180, y: 20 },
+      },
+      {
+        end: { x: 300, y: 180 },
+        nativeLineMask: 0,
+        radius: 0,
+        start: { x: 300, y: 20 },
+      },
+    ],
+  }
+
+  assert.deepEqual(firstBoneyardLineObstruction(
+    { x: 20, y: 100 },
+    { x: 400, y: 100 },
+    bounds,
+    world,
+  ), { x: 70, y: 100 })
+  assert.deepEqual(firstBoneyardLineObstruction(
+    { x: 20, y: 100 },
+    { x: 400, y: 100 },
+    bounds,
+    world,
+    undefined,
+    NATIVE_FIREBALL_TERRAIN_EXCLUSION_MASK,
+  ), { x: 300, y: 100 })
 })
 
 test('sweeps to the last clear point and retains tangential movement along a fence', () => {

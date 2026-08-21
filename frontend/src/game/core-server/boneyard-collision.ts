@@ -16,12 +16,14 @@ import {
 import { nativeRandomFloatFromSemanticWord } from '../core-kernels/native-random-domain.ts'
 
 export interface BoneyardCollisionPolygon {
+  nativeLineMask?: number
   points: readonly BoneyardPoint[]
   sourceId?: string
 }
 
 export interface BoneyardCollisionCircle {
   center: BoneyardPoint
+  nativeLineMask?: number
   radius: number
   sourceId?: string
 }
@@ -29,6 +31,7 @@ export interface BoneyardCollisionCircle {
 export interface BoneyardCollisionSegment {
   start: BoneyardPoint
   end: BoneyardPoint
+  nativeLineMask?: number
   radius: number
   sourceId?: string
 }
@@ -90,6 +93,8 @@ const GOODIE_POLYGON = rectangle(-25.125, -8.625, 25.875, 16.875)
 const FENCE_POST_RADIUS = 10
 const GOODIE_RADIUS = 8
 
+export const NATIVE_FIREBALL_TERRAIN_EXCLUSION_MASK = 0x700
+
 export const NATIVE_BONEYARD_SPAWN_PLACEMENT = Object.freeze({
   movementProbe: 0.5,
   verticalScale: 0.8,
@@ -116,10 +121,25 @@ export function createBoneyardCollisionWorld(scene: BoneyardScene): BoneyardColl
       continue
     } else if (code === 1) {
       const midpoint = mix(start, end, 0.5)
-      segments.push({ start, end: mix(start, midpoint, 0.82), radius: 0 })
-      segments.push({ start: end, end: mix(end, midpoint, 0.82), radius: 0 })
+      segments.push({
+        start,
+        end: mix(start, midpoint, 0.82),
+        nativeLineMask: 0x100,
+        radius: 0,
+      })
+      segments.push({
+        start: end,
+        end: mix(end, midpoint, 0.82),
+        nativeLineMask: 0x100,
+        radius: 0,
+      })
     } else {
-      segments.push({ start: { ...start }, end: { ...end }, radius: code === 3 ? 10 : 0 })
+      segments.push({
+        start: { ...start },
+        end: { ...end },
+        ...(code === 3 ? {} : { nativeLineMask: 0x100 }),
+        radius: code === 3 ? 10 : 0,
+      })
     }
   }
   return { circles, polygons, segments }
@@ -136,6 +156,7 @@ export function withBoneyardGateCollision(
       ...world.segments,
       ...gateLeaves.map((leaf) => ({
         end: leaf.tip,
+        nativeLineMask: 0x100,
         radius: 0,
         start: leaf.hinge,
       })),
@@ -223,10 +244,12 @@ export function firstBoneyardLineObstruction(
   bounds: BoneyardBounds,
   world: BoneyardCollisionWorld,
   excludedSourceId?: string,
+  nativeExclusionMask = 0,
 ): BoneyardPoint | null {
   let nearest: LineObstruction | null = lineBoundsExitObstruction(start, end, bounds)
   for (const polygon of world.polygons) {
     if (excludedSourceId !== undefined && polygon.sourceId === excludedSourceId) continue
+    if (((polygon.nativeLineMask ?? 0) & nativeExclusionMask) !== 0) continue
     for (let index = 0; index < polygon.points.length; index += 1) {
       nearest = nearerLineObstruction(nearest, lineSegmentObstruction(
         start,
@@ -238,6 +261,7 @@ export function firstBoneyardLineObstruction(
   }
   for (const circle of world.circles) {
     if (excludedSourceId !== undefined && circle.sourceId === excludedSourceId) continue
+    if (((circle.nativeLineMask ?? 0) & nativeExclusionMask) !== 0) continue
     nearest = nearerLineObstruction(
       nearest,
       lineCircleObstruction(start, end, circle.center, circle.radius),
@@ -245,6 +269,7 @@ export function firstBoneyardLineObstruction(
   }
   for (const segment of world.segments) {
     if (excludedSourceId !== undefined && segment.sourceId === excludedSourceId) continue
+    if (((segment.nativeLineMask ?? 0) & nativeExclusionMask) !== 0) continue
     nearest = nearerLineObstruction(nearest, lineCapsuleObstruction(
       start,
       end,
@@ -384,24 +409,33 @@ function appendObjectCollision(
   circles: BoneyardCollisionCircle[],
 ) {
   if (object.typeId === 2001) {
-    circles.push({ center: { ...object.pos }, radius: object.variant === 1 ? 12 : 8 })
+    circles.push({
+      center: { ...object.pos },
+      nativeLineMask: 0x700,
+      radius: object.variant === 1 ? 12 : 8,
+    })
   } else if (object.typeId === 2009) {
     appendLocalPolygon(polygons, object, MONUMENT_POLYGONS[object.variant ?? 0])
   } else if (object.typeId === 2029) {
     const sourceId = `scenery:${object.eid}`
     circles.push({
       center: { ...object.pos },
+      nativeLineMask: 0x600,
       radius: object.variant === 1 ? 0 : 1,
       sourceId,
     })
     if ((object.overlayVariant ?? 0) >= 7) {
-      appendLocalPolygon(polygons, object, GRAVE_POLYGON, sourceId)
+      appendLocalPolygon(polygons, object, GRAVE_POLYGON, sourceId, 0x600)
     }
   } else if (object.typeId === 2040) {
     appendLocalPolygon(polygons, object, BUILDING_POLYGONS[object.variant ?? 0])
   } else if (object.typeId === 2061) {
-    circles.push({ center: { ...object.pos }, radius: GOODIE_RADIUS })
-    appendLocalPolygon(polygons, object, GOODIE_POLYGON)
+    circles.push({
+      center: { ...object.pos },
+      nativeLineMask: 0x700,
+      radius: GOODIE_RADIUS,
+    })
+    appendLocalPolygon(polygons, object, GOODIE_POLYGON, undefined, 0x700)
   }
 }
 
@@ -410,6 +444,7 @@ function appendLocalPolygon(
   object: BoneyardObject,
   local: readonly BoneyardPoint[] | undefined,
   sourceId?: string,
+  nativeLineMask = 0,
 ) {
   if (!local) return
   polygons.push({
@@ -417,6 +452,7 @@ function appendLocalPolygon(
       x: object.pos.x + point.x,
       y: object.pos.y + point.y,
     })),
+    ...(nativeLineMask === 0 ? {} : { nativeLineMask }),
     ...(sourceId === undefined ? {} : { sourceId }),
   })
 }
@@ -429,7 +465,11 @@ function appendPost(
   const key = `${point.x},${point.y}`
   if (posts.has(key)) return
   posts.add(key)
-  circles.push({ center: { ...point }, radius: FENCE_POST_RADIUS })
+  circles.push({
+    center: { ...point },
+    nativeLineMask: 0x700,
+    radius: FENCE_POST_RADIUS,
+  })
 }
 
 interface CollisionContact {

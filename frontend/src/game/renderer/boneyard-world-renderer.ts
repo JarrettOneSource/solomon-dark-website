@@ -258,6 +258,7 @@ interface BoneyardRendererFrameDiagnostics {
   minTreeAlpha: number
   minTreeLightScalar: number
   painterBandCount: number
+  playerAttachmentPose: number
   playerCount: number
   playerDeathColorLayerCount: number
   playerDeathFrame: number | null
@@ -588,6 +589,7 @@ export async function createBoneyardWorldRenderer(
     minTreeAlpha: 1,
     minTreeLightScalar: 0,
     painterBandCount: 0,
+    playerAttachmentPose: 0,
     playerCount: 0,
     playerDeathColorLayerCount: 0,
     playerDeathFrame: null,
@@ -901,6 +903,7 @@ export async function createBoneyardWorldRenderer(
         + viewport.height / 2
       frameDiagnostics.playerWalkPose = scene.playerWalkPose(options.playerId)
       const playerView = scene.player(options.playerId)
+      frameDiagnostics.playerAttachmentPose = playerView?.attachmentPose ?? 0
       const deathFrame = playerView?.deathFrame ?? null
       frameDiagnostics.playerDeathColorLayerCount = playerView?.deathColorLayerCount ?? 0
       frameDiagnostics.playerDeathFrame = deathFrame
@@ -1240,8 +1243,8 @@ class BoneyardDynamicScene {
         this.players.set(playerId, view)
         this.root.addChild(view.container)
       }
-      view.update(player, snapshot.tick)
       view.setSecondaryState(snapshot.secondaryAbilities.players[playerId], snapshot.tick)
+      view.update(player, snapshot.tick)
     }
     for (const [playerId, view] of this.players) {
       if (livePlayerIds.has(playerId)) continue

@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import { EARTH_BOULDER_IDENTITY_ORIENTATION } from '../core-kernels/primary-spell-earth-orientation.ts'
 import { ETHER_PRIMARY_INITIAL_TURN } from '../core-kernels/primary-spell-targeting.ts'
+import type { PrimarySpellTarget } from '../core-kernels/primary-spell-targeting.ts'
 import {
   BONEYARD_WAVE_ENEMY_TYPES,
   type BoneyardEnemySpawnIntent,
@@ -105,6 +106,43 @@ test('Fire and Ether skip an ineligible Coffin and contact the next hostile acto
     assert.deepEqual(result.spells.projectiles, [])
     assert.equal(result.spells.transients[0]?.kind, `${kind}-impact`)
   }
+})
+
+test('Fire consumes on flag-four scenery roots without applying hostile damage', () => {
+  const enemies = spawnEnemies([{ position: { x: 10, y: 0 }, token: 'SKELETON' }])
+  const spells = spellState({
+    projectiles: [projectile({ id: 7, kind: 'fire', position: { x: 0, y: 0 } })],
+  })
+  const grave = sceneryTarget('grave', 0.01, 20.009)
+  const result = resolveBoneyardSpellCombat(
+    enemies,
+    spells,
+    [],
+    9,
+    WORLD_KEY,
+    null,
+    undefined,
+    () => 1,
+    [grave],
+  )
+
+  assert.deepEqual(result.hits, [])
+  assert.equal(result.enemies, enemies)
+  assert.deepEqual(result.spells.projectiles, [])
+  assert.deepEqual(result.spells.transients.map(({ kind }) => kind), ['fire-impact'])
+
+  const equality = resolveBoneyardSpellCombat(
+    createBoneyardEnemyStore('empty-fire-scenery'),
+    spells,
+    [],
+    9,
+    WORLD_KEY,
+    null,
+    undefined,
+    () => 1,
+    [sceneryTarget('grave-edge', 0.01, 20.01)],
+  )
+  assert.equal(equality.spells, spells, 'strict radius equality must miss the grave root')
 })
 
 test('Ether contact uses its six-unit point query and publishes FadeMM at the advanced root', () => {
@@ -428,4 +466,19 @@ function normalized(vector: Readonly<{ x: number; y: number }>): { x: number; y:
   return length === 0
     ? { x: 1, y: 0 }
     : { x: vector.x / length, y: vector.y / length }
+}
+
+function sceneryTarget(id: string, bodyRadius: number, x: number): PrimarySpellTarget {
+  return {
+    active: true,
+    actorFlags: 0x4,
+    attachment: { x: 0, y: 0 },
+    bodyRadius,
+    id: `scenery:${id}`,
+    kind: 'scenery',
+    nativePriority: 0,
+    pendingRemove: false,
+    position: { x, y: 0 },
+    registrationOrder: 0,
+  }
 }

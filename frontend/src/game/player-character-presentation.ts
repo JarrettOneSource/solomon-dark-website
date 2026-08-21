@@ -10,6 +10,8 @@ import type { Vector2 } from './core-kernels/vector.ts'
 import {
   primaryCastPose,
   primarySpellEmitterOffset,
+  staffAttachmentEmitterOffset,
+  type PlayerStaffAttachmentPose,
 } from './core-kernels/primary-spells.ts'
 
 const STAFF_FRONT: readonly boolean[] = [
@@ -27,7 +29,7 @@ const CAST_STAFF_FRONT: readonly boolean[] = [
 ]
 
 export interface PlayerCharacterDrawPlan {
-  attachmentPose: 0 | 1 | 7 | 8
+  attachmentPose: PlayerStaffAttachmentPose
   fixedRobeOffset: Vector2
   frontAttachmentOffset: Vector2
   headOffset: Vector2
@@ -182,12 +184,15 @@ export function createPlayerCharacterDrawPlan(
     'config' | 'gaitDegrees' | 'headingIndex' | 'primaryCast' | 'velocity' | 'walkCyclePrimary'
   >,
   scale = 1,
+  secondaryCastActive = false,
 ): PlayerCharacterDrawPlan {
-  const attachmentPose = primaryCastPose(
-    state.primaryCast.actionTick,
-    state.primaryCast.channelActive,
-    state.config.element,
-  )
+  const attachmentPose = secondaryCastActive
+    ? 9
+    : primaryCastPose(
+        state.primaryCast.actionTick,
+        state.primaryCast.channelActive,
+        state.config.element,
+      )
   const staffFront = playerCharacterStaffIsFront(state.headingIndex, attachmentPose)
   return {
     attachmentPose,
@@ -203,12 +208,14 @@ export function createPlayerCharacterDrawPlan(
     ),
     headingSheetOffsetY: -state.headingIndex * 170,
     moving: Math.hypot(state.velocity.x, state.velocity.y) > 0.01,
-    orbOffset: primarySpellEmitterOffset(
-      state.headingIndex,
-      state.primaryCast.actionTick,
-      state.primaryCast.channelActive,
-      state.config.element,
-    ),
+    orbOffset: secondaryCastActive
+      ? staffAttachmentEmitterOffset(state.headingIndex, 9)
+      : primarySpellEmitterOffset(
+          state.headingIndex,
+          state.primaryCast.actionTick,
+          state.primaryCast.channelActive,
+          state.config.element,
+        ),
     orbZIndex: staffFront ? 6 : 2,
     robePose: playerCharacterRobePose(state.walkCyclePrimary),
     staffFront,
@@ -221,9 +228,9 @@ export function playerCharacterStaffOrbOffset(headingIndex: number): Vector2 {
 
 export function playerCharacterStaffIsFront(
   headingIndex: number,
-  attachmentPose: 0 | 1 | 7 | 8 = 0,
+  attachmentPose: PlayerStaffAttachmentPose = 0,
 ): boolean {
-  const bank = attachmentPose === 7 || attachmentPose === 8
+  const bank = attachmentPose === 7 || attachmentPose === 8 || attachmentPose === 9
     ? CAST_STAFF_FRONT
     : STAFF_FRONT
   return bank[normalizedIndex(headingIndex, bank.length)]

@@ -1,4 +1,5 @@
 import nativeFontData from '../assets/game/hub-hud-font-group-8.json' with { type: 'json' }
+import { NATIVE_SECONDARY_GLOBAL_COOLDOWN_TICKS } from './core-kernels/native-secondary-abilities.ts'
 
 interface NativeBeltFontGlyph {
   advance: number
@@ -43,6 +44,11 @@ export interface NativeBeltBindingLayout {
   glyphs: readonly NativeBeltBindingGlyph[]
 }
 
+export interface NativeSecondaryCooldownPresentation {
+  capacity: number
+  remaining: number
+}
+
 export const NATIVE_SECONDARY_BELT_FONT: NativeBeltFontData = nativeFontData
 export const NATIVE_SECONDARY_BELT_SLOT_OFFSETS = Object.freeze([
   -332, -272, -212, -152, 98, 158, 218, 278,
@@ -50,6 +56,21 @@ export const NATIVE_SECONDARY_BELT_SLOT_OFFSETS = Object.freeze([
 
 const SLOT_SIZE = 53
 const SECTOR_CENTER = SLOT_SIZE / 2
+
+export function nativeSecondaryCooldownPresentation(
+  rowRemaining: number,
+  rowCapacity: number,
+  globalRemaining: number,
+): NativeSecondaryCooldownPresentation {
+  if (!(rowCapacity > 0)) return { capacity: 0, remaining: 0 }
+  if (rowRemaining > 0 && globalRemaining <= rowRemaining) {
+    return { capacity: rowCapacity, remaining: rowRemaining }
+  }
+  return {
+    capacity: NATIVE_SECONDARY_GLOBAL_COOLDOWN_TICKS,
+    remaining: Math.max(0, globalRemaining),
+  }
+}
 
 export function layoutNativeSecondaryBinding(text: string): NativeBeltBindingLayout {
   const glyphs: Array<NativeBeltBindingGlyph & { cursor: number }> = []

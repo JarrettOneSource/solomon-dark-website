@@ -116,7 +116,7 @@ async function assertTitleIdentity(page, expected) {
   assert.equal((await identity.textContent())?.trim(), expected)
   const bounds = await identity.boundingBox()
   assert.ok(bounds)
-  assert.ok(bounds.x + bounds.width > 1_300, JSON.stringify(bounds))
+  assert.ok(bounds.x >= 10 && bounds.x <= 12, JSON.stringify(bounds))
 }
 
 async function waitForSave(page, predicate, timeoutMs = 5_000) {

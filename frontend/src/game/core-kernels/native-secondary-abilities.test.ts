@@ -8,9 +8,11 @@ import {
 import {
   applyNativeSecondaryGolemDamage,
   applyNativeSecondaryPlayerDamage,
+  createNativeSecondaryPlayerState,
   createNativeSecondarySimulation,
   nativePlaneOrbDamage,
   nativeSecondaryAvailableMana,
+  nativeSecondaryStaffCastDurationTicks,
   nativeSecondaryTargetMaterialTint,
   removeNativeSecondaryOwner,
   stepNativeSecondaryAbilities,
@@ -63,7 +65,7 @@ const EXPECTED_ACTOR_KIND = new Map<NativeSecondaryAbilityId, string | null>([
 
 function book(
   skillId: NativeSecondaryAbilityId,
-  learnedSkillIds: readonly (NativeSecondaryAbilityId | 28)[] = [],
+  learnedSkillIds: readonly number[] = [],
   rank = 1,
 ): PlayerSkillBookComponent {
   const source = createPlayerSkillBook(CONFIG)
@@ -121,7 +123,7 @@ function context(
   tick: number,
   secondary: number | null,
   currentMana = 100,
-  learnedSkillIds: readonly (NativeSecondaryAbilityId | 28)[] = [],
+  learnedSkillIds: readonly number[] = [],
   rank = 1,
 ): NativeSecondaryTickContext {
   return {
@@ -202,6 +204,22 @@ function expectedScreenFlash(
 
 function screenFlashes(state: NativeSecondarySimulationState) {
   return state.events.flatMap(({ screenFlash }) => screenFlash === null ? [] : [screenFlash])
+}
+
+function finishCommonCastGate(state: NativeSecondarySimulationState): NativeSecondarySimulationState {
+  const player = state.players.player
+  if (!player) throw new Error('secondary test lost its player state')
+  return {
+    ...state,
+    players: {
+      ...state.players,
+      player: {
+        ...player,
+        globalCooldownTicks: 0,
+        staffCastTicksRemaining: 0,
+      },
+    },
+  }
 }
 
 function consumeFreezeWaveConstruction(
@@ -287,7 +305,8 @@ test('Phasing preserves native accepted-failure and single traversal-streak sema
   )
   assert.deepEqual(successful.manaSpent, { player: 75 })
   assert.deepEqual(successful.relocatedPlayers, { player: { x: 20, y: 0 } })
-  assert.equal(successful.state.players.player?.cooldownTicksBySkill[15], 100)
+  assert.equal(successful.state.players.player?.cooldownTicksBySkill[15], 0)
+  assert.equal(successful.state.players.player?.globalCooldownTicks, 150)
   const streak = successful.state.actors.find(({ kind }) => kind === 'phase-burst')!
   assert.ok(streak)
   assert.deepEqual({
@@ -334,8 +353,9 @@ test('Phasing preserves native accepted-failure and single traversal-streak sema
   assert.equal(blocked.state.players.player?.castSequence, 1)
   assert.equal(blocked.state.players.player?.fizzleSequence, 0)
   assert.equal(blocked.state.players.player?.lastSkillId, 15)
-  assert.equal(blocked.state.players.player?.cooldownTicksBySkill[15], 100)
+  assert.equal(blocked.state.players.player?.cooldownTicksBySkill[15], 0)
   assert.equal(blocked.state.players.player?.cooldownMaximumTicksBySkill[15], 100)
+  assert.equal(blocked.state.players.player?.globalCooldownTicks, 150)
 })
 
 test('Teleport owns two exact FadeScale bursts, two sound requests, and unconditional relocation', () => {
@@ -350,6 +370,7 @@ test('Teleport owns two exact FadeScale bursts, two sound requests, and uncondit
   assert.deepEqual(castResult.relocatedPlayers, { player: { x: 90, y: 10 } })
   assert.equal(castResult.state.players.player?.cooldownTicksBySkill[48], 6_000)
   assert.equal(castResult.state.players.player?.cooldownMaximumTicksBySkill[48], 6_000)
+  assert.equal(castResult.state.players.player?.globalCooldownTicks, 150)
   assert.deepEqual(castResult.state.rng, destinationRotation.state)
   assert.deepEqual(castResult.state.events.filter(({ cue }) => cue === 'teleport')
     .map(({ cue, position, screenFlash }) => ({
@@ -420,6 +441,161 @@ test('Teleport owns two exact FadeScale bursts, two sound requests, and uncondit
   assert.equal(state.actors.some(({ kind }) => kind === 'teleport-burst'), true)
   state = stepNativeSecondaryAbilities(state, context(48, 21, null)).state
   assert.equal(state.actors.some(({ kind }) => kind === 'teleport-burst'), false)
+})
+
+test('the shared right-click gate owns StaffCast2 occupancy and Faster Caster timing', () => {
+  assert.equal(nativeSecondaryStaffCastDurationTicks(book(11)), 51)
+  assert.equal(nativeSecondaryStaffCastDurationTicks(book(11, [70])), 46)
+
+  const castResult = stepNativeSecondaryAbilities(
+    createNativeSecondarySimulation(123),
+    context(11, 1, 0),
+  )
+  assert.equal(castResult.state.players.player?.staffCastTicksRemaining, 51)
+  assert.equal(castResult.state.players.player?.globalCooldownTicks, 150)
+
+  const released = stepNativeSecondaryAbilities(
+    castResult.state,
+    context(11, 2, null),
+  )
+  assert.equal(released.state.players.player?.staffCastTicksRemaining, 50)
+  const blocked = stepNativeSecondaryAbilities(
+    released.state,
+    context(11, 3, 0),
+  )
+  assert.equal(blocked.state.players.player?.castSequence, 1)
+  assert.equal(blocked.state.players.player?.fizzleSequence, 0)
+  assert.deepEqual(blocked.manaSpent, {})
+
+  let state = blocked.state
+  for (let tick = 4; tick <= 151; tick += 1) {
+    state = stepNativeSecondaryAbilities(state, context(11, tick, null)).state
+  }
+  assert.equal(state.players.player?.staffCastTicksRemaining, 0)
+  assert.equal(state.players.player?.globalCooldownTicks, 0)
+  const ready = stepNativeSecondaryAbilities(state, context(11, 152, 0))
+  assert.equal(ready.state.players.player?.castSequence, 2)
+  assert.equal(ready.state.players.player?.staffCastTicksRemaining, 51)
+})
+
+test('Focus drains every row and the progression-wide cooldown at the stock rate', () => {
+  const castResult = stepNativeSecondaryAbilities(
+    createNativeSecondarySimulation(123),
+    context(15, 1, 0, 100, [60]),
+  )
+  assert.equal(castResult.state.players.player?.cooldownTicksBySkill[15], 0)
+  assert.equal(castResult.state.players.player?.cooldownMaximumTicksBySkill[15], 100)
+  assert.equal(castResult.state.players.player?.globalCooldownTicks, 150)
+
+  const stepped = stepNativeSecondaryAbilities(
+    castResult.state,
+    context(15, 2, null, 100, [60]),
+  )
+  assert.equal(stepped.state.players.player?.cooldownTicksBySkill[15], 0)
+  assert.equal(stepped.state.players.player?.globalCooldownTicks, 148)
+
+  let state = castResult.state
+  for (let tick = 2; tick <= 76; tick += 1) {
+    state = stepNativeSecondaryAbilities(
+      state,
+      context(15, tick, null, 100, [60]),
+    ).state
+  }
+  assert.equal(state.players.player?.cooldownTicksBySkill[15], 0)
+  assert.equal(state.players.player?.globalCooldownTicks, 0)
+})
+
+test('the fixed common cooldown silently blocks otherwise-ready secondary rows', () => {
+  const teleport = stepNativeSecondaryAbilities(
+    createNativeSecondarySimulation(123),
+    context(48, 1, 0),
+  )
+  const teleportedPlayer = teleport.state.players.player!
+  const source = {
+    ...teleport.state,
+    players: {
+      player: {
+        ...teleportedPlayer,
+        heldSlot: null,
+        staffCastTicksRemaining: 0,
+      },
+    },
+  }
+  const blocked = stepNativeSecondaryAbilities(source, context(15, 2, 0))
+  assert.equal(blocked.state.players.player?.globalCooldownTicks, 149)
+  assert.equal(blocked.state.players.player?.cooldownTicksBySkill[48], 5_999)
+  assert.equal(blocked.state.players.player?.cooldownTicksBySkill[15], 0)
+  assert.equal(blocked.state.players.player?.castSequence, 1)
+  assert.equal(blocked.state.players.player?.fizzleSequence, 0)
+  assert.deepEqual(blocked.manaSpent, {})
+})
+
+test('state-only toggles stay actionless while accepted Planewalker and Dampen retain their owners', () => {
+  for (const skillId of [78, 79] as const) {
+    const result = cast(skillId)
+    assert.equal(result.state.players.player?.staffCastTicksRemaining, 0)
+    assert.equal(result.state.players.player?.castSpinTicksRemaining, 0)
+  }
+
+  const firewalkerOn = cast(23)
+  assert.equal(firewalkerOn.state.players.player?.staffCastTicksRemaining, 51)
+  const activeFirewalker = firewalkerOn.state.players.player!
+  const firewalkerOff = stepNativeSecondaryAbilities({
+    ...firewalkerOn.state,
+    players: {
+      player: {
+        ...activeFirewalker,
+        globalCooldownTicks: 0,
+        heldSlot: null,
+        staffCastTicksRemaining: 0,
+      },
+    },
+  }, context(23, 2, 0))
+  assert.equal(firewalkerOff.state.players.player?.firewalker, false)
+  assert.equal(firewalkerOff.state.players.player?.staffCastTicksRemaining, 0)
+
+  const planewalkerOn = cast(12)
+  const activePlanewalker = planewalkerOn.state.players.player!
+  const planewalkerOff = stepNativeSecondaryAbilities({
+    ...planewalkerOn.state,
+    players: {
+      player: {
+        ...activePlanewalker,
+        globalCooldownTicks: 0,
+        heldSlot: null,
+        staffCastTicksRemaining: 0,
+      },
+    },
+  }, context(12, 2, 0))
+  assert.equal(planewalkerOff.state.players.player?.planewalkerTicksRemaining, 0)
+  assert.equal(planewalkerOff.state.players.player?.staffCastTicksRemaining, 51)
+
+  const dampen = cast(51)
+  assert.equal(dampen.state.players.player?.staffCastTicksRemaining, 0)
+  assert.equal(dampen.state.players.player?.castSpinTicksRemaining, 73)
+  assert.equal(dampen.state.players.player?.globalCooldownTicks, 150)
+  assert.deepEqual(createNativeSecondaryPlayerState(), {
+    castSequence: 0,
+    castSpinTicksRemaining: 0,
+    cooldownMaximumTicksBySkill: new Array(83).fill(0),
+    cooldownTicksBySkill: new Array(83).fill(0),
+    firewalker: false,
+    fizzleSequence: 0,
+    globalCooldownTicks: 0,
+    heldSlot: null,
+    lastSkillId: null,
+    magicShieldAbsorb: 0,
+    magicShieldExplosionDamage: 0,
+    magicShieldMaximum: 0,
+    magicShieldPulseTicks: 0,
+    mindstar: false,
+    planeOrbHeld: false,
+    planewalkerTicksRemaining: 0,
+    regenerate: false,
+    reservedMana: 0,
+    staffCastTicksRemaining: 0,
+    stoneskinTicksRemaining: 0,
+  })
 })
 
 test('native RNG sign and bulk advance preserve the retail word stream', () => {
@@ -778,6 +954,7 @@ test('toggle Region feedback follows native on/off ownership without synthetic t
       context(skillId, 1, 0),
     ).state
     state = stepNativeSecondaryAbilities(state, context(skillId, 2, null)).state
+    state = finishCommonCastGate(state)
     state = stepNativeSecondaryAbilities(state, context(skillId, 3, 0)).state
     assert.equal(screenFlashes(state).length, 2, `skill ${skillId}`)
     if (skillId === 78 || skillId === 79) {
@@ -787,6 +964,7 @@ test('toggle Region feedback follows native on/off ownership without synthetic t
 
   let planewalker = cast(12).state
   planewalker = stepNativeSecondaryAbilities(planewalker, context(12, 2, null)).state
+  planewalker = finishCommonCastGate(planewalker)
   planewalker = stepNativeSecondaryAbilities(planewalker, context(12, 3, 0)).state
   assert.deepEqual(screenFlashes(planewalker), [
     expectedScreenFlash(1, 0, 1, 0.1, false),
@@ -1137,7 +1315,7 @@ test('Magic Trap ElectricBurn reattachment max-refreshes one target modifier and
   const secondCastContext = context(50, 47, 0, 100, [], 2)
   const secondAuthority = secondCastContext.players.player!
   const secondSkillBook = withElementalPrimary(secondAuthority.skillBook, 24)
-  state = stepNativeSecondaryAbilities(state, {
+  state = stepNativeSecondaryAbilities(finishCommonCastGate(state), {
     ...secondCastContext,
     players: { player: { ...secondAuthority, skillBook: secondSkillBook } },
     target: (_worldKey, targetId) => targetId === target.id ? target : null,
@@ -1317,7 +1495,10 @@ test('Magic Trap weld dispatch uses host RNG and Plane Orb preserves the selecte
 
   let planewalker = cast(12).state
   planewalker = stepNativeSecondaryAbilities(planewalker, context(50, 2, null)).state
-  planewalker = stepNativeSecondaryAbilities(planewalker, context(50, 3, 0)).state
+  planewalker = stepNativeSecondaryAbilities(
+    finishCommonCastGate(planewalker),
+    context(50, 3, 0),
+  ).state
   assert.equal(
     planewalker.actors.find(({ kind }) => kind === 'magic-trap')?.variant,
     0,
@@ -1761,12 +1942,13 @@ test('Mindstar and Regenerate share their toggle stream while Regenerate restore
   )
 })
 
-test('secondary input is a held edge and cooldowns are private per skill', () => {
+test('secondary input is a held edge and the shared cooldown gate is silent', () => {
   let state = createNativeSecondarySimulation(1)
   let result = stepNativeSecondaryAbilities(state, context(15, 1, 0))
   state = result.state
   assert.equal(result.relocatedPlayers.player?.x, 20)
-  assert.equal(state.players.player?.cooldownTicksBySkill[15], 100)
+  assert.equal(state.players.player?.cooldownTicksBySkill[15], 0)
+  assert.equal(state.players.player?.globalCooldownTicks, 150)
 
   result = stepNativeSecondaryAbilities(state, context(15, 2, 0))
   state = result.state
@@ -1776,7 +1958,7 @@ test('secondary input is a held edge and cooldowns are private per skill', () =>
   state = stepNativeSecondaryAbilities(state, context(15, 3, null)).state
   result = stepNativeSecondaryAbilities(state, context(15, 4, 0))
   assert.equal(result.relocatedPlayers.player, undefined)
-  assert.equal(result.state.players.player?.fizzleSequence, 1)
+  assert.equal(result.state.players.player?.fizzleSequence, 0)
   assert.equal(result.state.players.player?.cooldownTicksBySkill[48], 0)
 })
 
@@ -2469,6 +2651,7 @@ test('Fete of Clay, not Iron Golem, owns the two-summon cap', () => {
           },
         },
       }).state
+      if (tick === 2) state = finishCommonCastGate(state)
     }
     return state
   }
@@ -2487,6 +2670,7 @@ test('Fete of Clay, not Iron Golem, owns the two-summon cap', () => {
       : actor),
   }
   for (const [tick, slot] of [[4, null], [5, 0]] as const) {
+    if (tick === 5) evictionState = finishCommonCastGate(evictionState)
     const tickContext = context(45, tick, slot)
     evictionState = stepNativeSecondaryAbilities(evictionState, {
       ...tickContext,
@@ -2826,7 +3010,7 @@ test('toggle reserves stack, release immediately, and overload clears the full s
   assert.equal(nativeSecondaryAvailableMana(100, state.players.player!), 50)
 
   state = stepNativeSecondaryAbilities(state, context(23, 2, null)).state
-  state = stepNativeSecondaryAbilities(state, context(23, 3, 0)).state
+  state = stepNativeSecondaryAbilities(finishCommonCastGate(state), context(23, 3, 0)).state
   assert.equal(state.players.player?.firewalker, false)
   assert.equal(state.players.player?.reservedMana, 0)
 
@@ -2855,7 +3039,7 @@ test('Firewalker toggle-off keeps the Region write but owns no ignite request', 
     [{ cue: 'ignite', kind: 'toggle-on' }],
   )
   state = stepNativeSecondaryAbilities(state, context(23, 2, null)).state
-  state = stepNativeSecondaryAbilities(state, context(23, 3, 0)).state
+  state = stepNativeSecondaryAbilities(finishCommonCastGate(state), context(23, 3, 0)).state
   const off = state.events.filter(({ tick }) => tick === 3)
   assert.deepEqual(off.map(({ cue, kind }) => ({ cue, kind })), [
     { cue: null, kind: 'toggle-off' },
@@ -2873,7 +3057,7 @@ test('Stoneskin requests apply, refresh, and exactly one natural-removal callbac
   assert.equal(state.players.player?.stoneskinTicksRemaining, 600)
 
   state = stepNativeSecondaryAbilities(state, context(46, 2, null)).state
-  state = stepNativeSecondaryAbilities(state, context(46, 3, 0)).state
+  state = stepNativeSecondaryAbilities(finishCommonCastGate(state), context(46, 3, 0)).state
   assert.deepEqual(
     state.events.filter(({ tick }) => tick === 3).map(({ cue }) => cue),
     ['stoneskin-on', 'stoneskin', null],

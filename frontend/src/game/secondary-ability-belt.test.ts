@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   layoutNativeSecondaryBinding,
   nativeCooldownSectorPath,
+  nativeSecondaryCooldownPresentation,
   NATIVE_SECONDARY_BELT_FONT,
   NATIVE_SECONDARY_BELT_SLOT_OFFSETS,
 } from './secondary-ability-belt.ts'
@@ -18,6 +19,21 @@ test('secondary belt keeps the exact eight 53 px slots and 60 px pitch', () => {
     )),
     [60, 60, 60],
   )
+})
+
+test('cooldown presentation selects the stock common or longer row timer', () => {
+  assert.deepEqual(nativeSecondaryCooldownPresentation(0, 100, 150), {
+    capacity: 150,
+    remaining: 150,
+  })
+  assert.deepEqual(nativeSecondaryCooldownPresentation(6_000, 6_000, 150), {
+    capacity: 6_000,
+    remaining: 6_000,
+  })
+  assert.deepEqual(nativeSecondaryCooldownPresentation(0, 0, 150), {
+    capacity: 0,
+    remaining: 0,
+  })
 })
 
 test('secondary belt lays out native group-8 key labels over 13 px plaques', () => {

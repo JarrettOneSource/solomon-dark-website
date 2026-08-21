@@ -247,6 +247,20 @@ test('player draw plan consumes the authoritative Staff Cast 1 pose bank', () =>
   assert.equal(recoveryPlan.staffFront, true)
 })
 
+test('player draw plan holds native Staff Cast 2 pose nine during a secondary action', () => {
+  const plan = createPlayerCharacterDrawPlan({
+    config: FIRE_CONFIG,
+    gaitDegrees: 0,
+    headingIndex: 0,
+    primaryCast: createIdlePlayerPrimaryCast(),
+    velocity: { x: 0, y: 0 },
+    walkCyclePrimary: 0,
+  }, 1, true)
+  assert.equal(plan.attachmentPose, 9)
+  assert.deepEqual(plan.orbOffset, { x: 32.5, y: -55 })
+  assert.equal(plan.staffFront, false)
+})
+
 test('player draw plan holds the sustained Staff Constant pose bank', () => {
   const insertion = createPlayerCharacterDrawPlan({
     config: FIRE_CONFIG,

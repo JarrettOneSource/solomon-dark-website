@@ -18,6 +18,7 @@ import {
 } from '../core-kernels/primary-spell-fire-native.ts'
 import { ETHER_PRIMARY_INITIAL_TURN } from '../core-kernels/primary-spell-targeting.ts'
 import { nativeInitialGolemArticulation } from '../core-kernels/native-secondary-golem.ts'
+import { createNativeSecondaryPlayerState } from '../core-kernels/native-secondary-abilities.ts'
 import type { BoneyardEnemySemanticEvent } from '../core-server/boneyard-enemy-store.ts'
 import { spawnBoneyardLootSpecs } from '../core-server/boneyard-loot-store.ts'
 import {
@@ -220,7 +221,7 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
   })), /ownerDisplayName/)
 })
 
-test('protocol v34 bounds Lua requests and structured results by wire bytes and shape', () => {
+test('protocol v35 bounds Lua requests and structured results by wire bytes and shape', () => {
   assert.throws(() => decodeClientGameMessage(JSON.stringify({
     type: 'client-lua-execute',
     code: '😀'.repeat(MAX_LUA_CONSOLE_CODE_LENGTH / 4 + 1),
@@ -281,7 +282,7 @@ test('protocol v34 bounds Lua requests and structured results by wire bytes and 
   }
 })
 
-test('protocol v34 accepts every authoritative inventory action and rejects malformed variants', () => {
+test('protocol v35 accepts every authoritative inventory action and rejects malformed variants', () => {
   const actions = [
     { type: 'buy-dowsing', offerId: 1 },
     { type: 'buy-fomentius', itemId: 2 },
@@ -463,7 +464,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
   )
 })
 
-test('protocol v34 strictly round-trips projected statuses, lighting, shields, payloads, and effects', () => {
+test('protocol v35 strictly round-trips projected statuses, lighting, shields, payloads, and effects', () => {
   const loaded = loadedBoneyardFixture('modifier-protocol-run')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -893,8 +894,8 @@ test('protocol v34 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v34 carries gameplay pause, Skeleton head-facing, Solomon Dig audio, Game Over, and combat modifiers', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 34)
+test('protocol v35 carries secondary action/cooldown gates and the existing gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 35)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -938,6 +939,16 @@ test('protocol v34 carries gameplay pause, Skeleton head-facing, Solomon Dig aud
   assert.deepEqual(
     decodeServerGameMessage(encodeGameMessage(terminalMessage)),
     terminalMessage,
+  )
+
+  const excessiveCommonCooldown = JSON.parse(encodeGameMessage(terminalMessage))
+  excessiveCommonCooldown.frame.secondaryAbilities.players['player-1'] = {
+    ...createNativeSecondaryPlayerState(),
+    globalCooldownTicks: 151,
+  }
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(excessiveCommonCooldown)),
+    /globalCooldownTicks exceeds its native capacity/,
   )
 
   const missingAutomaticFade = JSON.parse(encodeGameMessage(terminalMessage))
@@ -1015,7 +1026,7 @@ test('protocol v34 carries gameplay pause, Skeleton head-facing, Solomon Dig aud
   )
 })
 
-test('protocol v34 strictly owns the generated-arena transition', () => {
+test('protocol v35 strictly owns the generated-arena transition', () => {
   const loaded = loadedBoneyardFixture('arena-transition-run')
   loaded.scene.solomonDig = {
     frameProgram: [0, 1],
@@ -1069,7 +1080,7 @@ test('protocol v34 strictly owns the generated-arena transition', () => {
   )
 })
 
-test('protocol v34 preserves the bounded run-scoped enemy semantic-event lane', () => {
+test('protocol v35 preserves the bounded run-scoped enemy semantic-event lane', () => {
   const runId = 'enemy-event-protocol-run'
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -2176,7 +2187,7 @@ test('protocol strictly validates nested native Region screen-feedback events', 
   )
 })
 
-test('protocol v34 round-trips Frozen and FrostBurn target ownership without client inference', () => {
+test('protocol v35 round-trips Frozen and FrostBurn target ownership without client inference', () => {
   const snapshot = createGameSnapshot(
     createGameSimulation({ 'player-1': CHARACTER }),
     'player-1',
@@ -2650,7 +2661,7 @@ test('loaded Boneyard round-trips scene identity, geometry, and Solomon Dig', ()
   )
 })
 
-test('protocol v34 strictly round-trips loot, Goodies, and their semantic event lane', () => {
+test('protocol v35 strictly round-trips loot, Goodies, and their semantic event lane', () => {
   const runId = 'loot-protocol-run'
   let state = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),

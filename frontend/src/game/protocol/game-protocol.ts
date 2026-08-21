@@ -93,6 +93,7 @@ import {
   NATIVE_SECONDARY_ACTOR_KINDS,
   NATIVE_SECONDARY_AUDIO_CUES,
   NATIVE_SECONDARY_EVENT_KINDS,
+  NATIVE_SECONDARY_GLOBAL_COOLDOWN_TICKS,
   nativeSecondaryLightDisposition,
   type NativeSecondaryActorKind,
   type NativeSecondaryAudioCue,
@@ -196,7 +197,7 @@ export type {
   LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
 
-export const GAME_PROTOCOL_VERSION = 34
+export const GAME_PROTOCOL_VERSION = 35
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const GAME_CONNECTION_TIMEOUT_CLOSE_CODE = 4000
 export const GAME_HOST_ENDED_SESSION_CLOSE_CODE = 4001
@@ -3171,11 +3172,11 @@ function nativeSecondaryPlayer(value: unknown, field: string): NativeSecondaryPl
   onlyKeys(source, field, [
     'castSequence', 'castSpinTicksRemaining', 'cooldownTicksBySkill', 'firewalker',
     'cooldownMaximumTicksBySkill',
-    'fizzleSequence', 'heldSlot', 'lastSkillId', 'magicShieldAbsorb',
+    'fizzleSequence', 'globalCooldownTicks', 'heldSlot', 'lastSkillId', 'magicShieldAbsorb',
     'magicShieldExplosionDamage',
     'magicShieldMaximum', 'magicShieldPulseTicks', 'mindstar', 'planeOrbHeld',
     'planewalkerTicksRemaining', 'regenerate', 'reservedMana',
-    'stoneskinTicksRemaining',
+    'staffCastTicksRemaining', 'stoneskinTicksRemaining',
   ])
   const cooldownMaximumTicksBySkill = limitedArray(
     source.cooldownMaximumTicksBySkill,
@@ -3203,6 +3204,13 @@ function nativeSecondaryPlayer(value: unknown, field: string): NativeSecondaryPl
     ticks > cooldownMaximumTicksBySkill[index]!
   ))) {
     throw new GameProtocolError(`${field}.cooldownTicksBySkill exceeds a capacity`)
+  }
+  const globalCooldownTicks = nonnegativeInteger(
+    source.globalCooldownTicks,
+    `${field}.globalCooldownTicks`,
+  )
+  if (globalCooldownTicks > NATIVE_SECONDARY_GLOBAL_COOLDOWN_TICKS) {
+    throw new GameProtocolError(`${field}.globalCooldownTicks exceeds its native capacity`)
   }
   const heldSlot = source.heldSlot === null
     ? null
@@ -3234,6 +3242,7 @@ function nativeSecondaryPlayer(value: unknown, field: string): NativeSecondaryPl
     cooldownTicksBySkill,
     firewalker: boolean(source.firewalker, `${field}.firewalker`),
     fizzleSequence: nonnegativeInteger(source.fizzleSequence, `${field}.fizzleSequence`),
+    globalCooldownTicks,
     heldSlot,
     lastSkillId,
     magicShieldAbsorb,
@@ -3254,6 +3263,10 @@ function nativeSecondaryPlayer(value: unknown, field: string): NativeSecondaryPl
     ),
     regenerate: boolean(source.regenerate, `${field}.regenerate`),
     reservedMana: nonnegativeFinite(source.reservedMana, `${field}.reservedMana`),
+    staffCastTicksRemaining: nonnegativeInteger(
+      source.staffCastTicksRemaining,
+      `${field}.staffCastTicksRemaining`,
+    ),
     stoneskinTicksRemaining: nonnegativeInteger(
       source.stoneskinTicksRemaining,
       `${field}.stoneskinTicksRemaining`,

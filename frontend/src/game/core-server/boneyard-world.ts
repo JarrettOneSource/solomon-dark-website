@@ -117,6 +117,7 @@ export interface BoneyardWorldState {
   bounds: BoneyardBounds
   collision: BoneyardCollisionWorld
   earthquakeSceneryTargets: readonly NativeSecondarySceneryTarget[]
+  fireballSceneryTargets: readonly PrimarySpellTarget[]
   encounter: BoneyardSolomonEncounterState | null
   enemies: BoneyardEnemyStore
   enemyEvents: readonly BoneyardEnemySemanticEvent[]
@@ -160,6 +161,21 @@ export function createBoneyardWorld(
       position: Object.freeze({ ...object.pos }),
       typeId: object.typeId,
     })),
+    fireballSceneryTargets: loaded.scene.objects.flatMap((object, registrationOrder) => {
+      const bodyRadius = fireballSceneryRadius(object.typeId)
+      return bodyRadius === null ? [] : [Object.freeze({
+        active: true,
+        actorFlags: 0x4,
+        attachment: Object.freeze({ x: 0, y: 0 }),
+        bodyRadius,
+        id: `scenery:${object.eid}`,
+        kind: 'scenery' as const,
+        nativePriority: 0,
+        pendingRemove: false,
+        position: Object.freeze({ ...object.pos }),
+        registrationOrder,
+      })]
+    }),
     encounter: ownsRetailEncounter
       ? createSolomonEncounter(loaded.scene.solomonDig!, loaded.seed)
       : null,
@@ -197,6 +213,17 @@ export function createBoneyardWorld(
       })),
     spawn: { ...loaded.scene.spawn },
     waves: ownsRetailEncounter ? createBoneyardWaveDirector(loaded.seed) : null,
+  }
+}
+
+function fireballSceneryRadius(typeId: number): number | null {
+  switch (typeId) {
+    case 2001: return 8
+    case 2009: return 1
+    case 2029: return 0.01
+    case 2040: return 1
+    case 2061: return 20
+    default: return null
   }
 }
 

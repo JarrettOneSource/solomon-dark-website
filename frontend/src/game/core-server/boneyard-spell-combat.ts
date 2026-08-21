@@ -74,6 +74,7 @@ export function resolveBoneyardSpellCombat(
   firstWorldContact: BoneyardSpellWorldContact | null = null,
   registerLightProvider?: RegisterNativeLightProvider,
   damageMultiplier: BoneyardSpellDamageMultiplier = () => 1,
+  fireballSceneryTargets: readonly PrimarySpellTarget[] = [],
 ): BoneyardSpellCombatResult {
   validateTick(tick)
   let enemies = sourceEnemies
@@ -102,7 +103,18 @@ export function resolveBoneyardSpellCombat(
 
   for (const projectile of [...sourceSpells.projectiles].sort(bySpellId)) {
     if (projectile.phase !== 'flight' || projectile.worldKey !== worldKey) continue
-    const rows = primaryTargetRows(enemies)
+    const enemyRows = primaryTargetRows(
+      enemies,
+      projectile.kind === 'fire'
+        ? nextRegistrationOrder(fireballSceneryTargets)
+        : 0,
+    )
+    const rows = projectile.kind === 'fire'
+      ? [
+          ...fireballSceneryTargets.map((target) => ({ actor: null, target })),
+          ...enemyRows,
+        ]
+      : enemyRows
     if (projectile.kind === 'earth') {
       const priorTargets = new Set(projectile.hitTargetIds)
       const contacts = nativePrimaryRootTargets(
@@ -136,7 +148,7 @@ export function resolveBoneyardSpellCombat(
     }
 
     const target = firstNativePrimaryPointContact({
-      actorMask: projectile.kind === 'fire' ? 0x2 : 0x6,
+      actorMask: 0x6,
       position: projectile.position,
       queryRadius: projectile.kind === 'fire'
         ? PRIMARY_SPELL_FIRE_COLLISION_RADIUS
@@ -145,7 +157,11 @@ export function resolveBoneyardSpellCombat(
     })
     if (!target) continue
     const actor = rows.find(({ target: candidate }) => candidate.id === target.id)?.actor
-    if (!actor) continue
+    if (!actor) {
+      consumedProjectileIds.add(projectile.id)
+      publishContactImpact(projectile, projectile.position)
+      continue
+    }
 
     const amount = projectileDamage(projectile)
       * validatedDamageMultiplier(damageMultiplier(actor.id, projectile.kind))
@@ -236,7 +252,7 @@ export function resolveBoneyardSpellCombat(
 type BoneyardSpellTarget = BoneyardEnemyActor | BoneyardMaggotActor
 
 interface PrimaryTargetRow {
-  readonly actor: BoneyardSpellTarget
+  readonly actor: BoneyardSpellTarget | null
   readonly target: PrimarySpellTarget
 }
 
@@ -256,7 +272,10 @@ function selectedAirTargets(
   return row?.target.active && !row.target.pendingRemove ? [row.target] : []
 }
 
-function primaryTargetRows(store: BoneyardEnemyStore): readonly PrimaryTargetRow[] {
+function primaryTargetRows(
+  store: BoneyardEnemyStore,
+  registrationOrderBase = 0,
+): readonly PrimaryTargetRow[] {
   return [...store.actors, ...store.maggots].map((actor, registrationOrder) => ({
     actor,
     target: {
@@ -269,9 +288,16 @@ function primaryTargetRows(store: BoneyardEnemyStore): readonly PrimaryTargetRow
       nativePriority: 0,
       pendingRemove: false,
       position: { ...actor.position },
-      registrationOrder,
+      registrationOrder: registrationOrderBase + registrationOrder,
     },
   }))
+}
+
+function nextRegistrationOrder(targets: readonly PrimarySpellTarget[]): number {
+  return targets.reduce(
+    (next, target) => Math.max(next, target.registrationOrder + 1),
+    0,
+  )
 }
 
 function projectileDamage(projectile: PrimarySpellProjectileState): number {

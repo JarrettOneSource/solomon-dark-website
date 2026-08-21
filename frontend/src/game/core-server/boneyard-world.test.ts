@@ -1041,6 +1041,26 @@ test('retains Gravestones as stable lower-priority Lightning targets', () => {
   }])
 })
 
+test('retains the complete native flag-four Fireball scenery roots and radii', () => {
+  const loaded = gatedBoneyard()
+  loaded.scene.objects = [
+    { eid: 'tree', typeId: 2001, pos: { x: 80, y: 90 }, variant: 1 },
+    { eid: 'monument', typeId: 2009, pos: { x: 100, y: 110 }, variant: 2 },
+    { eid: 'grave', typeId: 2029, pos: { x: 120, y: 130 }, variant: 2 },
+    { eid: 'building', typeId: 2040, pos: { x: 140, y: 150 }, variant: 1 },
+    { eid: 'goodie', typeId: 2061, pos: { x: 160, y: 170 }, variant: 0 },
+    { eid: 'scrub', typeId: 2062, pos: { x: 180, y: 190 }, variant: 0 },
+  ]
+
+  assert.deepEqual(createBoneyardWorld(loaded).fireballSceneryTargets, [
+    fireballSceneryTarget('tree', 0, 8, { x: 80, y: 90 }),
+    fireballSceneryTarget('monument', 1, 1, { x: 100, y: 110 }),
+    fireballSceneryTarget('grave', 2, 0.01, { x: 120, y: 130 }),
+    fireballSceneryTarget('building', 3, 1, { x: 140, y: 150 }),
+    fireballSceneryTarget('goodie', 4, 20, { x: 160, y: 170 }),
+  ])
+})
+
 test('retains every native group-four scene-object family for Earthquake wobble ownership', () => {
   const loaded = gatedBoneyard()
   loaded.scene.objects = [
@@ -1116,6 +1136,26 @@ function gatedBoneyard(): LoadedBoneyard {
       sprites: [],
       terrain: [],
     },
+  }
+}
+
+function fireballSceneryTarget(
+  eid: string,
+  registrationOrder: number,
+  bodyRadius: number,
+  position: Readonly<{ x: number; y: number }>,
+) {
+  return {
+    active: true,
+    actorFlags: 0x4,
+    attachment: { x: 0, y: 0 },
+    bodyRadius,
+    id: `scenery:${eid}`,
+    kind: 'scenery',
+    nativePriority: 0,
+    pendingRemove: false,
+    position: { ...position },
+    registrationOrder,
   }
 }
 

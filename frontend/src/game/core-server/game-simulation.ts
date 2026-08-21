@@ -109,6 +109,7 @@ import {
   canPlaceBoneyardBody,
   firstBoneyardLineObstruction,
   firstBoneyardPathBlockProgress,
+  NATIVE_FIREBALL_TERRAIN_EXCLUSION_MASK,
   resolveBoneyardMovement,
   withBoneyardGateCollision,
 } from './boneyard-collision.ts'
@@ -1330,6 +1331,8 @@ function finishGameSimulationTick(
   const primaryInputs = Object.fromEntries(Object.entries(inputs).map(([playerId, input]) => [
     playerId,
     primaryOverridePlayerIds.has(playerId)
+      || (secondaryAbilities.players[playerId]?.staffCastTicksRemaining ?? 0) > 0
+      || (secondaryAbilities.players[playerId]?.castSpinTicksRemaining ?? 0) > 0
       ? { ...input, cast: { ...input.cast, primary: false } }
       : input,
   ]))
@@ -1347,6 +1350,16 @@ function finishGameSimulationTick(
       return region !== undefined && isHubRegionTraversable(region, position, radius)
     },
     canTraverseProjectile: (spell, from, to) => {
+      if (result.world.kind === 'boneyard' && spell.kind === 'fire') {
+        return firstBoneyardLineObstruction(
+          from,
+          to,
+          boneyardSpellBounds!,
+          boneyardCollision!,
+          undefined,
+          NATIVE_FIREBALL_TERRAIN_EXCLUSION_MASK,
+        ) === null
+      }
       return spellObstructionPoint(spell.ownerId, from, to) === null
     },
     castAuthority: Object.fromEntries(playerEntities.identities.map(({ playerId }, index) => {
@@ -1515,6 +1528,7 @@ function finishGameSimulationTick(
         )?.prismaticTicks ?? 0) > 0
         ? 2
         : 1,
+      boneyardWorld.fireballSceneryTargets,
     )
     primarySpells = spellCombat.spells
     world = {

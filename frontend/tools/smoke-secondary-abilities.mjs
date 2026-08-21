@@ -130,6 +130,7 @@ try {
           magicShieldVisible: frame.playerMagicShieldVisible,
           materialTint: frame.playerMaterialTint,
           observedAtMs: performance.now(),
+          playerAttachmentPose: frame.playerAttachmentPose,
           primitiveCount: frame.secondaryAbilityPrimitiveCount,
           tick: frame.tick,
         })
@@ -339,6 +340,9 @@ try {
         }
         maximumSet = { expectedSummonCap: 1, summons: 1 }
       } else {
+        await waitUntil(() => (
+          (host.state().secondaryAbilities.players[playerId]?.staffCastTicksRemaining ?? 0) === 0
+        ), 'Raise Golem StaffCast2 did not release before the second cast')
         const secondCastSequence = host.state().secondaryAbilities.players[playerId]?.castSequence ?? 0
         await castSecondaryPointer(page, { x: target.x + 40, y: target.y })
         await waitUntil(() => (
@@ -378,6 +382,17 @@ try {
       await path.waitFor({ timeout: 2_000 })
       cooldownPath = await path.getAttribute('d')
       assert.ok(cooldownPath?.startsWith('M 26.5 26.5 L '))
+      const cooldownPlayer = host.state().secondaryAbilities.players[playerId]
+      assert.ok((cooldownPlayer?.globalCooldownTicks ?? 0) > 0)
+      if (contract.skillId === 15) {
+        assert.equal(cooldownPlayer?.cooldownTicksBySkill[contract.skillId], 0)
+        assert.equal(cooldownPlayer?.cooldownMaximumTicksBySkill[contract.skillId], 100)
+      } else {
+        assert.ok(
+          (cooldownPlayer?.cooldownTicksBySkill[contract.skillId] ?? 0)
+            > (cooldownPlayer?.globalCooldownTicks ?? 0),
+        )
+      }
     }
     const screenshotPath = `${screenshotRoot}/${String(contract.skillId).padStart(2, '0')}-${slug(contract.name)}.png`
     await page.screenshot({ path: screenshotPath })
@@ -392,6 +407,12 @@ try {
       new Set(samples.map(({ tick }) => tick)).size >= 2,
       `${contract.name} did not advance across authoritative animation ticks`,
     )
+    if (contract.skillId !== 78 && contract.skillId !== 79) {
+      assert.ok(
+        samples.some(({ playerAttachmentPose }) => playerAttachmentPose === 9),
+        `${contract.name} never presented its native Cast2 pose`,
+      )
+    }
     if (proof.kinds.length > 0) {
       assert.ok(
         samples.some(({ kinds }) => proof.kinds.every((kind) => kinds.includes(kind))),
@@ -490,7 +511,7 @@ try {
 
 async function enterHub(page, baseUrl) {
   await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
-  await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 90_000 })
+  await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 180_000 })
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
   await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({

@@ -35,9 +35,10 @@ test('game account presentation preserves the exact Website username', () => {
   })
 })
 
-test('title identity and resumable Last Game use their owned top-right and save paths', () => {
-  assert.match(scene, /fixedGameStageBounds\(fixedViewport, 'right', 'top'\)/)
-  assert.match(accountStyles, /\.game-account-name-title[\s\S]*right:\s*11px/)
+test('title identity stays at the native left corner while Last Game uses its save path', () => {
+  assert.match(scene, /fixedGameStageBounds\(fixedViewport, 'left', 'top'\)/)
+  assert.match(accountStyles, /\.game-account-name-title[\s\S]*left:\s*11px/)
+  assert.doesNotMatch(accountStyles, /\.game-account-name-title[\s\S]*right:\s*11px/)
   assert.match(scene, /action="last-game" accessibleLabel="Last game"/)
   assert.match(scene, /onClick=\{onLastGame\}/)
 })

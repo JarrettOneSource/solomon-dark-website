@@ -525,7 +525,7 @@ export default function MainMenuScene({
   )
   const accountStageStyle = fixedStageStyle(
     fixedViewport,
-    fixedGameStageBounds(fixedViewport, 'right', 'top'),
+    fixedGameStageBounds(fixedViewport, 'left', 'top'),
   )
 
   const beginNewGame = async () => {

@@ -317,7 +317,9 @@ const PRIMARY_SKILL_ID_BY_ELEMENT = {
   water: 32,
 } as const satisfies Readonly<Record<WizardElement, number>>
 
-const STAFF_PRIMARY_EMITTER_OFFSETS: Readonly<Record<0 | 1 | 7 | 8, readonly Vector2[]>> = {
+export type PlayerStaffAttachmentPose = 0 | 1 | 7 | 8 | 9
+
+const STAFF_PRIMARY_EMITTER_OFFSETS: Readonly<Record<PlayerStaffAttachmentPose, readonly Vector2[]>> = {
   0: [
     { x: -32.5, y: -66.5 }, { x: -21.5, y: -72.5 },
     { x: -9, y: -76.5 }, { x: 4.5, y: -76.5 },
@@ -373,6 +375,20 @@ const STAFF_PRIMARY_EMITTER_OFFSETS: Readonly<Record<0 | 1 | 7 | 8, readonly Vec
     { x: -36, y: -24.5 }, { x: -32.5, y: -32.5 },
     { x: -26.5, y: -38.5 }, { x: -19.5, y: -44 },
     { x: -10.5, y: -47.5 }, { x: -1, y: -48.5 },
+  ],
+  9: [
+    { x: 32.5, y: -55 }, { x: 33.5, y: -47.5 },
+    { x: 31.5, y: -40.5 }, { x: 28.5, y: -33.5 },
+    { x: 23, y: -27.5 }, { x: 16, y: -23.5 },
+    { x: 7.5, y: -21 }, { x: -0.5, y: -20.5 },
+    { x: -9.5, y: -21.5 }, { x: -17.5, y: -24.5 },
+    { x: -24, y: -29 }, { x: -29.5, y: -34.5 },
+    { x: -32.5, y: -41.5 }, { x: -33.5, y: -49 },
+    { x: -32, y: -56.5 }, { x: -28.5, y: -63 },
+    { x: -23, y: -68.5 }, { x: -15.5, y: -73.5 },
+    { x: -7.5, y: -75.5 }, { x: 0.5, y: -76.5 },
+    { x: 9.5, y: -75.5 }, { x: 17.5, y: -72.5 },
+    { x: 24, y: -67.5 }, { x: 29.5, y: -61.5 },
   ],
 }
 
@@ -444,6 +460,13 @@ export function primarySpellEmitterOffset(
   element: WizardElement = 'fire',
 ): Vector2 {
   const pose = primaryCastPose(actionTick, channelActive, element)
+  return staffAttachmentEmitterOffset(headingIndex, pose)
+}
+
+export function staffAttachmentEmitterOffset(
+  headingIndex: number,
+  pose: PlayerStaffAttachmentPose,
+): Vector2 {
   const facing = ((Math.round(headingIndex) % 24) + 24) % 24
   return STAFF_PRIMARY_EMITTER_OFFSETS[pose][facing]
 }

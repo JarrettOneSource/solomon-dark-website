@@ -50,7 +50,7 @@ let browser
 let page
 try {
   const readiness = await readHostReadiness(host)
-  assert.equal(readiness.protocol, 'solomon-dark/34')
+  assert.equal(readiness.protocol, 'solomon-dark/35')
   const healthUrl = new URL(readiness.url)
   healthUrl.protocol = 'http:'
   healthUrl.pathname = '/health'

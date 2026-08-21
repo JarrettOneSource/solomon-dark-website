@@ -133,7 +133,12 @@ export class PlayerWorldView {
 
   update(player: ProtocolPlayerState, tick: number): void {
     const playerTextures = this.textures.players[player.config.element]
-    const plan = createPlayerCharacterDrawPlan(player)
+    const plan = createPlayerCharacterDrawPlan(
+      player,
+      1,
+      (this.secondaryState?.staffCastTicksRemaining ?? 0) > 0
+        || (this.secondaryState?.castSpinTicksRemaining ?? 0) > 0,
+    )
     const heading = spriteFrameIndex(Math.round(player.headingIndex), 24)
     const pose = spriteFrameIndex(plan.robePose, 5)
     const attachmentPose = plan.attachmentPose

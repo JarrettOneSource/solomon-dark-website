@@ -7,12 +7,17 @@ import {
   createNativeRng,
   type NativeRngState,
 } from './native-rng.ts'
-import type { PlayerCharacterInput, PlayerCharacterState } from './player-character.ts'
+import {
+  playerPrimaryCastOwnsFacing,
+  type PlayerCharacterInput,
+  type PlayerCharacterState,
+} from './player-character.ts'
 import { actorHeadingIndex } from './actor-heading.ts'
 import {
   effectiveElementalPrimarySkillRankStats,
   effectiveSecondaryAbilityRankStats,
   nativeWeldBuild,
+  playerStatBook,
   type PlayerSkillBookComponent,
 } from './player-progression.ts'
 import type { NativeSecondaryAbilityId } from './native-secondary-ability-contract.ts'
@@ -95,6 +100,7 @@ export const NATIVE_SECONDARY_EVENT_KINDS = Object.freeze([
   'shield-break', 'shield-hit', 'toggle-off', 'toggle-on', 'whistle',
 ] as const)
 export type NativeSecondaryEventKind = typeof NATIVE_SECONDARY_EVENT_KINDS[number]
+export const NATIVE_SECONDARY_GLOBAL_COOLDOWN_TICKS = 150
 
 export interface NativeSecondaryActorState {
   readonly ageTicks: number
@@ -168,6 +174,7 @@ export interface NativeSecondaryPlayerState {
   readonly cooldownTicksBySkill: readonly number[]
   readonly firewalker: boolean
   readonly fizzleSequence: number
+  readonly globalCooldownTicks: number
   readonly heldSlot: number | null
   readonly lastSkillId: NativeSecondaryAbilityId | null
   readonly magicShieldAbsorb: number
@@ -179,6 +186,7 @@ export interface NativeSecondaryPlayerState {
   readonly planewalkerTicksRemaining: number
   readonly regenerate: boolean
   readonly reservedMana: number
+  readonly staffCastTicksRemaining: number
   readonly stoneskinTicksRemaining: number
 }
 
@@ -725,6 +733,7 @@ export function createNativeSecondaryPlayerState(): NativeSecondaryPlayerState {
     cooldownTicksBySkill: Object.freeze(new Array<number>(PLAYER_SKILL_COUNT).fill(0)),
     firewalker: false,
     fizzleSequence: 0,
+    globalCooldownTicks: 0,
     heldSlot: null,
     lastSkillId: null,
     magicShieldAbsorb: 0,
@@ -736,6 +745,7 @@ export function createNativeSecondaryPlayerState(): NativeSecondaryPlayerState {
     planewalkerTicksRemaining: 0,
     regenerate: false,
     reservedMana: 0,
+    staffCastTicksRemaining: 0,
     stoneskinTicksRemaining: 0,
   }
 }
@@ -745,6 +755,21 @@ export function nativeSecondaryAvailableMana(
   player: NativeSecondaryPlayerState,
 ): number {
   return Math.max(0, currentMana - player.reservedMana)
+}
+
+export function nativeSecondaryStaffCastDurationTicks(
+  skillBook: PlayerSkillBookComponent,
+): number {
+  const fasterCaster = effectiveSkillNumericValue(skillBook, 70, 'mValue')
+  const progressFactor = Math.fround(1 + fasterCaster / 100)
+  const progressPerTick = Math.fround(Math.fround(0.1) * progressFactor)
+  let progress = Math.fround(0)
+  let ticks = 0
+  do {
+    progress = Math.fround(progress + progressPerTick)
+    ticks += 1
+  } while (progress <= 5)
+  return ticks
 }
 
 export function nativePlaneOrbDamage(
@@ -3134,7 +3159,7 @@ export function stepNativeSecondaryAbilities(
     let player = state.players[playerId] ?? createNativeSecondaryPlayerState()
     const planewalkerWasActive = player.planewalkerTicksRemaining > 0
     const stoneskinWasActive = player.stoneskinTicksRemaining > 0
-    player = stepPlayerState(player)
+    player = stepPlayerState(player, authority.skillBook)
     if (planewalkerWasActive && player.planewalkerTicksRemaining === 0) {
       state = emit(state, {
         actorId: null,
@@ -3335,7 +3360,18 @@ function castAbility(
     dispelledShieldTargetIds: [], disruptedTargetIds: [], manaRecovered: 0, manaSpent: 0, player: nextPlayer,
     facingHeadingIndex: null, relocated: null, removedProjectileIds: [], state,
   })
-  if (!authority.eligible || (player.cooldownTicksBySkill[skillId] ?? 0) > 0) {
+  if (!authority.eligible) {
+    return none(fizzle(source, playerId, skillId, authority, context.tick), {
+      ...player, fizzleSequence: player.fizzleSequence + 1, lastSkillId: skillId,
+    })
+  }
+  if (
+    player.staffCastTicksRemaining > 0
+    || player.castSpinTicksRemaining > 0
+    || playerPrimaryCastOwnsFacing(authority.character.primaryCast)
+    || player.globalCooldownTicks > 0
+  ) return none()
+  if ((player.cooldownTicksBySkill[skillId] ?? 0) > 0) {
     return none(fizzle(source, playerId, skillId, authority, context.tick), {
       ...player, fizzleSequence: player.fizzleSequence + 1, lastSkillId: skillId,
     })
@@ -3445,6 +3481,8 @@ function castAbility(
           'toggle-off',
           'planewalker-off',
         ))
+        nextPlayer = startStaffCast(nextPlayer, authority.skillBook)
+        nextPlayer = withCooldown(nextPlayer, skillId, 0)
         return none(state, nextPlayer)
       }
       nextPlayer = {
@@ -3461,8 +3499,9 @@ function castAbility(
       break
     case 15:
       relocated = context.phasingDestination(playerId, origin, direction)
-      nextPlayer = withCooldown(nextPlayer, skillId, Math.round(v.mCooldown * 100))
       if (!relocated) {
+        nextPlayer = startStaffCast(nextPlayer, authority.skillBook)
+        nextPlayer = withCooldown(nextPlayer, skillId, Math.round(v.mCooldown * 100))
         return {
           dispelledShieldTargetIds,
           disruptedTargetIds,
@@ -3559,6 +3598,8 @@ function castAbility(
       nextPlayer = recalculateReserve(nextPlayer, authority)
       if (active) {
         state = spawnFirewalkerPatch(state, playerId, authority, true)
+        nextPlayer = startStaffCast(nextPlayer, authority.skillBook)
+        nextPlayer = withCooldown(nextPlayer, skillId, 0)
       }
       state = emit(state, {
         ...castEvent(
@@ -3841,7 +3882,6 @@ function castAbility(
         position: relocated,
         screenFlash: REGION_FLASH_TELEPORT_DESTINATION,
       })
-      nextPlayer = withCooldown(nextPlayer, skillId, Math.round(v.mCooldown * 100))
       break
     }
     case 49: {
@@ -4125,6 +4165,14 @@ function castAbility(
       })
       return none(state, nextPlayer)
     }
+  }
+  nextPlayer = withCooldown(
+    nextPlayer,
+    skillId,
+    Math.round((v.mCooldown ?? 0) * 100),
+  )
+  if (skillId !== 51) {
+    nextPlayer = startStaffCast(nextPlayer, authority.skillBook)
   }
   state = emit(state, castEvent(playerId, skillId, authority, context.tick, 'cast', castCue(skillId)))
   if (postCastCue !== null) {
@@ -5128,14 +5176,22 @@ function advanceActor(actor: NativeSecondaryActorState): NativeSecondaryActorSta
   }
 }
 
-function stepPlayerState(source: NativeSecondaryPlayerState): NativeSecondaryPlayerState {
+function stepPlayerState(
+  source: NativeSecondaryPlayerState,
+  skillBook: PlayerSkillBookComponent,
+): NativeSecondaryPlayerState {
+  const recharge = nativeSecondaryRechargePerTick(skillBook)
   return {
     ...source,
     castSpinTicksRemaining: Math.max(0, source.castSpinTicksRemaining - 1),
-    cooldownTicksBySkill: Object.freeze(source.cooldownTicksBySkill.map((ticks) => Math.max(0, ticks - 1))),
+    cooldownTicksBySkill: Object.freeze(source.cooldownTicksBySkill.map(
+      (ticks) => Math.max(0, ticks - recharge),
+    )),
+    globalCooldownTicks: Math.max(0, source.globalCooldownTicks - recharge),
     magicShieldPulseTicks: Math.max(0, source.magicShieldPulseTicks - 1),
     planewalkerTicksRemaining: Math.max(0, source.planewalkerTicksRemaining - 1),
     stoneskinTicksRemaining: Math.max(0, source.stoneskinTicksRemaining - 1),
+    staffCastTicksRemaining: Math.max(0, source.staffCastTicksRemaining - 1),
   }
 }
 
@@ -5174,11 +5230,44 @@ function withCooldown(
   const cooldownMaximumTicksBySkill = [...source.cooldownMaximumTicksBySkill]
   cooldownTicksBySkill[skillId] = ticks
   cooldownMaximumTicksBySkill[skillId] = ticks
+  for (let index = 0; index < cooldownTicksBySkill.length; index += 1) {
+    if (cooldownTicksBySkill[index]! < NATIVE_SECONDARY_GLOBAL_COOLDOWN_TICKS) {
+      cooldownTicksBySkill[index] = 0
+    }
+  }
   return {
     ...source,
     cooldownMaximumTicksBySkill: Object.freeze(cooldownMaximumTicksBySkill),
     cooldownTicksBySkill: Object.freeze(cooldownTicksBySkill),
+    globalCooldownTicks: NATIVE_SECONDARY_GLOBAL_COOLDOWN_TICKS,
   }
+}
+
+function startStaffCast(
+  source: NativeSecondaryPlayerState,
+  skillBook: PlayerSkillBookComponent,
+): NativeSecondaryPlayerState {
+  return {
+    ...source,
+    staffCastTicksRemaining: nativeSecondaryStaffCastDurationTicks(skillBook),
+  }
+}
+
+function nativeSecondaryRechargePerTick(skillBook: PlayerSkillBookComponent): number {
+  return Math.fround(1 + effectiveSkillNumericValue(skillBook, 60, 'mValue') / 100)
+}
+
+function effectiveSkillNumericValue(
+  skillBook: PlayerSkillBookComponent,
+  skillId: number,
+  property: string,
+): number {
+  const rank = skillBook.effectiveRanks[skillId] ?? 0
+  if (rank <= 0) return 0
+  const configured = playerStatBook().entries[skillId]?.numericProperties[property]
+  if (configured === undefined) return 0
+  if (typeof configured === 'number') return configured
+  return configured[Math.min(rank, configured.length - 1)] ?? 0
 }
 
 function mergeEffect(

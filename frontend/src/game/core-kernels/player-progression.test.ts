@@ -611,6 +611,25 @@ test('offer fill preserves the native category collision guards', () => {
     )
     assert.ok(offer.options.filter((option) => categoryFour.has(option.skillId)).length <= 1)
   }
+
+  const cappedRanks = fresh.permanentRanks.map((rank, skillId) => {
+    const maximum = playerStatBook().entries[skillId]?.maximumLevel ?? 0
+    return skillId === 8 ? rank : maximum
+  })
+  const onlyCategoryOne = {
+    ...fresh,
+    effectiveRanks: Object.freeze([...cappedRanks]),
+    permanentRanks: Object.freeze([...cappedRanks]),
+  }
+  const duplicateEscape = buildPlayerSkillOffer(offerProgression(7, 75, {
+    forcedOfferSkillIds: Object.freeze([8]),
+  }), onlyCategoryOne, 1)
+  assert.deepEqual(duplicateEscape.options, [
+    { skillId: 8, targetRank: 2 },
+    { skillId: 8, targetRank: 2 },
+    { skillId: 8, targetRank: 2 },
+    { skillId: 8, targetRank: 2 },
+  ])
 })
 
 test('the stock forced prefix is bookkeeping and consumes all three ordinary slots', () => {

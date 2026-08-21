@@ -57,6 +57,7 @@ const SPELLS = [
 const requestedSpellKind = process.env.SDR_PRIMARY_SPELL_KIND?.trim().toLowerCase()
 const lowManaAcceptance = process.env.SDR_PRIMARY_SPELL_LOW_MANA === '1'
 const hostOpenedBoneyard = process.env.SDR_PRIMARY_SPELL_HOST_OPENED_BONEYARD === '1'
+const fireGravestoneAcceptance = process.env.SDR_PRIMARY_FIRE_GRAVESTONE === '1'
 const selectedSpells = requestedSpellKind
   ? SPELLS.filter((spell) => spell.kind === requestedSpellKind)
   : SPELLS
@@ -208,7 +209,7 @@ try {
       lowManaAcceptance && spell.kind === 'fire',
     )
     if (castFrame === null) {
-      if (!hostOpenedBoneyard) {
+      if (!hostOpenedBoneyard && !fireGravestoneAcceptance) {
         assert.ok(
           facingWire.observedAttachmentPoses.includes(spell.castPose),
           `expected authoritative ${spell.kind} pose ${spell.castPose}`,
@@ -540,6 +541,31 @@ async function castAirInBoneyard(page) {
     .getAttribute('data-environment-mode'))
   assert.equal(frame.localPlayerLifeState, 'alive')
   assert.equal(frame.runPhase, 'active')
+  const idleScreenshotPath = `${screenshotRoot}/solomon-primary-air-boneyard-idle.png`
+  await page.screenshot({ path: idleScreenshotPath })
+  const idleEnvironmentLight = await page.evaluate(() => {
+    const canvas = document.querySelector('.boneyard-environment-light')
+    const world = document.querySelector('.boneyard-world-canvas')
+    const frame = world?.__sdrBoneyardFrame
+    if (!(canvas instanceof HTMLCanvasElement) || !frame) return null
+    const context = canvas.getContext('2d')
+    if (!context) return null
+    const resolutionX = canvas.width / 1_600
+    const resolutionY = canvas.height / 900
+    const sample = context.getImageData(
+      Math.round(frame.playerScreenX * resolutionX),
+      Math.round(frame.playerScreenY * resolutionY),
+      1,
+      1,
+    ).data
+    return {
+      alpha: sample[3],
+      blue: sample[2],
+      composite: getComputedStyle(canvas).mixBlendMode,
+      green: sample[1],
+      red: sample[0],
+    }
+  })
   const gravestones = await visibleGravestones(page, frame)
   assert.ok(gravestones.length > 0, 'expected a visible generated Gravestone')
   const eventStart = await audioEventCount(page)
@@ -603,6 +629,8 @@ async function castAirInBoneyard(page) {
     receipt = {
       gate,
       held,
+      idleEnvironmentLight,
+      idleScreenshotPath,
       environmentMode,
       lighting: {
         before: {
@@ -629,9 +657,25 @@ async function castAirInBoneyard(page) {
 
 async function castFireInBoneyard(page) {
   const canvas = await enterBoneyard(page)
+  const gate = fireGravestoneAcceptance
+    ? await crossEntryGate(page, page.locator('.boneyard-scene'))
+    : null
   const eventStart = await audioEventCount(page)
   const afterTick = await latestWireTick(page)
-  const target = await castTarget(canvas, 0.5, 0.05)
+  const idleScreenshotPath = `${screenshotRoot}/solomon-primary-fire-boneyard-idle.png`
+  await page.screenshot({ path: idleScreenshotPath })
+  let gravestone = null
+  let target
+  if (fireGravestoneAcceptance) {
+    const bounds = await canvas.boundingBox()
+    assert.ok(bounds, 'expected the Boneyard canvas to have bounds')
+    const frame = await boneyardFrame(page)
+    gravestone = (await visibleGravestones(page, frame))[0] ?? null
+    assert.ok(gravestone, 'expected a visible generated Gravestone for Fire contact')
+    target = worldScreenPoint(bounds, frame, gravestone.pos)
+  } else {
+    target = await castTarget(canvas, 0.5, 0.05)
+  }
   await page.mouse.move(target.x, target.y)
   await page.mouse.down({ button: 'left' })
   const launch = await waitForAudio(page, eventStart, '/game/audio/sfx/throw-fire.wav', 'play')
@@ -650,10 +694,34 @@ async function castFireInBoneyard(page) {
   }
   await page.mouse.up({ button: 'left' })
   const impact = await waitForWireSpell(page, 'fire-impact', afterTick, 20_000)
+  const gravestoneImpactDistance = gravestone === null
+    ? null
+    : Math.hypot(
+        impact.state.origin.x - gravestone.pos.x,
+        impact.state.origin.y - gravestone.pos.y,
+      )
+  if (gravestoneImpactDistance !== null) {
+    assert.ok(
+      gravestoneImpactDistance < 20.01,
+      `Fire impacted ${gravestoneImpactDistance} units from the Gravestone root`,
+    )
+  }
   const screenshotPath = `${screenshotRoot}/solomon-primary-fire-boneyard-impact.png`
   await page.screenshot({ path: screenshotPath })
   await waitForAudio(page, eventStart, '/game/audio/sfx/fireball-hit.wav', 'play')
-  return { flight, flightScreenshotPath, impact, screenshotPath }
+  return {
+    flight,
+    flightScreenshotPath,
+    gate,
+    gravestone: gravestone === null ? null : {
+      eid: gravestone.eid,
+      impactDistance: gravestoneImpactDistance,
+      position: gravestone.pos,
+    },
+    impact,
+    idleScreenshotPath,
+    screenshotPath,
+  }
 }
 
 async function castEtherInBoneyard(page) {
