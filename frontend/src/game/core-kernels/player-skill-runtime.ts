@@ -7,6 +7,7 @@ import {
 import { resolveNativeSkillDamageValue } from './native-offensive-resolution.ts'
 import {
   applyNativeEquipmentTransform,
+  nativeEquipmentHasFeature,
   resolveEquippedNativeEffects,
   type NativeEquipmentModifiers,
 } from './native-equipment-effects.ts'
@@ -25,6 +26,7 @@ import type {
 } from './player-progression.ts'
 import {
   NATIVE_SKILL_CATALOG,
+  NATIVE_WELD_COMPONENT_SKILL_IDS,
   nativeSkillCategory,
   nativeSkillRoot,
 } from './player-progression.ts'
@@ -77,6 +79,7 @@ export interface PlayerSkillDerivedStats {
   readonly flashDurationTicks: number
   readonly focusInstantRechargeChancePercent: number
   readonly flailingChancePercent: number
+  readonly goldAmountMultiplier: number
   readonly healthRecoveryPerTick: number
   readonly magicResistance: number
   readonly manaRecoveryPerTick: number
@@ -177,7 +180,10 @@ export function refreshPlayerSkillRuntime(
     economy.equipment,
   )
   const effectiveRanks = applyNativeMindstarRanks(
-    equipment.effectiveRanks,
+    energizeNativeWeldComponents(
+      equipment.effectiveRanks,
+      nativeEquipmentHasFeature(equipment.modifiers, 'maximumWeld'),
+    ),
     source.mindstarActive,
   )
   const nextSkillBook = ranksEqual(effectiveRanks, skillBook.effectiveRanks)
@@ -274,6 +280,7 @@ export function playerSkillDerivedStats(
     flashDurationTicks: Math.round(value(53, 'mDuration') * 100),
     focusInstantRechargeChancePercent: selected(60) ? value(60, 'mConcentration') : 0,
     flailingChancePercent: value(71, 'mChance'),
+    goldAmountMultiplier: modifiers.goldMultiplier,
     healthRecoveryPerTick: applyNativeEquipmentTransform(
       modifiers.healthRecovery,
       PLAYER_HEALTH_RECOVERY_PER_TICK,
@@ -745,6 +752,18 @@ function applyNativeMindstarRanks(
     if (skillId < 8 || skillId > 77 || baseRank < 1) return baseRank
     return Math.min(nativeSkillMaximumLevel(skillId), baseRank + 1)
   }))
+}
+
+function energizeNativeWeldComponents(
+  baseRanks: readonly number[],
+  active: boolean,
+): readonly number[] {
+  if (!active) return baseRanks
+  const ranks = [...baseRanks]
+  for (const skillId of NATIVE_WELD_COMPONENT_SKILL_IDS) {
+    if ((ranks[skillId] ?? 0) === 0) ranks[skillId] = 1
+  }
+  return Object.freeze(ranks)
 }
 
 function validConcentrationSelection(

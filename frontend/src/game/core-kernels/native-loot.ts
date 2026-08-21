@@ -47,6 +47,7 @@ export interface NativeLootModifiers {
 }
 
 export interface NativeLootAttractionModifiers {
+  readonly goldAmount: number
   readonly orbPull: number
   readonly pickupFactor: number
 }
@@ -245,9 +246,15 @@ export function nativeLootModifiers(
   if (!Number.isFinite(attraction.orbPull) || attraction.orbPull < 0) {
     throw new RangeError('native Orb pull factor must be finite and non-negative')
   }
+  if (!Number.isFinite(attraction.goldAmount) || attraction.goldAmount < 0) {
+    throw new RangeError('native Gold amount factor must be finite and non-negative')
+  }
   const owned = new Set(ownedPerkSelectors)
   return Object.freeze({
-    goldAmount: owned.has(4) ? NATIVE_LOOT_GOLD_AMOUNT_BONUS : Math.fround(1),
+    goldAmount: Math.fround(
+      attraction.goldAmount
+        * (owned.has(4) ? NATIVE_LOOT_GOLD_AMOUNT_BONUS : Math.fround(1)),
+    ),
     goldChance: owned.has(4) ? NATIVE_LOOT_GOLD_CHANCE_MULTIPLIER : Math.fround(1),
     itemChance: owned.has(3) ? NATIVE_LOOT_ITEM_CHANCE_MULTIPLIER : Math.fround(1),
     orbChance: owned.has(9) ? NATIVE_LOOT_ORB_CHANCE_MULTIPLIER : Math.fround(1),

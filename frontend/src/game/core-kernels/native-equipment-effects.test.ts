@@ -12,6 +12,7 @@ import {
   NATIVE_EQUIPMENT_RECIPE_COUNT,
   NATIVE_EQUIPMENT_SET_COUNT,
   applyNativeEquipmentTransform,
+  createNativeEquipmentModifiers,
   equippedNativeEffectSources,
   nativeEquipmentHasFeature,
   nativeEquipmentRecipeEffects,
@@ -104,6 +105,26 @@ test('equipment stat pass preserves every split lane, transform, class, and feat
   assert.equal(nativeEquipmentHasFeature(modifiers, 'maximumGolem'), true)
   assert.equal(nativeEquipmentHasFeature(modifiers, 'weldCalling'), true)
   assert.equal(NATIVE_EQUIPMENT_FEATURE.maximumGolem, 0x0008)
+})
+
+test('five shipped maximum feature names retain their inert bit-only contract', () => {
+  const permanent = new Array<number>(83).fill(0)
+  permanent[17] = 2
+  const result = resolveNativeEquipmentEffects(permanent, [{
+    effects: [31, 32, 33, 34, 35].map((kind) => ({
+      kind,
+      magnitude: 0,
+      operator: 0 as const,
+      target: 0,
+    })),
+    recipeIndex: null,
+  }])
+  assert.deepEqual(result.effectiveRanks, permanent)
+  assert.equal(result.modifiers.featureBits, 0x03e0)
+  assert.deepEqual(
+    { ...result.modifiers, featureBits: 0 },
+    createNativeEquipmentModifiers(),
+  )
 })
 
 test('equipped sources follow native sink order and exact set identity', () => {

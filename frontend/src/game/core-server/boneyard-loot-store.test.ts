@@ -136,7 +136,7 @@ test('each in-range Orb slot contributes one ordered 1.5-unit move per tick', ()
 test('Telekinesis and Calling independently scale every native pickup consumer', () => {
   const telekinetic = {
     ...FAR[0]!,
-    modifiers: nativeLootModifiers([], { orbPull: 1, pickupFactor: 6.25 }),
+    modifiers: nativeLootModifiers([], { goldAmount: 1, orbPull: 1, pickupFactor: 6.25 }),
     playerId: 'telekinetic',
   }
   let store = spawnBoneyardLootSpecs(
@@ -162,7 +162,7 @@ test('Telekinesis and Calling independently scale every native pickup consumer',
   ).store
   const calling = {
     ...telekinetic,
-    modifiers: nativeLootModifiers([], { orbPull: 2, pickupFactor: 6.25 }),
+    modifiers: nativeLootModifiers([], { goldAmount: 1, orbPull: 2, pickupFactor: 6.25 }),
   }
   stepped = stepBoneyardLootStore(store, {
     participants: [{ ...calling, position: { x: 749.999, y: 0 } }],

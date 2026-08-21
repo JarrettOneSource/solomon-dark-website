@@ -25410,3 +25410,26 @@ These corrections expand the Weld preload census to BadGuys 5, 16, 67, and 87
 plus DeadHawg 19. They also require affine sprite transforms for the two Frost
 87 draws and exact reuse of the already recovered element-compositor plans.
 Implementation and browser receipts follow this ledger update.
+
+### 2026-08-21 v45 equipment-consumer residual
+
+The all-skill census found four resolved-but-unconsumed equipment lanes:
+
+- `FX_GOLDBONUS` must multiply every Gold materialization total before native
+  rounding/chunking, in addition to the independent Gold Charm amount branch.
+- `FX_MAXWELD` must promote zero effective ranks for exactly component IDs
+  `9,10,17,18,25,26,33,34,42,43` to one while equipped. Permanent ranks,
+  active build, and belt state do not change.
+- `FX_WELDEFFECT` must enter `nativeWeldPrimaryVector` at materialization time;
+  applying it after the vector or as a generic contact multiplier is wrong.
+  `FX_WELDCALLING` must drive the already recovered welding-biased offer pool
+  while the feature is equipped.
+- Equipment HP recovery remains the independent ordinary
+  `+0x9C/(100*10)` tick add. Active Regenerate adds `1.5/100` in the same tick;
+  neither replaces nor multiplies the other.
+
+An exhaustive `+0x878` access scan also closes five tempting false positives.
+The executable writes feature bits `0x20/0x40/0x80/0x100/0x200` for named
+Embers-to-Imps, Disintegration, Ether-Charge, Harden, and Rock-Surge maximum
+effects, but contains no reader for any of them. They are shipped inert; the
+Website must retain the catalog/bit identity without inventing gameplay or VFX.

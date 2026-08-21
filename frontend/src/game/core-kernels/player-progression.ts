@@ -238,6 +238,14 @@ export const NATIVE_WELD_BUILDS: readonly NativeWeldBuild[] = Object.freeze([
   defineNativeWeldBuild({ colorRoots: [4, 2], componentSkillIds: [24, 40, 25, 43, 26, 42], id: 1009, pairDescription: 'Welded Lightning + Boulder', primarySkillIds: [24, 40], skillScreenIconRecord: 117, skillsAtlasIconRecord: 90, syntheticName: 'Crawling Shock' }),
 ])
 
+export const NATIVE_WELD_COMPONENT_SKILL_IDS: readonly number[] = Object.freeze([
+  ...new Set(NATIVE_WELD_BUILDS.flatMap(({ componentSkillIds }) => (
+    componentSkillIds.filter((skillId) => !ELEMENTAL_PRIMARY_SKILL_IDS.includes(
+      skillId as typeof ELEMENTAL_PRIMARY_SKILL_IDS[number],
+    ))
+  ))),
+].sort((left, right) => left - right))
+
 const CATALOG = nativeCatalogJson as unknown as NativeSkillCatalogJson
 export const NATIVE_SKILL_CATALOG = CATALOG.skills
 

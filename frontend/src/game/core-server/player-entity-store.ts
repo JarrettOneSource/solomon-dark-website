@@ -9,6 +9,7 @@ import {
   type PlayerLightingState,
 } from '../core-kernels/player-lighting.ts'
 import type { NativeLightProviderRegistration } from '../core-kernels/native-light-provider-order.ts'
+import { nativeEquipmentHasFeature } from '../core-kernels/native-equipment-effects.ts'
 import type { NativeRngState } from '../core-kernels/native-rng.ts'
 import {
   coldSlowPlayer,
@@ -1050,8 +1051,16 @@ function replacePlayerSkillState(
   const skillBooks = [...source.skillBooks]
   const skillRuntimes = [...source.skillRuntimes]
   economies[index] = economy
+  const currentProgression = source.progressions[index]!
+  const weldingOfferBias = nativeEquipmentHasFeature(
+    refreshed.runtime.equipmentModifiers,
+    'weldCalling',
+  )
+  const biasedProgression = currentProgression.weldingOfferBias === weldingOfferBias
+    ? currentProgression
+    : { ...currentProgression, weldingOfferBias }
   progressions[index] = refreshPlayerCombatFromSkillStats(
-    source.progressions[index]!,
+    biasedProgression,
     derived,
   )
   skillBooks[index] = refreshed.skillBook

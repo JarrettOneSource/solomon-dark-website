@@ -8,6 +8,7 @@ import {
   type PlayerSkillBookComponent,
 } from './player-progression.ts'
 import { nativePrimarySkillProfile } from './native-primary-skill-profile.ts'
+import { createNativeEquipmentModifiers } from './native-equipment-effects.ts'
 
 const FACTORS = Object.freeze({ damage: 1.5, manaCost: 0.75 })
 
@@ -200,6 +201,19 @@ test('resolves the selected welded build ahead of the elemental primary', () => 
     1.5,
     3,
   ])
+
+  const boosted = nativePrimarySkillProfile(
+    { ...source, activeWeldBuildId: 1000 },
+    playerStatBook(),
+    {
+      ...FACTORS,
+      equipment: { ...createNativeEquipmentModifiers(), weldEffect: 1.25 },
+    },
+  )
+  assert.equal(boosted.kind, 'weld')
+  if (boosted.kind !== 'weld') return
+  assert.equal(boosted.vector.values[0], 2.5)
+  assert.equal(boosted.damageMinimum, 3.75)
 })
 
 function book(

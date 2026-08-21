@@ -1013,6 +1013,7 @@ export function stepGameSimulationTick(
             inventoryHasWizardKey: economyHasWizardKey(economy),
             level: progression.level,
             lootModifiers: nativeLootModifiers(economy.ownedPerkSelectors, {
+              goldAmount: derived.goldAmountMultiplier,
               orbPull: derived.orbPullMultiplier,
               pickupFactor: derived.pickupRangeScalar,
             }),

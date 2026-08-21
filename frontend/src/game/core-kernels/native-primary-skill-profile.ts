@@ -111,7 +111,12 @@ export function nativePrimarySkillProfile(
   validateOffensiveFactors(factors)
   const skillId = skillBook.primarySkillId
   if (skillBook.activeWeldBuildId !== null) {
-    return nativeWeldPrimarySkillProfile(skillBook, statBook, factors)
+    return nativeWeldPrimarySkillProfile(
+      skillBook,
+      statBook,
+      factors,
+      factors.equipment?.weldEffect ?? 1,
+    )
   }
   if (!(PRIMARY_SKILL_IDS as readonly number[]).includes(skillId)) {
     throw new RangeError(`skill ${skillId} is not an elemental primary`)

@@ -61,6 +61,7 @@ test('applies every purchased native drop modifier at its final owner', () => {
     powerupChance: Math.fround(0.800000011920929),
   })
   assert.deepEqual(nativeLootModifiers([], {
+    goldAmount: 1,
     orbPull: 2,
     pickupFactor: 6.25,
   }), {
@@ -68,10 +69,21 @@ test('applies every purchased native drop modifier at its final owner', () => {
     orbPull: 2,
     pickupFactor: 6.25,
   })
+  assert.equal(nativeLootModifiers([4], {
+    goldAmount: 1.5,
+    orbPull: 1,
+    pickupFactor: 1.25,
+  }).goldAmount, Math.fround(1.5 * Math.fround(1.25)))
   assert.throws(() => nativeLootModifiers([], {
+    goldAmount: 1,
     orbPull: Number.NaN,
     pickupFactor: 1.25,
   }), /Orb pull factor/)
+  assert.throws(() => nativeLootModifiers([], {
+    goldAmount: Number.NaN,
+    orbPull: 1,
+    pickupFactor: 1.25,
+  }), /Gold amount factor/)
 })
 
 test('pins the complete native powerup level table and exclusions', () => {

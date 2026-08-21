@@ -41,6 +41,7 @@ import {
   removePlayerEntity,
   replacePlayerEconomy,
   replacePlayerCharacter,
+  restorePlayerEntityHealth,
   resetPlayerEntitiesForNewRun,
   setPlayerEntitySpectating,
   stepPlayerEntityCombatTick,
@@ -101,7 +102,12 @@ test('equipped native effects refresh effective ranks, maxima, and dense runtime
     name: 'Native Effect Ring',
     nativeEffects: [
       { kind: 4, magnitude: 1, operator: 0 as const, target: 64 },
+      { kind: 14, magnitude: 50, operator: 2 as const, target: 0 },
+      { kind: 16, magnitude: 100, operator: 2 as const, target: 0 },
       { kind: 23, magnitude: 50, operator: 0 as const, target: 0 },
+      { kind: 37, magnitude: 0, operator: 0 as const, target: 0 },
+      { kind: 38, magnitude: 25, operator: 2 as const, target: 0 },
+      { kind: 39, magnitude: 0, operator: 0 as const, target: 0 },
     ],
     nativeSubtype: null,
     nativeTypeId: 7002,
@@ -115,12 +121,43 @@ test('equipped native effects refresh effective ranks, maxima, and dense runtime
   })
   assert.equal(playerSkillBookAt(store, 'first')?.permanentRanks[64], 0)
   assert.equal(playerSkillBookAt(store, 'first')?.effectiveRanks[64], 1)
+  assert.deepEqual(
+    [9, 10, 17, 18, 25, 26, 33, 34, 42, 43].map((skillId) => (
+      playerSkillBookAt(store, 'first')?.effectiveRanks[skillId]
+    )),
+    new Array(10).fill(1),
+  )
+  assert.ok([9, 10, 17, 18, 25, 26, 33, 34, 42, 43].every((skillId) => (
+    playerSkillBookAt(store, 'first')?.permanentRanks[skillId] === 0
+  )))
   assert.equal(playerProgressionAt(store, 'first')?.maximumHealth, 150)
   assert.equal(playerProgressionAt(store, 'first')?.currentHealth, 150)
+  assert.equal(playerProgressionAt(store, 'first')?.weldingOfferBias, true)
   assert.equal(playerSkillRuntimeAt(store, 'first')?.equipmentModifiers.maximumHealth.offset, 50)
+  assert.equal(playerSkillRuntimeAt(store, 'first')?.equipmentModifiers.weldEffect, 1.25)
   assert.equal(playerSkillDerivedStatsAt(store, 'first')?.maximumHealth, 150)
+  assert.equal(playerSkillDerivedStatsAt(store, 'first')?.goldAmountMultiplier, 1.5)
+  const equipmentHealthRecovery = Math.fround(0.002)
+  assert.equal(
+    playerSkillDerivedStatsAt(store, 'first')?.healthRecoveryPerTick,
+    equipmentHealthRecovery,
+  )
   assert.strictEqual(playerSkillBookAt(store, 'second'), secondBook)
   assert.strictEqual(playerSkillRuntimeAt(store, 'second'), secondRuntime)
+  store = damagePlayerEntity(store, 'first', 10, 0)
+  const healthBeforeRecovery = playerProgressionAt(store, 'first')!.currentHealth
+  store = restorePlayerEntityHealth(store, 'first', 1.5 / 100)
+  store = stepPlayerEntityCombatTick(store).store
+  assert.ok(Math.abs(
+    playerProgressionAt(store, 'first')!.currentHealth
+      - healthBeforeRecovery
+      - (1.5 / 100 + equipmentHealthRecovery),
+  ) < 1e-12)
+  store = replacePlayerEconomy(store, 'first', economy)
+  assert.equal(playerProgressionAt(store, 'first')?.weldingOfferBias, false)
+  assert.ok([9, 10, 17, 18, 25, 26, 33, 34, 42, 43].every((skillId) => (
+    playerSkillBookAt(store, 'first')?.effectiveRanks[skillId] === 0
+  )))
 })
 
 test('each dense player row owns an isolated economy component that survives run resets', () => {
