@@ -265,6 +265,14 @@ import type {
 } from './replicated-entity-types.ts'
 import type { LocalPartyState, PartyPlayerProfile } from './party-state.ts'
 import {
+  normalizeGameChatText,
+  type GameChatChannel,
+  type GameChatMessage,
+  type GameChatRejection,
+  type GameChatRejectionReason,
+  type GameChatSender,
+} from './game-chat.ts'
+import {
   MAX_WEB_GAME_SAVE_BYTES,
 } from '../save/game-save-contract.ts'
 
@@ -274,8 +282,20 @@ export type {
   BoneyardScene,
   LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
+export type {
+  GameChatChannel,
+  GameChatMessage,
+  GameChatRejection,
+  GameChatRejectionReason,
+  GameChatSender,
+} from './game-chat.ts'
+export {
+  GAME_CHAT_MAX_TEXT_BYTES,
+  GAME_CHAT_MAX_TEXT_CODE_UNITS,
+  normalizeGameChatText,
+} from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 48
+export const GAME_PROTOCOL_VERSION = 49
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
 export const GAME_CONNECTION_TIMEOUT_CLOSE_CODE = 4000
@@ -439,6 +459,12 @@ export interface ClientHubActionMessage {
   action: HubInventoryAction
 }
 
+export interface ClientChatMessage {
+  type: 'client-chat'
+  channel: GameChatChannel
+  text: string
+}
+
 export interface ClientPartyInviteMessage {
   type: 'client-party-invite'
   targetPlayerId: string
@@ -494,6 +520,7 @@ export interface ClientLuaExecuteMessage {
 }
 
 export type ClientGameMessage =
+  | ClientChatMessage
   | ClientCheatModeMessage
   | ClientConfirmLoadoutMessage
   | ClientGameplayPauseMessage
@@ -582,6 +609,14 @@ export interface ServerPartyStateMessage {
   state: LocalPartyState
 }
 
+export interface ServerChatMessage extends GameChatMessage {
+  type: 'server-chat'
+}
+
+export interface ServerChatRejectedMessage extends GameChatRejection {
+  type: 'server-chat-rejected'
+}
+
 export interface LuaConsoleArray extends ReadonlyArray<LuaConsoleValue> {}
 
 export interface LuaConsoleObject {
@@ -618,6 +653,8 @@ export interface ServerDisconnectMessage {
 }
 
 export type ServerGameMessage =
+  | ServerChatMessage
+  | ServerChatRejectedMessage
   | ServerGameplayPauseMessage
   | ServerWelcomeMessage
   | ServerSnapshotMessage
@@ -682,6 +719,14 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
   if (value.type === 'client-hub-action') {
     onlyKeys(value, 'message', ['type', 'action'])
     return { type: 'client-hub-action', action: hubInventoryAction(value.action) }
+  }
+  if (value.type === 'client-chat') {
+    onlyKeys(value, 'message', ['type', 'channel', 'text'])
+    return {
+      type: 'client-chat',
+      channel: gameChatChannel(value.channel, 'channel'),
+      text: gameChatText(value.text, 'text'),
+    }
   }
   if (value.type === 'client-party-invite') {
     onlyKeys(value, 'message', ['type', 'targetPlayerId'])
@@ -938,6 +983,25 @@ export function decodeServerGameMessage(payload: string): ServerGameMessage {
   if (value.type === 'server-party-state') {
     onlyKeys(value, 'message', ['type', 'state'])
     return { type: 'server-party-state', state: localPartyState(value.state) }
+  }
+  if (value.type === 'server-chat') {
+    onlyKeys(value, 'message', ['type', 'channel', 'sender', 'sequence', 'text'])
+    return {
+      type: 'server-chat',
+      channel: gameChatChannel(value.channel, 'channel'),
+      sender: gameChatSender(value.sender, 'sender'),
+      sequence: positiveInteger(value.sequence, 'sequence'),
+      text: gameChatText(value.text, 'text'),
+    }
+  }
+  if (value.type === 'server-chat-rejected') {
+    onlyKeys(value, 'message', ['type', 'channel', 'reason', 'retryAfterMs'])
+    return {
+      type: 'server-chat-rejected',
+      channel: gameChatChannel(value.channel, 'channel'),
+      reason: gameChatRejectionReason(value.reason),
+      retryAfterMs: integerWithin(value.retryAfterMs, 'retryAfterMs', 0, 60_000),
+    }
   }
   if (value.type === 'server-lua-result') {
     onlyKeys(value, 'message', [
@@ -1246,6 +1310,41 @@ function partyPlayerProfile(value: unknown, field: string): PartyPlayerProfile {
     displayName: limitedString(source.displayName, `${field}.displayName`, 64),
     playerId: validatedPlayerId(source.playerId, `${field}.playerId`),
   }
+}
+
+function gameChatChannel(value: unknown, field: string): GameChatChannel {
+  return memberString(value, field, ['global', 'party'] as const)
+}
+
+function gameChatText(value: unknown, field: string): string {
+  if (typeof value !== 'string') throw new GameProtocolError(`${field} must be a string`)
+  let result: string
+  try {
+    result = normalizeGameChatText(value)
+  } catch (error) {
+    throw new GameProtocolError(error instanceof Error ? error.message : `${field} is invalid`)
+  }
+  if (result !== value) {
+    throw new GameProtocolError(`${field} must not begin or end with whitespace`)
+  }
+  return result
+}
+
+function gameChatSender(value: unknown, field: string): GameChatSender {
+  const source = record(value, field)
+  onlyKeys(source, field, ['displayName', 'playerId'])
+  return {
+    displayName: limitedString(source.displayName, `${field}.displayName`, 64),
+    playerId: validatedPlayerId(source.playerId, `${field}.playerId`),
+  }
+}
+
+function gameChatRejectionReason(value: unknown): GameChatRejectionReason {
+  return memberString(
+    value,
+    'reason',
+    ['channel-unavailable', 'rate-limited'] as const,
+  )
 }
 
 function localPartyState(value: unknown): LocalPartyState {

@@ -340,7 +340,7 @@ export default function BoneyardScene({
       if (
         inputBlocked
         || run.phase !== 'active'
-        || event.code !== 'KeyT'
+        || event.code !== 'KeyK'
         || event.repeat
         || event.altKey
         || event.ctrlKey

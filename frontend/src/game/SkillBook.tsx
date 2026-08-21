@@ -196,7 +196,7 @@ export default function SkillBook({
   }
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === 'Escape' || event.key.toLowerCase() === 't') {
+    if (event.key === 'Escape' || event.key.toLowerCase() === 'k') {
       event.preventDefault()
       event.stopPropagation()
       beginClose()

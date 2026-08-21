@@ -24,6 +24,8 @@ import {
   PLAYER_CHARACTER_KERNEL_VERSION,
   decodeClientGameMessage,
   encodeGameMessage,
+  type GameChatMessage,
+  type GameChatRejection,
   type LoadedBoneyard,
 } from '../protocol/game-protocol.ts'
 import { connectGameClientSession } from './game-client-session.ts'
@@ -163,6 +165,49 @@ test('client carries character config, publishes authority, and tears down', asy
     type: 'client-party-deny',
     invitationId: 'invite-1',
   })
+  const receivedChat: GameChatMessage[] = []
+  const rejectedChat: GameChatRejection[] = []
+  session.onChatMessage(message => receivedChat.push(message))
+  session.onChatRejected(rejection => rejectedChat.push(rejection))
+  session.sendChatMessage('party', '  Meet by the fountain.  ')
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-chat',
+    channel: 'party',
+    text: 'Meet by the fountain.',
+  })
+  assert.throws(() => session.sendChatMessage('party', ' \n '), /cannot be empty/)
+  transport.receive(encodeGameMessage({
+    type: 'server-chat',
+    channel: 'party',
+    sender: { displayName: 'Aurelia', playerId: 'player-2' },
+    sequence: 12,
+    text: 'On my way.',
+  }))
+  transport.receive(encodeGameMessage({
+    type: 'server-chat',
+    channel: 'party',
+    sender: { displayName: 'Aurelia', playerId: 'player-2' },
+    sequence: 12,
+    text: 'Duplicate transport event.',
+  }))
+  assert.deepEqual(receivedChat, [{
+    channel: 'party',
+    sender: { displayName: 'Aurelia', playerId: 'player-2' },
+    sequence: 12,
+    text: 'On my way.',
+  }])
+  assert.deepEqual(session.getChatMessages(), receivedChat)
+  transport.receive(encodeGameMessage({
+    type: 'server-chat-rejected',
+    channel: 'party',
+    reason: 'rate-limited',
+    retryAfterMs: 2_000,
+  }))
+  assert.deepEqual(rejectedChat, [{
+    channel: 'party',
+    reason: 'rate-limited',
+    retryAfterMs: 2_000,
+  }])
   let receivedCheckpoint = null
   const removeCheckpoint = session.onSaveCheckpoint((checkpoint) => {
     receivedCheckpoint = checkpoint
@@ -272,6 +317,15 @@ test('client carries character config, publishes authority, and tears down', asy
   session.destroy()
   assert.equal(decodeClientGameMessage(transport.sent.at(-1)!).type, 'client-disconnect')
   assert.equal(transport.readyState, 'closed')
+  assert.deepEqual(session.getChatMessages(), [])
+  transport.receive(encodeGameMessage({
+    type: 'server-chat',
+    channel: 'party',
+    sender: { displayName: 'Aurelia', playerId: 'player-2' },
+    sequence: 13,
+    text: 'After teardown.',
+  }))
+  assert.equal(receivedChat.length, 1)
 })
 
 test('client projects authoritative gameplay pause and blocks input until release', async () => {

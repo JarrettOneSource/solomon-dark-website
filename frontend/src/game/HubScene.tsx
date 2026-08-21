@@ -212,7 +212,7 @@ export default function HubScene({
         inputBlocked
         || pickerOpen
         || transitionActive
-        || event.code !== 'KeyT'
+        || event.code !== 'KeyK'
         || event.repeat
         || event.altKey
         || event.ctrlKey

@@ -72,6 +72,10 @@ type MaterializedServerSnapshotMessage = ServerSnapshotMessage & { snapshot: Gam
 type TestServerGameMessage =
   | Exclude<ServerGameMessage, ServerSnapshotMessage>
   | MaterializedServerSnapshotMessage
+type TestChatMessage = Extract<
+  ServerGameMessage,
+  { type: 'server-chat' | 'server-chat-rejected' }
+>
 
 interface TestReplicationState {
   readonly frames: Map<number, MaterializedServerSnapshotMessage>
@@ -139,6 +143,177 @@ test('authoritative game host owns two configured player characters and movement
     snapshot.snapshot.players[second.welcome.playerId].velocity,
     { x: 0, y: 0 },
   )
+})
+
+test('shared Hub chat isolates parties, reaches Hub global, and becomes party-only in a run', async (context) => {
+  const host = await startGameHost({
+    authentication: SHARED_HUB_AUTHENTICATION,
+    sharedHub: true,
+    snapshotRate: 100,
+  })
+  context.after(() => host.close())
+  const first = await join(host.address.url, 'ticket-first', FIRST_CHARACTER)
+  const second = await join(host.address.url, 'ticket-second', SECOND_CHARACTER)
+  const outsider = await join(host.address.url, 'ticket-outsider', {
+    ...FIRST_CHARACTER,
+    displayName: 'Cassia',
+  })
+  for (const client of [first, second, outsider]) {
+    context.after(() => client.socket.close())
+  }
+  const outsiderChat = collectChatMessages(outsider.socket)
+  context.after(outsiderChat.stop)
+
+  const invited = nextMessage(second.socket, message => (
+    message.type === 'server-party-state' && message.state.invitations.length === 1
+  ))
+  first.socket.send(encodeGameMessage({
+    type: 'client-party-invite',
+    targetPlayerId: second.welcome.playerId,
+  }))
+  const invitation = await invited
+  assert.equal(invitation.type, 'server-party-state')
+  const groupedFirst = nextMessage(first.socket, message => (
+    message.type === 'server-party-state' && message.state.party.memberPlayerIds.length === 2
+  ))
+  const groupedSecond = nextMessage(second.socket, message => (
+    message.type === 'server-party-state' && message.state.party.memberPlayerIds.length === 2
+  ))
+  second.socket.send(encodeGameMessage({
+    type: 'client-party-accept',
+    invitationId: invitation.state.invitations[0]!.id,
+  }))
+  await Promise.all([groupedFirst, groupedSecond])
+
+  const partyForFirst = nextMessage(first.socket, message => (
+    message.type === 'server-chat' && message.text === 'Party route'
+  ))
+  const partyForSecond = nextMessage(second.socket, message => (
+    message.type === 'server-chat' && message.text === 'Party route'
+  ))
+  first.socket.send(encodeGameMessage({
+    type: 'client-chat',
+    channel: 'party',
+    text: 'Party route',
+  }))
+  const [partyA, partyB] = await Promise.all([partyForFirst, partyForSecond])
+  assert.equal(partyA.type, 'server-chat')
+  assert.equal(partyB.type, 'server-chat')
+  assert.deepEqual(partyA, partyB)
+  assert.deepEqual(partyA.sender, {
+    displayName: FIRST_CHARACTER.displayName,
+    playerId: first.welcome.playerId,
+  })
+  await new Promise(resolve => setTimeout(resolve, 60))
+  assert.equal(outsiderChat.messages.length, 0)
+
+  const globalForFirst = nextMessage(first.socket, message => (
+    message.type === 'server-chat' && message.text === 'Hub route'
+  ))
+  const globalForSecond = nextMessage(second.socket, message => (
+    message.type === 'server-chat' && message.text === 'Hub route'
+  ))
+  const globalForOutsider = nextMessage(outsider.socket, message => (
+    message.type === 'server-chat' && message.text === 'Hub route'
+  ))
+  second.socket.send(encodeGameMessage({
+    type: 'client-chat',
+    channel: 'global',
+    text: 'Hub route',
+  }))
+  const globalMessages = await Promise.all([globalForFirst, globalForSecond, globalForOutsider])
+  for (const message of globalMessages) {
+    assert.equal(message.type, 'server-chat')
+    assert.equal(message.channel, 'global')
+    assert.equal(message.sender.playerId, second.welcome.playerId)
+    assert.ok(message.sequence > partyA.sequence)
+  }
+
+  const loadedFirst = nextMessage(first.socket, message => message.type === 'server-boneyard-loaded')
+  const loadedSecond = nextMessage(second.socket, message => message.type === 'server-boneyard-loaded')
+  first.socket.send(encodeGameMessage({
+    type: 'client-start-match',
+    boneyardId: 'default-random',
+  }))
+  await Promise.all([loadedFirst, loadedSecond])
+
+  const unavailable = nextMessage(second.socket, message => (
+    message.type === 'server-chat-rejected' && message.reason === 'channel-unavailable'
+  ))
+  second.socket.send(encodeGameMessage({
+    type: 'client-chat',
+    channel: 'global',
+    text: 'Must not leave the run',
+  }))
+  assert.deepEqual(await unavailable, {
+    type: 'server-chat-rejected',
+    channel: 'global',
+    reason: 'channel-unavailable',
+    retryAfterMs: 0,
+  })
+
+  const runPartyForFirst = nextMessage(first.socket, message => (
+    message.type === 'server-chat' && message.text === 'Run route'
+  ))
+  const runPartyForSecond = nextMessage(second.socket, message => (
+    message.type === 'server-chat' && message.text === 'Run route'
+  ))
+  second.socket.send(encodeGameMessage({
+    type: 'client-chat',
+    channel: 'party',
+    text: 'Run route',
+  }))
+  await Promise.all([runPartyForFirst, runPartyForSecond])
+  await new Promise(resolve => setTimeout(resolve, 60))
+  assert.equal(outsiderChat.messages.length, 1)
+  const outsiderOnlyMessage = outsiderChat.messages[0]!
+  if (outsiderOnlyMessage.type !== 'server-chat') throw new Error('expected global chat')
+  assert.equal(outsiderOnlyMessage.text, 'Hub route')
+})
+
+test('chat rejects unavailable channels and bounds floods per authenticated client', async (context) => {
+  const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
+  context.after(() => host.close())
+  const client = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
+  context.after(() => client.socket.close())
+  const chat = collectChatMessages(client.socket)
+  context.after(chat.stop)
+
+  client.socket.send(encodeGameMessage({
+    type: 'client-chat',
+    channel: 'global',
+    text: 'No public Hub here',
+  }))
+  await waitFor(() => chat.messages.length === 1)
+  assert.deepEqual(chat.messages[0], {
+    type: 'server-chat-rejected',
+    channel: 'global',
+    reason: 'channel-unavailable',
+    retryAfterMs: 0,
+  })
+  chat.messages.length = 0
+
+  for (let index = 1; index <= 6; index += 1) {
+    client.socket.send(encodeGameMessage({
+      type: 'client-chat',
+      channel: 'party',
+      text: `Burst ${index}`,
+    }))
+  }
+  await waitFor(() => chat.messages.length === 6)
+  const accepted = chat.messages.filter(message => message.type === 'server-chat')
+  const rejected = chat.messages.filter(message => message.type === 'server-chat-rejected')
+  assert.deepEqual(accepted.map(message => message.text), [
+    'Burst 1',
+    'Burst 2',
+    'Burst 3',
+    'Burst 4',
+    'Burst 5',
+  ])
+  assert.equal(new Set(accepted.map(message => message.sequence)).size, 5)
+  assert.equal(rejected.length, 1)
+  assert.equal(rejected[0]!.reason, 'rate-limited')
+  assert.ok(rejected[0]!.retryAfterMs > 0 && rejected[0]!.retryAfterMs <= 5_000)
 })
 
 test('Hub pause is first-request owned, survives late join, and releases on owner disconnect', async (context) => {
@@ -1740,6 +1915,24 @@ function forceHallArchive(host: Awaited<ReturnType<typeof startGameHost>>): void
     nextGameOverEventId: 2,
     phase: 'game-over',
   })
+}
+
+function collectChatMessages(socket: WebSocket): {
+  messages: TestChatMessage[]
+  stop: () => void
+} {
+  const messages: TestChatMessage[] = []
+  const receive = (data: WebSocket.RawData) => {
+    const message = decodeServerGameMessage(data.toString())
+    if (message.type === 'server-chat' || message.type === 'server-chat-rejected') {
+      messages.push(message)
+    }
+  }
+  socket.on('message', receive)
+  return {
+    messages,
+    stop: () => socket.off('message', receive),
+  }
 }
 
 function closeSocket(socket: WebSocket): Promise<void> {

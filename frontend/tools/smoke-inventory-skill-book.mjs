@@ -72,7 +72,7 @@ try {
   }).count(), 1)
   await page.screenshot({ path: `${screenshotRoot}-match-inventory.png` })
 
-  await page.keyboard.press('t')
+  await page.keyboard.press('k')
   const matchBook = page.getByRole('dialog', { name: 'Skills' })
   await matchBook.waitFor()
   await waitForSkillBook(matchBook)

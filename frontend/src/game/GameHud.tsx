@@ -336,6 +336,7 @@ export default function GameHud({
           aria-label="Open skills"
           disabled={!onSkillsClick}
           onClick={onSkillsClick}
+          title="Skills (K)"
         >
           <img className="hub-hud-tome" src={hub.hud.tome} alt="" />
         </button>

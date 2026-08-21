@@ -30,6 +30,7 @@ import type { GameRunPhase } from './core-kernels/game-run.ts'
 import type { GameConnectionStage } from './engine.ts'
 import GameAccountName from './GameAccountName.tsx'
 import GameFullscreenButton from './GameFullscreenButton.tsx'
+import GameChat from './GameChat.tsx'
 import GameSaveModMismatchDialog from './GameSaveModMismatchDialog.tsx'
 import GameplayPauseMenu from './GameplayPauseMenu.tsx'
 import GameSettingsDialog from './GameSettingsDialog.tsx'
@@ -282,6 +283,7 @@ export default function MainMenuScene({
   const [loadedBoneyard, setLoadedBoneyard] = useState<LoadedBoneyard | null>(null)
   const [gameplayPause, setGameplayPause] = useState<GameplayPauseState | null>(null)
   const [partyState, setPartyState] = useState<LocalPartyState | null>(null)
+  const [chatOpen, setChatOpen] = useState(false)
   const [gameplaySettingsOpen, setGameplaySettingsOpen] = useState(false)
   const activeBoneyardRunRef = useRef<string | null>(null)
   const loadedBoneyardRunRef = useRef<string | null>(null)
@@ -747,6 +749,7 @@ export default function MainMenuScene({
     setLoadedBoneyard(null)
     setGameplayPause(null)
     setPartyState(null)
+    setChatOpen(false)
     setGameplaySettingsOpen(false)
     setSkillBookOpen(false)
     setInventoryScreenOpen(false)
@@ -769,7 +772,13 @@ export default function MainMenuScene({
   const ownsActiveInventoryPause = ownsBookPause
     && gameplayPause?.source === 'inventory'
     && inventoryScreenOpen
-  const sceneInputBlocked = loading !== null
+  const chatDisabled = loading !== null
+    || levelUpModalActive
+    || skillBookOpen
+    || inventoryScreenOpen
+    || gameplayPause !== null
+  const sceneInputBlocked = chatOpen
+    || loading !== null
     || levelUpModalActive
     || skillBookOpen
     || (gameplayPause !== null && !ownsActiveInventoryPause)
@@ -827,6 +836,7 @@ export default function MainMenuScene({
   return (
     <div
       className="main-menu-page"
+      data-chat-open={chatOpen}
       data-game-scene={gameScene}
       data-skill-book-open={skillBookOpen}
     >
@@ -981,6 +991,16 @@ export default function MainMenuScene({
               subscribe={session.onSnapshot}
             />
           </Suspense>
+        ) : null}
+
+        {session && runtimeSnapshot ? (
+          <GameChat
+            disabled={chatDisabled}
+            onOpenChange={setChatOpen}
+            partyState={partyState}
+            session={session}
+            worldKind={runtimeSnapshot.world.kind}
+          />
         ) : null}
 
         {session && skillBookOpen && runtimeProgression ? (

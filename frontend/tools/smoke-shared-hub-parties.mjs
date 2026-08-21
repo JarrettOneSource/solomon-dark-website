@@ -75,6 +75,10 @@ try {
   assert.equal(memberInvitation.state.invitations[0].inviter.displayName, 'Aurelia')
   member.acceptInvitation(memberInvitation.state.invitations[0].id)
   await waitForPartySize(first.page, 3)
+  await first.page.getByRole('dialog', { name: 'Cassia' })
+    .getByRole('button', { name: 'Close' })
+    .click()
+  await first.page.locator('[data-profile-player]').waitFor({ state: 'detached' })
 
   const outsider = await enterRawHub('Daria', 'air')
   await waitForPlayers(first.page, 4)
@@ -83,6 +87,87 @@ try {
     && message.state.party.memberPlayerIds.length === 1
   ), 'outsider singleton party')
   assert.equal(outsiderParty.state.party.leaderPlayerId, outsider.playerId)
+
+  const chat = first.page.getByLabel('Game chat')
+  await first.page.keyboard.press('t')
+  await chat.locator('xpath=self::*[@data-chat-open="true"]').waitFor()
+  assert.equal(await chat.getAttribute('data-chat-channel'), 'party')
+  assert.equal(await chat.getAttribute('data-chat-channels'), 'party,global')
+  assert.equal(
+    await first.page.locator('.hub-scene').getAttribute('data-gameplay-input-blocked'),
+    'true',
+  )
+  const chatInput = chat.getByRole('textbox', { name: 'Chat message' })
+  const frameBeforeTyping = await frame(first.page)
+  const positionBeforeTyping = { x: frameBeforeTyping.playerX, y: frameBeforeTyping.playerY }
+  await chatInput.fill('wasd')
+  await first.page.waitForTimeout(150)
+  const frameAfterTyping = await frame(first.page)
+  const positionAfterTyping = { x: frameAfterTyping.playerX, y: frameAfterTyping.playerY }
+  assert.deepEqual(positionAfterTyping, positionBeforeTyping)
+
+  const hostPartyChat = host.next((message) => (
+    message.type === 'server-chat' && message.text === 'Aurelia party hello'
+  ), 'host party chat')
+  const memberPartyChat = member.next((message) => (
+    message.type === 'server-chat' && message.text === 'Aurelia party hello'
+  ), 'member party chat')
+  await chatInput.fill('Aurelia party hello')
+  await chatInput.press('Enter')
+  const [hostPartyMessage, memberPartyMessage] = await Promise.all([
+    hostPartyChat,
+    memberPartyChat,
+  ])
+  assert.equal(hostPartyMessage.channel, 'party')
+  assert.equal(memberPartyMessage.sender.playerId, first.playerId)
+  await chat.locator('[data-message-channel="party"]', {
+    hasText: 'Aurelia party hello',
+  }).waitFor()
+  await first.page.waitForTimeout(100)
+  assert.equal(
+    outsider.chatMessages.some(message => message.text === 'Aurelia party hello'),
+    false,
+  )
+
+  await chatInput.press('Tab')
+  assert.equal(await chat.getAttribute('data-chat-channel'), 'global')
+  const hostGlobalChat = host.next((message) => (
+    message.type === 'server-chat' && message.text === 'Aurelia global hello'
+  ), 'host global chat')
+  const memberGlobalChat = member.next((message) => (
+    message.type === 'server-chat' && message.text === 'Aurelia global hello'
+  ), 'member global chat')
+  const outsiderGlobalChat = outsider.next((message) => (
+    message.type === 'server-chat' && message.text === 'Aurelia global hello'
+  ), 'outsider global chat')
+  await chatInput.fill('Aurelia global hello')
+  await chatInput.press('Enter')
+  const globalChatMessages = await Promise.all([
+    hostGlobalChat,
+    memberGlobalChat,
+    outsiderGlobalChat,
+  ])
+  assert.equal(new Set(globalChatMessages.map(message => message.sequence)).size, 1)
+  assert.equal(globalChatMessages.every(message => message.channel === 'global'), true)
+
+  const hostReply = 'Basil global reply'
+  host.sendChat('global', hostReply)
+  await chat.locator('[data-message-channel="global"]', { hasText: hostReply }).waitFor()
+  const chatHubEvidencePath = evidenceRoot ? join(evidenceRoot, 'chat-hub-global.png') : null
+  if (chatHubEvidencePath) await first.page.screenshot({ path: chatHubEvidencePath })
+  await chatInput.press('Escape')
+  await chat.locator('xpath=self::*[@data-chat-open="false"]').waitFor()
+  await chat.locator('xpath=self::*[@data-chat-faded="true"]').waitFor({ timeout: 7_000 })
+  await first.page.waitForTimeout(700)
+  const fadedOpacity = Number(await chat.locator('.game-chat-panel').evaluate(node => (
+    getComputedStyle(node).opacity
+  )))
+  assert.ok(fadedOpacity <= 0.05, `chat faded opacity remained ${fadedOpacity}`)
+  outsider.sendChat('global', 'Daria wakes the chat')
+  await chat.locator('[data-message-channel="global"]', {
+    hasText: 'Daria wakes the chat',
+  }).waitFor()
+  assert.equal(await chat.getAttribute('data-chat-faded'), 'false')
 
   const outsiderHub = outsider.next((message) => (
     message.type === 'server-snapshot' && message.frame.world.kind === 'hub'
@@ -172,6 +257,35 @@ try {
     })
   }
 
+  await first.page.keyboard.press('t')
+  await chat.locator('xpath=self::*[@data-chat-open="true"]').waitFor()
+  assert.equal(await chat.getAttribute('data-chat-channel'), 'party')
+  assert.equal(await chat.getAttribute('data-chat-channels'), 'party')
+  assert.equal(
+    await firstBoneyard.getAttribute('data-gameplay-input-blocked'),
+    'true',
+  )
+  const runChatInput = chat.getByRole('textbox', { name: 'Chat message' })
+  const hostRunChat = host.next((message) => (
+    message.type === 'server-chat' && message.text === 'Party run hello'
+  ), 'host run chat')
+  const memberRunChat = member.next((message) => (
+    message.type === 'server-chat' && message.text === 'Party run hello'
+  ), 'member run chat')
+  const outsiderMessageCountBeforeRunChat = outsider.chatMessages.length
+  await runChatInput.fill('Party run hello')
+  await runChatInput.press('Enter')
+  await Promise.all([hostRunChat, memberRunChat])
+  await first.page.waitForTimeout(100)
+  assert.equal(outsider.chatMessages.length, outsiderMessageCountBeforeRunChat)
+  await runChatInput.press('Tab')
+  assert.equal(await chat.getAttribute('data-chat-channel'), 'party')
+  const chatBoneyardEvidencePath = evidenceRoot
+    ? join(evidenceRoot, 'chat-boneyard-party.png')
+    : null
+  if (chatBoneyardEvidencePath) await first.page.screenshot({ path: chatBoneyardEvidencePath })
+  await runChatInput.press('Escape')
+
   const outsiderBefore = await outsiderHub
   const outsiderX = outsiderBefore.frame.players[outsider.playerId].position.x
   outsider.sendInput(outsiderBefore.frame.tick + 1, 1, { x: 1, y: 0 })
@@ -209,6 +323,11 @@ try {
     boneyardEvidencePath,
     boneyardLighting,
     boneyardWithoutDirectLightPath,
+    chatBoneyardEvidencePath,
+    chatHubEvidencePath,
+    chatFadedOpacity: fadedOpacity,
+    chatGlobalSequence: globalChatMessages[0].sequence,
+    chatPartySequence: hostPartyMessage.sequence,
     remainingHubBeforeX: outsiderX,
     remainingHubAfterX: outsiderAfter.frame.players[outsider.playerId].position.x,
     healthDuringRun,
@@ -320,8 +439,14 @@ async function enterRawHub(displayName, element) {
     connecting.once('error', reject)
   })
   const next = rawMessageQueue(socket)
+  const chatMessages = []
+  socket.on('message', (data) => {
+    const message = JSON.parse(data.toString())
+    if (message.type === 'server-chat') chatMessages.push(message)
+  })
   socket.send(JSON.stringify({
     type: 'client-hello',
+    cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     credential: admission.credential,
     character: { discipline: 'arcane', displayName, element },
@@ -341,6 +466,7 @@ async function enterRawHub(displayName, element) {
       }))
     },
     close: () => closeRawSocket(socket),
+    chatMessages,
     invitePlayer(targetPlayerId) {
       socket.send(JSON.stringify({
         type: 'client-party-invite',
@@ -352,9 +478,16 @@ async function enterRawHub(displayName, element) {
     sendInput(targetTick, sequence, movement) {
       socket.send(JSON.stringify({
         type: 'client-input',
-        input: { aim: null, cast: { primary: false, secondary: null }, movement },
+        input: { aim: null, cast: { primary: false, quickbar: null }, movement },
         sequence,
         targetTick,
+      }))
+    },
+    sendChat(channel, text) {
+      socket.send(JSON.stringify({
+        type: 'client-chat',
+        channel,
+        text,
       }))
     },
     startMatch(boneyardId) {

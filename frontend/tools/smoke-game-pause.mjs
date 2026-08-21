@@ -125,7 +125,7 @@ try {
   const peerSawSkillBookPause = nextRawMessage(peer.socket, (message) => (
     message.type === 'server-gameplay-pause' && message.pause?.source === 'skill-book'
   ))
-  await page.keyboard.press('t')
+  await page.keyboard.press('k')
   const skillBook = page.getByRole('dialog', { name: 'Skills' })
   await skillBook.waitFor()
   await peerSawSkillBookPause

@@ -33,6 +33,7 @@ import {
 import { createGameSnapshot } from '../host/game-snapshot.ts'
 import {
   EMPTY_CONTENT_MANIFEST_SHA256,
+  GAME_CHAT_MAX_TEXT_CODE_UNITS,
   GAME_PROTOCOL_VERSION,
   MAX_LUA_CONSOLE_CODE_LENGTH,
   PLAYER_CHARACTER_KERNEL_VERSION,
@@ -1013,8 +1014,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v48 carries mod content, leaderboard authority, modal pause identity, unforge state, and gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 48)
+test('protocol v49 carries chat, mod content, unforge state, modal pause identity, leaderboard authority, and gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 49)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -3941,4 +3942,73 @@ test('protocol strictly round-trips every welded projectile and persistent actor
       rocks: [{ ...hailActor.rocks[0], releaseOffset: { x: 1, y: 2 } }],
     }],
   }), /releaseOffset does not match/)
+})
+
+test('chat protocol strictly bounds client text and authoritative server events', () => {
+  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
+    type: 'client-chat',
+    channel: 'party',
+    text: 'Meet by the fountain.',
+  })), {
+    type: 'client-chat',
+    channel: 'party',
+    text: 'Meet by the fountain.',
+  })
+  assert.deepEqual(decodeServerGameMessage(encodeGameMessage({
+    type: 'server-chat',
+    channel: 'global',
+    sender: { displayName: 'Aurelia', playerId: 'player-2' },
+    sequence: 17,
+    text: 'The Courtyard is busy today.',
+  })), {
+    type: 'server-chat',
+    channel: 'global',
+    sender: { displayName: 'Aurelia', playerId: 'player-2' },
+    sequence: 17,
+    text: 'The Courtyard is busy today.',
+  })
+  assert.deepEqual(decodeServerGameMessage(encodeGameMessage({
+    type: 'server-chat-rejected',
+    channel: 'party',
+    reason: 'rate-limited',
+    retryAfterMs: 2_500,
+  })), {
+    type: 'server-chat-rejected',
+    channel: 'party',
+    reason: 'rate-limited',
+    retryAfterMs: 2_500,
+  })
+
+  for (const text of [
+    '',
+    ' leading',
+    'trailing ',
+    'line\nbreak',
+    'x'.repeat(GAME_CHAT_MAX_TEXT_CODE_UNITS + 1),
+    '界'.repeat(171),
+  ]) {
+    assert.throws(() => decodeClientGameMessage(JSON.stringify({
+      type: 'client-chat',
+      channel: 'party',
+      text,
+    })), GameProtocolError)
+  }
+  assert.throws(() => decodeClientGameMessage(JSON.stringify({
+    type: 'client-chat',
+    channel: 'whisper',
+    text: 'Hello',
+  })), /channel is not supported/)
+  assert.throws(() => decodeServerGameMessage(JSON.stringify({
+    type: 'server-chat',
+    channel: 'party',
+    sender: { displayName: 'Aurelia', playerId: 'player-2', forged: true },
+    sequence: 1,
+    text: 'Hello',
+  })), /sender\.forged is not allowed/)
+  assert.throws(() => decodeServerGameMessage(JSON.stringify({
+    type: 'server-chat-rejected',
+    channel: 'global',
+    reason: 'rate-limited',
+    retryAfterMs: 60_001,
+  })), /retryAfterMs must be within/)
 })

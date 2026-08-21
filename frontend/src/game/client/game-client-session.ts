@@ -17,8 +17,12 @@ import {
   GameProtocolError,
   decodeServerGameMessage,
   encodeGameMessage,
+  normalizeGameChatText,
   type BoneyardChoice,
   type BoneyardEnemyEventSnapshot,
+  type GameChatChannel,
+  type GameChatMessage,
+  type GameChatRejection,
   type GameSnapshot,
   type GameplayPauseSource,
   type GameplayPauseState,
@@ -58,6 +62,7 @@ import {
   EntityReplicationGapError,
   EntityReplicationReconstructor,
 } from '../protocol/entity-replication.ts'
+import { appendGameChatMessage } from '../game-chat.ts'
 
 export interface GameClientSessionOptions {
   allowModMismatch?: boolean
@@ -85,6 +90,7 @@ export interface GameClientSession {
   executeLua(code: string): Promise<GameLuaExecutionResult>
   acceptPartyInvitation(invitationId: string): void
   getBoneyard(): LoadedBoneyard | null
+  getChatMessages(): readonly GameChatMessage[]
   getGameplayPause(): GameplayPauseState | null
   getModCatalog(): readonly ModConsumableCatalogEntry[]
   getPingMs(): number | null
@@ -92,6 +98,8 @@ export interface GameClientSession {
   getSaveCheckpoint(): GameSaveCheckpoint | null
   getSnapshot(): GameSnapshot
   onBoneyard(listener: (boneyard: LoadedBoneyard) => void): () => void
+  onChatMessage(listener: (message: GameChatMessage) => void): () => void
+  onChatRejected(listener: (rejection: GameChatRejection) => void): () => void
   onGameplayPause(listener: (pause: GameplayPauseState | null) => void): () => void
   onLeaderboardReceipt(listener: (receipt: string) => void): () => void
   onModCatalog(listener: (catalog: readonly ModConsumableCatalogEntry[]) => void): () => void
@@ -108,6 +116,7 @@ export interface GameClientSession {
   selectConcentration(skillId: number): void
   selectPrimarySkill(skillId: number): void
   selectSkill(choiceIndex: number, offerSequence: number, skillId: number): void
+  sendChatMessage(channel: GameChatChannel, text: string): void
   sendHubAction(action: HubInventoryAction): void
   sendInput(input: PlayerCharacterInput): void
   setCheatsEnabled(enabled: boolean): void
@@ -182,10 +191,14 @@ export function connectGameClientSession(
     let localHubPresentation: LocalHubPresentationState | undefined
     let currentInput = copyInput(STOPPED_INPUT)
     let sentInput = copyInput(STOPPED_INPUT)
+    let chatMessages: GameChatMessage[] = []
+    let lastChatSequence = 0
     let enemyEventCursor: { eventId: number; runId: string } | null = null
     const now = options.now ?? (() => performance.now())
     const snapshotListeners = new Set<(snapshot: GameSnapshot) => void>()
     const boneyardListeners = new Set<(boneyard: LoadedBoneyard) => void>()
+    const chatMessageListeners = new Set<(message: GameChatMessage) => void>()
+    const chatRejectionListeners = new Set<(rejection: GameChatRejection) => void>()
     const gameplayPauseListeners = new Set<(pause: GameplayPauseState | null) => void>()
     const leaderboardReceiptListeners = new Set<(receipt: string) => void>()
     const modCatalogListeners = new Set<(
@@ -292,6 +305,28 @@ export function connectGameClientSession(
       if (message.type === 'server-party-state') {
         partyState = message.state
         for (const listener of partyStateListeners) listener(partyState)
+        return
+      }
+      if (message.type === 'server-chat') {
+        if (message.sequence <= lastChatSequence) return
+        lastChatSequence = message.sequence
+        const chatMessage: GameChatMessage = {
+          channel: message.channel,
+          sender: message.sender,
+          sequence: message.sequence,
+          text: message.text,
+        }
+        chatMessages = [...appendGameChatMessage(chatMessages, chatMessage)]
+        for (const listener of chatMessageListeners) listener(chatMessage)
+        return
+      }
+      if (message.type === 'server-chat-rejected') {
+        const rejection: GameChatRejection = {
+          channel: message.channel,
+          reason: message.reason,
+          retryAfterMs: message.retryAfterMs,
+        }
+        for (const listener of chatRejectionListeners) listener(rejection)
         return
       }
       if (message.type === 'server-pong') {
@@ -474,6 +509,9 @@ export function connectGameClientSession(
         rejectPendingLuaExecutions(new Error('The game session was destroyed.'))
         snapshotListeners.clear()
         boneyardListeners.clear()
+        chatMessageListeners.clear()
+        chatRejectionListeners.clear()
+        chatMessages = []
         gameplayPauseListeners.clear()
         leaderboardReceiptListeners.clear()
         modCatalogListeners.clear()
@@ -534,6 +572,9 @@ export function connectGameClientSession(
       getBoneyard() {
         return loadedBoneyard
       },
+      getChatMessages() {
+        return chatMessages
+      },
       getGameplayPause() {
         return gameplayPause
       },
@@ -560,6 +601,14 @@ export function connectGameClientSession(
       onBoneyard(listener) {
         boneyardListeners.add(listener)
         return () => boneyardListeners.delete(listener)
+      },
+      onChatMessage(listener) {
+        chatMessageListeners.add(listener)
+        return () => chatMessageListeners.delete(listener)
+      },
+      onChatRejected(listener) {
+        chatRejectionListeners.add(listener)
+        return () => chatRejectionListeners.delete(listener)
       },
       onGameplayPause(listener) {
         gameplayPauseListeners.add(listener)
@@ -781,6 +830,14 @@ export function connectGameClientSession(
         options.transport.send(encodeGameMessage({
           type: 'client-select-primary-skill',
           skillId,
+        }))
+      },
+      sendChatMessage(channel, text) {
+        if (!welcome || destroyed) return
+        options.transport.send(encodeGameMessage({
+          type: 'client-chat',
+          channel,
+          text: normalizeGameChatText(text),
         }))
       },
       sendHubAction(action) {

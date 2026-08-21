@@ -1,7 +1,8 @@
 # Solomon Dark rebuilt runtime architecture
 
-Status: accepted; authoritative, GPU-client, shared-Hub party, desktop-solo,
-headless-crowd, and compact-replication slices implemented, 2026-08-20
+Status: accepted; authoritative, GPU-client, shared-Hub party/chat,
+desktop-solo, headless-crowd, and compact-replication slices implemented,
+2026-08-21
 
 This document records the load-bearing runtime decisions for the rebuilt game.
 It does not replace `game-native-parity-re.md`: the native game remains the
@@ -46,6 +47,14 @@ and sends the player through ordinary shared-Hub admission. It does not expose
 internal singleton memberships, invitations, credentials, content manifests,
 private sessions, or a direct join edge. No launcher transport participates in
 the rebuilt browser game's party model.
+
+The same authenticated gameplay connection carries ephemeral text chat. A
+public-Hub singleton sees Global; a grouped Hub participant defaults to Party
+and may switch to Global; a Boneyard exposes Party only. Global reaches only
+clients currently resident in the shared Hub. Party reaches only current
+members of the sender's authoritative party, across the Hub-to-run transition.
+There is no browser transcript service, whisper directory, cross-party route,
+or chat persistence in saves.
 
 ## Shared identities and boundaries
 
@@ -93,6 +102,13 @@ moves a singleton participant into the inviter's party; it never derives
 authority from connection order. Leader disconnect promotes the earliest
 remaining member. Invitations are invalidated when either endpoint disappears,
 the target ceases to be a singleton, or the party starts a run.
+
+Chat identity is never a fifth client-provided identity. A client chat command
+contains only a channel and bounded text. The host derives player ID and
+display name from the authenticated socket, resolves recipients against the
+current party/world graph, allocates the ordered chat sequence, and echoes the
+authoritative event. Client history is an 80-event presentation buffer, not an
+authority store.
 
 The browser supervisor owns one shared-Hub host for its process lifetime and a
 bounded set of single-use admission tickets. It does not create one host per
@@ -186,6 +202,11 @@ dependencies without revisiting this release invariant.
   reproducibly. Cross-platform bit-identical floating-point results are useful
   measurements, not a correctness dependency. There is no fixed-point or
   lockstep requirement unless redundant cross-machine authority is introduced.
+- Chat is a transport/UI sideband outside the fixed-step simulation, snapshots,
+  saves, Hall eligibility, and Lua state. Opening the HTML composer stops only
+  that client's gameplay input; it does not acquire the world pause lane. Its
+  five-second readable hold and fade are client-local wall-clock presentation,
+  refreshed by local or authoritative incoming activity.
 
 ## Protocol and transport rails
 
@@ -263,6 +284,16 @@ nonce ping that the host echoes immediately outside the simulation and snapshot
 clocks. The measurement is client-local diagnostics state and never enters an
 authoritative world snapshot.
 
+Protocol 49 adds the chat sideband. Client text is trimmed, nonempty,
+control-character-free, and bounded to 180 UTF-16 code units and 512 UTF-8
+bytes. The host admits five messages per authenticated client in a rolling
+five-second window, returns a bounded rejection for a valid but unavailable or
+rate-limited request, and does not log message content. Global routing requires
+the sender and recipients to remain in the shared Hub; Party routing derives
+the current party membership at receipt time. Chat events are not snapshot
+deltas and gaps in their host-global sequence are expected when other parties
+receive intervening messages.
+
 ## Saves, identity, and content
 
 - The authoritative game host is the only producer of browser-save contents.
@@ -324,7 +355,8 @@ never accepted from a gameplay packet or exposed in a snapshot.
 
 When the authoritative simulation archives a completed Hall row, the host
 serializes the immutable row with that account id and signs the opaque payload
-with a domain-separated HMAC. Protocol 47 carries only the signed receipt to
+with a domain-separated HMAC. Protocol 47 introduced the signed receipt carried
+only to
 the matching client. The leaderboard API accepts only that receipt, verifies
 its signature and account id against the caller's JWT, revalidates every Hall
 bound, and persists the sealed values. The browser cannot choose score fields,
@@ -349,6 +381,11 @@ There is one composed client, not one DOM client and one canvas client.
   transparent semantic controls, focus, gamepad/touch routing, status text, and
   the HUD; those overlays are input/accessibility surfaces, not a second visual
   game renderer.
+- Player-authored chat is deliberately an HTML overlay: its real focusable
+  `<input>` supports IME and the Steam Deck on-screen keyboard, while its
+  semantic live region and textual channel labels remain usable without color.
+  `T` opens chat by explicit product policy; the otherwise stock SkillScreen
+  remains on its HUD tome and uses `K` as the Website keyboard shortcut.
 - The Courtyard and Boneyard worlds and cameras now render through PixiJS
   WebGL canvases.
   Native draw plans, blend operations, frame selectors, render offsets, and

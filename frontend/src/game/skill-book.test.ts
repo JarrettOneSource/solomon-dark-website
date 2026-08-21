@@ -127,6 +127,6 @@ test('renderer owns the stock screen chrome, draggable primary/secondary frames,
   assert.match(scene, /current\.maximumMana === next\.maximumMana/)
   assert.doesNotMatch(hud, /SecondaryAbilityBelt/)
   assert.match(scene, /onAssignQuickbarSkill=\{session\.bindSkillQuickbar\}/)
-  assert.match(hubScene, /event\.code !== 'KeyT'/)
-  assert.match(boneyardScene, /event\.code !== 'KeyT'/)
+  assert.match(hubScene, /event\.code !== 'KeyK'/)
+  assert.match(boneyardScene, /event\.code !== 'KeyK'/)
 })

@@ -58,7 +58,7 @@ test('owns both requested transitions through destination renderer readiness', (
   )
   assert.match(
     mainScene,
-    /const sceneInputBlocked = loading !== null[\s\S]*\|\| levelUpModalActive[\s\S]*\|\| skillBookOpen[\s\S]*\|\| \(gameplayPause !== null && !ownsActiveInventoryPause\)/,
+    /const sceneInputBlocked = chatOpen[\s\S]*\|\| loading !== null[\s\S]*\|\| levelUpModalActive[\s\S]*\|\| skillBookOpen[\s\S]*\|\| \(gameplayPause !== null && !ownsActiveInventoryPause\)/,
   )
   assert.match(mainScene, /onReady=\{finishHubLoading\}/)
   assert.match(mainScene, /onReady=\{finishBoneyardLoading\}/)

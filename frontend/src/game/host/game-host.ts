@@ -56,6 +56,7 @@ import {
   decodeClientGameMessage,
   encodeGameMessage,
   type GameContentManifest,
+  type GameChatChannel,
   type GameplayPauseState,
   type ServerDisconnectMessage,
 } from '../protocol/game-protocol.ts'
@@ -125,6 +126,8 @@ import {
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost'])
 const GAME_SAVE_CHECKPOINT_TICKS = GAME_TICK_RATE * 5
+const GAME_CHAT_RATE_LIMIT = 5
+const GAME_CHAT_RATE_WINDOW_MS = 5_000
 
 export type GameHostAuthentication =
   | { kind: 'shared'; credential: string; leaderboardUserId?: number | null }
@@ -209,6 +212,7 @@ interface HostClient {
   acknowledgedSequence: number
   acknowledgedSnapshotSequence: number
   activeInput: PlayerCharacterInput
+  chatSentAtMs: number[]
   connectedAtMs: number
   displayName: string
   forceReplicationKeyframe: boolean
@@ -268,6 +272,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   let nextPlayerId = 1
   let hostPlayerId: PlayerId | null = null
   let loadedBoneyard: LoadedBoneyard | null = null
+  let nextChatSequence = 1
   let nextSnapshotSequence = 1
   let nextSaveSequence = 1
   let lastSaveDocument: string | null = null
@@ -615,6 +620,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           acknowledgedSequence: 0,
           acknowledgedSnapshotSequence: snapshotSequence,
           activeInput: createIdlePlayerCharacterInput(),
+          chatSentAtMs: [],
           connectedAtMs: Date.now(),
           displayName: message.character.displayName,
           forceReplicationKeyframe: false,
@@ -932,6 +938,44 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         if (applied.accepted) publishSaveCheckpoint('hub-action')
         return
       }
+      if (message.type === 'client-chat') {
+        const recipients = chatRecipients(client, message.channel)
+        if (!recipients) {
+          socket.send(encodeGameMessage({
+            type: 'server-chat-rejected',
+            channel: message.channel,
+            reason: 'channel-unavailable',
+            retryAfterMs: 0,
+          }))
+          return
+        }
+        const nowMs = Date.now()
+        const retryAfterMs = chatRateRetryAfter(client, nowMs)
+        if (retryAfterMs > 0) {
+          socket.send(encodeGameMessage({
+            type: 'server-chat-rejected',
+            channel: message.channel,
+            reason: 'rate-limited',
+            retryAfterMs,
+          }))
+          return
+        }
+        const encoded = encodeGameMessage({
+          type: 'server-chat',
+          channel: message.channel,
+          sender: {
+            displayName: client.displayName,
+            playerId: client.playerId,
+          },
+          sequence: nextChatSequence,
+          text: message.text,
+        })
+        nextChatSequence += 1
+        for (const recipient of recipients) {
+          if (recipient.socket.readyState === WebSocket.OPEN) recipient.socket.send(encoded)
+        }
+        return
+      }
       if (message.type === 'client-party-invite') {
         if (!sharedWorlds) return
         const result = inviteSharedPartyPlayer(
@@ -1245,6 +1289,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           state = createInitialSimulation(options.createSimulation)
           nextPlayerId = 1
           loadedBoneyard = null
+          nextChatSequence = 1
           nextSnapshotSequence = 1
           nextSaveSequence = 1
           lastSaveDocument = null
@@ -1733,6 +1778,40 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         && stateForPlayer(client.playerId) === playerState
       ) client.socket.send(encodeGameMessage(message))
     }
+  }
+
+  function chatRecipients(
+    sender: HostClient,
+    channel: GameChatChannel,
+  ): readonly HostClient[] | null {
+    if (channel === 'global') {
+      if (!sharedWorlds || stateForPlayer(sender.playerId).world.kind !== 'hub') return null
+      return [...clients.values()].filter(client => (
+        stateForPlayer(client.playerId).world.kind === 'hub'
+      ))
+    }
+    if (!sharedWorlds) {
+      const senderState = stateForPlayer(sender.playerId)
+      return [...clients.values()].filter(client => (
+        stateForPlayer(client.playerId) === senderState
+      ))
+    }
+    const party = partyForPlayer(sharedWorlds.parties, sender.playerId)
+    if (!party) return null
+    const memberPlayerIds = new Set(party.memberPlayerIds)
+    return [...clients.values()].filter(client => memberPlayerIds.has(client.playerId))
+  }
+
+  function chatRateRetryAfter(client: HostClient, nowMs: number): number {
+    const cutoffMs = nowMs - GAME_CHAT_RATE_WINDOW_MS
+    while (client.chatSentAtMs[0] !== undefined && client.chatSentAtMs[0] <= cutoffMs) {
+      client.chatSentAtMs.shift()
+    }
+    if (client.chatSentAtMs.length >= GAME_CHAT_RATE_LIMIT) {
+      return Math.max(1, client.chatSentAtMs[0]! + GAME_CHAT_RATE_WINDOW_MS - nowMs)
+    }
+    client.chatSentAtMs.push(nowMs)
+    return 0
   }
 
   function stopAllClientInputs(): void {
