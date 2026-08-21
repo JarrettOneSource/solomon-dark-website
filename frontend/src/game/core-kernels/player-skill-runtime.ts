@@ -76,6 +76,7 @@ export interface PlayerSkillDerivedStats {
   readonly castProgressFactor: number
   readonly damageResistance: number
   readonly deflectChancePercent: number
+  readonly experienceBonus: number
   readonly flashChancePercent: number
   readonly flashDurationTicks: number
   readonly focusInstantRechargeChancePercent: number
@@ -91,7 +92,9 @@ export interface PlayerSkillDerivedStats {
   readonly meditationRecoveryMultiplier: number
   readonly movementFactor: number
   readonly offensiveDamageFactor: number
+  readonly offensiveDamageFlat: number
   readonly offensiveManaCostFactor: number
+  readonly offensiveManaCostReduction: number
   readonly orbPullMultiplier: number
   readonly pickupRangeScalar: number
   readonly poisonResistance: number
@@ -285,6 +288,7 @@ export function playerSkillDerivedStats(
     castProgressFactor,
     damageResistance: clampUnit(modifiers.damageResistance),
     deflectChancePercent: staffEquipped ? value(68, 'mValue') : 0,
+    experienceBonus: economy.unforgeBonuses.experience,
     flashChancePercent: value(53, 'mChance'),
     flashDurationTicks: Math.round(value(53, 'mDuration') * 100),
     focusInstantRechargeChancePercent: selected(60) ? value(60, 'mConcentration') : 0,
@@ -307,13 +311,13 @@ export function playerSkillDerivedStats(
     maximumHealth: Math.fround(
       applyNativeEquipmentTransform(
         modifiers.maximumHealth,
-        PLAYER_INITIAL_HEALTH + value(64, 'mValue'),
+        PLAYER_INITIAL_HEALTH + economy.unforgeBonuses.maximumHealth + value(64, 'mValue'),
       ) * lifeCharmFactor,
     ),
     maximumMana: Math.fround(
       applyNativeEquipmentTransform(
         modifiers.maximumMana,
-        PLAYER_INITIAL_MANA + value(56, 'mValue'),
+        PLAYER_INITIAL_MANA + economy.unforgeBonuses.maximumMana + value(56, 'mValue'),
       ) * manaCharmFactor,
     ),
     meditationConcentrated: selected(58),
@@ -324,7 +328,9 @@ export function playerSkillDerivedStats(
       (1 + rush / 100) * (selected(67) ? 1 + value(67, 'mConcentration') / 100 : 1),
     ),
     offensiveDamageFactor,
+    offensiveDamageFlat: economy.unforgeBonuses.offensiveDamage,
     offensiveManaCostFactor,
+    offensiveManaCostReduction: economy.unforgeBonuses.manaCostReduction,
     orbPullMultiplier: modifiers.orbPullMultiplier,
     pickupRangeScalar: telekinesis * (selected(66) ? 2.5 : 1.25),
     poisonResistance: clampUnit(
@@ -502,6 +508,8 @@ export function playerStaffDamage(
     {
       damage: derived.offensiveDamageFactor,
       equipment: runtime.equipmentModifiers,
+      globalFlatDamage: derived.offensiveDamageFlat,
+      globalManaReduction: derived.offensiveManaCostReduction,
       manaCost: derived.offensiveManaCostFactor,
     },
   )

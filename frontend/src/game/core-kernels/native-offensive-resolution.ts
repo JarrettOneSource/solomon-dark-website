@@ -20,6 +20,8 @@ const NATIVE_OFFENSIVE_SKILL_ID_SET = new Set<number>(NATIVE_OFFENSIVE_SKILL_IDS
 export interface NativeOffensiveSpellFactors {
   readonly damage: number
   readonly equipment?: NativeEquipmentModifiers
+  readonly globalFlatDamage?: number
+  readonly globalManaReduction?: number
   readonly manaCost: number
 }
 
@@ -66,6 +68,9 @@ export function resolveNativeSkillDamage(
     valueOr(lanes.actorBaseDamage, 0, 'actor base damage')
     + baseDamage
     + valueOr(lanes.globalFlatDamage, 0, 'global flat damage')
+    + (nativeSkillIsOffensive(skillId)
+      ? valueOr(factors.globalFlatDamage, 0, 'unforge global flat damage')
+      : 0)
     + valueOr(lanes.skillFlatDamage, 0, 'skill flat damage')
     + valueOr(lanes.classFlatDamage, 0, 'class flat damage')
     + (equipment?.globalDamageFlat ?? 0)
@@ -95,7 +100,9 @@ export function resolveNativeSkillManaCost(
   const classId = nativeOffensiveSkillClass(skillId)
   let cost = Math.max(
     1,
-    baseManaCost - valueOr(lanes.globalManaReduction, 0, 'global mana reduction'),
+    baseManaCost
+      - valueOr(lanes.globalManaReduction, 0, 'global mana reduction')
+      - valueOr(factors.globalManaReduction, 0, 'unforge global mana reduction'),
   )
   if (nativeSkillIsOffensive(skillId)) cost *= factors.manaCost
   cost = (
@@ -162,6 +169,14 @@ export function validateOffensiveFactors(factors: NativeOffensiveSpellFactors): 
   }
   if (!Number.isFinite(factors.manaCost) || factors.manaCost < 0) {
     throw new RangeError('offensive mana factor must be finite and non-negative')
+  }
+  if (factors.globalFlatDamage !== undefined
+    && (!Number.isFinite(factors.globalFlatDamage) || factors.globalFlatDamage < 0)) {
+    throw new RangeError('global flat damage must be finite and non-negative')
+  }
+  if (factors.globalManaReduction !== undefined
+    && (!Number.isFinite(factors.globalManaReduction) || factors.globalManaReduction < 0)) {
+    throw new RangeError('global mana reduction must be finite and non-negative')
   }
 }
 

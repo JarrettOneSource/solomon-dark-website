@@ -3,6 +3,8 @@ import { writeFile } from 'node:fs/promises'
 
 import { chromium } from 'playwright-core'
 
+import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
+
 import {
   hubPortalAt,
   isHubRegionTraversable,
@@ -27,6 +29,7 @@ const hostPage = await browser.newPage({ viewport: { width: 1600, height: 900 } 
 const guestPage = await browser.newPage({ viewport: { width: 960, height: 540 } })
 const browserErrors = []
 for (const page of [hostPage, guestPage]) {
+  await page.addInitScript(installGameAudioSmokeProbe)
   await page.addInitScript(bypassStartupAudioPreload)
   await page.addInitScript(() => {
     const NativeWebSocket = window.WebSocket
@@ -374,6 +377,16 @@ try {
   await inventory.waitFor()
   await waitForNativeSurfaceSettled(inventory)
   assert.equal(await inventory.getByRole('button', { name: /^Equip / }).count(), 0)
+  const unforgeTintSamples = []
+  for (let sample = 0; sample < 6; sample += 1) {
+    unforgeTintSamples.push(await inventory.locator('canvas.hub-inventory-native-canvas').evaluate((canvas) => (
+      Number.parseInt(canvas.dataset.nativeUnforgeTint ?? '', 16)
+    )))
+    await hostPage.waitForTimeout(220)
+  }
+  assert.ok(unforgeTintSamples.every(Number.isFinite), JSON.stringify(unforgeTintSamples))
+  assert.ok(new Set(unforgeTintSamples).size >= 3, JSON.stringify(unforgeTintSamples))
+  assert.ok(unforgeTintSamples.every((tint) => (tint & 0xffff) === 0xffff), JSON.stringify(unforgeTintSamples))
 
   const equipmentItem = inventory.getByLabel('Backpack').getByRole('button', {
     name: `${dowsingItem.name}, quantity 1`,
@@ -411,7 +424,51 @@ try {
       name: `${equipmentSlotLabel(equipmentSlot)}, empty`,
     }).first().waitFor()
   }
-  await inventory.getByRole('button', { name: 'Done' }).click()
+  assert.equal(await inventory.getByRole('button', { name: 'Done' }).count(), 0)
+  await clickInventoryStagePoint(hostPage, inventory, { x: 1562, y: 868 })
+  await inventory.waitFor()
+  await equipmentItem.waitFor()
+
+  await dragInventoryPointer(hostPage, inventory, equipmentItem, { x: 1550, y: 450 })
+  await equipmentItem.waitFor()
+  assert.equal(await inventory.getByRole('alert').count(), 0)
+  await dragInventoryPointer(hostPage, inventory, equipmentItem, { x: 1000, y: 850 })
+  await equipmentItem.waitFor()
+  assert.equal(await inventory.getByRole('alert').count(), 0)
+
+  await dragInventoryPointer(hostPage, inventory, equipmentItem, { x: 1550, y: 850 })
+  let unforgeNotice = inventory.getByRole('alert')
+  await unforgeNotice.waitFor()
+  assert.match(await unforgeNotice.innerText(), /REALLY UNFORGE THIS\?/)
+  assert.match(await unforgeNotice.innerText(), /utterly destroys the item/i)
+  await waitForNativeNoticeSettled(inventory)
+  await hostPage.screenshot({ path: `${screenshotRoot}-inventory-unforge-confirm.png` })
+  await inventory.getByRole('button', { name: 'CANCEL' }).click()
+  await equipmentItem.waitFor()
+  assert.equal(await inventory.getByRole('alert').count(), 0)
+
+  const unforgeAudioStart = await hostPage.evaluate(() => window.__sdrAudioEvents.length)
+  await dragInventoryPointer(hostPage, inventory, equipmentItem, { x: 1550, y: 850 })
+  await inventory.getByRole('button', { name: 'UNFORGE' }).click()
+  unforgeNotice = inventory.getByRole('alert')
+  await unforgeNotice.waitFor()
+  await waitForNativeNoticeSettled(inventory)
+  const unforgeText = await unforgeNotice.innerText()
+  assert.match(unforgeText, /UNFORGED|FAILED UNFORGING!/)
+  assert.match(unforgeText, /Unforging bonus:|Spellbreaking fizzles!/)
+  const expectedUnforgeCue = unforgeText.includes('FAILED UNFORGING!') ? 'fizzle.wav' : 'unforge.wav'
+  await hostPage.waitForFunction(({ start, cue }) => (
+    window.__sdrAudioEvents.slice(start).some((event) => (
+      event.type === 'buffer-start'
+      && window.__sdrAudioSourceMatches(event.src, cue)
+    ))
+  ), { start: unforgeAudioStart, cue: expectedUnforgeCue })
+  await hostPage.screenshot({ path: `${screenshotRoot}-inventory-unforge-result.png` })
+  await inventory.getByRole('button', { name: 'OKAY' }).click()
+  await equipmentItem.waitFor({ state: 'detached' })
+  finalHostGold = await dialogGold(inventory)
+  step(`native unforge corner, cancel, destruction, result, and ${expectedUnforgeCue} complete`)
+  await closeInventory(hostPage, inventory)
 
   assert.equal(await inventoryGold(hostPage), finalHostGold)
   await focusPage(guestPage)
@@ -528,7 +585,7 @@ async function inventoryGold(page) {
   await inventory.waitFor()
   await waitForNativeSurfaceSettled(inventory)
   const gold = await dialogGold(inventory)
-  await inventory.getByRole('button', { name: 'Done' }).click()
+  await closeInventory(page, inventory)
   return gold
 }
 
@@ -599,7 +656,7 @@ async function exerciseStarterInventory(page) {
   await page.screenshot({ path: `${screenshotRoot}-inventory-hat-warning.png` })
   await inventory.getByRole('button', { name: 'OKAY' }).click()
   await inventory.getByRole('button', { exact: true, name: 'Hat, Hat' }).waitFor()
-  await inventory.getByRole('button', { name: 'Done' }).click()
+  await closeInventory(page, inventory)
   step('native drag, invalid release, and protected Hat branches complete')
 }
 
@@ -609,11 +666,29 @@ async function assertBackpackQuantity(page, name, quantity) {
   await inventory.waitFor()
   await waitForNativeSurfaceSettled(inventory)
   assert.equal(await inventory.getByLabel(`${name}, quantity ${quantity}`).count(), 1)
-  await inventory.getByRole('button', { name: 'Done' }).click()
+  await closeInventory(page, inventory)
 }
 
 async function dialogGold(dialog) {
   return Number(await dialog.locator('[data-player-gold]').getAttribute('data-player-gold'))
+}
+
+async function closeInventory(page, inventory) {
+  assert.equal(await inventory.getByRole('button', { name: 'Done' }).count(), 0)
+  await page.keyboard.press('i')
+  await inventory.waitFor({ state: 'hidden' })
+  await page.locator(
+    '.hub-scene[data-gameplay-input-blocked="false"][data-presentation-paused="false"]',
+  ).waitFor({ timeout: 10_000 })
+}
+
+async function clickInventoryStagePoint(page, inventory, point) {
+  const stageBox = await inventory.boundingBox()
+  assert.ok(stageBox, 'inventory stage has no browser geometry')
+  await page.mouse.click(
+    stageBox.x + point.x / 1600 * stageBox.width,
+    stageBox.y + point.y / 900 * stageBox.height,
+  )
 }
 
 async function waitForDialogGold(dialog, expected) {

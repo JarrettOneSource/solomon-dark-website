@@ -263,6 +263,7 @@ function protocolPlayerState(
       revision: economy.revision,
       storage: economy.storage.map(protocolInventoryItem),
       tonicPurchases: economy.tonicPurchases,
+      unforgeBonuses: { ...economy.unforgeBonuses },
     },
     lighting: {
       driveActive: playerLightDriveActive(player.primaryCast, progression.lifeState),

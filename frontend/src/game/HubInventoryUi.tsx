@@ -14,11 +14,14 @@ import {
 import nativeAssetsJson from '../assets/game/hub-trader-native-assets.json' with { type: 'json' }
 import {
   DOWSING_EQUIPMENT_RECIPES,
+  nativeInventoryItemCanUnforge,
+  nativeUnforgeOutcomeText,
   type EquipmentSlot,
   type HubInventoryAction,
   type HubInventoryItem,
   type HubShopItem,
   type HubTraderId,
+  type NativeUnforgeOutcome,
 } from './core-kernels/hub-economy.ts'
 import type { HubRegionId } from './core-kernels/hub-regions.ts'
 import type { PlayerCharacterConfig } from './core-kernels/player-character.ts'
@@ -53,6 +56,9 @@ import {
   HUB_NATIVE_UI_SIZE,
   HUB_NATIVE_UI_TIMING,
   HUB_ROBE_REMOVAL_MSGBOX,
+  HUB_UNFORGE_CONFIRMATION,
+  HUB_UNFORGE_RESULT,
+  HUB_UNFORGE_TARGET,
   HUB_SHOP_GRID,
   HUB_SHOP_PANEL,
   hubDowsingSlotPosition,
@@ -84,6 +90,30 @@ const EQUIPMENT_SLOT_ORDER: readonly EquipmentSlot[] = [
 interface HubServiceSelection {
   readonly id: number
   readonly owner: 'storage' | null
+}
+
+interface HubInventoryUiNotice extends HubInventoryRendererNotice {
+  readonly unforgeItemId?: number
+}
+
+const HUB_UNFORGE_CONFIRMATION_NOTICE: HubInventoryRendererNotice = {
+  actionLabel: 'UNFORGE',
+  body: 'Unforging grants you a permanent small bonus to your stats, but utterly destroys the item.',
+  secondaryActionLabel: 'CANCEL',
+  title: 'REALLY UNFORGE THIS?',
+  variant: 'unforge-confirmation',
+}
+
+function unforgeResultNotice(outcome: NativeUnforgeOutcome): HubInventoryUiNotice {
+  const failed = outcome.kind === 'fizzle'
+  return {
+    actionLabel: 'OKAY',
+    body: nativeUnforgeOutcomeText(outcome),
+    outcomeTint: failed ? 0xff4040 : 0x40ff40,
+    summary: failed ? 'Spellbreaking fizzles!' : 'Unforging bonus:',
+    title: failed ? 'FAILED UNFORGING!' : `${outcome.itemName.toUpperCase()} UNFORGED`,
+    variant: 'unforge-result',
+  }
 }
 
 export type HubUiSurface =
@@ -152,7 +182,10 @@ export default function HubInventoryUi({
   useEffect(() => {
     const keyDown = (event: KeyboardEvent) => {
       if (event.repeat) return
-      if (event.key === 'Escape' && surface) {
+      if (surface && (
+        event.key === 'Escape'
+        || (surface.kind === 'inventory' && event.code === 'KeyI')
+      )) {
         event.preventDefault()
         event.stopPropagation()
         if (surface.kind !== 'dialogue') audio.playSound('open-panel')
@@ -231,7 +264,7 @@ function NativeHubSurface({
   const revealStartedAtRef = useRef<number | null>(null)
   const chatCompletionHandledRef = useRef(false)
   const [rendererState, setRendererState] = useState<'error' | 'loading' | 'ready'>('loading')
-  const [notice, setNotice] = useState<HubInventoryRendererNotice | null>(null)
+  const [notice, setNotice] = useState<HubInventoryUiNotice | null>(null)
   const [chat, setChat] = useState<{
     acceleratedAtMs: number | null
     phase: HubTraderChatPhase
@@ -246,6 +279,15 @@ function NativeHubSurface({
     const feedback = economy.actionFeedback
     if (!feedback || feedback.sequence <= feedbackSequenceRef.current) return
     feedbackSequenceRef.current = feedback.sequence
+    if (feedback.action === 'unforge') {
+      if (!feedback.accepted || !feedback.unforgeOutcome) {
+        audio.playSound('bad-action')
+        return
+      }
+      audio.playSound(feedback.unforgeOutcome.kind === 'fizzle' ? 'fizzle' : 'unforge')
+      setNotice(unforgeResultNotice(feedback.unforgeOutcome))
+      return
+    }
     if (!feedback.accepted) {
       audio.playSound('bad-action')
       return
@@ -448,13 +490,30 @@ function NativeHubSurface({
         {notice ? (
           <>
             <span className="hub-native-ui-semantic" role="alert">
-              {notice.title} {notice.body}
+              {notice.title} {notice.summary ? `${notice.summary} ` : ''}{notice.body}
             </span>
             <NativeAction
               label={notice.actionLabel}
-              rect={HUB_DOWSING_MSGBOX.primaryButtonRect}
-              onClick={() => click(() => setNotice(null))}
+              rect={notice.variant === 'unforge-confirmation'
+                ? HUB_UNFORGE_CONFIRMATION.primaryButtonRect
+                : notice.variant === 'unforge-result'
+                  ? HUB_UNFORGE_RESULT.primaryButtonRect
+                  : HUB_DOWSING_MSGBOX.primaryButtonRect}
+              onClick={() => click(() => {
+                if (notice.variant === 'unforge-confirmation'
+                  && notice.unforgeItemId !== undefined) {
+                  onAction({ type: 'unforge', itemId: notice.unforgeItemId })
+                }
+                setNotice(null)
+              })}
             />
+            {notice.variant === 'unforge-confirmation' ? (
+              <NativeAction
+                label={notice.secondaryActionLabel ?? 'CANCEL'}
+                rect={HUB_UNFORGE_CONFIRMATION.secondaryButtonRect}
+                onClick={() => click(() => setNotice(null))}
+              />
+            ) : null}
           </>
         ) : surface.kind === 'dialogue' ? (
           <DialogueActions
@@ -479,7 +538,8 @@ function NativeHubSurface({
               onAction(action)
             }}
             onInventoryAction={(action) => {
-              if (action.type !== 'consume' && action.type !== 'transfer') audio.playSound('click')
+              if (action.type !== 'consume' && action.type !== 'transfer'
+                && action.type !== 'unforge') audio.playSound('click')
               onAction(action)
             }}
             onClose={() => {
@@ -504,12 +564,8 @@ function NativeHubSurface({
             economy={economy}
             selection={inventorySelection}
             onAction={(action) => {
-              if (action.type !== 'consume') audio.playSound('click')
+              if (action.type !== 'consume' && action.type !== 'unforge') audio.playSound('click')
               onAction(action)
-            }}
-            onClose={() => {
-              audio.playSound('open-panel')
-              onClose()
             }}
             onDragChange={setInventoryDrag}
             onDragMove={(point) => rendererRef.current?.moveDrag(point)}
@@ -614,7 +670,7 @@ function ServiceActions({
   onInventoryAction: (action: HubInventoryAction) => void
   onInventorySelect: (selection: HubInventorySelectionModel | null) => void
   onInteractionSound: (cue: 'shop-activation' | 'storage-drag-start') => void
-  onNotice: (notice: HubInventoryRendererNotice) => void
+  onNotice: (notice: HubInventoryUiNotice) => void
   onSelect: (selection: HubServiceSelection | null) => void
   selection: HubServiceSelection | null
   trader: HubTraderId
@@ -630,7 +686,6 @@ function ServiceActions({
       companion
       economy={economy}
       selection={inventorySelection}
-      showDone={false}
       storageDropRect={trader === 'luthacus' ? storageDropRect : null}
       onAction={onInventoryAction}
       onDragChange={onDragChange}
@@ -925,25 +980,21 @@ function InventoryActions({
   companion = false,
   economy,
   onAction,
-  onClose,
   onDragChange,
   onDragMove,
   onNotice,
   onSelect,
   selection,
-  showDone = true,
   storageDropRect = null,
 }: {
   companion?: boolean
   economy: ProtocolPlayerEconomy
   onAction: (action: HubInventoryAction) => void
-  onClose?: () => void
   onDragChange: (drag: HubInventoryDragModel | null) => void
   onDragMove: (point: { readonly x: number; readonly y: number }) => void
-  onNotice: (notice: HubInventoryRendererNotice) => void
+  onNotice: (notice: HubInventoryUiNotice) => void
   onSelect: (selection: HubInventorySelectionModel | null) => void
   selection: HubInventorySelectionModel | null
-  showDone?: boolean
   storageDropRect?: readonly [number, number, number, number] | null
 }) {
   const thirdRingUnlocked = economy.ownedPerkSelectors.includes(19)
@@ -1141,9 +1192,6 @@ function InventoryActions({
           />
         ))
       })}
-      {showDone && onClose
-        ? <NativeAction label="Done" rect={[1510, 830, 85, 65]} onClick={onClose} />
-        : null}
     </>
   )
 }
@@ -1198,13 +1246,22 @@ function dropInventorySource(
   economy: ProtocolPlayerEconomy,
   thirdRingUnlocked: boolean,
   onAction: (action: HubInventoryAction) => void,
-  onNotice: (notice: HubInventoryRendererNotice) => void,
+  onNotice: (notice: HubInventoryUiNotice) => void,
   companion: boolean,
   storageDropRect: readonly [number, number, number, number] | null,
 ): void {
   if (source.owner === 'backpack') {
     const item = economy.backpack.find(({ id }) => id === source.itemId)
     if (!item) return
+    if (pointInRect(point, HUB_UNFORGE_TARGET.rect)) {
+      if (!nativeInventoryItemCanUnforge(item)) return
+      if (item.nativeTypeId === 7008) {
+        if ((item.contents?.length ?? 0) === 0) onAction({ type: 'unforge', itemId: item.id })
+        return
+      }
+      onNotice({ ...HUB_UNFORGE_CONFIRMATION_NOTICE, unforgeItemId: item.id })
+      return
+    }
     if (storageDropRect && pointInRect(point, storageDropRect)) {
       onAction({ type: 'transfer', direction: 'to-storage', gesture: 'drag', itemId: item.id })
       return

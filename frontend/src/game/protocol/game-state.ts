@@ -22,6 +22,7 @@ import type {
   HubEquipmentState,
   HubInventoryItem,
   HubShopItem,
+  NativeUnforgeBonuses,
 } from '../core-kernels/hub-economy.ts'
 import type {
   HubParticipantState,
@@ -77,6 +78,7 @@ export interface ProtocolPlayerEconomy {
   revision: number
   storage: readonly HubInventoryItem[]
   tonicPurchases: number
+  unforgeBonuses: NativeUnforgeBonuses
 }
 
 export interface ProtocolPlayerLighting {

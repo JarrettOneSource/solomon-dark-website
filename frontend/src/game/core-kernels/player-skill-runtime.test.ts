@@ -55,6 +55,50 @@ test('pins the complete passive family and concentration membership', () => {
   ])
 })
 
+test('unforge bonuses enter the native base stat and offensive consumer lanes', () => {
+  const book = createPlayerSkillBook(CONFIG)
+  const statBook = playerStatBook()
+  const base = createHubEconomy(1)
+  const economy: HubEconomyState = {
+    ...base,
+    unforgeBonuses: {
+      experience: 0.1,
+      manaCostReduction: 2,
+      maximumHealth: 10,
+      maximumMana: 20,
+      offensiveDamage: 2,
+      recipeAttemptCount: 4,
+    },
+  }
+  const created = createPlayerSkillRuntime(book, statBook, economy)
+  const derived = playerSkillDerivedStats(
+    created.runtime,
+    created.skillBook,
+    statBook,
+    createPlayerProgression(1),
+    economy,
+  )
+  assert.equal(derived.maximumHealth, 60)
+  assert.equal(derived.maximumMana, 120)
+  assert.equal(derived.offensiveDamageFlat, 2)
+  assert.equal(derived.offensiveManaCostReduction, 2)
+  assert.equal(derived.experienceBonus, 0.1)
+
+  const charmedEconomy = { ...economy, ownedPerkSelectors: [0, 1] }
+  const charmed = createPlayerSkillRuntime(book, statBook, charmedEconomy)
+  const charmedDerived = playerSkillDerivedStats(
+    charmed.runtime,
+    charmed.skillBook,
+    statBook,
+    createPlayerProgression(1),
+    charmedEconomy,
+  )
+  assert.deepEqual(
+    [charmedDerived.maximumHealth, charmedDerived.maximumMana],
+    [75, 150],
+  )
+})
+
 test('all sixteen rows resolve their exact rank and concentration scalars', () => {
   const book = rankedBook({
     56: 1, 57: 1, 58: 1, 59: 1, 60: 1, 61: 1, 62: 1, 63: 1,

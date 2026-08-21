@@ -54,6 +54,7 @@ import {
   equipInventoryItem,
   restockFomentius,
   transferInventoryItem,
+  unforgeInventoryItem,
   unequipInventorySlot,
   type HubEconomyRejection,
   type HubEconomyState,
@@ -74,7 +75,9 @@ import {
   resolvePlayerHarmfulContact,
 } from '../core-kernels/player-skill-runtime.ts'
 import {
+  applyNativeUnforgeFullRejuvenation,
   boneyardEnemyExperienceAward,
+  grantNativeUnforgeMindDredge,
   NATIVE_SKILL_CATALOG,
   nativeSkillCategory,
   type PlayerLevelUpBarrierState,
@@ -91,6 +94,7 @@ import {
   applyNativeSecondaryFireBurn,
   applyNativeSecondaryPlayerDamage,
   applyNativeSecondaryTargetEffect,
+  applyNativeUnforgeCooldownRejuvenation,
   createNativeSecondaryPlayerState,
   createNativeSecondarySimulation,
   emitNativePlayerScreenFlash,
@@ -646,12 +650,23 @@ export function applyGameSimulationHubAction(
       case 'buy-hagatha': return buyHagathaPerk(economy, action.selector)
       case 'close-dowsing': {
         const next = closeDowsingOffers(economy)
-        return { accepted: true, dowsingPitch: null, reason: null, state: next }
+        return {
+          accepted: true,
+          dowsingPitch: null,
+          reason: null,
+          state: next,
+          unforgeOutcome: null,
+        }
       }
       case 'consume': return consumeInventoryItem(economy, action.itemId)
       case 'dowse': return dowse(economy, getPlayerProgression(state, playerId).level)
       case 'equip': return equipInventoryItem(economy, action.itemId, action.slot)
       case 'transfer': return transferInventoryItem(economy, action.itemId, action.direction)
+      case 'unforge': return unforgeInventoryItem(
+        economy,
+        action.itemId,
+        getPlayerProgression(state, playerId),
+      )
       case 'unequip': return unequipInventorySlot(economy, action.slot)
     }
   })()
@@ -663,6 +678,7 @@ export function applyGameSimulationHubAction(
     sequence: (economy.actionFeedback?.sequence ?? 0) + 1,
     transferDirection: action.type === 'transfer' ? action.direction : null,
     transferGesture: action.type === 'transfer' ? action.gesture : null,
+    unforgeOutcome: result.unforgeOutcome,
   } as const
   const nextEconomy = {
     ...result.state,
@@ -670,6 +686,7 @@ export function applyGameSimulationHubAction(
     revision: Math.max(result.state.revision, economy.revision + 1),
   }
   let playerEntities = replacePlayerEconomy(state.playerEntities, playerId, nextEconomy)
+  let secondaryAbilities = state.secondaryAbilities
   let world = state.world
   if (result.accepted && action.type === 'consume' && consumedPotion?.nativeSubtype != null) {
     playerEntities = applyPlayerEntityPotionEffect(
@@ -690,12 +707,25 @@ export function applyGameSimulationHubAction(
       }
     }
   }
+  if (result.accepted && action.type === 'unforge' && result.unforgeOutcome) {
+    const index = playerEntityIndex(playerEntities, playerId)
+    const progressions = [...playerEntities.progressions]
+    if (result.unforgeOutcome.kind === 'full-rejuvenation') {
+      progressions[index] = applyNativeUnforgeFullRejuvenation(progressions[index]!)
+      playerEntities = { ...playerEntities, progressions: Object.freeze(progressions) }
+      secondaryAbilities = applyNativeUnforgeCooldownRejuvenation(secondaryAbilities, playerId)
+    } else if (result.unforgeOutcome.kind === 'mind-dredge') {
+      progressions[index] = grantNativeUnforgeMindDredge(progressions[index]!)
+      playerEntities = { ...playerEntities, progressions: Object.freeze(progressions) }
+    }
+  }
   return {
     accepted: result.accepted,
     reason: result.reason,
     state: {
       ...state,
       playerEntities,
+      secondaryAbilities,
       world,
     },
   }
@@ -1337,10 +1367,12 @@ function finishGameSimulationTick(
     }
     const participantIds = levelUpParticipantIds(progressionState)
     if (!participantIds.includes(reward.playerId)) continue
+    const rewardDerived = playerSkillDerivedStatsAt(playerEntities, reward.playerId)
     const creditedExperience = boneyardEnemyExperienceAward({
       arenaPlayerCount: participantIds.length,
       evaluatedActorReward: reward.experience,
       receiverLevel: getPlayerProgression(progressionState, reward.playerId).level,
+      receiverXpBonus: rewardDerived?.experienceBonus ?? 0,
     })
     const awarded = grantSharedGameSimulationExperience(
       progressionState,
@@ -1748,6 +1780,8 @@ function finishGameSimulationTick(
       const offensiveFactors = {
         damage: derived.offensiveDamageFactor,
         equipment: runtime.equipmentModifiers,
+        globalFlatDamage: derived.offensiveDamageFlat,
+        globalManaReduction: derived.offensiveManaCostReduction,
         manaCost: derived.offensiveManaCostFactor,
       }
       return [playerId, {
@@ -2000,6 +2034,8 @@ function finishGameSimulationTick(
         {
           damage: derived.offensiveDamageFactor,
           equipment: runtime.equipmentModifiers,
+          globalFlatDamage: derived.offensiveDamageFlat,
+          globalManaReduction: derived.offensiveManaCostReduction,
           manaCost: derived.offensiveManaCostFactor,
         },
       )
@@ -2083,18 +2119,28 @@ function finishGameSimulationTick(
       return [{
         hurricaneCharge: hurricane.nextCharge,
         hurricaneContactCharge: hurricane.contactCharge,
-        hurricaneDamageMaximum: effectiveSkillNumericValue(
-          skillBook,
-          statBook,
+        hurricaneDamageMaximum: resolveNativeSkillDamageValue(
           29,
-          'mDamage2',
-        ) * derived.offensiveDamageFactor,
-        hurricaneDamageMinimum: effectiveSkillNumericValue(
-          skillBook,
-          statBook,
+          effectiveSkillNumericValue(skillBook, statBook, 29, 'mDamage2'),
+          {
+            damage: derived.offensiveDamageFactor,
+            equipment: runtime.equipmentModifiers,
+            globalFlatDamage: derived.offensiveDamageFlat,
+            globalManaReduction: derived.offensiveManaCostReduction,
+            manaCost: derived.offensiveManaCostFactor,
+          },
+        ),
+        hurricaneDamageMinimum: resolveNativeSkillDamageValue(
           29,
-          'mDamage1',
-        ) * derived.offensiveDamageFactor,
+          effectiveSkillNumericValue(skillBook, statBook, 29, 'mDamage1'),
+          {
+            damage: derived.offensiveDamageFactor,
+            equipment: runtime.equipmentModifiers,
+            globalFlatDamage: derived.offensiveDamageFlat,
+            globalManaReduction: derived.offensiveManaCostReduction,
+            manaCost: derived.offensiveManaCostFactor,
+          },
+        ),
         ownerId: playerId,
         position: player.position,
         worldKey: result.world.kind === 'hub'
@@ -2384,6 +2430,7 @@ function traderForAction(action: HubInventoryAction): HubTraderId | null {
     case 'close-dowsing':
     case 'consume':
     case 'equip':
+    case 'unforge':
     case 'unequip': return null
   }
 }

@@ -126,6 +126,7 @@ import throwLightning2 from '../assets/game/audio/sfx/throw-lightning-2.wav'
 import throwDirt1 from '../assets/game/audio/sfx/throw-dirt-1.wav'
 import throwDirt2 from '../assets/game/audio/sfx/throw-dirt-2.wav'
 import unlockSkill from '../assets/game/audio/sfx/unlockskill.wav'
+import unforge from '../assets/game/audio/sfx/unforge.wav'
 import wizardOuch1 from '../assets/game/audio/sfx/wizard-ouch-1.wav'
 import wizardOuch2 from '../assets/game/audio/sfx/wizard-ouch-2.wav'
 import wizardOuch3 from '../assets/game/audio/sfx/wizard-ouch-3.wav'
@@ -276,6 +277,7 @@ export const GAME_AUDIO_SOURCES = {
     'throw-lightning-1': throwLightning1,
     'throw-lightning-2': throwLightning2,
     'unlock-skill': unlockSkill,
+    unforge,
     'wizard-ouch-1': wizardOuch1,
     'wizard-ouch-2': wizardOuch2,
     'wizard-ouch-3': wizardOuch3,

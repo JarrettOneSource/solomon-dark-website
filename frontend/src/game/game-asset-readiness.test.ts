@@ -324,6 +324,9 @@ test('locks every native primary-cast extraction in one asset manifest', () => {
     'audio/sfx/fizzle.wav': {
       sha256: '938420950d859ebc00a9b1a37e548c7c2183a8504689b32aab3de3c683899e76',
     },
+    'audio/sfx/unforge.wav': {
+      sha256: '173db629737f50f3a958358dc9f88fb3b25528ee93298f2f95416517747fa9e2',
+    },
     'element-vfx-core.png': {
       dimensions: [27, 26],
       sha256: 'dc85c8e39483f4256ec7b28240d33a15b6966c0e997554598f19091d7a4c189f',

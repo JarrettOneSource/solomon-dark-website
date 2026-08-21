@@ -563,6 +563,27 @@ export function applyPlayerPotionEffect(
   }
 }
 
+export function applyNativeUnforgeFullRejuvenation(
+  source: PlayerProgressionComponent,
+): PlayerProgressionComponent {
+  return {
+    ...source,
+    currentHealth: source.maximumHealth,
+    currentMana: source.maximumMana,
+    revision: source.revision + 1,
+  }
+}
+
+export function grantNativeUnforgeMindDredge(
+  source: PlayerProgressionComponent,
+): PlayerProgressionComponent {
+  return {
+    ...source,
+    deferredSkillChoices: source.deferredSkillChoices + 1,
+    revision: source.revision + 1,
+  }
+}
+
 export function stepPlayerPotionEffects(
   source: PlayerProgressionComponent,
 ): PlayerProgressionComponent {

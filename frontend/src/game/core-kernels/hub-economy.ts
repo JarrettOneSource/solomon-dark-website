@@ -11,6 +11,9 @@ export const HUB_INVENTORY_SLOT_CAPACITY = 88
 export const NATIVE_LOOT_BACKPACK_REPLICATION_LIMIT = 2_048
 export const HUB_STORAGE_SLOT_CAPACITY = 28
 export const SHLORIO_INITIAL_DOWSING_FEE = 650
+export const NATIVE_UNFORGE_ELIGIBLE_TYPE_IDS = [
+  7002, 7003, 7004, 7005, 7006, 7008, 7011,
+] as const
 
 export type EquipmentType = 'amulet' | 'hat' | 'ring' | 'robe' | 'staff' | 'wand'
 export type EquipmentSlot = 'amulet' | 'hat' | 'ring-0' | 'ring-1' | 'ring-2' | 'robe' | 'weapon'
@@ -32,6 +35,7 @@ export type HubInventoryAction =
       readonly gesture: 'double-activation' | 'drag'
       readonly itemId: number
     }
+  | { readonly type: 'unforge'; readonly itemId: number }
   | { readonly type: 'unequip'; readonly slot: EquipmentSlot }
 export type HubItemKind =
   | 'antidote'
@@ -133,6 +137,36 @@ export interface HubActionFeedback {
   readonly sequence: number
   readonly transferDirection: 'to-backpack' | 'to-storage' | null
   readonly transferGesture: 'double-activation' | 'drag' | null
+  readonly unforgeOutcome: NativeUnforgeOutcome | null
+}
+
+export const NATIVE_UNFORGE_OUTCOME_KINDS = [
+  'experience',
+  'fizzle',
+  'full-rejuvenation',
+  'gold',
+  'mana-cost',
+  'maximum-health',
+  'maximum-mana',
+  'mind-dredge',
+  'offensive-damage',
+] as const
+
+export type NativeUnforgeOutcomeKind = typeof NATIVE_UNFORGE_OUTCOME_KINDS[number]
+
+export interface NativeUnforgeOutcome {
+  readonly amount: number | null
+  readonly itemName: string
+  readonly kind: NativeUnforgeOutcomeKind
+}
+
+export interface NativeUnforgeBonuses {
+  readonly experience: number
+  readonly manaCostReduction: number
+  readonly maximumHealth: number
+  readonly maximumMana: number
+  readonly offensiveDamage: number
+  readonly recipeAttemptCount: number
 }
 
 export interface HubEconomyState {
@@ -153,6 +187,7 @@ export interface HubEconomyState {
   readonly rng: NativeRngState
   readonly storage: readonly HubInventoryItem[]
   readonly tonicPurchases: number
+  readonly unforgeBonuses: NativeUnforgeBonuses
 }
 
 export type HubEconomyRejection =
@@ -173,6 +208,7 @@ export interface HubEconomyResult {
   readonly dowsingPitch: number | null
   readonly reason: HubEconomyRejection | null
   readonly state: HubEconomyState
+  readonly unforgeOutcome: NativeUnforgeOutcome | null
 }
 
 export interface HubLootInventoryResult {
@@ -378,6 +414,17 @@ export const HAGATHA_PERKS: readonly HagathaPerkDefinition[] =
 
 export const SORCERORS_CHARM_SELECTOR = 17
 
+export function createNativeUnforgeBonuses(): NativeUnforgeBonuses {
+  return {
+    experience: 0,
+    manaCostReduction: 0,
+    maximumHealth: 0,
+    maximumMana: 0,
+    offensiveDamage: 0,
+    recipeAttemptCount: 0,
+  }
+}
+
 export function createHubEconomy(
   seed: number,
   options: { readonly hagathaBundleSelectors?: readonly number[] } = {},
@@ -405,6 +452,7 @@ export function createHubEconomy(
     rng: stock.rng,
     storage: [],
     tonicPurchases: 0,
+    unforgeBonuses: createNativeUnforgeBonuses(),
   }
 }
 
@@ -542,6 +590,165 @@ export function consumeInventoryItem(
         ? { ...entry, quantity: entry.quantity - 1 }
         : entry),
   })
+}
+
+export interface NativeUnforgeVitals {
+  readonly currentHealth: number
+  readonly currentMana: number
+  readonly maximumHealth: number
+  readonly maximumMana: number
+}
+
+export function nativeInventoryItemCanUnforge(item: HubInventoryItem): boolean {
+  return (NATIVE_UNFORGE_ELIGIBLE_TYPE_IDS as readonly number[]).includes(item.nativeTypeId)
+}
+
+export function nativeUnforgeOutcomeText(outcome: NativeUnforgeOutcome): string {
+  switch (outcome.kind) {
+    case 'experience': return `+${outcome.amount}% faster experience gain`
+    case 'fizzle': return 'No bonus'
+    case 'full-rejuvenation': return 'Full rejuvenation'
+    case 'gold': return `Transmuted to ${outcome.amount} gold coins`
+    case 'mana-cost': return `-${outcome.amount} mana cost for all spells`
+    case 'maximum-health': return `+${outcome.amount} to maximum health`
+    case 'maximum-mana': return `+${outcome.amount} to maximum mana`
+    case 'mind-dredge': return 'Transmuted to Mind Dredge (+1 skill points at next level)'
+    case 'offensive-damage': return `+${outcome.amount} damage for all offensive spells`
+  }
+}
+
+export function unforgeInventoryItem(
+  source: HubEconomyState,
+  itemId: number,
+  vitals: NativeUnforgeVitals,
+): HubEconomyResult {
+  const item = source.backpack.find(({ id }) => id === itemId)
+  if (!item) return rejected(source, 'item-not-found')
+  if (!nativeInventoryItemCanUnforge(item)) return rejected(source, 'ineligible-item')
+  if (item.nativeTypeId === 7008 && (item.contents?.length ?? 0) > 0) {
+    return rejected(source, 'ineligible-item')
+  }
+
+  let rng = source.rng
+  let gold = source.gold
+  let unforgeBonuses = source.unforgeBonuses
+  let outcome: NativeUnforgeOutcome | null = null
+  const recipeBacked = item.recipeIndex !== null || item.nativeEffects !== undefined
+
+  if (item.nativeTypeId === 7008 || !recipeBacked) {
+    const draw = drawNativeInteger(rng, 4)
+    rng = draw.state
+    const amount = draw.value + 2
+    gold += amount
+    outcome = { amount, itemName: item.name, kind: 'gold' }
+  } else {
+    while (outcome === null) {
+      const recipeAttemptCount = unforgeBonuses.recipeAttemptCount + 1
+      unforgeBonuses = { ...unforgeBonuses, recipeAttemptCount }
+      const selectorDraw = drawNativeInteger(
+        rng,
+        recipeAttemptCount < 5 ? 7 : recipeAttemptCount + 3,
+      )
+      rng = selectorDraw.state
+      let selector = selectorDraw.value
+      if (selector > 7) {
+        const fallback = drawNativeInteger(rng, 6)
+        rng = fallback.state
+        if (fallback.value !== 3) {
+          outcome = { amount: null, itemName: item.name, kind: 'fizzle' }
+          continue
+        }
+        selector = 7
+      }
+
+      if (selector === 0) {
+        const needsRejuvenation = vitals.currentHealth < vitals.maximumHealth
+          || vitals.currentMana < vitals.maximumMana
+        if (recipeAttemptCount <= 5 && !needsRejuvenation) continue
+        outcome = { amount: null, itemName: item.name, kind: 'full-rejuvenation' }
+        continue
+      }
+      if (selector === 1 || selector === 2) {
+        let amount = 1
+        if (recipeAttemptCount < 5) {
+          const amountDraw = drawNativeInteger(rng, 3)
+          rng = amountDraw.state
+          if (amountDraw.value === 1) amount = 2
+        }
+        if (selector === 1) {
+          unforgeBonuses = {
+            ...unforgeBonuses,
+            offensiveDamage: unforgeBonuses.offensiveDamage + amount,
+          }
+          outcome = { amount, itemName: item.name, kind: 'offensive-damage' }
+        } else {
+          unforgeBonuses = {
+            ...unforgeBonuses,
+            manaCostReduction: unforgeBonuses.manaCostReduction + amount,
+          }
+          outcome = { amount, itemName: item.name, kind: 'mana-cost' }
+        }
+        continue
+      }
+      if (selector === 3) {
+        const mindDredge = drawNativeInteger(rng, 100)
+        rng = mindDredge.state
+        if (mindDredge.value !== 25) continue
+        outcome = { amount: 1, itemName: item.name, kind: 'mind-dredge' }
+        continue
+      }
+      if (selector === 4 || selector === 5) {
+        const maximum = selector === 4 ? 10 : 20
+        let amount = maximum
+        if (recipeAttemptCount >= 5) {
+          const amountDraw = drawNativeInteger(rng, 4)
+          rng = amountDraw.state
+          if (amountDraw.value !== 1) amount = maximum / 2
+        }
+        if (selector === 4) {
+          unforgeBonuses = {
+            ...unforgeBonuses,
+            maximumHealth: unforgeBonuses.maximumHealth + amount,
+          }
+          outcome = { amount, itemName: item.name, kind: 'maximum-health' }
+        } else {
+          unforgeBonuses = {
+            ...unforgeBonuses,
+            maximumMana: unforgeBonuses.maximumMana + amount,
+          }
+          outcome = { amount, itemName: item.name, kind: 'maximum-mana' }
+        }
+        continue
+      }
+      if (selector === 6) {
+        const amountDraw = drawNativeInteger(rng, 2)
+        rng = amountDraw.state
+        const amount = recipeAttemptCount <= 4
+          ? amountDraw.value === 1 ? 10 : 5
+          : amountDraw.value === 1 ? 2 : 1
+        unforgeBonuses = {
+          ...unforgeBonuses,
+          experience: Math.fround(unforgeBonuses.experience + amount / 100),
+        }
+        outcome = { amount, itemName: item.name, kind: 'experience' }
+        continue
+      }
+
+      const goldDraw = drawNativeInteger(rng, 6)
+      rng = goldDraw.state
+      const amount = (goldDraw.value + 1) * 10
+      gold += amount
+      outcome = { amount, itemName: item.name, kind: 'gold' }
+    }
+  }
+
+  return accepted({
+    ...source,
+    backpack: source.backpack.filter(({ id }) => id !== itemId),
+    gold,
+    rng,
+    unforgeBonuses,
+  }, null, outcome)
 }
 
 export function dowse(source: HubEconomyState, playerLevel: number): HubEconomyResult {
@@ -979,12 +1186,17 @@ function withEquippedItem(
   return { ...source, [slot]: item }
 }
 
-function accepted(source: HubEconomyState, dowsingPitch: number | null = null): HubEconomyResult {
+function accepted(
+  source: HubEconomyState,
+  dowsingPitch: number | null = null,
+  unforgeOutcome: NativeUnforgeOutcome | null = null,
+): HubEconomyResult {
   return {
     accepted: true,
     dowsingPitch,
     reason: null,
     state: { ...source, revision: source.revision + 1 },
+    unforgeOutcome,
   }
 }
 
@@ -992,5 +1204,5 @@ function rejected(
   state: HubEconomyState,
   reason: HubEconomyRejection,
 ): HubEconomyResult {
-  return { accepted: false, dowsingPitch: null, reason, state }
+  return { accepted: false, dowsingPitch: null, reason, state, unforgeOutcome: null }
 }

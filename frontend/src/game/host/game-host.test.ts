@@ -191,6 +191,36 @@ test('Hub pause is first-request owned, survives late join, and releases on owne
   await inventoryApplied
   assert.equal(host.state().tick, heldTick)
 
+  const staffId = getPlayerEconomy(host.state(), first.welcome.playerId).equipment.weapon?.id
+  assert.ok(staffId)
+  const staffUnequipped = nextMessage(first.socket, (message) => (
+    message.type === 'server-snapshot'
+    && message.snapshot.players[first.welcome.playerId].economy.backpack
+      .some(({ id }) => id === staffId)
+  ))
+  first.socket.send(encodeGameMessage({
+    type: 'client-hub-action',
+    action: { type: 'unequip', slot: 'weapon' },
+  }))
+  await staffUnequipped
+  const staffUnforged = nextMessage(first.socket, (message) => (
+    message.type === 'server-snapshot'
+    && message.snapshot.players[first.welcome.playerId].economy.actionFeedback?.action === 'unforge'
+    && message.snapshot.players[first.welcome.playerId].economy.actionFeedback?.accepted === true
+  ))
+  first.socket.send(encodeGameMessage({
+    type: 'client-hub-action',
+    action: { type: 'unforge', itemId: staffId },
+  }))
+  const unforgeSnapshot = await staffUnforged
+  assert.equal(unforgeSnapshot.type, 'server-snapshot')
+  assert.equal(
+    unforgeSnapshot.snapshot.players[first.welcome.playerId].economy.backpack
+      .some(({ id }) => id === staffId),
+    false,
+  )
+  assert.equal(host.state().tick, heldTick)
+
   const firstReplaced = nextMessage(first.socket, (message) => (
     message.type === 'server-gameplay-pause' && message.pause?.source === 'skill-book'
   ))
@@ -397,6 +427,7 @@ test('game host routes inventory commands without disconnecting on a stale or un
     sequence: 1,
     transferDirection: null,
     transferGesture: null,
+    unforgeOutcome: null,
   })
 
   const pong = nextMessage(client.socket, (message) => (

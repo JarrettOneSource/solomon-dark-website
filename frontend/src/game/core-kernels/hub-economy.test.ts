@@ -1,12 +1,15 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import { createNativeRng } from './native-rng.ts'
+
 import {
   DOWSING_EQUIPMENT_RECIPES,
   FOMENTIUS_STOCK_DEFINITIONS,
   HAGATHA_PERKS,
   HUB_INVENTORY_SLOT_CAPACITY,
   HUB_STORAGE_SLOT_CAPACITY,
+  NATIVE_UNFORGE_ELIGIBLE_TYPE_IDS,
   STARTING_PLAYER_GOLD,
   buyDowsingOffer,
   buyFomentiusItem,
@@ -27,8 +30,11 @@ import {
   hasPandimensionalBugMasterOutfit,
   hasTempestOutfit,
   insertLootInventoryItem,
+  nativeInventoryItemCanUnforge,
+  nativeUnforgeOutcomeText,
   restockFomentius,
   transferInventoryItem,
+  unforgeInventoryItem,
   unequipInventorySlot,
   type EquipmentSlot,
   type HubEconomyState,
@@ -456,4 +462,168 @@ test('loot Item_Sacks receive unique participant IDs and Wizard Keys are consume
   const absent = consumeWizardKey(consumed.state)
   assert.equal(absent.consumed, false)
   assert.strictEqual(absent.state, consumed.state)
+})
+
+test('unforge owns the exhaustive seven-type gate and rejects every sibling item class', () => {
+  assert.deepEqual(NATIVE_UNFORGE_ELIGIBLE_TYPE_IDS, [7002, 7003, 7004, 7005, 7006, 7008, 7011])
+  const base = createHubEconomy(1)
+  const template = base.backpack[0]!
+  for (const nativeTypeId of NATIVE_UNFORGE_ELIGIBLE_TYPE_IDS) {
+    const item = {
+      ...template,
+      contents: nativeTypeId === 7008 ? [] : undefined,
+      equipmentType: nativeTypeId === 7008 ? null : 'ring' as const,
+      id: 20_000 + nativeTypeId,
+      kind: nativeTypeId === 7008 ? 'sack' as const : 'equipment' as const,
+      name: `Eligible ${nativeTypeId}`,
+      nativeTypeId,
+      recipeIndex: null,
+    }
+    assert.equal(nativeInventoryItemCanUnforge(item), true, `${nativeTypeId} is eligible`)
+    const state = { ...base, backpack: [...base.backpack, item], rng: createNativeRng(nativeTypeId) }
+    const result = unforgeInventoryItem(state, item.id, {
+      currentHealth: 50,
+      currentMana: 100,
+      maximumHealth: 50,
+      maximumMana: 100,
+    })
+    assert.equal(result.accepted, true)
+    assert.equal(result.state.backpack.some(({ id }) => id === item.id), false)
+    assert.equal(result.unforgeOutcome?.kind, 'gold')
+    assert.ok(result.unforgeOutcome!.amount >= 2 && result.unforgeOutcome!.amount <= 5)
+  }
+
+  for (const nativeTypeId of [7000, 7001, 7009, 7010, 7012]) {
+    const item = { ...template, id: 30_000 + nativeTypeId, nativeTypeId }
+    assert.equal(nativeInventoryItemCanUnforge(item), false, `${nativeTypeId} is ineligible`)
+    const state = { ...base, backpack: [...base.backpack, item] }
+    const result = unforgeInventoryItem(state, item.id, {
+      currentHealth: 50,
+      currentMana: 100,
+      maximumHealth: 50,
+      maximumMana: 100,
+    })
+    assert.equal(result.reason, 'ineligible-item')
+    assert.strictEqual(result.state, state)
+  }
+})
+
+test('unforge rejects a nonempty Item_Sack and immediately transmutes an empty one', () => {
+  const base = createHubEconomy(1)
+  const sack = {
+    ...base.backpack[0]!,
+    contents: [base.backpack[1]!],
+    equipmentType: null,
+    id: 40_000,
+    kind: 'sack' as const,
+    name: 'Sack',
+    nativeTypeId: 7008,
+    recipeIndex: null,
+  }
+  const nonempty = { ...base, backpack: [sack], rng: createNativeRng(1) }
+  assert.equal(unforgeInventoryItem(nonempty, sack.id, {
+    currentHealth: 50,
+    currentMana: 100,
+    maximumHealth: 50,
+    maximumMana: 100,
+  }).reason, 'ineligible-item')
+
+  const empty = { ...nonempty, backpack: [{ ...sack, contents: [] }] }
+  const result = unforgeInventoryItem(empty, sack.id, {
+    currentHealth: 50,
+    currentMana: 100,
+    maximumHealth: 50,
+    maximumMana: 100,
+  })
+  assert.equal(result.accepted, true)
+  assert.equal(result.unforgeOutcome?.kind, 'gold')
+  assert.equal(result.state.unforgeBonuses.recipeAttemptCount, 0)
+  assert.equal(result.state.backpack.length, 0)
+})
+
+test('recipe-backed unforge reaches every authored result and always destroys the item', () => {
+  const kinds = new Set([
+    'experience',
+    'fizzle',
+    'full-rejuvenation',
+    'gold',
+    'mana-cost',
+    'maximum-health',
+    'maximum-mana',
+    'mind-dredge',
+    'offensive-damage',
+  ])
+  const observed = new Map<string, ReturnType<typeof unforgeInventoryItem>>()
+  for (let seed = 0; seed < 50_000 && observed.size < kinds.size; seed += 1) {
+    const base = createHubEconomy(1)
+    const item = createEquipmentInventoryItem(DOWSING_EQUIPMENT_RECIPES[0]!, 50_000)
+    const state = {
+      ...base,
+      backpack: [item],
+      rng: createNativeRng(seed),
+      unforgeBonuses: { ...base.unforgeBonuses, recipeAttemptCount: 8 },
+    }
+    const result = unforgeInventoryItem(state, item.id, {
+      currentHealth: 1,
+      currentMana: 1,
+      maximumHealth: 50,
+      maximumMana: 100,
+    })
+    const kind = result.unforgeOutcome?.kind
+    if (kind && kinds.has(kind) && !observed.has(kind)) observed.set(kind, result)
+  }
+  assert.deepEqual(new Set(observed.keys()), kinds)
+  for (const [kind, result] of observed) {
+    assert.equal(result.accepted, true, kind)
+    assert.equal(result.state.backpack.length, 0, kind)
+    assert.match(nativeUnforgeOutcomeText(result.unforgeOutcome!), /\S/, kind)
+  }
+  assert.equal(observed.get('fizzle')?.unforgeOutcome?.amount, null)
+  assert.equal(observed.get('fizzle')?.state.unforgeBonuses.recipeAttemptCount, 9)
+  assert.ok((observed.get('maximum-health')?.state.unforgeBonuses.maximumHealth ?? 0) > 0)
+  assert.ok((observed.get('maximum-mana')?.state.unforgeBonuses.maximumMana ?? 0) > 0)
+  assert.ok((observed.get('experience')?.state.unforgeBonuses.experience ?? 0) > 0)
+  assert.ok((observed.get('offensive-damage')?.state.unforgeBonuses.offensiveDamage ?? 0) > 0)
+  assert.ok((observed.get('mana-cost')?.state.unforgeBonuses.manaCostReduction ?? 0) > 0)
+})
+
+test('unforge amount tables switch exactly when the fifth recipe selector begins', () => {
+  const collect = (startingCount: number) => {
+    const values = new Map<string, Set<number>>()
+    for (let seed = 0; seed < 20_000; seed += 1) {
+      const base = createHubEconomy(1)
+      const item = createEquipmentInventoryItem(DOWSING_EQUIPMENT_RECIPES[0]!, 60_000)
+      const result = unforgeInventoryItem({
+        ...base,
+        backpack: [item],
+        rng: createNativeRng(seed),
+        unforgeBonuses: { ...base.unforgeBonuses, recipeAttemptCount: startingCount },
+      }, item.id, {
+        currentHealth: 1,
+        currentMana: 1,
+        maximumHealth: 50,
+        maximumMana: 100,
+      })
+      const outcome = result.unforgeOutcome!
+      if (result.state.unforgeBonuses.recipeAttemptCount !== startingCount + 1
+        || outcome.amount === null) continue
+      const bucket = values.get(outcome.kind) ?? new Set<number>()
+      bucket.add(outcome.amount)
+      values.set(outcome.kind, bucket)
+    }
+    return Object.fromEntries([...values].map(([kind, bucket]) => [kind, [...bucket].sort((a, b) => a - b)]))
+  }
+  const early = collect(0)
+  assert.deepEqual(early['offensive-damage'], [1, 2])
+  assert.deepEqual(early['mana-cost'], [1, 2])
+  assert.deepEqual(early['maximum-health'], [10])
+  assert.deepEqual(early['maximum-mana'], [20])
+  assert.deepEqual(early.experience, [5, 10])
+
+  const late = collect(4)
+  assert.deepEqual(late['offensive-damage'], [1])
+  assert.deepEqual(late['mana-cost'], [1])
+  assert.deepEqual(late['maximum-health'], [5, 10])
+  assert.deepEqual(late['maximum-mana'], [10, 20])
+  assert.deepEqual(late.experience, [1, 2])
 })

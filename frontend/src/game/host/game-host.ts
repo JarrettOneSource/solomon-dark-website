@@ -2425,7 +2425,12 @@ function pauseAllowsInventoryAction(
 ): boolean {
   return pause.ownerPlayerId === playerId
     && pause.source === 'inventory'
-    && (action.type === 'consume' || action.type === 'equip' || action.type === 'unequip')
+    && (
+      action.type === 'consume'
+      || action.type === 'equip'
+      || action.type === 'unequip'
+      || action.type === 'unforge'
+    )
 }
 
 function sameCharacter(first: PlayerCharacterConfig, second: PlayerCharacterConfig): boolean {

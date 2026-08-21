@@ -51,7 +51,9 @@ try {
   await healthPotion.dblclick()
   await healthPotion.waitFor({ state: 'detached' })
   await page.screenshot({ path: `${screenshotRoot}-hub-inventory.png` })
-  await hubInventory.getByRole('button', { name: 'Done' }).click()
+  assert.equal(await hubInventory.getByRole('button', { name: 'Done' }).count(), 0)
+  await page.keyboard.press('i')
+  await hubInventory.waitFor({ state: 'hidden' })
 
   await page.getByRole('button', { name: 'Enter the Boneyard' }).click()
   const picker = page.getByRole('dialog', { name: 'Choose a Boneyard' })

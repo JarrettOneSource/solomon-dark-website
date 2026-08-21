@@ -92,6 +92,41 @@ test('host save documents round-trip the complete owner state and revive Hub run
   assert.deepEqual(Object.keys(restored.state.world.participants), ['owner'])
 })
 
+test('schema-3 saves normalize the pre-unforge zero ledger and feedback shape', () => {
+  const document = createGameSaveDocument({
+    loadedBoneyard: null,
+    mods: MODS,
+    modState: MOD_STATE,
+    playerId: 'owner',
+    state: createGameSimulation({ owner: OWNER }),
+  })
+  const parsed = JSON.parse(document)
+  const economy = parsed.simulation.playerEntities.economies[0]
+  delete economy.unforgeBonuses
+  economy.actionFeedback = {
+    accepted: true,
+    action: 'consume',
+    dowsingPitch: null,
+    reason: null,
+    sequence: 1,
+    transferDirection: null,
+    transferGesture: null,
+  }
+  const restored = restoreGameSaveDocument(JSON.stringify(parsed))
+  assert.deepEqual(restored.state.playerEntities.economies[0]?.unforgeBonuses, {
+    experience: 0,
+    manaCostReduction: 0,
+    maximumHealth: 0,
+    maximumMana: 0,
+    offensiveDamage: 0,
+    recipeAttemptCount: 0,
+  })
+  assert.equal(
+    restored.state.playerEntities.economies[0]?.actionFeedback?.unforgeOutcome,
+    null,
+  )
+})
+
 test('host save documents retain the active Boneyard and its authoritative run id', () => {
   const loadedBoneyard = materializeBoneyard(
     createBoneyardCatalog(),

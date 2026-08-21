@@ -121,6 +121,7 @@ export type GameSoundCue =
   | 'throw-fire'
   | 'throw-lightning-1'
   | 'throw-lightning-2'
+  | 'unforge'
   | 'unlock-skill'
   | 'wizard-ouch-1'
   | 'wizard-ouch-2'
@@ -680,6 +681,11 @@ export const NATIVE_SOUND_MANIFEST = {
     registryOffset: 0x11a0,
     sourceName: 'sounds\\unlockskill',
     sourceSha256: '2013053abdd8a969f7c63b2c735cedb5a571fc999bf1474543cd608cee74ffaa',
+  },
+  unforge: {
+    registryOffset: 0x1148,
+    sourceName: 'sounds\\unforge',
+    sourceSha256: '173db629737f50f3a958358dc9f88fb3b25528ee93298f2f95416517747fa9e2',
   },
   'wizard-ouch-1': {
     registryOffset: 0x2620,

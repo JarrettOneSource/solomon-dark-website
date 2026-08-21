@@ -145,6 +145,7 @@ test('keeps native registry offsets on the browser cue manifest', () => {
   )
   assert.equal(NATIVE_SOUND_MANIFEST['pick-skill'].registryOffset, 0x44)
   assert.equal(NATIVE_SOUND_MANIFEST['open-panel'].registryOffset, 0xb18)
+  assert.equal(NATIVE_SOUND_MANIFEST.unforge.registryOffset, 0x1148)
   assert.equal(NATIVE_SOUND_MANIFEST['unlock-skill'].registryOffset, 0x11a0)
   assert.equal(NATIVE_SOUND_MANIFEST['level-up'].registryOffset, 0x908)
   assert.equal(NATIVE_SOUND_MANIFEST['step-1'].registryOffset, 0x23b8)
@@ -367,7 +368,9 @@ test('pins every inventory and trader transaction cue to its untouched stock WAV
     ['bad-action', 'bad-action.wav'],
     ['distort-reality', 'distort-reality.wav'],
     ['drop-coins', 'drop-coins.wav'],
+    ['fizzle', 'fizzle.wav'],
     ['open-panel', 'openpanel.wav'],
+    ['unforge', 'unforge.wav'],
   ] as const) {
     const source = readFileSync(new URL(
       `../assets/game/audio/sfx/${filename}`,
@@ -382,7 +385,9 @@ test('pins every inventory and trader transaction cue to its untouched stock WAV
   assert.equal(NATIVE_SOUND_MANIFEST['bad-action'].registryOffset, 0x120)
   assert.equal(NATIVE_SOUND_MANIFEST['distort-reality'].registryOffset, 0x40c)
   assert.equal(NATIVE_SOUND_MANIFEST['drop-coins'].registryOffset, 0x464)
+  assert.equal(NATIVE_SOUND_MANIFEST.fizzle.registryOffset, 0x598)
   assert.equal(NATIVE_SOUND_MANIFEST['open-panel'].registryOffset, 0xb18)
+  assert.equal(NATIVE_SOUND_MANIFEST.unforge.registryOffset, 0x1148)
 })
 
 test('pins every ground-loot cue and request to its untouched registry WAV', () => {

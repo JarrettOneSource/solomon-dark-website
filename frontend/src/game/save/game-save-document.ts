@@ -1,5 +1,6 @@
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import type { PlayerCharacterConfig } from '../core-kernels/player-character.ts'
+import { createNativeUnforgeBonuses } from '../core-kernels/hub-economy.ts'
 import type { GameContentIdentity, LuaConsoleValue } from '../protocol/game-protocol.ts'
 import {
   removePlayerCharacter,
@@ -251,7 +252,19 @@ function validatePlayerStore(value: unknown, playerId: string): GameSimulationSt
   if (!Number.isSafeInteger(store.nextEntityId) || Number(store.nextEntityId) < 1) {
     throw new Error('game save player entity sequence is invalid')
   }
-  return store as unknown as GameSimulationState['playerEntities']
+  const economies = (store.economies as unknown[]).map((value, index) => {
+    const economy = record(value, `game save player economy ${index}`)
+    const feedback = economy.actionFeedback && typeof economy.actionFeedback === 'object'
+      && !('unforgeOutcome' in economy.actionFeedback)
+      ? { ...economy.actionFeedback, unforgeOutcome: null }
+      : economy.actionFeedback
+    return {
+      ...economy,
+      actionFeedback: feedback,
+      unforgeBonuses: economy.unforgeBonuses ?? createNativeUnforgeBonuses(),
+    }
+  })
+  return { ...store, economies } as unknown as GameSimulationState['playerEntities']
 }
 
 function parseLoadedBoneyard(value: unknown): LoadedBoneyard {

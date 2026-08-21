@@ -141,6 +141,7 @@ import {
   HAGATHA_PERKS,
   HUB_ITEM_KINDS,
   NATIVE_LOOT_BACKPACK_REPLICATION_LIMIT,
+  NATIVE_UNFORGE_OUTCOME_KINDS,
   type DowsingOffer,
   type EquipmentSlot,
   type EquipmentType,
@@ -149,6 +150,7 @@ import {
   type HubInventoryItem,
   type HubItemKind,
   type HubShopItem,
+  type NativeUnforgeOutcome,
 } from '../core-kernels/hub-economy.ts'
 import {
   NATIVE_PLAYER_MAX_LIGHT_OVERLAY,
@@ -269,7 +271,7 @@ export type {
   LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
 
-export const GAME_PROTOCOL_VERSION = 47
+export const GAME_PROTOCOL_VERSION = 48
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
 export const GAME_CONNECTION_TIMEOUT_CLOSE_CODE = 4000
@@ -1417,6 +1419,10 @@ function hubInventoryAction(value: unknown): HubInventoryAction {
     onlyKeys(source, 'action', ['type', 'itemId'])
     return { type, itemId: positiveInteger(source.itemId, 'action.itemId') }
   }
+  if (type === 'unforge') {
+    onlyKeys(source, 'action', ['type', 'itemId'])
+    return { type, itemId: positiveInteger(source.itemId, 'action.itemId') }
+  }
   if (type === 'equip') {
     onlyKeys(source, 'action', ['type', 'itemId', 'slot'])
     return {
@@ -1528,6 +1534,7 @@ function playerEconomy(value: unknown, field: string): ProtocolPlayerEconomy {
     'revision',
     'storage',
     'tonicPurchases',
+    'unforgeBonuses',
   ])
   const backpack = inventoryItems(
     source.backpack,
@@ -1599,6 +1606,36 @@ function playerEconomy(value: unknown, field: string): ProtocolPlayerEconomy {
     revision: nonnegativeInteger(source.revision, `${field}.revision`),
     storage,
     tonicPurchases,
+    unforgeBonuses: nativeUnforgeBonuses(source.unforgeBonuses, `${field}.unforgeBonuses`),
+  }
+}
+
+function nativeUnforgeBonuses(
+  value: unknown,
+  field: string,
+): ProtocolPlayerEconomy['unforgeBonuses'] {
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'experience',
+    'manaCostReduction',
+    'maximumHealth',
+    'maximumMana',
+    'offensiveDamage',
+    'recipeAttemptCount',
+  ])
+  return {
+    experience: nonnegativeFinite(source.experience, `${field}.experience`),
+    manaCostReduction: nonnegativeInteger(
+      source.manaCostReduction,
+      `${field}.manaCostReduction`,
+    ),
+    maximumHealth: nonnegativeInteger(source.maximumHealth, `${field}.maximumHealth`),
+    maximumMana: nonnegativeInteger(source.maximumMana, `${field}.maximumMana`),
+    offensiveDamage: nonnegativeInteger(source.offensiveDamage, `${field}.offensiveDamage`),
+    recipeAttemptCount: nonnegativeInteger(
+      source.recipeAttemptCount,
+      `${field}.recipeAttemptCount`,
+    ),
   }
 }
 
@@ -1615,6 +1652,7 @@ function hubActionFeedback(
     'sequence',
     'transferDirection',
     'transferGesture',
+    'unforgeOutcome',
   ])
   const action = limitedString(source.action, `${field}.action`, 32)
   if (![
@@ -1626,6 +1664,7 @@ function hubActionFeedback(
     'dowse',
     'equip',
     'transfer',
+    'unforge',
     'unequip',
   ].includes(action)) throw new GameProtocolError(`${field}.action is not supported`)
   const reason = source.reason === null
@@ -1676,6 +1715,12 @@ function hubActionFeedback(
     || (dowsingPitch !== null && (dowsingPitch < 0.8 || dowsingPitch > 1.1))) {
     throw new GameProtocolError(`${field}.dowsingPitch does not match action`)
   }
+  const unforgeOutcome = source.unforgeOutcome === null
+    ? null
+    : nativeUnforgeOutcome(source.unforgeOutcome, `${field}.unforgeOutcome`)
+  if ((accepted && action === 'unforge') !== (unforgeOutcome !== null)) {
+    throw new GameProtocolError(`${field}.unforgeOutcome does not match action`)
+  }
   return {
     accepted,
     action: action as NonNullable<ProtocolPlayerEconomy['actionFeedback']>['action'],
@@ -1684,6 +1729,31 @@ function hubActionFeedback(
     sequence: positiveInteger(source.sequence, `${field}.sequence`),
     transferDirection: transferDirection as NonNullable<ProtocolPlayerEconomy['actionFeedback']>['transferDirection'],
     transferGesture: transferGesture as NonNullable<ProtocolPlayerEconomy['actionFeedback']>['transferGesture'],
+    unforgeOutcome,
+  }
+}
+
+function nativeUnforgeOutcome(value: unknown, field: string): NativeUnforgeOutcome {
+  const source = record(value, field)
+  onlyKeys(source, field, ['amount', 'itemName', 'kind'])
+  const kind = limitedString(source.kind, `${field}.kind`, 32)
+  if (!(NATIVE_UNFORGE_OUTCOME_KINDS as readonly string[]).includes(kind)) {
+    throw new GameProtocolError(`${field}.kind is not supported`)
+  }
+  const amount = source.amount === null
+    ? null
+    : positiveInteger(source.amount, `${field}.amount`)
+  const nullAmount = kind === 'fizzle' || kind === 'full-rejuvenation'
+  if (nullAmount !== (amount === null)) {
+    throw new GameProtocolError(`${field}.amount does not match kind`)
+  }
+  if (kind === 'mind-dredge' && amount !== 1) {
+    throw new GameProtocolError(`${field}.amount does not match Mind Dredge`)
+  }
+  return {
+    amount,
+    itemName: limitedString(source.itemName, `${field}.itemName`, 128),
+    kind: kind as NativeUnforgeOutcome['kind'],
   }
 }
 

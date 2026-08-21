@@ -46,6 +46,9 @@ import {
   HUB_SHOP_PANEL,
   HUB_SHOP_TEXT,
   HUB_STARTER_EQUIPMENT_PRIMARY_TINT,
+  HUB_UNFORGE_CONFIRMATION,
+  HUB_UNFORGE_RESULT,
+  HUB_UNFORGE_TARGET,
   hubChatTextRuns,
   hubDowsingFieldTint,
   hubDowsingSlotPosition,
@@ -54,6 +57,8 @@ import {
   hubInventoryPrimarySpellLines,
   hubInventorySlotPosition,
   hubShopSlotPosition,
+  hubUnforgeResultLayout,
+  hubUnforgeTargetTint,
 } from './hub-inventory-render-contract.ts'
 import { NativeElementVfxView } from './native-element-vfx-view.ts'
 import { createNativeElementVfxTextures, type PlayerWorldTextures } from './world-player-textures.ts'
@@ -88,7 +93,11 @@ interface FontAssets {
 export interface HubInventoryRendererNotice {
   readonly actionLabel: string
   readonly body: string
+  readonly outcomeTint?: number
+  readonly secondaryActionLabel?: string
+  readonly summary?: string
   readonly title: string
+  readonly variant?: 'standard' | 'unforge-confirmation' | 'unforge-result'
 }
 
 export type HubTraderChatPhase = 'choices' | 'intro' | 'prices'
@@ -210,6 +219,7 @@ export async function createHubInventoryRenderer(): Promise<HubInventoryRenderer
   let playerPreviewVfx: NativeElementVfxView | null = null
   let inventoryDragger: Container | null = null
   let inventoryItemInfo: Container | null = null
+  let unforgeTarget: Sprite | null = null
   let previousNoticeTitle: string | null = null
   let currentModel: HubInventoryRendererModel | null = null
 
@@ -276,6 +286,11 @@ export async function createHubInventoryRenderer(): Promise<HubInventoryRenderer
           }
         }
       }
+      if (unforgeTarget) {
+        const tint = hubUnforgeTargetTint(nowMs / 10)
+        unforgeTarget.tint = tint
+        gpu.canvas.dataset.nativeUnforgeTint = tint.toString(16).padStart(6, '0')
+      } else delete gpu.canvas.dataset.nativeUnforgeTint
       gpu.canvas.dataset.dowsingFlash = flashAlpha > 0 ? 'active' : 'idle'
       const noticeReveal = noticeRevealStartedAt === null
         ? 1
@@ -337,6 +352,7 @@ export async function createHubInventoryRenderer(): Promise<HubInventoryRenderer
       playerPreviewVfx = null
       inventoryDragger = null
       inventoryItemInfo = null
+      unforgeTarget = null
       surface.removeChildren().forEach((child) => child.destroy({ children: true }))
       if (model.kind === 'inventory') {
         const inventory = buildInventory(context, surface, model)
@@ -354,6 +370,9 @@ export async function createHubInventoryRenderer(): Promise<HubInventoryRenderer
           (child): child is Sprite => child instanceof Sprite && child.label === 'native-dowsing-field',
         )
       }
+      unforgeTarget = surface.children.find(
+        (child): child is Sprite => child instanceof Sprite && child.label === 'native-unforge-target',
+      ) ?? null
       if (nextNotice) buildNotice(context, surface, nextNotice)
       application.renderer.render(application.stage)
     },
@@ -441,7 +460,14 @@ function buildInventory(
 
   addGold(context, layer, economy.gold)
   addBelt(context, layer, economy.backpack, model.config.element)
-  addCenteredAtlasSprite(context, layer, 'UI', 75, 1562, 868)
+  const unforgeTarget = addCenteredAtlasSprite(
+    context,
+    layer,
+    'UI',
+    75,
+    ...HUB_UNFORGE_TARGET.center,
+  )
+  unforgeTarget.label = 'native-unforge-target'
 
   if (model.leftPane !== 'hagatha') {
     const primarySpellLines = hubInventoryPrimarySpellLines(model.config.element, progression.learnedSkills)
@@ -890,6 +916,10 @@ function buildNotice(
   layer: Container,
   notice: HubInventoryRendererNotice,
 ): void {
+  if (notice.variant === 'unforge-confirmation' || notice.variant === 'unforge-result') {
+    buildUnforgeNotice(context, layer, notice)
+    return
+  }
   const noticeLayer = new Container()
   noticeLayer.label = 'native-notice'
   noticeLayer.addChild(new Graphics()
@@ -947,6 +977,160 @@ function buildNotice(
   })
   addMessageBoxButton(context, noticeLayer, notice.actionLabel)
   layer.addChild(noticeLayer)
+}
+
+function buildUnforgeNotice(
+  context: RenderContext,
+  layer: Container,
+  notice: HubInventoryRendererNotice,
+): void {
+  const confirmation = notice.variant === 'unforge-confirmation'
+  const resultLayout = confirmation ? null : hubUnforgeResultLayout(Math.max(
+    measureBitmapText(notice.title, FONT_ASSETS.fonts.menu),
+    measureBitmapText(notice.summary ?? 'Unforging bonus:', FONT_ASSETS.fonts.medium),
+    measureBitmapText(notice.body, FONT_ASSETS.fonts.medium),
+  ))
+  const innerPanelRect = confirmation
+    ? HUB_UNFORGE_CONFIRMATION.innerPanelRect
+    : resultLayout!.innerPanelRect
+  const bodyLeft = confirmation ? HUB_UNFORGE_CONFIRMATION.bodyLeft : resultLayout!.bodyLeft
+  const titleTextBaselineY = confirmation
+    ? HUB_UNFORGE_CONFIRMATION.titleTextBaselineY
+    : HUB_UNFORGE_RESULT.titleTextBaselineY
+  const noticeLayer = new Container()
+  noticeLayer.label = 'native-notice'
+  noticeLayer.addChild(new Graphics()
+    .rect(0, 0, HUB_NATIVE_UI_SIZE.width, HUB_NATIVE_UI_SIZE.height)
+    .fill({ color: 0x000000, alpha: HUB_NATIVE_UI_TIMING.messageBoxCurtainAlpha }))
+  addContentSizedMessageBox(context, noticeLayer, innerPanelRect)
+
+  addBitmapText(
+    context,
+    noticeLayer,
+    notice.title,
+    'menu',
+    bodyLeft,
+    titleTextBaselineY,
+    { align: 'left', tint: 0xffffff },
+  )
+  if (confirmation) {
+    addBitmapText(
+      context,
+      noticeLayer,
+      notice.body,
+      'medium',
+      HUB_UNFORGE_CONFIRMATION.bodyLeft,
+      HUB_UNFORGE_CONFIRMATION.bodyTextBaselineY,
+      {
+        align: 'left',
+        lineHeight: 17,
+        maxWidth: HUB_UNFORGE_CONFIRMATION.bodyMaxWidth,
+        tint: 0xffffff,
+      },
+    )
+    addContentSizedMessageButton(
+      context,
+      noticeLayer,
+      notice.actionLabel,
+      HUB_UNFORGE_CONFIRMATION.primaryButtonRect,
+    )
+    addContentSizedMessageButton(
+      context,
+      noticeLayer,
+      notice.secondaryActionLabel ?? 'CANCEL',
+      HUB_UNFORGE_CONFIRMATION.secondaryButtonRect,
+    )
+  } else {
+    addBitmapText(
+      context,
+      noticeLayer,
+      notice.summary ?? 'Unforging bonus:',
+      'medium',
+      resultLayout!.bodyLeft,
+      HUB_UNFORGE_RESULT.summaryTextBaselineY,
+      { align: 'left', tint: HUB_SHOP_TEXT.goldTint },
+    )
+    addBitmapText(
+      context,
+      noticeLayer,
+      notice.body,
+      'medium',
+      resultLayout!.bodyLeft,
+      HUB_UNFORGE_RESULT.outcomeTextBaselineY,
+      { align: 'left', tint: notice.outcomeTint ?? 0x40ff40 },
+    )
+    addContentSizedMessageButton(
+      context,
+      noticeLayer,
+      notice.actionLabel,
+      resultLayout!.primaryButtonRect,
+    )
+  }
+  layer.addChild(noticeLayer)
+}
+
+function addContentSizedMessageBox(
+  context: RenderContext,
+  layer: Container,
+  innerRect: readonly [number, number, number, number],
+): void {
+  const [x, y, width, height] = innerRect
+  addTiledAtlas(context, layer, 'UI', HUB_DOWSING_MSGBOX.horizontalEdgeRecord, x + 66.5, y - 11.5, width - 133, 19)
+  addTiledAtlas(context, layer, 'UI', HUB_DOWSING_MSGBOX.horizontalEdgeRecord, x + 66.5, y + height - 7.5, width - 133, 19)
+  addTiledAtlas(context, layer, 'UI', HUB_DOWSING_MSGBOX.verticalEdgeRecord, x - 11.5, y + 71.5, 21, height - 143)
+  addTiledAtlas(context, layer, 'UI', HUB_DOWSING_MSGBOX.verticalEdgeRecord, x + width - 9.5, y + 71.5, 21, height - 143)
+  const corners = [
+    [x + 24, y + 27],
+    [x + width - 24, y + 27],
+    [x + 24, y + height - 27],
+    [x + width - 24, y + height - 27],
+  ] as const
+  corners.forEach(([centerX, centerY], index) => {
+    addCenteredAtlasSprite(context, layer, 'UI', 107 + index, centerX, centerY)
+  })
+  addTiledAtlas(
+    context,
+    layer,
+    'UI',
+    HUB_DOWSING_MSGBOX.interiorBackgroundRecord,
+    x - 5,
+    y - 5,
+    width + 10,
+    height + 10,
+  )
+  addNativeNineSlice(
+    context,
+    layer,
+    'UI',
+    HUB_DOWSING_MSGBOX.innerPanelRecord,
+    x,
+    y,
+    width,
+    height,
+    HUB_DOWSING_MSGBOX.innerPanelEdgeUvOrigin,
+  )
+  const centerX = x + width / 2
+  const skull = addCenteredAtlasSprite(context, layer, 'UI', 18, centerX, y - 42)
+  skull.rotation = Math.PI / 2
+  addCenteredAtlasSprite(context, layer, 'UI', 8, centerX, y + height + 55)
+  addCenteredAtlasSprite(context, layer, 'UI', 8, centerX - 75, y + height + 42, 0.75)
+  addCenteredAtlasSprite(context, layer, 'UI', 8, centerX + 75, y + height + 42, 0.75)
+}
+
+function addContentSizedMessageButton(
+  context: RenderContext,
+  layer: Container,
+  label: string,
+  [left, top, width, height]: readonly [number, number, number, number],
+): void {
+  const background = addAtlasSprite(context, layer, 'UI', 101, left, top + 8)
+  background.width = width
+  background.height = 69
+  addCenteredAtlasSprite(context, layer, 'UI', 54, left + 35, top + height / 2)
+  addCenteredAtlasSprite(context, layer, 'UI', 54, left + width - 35, top + height / 2, -1, 1)
+  addBitmapText(context, layer, label, 'menu', left + width / 2, top + 51, {
+    tint: HUB_DOWSING_MSGBOX.primaryButtonTextTint,
+  })
 }
 
 function addStoreGrid(

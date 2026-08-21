@@ -336,7 +336,7 @@ test('protocol v42 bounds Lua requests and structured results by wire bytes and 
   }
 })
 
-test('protocol v42 accepts every authoritative inventory action and rejects malformed variants', () => {
+test('protocol v48 accepts every authoritative inventory action and rejects malformed variants', () => {
   const actions = [
     { type: 'buy-dowsing', offerId: 1 },
     { type: 'buy-fomentius', itemId: 2 },
@@ -347,6 +347,7 @@ test('protocol v42 accepts every authoritative inventory action and rejects malf
     { type: 'equip', itemId: 3, slot: 'ring-2' },
     { type: 'transfer', direction: 'to-storage', gesture: 'drag', itemId: 4 },
     { type: 'transfer', direction: 'to-backpack', gesture: 'double-activation', itemId: 4 },
+    { type: 'unforge', itemId: 6 },
     { type: 'unequip', slot: 'weapon' },
   ] as const
   for (const action of actions) {
@@ -423,6 +424,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
               sequence: 1,
               transferDirection: null,
               transferGesture: null,
+              unforgeOutcome: null,
             },
           },
         },
@@ -430,6 +432,60 @@ test('server welcome round-trips content, kernel, character, and world ownership
     },
   } as const
   assert.deepEqual(decodeServerGameMessage(encodeGameMessage(feedbackWelcome)), feedbackWelcome)
+  const unforgeWelcome = {
+    ...welcome,
+    snapshot: {
+      ...welcome.snapshot,
+      players: {
+        ...welcome.snapshot.players,
+        'player-1': {
+          ...player,
+          economy: {
+            ...player.economy,
+            actionFeedback: {
+              accepted: true,
+              action: 'unforge',
+              dowsingPitch: null,
+              reason: null,
+              sequence: 2,
+              transferDirection: null,
+              transferGesture: null,
+              unforgeOutcome: {
+                amount: 10,
+                itemName: 'Pentaclostic Ring',
+                kind: 'maximum-health',
+              },
+            },
+            unforgeBonuses: {
+              ...player.economy.unforgeBonuses,
+              maximumHealth: 10,
+              recipeAttemptCount: 1,
+            },
+          },
+        },
+      },
+    },
+  } as const
+  assert.deepEqual(decodeServerGameMessage(encodeGameMessage(unforgeWelcome)), unforgeWelcome)
+  assert.throws(() => decodeServerGameMessage(JSON.stringify({
+    ...unforgeWelcome,
+    snapshot: {
+      ...unforgeWelcome.snapshot,
+      players: {
+        ...unforgeWelcome.snapshot.players,
+        'player-1': {
+          ...unforgeWelcome.snapshot.players['player-1'],
+          economy: {
+            ...unforgeWelcome.snapshot.players['player-1'].economy,
+            actionFeedback: {
+              ...unforgeWelcome.snapshot.players['player-1'].economy.actionFeedback,
+              unforgeOutcome: { amount: null, itemName: 'Ring', kind: 'gold' },
+            },
+          },
+        },
+      },
+    },
+  })), GameProtocolError)
   assert.deepEqual(welcome.snapshot.players['player-1'].lighting, {
     driveActive: false,
     lightRegistration: { managerLane: 'actor', registrationOrdinal: 0 },
@@ -953,8 +1009,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v47 carries leaderboard authority, modal pause identity, and existing gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 47)
+test('protocol v48 carries leaderboard authority, modal pause identity, unforge state, and existing gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 48)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),

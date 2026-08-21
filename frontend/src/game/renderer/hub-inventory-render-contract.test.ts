@@ -27,6 +27,9 @@ import {
   HUB_SHOP_PANEL,
   HUB_SHOP_TEXT,
   HUB_STARTER_EQUIPMENT_PRIMARY_TINT,
+  HUB_UNFORGE_CONFIRMATION,
+  HUB_UNFORGE_RESULT,
+  HUB_UNFORGE_TARGET,
   hubDowsingSlotPosition,
   hubDowsingFieldTint,
   hubChatTextRuns,
@@ -35,6 +38,8 @@ import {
   hubInventoryEquipmentSlotRects,
   hubInventorySlotPosition,
   hubShopSlotPosition,
+  hubUnforgeResultLayout,
+  hubUnforgeTargetTint,
 } from './hub-inventory-render-contract.ts'
 
 test('stock inventory owns the fixed 1600 by 900 stage and all 88 authored cells', () => {
@@ -91,6 +96,30 @@ test('stock inventory owns native ItemInfo, drag, double activation, and protect
   assert.match(HUB_HAT_REMOVAL_MSGBOX.body, /jaunty angle/)
   assert.equal(HUB_ROBE_REMOVAL_MSGBOX.title, 'A WIZARD WOULD NEVER REMOVE HIS ROBE!')
   assert.match(HUB_ROBE_REMOVAL_MSGBOX.body, /avoidable disintegration/)
+})
+
+test('the unforge anvil owns its native drop geometry, pulse, and dialog layouts', () => {
+  assert.deepEqual(HUB_UNFORGE_TARGET.rect, [1500, 800, 100, 100])
+  assert.deepEqual(HUB_UNFORGE_TARGET.center, [1562, 868])
+  assert.equal(hubUnforgeTargetTint(0), 0x99ffff)
+  assert.equal(hubUnforgeTargetTint(90), 0xccffff)
+  assert.equal(hubUnforgeTargetTint(270), 0x66ffff)
+  assert.deepEqual(HUB_UNFORGE_CONFIRMATION.innerPanelRect, [544.5, 387.5, 514, 326])
+  assert.deepEqual(HUB_UNFORGE_CONFIRMATION.primaryButtonRect, [589, 567, 209, 85])
+  assert.deepEqual(HUB_UNFORGE_CONFIRMATION.secondaryButtonRect, [805, 567, 209, 85])
+  assert.deepEqual(HUB_UNFORGE_RESULT.innerPanelRect, [606.5, 396.5, 390, 308])
+  assert.deepEqual(HUB_UNFORGE_RESULT.primaryButtonRect, [697, 558, 209, 85])
+  assert.deepEqual(hubUnforgeResultLayout(249), {
+    bodyLeft: 677,
+    innerPanelRect: [606.5, 396.5, 390, 308],
+    primaryButtonRect: [697, 558, 209, 85],
+  })
+  assert.deepEqual(hubUnforgeResultLayout(460), {
+    bodyLeft: 571.5,
+    innerPanelRect: [501, 396.5, 601, 308],
+    primaryButtonRect: [697, 558, 209, 85],
+  })
+  assert.throws(() => hubUnforgeResultLayout(Number.NaN), /finite and nonnegative/)
 })
 
 test('stock equipment icons retain class-owned natural transforms and starter appearance colors', () => {
@@ -352,6 +381,8 @@ test('the port exports the complete stock UI membership', () => {
     'inventory-item-info',
     'inventory-dragger',
     'inventory-required-clothing-message',
+    'inventory-unforge-confirmation',
+    'inventory-unforge-result',
   ])
 })
 

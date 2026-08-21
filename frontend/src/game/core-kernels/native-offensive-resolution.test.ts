@@ -65,6 +65,19 @@ test('Battle Mage runs after the minimum-one clamp and before later cost lanes',
   }), 3)
 })
 
+test('unforge flat damage and mana reduction enter their native pre-multiplier lanes', () => {
+  const factors = {
+    damage: 1.5,
+    globalFlatDamage: 2,
+    globalManaReduction: 2,
+    manaCost: 0.75,
+  }
+  assert.equal(resolveNativeSkillDamage(8, factors, { baseDamage: 10 }), 18)
+  assert.equal(resolveNativeSkillDamage(66, factors, { baseDamage: 10 }), 10)
+  assert.equal(resolveNativeSkillManaCost(8, factors, { baseManaCost: 10 }), 6)
+  assert.equal(resolveNativeSkillManaCost(15, factors, { baseManaCost: 10 }), 8)
+})
+
 test('equipment spell, class, and one-spell lanes feed the shared resolver once', () => {
   const equipment = resolveNativeEquipmentEffects(new Array(83).fill(0), [{
     effects: [

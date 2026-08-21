@@ -32,6 +32,7 @@ import {
   drawNativeFloat,
   drawNativeInteger,
 } from '../core-kernels/native-rng.ts'
+import { createNativeSecondaryPlayerState } from '../core-kernels/native-secondary-abilities.ts'
 import {
   addPlayerCharacter,
   applyGameSimulationHubAction,
@@ -433,6 +434,7 @@ test('hub trader actions require the authenticated participant to be in native s
     sequence: 1,
     transferDirection: null,
     transferGesture: null,
+    unforgeOutcome: null,
   })
   assert.equal(getPlayerEconomy(purchased.state, 'second').gold, 10_000)
   assert.strictEqual(
@@ -452,6 +454,7 @@ test('hub trader actions require the authenticated participant to be in native s
     sequence: 2,
     transferDirection: null,
     transferGesture: null,
+    unforgeOutcome: null,
   })
 
   if (purchased.state.world.kind !== 'hub') throw new Error('expected Hub world')
@@ -477,6 +480,86 @@ test('hub trader actions require the authenticated participant to be in native s
     type: 'buy-fomentius',
     itemId: getPlayerEconomy(fading, 'first').fomentiusStock[0]!.id,
   }).reason, 'service-unavailable')
+})
+
+test('unforge is participant-owned and applies full rejuvenation plus Mind Dredge authoritatively', () => {
+  const config = {
+    discipline: 'arcane',
+    displayName: 'Unforge',
+    element: 'ether',
+  } as const
+  const buildState = (seed: number) => {
+    let state = createGameSimulation({ player: config })
+    const economy = getPlayerEconomy(state, 'player')
+    const item = createEquipmentInventoryItem(DOWSING_EQUIPMENT_RECIPES[0]!, 90_000)
+    state = {
+      ...state,
+      playerEntities: replacePlayerEconomy(state.playerEntities, 'player', {
+        ...economy,
+        backpack: [item],
+        rng: createNativeRng(seed),
+        unforgeBonuses: { ...economy.unforgeBonuses, recipeAttemptCount: 8 },
+      }),
+    }
+    return { item, state }
+  }
+
+  const rejuvenation = buildState(2)
+  const playerIndex = rejuvenation.state.playerEntities.identities.findIndex(
+    ({ playerId }) => playerId === 'player',
+  )
+  const progressions = [...rejuvenation.state.playerEntities.progressions]
+  progressions[playerIndex] = {
+    ...progressions[playerIndex]!,
+    currentHealth: 1,
+    currentMana: 2,
+  }
+  const secondaryPlayer = createNativeSecondaryPlayerState()
+  const cooldowns = secondaryPlayer.cooldownTicksBySkill.map(() => 50)
+  const armed: GameSimulationState = {
+    ...rejuvenation.state,
+    playerEntities: {
+      ...rejuvenation.state.playerEntities,
+      progressions: Object.freeze(progressions),
+    },
+    secondaryAbilities: {
+      ...rejuvenation.state.secondaryAbilities,
+      players: {
+        ...rejuvenation.state.secondaryAbilities.players,
+        player: {
+          ...secondaryPlayer,
+          cooldownTicksBySkill: Object.freeze(cooldowns),
+          globalCooldownTicks: 25,
+        },
+      },
+    },
+  }
+  const rejuvenated = applyGameSimulationHubAction(armed, 'player', {
+    type: 'unforge',
+    itemId: rejuvenation.item.id,
+  })
+  assert.equal(rejuvenated.accepted, true)
+  assert.equal(getPlayerEconomy(rejuvenated.state, 'player').backpack.length, 0)
+  assert.equal(getPlayerEconomy(rejuvenated.state, 'player').actionFeedback?.unforgeOutcome?.kind,
+    'full-rejuvenation')
+  assert.equal(getPlayerProgression(rejuvenated.state, 'player').currentHealth,
+    getPlayerProgression(rejuvenated.state, 'player').maximumHealth)
+  assert.equal(getPlayerProgression(rejuvenated.state, 'player').currentMana,
+    getPlayerProgression(rejuvenated.state, 'player').maximumMana)
+  assert.equal(rejuvenated.state.secondaryAbilities.players.player?.globalCooldownTicks, 0)
+  assert.equal(rejuvenated.state.secondaryAbilities.players.player?.cooldownTicksBySkill[11], 0)
+  assert.equal(rejuvenated.state.secondaryAbilities.players.player?.cooldownTicksBySkill[0], 50)
+
+  const dredge = buildState(12)
+  const deferredBefore = getPlayerProgression(dredge.state, 'player').deferredSkillChoices
+  const granted = applyGameSimulationHubAction(dredge.state, 'player', {
+    type: 'unforge',
+    itemId: dredge.item.id,
+  })
+  assert.equal(getPlayerEconomy(granted.state, 'player').actionFeedback?.unforgeOutcome?.kind,
+    'mind-dredge')
+  assert.equal(getPlayerProgression(granted.state, 'player').deferredSkillChoices,
+    deferredBefore + 1)
 })
 
 test('inventory double activation consumes one potion and applies its participant-owned effect', () => {

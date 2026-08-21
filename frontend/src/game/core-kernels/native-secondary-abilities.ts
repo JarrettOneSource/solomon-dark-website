@@ -846,6 +846,27 @@ export function createNativeSecondaryPlayerState(): NativeSecondaryPlayerState {
   }
 }
 
+export function applyNativeUnforgeCooldownRejuvenation(
+  source: NativeSecondarySimulationState,
+  playerId: string,
+): NativeSecondarySimulationState {
+  const player = source.players[playerId]
+  if (!player) return source
+  return {
+    ...source,
+    players: {
+      ...source.players,
+      [playerId]: {
+        ...player,
+        cooldownTicksBySkill: Object.freeze(player.cooldownTicksBySkill.map((ticks, skillId) => (
+          nativeSkillCategory(skillId) === 2 ? 0 : ticks
+        ))),
+        globalCooldownTicks: 0,
+      },
+    },
+  }
+}
+
 export function nativeSecondaryAvailableMana(
   currentMana: number,
   player: NativeSecondaryPlayerState,

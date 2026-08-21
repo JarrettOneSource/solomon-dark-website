@@ -34,6 +34,66 @@ export const HUB_INVENTORY_INTERACTION = {
   selectionTint: 0x00c020,
 } as const
 
+export const HUB_UNFORGE_TARGET = {
+  center: [1562, 868] as const,
+  rect: [1500, 800, 100, 100] as const,
+  redAmplitude: 0.2,
+  redBase: 0.6,
+  periodTicks: 360,
+} as const
+
+export const HUB_UNFORGE_CONFIRMATION = {
+  bodyLeft: 614,
+  bodyMaxWidth: 376,
+  bodyTextBaselineY: 511,
+  innerPanelRect: [544.5, 387.5, 514, 326] as const,
+  primaryButtonRect: [589, 567, 209, 85] as const,
+  secondaryButtonRect: [805, 567, 209, 85] as const,
+  titleTextBaselineY: 478,
+} as const
+
+export const HUB_UNFORGE_RESULT = {
+  bodyLeft: 677,
+  bodyLeftOffset: 70.5,
+  centerX: 801.5,
+  horizontalChrome: 141,
+  innerPanelRect: [606.5, 396.5, 390, 308] as const,
+  outcomeTextBaselineY: 537,
+  primaryButtonRect: [697, 558, 209, 85] as const,
+  summaryTextBaselineY: 520,
+  titleTextBaselineY: 485,
+} as const
+
+export function hubUnforgeResultLayout(maxLineWidth: number): {
+  readonly bodyLeft: number
+  readonly innerPanelRect: readonly [number, number, number, number]
+  readonly primaryButtonRect: typeof HUB_UNFORGE_RESULT.primaryButtonRect
+} {
+  if (!Number.isFinite(maxLineWidth) || maxLineWidth < 0) {
+    throw new RangeError('unforge result line width must be finite and nonnegative')
+  }
+  const width = maxLineWidth + HUB_UNFORGE_RESULT.horizontalChrome
+  const left = HUB_UNFORGE_RESULT.centerX - width / 2
+  return {
+    bodyLeft: left + HUB_UNFORGE_RESULT.bodyLeftOffset,
+    innerPanelRect: [
+      left,
+      HUB_UNFORGE_RESULT.innerPanelRect[1],
+      width,
+      HUB_UNFORGE_RESULT.innerPanelRect[3],
+    ],
+    primaryButtonRect: HUB_UNFORGE_RESULT.primaryButtonRect,
+  }
+}
+
+export function hubUnforgeTargetTint(nativeTick: number): number {
+  const red = Math.round((
+    Math.sin(nativeTick * Math.PI / 180) * HUB_UNFORGE_TARGET.redAmplitude
+    + HUB_UNFORGE_TARGET.redBase
+  ) * 255)
+  return (red << 16) | 0x00ffff
+}
+
 export const HUB_STARTER_EQUIPMENT_PRIMARY_TINT: Readonly<Record<WizardElement, number>> = {
   air: 0xa0c3c3,
   earth: 0x90b390,
@@ -292,6 +352,8 @@ export const HUB_NATIVE_UI_SURFACES = [
   'inventory-item-info',
   'inventory-dragger',
   'inventory-required-clothing-message',
+  'inventory-unforge-confirmation',
+  'inventory-unforge-result',
 ] as const
 
 export interface HubInventoryItemInfoText {
