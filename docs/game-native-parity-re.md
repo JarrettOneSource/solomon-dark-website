@@ -26941,7 +26941,7 @@ validated immutable ZIP + required capabilities
 
 ### Implementation validation receipt
 
-- Website functional cutoff `84049999013c8b9665c4f78e92f97a092394bb4b`
+- Website final validated cutoff `7c2d766b843114eadc25af66dd2f23a52db795be`
   implements API `0.2.0` admission, capability rejection, the isolated package
   file/content registry, stable decimal content identities, registered sprite,
   item, and additive-loot owners, guest-correct consumption, synchronous
@@ -26949,13 +26949,14 @@ validated immutable ZIP + required capabilities
   and the recovered flash/ring renderer. The browser journey caught and closed
   one missing presentation member before publication: `BadGuys[110]` had not
   been included in the preload census. The 78-record asset contract now owns it.
-- The exact merged functional tree passed `./scripts/validate.sh` on native
-  Windows and the Apple-silicon Mac mini: 14 backend tests; frontend groups of
-  4, 43, 225, 1,239, 17, 10, 7, 17, and 16 tests; five desktop tests; formatting,
+- The merged functional tree passed `./scripts/validate.sh` on native Windows
+  and the Apple-silicon Mac mini: 15 backend tests; frontend groups of 4, 43,
+  225, 1,244, 19, 10, 7, 17, and 16 tests; five desktop tests; formatting,
   lint, architecture boundaries, Release backend build, production client and
-  portable-host builds, media policy, and a 353,613-byte raw / 100,134-byte
-  gzip Game entry. The later two Website commits change only the committed
-  built-browser acceptance tool and pass the supported lint gate on both hosts.
+  portable-host builds, media policy, and a 367,042-byte raw / 103,300-byte
+  gzip Game entry. The final commit makes the concurrent public-party assertion
+  scheduler-independent; the Mac repeated its 19 party, eight supervisor, and
+  lint gates, while Windows repeated the whole matrix at the final cutoff.
 - Deterministic package `invincibility-potion-0.3.0.zip` is 6,642 bytes with
   package SHA-256
   `5d294cc374403745c12ee1b441f1822bbadce126a4d78c2ea7f1125638eb1c54`
@@ -26971,11 +26972,11 @@ validated immutable ZIP + required capabilities
   derived session manifest SHA-256
   `28151cb4867ab55416a73f5fd65b6c7d3210286076d554e0c29fb19ec4bdcf00`.
   Windows Inventory/effect screenshots hash to
-  `78664f6ef2b34667a855964047fa0558b533dfd304fdfdd1ae4126a8a9ba7924`
-  and `6f3d2fba739e0347ea6028fdd53672ba2e915c11c5f3644ff4737f109fdeb59c`;
+  `6319ce2de4c9026d3e69b5ebf1cc458479403d0936d1715c5190c410e442f08b`
+  and `560fcb2583b820bb7017487ed77e45fe33702531bb1fa9909168646a780c4c15`;
   Mac equivalents hash to
-  `a12690d5b9e431cd8f63f3ce2b5c5729a5ed45cf74fdb5098598d7a25ed65eaf`
-  and `0830cdde5035369b1f3951f96be963fbcb8b802f2824da3aa64977adfbb7f4e1`.
+  `36b9f0f3832d70b488b599b069d911499a72bbe30cfcc39feb3962712c6b7285`
+  and `137d64818eb6ba0e17b74546d0a19be9f4f14a829e9f85d5bece7e15d04cbcac`.
 - Mod Loader cutoff `470758e2776eb06a3108bb10cecece021f3cf31e`
   passes 88/88 portable modules (801 tests) and 491/491 static RE contracts in
   WSL and on the Mac mini. The two pre-existing failures introduced by the
