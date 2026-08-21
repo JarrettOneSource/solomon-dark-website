@@ -25681,7 +25681,7 @@ remain in the element-specific sections above.
 | 5 Body Discipline | Body offer bias/root and dependency page membership. | Skills/creation UI only; no world/player VFX, light, or audio. | progression/Skill Screen — closed |
 | 6 Mind Discipline | Mind offer bias/root and dependency page membership. | Skills/creation UI only; no world/player VFX, light, or audio. | progression/Skill Screen — closed |
 | 7 Arcane Discipline | Arcane offer bias/root and dependency page membership. | Skills/creation UI only; no world/player VFX, light, or audio. | progression/Skill Screen — closed |
-| 8 Magic Missile | One-shot homing hostile projectile, damage/mana, terrain/actor contact. | Two-pass 110/111/112 Ether body; FadeMM/contact light and hit audio; cast `magicmissile`. | gameplay closed; shared selected-primary HUD owner reopened in v52 |
+| 8 Magic Missile | One-shot homing hostile projectile, damage/mana, terrain/actor contact. | Two-pass 110/111/112 Ether body; FadeMM/contact light and hit audio; cast `magicmissile`. | gameplay and shared selected-primary HUD owner — closed by v52 |
 | 9 Smart Missiles | Reacquisition and turn/speed scaling of row 8. | No independent actor/light/audio; path changes the retained Missile owner. | native primary profile/targeting — closed |
 | 10 More Missiles | Alternating fan quantity and added mana cost. | No independent VFX/light/audio family; each spawned row-8 actor owns the full body/contact stack. | primary emission — closed |
 | 11 Call Leviathan | Persistent summon, appendage targeting, EtherBolt damage, quantity/max-equipment branch. | BadGuys 343..372/39/11/22 plus Ether compositor; Leviathan/PlaneCross audio and owned lights. | secondary actor contract — closed |
@@ -25689,7 +25689,7 @@ remain in the element-specific sections above.
 | 13 Piercing | Row-8 pierce count and retained-damage factor; reacquires after exiting the contacted body. | Independent ten-tick additive BadGuys-53 streaks; no extra light/loop. | primary contact/pierce state — closed |
 | 14 Ether Blast | Refreshed Magic Missile charge, rounded radial current-HP pulse, target EtherBurn. | 108 perspective particles, weapon pulse, Region flash/camera; EtherBurn 246..250 plus target MiscLight; three release sounds. | native Ether kernel/secondary target ECS — closed |
 | 15 Phasing | Paid/cooldown heading probe and collision-authoritative relocation. | BadGuys-53 traversal; `phase` sound; no persistent light. | secondary action — closed |
-| 16 Fireball | One-shot projectile, ranked damage/mana, terrain/actor contact. | 255..266 body, 267..270 trail, 251..254 impact; outbound point light; throw/hit audio. | gameplay closed; shared selected-primary HUD owner reopened in v52 |
+| 16 Fireball | One-shot projectile, ranked damage/mana, terrain/actor contact. | 255..266 body, 267..270 trail, 251..254 impact; outbound point light; throw/hit audio. | gameplay and shared selected-primary HUD owner — closed by v52 |
 | 17 Embers | Contact fragments with independent damage/count and spent-Ember follow-up. | Ember actors and their native Fire passes/lights; parent Fire contact audio. | Fire payload/transient ECS — closed |
 | 18 Explode | Fire contact radial damage and radius payload. | Explosion/impact children, camera/light feedback, Fire hit audio; retires independently. | Fire detonation combat/view — closed |
 | 19 Embers to Imps | Spent Ember becomes timed friendly GoodImp and Fire patch; takes precedence over Immolate. | GoodImp body/flame/contact banks, actor light and Imp/bite sounds. | Fire GoodImp runtime — closed |
@@ -25697,7 +25697,7 @@ remain in the element-specific sections above.
 | 21 Ring of Fire | Paid 30-segment ring, Shockwave damage/push, Burning Man maximum branch. | DeadHawg fire ring, shockwave children, Region camera/light; `bigfire`/`nuke` audio. | secondary actor/wave — closed |
 | 22 Burn | Target-owned timed Fire damage modifier and merge. | Target flames and MiscLight each tick; fire loop/contact sound ownership is shared with producer. | secondary target effect — closed |
 | 23 Firewalker | Toggle/hoard, immediate and periodic trail patches, damage/duration/contact. | DeadHawg patch bank, registered patch light, `ignite` and shared `lowfire` loop. | secondary player + Fire patch ECS — closed |
-| 24 Lightning | Sustained target/terrain beam, ranked per-tick damage/mana. | Dual record-44 ribbons, source/contact coronas, path/MiscLights; start and lightning loop. | gameplay closed; shared selected-primary HUD owner reopened in v52 |
+| 24 Lightning | Sustained target/terrain beam, ranked per-tick damage/mana. | Dual record-44 ribbons, source/contact coronas, path/MiscLights; start and lightning loop. | gameplay and shared selected-primary HUD owner — closed by v52 |
 | 25 Chaining | Ordered distinct-target hops and float32 damage decay. | Independent Lightning legs/contact fades and their existing light stack; no new cue. | Air combat/transients — closed |
 | 26 Stun | Target-owned 25-tick minimum movement-factor merge. | No stock independent sprite, light, or audio; target motion is the presentation consequence. | secondary target effect — closed |
 | 27 Magic Storm | Paid aimed StormCloud, strike damage range, target shuffle/query, active/fade lifecycle. | Native rain/cloud/bolt composite and lights; magic-storm/thunder plus shared rain/wind loops. | secondary Storm actor — closed |
@@ -25705,7 +25705,7 @@ remain in the element-specific sections above.
 | 29 Hurricane | Refreshed Lightning aura, strict tangential Badguy/Maggot force, target cooldown, charge-cubed damage. | DeadHawg-15 core + BadGuys-84 high/low lane programs; shared steady-wind loop; explicitly no light/shadow. | Hurricane kernel/combat/view/audio — closed |
 | 30 Prismatic Shock | Paid radius application and target-owned Prismatic merge; doubles later Air susceptibility. | Record-58 wave plus 110..112 children, cast sounds; no retained parent light beyond mapped children. | secondary actor/target effect — closed |
 | 31 Disintegrate | Event-local Lightning percentile and strict post-hit 20-percent execute. | No independent actor/light/audio; ordinary hit/death presentation owns the result. | Air contact flag — closed |
-| 32 Frost Jet | Sustained cone query, ranked per-tick damage/mana and cold contact. | BadGuys-30/28 Normal/Over particles; ice-start and ice loop; no invented emitter light. | gameplay closed; shared selected-primary HUD owner reopened in v52 |
+| 32 Frost Jet | Sustained cone query, ranked per-tick damage/mana and cold contact. | BadGuys-30/28 Normal/Over particles; ice-start and ice loop; no invented emitter light. | gameplay and shared selected-primary HUD owner — closed by v52 |
 | 33 Chill Wind | Distance-tapered target push and hostile Arrow tumble/removal. | Independent record-2 SpinAway for arrows; otherwise row-32 presentation/audio, no new light. | Water combat + arrow effect — closed |
 | 34 Cone of Ice | Reach/aperture widening and particle width/density inputs. | Modifies row-32 geometry only; no independent actor/light/audio. | Water profile/emitter — closed |
 | 35 Ring of Ice | Paid expanding one-contact FreezeWave, damage/freeze/cold branches and bursts. | DeadHawg 114/121, WhirlSnow/iceblast children and wave light; `ringofice` audio. | secondary wave/target effects — closed |
@@ -25713,7 +25713,7 @@ remain in the element-specific sections above.
 | 37 Cold Aura | Held radius slow query and target merge. | Parent-following additive BadGuys-14 actor; no light/audio owner of its own. | Water channel/actor/target effect — closed |
 | 38 Hail | Native hit gate, event-time damage range, bouncing actor and target contact. | BadGuys-32 Hail with bounce clocks/audio samples; no outbound light. | Water RNG/combat/actor audio — closed |
 | 39 Permafrost | Scales Water cold strength/duration and Frozen/ColdSlow material/lifecycle. | No independent actor/light/audio; target material/status actors own visible consequences. | Water profile/secondary modifiers — closed |
-| 40 Boulder | Persistent held/released rock carrier, gathered rocks, charge, collision, damage pool. | 168..171/2008..2010/86 body, CalledRock and fragments with Region-light sampling; start/gather/rolling audio. | gameplay closed; shared selected-primary HUD owner reopened in v52 |
+| 40 Boulder | Persistent held/released rock carrier, gathered rocks, charge, collision, damage pool. | 168..171/2008..2010/86 body, CalledRock and fragments with Region-light sampling; start/gather/rolling audio. | gameplay and shared selected-primary HUD owner — closed by v52 |
 | 41 Earthquake | Paid duration, shuffled enemy disruption, scenery wobble, world shake. | Floor copies, cracks/dust/lit debris; earthquake/rock/crack audio; mapped Region light/feedback. | secondary Earthquake actor — closed |
 | 42 Hasten Rocks | Accelerates row-40 charge/gather recurrence and adds mana cost. | Inherited Boulder/CalledRock art and loops only; no independent light/audio. | Earth profile/charge kernel — closed |
 | 43 Bind Rocks | Row-40 toughness/damage-pool retention and mana cost. | No independent actor/light/audio; retained rock/contact lifetime changes. | Earth contact pool — closed |
@@ -25725,26 +25725,26 @@ remain in the element-specific sections above.
 | 49 Magic Circle | Paid aimed field, ten-tick slow and player HP/MP pulses. | BadGuys-48/7 rings, flickering shadow-casting Region light; magic-circle sound. | secondary actor/target/player effects — closed |
 | 50 Magic Trap | Paid weld/primary selector, charge, trigger queries, damage and elemental target modifier. | Native trap/shimmer/terminal banks, camera/light; selector cast sounds, trap/electric loops. | secondary trap/target ECS — closed |
 | 51 Dampen | Paid caster rectangle, projectile removal, shield dispel, disruption, CastSpin. | 360 MoveFades + 30 additive fades; flash/dampen sounds; no invented light. | secondary action/world mutation — closed |
-| 52 Spell Welding | Learned recipe/vector, selected-primary row, ten build dispatches and offer rules. | Special Skills selectors 108..117; each build owns its fully mapped native VFX/light/audio; no standalone cast actor. | gameplay/Skill Screen closed; build-specific in-run HUD emblem reopened in v52 |
+| 52 Spell Welding | Learned recipe/vector, selected-primary row, ten build dispatches and offer rules. | Special Skills selectors 108..117; each build owns its fully mapped native VFX/light/audio; no standalone cast actor. | gameplay, Skill Screen, and build-specific in-run HUD emblem — closed by v52 |
 | 53 Flash | Defensive chance response, radius-100 Dazzle and duration. | 8 record-16 + 4 record-15 children, Region flash/camera, flash sound; no persistent light. | harmful-contact/secondary response — closed |
 | 54 Magic Shield | Paid absorb state, hit pulse, break and optional row-55 payload. | Record-49 shell, break particles/FuzzySpears/shockwave, shield sounds and mapped light/camera. | secondary player/combat/view — closed |
 | 55 Explosive Shield | Adds paid damage payload to row-54 break and radius-110 hostile contact. | Break explosion/502-word visual and `magicshieldexplode` audio; uses row-54 lifecycle/light owner. | Magic Shield payload — closed |
-| 56 Mana Up | Adds configured maximum mana. | Dynamic mana-track/core and available-mana consequence only; no independent VFX/light/audio. | derived stat closed; dynamic maximum-meter geometry reopened in v52 |
-| 57 Channel Mana | Multiplies mana recovery; concentration adds its second factor. | Meter recovery and selected-concentration emblem; no independent world VFX/light/audio. | gameplay closed; in-run concentration emblem reopened in v52 |
-| 58 Meditation | Idle delay/recovery multiplier and concentrated acting/moving ramp. | Meter recovery and selected-concentration emblem; no independent world VFX/light/audio. | gameplay closed; in-run concentration emblem reopened in v52 |
-| 59 Battle Mage | Reduces offensive mana costs; concentration composes. | Selected-concentration emblem; selected casts retain their own presentation; no independent world VFX/light/audio. | gameplay closed; in-run concentration emblem reopened in v52 |
-| 60 Focus | Secondary recharge factor and concentrated instant-recharge percentile. | Selected-concentration emblem; affected skill's ordinary next cast owns feedback; no independent world VFX/light/audio. | gameplay closed; in-run concentration emblem reopened in v52 |
-| 61 Siege Mage | Raises offensive damage; concentration composes. | Selected-concentration emblem; damage producer retains its own effects; no independent world VFX/light/audio. | gameplay closed; in-run concentration emblem reopened in v52 |
-| 62 Resist Magic | Reduces incoming magic damage; concentration composes. | Selected-concentration emblem; no independent world VFX/light/audio. | gameplay closed; in-run concentration emblem reopened in v52 |
-| 63 Creativity | Fourth offer, relaxed picker eligibility, concentrated Insight double-apply. | Selected-concentration emblem plus Skill picker Insight/shared audio; no world light. | gameplay closed; in-run concentration emblem reopened in v52 |
-| 64 Health Up | Adds configured maximum health. | Dynamic health-track/core consequence only; no independent VFX/light/audio and no concentration emblem. | derived stat closed; dynamic maximum-meter geometry reopened in v52 |
-| 65 Enchant Staff | Adds staff damage, rank changes target selection, concentration speeds melee by 1.75. | Selected-concentration emblem plus Staff action/contact art and sounds; no rank-owned light. | gameplay closed; in-run concentration emblem reopened in v52 |
-| 66 Telekinesis | Scales Orb/Gold/Sack/Bonus pull and pickup ranges; concentration doubles. | Selected-concentration emblem plus existing loot motion/pickup art/audio; no independent light. | gameplay closed; in-run concentration emblem reopened in v52 |
-| 67 Rush | Player movement multiplier; concentration composes. | Selected-concentration emblem plus locomotion/gait consequence; no independent world VFX/light/audio. | gameplay closed; in-run concentration emblem reopened in v52 |
-| 68 Deflect | Staff-gated chance cancels eligible contact; concentration reflects physical damage x5 in range. | Selected-concentration emblem, source-facing and pitched `swipe` audio; no actor/light. | gameplay closed; in-run concentration emblem reopened in v52 |
-| 69 Resist Poison | Reduces poison duration; concentration composes. | Selected-concentration emblem plus status-duration consequence; no independent world VFX/light/audio. | gameplay closed; in-run concentration emblem reopened in v52 |
-| 70 Faster Caster | Cast/action progress factor; concentration composes. | Selected-concentration emblem; existing Staff/cast animation and sound accelerate; no independent light. | gameplay closed; in-run concentration emblem reopened in v52 |
-| 71 Fortunate Flailing | Staff proc selection; concentrated non-normal damage multiplier. | Selected-concentration emblem plus Knockback/Disable/Critical/Whirl children/sounds; no light. | gameplay closed; in-run concentration emblem reopened in v52 |
+| 56 Mana Up | Adds configured maximum mana. | Dynamic mana-track/core and available-mana consequence only; no independent VFX/light/audio. | derived stat and dynamic maximum-meter geometry — closed by v52 |
+| 57 Channel Mana | Multiplies mana recovery; concentration adds its second factor. | Meter recovery and selected-concentration emblem; no independent world VFX/light/audio. | gameplay and in-run concentration emblem — closed by v52 |
+| 58 Meditation | Idle delay/recovery multiplier and concentrated acting/moving ramp. | Meter recovery and selected-concentration emblem; no independent world VFX/light/audio. | gameplay and in-run concentration emblem — closed by v52 |
+| 59 Battle Mage | Reduces offensive mana costs; concentration composes. | Selected-concentration emblem; selected casts retain their own presentation; no independent world VFX/light/audio. | gameplay and in-run concentration emblem — closed by v52 |
+| 60 Focus | Secondary recharge factor and concentrated instant-recharge percentile. | Selected-concentration emblem; affected skill's ordinary next cast owns feedback; no independent world VFX/light/audio. | gameplay and in-run concentration emblem — closed by v52 |
+| 61 Siege Mage | Raises offensive damage; concentration composes. | Selected-concentration emblem; damage producer retains its own effects; no independent world VFX/light/audio. | gameplay and in-run concentration emblem — closed by v52 |
+| 62 Resist Magic | Reduces incoming magic damage; concentration composes. | Selected-concentration emblem; no independent world VFX/light/audio. | gameplay and in-run concentration emblem — closed by v52 |
+| 63 Creativity | Fourth offer, relaxed picker eligibility, concentrated Insight double-apply. | Selected-concentration emblem plus Skill picker Insight/shared audio; no world light. | gameplay and in-run concentration emblem — closed by v52 |
+| 64 Health Up | Adds configured maximum health. | Dynamic health-track/core consequence only; no independent VFX/light/audio and no concentration emblem. | derived stat and dynamic maximum-meter geometry — closed by v52 |
+| 65 Enchant Staff | Adds staff damage, rank changes target selection, concentration speeds melee by 1.75. | Selected-concentration emblem plus Staff action/contact art and sounds; no rank-owned light. | gameplay and in-run concentration emblem — closed by v52 |
+| 66 Telekinesis | Scales Orb/Gold/Sack/Bonus pull and pickup ranges; concentration doubles. | Selected-concentration emblem plus existing loot motion/pickup art/audio; no independent light. | gameplay and in-run concentration emblem — closed by v52 |
+| 67 Rush | Player movement multiplier; concentration composes. | Selected-concentration emblem plus locomotion/gait consequence; no independent world VFX/light/audio. | gameplay and in-run concentration emblem — closed by v52 |
+| 68 Deflect | Staff-gated chance cancels eligible contact; concentration reflects physical damage x5 in range. | Selected-concentration emblem, source-facing and pitched `swipe` audio; no actor/light. | gameplay and in-run concentration emblem — closed by v52 |
+| 69 Resist Poison | Reduces poison duration; concentration composes. | Selected-concentration emblem plus status-duration consequence; no independent world VFX/light/audio. | gameplay and in-run concentration emblem — closed by v52 |
+| 70 Faster Caster | Cast/action progress factor; concentration composes. | Selected-concentration emblem; existing Staff/cast animation and sound accelerate; no independent light. | gameplay and in-run concentration emblem — closed by v52 |
+| 71 Fortunate Flailing | Staff proc selection; concentrated non-normal damage multiplier. | Selected-concentration emblem plus Knockback/Disable/Critical/Whirl children/sounds; no light. | gameplay and in-run concentration emblem — closed by v52 |
 | 72 Acid Rain | Paid aimed persistent direct-damage field and shuffled subset pulses. | Native rain/field/splash passes and light; magic-storm/acid-sizzle/rain loop. | secondary Acid actor — closed |
 | 73 Fire Wall | Paid aim-perpendicular eleven-patch field and contact damage. | DeadHawg patch bank/light; ignite, fire-hit and shared low-fire loop. | secondary Fire patches — closed |
 | 74 Ether Drain | Paid aimed field, refreshed candidates, distance-tier damage and pull. | Ether-plane/BadGuys/DeadHawg children and Region light; distort/lightning plus plane/wind loops. | secondary Drain actor — closed |
@@ -25753,7 +25753,7 @@ remain in the element-specific sections above.
 | 77 Turn Undead | Paid family-filtered flee/weaken for Skeleton/Archer/Mage/Zombie. | 35 gray record-48 fades; level-up audio sample pitches 2 then 3; no Region light. | secondary area/target effects — closed |
 | 78 Mindstar | Toggle/hoard, temporary +1 effective rank across learned rows, overload cleanup. | Region toggle feedback and mindstar audio stream; no world actor/light. | secondary player/progression — closed |
 | 79 Regenerate | Toggle/hoard and fixed `1.5/tickRate` HP recovery, overload cleanup. | Orange Region point feedback and shared mindstar audio stream; no world actor/light. | secondary player/tick — closed |
-| 80 Plane Orb | Runtime primary forced by row 12; aimed orb, homing/acceleration, damage and fade. | BadGuys-75, repeating ether-plane mesh, 11/45 children, actor light; distort/lightning/plane audio; forced selected-primary emblem. | gameplay closed; forced in-run HUD emblem reopened in v52 |
+| 80 Plane Orb | Runtime primary forced by row 12; aimed orb, homing/acceleration, damage and fade. | BadGuys-75, repeating ether-plane mesh, 11/45 children, actor light; distort/lightning/plane audio; forced selected-primary emblem. | gameplay and forced in-run HUD emblem — closed by v52 |
 | 81 Reserved | No CFG, rank, cast, player/enemy/world effect; selector storage boundary only. | Skills record 108 overlaps the first weld special selector; no independent audio/light/lifecycle. | catalog/Skill Screen negative disposition — closed |
 
 The mechanical property audit covers every numeric CFG key. The apparent
@@ -26254,5 +26254,74 @@ before the complete globals section and requires a section-ownership
 regression. That configuration correction is independent of the Website
 presentation implementation but required for reproducible native evidence.
 
-Implementation and cross-platform receipts remain pending below this
-authoritative pre-code ledger.
+#### Implementation and cross-platform receipt
+
+- `native-hud-presentation.ts` is the sole web owner of native vital geometry
+  and selected-skill binding presentation. `GameHud` projects its values through
+  CSS variables. Default track/core rectangles are exactly
+  HP `[640,14.5,750,34.5]` / `[645,19.5,745,29.5]` and
+  MP `[850,14.5,960,34.5]` / `[855,19.5,955,29.5]`. The browser box-model
+  regression measures both outer and inner rectangles so the two-pixel ridge
+  cannot silently shift the native five-pixel inset.
+- Health/Mana Up, equipment maximum transforms, Mindstar effective ranks, and
+  Hagatha Life/Mana Charms now converge on the same authoritative maxima and
+  shared geometry. The two charms apply the recovered `1.25` final-maximum
+  factor independently. Snapshot equality includes both maxima, closing the
+  zero-current/dead-owner update edge.
+- Reserve and Magic Shield consume their expanded cores. The accepted
+  maximum-125/250 charm witness has 137.5-pixel cores, a 27.5-pixel
+  50-of-250 reserve ending at `x=992.5`, and a 50-percent shield over
+  `[607.5,19.5,745,29.5]`.
+- Binding presentation covers five pure primaries, all ten Weld build records,
+  Plane Orb 107, and every reachable concentration record. The exact Split Mind
+  browser witness is primary/A/B draw order with centers `760/840/800` and
+  records `67/84/85`. Passive Health Up 64 remains excluded.
+- The current-main rebase preserves the concurrent mobile quickbar/potion
+  controls and shared book-pause policy. The existing Skill Book smoke now
+  releases its authoritative book pause before injecting test-only learned
+  state, then reopens the same book; the real duplicate-quickbar and Fireball
+  selection journey remains green.
+
+Exact code cutoff `a8c955726938d01f880efb4860abb5ef5213230f` is one commit
+above Website `origin/main` `1361f097cf9ff2676e5c01c7b822f44b52a1220a`.
+Linux, native Windows, and the arm64 Mac mini each ran the unchanged canonical
+`./scripts/validate.sh` entrypoint with Node `22.17.0`, npm `10.9.2`, and
+.NET SDK `10.0.302`. Every accepted run passed 13 backend contracts, lint and
+architecture boundaries, 41 loot tests, 218 focused/pretests, 1,237 broad
+game/frontend tests, 17 party tests, 10 level-up/HUD tests, 7 diagnostics
+tests, 17 Hall tests, 15 Hub UI tests, 5 desktop tests, production builds,
+media policy, and the bundle gate. The production game entry is
+`Game-BonTeEJ0.js`, 346,628 raw / 98,018 gzip bytes. Only the eight existing
+Fast Refresh warnings remain.
+
+The first cold Mac full run recorded one unrelated Web Lua timing failure:
+p99 `25.798 ms` exceeded its 20 ms/two-tick gate while the other `1,236` broad
+tests passed. The isolated six-test Web Lua suite immediately passed on the
+settled machine, and the complete canonical rerun then passed all `1,237`
+broad tests plus every remaining gate. The retained logs are
+`/Users/jarrett/codex-acceptance/native-derived-hud-a8c9557-mac-validate.log`
+and `native-derived-hud-a8c9557-mac-validate-rerun.log`.
+
+Linux Chrome, Windows Chrome `151.0.7922.170`, and Mac Chrome
+`151.0.7922.170` returned identical measured HUD contracts:
+
+- default tracks `110` and cores `100` at the native anchors;
+- Health/Mana Up plus Life/Mana Charm tracks `147.5` and cores `137.5`;
+- dynamic reserve/shield geometry above;
+- selected Earth 67, Split Mind 67/84/85, Weld 81, and Plane Orb 107;
+- empty page, console, and network error arrays.
+
+Screenshots are `/tmp/solomon-dark-native-derived-hud.png`
+(SHA-256 `393d96f67502100c42e419660f37716f3bec7ad77689365343fbefbcb26d0cf1`),
+`C:/sdw/receipts/native-derived-hud-a8c9557-windows.png`
+(`26d4b0e06a7e883d372b147963af5cadf026d8449e6b63a3d40dcb0bf951a0f8`),
+and
+`/Users/jarrett/codex-acceptance/native-derived-hud-a8c9557-mac.png`
+(`ee86b9dafea19ca35346cb49de9a1edf390fd56e7cf09bd0dbd026008e46eec9`).
+
+Mod Loader evidence cutoff `ced002e3d54374afb4954cbdbf4e37a7ee4349cc`
+passes 88/88 ordinary modules (801 tests) and 491/491 static RE contracts on
+Linux and the Mac mini. Native Windows additionally passes the six derived-HUD
+contracts, all 491 static contracts, and the complete Release build with zero
+warnings/errors. The x86 loader build is correctly Windows-only; no Mac binary
+build is claimed. No member remains blocked by the browser platform.
