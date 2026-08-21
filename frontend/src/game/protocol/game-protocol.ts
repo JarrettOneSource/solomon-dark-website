@@ -103,6 +103,11 @@ import {
   type NativeWeldHailTerrainBouncerState,
   type NativeWeldHailTerrainParticleState,
 } from '../core-kernels/native-weld-hail-contact.ts'
+import {
+  NATIVE_WELD_FLAME_LASH_FADE_ALPHA_STEP,
+  type NativeWeldFlameLashFadeState,
+} from '../core-kernels/native-weld-flame-lash.ts'
+import type { NativeWeldBlizzardGlowState } from '../core-kernels/native-weld-blizzard.ts'
 import type { NativeWeldBuildId } from '../core-kernels/native-weld-primary-profile.ts'
 import type {
   NativeWeldMeteorDebrisSeed,
@@ -4351,7 +4356,7 @@ function primarySpellWeldActor(
 
   if (source.kind === 'weld-channel') {
     onlyKeys(source, field, [
-      ...commonKeys, 'endpoint', 'midpoint', 'targetId', 'variant',
+      ...commonKeys, 'endpoint', 'midpoint', 'targetId', 'underpowered', 'variant',
     ])
     if (buildId !== 1003 && buildId !== 1004) {
       throw new GameProtocolError(`${field}.buildId is not a welded channel build`)
@@ -4383,6 +4388,7 @@ function primarySpellWeldActor(
       targetId: source.targetId === null
         ? null
         : limitedString(source.targetId, `${field}.targetId`, 256),
+      underpowered: boolean(source.underpowered, `${field}.underpowered`),
       variant,
     } satisfies NativeWeldChannelActorState
   }
@@ -4481,6 +4487,90 @@ function primarySpellWeldActor(
       ),
       position: vector(source.position, `${field}.position`),
     } satisfies NativeWeldBoulderDebrisActorState
+  }
+
+  if (source.kind === 'weld-blizzard-glow') {
+    onlyKeys(source, field, [
+      ...commonKeys, 'glowIndex', 'position', 'rotationDegrees', 'scale', 'variant',
+    ])
+    if (buildId !== 1004 || common.ageTicks !== 0 || source.variant !== 24) {
+      throw new GameProtocolError(`${field} does not match the native Blizzard source glow`)
+    }
+    const glowIndex = nonnegativeInteger(source.glowIndex, `${field}.glowIndex`)
+    if (glowIndex > 1) throw new GameProtocolError(`${field}.glowIndex exceeds the pair`)
+    const scale = positiveFinite(source.scale, `${field}.scale`)
+    if (scale < 1 || scale >= 1.5) {
+      throw new GameProtocolError(`${field}.scale exceeds the Blizzard glow range`)
+    }
+    const rotationDegrees = finite(source.rotationDegrees, `${field}.rotationDegrees`)
+    if (rotationDegrees < 0 || rotationDegrees >= 360) {
+      throw new GameProtocolError(`${field}.rotationDegrees is outside [0,360)`)
+    }
+    return {
+      ...common,
+      buildId: 1004,
+      glowIndex: glowIndex as 0 | 1,
+      kind: 'weld-blizzard-glow',
+      lightRegistration: absentNativeLightProviderRegistration(
+        source.lightRegistration,
+        `${field}.lightRegistration`,
+      ),
+      position: vector(source.position, `${field}.position`),
+      rotationDegrees,
+      scale,
+      variant: 24,
+    } satisfies NativeWeldBlizzardGlowState
+  }
+
+  if (source.kind === 'weld-flame-lash-fade') {
+    onlyKeys(source, field, [
+      ...commonKeys, 'alpha', 'alphaStep', 'baseScale', 'colorGreen', 'position',
+      'record', 'rotationDegrees', 'variant', 'wrapperScalar',
+    ])
+    if (buildId !== 1003) throw new GameProtocolError(`${field}.buildId is not Flame Lash`)
+    const alpha = positiveFinite(source.alpha, `${field}.alpha`)
+    const alphaStep = positiveFinite(source.alphaStep, `${field}.alphaStep`)
+    if (alpha > 1 || alphaStep !== NATIVE_WELD_FLAME_LASH_FADE_ALPHA_STEP
+      || common.ageTicks >= 6) {
+      throw new GameProtocolError(`${field} exceeds the Flame Lash fade clock`)
+    }
+    const variant = source.variant
+    if (variant !== 'endpoint' && variant !== 'chain') {
+      throw new GameProtocolError(`${field}.variant is not a Flame Lash fade branch`)
+    }
+    const baseScale = positiveFinite(source.baseScale, `${field}.baseScale`)
+    if ((variant === 'endpoint' && (baseScale < 0.5 || baseScale >= 1))
+      || (variant === 'chain' && (baseScale < 0.05 || baseScale >= 0.1))) {
+      throw new GameProtocolError(`${field}.baseScale exceeds its Flame Lash branch`)
+    }
+    const colorGreen = unitInterval(source.colorGreen, `${field}.colorGreen`)
+    if ((variant === 'chain' && colorGreen !== Math.fround(0.75))
+      || (variant === 'endpoint' && (colorGreen < 0.5 || colorGreen > 1))) {
+      throw new GameProtocolError(`${field}.colorGreen exceeds its Flame Lash branch`)
+    }
+    const wrapperScalar = positiveFinite(source.wrapperScalar, `${field}.wrapperScalar`)
+    if (wrapperScalar < 0.75 || wrapperScalar >= 1.5) {
+      throw new GameProtocolError(`${field}.wrapperScalar exceeds the native range`)
+    }
+    if (source.record !== 35) throw new GameProtocolError(`${field}.record is not BadGuys 35`)
+    return {
+      ...common,
+      alpha,
+      alphaStep,
+      baseScale,
+      buildId: 1003,
+      colorGreen,
+      kind: 'weld-flame-lash-fade',
+      lightRegistration: absentNativeLightProviderRegistration(
+        source.lightRegistration,
+        `${field}.lightRegistration`,
+      ),
+      position: vector(source.position, `${field}.position`),
+      record: 35,
+      rotationDegrees: finite(source.rotationDegrees, `${field}.rotationDegrees`),
+      variant,
+      wrapperScalar,
+    } satisfies NativeWeldFlameLashFadeState
   }
 
   if (source.kind === 'weld-hail-line') {
@@ -4722,11 +4812,12 @@ function primarySpellWeldActor(
   if (source.kind === 'weld-steam') {
     onlyKeys(source, field, [
       ...commonKeys, 'alphaMultiplier', 'blue', 'colorRise', 'life', 'lifeLoss',
-      'phase', 'position', 'rotationDegrees', 'scale', 'stretch', 'tintFade',
-      'variant', 'velocity',
+      'contactDamage', 'contactDue', 'contactEnabled', 'contactTicksRemaining',
+      'phase', 'position', 'remainingDistance', 'rotationDegrees', 'scale', 'stretch',
+      'terminalPosition', 'tintFade', 'variant', 'velocity',
     ])
     if (buildId !== 1005) throw new GameProtocolError(`${field}.buildId is not Steam Jet`)
-    if (common.ageTicks >= 64) {
+    if (common.ageTicks >= 512) {
       throw new GameProtocolError(`${field}.ageTicks exceeds the Steam particle lifetime`)
     }
     const variant = source.variant
@@ -4740,23 +4831,43 @@ function primarySpellWeldActor(
     }
     const life = positiveFinite(source.life, `${field}.life`)
     const lifeLoss = positiveFinite(source.lifeLoss, `${field}.lifeLoss`)
-    if (life > 1.15 || lifeLoss < 0.05 || lifeLoss > 0.1) {
+    if (life > 1.15 || lifeLoss < 0.005 || lifeLoss > 0.055) {
       throw new GameProtocolError(`${field} Steam life state exceeds the native range`)
     }
-    const blue = nonnegativeFinite(source.blue, `${field}.blue`)
-    if ((variant === 'over' && blue !== 0) || blue > 1.1) {
-      throw new GameProtocolError(`${field}.blue does not match its Steam branch`)
+    const blue = finite(source.blue, `${field}.blue`)
+    if (blue > 0.75 || blue < -64) {
+      throw new GameProtocolError(`${field}.blue exceeds the native secondary-color lane`)
     }
     const rotationDegrees = finite(source.rotationDegrees, `${field}.rotationDegrees`)
     if (rotationDegrees < 0 || rotationDegrees >= 360) {
       throw new GameProtocolError(`${field}.rotationDegrees is outside [0,360)`)
     }
+    const contactEnabled = boolean(source.contactEnabled, `${field}.contactEnabled`)
+    const contactDue = boolean(source.contactDue, `${field}.contactDue`)
+    const contactTicksRemaining = nonnegativeInteger(
+      source.contactTicksRemaining,
+      `${field}.contactTicksRemaining`,
+    )
+    if (contactTicksRemaining > 10 || (!contactEnabled && contactDue)) {
+      throw new GameProtocolError(`${field} Steam contact clock is malformed`)
+    }
+    const alphaMultiplier = positiveFinite(
+      source.alphaMultiplier,
+      `${field}.alphaMultiplier`,
+    )
+    if (alphaMultiplier !== 1 && alphaMultiplier !== Math.fround(0.25)) {
+      throw new GameProtocolError(`${field}.alphaMultiplier is not a native power branch`)
+    }
     return {
       ...common,
-      alphaMultiplier: positiveFinite(source.alphaMultiplier, `${field}.alphaMultiplier`),
+      alphaMultiplier,
       blue,
       buildId: 1005,
       colorRise,
+      contactDamage: positiveFinite(source.contactDamage, `${field}.contactDamage`),
+      contactDue,
+      contactEnabled,
+      contactTicksRemaining,
       kind: 'weld-steam',
       life,
       lifeLoss,
@@ -4766,10 +4877,15 @@ function primarySpellWeldActor(
       ),
       phase: nonnegativeFinite(source.phase, `${field}.phase`),
       position: vector(source.position, `${field}.position`),
+      remainingDistance: nonnegativeFinite(
+        source.remainingDistance,
+        `${field}.remainingDistance`,
+      ),
       rotationDegrees,
       scale: positiveFinite(source.scale, `${field}.scale`),
       stretch: positiveFinite(source.stretch, `${field}.stretch`),
-      tintFade: finite(source.tintFade, `${field}.tintFade`),
+      terminalPosition: vector(source.terminalPosition, `${field}.terminalPosition`),
+      tintFade: nonnegativeFinite(source.tintFade, `${field}.tintFade`),
       variant,
       velocity: vector(source.velocity, `${field}.velocity`),
     } satisfies NativeWeldSteamActorState
@@ -5280,8 +5396,10 @@ function primarySpellFireSpentEmber(
 function primarySpellTransient(value: unknown, field: string): PrimarySpellTransientState {
   const source = record(value, field)
   if (source.kind === 'weld-boulder-debris'
+    || source.kind === 'weld-blizzard-glow'
     || source.kind === 'weld-channel'
     || source.kind === 'weld-frost-fade'
+    || source.kind === 'weld-flame-lash-fade'
     || source.kind === 'weld-ground-spark-fade'
     || source.kind === 'weld-hail-flash'
     || source.kind === 'weld-hail-knockback'

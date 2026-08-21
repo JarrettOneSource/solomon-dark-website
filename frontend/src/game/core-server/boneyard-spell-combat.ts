@@ -63,6 +63,7 @@ import {
   NATIVE_WELD_HAIL_FLIGHT_SUBSTEPS,
   NATIVE_WELD_HAIL_TARGET_RADIUS_FACTOR,
 } from '../core-kernels/native-weld-hail-contact.ts'
+import { createNativeWeldFlameLashFade } from '../core-kernels/native-weld-flame-lash.ts'
 import {
   nativeWeldMeteorDirectRadius,
   nativeWeldMeteorPulseRadius,
@@ -244,6 +245,29 @@ export function resolveBoneyardSpellCombat(
         ageTicks: effect.ageTicks + 1,
         remainingTicks,
       }))
+    }
+  }
+  for (const effect of sourceSpells.transients) {
+    if (effect.kind !== 'weld-steam' || effect.worldKey !== worldKey
+      || !effect.contactEnabled || !effect.contactDue) continue
+    const center = {
+      x: effect.position.x,
+      y: Math.fround(effect.position.y + 15),
+    }
+    const radius = Math.fround(effect.scale * 50)
+    for (const row of nativePrimaryRootTargetRows(enemies, center, radius, 0x2)) {
+      queueTargetEffect(row.actor.id, {
+        steamed: Object.freeze({
+          damagePerTick: Math.fround(Math.min(effect.life, 1) * effect.contactDamage),
+          emberDamage: effect.vector[6]!,
+          emberFragments: Math.max(0, Math.round(effect.vector[7]!)),
+          explodeDamage: effect.vector[4]!,
+          explodeRadius: effect.vector[5]!,
+          ownerId: effect.ownerId,
+          sourceActorId: effect.id,
+          ticks: NATIVE_WELD_STEAMED_TICKS,
+        }),
+      })
     }
   }
 
@@ -1101,6 +1125,21 @@ export function resolveBoneyardSpellCombat(
               events.push(...damaged.events)
               hits.push(channelSpellHit(emission, row.actor.id, amount, damaged.killed, tick))
               const point = primarySpellTargetPoint(row.target)
+              const fadeDirection = normalizedDifference(previousPoint, point)
+              const fade = createNativeWeldFlameLashFade({
+                direction: fadeDirection,
+                id: nextSpellId,
+                origin: point,
+                ownerId: emission.ownerId,
+                rng,
+                tick,
+                variant: 'chain',
+                vector: profile.vector.values,
+                worldKey,
+              })
+              rng = fade.rng
+              ownedTransients.push(fade.actor)
+              nextSpellId += 1
               const privateSeed = drawNativeInteger(rng, 1_000_000)
               rng = privateSeed.state
               const detonation = createPrimarySpellWeldFireDetonation(
@@ -1144,6 +1183,7 @@ export function resolveBoneyardSpellCombat(
                 origin: { ...previousPoint },
                 ownerId: emission.ownerId,
                 targetId: row.target.id,
+                underpowered: emission.underpowered,
                 variant: nextSpellId % 4,
                 vector: Object.freeze([...profile.vector.values]),
                 worldKey,
@@ -1243,6 +1283,7 @@ export function resolveBoneyardSpellCombat(
                   origin: { ...previousPoint },
                   ownerId: emission.ownerId,
                   targetId: row.target.id,
+                  underpowered: emission.underpowered,
                   variant: nextSpellId % 4,
                   vector: Object.freeze([...profile.vector.values]),
                   worldKey,
@@ -1261,7 +1302,9 @@ export function resolveBoneyardSpellCombat(
           break
         }
         case 1005: {
-          const widen = profile.vector.values[2]!
+          const widen = emission.underpowered ? 0 : profile.vector.values[2]!
+          const pushback = emission.underpowered ? 0 : profile.vector.values[3]!
+          if (pushback <= 0) break
           const contacts = nativePrimaryConeTargets({
             actorMask: 0x1082,
             aimDirection: emission.direction,
@@ -1278,28 +1321,14 @@ export function resolveBoneyardSpellCombat(
               candidate.id === target.id
             ))
             if (!row) continue
-            queueTargetEffect(row.actor.id, {
-              steamed: Object.freeze({
-                damagePerTick: emission.damage,
-                emberDamage: profile.vector.values[6]!,
-                emberFragments: Math.max(0, Math.round(profile.vector.values[7]!)),
-                explodeDamage: profile.vector.values[4]!,
-                explodeRadius: profile.vector.values[5]!,
-                ownerId: emission.ownerId,
-                sourceActorId: emission.id,
-                ticks: NATIVE_WELD_STEAMED_TICKS,
-              }),
-            })
-            if (profile.vector.values[3]! > 0) {
-              enemies = applyWaterPushback(
-                enemies,
-                row.actor,
-                emission.queryOrigin,
-                profile.vector.values[3]!,
-                205 + 4 * widen,
-                resolveEnemyMovement,
-              )
-            }
+            enemies = applyWaterPushback(
+              enemies,
+              row.actor,
+              emission.queryOrigin,
+              pushback,
+              205 + 4 * widen,
+              resolveEnemyMovement,
+            )
           }
           break
         }

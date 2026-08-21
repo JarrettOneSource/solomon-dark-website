@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import './native-weld-hail-contact.test.ts'
+import './native-weld-flame-lash.test.ts'
+import './native-weld-blizzard.test.ts'
 import type { NativeWeldPrimarySkillProfile } from './native-primary-skill-profile.ts'
 import { createNativeRng, drawNativeFloat, drawNativeInteger } from './native-rng.ts'
 import {

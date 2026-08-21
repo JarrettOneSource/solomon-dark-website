@@ -48,6 +48,11 @@ import {
   stepNativeWeldHailChild,
   type NativeWeldHailChildActorState,
 } from './native-weld-hail-contact.ts'
+import {
+  stepNativeWeldFlameLashFade,
+  type NativeWeldFlameLashFadeState,
+} from './native-weld-flame-lash.ts'
+import type { NativeWeldBlizzardGlowState } from './native-weld-blizzard.ts'
 
 export {
   NATIVE_WELD_HAIL_TARGET_RADIUS_FACTOR as NATIVE_WELD_HAILSTONES_TARGET_RADIUS_FACTOR,
@@ -158,6 +163,7 @@ export interface NativeWeldChannelActorState extends NativeWeldOwnedActorBase {
   readonly lightRegistration: null
   readonly midpoint: Vector2 | null
   readonly targetId: string | null
+  readonly underpowered: boolean
   readonly variant: number
 }
 
@@ -313,8 +319,10 @@ export interface NativeWeldGroundSparkFadeActorState extends NativeWeldOwnedActo
 }
 
 export type NativeWeldWorldActor =
+  | NativeWeldBlizzardGlowState
   | NativeWeldBoulderDebrisActorState
   | NativeWeldChannelActorState
+  | NativeWeldFlameLashFadeState
   | NativeWeldFrostFadeActorState
   | NativeWeldGroundSparkFadeActorState
   | NativeWeldHailRockFadeActorState
@@ -719,6 +727,7 @@ export function createNativeWeldChannelActor(input: {
   readonly ownerId: string
   readonly targetId: string | null
   readonly tick: number
+  readonly underpowered: boolean
   readonly vector: readonly number[]
   readonly worldKey: string
 }): NativeWeldChannelActorState {
@@ -735,6 +744,7 @@ export function createNativeWeldChannelActor(input: {
     origin: Object.freeze({ ...input.origin }),
     ownerId: input.ownerId,
     targetId: input.targetId,
+    underpowered: input.underpowered,
     variant: input.id % 4,
     vector: Object.freeze([...input.vector]),
     worldKey: input.worldKey,
@@ -1250,6 +1260,10 @@ export function stepNativeWeldWorldActor(
     to: Readonly<Vector2>,
   ) => boolean = () => true,
 ): { readonly actor: NativeWeldWorldActor | null; readonly rng: NativeRngState } {
+  if (actor.kind === 'weld-blizzard-glow') return { actor: null, rng: sourceRng }
+  if (actor.kind === 'weld-flame-lash-fade') {
+    return { actor: stepNativeWeldFlameLashFade(actor), rng: sourceRng }
+  }
   if (
     actor.kind === 'weld-hail-flash'
     || actor.kind === 'weld-hail-knockback'

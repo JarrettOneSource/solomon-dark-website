@@ -22,6 +22,7 @@ import type {
 import type { NativeWeldOneShotBuildId } from '../core-kernels/native-weld-primary-runtime.ts'
 import type { NativeWeldPrimarySkillProfile } from '../core-kernels/native-primary-skill-profile.ts'
 import type { NativeSecondarySteamedPulse } from '../core-kernels/native-secondary-abilities.ts'
+import { spawnNativeWeldSteamActor } from '../core-kernels/native-weld-steam.ts'
 import type {
   NativeWeldBuildId,
   NativeWeldCastKind,
@@ -861,6 +862,7 @@ test('Flame Lash retains the semantic Lightning target, chains, stuns, and owns 
       origin: { x: 0, y: 0 },
       ownerId: 'wizard',
       targetId: 'enemy:1',
+      underpowered: false,
       variant: 0,
       vector: profile.vector.values,
       worldKey: WORLD_KEY,
@@ -878,6 +880,15 @@ test('Flame Lash retains the semantic Lightning target, chains, stuns, and owns 
     { patch: { stunFactor: 0.4, stunTicks: 25 }, targetId: 2, worldKey: WORLD_KEY },
   ])
   assert.equal(result.spells.transients.filter(({ kind }) => kind === 'fire-explosion').length, 2)
+  const flameFades = result.spells.transients.filter(({ kind }) => (
+    kind === 'weld-flame-lash-fade'
+  ))
+  assert.equal(flameFades.length, 2)
+  assert.ok(flameFades.every((effect) => (
+    effect.kind === 'weld-flame-lash-fade'
+      && effect.variant === 'chain'
+      && effect.record === 35
+  )))
   assert.equal(result.spells.transients.some((effect) => (
     effect.kind === 'weld-channel' && effect.id !== 10 && effect.targetId === 'enemy:2'
   )), true)
@@ -910,18 +921,32 @@ test('Blizzard Beam combines its widened cone with chaining and applies Cold bef
   ])
 })
 
-test('Steam Jet installs one target-owned ten-tick Steamed payload and exports its combat pulse', () => {
-  const spawned = spawnEnemies([{ position: { x: 80, y: 0 }, token: 'SKELETON' }])
+test('Steam particle contact installs its ten-tick Steamed payload and exports the pulse', () => {
+  const spawned = spawnEnemies([{ position: { x: 0, y: 0 }, token: 'SKELETON' }])
   const actor = spawned.actors[0]!
   const enemies = {
     ...spawned,
     actors: [{ ...actor, currentHealth: 100, maximumHealth: 100 }],
   }
   const profile = weldProfile(1005, [300, 10, 5, 0.1, 4, 6, 2, 3], 'channel')
+  const steam = spawnNativeWeldSteamActor({
+    damage: 3,
+    direction: { x: 1, y: 0 },
+    id: 12,
+    origin: { x: 0, y: 0 },
+    ownerId: 'wizard',
+    queryOrigin: { x: 0, y: 0 },
+    rng: createNativeRng(0),
+    tick: 2,
+    underpowered: false,
+    vector: profile.vector.values,
+    worldKey: WORLD_KEY,
+  }).actor
+  assert.ok(steam?.kind === 'weld-steam' && steam.variant === 'normal')
   const applied = resolveCombatWithAuthority(
     enemies,
-    spellState({}),
-    [emission({ damage: 3, id: 12, kind: 'weld', primarySkill: profile })],
+    spellState({ transients: [{ ...steam, contactDue: true }] }),
+    [],
     1,
   )
   assert.deepEqual(applied.targetEffects, [{

@@ -120,6 +120,8 @@ import {
   createNativeWeldHailTerrainImpact,
   NATIVE_WELD_HAIL_LOOKAHEAD_DISTANCE,
 } from './native-weld-hail-contact.ts'
+import { createNativeWeldFlameLashFade } from './native-weld-flame-lash.ts'
+import { createNativeWeldBlizzardSourceGlows } from './native-weld-blizzard.ts'
 
 export type PrimarySpellProjectileKind = 'earth' | 'ether' | 'fire' | 'weld'
 export type PrimarySpellTransientKind =
@@ -1454,8 +1456,12 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
                   context,
                 )
               : null
+            const channelDamage = primarySpellChannelDamage(
+              authority.primarySkill,
+              underpowered,
+            )
             channelEmissions.push({
-              damage: primarySpellChannelDamage(authority.primarySkill, underpowered),
+              damage: channelDamage,
               direction: { ...aimDirection },
               id: nextId,
               kind: 'weld',
@@ -1469,15 +1475,22 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             })
             if (buildId === 1005) {
               const steam = spawnNativeWeldSteamActor({
+                damage: channelDamage,
                 direction: aimDirection,
                 id: nextId,
                 origin: emitter,
                 ownerId: playerId,
+                queryOrigin: nextPlayer.position,
                 rng,
                 tick: context.tick,
                 underpowered,
                 vector: authority.primarySkill.vector.values,
                 worldKey,
+                obstructionPoint: (start, end) => context.spellObstructionPoint(
+                  playerId,
+                  start,
+                  end,
+                ),
               })
               rng = steam.rng
               if (steam.actor) {
@@ -1496,7 +1509,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
                     x: Math.fround((emitter.x + endpoint.x) * 0.5),
                     y: Math.fround((emitter.y + endpoint.y) * 0.5),
                   })
-              transients = [...transients, createNativeWeldChannelActor({
+              const channel = createNativeWeldChannelActor({
                 buildId,
                 direction: aimDirection,
                 endpoint,
@@ -1506,10 +1519,42 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
                 ownerId: playerId,
                 targetId: lightning?.targetId ?? null,
                 tick: context.tick,
+                underpowered,
                 vector: authority.primarySkill.vector.values,
                 worldKey,
-              })]
+              })
+              transients = [...transients, channel]
               nextId += 1
+              if (buildId === 1003 && endpoint !== null) {
+                const fade = createNativeWeldFlameLashFade({
+                  direction: aimDirection,
+                  id: nextId,
+                  origin: endpoint,
+                  ownerId: playerId,
+                  rng,
+                  tick: context.tick,
+                  variant: 'endpoint',
+                  vector: authority.primarySkill.vector.values,
+                  worldKey,
+                })
+                rng = fade.rng
+                transients = [...transients, fade.actor]
+                nextId += 1
+              } else if (buildId === 1004) {
+                const glows = createNativeWeldBlizzardSourceGlows({
+                  direction: aimDirection,
+                  firstId: nextId,
+                  origin: emitter,
+                  ownerId: playerId,
+                  rng,
+                  tick: context.tick,
+                  vector: authority.primarySkill.vector.values,
+                  worldKey,
+                })
+                rng = glows.rng
+                transients = [...transients, ...glows.actors]
+                nextId = glows.nextId
+              }
             }
             if (lightning) {
               nextPlayer = {
@@ -2503,8 +2548,10 @@ function transientLifetime(effect: PrimarySpellTransientState): number {
     case 'water-aura': return effect.durationTicks
     case 'water-hail': throw new Error('Hail lifetime is state driven')
     case 'weld-boulder-debris': throw new Error('Weld boulder debris lifetime is state driven')
+    case 'weld-blizzard-glow': throw new Error('Weld Blizzard glow lifetime is state driven')
     case 'weld-channel': throw new Error('Weld channel lifetime is state driven')
     case 'weld-frost-fade': throw new Error('Weld Frost fade lifetime is state driven')
+    case 'weld-flame-lash-fade': throw new Error('Weld Flame Lash fade lifetime is state driven')
     case 'weld-ground-spark-fade': throw new Error('Weld GroundSpark fade lifetime is state driven')
     case 'weld-hail-flash': throw new Error('Weld Hail flash lifetime is state driven')
     case 'weld-hail-knockback': throw new Error('Weld Hail Knockback lifetime is combat owned')
@@ -2525,8 +2572,10 @@ function isNativeWeldWorldActor(
   effect: PrimarySpellTransientState,
 ): effect is NativeWeldWorldActor {
   return effect.kind === 'weld-boulder-debris'
+    || effect.kind === 'weld-blizzard-glow'
     || effect.kind === 'weld-channel'
     || effect.kind === 'weld-frost-fade'
+    || effect.kind === 'weld-flame-lash-fade'
     || effect.kind === 'weld-ground-spark-fade'
     || effect.kind === 'weld-hail-flash'
     || effect.kind === 'weld-hail-knockback'

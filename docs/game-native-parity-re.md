@@ -25270,3 +25270,43 @@ radius/offset lanes, Knockback clocks, line/flash roots, and record-32/45
 terrain children. Focused kernel, combat, protocol, renderer, TypeScript, lint,
 and architecture checks cover the corrected state machine; canonical and Mac
 browser receipts remain later gates for the combined skill tree.
+
+The same adjacency sweep closes the three channel draw families:
+
+- Flame Lash constructor `0x0045B810` uses the shared exact `0x0052E020`
+  three-point QuickSpline ribbon builder, not the former generic six-vertex
+  strip. Its record-44 body inherits the native sample spacing, wave envelope,
+  private xorshift displacement, alternating UV rows, and optional independent
+  record-375/376 branch. Normal width/alpha are `1/1`; weak uses `.75/.5`;
+  phase is `-3*birthTick`. Main and chained contacts also own independently
+  registered additive BadGuys-35 `Anim_FadeFlameLash` actors. Their constructor
+  spends two overwritten `Float(360)` words; endpoint and chain programs then
+  consume their exact color/offset/scale/wrapper lanes, retain `.2` alpha loss,
+  and sample Region light without submitting a source.
+- Blizzard factory `0x005328D0` is called by welded handler `0x00541870` with
+  source-glow flag one and endpoint/enhanced flag zero. Records 6 and 31 are
+  therefore unreachable for this skill. Draw `0x005308D0` owns exactly a
+  record-43 source cap and record-44 strip. Width is
+  `widen==0?.75:widen*3+1`, halved when weak; longitudinal half-length is
+  `width*30` and perpendicular half-width is `width*25*.908955`. A private
+  `-3*birthTick` projection supplies the coupled radial/angle jitter. Normal
+  tint is `(0.5435550212860107,1,1)` and weak tint `(.5,.75,1)`. Two separate
+  one-frame variant-24 `Anim_SpellGlow` roots consume four RNG words at the
+  source every emission.
+- Steam constructor/handler now retain the actual `(Float(.1)+.01)*.5` life
+  loss, signed `Float(4.5)` heading jitter, 15-unit backward birth socket,
+  `5.4*(1+widen*.02)` Normal or `6*(1+widen*.02)` Over speed, weak quarter
+  alpha, and birth-time terrain terminal. Tick owns remaining-distance snap,
+  `.25` tint loss, `.125` secondary-color loss, and the complete long tail.
+  Normal non-weak particles alone retain `Integer(10)` contact clocks; due
+  contacts query `scale*50` and install ten-tick Steamed with the particle's
+  stored Fire payload. Over and weak particles own no Steamed contact lane.
+  Positive normal tint draws two additive record-76 copies; after tint reaches
+  zero one ordinary copy remains. Over draws one ordinary quarter-alpha copy.
+
+Focused tests now pin the shared Flame ribbon, its 375/376 branch membership,
+all Flame fade RNG/lifetimes, Blizzard's two quads and negative 6/31 census,
+its four-word glow pair, Steam terminal/contact clocks, weak and Over branches,
+protocol ownership, and renderer plans. The remaining welded draw work is the
+Meteor ground primitive and independent debris painter/lifecycle audit before
+browser comparison.

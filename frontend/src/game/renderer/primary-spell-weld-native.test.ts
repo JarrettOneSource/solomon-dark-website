@@ -30,7 +30,10 @@ import {
   createNativeWeldHailContactPresentation,
   createNativeWeldHailTerrainImpact,
 } from '../core-kernels/native-weld-hail-contact.ts'
+import { createNativeWeldFlameLashFade } from '../core-kernels/native-weld-flame-lash.ts'
+import { createNativeWeldBlizzardSourceGlows } from '../core-kernels/native-weld-blizzard.ts'
 import { createPrimarySpellWeldImpact } from '../core-kernels/primary-spells.ts'
+import { buildNativeAirRibbonLayer } from './primary-spell-air-native.ts'
 import {
   NATIVE_WELD_BADGUYS_RECORDS,
   NATIVE_WELD_SPRITES,
@@ -44,7 +47,7 @@ const WORLD_KEY = 'boneyard:weld-render'
 
 test('Weld atlas membership covers every recovered direct owner', () => {
   for (const record of [
-    6, 15, 18, 31, 32, 43, 44, 45, 50, 51, 70, 71, 76, 86,
+    6, 15, 18, 31, 32, 35, 43, 44, 45, 50, 51, 70, 71, 76, 86,
     110, 111, 112, 168, 169, 170, 171, 251, 266, 271, 282,
     1836, 1839, 2008, 2010,
   ]) assert.ok((NATIVE_WELD_BADGUYS_RECORDS as readonly number[]).includes(record))
@@ -92,19 +95,59 @@ test('channel and Steam plans use their concrete native classes', () => {
     ageTicks: 0, birthTick: 1, buildId: 1003, direction: { x: 1, y: 0 },
     endpoint: { x: 100, y: 0 }, id: 1, kind: 'weld-channel', lightRegistration: null,
     midpoint: { x: 50, y: 10 }, origin: { x: 0, y: 0 }, ownerId: 'wizard',
-    targetId: 'enemy:1', variant: 0, vector: [8, 2, 1, 0.8, 0, 0, 0, 0],
+    targetId: 'enemy:1', underpowered: false, variant: 0,
+    vector: [8, 2, 1, 0.8, 0, 0, 0, 0],
     worldKey: WORLD_KEY,
   }
-  assert.deepEqual(nativeWeldVisualPlan(flame).meshes.map(({ record }) => record), [44])
+  const flamePlan = nativeWeldVisualPlan(flame)
+  assert.deepEqual(flamePlan.meshes.map(({ record }) => record), [44])
+  const nativeLayer = buildNativeAirRibbonLayer({
+    alpha: 1,
+    basePhaseDegrees: -3,
+    birthTick: 1,
+    endpoint: { x: 100, y: 0 },
+    id: 1,
+    midpoint: { x: 50, y: 10 },
+    source: { x: 0, y: 0 },
+    tint: 0xffffff,
+    width: 1,
+  })
+  assert.deepEqual(flamePlan.meshes[0]!.vertices, Array.from(nativeLayer.vertices))
+  assert.deepEqual(flamePlan.meshes[0]!.uvs, Array.from(nativeLayer.uvs))
+  const weakFlame = nativeWeldVisualPlan({ ...flame, underpowered: true })
+  assert.equal(weakFlame.meshes[0]!.alpha, 0.5)
+  assert.notDeepEqual(weakFlame.meshes[0]!.vertices, flamePlan.meshes[0]!.vertices)
   const blizzard = { ...flame, buildId: 1004 as const, vector: [8, 2, 1, 0.8, 0, 0, 0.2] }
   assert.deepEqual(nativeWeldVisualPlan(blizzard).meshes.map(({ record }) => record), [43, 44])
+  const glows = createNativeWeldBlizzardSourceGlows({
+    direction: blizzard.direction, firstId: 20, origin: blizzard.origin,
+    ownerId: blizzard.ownerId, rng: createNativeRng(44), tick: 2,
+    vector: blizzard.vector, worldKey: WORLD_KEY,
+  })
+  assert.ok(glows.actors.every((glow) => (
+    nativeWeldVisualPlan(glow).sprites.some(({ record }) => record === 110)
+  )))
+
+  const fade = createNativeWeldFlameLashFade({
+    direction: { x: 1, y: 0 }, id: 3, origin: { x: 100, y: 0 }, ownerId: 'wizard',
+    rng: createNativeRng(30), tick: 2, variant: 'endpoint',
+    vector: flame.vector, worldKey: WORLD_KEY,
+  }).actor
+  const fadePlan = nativeWeldVisualPlan(fade)
+  assert.equal(fadePlan.sprites[0]!.record, 35)
+  assert.equal(fadePlan.sprites[0]!.blend, 'add')
+  assert.deepEqual(fadePlan.regionLightPoint, fade.position)
 
   const steam = spawnNativeWeldSteamActor({
-    direction: { x: 1, y: 0 }, id: 2, origin: { x: 0, y: 0 }, ownerId: 'wizard',
-    rng: createNativeRng(1), tick: 2, underpowered: true,
+    damage: 8, direction: { x: 1, y: 0 }, id: 2, origin: { x: 0, y: 0 }, ownerId: 'wizard',
+    queryOrigin: { x: 0, y: 0 }, rng: createNativeRng(1), tick: 2, underpowered: true,
     vector: [8, 2, 1, 0.8, 0, 0, 0, 0], worldKey: WORLD_KEY,
   }).actor!
-  assert.ok(nativeWeldVisualPlan(steam).sprites.every(({ record }) => record === 76))
+  const steamPlan = nativeWeldVisualPlan(steam)
+  assert.ok(steamPlan.sprites.every(({ record }) => record === 76))
+  assert.equal(steamPlan.sprites.length, 2)
+  assert.ok(steamPlan.sprites.every(({ blend }) => blend === 'add'))
+  assert.ok(steamPlan.sprites.every(({ alpha }) => alpha <= Math.fround(0.25)))
 })
 
 test('retained rocks, independent fades, Meteor marker, and debris all render', () => {

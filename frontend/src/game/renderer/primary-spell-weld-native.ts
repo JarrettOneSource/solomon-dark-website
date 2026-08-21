@@ -20,10 +20,19 @@ import type {
   NativeWeldHailTerrainBouncerState,
   NativeWeldHailTerrainParticleState,
 } from '../core-kernels/native-weld-hail-contact.ts'
+import type { NativeWeldFlameLashFadeState } from '../core-kernels/native-weld-flame-lash.ts'
+import {
+  nativeWeldBlizzardBeamPlan,
+  type NativeWeldBlizzardGlowState,
+} from '../core-kernels/native-weld-blizzard.ts'
 import type { NativeWeldMeteorMarkerState } from '../core-kernels/native-weld-meteor.ts'
 import type { NativeWeldSteamActorState } from '../core-kernels/native-weld-steam.ts'
 import { earthBoulderPresentationPlan } from './earth-boulder-presentation.ts'
 import { nativeFireballPlan } from './primary-spell-fire-native.ts'
+import {
+  AIR_LIGHTNING_BRANCH_RECORDS,
+  buildNativeAirRibbonLayer,
+} from './primary-spell-air-native.ts'
 import {
   nativeEnemySpriteRegistration,
   type NativeEnemySpriteRegistration,
@@ -32,10 +41,11 @@ import {
 const DEG = Math.PI / 180
 
 export const NATIVE_WELD_BADGUYS_RECORDS = Object.freeze([
-  6, 15, 18, 31, 32, 43, 44, 45, 50, 51, 70, 71, 76, 86, 110, 111, 112,
+  6, 15, 18, 31, 32, 35, 43, 44, 45, 50, 51, 70, 71, 76, 86, 110, 111, 112,
   168, 169, 170, 171,
   ...integerRange(251, 266),
   ...integerRange(271, 282),
+  ...AIR_LIGHTNING_BRANCH_RECORDS,
   ...integerRange(1836, 1839),
   ...integerRange(2008, 2010),
 ] as const)
@@ -53,9 +63,11 @@ export type NativeWeldPresentationState =
   | NativeWeldProjectileState
   | Extract<PrimarySpellTransientState, {
       kind:
+        | 'weld-blizzard-glow'
         | 'weld-boulder-debris'
         | 'weld-channel'
         | 'weld-frost-fade'
+        | 'weld-flame-lash-fade'
         | 'weld-ground-spark-fade'
         | 'weld-hail-flash'
         | 'weld-hail-knockback'
@@ -117,9 +129,11 @@ export function isNativeWeldPresentationState(
   state: PrimarySpellProjectileState | PrimarySpellTransientState,
 ): state is NativeWeldPresentationState {
   return state.kind === 'weld'
+    || state.kind === 'weld-blizzard-glow'
     || state.kind === 'weld-boulder-debris'
     || state.kind === 'weld-channel'
     || state.kind === 'weld-frost-fade'
+    || state.kind === 'weld-flame-lash-fade'
     || state.kind === 'weld-ground-spark-fade'
     || state.kind === 'weld-hail-flash'
     || state.kind === 'weld-hail-knockback'
@@ -141,9 +155,11 @@ export function nativeWeldVisualPlan(
 ): NativeWeldVisualPlan {
   switch (state.kind) {
     case 'weld': return projectilePlan(state, presentationFrame)
+    case 'weld-blizzard-glow': return blizzardGlowPlan(state, presentationFrame)
     case 'weld-boulder-debris': return debrisPlan(state)
     case 'weld-channel': return channelPlan(state)
     case 'weld-frost-fade': return frostFadePlan(state, presentationFrame)
+    case 'weld-flame-lash-fade': return flameLashFadePlan(state, presentationFrame)
     case 'weld-ground-spark-fade': return positioned(state.position, [sprite(
       state.record,
       'ground-spark-fade',
@@ -258,17 +274,82 @@ function channelPlan(state: NativeWeldChannelActorState): NativeWeldVisualPlan {
         y: state.midpoint.y - state.origin.y,
       }
   if (state.buildId === 1003) {
+    const layer = buildNativeAirRibbonLayer({
+      alpha: state.underpowered ? 0.5 : 1,
+      basePhaseDegrees: -3 * state.birthTick,
+      birthTick: state.birthTick,
+      endpoint,
+      id: state.id,
+      midpoint,
+      source: { x: 0, y: 0 },
+      tint: 0xffffff,
+      width: state.underpowered ? 0.75 : 1,
+    })
     return positioned(state.origin, [], {
-      meshes: [beamMesh(44, midpoint, endpoint, 8, 'flame-lash', 0xff8040)],
+      meshes: flameLashMeshes(layer),
     })
   }
-  const width = Math.max(20, state.vector[6]! * 125)
-  return positioned(state.origin, [], {
-    meshes: [
-      beamMesh(43, midpoint, endpoint, width, 'blizzard-beam-core', 0x80bfff),
-      beamMesh(44, midpoint, endpoint, width * 0.5, 'blizzard-beam-over', 0xffffff),
-    ],
+  const blizzard = nativeWeldBlizzardBeamPlan({
+    birthTick: state.birthTick,
+    endpoint,
+    source: { x: 0, y: 0 },
+    underpowered: state.underpowered,
+    widen: state.vector[6]!,
   })
+  return positioned(state.origin, [], {
+    meshes: blizzard.quads.map((quad, index) => Object.freeze({
+      alpha: 1,
+      blend: 'add' as const,
+      indices: Object.freeze([0, 1, 2, 1, 3, 2]),
+      record: quad.record,
+      role: index === 0 ? 'blizzard-beam-core' : 'blizzard-beam-strip',
+      tint: blizzard.tint,
+      uvs: Object.freeze([0, 0, 1, 0, 0, 1, 1, 1]),
+      vertices: quad.vertices,
+    })),
+  })
+}
+
+function blizzardGlowPlan(
+  state: NativeWeldBlizzardGlowState,
+  frame: number,
+): NativeWeldVisualPlan {
+  return positioned(state.position, lightningCore(
+    state.id,
+    frame,
+    state.scale,
+    1,
+    `blizzard-source-glow-${state.glowIndex}`,
+  ).map((draw) => Object.freeze({
+    ...draw,
+    rotationRadians: draw.rotationRadians + state.rotationDegrees * DEG,
+  })))
+}
+
+function flameLashMeshes(
+  layer: ReturnType<typeof buildNativeAirRibbonLayer>,
+): readonly NativeWeldMeshDraw[] {
+  const body: NativeWeldMeshDraw = Object.freeze({
+    alpha: layer.alpha,
+    blend: 'add',
+    indices: Object.freeze(Array.from(layer.indices)),
+    record: 44,
+    role: 'flame-lash-ribbon',
+    tint: layer.tint,
+    uvs: Object.freeze(Array.from(layer.uvs)),
+    vertices: Object.freeze(Array.from(layer.vertices)),
+  })
+  if (!layer.branch) return Object.freeze([body])
+  return Object.freeze([body, Object.freeze({
+    alpha: layer.alpha,
+    blend: 'add',
+    indices: Object.freeze(Array.from(layer.branch.indices)),
+    record: layer.branch.textureRecord,
+    role: `flame-lash-branch-${layer.branch.geometryRecord}`,
+    tint: layer.tint,
+    uvs: Object.freeze(Array.from(layer.branch.uvs)),
+    vertices: Object.freeze(Array.from(layer.branch.vertices)),
+  })])
 }
 
 function impactPlan(state: NativeWeldImpactActorState, frame: number): NativeWeldVisualPlan {
@@ -534,6 +615,23 @@ function frostFadePlan(
   ))
 }
 
+function flameLashFadePlan(
+  state: NativeWeldFlameLashFadeState,
+  frame: number,
+): NativeWeldVisualPlan {
+  const scale = state.baseScale * (2 + visualUnit(state.id, frame, 0x57370) * 0.25)
+  return positioned(state.position, [sprite(35, `flame-lash-${state.variant}-fade`, {
+    alpha: state.alpha,
+    blend: 'add',
+    scaleX: scale,
+    scaleY: scale,
+    tint: packRgb(1, state.colorGreen, 0),
+  })], {
+    regionLightPoint: state.position,
+    sortBias: state.variant === 'endpoint' ? 100 : 50,
+  })
+}
+
 function steamPlan(state: NativeWeldSteamActorState): NativeWeldVisualPlan {
   const scale = state.scale * 2
   if (state.variant === 'over') {
@@ -550,13 +648,14 @@ function steamPlan(state: NativeWeldSteamActorState): NativeWeldVisualPlan {
   const tint = packRgb(1, green, blue)
   const draw = sprite(76, 'steam-jet-normal', {
     alpha,
+    blend: state.tintFade > 0 ? 'add' : 'normal',
     rotationRadians: state.rotationDegrees * DEG,
     scaleX: scale,
     scaleY: scale,
     tint,
   })
   return positioned(state.position, state.tintFade > 0
-    ? [draw, { ...draw, blend: 'add', role: 'steam-jet-normal-additive' }]
+    ? [draw, { ...draw, role: 'steam-jet-normal-additive-copy' }]
     : [draw])
 }
 
@@ -645,39 +744,6 @@ function lightningCore(
       scaleX: scale, scaleY: scale,
     }),
   ]
-}
-
-function beamMesh(
-  record: NativeWeldBadGuysRecord,
-  midpoint: Readonly<{ x: number; y: number }>,
-  endpoint: Readonly<{ x: number; y: number }>,
-  width: number,
-  role: string,
-  tint: number,
-): NativeWeldMeshDraw {
-  const points = [{ x: 0, y: 0 }, midpoint, endpoint]
-  const vertices: number[] = []
-  for (let index = 0; index < points.length; index += 1) {
-    const before = points[Math.max(0, index - 1)]!
-    const after = points[Math.min(points.length - 1, index + 1)]!
-    const dx = after.x - before.x
-    const dy = after.y - before.y
-    const length = Math.hypot(dx, dy) || 1
-    const px = -dy / length * width
-    const py = dx / length * width
-    vertices.push(points[index]!.x + px, points[index]!.y + py)
-    vertices.push(points[index]!.x - px, points[index]!.y - py)
-  }
-  return Object.freeze({
-    alpha: 1,
-    blend: 'add',
-    indices: Object.freeze([0, 1, 2, 2, 1, 3, 2, 3, 4, 4, 3, 5]),
-    record,
-    role,
-    tint,
-    uvs: Object.freeze([0, 0, 0, 1, 0.5, 0, 0.5, 1, 1, 0, 1, 1]),
-    vertices: Object.freeze(vertices),
-  })
 }
 
 function sprite(

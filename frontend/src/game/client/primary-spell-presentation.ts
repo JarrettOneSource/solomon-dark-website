@@ -286,8 +286,10 @@ function fixedTransientTiming(
     }
     case 'water-hail': return null
     case 'weld-boulder-debris': return null
+    case 'weld-blizzard-glow': return null
     case 'weld-channel':
     case 'weld-frost-fade':
+    case 'weld-flame-lash-fade':
     case 'weld-ground-spark-fade':
     case 'weld-hail-flash':
     case 'weld-hail-knockback':
@@ -685,6 +687,17 @@ function interpolateTransient(
       vector: [...actor.vector],
     }
   }
+  if (older.kind === 'weld-blizzard-glow' && newer.kind === 'weld-blizzard-glow') {
+    const actor = blend < 1 ? older : newer
+    return {
+      ...actor,
+      ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+      direction: lerpVector(older.direction, newer.direction, blend),
+      origin: lerpVector(older.origin, newer.origin, blend),
+      position: lerpVector(older.position, newer.position, blend),
+      vector: [...actor.vector],
+    }
+  }
   if (older.kind === 'weld-frost-fade' && newer.kind === 'weld-frost-fade') {
     const actor = blend < 1 ? older : newer
     return {
@@ -692,6 +705,21 @@ function interpolateTransient(
       ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
       direction: lerpVector(older.direction, newer.direction, blend),
       lightRegistration: null,
+      origin: lerpVector(older.origin, newer.origin, blend),
+      position: lerpVector(older.position, newer.position, blend),
+      vector: [...actor.vector],
+    }
+  }
+  if (
+    older.kind === 'weld-flame-lash-fade'
+    && newer.kind === 'weld-flame-lash-fade'
+  ) {
+    const actor = blend < 1 ? older : newer
+    return {
+      ...actor,
+      ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+      alpha: lerp(older.alpha, newer.alpha, blend),
+      direction: lerpVector(older.direction, newer.direction, blend),
       origin: lerpVector(older.origin, newer.origin, blend),
       position: lerpVector(older.position, newer.position, blend),
       vector: [...actor.vector],
@@ -800,8 +828,14 @@ function interpolateTransient(
       origin: lerpVector(older.origin, newer.origin, blend),
       phase: lerp(older.phase, newer.phase, blend),
       position: lerpVector(older.position, newer.position, blend),
+      remainingDistance: lerp(
+        older.remainingDistance,
+        newer.remainingDistance,
+        blend,
+      ),
       scale: lerp(older.scale, newer.scale, blend),
       stretch: lerp(older.stretch, newer.stretch, blend),
+      terminalPosition: { ...actor.terminalPosition },
       tintFade: lerp(older.tintFade, newer.tintFade, blend),
       vector: [...actor.vector],
       velocity: lerpVector(older.velocity, newer.velocity, blend),
@@ -941,9 +975,11 @@ function copyProjectile(spell: PrimarySpellProjectileState): PrimarySpellProject
 }
 
 function isWeldTransient(effect: PrimarySpellTransientState): boolean {
-  return effect.kind === 'weld-boulder-debris'
+  return effect.kind === 'weld-blizzard-glow'
+    || effect.kind === 'weld-boulder-debris'
     || effect.kind === 'weld-channel'
     || effect.kind === 'weld-frost-fade'
+    || effect.kind === 'weld-flame-lash-fade'
     || effect.kind === 'weld-ground-spark-fade'
     || effect.kind === 'weld-hail-flash'
     || effect.kind === 'weld-hail-knockback'
@@ -1098,7 +1134,18 @@ function copyTransient(effect: PrimarySpellTransientState): PrimarySpellTransien
       vector: [...effect.vector],
     }
   }
+  if (effect.kind === 'weld-blizzard-glow') {
+    return {
+      ...effect,
+      direction: { ...effect.direction },
+      lightRegistration: null,
+      origin: { ...effect.origin },
+      position: { ...effect.position },
+      vector: [...effect.vector],
+    }
+  }
   if (effect.kind === 'weld-frost-fade'
+    || effect.kind === 'weld-flame-lash-fade'
     || effect.kind === 'weld-ground-spark-fade'
     || effect.kind === 'weld-hail-flash'
     || effect.kind === 'weld-hail-rock-fade'
@@ -1152,6 +1199,7 @@ function copyTransient(effect: PrimarySpellTransientState): PrimarySpellTransien
       lightRegistration: null,
       origin: { ...effect.origin },
       position: { ...effect.position },
+      terminalPosition: { ...effect.terminalPosition },
       vector: [...effect.vector],
       velocity: { ...effect.velocity },
     }

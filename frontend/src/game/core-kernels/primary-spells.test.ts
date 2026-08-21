@@ -1866,6 +1866,27 @@ test('all welded sustained families use one latch and run their native release v
   }
 })
 
+test('Flame Lash emission owns the independent six-word endpoint fade', () => {
+  const profile = weldedProfile(1003, 'channel', [8, 10, 2, 0.5, 3, 10, 2, 3])
+  const source = { ...directSpellHarness('earth'), primarySkill: profile }
+  const result = stepSpellKernel(source, true, 100, true, () => true, profile).state
+  const fade = result.spells.transients.find(({ kind }) => kind === 'weld-flame-lash-fade')
+  assert.ok(fade?.kind === 'weld-flame-lash-fade')
+  assert.equal(fade.variant, 'endpoint')
+  assert.equal(fade.record, 35)
+  assert.deepEqual(result.rng, advanceNativeRngWords(source.rng, 6))
+})
+
+test('Blizzard emission owns its two-glow four-word program and no endpoint extras', () => {
+  const profile = weldedProfile(1004, 'channel', [8, 10, 1, 0.5, 0, 0, 0])
+  const source = { ...directSpellHarness('earth'), primarySkill: profile }
+  const result = stepSpellKernel(source, true, 100, true, () => true, profile).state
+  const glows = result.spells.transients.filter(({ kind }) => kind === 'weld-blizzard-glow')
+  assert.equal(glows.length, 2)
+  assert.ok(glows.every((glow) => glow.kind === 'weld-blizzard-glow' && glow.variant === 24))
+  assert.deepEqual(result.rng, advanceNativeRngWords(source.rng, 4))
+})
+
 test('released Hail terrain obstruction replaces its carrier with every native child actor', () => {
   const profile = weldedProfile(1008, 'persistent', [8, 10, 1.1, 1.5, 0.1, 0.5])
   let state = { ...directSpellHarness('earth'), primarySkill: profile }

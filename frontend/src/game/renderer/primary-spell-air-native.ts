@@ -145,6 +145,19 @@ export interface NativeAirLightningInput {
   underpowered?: boolean
 }
 
+export interface NativeAirRibbonLayerInput {
+  readonly alpha: number
+  readonly basePhaseDegrees: number
+  readonly birthTick: number
+  readonly endpoint: NativeAirPoint
+  readonly id: number
+  readonly midpoint: NativeAirPoint
+  readonly phaseOffset?: number
+  readonly source: NativeAirPoint
+  readonly tint: number
+  readonly width: number
+}
+
 export interface NativeAirCoronaInput {
   alpha: number
   angle: number
@@ -275,6 +288,22 @@ export function buildNativeAirLightningFactoryPlan(
       ? sourceCorona(input.id, source)
       : null,
   }
+}
+
+/** Shared native 0x0052E020 ribbon builder used by Lightning and Flame Lash. */
+export function buildNativeAirRibbonLayer(
+  input: NativeAirRibbonLayerInput,
+): NativeAirRibbonLayer {
+  return buildRibbon(
+    [input.source, input.midpoint, input.endpoint],
+    input.id,
+    input.birthTick,
+    input.width,
+    input.basePhaseDegrees,
+    input.phaseOffset ?? 0,
+    input.tint,
+    input.alpha,
+  )
 }
 
 export function buildNativeAirCoronaPlan(
