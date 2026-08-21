@@ -475,7 +475,6 @@ export default function HubScene({
 
         <GameHud
           accountUsername={accountUsername}
-          element={element}
           getPingMs={getPingMs}
           initialSnapshot={hubInitialSnapshot}
           mapLabel="Enter the Boneyard"

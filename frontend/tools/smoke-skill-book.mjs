@@ -139,6 +139,10 @@ try {
   await missile.dragTo(quickbarThree)
   await book.getByRole('button', { name: /Quickbar 3, Magic Missile/ }).waitFor()
 
+  await page.keyboard.press('Escape')
+  await book.waitFor({ state: 'detached', timeout: 5_000 })
+  await hubScene.locator('xpath=self::*[@data-gameplay-input-blocked="false"]').waitFor()
+
   const playerId = host.hostPlayerId()
   assert.ok(playerId)
   const state = host.state()
@@ -169,10 +173,16 @@ try {
       skillBooks,
     }, playerId, getPlayerEconomy(state, playerId)),
   })
+  await page.waitForTimeout(200)
+  await page.getByRole('button', { name: 'Open skills' }).click()
+  await book.waitFor({ timeout: 10_000 })
+  await book.locator('xpath=self::*[@data-transition-phase="settled"]').waitFor({
+    timeout: 5_000,
+  })
   const fireball = book.getByRole('button', { name: /Fireball, rank 1/ })
   await fireball.waitFor({ timeout: 10_000 })
   await fireball.click()
-  await page.getByAltText('Fireball primary spell').waitFor({ timeout: 10_000 })
+  await page.getByRole('img', { name: 'Fireball primary spell' }).waitFor({ timeout: 10_000 })
   await page.screenshot({ path: `${screenshotRoot}-mixed-quickbar.png` })
 
   await page.keyboard.press('Escape')

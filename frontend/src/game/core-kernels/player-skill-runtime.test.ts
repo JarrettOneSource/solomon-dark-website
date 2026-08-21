@@ -90,6 +90,74 @@ test('all sixteen rows resolve their exact rank and concentration scalars', () =
   assert.equal(derived.castProgressFactor, 1.1)
 })
 
+test('Life and Mana Charms multiply their final maximum-vital lanes independently', () => {
+  const book = rankedBook({ 56: 1, 64: 1 })
+  const statBook = playerStatBook()
+  const base = createHubEconomy(1)
+  const lifeEconomy = { ...base, ownedPerkSelectors: [0] }
+  const manaEconomy = { ...base, ownedPerkSelectors: [1] }
+  const bothEconomy = { ...base, ownedPerkSelectors: [0, 1] }
+  const derive = (economy: HubEconomyState) => {
+    const state = createPlayerSkillRuntime(book, statBook, economy)
+    return playerSkillDerivedStats(
+      state.runtime,
+      state.skillBook,
+      statBook,
+      progression(),
+      economy,
+    )
+  }
+
+  assert.deepEqual(
+    [derive(base).maximumHealth, derive(base).maximumMana],
+    [100, 200],
+  )
+  assert.deepEqual(
+    [derive(lifeEconomy).maximumHealth, derive(lifeEconomy).maximumMana],
+    [125, 200],
+  )
+  assert.deepEqual(
+    [derive(manaEconomy).maximumHealth, derive(manaEconomy).maximumMana],
+    [100, 250],
+  )
+  assert.deepEqual(
+    [derive(bothEconomy).maximumHealth, derive(bothEconomy).maximumMana],
+    [125, 250],
+  )
+})
+
+test('Mindstar effective ranks refresh both maximum-vital skills', () => {
+  const book = rankedBook({ 56: 1, 64: 1 })
+  const statBook = playerStatBook()
+  const economy = createHubEconomy(1)
+  let state = createPlayerSkillRuntime(book, statBook, economy)
+  const derive = () => playerSkillDerivedStats(
+    state.runtime,
+    state.skillBook,
+    statBook,
+    progression(),
+    economy,
+  )
+
+  assert.deepEqual([derive().maximumHealth, derive().maximumMana], [100, 200])
+  state = setPlayerMindstarActive(
+    state.runtime,
+    true,
+    state.skillBook,
+    statBook,
+    economy,
+  )
+  assert.deepEqual([derive().maximumHealth, derive().maximumMana], [150, 300])
+  state = setPlayerMindstarActive(
+    state.runtime,
+    false,
+    state.skillBook,
+    statBook,
+    economy,
+  )
+  assert.deepEqual([derive().maximumHealth, derive().maximumMana], [100, 200])
+})
+
 test('Mind Chug concentrates every direct branch while Creativity remains slot-A only', () => {
   const book = rankedBook({ 57: 1, 58: 1, 59: 1, 60: 1, 61: 1, 63: 1, 66: 1 })
   const statBook = playerStatBook()

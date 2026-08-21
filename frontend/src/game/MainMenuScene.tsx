@@ -1192,6 +1192,8 @@ function sameRuntimeProgression(
     && current.deathEpoch === next.deathEpoch
     && current.deathTick === next.deathTick
     && current.lifeState === next.lifeState
+    && current.maximumHealth === next.maximumHealth
+    && current.maximumMana === next.maximumMana
     && current.poisonDamagePerTick === next.poisonDamagePerTick
     && current.poisonTicksRemaining === next.poisonTicksRemaining
     && current.selectedPrimarySkillId === next.selectedPrimarySkillId

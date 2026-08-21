@@ -716,7 +716,6 @@ export default function BoneyardScene({
 
         <GameHud
           accountUsername={accountUsername}
-          element={element}
           getPingMs={getPingMs}
           initialSnapshot={boneyardInitialSnapshot}
           mode="run"

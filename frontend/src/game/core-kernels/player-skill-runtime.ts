@@ -44,6 +44,7 @@ export const NATIVE_CONCENTRATED_ENCHANT_STAFF_TIMING_FACTOR = 1.75
 export const NATIVE_CONCENTRATED_DEFLECT_DAMAGE_FACTOR = 5
 export const NATIVE_DEFLECT_REFLECTION_PADDING = 25
 export const NATIVE_FLASH_RESPONSE_RADIUS = 100
+export const NATIVE_HAGATHA_MAXIMUM_VITAL_FACTOR = 1.25
 
 export type PlayerConcentrationSlot = 'a' | 'b'
 export type PlayerStaffDamageLane = 'primary' | 'secondary'
@@ -274,6 +275,12 @@ export function playerSkillDerivedStats(
     1 + (fasterCaster + (selected(70) ? value(70, 'mConcentration') : 0)) / 100,
     skillBook.primarySkillId,
   )
+  const lifeCharmFactor = economy.ownedPerkSelectors.includes(0)
+    ? NATIVE_HAGATHA_MAXIMUM_VITAL_FACTOR
+    : 1
+  const manaCharmFactor = economy.ownedPerkSelectors.includes(1)
+    ? NATIVE_HAGATHA_MAXIMUM_VITAL_FACTOR
+    : 1
   return Object.freeze({
     castProgressFactor,
     damageResistance: clampUnit(modifiers.damageResistance),
@@ -297,13 +304,17 @@ export function playerSkillDerivedStats(
         * (1 + channelMana / 100)
         * (selected(57) ? 1 + value(57, 'mConcentration') / 100 : 1),
     ),
-    maximumHealth: applyNativeEquipmentTransform(
-      modifiers.maximumHealth,
-      PLAYER_INITIAL_HEALTH + value(64, 'mValue'),
+    maximumHealth: Math.fround(
+      applyNativeEquipmentTransform(
+        modifiers.maximumHealth,
+        PLAYER_INITIAL_HEALTH + value(64, 'mValue'),
+      ) * lifeCharmFactor,
     ),
-    maximumMana: applyNativeEquipmentTransform(
-      modifiers.maximumMana,
-      PLAYER_INITIAL_MANA + value(56, 'mValue'),
+    maximumMana: Math.fround(
+      applyNativeEquipmentTransform(
+        modifiers.maximumMana,
+        PLAYER_INITIAL_MANA + value(56, 'mValue'),
+      ) * manaCharmFactor,
     ),
     meditationConcentrated: selected(58),
     meditationIdleDelayTicks: meditationIdleDelayTicks(skillBook, statBook),

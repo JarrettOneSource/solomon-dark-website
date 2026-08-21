@@ -1,8 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type CSSProperties } from 'react'
 import { hub } from '../lib/assets'
 import AllyHud from './AllyHud.tsx'
 import type { AllyHudRow } from './ally-hud.ts'
-import type { WizardElement } from './core-kernels/player-character.ts'
 import type {
   ProtocolPlayerEconomy,
   ProtocolPlayerProgression,
@@ -14,13 +13,17 @@ import {
 import { subscribeGamePresentationFrames } from './game-presentation-frame-loop.ts'
 import GameAccountName from './GameAccountName.tsx'
 import { hubPotionShortcut } from './hub-inventory-presentation.ts'
-import SkillQuickbar from './SkillQuickbar.tsx'
+import SkillQuickbar, { NativeSkillIcon } from './SkillQuickbar.tsx'
 import type { GameSnapshot } from './protocol/game-protocol.ts'
+import {
+  nativeHealthHudPresentation,
+  nativeHudSkillBindings,
+  nativeManaHudPresentation,
+} from './native-hud-presentation.ts'
 
 interface GameHudProps {
   accountUsername: string | null
   additionalAllyRows?: readonly AllyHudRow[]
-  element: WizardElement
   getPingMs: () => number | null
   initialSnapshot: GameSnapshot
   mapLabel?: string
@@ -111,7 +114,6 @@ function PingCounter({
 export default function GameHud({
   accountUsername,
   additionalAllyRows,
-  element,
   getPingMs,
   initialSnapshot,
   mapLabel = 'Map',
@@ -135,37 +137,47 @@ export default function GameHud({
     if (next) setEconomy((current) => current.revision === next.revision ? current : next)
   }), [playerId, subscribeSnapshot])
   const [quickbarHud, setQuickbarHud] = useState(() => ({
+    concentrationSkillIds: initialSnapshot.players[playerId]!.progression.concentrationSkillIds,
     playerState: initialSnapshot.secondaryAbilities.players[playerId],
     quickbar: initialSnapshot.players[playerId]!.progression.skillQuickbar,
     selectedPrimarySkillId: initialSnapshot.players[playerId]!.progression.selectedPrimarySkillId,
+    weldBuildId: initialSnapshot.players[playerId]!.progression.weldBuildId,
   }))
   useEffect(() => subscribeSnapshot((snapshot) => {
     const player = snapshot.players[playerId]
     if (!player) return
     setQuickbarHud({
+      concentrationSkillIds: player.progression.concentrationSkillIds,
       playerState: snapshot.secondaryAbilities.players[playerId],
       quickbar: player.progression.skillQuickbar,
       selectedPrimarySkillId: player.progression.selectedPrimarySkillId,
+      weldBuildId: player.progression.weldBuildId,
     })
   }), [playerId, subscribeSnapshot])
   const xpProgress = playerExperienceProgress(progression)
-  const healthProgress = clampUnit(progression.currentHealth / progression.maximumHealth) ** 2
-  const manaProgress = clampUnit(progression.currentMana / progression.maximumMana)
-  const shieldProgress = quickbarHud.playerState === undefined
-    ? 0
-    : clampUnit(
-        quickbarHud.playerState.magicShieldAbsorb
-          / quickbarHud.playerState.magicShieldMaximum,
-      )
-  const reserveProgress = quickbarHud.playerState === undefined
-    ? 0
-    : clampUnit(quickbarHud.playerState.reservedMana / progression.maximumMana)
+  const healthHud = nativeHealthHudPresentation(
+    progression.currentHealth,
+    progression.maximumHealth,
+    quickbarHud.playerState?.magicShieldAbsorb ?? 0,
+    quickbarHud.playerState?.magicShieldMaximum ?? 0,
+  )
+  const manaHud = nativeManaHudPresentation(
+    progression.currentMana,
+    progression.maximumMana,
+    quickbarHud.playerState?.reservedMana ?? 0,
+  )
   const healthLayers = [
-    { className: 'hub-hud-meter-fill', progress: healthProgress, shield: false },
-    ...(shieldProgress > 0
-      ? [{ className: 'hub-hud-meter-fill hub-hud-meter-shield', progress: shieldProgress, shield: true }]
+    { className: 'hub-hud-meter-fill', progress: healthHud.fillProgress, shield: false },
+    ...(healthHud.shieldProgress > 0
+      ? [{ className: 'hub-hud-meter-fill hub-hud-meter-shield', progress: healthHud.shieldProgress, shield: true }]
       : []),
   ].sort((left, right) => left.progress - right.progress)
+  const skillBindings = nativeHudSkillBindings({
+    concentrationSkillIds: quickbarHud.concentrationSkillIds,
+    planewalkerActive: (quickbarHud.playerState?.planewalkerTicksRemaining ?? 0) > 0,
+    selectedPrimarySkillId: quickbarHud.selectedPrimarySkillId,
+    weldBuildId: quickbarHud.weldBuildId,
+  })
   const healthPotions = hubPotionShortcut(economy.backpack, 'health-potion')
   const manaPotions = hubPotionShortcut(economy.backpack, 'mana-potion')
   return (
@@ -184,7 +196,15 @@ export default function GameHud({
         <PingCounter getPingMs={getPingMs} subscribePing={subscribePing} />
       </div>
       <div className="hub-hud-meters">
-        <div className="hub-hud-meter hub-hud-meter-health">
+        <div
+          className="hub-hud-meter hub-hud-meter-health"
+          data-core-width={healthHud.coreWidth}
+          data-track-width={healthHud.trackWidth}
+          style={{
+            '--native-meter-core-width': `${healthHud.coreWidth}px`,
+            '--native-meter-track-width': `${healthHud.trackWidth}px`,
+          } as CSSProperties}
+        >
           {healthLayers.map((layer) => (
             <img
               className={layer.className}
@@ -197,19 +217,27 @@ export default function GameHud({
             />
           ))}
         </div>
-        <div className="hub-hud-meter hub-hud-meter-mana">
+        <div
+          className="hub-hud-meter hub-hud-meter-mana"
+          data-core-width={manaHud.coreWidth}
+          data-track-width={manaHud.trackWidth}
+          style={{
+            '--native-meter-core-width': `${manaHud.coreWidth}px`,
+            '--native-meter-track-width': `${manaHud.trackWidth}px`,
+          } as CSSProperties}
+        >
           <img
             className="hub-hud-meter-fill"
             src={hub.hud.barBlue}
-            style={{ clipPath: `inset(0 ${(1 - manaProgress) * 100}% 0 0)` }}
+            style={{ clipPath: `inset(0 ${(1 - manaHud.fillProgress) * 100}% 0 0)` }}
             alt={`Mana ${progression.currentMana} of ${progression.maximumMana}`}
           />
-          {reserveProgress > 0 ? (
+          {manaHud.reserveProgress > 0 ? (
             <span
               className="hub-hud-mana-reserve"
               style={{
                 backgroundImage: `url("${hub.hud.manaReserve}")`,
-                width: `${reserveProgress * 100}px`,
+                width: `${manaHud.reserveWidth}px`,
               }}
                 aria-label={`${quickbarHud.playerState!.reservedMana} mana reserved`}
             />
@@ -224,11 +252,24 @@ export default function GameHud({
           />
         </filter>
       </svg>
-      <img
-        className="hub-hud-primary"
-        src={hub.primary[selectedPrimaryElement(quickbarHud.selectedPrimarySkillId, element)]}
-        alt={`${NATIVE_SKILL_CATALOG[quickbarHud.selectedPrimarySkillId]?.name ?? element} primary spell`}
-      />
+      <div className="hub-hud-selected-skills" role="group" aria-label="Selected skills">
+        {skillBindings.map(({ binding, centerOffset, record, skillId }) => (
+          <NativeSkillIcon
+            ariaLabel={binding === 12
+              ? `${NATIVE_SKILL_CATALOG[skillId]?.name ?? `Skill ${skillId}`} primary spell`
+              : `${NATIVE_SKILL_CATALOG[skillId]?.name ?? `Skill ${skillId}`}, concentration ${binding === 16 ? 'A' : 'B'}`}
+            className="hub-hud-selected-skill"
+            cooldown={false}
+            dataBinding={binding}
+            key={binding}
+            opacity={0.75}
+            record={record}
+            style={{
+              '--native-hud-skill-center-offset': `${centerOffset}px`,
+            } as CSSProperties}
+          />
+        ))}
+      </div>
       {mode === 'hub' ? (
         <img className="hub-hud-help" src={hub.hud.help} alt="Help" />
       ) : null}
@@ -329,17 +370,4 @@ export default function GameHud({
       ) : null}
     </div>
   )
-}
-
-function clampUnit(value: number): number {
-  return Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0
-}
-
-function selectedPrimaryElement(skillId: number, fallback: WizardElement): WizardElement {
-  if (skillId === 8) return 'ether'
-  if (skillId === 16) return 'fire'
-  if (skillId === 24) return 'air'
-  if (skillId === 32) return 'water'
-  if (skillId === 40) return 'earth'
-  return fallback
 }

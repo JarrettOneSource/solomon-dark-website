@@ -128,7 +128,23 @@ export default function SkillQuickbar({
   )
 }
 
-export function NativeSkillIcon({ cooldown, record }: { cooldown: boolean; record: number }) {
+export function NativeSkillIcon({
+  ariaLabel,
+  className = 'hub-hud-quickbar-skill-icon',
+  cooldown,
+  dataBinding,
+  opacity,
+  record,
+  style,
+}: {
+  ariaLabel?: string
+  className?: string
+  cooldown: boolean
+  dataBinding?: number
+  opacity?: number
+  record: number
+  style?: CSSProperties
+}) {
   const definition = nativeAssets.atlases.Skills.records[`${record}`]
   if (!definition) throw new Error(`Missing native Skills record ${record}`)
   const [x, y] = definition.frame
@@ -136,17 +152,21 @@ export function NativeSkillIcon({ cooldown, record }: { cooldown: boolean; recor
   const [trimX, trimY] = definition.trimOrigin
   return (
     <span
-      className="hub-hud-quickbar-skill-icon"
+      aria-hidden={ariaLabel === undefined ? true : undefined}
+      aria-label={ariaLabel}
+      className={className}
+      data-binding={dataBinding}
       data-record={record}
+      role={ariaLabel === undefined ? undefined : 'img'}
       style={{
+        ...style,
         backgroundImage: `url("${hub.trader.skillsAtlas}")`,
         backgroundPosition: `${trimX - x}px ${trimY - y}px`,
         backgroundSize: `${ATLAS_WIDTH}px ${ATLAS_HEIGHT}px`,
         height: logicalHeight,
-        opacity: cooldown ? 0.25 : 0.375,
+        opacity: opacity ?? (cooldown ? 0.25 : 0.375),
         width: logicalWidth,
       }}
-      aria-hidden
     />
   )
 }
