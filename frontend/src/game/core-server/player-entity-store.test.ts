@@ -87,6 +87,47 @@ test('players occupy aligned dense ECS columns with stable entity IDs', () => {
   assert.equal(store.nextEntityId, 3)
 })
 
+test('learned primary effects follow the selected pure row, not creation element or Weld', () => {
+  let store = addPlayerEntity(
+    createPlayerEntityStore(),
+    'first',
+    FIRST,
+    createPlayerCharacter(FIRST, { x: 0, y: 0 }),
+    10,
+  )
+  store = {
+    ...store,
+    primaryCasts: [{
+      ...createIdlePlayerPrimaryCast(),
+      channelActive: true,
+      underpowered: false,
+    }],
+    skillBooks: [{ ...store.skillBooks[0]!, primarySkillId: 24 }],
+    skillRuntimes: [{
+      ...store.skillRuntimes[0]!,
+      hurricaneCharge: 0,
+      hurricaneEnabled: true,
+      hurricaneRefreshed: false,
+    }],
+  }
+  const lightning = stepPlayerEntityCombatTick(store).store
+  assert.equal(lightning.skillRuntimes[0]!.hurricaneCharge, Math.fround(0.0015))
+
+  const ether = stepPlayerEntityCombatTick({
+    ...store,
+    configs: [{ ...store.configs[0]!, element: 'air' }],
+    skillBooks: [{ ...store.skillBooks[0]!, primarySkillId: 8 }],
+  }).store
+  assert.equal(ether.skillRuntimes[0]!.hurricaneCharge, 0)
+
+  const weld = stepPlayerEntityCombatTick({
+    ...store,
+    configs: [{ ...store.configs[0]!, element: 'air' }],
+    skillBooks: [{ ...store.skillBooks[0]!, primarySkillId: 52 }],
+  }).store
+  assert.equal(weld.skillRuntimes[0]!.hurricaneCharge, 0)
+})
+
 test('equipped native effects refresh effective ranks, maxima, and dense runtime atomically', () => {
   let store = createPlayerEntityStore()
   store = addPlayerEntity(store, 'first', FIRST, createPlayerCharacter(FIRST, { x: 0, y: 0 }), 10)

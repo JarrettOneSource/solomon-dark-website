@@ -285,6 +285,23 @@ test('Hurricane and Harden use player-owned channel clocks and weak Water clears
     }).runtime,
   }
   assert.equal(state.runtime.hurricaneCharge, Math.fround(0.0015))
+  assert.equal(state.runtime.hurricaneRefreshed, true)
+  state = {
+    ...state,
+    runtime: stepPlayerSkillRuntime(state.runtime, derived, {
+      acting: true,
+      moving: false,
+      primaryChannel: 'water',
+      primaryUnderpowered: false,
+    }).runtime,
+  }
+  assert.equal(state.runtime.hurricaneCharge, Math.fround(0.0015))
+  assert.equal(state.runtime.hurricaneRefreshed, false)
+  assert.equal(state.runtime.hardenArmor, Math.fround(0.08))
+  const reduced = applyPlayerHardenArmor(state.runtime, 1)
+  assert.equal(reduced.damage, 1 - Math.fround(0.08))
+  assert.equal(reduced.runtime, state.runtime, 'Harden is persistent flat armor, not a consumed pool')
+
   state = {
     ...state,
     runtime: stepPlayerSkillRuntime(state.runtime, derived, {
@@ -295,10 +312,6 @@ test('Hurricane and Harden use player-owned channel clocks and weak Water clears
     }).runtime,
   }
   assert.equal(state.runtime.hurricaneCharge, 0)
-  assert.equal(state.runtime.hardenArmor, Math.fround(0.08))
-  const reduced = applyPlayerHardenArmor(state.runtime, 1)
-  assert.equal(reduced.damage, 1 - Math.fround(0.08))
-  assert.equal(reduced.runtime, state.runtime, 'Harden is persistent flat armor, not a consumed pool')
 
   state = {
     ...state,

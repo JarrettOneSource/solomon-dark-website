@@ -8,6 +8,7 @@ import { NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM } from '../core-kernels/boneyard-zomb
 import type { BoneyardPoint } from '../core-kernels/boneyard.ts'
 import type { NativeSecondaryTargetEffectState } from '../core-kernels/native-secondary-abilities.ts'
 import type { NativeEnemyWorldFeedbackOutput } from '../core-kernels/native-enemy-world-feedback.ts'
+import { NATIVE_HURRICANE_DEFAULT_MOVEMENT_STEP } from '../core-kernels/native-hurricane.ts'
 import {
   createNativeRng,
   drawNativeFloat,
@@ -343,6 +344,7 @@ export interface BoneyardEnemyActor {
   readonly gaitPose: number
   readonly headFacingOffset: NativeSkeletonHeadFacingOffset
   readonly headingDeg: number
+  readonly hurricaneContactCooldown: number
   readonly id: BoneyardEnemyActorId
   readonly lastDamagedByPlayerId: string | null
   readonly lastDamageTick: number | null
@@ -462,6 +464,7 @@ export interface BoneyardMaggotActor {
   readonly deathTick: number
   readonly gaitPose: number
   readonly headingDeg: number
+  readonly hurricaneContactCooldown: number
   readonly id: BoneyardEnemyActorId
   readonly emergenceTick: number
   readonly launchTrajectory: 'edge' | 'lid'
@@ -780,6 +783,7 @@ export interface DamageBoneyardEnemyRequest {
   readonly amount: number
   readonly lethalObserver?: BoneyardEnemyLethalObserver
   readonly sourcePlayerId: string | null
+  readonly suppressHurtSound?: boolean
   readonly tick: number
 }
 
@@ -1008,6 +1012,7 @@ export function damageBoneyardEnemy(
   const hurtSound = enemyHurtSound(actor)
   if (
     hurtSound !== null
+    && request.suppressHurtSound !== true
     && (
       actor.lastDamageTick === null
       || request.tick - actor.lastDamageTick >= NATIVE_ENEMY_HIT_LATCH_TICKS
@@ -1208,6 +1213,28 @@ export function positionBoneyardEnemy(
   const maggots = [...source.maggots]
   maggots[maggotIndex] = { ...maggot, position: Object.freeze({ ...position }) }
   return { accepted: true, store: { ...source, maggots } }
+}
+
+/** Raw Badguy +0x1DA Hurricane contact clock, shared by every source. */
+export function setBoneyardEnemyHurricaneContactCooldown(
+  source: BoneyardEnemyStore,
+  actorId: BoneyardEnemyActorId,
+  cooldown: number,
+): BoneyardEnemyStore {
+  if (!Number.isSafeInteger(cooldown) || cooldown < 0 || cooldown > 0xffff) {
+    throw new RangeError('enemy Hurricane cooldown must be an unsigned short')
+  }
+  const actorIndex = source.actors.findIndex((actor) => actor.id === actorId)
+  if (actorIndex >= 0) {
+    const actors = [...source.actors]
+    actors[actorIndex] = { ...actors[actorIndex]!, hurricaneContactCooldown: cooldown }
+    return { ...source, actors }
+  }
+  const maggotIndex = source.maggots.findIndex((maggot) => maggot.id === actorId)
+  if (maggotIndex < 0) return source
+  const maggots = [...source.maggots]
+  maggots[maggotIndex] = { ...maggots[maggotIndex]!, hurricaneContactCooldown: cooldown }
+  return { ...source, maggots }
 }
 
 /**
@@ -1496,7 +1523,7 @@ export function stepBoneyardEnemyStore(
     }
   }
   stepMageShields(work, context)
-  stepMaggots(work, context)
+  stepMaggots(work, context, context.tick - source.lastStepTick)
   stepProjectiles(work, context)
   const spawnIntents = context.resolveSpawnIntents(
     work.actors.length + work.maggots.length,
@@ -1582,6 +1609,7 @@ function materializeSpawnIntents(
     const bodyPose = config.enemyToken === 'SKELETONMAGE'
       ? drawInteger(work, 2)
       : 0
+    const hurricaneContactCooldown = drawInteger(work, 100)
     const actor: BoneyardEnemyActor = {
       bodyPose,
       brain,
@@ -1593,6 +1621,7 @@ function materializeSpawnIntents(
       gaitPose: 0,
       headFacingOffset: 0,
       headingDeg: targetHeading(position, targetPlayerId, context.players),
+      hurricaneContactCooldown,
       id: work.nextActorId,
       lastDamagedByPlayerId: null,
       lastDamageTick: null,
@@ -1879,6 +1908,11 @@ function stepDamagePresentationTimers(
   elapsedTicks: number,
 ): BoneyardEnemyActor {
   if (elapsedTicks <= 0) return actor
+  const hurricaneContactCooldown = Math.max(
+    0,
+    actor.hurricaneContactCooldown
+      - elapsedTicks * NATIVE_HURRICANE_DEFAULT_MOVEMENT_STEP,
+  )
   const shieldPulse = Math.max(0, actor.shieldPulse - elapsedTicks * 0.05)
   const shieldSoundCooldownTicks = Math.max(
     0,
@@ -1886,8 +1920,9 @@ function stepDamagePresentationTimers(
   )
   return shieldPulse === actor.shieldPulse
     && shieldSoundCooldownTicks === actor.shieldSoundCooldownTicks
+    && hurricaneContactCooldown === actor.hurricaneContactCooldown
     ? actor
-    : { ...actor, shieldPulse, shieldSoundCooldownTicks }
+    : { ...actor, hurricaneContactCooldown, shieldPulse, shieldSoundCooldownTicks }
 }
 
 function stepLivingActor(
@@ -2970,6 +3005,7 @@ function spawnCoffinMaggots(
       y: actor.position.y + unitY * trajectory.originDistance,
     })
     const targetPlayerId = nearestEligibleTarget(position, context.players)
+    const hurricaneContactCooldown = drawInteger(work, 100)
     work.maggots.push(Object.freeze({
       collisionRadius: BOUNDED_MAGGOT_PROGRAM.collisionRadius,
       currentHealth: family.maggotHealth,
@@ -2981,6 +3017,7 @@ function spawnCoffinMaggots(
       emergenceTick: 0,
       gaitPose: 0,
       headingDeg,
+      hurricaneContactCooldown,
       id: work.nextActorId,
       launchTrajectory,
       launchVelocity: Object.freeze({
@@ -3044,9 +3081,20 @@ function nativeMaggotDeathOffsets(
 function stepMaggots(
   work: WorkingStep,
   context: BoneyardEnemyStoreStepContext,
+  elapsedTicks: number,
 ): void {
   const retained: BoneyardMaggotActor[] = []
-  for (const source of work.maggots) {
+  for (const stored of work.maggots) {
+    const source = stored.hurricaneContactCooldown <= 0
+      ? stored
+      : {
+          ...stored,
+          hurricaneContactCooldown: Math.max(
+            0,
+            stored.hurricaneContactCooldown
+              - elapsedTicks * NATIVE_HURRICANE_DEFAULT_MOVEMENT_STEP,
+          ),
+        }
     const effect = context.abilityEffects?.[source.id]
     if (!hasLiveCoffinOwner(work.actors, source.ownerCoffinActorId)) {
       retireMaggot(work, source, context.tick)

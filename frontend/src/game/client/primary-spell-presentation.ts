@@ -614,10 +614,21 @@ function interpolateTransient(
   }
   if (older.kind === 'air' || newer.kind === 'air') return copyTransient(discrete)
   if (older.kind === 'air-hurricane' && newer.kind === 'air-hurricane') {
+    const hurricane = blend < 1 ? older : newer
     return {
-      ...(blend < 1 ? older : newer),
+      ...hurricane,
       ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
       charge: lerp(older.charge, newer.charge, blend),
+      contactCharge: lerp(older.contactCharge, newer.contactCharge, blend),
+      lanes: hurricane.lanes.map((lane, index) => ({
+        ...lane,
+        angleDegrees: lerp(
+          older.lanes[index]!.angleDegrees,
+          newer.lanes[index]!.angleDegrees,
+          blend,
+        ),
+      })),
+      phaseDegrees: lerp(older.phaseDegrees, newer.phaseDegrees, blend),
       position: {
         x: lerp(older.position.x, newer.position.x, blend),
         y: lerp(older.position.y, newer.position.y, blend),
@@ -1119,7 +1130,11 @@ function copyTransient(effect: PrimarySpellTransientState): PrimarySpellTransien
     }
   }
   if (effect.kind === 'air-hurricane') {
-    return { ...effect, position: { ...effect.position } }
+    return {
+      ...effect,
+      lanes: effect.lanes.map((lane) => ({ ...lane })),
+      position: { ...effect.position },
+    }
   }
   if (effect.kind === 'water-hail') {
     return {

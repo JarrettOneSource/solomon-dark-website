@@ -4,9 +4,9 @@ import type {
   PrimarySpellProjectileState,
   PrimarySpellTransientState,
 } from '../core-kernels/primary-spells.ts'
-import { buildNativeAirLightningPlan } from './primary-spell-air-native.ts'
 import {
   NATIVE_AIR_WATER_SPRITES,
+  nativeHurricaneVisualPlan,
   nativeHailVisualPlan,
   nativeWaterAuraVisualPlan,
 } from './primary-spell-air-water-native.ts'
@@ -59,7 +59,7 @@ export class AirWaterActorSpellView {
     this.container = new Container({ label: state.kind })
     this.container.eventMode = 'none'
     this.containers = [this.container]
-    this.sprites = Array.from({ length: 3 }, (_, index) => {
+    this.sprites = Array.from({ length: 17 }, (_, index) => {
       const sprite = new Sprite({
         label: `${state.kind}:sprite:${index}`,
         texture: textures.airWaterActors.coldAura,
@@ -81,22 +81,21 @@ export class AirWaterActorSpellView {
     this.sprites.forEach(resetSprite)
     if (state.kind === 'air-hurricane') {
       this.container.position.set(state.position.x, state.position.y)
-      const corona = buildNativeAirLightningPlan({
-        ageTicks: 0,
-        birthTick: state.birthTick,
-        endpoint: { x: 0, y: 0 },
-        id: state.id,
-        midpoint: { x: 0, y: 0 },
-      }).sourceCorona
-      corona?.circles.forEach((circle, index) => this.showSprite(
+      nativeHurricaneVisualPlan(state).forEach((plan, index) => this.showSprite(
         index,
-        this.textures.air.circle,
-        NATIVE_AIR_WATER_SPRITES.prismaticSpark0,
+        plan.role === 'core'
+          ? this.textures.airWaterActors.hurricaneCore
+          : this.textures.airWaterActors.hurricaneLane,
+        plan.role === 'core'
+          ? NATIVE_AIR_WATER_SPRITES.hurricaneCore
+          : NATIVE_AIR_WATER_SPRITES.hurricaneLane,
         {
-          alpha: circle.alpha * state.charge,
-          blend: 'add',
-          scale: circle.scale * state.charge,
-          tint: circle.tint,
+          alpha: plan.alpha,
+          blend: plan.blend,
+          position: plan.position,
+          rotation: plan.rotationRadians,
+          scale: plan.scale,
+          tint: plan.tint,
         },
       ))
       return

@@ -13,6 +13,7 @@ import {
 } from './primary-spell-air-water-actor-view.ts'
 import {
   NATIVE_AIR_WATER_SPRITES,
+  nativeHurricaneVisualPlan,
   nativeHailVisualPlan,
   nativeWaterAuraVisualPlan,
 } from './primary-spell-air-water-native.ts'
@@ -30,6 +31,10 @@ test('Air/Water world view routes all three primary-owned actors through stock t
   assert.deepEqual(root.children.map(({ label }) => label), NATIVE_AIR_WATER_ACTOR_KINDS)
   assert.equal(view.count, 3)
   assert.ok(root.children.every(({ children }) => children.some(({ visible }) => visible)))
+  const hurricane = visibleSprites(root.children[0]!)
+  assert.equal(hurricane.length, 17)
+  assert.equal(hurricane[0]!.label, 'DeadHawg:15')
+  assert.ok(hurricane.slice(1).every(({ label }) => label === 'BadGuys:84'))
 
   view.promoteOwnerOverlays((ownerId) => ownerId === 'wizard' ? 2_000 : undefined)
   assert.equal(root.children[0]!.zIndex, 2_000.5)
@@ -83,6 +88,40 @@ test('Hail and Cold Aura plans retain their authoritative motion fields', () => 
   })
   assert.equal(NATIVE_AIR_WATER_SPRITES.hail.entry, 32)
   assert.equal(NATIVE_AIR_WATER_SPRITES.coldAura.entry, 14)
+  assert.equal(NATIVE_AIR_WATER_SPRITES.hurricaneCore.entry, 15)
+  assert.equal(NATIVE_AIR_WATER_SPRITES.hurricaneCore.atlas, 'DeadHawg')
+  assert.equal(NATIVE_AIR_WATER_SPRITES.hurricaneLane.entry, 84)
+})
+
+test('Hurricane painter owns the stock core and both enhanced/low lane branches', () => {
+  const enhanced = nativeHurricaneVisualPlan({
+    charge: 0.5,
+    enhancedEffects: true,
+    lanes: hurricaneLanes(),
+    phaseDegrees: 10,
+  })
+  assert.equal(enhanced.length, 17)
+  assert.deepEqual(enhanced[0], {
+    alpha: Math.fround(0.5 * 0.75),
+    blend: 'normal',
+    position: { x: 0, y: -15 },
+    role: 'core',
+    rotationRadians: 15 * Math.PI / 180,
+    scale: { x: 5, y: 4 },
+    tint: 0xf2ffff,
+  })
+  assert.equal(enhanced.filter(({ role }) => role === 'lane').length, 8)
+  assert.equal(enhanced.filter(({ role }) => role === 'lane-copy').length, 8)
+  const low = nativeHurricaneVisualPlan({
+    charge: 0.5,
+    enhancedEffects: false,
+    lanes: hurricaneLanes(),
+    phaseDegrees: 10,
+  })
+  assert.equal(low.length, 5)
+  assert.deepEqual(low.slice(1).map(({ rotationRadians }) => rotationRadians), [
+    0, 20, 40, 60,
+  ].map((angle) => angle * Math.PI / 180))
 })
 
 function actorFixture(): PrimarySpellSimulationState {
@@ -90,8 +129,14 @@ function actorFixture(): PrimarySpellSimulationState {
   const transients: PrimarySpellTransientState[] = [{
     ...common,
     charge: 0.5,
+    contactCharge: 0.4,
+    damageMaximum: 20,
+    damageMinimum: 10,
+    enhancedEffects: true,
     id: 1,
     kind: 'air-hurricane',
+    lanes: hurricaneLanes(),
+    phaseDegrees: 10,
     position: { x: 10, y: 20 },
   }, {
     ...common,
@@ -141,9 +186,20 @@ function worldTextures(): PlayerWorldTextures {
       airWaterActors: {
         coldAura: Texture.EMPTY,
         hail: Texture.EMPTY,
+        hurricaneCore: Texture.EMPTY,
+        hurricaneLane: Texture.EMPTY,
       },
     },
   } as unknown as PlayerWorldTextures
+}
+
+function hurricaneLanes() {
+  return Array.from({ length: 8 }, (_, index) => Object.freeze({
+    angleDegrees: index * 10,
+    angularVelocityDegrees: 10 * 0.75 ** index,
+    radius: 1.5 * 1.2 ** index,
+    verticalOffset: index,
+  }))
 }
 
 function visibleSprites(container: Container): Sprite[] {

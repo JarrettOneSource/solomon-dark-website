@@ -54,6 +54,7 @@ import {
   emitBoneyardPlayerDamageSound,
   nativeWizardOuchCooldownReady,
   nativeSecondaryActorSpeedScale,
+  setBoneyardEnemyHurricaneContactCooldown,
   stepBoneyardEnemyStore,
   type BoneyardEnemyActor,
   type BoneyardEnemyMovementRequest,
@@ -77,6 +78,17 @@ const FAR_PLAYERS: BoneyardEnemyTargets = {
 const DIRECT_MOVEMENT = (request: BoneyardEnemyMovementRequest) => request.requestedPosition
 const NO_WORLD_CONTACT = () => null
 const CLEAR_SPELL_SEGMENT = (request: BoneyardEnemySpellSegmentRequest) => request.end
+
+test('Badguy Hurricane cooldown is constructor-randomized, target-owned, and drops ten per tick', () => {
+  const spawned = spawnOne('hurricane-cooldown', 'SKELETON', { x: 0, y: 0 }, FAR_PLAYERS)
+  const initial = spawned.store.actors[0]!.hurricaneContactCooldown
+  assert.ok(initial >= 0 && initial < 100)
+  const armed = setBoneyardEnemyHurricaneContactCooldown(spawned.store, 1, 100)
+  const oneTick = step(armed, 1, FAR_PLAYERS)
+  assert.equal(oneTick.store.actors[0]!.hurricaneContactCooldown, 90)
+  const threeTicks = step(oneTick.store, 3, FAR_PLAYERS)
+  assert.equal(threeTicks.store.actors[0]!.hurricaneContactCooldown, 70)
+})
 
 test('Frozen timeScale fully stops enemies and exposes the exact thaw scalar', () => {
   const effect = {

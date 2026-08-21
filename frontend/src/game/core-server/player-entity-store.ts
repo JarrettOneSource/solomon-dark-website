@@ -667,7 +667,7 @@ export function stepPlayerEntityCombatTick(
           source.locomotions[index]!.velocity.y,
         ) > 0.01,
         primaryChannel: source.primaryCasts[index]!.channelActive
-          ? source.configs[index]!.element
+          ? selectedPurePrimaryChannel(source.skillBooks[index]!.primarySkillId)
           : null,
         primaryUnderpowered: source.primaryCasts[index]!.underpowered,
       },
@@ -688,6 +688,19 @@ export function stepPlayerEntityCombatTick(
     beganDeathEpochPlayerIds: Object.freeze(beganDeathEpochPlayerIds),
     deathBurstPlayerIds: Object.freeze(deathBurstPlayerIds),
     store: changed ? { ...source, progressions, skillRuntimes } : source,
+  }
+}
+
+function selectedPurePrimaryChannel(
+  skillId: PlayerSkillBookComponent['primarySkillId'],
+): 'air' | 'earth' | 'ether' | 'fire' | 'water' | null {
+  switch (skillId) {
+    case 8: return 'ether'
+    case 16: return 'fire'
+    case 24: return 'air'
+    case 32: return 'water'
+    case 40: return 'earth'
+    case 52: return null
   }
 }
 

@@ -31,6 +31,12 @@ import {
   drawNativeInteger,
   type NativeRngState,
 } from '../core-kernels/native-rng.ts'
+import {
+  drawNativeHurricaneDamage,
+  nativeHurricaneMovementDue,
+  nativeHurricaneOrbitForce,
+  NATIVE_HURRICANE_CONTACT_COOLDOWN,
+} from '../core-kernels/native-hurricane.ts'
 import { waterFrostJetPlan } from '../core-kernels/primary-spell-water.ts'
 import {
   nativeEtherBlastDamage,
@@ -77,6 +83,7 @@ import type { RegisterNativeLightProvider } from '../core-kernels/native-light-p
 import {
   damageBoneyardEnemy,
   positionBoneyardEnemy,
+  setBoneyardEnemyHurricaneContactCooldown,
   tumbleBoneyardArrow,
   type BoneyardEnemyActor,
   type BoneyardEnemyLethalObserver,
@@ -89,6 +96,7 @@ import {
 export type BoneyardSpellHitKind =
   | PrimarySpellProjectileKind
   | 'air'
+  | 'air-hurricane'
   | 'air-storm'
   | 'ether-blast'
   | 'fire-ember'
@@ -217,6 +225,122 @@ export function resolveBoneyardSpellCombat(
     patch: NativeSecondaryTargetEffectPatch,
   ): void => {
     targetEffects.push(Object.freeze({ patch: Object.freeze({ ...patch }), targetId, worldKey }))
+  }
+
+  const hurricanes = sourceSpells.transients.filter((effect): effect is Extract<
+    PrimarySpellTransientState,
+    { kind: 'air-hurricane' }
+  > => (
+    effect.kind === 'air-hurricane'
+    && effect.worldKey === worldKey
+    && effect.contactCharge > 0
+  )).sort(bySpellId)
+  if (hurricanes.length > 0) {
+    for (const row of primaryTargetRows(enemies)) {
+      if (!row.target.active || !nativeHurricaneMovementDue(row.actor.id, tick)) continue
+      let deltaX = Math.fround(0)
+      let deltaY = Math.fround(0)
+      let contact: typeof hurricanes[number] | null = null
+      for (const hurricane of hurricanes) {
+        const force = nativeHurricaneOrbitForce(
+          hurricane.position,
+          row.target.position,
+          hurricane.contactCharge,
+        )
+        if (force === null) continue
+        deltaX = Math.fround(deltaX + force.x)
+        deltaY = Math.fround(deltaY + force.y)
+        if (contact === null && row.actor.hurricaneContactCooldown < 1) {
+          contact = hurricane
+        }
+      }
+      if (deltaX !== 0 || deltaY !== 0) {
+        const requested = {
+          x: Math.fround(row.target.position.x + deltaX),
+          y: Math.fround(row.target.position.y + deltaY),
+        }
+        const resolved = resolveEnemyMovement(
+          row.actor.id,
+          row.target.position,
+          requested,
+          row.target.bodyRadius,
+        )
+        enemies = positionBoneyardEnemy(enemies, row.actor.id, resolved).store
+      }
+      if (contact === null) continue
+      const damage = drawNativeHurricaneDamage(
+        rng,
+        contact.contactCharge,
+        contact.damageMinimum,
+        contact.damageMaximum,
+      )
+      rng = damage.rng
+      const amount = Math.fround(
+        damage.damage * validatedDamageMultiplier(damageMultiplier(row.actor.id, 'air')),
+      )
+      if (amount > 0) {
+        const damaged = damageBoneyardEnemy(enemies, {
+          actorId: row.actor.id,
+          amount,
+          sourcePlayerId: contact.ownerId,
+          suppressHurtSound: damage.suppressHitSound,
+          tick,
+        })
+        if (damaged.accepted) {
+          enemies = damaged.store
+          events.push(...damaged.events)
+          hits.push(Object.freeze({
+            actorId: row.actor.id,
+            amount,
+            killed: damaged.killed,
+            ownerId: contact.ownerId,
+            spellId: contact.id,
+            spellKind: 'air-hurricane',
+            tick,
+          }))
+        }
+      }
+      enemies = setBoneyardEnemyHurricaneContactCooldown(
+        enemies,
+        row.actor.id,
+        NATIVE_HURRICANE_CONTACT_COOLDOWN,
+      )
+    }
+
+    for (const effect of sourceSpells.transients) {
+      if (
+        effect.kind !== 'fire-good-imp'
+        || effect.worldKey !== worldKey
+        || !nativeHurricaneMovementDue(effect.id, tick)
+      ) continue
+      let deltaX = Math.fround(0)
+      let deltaY = Math.fround(0)
+      for (const hurricane of hurricanes) {
+        const force = nativeHurricaneOrbitForce(
+          hurricane.position,
+          effect.position,
+          hurricane.contactCharge,
+        )
+        if (force === null) continue
+        deltaX = Math.fround(deltaX + force.x)
+        deltaY = Math.fround(deltaY + force.y)
+      }
+      if (deltaX === 0 && deltaY === 0) continue
+      const requested = {
+        x: Math.fround(effect.position.x + deltaX),
+        y: Math.fround(effect.position.y + deltaY),
+      }
+      const position = resolveEnemyMovement(
+        effect.id,
+        effect.position,
+        requested,
+        effect.collisionRadius,
+      )
+      updatedTransients.set(effect.id, Object.freeze({
+        ...effect,
+        position: Object.freeze({ ...position }),
+      }))
+    }
   }
 
   for (const effect of [...sourceSpells.transients].sort(bySpellId)) {

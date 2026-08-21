@@ -66,6 +66,7 @@ import {
   resolveNativeSkillDamageValue,
   resolveNativeSkillManaCostValue,
 } from '../core-kernels/native-offensive-resolution.ts'
+import { nativeHurricaneChargeTick } from '../core-kernels/native-hurricane.ts'
 import {
   NATIVE_FLASH_RESPONSE_RADIUS,
   playerDeflectReflectionSourceInRange,
@@ -2062,15 +2063,38 @@ function finishGameSimulationTick(
     playerEntities = debit.store
   }
   deferredEnemyProjectileRegistrations?.commit(lightProviderOrder)
-  let primarySpells = cast.spells
-  primarySpells = synchronizeAirWaterPlayerVisualActors(
-    primarySpells,
+  const hurricaneVisuals = synchronizeAirWaterPlayerVisualActors(
+    cast.spells,
     playerEntities.identities.flatMap(({ playerId }, index) => {
       const player = cast.players[playerId]
       const runtime = playerEntities.skillRuntimes[index]
-      if (!player || !runtime) return []
+      const skillBook = playerEntities.skillBooks[index]
+      const statBook = playerEntities.statBooks[index]
+      const derived = playerSkillDerivedStatsAt(playerEntities, playerId)
+      if (!player || !runtime || !skillBook || !statBook || !derived) return []
+      const hurricane = nativeHurricaneChargeTick(
+        runtime.hurricaneCharge,
+        runtime.hurricaneRefreshed,
+        runtime.hurricaneEnabled,
+        player.primaryCast.channelActive
+          && skillBook.primarySkillId === 24
+          && !player.primaryCast.underpowered,
+      )
       return [{
-        hurricaneCharge: runtime.hurricaneCharge,
+        hurricaneCharge: hurricane.nextCharge,
+        hurricaneContactCharge: hurricane.contactCharge,
+        hurricaneDamageMaximum: effectiveSkillNumericValue(
+          skillBook,
+          statBook,
+          29,
+          'mDamage2',
+        ) * derived.offensiveDamageFactor,
+        hurricaneDamageMinimum: effectiveSkillNumericValue(
+          skillBook,
+          statBook,
+          29,
+          'mDamage1',
+        ) * derived.offensiveDamageFactor,
         ownerId: playerId,
         position: player.position,
         worldKey: result.world.kind === 'hub'
@@ -2079,8 +2103,10 @@ function finishGameSimulationTick(
       }]
     }),
     tick,
+    cast.rng,
   )
-  let combatRng = cast.rng
+  let primarySpells = hurricaneVisuals.spells
+  let combatRng = hurricaneVisuals.rng
   if (world.kind === 'boneyard') {
     const previousEvents = world.enemyEvents
     const previousLootEvents = previous.world.kind === 'boneyard'

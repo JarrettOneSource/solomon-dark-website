@@ -123,6 +123,8 @@ export interface PlayerWorldTextures {
     airWaterActors: {
       coldAura: Texture
       hail: Texture
+      hurricaneCore: Texture
+      hurricaneLane: Texture
     }
     air: {
       branches: readonly Texture[]
@@ -336,6 +338,8 @@ export function createPlayerWorldTextures(
       airWaterActors: {
         coldAura: texture(primarySpells.airWaterActors.coldAura),
         hail: texture(primarySpells.airWaterActors.hail),
+        hurricaneCore: texture(primarySpells.airWaterActors.hurricaneCore),
+        hurricaneLane: texture(primarySpells.airWaterActors.hurricaneLane),
       },
       air: {
         branches: primarySpells.air.branches.map(texture),

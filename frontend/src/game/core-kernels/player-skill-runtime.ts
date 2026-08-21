@@ -1,4 +1,5 @@
 import type { HubEconomyState } from './hub-economy.ts'
+import { nativeHurricaneChargeTick } from './native-hurricane.ts'
 import {
   drawNativeFloat,
   drawNativeInteger,
@@ -42,8 +43,6 @@ export const NATIVE_MEDITATION_ACTIVITY_BONUS_SCALE = 0.25
 export const NATIVE_CONCENTRATED_ENCHANT_STAFF_TIMING_FACTOR = 1.75
 export const NATIVE_CONCENTRATED_DEFLECT_DAMAGE_FACTOR = 5
 export const NATIVE_DEFLECT_REFLECTION_PADDING = 25
-export const NATIVE_HURRICANE_CHARGE_PER_TICK = Math.fround(0.0015)
-export const NATIVE_HURRICANE_RELEASE_PER_TICK = Math.fround(0.03)
 export const NATIVE_FLASH_RESPONSE_RADIUS = 100
 
 export type PlayerConcentrationSlot = 'a' | 'b'
@@ -64,6 +63,7 @@ export interface PlayerSkillRuntimeComponent {
   readonly hardenArmorPerTick: number
   readonly hurricaneCharge: number
   readonly hurricaneEnabled: boolean
+  readonly hurricaneRefreshed: boolean
   readonly meditationActivityRampTicks: number
   readonly meditationIdleElapsedTicks: number
   readonly mindstarActive: boolean
@@ -161,6 +161,7 @@ export function createPlayerSkillRuntime(
     hardenArmorPerTick: 0,
     hurricaneCharge: 0,
     hurricaneEnabled: false,
+    hurricaneRefreshed: false,
     meditationActivityRampTicks: 0,
     meditationIdleElapsedTicks: 0,
     mindstarActive: false,
@@ -220,6 +221,7 @@ export function refreshPlayerSkillRuntime(
     ) / 100,
     hurricaneCharge: hurricaneEnabled ? source.hurricaneCharge : 0,
     hurricaneEnabled,
+    hurricaneRefreshed: hurricaneEnabled && source.hurricaneRefreshed,
     meditationActivityRampTicks: delay < 0
       ? 0
       : Math.min(source.meditationActivityRampTicks, delay),
@@ -552,11 +554,12 @@ export function stepPlayerSkillRuntime(
     ? derived.manaRecoveryPerTick * activityMultiplier
     : derived.manaRecoveryPerTick
   meditationActivityRampTicks = Math.max(0, meditationActivityRampTicks - 1)
-  const hurricaneCharge = source.hurricaneEnabled
-      && activity.primaryChannel === 'air'
-      && !activity.primaryUnderpowered
-    ? Math.min(1, Math.fround(source.hurricaneCharge + NATIVE_HURRICANE_CHARGE_PER_TICK))
-    : Math.max(0, Math.fround(source.hurricaneCharge - NATIVE_HURRICANE_RELEASE_PER_TICK))
+  const hurricane = nativeHurricaneChargeTick(
+    source.hurricaneCharge,
+    source.hurricaneRefreshed,
+    source.hurricaneEnabled,
+    activity.primaryChannel === 'air' && !activity.primaryUnderpowered,
+  )
   const hardenArmor = activity.primaryChannel === 'water'
     ? activity.primaryUnderpowered
       ? 0
@@ -570,7 +573,8 @@ export function stepPlayerSkillRuntime(
     runtime: Object.freeze({
       ...source,
       hardenArmor,
-      hurricaneCharge,
+      hurricaneCharge: hurricane.nextCharge,
+      hurricaneRefreshed: hurricane.refreshed,
       meditationActivityRampTicks,
       meditationIdleElapsedTicks,
     }),

@@ -24,6 +24,8 @@ import type { NativeWeldPrimarySkillProfile } from '../core-kernels/native-prima
 import type { NativeSecondarySteamedPulse } from '../core-kernels/native-secondary-abilities.ts'
 import { spawnNativeWeldSteamActor } from '../core-kernels/native-weld-steam.ts'
 import { nativeEtherBlastDamage } from '../core-kernels/native-ether-blast.ts'
+import { createNativeHurricanePresentation } from '../core-kernels/native-hurricane.ts'
+import { spawnNativeFireGoodImp } from '../core-kernels/primary-spell-fire-effects.ts'
 import type {
   NativeWeldBuildId,
   NativeWeldCastKind,
@@ -33,6 +35,7 @@ import {
   stepBoneyardEnemyStore,
   type BoneyardEnemyProjectile,
   type BoneyardEnemyStore,
+  type BoneyardMaggotActor,
 } from './boneyard-enemy-store.ts'
 import {
   nativeWeldFrostRadialRadius,
@@ -195,6 +198,194 @@ test('Ether Blast damages current HP in the strict 175-radius query and requests
   const retained = resolveCombatWithAuthority(result.enemies, result.spells, [], 8)
   assert.deepEqual(retained.etherBurns, [])
   assert.deepEqual(retained.hits, [])
+})
+
+test('Hurricane batches clockwise force, target-owned cooldown, and charge-cubed contact', () => {
+  const spawned = spawnEnemies([{ position: { x: 100, y: 0 }, token: 'SKELETON' }])
+  const actor = spawned.actors[0]!
+  const enemies = {
+    ...spawned,
+    actors: [{
+      ...actor,
+      config: { ...actor.config, maximumHealth: 100 },
+      currentHealth: 100,
+      hurricaneContactCooldown: 0,
+    }],
+  }
+  const initialRng = createNativeRng(2900)
+  const program = createNativeHurricanePresentation(createNativeRng(29)).program
+  const hurricane: PrimarySpellTransientState = {
+    ageTicks: 1,
+    birthTick: 0,
+    charge: 1,
+    contactCharge: 1,
+    damageMaximum: 10,
+    damageMinimum: 10,
+    enhancedEffects: true,
+    id: 10,
+    kind: 'air-hurricane',
+    lanes: program.lanes,
+    ownerId: 'wizard',
+    phaseDegrees: 0,
+    position: { x: 0, y: 0 },
+    worldKey: WORLD_KEY,
+  }
+  const movements: Readonly<{ x: number; y: number }>[] = []
+  const result = resolveCombatWithAuthority(
+    enemies,
+    spellState({ transients: [hurricane] }),
+    [],
+    1,
+    {
+      damageMultiplier: (_actorId, kind) => kind === 'air' ? 2 : 1,
+      resolveMovement: (_actorId, _start, requested) => {
+        movements.push({ ...requested })
+        return requested
+      },
+      rngSeed: 2900,
+    },
+  )
+  assert.deepEqual(movements, [{ x: 100, y: 14.986320495605469 }])
+  assert.equal(result.enemies.actors[0]?.currentHealth, 80)
+  assert.equal(result.enemies.actors[0]?.hurricaneContactCooldown, 100)
+  assert.deepEqual(result.hits.map(({ amount, ownerId, spellKind }) => ({
+    amount,
+    ownerId,
+    spellKind,
+  })), [{ amount: 20, ownerId: 'wizard', spellKind: 'air-hurricane' }])
+  assert.deepEqual(result.events.map(({ sound }) => sound), ['bone-crack'])
+  assert.deepEqual(result.rng, initialRng, 'equal damage endpoints consume no RNG word')
+
+  const boundaryMovement: unknown[] = []
+  const boundary = resolveCombatWithAuthority(
+    {
+      ...enemies,
+      actors: [{
+        ...enemies.actors[0]!,
+        hurricaneContactCooldown: 0,
+        position: { x: 280, y: 0 },
+      }],
+    },
+    spellState({ transients: [hurricane] }),
+    [],
+    1,
+    { resolveMovement: (...args) => {
+      boundaryMovement.push(args)
+      return args[2]
+    } },
+  )
+  assert.deepEqual(boundary.hits, [])
+  assert.deepEqual(boundaryMovement, [])
+
+  const goodImpSpawn = spawnNativeFireGoodImp({
+    burnDamage: 0,
+    damage: 10,
+    id: 11,
+    lifetimeTicks: 100,
+    ownerId: 'wizard',
+    position: { x: 100, y: 0 },
+    worldKey: WORLD_KEY,
+  }, createNativeRng(11))
+  const goodImp = {
+    ...goodImpSpawn.goodImp,
+    kind: 'fire-good-imp' as const,
+    lightRegistration: { managerLane: 'actor' as const, registrationOrdinal: 11 },
+  }
+  const friendly = resolveCombatWithAuthority(
+    createBoneyardEnemyStore('hurricane-good-imp'),
+    spellState({ transients: [hurricane, goodImp] }),
+    [],
+    1,
+  )
+  const movedImp = friendly.spells.transients.find(({ id }) => id === 11)
+  assert.equal(movedImp?.kind, 'fire-good-imp')
+  assert.deepEqual(
+    movedImp?.kind === 'fire-good-imp' ? movedImp.position : null,
+    { x: 100, y: 14.986320495605469 },
+  )
+  assert.deepEqual(friendly.hits, [], 'friendly GoodImp receives only Hurricane orbit force')
+
+  const maggot: BoneyardMaggotActor = {
+    collisionRadius: 8,
+    currentHealth: 100,
+    damage: 2,
+    deathOffsets: [],
+    deathEpoch: null,
+    deathStartedTick: null,
+    deathTick: 0,
+    emergenceTick: 24,
+    gaitPose: 0,
+    headingDeg: 90,
+    hurricaneContactCooldown: 0,
+    id: 1,
+    launchTrajectory: 'edge',
+    launchVelocity: { x: 0, y: 0 },
+    lastAttackTick: null,
+    lastDamagedByPlayerId: null,
+    lastDamageTick: null,
+    lastMovementTick: null,
+    lifeState: 'alive',
+    lightRegistration: { managerLane: 'actor', registrationOrdinal: 1 },
+    maximumHealth: 100,
+    movementPhase: 'crawl',
+    nextAttackTick: 20,
+    nextMovementTick: 2,
+    ownerCoffinActorId: 99,
+    poisonDamage: 0,
+    poisonDuration: 0,
+    position: { x: 100, y: 0 },
+    spawnTick: 0,
+    staffActionFactor: 1,
+    staffMovementFactor: 1,
+    targetPlayerId: null,
+    terminalEmitted: false,
+  }
+  const maggotContact = resolveCombatWithAuthority({
+    ...createBoneyardEnemyStore('hurricane-maggot'),
+    maggots: [maggot],
+  }, spellState({ transients: [hurricane] }), [], 1)
+  assert.equal(maggotContact.enemies.maggots[0]?.currentHealth, 90)
+  assert.equal(maggotContact.enemies.maggots[0]?.hurricaneContactCooldown, 100)
+  assert.deepEqual(maggotContact.enemies.maggots[0]?.position, {
+    x: 100,
+    y: 14.986320495605469,
+  })
+  assert.equal(maggotContact.hits[0]?.spellKind, 'air-hurricane')
+})
+
+test('low-charge Hurricane contact suppresses the ordinary target hit sound only', () => {
+  const spawned = spawnEnemies([{ position: { x: 100, y: 0 }, token: 'SKELETON' }])
+  const actor = spawned.actors[0]!
+  const program = createNativeHurricanePresentation(createNativeRng(29)).program
+  const result = resolveCombatWithAuthority({
+    ...spawned,
+    actors: [{
+      ...actor,
+      config: { ...actor.config, maximumHealth: 100 },
+      currentHealth: 100,
+      hurricaneContactCooldown: 0,
+    }],
+  }, spellState({
+    transients: [{
+      ageTicks: 1,
+      birthTick: 0,
+      charge: 0.4,
+      contactCharge: 0.4,
+      damageMaximum: 10,
+      damageMinimum: 10,
+      enhancedEffects: true,
+      id: 10,
+      kind: 'air-hurricane',
+      lanes: program.lanes,
+      ownerId: 'wizard',
+      phaseDegrees: 0,
+      position: { x: 0, y: 0 },
+      worldKey: WORLD_KEY,
+    }],
+  }), [], 1)
+  assert.equal(result.hits[0]?.amount, Math.fround(0.4 ** 3 * 10))
+  assert.deepEqual(result.events, [])
+  assert.equal(result.enemies.actors[0]?.lifeState, 'alive')
 })
 
 test('Fire contact partitions direct and rectangular splash damage and consumes Ember RNG', () => {

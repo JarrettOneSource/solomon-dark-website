@@ -1018,7 +1018,7 @@ test('Magic Trap ElectricBurn starts only after its first native update and stop
   synchronizer.update(live)
   assert.deepEqual(audio.starts, [[
     'electric-loop',
-    'secondary-player:caster',
+    'native-ambient:electric-loop',
   ]])
 
   synchronizer.update({
@@ -1028,7 +1028,7 @@ test('Magic Trap ElectricBurn starts only after its first native update and stop
   })
   assert.deepEqual(audio.stops, [[
     'electric-loop',
-    'secondary-player:caster',
+    'native-ambient:electric-loop',
   ]])
   synchronizer.destroy()
 })
@@ -1147,18 +1147,13 @@ test('every persistent secondary audio owner starts and retires its exact native
   synchronizer.update(live)
 
   const expected = [
-    'comet-loop:secondary-player:comet',
-    'earthquake-loop:secondary-player:earthquake',
-    'electric-loop:secondary-player:electric',
-    'low-fire-loop:secondary-player:fire-patch',
-    'low-fire-loop:secondary-player:moving-fire',
-    'plane-cross-loop:secondary-player:caster',
-    'plane-cross-loop:secondary-player:drain',
-    'plane-cross-loop:secondary-player:leviathan',
-    'rainfall-loop:secondary-player:acid',
-    'rainfall-loop:secondary-player:storm',
-    'steady-wind-loop:secondary-player:drain',
-    'steady-wind-loop:secondary-player:storm',
+    'comet-loop:native-ambient:comet-loop',
+    'earthquake-loop:native-ambient:earthquake-loop',
+    'electric-loop:native-ambient:electric-loop',
+    'low-fire-loop:native-ambient:low-fire-loop',
+    'plane-cross-loop:native-ambient:plane-cross-loop',
+    'rainfall-loop:native-ambient:rainfall-loop',
+    'steady-wind-loop:native-ambient:steady-wind-loop',
   ].sort()
   assert.deepEqual(
     audio.starts.map(([cue, owner]) => `${cue}:${owner}`).sort(),
@@ -1184,6 +1179,66 @@ test('every persistent secondary audio owner starts and retires its exact native
     audio.stops.map(([cue, owner]) => `${cue}:${owner}`).sort(),
     expected,
   )
+  synchronizer.destroy()
+})
+
+test('Hurricane renews the shared steady-wind wrapper from contact charge', () => {
+  const initial = createGameSnapshot(simulation('air'), PLAYER_ID)
+  const audio = new RecordingAudio()
+  const synchronizer = new PrimarySpellAudioSynchronizer(
+    audio as unknown as GameAudioDirector,
+    PLAYER_ID,
+    initial,
+  )
+  const hurricane = {
+    ageTicks: 1,
+    birthTick: 0,
+    charge: 0.75,
+    contactCharge: 0.5,
+    damageMaximum: 20,
+    damageMinimum: 10,
+    enhancedEffects: true,
+    id: 1,
+    kind: 'air-hurricane' as const,
+    lanes: Array.from({ length: 8 }, (_, index) => ({
+      angleDegrees: index,
+      angularVelocityDegrees: 1,
+      radius: index + 1,
+      verticalOffset: index,
+    })),
+    ownerId: PLAYER_ID,
+    phaseDegrees: 0,
+    position: initial.players[PLAYER_ID]!.position,
+    worldKey: 'hub:courtyard',
+  }
+  const live = {
+    ...initial,
+    primarySpells: {
+      ...initial.primarySpells,
+      nextId: 2,
+      transients: [hurricane],
+    },
+    tick: initial.tick + 1,
+  }
+  synchronizer.update(live)
+  assert.deepEqual(audio.starts, [[
+    'steady-wind-loop',
+    'native-ambient:steady-wind-loop',
+  ]])
+  assert.equal(audio.startOptions[0]?.volume, 0.5)
+
+  synchronizer.update({
+    ...live,
+    primarySpells: {
+      ...live.primarySpells,
+      transients: [{ ...hurricane, contactCharge: 0 }],
+    },
+    tick: live.tick + 1,
+  })
+  assert.deepEqual(audio.stops, [[
+    'steady-wind-loop',
+    'native-ambient:steady-wind-loop',
+  ]])
   synchronizer.destroy()
 })
 

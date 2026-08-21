@@ -24795,9 +24795,10 @@ being mislabeled as native parity.
 | --- | --- | --- | --- |
 | Instructions | pinned retail `SolomonDark.exe`, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`; Air handler `0x0053F9C0`, Water handler `0x00543860` | Both primaries are immediate 100 Hz queries. Air owns an ordered retained-target chain; Water owns an LOS-filtered cone plus cold/push/status branches. | high |
 | Instructions | `0x006021A0`, `0x00645540`, `0x00644460`, `0x005FFDC0` | StormCloud, Prismatic cast wave, Ring-of-Ice factory, and FreezeWave own their state/lifetime rather than player render code. | high |
+| Instructions | Hurricane source registration/painter `0x00548B00`/`0x0052C2A0`, lane init/step `0x00528DA0`/`0x00528E30`, target movement/contact `0x0047CB20`, Badguy/Maggot callers `0x004835F0`/`0x004881A0` | Hurricane owns a live target orbit/damage field, eight randomized presentation lanes, a refreshed release latch, and target-private contact cooldown. The `+0x8D4/+0x8D8` damage caches are consumed. | high |
 | Static data | `native-skill-catalog.json` rows 24..39, 72, and 76 and Skills atlas records 51..66, 99, and 103 | Every rank property, cap, prerequisite, exclusion, advanced-root identity, and picker icon is fully catalogued. | high |
 | Instructions | advanced dispatcher `0x0054CC50`; `AcidRain 0x7FE` constructor/tick `0x005E3540`/`0x00604E90`; shuffle `0x005E41F0`; `Comet 0x80C` constructor/tick/impact/factory `0x005F0C50`/`0x006220D0`/`0x0061E9C0`/`0x0063FD00` | Air-root Acid Rain is a 1,500-tick persistent direct-damage field with an exact 400-unit query, fixed-bound shuffle, and `floor(n/3)+1` target count. Water-root Call Comet falls for 400 ticks; its impact owns 400-unit damage plus the common FreezeWave helper. | high |
-| Asset/data | BadGuys records 44, 110, 1836..1839, 30, 28, 32, and 14; audio registry 54/162 and 44/161 | Base Lightning/Frost art/audio is already exact; learned Hail and Cold Aura are distinct records 32 and 14. | high |
+| Asset/data | BadGuys records 44, 84, 110, 1836..1839, 30, 28, 32, and 14; DeadHawg record 15; audio registry 54/162, 44/161, and ambient-loop entry 171 | Base Lightning/Frost art/audio is already exact; Hurricane uses DeadHawg 15 plus BadGuys 84 and renews `steadywind__loop`; learned Hail and Cold Aura are distinct records 32 and 14. | high |
 | Existing browser proof | rank-one Air/Water receipts documented above, protocol 19, current Website tree | Base held lifecycle, world target geometry, audio ownership, and rank-one art are verified already; learned effects remain the boundary. | high |
 
 ### System boundary and membership inventory
@@ -24813,7 +24814,7 @@ merge, simulation tick, replication, presentation, audio, and teardown.
 | 26 Stun | `0x1B6A`, `0x006231B0`, `0x00625850` | exact-ported | 25-tick minimum-factor merge and movement consumer |
 | 27 Magic Storm | dispatcher `+0x6C`, `StormCloud 0x7F0` | exact-ported | paid secondary, persistent 1,000-tick actor, RNG strike and registered rain-child lifecycle |
 | 28 Magic Tornado | `0x005E2440`, `0x006021A0` | exact-ported | frequency factor, extra duration, moving-cloud compositor and presentation controls |
-| 29 Hurricane | `0x0053F9C0`, `0x00548B00`, progression `+0x8D4/+0x8D8` | exact-ported | shipped visual-only owner aura; charge `+0.0015` held, release decay `-0.03`; authored damage caches have no combat consumer |
+| 29 Hurricane | `0x0053F9C0`, `0x00548B00`, `0x0047CB20`, `0x0052C2A0`, progression `+0x8D4/+0x8D8` | exact-ported | refreshed charge/release ordering, Region-equivalent source registration, strict 280-unit tangential field, charge-cubed random damage, target cooldown and low-charge sound suppression, exact 16-word eight-lane painter program, high/low draw branches, and shared `steadywind__loop`; explicitly no light provider |
 | 30 Prismatic Shock | `0x00645540`, `Mod_Prismatic 0x1B76` | exact-ported | 350-unit circular application, duration merge, electric secondary-damage doubling, retained child fade/motion |
 | 31 Disintegrate | `0x0053F9C0`, `Badguy_Contact 0x0048A290` | exact-ported | event-scoped percentile roll and strict post-hit 20% execute gate |
 | 32 Frost Jet | `0x00543860`, `0x00641B10` | exact-ported | ranked damage/cost and cold modifier contact |
@@ -24936,11 +24937,37 @@ than becoming an Air/Water-only boolean.
   take the Frozen branch. The player Ring factory does not set the optional
   FrostBurn bit. Permafrost scales cold strength and raises cold/freeze
   duration to at least 200 ticks.
-- Hurricane's shipped `mDamage1/mDamage2` values are dead caches. The Air
-  handler only raises the player-owned aura lane: charge increases by `0.0015`
-  per held tick to one, `PlayerActor::Tick` renders/advances it, then release
-  decays it by `0.03` per tick. No target query or damage dispatch reads either
-  Hurricane damage cache.
+- Hurricane is a player-owned Lightning extension with separate early-tick and
+  late-handler edges. Byte `+0x310` retains the preceding Lightning refresh:
+  when clear, early player tick subtracts `0.03`, removes a zero charge from the
+  Region Hurricane list, registers every remaining positive charge, consumes
+  `FloatRange(2,3)` for core phase, advances eight lane angles, renews ambient
+  `steadywind__loop` at `charge*attenuation`, then clears the latch. The later
+  normal Lightning handler sets the latch, initializes a zero charge with 16
+  ordered RNG words, and adds `0.0015` up to one. Consequently first activation
+  draws before its first contact tick, and release retains one full-charge tick
+  before decay.
+- Each Hurricane target movement update uses strict squared radius `78,400`.
+  With `dx=source.x-target.x` and `dy=source.y-target.y`, stock normalizes the
+  clockwise tangent `(dy,-dx)` and adds
+  `falloff*targetMovementStep*charge*1.5`, where falloff is full through 100 and
+  linearly reaches zero at 280 after the native one-iteration fast-square-root
+  approximation. Ordinary targets move on their ten-tick object-serial phase.
+  Target `+0x1DA` is initialized with `Integer(100)`, decreases by the movement
+  step every tick, and resets to 100 after contact. The first eligible source in
+  Region registration order consumes
+  `FloatRange(cache+0x8D4,cache+0x8D8)` and deals float32
+  `charge^3*randomDamage`; charge below `0.5` suppresses the ordinary target hit
+  sound but not damage/death. The field affects Badguy subclasses and Maggots;
+  GoodImp receives orbit force but its friendly contact override ignores damage.
+- Hurricane presentation is not Lightning corona art. Each activation stores
+  eight `Float(360)` angles and eight `Float(15)` vertical offsets, with authored
+  velocities `10*0.75^i` and radii `1.5*1.2^i`. The owner-overlay painter draws
+  source-over DeadHawg 15 at `(x,y-15)`, rotation `1.5*phase`, scale `(5,4)`,
+  RGB `(0.95,1,1)`, alpha `0.75*charge`; then additive BadGuys 84 lanes at
+  `(radius,0.8*radius)`, RGB `(0.8,1,1)`, alpha `0.4*charge`. Enhanced mode
+  draws all eight plus copies at `0.75*angle`; low mode draws even lanes only.
+  It creates no Region/Misc/manager light and casts no shadow.
 - Chill Wind uses `mPushback` as its impulse scalar. At near range the applied
   vector has magnitude `mPushback*2.5`; squared-distance attenuation begins at
   half of `0.75*(180+4*mWiden)^2`, reaches zero at that outer squared radius,
@@ -25520,3 +25547,53 @@ merge/fade, target VFX, MiscLight, audio, screen feedback, and strict wire
 validation. The canonical `./scripts/validate.sh` gate passes, including 197
 skill pretests, 1,182 Boneyard/runtime tests, production build, game-host
 bundle, bundle budget, and media-policy checks.
+
+### 2026-08-21 v48 Hurricane full-system correction
+
+The every-property residual scan disproved the earlier “dead Hurricane damage
+cache” conclusion. Native target helper `0x0047CB20` reads both progression
+`+0x8D4/+0x8D8` values from the Region's active Hurricane sources, and is
+called by ordinary Badguy movement plus the Maggot-specific path. The Website
+visual-only lightning-corona surrogate has been replaced end to end:
+
+- Player runtime now retains the native previous-frame refresh latch. Early
+  contact/audio charge and later draw charge are separate protocol-v45 fields,
+  preserving first activation, the one-full-tick release delay, `0.03` decay,
+  zero-crossing removal, and fresh 16-word initialization.
+- The host stores eight randomized angles/vertical offsets plus the authored
+  `10*0.75^i` angular velocities and `1.5*1.2^i` radii. It consumes one
+  `FloatRange(2,3)` word on each active early tick. Clients interpolate phase,
+  lane angles, charge, and position without rerolling.
+- The Boneyard resolver uses the native fast-distance approximation, strict
+  radius 280, clockwise tangent `(dy,-dx)`, object-serial cadence, source-order
+  force accumulation, charge-cubed ordered damage draw, Prismatic Air factor,
+  target-owned randomized/raw cooldown, shields/death, and below-0.5 hit-sound
+  suppression. Maggots share the target clock; GoodImp receives force but not
+  damage.
+- The painter is the stock owner overlay: source-over DeadHawg 15 core followed
+  by additive BadGuys 84 lanes. Enhanced mode owns 17 draws; the recovered low
+  branch owns the core plus even lanes. Native anchors, tint, alpha, rotation,
+  anisotropic scale, and paint order are pinned. The old three-sprite Lightning
+  corona reuse is gone.
+- Hurricane renews the same maximum-gain `steadywind__loop` wrapper as Storm
+  and Ether Drain from contact charge and positional attenuation. The ambient
+  synchronizer now keeps one stable owner per native wrapper instead of
+  accidentally starting one copy per producer.
+- Lighting census is explicitly empty: no manager provider, Region MiscLight,
+  shadow, or light-map write exists. The native positional Region query feeds
+  loop attenuation only.
+- Hurricane and Harden now follow selected pure primary rows 24 and 32 rather
+  than the wizard creation element. Selecting another element or Weld cannot
+  leak these learned branches; this closes the downstream selector seam opened
+  by the stock Skill Screen cutover.
+
+Canonical `./scripts/validate.sh` passes 24 backend contracts, lint and
+architecture boundaries, 41 loot tests, 200 focused skill pretests, 1,189
+Boneyard/runtime/render tests, every auxiliary suite, the production and game-
+host builds, media policy, and the bundle gate at 287,819 raw / 79,099 gzip
+bytes. Focused coverage pins both charge edges, 16+1 RNG budgets, fast-distance
+force, strict boundary, hostile/Maggot target ownership, friendly GoodImp
+force, cooldown decrement/reset, low-charge sound suppression, both painter
+branches, exact atlas records, interpolation, protocol validation, and shared
+ambient-loop start/stop. A rendered browser/Mac Hurricane journey remains a
+final acceptance receipt rather than being inferred from the canonical gate.

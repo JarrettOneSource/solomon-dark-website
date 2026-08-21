@@ -522,19 +522,33 @@ export class PrimarySpellAudioSynchronizer {
       if (listener) {
         const requestSecondaryLoop = (
           cue: GameLoopCue,
-          ownerId: string,
+          _ownerId: string,
           position: Readonly<{ x: number; y: number }>,
+          gain = 1,
         ) => {
-          const volume = hubAudioAttenuation(Math.hypot(
+          const volume = gain * hubAudioAttenuation(Math.hypot(
             position.x - listener.position.x,
             position.y - listener.position.y,
           ))
-          const owner = `secondary-player:${ownerId}`
+          const owner = `native-ambient:${cue}`
           const loops = desired.get(cue)!
           loops.set(owner, {
             playbackRate: 1,
             volume: Math.max(loops.get(owner)?.volume ?? 0, volume),
           })
+        }
+        for (const actor of snapshot.primarySpells.transients) {
+          if (
+            actor.kind !== 'air-hurricane'
+            || actor.worldKey !== listenerWorldKey
+            || actor.contactCharge <= 0
+          ) continue
+          requestSecondaryLoop(
+            'steady-wind-loop',
+            actor.ownerId,
+            actor.position,
+            actor.contactCharge,
+          )
         }
         for (const [ownerId, secondaryPlayer] of Object.entries(
           snapshot.secondaryAbilities.players,

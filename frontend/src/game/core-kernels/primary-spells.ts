@@ -20,6 +20,7 @@ import {
   drawNativeInteger,
   type NativeRngState,
 } from './native-rng.ts'
+import type { NativeHurricaneLane } from './native-hurricane.ts'
 import {
   advanceNativeEarthBoulderCharge,
   nativeEarthBoulderReleasedDamage,
@@ -282,7 +283,13 @@ interface PrimarySpellOwnedTransientBase {
 
 export interface PrimarySpellAirHurricaneState extends PrimarySpellOwnedTransientBase {
   charge: number
+  contactCharge: number
+  damageMaximum: number
+  damageMinimum: number
+  enhancedEffects: boolean
   kind: 'air-hurricane'
+  lanes: readonly NativeHurricaneLane[]
+  phaseDegrees: number
   position: Vector2
 }
 

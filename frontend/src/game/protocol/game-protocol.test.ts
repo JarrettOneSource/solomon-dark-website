@@ -917,8 +917,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v44 carries party denial, Hall archives, the mixed-skill quickbar, secondary gates, and existing gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 44)
+test('protocol v45 carries party denial, Hall archives, the mixed-skill quickbar, secondary gates, and existing gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 45)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -2542,9 +2542,20 @@ test('protocol strictly carries primary Hurricane, Cold Aura, and Hail lifecycle
       ageTicks: 20,
       birthTick: 3,
       charge: 0.5,
+      contactCharge: 0.4,
+      damageMaximum: 20,
+      damageMinimum: 10,
+      enhancedEffects: true,
       id: 1,
       kind: 'air-hurricane',
+      lanes: Array.from({ length: 8 }, (_, index) => ({
+        angleDegrees: index * 10,
+        angularVelocityDegrees: 10 * 0.75 ** index,
+        radius: 1.5 * 1.2 ** index,
+        verticalOffset: index,
+      })),
       ownerId: 'player-1',
+      phaseDegrees: 15,
       position: { x: 10, y: 20 },
       worldKey: 'hub:courtyard',
     },

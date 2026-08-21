@@ -303,6 +303,8 @@ import primarySpellAirFork1838 from '../assets/game/boneyard/badguys/1838.png'
 import primarySpellAirFork1839 from '../assets/game/boneyard/badguys/1839.png'
 import primarySpellColdAura from '../assets/game/boneyard/badguys/0014.png'
 import primarySpellHail from '../assets/game/boneyard/badguys/0032.png'
+import primarySpellHurricaneCore from '../assets/game/boneyard/deadhawg/015.png'
+import primarySpellHurricaneLane from '../assets/game/boneyard/badguys/0084.png'
 import fxFireball from '../assets/game/fx-fireball.png'
 import animSolomonWalk from '../assets/game/anim-solomon-walk.png'
 import animSolomonDig from '../assets/game/anim-solomon-dig.png'
@@ -564,6 +566,8 @@ export const primarySpells = {
   airWaterActors: {
     coldAura: primarySpellColdAura,
     hail: primarySpellHail,
+    hurricaneCore: primarySpellHurricaneCore,
+    hurricaneLane: primarySpellHurricaneLane,
   },
   air: {
     branches: [primarySpellAirBranch375, primarySpellAirBranch376],

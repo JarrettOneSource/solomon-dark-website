@@ -269,7 +269,7 @@ export type {
   LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
 
-export const GAME_PROTOCOL_VERSION = 44
+export const GAME_PROTOCOL_VERSION = 45
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const GAME_CONNECTION_TIMEOUT_CLOSE_CODE = 4000
 export const GAME_HOST_ENDED_SESSION_CLOSE_CODE = 4001
@@ -5483,20 +5483,56 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
   }
   if (source.kind === 'air-hurricane') {
     onlyKeys(source, field, [
-      'ageTicks', 'birthTick', 'charge', 'id', 'kind', 'ownerId', 'position',
-      'worldKey',
+      'ageTicks', 'birthTick', 'charge', 'contactCharge', 'damageMaximum',
+      'damageMinimum', 'enhancedEffects', 'id', 'kind', 'lanes', 'ownerId',
+      'phaseDegrees', 'position', 'worldKey',
     ])
     const charge = finite(source.charge, `${field}.charge`)
     if (charge <= 0 || charge > 1) {
       throw new GameProtocolError(`${field}.charge must be within (0,1]`)
     }
+    const contactCharge = finite(source.contactCharge, `${field}.contactCharge`)
+    if (contactCharge < 0 || contactCharge > charge) {
+      throw new GameProtocolError(`${field}.contactCharge must be within [0,charge]`)
+    }
+    const damageMinimum = finite(source.damageMinimum, `${field}.damageMinimum`)
+    const damageMaximum = finite(source.damageMaximum, `${field}.damageMaximum`)
+    if (damageMinimum < 0 || damageMaximum < damageMinimum) {
+      throw new GameProtocolError(`${field} has an invalid Hurricane damage range`)
+    }
+    const lanes = array(source.lanes, `${field}.lanes`)
+    if (lanes.length !== 8) {
+      throw new GameProtocolError(`${field}.lanes must contain eight native lanes`)
+    }
     return {
       ageTicks: nonnegativeInteger(source.ageTicks, `${field}.ageTicks`),
       birthTick: nonnegativeInteger(source.birthTick, `${field}.birthTick`),
       charge,
+      contactCharge,
+      damageMaximum,
+      damageMinimum,
+      enhancedEffects: boolean(source.enhancedEffects, `${field}.enhancedEffects`),
       id: positiveInteger(source.id, `${field}.id`),
       kind: 'air-hurricane',
+      lanes: lanes.map((value, index) => {
+        const laneField = `${field}.lanes[${index}]`
+        const lane = record(value, laneField)
+        onlyKeys(lane, laneField, [
+          'angleDegrees', 'angularVelocityDegrees', 'radius', 'verticalOffset',
+        ])
+        const radius = positiveFinite(lane.radius, `${laneField}.radius`)
+        return {
+          angleDegrees: finite(lane.angleDegrees, `${laneField}.angleDegrees`),
+          angularVelocityDegrees: positiveFinite(
+            lane.angularVelocityDegrees,
+            `${laneField}.angularVelocityDegrees`,
+          ),
+          radius,
+          verticalOffset: finite(lane.verticalOffset, `${laneField}.verticalOffset`),
+        }
+      }),
       ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
+      phaseDegrees: finite(source.phaseDegrees, `${field}.phaseDegrees`),
       position: vector(source.position, `${field}.position`),
       worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
     }
