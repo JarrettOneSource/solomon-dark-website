@@ -27298,7 +27298,7 @@ and authoritative multiplayer simulation remain outside this preference
 owner.
 
 The disposition column is the required final state. The implementation receipt
-below remains pending until the corresponding proof contract passes.
+below records the completed proof contract.
 
 | Member (class/variant/scene/branch) | Native source | Disposition | Proof contract |
 | --- | --- | --- | --- |
@@ -27460,12 +27460,88 @@ user must activate it again.
   fullscreen, key capture and actual gameplay input, Hub and Boneyard FOV,
   UI Scale on desktop and coarse-pointer landscape, Performance toggles,
   gameplay skill selectors, Dark Cloud return, and zero page/console errors.
-- The exact final tree must pass `./scripts/validate.sh` on Windows. The same
-  affected Settings/device/browser matrices must pass independently on the Mac
-  mini, with its evidence reported separately.
+- The exact final tree must pass the supported `./scripts/validate.sh`
+  entrypoint. The same affected Settings/device/browser matrices must pass
+  independently on the Mac mini, with its evidence reported separately.
 
 ### Implementation validation receipt
 
-- Pending implementation, canonical validation, Windows browser evidence, and
-  Mac mini matrix. No commit, push, deployment, or production verification is
-  authorized by this request.
+- `game-settings.ts` is the one normalized local preference owner. It keeps the
+  deployed `solomon-dark-game-settings-v1` key, migrates the old Cheats-only
+  record, rejects partial/corrupt current records atomically, and persists the
+  complete audio, display, lighting, play-style, developer, and input state.
+  The input census is the fifteen native identities plus the explicit Website
+  Chat extension. Chat defaults to `T`, Skills defaults to `K`, and rebinding
+  either conflict-swaps the other so one physical edge cannot open both.
+- One `GameSettingsDialog` owns title, gameplay, and redesigned Dark Cloud
+  contexts plus Controls, Performance, primary, and concentration children.
+  It consumes the untouched stock `ControlPanel.png` atlas (SHA-256
+  `d63bd3ac402fcbc00a60916b6f0aa79f662501acc8f6fbe88ee1676e69b43f86`),
+  native UI chrome, semantic focus/Back behavior, responsive scrolling, and
+  actual Fullscreen API state. Gameplay stays under the existing authoritative
+  pause owner; Dark Cloud Done returns to the live catalog instead of title.
+- Sound/Music values drive independent live Web Audio master lanes. Camera FOV
+  drives the shared Hub/private-room/Boneyard camera and projection consumers.
+  UI Scale drives centered virtual HUD geometry and the visual plus measured
+  touch radii. The complete configurable key set drives movement, menus,
+  Inventory, Skills, Chat, and all eight quickbar lanes. Performance values
+  drive the recovered Complex Lighting composite branch, complete complex
+  caster gate, `MS`-only Multiple Shadows flags, native `0.06..0.25` light
+  target/query scale, pointer-versus-heading secondaries, and Zoom Effects.
+- The intentional negative dispositions remain enforced: Resolution follows
+  the browser; Website account authority replaces Login Info; Kid Mode has no
+  story-game consumer; Enhanced Effects stays visibly fixed On while optional
+  actors remain authoritative; and browser/WebGL owns texture memory. Automatic
+  Fullscreen restoration remains the sole `blocked-by-platform` member because
+  reload cannot supply the required user activation. The predicted visible
+  difference is an Off row after reload until the user activates fullscreen.
+- Code cutoff `1d87eb978dcd736875308e30252637aad20dcf60` is one commit above
+  Website `origin/main` `ff1a574422a8fcb645fe2488caf45be44d4a0883` and preserves the
+  concurrent Dark Cloud, derived HUD, unforge, mod-consumable, and chat systems.
+  The supported local `./scripts/validate.sh` passed `15/15` backend contracts,
+  `4/4` library/mod, `43/43` loot/presentation, `225/225` prerequisites,
+  `1258/1258` broad game, `25/25` party/chat, `10/10` level-up/HUD, `7/7`
+  diagnostics, `17/17` Hall, `16/16` Hub UI, `5/5` desktop, production build,
+  bundle budget, and media policy. Only the eight existing Fast Refresh
+  warnings remain. The local game entry is `383177` raw / `107780` gzip bytes.
+- Local Chrome Settings acceptance returned `status: ok` and empty browser
+  errors. It proved title persistence/fullscreen, `K/T -> T/K` Skills/Chat
+  conflict swapping, actual `K` chat focus after the swap, Move Right `Z`, Hub
+  zoom `0.96`, UI scale `1.5`, Dark Cloud return/topmost paint, Boneyard zoom
+  `1.08`, Complex Lighting/Shadows/Multiple Shadows Off, light quality
+  `0.05999999865889549`, Zoom Effects Off, and zero complex-shadow records.
+- The final tested local and Mac mini worktrees shared Git tree
+  `dbc6344cda5520e317bf446d1ac664b92ebec1d4`. The results were then written into
+  this receipt as a documentation-only change; no code, asset, or test changed.
+  Apple arm64/macOS Chrome `151.0.7922.170` passed the same canonical gate
+  with the counts above and entry `Game-BBMbsaWN.js`, `383177` raw / `107781`
+  gzip bytes. Every final tmux session exited `0`.
+- Mac Chrome Settings acceptance returned the same semantic receipt with Hub
+  movement delta `31.789827660263995`, remapped Chat `KeyK`, and zero errors.
+  The title, Dark Cloud, and Boneyard captures have SHA-256
+  `f139a739dd30bd9f0638898a5cbf40e36248226b828464063c75e508188b941d`,
+  `57dcb56d19ba6b14338ee898167cf0470108a62bdbf66760feaa1861bb50b909`,
+  and `8766dd6ec94b7a0b61ee335ad21280c90a22a40d1b9d417f2265156f992872ba`.
+  The Dark Cloud label probe was topmost, visible, opacity `1`, color
+  `rgb(255, 240, 183)`, and measured `247x22` pixels.
+- Mac pause acceptance held Hub tick `1256` and Boneyard owner/peer ticks
+  `1681/1683`, then resumed at `1685` without catch-up. Settings, Hub-owner,
+  and Boneyard-waiting captures hash to
+  `427354dcbf7222ab8db29ad65bfb287c49e2914ac0138c4eaa05a6309927db34`,
+  `6931e0543b3ea7159825913a689d1e0d351a2b292b0cafec8579f5fce1a06915`,
+  and `2241b533024b5d2a763cf9227a92a7c0fb840c15df86d9964b56953db9bee86e`.
+- Mac device acceptance passed Steam Deck `1280x800`, mobile `844x390`, and
+  portrait surfaces. Both joysticks grew from about `82.333` to `123.5` pixels
+  at UI Scale 150%, remained inside the viewport and clear of the map, and all
+  normal/cancel/capture-loss/blur/reuse/visibility/teardown release paths
+  reached `playerMoving=false` then stayed position-stable. Boneyard FOV was
+  `1.08`. Deck, mobile Settings, Hub, and Boneyard captures hash to
+  `477e0307b14b8e8a089125e4e5790e96001f8e7e7488d93aebee854bb746f3ae`,
+  `bf4d0c900dbe8d53f1bb297db95c56e1fc25d1feac657e4db2587754c0ec069f`,
+  `7aa62f86d720abe294bc7adafd673954de4c9c97b357e1afc31b9b22115b001a`,
+  and `1a4775b1144a21ab0e7514e521c8ea75a75736cf1076322ef8e0d3f9a3e4c94d`.
+- Mac live-audio acceptance returned `status: ok`: title/selection/academy/
+  Boneyard tracks, one-shots and streams, semantic `25`-tick Hub and Boneyard
+  footsteps, rainfall, Dig, and Teacher summon all retained their owners after
+  the new master-gain seam. No push, deployment, or production restart was
+  performed.
