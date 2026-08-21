@@ -142,6 +142,9 @@ try {
     })}\n`)
     throw error
   }
+  await page.locator(
+    '.hub-scene[data-renderer-state="ready"][data-gameplay-input-blocked="false"]',
+  ).waitFor({ timeout: 30_000 })
   await waitForPlay(page, '/game/audio/music/academy.mp3')
 
   const footstepSources = [
@@ -150,7 +153,24 @@ try {
   ]
   const stepCountBeforeMovement = footstepEvents(await audioEvents(page), 'play').length
   await page.keyboard.down('d')
-  await waitForFootstepCount(page, footstepSources, 'play', stepCountBeforeMovement + 3)
+  try {
+    await waitForFootstepCount(page, footstepSources, 'play', stepCountBeforeMovement + 3)
+  } catch (error) {
+    process.stderr.write(`${JSON.stringify({
+      activeElement: await page.evaluate(() => ({
+        className: document.activeElement?.className ?? null,
+        tagName: document.activeElement?.tagName ?? null,
+      })),
+      gameSettings: await page.evaluate(() => localStorage.getItem('solomon-dark-game-settings-v1')),
+      hub: await page.locator('.hub-scene').evaluate((node) => ({ ...node.dataset })),
+      player: await page.locator('.hub-world-canvas').evaluate((node) => ({
+        playerMoving: node.__sdrHubFrame.playerMoving,
+        playerX: node.__sdrHubFrame.playerX,
+        playerY: node.__sdrHubFrame.playerY,
+      })),
+    })}\n`)
+    throw error
+  }
   await page.keyboard.up('d')
   await nextPresentationFrame(page)
 

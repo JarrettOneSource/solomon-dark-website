@@ -27202,11 +27202,14 @@ SkillScreen remains available from the tome HUD button and moves to `K`.
 - `GameClientSession` owns ordered receipt, stale-sequence rejection, an
   80-event session buffer, listener teardown, and normalized sending.
   `MainMenuScene` owns one `GameChat` across Hub/Boneyard replacement. The
-  accessible HTML composer owns `T`, `Enter`, `Escape`, `Tab`, touch opening,
+  accessible HTML composer owns the configurable browser-chat binding (default
+  `T`), `Enter`, `Escape`, `Tab`, touch opening,
   unread counts, channel reconciliation, and a five-second hold plus 650 ms
   fade. Composing stops only local gameplay input; no shared pause is acquired.
   SkillScreen content/authority is unchanged and remains reachable from the HUD
-  tome plus its declared Website `K` shortcut.
+  tome plus its configurable binding (Website default `K`). The complete
+  Settings owner conflict-swaps Chat and Skills, so neither edge can open both
+  surfaces after rebinding.
 - Focused coverage closes every membership branch: strict code-unit/byte/
   control bounds; authenticated sender identity; Party outsider isolation;
   Global Hub reach; Boneyard Global rejection; ordered echo; rolling flood
@@ -27245,3 +27248,224 @@ SkillScreen remains available from the tome HUD button and moves to `K`.
   `5cbc5c373965ff9f30ba7a522d698ef960856b3059e99a37c6595d883a57078d`.
   No member is browser-blocked. This receipt does not claim a deployment or
   production restart.
+
+## 2026-08-21 — Native Settings system and browser display/accessibility extensions
+
+### Reported smell and parity question
+
+- The title and gameplay `GAME SETTINGS` actions currently open a generic DOM
+  dialog containing only Enable Cheats and the already recovered gameplay
+  primary/concentration selectors. Stock's Settings root, Audio and Video
+  controls, Customize Keyboard child, Performance child, context branches,
+  persistence, native panel presentation, and live consumers are absent.
+- The requested browser product surface must port the Settings menu and every
+  native setting that has a coherent browser owner, omit screen resolution
+  because the game fits the browser, and add Camera FOV plus UI Scale for
+  desktop and mobile users.
+- Reproduction membership is title, gameplay pause, Dark Cloud, Hub Courtyard,
+  all four private rooms, Boneyard modes `0..2`, desktop keyboard/mouse,
+  controller focus, coarse-pointer landscape, fullscreen-capable browsers,
+  installed iOS/web-app display mode, live resize, cross-tab storage, and
+  remount/reload.
+- Falsifiers are a slider that changes only its label, audio affecting only
+  future sources, FOV moving actors or hit projection away from rendering,
+  HUD scaling moving its anchors offscreen, a key label that disagrees with
+  input routing, a local graphics option changing authoritative simulation,
+  Settings releasing another pause owner, or an omitted native row without an
+  explicit disposition.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Retail binary and fresh static analysis | `SolomonDarkAbandonware/SolomonDark.exe`, 0.72.5, `4,723,200` bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`; preferred image base `0x00400000`; Ghidra 12.0.3 read-only replica | `MyCPanel` vtable `0x0079BEDC` owns adjacent root/audio/controls slots `+0xB4/+0xB8/+0xBC`; `0x005A81A0` allocates it, `0x005D8DC0/0x005D8F30` acquire/release gameplay suspension, and `0x005D8120` dispatches every root/skill child action. | high |
+| Root and controls instructions | builders `0x005D9A50` and `0x005DAEF0`; audio apply `0x005D8FC0`; display init/apply `0x0041CE20/0x0041D4A0`; config init `0x005BAB60` | The complete root, 15 key/mouse rows, nine Performance rows, globals, defaults, capability gate, and context-only Resolution branch are directly instruction-backed. | high |
+| Live native menu fixtures | `../Mod Loader/tests/fixtures/webgame/menu-layouts/{game-settings-title,game-settings-gameplay,game-settings-dark-cloud,controls,performance}.json` and paired reference PNGs | All three root contexts and both child families have independent settled/confirmation captures bound to the same retail executable. Title Settings process `13876` settled for 40 samples and confirmation process `17980` reproduced the family. | high |
+| Native persistence/audio/lighting reports | `native-settings-system.md`, `native-save-format.md`, `native-audio-system.md`, `native-lighting-and-shadow-system.md`, `native-input-model.md`, `native-camera-control.md` | Audio user gain is live and independent by lane; renderer settings are local process presentation state; camera projection and screen UI are separate from actors/collision; native Settings has no adjustable FOV or UI scale. | high |
+| Current Website trace | `GameSettingsDialog.tsx`, `game-settings.ts`, `MainMenuScene.tsx`, `DarkCloudScene.tsx`, `game-audio-director.ts`, Hub/Boneyard scenes and renderers, `GameHud.tsx`, input modules | One local `enableCheats` Boolean is the only persisted Settings state. Audio, camera, HUD scale, fullscreen state, bindings, lighting quality, and camera-pulse consumers have no Settings owner. Dark Cloud has no Settings return edge. | high |
+
+Reusable native findings from the fresh static pass are recorded first in
+`../Mod Loader/docs/reverse-engineering/native-settings-system.md`; the menu
+shell summary now links to that report.
+
+### System boundary and membership inventory
+
+Native/web system: the local Settings controller, its title/gameplay/Dark
+Cloud context lifecycle, persisted browser preference record, root and child
+controls, and every live local presentation/input consumer. Account authority,
+screen-size negotiation, story difficulty, native texture-memory retention,
+and authoritative multiplayer simulation remain outside this preference
+owner.
+
+The disposition column is the required final state. The implementation receipt
+below remains pending until the corresponding proof contract passes.
+
+| Member (class/variant/scene/branch) | Native source | Disposition | Proof contract |
+| --- | --- | --- | --- |
+| `MyCPanel` construction, modal ownership, Done, destruction | `0x005A81A0`, `0x005D8DC0`, `0x005D8F30`, vtable `0x0079BEDC` | exact-ported | one root owner per invocation; child Back retains it; gameplay Done alone releases its Settings pause |
+| title Settings context | `game-settings-title` | exact-ported | title retained/dimmed, root controls usable, Done restores Settings focus |
+| gameplay Settings context | `game-settings-gameplay` | exact-ported | pause owner holds constant world state through root and every child; Done resumes without catch-up |
+| Dark Cloud Settings context and return | `game-settings-dark-cloud`, native Dark Cloud menu Settings edge | exact-ported | Dark Cloud retained/dimmed, Done restores its menu/browser without title transition |
+| Sound Vol | `0x005D8FC0 -> 0x004073A0`; `Audio.SoundVolume` | exact-ported | `0..1` slider changes active and future one-shots, loops, and streams without changing authored per-source gain |
+| Music Vol | `0x005D8FC0 -> 0x00407340`; `Audio.MusicVolume` | exact-ported | `0..1` slider scales active crossfades and future scene music independently of sound |
+| Fullscreen live state | `Graphics.Fullscreen`; `0x0041D4A0` | exact-ported | standard and WebKit enter/exit plus installed-display fallback use the existing browser owner |
+| Fullscreen automatic persisted re-entry | stock persisted `Graphics.Fullscreen` | blocked-by-platform (Fullscreen API requires a current user activation; browsers prohibit automatic re-entry on reload) | row always reports actual document/display state and never claims a persisted mode was restored |
+| Resolution | title enumeration/gameplay restriction at `0x005D9A50` | out-of-system (user-directed browser-fit viewport already owns size and FOV expansion) | no resolution row or stale `data-resolution` preference; renderer backing density remains independent |
+| Login Info / native Dark Name and password | control `+0x22C`, `0x005D8120 -> 0x005C6F10` | out-of-system (the authenticated Website account owns identity; legacy credentials must never enter game-local storage) | Settings exposes no credential field or token copy |
+| Move Up/Down/Left/Right | `0x00B3BCBC/C0/B4/B8` | exact-ported | persisted physical key codes drive the same movement state; controller/touch remain independent browser inputs |
+| Open Menu/Inventory | `0x00B3BCCC/C4` | exact-ported | displayed bindings match every Hub/Boneyard key listener and modal gate |
+| Open Skills | `0x00B3BCC8`; native fresh value `T` | exact-ported row with documented web-default adaptation | Website defaults this row to `K` because current-main browser chat owns `T`; rebinding either row conflict-swaps the other, and `T` remains selectable |
+| Open Chat | no native player-chat row; current Website protocol 49 chat extension | exact-ported as designed-not-observed browser extension | defaults `T`, persists beside the fifteen native identities, updates the composer prompt, and cannot collide with Skills |
+| Belt slots 1..8 | `0x00B3BCD0..0x00B3BCEC` | exact-ported | persisted keyboard/Right Mouse codes route slots `0..7` and update HUD binding labels |
+| Complex Lighting On branch | `0x00B3BCA8`; early composite and analytic tint | verified-already-at-parity | shipped-default visuals/draw order remain the identity case |
+| Complex Lighting Off branch | `0x00B3BCA8`; Arena late-composite branch | exact-ported | object tint is white, light field remains, and composite moves after the shared world queue |
+| Complex Shadows On/Off | `0x00B3BCA9`; complete caster family | exact-ported | On preserves every authored caster; Off drains/hides all directional meshes without affecting flat class shadows |
+| Multiple Shadows On/Off | `0x00B3BCAA`; complete `MS` provider family | exact-ported | only providers whose recovered flag is `MS` change; literal true/false providers retain their flag and containment rule |
+| Light Quality | `0x00B3BCA4`; `0x0057DF20` | exact-ported | browser slider covers native low `0.06` through capable `0.25`; target pixels and manager visibility use the same value |
+| Cast Secondary Spells at Mouse | `0x00B3BCF4` | exact-ported | On projects Right Mouse through the live camera; Off uses the actor's live heading; touch/gamepad directional intents are unchanged |
+| Kid Mode (Story Games Only) | `0x00B3BCF5` | out-of-system (Website has no stock story-game simulation or difficulty consumer) | row absent; no inert stored Boolean |
+| Enhanced Effects On branch | `0x00B3BCAD`, persisted as `Game.FastCPU` | verified-already-at-parity | current high-fidelity shipped-capability branch remains enabled |
+| Enhanced Effects user toggle / Off branch | `0x00B3BCAD` consumers across authoritative effect actor births and peer-local presentation | out-of-system (current multiplayer snapshots authoritatively materialize optional effect actors; partial client culling or host-wide preference would not reproduce native per-process semantics) | no misleading toggle; fixed On policy stays explicit until optional actors are fully presentation-local |
+| Save Memory (Requires Restart) | `Graphics.SaveVideoMemory`, application `+0x49C` | out-of-system (browser/WebGL owns texture eviction and device recovery; the native D3D retention switch has no coherent web value) | row absent; no restart placebo |
+| Zoom Effects On/Off | `0x00B3BCAC` | exact-ported | Off suppresses native camera/world pulse magnitude while retaining screen flash, gameplay, audio, and ordinary FOV |
+| Performance Back | `0x005D8120` child return | exact-ported | applies local values and restores root without releasing gameplay suspension |
+| Select Primary Attack | control `+0x3AC` | verified-already-at-parity | learned native primary membership and selection remain in gameplay Settings |
+| Select Concentration siblings | controls `+0x46C/+0x52C` | verified-already-at-parity | learned concentration membership, active state, and Mind Chug gate remain in gameplay Settings |
+| Enable Cheats | Website semantic Lua setting | exact-ported as explicit browser extension | defaults off, host-only runtime gate remains live, and guest never gains a VM/API |
+| Camera FOV | browser extension over Region camera projection | exact-ported as designed-not-observed | `75..125%`; actual zoom is native zoom divided by FOV factor in Hub, every private room, Boneyard, culling, lighting, hit projection, and audio viewport calculations |
+| UI Scale | browser extension over screen-space HUD/touch presentation | exact-ported as designed-not-observed | `75..150%`; top/center/bottom/right anchors remain inside logical viewport and hit boxes scale with their visuals |
+| `UI`, `ControlPanel`, and bitmap-font presentation family | fixture JSON; `UI.8,17,18,28,42,47,48,54,80/82,100,101,107..110`; `ControlPanel.0,8,9,18` | exact-ported with designed layout extension for added FOV/UI/Cheats rows | exact source atlas records and native labels/chrome; no PNG screenshot baked as state |
+| keyboard/gamepad focus, slider adjustment, Back, modal trap | native mouse-only input plus documented G11 browser design | exact-ported as designed-not-observed accessibility policy | disabled/absent rows skipped; left/right adjusts; Back cancels capture then child then root; focus returns to invoker |
+
+The three `out-of-system` native product domains and the Enhanced Effects Off
+branch are intentional dispositions, not silent stubs. The one
+`blocked-by-platform` member predicts a visible difference: after reload the
+Fullscreen row may read Off even if the prior session ended fullscreen; the
+user must activate it again.
+
+### Native ownership thread
+
+- `0x005A81A0` constructs one `MyCPanel`. Title and Dark Cloud install it as a
+  retained-underlay modal; gameplay construction increments the shared nested
+  suspension owner. Root and child panels are one lifetime.
+- `Settings_Render 0x005D9A50` builds audio/video/account/controls/performance
+  root rollouts and conditional gameplay skill actions. `Controls_Render
+  0x005DAEF0` is both the concrete key/performance builder and their apply
+  path. `0x005D8FC0` is the adjacent audio apply slot.
+- Configuration initialization and persistence are upstream state owners.
+  Audio's `Audio.*Volume` store is separate from the 37-row process
+  `settings.txt`; display/input/performance globals use the process settings
+  writer. Runtime audio, display, input, camera, lighting, shadow, skill, and
+  gameplay systems are downstream consumers and do not become panel state.
+- In Website, `MainMenuScene` owns the local preference snapshot and context
+  lifecycle. The Audio director, Hub/Boneyard scene/input owners, WebGL
+  renderers, HUD, and semantic panels subscribe through typed values. No
+  preference enters the network protocol or authoritative save.
+- Storage events update another tab; unmount destroys listeners/renderers.
+  Corrupt or incomplete current-schema state falls back atomically. The
+  existing one-field settings record is migrated once into the complete
+  schema so deployed Enable Cheats preference is not silently lost.
+
+### Recovered and designed behavioral contract
+
+- Native root values apply live. Sound and music remain separate master lanes
+  over authored cue gain/crossfade envelopes. Active continuous sources must
+  change immediately.
+- FOV is a local renderer projection factor, not native `Zoom Effects`, WebGL
+  backing resolution, viewport CSS scale, or simulation state. With factor
+  `f`, Hub uses `1.2/f` and Boneyard `1.35/f`; every projection, inverse
+  projection, clamp, cull, light query, nameplate, environment-light, and
+  positional-audio view consumer uses that same zoom.
+- UI Scale changes screen UI only. World canvases, actor positions, collision,
+  camera zoom, light targets, snapshot state, and fixed ticks are unchanged.
+  HUD virtual dimensions contract by the reciprocal scale before a centered
+  uniform transform, preserving edge and center anchors. Touch controls scale
+  their rendered and measured input radius together.
+- Complex Lighting Off retains the native light field but does not analytically
+  tint world objects and places the multiply composite in the recovered late
+  band. Complex Shadows and Multiple Shadows remain independent settings.
+  Light Quality affects both target resolution and manager visibility/cull
+  math.
+- Zoom Effects Off removes only optional camera/world magnification and
+  displacement feedback. Damage, actors, screen-color flashes, sound, and the
+  user's ordinary FOV remain.
+- Key bindings are physical browser codes. The fifteen native identities remain
+  complete; browser chat is an explicit sixteenth extension. Gamepad and touch
+  mappings remain fixed input-family peers. Key capture conflict-swaps Chat and
+  Skills, never steals a browser credential, and leaves no gameplay listener
+  active beneath the modal.
+- Native exact missing label rectangles remain an evidence limitation. The
+  port consumes exact atlas records, labels, order, and live reference frames,
+  while added browser rows require a documented responsive layout rather than
+  invented native coordinates.
+
+### Nearby-system findings
+
+- `Select Primary Attack` and both `Select Concentration` actions are native
+  Settings members handled by `0x005D8120`; the current web skill selectors
+  are not arbitrary additions and remain under the gameplay Settings owner.
+- The native fresh Windows default for Enhanced Effects is On even though the
+  preserved sandbox profile is Off. The Website's current fixed-On policy is
+  therefore the shipped-capability identity case, but it must remain visibly
+  non-configurable until optional presentation actors leave authoritative
+  state.
+- Browser fullscreen persistence cannot be symmetric with native display
+  persistence because activation is required. Persisting a desired Boolean
+  would create a false state; actual `document.fullscreenElement`/installed
+  display mode is authoritative.
+- The existing renderer `data-resolution` value is device backing density,
+  not the removed native Resolution row and not Camera FOV.
+
+### Confidence and open questions
+
+- Confirmed: owner/vtable/lifecycle, all semantic native members, context
+  branches, globals, persistence keys/defaults, exact source asset families,
+  browser owners, and every planned/out-of-system disposition.
+- Designed-not-observed: FOV/UI ranges, responsive placement of added browser
+  rows, physical-code conflict handling, and controller focus. Each is a web
+  accessibility/product policy and is labeled as such.
+- Unknown but non-material: exact native glyph/hit rectangles for old
+  ControlPanel labels were not emitted by the stable hook. The fixture pixels,
+  atlas records, builder strings, and values are exact; the browser layout does
+  not claim those missing rectangles.
+- No other native setting, authored table row, context branch, asset family,
+  or persistence consumer remains undispositioned.
+
+### Web implementation consequence
+
+- Replace the one-field settings store with one typed local preference owner
+  and a narrow legacy migration. Keep write normalization, storage
+  subscription, defaults, formatting, camera zoom, and UI transform formulas
+  in that cohesive module.
+- Replace the generic dialog with the native Settings root and child-page
+  hierarchy, exact source atlas chrome, semantic sliders/toggles/buttons,
+  responsive scrolling, modal focus/Back behavior, and title/gameplay/Dark
+  Cloud context return.
+- Add master sound/music gain to the existing director rather than multiplying
+  authored gains at dozens of callsites. Thread camera/display settings through
+  scene-local renderer APIs; thread bindings through their actual input and HUD
+  consumers.
+- Do not add inert Resolution, Login Info, Kid Mode, Enhanced Effects, or Save
+  Memory controls. Remove no active skill or Cheats functionality.
+
+### Validation contract
+
+- Focused contracts must cover strict storage/current-schema migration;
+  default and boundary values; every membership row/disposition; active/future
+  audio; native camera identity plus both FOV extremes in Hub/private rooms and
+  Boneyard; pointer round trips; HUD/touch anchor and hit-size scaling; every
+  binding; lighting/shadow/quality branches; Zoom Effects; fullscreen modes;
+  context/Back/pause lifetime; and exact required atlas records.
+- Browser journeys must exercise title root/children/reload, live audio,
+  fullscreen, key capture and actual gameplay input, Hub and Boneyard FOV,
+  UI Scale on desktop and coarse-pointer landscape, Performance toggles,
+  gameplay skill selectors, Dark Cloud return, and zero page/console errors.
+- The exact final tree must pass `./scripts/validate.sh` on Windows. The same
+  affected Settings/device/browser matrices must pass independently on the Mac
+  mini, with its evidence reported separately.
+
+### Implementation validation receipt
+
+- Pending implementation, canonical validation, Windows browser evidence, and
+  Mac mini matrix. No commit, push, deployment, or production verification is
+  authorized by this request.

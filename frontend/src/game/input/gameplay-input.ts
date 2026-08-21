@@ -4,6 +4,11 @@ import {
 } from '../core-kernels/player-character.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
 import {
+  DEFAULT_GAME_CONTROL_BINDINGS,
+  quickbarSlotForBinding,
+  type GameControlBindings,
+} from '../game-settings.ts'
+import {
   createBrowserMovementInput,
   type GamepadLike,
   type MovementInputDevice,
@@ -29,12 +34,13 @@ export interface BrowserGameplayInput {
   destroy(): void
   sample(): BrowserGameplayInputSample
   setBlocked(blocked: boolean): void
+  setControls(controls: GameControlBindings): void
   setTouch(movement: Vector2): void
   setTouchPrimary(direction: Vector2): void
   setTouchQuickbar(slot: number, pressed: boolean, fallbackDirection?: Vector2): void
 }
 
-type QuickbarInputSource = 'mouse' | `keyboard:${number}` | `touch:${number}`
+type QuickbarInputSource = `mouse:${number}` | `keyboard:${number}` | `touch:${number}`
 
 interface HeldQuickbarInput {
   source: QuickbarInputSource
@@ -43,22 +49,28 @@ interface HeldQuickbarInput {
 
 interface BrowserGameplayInputOptions {
   claimMouseCastStart?: (lane: GameplayMouseCastLane) => boolean
+  controls?: GameControlBindings
   getGamepads?: () => readonly (GamepadLike | null)[]
   mouseTarget: BrowserInputTarget
   onInput: (input: PlayerCharacterInput) => void
   projectDirection: (direction: Vector2) => Vector2 | null
   projectPointer: (pointer: Vector2) => Vector2 | null
+  projectSecondaryAim?: () => Vector2 | null
+  secondaryAtPointer?: () => boolean
   target?: BrowserInputTarget
   visibilityTarget?: BrowserVisibilityTarget
 }
 
 export function createBrowserGameplayInput({
   claimMouseCastStart = () => false,
+  controls: initialControls = DEFAULT_GAME_CONTROL_BINDINGS,
   getGamepads = () => navigator.getGamepads(),
   mouseTarget,
   onInput,
   projectDirection,
   projectPointer,
+  projectSecondaryAim = () => null,
+  secondaryAtPointer = () => true,
   target = window,
   visibilityTarget = document,
 }: BrowserGameplayInputOptions): BrowserGameplayInput {
@@ -68,9 +80,11 @@ export function createBrowserGameplayInput({
   let touchPrimaryDirection: Vector2 | null = null
   let capturedPointer: Vector2 | null = null
   let blocked = false
+  let controls = initialControls
   let destroyed = false
 
   const movement = createBrowserMovementInput({
+    controls,
     getGamepads,
     onStop: () => {
       aim = null
@@ -93,8 +107,13 @@ export function createBrowserGameplayInput({
     }
     if (touchPrimaryDirection) {
       aim = projectDirection(touchPrimaryDirection) ?? aim
-    } else if (capturedPointer && (mousePrimary || heldQuickbarInputs.length > 0)) {
+    } else if (capturedPointer && (
+      mousePrimary
+      || (mouseQuickbarHeld() && secondaryAtPointer())
+    )) {
       aim = projectPointer(capturedPointer) ?? aim
+    } else if (mouseQuickbarHeld()) {
+      aim = projectSecondaryAim() ?? aim
     }
     const movementSample = movement.sample()
     return {
@@ -113,18 +132,24 @@ export function createBrowserGameplayInput({
   const mouseDown: EventListener = (event) => {
     if (blocked) return
     const mouse = mouseEvent(event)
-    const lane = mouse && castLane(mouse.button)
+    const lane = mouse && castLane(mouse.button, controls)
     if (!mouse || !lane) return
     if (claimMouseCastStart(lane)) {
       event.preventDefault()
       return
     }
-    const nextAim = projectPointer(mouse)
+    const nextAim = lane === 'secondary' && !secondaryAtPointer()
+      ? projectSecondaryAim()
+      : projectPointer(mouse)
     if (!nextAim) return
     capturedPointer = mouse
     aim = nextAim
     if (lane === 'primary') mousePrimary = true
-    else holdQuickbarInput('mouse', 0)
+    else {
+      const slot = quickbarSlotForBinding(controls, `Mouse${mouse.button}`)
+      if (slot === null) return
+      holdQuickbarInput(`mouse:${slot}`, slot)
+    }
     event.preventDefault()
     publish()
   }
@@ -134,20 +159,27 @@ export function createBrowserGameplayInput({
     const mouse = mouseEvent(event)
     if (!mouse) return
     capturedPointer = mouse
-    aim = projectPointer(mouse) ?? aim
+    aim = mousePrimary || secondaryAtPointer()
+      ? projectPointer(mouse) ?? aim
+      : projectSecondaryAim() ?? aim
     event.preventDefault()
     publish()
   }
   const mouseUp: EventListener = (event) => {
     if (blocked) return
     const mouse = mouseEvent(event)
-    const lane = mouse && castLane(mouse.button)
+    const lane = mouse && castLane(mouse.button, controls)
     if (!mouse || !lane) return
-    if (lane === 'primary' ? !mousePrimary : !quickbarInputHeld('mouse', 0)) return
+    const slot = lane === 'secondary'
+      ? quickbarSlotForBinding(controls, `Mouse${mouse.button}`)
+      : null
+    if (lane === 'primary' ? !mousePrimary : slot === null || !quickbarInputHeld(`mouse:${slot}`, slot)) return
     capturedPointer = mouse
-    aim = projectPointer(mouse) ?? aim
+    aim = lane === 'secondary' && !secondaryAtPointer()
+      ? projectSecondaryAim() ?? aim
+      : projectPointer(mouse) ?? aim
     if (lane === 'primary') mousePrimary = false
-    else releaseQuickbarInput('mouse', 0)
+    else releaseQuickbarInput(`mouse:${slot!}`, slot!)
     event.preventDefault()
     publish()
   }
@@ -155,7 +187,7 @@ export function createBrowserGameplayInput({
   const keyDown: EventListener = (event) => {
     if (blocked) return
     const keyboard = keyboardEvent(event)
-    const slot = keyboard && secondaryKeyboardSlot(keyboard.code)
+    const slot = keyboard && quickbarSlotForBinding(controls, keyboard.code)
     if (slot === null || keyboard!.repeat || quickbarInputHeld(`keyboard:${slot}`, slot)) return
     holdQuickbarInput(`keyboard:${slot}`, slot)
     event.preventDefault()
@@ -164,7 +196,7 @@ export function createBrowserGameplayInput({
   const keyUp: EventListener = (event) => {
     if (blocked) return
     const keyboard = keyboardEvent(event)
-    const slot = keyboard && secondaryKeyboardSlot(keyboard.code)
+    const slot = keyboard && quickbarSlotForBinding(controls, keyboard.code)
     if (slot === null || !quickbarInputHeld(`keyboard:${slot}`, slot)) return
     releaseQuickbarInput(`keyboard:${slot}`, slot)
     event.preventDefault()
@@ -186,6 +218,10 @@ export function createBrowserGameplayInput({
     heldQuickbarInputs = heldQuickbarInputs.filter((entry) => (
       entry.source !== source || entry.slot !== slot
     ))
+  }
+
+  function mouseQuickbarHeld(): boolean {
+    return heldQuickbarInputs.some(({ source }) => source.startsWith('mouse:'))
   }
 
   mouseTarget.addEventListener('mousedown', mouseDown)
@@ -212,6 +248,10 @@ export function createBrowserGameplayInput({
       if (blocked === nextBlocked) return
       blocked = nextBlocked
       movement.setBlocked(nextBlocked)
+    },
+    setControls(nextControls) {
+      controls = nextControls
+      movement.setControls(nextControls)
     },
     setTouch(nextMovement) {
       if (!blocked) movement.setTouch(nextMovement)
@@ -240,11 +280,6 @@ export function createBrowserGameplayInput({
   }
 }
 
-function secondaryKeyboardSlot(code: string): number | null {
-  const match = /^Digit([1-7])$/.exec(code)
-  return match ? Number(match[1]) : null
-}
-
 function keyboardEvent(event: Event): { code: string; repeat: boolean } | null {
   const source = event as Partial<KeyboardEvent>
   return typeof source.code === 'string' && typeof source.repeat === 'boolean'
@@ -260,9 +295,12 @@ function primaryDirection(direction: Vector2): Vector2 | null {
     : null
 }
 
-function castLane(button: number): GameplayMouseCastLane | null {
+function castLane(
+  button: number,
+  controls: GameControlBindings,
+): GameplayMouseCastLane | null {
   if (button === 0) return 'primary'
-  if (button === 2) return 'secondary'
+  if (quickbarSlotForBinding(controls, `Mouse${button}`) !== null) return 'secondary'
   return null
 }
 

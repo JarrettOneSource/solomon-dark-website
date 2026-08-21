@@ -12,6 +12,7 @@ import type { GameViewportLayout } from './game-viewport.ts'
 import {
   NATIVE_REGION_LIGHT_ATLAS,
   NATIVE_REGION_LIGHT_COMPOSITE_Z_INDEX,
+  NATIVE_DEFAULT_LIGHT_QUALITY,
   NATIVE_REGION_LIGHT_ENTRY,
   nativeRegionLightTargetPlan,
   nativeRegionLightStamp,
@@ -28,19 +29,21 @@ export class BoneyardRegionLightField {
   private readonly sourceSprites: Sprite[] = []
   private logicalSide: number
   private physicalSide: number
+  private quality: number
 
   constructor(
     root: Container,
     glyph: Texture,
     viewport: GameViewportLayout,
     resolution: number,
+    quality = NATIVE_DEFAULT_LIGHT_QUALITY,
   ) {
     const glyphRef = spriteRefFor(
       NATIVE_REGION_LIGHT_ATLAS,
       NATIVE_REGION_LIGHT_ENTRY,
     )
     if (!glyphRef) throw new Error('Native Region light glyph is missing.')
-    const target = nativeRegionLightTargetPlan(viewport, resolution)
+    const target = nativeRegionLightTargetPlan(viewport, resolution, quality)
     this.root = root
     this.glyph = glyph
     this.glyphRef = glyphRef
@@ -53,6 +56,7 @@ export class BoneyardRegionLightField {
     })
     this.logicalSide = target.logicalSide
     this.physicalSide = target.physicalSide
+    this.quality = quality
     this.composite = new Sprite(this.renderTexture)
     this.composite.blendMode = 'multiply'
     this.composite.eventMode = 'none'
@@ -81,7 +85,7 @@ export class BoneyardRegionLightField {
   }
 
   resize(viewport: GameViewportLayout, resolution: number): void {
-    const target = nativeRegionLightTargetPlan(viewport, resolution)
+    const target = nativeRegionLightTargetPlan(viewport, resolution, this.quality)
     this.logicalSide = target.logicalSide
     this.physicalSide = target.physicalSide
     this.renderTexture.resize(
@@ -89,6 +93,16 @@ export class BoneyardRegionLightField {
       target.logicalSide,
       target.renderResolution,
     )
+  }
+
+  setQuality(quality: number, viewport: GameViewportLayout, resolution: number): void {
+    if (quality === this.quality) return
+    this.quality = quality
+    this.resize(viewport, resolution)
+  }
+
+  setCompositeZIndex(zIndex: number): void {
+    this.composite.zIndex = zIndex
   }
 
   get targetLogicalSide(): number {

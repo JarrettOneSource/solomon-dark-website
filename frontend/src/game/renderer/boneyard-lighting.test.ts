@@ -557,6 +557,15 @@ test('uses the shipped Windows light-quality profile and a square low-resolution
     physicalSide: 250,
     renderResolution: 250 / 801,
   })
+  assert.deepEqual(nativeRegionLightTargetPlan(
+    { height: 900, width: 1_600 },
+    1,
+    Math.fround(0.06),
+  ), {
+    logicalSide: 1_600,
+    physicalSide: 95,
+    renderResolution: 95 / 1_600,
+  })
 })
 
 test('publishes currently modeled Ether and Earth providers through native defaults', () => {
@@ -583,6 +592,28 @@ test('publishes currently modeled Ether and Earth providers through native defau
     charge: 0.8,
     position: { x: 30, y: 40 },
   }).radius, 1.6)
+})
+
+test('Multiple Shadows changes every MS provider without changing literal flags', () => {
+  assert.equal(nativeMissileLightSource(
+    { id: 9, position: { x: 10, y: 20 } },
+    41,
+    false,
+  ).castsDirectionalShadow, false)
+  assert.equal(nativeBoulderLightSource({
+    charge: 0.8,
+    position: { x: 30, y: 40 },
+  }, false).castsDirectionalShadow, false)
+  assert.equal(nativeWeldProjectileLightSource(weldProjectile(1000), 41, false)
+    .castsDirectionalShadow, false)
+  assert.equal(nativeWeldProjectileLightSource(weldProjectile(1009), 41, false)
+    .castsDirectionalShadow, false)
+  assert.equal(nativePlayerLightSource({
+    headingIndex: 0,
+    id: 'player',
+    lighting: { driveActive: false, overlayEffectPhase: 0 },
+    position: { x: 0, y: 0 },
+  }, 1, true)?.castsDirectionalShadow, true)
 })
 
 test('projects every welded projectile and retained-rock light provider exactly', () => {

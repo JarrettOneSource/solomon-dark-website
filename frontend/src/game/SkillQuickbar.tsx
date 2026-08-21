@@ -4,6 +4,11 @@ import nativeAssetsJson from '../assets/game/skill-picker-native-assets.json' wi
 import { hub } from '../lib/assets.ts'
 import type { NativeSecondaryPlayerState } from './core-kernels/native-secondary-abilities.ts'
 import {
+  gameBindingLabel,
+  type GameBindingAction,
+  type GameControlBindings,
+} from './game-settings.ts'
+import {
   NATIVE_SKILL_CATALOG,
   nativeSkillCategory,
 } from './core-kernels/player-progression.ts'
@@ -37,6 +42,7 @@ const MOBILE_QUICKBAR_SLOT_OFFSETS = Object.freeze([
 ])
 
 interface SkillQuickbarProps {
+  controls: GameControlBindings
   mode: 'hub' | 'run'
   onInput?: (slot: number, pressed: boolean) => void
   playerState: NativeSecondaryPlayerState | undefined
@@ -45,6 +51,7 @@ interface SkillQuickbarProps {
 }
 
 export default function SkillQuickbar({
+  controls,
   mode,
   onInput,
   playerState,
@@ -68,7 +75,11 @@ export default function SkillQuickbar({
               playerState?.cooldownMaximumTicksBySkill[skillId] ?? 0,
               playerState?.globalCooldownTicks ?? 0,
             )
-        const input = slot === 0 ? 'right mouse button' : `key ${slot}`
+        const bindingCode = controls[`belt${slot + 1}` as GameBindingAction]
+        const bindingLabel = gameBindingLabel(bindingCode)
+        const input = bindingCode.startsWith('Mouse')
+          ? `${bindingLabel.toLowerCase()} button`
+          : `key ${bindingLabel}`
         const active = skillId !== null && (
           skillId === selectedPrimarySkillId
           || secondaryAbilityActive(skillId, playerState)
@@ -83,6 +94,7 @@ export default function SkillQuickbar({
             type="button"
             className="hub-hud-quickbar-slot"
             data-slot={slot}
+            data-binding-code={bindingCode}
             data-active={active}
             disabled={skill === undefined || !onInput}
             key={slot}
@@ -111,15 +123,15 @@ export default function SkillQuickbar({
                 record={skill.skills_atlas_icon_record}
               />
             )}
-            {slot === 0 && skill !== undefined ? (
+            {bindingCode === 'Mouse2' && skill !== undefined ? (
               <img
                 className="hub-hud-quickbar-input-mouse"
                 src={hub.hud.mouseRight}
                 alt=""
               />
             ) : null}
-            {slot > 0 && skill !== undefined ? (
-              <NativeKeyboardBinding text={`${slot}`} />
+            {bindingCode !== 'Mouse2' && skill !== undefined ? (
+              <NativeKeyboardBinding text={bindingLabel.toUpperCase()} />
             ) : null}
           </button>
         )

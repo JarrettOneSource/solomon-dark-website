@@ -222,21 +222,22 @@ export function boneyardCamera(
     height: BONEYARD_RENDER_HEIGHT,
     width: BONEYARD_RENDER_WIDTH,
   },
+  zoom = BONEYARD_CAMERA_ZOOM,
 ): Camera {
   return {
     x: clampCameraAxis(
       position.x,
       bounds.x,
       bounds.w,
-      viewport.width / 2 / BONEYARD_CAMERA_ZOOM,
+      viewport.width / 2 / zoom,
     ),
     y: clampCameraAxis(
       position.y,
       bounds.y,
       bounds.h,
-      viewport.height / 2 / BONEYARD_CAMERA_ZOOM,
+      viewport.height / 2 / zoom,
     ),
-    zoom: BONEYARD_CAMERA_ZOOM,
+    zoom,
   }
 }
 

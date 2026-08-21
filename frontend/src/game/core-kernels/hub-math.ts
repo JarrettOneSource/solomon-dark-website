@@ -28,18 +28,20 @@ export function clamp(value: number, minimum: number, maximum: number): number {
 export function hubCameraOrigin(
   position: Vector2,
   viewport?: HubRenderViewport,
+  cameraScale = HUB_CAMERA_SCALE,
 ): Vector2 {
-  return hubRegionCameraOrigin('courtyard', position, viewport)
+  return hubRegionCameraOrigin('courtyard', position, viewport, cameraScale)
 }
 
 export function hubRegionCameraOrigin(
   region: HubRegionId,
   position: Vector2,
   viewport: HubRenderViewport = { width: 1600, height: 900 },
+  cameraScale = HUB_CAMERA_SCALE,
 ): Vector2 {
   const definition = HUB_REGION_DEFINITIONS[region]
-  const viewWidth = viewport.width / HUB_CAMERA_SCALE
-  const viewHeight = viewport.height / HUB_CAMERA_SCALE
+  const viewWidth = viewport.width / cameraScale
+  const viewHeight = viewport.height / cameraScale
   return {
     x: cameraAxisOrigin(position.x, viewWidth, definition.width),
     y: cameraAxisOrigin(position.y, viewHeight, definition.height),

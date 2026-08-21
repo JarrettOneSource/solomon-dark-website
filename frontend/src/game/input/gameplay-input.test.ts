@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import type { PlayerCharacterInput } from '../core-kernels/player-character.ts'
+import { DEFAULT_GAME_CONTROL_BINDINGS, rebindGameControl } from '../game-settings.ts'
 import { createBrowserGameplayInput } from './gameplay-input.ts'
 
 class FakeMouseEvent extends Event {
@@ -360,6 +361,42 @@ test('right mouse and digits one through seven address all native skill quickbar
   const afterRelease = published.length
   target.dispatchEvent(new FakeKeyboardEvent('keydown', 'Digit0'))
   assert.equal(published.length, afterRelease)
+  input.destroy()
+})
+
+test('live binding changes reroute quickbar input and pointer-off secondary uses actor heading', () => {
+  const mouseTarget = new EventTarget()
+  const target = new EventTarget()
+  const published: PlayerCharacterInput[] = []
+  const controls = rebindGameControl(DEFAULT_GAME_CONTROL_BINDINGS, 'belt8', 'KeyQ')
+  const input = createBrowserGameplayInput({
+    controls,
+    getGamepads: () => [],
+    mouseTarget,
+    onInput: (state) => published.push(state),
+    projectDirection: ({ x, y }) => ({ x, y }),
+    projectPointer: ({ x, y }) => ({ x: x + 1_000, y: y + 2_000 }),
+    projectSecondaryAim: () => ({ x: 75, y: 25 }),
+    secondaryAtPointer: () => false,
+    target,
+    visibilityTarget: new FakeVisibilityTarget(),
+  })
+
+  target.dispatchEvent(new FakeKeyboardEvent('keydown', 'KeyQ'))
+  assert.equal(published.at(-1)?.cast.quickbar, 7)
+  target.dispatchEvent(new FakeKeyboardEvent('keyup', 'KeyQ'))
+  mouseTarget.dispatchEvent(new FakeMouseEvent('mousedown', 2, 20, 30))
+  assert.deepEqual(published.at(-1), expectedInput({ x: 75, y: 25 }, false, 0))
+  target.dispatchEvent(new FakeMouseEvent('mousemove', 0, 40, 50))
+  assert.deepEqual(published.at(-1), expectedInput({ x: 75, y: 25 }, false, 0))
+
+  const swapped = rebindGameControl(controls, 'belt1', 'KeyZ')
+  input.setControls(swapped)
+  const afterRebind = published.length
+  mouseTarget.dispatchEvent(new FakeMouseEvent('mousedown', 2, 20, 30))
+  assert.equal(published.length, afterRebind)
+  target.dispatchEvent(new FakeKeyboardEvent('keydown', 'KeyZ'))
+  assert.equal(published.at(-1)?.cast.quickbar, 0)
   input.destroy()
 })
 

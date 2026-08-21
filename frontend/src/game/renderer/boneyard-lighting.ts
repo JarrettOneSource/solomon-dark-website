@@ -141,13 +141,14 @@ export class NativeBoneyardLightIndex implements NativeBoneyardLightLookup {
     providerCandidates: readonly NativeBoneyardLightSource[],
     miscTailCandidates: readonly NativeBoneyardLightSource[] = EMPTY_LIGHT_SOURCES,
     view: NativeBoneyardLightManagerView,
+    quality = NATIVE_DEFAULT_LIGHT_QUALITY,
   ): readonly NativeBoneyardLightSource[] {
     this.generation += 1
     this.accepted.length = 0
     this.activeBuckets = 0
     this.indexedReferences = 0
-    this.appendCandidates(providerCandidates, view)
-    this.appendCandidates(miscTailCandidates, view)
+    this.appendCandidates(providerCandidates, view, quality)
+    this.appendCandidates(miscTailCandidates, view, quality)
     return this.accepted
   }
 
@@ -198,10 +199,11 @@ export class NativeBoneyardLightIndex implements NativeBoneyardLightLookup {
   private appendCandidates(
     candidates: readonly NativeBoneyardLightSource[],
     view: NativeBoneyardLightManagerView,
+    quality: number,
   ): void {
     for (const source of candidates) {
       const candidate = nativeSubmittedBoneyardLightSource(source)
-      if (!nativeBoneyardLightVisibleInManager(candidate, view)) continue
+      if (!nativeBoneyardLightVisibleInManager(candidate, view, quality)) continue
       if (
         !candidate.castsDirectionalShadow
         && this.candidateContained(candidate)
@@ -584,11 +586,12 @@ export function nativeRegionLightTargetPlan(
 export function nativeSecondaryProviderLightSource(
   actor: NativeSecondaryActorState,
   presentationFrame = actor.ageTicks,
+  multipleShadows = NATIVE_DEFAULT_MULTIPLE_SHADOWS,
 ): NativeBoneyardLightSource | null {
   if (actor.kind === 'moving-fire' || actor.kind === 'fire-patch') {
     if (!(actor.radius > 0)) return null
     return {
-      castsDirectionalShadow: true,
+      castsDirectionalShadow: multipleShadows,
       intensity: Math.min(1, 3 * actor.radius),
       position: actor.position,
       radius: 0.6,
@@ -632,7 +635,7 @@ export function nativeSecondaryProviderLightSource(
   }
   if (actor.kind === 'leviathan') {
     return {
-      castsDirectionalShadow: true,
+      castsDirectionalShadow: multipleShadows,
       intensity: 1,
       position: actor.position,
       radius: 1,
@@ -640,7 +643,7 @@ export function nativeSecondaryProviderLightSource(
   }
   if (actor.kind === 'ether-bolt') {
     return {
-      castsDirectionalShadow: true,
+      castsDirectionalShadow: multipleShadows,
       intensity: 1,
       position: actor.position,
       radius: 0.5,
@@ -648,7 +651,7 @@ export function nativeSecondaryProviderLightSource(
   }
   if (actor.kind === 'golem') {
     return {
-      castsDirectionalShadow: true,
+      castsDirectionalShadow: multipleShadows,
       intensity: 0.75,
       position: actor.position,
       radius: 1,
@@ -664,7 +667,7 @@ export function nativeSecondaryProviderLightSource(
   }
   if (actor.kind === 'ether-drain') {
     return {
-      castsDirectionalShadow: true,
+      castsDirectionalShadow: multipleShadows,
       intensity: Math.min(actor.scale, 1) * (
         0.5 + presentationRandom(actor.id * 131 + presentationFrame) * 0.5
       ),
@@ -678,7 +681,7 @@ export function nativeSecondaryProviderLightSource(
       intensity = Math.fround(intensity - Math.fround(actor.slowFactor))
     }
     return {
-      castsDirectionalShadow: true,
+      castsDirectionalShadow: multipleShadows,
       intensity: Math.min(1, Math.max(0, intensity)),
       position: actor.position,
       radius: actor.scale,
@@ -686,7 +689,7 @@ export function nativeSecondaryProviderLightSource(
   }
   if (actor.kind !== 'comet') return null
   return {
-    castsDirectionalShadow: true,
+    castsDirectionalShadow: multipleShadows,
     intensity: 0.5,
     position: actor.position,
     radius: 2,

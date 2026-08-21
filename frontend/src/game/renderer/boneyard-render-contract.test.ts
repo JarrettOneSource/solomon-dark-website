@@ -159,6 +159,23 @@ test('Boneyard camera clamp and centering follow the logical browser viewport', 
   })
 })
 
+test('Boneyard FOV zoom is shared by clamp and world projection', () => {
+  const bounds = { h: 2000, w: 2400, x: 0, y: 0 }
+  const viewport = { width: 1600, height: 900 }
+  const camera = boneyardCamera({ x: 1200, y: 1000 }, bounds, viewport, 1.08)
+  assert.deepEqual(camera, { x: 1200, y: 1000, zoom: 1.08 })
+  assert.deepEqual(boneyardWorldPosition(camera, viewport), {
+    x: 800 - 1200 * 1.08,
+    y: 450 - 1000 * 1.08,
+  })
+  const edge = boneyardCamera({ x: 0, y: 0 }, bounds, viewport, 1.8)
+  assert.deepEqual(edge, {
+    x: 1600 / 2 / 1.8,
+    y: 900 / 2 / 1.8,
+    zoom: 1.8,
+  })
+})
+
 test('enemy terminal output drives the exact native feedback accumulator and decay', () => {
   const feedback = new NativeEnemyWorldFeedbackPresentation(0)
   assert.deepEqual(feedback.sample(1), {

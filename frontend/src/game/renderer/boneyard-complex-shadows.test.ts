@@ -170,6 +170,19 @@ test('pools only active meshes and places each at equal depth immediately before
     root.children.find(({ label }) => label === 'complex-shadow:grave:pool'),
     mesh,
   )
+  const disabled = presentation.render([source], 4, [], new Map(), [owner], false)
+  assert.deepEqual({
+    activeMeshCount: disabled.activeMeshCount,
+    casterCount: disabled.casterCount,
+    quadCount: disabled.quadCount,
+    recordCount: disabled.recordCount,
+  }, {
+    activeMeshCount: 0,
+    casterCount: 0,
+    quadCount: 0,
+    recordCount: 0,
+  })
+  assert.equal(mesh.parent, null)
   presentation.destroy()
   root.destroy({ children: true })
 })

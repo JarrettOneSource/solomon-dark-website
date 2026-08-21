@@ -55,12 +55,13 @@ export function createGamepadMenuNavigation(
   const update = () => {
     const currentTime = now()
     const current = readMenuGamepad(getGamepads())
-    if (current.confirm && !previous.confirm) confirm(root, ownerDocument)
-    if (current.back && !previous.back) activateBack(root)
+    const scope = activeNavigationRoot(root)
+    if (current.confirm && !previous.confirm) confirm(scope, ownerDocument)
+    if (current.back && !previous.back) activateBack(scope)
     if (current.direction) {
       const changed = current.direction !== previous.direction
       if (changed || currentTime >= nextRepeatAt) {
-        moveFocus(root, ownerDocument, current.direction)
+        moveFocus(scope, ownerDocument, current.direction)
         nextRepeatAt = currentTime + (changed ? INITIAL_REPEAT_DELAY_MS : REPEAT_INTERVAL_MS)
       }
     } else {
@@ -161,6 +162,7 @@ function moveFocus(root: ParentNode, ownerDocument: Document, direction: MenuDir
     )?.focus()
     return
   }
+  if (adjustRange(active, direction)) return
   const current = { bounds: active.getBoundingClientRect(), value: active }
   const candidates = elements.map((element) => ({
     bounds: element.getBoundingClientRect(),
@@ -174,6 +176,16 @@ function moveFocus(root: ParentNode, ownerDocument: Document, direction: MenuDir
   const index = elements.indexOf(active)
   const delta = direction === 'up' || direction === 'left' ? -1 : 1
   elements[(index + delta + elements.length) % elements.length].focus()
+}
+
+function adjustRange(element: HTMLElement, direction: MenuDirection): boolean {
+  if (!(element instanceof HTMLInputElement) || element.type !== 'range') return false
+  if (direction !== 'left' && direction !== 'right') return false
+  if (direction === 'left') element.stepDown()
+  else element.stepUp()
+  element.dispatchEvent(new Event('input', { bubbles: true }))
+  element.dispatchEvent(new Event('change', { bubbles: true }))
+  return true
 }
 
 function confirm(root: ParentNode, ownerDocument: Document): void {
@@ -220,4 +232,11 @@ function emptyGamepadState(): MenuGamepadState {
 
 function contains(root: ParentNode, element: Element): boolean {
   return root === element || Array.from(root.querySelectorAll('*')).includes(element)
+}
+
+function activeNavigationRoot(root: ParentNode): ParentNode {
+  const modals = Array.from(root.querySelectorAll<HTMLElement>(
+    '[role="dialog"][aria-modal="true"]',
+  )).filter(isVisible)
+  return modals.at(-1) ?? root
 }

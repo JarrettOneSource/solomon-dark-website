@@ -415,10 +415,11 @@ export function nativeFireGoodImpLightSource(
 export function nativeFireballLightSource(
   state: PrimarySpellFireProjectileState,
   presentationFrame: number,
+  multipleShadows = NATIVE_DEFAULT_MULTIPLE_SHADOWS,
 ): NativeBoneyardLightSource {
   return {
     intensity: 0.75,
-    castsDirectionalShadow: NATIVE_DEFAULT_MULTIPLE_SHADOWS,
+    castsDirectionalShadow: multipleShadows,
     position: { ...state.position },
     radius: Math.fround(1 + nativeFirePresentationRandom(
       state.id,

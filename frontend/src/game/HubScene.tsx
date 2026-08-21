@@ -21,6 +21,11 @@ import type { PlayerCharacterInput } from './core-kernels/player-character.ts'
 import type { HubInventoryAction } from './core-kernels/hub-economy.ts'
 import type { GameAudioDirector } from './game-audio-director.ts'
 import {
+  cameraZoomForFov,
+  gameUiScale,
+  type GameSettings,
+} from './game-settings.ts'
+import {
   hubTeacherReleasesBetween,
   hubTeacherSummonPitch,
   hubTeacherSummonVolume,
@@ -85,6 +90,7 @@ interface HubSceneProps {
   progression: ProtocolPlayerProgression
   presentationPaused: boolean
   samplePresentation: (nowMs?: number) => HubPresentationFrame
+  settings: GameSettings
   subscribePing: (listener: (pingMs: number) => void) => () => void
   subscribe: (listener: (snapshot: GameSnapshot) => void) => () => void
 }
@@ -92,7 +98,7 @@ interface HubSceneProps {
 type RendererState = 'loading' | 'ready'
 const HUB_TEACHER_POSITION = { x: 576.5, y: 710.5 } as const
 const HUB_REGION_ACCESSIBILITY: Readonly<Record<HubRegionId, string>> = {
-  courtyard: 'College courtyard. Move with W A S D, arrow keys, a controller, or the touch joystick.',
+  courtyard: 'College courtyard. Move with the configured keys, a controller, or the touch joystick.',
   mortuary: 'College mortuary. Move toward the south doorway to return to the courtyard.',
   library: 'College library. Move toward the south doorway to return to the courtyard.',
   storeroom: 'College storeroom. Move toward the south doorway to return to the courtyard.',
@@ -125,6 +131,7 @@ export default function HubScene({
   progression,
   presentationPaused,
   samplePresentation,
+  settings,
   subscribePing,
   subscribe,
 }: HubSceneProps) {
@@ -139,12 +146,14 @@ export default function HubScene({
   const rendererRef = useRef<HubWorldRenderer | null>(null)
   const inputRef = useRef<BrowserGameplayInput | null>(null)
   const inputBlockedRef = useRef(inputBlocked)
+  const settingsRef = useRef(settings)
   const presentationPausedRef = useRef(presentationPaused)
   const modalOpenRef = useRef(false)
   const levelUpPresentationIdRef = useRef(levelUpPresentationId)
   const onLoadingErrorRef = useRef(onLoadingError)
   const onReadyRef = useRef(onReady)
   inputBlockedRef.current = inputBlocked
+  settingsRef.current = settings
   presentationPausedRef.current = presentationPaused
   levelUpPresentationIdRef.current = levelUpPresentationId
   onLoadingErrorRef.current = onLoadingError
@@ -206,13 +215,24 @@ export default function HubScene({
     inputRef.current?.setBlocked(inputBlocked || modalOpen)
   }, [inputBlocked, modalOpen])
 
+  useLayoutEffect(() => {
+    inputRef.current?.setControls(settings.controls)
+  }, [settings.controls])
+
+  useLayoutEffect(() => {
+    rendererRef.current?.setSettings({
+      cameraFovPercent: settings.cameraFovPercent,
+      zoomEffects: settings.zoomEffects,
+    })
+  }, [settings.cameraFovPercent, settings.zoomEffects])
+
   useEffect(() => {
     const openSkills = (event: KeyboardEvent) => {
       if (
         inputBlocked
         || pickerOpen
         || transitionActive
-        || event.code !== 'KeyK'
+        || event.code !== settings.controls.openSkills
         || event.repeat
         || event.altKey
         || event.ctrlKey
@@ -225,7 +245,7 @@ export default function HubScene({
     }
     window.addEventListener('keydown', openSkills, { capture: true })
     return () => window.removeEventListener('keydown', openSkills, { capture: true })
-  }, [inputBlocked, onOpenSkills, pickerOpen, transitionActive])
+  }, [inputBlocked, onOpenSkills, pickerOpen, settings.controls.openSkills, transitionActive])
 
   useEffect(() => {
     const openPause = (event: KeyboardEvent) => {
@@ -233,7 +253,7 @@ export default function HubScene({
         inputBlocked
         || modalOpen
         || transitionActive
-        || event.key !== 'Escape'
+        || event.code !== settings.controls.openMenu
         || event.repeat
         || event.altKey
         || event.ctrlKey
@@ -245,7 +265,7 @@ export default function HubScene({
     }
     window.addEventListener('keydown', openPause)
     return () => window.removeEventListener('keydown', openPause)
-  }, [inputBlocked, modalOpen, onPauseRequest, transitionActive])
+  }, [inputBlocked, modalOpen, onPauseRequest, settings.controls.openMenu, transitionActive])
 
   useLayoutEffect(() => {
     rendererRef.current?.setLevelUpPresentation(levelUpPresentationId)
@@ -301,6 +321,7 @@ export default function HubScene({
     let stopPresentationLoop: (() => void) | null = null
     let previousTeacherSeconds = hubInitialSnapshot.tick / 100
     const input = createBrowserGameplayInput({
+      controls: settingsRef.current.controls,
       mouseTarget: host,
       onInput,
       projectDirection: (direction) => {
@@ -311,7 +332,10 @@ export default function HubScene({
           direction,
           player.position,
           viewportRef.current,
-          HUB_CAMERA_SCALE,
+          cameraZoomForFov(
+            HUB_CAMERA_SCALE,
+            settingsRef.current.cameraFovPercent,
+          ),
         )
       },
       projectPointer: (pointer) => {
@@ -319,6 +343,10 @@ export default function HubScene({
         const player = snapshot.players[playerId]
         const participant = snapshot.world.participants[playerId]
         if (!player || !participant) return null
+        const cameraScale = cameraZoomForFov(
+          HUB_CAMERA_SCALE,
+          settingsRef.current.cameraFovPercent,
+        )
         return projectNativeWorldPointer(
           pointer,
           host.getBoundingClientRect(),
@@ -327,12 +355,28 @@ export default function HubScene({
             participant.region,
             player.position,
             viewportRef.current,
+            cameraScale,
           ),
-          HUB_CAMERA_SCALE,
+          cameraScale,
         )
       },
+      projectSecondaryAim: () => {
+        const snapshot = samplePresentation()
+        const player = snapshot.players[playerId]
+        if (!player) return null
+        return projectNativeStickAim(
+          actorHeadingVector(player.headingIndex),
+          player.position,
+          viewportRef.current,
+          cameraZoomForFov(
+            HUB_CAMERA_SCALE,
+            settingsRef.current.cameraFovPercent,
+          ),
+        )
+      },
+      secondaryAtPointer: () => settingsRef.current.castSecondariesAtMouse,
     })
-    input.setBlocked(inputBlockedRef.current || modalOpenRef.current)
+    input.setBlocked(true)
     inputRef.current = input
     setRendererState('loading')
     setRendererError(null)
@@ -340,6 +384,7 @@ export default function HubScene({
     void createHubWorldRenderer({
       initialSnapshot: hubInitialSnapshot,
       playerId,
+      settings: settingsRef.current,
       viewport: viewportRef.current,
     }).then((renderer) => {
       if (cancelled) {
@@ -352,6 +397,7 @@ export default function HubScene({
       renderer.resize(viewportRef.current)
       setRendererState('ready')
       onReadyRef.current()
+      input.setBlocked(inputBlockedRef.current || modalOpenRef.current)
       stopPresentationLoop = startGamePresentationLoop((now) => {
         if (presentationPausedRef.current) return
         onInput(input.sample().input)
@@ -402,6 +448,11 @@ export default function HubScene({
   }
   const localPlayer = hubInitialSnapshot.players[playerId]
   const element = localPlayer?.config.element ?? 'ether'
+  const configuredCameraScale = cameraZoomForFov(
+    HUB_CAMERA_SCALE,
+    settings.cameraFovPercent,
+  )
+  const uiScale = gameUiScale(settings)
   const activatePointerTarget = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (!event.isPrimary || event.button !== 0 || inputBlocked || modalOpen || transitionActive) {
       return
@@ -420,8 +471,9 @@ export default function HubScene({
         participant.region,
         player.position,
         viewportRef.current,
+        configuredCameraScale,
       ),
-      HUB_CAMERA_SCALE,
+      configuredCameraScale,
     )
     if (!point) return
     const selectedPlayer = selectHubPlayerAtPoint(snapshot, playerId, point)
@@ -446,9 +498,10 @@ export default function HubScene({
     <div
       ref={sceneRef}
       className="hub-scene"
+      data-camera-zoom={configuredCameraScale}
       data-discipline={localPlayer?.config.discipline ?? 'arcane'}
       data-element={element}
-      data-gameplay-input-blocked={inputBlocked || modalOpen}
+      data-gameplay-input-blocked={inputBlocked || modalOpen || rendererState !== 'ready'}
       data-presentation-paused={presentationPaused}
       data-hub-region={currentRegion}
       data-hub-ui-surface={hubUiSurface?.kind ?? 'none'}
@@ -457,8 +510,9 @@ export default function HubScene({
       data-viewport-height={viewport.height}
       data-viewport-scale={viewport.displayScale}
       data-viewport-width={viewport.width}
+      data-ui-scale={uiScale}
       data-renderer-state={rendererError ? 'error' : rendererState}
-      aria-label={HUB_REGION_ACCESSIBILITY[currentRegion]}
+      aria-label={`${HUB_REGION_ACCESSIBILITY[currentRegion]} Configured movement keys are ${settings.controls.moveUp}, ${settings.controls.moveLeft}, ${settings.controls.moveDown}, and ${settings.controls.moveRight}.`}
       tabIndex={0}
     >
       <div
@@ -477,6 +531,7 @@ export default function HubScene({
 
         <GameHud
           accountUsername={accountUsername}
+          controls={settings.controls}
           getPingMs={getPingMs}
           initialSnapshot={hubInitialSnapshot}
           mapLabel="Enter the Boneyard"
@@ -516,6 +571,8 @@ export default function HubScene({
           progression={progression}
           subscribePing={subscribePing}
           subscribeSnapshot={subscribe}
+          uiScale={uiScale}
+          viewport={viewport}
         />
 
         <HubInventoryUi
@@ -523,6 +580,8 @@ export default function HubScene({
           config={hubInitialSnapshot.players[playerId]!.config}
           disabled={inputBlocked || pickerOpen}
           economy={economy}
+          inventoryKeyCode={settings.controls.openInventory}
+          menuKeyCode={settings.controls.openMenu}
           modAssets={modAssets}
           onAction={onHubAction}
           onSurfaceChange={setHubUiSurface}
@@ -657,10 +716,12 @@ export default function HubScene({
         <TouchJoystick
           lane="movement"
           onInput={(movement) => inputRef.current?.setTouch(movement)}
+          uiScale={uiScale}
         />
         <TouchJoystick
           lane="primary"
           onInput={(direction) => inputRef.current?.setTouchPrimary(direction)}
+          uiScale={uiScale}
         />
 
         <div className="hub-world-accessibility sr-only">

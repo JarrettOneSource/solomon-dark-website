@@ -34,12 +34,14 @@ interface DarkCloudSceneProps {
   accountUsername: string | null
   onBack: () => void
   onEnterSharedHub: () => void
+  onSettings: () => void
 }
 
 export default function DarkCloudScene({
   accountUsername,
   onBack,
   onEnterSharedHub,
+  onSettings,
 }: DarkCloudSceneProps) {
   const requestGeneration = useRef(0)
   const partyRequestGeneration = useRef(0)
@@ -59,6 +61,7 @@ export default function DarkCloudScene({
   const [draftQuery, setDraftQuery] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
   const [sortOpen, setSortOpen] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
   const [sort, setSort] = useState<SortMode>('newest')
 
   const load = useCallback(async () => {
@@ -98,6 +101,17 @@ export default function DarkCloudScene({
     void load()
     return () => { requestGeneration.current += 1 }
   }, [load])
+
+  useEffect(() => {
+    if (!menuOpen) return
+    const closeMenu = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      setMenuOpen(false)
+    }
+    window.addEventListener('keydown', closeMenu)
+    return () => window.removeEventListener('keydown', closeMenu)
+  }, [menuOpen])
 
   const refreshParties = useCallback(async () => {
     const generation = ++partyRequestGeneration.current
@@ -218,8 +232,7 @@ export default function DarkCloudScene({
       <div className="dark-cloud-wall" aria-hidden />
       <img className="dark-cloud-wizard dark-cloud-wizard-left" src={wizardLeft} alt="" />
       <img className="dark-cloud-wizard dark-cloud-wizard-right" src={wizardRight} alt="" />
-
-      <button type="button" className="dark-cloud-menu" onClick={onBack} aria-label="Main menu">
+      <button type="button" className="dark-cloud-menu" onClick={() => setMenuOpen(true)} aria-label="Menu">
         <img src={skull} alt="" />
       </button>
 
@@ -328,7 +341,32 @@ export default function DarkCloudScene({
       </footer>
 
       {actionError ? <p className="dark-cloud-error" role="alert">{actionError}</p> : null}
-
+      {menuOpen ? (
+        <div className="dark-cloud-modal-backdrop" role="presentation" onMouseDown={event => {
+          if (event.target === event.currentTarget) setMenuOpen(false)
+        }}>
+          <section className="dark-cloud-modal" role="dialog" aria-modal="true" aria-label="Dark Cloud menu">
+            <h2>DARK CLOUD MENU</h2>
+            <div>
+              <button type="button" data-game-back="true" onClick={() => setMenuOpen(false)}>
+                RESUME
+              </button>
+              <button type="button" onClick={() => {
+                setMenuOpen(false)
+                onSettings()
+              }}>
+                GAME SETTINGS
+              </button>
+              <button type="button" onClick={() => {
+                setMenuOpen(false)
+                onBack()
+              }}>
+                MAIN MENU
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
       {searchOpen ? (
         <DarkCloudModal title="SEARCH THE DARK CLOUD" onClose={() => setSearchOpen(false)}>
           <label>

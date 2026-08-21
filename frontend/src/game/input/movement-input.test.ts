@@ -11,6 +11,7 @@ import {
   radialDeadZone,
   type GamepadLike,
 } from './movement-input.ts'
+import { DEFAULT_GAME_CONTROL_BINDINGS, rebindGameControl } from '../game-settings.ts'
 
 function gamepad(x: number, y: number, index = 0): GamepadLike {
   return { axes: [x, y], connected: true, index, mapping: 'standard' }
@@ -37,7 +38,7 @@ class FakeVisibilityTarget extends EventTarget {
   visibilityState: DocumentVisibilityState = 'visible'
 }
 
-test('keyboard input uses physical WASD and arrows with normalized diagonals', () => {
+test('keyboard input uses the configured physical bindings with normalized diagonals', () => {
   const input = createMovementInputState()
   assert.equal(input.press('KeyD'), true)
   assert.deepEqual(input.sample(), { device: 'keyboard', movement: { x: 1, y: 0 } })
@@ -47,8 +48,10 @@ test('keyboard input uses physical WASD and arrows with normalized diagonals', (
   closeTo(diagonal.movement.x, Math.SQRT1_2)
   closeTo(diagonal.movement.y, -Math.SQRT1_2)
 
+  assert.equal(input.press('ArrowLeft'), false)
+  input.setControls(rebindGameControl(DEFAULT_GAME_CONTROL_BINDINGS, 'moveLeft', 'ArrowLeft'))
   input.press('ArrowLeft')
-  assert.deepEqual(input.sample().movement, { x: 0, y: -1 })
+  assert.deepEqual(input.sample().movement, { x: -1, y: 0 })
   assert.equal(input.press('Space'), false)
   assert.equal(input.release('Space'), false)
 })

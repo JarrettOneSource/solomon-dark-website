@@ -15,6 +15,7 @@ import GameAccountName from './GameAccountName.tsx'
 import { hubPotionShortcut } from './hub-inventory-presentation.ts'
 import SkillQuickbar, { NativeSkillIcon } from './SkillQuickbar.tsx'
 import type { GameSnapshot } from './protocol/game-protocol.ts'
+import type { GameControlBindings } from './game-settings.ts'
 import {
   nativeHealthHudPresentation,
   nativeHudSkillBindings,
@@ -24,6 +25,7 @@ import {
 interface GameHudProps {
   accountUsername: string | null
   additionalAllyRows?: readonly AllyHudRow[]
+  controls: GameControlBindings
   getPingMs: () => number | null
   initialSnapshot: GameSnapshot
   mapLabel?: string
@@ -38,6 +40,8 @@ interface GameHudProps {
   progression: ProtocolPlayerProgression
   subscribePing: (listener: (pingMs: number) => void) => () => void
   subscribeSnapshot: (listener: (snapshot: GameSnapshot) => void) => () => void
+  uiScale: number
+  viewport: Readonly<{ height: number; width: number }>
 }
 
 function HudSlot({ src }: { src: string }) {
@@ -114,6 +118,7 @@ function PingCounter({
 export default function GameHud({
   accountUsername,
   additionalAllyRows,
+  controls,
   getPingMs,
   initialSnapshot,
   mapLabel = 'Map',
@@ -128,6 +133,8 @@ export default function GameHud({
   progression,
   subscribePing,
   subscribeSnapshot,
+  uiScale,
+  viewport,
 }: GameHudProps) {
   const [economy, setEconomy] = useState<ProtocolPlayerEconomy>(() => (
     initialSnapshot.players[playerId]!.economy
@@ -181,7 +188,20 @@ export default function GameHud({
   const healthPotions = hubPotionShortcut(economy.backpack, 'health-potion')
   const manaPotions = hubPotionShortcut(economy.backpack, 'mana-potion')
   return (
-    <div className="hub-hud" aria-label="Player status">
+    <div
+      className="hub-hud"
+      aria-label="Player status"
+      data-ui-scale={uiScale}
+      style={{
+        height: viewport.height / uiScale,
+        inset: 'auto',
+        left: viewport.width / 2,
+        top: viewport.height / 2,
+        transform: `translate(-50%, -50%) scale(${uiScale})`,
+        transformOrigin: 'center',
+        width: viewport.width / uiScale,
+      }}
+    >
       <img className="hub-hud-skull" src={hub.hud.skull} alt="Menu" />
       <GameAccountName placement="hud" username={accountUsername} />
       <AllyHud
@@ -275,6 +295,7 @@ export default function GameHud({
       ) : null}
 
       <SkillQuickbar
+        controls={controls}
         mode={mode}
         onInput={onQuickbarInput}
         playerState={quickbarHud.playerState}

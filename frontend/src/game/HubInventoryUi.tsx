@@ -128,6 +128,8 @@ interface HubInventoryUiProps {
   config: PlayerCharacterConfig
   disabled: boolean
   economy: ProtocolPlayerEconomy
+  inventoryKeyCode: string
+  menuKeyCode: string
   onAction: (action: HubInventoryAction) => void
   modAssets: readonly GameModAsset[]
   onSurfaceChange: (surface: HubUiSurface) => void
@@ -144,6 +146,8 @@ export default function HubInventoryUi({
   config,
   disabled,
   economy,
+  inventoryKeyCode,
+  menuKeyCode,
   onAction,
   modAssets,
   onSurfaceChange,
@@ -186,8 +190,8 @@ export default function HubInventoryUi({
     const keyDown = (event: KeyboardEvent) => {
       if (event.repeat) return
       if (surface && (
-        event.key === 'Escape'
-        || (surface.kind === 'inventory' && event.code === 'KeyI')
+        event.code === menuKeyCode
+        || (surface.kind === 'inventory' && event.code === inventoryKeyCode)
       )) {
         event.preventDefault()
         event.stopPropagation()
@@ -195,7 +199,7 @@ export default function HubInventoryUi({
         closeSurface()
         return
       }
-      if (!surface && !disabled && !transitionActive && event.code === 'KeyI') {
+      if (!surface && !disabled && !transitionActive && event.code === inventoryKeyCode) {
         event.preventDefault()
         event.stopPropagation()
         onSurfaceChange({ kind: 'inventory' })
@@ -209,7 +213,17 @@ export default function HubInventoryUi({
     }
     window.addEventListener('keydown', keyDown, { capture: true })
     return () => window.removeEventListener('keydown', keyDown, { capture: true })
-  }, [audio, closeSurface, disabled, nearestTrader, onSurfaceChange, surface, transitionActive])
+  }, [
+    audio,
+    closeSurface,
+    disabled,
+    inventoryKeyCode,
+    menuKeyCode,
+    nearestTrader,
+    onSurfaceChange,
+    surface,
+    transitionActive,
+  ])
 
   if (!surface) {
     return nearestTrader ? (

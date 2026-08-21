@@ -101,18 +101,22 @@ test('reuses resident buffers across overlapping low-latency one-shots', async (
   assert.equal(context.sources[0].buffer, click)
   assert.equal(context.sources[1].buffer, click)
   assert.equal(context.sources[0].playbackRate.value, 1.05)
-  assert.equal(context.gains[0].gain.value, 0.5)
+  assert.equal(context.gains[1].gain.value, 0.5)
+  assert.equal(context.gains[1].connectedTo, context.gains[0])
+  playback.setMasterVolume(0.25)
+  assert.equal(context.gains[0].gain.value, 0.25)
   assert.equal(context.sources[0].startCalls, 1)
   assert.equal(context.sources[1].startCalls, 1)
 
   context.sources[0].onended?.()
   assert.equal(context.sources[0].disconnected, true)
-  assert.equal(context.gains[0].disconnected, true)
+  assert.equal(context.gains[1].disconnected, true)
 
   playback.destroy()
   await Promise.resolve()
   assert.equal(context.sources[1].stopCalls, 1)
   assert.equal(context.suspendCalls, 1)
+  assert.equal(context.gains[0].disconnected, true)
 })
 
 test('restarts keyed streams and stops keyed loops without touching other channels', () => {
@@ -139,9 +143,9 @@ test('restarts keyed streams and stops keyed loops without touching other channe
   const loop = context.sources[1]
   assert.equal(loop.loop, true)
   assert.equal(loop.playbackRate.value, 0.95)
-  assert.equal(context.gains[1].gain.value, 0.25)
+  assert.equal(context.gains[2].gain.value, 0.25)
   playback.setVolume('loop:spell', 0.5)
-  assert.equal(context.gains[1].gain.value, 0.5)
+  assert.equal(context.gains[2].gain.value, 0.5)
   assert.equal(loop.stopCalls, 0)
 
   playback.restart('stream:voice', 'stream.wav', {

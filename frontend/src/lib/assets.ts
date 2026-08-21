@@ -126,6 +126,7 @@ import hubHudXpFrame from '../assets/game/hub-hud-xp-frame.png'
 import skillPickerFontsAtlas from '../assets/game/skill-picker-fonts-atlas.png'
 import skillPickerSkillsAtlas from '../assets/game/skill-picker-skills-atlas.png'
 import skillPickerUiAtlas from '../assets/game/skill-picker-ui-atlas.png'
+import settingsControlPanelAtlas from '../assets/game/settings-control-panel-atlas.png'
 import hubHudNpcAnnalist from '../assets/game/hub-hud-npc-annalist.png'
 import hubHudNpcItems from '../assets/game/hub-hud-npc-items.png'
 import hubHudNpcPerkWitch from '../assets/game/hub-hud-npc-perk-witch.png'
@@ -882,6 +883,13 @@ export const hub = {
 export const skillPicker = {
   fontsAtlas: skillPickerFontsAtlas,
   skillsAtlas: skillPickerSkillsAtlas,
+  uiAtlas: skillPickerUiAtlas,
+}
+
+/** Exact stock ControlPanel, UI, and Fonts atlases consumed by Settings. */
+export const gameSettings = {
+  controlPanelAtlas: settingsControlPanelAtlas,
+  fontsAtlas: skillPickerFontsAtlas,
   uiAtlas: skillPickerUiAtlas,
 }
 

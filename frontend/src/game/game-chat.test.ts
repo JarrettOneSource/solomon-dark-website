@@ -75,8 +75,8 @@ test('chat rejections provide concise channel and retry feedback', () => {
   }), 'Slow down. Try again in 2s.')
 })
 
-test('chat UI owns T, real text focus, Tab channels, fade, and local gameplay exclusion', () => {
-  assert.match(component, /event\.code !== 'KeyT'/)
+test('chat UI owns its configured key, real text focus, Tab channels, fade, and local gameplay exclusion', () => {
+  assert.match(component, /event\.code !== openKeyCode/)
   assert.match(component, /<input/)
   assert.match(component, /event\.key === 'Tab'/)
   assert.match(component, /aria-live="polite"/)
@@ -84,8 +84,9 @@ test('chat UI owns T, real text focus, Tab channels, fade, and local gameplay ex
   assert.match(css, /data-chat-faded='true'/)
   assert.match(css, /opacity 650ms ease/)
   assert.match(mainMenu, /const sceneInputBlocked = chatOpen/)
-  assert.match(hubScene, /event\.code !== 'KeyK'/)
-  assert.match(boneyardScene, /event\.code !== 'KeyK'/)
+  assert.match(mainMenu, /openKeyCode=\{gameSettings\.controls\.openChat\}/)
+  assert.match(hubScene, /event\.code !== settings\.controls\.openSkills/)
+  assert.match(boneyardScene, /event\.code !== settings\.controls\.openSkills/)
 })
 
 function partyState(memberPlayerIds: readonly string[]): LocalPartyState {

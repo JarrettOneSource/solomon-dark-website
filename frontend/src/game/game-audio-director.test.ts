@@ -216,6 +216,7 @@ interface PlaybackCall {
 
 class FakePlayback implements GameAudioPlayback {
   destroyCalls = 0
+  readonly masterVolumeUpdates: number[] = []
   readonly plays: PlaybackCall[] = []
   readonly restarts: PlaybackCall[] = []
   readonly volumeUpdates: Array<[string, number]> = []
@@ -236,6 +237,10 @@ class FakePlayback implements GameAudioPlayback {
     options: GameAudioPlaybackOptions,
   ): void {
     this.restarts.push({ key, options, source })
+  }
+
+  setMasterVolume(volume: number): void {
+    this.masterVolumeUpdates.push(volume)
   }
 
   setVolume(key: string, volume: number): void {
@@ -362,6 +367,31 @@ test('crossfades the recovered scene tracks at their native tick durations', asy
   assert.equal(death.src, 'death.mp3')
   frames.runAt(4_020)
   assert.equal(death.volume, 1)
+})
+
+test('applies independent live sound and music user gains over native envelopes', async () => {
+  const { created, director, frames, playback } = fixture()
+  director.setVolumes(0.35, 0.4)
+  assert.deepEqual(playback.masterVolumeUpdates, [0.35])
+  director.setScene('title')
+  await flushPromises()
+  frames.runAt(500)
+  assert.equal(created[0].volume, 0.2)
+
+  director.setVolumes(0.7, 0.25)
+  assert.deepEqual(playback.masterVolumeUpdates, [0.35, 0.7])
+  assert.equal(created[0].volume, 0.125)
+  frames.runAt(1_000)
+  assert.equal(created[0].volume, 0.25)
+
+  director.setScene('create')
+  await flushPromises()
+  frames.runAt(1_500)
+  assert.equal(created[0].volume, 0.125)
+  assert.equal(created[1].volume, 0.125)
+  director.setVolumes(0, 0)
+  assert.equal(created[0].volume, 0)
+  assert.equal(created[1].volume, 0)
 })
 
 test('holds a blocked scene at its beginning and retries on unlock', async () => {

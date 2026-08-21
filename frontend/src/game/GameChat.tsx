@@ -25,11 +25,13 @@ import {
   type GameChatChannel,
 } from './protocol/game-protocol.ts'
 import type { LocalPartyState } from './protocol/party-state.ts'
+import { gameBindingLabel } from './game-settings.ts'
 import './game-chat.css'
 
 interface GameChatProps {
   disabled: boolean
   onOpenChange: (open: boolean) => void
+  openKeyCode: string
   partyState: LocalPartyState | null
   session: GameClientSession
   worldKind: GameChatWorldKind
@@ -43,6 +45,7 @@ const CLOSED_MESSAGE_LIMIT = 5
 export default function GameChat({
   disabled,
   onOpenChange,
+  openKeyCode,
   partyState,
   session,
   worldKind,
@@ -179,7 +182,7 @@ export default function GameChat({
       if (
         disabled
         || openRef.current
-        || event.code !== 'KeyT'
+        || event.code !== openKeyCode
         || event.repeat
         || event.altKey
         || event.ctrlKey
@@ -197,7 +200,7 @@ export default function GameChat({
     }
     window.addEventListener('keydown', openFromKeyboard, { capture: true })
     return () => window.removeEventListener('keydown', openFromKeyboard, { capture: true })
-  }, [disabled, markActivity])
+  }, [disabled, markActivity, openKeyCode])
 
   const chooseChannel = (next: GameChatChannel) => {
     manuallySelectedChannelRef.current = true
@@ -309,7 +312,9 @@ export default function GameChat({
         >
           {visibleMessages.length === 0 ? (
             <li className="game-chat-empty">
-              {open ? `No ${channelLabel(channel).toLowerCase()} messages yet.` : 'Press T to chat.'}
+              {open
+                ? `No ${channelLabel(channel).toLowerCase()} messages yet.`
+                : `Press ${gameBindingLabel(openKeyCode)} to chat.`}
             </li>
           ) : visibleMessages.map(message => (
             <li

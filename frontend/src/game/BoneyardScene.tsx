@@ -26,6 +26,11 @@ import {
   type BoneyardGameSnapshot,
 } from './client/boneyard-presentation-timeline.ts'
 import type { GameAudioDirector } from './game-audio-director.ts'
+import {
+  cameraZoomForFov,
+  gameUiScale,
+  type GameSettings,
+} from './game-settings.ts'
 import { loadGameImage } from './game-assets.ts'
 import {
   nativeBoneyardHitPointGain,
@@ -78,6 +83,7 @@ import {
   type BoneyardEnvironmentLightImages,
 } from './renderer/boneyard-environment-light.ts'
 import {
+  BONEYARD_CAMERA_ZOOM,
   boneyardSpectatorStatusesEqual,
   type BoneyardSpectatorStatusPresentation,
 } from './renderer/boneyard-render-contract.ts'
@@ -110,6 +116,7 @@ interface BoneyardSceneProps {
   progression: ProtocolPlayerProgression
   presentationPaused: boolean
   samplePresentation: (nowMs?: number) => GameSnapshot
+  settings: GameSettings
   subscribePing: (listener: (pingMs: number) => void) => () => void
   subscribeEnemyEvent: (listener: (event: BoneyardEnemyEventSnapshot) => void) => () => void
   subscribe: (listener: (snapshot: GameSnapshot) => void) => () => void
@@ -150,6 +157,7 @@ export default function BoneyardScene({
   progression,
   presentationPaused,
   samplePresentation,
+  settings,
   subscribeEnemyEvent,
   subscribePing,
   subscribe,
@@ -182,6 +190,7 @@ export default function BoneyardScene({
   const rendererRef = useRef<BoneyardWorldRenderer | null>(null)
   const pendingEnemyPresentationEventsRef = useRef<BoneyardEnemyEventSnapshot[]>([])
   const inputRef = useRef<BrowserGameplayInput | null>(null)
+  const settingsRef = useRef(settings)
   const lastVoiceEventRef = useRef({
     eventId: boneyardInitialSnapshot.world.encounter?.voiceEvents.at(-1)?.id ?? 0,
     runId: loaded.runId,
@@ -189,6 +198,7 @@ export default function BoneyardScene({
   const digAudioCursorRef = useRef<SolomonDigAudioCursor | null>(null)
   const inputBlockedRef = useRef(sceneInputBlocked)
   const presentationPausedRef = useRef(presentationPaused)
+  settingsRef.current = settings
   const levelUpPresentationIdRef = useRef(levelUpPresentationId)
   const onLoadingErrorRef = useRef(onLoadingError)
   const onReadyRef = useRef(onReady)
@@ -340,7 +350,7 @@ export default function BoneyardScene({
       if (
         inputBlocked
         || run.phase !== 'active'
-        || event.code !== 'KeyK'
+        || event.code !== settings.controls.openSkills
         || event.repeat
         || event.altKey
         || event.ctrlKey
@@ -353,7 +363,7 @@ export default function BoneyardScene({
     }
     window.addEventListener('keydown', openSkills, { capture: true })
     return () => window.removeEventListener('keydown', openSkills, { capture: true })
-  }, [inputBlocked, onOpenSkills, run.phase])
+  }, [inputBlocked, onOpenSkills, run.phase, settings.controls.openSkills])
 
   useEffect(() => {
     const toggleDigIndicator = (event: KeyboardEvent) => {
@@ -380,7 +390,7 @@ export default function BoneyardScene({
       if (
         sceneInputBlocked
         || run.phase !== 'active'
-        || event.key !== 'Escape'
+        || event.code !== settings.controls.openMenu
         || event.repeat
         || event.altKey
         || event.ctrlKey
@@ -392,7 +402,7 @@ export default function BoneyardScene({
     }
     window.addEventListener('keydown', openPause)
     return () => window.removeEventListener('keydown', openPause)
-  }, [onPauseRequest, run.phase, sceneInputBlocked])
+  }, [onPauseRequest, run.phase, sceneInputBlocked, settings.controls.openMenu])
 
   useLayoutEffect(() => {
     const scene = sceneRef.current
@@ -412,6 +422,28 @@ export default function BoneyardScene({
   useLayoutEffect(() => {
     inputRef.current?.setBlocked(sceneInputBlocked)
   }, [sceneInputBlocked])
+
+  useLayoutEffect(() => {
+    inputRef.current?.setControls(settings.controls)
+  }, [settings.controls])
+
+  useLayoutEffect(() => {
+    rendererRef.current?.setSettings({
+      cameraFovPercent: settings.cameraFovPercent,
+      complexLighting: settings.complexLighting,
+      complexShadows: settings.complexShadows,
+      lightQualityPercent: settings.lightQualityPercent,
+      multipleShadows: settings.multipleShadows,
+      zoomEffects: settings.zoomEffects,
+    })
+  }, [
+    settings.cameraFovPercent,
+    settings.complexLighting,
+    settings.complexShadows,
+    settings.lightQualityPercent,
+    settings.multipleShadows,
+    settings.zoomEffects,
+  ])
 
   useLayoutEffect(() => {
     rendererRef.current?.setLevelUpPresentation(levelUpPresentationId)
@@ -436,6 +468,7 @@ export default function BoneyardScene({
         ))
         return true
       },
+      controls: settingsRef.current.controls,
       mouseTarget: host,
       onInput,
       projectDirection: (direction) => {
@@ -468,8 +501,22 @@ export default function BoneyardScene({
           camera.zoom,
         )
       },
+      projectSecondaryAim: () => {
+        const renderer = rendererRef.current
+        if (!renderer) return null
+        const snapshot = samplePresentation()
+        const player = snapshot.players[playerId]
+        if (!player) return null
+        return projectNativeStickAim(
+          actorHeadingVector(player.headingIndex),
+          player.position,
+          viewportRef.current,
+          renderer.camera(snapshot).zoom,
+        )
+      },
+      secondaryAtPointer: () => settingsRef.current.castSecondariesAtMouse,
     })
-    input.setBlocked(inputBlockedRef.current)
+    input.setBlocked(true)
     inputRef.current = input
     setRendererState('loading')
     setRendererError(null)
@@ -485,6 +532,7 @@ export default function BoneyardScene({
       modAssets,
       modCatalog,
       playerId,
+      settings: settingsRef.current,
       viewport: viewportRef.current,
     })
     void Promise.all([
@@ -517,6 +565,7 @@ export default function BoneyardScene({
       }
       setRendererState('ready')
       onReadyRef.current()
+      input.setBlocked(inputBlockedRef.current)
       stopPresentationLoop = startGamePresentationLoop((now) => {
         if (presentationPausedRef.current) return
         const snapshot = samplePresentation(now)
@@ -674,20 +723,25 @@ export default function BoneyardScene({
   const discipline = localPlayer?.config.discipline ?? 'arcane'
   const gateLeaves = boneyardInitialSnapshot.world.gateLeaves
   const digIndicatorVisible = Boolean(dig && digIndicatorRunId === loaded.runId)
+  const configuredCameraZoom = cameraZoomForFov(
+    BONEYARD_CAMERA_ZOOM,
+    settings.cameraFovPercent,
+  )
+  const uiScale = gameUiScale(settings)
 
   return (
     <div
       ref={sceneRef}
       className="boneyard-scene"
       data-boneyard-id={loaded.choice.id}
-      data-camera-zoom="1.35"
+      data-camera-zoom={configuredCameraZoom}
       data-discipline={discipline}
       data-element={element}
       data-environment-mode={loaded.scene.environmentMode}
       data-geometry-sha256={loaded.geometrySha256}
       data-gate-leaf-count={gateLeaves.length}
       data-gate-state={gateState(gateLeaves)}
-      data-gameplay-input-blocked={sceneInputBlocked}
+      data-gameplay-input-blocked={sceneInputBlocked || rendererState !== 'ready'}
       data-local-player-x={localPlayer?.position.x}
       data-local-player-y={localPlayer?.position.y}
       data-presentation-paused={presentationPaused}
@@ -696,7 +750,8 @@ export default function BoneyardScene({
       data-viewport-height={viewport.height}
       data-viewport-scale={viewport.displayScale}
       data-viewport-width={viewport.width}
-      aria-label={`Boneyard: ${loaded.choice.name}. Move with W A S D, arrow keys, a controller, or the touch joystick.${dig ? ' Press H to toggle the Solomon Dig direction arrow.' : ''}`}
+      data-ui-scale={uiScale}
+      aria-label={`Boneyard: ${loaded.choice.name}. Move with the configured keys, a controller, or the touch joystick.${dig ? ' Press H to toggle the Solomon Dig direction arrow.' : ''}`}
       tabIndex={0}
     >
       <div
@@ -735,6 +790,7 @@ export default function BoneyardScene({
 
         <GameHud
           accountUsername={accountUsername}
+          controls={settings.controls}
           getPingMs={getPingMs}
           initialSnapshot={boneyardInitialSnapshot}
           mode="run"
@@ -772,12 +828,16 @@ export default function BoneyardScene({
           progression={progression}
           subscribePing={subscribePing}
           subscribeSnapshot={subscribe}
+          uiScale={uiScale}
+          viewport={viewport}
         />
         <HubInventoryUi
           audio={audio}
           config={boneyardInitialSnapshot.players[playerId]!.config}
           disabled={inputBlocked || run.phase !== 'active'}
           economy={economy}
+          inventoryKeyCode={settings.controls.openInventory}
+          menuKeyCode={settings.controls.openMenu}
           modAssets={modAssets}
           onAction={onHubAction}
           onSurfaceChange={setInventorySurface}
@@ -824,10 +884,12 @@ export default function BoneyardScene({
         <TouchJoystick
           lane="movement"
           onInput={(movement) => inputRef.current?.setTouch(movement)}
+          uiScale={uiScale}
         />
         <TouchJoystick
           lane="primary"
           onInput={(direction) => inputRef.current?.setTouchPrimary(direction)}
+          uiScale={uiScale}
         />
 
         {run.phase === 'game-over' && run.runId ? (

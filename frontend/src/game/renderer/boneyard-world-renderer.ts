@@ -60,6 +60,12 @@ import {
   type NativeLightProviderRegistration,
 } from '../core-kernels/native-light-provider-order.ts'
 import type { GameSnapshot, LoadedBoneyard } from '../protocol/game-protocol.ts'
+import {
+  DEFAULT_GAME_SETTINGS,
+  cameraZoomForFov,
+  gameLightQuality,
+  type GameSettings,
+} from '../game-settings.ts'
 import { playerStaffActionPose } from '../player-character-presentation.ts'
 import type {
   BoneyardEnemySnapshot,
@@ -71,6 +77,7 @@ import { boneyardSolomonVisualState } from './boneyard-solomon-render.ts'
 import type { GameViewportLayout } from './game-viewport.ts'
 import { initialHubResolution } from './hub-render-contract.ts'
 import {
+  BONEYARD_CAMERA_ZOOM,
   INITIAL_BONEYARD_SPECTATOR_CAMERA_STATE,
   type BoneyardBounds,
   boneyardCamera,
@@ -346,8 +353,19 @@ export interface BoneyardWorldRenderer {
   render(snapshot: GameSnapshot): void
   resize(viewport: GameViewportLayout, devicePixelRatio?: number): void
   setLevelUpPresentation(presentationId: number | null): void
+  setSettings(settings: BoneyardWorldPresentationSettings): void
   spectatorStatus(snapshot: GameSnapshot): BoneyardSpectatorStatusPresentation | null
 }
+
+export type BoneyardWorldPresentationSettings = Pick<
+  GameSettings,
+  | 'cameraFovPercent'
+  | 'complexLighting'
+  | 'complexShadows'
+  | 'lightQualityPercent'
+  | 'multipleShadows'
+  | 'zoomEffects'
+>
 
 interface BoneyardWorldRendererOptions {
   boneyard: LoadedBoneyard
@@ -357,6 +375,7 @@ interface BoneyardWorldRendererOptions {
   modCatalog: readonly ModConsumableCatalogEntry[]
   now?: () => number
   playerId: string
+  settings?: BoneyardWorldPresentationSettings
   viewport: GameViewportLayout
 }
 
@@ -436,6 +455,9 @@ export async function createBoneyardWorldRenderer(
   const application = new Application()
   const devicePixelRatio = options.devicePixelRatio ?? window.devicePixelRatio
   let viewport = options.viewport
+  let settings = options.settings ?? DEFAULT_GAME_SETTINGS
+  let cameraZoom = cameraZoomForFov(BONEYARD_CAMERA_ZOOM, settings.cameraFovPercent)
+  let lightQuality = gameLightQuality(settings)
   const initialResolution = initialHubResolution({
     devicePixelRatio,
     displayScale: viewport.displayScale,
@@ -506,6 +528,7 @@ export async function createBoneyardWorldRenderer(
     textures.regionLightGlyph,
     viewport,
     initialResolution,
+    lightQuality,
   )
   const secondaryScreenFlash = new Graphics({ label: 'native-secondary-screen-flash' })
   secondaryScreenFlash.eventMode = 'none'
@@ -699,6 +722,7 @@ export async function createBoneyardWorldRenderer(
       focus.position,
       snapshot.world.arenaTransition?.cameraBounds ?? options.boneyard.scene.bounds,
       viewport,
+      cameraZoom,
     )
   }
 
@@ -731,6 +755,7 @@ export async function createBoneyardWorldRenderer(
         cameraFocus.position,
         snapshot.world.arenaTransition?.cameraBounds ?? options.boneyard.scene.bounds,
         viewport,
+        cameraZoom,
       )
       const visibleWorld = boneyardVisibleWorldBounds(camera, viewport, 0)
       visibility.update(camera, viewport)
@@ -766,7 +791,11 @@ export async function createBoneyardWorldRenderer(
             },
         camera,
         viewport,
+        settings,
       )
+      regionLightField.setCompositeZIndex(settings.complexLighting
+        ? NATIVE_REGION_LIGHT_COMPOSITE_Z_INDEX
+        : painter.foregroundZIndex - 0.25)
       regionLightField.render(
         application.renderer,
         scene.currentLightSources,
@@ -810,22 +839,32 @@ export async function createBoneyardWorldRenderer(
           worldKey: effect.worldKey,
         })
       }
-      const feedback = worldFeedback.sample(snapshot.tick)
-      const worldShake = nativeSecondaryWorldShake(
+      const sampledFeedback = worldFeedback.sample(snapshot.tick)
+      const sampledWorldShake = nativeSecondaryWorldShake(
         snapshot.secondaryAbilities.actors,
         `boneyard:${snapshot.world.runId}`,
       )
-      const secondaryCameraMagnitude = secondaryScreenFeedback.sampleCameraMagnitude(
+      const sampledSecondaryCameraMagnitude = secondaryScreenFeedback.sampleCameraMagnitude(
         snapshot.tick,
       )
-      const secondaryCameraDisplacement = secondaryScreenFeedback.sampleCameraDisplacement(
+      const sampledSecondaryCameraDisplacement = secondaryScreenFeedback.sampleCameraDisplacement(
         snapshot.tick,
       )
+      const feedbackMagnitude = settings.zoomEffects ? sampledFeedback.magnitude : 0
+      const worldShake = settings.zoomEffects
+        ? sampledWorldShake
+        : { magnitude: 0, x: 0, y: 0 }
+      const secondaryCameraMagnitude = settings.zoomEffects
+        ? sampledSecondaryCameraMagnitude
+        : 0
+      const secondaryCameraDisplacement = settings.zoomEffects
+        ? sampledSecondaryCameraDisplacement
+        : { x: 0, y: 0 }
       const worldTransform = nativeEnemyWorldFeedbackTransform(
         camera,
         viewport,
         player.position,
-        Math.max(feedback.magnitude, worldShake.magnitude, secondaryCameraMagnitude),
+        Math.max(feedbackMagnitude, worldShake.magnitude, secondaryCameraMagnitude),
       )
       world.scale.set(worldTransform.scale)
       world.position.set(
@@ -1001,7 +1040,7 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.weatherDropCount = scene.weatherDropCount
       frameDiagnostics.weatherMode = scene.weatherMode
       frameDiagnostics.weatherSplashCount = scene.weatherSplashCount
-      frameDiagnostics.worldFeedbackMagnitude = feedback.magnitude
+      frameDiagnostics.worldFeedbackMagnitude = feedbackMagnitude
       frameDiagnostics.regionLightLogicalSide = regionLightField.targetLogicalSide
       frameDiagnostics.regionLightPhysicalSide = regionLightField.targetPhysicalSide
       frameDiagnostics.worldShakeX = worldShake.x
@@ -1029,7 +1068,7 @@ export async function createBoneyardWorldRenderer(
       canvas.dataset.goodieCount = `${scene.goodieCount}`
       canvas.dataset.mageLightningCount = `${scene.mageLightningCount}`
       canvas.dataset.playerDeathBurstCount = `${scene.playerDeathBurstCount}`
-      canvas.dataset.worldFeedbackMagnitude = `${feedback.magnitude}`
+      canvas.dataset.worldFeedbackMagnitude = `${feedbackMagnitude}`
       canvas.dataset.secondaryCameraMagnitude = `${secondaryCameraMagnitude}`
       canvas.dataset.worldShakeX = `${worldShake.x}`
       canvas.dataset.worldShakeY = `${worldShake.y}`
@@ -1075,6 +1114,19 @@ export async function createBoneyardWorldRenderer(
         : `${armedLevelUpPresentationId}`
       canvas.dataset.levelUpDynamicSuppressed = 'false'
     },
+    setSettings(nextSettings) {
+      if (destroyed) return
+      settings = nextSettings
+      cameraZoom = cameraZoomForFov(BONEYARD_CAMERA_ZOOM, settings.cameraFovPercent)
+      lightQuality = gameLightQuality(settings)
+      regionLightField.setQuality(lightQuality, viewport, resolution)
+      canvas.dataset.cameraZoom = `${cameraZoom}`
+      canvas.dataset.complexLighting = `${settings.complexLighting}`
+      canvas.dataset.complexShadowsEnabled = `${settings.complexShadows}`
+      canvas.dataset.lightQuality = `${lightQuality}`
+      canvas.dataset.multipleShadows = `${settings.multipleShadows}`
+      canvas.dataset.zoomEffects = `${settings.zoomEffects}`
+    },
     destroy() {
       if (destroyed) return
       destroyed = true
@@ -1100,6 +1152,7 @@ export async function createBoneyardWorldRenderer(
     },
   }
 
+  renderer.setSettings(options.settings ?? DEFAULT_GAME_SETTINGS)
   renderer.render(options.initialSnapshot)
   return renderer
 }
@@ -1289,6 +1342,7 @@ class BoneyardDynamicScene {
     } | null,
     camera: Camera,
     viewport: GameViewportLayout,
+    settings: BoneyardWorldPresentationSettings,
   ): BoneyardPainterFrame {
     requireBoneyardSnapshot(snapshot, this.boneyard.runId)
     const enemySnapshots = nativeEnemySnapshots(snapshot)
@@ -1378,7 +1432,11 @@ class BoneyardDynamicScene {
 
     const dig = this.boneyard.scene.solomonDig
     const lanternLight = dig
-      ? nativeLanternLightSource(dig.lanternPosition, presentationFrame)
+      ? nativeLanternLightSource(
+          dig.lanternPosition,
+          presentationFrame,
+          settings.multipleShadows,
+        )
       : null
     const lightProviderOwners = this.lightProviderOwners
     lightProviderOwners.length = 0
@@ -1406,7 +1464,11 @@ class BoneyardDynamicScene {
       }
     }
     for (const enemy of snapshot.world.enemies) {
-      const sources = nativeEnemyLightSources(enemy, presentationFrame)
+      const sources = nativeEnemyLightSources(
+        enemy,
+        presentationFrame,
+        settings.multipleShadows,
+      )
       if (sources.length === 0) continue
       lightProviderOwners.push({
         registration: requiredLightRegistration(
@@ -1421,16 +1483,28 @@ class BoneyardDynamicScene {
       let source: NativeBoneyardLightSource
       switch (spell.kind) {
         case 'earth':
-          source = nativeBoulderLightSource(spell)
+          source = nativeBoulderLightSource(spell, settings.multipleShadows)
           break
         case 'ether':
-          source = nativeMissileLightSource(spell, presentationFrame)
+          source = nativeMissileLightSource(
+            spell,
+            presentationFrame,
+            settings.multipleShadows,
+          )
           break
         case 'fire':
-          source = nativeFireballLightSource(spell, presentationFrame)
+          source = nativeFireballLightSource(
+            spell,
+            presentationFrame,
+            settings.multipleShadows,
+          )
           break
         case 'weld':
-          source = nativeWeldProjectileLightSource(spell, presentationFrame)
+          source = nativeWeldProjectileLightSource(
+            spell,
+            presentationFrame,
+            settings.multipleShadows,
+          )
           break
       }
       lightProviderOwners.push({
@@ -1442,6 +1516,7 @@ class BoneyardDynamicScene {
       const candidate = nativeEnemyProjectileLightProvider(
         projectile,
         presentationFrame,
+        settings.multipleShadows,
       )
       if (!candidate) continue
       const registration = requiredLightRegistration(
@@ -1472,7 +1547,7 @@ class BoneyardDynamicScene {
       ) {
         lightProviderOwners.push({
           registration: effect.lightRegistration,
-          sources: [nativeWeldRockLightSource(effect)],
+          sources: [nativeWeldRockLightSource(effect, settings.multipleShadows)],
         })
         continue
       }
@@ -1529,7 +1604,11 @@ class BoneyardDynamicScene {
     }
     for (const actor of snapshot.secondaryAbilities.actors) {
       if (actor.worldKey !== `boneyard:${snapshot.world.runId}`) continue
-      const source = nativeSecondaryProviderLightSource(actor, presentationFrame)
+      const source = nativeSecondaryProviderLightSource(
+        actor,
+        presentationFrame,
+        settings.multipleShadows,
+      )
       if (!source) continue
       lightProviderOwners.push({
         registration: requiredLightRegistration(
@@ -1647,20 +1726,18 @@ class BoneyardDynamicScene {
       lightSourceCandidates,
       lightMiscTailCandidates,
       { camera, viewport },
+      gameLightQuality(settings),
     )
-    this.weatherView.update((position) => nativeBoneyardLightScalar(
-      position,
-      this.lightIndex,
-    ))
+    const worldLightScalar = (position: Vec2) => settings.complexLighting
+      ? nativeBoneyardLightScalar(position, this.lightIndex)
+      : 1
+    this.weatherView.update(worldLightScalar)
     let maxMainLightScalar = 0
     let minMainLightScalar = 1
     for (const resident of visibleMainResidents) {
       const layerIndex = resident.mainLayerIndex
       if (layerIndex === null) continue
-      const scalar = nativeBoneyardLightScalar(
-        this.mainLayers[layerIndex].pos,
-        this.lightIndex,
-      )
+      const scalar = worldLightScalar(this.mainLayers[layerIndex].pos)
       resident.sprite.tint = nativeBoneyardLightTint(scalar)
       maxMainLightScalar = Math.max(maxMainLightScalar, scalar)
       minMainLightScalar = Math.min(minMainLightScalar, scalar)
@@ -1687,10 +1764,7 @@ class BoneyardDynamicScene {
     for (const presentation of treePresentations) {
       const tree = this.treeResidents.get(presentation.eid)
       if (!tree) continue
-      const scalar = nativeBoneyardLightScalar(
-        presentation.position,
-        this.lightIndex,
-      )
+      const scalar = worldLightScalar(presentation.position)
       const tint = nativeBoneyardLightTint(scalar)
       tree.main.sprite.alpha = presentation.alpha
       tree.foreground.sprite.alpha = presentation.alpha
@@ -1722,33 +1796,26 @@ class BoneyardDynamicScene {
     for (const [id, view] of this.players) {
       const player = snapshot.players[id]
       if (!player) continue
-      view.setWorldTint(nativeBoneyardLightTint(
-        nativeBoneyardLightScalar(player.position, this.lightIndex),
-      ))
+      view.setWorldTint(nativeBoneyardLightTint(worldLightScalar(player.position)))
     }
     for (const layer of this.playerDeathWeapons.painterLayers()) {
-      this.playerDeathWeapons.setTint(layer.playerId, nativeBoneyardLightTint(
-        nativeBoneyardLightScalar(layer.position, this.lightIndex),
-      ))
+      this.playerDeathWeapons.setTint(
+        layer.playerId,
+        nativeBoneyardLightTint(worldLightScalar(layer.position)),
+      )
     }
     for (const layer of this.primarySpells.painterLayers()) {
       if (!layer.regionLightPoint) continue
       this.primarySpells.setTint(
         layer.id,
-        nativeBoneyardLightTint(nativeBoneyardLightScalar(
-          layer.regionLightPoint,
-          this.lightIndex,
-        )),
+        nativeBoneyardLightTint(worldLightScalar(layer.regionLightPoint)),
       )
     }
     for (const layer of this.secondaryAbilities.painterLayers()) {
       if (!layer.regionLightPoint) continue
       this.secondaryAbilities.setTint(
         layer.id,
-        nativeBoneyardLightTint(nativeBoneyardLightScalar(
-          layer.regionLightPoint,
-          this.lightIndex,
-        )),
+        nativeBoneyardLightTint(worldLightScalar(layer.regionLightPoint)),
       )
     }
     const secondaryEffectsByTarget = new Map(
@@ -1757,23 +1824,20 @@ class BoneyardDynamicScene {
         .map((effect) => [effect.targetId, effect] as const),
     )
     for (const enemy of enemySnapshots) {
-      const lightTint = nativeBoneyardLightTint(
-        nativeBoneyardLightScalar(enemy.position, this.lightIndex),
-      )
+      const lightTint = nativeBoneyardLightTint(worldLightScalar(enemy.position))
       this.enemies.setTint(enemy.id, nativeSecondaryTargetMaterialTint(
         lightTint,
         secondaryEffectsByTarget.get(enemy.id),
       ))
     }
     for (const effect of snapshot.world.deathEffects) {
-      this.enemyDeathEffects.setWorldTint(effect.id, nativeBoneyardLightTint(
-        nativeBoneyardLightScalar(effect.position, this.lightIndex),
-      ))
+      this.enemyDeathEffects.setWorldTint(
+        effect.id,
+        nativeBoneyardLightTint(worldLightScalar(effect.position)),
+      )
     }
     for (const actor of snapshot.world.loot) {
-      this.loot.setTint(actor.id, nativeBoneyardLightTint(
-        nativeBoneyardLightScalar(actor.position, this.lightIndex),
-      ))
+      this.loot.setTint(actor.id, nativeBoneyardLightTint(worldLightScalar(actor.position)))
     }
     for (const effect of snapshot.modEffects) {
       const player = snapshot.players[effect.playerId]
@@ -1783,40 +1847,46 @@ class BoneyardDynamicScene {
       ))
     }
     for (const goodie of snapshot.world.goodies) {
-      this.goodies.setTint(goodie.id, nativeBoneyardLightTint(
-        nativeBoneyardLightScalar(goodie.position, this.lightIndex),
-      ))
+      this.goodies.setTint(
+        goodie.id,
+        nativeBoneyardLightTint(worldLightScalar(goodie.position)),
+      )
     }
     for (const projectile of snapshot.world.enemyProjectiles) {
-      this.enemyProjectiles.setTint(projectile.id, nativeBoneyardLightTint(
-        nativeBoneyardLightScalar(projectile.position, this.lightIndex),
-      ))
+      this.enemyProjectiles.setTint(
+        projectile.id,
+        nativeBoneyardLightTint(worldLightScalar(projectile.position)),
+      )
     }
     for (const effect of snapshot.world.enemyProjectileEffects) {
-      this.enemyProjectileEffects.setWorldTint(effect.id, nativeBoneyardLightTint(
-        nativeBoneyardLightScalar(effect.position, this.lightIndex),
-      ))
+      this.enemyProjectileEffects.setWorldTint(
+        effect.id,
+        nativeBoneyardLightTint(worldLightScalar(effect.position)),
+      )
     }
     for (const maggot of snapshot.world.maggots) {
-      this.maggots.setTint(maggot.id, nativeBoneyardLightTint(
-        nativeBoneyardLightScalar(maggot.position, this.lightIndex),
-      ))
+      this.maggots.setTint(
+        maggot.id,
+        nativeBoneyardLightTint(worldLightScalar(maggot.position)),
+      )
     }
     for (const leaf of snapshot.world.gateLeaves) {
       const position = nativeGatePainterRoot(leaf.hinge, leaf.tip)
       this.gates.setTint(
         leaf.fenceEid,
         leaf.side,
-        nativeBoneyardLightTint(nativeBoneyardLightScalar(position, this.lightIndex)),
+        nativeBoneyardLightTint(worldLightScalar(position)),
       )
     }
     if (dig) {
       const solomonPosition = snapshot.world.encounter?.position ?? dig.position
-      this.solomon?.setLighting(nativeSolomonSetPieceLighting(
-        solomonPosition,
-        dig.lanternPosition,
-        this.lightIndex,
-      ))
+      this.solomon?.setLighting(settings.complexLighting
+        ? nativeSolomonSetPieceLighting(
+            solomonPosition,
+            dig.lanternPosition,
+            this.lightIndex,
+          )
+        : { digRootTint: 0xffffff, lanternTint: 0xffffff })
     }
 
     const gateLeaves = this.gateLeaves
@@ -2081,6 +2151,7 @@ class BoneyardDynamicScene {
       snapshot.world.gateLeaves,
       gateShadowDepthOwners,
       visibleShadowDepthOwners,
+      settings.complexLighting && settings.complexShadows,
     )
     const localPainter = positionedDynamics.get(`player:${localPlayerId}`)
     const localPlayerZIndex = localPainter?.zIndex ?? 1

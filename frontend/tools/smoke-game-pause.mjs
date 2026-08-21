@@ -263,13 +263,21 @@ try {
     pauseCanvas: settingsCanvas,
   }))
 
-  const peerSawSettingsResume = nextRawMessage(peer.socket, (message) => (
-    message.type === 'server-gameplay-pause' && message.pause === null
-  ))
   await settingsPause.getByRole('button', { name: 'GAME SETTINGS' }).click()
-  const settingsDialog = page.getByRole('dialog', { name: 'Settings' })
-  await settingsDialog.waitFor()
+  await page.getByRole('dialog', { name: 'Settings' }).waitFor()
+  const settingsDialog = page.locator('.game-settings-dialog')
   await settingsPause.waitFor({ state: 'detached' })
+  await setRange(settingsDialog.getByRole('slider', { name: 'CAMERA FOV' }), 125)
+  await setRange(settingsDialog.getByRole('slider', { name: 'UI SCALE' }), 150)
+  assert.equal(await page.locator('.hub-scene').getAttribute('data-camera-zoom'), '0.96')
+  assert.equal(await page.locator('.hub-hud').getAttribute('data-ui-scale'), '1.5')
+  await settingsDialog.getByRole('button', { name: 'TWEAK GAME' }).click()
+  const complexLighting = settingsDialog.getByRole('button', { name: 'COMPLEX LIGHTING' })
+  assert.equal(await complexLighting.getAttribute('aria-pressed'), 'true')
+  await complexLighting.click()
+  assert.equal(await complexLighting.getAttribute('aria-pressed'), 'false')
+  await settingsDialog.getByRole('button', { name: 'BACK' }).click()
+  await settingsDialog.getByRole('button', { name: 'SELECT CONCENTRATION' }).click()
   const concentrationSelector = settingsDialog.getByRole('region', {
     name: 'Select Concentration',
   })
@@ -278,16 +286,21 @@ try {
     playerSkillRuntimeAt(host.state().playerEntities, host.hostPlayerId())
       ?.concentrationSkillIdA === 57
   ), 'concentration selection')
+  await settingsDialog.getByRole('button', { name: 'SELECT PRIMARY ATTACK' }).click()
   const primarySelector = settingsDialog.getByRole('region', { name: 'Select Primary Attack' })
   assert.equal(
     await primarySelector.getByRole('button', { name: 'Fireball, selected' })
       .getAttribute('aria-pressed'),
     'true',
   )
+  await settingsDialog.getByRole('button', { name: 'BACK' }).click()
   await page.screenshot({ path: screenshots.skillSettings })
   const settingsHeldHub = simulationReceipt()
   await page.waitForTimeout(550)
   assert.deepEqual(simulationReceipt(), settingsHeldHub)
+  const peerSawSettingsResume = nextRawMessage(peer.socket, (message) => (
+    message.type === 'server-gameplay-pause' && message.pause === null
+  ))
   const hubResumeStartedAt = performance.now()
   await settingsDialog.getByRole('button', { name: 'Done' }).click()
   await peerSawSettingsResume
@@ -444,6 +457,10 @@ try {
   await browser.close()
   await host.close()
   await vite.close()
+}
+
+async function setRange(locator, value) {
+  await locator.fill(`${value}`)
 }
 
 async function enterHub(page, element) {

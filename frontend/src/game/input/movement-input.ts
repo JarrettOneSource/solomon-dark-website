@@ -1,4 +1,8 @@
 import type { Vector2 } from '../core-kernels/vector.ts'
+import {
+  DEFAULT_GAME_CONTROL_BINDINGS,
+  type GameControlBindings,
+} from '../game-settings.ts'
 
 export type MovementInputDevice = 'gamepad' | 'keyboard' | 'none' | 'touch'
 
@@ -12,6 +16,7 @@ export interface MovementInputState {
   press(code: string): boolean
   release(code: string): boolean
   sample(gamepads?: readonly (GamepadLike | null)[]): MovementInputSample
+  setControls(controls: GameControlBindings): void
   setTouch(movement: Vector2): void
 }
 
@@ -19,6 +24,7 @@ export interface BrowserMovementInput {
   destroy(): void
   sample(): MovementInputSample
   setBlocked(blocked: boolean): void
+  setControls(controls: GameControlBindings): void
   setTouch(movement: Vector2): void
 }
 
@@ -45,26 +51,20 @@ interface BrowserVisibilityTarget extends BrowserInputTarget {
 }
 
 interface BrowserMovementInputOptions {
+  controls?: GameControlBindings
   getGamepads?: () => readonly (GamepadLike | null)[]
   onStop: () => void
   target?: BrowserInputTarget
   visibilityTarget?: BrowserVisibilityTarget
 }
 
-const MOVEMENT_CODES = new Set([
-  'ArrowDown',
-  'ArrowLeft',
-  'ArrowRight',
-  'ArrowUp',
-  'KeyA',
-  'KeyD',
-  'KeyS',
-  'KeyW',
-])
 export const GAMEPAD_MOVEMENT_DEAD_ZONE = 0.2
 
-export function createMovementInputState(): MovementInputState {
+export function createMovementInputState(
+  initialControls = DEFAULT_GAME_CONTROL_BINDINGS,
+): MovementInputState {
   const pressed = new Set<string>()
+  let controls = initialControls
   let touch: Vector2 = { x: 0, y: 0 }
 
   return {
@@ -73,12 +73,12 @@ export function createMovementInputState(): MovementInputState {
       touch = { x: 0, y: 0 }
     },
     press(code) {
-      if (!MOVEMENT_CODES.has(code)) return false
+      if (!movementCodes(controls).has(code)) return false
       pressed.add(code)
       return true
     },
     release(code) {
-      if (!MOVEMENT_CODES.has(code)) return false
+      if (!movementCodes(controls).has(code)) return false
       pressed.delete(code)
       return true
     },
@@ -91,14 +91,16 @@ export function createMovementInputState(): MovementInputState {
         return { device: 'gamepad', movement: gamepadMovement }
       }
       const keyboard = normalizeMovement({
-        x: Number(pressed.has('KeyD') || pressed.has('ArrowRight'))
-          - Number(pressed.has('KeyA') || pressed.has('ArrowLeft')),
-        y: Number(pressed.has('KeyS') || pressed.has('ArrowDown'))
-          - Number(pressed.has('KeyW') || pressed.has('ArrowUp')),
+        x: Number(pressed.has(controls.moveRight)) - Number(pressed.has(controls.moveLeft)),
+        y: Number(pressed.has(controls.moveDown)) - Number(pressed.has(controls.moveUp)),
       })
       return Math.hypot(keyboard.x, keyboard.y) > 0
         ? { device: 'keyboard', movement: keyboard }
         : { device: 'none', movement: keyboard }
+    },
+    setControls(nextControls) {
+      controls = nextControls
+      pressed.clear()
     },
     setTouch(movement) {
       touch = normalizeMovement(movement)
@@ -107,12 +109,13 @@ export function createMovementInputState(): MovementInputState {
 }
 
 export function createBrowserMovementInput({
+  controls = DEFAULT_GAME_CONTROL_BINDINGS,
   getGamepads = () => navigator.getGamepads(),
   onStop,
   target = window,
   visibilityTarget = document,
 }: BrowserMovementInputOptions): BrowserMovementInput {
-  const state = createMovementInputState()
+  const state = createMovementInputState(controls)
   let blocked = false
   const keyDown: EventListener = (event) => {
     const code = keyboardCode(event)
@@ -154,10 +157,23 @@ export function createBrowserMovementInput({
       blocked = nextBlocked
       if (blocked) stop()
     },
+    setControls(nextControls) {
+      state.setControls(nextControls)
+      onStop()
+    },
     setTouch(movement) {
       if (!blocked) state.setTouch(movement)
     },
   }
+}
+
+function movementCodes(controls: GameControlBindings): ReadonlySet<string> {
+  return new Set([
+    controls.moveDown,
+    controls.moveLeft,
+    controls.moveRight,
+    controls.moveUp,
+  ])
 }
 
 function keyboardCode(event: Event): string | null {

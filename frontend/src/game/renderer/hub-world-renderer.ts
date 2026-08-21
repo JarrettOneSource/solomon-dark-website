@@ -3,6 +3,11 @@ import 'pixi.js/unsafe-eval'
 import { Application, Graphics, Sprite, Texture } from 'pixi.js'
 import type { HubPresentationFrame } from '../client/hub-presentation-timeline.ts'
 import {
+  DEFAULT_GAME_SETTINGS,
+  cameraZoomForFov,
+  type GameSettings,
+} from '../game-settings.ts'
+import {
   HUB_CAMERA_SCALE,
   hubRegionCameraOrigin,
 } from '../core-kernels/hub-math.ts'
@@ -89,7 +94,13 @@ export interface HubWorldRenderer {
   render(snapshot: HubPresentationFrame): void
   resize(viewport: GameViewportLayout, devicePixelRatio?: number): void
   setLevelUpPresentation(presentationId: number | null): void
+  setSettings(settings: HubWorldPresentationSettings): void
 }
+
+export type HubWorldPresentationSettings = Pick<
+  GameSettings,
+  'cameraFovPercent' | 'zoomEffects'
+>
 
 interface HubWorldRendererOptions {
   devicePixelRatio?: number
@@ -97,6 +108,7 @@ interface HubWorldRendererOptions {
   now?: () => number
   onDiagnostics?: (diagnostics: HubRendererDiagnostics) => void
   playerId: string
+  settings?: HubWorldPresentationSettings
   viewport: GameViewportLayout
 }
 
@@ -107,6 +119,11 @@ export async function createHubWorldRenderer(
   const application = new Application()
   const devicePixelRatio = options.devicePixelRatio ?? window.devicePixelRatio
   let viewport = options.viewport
+  let baseCameraScale = cameraZoomForFov(
+    HUB_CAMERA_SCALE,
+    options.settings?.cameraFovPercent ?? DEFAULT_GAME_SETTINGS.cameraFovPercent,
+  )
+  let zoomEffects = options.settings?.zoomEffects ?? DEFAULT_GAME_SETTINGS.zoomEffects
   const initialResolution = initialHubResolution({
     devicePixelRatio,
     displayScale: viewport.displayScale,
@@ -149,8 +166,8 @@ export async function createHubWorldRenderer(
     traderAnimationSeed,
     application.renderer,
   )
-  courtyardScene.stage.scale.set(HUB_CAMERA_SCALE)
-  privateRoomScene.world.scale.set(HUB_CAMERA_SCALE)
+  courtyardScene.stage.scale.set(baseCameraScale)
+  privateRoomScene.world.scale.set(baseCameraScale)
   const worldNameplates = new NativeWorldNameplateLayer(textures.fontAtlas)
   application.stage.addChild(
     courtyardScene.stage,
@@ -321,7 +338,12 @@ export async function createHubWorldRenderer(
       const player = snapshot.players[options.playerId]
       const participant = snapshot.world.participants[options.playerId]
       if (!player || !participant) return
-      const camera = hubRegionCameraOrigin(participant.region, player.position, viewport)
+      const camera = hubRegionCameraOrigin(
+        participant.region,
+        player.position,
+        viewport,
+        baseCameraScale,
+      )
       for (const playerId of Object.keys(frameDiagnostics.playerScreenPositions)) {
         if (snapshot.world.participants[playerId]?.region !== participant.region) {
           delete frameDiagnostics.playerScreenPositions[playerId]
@@ -330,8 +352,8 @@ export async function createHubWorldRenderer(
       for (const [playerId, remote] of Object.entries(snapshot.players)) {
         if (snapshot.world.participants[playerId]?.region !== participant.region) continue
         const position = frameDiagnostics.playerScreenPositions[playerId] ??= { x: 0, y: 0 }
-        position.x = (remote.position.x - camera.x) * HUB_CAMERA_SCALE
-        position.y = (remote.position.y - camera.y) * HUB_CAMERA_SCALE
+        position.x = (remote.position.x - camera.x) * baseCameraScale
+        position.y = (remote.position.y - camera.y) * baseCameraScale
       }
       const frameAt = now()
       frameTimeTotal += Math.max(0, frameAt - previousFrameAt)
@@ -377,8 +399,8 @@ export async function createHubWorldRenderer(
       if (inCourtyard) {
         courtyardScene.world.position.set(-camera.x, -camera.y)
         const southernTranslation = hubSouthernCameraTranslation(camera, {
-          height: viewport.height / HUB_CAMERA_SCALE,
-          width: viewport.width / HUB_CAMERA_SCALE,
+          height: viewport.height / baseCameraScale,
+          width: viewport.width / baseCameraScale,
         })
         courtyardScene.southern.position.copyFrom(southernTranslation)
         const studentCount = snapshot.world.students.length
@@ -388,8 +410,8 @@ export async function createHubWorldRenderer(
           sampledStudentCount,
         )) {
           const view = {
-            height: viewport.height / HUB_CAMERA_SCALE,
-            width: viewport.width / HUB_CAMERA_SCALE,
+            height: viewport.height / baseCameraScale,
+            width: viewport.width / baseCameraScale,
           }
           const visible = courtyardScene.countVisibleStudents(snapshot, camera, view)
           frameDiagnostics.studentVisibleCandidateCount = visible
@@ -398,8 +420,8 @@ export async function createHubWorldRenderer(
         }
       } else {
         privateRoomScene.world.position.set(
-          -camera.x * HUB_CAMERA_SCALE,
-          -camera.y * HUB_CAMERA_SCALE,
+          -camera.x * baseCameraScale,
+          -camera.y * baseCameraScale,
         )
         frameDiagnostics.studentVisibleCandidateCount = 0
         frameDiagnostics.studentOutsideViewCount = snapshot.world.students.length
@@ -413,12 +435,12 @@ export async function createHubWorldRenderer(
         )
         secondaryScreenFeedback.set(participant.region, screenFeedback)
       }
-      const visibleWorldWidth = viewport.width / HUB_CAMERA_SCALE
+      const visibleWorldWidth = viewport.width / baseCameraScale
       for (const event of snapshot.secondaryAbilities.events) {
         screenFeedback.consume(event, {
           cameraCenter: {
             x: camera.x + visibleWorldWidth / 2,
-            y: camera.y + viewport.height / HUB_CAMERA_SCALE / 2,
+            y: camera.y + viewport.height / baseCameraScale / 2,
           },
           localPlayerAlternate: player.progression.lifeState !== 'alive',
           visibleWorldWidth,
@@ -429,7 +451,7 @@ export async function createHubWorldRenderer(
           screenFeedback.consumePrimaryEtherBlast(effect, {
             cameraCenter: {
               x: camera.x + visibleWorldWidth / 2,
-              y: camera.y + viewport.height / HUB_CAMERA_SCALE / 2,
+              y: camera.y + viewport.height / baseCameraScale / 2,
             },
             localPlayerAlternate: player.progression.lifeState !== 'alive',
             visibleWorldWidth,
@@ -459,34 +481,40 @@ export async function createHubWorldRenderer(
         })
       }
       const screenOverlay = screenFeedback.sample(snapshot.tick)
-      const secondaryCameraMagnitude = screenFeedback.sampleCameraMagnitude(snapshot.tick)
-      const secondaryCameraDisplacement = screenFeedback.sampleCameraDisplacement(snapshot.tick)
-      const cameraScale = HUB_CAMERA_SCALE * (1 + secondaryCameraMagnitude)
+      const secondaryCameraMagnitude = zoomEffects
+        ? screenFeedback.sampleCameraMagnitude(snapshot.tick)
+        : 0
+      const secondaryCameraDisplacement = zoomEffects
+        ? screenFeedback.sampleCameraDisplacement(snapshot.tick)
+        : { x: 0, y: 0 }
+      const feedbackCameraScale = baseCameraScale * (1 + secondaryCameraMagnitude)
       if (inCourtyard) {
-        courtyardScene.stage.scale.set(cameraScale)
+        courtyardScene.stage.scale.set(feedbackCameraScale)
         courtyardScene.stage.position.set(
-          (HUB_CAMERA_SCALE - cameraScale) * (player.position.x - camera.x)
+          (baseCameraScale - feedbackCameraScale) * (player.position.x - camera.x)
             + secondaryCameraDisplacement.x,
-          (HUB_CAMERA_SCALE - cameraScale) * (player.position.y - camera.y)
+          (baseCameraScale - feedbackCameraScale) * (player.position.y - camera.y)
             + secondaryCameraDisplacement.y,
         )
       } else {
-        privateRoomScene.world.scale.set(cameraScale)
+        privateRoomScene.world.scale.set(feedbackCameraScale)
         privateRoomScene.world.position.set(
-          HUB_CAMERA_SCALE * (player.position.x - camera.x) - cameraScale * player.position.x
+          baseCameraScale * (player.position.x - camera.x)
+            - feedbackCameraScale * player.position.x
             + secondaryCameraDisplacement.x,
-          HUB_CAMERA_SCALE * (player.position.y - camera.y) - cameraScale * player.position.y
+          baseCameraScale * (player.position.y - camera.y)
+            - feedbackCameraScale * player.position.y
             + secondaryCameraDisplacement.y,
         )
       }
       const worldNameplateTransform = {
         position: {
-          x: (player.position.x - camera.x) * HUB_CAMERA_SCALE
-            - cameraScale * player.position.x,
-          y: (player.position.y - camera.y) * HUB_CAMERA_SCALE
-            - cameraScale * player.position.y,
+          x: (player.position.x - camera.x) * baseCameraScale
+            - feedbackCameraScale * player.position.x,
+          y: (player.position.y - camera.y) * baseCameraScale
+            - feedbackCameraScale * player.position.y,
         },
-        scale: cameraScale,
+        scale: feedbackCameraScale,
       }
       worldNameplates.update(
         snapshot.players,
@@ -561,6 +589,13 @@ export async function createHubWorldRenderer(
         : `${armedLevelUpPresentationId}`
       canvas.dataset.levelUpDynamicSuppressed = 'false'
     },
+    setSettings(settings) {
+      if (destroyed) return
+      baseCameraScale = cameraZoomForFov(HUB_CAMERA_SCALE, settings.cameraFovPercent)
+      zoomEffects = settings.zoomEffects
+      canvas.dataset.cameraZoom = `${baseCameraScale}`
+      canvas.dataset.zoomEffects = `${zoomEffects}`
+    },
     destroy() {
       if (destroyed) return
       destroyed = true
@@ -585,6 +620,7 @@ export async function createHubWorldRenderer(
 
   courtyardScene.update(options.initialSnapshot, options.playerId, frameCount)
   privateRoomScene.update(options.initialSnapshot, options.playerId, frameCount)
+  renderer.setSettings(options.settings ?? DEFAULT_GAME_SETTINGS)
   renderer.render(options.initialSnapshot)
   publishDiagnostics(options.initialSnapshot, 0)
   return renderer

@@ -125,6 +125,16 @@ test('camera view dimensions follow the logical browser viewport without changin
   closeTo(narrowRoom.y, 95.333333)
 })
 
+test('adjustable Hub FOV changes only the camera view extent', () => {
+  const viewport = { width: 1600, height: 900 }
+  const wider = hubRegionCameraOrigin('courtyard', { x: 1000, y: 512 }, viewport, 0.96)
+  closeTo(wider.x, 166.666667)
+  closeTo(wider.y, 43.25)
+  const closer = hubRegionCameraOrigin('library', { x: 512, y: 512 }, viewport, 1.6)
+  closeTo(closer.x, 12)
+  closeTo(closer.y, 230.75)
+})
+
 test('sorts each Useful Thyngs painter around PotionGuy', () => {
   assert.equal(HUB_USEFUL_THYNGS_COUNTER_DEPTH, 1663)
   assert.equal(hubActorDepth(664), 1664)

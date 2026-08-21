@@ -3,6 +3,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type CSSProperties,
 } from 'react'
 
 import type { Vector2 } from '../core-kernels/vector.ts'
@@ -15,9 +16,10 @@ type TouchJoystickLane = 'movement' | 'primary'
 interface TouchJoystickProps {
   lane: TouchJoystickLane
   onInput: (movement: Vector2) => void
+  uiScale: number
 }
 
-export default function TouchJoystick({ lane, onInput }: TouchJoystickProps) {
+export default function TouchJoystick({ lane, onInput, uiScale }: TouchJoystickProps) {
   const baseRef = useRef<HTMLDivElement>(null)
   const activePointerRef = useRef<number | null>(null)
   const inputSinkRef = useRef(onInput)
@@ -81,9 +83,11 @@ export default function TouchJoystick({ lane, onInput }: TouchJoystickProps) {
       ref={baseRef}
       className={`game-touch-joystick game-touch-joystick-${lane}`}
       data-joystick={lane}
+      data-ui-scale={uiScale}
       role="region"
       aria-label={lane === 'movement' ? 'Movement joystick' : 'Primary attack joystick'}
       tabIndex={-1}
+      style={{ '--game-ui-scale': uiScale } as CSSProperties}
       onPointerDown={(event) => {
         event.preventDefault()
         if (activePointerRef.current !== null) return

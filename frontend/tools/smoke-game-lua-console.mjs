@@ -84,10 +84,12 @@ try {
   await page.getByRole('button', { name: 'Settings' }).click()
   const settings = page.getByRole('dialog', { name: 'Settings' })
   await settings.waitFor()
-  const cheats = settings.getByRole('checkbox', { name: /Enable Cheats/ })
-  assert.equal(await cheats.isChecked(), false)
-  await cheats.check()
-  assert.equal(await page.evaluate((key) => localStorage.getItem(key), GAME_SETTINGS_STORAGE_KEY), '{"enableCheats":true}')
+  const cheats = settings.getByRole('button', { name: /Enable Cheats/i })
+  assert.equal(await cheats.getAttribute('aria-pressed'), 'false')
+  await cheats.click()
+  assert.equal(await page.evaluate((key) => (
+    JSON.parse(localStorage.getItem(key)).enableCheats
+  ), GAME_SETTINGS_STORAGE_KEY), true)
   await settings.getByRole('button', { name: 'Done' }).click()
 
   await page.getByRole('button', { name: 'Play' }).click()

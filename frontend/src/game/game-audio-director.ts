@@ -31,6 +31,7 @@ export interface GameAudioPlayback {
   destroy(): void
   play(source: string, options: GameAudioPlaybackOptions): void
   restart(key: string, source: string, options: GameAudioPlaybackOptions): void
+  setMasterVolume(volume: number): void
   setVolume(key: string, volume: number): void
   stop(key: string): void
   unlock(): void
@@ -59,6 +60,8 @@ export class GameAudioDirector {
   private generation = 0
   private musicScene: GameAudioScene | null = null
   private loops = new Map<GameLoopCue, Map<string, Required<PlaySoundOptions>>>()
+  private readonly musicEnvelopes = new Map<GameMusicChannel, number>()
+  private musicVolume = 1
   private now: () => number
   private outgoingMusic: GameMusicChannel | null = null
   private playback: GameAudioPlayback
@@ -77,6 +80,14 @@ export class GameAudioDirector {
     this.cancelFrame = options.cancelFrame ?? ((handle) => cancelAnimationFrame(handle))
   }
 
+  setVolumes(soundVolume: number, musicVolume: number): void {
+    this.playback.setMasterVolume(clampUnit(soundVolume))
+    this.musicVolume = clampUnit(musicVolume)
+    for (const channel of [this.currentMusic, this.outgoingMusic]) {
+      if (channel) this.applyMusicEnvelope(channel)
+    }
+  }
+
   setScene(scene: GameAudioScene): void {
     if (scene === this.musicScene && this.currentMusic) return
 
@@ -88,7 +99,7 @@ export class GameAudioDirector {
     )
     this.currentMusic.currentTime = 0
     this.currentMusic.loop = true
-    this.currentMusic.volume = 0
+    this.setMusicEnvelope(this.currentMusic, 0)
     this.musicScene = scene
     this.generation += 1
 
@@ -178,6 +189,7 @@ export class GameAudioDirector {
     this.outgoingMusic = null
     this.musicScene = null
     this.loops.clear()
+    this.musicEnvelopes.clear()
     this.playback.destroy()
   }
 
@@ -214,13 +226,13 @@ export class GameAudioDirector {
   ): void {
     const startedAt = this.now()
     const durationMs = transitionTicks * NATIVE_AUDIO_TICK_MS
-    const incomingStart = incoming.volume
-    const outgoingStart = outgoing?.volume ?? 0
+    const incomingStart = this.musicEnvelopes.get(incoming) ?? 0
+    const outgoingStart = outgoing ? this.musicEnvelopes.get(outgoing) ?? 0 : 0
     const step = (now: number) => {
       if (incoming !== this.currentMusic) return
       const progress = durationMs === 0 ? 1 : clampUnit((now - startedAt) / durationMs)
-      incoming.volume = incomingStart + (1 - incomingStart) * progress
-      if (outgoing) outgoing.volume = outgoingStart * (1 - progress)
+      this.setMusicEnvelope(incoming, incomingStart + (1 - incomingStart) * progress)
+      if (outgoing) this.setMusicEnvelope(outgoing, outgoingStart * (1 - progress))
       if (progress < 1) {
         this.fadeFrame = this.requestFrame(step)
         return
@@ -242,6 +254,16 @@ export class GameAudioDirector {
     if (!channel) return
     channel.pause()
     channel.currentTime = 0
+    this.musicEnvelopes.delete(channel)
+  }
+
+  private setMusicEnvelope(channel: GameMusicChannel, envelope: number): void {
+    this.musicEnvelopes.set(channel, clampUnit(envelope))
+    this.applyMusicEnvelope(channel)
+  }
+
+  private applyMusicEnvelope(channel: GameMusicChannel): void {
+    channel.volume = (this.musicEnvelopes.get(channel) ?? 0) * this.musicVolume
   }
 }
 

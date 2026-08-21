@@ -73,6 +73,7 @@ export class BoneyardComplexShadowPresentation {
     gateLeaves: readonly BoneyardGateLeafSnapshot[],
     gateDepthOwners: ReadonlyMap<string, ContainerChild>,
     visibleStaticDepthOwners: readonly ContainerChild[],
+    enabled = true,
   ): BoneyardComplexShadowFrame {
     const liveIds = this.liveIds
     liveIds.clear()
@@ -80,6 +81,19 @@ export class BoneyardComplexShadowPresentation {
     let quadCount = 0
     let recordCount = 0
     let zOrderMismatchCount = 0
+
+    if (!enabled) {
+      for (const id of this.activeViews.keys()) this.release(id)
+      return {
+        activeMeshCount: 0,
+        allocatedQuadCapacity: this.allocatedQuadCapacity,
+        casterCount: 0,
+        pooledMeshCount: this.freeViews.length,
+        quadCount: 0,
+        recordCount: 0,
+        zOrderMismatchCount: 0,
+      }
+    }
 
     for (const depthOwner of visibleStaticDepthOwners) {
       const caster = this.staticCastersByOwner.get(depthOwner)

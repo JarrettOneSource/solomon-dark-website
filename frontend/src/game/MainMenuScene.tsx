@@ -33,7 +33,7 @@ import GameFullscreenButton from './GameFullscreenButton.tsx'
 import GameChat from './GameChat.tsx'
 import GameSaveModMismatchDialog from './GameSaveModMismatchDialog.tsx'
 import GameplayPauseMenu from './GameplayPauseMenu.tsx'
-import GameSettingsDialog from './GameSettingsDialog.tsx'
+import GameSettingsDialog, { type GameSettingsContext } from './GameSettingsDialog.tsx'
 import HallOfFameScene from './HallOfFameScene.tsx'
 import { HallOfFameRunRecorder } from './client/hall-of-fame-run-recorder.ts'
 import type {
@@ -48,6 +48,7 @@ import { installGameLuaConsole } from './game-lua-console.ts'
 import {
   GAME_SETTINGS_STORAGE_KEY,
   gameCheatsEnabled,
+  gameVolume,
   readGameSettings,
   setGameSettings,
   subscribeGameSettings,
@@ -300,7 +301,7 @@ export default function MainMenuScene({
   const [connectionError, setConnectionError] = useState<string | null>(null)
   const [hoveredTitleAction, setHoveredTitleAction] = useState<TitleMenuAction | null>(null)
   const [pressedTitleAction, setPressedTitleAction] = useState<TitleMenuAction | null>(null)
-  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [settingsContext, setSettingsContext] = useState<GameSettingsContext | null>(null)
   const [modMismatch, setModMismatch] = useState<GameSaveModMismatch | null>(null)
   const [gameSettings, setLocalGameSettings] = useState(readGameSettings)
   const [localHallOfFame, setLocalHallOfFame] = useState(readLocalHallOfFame)
@@ -379,17 +380,11 @@ export default function MainMenuScene({
   }, [gameSettings.enableCheats, session])
 
   useEffect(() => {
-    if (!settingsOpen && !gameplaySettingsOpen) return
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return
-      if (gameplaySettingsOpen) {
-        setGameplaySettingsOpen(false)
-        session?.requestGameplayPause(null)
-      } else setSettingsOpen(false)
-    }
-    window.addEventListener('keydown', closeOnEscape)
-    return () => window.removeEventListener('keydown', closeOnEscape)
-  }, [gameplaySettingsOpen, session, settingsOpen])
+    audio.setVolumes(
+      gameVolume(gameSettings.soundVolumePercent),
+      gameVolume(gameSettings.musicVolumePercent),
+    )
+  }, [audio, gameSettings.musicVolumePercent, gameSettings.soundVolumePercent])
 
   useEffect(() => {
     if (!gameplayPause) setGameplaySettingsOpen(false)
@@ -564,10 +559,11 @@ export default function MainMenuScene({
   }, [audio, session])
 
   useEffect(() => {
-    if (screen === 'hub' || settingsOpen || modMismatch || !stageRef.current) return
+    if (screen === 'hub' || settingsContext || gameplaySettingsOpen
+      || modMismatch || !stageRef.current) return
     const navigation = createGamepadMenuNavigation({ root: stageRef.current })
     return () => navigation.destroy()
-  }, [modMismatch, screen, settingsOpen])
+  }, [gameplaySettingsOpen, modMismatch, screen, settingsContext])
 
   const transitionTo = (target: MenuScreen) => {
     if (fadeState !== 'idle') return
@@ -878,7 +874,7 @@ export default function MainMenuScene({
                     onPlay={() => setScreen('play')}
                     onPress={() => audio.playSound('click')}
                     onPressState={setPressedTitleAction}
-                    onSettings={() => setSettingsOpen(true)}
+                    onSettings={() => setSettingsContext('title')}
                   />
                 ) : (
                   <PlayActions
@@ -913,6 +909,7 @@ export default function MainMenuScene({
               accountUsername={accountUsername}
               onBack={() => transitionTo('root')}
               onEnterSharedHub={() => { void beginNewGame() }}
+              onSettings={() => setSettingsContext('dark-cloud')}
             />
           </div>
         ) : screen === 'create' ? (
@@ -954,6 +951,7 @@ export default function MainMenuScene({
               progression={runtimeProgression ?? runtimeSnapshot.players[session.playerId]!.progression}
               presentationPaused={gameplayPause !== null}
               samplePresentation={session.sampleBoneyardPresentation}
+              settings={gameSettings}
               subscribePing={session.onPing}
               subscribeEnemyEvent={session.onEnemyEvent}
               subscribe={session.onSnapshot}
@@ -987,6 +985,7 @@ export default function MainMenuScene({
               partyState={partyState}
               presentationPaused={gameplayPause !== null}
               samplePresentation={session.samplePresentation}
+              settings={gameSettings}
               subscribePing={session.onPing}
               subscribe={session.onSnapshot}
             />
@@ -997,6 +996,7 @@ export default function MainMenuScene({
           <GameChat
             disabled={chatDisabled}
             onOpenChange={setChatOpen}
+            openKeyCode={gameSettings.controls.openChat}
             partyState={partyState}
             session={session}
             worldKind={runtimeSnapshot.world.kind}
@@ -1082,6 +1082,7 @@ export default function MainMenuScene({
           && gameplayPause?.ownerPlayerId === session.playerId
           && gameplaySettingsOpen ? (
             <GameSettingsDialog
+              context="gameplay"
               onChange={updateGameSettings}
               onClose={() => {
                 setGameplaySettingsOpen(false)
@@ -1101,10 +1102,11 @@ export default function MainMenuScene({
           </div>
         )}
 
-        {settingsOpen && titleScreen ? (
+        {settingsContext && !gameplaySettingsOpen ? (
           <GameSettingsDialog
+            context={settingsContext}
             onChange={updateGameSettings}
-            onClose={() => setSettingsOpen(false)}
+            onClose={() => setSettingsContext(null)}
             settings={gameSettings}
           />
         ) : null}

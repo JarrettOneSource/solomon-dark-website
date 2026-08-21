@@ -14,6 +14,8 @@ export function createWebAudioPlayback(
 ): GameAudioPlayback {
   const channels = new Map<string, OwnedBufferSource>()
   const oneShots = new Set<OwnedBufferSource>()
+  const masterGain = context.createGain()
+  masterGain.connect(context.destination)
 
   const release = (owned: OwnedBufferSource) => {
     owned.source.onended = null
@@ -40,7 +42,7 @@ export function createWebAudioPlayback(
     bufferSource.playbackRate.value = options.playbackRate
     gain.gain.value = options.volume
     bufferSource.connect(gain)
-    gain.connect(context.destination)
+    gain.connect(masterGain)
     return { gain, source: bufferSource }
   }
 
@@ -50,6 +52,7 @@ export function createWebAudioPlayback(
       oneShots.clear()
       for (const owned of channels.values()) stop(owned)
       channels.clear()
+      masterGain.disconnect()
       if (context.state === 'running') void context.suspend().catch(() => {})
     },
     play(source, options) {
@@ -71,6 +74,9 @@ export function createWebAudioPlayback(
         release(owned)
       }
       owned.source.start()
+    },
+    setMasterVolume(volume) {
+      masterGain.gain.value = volume
     },
     setVolume(key, volume) {
       const owned = channels.get(key)

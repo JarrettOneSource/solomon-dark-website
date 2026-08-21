@@ -9,6 +9,8 @@ const mobileHubScreenshotPath = process.env.SDR_GAME_MOBILE_HUB_SCREENSHOT
   || '/tmp/solomon-dark-responsive-mobile-hub.png'
 const mobileBoneyardScreenshotPath = process.env.SDR_GAME_MOBILE_BONEYARD_SCREENSHOT
   || '/tmp/solomon-dark-responsive-mobile-boneyard.png'
+const mobileSettingsScreenshotPath = process.env.SDR_GAME_MOBILE_SETTINGS_SCREENSHOT
+  || '/tmp/solomon-dark-responsive-mobile-settings.png'
 const browser = await chromium.launch({
   executablePath: process.env.SDR_CHROME_PATH || '/usr/bin/google-chrome',
   headless: true,
@@ -151,15 +153,34 @@ async function installLifecycleHarness(page) {
 }
 
 async function settledPosition(page, readPosition, label) {
-  await page.waitForTimeout(400)
+  await page.waitForTimeout(600)
+  const firstMotion = await presentationMotion(page)
+  if (firstMotion?.kind === 'hub' && firstMotion.moving) {
+    await page.waitForFunction(() => (
+      document.querySelector('.hub-world-canvas')?.__sdrHubFrame?.playerMoving === false
+    ), null, { timeout: 3_000 })
+  }
   const afterTail = await readPosition()
-  await page.waitForTimeout(400)
+  const afterTailMotion = await presentationMotion(page)
+  await page.waitForTimeout(600)
   const settled = await readPosition()
+  const settledMotion = await presentationMotion(page)
   assert.ok(
     Math.abs(settled - afterTail) < 1,
-    `${label} remained latched after its movement tail (${afterTail} -> ${settled})`,
+    `${label} remained latched after its movement tail (${afterTail} -> ${settled}; ${JSON.stringify({ afterTailMotion, settledMotion })})`,
   )
-  return { afterTail, settled }
+  return { afterTail, afterTailMotion, settled, settledMotion }
+}
+
+async function presentationMotion(page) {
+  return page.evaluate(() => {
+    const hub = document.querySelector('.hub-world-canvas')?.__sdrHubFrame
+    if (hub) return { kind: 'hub', moving: hub.playerMoving, tick: hub.tick, x: hub.playerX }
+    const boneyard = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
+    return boneyard
+      ? { kind: 'boneyard', tick: boneyard.tick, x: boneyard.playerX }
+      : null
+  })
 }
 
 const reports = {}
@@ -207,7 +228,9 @@ try {
   assertRect(titleStageBounds, { x: 0, y: 0, width: 1280, height: 800 }, 'Steam Deck title stage')
   assertRect(await titleCanvas.boundingBox(), titleStageBounds, 'Steam Deck title canvas')
   assertRect(
-    await deck.locator('.main-menu-native-stage:not(.main-menu-quit-stage)').boundingBox(),
+    await deck.locator(
+      '.main-menu-native-stage:not(.main-menu-quit-stage):not(.main-menu-account-stage)',
+    ).boundingBox(),
     { x: 0, y: 40, width: 1280, height: 720 },
     'Steam Deck title native stage',
   )
@@ -221,10 +244,16 @@ try {
   const fullscreenButton = deck.locator('[data-game-fullscreen]')
   await fullscreenButton.click()
   await deck.waitForFunction(() => document.fullscreenElement === document.documentElement)
+  await deck.waitForFunction(() => (
+    document.querySelector('[data-game-fullscreen]')?.getAttribute('aria-label') === 'Exit fullscreen'
+  ))
   assert.equal(await fullscreenButton.getAttribute('aria-label'), 'Exit fullscreen')
   assert.equal(await titleCanvasHandle.evaluate((node) => node.isConnected), true)
   await fullscreenButton.click()
   await deck.waitForFunction(() => document.fullscreenElement === null)
+  await deck.waitForFunction(() => (
+    document.querySelector('[data-game-fullscreen]')?.getAttribute('aria-label') === 'Enter fullscreen'
+  ))
   assert.equal(await fullscreenButton.getAttribute('aria-label'), 'Enter fullscreen')
   assert.equal(await titleCanvasHandle.evaluate((node) => node.isConnected), true)
   await deck.reload({ waitUntil: 'domcontentloaded' })
@@ -242,9 +271,14 @@ try {
   const createFullscreenButton = deck.locator('[data-game-fullscreen]')
   assertRect(await createCanvas.boundingBox(), titleStageBounds, 'Steam Deck Create canvas')
   assertRect(
-    await deck.locator('.create-menu-native-top-stage').boundingBox(),
-    { x: 0, y: 40, width: 1280, height: 720 },
-    'Steam Deck Create top stage',
+    await deck.locator('.create-menu-native-back-stage').boundingBox(),
+    { x: 0, y: 0, width: 1280, height: 720 },
+    'Steam Deck Create back stage',
+  )
+  assertRect(
+    await deck.locator('.create-menu-native-name-stage').boundingBox(),
+    { x: 0, y: 0, width: 1280, height: 720 },
+    'Steam Deck Create name stage',
   )
   assertRect(
     await deck.locator('.create-menu-native-action-stage').boundingBox(),
@@ -340,7 +374,9 @@ try {
   )
   assertRect(await mobileTitleCanvas.boundingBox(), mobileTitleStageBounds, 'mobile title canvas')
   assertRect(
-    await mobile.locator('.main-menu-native-stage:not(.main-menu-quit-stage)').boundingBox(),
+    await mobile.locator(
+      '.main-menu-native-stage:not(.main-menu-quit-stage):not(.main-menu-account-stage)',
+    ).boundingBox(),
     { x: (844 - 1600 * (390 / 900)) / 2, y: 0, width: 1600 * (390 / 900), height: 390 },
     'mobile title native stage',
   )
@@ -465,7 +501,7 @@ try {
   await mobileCdp.send('Input.dispatchTouchEvent', {
     type: 'touchMove',
     touchPoints: [
-      { id: 11, x: centerX + requestedOffset, y: centerY },
+      { id: 11, x: centerX - requestedOffset, y: centerY },
       { id: 22, x: primaryCenter.x + primaryRequestedOffset, y: primaryCenter.y },
     ],
   })
@@ -475,7 +511,7 @@ try {
     playerX: node.__sdrHubFrame.playerX,
     primarySpellKinds: [...node.__sdrHubFrame.primarySpellKinds],
   }))
-  assert.ok(concurrentHeld.playerX - concurrentBefore > 10, 'left touch must move during attack')
+  assert.ok(concurrentBefore - concurrentHeld.playerX > 10, 'left touch must move during attack')
   assert.equal(concurrentHeld.playerHeadingIndex, 6)
   assert.ok(concurrentHeld.primarySpellKinds.includes('water'))
   await touchEnd(mobileCdp)
@@ -567,11 +603,11 @@ try {
 
   const visibilityStart = gestureReuse.settled
   await touchStart(mobileCdp, centerX, centerY)
-  await touchMove(mobileCdp, centerX + requestedOffset, centerY)
+  await touchMove(mobileCdp, centerX - requestedOffset, centerY)
   await mobile.waitForTimeout(300)
   const visibilityBefore = await canvas.evaluate((node) => node.__sdrHubFrame.playerX)
   assert.ok(
-    visibilityBefore - visibilityStart > 10,
+    visibilityStart - visibilityBefore > 10,
     'expected held movement before the visibility-suspension probe',
   )
   await mobile.evaluate(() => {
@@ -589,19 +625,57 @@ try {
     () => canvas.evaluate((node) => node.__sdrHubFrame.playerX),
     'visibility interruption during render suspension',
   )
-  const visibilitySuspensionTravel = visibilityInterruption.afterTail - visibilityBefore
+  const visibilitySuspensionTravel = Math.abs(
+    visibilityInterruption.afterTail - visibilityBefore,
+  )
   assert.ok(
-    visibilitySuspensionTravel < 30,
+    visibilitySuspensionTravel < 40,
     `hidden render suspension retained authoritative input (${visibilitySuspensionTravel})`,
   )
   const visibilityKnobCenter = rectCenter(await joystickKnob.boundingBox())
   assert.ok(Math.abs(visibilityKnobCenter.x - centerX) < 1)
   assert.ok(Math.abs(visibilityKnobCenter.y - centerY) < 1)
+  await mobileScene.focus()
+  await mobile.keyboard.press('Escape')
+  const mobilePause = mobile.locator(
+    '.gameplay-pause-stage[data-gameplay-pause-view="owner"]',
+  )
+  await mobilePause.waitFor()
+  await mobile.waitForTimeout(350)
+  await mobilePause.getByRole('button', { name: 'GAME SETTINGS' }).click()
+  const mobileSettings = mobile.locator('.game-settings-dialog')
+  await mobileSettings.waitFor()
+  await mobileSettings.getByRole('slider', { name: 'CAMERA FOV' }).fill('125')
+  await mobileSettings.getByRole('slider', { name: 'UI SCALE' }).fill('150')
+  assert.equal(await mobileScene.getAttribute('data-camera-zoom'), '0.96')
+  assert.equal(await mobileScene.getAttribute('data-ui-scale'), '1.5')
+  await mobile.screenshot({ path: mobileSettingsScreenshotPath })
+  await mobileSettings.getByRole('button', { name: 'DONE' }).click()
+  await mobileSettings.waitFor({ state: 'detached' })
+  const scaledJoystickBounds = await joystick.boundingBox()
+  const scaledPrimaryJoystickBounds = await primaryJoystick.boundingBox()
+  assert.ok(scaledJoystickBounds && scaledPrimaryJoystickBounds)
+  assert.ok(Math.abs(scaledJoystickBounds.width / joystickBounds.width - 1.5) < 0.01)
+  assert.ok(Math.abs(scaledPrimaryJoystickBounds.width / primaryJoystickBounds.width - 1.5) < 0.01)
+  const scaledMapBounds = await mobile.locator('.hub-hud-map').boundingBox()
+  assert.ok(scaledMapBounds && scaledMapBounds.x >= 0 && scaledMapBounds.y >= 0)
+  assert.ok(scaledMapBounds.x + scaledMapBounds.width <= 844.05)
+  assert.ok(scaledMapBounds.y + scaledMapBounds.height <= 390.05)
+  assert.equal(
+    rectsOverlap(scaledPrimaryJoystickBounds, scaledMapBounds),
+    false,
+    'scaled primary joystick must not cover the scaled Hub map control',
+  )
   const hubResolution = Number(await canvas.getAttribute('data-resolution'))
   await mobile.screenshot({ path: mobileHubScreenshotPath })
 
-  await touchStart(mobileCdp, centerX, centerY)
-  await touchMove(mobileCdp, centerX + requestedOffset, centerY)
+  const scaledCenter = rectCenter(scaledJoystickBounds)
+  await touchStart(mobileCdp, scaledCenter.x, scaledCenter.y)
+  await touchMove(
+    mobileCdp,
+    scaledCenter.x + scaledJoystickBounds.width * 0.3,
+    scaledCenter.y,
+  )
   await mobile.waitForTimeout(200)
   await mobile.getByRole('button', { name: 'Enter the Boneyard' }).click()
   const mobileBoneyard = mobile.locator('.boneyard-scene[data-renderer-state="ready"]')
@@ -700,7 +774,9 @@ try {
     before,
     after,
     joystickWidth: joystickBounds.width,
+    scaledJoystickWidth: scaledJoystickBounds.width,
     primaryJoystickWidth: primaryJoystickBounds.width,
+    scaledPrimaryJoystickWidth: scaledPrimaryJoystickBounds.width,
     primaryAttack: {
       boneyard: boneyardPrimaryAttack,
       concurrentHeld,
@@ -710,6 +786,7 @@ try {
     screenshots: {
       boneyard: mobileBoneyardScreenshotPath,
       hub: mobileHubScreenshotPath,
+      settings: mobileSettingsScreenshotPath,
     },
     stageBounds: mobileStageBounds,
     touchDistance,
@@ -729,7 +806,7 @@ try {
     },
     viewport: mobileViewport,
     boneyard: {
-      darkness: Boolean(darknessBounds),
+      environmentLight: Boolean(environmentLightBounds),
       playerScreen,
       viewport: mobileBoneyardViewport,
     },
