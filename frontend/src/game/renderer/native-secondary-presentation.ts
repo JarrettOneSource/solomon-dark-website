@@ -230,6 +230,8 @@ export class NativeSecondaryScreenFeedbackPresentation {
   private cameraMagnitude = 0
   private green = 1
   private lastEventId = 0
+  private lastPrimaryImpactId = 0
+  private lastPrimaryMagnitudeId = 0
   private lastTick: number
   private red = 1
   private decayPerTick = 0
@@ -297,6 +299,52 @@ export class NativeSecondaryScreenFeedbackPresentation {
       this.alpha = repeatedFloatDecay(
         this.alpha,
         this.decayPerTick,
+        this.lastTick - eventTick,
+      )
+    }
+  }
+
+  consumePrimaryCameraDisplacement(input: Readonly<{
+    displacement: Readonly<{ x: number; y: number }>
+    eventId: number
+    tick: number
+    worldKey: string
+  }>): void {
+    if (input.eventId <= this.lastPrimaryImpactId) return
+    this.lastPrimaryImpactId = input.eventId
+    if (input.worldKey !== this.worldKey) return
+    const eventTick = Math.max(0, Math.trunc(input.tick))
+    if (eventTick > this.lastTick) this.advanceTo(eventTick)
+    let x = Math.fround(input.displacement.x)
+    let y = Math.fround(input.displacement.y)
+    if (eventTick < this.lastTick) {
+      x = repeatedFloatMultiply(x, Math.fround(0.75), this.lastTick - eventTick)
+      y = repeatedFloatMultiply(y, Math.fround(0.75), this.lastTick - eventTick)
+    }
+    const currentSquared = this.cameraDisplacementX * this.cameraDisplacementX
+      + this.cameraDisplacementY * this.cameraDisplacementY
+    if (x * x + y * y >= currentSquared) {
+      this.cameraDisplacementX = x
+      this.cameraDisplacementY = y
+    }
+  }
+
+  consumePrimaryCameraMagnitude(input: Readonly<{
+    eventId: number
+    magnitude: number
+    tick: number
+    worldKey: string
+  }>): void {
+    if (input.eventId <= this.lastPrimaryMagnitudeId) return
+    this.lastPrimaryMagnitudeId = input.eventId
+    if (input.worldKey !== this.worldKey) return
+    const eventTick = Math.max(0, Math.trunc(input.tick))
+    if (eventTick > this.lastTick) this.advanceTo(eventTick)
+    this.cameraMagnitude = Math.fround(input.magnitude)
+    if (eventTick < this.lastTick) {
+      this.cameraMagnitude = repeatedFloatMultiply(
+        this.cameraMagnitude,
+        MAGIC_SHIELD_EXPLOSION_CAMERA_DECAY,
         this.lastTick - eventTick,
       )
     }

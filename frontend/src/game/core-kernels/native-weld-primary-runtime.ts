@@ -26,9 +26,25 @@ import {
   earthBoulderHeldOrientationStep,
   type EarthBoulderOrientation,
 } from './primary-spell-earth-orientation.ts'
+import {
+  createNativeWeldMeteorImpactProgram,
+  type NativeWeldMeteorDebrisSeed,
+  type NativeWeldMeteorMarkerState,
+  stepNativeWeldMeteorMarker,
+} from './native-weld-meteor.ts'
+import {
+  NATIVE_WELD_BOULDER_DEBRIS_LIFETIME_TICKS,
+  createNativeWeldEtherealBoulderWeakDebrisProgram,
+} from './native-weld-boulder-debris.ts'
+import type { NativeWeldGroundSparkFadeSeed } from './native-weld-ground-spark.ts'
+import {
+  stepNativeWeldSteamActor,
+  type NativeWeldSteamActorState,
+} from './native-weld-steam.ts'
 
 export type NativeWeldOneShotBuildId = 1000 | 1001 | 1002 | 1009
 export type NativeWeldChannelBuildId = 1003 | 1004 | 1005
+export type NativeWeldBeamBuildId = 1003 | 1004
 export type NativeWeldPersistentBuildId = 1006 | 1007 | 1008
 
 export type NativeWeldCastCue =
@@ -81,6 +97,10 @@ export interface NativeWeldProjectileState {
   readonly hitTargetIds: readonly string[]
   readonly id: number
   readonly frostPulseAspect: number | null
+  readonly frostPresentationLanes: readonly [
+    NativeWeldFrostPresentationLane,
+    NativeWeldFrostPresentationLane,
+  ] | null
   readonly frostTurnDegrees: number | null
   readonly groundSparkNativeAgeTicks: number | null
   readonly groundSparkTurnTicksRemaining: number | null
@@ -102,6 +122,12 @@ export interface NativeWeldProjectileState {
   readonly worldKey: string
 }
 
+export interface NativeWeldFrostPresentationLane {
+  readonly aspect: number
+  readonly rotationDegrees: number
+  readonly scale: number
+}
+
 interface NativeWeldOwnedActorBase {
   readonly ageTicks: number
   readonly birthTick: number
@@ -115,7 +141,7 @@ interface NativeWeldOwnedActorBase {
 }
 
 export interface NativeWeldChannelActorState extends NativeWeldOwnedActorBase {
-  readonly buildId: NativeWeldChannelBuildId
+  readonly buildId: NativeWeldBeamBuildId
   readonly endpoint: Vector2 | null
   readonly kind: 'weld-channel'
   readonly lightRegistration: null
@@ -164,10 +190,11 @@ export interface NativeWeldHailstonesState extends NativeWeldPersistentActorBase
   readonly buildId: 1008
   readonly damage: number
   readonly lightRegistration: NativeLightProviderRegistration
-  readonly maximumScale: 1
+  readonly maximumScale: number
   readonly phase: 'flight' | 'held'
-  readonly presentationScale: number
   readonly pushback: number
+  readonly releaseAgeTicks: number | null
+  readonly releaseFadeScale: number | null
   readonly rocks: readonly NativeWeldHailstoneRockState[]
   readonly scale: number
   readonly toughness: number
@@ -187,33 +214,90 @@ export type NativeWeldPersistentActorState =
 
 export interface NativeWeldMeteorActorState extends NativeWeldOwnedActorBase {
   readonly buildId: 1007
+  readonly cameraDisplacement: Vector2 | null
   readonly damage: number
+  readonly debris: readonly NativeWeldMeteorDebrisSeed[]
+  readonly fallHeadingDegrees: number
   readonly fallScalar: number
+  readonly fallStep: number
   readonly impactDue: boolean
+  readonly impactAgeTicks: number
+  readonly impactRadiusScalar: number
+  readonly impactRotationDegrees: number
+  readonly impactSoundPitch: number | null
+  readonly impactThrowFirePitch: number | null
   readonly impactTicksRemaining: number
   readonly kind: 'weld-meteor'
   readonly lightRegistration: NativeLightProviderRegistration
   readonly phase: 'fall' | 'impact'
   readonly position: Vector2
-  readonly presentationPhase: number
   readonly privateSeed: number
   readonly pulseDue: boolean
   readonly pulseSequence: number
   readonly pulseTicksRemaining: number
+  readonly size: number
+  readonly underpowered: boolean
 }
 
 export interface NativeWeldImpactActorState extends NativeWeldOwnedActorBase {
+  readonly alpha: number
   readonly buildId: NativeWeldOneShotBuildId | NativeWeldPersistentBuildId
+  readonly impactSoundPitch: number | null
+  readonly impactSoundVariant: number | null
   readonly kind: 'weld-impact'
+  readonly lightRegistration: null
+  readonly position: Vector2
+  readonly presentationRotationDegrees: number | null
+  readonly presentationScale: number
+}
+
+export interface NativeWeldBoulderDebrisActorState extends NativeWeldOwnedActorBase {
+  readonly buildId: 1006
+  readonly debris: readonly NativeWeldMeteorDebrisSeed[]
+  readonly kind: 'weld-boulder-debris'
   readonly lightRegistration: null
   readonly position: Vector2
 }
 
+export interface NativeWeldHailRockFadeActorState extends NativeWeldOwnedActorBase {
+  readonly buildId: 1008
+  readonly kind: 'weld-hail-rock-fade'
+  readonly lightRegistration: null
+  readonly position: Vector2
+  readonly rotationDegrees: number
+}
+
+export interface NativeWeldFrostFadeActorState extends NativeWeldOwnedActorBase {
+  readonly buildId: 1008
+  readonly kind: 'weld-frost-fade'
+  readonly lightRegistration: null
+  readonly position: Vector2
+  readonly scale: number
+}
+
+export interface NativeWeldGroundSparkFadeActorState extends NativeWeldOwnedActorBase {
+  readonly alpha: number
+  readonly alphaStep: number
+  readonly buildId: 1009
+  readonly kind: 'weld-ground-spark-fade'
+  readonly lightRegistration: null
+  readonly position: Vector2
+  readonly record: 71 | 1836 | 1837 | 1838 | 1839
+  readonly rotationDegrees: number
+  readonly scale: number
+}
+
 export type NativeWeldWorldActor =
+  | NativeWeldBoulderDebrisActorState
   | NativeWeldChannelActorState
+  | NativeWeldFrostFadeActorState
+  | NativeWeldGroundSparkFadeActorState
+  | NativeWeldHailRockFadeActorState
   | NativeWeldImpactActorState
   | NativeWeldMeteorActorState
+  | NativeWeldMeteorMarkerState
   | NativeWeldPersistentActorState
+  | NativeWeldSteamActorState
 
 export interface SpawnNativeWeldOneShotInput {
   readonly aimDirection: Vector2
@@ -233,7 +317,7 @@ export interface SpawnNativeWeldOneShotResult {
   readonly rng: NativeRngState
 }
 
-export const NATIVE_WELD_CHANNEL_VISIBLE_TICKS = 5
+export const NATIVE_WELD_CHANNEL_VISIBLE_TICKS = 2
 export const NATIVE_WELD_IMPACT_VISIBLE_TICKS = 20
 export const NATIVE_WELD_METEOR_CADENCE_TICKS = 25
 export const NATIVE_WELD_METEOR_FALL_STEP = Math.fround(0.02)
@@ -243,6 +327,8 @@ export const NATIVE_WELD_PERSISTENT_INITIAL_SCALE = Math.fround(0.18)
 export const NATIVE_WELD_HAILSTONES_SPEED = 10
 export const NATIVE_WELD_HAILSTONES_LOOKAHEAD = 30
 export const NATIVE_WELD_HAILSTONES_TARGET_RADIUS_FACTOR = 3
+export const NATIVE_WELD_HAIL_ROCK_FADE_LIFETIME_TICKS = 400
+export const NATIVE_WELD_HAIL_RELEASE_FADE_LIFETIME_TICKS = 20
 
 const NATIVE_WELD_BALL_LIGHTNING_SPEED_FACTOR = 0.8500000238418579
 const NATIVE_WELD_BALL_LIGHTNING_INITIAL_ACCELERATION = 2
@@ -395,6 +481,16 @@ export function spawnNativeWeldOneShot(
       direction,
       flightTicks: 0,
       frostPulseAspect,
+      frostPresentationLanes: profile.buildId === 1001
+        ? Object.freeze([
+            Object.freeze({ aspect: 0, rotationDegrees: 0, scale: 0 }),
+            Object.freeze({
+              aspect: frostPulseAspect!,
+              rotationDegrees: secondaryPresentationPhaseDegrees!,
+              scale: 0,
+            }),
+          ] as const)
+        : null,
       frostTurnDegrees: profile.buildId === 1001 ? 0 : null,
       groundSparkNativeAgeTicks,
       groundSparkTurnTicksRemaining: profile.buildId === 1009 ? 0 : null,
@@ -433,6 +529,41 @@ export function spawnNativeWeldOneShot(
     }))
   }
   return { projectiles: Object.freeze(projectiles), rng }
+}
+
+export function stepNativeWeldProjectilePresentation(
+  projectile: NativeWeldProjectileState,
+  sourceRng: NativeRngState,
+): {
+  readonly projectile: NativeWeldProjectileState
+  readonly rng: NativeRngState
+} {
+  if (projectile.buildId !== 1001) return { projectile, rng: sourceRng }
+  let rng = sourceRng
+  const lanes = projectile.frostPresentationLanes!.map((lane) => {
+    let scale = Math.fround(lane.scale - Math.fround(0.01))
+    let aspect = lane.aspect
+    let rotationDegrees = lane.rotationDegrees
+    if (scale < Math.fround(0.1)) {
+      const nextAspect = drawNativeFloat(rng, Math.fround(0.25)); rng = nextAspect.state
+      const nextScale = drawNativeFloat(rng, Math.fround(0.75)); rng = nextScale.state
+      const nextRotation = drawNativeFloat(rng, 45); rng = nextRotation.state
+      aspect = Math.fround(nextAspect.value + 0.5)
+      scale = Math.fround(nextScale.value + 0.5)
+      rotationDegrees = nextRotation.value
+    }
+    return Object.freeze({ aspect, rotationDegrees, scale })
+  }) as unknown as readonly [
+    NativeWeldFrostPresentationLane,
+    NativeWeldFrostPresentationLane,
+  ]
+  return {
+    projectile: Object.freeze({
+      ...projectile,
+      frostPresentationLanes: Object.freeze(lanes),
+    }),
+    rng,
+  }
 }
 
 export function stepNativeWeldProjectile(
@@ -553,7 +684,7 @@ export function stepNativeWeldProjectile(
 }
 
 export function createNativeWeldChannelActor(input: {
-  readonly buildId: NativeWeldChannelBuildId
+  readonly buildId: NativeWeldBeamBuildId
   readonly direction: Vector2
   readonly endpoint?: Vector2 | null
   readonly id: number
@@ -618,7 +749,7 @@ export function createNativeWeldPersistentActor(input: {
       hitTargetIds: Object.freeze([]),
       lifetimeTicksRemaining: Math.floor(input.vector[3]! * 1_000 + 250),
       lightRegistration: weldActorLightRegistration(input),
-      maximumScale: Math.fround(0.75),
+      maximumScale: Math.fround(input.vector[4]! * 0.75),
       orientation: Object.freeze([
         ...EARTH_BOULDER_IDENTITY_ORIENTATION,
       ]) as EarthBoulderOrientation,
@@ -638,10 +769,11 @@ export function createNativeWeldPersistentActor(input: {
       buildId: 1008,
       damage: input.vector[0]!,
       lightRegistration: weldActorLightRegistration(input),
-      maximumScale: 1,
+      maximumScale: input.vector[3]!,
       phase: 'held',
-      presentationScale: 1,
       pushback: input.vector[4]!,
+      releaseAgeTicks: null,
+      releaseFadeScale: null,
       rocks: Object.freeze([]),
       scale: NATIVE_WELD_PERSISTENT_INITIAL_SCALE,
       toughness: input.vector[3]!,
@@ -661,9 +793,39 @@ export function updateNativeWeldPersistentActor(
   origin: Vector2,
   direction: Vector2,
   sourceRng: NativeRngState,
-): { readonly actor: NativeWeldPersistentActorState; readonly rng: NativeRngState } {
+  options: {
+    readonly castProgressFactor?: number
+    readonly enhancedEffects?: boolean
+    readonly underpowered?: boolean
+  } = {},
+): {
+  readonly actor: NativeWeldPersistentActorState
+  readonly debris: readonly NativeWeldMeteorDebrisSeed[]
+  readonly hailRockFades: readonly Readonly<{
+    readonly position: Vector2
+    readonly rotationDegrees: number
+  }>[]
+  readonly releaseRequested: boolean
+  readonly rng: NativeRngState
+} {
+  const castProgressFactor = options.castProgressFactor ?? 1
+  const enhancedEffects = options.enhancedEffects ?? true
+  const underpowered = options.underpowered ?? false
+  if (!Number.isFinite(castProgressFactor) || castProgressFactor <= 0) {
+    throw new RangeError('weld cast progress factor must be finite and positive')
+  }
   if (actor.buildId === 1006) {
-    const growth = Math.fround(actor.vector[5]! * 1.5) * 0.0025
+    const debrisProgram = underpowered && actor.quantity > 1
+      ? createNativeWeldEtherealBoulderWeakDebrisProgram({
+          direction: actor.direction,
+          rng: sourceRng,
+          scale: actor.scale,
+        })
+      : { debris: Object.freeze([]), rng: sourceRng }
+    const growthInput = underpowered
+      ? 1
+      : Math.fround(actor.vector[5]! * castProgressFactor)
+    const growth = Math.fround(Math.fround(growthInput * 0.0025) * 3)
     const scale = Math.min(actor.maximumScale, Math.fround(actor.scale + growth))
     return {
       actor: Object.freeze({
@@ -674,26 +836,49 @@ export function updateNativeWeldPersistentActor(
           : scale,
         buildId: 1006,
         direction: Object.freeze({ ...direction }),
+        damage: underpowered ? Math.fround(actor.vector[0]! * 0.5) : actor.damage,
         origin: Object.freeze({ ...origin }),
         orientation: Object.freeze(earthBoulderHeldOrientationStep(
           actor.orientation,
           direction,
         )),
         pulseSequence: actor.pulseSequence + 1,
+        quantity: underpowered ? 1 : actor.quantity,
+        remainingDamage: underpowered
+          ? Math.fround(actor.remainingDamage * 0.5)
+          : actor.remainingDamage,
         scale,
+        speedFactor: underpowered ? 1 : actor.speedFactor,
       }),
-      rng: sourceRng,
+      debris: debrisProgram.debris,
+      hailRockFades: Object.freeze([]),
+      releaseRequested: underpowered && actor.scale > Math.fround(0.3),
+      rng: debrisProgram.rng,
     }
   }
   if (actor.buildId === 1008) {
     const oldBucket = Math.floor(30 * actor.scale)
-    const growth = Math.fround(actor.vector[2]! * 2.5) * 0.0025 * 3
+    const growthInput = underpowered && actor.scale > Math.fround(0.3)
+      ? 0
+      : Math.fround(Math.fround(actor.vector[2]! * castProgressFactor) * 0.5)
+    const growth = Math.fround(Math.fround(growthInput * 0.0025) * 3)
     const scale = Math.min(actor.maximumScale, Math.fround(actor.scale + growth))
     let rng = sourceRng
     let rocks = actor.rocks
+    let hailRockFades: readonly Readonly<{
+      readonly position: Vector2
+      readonly rotationDegrees: number
+    }>[] = Object.freeze([])
     if (Math.floor(30 * scale) !== oldBucket) {
-      const rebuilt = rebuildNativeWeldHailstonesRocks(actor, scale, rng)
+      const rebuilt = rebuildNativeWeldHailstonesRocks(
+        actor,
+        origin,
+        scale,
+        rng,
+        enhancedEffects,
+      )
       rocks = rebuilt.rocks
+      hailRockFades = rebuilt.hailRockFades
       rng = rebuilt.rng
     }
     return {
@@ -701,12 +886,18 @@ export function updateNativeWeldPersistentActor(
         ...actor,
         ageTicks: actor.ageTicks + 1,
         buildId: 1008,
+        damage: underpowered ? Math.fround(actor.vector[0]! * 0.5) : actor.damage,
         direction: Object.freeze({ ...direction }),
         origin: Object.freeze({ ...origin }),
         pulseSequence: actor.pulseSequence + 1,
+        pushback: underpowered ? 0 : actor.vector[4]!,
         rocks,
         scale,
+        widen: underpowered ? 0 : actor.vector[5]!,
       }),
+      debris: Object.freeze([]),
+      hailRockFades,
+      releaseRequested: false,
       rng,
     }
   }
@@ -719,8 +910,100 @@ export function updateNativeWeldPersistentActor(
       origin: Object.freeze({ ...origin }),
       pulseSequence: actor.pulseSequence + 1,
     }),
+    debris: Object.freeze([]),
+    hailRockFades: Object.freeze([]),
+    releaseRequested: false,
     rng: sourceRng,
   }
+}
+
+export function createNativeWeldBoulderDebrisActor(input: {
+  readonly debris: readonly NativeWeldMeteorDebrisSeed[]
+  readonly direction: Vector2
+  readonly id: number
+  readonly origin: Vector2
+  readonly ownerId: string
+  readonly tick: number
+  readonly vector: readonly number[]
+  readonly worldKey: string
+}): NativeWeldBoulderDebrisActorState {
+  return Object.freeze({
+    ageTicks: 0,
+    birthTick: input.tick,
+    buildId: 1006,
+    debris: Object.freeze(input.debris.map((debris) => Object.freeze({
+      ...debris,
+      position: Object.freeze({ ...debris.position }),
+      velocity: Object.freeze({ ...debris.velocity }),
+    }))),
+    direction: Object.freeze({ ...input.direction }),
+    id: input.id,
+    kind: 'weld-boulder-debris',
+    lightRegistration: null,
+    origin: Object.freeze({ ...input.origin }),
+    ownerId: input.ownerId,
+    position: Object.freeze({ ...input.origin }),
+    vector: Object.freeze([...input.vector]),
+    worldKey: input.worldKey,
+  })
+}
+
+export function createNativeWeldHailRockFadeActor(input: {
+  readonly direction: Vector2
+  readonly id: number
+  readonly origin: Vector2
+  readonly ownerId: string
+  readonly position: Vector2
+  readonly rotationDegrees: number
+  readonly tick: number
+  readonly vector: readonly number[]
+  readonly worldKey: string
+}): NativeWeldHailRockFadeActorState {
+  return Object.freeze({
+    ageTicks: 0,
+    birthTick: input.tick,
+    buildId: 1008,
+    direction: Object.freeze({ ...input.direction }),
+    id: input.id,
+    kind: 'weld-hail-rock-fade',
+    lightRegistration: null,
+    origin: Object.freeze({ ...input.origin }),
+    ownerId: input.ownerId,
+    position: Object.freeze({ ...input.position }),
+    rotationDegrees: input.rotationDegrees,
+    vector: Object.freeze([...input.vector]),
+    worldKey: input.worldKey,
+  })
+}
+
+export function createNativeWeldGroundSparkFadeActor(input: {
+  readonly direction: Vector2
+  readonly id: number
+  readonly ownerId: string
+  readonly seed: NativeWeldGroundSparkFadeSeed
+  readonly tick: number
+  readonly vector: readonly number[]
+  readonly worldKey: string
+}): NativeWeldGroundSparkFadeActorState {
+  return Object.freeze({
+    ageTicks: 0,
+    alpha: input.seed.alpha,
+    alphaStep: input.seed.alphaStep,
+    birthTick: input.tick,
+    buildId: 1009,
+    direction: Object.freeze({ ...input.direction }),
+    id: input.id,
+    kind: 'weld-ground-spark-fade',
+    lightRegistration: null,
+    origin: Object.freeze({ ...input.seed.position }),
+    ownerId: input.ownerId,
+    position: Object.freeze({ ...input.seed.position }),
+    record: input.seed.record,
+    rotationDegrees: input.seed.rotationDegrees,
+    scale: input.seed.scale,
+    vector: Object.freeze([...input.vector]),
+    worldKey: input.worldKey,
+  })
 }
 
 export function releaseNativeWeldPersistentActor(input: {
@@ -728,8 +1011,9 @@ export function releaseNativeWeldPersistentActor(input: {
   readonly firstChildId: number
   readonly registerLightProvider?: RegisterNativeLightProvider
   readonly rng: NativeRngState
+  readonly tick: number
 }): {
-  readonly actors: readonly NativeWeldPersistentActorState[]
+  readonly actors: readonly NativeWeldWorldActor[]
   readonly nextId: number
   readonly rng: NativeRngState
 } {
@@ -740,15 +1024,19 @@ export function releaseNativeWeldPersistentActor(input: {
   if (actor.buildId === 1008) {
     const presentation = drawNativeFloat(input.rng, Math.fround(0.75))
     const carrierOrigin = Object.freeze({
-      x: Math.fround(actor.origin.x - actor.direction.x * 10),
+      x: Math.fround(actor.origin.x - actor.direction.x * 20),
       y: Math.fround(actor.origin.y - actor.direction.y * 20),
     })
     const rocks = actor.rocks.map((rock) => Object.freeze({
       ...rock,
       damageRemaining: actor.damage,
       releaseOffset: Object.freeze({
-        x: rock.localPosition.y,
-        y: nativeWeldHailstoneReleaseHeight(rock.localPosition.z, rock.decay),
+        x: rock.localPosition.x,
+        y: nativeWeldHailstoneReleaseHeight(
+          rock.localPosition.y,
+          rock.localPosition.z,
+          rock.decay,
+        ),
       }),
     }))
     return {
@@ -757,10 +1045,28 @@ export function releaseNativeWeldPersistentActor(input: {
         direction: Object.freeze({ ...actor.direction }),
         origin: carrierOrigin,
         phase: 'flight',
-        presentationScale: Math.fround(presentation.value + 0.75),
+        releaseAgeTicks: 0,
+        releaseFadeScale: Math.fround(presentation.value + 0.75),
         rocks: Object.freeze(rocks),
+      }), Object.freeze({
+        ageTicks: 0,
+        birthTick: input.tick,
+        buildId: 1008,
+        direction: Object.freeze({ ...actor.direction }),
+        id: input.firstChildId,
+        kind: 'weld-frost-fade',
+        lightRegistration: null,
+        origin: carrierOrigin,
+        ownerId: actor.ownerId,
+        position: Object.freeze({
+          x: carrierOrigin.x,
+          y: Math.fround(carrierOrigin.y - 20),
+        }),
+        scale: Math.fround(Math.fround(presentation.value + 0.75) * 5),
+        vector: Object.freeze([...actor.vector]),
+        worldKey: actor.worldKey,
       })]),
-      nextId: input.firstChildId,
+      nextId: input.firstChildId + 1,
       rng: presentation.state,
     }
   }
@@ -824,15 +1130,22 @@ export function retainNativeWeldHailstoneDamage(
 }
 
 export function createNativeWeldMeteor(input: {
+  readonly cameraDisplacement?: null
   readonly damage: number
   readonly direction: Vector2
+  readonly fallHeadingDegrees: number
+  readonly fallScalar: number
+  readonly fallStep: number
   readonly id: number
+  readonly impactTicks: number
   readonly origin: Vector2
   readonly ownerId: string
-  readonly presentationPhase: number
+  readonly position: Vector2
   readonly privateSeed: number
   readonly registerLightProvider?: RegisterNativeLightProvider
+  readonly size: number
   readonly tick: number
+  readonly underpowered: boolean
   readonly vector: readonly number[]
   readonly worldKey: string
 }): NativeWeldMeteorActorState {
@@ -840,12 +1153,21 @@ export function createNativeWeldMeteor(input: {
     ageTicks: 0,
     birthTick: input.tick,
     buildId: 1007,
+    cameraDisplacement: null,
     damage: input.damage,
+    debris: Object.freeze([]),
     direction: Object.freeze({ ...input.direction }),
-    fallScalar: Math.fround(1 - input.presentationPhase),
+    fallHeadingDegrees: input.fallHeadingDegrees,
+    fallScalar: input.fallScalar,
+    fallStep: input.fallStep,
     id: input.id,
     impactDue: false,
-    impactTicksRemaining: NATIVE_WELD_METEOR_IMPACT_TICKS,
+    impactAgeTicks: 0,
+    impactRadiusScalar: 0,
+    impactRotationDegrees: 0,
+    impactSoundPitch: null,
+    impactThrowFirePitch: null,
+    impactTicksRemaining: input.impactTicks,
     kind: 'weld-meteor',
     lightRegistration: input.registerLightProvider?.('actor') ?? Object.freeze({
       managerLane: 'actor',
@@ -853,13 +1175,14 @@ export function createNativeWeldMeteor(input: {
     }),
     origin: Object.freeze({ ...input.origin }),
     ownerId: input.ownerId,
-    position: Object.freeze({ ...input.origin }),
-    presentationPhase: input.presentationPhase,
+    position: Object.freeze({ ...input.position }),
     privateSeed: input.privateSeed,
     phase: 'fall',
     pulseDue: false,
     pulseSequence: 0,
     pulseTicksRemaining: NATIVE_WELD_METEOR_PULSE_TICKS,
+    size: input.size,
+    underpowered: input.underpowered,
     vector: Object.freeze([...input.vector]),
     worldKey: input.worldKey,
   })
@@ -867,97 +1190,186 @@ export function createNativeWeldMeteor(input: {
 
 export function stepNativeWeldWorldActor(
   actor: NativeWeldWorldActor,
+  sourceRng: NativeRngState,
   canAdvance: (
     actor: NativeWeldPersistentActorState,
     from: Readonly<Vector2>,
     to: Readonly<Vector2>,
   ) => boolean = () => true,
-): NativeWeldWorldActor | null {
+): { readonly actor: NativeWeldWorldActor | null; readonly rng: NativeRngState } {
+  if (actor.kind === 'weld-boulder-debris') {
+    return {
+      actor: actor.ageTicks + 1 < NATIVE_WELD_BOULDER_DEBRIS_LIFETIME_TICKS
+        ? Object.freeze({ ...actor, ageTicks: actor.ageTicks + 1 })
+        : null,
+      rng: sourceRng,
+    }
+  }
+  if (actor.kind === 'weld-hail-rock-fade') {
+    return {
+      actor: actor.ageTicks + 1 < NATIVE_WELD_HAIL_ROCK_FADE_LIFETIME_TICKS
+        ? Object.freeze({ ...actor, ageTicks: actor.ageTicks + 1 })
+        : null,
+      rng: sourceRng,
+    }
+  }
+  if (actor.kind === 'weld-frost-fade') {
+    return {
+      actor: actor.ageTicks + 1 < NATIVE_WELD_HAIL_RELEASE_FADE_LIFETIME_TICKS
+        ? Object.freeze({ ...actor, ageTicks: actor.ageTicks + 1 })
+        : null,
+      rng: sourceRng,
+    }
+  }
+  if (actor.kind === 'weld-ground-spark-fade') {
+    const alpha = Math.fround(actor.alpha - actor.alphaStep)
+    return {
+      actor: alpha > 0
+        ? Object.freeze({ ...actor, ageTicks: actor.ageTicks + 1, alpha })
+        : null,
+      rng: sourceRng,
+    }
+  }
+  if (actor.kind === 'weld-meteor-marker') {
+    return { actor: stepNativeWeldMeteorMarker(actor), rng: sourceRng }
+  }
   if (actor.kind === 'weld-channel') {
-    return actor.ageTicks + 1 < NATIVE_WELD_CHANNEL_VISIBLE_TICKS
-      ? Object.freeze({ ...actor, ageTicks: actor.ageTicks + 1 })
-      : null
+    return {
+      actor: actor.ageTicks + 1 < NATIVE_WELD_CHANNEL_VISIBLE_TICKS
+        ? Object.freeze({ ...actor, ageTicks: actor.ageTicks + 1 })
+        : null,
+      rng: sourceRng,
+    }
+  }
+  if (actor.kind === 'weld-steam') {
+    return { actor: stepNativeWeldSteamActor(actor), rng: sourceRng }
   }
   if (actor.kind === 'weld-impact') {
-    return actor.ageTicks + 1 < NATIVE_WELD_IMPACT_VISIBLE_TICKS
-      ? Object.freeze({ ...actor, ageTicks: actor.ageTicks + 1 })
-      : null
+    const alpha = actor.alpha > 0
+      ? Math.fround(actor.alpha - Math.fround(0.1))
+      : 0
+    return {
+      actor: actor.ageTicks + 1 < NATIVE_WELD_IMPACT_VISIBLE_TICKS && alpha >= 0
+        ? Object.freeze({ ...actor, ageTicks: actor.ageTicks + 1, alpha })
+        : null,
+      rng: sourceRng,
+    }
   }
   if (actor.kind === 'weld-meteor') {
     if (actor.phase === 'fall') {
-      const fallScalar = Math.fround(actor.fallScalar - NATIVE_WELD_METEOR_FALL_STEP)
-      return fallScalar > 0
-        ? Object.freeze({
+      const fallScalar = Math.fround(actor.fallScalar - actor.fallStep)
+      if (fallScalar > 0) {
+        return {
+          actor: Object.freeze({
             ...actor,
             ageTicks: actor.ageTicks + 1,
             fallScalar,
-          })
-        : Object.freeze({
-            ...actor,
-            ageTicks: actor.ageTicks + 1,
-            fallScalar,
-            impactDue: true,
-            phase: 'impact',
-          })
+          }),
+          rng: sourceRng,
+        }
+      }
+      const impact = createNativeWeldMeteorImpactProgram({
+        fallScalar,
+        rng: sourceRng,
+        underpowered: actor.underpowered,
+      })
+      return {
+        actor: Object.freeze({
+          ...actor,
+          ageTicks: actor.ageTicks + 1,
+          cameraDisplacement: impact.cameraDisplacement,
+          debris: impact.debris,
+          fallScalar,
+          impactDue: true,
+          impactRadiusScalar: impact.impactRadiusScalar,
+          impactRotationDegrees: impact.impactRotationDegrees,
+          impactSoundPitch: impact.impactSoundPitch,
+          impactThrowFirePitch: impact.impactThrowFirePitch,
+          phase: 'impact',
+        }),
+        rng: impact.rng,
+      }
     }
     const impactTicksRemaining = actor.impactTicksRemaining - 1
-    if (impactTicksRemaining <= 0) return null
+    if (impactTicksRemaining <= 0) return { actor: null, rng: sourceRng }
     const pulseTicksRemaining = actor.pulseTicksRemaining - 1
     const pulseDue = pulseTicksRemaining === 0
-    return Object.freeze({
-      ...actor,
-      ageTicks: actor.ageTicks + 1,
-      impactDue: false,
-      impactTicksRemaining,
-      pulseDue,
-      pulseSequence: pulseDue ? actor.pulseSequence + 1 : actor.pulseSequence,
-      pulseTicksRemaining: pulseDue
-        ? NATIVE_WELD_METEOR_PULSE_TICKS
-        : pulseTicksRemaining,
-    })
+    return {
+      actor: Object.freeze({
+        ...actor,
+        ageTicks: actor.ageTicks + 1,
+        impactAgeTicks: actor.impactAgeTicks + 1,
+        impactDue: false,
+        impactTicksRemaining,
+        pulseDue,
+        pulseSequence: pulseDue ? actor.pulseSequence + 1 : actor.pulseSequence,
+        pulseTicksRemaining: pulseDue
+          ? NATIVE_WELD_METEOR_PULSE_TICKS
+          : pulseTicksRemaining,
+      }),
+      rng: sourceRng,
+    }
   }
-  if (actor.phase === 'held') return actor
+  if (actor.phase === 'held') return { actor, rng: sourceRng }
   if (actor.buildId === 1006) {
     const lifetimeTicksRemaining = actor.lifetimeTicksRemaining - 1
-    if (lifetimeTicksRemaining <= 0) return null
+    if (lifetimeTicksRemaining <= 0) return { actor: null, rng: sourceRng }
     const origin = Object.freeze({
       x: Math.fround(actor.origin.x + actor.velocity.x),
       y: Math.fround(actor.origin.y + actor.velocity.y),
     })
-    if (!canAdvance(actor, actor.origin, origin)) return null
-    return Object.freeze({
-      ...actor,
-      ageTicks: actor.ageTicks + 1,
-      flightTicks: actor.flightTicks + 1,
-      lifetimeTicksRemaining,
-      origin,
-      orientation: Object.freeze(earthBoulderFlightOrientationStep(
-        actor.orientation,
-        actor.direction,
-        actor.velocity,
-        actor.scale,
-      )),
-    })
+    if (!canAdvance(actor, actor.origin, origin)) return { actor: null, rng: sourceRng }
+    return {
+      actor: Object.freeze({
+        ...actor,
+        ageTicks: actor.ageTicks + 1,
+        flightTicks: actor.flightTicks + 1,
+        lifetimeTicksRemaining,
+        origin,
+        orientation: Object.freeze(earthBoulderFlightOrientationStep(
+          actor.orientation,
+          actor.direction,
+          actor.velocity,
+          actor.scale,
+        )),
+      }),
+      rng: sourceRng,
+    }
   }
   const lookahead = Object.freeze({
     x: Math.fround(actor.origin.x + actor.direction.x * NATIVE_WELD_HAILSTONES_LOOKAHEAD),
     y: Math.fround(actor.origin.y + actor.direction.y * NATIVE_WELD_HAILSTONES_LOOKAHEAD),
   })
-  if (!canAdvance(actor, actor.origin, lookahead)) return null
+  if (!canAdvance(actor, actor.origin, lookahead)) return { actor: null, rng: sourceRng }
   const origin = Object.freeze({
     x: Math.fround(actor.origin.x + actor.direction.x * NATIVE_WELD_HAILSTONES_SPEED),
     y: Math.fround(actor.origin.y + actor.direction.y * NATIVE_WELD_HAILSTONES_SPEED),
   })
-  return Object.freeze({
-    ...actor,
-    ageTicks: actor.ageTicks + 1,
-    origin,
-    rocks: Object.freeze(actor.rocks.map((rock) => Object.freeze({
-      ...rock,
-      decay: Math.fround(rock.decay * Math.fround(0.95)),
-      phase: Math.min(1, Math.fround(rock.phase + Math.fround(0.025))),
-    }))),
-  })
+  return {
+    actor: Object.freeze({
+      ...actor,
+      ageTicks: actor.ageTicks + 1,
+      origin,
+      releaseAgeTicks: actor.releaseAgeTicks! + 1,
+      rocks: Object.freeze(actor.rocks.map((rock) => {
+        const decay = Math.fround(rock.decay * Math.fround(0.95))
+        return Object.freeze({
+          ...rock,
+          decay,
+          phase: Math.min(1, Math.fround(rock.phase + Math.fround(0.025))),
+          releaseOffset: Object.freeze({
+            x: rock.localPosition.x,
+            y: nativeWeldHailstoneReleaseHeight(
+              rock.localPosition.y,
+              rock.localPosition.z,
+              decay,
+            ),
+          }),
+        })
+      })),
+    }),
+    rng: sourceRng,
+  }
 }
 
 export function drawNativeWeldDamage(
@@ -1100,20 +1512,30 @@ function signedHeadingDelta(current: number, next: number): number {
 
 function rebuildNativeWeldHailstonesRocks(
   actor: NativeWeldHailstonesState,
+  origin: Vector2,
   scale: number,
   sourceRng: NativeRngState,
+  enhancedEffects: boolean,
 ): {
   readonly rng: NativeRngState
+  readonly hailRockFades: readonly Readonly<{
+    readonly position: Vector2
+    readonly rotationDegrees: number
+  }>[]
   readonly rocks: readonly NativeWeldHailstoneRockState[]
 } {
-  const desiredCount = Math.floor(Math.max(
+  const desiredCount = roundHalfToEven(Math.max(
     1,
     Math.fround(Math.fround(Math.fround(actor.pushback * 3 + 20) * scale) * scale),
   ))
   if (desiredCount <= actor.rocks.length) {
-    return { rng: sourceRng, rocks: actor.rocks }
+    return { hailRockFades: Object.freeze([]), rng: sourceRng, rocks: actor.rocks }
   }
   let rng = sourceRng
+  const hailRockFades: Array<Readonly<{
+    readonly position: Vector2
+    readonly rotationDegrees: number
+  }>> = []
   const rocks = [...actor.rocks]
   while (rocks.length < desiredCount) {
     const sprite = drawNativeInteger(rng, 3)
@@ -1136,6 +1558,19 @@ function rebuildNativeWeldHailstonesRocks(
     }
     const visual = drawNativeFloat(rng, Math.fround(0.75))
     rng = visual.state
+    if (enhancedEffects) {
+      const rotation = drawNativeFloat(rng, 20)
+      rng = rotation.state
+      hailRockFades.push(Object.freeze({
+        position: Object.freeze({
+          x: Math.fround(origin.x + unit.x * radialScale * 1.5),
+          y: Math.fround(
+            origin.y + unit.z * radialScale * Math.fround(0.8) * 1.5,
+          ),
+        }),
+        rotationDegrees: rotation.value,
+      }))
+    }
     rocks.push(Object.freeze({
       damageRemaining: 0,
       decay: 1,
@@ -1150,12 +1585,28 @@ function rebuildNativeWeldHailstonesRocks(
       visualScale: Math.min(1, Math.fround(Math.fround(visual.value + 0.5) * 0.2)),
     }))
   }
-  return { rng, rocks: Object.freeze(rocks) }
+  return {
+    hailRockFades: Object.freeze(hailRockFades),
+    rng,
+    rocks: Object.freeze(rocks),
+  }
 }
 
-function nativeWeldHailstoneReleaseHeight(z: number, decay: number): number {
-  const fallingHeight = Math.fround(50 - z * 2.5)
-  return Math.fround(z + Math.fround(fallingHeight - z) * decay)
+function nativeWeldHailstoneReleaseHeight(
+  y: number,
+  z: number,
+  decay: number,
+): number {
+  const fallingHeight = Math.fround(50 - z * Math.fround(0.8))
+  return Math.fround(y + Math.fround(fallingHeight - y) * decay)
+}
+
+function roundHalfToEven(value: number): number {
+  const floor = Math.floor(value)
+  const fraction = value - floor
+  if (fraction < 0.5) return floor
+  if (fraction > 0.5) return floor + 1
+  return floor % 2 === 0 ? floor : floor + 1
 }
 
 function nativeWeldEtherealBoulderSplit(

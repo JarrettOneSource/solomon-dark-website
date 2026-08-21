@@ -77,6 +77,7 @@ const SOURCES = {
     'hail-bounce-1': 'hail-1.wav',
     'hail-bounce-2': 'hail-2.wav',
     'hail-bounce-3': 'hail-3.wav',
+    'hail-shot': 'hail-shot.wav',
     'ice-start': 'ice.wav',
     'imp-split': 'imp-split.wav',
     'imp-vocal-1': 'imp-1.wav',

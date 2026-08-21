@@ -25106,7 +25106,7 @@ Region-light registration/submission, painter lane, release, and teardown.
 | 1002 Ball Lightning | accelerated MagicMissile-derived actor, ElectricBurn, FadeLightning | replicated acceleration/phase, variant+pitch audio edge, actor light |
 | 1003 Flame Lash | two-tick textured mesh plus Lightning chain/fades and Fire payload | dedicated Flame Lash view; replicated target/chain geometry; no invented light |
 | 1004 Blizzard Beam | two-tick beam, widened Frost selection, Lightning chains | dedicated beam view; Cold-before-Stun target effects; no ordinary Frost-Jet substitution |
-| 1005 Steam Jet | normal/over stream actors and target-owned Steamed | two native stream views plus ten-tick fire payload lifecycle |
+| 1005 Steam Jet | one normal/over stream actor selected per eligible tick and target-owned Steamed | independently retained moving particle plus ten-tick fire payload lifecycle |
 | 1006 Ethereal Boulder | retained EBoulder and recursive separately registered children | actor-owned rock set/orientation/pools, provider registration, release/split cleanup |
 | 1007 Meteor Swarm | retained channel owner, periodic Meteor actors, impact debris/fire | exact cadence/RNG, per-Meteor lifecycle/provider registration, provider submits no light for normal size |
 | 1008 Hailstones | retained rock carrier and independently retiring released rocks | exact bucket rebuild/release/contact state, actor light, held/flight renderer |
@@ -25136,9 +25136,10 @@ Region-light registration/submission, painter lane, release, and teardown.
   movement factor one, and multiplies its sampled pitch by
   `.800000011920929`. The separate fizzle precedes the cast cue at gain one.
 
-Protocol 39 carries cast playback rate, sound variant, weak state, mutable
-base phase, Ball acceleration, Frost aspect/turn, Ground private word/native
-age/turn timer, effective per-actor vector, and provider registration. The
+Protocol 41 carries cast playback rate, sound variant, weak state, mutable
+base phase, Ball acceleration, both tick-owned Frost compositor lanes,
+Ground private word/native age/turn timer and independent fade children,
+effective per-actor vector, and provider registration. The
 player cast edge retains pitch/variant so a same-tick obstruction/contact
 cannot erase audio before the snapshot. Clients interpolate motion and the
 continuous presentation fields but never reroll authority.
@@ -25158,8 +25159,9 @@ continuous presentation fields but never reroll authority.
 - FireMissile directly uses the Fire body/impact records; Frost, Ball, and
   Ground own their concrete compositor/child programs. Flame Lash record-44
   mesh, Blizzard's `0x005308D0` beam, Steam record-76 normal/over actors,
-  EBoulder 86/168..171/2008..2010, Meteor fall/impact/debris, and Hail shell 18
-  plus rocks 168..171 each require separate plans and lifetimes.
+  EBoulder 86/168..171/2008..2010, Meteor marker/fall/impact/debris, and Hail's
+  Frost helper, record-18 rock-birth fades, release FadeFrost, and rocks
+  168..171 each require separate plans and lifetimes.
 - Fire/Frost/Ball light is intensity `.75`, radius `.75+Float(.1)`, actor lane,
   with Multiple Shadows. Ground is actor lane, intensity `.5+Float(.5)`, radius
   `.4`, no directional shadow. EBoulder/Hail are actor lane, intensity `.5`,
@@ -25170,17 +25172,53 @@ continuous presentation fields but never reroll authority.
   this is the one explicit platform adaptation. Domains, recurrences, actor
   state, painter order, provider lane/order, and teardown remain native.
 
-### Current implementation/verification checkpoint
+### 2026-08-20 v41 runtime/presentation checkpoint
 
-The corrected runtime slice has native low-mana payload suppression, exact
-one-shot constructor order, robust randomized pitch/variant audio, Ball
-acceleration, Frost constructor aspect/turn state, Ground private recurrence,
-Frost radial contact, strict protocol 39, retained-rock/Meteor provider
-registration, and pure welded light adapters. The focused runtime/combat/audio/
-protocol tests and test TypeScript build are green on the working tree.
+The retained and presentation membership is now explicit rather than attached
+to cast timers:
 
-This is not the final Welding receipt. Remaining before this section can be
-marked complete: close Meteor impact-time RNG/debris/radius state, finish the
-dedicated ten-build renderer and asset preload, add full provider/painter tests,
-run the canonical Website gate, and cast all ten builds in the real Mac mini
-browser journey with visual/audio/light diagnostics and zero errors.
+- Meteor emits one record-51 `Anim_Iceblast` marker every held tick before the
+  gameplay draw. Cadence uses selected-primary age and the native
+  `max(5,trunc((weak ? 35 : 25)/round(castFactor)))` branch. Normal spawn
+  consumes seven words and weak spawn six. Impact consumes the camera vector,
+  rotation/radius, five 13-word BoulderBit programs, and two-word signed sound
+  pitch; normal additionally owns `throwfire` pitch `.8`. Direct radius is 45;
+  recurring radius is the impact-created scalar times 45. Camera displacement
+  decays by `.75` per update and preserves the largest vector.
+- Weak EBoulder checks its pre-growth scale, emits the independently retained
+  `round(max(scale*30,8))` BoulderBit program before collapsing quantity to one,
+  and preserves the retail `MAX` macro's conditional second `.75` draw. Those
+  children live for 80 alpha updates even when the boulder releases or dies.
+- Hail bucket counts use native tie-to-even rounding. Enhanced rock creation
+  emits an independent 400-tick record-18 fade for each new rock. Release moves
+  the carrier back 20 on both axes, creates an independent 20-tick FadeFrost,
+  recomputes each rock's falling offset from local Y/Z and `.95` decay, applies
+  camera magnitude `.1`, and plays `icestart`/`rockhit` at pitch `1.5` followed
+  by `hailshot` at pitch one. The checked-in `hailshot.wav` is the untouched
+  registry-40 PCM, SHA-256
+  `3190570e01141d2036b0aabc7fae77e70204ceaa7119e26e811f2a45a954b6a2`.
+- Frost Missile owns two replicated compositor lanes. Each subtracts `.01`;
+  below `.1`, the authority consumes aspect `.5+Float(.25)`, scale
+  `.5+Float(.75)`, and rotation `Float(45)` in lane order. Ball/Frost/Ground
+  contacts retain their FadeLightning/FadeFrost state and exact impact audio:
+  Frost `icestart` pitch `1.5`, Ball `throwlightning1` pitch `1.5`, and Ground
+  `1+Float(.1)` plus `Integer(3)` Shock selection.
+- GroundSpark's tick creates an independent record-71 fade, then the native
+  `abs(sin(nativeAge*12deg)) < .1` or one-in-six fork creates record
+  1836..1839. Weak state halves record-71 alpha and loss, but only fork alpha.
+  Steam is not a two-tick beam: the handler emits one particle on the even lane,
+  consumes the one-in-seven Over selector plus its complete constructor program,
+  and lets the normal/Over actor retain life, color, scale, and velocity decay.
+- `primary-spell-weld-native.ts` and `primary-spell-weld-view.ts` now own one
+  stock-atlas/painter route for every replicated Weld projectile, beam, Steam
+  particle, persistent carrier, marker, impact, fade, and debris actor. The
+  preload census includes every direct BadGuys row used by those plans.
+
+Focused TypeScript, runtime, combat, protocol-v41, audio, lighting, camera,
+asset-hash, painter, and Pixi routing coverage passes 248 tests; frontend lint
+and the architecture-boundary checker are green. This is still not the final
+Welding receipt: the stock-to-browser cast journey must now falsify and tune the
+remaining draw-level translations (especially Flame Lash mesh curvature,
+Blizzard enhanced children, Meteor's native primitive body, and Hail/Steam
+contact children), followed by the canonical Website gate and real Mac mini
+visual/audio/light diagnostics for all ten builds.

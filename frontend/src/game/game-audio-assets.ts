@@ -37,6 +37,7 @@ import hailBounce0 from '../assets/game/audio/sfx/hail-bounce-0.wav'
 import hailBounce1 from '../assets/game/audio/sfx/hail-bounce-1.wav'
 import hailBounce2 from '../assets/game/audio/sfx/hail-bounce-2.wav'
 import hailBounce3 from '../assets/game/audio/sfx/hail-bounce-3.wav'
+import hailShot from '../assets/game/audio/sfx/hail-shot.wav'
 import pickupBag from '../assets/game/audio/sfx/pickup-bag.wav'
 import pickupCoin from '../assets/game/audio/sfx/pickup-coin.wav'
 import enemyFlash from '../assets/game/audio/sfx/enemy-flash.wav'
@@ -215,6 +216,7 @@ export const GAME_AUDIO_SOURCES = {
     'hail-bounce-1': hailBounce1,
     'hail-bounce-2': hailBounce2,
     'hail-bounce-3': hailBounce3,
+    'hail-shot': hailShot,
     'ice-start': iceStart,
     'imp-split': impSplit,
     'imp-vocal-1': impVocal1,

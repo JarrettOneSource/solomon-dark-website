@@ -34,6 +34,8 @@ import {
   PlayerStaffVfxView,
 } from './player-staff-vfx-view.ts'
 import type { PlayerWorldTextures } from './world-player-textures.ts'
+import { WeldPrimarySpellView } from './primary-spell-weld-view.ts'
+import { isNativeWeldPresentationState } from './primary-spell-weld-native.ts'
 
 export interface PrimarySpellPainterLayer {
   id: string
@@ -102,7 +104,9 @@ export class PrimarySpellWorldView {
       this.liveIds.add(state.id)
       let view = this.views.get(state.id)
       if (!view) {
-        if (isNativeAirWaterActorState(state)) {
+        if (isNativeWeldPresentationState(state)) {
+          view = new WeldPrimarySpellView(state, this.textures.primarySpells.weldActors)
+        } else if (isNativeAirWaterActorState(state)) {
           view = new AirWaterActorSpellView(state, this.textures.primarySpells)
         } else if (state.kind === 'player-staff-pike-break') {
           view = new PlayerStaffPikeBreakView(state, this.textures)

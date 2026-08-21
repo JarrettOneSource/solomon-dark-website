@@ -17,7 +17,9 @@ import {
   type NativePrimarySkillProfile,
 } from './native-primary-skill-profile.ts'
 import {
+  advanceNativeRngWords,
   createNativeRng,
+  drawNativeFloat,
   drawNativeInteger,
   type NativeRngState,
 } from './native-rng.ts'
@@ -227,7 +229,7 @@ function stepSpellKernel(
     ...EMPTY_SPELL_WORLD,
     canPlaceProjectile,
     castAuthority: {
-      [PLAYER_ID]: { availableMana, eligible, primarySkill },
+      [PLAYER_ID]: { availableMana, castProgressFactor: 1, eligible, primarySkill },
     },
     inputs: {
       [PLAYER_ID]: {
@@ -1860,6 +1862,55 @@ test('all welded sustained families use one latch and run their native release v
     } else {
       assert.equal(persistent.length, 0)
     }
+  }
+})
+
+test('Meteor Swarm emits Iceblast every tick and keys Meteors to selected-primary age', () => {
+  const profile = weldedProfile(1007, 'persistent', [8, 16, 20, 1.1, 1.5, 3, 10, 2, 3])
+  let state = { ...directSpellHarness('earth'), primarySkill: profile }
+  state = stepSpellKernel(state, true, 100, true, () => true, profile).state
+  assert.equal(state.players[PLAYER_ID]!.primaryCast.selectedPrimaryAgeTicks, 0)
+  assert.equal(state.spells.transients.filter(({ kind }) => (
+    kind === 'weld-meteor-marker'
+  )).length, 1)
+  assert.equal(state.spells.transients.some(({ kind }) => kind === 'weld-meteor'), false)
+
+  state = stepSpellKernel(state, true, 100, true, () => true, profile).state
+  assert.equal(state.players[PLAYER_ID]!.primaryCast.selectedPrimaryAgeTicks, 1)
+  assert.equal(state.spells.transients.filter(({ kind }) => (
+    kind === 'weld-meteor-marker'
+  )).length, 2)
+  const meteor = state.spells.transients.find(({ kind }) => kind === 'weld-meteor')
+  assert.ok(meteor?.kind === 'weld-meteor')
+  assert.equal(meteor.underpowered, false)
+  assert.equal(meteor.impactTicksRemaining, 275)
+  assert.ok(meteor.position.x !== state.players[PLAYER_ID]!.position.x)
+  assert.deepEqual(state.rng, advanceNativeRngWords(createNativeRng(0), 17))
+
+  let weak = { ...directSpellHarness('earth'), primarySkill: profile }
+  weak = stepSpellKernel(weak, true, 0, true, () => true, profile).state
+  weak = stepSpellKernel(weak, true, 0, true, () => true, profile).state
+  const weakMeteor = weak.spells.transients.find(({ kind }) => kind === 'weld-meteor')
+  assert.ok(weakMeteor?.kind === 'weld-meteor')
+  assert.equal(weakMeteor.underpowered, true)
+  assert.equal(weakMeteor.privateSeed, 0)
+  assert.deepEqual(weakMeteor.vector.slice(5), [0, 0, 0, 0])
+  assert.deepEqual(weak.rng, advanceNativeRngWords(createNativeRng(0), 16))
+})
+
+test('retained rock welds publish their constructor-randomized start pitch', () => {
+  for (const profile of [
+    weldedProfile(1006, 'persistent', [8, 10, 2, 1.1, 1.5, 1.2]),
+    weldedProfile(1008, 'persistent', [8, 10, 1.1, 1.5, 0.1, 0.5]),
+  ] as const) {
+    const state = { ...directSpellHarness('earth'), primarySkill: profile }
+    const pitch = drawNativeFloat(state.rng, Math.fround(0.5))
+    const stepped = stepSpellKernel(state, true, 100, true, () => true, profile).state
+    assert.equal(
+      stepped.players[PLAYER_ID]!.primaryCast.lastWeldPlaybackRate,
+      Math.fround(1.5 - pitch.value),
+    )
+    assert.deepEqual(stepped.rng, pitch.state)
   }
 })
 

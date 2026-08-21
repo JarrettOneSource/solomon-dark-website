@@ -71,21 +71,33 @@ import {
 } from '../core-kernels/primary-spell-fire-effects.ts'
 import {
   NATIVE_WELD_CHANNEL_VISIBLE_TICKS,
+  NATIVE_WELD_HAIL_RELEASE_FADE_LIFETIME_TICKS,
+  NATIVE_WELD_HAIL_ROCK_FADE_LIFETIME_TICKS,
   NATIVE_WELD_IMPACT_VISIBLE_TICKS,
   NATIVE_WELD_METEOR_IMPACT_TICKS,
   NATIVE_WELD_METEOR_PULSE_TICKS,
   NATIVE_WELD_PERSISTENT_INITIAL_SCALE,
+  type NativeWeldBoulderDebrisActorState,
   type NativeWeldChannelActorState,
   type NativeWeldEtherealBoulderState,
   type NativeWeldHailstoneRockState,
+  type NativeWeldHailRockFadeActorState,
   type NativeWeldHailstonesState,
+  type NativeWeldFrostFadeActorState,
+  type NativeWeldGroundSparkFadeActorState,
   type NativeWeldImpactActorState,
   type NativeWeldMeteorActorState,
   type NativeWeldMeteorFieldState,
   type NativeWeldProjectileState,
   type NativeWeldWorldActor,
 } from '../core-kernels/native-weld-primary-runtime.ts'
+import { NATIVE_WELD_BOULDER_DEBRIS_LIFETIME_TICKS } from '../core-kernels/native-weld-boulder-debris.ts'
+import type { NativeWeldSteamActorState } from '../core-kernels/native-weld-steam.ts'
 import type { NativeWeldBuildId } from '../core-kernels/native-weld-primary-profile.ts'
+import type {
+  NativeWeldMeteorDebrisSeed,
+  NativeWeldMeteorMarkerState,
+} from '../core-kernels/native-weld-meteor.ts'
 import {
   NATIVE_STAFF_MELEE_ACCELERATION,
   NATIVE_STAFF_MELEE_BASE_PROGRESS,
@@ -237,7 +249,7 @@ export type {
   LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
 
-export const GAME_PROTOCOL_VERSION = 39
+export const GAME_PROTOCOL_VERSION = 41
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const GAME_CONNECTION_TIMEOUT_CLOSE_CODE = 4000
 export const GAME_HOST_ENDED_SESSION_CLOSE_CODE = 4001
@@ -2034,6 +2046,8 @@ function playerPrimaryCastState(
     'held',
     'lastWeldPlaybackRate',
     'lastWeldSoundVariant',
+    'selectedPrimaryAgeTicks',
+    'selectedPrimaryId',
     'targetId',
     'underpowered',
   ])
@@ -2073,10 +2087,27 @@ function playerPrimaryCastState(
     || activeWeldBuildId === 1001
     || activeWeldBuildId === 1002
     || activeWeldBuildId === 1009
-  if ((!weldOneShot && lastWeldPlaybackRate !== null)
+  const weldRandomizedStart = activeWeldBuildId === 1006 || activeWeldBuildId === 1008
+  if ((!weldOneShot && !weldRandomizedStart && lastWeldPlaybackRate !== null)
     || (lastWeldPlaybackRate !== null
       && (lastWeldPlaybackRate < 0.5 || lastWeldPlaybackRate > 1.5))) {
     throw new GameProtocolError(`${field}.lastWeldPlaybackRate does not match the active build`)
+  }
+  const selectedPrimaryId = boundedInteger(
+    source.selectedPrimaryId,
+    `${field}.selectedPrimaryId`,
+    -1,
+    1009,
+  )
+  const expectedPrimaryId = activeWeldBuildId ?? ({
+    air: 24,
+    earth: 40,
+    ether: 8,
+    fire: 16,
+    water: 32,
+  } as const)[element]
+  if (selectedPrimaryId !== -1 && selectedPrimaryId !== expectedPrimaryId) {
+    throw new GameProtocolError(`${field}.selectedPrimaryId does not match progression`)
   }
   return {
     actionTick,
@@ -2094,6 +2125,11 @@ function playerPrimaryCastState(
     held: boolean(source.held, `${field}.held`),
     lastWeldPlaybackRate,
     lastWeldSoundVariant,
+    selectedPrimaryAgeTicks: nonnegativeInteger(
+      source.selectedPrimaryAgeTicks,
+      `${field}.selectedPrimaryAgeTicks`,
+    ),
+    selectedPrimaryId,
     targetId,
     underpowered: boolean(source.underpowered, `${field}.underpowered`),
   }
@@ -3347,6 +3383,7 @@ function nativeSecondaryActor(
     velocity: vector(source.velocity, `${field}.velocity`),
     worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
   }
+
 }
 
 function nativeRngState(value: unknown, field: string): NativeRngState {
@@ -4004,7 +4041,7 @@ function primarySpellWeldProjectile(
     'ageTicks', 'ballLightningAcceleration', 'basePresentationPhaseDegrees',
     'buildId', 'castPlaybackRate', 'castSoundVariant', 'charge',
     'contactsRemaining', 'damage', 'direction', 'flightTicks', 'frostPulseAspect',
-    'frostTurnDegrees', 'groundSparkNativeAgeTicks',
+    'frostPresentationLanes', 'frostTurnDegrees', 'groundSparkNativeAgeTicks',
     'groundSparkTurnTicksRemaining', 'headingDegrees', 'hitTargetIds', 'id', 'kind',
     'lightRegistration', 'ownerId', 'phase', 'position', 'presentationSeed',
     'projectileIndex', 'secondaryPresentationPhaseDegrees', 'speed', 'targetId',
@@ -4094,6 +4131,36 @@ function primarySpellWeldProjectile(
       || frostPulseAspect < 0.5 || frostPulseAspect > 0.75))) {
     throw new GameProtocolError(`${field}.frostPulseAspect does not match its build`)
   }
+  const frostPresentationLanes = source.frostPresentationLanes === null
+    ? null
+    : limitedArray(source.frostPresentationLanes, `${field}.frostPresentationLanes`, 2)
+      .map((value, index) => {
+        const lane = record(value, `${field}.frostPresentationLanes[${index}]`)
+        onlyKeys(lane, `${field}.frostPresentationLanes[${index}]`, [
+          'aspect', 'rotationDegrees', 'scale',
+        ])
+        const aspect = nonnegativeFinite(
+          lane.aspect,
+          `${field}.frostPresentationLanes[${index}].aspect`,
+        )
+        const rotationDegrees = nonnegativeFinite(
+          lane.rotationDegrees,
+          `${field}.frostPresentationLanes[${index}].rotationDegrees`,
+        )
+        const scale = nonnegativeFinite(
+          lane.scale,
+          `${field}.frostPresentationLanes[${index}].scale`,
+        )
+        if (aspect > 0.75 || rotationDegrees >= 45 || scale >= 1.25) {
+          throw new GameProtocolError(
+            `${field}.frostPresentationLanes[${index}] exceeds the native lane`,
+          )
+        }
+        return { aspect, rotationDegrees, scale }
+      })
+  if ((buildId === 1001) !== (frostPresentationLanes?.length === 2)) {
+    throw new GameProtocolError(`${field}.frostPresentationLanes does not match its build`)
+  }
   const frostTurnDegrees = source.frostTurnDegrees === null
     ? null
     : finite(source.frostTurnDegrees, `${field}.frostTurnDegrees`)
@@ -4150,6 +4217,8 @@ function primarySpellWeldProjectile(
     direction: unitVector(source.direction, `${field}.direction`),
     flightTicks,
     frostPulseAspect,
+    frostPresentationLanes: frostPresentationLanes as
+      NativeWeldProjectileState['frostPresentationLanes'],
     frostTurnDegrees,
     groundSparkNativeAgeTicks,
     groundSparkTurnTicksRemaining,
@@ -4231,11 +4300,46 @@ function primarySpellWeldActor(
     worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
   }
 
+  if (source.kind === 'weld-meteor-marker') {
+    onlyKeys(source, field, [
+      ...commonKeys, 'alpha', 'colorGreen', 'growthFactor', 'rotationDegrees', 'scale',
+    ])
+    if (buildId !== 1007) throw new GameProtocolError(`${field}.buildId is not Meteor Swarm`)
+    const alpha = positiveFinite(source.alpha, `${field}.alpha`)
+    if (alpha > 0.5) throw new GameProtocolError(`${field}.alpha exceeds native marker range`)
+    const colorGreen = unitInterval(source.colorGreen, `${field}.colorGreen`)
+    if (colorGreen > 0.5) {
+      throw new GameProtocolError(`${field}.colorGreen exceeds native marker range`)
+    }
+    const growthFactor = finite(source.growthFactor, `${field}.growthFactor`)
+    if (growthFactor !== Math.fround(0.99) && growthFactor !== Math.fround(1.015)) {
+      throw new GameProtocolError(`${field}.growthFactor is not a native marker branch`)
+    }
+    const rotationDegrees = finite(source.rotationDegrees, `${field}.rotationDegrees`)
+    if (rotationDegrees < 0 || rotationDegrees >= 360) {
+      throw new GameProtocolError(`${field}.rotationDegrees is outside [0,360)`)
+    }
+    return {
+      ...common,
+      alpha,
+      buildId: 1007,
+      colorGreen,
+      growthFactor,
+      kind: 'weld-meteor-marker',
+      lightRegistration: absentNativeLightProviderRegistration(
+        source.lightRegistration,
+        `${field}.lightRegistration`,
+      ),
+      rotationDegrees,
+      scale: positiveFinite(source.scale, `${field}.scale`),
+    } satisfies NativeWeldMeteorMarkerState
+  }
+
   if (source.kind === 'weld-channel') {
     onlyKeys(source, field, [
       ...commonKeys, 'endpoint', 'midpoint', 'targetId', 'variant',
     ])
-    if (buildId !== 1003 && buildId !== 1004 && buildId !== 1005) {
+    if (buildId !== 1003 && buildId !== 1004) {
       throw new GameProtocolError(`${field}.buildId is not a welded channel build`)
     }
     if (common.ageTicks >= NATIVE_WELD_CHANNEL_VISIBLE_TICKS) {
@@ -4251,9 +4355,6 @@ function primarySpellWeldActor(
       : vector(source.midpoint, `${field}.midpoint`)
     if ((endpoint === null) !== (midpoint === null)) {
       throw new GameProtocolError(`${field}.endpoint and midpoint must be present together`)
-    }
-    if (buildId === 1005 && endpoint !== null) {
-      throw new GameProtocolError(`${field} Steam Jet cannot own lightning geometry`)
     }
     return {
       ...common,
@@ -4273,30 +4374,256 @@ function primarySpellWeldActor(
   }
 
   if (source.kind === 'weld-impact') {
-    onlyKeys(source, field, [...commonKeys, 'position'])
+    onlyKeys(source, field, [
+      ...commonKeys, 'alpha', 'impactSoundPitch', 'impactSoundVariant', 'position',
+      'presentationRotationDegrees', 'presentationScale',
+    ])
     if (buildId === 1003 || buildId === 1004 || buildId === 1005) {
       throw new GameProtocolError(`${field}.buildId cannot create a welded impact actor`)
     }
     if (common.ageTicks >= NATIVE_WELD_IMPACT_VISIBLE_TICKS) {
       throw new GameProtocolError(`${field}.ageTicks exceeds the welded impact lifetime`)
     }
+    const alpha = nonnegativeFinite(source.alpha, `${field}.alpha`)
+    const impactSoundPitch = source.impactSoundPitch === null
+      ? null
+      : positiveFinite(source.impactSoundPitch, `${field}.impactSoundPitch`)
+    const impactSoundVariant = source.impactSoundVariant === null
+      ? null
+      : nonnegativeInteger(source.impactSoundVariant, `${field}.impactSoundVariant`)
+    const presentationRotationDegrees = source.presentationRotationDegrees === null
+      ? null
+      : finite(source.presentationRotationDegrees, `${field}.presentationRotationDegrees`)
+    const presentationScale = nonnegativeFinite(
+      source.presentationScale,
+      `${field}.presentationScale`,
+    )
+    const ownsFade = buildId === 1001 || buildId === 1002 || buildId === 1009
+    if ((ownsFade && (alpha > 2 || presentationScale !== Math.fround(1.5)))
+      || (!ownsFade && (alpha !== 0 || presentationScale !== 0))) {
+      throw new GameProtocolError(`${field} fade state does not match its build`)
+    }
+    if ((buildId === 1001 && (impactSoundPitch !== Math.fround(1.5)
+      || impactSoundVariant !== null || presentationRotationDegrees !== null))
+      || (buildId === 1002 && (impactSoundPitch !== Math.fround(1.5)
+        || impactSoundVariant !== 0 || presentationRotationDegrees === null))
+      || (buildId === 1009 && (impactSoundPitch === null
+        || impactSoundPitch < 1 || impactSoundPitch > 1.1
+        || impactSoundVariant === null || impactSoundVariant > 2
+        || presentationRotationDegrees === null))
+      || ((buildId !== 1001 && buildId !== 1002 && buildId !== 1009)
+        && (impactSoundPitch !== null || impactSoundVariant !== null
+          || presentationRotationDegrees !== null))) {
+      throw new GameProtocolError(`${field} impact presentation does not match its build`)
+    }
+    if (presentationRotationDegrees !== null
+      && (presentationRotationDegrees < 0 || presentationRotationDegrees >= 360)) {
+      throw new GameProtocolError(`${field}.presentationRotationDegrees is outside [0,360)`)
+    }
     return {
       ...common,
+      alpha,
       buildId,
+      impactSoundPitch,
+      impactSoundVariant,
       kind: 'weld-impact',
       lightRegistration: absentNativeLightProviderRegistration(
         source.lightRegistration,
         `${field}.lightRegistration`,
       ),
       position: vector(source.position, `${field}.position`),
+      presentationRotationDegrees,
+      presentationScale,
     } satisfies NativeWeldImpactActorState
+  }
+
+  if (source.kind === 'weld-boulder-debris') {
+    onlyKeys(source, field, [...commonKeys, 'debris', 'position'])
+    if (buildId !== 1006) {
+      throw new GameProtocolError(`${field}.buildId is not Ethereal Boulder`)
+    }
+    if (common.ageTicks >= NATIVE_WELD_BOULDER_DEBRIS_LIFETIME_TICKS) {
+      throw new GameProtocolError(`${field}.ageTicks exceeds the BoulderBit lifetime`)
+    }
+    const debris = limitedArray(source.debris, `${field}.debris`, 4096).map(
+      (value, index) => nativeWeldBoulderDebris(
+        value,
+        `${field}.debris[${index}]`,
+        index,
+      ),
+    )
+    if (debris.length < 8) {
+      throw new GameProtocolError(`${field}.debris is below the native eight-piece floor`)
+    }
+    return {
+      ...common,
+      buildId: 1006,
+      debris,
+      kind: 'weld-boulder-debris',
+      lightRegistration: absentNativeLightProviderRegistration(
+        source.lightRegistration,
+        `${field}.lightRegistration`,
+      ),
+      position: vector(source.position, `${field}.position`),
+    } satisfies NativeWeldBoulderDebrisActorState
+  }
+
+  if (source.kind === 'weld-hail-rock-fade') {
+    onlyKeys(source, field, [...commonKeys, 'position', 'rotationDegrees'])
+    if (buildId !== 1008) throw new GameProtocolError(`${field}.buildId is not Hailstones`)
+    if (common.ageTicks >= NATIVE_WELD_HAIL_ROCK_FADE_LIFETIME_TICKS) {
+      throw new GameProtocolError(`${field}.ageTicks exceeds the Hail rock-fade lifetime`)
+    }
+    const rotationDegrees = finite(source.rotationDegrees, `${field}.rotationDegrees`)
+    if (rotationDegrees < 0 || rotationDegrees >= 20) {
+      throw new GameProtocolError(`${field}.rotationDegrees exceeds the native range`)
+    }
+    return {
+      ...common,
+      buildId: 1008,
+      kind: 'weld-hail-rock-fade',
+      lightRegistration: absentNativeLightProviderRegistration(
+        source.lightRegistration,
+        `${field}.lightRegistration`,
+      ),
+      position: vector(source.position, `${field}.position`),
+      rotationDegrees,
+    } satisfies NativeWeldHailRockFadeActorState
+  }
+
+  if (source.kind === 'weld-frost-fade') {
+    onlyKeys(source, field, [...commonKeys, 'position', 'scale'])
+    if (buildId !== 1008) throw new GameProtocolError(`${field}.buildId is not Hailstones`)
+    if (common.ageTicks >= NATIVE_WELD_HAIL_RELEASE_FADE_LIFETIME_TICKS) {
+      throw new GameProtocolError(`${field}.ageTicks exceeds the Hail Frost-fade lifetime`)
+    }
+    const scale = positiveFinite(source.scale, `${field}.scale`)
+    if (scale < 3.75 || scale >= 7.5) {
+      throw new GameProtocolError(`${field}.scale exceeds the native Hail release range`)
+    }
+    return {
+      ...common,
+      buildId: 1008,
+      kind: 'weld-frost-fade',
+      lightRegistration: absentNativeLightProviderRegistration(
+        source.lightRegistration,
+        `${field}.lightRegistration`,
+      ),
+      position: vector(source.position, `${field}.position`),
+      scale,
+    } satisfies NativeWeldFrostFadeActorState
+  }
+
+  if (source.kind === 'weld-ground-spark-fade') {
+    onlyKeys(source, field, [
+      ...commonKeys, 'alpha', 'alphaStep', 'position', 'record',
+      'rotationDegrees', 'scale',
+    ])
+    if (buildId !== 1009) {
+      throw new GameProtocolError(`${field}.buildId is not Crawling Shock`)
+    }
+    if (common.ageTicks >= 20) {
+      throw new GameProtocolError(`${field}.ageTicks exceeds the GroundSpark fade lifetime`)
+    }
+    const alpha = positiveFinite(source.alpha, `${field}.alpha`)
+    if (alpha > 1.75) throw new GameProtocolError(`${field}.alpha exceeds the native range`)
+    const alphaStep = positiveFinite(source.alphaStep, `${field}.alphaStep`)
+    if (alphaStep !== Math.fround(0.05) && alphaStep !== Math.fround(0.1)) {
+      throw new GameProtocolError(`${field}.alphaStep is not a native GroundSpark branch`)
+    }
+    const nativeRecord = positiveInteger(source.record, `${field}.record`)
+    if (nativeRecord !== 71 && (
+      nativeRecord < 1836 || nativeRecord > 1839
+    )) throw new GameProtocolError(`${field}.record is not GroundSpark art`)
+    const rotationDegrees = finite(source.rotationDegrees, `${field}.rotationDegrees`)
+    if (rotationDegrees < 0 || rotationDegrees >= 360) {
+      throw new GameProtocolError(`${field}.rotationDegrees is outside [0,360)`)
+    }
+    const scale = positiveFinite(source.scale, `${field}.scale`)
+    if (scale < Math.fround(0.25) || scale > 1) {
+      throw new GameProtocolError(`${field}.scale exceeds the native GroundSpark range`)
+    }
+    return {
+      ...common,
+      alpha,
+      alphaStep,
+      buildId: 1009,
+      kind: 'weld-ground-spark-fade',
+      lightRegistration: absentNativeLightProviderRegistration(
+        source.lightRegistration,
+        `${field}.lightRegistration`,
+      ),
+      position: vector(source.position, `${field}.position`),
+      record: nativeRecord as NativeWeldGroundSparkFadeActorState['record'],
+      rotationDegrees,
+      scale,
+    } satisfies NativeWeldGroundSparkFadeActorState
+  }
+
+  if (source.kind === 'weld-steam') {
+    onlyKeys(source, field, [
+      ...commonKeys, 'alphaMultiplier', 'blue', 'colorRise', 'life', 'lifeLoss',
+      'phase', 'position', 'rotationDegrees', 'scale', 'stretch', 'tintFade',
+      'variant', 'velocity',
+    ])
+    if (buildId !== 1005) throw new GameProtocolError(`${field}.buildId is not Steam Jet`)
+    if (common.ageTicks >= 64) {
+      throw new GameProtocolError(`${field}.ageTicks exceeds the Steam particle lifetime`)
+    }
+    const variant = source.variant
+    if (variant !== 'normal' && variant !== 'over') {
+      throw new GameProtocolError(`${field}.variant is not a Steam particle branch`)
+    }
+    const colorRise = positiveFinite(source.colorRise, `${field}.colorRise`)
+    if ((variant === 'normal' && colorRise !== Math.fround(0.15))
+      || (variant === 'over' && colorRise !== Math.fround(0.075))) {
+      throw new GameProtocolError(`${field}.colorRise does not match its Steam branch`)
+    }
+    const life = positiveFinite(source.life, `${field}.life`)
+    const lifeLoss = positiveFinite(source.lifeLoss, `${field}.lifeLoss`)
+    if (life > 1.15 || lifeLoss < 0.05 || lifeLoss > 0.1) {
+      throw new GameProtocolError(`${field} Steam life state exceeds the native range`)
+    }
+    const blue = nonnegativeFinite(source.blue, `${field}.blue`)
+    if ((variant === 'over' && blue !== 0) || blue > 1.1) {
+      throw new GameProtocolError(`${field}.blue does not match its Steam branch`)
+    }
+    const rotationDegrees = finite(source.rotationDegrees, `${field}.rotationDegrees`)
+    if (rotationDegrees < 0 || rotationDegrees >= 360) {
+      throw new GameProtocolError(`${field}.rotationDegrees is outside [0,360)`)
+    }
+    return {
+      ...common,
+      alphaMultiplier: positiveFinite(source.alphaMultiplier, `${field}.alphaMultiplier`),
+      blue,
+      buildId: 1005,
+      colorRise,
+      kind: 'weld-steam',
+      life,
+      lifeLoss,
+      lightRegistration: absentNativeLightProviderRegistration(
+        source.lightRegistration,
+        `${field}.lightRegistration`,
+      ),
+      phase: nonnegativeFinite(source.phase, `${field}.phase`),
+      position: vector(source.position, `${field}.position`),
+      rotationDegrees,
+      scale: positiveFinite(source.scale, `${field}.scale`),
+      stretch: positiveFinite(source.stretch, `${field}.stretch`),
+      tintFade: finite(source.tintFade, `${field}.tintFade`),
+      variant,
+      velocity: vector(source.velocity, `${field}.velocity`),
+    } satisfies NativeWeldSteamActorState
   }
 
   if (source.kind === 'weld-meteor') {
     onlyKeys(source, field, [
-      ...commonKeys, 'damage', 'fallScalar', 'impactDue', 'impactTicksRemaining',
-      'phase', 'position', 'presentationPhase', 'privateSeed', 'pulseDue',
-      'pulseSequence', 'pulseTicksRemaining',
+      ...commonKeys, 'cameraDisplacement', 'damage', 'debris', 'fallHeadingDegrees',
+      'fallScalar', 'fallStep', 'impactAgeTicks', 'impactDue', 'impactRadiusScalar',
+      'impactRotationDegrees', 'impactSoundPitch', 'impactThrowFirePitch',
+      'impactTicksRemaining',
+      'phase', 'position', 'privateSeed', 'pulseDue', 'pulseSequence',
+      'pulseTicksRemaining', 'size', 'underpowered',
     ])
     if (buildId !== 1007) throw new GameProtocolError(`${field}.buildId is not Meteor Swarm`)
     if (source.phase !== 'fall' && source.phase !== 'impact') {
@@ -4306,22 +4633,20 @@ function primarySpellWeldActor(
     if (fallScalar <= -0.021 || fallScalar >= 2) {
       throw new GameProtocolError(`${field}.fallScalar is outside the native fall lane`)
     }
-    const presentationPhase = unitInterval(
-      source.presentationPhase,
-      `${field}.presentationPhase`,
-    )
-    if (presentationPhase >= 1) {
-      throw new GameProtocolError(`${field}.presentationPhase must be below one`)
-    }
+    const underpowered = boolean(source.underpowered, `${field}.underpowered`)
     const privateSeed = nonnegativeInteger(source.privateSeed, `${field}.privateSeed`)
-    if (privateSeed >= 10_000_000) {
+    if ((underpowered && privateSeed !== 0)
+      || (!underpowered && privateSeed >= 10_000_000)) {
       throw new GameProtocolError(`${field}.privateSeed exceeds the native draw bound`)
     }
     const impactTicksRemaining = positiveInteger(
       source.impactTicksRemaining,
       `${field}.impactTicksRemaining`,
     )
-    if (impactTicksRemaining > NATIVE_WELD_METEOR_IMPACT_TICKS) {
+    const maximumImpactTicks = underpowered
+      ? NATIVE_WELD_METEOR_IMPACT_TICKS
+      : Math.round(NATIVE_WELD_METEOR_IMPACT_TICKS + common.vector[4]! * 50)
+    if (impactTicksRemaining > maximumImpactTicks) {
       throw new GameProtocolError(`${field}.impactTicksRemaining exceeds its native clock`)
     }
     const pulseTicksRemaining = positiveInteger(
@@ -4331,12 +4656,78 @@ function primarySpellWeldActor(
     if (pulseTicksRemaining > NATIVE_WELD_METEOR_PULSE_TICKS) {
       throw new GameProtocolError(`${field}.pulseTicksRemaining exceeds its native clock`)
     }
+    const cameraDisplacement = source.cameraDisplacement === null
+      ? null
+      : vector(source.cameraDisplacement, `${field}.cameraDisplacement`)
+    const impactAgeTicks = nonnegativeInteger(source.impactAgeTicks, `${field}.impactAgeTicks`)
+    const impactRadiusScalar = finite(
+      source.impactRadiusScalar,
+      `${field}.impactRadiusScalar`,
+    )
+    if (impactRadiusScalar < -1 || impactRadiusScalar > 0.5) {
+      throw new GameProtocolError(`${field}.impactRadiusScalar is outside the native lane`)
+    }
+    const impactRotationDegrees = finite(
+      source.impactRotationDegrees,
+      `${field}.impactRotationDegrees`,
+    )
+    if (impactRotationDegrees < 0 || impactRotationDegrees >= 360) {
+      throw new GameProtocolError(`${field}.impactRotationDegrees is outside [0,360)`)
+    }
+    const impactSoundPitch = source.impactSoundPitch === null
+      ? null
+      : positiveFinite(source.impactSoundPitch, `${field}.impactSoundPitch`)
+    if (impactSoundPitch !== null && (impactSoundPitch < 0.8 || impactSoundPitch > 1.2)) {
+      throw new GameProtocolError(`${field}.impactSoundPitch is outside the native lane`)
+    }
+    const impactThrowFirePitch = source.impactThrowFirePitch === null
+      ? null
+      : positiveFinite(source.impactThrowFirePitch, `${field}.impactThrowFirePitch`)
+    if (impactThrowFirePitch !== null && impactThrowFirePitch !== Math.fround(0.8)) {
+      throw new GameProtocolError(`${field}.impactThrowFirePitch is not native`)
+    }
+    const debris = limitedArray(source.debris, `${field}.debris`, 5).map((value, index) => (
+      nativeWeldMeteorDebris(value, `${field}.debris[${index}]`, index)
+    ))
+    if ((source.phase === 'fall' && (debris.length !== 0
+      || cameraDisplacement !== null || impactAgeTicks !== 0
+      || impactRadiusScalar !== 0 || impactRotationDegrees !== 0
+      || impactSoundPitch !== null || impactThrowFirePitch !== null))
+      || (source.phase === 'impact' && (debris.length !== 5
+        || cameraDisplacement === null))
+      || ((impactSoundPitch !== null) !== (source.phase === 'impact'))
+      || ((impactThrowFirePitch !== null) !== (
+        source.phase === 'impact'
+        && !underpowered
+      ))) {
+      throw new GameProtocolError(`${field} Meteor phase-owned presentation state is malformed`)
+    }
+    const fallHeadingDegrees = finite(
+      source.fallHeadingDegrees,
+      `${field}.fallHeadingDegrees`,
+    )
+    if (fallHeadingDegrees < -50 || fallHeadingDegrees > 50) {
+      throw new GameProtocolError(`${field}.fallHeadingDegrees is outside the native lane`)
+    }
+    const size = positiveFinite(source.size, `${field}.size`)
+    if (size < 5 || size > 6.25) {
+      throw new GameProtocolError(`${field}.size is outside the native lane`)
+    }
     return {
       ...common,
       buildId: 1007,
+      cameraDisplacement,
       damage: positiveFinite(source.damage, `${field}.damage`),
+      debris,
+      fallHeadingDegrees,
       fallScalar,
+      fallStep: positiveFinite(source.fallStep, `${field}.fallStep`),
+      impactAgeTicks,
       impactDue: boolean(source.impactDue, `${field}.impactDue`),
+      impactRadiusScalar,
+      impactRotationDegrees,
+      impactSoundPitch,
+      impactThrowFirePitch,
       impactTicksRemaining,
       kind: 'weld-meteor',
       lightRegistration: nativeLightProviderRegistration(
@@ -4346,11 +4737,12 @@ function primarySpellWeldActor(
       ),
       phase: source.phase,
       position: vector(source.position, `${field}.position`),
-      presentationPhase,
       privateSeed,
       pulseDue: boolean(source.pulseDue, `${field}.pulseDue`),
       pulseSequence: nonnegativeInteger(source.pulseSequence, `${field}.pulseSequence`),
       pulseTicksRemaining,
+      size,
+      underpowered,
     } satisfies NativeWeldMeteorActorState
   }
 
@@ -4411,7 +4803,7 @@ function primarySpellWeldEtherealBoulder(
     throw new GameProtocolError(`${field}.phase is not an Ethereal Boulder phase`)
   }
   const maximumScale = finite(source.maximumScale, `${field}.maximumScale`)
-  if (maximumScale !== Math.fround(0.75)) {
+  if (maximumScale !== Math.fround(common.vector[4]! * 0.75)) {
     throw new GameProtocolError(`${field}.maximumScale is not the native cap`)
   }
   const scale = positiveFinite(source.scale, `${field}.scale`)
@@ -4475,6 +4867,66 @@ function primarySpellWeldEtherealBoulder(
   }
 }
 
+function nativeWeldMeteorDebris(
+  value: unknown,
+  field: string,
+  expectedIndex: number,
+  minimumScale = Math.fround(0.45),
+  maximumScale = Math.fround(0.75),
+): NativeWeldMeteorDebrisSeed {
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'alpha', 'colorGreen', 'height', 'index', 'position', 'record',
+    'rotationDegrees', 'rotationStepDegrees', 'scale', 'velocity',
+    'verticalVelocity',
+  ])
+  if (source.alpha !== 2 || source.index !== expectedIndex) {
+    throw new GameProtocolError(`${field} does not match its native debris slot`)
+  }
+  const colorGreen = unitInterval(source.colorGreen, `${field}.colorGreen`)
+  if (colorGreen > 0.5) {
+    throw new GameProtocolError(`${field}.colorGreen exceeds the native range`)
+  }
+  const nativeRecord = positiveInteger(source.record, `${field}.record`)
+  if (nativeRecord !== 2008 && nativeRecord !== 2009 && nativeRecord !== 2010) {
+    throw new GameProtocolError(`${field}.record is not native Meteor debris`)
+  }
+  const scale = positiveFinite(source.scale, `${field}.scale`)
+  if (scale < minimumScale || scale > maximumScale) {
+    throw new GameProtocolError(`${field}.scale is outside the native range`)
+  }
+  return {
+    alpha: 2,
+    colorGreen,
+    height: finite(source.height, `${field}.height`),
+    index: expectedIndex,
+    position: vector(source.position, `${field}.position`),
+    record: nativeRecord,
+    rotationDegrees: finite(source.rotationDegrees, `${field}.rotationDegrees`),
+    rotationStepDegrees: positiveFinite(
+      source.rotationStepDegrees,
+      `${field}.rotationStepDegrees`,
+    ),
+    scale,
+    velocity: vector(source.velocity, `${field}.velocity`),
+    verticalVelocity: finite(source.verticalVelocity, `${field}.verticalVelocity`),
+  }
+}
+
+function nativeWeldBoulderDebris(
+  value: unknown,
+  field: string,
+  expectedIndex: number,
+): NativeWeldMeteorDebrisSeed {
+  return nativeWeldMeteorDebris(
+    value,
+    field,
+    expectedIndex,
+    Number.MIN_VALUE,
+    Math.fround(0.75 * 0.75),
+  )
+}
+
 function primarySpellWeldHailstones(
   source: Record<string, unknown>,
   field: string,
@@ -4493,27 +4945,35 @@ function primarySpellWeldHailstones(
   pulseSequence: number,
 ): NativeWeldHailstonesState {
   onlyKeys(source, field, [
-    ...commonKeys, 'damage', 'maximumScale', 'phase', 'presentationScale',
-    'pulseSequence', 'pushback', 'rocks', 'scale', 'toughness', 'widen',
+    ...commonKeys, 'damage', 'maximumScale', 'phase', 'pulseSequence',
+    'pushback', 'releaseAgeTicks', 'releaseFadeScale', 'rocks', 'scale',
+    'toughness', 'widen',
   ])
   if (source.phase !== 'held' && source.phase !== 'flight') {
     throw new GameProtocolError(`${field}.phase is not a Hailstones phase`)
   }
   const phase = source.phase
-  if (source.maximumScale !== 1) {
+  const maximumScale = positiveFinite(source.maximumScale, `${field}.maximumScale`)
+  if (maximumScale !== common.vector[3]) {
     throw new GameProtocolError(`${field}.maximumScale is not the native cap`)
   }
   const scale = positiveFinite(source.scale, `${field}.scale`)
-  if (scale < NATIVE_WELD_PERSISTENT_INITIAL_SCALE || scale > 1) {
+  if (scale < NATIVE_WELD_PERSISTENT_INITIAL_SCALE || scale > maximumScale) {
     throw new GameProtocolError(`${field}.scale is outside the native growth lane`)
   }
-  const presentationScale = positiveFinite(
-    source.presentationScale,
-    `${field}.presentationScale`,
-  )
-  if ((phase === 'held' && presentationScale !== 1)
-    || (phase === 'flight' && (presentationScale < 0.75 || presentationScale >= 1.5))) {
-    throw new GameProtocolError(`${field}.presentationScale does not match the hail phase`)
+  const releaseFadeScale = source.releaseFadeScale === null
+    ? null
+    : positiveFinite(source.releaseFadeScale, `${field}.releaseFadeScale`)
+  if ((phase === 'held' && releaseFadeScale !== null)
+    || (phase === 'flight' && (releaseFadeScale === null
+      || releaseFadeScale < 0.75 || releaseFadeScale >= 1.5))) {
+    throw new GameProtocolError(`${field}.releaseFadeScale does not match the hail phase`)
+  }
+  const releaseAgeTicks = source.releaseAgeTicks === null
+    ? null
+    : nonnegativeInteger(source.releaseAgeTicks, `${field}.releaseAgeTicks`)
+  if ((phase === 'held') !== (releaseAgeTicks === null)) {
+    throw new GameProtocolError(`${field}.releaseAgeTicks does not match the hail phase`)
   }
   const rocks = limitedArray(source.rocks, `${field}.rocks`, 4096).map((rock, index) => (
     primarySpellWeldHailstone(rock, `${field}.rocks[${index}]`, phase)
@@ -4528,11 +4988,12 @@ function primarySpellWeldHailstones(
       `${field}.lightRegistration`,
       'actor',
     ),
-    maximumScale: 1,
+    maximumScale,
     phase,
-    presentationScale,
     pulseSequence,
     pushback: nonnegativeFinite(source.pushback, `${field}.pushback`),
+    releaseAgeTicks,
+    releaseFadeScale,
     rocks,
     scale,
     toughness: nonnegativeFinite(source.toughness, `${field}.toughness`),
@@ -4613,10 +5074,16 @@ function primarySpellFireSpentEmber(
 
 function primarySpellTransient(value: unknown, field: string): PrimarySpellTransientState {
   const source = record(value, field)
-  if (source.kind === 'weld-channel'
+  if (source.kind === 'weld-boulder-debris'
+    || source.kind === 'weld-channel'
+    || source.kind === 'weld-frost-fade'
+    || source.kind === 'weld-ground-spark-fade'
+    || source.kind === 'weld-hail-rock-fade'
     || source.kind === 'weld-impact'
     || source.kind === 'weld-meteor'
-    || source.kind === 'weld-persistent') {
+    || source.kind === 'weld-meteor-marker'
+    || source.kind === 'weld-persistent'
+    || source.kind === 'weld-steam') {
     return primarySpellWeldActor(source, field)
   }
   if (isNativePlayerStaffTransient(source as { kind: string })) {

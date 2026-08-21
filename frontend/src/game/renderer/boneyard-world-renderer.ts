@@ -763,6 +763,29 @@ export async function createBoneyardWorldRenderer(
           visibleWorldWidth: visibleWorld.w,
         })
       }
+      for (const effect of snapshot.primarySpells.transients) {
+        if (effect.kind === 'weld-meteor') {
+          if (effect.phase !== 'impact' || effect.cameraDisplacement === null) continue
+          secondaryScreenFeedback.consumePrimaryCameraDisplacement({
+            displacement: effect.cameraDisplacement,
+            eventId: effect.id,
+            tick: snapshot.tick - effect.impactAgeTicks,
+            worldKey: effect.worldKey,
+          })
+          continue
+        }
+        if (
+          effect.kind === 'weld-persistent'
+          && effect.buildId === 1008
+          && effect.phase === 'flight'
+          && effect.releaseAgeTicks !== null
+        ) secondaryScreenFeedback.consumePrimaryCameraMagnitude({
+          eventId: effect.id,
+          magnitude: Math.fround(0.1),
+          tick: snapshot.tick - effect.releaseAgeTicks,
+          worldKey: effect.worldKey,
+        })
+      }
       const feedback = worldFeedback.sample(snapshot.tick)
       const worldShake = nativeSecondaryWorldShake(
         snapshot.secondaryAbilities.actors,

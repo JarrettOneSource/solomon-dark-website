@@ -154,6 +154,7 @@ function weldProjectile(buildId: 1000 | 1009): NativeWeldProjectileState {
     direction: { x: 1, y: 0 },
     flightTicks: 1,
     frostPulseAspect: null,
+    frostPresentationLanes: null,
     frostTurnDegrees: null,
     groundSparkNativeAgeTicks: buildId === 1009 ? 20 : null,
     groundSparkTurnTicksRemaining: buildId === 1009 ? 10 : null,

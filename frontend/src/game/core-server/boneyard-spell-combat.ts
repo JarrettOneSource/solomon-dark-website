@@ -52,6 +52,10 @@ import {
   retainNativeWeldHailstoneDamage,
   retainNativeWeldPersistentActorContacts,
 } from '../core-kernels/native-weld-primary-runtime.ts'
+import {
+  nativeWeldMeteorDirectRadius,
+  nativeWeldMeteorPulseRadius,
+} from '../core-kernels/native-weld-meteor.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
 import type { RegisterNativeLightProvider } from '../core-kernels/native-light-provider-order.ts'
 import {
@@ -229,13 +233,16 @@ export function resolveBoneyardSpellCombat(
     projectile: PrimarySpellProjectileState,
     origin: Readonly<Vector2>,
   ): void => {
-    const impact = createPrimarySpellContactImpact(
+    const impactProgram = createPrimarySpellContactImpact(
       nextSpellId,
       projectile,
       origin,
       tick,
+      rng,
       registerLightProvider,
     )
+    rng = impactProgram.rng
+    const impact = impactProgram.impact
     if (!impact) return
     impactTransients.push(impact)
     nextSpellId += 1
@@ -570,15 +577,20 @@ export function resolveBoneyardSpellCombat(
         consumedTransientIds.add(effect.id)
         impactTransients.push({
           ageTicks: 0,
+          alpha: 0,
           birthTick: tick,
           buildId: 1006,
           direction: { ...effect.direction },
           id: nextSpellId,
+          impactSoundPitch: null,
+          impactSoundVariant: null,
           kind: 'weld-impact',
           lightRegistration: null,
           origin: { ...effect.origin },
           ownerId: effect.ownerId,
           position: { ...effect.origin },
+          presentationRotationDegrees: null,
+          presentationScale: 0,
           vector: [...effect.vector],
           worldKey: effect.worldKey,
         })
@@ -678,9 +690,12 @@ export function resolveBoneyardSpellCombat(
   for (const effect of [...sourceSpells.transients].sort(bySpellId)) {
     if (effect.kind !== 'weld-meteor' || effect.worldKey !== worldKey) continue
     const pulse = effect.impactDue
-      ? Object.freeze({ amount: effect.damage * 0.5, radius: 45 })
+      ? Object.freeze({ amount: effect.damage * 0.5, radius: nativeWeldMeteorDirectRadius() })
       : effect.pulseDue
-        ? Object.freeze({ amount: effect.damage / 20, radius: effect.vector[4]! * 45 })
+        ? Object.freeze({
+            amount: effect.damage / 20,
+            radius: nativeWeldMeteorPulseRadius(effect.impactRadiusScalar),
+          })
         : null
     if (pulse) {
       for (const row of nativePrimaryRootTargetRows(

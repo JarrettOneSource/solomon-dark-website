@@ -984,6 +984,8 @@ test('client accepts cast-owned heading and prevents movement prediction from re
           held: false,
           lastWeldPlaybackRate: null,
           lastWeldSoundVariant: null,
+          selectedPrimaryAgeTicks: 1,
+          selectedPrimaryId: 16,
           targetId: null,
           underpowered: false,
         },

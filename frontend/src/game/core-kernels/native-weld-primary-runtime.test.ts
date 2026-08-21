@@ -3,6 +3,9 @@ import test from 'node:test'
 import type { NativeWeldPrimarySkillProfile } from './native-primary-skill-profile.ts'
 import { createNativeRng, drawNativeFloat, drawNativeInteger } from './native-rng.ts'
 import {
+  createNativeWeldMeteorSpawnProgram,
+} from './native-weld-meteor.ts'
+import {
   createNativeWeldChannelActor,
   createNativeWeldPersistentActor,
   createNativeWeldMeteor,
@@ -13,6 +16,7 @@ import {
   releaseNativeWeldPersistentActor,
   spawnNativeWeldOneShot,
   stepNativeWeldProjectile,
+  stepNativeWeldProjectilePresentation,
   stepNativeWeldWorldActor,
   updateNativeWeldPersistentActor,
 } from './native-weld-primary-runtime.ts'
@@ -113,54 +117,74 @@ test('Meteor crosses its float32 fall lane then pulses every ten of 200 impact t
   let actor = createNativeWeldMeteor({
     damage: 12,
     direction: { x: 1, y: 0 },
+    fallHeadingDegrees: 20,
+    fallScalar: 1,
+    fallStep: Math.fround(0.02),
     id: 5,
+    impactTicks: 200,
     origin: { x: 40, y: 80 },
     ownerId: 'p1',
-    presentationPhase: 0,
+    position: { x: 40, y: 80 },
     privateSeed: 4242,
+    size: 5,
     tick: 100,
+    underpowered: false,
     vector: [8, 16, 20, 1.1, 1.5, 3, 10, 2, 3],
     worldKey: 'boneyard:1',
   })
-  for (let tick = 0; tick < 50; tick += 1) {
-    const stepped = stepNativeWeldWorldActor(actor)
-    assert.ok(stepped?.kind === 'weld-meteor')
-    actor = stepped
-    assert.equal(actor.phase, 'fall')
+  let rng = createNativeRng(99)
+  let fallTicks = 0
+  while (actor.phase === 'fall') {
+    const stepped = stepNativeWeldWorldActor(actor, rng)
+    rng = stepped.rng
+    assert.ok(stepped.actor?.kind === 'weld-meteor')
+    actor = stepped.actor
+    fallTicks += 1
+    assert.ok(fallTicks < 60)
   }
-  let stepped = stepNativeWeldWorldActor(actor)
-  assert.ok(stepped?.kind === 'weld-meteor')
-  actor = stepped
+  assert.equal(fallTicks, 51)
   assert.equal(actor.phase, 'impact')
   assert.equal(actor.impactDue, true)
+  assert.equal(actor.debris.length, 5)
+  assert.ok(actor.cameraDisplacement)
 
   for (let tick = 0; tick < 9; tick += 1) {
-    stepped = stepNativeWeldWorldActor(actor)
-    assert.ok(stepped?.kind === 'weld-meteor')
-    actor = stepped
+    const stepped = stepNativeWeldWorldActor(actor, rng)
+    rng = stepped.rng
+    assert.ok(stepped.actor?.kind === 'weld-meteor')
+    actor = stepped.actor
     assert.equal(actor.pulseDue, false)
   }
-  stepped = stepNativeWeldWorldActor(actor)
-  assert.ok(stepped?.kind === 'weld-meteor')
-  assert.equal(stepped.pulseDue, true)
-  assert.equal(stepped.pulseSequence, 1)
-  assert.equal(stepped.impactTicksRemaining, 190)
+  const stepped = stepNativeWeldWorldActor(actor, rng)
+  assert.ok(stepped.actor?.kind === 'weld-meteor')
+  assert.equal(stepped.actor.pulseDue, true)
+  assert.equal(stepped.actor.pulseSequence, 1)
+  assert.equal(stepped.actor.impactTicksRemaining, 190)
 })
 
-test('Meteor constructor subtracts its float32 quarter-range fall draw', () => {
-  const actor = createNativeWeldMeteor({
-    damage: 12,
-    direction: { x: 1, y: 0 },
-    id: 6,
-    origin: { x: 40, y: 80 },
-    ownerId: 'p1',
-    presentationPhase: Math.fround(0.25),
-    privateSeed: 42,
-    tick: 100,
+test('Meteor construction consumes every overwritten and retained native draw', () => {
+  const rng = createNativeRng(42)
+  const fall = drawNativeFloat(rng, Math.fround(0.25))
+  const radius = drawNativeFloat(fall.state, 150)
+  const unit = drawNativeInteger(radius.state, 100_001)
+  const overwritten = drawNativeFloat(unit.state, Math.fround(0.25))
+  const heading = drawNativeFloat(overwritten.state, 40)
+  const size = drawNativeFloat(heading.state, Math.fround(0.25))
+  const seed = drawNativeInteger(size.state, 10_000_000)
+  const spawn = createNativeWeldMeteorSpawnProgram({
+    aimDirection: { x: 1, y: 0 },
+    center: { x: 40, y: 80 },
+    resolvePosition: (candidate) => candidate,
+    rng,
+    underpowered: false,
     vector: [8, 16, 20, 1.1, 1.5, 3, 10, 2, 3],
-    worldKey: 'boneyard:1',
   })
-  assert.equal(actor.fallScalar, Math.fround(0.75))
+  assert.equal(spawn.fallScalar, Math.fround(1 - fall.value))
+  assert.equal(spawn.fallStep, Math.fround(Math.fround(0.02) * Math.fround(1.1 * 2)))
+  assert.equal(spawn.impactTicks, 275)
+  assert.equal(spawn.privateSeed, seed.value)
+  assert.equal(spawn.size, Math.fround(Math.fround(size.value + 1) * 2.5 * 2))
+  assert.deepEqual(spawn.rng, seed.state)
 })
 
 test('weld homing actors retain the nearest native target and advance through shared motion', () => {
@@ -243,6 +267,26 @@ test('Frost Missile consumes inherited and derived presentation phases per actor
   assert.equal(spawned.projectiles[0]!.frostPulseAspect, Math.fround(0.5 + aspect.value))
   assert.equal(spawned.projectiles[0]!.castPlaybackRate, Math.fround(1 + playback.value))
   assert.deepEqual(spawned.rng, aspect.state)
+
+  let expected = aspect.state
+  const expectedLanes = []
+  for (let lane = 0; lane < 2; lane += 1) {
+    const nextAspect = drawNativeFloat(expected, Math.fround(0.25))
+    const nextScale = drawNativeFloat(nextAspect.state, Math.fround(0.75))
+    const nextRotation = drawNativeFloat(nextScale.state, 45)
+    expected = nextRotation.state
+    expectedLanes.push({
+      aspect: Math.fround(nextAspect.value + 0.5),
+      rotationDegrees: nextRotation.value,
+      scale: Math.fround(nextScale.value + 0.5),
+    })
+  }
+  const presentation = stepNativeWeldProjectilePresentation(
+    spawned.projectiles[0]!,
+    aspect.state,
+  )
+  assert.deepEqual(presentation.projectile.frostPresentationLanes, expectedLanes)
+  assert.deepEqual(presentation.rng, expected)
 })
 
 test('underpowered welded one-shots retain native actors but suppress every learned payload', () => {
@@ -358,6 +402,7 @@ test('Ethereal Boulder grows in the native float lane and releases the four-piec
   assert.equal(source.buildId, 1006)
   assert.equal(source.assemblyScale, Math.fround(0.18))
   assert.equal(source.flightTicks, 0)
+  assert.equal(source.maximumScale, Math.fround(1.5 * 0.75))
   const updated = updateNativeWeldPersistentActor(
     source,
     source.origin,
@@ -368,12 +413,13 @@ test('Ethereal Boulder grows in the native float lane and releases the four-piec
   assert.notDeepEqual(updated.actor.orientation, source.orientation)
   assert.equal(
     updated.actor.scale,
-    Math.fround(Math.fround(0.18) + Math.fround(1.2 * 1.5) * 0.0025),
+    Math.fround(Math.fround(0.18) + Math.fround(Math.fround(1.2 * 0.0025) * 3)),
   )
   const released = releaseNativeWeldPersistentActor({
     actor: updated.actor,
     firstChildId: 90,
     rng: updated.rng,
+    tick: 12,
   })
   assert.equal(released.nextId, 93)
   assert.deepEqual(released.actors.map(({ id, origin }) => ({ id, origin })), [
@@ -390,10 +436,10 @@ test('Ethereal Boulder grows in the native float lane and releases the four-piec
   )), [Math.fround(0.75), Math.fround(0.7125), Math.fround(0.7125), Math.fround(0.675)])
   const first = released.actors[0]
   assert.ok(first?.buildId === 1006)
-  const stepped = stepNativeWeldWorldActor(first)
-  assert.ok(stepped?.kind === 'weld-persistent' && stepped.buildId === 1006)
-  assert.equal(stepped.flightTicks, 1)
-  assert.notDeepEqual(stepped.orientation, first.orientation)
+  const stepped = stepNativeWeldWorldActor(first, createNativeRng(2))
+  assert.ok(stepped.actor?.kind === 'weld-persistent' && stepped.actor.buildId === 1006)
+  assert.equal(stepped.actor.flightTicks, 1)
+  assert.notDeepEqual(stepped.actor.orientation, first.orientation)
 })
 
 test('Hailstones bucket rebuild consumes native rock RNG in exact field order', () => {
@@ -405,7 +451,7 @@ test('Hailstones bucket rebuild consumes native rock RNG in exact field order', 
     origin: { x: 10, y: 20 },
     ownerId: 'p1',
     tick: 4,
-    vector: [8, 2, 8, 1.5, 0.1, 0.5],
+    vector: [8, 2, 40, 1.5, 0.1, 0.5],
     worldKey: 'boneyard:1',
   })
   assert.equal(source.buildId, 1008)
@@ -416,11 +462,18 @@ test('Hailstones bucket rebuild consumes native rock RNG in exact field order', 
     rng,
   )
   assert.equal(updated.actor.buildId, 1008)
-  assert.equal(updated.actor.scale, Math.fround(Math.fround(0.18) + 20 * 0.0025 * 3))
+  assert.equal(
+    updated.actor.scale,
+    Math.fround(Math.fround(0.18) + Math.fround(Math.fround(40 * 0.5) * 0.0025) * 3),
+  )
   assert.equal(updated.actor.rocks.length, 2)
   assert.equal(updated.actor.rocks[0]!.decay, 1)
   assert.equal(updated.actor.rocks[0]!.phase, 0)
   assert.equal(updated.actor.rocks[0]!.releaseOffset, null)
+  assert.equal(updated.hailRockFades.length, 2)
+  assert.ok(updated.hailRockFades.every(({ rotationDegrees }) => (
+    rotationDegrees >= 0 && rotationDegrees < 20
+  )))
 
   let expected = rng
   for (let index = 0; index < 2; index += 1) {
@@ -430,6 +483,7 @@ test('Hailstones bucket rebuild consumes native rock RNG in exact field order', 
     expected = drawNativeFloat(expected, 50, true).state
     if (index === 0) expected = drawNativeFloat(expected, 10).state
     expected = drawNativeFloat(expected, Math.fround(0.75)).state
+    expected = drawNativeFloat(expected, 20).state
   }
   assert.deepEqual(updated.rng, expected)
 
@@ -438,22 +492,95 @@ test('Hailstones bucket rebuild consumes native rock RNG in exact field order', 
     actor: updated.actor,
     firstChildId: 6,
     rng: expected,
+    tick: 7,
   })
   assert.deepEqual(released.rng, presentation.state)
   const actor = released.actors[0]
   assert.ok(actor?.buildId === 1008)
   assert.equal(actor.phase, 'flight')
-  assert.deepEqual(actor.origin, { x: 0, y: 20 })
-  assert.equal(actor.presentationScale, Math.fround(presentation.value + 0.75))
+  assert.deepEqual(actor.origin, { x: -10, y: 20 })
+  assert.equal(actor.releaseFadeScale, Math.fround(presentation.value + 0.75))
+  assert.equal(actor.rocks[0]!.releaseOffset!.x, actor.rocks[0]!.localPosition.x)
   assert.ok(actor.rocks.every(({ damageRemaining, releaseOffset }) => (
     damageRemaining === 8 && releaseOffset !== null
   )))
+  const releaseFade = released.actors[1]
+  assert.ok(releaseFade?.kind === 'weld-frost-fade')
+  assert.equal(releaseFade.birthTick, 7)
+  assert.equal(releaseFade.scale, Math.fround(actor.releaseFadeScale * 5))
 
-  const stepped = stepNativeWeldWorldActor(actor)
-  assert.ok(stepped?.kind === 'weld-persistent' && stepped.buildId === 1008)
-  assert.deepEqual(stepped.origin, { x: 10, y: 20 })
-  assert.equal(stepped.rocks[0]!.decay, Math.fround(0.95))
-  assert.equal(stepped.rocks[0]!.phase, Math.fround(0.025))
+  const stepped = stepNativeWeldWorldActor(actor, createNativeRng(3))
+  assert.ok(stepped.actor?.kind === 'weld-persistent' && stepped.actor.buildId === 1008)
+  assert.deepEqual(stepped.actor.origin, { x: 0, y: 20 })
+  assert.equal(stepped.actor.rocks[0]!.decay, Math.fround(0.95))
+  assert.equal(stepped.actor.rocks[0]!.phase, Math.fround(0.025))
+  const firstRock = stepped.actor.rocks[0]!
+  assert.equal(firstRock.releaseOffset!.x, firstRock.localPosition.x)
+  assert.equal(firstRock.releaseOffset!.y, Math.fround(
+    firstRock.localPosition.y
+      + Math.fround(
+        Math.fround(50 - firstRock.localPosition.z * Math.fround(0.8))
+          - firstRock.localPosition.y,
+      ) * Math.fround(0.95),
+  ))
+})
+
+test('weak retained welds suppress native payloads and obey their distinct release gates', () => {
+  const ethereal = createNativeWeldPersistentActor({
+    buildId: 1006,
+    direction: { x: 1, y: 0 },
+    id: 1,
+    origin: { x: 0, y: 0 },
+    ownerId: 'wizard',
+    tick: 0,
+    vector: [12, 3, 4, 1.2, 1.5, 2],
+    worldKey: 'boneyard:1',
+  })
+  assert.equal(ethereal.buildId, 1006)
+  if (ethereal.buildId !== 1006) throw new Error('expected Ethereal Boulder')
+  const weakEthereal = updateNativeWeldPersistentActor(
+    { ...ethereal, remainingDamage: 8, scale: Math.fround(0.31) },
+    ethereal.origin,
+    ethereal.direction,
+    createNativeRng(1),
+    { castProgressFactor: 3, underpowered: true },
+  )
+  assert.equal(weakEthereal.releaseRequested, true)
+  assert.equal(weakEthereal.actor.buildId, 1006)
+  if (weakEthereal.actor.buildId !== 1006) throw new Error('expected weak Ethereal Boulder')
+  assert.equal(weakEthereal.actor.damage, 6)
+  assert.equal(weakEthereal.actor.remainingDamage, 4)
+  assert.equal(weakEthereal.actor.quantity, 1)
+  assert.equal(weakEthereal.actor.speedFactor, 1)
+  assert.ok(weakEthereal.debris.length >= 8)
+  assert.notDeepEqual(weakEthereal.rng, createNativeRng(1))
+
+  const hail = createNativeWeldPersistentActor({
+    buildId: 1008,
+    direction: { x: 1, y: 0 },
+    id: 2,
+    origin: { x: 0, y: 0 },
+    ownerId: 'wizard',
+    tick: 0,
+    vector: [10, 2, 2, 1.5, 0.4, 0.8],
+    worldKey: 'boneyard:1',
+  })
+  assert.equal(hail.buildId, 1008)
+  if (hail.buildId !== 1008) throw new Error('expected Hailstones')
+  const weakHail = updateNativeWeldPersistentActor(
+    { ...hail, scale: Math.fround(0.31) },
+    hail.origin,
+    hail.direction,
+    createNativeRng(2),
+    { castProgressFactor: 2, underpowered: true },
+  )
+  assert.equal(weakHail.releaseRequested, false)
+  assert.equal(weakHail.actor.buildId, 1008)
+  if (weakHail.actor.buildId !== 1008) throw new Error('expected weak Hailstones')
+  assert.equal(weakHail.actor.scale, Math.fround(0.31))
+  assert.equal(weakHail.actor.damage, 5)
+  assert.equal(weakHail.actor.pushback, 0)
+  assert.equal(weakHail.actor.widen, 0)
 })
 
 function profile(

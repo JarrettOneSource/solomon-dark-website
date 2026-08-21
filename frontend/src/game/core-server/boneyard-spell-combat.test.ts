@@ -972,11 +972,32 @@ test('Meteor impact owns its 45-unit half-damage contact and ten-tick rooted pul
     ageTicks: 51,
     birthTick: 0,
     buildId: 1007,
+    cameraDisplacement: { x: 10, y: 0 },
     damage: 20,
+    debris: Array.from({ length: 5 }, (_, index) => ({
+      alpha: 2 as const,
+      colorGreen: 0.25,
+      height: 0,
+      index,
+      position: { x: 0, y: 0 },
+      record: 2008 as const,
+      rotationDegrees: 0,
+      rotationStepDegrees: 1,
+      scale: Math.fround(0.45),
+      velocity: { x: 0, y: 0 },
+      verticalVelocity: -1,
+    })),
     direction: { x: 1, y: 0 },
+    fallHeadingDegrees: 20,
     fallScalar: 0,
+    fallStep: Math.fround(0.04),
     id: 20,
+    impactAgeTicks: 0,
     impactDue: true,
+    impactRadiusScalar: 0.5,
+    impactRotationDegrees: 0,
+    impactSoundPitch: null,
+    impactThrowFirePitch: null,
     impactTicksRemaining: 200,
     kind: 'weld-meteor',
     lightRegistration: { managerLane: 'actor', registrationOrdinal: 20 },
@@ -984,11 +1005,12 @@ test('Meteor impact owns its 45-unit half-damage contact and ten-tick rooted pul
     ownerId: 'wizard',
     phase: 'impact',
     position: { x: 0, y: 0 },
-    presentationPhase: 0,
     privateSeed: 99,
     pulseDue: false,
     pulseSequence: 0,
     pulseTicksRemaining: 10,
+    size: 5,
+    underpowered: false,
     vector: [10, 20, 2, 1, 2, 0, 0, 0, 0],
     worldKey: WORLD_KEY,
   }
@@ -1000,13 +1022,13 @@ test('Meteor impact owns its 45-unit half-damage contact and ten-tick rooted pul
 
   const pulse = resolveCombatWithAuthority(enemies, spellState({ transients: [{
     ...meteor,
+    cameraDisplacement: null,
     impactDue: false,
     pulseDue: true,
     pulseSequence: 1,
   }] }), [], 4)
   assert.deepEqual(pulse.hits.map(({ actorId, amount }) => ({ actorId, amount })), [
     { actorId: 1, amount: 1 },
-    { actorId: 2, amount: 1 },
   ])
 })
 
@@ -1094,7 +1116,8 @@ test('released Hailstones rocks contact at carrier offsets and divide only pool 
     origin: { x: 0, y: 0 },
     ownerId: 'wizard',
     phase: 'flight',
-    presentationScale: 1,
+    releaseAgeTicks: 1,
+    releaseFadeScale: 1,
     pulseSequence: 1,
     pushback: 0,
     rocks: [{
@@ -1454,6 +1477,12 @@ function projectile(options: {
         charge: 1,
         contactsRemaining: options.contactsRemaining ?? 1,
         frostPulseAspect: options.buildId === 1001 ? 0.5 : null,
+        frostPresentationLanes: options.buildId === 1001
+          ? [
+              { aspect: 0.5, rotationDegrees: 10, scale: 0.5 },
+              { aspect: 0.75, rotationDegrees: 20, scale: 0.75 },
+            ]
+          : null,
         frostTurnDegrees: options.buildId === 1001 ? 0 : null,
         groundSparkNativeAgeTicks: options.buildId === 1009 ? 0 : null,
         groundSparkTurnTicksRemaining: options.buildId === 1009 ? 0 : null,

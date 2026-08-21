@@ -44,6 +44,11 @@ const SECONDARY_STREAM_CUES = new Set<NativeSecondaryAudioCue>([
   'quake-cracks', 'set-trap', 'stoneskin-on', 'thunder', 'trap',
 ])
 
+interface PrimaryLoopMix {
+  readonly playbackRate: number
+  readonly volume: number
+}
+
 const SECONDARY_LOOP_CUES = new Set<NativeSecondaryAudioCue>([
   'comet-loop', 'electric-loop', 'earthquake-loop', 'low-fire-loop', 'plane-cross-loop',
   'rainfall-loop', 'steady-wind-loop',
@@ -61,7 +66,7 @@ const GOOD_IMP_CONTACT_CUES = Object.freeze([
 export class PrimarySpellAudioSynchronizer {
   private readonly audio: GameAudioDirector
   private readonly localPlayerId: string
-  private readonly loopOwners = new Map<GameLoopCue, Map<string, number>>()
+  private readonly loopOwners = new Map<GameLoopCue, Map<string, PrimaryLoopMix>>()
   private previous: GameSnapshot
 
   constructor(
@@ -97,7 +102,10 @@ export class PrimarySpellAudioSynchronizer {
                 sequence < player.primaryCast.castSequence;
                 sequence += 1) {
                 for (const cue of nativeWeldCastSoundCues(weldBuildId, null)) {
-                  this.audio.playSound(cue, { volume })
+                  this.audio.playSound(cue, {
+                    playbackRate: player.primaryCast.lastWeldPlaybackRate ?? 1,
+                    volume,
+                  })
                 }
               }
             }
@@ -164,6 +172,87 @@ export class PrimarySpellAudioSynchronizer {
             effect.origin.y - listener.position.y,
           )),
         })
+      }
+      const previousMeteors = new Map(this.previous.primarySpells.transients
+        .filter((effect) => effect.kind === 'weld-meteor')
+        .map((effect) => [`${effect.worldKey}\u0000${effect.id}`, effect]))
+      for (const effect of snapshot.primarySpells.transients) {
+        if (
+          effect.kind !== 'weld-meteor'
+          || effect.phase !== 'impact'
+          || effect.worldKey !== listenerWorldKey
+          || previousMeteors.get(`${effect.worldKey}\u0000${effect.id}`)?.phase === 'impact'
+        ) continue
+        if (effect.impactSoundPitch === null) {
+          throw new Error(`Meteor ${effect.id} impacted without its native sound pitch`)
+        }
+        const volume = effect.underpowered
+          ? 1
+          : 2 * hubAudioAttenuation(Math.hypot(
+              effect.position.x - listener.position.x,
+              effect.position.y - listener.position.y,
+            ))
+        this.audio.playSound('fireball-hit', {
+          playbackRate: effect.impactSoundPitch,
+          volume,
+        })
+        if (effect.impactThrowFirePitch !== null) {
+          this.audio.playSound('throw-fire', {
+            playbackRate: effect.impactThrowFirePitch,
+            volume,
+          })
+        }
+      }
+      const previousWeldImpacts = new Set(this.previous.primarySpells.transients
+        .filter((effect) => effect.kind === 'weld-impact')
+        .map((effect) => `${effect.worldKey}\u0000${effect.id}`))
+      for (const effect of snapshot.primarySpells.transients) {
+        if (
+          effect.kind !== 'weld-impact'
+          || effect.worldKey !== listenerWorldKey
+          || effect.impactSoundPitch === null
+          || previousWeldImpacts.has(`${effect.worldKey}\u0000${effect.id}`)
+        ) continue
+        const volume = hubAudioAttenuation(Math.hypot(
+          effect.position.x - listener.position.x,
+          effect.position.y - listener.position.y,
+        ))
+        if (effect.buildId === 1001) {
+          this.audio.playSound('ice-start', {
+            playbackRate: effect.impactSoundPitch,
+            volume,
+          })
+        } else if (effect.buildId === 1002) {
+          this.audio.playSound('throw-lightning-1', {
+            playbackRate: effect.impactSoundPitch,
+            volume,
+          })
+        } else if (effect.buildId === 1009 && effect.impactSoundVariant !== null) {
+          const cue = (['shock-1', 'shock-2', 'shock-3'] as const)[
+            effect.impactSoundVariant
+          ]!
+          this.audio.playSound(cue, {
+            playbackRate: effect.impactSoundPitch,
+            volume,
+          })
+        }
+      }
+      const previousWeldPersistentActors = new Map(this.previous.primarySpells.transients
+        .filter((effect) => effect.kind === 'weld-persistent')
+        .map((effect) => [`${effect.worldKey}\u0000${effect.id}`, effect]))
+      for (const effect of snapshot.primarySpells.transients) {
+        if (
+          effect.kind !== 'weld-persistent'
+          || effect.buildId !== 1008
+          || effect.phase !== 'flight'
+          || effect.worldKey !== listenerWorldKey
+          || previousWeldPersistentActors.get(
+            `${effect.worldKey}\u0000${effect.id}`,
+          )?.phase === 'flight'
+        ) continue
+        this.audio.playSound('ice-start', { playbackRate: 1.5, volume: 1 })
+        this.audio.playSound('rock-hit', { playbackRate: 1.5, volume: 1 })
+        this.audio.playSound('hail-shot', { playbackRate: 1, volume: 1 })
       }
       const previousGoodImps = new Map(this.previous.primarySpells.transients
         .filter((effect) => effect.kind === 'fire-good-imp')
@@ -314,8 +403,8 @@ export class PrimarySpellAudioSynchronizer {
   }
 
   private syncLoops(snapshot: GameSnapshot): void {
-    const desired = new Map<GameLoopCue, Map<string, number>>(
-      LOOP_CUES.map((cue) => [cue, new Map<string, number>()]),
+    const desired = new Map<GameLoopCue, Map<string, PrimaryLoopMix>>(
+      LOOP_CUES.map((cue) => [cue, new Map<string, PrimaryLoopMix>()]),
     )
     const listenerWorldKey = playerAudioWorldKey(snapshot, this.localPlayerId)
     if (listenerWorldKey) {
@@ -334,16 +423,21 @@ export class PrimarySpellAudioSynchronizer {
         const weldBuildId = activeWeldBuildId(player.progression.activeWeldBuildId)
         if (weldBuildId !== null) {
           for (const cue of nativeWeldLoopCues(weldBuildId)) {
-            desired.get(cue)!.set(owner, attenuation)
+            desired.get(cue)!.set(owner, {
+              playbackRate: weldBuildId === 1007 && player.primaryCast.underpowered
+                ? 0.75
+                : 1,
+              volume: attenuation,
+            })
           }
           continue
         }
         switch (player.config.element) {
           case 'air':
-            desired.get('lightning-loop')!.set(
-              owner,
-              attenuation * (player.primaryCast.underpowered ? 0.75 : 1),
-            )
+            desired.get('lightning-loop')!.set(owner, {
+              playbackRate: 1,
+              volume: attenuation * (player.primaryCast.underpowered ? 0.75 : 1),
+            })
             break
           case 'earth': {
             const gathering = snapshot.primarySpells.projectiles.some((spell) => (
@@ -353,14 +447,17 @@ export class PrimarySpellAudioSynchronizer {
               && spell.charge < 1
               && spell.worldKey === listenerWorldKey
             ))
-            if (gathering) desired.get('gather-rocks-loop')!.set(owner, attenuation)
+            if (gathering) desired.get('gather-rocks-loop')!.set(owner, {
+              playbackRate: 1,
+              volume: attenuation,
+            })
             break
           }
           case 'water':
-            desired.get('ice-loop')!.set(
-              owner,
-              attenuation * (player.primaryCast.underpowered ? 0.5 : 1),
-            )
+            desired.get('ice-loop')!.set(owner, {
+              playbackRate: 1,
+              volume: attenuation * (player.primaryCast.underpowered ? 0.5 : 1),
+            })
             break
           case 'ether':
           case 'fire':
@@ -375,13 +472,13 @@ export class PrimarySpellAudioSynchronizer {
         ) {
           const listener = snapshot.players[this.localPlayerId]
           if (!listener) continue
-          desired.get('rolling-stone-loop')!.set(
-            `primary-spell:${spell.id}`,
-            hubAudioAttenuation(Math.hypot(
+          desired.get('rolling-stone-loop')!.set(`primary-spell:${spell.id}`, {
+            playbackRate: 1,
+            volume: hubAudioAttenuation(Math.hypot(
               spell.position.x - listener.position.x,
               spell.position.y - listener.position.y,
             )),
-          )
+          })
         }
       }
       const listener = snapshot.players[this.localPlayerId]
@@ -397,7 +494,10 @@ export class PrimarySpellAudioSynchronizer {
           ))
           const owner = `secondary-player:${ownerId}`
           const loops = desired.get(cue)!
-          loops.set(owner, Math.max(loops.get(owner) ?? 0, volume))
+          loops.set(owner, {
+            playbackRate: 1,
+            volume: Math.max(loops.get(owner)?.volume ?? 0, volume),
+          })
         }
         for (const [ownerId, secondaryPlayer] of Object.entries(
           snapshot.secondaryAbilities.players,
@@ -450,9 +550,10 @@ export class PrimarySpellAudioSynchronizer {
     for (const cue of LOOP_CUES) {
       const current = this.loopOwners.get(cue)!
       const next = desired.get(cue)!
-      for (const [owner, volume] of next) {
-        if (current.get(owner) === volume) continue
-        this.audio.startLoop(cue, owner, { volume })
+      for (const [owner, mix] of next) {
+        const prior = current.get(owner)
+        if (prior?.playbackRate === mix.playbackRate && prior.volume === mix.volume) continue
+        this.audio.startLoop(cue, owner, mix)
       }
       for (const owner of current.keys()) {
         if (next.has(owner)) continue

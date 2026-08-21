@@ -32,6 +32,8 @@ export interface PlayerPrimaryCastState {
   held: boolean
   lastWeldPlaybackRate: number | null
   lastWeldSoundVariant: number | null
+  selectedPrimaryAgeTicks: number
+  selectedPrimaryId: number
   targetId: string | null
   underpowered: boolean
 }
@@ -106,6 +108,8 @@ export function createIdlePlayerPrimaryCast(): PlayerPrimaryCastState {
     held: false,
     lastWeldPlaybackRate: null,
     lastWeldSoundVariant: null,
+    selectedPrimaryAgeTicks: 0,
+    selectedPrimaryId: -1,
     targetId: null,
     underpowered: false,
   }

@@ -66,6 +66,7 @@ export type GameSoundCue =
   | 'hail-bounce-1'
   | 'hail-bounce-2'
   | 'hail-bounce-3'
+  | 'hail-shot'
   | 'ice-start'
   | 'imp-split'
   | 'imp-vocal-1'
@@ -379,6 +380,11 @@ export const NATIVE_SOUND_MANIFEST = {
     registryOffset: 0x1f98,
     sourceName: 'sounds\\hail\\ice2',
     sourceSha256: 'aef26122ad82c8663ab579bd25a3a37f16120d5dda7ac98590ffdc85c24f1a50',
+  },
+  'hail-shot': {
+    registryOffset: 0x6f8,
+    sourceName: 'sounds\\hailshot',
+    sourceSha256: '3190570e01141d2036b0aabc7fae77e70204ceaa7119e26e811f2a45a954b6a2',
   },
   'ice-start': {
     registryOffset: 0x7a8,

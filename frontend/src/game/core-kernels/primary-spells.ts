@@ -86,8 +86,10 @@ import {
   type RegisterNativeLightProvider,
 } from './native-light-provider-order.ts'
 import {
-  NATIVE_WELD_METEOR_CADENCE_TICKS,
   createNativeWeldChannelActor,
+  createNativeWeldBoulderDebrisActor,
+  createNativeWeldGroundSparkFadeActor,
+  createNativeWeldHailRockFadeActor,
   createNativeWeldMeteor,
   createNativeWeldPersistentActor,
   drawNativeWeldDamage,
@@ -96,6 +98,7 @@ import {
   releaseNativeWeldPersistentActor,
   spawnNativeWeldOneShot,
   stepNativeWeldProjectile,
+  stepNativeWeldProjectilePresentation,
   stepNativeWeldWorldActor,
   updateNativeWeldPersistentActor,
   type NativeWeldProjectileState,
@@ -103,6 +106,15 @@ import {
   type NativeWeldWorldActor,
 } from './native-weld-primary-runtime.ts'
 import type { NativeWeldBuildId } from './native-weld-primary-profile.ts'
+import {
+  createNativeWeldMeteorSpawnProgram,
+  nativeWeldMeteorCadenceTicks,
+  nativeWeldMeteorTargetPoint,
+  spawnNativeWeldMeteorMarker,
+  type NativeWeldMeteorDebrisSeed,
+} from './native-weld-meteor.ts'
+import { createNativeWeldGroundSparkFadeProgram } from './native-weld-ground-spark.ts'
+import { spawnNativeWeldSteamActor } from './native-weld-steam.ts'
 
 export type PrimarySpellProjectileKind = 'earth' | 'ether' | 'fire' | 'weld'
 export type PrimarySpellTransientKind =
@@ -123,9 +135,15 @@ export type PrimarySpellTransientKind =
   | 'water-aura'
   | 'water-hail'
   | 'weld-channel'
+  | 'weld-boulder-debris'
+  | 'weld-frost-fade'
+  | 'weld-ground-spark-fade'
+  | 'weld-hail-rock-fade'
   | 'weld-impact'
   | 'weld-meteor'
+  | 'weld-meteor-marker'
   | 'weld-persistent'
+  | 'weld-steam'
 export type PrimarySpellProjectilePhase = 'flight' | 'held'
 
 interface PrimarySpellProjectileBaseState {
@@ -777,19 +795,49 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
     ?? standaloneLightProviderOrder.register
   let nextId = context.spells.nextId
   let rng = context.rng
+  let transients: PrimarySpellTransientState[] = []
+  const advanceProjectileWithPresentation = (
+    spell: PrimarySpellProjectileState,
+    targets: readonly PrimarySpellTarget[],
+  ): PrimarySpellProjectileState => {
+    const advanced = advanceProjectile(spell, targets)
+    if (advanced.kind !== 'weld') return advanced
+    const presentation = stepNativeWeldProjectilePresentation(advanced, rng)
+    rng = presentation.rng
+    if (presentation.projectile.buildId === 1009) {
+      const fadeProgram = createNativeWeldGroundSparkFadeProgram({
+        projectile: presentation.projectile,
+        rng,
+      })
+      rng = fadeProgram.rng
+      for (const seed of fadeProgram.fades) {
+        transients.push(createNativeWeldGroundSparkFadeActor({
+          direction: presentation.projectile.direction,
+          id: nextId,
+          ownerId: presentation.projectile.ownerId,
+          seed,
+          tick: context.tick,
+          vector: presentation.projectile.vector,
+          worldKey: presentation.projectile.worldKey,
+        }))
+        nextId += 1
+      }
+    }
+    return presentation.projectile
+  }
   const existingCalledRockIds = new Set(context.spells.transients
     .filter((effect) => effect.kind === 'earth-called-rock')
     .map((effect) => effect.id))
-  let transients: PrimarySpellTransientState[] = []
   const fireActorContacts: NativeFireActorContact[] = []
   for (const effect of context.spells.transients) {
     if (isNativeWeldWorldActor(effect)) {
-      const stepped = stepNativeWeldWorldActor(effect, (actor, from, to) => (
+      const stepped = stepNativeWeldWorldActor(effect, rng, (actor, from, to) => (
         actor.buildId === 1006
           ? context.canPlaceProjectile(actor, to, actor.scale * PRIMARY_SPELL_EARTH_COLLISION_RADIUS_SCALE)
           : context.spellObstructionPoint(actor.ownerId, from, to) === null
       ))
-      if (stepped) transients.push(stepped)
+      rng = stepped.rng
+      if (stepped.actor) transients.push(stepped.actor)
     } else if (
       effect.kind === 'earth-called-rock'
       || isNativePlayerStaffTransient(effect)
@@ -894,7 +942,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
   let projectiles: PrimarySpellProjectileState[] = []
   for (const spell of context.spells.projectiles) {
     if (spell.phase === 'held') {
-      projectiles.push(advanceProjectile(spell, []))
+      projectiles.push(advanceProjectileWithPresentation(spell, []))
       continue
     }
     if (
@@ -941,13 +989,15 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
         transients = [...transients, ...detonation.transients]
         nextId = detonation.nextId
       } else {
-        transients = [...transients, createPrimarySpellWeldImpact(nextId, spell, context.tick)]
+        const impact = createPrimarySpellWeldImpact(nextId, spell, context.tick, rng)
+        rng = impact.rng
+        transients = [...transients, impact.impact]
         nextId += 1
       }
       continue
     }
     const targets = context.spellTargets(spell.ownerId)
-    const advanced = advanceProjectile(spell, targets)
+    const advanced = advanceProjectileWithPresentation(spell, targets)
     if (
       advanced.kind === 'earth'
       && !context.canPlaceProjectile(
@@ -996,6 +1046,12 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
     }
     let earthAcceptedUnderpowered: boolean | null = null
     const rawHeld = input?.cast.primary === true && input.aim !== null
+    const selectedPrimaryId = authority?.primarySkill.skillId
+      ?? previous.primaryCast.selectedPrimaryId
+    const nativeSelectedPrimaryAge = previous.primaryCast.selectedPrimaryId
+      === selectedPrimaryId
+      ? previous.primaryCast.selectedPrimaryAgeTicks
+      : -1
     const pressed = rawHeld && !previous.primaryCast.held
     const released = !rawHeld && previous.primaryCast.held
     const oneShotPrimary = authority?.primarySkill.kind === 'weld'
@@ -1028,6 +1084,11 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
       castClockElement,
       authority?.castProgressFactor ?? 1,
     )
+    primaryCast = {
+      ...primaryCast,
+      selectedPrimaryAgeTicks: nativeSelectedPrimaryAge + 1,
+      selectedPrimaryId,
+    }
     const castOwnsFacing = playerPrimaryCastOwnsFacing(primaryCast)
     let nextPlayer: PlayerCharacterState = {
       ...player,
@@ -1217,7 +1278,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             },
           )
           if (initialClear && firstLookaheadClear) {
-            const spell = advanceProjectile(born, [])
+            const spell = advanceProjectileWithPresentation(born, [])
             projectiles = [...projectiles, spell]
             transients = [...transients, createFireParticle(nextId, spell)]
             nextId += 1
@@ -1243,7 +1304,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             },
           )
           if (firstLookaheadClear) {
-            const spell = advanceProjectile(
+            const spell = advanceProjectileWithPresentation(
               born,
               context.spellTargets(playerId),
             )
@@ -1268,7 +1329,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             },
           )
           if (firstLookaheadClear) {
-            const spell = advanceProjectile(
+            const spell = advanceProjectileWithPresentation(
               born,
               context.spellTargets(playerId),
             )
@@ -1290,7 +1351,9 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             transients = [...transients, ...detonation.transients]
             nextId = detonation.nextId
           } else {
-            transients = [...transients, createPrimarySpellWeldImpact(nextId, born, context.tick)]
+            const impact = createPrimarySpellWeldImpact(nextId, born, context.tick, rng)
+            rng = impact.rng
+            transients = [...transients, impact.impact]
             nextId += 1
           }
         }
@@ -1356,19 +1419,50 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
               underpowered,
               worldKey,
             })
-            transients = [...transients, createNativeWeldChannelActor({
-              buildId,
-              direction: aimDirection,
-              endpoint: lightning?.endpoint ?? null,
-              id: nextId,
-              midpoint: lightning?.midpoint ?? null,
-              origin: emitter,
-              ownerId: playerId,
-              targetId: lightning?.targetId ?? null,
-              tick: context.tick,
-              vector: authority.primarySkill.vector.values,
-              worldKey,
-            })]
+            if (buildId === 1005) {
+              const steam = spawnNativeWeldSteamActor({
+                direction: aimDirection,
+                id: nextId,
+                origin: emitter,
+                ownerId: playerId,
+                rng,
+                tick: context.tick,
+                underpowered,
+                vector: authority.primarySkill.vector.values,
+                worldKey,
+              })
+              rng = steam.rng
+              if (steam.actor) {
+                transients = [...transients, steam.actor]
+                nextId += 1
+              }
+            } else {
+              const endpoint = lightning?.endpoint ?? (
+                buildId === 1004
+                  ? context.spellRangeEndpoint(playerId, emitter, aimDirection)
+                  : null
+              )
+              const midpoint = lightning?.midpoint ?? (endpoint === null
+                ? null
+                : {
+                    x: Math.fround((emitter.x + endpoint.x) * 0.5),
+                    y: Math.fround((emitter.y + endpoint.y) * 0.5),
+                  })
+              transients = [...transients, createNativeWeldChannelActor({
+                buildId,
+                direction: aimDirection,
+                endpoint,
+                id: nextId,
+                midpoint,
+                origin: emitter,
+                ownerId: playerId,
+                targetId: lightning?.targetId ?? null,
+                tick: context.tick,
+                vector: authority.primarySkill.vector.values,
+                worldKey,
+              })]
+              nextId += 1
+            }
             if (lightning) {
               nextPlayer = {
                 ...nextPlayer,
@@ -1378,8 +1472,32 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
                 },
               }
             }
-            nextId += 1
           } else if (isPersistentBuild(buildId)) {
+            let meteorDamage: number | null = null
+            let meteorCenter: Vector2 | null = null
+            if (buildId === 1007) {
+              meteorCenter = nativeWeldMeteorTargetPoint(nextPlayer.position, aimDirection)
+              const marker = spawnNativeWeldMeteorMarker({
+                direction: aimDirection,
+                id: nextId,
+                origin: meteorCenter,
+                ownerId: playerId,
+                rng,
+                tick: context.tick,
+                vector: authority.primarySkill.vector.values,
+                worldKey,
+              })
+              rng = marker.rng
+              transients = [...transients, marker.marker]
+              nextId += 1
+              const damage = drawNativeWeldDamage(
+                rng,
+                authority.primarySkill.damageMinimum,
+                authority.primarySkill.damageMaximum,
+              )
+              rng = damage.rng
+              meteorDamage = damage.value
+            }
             const current = transients.find((effect): effect is Extract<
               NativeWeldWorldActor,
               { kind: 'weld-persistent' }
@@ -1390,14 +1508,28 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
               && effect.phase === 'held'
             ))
             let actor: Extract<NativeWeldWorldActor, { kind: 'weld-persistent' }>
+            let boulderDebris: readonly NativeWeldMeteorDebrisSeed[] = Object.freeze([])
+            let hailRockFades: readonly Readonly<{
+              readonly position: Vector2
+              readonly rotationDegrees: number
+            }>[] = Object.freeze([])
+            let releaseRequested = false
             if (current) {
               const updated = updateNativeWeldPersistentActor(
                 current,
                 emitter,
                 aimDirection,
                 rng,
+                {
+                  castProgressFactor: authority.castProgressFactor,
+                  enhancedEffects: true,
+                  underpowered,
+                },
               )
               actor = updated.actor
+              boulderDebris = updated.debris
+              hailRockFades = updated.hailRockFades
+              releaseRequested = updated.releaseRequested
               rng = updated.rng
             } else {
               actor = createNativeWeldPersistentActor({
@@ -1411,6 +1543,17 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
                   vector: authority.primarySkill.vector.values,
                   worldKey,
                 })
+              if (buildId === 1006 || buildId === 1008) {
+                const pitch = drawNativeFloat(rng, Math.fround(0.5))
+                rng = pitch.state
+                nextPlayer = {
+                  ...nextPlayer,
+                  primaryCast: {
+                    ...nextPlayer.primaryCast,
+                    lastWeldPlaybackRate: Math.fround(1.5 - pitch.value),
+                  },
+                }
+              }
             }
             if (current) {
               transients = transients.map((effect) => effect.id === current.id ? actor : effect)
@@ -1418,38 +1561,100 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
               transients = [...transients, actor]
               nextId += 1
             }
+            if (boulderDebris.length > 0) {
+              transients.push(createNativeWeldBoulderDebrisActor({
+                debris: boulderDebris,
+                direction: actor.direction,
+                id: nextId,
+                origin: actor.origin,
+                ownerId: actor.ownerId,
+                tick: context.tick,
+                vector: actor.vector,
+                worldKey: actor.worldKey,
+              }))
+              nextId += 1
+            }
+            for (const fade of hailRockFades) {
+              transients.push(createNativeWeldHailRockFadeActor({
+                direction: actor.direction,
+                id: nextId,
+                origin: actor.origin,
+                ownerId: actor.ownerId,
+                position: fade.position,
+                rotationDegrees: fade.rotationDegrees,
+                tick: context.tick,
+                vector: actor.vector,
+                worldKey: actor.worldKey,
+              }))
+              nextId += 1
+            }
+            if (releaseRequested) {
+              const releasedActor = releaseNativeWeldPersistentActor({
+                actor,
+                firstChildId: nextId,
+                registerLightProvider,
+                rng,
+                tick: context.tick,
+              })
+              rng = releasedActor.rng
+              nextId = releasedActor.nextId
+              transients = transients.filter((effect) => effect.id !== actor.id)
+              transients.push(...releasedActor.actors)
+              nextPlayer = {
+                ...nextPlayer,
+                primaryCast: {
+                  ...nextPlayer.primaryCast,
+                  actionTick: -1,
+                  channelActive: false,
+                  targetId: null,
+                },
+              }
+            }
             if (
               buildId === 1007
-              && actor.pulseSequence % NATIVE_WELD_METEOR_CADENCE_TICKS === 0
+              && nativeSelectedPrimaryAge % nativeWeldMeteorCadenceTicks(
+                authority.castProgressFactor,
+                underpowered,
+              ) === 0
             ) {
-              const damage = drawNativeWeldDamage(
-                rng,
-                authority.primarySkill.damageMinimum,
-                authority.primarySkill.damageMaximum,
-              )
-              rng = damage.rng
-              // Meteor construction initializes its fall scalar to
-              // `1 - RandomFloat(0.25)` before subtracting 0.02 per tick.
-              const phase = drawNativeFloat(rng, Math.fround(0.25))
-              rng = phase.state
-              const privateSeed = drawNativeInteger(rng, 10_000_000)
-              rng = privateSeed.state
-              const endpoint = context.spellRangeEndpoint(
-                playerId,
-                nextPlayer.position,
+              if (meteorDamage === null || meteorCenter === null) {
+                throw new Error('Meteor Swarm construction state is unavailable')
+              }
+              const spawn = createNativeWeldMeteorSpawnProgram({
                 aimDirection,
-              )
-              transients = [...transients, createNativeWeldMeteor({
-                damage: damage.value * (underpowered ? 0.5 : 1),
-                direction: aimDirection,
-                id: nextId,
-                origin: endpoint,
-                ownerId: playerId,
-                presentationPhase: phase.value,
-                privateSeed: privateSeed.value,
-                registerLightProvider,
-                tick: context.tick,
+                center: meteorCenter,
+                resolvePosition: (candidate) => context.spellObstructionPoint(
+                  playerId,
+                  meteorCenter!,
+                  candidate,
+                ) ?? candidate,
+                rng,
+                underpowered,
                 vector: authority.primarySkill.vector.values,
+              })
+              rng = spawn.rng
+              const vector = underpowered
+                ? Object.freeze(authority.primarySkill.vector.values.map((value, index) => (
+                    index >= 5 ? 0 : value
+                  )))
+                : authority.primarySkill.vector.values
+              transients = [...transients, createNativeWeldMeteor({
+                damage: Math.fround(meteorDamage * (underpowered ? 0.5 : 1)),
+                direction: aimDirection,
+                fallHeadingDegrees: spawn.fallHeadingDegrees,
+                fallScalar: spawn.fallScalar,
+                fallStep: spawn.fallStep,
+                id: nextId,
+                impactTicks: spawn.impactTicks,
+                origin: spawn.position,
+                ownerId: playerId,
+                position: spawn.position,
+                privateSeed: spawn.privateSeed,
+                registerLightProvider,
+                size: spawn.size,
+                tick: context.tick,
+                underpowered,
+                vector,
                 worldKey,
               })]
               nextId += 1
@@ -1718,6 +1923,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           nextId,
           registerLightProvider,
           rng,
+          context.tick,
         )
         transients = releasedWeld.transients
         nextId = releasedWeld.nextId
@@ -1758,6 +1964,7 @@ function releaseOwnedNativeWeldPersistentActors(
   sourceNextId: number,
   registerLightProvider: RegisterNativeLightProvider,
   sourceRng: NativeRngState,
+  tick: number,
 ): {
   readonly nextId: number
   readonly rng: NativeRngState
@@ -1780,6 +1987,7 @@ function releaseOwnedNativeWeldPersistentActors(
       firstChildId: nextId,
       registerLightProvider,
       rng,
+      tick,
     })
     nextId = released.nextId
     rng = released.rng
@@ -2245,20 +2453,32 @@ function transientLifetime(effect: PrimarySpellTransientState): number {
     case 'water': return waterFrostJetLifetimeTicks(effect.id)
     case 'water-aura': return effect.durationTicks
     case 'water-hail': throw new Error('Hail lifetime is state driven')
+    case 'weld-boulder-debris': throw new Error('Weld boulder debris lifetime is state driven')
     case 'weld-channel': throw new Error('Weld channel lifetime is state driven')
+    case 'weld-frost-fade': throw new Error('Weld Frost fade lifetime is state driven')
+    case 'weld-ground-spark-fade': throw new Error('Weld GroundSpark fade lifetime is state driven')
+    case 'weld-hail-rock-fade': throw new Error('Weld Hail fade lifetime is state driven')
     case 'weld-impact': throw new Error('Weld impact lifetime is state driven')
     case 'weld-meteor': throw new Error('Weld meteor lifetime is state driven')
+    case 'weld-meteor-marker': throw new Error('Weld Meteor marker lifetime is state driven')
     case 'weld-persistent': throw new Error('Weld persistent lifetime is cast driven')
+    case 'weld-steam': throw new Error('Weld Steam lifetime is state driven')
   }
 }
 
 function isNativeWeldWorldActor(
   effect: PrimarySpellTransientState,
 ): effect is NativeWeldWorldActor {
-  return effect.kind === 'weld-channel'
+  return effect.kind === 'weld-boulder-debris'
+    || effect.kind === 'weld-channel'
+    || effect.kind === 'weld-frost-fade'
+    || effect.kind === 'weld-ground-spark-fade'
+    || effect.kind === 'weld-hail-rock-fade'
     || effect.kind === 'weld-impact'
     || effect.kind === 'weld-meteor'
+    || effect.kind === 'weld-meteor-marker'
     || effect.kind === 'weld-persistent'
+    || effect.kind === 'weld-steam'
 }
 
 export function createPrimarySpellWeldImpact(
@@ -2268,20 +2488,54 @@ export function createPrimarySpellWeldImpact(
     'direction' | 'ownerId' | 'position' | 'vector' | 'worldKey'
   > & Readonly<{ buildId: NativeWeldImpactActorState['buildId'] }>,
   birthTick: number,
-): Extract<NativeWeldWorldActor, { kind: 'weld-impact' }> {
+  sourceRng: NativeRngState,
+): Readonly<{
+  impact: Extract<NativeWeldWorldActor, { kind: 'weld-impact' }>
+  rng: NativeRngState
+}> {
+  let rng = sourceRng
+  let impactSoundPitch: number | null = null
+  let impactSoundVariant: number | null = null
+  let presentationRotationDegrees: number | null = null
+  if (spell.buildId === 1001) {
+    impactSoundPitch = Math.fround(1.5)
+  } else if (spell.buildId === 1002) {
+    impactSoundPitch = Math.fround(1.5)
+    impactSoundVariant = 0
+    const rotation = drawNativeFloat(rng, 360)
+    rng = rotation.state
+    presentationRotationDegrees = rotation.value
+  } else if (spell.buildId === 1009) {
+    const pitch = drawNativeFloat(rng, Math.fround(0.1))
+    const variant = drawNativeInteger(pitch.state, 3)
+    const rotation = drawNativeFloat(variant.state, 360)
+    rng = rotation.state
+    impactSoundPitch = Math.fround(1 + pitch.value)
+    impactSoundVariant = variant.value
+    presentationRotationDegrees = rotation.value
+  }
+  const ownsFade = spell.buildId === 1001 || spell.buildId === 1002 || spell.buildId === 1009
   return Object.freeze({
+    impact: Object.freeze({
     ageTicks: 0,
+    alpha: ownsFade ? 2 : 0,
     birthTick,
     buildId: spell.buildId,
     direction: Object.freeze({ ...spell.direction }),
     id,
+    impactSoundPitch,
+    impactSoundVariant,
     kind: 'weld-impact',
     lightRegistration: null,
     origin: Object.freeze({ ...spell.position }),
     ownerId: spell.ownerId,
     position: Object.freeze({ ...spell.position }),
+    presentationRotationDegrees,
+    presentationScale: ownsFade ? Math.fround(1.5) : 0,
     vector: Object.freeze([...spell.vector]),
     worldKey: spell.worldKey,
+    }),
+    rng,
   })
 }
 
@@ -2326,8 +2580,8 @@ export function createPrimarySpellWeldFireDetonation(
     privateSeed,
     spentEmber: Object.freeze({ kind: 'none' }),
   })
-  const impact = includeImpact
-    ? [createPrimarySpellWeldImpact(
+  const impactProgram = includeImpact
+    ? createPrimarySpellWeldImpact(
         sourceNextId,
         {
           ...spell,
@@ -2335,8 +2589,11 @@ export function createPrimarySpellWeldFireDetonation(
           position: { ...origin },
         },
         birthTick,
-      )]
-    : []
+        sourceRng,
+      )
+    : null
+  const impact = impactProgram === null ? [] : [impactProgram.impact]
+  const impactRng = impactProgram?.rng ?? sourceRng
   const firstEffectId = sourceNextId + impact.length
   const explosionOffset = payload.explodeRadius > 0 && payload.explodeDamage > 0 ? 1 : 0
   const detonation = createNativeFireDetonation(
@@ -2345,7 +2602,7 @@ export function createPrimarySpellWeldFireDetonation(
     origin,
     spell.ownerId,
     spell.worldKey,
-    sourceRng,
+    impactRng,
   )
   const explosion = detonation.explosion === null
     ? []
@@ -2492,25 +2749,35 @@ export function createPrimarySpellContactImpact(
   spell: PrimarySpellProjectileState,
   origin: Readonly<Vector2>,
   birthTick: number,
+  sourceRng: NativeRngState,
   registerLightProvider: RegisterNativeLightProvider = (managerLane) => ({
     managerLane,
     registrationOrdinal: id,
   }),
-): PrimarySpellEarthImpactState | PrimarySpellEtherImpactState | PrimarySpellFireImpactState
-  | Extract<NativeWeldWorldActor, { kind: 'weld-impact' }> | null {
+): Readonly<{
+  impact: PrimarySpellEarthImpactState | PrimarySpellEtherImpactState
+    | PrimarySpellFireImpactState | Extract<NativeWeldWorldActor, { kind: 'weld-impact' }> | null
+  rng: NativeRngState
+}> {
   const contactSpell = { ...spell, position: { ...origin } }
   if (contactSpell.kind === 'earth') {
-    return earthImpact(id, contactSpell, birthTick)
+    return { impact: earthImpact(id, contactSpell, birthTick), rng: sourceRng }
   }
   if (contactSpell.kind === 'ether') {
-    return etherImpact(id, contactSpell, birthTick, registerLightProvider('transient'))
+    return {
+      impact: etherImpact(id, contactSpell, birthTick, registerLightProvider('transient')),
+      rng: sourceRng,
+    }
   }
   if (contactSpell.kind === 'weld') {
-    return createPrimarySpellWeldImpact(id, contactSpell, birthTick)
+    return createPrimarySpellWeldImpact(id, contactSpell, birthTick, sourceRng)
   }
-  return contactSpell.kind === 'fire'
-    ? fireImpact(id, contactSpell, registerLightProvider('transient'))
-    : null
+  return {
+    impact: contactSpell.kind === 'fire'
+      ? fireImpact(id, contactSpell, registerLightProvider('transient'))
+      : null,
+    rng: sourceRng,
+  }
 }
 
 function earthCalledRockEmits(

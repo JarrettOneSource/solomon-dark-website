@@ -1495,6 +1495,44 @@ test('Region screen feedback is one overwrite lane with exact float32 decay', ()
     y: Math.fround(Math.fround(-2.4) * Math.fround(0.75)),
   })
   assert.deepEqual(camera.sampleCameraDisplacement(8), { x: 0, y: 0 })
+
+  const meteor = new NativeSecondaryScreenFeedbackPresentation(20, 'boneyard:test')
+  meteor.consumePrimaryCameraDisplacement({
+    displacement: { x: 6, y: -8 },
+    eventId: 40,
+    tick: 18,
+    worldKey: 'boneyard:test',
+  })
+  assert.deepEqual(meteor.sampleCameraDisplacement(20), {
+    x: Math.fround(Math.fround(6) * Math.fround(0.75) * Math.fround(0.75)),
+    y: Math.fround(Math.fround(-8) * Math.fround(0.75) * Math.fround(0.75)),
+  })
+  meteor.consumePrimaryCameraDisplacement({
+    displacement: { x: 10, y: 0 },
+    eventId: 40,
+    tick: 20,
+    worldKey: 'boneyard:test',
+  })
+  assert.notDeepEqual(meteor.sampleCameraDisplacement(20), { x: 10, y: 0 })
+
+  const hail = new NativeSecondaryScreenFeedbackPresentation(20, 'boneyard:test')
+  hail.consumePrimaryCameraMagnitude({
+    eventId: 41,
+    magnitude: Math.fround(0.1),
+    tick: 18,
+    worldKey: 'boneyard:test',
+  })
+  assert.equal(
+    hail.sampleCameraMagnitude(20),
+    Math.fround(Math.fround(Math.fround(0.1) * Math.fround(0.94)) * Math.fround(0.94)),
+  )
+  hail.consumePrimaryCameraMagnitude({
+    eventId: 41,
+    magnitude: 1,
+    tick: 20,
+    worldKey: 'boneyard:test',
+  })
+  assert.notEqual(hail.sampleCameraMagnitude(20), 1)
 })
 
 test('Flash response actors retain the exact record-16 growth and record-15 fade passes', () => {

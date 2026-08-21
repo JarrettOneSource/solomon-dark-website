@@ -24,6 +24,7 @@ const projectile = {
   direction: { x: 1, y: 0 },
   flightTicks: 10,
   frostPulseAspect: null,
+  frostPresentationLanes: null,
   frostTurnDegrees: null,
   groundSparkNativeAgeTicks: null,
   groundSparkTurnTicksRemaining: null,
@@ -57,11 +58,12 @@ const hailstones = {
   id: 2,
   kind: 'weld-persistent',
   lightRegistration: { managerLane: 'actor', registrationOrdinal: 2 },
-  maximumScale: 1,
+  maximumScale: 1.5,
   origin: { x: 100, y: 200 },
   ownerId: 'wizard',
   phase: 'flight',
-  presentationScale: 1.25,
+  releaseAgeTicks: 20,
+  releaseFadeScale: 1.25,
   pulseSequence: 20,
   pushback: 0.2,
   rocks: [{
@@ -69,7 +71,7 @@ const hailstones = {
     decay: 0.95,
     localPosition: { x: 1, y: 2, z: 3 },
     phase: 0.25,
-    releaseOffset: { x: 2, y: 40 },
+    releaseOffset: { x: 1, y: 40 },
     spriteRecord: 168,
     visualScale: 0.2,
   }],
@@ -119,7 +121,8 @@ test('weld presentation interpolates projectile and released carrier motion', ()
     ...hailstones,
     ageTicks: 22,
     origin: { x: 120, y: 180 },
-    presentationScale: 1.5,
+    releaseAgeTicks: 22,
+    releaseFadeScale: 1.5,
     scale: 1,
   }
   const halfway = interpolatePrimarySpellState(
@@ -135,6 +138,7 @@ test('weld presentation interpolates projectile and released carrier motion', ()
   assert.deepEqual(halfwayProjectile.position, { x: 45, y: 55 })
   assert.equal(halfwayProjectile.ageTicks, 11)
   assert.deepEqual(halfwayHail.origin, { x: 110, y: 190 })
-  assert.equal(halfwayHail.presentationScale, 1.375)
+  assert.equal(halfwayHail.releaseAgeTicks, 21)
+  assert.equal(halfwayHail.releaseFadeScale, 1.375)
   assert.equal(halfwayHail.scale, 0.875)
 })

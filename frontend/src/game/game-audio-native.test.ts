@@ -189,6 +189,9 @@ test('pins every welded-primary cue to its untouched stock WAV', () => {
   const sounds = {
     'flame-lash-start': 'flame-lash-start.wav',
     'frost-missile': 'frost-missile.wav',
+    'hail-shot': 'hail-shot.wav',
+    'ice-start': 'ice-start.wav',
+    'rock-hit': 'rock-hit.wav',
     'shock-1': 'shock-1.wav',
     'shock-2': 'shock-2.wav',
     'shock-3': 'shock-3.wav',

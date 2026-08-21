@@ -23,6 +23,11 @@ import {
   nativeSecondarySpriteKey,
 } from './native-secondary-assets.ts'
 import { nativeEnemySpriteRecord } from './native-enemy-assets.ts'
+import type { NativeEnemySpriteRegistration } from './native-enemy-sprite-registration.ts'
+import {
+  NATIVE_WELD_BADGUYS_RECORDS,
+  NATIVE_WELD_SPRITES,
+} from './primary-spell-weld-native.ts'
 
 const ACTOR_FRAME_SIZE = 170
 const ACTOR_HEADINGS = 24
@@ -41,6 +46,10 @@ const NATIVE_FIRE_ACTOR_DEADHAWG_RECORDS = Object.freeze(integerRange(46, 77))
 export interface NativeFireActorTextures {
   badGuys: Readonly<Record<number, Texture>>
   deadHawg: Readonly<Record<number, Texture>>
+}
+
+export interface NativeWeldTexture extends NativeEnemySpriteRegistration {
+  readonly texture: Texture
 }
 
 export interface PlayerActorTextureFrames {
@@ -129,6 +138,7 @@ export interface PlayerWorldTextures {
       over: Texture
       spark: Texture
     }
+    weldActors: Readonly<Record<number, NativeWeldTexture>>
     etherPierceStreak: Texture
   }
   secondary: Readonly<Record<string, Texture>>
@@ -152,6 +162,9 @@ export function playerWorldAssetSources(): string[] {
     playerCharacter,
     playerShadow: hub.npcs.teacher.shadow,
     primarySpells,
+    weldActors: NATIVE_WELD_BADGUYS_RECORDS.map((entry) => (
+      nativeEnemySpriteRecord('BadGuys', entry).source
+    )),
     secondary: NATIVE_SECONDARY_ASSET_SOURCES,
   })
 }
@@ -332,6 +345,12 @@ export function createPlayerWorldTextures(
         over: texture(primarySpells.frost.over),
         spark: texture(primarySpells.frost.spark),
       },
+      weldActors: Object.freeze(Object.fromEntries(
+        NATIVE_WELD_BADGUYS_RECORDS.map((entry) => [entry, {
+          ...NATIVE_WELD_SPRITES[entry],
+          texture: texture(nativeEnemySpriteRecord('BadGuys', entry).source),
+        }]),
+      )),
       etherPierceStreak: texture(primarySpells.etherPierceStreak),
     },
     secondary: Object.fromEntries(NATIVE_SECONDARY_SPRITE_RECORDS.map((record) => [

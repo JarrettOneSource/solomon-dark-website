@@ -32,6 +32,11 @@ import type {
 import { createGameSnapshot } from './host/game-snapshot.ts'
 import { PrimarySpellAudioSynchronizer } from './primary-spell-audio.ts'
 import type { NativeWeldBuildId } from './core-kernels/native-weld-primary-profile.ts'
+import type {
+  NativeWeldHailstonesState,
+  NativeWeldImpactActorState,
+  NativeWeldMeteorActorState,
+} from './core-kernels/native-weld-primary-runtime.ts'
 
 const PLAYER_ID = 'caster'
 
@@ -206,6 +211,199 @@ test('balances every welded channel loop and plays only its start cue', () => {
   synchronizer.destroy()
 })
 
+test('plays both native Meteor impact cues and the weak global-hit branch once', () => {
+  const source = createGameSnapshot(simulation('fire'), PLAYER_ID)
+  const normalFall = {
+    ...source,
+    primarySpells: {
+      ...source.primarySpells,
+      transients: [meteorAudioActor(source, false, 'fall')],
+    },
+  }
+  const normalAudio = new RecordingAudio()
+  const normal = new PrimarySpellAudioSynchronizer(
+    normalAudio as unknown as GameAudioDirector,
+    PLAYER_ID,
+    normalFall,
+  )
+  const normalImpact = {
+    ...normalFall,
+    primarySpells: {
+      ...normalFall.primarySpells,
+      transients: [meteorAudioActor(source, false, 'impact')],
+    },
+    tick: normalFall.tick + 1,
+  }
+  normal.update(normalImpact)
+  normal.update(normalImpact)
+  assert.deepEqual(normalAudio.sounds, ['fireball-hit', 'throw-fire'])
+  assert.deepEqual(normalAudio.soundOptions, [
+    { playbackRate: 1.05, volume: 2 },
+    { playbackRate: Math.fround(0.8), volume: 2 },
+  ])
+  normal.destroy()
+
+  const weakFall = {
+    ...source,
+    primarySpells: {
+      ...source.primarySpells,
+      transients: [meteorAudioActor(source, true, 'fall')],
+    },
+  }
+  const weakAudio = new RecordingAudio()
+  const weak = new PrimarySpellAudioSynchronizer(
+    weakAudio as unknown as GameAudioDirector,
+    PLAYER_ID,
+    weakFall,
+  )
+  weak.update({
+    ...weakFall,
+    primarySpells: {
+      ...weakFall.primarySpells,
+      transients: [meteorAudioActor(source, true, 'impact')],
+    },
+    tick: weakFall.tick + 1,
+  })
+  assert.deepEqual(weakAudio.sounds, ['fireball-hit'])
+  assert.deepEqual(weakAudio.soundOptions, [{ playbackRate: 0.9, volume: 1 }])
+  weak.destroy()
+})
+
+test('updates the Meteor loop to the native weak three-quarter pitch', () => {
+  const initial = weldedSnapshot(
+    createGameSnapshot(simulation('fire'), PLAYER_ID),
+    1007,
+  )
+  const audio = new RecordingAudio()
+  const synchronizer = new PrimarySpellAudioSynchronizer(
+    audio as unknown as GameAudioDirector,
+    PLAYER_ID,
+    initial,
+  )
+  const active = weldedSnapshot(initial, 1007, {
+    channelActive: true,
+    underpowered: false,
+  })
+  synchronizer.update(active)
+  const weak = weldedSnapshot(active, 1007, { underpowered: true })
+  synchronizer.update(weak)
+  assert.deepEqual(audio.starts, [
+    ['meteor-loop', 'primary-player:caster'],
+    ['meteor-loop', 'primary-player:caster'],
+  ])
+  assert.deepEqual(audio.startOptions, [
+    { playbackRate: 1, volume: 1 },
+    { playbackRate: 0.75, volume: 1 },
+  ])
+  synchronizer.destroy()
+})
+
+test('plays each Frost, Ball Lightning, and GroundSpark impact sound once', () => {
+  const initial = createGameSnapshot(simulation('air'), PLAYER_ID)
+  const audio = new RecordingAudio()
+  const synchronizer = new PrimarySpellAudioSynchronizer(
+    audio as unknown as GameAudioDirector,
+    PLAYER_ID,
+    initial,
+  )
+  const impacted = {
+    ...initial,
+    primarySpells: {
+      ...initial.primarySpells,
+      transients: [
+        weldImpactAudioActor(initial, 1001, 51, 1.5, null),
+        weldImpactAudioActor(initial, 1002, 52, 1.5, 0),
+        weldImpactAudioActor(initial, 1009, 53, 1.05, 2),
+      ],
+    },
+    tick: initial.tick + 1,
+  }
+  synchronizer.update(impacted)
+  synchronizer.update(impacted)
+  assert.deepEqual(audio.sounds, ['ice-start', 'throw-lightning-1', 'shock-3'])
+  assert.deepEqual(audio.soundOptions, [
+    { playbackRate: 1.5, volume: 1 },
+    { playbackRate: 1.5, volume: 1 },
+    { playbackRate: 1.05, volume: 1 },
+  ])
+  synchronizer.destroy()
+
+  const hydratedAudio = new RecordingAudio()
+  const hydrated = new PrimarySpellAudioSynchronizer(
+    hydratedAudio as unknown as GameAudioDirector,
+    PLAYER_ID,
+    impacted,
+  )
+  hydrated.update(impacted)
+  assert.deepEqual(hydratedAudio.sounds, [])
+  hydrated.destroy()
+})
+
+test('plays retained-rock weld creation at its authoritative randomized pitch', () => {
+  const initial = weldedSnapshot(
+    createGameSnapshot(simulation('earth'), PLAYER_ID),
+    1006,
+  )
+  const audio = new RecordingAudio()
+  const synchronizer = new PrimarySpellAudioSynchronizer(
+    audio as unknown as GameAudioDirector,
+    PLAYER_ID,
+    initial,
+  )
+  synchronizer.update(weldedSnapshot(initial, 1006, {
+    castSequence: 1,
+    channelActive: true,
+    lastWeldPlaybackRate: 1.25,
+  }))
+  assert.deepEqual(audio.sounds, ['start-boulder'])
+  assert.deepEqual(audio.soundOptions, [{ playbackRate: 1.25, volume: 1 }])
+  synchronizer.destroy()
+})
+
+test('plays the exact Hail release triplet once without hydration replay', () => {
+  const source = createGameSnapshot(simulation('water'), PLAYER_ID)
+  const held = {
+    ...source,
+    primarySpells: {
+      ...source.primarySpells,
+      transients: [hailAudioActor(source, 'held')],
+    },
+  }
+  const audio = new RecordingAudio()
+  const synchronizer = new PrimarySpellAudioSynchronizer(
+    audio as unknown as GameAudioDirector,
+    PLAYER_ID,
+    held,
+  )
+  const released = {
+    ...held,
+    primarySpells: {
+      ...held.primarySpells,
+      transients: [hailAudioActor(source, 'flight')],
+    },
+    tick: held.tick + 1,
+  }
+  synchronizer.update(released)
+  synchronizer.update(released)
+  assert.deepEqual(audio.sounds, ['ice-start', 'rock-hit', 'hail-shot'])
+  assert.deepEqual(audio.soundOptions, [
+    { playbackRate: 1.5, volume: 1 },
+    { playbackRate: 1.5, volume: 1 },
+    { playbackRate: 1, volume: 1 },
+  ])
+  synchronizer.destroy()
+
+  const hydratedAudio = new RecordingAudio()
+  const hydrated = new PrimarySpellAudioSynchronizer(
+    hydratedAudio as unknown as GameAudioDirector,
+    PLAYER_ID,
+    released,
+  )
+  hydrated.update(released)
+  assert.deepEqual(hydratedAudio.sounds, [])
+  hydrated.destroy()
+})
+
 test('consumes the Ether one-shot only from its authoritative marker sequence', () => {
   let state = simulation('ether')
   const audio = new RecordingAudio()
@@ -375,7 +573,10 @@ test('updates weak Air loop gain without replaying its start cue', () => {
     ['lightning-loop', 'primary-player:caster'],
     ['lightning-loop', 'primary-player:caster'],
   ])
-  assert.deepEqual(audio.startOptions, [{ volume: 1 }, { volume: 0.75 }])
+  assert.deepEqual(audio.startOptions, [
+    { playbackRate: 1, volume: 1 },
+    { playbackRate: 1, volume: 0.75 },
+  ])
 })
 
 test('updates weak Water loop to half gain without another ice-start edge', () => {
@@ -404,7 +605,10 @@ test('updates weak Water loop to half gain without another ice-start edge', () =
     tick: normal.tick + 1,
   })
   assert.deepEqual(audio.sounds, ['ice-start'])
-  assert.deepEqual(audio.startOptions, [{ volume: 1 }, { volume: 0.5 }])
+  assert.deepEqual(audio.startOptions, [
+    { playbackRate: 1, volume: 1 },
+    { playbackRate: 1, volume: 0.5 },
+  ])
 })
 
 test('plays Earth periodic weak fizzle at pitch and point gain one half', () => {
@@ -923,6 +1127,128 @@ test('every persistent secondary audio owner starts and retires its exact native
 
 type Snapshot = ReturnType<typeof createGameSnapshot>
 
+function meteorAudioActor(
+  snapshot: Snapshot,
+  underpowered: boolean,
+  phase: 'fall' | 'impact',
+): NativeWeldMeteorActorState {
+  const position = { ...snapshot.players[PLAYER_ID]!.position }
+  const impact = phase === 'impact'
+  return {
+    ageTicks: impact ? 51 : 50,
+    birthTick: 0,
+    buildId: 1007,
+    cameraDisplacement: impact ? { x: 6, y: -8 } : null,
+    damage: 12,
+    debris: impact
+      ? Array.from({ length: 5 }, (_, index) => ({
+          alpha: 2 as const,
+          colorGreen: 0.25,
+          height: 0,
+          index,
+          position: { x: 0, y: 0 },
+          record: 2008 as const,
+          rotationDegrees: 0,
+          rotationStepDegrees: 1,
+          scale: Math.fround(0.45),
+          velocity: { x: 0, y: 0 },
+          verticalVelocity: -1,
+        }))
+      : [],
+    direction: { x: 1, y: 0 },
+    fallHeadingDegrees: 20,
+    fallScalar: impact ? 0 : 1,
+    fallStep: Math.fround(0.04),
+    id: underpowered ? 42 : 41,
+    impactAgeTicks: 0,
+    impactDue: impact,
+    impactRadiusScalar: impact ? 0.25 : 0,
+    impactRotationDegrees: impact ? 45 : 0,
+    impactSoundPitch: impact ? underpowered ? 0.9 : 1.05 : null,
+    impactThrowFirePitch: impact && !underpowered ? Math.fround(0.8) : null,
+    impactTicksRemaining: 200,
+    kind: 'weld-meteor',
+    lightRegistration: { managerLane: 'actor', registrationOrdinal: 40 },
+    origin: position,
+    ownerId: PLAYER_ID,
+    phase,
+    position,
+    privateSeed: underpowered ? 0 : 42,
+    pulseDue: false,
+    pulseSequence: 0,
+    pulseTicksRemaining: 10,
+    size: 5,
+    underpowered,
+    vector: underpowered
+      ? [8, 16, 20, 1.1, 1.5, 0, 0, 0, 0]
+      : [8, 16, 20, 1.1, 1.5, 3, 10, 2, 3],
+    worldKey: 'hub:courtyard',
+  }
+}
+
+function hailAudioActor(
+  snapshot: Snapshot,
+  phase: 'flight' | 'held',
+): NativeWeldHailstonesState {
+  const origin = { ...snapshot.players[PLAYER_ID]!.position }
+  const released = phase === 'flight'
+  return {
+    ageTicks: released ? 2 : 1,
+    birthTick: 0,
+    buildId: 1008,
+    damage: 7,
+    direction: { x: 1, y: 0 },
+    id: 43,
+    kind: 'weld-persistent',
+    lightRegistration: { managerLane: 'actor', registrationOrdinal: 43 },
+    maximumScale: 1,
+    origin,
+    ownerId: PLAYER_ID,
+    phase,
+    pulseSequence: 1,
+    pushback: 0.2,
+    releaseAgeTicks: released ? 0 : null,
+    releaseFadeScale: released ? 1 : null,
+    rocks: [],
+    scale: 0.5,
+    toughness: 1,
+    vector: [7, 2, 1, 1, 0.2, 0.5],
+    widen: 0.5,
+    worldKey: 'hub:courtyard',
+  }
+}
+
+function weldImpactAudioActor(
+  snapshot: Snapshot,
+  buildId: 1001 | 1002 | 1009,
+  id: number,
+  impactSoundPitch: number,
+  impactSoundVariant: number | null,
+): NativeWeldImpactActorState {
+  const position = { ...snapshot.players[PLAYER_ID]!.position }
+  return {
+    ageTicks: 0,
+    alpha: 2,
+    birthTick: snapshot.tick,
+    buildId,
+    direction: { x: 1, y: 0 },
+    id,
+    impactSoundPitch,
+    impactSoundVariant,
+    kind: 'weld-impact',
+    lightRegistration: null,
+    origin: position,
+    ownerId: PLAYER_ID,
+    position,
+    presentationRotationDegrees: buildId === 1001 ? null : 45,
+    presentationScale: Math.fround(1.5),
+    vector: buildId === 1009
+      ? [8, 5, 1, 1, 1, 0]
+      : [8, 8, 5, 1, 1, 0, 0],
+    worldKey: 'hub:courtyard',
+  }
+}
+
 function weldedSnapshot(
   source: Snapshot,
   buildId: NativeWeldBuildId,
@@ -932,6 +1258,7 @@ function weldedSnapshot(
     emissionSequence: number
     lastWeldPlaybackRate: number | null
     lastWeldSoundVariant: number | null
+    underpowered: boolean
   }> = {},
 ): Snapshot {
   const player = source.players[PLAYER_ID]!

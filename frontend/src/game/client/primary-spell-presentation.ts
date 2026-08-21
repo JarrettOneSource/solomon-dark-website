@@ -83,6 +83,10 @@ function interpolateProjectile(
         newer.frostTurnDegrees,
         blend,
       ),
+      frostPresentationLanes: discrete.frostPresentationLanes === null
+        ? null
+        : discrete.frostPresentationLanes.map((lane) => ({ ...lane })) as unknown as
+          typeof discrete.frostPresentationLanes,
       groundSparkNativeAgeTicks: interpolateNullableNumber(
         older.groundSparkNativeAgeTicks,
         newer.groundSparkNativeAgeTicks,
@@ -281,10 +285,16 @@ function fixedTransientTiming(
       lifetimeTicks: effect.durationTicks,
     }
     case 'water-hail': return null
+    case 'weld-boulder-debris': return null
     case 'weld-channel':
+    case 'weld-frost-fade':
+    case 'weld-ground-spark-fade':
+    case 'weld-hail-rock-fade':
     case 'weld-impact':
     case 'weld-meteor':
+    case 'weld-meteor-marker':
     case 'weld-persistent': return null
+    case 'weld-steam': return null
   }
 }
 
@@ -613,6 +623,20 @@ function interpolateTransient(
   if (older.kind === 'water-aura' && newer.kind === 'water-aura') {
     return interpolateOriginTransient(older, newer, blend)
   }
+  if (older.kind === 'weld-meteor-marker' && newer.kind === 'weld-meteor-marker') {
+    const actor = blend < 1 ? older : newer
+    return {
+      ...actor,
+      ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+      alpha: lerp(older.alpha, newer.alpha, blend),
+      direction: lerpVector(older.direction, newer.direction, blend),
+      lightRegistration: null,
+      origin: lerpVector(older.origin, newer.origin, blend),
+      rotationDegrees: lerp(older.rotationDegrees, newer.rotationDegrees, blend),
+      scale: lerp(older.scale, newer.scale, blend),
+      vector: [...actor.vector],
+    }
+  }
   if (older.kind === 'weld-channel' && newer.kind === 'weld-channel') {
     const actor = blend < 1 ? older : newer
     return {
@@ -631,6 +655,85 @@ function interpolateTransient(
     return {
       ...actor,
       ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+      alpha: lerp(older.alpha, newer.alpha, blend),
+      direction: lerpVector(older.direction, newer.direction, blend),
+      lightRegistration: null,
+      origin: lerpVector(older.origin, newer.origin, blend),
+      position: lerpVector(older.position, newer.position, blend),
+      vector: [...actor.vector],
+    }
+  }
+  if (
+    older.kind === 'weld-boulder-debris'
+    && newer.kind === 'weld-boulder-debris'
+  ) {
+    const actor = blend < 1 ? older : newer
+    return {
+      ...actor,
+      ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+      debris: actor.debris.map(copyWeldMeteorDebris),
+      direction: lerpVector(older.direction, newer.direction, blend),
+      lightRegistration: null,
+      origin: lerpVector(older.origin, newer.origin, blend),
+      position: lerpVector(older.position, newer.position, blend),
+      vector: [...actor.vector],
+    }
+  }
+  if (older.kind === 'weld-frost-fade' && newer.kind === 'weld-frost-fade') {
+    const actor = blend < 1 ? older : newer
+    return {
+      ...actor,
+      ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+      direction: lerpVector(older.direction, newer.direction, blend),
+      lightRegistration: null,
+      origin: lerpVector(older.origin, newer.origin, blend),
+      position: lerpVector(older.position, newer.position, blend),
+      vector: [...actor.vector],
+    }
+  }
+  if (
+    older.kind === 'weld-ground-spark-fade'
+    && newer.kind === 'weld-ground-spark-fade'
+  ) {
+    const actor = blend < 1 ? older : newer
+    return {
+      ...actor,
+      ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+      alpha: lerp(older.alpha, newer.alpha, blend),
+      direction: lerpVector(older.direction, newer.direction, blend),
+      lightRegistration: null,
+      origin: lerpVector(older.origin, newer.origin, blend),
+      position: lerpVector(older.position, newer.position, blend),
+      vector: [...actor.vector],
+    }
+  }
+  if (older.kind === 'weld-steam' && newer.kind === 'weld-steam') {
+    const actor = blend < 1 ? older : newer
+    return {
+      ...actor,
+      ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+      blue: lerp(older.blue, newer.blue, blend),
+      direction: lerpVector(older.direction, newer.direction, blend),
+      life: lerp(older.life, newer.life, blend),
+      lightRegistration: null,
+      origin: lerpVector(older.origin, newer.origin, blend),
+      phase: lerp(older.phase, newer.phase, blend),
+      position: lerpVector(older.position, newer.position, blend),
+      scale: lerp(older.scale, newer.scale, blend),
+      stretch: lerp(older.stretch, newer.stretch, blend),
+      tintFade: lerp(older.tintFade, newer.tintFade, blend),
+      vector: [...actor.vector],
+      velocity: lerpVector(older.velocity, newer.velocity, blend),
+    }
+  }
+  if (
+    older.kind === 'weld-hail-rock-fade'
+    && newer.kind === 'weld-hail-rock-fade'
+  ) {
+    const actor = blend < 1 ? older : newer
+    return {
+      ...actor,
+      ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
       direction: lerpVector(older.direction, newer.direction, blend),
       lightRegistration: null,
       origin: lerpVector(older.origin, newer.origin, blend),
@@ -643,6 +746,10 @@ function interpolateTransient(
     return {
       ...actor,
       ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+      cameraDisplacement: actor.cameraDisplacement === null
+        ? null
+        : { ...actor.cameraDisplacement },
+      debris: actor.debris.map(copyWeldMeteorDebris),
       direction: lerpVector(older.direction, newer.direction, blend),
       fallScalar: lerp(older.fallScalar, newer.fallScalar, blend),
       lightRegistration: { ...actor.lightRegistration },
@@ -675,7 +782,16 @@ function interpolateTransient(
         direction: lerpVector(older.direction, newer.direction, blend),
         lightRegistration: { ...actor.lightRegistration },
         origin: lerpVector(older.origin, newer.origin, blend),
-        presentationScale: lerp(older.presentationScale, newer.presentationScale, blend),
+        releaseAgeTicks: interpolateNullableNumber(
+          older.releaseAgeTicks,
+          newer.releaseAgeTicks,
+          blend,
+        ),
+        releaseFadeScale: interpolateNullableNumber(
+          older.releaseFadeScale,
+          newer.releaseFadeScale,
+          blend,
+        ),
         rocks: actor.rocks.map(copyWeldHailstone),
         scale: lerp(older.scale, newer.scale, blend),
         vector: [...actor.vector],
@@ -718,6 +834,10 @@ function copyProjectile(spell: PrimarySpellProjectileState): PrimarySpellProject
     return {
       ...spell,
       direction: { ...spell.direction },
+      frostPresentationLanes: spell.frostPresentationLanes === null
+        ? null
+        : spell.frostPresentationLanes.map((lane) => ({ ...lane })) as unknown as
+          typeof spell.frostPresentationLanes,
       hitTargetIds: [...spell.hitTargetIds],
       lightRegistration: { ...spell.lightRegistration },
       position: { ...spell.position },
@@ -739,10 +859,16 @@ function copyProjectile(spell: PrimarySpellProjectileState): PrimarySpellProject
 }
 
 function isWeldTransient(effect: PrimarySpellTransientState): boolean {
-  return effect.kind === 'weld-channel'
+  return effect.kind === 'weld-boulder-debris'
+    || effect.kind === 'weld-channel'
+    || effect.kind === 'weld-frost-fade'
+    || effect.kind === 'weld-ground-spark-fade'
+    || effect.kind === 'weld-hail-rock-fade'
     || effect.kind === 'weld-impact'
     || effect.kind === 'weld-meteor'
+    || effect.kind === 'weld-meteor-marker'
     || effect.kind === 'weld-persistent'
+    || effect.kind === 'weld-steam'
 }
 
 function copyTransient(effect: PrimarySpellTransientState): PrimarySpellTransientState {
@@ -862,11 +988,49 @@ function copyTransient(effect: PrimarySpellTransientState): PrimarySpellTransien
   if (effect.kind === 'weld-meteor') {
     return {
       ...effect,
+      cameraDisplacement: effect.cameraDisplacement === null
+        ? null
+        : { ...effect.cameraDisplacement },
+      debris: effect.debris.map(copyWeldMeteorDebris),
       direction: { ...effect.direction },
       lightRegistration: { ...effect.lightRegistration },
       origin: { ...effect.origin },
       position: { ...effect.position },
       vector: [...effect.vector],
+    }
+  }
+  if (effect.kind === 'weld-boulder-debris') {
+    return {
+      ...effect,
+      debris: effect.debris.map(copyWeldMeteorDebris),
+      direction: { ...effect.direction },
+      lightRegistration: null,
+      origin: { ...effect.origin },
+      position: { ...effect.position },
+      vector: [...effect.vector],
+    }
+  }
+  if (effect.kind === 'weld-frost-fade'
+    || effect.kind === 'weld-ground-spark-fade'
+    || effect.kind === 'weld-hail-rock-fade') {
+    return {
+      ...effect,
+      direction: { ...effect.direction },
+      lightRegistration: null,
+      origin: { ...effect.origin },
+      position: { ...effect.position },
+      vector: [...effect.vector],
+    }
+  }
+  if (effect.kind === 'weld-steam') {
+    return {
+      ...effect,
+      direction: { ...effect.direction },
+      lightRegistration: null,
+      origin: { ...effect.origin },
+      position: { ...effect.position },
+      vector: [...effect.vector],
+      velocity: { ...effect.velocity },
     }
   }
   if (effect.kind === 'weld-impact') {
@@ -925,6 +1089,19 @@ function copyTransient(effect: PrimarySpellTransientState): PrimarySpellTransien
     direction: { ...effect.direction },
     lightRegistration: null,
     origin: { ...effect.origin },
+  }
+}
+
+function copyWeldMeteorDebris<
+  Debris extends Readonly<{
+    position: Readonly<{ x: number; y: number }>
+    velocity: Readonly<{ x: number; y: number }>
+  }>,
+>(debris: Debris): Debris {
+  return {
+    ...debris,
+    position: { ...debris.position },
+    velocity: { ...debris.velocity },
   }
 }
 
