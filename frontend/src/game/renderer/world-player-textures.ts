@@ -21,6 +21,7 @@ import {
   NATIVE_SECONDARY_SPECIAL_ASSET_SOURCES,
   NATIVE_SECONDARY_SPRITE_RECORDS,
   nativeSecondarySpriteKey,
+  nativeSecondarySpriteRecord,
 } from './native-secondary-assets.ts'
 import { nativeEnemySpriteRecord } from './native-enemy-assets.ts'
 import type { NativeEnemySpriteRegistration } from './native-enemy-sprite-registration.ts'
@@ -112,6 +113,13 @@ export interface PlayerWorldTextures {
   playerShadow: Texture
   players: Readonly<Record<WizardElement, PlayerActorTextureFrames>>
   primarySpells: {
+    etherBlast: Readonly<Record<11 | 45, Readonly<{
+      anchorX: number
+      anchorY: number
+      height: number
+      texture: Texture
+      width: number
+    }>>>
     airWaterActors: {
       coldAura: Texture
       hail: Texture
@@ -315,6 +323,16 @@ export function createPlayerWorldTextures(
     playerShadow: texture(hub.npcs.teacher.shadow),
     players,
     primarySpells: {
+      etherBlast: Object.freeze(Object.fromEntries([11, 45].map((entry) => {
+        const record = nativeSecondarySpriteRecord('BadGuys', entry)
+        return [entry, Object.freeze({
+          anchorX: record.anchorX,
+          anchorY: record.anchorY,
+          height: record.height,
+          texture: texture(record.source),
+          width: record.width,
+        })]
+      }))) as PlayerWorldTextures['primarySpells']['etherBlast'],
       airWaterActors: {
         coldAura: texture(primarySpells.airWaterActors.coldAura),
         hail: texture(primarySpells.airWaterActors.hail),

@@ -73,6 +73,7 @@ import {
 } from '../core-server/game-simulation.ts'
 import { playerCharacterRecords } from '../core-server/player-entity-store.ts'
 import { createNativeWeldMeteor } from './native-weld-primary-runtime.ts'
+import { createNativeEtherBlastParticleProgram } from './native-ether-blast.ts'
 
 const PLAYER_ID = 'caster'
 const ACTOR_LIGHT_REGISTRATION = {
@@ -230,7 +231,14 @@ function stepSpellKernel(
     ...EMPTY_SPELL_WORLD,
     canPlaceProjectile,
     castAuthority: {
-      [PLAYER_ID]: { availableMana, castProgressFactor: 1, eligible, primarySkill },
+      [PLAYER_ID]: {
+        alive: true,
+        availableMana,
+        castProgressFactor: 1,
+        eligible,
+        planeActive: false,
+        primarySkill,
+      },
     },
     inputs: {
       [PLAYER_ID]: {
@@ -390,6 +398,53 @@ test('rank-one one-shot casts arm before their emission-time debit', () => {
   assert.equal(acceptedLowMana.manaSpent, 0)
   assert.equal(acceptedLowMana.state.players[PLAYER_ID]!.primaryCast.actionTick, 0)
   assert.equal(acceptedLowMana.state.players[PLAYER_ID]!.primaryCast.castSequence, 1)
+})
+
+test('Ether Blast releases before Magic Missile RNG and resumes charging after emission', () => {
+  const primarySkill = primarySkillWithRanks('ether', { 8: 1, 14: 1 })
+  if (primarySkill.kind !== 'ether') throw new Error('Expected an Ether skill profile')
+  const sourceRng = createNativeRng(0x1414)
+  const source = directSpellHarness('ether')
+  let state: DirectSpellHarness = {
+    ...source,
+    players: {
+      [PLAYER_ID]: {
+        ...source.players[PLAYER_ID]!,
+        primaryCast: {
+          ...source.players[PLAYER_ID]!.primaryCast,
+          etherBlastCharge: Math.fround(1.2),
+        },
+      },
+    },
+    primarySkill,
+    rng: sourceRng,
+  }
+  let outcome = stepSpellKernel(state, true, 1_000, true, () => true, primarySkill)
+  state = outcome.state
+  for (let tick = 0; tick < PRIMARY_CAST_ETHER_EMISSION_TICK; tick += 1) {
+    outcome = stepSpellKernel(state, true, 1_000, true, () => true, primarySkill)
+    state = outcome.state
+  }
+  const pulse = state.spells.transients.find((effect) => effect.kind === 'ether-blast')
+  assert.ok(pulse?.kind === 'ether-blast')
+  assert.equal(pulse.charges, 1)
+  assert.deepEqual(pulse.presentationRng, sourceRng)
+  assert.deepEqual(
+    state.rng,
+    drawNativeInteger(
+      createNativeEtherBlastParticleProgram(sourceRng).rng,
+      primarySkill.damageRollCount,
+    ).state,
+  )
+  assert.deepEqual(pulse.origin, {
+    x: Math.fround(state.players[PLAYER_ID]!.position.x),
+    y: Math.fround(state.players[PLAYER_ID]!.position.y - 100),
+  })
+  assert.equal(
+    state.players[PLAYER_ID]!.primaryCast.etherBlastCharge,
+    Math.fround(0.00700000022),
+  )
+  assert.equal(state.players[PLAYER_ID]!.primaryCast.weaponPulse, Math.fround(0.15))
 })
 
 test('rank-two spell payloads change debit and damage without rewriting a live projectile', () => {

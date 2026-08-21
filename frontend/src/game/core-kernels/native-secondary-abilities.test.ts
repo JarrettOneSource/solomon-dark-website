@@ -7,12 +7,14 @@ import {
 } from './native-secondary-ability-contract.ts'
 import {
   applyNativeSecondaryGolemDamage,
+  applyNativeSecondaryEtherBurn,
   applyNativeSecondaryPlayerDamage,
   createNativeSecondaryPlayerState,
   createNativeSecondarySimulation,
   materializeNativePlayerFlashResponse,
   NATIVE_MINDBLAST_DIRECT_RADIUS,
   NATIVE_MINDBLAST_PRESENTATION_RNG_WORDS,
+  NATIVE_ETHER_BURN_LIFETIME_TICKS,
   nativePlaneOrbDamage,
   nativeSecondaryAvailableMana,
   nativeSecondaryStaffCastDurationTicks,
@@ -3241,6 +3243,89 @@ test('Burn owns two RNG words per tick, target-scaled flame and light, max merge
   assert.equal(fadeAt49TicksRemaining, Math.fround(49 / 50))
   assert.equal(state.actors.some(({ kind }) => kind === 'fire-burn'), false)
   assert.ok(Math.abs(burnDamage - Math.fround(2 / 200) * 200) < 1e-12)
+})
+
+test('EtherBurn owns three RNG words, records 246 through 250, target MiscLight, and no periodic damage', () => {
+  const target = {
+    family: 'ZOMBIE',
+    id: 414,
+    lightRegistration: TARGET_LIGHT_REGISTRATION,
+    position: { x: 40, y: 60 },
+    radius: 10,
+    scale: 1.5,
+    shieldHealth: 0,
+  }
+  let state = applyNativeSecondaryEtherBurn(createNativeSecondarySimulation(14), {
+    ownerId: 'player',
+    rank: 2,
+    target,
+    worldKey: 'boneyard:test',
+  })
+  const born = state.actors.find(({ kind }) => kind === 'ether-burn')!
+  assert.equal(born.lifetimeTicks, NATIVE_ETHER_BURN_LIFETIME_TICKS)
+  const scaleDraw = drawNativeFloat(state.rng, Math.fround(0.25), true)
+  const lightDraw = drawNativeFloat(scaleDraw.state, Math.fround(0.1))
+  const tickContext = context(11, 6, null)
+  const first = stepNativeSecondaryAbilities(state, {
+    ...tickContext,
+    target: (_worldKey, targetId) => targetId === target.id ? target : null,
+  })
+  assert.deepEqual(first.damage, [])
+  assert.deepEqual(first.state.rng, lightDraw.state)
+  const active = first.state.actors.find(({ kind }) => kind === 'ether-burn')!
+  assert.deepEqual({
+    ageTicks: active.ageTicks,
+    alpha: active.alpha,
+    lightRegistration: active.lightRegistration,
+    miscLightAppendOrdinal: active.miscLightAppendOrdinal,
+    position: active.position,
+    radius: active.radius,
+  }, {
+    ageTicks: 1,
+    alpha: 1,
+    lightRegistration: TARGET_LIGHT_REGISTRATION,
+    miscLightAppendOrdinal: 0,
+    position: target.position,
+    radius: Math.fround(0.1 + lightDraw.value),
+  })
+  const flare = first.state.actors.find(({ kind }) => kind === 'ether-burn-flare')!
+  assert.deepEqual({
+    alpha: flare.alpha,
+    frame: flare.frame,
+    position: flare.position,
+    scale: flare.scale,
+    skillId: flare.skillId,
+  }, {
+    alpha: Math.fround(0.125),
+    frame: 247,
+    position: { x: target.position.x, y: Math.fround(target.position.y - 15) },
+    scale: Math.fround((1 + scaleDraw.value) * target.scale),
+    skillId: 14,
+  })
+
+  state = applyNativeSecondaryEtherBurn({
+    ...first.state,
+    actors: [{ ...active, ageTicks: 200 }],
+  }, {
+    ownerId: 'player',
+    rank: 3,
+    target,
+    worldKey: 'boneyard:test',
+  })
+  assert.equal(state.actors.filter(({ kind }) => kind === 'ether-burn').length, 1)
+  assert.equal(state.actors[0]!.ageTicks, 0)
+  assert.equal(state.actors[0]!.rank, 3)
+
+  const fading = {
+    ...state,
+    actors: [{ ...state.actors[0]!, ageTicks: 251 }],
+  }
+  const fadeContext = context(11, 7, null)
+  const faded = stepNativeSecondaryAbilities(fading, {
+    ...fadeContext,
+    target: (_worldKey, targetId) => targetId === target.id ? target : null,
+  }).state.actors.find(({ kind }) => kind === 'ether-burn')!
+  assert.equal(faded.alpha, Math.fround(49 / 50))
 })
 
 test('toggle reserves stack, release immediately, and overload clears the full set', () => {

@@ -917,8 +917,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v43 carries party denial, Hall archives, the mixed-skill quickbar, secondary gates, and existing gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 43)
+test('protocol v44 carries party denial, Hall archives, the mixed-skill quickbar, secondary gates, and existing gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 44)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -1729,6 +1729,31 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
   })
   assert.equal(decodedImpact.type, 'server-snapshot')
   assert.deepEqual(decodedImpact.frame.primarySpells.transients, [earthImpact])
+  const etherBlast = {
+    ageTicks: 0,
+    birthTick: 40,
+    charges: 4,
+    id: 1,
+    kind: 'ether-blast',
+    origin: { x: 800, y: 300 },
+    ownerId: 'player-1',
+    presentationRng: createNativeRng(14),
+    worldKey: 'hub:courtyard',
+  }
+  const decodedEtherBlast = decodeFrame({
+    ...frame,
+    primarySpells: { nextId: 2, projectiles: [], transients: [etherBlast] },
+  })
+  assert.equal(decodedEtherBlast.type, 'server-snapshot')
+  assert.deepEqual(decodedEtherBlast.frame.primarySpells.transients, [etherBlast])
+  assert.throws(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 2,
+      projectiles: [],
+      transients: [{ ...etherBlast, charges: 0 }],
+    },
+  }), /charges/)
   const fireParticle = {
     ageTicks: 7,
     direction: { x: 0, y: -1 },
@@ -2886,6 +2911,30 @@ test('protocol preserves Earthquake pointer-list order while retaining unique-ta
     miscDecoded.frame.secondaryAbilities.actors[0]!.miscLightAppendOrdinal,
     0,
   )
+
+  const etherBurnFrame = JSON.parse(JSON.stringify(message))
+  const etherBurn = etherBurnFrame.frame.secondaryAbilities.actors[0]!
+  etherBurn.hitTargetIds = []
+  etherBurn.kind = 'ether-burn'
+  etherBurn.lightRegistration = {
+    managerLane: 'actor',
+    registrationOrdinal: 5,
+  }
+  etherBurn.miscLightAppendOrdinal = 0
+  etherBurn.skillId = 14
+  etherBurn.targetId = 7
+  const etherBurnDecoded = decodeServerGameMessage(JSON.stringify(etherBurnFrame))
+  assert.equal(etherBurnDecoded.type, 'server-snapshot')
+  assert.equal(etherBurnDecoded.frame.secondaryAbilities.actors[0]!.skillId, 14)
+
+  const etherFlareFrame = JSON.parse(JSON.stringify(etherBurnFrame))
+  const etherFlare = etherFlareFrame.frame.secondaryAbilities.actors[0]!
+  etherFlare.kind = 'ether-burn-flare'
+  etherFlare.lightRegistration = null
+  etherFlare.miscLightAppendOrdinal = null
+  const etherFlareDecoded = decodeServerGameMessage(JSON.stringify(etherFlareFrame))
+  assert.equal(etherFlareDecoded.type, 'server-snapshot')
+  assert.equal(etherFlareDecoded.frame.secondaryAbilities.actors[0]!.kind, 'ether-burn-flare')
 
   const wrongMiscLane = JSON.parse(JSON.stringify(miscFrame))
   wrongMiscLane.frame.secondaryAbilities.actors[0]!.lightRegistration!.managerLane = 'transient'

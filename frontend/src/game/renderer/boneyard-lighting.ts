@@ -712,6 +712,14 @@ export function nativeSecondaryMiscLightSource(
       radius: actor.radius,
     }
   }
+  if (actor.kind === 'ether-burn' && actor.ageTicks > 0) {
+    return {
+      castsDirectionalShadow: false,
+      intensity: actor.alpha,
+      position: actor.position,
+      radius: actor.radius,
+    }
+  }
   if (actor.kind !== 'electric-burn' || actor.ageTicks === 0) return null
   return {
     castsDirectionalShadow: false,

@@ -25460,7 +25460,7 @@ Website's secondary-only belt assumption:
   creation element.
 
 The authoritative component is now `skillQuickbar`; input is `cast.quickbar`,
-protocol 43 replicates the selected primary, learned acquisition order,
+protocol 44 replicates the selected primary, learned acquisition order,
 concentrations, learned Weld recipe, and duplicate-capable quickbar, and the
 host owns bind/select mutations. The stock `1600x900` Skill Screen uses the
 native leather, chain, statue, card, dependency-arrow, icon-frame, font, and
@@ -25471,7 +25471,52 @@ the catalog audit rather than a static two-card mock.
 The separately recovered `Skills_Quickbar` settings path is also live. Game
 Settings exposes the learned category-1 `SELECT PRIMARY ATTACK` list and the
 learned category-3 `SELECT CONCENTRATION` list; both submit authoritative
-protocol-43 actions. Concentration selection preserves the native one-slot or
+protocol-44 actions. Concentration selection preserves the native one-slot or
 Split Mind two-slot replacement policy, treats a currently selected row as a
 no-op, and remains blocked during Mind Chug. It is not incorrectly folded into
 the Skill Screen's gold/green drag membership.
+
+### 2026-08-21 v47 Ether Blast closure
+
+The every-skill residual scan found that Ether Blast `14` had a parsed
+`blastChargeCapacity` but no runtime consumer. The full native chain is now
+implemented instead of treating the row as inert:
+
+- Player-owned protocol-v44 state retains the float32 charge, integer-crossing
+  cue sequence, and shared held-weapon pulse. Charge advances by
+  `0.00700000022` only for a living Magic Missile owner with enough MP for the
+  full cached cast, survives primary selection changes, resets on insufficient
+  MP and Planewalker, and resumes after a Magic Missile release.
+- Integer crossings play `magicshieldup` at pitch two and drive the recovered
+  held-weapon scale `1 + 10*pulse`; pulse state decays by `0.899999976` per
+  authoritative tick and is interpolated for both Hub and Boneyard clients.
+- A positive rounded release runs before Magic Missile damage RNG. One
+  replicated `ether-blast` owner preserves the pre-draw native RNG state, and
+  its view reconstructs all 108 independent
+  `Anim_FadeMoveAdditive_Perspective` children: 36 BadGuys-11 and 72
+  BadGuys-45 sprites, 720 RNG words, individual world-depth roots, additive
+  blend, native anchors, velocity damping, alpha loss, and the perspective
+  `0.800000012` Y-scale.
+- The release center is 100 units forward. The authoritative Boneyard contact
+  query uses strict radius 175 and deals
+  `min(charges*.150000006,.949999988) * currentHP`; maximum HP is not changed,
+  matching the executable rather than its misleading tooltip.
+- Every accepted contact installs one mergeable 300-tick `ether-burn` owner.
+  It emits BadGuys 246..250 at the target, consumes the exact signed-scale and
+  light-radius RNG words, owns no periodic damage, and appends its
+  target-registered Region `MiscLight` after normal providers with no
+  directional shadow.
+- Release audio layers are `lightningstart` at pitch two and `gotorb` at
+  pitches `.75` and `.5`. The point-attenuated purple Region flash loses
+  `.025` alpha per tick; camera magnitude starts at `charges*.1` and follows
+  the recovered `.94` decay.
+
+The protocol parser, copy/interpolation lanes, audio synchronizer, Hub and
+Boneyard feedback owners, global painter, texture preload, light tail,
+contact/store integration, and disconnect cleanup all carry the new state.
+Focused coverage pins charge/reset gates, release order, 108-particle and
+720-word censuses, independent painter roots, current-HP contact, modifier
+merge/fade, target VFX, MiscLight, audio, screen feedback, and strict wire
+validation. The canonical `./scripts/validate.sh` gate passes, including 197
+skill pretests, 1,182 Boneyard/runtime tests, production build, game-host
+bundle, bundle budget, and media-policy checks.

@@ -273,6 +273,16 @@ function interpolatePlayer(
     primaryCast: {
       ...discrete.primaryCast,
       aimDirection: { ...discrete.primaryCast.aimDirection },
+      etherBlastCharge: lerp(
+        older.primaryCast.etherBlastCharge,
+        newer.primaryCast.etherBlastCharge,
+        blend,
+      ),
+      weaponPulse: lerp(
+        older.primaryCast.weaponPulse,
+        newer.primaryCast.weaponPulse,
+        blend,
+      ),
     },
     progression: interpolatePlayerProgression(older, newer, blend),
     velocity: {

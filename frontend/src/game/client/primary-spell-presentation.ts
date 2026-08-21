@@ -10,6 +10,7 @@ import {
   type PrimarySpellSimulationState,
   type PrimarySpellTransientState,
 } from '../core-kernels/primary-spells.ts'
+import { NATIVE_ETHER_BLAST_PARTICLE_LIFETIME_TICKS } from '../core-kernels/native-ether-blast.ts'
 import { isNativePlayerStaffTransient } from '../core-kernels/native-player-staff-action.ts'
 
 export interface PrimarySpellPresentationTime {
@@ -251,6 +252,11 @@ function fixedTransientTiming(
       firstVisibleAge: 0,
       lifetimeTicks: PRIMARY_SPELL_ETHER_IMPACT_LIFETIME_TICKS,
     }
+    case 'ether-blast': return {
+      ageZeroTick: effect.birthTick,
+      firstVisibleAge: 0,
+      lifetimeTicks: NATIVE_ETHER_BLAST_PARTICLE_LIFETIME_TICKS,
+    }
     case 'ether-pierce-streak': return {
       ageZeroTick: snapshotTick - effect.ageTicks,
       firstVisibleAge: 0,
@@ -312,6 +318,15 @@ function interpolateTransient(
   blend: number,
 ): PrimarySpellTransientState {
   const discrete = blend < 1 ? older : newer
+  if (older.kind === 'ether-blast' && newer.kind === 'ether-blast') {
+    const blast = blend < 1 ? older : newer
+    return {
+      ...blast,
+      ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+      origin: lerpVector(older.origin, newer.origin, blend),
+      presentationRng: copyNativeRng(blast.presentationRng),
+    }
+  }
   if (older.kind === 'player-staff-melee' && newer.kind === 'player-staff-melee') {
     const action = blend < 1 ? older : newer
     return {
@@ -1001,6 +1016,13 @@ function copyTransient(effect: PrimarySpellTransientState): PrimarySpellTransien
   }
   if (effect.kind === 'ether-pierce-streak' || effect.kind === 'fire-explosion') {
     return { ...effect, origin: { ...effect.origin } }
+  }
+  if (effect.kind === 'ether-blast') {
+    return {
+      ...effect,
+      origin: { ...effect.origin },
+      presentationRng: copyNativeRng(effect.presentationRng),
+    }
   }
   if (effect.kind === 'player-staff-contact') {
     return {

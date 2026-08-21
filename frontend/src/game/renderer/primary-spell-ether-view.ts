@@ -1,11 +1,16 @@
 import { Container, Sprite, type Texture } from 'pixi.js'
 
 import type {
+  PrimarySpellEtherBlastState,
   PrimarySpellEtherImpactState,
   PrimarySpellEtherPierceStreakState,
   PrimarySpellProjectileState,
   PrimarySpellTransientState,
 } from '../core-kernels/primary-spells.ts'
+import {
+  createNativeEtherBlastParticleProgram,
+  nativeEtherBlastParticleFrame,
+} from '../core-kernels/native-ether-blast.ts'
 import {
   ETHER_PRIMARY_ROOT_OFFSET,
   etherPrimaryFlightPlan,
@@ -16,6 +21,85 @@ import {
 } from './primary-spell-ether-native.ts'
 
 export type EtherPrimaryTextures = Readonly<Record<EtherPrimarySprite, Texture>>
+
+export type EtherBlastTextures = Readonly<Record<11 | 45, Readonly<{
+  anchorX: number
+  anchorY: number
+  height: number
+  texture: Texture
+  width: number
+}>>>
+
+export class EtherBlastPulseView {
+  readonly containers: readonly Container[]
+  readonly kind = 'ether-blast'
+  private readonly particles: ReturnType<
+    typeof createNativeEtherBlastParticleProgram
+  >['particles']
+  private readonly sprites: readonly Sprite[]
+
+  constructor(
+    state: PrimarySpellEtherBlastState,
+    textures: EtherBlastTextures,
+  ) {
+    this.particles = createNativeEtherBlastParticleProgram(state.presentationRng).particles
+    const containers: Container[] = []
+    const sprites: Sprite[] = []
+    for (const [index, particle] of this.particles.entries()) {
+      const metrics = textures[particle.spriteRecord]
+      const sprite = new Sprite(metrics.texture)
+      sprite.anchor.set(metrics.anchorX / metrics.width, metrics.anchorY / metrics.height)
+      sprite.blendMode = 'add'
+      sprite.eventMode = 'none'
+      const container = new Container({ label: `ether-blast-particle-${index}` })
+      container.eventMode = 'none'
+      container.addChild(sprite)
+      containers.push(container)
+      sprites.push(sprite)
+    }
+    this.containers = containers
+    this.sprites = sprites
+    this.update(state)
+  }
+
+  update(state: PrimarySpellProjectileState | PrimarySpellTransientState): void {
+    if (state.kind !== 'ether-blast') return
+    for (let index = 0; index < this.particles.length; index += 1) {
+      const frame = nativeEtherBlastParticleFrame(this.particles[index]!, state.ageTicks)
+      const container = this.containers[index]!
+      const sprite = this.sprites[index]!
+      container.position.set(
+        Math.fround(state.origin.x + frame.position.x),
+        Math.fround(state.origin.y + frame.position.y),
+      )
+      sprite.alpha = frame.alpha
+      sprite.visible = frame.alpha > 0
+      sprite.rotation = frame.rotationDegrees * Math.PI / 180
+      sprite.scale.set(frame.scale, Math.fround(frame.scale * Math.fround(0.800000012)))
+      sprite.tint = packRgb(frame.red, frame.green, frame.blue)
+    }
+  }
+
+  painterRoots(): readonly EtherBlastPainterRoot[] {
+    return this.containers.map((container, index) => ({
+      container,
+      lane: 'world-sorted',
+      queueFamily: 'zanim',
+      regionLightPoint: null,
+      sortBias: 0,
+      suffix: `particle-${index}`,
+      worldY: container.position.y,
+    }))
+  }
+
+  setTint(_suffix: string, _tint: number): void {
+    // Anim_FadeMoveAdditive_Perspective owns its unlit violet compositor color.
+  }
+
+  destroy(): void {
+    for (const container of this.containers) container.destroy({ children: true })
+  }
+}
 
 export class EtherPrimarySpellView {
   readonly container = new Container({ label: 'ether' })
@@ -221,6 +305,8 @@ interface EtherImpactPainterRoot {
 
 type EtherPiercePainterRoot = EtherImpactPainterRoot
 
+type EtherBlastPainterRoot = EtherImpactPainterRoot
+
 function applyEtherDraw(
   sprite: Sprite,
   operation: EtherPrimaryDraw,
@@ -233,4 +319,9 @@ function applyEtherDraw(
   sprite.scale.set(operation.scale)
   sprite.alpha = operation.alpha
   sprite.tint = operation.tint
+}
+
+function packRgb(red: number, green: number, blue: number): number {
+  const channel = (value: number): number => Math.round(Math.min(1, Math.max(0, value)) * 255)
+  return channel(red) << 16 | channel(green) << 8 | channel(blue)
 }

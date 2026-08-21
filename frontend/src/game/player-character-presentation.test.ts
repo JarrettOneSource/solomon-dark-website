@@ -259,6 +259,15 @@ test('player character draw plan preserves native attachment and gait transforms
   assert.equal(plan.moving, true)
   assert.equal(plan.staffFront, true)
   assert.equal(plan.orbZIndex, 6)
+  assert.equal(plan.weaponScale, 1)
+  assert.equal(createPlayerCharacterDrawPlan({
+    config: FIRE_CONFIG,
+    gaitDegrees: 0,
+    headingIndex: 0,
+    primaryCast: { ...createIdlePlayerPrimaryCast(), weaponPulse: 0.25 },
+    velocity: { x: 0, y: 0 },
+    walkCyclePrimary: 0,
+  }).weaponScale, 3.5)
 })
 
 test('player draw plan consumes the authoritative Staff Cast 1 pose bank', () => {

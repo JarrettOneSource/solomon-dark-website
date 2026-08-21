@@ -161,6 +161,32 @@ export class PrimarySpellAudioSynchronizer {
             }
           }
         }
+        for (
+          let sequence = previous.primaryCast.etherBlastChargeCueSequence;
+          sequence < player.primaryCast.etherBlastChargeCueSequence;
+          sequence += 1
+        ) {
+          this.audio.playSound('magic-shield-up', { playbackRate: 2, volume })
+        }
+      }
+      const previousEtherBlasts = new Set(this.previous.primarySpells.transients
+        .filter((effect) => effect.kind === 'ether-blast')
+        .map((effect) => `${effect.worldKey}\u0000${effect.id}`))
+      for (const effect of snapshot.primarySpells.transients) {
+        if (
+          effect.kind !== 'ether-blast'
+          || effect.worldKey !== listenerWorldKey
+          || previousEtherBlasts.has(`${effect.worldKey}\u0000${effect.id}`)
+        ) continue
+        const volume = playerAudioAttenuation(
+          snapshot,
+          this.localPlayerId,
+          effect.ownerId,
+        )
+        if (volume === null) continue
+        this.audio.playSound('lightning-start', { playbackRate: 2, volume })
+        this.audio.playSound('goto-orb', { playbackRate: 0.75, volume })
+        this.audio.playSound('goto-orb', { playbackRate: 0.5, volume })
       }
       const previousFireImpacts = new Set(this.previous.primarySpells.transients
         .filter((effect) => effect.kind === 'fire-impact')

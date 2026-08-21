@@ -37,6 +37,7 @@ import type {
   NativeWeldImpactActorState,
   NativeWeldMeteorActorState,
 } from './core-kernels/native-weld-primary-runtime.ts'
+import { createNativeRng } from './core-kernels/native-rng.ts'
 
 const PLAYER_ID = 'caster'
 
@@ -541,6 +542,67 @@ test('orders low-mana fizzle before both pitch-reduced one-shot launches', () =>
       { playbackRate: 0.75, volume: 1 },
     ])
   }
+})
+
+test('plays Ether Blast charge crossings and the three release layers at native pitches', () => {
+  const initial = createGameSnapshot(simulation('ether'), PLAYER_ID)
+  const audio = new RecordingAudio()
+  const synchronizer = new PrimarySpellAudioSynchronizer(
+    audio as unknown as GameAudioDirector,
+    PLAYER_ID,
+    initial,
+  )
+  const charged = {
+    ...initial,
+    players: {
+      ...initial.players,
+      [PLAYER_ID]: {
+        ...initial.players[PLAYER_ID],
+        primaryCast: {
+          ...initial.players[PLAYER_ID].primaryCast,
+          etherBlastCharge: 1,
+          etherBlastChargeCueSequence: 1,
+          weaponPulse: 0.25,
+        },
+      },
+    },
+    tick: initial.tick + 1,
+  }
+  synchronizer.update(charged)
+  assert.deepEqual(audio.sounds, ['magic-shield-up'])
+  assert.deepEqual(audio.soundOptions, [{ playbackRate: 2, volume: 1 }])
+
+  const pulse = {
+    ...charged,
+    primarySpells: {
+      ...charged.primarySpells,
+      nextId: 2,
+      transients: [{
+        ageTicks: 0,
+        birthTick: charged.tick + 1,
+        charges: 1,
+        id: 1,
+        kind: 'ether-blast' as const,
+        origin: { ...charged.players[PLAYER_ID].position },
+        ownerId: PLAYER_ID,
+        presentationRng: createNativeRng(14),
+        worldKey: 'hub:courtyard',
+      }],
+    },
+    tick: charged.tick + 1,
+  }
+  synchronizer.update(pulse)
+  assert.deepEqual(audio.sounds, [
+    'magic-shield-up',
+    'lightning-start',
+    'goto-orb',
+    'goto-orb',
+  ])
+  assert.deepEqual(audio.soundOptions.slice(1), [
+    { playbackRate: 2, volume: 1 },
+    { playbackRate: 0.75, volume: 1 },
+    { playbackRate: 0.5, volume: 1 },
+  ])
 })
 
 test('updates weak Air loop gain without replaying its start cue', () => {

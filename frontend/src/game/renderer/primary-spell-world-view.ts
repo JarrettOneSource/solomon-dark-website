@@ -16,6 +16,7 @@ import {
   isNativeAirWaterActorState,
 } from './primary-spell-air-water-actor-view.ts'
 import {
+  EtherBlastPulseView,
   EtherPrimaryImpactView,
   EtherPrimaryPierceStreakView,
   EtherPrimarySpellView,
@@ -142,6 +143,8 @@ export class PrimarySpellWorldView {
             ray: this.textures.elementVfx.ray[0],
             spark: this.textures.elementVfx.spark[0],
           })
+        } else if (state.kind === 'ether-blast') {
+          view = new EtherBlastPulseView(state, this.textures.primarySpells.etherBlast)
         } else if (state.kind === 'ether-pierce-streak') {
           view = new EtherPrimaryPierceStreakView(
             state,

@@ -76,6 +76,7 @@ export const NATIVE_SECONDARY_ACTOR_KINDS = Object.freeze([
   'leviathan', 'leviathan-appendage', 'leviathan-mote', 'ether-bolt', 'ether-fade', 'phase-burst',
   'plane-orb-shot', 'plane-orb-particle',
   'moving-fire', 'shockwave', 'fire-patch', 'fire-burn', 'fire-burn-flame',
+  'ether-burn', 'ether-burn-flare',
   'storm-cloud', 'storm-drop', 'storm-strike',
   'prismatic-wave', 'freeze-wave', 'freeze-wave-visual', 'ice-blast',
   'frost-burn-flare',
@@ -143,7 +144,7 @@ export interface NativeSecondaryActorState {
   readonly rank: number
   readonly rotationRadians: number
   readonly scale: number
-  readonly skillId: NativeSecondaryAbilityId | 22 | 53 | null
+  readonly skillId: NativeSecondaryAbilityId | 14 | 22 | 53 | null
   readonly slowFactor: number
   readonly targetId: number | null
   readonly variant: number
@@ -453,6 +454,13 @@ export interface NativeSecondaryFireBurnInput {
   readonly worldKey: string
 }
 
+export interface NativeSecondaryEtherBurnInput {
+  readonly ownerId: string
+  readonly rank: number
+  readonly target: NativeSecondaryTarget
+  readonly worldKey: string
+}
+
 interface NativeElectricBurnRequest {
   readonly actor: NativeSecondaryActorState
   readonly damage: number
@@ -501,6 +509,11 @@ const FIRE_BURN_FADE_TICKS = 50
 const FIRE_BURN_FLAME_ALPHA = Math.fround(0.125)
 const FIRE_BURN_FLAME_ALPHA_LOSS = Math.fround(0.01)
 const FIRE_BURN_FLAME_LIFETIME_TICKS = 13
+export const NATIVE_ETHER_BURN_LIFETIME_TICKS = 300
+const ETHER_BURN_FADE_TICKS = 50
+const ETHER_BURN_FLARE_ALPHA = Math.fround(0.125)
+const ETHER_BURN_FLARE_ALPHA_LOSS = Math.fround(0.01)
+const ETHER_BURN_FLARE_LIFETIME_TICKS = 13
 const SHOCKWAVE_INITIAL_LIFE = Math.fround(1.155)
 const SHOCKWAVE_EXPLOSIVE_SHIELD_LIFE = Math.fround(0.35)
 const SHOCKWAVE_RADIUS_GROWTH_PER_TICK = Math.fround(6)
@@ -1937,6 +1950,59 @@ export function stepNativeSecondaryAbilities(
           ...actor,
           alpha: Math.max(0, Math.fround(
             sourceActor.alpha - FIRE_BURN_FLAME_ALPHA_LOSS,
+          )),
+          frame: sourceActor.frame,
+        }
+        retain = actor.alpha > 0
+        break
+      }
+      case 'ether-burn': {
+        const target = actor.targetId === null
+          ? null
+          : context.target(actor.worldKey, actor.targetId)
+        if (!target) {
+          retain = false
+          break
+        }
+        const remainingTicks = actor.lifetimeTicks - actor.ageTicks + 1
+        const fade = remainingTicks < ETHER_BURN_FADE_TICKS
+          ? Math.fround(remainingTicks / ETHER_BURN_FADE_TICKS)
+          : 1
+        const flareScale = drawNativeFloat(rng, Math.fround(0.25), true)
+        const lightRadius = drawNativeFloat(flareScale.state, Math.fround(0.1))
+        rng = lightRadius.state
+        state = spawn(state, actorSeed({
+          alpha: Math.fround(fade * ETHER_BURN_FLARE_ALPHA),
+          frame: 246 + Math.floor(context.tick / 6) % 5,
+          kind: 'ether-burn-flare',
+          lifetimeTicks: ETHER_BURN_FLARE_LIFETIME_TICKS,
+          ownerId: actor.ownerId,
+          position: {
+            x: target.position.x,
+            y: Math.fround(target.position.y - 15),
+          },
+          rank: actor.rank,
+          scale: Math.fround((1 + flareScale.value) * target.scale),
+          skillId: 14,
+          targetId: target.id,
+          worldKey: actor.worldKey,
+        }))
+        actor = {
+          ...actor,
+          alpha: fade,
+          lightRegistration: target.lightRegistration,
+          position: target.position,
+          radius: Math.fround(0.1 + lightRadius.value),
+          scale: target.scale,
+        }
+        retain = actor.ageTicks < actor.lifetimeTicks
+        break
+      }
+      case 'ether-burn-flare': {
+        actor = {
+          ...actor,
+          alpha: Math.max(0, Math.fround(
+            sourceActor.alpha - ETHER_BURN_FLARE_ALPHA_LOSS,
           )),
           frame: sourceActor.frame,
         }
@@ -4436,8 +4502,8 @@ function applyFireBurnRequest(
   source: NativeSecondarySimulationState,
   request: NativeFireBurnRequest,
 ): NativeSecondarySimulationState {
-  if (request.actor.skillId === 53) {
-    throw new Error('Flash response actors cannot author Fire Burn')
+  if (request.actor.skillId === 53 || request.actor.skillId === 14) {
+    throw new Error('Non-fire status actors cannot author Fire Burn')
   }
   return applyNativeSecondaryFireBurn(source, {
     damage: request.damage,
@@ -4489,6 +4555,44 @@ export function applyNativeSecondaryFireBurn(
     rank: input.rank,
     scale: input.target.scale,
     skillId: input.skillId,
+  })
+  return { ...source, actors }
+}
+
+export function applyNativeSecondaryEtherBurn(
+  source: NativeSecondarySimulationState,
+  input: NativeSecondaryEtherBurnInput,
+): NativeSecondarySimulationState {
+  const existingIndex = source.actors.findIndex((actor) => (
+    actor.kind === 'ether-burn'
+      && actor.worldKey === input.worldKey
+      && actor.targetId === input.target.id
+  ))
+  if (existingIndex < 0) {
+    return spawn(source, actorSeed({
+      kind: 'ether-burn',
+      lightRegistration: input.target.lightRegistration,
+      lifetimeTicks: NATIVE_ETHER_BURN_LIFETIME_TICKS,
+      miscLightAppendOrdinal: 0,
+      ownerId: input.ownerId,
+      position: input.target.position,
+      rank: input.rank,
+      scale: input.target.scale,
+      skillId: 14,
+      targetId: input.target.id,
+      worldKey: input.worldKey,
+    }))
+  }
+
+  const actors = [...source.actors]
+  actors[existingIndex] = Object.freeze({
+    ...actors[existingIndex]!,
+    ageTicks: 0,
+    lifetimeTicks: NATIVE_ETHER_BURN_LIFETIME_TICKS,
+    ownerId: input.ownerId,
+    position: input.target.position,
+    rank: input.rank,
+    scale: input.target.scale,
   })
   return { ...source, actors }
 }
@@ -4938,6 +5042,7 @@ export function nativeSecondaryLightDisposition(
       return actor.variant === 1 ? 'transient-provider' : 'none'
     case 'magic-circle':
     case 'fire-burn':
+    case 'ether-burn':
     case 'electric-burn':
       return 'misc'
     default:
@@ -4967,7 +5072,11 @@ function enrollNativeSecondaryLightOwners(
       })
     }
 
-    if (actor.kind === 'fire-burn' || actor.kind === 'electric-burn') {
+    if (
+      actor.kind === 'fire-burn'
+      || actor.kind === 'ether-burn'
+      || actor.kind === 'electric-burn'
+    ) {
       if (actor.targetId === null) {
         throw new Error(`${actor.kind} lost its target-owned light registration`)
       }
@@ -5400,6 +5509,9 @@ function eventSeed(
   cue: NativeSecondaryAudioCue | null,
   kind: NativeSecondaryEventKind,
 ): NativeSecondaryEventSeed {
+  if (actor.skillId === 14) {
+    throw new Error('EtherBurn has no native semantic audio event')
+  }
   return {
     actorId: actor.id, cue, kind, ownerId: actor.ownerId, pitch: 1,
     position: actor.position, skillId: actor.skillId, tick, worldKey: actor.worldKey,

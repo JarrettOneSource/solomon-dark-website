@@ -123,6 +123,16 @@ import {
 } from './native-weld-hail-contact.ts'
 import { createNativeWeldFlameLashFade } from './native-weld-flame-lash.ts'
 import { createNativeWeldBlizzardSourceGlows } from './native-weld-blizzard.ts'
+import {
+  advanceNativeEtherBlastCharge,
+  createNativeEtherBlastParticleProgram,
+  nativeEtherBlastPulseOrigin,
+  nativeEtherBlastReleaseCharges,
+  NATIVE_ETHER_BLAST_PARTICLE_LIFETIME_TICKS,
+  NATIVE_ETHER_BLAST_WEAPON_PULSE,
+  NATIVE_PLAYER_CAST_WEAPON_PULSE,
+  NATIVE_PLAYER_WEAPON_PULSE_DECAY,
+} from './native-ether-blast.ts'
 
 export type PrimarySpellProjectileKind = 'earth' | 'ether' | 'fire' | 'weld'
 export type PrimarySpellTransientKind =
@@ -130,6 +140,7 @@ export type PrimarySpellTransientKind =
   | 'air-hurricane'
   | 'earth-called-rock'
   | 'earth-impact'
+  | 'ether-blast'
   | 'ether-impact'
   | 'ether-pierce-streak'
   | 'fire'
@@ -410,6 +421,18 @@ export interface PrimarySpellEtherPierceStreakState {
   worldKey: string
 }
 
+export interface PrimarySpellEtherBlastState {
+  ageTicks: number
+  birthTick: number
+  charges: number
+  id: number
+  kind: 'ether-blast'
+  origin: Vector2
+  ownerId: string
+  presentationRng: NativeRngState
+  worldKey: string
+}
+
 export interface PrimarySpellFireImpactState {
   ageTicks: number
   id: number
@@ -443,6 +466,7 @@ export type PrimarySpellTransientState =
   | PrimarySpellEarthCalledRockState
   | PrimarySpellEarthImpactState
   | PrimarySpellEtherImpactState
+  | PrimarySpellEtherBlastState
   | PrimarySpellEtherPierceStreakState
   | PrimarySpellFireEmberState
   | PrimarySpellFireExplosionState
@@ -462,9 +486,11 @@ export interface PrimarySpellSimulationState {
 }
 
 export interface PrimarySpellCastAuthority {
+  alive?: boolean
   availableMana: number
   castProgressFactor: number
   eligible: boolean
+  planeActive?: boolean
   primarySkill: NativePrimarySkillProfile
 }
 
@@ -1142,6 +1168,9 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
       ...primaryCast,
       selectedPrimaryAgeTicks: nativeSelectedPrimaryAge + 1,
       selectedPrimaryId,
+      weaponPulse: Math.fround(
+        previous.primaryCast.weaponPulse * NATIVE_PLAYER_WEAPON_PULSE_DECAY,
+      ),
     }
     const castOwnsFacing = playerPrimaryCastOwnsFacing(primaryCast)
     let nextPlayer: PlayerCharacterState = {
@@ -1152,6 +1181,40 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
       primaryCast: { ...primaryCast, aimDirection },
     }
     const worldKey = context.worldKeyForPlayer(playerId)
+    const finishEtherBlastTick = (
+      sourcePlayer: PlayerCharacterState,
+    ): PlayerCharacterState => {
+      if (authority?.planeActive === true) {
+        return {
+          ...sourcePlayer,
+          primaryCast: { ...sourcePlayer.primaryCast, etherBlastCharge: 0 },
+        }
+      }
+      if (
+        authority?.alive !== true
+        || authority.primarySkill.kind !== 'ether'
+        || authority.primarySkill.skillId !== 8
+      ) return sourcePlayer
+      const charge = advanceNativeEtherBlastCharge(
+        sourcePlayer.primaryCast.etherBlastCharge,
+        authority.primarySkill.blastChargeCapacity,
+        availableMana >= manaCost,
+        false,
+      )
+      return {
+        ...sourcePlayer,
+        primaryCast: {
+          ...sourcePlayer.primaryCast,
+          etherBlastCharge: charge.charge,
+          etherBlastChargeCueSequence: charge.crossedInteger
+            ? sourcePlayer.primaryCast.etherBlastChargeCueSequence + 1
+            : sourcePlayer.primaryCast.etherBlastChargeCueSequence,
+          weaponPulse: charge.crossedInteger
+            ? NATIVE_ETHER_BLAST_WEAPON_PULSE
+            : sourcePlayer.primaryCast.weaponPulse,
+        },
+      }
+    }
 
     if (authority?.eligible !== true) {
       if (primaryElement === 'earth') {
@@ -1166,7 +1229,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           effect.kind === 'weld-persistent' && effect.ownerId === playerId
         ))
       }
-      players[playerId] = {
+      players[playerId] = finishEtherBlastTick({
         ...nextPlayer,
         primaryCast: {
           ...nextPlayer.primaryCast,
@@ -1174,7 +1237,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           channelActive: false,
           underpowered: false,
         },
-      }
+      })
       continue
     }
 
@@ -1288,6 +1351,37 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
       && previous.primaryCast.actionTick < emissionTick
       && oneShotPrimary
     ) {
+      if (
+        primaryElement === 'ether'
+        && authority.primarySkill.kind === 'ether'
+        && authority.primarySkill.skillId === 8
+      ) {
+        const storedCharge = nextPlayer.primaryCast.etherBlastCharge
+        if (storedCharge > 0) {
+          const charges = nativeEtherBlastReleaseCharges(storedCharge)
+          nextPlayer = {
+            ...nextPlayer,
+            primaryCast: { ...nextPlayer.primaryCast, etherBlastCharge: 0 },
+          }
+          if (charges > 0) {
+            const presentationRng = rng
+            const program = createNativeEtherBlastParticleProgram(rng)
+            rng = program.rng
+            transients.push(Object.freeze({
+              ageTicks: 0,
+              birthTick: context.tick,
+              charges,
+              id: nextId,
+              kind: 'ether-blast',
+              origin: nativeEtherBlastPulseOrigin(nextPlayer.position, aimDirection),
+              ownerId: playerId,
+              presentationRng,
+              worldKey,
+            }))
+            nextId += 1
+          }
+        }
+      }
       const underpowered = debitMana()
       const birth = authority.primarySkill.kind === 'weld'
         ? spawnNativeWeldOneShot({
@@ -1431,6 +1525,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
               : null
             : null,
           underpowered,
+          weaponPulse: NATIVE_PLAYER_CAST_WEAPON_PULSE,
         },
       }
     }
@@ -2031,7 +2126,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
       }
     }
 
-    players[playerId] = nextPlayer
+    players[playerId] = finishEtherBlastTick(nextPlayer)
   }
 
   const bouldersById = new Map(projectiles
@@ -2522,6 +2617,7 @@ function transientLifetime(effect: PrimarySpellTransientState): number {
     case 'earth-called-rock': throw new Error('Called-rock lifetime is state driven')
     case 'earth-impact': return effect.lifetimeTicks
     case 'ether-impact': return PRIMARY_SPELL_ETHER_IMPACT_LIFETIME_TICKS
+    case 'ether-blast': return NATIVE_ETHER_BLAST_PARTICLE_LIFETIME_TICKS
     case 'ether-pierce-streak': return 10
     case 'fire': return nativeFireParticleLifetimeTicks(effect.id)
     case 'fire-ember': throw new Error('Ember lifetime is state driven')

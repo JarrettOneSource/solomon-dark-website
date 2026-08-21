@@ -23,6 +23,7 @@ import type { NativeWeldOneShotBuildId } from '../core-kernels/native-weld-prima
 import type { NativeWeldPrimarySkillProfile } from '../core-kernels/native-primary-skill-profile.ts'
 import type { NativeSecondarySteamedPulse } from '../core-kernels/native-secondary-abilities.ts'
 import { spawnNativeWeldSteamActor } from '../core-kernels/native-weld-steam.ts'
+import { nativeEtherBlastDamage } from '../core-kernels/native-ether-blast.ts'
 import type {
   NativeWeldBuildId,
   NativeWeldCastKind,
@@ -145,6 +146,55 @@ test('Fire uses the post-move same-cell point query, projected slot order, and s
     projectiles: [projectile({ id: 9, kind: 'fire', position: { x: -0.25, y: 0 } })],
   }), [], 1, WORLD_KEY, COMBAT_RNG)
   assert.equal(negative.hits[0]?.actorId, 1, 'float32 truncation maps both roots to cell zero')
+})
+
+test('Ether Blast damages current HP in the strict 175-radius query and requests EtherBurn', () => {
+  const spawned = spawnEnemies([
+    { position: { x: 0, y: 0 }, token: 'SKELETON' },
+    { position: { x: 175, y: 0 }, token: 'SKELETON' },
+  ])
+  const enemies = {
+    ...spawned,
+    actors: spawned.actors.map((actor) => ({
+      ...actor,
+      config: { ...actor.config, maximumHealth: 100 },
+      currentHealth: 100,
+    })),
+  }
+  const pulse: PrimarySpellTransientState = {
+    ageTicks: 0,
+    birthTick: 7,
+    charges: 2,
+    id: 9,
+    kind: 'ether-blast',
+    origin: { x: 0, y: 0 },
+    ownerId: 'wizard',
+    presentationRng: createNativeRng(14),
+    worldKey: WORLD_KEY,
+  }
+  const result = resolveCombatWithAuthority(
+    enemies,
+    spellState({ transients: [pulse] }),
+    [],
+    7,
+  )
+  const amount = nativeEtherBlastDamage(2, 100)
+  assert.deepEqual(
+    result.hits.map(({ actorId, amount: hitAmount, spellKind }) => ({
+      actorId,
+      amount: hitAmount,
+      spellKind,
+    })),
+    [{ actorId: 1, amount, spellKind: 'ether-blast' }],
+  )
+  assert.equal(result.enemies.actors[0]!.currentHealth, 100 - amount)
+  assert.equal(result.enemies.actors[0]!.config.maximumHealth, 100)
+  assert.equal(result.enemies.actors[1]!.currentHealth, 100)
+  assert.deepEqual(result.etherBurns, [{ ownerId: 'wizard', targetId: 1 }])
+
+  const retained = resolveCombatWithAuthority(result.enemies, result.spells, [], 8)
+  assert.deepEqual(retained.etherBurns, [])
+  assert.deepEqual(retained.hits, [])
 })
 
 test('Fire contact partitions direct and rectangular splash damage and consumes Ember RNG', () => {

@@ -86,6 +86,7 @@ import { playerCollisionEnabledAfterCombatTick } from '../core-kernels/player-co
 import {
   applyNativeSecondaryGolemDamage,
   applyNativeSecondaryDazzle,
+  applyNativeSecondaryEtherBurn,
   applyNativeSecondaryFireBurn,
   applyNativeSecondaryPlayerDamage,
   applyNativeSecondaryTargetEffect,
@@ -2004,6 +2005,7 @@ function finishGameSimulationTick(
       return [
         playerId,
         {
+          alive: progression.lifeState === 'alive',
           availableMana: nativeSecondaryAvailableMana(
             progression.currentMana,
             secondaryAbilities.players[playerId]
@@ -2012,6 +2014,9 @@ function finishGameSimulationTick(
           castProgressFactor: derived.castProgressFactor,
           eligible: playerEntityCanCast(playerEntities, playerId)
             && progression.pendingOffer === null,
+          planeActive: (
+            secondaryAbilities.players[playerId]?.planewalkerTicksRemaining ?? 0
+          ) > 0,
           primarySkill,
         },
       ]
@@ -2217,6 +2222,17 @@ function finishGameSimulationTick(
         ownerId: burn.ownerId,
         rank: Math.max(1, playerEntities.skillBooks[ownerIndex]!.effectiveRanks[22] ?? 0),
         skillId: 22,
+        target,
+        worldKey: `boneyard:${boneyardWorld.runId}`,
+      })
+    }
+    for (const burn of spellCombat.etherBurns) {
+      const target = boneyardNativeSecondaryTarget(world.enemies, burn.targetId)
+      const ownerIndex = playerEntityIndex(playerEntities, burn.ownerId)
+      if (target === null || ownerIndex < 0) continue
+      secondaryAbilities = applyNativeSecondaryEtherBurn(secondaryAbilities, {
+        ownerId: burn.ownerId,
+        rank: Math.max(1, playerEntities.skillBooks[ownerIndex]!.effectiveRanks[14] ?? 0),
         target,
         worldKey: `boneyard:${boneyardWorld.runId}`,
       })

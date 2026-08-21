@@ -235,6 +235,10 @@ export class PlayerWorldView {
     this.hitStaffFront.visible = hasWeapon
     this.hitHead.visible = true
     this.hitHeadSecondary.visible = livingAppearance.hat !== null
+    this.staffBack.scale.set(plan.weaponScale)
+    this.staffFront.scale.set(plan.weaponScale)
+    this.hitStaffBack.scale.set(plan.weaponScale)
+    this.hitStaffFront.scale.set(plan.weaponScale)
     if (weaponTextures !== null) {
       this.staffBack.texture = weaponTextures.back[heading]![attachmentPose]!
       this.staffFront.texture = weaponTextures.front[heading]![attachmentPose]!

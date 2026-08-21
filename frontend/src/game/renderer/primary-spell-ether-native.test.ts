@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { Sprite, Texture } from 'pixi.js'
 
 import { NATIVE_ELEMENT_VFX_SPRITES } from '../element-vfx-native.ts'
 import {
@@ -18,6 +19,8 @@ import {
   etherPrimaryPierceStreakPlan,
   etherPrimaryPhase,
 } from './primary-spell-ether-native.ts'
+import { EtherBlastPulseView } from './primary-spell-ether-view.ts'
+import { createNativeRng } from '../core-kernels/native-rng.ts'
 
 const closeTo = (actual: number, expected: number): void => {
   assert.ok(Math.abs(actual - expected) < 1e-12, `${actual} != ${expected}`)
@@ -182,4 +185,34 @@ test('renders surviving-pierce record 53 as a ten-tick heading-aligned additive 
     etherPrimaryPierceStreakPlan({ ...state, ageTicks: 9 }).alpha,
     Math.fround(0.09999992698431015),
   )
+})
+
+test('renders Ether Blast as 108 independently depth-sorted additive native particles', () => {
+  const state = {
+    ageTicks: 0,
+    birthTick: 10,
+    charges: 2,
+    id: 14,
+    kind: 'ether-blast',
+    origin: { x: 100, y: 200 },
+    ownerId: 'caster',
+    presentationRng: createNativeRng(14),
+    worldKey: 'boneyard:run',
+  } as const
+  const view = new EtherBlastPulseView(state, {
+    11: { anchorX: 0, anchorY: 0, height: 1, texture: Texture.EMPTY, width: 1 },
+    45: { anchorX: 0, anchorY: 0, height: 1, texture: Texture.EMPTY, width: 1 },
+  })
+  assert.equal(view.containers.length, 108)
+  assert.equal(view.painterRoots().length, 108)
+  assert.ok(view.painterRoots().every(({ queueFamily, regionLightPoint }) => (
+    queueFamily === 'zanim' && regionLightPoint === null
+  )))
+  const first = view.containers[0]!.children[0]
+  assert.ok(first instanceof Sprite)
+  assert.equal(first.blendMode, 'add')
+  assert.equal(first.visible, true)
+  view.update({ ...state, ageTicks: 100 })
+  assert.ok(view.containers.every((container) => container.children[0]!.visible === false))
+  view.destroy()
 })

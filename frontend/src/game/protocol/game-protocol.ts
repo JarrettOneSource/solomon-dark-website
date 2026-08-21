@@ -40,6 +40,7 @@ import type { NativeRngState } from '../core-kernels/native-rng.ts'
 import type { NativeEnemyWorldFeedbackKernelState } from '../core-kernels/native-enemy-world-feedback.ts'
 import { NATIVE_HALL_OF_FAME_SCORE } from '../core-kernels/hall-of-fame-score.ts'
 import { ETHER_PRIMARY_INITIAL_TURN } from '../core-kernels/primary-spell-targeting.ts'
+import { NATIVE_ETHER_BLAST_PARTICLE_LIFETIME_TICKS } from '../core-kernels/native-ether-blast.ts'
 import { earthImpactLifetimeTicks } from '../core-kernels/primary-spell-earth.ts'
 import {
   waterFrostJetKind,
@@ -268,7 +269,7 @@ export type {
   LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
 
-export const GAME_PROTOCOL_VERSION = 43
+export const GAME_PROTOCOL_VERSION = 44
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const GAME_CONNECTION_TIMEOUT_CLOSE_CODE = 4000
 export const GAME_HOST_ENDED_SESSION_CLOSE_CODE = 4001
@@ -2065,6 +2066,8 @@ function playerPrimaryCastState(
     'castSequence',
     'channelActive',
     'emissionSequence',
+    'etherBlastCharge',
+    'etherBlastChargeCueSequence',
     'fizzleSequence',
     'held',
     'lastWeldPlaybackRate',
@@ -2073,6 +2076,7 @@ function playerPrimaryCastState(
     'selectedPrimaryId',
     'targetId',
     'underpowered',
+    'weaponPulse',
   ])
   const actionTick = finite(source.actionTick, `${field}.actionTick`)
   const channelActive = boolean(source.channelActive, `${field}.channelActive`)
@@ -2127,6 +2131,17 @@ function playerPrimaryCastState(
   if (selectedPrimaryId !== -1 && selectedPrimaryId !== expectedPrimaryId) {
     throw new GameProtocolError(`${field}.selectedPrimaryId does not match progression`)
   }
+  const etherBlastCharge = nonnegativeFinite(
+    source.etherBlastCharge,
+    `${field}.etherBlastCharge`,
+  )
+  if (etherBlastCharge > 6) {
+    throw new GameProtocolError(`${field}.etherBlastCharge exceeds the native maximum`)
+  }
+  const weaponPulse = nonnegativeFinite(source.weaponPulse, `${field}.weaponPulse`)
+  if (weaponPulse > 0.45) {
+    throw new GameProtocolError(`${field}.weaponPulse exceeds the native maximum`)
+  }
   return {
     actionTick,
     aimDirection: unitVector(source.aimDirection, `${field}.aimDirection`),
@@ -2135,6 +2150,11 @@ function playerPrimaryCastState(
     emissionSequence: nonnegativeInteger(
       source.emissionSequence,
       `${field}.emissionSequence`,
+    ),
+    etherBlastCharge,
+    etherBlastChargeCueSequence: nonnegativeInteger(
+      source.etherBlastChargeCueSequence,
+      `${field}.etherBlastChargeCueSequence`,
     ),
     fizzleSequence: nonnegativeInteger(
       source.fizzleSequence,
@@ -2150,6 +2170,7 @@ function playerPrimaryCastState(
     selectedPrimaryId,
     targetId,
     underpowered: boolean(source.underpowered, `${field}.underpowered`),
+    weaponPulse,
   }
 }
 
@@ -3339,6 +3360,10 @@ function nativeSecondaryActor(
     : nativeRngState(source.presentationRng, `${field}.presentationRng`)
   const skillId = source.skillId === null
     ? null
+    : source.skillId === 14 && (
+        kind === 'ether-burn' || kind === 'ether-burn-flare'
+      )
+      ? 14
     : source.skillId === 22 && kind === 'fire-burn'
       ? 22
       : source.skillId === 53 && (
@@ -5721,6 +5746,30 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
       origin: vector(source.origin, `${field}.origin`),
       ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
       visualScale,
+      worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
+    }
+  }
+  if (source.kind === 'ether-blast') {
+    onlyKeys(source, field, [
+      'ageTicks', 'birthTick', 'charges', 'id', 'kind', 'origin', 'ownerId',
+      'presentationRng', 'worldKey',
+    ])
+    const ageTicks = nonnegativeInteger(source.ageTicks, `${field}.ageTicks`)
+    if (ageTicks >= NATIVE_ETHER_BLAST_PARTICLE_LIFETIME_TICKS) {
+      throw new GameProtocolError(`${field}.ageTicks exceeds the Ether Blast lifetime`)
+    }
+    return {
+      ageTicks,
+      birthTick: nonnegativeInteger(source.birthTick, `${field}.birthTick`),
+      charges: boundedInteger(source.charges, `${field}.charges`, 1, 6),
+      id: positiveInteger(source.id, `${field}.id`),
+      kind: 'ether-blast',
+      origin: vector(source.origin, `${field}.origin`),
+      ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
+      presentationRng: nativeRngState(
+        source.presentationRng,
+        `${field}.presentationRng`,
+      ),
       worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
     }
   }

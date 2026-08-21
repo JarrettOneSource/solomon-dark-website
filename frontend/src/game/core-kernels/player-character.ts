@@ -28,6 +28,8 @@ export interface PlayerPrimaryCastState {
   castSequence: number
   channelActive: boolean
   emissionSequence: number
+  etherBlastCharge: number
+  etherBlastChargeCueSequence: number
   fizzleSequence: number
   held: boolean
   lastWeldPlaybackRate: number | null
@@ -36,6 +38,7 @@ export interface PlayerPrimaryCastState {
   selectedPrimaryId: number
   targetId: string | null
   underpowered: boolean
+  weaponPulse: number
 }
 
 export interface PlayerCharacterState {
@@ -104,6 +107,8 @@ export function createIdlePlayerPrimaryCast(): PlayerPrimaryCastState {
     castSequence: 0,
     channelActive: false,
     emissionSequence: 0,
+    etherBlastCharge: 0,
+    etherBlastChargeCueSequence: 0,
     fizzleSequence: 0,
     held: false,
     lastWeldPlaybackRate: null,
@@ -112,15 +117,22 @@ export function createIdlePlayerPrimaryCast(): PlayerPrimaryCastState {
     selectedPrimaryId: -1,
     targetId: null,
     underpowered: false,
+    weaponPulse: 0,
   }
 }
 
 export function resetPlayerPrimaryCast(
   player: PlayerCharacterState,
 ): PlayerCharacterState {
+  const idle = createIdlePlayerPrimaryCast()
   return {
     ...player,
-    primaryCast: createIdlePlayerPrimaryCast(),
+    primaryCast: {
+      ...idle,
+      etherBlastCharge: player.primaryCast.etherBlastCharge,
+      etherBlastChargeCueSequence: player.primaryCast.etherBlastChargeCueSequence,
+      weaponPulse: player.primaryCast.weaponPulse,
+    },
   }
 }
 

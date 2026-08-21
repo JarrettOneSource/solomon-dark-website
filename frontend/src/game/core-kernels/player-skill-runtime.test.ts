@@ -176,6 +176,7 @@ test('Split Mind owns two distinct selections and replacement alternates A then 
   )
   assert.equal(unchanged.runtime, state.runtime)
   assert.equal(unchanged.skillBook, state.skillBook)
+  assert.equal(unchanged.runtime.nextConcentrationReplacementSlot, 'b')
 })
 
 test('equipment skill effects compose before Mindstar and refresh back to permanent state', () => {

@@ -37,7 +37,7 @@ import {
 const KINDS: readonly NativeSecondaryActorKind[] = [
   'leviathan', 'leviathan-appendage', 'leviathan-mote', 'ether-bolt', 'ether-fade', 'phase-burst',
   'plane-orb-shot', 'plane-orb-particle', 'moving-fire', 'shockwave', 'fire-patch', 'fire-burn',
-  'fire-burn-flame', 'storm-cloud',
+  'fire-burn-flame', 'ether-burn', 'ether-burn-flare', 'storm-cloud',
   'storm-drop', 'storm-strike', 'prismatic-wave', 'freeze-wave', 'freeze-wave-visual',
   'ice-blast', 'frost-burn-flare', 'earthquake', 'earthquake-scenery-wobble', 'earthquake-quake',
   'earthquake-dust', 'earthquake-debris',
@@ -100,6 +100,8 @@ function actor(kind: NativeSecondaryActorKind): NativeSecondaryActorState {
     scale: 1,
     skillId: kind.startsWith('mindblast-')
       ? null
+      : kind.startsWith('ether-burn')
+        ? 14
       : kind.startsWith('flash-response-')
         ? 53
       : kind.startsWith('acid-')
@@ -147,7 +149,7 @@ test('every authoritative secondary actor kind has an explicit stock presentatio
     assert.equal(plan.root.x, 100, kind)
     assert.ok(['ordinary-dynamic', 'zanim'].includes(plan.queueFamily), kind)
     if (![
-      'shockwave', 'mindblast-shockwave', 'fire-burn', 'electric-burn', 'storm-cloud', 'storm-strike', 'freeze-wave', 'ice-blast',
+      'shockwave', 'mindblast-shockwave', 'fire-burn', 'ether-burn', 'electric-burn', 'storm-cloud', 'storm-strike', 'freeze-wave', 'ice-blast',
       'earthquake-scenery-wobble',
     ].includes(kind)) {
       assert.ok(plan.draws.length > 0, `${kind} unexpectedly became invisible`)
@@ -162,7 +164,7 @@ test('the complete secondary light census stays split between providers and Misc
     'ether-drain', 'comet', 'ring-fire-explosion', 'ring-fire-fragment',
   ])
   const miscWriters = new Set<NativeSecondaryActorKind>([
-    'magic-circle', 'fire-burn', 'electric-burn',
+    'magic-circle', 'fire-burn', 'ether-burn', 'electric-burn',
   ])
   for (const kind of KINDS) {
     const source = actor(kind)
@@ -459,6 +461,39 @@ test('Fire and Burn use the exact additive strip, mirror, scale-in, target flame
     rotationRadians: 0,
     scaleX: 1.2,
     scaleY: 1.2,
+    tint: 0xffffff,
+  })
+
+  const etherBurn = {
+    ...actor('ether-burn'),
+    ageTicks: 1,
+    alpha: 0.6,
+    position: { x: 25, y: 35 },
+    radius: 0.14,
+  }
+  assert.deepEqual(nativeSecondaryPresentationPlan(etherBurn).draws, [])
+  assert.deepEqual(nativeSecondaryMiscLightSource(etherBurn), {
+    castsDirectionalShadow: false,
+    intensity: 0.6,
+    position: { x: 25, y: 35 },
+    radius: 0.14,
+  })
+  const etherFlare = nativeSecondaryPresentationPlan({
+    ...actor('ether-burn-flare'),
+    alpha: 0.125,
+    frame: 248,
+    scale: 1.1,
+  }).draws[0]
+  assert.deepEqual(etherFlare, {
+    alpha: 0.125,
+    atlas: 'BadGuys',
+    blend: 'add',
+    entry: 248,
+    offset: { x: 0, y: 0 },
+    role: 'ether-burn-flare-BadGuys-248',
+    rotationRadians: 0,
+    scaleX: 1.1,
+    scaleY: 1.1,
     tint: 0xffffff,
   })
 })
@@ -1495,6 +1530,26 @@ test('Region screen feedback is one overwrite lane with exact float32 decay', ()
     y: Math.fround(Math.fround(-2.4) * Math.fround(0.75)),
   })
   assert.deepEqual(camera.sampleCameraDisplacement(8), { x: 0, y: 0 })
+
+  const etherBlast = new NativeSecondaryScreenFeedbackPresentation(20, 'boneyard:test')
+  etherBlast.consumePrimaryEtherBlast({
+    ageTicks: 0,
+    birthTick: 20,
+    charges: 4,
+    id: 39,
+    kind: 'ether-blast',
+    origin: { x: 0, y: 0 },
+    ownerId: 'player',
+    presentationRng: createNativeRng(14),
+    worldKey: 'boneyard:test',
+  }, context)
+  assert.deepEqual(etherBlast.sample(20), { alpha: 1, color: 0xff40ff })
+  assert.equal(etherBlast.sampleCameraMagnitude(20), Math.fround(0.4))
+  assert.equal(etherBlast.sample(21)?.alpha, Math.fround(0.975))
+  assert.equal(
+    etherBlast.sampleCameraMagnitude(21),
+    Math.fround(Math.fround(0.4) * Math.fround(0.94)),
+  )
 
   const meteor = new NativeSecondaryScreenFeedbackPresentation(20, 'boneyard:test')
   meteor.consumePrimaryCameraDisplacement({

@@ -33,6 +33,10 @@ import {
 } from '../core-kernels/native-rng.ts'
 import { waterFrostJetPlan } from '../core-kernels/primary-spell-water.ts'
 import {
+  nativeEtherBlastDamage,
+  NATIVE_ETHER_BLAST_CONTACT_RADIUS,
+} from '../core-kernels/native-ether-blast.ts'
+import {
   airPrimaryBoltGeometry,
   firstNativePrimaryPointContact,
   nativePrimaryConeTargets,
@@ -86,6 +90,7 @@ export type BoneyardSpellHitKind =
   | PrimarySpellProjectileKind
   | 'air'
   | 'air-storm'
+  | 'ether-blast'
   | 'fire-ember'
   | 'fire-explosion'
   | 'fire-good-imp'
@@ -98,6 +103,11 @@ export const NATIVE_CHILL_ARROW_TUMBLE_FACTOR = Math.fround(0.3199999928474426)
 
 export interface BoneyardSpellBurnContact {
   readonly damage: number
+  readonly ownerId: string
+  readonly targetId: number
+}
+
+export interface BoneyardSpellEtherBurnContact {
   readonly ownerId: string
   readonly targetId: number
 }
@@ -133,6 +143,7 @@ export interface BoneyardSpellHit {
 export interface BoneyardSpellCombatResult {
   readonly burns: readonly BoneyardSpellBurnContact[]
   readonly enemies: BoneyardEnemyStore
+  readonly etherBurns: readonly BoneyardSpellEtherBurnContact[]
   readonly events: readonly BoneyardEnemySemanticEvent[]
   readonly hits: readonly BoneyardSpellHit[]
   readonly rng: NativeRngState
@@ -191,6 +202,7 @@ export function resolveBoneyardSpellCombat(
   const updatedTransients = new Map<number, PrimarySpellTransientState>()
   const hits: BoneyardSpellHit[] = []
   const burns: BoneyardSpellBurnContact[] = []
+  const etherBurns: BoneyardSpellEtherBurnContact[] = []
   const events: BoneyardEnemySemanticEvent[] = []
   const targetEffects: BoneyardSpellTargetEffectContact[] = []
   const impactTransients: PrimarySpellTransientState[] = []
@@ -205,6 +217,44 @@ export function resolveBoneyardSpellCombat(
     patch: NativeSecondaryTargetEffectPatch,
   ): void => {
     targetEffects.push(Object.freeze({ patch: Object.freeze({ ...patch }), targetId, worldKey }))
+  }
+
+  for (const effect of [...sourceSpells.transients].sort(bySpellId)) {
+    if (
+      effect.kind !== 'ether-blast'
+      || effect.birthTick !== tick
+      || effect.worldKey !== worldKey
+    ) continue
+    for (const row of nativePrimaryRootTargetRows(
+      enemies,
+      effect.origin,
+      NATIVE_ETHER_BLAST_CONTACT_RADIUS,
+      0x2,
+    )) {
+      const amount = nativeEtherBlastDamage(effect.charges, row.actor.currentHealth)
+      const contact = damageBoneyardEnemy(enemies, {
+        actorId: row.actor.id,
+        amount,
+        sourcePlayerId: effect.ownerId,
+        tick,
+      })
+      if (!contact.accepted) continue
+      enemies = contact.store
+      events.push(...contact.events)
+      hits.push(Object.freeze({
+        actorId: row.actor.id,
+        amount,
+        killed: contact.killed,
+        ownerId: effect.ownerId,
+        spellId: effect.id,
+        spellKind: 'ether-blast',
+        tick,
+      }))
+      etherBurns.push(Object.freeze({
+        ownerId: effect.ownerId,
+        targetId: row.actor.id,
+      }))
+    }
   }
 
   const activeKnockbackTargetIds = new Set(sourceSpells.transients.flatMap((effect) => {
@@ -1551,6 +1601,7 @@ export function resolveBoneyardSpellCombat(
   return {
     burns: Object.freeze(burns),
     enemies,
+    etherBurns: Object.freeze(etherBurns),
     events: Object.freeze(events),
     hits: Object.freeze(hits),
     rng,

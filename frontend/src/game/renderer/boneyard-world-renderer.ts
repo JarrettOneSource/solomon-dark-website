@@ -765,6 +765,14 @@ export async function createBoneyardWorldRenderer(
         })
       }
       for (const effect of snapshot.primarySpells.transients) {
+        if (effect.kind === 'ether-blast') {
+          secondaryScreenFeedback.consumePrimaryEtherBlast(effect, {
+            cameraCenter: { x: camera.x, y: camera.y },
+            localPlayerAlternate: player.progression.lifeState !== 'alive',
+            visibleWorldWidth: visibleWorld.w,
+          })
+          continue
+        }
         if (effect.kind === 'weld-meteor') {
           if (effect.phase !== 'impact' || effect.cameraDisplacement === null) continue
           secondaryScreenFeedback.consumePrimaryCameraDisplacement({

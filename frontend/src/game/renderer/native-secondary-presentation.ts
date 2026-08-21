@@ -16,6 +16,11 @@ import {
   type NativeRngState,
 } from '../core-kernels/native-rng.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
+import type { PrimarySpellEtherBlastState } from '../core-kernels/primary-spells.ts'
+import {
+  NATIVE_ETHER_BLAST_SCREEN_FLASH_DECAY,
+  NATIVE_ETHER_BLAST_SCREEN_GREEN,
+} from '../core-kernels/native-ether-blast.ts'
 import { roundHalfToEven } from './native-enemy-presentation.ts'
 import type { NativeSecondaryAtlas } from './native-secondary-assets.ts'
 import {
@@ -231,6 +236,7 @@ export class NativeSecondaryScreenFeedbackPresentation {
   private green = 1
   private lastEventId = 0
   private lastPrimaryImpactId = 0
+  private lastPrimaryFeedbackId = 0
   private lastPrimaryMagnitudeId = 0
   private lastTick: number
   private red = 1
@@ -326,6 +332,37 @@ export class NativeSecondaryScreenFeedbackPresentation {
     if (x * x + y * y >= currentSquared) {
       this.cameraDisplacementX = x
       this.cameraDisplacementY = y
+    }
+  }
+
+  consumePrimaryEtherBlast(
+    effect: PrimarySpellEtherBlastState,
+    context: NativeSecondaryScreenFeedbackContext,
+  ): void {
+    if (effect.id <= this.lastPrimaryFeedbackId) return
+    this.lastPrimaryFeedbackId = effect.id
+    if (effect.worldKey !== this.worldKey) return
+    const eventTick = Math.max(0, Math.trunc(effect.birthTick))
+    if (eventTick > this.lastTick) this.advanceTo(eventTick)
+    this.cameraMagnitude = Math.fround(effect.charges * Math.fround(0.1))
+    this.alpha = nativeRegionPointGain(
+      effect.origin,
+      context.cameraCenter,
+      context.visibleWorldWidth,
+      context.localPlayerAlternate,
+    )
+    this.blue = 1
+    this.decayPerTick = NATIVE_ETHER_BLAST_SCREEN_FLASH_DECAY
+    this.green = NATIVE_ETHER_BLAST_SCREEN_GREEN
+    this.red = 1
+    if (eventTick < this.lastTick) {
+      const elapsed = this.lastTick - eventTick
+      this.alpha = repeatedFloatDecay(this.alpha, this.decayPerTick, elapsed)
+      this.cameraMagnitude = repeatedFloatMultiply(
+        this.cameraMagnitude,
+        MAGIC_SHIELD_EXPLOSION_CAMERA_DECAY,
+        elapsed,
+      )
     }
   }
 
@@ -571,6 +608,15 @@ export function nativeSecondaryPresentationPlan(
       return plan([])
     case 'fire-burn-flame':
       return plan([draw('BadGuys', clampEntry(actor.frame, 333, 342), {
+        alpha: actor.alpha,
+        blend: 'add',
+        scaleX: actor.scale,
+        scaleY: actor.scale,
+      })])
+    case 'ether-burn':
+      return plan([])
+    case 'ether-burn-flare':
+      return plan([draw('BadGuys', clampEntry(actor.frame, 246, 250), {
         alpha: actor.alpha,
         blend: 'add',
         scaleX: actor.scale,

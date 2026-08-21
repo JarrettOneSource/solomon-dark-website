@@ -428,6 +428,17 @@ export async function createHubWorldRenderer(
         })
       }
       for (const effect of snapshot.primarySpells.transients) {
+        if (effect.kind === 'ether-blast') {
+          screenFeedback.consumePrimaryEtherBlast(effect, {
+            cameraCenter: {
+              x: camera.x + visibleWorldWidth / 2,
+              y: camera.y + viewport.height / HUB_CAMERA_SCALE / 2,
+            },
+            localPlayerAlternate: player.progression.lifeState !== 'alive',
+            visibleWorldWidth,
+          })
+          continue
+        }
         if (effect.kind === 'weld-meteor') {
           if (effect.phase !== 'impact' || effect.cameraDisplacement === null) continue
           screenFeedback.consumePrimaryCameraDisplacement({
