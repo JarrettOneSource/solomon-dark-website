@@ -249,6 +249,7 @@ export default function MainMenuScene({
   const [loadedBoneyard, setLoadedBoneyard] = useState<LoadedBoneyard | null>(null)
   const [gameplayPause, setGameplayPause] = useState<GameplayPauseState | null>(null)
   const [partyState, setPartyState] = useState<LocalPartyState | null>(null)
+  const [gameplaySettingsOpen, setGameplaySettingsOpen] = useState(false)
   const activeBoneyardRunRef = useRef<string | null>(null)
   const loadedBoneyardRunRef = useRef<string | null>(null)
   const levelUpPickerPresentationRef = useRef<number | null>(null)
@@ -334,13 +335,21 @@ export default function MainMenuScene({
   }, [gameSettings.enableCheats, runtimeSnapshot?.hostPlayerId, session])
 
   useEffect(() => {
-    if (!settingsOpen) return
+    if (!settingsOpen && !gameplaySettingsOpen) return
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setSettingsOpen(false)
+      if (event.key !== 'Escape') return
+      if (gameplaySettingsOpen) {
+        setGameplaySettingsOpen(false)
+        session?.requestGameplayPause(false)
+      } else setSettingsOpen(false)
     }
     window.addEventListener('keydown', closeOnEscape)
     return () => window.removeEventListener('keydown', closeOnEscape)
-  }, [settingsOpen])
+  }, [gameplaySettingsOpen, session, settingsOpen])
+
+  useEffect(() => {
+    if (!gameplayPause) setGameplaySettingsOpen(false)
+  }, [gameplayPause])
 
   const updateGameSettings = useCallback((settings: GameSettings) => {
     setLocalGameSettings(setGameSettings(settings))
@@ -664,6 +673,7 @@ export default function MainMenuScene({
     setLoadedBoneyard(null)
     setGameplayPause(null)
     setPartyState(null)
+    setGameplaySettingsOpen(false)
     setScreen('root')
   }
 
@@ -857,16 +867,30 @@ export default function MainMenuScene({
             </div>
           ) : null}
 
-        {session && gameplayPause ? (
+        {session && gameplayPause && !gameplaySettingsOpen ? (
           <GameplayPauseMenu
             audio={audio}
             onLeave={leaveGameplay}
             onResume={() => session.requestGameplayPause(false)}
+            onSettings={() => setGameplaySettingsOpen(true)}
             pause={gameplayPause}
             playerId={session.playerId}
             style={nativeStageStyle}
           />
         ) : null}
+
+        {session
+          && gameplayPause?.ownerPlayerId === session.playerId
+          && gameplaySettingsOpen ? (
+            <GameSettingsDialog
+              onChange={updateGameSettings}
+              onClose={() => {
+                setGameplaySettingsOpen(false)
+                session.requestGameplayPause(false)
+              }}
+              settings={gameSettings}
+            />
+          ) : null}
 
         {(preparing || connectionError) && (
           <div className="main-menu-runtime-status" role={connectionError ? 'alert' : 'status'}>

@@ -1,74 +1,82 @@
-.gameplay-pause-stage {
+.main-menu-native-stage.gameplay-pause-stage {
   z-index: 80;
   overflow: hidden;
   pointer-events: auto;
-  animation: gameplay-pause-reveal var(--gameplay-pause-reveal) linear both;
 }
 
-.gameplay-pause-stage.gameplay-pause-closing {
-  animation: gameplay-pause-close var(--gameplay-pause-close) linear both;
-}
-
-.gameplay-pause-dim {
+.gameplay-pause-dim,
+.gameplay-pause-native-render,
+.gameplay-pause-canvas {
   position: absolute;
   inset: 0;
-  background: rgb(0 0 0 / var(--gameplay-pause-dim));
+  width: 1600px;
+  height: 900px;
   pointer-events: none;
 }
 
-.gameplay-pause-frame {
-  position: absolute;
-  inset: 300px auto auto 584px;
-  box-sizing: border-box;
-  width: 432px;
-  height: 300px;
-  border: 2px solid #c7a95e;
-  background: rgb(8 8 8 / 0.32);
-  box-shadow:
-    inset 0 0 0 4px #211b0e,
-    inset 0 0 0 6px #c7a95e,
-    0 0 24px 8px #000;
-  pointer-events: none;
-}
-
-.gameplay-pause-native-art {
-  position: fixed;
-  z-index: 0;
+.gameplay-pause-canvas {
   display: block;
-  background-repeat: no-repeat;
-  background-size: 1024px 1024px;
-  pointer-events: none;
-  transform-origin: top left;
 }
 
 .gameplay-pause-action {
-  position: fixed;
+  position: absolute;
   z-index: 1;
   box-sizing: border-box;
-  padding: 0 28px;
+  padding: 0;
   border: 0;
-  color: #dfc782;
-  font: 700 25px/69px 'Cinzel', Georgia, serif;
-  letter-spacing: -0.025em;
-  text-align: center;
-  text-shadow: 0 2px 1px #000;
+  outline: 0;
+  color: transparent;
+  font-size: 0;
   background: transparent;
   cursor: pointer;
-  pointer-events: auto;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.gameplay-pause-action:nth-of-type(2) {
-  color: #9d8c5f;
+.gameplay-pause-action:disabled {
   cursor: default;
-  filter: saturate(0.55) brightness(0.72);
 }
 
-.gameplay-pause-action:hover:not(:disabled),
-.gameplay-pause-action:focus-visible {
-  color: #fff0b7;
-  outline: 2px solid rgb(231 205 139 / 0.92);
-  outline-offset: -5px;
-  filter: brightness(1.18);
+.gameplay-pause-pressed-row {
+  position: absolute;
+  z-index: 2;
+  display: block;
+  pointer-events: none;
+}
+
+.gameplay-pause-pressed-row-body,
+.gameplay-pause-pressed-row-end,
+.gameplay-pause-pressed-row-connector {
+  position: absolute;
+  top: 0;
+  display: block;
+}
+
+.gameplay-pause-pressed-row-body {
+  top: 6px;
+  left: 6px;
+}
+
+.gameplay-pause-pressed-row-end-left {
+  left: 0;
+}
+
+.gameplay-pause-pressed-row-connector {
+  left: 70px;
+  width: 225px;
+  height: 85px;
+}
+
+.gameplay-pause-pressed-row-end-right {
+  left: 365px;
+  transform: scaleX(-1);
+  transform-origin: 0 0;
+}
+
+.gameplay-pause-pressed-row > i {
+  position: absolute;
+  z-index: 1;
+  display: block;
+  transform: translate(6px, 6px);
 }
 
 .gameplay-pause-waiting {
@@ -99,14 +107,4 @@
   display: block;
   color: #c9b98a;
   font-size: 19px;
-}
-
-@keyframes gameplay-pause-reveal {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes gameplay-pause-close {
-  from { opacity: 1; }
-  to { opacity: 0; }
 }

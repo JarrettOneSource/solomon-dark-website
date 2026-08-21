@@ -1,8 +1,75 @@
 import type { GameplayPauseState } from './protocol/game-protocol.ts'
 
+export type NativePauseAction = 'leave' | 'resume' | 'settings'
+export type NativePausePhase = 'closing' | 'opening'
+
+export interface NativePauseBounds {
+  readonly height: number
+  readonly left: number
+  readonly top: number
+  readonly width: number
+}
+
+export interface NativePauseMenuRowPlan {
+  readonly action: NativePauseAction
+  readonly bodyRecord: 101 | 102
+  readonly bounds: NativePauseBounds
+  readonly label: string
+  readonly labelX: number
+  readonly labelY: number
+}
+
+export interface NativePauseMenuRenderPlan {
+  readonly alpha: number
+  readonly arrows: readonly Readonly<{ scale: number; x: number; y: number }>[]
+  readonly chrome: Readonly<NativePauseBounds & { bottom: number; right: number }>
+  readonly dimAlpha: number
+  readonly header: Readonly<{ rotation: number; x: number; y: number }>
+  readonly rows: readonly NativePauseMenuRowPlan[]
+}
+
 export const NATIVE_PAUSE_REVEAL_MS = 29 * 10
 export const NATIVE_PAUSE_CLOSE_MS = 20 * 10
 export const NATIVE_PAUSE_DIM_ALPHA = 0.85
+export const NATIVE_PAUSE_EDGE_UV_START = 0.95
+export const NATIVE_PAUSE_TEXT_TINT = 0xd9ba70
+export const NATIVE_PAUSE_PRESSED_ROW_FRAME = Object.freeze([620, 482, 353, 69] as const)
+export const NATIVE_PAUSE_ROW_END_FRAME = Object.freeze([679, 394, 70, 85] as const)
+
+const NATIVE_PAUSE_REVEAL_STEP = 0.03500000014901161
+const NATIVE_PAUSE_CLOSE_STEP = 0.05000000074505806
+const NATIVE_PAUSE_TICK_MS = 10
+const NATIVE_PAUSE_CHROME_PADDING = 40
+const NATIVE_PAUSE_CHROME_MOTION = 25
+const NATIVE_PAUSE_LABEL_Y_OFFSET = 9
+const NATIVE_PAUSE_PRESSED_OFFSET = 6
+
+export const NATIVE_PAUSE_ART_RECORDS = Object.freeze({
+  arrow: 8,
+  frame: 17,
+  header: 18,
+  idleRow: 101,
+  pressedRow: 102,
+  rowEnd: 54,
+} as const)
+
+export const NATIVE_PAUSE_ART_COUNTS = Object.freeze({
+  8: 3,
+  17: 4,
+  18: 1,
+  54: 6,
+  101: 3,
+} as const)
+
+export const NATIVE_PAUSE_FONT = Object.freeze({
+  firstRecord: 216,
+  glyphCount: 92,
+  group: 'menu',
+  kerningCount: 210,
+  lastRecord: 307,
+  metrics: Object.freeze([24, 6, 28] as const),
+  spaceAdvance: 6,
+})
 
 export const PAUSE_MENU_ACTION_BOUNDS = Object.freeze({
   resume: Object.freeze({ height: 69, left: 623.5, top: 339.5, width: 353 }),
@@ -10,43 +77,77 @@ export const PAUSE_MENU_ACTION_BOUNDS = Object.freeze({
   leave: Object.freeze({ height: 69, left: 623.5, top: 491.5, width: 353 }),
 })
 
-export interface NativePauseArtMember {
-  flipX?: boolean
-  flipY?: boolean
-  left: number
-  record: 8 | 17 | 18 | 54 | 101
-  rotate?: -90
-  scale?: number
-  top: number
+const NATIVE_PAUSE_ACTIONS = Object.freeze([
+  Object.freeze({ action: 'resume', label: 'RESUME GAME' }),
+  Object.freeze({ action: 'settings', label: 'GAME SETTINGS' }),
+  Object.freeze({ action: 'leave', label: 'LEAVE GAME' }),
+] as const)
+
+const NATIVE_PAUSE_CONTROL_UNION = Object.freeze({
+  height: 221,
+  left: 623.5,
+  top: 339.5,
+  width: 353,
+})
+
+export function nativePauseMenuReveal(phase: NativePausePhase, elapsedMs: number): number {
+  const ticks = Math.max(0, Math.floor(elapsedMs / NATIVE_PAUSE_TICK_MS))
+  if (phase === 'opening') {
+    let reveal = 0
+    for (let tick = 0; tick < Math.min(ticks, 29); tick += 1) {
+      reveal = Math.fround(reveal + NATIVE_PAUSE_REVEAL_STEP)
+      if (reveal > 1) return 1
+    }
+    return reveal
+  }
+
+  let reveal = 1
+  for (let tick = 0; tick < Math.min(ticks, 20); tick += 1) {
+    reveal = Math.fround(reveal - NATIVE_PAUSE_CLOSE_STEP)
+    if (reveal < 0) return 0
+  }
+  return reveal
 }
 
-export const NATIVE_PAUSE_ATLAS_FRAMES = Object.freeze({
-  8: [824, 587, 49, 112],
-  17: [743, 588, 80, 83],
-  18: [543, 205, 67, 262],
-  54: [679, 394, 70, 85],
-  101: [266, 482, 353, 69],
-} as const)
+export function nativePauseMenuRenderPlan(
+  reveal: number,
+  pressedAction: NativePauseAction | null,
+): NativePauseMenuRenderPlan {
+  const alpha = Math.min(1, Math.max(0, reveal))
+  const spread = Math.fround(
+    (1 - alpha) * NATIVE_PAUSE_CHROME_MOTION + NATIVE_PAUSE_CHROME_PADDING,
+  )
+  const left = NATIVE_PAUSE_CONTROL_UNION.left - spread
+  const top = NATIVE_PAUSE_CONTROL_UNION.top - spread
+  const width = NATIVE_PAUSE_CONTROL_UNION.width + spread * 2
+  const height = NATIVE_PAUSE_CONTROL_UNION.height + spread * 2
+  const right = left + width
+  const bottom = top + height
 
-export const NATIVE_PAUSE_ART_MEMBERS: readonly NativePauseArtMember[] = Object.freeze([
-  { left: 623.5, record: 101, top: 339.5 },
-  { left: 617.5, record: 54, top: 333.5 },
-  { flipX: true, left: 982.5, record: 54, top: 333.5 },
-  { left: 623.5, record: 101, top: 415.5 },
-  { left: 617.5, record: 54, top: 409.5 },
-  { flipX: true, left: 982.5, record: 54, top: 409.5 },
-  { left: 623.5, record: 101, top: 491.5 },
-  { left: 617.5, record: 54, top: 485.5 },
-  { flipX: true, left: 982.5, record: 54, top: 485.5 },
-  { left: 583.5, record: 17, top: 299.5 },
-  { flipX: true, left: 1016.5, record: 17, top: 299.5 },
-  { flipY: true, left: 583.5, record: 17, top: 600.5 },
-  { flipX: true, flipY: true, left: 1016.5, record: 17, top: 600.5 },
-  { left: 669, record: 18, rotate: -90, top: 300.5 },
-  { left: 775.5, record: 8, top: 599.5 },
-  { left: 706.625, record: 8, scale: 0.75, top: 600.5 },
-  { left: 856.625, record: 8, scale: 0.75, top: 600.5 },
-])
+  return {
+    alpha,
+    arrows: [
+      { scale: 1, x: 800, y: bottom + 55 },
+      { scale: 0.75, x: 725, y: bottom + 42 },
+      { scale: 0.75, x: 875, y: bottom + 42 },
+    ],
+    chrome: { bottom, height, left, right, top, width },
+    dimAlpha: Math.fround(alpha * NATIVE_PAUSE_DIM_ALPHA),
+    header: { rotation: Math.PI / 2, x: 800, y: top - 42 },
+    rows: NATIVE_PAUSE_ACTIONS.map(({ action, label }) => {
+      const bounds = PAUSE_MENU_ACTION_BOUNDS[action]
+      const pressedOffset = action === pressedAction ? NATIVE_PAUSE_PRESSED_OFFSET : 0
+      return {
+        action,
+        bodyRecord: action === pressedAction ? 102 : 101,
+        bounds,
+        label,
+        labelX: bounds.left + bounds.width / 2 + pressedOffset,
+        labelY: bounds.top + bounds.height / 2 + NATIVE_PAUSE_LABEL_Y_OFFSET + pressedOffset,
+      }
+    }),
+  }
+}
 
 export type GameplayPausePresentation =
   | { kind: 'owner'; label: 'Game paused' }

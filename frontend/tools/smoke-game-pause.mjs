@@ -1,18 +1,23 @@
 import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
+import { writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 
 import { chromium } from 'playwright-core'
 import { createServer as createViteServer } from 'vite'
 import { WebSocket } from 'ws'
 
-import { gameSimulationPlayerRecords } from '../src/game/core-server/game-simulation.ts'
+import {
+  GAME_FIXED_TICK_SECONDS,
+  gameSimulationPlayerRecords,
+} from '../src/game/core-server/game-simulation.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 import {
   GAME_PROTOCOL_VERSION,
   decodeServerGameMessage,
   encodeGameMessage,
 } from '../src/game/protocol/game-protocol.ts'
+import { PAUSE_MENU_ACTION_BOUNDS } from '../src/game/pause-menu-contract.ts'
 
 const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
 const credential = randomBytes(32).toString('base64url')
@@ -23,6 +28,12 @@ const screenshots = {
     || '/tmp/solomon-dark-pause-hub-owner.png',
   hubWaiting: process.env.SDR_GAME_PAUSE_WAITING_SCREENSHOT
     || '/tmp/solomon-dark-pause-hub-waiting.png',
+  leavePressed: process.env.SDR_GAME_PAUSE_LEAVE_PRESSED_SCREENSHOT
+    || '/tmp/solomon-dark-pause-leave-pressed.png',
+  resumePressed: process.env.SDR_GAME_PAUSE_RESUME_PRESSED_SCREENSHOT
+    || '/tmp/solomon-dark-pause-resume-pressed.png',
+  settingsPressed: process.env.SDR_GAME_PAUSE_SETTINGS_PRESSED_SCREENSHOT
+    || '/tmp/solomon-dark-pause-settings-pressed.png',
 }
 const errors = []
 
@@ -52,7 +63,7 @@ const runtime = {
   },
 }
 const browser = await chromium.launch({
-  args: ['--autoplay-policy=no-user-gesture-required'],
+  args: ['--autoplay-policy=no-user-gesture-required', '--disable-audio-output'],
   executablePath: process.env.SDR_CHROME_PATH || '/usr/bin/google-chrome',
   headless: true,
 })
@@ -65,6 +76,7 @@ try {
   page.on('console', (message) => {
     if (message.type() === 'error') errors.push(`console: ${message.text()}`)
   })
+  await page.addInitScript(bypassStartupAudioPreload)
   await page.addInitScript((configuration) => {
     window.solomonDarkRuntime = configuration
   }, runtime)
@@ -87,16 +99,30 @@ try {
   await ownerPause.waitFor()
   const ownerPauseMessage = await peerSawOwnerPause
   assert.equal(ownerPauseMessage.type, 'server-gameplay-pause')
-  assert.deepEqual(ownerPauseMessage.pause, {
-    ownerDisplayName: 'Helvidius',
-    ownerPlayerId: host.hostPlayerId(),
-  })
+  assert.equal(ownerPauseMessage.pause.ownerPlayerId, host.hostPlayerId())
+  assert.equal(
+    ownerPauseMessage.pause.ownerDisplayName,
+    await ownerPause.getAttribute('data-gameplay-pause-owner-name'),
+  )
+  assert.ok(ownerPauseMessage.pause.ownerDisplayName.length > 0)
   await page.waitForTimeout(350)
 
   assert.equal(
-    await ownerPause.getByRole('button', { name: 'Game Settings unavailable' }).isDisabled(),
+    await ownerPause.getByRole('button', { name: 'GAME SETTINGS' }).isEnabled(),
     true,
   )
+  assert.equal(await ownerPause.getAttribute('data-gameplay-pause-reveal'), '1')
+  const pauseCanvas = ownerPause.locator('canvas[data-pause-renderer="native-simple-menu"]')
+  await pauseCanvas.waitFor()
+  assert.deepEqual(await pauseCanvas.evaluate((canvas) => ({
+    height: canvas.height,
+    renderer: canvas.dataset.gameRenderer,
+    width: canvas.width,
+  })), {
+    height: 900,
+    renderer: 'pixi-webgl',
+    width: 1600,
+  })
   const bounds = {}
   for (const action of ['resume', 'settings', 'leave']) {
     bounds[action] = await ownerPause.locator(`[data-pause-action="${action}"]`).boundingBox()
@@ -112,6 +138,27 @@ try {
     )),
     'rgba(0, 0, 0, 0.85)',
   )
+  const idlePauseFrame = await pauseCompositeFrame(page)
+  const resumeButton = ownerPause.getByRole('button', { name: 'RESUME GAME' })
+  await resumeButton.focus()
+  await resumeButton.hover()
+  const hoverPauseFrame = await pauseCompositeFrame(page)
+  assert.ok(hoverPauseFrame.equals(idlePauseFrame))
+  assert.deepEqual(await resumeButton.evaluate((button) => {
+    const computed = getComputedStyle(button)
+    return {
+      color: computed.color,
+      fontSize: computed.fontSize,
+      outlineStyle: computed.outlineStyle,
+    }
+  }), { color: 'rgba(0, 0, 0, 0)', fontSize: '0px', outlineStyle: 'none' })
+  const pressedFrames = [await capturePressedAction({
+    action: 'resume',
+    ownerPause,
+    page,
+    path: screenshots.resumePressed,
+    pauseCanvas,
+  })]
   await page.screenshot({ path: screenshots.hubOwner })
 
   const heldHub = simulationReceipt()
@@ -132,11 +179,81 @@ try {
   const peerSawHubResume = nextRawMessage(peer.socket, (message) => (
     message.type === 'server-gameplay-pause' && message.pause === null
   ))
+  const firstHubResumeStartedAt = performance.now()
   await ownerPause.getByRole('button', { name: 'RESUME GAME' }).click()
   await peerSawHubResume
-  assert.ok(host.state().tick - heldHub.tick <= 10, 'browser-owner resume replayed paused time')
+  assertNoCatchUp(heldHub.tick, firstHubResumeStartedAt, 'browser-owner Hub resume')
   await ownerPause.waitFor({ state: 'detached' })
   await assertNormalResumeRate(page)
+
+  const peerSawSettingsPause = nextRawMessage(peer.socket, (message) => (
+    message.type === 'server-gameplay-pause' && message.pause?.ownerPlayerId === host.hostPlayerId()
+  ))
+  await pressPause(page, '.hub-scene')
+  const settingsPause = page.locator(
+    '.gameplay-pause-stage[data-gameplay-pause-view="owner"]',
+  )
+  await Promise.all([settingsPause.waitFor(), peerSawSettingsPause])
+  await page.waitForTimeout(350)
+  const settingsCanvas = settingsPause.locator('canvas[data-pause-renderer="native-simple-menu"]')
+  await settingsCanvas.waitFor()
+  pressedFrames.push(await capturePressedAction({
+    action: 'settings',
+    ownerPause: settingsPause,
+    page,
+    path: screenshots.settingsPressed,
+    pauseCanvas: settingsCanvas,
+  }))
+
+  const peerSawSettingsResume = nextRawMessage(peer.socket, (message) => (
+    message.type === 'server-gameplay-pause' && message.pause === null
+  ))
+  await settingsPause.getByRole('button', { name: 'GAME SETTINGS' }).click()
+  const settingsDialog = page.getByRole('dialog', { name: 'Settings' })
+  await settingsDialog.waitFor()
+  await settingsPause.waitFor({ state: 'detached' })
+  const settingsHeldHub = simulationReceipt()
+  await page.waitForTimeout(550)
+  assert.deepEqual(simulationReceipt(), settingsHeldHub)
+  const hubResumeStartedAt = performance.now()
+  await settingsDialog.getByRole('button', { name: 'Done' }).click()
+  await peerSawSettingsResume
+  assertNoCatchUp(settingsHeldHub.tick, hubResumeStartedAt, 'browser-owner Hub resume')
+  await assertNormalResumeRate(page)
+
+  const peerSawLeavePause = nextRawMessage(peer.socket, (message) => (
+    message.type === 'server-gameplay-pause' && message.pause?.ownerPlayerId === host.hostPlayerId()
+  ))
+  await pressPause(page, '.hub-scene')
+  const leavePause = page.locator(
+    '.gameplay-pause-stage[data-gameplay-pause-view="owner"]',
+  )
+  await Promise.all([leavePause.waitFor(), peerSawLeavePause])
+  await page.waitForTimeout(350)
+  const leaveCanvas = leavePause.locator('canvas[data-pause-renderer="native-simple-menu"]')
+  await leaveCanvas.waitFor()
+  pressedFrames.push(await capturePressedAction({
+    action: 'leave',
+    ownerPause: leavePause,
+    page,
+    path: screenshots.leavePressed,
+    pauseCanvas: leaveCanvas,
+  }))
+  assert.equal(new Set(pressedFrames).size, 3)
+
+  const leaveTestHeldHub = simulationReceipt()
+  const peerSawLeaveTestResume = nextRawMessage(peer.socket, (message) => (
+    message.type === 'server-gameplay-pause' && message.pause === null
+  ))
+  const leaveTestResumeStartedAt = performance.now()
+  await leavePause.getByRole('button', { name: 'RESUME GAME' }).click()
+  await peerSawLeaveTestResume
+  assertNoCatchUp(
+    leaveTestHeldHub.tick,
+    leaveTestResumeStartedAt,
+    'post-Leave-press Hub resume',
+  )
+  await leavePause.waitFor({ state: 'detached' })
 
   const peerPause = nextRawMessage(peer.socket, (message) => (
     message.type === 'server-gameplay-pause' && message.pause?.ownerPlayerId === peer.welcome.playerId
@@ -159,9 +276,10 @@ try {
   const peerSawOwnResume = nextRawMessage(peer.socket, (message) => (
     message.type === 'server-gameplay-pause' && message.pause === null
   ))
+  const peerHubResumeStartedAt = performance.now()
   peer.socket.send(encodeGameMessage({ type: 'client-gameplay-pause', paused: false }))
   await peerSawOwnResume
-  assert.ok(host.state().tick - peerHeldHub.tick <= 10, 'peer resume replayed paused time')
+  assertNoCatchUp(peerHeldHub.tick, peerHubResumeStartedAt, 'peer Hub resume')
   await hubWaiting.waitFor({ state: 'detached' })
 
   const peerLoaded = nextRawMessage(peer.socket, (message) => (
@@ -192,11 +310,13 @@ try {
   const peerSawBoneyardResume = nextRawMessage(peer.socket, (message) => (
     message.type === 'server-gameplay-pause' && message.pause === null
   ))
+  const boneyardResumeStartedAt = performance.now()
   await boneyardOwner.getByRole('button', { name: 'RESUME GAME' }).click()
   await peerSawBoneyardResume
-  assert.ok(
-    host.state().tick - heldBoneyardOwner.tick <= 10,
-    'Boneyard browser-owner resume replayed paused time',
+  assertNoCatchUp(
+    heldBoneyardOwner.tick,
+    boneyardResumeStartedAt,
+    'browser-owner Boneyard resume',
   )
   await boneyardOwner.waitFor({ state: 'detached' })
 
@@ -249,6 +369,7 @@ async function enterHub(page, element) {
   await page.bringToFront()
   await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 180_000 })
+  await page.evaluate(() => window.__sdrRestoreAudioPreload?.())
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
   await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({ timeout: 30_000 })
@@ -328,11 +449,97 @@ async function canvasFrame(page, selector) {
   })
 }
 
+async function pauseCompositeFrame(page) {
+  return page.screenshot({
+    clip: { height: 500, width: 500, x: 550, y: 210 },
+  })
+}
+
+async function capturePressedAction({
+  action,
+  ownerPause,
+  page,
+  path,
+  pauseCanvas,
+}) {
+  const button = ownerPause.locator(`[data-pause-action="${action}"]`)
+  const priorRevision = Number(await pauseCanvas.getAttribute('data-pause-frame-revision'))
+  await button.dispatchEvent('pointerdown', {
+    button: 0,
+    isPrimary: true,
+    pointerId: 1,
+    pointerType: 'mouse',
+  })
+  await page.waitForFunction(
+    (pressedAction) => {
+      const stage = document.querySelector('.gameplay-pause-stage')
+      const overlay = document.querySelector('[data-pause-pressed-record="102"]')
+      return stage?.getAttribute('data-gameplay-pause-pressed') === pressedAction
+        && overlay?.getAttribute('data-pause-pressed-action') === pressedAction
+    },
+    action,
+  )
+  assert.equal(
+    await pauseCanvas.getAttribute('data-pause-body-records'),
+    '101,101,101',
+  )
+  assert.equal(
+    Number(await pauseCanvas.getAttribute('data-pause-frame-revision')),
+    priorRevision,
+  )
+  await settleBrowserPaint(page)
+  const overlay = ownerPause.locator(
+    `[data-pause-pressed-record="102"][data-pause-pressed-action="${action}"]`,
+  )
+  assert.deepEqual(await overlay.boundingBox(), {
+    height: 85,
+    width: 365,
+    x: PAUSE_MENU_ACTION_BOUNDS[action].left - 6,
+    y: PAUSE_MENU_ACTION_BOUNDS[action].top - 6,
+  })
+  const pressedFrame = await overlay.screenshot()
+  await writeFile(path, pressedFrame)
+  await button.dispatchEvent('pointercancel', { pointerId: 1, pointerType: 'mouse' })
+  await page.waitForFunction(() => (
+    document.querySelector('.gameplay-pause-stage')
+      ?.getAttribute('data-gameplay-pause-pressed') === 'none'
+    && document.querySelector('[data-pause-pressed-record="102"]') === null
+  ))
+  return pressedFrame.toString('base64')
+}
+
+async function settleBrowserPaint(page) {
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(
+    () => requestAnimationFrame(resolve),
+  )))
+}
+
+function bypassStartupAudioPreload() {
+  const nativeLoad = HTMLMediaElement.prototype.load
+  HTMLMediaElement.prototype.load = function loadWithoutDecode() {
+    if (!(this instanceof HTMLAudioElement)) return nativeLoad.call(this)
+    queueMicrotask(() => this.dispatchEvent(new Event('loadeddata')))
+  }
+  Object.defineProperty(window, '__sdrRestoreAudioPreload', {
+    value: () => { HTMLMediaElement.prototype.load = nativeLoad },
+  })
+}
+
 async function assertNormalResumeRate(page) {
   const resumedAt = host.state().tick
   await page.waitForTimeout(100)
   const delta = host.state().tick - resumedAt
   assert.ok(delta >= 5 && delta <= 20, `unexpected resumed rate: ${delta} ticks per 100 ms`)
+}
+
+function assertNoCatchUp(heldTick, resumedAtMs, label) {
+  const elapsedMs = performance.now() - resumedAtMs
+  const tickDelta = host.state().tick - heldTick
+  const maxNormalTicks = Math.ceil(elapsedMs / (GAME_FIXED_TICK_SECONDS * 1000)) + 2
+  assert.ok(
+    tickDelta <= maxNormalTicks,
+    `${label} advanced ${tickDelta} ticks in ${elapsedMs.toFixed(1)} ms`,
+  )
 }
 
 async function waitForHost(predicate, label, timeoutMs = 10_000) {
