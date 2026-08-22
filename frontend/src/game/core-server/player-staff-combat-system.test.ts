@@ -37,6 +37,24 @@ const CONFIG = { discipline: 'body', displayName: 'Staff', element: 'air' } as c
 const ETHER_CONFIG = { ...CONFIG, element: 'ether' } as const
 const PLAYER_ID = 'caster'
 
+test('the Solomon prelude gate suppresses only new automatic staff actions', () => {
+  const context = staffFixture()
+  const blocked = stepPlayerStaffCombatSystem({
+    ...context,
+    combatAdmissionEnabled: false,
+  })
+  assert.deepEqual(blocked.spells.transients, [])
+  assert.deepEqual([...blocked.actingPlayerIds], [])
+  assert.deepEqual(blocked.rng, context.rng)
+
+  const admitted = stepPlayerStaffCombatSystem({
+    ...context,
+    combatAdmissionEnabled: true,
+  })
+  assert.equal(admitted.spells.transients[0]?.kind, 'player-staff-melee')
+  assert.deepEqual([...admitted.actingPlayerIds], [PLAYER_ID])
+})
+
 test('automatic staff admission requires the exact equipped Staff and emits one retained contact', () => {
   const equipped = staffFixture()
   const economy = playerEconomyAt(equipped.playerEntities, PLAYER_ID)!
@@ -218,6 +236,7 @@ function staffFixture(
     }],
   }
   return {
+    combatAdmissionEnabled: true,
     enemies,
     inputs: { [PLAYER_ID]: createIdlePlayerCharacterInput() },
     knockbackTargetVisible: () => true,

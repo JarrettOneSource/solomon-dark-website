@@ -17,7 +17,10 @@ import {
   BoneyardWeatherAudioSynchronizer,
   nativeBoneyardWeatherArenaFade,
 } from './boneyard-weather-audio.ts'
-import { BONEYARD_SOLOMON_VOICE_CUES } from './core-kernels/boneyard-encounter.ts'
+import {
+  BONEYARD_SOLOMON_VOICE_CUES,
+  isBoneyardPlayerCombatEnabled,
+} from './core-kernels/boneyard-encounter.ts'
 import { actorHeadingVector } from './core-kernels/actor-heading.ts'
 import type { HubInventoryAction } from './core-kernels/hub-economy.ts'
 import type { PlayerCharacterInput } from './core-kernels/player-character.ts'
@@ -1005,6 +1008,7 @@ function publishSceneDiagnostics(
   }
   const encounter = snapshot.world.encounter
   const latestVoiceEvent = encounter?.voiceEvents.at(-1)
+  scene.dataset.combatEnabled = `${isBoneyardPlayerCombatEnabled(encounter)}`
   scene.dataset.solomonPhase = encounter?.phase ?? 'absent'
   scene.dataset.solomonRunEventId = `${encounter?.runEventId ?? 0}`
   scene.dataset.solomonVoiceCue = latestVoiceEvent?.cue ?? 'none'

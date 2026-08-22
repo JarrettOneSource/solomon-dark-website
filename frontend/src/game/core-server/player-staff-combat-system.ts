@@ -55,6 +55,7 @@ import {
 } from './player-entity-store.ts'
 
 export interface PlayerStaffCombatSystemContext {
+  readonly combatAdmissionEnabled: boolean
   readonly enemies: BoneyardEnemyStore
   readonly inputs: Readonly<Record<string, PlayerCharacterInput>>
   readonly knockbackTargetVisible: (
@@ -317,7 +318,7 @@ export function stepPlayerStaffCombatSystem(
   }
 
   for (const [playerId, player] of Object.entries(players)) {
-    if (existingActionOwners.has(playerId)) continue
+    if (!context.combatAdmissionEnabled || existingActionOwners.has(playerId)) continue
     const progression = playerProgressionAt(playerEntities, playerId)
     const runtime = playerSkillRuntimeAt(playerEntities, playerId)
     const derived = playerSkillDerivedStatsAt(playerEntities, playerId)

@@ -185,6 +185,12 @@ export function isSolomonPlayerLocked(
     && (encounter.phase === 'turning' || encounter.phase === 'speaking')
 }
 
+export function isBoneyardPlayerCombatEnabled(
+  encounter: Pick<BoneyardSolomonEncounterState, 'runEventId'> | null,
+): boolean {
+  return encounter === null || encounter.runEventId > 0
+}
+
 export function stepSolomonEncounter(
   source: BoneyardSolomonEncounterState,
   players: SolomonContactPlayers,

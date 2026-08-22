@@ -66,7 +66,7 @@ import {
   type BoneyardEnemySemanticEvent,
 } from './boneyard-enemy-store.ts'
 import { spawnBoneyardLootSpecs } from './boneyard-loot-store.ts'
-import { sealHubCombatInput } from './hub-combat-input.ts'
+import { sealPlayerCombatInput } from './player-combat-input.ts'
 import {
   damagePlayerEntity,
   dazzlePlayerEntity,
@@ -312,6 +312,7 @@ test('same-tick wave actors register before player primary actors', () => {
   } }), loaded)
   if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
   if (state.world.waves === null) throw new Error('expected retail wave director')
+  if (state.world.encounter === null) throw new Error('expected retail encounter')
   const player = getPlayerCharacter(state, 'caster')
   state = {
     ...state,
@@ -327,6 +328,7 @@ test('same-tick wave actors register before player primary actors', () => {
     },
     world: {
       ...state.world,
+      encounter: { ...state.world.encounter, phase: 'gone', runEventId: 1 },
       waves: startBoneyardWaveDirector(state.world.waves),
     },
   }
@@ -408,7 +410,7 @@ test('Hub combat seal preserves movement and primary selection while rejecting e
   assert.deepEqual(weldIds, [1000, 1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009])
   for (const skillId of [8, 16, 24, 32, 40, 52]) {
     assert.deepEqual(
-      sealHubCombatInput(source, [skillId, null, null, null, null, null, null, null]),
+      sealPlayerCombatInput(source, [skillId, null, null, null, null, null, null, null]),
       {
         aim: null,
         cast: { primary: false, quickbar: 0 },
@@ -419,14 +421,14 @@ test('Hub combat seal preserves movement and primary selection while rejecting e
   }
   for (const buildId of weldIds) {
     assert.equal(
-      sealHubCombatInput(source, [52, null, null, null, null, null, null, null]).cast.primary,
+      sealPlayerCombatInput(source, [52, null, null, null, null, null, null, null]).cast.primary,
       false,
       `weld ${buildId} crossed the Hub combat seal`,
     )
   }
   for (const skillId of NATIVE_SECONDARY_ABILITY_IDS) {
     assert.deepEqual(
-      sealHubCombatInput(source, [skillId, null, null, null, null, null, null, null]),
+      sealPlayerCombatInput(source, [skillId, null, null, null, null, null, null, null]),
       {
         aim: null,
         cast: { primary: false, quickbar: null },
@@ -457,6 +459,97 @@ test('Hub combat seal preserves movement and primary selection while rejecting e
   assert.deepEqual(state.primarySpells, { nextId: 1, projectiles: [], transients: [] })
   assert.deepEqual(state.secondaryAbilities.actors, [])
   assert.deepEqual(state.secondaryAbilities.events, [])
+})
+
+test('the retail Solomon run edge admits primary and secondary combat on its own tick', () => {
+  const loaded = emptyBoneyard()
+  loaded.runId = 'solomon-combat-admission'
+  loaded.scene.solomonDig = {
+    frameProgram: [0, 3, 1],
+    gravePosition: { x: 240, y: 390 },
+    lanternPosition: { x: 245, y: 390 },
+    position: { x: 250, y: 390 },
+    ticksPerFrame: 5,
+  }
+  const entered = enterBoneyardWorld(createGameSimulation({ caster: {
+    discipline: 'arcane',
+    displayName: 'Combat Gate Caster',
+    element: 'fire',
+  } }), loaded)
+  if (entered.world.kind !== 'boneyard' || entered.world.encounter === null) {
+    throw new Error('expected the retail Solomon encounter')
+  }
+  const player = getPlayerCharacter(entered, 'caster')
+  const prelude = {
+    ...entered,
+    world: {
+      ...entered.world,
+      encounter: {
+        ...entered.world.encounter,
+        acceleration: -1,
+        motion: -1,
+        phase: 'retreat-accelerating' as const,
+      },
+    },
+  }
+  const primaryInput = {
+    caster: {
+      aim: { x: player.position.x, y: player.position.y - 100 },
+      cast: { primary: true, quickbar: null },
+      movement: { x: 1, y: 0 },
+    },
+  }
+  assert.equal(prelude.world.encounter.runEventId, 0)
+  const blockedPrimary = stepGameSimulationTick(prelude, primaryInput)
+  assert.equal(blockedPrimary.world.kind, 'boneyard')
+  if (blockedPrimary.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.equal(blockedPrimary.world.encounter?.runEventId, 0)
+  assert.equal(blockedPrimary.world.encounter?.phase, 'retreat-accelerating')
+  assert.equal(getPlayerCharacter(blockedPrimary, 'caster').primaryCast.castSequence, 0)
+  assert.equal(blockedPrimary.primarySpells.projectiles.length, 0)
+  assert.ok(getPlayerCharacter(blockedPrimary, 'caster').position.x > player.position.x)
+
+  const blockedSecondary = stepGameSimulationTick(prelude, {
+    caster: {
+      aim: { x: player.position.x, y: player.position.y - 100 },
+      cast: { primary: false, quickbar: 0 },
+      movement: { x: 0, y: 0 },
+    },
+  })
+  assert.equal(blockedSecondary.secondaryAbilities.players.caster?.castSequence, 0)
+  assert.equal(blockedSecondary.secondaryAbilities.players.caster?.fizzleSequence, 0)
+  assert.equal(getPlayerProgression(blockedSecondary, 'caster').currentMana, 100)
+
+  const runEdge = {
+    ...prelude,
+    world: {
+      ...prelude.world,
+      encounter: {
+        ...prelude.world.encounter,
+        acceleration: 1,
+        motion: 0,
+      },
+    },
+  }
+  const admittedPrimary = stepGameSimulationTick(runEdge, primaryInput)
+  assert.equal(admittedPrimary.world.kind, 'boneyard')
+  if (admittedPrimary.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.equal(admittedPrimary.world.encounter?.runEventId, 1)
+  assert.equal(getPlayerCharacter(admittedPrimary, 'caster').primaryCast.castSequence, 1)
+
+  const admittedSecondary = stepGameSimulationTick(runEdge, {
+    caster: {
+      aim: { x: player.position.x, y: player.position.y - 100 },
+      cast: { primary: false, quickbar: 0 },
+      movement: { x: 0, y: 0 },
+    },
+  })
+  assert.equal(admittedSecondary.world.kind, 'boneyard')
+  if (admittedSecondary.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.equal(admittedSecondary.world.encounter?.runEventId, 1)
+  assert.equal(admittedSecondary.secondaryAbilities.players.caster?.castSequence, 1)
+  assert.equal(admittedSecondary.secondaryAbilities.players.caster?.globalCooldownTicks, 150)
+  assert.ok(getPlayerProgression(admittedSecondary, 'caster').currentMana < 100)
 })
 
 test('hub trader actions require the authenticated participant to be in native service range', () => {
@@ -1136,7 +1229,11 @@ test('sealed generated Arena clips player spell range at the retired entrance bo
     displayName: 'Air Caster',
     element: 'air',
   } }), loaded)
-  if (state.world.kind !== 'boneyard' || state.world.arenaTransition === null) {
+  if (
+    state.world.kind !== 'boneyard'
+    || state.world.arenaTransition === null
+    || state.world.encounter === null
+  ) {
     throw new Error('expected generated Arena transition ownership')
   }
   const player = getPlayerCharacter(state, 'caster')
@@ -1149,6 +1246,7 @@ test('sealed generated Arena clips player spell range at the retired entrance bo
     world: {
       ...state.world,
       arenaTransition: startBoneyardArenaTransition(state.world.arenaTransition),
+      encounter: { ...state.world.encounter, phase: 'gone', runEventId: 1 },
     },
   }
 

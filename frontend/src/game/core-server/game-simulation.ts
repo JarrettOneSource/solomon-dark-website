@@ -11,6 +11,7 @@ import {
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import { actorHeadingFromVector, actorHeadingIndex } from '../core-kernels/actor-heading.ts'
 import { boneyardActiveBounds } from '../core-kernels/boneyard-arena-transition.ts'
+import { isBoneyardPlayerCombatEnabled } from '../core-kernels/boneyard-encounter.ts'
 import type { BoneyardEnemySpawnIntent } from '../core-kernels/boneyard-wave-director.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
 import { lineBoundsExitObstruction } from '../core-kernels/line-obstruction.ts'
@@ -163,7 +164,7 @@ import {
   type BoneyardEnemySemanticEvent,
 } from './boneyard-enemy-store.ts'
 import { stepPlayerStaffCombatSystem } from './player-staff-combat-system.ts'
-import { sealHubCombatInput } from './hub-combat-input.ts'
+import { sealPlayerCombatInput } from './player-combat-input.ts'
 import {
   addHubParticipant,
   createHubWorld,
@@ -1127,7 +1128,7 @@ export function stepGameSimulationTick(
       ? createIdlePlayerCharacterInput()
       : inputs[playerId] ?? createIdlePlayerCharacterInput()
     const input = state.world.kind === 'hub'
-      ? sealHubCombatInput(
+      ? sealPlayerCombatInput(
           admittedInput,
           playerSkillBookAt(state.playerEntities, playerId)?.skillQuickbar ?? [],
         )
@@ -1262,6 +1263,17 @@ function finishGameSimulationTick(
   let resolvedPlayers = result.players
   let playerEntities = replacePlayerCharacterRecords(previous.playerEntities, resolvedPlayers)
   let world = result.world
+  const combatAdmissionEnabled = world.kind !== 'boneyard'
+    || isBoneyardPlayerCombatEnabled(world.encounter)
+  const combatInputs = combatAdmissionEnabled
+    ? inputs
+    : Object.fromEntries(Object.entries(inputs).map(([playerId, input]) => [
+        playerId,
+        sealPlayerCombatInput(
+          input,
+          playerSkillBookAt(playerEntities, playerId)?.skillQuickbar ?? [],
+        ),
+      ]))
   let gameRng = previous.gameRng
   let secondaryAbilities = previous.secondaryAbilities
   let levelUpBarrier = previous.levelUpBarrier
@@ -1676,11 +1688,12 @@ function finishGameSimulationTick(
   }
   let spellsBeforePrimary = previous.primarySpells
   let staffActingPlayerIds: ReadonlySet<string> = new Set()
-  let postStaffInputs = inputs
+  let postStaffInputs = combatInputs
   if (world.kind === 'boneyard') {
     const staff = stepPlayerStaffCombatSystem({
+      combatAdmissionEnabled,
       enemies: world.enemies,
-      inputs,
+      inputs: combatInputs,
       knockbackTargetVisible: (origin, target) => {
         const blocked = firstBoneyardPathBlockProgress(
           origin,
@@ -1762,7 +1775,7 @@ function finishGameSimulationTick(
         tick,
       })
     }
-    postStaffInputs = Object.fromEntries(Object.entries(inputs).map(([playerId, input]) => [
+    postStaffInputs = Object.fromEntries(Object.entries(combatInputs).map(([playerId, input]) => [
       playerId,
       staff.actingPlayerIds.has(playerId)
         ? { ...input, cast: { primary: false, quickbar: null } }

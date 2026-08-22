@@ -5647,18 +5647,23 @@ function withCooldown(
   player: NativeSecondaryPlayerState
   state: NativeSecondarySimulationState
 }> {
-  let cooldownTicks = ticks
+  const cooldownMaximumTicksBySkill = [...source.cooldownMaximumTicksBySkill]
+  cooldownMaximumTicksBySkill[skillId] = ticks
   if (ticks > 0 && authority.focusInstantRechargeChancePercent > 0) {
     const draw = drawNativeInteger(state.rng, 100)
     state = { ...state, rng: draw.state }
     if (draw.value >= 100 - authority.focusInstantRechargeChancePercent) {
-      cooldownTicks = 0
+      return Object.freeze({
+        player: Object.freeze({
+          ...source,
+          cooldownMaximumTicksBySkill: Object.freeze(cooldownMaximumTicksBySkill),
+        }),
+        state,
+      })
     }
   }
   const cooldownTicksBySkill = [...source.cooldownTicksBySkill]
-  const cooldownMaximumTicksBySkill = [...source.cooldownMaximumTicksBySkill]
-  cooldownTicksBySkill[skillId] = cooldownTicks
-  cooldownMaximumTicksBySkill[skillId] = ticks
+  cooldownTicksBySkill[skillId] = ticks
   for (let index = 0; index < cooldownTicksBySkill.length; index += 1) {
     if (cooldownTicksBySkill[index]! < NATIVE_SECONDARY_GLOBAL_COOLDOWN_TICKS) {
       cooldownTicksBySkill[index] = 0

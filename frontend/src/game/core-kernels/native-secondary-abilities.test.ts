@@ -2176,6 +2176,9 @@ test('Focus accelerates retained cooldowns and its concentration owns one instan
     },
   )
   assert.equal(result.state.players.player?.cooldownTicksBySkill[48], 0)
+  assert.equal(result.state.players.player?.cooldownMaximumTicksBySkill[48], 6_000)
+  assert.equal(result.state.players.player?.globalCooldownTicks, 0)
+  assert.equal(result.state.players.player?.staffCastTicksRemaining, 51)
   assert.deepEqual(result.state.rng, chance.state)
 })
 

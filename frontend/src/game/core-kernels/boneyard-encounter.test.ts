@@ -6,6 +6,7 @@ import {
   BONEYARD_SOLOMON_DIG_AUDIO_CUES,
   SOLOMON_VOICE_DURATION_TICKS,
   createSolomonEncounter,
+  isBoneyardPlayerCombatEnabled,
   isSolomonPlayerLocked,
   solomonContactContains,
   stepSolomonEncounter,
@@ -41,6 +42,39 @@ function advanceToSpeaking(
   assert.equal(encounter.phase, 'speaking')
   return encounter
 }
+
+test('player combat opens only on the monotonic Solomon run edge', () => {
+  const encounter = createSolomonEncounter(DIG, 'combat-admission')
+  for (const phase of [
+    'digging',
+    'turning',
+    'speaking',
+    'retreat-hold',
+    'retreat-accelerating',
+  ] as const) {
+    const phaseState = { ...encounter, phase }
+    assert.equal(isBoneyardPlayerCombatEnabled(phaseState), false, phase)
+  }
+  const escaping = {
+    ...encounter,
+    phase: 'escaping',
+    runEventId: 1,
+  } as const
+  assert.equal(isBoneyardPlayerCombatEnabled(escaping), true)
+  const gone = {
+    ...encounter,
+    phase: 'gone',
+    runEventId: 1,
+  } as const
+  assert.equal(isBoneyardPlayerCombatEnabled(gone), true)
+  const missingRunEdge = {
+    ...encounter,
+    phase: 'escaping',
+    runEventId: 0,
+  } as const
+  assert.equal(isBoneyardPlayerCombatEnabled(missingRunEdge), false)
+  assert.equal(isBoneyardPlayerCombatEnabled(null), true)
+})
 
 test('Solomon first contact uses the strict native 150 by 125 ellipse', () => {
   const center = { x: 1000, y: 990 }

@@ -1,7 +1,7 @@
 import type { PlayerCharacterInput } from '../core-kernels/player-character.ts'
 import { nativeSkillCategory } from '../core-kernels/player-progression.ts'
 
-export function sealHubCombatInput(
+export function sealPlayerCombatInput(
   input: PlayerCharacterInput,
   quickbar: readonly (number | null)[],
 ): PlayerCharacterInput {

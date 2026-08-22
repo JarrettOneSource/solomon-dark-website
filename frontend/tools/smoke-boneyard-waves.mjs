@@ -108,6 +108,7 @@ try {
     collision: createBoneyardCollisionWorld(loadedBoneyard.scene),
     scene: loadedBoneyard.scene,
   }
+  const diggingCombatAdmission = await provePreludeCombatSealed(page, scene, 'digging')
 
   const gateCrossing = await crossNearestEntryGate(page, scene, loadedBoneyard.scene)
   combatNavigation.entryGate = {
@@ -151,6 +152,7 @@ try {
     new Set(mouthPoses).size > 1,
     `expected speaking mouth animation (${mouthPoses.join(', ')})`,
   )
+  const speakingCombatAdmission = await provePreludeCombatSealed(page, scene, 'speaking')
   await page.screenshot({ path: speakingScreenshotPath })
   await page.waitForFunction((cue) => (
     window.__sdrAudioPlaySources?.some((source) => source.includes(cue))
@@ -171,6 +173,7 @@ try {
     ), undefined, { timeout: 15_000 })
     runEdge = await encounterReceipt(scene)
     assert.ok(runEdge.phase === 'escaping' || runEdge.phase === 'gone')
+    assert.equal(runEdge.combatEnabled, true)
     await page.screenshot({ path: screenshotPath })
     await page.waitForFunction(() => {
       const scene = document.querySelector('.boneyard-scene')
@@ -194,17 +197,21 @@ try {
   )
 
   if (entranceOnly) {
+    const runCombatAdmission = await proveRunCombatAdmitted(page, scene)
     await page.screenshot({ path: combatScreenshotPath })
     assert.deepEqual(wire.errors, [])
     assert.deepEqual(errors, [])
     process.stdout.write(`${JSON.stringify({
       entranceRetirement,
       digAudio,
+      diggingCombatAdmission,
       errors,
       gateCrossing,
       nearDigAudio,
       nearSolomon,
       opening,
+      runCombatAdmission,
+      speakingCombatAdmission,
       screenshotPath: combatScreenshotPath,
       status: 'ok',
       wire: wireSummary(wire),
@@ -334,6 +341,7 @@ try {
     deathRender,
     deathScreenshotPath,
     digAudio,
+    diggingCombatAdmission,
     errors,
     entranceRetirement,
     enemyHeadFacingSamples,
@@ -357,6 +365,7 @@ try {
       runId: secondLoadedBoneyard.runId,
       seed: secondLoadedBoneyard.seed,
     },
+    speakingCombatAdmission,
     speakingScreenshotPath,
     status: 'ok',
     taunt,
@@ -2045,6 +2054,7 @@ async function approachReceipt(scene) {
 
 async function encounterReceipt(scene) {
   return scene.evaluate((node) => ({
+    combatEnabled: node.getAttribute('data-combat-enabled') === 'true',
     heading: Number(node.getAttribute('data-solomon-heading')),
     liveEnemies: Number(node.getAttribute('data-wave-live-enemy-count')),
     mouthPose: Number(node.getAttribute('data-solomon-mouth-pose')),
@@ -2060,6 +2070,92 @@ async function encounterReceipt(scene) {
     waveScheduleIndex: Number(node.getAttribute('data-wave-schedule-index')),
     waveSpawnDelayTicks: Number(node.getAttribute('data-wave-spawn-delay-ticks')),
   }))
+}
+
+async function provePreludeCombatSealed(page, scene, expectedPhase) {
+  const beforeScene = await encounterReceipt(scene)
+  assert.equal(beforeScene.phase, expectedPhase)
+  assert.equal(beforeScene.combatEnabled, false)
+  const before = hostCombatAdmissionReceipt()
+  const canvas = page.locator('.boneyard-world-canvas[data-game-renderer="pixi-webgl"]')
+  const bounds = await canvas.boundingBox()
+  const frame = await boneyardFrame(page)
+  assert.ok(bounds)
+  assert.ok(Number.isFinite(frame.playerScreenX) && Number.isFinite(frame.playerScreenY))
+  const aim = {
+    x: bounds.x + Math.max(1, Math.min(bounds.width - 1, frame.playerScreenX)),
+    y: bounds.y + Math.max(1, Math.min(bounds.height - 1, frame.playerScreenY - 120)),
+  }
+
+  await page.mouse.move(aim.x, aim.y)
+  await page.mouse.down({ button: 'right' })
+  await page.waitForTimeout(35)
+  await page.mouse.up({ button: 'right' })
+  await waitForHostTick(page, before.tick + 80)
+
+  await page.mouse.down({ button: 'left' })
+  await page.waitForTimeout(35)
+  await page.mouse.up({ button: 'left' })
+  await waitForHostTick(page, before.tick + 110)
+
+  const after = hostCombatAdmissionReceipt()
+  assert.equal(after.mana, before.mana)
+  assert.equal(after.primaryCastSequence, before.primaryCastSequence)
+  assert.equal(after.primarySpellCount, before.primarySpellCount)
+  assert.equal(after.secondaryActorCount, before.secondaryActorCount)
+  assert.equal(after.secondaryCastSequence, before.secondaryCastSequence)
+  assert.equal(after.secondaryEventCount, before.secondaryEventCount)
+  assert.equal((await encounterReceipt(scene)).combatEnabled, false)
+  return { after, before, phase: expectedPhase }
+}
+
+async function proveRunCombatAdmitted(page, scene) {
+  assert.equal((await encounterReceipt(scene)).combatEnabled, true)
+  const before = hostCombatAdmissionReceipt()
+  const canvas = page.locator('.boneyard-world-canvas[data-game-renderer="pixi-webgl"]')
+  const bounds = await canvas.boundingBox()
+  const frame = await boneyardFrame(page)
+  assert.ok(bounds)
+  const aim = {
+    x: bounds.x + Math.max(1, Math.min(bounds.width - 1, frame.playerScreenX)),
+    y: bounds.y + Math.max(1, Math.min(bounds.height - 1, frame.playerScreenY - 120)),
+  }
+  await page.mouse.move(aim.x, aim.y)
+  await page.mouse.down({ button: 'left' })
+  await page.waitForTimeout(35)
+  await page.mouse.up({ button: 'left' })
+  await waitForHostTick(page, before.tick + 30)
+  const after = hostCombatAdmissionReceipt()
+  assert.equal(after.primaryCastSequence, before.primaryCastSequence + 1)
+  assert.ok(after.mana < before.mana)
+  return { after, before }
+}
+
+function hostCombatAdmissionReceipt() {
+  const state = host.state()
+  const identity = state.playerEntities.identities[0]
+  assert.ok(identity)
+  const index = state.playerEntities.identities.findIndex(({ playerId }) => (
+    playerId === identity.playerId
+  ))
+  const secondary = state.secondaryAbilities.players[identity.playerId]
+  return {
+    mana: state.playerEntities.progressions[index].currentMana,
+    primaryCastSequence: state.playerEntities.primaryCasts[index].castSequence,
+    primarySpellCount: state.primarySpells.projectiles.length + state.primarySpells.transients.length,
+    secondaryActorCount: state.secondaryAbilities.actors.length,
+    secondaryCastSequence: secondary?.castSequence ?? 0,
+    secondaryEventCount: state.secondaryAbilities.events.length,
+    tick: state.tick,
+  }
+}
+
+async function waitForHostTick(page, targetTick) {
+  const deadline = Date.now() + 5_000
+  while (host.state().tick < targetTick && Date.now() < deadline) {
+    await page.waitForTimeout(10)
+  }
+  assert.ok(host.state().tick >= targetTick, `host did not reach tick ${targetTick}`)
 }
 
 async function captureSolomonDigAudio(page) {
