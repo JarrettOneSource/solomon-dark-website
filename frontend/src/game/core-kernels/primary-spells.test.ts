@@ -805,7 +805,7 @@ test('More Missiles shares one damage roll and preserves native fan and turn ord
   assert.deepEqual(missiles.map(({ id }) => id), [1, 2, 3, 4])
   assert.deepEqual(
     missiles.map((spell) => spell.kind === 'ether' ? spell.headingDegrees : null),
-    [10, 350, 50, 310],
+    [10, 350, 30, 330],
   )
   assert.equal(new Set(missiles.map(({ damage }) => damage)).size, 1)
   assert.ok(missiles[0]!.damage >= 2 && missiles[0]!.damage <= 4)
@@ -815,7 +815,7 @@ test('More Missiles shares one damage roll and preserves native fan and turn ord
   )
   assert.deepEqual(
     missiles.map((spell) => spell.kind === 'ether' ? spell.turnInput : null),
-    [2.5, 1.875, 1.40625, 1.0546875],
+    [2.5, 1.875, 1.875, 1.40625],
   )
   assert.deepEqual(
     missiles.map((spell) => spell.kind === 'ether' ? spell.visualScale : null),
@@ -824,7 +824,7 @@ test('More Missiles shares one damage roll and preserves native fan and turn ord
   assert.deepEqual(harness.rng, drawNativeInteger(createNativeRng(0), 3).state)
 })
 
-test('Smart Missiles reacquires after its copied target handle is lost', () => {
+test('Smart Missiles does not search again when it was born without a target handle', () => {
   const profile = primarySkillWithRanks('ether', { 8: 1, 9: 1 })
   assert.equal(profile.kind, 'ether')
   let harness = directSpellHarness('ether')
@@ -860,7 +860,117 @@ test('Smart Missiles reacquires after its copied target handle is lost', () => {
     worldKeyForPlayer: () => 'hub:courtyard',
   }).spells.projectiles[0]
   assert.equal(advanced?.kind, 'ether')
-  if (advanced?.kind === 'ether') assert.equal(advanced.targetId, target.id)
+  if (advanced?.kind === 'ether') {
+    assert.equal(advanced.targetId, null)
+    assert.equal(advanced.turnAccumulator, missile.turnAccumulator)
+  }
+})
+
+test('Smart Missiles replaces an unresolved handle at its current root without same-tick steering', () => {
+  const profile = primarySkillWithRanks('ether', { 8: 1, 9: 1 })
+  assert.equal(profile.kind, 'ether')
+  let harness = directSpellHarness('ether')
+  let outcome = stepSpellKernel(harness, true, 1_000_000, true, () => true, profile)
+  harness = outcome.state
+  while (harness.spells.projectiles.length === 0) {
+    outcome = stepSpellKernel(harness, true, 1_000_000, true, () => true, profile)
+    harness = outcome.state
+  }
+  const missile = harness.spells.projectiles[0]
+  assert.equal(missile?.kind, 'ether')
+  if (missile?.kind !== 'ether') throw new Error('Expected an Ether missile')
+  const replacement = hostileTarget('enemy:replacement', {
+    x: missile.position.x + 5,
+    y: missile.position.y,
+  })
+  const launchProbeDecoy = hostileTarget('enemy:launch-probe', {
+    x: missile.position.x,
+    y: missile.position.y - 100,
+  }, { registrationOrder: 2 })
+  const advanced = stepPrimarySpells({
+    ...EMPTY_SPELL_WORLD,
+    canPlaceProjectile: () => true,
+    canTraverseProjectile: () => true,
+    inputs: {},
+    players: {},
+    previousPlayers: {},
+    rng: harness.rng,
+    spellTargets: () => [replacement, launchProbeDecoy],
+    spells: {
+      nextId: harness.spells.nextId,
+      projectiles: [{ ...missile, targetId: 'enemy:removed' }],
+      transients: [],
+    },
+    tick: harness.tick + 1,
+    viewScale: 1.35,
+    worldKeyForPlayer: () => 'hub:courtyard',
+  }).spells.projectiles[0]
+  assert.equal(advanced?.kind, 'ether')
+  if (advanced?.kind === 'ether') {
+    assert.equal(advanced.targetId, replacement.id)
+    assert.equal(advanced.headingDegrees, missile.headingDegrees)
+    assert.equal(advanced.turnAccumulator, missile.turnAccumulator)
+  }
+})
+
+test('Smart Missiles disables replacement after an unresolved handle finds no target', () => {
+  const profile = primarySkillWithRanks('ether', { 8: 1, 9: 1 })
+  assert.equal(profile.kind, 'ether')
+  let harness = directSpellHarness('ether')
+  let outcome = stepSpellKernel(harness, true, 1_000_000, true, () => true, profile)
+  harness = outcome.state
+  while (harness.spells.projectiles.length === 0) {
+    outcome = stepSpellKernel(harness, true, 1_000_000, true, () => true, profile)
+    harness = outcome.state
+  }
+  const missile = harness.spells.projectiles[0]
+  assert.equal(missile?.kind, 'ether')
+  if (missile?.kind !== 'ether') throw new Error('Expected an Ether missile')
+  const empty = stepPrimarySpells({
+    ...EMPTY_SPELL_WORLD,
+    canPlaceProjectile: () => true,
+    canTraverseProjectile: () => true,
+    inputs: {},
+    players: {},
+    previousPlayers: {},
+    rng: harness.rng,
+    spells: {
+      nextId: harness.spells.nextId,
+      projectiles: [{ ...missile, targetId: 'enemy:removed' }],
+      transients: [],
+    },
+    tick: harness.tick + 1,
+    viewScale: 1.35,
+    worldKeyForPlayer: () => 'hub:courtyard',
+  }).spells.projectiles[0]
+  assert.equal(empty?.kind, 'ether')
+  if (empty?.kind !== 'ether') throw new Error('Expected an Ether missile')
+  assert.equal(empty.targetId, null)
+  assert.equal(empty.reacquiresTarget, false)
+
+  const later = hostileTarget('enemy:later', {
+    x: empty.position.x,
+    y: empty.position.y - 5,
+  })
+  const advanced = stepPrimarySpells({
+    ...EMPTY_SPELL_WORLD,
+    canPlaceProjectile: () => true,
+    canTraverseProjectile: () => true,
+    inputs: {},
+    players: {},
+    previousPlayers: {},
+    spellTargets: () => [later],
+    spells: {
+      nextId: harness.spells.nextId,
+      projectiles: [empty],
+      transients: [],
+    },
+    tick: harness.tick + 2,
+    viewScale: 1.35,
+    worldKeyForPlayer: () => 'hub:courtyard',
+  }).spells.projectiles[0]
+  assert.equal(advanced?.kind, 'ether')
+  if (advanced?.kind === 'ether') assert.equal(advanced.targetId, null)
 })
 
 test('Ether snapshots the forward-probe target and steers after its first movement', () => {
@@ -951,7 +1061,8 @@ test('Ether snapshots the forward-probe target and steers after its first moveme
     worldKeyForPlayer: () => 'hub:courtyard',
   }).spells.projectiles[0]
   assert.equal(flagChanged.kind, 'ether')
-  assert.equal(flagChanged.targetId, null)
+  assert.equal(flagChanged.targetId, target.id)
+  assert.ok(flagChanged.turnAccumulator > advanced.turnAccumulator)
 
   const inactiveTarget = { ...target, active: false, actorFlags: 0 }
   const finalTracked = stepPrimarySpells({
@@ -970,8 +1081,8 @@ test('Ether snapshots the forward-probe target and steers after its first moveme
   }).spells.projectiles[0]
   assert.equal(finalTracked.kind, 'ether')
   assert.equal(finalTracked.targetId, null)
-  assert.equal(finalTracked.headingDegrees, flagChanged.headingDegrees)
-  assert.equal(finalTracked.turnAccumulator, flagChanged.turnAccumulator)
+  assert.notEqual(finalTracked.headingDegrees, flagChanged.headingDegrees)
+  assert.ok(finalTracked.turnAccumulator > flagChanged.turnAccumulator)
 
   const lost = stepPrimarySpells({
     ...EMPTY_SPELL_WORLD,

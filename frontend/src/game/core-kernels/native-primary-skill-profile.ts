@@ -144,6 +144,7 @@ export function nativePrimarySkillProfile(
       const quantityRank = effectiveRank(skillBook, 10)
       const piercingRank = effectiveRank(skillBook, 13)
       const blastRank = effectiveRank(skillBook, 14)
+      const speedFactor = 1 + rankedOr(statBook, 9, 'mSpeed', smartRank, 0) / 100
       return Object.freeze({
         ...common,
         blastChargeCapacity: Math.round(rankedOr(statBook, 14, 'mCharges', blastRank, 0)),
@@ -153,8 +154,8 @@ export function nativePrimarySkillProfile(
         kind: 'ether',
         pierces: Math.round(rankedOr(statBook, 13, 'mPierces', piercingRank, 0)),
         quantity: Math.round(rankedOr(statBook, 10, 'mQuantity', quantityRank, 1)),
-        reacquiresTarget: smartRank > 0,
-        speedFactor: 1 + rankedOr(statBook, 9, 'mSpeed', smartRank, 0) / 100,
+        reacquiresTarget: speedFactor > Math.fround(1.01),
+        speedFactor,
       })
     }
     case 16: {

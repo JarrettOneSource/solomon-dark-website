@@ -59,6 +59,7 @@ const lowManaAcceptance = process.env.SDR_PRIMARY_SPELL_LOW_MANA === '1'
 const hostOpenedBoneyard = process.env.SDR_PRIMARY_SPELL_HOST_OPENED_BONEYARD === '1'
 const fireGravestoneAcceptance = process.env.SDR_PRIMARY_FIRE_GRAVESTONE === '1'
 const earthContactAcceptance = process.env.SDR_PRIMARY_EARTH_CONTACT === '1'
+const etherFanAcceptance = process.env.SDR_PRIMARY_ETHER_FAN === '1'
 const selectedSpells = requestedSpellKind
   ? SPELLS.filter((spell) => spell.kind === requestedSpellKind)
   : SPELLS
@@ -72,6 +73,13 @@ if (earthContactAcceptance && (
   selectedSpells.length !== 1 || selectedSpells[0].kind !== 'earth'
 )) {
   throw new Error('Earth-contact acceptance requires SDR_PRIMARY_SPELL_KIND=earth')
+}
+if (etherFanAcceptance && (
+  lowManaAcceptance
+  || selectedSpells.length !== 1
+  || selectedSpells[0].kind !== 'ether'
+)) {
+  throw new Error('Ether-fan acceptance requires full-power SDR_PRIMARY_SPELL_KIND=ether')
 }
 
 const browser = await chromium.launch({
@@ -771,7 +779,15 @@ async function castFireInBoneyard(page) {
   const launch = await waitForAudio(page, eventStart, '/game/audio/sfx/throw-fire.wav', 'play')
   let flight = null
   let flightScreenshotPath = null
-  if (lowManaAcceptance) {
+  if (etherFanAcceptance) {
+    flight = await waitForEtherFan(page, afterTick, 4, 10_000)
+    assertEtherFan(flight)
+    const rendered = await waitForBoneyardSpell(page, 'ether')
+    assert.ok(rendered.primarySpellCount >= 4)
+    flight = { ...flight, renderedPrimarySpellCount: rendered.primarySpellCount }
+    flightScreenshotPath = `${screenshotRoot}/solomon-primary-ether-boneyard-fan-flight.png`
+    await page.screenshot({ path: flightScreenshotPath })
+  } else if (lowManaAcceptance) {
     const fizzle = await waitForAudio(page, eventStart, '/game/audio/sfx/fizzle.wav', 'play')
     assert.ok(fizzle.at <= launch.at)
     assert.equal(fizzle.volume, 1)
@@ -1537,6 +1553,65 @@ async function waitForWireSpell(page, kind, afterTick, timeout, projectileOnly =
   const result = await handle.jsonValue()
   await handle.dispose()
   return result
+}
+
+async function waitForEtherFan(page, afterTick, quantity, timeout) {
+  const handle = await page.waitForFunction(([minimumTick, expectedQuantity]) => {
+    for (let index = window.__primarySpellWireFrames.length - 1; index >= 0; index -= 1) {
+      const wire = window.__primarySpellWireFrames[index]
+      if (wire.tick <= minimumTick) continue
+      const states = wire.primarySpells.projectiles
+        .filter((candidate) => candidate.kind === 'ether')
+        .sort((left, right) => left.id - right.id)
+        .slice(-expectedQuantity)
+      if (states.length !== expectedQuantity) continue
+      if (states.some((state, stateIndex) => (
+        stateIndex > 0 && state.id !== states[stateIndex - 1].id + 1
+      ))) continue
+      const owner = wire.players[states[0].ownerId]
+      if (!owner) continue
+      return {
+        castAimDirection: owner.primaryCast.aimDirection,
+        states,
+        tick: wire.tick,
+      }
+    }
+    return null
+  }, [afterTick, quantity], { timeout })
+  const result = await handle.jsonValue()
+  await handle.dispose()
+  return result
+}
+
+function assertEtherFan(fan) {
+  const aimHeading = headingFromDirection(fan.castAimDirection)
+  const expectedOffsets = [10, -10, 30, -30]
+  const expectedTurns = [2.2, 1.65, 1.65, 1.2375]
+  assert.equal(fan.states.length, 4)
+  for (let index = 0; index < fan.states.length; index += 1) {
+    const state = fan.states[index]
+    assert.equal(state.visualScale, 1)
+    assert.equal(state.underpowered, false)
+    assert.ok(Math.abs(state.speed - Math.fround(3.3)) < 0.000_001)
+    assert.ok(Math.abs(state.turnInput - Math.fround(expectedTurns[index])) < 0.000_001)
+    const expectedHeading = normalizeDegrees(aimHeading + expectedOffsets[index])
+    const firstTurnBound = state.turnInput * 0.01 + 0.001
+    assert.ok(
+      Math.abs(signedDegrees(state.headingDegrees - expectedHeading)) <= firstTurnBound,
+      `Ether fan child ${index} left its native launch tier`,
+    )
+  }
+  assert.equal(new Set(fan.states.map(({ id }) => id)).size, 4)
+  assert.equal(new Set(fan.states.map(({ damage }) => damage)).size, 1)
+  assert.equal(new Set(fan.states.map(({ position }) => `${position.x},${position.y}`)).size, 4)
+}
+
+function headingFromDirection(direction) {
+  return normalizeDegrees(Math.atan2(direction.x, -direction.y) * 180 / Math.PI)
+}
+
+function normalizeDegrees(value) {
+  return ((value % 360) + 360) % 360
 }
 
 async function waitForHeldEarthCharge(page, boulderId, worldKey, minimumCharge, timeout) {

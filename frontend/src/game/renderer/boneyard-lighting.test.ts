@@ -180,6 +180,7 @@ function weldProjectile(buildId: 1000 | 1009): NativeWeldProjectileState {
     position: { x: 10, y: 20 },
     presentationSeed: buildId === 1009 ? 17 : 42,
     projectileIndex: 0,
+    reacquiresTarget: false,
     secondaryPresentationPhaseDegrees: null,
     speed: buildId === 1009 ? 4 : 3,
     targetId: null,

@@ -8,6 +8,8 @@ import { fileURLToPath } from 'node:url'
 
 import { build as buildFrontend, preview as previewBuiltFrontend } from 'vite'
 
+import { getPlayerEconomy } from '../src/game/core-server/game-simulation.ts'
+import { replacePlayerEconomy } from '../src/game/core-server/player-entity-store.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 
 const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
@@ -49,20 +51,24 @@ try {
       SDR_GAME_SMOKE_ENDPOINT: host.address.url,
       SDR_GAME_SMOKE_URL: baseUrl,
       SDR_PRIMARY_SPELL_HOST_OPENED_BONEYARD: '1',
+      SDR_PRIMARY_ETHER_FAN: '1',
       SDR_PRIMARY_SPELL_KIND: 'ether',
       SDR_PRIMARY_SPELL_SCREENSHOT_ROOT: screenshotRoot,
     }),
     (async () => {
       const fixture = await openBoneyardCombat(host)
-      return { fixture, tracking: await captureEtherTracking(host) }
+      return { fixture, ...(await captureEtherFan(host)) }
     })(),
   ])
   assert.equal(browser.status, 'ok')
   assert.deepEqual(browser.errors, [])
   assert.ok(proof.tracking.nonzeroTurns > 0)
+  assert.equal(proof.fan.missiles.length, 4)
+  assert.ok(browser.boneyard.flight.renderedPrimarySpellCount >= 4)
   process.stdout.write(`${JSON.stringify({
     browser,
     fixture: proof.fixture,
+    fan: proof.fan,
     screenshotRoot,
     status: 'ok',
     tracking: proof.tracking,
@@ -111,6 +117,7 @@ async function openBoneyardCombat(host) {
     id === playerId
   ))
   assert.ok(playerIndex >= 0)
+  learnEtherFan(state, playerId, playerIndex)
   const solomon = state.world.encounter?.position
   assert.ok(solomon, 'Ether tracking proof requires the Solomon opening encounter')
 
@@ -141,8 +148,66 @@ async function openBoneyardCombat(host) {
       lifeState === 'alive'
     )).length,
     playerId,
+    ranks: { moreMissiles: 3, smartMissiles: 1 },
     runId: combatState.world.runId,
   }
+}
+
+async function captureEtherFan(host) {
+  const deadline = Date.now() + 180_000
+  let fan = null
+  while (Date.now() < deadline && fan === null) {
+    const state = host.state()
+    const missiles = state.primarySpells.projectiles
+      .filter((candidate) => candidate.kind === 'ether')
+      .sort((left, right) => left.id - right.id)
+      .slice(-4)
+    if (
+      missiles.length === 4
+      && missiles.every((missile, index) => (
+        index === 0 || missile.id === missiles[index - 1].id + 1
+      ))
+    ) {
+      const playerId = host.hostPlayerId()
+      const playerIndex = state.playerEntities.identities.findIndex(({ playerId: id }) => (
+        id === playerId
+      ))
+      const aim = state.playerEntities.characters[playerIndex].primaryCast.aimDirection
+      const aimHeading = headingFromDirection(aim)
+      const expectedOffsets = [10, -10, 30, -30]
+      const expectedTurns = [2.2, 1.65, 1.65, 1.2375]
+      for (let index = 0; index < missiles.length; index += 1) {
+        const missile = missiles[index]
+        assert.equal(missile.visualScale, 1)
+        assert.equal(missile.underpowered, false)
+        assert.ok(Math.abs(missile.speed - Math.fround(3.3)) < 0.000_001)
+        assert.ok(Math.abs(missile.turnInput - Math.fround(expectedTurns[index])) < 0.000_001)
+        const expectedHeading = normalizeDegrees(aimHeading + expectedOffsets[index])
+        assert.ok(
+          Math.abs(signedDegrees(missile.headingDegrees - expectedHeading))
+            <= missile.turnInput * 0.01 + 0.001,
+        )
+      }
+      assert.equal(new Set(missiles.map(({ damage }) => damage)).size, 1)
+      fan = {
+        aimHeading,
+        missiles: missiles.map((missile) => ({
+          damage: missile.damage,
+          headingDegrees: missile.headingDegrees,
+          id: missile.id,
+          position: { ...missile.position },
+          speed: missile.speed,
+          targetId: missile.targetId,
+          turnInput: missile.turnInput,
+          visualScale: missile.visualScale,
+        })),
+        tick: state.tick,
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1))
+  }
+  assert.ok(fan, 'expected one authoritative four-child Ether fan')
+  return { fan, tracking: await captureEtherTracking(host) }
 }
 
 async function captureEtherTracking(host) {
@@ -235,6 +300,46 @@ function assertEtherTrackingSamples(samples) {
 
 function signedDegrees(value) {
   return ((value + 540) % 360) - 180
+}
+
+function headingFromDirection(direction) {
+  return normalizeDegrees(Math.atan2(direction.x, -direction.y) * 180 / Math.PI)
+}
+
+function normalizeDegrees(value) {
+  return ((value % 360) + 360) % 360
+}
+
+function learnEtherFan(state, playerId, playerIndex) {
+  const sourceBook = state.playerEntities.skillBooks[playerIndex]
+  const permanentRanks = [...sourceBook.permanentRanks]
+  const effectiveRanks = [...sourceBook.effectiveRanks]
+  permanentRanks[9] = 1
+  permanentRanks[10] = 3
+  effectiveRanks[9] = 1
+  effectiveRanks[10] = 3
+  const skillBooks = [...state.playerEntities.skillBooks]
+  const progressions = [...state.playerEntities.progressions]
+  skillBooks[playerIndex] = {
+    ...sourceBook,
+    effectiveRanks,
+    learnedSkillOrder: [
+      ...sourceBook.learnedSkillOrder,
+      ...[9, 10].filter((skillId) => !sourceBook.learnedSkillOrder.includes(skillId)),
+    ],
+    permanentRanks,
+  }
+  progressions[playerIndex] = {
+    ...progressions[playerIndex],
+    revision: progressions[playerIndex].revision + 1,
+  }
+  Object.assign(state, {
+    playerEntities: replacePlayerEconomy({
+      ...state.playerEntities,
+      progressions,
+      skillBooks,
+    }, playerId, getPlayerEconomy(state, playerId)),
+  })
 }
 
 function setHostPlayerPosition(host, index, position) {

@@ -73,11 +73,11 @@ import {
 import {
   AIR_PRIMARY_TARGET_Y_OFFSET,
   ETHER_PRIMARY_INITIAL_TURN,
-  NATIVE_PRIMARY_HOSTILE_FLAG,
   airPrimaryBoltGeometry,
-  advanceEtherPrimaryHoming,
+  advanceEtherPrimaryTracking,
   directionFromHeading,
-  nativePrimaryTargetEligible,
+  nativeMissileFanHeading,
+  nativeMissileFanTurnScale,
   selectAirPrimaryTarget,
   selectEtherPrimaryTarget,
   type PrimarySpellTarget,
@@ -2473,7 +2473,7 @@ function createOneShotProjectiles(
   const quantity = underpowered ? 1 : primarySkill.quantity
   const speed = underpowered
     ? PRIMARY_SPELL_ETHER_UNDERPOWERED_SPEED
-    : 3 * primarySkill.speedFactor
+    : Math.fround(3 * primarySkill.speedFactor)
   const projectiles = Array.from({ length: quantity }, (_, index) => {
     const headingDegrees = nativeMissileFanHeading(aimHeading, quantity, index)
     const direction = directionFromHeading(headingDegrees)
@@ -2504,7 +2504,9 @@ function createOneShotProjectiles(
       turnAccumulator: ETHER_PRIMARY_INITIAL_TURN,
       turnInput: underpowered
         ? PRIMARY_SPELL_ETHER_UNDERPOWERED_TURN_INPUT
-        : 2 * primarySkill.speedFactor * 0.75 ** index,
+        : Math.fround(
+            2 * primarySkill.speedFactor * nativeMissileFanTurnScale(index),
+          ),
       underpowered,
       velocity: { x: direction.x * speed, y: direction.y * speed },
       visualScale: 1,
@@ -2515,17 +2517,6 @@ function createOneShotProjectiles(
     projectiles,
     rng: damageDraw.rng,
   }
-}
-
-function nativeMissileFanHeading(
-  aimHeading: number,
-  quantity: number,
-  index: number,
-): number {
-  const step = quantity < 4 ? 30 : 20
-  const base = aimHeading + (quantity % 2 === 0 ? step / 2 : 0)
-  const signedOffset = (index % 2 === 0 ? 1 : -1) * index * step
-  return Math.fround(((base + signedOffset) % 360 + 360) % 360)
 }
 
 function drawInclusiveDamage(
@@ -2581,26 +2572,14 @@ function advanceProjectile(
     return { ...spell, ageTicks: spell.ageTicks + 1 }
   }
   if (spell.kind === 'ether') {
-    const candidate = spell.targetId === null
-      ? undefined
-      : targets.find(({ id }) => id === spell.targetId)
-    const retainedTarget = candidate
-      && nativePrimaryTargetEligible(candidate, NATIVE_PRIMARY_HOSTILE_FLAG)
-      ? candidate
-      : undefined
-    const target = retainedTarget ?? (spell.reacquiresTarget
-      ? selectEtherPrimaryTarget({
-          aimDirection: spell.direction,
-          origin: spell.position,
-          targets,
-        }) ?? undefined
-      : undefined)
-    const advanced = advanceEtherPrimaryHoming({
+    const advanced = advanceEtherPrimaryTracking({
       headingDegrees: spell.headingDegrees,
       movementScalar: 1,
       position: spell.position,
+      reacquiresTarget: spell.reacquiresTarget,
       speed: spell.speed,
-      targetPosition: target?.position ?? null,
+      targetId: spell.targetId,
+      targets,
       turnInput: spell.turnInput,
       turnAccumulator: spell.turnAccumulator,
     })
@@ -2611,7 +2590,8 @@ function advanceProjectile(
       flightTicks: spell.flightTicks + 1,
       headingDegrees: advanced.headingDegrees,
       position: advanced.position,
-      targetId: target?.id ?? null,
+      reacquiresTarget: advanced.reacquiresTarget,
+      targetId: advanced.targetId,
       turnAccumulator: advanced.turnAccumulator,
       velocity: {
         x: Math.fround(advanced.direction.x * spell.speed),

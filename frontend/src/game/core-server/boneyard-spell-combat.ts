@@ -50,7 +50,7 @@ import {
   nativePrimaryRootTargets,
   nativePrimaryTargetEligible,
   primarySpellTargetPoint,
-  selectEtherPrimaryTarget,
+  selectEtherPrimaryTargetAtPoint,
   type PrimarySpellTarget,
 } from '../core-kernels/primary-spell-targeting.ts'
 import { consumeNativeEarthBoulderContact } from '../core-kernels/native-earth-boulder.ts'
@@ -1848,17 +1848,19 @@ function continuePiercingEtherProjectile(
     const dy = contacted.position.y - position.y
     if (dx * dx + dy * dy >= radius * radius) break
   }
-  const target = selectEtherPrimaryTarget({
-    aimDirection: projectile.direction,
+  let target = selectEtherPrimaryTargetAtPoint({
+    excludedTargetId: contacted.id,
     origin: position,
-    targets: targets.filter(({ id }) => id !== contacted.id),
+    targets,
   })
+  target ??= selectEtherPrimaryTargetAtPoint({ origin: position, targets })
   return {
     projectile: {
       ...projectile,
       damage: projectile.damage * projectile.damageRetention,
       piercesRemaining: projectile.piercesRemaining - 1,
       position,
+      reacquiresTarget: target === null ? false : projectile.reacquiresTarget,
       targetId: target?.id ?? null,
       visualScale: projectile.visualScale * projectile.damageRetention,
     },

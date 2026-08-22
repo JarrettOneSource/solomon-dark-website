@@ -7,9 +7,10 @@ import {
 } from './native-rng.ts'
 import {
   ETHER_PRIMARY_INITIAL_TURN,
-  advanceEtherPrimaryHoming,
+  advanceEtherPrimaryTracking,
   directionFromHeading,
-  nativePrimaryTargetEligible,
+  nativeMissileFanHeading,
+  nativeMissileFanTurnScale,
   selectEtherPrimaryTarget,
   type PrimarySpellTarget,
 } from './primary-spell-targeting.ts'
@@ -129,6 +130,7 @@ export interface NativeWeldProjectileState {
   readonly position: Vector2
   readonly presentationSeed: number | null
   readonly projectileIndex: number
+  readonly reacquiresTarget: boolean
   readonly secondaryPresentationPhaseDegrees: number | null
   readonly speed: number
   readonly targetId: string | null
@@ -544,6 +546,11 @@ export function spawnNativeWeldOneShot(
       position,
       presentationSeed,
       projectileIndex: index,
+      reacquiresTarget: nativeWeldMissileReacquiresTarget(
+        profile.buildId,
+        speedFactor,
+        input.underpowered,
+      ),
       secondaryPresentationPhaseDegrees,
       speed,
       targetId: target?.id ?? null,
@@ -554,7 +561,7 @@ export function spawnNativeWeldOneShot(
             2
               * speedFactor
               * (profile.buildId === 1002 ? ballLightningTurnScale : 1)
-              * 0.75 ** Math.ceil(index / 2),
+              * nativeMissileFanTurnScale(index),
           ),
       underpowered: input.underpowered,
       vector,
@@ -647,28 +654,20 @@ export function stepNativeWeldProjectile(
       }),
     })
   }
-  const candidate = projectile.targetId === null
-    ? undefined
-    : targets.find(({ id }) => id === projectile.targetId)
-  const target = candidate && nativePrimaryTargetEligible(candidate, 0x2)
-    ? candidate
-    : selectEtherPrimaryTarget({
-        aimDirection: projectile.direction,
-        origin: projectile.position,
-        targets,
-      })
   const movementSpeed = projectile.buildId === 1002
     ? nativeBallLightningMovementSpeed(
         projectile.speed,
         projectile.ballLightningAcceleration!,
       )
     : projectile.speed
-  const advanced = advanceEtherPrimaryHoming({
+  const advanced = advanceEtherPrimaryTracking({
     headingDegrees: projectile.headingDegrees,
     movementScalar: 1,
     position: projectile.position,
+    reacquiresTarget: projectile.reacquiresTarget,
     speed: movementSpeed,
-    targetPosition: target?.position ?? null,
+    targetId: projectile.targetId,
+    targets,
     turnAccumulator: projectile.turnAccumulator,
     turnInput: projectile.turnInput,
   })
@@ -711,7 +710,8 @@ export function stepNativeWeldProjectile(
     frostTurnDegrees,
     headingDegrees: advanced.headingDegrees,
     position: advanced.position,
-    targetId: target?.id ?? null,
+    reacquiresTarget: advanced.reacquiresTarget,
+    targetId: advanced.targetId,
     turnAccumulator: advanced.turnAccumulator,
     velocity: Object.freeze({
       x: Math.fround(advanced.direction.x * nextMovementSpeed),
@@ -1501,18 +1501,20 @@ export function nativeWeldMissileFanHeading(
   quantity: number,
   index: number,
 ): number {
-  if (!Number.isSafeInteger(quantity) || quantity < 1) {
-    throw new RangeError('weld missile quantity must be a positive safe integer')
+  return nativeMissileFanHeading(aimHeading, quantity, index)
+}
+
+function nativeWeldMissileReacquiresTarget(
+  buildId: NativeWeldOneShotBuildId,
+  speedFactor: number,
+  underpowered: boolean,
+): boolean {
+  if (underpowered || buildId === 1009) return false
+  switch (buildId) {
+    case 1000: return speedFactor > Math.fround(1.255)
+    case 1001: return speedFactor > 1
+    case 1002: return speedFactor > 0.8600000143051147
   }
-  if (!Number.isSafeInteger(index) || index < 0 || index >= quantity) {
-    throw new RangeError('weld missile index is outside the fan')
-  }
-  const step = quantity < 4 ? 30 : 20
-  const base = aimHeading + (quantity % 2 === 0 ? step / 2 : 0)
-  const offset = index === 0
-    ? 0
-    : (index % 2 === 0 ? 1 : -1) * Math.ceil(index / 2) * step
-  return normalizeDegrees(base + offset)
 }
 
 export function isOneShotBuild(buildId: NativeWeldBuildId): buildId is NativeWeldOneShotBuildId {

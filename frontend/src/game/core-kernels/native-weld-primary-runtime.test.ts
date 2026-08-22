@@ -214,6 +214,28 @@ test('weld homing actors retain the nearest native target and advance through sh
   assert.notDeepEqual(stepped.position, projectile.position)
 })
 
+test('welded MagicMissile derivatives preserve their class-specific replacement thresholds', () => {
+  const spawn = (buildId: 1000 | 1001 | 1002, speedFactor: number) => (
+    spawnNativeWeldOneShot({
+      aimDirection: { x: 1, y: 0 },
+      firstId: 1,
+      origin: { x: 0, y: 0 },
+      ownerId: 'p1',
+      primarySkill: profile(buildId, [4, 4, 10, 1, speedFactor, 0, 0, 0, 0]),
+      rng: createNativeRng(1),
+      targets: [],
+      underpowered: false,
+      worldKey: 'boneyard:1',
+    }).projectiles[0]!.reacquiresTarget
+  )
+  assert.equal(spawn(1000, 1.25), false)
+  assert.equal(spawn(1000, 1.3), true)
+  assert.equal(spawn(1001, 1), false)
+  assert.equal(spawn(1001, 1.1), true)
+  assert.equal(spawn(1002, 1), false)
+  assert.equal(spawn(1002, 1.1), true)
+})
+
 test('semantic audio plans retain every native sound and loop registry owner', () => {
   const buildIds = [
     1000, 1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009,
@@ -307,6 +329,7 @@ test('underpowered welded one-shots retain native actors but suppress every lear
   assert.equal(fire[0]!.damage, 4)
   assert.equal(fire[0]!.speed, Math.fround(3 * 0.8))
   assert.equal(fire[0]!.castPlaybackRate, 0.75)
+  assert.equal(fire[0]!.reacquiresTarget, false)
   assert.deepEqual(fire[0]!.vector.slice(3), [1, Math.fround(0.8), 0, 0, 0, 0])
 
   const frost = spawnNativeWeldOneShot({
@@ -316,6 +339,7 @@ test('underpowered welded one-shots retain native actors but suppress every lear
   }).projectiles
   assert.equal(frost.length, 1)
   assert.equal(frost[0]!.castPlaybackRate, 0.75)
+  assert.equal(frost[0]!.reacquiresTarget, false)
   assert.deepEqual(frost[0]!.vector.slice(3), [1, Math.fround(0.8), 0, 0])
 
   const ball = spawnNativeWeldOneShot({
@@ -325,6 +349,7 @@ test('underpowered welded one-shots retain native actors but suppress every lear
   }).projectiles
   assert.equal(ball.length, 1)
   assert.equal(ball[0]!.castPlaybackRate, 0.75)
+  assert.equal(ball[0]!.reacquiresTarget, false)
   assert.equal(ball[0]!.turnInput, Math.fround(2 * 0.8 * 0.75))
   assert.deepEqual(ball[0]!.vector.slice(3), [1, Math.fround(0.8), 0, 1])
 

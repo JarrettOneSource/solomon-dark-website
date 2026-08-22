@@ -67,6 +67,12 @@ export interface EtherPrimaryTargetQuery {
   targets: readonly PrimarySpellTarget[]
 }
 
+export interface EtherPrimaryTargetPointQuery {
+  excludedTargetId?: string | null
+  origin: Vector2
+  targets: readonly PrimarySpellTarget[]
+}
+
 export interface EtherPrimaryHomingInput {
   headingDegrees: number
   movementScalar: number
@@ -82,6 +88,20 @@ export interface EtherPrimaryHomingResult {
   headingDegrees: number
   position: Vector2
   turnAccumulator: number
+}
+
+export interface EtherPrimaryTrackingInput extends Omit<
+  EtherPrimaryHomingInput,
+  'targetPosition'
+> {
+  reacquiresTarget: boolean
+  targetId: string | null
+  targets: readonly PrimarySpellTarget[]
+}
+
+export interface EtherPrimaryTrackingResult extends EtherPrimaryHomingResult {
+  reacquiresTarget: boolean
+  targetId: string | null
 }
 
 export function selectAirPrimaryTarget(
@@ -163,19 +183,23 @@ export function selectEtherPrimaryTarget(
     x: query.origin.x + aim.x * ETHER_PRIMARY_PROBE_DISTANCE,
     y: query.origin.y + aim.y * ETHER_PRIMARY_PROBE_DISTANCE,
   }
+  return selectEtherPrimaryTargetAtPoint({
+    origin: probe,
+    targets: query.targets,
+  })
+}
+
+export function selectEtherPrimaryTargetAtPoint(
+  query: EtherPrimaryTargetPointQuery,
+): PrimarySpellTarget | null {
   let selected: PrimarySpellTarget | null = null
   let selectedDistanceSquared = ETHER_PRIMARY_TARGET_DISTANCE_SQUARED
-  for (const target of nativeBroadphaseOrder(
-    probe,
-    Math.sqrt(ETHER_PRIMARY_TARGET_DISTANCE_SQUARED),
-    query.targets,
-  )) {
+  for (const target of nativeRegistrationOrder(query.targets)) {
     if (
-      target.kind !== 'enemy'
-      || !target.active
+      target.id === query.excludedTargetId
       || (target.actorFlags & NATIVE_PRIMARY_HOSTILE_FLAG) === 0
     ) continue
-    const distanceSquared = squaredLength(subtract(target.position, probe))
+    const distanceSquared = squaredLength(subtract(target.position, query.origin))
     if (distanceSquared >= selectedDistanceSquared) continue
     selected = target
     selectedDistanceSquared = distanceSquared
@@ -289,6 +313,66 @@ export function advanceEtherPrimaryHoming(
   }
 }
 
+export function advanceEtherPrimaryTracking(
+  input: EtherPrimaryTrackingInput,
+): EtherPrimaryTrackingResult {
+  const resolvedTarget = input.targetId === null
+    ? undefined
+    : input.targets.find(({ id }) => id === input.targetId)
+  if (resolvedTarget) {
+    const advanced = advanceEtherPrimaryHoming({
+      ...input,
+      targetPosition: resolvedTarget.position,
+    })
+    return {
+      ...advanced,
+      reacquiresTarget: input.reacquiresTarget,
+      targetId: resolvedTarget.active ? resolvedTarget.id : null,
+    }
+  }
+
+  const advanced = advanceEtherPrimaryHoming({
+    ...input,
+    targetPosition: null,
+  })
+  if (input.targetId !== null && input.reacquiresTarget) {
+    const replacement = selectEtherPrimaryTargetAtPoint({
+      origin: advanced.position,
+      targets: input.targets,
+    })
+    return {
+      ...advanced,
+      reacquiresTarget: replacement !== null,
+      targetId: replacement?.id ?? null,
+    }
+  }
+  return {
+    ...advanced,
+    reacquiresTarget: input.reacquiresTarget,
+    targetId: null,
+  }
+}
+
+export function nativeMissileFanHeading(
+  aimHeading: number,
+  quantity: number,
+  index: number,
+): number {
+  validateMissileFanIndex(quantity, index)
+  const step = quantity < 4 ? 30 : 20
+  const base = aimHeading + (quantity % 2 === 0 ? step / 2 : 0)
+  const tier = Math.ceil(index / 2)
+  const offset = (index % 2 === 0 ? 1 : -1) * tier * step
+  return Math.fround(normalizeDegrees(base + offset))
+}
+
+export function nativeMissileFanTurnScale(index: number): number {
+  if (!Number.isSafeInteger(index) || index < 0) {
+    throw new RangeError('missile index must be a non-negative safe integer')
+  }
+  return 0.75 ** Math.ceil(index / 2)
+}
+
 export function nativeHeadingTurnDirection(current: number, desired: number): -1 | 0 | 1 {
   const normalizedCurrent = normalizeDegrees(current)
   const normalizedDesired = normalizeDegrees(desired)
@@ -324,6 +408,15 @@ function dot(left: Vector2, right: Vector2): number {
 
 function normalizeDegrees(degrees: number): number {
   return ((degrees % 360) + 360) % 360
+}
+
+function validateMissileFanIndex(quantity: number, index: number): void {
+  if (!Number.isSafeInteger(quantity) || quantity < 1) {
+    throw new RangeError('missile quantity must be a positive safe integer')
+  }
+  if (!Number.isSafeInteger(index) || index < 0 || index >= quantity) {
+    throw new RangeError('missile index is outside the fan')
+  }
 }
 
 function nativeRegistrationOrder(

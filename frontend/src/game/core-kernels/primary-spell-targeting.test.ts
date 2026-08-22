@@ -12,6 +12,8 @@ import {
   advanceEtherPrimaryHoming,
   firstNativePrimaryPointContact,
   nativeHeadingTurnDirection,
+  nativeMissileFanHeading,
+  nativeMissileFanTurnScale,
   nativePrimaryConeTargets,
   nativePrimaryRootTargets,
   selectAirPrimaryTarget,
@@ -134,6 +136,56 @@ test('Magic Missile chooses nearest to its 100-unit forward probe, not nearest t
     origin: { x: 0, y: 0 },
     targets: [grave('grave:not-in-actor-query', 100, 0)],
   }), null)
+})
+
+test('Magic Missile acquisition uses resident flag-two actors without active or pending filters', () => {
+  const inactive = {
+    ...enemy('enemy:inactive', 100, 0),
+    active: false,
+    pendingRemove: true,
+  }
+  assert.equal(selectEtherPrimaryTarget({
+    aimDirection: { x: 1, y: 0 },
+    origin: { x: 0, y: 0 },
+    targets: [inactive],
+  })?.id, inactive.id)
+})
+
+test('Magic Missile fan drains all authored quantities through paired heading and turn tiers', () => {
+  for (let quantity = 1; quantity <= 14; quantity += 1) {
+    const step = quantity < 4 ? 30 : 20
+    const base = quantity % 2 === 0 ? step / 2 : 0
+    const expectedHeadings = Array.from({ length: quantity }, (_, index) => {
+      const tier = Math.ceil(index / 2)
+      const offset = (index % 2 === 0 ? 1 : -1) * tier * step
+      return ((base + offset) % 360 + 360) % 360
+    })
+    assert.deepEqual(
+      Array.from(
+        { length: quantity },
+        (_, index) => nativeMissileFanHeading(0, quantity, index),
+      ),
+      expectedHeadings,
+    )
+    assert.deepEqual(
+      Array.from(
+        { length: quantity },
+        (_, index) => nativeMissileFanTurnScale(index),
+      ),
+      Array.from(
+        { length: quantity },
+        (_, index) => 0.75 ** Math.ceil(index / 2),
+      ),
+    )
+  }
+  assert.deepEqual(
+    Array.from({ length: 4 }, (_, index) => nativeMissileFanHeading(0, 4, index)),
+    [10, 350, 30, 330],
+  )
+  assert.deepEqual(
+    Array.from({ length: 5 }, (_, index) => nativeMissileFanHeading(0, 5, index)),
+    [0, 340, 20, 320, 40],
+  )
 })
 
 test('Air and Magic Missile preserve projected native per-cell order on exact target ties', () => {
@@ -297,7 +349,7 @@ test('native point contact uses trunc0 cells, strict radii, and projected slot o
   })?.id, nearerSecond.id, 'native cell conversion truncates float32 toward zero')
 })
 
-test('all primary queries skip inactive, pending, and actor-flag-ineligible Coffins', () => {
+test('Air and Water queries skip inactive, pending, and actor-flag-ineligible Coffins', () => {
   const coffin = {
     ...enemy('enemy:1', 0, -20),
     actorFlags: 0,
@@ -313,11 +365,6 @@ test('all primary queries skip inactive, pending, and actor-flag-ineligible Coff
     maxRange: 205,
     origin: { x: 0, y: 0 },
     previousTargetId: null,
-    targets,
-  })?.id, skeleton.id)
-  assert.equal(selectEtherPrimaryTarget({
-    aimDirection: { x: 0, y: -1 },
-    origin: { x: 0, y: 0 },
     targets,
   })?.id, skeleton.id)
   assert.deepEqual(nativePrimaryConeTargets({

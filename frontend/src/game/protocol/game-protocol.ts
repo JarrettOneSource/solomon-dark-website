@@ -4619,7 +4619,7 @@ function primarySpellWeldProjectile(
     'frostPresentationLanes', 'frostTurnDegrees', 'groundSparkNativeAgeTicks',
     'groundSparkTurnTicksRemaining', 'headingDegrees', 'hitTargetIds', 'id', 'kind',
     'lightRegistration', 'ownerId', 'phase', 'position', 'presentationSeed',
-    'projectileIndex', 'secondaryPresentationPhaseDegrees', 'speed', 'targetId',
+    'projectileIndex', 'reacquiresTarget', 'secondaryPresentationPhaseDegrees', 'speed', 'targetId',
     'turnAccumulator', 'turnInput', 'underpowered', 'vector', 'velocity', 'worldKey',
   ])
   const buildId = weldBuildId(source.buildId, `${field}.buildId`)
@@ -4811,6 +4811,7 @@ function primarySpellWeldProjectile(
     position: vector(source.position, `${field}.position`),
     presentationSeed,
     projectileIndex: nonnegativeInteger(source.projectileIndex, `${field}.projectileIndex`),
+    reacquiresTarget: boolean(source.reacquiresTarget, `${field}.reacquiresTarget`),
     secondaryPresentationPhaseDegrees,
     speed: positiveFinite(source.speed, `${field}.speed`),
     targetId,

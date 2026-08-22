@@ -792,7 +792,8 @@ test('Ether contact uses its six-unit point query and publishes FadeMM at the ad
 test('Piercing keeps the missile, scales payload and art, and emits native contact streaks', () => {
   const enemies = spawnEnemies([
     { position: { x: 0, y: 0 }, token: 'SKELETON' },
-    { position: { x: 100, y: 0 }, token: 'SKELETON' },
+    { position: { x: 30, y: 0 }, token: 'SKELETON' },
+    { position: { x: 120, y: 0 }, token: 'SKELETON' },
   ])
   const base = projectile({
     id: 8,
@@ -831,6 +832,30 @@ test('Piercing keeps the missile, scales payload and art, and emits native conta
     result.spells.transients.map((effect) => 'origin' in effect ? effect.origin.x : null),
     [5, 10, 15, 20],
   )
+})
+
+test('Piercing retries target selection without excluding the contacted actor', () => {
+  const enemies = spawnEnemies([
+    { position: { x: 0, y: 0 }, token: 'SKELETON' },
+  ])
+  const base = projectile({
+    id: 8,
+    kind: 'ether',
+    position: { x: 0, y: 0 },
+    velocity: { x: 3, y: 0 },
+  })
+  if (base.kind !== 'ether') throw new Error('Expected an Ether fixture')
+  const result = resolveBoneyardSpellCombat(enemies, spellState({
+    projectiles: [{
+      ...base,
+      damageRetention: 0.5,
+      piercesRemaining: 1,
+      reacquiresTarget: true,
+    }],
+  }), [], 77, WORLD_KEY, COMBAT_RNG)
+  const continued = result.spells.projectiles[0]
+  assert.equal(continued?.kind, 'ether')
+  if (continued?.kind === 'ether') assert.equal(continued.targetId, 'enemy:1')
 })
 
 test('Earth gathers strict roots once, shrinks, and sheds one independent contact rock', () => {
@@ -1974,6 +1999,7 @@ function projectile(options: {
           ? 0
           : null,
         projectileIndex: 0,
+        reacquiresTarget: false,
         secondaryPresentationPhaseDegrees: options.buildId === 1001 ? 0 : null,
         speed: 3,
         targetId: null,

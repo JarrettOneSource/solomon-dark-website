@@ -379,6 +379,14 @@ the bounded `target-unavailable` rejection. The existing chat rate limit,
 normalization, local 80-event history, and nonpersistent lifecycle apply to all
 three channels.
 
+Protocol 53 adds the mutable native target-replacement policy to welded
+MagicMissile-derived projectile snapshots. Pure Ether already carried the same
+field. The host now publishes whether FireMissile, FrostMissile, or
+BallLightning may replace an unresolved target after applying its
+class-specific constructor threshold and any later failed replacement. Clients
+copy this semantic state; they do not reacquire targets or steer projectiles in
+presentation.
+
 ## Saves, identity, and content
 
 - The authoritative game host is the only producer of browser-save contents.

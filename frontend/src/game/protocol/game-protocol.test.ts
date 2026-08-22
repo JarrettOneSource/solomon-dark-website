@@ -1024,7 +1024,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v53 carries deployment restart, Boulder, movement, social, mod, and gameplay state', () => {
+test('protocol v53 carries deployment restart, Ether replacement, Boulder, movement, social, mod, and gameplay state', () => {
   assert.equal(GAME_PROTOCOL_VERSION, 53)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
@@ -3696,6 +3696,7 @@ test('protocol strictly round-trips every welded projectile and persistent actor
     position: { x: 800, y: 400 },
     presentationSeed: 42,
     projectileIndex: 0,
+    reacquiresTarget: false,
     secondaryPresentationPhaseDegrees: null,
     speed: 3,
     targetId: null,

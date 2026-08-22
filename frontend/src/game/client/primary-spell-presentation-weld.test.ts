@@ -38,6 +38,7 @@ const projectile = {
   position: { x: 40, y: 50 },
   presentationSeed: 17,
   projectileIndex: 0,
+  reacquiresTarget: false,
   secondaryPresentationPhaseDegrees: null,
   speed: 3,
   targetId: 'enemy:2',
