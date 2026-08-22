@@ -130,6 +130,7 @@ try {
     page,
     playerId,
     baseline: enemyBaseline,
+    requireLiveEmber: true,
   })
   await page.waitForFunction(() => {
     const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
@@ -137,7 +138,6 @@ try {
       && frame.primarySpellKinds.includes('fire-ember')
   }, undefined, { timeout: 10_000 })
   await page.screenshot({ path: screenshots.explosion })
-  moveEnemiesAway(host, playerId)
   await page.waitForFunction((wireStart) => window.__fireWireFrames
     .slice(wireStart)
     .some((frame) => frame.transients.some((effect) => (
@@ -271,10 +271,19 @@ try {
   }, null, 2)}\n`)
   throw error
 } finally {
-  await browser.close()
-  await host.close()
-  await vite.close()
+  for (const close of [
+    () => browser.close(),
+    () => host.close(),
+    () => vite.close(),
+  ]) {
+    await Promise.race([
+      close(),
+      new Promise((resolve) => setTimeout(resolve, 5_000)),
+    ])
+  }
 }
+
+process.exit(0)
 
 function installFireProbe() {
   const samples = []
@@ -407,18 +416,27 @@ async function openBoneyardCombat(page, host, playerId) {
     const current = host.state()
     return current.world.kind === 'boneyard' && current.world.encounter?.phase === 'speaking'
   }, 'Solomon did not enter the speaking phase', 10_000)
+  const afterApproach = host.state()
+  assert.equal(afterApproach.world.kind, 'boneyard')
+  setHostPlayerPosition(host, index, { x: solomon.x, y: solomon.y + 250 })
   await waitUntil(() => {
     const current = host.state()
     return current.world.kind === 'boneyard'
       && (current.world.encounter?.runEventId ?? 0) > 0
-      && current.world.enemies.actors.filter(({ lifeState }) => lifeState === 'alive').length >= 10
+      && current.world.enemies.actors.some(({ lifeState }) => lifeState === 'alive')
   }, 'Solomon did not release the opening combat wave', 30_000)
   const combat = host.state()
   assert.equal(combat.world.kind, 'boneyard')
+  assert.ok(combat.world.waves, 'Fire acceptance requires the native wave director')
+  const expectedOpeningCount = combat.world.waves.openingBursts.reduce(
+    (total, burst) => total + burst.count,
+    0,
+  )
+  assert.ok(expectedOpeningCount >= 11 && expectedOpeningCount <= 17)
   assert.equal(
     combat.world.enemies.actors.filter(({ lifeState }) => lifeState === 'alive').length
-      + (combat.world.waves?.pendingSpawnBudget ?? 0),
-    15,
+      + combat.world.waves.pendingSpawnBudget,
+    expectedOpeningCount,
   )
   Object.assign(combat, {
     world: {
@@ -466,23 +484,74 @@ function setHostPlayerPosition(host, index, position) {
   })
 }
 
-async function castAtPreparedEnemy({ baseline, health, host, page, playerId }) {
-  await waitForFireClear(host)
-  const enemyId = prepareEnemy(host, playerId, baseline, health)
-  await page.waitForTimeout(150)
-  const pointer = await enemyPointer(page, host, enemyId)
-  const sampleStart = await page.evaluate(() => window.__fireRenderSamples.length)
-  const wireStart = await page.evaluate(() => window.__fireWireFrames.length)
-  const audioStart = await page.evaluate(() => window.__sdrAudioEvents.length)
-  const firstEffectId = host.state().primarySpells.nextId
-  await page.mouse.move(pointer.x, pointer.y)
-  await page.mouse.down({ button: 'left' })
-  await page.waitForTimeout(260)
-  await page.mouse.up({ button: 'left' })
-  await waitUntil(() => host.state().primarySpells.transients.some((effect) => (
-    effect.id >= firstEffectId && effect.kind === 'fire-explosion'
-  )), 'Fireball contact did not materialize its shared explosion', 5_000)
-  return { audioStart, enemyId, sampleStart, wireStart }
+async function castAtPreparedEnemy({
+  baseline,
+  health,
+  host,
+  page,
+  playerId,
+  requireLiveEmber = false,
+}) {
+  const attemptReceipts = []
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await waitForFireClear(host)
+    const enemyId = prepareEnemy(host, playerId, baseline, health)
+    await page.waitForTimeout(150)
+    const pointer = await enemyPointer(page, host, enemyId)
+    const sampleStart = await page.evaluate(() => window.__fireRenderSamples.length)
+    const wireStart = await page.evaluate(() => window.__fireWireFrames.length)
+    const audioStart = await page.evaluate(() => window.__sdrAudioEvents.length)
+    const firstEffectId = host.state().primarySpells.nextId
+    await page.mouse.move(pointer.x, pointer.y)
+    await page.mouse.down({ button: 'left' })
+    await page.waitForTimeout(260)
+    await page.mouse.up({ button: 'left' })
+    const attempted = host.state()
+    attemptReceipts.push({
+      attempt: attempt + 1,
+      player: attempted.playerEntities.locomotions.find((_, index) => (
+        attempted.playerEntities.identities[index]?.playerId === playerId
+      ))?.position ?? null,
+      pointer,
+      projectiles: attempted.primarySpells.projectiles.map((projectile) => ({
+        direction: projectile.direction,
+        id: projectile.id,
+        kind: projectile.kind,
+        position: projectile.position,
+      })),
+      target: attempted.world.kind === 'boneyard'
+        ? attempted.world.enemies.actors.find(({ id }) => id === enemyId)?.position ?? null
+        : null,
+    })
+    try {
+      await waitUntil(() => host.state().primarySpells.transients.some((effect) => (
+        effect.id >= firstEffectId && effect.kind === 'fire-explosion'
+      )), 'Fireball contact did not materialize its shared explosion', 5_000)
+    } catch (error) {
+      if (attempt === 2) {
+        throw new Error(
+          `Fireball contact missed after three attempts: ${JSON.stringify(attemptReceipts)}`,
+          { cause: error },
+        )
+      }
+      continue
+    }
+    await waitUntil(() => host.state().primarySpells.transients.some((effect) => (
+      effect.id >= firstEffectId && effect.kind === 'fire-explosion' && effect.ageTicks > 0
+    )), 'Fireball explosion did not advance through its authoritative contact tick', 5_000)
+    const hasLiveEmber = host.state().primarySpells.transients.some((effect) => (
+      effect.id >= firstEffectId && effect.kind === 'fire-ember'
+    ))
+    if (requireLiveEmber && !hasLiveEmber) {
+      if (attempt === 2) {
+        throw new Error('three authentic Fireball contacts consumed every newborn Ember')
+      }
+      continue
+    }
+    moveEnemiesAway(host, playerId)
+    return { audioStart, enemyId, sampleStart, wireStart }
+  }
+  throw new Error('Fireball acceptance exhausted its bounded cast attempts')
 }
 
 function prepareEnemy(host, playerId, baseline, health) {
@@ -561,9 +630,30 @@ async function enemyPointer(page, host, enemyId) {
   return page.locator('.boneyard-world-canvas').evaluate((node, position) => {
     const bounds = node.getBoundingClientRect()
     const frame = node.__sdrBoneyardFrame
+    const scaleX = bounds.width / node.clientWidth
+    const scaleY = bounds.height / node.clientHeight
+    const x = bounds.left + (
+      node.clientWidth / 2 + (position.x - frame.cameraX) * frame.cameraZoom
+    ) * scaleX
+    const y = bounds.top + (
+      node.clientHeight / 2 + (position.y - frame.cameraY) * frame.cameraZoom
+    ) * scaleY
     return {
-      x: bounds.left + bounds.width / 2 + (position.x - frame.cameraX) * frame.cameraZoom,
-      y: bounds.top + bounds.height / 2 + (position.y - frame.cameraY) * frame.cameraZoom,
+      bounds: {
+        height: bounds.height,
+        left: bounds.left,
+        top: bounds.top,
+        width: bounds.width,
+      },
+      camera: { x: frame.cameraX, y: frame.cameraY, zoom: frame.cameraZoom },
+      client: { height: node.clientHeight, width: node.clientWidth },
+      scale: { x: scaleX, y: scaleY },
+      stack: document.elementsFromPoint(x, y).slice(0, 5).map((element) => ({
+        className: `${element.className}`,
+        tagName: element.tagName,
+      })),
+      x,
+      y,
     }
   }, enemy.position)
 }

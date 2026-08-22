@@ -33860,8 +33860,78 @@ combat rectangle but still centers a finite search on the exterior point.
   disabled by `CAMERA SHAKE`, and retain audio/light/provider evidence.
 - Canonical `./scripts/validate.sh`, focused Loader static contracts, and final
   Mac hardware Chrome/WebGL acceptance are required. Publication and deployment
-  remain separate and are not authorized by this request.
+  remain separate: publication is authorized by this request; deployment is not.
 
 ### Implementation validation receipt
 
-Pending implementation and exact-tree validation.
+- Protocol 58 now carries the full live Ember interval `(0,3]`, contact cadence
+  and due edge, actor/transient light registrations, 37-tick shared explosion,
+  and sampled signed hit pitch. The primary view admits `fire-explosion`
+  explicitly, so the submitted diagnostics' per-display-frame exception loop
+  and subsequent code-4008 parser close no longer have a reachable state.
+- The shared Fire implementation now serves Fireball, FireMissile/welded Fire,
+  Immolate, and Burning Man Ring from the same three-child explosion clocks,
+  cue pair, Ember physics/contact program, light ownership, and teardown. The
+  registration-time ten-tick Ember loop publishes every contact query and
+  consumes the child on its first accepted target.
+- Ember interpolation moves forward through the four-frame wrap. Its renderer
+  owns the source-over body, two independently sampled Enhanced additive
+  copies, orange BadGuys-15 glow, and the exact live-recovered untextured
+  ground quad. The previous duplicate atlas-sprite surrogate is gone. Explosion
+  lit-array scale and provider radius retain the local Region point gain sampled
+  at view birth rather than changing as the camera moves.
+- The existing persisted `zoomEffects` owner is exposed as `CAMERA SHAKE`.
+  Every Boneyard and Hub scalar/displacement consumer remains gated by that one
+  value; tracking, FOV, spectator selection, and screen-color overlays remain
+  independent. No Fireball, shared explosion, or Ember camera event was added.
+- Generated-wave placement now clamps only an exterior raw origin into the
+  radius-inset combat rectangle before retaining the native actor-radius ring
+  topology. The exact logged point/radius resolves in all 12 generated
+  templates; already valid origins remain identity placements.
+- The clean detached Mac worktree at pre-publication commit
+  `5c9585a241459f4a2a30384f273da4605537ce69`, tree
+  `fdb5ff0128d429efa982eca1f82f8baf2289d74e`, passed the complete canonical
+  `./scripts/validate.sh` gate on Apple M2: `17/17` backend/repository
+  contracts and frontend groups `4/4`, `44/44`, `234/234`, `1368/1368`,
+  `9/9`, `43/43`, `11/11`, `7/7`, `17/17`, and `21/21`; desktop `5/5`;
+  backend formatting/build, frontend lint/import boundaries, production
+  frontend/game-host builds, CSP media policy, and bundle budget (`420073` raw
+  / `117464` gzip bytes). The log SHA-256 is
+  `35a76b00c1afb8cab5f7e4a0fb9c6de6da9ad3001549ae54801db3fc8f7bf143`.
+  The Mac was arm64 macOS `26.6.2` with Node `22.17.0`, npm `10.9.2`,
+  .NET `10.0.302`, and Chrome `151.0.7922.170`. Only the repository's eight
+  existing Fast Refresh warnings and the non-fatal large-chunk advisory
+  remained.
+- The rebased Mod Loader documentation commit
+  `8384eaab53ae502077f7d871ef469bba2b926bca`, tree
+  `ff35bc8172b95d3daabd8ccb05c9d80607467436`, passed its complete registered
+  static RE gate on the Mac: `504/504` under Homebrew Python `3.13.15` with
+  the repository-pinned Pillow `12.2.0`; log SHA-256
+  `ec25d0339b84f4dd293778308e2935b409be0e090149f63ba1a000a5f8ba4ebb`.
+- The same Website commit passed physical-Mac Chrome/WebGL acceptance with
+  empty page, console, HTTP, and runtime-error arrays. The final run observed
+  nine Fireball-hit requests, six Throw Fire requests, signed playback range
+  `0.9002779722..1.0829219818`, a live Ember at life `0.9299941063`, direct
+  nonlethal Explode camera magnitude `0`, lethal enemy-terminal magnitude
+  `0.009999999776`, and the same lethal outcome at `0` after persisting
+  `CAMERA SHAKE: OFF`. The browser log SHA-256 is
+  `dc56b2bb49e1ca3ba19e8be050b0cea176df523284dd12cf6048d24a0087f291`.
+- The controlled Mac display samples show no Explode regression: baseline p95
+  `26.2 ms` / max `26.3 ms`, explosion-and-Ember p95 `26.1 ms` / max
+  `26.4 ms`, and restored p95/max `26.3 ms`. This distinguishes the removed
+  exception storm from the stock enemy-death pulse instead of inferring
+  performance from source.
+- The final acceptance harness follows the generated `11..17` opening count,
+  retains the player on the combat side of Solomon's retreat, projects pointer
+  coordinates through the canvas CSS scale, accepts only an authentic shared
+  explosion with a live newborn Ember, and bounds every owned shutdown step.
+  Inspected Mac captures are `/tmp/solomon-fireball-explode-embers.png`
+  SHA-256
+  `eda40a84f6a7646216d36d51eebb72c2cc50135444fb1d689454510dd0e4509b`
+  and `/tmp/solomon-fireball-camera-shake-off.png` SHA-256
+  `7f0b81fab2f97d07d228906d76f76b9409ac85e168eaf498d5423c977012c1d1`.
+  The first visibly retains the discrete orange explosion/Ember stack without
+  the duplicate-Ember silhouette; the second shows the gameplay Settings row
+  and persisted Off state. No system member remains blocked by the browser
+  platform. Publication is pending; no deployment or production restart was
+  performed.
