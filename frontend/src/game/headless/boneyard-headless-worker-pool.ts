@@ -1,6 +1,16 @@
 import { Worker } from 'node:worker_threads'
 
 import type { MlBotPolicyActionMasks } from '../core-server/ml-bot-policy/actions.ts'
+import type { MlBotPolicyChoiceTrajectoryRecord } from '../core-server/ml-bot-policy/choice-trajectory.ts'
+import type {
+  MlBotPolicyScriptedChoiceEvent,
+  MlBotPolicySkillSelection,
+} from '../core-server/ml-bot-policy/skill-chooser.ts'
+import type {
+  BoneyardHeadlessBatchTransition,
+  BoneyardHeadlessIndexedValue,
+  BoneyardHeadlessPackedRewardTerms,
+} from './boneyard-headless-batch.ts'
 import {
   BONEYARD_HEADLESS_ACTION_STRIDE,
   type BoneyardHeadlessEnvironmentOptions,
@@ -16,6 +26,10 @@ export interface BoneyardHeadlessWorkerResult {
   readonly hashes: readonly string[]
   readonly masks: MlBotPolicyActionMasks
   readonly observations: Float32Array
+}
+
+export interface BoneyardHeadlessWorkerStepResult extends BoneyardHeadlessWorkerResult {
+  readonly transition: BoneyardHeadlessBatchTransition
 }
 
 interface WorkerLane {
@@ -81,7 +95,7 @@ export class BoneyardHeadlessWorkerPool {
     }
   }
 
-  async step(actions: Float32Array, ticks = 1): Promise<BoneyardHeadlessWorkerResult> {
+  async step(actions: Float32Array, ticks = 1): Promise<BoneyardHeadlessWorkerStepResult> {
     if (actions.length !== this.worldCount * BONEYARD_HEADLESS_ACTION_STRIDE) {
       throw new RangeError('packed actions must match the Boneyard worker-pool world count')
     }
@@ -96,7 +110,7 @@ export class BoneyardHeadlessWorkerPool {
         type: 'step',
       })
     }))
-    return this.combine(laneResults)
+    return this.combineStep(laneResults)
   }
 
   async reset(
@@ -139,6 +153,98 @@ export class BoneyardHeadlessWorkerPool {
       worldOffset += result.hashes.length
     }
     return { hashes, masks: { ability, aim, movement, target }, observations }
+  }
+
+  private combineStep(
+    results: readonly Record<string, unknown>[],
+  ): BoneyardHeadlessWorkerStepResult {
+    const combined = this.combine(results)
+    const actions = new Uint8Array(this.worldCount * BONEYARD_HEADLESS_ACTION_STRIDE)
+    const choiceEvents: BoneyardHeadlessIndexedValue<MlBotPolicyScriptedChoiceEvent>[] = []
+    const choiceIntervals: BoneyardHeadlessIndexedValue<MlBotPolicyChoiceTrajectoryRecord>[] = []
+    const dones = new Uint8Array(this.worldCount)
+    const nextSimulationTicks = new Float64Array(this.worldCount)
+    const observations = new Float32Array(this.worldCount * this.observationLength)
+    const rawRewards = new Float64Array(this.worldCount)
+    const rewardClamped = new Uint8Array(this.worldCount)
+    const rewards = new Float64Array(this.worldCount)
+    const rewardTerms = createPackedRewardTerms(this.worldCount)
+    const simulationTicks = new Float64Array(this.worldCount)
+    const skillSelections: BoneyardHeadlessIndexedValue<MlBotPolicySkillSelection>[] = []
+    const stateHashes: string[] = []
+    const ticks = new Uint32Array(this.worldCount)
+    let worldOffset = 0
+    for (const result of results) {
+      const source = requiredObject(result.transition, 'Boneyard headless worker transition')
+      const laneWorldCount = requiredStringArray(source.nextStateHashes, 'nextStateHashes').length
+      const actionOffset = worldOffset * BONEYARD_HEADLESS_ACTION_STRIDE
+      const observationOffset = worldOffset * this.observationLength
+      actions.set(uint8(source.actions, laneWorldCount * BONEYARD_HEADLESS_ACTION_STRIDE, 'actions'), actionOffset)
+      dones.set(uint8(source.dones, laneWorldCount, 'dones'), worldOffset)
+      nextSimulationTicks.set(float64(source.nextSimulationTicks, laneWorldCount, 'nextSimulationTicks'), worldOffset)
+      observations.set(
+        float32(source.observations, laneWorldCount * this.observationLength, 'observations'),
+        observationOffset,
+      )
+      rawRewards.set(float64(source.rawRewards, laneWorldCount, 'rawRewards'), worldOffset)
+      rewardClamped.set(uint8(source.rewardClamped, laneWorldCount, 'rewardClamped'), worldOffset)
+      rewards.set(float64(source.rewards, laneWorldCount, 'rewards'), worldOffset)
+      setPackedRewardTerms(
+        rewardTerms,
+        worldOffset,
+        requiredPackedRewardTerms(source.rewardTerms, laneWorldCount),
+      )
+      simulationTicks.set(float64(source.simulationTicks, laneWorldCount, 'simulationTicks'), worldOffset)
+      ticks.set(uint32(source.ticks, laneWorldCount, 'ticks'), worldOffset)
+      stateHashes.push(...requiredStringArray(source.stateHashes, 'stateHashes'))
+      appendIndexedValues(
+        choiceEvents,
+        source.choiceEvents,
+        worldOffset,
+        laneWorldCount,
+        'choiceEvents',
+      )
+      appendIndexedValues(
+        choiceIntervals,
+        source.choiceIntervals,
+        worldOffset,
+        laneWorldCount,
+        'choiceIntervals',
+      )
+      appendIndexedValues(
+        skillSelections,
+        source.skillSelections,
+        worldOffset,
+        laneWorldCount,
+        'skillSelections',
+      )
+      worldOffset += laneWorldCount
+    }
+    if (worldOffset !== this.worldCount || stateHashes.length !== this.worldCount) {
+      throw new Error('Boneyard headless worker transitions disagree with the pool world count')
+    }
+    return {
+      ...combined,
+      transition: {
+        actions,
+        choiceEvents,
+        choiceIntervals,
+        dones,
+        masks: combined.masks,
+        nextObservations: combined.observations,
+        nextSimulationTicks,
+        nextStateHashes: combined.hashes,
+        observations,
+        rawRewards,
+        rewardClamped,
+        rewards,
+        rewardTerms,
+        simulationTicks,
+        skillSelections,
+        stateHashes,
+        ticks,
+      },
+    }
   }
 }
 
@@ -212,6 +318,103 @@ function requiredMasks(value: unknown): MlBotPolicyActionMasks {
     aim: buffer('aim'),
     movement: buffer('movement'),
     target: buffer('target'),
+  }
+}
+
+function requiredObject(value: unknown, name: string): Record<string, unknown> {
+  if (value === null || typeof value !== 'object') throw new Error(`${name} is invalid`)
+  return value as Record<string, unknown>
+}
+
+function requiredArrayBuffer(value: unknown, name: string): ArrayBuffer {
+  if (!(value instanceof ArrayBuffer)) {
+    throw new Error(`Boneyard headless worker returned invalid ${name}`)
+  }
+  return value
+}
+
+function float32(value: unknown, length: number, name: string): Float32Array {
+  const result = new Float32Array(requiredArrayBuffer(value, name))
+  if (result.length !== length) throw new Error(`Boneyard headless worker returned invalid ${name} length`)
+  return result
+}
+
+function float64(value: unknown, length: number, name: string): Float64Array {
+  const result = new Float64Array(requiredArrayBuffer(value, name))
+  if (result.length !== length) throw new Error(`Boneyard headless worker returned invalid ${name} length`)
+  return result
+}
+
+function uint8(value: unknown, length: number, name: string): Uint8Array {
+  const result = new Uint8Array(requiredArrayBuffer(value, name))
+  if (result.length !== length) throw new Error(`Boneyard headless worker returned invalid ${name} length`)
+  return result
+}
+
+function uint32(value: unknown, length: number, name: string): Uint32Array {
+  const result = new Uint32Array(requiredArrayBuffer(value, name))
+  if (result.length !== length) throw new Error(`Boneyard headless worker returned invalid ${name} length`)
+  return result
+}
+
+function requiredStringArray(value: unknown, name: string): string[] {
+  if (!Array.isArray(value) || value.some((entry) => typeof entry !== 'string')) {
+    throw new Error(`Boneyard headless worker returned invalid ${name}`)
+  }
+  return value
+}
+
+function createPackedRewardTerms(worldCount: number): BoneyardHeadlessPackedRewardTerms {
+  return {
+    death: new Float64Array(worldCount),
+    ownDamage: new Float64Array(worldCount),
+    selfHp: new Float64Array(worldCount),
+    wave: new Float64Array(worldCount),
+    xp: new Float64Array(worldCount),
+  }
+}
+
+function requiredPackedRewardTerms(
+  value: unknown,
+  worldCount: number,
+): BoneyardHeadlessPackedRewardTerms {
+  const source = requiredObject(value, 'Boneyard headless worker reward terms')
+  return {
+    death: float64(source.death, worldCount, 'rewardTerms.death'),
+    ownDamage: float64(source.ownDamage, worldCount, 'rewardTerms.ownDamage'),
+    selfHp: float64(source.selfHp, worldCount, 'rewardTerms.selfHp'),
+    wave: float64(source.wave, worldCount, 'rewardTerms.wave'),
+    xp: float64(source.xp, worldCount, 'rewardTerms.xp'),
+  }
+}
+
+function setPackedRewardTerms(
+  target: BoneyardHeadlessPackedRewardTerms,
+  offset: number,
+  source: BoneyardHeadlessPackedRewardTerms,
+): void {
+  target.death.set(source.death, offset)
+  target.ownDamage.set(source.ownDamage, offset)
+  target.selfHp.set(source.selfHp, offset)
+  target.wave.set(source.wave, offset)
+  target.xp.set(source.xp, offset)
+}
+
+function appendIndexedValues<Value>(
+  target: BoneyardHeadlessIndexedValue<Value>[],
+  value: unknown,
+  worldOffset: number,
+  laneWorldCount: number,
+  name: string,
+): void {
+  if (!Array.isArray(value)) throw new Error(`Boneyard headless worker returned invalid ${name}`)
+  for (const entry of value) {
+    const source = requiredObject(entry, `Boneyard headless worker ${name} entry`)
+    const worldIndex = requiredNumber(source.worldIndex, `${name} worldIndex`)
+    if (!Number.isInteger(worldIndex) || worldIndex < 0 || worldIndex >= laneWorldCount) {
+      throw new Error(`Boneyard headless worker returned invalid ${name} worldIndex`)
+    }
+    target.push({ value: source.value as Value, worldIndex: worldOffset + worldIndex })
   }
 }
 

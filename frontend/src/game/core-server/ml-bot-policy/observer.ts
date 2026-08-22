@@ -165,7 +165,6 @@ export class MlBotPolicyObserver {
     }
     this.enemyMemory = enemies.next.memory
     this.worldMemory = world.nextMemory
-    this.previousAction = null
     return {
       blocks: Object.freeze(blocks),
       enemyRows: enemies.rows,

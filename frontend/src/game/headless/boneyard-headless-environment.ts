@@ -17,10 +17,30 @@ import {
 import {
   ML_BOT_POLICY_ACTION_STRIDE,
   resolveMlBotPolicyDecision,
+  type MlBotPolicyActionIndices,
   type MlBotPolicyActionMasks,
 } from '../core-server/ml-bot-policy/actions.ts'
+import { evaluateMlBotPolicyDecision } from '../core-server/ml-bot-policy/agent.ts'
+import {
+  MlBotPolicyChoiceTrajectoryTracker,
+  type MlBotPolicyChoiceTrajectoryRecord,
+} from '../core-server/ml-bot-policy/choice-trajectory.ts'
 import { MlBotPolicyObserver, type MlBotPolicyFrame } from '../core-server/ml-bot-policy/observer.ts'
-import { resolveMlBotPolicySkillOffers } from '../core-server/ml-bot-policy/skill-chooser.ts'
+import {
+  MlBotPolicyRewardAccumulator,
+  mlBotPolicyTerminal,
+  type MlBotPolicyRewardResult,
+} from '../core-server/ml-bot-policy/reward.ts'
+import {
+  MlBotPolicyRuntime,
+  type MlBotPolicySelectionOptions,
+} from '../core-server/ml-bot-policy/runtime.ts'
+import {
+  resolveMlBotPolicySkillOffers,
+  type MlBotPolicyScriptedChoiceEvent,
+  type MlBotPolicySkillSelection,
+} from '../core-server/ml-bot-policy/skill-chooser.ts'
+import type { MlBotPolicyMainTrajectoryRecord } from '../core-server/ml-bot-policy/trajectory.ts'
 import { NATIVE_GENERATED_BONEYARDS } from '../host/native-generated-boneyards.ts'
 import { deterministicStateHash } from './hub-headless-environment.ts'
 
@@ -43,11 +63,36 @@ export interface BoneyardHeadlessEnvironmentOptions extends BoneyardHeadlessRese
   readonly allies?: readonly PlayerCharacterConfig[]
 }
 
+export interface BoneyardHeadlessTransition {
+  readonly actions: MlBotPolicyActionIndices
+  readonly choiceEvents: readonly MlBotPolicyScriptedChoiceEvent[]
+  readonly choiceIntervals: readonly MlBotPolicyChoiceTrajectoryRecord[]
+  readonly done: boolean
+  readonly masks: MlBotPolicyActionMasks
+  readonly nextObservation: Float32Array
+  readonly nextSimulationTick: number
+  readonly nextStateHash: string
+  readonly observation: Float32Array
+  readonly reward: MlBotPolicyRewardResult
+  readonly simulationTick: number
+  readonly skillSelections: readonly MlBotPolicySkillSelection[]
+  readonly stateHash: string
+  readonly ticks: number
+}
+
+export interface BoneyardHeadlessPolicyStep {
+  readonly nextObservation: Float32Array
+  readonly record: MlBotPolicyMainTrajectoryRecord
+  readonly transition: BoneyardHeadlessTransition
+}
+
 export class BoneyardHeadlessEnvironment {
   readonly observationLength = BONEYARD_HEADLESS_OBSERVATION_LENGTH
   private readonly agent: PlayerCharacterConfig
   private readonly allies: readonly PlayerCharacterConfig[]
+  private choiceTracker: MlBotPolicyChoiceTrajectoryTracker
   private frame: MlBotPolicyFrame
+  private lastTransitionValue: BoneyardHeadlessTransition | null = null
   private lastMasks: MlBotPolicyActionMasks
   private readonly observer = new MlBotPolicyObserver(HEADLESS_PLAYER_ID)
   private resetOptions: BoneyardHeadlessResetOptions
@@ -57,8 +102,10 @@ export class BoneyardHeadlessEnvironment {
     this.agent = Object.freeze({ ...(options.agent ?? DEFAULT_AGENT) })
     this.allies = Object.freeze((options.allies ?? []).map((ally) => Object.freeze({ ...ally })))
     this.resetOptions = validatedResetOptions(options)
+    this.choiceTracker = this.createChoiceTracker(this.resetOptions)
     this.simulation = this.createSimulation(this.resetOptions)
     this.frame = this.observeState({})
+    this.lastTransitionValue = null
     this.lastMasks = resolveMlBotPolicyDecision(this.simulation, HEADLESS_PLAYER_ID, this.frame, {
       ability: 0,
       aim: 0,
@@ -69,9 +116,11 @@ export class BoneyardHeadlessEnvironment {
 
   reset(options: BoneyardHeadlessResetOptions = this.resetOptions): Float32Array {
     this.resetOptions = validatedResetOptions(options)
+    this.choiceTracker = this.createChoiceTracker(this.resetOptions)
     this.observer.reset()
     this.simulation = this.createSimulation(this.resetOptions)
     this.frame = this.observeState({})
+    this.lastTransitionValue = null
     this.lastMasks = resolveMlBotPolicyDecision(this.simulation, HEADLESS_PLAYER_ID, this.frame, {
       ability: 0,
       aim: 0,
@@ -82,14 +131,65 @@ export class BoneyardHeadlessEnvironment {
   }
 
   step(actions: Float32Array, ticks = 1): Float32Array {
-    this.stepPacked(actions, 0, ticks)
-    return this.observe()
+    return this.stepTransition(actions, ticks).nextObservation
   }
 
   stepPacked(actions: Float32Array, offset: number, ticks = 1): void {
+    this.stepPackedTransition(actions, offset, ticks)
+  }
+
+  stepTransition(actions: Float32Array, ticks = 1): BoneyardHeadlessTransition {
+    return this.stepPackedTransition(actions, 0, ticks)
+  }
+
+  stepPolicy(
+    runtime: MlBotPolicyRuntime,
+    options: MlBotPolicySelectionOptions,
+    ticks = 1,
+  ): BoneyardHeadlessPolicyStep {
+    const evaluated = evaluateMlBotPolicyDecision(
+      runtime,
+      this.simulation,
+      HEADLESS_PLAYER_ID,
+      this.frame,
+      options,
+    )
+    const actions = createBoneyardHeadlessActionBuffer()
+    actions[0] = evaluated.evaluation.actions.movement
+    actions[1] = evaluated.evaluation.actions.target
+    actions[2] = evaluated.evaluation.actions.ability
+    actions[3] = evaluated.evaluation.actions.aim
+    const transition = this.stepTransition(actions, ticks)
+    const record: MlBotPolicyMainTrajectoryRecord = Object.freeze({
+      actions: evaluated.evaluation.actions,
+      done: transition.done,
+      episodeId: deterministicBoneyard(this.resetOptions.seed).runId,
+      masks: evaluated.evaluation.masks,
+      observation: transition.observation,
+      oldLogProbability: evaluated.evaluation.logProbability,
+      oldValue: evaluated.evaluation.value,
+      participantId: HEADLESS_PLAYER_ID,
+      reward: transition.reward.reward,
+      rewardTerms: transition.reward.terms,
+      simulationTick: transition.simulationTick,
+      ticks,
+      trajectoryVersion: 5,
+    })
+    return Object.freeze({
+      nextObservation: transition.nextObservation,
+      record,
+      transition,
+    })
+  }
+
+  stepPackedTransition(
+    actions: Float32Array,
+    offset: number,
+    ticks = 1,
+  ): BoneyardHeadlessTransition {
     validateActionSlice(actions, offset)
     validateTicks(ticks)
-    const selected = {
+    const selected: MlBotPolicyActionIndices = {
       movement: actions[offset]!,
       target: actions[offset + 1]!,
       ability: actions[offset + 2]!,
@@ -101,13 +201,25 @@ export class BoneyardHeadlessEnvironment {
       this.frame,
       selected,
     )
+    const observation = this.frame.values.slice()
+    const simulationTick = this.simulation.tick
+    const stateHash = this.stateHash()
     this.lastMasks = decision.masks
     this.observer.commit(decision.committedAction, decision.targetId)
+    const rewardAccumulator = new MlBotPolicyRewardAccumulator(HEADLESS_PLAYER_ID)
+    rewardAccumulator.begin(this.simulation)
+    const skillSelections: MlBotPolicySkillSelection[] = []
+    const choiceEvents: MlBotPolicyScriptedChoiceEvent[] = []
     if (this.simulation.levelUpBarrier !== null) {
-      this.simulation = resolveMlBotPolicySkillOffers(
+      const resolved = resolveMlBotPolicySkillOffers(
         this.simulation,
         this.playerIds(),
-      ).state
+        { [HEADLESS_PLAYER_ID]: this.frame.values },
+      )
+      this.simulation = resolved.state
+      skillSelections.push(...resolved.selections)
+      choiceEvents.push(...resolved.events)
+      for (const event of resolved.events) this.openScriptedChoice(event)
     }
     if (decision.hubAction) {
       const applied = applyGameSimulationHubAction(
@@ -125,9 +237,33 @@ export class BoneyardHeadlessEnvironment {
         [HEADLESS_PLAYER_ID]: decision.input,
       }
       for (const allyId of this.allyIds()) inputs[allyId] = scriptedAllyInput(this.simulation, allyId)
-      this.simulation = stepGameSimulationTick(this.simulation, inputs)
+      this.simulation = stepGameSimulationTick(this.simulation, inputs, {
+        attributionObserver: rewardAccumulator.attributionObserver(),
+      })
       this.frame = this.observeState(inputs)
     }
+    const done = mlBotPolicyTerminal(this.simulation, HEADLESS_PLAYER_ID)
+    const reward = rewardAccumulator.finish(this.simulation, done)
+    this.choiceTracker.accumulate(reward.reward, ticks)
+    if (done) this.choiceTracker.finish(true)
+    const transition = Object.freeze({
+      actions: Object.freeze({ ...selected }),
+      choiceEvents: Object.freeze(choiceEvents),
+      choiceIntervals: Object.freeze(this.choiceTracker.drain()),
+      done,
+      masks: decision.masks,
+      nextObservation: this.frame.values.slice(),
+      nextSimulationTick: this.simulation.tick,
+      nextStateHash: this.stateHash(),
+      observation,
+      reward,
+      simulationTick,
+      skillSelections: Object.freeze(skillSelections),
+      stateHash,
+      ticks,
+    })
+    this.lastTransitionValue = transition
+    return transition
   }
 
   observe(
@@ -152,6 +288,13 @@ export class BoneyardHeadlessEnvironment {
 
   lastActionMasks(): MlBotPolicyActionMasks {
     return this.lastMasks
+  }
+
+  lastTransition(): BoneyardHeadlessTransition {
+    if (this.lastTransitionValue === null) {
+      throw new Error('Boneyard headless environment has no completed transition')
+    }
+    return this.lastTransitionValue
   }
 
   stateHash(): string {
@@ -184,6 +327,23 @@ export class BoneyardHeadlessEnvironment {
         waves: startBoneyardWaveDirector(simulation.world.waves),
       },
     }
+  }
+
+  private createChoiceTracker(
+    options: BoneyardHeadlessResetOptions,
+  ): MlBotPolicyChoiceTrajectoryTracker {
+    return new MlBotPolicyChoiceTrajectoryTracker(
+      deterministicBoneyard(options.seed).runId,
+      HEADLESS_PLAYER_ID,
+    )
+  }
+
+  private openScriptedChoice(event: MlBotPolicyScriptedChoiceEvent): void {
+    this.choiceTracker.open({
+      ...event,
+      oldLogProbability: 0,
+      oldValue: 0,
+    })
   }
 
   private observeState(activeInputs: Readonly<Record<string, PlayerCharacterInput>>): MlBotPolicyFrame {

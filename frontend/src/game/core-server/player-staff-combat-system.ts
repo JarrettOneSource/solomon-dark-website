@@ -42,6 +42,7 @@ import {
   applyBoneyardStaffImpactVerticalVelocity,
   breakBoneyardSkeletonPike,
   damageBoneyardEnemy,
+  type BoneyardEnemyLethalObserver,
   type BoneyardEnemySemanticEvent,
   type BoneyardEnemyStore,
 } from './boneyard-enemy-store.ts'
@@ -62,6 +63,7 @@ export interface PlayerStaffCombatSystemContext {
     origin: Readonly<Vector2>,
     target: Readonly<Vector2>,
   ) => boolean
+  readonly lethalObserver?: BoneyardEnemyLethalObserver
   readonly playerEntities: PlayerEntityStore
   readonly players: Readonly<Record<string, PlayerCharacterState>>
   readonly rng: NativeRngState
@@ -278,6 +280,7 @@ export function stepPlayerStaffCombatSystem(
         stepped.sample,
         selected.targets,
         context.tick,
+        context.lethalObserver,
       )
       enemies = contact.enemies
       events.push(...contact.events)
@@ -388,6 +391,7 @@ function applyStaffContact(
   action: NativePlayerStaffAction,
   targets: readonly StaffCombatTarget[],
   tick: number,
+  lethalObserver?: BoneyardEnemyLethalObserver,
 ): Readonly<{
   enemies: BoneyardEnemyStore
   events: readonly BoneyardEnemySemanticEvent[]
@@ -415,6 +419,7 @@ function applyStaffContact(
     const damaged = damageBoneyardEnemy(enemies, {
       actorId: target.actorId,
       amount: damage,
+      lethalObserver,
       sourcePlayerId: action.ownerId,
       tick,
     })

@@ -35,6 +35,22 @@ test('Boneyard headless action buffers use four selected categorical heads per w
   assert.throws(() => createBoneyardHeadlessActionBuffer(0), /positive integer/)
 })
 
+test('Boneyard headless transition aligns the current observation, masks, action, reward, and next state', () => {
+  const environment = new BoneyardHeadlessEnvironment(RESET)
+  const before = environment.observe()
+  const actions = createBoneyardHeadlessActionBuffer()
+  const transition = environment.stepTransition(actions, 1)
+  assert.deepEqual(transition.observation, before)
+  assert.deepEqual(transition.actions, { ability: 0, aim: 0, movement: 0, target: 0 })
+  assert.equal(transition.reward.reward, 0)
+  assert.equal(transition.done, false)
+  assert.equal(transition.simulationTick + 1, transition.nextSimulationTick)
+  assert.equal(transition.masks.movement[0], 1)
+  assert.equal(transition.masks.ability[0], 1)
+  assert.deepEqual(transition.nextObservation, environment.observe())
+  assert.deepEqual(environment.lastTransition(), transition)
+})
+
 test('Boneyard headless reset rejects seeds outside uint32', () => {
   assert.throws(() => new BoneyardHeadlessEnvironment({ seed: -1 }), /uint32/)
   assert.throws(() => new BoneyardHeadlessEnvironment({ seed: 0x1_0000_0000 }), /uint32/)

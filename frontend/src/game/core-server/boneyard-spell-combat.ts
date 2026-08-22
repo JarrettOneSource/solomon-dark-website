@@ -287,6 +287,7 @@ export function resolveBoneyardSpellCombat(
         const damaged = damageBoneyardEnemy(enemies, {
           actorId: row.actor.id,
           amount,
+          lethalObserver,
           sourcePlayerId: contact.ownerId,
           suppressHurtSound: damage.suppressHitSound,
           tick,
@@ -364,6 +365,7 @@ export function resolveBoneyardSpellCombat(
       const contact = damageBoneyardEnemy(enemies, {
         actorId: row.actor.id,
         amount,
+        lethalObserver,
         sourcePlayerId: effect.ownerId,
         tick,
       })

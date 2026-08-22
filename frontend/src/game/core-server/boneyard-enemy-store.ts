@@ -771,6 +771,7 @@ export type ClipBoneyardEnemySpellSegment = (
 ) => Readonly<BoneyardPoint>
 
 export interface BoneyardEnemyLethalObserver {
+  readonly attributionObserver?: BoneyardEnemyAttributionObserver
   readonly onReward: (
     request: Readonly<{
       enemy: EvaluatedBoneyardEnemyConfig
@@ -817,6 +818,7 @@ export interface BoneyardEnemyStoreStepResult {
 export interface DamageBoneyardEnemyRequest {
   readonly actorId: BoneyardEnemyActorId
   readonly amount: number
+  readonly attributionObserver?: BoneyardEnemyAttributionObserver
   readonly lethalObserver?: BoneyardEnemyLethalObserver
   readonly sourcePlayerId: string | null
   readonly suppressHurtSound?: boolean
@@ -826,8 +828,22 @@ export interface DamageBoneyardEnemyRequest {
 export interface DamageBoneyardEnemyResult {
   readonly accepted: boolean
   readonly events: readonly BoneyardEnemySemanticEvent[]
+  readonly healthDamage: number
   readonly killed: boolean
   readonly store: BoneyardEnemyStore
+}
+
+export interface BoneyardEnemyAttributionObserver {
+  readonly onEnemyHealthDamage: (event: Readonly<{
+    actorId: number
+    amount: number
+    maximumHealth: number
+    playerId: string
+  }>) => void
+  readonly onEnemyKillExperience: (event: Readonly<{
+    amount: number
+    playerId: string
+  }>) => void
 }
 
 interface DamagePresentationWork {
@@ -1012,7 +1028,7 @@ export function damageBoneyardEnemy(
   const actor = source.actors[index]
   if (!actor) return damageBoneyardMaggot(source, request)
   if (actor.lifeState !== 'alive') {
-    return { accepted: false, events: [], killed: false, store: source }
+    return { accepted: false, events: [], healthDamage: 0, killed: false, store: source }
   }
 
   const work: DamagePresentationWork = {
@@ -1051,7 +1067,7 @@ export function damageBoneyardEnemy(
     }
     const actors = [...source.actors]
     actors[index] = nextActor
-    return finishDamage(source, actors, work, false)
+    return finishDamage(source, actors, work, false, 0)
   }
 
   const hurtSound = enemyHurtSound(actor)
@@ -1073,6 +1089,7 @@ export function damageBoneyardEnemy(
   }
 
   const currentHealth = actor.currentHealth - request.amount
+  const healthDamage = Math.min(Math.max(actor.currentHealth, 0), request.amount)
   const killed = currentHealth <= 0
   const nextActor: BoneyardEnemyActor = killed
     ? {
@@ -1112,7 +1129,8 @@ export function damageBoneyardEnemy(
       playerId: request.sourcePlayerId,
     })
   }
-  return finishDamage(source, actors, work, killed)
+  notifyAttributedHealthDamage(request, actor.id, actor.config.maximumHealth, healthDamage)
+  return finishDamage(source, actors, work, killed, healthDamage)
 }
 
 export function applyBoneyardStaffDisable(
@@ -1374,9 +1392,10 @@ function damageBoneyardMaggot(
   const index = source.maggots.findIndex((maggot) => maggot.id === request.actorId)
   const maggot = source.maggots[index]
   if (!maggot || maggot.lifeState !== 'alive') {
-    return { accepted: false, events: [], killed: false, store: source }
+    return { accepted: false, events: [], healthDamage: 0, killed: false, store: source }
   }
   const currentHealth = maggot.currentHealth - request.amount
+  const healthDamage = Math.min(Math.max(maggot.currentHealth, 0), request.amount)
   const killed = currentHealth <= 0
   const nextMaggot: BoneyardMaggotActor = {
     ...maggot,
@@ -1389,9 +1408,11 @@ function damageBoneyardMaggot(
   }
   const maggots = [...source.maggots]
   maggots[index] = nextMaggot
+  notifyAttributedHealthDamage(request, maggot.id, maggot.maximumHealth, healthDamage)
   return {
     accepted: true,
     events: [],
+    healthDamage,
     killed,
     store: {
       ...source,
@@ -1406,10 +1427,12 @@ function finishDamage(
   actors: readonly BoneyardEnemyActor[],
   work: DamagePresentationWork,
   killed: boolean,
+  healthDamage: number,
 ): DamageBoneyardEnemyResult {
   return {
     accepted: true,
     events: Object.freeze(work.events),
+    healthDamage,
     killed,
     store: {
       ...source,
@@ -1421,6 +1444,22 @@ function finishDamage(
       rngState: work.rngState,
     },
   }
+}
+
+function notifyAttributedHealthDamage(
+  request: DamageBoneyardEnemyRequest,
+  actorId: number,
+  maximumHealth: number,
+  amount: number,
+): void {
+  if (request.sourcePlayerId === null || amount <= 0) return
+  const observer = request.attributionObserver ?? request.lethalObserver?.attributionObserver
+  observer?.onEnemyHealthDamage({
+    actorId,
+    amount,
+    maximumHealth,
+    playerId: request.sourcePlayerId,
+  })
 }
 
 function enemyHurtSound(

@@ -162,6 +162,7 @@ import {
   applyBoneyardStaffHeadingPerturbation,
   emitBoneyardPlayerDamageSound,
   nativeWizardOuchCooldownReady,
+  type BoneyardEnemyAttributionObserver,
   type BoneyardEnemyLethalObserver,
   type BoneyardEnemySemanticEvent,
 } from './boneyard-enemy-store.ts'
@@ -274,6 +275,7 @@ export interface GameSimulationInventoryActionResult {
 export type PlayerCharacterInputs = Readonly<Record<PlayerId, PlayerCharacterInput>>
 
 export interface GameSimulationTickOptions {
+  readonly attributionObserver?: BoneyardEnemyAttributionObserver
   readonly enemySpawnIntents?: readonly BoneyardEnemySpawnIntent[]
   readonly extensions?: GameSimulationExtensions
 }
@@ -1189,6 +1191,7 @@ export function stepGameSimulationTick(
         lightProviderOrder,
         null,
         options.extensions,
+        options.attributionObserver,
       )
     }
     case 'boneyard': {
@@ -1253,6 +1256,7 @@ export function stepGameSimulationTick(
         lightProviderOrder,
         deferredEnemyProjectileRegistrations,
         options.extensions,
+        options.attributionObserver,
       )
     }
   }
@@ -1288,6 +1292,7 @@ function finishGameSimulationTick(
   lightProviderOrder: NativeLightProviderOrder,
   deferredEnemyProjectileRegistrations: DeferredNativeLightProviderRegistrations | null,
   extensions?: GameSimulationExtensions,
+  attributionObserver?: BoneyardEnemyAttributionObserver,
 ): GameSimulationState {
   const tick = previous.tick + 1
   let resolvedPlayers = result.players
@@ -1310,6 +1315,7 @@ function finishGameSimulationTick(
   let nextLevelUpBarrierId = previous.nextLevelUpBarrierId
   const unsteppedSecondaryActorIds = new Set<number>()
   const lethalObserver: BoneyardEnemyLethalObserver = {
+    attributionObserver,
     onReward: ({ enemy, playerId }) => {
       if (world.kind !== 'boneyard' || playerId === null) return
       const run = world.hallOfFameRuns[playerId]
@@ -1563,6 +1569,12 @@ function finishGameSimulationTick(
       receiverLevel: getPlayerProgression(progressionState, reward.playerId).level,
       receiverXpBonus: rewardDerived?.experienceBonus ?? 0,
     })
+    if (creditedExperience > 0) {
+      attributionObserver?.onEnemyKillExperience({
+        amount: creditedExperience,
+        playerId: reward.playerId,
+      })
+    }
     const awarded = grantSharedGameSimulationExperience(
       progressionState,
       reward.playerId,
@@ -1582,6 +1594,7 @@ function finishGameSimulationTick(
         level,
         tick,
         lightProviderOrder,
+        lethalObserver,
       )
       secondaryAbilities = triggered.secondaryAbilities
       world = triggered.world
@@ -1724,6 +1737,7 @@ function finishGameSimulationTick(
       combatAdmissionEnabled,
       enemies: world.enemies,
       inputs: combatInputs,
+      lethalObserver,
       knockbackTargetVisible: (origin, target) => {
         const blocked = firstBoneyardPathBlockProgress(
           origin,
@@ -2835,6 +2849,7 @@ function triggerMindblowingRing(
   level: number,
   tick: number,
   lightProviderOrder: NativeLightProviderOrder,
+  lethalObserver?: BoneyardEnemyLethalObserver,
 ): Readonly<{
   actorIds: readonly number[]
   secondaryAbilities: NativeSecondarySimulationState
@@ -2874,6 +2889,7 @@ function triggerMindblowingRing(
       const damaged = damageBoneyardEnemy(world.enemies, {
         actorId: target.id,
         amount: triggered.directDamage,
+        lethalObserver,
         sourcePlayerId: playerId,
         tick,
       })
