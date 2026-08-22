@@ -132,6 +132,10 @@ test('wizard variants share compact atlas pages instead of decoded padded sheets
   assert.match(playerAtlasGenerated, /PLAYER_CHARACTER_ATLAS_SOURCES = \[page0, page1\]/)
   assert.match(playerAtlasPacker, /cell\.getchannel\("A"\)\.getbbox\(\)/)
   assert.match(playerAtlasPacker, /if len\(pages\) > 2:/)
+  assert.match(
+    playerAtlasPacker,
+    /committed\.size != page\.size or committed\.tobytes\(\) != page\.tobytes\(\)/,
+  )
   assert.doesNotMatch(sharedAssets, /player-character-/)
   for (const page of [0, 1]) {
     const png = readFileSync(new URL(

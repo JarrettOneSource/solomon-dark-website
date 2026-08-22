@@ -303,6 +303,18 @@ def write_or_check(path: Path, expected: bytes, check: bool) -> None:
     path.write_bytes(expected)
 
 
+def write_or_check_page(path: Path, page: Image.Image, check: bool) -> None:
+    if check:
+        if not path.is_file():
+            raise SystemExit(f"generated player atlas is stale: {path}")
+        with Image.open(path) as source:
+            committed = source.convert("RGBA")
+        if committed.size != page.size or committed.tobytes() != page.tobytes():
+            raise SystemExit(f"generated player atlas is stale: {path}")
+        return
+    path.write_bytes(png_bytes(page))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--check", action="store_true")
@@ -328,9 +340,9 @@ def main() -> None:
     verify_reconstruction(paths, sheets, rectangles, pages)
 
     for index, page in enumerate(pages):
-        write_or_check(
+        write_or_check_page(
             assets_directory / f"{PAGE_PREFIX}-{index}.png",
-            png_bytes(page),
+            page,
             args.check,
         )
     write_or_check(
