@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import {
   HUB_COURTYARD_DEPTH_PROP_FRAME,
@@ -13,6 +14,8 @@ import {
   initialHubResolution,
   spriteFrameIndex,
 } from './hub-render-contract.ts'
+
+const hubWorldScene = readFileSync(new URL('./hub-world-scene.ts', import.meta.url), 'utf8')
 
 test('native painter boundaries sort actors around Courtyard props and tent faces', () => {
   assert.deepEqual(HUB_COURTYARD_DEPTH_PROP_FRAME, {
@@ -29,6 +32,13 @@ test('native painter boundaries sort actors around Courtyard props and tent face
   assert.ok(hubWorldDepthForActor(699) < HUB_WORLD_DEPTH.usefulThyngsFront)
   assert.ok(hubWorldDepthForActor(701) > HUB_WORLD_DEPTH.usefulThyngsFront)
   assert.ok(HUB_WORLD_DEPTH.usefulThyngsShadow < HUB_WORLD_DEPTH.courtyard + 1000)
+})
+
+test('Courtyard fountain transients keep the shared additive FadeScale painter', () => {
+  assert.match(
+    hubWorldScene,
+    /new Sprite\(this\.textures\.base\[hub\.fountainParticle\]\)[\s\S]*?sprite\.blendMode = 'add'/,
+  )
 })
 
 test('world overlays submit only their authored alpha bounds', () => {

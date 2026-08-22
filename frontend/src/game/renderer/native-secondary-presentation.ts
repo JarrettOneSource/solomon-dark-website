@@ -2407,6 +2407,7 @@ function shieldExplosionDraws(
     const ringScale = repeatedFloatMultiply(2.5, 1.01, age)
     draws.push(draw('DeadHawg', 2, {
       alpha: Math.min(ringAlpha, 1),
+      blend: 'add',
       offset: { x: 0, y: -35 },
       role: 'explosive-shield-expanding-ring',
       scaleX: ringScale,
@@ -2484,6 +2485,7 @@ function mindblastBurstDraws(
     const growth = [1.1, 1.05, 1.025][index]!
     draws.push(draw('Clothes', 2, {
       alpha: Math.min(alpha, 1),
+      blend: 'add',
       offset: { x: 0, y: -35 },
       role: `mindblast-expanding-ring-${index}`,
       scaleX: repeatedFloatMultiply(4.5, growth, age),

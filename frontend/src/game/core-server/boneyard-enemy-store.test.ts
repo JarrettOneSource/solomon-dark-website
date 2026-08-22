@@ -2901,6 +2901,18 @@ test('family Unbind stars use the exact primary-only clocks', () => {
   )
 })
 
+test('Wraith dissolve keeps the shared additive BadGuys-20 FadeScale core', () => {
+  const result = killOneAndStep('wraith-fade-scale-core', 'WRAITH')
+  const core = result.store.deathEffects.find(
+    ({ role }) => role === 'wraith-dissolve-core',
+  )
+  assert.ok(core)
+  assert.deepEqual(
+    { atlas: core.atlas, blendMode: core.blendMode, entry: core.entry },
+    { atlas: 'BadGuys', blendMode: 'add', entry: 20 },
+  )
+})
+
 test('Demon death retains its body flames and delayed Anim_FireBurst choreography', () => {
   let result = killOneAndStep('demon-death-choreography', 'DEMON')
   const effects = result.store.deathEffects

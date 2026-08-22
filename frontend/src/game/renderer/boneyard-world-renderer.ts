@@ -597,6 +597,7 @@ export async function createBoneyardWorldRenderer(
   canvas.dataset.staticCulling = 'exact-world-bounds'
   canvas.dataset.staticPaintCount = `${staticWorld.staticPaintCount}`
   canvas.dataset.weatherSplashAsset = 'DeadHawg:24'
+  canvas.dataset.weatherSplashBlend = 'add'
   canvas.dataset.weatherStreakRenderer = 'pixi-particle-batch'
   canvas.style.width = `${viewport.width}px`
   canvas.style.height = `${viewport.height}px`

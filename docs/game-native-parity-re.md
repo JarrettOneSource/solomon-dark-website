@@ -16050,7 +16050,7 @@ and `2+Float(.25)` scale. They spawn at `y-35`, lose `.05` alpha per tick,
 and account for an exact 60-word prefix.
 
 When Explosive Shield is installed, helper `0x00648790` then registers one
-normal scale-12 BadGuys `15` fade at `y-25`, one normal DeadHawg `2`
+normal scale-12 BadGuys `15` fade at `y-25`, one additive DeadHawg `2`
 FadeScale at `y-35` (scale `2.5`, factor `1.01`, alpha `1.5`, loss `.05`),
 and two additive ten-frame BadGuys `158..167` arrays at `y-35`, scale `6`,
 with frame rates `.15` and `.225`. Their two rotations consume two RNG words.
@@ -20860,7 +20860,7 @@ The complete retained presentation is:
 
 - one normal BadGuys 15 fade at `(x,y-25)`, scale `9*6=54`, alpha one,
   loss `.025`;
-- three cyan Clothes record 2 `Anim_FadeScale` rings at `(x,y-35)`, initial
+- three additive cyan Clothes record 2 `Anim_FadeScale` rings at `(x,y-35)`, initial
   scale `4.5`, alpha `1.5`, loss `.025`, and independent scale multipliers
   `1.1`, `1.05`, and `1.025`;
 - two additive BadGuys 158..167 sprite arrays at the origin, scale ten, with
@@ -22965,7 +22965,7 @@ The retail class census identifies `Anim_WeatherRaindrop` at vtable
 | Stormy mode 2 | 10 drops, or 20 with Enhanced Effects | exact-ported with the existing enabled browser effect configuration |
 | World streak | `20 + RandomFloat(10)`, width 1, cached world-light gradient, floor retirement | exact-ported after the 2026-08-22 render-boundary reopen |
 | Spawn validity | visible-camera samples rejected only by `FUN_005238C0` with native radius 4; retry is unbounded | corrected after audit |
-| Splash child | `Anim_FadeScale` with `DeadHawg:24` (`DAT_00819994 + 0x1298`), `life=0.75..1`, scaled loss, scaled growth, and pre-light-composite painter ownership | exact-ported after the 2026-08-22 render-boundary reopen |
+| Splash child | additive `Anim_FadeScale` with `DeadHawg:24` (`DAT_00819994 + 0x1298`), `life=0.75..1`, scaled loss, scaled growth, and pre-light-composite painter ownership | correction in the 2026-08-22 additive-painter reopen below |
 | Complex Lighting on | splash manager, early Region light multiply, shared queue, then analytically lit streak manager | exact-ported after the 2026-08-22 render-boundary reopen |
 | Complex Lighting off | white analytic tint, splash and streak managers, then the late Region light multiply | exact-ported after the 2026-08-22 render-boundary reopen |
 | Ambient audio | shared `sounds\\rainfall__loop`, mode gain `0.4/1` times `1 - Arena+0x8E48` | corrected after audit |
@@ -23141,6 +23141,132 @@ nudge would not reproduce both native branches.
   gone: the rings remain visible inside the Region light and contribute no
   visible pixels across the surrounding black field. No member is
   browser-blocked and no unknown remains in the corrected boundary.
+
+### Additive-painter reopen — 2026-08-22
+
+#### Reported smell and parity question
+
+- Reported web behavior: rain ground splashes/puddles are black. A fresh built
+  preview mode-2 capture reproduces a dark `DeadHawg:24` ring inside the
+  player's partially lit terrain at `/tmp/solomon-rain-puddle-black-before.png`.
+- Stock behavior to recover: the complete `Anim_FadeScale` painter state, its
+  interaction with both Region-composite branches, and every sibling producer
+  that installs the same concrete vtable.
+- Falsifier: if `Anim_FadeScale::Draw` retained ordinary source-over blending,
+  the current Pixi default would be correct and another light-boundary fact
+  would have to explain the black ring.
+
+This is a third report in the Arena-weather system. The earlier passes recovered
+the splash asset, lifecycle, and position relative to the Region multiply, but
+described only its RGB/alpha setup. They did not trace the renderer-state byte
+written immediately before the sprite draw. The previous browser receipt then
+accepted z-index metadata and disappearance in zero-light pixels without
+asserting the splash's color or blend inside a nonzero light field.
+
+#### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Instructions | retail `Anim_FadeScale::Draw 0x00455DF0` | writes renderer blend byte `1`, flushes that state, draws the transformed sprite, restores white, then restores blend byte `0` | high |
+| Instructions | renderer dispatcher `0x004208A0` | blend byte `1` writes Direct3D render states `SRCBLEND=5 (SRCALPHA)` and `DESTBLEND=2 (ONE)`: alpha-weighted additive composition | high |
+| Instructions/data | vtable `0x00785A84`; class catalog and exact constructors `0x00468E50`, `0x0047F8D0`, `0x0050B390`, `0x005F7010`, `0x005FB020`, `0x00644A00`, `0x00645B50`, `0x00648790` | eight producers install this one shared additive painter; the associated records are fully enumerated below | high |
+| Current web | `native-boneyard-weather-view.ts` at `origin/main d2ed2c31` | pooled splash sprites never set `blendMode`, leaving Pixi's inherited/default path instead of the native additive path | high |
+| Browser | built preview, Chromium, 1600x900, mode 2, Complex Lighting on | 561 streaks, 305 splashes, light scalar range `0..1`, exact split order `0.25 < 0.5 < 11.5`, zero page/console errors, but a dark ring remains in the partially lit field | high |
+
+The instruction evidence uses the preserved 4,723,200-byte retail executable,
+preferred base `0x00400000`, SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`.
+The read-only Ghidra queries used static addresses; no injected process, PID,
+or ASLR mapping is involved. The reusable native fact is also recorded in Mod
+Loader `docs/reverse-engineering/native-world-weather.md` and the affected
+projectile/equipment/enemy reports.
+
+#### System boundary and membership inventory
+
+Native system: Arena world-weather presentation plus the complete concrete
+`Anim_FadeScale` vtable membership falsified by the missing blend-state trace.
+Perspective, additive-perspective, and clipped FadeScale variants use distinct
+vtables and are outside this shared-class boundary.
+
+| Member | Native source | Disposition | Proof |
+| --- | --- | --- | --- |
+| Arena rain/storm splash, all density branches | `0x00468E50`, `DeadHawg[24]` | `exact-ported` | immutable pooled-sprite additive blend contract plus Linux and Mac mode-2 Chrome receipts |
+| Wraith dissolve core | `0x0047F8D0`, `BadGuys[20]` | `exact-ported` | host death-effect assertion pins record 20 and additive blend |
+| Courtyard fountain transient | `0x0050B390`, `College[38]` | `exact-ported` | Hub renderer contract pins additive blend on pooled sprite creation |
+| Tragic Circle player pulse | `0x005F7010`, `BadGuys[7]` | `verified-already-at-parity` | shared record-7 presentation plan was already explicitly additive |
+| Magic Circle player pulse | `0x005FB020`, `BadGuys[7]` | `verified-already-at-parity` | Magic Circle presentation assertion retains the additive player pulse |
+| Teleport source/destination | `0x00644A00`, `BadGuys[90]` | `verified-already-at-parity` | both source and destination remain pinned to additive blend |
+| Mindblast rings | `0x00645B50`, three `Clothes[2]` actors | `exact-ported` | all three independent recurrence rows now assert additive blend |
+| Explosive Shield ring | `0x00648790`, `DeadHawg[2]` | `exact-ported` | four-layer burst assertion pins only the ring additive and keeps the separate `BadGuys[15]` `Anim_Fade` source-over |
+
+All vtable-install xrefs and associated authored records are dispositioned in
+this inventory. Right-click Storm/Acid raindrop ground sprites do not install
+`Anim_FadeScale` and retain their separately recovered tinted painter programs.
+There is no browser-blocked member and no unextracted table row.
+
+#### Native ownership and recovered contract
+
+`Anim_FadeScale` owns scale, recurrence, RGBA, sprite pointer, and lifetime.
+Its vtable slot `+0x0C` is the painter `0x00455DF0`; therefore additive blend
+is class behavior, not a weather special case. The Arena keeps the splash in
+manager `+0x2C4`. Complex Lighting on still paints that manager, then multiplies
+the framebuffer at `0x0046FAFA`, flushes the shared queue, and paints the
+analytically tinted streak manager. Complex Lighting off still moves the same
+multiply after both weather families. The new fact changes neither root order,
+RNG, collision, alpha, scale, asset, audio, authority, nor teardown.
+
+#### Web implementation consequence and validation contract
+
+- Set the weather splash sprite's immutable blend to `add` when its pooled view
+  is created; do not tint it analytically or move it across the Region boundary.
+- Replace the same falsified default/normal assumption for the Courtyard
+  fountain, three Mindblast rings, Explosive Shield ring, and Wraith record.
+  Preserve the three already-additive members and every unrelated sibling pass.
+- Focused regressions must assert every inventory row: source-level immutable
+  blend for both pooled sprite owners, exact Wraith record 20, all three
+  Mindblast ring blends, the Explosive Shield ring blend, and unchanged
+  Circle/Teleport additive draws.
+- The browser weather journey must handle the local-cheats confirmation, retain
+  modes 1/2 and both Complex Lighting orders, and inspect a real splash inside
+  the nonzero Region field rather than accepting counts/z-index alone. The
+  exact tree must then pass `./scripts/validate.sh`.
+
+#### Implementation validation receipt
+
+- `NativeBoneyardWeatherView` and `HubWorldScene` set `blendMode='add'` once
+  when growing their pooled FadeScale sprites. Secondary presentation marks
+  only the three Mindblast rings and Explosive Shield ring additive, and the
+  Wraith death owner now selects exact `BadGuys[20]`. No weather state, RNG,
+  light sampling, root order, audio, collision, authority, or teardown changed.
+- The new contracts first failed on both secondary blend families. After the
+  correction, the complete Boneyard suite passed `1,326/1,326`, including the
+  weather/fountain source owners and Wraith record assertion; the separately
+  canonical weather suite passed `9/9` and retained modes 0/1/2, Enhanced
+  Effects density, RNG, collision, recurrence, light caching, audio, and
+  retirement.
+- Exact rebased Website base `d8c9d14769210d7f8ae3ae321ced1245c79bd688`
+  passed `./scripts/validate.sh` on the Mac mini (`macOS 26.6.2`, Apple
+  hardware): backend build/contracts, lint/import boundaries, all frontend and
+  desktop suites, production build, game-bundle budget, and media policy. The
+  candidate tree is
+  `/Users/jarrett/codex-acceptance/rain-puddle-additive-rebased-20260822.FYy8bR`;
+  checksum dry-run confirmed its eleven changed Website files match this tree.
+- Mac hardware Chrome mode 2 produced 560 streaks and 305 additive splashes,
+  light scalar range `0..1`, rainfall gain `1`, `DeadHawg:24`, and empty
+  page/console error arrays. Complex Lighting on retained
+  `0.25 < 0.5 < 11.5`; the in-game off toggle retained
+  `0.25 < 11.5 < 11.75`. The image visibly shows gray-white rings in the
+  nonzero light field instead of the reproduced black mark:
+  `/tmp/solomon-rain-puddle-additive-mac-20260822.png`, SHA-256
+  `f6a5ba1ec09ac767aaa41da178f34c58041cad12e9c74d4d4b793201c3b61cb6`.
+- Linux built-preview acceptance independently passed with 570 streaks, 306
+  additive splashes, both lighting orders, rainfall gain one, and no browser
+  errors. Before/after artifacts are
+  `/tmp/solomon-rain-puddle-black-before.png` and
+  `/tmp/solomon-rain-puddle-additive-after.png`.
+- Every shared-class row is dispositioned above. There is no browser-blocked
+  member, approximation, or remaining unknown in this reopened painter
+  boundary. Validation processes were task-owned and stopped afterward.
 
 ### Implementation and validation receipt
 

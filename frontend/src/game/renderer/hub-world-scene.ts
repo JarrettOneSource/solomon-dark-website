@@ -463,6 +463,7 @@ export class HubWorldScene {
       if (!sprite) {
         sprite = new Sprite(this.textures.base[hub.fountainParticle])
         sprite.anchor.set(0.5)
+        sprite.blendMode = 'add'
         sprite.position.set(HUB_FOUNTAIN_ORIGIN.x, HUB_FOUNTAIN_ORIGIN.y)
         sprite.zIndex = HUB_WORLD_DEPTH.fountain
         sprite.eventMode = 'none'

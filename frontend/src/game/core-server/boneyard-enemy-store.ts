@@ -5016,7 +5016,7 @@ function spawnEnemyDeathEffects(
         alphaLossPerTick: 1 / 36,
         atlas: 'BadGuys',
         blendMode: 'add',
-        entry: 21,
+        entry: 20,
         kind: 'fade',
         lifetimeTicks: 36,
         role: 'wraith-dissolve-core',

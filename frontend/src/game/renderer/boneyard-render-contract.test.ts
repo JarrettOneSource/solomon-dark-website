@@ -117,6 +117,10 @@ test('world-weather splash and streak painters are separate light-boundary roots
   )
 })
 
+test('world-weather splash pool keeps the native additive FadeScale painter', () => {
+  assert.match(weatherView, /sprite\.blendMode = 'add'/)
+})
+
 test('wizard variants share compact atlas pages instead of decoded padded sheets', () => {
   assert.match(playerTextures, /PLAYER_CHARACTER_ATLAS_SOURCES/)
   assert.match(playerTextures, /createPlayerCharacterAtlas/)

@@ -754,7 +754,7 @@ test('Explosive Shield replays the exact four-layer burst and one hundred FuzzyS
       role: 'explosive-shield-center-flash', scaleX: 12, scaleY: 12,
     },
     {
-      atlas: 'DeadHawg', blend: 'normal', entry: 2, offset: { x: 0, y: -35 },
+      atlas: 'DeadHawg', blend: 'add', entry: 2, offset: { x: 0, y: -35 },
       role: 'explosive-shield-expanding-ring', scaleX: 2.5, scaleY: 2.5,
     },
     {
@@ -882,7 +882,7 @@ test('Mindblowing Ring replays its exact core, three Clothes rings, arrays, and 
   }, ...[1.1, 1.05, 1.025].map((_, index) => ({
     alpha: 1,
     atlas: 'Clothes' as const,
-    blend: 'normal' as const,
+    blend: 'add' as const,
     entry: 2,
     offset: { x: 0, y: -35 },
     role: `mindblast-expanding-ring-${index}`,

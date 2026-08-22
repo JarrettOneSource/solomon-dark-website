@@ -56,6 +56,8 @@ try {
   }
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
+  const continueLocal = page.getByRole('button', { name: /continue local/i })
+  if (await continueLocal.isVisible().catch(() => false)) await continueLocal.click()
   await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({ timeout: 30_000 })
   await page.getByRole('textbox', { name: 'Wizard name' }).fill('WeatherProbe')
   await page.getByRole('button', { name: /fire/i }).click()
@@ -91,6 +93,7 @@ try {
       maxMainLightScalar: frame?.maxMainLightScalar,
       minMainLightScalar: frame?.minMainLightScalar,
       splashAsset: canvas?.dataset.weatherSplashAsset,
+      splashBlend: canvas?.dataset.weatherSplashBlend,
       splashCount: Number(canvas?.dataset.weatherSplashCount),
       splashZIndex: Number(canvas?.dataset.weatherSplashZIndex),
       streakRenderer: canvas?.dataset.weatherStreakRenderer,
@@ -100,6 +103,7 @@ try {
   })
   assert.equal(receipt.canvasMode, mode)
   assert.equal(receipt.splashAsset, 'DeadHawg:24')
+  assert.equal(receipt.splashBlend, 'add')
   assert.equal(receipt.streakRenderer, 'pixi-particle-batch')
   assert.equal(receipt.audioCue, 'rainfall-loop')
   assert.equal(receipt.audioOwner, 'boneyard-weather:rainfall')

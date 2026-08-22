@@ -110,6 +110,7 @@ export class NativeBoneyardWeatherView {
       texture: this.splashTexture,
     })
     sprite.anchor.set(this.splashAnchor.x, this.splashAnchor.y)
+    sprite.blendMode = 'add'
     sprite.eventMode = 'none'
     sprite.renderable = false
     this.splashViews.push(sprite)
