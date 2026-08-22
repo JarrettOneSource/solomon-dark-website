@@ -30305,14 +30305,18 @@ Monument row remains unextracted.
   root-scalar path.
 - Apple-M2 Chrome `151.0.7922.170` repeated the exact focused suite and WebGL2
   journey on detached Website commit
-  `5a619c0ca99388d3ea344c81ff1574552b276fb4`. Building selectors changed
+  `fcc69ab9077d6cf31ccbfbc168010ede06c05c64`. Building selectors changed
   `17,271`, `18,285`, `18,474`, and `16,763` roof pixels with zero mismatches;
   every Monument row passed. The screenshot is
-  `/tmp/solomon-roof-lighting-mac-5a619c0c.png`, SHA-256
+  `/tmp/solomon-roof-lighting-mac-fcc69ab9.png`, SHA-256
   `4b724c5ecc6f0551795014ede412ddb4c1dbe57212e4175e6f024530396d765d`.
   The task-owned host/Vite process was stopped and port `5197` closed.
-- The complete canonical Website gate and final Mac exact-tree gate remain
-  pending after concurrent unrelated validations starved pre-existing
-  WebSocket heartbeat tests. Those unchanged files pass `49/49` in isolation;
-  no failure touched the lighting implementation. Publication and deployment
-  remain pending and are not implied by the focused receipt.
+- The full unchanged `./scripts/validate.sh` gate passed on that exact Mac tree:
+  `15/15` backend/contracts, `4/4` library, `43/43` loot, `227/227`
+  prerequisites, `1297/1297` game, `8/8` world weather, `29/29` party,
+  `11/11` level-up, `7/7` diagnostics, `17/17` Hall, `21/21` Hub UI, and `5/5`
+  desktop, followed by production TypeScript/Vite/game-host builds, media
+  policy, and bundle budget (`394,179` raw / `110,639` gzip bytes). Linux
+  concurrency diagnostics starved unchanged WebSocket heartbeat tests; both
+  affected files pass `49/49` in isolation and are not used as the closure
+  gate. Publication and deployment remain separate and pending.
