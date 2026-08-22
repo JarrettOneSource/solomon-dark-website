@@ -1,6 +1,7 @@
 import { Container, Sprite, type Texture } from 'pixi.js'
 
 import type {
+  PrimarySpellEarthBoulderBitState,
   PrimarySpellEarthCalledRockState,
   PrimarySpellEarthImpactState,
   PrimarySpellEarthProjectileState,
@@ -20,6 +21,81 @@ export interface EarthBoulderTextures {
   litRocks: readonly Texture[]
   openingFlash: Texture
   rocks: readonly Texture[]
+}
+
+export class EarthBoulderBitView {
+  readonly container: Container
+  readonly containers: readonly Container[]
+  readonly kind = 'earth-boulder-bit'
+  private readonly rock: Sprite
+  private readonly shadow: Sprite
+  private state: PrimarySpellEarthBoulderBitState
+  private readonly textures: EarthBoulderTextures
+  private worldTint = 0xffffff
+
+  constructor(state: PrimarySpellEarthBoulderBitState, textures: EarthBoulderTextures) {
+    this.state = state
+    this.textures = textures
+    this.container = new Container({ label: 'earth-boulder-bit' })
+    this.containers = [this.container]
+    this.container.eventMode = 'none'
+    this.shadow = sprite(textures.litRocks[0])
+    this.shadow.tint = 0x000000
+    this.rock = sprite(textures.litRocks[0])
+    this.container.addChild(this.shadow, this.rock)
+    this.update(state)
+  }
+
+  update(state: PrimarySpellProjectileState | PrimarySpellTransientState): void {
+    if (state.kind !== 'earth-boulder-bit') return
+    this.state = state
+    const debris = state.debris
+    this.container.position.set(
+      state.position.x + debris.position.x,
+      state.position.y + debris.position.y,
+    )
+    const texture = this.textures.litRocks[EARTH_BOULDER_LIT_RECORDS.indexOf(debris.record)]
+    this.shadow.texture = texture
+    this.shadow.position.set(0, 2)
+    this.shadow.rotation = debris.rotationDegrees * Math.PI / 180
+    this.shadow.scale.set(debris.scale, debris.scale * 0.75)
+    this.shadow.alpha = Math.min(1, debris.alpha)
+    this.shadow.renderable = debris.enhancedShadow && debris.height !== 0
+    this.rock.texture = texture
+    this.rock.position.set(0, debris.height)
+    this.rock.rotation = debris.rotationDegrees * Math.PI / 180
+    this.rock.scale.set(debris.scale)
+    this.rock.alpha = Math.min(1, debris.alpha)
+    this.applyRockTint()
+  }
+
+  painterRoots(): readonly EarthPainterRoot[] {
+    const position = this.container.position
+    return [{
+      container: this.container,
+      lane: 'world-sorted',
+      queueFamily: 'ordinary-dynamic',
+      regionLightPoint: { x: position.x, y: position.y },
+      sortBias: -15,
+      suffix: '',
+      worldY: position.y,
+    }]
+  }
+
+  setTint(suffix: string, tint: number): void {
+    if (suffix !== '') return
+    this.worldTint = tint
+    this.applyRockTint()
+  }
+
+  destroy(): void {
+    this.container.destroy({ children: true })
+  }
+
+  private applyRockTint(): void {
+    const nativeTint = 0xff0000 | Math.trunc(this.state.debris.colorGreen * 255) << 8
+    this.rock.tint = multiplyTint(this.worldTint, nativeTint)
+  }
 }
 
 export class EarthBoulderView {

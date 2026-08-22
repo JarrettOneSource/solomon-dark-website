@@ -33,7 +33,6 @@ import {
   stepNativeWeldMeteorMarker,
 } from './native-weld-meteor.ts'
 import {
-  NATIVE_WELD_BOULDER_DEBRIS_LIFETIME_TICKS,
   createNativeWeldBoulderDebrisParticle,
   createNativeWeldEtherealBoulderWeakDebrisProgram,
   stepNativeWeldBoulderDebrisParticle,
@@ -190,6 +189,7 @@ export interface NativeWeldEtherealBoulderState extends NativeWeldPersistentActo
   readonly quantity: number
   readonly remainingDamage: number
   readonly scale: number
+  readonly shellScale: number
   readonly speedFactor: number
   readonly toughness: number
   readonly velocity: Vector2
@@ -274,11 +274,12 @@ export interface NativeWeldMeteorFlashActorState extends NativeWeldOwnedActorBas
 
 export interface NativeWeldImpactActorState extends NativeWeldOwnedActorBase {
   readonly alpha: number
+  readonly boulderTerminalCharge: number | null
   readonly buildId: NativeWeldOneShotBuildId | NativeWeldPersistentBuildId
   readonly impactSoundPitch: number | null
   readonly impactSoundVariant: number | null
   readonly kind: 'weld-impact'
-  readonly lightRegistration: null
+  readonly lightRegistration: NativeLightProviderRegistration | null
   readonly position: Vector2
   readonly presentationRotationDegrees: number | null
   readonly presentationScale: number
@@ -795,6 +796,7 @@ export function createNativeWeldPersistentActor(input: {
       quantity: Math.max(1, Math.min(4, Math.round(input.vector[2]!))),
       remainingDamage: input.vector[0]!,
       scale: NATIVE_WELD_PERSISTENT_INITIAL_SCALE,
+      shellScale: NATIVE_WELD_PERSISTENT_INITIAL_SCALE,
       speedFactor: input.vector[3]!,
       toughness: input.vector[4]!,
       velocity: Object.freeze({ x: 0, y: 0 }),
@@ -865,13 +867,14 @@ export function updateNativeWeldPersistentActor(
       : Math.fround(actor.vector[5]! * castProgressFactor)
     const growth = Math.fround(Math.fround(growthInput * 0.0025) * 3)
     const scale = Math.min(actor.maximumScale, Math.fround(actor.scale + growth))
+    const assemblyScale = Math.floor(30 * scale) === Math.floor(30 * actor.scale)
+      ? actor.assemblyScale
+      : scale
     return {
       actor: Object.freeze({
         ...actor,
         ageTicks: actor.ageTicks + 1,
-        assemblyScale: Math.floor(30 * scale) === Math.floor(30 * actor.scale)
-          ? actor.assemblyScale
-          : scale,
+        assemblyScale,
         buildId: 1006,
         direction: Object.freeze({ ...direction }),
         damage: underpowered ? Math.fround(actor.vector[0]! * 0.5) : actor.damage,
@@ -886,6 +889,7 @@ export function updateNativeWeldPersistentActor(
           ? Math.fround(actor.remainingDamage * 0.5)
           : actor.remainingDamage,
         scale,
+        shellScale: assemblyScale,
         speedFactor: underpowered ? 1 : actor.speedFactor,
       }),
       debris: debrisProgram.debris,
@@ -1120,6 +1124,7 @@ export function releaseNativeWeldPersistentActor(input: {
             registrationOrdinal: input.firstChildId + index - 1,
           }),
       lifetimeTicksRemaining: Math.floor(piece.speedFactor * 1_000 + 250),
+      maximumScale: actor.scale,
       origin: piece.origin,
       phase: 'flight',
       flightTicks: 0,
@@ -1141,12 +1146,15 @@ export function retainNativeWeldPersistentActorContacts(
   actor: NativeWeldEtherealBoulderState,
   hitTargetIds: readonly string[],
   remainingDamage: number,
+  scale: number,
 ): NativeWeldEtherealBoulderState | null {
-  if (remainingDamage < 0.001) return null
+  if (remainingDamage <= 0) return null
   return Object.freeze({
     ...actor,
     hitTargetIds: Object.freeze([...hitTargetIds]),
     remainingDamage,
+    scale,
+    shellScale: scale,
   })
 }
 
@@ -1280,14 +1288,13 @@ export function stepNativeWeldWorldActor(
       sourceRng,
     )
     return {
-      actor: stepped.particle !== null
-        && actor.ageTicks + 1 < NATIVE_WELD_BOULDER_DEBRIS_LIFETIME_TICKS
-        ? Object.freeze({
+      actor: stepped.particle === null
+        ? null
+        : Object.freeze({
             ...actor,
             ageTicks: actor.ageTicks + 1,
             debris: stepped.particle,
-          })
-        : null,
+          }),
       rng: stepped.rng,
     }
   }

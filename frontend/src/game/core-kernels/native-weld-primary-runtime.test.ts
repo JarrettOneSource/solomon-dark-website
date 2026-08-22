@@ -409,6 +409,7 @@ test('Ethereal Boulder grows in the native float lane and releases the four-piec
   })
   assert.equal(source.buildId, 1006)
   assert.equal(source.assemblyScale, Math.fround(0.18))
+  assert.equal(source.shellScale, Math.fround(0.18))
   assert.equal(source.flightTicks, 0)
   assert.equal(source.maximumScale, Math.fround(1.5 * 0.75))
   const updated = updateNativeWeldPersistentActor(
@@ -423,12 +424,17 @@ test('Ethereal Boulder grows in the native float lane and releases the four-piec
     updated.actor.scale,
     Math.fround(Math.fround(0.18) + Math.fround(Math.fround(1.2 * 0.0025) * 3)),
   )
+  assert.equal(updated.actor.shellScale, updated.actor.assemblyScale)
   const released = releaseNativeWeldPersistentActor({
     actor: updated.actor,
     firstChildId: 90,
     rng: updated.rng,
     tick: 12,
   })
+  assert.ok(released.actors[0]?.kind === 'weld-persistent')
+  assert.ok(released.actors[0]?.buildId === 1006)
+  assert.equal(released.actors[0].maximumScale, updated.actor.scale)
+  assert.equal(released.actors[0].shellScale, updated.actor.shellScale)
   assert.equal(released.nextId, 93)
   assert.deepEqual(released.actors.map(({ id, origin }) => ({ id, origin })), [
     { id: 40, origin: { x: 118, y: 224 } },

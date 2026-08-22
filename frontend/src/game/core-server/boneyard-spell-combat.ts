@@ -1,5 +1,6 @@
 import {
   createPrimarySpellContactImpact,
+  createPrimarySpellEarthBoulderBit,
   createPrimarySpellFireDetonation,
   createPrimarySpellWeldFireDetonation,
   PRIMARY_SPELL_EARTH_COLLISION_RADIUS_SCALE,
@@ -64,7 +65,10 @@ import {
   retainNativeWeldHailstoneDamage,
   retainNativeWeldPersistentActorContacts,
 } from '../core-kernels/native-weld-primary-runtime.ts'
-import { createNativeWeldBoulderContactDebrisProgram } from '../core-kernels/native-weld-boulder-debris.ts'
+import {
+  createNativeWeldBoulderContactDebrisProgram,
+  createNativeWeldEtherealBoulderBreakupDebrisProgram,
+} from '../core-kernels/native-weld-boulder-debris.ts'
 import {
   createNativeWeldHailContactPresentation,
   createNativeWeldHailKnockback,
@@ -498,7 +502,27 @@ export function resolveBoneyardSpellCombat(
     nextSpellId += 1
   }
 
-  const publishBoulderContactDebris = (effect: Readonly<{
+  const publishEarthBoulderContactDebris = (
+    projectile: Extract<PrimarySpellProjectileState, { kind: 'earth' }>,
+    charge: number,
+  ): void => {
+    const program = createNativeWeldBoulderContactDebrisProgram({ rng, scale: charge })
+    rng = program.rng
+    const id = nextSpellId
+    nextSpellId += 1
+    if (!Number.isFinite(charge)) return
+    impactTransients.push(createPrimarySpellEarthBoulderBit({
+      debris: program.debris[0]!,
+      enhancedEffects: true,
+      id,
+      origin: projectile.position,
+      ownerId: projectile.ownerId,
+      tick,
+      worldKey: projectile.worldKey,
+    }))
+  }
+
+  const publishWeldBoulderContactDebris = (effect: Readonly<{
     buildId: 1006
     direction: Vector2
     origin: Vector2
@@ -512,18 +536,20 @@ export function resolveBoneyardSpellCombat(
       scale: effect.scale,
     })
     rng = program.rng
+    const id = nextSpellId
+    nextSpellId += 1
+    if (!Number.isFinite(effect.scale)) return
     impactTransients.push(createNativeWeldBoulderDebrisActor({
       buildId: effect.buildId,
       debris: program.debris[0]!,
       direction: effect.direction,
-      id: nextSpellId,
+      id,
       origin: effect.origin,
       ownerId: effect.ownerId,
       tick,
       vector: effect.vector,
       worldKey: effect.worldKey,
     }))
-    nextSpellId += 1
   }
 
   for (const projectile of [...sourceSpells.projectiles].sort(bySpellId)) {
@@ -556,16 +582,19 @@ export function resolveBoneyardSpellCombat(
 
       const hitTargetIds = [...projectile.hitTargetIds]
       let remainingDamage = projectile.remainingDamage
+      let contactCharge = projectile.charge
+      let continueTraversal = true
       for (const target of contacts) {
-        if (remainingDamage < 0.001) break
-        hitTargetIds.push(target.id)
+        if (!continueTraversal) break
         const actor = rows.find(({ target: candidate }) => candidate.id === target.id)?.actor
         if (!actor) continue
-        const contact = consumeNativeEarthBoulderContact(
-          remainingDamage,
-          Math.max(0, actor.currentHealth),
-          projectile.toughness,
-        )
+        const contact = consumeNativeEarthBoulderContact({
+          releaseBaseDamage: projectile.damage,
+          releaseCharge: projectile.maximumCharge,
+          remainingPool: remainingDamage,
+          targetHealth: Math.max(0, actor.currentHealth),
+          toughness: projectile.toughness,
+        })
         const amount = contact.damage
           * validatedDamageMultiplier(damageMultiplier(actor.id, projectile.kind))
         const damaged = damageBoneyardEnemy(enemies, {
@@ -576,19 +605,25 @@ export function resolveBoneyardSpellCombat(
           tick,
         })
         if (!damaged.accepted) continue
+        hitTargetIds.push(target.id)
         enemies = damaged.store
         events.push(...damaged.events)
+        contactCharge = contact.charge
+        continueTraversal = contact.continueTraversal
+        publishEarthBoulderContactDebris(projectile, contact.charge)
         remainingDamage = contact.remainingPool
         hits.push(spellHit(projectile, actor.id, amount, damaged.killed, tick))
       }
-      if (remainingDamage < 0.001) {
+      if (remainingDamage <= 0) {
         consumedProjectileIds.add(projectile.id)
         publishContactImpact(projectile, projectile.position)
       } else {
         updatedProjectiles.set(projectile.id, {
           ...projectile,
+          charge: contactCharge,
           hitTargetIds,
           remainingDamage,
+          shellCharge: contactCharge,
         })
       }
       continue
@@ -818,16 +853,19 @@ export function resolveBoneyardSpellCombat(
       if (contacts.length === 0) continue
       const hitTargetIds = [...effect.hitTargetIds]
       let remainingDamage = effect.remainingDamage
+      let contactScale = effect.scale
+      let continueTraversal = true
       for (const target of contacts) {
-        if (remainingDamage < 0.001) break
-        hitTargetIds.push(target.id)
+        if (!continueTraversal) break
         const actor = rows.find(({ target: candidate }) => candidate.id === target.id)?.actor
         if (!actor) continue
-        const contact = consumeNativeEarthBoulderContact(
-          remainingDamage,
-          Math.max(0, actor.currentHealth),
-          effect.toughness,
-        )
+        const contact = consumeNativeEarthBoulderContact({
+          releaseBaseDamage: effect.damage,
+          releaseCharge: effect.maximumScale,
+          remainingPool: remainingDamage,
+          targetHealth: Math.max(0, actor.currentHealth),
+          toughness: effect.toughness,
+        })
         const damaged = damageBoneyardEnemy(enemies, {
           lethalObserver,
           actorId: actor.id,
@@ -836,9 +874,12 @@ export function resolveBoneyardSpellCombat(
           tick,
         })
         if (!damaged.accepted) continue
+        hitTargetIds.push(target.id)
         enemies = damaged.store
         events.push(...damaged.events)
-        publishBoulderContactDebris(effect)
+        contactScale = contact.charge
+        continueTraversal = contact.continueTraversal
+        publishWeldBoulderContactDebris({ ...effect, scale: contact.charge })
         remainingDamage = contact.remainingPool
         hits.push({
           actorId: actor.id,
@@ -854,31 +895,56 @@ export function resolveBoneyardSpellCombat(
         effect,
         hitTargetIds,
         remainingDamage,
+        contactScale,
       )
       if (retained) {
         updatedTransients.set(effect.id, retained)
       } else {
         consumedTransientIds.add(effect.id)
+        const terminalScale = effect.scale
         impactTransients.push({
           ageTicks: 0,
-          alpha: 0,
+          alpha: 2,
           birthTick: tick,
+          boulderTerminalCharge: terminalScale,
           buildId: 1006,
           direction: { ...effect.direction },
           id: nextSpellId,
           impactSoundPitch: null,
           impactSoundVariant: null,
           kind: 'weld-impact',
-          lightRegistration: null,
+          lightRegistration: registerLightProvider?.('transient') ?? {
+            managerLane: 'transient',
+            registrationOrdinal: nextSpellId,
+          },
           origin: { ...effect.origin },
           ownerId: effect.ownerId,
           position: { ...effect.origin },
           presentationRotationDegrees: null,
-          presentationScale: 0,
+          presentationScale: 2,
           vector: [...effect.vector],
           worldKey: effect.worldKey,
         })
         nextSpellId += 1
+        const breakup = createNativeWeldEtherealBoulderBreakupDebrisProgram({
+          rng,
+          scale: terminalScale,
+        })
+        rng = breakup.rng
+        for (const debris of breakup.debris) {
+          impactTransients.push(createNativeWeldBoulderDebrisActor({
+            buildId: 1006,
+            debris,
+            direction: effect.direction,
+            id: nextSpellId,
+            origin: effect.origin,
+            ownerId: effect.ownerId,
+            tick,
+            vector: effect.vector,
+            worldKey: effect.worldKey,
+          }))
+          nextSpellId += 1
+        }
       }
       continue
     }

@@ -1022,8 +1022,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v50 carries movement authority, chat, mod content, unforge state, modal pause identity, leaderboard authority, and gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 50)
+test('protocol v51 carries Boulder residuals, movement authority, chat, mod content, unforge state, modal pause identity, leaderboard authority, and gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 51)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -1777,6 +1777,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     phase: 'held',
     position: missile.position,
     remainingDamage: missile.damage,
+    shellCharge: Math.fround(0.18),
     toughness: 1,
     velocity: { x: 0, y: 0 },
     worldKey: missile.worldKey,
@@ -1795,6 +1796,32 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
   const earthImpact = {
     ...earthImpactSeed,
     lifetimeTicks: earthImpactLifetimeTicks(earthImpactSeed),
+  }
+  const earthBoulderBit = {
+    ageTicks: 0,
+    birthTick: 40,
+    debris: {
+      alpha: 10,
+      bounceVelocity: -2,
+      colorGreen: 0.25,
+      enhancedShadow: true,
+      height: -10,
+      index: 0,
+      position: { x: 3, y: 4 },
+      record: 2008,
+      rotationDegrees: 90,
+      rotationStepDegrees: 4,
+      scale: 0.5,
+      velocity: { x: 1, y: 0 },
+      verticalVelocity: -2,
+    },
+    id: 2,
+    kind: 'earth-boulder-bit',
+    lightRegistration: null,
+    origin: { x: 800, y: 400 },
+    ownerId: 'player-1',
+    position: { x: 800, y: 400 },
+    worldKey: 'hub:courtyard',
   }
   const calledRock = {
     ageTicks: 8,
@@ -1837,6 +1864,20 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
   })
   assert.equal(decodedImpact.type, 'server-snapshot')
   assert.deepEqual(decodedImpact.frame.primarySpells.transients, [earthImpact])
+  const decodedBoulderBit = decodeFrame({
+    ...frame,
+    primarySpells: { nextId: 3, projectiles: [], transients: [earthBoulderBit] },
+  })
+  assert.equal(decodedBoulderBit.type, 'server-snapshot')
+  assert.deepEqual(decodedBoulderBit.frame.primarySpells.transients, [earthBoulderBit])
+  assert.throws(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 3,
+      projectiles: [],
+      transients: [{ ...earthBoulderBit, debris: { ...earthBoulderBit.debris, alpha: NaN } }],
+    },
+  }), /alpha must be finite/)
   const etherBlast = {
     ageTicks: 0,
     birthTick: 40,
@@ -2376,6 +2417,14 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
       transients: [],
     },
   }), /assemblyCharge/)
+  assert.throws(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 2,
+      projectiles: [{ ...boulder, shellCharge: undefined }],
+      transients: [],
+    },
+  }), /shellCharge/)
   assert.throws(() => decodeFrame({
     ...frame,
     primarySpells: {
@@ -3694,6 +3743,7 @@ test('protocol strictly round-trips every welded projectile and persistent actor
   }, {
     ...common,
     alpha: 0,
+    boulderTerminalCharge: null,
     buildId: 1000,
     impactSoundPitch: null,
     impactSoundVariant: null,
@@ -3882,6 +3932,7 @@ test('protocol strictly round-trips every welded projectile and persistent actor
     quantity: 1,
     remainingDamage: 12,
     scale: Math.fround(0.18),
+    shellScale: Math.fround(0.18),
     speedFactor: 1,
     toughness: 1,
     vector: [12, 2, 1, 1, 1, 1],

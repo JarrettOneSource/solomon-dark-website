@@ -58,6 +58,7 @@ const requestedSpellKind = process.env.SDR_PRIMARY_SPELL_KIND?.trim().toLowerCas
 const lowManaAcceptance = process.env.SDR_PRIMARY_SPELL_LOW_MANA === '1'
 const hostOpenedBoneyard = process.env.SDR_PRIMARY_SPELL_HOST_OPENED_BONEYARD === '1'
 const fireGravestoneAcceptance = process.env.SDR_PRIMARY_FIRE_GRAVESTONE === '1'
+const earthContactAcceptance = process.env.SDR_PRIMARY_EARTH_CONTACT === '1'
 const selectedSpells = requestedSpellKind
   ? SPELLS.filter((spell) => spell.kind === requestedSpellKind)
   : SPELLS
@@ -66,6 +67,11 @@ if (selectedSpells.length === 0) {
 }
 if (lowManaAcceptance && selectedSpells.length !== 1) {
   throw new Error('Low-mana acceptance requires one SDR_PRIMARY_SPELL_KIND')
+}
+if (earthContactAcceptance && (
+  selectedSpells.length !== 1 || selectedSpells[0].kind !== 'earth'
+)) {
+  throw new Error('Earth-contact acceptance requires SDR_PRIMARY_SPELL_KIND=earth')
 }
 
 const browser = await chromium.launch({
@@ -467,8 +473,15 @@ function headingIndex(direction) {
 
 async function castEarthInBoneyard(page) {
   const canvas = await enterBoneyard(page)
+  const contactTarget = earthContactAcceptance
+    ? await visibleBoneyardEnemy(page, true)
+    : null
   const eventStart = await audioEventCount(page)
-  const target = await castTarget(canvas, 0.67, 0.38)
+  const bounds = contactTarget === null ? null : await canvas.boundingBox()
+  if (contactTarget !== null) assert.ok(bounds, 'expected the Boneyard canvas to have bounds')
+  const target = contactTarget === null
+    ? await castTarget(canvas, 0.67, 0.38)
+    : worldScreenPoint(bounds, contactTarget.frame, contactTarget.enemy)
   await page.mouse.move(target.x, target.y)
   await page.mouse.down({ button: 'left' })
   await waitForAudio(page, eventStart, '/game/audio/sfx/start-boulder.wav', 'play')
@@ -480,8 +493,19 @@ async function castEarthInBoneyard(page) {
   )
   assert.equal(gather.loop, true)
   const held = await waitForBoneyardSpell(page, 'earth')
+  const initialHeldWire = await latestWireSpell(page, 'earth')
   if (lowManaAcceptance) assert.ok(held.localPlayerMana <= 0.1)
-  await page.waitForTimeout(400)
+  if (earthContactAcceptance) {
+    await waitForHeldEarthCharge(
+      page,
+      initialHeldWire.state.id,
+      initialHeldWire.state.worldKey,
+      0.5,
+      10_000,
+    )
+  } else {
+    await page.waitForTimeout(400)
+  }
   const heldWire = await latestWireSpell(page, 'earth')
   if (lowManaAcceptance) {
     assert.equal(heldWire.playerUnderpowered, true)
@@ -494,6 +518,10 @@ async function castEarthInBoneyard(page) {
   await page.waitForTimeout(40)
   const releaseScreenshotPath = `${screenshotRoot}/solomon-primary-earth-boneyard-release.png`
   const releaseScreenshotPromise = page.screenshot({ path: releaseScreenshotPath })
+  const releasedWire = earthContactAcceptance
+    ? await waitForEarthFlight(page, heldWire.state.id, heldWire.tick, 15_000)
+    : await waitForWireSpell(page, 'earth', heldWire.tick, 10_000)
+  assert.equal(releasedWire.state.phase, 'flight')
   const rolling = await waitForAudio(
     page,
     eventStart,
@@ -501,15 +529,76 @@ async function castEarthInBoneyard(page) {
     'play',
   )
   assert.equal(rolling.loop, true)
-  const releasedWire = await waitForWireSpell(page, 'earth', heldWire.tick, 10_000)
-  assert.equal(releasedWire.state.phase, 'flight')
   assert.notDeepEqual(releasedWire.state.orientation, heldWire.state.orientation)
   assert.notDeepEqual(releasedWire.state.position, heldWire.state.position)
   const released = await waitForBoneyardSpell(page, ['earth', 'earth-impact'])
   await releaseScreenshotPromise
   assert.ok(released.painterBandCount >= 2)
   assert.ok(released.maxDynamicZIndex > 0)
+  let contact = null
+  if (contactTarget !== null) {
+    const targetId = `enemy:${contactTarget.enemy.id}`
+    const residual = await waitForEarthResidualContact(
+      page,
+      releasedWire.state.id,
+      targetId,
+      releasedWire.tick,
+      15_000,
+    )
+    assert.equal(residual.boulder.state.phase, 'flight')
+    assert.ok(residual.boulder.state.hitTargetIds.includes(targetId))
+    assert.ok(residual.boulder.state.remainingDamage > 0)
+    assert.ok(residual.boulder.state.charge < residual.boulder.state.maximumCharge)
+    assert.equal(residual.boulder.state.shellCharge, residual.boulder.state.charge)
+    assert.ok(residual.boulder.state.assemblyCharge > residual.boulder.state.shellCharge)
+    assert.equal(residual.bit.state.kind, 'earth-boulder-bit')
+    const rendered = await waitForRenderedBoneyardSpellKinds(
+      page,
+      ['earth', 'earth-boulder-bit'],
+      10_000,
+    )
+    assert.ok(rendered.painterBandCount >= 2)
+    assert.ok(rendered.maxDynamicZIndex > 0)
+    const contactScreenshotPath = `${screenshotRoot}/solomon-primary-earth-boneyard-contact.png`
+    await page.screenshot({ path: contactScreenshotPath })
+
+    const terminal = await waitForWireSpell(page, 'earth-impact', residual.tick, 20_000)
+    const rockHit = await waitForAudio(
+      page,
+      eventStart,
+      '/game/audio/sfx/rock-hit.wav',
+      'play',
+      20_000,
+    )
+    const stoneBreak = await waitForAudio(
+      page,
+      eventStart,
+      '/game/audio/sfx/stone-break.wav',
+      'play',
+      20_000,
+    )
+    assert.ok(Math.abs(
+      rockHit.playbackRate - (1 + 0.05 / terminal.state.charge),
+    ) < 0.000_001)
+    assert.ok(Math.abs(
+      stoneBreak.playbackRate - (1 - 0.5 * terminal.state.charge),
+    ) < 0.000_001)
+    const terminalScreenshotPath = `${screenshotRoot}/solomon-primary-earth-boneyard-terminal.png`
+    await page.screenshot({ path: terminalScreenshotPath })
+    contact = {
+      contactScreenshotPath,
+      residual,
+      rendered,
+      rockHit,
+      stoneBreak,
+      target: contactTarget.enemy,
+      targetId,
+      terminal,
+      terminalScreenshotPath,
+    }
+  }
   return {
+    contact,
     held,
     heldWire,
     heldScreenshotPath,
@@ -1009,8 +1098,8 @@ async function boneyardFrame(page) {
   ))
 }
 
-async function visibleBoneyardEnemy(page) {
-  const handle = await page.waitForFunction(() => {
+async function visibleBoneyardEnemy(page, preferWeakest = false) {
+  const handle = await page.waitForFunction((weakestFirst) => {
     const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
     if (!frame || !Number.isFinite(frame.playerX) || !Number.isFinite(frame.playerY)) return null
     const visible = frame.enemySamples.filter((enemy) => {
@@ -1018,14 +1107,16 @@ async function visibleBoneyardEnemy(page) {
       const x = frame.playerScreenX + (enemy.x - frame.playerX) * 1.35
       const y = frame.playerScreenY + (enemy.y - frame.playerY) * 1.35
       return x >= 100 && x <= 1_500 && y >= 100 && y <= 800
-    }).toSorted((left, right) => (
-      Math.hypot(right.x - frame.playerX, right.y - frame.playerY)
-        - Math.hypot(left.x - frame.playerX, left.y - frame.playerY)
-    ))
+    }).toSorted((left, right) => weakestFirst
+      ? left.currentHealth - right.currentHealth
+        || Math.hypot(left.x - frame.playerX, left.y - frame.playerY)
+          - Math.hypot(right.x - frame.playerX, right.y - frame.playerY)
+      : Math.hypot(right.x - frame.playerX, right.y - frame.playerY)
+        - Math.hypot(left.x - frame.playerX, left.y - frame.playerY))
     return visible.length > 0
       ? { enemy: { ...visible[0] }, frame: structuredClone(frame) }
       : null
-  }, undefined, { timeout: 30_000 })
+  }, preferWeakest, { timeout: 30_000 })
   const result = await handle.jsonValue()
   await handle.dispose()
   return result
@@ -1443,6 +1534,87 @@ async function waitForWireSpell(page, kind, afterTick, timeout, projectileOnly =
     }
     return null
   }, [kind, afterTick, projectileOnly], { timeout })
+  const result = await handle.jsonValue()
+  await handle.dispose()
+  return result
+}
+
+async function waitForHeldEarthCharge(page, boulderId, worldKey, minimumCharge, timeout) {
+  const handle = await page.waitForFunction(([id, world, minimum]) => {
+    for (let index = window.__primarySpellWireFrames.length - 1; index >= 0; index -= 1) {
+      const wire = window.__primarySpellWireFrames[index]
+      const state = wire.primarySpells.projectiles.find((candidate) => (
+        candidate.kind === 'earth'
+        && candidate.id === id
+        && candidate.phase === 'held'
+        && candidate.worldKey === world
+        && candidate.charge >= minimum
+      ))
+      if (state) return { state, tick: wire.tick }
+    }
+    return null
+  }, [boulderId, worldKey, minimumCharge], { timeout })
+  const result = await handle.jsonValue()
+  await handle.dispose()
+  return result
+}
+
+async function waitForEarthFlight(page, boulderId, afterTick, timeout) {
+  const handle = await page.waitForFunction(([id, minimumTick]) => {
+    for (let index = window.__primarySpellWireFrames.length - 1; index >= 0; index -= 1) {
+      const wire = window.__primarySpellWireFrames[index]
+      if (wire.tick <= minimumTick) continue
+      const state = wire.primarySpells.projectiles.find((candidate) => (
+        candidate.kind === 'earth'
+        && candidate.id === id
+        && candidate.phase === 'flight'
+      ))
+      if (state) return { state, tick: wire.tick }
+    }
+    return null
+  }, [boulderId, afterTick], { timeout })
+  const result = await handle.jsonValue()
+  await handle.dispose()
+  return result
+}
+
+async function waitForEarthResidualContact(page, boulderId, targetId, afterTick, timeout) {
+  const handle = await page.waitForFunction(([id, target, minimumTick]) => {
+    for (let index = window.__primarySpellWireFrames.length - 1; index >= 0; index -= 1) {
+      const wire = window.__primarySpellWireFrames[index]
+      if (wire.tick <= minimumTick) continue
+      const state = wire.primarySpells.projectiles.find((candidate) => (
+        candidate.kind === 'earth'
+        && candidate.id === id
+        && candidate.phase === 'flight'
+        && candidate.hitTargetIds.includes(target)
+        && candidate.remainingDamage > 0
+      ))
+      const bit = wire.primarySpells.transients.find((candidate) => (
+        candidate.kind === 'earth-boulder-bit'
+      ))
+      if (state && bit) {
+        return {
+          bit: { state: bit },
+          boulder: { state },
+          tick: wire.tick,
+        }
+      }
+    }
+    return null
+  }, [boulderId, targetId, afterTick], { timeout })
+  const result = await handle.jsonValue()
+  await handle.dispose()
+  return result
+}
+
+async function waitForRenderedBoneyardSpellKinds(page, kinds, timeout) {
+  const handle = await page.waitForFunction((expectedKinds) => {
+    const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
+    return expectedKinds.every((kind) => frame?.primarySpellKinds?.includes(kind))
+      ? { ...frame }
+      : null
+  }, kinds, { timeout })
   const result = await handle.jsonValue()
   await handle.dispose()
   return result

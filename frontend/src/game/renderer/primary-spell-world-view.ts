@@ -7,6 +7,7 @@ import type {
 } from '../core-kernels/primary-spells.ts'
 import {
   EarthCalledRockView,
+  EarthBoulderBitView,
   EarthBoulderImpactView,
   EarthBoulderView,
 } from './earth-boulder-view.ts'
@@ -137,6 +138,8 @@ export class PrimarySpellWorldView {
                   spark: this.textures.elementVfx.spark[0],
                 })
               : new FirePrimarySpellView(state, this.textures.primarySpells.fire)
+        } else if (state.kind === 'earth-boulder-bit') {
+          view = new EarthBoulderBitView(state, this.textures.primarySpells.earth)
         } else if (state.kind === 'ether-impact') {
           view = new EtherPrimaryImpactView(state, {
             core: this.textures.elementVfx.core[0],

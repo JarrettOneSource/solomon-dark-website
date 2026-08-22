@@ -117,9 +117,10 @@ function interpolateProjectile(
       x: lerp(older.velocity.x, newer.velocity.x, blend),
       y: lerp(older.velocity.y, newer.velocity.y, blend),
     },
-    ...(discrete.kind === 'earth' ? {
+    ...(discrete.kind === 'earth' && older.kind === 'earth' && newer.kind === 'earth' ? {
       hitTargetIds: [...discrete.hitTargetIds],
       orientation: [...discrete.orientation],
+      shellCharge: lerp(older.shellCharge, newer.shellCharge, blend),
     } : {}),
   }
 }
@@ -210,6 +211,7 @@ function interpolateStateDrivenTransients(
 
 function isStateDrivenTransient(effect: PrimarySpellTransientState): boolean {
   return effect.kind === 'air-hurricane'
+    || effect.kind === 'earth-boulder-bit'
     || effect.kind === 'earth-called-rock'
     || effect.kind === 'fire-ember'
     || effect.kind === 'fire-good-imp'
@@ -232,6 +234,7 @@ function fixedTransientTiming(
         : PRIMARY_SPELL_AIR_LIFETIME_TICKS,
     }
     case 'air-hurricane': return null
+    case 'earth-boulder-bit': return null
     case 'earth-called-rock': return null
     case 'player-staff-contact':
     case 'player-staff-contact-knockback':
@@ -425,6 +428,20 @@ function interpolateTransient(
     }
   }
   if (isNativePlayerStaffTransient(older) || isNativePlayerStaffTransient(newer)) {
+    return copyTransient(discrete)
+  }
+  if (older.kind === 'earth-boulder-bit' && newer.kind === 'earth-boulder-bit') {
+    const actor = blend < 1 ? older : newer
+    return {
+      ...actor,
+      ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+      debris: copyWeldMeteorDebris(actor.debris),
+      lightRegistration: null,
+      origin: lerpVector(older.origin, newer.origin, blend),
+      position: lerpVector(older.position, newer.position, blend),
+    }
+  }
+  if (older.kind === 'earth-boulder-bit' || newer.kind === 'earth-boulder-bit') {
     return copyTransient(discrete)
   }
   if (older.kind === 'earth-impact' && newer.kind === 'earth-impact') {
@@ -691,7 +708,9 @@ function interpolateTransient(
       ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
       alpha: lerp(older.alpha, newer.alpha, blend),
       direction: lerpVector(older.direction, newer.direction, blend),
-      lightRegistration: null,
+      lightRegistration: actor.lightRegistration === null
+        ? null
+        : { ...actor.lightRegistration },
       origin: lerpVector(older.origin, newer.origin, blend),
       position: lerpVector(older.position, newer.position, blend),
       vector: [...actor.vector],
@@ -912,6 +931,7 @@ function interpolateTransient(
         lightRegistration: { ...actor.lightRegistration },
         origin: lerpVector(older.origin, newer.origin, blend),
         scale: lerp(older.scale, newer.scale, blend),
+        shellScale: lerp(older.shellScale, newer.shellScale, blend),
         vector: [...actor.vector],
         velocity: lerpVector(older.velocity, newer.velocity, blend),
       }
@@ -1073,6 +1093,15 @@ function copyTransient(effect: PrimarySpellTransientState): PrimarySpellTransien
       ...effect,
       lightRegistration: null,
       origin: { ...effect.origin },
+    }
+  }
+  if (effect.kind === 'earth-boulder-bit') {
+    return {
+      ...effect,
+      debris: copyWeldMeteorDebris(effect.debris),
+      lightRegistration: null,
+      origin: { ...effect.origin },
+      position: { ...effect.position },
     }
   }
   if (effect.kind === 'ether-impact' || effect.kind === 'fire-impact') {
@@ -1245,7 +1274,9 @@ function copyTransient(effect: PrimarySpellTransientState): PrimarySpellTransien
     return {
       ...effect,
       direction: { ...effect.direction },
-      lightRegistration: null,
+      lightRegistration: effect.lightRegistration === null
+        ? null
+        : { ...effect.lightRegistration },
       origin: { ...effect.origin },
       position: { ...effect.position },
       vector: [...effect.vector],

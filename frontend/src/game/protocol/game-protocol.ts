@@ -52,6 +52,7 @@ import {
   PRIMARY_SPELL_AIR_UNDERPOWERED_LIFETIME_TICKS,
   PRIMARY_SPELL_ETHER_IMPACT_LIFETIME_TICKS,
   primaryCastActionEndTick,
+  type PrimarySpellEarthBoulderBitState,
   type PrimarySpellEarthProjectileState,
   type PrimarySpellProjectilePhase,
   type PrimarySpellProjectileState,
@@ -94,7 +95,7 @@ import {
   type NativeWeldWorldActor,
 } from '../core-kernels/native-weld-primary-runtime.ts'
 import {
-  NATIVE_WELD_BOULDER_DEBRIS_LIFETIME_TICKS,
+  NATIVE_BOULDER_DEBRIS_MAX_LIFETIME_TICKS,
   type NativeWeldBoulderDebrisParticleState,
 } from '../core-kernels/native-weld-boulder-debris.ts'
 import type { NativeWeldSteamActorState } from '../core-kernels/native-weld-steam.ts'
@@ -295,7 +296,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 50
+export const GAME_PROTOCOL_VERSION = 51
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
 export const GAME_CONNECTION_TIMEOUT_CLOSE_CODE = 4000
@@ -4305,7 +4306,7 @@ function primarySpellProjectile(value: unknown, field: string): PrimarySpellProj
     'lightRegistration', 'ownerId', 'phase', 'position', 'velocity', 'worldKey',
     ...(source.kind === 'earth' ? [
       'assemblyCharge', 'hitTargetIds', 'maximumCharge', 'orientation',
-      'remainingDamage', 'toughness',
+      'remainingDamage', 'shellCharge', 'toughness',
     ] : []),
     ...(source.kind === 'ether' ? [
       'damageRetention', 'headingDegrees', 'piercesRemaining', 'reacquiresTarget',
@@ -4339,7 +4340,7 @@ function primarySpellProjectile(value: unknown, field: string): PrimarySpellProj
     throw new GameProtocolError(`${field}.flightTicks is outside the actor age`)
   }
   const damage = nonnegativeFinite(source.damage, `${field}.damage`)
-  if ((source.kind !== 'earth' || phase === 'flight') && damage <= 0) {
+  if (source.kind !== 'earth' && damage <= 0) {
     throw new GameProtocolError(`${field}.damage must be positive in flight`)
   }
   const projectile = {
@@ -4362,7 +4363,7 @@ function primarySpellProjectile(value: unknown, field: string): PrimarySpellProj
   }
   if (source.kind === 'earth') {
     const maximumCharge = positiveFinite(source.maximumCharge, `${field}.maximumCharge`)
-    if (maximumCharge < 1 || charge > maximumCharge) {
+    if ((phase === 'held' && maximumCharge < 1) || charge > maximumCharge) {
       throw new GameProtocolError(`${field}.charge exceeds its native Earth maximum`)
     }
     const remainingDamage = nonnegativeFinite(
@@ -4371,14 +4372,22 @@ function primarySpellProjectile(value: unknown, field: string): PrimarySpellProj
     )
     const toughness = positiveFinite(source.toughness, `${field}.toughness`)
     const assemblyCharge = finite(source.assemblyCharge, `${field}.assemblyCharge`)
+    const shellCharge = positiveFinite(source.shellCharge, `${field}.shellCharge`)
     if (
       assemblyCharge < PRIMARY_SPELL_EARTH_INITIAL_CHARGE
-      || assemblyCharge > charge
-      || Math.floor(30 * assemblyCharge) !== Math.floor(30 * charge)
+      || assemblyCharge > maximumCharge
+      || (phase === 'held' && (
+        assemblyCharge > charge
+        || Math.floor(30 * assemblyCharge) !== Math.floor(30 * charge)
+        || shellCharge !== assemblyCharge
+      ))
     ) {
       throw new GameProtocolError(
         `${field}.assemblyCharge is outside the current native rebuild bucket`,
       )
+    }
+    if (shellCharge > maximumCharge) {
+      throw new GameProtocolError(`${field}.shellCharge exceeds the released charge ceiling`)
     }
     if (!Array.isArray(source.orientation) || source.orientation.length !== 9) {
       throw new GameProtocolError(`${field}.orientation must contain nine float32 values`)
@@ -4410,6 +4419,7 @@ function primarySpellProjectile(value: unknown, field: string): PrimarySpellProj
       maximumCharge,
       orientation,
       remainingDamage,
+      shellCharge,
       toughness,
     } satisfies PrimarySpellEarthProjectileState
   }
@@ -4839,8 +4849,9 @@ function primarySpellWeldActor(
 
   if (source.kind === 'weld-impact') {
     onlyKeys(source, field, [
-      ...commonKeys, 'alpha', 'impactSoundPitch', 'impactSoundVariant', 'position',
-      'presentationRotationDegrees', 'presentationScale',
+      ...commonKeys, 'alpha', 'boulderTerminalCharge', 'impactSoundPitch',
+      'impactSoundVariant', 'position', 'presentationRotationDegrees',
+      'presentationScale',
     ])
     if (buildId === 1003 || buildId === 1004 || buildId === 1005) {
       throw new GameProtocolError(`${field}.buildId cannot create a welded impact actor`)
@@ -4849,6 +4860,9 @@ function primarySpellWeldActor(
       throw new GameProtocolError(`${field}.ageTicks exceeds the welded impact lifetime`)
     }
     const alpha = nonnegativeFinite(source.alpha, `${field}.alpha`)
+    const boulderTerminalCharge = source.boulderTerminalCharge === null
+      ? null
+      : positiveFinite(source.boulderTerminalCharge, `${field}.boulderTerminalCharge`)
     const impactSoundPitch = source.impactSoundPitch === null
       ? null
       : positiveFinite(source.impactSoundPitch, `${field}.impactSoundPitch`)
@@ -4862,10 +4876,14 @@ function primarySpellWeldActor(
       source.presentationScale,
       `${field}.presentationScale`,
     )
-    const ownsFade = buildId === 1001 || buildId === 1002 || buildId === 1009
-    if ((ownsFade && (alpha > 2 || presentationScale !== Math.fround(1.5)))
-      || (!ownsFade && (alpha !== 0 || presentationScale !== 0))) {
+    const ownsStandardFade = buildId === 1001 || buildId === 1002 || buildId === 1009
+    if ((buildId === 1006 && (alpha > 2 || presentationScale !== 2))
+      || (ownsStandardFade && (alpha > 2 || presentationScale !== Math.fround(1.5)))
+      || (!ownsStandardFade && buildId !== 1006 && (alpha !== 0 || presentationScale !== 0))) {
       throw new GameProtocolError(`${field} fade state does not match its build`)
+    }
+    if ((buildId === 1006) !== (boulderTerminalCharge !== null)) {
+      throw new GameProtocolError(`${field}.boulderTerminalCharge does not match its build`)
     }
     if ((buildId === 1001 && (impactSoundPitch !== Math.fround(1.5)
       || impactSoundVariant !== null || presentationRotationDegrees !== null))
@@ -4887,14 +4905,21 @@ function primarySpellWeldActor(
     return {
       ...common,
       alpha,
+      boulderTerminalCharge,
       buildId,
       impactSoundPitch,
       impactSoundVariant,
       kind: 'weld-impact',
-      lightRegistration: absentNativeLightProviderRegistration(
-        source.lightRegistration,
-        `${field}.lightRegistration`,
-      ),
+      lightRegistration: buildId === 1006
+        ? nativeLightProviderRegistration(
+            source.lightRegistration,
+            `${field}.lightRegistration`,
+            'transient',
+          )
+        : absentNativeLightProviderRegistration(
+            source.lightRegistration,
+            `${field}.lightRegistration`,
+          ),
       position: vector(source.position, `${field}.position`),
       presentationRotationDegrees,
       presentationScale,
@@ -4906,7 +4931,7 @@ function primarySpellWeldActor(
     if (buildId !== 1006 && buildId !== 1007) {
       throw new GameProtocolError(`${field}.buildId is not a Boulder carrier`)
     }
-    if (common.ageTicks >= NATIVE_WELD_BOULDER_DEBRIS_LIFETIME_TICKS) {
+    if (common.ageTicks >= NATIVE_BOULDER_DEBRIS_MAX_LIFETIME_TICKS) {
       throw new GameProtocolError(`${field}.ageTicks exceeds the BoulderBit lifetime`)
     }
     const debris = nativeWeldBoulderDebris(source.debris, `${field}.debris`)
@@ -5543,17 +5568,17 @@ function primarySpellWeldEtherealBoulder(
     ...commonKeys, 'assemblyScale', 'damage', 'flightTicks', 'hitTargetIds',
     'lifetimeTicksRemaining', 'maximumScale', 'orientation', 'phase',
     'pulseSequence', 'quantity', 'remainingDamage', 'scale', 'speedFactor',
-    'toughness', 'velocity',
+    'shellScale', 'toughness', 'velocity',
   ])
   if (source.phase !== 'held' && source.phase !== 'flight') {
     throw new GameProtocolError(`${field}.phase is not an Ethereal Boulder phase`)
   }
-  const maximumScale = finite(source.maximumScale, `${field}.maximumScale`)
-  if (maximumScale !== Math.fround(common.vector[4]! * 0.75)) {
+  const maximumScale = positiveFinite(source.maximumScale, `${field}.maximumScale`)
+  if (source.phase === 'held' && maximumScale !== Math.fround(common.vector[4]! * 0.75)) {
     throw new GameProtocolError(`${field}.maximumScale is not the native cap`)
   }
   const scale = positiveFinite(source.scale, `${field}.scale`)
-  if (scale < NATIVE_WELD_PERSISTENT_INITIAL_SCALE || scale > maximumScale) {
+  if (scale > maximumScale) {
     throw new GameProtocolError(`${field}.scale is outside the native growth lane`)
   }
   const quantity = nonnegativeInteger(source.quantity, `${field}.quantity`)
@@ -5562,10 +5587,18 @@ function primarySpellWeldEtherealBoulder(
     throw new GameProtocolError(`${field}.quantity does not match the boulder phase`)
   }
   const assemblyScale = positiveFinite(source.assemblyScale, `${field}.assemblyScale`)
+  const shellScale = positiveFinite(source.shellScale, `${field}.shellScale`)
   if (assemblyScale < NATIVE_WELD_PERSISTENT_INITIAL_SCALE
-    || assemblyScale > scale
-    || Math.floor(30 * assemblyScale) !== Math.floor(30 * scale)) {
+    || assemblyScale > maximumScale
+    || (source.phase === 'held' && (
+      assemblyScale > scale
+      || Math.floor(30 * assemblyScale) !== Math.floor(30 * scale)
+      || shellScale !== assemblyScale
+    ))) {
     throw new GameProtocolError(`${field}.assemblyScale is outside its native rebuild bucket`)
+  }
+  if (shellScale > maximumScale) {
+    throw new GameProtocolError(`${field}.shellScale exceeds the released scale ceiling`)
   }
   const flightTicks = nonnegativeInteger(source.flightTicks, `${field}.flightTicks`)
   if ((source.phase === 'held' && flightTicks !== 0)
@@ -5586,7 +5619,7 @@ function primarySpellWeldEtherealBoulder(
     ...common,
     assemblyScale,
     buildId: 1006,
-    damage: positiveFinite(source.damage, `${field}.damage`),
+    damage: nonnegativeFinite(source.damage, `${field}.damage`),
     flightTicks,
     hitTargetIds: uniqueWeldTargetIds(source.hitTargetIds, `${field}.hitTargetIds`),
     kind: 'weld-persistent',
@@ -5606,6 +5639,7 @@ function primarySpellWeldEtherealBoulder(
     quantity,
     remainingDamage: positiveFinite(source.remainingDamage, `${field}.remainingDamage`),
     scale,
+    shellScale,
     speedFactor: positiveFinite(source.speedFactor, `${field}.speedFactor`),
     toughness: nonnegativeFinite(source.toughness, `${field}.toughness`),
     velocity: vector(source.velocity, `${field}.velocity`),
@@ -5669,7 +5703,10 @@ function nativeWeldBoulderDebris(
     'velocity', 'verticalVelocity',
   ])
   const alpha = positiveFinite(source.alpha, `${field}.alpha`)
-  if (alpha > 2) throw new GameProtocolError(`${field}.alpha exceeds native debris life`)
+  const enhancedShadow = boolean(source.enhancedShadow, `${field}.enhancedShadow`)
+  if (alpha > (enhancedShadow ? 10 : 2)) {
+    throw new GameProtocolError(`${field}.alpha exceeds native debris life`)
+  }
   const nativeRecord = positiveInteger(source.record, `${field}.record`)
   if (nativeRecord !== 2008 && nativeRecord !== 2009 && nativeRecord !== 2010) {
     throw new GameProtocolError(`${field}.record is not native BoulderBit art`)
@@ -5680,7 +5717,7 @@ function nativeWeldBoulderDebris(
     alpha,
     bounceVelocity: finite(source.bounceVelocity, `${field}.bounceVelocity`),
     colorGreen: unitInterval(source.colorGreen, `${field}.colorGreen`),
-    enhancedShadow: boolean(source.enhancedShadow, `${field}.enhancedShadow`),
+    enhancedShadow,
     height: finite(source.height, `${field}.height`),
     index: nonnegativeInteger(source.index, `${field}.index`),
     position: vector(source.position, `${field}.position`),
@@ -5852,6 +5889,31 @@ function primarySpellFireSpentEmber(
 
 function primarySpellTransient(value: unknown, field: string): PrimarySpellTransientState {
   const source = record(value, field)
+  if (source.kind === 'earth-boulder-bit') {
+    onlyKeys(source, field, [
+      'ageTicks', 'birthTick', 'debris', 'id', 'kind', 'lightRegistration',
+      'origin', 'ownerId', 'position', 'worldKey',
+    ])
+    const ageTicks = nonnegativeInteger(source.ageTicks, `${field}.ageTicks`)
+    if (ageTicks >= NATIVE_BOULDER_DEBRIS_MAX_LIFETIME_TICKS) {
+      throw new GameProtocolError(`${field}.ageTicks exceeds the BoulderBit lifetime`)
+    }
+    return {
+      ageTicks,
+      birthTick: nonnegativeInteger(source.birthTick, `${field}.birthTick`),
+      debris: nativeWeldBoulderDebris(source.debris, `${field}.debris`),
+      id: positiveInteger(source.id, `${field}.id`),
+      kind: 'earth-boulder-bit',
+      lightRegistration: absentNativeLightProviderRegistration(
+        source.lightRegistration,
+        `${field}.lightRegistration`,
+      ),
+      origin: vector(source.origin, `${field}.origin`),
+      ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
+      position: vector(source.position, `${field}.position`),
+      worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
+    } satisfies PrimarySpellEarthBoulderBitState
+  }
   if (source.kind === 'weld-boulder-debris'
     || source.kind === 'weld-blizzard-glow'
     || source.kind === 'weld-channel'

@@ -538,6 +538,8 @@ test('Hasten, Bind, and Gargantuan are captured by the authoritative Boulder act
   ).state.spells.projectiles[0]
   assert.ok(released?.kind === 'earth')
   assert.equal(released.phase, 'flight')
+  assert.equal(released.damage, 10)
+  assert.equal(released.maximumCharge, 1.5)
   assert.equal(released.remainingDamage, nativeEarthBoulderReleasedDamage(10, 1.5))
 })
 
@@ -558,6 +560,8 @@ test('Rock Surge consumes one 1/100-percent draw and its one-shot mana only on s
   assert.equal(successful.manaSpent, primarySkill.manaCost / 100 + primarySkill.rockSurgeManaCost)
   assert.equal(surged.phase, 'flight')
   assert.equal(surged.charge, 1)
+  assert.equal(surged.damage, 10)
+  assert.equal(surged.maximumCharge, 1)
   assert.equal(surged.remainingDamage, 10)
   assert.equal(successful.state.players[PLAYER_ID]?.primaryCast.channelActive, false)
   assert.notDeepEqual(successful.state.rng, source.rng)
@@ -686,7 +690,8 @@ test('Earth can deplete its held weak base to zero before the release floor owns
   const flight = released.state.spells.projectiles[0]!
   assert.equal(flight.kind, 'earth')
   assert.equal(flight.phase, 'flight')
-  assert.equal(flight.damage, 0.25)
+  assert.equal(flight.damage, 0)
+  assert.equal(flight.maximumCharge, flight.charge)
   assert.equal(flight.remainingDamage, 0.25)
 })
 
@@ -1532,6 +1537,7 @@ test('Earth honors the native 0.3 latch and releases the same actor at age 98', 
   assert.equal(created.flightTicks, 0)
   assert.equal(created.charge, PRIMARY_SPELL_EARTH_FIRST_TICK_CHARGE)
   assert.equal(created.assemblyCharge, PRIMARY_SPELL_EARTH_INITIAL_CHARGE)
+  assert.equal(created.shellCharge, PRIMARY_SPELL_EARTH_INITIAL_CHARGE)
   assert.deepEqual(
     created.orientation,
     earthBoulderHeldOrientationStep(EARTH_BOULDER_IDENTITY_ORIENTATION, created.direction),
@@ -1543,6 +1549,7 @@ test('Earth honors the native 0.3 latch and releases the same actor at age 98', 
   assert.equal(constantPose.ageTicks, 2)
   assert.equal(constantPose.charge, earthChargeAfter(2))
   assert.equal(constantPose.assemblyCharge, PRIMARY_SPELL_EARTH_INITIAL_CHARGE)
+  assert.equal(constantPose.shellCharge, PRIMARY_SPELL_EARTH_INITIAL_CHARGE)
   assert.deepEqual(
     constantPose.orientation,
     earthBoulderHeldOrientationStep(created.orientation, constantPose.direction),
@@ -1557,6 +1564,7 @@ test('Earth honors the native 0.3 latch and releases the same actor at age 98', 
   assert.equal(thresholdRow.charge, earthChargeAfter(97))
   assert.equal(thresholdRow.charge, 0.3012498915195465)
   assert.equal(thresholdRow.assemblyCharge, thresholdRow.charge)
+  assert.equal(thresholdRow.shellCharge, thresholdRow.charge)
   assert.ok(thresholdRow.charge >= PRIMARY_SPELL_EARTH_MIN_RELEASE_CHARGE)
   assert.equal(thresholdRow.phase, 'held')
   assert.equal(getPlayerCharacter(state, PLAYER_ID).primaryCast.channelActive, true)
@@ -1569,7 +1577,13 @@ test('Earth honors the native 0.3 latch and releases the same actor at age 98', 
   assert.equal(released.ageTicks, 98)
   assert.equal(released.flightTicks, 1)
   assert.equal(released.assemblyCharge, thresholdRow.assemblyCharge)
-  assert.equal(released.damage, nativeEarthBoulderReleasedDamage(10, released.charge))
+  assert.equal(released.shellCharge, thresholdRow.shellCharge)
+  assert.equal(released.damage, 10)
+  assert.equal(released.maximumCharge, released.charge)
+  assert.equal(
+    released.remainingDamage,
+    nativeEarthBoulderReleasedDamage(10, released.charge),
+  )
   const releaseDelta = {
     x: Math.fround(released.position.x - thresholdRow.position.x),
     y: Math.fround(released.position.y - thresholdRow.position.y),

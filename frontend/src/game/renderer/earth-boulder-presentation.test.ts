@@ -27,7 +27,15 @@ import {
   earthBoulderHeldOrientationStep,
   type EarthBoulderOrientation,
 } from '../core-kernels/primary-spell-earth-orientation.ts'
-import type { PrimarySpellSimulationState } from '../core-kernels/primary-spells.ts'
+import {
+  createPrimarySpellEarthBoulderBit,
+  type PrimarySpellSimulationState,
+} from '../core-kernels/primary-spells.ts'
+import { createNativeRng } from '../core-kernels/native-rng.ts'
+import {
+  createNativeWeldBoulderContactDebrisProgram,
+} from '../core-kernels/native-weld-boulder-debris.ts'
+import { EarthBoulderBitView } from './earth-boulder-view.ts'
 import { PrimarySpellWorldView } from './primary-spell-world-view.ts'
 import type { PlayerWorldTextures } from './world-player-textures.ts'
 
@@ -39,6 +47,7 @@ function held(
   id = 17,
   assemblyCharge = charge,
   orientation: EarthBoulderOrientation = EARTH_BOULDER_IDENTITY_ORIENTATION,
+  shellCharge = assemblyCharge,
 ) {
   return earthBoulderPresentationPlan({
     ageTicks,
@@ -48,6 +57,7 @@ function held(
     id,
     orientation,
     phase: 'held' as const,
+    shellCharge,
   })
 }
 
@@ -96,6 +106,7 @@ test('Earth renders the authoritative matrix and keeps spinning through released
     id: 17,
     orientation: flightMatrix,
     phase: 'flight',
+    shellCharge: charge,
   })
 
   assert.deepEqual(released.orientation, flightMatrix)
@@ -148,6 +159,60 @@ test('Earth holds its Rock collection stable between native rebuild buckets', ()
     rebuilt.rocks.find(({ shellIndex }) => shellIndex === null)?.storedScale,
     4 * Math.fround(0.18),
   )
+})
+
+test('surviving contact preserves shell membership while renormalizing every shell vector', () => {
+  const before = held(700, 1, 17, 1)
+  const after = held(701, 0.9125000238418579, 17, 1, undefined, 0.9125000238418579)
+  assert.equal(after.rocks.length, before.rocks.length)
+  assert.deepEqual(
+    after.rocks.map(({ record, shellIndex, storedScale }) => ({
+      record,
+      shellIndex,
+      storedScale,
+    })),
+    before.rocks.map(({ record, shellIndex, storedScale }) => ({
+      record,
+      shellIndex,
+      storedScale,
+    })),
+  )
+  for (const rock of after.rocks.filter(({ shellIndex }) => shellIndex !== null)) {
+    assert.ok(Math.abs(Math.hypot(rock.local.x, rock.local.y, rock.local.z)
+      - 30 * 0.9125000238418579) < 1e-9)
+  }
+})
+
+test('contact BoulderBit owns its airborne shadow, lit copy, Region sample, and painter bias', () => {
+  const seed = createNativeWeldBoulderContactDebrisProgram({
+    rng: createNativeRng(17),
+    scale: 0.9,
+  }).debris[0]!
+  const state = createPrimarySpellEarthBoulderBit({
+    debris: seed,
+    enhancedEffects: true,
+    id: 80,
+    origin: { x: 100, y: 200 },
+    ownerId: 'wizard',
+    tick: 40,
+    worldKey: WORLD_KEY,
+  })
+  const view = new EarthBoulderBitView(state, worldTextures().primarySpells.earth)
+  assert.equal(view.container.children.length, 2)
+  assert.equal(view.container.children[0]?.renderable, true)
+  assert.equal(view.container.children[0]?.tint, 0x000000)
+  assert.equal(view.container.children[1]?.position.y, state.debris.height)
+  assert.deepEqual(view.painterRoots().map(({ regionLightPoint, sortBias }) => ({
+    regionLightPoint,
+    sortBias,
+  })), [{
+    regionLightPoint: {
+      x: state.position.x + state.debris.position.x,
+      y: state.position.y + state.debris.position.y,
+    },
+    sortBias: -15,
+  }])
+  view.destroy()
 })
 
 test('record 15 persists while additive record 86 opens and body crossfades in', () => {
@@ -204,6 +269,7 @@ test('Earth draw-time jitter changes without mutating an authoritative shell mat
     id: 17,
     orientation: EARTH_BOULDER_IDENTITY_ORIENTATION,
     phase: 'held' as const,
+    shellCharge: Math.fround(0.18),
   }
   const first = earthBoulderPresentationPlan(state, 100)
   const second = earthBoulderPresentationPlan(state, 101)
@@ -387,6 +453,7 @@ function worldFixture(): PrimarySpellSimulationState {
       phase: 'held',
       position: { x: 100, y: 200 },
       remainingDamage: 10,
+      shellCharge: 1,
       toughness: 1,
       velocity: { x: 0, y: 0 },
       worldKey: WORLD_KEY,

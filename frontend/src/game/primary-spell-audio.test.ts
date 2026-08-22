@@ -340,6 +340,65 @@ test('plays each Frost, Ball Lightning, and GroundSpark impact sound once', () =
   hydrated.destroy()
 })
 
+test('plays ordinary and Ethereal Boulder terminal sound pairs from saved charge', () => {
+  const initial = createGameSnapshot(simulation('earth'), PLAYER_ID)
+  const position = { ...initial.players[PLAYER_ID]!.position }
+  const audio = new RecordingAudio()
+  const synchronizer = new PrimarySpellAudioSynchronizer(
+    audio as unknown as GameAudioDirector,
+    PLAYER_ID,
+    initial,
+  )
+  const impacted = {
+    ...initial,
+    primarySpells: {
+      ...initial.primarySpells,
+      transients: [{
+        ageTicks: 0,
+        birthTick: initial.tick,
+        charge: 1,
+        id: 60,
+        kind: 'earth-impact' as const,
+        lightRegistration: null,
+        lifetimeTicks: 100,
+        origin: position,
+        ownerId: PLAYER_ID,
+        worldKey: 'hub:courtyard',
+      }, {
+        ageTicks: 0,
+        alpha: 2,
+        birthTick: initial.tick,
+        boulderTerminalCharge: 0.5,
+        buildId: 1006 as const,
+        direction: { x: 1, y: 0 },
+        id: 61,
+        impactSoundPitch: null,
+        impactSoundVariant: null,
+        kind: 'weld-impact' as const,
+        lightRegistration: { managerLane: 'transient' as const, registrationOrdinal: 61 },
+        origin: position,
+        ownerId: PLAYER_ID,
+        position,
+        presentationRotationDegrees: null,
+        presentationScale: 2,
+        vector: [8, 2, 1, 1, 1, 1],
+        worldKey: 'hub:courtyard',
+      }],
+    },
+    tick: initial.tick + 1,
+  }
+  synchronizer.update(impacted)
+  synchronizer.update(impacted)
+  assert.deepEqual(audio.sounds, ['rock-hit', 'stone-break', 'rock-hit', 'stone-break'])
+  assert.deepEqual(audio.soundOptions, [
+    { playbackRate: Math.fround(1.1), volume: 0.5 },
+    { playbackRate: Math.fround(0.75), volume: 1 },
+    { playbackRate: Math.fround(1.05), volume: 1 },
+    { playbackRate: Math.fround(0.5), volume: 1 },
+  ])
+  synchronizer.destroy()
+})
+
 test('plays retained-rock weld creation at its authoritative randomized pitch', () => {
   const initial = weldedSnapshot(
     createGameSnapshot(simulation('earth'), PLAYER_ID),
@@ -1348,6 +1407,7 @@ function weldImpactAudioActor(
     ageTicks: 0,
     alpha: 2,
     birthTick: snapshot.tick,
+    boulderTerminalCharge: null,
     buildId,
     direction: { x: 1, y: 0 },
     id,

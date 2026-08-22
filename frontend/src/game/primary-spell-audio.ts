@@ -13,6 +13,10 @@ import {
 } from './game-audio-spatial.ts'
 import { nativeFireImpactPitch } from './core-kernels/primary-spell-fire-native.ts'
 import { nativeEtherImpactPitch } from './core-kernels/primary-spell-ether-native.ts'
+import {
+  nativeEarthBoulderRockHitPitch,
+  nativeEarthBoulderStoneBreakPitch,
+} from './core-kernels/native-earth-boulder.ts'
 import { newNativeAirWaterActorSoundRequests } from './air-water-skill-audio.ts'
 import type { NativeWeldBuildId } from './core-kernels/native-weld-primary-profile.ts'
 import {
@@ -242,24 +246,36 @@ export class PrimarySpellAudioSynchronizer {
         if (
           effect.kind !== 'weld-impact'
           || effect.worldKey !== listenerWorldKey
-          || effect.impactSoundPitch === null
           || previousWeldImpacts.has(`${effect.worldKey}\u0000${effect.id}`)
         ) continue
         const volume = hubAudioAttenuation(Math.hypot(
           effect.position.x - listener.position.x,
           effect.position.y - listener.position.y,
         ))
-        if (effect.buildId === 1001) {
+        if (effect.buildId === 1006 && effect.boulderTerminalCharge !== null) {
+          const charge = effect.boulderTerminalCharge
+          this.audio.playSound('rock-hit', {
+            playbackRate: nativeEarthBoulderRockHitPitch(charge),
+            volume: volume * charge,
+          })
+          const stoneBreakPitch = nativeEarthBoulderStoneBreakPitch(charge)
+          this.audio.playSound('stone-break', {
+            playbackRate: stoneBreakPitch,
+            volume,
+          })
+        } else if (effect.buildId === 1001 && effect.impactSoundPitch !== null) {
           this.audio.playSound('ice-start', {
             playbackRate: effect.impactSoundPitch,
             volume,
           })
-        } else if (effect.buildId === 1002) {
+        } else if (effect.buildId === 1002 && effect.impactSoundPitch !== null) {
           this.audio.playSound('throw-lightning-1', {
             playbackRate: effect.impactSoundPitch,
             volume,
           })
-        } else if (effect.buildId === 1009 && effect.impactSoundVariant !== null) {
+        } else if (effect.buildId === 1009
+          && effect.impactSoundPitch !== null
+          && effect.impactSoundVariant !== null) {
           const cue = (['shock-1', 'shock-2', 'shock-3'] as const)[
             effect.impactSoundVariant
           ]!
@@ -268,6 +284,26 @@ export class PrimarySpellAudioSynchronizer {
             volume,
           })
         }
+      }
+      const previousEarthImpacts = new Set(this.previous.primarySpells.transients
+        .filter((effect) => effect.kind === 'earth-impact')
+        .map((effect) => `${effect.worldKey}\u0000${effect.id}`))
+      for (const effect of snapshot.primarySpells.transients) {
+        if (
+          effect.kind !== 'earth-impact'
+          || effect.worldKey !== listenerWorldKey
+          || previousEarthImpacts.has(`${effect.worldKey}\u0000${effect.id}`)
+        ) continue
+        const volume = hubAudioAttenuation(Math.hypot(
+          effect.origin.x - listener.position.x,
+          effect.origin.y - listener.position.y,
+        ))
+        this.audio.playSound('rock-hit', {
+          playbackRate: nativeEarthBoulderRockHitPitch(effect.charge),
+          volume: volume * effect.charge,
+        })
+        const stoneBreakPitch = nativeEarthBoulderStoneBreakPitch(effect.charge)
+        this.audio.playSound('stone-break', { playbackRate: stoneBreakPitch, volume })
       }
       const previousWeldPersistentActors = new Map(this.previous.primarySpells.transients
         .filter((effect) => effect.kind === 'weld-persistent')

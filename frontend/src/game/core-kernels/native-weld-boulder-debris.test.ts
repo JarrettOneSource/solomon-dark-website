@@ -8,9 +8,10 @@ import {
   drawNativeInteger,
 } from './native-rng.ts'
 import {
-  NATIVE_WELD_BOULDER_DEBRIS_LIFETIME_TICKS,
+  NATIVE_BOULDER_DEBRIS_MAX_LIFETIME_TICKS,
   createNativeWeldBoulderDebrisParticle,
   createNativeWeldBoulderContactDebrisProgram,
+  createNativeWeldEtherealBoulderBreakupDebrisProgram,
   createNativeWeldEtherealBoulderWeakDebrisProgram,
   stepNativeWeldBoulderDebrisParticle,
 } from './native-weld-boulder-debris.ts'
@@ -24,7 +25,7 @@ test('weak EBoulder debris preserves native count, macro redraw, and field order
     scale,
   })
   assert.equal(program.debris.length, 30)
-  assert.equal(NATIVE_WELD_BOULDER_DEBRIS_LIFETIME_TICKS, 80)
+  assert.equal(NATIVE_BOULDER_DEBRIS_MAX_LIFETIME_TICKS, 400)
 
   let expected = drawNativeFloat(source, 360).state
   let scaleRedraws = 0
@@ -70,6 +71,21 @@ test('shared Boulder contact emits one independent native BoulderBit', () => {
   )
 })
 
+test('terminal EBoulder emits its complete saved-scale BoulderBit family', () => {
+  const program = createNativeWeldEtherealBoulderBreakupDebrisProgram({
+    rng: createNativeRng(202),
+    scale: 0.5,
+  })
+  assert.equal(program.debris.length, 15)
+  assert.ok(program.debris.every((fragment) => (
+    fragment.record >= 2008
+    && fragment.record <= 2010
+    && fragment.scale > 0
+    && fragment.scale <= 0.75
+    && Math.hypot(fragment.position.x, fragment.position.y) <= 22.5
+  )))
+})
+
 test('weak EBoulder debris uses the eight-piece floor and forward spawn socket', () => {
   const program = createNativeWeldEtherealBoulderWeakDebrisProgram({
     direction: { x: 0, y: -1 },
@@ -86,10 +102,12 @@ test('BoulderBit recurrence preserves modulo-three skips and sequential native f
     scale: 0.75,
   }).debris[0]!
   const particle = createNativeWeldBoulderDebrisParticle(seed)
+  assert.equal(particle.alpha, 10)
+  assert.equal(createNativeWeldBoulderDebrisParticle(seed, false).alpha, 2)
   const skipped = stepNativeWeldBoulderDebrisParticle(particle, 3, createNativeRng(4))
   assert.ok(skipped.particle)
   assert.deepEqual(skipped.particle.position, particle.position)
-  assert.equal(skipped.particle.alpha, Math.fround(2 - Math.fround(0.025)))
+  assert.equal(skipped.particle.alpha, Math.fround(10 - Math.fround(0.025)))
 
   const advanced = stepNativeWeldBoulderDebrisParticle(
     skipped.particle,

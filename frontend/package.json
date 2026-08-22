@@ -40,6 +40,7 @@
     "smoke:game:enemy-animation-projectiles": "node tools/smoke-enemy-animation-projectile-vfx.mjs",
     "smoke:game:player-damage": "node tools/smoke-player-damage-presentation.mjs",
     "smoke:game:primary-spells": "node tools/smoke-primary-spells.mjs",
+    "smoke:game:earth-contact": "node --experimental-strip-types tools/smoke-earth-boulder-contact.mjs",
     "smoke:game:ether-tracking": "node --experimental-strip-types tools/smoke-ether-primary-tracking.mjs",
     "smoke:game:hurricane": "node --experimental-strip-types tools/smoke-hurricane.mjs",
     "smoke:game:secondary-abilities": "node --experimental-strip-types tools/smoke-secondary-abilities.mjs",

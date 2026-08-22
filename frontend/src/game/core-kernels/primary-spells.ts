@@ -117,6 +117,11 @@ import {
   type NativeWeldMeteorDebrisSeed,
 } from './native-weld-meteor.ts'
 import { createNativeWeldGroundSparkFadeProgram } from './native-weld-ground-spark.ts'
+import {
+  createNativeWeldBoulderDebrisParticle,
+  stepNativeWeldBoulderDebrisParticle,
+  type NativeWeldBoulderDebrisParticleState,
+} from './native-weld-boulder-debris.ts'
 import { spawnNativeWeldSteamActor } from './native-weld-steam.ts'
 import {
   createNativeWeldHailTerrainImpact,
@@ -139,6 +144,7 @@ export type PrimarySpellProjectileKind = 'earth' | 'ether' | 'fire' | 'weld'
 export type PrimarySpellTransientKind =
   | 'air'
   | 'air-hurricane'
+  | 'earth-boulder-bit'
   | 'earth-called-rock'
   | 'earth-impact'
   | 'ether-blast'
@@ -188,6 +194,7 @@ export interface PrimarySpellEarthProjectileState extends PrimarySpellProjectile
   maximumCharge: number
   orientation: EarthBoulderOrientation
   remainingDamage: number
+  shellCharge: number
   toughness: number
 }
 
@@ -372,6 +379,19 @@ export interface PrimarySpellEarthImpactState {
   worldKey: string
 }
 
+export interface PrimarySpellEarthBoulderBitState {
+  ageTicks: number
+  birthTick: number
+  debris: NativeWeldBoulderDebrisParticleState
+  id: number
+  kind: 'earth-boulder-bit'
+  lightRegistration: null
+  origin: Vector2
+  ownerId: string
+  position: Vector2
+  worldKey: string
+}
+
 export interface PrimarySpellEarthCalledRockState {
   ageTicks: number
   fallVelocity: number
@@ -470,6 +490,7 @@ export type PrimarySpellFirePatchState = NativeFirePatchState
 export type PrimarySpellTransientState =
   | PrimarySpellChannelTransientState
   | PrimarySpellAirHurricaneState
+  | PrimarySpellEarthBoulderBitState
   | PrimarySpellEarthCalledRockState
   | PrimarySpellEarthImpactState
   | PrimarySpellEtherImpactState
@@ -864,7 +885,21 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
     .map((effect) => effect.id))
   const fireActorContacts: NativeFireActorContact[] = []
   for (const effect of context.spells.transients) {
-    if (isNativeWeldWorldActor(effect)) {
+    if (effect.kind === 'earth-boulder-bit') {
+      const stepped = stepNativeWeldBoulderDebrisParticle(
+        effect.debris,
+        effect.birthTick + effect.ageTicks + 1,
+        rng,
+      )
+      rng = stepped.rng
+      if (stepped.particle) {
+        transients.push({
+          ...effect,
+          ageTicks: effect.ageTicks + 1,
+          debris: stepped.particle,
+        })
+      }
+    } else if (isNativeWeldWorldActor(effect)) {
       if (
         effect.kind === 'weld-persistent'
         && effect.buildId === 1008
@@ -1338,6 +1373,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
                   initialCharge,
                 )
               : earthSkill.damageMinimum,
+            shellCharge: surged ? initialCharge : PRIMARY_SPELL_EARTH_INITIAL_CHARGE,
             toughness: earthSkill.toughness,
             velocity,
             worldKey,
@@ -2020,11 +2056,12 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
                 )
             const releasesThisTick = !rawHeld
               && spell.charge >= PRIMARY_SPELL_EARTH_MIN_RELEASE_CHARGE
+            const assemblyCharge = Math.floor(30 * spell.charge) === Math.floor(30 * charge)
+              ? spell.assemblyCharge
+              : charge
             return {
               ...spell,
-              assemblyCharge: Math.floor(30 * spell.charge) === Math.floor(30 * charge)
-                ? spell.assemblyCharge
-                : charge,
+              assemblyCharge,
               charge,
               damage: underpowered && spell.charge < 1
                 ? Math.fround(spell.damage * 0.5)
@@ -2037,6 +2074,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
                 ? spell.orientation
                 : earthBoulderHeldOrientationStep(spell.orientation, aimDirection),
               position: { x: emitter.x, y: emitter.y + 15 },
+              shellCharge: assemblyCharge,
               worldKey,
             }
           })
@@ -2232,7 +2270,6 @@ function releaseHeldEarthProjectiles(
     }
     const releasedSpell: PrimarySpellProjectileState = {
       ...spell,
-      damage: nativeEarthBoulderReleasedDamage(spell.damage, spell.charge),
       direction: { ...aimDirection },
       flightTicks: 1,
       orientation: earthBoulderFlightOrientationStep(
@@ -2241,6 +2278,7 @@ function releaseHeldEarthProjectiles(
         storedDelta,
         spell.charge,
       ),
+      maximumCharge: spell.charge,
       phase: 'flight',
       position,
       remainingDamage: nativeEarthBoulderReleasedDamage(
@@ -2621,6 +2659,7 @@ function transientLifetime(effect: PrimarySpellTransientState): number {
       ? PRIMARY_SPELL_AIR_UNDERPOWERED_LIFETIME_TICKS
       : PRIMARY_SPELL_AIR_LIFETIME_TICKS
     case 'air-hurricane': throw new Error('Hurricane lifetime is player-runtime driven')
+    case 'earth-boulder-bit': throw new Error('Earth BoulderBit lifetime is state driven')
     case 'earth-called-rock': throw new Error('Called-rock lifetime is state driven')
     case 'earth-impact': return effect.lifetimeTicks
     case 'ether-impact': return PRIMARY_SPELL_ETHER_IMPACT_LIFETIME_TICKS
@@ -2724,10 +2763,11 @@ export function createPrimarySpellWeldImpact(
   const ownsFade = spell.buildId === 1001 || spell.buildId === 1002 || spell.buildId === 1009
   return Object.freeze({
     impact: Object.freeze({
-    ageTicks: 0,
-    alpha: ownsFade ? 2 : 0,
-    birthTick,
-    buildId: spell.buildId,
+	    ageTicks: 0,
+	    alpha: ownsFade ? 2 : 0,
+	    birthTick,
+	    boulderTerminalCharge: null,
+	    buildId: spell.buildId,
     direction: Object.freeze({ ...spell.direction }),
     id,
     impactSoundPitch,
@@ -2868,6 +2908,32 @@ function earthImpact(
     worldKey: spell.worldKey,
   } satisfies PrimarySpellEarthImpactState
   return { ...seed, lifetimeTicks: earthImpactLifetimeTicks(seed) }
+}
+
+export function createPrimarySpellEarthBoulderBit(input: {
+  readonly debris: NativeWeldMeteorDebrisSeed
+  readonly enhancedEffects: boolean
+  readonly id: number
+  readonly origin: Vector2
+  readonly ownerId: string
+  readonly tick: number
+  readonly worldKey: string
+}): PrimarySpellEarthBoulderBitState {
+  return Object.freeze({
+    ageTicks: 0,
+    birthTick: input.tick,
+    debris: createNativeWeldBoulderDebrisParticle(
+      input.debris,
+      input.enhancedEffects,
+    ),
+    id: input.id,
+    kind: 'earth-boulder-bit',
+    lightRegistration: null,
+    origin: Object.freeze({ ...input.origin }),
+    ownerId: input.ownerId,
+    position: Object.freeze({ ...input.origin }),
+    worldKey: input.worldKey,
+  })
 }
 
 function fireImpact(

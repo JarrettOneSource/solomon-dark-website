@@ -27,6 +27,7 @@ export interface EarthBoulderPresentationState {
   id: number
   orientation: EarthBoulderOrientation
   phase: 'flight' | 'held'
+  shellCharge: number
 }
 
 export interface EarthBoulderRockPlan {
@@ -95,7 +96,12 @@ export function earthBoulderPresentationPlan(
     x: Math.cos(jitterAngle) * jitterRadius,
     y: Math.sin(jitterAngle) * jitterRadius,
   }
-  const rocks = earthBoulderBody(state.id, state.assemblyCharge, state.orientation)
+  const rocks = earthBoulderBody(
+    state.id,
+    state.assemblyCharge,
+    state.shellCharge,
+    state.orientation,
+  )
   return {
     aura: {
       alpha: 0.35 + unitRandom(state.id, 0x4000 + visualTick) * 0.25,
@@ -138,11 +144,12 @@ export function earthBoulderImpactPlan(
 
 function earthBoulderBody(
   id: number,
-  charge: number,
+  assemblyCharge: number,
+  shellCharge: number,
   orientation: EarthBoulderOrientation,
 ): EarthBoulderRockPlan[] {
-  const n = 30 * charge
-  const radius = n
+  const n = 30 * assemblyCharge
+  const radius = 30 * shellCharge
   const rebuildBucket = Math.floor(n)
   const localRocks: Omit<
     EarthBoulderRockPlan,
@@ -151,7 +158,7 @@ function earthBoulderBody(
     local: { x: 0, y: 0, z: 0 },
     record: 171,
     shellIndex: null,
-    storedScale: 4 * charge,
+    storedScale: 4 * assemblyCharge,
   }]
   for (let index = 0; index < Math.ceil(n); index += 1) {
     const y = 2 * index / n - 1 + 1 / n
@@ -171,7 +178,7 @@ function earthBoulderBody(
       storedScale: Math.min(
         1,
         (unitRandom(id, 0x2000 + rebuildBucket * 64 + index) * 0.75 + 0.5)
-          * Math.min(charge, 1),
+          * Math.min(assemblyCharge, 1),
       ),
       shellIndex: index,
     })

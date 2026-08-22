@@ -15,6 +15,7 @@ import {
   spawnNativeWeldOneShot,
   stepNativeWeldProjectilePresentation,
   updateNativeWeldPersistentActor,
+  type NativeWeldImpactActorState,
   type NativeWeldWorldActor,
 } from '../core-kernels/native-weld-primary-runtime.ts'
 import {
@@ -404,6 +405,21 @@ test('Meteor impact and all one-shot FadeFrost/FadeLightning variants are visibl
     const impact = createPrimarySpellWeldImpact(100 + buildId, spell, 1, createNativeRng(6))
     assert.ok(nativeWeldVisualPlan(impact.impact).sprites.length >= 3)
   }
+  const base = createPrimarySpellWeldImpact(1106, projectile(1000), 1, createNativeRng(7)).impact
+  const etherealImpact = {
+    ...base,
+    alpha: 2,
+    boulderTerminalCharge: 0.5,
+    buildId: 1006,
+    lightRegistration: { managerLane: 'transient' as const, registrationOrdinal: 1106 },
+    presentationScale: 2,
+    vector: [8, 2, 1, 1, 1, 1],
+  } satisfies NativeWeldImpactActorState
+  const etherealPlan = nativeWeldVisualPlan(etherealImpact)
+  assert.ok(etherealPlan.sprites.every(({ role }) => role.startsWith(
+    'ethereal-boulder-impact-',
+  )))
+  assert.deepEqual(etherealPlan.regionLightPoint, etherealImpact.position)
 })
 
 test('PrimarySpellWorldView routes and tears down native Weld plans', () => {

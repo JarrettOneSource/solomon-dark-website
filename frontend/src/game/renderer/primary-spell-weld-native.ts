@@ -415,6 +415,15 @@ function flameLashMeshes(
 }
 
 function impactPlan(state: NativeWeldImpactActorState, frame: number): NativeWeldVisualPlan {
+  if (state.buildId === 1006) {
+    return positioned(state.position, elementVfxSprites(
+      'ether',
+      frame,
+      state.presentationScale,
+      state.alpha,
+      'ethereal-boulder-impact',
+    ), { regionLightPoint: state.position })
+  }
   if (state.buildId === 1001) {
     return positioned(state.position, elementVfxSprites(
       'water',
@@ -543,6 +552,7 @@ function etherealBoulderPlan(
     id: state.id,
     orientation: state.orientation,
     phase: state.phase,
+    shellCharge: state.shellScale,
   }, frame)
   const centers = state.phase === 'held'
     ? etherealBoulderHeldCenters(state)

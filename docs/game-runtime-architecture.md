@@ -305,6 +305,15 @@ equipment, and status composition. The field exists so the already-bounded Hub
 predictor can use the same movement plan as authority instead of hard-coding
 scale one and reconciling every boosted tick.
 
+Protocol 51 extends authoritative primary-spell snapshots with the native
+Boulder contact lifecycle. Ordinary Earth and welded Ethereal Boulder carry
+separate retained-shell membership and current shell-radius scalars; each
+finite accepted ordinary contact can publish one independent
+`earth-boulder-bit` actor, while EBoulder continues using its concrete Weld
+BoulderBit actor family. The host owns pool/charge mutation, child RNG and
+retirement. Clients copy/interpolate the finite semantic state and never infer
+contact children from hit or death presentation.
+
 ## Saves, identity, and content
 
 - The authoritative game host is the only producer of browser-save contents.

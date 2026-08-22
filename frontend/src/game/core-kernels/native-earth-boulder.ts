@@ -1,5 +1,18 @@
+export const NATIVE_EARTH_BOULDER_TRAVERSAL_POOL_THRESHOLD = 0.001
+
+export interface NativeEarthBoulderContactInput {
+  readonly releaseBaseDamage: number
+  readonly releaseCharge: number
+  readonly remainingPool: number
+  readonly targetHealth: number
+  readonly toughness: number
+}
+
 export interface NativeEarthBoulderContactResult {
+  readonly charge: number
+  readonly continueTraversal: boolean
   readonly damage: number
+  readonly depleted: boolean
   readonly remainingPool: number
 }
 
@@ -32,23 +45,32 @@ export function nativeEarthBoulderReleasedDamage(
 }
 
 export function consumeNativeEarthBoulderContact(
-  remainingPool: number,
-  targetHealth: number,
-  toughness: number,
+  input: NativeEarthBoulderContactInput,
 ): NativeEarthBoulderContactResult {
-  requireNonnegativeFinite(remainingPool, 'Boulder remaining damage pool')
-  requireNonnegativeFinite(targetHealth, 'Boulder target health')
-  if (!Number.isFinite(toughness) || toughness <= 0) {
+  requireNonnegativeFinite(input.releaseBaseDamage, 'Boulder release base damage')
+  requireNonnegativeFinite(input.releaseCharge, 'Boulder release charge')
+  requireNonnegativeFinite(input.remainingPool, 'Boulder remaining damage pool')
+  requireNonnegativeFinite(input.targetHealth, 'Boulder target health')
+  if (!Number.isFinite(input.toughness) || input.toughness <= 0) {
     throw new RangeError('Boulder toughness must be finite and positive')
   }
-  const damage = Math.min(targetHealth, remainingPool)
-  const consumed = remainingPool < targetHealth
+  const damage = Math.fround(Math.min(input.targetHealth, input.remainingPool))
+  const consumed = Math.fround(input.remainingPool < input.targetHealth
     ? damage
-    : damage / (2 * toughness)
-  const remaining = remainingPool - consumed
+    : damage / (2 * input.toughness))
+  const remainingPool = Math.max(0, Math.fround(input.remainingPool - consumed))
+  const charge = Math.fround(Math.min(
+    input.releaseCharge,
+    input.releaseCharge * (
+      1 - (1 - remainingPool / input.releaseBaseDamage) * 0.35
+    ),
+  ))
   return Object.freeze({
+    charge,
+    continueTraversal: remainingPool > NATIVE_EARTH_BOULDER_TRAVERSAL_POOL_THRESHOLD,
     damage,
-    remainingPool: remaining < 0.001 ? 0 : remaining,
+    depleted: remainingPool <= 0,
+    remainingPool,
   })
 }
 
@@ -63,6 +85,17 @@ export function nativePercentRollSucceeds(
     throw new RangeError('native percent draw must be between zero and one hundred')
   }
   return drawPercent < chancePercent
+}
+
+export function nativeEarthBoulderRockHitPitch(charge: number): number {
+  requireNonnegativeFinite(charge, 'Boulder terminal charge')
+  if (charge === 0) throw new RangeError('Boulder terminal charge must be positive')
+  return Math.fround(1 + 0.05 / charge)
+}
+
+export function nativeEarthBoulderStoneBreakPitch(charge: number): number {
+  requireNonnegativeFinite(charge, 'Boulder terminal charge')
+  return Math.fround(1 - charge * 0.5)
 }
 
 function requireNonnegativeFinite(value: number, field: string): void {

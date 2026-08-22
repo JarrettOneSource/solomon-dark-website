@@ -6,11 +6,15 @@ import { createHubParticipantState } from '../core-kernels/hub-regions.ts'
 import { createIdlePlayerPrimaryCast } from '../core-kernels/player-character.ts'
 import { nativeFireParticleVariant } from '../core-kernels/primary-spell-fire-native.ts'
 import { createNativeRng } from '../core-kernels/native-rng.ts'
+import { createNativeWeldBoulderContactDebrisProgram } from '../core-kernels/native-weld-boulder-debris.ts'
 import {
   EARTH_BOULDER_IDENTITY_ORIENTATION,
   earthBoulderHeldOrientationStep,
 } from '../core-kernels/primary-spell-earth-orientation.ts'
-import type { PrimarySpellSimulationState } from '../core-kernels/primary-spells.ts'
+import {
+  createPrimarySpellEarthBoulderBit,
+  type PrimarySpellSimulationState,
+} from '../core-kernels/primary-spells.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
 import type {
   ProtocolPlayerState,
@@ -156,6 +160,7 @@ test('interpolates primary spells by stable identity without popping lifecycle e
         phase: 'held',
         position: { x: 10, y: 20 },
         remainingDamage: 10,
+        shellCharge: Math.fround(0.18),
         toughness: 1,
         velocity: { x: 0, y: 0 },
         worldKey: 'hub:courtyard',
@@ -215,6 +220,7 @@ test('interpolates primary spells by stable identity without popping lifecycle e
         ),
         phase: 'flight',
         position: { x: 20, y: 30 },
+        shellCharge: 0.4,
         velocity: { x: 3, y: 0 },
       },
       {
@@ -308,6 +314,59 @@ test('interpolates primary spells by stable identity without popping lifecycle e
   if (owned.transients[0].kind === 'fire') {
     assert.notEqual(owned.transients[0].origin, newer.transients[0].origin)
   }
+})
+
+test('retains the state-driven Earth BoulderBit through the client presentation seam', () => {
+  const program = createNativeWeldBoulderContactDebrisProgram({
+    rng: createNativeRng(0x1234_5678),
+    scale: 0.5,
+  })
+  const bit = createPrimarySpellEarthBoulderBit({
+    debris: program.debris[0]!,
+    enhancedEffects: true,
+    id: 7,
+    origin: { x: 100, y: 200 },
+    ownerId: 'local',
+    tick: 100,
+    worldKey: 'hub:courtyard',
+  })
+  const older = {
+    nextId: 8,
+    projectiles: [],
+    transients: [bit],
+  } satisfies PrimarySpellSimulationState
+  const newerBit = {
+    ...bit,
+    ageTicks: 5,
+    position: { x: 110, y: 220 },
+  }
+  const newer = {
+    nextId: 8,
+    projectiles: [],
+    transients: [newerBit],
+  } satisfies PrimarySpellSimulationState
+
+  const halfway = interpolatePrimarySpellState(
+    older,
+    newer,
+    0.5,
+    primarySpellTime(102.5),
+  )
+  assert.equal(halfway.transients.length, 1)
+  assert.equal(halfway.transients[0]!.kind, 'earth-boulder-bit')
+  assert.equal(halfway.transients[0]!.ageTicks, 2.5)
+  if (halfway.transients[0]!.kind === 'earth-boulder-bit') {
+    assert.deepEqual(halfway.transients[0]!.position, { x: 105, y: 210 })
+    assert.notEqual(halfway.transients[0]!.debris, bit.debris)
+  }
+
+  const retired = interpolatePrimarySpellState(
+    newer,
+    { ...newer, transients: [] },
+    1,
+    { newerTick: 110, olderTick: 105, targetTick: 110 },
+  )
+  assert.deepEqual(retired.transients, [])
 })
 
 test('admits retained Air, Water, and Fire births on their owned 100 Hz ticks', () => {

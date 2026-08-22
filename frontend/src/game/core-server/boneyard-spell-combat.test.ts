@@ -19,7 +19,10 @@ import type {
   PrimarySpellSimulationState,
   PrimarySpellTransientState,
 } from '../core-kernels/primary-spells.ts'
-import type { NativeWeldOneShotBuildId } from '../core-kernels/native-weld-primary-runtime.ts'
+import {
+  createNativeWeldPersistentActor,
+  type NativeWeldOneShotBuildId,
+} from '../core-kernels/native-weld-primary-runtime.ts'
 import type { NativeWeldPrimarySkillProfile } from '../core-kernels/native-primary-skill-profile.ts'
 import type { NativeSecondarySteamedPulse } from '../core-kernels/native-secondary-abilities.ts'
 import { spawnNativeWeldSteamActor } from '../core-kernels/native-weld-steam.ts'
@@ -830,7 +833,7 @@ test('Piercing keeps the missile, scales payload and art, and emits native conta
   )
 })
 
-test('Earth gathers strict charge-scaled roots once and never fractures on actor contact', () => {
+test('Earth gathers strict roots once, shrinks, and sheds one independent contact rock', () => {
   const enemies = spawnEnemies([
     { position: { x: 20, y: 0 }, token: 'SKELETON' },
     { position: { x: 70, y: 0 }, token: 'SKELETON' },
@@ -853,11 +856,14 @@ test('Earth gathers strict charge-scaled roots once and never fractures on actor
   assert.equal(first.enemies.actors[0]?.currentHealth, 5)
   assert.equal(first.enemies.actors[1]?.lifeState, 'dying')
   assert.equal(first.enemies.actors[2]?.currentHealth, 5)
-  assert.deepEqual(first.spells.transients, [])
+  assert.deepEqual(first.spells.transients.map(({ kind }) => kind), ['earth-boulder-bit'])
   assert.equal(first.spells.projectiles.length, 1)
   const boulder = first.spells.projectiles[0]
   assert.ok(boulder?.kind === 'earth')
   assert.deepEqual(boulder.hitTargetIds, ['enemy:1', 'enemy:2'])
+  assert.equal(boulder.remainingDamage, 7.5)
+  assert.equal(boulder.charge, 0.9125000238418579)
+  assert.equal(boulder.assemblyCharge, 1)
 
   const repeated = resolveBoneyardSpellCombat(
     first.enemies,
@@ -868,7 +874,9 @@ test('Earth gathers strict charge-scaled roots once and never fractures on actor
     first.rng,
   )
   assert.deepEqual(repeated.hits, [])
-  assert.equal(repeated.spells, first.spells)
+  assert.deepEqual(repeated.spells.projectiles, first.spells.projectiles)
+  assert.equal(repeated.spells.transients[0]?.kind, 'earth-boulder-bit')
+  assert.equal(repeated.spells.transients[0]?.ageTicks, 0)
 })
 
 test('Earth contact consumes the finalized quadratic release pool without scaling charge twice', () => {
@@ -884,6 +892,10 @@ test('Earth contact consumes the finalized quadratic release pool without scalin
 
   assert.deepEqual(result.hits.map(({ amount }) => amount), [2.5])
   assert.equal(result.enemies.actors[0]?.currentHealth, 2.5)
+  assert.deepEqual(result.spells.transients.map(({ kind }) => kind), [
+    'earth-boulder-bit',
+    'earth-impact',
+  ])
 })
 
 test('Earth contact spends its residual pool in native target order and breaks below threshold', () => {
@@ -907,7 +919,11 @@ test('Earth contact spends its residual pool in native target order and breaks b
   assert.equal(result.enemies.actors[0]?.currentHealth, 0)
   assert.equal(result.enemies.actors[1]?.currentHealth, 1.5)
   assert.deepEqual(result.spells.projectiles, [])
-  assert.deepEqual(result.spells.transients.map(({ kind }) => kind), ['earth-impact'])
+  assert.deepEqual(result.spells.transients.map(({ kind }) => kind), [
+    'earth-boulder-bit',
+    'earth-boulder-bit',
+    'earth-impact',
+  ])
 })
 
 test('Bind Rocks reduces only pool consumption, never the outgoing target payload', () => {
@@ -928,6 +944,11 @@ test('Bind Rocks reduces only pool consumption, never the outgoing target payloa
   const boulder = result.spells.projectiles[0]
   assert.ok(boulder?.kind === 'earth')
   assert.equal(boulder.remainingDamage, 9)
+  assert.equal(boulder.charge, 0.9649999737739563)
+  assert.deepEqual(result.spells.transients.map(({ kind }) => kind), [
+    'earth-boulder-bit',
+    'earth-boulder-bit',
+  ])
 })
 
 test('Water uses the root-only 205-unit 15-degree cone and per-target LOS', () => {
@@ -1369,7 +1390,7 @@ test('released Ethereal Boulder pieces own independent native residual pools', (
     kind: 'weld-persistent',
     lightRegistration: { managerLane: 'actor', registrationOrdinal: 31 },
     lifetimeTicksRemaining: 1_000,
-    maximumScale: 0.75,
+    maximumScale: 0.5,
     origin: { x: 0, y: 0 },
     ownerId: 'wizard',
     orientation: [...EARTH_BOULDER_IDENTITY_ORIENTATION],
@@ -1378,6 +1399,7 @@ test('released Ethereal Boulder pieces own independent native residual pools', (
     quantity: 0,
     remainingDamage: 10,
     scale: 0.5,
+    shellScale: 0.5,
     speedFactor: 1,
     toughness: 2,
     vector: [10, 2, 1, 1, 2, 1],
@@ -1397,7 +1419,64 @@ test('released Ethereal Boulder pieces own independent native residual pools', (
   const retained = resolved.spells.transients.find(({ id }) => id === 31)
   assert.ok(retained?.kind === 'weld-persistent' && retained.buildId === 1006)
   assert.equal(retained.remainingDamage, 8)
+  assert.equal(retained.scale, 0.4650000035762787)
+  assert.equal(retained.shellScale, retained.scale)
+  assert.equal(retained.assemblyScale, 0.5)
   assert.deepEqual(retained.hitTargetIds, ['enemy:1', 'enemy:2'])
+  assert.equal(resolved.spells.transients.filter(({ kind }) => (
+    kind === 'weld-boulder-debris'
+  )).length, 2)
+})
+
+test('terminal Ethereal Boulder keeps the contact bit, Ether fade, and full breakup family', () => {
+  const spawned = spawnEnemies([{ position: { x: 0, y: 0 }, token: 'SKELETON' }])
+  const enemies = {
+    ...spawned,
+    actors: spawned.actors.map((actor) => ({
+      ...actor,
+      currentHealth: 20,
+      maximumHealth: 20,
+    })),
+  }
+  const created = createNativeWeldPersistentActor({
+    buildId: 1006,
+    direction: { x: 1, y: 0 },
+    id: 33,
+    origin: { x: 0, y: 0 },
+    ownerId: 'wizard',
+    tick: 0,
+    vector: [10, 2, 1, 1, 1, 1],
+    worldKey: WORLD_KEY,
+  })
+  assert.equal(created.buildId, 1006)
+  if (created.buildId !== 1006) throw new Error('expected EBoulder')
+  const source: PrimarySpellTransientState = {
+    ...created,
+    assemblyScale: 0.5,
+    damage: 10,
+    flightTicks: 1,
+    maximumScale: 0.5,
+    phase: 'flight',
+    remainingDamage: 3,
+    scale: 0.5,
+    shellScale: 0.5,
+    velocity: { x: 3, y: 0 },
+  }
+  const result = resolveCombatWithAuthority(
+    enemies,
+    spellState({ transients: [source] }),
+    [],
+    5,
+  )
+  assert.equal(result.spells.transients.some(({ id }) => id === source.id), false)
+  assert.equal(result.spells.transients.filter(({ kind }) => (
+    kind === 'weld-boulder-debris'
+  )).length, 16)
+  const fade = result.spells.transients.find((effect) => (
+    effect.kind === 'weld-impact' && effect.buildId === 1006
+  ))
+  assert.ok(fade?.kind === 'weld-impact' && fade.buildId === 1006)
+  assert.equal(fade.presentationScale, 2)
 })
 
 test('released Hailstones rocks contact at carrier offsets and divide only pool consumption', () => {
@@ -1837,6 +1916,7 @@ function projectile(options: {
         maximumCharge: Math.max(1, options.charge ?? 1),
         orientation: [...EARTH_BOULDER_IDENTITY_ORIENTATION],
         remainingDamage: options.remainingDamage ?? options.damage ?? 10,
+        shellCharge: options.charge ?? 1,
         toughness: options.toughness ?? 1,
       }
     case 'ether':
