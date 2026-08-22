@@ -1393,6 +1393,62 @@ test('client requests a keyframe after a replication gap and resumes cleanly', a
   session.destroy()
 })
 
+test('client acknowledges deployment only after the final save and keeps update close nonfatal', async () => {
+  const transport = new MemoryTransport()
+  const targetRevision = 'a'.repeat(40)
+  let releaseSave!: () => void
+  const saveFinished = new Promise<void>((resolve) => { releaseSave = resolve })
+  let restartRequest: { checkpointSequence: number; targetRevision: string } | null = null
+  let fatal: GameConnectionFailure | null = null
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    profile: NULL_PROFILE,
+    credential: 'spawn-secret',
+    transport,
+    onDeploymentRestart: async (request) => {
+      restartRequest = {
+        checkpointSequence: request.checkpoint?.sequence ?? 0,
+        targetRevision: request.targetRevision,
+      }
+      await saveFinished
+    },
+    onFatal: failure => { fatal = failure },
+  })
+  receiveWelcome(
+    transport,
+    createGameSnapshot(createGameSimulation({ 'player-1': CHARACTER }), 'player-1'),
+  )
+  await connecting
+  transport.receive(encodeGameMessage({
+    type: 'server-save-checkpoint',
+    save: '{"checkpoint":"deployment"}',
+    reason: 'progress',
+    sequence: 9,
+  }))
+  transport.receive(encodeGameMessage({
+    type: 'server-deployment-restart',
+    checkpointSequence: 9,
+    targetRevision,
+  }))
+  await new Promise(resolve => setImmediate(resolve))
+
+  assert.deepEqual(restartRequest, { checkpointSequence: 9, targetRevision })
+  assert.equal(
+    transport.sent.some(payload => decodeClientGameMessage(payload).type === 'client-deployment-ready'),
+    false,
+  )
+
+  releaseSave()
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-deployment-ready',
+    checkpointSequence: 9,
+    targetRevision,
+  })
+  transport.disconnect({ code: 1012, reason: 'game updating', wasClean: true })
+  assert.equal(fatal, null)
+})
+
 function kernelParameters() {
   return {
     fixedTickSeconds: 0.01,

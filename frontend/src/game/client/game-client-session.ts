@@ -28,6 +28,7 @@ import {
   type GameplayPauseState,
   type LoadedBoneyard,
   type ServerLuaResultMessage,
+  type ServerDeploymentRestartMessage,
   type ServerWelcomeMessage,
   type GameModAsset,
 } from '../protocol/game-protocol.ts'
@@ -72,10 +73,16 @@ export interface GameClientSessionOptions {
   diagnostics?: GameClientDiagnostics
   now?: () => number
   onFatal?: (failure: GameConnectionFailure) => void
+  onDeploymentRestart?: (request: GameDeploymentRestartRequest) => Promise<void>
   profile: PlayerSocialProfile
   resumeToken?: string
   saveDocument?: string
   transport: GameTransport
+}
+
+export interface GameDeploymentRestartRequest {
+  readonly checkpoint: GameSaveCheckpoint | null
+  readonly targetRevision: string
 }
 
 export interface GameClientSession {
@@ -170,6 +177,7 @@ export function connectGameClientSession(
   return new Promise((resolve, reject) => {
     let settled = false
     let destroyed = false
+    let deploymentRestarting = false
     let welcome: ServerWelcomeMessage | undefined
     let snapshot: GameSnapshot | undefined
     let presentationTimeline: HubPresentationTimeline | undefined
@@ -289,6 +297,10 @@ export function connectGameClientSession(
           sequence: message.sequence,
         }
         for (const listener of saveCheckpointListeners) listener(latestSaveCheckpoint)
+        return
+      }
+      if (message.type === 'server-deployment-restart') {
+        beginDeploymentRestart(message)
         return
       }
       if (message.type === 'server-leaderboard-receipt') {
@@ -440,6 +452,10 @@ export function connectGameClientSession(
       for (const listener of snapshotListeners) listener(snapshot)
     })
     const removeClose = options.transport.onClose((event) => {
+      if (deploymentRestarting) {
+        finishDeploymentRestart()
+        return
+      }
       if (!destroyed) fail(failureFromTransportClose(event))
     })
 
@@ -1116,6 +1132,82 @@ export function connectGameClientSession(
       enemyEventListeners.clear()
       pingListeners.clear()
       options.onFatal?.(failure)
+    }
+
+    function beginDeploymentRestart(message: ServerDeploymentRestartMessage): void {
+      if (deploymentRestarting || destroyed) return
+      const checkpoint = message.checkpointSequence === 0
+        ? null
+        : latestSaveCheckpoint
+      if (
+        message.checkpointSequence !== 0
+        && checkpoint?.sequence !== message.checkpointSequence
+      ) {
+        fail(new Error('The deployment restart did not include its final save checkpoint.'))
+        return
+      }
+      deploymentRestarting = true
+      currentInput = copyInput(STOPPED_INPUT)
+      sentInput = copyInput(STOPPED_INPUT)
+      pendingInputs = []
+      options.diagnostics?.info(
+        'deployment.restart_requested',
+        'The game server requested a saved restart for an update.',
+        `targetRevision=${message.targetRevision}; checkpointSequence=${message.checkpointSequence}`,
+      )
+      const persist = options.onDeploymentRestart
+      if (!persist) {
+        options.diagnostics?.warning(
+          'deployment.save_unavailable',
+          'This game shell has no deployment save owner, so it cannot acknowledge the update.',
+        )
+        return
+      }
+      void persist({ checkpoint, targetRevision: message.targetRevision }).then(() => {
+        if (destroyed || options.transport.readyState !== 'open') return
+        options.transport.send(encodeGameMessage({
+          type: 'client-deployment-ready',
+          checkpointSequence: message.checkpointSequence,
+          targetRevision: message.targetRevision,
+        }))
+        options.diagnostics?.info(
+          'deployment.save_ready',
+          'The final game checkpoint is saved and ready for the update.',
+          `targetRevision=${message.targetRevision}; checkpointSequence=${message.checkpointSequence}`,
+        )
+      }).catch((error: unknown) => {
+        options.diagnostics?.error(
+          'deployment.save_failed',
+          'The final game checkpoint could not be saved before the update.',
+          error instanceof Error ? error.message : 'Game save failed.',
+        )
+      })
+    }
+
+    function finishDeploymentRestart(): void {
+      if (destroyed) return
+      destroyed = true
+      globalThis.clearTimeout(handshakeDeadline)
+      stopPing()
+      rejectPendingLuaExecutions(new Error('The game is restarting for an update.'))
+      removeClose()
+      removeMessage()
+      snapshotListeners.clear()
+      boneyardListeners.clear()
+      chatMessageListeners.clear()
+      chatRejectionListeners.clear()
+      chatMessages = []
+      gameplayPauseListeners.clear()
+      leaderboardReceiptListeners.clear()
+      modCatalogListeners.clear()
+      enemyEventListeners.clear()
+      pingListeners.clear()
+      partyStateListeners.clear()
+      saveCheckpointListeners.clear()
+      options.diagnostics?.info(
+        'deployment.transport_closed',
+        'The game connection closed for the announced update.',
+      )
     }
   })
 }

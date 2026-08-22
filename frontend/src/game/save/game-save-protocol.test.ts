@@ -55,6 +55,25 @@ test('protocol carries one bounded resume document and ordered host checkpoints'
     reason: 'game-over',
     sequence: 10,
   })
+  const targetRevision = 'a'.repeat(40)
+  assert.deepEqual(decodeServerGameMessage(JSON.stringify({
+    type: 'server-deployment-restart',
+    checkpointSequence: 9,
+    targetRevision,
+  })), {
+    type: 'server-deployment-restart',
+    checkpointSequence: 9,
+    targetRevision,
+  })
+  assert.deepEqual(decodeClientGameMessage(JSON.stringify({
+    type: 'client-deployment-ready',
+    checkpointSequence: 9,
+    targetRevision,
+  })), {
+    type: 'client-deployment-ready',
+    checkpointSequence: 9,
+    targetRevision,
+  })
 })
 
 test('protocol rejects oversized and inconsistent save messages', () => {
@@ -79,4 +98,14 @@ test('protocol rejects oversized and inconsistent save messages', () => {
     reason: 'game-over',
     sequence: 1,
   })), /game-over/)
+  assert.throws(() => decodeServerGameMessage(JSON.stringify({
+    type: 'server-deployment-restart',
+    checkpointSequence: 1,
+    targetRevision: 'main',
+  })), /targetRevision/)
+  assert.throws(() => decodeClientGameMessage(JSON.stringify({
+    type: 'client-deployment-ready',
+    checkpointSequence: -1,
+    targetRevision: 'a'.repeat(40),
+  })), /checkpointSequence/)
 })

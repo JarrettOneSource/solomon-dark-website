@@ -291,6 +291,13 @@ var frontendFiles = new StaticFileOptions
         {
             context.Context.Response.Headers.CacheControl = "no-cache";
         }
+        else if (string.Equals(
+                     context.File.Name,
+                     "deployment.json",
+                     StringComparison.OrdinalIgnoreCase))
+        {
+            context.Context.Response.Headers.CacheControl = "no-store";
+        }
     }
 };
 app.UseDefaultFiles();

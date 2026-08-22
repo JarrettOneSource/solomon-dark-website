@@ -93,24 +93,6 @@ remote_caddy_checksum() {
         "if test -r '$remote_caddy_site'; then sha256sum '$remote_caddy_site' | awk '{print \$1}'; else printf 'missing\n'; fi"
 }
 
-remote_session_count() {
-    local health
-    health="$("$ssh_command" "${ssh_options[@]}" "$remote_host" \
-        "curl -fsS http://127.0.0.1:5222/health")"
-    python3 - "$health" <<'PY'
-import json
-import sys
-
-payload = json.loads(sys.argv[1])
-if payload.get("status") != "ok":
-    raise SystemExit("game supervisor is not healthy")
-sessions = payload.get("sessions")
-if not isinstance(sessions, int) or sessions < 0:
-    raise SystemExit("game supervisor returned an invalid session count")
-print(sessions)
-PY
-}
-
 for command_name in curl date flock git install mktemp python3 sha256sum tar; do
     require_command "$command_name"
 done
@@ -222,6 +204,7 @@ if [[ -z "$artifact_checksum" ]]; then
         Server.dll \
         GameHost/game-session-supervisor.mjs \
         GameHost/lua54.wasm \
+        wwwroot/deployment.json \
         wwwroot/index.html \
         DEPLOYED_GIT_SHA; do
         [[ -f "$publish_dir/$required_file" ]] ||
@@ -257,12 +240,6 @@ if [[ "$deployed_sha" == "$target_sha" &&
     exit 0
 fi
 
-sessions="$(remote_session_count)"
-if (( sessions != 0 )); then
-    log "Validated $target_sha; deployment deferred because $sessions game session(s) are active"
-    exit 0
-fi
-
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 remote_upload="/root/solomon-dark-main-$short_sha-$timestamp.tar.gz"
 log "Uploading validated release $target_sha"
@@ -290,21 +267,36 @@ caddy_backup=""
 caddy_changed=0
 rollback_needed=0
 website_stopped=0
+game_drained=0
 
-session_count() {
-    local health
-    health="$(curl -fsS http://127.0.0.1:5222/health)"
-    python3 - "$health" <<'PY'
+request_game_restart() {
+    local result
+    local SDR_GAME_SUPERVISOR_SECRET
+    # shellcheck disable=SC1091
+    source /etc/solomon-dark-game.env
+    [[ -n "${SDR_GAME_SUPERVISOR_SECRET:-}" ]]
+    game_drained=1
+    result="$(curl --fail --silent --show-error --max-time 40 \
+        -H "Authorization: Bearer $SDR_GAME_SUPERVISOR_SECRET" \
+        -H 'Content-Type: application/json' \
+        --data "{\"targetRevision\":\"$target_sha\"}" \
+        http://127.0.0.1:5222/admin/deployments/restart)"
+    python3 - "$result" "$target_sha" <<'PY'
 import json
 import sys
 
 payload = json.loads(sys.argv[1])
-if payload.get("status") != "ok":
-    raise SystemExit("game supervisor is not healthy")
-sessions = payload.get("sessions")
-if not isinstance(sessions, int) or sessions < 0:
-    raise SystemExit("game supervisor returned an invalid session count")
-print(sessions)
+target = sys.argv[2]
+if payload.get("status") != "ready" or payload.get("targetRevision") != target:
+    raise SystemExit("game supervisor did not confirm the deployment target")
+players = payload.get("players")
+saved = payload.get("savedPlayers")
+unacknowledged = payload.get("unacknowledgedPlayers")
+if not all(isinstance(value, int) and value >= 0 for value in (players, saved, unacknowledged)):
+    raise SystemExit("game supervisor returned invalid deployment counts")
+if saved + unacknowledged != players:
+    raise SystemExit("game supervisor deployment counts do not balance")
+print(f"Game updating drain: players={players} saved={saved} unacknowledged={unacknowledged}")
 PY
 }
 
@@ -343,6 +335,10 @@ cleanup_upload() {
         systemctl start solomon-dark-revived.service || true
         website_stopped=0
     fi
+    if (( game_drained == 1 && rollback_needed == 0 )); then
+        systemctl restart solomon-dark-game.service || true
+        game_drained=0
+    fi
     if [[ -n "$stage" && -d "$stage" ]]; then
         mv -- "$stage" "$stage.failed" || true
     fi
@@ -364,6 +360,7 @@ rollback_release() {
     if (( rollback_needed == 1 )); then
         systemctl start solomon-dark-game.service solomon-dark-revived.service || true
         website_stopped=0
+        game_drained=0
     fi
     cleanup_upload
     exit "$exit_code"
@@ -383,12 +380,6 @@ caddy validate --config "$caddy_candidate" --adapter caddyfile >/dev/null
 
 current_sha="$(tr -d '\r\n' <"$live/DEPLOYED_GIT_SHA")"
 if [[ "$current_sha" == "$target_sha" ]]; then
-    sessions="$(session_count)"
-    if (( sessions != 0 )); then
-        printf 'Caddy reconciliation deferred because %s game session(s) became active\n' \
-            "$sessions" >&2
-        exit 75
-    fi
     install_caddy_config
     [[ "$(sha256sum "$caddy_site" | awk '{print $1}')" == \
         "$(sha256sum "$caddy_candidate" | awk '{print $1}')" ]]
@@ -398,12 +389,6 @@ if [[ "$current_sha" == "$target_sha" ]]; then
     exit 0
 fi
 
-sessions="$(session_count)"
-if (( sessions != 0 )); then
-    printf 'Deployment deferred because %s game session(s) became active\n' "$sessions" >&2
-    exit 75
-fi
-
 mkdir -- "$stage"
 tar --extract --gzip --file "$artifact" --directory "$stage"
 for required_file in \
@@ -411,6 +396,7 @@ for required_file in \
     Server.dll \
     GameHost/game-session-supervisor.mjs \
     GameHost/lua54.wasm \
+    wwwroot/deployment.json \
     wwwroot/index.html \
     DEPLOYED_GIT_SHA; do
     [[ -f "$stage/$required_file" ]]
@@ -423,19 +409,10 @@ install -d -m 0700 "$backup_dir"
 sqlite3 "$database" ".backup '$backup_dir/sdr.db'"
 [[ "$(sqlite3 "$backup_dir/sdr.db" 'PRAGMA integrity_check;')" == "ok" ]]
 
-sessions="$(session_count)"
-if (( sessions != 0 )); then
-    printf 'Deployment deferred because %s game session(s) became active\n' "$sessions" >&2
-    exit 75
-fi
+request_game_restart
 
 systemctl stop solomon-dark-revived.service
 website_stopped=1
-sessions="$(session_count)"
-if (( sessions != 0 )); then
-    printf 'Deployment deferred because %s game session(s) became active\n' "$sessions" >&2
-    exit 75
-fi
 systemctl stop solomon-dark-game.service
 mv -- "$live" "$rollback"
 rollback_needed=1
@@ -444,6 +421,7 @@ stage=""
 install_caddy_config
 systemctl start solomon-dark-game.service solomon-dark-revived.service
 website_stopped=0
+game_drained=0
 
 healthy=0
 for _attempt in {1..30}; do
@@ -475,11 +453,6 @@ else
     deploy_exit=$?
 fi
 
-if (( deploy_exit == 75 )); then
-    remote_upload=""
-    log "Validated $target_sha; deployment deferred because a game session became active"
-    exit 0
-fi
 (( deploy_exit == 0 )) || fail "remote deployment exited with status $deploy_exit"
 remote_upload=""
 
@@ -490,6 +463,16 @@ live_caddy_checksum="$(remote_caddy_checksum)"
     fail "production Caddy site does not match origin/main after deploying $target_sha"
 curl --fail --silent --show-error --retry 10 --retry-all-errors \
     --retry-delay 1 "$public_url/game" >/dev/null
+public_deployment="$(curl --fail --silent --show-error --retry 10 --retry-all-errors \
+    --retry-delay 1 "$public_url/deployment.json")"
+python3 - "$public_deployment" "$target_sha" <<'PY'
+import json
+import sys
+
+payload = json.loads(sys.argv[1])
+if payload != {"revision": sys.argv[2]}:
+    raise SystemExit("public deployment manifest does not match origin/main")
+PY
 
 printf '%s %s\n' "$target_sha" "$(date --iso-8601=seconds)" >"$state_root/last-success"
 [[ ! -f "$artifact" ]] || unlink -- "$artifact"

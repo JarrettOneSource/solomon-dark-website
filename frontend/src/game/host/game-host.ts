@@ -128,6 +128,7 @@ import {
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost'])
 const GAME_SAVE_CHECKPOINT_TICKS = GAME_TICK_RATE * 5
+const DEFAULT_DEPLOYMENT_SAVE_TIMEOUT_MS = 30_000
 const GAME_CHAT_RATE_LIMIT = 5
 const GAME_CHAT_RATE_WINDOW_MS = 5_000
 
@@ -200,8 +201,18 @@ export interface GameHost {
   modCatalog(): readonly ModConsumableCatalogEntry[]
   partyCount(): number
   publicParties(): readonly PublicPartyDirectoryEntry[]
+  restartForDeployment(
+    targetRevision: string,
+    timeoutMs?: number,
+  ): Promise<GameHostDeploymentRestartResult>
   state(): GameSimulationState
   runCount(): number
+}
+
+export interface GameHostDeploymentRestartResult {
+  readonly players: number
+  readonly savedPlayers: number
+  readonly unacknowledgedPlayers: number
 }
 
 export type GameHostCloseReason = 'host-ended-session' | 'server-shutdown'
@@ -234,6 +245,15 @@ interface QueuedClientInput {
   input: PlayerCharacterInput
   sequence: number
   targetTick: number
+}
+
+interface DeploymentRestartState {
+  readonly acknowledged: Set<WebSocket>
+  readonly checkpointSequences: Map<WebSocket, number>
+  readonly pending: Set<WebSocket>
+  readonly ready: Promise<void>
+  readonly resolveReady: () => void
+  readonly targetRevision: string
 }
 
 export async function startGameHost(options: GameHostOptions): Promise<GameHost> {
@@ -277,11 +297,8 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   let loadedBoneyard: LoadedBoneyard | null = null
   let nextChatSequence = 1
   let nextSnapshotSequence = 1
-  let nextSaveSequence = 1
-  let lastSaveDocument: string | null = null
-  let lastSaveOwnerPlayerId: string | null = null
-  const sharedSaveDocuments = new Map<string, string>()
-  const sharedSaveSequences = new Map<string, number>()
+  const saveDocuments = new Map<string, string>()
+  const saveSequences = new Map<string, number>()
   let nextLuaRunSeed: number | null = null
   let luaRuntime: WebLuaRuntime | null = null
   let luaRuntimeInitialization: Promise<WebLuaRuntime> | null = null
@@ -298,6 +315,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   const partyModRuntimes = new Map<string, PartyModRuntimeScope>()
   const startingPartyIds = new Set<string>()
   let closed = false
+  let deploymentRestart: DeploymentRestartState | null = null
   let ticking = false
   let lastTickLagWarningAt = Number.NEGATIVE_INFINITY
   let nextTickAt = performance.now() + GAME_FIXED_TICK_SECONDS * 1000
@@ -450,6 +468,14 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
 
       const client = clients.get(socket)
       if (!client) {
+        if (deploymentRestart) {
+          disconnectCauses.set(socket, {
+            reason: 'game updating',
+            source: 'deployment-restart',
+          })
+          socket.close(1012, 'game updating')
+          return
+        }
         if (message.type !== 'client-hello') {
           disconnect(socket, 'authentication-failed', 'The first message must authenticate.')
           return
@@ -688,6 +714,36 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         if (sharedWorlds) broadcastPartyState()
         publishSaveCheckpoint('connected')
         if (gameplayPauseForPlayer(playerId)) broadcastSnapshot()
+        return
+      }
+
+      if (message.type === 'client-deployment-ready') {
+        const restart = deploymentRestart
+        const checkpointSequence = restart?.checkpointSequences.get(socket)
+        if (
+          !restart
+          || message.targetRevision !== restart.targetRevision
+          || message.checkpointSequence !== checkpointSequence
+        ) {
+          disconnect(socket, 'invalid-message', 'The deployment acknowledgement is not current.')
+          return
+        }
+        if (restart.pending.delete(socket)) {
+          restart.acknowledged.add(socket)
+          if (restart.pending.size === 0) restart.resolveReady()
+        }
+        return
+      }
+      if (deploymentRestart) {
+        if (message.type === 'client-ping') {
+          socket.send(encodeGameMessage({ type: 'server-pong', nonce: message.nonce }))
+        } else if (message.type === 'client-disconnect') {
+          disconnectCauses.set(socket, {
+            reason: 'client disconnected while saving for update',
+            source: 'deployment-restart',
+          })
+          socket.close(1000, 'client disconnect')
+        }
         return
       }
 
@@ -1290,6 +1346,12 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         return
       }
       clients.delete(socket)
+      const activeDeploymentRestart = deploymentRestart
+      if (activeDeploymentRestart?.pending.delete(socket)) {
+        if (activeDeploymentRestart.pending.size === 0) {
+          activeDeploymentRestart.resolveReady()
+        }
+      }
       const disconnectedState = stateForPlayer(client.playerId)
       const disconnectedPartyId = sharedWorlds
         ? partyForPlayer(sharedWorlds.parties, client.playerId)?.id ?? null
@@ -1299,13 +1361,13 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         : null
       const releasedGameplayPause = gameplayPauseForPlayer(client.playerId)?.ownerPlayerId
         === client.playerId
+      saveDocuments.delete(client.playerId)
+      saveSequences.delete(client.playerId)
       if (sharedWorlds) {
         sharedWorlds = removeSharedGamePlayer(sharedWorlds, client.playerId)
         state = sharedWorlds.hub
         playerContents.delete(client.playerId)
         pendingRestoredModState.delete(client.playerId)
-        sharedSaveDocuments.delete(client.playerId)
-        sharedSaveSequences.delete(client.playerId)
         if (
           disconnectedPartyId
           && !sharedWorlds.parties.parties.some(party => party.id === disconnectedPartyId)
@@ -1322,9 +1384,8 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           loadedBoneyard = null
           nextChatSequence = 1
           nextSnapshotSequence = 1
-          nextSaveSequence = 1
-          lastSaveDocument = null
-          lastSaveOwnerPlayerId = null
+          saveDocuments.clear()
+          saveSequences.clear()
           gameplayPause = null
           resetNextTickDeadline()
         }
@@ -1359,7 +1420,9 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         releaseGameplayPause('owner-disconnected', client.playerId, disconnectedPauseScope)
       } else broadcastSnapshot()
       if (sharedWorlds) broadcastPartyState()
-      if (clients.size > 0) publishSaveCheckpoint('participant-disconnected')
+      if (clients.size > 0 && !deploymentRestart) {
+        publishSaveCheckpoint('participant-disconnected')
+      }
     }
     socket.once('close', (code, reason) => release(code, reason.toString()))
     socket.once('error', (error) => release(null, '', error))
@@ -1368,6 +1431,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   const ticksPerSnapshot = Math.max(1, Math.round(GAME_TICK_RATE / snapshotRate))
   const timer = setInterval(() => {
     if (closed || ticking) return
+    if (deploymentRestart) {
+      resetNextTickDeadline()
+      return
+    }
     if (resetWhenEmpty && clients.size === 0) {
       resetNextTickDeadline()
       return
@@ -1584,76 +1651,72 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   }, 2)
 
   function publishSaveCheckpoint(source: string): void {
-    if (sharedWorlds) {
-      for (const party of sharedWorlds.parties.parties) {
-        const owner = [...clients.values()].find(({ playerId }) => (
-          playerId === party.leaderPlayerId
-        ))
-        const saveState = sharedPartySaveStateForPlayer(sharedWorlds, party.leaderPlayerId)
-        if (
-          !owner
-          || owner.socket.readyState !== WebSocket.OPEN
-          || !saveState
-          || saveState.run.phase === 'game-over'
-          || saveState.run.phase === 'loadout'
-        ) continue
-        let document: string
-        try {
-          const partyContent = contentForParty(party.id)
-          const scope = partyModRuntimes.get(party.id)
-          document = createGameSaveDocument({
-            loadedBoneyard: sharedLoadedBoneyardForPlayer(
-              sharedWorlds,
-              party.leaderPlayerId,
-            ),
-            mods: partyContent?.manifest.mods ?? [],
-            modState: Object.fromEntries(
-              scope?.runtimes.map(runtime => [runtime.mod.id, runtime.snapshotState()]) ?? [],
-            ),
-            playerId: party.leaderPlayerId,
-            state: saveState,
-          })
-        } catch (error) {
-          logGameServerEvent(
-            options.log,
-            'game-host',
-            'error',
-            'save.checkpoint_failed',
-            'A party game state could not produce a save checkpoint.',
-            logDetails({ partyId: party.id, source, ...gameServerErrorDetails(error) }),
-          )
-          continue
-        }
-        if (sharedSaveDocuments.get(party.leaderPlayerId) === document) continue
-        const sequence = (sharedSaveSequences.get(party.leaderPlayerId) ?? 0) + 1
-        sharedSaveSequences.set(party.leaderPlayerId, sequence)
-        sharedSaveDocuments.set(party.leaderPlayerId, document)
-        owner.socket.send(encodeGameMessage({
-          type: 'server-save-checkpoint',
-          save: document,
-          reason: 'progress',
-          sequence,
-        }))
-      }
+    if (!sharedWorlds) {
+      const owner = [...clients.values()].find(client => client.playerId === hostPlayerId)
+      if (owner) publishSaveCheckpointForClient(owner, source)
       return
     }
-    if (
-      hostPlayerId === null
-      || state.run.phase === 'game-over'
-      || state.run.phase === 'loadout'
-    ) return
-    const owner = [...clients.values()].find((client) => client.playerId === hostPlayerId)
-    if (!owner || owner.socket.readyState !== WebSocket.OPEN) return
+    const leaderIds = new Set(
+      sharedWorlds.parties.parties.map(party => party.leaderPlayerId),
+    )
+    for (const client of clients.values()) {
+      if (leaderIds.has(client.playerId)) publishSaveCheckpointForClient(client, source)
+    }
+  }
+
+  function publishSaveClear(): void {
+    for (const client of clients.values()) publishSaveClearForClient(client)
+  }
+
+  function publishSharedSaveClear(partyId: string): void {
+    if (!sharedWorlds) return
+    const party = sharedWorlds.parties.parties.find(({ id }) => id === partyId)
+    if (!party) return
+    const memberIds = new Set(party.memberPlayerIds)
+    for (const client of clients.values()) {
+      if (memberIds.has(client.playerId)) publishSaveClearForClient(client)
+    }
+  }
+
+  function publishSaveCheckpointForClient(
+    client: HostClient,
+    source: string,
+    force = false,
+    clearTerminal = false,
+  ): number {
+    if (client.socket.readyState !== WebSocket.OPEN) return 0
+    const saveState = sharedWorlds
+      ? sharedPartySaveStateForPlayer(sharedWorlds, client.playerId)
+      : state
+    if (!saveState) return 0
+    if (saveState.run.phase === 'game-over' || saveState.run.phase === 'loadout') {
+      return clearTerminal ? publishSaveClearForClient(client) : 0
+    }
     let document: string
     try {
+      const party = sharedWorlds
+        ? partyForPlayer(sharedWorlds.parties, client.playerId)
+        : null
+      const sharedContent = sharedWorlds
+        ? saveState.world.kind === 'boneyard' && party
+          ? contentForParty(party.id)
+          : playerContents.get(client.playerId) ?? null
+        : null
+      if (sharedWorlds && !sharedContent) {
+        throw new Error('connected player has no save content manifest')
+      }
+      const scope = party && saveState.world.kind === 'boneyard'
+        ? partyModRuntimes.get(party.id)
+        : null
       document = createGameSaveDocument({
-        loadedBoneyard,
-        mods: content.mods,
+        loadedBoneyard: loadedBoneyardForPlayer(client.playerId),
+        mods: sharedContent?.manifest.mods ?? content.mods,
         modState: Object.fromEntries(
-          privateModLuaRuntimes.map(runtime => [runtime.mod.id, runtime.snapshotState()]),
+          (scope?.runtimes ?? privateModLuaRuntimes)
+            .map(runtime => [runtime.mod.id, runtime.snapshotState()]),
         ),
-        playerId: hostPlayerId,
-        state,
+        playerId: client.playerId,
+        state: saveState,
       })
     } catch (error) {
       logGameServerEvent(
@@ -1661,55 +1724,43 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         'game-host',
         'error',
         'save.checkpoint_failed',
-        'The authoritative game state could not produce a save checkpoint.',
-        logDetails({ source, ...gameServerErrorDetails(error) }),
+        'An authoritative player state could not produce a save checkpoint.',
+        logDetails({
+          playerId: client.playerId,
+          source,
+          ...gameServerErrorDetails(error),
+        }),
       )
-      return
+      return 0
     }
-    if (lastSaveOwnerPlayerId === hostPlayerId && lastSaveDocument === document) return
-    lastSaveOwnerPlayerId = hostPlayerId
-    lastSaveDocument = document
-    owner.socket.send(encodeGameMessage({
+    const previousSequence = saveSequences.get(client.playerId) ?? 0
+    if (!force && saveDocuments.get(client.playerId) === document) {
+      return previousSequence
+    }
+    const sequence = previousSequence + 1
+    saveSequences.set(client.playerId, sequence)
+    saveDocuments.set(client.playerId, document)
+    client.socket.send(encodeGameMessage({
       type: 'server-save-checkpoint',
       save: document,
       reason: 'progress',
-      sequence: nextSaveSequence,
+      sequence,
     }))
-    nextSaveSequence += 1
+    return sequence
   }
 
-  function publishSaveClear(): void {
-    if (hostPlayerId === null) return
-    const owner = [...clients.values()].find((client) => client.playerId === hostPlayerId)
-    if (!owner || owner.socket.readyState !== WebSocket.OPEN) return
-    lastSaveOwnerPlayerId = hostPlayerId
-    lastSaveDocument = null
-    owner.socket.send(encodeGameMessage({
-      type: 'server-save-checkpoint',
-      save: null,
-      reason: 'game-over',
-      sequence: nextSaveSequence,
-    }))
-    nextSaveSequence += 1
-  }
-
-  function publishSharedSaveClear(partyId: string): void {
-    if (!sharedWorlds) return
-    const party = sharedWorlds.parties.parties.find(({ id }) => id === partyId)
-    if (!party) return
-    const owner = [...clients.values()].find(({ playerId }) => (
-      playerId === party.leaderPlayerId
-    ))
-    if (!owner || owner.socket.readyState !== WebSocket.OPEN) return
-    const sequence = (sharedSaveSequences.get(party.leaderPlayerId) ?? 0) + 1
-    sharedSaveSequences.set(party.leaderPlayerId, sequence)
-    sharedSaveDocuments.delete(party.leaderPlayerId)
-    owner.socket.send(encodeGameMessage({
+  function publishSaveClearForClient(client: HostClient): number {
+    if (client.socket.readyState !== WebSocket.OPEN) return 0
+    const sequence = (saveSequences.get(client.playerId) ?? 0) + 1
+    saveSequences.set(client.playerId, sequence)
+    saveDocuments.delete(client.playerId)
+    client.socket.send(encodeGameMessage({
       type: 'server-save-checkpoint',
       save: null,
       reason: 'game-over',
       sequence,
     }))
+    return sequence
   }
 
   function broadcastSnapshot(): void {
@@ -1854,6 +1905,130 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       client.activeInput = createIdlePlayerCharacterInput()
       client.queuedInputs.clear()
     }
+  }
+
+  async function restartForDeployment(
+    requestedRevision: string,
+    timeoutMs = DEFAULT_DEPLOYMENT_SAVE_TIMEOUT_MS,
+  ): Promise<GameHostDeploymentRestartResult> {
+    const targetRevision = requestedRevision.trim().toLowerCase()
+    if (!/^[0-9a-f]{40}$/.test(targetRevision)) {
+      throw new Error('deployment target must be a full Git revision')
+    }
+    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+      throw new Error('deployment save timeout must be positive')
+    }
+    if (closed) throw new Error('game host is closed')
+    if (deploymentRestart) throw new Error('game host is already restarting for deployment')
+
+    stopAllClientInputs()
+    resetNextTickDeadline()
+    const connected = [...clients.values()]
+      .filter(client => client.socket.readyState === WebSocket.OPEN)
+      .map(client => client.socket)
+    let resolveReady!: () => void
+    const ready = new Promise<void>((resolve) => { resolveReady = resolve })
+    const restart: DeploymentRestartState = {
+      acknowledged: new Set(),
+      checkpointSequences: new Map(),
+      pending: new Set(connected),
+      ready,
+      resolveReady,
+      targetRevision,
+    }
+    deploymentRestart = restart
+    for (const socket of connected) {
+      const client = clients.get(socket)
+      if (!client) {
+        restart.pending.delete(socket)
+        continue
+      }
+      const checkpointSequence = publishSaveCheckpointForClient(
+        client,
+        'deployment-restart',
+        true,
+        true,
+      )
+      restart.checkpointSequences.set(socket, checkpointSequence)
+      socket.send(encodeGameMessage({
+        type: 'server-deployment-restart',
+        checkpointSequence,
+        targetRevision,
+      }))
+    }
+    if (restart.pending.size === 0) restart.resolveReady()
+    logGameServerEvent(
+      options.log,
+      'game-host',
+      'info',
+      'deployment.checkpoint_requested',
+      'Every connected player was asked to save before the game update.',
+      logDetails({ players: connected.length, targetRevision }),
+    )
+
+    let timeout: ReturnType<typeof setTimeout> | undefined
+    await Promise.race([
+      restart.ready,
+      new Promise<void>((resolve) => {
+        timeout = setTimeout(resolve, timeoutMs)
+        timeout.unref()
+      }),
+    ])
+    if (timeout) clearTimeout(timeout)
+    const savedPlayers = restart.acknowledged.size
+    const unacknowledgedPlayers = connected.length - savedPlayers
+    const socketClosures = connected.map(waitForDeploymentSocketClose)
+    for (const socket of connected) {
+      if (socket.readyState !== WebSocket.OPEN && socket.readyState !== WebSocket.CONNECTING) {
+        continue
+      }
+      disconnectCauses.set(socket, {
+        reason: 'game updating',
+        source: 'deployment-restart',
+      })
+      socket.close(1012, 'game updating')
+    }
+    await Promise.all(socketClosures)
+    if (deploymentRestart === restart) deploymentRestart = null
+    resetNextTickDeadline()
+    logGameServerEvent(
+      options.log,
+      'game-host',
+      unacknowledgedPlayers === 0 ? 'info' : 'warning',
+      'deployment.players_disconnected',
+      'Connected players were disconnected for the game update.',
+      logDetails({
+        players: connected.length,
+        savedPlayers,
+        targetRevision,
+        unacknowledgedPlayers,
+      }),
+    )
+    return {
+      players: connected.length,
+      savedPlayers,
+      unacknowledgedPlayers,
+    }
+  }
+
+  function waitForDeploymentSocketClose(socket: WebSocket): Promise<void> {
+    if (socket.readyState === WebSocket.CLOSED) return Promise.resolve()
+    return new Promise((resolve) => {
+      let settled = false
+      const finish = () => {
+        if (settled) return
+        settled = true
+        clearTimeout(forceClose)
+        socket.off('close', finish)
+        resolve()
+      }
+      const forceClose = setTimeout(() => {
+        if (socket.readyState !== WebSocket.CLOSED) socket.terminate()
+        finish()
+      }, 1_000)
+      forceClose.unref()
+      socket.once('close', finish)
+    })
   }
 
   function stopWorldClientInputs(playerId: string): void {
@@ -2380,6 +2555,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       if (closed) return
       closed = true
       clearInterval(timer)
+      deploymentRestart?.resolveReady()
       resetLuaRuntime()
       for (const runtime of privateModLuaRuntimes.splice(0)) runtime.close()
       privateModContentRegistry.close()
@@ -2426,6 +2602,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           [...clients.values()].map(({ displayName, playerId }) => [playerId, displayName]),
         ), maxPlayers)
       : [],
+    restartForDeployment,
     state: () => state,
     runCount: () => sharedWorlds?.runs.length ?? Number(state.world.kind === 'boneyard'),
   }

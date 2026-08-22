@@ -93,7 +93,9 @@ export function failureFromTransportClose(
   if (transport.code === 1001 || transport.code === 1012) {
     return new GameConnectionFailure({
       code: 'server-restart',
-      explanation: 'The game server shut down or restarted while you were connected.',
+      explanation: transport.reason === 'game updating'
+        ? 'Solomon Dark is updating. Your saved game will resume after the app restarts.'
+        : 'The game server shut down or restarted while you were connected.',
       technicalDetail,
       transport,
     })

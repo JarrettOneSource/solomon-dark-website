@@ -124,8 +124,11 @@ party-scoped Boneyard simulations. Each socket receives snapshots only for its
 current world instance, while party-control messages remain session-wide.
 Leaving or a failed heartbeat removes the participant from its world and party;
 an empty run retires independently, and an empty shared Hub remains ready for
-the next ticket. Health reports active players, parties, and runs so deployment
-safety does not mistake an empty resident Hub process for an occupied session.
+the next ticket. Health reports active players, parties, runs, and
+deployment-drain state. A validated release closes admissions, freezes
+authoritative hosts, requests one final owner checkpoint from every connected
+browser player, and only then disconnects occupied sessions for cutover; an
+empty resident Hub is not an occupied session.
 The host also owns the safe public-party projection. A bearer-protected
 supervisor control-plane read exposes that projection to the Website backend;
 public clients receive only the bounded DTO from `GET /api/game/parties`.
@@ -153,6 +156,23 @@ atomically installs changed configuration, reloads Caddy gracefully, and
 restores the prior site with the runtime rollback. Shared `/game-hub` and
 private `/game-sessions/*` handlers must precede the ordinary Website
 fallback.
+
+Production deployment is an intentional browser-game restart, not an
+occupancy wait. After validation, artifact staging, and database backup, the
+worker authenticates to the supervisor control plane with the existing
+server-only secret and announces the exact target revision. The supervisor
+rejects new tickets, private provisioning, and WebSocket upgrades; freezes all
+shared/private hosts; and asks every connected client to persist a forced final
+host-authored checkpoint. The Website remains live while anonymous clients
+commit IndexedDB and authenticated clients complete cloud-slot requests. Ready
+acknowledgements are bounded because a dead browser cannot execute a final
+write; an unresponsive client falls back to its latest prior owner checkpoint
+if one exists and cannot defer the release indefinitely. A party guest with no
+prior continuation cannot acquire one after its browser stops responding. The supervisor then
+closes clients with restart code `1012` and reason `game updating`, and the
+worker restarts only the Website and browser-game units. A no-store deployment
+manifest proves the target revision before active or idle `/game` pages reload;
+a generic HTTP `200` or guessed delay is not release identity.
 
 Browser connection diagnostics use endpoint-class correlation rather than a
 credential: `shared-hub` for the resident host, a 32-character private
@@ -376,6 +396,14 @@ three channels.
   delete checkpoint. The adapter serializes that delete after prior writes, so
   the completed run cannot be resumed or recreated by an older in-flight
   checkpoint.
+- Normal semantic/five-second publication remains continuation-authority owned:
+  each independent party leader receives it. Deployment-final publication
+  additionally covers every connected player. In a party world, the host
+  projects the same authoritative state to one owner at a time, so every
+  participant can resume an individual continuation without serializing another
+  player's actor into their slot. Before a deployment disconnect, the page
+  acknowledges the exact final sequence only after the selected cloud or
+  IndexedDB adapter is idle.
 - Website slot writes use optimistic revision checks and a content hash. The
   document is capped at 8 MiB. Schema version two carries the immutable session
   content manifest and one bounded normalized `sd.state` snapshot per active

@@ -2,6 +2,7 @@ import {
   connectGameClientSession,
   type GameSessionConnector,
   type GameClientSession,
+  type GameDeploymentRestartRequest,
 } from './client/game-client-session.ts'
 import {
   connectWebSocketTransport,
@@ -38,6 +39,7 @@ export interface SessionOptions {
   diagnostics?: GameClientDiagnostics
   endpoint: GameEndpoint
   onFatal?: (failure: GameConnectionFailure) => void
+  onDeploymentRestart?: (request: GameDeploymentRestartRequest) => Promise<void>
   onProgress?: (stage: GameConnectionStage) => void
   profile: PlayerSocialProfile
   saveDocument?: string
@@ -83,6 +85,9 @@ export async function bootGame(options: SessionOptions): Promise<GameSession> {
     credential: options.endpoint.credential,
     ...(options.diagnostics ? { diagnostics: options.diagnostics } : {}),
     ...(options.onFatal ? { onFatal: options.onFatal } : {}),
+    ...(options.onDeploymentRestart
+      ? { onDeploymentRestart: options.onDeploymentRestart }
+      : {}),
     ...(options.saveDocument ? { saveDocument: options.saveDocument } : {}),
   })
   options.onProgress?.('receiving_host_checkpoint')

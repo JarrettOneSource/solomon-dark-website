@@ -83,3 +83,23 @@ test('save coordinator ignores replayed and byte-identical checkpoints', async (
   assert.deepEqual(store.operations, ['read', 'write:4:new-document'])
   assert.equal(coordinator.current()?.revision, 5)
 })
+
+test('save coordinator exposes exact checkpoint completion and failure to deployment drain', async () => {
+  const store = new RecordingStore()
+  const failures: Error[] = []
+  const coordinator = new GameSaveCoordinator(store, () => {}, error => failures.push(error))
+  await coordinator.load()
+
+  coordinator.accept({ document: 'checkpoint-one', reason: 'progress', sequence: 1 })
+  await coordinator.waitFor(1)
+  assert.equal(coordinator.current()?.document, 'checkpoint-one')
+
+  store.record = {
+    ...store.record!,
+    revision: 9,
+  }
+  coordinator.accept({ document: 'checkpoint-two', reason: 'progress', sequence: 2 })
+  await assert.rejects(() => coordinator.waitFor(2), /revision conflict/)
+  await assert.rejects(() => coordinator.waitFor(0), /revision conflict/)
+  assert.match(failures.at(-1)?.message ?? '', /revision conflict/)
+})

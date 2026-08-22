@@ -43,6 +43,7 @@ export interface GameSessionSupervisorOptions {
   adminSecret: string
   allowedOrigins: readonly string[]
   boneyards?: BoneyardCatalog
+  deploymentSaveTimeoutMs?: number
   heartbeatIntervalMs?: number
   host?: string
   log?: GameServerLogSink
@@ -93,6 +94,10 @@ export async function startGameSessionSupervisor(
     options.unclaimedTimeoutMs ?? DEFAULT_UNCLAIMED_TIMEOUT_MS,
     'unclaimedTimeoutMs',
   )
+  const deploymentSaveTimeoutMs = positiveDuration(
+    options.deploymentSaveTimeoutMs ?? 30_000,
+    'deploymentSaveTimeoutMs',
+  )
   const heartbeatIntervalMs = resolveGameHeartbeatInterval(options.heartbeatIntervalMs)
   const maxConnectionsPerSession = positiveInteger(
     options.maxConnectionsPerSession ?? DEFAULT_MAX_CONNECTIONS_PER_SESSION,
@@ -106,6 +111,7 @@ export async function startGameSessionSupervisor(
   }>()
   const downstreamSockets = new Set<WebSocket>()
   let closed = false
+  let draining = false
   let provisioning = 0
   const logDetails = (details: Readonly<Record<string, unknown>> = {}) => details
   const claimHubTicket = (credential: string): GameHostAdmission | null => {
@@ -159,6 +165,7 @@ export async function startGameSessionSupervisor(
       sendJson(response, 200, {
         status: 'ok',
         protocol: GAME_PROTOCOL_NAME,
+        draining,
         sessions: sessions.size + Number(hubHost.playerCount() > 0),
         privateSessions: sessions.size,
         hubPlayers: hubHost.hubPlayerCount(),
@@ -183,6 +190,80 @@ export async function startGameSessionSupervisor(
         logDetails({ method: request.method ?? 'unknown', path }),
       )
       sendJson(response, 401, { error: 'Unauthorized.' })
+      return
+    }
+    if (request.method === 'POST' && path === '/admin/deployments/restart') {
+      if (draining) {
+        sendJson(response, 409, { error: 'A deployment restart is already in progress.' })
+        return
+      }
+      void readJsonObject(request).then(async (body) => {
+        const targetRevision = deploymentTargetRevision(body)
+        draining = true
+        hubTickets.clear()
+        const privateSessions = [...sessions.values()]
+        const restartablePrivateSessions = privateSessions.filter(session => !session.closing)
+        const results = await Promise.all([
+          hubHost.restartForDeployment(targetRevision, deploymentSaveTimeoutMs),
+          ...restartablePrivateSessions.map(session => session.host.restartForDeployment(
+            targetRevision,
+            deploymentSaveTimeoutMs,
+          )),
+        ])
+        await Promise.all(privateSessions.map(session => (
+          session.closePromise ?? closeSession(session, 'deployment-restart')
+        )))
+        const players = results.reduce((total, result) => total + result.players, 0)
+        const savedPlayers = results.reduce(
+          (total, result) => total + result.savedPlayers,
+          0,
+        )
+        const unacknowledgedPlayers = results.reduce(
+          (total, result) => total + result.unacknowledgedPlayers,
+          0,
+        )
+        logGameServerEvent(
+          options.log,
+          'session-supervisor',
+          unacknowledgedPlayers === 0 ? 'info' : 'warning',
+          'deployment.ready',
+          'Browser game sessions are drained and ready for deployment.',
+          logDetails({
+            players,
+            savedPlayers,
+            targetRevision,
+            unacknowledgedPlayers,
+          }),
+        )
+        sendJson(response, 200, {
+          status: 'ready',
+          players,
+          savedPlayers,
+          targetRevision,
+          unacknowledgedPlayers,
+        })
+      }).catch((error: unknown) => {
+        logGameServerEvent(
+          options.log,
+          'session-supervisor',
+          'error',
+          'deployment.restart_failed',
+          'The browser game sessions could not prepare for deployment.',
+          logDetails(gameServerErrorDetails(error)),
+        )
+        if (!response.headersSent) {
+          sendJson(response, 500, { error: 'The game update could not prepare active players.' })
+        }
+      })
+      return
+    }
+    if (draining && request.method === 'POST') {
+      sendJson(
+        response,
+        503,
+        { error: 'The game is updating.' },
+        { 'retry-after': '5' },
+      )
       return
     }
     if (request.method === 'GET' && path === '/admin/hub/parties') {
@@ -267,6 +348,10 @@ export async function startGameSessionSupervisor(
   }
 
   server.on('upgrade', (request, socket, head) => {
+    if (draining) {
+      rejectUpgrade(socket, 503, 'Game Updating')
+      return
+    }
     if (!originAllowed(request.headers.origin, options.allowedOrigins)) {
       logGameServerEvent(
         options.log,
@@ -661,6 +746,17 @@ function materializeGameAdmission(body: Record<string, unknown>): GameHostAdmiss
     content: materializeWebSessionContent(body.content),
     leaderboardUserId: value === undefined || value === null ? null : Number(value),
   }
+}
+
+function deploymentTargetRevision(body: Record<string, unknown>): string {
+  if (Object.keys(body).length !== 1 || typeof body.targetRevision !== 'string') {
+    throw new Error('deployment restart body is invalid')
+  }
+  const targetRevision = body.targetRevision.trim().toLowerCase()
+  if (!/^[0-9a-f]{40}$/.test(targetRevision)) {
+    throw new Error('deployment target revision is invalid')
+  }
+  return targetRevision
 }
 
 function sendJson(

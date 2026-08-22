@@ -1462,6 +1462,56 @@ test('host emits an owner checkpoint and revives it before a fresh welcome', asy
   assert.equal(resumed.snapshot.world.kind, 'hub')
 })
 
+test('deployment restart checkpoints every connected private-session player before closing', async (context) => {
+  const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
+  context.after(() => host.close())
+  const first = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
+  const second = await join(host.address.url, 'test-secret', SECOND_CHARACTER)
+  const firstMessages = deploymentMessages(first.socket)
+  const secondMessages = deploymentMessages(second.socket)
+  const firstClosed = socketClose(first.socket)
+  const secondClosed = socketClose(second.socket)
+  const targetRevision = 'a'.repeat(40)
+
+  const restarting = host.restartForDeployment(targetRevision, 1_000)
+  const [firstDeployment, secondDeployment] = await Promise.all([
+    firstMessages,
+    secondMessages,
+  ])
+  for (const deployment of [firstDeployment, secondDeployment]) {
+    assert.equal(deployment.restart.checkpointSequence, deployment.checkpoint.sequence)
+    assert.equal(deployment.restart.targetRevision, targetRevision)
+  }
+  assert.equal(
+    (JSON.parse(firstDeployment.checkpoint.save!) as { summary: { playerId: string } })
+      .summary.playerId,
+    first.welcome.playerId,
+  )
+  assert.equal(
+    (JSON.parse(secondDeployment.checkpoint.save!) as { summary: { playerId: string } })
+      .summary.playerId,
+    second.welcome.playerId,
+  )
+  for (const [socket, deployment] of [
+    [first.socket, firstDeployment],
+    [second.socket, secondDeployment],
+  ] as const) {
+    socket.send(encodeGameMessage({
+      type: 'client-deployment-ready',
+      checkpointSequence: deployment.restart.checkpointSequence,
+      targetRevision,
+    }))
+  }
+
+  assert.deepEqual(await restarting, {
+    players: 2,
+    savedPlayers: 2,
+    unacknowledgedPlayers: 0,
+  })
+  assert.deepEqual(await firstClosed, { code: 1012, reason: 'game updating' })
+  assert.deepEqual(await secondClosed, { code: 1012, reason: 'game updating' })
+})
+
 test('host rejects an unconfirmed save mod mismatch and accepts an explicit continuation', async (context) => {
   const savedMod = {
     contentSha256: 'a'.repeat(64),
@@ -2119,6 +2169,47 @@ function openSocket(url: string, origin?: string, autoPong = true): Promise<WebS
       reject(new Error(`upgrade rejected with ${response.statusCode}`))
     })
   })
+}
+
+function deploymentMessages(socket: WebSocket): Promise<{
+  checkpoint: Extract<ServerGameMessage, { type: 'server-save-checkpoint' }>
+  restart: Extract<ServerGameMessage, { type: 'server-deployment-restart' }>
+}> {
+  return new Promise((resolve, reject) => {
+    let checkpoint: Extract<ServerGameMessage, { type: 'server-save-checkpoint' }> | null = null
+    let restart: Extract<ServerGameMessage, { type: 'server-deployment-restart' }> | null = null
+    const timeout = setTimeout(() => {
+      cleanup()
+      reject(new Error('timed out waiting for deployment messages'))
+    }, 3_000)
+    const receive = (data: WebSocket.RawData) => {
+      const message = decodeServerGameMessage(data.toString())
+      if (message.type === 'server-save-checkpoint') checkpoint = message
+      if (message.type === 'server-deployment-restart') restart = message
+      if (checkpoint && restart && checkpoint.sequence === restart.checkpointSequence) {
+        cleanup()
+        resolve({ checkpoint, restart })
+      }
+    }
+    const fail = (error: Error) => {
+      cleanup()
+      reject(error)
+    }
+    const cleanup = () => {
+      clearTimeout(timeout)
+      socket.off('message', receive)
+      socket.off('error', fail)
+    }
+    socket.on('message', receive)
+    socket.on('error', fail)
+  })
+}
+
+function socketClose(socket: WebSocket): Promise<{ code: number; reason: string }> {
+  return new Promise(resolve => socket.once('close', (code, reason) => resolve({
+    code,
+    reason: reason.toString(),
+  })))
 }
 
 function nextMessage(

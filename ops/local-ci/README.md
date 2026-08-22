@@ -7,11 +7,20 @@ live checksum is reconciled even when the runtime commit is already current.
 It never reads or modifies a developer checkout.
 
 The cutover is fail-closed: a changed `main` is not deployed until validation
-passes, active browser-game sessions defer deployment, the SQLite database is
-backed up and checked, and an unhealthy release is rolled back atomically.
-Changed Caddy configuration is validated before installation, reloaded
-gracefully, and restored with a failed release. Successful cutovers retain the
-previous release, database backup, and any replaced Caddy site on NFO.
+passes, the SQLite database is backed up and checked, and an unhealthy release
+is rolled back atomically. Active browser games do not defer a validated
+release. The worker asks the supervisor to close admissions, freeze each host,
+publish one final checkpoint per connected player, wait up to the bounded save
+grace for cloud/IndexedDB acknowledgements, and disconnect players with the
+`game updating` reason before restarting the Website and game units. Changed
+Caddy configuration is validated before installation, reloaded gracefully, and
+restored with a failed release. Successful cutovers retain the previous release,
+database backup, and any replaced Caddy site on NFO.
+
+The release also publishes `/deployment.json`. Connected players see the custom
+update surface while saving and reload only when that manifest identifies the
+announced target revision. Idle production `/game` tabs use the same manifest
+to pick up a release without a game connection.
 
 The worker is intentionally a fixed local systemd service instead of a GitHub
 Actions self-hosted runner. This is a public repository, so a persistent Actions
@@ -24,6 +33,11 @@ Install or refresh it on the deployment machine:
 ```bash
 ./ops/local-ci/install.sh
 ```
+
+Bootstrap a worker change in two phases: first deploy a release whose
+supervisor/client implements the authenticated restart handshake using the old
+zero-session worker, then run `install.sh`. The worker is machine-local and is
+not replaced by the application archive itself.
 
 On WSL, keep the user manager enabled with linger and launch the distribution
 at Windows logon. This workstation uses a per-user Startup entry for Ubuntu, so

@@ -147,6 +147,14 @@ class ValidationContractTests(unittest.TestCase):
             with self.subTest(member=member):
                 self.assertIn(member, deploy)
 
+        self.assertIn("/admin/deployments/restart", deploy)
+        self.assertIn('wwwroot/deployment.json', deploy)
+        self.assertNotIn("deployment deferred because $sessions game session(s) are active", deploy)
+
+        program = (ROOT / "backend/Program.cs").read_text()
+        self.assertIn('"deployment.json"', program)
+        self.assertIn('Headers.CacheControl = "no-store"', program)
+
 
 if __name__ == "__main__":
     unittest.main()

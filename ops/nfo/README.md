@@ -19,6 +19,7 @@ SDR_GAME_SUPERVISOR_HOST=127.0.0.1
 SDR_GAME_SUPERVISOR_PORT=5222
 SDR_GAME_MAX_SESSIONS=64
 SDR_GAME_MAX_CONNECTIONS_PER_SESSION=16
+SDR_GAME_DEPLOYMENT_SAVE_TIMEOUT_SECONDS=30
 SDR_GAME_UNCLAIMED_TIMEOUT_SECONDS=120
 SDR_GAME_LOG_LEVEL=info
 ```
@@ -64,7 +65,14 @@ the runtime. It compares the live site hash even when the deployed Git SHA is
 already current, validates a candidate before an atomic install, retains the
 prior site in the release backup, and gracefully reloads Caddy. Any later
 release failure restores and reloads that backup. The active-session guard
-still applies before either reconciliation or runtime cutover.
+is replaced by an authenticated deployment drain for runtime cutover: the
+supervisor rejects new admissions, freezes every host, publishes a final
+owner-only checkpoint to every connected player, waits for bounded browser
+storage acknowledgements, and closes the clients with code `1012` and reason
+`game updating`. Caddy-only reconciliation remains a graceful reload and does
+not disconnect games. The Website stays live until the save grace completes so
+authenticated cloud-slot writes can finish. The release manifest at
+`/deployment.json` is `no-store` and owns the automatic browser reload edge.
 
 Restart the game supervisor together with the website whenever the bundled game
 protocol changes. A release is healthy only when all of these pass:

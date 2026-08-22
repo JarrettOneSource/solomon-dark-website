@@ -6,6 +6,7 @@ export type { GameSaveStore, StoredGameSave } from './game-save-store.ts'
 export class GameSaveCoordinator {
   private record: StoredGameSave | null = null
   private lastSequence = 0
+  private lastOutcome: Promise<void> = Promise.resolve()
   private pending: Promise<void> = Promise.resolve()
   private readonly store: GameSaveStore
   private readonly onChange: (record: StoredGameSave | null) => void
@@ -30,7 +31,7 @@ export class GameSaveCoordinator {
   accept(checkpoint: GameSaveCheckpoint): void {
     if (checkpoint.sequence <= this.lastSequence) return
     this.lastSequence = checkpoint.sequence
-    this.pending = this.pending.then(async () => {
+    const operation = this.pending.then(async () => {
       if (checkpoint.document === null) {
         if (this.record !== null) await this.store.clear(this.record.revision)
         this.record = null
@@ -43,9 +44,14 @@ export class GameSaveCoordinator {
         this.record?.revision ?? 0,
       )
       this.onChange(this.record)
-    }).catch((error: unknown) => {
-      this.onError(error instanceof Error ? error : new Error('Game save failed.'))
     })
+    this.lastOutcome = operation.catch((error: unknown) => {
+      const failure = error instanceof Error ? error : new Error('Game save failed.')
+      this.onError(failure)
+      throw failure
+    })
+    void this.lastOutcome.catch(() => {})
+    this.pending = this.lastOutcome.catch(() => {})
   }
 
   current(): StoredGameSave | null {
@@ -54,5 +60,15 @@ export class GameSaveCoordinator {
 
   idle(): Promise<void> {
     return this.pending
+  }
+
+  waitFor(sequence: number): Promise<void> {
+    if (sequence === 0) return this.lastSequence === 0 ? this.pending : this.lastOutcome
+    if (sequence !== this.lastSequence) {
+      return Promise.reject(new Error(
+        `Game save checkpoint ${sequence} is not the latest accepted sequence.`,
+      ))
+    }
+    return this.lastOutcome
   }
 }

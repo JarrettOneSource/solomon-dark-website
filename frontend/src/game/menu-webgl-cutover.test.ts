@@ -112,6 +112,8 @@ test('the title version lane reports the exact deployed build revision', () => {
   assert.match(buildRevision, /BUILD \$\{short\}/)
   assert.match(viteConfig, /\['rev-parse', '--verify', 'HEAD'\]/)
   assert.match(viteConfig, /__SDR_BUILD_REVISION__/)
+  assert.match(viteConfig, /fileName: 'deployment\.json'/)
+  assert.match(viteConfig, /revision: buildRevision/)
   assert.match(viteConfig, /requestedRevision !== checkoutRevision/)
   assert.match(
     deployMain,

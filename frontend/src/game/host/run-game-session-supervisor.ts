@@ -41,6 +41,12 @@ const allowedOrigins = requiredEnvironment('SDR_GAME_ALLOWED_ORIGINS')
 const supervisor = await startGameSessionSupervisor({
   adminSecret,
   allowedOrigins,
+  deploymentSaveTimeoutMs: parseInteger(
+    process.env.SDR_GAME_DEPLOYMENT_SAVE_TIMEOUT_SECONDS,
+    30,
+    1,
+    300,
+  ) * 1000,
   host: process.env.SDR_GAME_SUPERVISOR_HOST?.trim() || '127.0.0.1',
   log,
   luaWasmPath: resolveWebLuaWasmPath(import.meta.url),

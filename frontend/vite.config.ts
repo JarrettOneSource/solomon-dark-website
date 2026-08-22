@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
@@ -27,12 +27,22 @@ if (requestedRevision !== undefined && requestedRevision !== checkoutRevision) {
 }
 
 const buildRevision = requestedRevision ?? checkoutRevision
+const deploymentRevisionManifest: Plugin = {
+  name: 'deployment-revision-manifest',
+  generateBundle() {
+    this.emitFile({
+      type: 'asset',
+      fileName: 'deployment.json',
+      source: `${JSON.stringify({ revision: buildRevision })}\n`,
+    })
+  },
+}
 
 export default defineConfig({
   define: {
     __SDR_BUILD_REVISION__: JSON.stringify(buildRevision),
   },
-  plugins: [react(), tailwindcss()],
+  plugins: [deploymentRevisionManifest, react(), tailwindcss()],
   server: {
     proxy: {
       '/api': 'http://localhost:5210',

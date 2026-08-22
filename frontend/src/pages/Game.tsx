@@ -14,6 +14,7 @@ import {
 import {
   GameConnectionFailure,
 } from '../game/client/game-connection-failure.ts'
+import type { GameDeploymentRestartRequest } from '../game/client/game-client-session.ts'
 import { createGameClientDiagnostics } from '../game/client/game-diagnostics.ts'
 import type { PlayerCharacterConfig } from '../game/core-kernels/player-character.ts'
 import type {
@@ -43,8 +44,16 @@ import {
 import type { GameContentIdentity } from '../game/protocol/game-protocol.ts'
 import { readLocalHallOfFame } from '../game/hall-of-fame-store.ts'
 import { readTotalPlaytimeMs, trackPlaytime } from '../game/playtime-store.ts'
+import { TITLE_BUILD_REVISION } from '../game/title-build-revision.ts'
+import { waitForDeploymentRevision } from '../game/deployment-revision.ts'
+import GameDeploymentUpdate from '../game/GameDeploymentUpdate.tsx'
 
 type Readiness = 'loading' | 'ready'
+
+interface DeploymentRestartState {
+  saved: boolean
+  targetRevision: string
+}
 
 export default function Game() {
   const { user, loading: authLoading, logout } = useAuth()
@@ -59,6 +68,7 @@ export default function Game() {
   const [modsReady, setModsReady] = useState(false)
   const [activeMods, setActiveMods] = useState<readonly GameContentIdentity[]>([])
   const [resumeSave, setResumeSave] = useState<ResumableGameSave | null>(null)
+  const [deploymentRestart, setDeploymentRestart] = useState<DeploymentRestartState | null>(null)
   const saveCoordinator = useRef<GameSaveCoordinator | null>(null)
 
   useEffect(() => {
@@ -67,6 +77,29 @@ export default function Game() {
   }, [diagnostics])
 
   useEffect(() => trackPlaytime(), [])
+
+  useEffect(() => {
+    const currentRevision = TITLE_BUILD_REVISION.full
+    if (!currentRevision) return
+    const controller = new AbortController()
+    void waitForDeploymentRevision({
+      currentRevision,
+      intervalMs: deploymentRestart ? 500 : 15_000,
+      signal: controller.signal,
+      targetRevision: deploymentRestart?.targetRevision ?? null,
+    }).then(() => {
+      if (!controller.signal.aborted) window.location.reload()
+    }).catch((error: unknown) => {
+      if (!controller.signal.aborted) {
+        diagnostics.warning(
+          'deployment.revision_poll_failed',
+          'The game could not verify the deployed revision.',
+          error instanceof Error ? error.message : 'Revision check failed.',
+        )
+      }
+    })
+    return () => controller.abort()
+  }, [deploymentRestart, diagnostics])
 
   useEffect(() => {
     if (authLoading) return
@@ -219,6 +252,19 @@ export default function Game() {
     preparedEndpoint.current = null
   }, [])
 
+  const saveForDeployment = useCallback(async (
+    request: GameDeploymentRestartRequest,
+  ): Promise<void> => {
+    setDeploymentRestart({ saved: false, targetRevision: request.targetRevision })
+    const coordinator = saveCoordinator.current
+    if (!coordinator) throw new Error('The game save owner is unavailable.')
+    if (request.checkpoint) coordinator.accept(request.checkpoint)
+    await coordinator.waitFor(request.checkpoint?.sequence ?? 0)
+    setDeploymentRestart(current => current?.targetRevision === request.targetRevision
+      ? { ...current, saved: true }
+      : current)
+  }, [])
+
   const connectSession = useCallback(async (
     character: PlayerCharacterConfig,
     onProgress: (stage: GameConnectionStage) => void,
@@ -236,6 +282,7 @@ export default function Game() {
         diagnostics,
         endpoint,
         onFatal: setFatal,
+        onDeploymentRestart: saveForDeployment,
         onProgress,
         profile: {
           accountUsername,
@@ -253,7 +300,7 @@ export default function Game() {
       setFatal(failure)
       throw failure
     }
-  }, [accountUsername, diagnostics])
+  }, [accountUsername, diagnostics, saveForDeployment])
 
   const persistCheckpoint = useCallback((checkpoint: GameSaveCheckpoint) => {
     saveCoordinator.current?.accept(checkpoint)
@@ -279,7 +326,7 @@ export default function Game() {
     }
   }, [diagnostics, user])
 
-  if (fatal) {
+  if (fatal && !deploymentRestart) {
     return (
       <GameRuntimeError
         diagnostics={diagnostics}
@@ -320,6 +367,7 @@ export default function Game() {
               total={loadProgress.total}
             />
           )}
+      {deploymentRestart && <GameDeploymentUpdate saved={deploymentRestart.saved} />}
     </>
   )
 }

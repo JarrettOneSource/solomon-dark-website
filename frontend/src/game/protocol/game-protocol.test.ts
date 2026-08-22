@@ -1024,8 +1024,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v52 carries Boulder residuals, movement authority, whispers, social profiles, chat, mod content, unforge state, modal pause identity, leaderboard authority, and gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 52)
+test('protocol v53 carries deployment restart, Boulder, movement, social, mod, and gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 53)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),

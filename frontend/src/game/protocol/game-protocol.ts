@@ -305,7 +305,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 52
+export const GAME_PROTOCOL_VERSION = 53
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
 export const GAME_CONNECTION_TIMEOUT_CLOSE_CODE = 4000
@@ -508,6 +508,12 @@ export interface ClientDisconnectMessage {
   type: 'client-disconnect'
 }
 
+export interface ClientDeploymentReadyMessage {
+  type: 'client-deployment-ready'
+  checkpointSequence: number
+  targetRevision: string
+}
+
 export interface ClientStartMatchMessage {
   type: 'client-start-match'
   boneyardId: string
@@ -536,6 +542,7 @@ export type ClientGameMessage =
   | ClientChatMessage
   | ClientCheatModeMessage
   | ClientConfirmLoadoutMessage
+  | ClientDeploymentReadyMessage
   | ClientGameplayPauseMessage
   | ClientHelloMessage
   | ClientHubActionMessage
@@ -600,6 +607,12 @@ export interface ServerSaveCheckpointMessage {
   save: string | null
   reason: 'game-over' | 'progress'
   sequence: number
+}
+
+export interface ServerDeploymentRestartMessage {
+  type: 'server-deployment-restart'
+  checkpointSequence: number
+  targetRevision: string
 }
 
 export interface ServerLeaderboardReceiptMessage {
@@ -668,6 +681,7 @@ export interface ServerDisconnectMessage {
 export type ServerGameMessage =
   | ServerChatMessage
   | ServerChatRejectedMessage
+  | ServerDeploymentRestartMessage
   | ServerGameplayPauseMessage
   | ServerWelcomeMessage
   | ServerSnapshotMessage
@@ -880,6 +894,17 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
     onlyKeys(value, 'message', ['type'])
     return { type: 'client-disconnect' }
   }
+  if (value.type === 'client-deployment-ready') {
+    onlyKeys(value, 'message', ['type', 'checkpointSequence', 'targetRevision'])
+    return {
+      type: 'client-deployment-ready',
+      checkpointSequence: nonnegativeInteger(
+        value.checkpointSequence,
+        'checkpointSequence',
+      ),
+      targetRevision: gitRevision(value.targetRevision, 'targetRevision'),
+    }
+  }
   throw new GameProtocolError('unknown client message type')
 }
 
@@ -980,6 +1005,17 @@ export function decodeServerGameMessage(payload: string): ServerGameMessage {
       save,
       reason,
       sequence: positiveInteger(value.sequence, 'sequence'),
+    }
+  }
+  if (value.type === 'server-deployment-restart') {
+    onlyKeys(value, 'message', ['type', 'checkpointSequence', 'targetRevision'])
+    return {
+      type: 'server-deployment-restart',
+      checkpointSequence: nonnegativeInteger(
+        value.checkpointSequence,
+        'checkpointSequence',
+      ),
+      targetRevision: gitRevision(value.targetRevision, 'targetRevision'),
     }
   }
   if (value.type === 'server-leaderboard-receipt') {
@@ -1476,6 +1512,14 @@ function sha256(value: unknown, field: string): string {
   const result = limitedString(value, field, 64).toLowerCase()
   if (!/^[0-9a-f]{64}$/.test(result)) {
     throw new GameProtocolError(`${field} must be SHA-256 hex`)
+  }
+  return result
+}
+
+function gitRevision(value: unknown, field: string): string {
+  const result = limitedString(value, field, 40).toLowerCase()
+  if (!/^[0-9a-f]{40}$/.test(result)) {
+    throw new GameProtocolError(`${field} must be a full Git revision`)
   }
   return result
 }

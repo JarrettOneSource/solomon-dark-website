@@ -38,6 +38,17 @@ test('transport timeouts, restarts, and abnormal losses have distinct explanatio
   assert.equal(restart.code, 'server-restart')
   assert.match(restart.message, /restarted|shut down/i)
 
+  const updating = failureFromTransportClose({
+    code: 1012,
+    reason: 'game updating',
+    wasClean: true,
+  })
+  assert.equal(updating.code, 'server-restart')
+  assert.equal(
+    updating.message,
+    'Solomon Dark is updating. Your saved game will resume after the app restarts.',
+  )
+
   const hostEnded = failureFromTransportClose({
     code: 4001,
     reason: 'host ended session',

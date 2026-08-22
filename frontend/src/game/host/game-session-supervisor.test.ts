@@ -245,6 +245,48 @@ test('game session supervisor admits independent players to one shared Hub and r
   assert.equal((await fetch(`${supervisor.address.url}/admin/lobbies`, {
     headers: { authorization: `Bearer ${ADMIN_SECRET}` },
   })).status, 404)
+
+  const targetRevision = 'c'.repeat(40)
+  const restartMessages = [first, second, third].map(client => client.next(
+    message => message.type === 'server-deployment-restart',
+  ))
+  const restartResponse = fetch(`${supervisor.address.url}/admin/deployments/restart`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${ADMIN_SECRET}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ targetRevision }),
+  })
+  for (const [client, restartPromise] of [first, second, third].map(
+    (client, index) => [client, restartMessages[index]!] as const,
+  )) {
+    const restart = await restartPromise
+    assert.equal(restart.type, 'server-deployment-restart')
+    const checkpoint = await client.next(message => (
+      message.type === 'server-save-checkpoint'
+      && message.sequence === restart.checkpointSequence
+    ))
+    assert.equal(checkpoint.type, 'server-save-checkpoint')
+    assert.equal(
+      (JSON.parse(checkpoint.save!) as { summary: { playerId: string } }).summary.playerId,
+      client.welcome.playerId,
+    )
+    client.socket.send(encodeGameMessage({
+      type: 'client-deployment-ready',
+      checkpointSequence: restart.checkpointSequence,
+      targetRevision,
+    }))
+  }
+  const deployed = await restartResponse
+  assert.equal(deployed.status, 200)
+  assert.deepEqual(await deployed.json(), {
+    status: 'ready',
+    players: 3,
+    savedPlayers: 3,
+    targetRevision,
+    unacknowledgedPlayers: 0,
+  })
 })
 
 test('shared Hub refuses a party launch when member mod manifests differ', async (context) => {
@@ -371,6 +413,104 @@ test('game session supervisor gives connected players a reason when it shuts dow
   assert.equal(browserClose?.details?.closeReason, 'server shutdown')
 })
 
+test('deployment restart drains admissions, waits for the final save, and closes with update copy', async (context) => {
+  const supervisor = await startGameSessionSupervisor({
+    adminSecret: ADMIN_SECRET,
+    allowedOrigins: [BROWSER_ORIGIN],
+    snapshotRate: 100,
+  })
+  context.after(() => supervisor.close())
+  const client = await join(
+    supervisor.address.url,
+    await admitHub(supervisor.address.url),
+    BROWSER_ORIGIN,
+  )
+  const targetRevision = 'a'.repeat(40)
+  const closed = socketClosed(client.socket)
+  const responsePromise = fetch(`${supervisor.address.url}/admin/deployments/restart`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${ADMIN_SECRET}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ targetRevision }),
+  })
+  const restart = await client.next(message => message.type === 'server-deployment-restart')
+  assert.equal(restart.type, 'server-deployment-restart')
+  const checkpoint = await client.next(message => (
+    message.type === 'server-save-checkpoint'
+    && message.sequence === restart.checkpointSequence
+  ))
+  assert.equal(checkpoint.type, 'server-save-checkpoint')
+  assert.equal(checkpoint.reason, 'progress')
+  assert.ok(checkpoint.save)
+  assert.equal((await readHealth(supervisor.address.url)).draining, true)
+
+  const rejectedAdmission = await fetch(`${supervisor.address.url}/admin/hub/tickets`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${ADMIN_SECRET}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ content: EMPTY_CONTENT, leaderboardUserId: null }),
+  })
+  assert.equal(rejectedAdmission.status, 503)
+
+  client.socket.send(encodeGameMessage({
+    type: 'client-deployment-ready',
+    checkpointSequence: restart.checkpointSequence,
+    targetRevision,
+  }))
+  const response = await responsePromise
+  assert.equal(response.status, 200)
+  assert.deepEqual(await response.json(), {
+    status: 'ready',
+    players: 1,
+    savedPlayers: 1,
+    targetRevision,
+    unacknowledgedPlayers: 0,
+  })
+  assert.deepEqual(await closed, { code: 1012, reason: 'game updating' })
+})
+
+test('deployment restart cannot be deferred by an unresponsive browser', async (context) => {
+  const supervisor = await startGameSessionSupervisor({
+    adminSecret: ADMIN_SECRET,
+    allowedOrigins: [BROWSER_ORIGIN],
+    deploymentSaveTimeoutMs: 25,
+    snapshotRate: 100,
+  })
+  context.after(() => supervisor.close())
+  const client = await join(
+    supervisor.address.url,
+    await admitHub(supervisor.address.url),
+    BROWSER_ORIGIN,
+  )
+  const targetRevision = 'b'.repeat(40)
+  const closed = socketClosed(client.socket)
+  const responsePromise = fetch(`${supervisor.address.url}/admin/deployments/restart`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${ADMIN_SECRET}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ targetRevision }),
+  })
+  const restart = await client.next(message => message.type === 'server-deployment-restart')
+  assert.equal(restart.type, 'server-deployment-restart')
+
+  const response = await responsePromise
+  assert.equal(response.status, 200)
+  assert.deepEqual(await response.json(), {
+    status: 'ready',
+    players: 1,
+    savedPlayers: 0,
+    targetRevision,
+    unacknowledgedPlayers: 1,
+  })
+  assert.deepEqual(await closed, { code: 1012, reason: 'game updating' })
+})
+
 test('game session supervisor closes a used session after the final player and proxy leave', async (context) => {
   const supervisor = await startGameSessionSupervisor({
     adminSecret: ADMIN_SECRET,
@@ -450,6 +590,7 @@ interface ProvisionedEndpoint {
 }
 
 interface SupervisorHealth {
+  draining: boolean
   hubPlayers: number
   parties: number
   players: number
