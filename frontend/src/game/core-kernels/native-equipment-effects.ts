@@ -90,6 +90,13 @@ interface NativeEquipmentCatalog {
   }[]
 }
 
+export interface NativeEquipmentTooltipSet {
+  readonly effects: readonly NativeEquipmentEffect[]
+  readonly memberRecipeIndices: readonly number[]
+  readonly name: string
+  readonly sourceIndex: number
+}
+
 interface MutableNativeEquipmentModifiers {
   castSpeedFlat: number
   castSpeedMultiplier: number
@@ -130,6 +137,16 @@ if (CATALOG.schema !== 'solomon-dark-native-equipment-effects-v1') {
 
 export const NATIVE_EQUIPMENT_RECIPE_COUNT = CATALOG.items.length
 export const NATIVE_EQUIPMENT_SET_COUNT = CATALOG.sets.length
+export const NATIVE_EQUIPMENT_CATALOG_EFFECT_COUNT = CATALOG.items.reduce(
+  (count, item) => count + item.effects.length,
+  CATALOG.sets.reduce((count, set) => count + set.effects.length, 0),
+)
+const NATIVE_EQUIPMENT_TOOLTIP_SETS = Object.freeze(CATALOG.sets.map((set) => Object.freeze({
+  effects: cloneEffects(set.effects),
+  memberRecipeIndices: Object.freeze([...set.memberRecipeIndices]),
+  name: set.name,
+  sourceIndex: set.sourceIndex,
+})))
 
 export function resolveEquippedNativeEffects(
   permanentRanks: readonly number[],
@@ -159,6 +176,18 @@ export function nativeEquipmentRecipeEffects(
   const recipe = CATALOG.items[recipeIndex]
   if (recipe === undefined || recipe.sourceIndex !== recipeIndex) return Object.freeze([])
   return cloneEffects(recipe.effects)
+}
+
+export function nativeEquipmentTooltipSets(): readonly NativeEquipmentTooltipSet[] {
+  return NATIVE_EQUIPMENT_TOOLTIP_SETS
+}
+
+export function nativeEquipmentTooltipSetForRecipe(
+  recipeIndex: number,
+): NativeEquipmentTooltipSet | null {
+  return nativeEquipmentTooltipSets().find(
+    ({ memberRecipeIndices }) => memberRecipeIndices.includes(recipeIndex),
+  ) ?? null
 }
 
 export function nativeEquipmentSetEffects(

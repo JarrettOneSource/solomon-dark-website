@@ -4,6 +4,20 @@ import test from 'node:test'
 
 import nativeAssetsJson from '../../assets/game/hub-trader-native-assets.json' with { type: 'json' }
 import {
+  createEquipmentInventoryItem,
+  DOWSING_EQUIPMENT_RECIPES,
+  FOMENTIUS_STOCK_DEFINITIONS,
+  type HubInventoryItem,
+} from '../core-kernels/hub-economy.ts'
+import {
+  NATIVE_EQUIPMENT_CATALOG_EFFECT_COUNT,
+  NATIVE_EQUIPMENT_RECIPE_COUNT,
+  NATIVE_EQUIPMENT_SET_COUNT,
+  nativeEquipmentRecipeEffects,
+  nativeEquipmentTooltipSets,
+} from '../core-kernels/native-equipment-effects.ts'
+import {
+  HAGATHA_NATIVE_TOOLTIP_LINES,
   HUB_CHAT_PANEL,
   HUB_CHAT_INLINE_EMPHASIS,
   HUB_DOWSING_FIELD,
@@ -13,6 +27,7 @@ import {
   HUB_DOWSING_INSUFFICIENT_GOLD,
   HUB_DOWSING_GRID,
   HUB_HAGATHA_PERK_PANE,
+  HUB_HOVER_BOX,
   HUB_HAT_REMOVAL_MSGBOX,
   HUB_INVENTORY_GRID,
   HUB_INVENTORY_INTERACTION,
@@ -35,6 +50,10 @@ import {
   hubChatTextRuns,
   hubInventoryPrimarySpellLines,
   hubInventoryItemInfoText,
+  hubHagathaTooltipLines,
+  hubItemTooltipLines,
+  hubNativeEquipmentEffectText,
+  hubOwnedPerkSlotRect,
   hubInventoryEquipmentSlotRects,
   hubInventorySlotPosition,
   hubShopSlotPosition,
@@ -102,9 +121,6 @@ test('stock inventory owns native ItemInfo, drag, double activation, and protect
     dragThresholdPixels: 10,
     itemInfoDelayMs: 200,
     itemInfoDelayTicks: 20,
-    itemInfoOffset: 40,
-    itemInfoPadding: 20,
-    itemInfoViewportMargin: 25,
     selectionTint: 0x00c020,
   })
   const item = {
@@ -128,6 +144,140 @@ test('stock inventory owns native ItemInfo, drag, double activation, and protect
   assert.match(HUB_HAT_REMOVAL_MSGBOX.body, /jaunty angle/)
   assert.equal(HUB_ROBE_REMOVAL_MSGBOX.title, 'A WIZARD WOULD NEVER REMOVE HIS ROBE!')
   assert.match(HUB_ROBE_REMOVAL_MSGBOX.body, /avoidable disintegration/)
+})
+
+test('HoverBox owns exact immediate Shop and occupied-Hagatha geometry', () => {
+  assert.deepEqual(HUB_HOVER_BOX, {
+    contentMargin: 25,
+    contentMaxWidth: 300,
+    lineGap: 10,
+    ownedPerkDelayTicks: 0,
+    ownedPerkSourceExclusionSize: 60,
+    ownedPerkSourceGap: 25,
+    shopDelayTicks: 0,
+    shopSourceExclusionSize: 70,
+    shopSourceGap: 35,
+    viewportMargin: 25,
+  })
+  assert.deepEqual(hubOwnedPerkSlotRect(0), [163, 168, 60, 60])
+  assert.deepEqual(hubOwnedPerkSlotRect(4), [223, 228, 60, 60])
+  assert.deepEqual(hubOwnedPerkSlotRect(8), [283, 288, 60, 60])
+  assert.throws(() => hubOwnedPerkSlotRect(9), /\[0, 8\]/)
+})
+
+test('all Hagatha rows use exact native HoverBox copy and preserve dynamic/suffix branches', () => {
+  assert.equal(HAGATHA_NATIVE_TOOLTIP_LINES.length, 28)
+  assert.equal(HAGATHA_NATIVE_TOOLTIP_LINES.every((lines) => lines.length > 0), true)
+  assert.deepEqual(HAGATHA_NATIVE_TOOLTIP_LINES[4], [
+    'Odds of finding gold is increased.',
+    'Quantity of gold found is increased.',
+  ])
+  assert.deepEqual(HAGATHA_NATIVE_TOOLTIP_LINES[13], [
+    'Welded spells recombine any time the compenent spells are improved.',
+  ])
+
+  const firstMix = hubHagathaTooltipLines({
+    cheatDeathCharges: null,
+    firstMixed: false,
+    price: 600,
+    selector: 0,
+  }).map(({ text }) => text)
+  assert.deepEqual(firstMix, [
+    'LIFE CHARM',
+    'Maximum life is always increased by 25%.',
+    '',
+    '    Price: 600',
+    '    High price due to first mixing.',
+  ])
+  assert.deepEqual(hubHagathaTooltipLines({
+    cheatDeathCharges: 2,
+    firstMixed: true,
+    price: null,
+    selector: 7,
+  }).map(({ text }) => text), [
+    'CHEAT DEATH CHARM',
+    'Survive one killing blow by recovering half of your health.',
+    '   Cheats remaining: 2',
+  ])
+  assert.deepEqual(hubHagathaTooltipLines({
+    cheatDeathCharges: 0,
+    firstMixed: true,
+    price: null,
+    selector: 7,
+  }).at(-1)?.text, '   Used up!')
+  assert.deepEqual(hubHagathaTooltipLines({
+    bundleSelectors: [0, 4],
+    cheatDeathCharges: null,
+    firstMixed: true,
+    price: 1_050,
+    selector: -1,
+  }).map(({ text }) => text), [
+    'BARGAIN BUNDLE',
+    'Get everything the last wizard got.',
+    '        LIFE CHARM',
+    '        GOLD CHARM',
+    '',
+    '    Price: 1050',
+    '    Bulk discount: 50%',
+  ])
+})
+
+test('every Fomentius class and all 47 recipe rows build complete contextual details', () => {
+  assert.equal(FOMENTIUS_STOCK_DEFINITIONS.length, 9)
+  for (const [index, definition] of FOMENTIUS_STOCK_DEFINITIONS.entries()) {
+    const item: HubInventoryItem = {
+      equipmentType: null,
+      iconRecords: definition.iconRecords,
+      id: index + 1,
+      kind: definition.kind,
+      name: definition.name,
+      nativeSubtype: definition.nativeSubtype,
+      nativeTypeId: definition.nativeTypeId,
+      quantity: 1,
+      rarity: null,
+      recipeIndex: null,
+    }
+    const lines = hubItemTooltipLines(item, { price: definition.price }).map(({ text }) => text)
+    assert.ok(lines.length >= 3, `${definition.name} tooltip is incomplete`)
+    assert.equal(lines.at(-1), `    Price: ${definition.price}`)
+  }
+
+  assert.equal(NATIVE_EQUIPMENT_RECIPE_COUNT, 47)
+  assert.equal(DOWSING_EQUIPMENT_RECIPES.length, 47)
+  assert.equal(NATIVE_EQUIPMENT_SET_COUNT, 7)
+  assert.equal(nativeEquipmentTooltipSets().length, 7)
+  assert.equal(NATIVE_EQUIPMENT_CATALOG_EFFECT_COUNT, 86)
+  for (const recipe of DOWSING_EQUIPMENT_RECIPES) {
+    const item = createEquipmentInventoryItem(recipe, recipe.sourceIndex + 100)
+    const lines = hubItemTooltipLines(item, {
+      ownedPerkSelectors: [],
+      playerLevel: 100,
+      price: 5_000,
+    }).map(({ text }) => text)
+    assert.equal(lines[0], recipe.name)
+    assert.equal(lines.at(-1), '    Price: 5000')
+    for (const effect of nativeEquipmentRecipeEffects(recipe.sourceIndex)) {
+      assert.ok(lines.includes(hubNativeEquipmentEffectText(effect)))
+    }
+    if (recipe.setName !== null) {
+      assert.ok(lines.includes('Item Set:'))
+      assert.ok(lines.includes(recipe.setName))
+      assert.ok(lines.includes('Complete Set Bonus:'))
+    }
+  }
+})
+
+test('native equipment HoverBox effect formatting covers every operator and feature family', () => {
+  assert.equal(hubNativeEquipmentEffectText({ kind: 1, magnitude: 12.5, operator: 0, target: 0 }), 'Spell Damage +12.5')
+  assert.equal(hubNativeEquipmentEffectText({ kind: 9, magnitude: 2, operator: 1, target: 0 }), 'Mana Recovery x2.0')
+  assert.equal(hubNativeEquipmentEffectText({ kind: 17, magnitude: -10, operator: 2, target: 0 }), 'Walk Speed -10%')
+  assert.equal(hubNativeEquipmentEffectText({ kind: 7, magnitude: 1, operator: 0, target: 11 }), 'Call Leviathan + 1')
+  assert.equal(hubNativeEquipmentEffectText({ kind: 26, magnitude: 0, operator: 0, target: 0 }), 'Always summon max Leviathan tentacles')
+  assert.equal(hubNativeEquipmentEffectText({ kind: 39, magnitude: 0, operator: 0, target: 0 }), '+Bias for welding skill picks')
+  assert.throws(
+    () => hubNativeEquipmentEffectText({ kind: 40, magnitude: 1, operator: 0, target: 0 }),
+    /unknown native equipment effect kind/,
+  )
 })
 
 test('the unforge anvil owns its native drop geometry, pulse, and dialog layouts', () => {
@@ -411,6 +561,7 @@ test('the port exports the complete stock UI membership', () => {
     'shlorio-insufficient-gold-message',
     'inventory',
     'inventory-item-info',
+    'contextual-hover-box',
     'inventory-dragger',
     'inventory-required-clothing-message',
     'inventory-unforge-confirmation',
@@ -461,7 +612,6 @@ test('visible hub inventory presentation is owned by the native WebGL renderer',
   assert.match(rendererSource, /HUB_STARTER_EQUIPMENT_PRIMARY_TINT\[element\]/)
   assert.doesNotMatch(rendererSource, /`EQUIP \$\{equipmentSlotLabel\(slot\)\}`/)
   assert.doesNotMatch(rendererSource, /selected\.rarity \?\? selected\.kind/)
-  assert.match(rendererSource, /hubInventoryItemInfoText\(/)
   assert.match(rendererSource, /native-inventory-dragger/)
   assert.match(rendererSource, /addClippedItemIcon\(/)
   assert.match(rendererSource, /hubInventorySlotPosition\(index\)[\s\S]*?addClippedItemIcon\(/)
@@ -473,6 +623,18 @@ test('visible hub inventory presentation is owned by the native WebGL renderer',
   assert.match(rendererSource, /dragging\.owner === 'storage'/)
   assert.match(source, /inventorySelection=\{inventorySelection\}/)
   assert.match(source, /const companionInventory = \([\s\S]*?<InventoryActions[\s\S]*?companion/)
+  assert.match(source, /data-owned-hagatha-selector/)
+  assert.match(source, /onPointerEnter/)
+  assert.match(source, /onPointerLeave/)
+  assert.match(source, /role="tooltip"/)
+  assert.match(
+    source,
+    /event\.pointerType === 'touch'[\s\S]*?lastActivationRef[\s\S]*?activateSource\(source\)/,
+  )
+  assert.match(rendererSource, /native-contextual-hover-box/)
+  assert.match(rendererSource, /dataset\.nativeItemInfo/)
+  assert.match(rendererSource, /hubHagathaTooltipLines\(/)
+  assert.match(rendererSource, /hubItemTooltipLines\(/)
   assert.doesNotMatch(source, /readonly owner: 'backpack' \| 'storage' \| null/)
   assert.match(source, /gesture: 'double-activation'/)
   assert.match(source, /gesture: 'drag'/)

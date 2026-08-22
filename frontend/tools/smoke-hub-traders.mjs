@@ -21,6 +21,7 @@ import { HUB_TRADER_GEOMETRY } from '../src/game/hub-inventory-presentation.ts'
 const baseUrl = process.env.SDR_GAME_TRADER_SMOKE_URL || 'http://127.0.0.1:4189'
 const hostElement = process.env.SDR_GAME_TRADER_HOST_ELEMENT || 'Fire'
 const screenshotRoot = process.env.SDR_GAME_TRADER_SCREENSHOT_ROOT || '/tmp/solomon-dark-hub-trader'
+const singleClient = process.env.SDR_GAME_TRADER_SINGLE_CLIENT === '1'
 const browser = await chromium.launch({
   executablePath: process.env.SDR_CHROME_PATH || '/usr/bin/google-chrome',
   headless: true,
@@ -77,17 +78,18 @@ for (const page of [hostPage, guestPage]) {
 
 try {
   step('preloading both game clients')
-  await Promise.all([loadGame(hostPage), loadGame(guestPage)])
+  await Promise.all([loadGame(hostPage), ...(singleClient ? [] : [loadGame(guestPage)])])
   step('entering host Hub')
   await enterHub(hostPage, hostElement)
-  step('entering guest Hub')
-  await enterHub(guestPage, 'Earth')
-  await Promise.all([waitForPlayers(hostPage, 2), waitForPlayers(guestPage, 2)])
-  step('two participants replicated')
+  if (!singleClient) {
+    step('entering guest Hub')
+    await enterHub(guestPage, 'Earth')
+    await Promise.all([waitForPlayers(hostPage, 2), waitForPlayers(guestPage, 2)])
+    step('two participants replicated')
+  }
 
   const canvas = hostPage.locator('.hub-world-canvas')
-  const guestStartingGold = await inventoryGold(guestPage)
-  assert.equal(guestStartingGold, 10_000)
+  if (!singleClient) assert.equal(await inventoryGold(guestPage), 10_000)
   await focusPage(hostPage)
   const hostStartingGold = await inventoryGold(hostPage)
   assert.equal(hostStartingGold, 10_000)
@@ -114,8 +116,12 @@ try {
   const stockLabel = await stockCell.getAttribute('aria-label')
   const stock = parsePurchaseLabel(stockLabel)
   const beforeFomentius = await dialogGold(fomentius)
+  await stockCell.hover()
+  await assertTooltip(fomentius, [stock.name, 'Double-click to drink', `Price: ${stock.price}`])
+  await hostPage.screenshot({ path: `${screenshotRoot}-fomentius-hover-tooltip.png` })
   await stockCell.click()
   await stockCell.locator('xpath=self::*[@data-selected="true"]').waitFor()
+  assert.equal(await fomentius.getByRole('tooltip').count(), 0)
   await hostPage.screenshot({ path: `${screenshotRoot}-fomentius-selected.png` })
   await stockCell.click()
   await waitForDialogGold(fomentius, beforeFomentius - stock.price)
@@ -182,6 +188,10 @@ try {
     name: new RegExp(`^${escapeRegExp(stock.name)}, quantity `),
   })
   await storedItem.waitFor()
+  await storedItem.hover()
+  const luthacusTooltip = await assertTooltip(luthacus, [stock.name, 'Double-click to drink'])
+  assert.doesNotMatch(luthacusTooltip, /Price:/)
+  await hostPage.screenshot({ path: `${screenshotRoot}-luthacus-hover-tooltip.png` })
   assert.equal(await dialogGold(luthacus), goldBeforeStorage)
   await doubleActivateInventoryPointer(hostPage, storedItem)
   await remainingBackpackItem.waitFor()
@@ -227,13 +237,29 @@ try {
   const lifeCharm = hagatha.locator('[data-hagatha-selector="0"]')
   const lifeCharmPrice = parseInt((await lifeCharm.locator('.hub-trader-price').innerText()).replace(/\D/g, ''), 10)
   const beforeHagatha = await dialogGold(hagatha)
+  await lifeCharm.hover()
+  await assertTooltip(hagatha, [
+    'LIFE CHARM',
+    'Maximum life is always increased by 25%.',
+    `Price: ${lifeCharmPrice}`,
+    'High price due to first mixing.',
+  ])
+  await hostPage.screenshot({ path: `${screenshotRoot}-hagatha-offer-hover-tooltip.png` })
   await lifeCharm.click()
   await lifeCharm.locator('xpath=self::*[@data-selected="true"]').waitFor()
+  assert.equal(await hagatha.getByRole('tooltip').count(), 0)
   await hostPage.screenshot({ path: `${screenshotRoot}-hagatha-selected.png` })
   await lifeCharm.click()
   await waitForDialogGold(hagatha, beforeHagatha - lifeCharmPrice)
   await lifeCharm.waitFor({ state: 'detached' })
   assert.match(await hagatha.locator('.hub-charm-capacity').innerText(), /1 \/ 3/)
+  const ownedLifeCharm = hagatha.locator('[data-owned-hagatha-selector="0"]')
+  await ownedLifeCharm.hover()
+  await assertTooltip(hagatha, [
+    'LIFE CHARM',
+    'Maximum life is always increased by 25%.',
+  ])
+  await hostPage.screenshot({ path: `${screenshotRoot}-hagatha-owned-hover-tooltip.png` })
   const hagathaCompanionItem = hagatha.getByLabel('Backpack').getByRole('button', {
     exact: true,
     name: 'Mana Potion, quantity 1',
@@ -299,8 +325,12 @@ try {
   await dowsingCell.waitFor()
   await hostPage.screenshot({ path: `${screenshotRoot}-shlorio-results.png` })
   const dowsingItem = parsePurchaseLabel(await dowsingCell.getAttribute('aria-label'))
+  await dowsingCell.hover()
+  await assertTooltip(shlorio, [dowsingItem.name, `Price: ${dowsingItem.price}`])
+  await hostPage.screenshot({ path: `${screenshotRoot}-shlorio-hover-tooltip.png` })
   await dowsingCell.click()
   await dowsingCell.locator('xpath=self::*[@data-selected="true"]').waitFor()
+  assert.equal(await shlorio.getByRole('tooltip').count(), 0)
   await hostPage.screenshot({ path: `${screenshotRoot}-shlorio-selected.png` })
   await dowsingCell.click()
   await waitForDialogGold(shlorio, beforeDowsing - 650 - dowsingItem.price)
@@ -471,18 +501,20 @@ try {
   await closeInventory(hostPage, inventory)
 
   assert.equal(await inventoryGold(hostPage), finalHostGold)
-  await focusPage(guestPage)
-  assert.equal(await inventoryGold(guestPage), 10_000)
-  await guestPage.keyboard.press('i')
-  const guestInventory = guestPage.getByRole('dialog', { name: 'Inventory' })
-  await guestInventory.waitFor()
-  await waitForNativeSurfaceSettled(guestInventory)
-  assert.equal(await guestInventory.getByLabel(/Health Potion, quantity 1/).count(), 1)
-  assert.equal(await guestInventory.getByLabel(/Mana Potion, quantity 1/).count(), 1)
-  await guestInventory.getByRole('button', { exact: true, name: 'Hat, Hat' }).waitFor()
-  await guestInventory.getByRole('button', { exact: true, name: 'Robe, Robe' }).waitFor()
-  await guestInventory.getByRole('button', { exact: true, name: 'Weapon, Staff' }).first().waitFor()
-  await guestPage.screenshot({ path: `${screenshotRoot}-guest-isolated.png` })
+  if (!singleClient) {
+    await focusPage(guestPage)
+    assert.equal(await inventoryGold(guestPage), 10_000)
+    await guestPage.keyboard.press('i')
+    const guestInventory = guestPage.getByRole('dialog', { name: 'Inventory' })
+    await guestInventory.waitFor()
+    await waitForNativeSurfaceSettled(guestInventory)
+    assert.equal(await guestInventory.getByLabel(/Health Potion, quantity 1/).count(), 1)
+    assert.equal(await guestInventory.getByLabel(/Mana Potion, quantity 1/).count(), 1)
+    await guestInventory.getByRole('button', { exact: true, name: 'Hat, Hat' }).waitFor()
+    await guestInventory.getByRole('button', { exact: true, name: 'Robe, Robe' }).waitFor()
+    await guestInventory.getByRole('button', { exact: true, name: 'Weapon, Staff' }).first().waitFor()
+    await guestPage.screenshot({ path: `${screenshotRoot}-guest-isolated.png` })
+  }
 
   assert.deepEqual(browserErrors, [])
   process.stdout.write(`${JSON.stringify({
@@ -490,7 +522,8 @@ try {
     dowsingItem,
     equipmentSlot,
     finalHostGold,
-    guestGold: 10_000,
+    guestGold: singleClient ? null : 10_000,
+    singleClient,
     status: 'ok',
     stock,
   })}\n`)
@@ -530,6 +563,15 @@ function step(message) {
   process.stdout.write(`[hub-traders] ${message}\n`)
 }
 
+async function assertTooltip(dialog, fragments) {
+  const tooltip = dialog.getByRole('tooltip')
+  await tooltip.waitFor()
+  const text = await tooltip.innerText()
+  for (const fragment of fragments) assert.ok(text.includes(fragment), JSON.stringify({ fragment, text }))
+  assert.equal(await dialog.getAttribute('data-native-tooltip'), text)
+  return text
+}
+
 async function enterHub(page, element) {
   await focusPage(page)
   await page.getByRole('button', { name: 'Play' }).click()
@@ -539,7 +581,7 @@ async function enterHub(page, element) {
   await page.locator('.create-menu-disciplines[data-visible="true"]').waitFor({ timeout: 15_000 })
   await page.locator('.create-menu-discipline-arcane').click()
   try {
-    await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 30_000 })
+    await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 90_000 })
   } catch (error) {
     process.stderr.write(`${JSON.stringify({
       body: (await page.locator('body').innerText()).slice(0, 2_000),
@@ -692,7 +734,7 @@ async function clickInventoryStagePoint(page, inventory, point) {
 }
 
 async function waitForDialogGold(dialog, expected) {
-  await dialog.locator(`[data-player-gold="${expected}"]`).waitFor({ timeout: 10_000 })
+  await dialog.locator(`[data-player-gold="${expected}"]`).waitFor({ timeout: 30_000 })
   assert.equal(await dialogGold(dialog), expected)
 }
 

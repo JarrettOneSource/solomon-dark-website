@@ -41,6 +41,7 @@ import {
   HUB_CHAT_PANEL,
   HUB_EQUIPMENT_SINK_RENDER,
   HUB_HAGATHA_PERK_PANE,
+  HUB_HOVER_BOX,
   HUB_INVENTORY_GRID,
   HUB_INVENTORY_INTERACTION,
   HUB_ITEM_ICON_TRANSFORMS,
@@ -58,12 +59,16 @@ import {
   hubDowsingFieldTint,
   hubDowsingSlotPosition,
   hubInventoryEquipmentSlotRects,
-  hubInventoryItemInfoText,
+  hubHagathaTooltipLines,
+  hubItemTooltipLines,
   hubInventoryPrimarySpellLines,
   hubInventorySlotPosition,
+  hubOwnedPerkSlotRect,
   hubShopSlotPosition,
   hubUnforgeResultLayout,
   hubUnforgeTargetTint,
+  type HubTooltipLine,
+  type HubTooltipOptions,
 } from './hub-inventory-render-contract.ts'
 import { NativeElementVfxView } from './native-element-vfx-view.ts'
 import { createNativeElementVfxTextures, type PlayerWorldTextures } from './world-player-textures.ts'
@@ -121,6 +126,18 @@ export interface HubInventoryDragModel {
   readonly pointer: { readonly x: number; readonly y: number }
 }
 
+export type HubServiceInspectionModel =
+  | {
+      readonly id: number
+      readonly kind: 'store-item'
+      readonly owner: 'storage' | null
+    }
+  | {
+      readonly index: number
+      readonly kind: 'owned-perk'
+      readonly selector: number
+    }
+
 export type HubInventoryRendererModel =
   | {
       readonly config: PlayerCharacterConfig
@@ -146,6 +163,7 @@ export type HubInventoryRendererModel =
       readonly notice: HubInventoryRendererNotice | null
       readonly progression: ProtocolPlayerProgression
       readonly inventorySelection: HubInventorySelectionModel | null
+      readonly inspection: HubServiceInspectionModel | null
       readonly selectedItemId: number | null
       readonly selectedOwner: 'storage' | null
       readonly trader: HubTraderId
@@ -291,6 +309,7 @@ export async function createHubInventoryRenderer(
           && selectionStartedAtMs !== null
           && nowMs - selectionStartedAtMs >= HUB_INVENTORY_INTERACTION.itemInfoDelayMs
       }
+      gpu.canvas.dataset.nativeItemInfo = inventoryItemInfo?.visible ? 'visible' : 'hidden'
       if (inventoryDragger) {
         for (const child of inventoryDragger.children) {
           if (child.label === 'native-inventory-drag-pulse') {
@@ -519,7 +538,18 @@ function buildInventory(
   const selected = selection ? inventoryItemForSelection(economy, selection) : null
   const selectedCenter = selection ? inventorySelectionCenter(economy, selection, companion) : null
   const itemInfo = selected && selectedCenter && !dragging
-    ? addInventoryItemInfo(context, layer, selected, selectedCenter.x, selectedCenter.y)
+    ? addInventoryItemInfo(
+        context,
+        layer,
+        selected,
+        selectedCenter.x,
+        selectedCenter.y,
+        {
+          ownedPerkSelectors: economy.ownedPerkSelectors,
+          ownedRecipeIndexes: economyRecipeIndexes(economy),
+          playerLevel: progression.level,
+        },
+      )
     : null
   const dragger = dragging
     ? addInventoryDragger(context, layer, inventoryItemForDrag(economy, dragging), dragging, model.config.element)
@@ -908,6 +938,7 @@ function buildService(
       .fill({ color: 0x000000 }))
     addDowsingButton(context, overlay, model.economy.dowsingFee)
     addDoneControl(context, overlay)
+    addServiceInspection(context, layer, model)
     if (inventory.dragger) layer.addChild(inventory.dragger)
     return { dragger: inventory.dragger, itemInfo: inventory.itemInfo, overlay }
   }
@@ -920,6 +951,7 @@ function buildService(
     addStoreGrid(context, overlay, serviceItems(model), model, null)
   }
   addDoneControl(context, overlay)
+  addServiceInspection(context, layer, model)
   if (inventory.dragger) layer.addChild(inventory.dragger)
   return { dragger: inventory.dragger, itemInfo: inventory.itemInfo, overlay }
 }
@@ -1287,6 +1319,115 @@ function serviceItems(model: Extract<HubInventoryRendererModel, { kind: 'service
   })
 }
 
+function addServiceInspection(
+  context: RenderContext,
+  layer: Container,
+  model: Extract<HubInventoryRendererModel, { kind: 'service' }>,
+): void {
+  const inspection = model.inspection
+  if (!inspection || model.notice) return
+  if (inspection.kind === 'owned-perk') {
+    if (
+      model.trader !== 'hagatha'
+      || model.economy.ownedPerkSelectors[inspection.index] !== inspection.selector
+    ) return
+    const [left, top, width, height] = hubOwnedPerkSlotRect(inspection.index)
+    addNativeContextualHoverBox(
+      context,
+      layer,
+      hubHagathaTooltipLines({
+        cheatDeathCharges: inspection.selector === 7 ? 1 : null,
+        firstMixed: true,
+        price: null,
+        selector: inspection.selector,
+      }),
+      left + width / 2,
+      top + height / 2,
+      HUB_HOVER_BOX.ownedPerkSourceGap,
+    )
+    return
+  }
+  if (
+    model.selectedItemId === inspection.id
+    && model.selectedOwner === inspection.owner
+  ) return
+
+  if (model.trader === 'hagatha') {
+    const index = model.economy.hagathaOffers.findIndex(
+      ({ selector }) => selector === inspection.id,
+    )
+    const offer = model.economy.hagathaOffers[index]
+    if (!offer || inspection.owner !== null) return
+    const { x, y } = hubShopSlotPosition(index)
+    addNativeContextualHoverBox(
+      context,
+      layer,
+      hubHagathaTooltipLines({
+        bundleSelectors: offer.members,
+        cheatDeathCharges: null,
+        firstMixed: offer.price === offer.basePrice,
+        price: offer.price,
+        selector: offer.selector,
+      }),
+      x + HUB_SHOP_GRID.cellSize / 2,
+      y + HUB_SHOP_GRID.cellSize / 2,
+      HUB_HOVER_BOX.shopSourceGap,
+    )
+    return
+  }
+
+  const items = model.trader === 'luthacus'
+    ? model.economy.storage
+    : serviceItems(model)
+  const index = items.findIndex(({ id }) => id === inspection.id)
+  const item = items[index]
+  if (!item) return
+  if (model.trader === 'luthacus' && inspection.owner !== 'storage') return
+  if (model.trader !== 'luthacus' && inspection.owner !== null) return
+  const position = model.trader === 'shlorio'
+    ? hubDowsingSlotPosition(index)
+    : hubShopSlotPosition(index)
+  const cellSize = model.trader === 'shlorio'
+    ? HUB_DOWSING_GRID.cellSize
+    : HUB_SHOP_GRID.cellSize
+  addNativeContextualHoverBox(
+    context,
+    layer,
+    hubItemTooltipLines(item, {
+      ownedPerkSelectors: model.economy.ownedPerkSelectors,
+      ownedRecipeIndexes: economyRecipeIndexes(model.economy),
+      playerLevel: model.progression.level,
+      price: model.trader === 'luthacus' ? null : hubShopItemPrice(item),
+    }),
+    position.x + cellSize / 2,
+    position.y + cellSize / 2,
+    HUB_HOVER_BOX.shopSourceGap,
+  )
+}
+
+function economyRecipeIndexes(economy: ProtocolPlayerEconomy): readonly number[] {
+  const equipment = [
+    economy.equipment.hat,
+    economy.equipment.robe,
+    economy.equipment.amulet,
+    economy.equipment.weapon,
+    ...economy.equipment.rings,
+  ]
+  const visit = (item: HubInventoryItem): readonly number[] => [
+    ...(item.recipeIndex === null ? [] : [item.recipeIndex]),
+    ...(item.contents ?? []).flatMap(visit),
+  ]
+  return Object.freeze([
+    ...economy.backpack,
+    ...economy.storage,
+    ...equipment.filter((item): item is HubInventoryItem => item !== null),
+  ].flatMap(visit))
+}
+
+function hubShopItemPrice(item: HubInventoryItem | HubShopItem): number | null {
+  return 'price' in item && typeof item.price === 'number' ? item.price : null
+}
+
 function addChatPanel(context: RenderContext, layer: Container): void {
   addNativeNineSlice(
     context,
@@ -1537,41 +1678,78 @@ function addInventoryItemInfo(
   item: HubInventoryItem,
   sourceCenterX: number,
   sourceCenterY: number,
+  options: HubTooltipOptions,
 ): Container {
-  const text = hubInventoryItemInfoText(item)
-  const lines: readonly { readonly font: FontName; readonly text: string }[] = [
-    { font: 'menu', text: text.title.toUpperCase() },
-    ...(text.description ? [{ font: 'body' as const, text: text.description.toUpperCase() }] : []),
-    ...(text.instruction ? [{ font: 'body' as const, text: text.instruction.toUpperCase() }] : []),
-  ]
-  const padding = HUB_INVENTORY_INTERACTION.itemInfoPadding
-  const width = Math.max(...lines.map((line) => measureBitmapText(line.text, FONT_ASSETS.fonts[line.font])))
-    + padding * 2
-  const height = lines.length * 28 + padding * 2
-  const margin = HUB_INVENTORY_INTERACTION.itemInfoViewportMargin
-  let x = sourceCenterX + HUB_INVENTORY_INTERACTION.itemInfoOffset
-  if (x + width > HUB_NATIVE_UI_SIZE.width - margin) {
-    x = sourceCenterX - HUB_INVENTORY_INTERACTION.itemInfoOffset - width
-  }
+  const info = addNativeContextualHoverBox(
+    context,
+    layer,
+    hubItemTooltipLines(item, options),
+    sourceCenterX,
+    sourceCenterY,
+    HUB_HOVER_BOX.shopSourceGap,
+  )
+  info.label = 'native-inventory-item-info'
+  info.visible = false
+  return info
+}
+
+function addNativeContextualHoverBox(
+  context: RenderContext,
+  layer: Container,
+  lines: readonly HubTooltipLine[],
+  sourceCenterX: number,
+  sourceCenterY: number,
+  sourceGap: number,
+): Container {
+  const rendered = lines.map((line) => {
+    const font = FONT_ASSETS.fonts[line.font]
+    const wrapped = wrapBitmapText(line.text, font, HUB_HOVER_BOX.contentMaxWidth)
+    return { font, line, wrapped }
+  })
+  const contentWidth = Math.max(0, ...rendered.flatMap(({ font, wrapped }) => (
+    wrapped.map((text) => measureBitmapText(text, font))
+  )))
+  const contentHeight = rendered.reduce((height, { font, wrapped }, index) => (
+    height
+    + wrapped.length * font.metrics[0]
+    + (index === rendered.length - 1 ? 0 : HUB_HOVER_BOX.lineGap)
+  ), 0)
+  const width = contentWidth + HUB_HOVER_BOX.contentMargin * 2
+  const height = contentHeight + HUB_HOVER_BOX.contentMargin * 2
+  const margin = HUB_HOVER_BOX.viewportMargin
+  let x = sourceCenterX + sourceGap
+  if (x + width > HUB_NATIVE_UI_SIZE.width - margin) x = sourceCenterX - sourceGap - width
   x = Math.max(margin, Math.min(HUB_NATIVE_UI_SIZE.width - margin - width, x))
   const y = Math.max(
     margin,
     Math.min(HUB_NATIVE_UI_SIZE.height - margin - height, sourceCenterY - height / 2),
   )
+
   const info = new Container()
-  info.label = 'native-inventory-item-info'
+  info.label = 'native-contextual-hover-box'
   info.position.set(x, y)
-  info.addChild(new Graphics().rect(0, 0, width, height).fill({ color: 0x000000 }))
-  lines.forEach((line, index) => addBitmapText(
-    context,
-    info,
-    line.text,
-    line.font,
-    padding,
-    padding + index * 28,
-    { align: 'left', tint: 0xffffff },
-  ))
-  info.visible = false
+  info.addChild(new Graphics()
+    .rect(0, 0, width, height)
+    .fill({ color: 0x000000 })
+    .stroke({ color: 0xffffff, width: 1 }))
+  let cursorY = HUB_HOVER_BOX.contentMargin
+  for (const { font, line, wrapped } of rendered) {
+    addBitmapText(
+      context,
+      info,
+      line.text,
+      line.font,
+      HUB_HOVER_BOX.contentMargin,
+      cursorY,
+      {
+        align: 'left',
+        lineHeight: font.metrics[0],
+        maxWidth: HUB_HOVER_BOX.contentMaxWidth,
+        tint: line.tint,
+      },
+    )
+    cursorY += wrapped.length * font.metrics[0] + HUB_HOVER_BOX.lineGap
+  }
   layer.addChild(info)
   return info
 }

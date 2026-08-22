@@ -16,6 +16,7 @@ import { createPortal } from 'react-dom'
 import nativeAssetsJson from '../assets/game/hub-trader-native-assets.json' with { type: 'json' }
 import {
   DOWSING_EQUIPMENT_RECIPES,
+  HAGATHA_PERKS,
   nativeInventoryItemCanUnforge,
   nativeUnforgeOutcomeText,
   type EquipmentSlot,
@@ -45,6 +46,7 @@ import {
   type HubInventoryRendererModel,
   type HubInventoryRendererNotice,
   type HubInventorySelectionModel,
+  type HubServiceInspectionModel,
   type HubTraderChatPhase,
 } from './renderer/hub-inventory-renderer.ts'
 import {
@@ -65,8 +67,11 @@ import {
   HUB_SHOP_GRID,
   HUB_SHOP_PANEL,
   hubDowsingSlotPosition,
+  hubHagathaTooltipLines,
   hubInventoryEquipmentSlotRects,
+  hubItemTooltipLines,
   hubInventorySlotPosition,
+  hubOwnedPerkSlotRect,
   hubShopSlotPosition,
 } from './renderer/hub-inventory-render-contract.ts'
 import './hub-inventory.css'
@@ -301,6 +306,8 @@ function NativeHubSurface({
     phaseStartedAtMs: number
   }>(() => ({ acceleratedAtMs: null, phase: 'intro', phaseStartedAtMs: performance.now() }))
   const [serviceSelection, setServiceSelection] = useState<HubServiceSelection | null>(null)
+  const [serviceHoverInspection, setServiceHoverInspection] = useState<HubServiceInspectionModel | null>(null)
+  const [serviceFocusInspection, setServiceFocusInspection] = useState<HubServiceInspectionModel | null>(null)
   const [inventorySelection, setInventorySelection] = useState<HubInventorySelectionModel | null>(null)
   const [inventoryDrag, setInventoryDrag] = useState<HubInventoryDragModel | null>(null)
   const feedbackSequenceRef = useRef(economy.actionFeedback?.sequence ?? 0)
@@ -379,6 +386,7 @@ function NativeHubSurface({
       config,
       dragging: inventoryDrag,
       economy,
+      inspection: serviceHoverInspection ?? serviceFocusInspection,
       inventorySelection,
       kind: 'service',
       notice,
@@ -387,7 +395,19 @@ function NativeHubSurface({
       selectedOwner: serviceSelection?.owner ?? null,
       trader: surface.trader,
     }
-  }, [chat, config, economy, inventoryDrag, inventorySelection, notice, progression, serviceSelection, surface])
+  }, [
+    chat,
+    config,
+    economy,
+    inventoryDrag,
+    inventorySelection,
+    notice,
+    progression,
+    serviceFocusInspection,
+    serviceHoverInspection,
+    serviceSelection,
+    surface,
+  ])
 
   useLayoutEffect(() => {
     modelRef.current = model
@@ -493,6 +513,16 @@ function NativeHubSurface({
     : surface.kind === 'dialogue'
       ? `Talking to ${HUB_TRADER_DIALOGUES[surface.trader].name}`
       : HUB_TRADER_DIALOGUES[surface.trader].title
+  const activeServiceInspection = serviceHoverInspection ?? serviceFocusInspection
+  const semanticTooltip = surface.kind === 'service' && activeServiceInspection
+    ? serviceInspectionTooltipText(
+        activeServiceInspection,
+        economy,
+        progression,
+        serviceSelection,
+        surface.trader,
+      )
+    : null
 
   return (
     <div className="hub-native-ui-overlay" data-surface-kind={surface.kind}>
@@ -513,6 +543,7 @@ function NativeHubSurface({
         data-native-inventory-dragging={inventoryDrag
           ? `${inventoryDrag.owner}:${inventoryDrag.equipmentSlot ?? inventoryDrag.itemId}`
           : ''}
+        data-native-tooltip={semanticTooltip ?? ''}
       >
         <div ref={hostRef} className="hub-native-ui-renderer" aria-hidden />
         <div className="hub-native-ui-actions">
@@ -588,6 +619,8 @@ function NativeHubSurface({
               onInteractionSound={(cue) => {
                 if (cue === 'storage-drag-start' || cue === 'shop-activation') audio.playSound('click')
               }}
+              onFocusInspection={setServiceFocusInspection}
+              onHoverInspection={setServiceHoverInspection}
               onNotice={setNotice}
               onSelect={setServiceSelection}
             />
@@ -608,6 +641,9 @@ function NativeHubSurface({
               }}
             />
           )}
+          {semanticTooltip ? (
+            <span className="hub-native-ui-semantic" role="tooltip">{semanticTooltip}</span>
+          ) : null}
         </div>
         {rendererState === 'error' ? (
           <p className="hub-native-ui-error" role="alert">Native inventory renderer unavailable.</p>
@@ -688,6 +724,8 @@ function ServiceActions({
   onInventoryAction,
   onInventorySelect,
   onInteractionSound,
+  onFocusInspection,
+  onHoverInspection,
   onNotice,
   onSelect,
   selection,
@@ -703,6 +741,8 @@ function ServiceActions({
   onInventoryAction: (action: HubInventoryAction) => void
   onInventorySelect: (selection: HubInventorySelectionModel | null) => void
   onInteractionSound: (cue: 'shop-activation' | 'storage-drag-start') => void
+  onFocusInspection: (inspection: HubServiceInspectionModel | null) => void
+  onHoverInspection: (inspection: HubServiceInspectionModel | null) => void
   onNotice: (notice: HubInventoryUiNotice) => void
   onSelect: (selection: HubServiceSelection | null) => void
   selection: HubServiceSelection | null
@@ -739,6 +779,8 @@ function ServiceActions({
         onDragChange={onDragChange}
         onDragMove={onDragMove}
         onInteractionSound={onInteractionSound}
+        onFocusInspection={onFocusInspection}
+        onHoverInspection={onHoverInspection}
         onSelect={onSelect}
       />
     )
@@ -766,6 +808,7 @@ function ServiceActions({
             data={{ 'data-hagatha-selector': offer.selector }}
             price={offer.price}
             selected={selection?.id === offer.selector && selection.owner === null}
+            onBlur={() => onFocusInspection(null)}
             onClick={() => activateSelection(
               selection,
               { id: offer.selector, owner: null },
@@ -775,6 +818,17 @@ function ServiceActions({
               },
               () => onAction({ type: 'buy-hagatha', selector: offer.selector }),
             )}
+            onFocus={() => onFocusInspection({
+              id: offer.selector,
+              kind: 'store-item',
+              owner: null,
+            })}
+            onPointerEnter={() => onHoverInspection({
+              id: offer.selector,
+              kind: 'store-item',
+              owner: null,
+            })}
+            onPointerLeave={() => onHoverInspection(null)}
           />
         ))}
         <span className="hub-native-ui-semantic hub-charm-capacity">
@@ -798,6 +852,7 @@ function ServiceActions({
             price={item.price}
             dowsing={trader === 'shlorio'}
             selected={selection?.id === item.id && selection.owner === null}
+            onBlur={() => onFocusInspection(null)}
             onClick={() => activateSelection(
               selection,
               { id: item.id, owner: null },
@@ -809,6 +864,9 @@ function ServiceActions({
                 ? { type: 'buy-fomentius', itemId: item.id }
                 : { type: 'buy-dowsing', offerId: item.id }),
             )}
+            onFocus={() => onFocusInspection({ id: item.id, kind: 'store-item', owner: null })}
+            onPointerEnter={() => onHoverInspection({ id: item.id, kind: 'store-item', owner: null })}
+            onPointerLeave={() => onHoverInspection(null)}
           />
         ))}
         <NativeAction label="Done" rect={HUB_SHOP_PANEL.doneRect} onClick={onClose} />
@@ -819,6 +877,30 @@ function ServiceActions({
   return (
     <>
       {companionInventory}
+      {trader === 'hagatha' ? (
+        <section aria-label="Owned Charms and Curses">
+          {economy.ownedPerkSelectors.slice(0, 9).map((selector, index) => (
+            <NativeAction
+              key={`${selector}-${index}`}
+              data={{ 'data-owned-hagatha-selector': selector }}
+              label={`Inspect ${HAGATHA_PERKS[selector]!.name}`}
+              rect={hubOwnedPerkSlotRect(index)}
+              onBlur={() => onFocusInspection(null)}
+              onFocus={() => onFocusInspection({
+                index,
+                kind: 'owned-perk',
+                selector,
+              })}
+              onPointerEnter={() => onHoverInspection({
+                index,
+                kind: 'owned-perk',
+                selector,
+              })}
+              onPointerLeave={() => onHoverInspection(null)}
+            />
+          ))}
+        </section>
+      ) : null}
       {serviceActions}
     </>
   )
@@ -830,6 +912,8 @@ function InventoryShopStorageActions({
   onClose,
   onDragChange,
   onDragMove,
+  onFocusInspection,
+  onHoverInspection,
   onInteractionSound,
   onSelect,
   selection,
@@ -839,6 +923,8 @@ function InventoryShopStorageActions({
   onClose: () => void
   onDragChange: (drag: HubInventoryDragModel | null) => void
   onDragMove: (point: { readonly x: number; readonly y: number }) => void
+  onFocusInspection: (inspection: HubServiceInspectionModel | null) => void
+  onHoverInspection: (inspection: HubServiceInspectionModel | null) => void
   onInteractionSound: (cue: 'shop-activation' | 'storage-drag-start') => void
   onSelect: (selection: HubServiceSelection | null) => void
   selection: HubServiceSelection | null
@@ -859,11 +945,34 @@ function InventoryShopStorageActions({
     if (event.button !== 0) return
     event.preventDefault()
     event.stopPropagation()
+    if (event.pointerType === 'touch') {
+      const nowMs = performance.now()
+      const previous = lastActivationRef.current
+      const doubled = previous
+        && previous.itemId === itemId
+        && nowMs - previous.atMs <= HUB_INVENTORY_INTERACTION.doubleActivationMs
+      onInteractionSound('shop-activation')
+      if (doubled) {
+        pressRef.current = null
+        lastActivationRef.current = null
+        onDragChange(null)
+        onAction({
+          type: 'transfer',
+          direction: 'to-backpack',
+          gesture: 'double-activation',
+          itemId,
+        })
+        return
+      }
+      lastActivationRef.current = { atMs: nowMs, itemId }
+      if (!sourceIsSelected(itemId)) selectSource(itemId)
+    }
     event.currentTarget.setPointerCapture(event.pointerId)
     pressRef.current = {
       activeDrag: false,
       itemId,
       pointerId: event.pointerId,
+      pointerType: event.pointerType,
       start: pointerStagePosition(event),
     }
   }
@@ -900,6 +1009,7 @@ function InventoryShopStorageActions({
     }
     pressRef.current = null
     if (press.activeDrag) {
+      if (press.pointerType === 'touch') lastActivationRef.current = null
       onDragChange(null)
       selectSource(press.itemId)
       const validDrop = pointInRect(point, [0, 490, 1600, 310])
@@ -911,6 +1021,8 @@ function InventoryShopStorageActions({
       })
       return
     }
+
+    if (press.pointerType === 'touch') return
 
     const nowMs = performance.now()
     const previous = lastActivationRef.current
@@ -933,7 +1045,9 @@ function InventoryShopStorageActions({
   }
 
   const cancelPointer = (event: ReactPointerEvent<HTMLButtonElement>) => {
-    if (pressRef.current?.pointerId !== event.pointerId) return
+    const press = pressRef.current
+    if (press?.pointerId !== event.pointerId) return
+    if (press.pointerType === 'touch' && press.activeDrag) lastActivationRef.current = null
     pressRef.current = null
     onDragChange(null)
   }
@@ -983,9 +1097,21 @@ function InventoryShopStorageActions({
                 HUB_SHOP_GRID.cellSize,
                 HUB_SHOP_GRID.cellSize,
               ]}
+              onBlur={() => onFocusInspection(null)}
+              onFocus={() => onFocusInspection({
+                id: item.id,
+                kind: 'store-item',
+                owner: 'storage',
+              })}
               onKeyDown={keyboardActivate(item.id)}
               onPointerCancel={cancelPointer}
               onPointerDown={beginPointer(item.id)}
+              onPointerEnter={() => onHoverInspection({
+                id: item.id,
+                kind: 'store-item',
+                owner: 'storage',
+              })}
+              onPointerLeave={() => onHoverInspection(null)}
               onPointerMove={movePointer}
               onPointerUp={finishPointer}
             />
@@ -1001,6 +1127,7 @@ interface StoragePointerPress {
   activeDrag: boolean
   readonly itemId: number
   readonly pointerId: number
+  readonly pointerType: string
   readonly start: { readonly x: number; readonly y: number }
 }
 
@@ -1077,11 +1204,24 @@ function InventoryActions({
     if (event.button !== 0) return
     event.preventDefault()
     event.stopPropagation()
-    event.currentTarget.setPointerCapture(event.pointerId)
     const startedAtMs = performance.now()
+    if (event.pointerType === 'touch') {
+      const previous = lastActivationRef.current
+      if (previous && sameInventorySource(previous.source, source)
+        && startedAtMs - previous.atMs <= HUB_INVENTORY_INTERACTION.doubleActivationMs) {
+        pressRef.current = null
+        lastActivationRef.current = null
+        onDragChange(null)
+        activateSource(source)
+        return
+      }
+      lastActivationRef.current = { atMs: startedAtMs, source }
+    }
+    event.currentTarget.setPointerCapture(event.pointerId)
     pressRef.current = {
       activeDrag: false,
       pointerId: event.pointerId,
+      pointerType: event.pointerType,
       source,
       start: pointerStagePosition(event),
     }
@@ -1118,6 +1258,7 @@ function InventoryActions({
     }
     pressRef.current = null
     if (press.activeDrag) {
+      if (press.pointerType === 'touch') lastActivationRef.current = null
       onDragChange(null)
       selectSource(press.source, performance.now() - HUB_INVENTORY_INTERACTION.itemInfoDelayMs)
       dropInventorySource(
@@ -1132,6 +1273,7 @@ function InventoryActions({
       )
       return
     }
+    if (press.pointerType === 'touch') return
     const nowMs = performance.now()
     const previous = lastActivationRef.current
     if (previous && sameInventorySource(previous.source, press.source)
@@ -1142,7 +1284,9 @@ function InventoryActions({
   }
 
   const cancelPointer = (event: ReactPointerEvent<HTMLButtonElement>) => {
-    if (pressRef.current?.pointerId !== event.pointerId) return
+    const press = pressRef.current
+    if (press?.pointerId !== event.pointerId) return
+    if (press.pointerType === 'touch' && press.activeDrag) lastActivationRef.current = null
     pressRef.current = null
     onDragChange(null)
   }
@@ -1238,6 +1382,7 @@ interface InventoryPointerSource {
 interface InventoryPointerPress {
   activeDrag: boolean
   readonly pointerId: number
+  readonly pointerType: string
   readonly source: InventoryPointerSource
   readonly start: { readonly x: number; readonly y: number }
 }
@@ -1322,7 +1467,11 @@ function ShopAction({
   dowsing = false,
   index,
   label,
+  onBlur,
   onClick,
+  onFocus,
+  onPointerEnter,
+  onPointerLeave,
   price,
   selected,
 }: {
@@ -1330,7 +1479,11 @@ function ShopAction({
   dowsing?: boolean
   index: number
   label: string
+  onBlur: () => void
   onClick: () => void
+  onFocus: () => void
+  onPointerEnter: () => void
+  onPointerLeave: () => void
   price: number
   selected: boolean
 }) {
@@ -1345,7 +1498,11 @@ function ShopAction({
         dowsing ? HUB_DOWSING_GRID.cellSize : HUB_SHOP_GRID.cellSize,
         dowsing ? HUB_DOWSING_GRID.cellSize : HUB_SHOP_GRID.cellSize,
       ]}
+      onBlur={onBlur}
       onClick={onClick}
+      onFocus={onFocus}
+      onPointerEnter={onPointerEnter}
+      onPointerLeave={onPointerLeave}
     >
       <span className="hub-native-ui-semantic hub-trader-price">{price.toLocaleString()}</span>
     </NativeAction>
@@ -1367,11 +1524,14 @@ function NativeAction({
   data,
   disabled = false,
   label,
+  onBlur,
   onClick,
   onFocus,
   onKeyDown,
   onPointerCancel,
   onPointerDown,
+  onPointerEnter,
+  onPointerLeave,
   onPointerMove,
   onPointerUp,
   rect,
@@ -1380,11 +1540,14 @@ function NativeAction({
   data?: Record<string, number | string>
   disabled?: boolean
   label: string
+  onBlur?: () => void
   onClick?: () => void
   onFocus?: () => void
   onKeyDown?: (event: ReactKeyboardEvent<HTMLButtonElement>) => void
   onPointerCancel?: (event: ReactPointerEvent<HTMLButtonElement>) => void
   onPointerDown?: (event: ReactPointerEvent<HTMLButtonElement>) => void
+  onPointerEnter?: () => void
+  onPointerLeave?: () => void
   onPointerMove?: (event: ReactPointerEvent<HTMLButtonElement>) => void
   onPointerUp?: (event: ReactPointerEvent<HTMLButtonElement>) => void
   rect: readonly [number, number, number, number]
@@ -1396,12 +1559,14 @@ function NativeAction({
       aria-label={label}
       disabled={disabled}
       style={rectStyle(rect)}
+      onBlur={onBlur}
       onClick={onClick}
       onFocus={onFocus}
       onKeyDown={onKeyDown}
       onPointerCancel={onPointerCancel}
       onPointerDown={onPointerDown}
-      onPointerEnter={onFocus}
+      onPointerEnter={onPointerEnter}
+      onPointerLeave={onPointerLeave}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       {...data}
@@ -1445,4 +1610,56 @@ function dowsingItems(economy: ProtocolPlayerEconomy): readonly HubShopItem[] {
       recipeIndex: recipe.sourceIndex,
     }
   })
+}
+
+function serviceInspectionTooltipText(
+  inspection: HubServiceInspectionModel,
+  economy: ProtocolPlayerEconomy,
+  progression: ProtocolPlayerProgression,
+  selection: HubServiceSelection | null,
+  trader: HubTraderId,
+): string | null {
+  if (inspection.kind === 'owned-perk') {
+    if (
+      trader !== 'hagatha'
+      || economy.ownedPerkSelectors[inspection.index] !== inspection.selector
+    ) return null
+    return tooltipSemanticText(hubHagathaTooltipLines({
+      cheatDeathCharges: inspection.selector === 7 ? 1 : null,
+      firstMixed: true,
+      price: null,
+      selector: inspection.selector,
+    }))
+  }
+  if (selection?.id === inspection.id && selection.owner === inspection.owner) return null
+  if (trader === 'hagatha') {
+    const offer = economy.hagathaOffers.find(({ selector }) => selector === inspection.id)
+    if (!offer || inspection.owner !== null) return null
+    return tooltipSemanticText(hubHagathaTooltipLines({
+      bundleSelectors: offer.members,
+      cheatDeathCharges: null,
+      firstMixed: offer.price === offer.basePrice,
+      price: offer.price,
+      selector: offer.selector,
+    }))
+  }
+  const item = trader === 'luthacus'
+    ? economy.storage.find(({ id }) => id === inspection.id)
+    : trader === 'fomentius'
+      ? economy.fomentiusStock.find(({ id }) => id === inspection.id)
+      : dowsingItems(economy).find(({ id }) => id === inspection.id)
+  if (!item) return null
+  return tooltipSemanticText(hubItemTooltipLines(item, {
+    ownedPerkSelectors: economy.ownedPerkSelectors,
+    playerLevel: progression.level,
+    price: trader === 'luthacus' ? null : hubShopItemPrice(item),
+  }))
+}
+
+function hubShopItemPrice(item: HubInventoryItem | HubShopItem): number | null {
+  return 'price' in item && typeof item.price === 'number' ? item.price : null
+}
+
+function tooltipSemanticText(lines: readonly { readonly text: string }[]): string {
+  return lines.map(({ text }) => text.trim()).filter(Boolean).join(' ')
 }
