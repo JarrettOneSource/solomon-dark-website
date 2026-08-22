@@ -1597,36 +1597,56 @@ async function waitForEtherFan(
   minimumFlightTicks,
   expectedIds = null,
 ) {
-  const handle = await page.waitForFunction(([
-    minimumTick,
-    expectedQuantity,
-    minimumFlight,
-    requiredIds,
-  ]) => {
-    for (let index = window.__primarySpellWireFrames.length - 1; index >= 0; index -= 1) {
-      const wire = window.__primarySpellWireFrames[index]
-      if (wire.tick <= minimumTick) continue
-      let states = wire.primarySpells.projectiles
-        .filter((candidate) => candidate.kind === 'ether')
-        .sort((left, right) => left.id - right.id)
-      states = requiredIds === null
-        ? states.slice(-expectedQuantity)
-        : states.filter(({ id }) => requiredIds.includes(id))
-      if (states.length !== expectedQuantity) continue
-      if (states.some(({ flightTicks }) => flightTicks < minimumFlight)) continue
-      if (states.some((state, stateIndex) => (
-        stateIndex > 0 && state.id !== states[stateIndex - 1].id + 1
-      ))) continue
-      const owner = wire.players[states[0].ownerId]
-      if (!owner) continue
-      return {
-        castAimDirection: owner.primaryCast.aimDirection,
-        states,
-        tick: wire.tick,
+  let handle
+  try {
+    handle = await page.waitForFunction(([
+      minimumTick,
+      expectedQuantity,
+      minimumFlight,
+      requiredIds,
+    ]) => {
+      for (let index = window.__primarySpellWireFrames.length - 1; index >= 0; index -= 1) {
+        const wire = window.__primarySpellWireFrames[index]
+        if (wire.tick <= minimumTick) continue
+        let states = wire.primarySpells.projectiles
+          .filter((candidate) => candidate.kind === 'ether')
+          .sort((left, right) => left.id - right.id)
+        states = requiredIds === null
+          ? states.slice(-expectedQuantity)
+          : states.filter(({ id }) => requiredIds.includes(id))
+        if (states.length !== expectedQuantity) continue
+        if (states.some(({ flightTicks }) => flightTicks < minimumFlight)) continue
+        if (states.some((state, stateIndex) => (
+          stateIndex > 0 && state.id !== states[stateIndex - 1].id + 1
+        ))) continue
+        const owner = wire.players[states[0].ownerId]
+        if (!owner) continue
+        return {
+          castAimDirection: owner.primaryCast.aimDirection,
+          states,
+          tick: wire.tick,
+        }
       }
-    }
-    return null
-  }, [afterTick, quantity, minimumFlightTicks, expectedIds], { timeout })
+      return null
+    }, [afterTick, quantity, minimumFlightTicks, expectedIds], { timeout })
+  } catch (error) {
+    const diagnostics = await page.evaluate(([minimumTick, requiredIds]) => (
+      window.__primarySpellWireFrames
+        .filter(({ tick }) => tick > minimumTick)
+        .slice(-20)
+        .map((wire) => ({
+          impacts: wire.primarySpells.transients.filter(({ kind }) => kind === 'ether-impact'),
+          states: wire.primarySpells.projectiles.filter((candidate) => (
+            candidate.kind === 'ether'
+            && (requiredIds === null || requiredIds.includes(candidate.id))
+          )),
+          tick: wire.tick,
+        }))
+    ), [afterTick, expectedIds])
+    throw new Error(`Ether fan did not reach its visual sample: ${JSON.stringify(diagnostics)}`, {
+      cause: error,
+    })
+  }
   const result = await handle.jsonValue()
   await handle.dispose()
   return result
