@@ -89,10 +89,57 @@ try {
   assert.equal(outsiderParty.state.party.leaderPlayerId, outsider.playerId)
 
   const chat = first.page.getByLabel('Game chat')
+  const hostMessageCountBeforeWhisper = host.chatMessages.length
+  const memberMessageCountBeforeWhisper = member.chatMessages.length
+  await activatePlayer(first, outsider.playerId)
+  const outsiderProfile = first.page.getByRole('dialog', { name: 'Daria' })
+  await outsiderProfile.waitFor()
+  await outsiderProfile.getByText('Guest wizard', { exact: true }).waitFor()
+  const outsiderWhisper = outsider.next((message) => (
+    message.type === 'server-chat' && message.text === 'Aurelia private hello'
+  ), 'outsider Whisper')
+  await outsiderProfile.getByRole('button', { name: 'Message', exact: true }).click()
+  await chat.locator('xpath=self::*[@data-chat-open="true"]').waitFor()
+  assert.equal(await chat.getAttribute('data-chat-channel'), 'whisper')
+  assert.equal(await chat.getAttribute('data-chat-channels'), 'party,global,whisper')
+  assert.equal(await chat.getAttribute('data-whisper-target'), outsider.playerId)
+  const whisperInput = chat.getByRole('textbox', { name: 'Chat message' })
+  await whisperInput.fill('Aurelia private hello')
+  await whisperInput.press('Enter')
+  const whisperMessage = await outsiderWhisper
+  assert.equal(whisperMessage.channel, 'whisper')
+  assert.deepEqual(whisperMessage.sender, {
+    displayName: 'Aurelia',
+    playerId: first.playerId,
+  })
+  assert.deepEqual(whisperMessage.recipient, {
+    displayName: 'Daria',
+    playerId: outsider.playerId,
+  })
+  await chat.locator('[data-message-channel="whisper"]', {
+    hasText: 'Aurelia private hello',
+  }).waitFor()
+  await first.page.waitForTimeout(100)
+  assert.equal(host.chatMessages.length, hostMessageCountBeforeWhisper)
+  assert.equal(member.chatMessages.length, memberMessageCountBeforeWhisper)
+
+  outsider.sendChat('whisper', 'Daria private reply', first.playerId)
+  await chat.locator('[data-message-channel="whisper"]', {
+    hasText: 'Daria private reply',
+  }).waitFor()
+  assert.equal(await chat.getAttribute('data-whisper-target'), outsider.playerId)
+  const chatWhisperEvidencePath = evidenceRoot
+    ? join(evidenceRoot, 'chat-hub-whisper.png')
+    : null
+  if (chatWhisperEvidencePath) await first.page.screenshot({ path: chatWhisperEvidencePath })
+  await whisperInput.press('Tab')
+  assert.equal(await chat.getAttribute('data-chat-channel'), 'party')
+  await whisperInput.press('Escape')
+
   await first.page.keyboard.press('t')
   await chat.locator('xpath=self::*[@data-chat-open="true"]').waitFor()
   assert.equal(await chat.getAttribute('data-chat-channel'), 'party')
-  assert.equal(await chat.getAttribute('data-chat-channels'), 'party,global')
+  assert.equal(await chat.getAttribute('data-chat-channels'), 'party,global,whisper')
   // GameChat renders data-chat-open in the commit that opens it, but the Hub
   // only learns about it through GameChat's onOpenChange effect one commit
   // later, so wait for the gameplay gate instead of reading it in the same tick.
@@ -269,7 +316,7 @@ try {
   await first.page.keyboard.press('t')
   await chat.locator('xpath=self::*[@data-chat-open="true"]').waitFor()
   assert.equal(await chat.getAttribute('data-chat-channel'), 'party')
-  assert.equal(await chat.getAttribute('data-chat-channels'), 'party')
+  assert.equal(await chat.getAttribute('data-chat-channels'), 'party,whisper')
   await firstBoneyard.locator('xpath=self::*[@data-gameplay-input-blocked="true"]').waitFor({
     timeout: 5_000,
   })
@@ -286,6 +333,8 @@ try {
   await Promise.all([hostRunChat, memberRunChat])
   await first.page.waitForTimeout(100)
   assert.equal(outsider.chatMessages.length, outsiderMessageCountBeforeRunChat)
+  await runChatInput.press('Tab')
+  assert.equal(await chat.getAttribute('data-chat-channel'), 'whisper')
   await runChatInput.press('Tab')
   assert.equal(await chat.getAttribute('data-chat-channel'), 'party')
   const chatBoneyardEvidencePath = evidenceRoot
@@ -333,9 +382,11 @@ try {
     boneyardWithoutDirectLightPath,
     chatBoneyardEvidencePath,
     chatHubEvidencePath,
+    chatWhisperEvidencePath,
     chatFadedOpacity: fadedOpacity,
     chatGlobalSequence: globalChatMessages[0].sequence,
     chatPartySequence: hostPartyMessage.sequence,
+    chatWhisperSequence: whisperMessage.sequence,
     remainingHubBeforeX: outsiderX,
     remainingHubAfterX: outsiderAfter.frame.players[outsider.playerId].position.x,
     healthDuringRun,
@@ -454,6 +505,7 @@ async function enterRawHub(displayName, element) {
   })
   socket.send(JSON.stringify({
     type: 'client-hello',
+    profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     credential: admission.credential,
@@ -491,10 +543,11 @@ async function enterRawHub(displayName, element) {
         targetTick,
       }))
     },
-    sendChat(channel, text) {
+    sendChat(channel, text, targetPlayerId) {
       socket.send(JSON.stringify({
         type: 'client-chat',
         channel,
+        ...(targetPlayerId === undefined ? {} : { targetPlayerId }),
         text,
       }))
     },

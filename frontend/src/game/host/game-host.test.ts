@@ -31,6 +31,7 @@ import {
   type ServerSnapshotMessage,
 } from '../protocol/game-protocol.ts'
 import type { GameSnapshot } from '../protocol/game-state.ts'
+import type { PlayerSocialProfile } from '../protocol/party-state.ts'
 import { EntityReplicationReconstructor } from '../protocol/entity-replication.ts'
 import type { BoneyardScene } from '../core-kernels/boneyard.ts'
 import { createBoneyardCatalog, type ModBoneyardEntry } from './boneyard-catalog.ts'
@@ -269,6 +270,108 @@ test('shared Hub chat isolates parties, reaches Hub global, and becomes party-on
   const outsiderOnlyMessage = outsiderChat.messages[0]!
   if (outsiderOnlyMessage.type !== 'server-chat') throw new Error('expected global chat')
   assert.equal(outsiderOnlyMessage.text, 'Hub route')
+})
+
+test('whispers route to exactly the target pair and expose Hub social profiles', async (context) => {
+  const host = await startGameHost({
+    authentication: SHARED_HUB_AUTHENTICATION,
+    sharedHub: true,
+    snapshotRate: 100,
+  })
+  context.after(() => host.close())
+  const first = await join(host.address.url, 'ticket-first', FIRST_CHARACTER, true, {
+    accountUsername: 'helvidius-prime',
+    highestWave: 41,
+    totalPlaytimeMs: 7_260_000,
+  })
+  const second = await join(host.address.url, 'ticket-second', SECOND_CHARACTER)
+  const profiledPromise = nextMessage(first.socket, message => (
+    message.type === 'server-party-state'
+    && message.state.hubPlayers.length === 3
+  ))
+  const outsider = await join(host.address.url, 'ticket-outsider', {
+    ...FIRST_CHARACTER,
+    displayName: 'Cassia',
+  })
+  for (const client of [first, second, outsider]) {
+    context.after(() => client.socket.close())
+  }
+  const outsiderChat = collectChatMessages(outsider.socket)
+  context.after(outsiderChat.stop)
+
+  const profiled = await profiledPromise
+  assert.equal(profiled.type, 'server-party-state')
+  const hubProfiles = Object.fromEntries(
+    profiled.state.hubPlayers.map(profile => [profile.playerId, profile]),
+  )
+  assert.deepEqual(hubProfiles[first.welcome.playerId], {
+    accountUsername: 'helvidius-prime',
+    displayName: FIRST_CHARACTER.displayName,
+    highestWave: 41,
+    playerId: first.welcome.playerId,
+    totalPlaytimeMs: 7_260_000,
+  })
+  assert.deepEqual(hubProfiles[second.welcome.playerId], {
+    accountUsername: null,
+    displayName: SECOND_CHARACTER.displayName,
+    highestWave: null,
+    playerId: second.welcome.playerId,
+    totalPlaytimeMs: null,
+  })
+
+  const whisperForSender = nextMessage(first.socket, message => (
+    message.type === 'server-chat' && message.text === 'Between us'
+  ))
+  const whisperForTarget = nextMessage(second.socket, message => (
+    message.type === 'server-chat' && message.text === 'Between us'
+  ))
+  first.socket.send(encodeGameMessage({
+    type: 'client-chat',
+    channel: 'whisper',
+    targetPlayerId: second.welcome.playerId,
+    text: 'Between us',
+  }))
+  const [atSender, atTarget] = await Promise.all([whisperForSender, whisperForTarget])
+  assert.deepEqual(atSender, atTarget)
+  assert.equal(atSender.type, 'server-chat')
+  assert.equal(atSender.channel, 'whisper')
+  assert.deepEqual(atSender.sender, {
+    displayName: FIRST_CHARACTER.displayName,
+    playerId: first.welcome.playerId,
+  })
+  assert.deepEqual(atSender.recipient, {
+    displayName: SECOND_CHARACTER.displayName,
+    playerId: second.welcome.playerId,
+  })
+  await new Promise(resolve => setTimeout(resolve, 60))
+  assert.equal(outsiderChat.messages.length, 0)
+
+  const unavailable = nextMessage(first.socket, message => (
+    message.type === 'server-chat-rejected' && message.reason === 'target-unavailable'
+  ))
+  first.socket.send(encodeGameMessage({
+    type: 'client-chat',
+    channel: 'whisper',
+    targetPlayerId: 'player-toltec-departed',
+    text: 'Anyone there?',
+  }))
+  assert.deepEqual(await unavailable, {
+    type: 'server-chat-rejected',
+    channel: 'whisper',
+    reason: 'target-unavailable',
+    retryAfterMs: 0,
+  })
+
+  const selfRejected = nextMessage(first.socket, message => (
+    message.type === 'server-chat-rejected' && message.reason === 'target-unavailable'
+  ))
+  first.socket.send(encodeGameMessage({
+    type: 'client-chat',
+    channel: 'whisper',
+    targetPlayerId: first.welcome.playerId,
+    text: 'Echoing into the void',
+  }))
+  assert.equal((await selfRejected).type, 'server-chat-rejected')
 })
 
 test('chat rejects unavailable channels and bounds floods per authenticated client', async (context) => {
@@ -1009,6 +1112,7 @@ test('game host rejects arbitrary origins and invalid bootstrap credentials', as
   context.after(() => socket.close())
   socket.send(encodeGameMessage({
     type: 'client-hello',
+    profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     credential: 'wrong-secret',
@@ -1290,6 +1394,7 @@ test('host emits an owner checkpoint and revives it before a fresh welcome', asy
   )
   firstSocket.send(encodeGameMessage({
     type: 'client-hello',
+    profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     credential: 'test-secret',
@@ -1311,6 +1416,7 @@ test('host emits an owner checkpoint and revives it before a fresh welcome', asy
   ))
   secondSocket.send(encodeGameMessage({
     type: 'client-hello',
+    profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     credential: 'test-secret',
@@ -1360,6 +1466,7 @@ test('host rejects an unconfirmed save mod mismatch and accepts an explicit cont
   )
   rejectedSocket.send(encodeGameMessage({
     type: 'client-hello',
+    profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     credential: 'test-secret',
@@ -1380,6 +1487,7 @@ test('host rejects an unconfirmed save mod mismatch and accepts an explicit cont
   )
   continuedSocket.send(encodeGameMessage({
     type: 'client-hello',
+    profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     allowModMismatch: true,
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
@@ -1668,6 +1776,7 @@ test('host exposes and authoritatively loads a selected mod Boneyard', async (co
   const lateLoaded = nextMessage(lateSocket, (message) => message.type === 'server-boneyard-loaded')
   lateSocket.send(encodeGameMessage({
     type: 'client-hello',
+    profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     credential: 'test-secret',
@@ -1827,10 +1936,16 @@ async function join(
   credential: string,
   character: PlayerCharacterConfig,
   autoPong = true,
+  profile: PlayerSocialProfile = {
+    accountUsername: null,
+    highestWave: null,
+    totalPlaytimeMs: null,
+  },
 ) {
   const socket = await openSocket(url, undefined, autoPong)
   socket.send(encodeGameMessage({
     type: 'client-hello',
+    profile,
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     credential,
@@ -1875,6 +1990,7 @@ async function completeLeaderboardScenario(
     const welcomeMessage = nextMessage(socket, message => message.type === 'server-welcome')
     socket.send(encodeGameMessage({
       type: 'client-hello',
+      profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
       cheatsEnabled: scenario.cheatsEnabled === true,
       protocolVersion: GAME_PROTOCOL_VERSION,
       credential: 'test-secret',

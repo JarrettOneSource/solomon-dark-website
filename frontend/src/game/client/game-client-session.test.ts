@@ -40,6 +40,12 @@ const CHARACTER = {
   element: 'ether',
 } as const
 
+const NULL_PROFILE = {
+  accountUsername: null,
+  highestWave: null,
+  totalPlaytimeMs: null,
+}
+
 function gameplayInput(
   movement: { x: number; y: number },
   aim: { x: number; y: number } | null = null,
@@ -79,12 +85,14 @@ test('client carries character config, publishes authority, and tears down', asy
   const transport = new MemoryTransport()
   const connecting = connectGameClientSession({
     character: CHARACTER,
+    profile: NULL_PROFILE,
     credential: 'spawn-secret',
     saveDocument: '{"schemaVersion":1}',
     transport,
   })
   assert.deepEqual(decodeClientGameMessage(transport.sent[0]), {
     type: 'client-hello',
+    profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     credential: 'spawn-secret',
@@ -132,12 +140,12 @@ test('client carries character config, publishes authority, and tears down', asy
     type: 'server-party-state',
     state: {
       hubPlayers: [
-        { displayName: 'Helvidius', playerId: 'player-1' },
-        { displayName: 'Aurelia', playerId: 'player-2' },
+        { ...NULL_PROFILE, displayName: 'Helvidius', playerId: 'player-1' },
+        { ...NULL_PROFILE, displayName: 'Aurelia', playerId: 'player-2' },
       ],
       invitations: [{
         id: 'invite-1',
-        inviter: { displayName: 'Aurelia', playerId: 'player-2' },
+        inviter: { ...NULL_PROFILE, displayName: 'Aurelia', playerId: 'player-2' },
         partyId: 'party-2',
       }],
       party: {
@@ -332,6 +340,7 @@ test('client projects authoritative gameplay pause and blocks input until releas
   const transport = new MemoryTransport()
   const connecting = connectGameClientSession({
     character: CHARACTER,
+    profile: NULL_PROFILE,
     credential: 'spawn-secret',
     transport,
   })
@@ -378,6 +387,7 @@ test('client replaces only its own modal pause source and emits a strict release
   const transport = new MemoryTransport()
   const connecting = connectGameClientSession({
     character: CHARACTER,
+    profile: NULL_PROFILE,
     credential: 'spawn-secret',
     transport,
   })
@@ -420,6 +430,7 @@ test('client correlates bounded host Lua results and rejects guest or retired ex
   const transport = new MemoryTransport()
   const connecting = connectGameClientSession({
     character: CHARACTER,
+    profile: NULL_PROFILE,
     credential: 'spawn-secret',
     transport,
   })
@@ -454,6 +465,7 @@ test('client correlates bounded host Lua results and rejects guest or retired ex
   const guestTransport = new MemoryTransport()
   const guestConnecting = connectGameClientSession({
     character: CHARACTER,
+    profile: NULL_PROFILE,
     credential: 'spawn-secret',
     transport: guestTransport,
   })
@@ -489,6 +501,7 @@ test('client logs and explains an unexpected transport disconnect', async () => 
   let fatal: GameConnectionFailure | undefined
   const connecting = connectGameClientSession({
     character: CHARACTER,
+    profile: NULL_PROFILE,
     credential: 'spawn-secret',
     diagnostics,
     onFatal: (failure) => { fatal = failure },
@@ -519,6 +532,7 @@ test('host client keeps one session through Game Over, loadout, and Hub confirma
   const transport = new MemoryTransport()
   const connecting = connectGameClientSession({
     character: CHARACTER,
+    profile: NULL_PROFILE,
     credential: 'spawn-secret',
     transport,
   })
@@ -625,6 +639,7 @@ test('client consumes each run-scoped Boneyard enemy event exactly once', async 
   const transport = new MemoryTransport()
   const connecting = connectGameClientSession({
     character: CHARACTER,
+    profile: NULL_PROFILE,
     credential: 'spawn-secret',
     transport,
   })
@@ -708,6 +723,7 @@ test('client suppresses gameplay input while a skill offer is pending and submit
   const transport = new MemoryTransport()
   const connecting = connectGameClientSession({
     character: CHARACTER,
+    profile: NULL_PROFILE,
     credential: 'spawn-secret',
     now: () => nowMs,
     transport,
@@ -751,6 +767,7 @@ test('client submits native quickbar bindings and primary selection against lear
   const transport = new MemoryTransport()
   const connecting = connectGameClientSession({
     character: CHARACTER,
+    profile: NULL_PROFILE,
     credential: 'spawn-secret',
     transport,
   })
@@ -796,6 +813,7 @@ test('client submits the exact Sorceror action for the current offer only', asyn
   const transport = new MemoryTransport()
   const connecting = connectGameClientSession({
     character: CHARACTER,
+    profile: NULL_PROFILE,
     credential: 'spawn-secret',
     transport,
   })
@@ -832,6 +850,7 @@ test('client schedules every cast-level transition on a distinct fixed tick', as
   const transport = new MemoryTransport()
   const connecting = connectGameClientSession({
     character: CHARACTER,
+    profile: NULL_PROFILE,
     credential: 'spawn-secret',
     transport,
   })
@@ -885,6 +904,7 @@ test('client measures authenticated WebSocket round trips with its monotonic clo
   const transport = new MemoryTransport()
   const connecting = connectGameClientSession({
     character: CHARACTER,
+    profile: NULL_PROFILE,
     credential: 'spawn-secret',
     now: () => nowMs,
     transport,
@@ -920,6 +940,7 @@ test('client disables prediction when the shared character kernel does not match
   const transport = new MemoryTransport()
   const connecting = connectGameClientSession({
     character: CHARACTER,
+    profile: NULL_PROFILE,
     credential: 'spawn-secret',
     transport,
   })
@@ -956,6 +977,7 @@ test('client presents bounded display-rate movement without resending unchanged 
   const transport = new MemoryTransport()
   const connecting = connectGameClientSession({
     character: CHARACTER,
+    profile: NULL_PROFILE,
     credential: 'spawn-secret',
     now: () => nowMs,
     transport,
@@ -1006,6 +1028,7 @@ test('client applies direction changes only to future presentation ticks', async
   const transport = new MemoryTransport()
   const connecting = connectGameClientSession({
     character: CHARACTER,
+    profile: NULL_PROFILE,
     credential: 'spawn-secret',
     now: () => nowMs,
     transport,
@@ -1036,6 +1059,7 @@ test('client does not rewind a locally presented turn while acknowledgement is d
   const transport = new MemoryTransport()
   const connecting = connectGameClientSession({
     character: CHARACTER,
+    profile: NULL_PROFILE,
     credential: 'spawn-secret',
     now: () => nowMs,
     transport,
@@ -1111,6 +1135,7 @@ test('client accepts cast-owned heading and prevents movement prediction from re
   const transport = new MemoryTransport()
   const connecting = connectGameClientSession({
     character: CHARACTER,
+    profile: NULL_PROFILE,
     credential: 'spawn-secret',
     now: () => nowMs,
     transport,
@@ -1193,6 +1218,7 @@ test('client visually absorbs an unpredicted push over one snapshot interval', a
   const transport = new MemoryTransport()
   const connecting = connectGameClientSession({
     character: CHARACTER,
+    profile: NULL_PROFILE,
     credential: 'spawn-secret',
     now: () => nowMs,
     transport,
@@ -1288,6 +1314,7 @@ test('client rejects a welcome that omits its assigned player', async () => {
   const transport = new MemoryTransport()
   const connecting = connectGameClientSession({
     character: CHARACTER,
+    profile: NULL_PROFILE,
     credential: 'spawn-secret',
     transport,
   })
@@ -1315,6 +1342,7 @@ test('client requests a keyframe after a replication gap and resumes cleanly', a
   const transport = new MemoryTransport()
   const connecting = connectGameClientSession({
     character: CHARACTER,
+    profile: NULL_PROFILE,
     credential: 'spawn-secret',
     transport,
   })

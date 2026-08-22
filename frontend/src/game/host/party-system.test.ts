@@ -118,23 +118,32 @@ test('party projection exposes Hub profiles, local membership, and only received
   state = invitePartyPlayer(state, 'player-a', 'player-b', 4).state
   state = invitePartyPlayer(state, 'player-c', 'player-a', 4).state
 
+  const aurelia = {
+    accountUsername: 'aurelia-prime',
+    displayName: 'Aurelia',
+    highestWave: 23,
+    playerId: 'player-a',
+    totalPlaytimeMs: 5_400_000,
+  }
   assert.deepEqual(projectPartyState(
     state,
     'player-b',
-    new Map([
-      ['player-a', 'Aurelia'],
-      ['player-b', 'Basil'],
-      ['player-c', 'Cassia'],
-    ]),
+    new Map([['player-a', aurelia]]),
     new Set(['player-a', 'player-b']),
   ), {
     hubPlayers: [
-      { displayName: 'Aurelia', playerId: 'player-a' },
-      { displayName: 'Basil', playerId: 'player-b' },
+      aurelia,
+      {
+        accountUsername: null,
+        displayName: 'player-b',
+        highestWave: null,
+        playerId: 'player-b',
+        totalPlaytimeMs: null,
+      },
     ],
     invitations: [{
       id: 'invite-1',
-      inviter: { displayName: 'Aurelia', playerId: 'player-a' },
+      inviter: aurelia,
       partyId: 'party-1',
     }],
     party: {

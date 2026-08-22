@@ -3,10 +3,11 @@ import type {
   NativeSecondaryActorState,
   NativeSecondaryGolemState,
 } from './core-kernels/native-secondary-abilities.ts'
+import type { WizardElement } from './core-kernels/player-character.ts'
 import type { ProtocolPlayerState } from './protocol/game-state.ts'
 
 export type AllyHudIdentity =
-  | { kind: 'player'; displayName: string }
+  | { kind: 'player'; displayName: string; element: WizardElement }
   | { kind: 'golem' }
 
 export interface AllyHudRow {
@@ -80,6 +81,7 @@ export function derivePlayerAllyHudRows(
       identity: {
         kind: 'player',
         displayName: player.config.displayName,
+        element: player.config.element,
       },
     }))
 }
@@ -125,13 +127,8 @@ export function clampAllyHudHealthRatio(healthRatio: number): number {
   return Math.min(1, Math.max(0, healthRatio))
 }
 
-export function allyHudIdentityPresentation(identity: AllyHudIdentity): {
-  accessibleName: string
-  visual: 'native-font' | 'stock-golem'
-} {
-  return identity.kind === 'player'
-    ? { accessibleName: identity.displayName, visual: 'native-font' }
-    : { accessibleName: 'Golem', visual: 'stock-golem' }
+export function allyHudAccessibleName(identity: AllyHudIdentity): string {
+  return identity.kind === 'player' ? identity.displayName : 'Golem'
 }
 
 export function allyHudRowsEqual(
@@ -148,8 +145,10 @@ export function allyHudRowsEqual(
     ) return false
     return leftRow.identity.kind === 'golem'
       || (
-        rightRow.identity.kind === 'player'
+        leftRow.identity.kind === 'player'
+        && rightRow.identity.kind === 'player'
         && leftRow.identity.displayName === rightRow.identity.displayName
+        && leftRow.identity.element === rightRow.identity.element
       )
   })
 }

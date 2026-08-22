@@ -45,61 +45,109 @@
 
 .hub-hud-allies {
   position: absolute;
-  top: 62px;
+  top: 60px;
   left: 11px;
-  width: 180px;
+  display: grid;
+  width: 196px;
+  gap: 5px;
 }
 
+.hub-hud-ally-row[data-ally-element='ether'] { --element-accent: #b98fe6; }
+.hub-hud-ally-row[data-ally-element='fire'] { --element-accent: #e07a45; }
+.hub-hud-ally-row[data-ally-element='water'] { --element-accent: #5fb0dc; }
+.hub-hud-ally-row[data-ally-element='air'] { --element-accent: #a5cbe4; }
+.hub-hud-ally-row[data-ally-element='earth'] { --element-accent: #a8bf62; }
+
 .hub-hud-ally-row {
+  display: grid;
+  grid-template-columns: 27px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  padding: 2px 9px 3px 2px;
+  border: 1px solid rgb(216 188 114 / 0.3);
+  border-left: 2px solid var(--element-accent, rgb(216 188 114 / 0.75));
+  border-radius: 3px 14px 14px 3px;
+  background:
+    linear-gradient(
+      90deg,
+      rgb(10 9 6 / 0.82),
+      rgb(9 11 15 / 0.6) 62%,
+      rgb(9 11 15 / 0.12)
+    );
+}
+
+.hub-hud-ally-chip {
   position: relative;
-  width: 180px;
-  height: 10px;
+  display: block;
+  overflow: hidden;
+  /* Transformed sprite layers escape border-radius clipping under scaled ancestors; hard-clip. */
+  clip-path: circle(50%);
+  width: 27px;
+  height: 27px;
+  border: 1px solid var(--element-accent, rgb(216 188 114 / 0.6));
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 30%, rgb(56 51 39 / 0.95), rgb(8 9 12 / 0.96) 76%);
+  box-shadow: inset 0 0 7px rgb(0 0 0 / 0.85);
+}
+
+.hub-hud-ally-chip-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  width: 170px;
+  height: 170px;
+  background-repeat: no-repeat;
+  /* Sprite frame 12 holds the wizard at (86.5, 56); land it on the 27px chip's center. */
+  transform: translate(-25.4px, -11.7px) scale(0.45);
+  transform-origin: 0 0;
+}
+
+.hub-hud-ally-chip-golem img {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 17px;
+  height: auto;
+  transform: translate(-50%, -50%);
+}
+
+.hub-hud-ally-main {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.hub-hud-ally-name {
+  overflow: hidden;
+  color: #f0e2b6;
+  font: 12px/1.1 'IM FELL English', Georgia, serif;
+  letter-spacing: 0.02em;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 2px #000, 0 0 5px rgb(0 0 0 / 0.9);
+  white-space: nowrap;
 }
 
 .hub-hud-ally-bar {
-  position: absolute;
-  top: 1px;
-  left: 0;
+  position: relative;
   display: block;
-  width: 50px;
-  height: 5px;
+  height: 7px;
   overflow: hidden;
+  border: 1px solid rgb(0 0 0 / 0.85);
+  border-radius: 4px;
+  background: linear-gradient(180deg, rgb(40 21 17 / 0.92), rgb(16 8 7 / 0.94));
+  box-shadow:
+    0 0 0 1px rgb(216 188 114 / 0.26),
+    inset 0 1px 2px rgb(0 0 0 / 0.85);
 }
 
 .hub-hud-ally-bar-fill {
   display: block;
-  height: 5px;
-  background: rgb(255 128 128);
-}
-
-.hub-hud-ally-identity {
-  position: absolute;
-  top: 0;
-  left: 52px;
-  display: block;
-  width: 128px;
-  height: 10px;
-  overflow: hidden;
-}
-
-.hub-hud-ally-glyph,
-.hub-hud-ally-golem {
-  position: absolute;
-  display: block;
-  background: rgb(217 186 112);
-  mask-repeat: no-repeat;
-  -webkit-mask-repeat: no-repeat;
-}
-
-.hub-hud-ally-golem {
-  top: 0;
-  left: 0;
-  width: 37px;
-  height: 7px;
-  mask-position: 0 0;
-  mask-size: 37px 7px;
-  -webkit-mask-position: 0 0;
-  -webkit-mask-size: 37px 7px;
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #f08a70, #c0392b 55%, #7e1d12);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.25);
+  transition: width 220ms ease;
 }
 
 .hub-hud-diagnostics {
@@ -454,12 +502,25 @@
 .hub-party-panel {
   position: absolute;
   z-index: 15000;
-  top: 96px;
+  top: 174px;
   left: 11px;
-  min-width: 190px;
-  padding: 10px 12px;
-  border: 1px solid rgb(135 115 77 / 0.8);
-  background: rgb(13 12 10 / 0.82);
+  box-sizing: border-box;
+  min-width: 198px;
+  max-width: 236px;
+  padding: 8px 10px 10px;
+  border: 1px solid rgb(216 188 114 / 0.5);
+  border-radius: 4px;
+  background:
+    linear-gradient(
+      160deg,
+      rgb(30 25 15 / 0.92),
+      rgb(5 7 10 / 0.93) 55%,
+      rgb(10 12 17 / 0.94)
+    );
+  box-shadow:
+    0 0 0 1px rgb(64 50 22 / 0.85),
+    0 10px 26px rgb(0 0 0 / 0.5),
+    inset 0 0 20px rgb(0 0 0 / 0.5);
   color: #dfd0a0;
   font: 13px 'IM FELL English', Georgia, serif;
   pointer-events: auto;
@@ -467,22 +528,119 @@
 }
 
 .hub-party-panel h2 {
-  margin: 0 0 5px;
-  color: #f0dda0;
-  font-size: 17px;
-  font-weight: normal;
-}
-
-.hub-party-members { display: grid; gap: 2px; }
-
-.hub-party-invitation {
   display: flex;
   align-items: center;
-  gap: 10px;
-  justify-content: space-between;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid rgb(135 115 77 / 0.55);
+  gap: 7px;
+  margin: 0 0 7px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgb(194 161 88 / 0.3);
+  color: #f3d994;
+  font: 700 12px Cinzel, Georgia, serif;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.hub-party-panel h2 img {
+  width: 13px;
+  height: auto;
+  filter: drop-shadow(0 1px 1px #000);
+}
+
+.hub-party-count {
+  margin-left: auto;
+  color: #a49c89;
+  font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.hub-party-members {
+  display: grid;
+  gap: 2px;
+}
+
+.hub-party-member-open {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  text-shadow: inherit;
+}
+
+.hub-party-member-open:hover,
+.hub-party-member-open:focus-visible {
+  background: rgb(218 176 77 / 0.13);
+  outline: none;
+}
+
+.hub-party-member-marker {
+  flex: none;
+  width: 11px;
+  height: auto;
+  filter: drop-shadow(0 1px 1px #000);
+}
+
+.hub-party-member-name {
+  overflow: hidden;
+  min-width: 0;
+  flex: 1;
+  color: #eee4ca;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hub-party-member-tag {
+  flex: none;
+  padding: 1px 7px 2px;
+  border: 1px solid rgb(202 168 84 / 0.5);
+  border-radius: 8px;
+  color: #f3d994;
+  font: 700 9px Cinzel, Georgia, serif;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.hub-party-member-you {
+  border-color: rgb(141 200 227 / 0.45);
+  color: #a9d9ef;
+}
+
+.hub-party-invitation {
+  display: grid;
+  gap: 8px;
+  margin-top: 9px;
+  padding: 8px 9px 9px;
+  border: 1px solid rgb(216 188 114 / 0.5);
+  border-radius: 3px;
+  background: linear-gradient(180deg, rgb(218 176 77 / 0.13), rgb(0 0 0 / 0.28));
+  animation: hub-party-invitation-in 240ms ease-out both;
+}
+
+@keyframes hub-party-invitation-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+.hub-party-invitation-text {
+  color: #eee4ca;
+  font-size: 14px;
+}
+
+.hub-party-invitation-text strong {
+  color: #f3d994;
+  font-weight: 700;
 }
 
 .hub-party-invitation-actions {
@@ -492,26 +650,33 @@
 
 .hub-party-invitation button,
 .hub-player-profile button {
-  min-height: 32px;
-  padding: 5px 12px;
-  border: 1px solid #87734d;
-  background: #1c1a15;
-  color: #dfd0a0;
+  min-height: 34px;
+  padding: 6px 12px;
+  border: 1px solid rgb(202 168 84 / 0.66);
+  border-radius: 3px;
+  background: linear-gradient(180deg, #3a2e17, #171208);
+  box-shadow: inset 0 1px 0 rgb(255 232 160 / 0.14);
+  color: #ead293;
   cursor: pointer;
-  font: 14px 'IM FELL English', Georgia, serif;
+  font: 700 11px Cinzel, Georgia, serif;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
 }
 
 .hub-party-invitation button:hover,
 .hub-party-invitation button:focus-visible,
 .hub-player-profile button:hover,
 .hub-player-profile button:focus-visible {
-  border-color: #cfb978;
-  color: #fff1bd;
+  border-color: #e4c36d;
+  color: #fff0bc;
   outline: none;
 }
 
+.hub-party-invitation-actions button { flex: 1 1 0; }
+
 .hub-party-invitation .hub-party-invitation-deny {
-  border-color: #654945;
+  background: linear-gradient(180deg, #2a1b16, #120b08);
+  border-color: rgb(173 116 105 / 0.55);
   color: #c9aaa1;
 }
 
@@ -527,28 +692,228 @@
   inset: 0;
   display: grid;
   place-items: center;
-  background: rgb(0 0 0 / 0.72);
+  background: radial-gradient(circle at 50% 42%, rgb(20 16 8 / 0.55), rgb(0 0 0 / 0.8));
+  backdrop-filter: blur(2px);
   pointer-events: auto;
 }
 
+.hub-player-profile[data-profile-element='ether'] { --element-accent: #b98fe6; }
+.hub-player-profile[data-profile-element='fire'] { --element-accent: #e07a45; }
+.hub-player-profile[data-profile-element='water'] { --element-accent: #5fb0dc; }
+.hub-player-profile[data-profile-element='air'] { --element-accent: #a5cbe4; }
+.hub-player-profile[data-profile-element='earth'] { --element-accent: #a8bf62; }
+
 .hub-player-profile {
+  position: relative;
   display: grid;
-  width: 360px;
-  padding: 28px;
-  border: 2px solid #8c774e;
+  box-sizing: border-box;
+  width: 400px;
+  max-width: calc(100% - 40px);
+  padding: 24px 26px;
+  border: 3px double rgb(216 188 114 / 0.82);
   border-radius: 5px;
-  background: radial-gradient(circle at 50% 0, #353126, #11100d 70%);
-  box-shadow: 0 14px 50px #000;
-  gap: 12px;
+  background:
+    linear-gradient(
+      165deg,
+      rgb(37 31 18 / 0.97),
+      rgb(9 10 14 / 0.97) 55%,
+      rgb(13 15 21 / 0.98)
+    );
+  box-shadow:
+    0 0 0 1px rgb(64 50 22 / 0.9),
+    0 18px 50px rgb(0 0 0 / 0.7),
+    inset 0 0 30px rgb(0 0 0 / 0.55);
+  color: #dfd0a0;
+  font: 14px Alegreya, Georgia, serif;
+  gap: 14px;
+  text-shadow: 0 1px 2px #000;
+}
+
+.hub-player-profile-corner {
+  position: absolute;
+  top: -5px;
+  left: -6px;
+  width: 72px;
+  height: auto;
+  filter: drop-shadow(0 2px 2px rgb(0 0 0 / 0.6));
+  pointer-events: none;
+}
+
+.hub-player-profile-corner-right {
+  left: auto;
+  right: -6px;
+  transform: scaleX(-1);
+}
+
+.hub-player-profile-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 4px;
+}
+
+.hub-wizard-portrait {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  /* Transformed sprite layers escape border-radius clipping under scaled ancestors; hard-clip.
+     Square with softened corners to match the frame-gold plate, like the native loadout portraits. */
+  clip-path: inset(0 round 7px);
+  flex: none;
+  width: 92px;
+  height: 92px;
+  border-radius: 7px;
+  background: radial-gradient(circle at 50% 28%, #3b3526, #0c0b09 72%);
+  box-shadow: 0 0 14px rgb(0 0 0 / 0.65), inset 0 0 10px rgb(0 0 0 / 0.7);
+}
+
+.hub-wizard-portrait-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 170px;
+  height: 170px;
+  background-repeat: no-repeat;
+  /* Sprite frame 12 holds the wizard at (86.5, 56); land it on the 92px circle's center. */
+  transform: translate(-53.5px, -18.5px) scale(1.15);
+  transform-origin: 0 0;
+}
+
+.hub-wizard-portrait-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.7));
+}
+
+.hub-player-profile-title {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
 }
 
 .hub-player-profile h2 {
-  margin: 0 0 10px;
-  color: #e0cf98;
-  font: 32px 'IM FELL English', Georgia, serif;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: #f0dda0;
+  font: 28px/1.05 'IM FELL English', Georgia, serif;
   font-weight: normal;
-  text-align: center;
   text-shadow: 0 3px 3px #000;
+}
+
+.hub-player-profile-class {
+  margin: 0;
+  color: var(--element-accent, #a9d9ef);
+  font: 700 11px Cinzel, Georgia, serif;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.hub-player-profile-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-self: start;
+  margin: 2px 0 0;
+  padding: 2px 9px 3px;
+  border: 1px solid rgb(202 168 84 / 0.5);
+  border-radius: 9px;
+  color: #f3d994;
+  font: 700 9.5px Cinzel, Georgia, serif;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.hub-player-profile-badge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ffd76a;
+  box-shadow: 0 0 6px rgb(255 215 106 / 0.9);
+}
+
+.hub-player-profile-badge[data-registered='false'] {
+  border-color: rgb(164 156 137 / 0.4);
+  color: #a49c89;
+}
+
+.hub-player-profile-badge[data-registered='false']::before {
+  background: #7d776a;
+  box-shadow: none;
+}
+
+.hub-player-profile-stats {
+  display: grid;
+  margin: 0;
+  border-top: 1px solid rgb(194 161 88 / 0.25);
+  border-bottom: 1px solid rgb(194 161 88 / 0.25);
+}
+
+.hub-player-profile-stat {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  padding: 8px 2px;
+  gap: 11px;
+}
+
+.hub-player-profile-stat + .hub-player-profile-stat {
+  border-top: 1px solid rgb(194 161 88 / 0.16);
+}
+
+.hub-player-profile-stat img {
+  width: 21px;
+  height: 21px;
+  filter: drop-shadow(0 1px 1px #000);
+  object-fit: contain;
+}
+
+.hub-player-profile-stat dt {
+  margin: 0;
+  color: #a49c89;
+  font: 700 10.5px Cinzel, Georgia, serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.hub-player-profile-stat dd {
+  margin: 0;
+  color: #fff0c0;
+  font: 18px 'IM FELL English', Georgia, serif;
+  text-align: right;
+}
+
+.hub-player-profile-stat dd[data-profile-gold] {
+  color: #ffd76a;
+}
+
+.hub-player-profile-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.hub-player-profile-actions button {
+  flex: 1 1 auto;
+}
+
+.hub-player-profile .hub-player-profile-message {
+  border-color: rgb(190 150 230 / 0.55);
+  color: #cfb0e8;
+}
+
+.hub-player-profile .hub-player-profile-message:hover,
+.hub-player-profile .hub-player-profile-message:focus-visible {
+  border-color: #c9a3e8;
+  color: #e8d7f7;
+}
+
+.hub-player-profile .hub-player-profile-close {
+  flex: 0 1 auto;
+  background: linear-gradient(180deg, #232019, #100e0a);
+  border-color: rgb(135 115 77 / 0.6);
+  color: #bdb39d;
 }
 
 .hub-boneyard-option:hover,
@@ -740,23 +1105,36 @@
   .hub-hud-count-red { left: calc(50% - 170.5px); }
   .hub-hud-count-blue { left: calc(50% + 160px); }
 
-  .hub-party-panel,
+  /* Counter the native display scale so social UI lands at true screen pixels on touch devices. */
+  .hub-party-panel {
+    top: 196px;
+    transform: scale(calc(1 / var(--hud-display-scale, 0.65)));
+    transform-origin: top left;
+  }
+
+  .hub-party-member-open {
+    min-height: 34px;
+  }
+
+  .hub-party-invitation button {
+    min-height: 42px;
+  }
+
   .hub-player-profile {
-    transform: scale(2);
-    transform-origin: top left;
+    transform: scale(calc(1 / var(--hud-display-scale, 0.65)));
+    transform-origin: center;
   }
 
-  .hub-player-profile { transform-origin: center; }
-
-  .hub-party-invitation button,
   .hub-player-profile button {
-    min-height: 48px;
-    font-size: 18px;
+    min-height: 42px;
   }
 
+  /* Centered under the player's own meters; the left column belongs to chat + party. */
   .hub-hud-allies {
-    transform: scale(2);
-    transform-origin: top left;
+    top: 96px;
+    left: 50%;
+    transform: translateX(-50%) scale(calc(1 / var(--hud-display-scale, 0.65)));
+    transform-origin: top center;
   }
 
   .hub-hud-loadout {

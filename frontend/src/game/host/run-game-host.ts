@@ -3,6 +3,7 @@ import { createGameSimulation } from '../core-server/game-simulation.ts'
 import { createHubStudentFixturePopulation } from '../core-server/hub-student-fixtures.ts'
 import { createBoneyardCatalog } from './boneyard-catalog.ts'
 import { startGameHost } from './game-host.ts'
+import { materializeWebSessionContent } from './web-mod-content.ts'
 import { resolveWebLuaWasmPath } from './lua/web-lua-wasm-path.ts'
 import {
   createJsonGameServerLogSink,
@@ -46,6 +47,7 @@ const allowedOrigins = process.env.SDR_GAME_ALLOWED_ORIGINS
   .filter(Boolean)
 const snapshotRate = parseSnapshotRate(process.env.SDR_GAME_SNAPSHOT_RATE)
 const trustedProxy = process.env.SDR_GAME_TRUSTED_PROXY === '1'
+const sharedHub = process.env.SDR_GAME_SHARED_HUB === '1'
 const benchmarkStudentCount = parseBenchmarkStudentCount(
   process.env.SDR_HUB_BENCH_STUDENTS,
 )
@@ -56,12 +58,26 @@ const benchmarkStudentSeed = parseBenchmarkStudentSeed(
 const boneyards = createBoneyardCatalog()
 
 const server = await startGameHost({
-  authentication: { kind: 'shared', credential },
+  authentication: sharedHub
+    ? {
+        kind: 'tickets',
+        claim: (candidate) => candidate === credential
+          ? {
+              content: materializeWebSessionContent({
+                manifestSha256: '0'.repeat(64),
+                mods: [],
+              }),
+              leaderboardUserId: null,
+            }
+          : null,
+      }
+    : { kind: 'shared', credential },
   host,
   log,
   luaWasmPath: resolveWebLuaWasmPath(import.meta.url),
   port,
   resetWhenEmpty: true,
+  sharedHub,
   boneyards,
   snapshotRate,
   trustedProxy,

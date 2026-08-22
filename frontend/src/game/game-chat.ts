@@ -18,11 +18,15 @@ const GROUPED_HUB_CHANNELS = ['party', 'global'] as const
 export function availableGameChatChannels(
   worldKind: GameChatWorldKind,
   partyState: LocalPartyState | null,
+  hasWhisperThread = false,
 ): readonly GameChatChannel[] {
-  if (worldKind === 'boneyard' || partyState === null) return PARTY_CHANNELS
-  return partyState.party.memberPlayerIds.length > 1
-    ? GROUPED_HUB_CHANNELS
-    : GLOBAL_CHANNELS
+  const base: readonly GameChatChannel[] =
+    worldKind === 'boneyard' || partyState === null
+      ? PARTY_CHANNELS
+      : partyState.party.memberPlayerIds.length > 1
+        ? GROUPED_HUB_CHANNELS
+        : GLOBAL_CHANNELS
+  return hasWhisperThread ? [...base, 'whisper'] : base
 }
 
 export function defaultGameChatChannel(
@@ -67,9 +71,14 @@ export function gameChatRejectionText(rejection: GameChatRejection): string {
   if (rejection.reason === 'channel-unavailable') {
     return `${channelLabel(rejection.channel)} chat is unavailable here.`
   }
+  if (rejection.reason === 'target-unavailable') {
+    return 'That wizard is no longer connected.'
+  }
   return `Slow down. Try again in ${Math.max(1, Math.ceil(rejection.retryAfterMs / 1_000))}s.`
 }
 
-export function channelLabel(channel: GameChatChannel): 'Global' | 'Party' {
-  return channel === 'party' ? 'Party' : 'Global'
+export function channelLabel(channel: GameChatChannel): 'Global' | 'Party' | 'Whisper' {
+  if (channel === 'party') return 'Party'
+  if (channel === 'whisper') return 'Whisper'
+  return 'Global'
 }

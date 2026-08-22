@@ -13,6 +13,9 @@ import type {
 import { isHubGameSnapshot } from './client/hub-presentation-timeline.ts'
 import type { HubRegionId } from './core-kernels/hub-regions.ts'
 import { actorHeadingVector } from './core-kernels/actor-heading.ts'
+import { HALL_OF_FAME_CLASS_NAMES } from './core-kernels/hall-of-fame.ts'
+import type { WizardElement } from './core-kernels/player-character.ts'
+import { art, playerCharacter, skillIcons } from '../lib/assets.ts'
 import {
   HUB_CAMERA_SCALE,
   hubRegionCameraOrigin,
@@ -81,6 +84,7 @@ interface HubSceneProps {
   onInventoryOpenChange: (open: boolean) => void
   onInvitePlayer: (playerId: string) => void
   onLoadingError: () => void
+  onMessagePlayer: (playerId: string, displayName: string) => void
   onOpenSkills: () => void
   onPauseRequest: () => void
   onReady: () => void
@@ -122,6 +126,7 @@ export default function HubScene({
   onInventoryOpenChange,
   onInvitePlayer,
   onLoadingError,
+  onMessagePlayer,
   onOpenSkills,
   onPauseRequest,
   onReady,
@@ -171,6 +176,9 @@ export default function HubScene({
   const [pickerOpen, setPickerOpen] = useState(false)
   const [hubUiSurface, setHubUiSurface] = useState<HubUiSurface>(null)
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null)
+  const [selectedGold, setSelectedGold] = useState<number | null>(null)
+  const selectedPlayerIdRef = useRef<string | null>(null)
+  selectedPlayerIdRef.current = selectedPlayerId
   const inventoryRequestRef = useRef(inventoryRequestSequence)
   const [economy, setEconomy] = useState<ProtocolPlayerEconomy>(() => (
     hubInitialSnapshot.players[playerId]!.economy
@@ -311,6 +319,11 @@ export default function HubScene({
           ? selected
           : null
       })
+      const selected = selectedPlayerIdRef.current
+      if (selected) {
+        const gold = snapshot.players[selected]?.economy.gold ?? null
+        setSelectedGold((current) => current === gold ? current : gold)
+      }
     })
   }, [audio, hubInitialSnapshot, playerId, subscribe])
 
@@ -446,6 +459,14 @@ export default function HubScene({
     }
     setPickerOpen(true)
   }
+  const openMemberCard = (memberPlayerId: string) => {
+    const snapshot = samplePresentation()
+    const member = snapshot.players[memberPlayerId]
+    const memberRegion = snapshot.world.participants[memberPlayerId]?.region
+    if (!member || memberRegion !== snapshot.world.participants[playerId]?.region) return
+    setSelectedGold(member.economy.gold)
+    setSelectedPlayerId(memberPlayerId)
+  }
   const localPlayer = hubInitialSnapshot.players[playerId]
   const element = localPlayer?.config.element ?? 'ether'
   const configuredCameraScale = cameraZoomForFov(
@@ -480,6 +501,7 @@ export default function HubScene({
     if (selectedPlayer) {
       event.preventDefault()
       event.stopPropagation()
+      setSelectedGold(snapshot.players[selectedPlayer]?.economy.gold ?? null)
       setSelectedPlayerId(selectedPlayer)
       return
     }
@@ -518,10 +540,11 @@ export default function HubScene({
       <div
         className="hub-native-frame"
         style={{
+          '--hud-display-scale': viewport.displayScale,
           height: viewport.height,
           transform: `scale(${viewport.displayScale})`,
           width: viewport.width,
-        } satisfies CSSProperties}
+        } as CSSProperties}
       >
         <div
           ref={hostRef}
@@ -594,16 +617,46 @@ export default function HubScene({
 
         {partyState && (
           <section className="hub-party-panel" aria-label="Party" data-party-id={partyState.party.id}>
-            <h2>Party</h2>
+            <h2>
+              <img src={art.skullGold} alt="" aria-hidden />
+              Party
+              <span className="hub-party-count">{partyState.party.memberPlayerIds.length}</span>
+            </h2>
             <div className="hub-party-members" role="list">
               {partyState.party.memberPlayerIds.map((memberPlayerId) => {
                 const profile = partyState.hubPlayers.find(({ playerId: id }) => (
                   id === memberPlayerId
                 ))
+                const isLeader = memberPlayerId === partyState.party.leaderPlayerId
                 return (
-                  <div key={memberPlayerId} role="listitem" data-party-member={memberPlayerId}>
-                    {profile?.displayName ?? memberPlayerId}
-                    {memberPlayerId === partyState.party.leaderPlayerId ? ' · Host' : ''}
+                  <div
+                    key={memberPlayerId}
+                    role="listitem"
+                    className="hub-party-member"
+                    data-party-member={memberPlayerId}
+                    data-party-leader={isLeader}
+                  >
+                    <button
+                      type="button"
+                      className="hub-party-member-open"
+                      onClick={() => openMemberCard(memberPlayerId)}
+                    >
+                      <img
+                        className="hub-party-member-marker"
+                        src={isLeader ? art.skullGold : art.skullWhite}
+                        alt=""
+                        aria-hidden
+                      />
+                      <span className="hub-party-member-name">
+                        {profile?.displayName ?? memberPlayerId}
+                      </span>
+                      {memberPlayerId === playerId && (
+                        <span className="hub-party-member-tag hub-party-member-you">You</span>
+                      )}
+                      {isLeader && (
+                        <span className="hub-party-member-tag hub-party-member-host">Host</span>
+                      )}
+                    </button>
                   </div>
                 )
               })}
@@ -614,7 +667,9 @@ export default function HubScene({
                 data-party-invitation={invitation.id}
                 key={invitation.id}
               >
-                <span>{invitation.inviter.displayName} invited you</span>
+                <span className="hub-party-invitation-text">
+                  <strong>{invitation.inviter.displayName}</strong> invited you
+                </span>
                 <div className="hub-party-invitation-actions">
                   <button
                     type="button"
@@ -639,37 +694,109 @@ export default function HubScene({
           const profile = partyState?.hubPlayers.find(({ playerId: id }) => (
             id === selectedPlayerId
           ))
+          const presented = samplePresentation().players[selectedPlayerId]
           const displayName = profile?.displayName
-            ?? samplePresentation().players[selectedPlayerId]?.config.displayName
+            ?? presented?.config.displayName
             ?? selectedPlayerId
           const alreadyTogether = partyState?.party.memberPlayerIds.includes(selectedPlayerId)
             ?? false
+          const isSelf = selectedPlayerId === playerId
+          const cardElement = presented?.config.element ?? 'ether'
+          const cardClassName =
+            HALL_OF_FAME_CLASS_NAMES[cardElement][presented?.config.discipline ?? 'arcane']
           return (
-            <div className="hub-player-profile-backdrop" role="presentation">
+            <div
+              className="hub-player-profile-backdrop"
+              role="presentation"
+              onPointerDown={(event) => {
+                if (event.target === event.currentTarget) setSelectedPlayerId(null)
+              }}
+            >
               <section
                 className="hub-player-profile"
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="hub-player-profile-name"
                 data-profile-player={selectedPlayerId}
+                data-profile-element={cardElement}
               >
-                <h2 id="hub-player-profile-name">{displayName}</h2>
-                {partyState && !alreadyTogether && (
+                <img className="hub-player-profile-corner" src={art.cornerGold} alt="" aria-hidden />
+                <img
+                  className="hub-player-profile-corner hub-player-profile-corner-right"
+                  src={art.cornerGold}
+                  alt=""
+                  aria-hidden
+                />
+                <header className="hub-player-profile-header">
+                  <WizardPortrait element={cardElement} />
+                  <div className="hub-player-profile-title">
+                    <h2 id="hub-player-profile-name">{displayName}</h2>
+                    <p className="hub-player-profile-class">{cardClassName}</p>
+                    {profile && (
+                      <p
+                        className="hub-player-profile-badge"
+                        data-registered={profile.accountUsername !== null}
+                      >
+                        {profile.accountUsername !== null
+                          ? `Registered · ${profile.accountUsername}`
+                          : 'Guest wizard'}
+                      </p>
+                    )}
+                  </div>
+                </header>
+                <dl className="hub-player-profile-stats">
+                  <div className="hub-player-profile-stat">
+                    <img src={skillIcons.bag} alt="" aria-hidden />
+                    <dt>Gold</dt>
+                    <dd data-profile-gold={selectedGold ?? undefined}>
+                      {selectedGold === null ? '—' : selectedGold.toLocaleString()}
+                    </dd>
+                  </div>
+                  <div className="hub-player-profile-stat">
+                    <img src={skillIcons.wave} alt="" aria-hidden />
+                    <dt>Highest Wave</dt>
+                    <dd>
+                      {profile?.highestWave == null ? '—' : profile.highestWave.toLocaleString()}
+                    </dd>
+                  </div>
+                  <div className="hub-player-profile-stat">
+                    <img src={skillIcons.infinity} alt="" aria-hidden />
+                    <dt>Time in the Dark</dt>
+                    <dd>
+                      {profile?.totalPlaytimeMs == null ? '—' : formatPlaytime(profile.totalPlaytimeMs)}
+                    </dd>
+                  </div>
+                </dl>
+                <div className="hub-player-profile-actions">
+                  {!isSelf && (
+                    <button
+                      type="button"
+                      className="hub-player-profile-message"
+                      onClick={() => {
+                        onMessagePlayer(selectedPlayerId, displayName)
+                        setSelectedPlayerId(null)
+                      }}
+                    >
+                      Message
+                    </button>
+                  )}
+                  {partyState && !alreadyTogether && (
+                    <button
+                      type="button"
+                      className="hub-player-profile-invite"
+                      onClick={() => onInvitePlayer(selectedPlayerId)}
+                    >
+                      Invite to Party
+                    </button>
+                  )}
                   <button
                     type="button"
-                    className="hub-player-profile-invite"
-                    onClick={() => onInvitePlayer(selectedPlayerId)}
+                    className="hub-player-profile-close"
+                    onClick={() => setSelectedPlayerId(null)}
                   >
-                    Invite to Party
+                    Close
                   </button>
-                )}
-                <button
-                  type="button"
-                  className="hub-player-profile-close"
-                  onClick={() => setSelectedPlayerId(null)}
-                >
-                  Close
-                </button>
+                </div>
               </section>
             </div>
           )
@@ -747,4 +874,38 @@ function sameViewport(left: GameViewportLayout, right: GameViewportLayout): bool
   return left.displayScale === right.displayScale
     && left.height === right.height
     && left.width === right.width
+}
+
+const WIZARD_PORTRAIT_HEADING_INDEX = 12
+
+function WizardPortrait({ element }: { element: WizardElement }) {
+  const layers = [
+    playerCharacter.staffBack,
+    playerCharacter.robeDynamic[element],
+    playerCharacter.robeFixed[element],
+    playerCharacter.staffFront,
+    playerCharacter.head[element],
+  ] as const
+  return (
+    <span className="hub-wizard-portrait" data-portrait-element={element} aria-hidden>
+      {layers.map((source, index) => (
+        <span
+          key={`${source}:${index}`}
+          className="hub-wizard-portrait-layer"
+          style={{
+            backgroundImage: `url(${source})`,
+            backgroundPosition: `0 -${WIZARD_PORTRAIT_HEADING_INDEX * 170}px`,
+          }}
+        />
+      ))}
+      <img className="hub-wizard-portrait-frame" src={art.frameGold} alt="" />
+    </span>
+  )
+}
+
+function formatPlaytime(totalPlaytimeMs: number): string {
+  const totalMinutes = Math.floor(totalPlaytimeMs / 60_000)
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`
 }

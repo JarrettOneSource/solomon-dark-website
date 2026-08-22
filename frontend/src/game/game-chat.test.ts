@@ -32,6 +32,26 @@ test('chat channels follow public Hub party membership and Boneyard scope', () =
   assert.deepEqual(availableGameChatChannels('hub', null), ['party'])
 })
 
+test('whisper channel appears exactly while a whisper thread is open', () => {
+  assert.deepEqual(
+    availableGameChatChannels('hub', singleton, true),
+    ['global', 'whisper'],
+  )
+  assert.deepEqual(
+    availableGameChatChannels('hub', grouped, true),
+    ['party', 'global', 'whisper'],
+  )
+  assert.deepEqual(
+    availableGameChatChannels('boneyard', grouped, true),
+    ['party', 'whisper'],
+  )
+  assert.deepEqual(availableGameChatChannels('hub', grouped, false), ['party', 'global'])
+  const channels = availableGameChatChannels('hub', grouped, true)
+  assert.equal(nextGameChatChannel('global', channels), 'whisper')
+  assert.equal(nextGameChatChannel('whisper', channels), 'party')
+  assert.equal(reconcileGameChatChannel('whisper', ['party', 'global']), 'party')
+})
+
 test('Tab cycling and channel reconciliation stay inside current membership', () => {
   const channels = availableGameChatChannels('hub', grouped)
   assert.equal(nextGameChatChannel('party', channels), 'global')
@@ -73,6 +93,11 @@ test('chat rejections provide concise channel and retry feedback', () => {
     reason: 'rate-limited',
     retryAfterMs: 1_001,
   }), 'Slow down. Try again in 2s.')
+  assert.equal(gameChatRejectionText({
+    channel: 'whisper',
+    reason: 'target-unavailable',
+    retryAfterMs: 0,
+  }), 'That wizard is no longer connected.')
 })
 
 test('chat UI owns its configured key, real text focus, Tab channels, fade, and local gameplay exclusion', () => {
@@ -89,11 +114,26 @@ test('chat UI owns its configured key, real text focus, Tab channels, fade, and 
   assert.match(boneyardScene, /event\.code !== settings\.controls\.openSkills/)
 })
 
+test('whisper UX runs from the Player Card into a dedicated chat thread', () => {
+  assert.match(component, /data-whisper-target=/)
+  assert.match(component, /whisperRequest/)
+  assert.match(component, /onWhisperRequestHandled\(\)/)
+  assert.match(css, /data-message-channel='whisper'/)
+  assert.match(css, /data-channel='whisper'/)
+  assert.match(hubScene, /hub-player-profile-message/)
+  assert.match(hubScene, /onMessagePlayer\(/)
+  assert.match(mainMenu, /whisperRequest=/)
+  assert.match(mainMenu, /onWhisperRequestHandled=/)
+})
+
 function partyState(memberPlayerIds: readonly string[]): LocalPartyState {
   return {
     hubPlayers: memberPlayerIds.map((playerId, index) => ({
+      accountUsername: null,
       displayName: `Player ${index + 1}`,
+      highestWave: null,
       playerId,
+      totalPlaytimeMs: null,
     })),
     invitations: [],
     party: {

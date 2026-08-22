@@ -8,6 +8,7 @@ import {
   type GameTransport,
 } from './client/game-transport.ts'
 import type { PlayerCharacterConfig } from './core-kernels/player-character.ts'
+import type { PlayerSocialProfile } from './protocol/party-state.ts'
 import type { GameConnectionFailure } from './client/game-connection-failure.ts'
 import type { GameClientDiagnostics } from './client/game-diagnostics.ts'
 
@@ -38,6 +39,7 @@ export interface SessionOptions {
   endpoint: GameEndpoint
   onFatal?: (failure: GameConnectionFailure) => void
   onProgress?: (stage: GameConnectionStage) => void
+  profile: PlayerSocialProfile
   saveDocument?: string
   transportFactory?: (url: string) => Promise<GameTransport>
   sessionConnector?: GameSessionConnector
@@ -76,6 +78,7 @@ export async function bootGame(options: SessionOptions): Promise<GameSession> {
     ...(options.allowModMismatch ? { allowModMismatch: true } : {}),
     character: options.character,
     cheatsEnabled: options.cheatsEnabled === true,
+    profile: options.profile,
     transport,
     credential: options.endpoint.credential,
     ...(options.diagnostics ? { diagnostics: options.diagnostics } : {}),

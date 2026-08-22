@@ -198,15 +198,18 @@ export function clearPartyInvitations(
 export function projectPartyState(
   state: PartySystemState,
   playerId: string,
-  displayNames: ReadonlyMap<string, string>,
+  profiles: ReadonlyMap<string, PartyPlayerProfile>,
   hubPlayerIds: ReadonlySet<string>,
 ): LocalPartyState {
   const party = partyForPlayer(state, playerId)
   if (!party) throw new Error(`party system has no membership for ${playerId}`)
-  const profile = (id: string): PartyPlayerProfile => ({
-    displayName: displayNames.get(id) ?? id,
+  const profile = (id: string): PartyPlayerProfile => profiles.get(id) ?? {
+    accountUsername: null,
+    displayName: id,
+    highestWave: null,
     playerId: id,
-  })
+    totalPlaytimeMs: null,
+  }
   const hubPlayers = [...hubPlayerIds]
     .sort(compareIds)
     .map(profile)

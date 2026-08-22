@@ -18,11 +18,18 @@ const CHARACTER = {
   element: 'ether',
 } as const
 
+const NULL_PROFILE = {
+  accountUsername: null,
+  highestWave: null,
+  totalPlaytimeMs: null,
+}
+
 test('bootGame accepts a separate localhost server and routes through the shared connector', async () => {
   let connected: GameClientSessionOptions | undefined
   const session = inertSession()
   const result = await bootGame({
     character: CHARACTER,
+    profile: NULL_PROFILE,
     endpoint: {
       kind: 'localhost',
       url: 'ws://127.0.0.1:1234/game',
@@ -46,6 +53,7 @@ test('bootGame reports concrete transport and welcome milestones in order', asyn
   const session = inertSession()
   const result = await bootGame({
     character: CHARACTER,
+    profile: NULL_PROFILE,
     endpoint: {
       kind: 'localhost',
       url: 'ws://127.0.0.1:1234/game',
@@ -75,18 +83,22 @@ test('bootGame reports concrete transport and welcome milestones in order', asyn
 test('bootGame bans website remote sessions from local and plaintext endpoints', async () => {
   await assert.rejects(() => bootGame({
     character: CHARACTER,
+    profile: NULL_PROFILE,
     endpoint: { kind: 'remote', url: 'ws://127.0.0.1:1234/game', credential: 'x' },
   }), /private networks/)
   await assert.rejects(() => bootGame({
     character: CHARACTER,
+    profile: NULL_PROFILE,
     endpoint: { kind: 'remote', url: 'ws://game.example.test/game', credential: 'x' },
   }), /must use wss/)
   await assert.rejects(() => bootGame({
     character: CHARACTER,
+    profile: NULL_PROFILE,
     endpoint: { kind: 'remote', url: 'wss://127.12.34.56/game', credential: 'x' },
   }), /private networks/)
   await assert.rejects(() => bootGame({
     character: CHARACTER,
+    profile: NULL_PROFILE,
     endpoint: { kind: 'remote', url: 'wss://game.local/game', credential: 'x' },
   }), /private networks/)
 })
@@ -95,6 +107,7 @@ test('bootGame accepts any numeric IPv4 loopback address for a desktop-local ser
   const session = inertSession()
   const result = await bootGame({
     character: CHARACTER,
+    profile: NULL_PROFILE,
     endpoint: { kind: 'localhost', url: 'ws://127.12.34.56:1234/game', credential: 'x' },
     transportFactory: async () => inertTransport,
     sessionConnector: async () => session,
@@ -105,6 +118,7 @@ test('bootGame accepts any numeric IPv4 loopback address for a desktop-local ser
 test('bootGame rejects non-loopback addresses presented as desktop-local servers', async () => {
   await assert.rejects(() => bootGame({
     character: CHARACTER,
+    profile: NULL_PROFILE,
     endpoint: { kind: 'localhost', url: 'ws://192.168.1.20:1234/game', credential: 'x' },
   }), /loopback/)
 })

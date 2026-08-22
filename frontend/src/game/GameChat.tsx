@@ -24,37 +24,50 @@ import {
 import {
   GAME_CHAT_MAX_TEXT_CODE_UNITS,
   type GameChatChannel,
+  type GameChatMessage,
+  type GameChatSender,
 } from './protocol/game-protocol.ts'
 import type { LocalPartyState } from './protocol/party-state.ts'
 import { gameBindingLabel } from './game-settings.ts'
 import './game-chat.css'
 
+export interface GameChatWhisperRequest {
+  readonly displayName: string
+  readonly playerId: string
+  readonly requestedAtMs: number
+}
+
 interface GameChatProps {
   disabled: boolean
   onOpenChange: (open: boolean) => void
+  onWhisperRequestHandled: () => void
   openKeyCode: string
   partyState: LocalPartyState | null
   session: GameClientSession
+  whisperRequest: GameChatWhisperRequest | null
   worldKind: GameChatWorldKind
 }
 
 type UnreadCounts = Record<GameChatChannel, number>
 
-const EMPTY_UNREAD: UnreadCounts = { global: 0, party: 0 }
+const EMPTY_UNREAD: UnreadCounts = { global: 0, party: 0, whisper: 0 }
 const CLOSED_MESSAGE_LIMIT = 5
 const PINNED_SCROLL_SLACK_PX = 48
 
 export default function GameChat({
   disabled,
   onOpenChange,
+  onWhisperRequestHandled,
   openKeyCode,
   partyState,
   session,
+  whisperRequest,
   worldKind,
 }: GameChatProps) {
+  const [whisperTarget, setWhisperTarget] = useState<GameChatSender | null>(null)
   const channels = useMemo(
-    () => availableGameChatChannels(worldKind, partyState),
-    [partyState, worldKind],
+    () => availableGameChatChannels(worldKind, partyState, whisperTarget !== null),
+    [partyState, whisperTarget, worldKind],
   )
   const [channel, setChannel] = useState<GameChatChannel>(() => (
     defaultGameChatChannel(worldKind, partyState)
@@ -70,6 +83,7 @@ export default function GameChat({
     window.visualViewport?.height ?? window.innerHeight
   ))
   const channelRef = useRef(channel)
+  const draftRef = useRef(draft)
   const inputRef = useRef<HTMLInputElement>(null)
   const manuallySelectedChannelRef = useRef(false)
   const messageListRef = useRef<HTMLOListElement>(null)
@@ -79,6 +93,7 @@ export default function GameChat({
   const previousGroupedRef = useRef(channels.length > 1)
   const previousWorldRef = useRef<GameChatWorldKind | null>(worldKind)
   channelRef.current = channel
+  draftRef.current = draft
   openRef.current = open
 
   const markActivity = useCallback(() => {
@@ -92,7 +107,7 @@ export default function GameChat({
     ? filteredMessages
     : messages.slice(-CLOSED_MESSAGE_LIMIT)
   const faded = isGameChatFaded(open, lastActivityAtMs, nowMs)
-  const totalUnread = unread.party + unread.global
+  const totalUnread = unread.party + unread.global + unread.whisper
 
   useEffect(() => {
     setMessages(session.getChatMessages())
@@ -100,6 +115,7 @@ export default function GameChat({
     setStatus(null)
     setDraft('')
     setOpen(false)
+    setWhisperTarget(null)
     manuallySelectedChannelRef.current = false
     setChannel('party')
     channelRef.current = 'party'
@@ -109,6 +125,17 @@ export default function GameChat({
 
     const removeMessage = session.onChatMessage((message) => {
       setMessages(session.getChatMessages())
+      const partner = whisperPartner(message, session.playerId)
+      if (partner) {
+        setWhisperTarget(current => (
+          current !== null
+          && current.playerId !== partner.playerId
+          && message.sender.playerId !== session.playerId
+          && openRef.current
+          && channelRef.current === 'whisper'
+          && draftRef.current.length > 0
+        ) ? current : partner)
+      }
       if (!openRef.current || channelRef.current !== message.channel) {
         setUnread(current => ({
           ...current,
@@ -163,6 +190,27 @@ export default function GameChat({
     setOpen(false)
     markActivity()
   }, [disabled, markActivity, open])
+
+  useEffect(() => {
+    if (!whisperRequest || disabled) return
+    if (whisperRequest.playerId === session.playerId) {
+      onWhisperRequestHandled()
+      return
+    }
+    setWhisperTarget({
+      displayName: whisperRequest.displayName,
+      playerId: whisperRequest.playerId,
+    })
+    manuallySelectedChannelRef.current = true
+    channelRef.current = 'whisper'
+    setChannel('whisper')
+    setUnread(current => current.whisper === 0 ? current : { ...current, whisper: 0 })
+    setOpen(true)
+    setStatus(null)
+    markActivity()
+    inputRef.current?.focus({ preventScroll: true })
+    onWhisperRequestHandled()
+  }, [disabled, markActivity, onWhisperRequestHandled, session, whisperRequest])
 
   useEffect(() => {
     onOpenChange(open)
@@ -244,7 +292,11 @@ export default function GameChat({
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     try {
-      session.sendChatMessage(channel, draft)
+      session.sendChatMessage(
+        channel,
+        draft,
+        channel === 'whisper' ? whisperTarget?.playerId : undefined,
+      )
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'The message could not be sent.')
       markActivity()
@@ -291,6 +343,7 @@ export default function GameChat({
       data-chat-channels={channels.join(',')}
       data-chat-faded={faded}
       data-chat-open={open}
+      data-whisper-target={whisperTarget?.playerId}
       hidden={disabled}
       onPointerDown={event => event.stopPropagation()}
       style={{ '--game-chat-vvh': `${Math.round(viewportHeightPx)}px` } as CSSProperties}
@@ -358,10 +411,11 @@ export default function GameChat({
               className="game-chat-message"
               data-message-channel={message.channel}
               data-message-sequence={message.sequence}
+              data-recipient-player-id={message.recipient?.playerId}
               data-sender-player-id={message.sender.playerId}
               key={message.sequence}
             >
-              <strong>{message.sender.playerId === session.playerId ? 'You' : message.sender.displayName}</strong>
+              <strong>{messageAuthorLabel(message, session.playerId)}</strong>
               <span>{message.text}</span>
             </li>
           ))}
@@ -384,7 +438,9 @@ export default function GameChat({
                 markActivity()
               }}
               onKeyDown={handleInputKey}
-              placeholder={`Message ${channelLabel(channel)}`}
+              placeholder={channel === 'whisper' && whisperTarget
+                ? `Whisper ${whisperTarget.displayName}`
+                : `Message ${channelLabel(channel)}`}
               ref={inputRef}
               spellCheck
               value={draft}
@@ -425,4 +481,22 @@ function isEditableTarget(target: EventTarget | null): boolean {
   return target instanceof HTMLInputElement
     || target instanceof HTMLTextAreaElement
     || (target instanceof HTMLElement && target.isContentEditable)
+}
+
+function messageAuthorLabel(message: GameChatMessage, localPlayerId: string): string {
+  const own = message.sender.playerId === localPlayerId
+  if (message.channel === 'whisper') {
+    return own && message.recipient
+      ? `To ${message.recipient.displayName}`
+      : `From ${message.sender.displayName}`
+  }
+  return own ? 'You' : message.sender.displayName
+}
+
+function whisperPartner(
+  message: GameChatMessage,
+  localPlayerId: string,
+): GameChatSender | null {
+  if (message.channel !== 'whisper' || !message.recipient) return null
+  return message.sender.playerId === localPlayerId ? message.recipient : message.sender
 }

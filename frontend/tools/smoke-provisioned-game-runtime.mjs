@@ -41,6 +41,7 @@ const socket = await openSocket(transportEndpoint, browserOrigin)
 try {
   socket.send(encodeGameMessage({
     type: 'client-hello',
+    profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     protocolVersion: GAME_PROTOCOL_VERSION,
     credential: payload.credential,
     character: {

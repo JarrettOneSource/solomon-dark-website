@@ -264,7 +264,11 @@ import type {
   ReplicatedEntityKey,
   ReplicatedEntitySample,
 } from './replicated-entity-types.ts'
-import type { LocalPartyState, PartyPlayerProfile } from './party-state.ts'
+import type {
+  LocalPartyState,
+  PartyPlayerProfile,
+  PlayerSocialProfile,
+} from './party-state.ts'
 import {
   normalizeGameChatText,
   type GameChatChannel,
@@ -290,13 +294,18 @@ export type {
   GameChatRejectionReason,
   GameChatSender,
 } from './game-chat.ts'
+export type {
+  LocalPartyState,
+  PartyPlayerProfile,
+  PlayerSocialProfile,
+} from './party-state.ts'
 export {
   GAME_CHAT_MAX_TEXT_BYTES,
   GAME_CHAT_MAX_TEXT_CODE_UNITS,
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 51
+export const GAME_PROTOCOL_VERSION = 52
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
 export const GAME_CONNECTION_TIMEOUT_CLOSE_CODE = 4000
@@ -415,6 +424,7 @@ export interface ClientHelloMessage {
   protocolVersion: number
   credential: string
   character: PlayerCharacterConfig
+  profile: PlayerSocialProfile
   resumeToken?: string
   save?: string
 }
@@ -463,6 +473,8 @@ export interface ClientHubActionMessage {
 export interface ClientChatMessage {
   type: 'client-chat'
   channel: GameChatChannel
+  /** Required exactly when the channel is whisper: the private message target. */
+  targetPlayerId?: string
   text: string
 }
 
@@ -682,6 +694,7 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
       'protocolVersion',
       'credential',
       'character',
+      'profile',
       'resumeToken',
       'save',
     ])
@@ -691,6 +704,7 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
       protocolVersion: integer(value.protocolVersion, 'protocolVersion'),
       credential: limitedString(value.credential, 'credential', 512),
       character: playerCharacterConfig(value.character, 'character'),
+      profile: playerSocialProfile(value.profile, 'profile'),
       ...(value.allowModMismatch === undefined
         ? {}
         : { allowModMismatch: boolean(value.allowModMismatch, 'allowModMismatch') }),
@@ -722,10 +736,19 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
     return { type: 'client-hub-action', action: hubInventoryAction(value.action) }
   }
   if (value.type === 'client-chat') {
-    onlyKeys(value, 'message', ['type', 'channel', 'text'])
+    onlyKeys(value, 'message', ['type', 'channel', 'targetPlayerId', 'text'])
+    const channel = gameChatChannel(value.channel, 'channel')
+    if ((channel === 'whisper') !== (value.targetPlayerId !== undefined)) {
+      throw new GameProtocolError(
+        'targetPlayerId is required exactly when the channel is whisper',
+      )
+    }
     return {
       type: 'client-chat',
-      channel: gameChatChannel(value.channel, 'channel'),
+      channel,
+      ...(value.targetPlayerId === undefined
+        ? {}
+        : { targetPlayerId: validatedPlayerId(value.targetPlayerId, 'targetPlayerId') }),
       text: gameChatText(value.text, 'text'),
     }
   }
@@ -986,10 +1009,19 @@ export function decodeServerGameMessage(payload: string): ServerGameMessage {
     return { type: 'server-party-state', state: localPartyState(value.state) }
   }
   if (value.type === 'server-chat') {
-    onlyKeys(value, 'message', ['type', 'channel', 'sender', 'sequence', 'text'])
+    onlyKeys(value, 'message', ['type', 'channel', 'recipient', 'sender', 'sequence', 'text'])
+    const channel = gameChatChannel(value.channel, 'channel')
+    if ((channel === 'whisper') !== (value.recipient !== undefined)) {
+      throw new GameProtocolError(
+        'recipient is required exactly when the channel is whisper',
+      )
+    }
     return {
       type: 'server-chat',
-      channel: gameChatChannel(value.channel, 'channel'),
+      channel,
+      ...(value.recipient === undefined
+        ? {}
+        : { recipient: gameChatSender(value.recipient, 'recipient') }),
       sender: gameChatSender(value.sender, 'sender'),
       sequence: positiveInteger(value.sequence, 'sequence'),
       text: gameChatText(value.text, 'text'),
@@ -1306,15 +1338,45 @@ function partyIdentifier(value: unknown, field: string): string {
 
 function partyPlayerProfile(value: unknown, field: string): PartyPlayerProfile {
   const source = record(value, field)
-  onlyKeys(source, field, ['displayName', 'playerId'])
+  onlyKeys(source, field, [
+    'accountUsername',
+    'displayName',
+    'highestWave',
+    'playerId',
+    'totalPlaytimeMs',
+  ])
   return {
+    ...playerSocialProfile(
+      {
+        accountUsername: source.accountUsername,
+        highestWave: source.highestWave,
+        totalPlaytimeMs: source.totalPlaytimeMs,
+      },
+      field,
+    ),
     displayName: limitedString(source.displayName, `${field}.displayName`, 64),
     playerId: validatedPlayerId(source.playerId, `${field}.playerId`),
   }
 }
 
+function playerSocialProfile(value: unknown, field: string): PlayerSocialProfile {
+  const source = record(value, field)
+  onlyKeys(source, field, ['accountUsername', 'highestWave', 'totalPlaytimeMs'])
+  return {
+    accountUsername: source.accountUsername === null
+      ? null
+      : limitedString(source.accountUsername, `${field}.accountUsername`, 64),
+    highestWave: source.highestWave === null
+      ? null
+      : integerWithin(source.highestWave, `${field}.highestWave`, 1, 1_000_000),
+    totalPlaytimeMs: source.totalPlaytimeMs === null
+      ? null
+      : integerWithin(source.totalPlaytimeMs, `${field}.totalPlaytimeMs`, 0, 10_000_000_000_000),
+  }
+}
+
 function gameChatChannel(value: unknown, field: string): GameChatChannel {
-  return memberString(value, field, ['global', 'party'] as const)
+  return memberString(value, field, ['global', 'party', 'whisper'] as const)
 }
 
 function gameChatText(value: unknown, field: string): string {
@@ -1344,7 +1406,7 @@ function gameChatRejectionReason(value: unknown): GameChatRejectionReason {
   return memberString(
     value,
     'reason',
-    ['channel-unavailable', 'rate-limited'] as const,
+    ['channel-unavailable', 'rate-limited', 'target-unavailable'] as const,
   )
 }
 

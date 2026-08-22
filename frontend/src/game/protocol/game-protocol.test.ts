@@ -114,6 +114,7 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
   })
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
     type: 'client-hello',
+    profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     credential: 'spawn-secret',
@@ -121,6 +122,7 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
     resumeToken: 'reserved-token',
   })), {
     type: 'client-hello',
+    profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     credential: 'spawn-secret',
@@ -1022,8 +1024,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v51 carries Boulder residuals, movement authority, chat, mod content, unforge state, modal pause identity, leaderboard authority, and gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 51)
+test('protocol v52 carries Boulder residuals, movement authority, whispers, social profiles, chat, mod content, unforge state, modal pause identity, leaderboard authority, and gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 52)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -1603,17 +1605,34 @@ test('protocol rejects legacy, malformed, and unsupported discriminated payloads
   assert.throws(() => decodeClientGameMessage('{'), GameProtocolError)
   assert.throws(() => decodeClientGameMessage(JSON.stringify({
     type: 'client-hello',
+    profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     protocolVersion: GAME_PROTOCOL_VERSION,
     credential: 'spawn-secret',
     displayName: 'legacy',
   })), /displayName|character/)
   assert.throws(() => decodeClientGameMessage(JSON.stringify({
     type: 'client-hello',
+    profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     credential: 'spawn-secret',
     character: { ...CHARACTER, element: 'void' },
   })), /element/)
+  assert.throws(() => decodeClientGameMessage(JSON.stringify({
+    type: 'client-hello',
+    cheatsEnabled: false,
+    protocolVersion: GAME_PROTOCOL_VERSION,
+    credential: 'spawn-secret',
+    character: CHARACTER,
+  })), /profile/)
+  assert.throws(() => decodeClientGameMessage(JSON.stringify({
+    type: 'client-hello',
+    profile: { accountUsername: null, highestWave: 0, totalPlaytimeMs: null },
+    cheatsEnabled: false,
+    protocolVersion: GAME_PROTOCOL_VERSION,
+    credential: 'spawn-secret',
+    character: CHARACTER,
+  })), /highestWave/)
   assert.throws(() => decodeClientGameMessage(JSON.stringify({
     type: 'client-input',
     input: {
@@ -3588,12 +3607,30 @@ test('party protocol strictly round-trips invite, acceptance, denial, and local 
     type: 'server-party-state' as const,
     state: {
       hubPlayers: [
-        { displayName: 'Aurelia', playerId: 'player-1' },
-        { displayName: 'Basil', playerId: 'player-2' },
+        {
+          accountUsername: 'aurelia-prime',
+          displayName: 'Aurelia',
+          highestWave: 23,
+          playerId: 'player-1',
+          totalPlaytimeMs: 5_400_000,
+        },
+        {
+          accountUsername: null,
+          displayName: 'Basil',
+          highestWave: null,
+          playerId: 'player-2',
+          totalPlaytimeMs: null,
+        },
       ],
       invitations: [{
         id: 'invite-7',
-        inviter: { displayName: 'Aurelia', playerId: 'player-1' },
+        inviter: {
+          accountUsername: 'aurelia-prime',
+          displayName: 'Aurelia',
+          highestWave: 23,
+          playerId: 'player-1',
+          totalPlaytimeMs: 5_400_000,
+        },
         partyId: 'party-1',
       }],
       party: {
@@ -4052,11 +4089,69 @@ test('chat protocol strictly bounds client text and authoritative server events'
       text,
     })), GameProtocolError)
   }
+  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
+    type: 'client-chat',
+    channel: 'whisper',
+    targetPlayerId: 'player-3',
+    text: 'Between us only.',
+  })), {
+    type: 'client-chat',
+    channel: 'whisper',
+    targetPlayerId: 'player-3',
+    text: 'Between us only.',
+  })
+  assert.deepEqual(decodeServerGameMessage(encodeGameMessage({
+    type: 'server-chat',
+    channel: 'whisper',
+    recipient: { displayName: 'Basil', playerId: 'player-3' },
+    sender: { displayName: 'Aurelia', playerId: 'player-2' },
+    sequence: 18,
+    text: 'Between us only.',
+  })), {
+    type: 'server-chat',
+    channel: 'whisper',
+    recipient: { displayName: 'Basil', playerId: 'player-3' },
+    sender: { displayName: 'Aurelia', playerId: 'player-2' },
+    sequence: 18,
+    text: 'Between us only.',
+  })
+  assert.deepEqual(decodeServerGameMessage(encodeGameMessage({
+    type: 'server-chat-rejected',
+    channel: 'whisper',
+    reason: 'target-unavailable',
+    retryAfterMs: 0,
+  })), {
+    type: 'server-chat-rejected',
+    channel: 'whisper',
+    reason: 'target-unavailable',
+    retryAfterMs: 0,
+  })
   assert.throws(() => decodeClientGameMessage(JSON.stringify({
     type: 'client-chat',
     channel: 'whisper',
     text: 'Hello',
-  })), /channel is not supported/)
+  })), /targetPlayerId is required exactly when the channel is whisper/)
+  assert.throws(() => decodeClientGameMessage(JSON.stringify({
+    type: 'client-chat',
+    channel: 'party',
+    targetPlayerId: 'player-3',
+    text: 'Hello',
+  })), /targetPlayerId is required exactly when the channel is whisper/)
+  assert.throws(() => decodeServerGameMessage(JSON.stringify({
+    type: 'server-chat',
+    channel: 'whisper',
+    sender: { displayName: 'Aurelia', playerId: 'player-2' },
+    sequence: 1,
+    text: 'Hello',
+  })), /recipient is required exactly when the channel is whisper/)
+  assert.throws(() => decodeServerGameMessage(JSON.stringify({
+    type: 'server-chat',
+    channel: 'global',
+    recipient: { displayName: 'Basil', playerId: 'player-3' },
+    sender: { displayName: 'Aurelia', playerId: 'player-2' },
+    sequence: 1,
+    text: 'Hello',
+  })), /recipient is required exactly when the channel is whisper/)
   assert.throws(() => decodeServerGameMessage(JSON.stringify({
     type: 'server-chat',
     channel: 'party',

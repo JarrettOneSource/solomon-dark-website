@@ -366,6 +366,7 @@ import animCrawler from '../assets/game/anim-crawler.png'
 import animTomeBlue from '../assets/game/anim-tome-blue.png'
 import animTomeRed from '../assets/game/anim-tome-red.png'
 import frameGold from '../assets/game/frame-gold.png'
+import cornerGold from '../assets/game/corner-gold.png'
 import flourishVert from '../assets/game/flourish-vert.png'
 import gateIron from '../assets/game/gate-iron.png'
 import portalRing from '../assets/game/portal-ring.png'
@@ -391,6 +392,7 @@ import iconHat from '../assets/game/icon-hat.png'
 import iconPotion from '../assets/game/icon-potion.png'
 import iconHand from '../assets/game/icon-hand.png'
 import iconChart from '../assets/game/icon-chart.png'
+import iconWave from '../assets/game/icon-wave.png'
 
 export const art = {
   logoSolomonDark,
@@ -448,6 +450,7 @@ export const art = {
   animTomeBlue,
   animTomeRed,
   frameGold,
+  cornerGold,
   flourishVert,
   gateIron,
   portalRing,
@@ -945,4 +948,5 @@ export const skillIcons = {
   potion: iconPotion,
   hand: iconHand,
   chart: iconChart,
+  wave: iconWave,
 }

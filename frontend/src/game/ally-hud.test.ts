@@ -6,7 +6,7 @@ import { createGameSimulation } from './core-server/game-simulation.ts'
 import { createGameSnapshot } from './host/game-snapshot.ts'
 import type { ProtocolPlayerState } from './protocol/game-state.ts'
 import {
-  allyHudIdentityPresentation,
+  allyHudAccessibleName,
   allyHudRowsEqual,
   clampAllyHudHealthRatio,
   combineAllyHudRows,
@@ -80,12 +80,12 @@ test('ally HUD derives exact nonlocal party identities in stable player order', 
     {
       healthRatio: 1,
       id: 'player-1',
-      identity: { kind: 'player', displayName: 'Helvidius' },
+      identity: { kind: 'player', displayName: 'Helvidius', element: 'ether' },
     },
     {
       healthRatio: 1,
       id: 'player-3',
-      identity: { kind: 'player', displayName: 'Vibia' },
+      identity: { kind: 'player', displayName: 'Vibia', element: 'ether' },
     },
   ])
 })
@@ -112,10 +112,11 @@ test('ally HUD appends the explicit stock Golem presentation through the shared 
   }
 
   assert.deepEqual(combineAllyHudRows(players, [golem]), [...players, golem])
-  assert.deepEqual(allyHudIdentityPresentation(golem.identity), {
-    accessibleName: 'Golem',
-    visual: 'stock-golem',
-  })
+  assert.equal(allyHudAccessibleName(golem.identity), 'Golem')
+  assert.equal(
+    allyHudAccessibleName({ kind: 'player', displayName: 'Remote', element: 'fire' }),
+    'Remote',
+  )
 })
 
 test('ally HUD derives every live in-world Golem row in stable actor order', () => {
@@ -144,13 +145,17 @@ test('ally HUD clamps ratios without smoothing and compares semantic rows', () =
   const first: AllyHudRow[] = [{
     healthRatio: 0.5,
     id: 'remote',
-    identity: { kind: 'player', displayName: 'Remote' },
+    identity: { kind: 'player', displayName: 'Remote', element: 'ether' },
   }]
   assert.equal(allyHudRowsEqual(first, first.map((row) => ({
     ...row,
     identity: { ...row.identity },
   }))), true)
   assert.equal(allyHudRowsEqual(first, [{ ...first[0], healthRatio: 0.6 }]), false)
+  assert.equal(allyHudRowsEqual(first, [{
+    ...first[0],
+    identity: { kind: 'player', displayName: 'Remote', element: 'fire' },
+  }]), false)
 })
 
 test('ally HUD lays out native quarter-scale bitmap glyphs with bundle kerning', () => {

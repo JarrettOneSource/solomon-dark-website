@@ -1,21 +1,20 @@
-import { useEffect, useState, type CSSProperties } from 'react'
+import { useEffect, useState } from 'react'
 
-import { hub } from '../lib/assets.ts'
+import { art, playerCharacter } from '../lib/assets.ts'
+import type { WizardElement } from './core-kernels/player-character.ts'
 import type { GameSnapshot } from './protocol/game-protocol.ts'
 import {
-  allyHudIdentityPresentation,
+  allyHudAccessibleName,
   allyHudRowsEqual,
   clampAllyHudHealthRatio,
   combineAllyHudRows,
   deriveGolemAllyHudRows,
   derivePlayerAllyHudRows,
-  layoutNativeAllyName,
-  NATIVE_ALLY_FONT,
   type AllyHudRow,
 } from './ally-hud.ts'
 
 const EMPTY_ADDITIONAL_ROWS: readonly AllyHudRow[] = []
-const NATIVE_NAME_BASELINE = 7
+const ALLY_CHIP_HEADING_INDEX = 12
 
 interface AllyHudProps {
   additionalRows?: readonly AllyHudRow[]
@@ -49,43 +48,33 @@ function deriveSnapshotAllyHudRows(
   )
 }
 
-function NativeAllyName({ name }: { name: string }) {
-  const layout = layoutNativeAllyName(name)
-  const maskImage = `url("${hub.hud.fontAtlas}")`
-  const maskSize = `${NATIVE_ALLY_FONT.atlasWidth * NATIVE_ALLY_FONT.scale}px ${NATIVE_ALLY_FONT.atlasHeight * NATIVE_ALLY_FONT.scale}px`
-
-  return layout.glyphs.map((glyph, index) => (
-    <span
-      key={`${index}:${glyph.char}`}
-      className="hub-hud-ally-glyph"
-      style={{
-        height: glyph.height,
-        left: glyph.left,
-        maskImage,
-        maskPosition: `${-glyph.atlasX * NATIVE_ALLY_FONT.scale}px ${-glyph.atlasY * NATIVE_ALLY_FONT.scale}px`,
-        maskSize,
-        top: NATIVE_NAME_BASELINE + glyph.top,
-        WebkitMaskImage: maskImage,
-        WebkitMaskPosition: `${-glyph.atlasX * NATIVE_ALLY_FONT.scale}px ${-glyph.atlasY * NATIVE_ALLY_FONT.scale}px`,
-        WebkitMaskSize: maskSize,
-        width: glyph.width,
-      } satisfies CSSProperties}
-      aria-hidden
-    />
-  ))
+function AllyChip({ element }: { element: WizardElement }) {
+  const layers = [
+    playerCharacter.robeDynamic[element],
+    playerCharacter.robeFixed[element],
+    playerCharacter.head[element],
+  ] as const
+  return (
+    <span className="hub-hud-ally-chip" data-ally-chip-element={element} aria-hidden>
+      {layers.map((source, index) => (
+        <span
+          key={`${source}:${index}`}
+          className="hub-hud-ally-chip-layer"
+          style={{
+            backgroundImage: `url(${source})`,
+            backgroundPosition: `0 -${ALLY_CHIP_HEADING_INDEX * 170}px`,
+          }}
+        />
+      ))}
+    </span>
+  )
 }
 
-function GolemIdentity() {
-  const maskImage = `url("${hub.hud.golem}")`
+function GolemChip() {
   return (
-    <span
-      className="hub-hud-ally-golem"
-      style={{
-        maskImage,
-        WebkitMaskImage: maskImage,
-      }}
-      aria-hidden
-    />
+    <span className="hub-hud-ally-chip hub-hud-ally-chip-golem" aria-hidden>
+      <img src={art.skullWhite} alt="" />
+    </span>
   )
 }
 
@@ -99,35 +88,37 @@ export function AllyHudRoster({ rows }: AllyHudRosterProps) {
     >
       {rows.map((row) => {
         const ratio = clampAllyHudHealthRatio(row.healthRatio)
-        const presentation = allyHudIdentityPresentation(row.identity)
+        const accessibleName = allyHudAccessibleName(row.identity)
         return (
           <div
             key={row.id}
             className="hub-hud-ally-row"
             data-ally-id={row.id}
             data-ally-kind={row.identity.kind}
+            data-ally-element={row.identity.kind === 'player' ? row.identity.element : undefined}
             data-health-ratio={ratio}
             role="listitem"
-            aria-label={presentation.accessibleName}
+            aria-label={accessibleName}
           >
-            <span
-              className="hub-hud-ally-bar"
-              role="progressbar"
-              aria-label={`${presentation.accessibleName} health`}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={ratio * 100}
-            >
+            {row.identity.kind === 'player'
+              ? <AllyChip element={row.identity.element} />
+              : <GolemChip />}
+            <span className="hub-hud-ally-main">
+              <span className="hub-hud-ally-name" aria-hidden>{accessibleName}</span>
               <span
-                className="hub-hud-ally-bar-fill"
-                style={{ width: 50 * ratio }}
-                aria-hidden
-              />
-            </span>
-            <span className="hub-hud-ally-identity" aria-hidden>
-              {presentation.visual === 'native-font'
-                ? <NativeAllyName name={presentation.accessibleName} />
-                : <GolemIdentity />}
+                className="hub-hud-ally-bar"
+                role="progressbar"
+                aria-label={`${accessibleName} health`}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={ratio * 100}
+              >
+                <span
+                  className="hub-hud-ally-bar-fill"
+                  style={{ width: `${ratio * 100}%` }}
+                  aria-hidden
+                />
+              </span>
             </span>
           </div>
         )

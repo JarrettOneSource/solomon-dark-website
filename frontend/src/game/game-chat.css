@@ -102,6 +102,8 @@
 
 .game-chat-tab[data-channel='global'][aria-selected='true'] { color: #a9d9ef; }
 
+.game-chat-tab[data-channel='whisper'][aria-selected='true'] { color: #d5b3ef; }
+
 .game-chat-tab[aria-selected='true']::after {
   position: absolute;
   right: 10px;
@@ -194,6 +196,10 @@
   border-left-color: rgb(141 200 227 / 0.7);
 }
 
+.game-chat-message[data-message-channel='whisper'] {
+  border-left-color: rgb(190 150 230 / 0.7);
+}
+
 .game-chat[data-chat-open='true'] .game-chat-message {
   padding: 1px 0 2px;
   border-left: 0;
@@ -212,6 +218,11 @@
 }
 
 .game-chat-message[data-message-channel='global'] strong { color: #8dc8e3; }
+
+.game-chat-message[data-message-channel='whisper'] strong {
+  color: #c9a3e8;
+  font-style: italic;
+}
 
 .game-chat-message span {
   min-width: 0;
@@ -268,6 +279,11 @@
 .game-chat-rune[data-channel='global'] {
   color: #8dc8e3;
   text-shadow: 0 0 6px rgb(141 200 227 / 0.55);
+}
+
+.game-chat-rune[data-channel='whisper'] {
+  color: #c9a3e8;
+  text-shadow: 0 0 6px rgb(190 150 230 / 0.55);
 }
 
 .game-chat-input {

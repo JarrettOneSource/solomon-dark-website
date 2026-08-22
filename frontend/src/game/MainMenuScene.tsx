@@ -30,7 +30,7 @@ import type { GameRunPhase } from './core-kernels/game-run.ts'
 import type { GameConnectionStage } from './engine.ts'
 import GameAccountName from './GameAccountName.tsx'
 import GameFullscreenButton from './GameFullscreenButton.tsx'
-import GameChat from './GameChat.tsx'
+import GameChat, { type GameChatWhisperRequest } from './GameChat.tsx'
 import GameSaveModMismatchDialog from './GameSaveModMismatchDialog.tsx'
 import GameplayPauseMenu from './GameplayPauseMenu.tsx'
 import GameSettingsDialog, { type GameSettingsContext } from './GameSettingsDialog.tsx'
@@ -284,6 +284,7 @@ export default function MainMenuScene({
   const [loadedBoneyard, setLoadedBoneyard] = useState<LoadedBoneyard | null>(null)
   const [gameplayPause, setGameplayPause] = useState<GameplayPauseState | null>(null)
   const [partyState, setPartyState] = useState<LocalPartyState | null>(null)
+  const [whisperRequest, setWhisperRequest] = useState<GameChatWhisperRequest | null>(null)
   const [chatOpen, setChatOpen] = useState(false)
   const [gameplaySettingsOpen, setGameplaySettingsOpen] = useState(false)
   const activeBoneyardRunRef = useRef<string | null>(null)
@@ -632,6 +633,7 @@ export default function MainMenuScene({
 
   const activateSession = (nextSession: GameClientSession) => {
     const snapshot = nextSession.getSnapshot()
+    setWhisperRequest(null)
     setSession(nextSession)
     setRuntimeSnapshot(snapshot)
     setRuntimeProgression(
@@ -745,6 +747,7 @@ export default function MainMenuScene({
     setLoadedBoneyard(null)
     setGameplayPause(null)
     setPartyState(null)
+    setWhisperRequest(null)
     setChatOpen(false)
     setGameplaySettingsOpen(false)
     setSkillBookOpen(false)
@@ -978,6 +981,11 @@ export default function MainMenuScene({
               onInventoryOpenChange={setInventoryScreenOpen}
               onInvitePlayer={session.inviteToParty}
               onLoadingError={cancelHubLoading}
+              onMessagePlayer={(playerId, displayName) => setWhisperRequest({
+                displayName,
+                playerId,
+                requestedAtMs: Date.now(),
+              })}
               onOpenSkills={openSkillBook}
               onPauseRequest={requestGameplayPause}
               onReady={finishHubLoading}
@@ -996,9 +1004,11 @@ export default function MainMenuScene({
           <GameChat
             disabled={chatDisabled}
             onOpenChange={setChatOpen}
+            onWhisperRequestHandled={() => setWhisperRequest(null)}
             openKeyCode={gameSettings.controls.openChat}
             partyState={partyState}
             session={session}
+            whisperRequest={whisperRequest}
             worldKind={runtimeSnapshot.world.kind}
           />
         ) : null}

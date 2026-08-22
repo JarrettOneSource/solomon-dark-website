@@ -1,7 +1,7 @@
 export const GAME_CHAT_MAX_TEXT_CODE_UNITS = 180
 export const GAME_CHAT_MAX_TEXT_BYTES = 512
 
-export type GameChatChannel = 'global' | 'party'
+export type GameChatChannel = 'global' | 'party' | 'whisper'
 
 export interface GameChatSender {
   readonly displayName: string
@@ -10,12 +10,17 @@ export interface GameChatSender {
 
 export interface GameChatMessage {
   readonly channel: GameChatChannel
+  /** Present exactly when the channel is whisper: the private message target. */
+  readonly recipient?: GameChatSender
   readonly sender: GameChatSender
   readonly sequence: number
   readonly text: string
 }
 
-export type GameChatRejectionReason = 'channel-unavailable' | 'rate-limited'
+export type GameChatRejectionReason =
+  | 'channel-unavailable'
+  | 'rate-limited'
+  | 'target-unavailable'
 
 export interface GameChatRejection {
   readonly channel: GameChatChannel

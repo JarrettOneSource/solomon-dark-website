@@ -488,6 +488,7 @@ async function joinRaw(character) {
   const welcomePromise = nextRawMessage(socket, (message) => message.type === 'server-welcome')
   socket.send(encodeGameMessage({
     type: 'client-hello',
+    profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     character,
     cheatsEnabled: false,
     credential,

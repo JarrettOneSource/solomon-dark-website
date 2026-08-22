@@ -58,6 +58,8 @@ import {
   type GameContentManifest,
   type GameChatChannel,
   type GameplayPauseState,
+  type PartyPlayerProfile,
+  type PlayerSocialProfile,
   type ServerDisconnectMessage,
 } from '../protocol/game-protocol.ts'
 import { createGameSnapshot } from './game-snapshot.ts'
@@ -215,6 +217,7 @@ interface HostClient {
   chatSentAtMs: number[]
   connectedAtMs: number
   displayName: string
+  profile: PlayerSocialProfile
   forceReplicationKeyframe: boolean
   globalScoreEligible: boolean
   lastReceivedSequence: number
@@ -623,6 +626,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           chatSentAtMs: [],
           connectedAtMs: Date.now(),
           displayName: message.character.displayName,
+          profile: message.profile,
           forceReplicationKeyframe: false,
           globalScoreEligible: message.save === undefined && !message.cheatsEnabled,
           lastReceivedSequence: 0,
@@ -939,7 +943,25 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         return
       }
       if (message.type === 'client-chat') {
-        const recipients = chatRecipients(client, message.channel)
+        const whisperTarget = message.channel === 'whisper'
+          ? [...clients.values()].find(candidate => (
+              candidate.playerId === message.targetPlayerId
+              && candidate.playerId !== client.playerId
+              && candidate.socket.readyState === WebSocket.OPEN
+            )) ?? null
+          : null
+        if (message.channel === 'whisper' && !whisperTarget) {
+          socket.send(encodeGameMessage({
+            type: 'server-chat-rejected',
+            channel: message.channel,
+            reason: 'target-unavailable',
+            retryAfterMs: 0,
+          }))
+          return
+        }
+        const recipients = whisperTarget
+          ? [whisperTarget, client]
+          : chatRecipients(client, message.channel)
         if (!recipients) {
           socket.send(encodeGameMessage({
             type: 'server-chat-rejected',
@@ -963,6 +985,14 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         const encoded = encodeGameMessage({
           type: 'server-chat',
           channel: message.channel,
+          ...(whisperTarget
+            ? {
+                recipient: {
+                  displayName: whisperTarget.displayName,
+                  playerId: whisperTarget.playerId,
+                },
+              }
+            : {}),
           sender: {
             displayName: client.displayName,
             playerId: client.playerId,
@@ -1747,8 +1777,12 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
 
   function broadcastPartyState(): void {
     if (!sharedWorlds) return
-    const displayNames = new Map(
-      [...clients.values()].map(({ displayName, playerId }) => [playerId, displayName]),
+    const profiles = new Map<string, PartyPlayerProfile>(
+      [...clients.values()].map(({ displayName, playerId, profile }) => [playerId, {
+        ...profile,
+        displayName,
+        playerId,
+      }]),
     )
     const hubPlayerIds = new Set(
       sharedWorlds.hub.playerEntities.identities.map(({ playerId }) => playerId),
@@ -1760,7 +1794,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         state: projectPartyState(
           sharedWorlds.parties,
           client.playerId,
-          displayNames,
+          profiles,
           hubPlayerIds,
         ),
       }))

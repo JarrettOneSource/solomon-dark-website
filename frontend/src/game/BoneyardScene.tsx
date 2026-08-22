@@ -757,10 +757,11 @@ export default function BoneyardScene({
       <div
         className="boneyard-native-frame"
         style={{
+          '--hud-display-scale': viewport.displayScale,
           height: viewport.height,
           transform: `scale(${viewport.displayScale})`,
           width: viewport.width,
-        } satisfies CSSProperties}
+        } as CSSProperties}
       >
         <div ref={hostRef} className="boneyard-world-renderer" />
         {(loaded.scene.environmentMode === 1 || loaded.scene.environmentMode === 2) ? (

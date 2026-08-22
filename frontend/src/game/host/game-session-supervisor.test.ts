@@ -321,6 +321,7 @@ test('shared Hub admissions are single-use and expire before authentication', as
   const replayMessages = messageQueue(replay)
   replay.send(encodeGameMessage({
     type: 'client-hello',
+    profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     credential: admission.credential,
@@ -336,6 +337,7 @@ test('shared Hub admissions are single-use and expire before authentication', as
   const lateMessages = messageQueue(late)
   late.send(encodeGameMessage({
     type: 'client-hello',
+    profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     credential: expired.credential,
@@ -536,6 +538,7 @@ async function join(
   const next = messageQueue(socket)
   socket.send(encodeGameMessage({
     type: 'client-hello',
+    profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     credential: endpoint.credential,

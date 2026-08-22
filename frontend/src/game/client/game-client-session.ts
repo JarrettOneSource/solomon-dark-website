@@ -36,7 +36,7 @@ import type { GameSaveCheckpoint } from '../save/game-save-contract.ts'
 import type { HubParticipantState } from '../core-kernels/hub-regions.ts'
 import type { ProtocolPlayerState } from '../protocol/game-state.ts'
 import type { HubInventoryAction } from '../core-kernels/hub-economy.ts'
-import type { LocalPartyState } from '../protocol/party-state.ts'
+import type { LocalPartyState, PlayerSocialProfile } from '../protocol/party-state.ts'
 import { nativeSkillCategory } from '../core-kernels/player-progression.ts'
 import type { GameTransport } from './game-transport.ts'
 import {
@@ -72,6 +72,7 @@ export interface GameClientSessionOptions {
   diagnostics?: GameClientDiagnostics
   now?: () => number
   onFatal?: (failure: GameConnectionFailure) => void
+  profile: PlayerSocialProfile
   resumeToken?: string
   saveDocument?: string
   transport: GameTransport
@@ -116,7 +117,7 @@ export interface GameClientSession {
   selectConcentration(skillId: number): void
   selectPrimarySkill(skillId: number): void
   selectSkill(choiceIndex: number, offerSequence: number, skillId: number): void
-  sendChatMessage(channel: GameChatChannel, text: string): void
+  sendChatMessage(channel: GameChatChannel, text: string, targetPlayerId?: string): void
   sendHubAction(action: HubInventoryAction): void
   sendInput(input: PlayerCharacterInput): void
   setCheatsEnabled(enabled: boolean): void
@@ -312,6 +313,7 @@ export function connectGameClientSession(
         lastChatSequence = message.sequence
         const chatMessage: GameChatMessage = {
           channel: message.channel,
+          ...(message.recipient ? { recipient: message.recipient } : {}),
           sender: message.sender,
           sequence: message.sequence,
           text: message.text,
@@ -832,11 +834,15 @@ export function connectGameClientSession(
           skillId,
         }))
       },
-      sendChatMessage(channel, text) {
+      sendChatMessage(channel, text, targetPlayerId) {
         if (!welcome || destroyed) return
+        if ((channel === 'whisper') !== (targetPlayerId !== undefined)) {
+          throw new Error('Whispers require a target wizard.')
+        }
         options.transport.send(encodeGameMessage({
           type: 'client-chat',
           channel,
+          ...(targetPlayerId === undefined ? {} : { targetPlayerId }),
           text: normalizeGameChatText(text),
         }))
       },
@@ -874,6 +880,7 @@ export function connectGameClientSession(
       protocolVersion: GAME_PROTOCOL_VERSION,
       credential: options.credential,
       character: options.character,
+      profile: options.profile,
       ...(options.resumeToken ? { resumeToken: options.resumeToken } : {}),
       ...(options.saveDocument ? { save: options.saveDocument } : {}),
     }))

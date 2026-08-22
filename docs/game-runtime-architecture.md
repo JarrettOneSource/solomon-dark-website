@@ -2,7 +2,7 @@
 
 Status: accepted; authoritative, GPU-client, shared-Hub party/chat,
 desktop-solo, headless-crowd, and compact-replication slices implemented,
-2026-08-21
+2026-08-22
 
 This document records the load-bearing runtime decisions for the rebuilt game.
 It does not replace `game-native-parity-re.md`: the native game remains the
@@ -50,11 +50,15 @@ the rebuilt browser game's party model.
 
 The same authenticated gameplay connection carries ephemeral text chat. A
 public-Hub singleton sees Global; a grouped Hub participant defaults to Party
-and may switch to Global; a Boneyard exposes Party only. Global reaches only
+and may switch to Global; a Boneyard defaults to Party. Global reaches only
 clients currently resident in the shared Hub. Party reaches only current
 members of the sender's authoritative party, across the Hub-to-run transition.
-There is no browser transcript service, whisper directory, cross-party route,
-or chat persistence in saves.
+A Whisper is an explicit one-to-one request: the client supplies a target
+player id, while the host derives the sender, resolves one currently connected
+target on the same host, and echoes the authoritative event to exactly that
+pair. The Hub player projection is the only target-discovery surface; there is
+no cross-host directory, transcript service, offline delivery, or chat
+persistence in saves.
 
 ## Shared identities and boundaries
 
@@ -313,6 +317,16 @@ finite accepted ordinary contact can publish one independent
 BoulderBit actor family. The host owns pool/charge mutation, child RNG and
 retirement. Clients copy/interpolate the finite semantic state and never infer
 contact children from hit or death presentation.
+
+Protocol 52 adds the Website social-profile and Whisper contracts. Client hello
+carries bounded informational account name, highest-wave, and local-playtime
+fields; the host republishes them in party-state profiles but never uses them
+for authentication or gameplay authority. `client-chat` carries
+`targetPlayerId` exactly for Whisper, and `server-chat` carries the resolved
+recipient exactly for Whisper. Self, missing, and disconnected targets receive
+the bounded `target-unavailable` rejection. The existing chat rate limit,
+normalization, local 80-event history, and nonpersistent lifecycle apply to all
+three channels.
 
 ## Saves, identity, and content
 

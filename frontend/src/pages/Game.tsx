@@ -41,6 +41,8 @@ import {
   type ResumableGameSave,
 } from '../game/save/game-save-contract.ts'
 import type { GameContentIdentity } from '../game/protocol/game-protocol.ts'
+import { readLocalHallOfFame } from '../game/hall-of-fame-store.ts'
+import { readTotalPlaytimeMs, trackPlaytime } from '../game/playtime-store.ts'
 
 type Readiness = 'loading' | 'ready'
 
@@ -63,6 +65,8 @@ export default function Game() {
     diagnostics.info('game.page_opened', 'The browser game page opened.')
     return diagnostics.attachBrowserListeners()
   }, [diagnostics])
+
+  useEffect(() => trackPlaytime(), [])
 
   useEffect(() => {
     if (authLoading) return
@@ -232,6 +236,11 @@ export default function Game() {
         endpoint,
         onFatal: setFatal,
         onProgress,
+        profile: {
+          accountUsername,
+          highestWave: highestLocalWave(),
+          totalPlaytimeMs: readTotalPlaytimeMs(),
+        },
         ...(saveDocument ? { saveDocument } : {}),
       })
       preparedEndpoint.current = null
@@ -242,7 +251,7 @@ export default function Game() {
       setFatal(failure)
       throw failure
     }
-  }, [diagnostics])
+  }, [accountUsername, diagnostics])
 
   const persistCheckpoint = useCallback((checkpoint: GameSaveCheckpoint) => {
     saveCoordinator.current?.accept(checkpoint)
@@ -310,4 +319,11 @@ export default function Game() {
           )}
     </>
   )
+}
+
+function highestLocalWave(): number | null {
+  const waves = readLocalHallOfFame()
+    .map(({ wave }) => wave)
+    .filter((wave) => wave > 0)
+  return waves.length === 0 ? null : Math.max(...waves)
 }
