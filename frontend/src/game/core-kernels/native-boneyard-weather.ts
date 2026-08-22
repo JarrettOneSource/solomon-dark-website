@@ -48,6 +48,24 @@ export type NativeBoneyardWeatherSpawnCollision = (
   radius: number,
 ) => boolean
 
+export type NativeBoneyardWeatherDropVisitor = (
+  index: number,
+  id: number,
+  x: number,
+  y: number,
+  length: number,
+  color: number,
+) => void
+
+export type NativeBoneyardWeatherSplashVisitor = (
+  index: number,
+  id: number,
+  x: number,
+  y: number,
+  scale: number,
+  alpha: number,
+) => void
+
 interface WeatherDropState {
   height: number
   id: number
@@ -168,6 +186,38 @@ export class NativeBoneyardWeather {
       splashes,
       splashAsset: NATIVE_BONEYARD_WEATHER_SPLASH,
       tick: this.currentTick,
+    }
+  }
+
+  visitDrops(
+    lightAt: (position: Readonly<BoneyardPoint>) => number,
+    visitor: NativeBoneyardWeatherDropVisitor,
+  ): void {
+    for (let index = 0; index < this.drops.length; index += 1) {
+      const drop = this.drops[index]!
+      if (drop.lightScalar === null) drop.lightScalar = clampUnit(lightAt(drop.position))
+      visitor(
+        index,
+        drop.id,
+        drop.position.x,
+        drop.position.y + drop.height - drop.length / 2,
+        drop.length,
+        grayscaleColor(drop.lightScalar),
+      )
+    }
+  }
+
+  visitSplashes(visitor: NativeBoneyardWeatherSplashVisitor): void {
+    for (let index = 0; index < this.splashes.length; index += 1) {
+      const splash = this.splashes[index]!
+      visitor(
+        index,
+        splash.id,
+        splash.position.x,
+        splash.position.y,
+        splash.scale,
+        Math.min(1, Math.max(0, splash.life)),
+      )
     }
   }
 

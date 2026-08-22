@@ -8,7 +8,7 @@ import {
 
 import traderAssetsJson from '../../assets/game/hub-trader-native-assets.json' with { type: 'json' }
 import fontAssetsJson from '../../assets/game/skill-picker-native-assets.json' with { type: 'json' }
-import { elementVfx, hub, playerCharacter, skillPicker } from '../../lib/assets.ts'
+import { elementVfx, hub, skillPicker } from '../../lib/assets.ts'
 import {
   DOWSING_EQUIPMENT_RECIPES,
   type EquipmentSlot,
@@ -71,6 +71,12 @@ import {
   type HubTooltipOptions,
 } from './hub-inventory-render-contract.ts'
 import { NativeElementVfxView } from './native-element-vfx-view.ts'
+import {
+  PLAYER_CHARACTER_ATLAS_SOURCES,
+  PLAYER_CHARACTER_SHEETS,
+  createPlayerCharacterAtlas,
+  type PlayerCharacterAtlas,
+} from './player-character-atlas.ts'
 import { createNativeElementVfxTextures, type PlayerWorldTextures } from './world-player-textures.ts'
 
 type AtlasName = 'Inventory' | 'Skills' | 'UI'
@@ -207,11 +213,7 @@ export async function createHubInventoryRenderer(
         skillPicker.fontsAtlas,
         ...Object.values(elementVfx.common),
         ...Object.values(elementVfx.frames),
-        playerCharacter.staffBack,
-        playerCharacter.staffFront,
-        ...Object.values(playerCharacter.robeDynamic),
-        ...Object.values(playerCharacter.robeFixed),
-        ...Object.values(playerCharacter.head),
+        ...PLAYER_CHARACTER_ATLAS_SOURCES,
       ]),
       loadModPresentationTextures(modAssets),
     ])
@@ -252,12 +254,16 @@ export async function createHubInventoryRenderer(
   let currentModel: HubInventoryRendererModel | null = null
 
   const elementVfxTextures = createNativeElementVfxTextures((source) => textureFrom(textures.textures, source))
+  const playerCharacterAtlas = createPlayerCharacterAtlas((source) => (
+    textureFrom(textures.textures, source)
+  ))
 
   const context: RenderContext = {
     atlasTextureCache,
     elementVfxTextures,
     glyphTextureCache,
     modTextures,
+    playerCharacterAtlas,
     textures,
   }
 
@@ -267,6 +273,7 @@ export async function createHubInventoryRenderer(
       if (destroyed) return
       destroyed = true
       application.destroy({ removeView: true })
+      playerCharacterAtlas.destroy()
       for (const texture of atlasTextureCache.values()) texture.destroy(false)
       for (const texture of glyphTextureCache.values()) texture.destroy(false)
       for (const frames of Object.values(elementVfxTextures)) {
@@ -415,6 +422,7 @@ interface RenderContext {
   readonly elementVfxTextures: PlayerWorldTextures['elementVfx']
   readonly glyphTextureCache: Map<string, Texture>
   readonly modTextures: ModPresentationTextures
+  readonly playerCharacterAtlas: PlayerCharacterAtlas
   readonly textures: GameTextureMap
 }
 
@@ -706,11 +714,11 @@ function addPlayerPreview(context: RenderContext, layer: Container, element: Wiz
   layer.addChild(actor)
   const staffFront = playerCharacterStaffIsFront(heading)
   const layers = [
-    [playerCharacter.staffBack, 0, staffFront ? -1 : 1],
-    [playerCharacter.robeDynamic[element], 0, 3],
-    [playerCharacter.robeFixed[element], 0, 4],
-    [playerCharacter.staffFront, 0, staffFront ? 5 : -1],
-    [playerCharacter.head[element], null, 7],
+    [PLAYER_CHARACTER_SHEETS.staffBack, 0, staffFront ? -1 : 1],
+    [PLAYER_CHARACTER_SHEETS.robeDynamic[element], 0, 3],
+    [PLAYER_CHARACTER_SHEETS.robeFixed[element], 0, 4],
+    [PLAYER_CHARACTER_SHEETS.staffFront, 0, staffFront ? 5 : -1],
+    [PLAYER_CHARACTER_SHEETS.head[element], null, 7],
   ] as const
   for (const [source, column, zIndex] of layers) {
     if (zIndex < 0) continue
@@ -732,20 +740,11 @@ function addPlayerPreview(context: RenderContext, layer: Container, element: Wiz
 
 function actorFrameTexture(
   context: RenderContext,
-  source: string,
+  sheet: string,
   heading: number,
   column: number | null,
 ): Texture {
-  const key = `actor.${source}.${heading}.${column ?? 0}`
-  const cached = context.atlasTextureCache.get(key)
-  if (cached) return cached
-  const base = textureFrom(context.textures.textures, source)
-  const texture = new Texture({
-    frame: new Rectangle((column ?? 0) * 170, heading * 170, 170, 170),
-    source: base.source,
-  })
-  context.atlasTextureCache.set(key, texture)
-  return texture
+  return context.playerCharacterAtlas.frame(sheet, column ?? 0, heading)
 }
 
 function addEquipment(

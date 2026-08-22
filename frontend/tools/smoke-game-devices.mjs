@@ -51,14 +51,6 @@ function rectCenter(rect) {
   return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
 }
 
-function rectsOverlap(first, second) {
-  assert.ok(first && second, 'expected both element bounds')
-  return first.x < second.x + second.width
-    && first.x + first.width > second.x
-    && first.y < second.y + second.height
-    && first.y + first.height > second.y
-}
-
 async function touchStart(cdp, x, y) {
   await cdp.send('Input.dispatchTouchEvent', {
     type: 'touchStart',
@@ -387,17 +379,10 @@ try {
   await enterHubWithPointer(mobile, 'Water', false)
   const joystick = mobile.locator('[data-joystick="movement"]')
   const joystickKnob = joystick.locator('.game-touch-joystick-knob')
-  const primaryJoystick = mobile.locator('[data-joystick="primary"]')
-  const primaryJoystickKnob = primaryJoystick.locator('.game-touch-joystick-knob')
   await joystick.waitFor()
-  await primaryJoystick.waitFor()
+  assert.equal(await mobile.locator('[data-joystick="primary"]').count(), 0)
   const joystickBounds = await joystick.boundingBox()
   assert.ok(joystickBounds && joystickBounds.width > 60, 'expected a visible landscape touch joystick')
-  const primaryJoystickBounds = await primaryJoystick.boundingBox()
-  assert.ok(
-    primaryJoystickBounds && primaryJoystickBounds.width > 60,
-    'expected a visible landscape primary attack joystick',
-  )
   const canvas = mobile.locator('.hub-world-canvas')
   const mobileScene = mobile.locator('.hub-scene')
   const mobileStageBounds = await mobile.locator('.main-menu-stage').boundingBox()
@@ -416,48 +401,11 @@ try {
   assert.ok(mapBounds && mapBounds.x >= 0 && mapBounds.y >= 0)
   assert.ok(mapBounds.x + mapBounds.width <= 844.05)
   assert.ok(mapBounds.y + mapBounds.height <= 390.05)
-  assert.equal(
-    rectsOverlap(primaryJoystickBounds, mapBounds),
-    false,
-    'primary attack joystick must not cover the Hub map control',
-  )
   const before = await canvas.evaluate((node) => node.__sdrHubFrame.playerX)
   const centerX = joystickBounds.x + joystickBounds.width / 2
   const centerY = joystickBounds.y + joystickBounds.height / 2
   const requestedOffset = joystickBounds.width * 0.3
-  const primaryCenter = rectCenter(primaryJoystickBounds)
-  const primaryRequestedOffset = primaryJoystickBounds.width * 0.3
   const mobileCdp = await mobile.context().newCDPSession(mobile)
-
-  await touchStart(mobileCdp, primaryCenter.x, primaryCenter.y)
-  await touchMove(
-    mobileCdp,
-    primaryCenter.x + primaryRequestedOffset,
-    primaryCenter.y,
-  )
-  const primaryAttackHeldHandle = await mobile.waitForFunction(() => {
-    const frame = document.querySelector('.hub-world-canvas')?.__sdrHubFrame
-    return frame?.playerHeadingIndex === 6
-      && frame.primarySpellKinds?.includes('water')
-      ? { ...frame, primarySpellKinds: [...frame.primarySpellKinds] }
-      : null
-  }, null, { timeout: 10_000 })
-  const primaryAttackHeld = await primaryAttackHeldHandle.jsonValue()
-  await primaryAttackHeldHandle.dispose()
-  const primaryHeldKnobCenter = rectCenter(await primaryJoystickKnob.boundingBox())
-  assert.ok(
-    Math.abs(primaryHeldKnobCenter.x - (primaryCenter.x + primaryRequestedOffset)) < 1,
-  )
-  assert.ok(Math.abs(primaryHeldKnobCenter.y - primaryCenter.y) < 1)
-  await touchEnd(mobileCdp)
-  await mobile.waitForFunction(() => {
-    const frame = document.querySelector('.hub-world-canvas')?.__sdrHubFrame
-    return frame?.playerAttachmentPose === 0
-      && !frame.primarySpellKinds?.includes('water')
-  }, null, { timeout: 10_000 })
-  const primaryReleasedKnobCenter = rectCenter(await primaryJoystickKnob.boundingBox())
-  assert.ok(Math.abs(primaryReleasedKnobCenter.x - primaryCenter.x) < 1)
-  assert.ok(Math.abs(primaryReleasedKnobCenter.y - primaryCenter.y) < 1)
 
   await joystick.evaluate((node) => {
     node.addEventListener('pointerdown', (event) => {
@@ -490,49 +438,7 @@ try {
     `expected touch input to remain active through parent snapshot renders (${before} -> ${after})`,
   )
 
-  const concurrentBefore = normalRelease.settled
-  await mobileCdp.send('Input.dispatchTouchEvent', {
-    type: 'touchStart',
-    touchPoints: [
-      { id: 11, x: centerX, y: centerY },
-      { id: 22, x: primaryCenter.x, y: primaryCenter.y },
-    ],
-  })
-  await mobileCdp.send('Input.dispatchTouchEvent', {
-    type: 'touchMove',
-    touchPoints: [
-      { id: 11, x: centerX - requestedOffset, y: centerY },
-      { id: 22, x: primaryCenter.x + primaryRequestedOffset, y: primaryCenter.y },
-    ],
-  })
-  await mobile.waitForTimeout(350)
-  const concurrentHeld = await canvas.evaluate((node) => ({
-    playerHeadingIndex: node.__sdrHubFrame.playerHeadingIndex,
-    playerX: node.__sdrHubFrame.playerX,
-    primarySpellKinds: [...node.__sdrHubFrame.primarySpellKinds],
-  }))
-  assert.ok(concurrentBefore - concurrentHeld.playerX > 10, 'left touch must move during attack')
-  assert.equal(concurrentHeld.playerHeadingIndex, 6)
-  assert.ok(concurrentHeld.primarySpellKinds.includes('water'))
-  await touchEnd(mobileCdp)
-  const concurrentRelease = await settledPosition(
-    mobile,
-    () => canvas.evaluate((node) => node.__sdrHubFrame.playerX),
-    'simultaneous movement and primary attack release',
-  )
-  await mobile.waitForFunction(() => {
-    const frame = document.querySelector('.hub-world-canvas')?.__sdrHubFrame
-    return frame?.playerAttachmentPose === 0
-      && !frame.primarySpellKinds?.includes('water')
-  }, null, { timeout: 10_000 })
-  const concurrentMovementCenter = rectCenter(await joystickKnob.boundingBox())
-  const concurrentPrimaryCenter = rectCenter(await primaryJoystickKnob.boundingBox())
-  assert.ok(Math.abs(concurrentMovementCenter.x - centerX) < 1)
-  assert.ok(Math.abs(concurrentMovementCenter.y - centerY) < 1)
-  assert.ok(Math.abs(concurrentPrimaryCenter.x - primaryCenter.x) < 1)
-  assert.ok(Math.abs(concurrentPrimaryCenter.y - primaryCenter.y) < 1)
-
-  const cancelBefore = concurrentRelease.settled
+  const cancelBefore = normalRelease.settled
   await touchStart(mobileCdp, centerX, centerY)
   await touchMove(mobileCdp, centerX - requestedOffset, centerY)
   await mobile.waitForTimeout(300)
@@ -653,19 +559,13 @@ try {
   await mobileSettings.getByRole('button', { name: 'DONE' }).click()
   await mobileSettings.waitFor({ state: 'detached' })
   const scaledJoystickBounds = await joystick.boundingBox()
-  const scaledPrimaryJoystickBounds = await primaryJoystick.boundingBox()
-  assert.ok(scaledJoystickBounds && scaledPrimaryJoystickBounds)
+  assert.ok(scaledJoystickBounds)
   assert.ok(Math.abs(scaledJoystickBounds.width / joystickBounds.width - 1.5) < 0.01)
-  assert.ok(Math.abs(scaledPrimaryJoystickBounds.width / primaryJoystickBounds.width - 1.5) < 0.01)
+  assert.equal(await mobile.locator('[data-joystick="primary"]').count(), 0)
   const scaledMapBounds = await mobile.locator('.hub-hud-map').boundingBox()
   assert.ok(scaledMapBounds && scaledMapBounds.x >= 0 && scaledMapBounds.y >= 0)
   assert.ok(scaledMapBounds.x + scaledMapBounds.width <= 844.05)
   assert.ok(scaledMapBounds.y + scaledMapBounds.height <= 390.05)
-  assert.equal(
-    rectsOverlap(scaledPrimaryJoystickBounds, scaledMapBounds),
-    false,
-    'scaled primary joystick must not cover the scaled Hub map control',
-  )
   const hubResolution = Number(await canvas.getAttribute('data-resolution'))
   await mobile.screenshot({ path: mobileHubScreenshotPath })
 
@@ -720,7 +620,18 @@ try {
   const boneyardKnob = boneyardJoystick.locator('.game-touch-joystick-knob')
   const boneyardPrimaryJoystick = mobile.locator('[data-joystick="primary"]')
   const boneyardPrimaryKnob = boneyardPrimaryJoystick.locator('.game-touch-joystick-knob')
+  await boneyardJoystick.waitFor()
+  await boneyardPrimaryJoystick.waitFor()
   const boneyardJoystickBounds = await boneyardJoystick.boundingBox()
+  const boneyardPrimaryBounds = await boneyardPrimaryJoystick.boundingBox()
+  assert.ok(
+    boneyardJoystickBounds && boneyardJoystickBounds.width > 60,
+    'expected a visible Boneyard movement joystick',
+  )
+  assert.ok(
+    boneyardPrimaryBounds && boneyardPrimaryBounds.width > 60,
+    'expected a visible Boneyard primary attack joystick',
+  )
   const boneyardCenter = rectCenter(boneyardJoystickBounds)
   const boneyardBefore = sceneTeardown.settled
   await touchStart(mobileCdp, boneyardCenter.x, boneyardCenter.y)
@@ -744,7 +655,6 @@ try {
   assert.ok(Math.abs(boneyardKnobCenter.x - boneyardCenter.x) < 1)
   assert.ok(Math.abs(boneyardKnobCenter.y - boneyardCenter.y) < 1)
 
-  const boneyardPrimaryBounds = await boneyardPrimaryJoystick.boundingBox()
   const boneyardPrimaryCenter = rectCenter(boneyardPrimaryBounds)
   await touchStart(mobileCdp, boneyardPrimaryCenter.x, boneyardPrimaryCenter.y)
   await touchMove(
@@ -768,6 +678,58 @@ try {
   const boneyardPrimaryReleasedCenter = rectCenter(await boneyardPrimaryKnob.boundingBox())
   assert.ok(Math.abs(boneyardPrimaryReleasedCenter.x - boneyardPrimaryCenter.x) < 1)
   assert.ok(Math.abs(boneyardPrimaryReleasedCenter.y - boneyardPrimaryCenter.y) < 1)
+
+  const boneyardConcurrentBefore = boneyardRelease.settled
+  const boneyardRequestedOffset = boneyardJoystickBounds.width * 0.3
+  const boneyardPrimaryRequestedOffset = boneyardPrimaryBounds.width * 0.3
+  await mobileCdp.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [
+      { id: 11, x: boneyardCenter.x, y: boneyardCenter.y },
+      { id: 22, x: boneyardPrimaryCenter.x, y: boneyardPrimaryCenter.y },
+    ],
+  })
+  await mobileCdp.send('Input.dispatchTouchEvent', {
+    type: 'touchMove',
+    touchPoints: [
+      {
+        id: 11,
+        x: boneyardCenter.x - boneyardRequestedOffset,
+        y: boneyardCenter.y,
+      },
+      {
+        id: 22,
+        x: boneyardPrimaryCenter.x + boneyardPrimaryRequestedOffset,
+        y: boneyardPrimaryCenter.y,
+      },
+    ],
+  })
+  await mobile.waitForTimeout(350)
+  const boneyardConcurrentHeld = await mobileBoneyardCanvas.evaluate((node) => ({
+    playerX: node.__sdrBoneyardFrame.playerX,
+    primarySpellKinds: [...node.__sdrBoneyardFrame.primarySpellKinds],
+  }))
+  assert.ok(
+    boneyardConcurrentBefore - boneyardConcurrentHeld.playerX > 10,
+    'left touch must move during a Boneyard attack',
+  )
+  assert.ok(boneyardConcurrentHeld.primarySpellKinds.includes('water'))
+  await touchEnd(mobileCdp)
+  const boneyardConcurrentRelease = await settledPosition(
+    mobile,
+    () => mobileBoneyardCanvas.evaluate((node) => node.__sdrBoneyardFrame.playerX),
+    'simultaneous Boneyard movement and primary attack release',
+  )
+  await mobile.waitForFunction(() => {
+    const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
+    return frame && !frame.primarySpellKinds?.includes('water')
+  }, null, { timeout: 10_000 })
+  const boneyardConcurrentMovementCenter = rectCenter(await boneyardKnob.boundingBox())
+  const boneyardConcurrentPrimaryCenter = rectCenter(await boneyardPrimaryKnob.boundingBox())
+  assert.ok(Math.abs(boneyardConcurrentMovementCenter.x - boneyardCenter.x) < 1)
+  assert.ok(Math.abs(boneyardConcurrentMovementCenter.y - boneyardCenter.y) < 1)
+  assert.ok(Math.abs(boneyardConcurrentPrimaryCenter.x - boneyardPrimaryCenter.x) < 1)
+  assert.ok(Math.abs(boneyardConcurrentPrimaryCenter.y - boneyardPrimaryCenter.y) < 1)
   await mobile.screenshot({ path: mobileBoneyardScreenshotPath })
   assert.deepEqual(mobileErrors, [])
   reports.mobileLandscape = {
@@ -775,12 +737,11 @@ try {
     after,
     joystickWidth: joystickBounds.width,
     scaledJoystickWidth: scaledJoystickBounds.width,
-    primaryJoystickWidth: primaryJoystickBounds.width,
-    scaledPrimaryJoystickWidth: scaledPrimaryJoystickBounds.width,
+    boneyardPrimaryJoystickWidth: boneyardPrimaryBounds.width,
     primaryAttack: {
       boneyard: boneyardPrimaryAttack,
-      concurrentHeld,
-      hub: primaryAttackHeld,
+      concurrentHeld: boneyardConcurrentHeld,
+      hubDisabled: true,
     },
     resolution: hubResolution,
     screenshots: {
@@ -791,8 +752,8 @@ try {
     stageBounds: mobileStageBounds,
     touchDistance,
     touchLifecycle: {
+      boneyardConcurrentRelease,
       boneyardRelease,
-      concurrentRelease,
       focusInterruption,
       gestureReuse,
       lostCaptureRelease,

@@ -140,13 +140,17 @@ route-wide resident manifest. Startup owns only Loader and immediately-next
 Title images plus the app-global compiled audio registry. Title, Create, Hub,
 Boneyard, SkillPicker, inventory/traders, pause, and mod presentation each
 acquire their renderer-contracted texture membership through the renderer that
-consumes it and destroy that membership with the renderer. The shared image-promise map
-is an in-flight deduplication seam, not residency: entries are removed as soon
-as a scene has constructed its Pixi textures. Browser loading is bounded to
-four concurrent tasks so HTTP/2 and `Image.decode()` cannot turn native
-per-owner acquisition into an unbounded mobile memory spike. Scene transition
-barriers remain the readiness authority; a scene cannot accept gameplay input
-until its own renderer publishes the first ready frame.
+consumes it and destroy that membership with the renderer. Player appearances
+retain every dynamic element/equipment/death variant through a compact
+multi-page atlas, mirroring the native `Clothes` bundle page set. They do not
+retain one decoded 170-pixel padded image for every extracted logical sheet.
+The shared image-promise map is an in-flight deduplication seam, not residency:
+entries are removed as soon as a scene has constructed its Pixi textures.
+Browser loading is bounded to four concurrent tasks so HTTP/2 and
+`Image.decode()` cannot turn native per-owner acquisition into an unbounded
+mobile memory spike. Scene transition barriers remain the readiness authority;
+a scene cannot accept gameplay input until its own renderer publishes the
+first ready frame.
 
 The TLS edge is part of the browser-game release contract, not an out-of-band
 host prerequisite. The release artifact carries the checked-in Caddy site;
@@ -548,9 +552,17 @@ There is one composed client, not one DOM client and one canvas client.
   integer ticks, while repeated display samples render the current frame
   without replaying tick history. Their random-access reconstructions are
   parity/seek oracles, not display-loop painters.
-- Texture residency is scene-scoped. The Hub keeps every wizard appearance
-  available because authenticated remote participants may use different
-  elements, while scenes outside the Hub do not retain its GPU textures.
+- Texture residency is scene-scoped. Hub and Boneyard keep every wizard
+  appearance available because authenticated participants may use different
+  elements and equipment. Those variants share compact player-atlas pages and
+  trim/origin metadata; decoded page memory scales with the page set rather
+  than with 7,723 padded logical frames. Scenes outside gameplay do not retain
+  those GPU textures.
+- Arena world-weather state advances only on the recovered fixed-tick clock.
+  Its persistent drop and splash actors feed their pooled Pixi views directly;
+  display frames do not allocate a second immutable plan graph for the full
+  live population. The diagnostic plan remains an explicit snapshot oracle,
+  not the production painter path.
 
 WebGL is the production baseline. PixiJS keeps the renderer backend replaceable,
 but WebGPU remains experimental follow-up work rather than a compatibility

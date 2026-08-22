@@ -4,7 +4,6 @@ import deathHatAnchors from '../../assets/game/player-character-death-hat-anchor
 import {
   elementVfx,
   hub,
-  playerCharacter,
   primarySpells,
 } from '../../lib/assets.ts'
 import {
@@ -26,13 +25,17 @@ import {
 import { nativeEnemySpriteRecord } from './native-enemy-assets.ts'
 import type { NativeEnemySpriteRegistration } from './native-enemy-sprite-registration.ts'
 import {
+  PLAYER_CHARACTER_ATLAS_SOURCES,
+  PLAYER_CHARACTER_SHEETS,
+  createPlayerCharacterAtlas,
+} from './player-character-atlas.ts'
+import {
   NATIVE_WELD_BADGUYS_RECORDS,
   NATIVE_WELD_DEADHAWG_RECORDS,
   NATIVE_WELD_DEADHAWG_SPRITES,
   NATIVE_WELD_SPRITES,
 } from './primary-spell-weld-native.ts'
 
-const ACTOR_FRAME_SIZE = 170
 const ACTOR_HEADINGS = 24
 const ACTOR_WALK_FRAMES = 5
 const ACTOR_ATTACHMENT_POSES = 10
@@ -174,7 +177,7 @@ export function playerWorldAssetSources(): string[] {
         nativeEnemySpriteRecord('DeadHawg', entry).source
       )),
     },
-    playerCharacter,
+    playerAtlas: PLAYER_CHARACTER_ATLAS_SOURCES,
     playerShadow: hub.npcs.teacher.shadow,
     primarySpells,
     weldActors: {
@@ -192,48 +195,36 @@ export function playerWorldAssetSources(): string[] {
 export function createPlayerWorldTextures(
   texture: (source: string) => Texture,
 ): PlayerWorldTextures {
+  const playerCharacterAtlas = createPlayerCharacterAtlas(texture)
   const playerTextures = (element: WizardElement): PlayerActorTextureFrames => ({
-    death: gridFrames(
-      texture(playerCharacter.death[element]),
+    death: playerCharacterAtlas.grid(
+      PLAYER_CHARACTER_SHEETS.death[element],
       ACTOR_DEATH_FRAMES,
       ACTOR_DEATH_FACINGS,
-      ACTOR_FRAME_SIZE,
-      ACTOR_FRAME_SIZE,
     ),
-    fixed: gridFrames(
-      texture(playerCharacter.robeFixed[element]),
+    fixed: playerCharacterAtlas.grid(
+      PLAYER_CHARACTER_SHEETS.robeFixed[element],
       ACTOR_ATTACHMENT_POSES,
       ACTOR_HEADINGS,
-      ACTOR_FRAME_SIZE,
-      ACTOR_FRAME_SIZE,
     ),
-    head: stripFrames(
-      texture(playerCharacter.head[element]),
+    head: playerCharacterAtlas.strip(
+      PLAYER_CHARACTER_SHEETS.head[element],
       ACTOR_HEADINGS,
-      ACTOR_FRAME_SIZE,
-      ACTOR_FRAME_SIZE,
-      'vertical',
     ),
-    robe: gridFrames(
-      texture(playerCharacter.robeDynamic[element]),
+    robe: playerCharacterAtlas.grid(
+      PLAYER_CHARACTER_SHEETS.robeDynamic[element],
       ACTOR_WALK_FRAMES,
       ACTOR_HEADINGS,
-      ACTOR_FRAME_SIZE,
-      ACTOR_FRAME_SIZE,
     ),
-    staffBack: gridFrames(
-      texture(playerCharacter.staffBack),
+    staffBack: playerCharacterAtlas.grid(
+      PLAYER_CHARACTER_SHEETS.staffBack,
       ACTOR_ATTACHMENT_POSES,
       ACTOR_HEADINGS,
-      ACTOR_FRAME_SIZE,
-      ACTOR_FRAME_SIZE,
     ),
-    staffFront: gridFrames(
-      texture(playerCharacter.staffFront),
+    staffFront: playerCharacterAtlas.grid(
+      PLAYER_CHARACTER_SHEETS.staffFront,
       ACTOR_ATTACHMENT_POSES,
       ACTOR_HEADINGS,
-      ACTOR_FRAME_SIZE,
-      ACTOR_FRAME_SIZE,
     ),
   })
   const players = Object.fromEntries(WIZARD_ELEMENTS.map((element) => [
@@ -242,77 +233,85 @@ export function createPlayerWorldTextures(
   ])) as Record<WizardElement, PlayerActorTextureFrames>
   const elementTextures = createNativeElementVfxTextures(texture)
   const equipment: PlayerLivingEquipmentTextureFrames = {
-    hats: playerCharacter.hatStyles.map((style) => ({
-      primary: stripFrames(texture(style.primary), 24, 170, 170, 'vertical'),
-      secondary: stripFrames(texture(style.secondary), 24, 170, 170, 'vertical'),
+    hats: PLAYER_CHARACTER_SHEETS.hatStyles.map((style) => ({
+      primary: playerCharacterAtlas.strip(style.primary, ACTOR_HEADINGS),
+      secondary: playerCharacterAtlas.strip(style.secondary, ACTOR_HEADINGS),
     })),
     robeFixed: {
-      primary: gridFrames(texture(playerCharacter.robeFixedLayers.primary), 10, 24, 170, 170),
-      secondary: gridFrames(texture(playerCharacter.robeFixedLayers.secondary), 10, 24, 170, 170),
+      primary: playerCharacterAtlas.grid(
+        PLAYER_CHARACTER_SHEETS.robeFixedLayers.primary,
+        ACTOR_ATTACHMENT_POSES,
+        ACTOR_HEADINGS,
+      ),
+      secondary: playerCharacterAtlas.grid(
+        PLAYER_CHARACTER_SHEETS.robeFixedLayers.secondary,
+        ACTOR_ATTACHMENT_POSES,
+        ACTOR_HEADINGS,
+      ),
     },
-    robes: playerCharacter.robeStyles.map((style) => ({
-      primary: gridFrames(texture(style.primary), 5, 24, 170, 170),
-      secondary: gridFrames(texture(style.secondary), 5, 24, 170, 170),
+    robes: PLAYER_CHARACTER_SHEETS.robeStyles.map((style) => ({
+      primary: playerCharacterAtlas.grid(style.primary, ACTOR_WALK_FRAMES, ACTOR_HEADINGS),
+      secondary: playerCharacterAtlas.grid(style.secondary, ACTOR_WALK_FRAMES, ACTOR_HEADINGS),
     })),
-    staffs: playerCharacter.staffStyles.map((style) => ({
-      back: gridFrames(texture(style.back), 10, 24, 170, 170),
-      front: gridFrames(texture(style.front), 10, 24, 170, 170),
+    staffs: PLAYER_CHARACTER_SHEETS.staffStyles.map((style) => ({
+      back: playerCharacterAtlas.grid(style.back, ACTOR_ATTACHMENT_POSES, ACTOR_HEADINGS),
+      front: playerCharacterAtlas.grid(style.front, ACTOR_ATTACHMENT_POSES, ACTOR_HEADINGS),
     })),
     wand: {
-      back: gridFrames(texture(playerCharacter.wand.back), 10, 24, 170, 170),
-      front: gridFrames(texture(playerCharacter.wand.front), 10, 24, 170, 170),
+      back: playerCharacterAtlas.grid(
+        PLAYER_CHARACTER_SHEETS.wand.back,
+        ACTOR_ATTACHMENT_POSES,
+        ACTOR_HEADINGS,
+      ),
+      front: playerCharacterAtlas.grid(
+        PLAYER_CHARACTER_SHEETS.wand.front,
+        ACTOR_ATTACHMENT_POSES,
+        ACTOR_HEADINGS,
+      ),
     },
   }
-  const deathGrid = (source: string): Texture[][] => gridFrames(
-    texture(source),
+  const deathGrid = (name: string): Texture[][] => playerCharacterAtlas.grid(
+    name,
     ACTOR_DEATH_FRAMES,
     ACTOR_DEATH_FACINGS,
-    ACTOR_FRAME_SIZE,
-    ACTOR_FRAME_SIZE,
   )
   const etherPlane = texture(NATIVE_SECONDARY_SPECIAL_ASSET_SOURCES.etherPlane)
   etherPlane.source.addressMode = 'repeat'
   return {
     death: {
       hat: {
-        primary: playerCharacter.deathHat.primary.map((source) => stripFrames(
-          texture(source),
-          ACTOR_HEADINGS,
-          ACTOR_FRAME_SIZE,
-          ACTOR_FRAME_SIZE,
-          'vertical',
+        primary: PLAYER_CHARACTER_SHEETS.deathHat.primary.map((name) => (
+          playerCharacterAtlas.strip(
+            name,
+            ACTOR_HEADINGS,
+          )
         )),
-        secondary: playerCharacter.deathHat.secondary.map((source) => stripFrames(
-          texture(source),
-          ACTOR_HEADINGS,
-          ACTOR_FRAME_SIZE,
-          ACTOR_FRAME_SIZE,
-          'vertical',
+        secondary: PLAYER_CHARACTER_SHEETS.deathHat.secondary.map((name) => (
+          playerCharacterAtlas.strip(
+            name,
+            ACTOR_HEADINGS,
+          )
         )),
-        specialPrimary: stripFrames(
-          texture(playerCharacter.deathHat.specialPrimary),
+        specialPrimary: playerCharacterAtlas.strip(
+          PLAYER_CHARACTER_SHEETS.deathHat.specialPrimary,
           ACTOR_DEATH_FACINGS,
-          ACTOR_FRAME_SIZE,
-          ACTOR_FRAME_SIZE,
-          'vertical',
         ),
-        specialSecondary: stripFrames(
-          texture(playerCharacter.deathHat.specialSecondary),
+        specialSecondary: playerCharacterAtlas.strip(
+          PLAYER_CHARACTER_SHEETS.deathHat.specialSecondary,
           ACTOR_DEATH_FACINGS,
-          ACTOR_FRAME_SIZE,
-          ACTOR_FRAME_SIZE,
-          'vertical',
         ),
       },
       robe: {
-        fixedPrimary: playerCharacter.deathRobe.fixedPrimary.map(deathGrid),
-        fixedSecondary: playerCharacter.deathRobe.fixedSecondary.map(deathGrid),
-        primary: playerCharacter.deathRobe.primary.map(deathGrid),
-        secondary: playerCharacter.deathRobe.secondary.map(deathGrid),
+        fixedPrimary: PLAYER_CHARACTER_SHEETS.deathRobe.fixedPrimary.map(deathGrid),
+        fixedSecondary: PLAYER_CHARACTER_SHEETS.deathRobe.fixedSecondary.map(deathGrid),
+        primary: PLAYER_CHARACTER_SHEETS.deathRobe.primary.map(deathGrid),
+        secondary: PLAYER_CHARACTER_SHEETS.deathRobe.secondary.map(deathGrid),
       },
       weapon: {
-        staff: playerCharacter.deathWeapon.staff.map(texture),
-        wand: texture(playerCharacter.deathWeapon.wand),
+        staff: PLAYER_CHARACTER_SHEETS.deathWeapon.staff.map((name) => (
+          playerCharacterAtlas.single(name)
+        )),
+        wand: playerCharacterAtlas.single(PLAYER_CHARACTER_SHEETS.deathWeapon.wand),
       },
     },
     elementVfx: elementTextures,

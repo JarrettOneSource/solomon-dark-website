@@ -5,8 +5,6 @@ import {
   loader,
   mainMenu,
   menuSolomon,
-  playerCharacter,
-  primarySpells,
 } from '../lib/assets.ts'
 import type { WizardElement } from './core-kernels/player-character.ts'
 import {
@@ -118,17 +116,6 @@ export function hubGameAssetSources(element: WizardElement): string[] {
     southern: hub.southern,
     fountainParticle: hub.fountainParticle,
     tent: hub.tent,
-    player: {
-      death: playerCharacter.death[element],
-      deathHat: playerCharacter.deathHat,
-      deathRobe: playerCharacter.deathRobe,
-      deathWeapon: playerCharacter.deathWeapon,
-      staffBack: playerCharacter.staffBack,
-      robeDynamic: playerCharacter.robeDynamic[element],
-      robeFixed: playerCharacter.robeFixed[element],
-      staffFront: playerCharacter.staffFront,
-      head: playerCharacter.head[element],
-    },
     markers: {
       help: hub.markers.help.right,
       talk: hub.markers.talk.right,
@@ -136,7 +123,6 @@ export function hubGameAssetSources(element: WizardElement): string[] {
     props: hub.props,
     npcs: hub.npcs,
     elementVfx: elementVfxSources(element),
-    primarySpells,
   })
 }
 

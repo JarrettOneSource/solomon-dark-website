@@ -55,6 +55,23 @@ const buildingSurfaceView = readFileSync(
   new URL('./boneyard-building-surface-view.ts', import.meta.url),
   'utf8',
 )
+const playerTextures = readFileSync(
+  new URL('./world-player-textures.ts', import.meta.url),
+  'utf8',
+)
+const playerAtlas = readFileSync(
+  new URL('./player-character-atlas.ts', import.meta.url),
+  'utf8',
+)
+const playerAtlasGenerated = readFileSync(
+  new URL('./player-character-atlas.generated.ts', import.meta.url),
+  'utf8',
+)
+const playerAtlasPacker = readFileSync(
+  new URL('../../../../tools/pack-player-character-atlas.py', import.meta.url),
+  'utf8',
+)
+const sharedAssets = readFileSync(new URL('../../lib/assets.ts', import.meta.url), 'utf8')
 const hubExtractor = readFileSync(
   new URL('../../../../tools/extract-hub-assets.py', import.meta.url),
   'utf8',
@@ -78,6 +95,11 @@ test('world-weather streaks share one particle batch and alpha-ramp texture', ()
   assert.match(weatherView, /nativeBoneyardWeatherStreakRampPixels/)
   assert.doesNotMatch(weatherView, /new Graphics/)
   assert.doesNotMatch(weatherView, /new FillGradient/)
+  assert.doesNotMatch(weatherView, /this\.weather\.plan\(/)
+  assert.match(weatherView, /this\.weather\.visitDrops\(/)
+  assert.match(weatherView, /this\.weather\.visitSplashes\(/)
+  assert.doesNotMatch(weatherView, /sprite\.label\s*=/)
+  assert.doesNotMatch(weatherView, /sprite\.texture\s*=/)
 })
 
 test('world-weather splash and streak painters are separate light-boundary roots', () => {
@@ -93,6 +115,32 @@ test('world-weather splash and streak painters are separate light-boundary roots
     boneyardRenderer,
     /regionLightField\.setCompositeZIndex\(\s*painter\.weatherLightingOrder\.lightCompositeZIndex,?\s*\)/,
   )
+})
+
+test('wizard variants share compact atlas pages instead of decoded padded sheets', () => {
+  assert.match(playerTextures, /PLAYER_CHARACTER_ATLAS_SOURCES/)
+  assert.match(playerTextures, /createPlayerCharacterAtlas/)
+  assert.doesNotMatch(playerTextures, /collectAssetSources\(\{[\s\S]*?playerCharacter,/)
+  assert.match(playerAtlas, /orig: origin/)
+  assert.match(playerAtlas, /trim: new Rectangle\(trimX, trimY, width, height\)/)
+  assert.match(playerAtlasGenerated, /PLAYER_CHARACTER_ATLAS_PAGE_SIZE = 2048/)
+  assert.match(playerAtlasGenerated, /PLAYER_CHARACTER_ATLAS_DECODED_BYTES = 33554432/)
+  assert.match(playerAtlasGenerated, /PLAYER_CHARACTER_ATLAS_SOURCE_SHEET_COUNT = 79/)
+  assert.match(playerAtlasGenerated, /PLAYER_CHARACTER_ATLAS_FRAME_COUNT = 7723/)
+  assert.match(playerAtlasGenerated, /PLAYER_CHARACTER_ATLAS_PACKED_RECTANGLE_COUNT = 5338/)
+  assert.match(playerAtlasGenerated, /PLAYER_CHARACTER_ATLAS_PACKED_RGBA_BYTES = 28736300/)
+  assert.match(playerAtlasGenerated, /PLAYER_CHARACTER_ATLAS_SOURCES = \[page0, page1\]/)
+  assert.match(playerAtlasPacker, /cell\.getchannel\("A"\)\.getbbox\(\)/)
+  assert.match(playerAtlasPacker, /if len\(pages\) > 2:/)
+  assert.doesNotMatch(sharedAssets, /player-character-/)
+  for (const page of [0, 1]) {
+    const png = readFileSync(new URL(
+      `../../assets/game/player-character-atlas-${page}.png`,
+      import.meta.url,
+    ))
+    assert.equal(png.readUInt32BE(16), 2048)
+    assert.equal(png.readUInt32BE(20), 2048)
+  }
 })
 
 test('Tree foreground stays per-object and shares native alpha and root tint', () => {

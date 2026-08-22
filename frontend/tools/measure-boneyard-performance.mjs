@@ -6,8 +6,8 @@ const baseUrl = process.env.SDR_GAME_PERF_URL
   || process.env.SDR_GAME_SMOKE_URL
   || 'http://127.0.0.1:4181'
 const cdpUrl = process.env.SDR_GAME_CDP_URL?.trim()
-const gameEndpoint = process.env.SDR_GAME_PERF_ENDPOINT?.trim()
-const gameCredential = process.env.SDR_GAME_PERF_CREDENTIAL?.trim()
+const configuredGameEndpoint = process.env.SDR_GAME_PERF_ENDPOINT?.trim()
+const configuredGameCredential = process.env.SDR_GAME_PERF_CREDENTIAL?.trim()
 const minimumFps = Number(process.env.SDR_GAME_MIN_FPS || 0)
 const sampleMs = Number(process.env.SDR_GAME_PERF_SAMPLE_MS || 5_000)
 const viewport = parseViewport(process.env.SDR_GAME_PERF_VIEWPORT || '1600x900')
@@ -15,6 +15,12 @@ const mobileEmulation = process.env.SDR_GAME_PERF_MOBILE === '1'
 const cpuThrottleRate = Number(process.env.SDR_GAME_CPU_THROTTLE || 1)
 const browserFrameLimitDisabled = process.env.SDR_GAME_PERF_UNCAPPED === '1'
 const presentationUncapped = process.env.SDR_GAME_PRESENTATION_UNCAPPED === '1'
+if (Boolean(configuredGameEndpoint) !== Boolean(configuredGameCredential)) {
+  throw new Error('SDR_GAME_PERF_ENDPOINT and SDR_GAME_PERF_CREDENTIAL must be configured together')
+}
+const performanceEndpoint = configuredGameEndpoint && configuredGameCredential
+  ? { credential: configuredGameCredential, url: configuredGameEndpoint }
+  : await provisionPerformanceEndpoint(baseUrl)
 const connectedBrowser = Boolean(cdpUrl)
 const browser = cdpUrl
   ? await chromium.connectOverCDP(cdpUrl)
@@ -45,10 +51,7 @@ page.on('pageerror', (error) => errors.push(error.message))
 page.on('console', (message) => {
   if (message.type() === 'error') errors.push(message.text())
 })
-if (Boolean(gameEndpoint) !== Boolean(gameCredential)) {
-  throw new Error('SDR_GAME_PERF_ENDPOINT and SDR_GAME_PERF_CREDENTIAL must be configured together')
-}
-if (gameEndpoint && gameCredential) {
+if (performanceEndpoint) {
   await page.addInitScript(({ credential, endpoint }) => {
     window.solomonDarkRuntime = {
       gameEndpoint: {
@@ -57,7 +60,10 @@ if (gameEndpoint && gameCredential) {
         url: endpoint,
       },
     }
-  }, { credential: gameCredential, endpoint: gameEndpoint })
+  }, {
+    credential: performanceEndpoint.credential,
+    endpoint: performanceEndpoint.url,
+  })
 }
 
 try {
@@ -331,6 +337,25 @@ async function enterBoneyard(page) {
   }, viewport)
   await page.waitForTimeout(1_000)
   return { ...presentation, startupEnvironmentLight }
+}
+
+async function provisionPerformanceEndpoint(url) {
+  const origin = new URL(url)
+  if (origin.protocol !== 'https:') return null
+  const response = await fetch(new URL('/api/game/sessions', origin), {
+    method: 'POST',
+    headers: {
+      accept: 'application/json',
+      'x-solomon-dark-session': 'provision',
+    },
+  })
+  const payload = await response.json()
+  assert.equal(response.status, 200, JSON.stringify(payload))
+  assert.equal(response.headers.get('cache-control'), 'no-store')
+  assert.equal(payload.kind, 'remote')
+  assert.equal(new URL(payload.url).protocol, 'wss:')
+  assert.equal(typeof payload.credential, 'string')
+  return { credential: payload.credential, url: payload.url }
 }
 
 async function selectStormyBoneyard(page) {

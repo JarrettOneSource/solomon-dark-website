@@ -92,3 +92,55 @@ test('weather drops retire only after crossing the native floor and older sample
   source.advanceTo(2, BOUNDS, 1, () => false)
   assert.deepEqual(source.plan(), current)
 })
+
+test('production weather visitors expose every persistent actor without rebuilding the plan graph', () => {
+  const source = weather(2, true) as NativeBoneyardWeather & {
+    visitDrops(
+      lightAt: (position: Readonly<{ x: number; y: number }>) => number,
+      visitor: (
+        index: number,
+        id: number,
+        x: number,
+        y: number,
+        length: number,
+        color: number,
+      ) => void,
+    ): void
+    visitSplashes(
+      visitor: (
+        index: number,
+        id: number,
+        x: number,
+        y: number,
+        scale: number,
+        alpha: number,
+      ) => void,
+    ): void
+  }
+  source.advanceTo(2, BOUNDS, 900, () => false)
+  const plan = source.plan(() => 0.25)
+  const drops: Array<readonly [number, number, number, number, number, number]> = []
+  const splashes: Array<readonly [number, number, number, number, number, number]> = []
+
+  assert.equal(typeof source.visitDrops, 'function')
+  assert.equal(typeof source.visitSplashes, 'function')
+  source.visitDrops(() => 1, (...values) => drops.push(values))
+  source.visitSplashes((...values) => splashes.push(values))
+
+  assert.deepEqual(drops, plan.drops.map((drop, index) => [
+    index,
+    drop.id,
+    drop.position.x,
+    (drop.start.y + drop.end.y) / 2,
+    drop.length,
+    drop.startColor,
+  ]))
+  assert.deepEqual(splashes, plan.splashes.map((splash, index) => [
+    index,
+    splash.id,
+    splash.position.x,
+    splash.position.y,
+    splash.scale,
+    splash.alpha,
+  ]))
+})

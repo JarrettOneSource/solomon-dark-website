@@ -10,8 +10,9 @@ import {
 import { spriteRefFor } from '../../editor/assets.ts'
 import type { BoneyardPoint } from '../core-kernels/boneyard.ts'
 import {
+  NATIVE_BONEYARD_WEATHER_SPLASH,
+  NATIVE_BONEYARD_WEATHER_STREAK_WIDTH,
   NativeBoneyardWeather,
-  type NativeBoneyardWeatherDropPlan,
 } from '../core-kernels/native-boneyard-weather.ts'
 import type { NativeBoneyardWeatherLightingOrder } from './boneyard-lighting.ts'
 
@@ -56,29 +57,20 @@ export class NativeBoneyardWeatherView {
   }
 
   update(lightAt: (position: Readonly<BoneyardPoint>) => number = () => 1): void {
-    const plan = this.weather.plan(lightAt)
-    while (this.dropViews.length < plan.drops.length) this.addDropView()
-    while (this.splashViews.length < plan.splashes.length) this.addSplashView()
-    for (let index = 0; index < this.dropViews.length; index += 1) {
-      const view = this.dropViews[index]!
-      const drop = plan.drops[index]
-      view.alpha = drop === undefined ? 0 : 1
-      if (drop) applyDrop(view, drop)
-    }
-    for (let index = 0; index < this.splashViews.length; index += 1) {
-      const sprite = this.splashViews[index]!
-      const splash = plan.splashes[index]
-      sprite.renderable = splash !== undefined
-      if (!splash) continue
-      sprite.label = `native-boneyard-weather-splash:${plan.splashAsset.atlas}:${plan.splashAsset.entry}`
-      sprite.texture = this.splashTexture
-      sprite.anchor.set(this.splashAnchor.x, this.splashAnchor.y)
-      sprite.position.set(splash.position.x, splash.position.y)
-      sprite.rotation = 0
-      sprite.scale.set(splash.scale)
-      sprite.alpha = splash.alpha
-      sprite.tint = 0xffffff
-    }
+    while (this.dropViews.length < this.weather.activeDropCount) this.addDropView()
+    while (this.splashViews.length < this.weather.activeSplashCount) this.addSplashView()
+    this.weather.visitDrops(lightAt, this.updateDropView)
+    this.weather.visitSplashes(this.updateSplashView)
+    for (
+      let index = this.weather.activeDropCount;
+      index < this.dropViews.length;
+      index += 1
+    ) this.dropViews[index]!.alpha = 0
+    for (
+      let index = this.weather.activeSplashCount;
+      index < this.splashViews.length;
+      index += 1
+    ) this.splashViews[index]!.renderable = false
   }
 
   setDepth(order: NativeBoneyardWeatherLightingOrder): void {
@@ -113,20 +105,48 @@ export class NativeBoneyardWeatherView {
   }
 
   private addSplashView(): void {
-    const sprite = new Sprite(this.splashTexture)
+    const sprite = new Sprite({
+      label: `native-boneyard-weather-splash:${NATIVE_BONEYARD_WEATHER_SPLASH.atlas}:${NATIVE_BONEYARD_WEATHER_SPLASH.entry}`,
+      texture: this.splashTexture,
+    })
+    sprite.anchor.set(this.splashAnchor.x, this.splashAnchor.y)
     sprite.eventMode = 'none'
     sprite.renderable = false
     this.splashViews.push(sprite)
     this.splashContainer.addChild(sprite)
   }
-}
 
-function applyDrop(particle: Particle, drop: NativeBoneyardWeatherDropPlan): void {
-  particle.x = (drop.start.x + drop.end.x) / 2
-  particle.y = (drop.start.y + drop.end.y) / 2
-  particle.scaleX = drop.width
-  particle.scaleY = drop.length / WEATHER_STREAK_RAMP_HEIGHT
-  particle.tint = drop.startColor
+  private readonly updateDropView = (
+    index: number,
+    _id: number,
+    x: number,
+    y: number,
+    length: number,
+    color: number,
+  ): void => {
+    const particle = this.dropViews[index]!
+    particle.alpha = 1
+    particle.x = x
+    particle.y = y
+    particle.scaleX = NATIVE_BONEYARD_WEATHER_STREAK_WIDTH
+    particle.scaleY = length / WEATHER_STREAK_RAMP_HEIGHT
+    particle.tint = color
+  }
+
+  private readonly updateSplashView = (
+    index: number,
+    _id: number,
+    x: number,
+    y: number,
+    scale: number,
+    alpha: number,
+  ): void => {
+    const sprite = this.splashViews[index]!
+    sprite.renderable = true
+    sprite.position.set(x, y)
+    sprite.scale.set(scale)
+    sprite.alpha = alpha
+  }
 }
 
 export function nativeBoneyardWeatherStreakRampPixels(): Uint8Array {

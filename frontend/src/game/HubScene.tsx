@@ -15,7 +15,7 @@ import type { HubRegionId } from './core-kernels/hub-regions.ts'
 import { actorHeadingVector } from './core-kernels/actor-heading.ts'
 import { HALL_OF_FAME_CLASS_NAMES } from './core-kernels/hall-of-fame.ts'
 import type { WizardElement } from './core-kernels/player-character.ts'
-import { art, playerCharacter, skillIcons } from '../lib/assets.ts'
+import { art, skillIcons } from '../lib/assets.ts'
 import {
   HUB_CAMERA_SCALE,
   hubRegionCameraOrigin,
@@ -64,6 +64,10 @@ import {
   gameViewportLayout,
   type GameViewportLayout,
 } from './renderer/game-viewport.ts'
+import {
+  PLAYER_CHARACTER_SHEETS,
+  playerCharacterAtlasCssFrame,
+} from './renderer/player-character-atlas.ts'
 import { selectHubPlayerAtPoint } from './hub-player-selection.ts'
 import './hub.css'
 
@@ -880,23 +884,25 @@ const WIZARD_PORTRAIT_HEADING_INDEX = 12
 
 function WizardPortrait({ element }: { element: WizardElement }) {
   const layers = [
-    playerCharacter.staffBack,
-    playerCharacter.robeDynamic[element],
-    playerCharacter.robeFixed[element],
-    playerCharacter.staffFront,
-    playerCharacter.head[element],
+    PLAYER_CHARACTER_SHEETS.staffBack,
+    PLAYER_CHARACTER_SHEETS.robeDynamic[element],
+    PLAYER_CHARACTER_SHEETS.robeFixed[element],
+    PLAYER_CHARACTER_SHEETS.staffFront,
+    PLAYER_CHARACTER_SHEETS.head[element],
   ] as const
   return (
     <span className="hub-wizard-portrait" data-portrait-element={element} aria-hidden>
-      {layers.map((source, index) => (
+      {layers.map((sheet, index) => (
         <span
-          key={`${source}:${index}`}
+          key={`${sheet}:${index}`}
           className="hub-wizard-portrait-layer"
-          style={{
-            backgroundImage: `url(${source})`,
-            backgroundPosition: `0 -${WIZARD_PORTRAIT_HEADING_INDEX * 170}px`,
-          }}
-        />
+        >
+          <span style={playerCharacterAtlasCssFrame(
+            sheet,
+            0,
+            WIZARD_PORTRAIT_HEADING_INDEX,
+          )} />
+        </span>
       ))}
       <img className="hub-wizard-portrait-frame" src={art.frameGold} alt="" />
     </span>

@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react'
 
-import { art, playerCharacter } from '../lib/assets.ts'
+import { art } from '../lib/assets.ts'
 import type { WizardElement } from './core-kernels/player-character.ts'
 import type { GameSnapshot } from './protocol/game-protocol.ts'
+import {
+  PLAYER_CHARACTER_SHEETS,
+  playerCharacterAtlasCssFrame,
+} from './renderer/player-character-atlas.ts'
 import {
   allyHudAccessibleName,
   allyHudRowsEqual,
@@ -50,21 +54,23 @@ function deriveSnapshotAllyHudRows(
 
 function AllyChip({ element }: { element: WizardElement }) {
   const layers = [
-    playerCharacter.robeDynamic[element],
-    playerCharacter.robeFixed[element],
-    playerCharacter.head[element],
+    PLAYER_CHARACTER_SHEETS.robeDynamic[element],
+    PLAYER_CHARACTER_SHEETS.robeFixed[element],
+    PLAYER_CHARACTER_SHEETS.head[element],
   ] as const
   return (
     <span className="hub-hud-ally-chip" data-ally-chip-element={element} aria-hidden>
-      {layers.map((source, index) => (
+      {layers.map((sheet, index) => (
         <span
-          key={`${source}:${index}`}
+          key={`${sheet}:${index}`}
           className="hub-hud-ally-chip-layer"
-          style={{
-            backgroundImage: `url(${source})`,
-            backgroundPosition: `0 -${ALLY_CHIP_HEADING_INDEX * 170}px`,
-          }}
-        />
+        >
+          <span style={playerCharacterAtlasCssFrame(
+            sheet,
+            0,
+            ALLY_CHIP_HEADING_INDEX,
+          )} />
+        </span>
       ))}
     </span>
   )

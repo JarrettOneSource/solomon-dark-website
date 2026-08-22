@@ -5,7 +5,7 @@ import {
   type CSSProperties,
 } from 'react'
 
-import { mainMenu, playerCharacter } from '../lib/assets.ts'
+import { mainMenu } from '../lib/assets.ts'
 import {
   HALL_OF_FAME_BOARDS,
   formatHallOfFameTime,
@@ -14,6 +14,10 @@ import {
   type HallOfFameBoard,
   type HallOfFameEntry,
 } from './core-kernels/hall-of-fame.ts'
+import {
+  PLAYER_CHARACTER_SHEETS,
+  playerCharacterAtlasCssFrame,
+} from './renderer/player-character-atlas.ts'
 import './hall-of-fame.css'
 
 type HallScope = 'global' | 'local'
@@ -236,24 +240,22 @@ function HallDetails({ entry }: { entry: HallOfFameEntry }) {
 function HallWizard({ entry }: { entry: HallOfFameEntry }) {
   const heading = ((Math.round(entry.headingIndex) % 24) + 24) % 24
   const layers = [
-    playerCharacter.staffBack,
-    playerCharacter.robeDynamic[entry.element],
-    playerCharacter.robeFixed[entry.element],
-    playerCharacter.staffFront,
-    playerCharacter.head[entry.element],
+    PLAYER_CHARACTER_SHEETS.staffBack,
+    PLAYER_CHARACTER_SHEETS.robeDynamic[entry.element],
+    PLAYER_CHARACTER_SHEETS.robeFixed[entry.element],
+    PLAYER_CHARACTER_SHEETS.staffFront,
+    PLAYER_CHARACTER_SHEETS.head[entry.element],
   ] as const
   return (
     <span className="hall-of-fame-wizard" aria-hidden>
-      {layers.map((source, index) => (
+      {layers.map((sheet, index) => (
         <span
-          key={`${source}:${index}`}
+          key={`${sheet}:${index}`}
           className="hall-of-fame-wizard-layer"
-          style={{
-            backgroundImage: `url(${source})`,
-            backgroundPosition: `0 -${heading * 170}px`,
-            transform: `scale(${1.6 * entry.portraitScale})`,
-          }}
-        />
+          style={{ transform: `scale(${1.6 * entry.portraitScale})` }}
+        >
+          <span style={playerCharacterAtlasCssFrame(sheet, 0, heading)} />
+        </span>
       ))}
     </span>
   )
