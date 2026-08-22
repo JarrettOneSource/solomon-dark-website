@@ -139,6 +139,29 @@ test('keeps player-lighting ownership discrete across Hub presentation samples',
   )
 })
 
+test('keeps the held one-shot attack pose discrete across Hub presentation samples', () => {
+  const older = snapshotAt(100, 10, 20)
+  const newer = snapshotAt(105, 20, 30)
+  newer.players.remote.primaryCast = {
+    ...newer.players.remote.primaryCast,
+    actionTick: 0,
+    castSequence: 2,
+    emissionSequence: 1,
+    held: true,
+    oneShotAttackPoseHeld: true,
+    selectedPrimaryId: 8,
+  }
+  const presentation = timeline(older)
+  presentation.push(newer, 50)
+
+  assert.equal(presentation.sample(75).players.remote.primaryCast.oneShotAttackPoseHeld, false)
+  assert.equal(presentation.sample(100).players.remote.primaryCast.oneShotAttackPoseHeld, true)
+  assert.notEqual(
+    presentation.sample(100).players.remote.primaryCast,
+    newer.players.remote.primaryCast,
+  )
+})
+
 test('interpolates primary spells by stable identity without popping lifecycle edges early', () => {
   const older = {
     nextId: 4,

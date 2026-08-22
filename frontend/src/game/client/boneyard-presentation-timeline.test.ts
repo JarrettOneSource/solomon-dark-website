@@ -568,6 +568,34 @@ test('holds authoritative player-lighting state discretely and returns an owned 
   )
 })
 
+test('keeps the held one-shot attack pose discrete across Boneyard presentation samples', () => {
+  const older = snapshotAt(100, 10, 100)
+  const newer = snapshotAt(105, 20, 120)
+  newer.players.local.primaryCast = {
+    ...newer.players.local.primaryCast,
+    actionTick: 0,
+    castSequence: 2,
+    emissionSequence: 1,
+    held: true,
+    oneShotAttackPoseHeld: true,
+    selectedPrimaryId: 16,
+  }
+  const timeline = createBoneyardPresentationTimeline({
+    initialReceivedAtMs: 0,
+    initialSnapshot: older,
+    serverTickRate: 100,
+    snapshotRate: 20,
+  })
+  timeline.push(newer, 50)
+
+  assert.equal(timeline.sample(75).players.local.primaryCast.oneShotAttackPoseHeld, false)
+  assert.equal(timeline.sample(100).players.local.primaryCast.oneShotAttackPoseHeld, true)
+  assert.notEqual(
+    timeline.sample(100).players.local.primaryCast,
+    newer.players.local.primaryCast,
+  )
+})
+
 test('interpolates independent death-effect transforms without rerolling art identity', () => {
   const older = snapshotAt(100, 10, 100)
   const newer = snapshotAt(105, 20, 120)

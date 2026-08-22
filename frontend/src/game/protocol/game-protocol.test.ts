@@ -1059,8 +1059,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v58 carries Fire lifecycle, Game Over/loadout, status composition, saved leave, deployment restart, Ether replacement, party access, movement, social, mod, and gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 58)
+test('protocol v59 carries held one-shot pose, Fire lifecycle, Game Over/loadout, status composition, saved leave, deployment restart, Ether replacement, party access, movement, social, mod, and gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 59)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -2498,6 +2498,53 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     throw new Error('expected an Ether projectile')
   }
   assert.equal(weakFrame.frame.primarySpells.projectiles[0]!.underpowered, true)
+
+  const poseHeldFrame = decodeFrame({
+    ...frame,
+    players: {
+      ...frame.players,
+      'player-1': {
+        ...frame.players['player-1'],
+        lighting: { ...frame.players['player-1'].lighting, driveActive: true },
+        primaryCast: {
+          ...frame.players['player-1'].primaryCast,
+          actionTick: 0,
+          castSequence: 2,
+          emissionSequence: 1,
+          held: true,
+          oneShotAttackPoseHeld: true,
+          selectedPrimaryId: 8,
+        },
+      },
+    },
+  })
+  assert.equal(poseHeldFrame.type, 'server-snapshot')
+  assert.equal(
+    poseHeldFrame.frame.players['player-1'].primaryCast.oneShotAttackPoseHeld,
+    true,
+  )
+  const missingPoseLatch = JSON.parse(JSON.stringify(frame))
+  delete missingPoseLatch.players['player-1'].primaryCast.oneShotAttackPoseHeld
+  assert.throws(() => decodeFrame(missingPoseLatch), /oneShotAttackPoseHeld/)
+  assert.throws(() => decodeFrame({
+    ...frame,
+    players: {
+      ...frame.players,
+      'player-1': {
+        ...frame.players['player-1'],
+        lighting: { ...frame.players['player-1'].lighting, driveActive: true },
+        primaryCast: {
+          ...frame.players['player-1'].primaryCast,
+          actionTick: 1,
+          channelActive: true,
+          emissionSequence: 1,
+          held: true,
+          oneShotAttackPoseHeld: true,
+          selectedPrimaryId: 8,
+        },
+      },
+    },
+  }), /oneShotAttackPoseHeld is outside a one-shot burst/)
 
   const missingDamage = JSON.parse(JSON.stringify(missile))
   delete missingDamage.damage

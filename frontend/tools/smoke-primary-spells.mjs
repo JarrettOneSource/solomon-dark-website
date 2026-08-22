@@ -61,6 +61,7 @@ const boneyardOnlyAcceptance = process.env.SDR_PRIMARY_SPELL_BONEYARD_ONLY === '
 const fireGravestoneAcceptance = process.env.SDR_PRIMARY_FIRE_GRAVESTONE === '1'
 const earthContactAcceptance = process.env.SDR_PRIMARY_EARTH_CONTACT === '1'
 const etherFanAcceptance = process.env.SDR_PRIMARY_ETHER_FAN === '1'
+const heldPoseAcceptance = process.env.SDR_PRIMARY_HELD_POSE === '1'
 const selectedSpells = requestedSpellKind
   ? SPELLS.filter((spell) => spell.kind === requestedSpellKind)
   : SPELLS
@@ -82,6 +83,14 @@ if (etherFanAcceptance && (
 )) {
   throw new Error('Ether-fan acceptance requires full-power SDR_PRIMARY_SPELL_KIND=ether')
 }
+if (heldPoseAcceptance && (
+  lowManaAcceptance
+  || etherFanAcceptance
+  || selectedSpells.length !== 1
+  || selectedSpells[0].kind !== 'ether'
+)) {
+  throw new Error('Held-pose acceptance requires full-power SDR_PRIMARY_SPELL_KIND=ether')
+}
 if (boneyardOnlyAcceptance && selectedSpells.length !== 1) {
   throw new Error('Boneyard-only acceptance requires one SDR_PRIMARY_SPELL_KIND')
 }
@@ -95,6 +104,15 @@ let context = null
 
 try {
   context = await browser.newContext({ viewport: { width: 1600, height: 900 } })
+  await context.route('**/deployment.json*', (route) => {
+    const current = new URL(route.request().url()).searchParams.get('current')
+    route.fulfill({
+      body: JSON.stringify({ revision: current }),
+      contentType: 'application/json',
+      headers: { 'cache-control': 'no-store' },
+      status: 200,
+    })
+  })
   if (gameEndpointUrl && gameEndpointCredential) {
     await context.addInitScript((runtime) => {
       window.solomonDarkRuntime = runtime
@@ -119,13 +137,17 @@ try {
     )
     window.cancelAnimationFrame = (handle) => window.clearTimeout(handle)
     const poseEvents = []
+    const poseSamples = []
     const wireFrames = []
     let loadedBoneyard = null
+    let localPlayerId = null
     let previousPose = null
     const nativeJsonParse = JSON.parse
     Object.defineProperties(window, {
       __primarySpellPoseEvents: { value: poseEvents },
+      __primarySpellPoseSamples: { value: poseSamples },
       __primarySpellBoneyard: { get: () => loadedBoneyard },
+      __primarySpellLocalPlayerId: { get: () => localPlayerId },
       __primarySpellWireFrames: { value: wireFrames },
     })
     JSON.parse = function (...args) {
@@ -147,7 +169,18 @@ try {
       return value
     }
     const observePose = () => {
-      const frame = document.querySelector('.hub-world-canvas')?.__sdrHubFrame
+      const node = document.querySelector('.boneyard-world-canvas')
+        ?? document.querySelector('.hub-world-canvas')
+      const frame = node?.__sdrHubFrame ?? node?.__sdrBoneyardFrame
+      if (frame) {
+        if (typeof frame.localPlayerId === 'string') localPlayerId = frame.localPlayerId
+        poseSamples.push({
+          at: performance.now(),
+          playerAttachmentPose: frame.playerAttachmentPose,
+          tick: frame.tick,
+        })
+        if (poseSamples.length > 10_000) poseSamples.shift()
+      }
       if (frame && frame.playerAttachmentPose !== previousPose) {
         previousPose = frame.playerAttachmentPose
         poseEvents.push({
@@ -200,6 +233,9 @@ try {
     }
     const eventStart = await audioEventCount(page)
     const poseEventStart = await page.evaluate(() => window.__primarySpellPoseEvents.length)
+    const heldPoseCheckpoint = heldPoseAcceptance
+      ? await oneShotPoseCheckpoint(page)
+      : null
     const target = await castTarget(canvas, 0.67, 0.42)
     await page.mouse.move(target.x, target.y)
     await page.mouse.down({ button: 'left' })
@@ -217,9 +253,20 @@ try {
       }
     }
 
+    let heldPose = null
     if (spell.mode === 'one-shot') {
-      await page.waitForTimeout(hostOpenedBoneyard ? 250 : 35)
+      if (heldPoseCheckpoint) {
+        heldPose = await waitForHeldOneShotPose(page, heldPoseCheckpoint, 3)
+      } else {
+        await page.waitForTimeout(hostOpenedBoneyard ? 250 : 35)
+      }
       await page.mouse.up({ button: 'left' })
+      if (heldPose) {
+        heldPose = {
+          ...heldPose,
+          release: await waitForOneShotPoseRelease(page),
+        }
+      }
     }
 
     let castFrame = castPosePromise === null ? null : await castPosePromise
@@ -395,6 +442,7 @@ try {
       earthStages,
       element: spell.element,
       expectedHeadingIndex,
+      heldPose,
       kind: spell.kind,
       lowManaPresentation,
       playerHeadingIndex: facingFrame.playerHeadingIndex,
@@ -463,8 +511,21 @@ async function enterHub(page, element) {
     waitUntil: 'domcontentloaded',
   })
   await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 90_000 })
+  if (heldPoseAcceptance && !hostOpenedBoneyard) {
+    await page.getByRole('button', { name: 'Settings' }).click()
+    const settings = page.getByRole('dialog', { name: 'Settings' })
+    await settings.waitFor()
+    const cheats = settings.getByRole('button', { name: /Enable Cheats/i })
+    if (await cheats.getAttribute('aria-pressed') !== 'true') await cheats.click()
+    await settings.getByRole('button', { name: 'Done' }).click()
+  }
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
+  if (heldPoseAcceptance && !hostOpenedBoneyard) {
+    const continueLocal = page.getByRole('button', { name: 'Continue Local' })
+    await continueLocal.waitFor({ timeout: 5_000 })
+    await continueLocal.click()
+  }
   await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({
     timeout: CREATE_MENU_TIMEOUT_MS,
   })
@@ -486,6 +547,14 @@ async function enterHub(page, element) {
     throw new Error(`Hub renderer did not become ready: ${JSON.stringify(diagnostics)}`, {
       cause: error,
     })
+  }
+  if (heldPoseAcceptance && !hostOpenedBoneyard) {
+    await page.waitForFunction(() => window.solomonDark?.lua)
+    const seeded = await page.evaluate(() => window.solomonDark.lua.execute(
+      'return sd.rng.set_seed(12)',
+    ))
+    assert.equal(seeded.ok, true, seeded.error)
+    assert.equal(seeded.values[0], 12)
   }
 }
 
@@ -853,6 +922,9 @@ async function castEtherInBoneyard(page) {
   }
   const eventStart = await audioEventCount(page)
   const afterTick = await latestWireTick(page)
+  const heldPoseCheckpoint = heldPoseAcceptance
+    ? await oneShotPoseCheckpoint(page)
+    : null
   await page.mouse.move(aimPoint.x, aimPoint.y)
   await page.mouse.down({ button: 'left' })
   const launch = await waitForAudio(
@@ -864,6 +936,10 @@ async function castEtherInBoneyard(page) {
   )
   let flight = null
   let flightScreenshotPath = null
+  let heldPose = null
+  if (heldPoseCheckpoint) {
+    heldPose = await waitForHeldOneShotPose(page, heldPoseCheckpoint, 3)
+  }
   if (etherFanAcceptance) {
     const launchFan = await waitForEtherFan(page, afterTick, 4, 10_000, 1)
     await page.mouse.up({ button: 'left' })
@@ -907,6 +983,12 @@ async function castEtherInBoneyard(page) {
     await page.screenshot({ path: flightScreenshotPath })
   }
   if (!etherFanAcceptance) await page.mouse.up({ button: 'left' })
+  if (heldPose) {
+    heldPose = {
+      ...heldPose,
+      release: await waitForOneShotPoseRelease(page),
+    }
+  }
   const impact = await waitForWireSpell(
     page,
     'ether-impact',
@@ -927,6 +1009,7 @@ async function castEtherInBoneyard(page) {
     flight,
     flightScreenshotPath,
     gate: { fixture: 'host-opened-boneyard' },
+    heldPose,
     impact,
     screenshotPath,
     target: target.enemy,
@@ -935,8 +1018,18 @@ async function castEtherInBoneyard(page) {
 }
 
 async function castUntargetedEtherInBoneyard(page, canvas) {
+  const scene = page.locator('.boneyard-scene')
+  const gate = heldPoseAcceptance
+    ? await crossEntryGate(page, scene)
+    : null
+  const combatAdmission = heldPoseAcceptance
+    ? await enableSolomonCombat(page, scene)
+    : null
   const eventStart = await audioEventCount(page)
   const afterTick = await latestWireTick(page)
+  const heldPoseCheckpoint = heldPoseAcceptance
+    ? await oneShotPoseCheckpoint(page)
+    : null
   const target = await castTarget(canvas, 0.5, 0.05)
   await page.mouse.move(target.x, target.y)
   await page.mouse.down({ button: 'left' })
@@ -948,6 +1041,10 @@ async function castUntargetedEtherInBoneyard(page, canvas) {
   )
   let flight = null
   let flightScreenshotPath = null
+  let heldPose = null
+  if (heldPoseCheckpoint) {
+    heldPose = await waitForHeldOneShotPose(page, heldPoseCheckpoint, 3)
+  }
   if (lowManaAcceptance) {
     const fizzle = await waitForAudio(page, eventStart, '/game/audio/sfx/fizzle.wav', 'play')
     assert.ok(fizzle.at <= launch.at)
@@ -964,11 +1061,25 @@ async function castUntargetedEtherInBoneyard(page, canvas) {
     await page.screenshot({ path: flightScreenshotPath })
   }
   await page.mouse.up({ button: 'left' })
+  if (heldPose) {
+    heldPose = {
+      ...heldPose,
+      release: await waitForOneShotPoseRelease(page),
+    }
+  }
   const impact = await waitForWireSpell(page, 'ether-impact', afterTick, 10_000)
   const screenshotPath = `${screenshotRoot}/solomon-primary-ether-boneyard-impact.png`
   await page.screenshot({ path: screenshotPath })
   await waitForAudio(page, eventStart, '/game/audio/sfx/magic-missile-hit.wav', 'play')
-  return { flight, flightScreenshotPath, impact, screenshotPath }
+  return {
+    combatAdmission,
+    flight,
+    flightScreenshotPath,
+    gate,
+    heldPose,
+    impact,
+    screenshotPath,
+  }
 }
 
 async function castWaterInBoneyard(page) {
@@ -1057,6 +1168,101 @@ async function crossEntryGate(page, scene) {
   return { ...gate, direction, finalY, initialY }
 }
 
+async function enableSolomonCombat(page, scene) {
+  if (await scene.getAttribute('data-combat-enabled') === 'true') {
+    return { phase: await scene.getAttribute('data-solomon-phase'), alreadyEnabled: true }
+  }
+  const deadline = Date.now() + 120_000
+  let bestDistance = Number.POSITIVE_INFINITY
+  let stalledPulses = 0
+  let sidestepSign = 1
+  let pulses = 0
+  while (Date.now() < deadline) {
+    const receipt = await solomonApproachReceipt(scene)
+    if (receipt.phase !== 'digging') break
+    const dx = receipt.solomonX - receipt.playerX
+    const dy = receipt.solomonY - receipt.playerY
+    const keys = movementKeys(dx, dy)
+    assert.ok(keys.length > 0, 'expected movement toward Solomon')
+    await pulseBoneyardMovement(page, keys, Math.min(500, Math.max(150, receipt.distance * 2)))
+    const after = await solomonApproachReceipt(scene)
+    pulses += 1
+    if (after.phase !== 'digging') break
+    if (after.distance < bestDistance - 5) {
+      bestDistance = after.distance
+      stalledPulses = 0
+      continue
+    }
+    stalledPulses += 1
+    if (stalledPulses < 3) continue
+    const sideKeys = movementKeys(-dy * sidestepSign, dx * sidestepSign)
+    await pulseBoneyardMovement(page, sideKeys, 650)
+    sidestepSign *= -1
+    stalledPulses = 0
+  }
+
+  const contact = await solomonApproachReceipt(scene)
+  assert.notEqual(contact.phase, 'digging', `could not reach Solomon: ${JSON.stringify(contact)}`)
+  const awayKeys = movementKeys(
+    contact.playerX - contact.solomonX,
+    contact.playerY - contact.solomonY,
+  )
+  assert.ok(awayKeys.length > 0, 'expected movement away from Solomon')
+  await page.bringToFront()
+  for (const key of awayKeys) await page.keyboard.down(key)
+  try {
+    await page.waitForFunction(() => (
+      document.querySelector('.boneyard-scene')?.getAttribute('data-combat-enabled') === 'true'
+    ), undefined, { timeout: 30_000 })
+  } finally {
+    for (const key of awayKeys.reverse()) await page.keyboard.up(key)
+    await page.evaluate(() => window.dispatchEvent(new Event('blur')))
+  }
+  return {
+    alreadyEnabled: false,
+    contact,
+    phase: await scene.getAttribute('data-solomon-phase'),
+    pulses,
+    runEventId: Number(await scene.getAttribute('data-solomon-run-event-id')),
+  }
+}
+
+async function solomonApproachReceipt(scene) {
+  return scene.evaluate((node) => {
+    const playerX = Number(node.getAttribute('data-local-player-x'))
+    const playerY = Number(node.getAttribute('data-local-player-y'))
+    const solomonX = Number(node.getAttribute('data-solomon-x'))
+    const solomonY = Number(node.getAttribute('data-solomon-y'))
+    return {
+      distance: Math.hypot(solomonX - playerX, solomonY - playerY),
+      phase: node.getAttribute('data-solomon-phase'),
+      playerX,
+      playerY,
+      solomonX,
+      solomonY,
+    }
+  })
+}
+
+function movementKeys(x, y) {
+  const keys = []
+  const scale = Math.max(Math.abs(x), Math.abs(y), 1)
+  if (Math.abs(x) / scale >= 0.25) keys.push(x > 0 ? 'd' : 'a')
+  if (Math.abs(y) / scale >= 0.25) keys.push(y > 0 ? 's' : 'w')
+  return keys
+}
+
+async function pulseBoneyardMovement(page, keys, durationMs) {
+  await page.bringToFront()
+  for (const key of keys) await page.keyboard.down(key)
+  try {
+    await page.waitForTimeout(durationMs)
+  } finally {
+    for (const key of keys.reverse()) await page.keyboard.up(key)
+  }
+  await page.waitForTimeout(80)
+}
+
 async function alignWithEntryGate(page, scene) {
   const initialX = Number(await scene.getAttribute('data-local-player-x'))
   const initialY = Number(await scene.getAttribute('data-local-player-y'))
@@ -1106,8 +1312,31 @@ async function alignWithEntryGate(page, scene) {
       await page.keyboard.up(key)
     }
   }
+  const alignedY = Number(await scene.getAttribute('data-local-player-y'))
+  const direction = Math.sign(target.y - alignedY)
+  const approachY = target.y - direction * 60
+  const approachDelta = approachY - alignedY
+  if (direction !== 0 && Math.abs(approachDelta) > 3) {
+    const key = approachDelta < 0 ? 'w' : 's'
+    await page.keyboard.down(key)
+    try {
+      await page.waitForFunction(
+        ({ initial, sign, targetY }) => {
+          const value = Number(document.querySelector('.boneyard-scene')
+            ?.getAttribute('data-local-player-y'))
+          return Number.isFinite(value)
+            && (value - initial) * sign >= Math.abs(targetY - initial) - 3
+        },
+        { initial: alignedY, sign: Math.sign(approachDelta), targetY: approachY },
+        { timeout: 15_000 },
+      )
+    } finally {
+      await page.keyboard.up(key)
+    }
+  }
   return {
     playerX: Number(await scene.getAttribute('data-local-player-x')),
+    playerY: Number(await scene.getAttribute('data-local-player-y')),
     targetX: target.x,
     targetY: target.y,
   }
@@ -1175,6 +1404,123 @@ async function visibleBoneyardEnemy(page, preferWeakest = false) {
 async function settleMovement(page) {
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)))
   await page.waitForTimeout(650)
+}
+
+async function oneShotPoseCheckpoint(page) {
+  return page.evaluate(() => {
+    const playerId = window.__primarySpellLocalPlayerId
+    const wire = window.__primarySpellWireFrames.at(-1)
+    const cast = playerId ? wire?.players[playerId]?.primaryCast : null
+    if (!playerId || !cast) throw new Error('Local one-shot cast wire is unavailable')
+    return {
+      emissionSequence: cast.emissionSequence,
+      playerId,
+      poseSampleIndex: window.__primarySpellPoseSamples.length,
+      wireFrameIndex: window.__primarySpellWireFrames.length,
+    }
+  })
+}
+
+async function waitForHeldOneShotPose(page, checkpoint, minimumEmissions) {
+  const targetEmission = checkpoint.emissionSequence + minimumEmissions
+  await page.waitForFunction(([playerId, target]) => {
+    const wire = window.__primarySpellWireFrames.at(-1)
+    return (wire?.players[playerId]?.primaryCast.emissionSequence ?? -1) >= target
+  }, [checkpoint.playerId, targetEmission], { timeout: 10_000 })
+
+  const receipt = await page.evaluate((start) => {
+    const samples = window.__primarySpellPoseSamples.slice(start.poseSampleIndex)
+    const firstReleaseIndex = samples.findIndex(({ playerAttachmentPose }) => (
+      playerAttachmentPose === 8
+    ))
+    const heldSamples = firstReleaseIndex < 0 ? [] : samples.slice(firstReleaseIndex)
+    const wireCasts = window.__primarySpellWireFrames
+      .slice(start.wireFrameIndex)
+      .map((wire) => ({
+        ...wire.players[start.playerId]?.primaryCast,
+        tick: wire.tick,
+      }))
+    const firstLatchedIndex = wireCasts.findIndex(({ oneShotAttackPoseHeld }) => (
+      oneShotAttackPoseHeld === true
+    ))
+    return {
+      heldSamples,
+      wireCasts: firstLatchedIndex < 0 ? [] : wireCasts.slice(firstLatchedIndex),
+    }
+  }, checkpoint)
+
+  assert.ok(
+    receipt.heldSamples.length >= 8,
+    `expected repeated rendered held-pose samples: ${JSON.stringify(receipt)}`,
+  )
+  assert.ok(
+    new Set(receipt.heldSamples.map(({ tick }) => tick)).size >= 3,
+    'expected the held pose across multiple authoritative ticks',
+  )
+  assert.ok(
+    receipt.heldSamples.every(({ playerAttachmentPose }) => playerAttachmentPose === 8),
+    `one-shot pose left K=8 while held: ${JSON.stringify(receipt.heldSamples)}`,
+  )
+  assert.ok(receipt.wireCasts.length >= 3, 'expected repeated authoritative burst samples')
+  assert.ok(receipt.wireCasts.every((cast) => (
+    cast.held === true
+    && cast.oneShotAttackPoseHeld === true
+    && cast.actionTick !== -1
+  )), `held one-shot wire reset: ${JSON.stringify(receipt.wireCasts)}`)
+  const scene = await page.locator('.boneyard-world-canvas').count() > 0
+    ? 'boneyard'
+    : 'hub'
+  const rendering = await page.locator(
+    scene === 'boneyard' ? '.boneyard-world-canvas' : '.hub-world-canvas',
+  ).evaluate((node) => {
+    const gl = node.getContext('webgl2') ?? node.getContext('webgl')
+    if (!gl) return { context: null, renderer: node.dataset.rendererName ?? null }
+    const debug = gl.getExtension('WEBGL_debug_renderer_info')
+    return {
+      context: typeof WebGL2RenderingContext !== 'undefined'
+        && gl instanceof WebGL2RenderingContext
+        ? 'webgl2'
+        : 'webgl',
+      renderer: node.dataset.rendererName ?? null,
+      unmaskedRenderer: debug ? gl.getParameter(debug.UNMASKED_RENDERER_WEBGL) : null,
+      unmaskedVendor: debug ? gl.getParameter(debug.UNMASKED_VENDOR_WEBGL) : null,
+    }
+  })
+  const screenshotPath = `${screenshotRoot}/solomon-primary-ether-${scene}-held-pose.png`
+  await page.screenshot({ path: screenshotPath })
+  return {
+    emissionSequenceEnd: receipt.wireCasts.at(-1).emissionSequence,
+    emissionSequenceStart: checkpoint.emissionSequence,
+    heldSampleCount: receipt.heldSamples.length,
+    heldTickCount: new Set(receipt.heldSamples.map(({ tick }) => tick)).size,
+    rendering,
+    screenshotPath,
+    wireSampleCount: receipt.wireCasts.length,
+  }
+}
+
+async function waitForOneShotPoseRelease(page) {
+  const handle = await page.waitForFunction((playerId) => {
+    const node = document.querySelector('.boneyard-world-canvas')
+      ?? document.querySelector('.hub-world-canvas')
+    const frame = node?.__sdrHubFrame ?? node?.__sdrBoneyardFrame
+    const wire = window.__primarySpellWireFrames.at(-1)
+    const cast = wire?.players[playerId]?.primaryCast
+    return frame?.playerAttachmentPose === 0
+      && cast?.held === false
+      && cast?.oneShotAttackPoseHeld === false
+      && cast?.actionTick === -1
+      ? { cast: { ...cast }, frame: { ...frame } }
+      : null
+  }, await page.evaluate(() => window.__primarySpellLocalPlayerId), { timeout: 10_000 })
+  const receipt = await handle.jsonValue()
+  await handle.dispose()
+  return {
+    actionTick: receipt.cast.actionTick,
+    attachmentPose: receipt.frame.playerAttachmentPose,
+    oneShotAttackPoseHeld: receipt.cast.oneShotAttackPoseHeld,
+    tick: receipt.frame.tick,
+  }
 }
 
 async function waitForHubCastPose(page, eventStart, expectedPose) {

@@ -39,6 +39,7 @@ import {
   primaryCastActionEndTick,
   primaryCastEmissionTick,
   primaryCastPose,
+  primaryCastPresentationPose,
   primarySpellAimDirection,
   primarySpellEmitterOffset,
   removePrimarySpellOwner,
@@ -766,15 +767,32 @@ test('cast eligibility cancels an active channel without another debit or emissi
   assert.equal(cancelled.state.players[PLAYER_ID]!.primaryCast.actionTick, -1)
 })
 
+test('cast eligibility loss clears a latched one-shot attack pose immediately', () => {
+  let harness = directSpellHarness('ether')
+  while (!harness.players[PLAYER_ID]!.primaryCast.oneShotAttackPoseHeld) {
+    harness = stepSpellKernel(harness, true, 100).state
+  }
+  const cancelled = stepSpellKernel(harness, true, 100, false)
+  const cast = cancelled.state.players[PLAYER_ID]!.primaryCast
+  assert.equal(cast.actionTick, -1)
+  assert.equal(cast.oneShotAttackPoseHeld, false)
+  assert.equal(primaryCastPresentationPose(cast, 'ether'), 0)
+})
+
 test('Ether uses its faster native Staff rate and repeats while held', () => {
   let state = step(simulation('ether'), true)
-  assert.equal(getPlayerCharacter(state, PLAYER_ID).primaryCast.actionTick, 0)
+  let player = getPlayerCharacter(state, PLAYER_ID)
+  assert.equal(player.primaryCast.actionTick, 0)
+  assert.equal(player.primaryCast.oneShotAttackPoseHeld, false)
+  assert.equal(primaryCastPresentationPose(player.primaryCast, 'ether'), 0)
   assert.equal(state.primarySpells.projectiles.length, 0)
   state = step(state, true, PRIMARY_CAST_ETHER_EMISSION_TICK)
-  const player = getPlayerCharacter(state, PLAYER_ID)
+  player = getPlayerCharacter(state, PLAYER_ID)
   const missile = state.primarySpells.projectiles[0]
   assert.equal(player.primaryCast.actionTick, PRIMARY_CAST_ETHER_EMISSION_TICK)
   assert.equal(player.primaryCast.emissionSequence, 1)
+  assert.equal(player.primaryCast.oneShotAttackPoseHeld, true)
+  assert.equal(primaryCastPresentationPose(player.primaryCast, 'ether'), 8)
   assert.equal(primaryCastPose(player.primaryCast.actionTick, false, 'ether'), 8)
   assert.equal(missile.kind, 'ether')
   assert.equal(missile.ageTicks, 1)
@@ -787,12 +805,88 @@ test('Ether uses its faster native Staff rate and repeats while held', () => {
     true,
     PRIMARY_CAST_ETHER_ACTION_END_TICK - PRIMARY_CAST_ETHER_EMISSION_TICK,
   )
-  assert.equal(getPlayerCharacter(state, PLAYER_ID).primaryCast.actionTick, -1)
+  player = getPlayerCharacter(state, PLAYER_ID)
+  assert.equal(player.primaryCast.actionTick, 0)
+  assert.equal(player.primaryCast.castSequence, 2)
+  assert.equal(player.primaryCast.oneShotAttackPoseHeld, true)
+  assert.equal(primaryCastPresentationPose(player.primaryCast, 'ether'), 8)
+  for (let tick = 0; tick < PRIMARY_CAST_ETHER_EMISSION_TICK; tick += 1) {
+    assert.equal(primaryCastPresentationPose(player.primaryCast, 'ether'), 8)
+    state = step(state, true)
+    player = getPlayerCharacter(state, PLAYER_ID)
+  }
+  assert.equal(player.primaryCast.emissionSequence, 2)
+  assert.equal(primaryCastPresentationPose(player.primaryCast, 'ether'), 8)
+
+  state = step(state, false)
+  player = getPlayerCharacter(state, PLAYER_ID)
+  assert.equal(player.primaryCast.oneShotAttackPoseHeld, true)
+  for (let tick = 0; player.primaryCast.oneShotAttackPoseHeld; tick += 1) {
+    assert.ok(tick < PRIMARY_CAST_ETHER_ACTION_END_TICK)
+    assert.equal(primaryCastPresentationPose(player.primaryCast, 'ether'), 8)
+    state = step(state, false)
+    player = getPlayerCharacter(state, PLAYER_ID)
+  }
+  assert.equal(player.primaryCast.actionTick, -1)
+  assert.equal(primaryCastPresentationPose(player.primaryCast, 'ether'), 0)
+
   state = step(state, true)
-  assert.equal(getPlayerCharacter(state, PLAYER_ID).primaryCast.actionTick, 0)
-  assert.equal(getPlayerCharacter(state, PLAYER_ID).primaryCast.castSequence, 2)
-  state = step(state, true, PRIMARY_CAST_ETHER_EMISSION_TICK)
-  assert.equal(getPlayerCharacter(state, PLAYER_ID).primaryCast.emissionSequence, 2)
+  player = getPlayerCharacter(state, PLAYER_ID)
+  assert.equal(player.primaryCast.oneShotAttackPoseHeld, false)
+  assert.equal(primaryCastPresentationPose(player.primaryCast, 'ether'), 0)
+})
+
+test('Fire and every welded one-shot share held release-pose continuity', () => {
+  const profiles = [
+    primarySkillRankStats('fire', 1),
+    weldedProfile(1000, 'one-shot', [4, 10, 12, 2, 1.25, 3, 8, 2, 3]),
+    weldedProfile(1001, 'one-shot', [4, 10, 12, 2, 1.1, 0.5, 0.1]),
+    weldedProfile(1002, 'one-shot', [4, 10, 12, 2, 1.1, 1, 0.5]),
+    weldedProfile(1009, 'one-shot', [4, 12, 1, 0.5, 1, 1]),
+  ] as const
+
+  for (const profile of profiles) {
+    let harness = { ...directSpellHarness('fire'), primarySkill: profile }
+    while (harness.players[PLAYER_ID]!.primaryCast.emissionSequence === 0) {
+      harness = stepSpellKernel(harness, true, 1_000, true, () => true, profile).state
+    }
+    let cast = harness.players[PLAYER_ID]!.primaryCast
+    assert.equal(cast.oneShotAttackPoseHeld, true, `${profile.skillId}: first marker`)
+    assert.equal(primaryCastPresentationPose(cast, 'fire'), 8, `${profile.skillId}: release`)
+
+    while (cast.castSequence < 2) {
+      harness = stepSpellKernel(harness, true, 1_000, true, () => true, profile).state
+      cast = harness.players[PLAYER_ID]!.primaryCast
+      assert.equal(cast.oneShotAttackPoseHeld, true, `${profile.skillId}: handoff`)
+      assert.equal(primaryCastPresentationPose(cast, 'fire'), 8, `${profile.skillId}: handoff`)
+      assert.notEqual(cast.actionTick, -1, `${profile.skillId}: idle insertion`)
+    }
+    assert.equal(cast.actionTick, 0, `${profile.skillId}: successor insertion`)
+  }
+})
+
+test('pure and welded sustained primaries retain Staff Constant instead of the one-shot latch', () => {
+  const profiles = [
+    primarySkillRankStats('air', 1),
+    primarySkillRankStats('water', 1),
+    primarySkillRankStats('earth', 1),
+    weldedProfile(1003, 'channel', [8, 10, 2, 0.5, 3, 10, 2, 3]),
+    weldedProfile(1004, 'channel', [8, 10, 1, 0.5, 0, 0, 0]),
+    weldedProfile(1005, 'channel', [8, 10, 2, 0.5, 3, 10, 2, 3]),
+    weldedProfile(1006, 'persistent', [8, 10, 2, 1.1, 1.5, 1.2]),
+    weldedProfile(1007, 'persistent', [8, 16, 20, 1.1, 1.5, 3, 10, 2, 3]),
+    weldedProfile(1008, 'persistent', [8, 10, 1.1, 1.5, 0.1, 0.5]),
+  ] as const
+
+  for (const profile of profiles) {
+    let harness = { ...directSpellHarness('earth'), primarySkill: profile }
+    harness = stepSpellKernel(harness, true, 1_000, true, () => true, profile).state
+    harness = stepSpellKernel(harness, true, 1_000, true, () => true, profile).state
+    const cast = harness.players[PLAYER_ID]!.primaryCast
+    assert.equal(cast.channelActive, true, `${profile.skillId}: channel`)
+    assert.equal(cast.oneShotAttackPoseHeld, false, `${profile.skillId}: latch`)
+    assert.equal(primaryCastPresentationPose(cast, 'fire'), 7, `${profile.skillId}: pose`)
+  }
 })
 
 test('More Missiles shares one damage roll and preserves native fan and turn order', () => {
@@ -2361,11 +2455,11 @@ test('retained rock welds publish their constructor-randomized start pitch', () 
 })
 
 function weldedProfile(
-  buildId: 1000 | 1003 | 1006 | 1007 | 1008,
+  buildId: 1000 | 1001 | 1002 | 1003 | 1004 | 1005 | 1006 | 1007 | 1008 | 1009,
   castKind: 'channel' | 'one-shot' | 'persistent',
   values: readonly number[],
 ): Extract<NativePrimarySkillProfile, { kind: 'weld' }> {
-  const manaIndex = castKind === 'one-shot' ? 2 : 1
+  const manaIndex = castKind === 'one-shot' && buildId !== 1009 ? 2 : 1
   return {
     buildId,
     castKind,

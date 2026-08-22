@@ -9,7 +9,7 @@ import type {
 import type { Vector2 } from './core-kernels/vector.ts'
 import { nativePlayerStaffActionPose } from './core-kernels/native-player-staff-action.ts'
 import {
-  primaryCastPose,
+  primaryCastPresentationPose,
   primarySpellEmitterOffset,
   staffAttachmentEmitterOffset,
   playerStaffAttachmentOffset,
@@ -249,11 +249,7 @@ export function createPlayerCharacterDrawPlan(
   )
   const attachmentPose = secondaryCastActive
     ? 9
-    : staffActionPose ?? primaryCastPose(
-        state.primaryCast.actionTick,
-        state.primaryCast.channelActive,
-        castElement,
-      )
+    : staffActionPose ?? primaryCastPresentationPose(state.primaryCast, castElement)
   const staffFront = playerCharacterStaffIsFront(state.headingIndex, attachmentPose)
   return {
     attachmentPose,
@@ -276,14 +272,7 @@ export function createPlayerCharacterDrawPlan(
     ),
     orbOffset: secondaryCastActive
       ? staffAttachmentEmitterOffset(state.headingIndex, 9)
-      : staffActionPose === null
-        ? primarySpellEmitterOffset(
-          state.headingIndex,
-          state.primaryCast.actionTick,
-          state.primaryCast.channelActive,
-          castElement,
-        )
-        : playerStaffAttachmentOffset(state.headingIndex, staffActionPose),
+      : playerStaffAttachmentOffset(state.headingIndex, attachmentPose),
     robePose: playerCharacterRobePose(state.walkCyclePrimary),
     staffFront,
   }

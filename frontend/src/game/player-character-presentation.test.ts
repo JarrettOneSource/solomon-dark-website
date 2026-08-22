@@ -376,6 +376,31 @@ test('player draw plan consumes the authoritative Staff Cast 1 pose bank', () =>
   assert.equal(recoveryPlan.staffFront, true)
 })
 
+test('player draw plan holds one-shot release pose across successor action clocks', () => {
+  const heldBurst = {
+    config: { ...FIRE_CONFIG, element: 'ether' as const },
+    gaitDegrees: 0,
+    headingIndex: 0,
+    primaryCast: {
+      ...createIdlePlayerPrimaryCast(),
+      actionTick: 0,
+      castSequence: 2,
+      emissionSequence: 1,
+      held: true,
+      oneShotAttackPoseHeld: true,
+      selectedPrimaryId: 8,
+    },
+    velocity: { x: 0, y: 0 },
+    walkCyclePrimary: 0,
+  }
+  const plan = createPlayerCharacterDrawPlan(heldBurst)
+  assert.equal(plan.attachmentPose, 8)
+  assert.deepEqual(plan.orbOffset, { x: 8.5, y: -47.5 })
+
+  assert.equal(createPlayerCharacterDrawPlan(heldBurst, 1, 4).attachmentPose, 4)
+  assert.equal(createPlayerCharacterDrawPlan(heldBurst, 1, null, true).attachmentPose, 9)
+})
+
 test('player draw plan holds native Staff Cast 2 pose nine during a secondary action', () => {
   const plan = createPlayerCharacterDrawPlan({
     config: FIRE_CONFIG,

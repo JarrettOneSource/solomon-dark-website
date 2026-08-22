@@ -318,7 +318,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 58
+export const GAME_PROTOCOL_VERSION = 59
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
 export const GAME_CONNECTION_TIMEOUT_CLOSE_CODE = 4000
@@ -2795,6 +2795,7 @@ function playerPrimaryCastState(
     'held',
     'lastWeldPlaybackRate',
     'lastWeldSoundVariant',
+    'oneShotAttackPoseHeld',
     'selectedPrimaryAgeTicks',
     'selectedPrimaryId',
     'targetId',
@@ -2854,6 +2855,29 @@ function playerPrimaryCastState(
   if (selectedPrimaryId !== -1 && selectedPrimaryId !== expectedPrimaryId) {
     throw new GameProtocolError(`${field}.selectedPrimaryId does not match progression`)
   }
+  const held = boolean(source.held, `${field}.held`)
+  const emissionSequence = nonnegativeInteger(
+    source.emissionSequence,
+    `${field}.emissionSequence`,
+  )
+  const oneShotAttackPoseHeld = boolean(
+    source.oneShotAttackPoseHeld,
+    `${field}.oneShotAttackPoseHeld`,
+  )
+  const selectedOneShot = selectedPrimaryId === 8
+    || selectedPrimaryId === 16
+    || selectedPrimaryId === 1000
+    || selectedPrimaryId === 1001
+    || selectedPrimaryId === 1002
+    || selectedPrimaryId === 1009
+  if (oneShotAttackPoseHeld && (
+    !selectedOneShot
+    || channelActive
+    || emissionSequence === 0
+    || (!held && actionTick < 0)
+  )) {
+    throw new GameProtocolError(`${field}.oneShotAttackPoseHeld is outside a one-shot burst`)
+  }
   const etherBlastCharge = nonnegativeFinite(
     source.etherBlastCharge,
     `${field}.etherBlastCharge`,
@@ -2870,10 +2894,7 @@ function playerPrimaryCastState(
     aimDirection: unitVector(source.aimDirection, `${field}.aimDirection`),
     castSequence: nonnegativeInteger(source.castSequence, `${field}.castSequence`),
     channelActive,
-    emissionSequence: nonnegativeInteger(
-      source.emissionSequence,
-      `${field}.emissionSequence`,
-    ),
+    emissionSequence,
     etherBlastCharge,
     etherBlastChargeCueSequence: nonnegativeInteger(
       source.etherBlastChargeCueSequence,
@@ -2883,9 +2904,10 @@ function playerPrimaryCastState(
       source.fizzleSequence,
       `${field}.fizzleSequence`,
     ),
-    held: boolean(source.held, `${field}.held`),
+    held,
     lastWeldPlaybackRate,
     lastWeldSoundVariant,
+    oneShotAttackPoseHeld,
     selectedPrimaryAgeTicks: nonnegativeInteger(
       source.selectedPrimaryAgeTicks,
       `${field}.selectedPrimaryAgeTicks`,

@@ -34,6 +34,7 @@ export interface PlayerPrimaryCastState {
   held: boolean
   lastWeldPlaybackRate: number | null
   lastWeldSoundVariant: number | null
+  oneShotAttackPoseHeld: boolean
   selectedPrimaryAgeTicks: number
   selectedPrimaryId: number
   targetId: string | null
@@ -113,6 +114,7 @@ export function createIdlePlayerPrimaryCast(): PlayerPrimaryCastState {
     held: false,
     lastWeldPlaybackRate: null,
     lastWeldSoundVariant: null,
+    oneShotAttackPoseHeld: false,
     selectedPrimaryAgeTicks: 0,
     selectedPrimaryId: -1,
     targetId: null,

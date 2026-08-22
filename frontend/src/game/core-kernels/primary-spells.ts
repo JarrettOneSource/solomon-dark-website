@@ -796,6 +796,14 @@ export function primaryCastPose(
   return 7
 }
 
+export function primaryCastPresentationPose(
+  cast: PlayerPrimaryCastState,
+  element: WizardElement = 'fire',
+): 0 | 1 | 7 | 8 {
+  if (cast.oneShotAttackPoseHeld) return 8
+  return primaryCastPose(cast.actionTick, cast.channelActive, element)
+}
+
 export function primaryCastActionEndTick(element: WizardElement): number {
   return element === 'ether'
     ? PRIMARY_CAST_ETHER_ACTION_END_TICK
@@ -1225,15 +1233,22 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
     const oneShotPrimary = authority?.primarySkill.kind === 'weld'
       ? authority.primarySkill.castKind === 'one-shot'
       : primaryElement === 'ether' || primaryElement === 'fire'
+    const castProgressFactor = authority?.castProgressFactor ?? 1
+    const actionAvailable = previous.primaryCast.actionTick < 0 || (
+      oneShotPrimary
+      && !previous.primaryCast.channelActive
+      && previous.primaryCast.actionTick + castProgressFactor
+        >= primaryCastActionEndTick(castClockElement)
+    )
     const acceptedCast = rawHeld
-      && previous.primaryCast.actionTick < 0
+      && actionAvailable
       && (pressed || (oneShotPrimary && previous.primaryCast.castSequence > 0))
       && authority?.eligible === true
     const sustainedPrimary = authority?.primarySkill.kind === 'weld'
       ? authority.primarySkill.castKind !== 'one-shot'
       : primaryElement === 'air' || primaryElement === 'water' || primaryElement === 'earth'
     const aimSamplesInput = rawHeld && (
-      sustainedPrimary || previous.primaryCast.actionTick < 0
+      sustainedPrimary || actionAvailable
     )
     const aimDirection = aimSamplesInput && input?.aim
       ? primarySpellAimDirection(player.position, input.aim, context.viewScale)
@@ -1243,8 +1258,11 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
       rawHeld,
       acceptedCast,
       castClockElement,
-      authority?.castProgressFactor ?? 1,
+      castProgressFactor,
     )
+    if (!oneShotPrimary && primaryCast.oneShotAttackPoseHeld) {
+      primaryCast = { ...primaryCast, oneShotAttackPoseHeld: false }
+    }
     primaryCast = {
       ...primaryCast,
       selectedPrimaryAgeTicks: nativeSelectedPrimaryAge + 1,
@@ -1316,6 +1334,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           ...nextPlayer.primaryCast,
           actionTick: -1,
           channelActive: false,
+          oneShotAttackPoseHeld: false,
           underpowered: false,
         },
       })
@@ -1610,6 +1629,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
               ? birth.projectiles[0].castPlaybackRate
               : null
             : null,
+          oneShotAttackPoseHeld: true,
           underpowered,
           weaponPulse: NATIVE_PLAYER_CAST_WEAPON_PULSE,
         },
@@ -2448,11 +2468,14 @@ function advancePrimaryCast(
     }
   }
   if (acceptedCast) actionTick = 0
+  const oneShotAttackPoseHeld = previous.oneShotAttackPoseHeld
+    && (held || actionTick >= 0)
   return {
     ...previous,
     actionTick,
     castSequence: acceptedCast ? previous.castSequence + 1 : previous.castSequence,
     held,
+    oneShotAttackPoseHeld,
     underpowered: acceptedCast ? false : previous.underpowered,
   }
 }

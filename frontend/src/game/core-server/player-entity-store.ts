@@ -395,6 +395,7 @@ export function selectPlayerEntityPrimarySkill(
     held: false,
     lastWeldPlaybackRate: null,
     lastWeldSoundVariant: null,
+    oneShotAttackPoseHeld: false,
     selectedPrimaryAgeTicks: 0,
     selectedPrimaryId: skillBook.primarySkillId === 52
       ? skillBook.weldBuildId!

@@ -436,6 +436,10 @@ clients project the three native child clocks from that one authority state.
 The host owns damage, Ember motion/contact, registration order, and retirement;
 renderers own only display-frame jitter and local Region point gain.
 
+Protocol 59 adds the authoritative held one-shot attack-pose latch. The
+fixed-tick host publishes it with player cast state, and Hub/Boneyard clients
+retain it discretely without inferring pose lifetime from render frames.
+
 ## Saves, identity, and content
 
 - The authoritative game host is the only producer of browser-save contents.
