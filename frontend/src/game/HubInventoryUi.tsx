@@ -495,7 +495,7 @@ function NativeHubSurface({
       : HUB_TRADER_DIALOGUES[surface.trader].title
 
   return (
-    <div className="hub-native-ui-overlay">
+    <div className="hub-native-ui-overlay" data-surface-kind={surface.kind}>
       <section
         className="hub-native-ui-stage"
         style={style}

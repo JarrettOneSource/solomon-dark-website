@@ -24,6 +24,11 @@
   user-select: none;
 }
 
+/* Dialogue keeps the world visible behind the stage (renderer curtainAlpha = 0). */
+.hub-native-ui-overlay[data-surface-kind='dialogue'] {
+  background: transparent;
+}
+
 .hub-native-ui-stage {
   position: absolute;
   top: 0;
