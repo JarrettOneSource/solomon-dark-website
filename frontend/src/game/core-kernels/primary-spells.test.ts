@@ -67,15 +67,18 @@ import {
 } from './primary-spell-targeting.ts'
 import {
   createGameSimulation,
+  enterBoneyardWorld,
   getPlayerCharacter,
   stepGameSimulationTick,
   type GameSimulationState,
 } from '../core-server/game-simulation.ts'
+import type { LoadedBoneyard } from './boneyard.ts'
 import { playerCharacterRecords } from '../core-server/player-entity-store.ts'
 import { createNativeWeldMeteor } from './native-weld-primary-runtime.ts'
 import { createNativeEtherBlastParticleProgram } from './native-ether-blast.ts'
 
 const PLAYER_ID = 'caster'
+const INTEGRATION_VIEW_SCALE = 1.35
 const ACTOR_LIGHT_REGISTRATION = {
   managerLane: 'actor' as const,
   registrationOrdinal: 0,
@@ -125,7 +128,32 @@ function simulation(element: WizardElement): GameSimulationState {
     displayName: 'Caster',
     element,
   }
-  return createGameSimulation({ [PLAYER_ID]: config })
+  return enterBoneyardWorld(
+    createGameSimulation({ [PLAYER_ID]: config }),
+    primarySpellBoneyard(),
+  )
+}
+
+function primarySpellBoneyard(): LoadedBoneyard {
+  return {
+    choice: { id: 'primary-spells', name: 'Primary spells', source: 'default' },
+    geometrySha256: 'b'.repeat(64),
+    runId: 'primary-spells-run',
+    scene: {
+      bounds: { x: 0, y: 0, w: 500, h: 500 },
+      environmentMode: 2,
+      fences: [],
+      name: 'Primary spell fixture',
+      objects: [],
+      roads: [],
+      solomonDig: null,
+      spawn: { facingDeg: 180, x: 250, y: 250 },
+      sprites: [],
+      terrain: [],
+    },
+    seed: 'primary-spells-seed',
+    sourceSha256: 'a'.repeat(64),
+  }
 }
 
 function input(state: GameSimulationState, primary: boolean): PlayerCharacterInput {
@@ -1107,7 +1135,7 @@ test('Fire emits its one 4.5-unit missile from the native pushed socket', () => 
     origin: { ...fireball.position },
     ownerId: PLAYER_ID,
     variant: nativeFireParticleVariant(2),
-    worldKey: 'hub:courtyard',
+    worldKey: 'boneyard:primary-spells-run',
   })
 
   state = step(state, false, 3)
@@ -1405,7 +1433,7 @@ test('one-shot casts retain accepted facing against movement through projectile 
     const start = getPlayerCharacter(state, PLAYER_ID)
     const eastAim = {
       x: start.position.x + 200,
-      y: start.position.y - 25 / 1.2,
+      y: start.position.y - 25 / INTEGRATION_VIEW_SCALE,
     }
     const castInput = (primary: boolean): PlayerCharacterInput => ({
       aim: eastAim,
@@ -1478,9 +1506,7 @@ test('Water emits the shipped Enhanced Effects Frost pair while held and lets it
   const born = state.primarySpells.transients.filter((effect) => effect.kind === 'water')
   assert.equal(born.length, 2)
   assert.deepEqual(born.map(({ ageTicks }) => ageTicks), [1, 1])
-  assert.equal(born.filter(({ obstructionPoint }) => obstructionPoint !== null).length, 1)
-  assert.equal(born.find(({ id }) => id === 2)?.obstructionPoint?.y, 0)
-  assert.ok((born.find(({ id }) => id === 2)?.obstructionDistance ?? -1) >= 0)
+  assert.ok(born.every(({ obstructionPoint }) => obstructionPoint === null))
   state = step(state, true, 3)
   assert.equal(getPlayerCharacter(state, PLAYER_ID).primaryCast.actionTick, 1)
   assert.equal(primaryCastPose(1, true), 7)
@@ -1501,10 +1527,10 @@ test('Water wiggle uses the shared authority tick when player ids interleave', (
     displayName,
     element: 'water',
   })
-  let state = createGameSimulation({
+  let state = enterBoneyardWorld(createGameSimulation({
     'caster-a': water('Caster A'),
     'caster-b': water('Caster B'),
-  })
+  }), primarySpellBoneyard())
   const heldInputs = (): Readonly<Record<string, PlayerCharacterInput>> => Object.fromEntries(
     Object.entries(playerCharacterRecords(state.playerEntities)).map(([playerId, player]) => [playerId, {
       ...createIdlePlayerCharacterInput(),
@@ -1607,7 +1633,7 @@ test('Earth resamples world aim while held and freezes the last sample on releas
     ...createIdlePlayerCharacterInput(),
     aim: {
       x: player.position.x + 200,
-      y: player.position.y - 25 / 1.2,
+      y: player.position.y - 25 / INTEGRATION_VIEW_SCALE,
     },
     cast: { primary: true, quickbar: null },
   }
@@ -1780,7 +1806,7 @@ test('Earth publishes one authoritative breakup when its next flight position co
     lifetimeTicks: earthImpactLifetimeTicks(impact),
     origin: checked[0].position,
     ownerId: PLAYER_ID,
-    worldKey: 'hub:courtyard',
+    worldKey: 'boneyard:primary-spells-run',
   })
 })
 

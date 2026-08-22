@@ -15,6 +15,7 @@ import type {
 import {
   createPlayerCharacterDrawPlan,
   createPlayerDeathDrawPlan,
+  playerEquippedElementEffectScale,
   playerDeathEquipmentAppearance,
   playerLivingEquipmentAppearance,
 } from '../player-character-presentation.ts'
@@ -67,6 +68,7 @@ export class PlayerWorldView {
   private worldTint = 0xffffff
   private currentWalkPose = 0
   private currentAttachmentPose = 0
+  private currentElementEffectScale = 1
   private currentDeathFrame: number | null = null
   private secondaryState: NativeSecondaryPlayerState | undefined
   private robePrimaryTint = 0xffffff
@@ -235,10 +237,6 @@ export class PlayerWorldView {
     this.hitStaffFront.visible = hasWeapon
     this.hitHead.visible = true
     this.hitHeadSecondary.visible = livingAppearance.hat !== null
-    this.staffBack.scale.set(plan.weaponScale)
-    this.staffFront.scale.set(plan.weaponScale)
-    this.hitStaffBack.scale.set(plan.weaponScale)
-    this.hitStaffFront.scale.set(plan.weaponScale)
     if (weaponTextures !== null) {
       this.staffBack.texture = weaponTextures.back[heading]![attachmentPose]!
       this.staffFront.texture = weaponTextures.front[heading]![attachmentPose]!
@@ -297,7 +295,11 @@ export class PlayerWorldView {
       orbOffset.y + (staffFront ? attachmentOffset.y : 0),
     )
     this.orb.container.zIndex = staffFront ? 6 : 2
-    this.orb.update(tick)
+    this.currentElementEffectScale = playerEquippedElementEffectScale(
+      player.primaryCast.weaponPulse,
+      player.lighting.overlayEffectPhase,
+    )
+    this.orb.update(tick, this.currentElementEffectScale)
     this.applyMaterialTint()
   }
 
@@ -307,6 +309,10 @@ export class PlayerWorldView {
 
   get attachmentPose(): number {
     return this.currentAttachmentPose
+  }
+
+  get elementEffectScale(): number {
+    return this.currentElementEffectScale
   }
 
   get deathColorLayerCount(): number {
@@ -323,6 +329,10 @@ export class PlayerWorldView {
 
   get materialTint(): number {
     return this.robe.tint
+  }
+
+  get weaponScale(): number {
+    return this.staffBack.scale.x
   }
 
   get magicShieldScale(): number {

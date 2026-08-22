@@ -31,8 +31,11 @@ the Website no longer owns a DLL loader, custom-protocol launcher hand-off,
 native-lobby directory, or native-save ZIP service.
 
 Browser play has no launcher lobby directory or join-by-lobby URL. New Game
-requests one single-use shared-Hub admission ticket, and the authoritative host
-registers a singleton party when the completed character authenticates.
+first enters Create without requesting or reserving shared-Hub admission. The
+accepted discipline starts the Hub loading/input barrier; only behind that
+barrier does the page request one single-use shared-Hub ticket and connect the
+completed character. The authoritative host registers a singleton party when
+that complete character authenticates.
 Players discover one another in the Courtyard itself, inspect a name-only
 profile, and exchange party invitations over the gameplay protocol. The
 current party leader alone can launch; that transition freezes the current
@@ -43,7 +46,7 @@ instance.
 The shared Hub and its in-world party system remain the only Website
 multiplayer authority and entry path. The Dark Cloud browser may read a public
 directory projected from that owner: it lists safe multi-member party summaries
-and sends the player through ordinary shared-Hub admission. It does not expose
+and sends the player through the same Create-first shared-Hub entry flow. It does not expose
 internal singleton memberships, invitations, credentials, content manifests,
 private sessions, or a direct join edge. No launcher transport participates in
 the rebuilt browser game's party model.
@@ -199,6 +202,13 @@ dependencies without revisiting this release invariant.
   on its own fixed tick, while unchanged held state and same-level aim updates
   may coalesce. Spell systems consume this seam later rather than importing DOM
   button events or browser coordinates.
+- The shared Hub is a noncombat social world. Its world boundary preserves
+  movement and category-1 primary-selection intents but replaces primary cast
+  levels and every category-2 quickbar action with idle input before spell
+  authority. The browser also removes the Hub touch-primary affordance and
+  suppresses primary mouse output, but the server gate remains decisive for a
+  crafted client. Party Boneyards continue to consume the complete combat
+  input, including primary, secondary, and staff-action families.
 - The client predicts only explicitly shared kernels needed for the local
   player. Remote actors and server-only systems are presented from buffered
   authoritative snapshots.
@@ -373,7 +383,7 @@ three channels.
   `(id, version, content SHA-256)`. This follows the existing host-manifest
   contract.
 - A Website account owns `ModSubscription` rows. Subscription controls Library
-  membership; `enabled` controls the next admission snapshot. The backend
+  membership; `enabled` controls the next post-loadout admission snapshot. The backend
   resolves exact latest published versions, validates the complete dependency
   graph, reopens and hashes every package, and sends only accepted Lua and typed
   Boneyard members with the single-use Hub ticket or private-session request.
@@ -382,8 +392,11 @@ three channels.
   the run then owns one isolated Lua VM per active Lua member and a party-local
   Boneyard catalog. Other Hub residents and other party runs cannot observe or
   mutate that content. Subscription changes affect only a later admission.
-- On resume, the title owner compares the save manifest with the next-admission
-  manifest before requesting a ticket. Exact matches restore matching mod
+- On resume, the title owner first compares the stored manifest with the
+  already-loaded account preview. Once that preflight is accepted, it starts
+  the matching Hub/Boneyard loading barrier before requesting a ticket; the
+  admission and host handshake remain the authoritative content check. Exact
+  matches restore matching mod
   state. Added mods start empty; removed or version/content-changed mods discard
   their old state only after explicit Continue. Cancel leaves the save and
   active subscriptions untouched.

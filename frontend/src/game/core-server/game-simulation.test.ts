@@ -8,6 +8,8 @@ import {
   BONEYARD_GAME_OVER_EXIT_FADE_TICKS,
 } from '../core-kernels/game-run.ts'
 import { NATIVE_HALL_OF_FAME_SCORE } from '../core-kernels/hall-of-fame-score.ts'
+import { NATIVE_SECONDARY_ABILITY_IDS } from '../core-kernels/native-secondary-ability-contract.ts'
+import { NATIVE_WELD_BUILDS } from '../core-kernels/player-progression.ts'
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-schema.ts'
 import { startBoneyardArenaTransition } from '../core-kernels/boneyard-arena-transition.ts'
 import { startBoneyardWaveDirector } from '../core-kernels/boneyard-wave-director.ts'
@@ -48,6 +50,7 @@ import {
   getPlayerSkillBook,
   grantGameSimulationPlayerExperience,
   removePlayerCharacter,
+  returnGameSimulationToHub,
   rerollGameSimulationPlayerSkill,
   saveGameSimulationPlayerSkill,
   selectGameSimulationPlayerSkill,
@@ -63,6 +66,7 @@ import {
   type BoneyardEnemySemanticEvent,
 } from './boneyard-enemy-store.ts'
 import { spawnBoneyardLootSpecs } from './boneyard-loot-store.ts'
+import { sealHubCombatInput } from './hub-combat-input.ts'
 import {
   damagePlayerEntity,
   dazzlePlayerEntity,
@@ -392,6 +396,67 @@ test('game simulation owns player characters outside the active world', () => {
   assert.throws(() => getPlayerCharacter(state, 'first'), /no player character/)
   assert.deepEqual(getPlayerCharacter(state, 'second').config, secondConfig)
   assert.deepEqual(Object.keys(state.world.participants), ['second'])
+})
+
+test('Hub combat seal preserves movement and primary selection while rejecting every cast family', () => {
+  const source = {
+    aim: { x: 400, y: 300 },
+    cast: { primary: true, quickbar: 0 },
+    movement: { x: 1, y: -1 },
+  }
+  const weldIds = NATIVE_WELD_BUILDS.map(({ id }) => id)
+  assert.deepEqual(weldIds, [1000, 1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009])
+  for (const skillId of [8, 16, 24, 32, 40, 52]) {
+    assert.deepEqual(
+      sealHubCombatInput(source, [skillId, null, null, null, null, null, null, null]),
+      {
+        aim: null,
+        cast: { primary: false, quickbar: 0 },
+        movement: { x: 1, y: -1 },
+      },
+      `primary ${skillId} crossed the Hub combat seal`,
+    )
+  }
+  for (const buildId of weldIds) {
+    assert.equal(
+      sealHubCombatInput(source, [52, null, null, null, null, null, null, null]).cast.primary,
+      false,
+      `weld ${buildId} crossed the Hub combat seal`,
+    )
+  }
+  for (const skillId of NATIVE_SECONDARY_ABILITY_IDS) {
+    assert.deepEqual(
+      sealHubCombatInput(source, [skillId, null, null, null, null, null, null, null]),
+      {
+        aim: null,
+        cast: { primary: false, quickbar: null },
+        movement: { x: 1, y: -1 },
+      },
+      `secondary ${skillId} crossed the Hub combat seal`,
+    )
+  }
+
+  let state = createGameSimulation({ caster: {
+    discipline: 'arcane',
+    displayName: 'Hub Caster',
+    element: 'fire',
+  } })
+  const before = getPlayerCharacter(state, 'caster')
+  const manaBefore = getPlayerProgression(state, 'caster').currentMana
+  state = stepGameSimulationTick(state, { caster: {
+    aim: { x: before.position.x, y: before.position.y - 200 },
+    cast: { primary: true, quickbar: null },
+    movement: { x: 1, y: 0 },
+  } })
+  const after = getPlayerCharacter(state, 'caster')
+  assert.ok(after.position.x > before.position.x)
+  assert.equal(after.primaryCast.actionTick, -1)
+  assert.equal(after.primaryCast.castSequence, 0)
+  assert.equal(after.primaryCast.emissionSequence, 0)
+  assert.equal(getPlayerProgression(state, 'caster').currentMana, manaBefore)
+  assert.deepEqual(state.primarySpells, { nextId: 1, projectiles: [], transients: [] })
+  assert.deepEqual(state.secondaryAbilities.actors, [])
+  assert.deepEqual(state.secondaryAbilities.events, [])
 })
 
 test('hub trader actions require the authenticated participant to be in native service range', () => {
@@ -961,7 +1026,7 @@ test('disconnect and world replacement clean spell actors and cast ownership', (
     displayName: 'Earth Caster',
     element: 'earth',
   } as const
-  let state = createGameSimulation({ caster: earth })
+  let state = enterBoneyardWorld(createGameSimulation({ caster: earth }), emptyBoneyard())
   const cast = (primary: boolean) => ({
     aim: {
       x: getPlayerCharacter(state, 'caster').position.x,
@@ -976,12 +1041,15 @@ test('disconnect and world replacement clean spell actors and cast ownership', (
   state = removePlayerCharacter(state, 'caster')
   assert.deepEqual(state.primarySpells.projectiles, [])
 
-  state = createGameSimulation({ caster: { ...earth, element: 'fire' } })
+  state = enterBoneyardWorld(
+    createGameSimulation({ caster: { ...earth, element: 'fire' } }),
+    emptyBoneyard(),
+  )
   for (let tick = 0; tick < 20; tick += 1) {
     state = stepGameSimulationTick(state, { caster: cast(true) })
   }
   assert.equal(state.primarySpells.projectiles.length, 1)
-  state = enterBoneyardWorld(state, emptyBoneyard())
+  state = returnGameSimulationToHub(state)
   assert.deepEqual(state.primarySpells, { nextId: 1, projectiles: [], transients: [] })
   assert.equal(getPlayerCharacter(state, 'caster').primaryCast.actionTick, -1)
   assert.equal(getPlayerCharacter(state, 'caster').primaryCast.channelActive, false)
@@ -993,7 +1061,7 @@ test('authoritative player ticks reset and decay StaffConstant lighting before p
     displayName: 'Water Caster',
     element: 'water',
   } as const
-  let state = createGameSimulation({ caster: water })
+  let state = enterBoneyardWorld(createGameSimulation({ caster: water }), emptyBoneyard())
   const cast = (primary: boolean) => {
     const player = getPlayerCharacter(state, 'caster')
     return {
@@ -1101,8 +1169,12 @@ test('booked primary ranks feed new casts while existing projectile payloads sta
     displayName: 'Fire Caster',
     element: 'fire',
   } as const
-  let rankOne = createGameSimulation({ caster: fire })
-  let rankTwo = withEffectivePrimaryRank(createGameSimulation({ caster: fire }), 'caster', 2)
+  let rankOne = enterBoneyardWorld(createGameSimulation({ caster: fire }), emptyBoneyard())
+  let rankTwo = withEffectivePrimaryRank(
+    enterBoneyardWorld(createGameSimulation({ caster: fire }), emptyBoneyard()),
+    'caster',
+    2,
+  )
   const cast = (state: GameSimulationState, primary: boolean) => {
     const player = getPlayerCharacter(state, 'caster')
     return {
@@ -1142,11 +1214,14 @@ test('Battle and Siege factors reach the authoritative primary payment and birth
     displayName: 'Mind Fire Caster',
     element: 'fire',
   } as const
-  let baseline = createGameSimulation({ caster: fire })
-  let passive = withPassiveRanks(createGameSimulation({ caster: fire }), 'caster', {
-    59: 1,
-    61: 1,
-  })
+  let baseline = enterBoneyardWorld(createGameSimulation({ caster: fire }), emptyBoneyard())
+  let passive = enterBoneyardWorld(
+    withPassiveRanks(createGameSimulation({ caster: fire }), 'caster', {
+      59: 1,
+      61: 1,
+    }),
+    emptyBoneyard(),
+  )
   const input = (state: GameSimulationState) => {
     const player = getPlayerCharacter(state, 'caster')
     return {

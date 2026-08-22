@@ -293,6 +293,7 @@ interface BoneyardRendererFrameDiagnostics {
   playerDeathShadowLayerCount: number
   playerDeathBurstCount: number
   playerDeathWeaponCount: number
+  playerElementEffectScale: number
   playerLightRadius: number
   playerLightRasterRadius: number
   playerMagicShieldScale: number
@@ -310,6 +311,7 @@ interface BoneyardRendererFrameDiagnostics {
   playerScreenX: number
   playerScreenY: number
   playerWalkPose: number
+  playerWeaponScale: number
   playerX: number
   playerY: number
   solomonFrame: number
@@ -647,6 +649,7 @@ export async function createBoneyardWorldRenderer(
     playerDeathShadowLayerCount: 0,
     playerDeathBurstCount: 0,
     playerDeathWeaponCount: 0,
+    playerElementEffectScale: 1,
     playerLightRadius: 0,
     playerLightRasterRadius: 0,
     playerMagicShieldScale: 1.5,
@@ -658,6 +661,7 @@ export async function createBoneyardWorldRenderer(
     playerScreenX: Number.NaN,
     playerScreenY: Number.NaN,
     playerWalkPose: 0,
+    playerWeaponScale: 1,
     playerX: Number.NaN,
     playerY: Number.NaN,
     solomonFrame: 0,
@@ -1006,6 +1010,8 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.playerWalkPose = scene.playerWalkPose(options.playerId)
       const playerView = scene.player(options.playerId)
       frameDiagnostics.playerAttachmentPose = playerView?.attachmentPose ?? 0
+      frameDiagnostics.playerElementEffectScale = playerView?.elementEffectScale ?? 1
+      frameDiagnostics.playerWeaponScale = playerView?.weaponScale ?? 1
       const deathFrame = playerView?.deathFrame ?? null
       frameDiagnostics.playerDeathColorLayerCount = playerView?.deathColorLayerCount ?? 0
       frameDiagnostics.playerDeathFrame = deathFrame

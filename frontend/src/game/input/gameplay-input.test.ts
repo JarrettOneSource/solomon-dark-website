@@ -112,6 +112,35 @@ test('a local presentation owner can claim either mouse edge before casting', ()
   input.destroy()
 })
 
+test('a noncombat scene suppresses primary mouse and touch without blocking movement or quickbar input', () => {
+  const mouseTarget = new EventTarget()
+  const target = new EventTarget()
+  const published: PlayerCharacterInput[] = []
+  const input = createBrowserGameplayInput({
+    getGamepads: () => [],
+    mouseTarget,
+    onInput: (state) => published.push(state),
+    primaryCastingEnabled: false,
+    projectDirection: ({ x, y }) => ({ x: x * 100, y: y * 100 }),
+    projectPointer: ({ x, y }) => ({ x, y }),
+    target,
+    visibilityTarget: new FakeVisibilityTarget(),
+  })
+
+  assert.equal(mouseTarget.dispatchEvent(new FakeMouseEvent('mousedown', 0, 20, 30)), true)
+  input.setTouchPrimary({ x: 1, y: 0 })
+  assert.deepEqual(published, [])
+
+  input.setTouch({ x: 1, y: 0 })
+  input.setTouchQuickbar(3, true, { x: 0, y: -1 })
+  assert.deepEqual(input.sample().input, {
+    aim: { x: 0, y: -100 },
+    cast: { primary: false, quickbar: 3 },
+    movement: { x: 1, y: 0 },
+  })
+  input.destroy()
+})
+
 test('ignores non-world downs but keeps move and release capture outside the surface', () => {
   const mouseTarget = new EventTarget()
   const target = new EventTarget()

@@ -49,7 +49,6 @@ export interface PlayerCharacterDrawPlan {
   orbZIndex: number
   robePose: number
   staffFront: boolean
-  weaponScale: number
 }
 
 export interface PlayerDeathDrawPlan {
@@ -274,8 +273,14 @@ export function createPlayerCharacterDrawPlan(
     orbZIndex: staffFront ? 6 : 2,
     robePose: playerCharacterRobePose(state.walkCyclePrimary),
     staffFront,
-    weaponScale: Math.fround(1 + 10 * state.primaryCast.weaponPulse),
   }
+}
+
+export function playerEquippedElementEffectScale(
+  primaryPulse: number,
+  castLightPulse: number,
+): number {
+  return Math.fround(1 + 10 * Math.max(primaryPulse, castLightPulse))
 }
 
 function selectedPrimaryCastElement(

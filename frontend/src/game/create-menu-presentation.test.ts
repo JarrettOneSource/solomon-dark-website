@@ -62,10 +62,20 @@ test('wizard-name controls own only their logical bounds and a fresh Create owns
   assert.match(mainMenuCss, /\.create-menu-name-randomize\s*\{[^}]*background-color:\s*transparent/s)
   assert.doesNotMatch(mainMenuCss, /\.create-menu-name-randomize\s*\{[^}]*(?:border-radius|box-shadow):/s)
   assert.doesNotMatch(mainScene, /wizardNameTouchedRef/)
-  assert.match(
-    mainScene,
-    /await prepareNewGame\(\)[\s\S]*setWizardName\(initialCreateWizardNameForSession\(displayName\)\)[\s\S]*transitionTo\('create'\)/,
+  const beginNewGame = mainScene.slice(
+    mainScene.indexOf('const beginNewGame ='),
+    mainScene.indexOf('const leaveCreate ='),
   )
+  const startHub = mainScene.slice(
+    mainScene.indexOf('const startHub ='),
+    mainScene.indexOf('const startBoneyard ='),
+  )
+  assert.doesNotMatch(beginNewGame, /prepareNewGame/)
+  assert.match(
+    beginNewGame,
+    /setWizardName\(initialCreateWizardNameForSession\(displayName\)\)[\s\S]*transitionTo\('create'\)/,
+  )
+  assert.match(startHub, /await prepareNewGame\(\)[\s\S]*await connectSession\(/)
 })
 
 test('wizard-name layout drains the native group-4 glyph and kerning membership', () => {

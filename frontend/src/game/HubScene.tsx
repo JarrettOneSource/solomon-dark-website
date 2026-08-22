@@ -339,6 +339,7 @@ export default function HubScene({
       controls: settingsRef.current.controls,
       mouseTarget: host,
       onInput,
+      primaryCastingEnabled: false,
       projectDirection: (direction) => {
         const snapshot = samplePresentation()
         const player = snapshot.players[playerId]
@@ -847,11 +848,6 @@ export default function HubScene({
         <TouchJoystick
           lane="movement"
           onInput={(movement) => inputRef.current?.setTouch(movement)}
-          uiScale={uiScale}
-        />
-        <TouchJoystick
-          lane="primary"
-          onInput={(direction) => inputRef.current?.setTouchPrimary(direction)}
           uiScale={uiScale}
         />
 

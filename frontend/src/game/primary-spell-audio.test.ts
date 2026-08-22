@@ -18,11 +18,13 @@ import type {
 } from './core-kernels/native-secondary-abilities.ts'
 import {
   createGameSimulation,
+  enterBoneyardWorld,
   getPlayerCharacter,
   removePlayerCharacter,
   stepGameSimulationTick,
   type GameSimulationState,
 } from './core-server/game-simulation.ts'
+import type { LoadedBoneyard } from './core-kernels/boneyard.ts'
 import type { GameAudioDirector, PlaySoundOptions } from './game-audio-director.ts'
 import type {
   GameLoopCue,
@@ -40,6 +42,7 @@ import type {
 import { createNativeRng } from './core-kernels/native-rng.ts'
 
 const PLAYER_ID = 'caster'
+const AUDIO_WORLD_KEY = 'boneyard:primary-audio-run'
 
 class RecordingAudio {
   readonly sounds: GameSoundCue[] = []
@@ -71,13 +74,38 @@ class RecordingAudio {
 }
 
 function simulation(element: WizardElement): GameSimulationState {
-  return createGameSimulation({
-    [PLAYER_ID]: {
-      discipline: 'arcane',
-      displayName: 'Caster',
-      element,
+  return enterBoneyardWorld(
+    createGameSimulation({
+      [PLAYER_ID]: {
+        discipline: 'arcane',
+        displayName: 'Caster',
+        element,
+      },
+    }),
+    primaryAudioBoneyard(),
+  )
+}
+
+function primaryAudioBoneyard(): LoadedBoneyard {
+  return {
+    choice: { id: 'primary-audio', name: 'Primary audio', source: 'default' },
+    geometrySha256: 'b'.repeat(64),
+    runId: 'primary-audio-run',
+    scene: {
+      bounds: { x: 0, y: 0, w: 500, h: 500 },
+      environmentMode: 2,
+      fences: [],
+      name: 'Primary audio fixture',
+      objects: [],
+      roads: [],
+      solomonDig: null,
+      spawn: { facingDeg: 180, x: 250, y: 250 },
+      sprites: [],
+      terrain: [],
     },
-  })
+    seed: 'primary-audio-seed',
+    sourceSha256: 'a'.repeat(64),
+  }
 }
 
 function secondaryActor(
@@ -122,7 +150,7 @@ function secondaryActor(
     targetId: null,
     variant: 0,
     velocity: { x: 0, y: 0 },
-    worldKey: 'hub:courtyard',
+    worldKey: AUDIO_WORLD_KEY,
   }
 }
 
@@ -363,7 +391,7 @@ test('plays ordinary and Ethereal Boulder terminal sound pairs from saved charge
         lifetimeTicks: 100,
         origin: position,
         ownerId: PLAYER_ID,
-        worldKey: 'hub:courtyard',
+        worldKey: AUDIO_WORLD_KEY,
       }, {
         ageTicks: 0,
         alpha: 2,
@@ -382,7 +410,7 @@ test('plays ordinary and Ethereal Boulder terminal sound pairs from saved charge
         presentationRotationDegrees: null,
         presentationScale: 2,
         vector: [8, 2, 1, 1, 1, 1],
-        worldKey: 'hub:courtyard',
+        worldKey: AUDIO_WORLD_KEY,
       }],
     },
     tick: initial.tick + 1,
@@ -535,7 +563,7 @@ test('consumes GoodImp landing and Bite banks only from replicated actor counter
     targetId: 'enemy:1',
     verticalOffset: 0,
     verticalVelocity: -4,
-    worldKey: 'hub:courtyard',
+    worldKey: AUDIO_WORLD_KEY,
   } satisfies PrimarySpellFireGoodImpState
   const landed = {
     ...initial,
@@ -645,7 +673,7 @@ test('plays Ether Blast charge crossings and the three release layers at native 
         origin: { ...charged.players[PLAYER_ID].position },
         ownerId: PLAYER_ID,
         presentationRng: createNativeRng(14),
-        worldKey: 'hub:courtyard',
+        worldKey: AUDIO_WORLD_KEY,
       }],
     },
     tick: charged.tick + 1,
@@ -773,7 +801,7 @@ test('plays each semantic Fire impact once without replaying an initial snapshot
     origin: { x: player.position.x, y: player.position.y - 50 },
     ownerId: PLAYER_ID,
     visualScale: 1,
-    worldKey: 'hub:courtyard',
+    worldKey: AUDIO_WORLD_KEY,
   } as const
   const audio = new RecordingAudio()
   const synchronizer = new PrimarySpellAudioSynchronizer(
@@ -814,7 +842,7 @@ test('plays each semantic Ether impact once with its native pitch interval', () 
     origin: { x: player.position.x, y: player.position.y - 50 },
     ownerId: PLAYER_ID,
     visualScale: 1,
-    worldKey: 'hub:courtyard',
+    worldKey: AUDIO_WORLD_KEY,
   } as const
   const audio = new RecordingAudio()
   const synchronizer = new PrimarySpellAudioSynchronizer(
@@ -850,7 +878,7 @@ test('plays each retained Staff contact once in native swoosh, world-impact, the
     pikeBreakSoundIndexes: [0],
     swooshPitch: 1.1,
     targetIds: ['enemy:1'],
-    worldKey: 'hub:courtyard',
+    worldKey: AUDIO_WORLD_KEY,
   } as const
   const initialSnapshot = createGameSnapshot(initial, PLAYER_ID)
   const contacted = createGameSnapshot({
@@ -1053,7 +1081,7 @@ test('Magic Trap ElectricBurn starts only after its first native update and stop
     targetId: 33,
     variant: 2,
     velocity: { x: 0, y: 0 },
-    worldKey: 'hub:courtyard',
+    worldKey: AUDIO_WORLD_KEY,
   }
   const born = {
     ...initial,
@@ -1109,7 +1137,7 @@ test('secondary one-shots and streams consume new authoritative events once with
     eventId: number,
     cue: NativeSecondaryAudioCue,
     pitch: number,
-    worldKey = 'hub:courtyard',
+    worldKey = AUDIO_WORLD_KEY,
   ): NativeSecondaryEventState => ({
     actorId: null,
     cameraDisplacement: null,
@@ -1268,7 +1296,7 @@ test('Hurricane renews the shared steady-wind wrapper from contact charge', () =
     ownerId: PLAYER_ID,
     phaseDegrees: 0,
     position: initial.players[PLAYER_ID]!.position,
-    worldKey: 'hub:courtyard',
+    worldKey: AUDIO_WORLD_KEY,
   }
   const live = {
     ...initial,
@@ -1358,7 +1386,7 @@ function meteorAudioActor(
     vector: underpowered
       ? [8, 16, 20, 1.1, 1.5, 0, 0, 0, 0]
       : [8, 16, 20, 1.1, 1.5, 3, 10, 2, 3],
-    worldKey: 'hub:courtyard',
+    worldKey: AUDIO_WORLD_KEY,
   }
 }
 
@@ -1391,7 +1419,7 @@ function hailAudioActor(
     toughness: 1,
     vector: [7, 2, 1, 1, 0.2, 0.5],
     widen: 0.5,
-    worldKey: 'hub:courtyard',
+    worldKey: AUDIO_WORLD_KEY,
   }
 }
 
@@ -1423,7 +1451,7 @@ function weldImpactAudioActor(
     vector: buildId === 1009
       ? [8, 5, 1, 1, 1, 0]
       : [8, 8, 5, 1, 1, 0, 0],
-    worldKey: 'hub:courtyard',
+    worldKey: AUDIO_WORLD_KEY,
   }
 }
 

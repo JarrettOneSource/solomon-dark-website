@@ -163,6 +163,7 @@ import {
   type BoneyardEnemySemanticEvent,
 } from './boneyard-enemy-store.ts'
 import { stepPlayerStaffCombatSystem } from './player-staff-combat-system.ts'
+import { sealHubCombatInput } from './hub-combat-input.ts'
 import {
   addHubParticipant,
   createHubWorld,
@@ -1123,11 +1124,17 @@ export function stepGameSimulationTick(
       : []
   )))
   const activeInputs = Object.fromEntries(Object.keys(players).map((playerId) => {
-    const input = getPlayerProgression(state, playerId).pendingOffer
+    const admittedInput = getPlayerProgression(state, playerId).pendingOffer
       || !playerEntityCanAcceptInput(state.playerEntities, playerId)
       || (state.run.phase !== 'hub' && state.run.phase !== 'active')
       ? createIdlePlayerCharacterInput()
       : inputs[playerId] ?? createIdlePlayerCharacterInput()
+    const input = state.world.kind === 'hub'
+      ? sealHubCombatInput(
+          admittedInput,
+          playerSkillBookAt(state.playerEntities, playerId)?.skillQuickbar ?? [],
+        )
+      : admittedInput
     return [playerId, staffActionOwnerIds.has(playerId)
       ? {
           ...input,

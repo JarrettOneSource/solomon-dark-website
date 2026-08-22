@@ -53,6 +53,7 @@ interface BrowserGameplayInputOptions {
   getGamepads?: () => readonly (GamepadLike | null)[]
   mouseTarget: BrowserInputTarget
   onInput: (input: PlayerCharacterInput) => void
+  primaryCastingEnabled?: boolean
   projectDirection: (direction: Vector2) => Vector2 | null
   projectPointer: (pointer: Vector2) => Vector2 | null
   projectSecondaryAim?: () => Vector2 | null
@@ -67,6 +68,7 @@ export function createBrowserGameplayInput({
   getGamepads = () => navigator.getGamepads(),
   mouseTarget,
   onInput,
+  primaryCastingEnabled = true,
   projectDirection,
   projectPointer,
   projectSecondaryAim = () => null,
@@ -134,6 +136,7 @@ export function createBrowserGameplayInput({
     const mouse = mouseEvent(event)
     const lane = mouse && castLane(mouse.button, controls)
     if (!mouse || !lane) return
+    if (lane === 'primary' && !primaryCastingEnabled) return
     if (claimMouseCastStart(lane)) {
       event.preventDefault()
       return
@@ -257,7 +260,7 @@ export function createBrowserGameplayInput({
       if (!blocked) movement.setTouch(nextMovement)
     },
     setTouchPrimary(direction) {
-      if (blocked) return
+      if (blocked || !primaryCastingEnabled) return
       touchPrimaryDirection = primaryDirection(direction)
       publish()
     },

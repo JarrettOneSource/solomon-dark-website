@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 import {
@@ -8,6 +9,8 @@ import {
   NATIVE_SKILL_QUICKBAR_FONT,
   NATIVE_SKILL_QUICKBAR_SLOT_OFFSETS,
 } from './skill-quickbar.ts'
+
+const component = readFileSync(new URL('./SkillQuickbar.tsx', import.meta.url), 'utf8')
 
 test('skill quickbar keeps the exact eight 53 px slots and 60 px pitch', () => {
   assert.deepEqual(NATIVE_SKILL_QUICKBAR_SLOT_OFFSETS, [
@@ -19,6 +22,11 @@ test('skill quickbar keeps the exact eight 53 px slots and 60 px pitch', () => {
     )),
     [60, 60, 60],
   )
+})
+
+test('Hub pointer quickbar disables category-2 actions while retaining primary selection', () => {
+  assert.match(component, /const combatDisabled = mode === 'hub' && secondary/)
+  assert.match(component, /disabled=\{skill === undefined \|\| !onInput \|\| combatDisabled\}/)
 })
 
 test('cooldown presentation selects the stock common or longer row timer', () => {

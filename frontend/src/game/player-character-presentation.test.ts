@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import { createHubEconomy } from './core-kernels/hub-economy.ts'
 import { createIdlePlayerPrimaryCast } from './core-kernels/player-character.ts'
@@ -10,6 +11,7 @@ import {
 import {
   createPlayerCharacterDrawPlan,
   createPlayerDeathDrawPlan,
+  playerEquippedElementEffectScale,
   playerDeathEquipmentAppearance,
   playerLivingEquipmentAppearance,
   playerCharacterFixedRobeOffset,
@@ -20,6 +22,8 @@ import {
   playerCharacterStaffOrbOffset,
   playerStaffActionPose,
 } from './player-character-presentation.ts'
+
+const playerWorldView = readFileSync(new URL('./renderer/hub-actors.ts', import.meta.url), 'utf8')
 
 test('player death draw plan uses the native four-frame six-facing bank', () => {
   assert.deepEqual(createPlayerDeathDrawPlan(0, 'alive', 999), {
@@ -259,15 +263,24 @@ test('player character draw plan preserves native attachment and gait transforms
   assert.equal(plan.moving, true)
   assert.equal(plan.staffFront, true)
   assert.equal(plan.orbZIndex, 6)
-  assert.equal(plan.weaponScale, 1)
-  assert.equal(createPlayerCharacterDrawPlan({
+  const pulsingPlan = createPlayerCharacterDrawPlan({
     config: FIRE_CONFIG,
     gaitDegrees: 0,
     headingIndex: 0,
     primaryCast: { ...createIdlePlayerPrimaryCast(), weaponPulse: 0.25 },
     velocity: { x: 0, y: 0 },
     walkCyclePrimary: 0,
-  }).weaponScale, 3.5)
+  })
+  assert.equal('weaponScale' in pulsingPlan, false)
+  assert.equal(playerEquippedElementEffectScale(0, 0), 1)
+  assert.equal(playerEquippedElementEffectScale(0.25, 0), 3.5)
+  assert.equal(playerEquippedElementEffectScale(0, 0.225), 3.25)
+  assert.equal(playerEquippedElementEffectScale(0.15, 0.135), 2.5)
+  assert.doesNotMatch(playerWorldView, /staff(?:Back|Front)\.scale\.set/)
+  assert.match(
+    playerWorldView,
+    /playerEquippedElementEffectScale\([\s\S]*player\.primaryCast\.weaponPulse,[\s\S]*player\.lighting\.overlayEffectPhase,[\s\S]*this\.orb\.update\(tick, this\.currentElementEffectScale\)/,
+  )
 })
 
 test('player draw plan consumes the authoritative Staff Cast 1 pose bank', () => {

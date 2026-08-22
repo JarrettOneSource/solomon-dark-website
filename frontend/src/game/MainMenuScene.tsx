@@ -625,19 +625,11 @@ export default function MainMenuScene({
     nativePauseMenuStagePlacement(fixedViewport, darkCloudMenuRows),
   )
 
-  const beginNewGame = async () => {
+  const beginNewGame = () => {
     if (preparing || connecting) return
-    setPreparing(true)
     setConnectionError(null)
-    try {
-      await prepareNewGame()
-      setWizardName(initialCreateWizardNameForSession(displayName))
-      transitionTo('create')
-    } catch (error) {
-      setConnectionError(error instanceof Error ? error.message : 'Shared Hub admission failed.')
-    } finally {
-      setPreparing(false)
-    }
+    setWizardName(initialCreateWizardNameForSession(displayName))
+    transitionTo('create')
   }
 
   const leaveCreate = async () => {
@@ -673,19 +665,11 @@ export default function MainMenuScene({
     const flow: MatchLoadingFlow = resumeSave.summary.worldKind === 'boneyard'
       ? 'boneyard'
       : 'hub'
-    setPreparing(true)
-    setConnectionError(null)
-    try {
-      await prepareNewGame()
-    } catch (error) {
-      setConnectionError(error instanceof Error ? error.message : 'Shared Hub admission failed.')
-      return
-    } finally {
-      setPreparing(false)
-    }
     setConnecting(true)
+    setConnectionError(null)
     beginLoading(flow, 'connecting_transport')
     try {
+      await prepareNewGame()
       const nextSession = await connectSession(
         resumeSave.summary.character,
         advanceLoading,
@@ -726,6 +710,7 @@ export default function MainMenuScene({
     setConnecting(true)
     setConnectionError(null)
     try {
+      await prepareNewGame()
       const nextSession = await connectSession(
         {
           discipline: selectedDiscipline,
@@ -908,7 +893,7 @@ export default function MainMenuScene({
                     onBack={() => setScreen('root')}
                     onHighlight={setHoveredTitleAction}
                     onLastGame={requestResumeLastGame}
-                    onNewGame={() => { void beginNewGame() }}
+                    onNewGame={beginNewGame}
                     onPress={() => audio.playSound('click')}
                     onPressState={setPressedTitleAction}
                   />
@@ -936,7 +921,7 @@ export default function MainMenuScene({
                 accountUsername={accountUsername}
                 menuKeyCode={gameSettings.controls.openMenu}
                 menuOpen={darkCloudMenuOpen || settingsContext !== null}
-                onEnterSharedHub={() => { void beginNewGame() }}
+                onEnterSharedHub={beginNewGame}
                 onMenu={openDarkCloudMenu}
               />
             </div>

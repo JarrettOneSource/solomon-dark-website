@@ -68,6 +68,7 @@ export default function SkillQuickbar({
         const skillId = quickbar[slot] ?? null
         const skill = skillId === null ? undefined : NATIVE_SKILL_CATALOG[skillId]
         const secondary = skillId !== null && nativeSkillCategory(skillId) === 2
+        const combatDisabled = mode === 'hub' && secondary
         const { capacity, remaining } = !secondary
           ? { capacity: 0, remaining: 0 }
           : nativeSkillQuickbarCooldownPresentation(
@@ -88,7 +89,7 @@ export default function SkillQuickbar({
           ? `Empty quickbar slot ${slot + 1}, ${input}`
           : `${skill.name}, ${input}${remaining > 0
             ? `, ${formatCooldown(remaining)} seconds cooldown remaining`
-            : ''}${active ? ', active' : ''}`
+            : ''}${active ? ', active' : ''}${combatDisabled ? ', unavailable in the Hub' : ''}`
         return (
           <button
             type="button"
@@ -96,7 +97,7 @@ export default function SkillQuickbar({
             data-slot={slot}
             data-binding-code={bindingCode}
             data-active={active}
-            disabled={skill === undefined || !onInput}
+            disabled={skill === undefined || !onInput || combatDisabled}
             key={slot}
             style={{
               '--mobile-quickbar-slot-offset': `${MOBILE_QUICKBAR_SLOT_OFFSETS[slot]}px`,
@@ -105,7 +106,7 @@ export default function SkillQuickbar({
             aria-label={label}
             onPointerDown={(event) => {
               const unsupportedMouseButton = event.pointerType === 'mouse' && event.button !== 0
-              if (unsupportedMouseButton || skill === undefined || !onInput) return
+              if (unsupportedMouseButton || skill === undefined || !onInput || combatDisabled) return
               event.preventDefault()
               event.currentTarget.setPointerCapture(event.pointerId)
               onInput(slot, true)

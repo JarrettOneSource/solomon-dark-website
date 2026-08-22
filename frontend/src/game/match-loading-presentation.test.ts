@@ -66,6 +66,29 @@ test('owns both requested transitions through destination renderer readiness', (
   assert.doesNotMatch(mainScene, /transitionTo\('hub'\)/)
 })
 
+test('owns shared-Hub admission only after the complete loadout is behind loading', () => {
+  const beginNewGame = mainScene.slice(
+    mainScene.indexOf('const beginNewGame ='),
+    mainScene.indexOf('const leaveCreate ='),
+  )
+  const resumeLastGame = mainScene.slice(
+    mainScene.indexOf('const resumeLastGame ='),
+    mainScene.indexOf('const requestResumeLastGame ='),
+  )
+  const startHub = mainScene.slice(
+    mainScene.indexOf('const startHub ='),
+    mainScene.indexOf('const startBoneyard ='),
+  )
+
+  assert.doesNotMatch(beginNewGame, /prepareNewGame/)
+  assert.match(startHub, /await prepareNewGame\(\)[\s\S]*await connectSession\(/)
+  assert.ok(
+    resumeLastGame.indexOf('beginLoading(flow') < resumeLastGame.indexOf('await prepareNewGame()'),
+    'resume must mount its loading barrier before shared-Hub admission',
+  )
+  assert.match(mainScene, /onDisciplineCommit=\{beginHubLoading\}/)
+})
+
 test('seals scene input until the same renderer reports its initial frame', () => {
   for (const scene of [hubScene, boneyardScene]) {
     assert.match(scene, /inputBlocked: boolean/)
@@ -83,6 +106,9 @@ test('seals scene input until the same renderer reports its initial frame', () =
     hubScene,
     /inputRef\.current\?\.setBlocked\(inputBlocked \|\| modalOpen\)/,
   )
+  assert.match(hubScene, /primaryCastingEnabled:\s*false/)
+  assert.doesNotMatch(hubScene, /<TouchJoystick\s+lane="primary"/)
+  assert.match(boneyardScene, /<TouchJoystick\s+lane="primary"/)
 })
 
 test('keeps the Boneyard renderer resident across run-local snapshot changes', () => {

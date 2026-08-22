@@ -56,6 +56,7 @@ interface HubFrameDiagnostics {
   orbSpriteCount: number
   playerCount: number
   playerAttachmentPose: number
+  playerElementEffectScale: number
   playerHeadingIndex: number
   playerMagicShieldScale: number
   playerMagicShieldVisible: boolean
@@ -64,6 +65,7 @@ interface HubFrameDiagnostics {
   playerPositions: Record<string, { x: number; y: number }>
   playerScreenPositions: Record<string, { x: number; y: number }>
   playerWalkPose: number
+  playerWeaponScale: number
   playerX: number
   playerY: number
   primarySpellCount: number
@@ -225,6 +227,7 @@ export async function createHubWorldRenderer(
     orbSpriteCount: 0,
     playerCount: Object.keys(options.initialSnapshot.players).length,
     playerAttachmentPose: 0,
+    playerElementEffectScale: 1,
     playerHeadingIndex: 0,
     playerMagicShieldScale: 1.5,
     playerMagicShieldVisible: false,
@@ -233,6 +236,7 @@ export async function createHubWorldRenderer(
     playerPositions: {},
     playerScreenPositions: {},
     playerWalkPose: 0,
+    playerWeaponScale: 1,
     playerX: Number.NaN,
     playerY: Number.NaN,
     primarySpellCount: 0,
@@ -324,10 +328,12 @@ export async function createHubWorldRenderer(
       : privateRoomScene.player(options.playerId)
     if (!playerView) return
     frameDiagnostics.playerAttachmentPose = playerView.attachmentPose
+    frameDiagnostics.playerElementEffectScale = playerView.elementEffectScale
     frameDiagnostics.playerMagicShieldScale = playerView.magicShieldScale
     frameDiagnostics.playerMagicShieldVisible = playerView.magicShieldVisible
     frameDiagnostics.playerMaterialTint = playerView.materialTint
     frameDiagnostics.playerWalkPose = playerView.walkPose
+    frameDiagnostics.playerWeaponScale = playerView.weaponScale
     frameDiagnostics.orbSpriteCount = playerView.orbSpriteCount
   }
 

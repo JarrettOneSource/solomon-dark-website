@@ -208,6 +208,7 @@ export default function Game() {
         'A shared Hub admission was issued.',
       )
     } catch (error) {
+      preparedEndpoint.current = null
       const failure = GameConnectionFailure.from(error)
       diagnostics.error('hub.admission_failed', failure.message, failure.stack)
       throw failure
@@ -246,6 +247,7 @@ export default function Game() {
       preparedEndpoint.current = null
       return session
     } catch (error) {
+      preparedEndpoint.current = null
       const failure = GameConnectionFailure.from(error)
       diagnostics.error('connection.session_failed', failure.message, failure.technicalDetail)
       setFatal(failure)

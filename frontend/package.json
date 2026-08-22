@@ -35,6 +35,7 @@
     "smoke:game:weather": "node --experimental-strip-types tools/smoke-boneyard-weather.mjs",
     "smoke:game:saves": "node tools/smoke-game-saves.mjs",
     "smoke:game:match-loading": "node tools/smoke-match-loading.mjs",
+    "smoke:game:hub-combat-entry": "node tools/smoke-hub-combat-entry.mjs",
     "smoke:game:boneyard-collision": "node --experimental-strip-types tools/smoke-boneyard-player-collision.mjs",
     "smoke:game:boneyard-tree-occlusion": "node tools/smoke-boneyard-tree-occlusion.mjs",
     "smoke:game:boneyard-complex-shadows": "node tools/smoke-boneyard-complex-shadows.mjs",
