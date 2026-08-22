@@ -1040,8 +1040,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v55 carries saved leave, deployment restart, Ether replacement, party access, movement, social, mod, and gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 55)
+test('protocol v56 carries status composition, saved leave, deployment restart, Ether replacement, party access, movement, social, mod, and gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 56)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -2954,6 +2954,8 @@ test('protocol v42 round-trips Frozen and FrostBurn target ownership without cli
   )
   const frame = createGameSnapshotFrame(snapshot, 0, undefined, true)
   const effect = {
+    circleSlowFactor: 1,
+    circleSlowTicks: 0,
     coldSlowFactor: 1,
     coldSlowMaterial: false,
     coldSlowTicks: 0,
@@ -2969,6 +2971,7 @@ test('protocol v42 round-trips Frozen and FrostBurn target ownership without cli
     frostBurnTicks: 50_000,
     frozenTicks: 500,
     frozenTimeScale: 0,
+    movementModifierOrder: ['frozen'],
     prismaticTicks: 0,
     stunFactor: 1,
     stunTicks: 0,
@@ -2999,6 +3002,28 @@ test('protocol v42 round-trips Frozen and FrostBurn target ownership without cli
   assert.throws(
     () => decodeServerGameMessage(JSON.stringify(invalid)),
     /frostBurnSkillId must be 35 or 76/,
+  )
+
+  const duplicateModifier = JSON.parse(JSON.stringify(message))
+  duplicateModifier.frame.secondaryAbilities.targetEffects[0]
+    .movementModifierOrder.push('frozen')
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(duplicateModifier)),
+    /movementModifierOrder contains duplicates/,
+  )
+
+  const missingModifier = JSON.parse(JSON.stringify(message))
+  missingModifier.frame.secondaryAbilities.targetEffects[0].movementModifierOrder = []
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(missingModifier)),
+    /movementModifierOrder does not match active clocks/,
+  )
+
+  const wrongScale = JSON.parse(JSON.stringify(message))
+  wrongScale.frame.secondaryAbilities.targetEffects[0].timeScale = 1
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(wrongScale)),
+    /timeScale does not match modifier order/,
   )
 })
 

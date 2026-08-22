@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
 import { mkdir } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 
@@ -17,13 +18,28 @@ import {
 import {
   resetNativeSecondaryWorld,
 } from '../src/game/core-kernels/native-secondary-abilities.ts'
+import { createPrimarySpellSimulation } from '../src/game/core-kernels/primary-spells.ts'
+import {
+  canPlaceBoneyardBody,
+  firstBoneyardPathBlockProgress,
+  withBoneyardGateCollision,
+} from '../src/game/core-server/boneyard-collision.ts'
 import {
   getPlayerSkillBook,
 } from '../src/game/core-server/game-simulation.ts'
-import { replacePlayerEconomy } from '../src/game/core-server/player-entity-store.ts'
+import {
+  replacePlayerEconomy,
+  selectPlayerEntityPrimarySkill,
+} from '../src/game/core-server/player-entity-store.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 
 const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
+const repositoryRoot = fileURLToPath(new URL('../../', import.meta.url))
+const currentRevision = execFileSync(
+  'git',
+  ['rev-parse', '--verify', 'HEAD'],
+  { cwd: repositoryRoot, encoding: 'utf8' },
+).trim().toLowerCase()
 const screenshotRoot = process.env.SDR_SECONDARY_ABILITY_SCREENSHOT_ROOT
   || '/tmp/solomon-dark-secondary-abilities-20260816'
 const chromePath = process.env.SDR_CHROME_PATH || '/usr/bin/google-chrome'
@@ -33,7 +49,9 @@ const requestedSkillIds = (process.env.SDR_SECONDARY_ABILITY_ID || '')
   .map(Number)
 const requestedScene = process.env.SDR_SECONDARY_ABILITY_SCENE || 'hub'
 const singleGolemCapture = process.env.SDR_SECONDARY_GOLEM_SINGLE === '1'
+const statusEffectAcceptance = process.env.SDR_STATUS_EFFECT_ACCEPTANCE === '1'
 assert.ok(requestedScene === 'hub' || requestedScene === 'boneyard')
+if (statusEffectAcceptance) assert.equal(requestedScene, 'boneyard')
 
 const PROOFS = Object.freeze({
   11: { audio: 'leviathan-roar', flash: true, kinds: ['leviathan', 'leviathan-appendage'] },
@@ -103,12 +121,24 @@ const browser = await chromium.launch({
 })
 const pageErrors = []
 const consoleErrors = []
+const responseErrors = []
 
 try {
   const page = await browser.newPage({ viewport: { width: 1600, height: 900 } })
+  await page.route('**/deployment.json*', route => route.fulfill({
+    body: JSON.stringify({ revision: currentRevision }),
+    contentType: 'application/json',
+    headers: { 'cache-control': 'no-store' },
+    status: 200,
+  }))
   page.on('pageerror', (error) => pageErrors.push(error.message))
   page.on('console', (message) => {
     if (message.type() === 'error') consoleErrors.push(message.text())
+  })
+  page.on('response', (response) => {
+    if (response.status() >= 400) {
+      responseErrors.push({ status: response.status(), url: response.url() })
+    }
   })
   await page.addInitScript(installGameAudioSmokeProbe)
   await page.addInitScript(() => {
@@ -183,6 +213,16 @@ try {
     assert.equal(state.world.kind, 'boneyard')
     boneyardEnemyBaseline = structuredClone(state.world.enemies)
   }
+  const statusEffects = statusEffectAcceptance
+    ? await capturePrimaryStatusEffectExpiry(
+        page,
+        canvas,
+        host,
+        playerId,
+        baseSkillBook,
+        boneyardEnemyBaseline,
+      )
+    : null
   await page.setViewportSize({ width: 800, height: 450 })
   await page.waitForTimeout(250)
 
@@ -507,7 +547,7 @@ try {
   }
 
   assert.deepEqual(pageErrors, [])
-  assert.deepEqual(consoleErrors, [])
+  assert.deepEqual({ consoleErrors, responseErrors }, { consoleErrors: [], responseErrors: [] })
   process.stdout.write(`${JSON.stringify({
     belt: beltReceipt,
     browser: await canvas.evaluate((node) => ({
@@ -517,13 +557,326 @@ try {
     consoleErrors,
     pageErrors,
     receipts,
+    responseErrors,
     scene: requestedScene,
     screenshotRoot,
+    statusEffects,
   }, null, 2)}\n`)
 } finally {
-  await browser.close()
   await host.close()
+  await browser.close()
   await vite.close()
+}
+
+async function capturePrimaryStatusEffectExpiry(
+  page,
+  canvas,
+  host,
+  playerId,
+  baseSkillBook,
+  enemyBaseline,
+) {
+  assert.ok(enemyBaseline, 'status-effect acceptance requires a Boneyard enemy baseline')
+  const receipts = []
+  for (const testCase of [
+    {
+      active: (effect) => (effect?.coldSlowTicks ?? 0) > 0,
+      name: 'frost-jet',
+      primarySkillId: 32,
+      ranks: [[32, 1]],
+    },
+    {
+      active: (effect) => (effect?.stunTicks ?? 0) > 0,
+      name: 'lightning-stun',
+      primarySkillId: 24,
+      ranks: [[24, 1], [26, 10]],
+    },
+  ]) {
+    await releasePrimaryPointer(page)
+    armPrimaryStatusSkill(host, playerId, baseSkillBook, testCase)
+    const target = preparePrimaryStatusTarget(host, playerId, enemyBaseline)
+    const pointer = await primaryStatusTargetPointer(page, canvas, target)
+    await pressPrimaryPointer(page, pointer)
+    let activeEffect
+    try {
+      try {
+        await waitUntil(() => {
+          const state = host.state()
+          activeEffect = state.secondaryAbilities.targetEffects.find(({ targetId, worldKey }) => (
+            targetId === target.id && worldKey === target.worldKey
+          ))
+          return testCase.active(activeEffect)
+        }, `${testCase.name} did not attach its target-owned modifier`, 10_000)
+      } catch (error) {
+        const state = host.state()
+        const playerIndex = state.playerEntities.identities.findIndex(({ playerId: id }) => (
+          id === playerId
+        ))
+        process.stderr.write(`${JSON.stringify({
+          statusEffectCastFailure: {
+            combatEnabled: state.world.kind === 'boneyard'
+              ? (state.world.encounter?.runEventId ?? 0) > 0
+              : false,
+            frame: await canvas.evaluate(node => structuredClone(node.__sdrBoneyardFrame)),
+            input: state.inputs?.[playerId] ?? null,
+            player: state.players?.[playerId] ?? null,
+            primaryCast: state.playerEntities.primaryCasts[playerIndex] ?? null,
+            primarySkillId: state.playerEntities.skillBooks[playerIndex]?.primarySkillId ?? null,
+            primarySpells: state.primarySpells,
+            pointer,
+            target: state.world.kind === 'boneyard'
+              ? state.world.enemies.actors.find(({ id }) => id === target.id) ?? null
+              : null,
+            targetEffects: state.secondaryAbilities.targetEffects,
+            testCase,
+            tick: state.tick,
+          },
+        }, null, 2)}\n`)
+        throw error
+      }
+      const state = host.state()
+      assert.equal(state.world.kind, 'boneyard')
+      const enemy = state.world.enemies.actors.find(({ id }) => id === target.id)
+      assert.ok(enemy, `${testCase.name} target retired during its modifier`)
+      assert.deepEqual(enemy.config, target.authoredConfig)
+      enablePrimaryStatusTargetMovement(host, target.id)
+      if (testCase.name === 'frost-jet') {
+        assert.equal(activeEffect.coldSlowMaterial, true)
+        assert.ok(activeEffect.timeScale > 0 && activeEffect.timeScale < 1)
+      } else {
+        assert.equal(activeEffect.timeScale, 0)
+        const heldPosition = { ...enemy.position }
+        await new Promise((resolve) => setTimeout(resolve, 120))
+        const heldState = host.state()
+        assert.equal(heldState.world.kind, 'boneyard')
+        const heldEnemy = heldState.world.enemies.actors.find(({ id }) => id === target.id)
+        assert.ok(heldEnemy)
+        assert.equal(squaredDistance(heldEnemy.position, heldPosition), 0)
+      }
+      await page.screenshot({
+        path: `${screenshotRoot}/status-${testCase.name}-active.png`,
+      })
+    } finally {
+      await releasePrimaryPointer(page)
+    }
+
+    const releaseTick = host.state().tick
+    await waitUntil(() => {
+      const effect = host.state().secondaryAbilities.targetEffects.find(({ targetId, worldKey }) => (
+        targetId === target.id && worldKey === target.worldKey
+      ))
+      return !testCase.active(effect)
+    }, `${testCase.name} modifier did not expire after release`, 15_000)
+    const expiredState = host.state()
+    assert.equal(expiredState.world.kind, 'boneyard')
+    const expiredEnemy = expiredState.world.enemies.actors.find(({ id }) => id === target.id)
+    assert.ok(expiredEnemy, `${testCase.name} target retired before recovery`)
+    assert.deepEqual(expiredEnemy.config, target.authoredConfig)
+    const expiredPosition = { ...expiredEnemy.position }
+    await waitUntil(() => {
+      const state = host.state()
+      if (state.world.kind !== 'boneyard') return false
+      const enemy = state.world.enemies.actors.find(({ id }) => id === target.id)
+      return enemy !== undefined && squaredDistance(enemy.position, expiredPosition) > 0.01
+    }, `${testCase.name} target did not resume movement after expiry`, 5_000)
+    const recoveredState = host.state()
+    assert.equal(recoveredState.world.kind, 'boneyard')
+    const recoveredEnemy = recoveredState.world.enemies.actors.find(({ id }) => id === target.id)
+    assert.ok(recoveredEnemy)
+    assert.deepEqual(recoveredEnemy.config, target.authoredConfig)
+    const recoveryDistance = Math.sqrt(squaredDistance(
+      recoveredEnemy.position,
+      expiredPosition,
+    ))
+    const recoveredScreenshotPath = `${screenshotRoot}/status-${testCase.name}-recovered.png`
+    await page.screenshot({ path: recoveredScreenshotPath })
+    receipts.push({
+      activeEffect: structuredClone(activeEffect),
+      activeScreenshotPath: `${screenshotRoot}/status-${testCase.name}-active.png`,
+      authoredConfigPreserved: true,
+      enemyId: target.id,
+      name: testCase.name,
+      recoveredScreenshotPath,
+      recoveredTick: recoveredState.tick,
+      recoveryDistance,
+      releaseTick,
+    })
+  }
+  return receipts
+}
+
+function armPrimaryStatusSkill(host, playerId, baseSkillBook, testCase) {
+  const state = host.state()
+  const index = state.playerEntities.identities.findIndex(({ playerId: id }) => id === playerId)
+  assert.notEqual(index, -1)
+  const permanentRanks = [...baseSkillBook.permanentRanks]
+  const effectiveRanks = [...baseSkillBook.effectiveRanks]
+  const learnedSkillOrder = [...baseSkillBook.learnedSkillOrder]
+  for (const [skillId, rank] of testCase.ranks) {
+    permanentRanks[skillId] = rank
+    effectiveRanks[skillId] = rank
+    if (!learnedSkillOrder.includes(skillId)) learnedSkillOrder.push(skillId)
+  }
+  const skillBooks = [...state.playerEntities.skillBooks]
+  skillBooks[index] = {
+    ...baseSkillBook,
+    effectiveRanks: Object.freeze(effectiveRanks),
+    learnedSkillOrder: Object.freeze(learnedSkillOrder),
+    permanentRanks: Object.freeze(permanentRanks),
+    skillQuickbar: Object.freeze([
+      testCase.primarySkillId, null, null, null, null, null, null, null,
+    ]),
+  }
+  const progressions = [...state.playerEntities.progressions]
+  progressions[index] = {
+    ...progressions[index],
+    currentHealth: 1_000_000,
+    currentMana: 10_000,
+    deathEpoch: 0,
+    deathTick: 0,
+    lifeState: 'alive',
+    maximumHealth: 1_000_000,
+    maximumMana: 10_000,
+    pendingOffer: null,
+    revision: progressions[index].revision + 1,
+  }
+  let playerEntities = {
+    ...state.playerEntities,
+    progressions: Object.freeze(progressions),
+    skillBooks: Object.freeze(skillBooks),
+  }
+  playerEntities = selectPlayerEntityPrimarySkill(
+    playerEntities,
+    playerId,
+    testCase.primarySkillId,
+  )
+  Object.assign(state, {
+    playerEntities,
+    primarySpells: createPrimarySpellSimulation(),
+    secondaryAbilities: resetNativeSecondaryWorld(state.secondaryAbilities),
+  })
+}
+
+function preparePrimaryStatusTarget(host, playerId, enemyBaseline) {
+  restoreBoneyardEnemies(host, enemyBaseline)
+  const state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
+  const playerIndex = state.playerEntities.identities.findIndex(({ playerId: id }) => id === playerId)
+  assert.notEqual(playerIndex, -1)
+  const playerPosition = state.playerEntities.locomotions[playerIndex].position
+  const selected = state.world.enemies.actors.find(({ config, lifeState }) => (
+    config.enemyToken === 'SKELETON' && lifeState === 'alive'
+  )) ?? state.world.enemies.actors.find(({ config, lifeState }) => (
+    config.enemyToken !== 'COFFIN' && lifeState === 'alive'
+  ))
+  assert.ok(selected, 'status-effect acceptance requires one mobile living enemy')
+  const position = primaryStatusTargetPosition(
+    state.world,
+    playerPosition,
+    selected.config.collisionRadius,
+    selected.id,
+  )
+  const actors = state.world.enemies.actors.map((actor) => actor.id === selected.id
+    ? {
+        ...actor,
+        currentHealth: actor.config.maximumHealth,
+        nextMovementTick: state.tick + 100_000,
+        nextTargetRefreshTick: state.tick,
+        position,
+        targetPlayerId: playerId,
+      }
+    : actor)
+  Object.assign(state, {
+    world: { ...state.world, enemies: { ...state.world.enemies, actors } },
+  })
+  return {
+    authoredConfig: structuredClone(selected.config),
+    id: selected.id,
+    position,
+    worldKey: `boneyard:${state.world.runId}`,
+  }
+}
+
+function primaryStatusTargetPosition(world, playerPosition, bodyRadius, selectedId) {
+  const collision = withBoneyardGateCollision(world.collision, world.gateLeaves)
+  for (const distance of [160, 140, 120, 100, 80]) {
+    for (let index = 0; index < 32; index += 1) {
+      const angle = -Math.PI / 2 + index * Math.PI / 16
+      const candidate = {
+        x: Math.fround(playerPosition.x + Math.cos(angle) * distance),
+        y: Math.fround(playerPosition.y + Math.sin(angle) * distance),
+      }
+      if (firstBoneyardPathBlockProgress(
+        playerPosition,
+        candidate,
+        world.bounds,
+        collision,
+        0,
+      ) !== null) continue
+      if (!canPlaceBoneyardBody(candidate, world.bounds, collision, bodyRadius)) continue
+      if (world.enemies.actors.some((actor) => (
+        actor.id !== selectedId
+        && squaredDistance(actor.position, candidate) < (
+          bodyRadius + actor.config.collisionRadius + 20
+        ) ** 2
+      ))) continue
+      return candidate
+    }
+  }
+  throw new Error('status-effect acceptance could not find a clear target path')
+}
+
+function enablePrimaryStatusTargetMovement(host, targetId) {
+  const state = host.state()
+  if (state.world.kind !== 'boneyard') return
+  const actors = state.world.enemies.actors.map((actor) => actor.id === targetId
+    ? { ...actor, nextMovementTick: state.tick }
+    : actor)
+  Object.assign(state, {
+    world: { ...state.world, enemies: { ...state.world.enemies, actors } },
+  })
+}
+
+async function primaryStatusTargetPointer(page, canvas, target) {
+  await page.waitForFunction(({ id, x, y }) => {
+    const enemy = document.querySelector('.boneyard-world-canvas')
+      ?.__sdrBoneyardFrame?.enemySamples.find((sample) => sample.id === id)
+    return enemy !== undefined && Math.hypot(enemy.x - x, enemy.y - y) < 1
+  }, { id: target.id, ...target.position }, { timeout: 5_000 })
+  return canvas.evaluate((node, position) => {
+    const bounds = node.getBoundingClientRect()
+    const frame = node.__sdrBoneyardFrame
+    return {
+      x: bounds.left + bounds.width * 0.5
+        + (position.x - frame.cameraX) * frame.cameraZoom,
+      y: bounds.top + bounds.height * 0.5
+        + (position.y - frame.cameraY) * frame.cameraZoom,
+    }
+  }, target.position)
+}
+
+async function pressPrimaryPointer(page, target) {
+  await page.evaluate(({ x, y }) => {
+    const surface = document.querySelector('.boneyard-world-renderer')
+    if (!surface) throw new Error('Boneyard primary cast surface is unavailable')
+    surface.dispatchEvent(new MouseEvent('mousedown', {
+      bubbles: true,
+      button: 0,
+      cancelable: true,
+      clientX: x,
+      clientY: y,
+    }))
+  }, target)
+}
+
+async function releasePrimaryPointer(page) {
+  await page.evaluate(() => {
+    window.dispatchEvent(new MouseEvent('mouseup', {
+      bubbles: true,
+      button: 0,
+      cancelable: true,
+    }))
+  })
 }
 
 async function enterHub(page, baseUrl) {

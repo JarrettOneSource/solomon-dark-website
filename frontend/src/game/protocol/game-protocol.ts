@@ -169,6 +169,7 @@ import {
   NATIVE_SECONDARY_AUDIO_CUES,
   NATIVE_SECONDARY_EVENT_KINDS,
   NATIVE_SECONDARY_GLOBAL_COOLDOWN_TICKS,
+  NATIVE_SECONDARY_MOVEMENT_MODIFIER_KINDS,
   nativeSecondaryLightDisposition,
   type NativeSecondaryActorKind,
   type NativeSecondaryAudioCue,
@@ -176,6 +177,7 @@ import {
   type NativeSecondaryActorState,
   type NativeSecondaryEventState,
   type NativeSecondaryGolemState,
+  type NativeSecondaryMovementModifierKind,
   type NativeSecondaryPlayerState,
   type NativeSecondaryScreenFlashState,
   type NativeSecondaryTargetEffectState,
@@ -310,7 +312,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 55
+export const GAME_PROTOCOL_VERSION = 56
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
 export const GAME_CONNECTION_TIMEOUT_CLOSE_CODE = 4000
@@ -4491,10 +4493,12 @@ function nativeSecondaryTargetEffectState(
 ): NativeSecondaryTargetEffectState {
   const source = record(value, field)
   onlyKeys(source, field, [
+    'circleSlowFactor', 'circleSlowTicks',
     'coldSlowFactor', 'coldSlowMaterial', 'coldSlowTicks', 'dazzleMaximumTicks',
     'dazzleTicks', 'disruptedTicks', 'electricBurn', 'fleeTicks', 'frostBurnDamagePerTick',
     'frostBurnOwnerId', 'frostBurnSkillId', 'frostBurnSourceActorId', 'frostBurnTicks',
-    'frozenTicks', 'frozenTimeScale', 'prismaticTicks', 'stunFactor', 'stunTicks',
+    'frozenTicks', 'frozenTimeScale', 'movementModifierOrder', 'prismaticTicks',
+    'stunFactor', 'stunTicks',
     'steamed', 'targetId', 'timeScale', 'weakenFactor', 'worldKey',
   ])
   const dazzleMaximumTicks = nonnegativeInteger(
@@ -4511,10 +4515,62 @@ function nativeSecondaryTargetEffectState(
   if (frostBurnSkillId !== null && frostBurnSkillId !== 35 && frostBurnSkillId !== 76) {
     throw new GameProtocolError(`${field}.frostBurnSkillId must be 35 or 76`)
   }
+  const circleSlowFactor = unitInterval(source.circleSlowFactor, `${field}.circleSlowFactor`)
+  const circleSlowTicks = nonnegativeInteger(source.circleSlowTicks, `${field}.circleSlowTicks`)
+  const coldSlowFactor = unitInterval(source.coldSlowFactor, `${field}.coldSlowFactor`)
+  const coldSlowTicks = nonnegativeInteger(source.coldSlowTicks, `${field}.coldSlowTicks`)
+  const frozenTicks = nonnegativeInteger(source.frozenTicks, `${field}.frozenTicks`)
+  const frozenTimeScale = unitInterval(source.frozenTimeScale, `${field}.frozenTimeScale`)
+  const stunFactor = unitInterval(source.stunFactor, `${field}.stunFactor`)
+  const stunTicks = nonnegativeInteger(source.stunTicks, `${field}.stunTicks`)
+  const timeScale = unitInterval(source.timeScale, `${field}.timeScale`)
+  const movementModifierOrder = limitedArray(
+    source.movementModifierOrder,
+    `${field}.movementModifierOrder`,
+    NATIVE_SECONDARY_MOVEMENT_MODIFIER_KINDS.length,
+  ).map((kind, index) => memberString(
+    kind,
+    `${field}.movementModifierOrder[${index}]`,
+    NATIVE_SECONDARY_MOVEMENT_MODIFIER_KINDS,
+  ) as NativeSecondaryMovementModifierKind)
+  if (new Set(movementModifierOrder).size !== movementModifierOrder.length) {
+    throw new GameProtocolError(`${field}.movementModifierOrder contains duplicates`)
+  }
+  const expectedMovementModifiers = [
+    coldSlowTicks > 0 ? 'cold-slow' : null,
+    circleSlowTicks > 0 ? 'circle-slow' : null,
+    frozenTicks > 0 ? 'frozen' : null,
+    stunTicks > 0 ? 'stun' : null,
+    dazzleTicks > 0 ? 'dazzle' : null,
+  ].filter((kind): kind is NativeSecondaryMovementModifierKind => kind !== null)
+  const movementModifierSet = new Set(movementModifierOrder)
+  if (
+    movementModifierOrder.length !== expectedMovementModifiers.length
+    || expectedMovementModifiers.some((kind) => !movementModifierSet.has(kind))
+  ) throw new GameProtocolError(`${field}.movementModifierOrder does not match active clocks`)
+  const dazzleFactor = dazzleTicks <= 0 || dazzleMaximumTicks <= 0
+    ? 1
+    : Math.max(1 / dazzleMaximumTicks, 1 - dazzleTicks / dazzleMaximumTicks)
+  const factors: Readonly<Record<NativeSecondaryMovementModifierKind, number>> = {
+    'circle-slow': circleSlowFactor,
+    'cold-slow': coldSlowFactor,
+    dazzle: dazzleFactor,
+    frozen: frozenTimeScale,
+    stun: stunFactor,
+  }
+  const expectedTimeScale = movementModifierOrder.reduce(
+    (scale, kind) => Math.fround(scale * factors[kind]),
+    Math.fround(1),
+  )
+  if (timeScale !== expectedTimeScale) {
+    throw new GameProtocolError(`${field}.timeScale does not match modifier order`)
+  }
   return {
-    coldSlowFactor: unitInterval(source.coldSlowFactor, `${field}.coldSlowFactor`),
+    circleSlowFactor,
+    circleSlowTicks,
+    coldSlowFactor,
     coldSlowMaterial: boolean(source.coldSlowMaterial, `${field}.coldSlowMaterial`),
-    coldSlowTicks: nonnegativeInteger(source.coldSlowTicks, `${field}.coldSlowTicks`),
+    coldSlowTicks,
     dazzleMaximumTicks,
     dazzleTicks,
     disruptedTicks: nonnegativeInteger(source.disruptedTicks, `${field}.disruptedTicks`),
@@ -4532,14 +4588,15 @@ function nativeSecondaryTargetEffectState(
       ? null
       : positiveInteger(source.frostBurnSourceActorId, `${field}.frostBurnSourceActorId`),
     frostBurnTicks: nonnegativeInteger(source.frostBurnTicks, `${field}.frostBurnTicks`),
-    frozenTicks: nonnegativeInteger(source.frozenTicks, `${field}.frozenTicks`),
-    frozenTimeScale: unitInterval(source.frozenTimeScale, `${field}.frozenTimeScale`),
+    frozenTicks,
+    frozenTimeScale,
+    movementModifierOrder,
     prismaticTicks: nonnegativeInteger(source.prismaticTicks, `${field}.prismaticTicks`),
-    stunFactor: unitInterval(source.stunFactor, `${field}.stunFactor`),
-    stunTicks: nonnegativeInteger(source.stunTicks, `${field}.stunTicks`),
+    stunFactor,
+    stunTicks,
     steamed: nativeSecondarySteamedEffect(source.steamed, `${field}.steamed`),
     targetId: nonnegativeInteger(source.targetId, `${field}.targetId`),
-    timeScale: unitInterval(source.timeScale, `${field}.timeScale`),
+    timeScale,
     weakenFactor: unitInterval(source.weakenFactor, `${field}.weakenFactor`),
     worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
   }

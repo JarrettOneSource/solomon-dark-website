@@ -6,6 +6,7 @@ import {
   type NativeSecondaryAbilityId,
 } from './native-secondary-ability-contract.ts'
 import {
+  applyNativeSecondaryTargetEffect,
   applyNativeSecondaryGolemDamage,
   applyNativeSecondaryEtherBurn,
   applyNativeSecondaryPlayerDamage,
@@ -893,7 +894,7 @@ test('Magic Circle performs its stock first pulse, light RNG, parity emitter, an
   assert.deepEqual(castResult.manaRecovered, { player: 0.2 })
   assert.deepEqual(castResult.state.rng, flashLife.state)
   assert.equal(castResult.state.targetEffects[0]?.targetId, 9)
-  assert.equal(castResult.state.targetEffects[0]?.coldSlowTicks, 20)
+  assert.equal(castResult.state.targetEffects[0]?.circleSlowTicks, 20)
   const circle = castResult.state.actors.find(({ kind }) => kind === 'magic-circle')!
   assert.deepEqual({
     ageTicks: circle.ageTicks,
@@ -2019,6 +2020,8 @@ test('Dampen removes projectiles, disrupts casters, rolls shield dispels, and ow
   assert.deepEqual(
     result.state.targetEffects.find(({ targetId }) => targetId === 7),
     {
+      circleSlowFactor: 1,
+      circleSlowTicks: 0,
       coldSlowFactor: 1,
       coldSlowMaterial: false,
       coldSlowTicks: 0,
@@ -2034,6 +2037,7 @@ test('Dampen removes projectiles, disrupts casters, rolls shield dispels, and ow
       frostBurnTicks: 0,
       frozenTicks: 0,
       frozenTimeScale: 1,
+      movementModifierOrder: [],
       prismaticTicks: 0,
       stunFactor: 1,
       stunTicks: 0,
@@ -4155,6 +4159,80 @@ test('FreezeWave installs target-owned Frozen material and the exact final-200 t
   assert.equal(expired.targetEffects.some(({ targetId }) => targetId === target.id), false)
 })
 
+test('distinct native movement modifiers multiply instead of selecting one minimum factor', () => {
+  let state = createNativeSecondarySimulation(123)
+  state = applyNativeSecondaryTargetEffect(state, 'boneyard:test', 41, {
+    coldSlowFactor: 0.5,
+    coldSlowMaterial: true,
+    coldSlowTicks: 1,
+  })
+  state = applyNativeSecondaryTargetEffect(state, 'boneyard:test', 41, {
+    circleSlowFactor: 0.5,
+    circleSlowTicks: 3,
+  })
+  state = applyNativeSecondaryTargetEffect(state, 'boneyard:test', 41, {
+    stunFactor: 0.5,
+    stunTicks: 2,
+  })
+  state = applyNativeSecondaryTargetEffect(state, 'boneyard:test', 41, {
+    dazzleTicks: 100,
+  })
+  let effect = state.targetEffects[0]!
+  assert.deepEqual(effect.movementModifierOrder, [
+    'cold-slow', 'circle-slow', 'stun', 'dazzle',
+  ])
+  assert.equal(effect.timeScale, Math.fround(Math.fround(Math.fround(0.5 * 0.5) * 0.5) * 0.01))
+  assert.equal(effect.coldSlowMaterial, true)
+
+  state = stepNativeSecondaryAbilities(state, context(49, 1, null)).state
+  effect = state.targetEffects[0]!
+  assert.equal(effect.coldSlowTicks, 0)
+  assert.equal(effect.circleSlowTicks, 2)
+  assert.equal(effect.coldSlowMaterial, false)
+  assert.equal(effect.timeScale, Math.fround(Math.fround(0.5 * 0.5) * 0.01))
+
+  state = stepNativeSecondaryAbilities(state, context(49, 2, null)).state
+  effect = state.targetEffects[0]!
+  assert.equal(effect.circleSlowTicks, 1)
+  assert.equal(effect.stunTicks, 0)
+  assert.equal(effect.timeScale, Math.fround(0.5 * 0.02))
+
+  let forward = createNativeSecondarySimulation(123)
+  forward = applyNativeSecondaryTargetEffect(forward, 'boneyard:test', 42, {
+    coldSlowFactor: 0.1,
+    coldSlowTicks: 10,
+  })
+  forward = applyNativeSecondaryTargetEffect(forward, 'boneyard:test', 42, {
+    circleSlowFactor: 0.1,
+    circleSlowTicks: 10,
+  })
+  forward = applyNativeSecondaryTargetEffect(forward, 'boneyard:test', 42, {
+    stunFactor: 0.7,
+    stunTicks: 10,
+  })
+  let reverse = createNativeSecondarySimulation(123)
+  reverse = applyNativeSecondaryTargetEffect(reverse, 'boneyard:test', 42, {
+    stunFactor: 0.7,
+    stunTicks: 10,
+  })
+  reverse = applyNativeSecondaryTargetEffect(reverse, 'boneyard:test', 42, {
+    circleSlowFactor: 0.1,
+    circleSlowTicks: 10,
+  })
+  reverse = applyNativeSecondaryTargetEffect(reverse, 'boneyard:test', 42, {
+    coldSlowFactor: 0.1,
+    coldSlowTicks: 10,
+  })
+  assert.deepEqual(forward.targetEffects[0]?.movementModifierOrder, [
+    'cold-slow', 'circle-slow', 'stun',
+  ])
+  assert.deepEqual(reverse.targetEffects[0]?.movementModifierOrder, [
+    'stun', 'circle-slow', 'cold-slow',
+  ])
+  assert.equal(forward.targetEffects[0]?.timeScale, 0.00699999975040555)
+  assert.equal(reverse.targetEffects[0]?.timeScale, 0.007000000216066837)
+})
+
 test('FreezeWave selects ColdSlow for flag 0x40 and Frostburn adds exact damage and target flares', () => {
   const coldTarget = {
     family: 'OBJECT', lightRegistration: TARGET_LIGHT_REGISTRATION,
@@ -4388,6 +4466,8 @@ test('death or disconnect cleanup retires player-owned actors and state once', (
   const frost = removeNativeSecondaryOwner({
     ...state,
     targetEffects: [{
+      circleSlowFactor: 1,
+      circleSlowTicks: 0,
       coldSlowFactor: 1,
       coldSlowMaterial: false,
       coldSlowTicks: 0,
@@ -4403,6 +4483,7 @@ test('death or disconnect cleanup retires player-owned actors and state once', (
       frostBurnTicks: 50_000,
       frozenTicks: 500,
       frozenTimeScale: 0,
+      movementModifierOrder: ['frozen'],
       prismaticTicks: 0,
       stunFactor: 1,
       stunTicks: 0,

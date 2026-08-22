@@ -21,6 +21,11 @@ import {
   drawNativeInteger,
   type NativeRngState,
 } from '../core-kernels/native-rng.ts'
+import type {
+  NativeSecondaryMovementModifierKind,
+  NativeSecondaryTargetEffectPatch,
+  NativeSecondaryTargetEffectState,
+} from '../core-kernels/native-secondary-abilities.ts'
 import {
   BOUNDED_ARCHER_RANGE_BANDS,
   BOUNDED_ENEMY_COLD_SLOW_TICKS,
@@ -97,6 +102,8 @@ test('Badguy Hurricane cooldown is constructor-randomized, target-owned, and dro
 
 test('Frozen timeScale fully stops enemies and exposes the exact thaw scalar', () => {
   const effect = {
+    circleSlowFactor: 1,
+    circleSlowTicks: 0,
     coldSlowFactor: 1,
     coldSlowMaterial: false,
     coldSlowTicks: 0,
@@ -112,6 +119,7 @@ test('Frozen timeScale fully stops enemies and exposes the exact thaw scalar', (
     frostBurnTicks: 0,
     frozenTicks: 500,
     frozenTimeScale: 0,
+    movementModifierOrder: ['frozen'],
     prismaticTicks: 0,
     stunFactor: 1,
     stunTicks: 0,
@@ -128,6 +136,93 @@ test('Frozen timeScale fully stops enemies and exposes the exact thaw scalar', (
     frozenTimeScale: Math.fround(0.005),
     timeScale: Math.fround(0.005),
   }), Math.fround(0.005))
+})
+
+test('temporary target scalars never rewrite authored config for any ordinary enemy family', () => {
+  const effects = [
+    ['cold-slow', { coldSlowFactor: 0.5, coldSlowTicks: 2 }],
+    ['circle-slow', { circleSlowFactor: 0.5, circleSlowTicks: 2 }],
+    ['frozen', { frozenTicks: 2, frozenTimeScale: 0 }],
+    ['stun', { stunFactor: 0.5, stunTicks: 2 }],
+    ['dazzle', { dazzleMaximumTicks: 100, dazzleTicks: 100 }],
+    ['weaken', { weakenFactor: 0.5 }],
+  ] as const satisfies readonly (readonly [string, NativeSecondaryTargetEffectPatch])[]
+
+  for (const token of TOKENS) {
+    for (const [effectName, patch] of effects) {
+      const spawned = spawnOne(
+        `temporary-${token}-${effectName}`,
+        token,
+        { x: 0, y: 0 },
+        FAR_PLAYERS,
+      )
+      const actor = spawned.store.actors[0]!
+      const effect = targetEffect(actor.id, patch)
+      const first = stepWithEffects(spawned.store, 1, FAR_PLAYERS, {
+        [actor.id]: effect,
+      })
+      assert.deepEqual(
+        first.store.actors[0]!.config,
+        actor.config,
+        `${token}/${effectName} rewrote config on its first active tick`,
+      )
+      const second = stepWithEffects(first.store, 2, FAR_PLAYERS, {
+        [actor.id]: effect,
+      })
+      assert.deepEqual(
+        second.store.actors[0]!.config,
+        actor.config,
+        `${token}/${effectName} compounded config on a refreshed tick`,
+      )
+      const expired = stepWithEffects(second.store, 3, FAR_PLAYERS, {})
+      assert.deepEqual(
+        expired.store.actors[0]!.config,
+        actor.config,
+        `${token}/${effectName} did not restore after expiry`,
+      )
+    }
+  }
+})
+
+test('Frost freeze and Lightning Stun alter only live action ticks and then restore full progress', () => {
+  const near = { player: livingTarget(10, 0) }
+
+  let frozen = spawnOne('frost-freeze-expiry', 'SKELETON', { x: 0, y: 0 }, near)
+  frozen = step(frozen.store, 1, near)
+  const frozenStart = skeletonActionProgress(frozen)
+  const held = stepWithEffects(frozen.store, 2, near, {
+    1: targetEffect(1, { frozenTicks: 1, frozenTimeScale: 0 }),
+  })
+  assert.equal(skeletonActionProgress(held), frozenStart)
+  const thawed = stepWithEffects(held.store, 3, near, {})
+  assert.ok(skeletonActionProgress(thawed) > frozenStart)
+
+  let stunned = spawnOne('lightning-stun-expiry', 'SKELETON', { x: 0, y: 0 }, near)
+  stunned = step(stunned.store, 1, near)
+  const stunStart = skeletonActionProgress(stunned)
+  const slowed = stepWithEffects(stunned.store, 2, near, {
+    1: targetEffect(1, { stunFactor: 0.5, stunTicks: 1 }),
+  })
+  const slowedProgress = skeletonActionProgress(slowed) - stunStart
+  const recovered = stepWithEffects(slowed.store, 3, near, {})
+  const recoveredProgress = skeletonActionProgress(recovered)
+    - skeletonActionProgress(slowed)
+  assert.ok(Math.abs(recoveredProgress - slowedProgress * 2) < 1e-12)
+})
+
+test('Turn Undead weakening remains one fixed factor across repeated target ticks', () => {
+  const near = { player: livingTarget(10, 0) }
+  let result = spawnOne('turn-undead-weaken', 'SKELETON', { x: 0, y: 0 }, near)
+  const authoredConfig = result.store.actors[0]!.config
+  const damage: number[] = []
+  for (let tick = 1; tick <= 60; tick += 1) {
+    result = stepWithEffects(result.store, tick, near, {
+      1: targetEffect(1, { weakenFactor: 0.5 }),
+    })
+    damage.push(...result.playerDamage.map(({ amount }) => amount))
+  }
+  assert.deepEqual(damage, [1.5, 1.5, 1.5])
+  assert.deepEqual(result.store.actors[0]!.config, authoredConfig)
 })
 
 test('Wizard ouch consumes cue then inclusive cooldown draws on the active enemy RNG stream', () => {
@@ -3300,6 +3395,91 @@ function step(
     resolveSpawnIntents: () => [],
     tick,
   })
+}
+
+function stepWithEffects(
+  store: BoneyardEnemyStore,
+  tick: number,
+  players: BoneyardEnemyTargets,
+  abilityEffects: Readonly<Record<number, NativeSecondaryTargetEffectState>>,
+): BoneyardEnemyStoreStepResult {
+  return stepBoneyardEnemyStore(store, {
+    abilityEffects,
+    clipSpellSegment: CLEAR_SPELL_SEGMENT,
+    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    players,
+    resolveMovement: DIRECT_MOVEMENT,
+    resolveSpawnIntents: () => [],
+    tick,
+  })
+}
+
+function targetEffect(
+  targetId: number,
+  patch: NativeSecondaryTargetEffectPatch,
+): NativeSecondaryTargetEffectState {
+  const effect = {
+    circleSlowFactor: 1,
+    circleSlowTicks: 0,
+    coldSlowFactor: 1,
+    coldSlowMaterial: false,
+    coldSlowTicks: 0,
+    dazzleMaximumTicks: 0,
+    dazzleTicks: 0,
+    disruptedTicks: 0,
+    electricBurn: null,
+    fleeTicks: 0,
+    frostBurnDamagePerTick: 0,
+    frostBurnOwnerId: null,
+    frostBurnSkillId: null,
+    frostBurnSourceActorId: null,
+    frostBurnTicks: 0,
+    frozenTicks: 0,
+    frozenTimeScale: 1,
+    prismaticTicks: 0,
+    steamed: null,
+    stunFactor: 1,
+    stunTicks: 0,
+    targetId,
+    timeScale: 1,
+    weakenFactor: 1,
+    worldKey: 'boneyard:test',
+    ...patch,
+  }
+  const dazzleFactor = effect.dazzleTicks <= 0 || effect.dazzleMaximumTicks <= 0
+    ? 1
+    : Math.max(
+        1 / effect.dazzleMaximumTicks,
+        1 - effect.dazzleTicks / effect.dazzleMaximumTicks,
+      )
+  const movementModifierOrder: NativeSecondaryMovementModifierKind[] = [
+    effect.coldSlowTicks > 0 ? 'cold-slow' : null,
+    effect.circleSlowTicks > 0 ? 'circle-slow' : null,
+    effect.frozenTicks > 0 ? 'frozen' : null,
+    effect.stunTicks > 0 ? 'stun' : null,
+    effect.dazzleTicks > 0 ? 'dazzle' : null,
+  ].filter((kind): kind is NativeSecondaryMovementModifierKind => kind !== null)
+  const movementFactors: Record<NativeSecondaryMovementModifierKind, number> = {
+    'circle-slow': effect.circleSlowFactor,
+    'cold-slow': effect.coldSlowFactor,
+    dazzle: dazzleFactor,
+    frozen: effect.frozenTimeScale,
+    stun: effect.stunFactor,
+  }
+  return {
+    ...effect,
+    movementModifierOrder,
+    timeScale: movementModifierOrder.reduce(
+      (scale, kind) => Math.fround(scale * movementFactors[kind]),
+      Math.fround(1),
+    ),
+  }
+}
+
+function skeletonActionProgress(result: BoneyardEnemyStoreStepResult): number {
+  const brain = result.store.actors[0]!.brain
+  if (brain.family !== 'skeleton') throw new Error('expected Skeleton brain')
+  return brain.actionProgress
 }
 
 function withActorBrain(

@@ -647,7 +647,6 @@ export function resolveBoneyardSpellCombat(
           coldSlowFactor: NATIVE_WELD_FROST_SLOW_FACTOR,
           coldSlowMaterial: true,
           coldSlowTicks: NATIVE_WELD_FROST_SLOW_TICKS,
-          timeScale: NATIVE_WELD_FROST_SLOW_FACTOR,
         })
       }
       if (projectile.buildId === 1002 || projectile.buildId === 1009) {
@@ -701,7 +700,6 @@ export function resolveBoneyardSpellCombat(
               coldSlowFactor: NATIVE_WELD_FROST_SLOW_FACTOR,
               coldSlowMaterial: true,
               coldSlowTicks: NATIVE_WELD_FROST_SLOW_TICKS,
-              timeScale: NATIVE_WELD_FROST_SLOW_FACTOR,
             })
           }
           const radial = damageBoneyardEnemy(enemies, {
@@ -963,7 +961,6 @@ export function resolveBoneyardSpellCombat(
             coldSlowFactor: NATIVE_WELD_HAIL_COLD_SLOW_FACTOR,
             coldSlowMaterial: true,
             coldSlowTicks: NATIVE_WELD_HAIL_COLD_SLOW_TICKS,
-            timeScale: NATIVE_WELD_HAIL_COLD_SLOW_FACTOR,
           })
           const targetKey = `enemy:${currentActor.id}`
           if (!activeKnockbackTargetIds.has(targetKey)) {
@@ -1447,7 +1444,6 @@ export function resolveBoneyardSpellCombat(
                 coldSlowFactor: NATIVE_WELD_FROST_SLOW_FACTOR,
                 coldSlowMaterial: true,
                 coldSlowTicks: NATIVE_WELD_CHANNEL_MODIFIER_TICKS,
-                timeScale: NATIVE_WELD_FROST_SLOW_FACTOR,
               })
               const stunFactor = profile.vector.values[3]!
               if (stunFactor < 1) {
@@ -1590,6 +1586,7 @@ export function resolveBoneyardSpellCombat(
       )) {
         queueTargetEffect(row.actor.id, {
           coldSlowFactor: profile.auraMovementFactor,
+          coldSlowMaterial: true,
           coldSlowTicks: profile.coldDurationTicks,
         })
       }
@@ -1647,6 +1644,7 @@ export function resolveBoneyardSpellCombat(
       }
       queueTargetEffect(row.actor.id, {
         coldSlowFactor: emission.underpowered ? 0.75 : profile.coldMovementFactor,
+        coldSlowMaterial: true,
         coldSlowTicks: emission.underpowered ? 25 : profile.coldDurationTicks,
       })
       if (!emission.underpowered && profile.pushbackPercent > 0) {

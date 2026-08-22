@@ -645,7 +645,6 @@ test('welded missile contacts preserve each native elemental payload and impact 
       coldSlowFactor: 0.5,
       coldSlowMaterial: true,
       coldSlowTicks: 150,
-      timeScale: 0.5,
     },
     targetId: 1,
     worldKey: WORLD_KEY,
@@ -1776,7 +1775,7 @@ test('underpowered channels suppress every learned Air and Water branch', () => 
   )
   assert.deepEqual(water.hits.map(({ spellKind }) => spellKind), ['water'])
   assert.deepEqual(water.targetEffects, [{
-    patch: { coldSlowFactor: 0.75, coldSlowTicks: 25 },
+    patch: { coldSlowFactor: 0.75, coldSlowMaterial: true, coldSlowTicks: 25 },
     targetId: 1,
     worldKey: WORLD_KEY,
   }])
@@ -1839,9 +1838,9 @@ test('Frost applies widened cone cold, Chill pushback, Aura, Permafrost, and Hai
   assert.equal(result.enemies.actors[0]?.position.x, 60)
   assert.deepEqual(movementRequests, [{ x: 60, y: 0 }])
   assert.deepEqual(result.targetEffects, [
-    { patch: { coldSlowFactor: 0.4, coldSlowTicks: 200 }, targetId: 1, worldKey: WORLD_KEY },
-    { patch: { coldSlowFactor: 0.25, coldSlowTicks: 200 }, targetId: 1, worldKey: WORLD_KEY },
-    { patch: { coldSlowFactor: 0.25, coldSlowTicks: 200 }, targetId: 2, worldKey: WORLD_KEY },
+    { patch: { coldSlowFactor: 0.4, coldSlowMaterial: true, coldSlowTicks: 200 }, targetId: 1, worldKey: WORLD_KEY },
+    { patch: { coldSlowFactor: 0.25, coldSlowMaterial: true, coldSlowTicks: 200 }, targetId: 1, worldKey: WORLD_KEY },
+    { patch: { coldSlowFactor: 0.25, coldSlowMaterial: true, coldSlowTicks: 200 }, targetId: 2, worldKey: WORLD_KEY },
   ])
   assert.equal(result.enemies.actors[1]?.currentHealth, 3, 'Cone of Ice widens the acquired wedge')
   assert.equal(result.spells.transients.some(({ kind }) => kind === 'water-aura'), true)

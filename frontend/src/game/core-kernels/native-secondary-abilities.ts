@@ -93,7 +93,13 @@ export const NATIVE_SECONDARY_ACTOR_KINDS = Object.freeze([
   'ether-drain-capture-flare', 'comet', 'comet-trail', 'comet-impact', 'comet-debris', 'turn-undead',
 ] as const)
 
+export const NATIVE_SECONDARY_MOVEMENT_MODIFIER_KINDS = Object.freeze([
+  'cold-slow', 'circle-slow', 'frozen', 'stun', 'dazzle',
+] as const)
+
 export type NativeSecondaryActorKind = typeof NATIVE_SECONDARY_ACTOR_KINDS[number]
+export type NativeSecondaryMovementModifierKind =
+  typeof NATIVE_SECONDARY_MOVEMENT_MODIFIER_KINDS[number]
 
 export const NATIVE_SECONDARY_AUDIO_CUES = Object.freeze([
   'leviathan-roar', 'planewalker-on', 'planewalker-off', 'phase',
@@ -230,6 +236,8 @@ export interface NativeSecondarySteamedEffectState {
 }
 
 export interface NativeSecondaryTargetEffectState {
+  readonly circleSlowFactor: number
+  readonly circleSlowTicks: number
   readonly coldSlowFactor: number
   readonly coldSlowMaterial: boolean
   readonly coldSlowTicks: number
@@ -245,6 +253,7 @@ export interface NativeSecondaryTargetEffectState {
   readonly frostBurnTicks: number
   readonly frozenTicks: number
   readonly frozenTimeScale: number
+  readonly movementModifierOrder: readonly NativeSecondaryMovementModifierKind[]
   readonly prismaticTicks: number
   readonly stunFactor: number
   readonly stunTicks: number
@@ -257,7 +266,7 @@ export interface NativeSecondaryTargetEffectState {
 
 export type NativeSecondaryTargetEffectPatch = Partial<Omit<
   NativeSecondaryTargetEffectState,
-  'targetId' | 'worldKey'
+  'movementModifierOrder' | 'targetId' | 'timeScale' | 'worldKey'
 >>
 
 export interface NativeSecondarySimulationState {
@@ -1222,7 +1231,12 @@ export function stepNativeSecondaryAbilities(
     ...source,
     events: source.events.filter(({ tick }) => tick >= context.tick - EVENT_RETENTION_TICKS),
     targetEffects: source.targetEffects.flatMap((effect) => {
+      const circleSlowTicks = Math.max(0, effect.circleSlowTicks - 1)
       const coldSlowTicks = Math.max(0, effect.coldSlowTicks - 1)
+      const dazzleTicks = Math.max(0, effect.dazzleTicks - 1)
+      const dazzleMaximumTicks = effect.dazzleTicks > 1
+        ? effect.dazzleMaximumTicks
+        : 0
       const frozenTicks = Math.max(0, effect.frozenTicks - 1)
       const frostBurnTicks = Math.max(0, effect.frostBurnTicks - 1)
       const stunTicks = Math.max(0, effect.stunTicks - 1)
@@ -1241,15 +1255,31 @@ export function stepNativeSecondaryAbilities(
         : frozenTicks <= FROZEN_THAW_TICKS
           ? Math.fround(Math.min(1, effect.frozenTimeScale + FROZEN_TIME_SCALE_GAIN))
           : effect.frozenTimeScale
+      const circleSlowFactor = circleSlowTicks > 0 ? effect.circleSlowFactor : 1
+      const coldSlowFactor = coldSlowTicks > 0 ? effect.coldSlowFactor : 1
+      const stunFactor = stunTicks > 0 ? effect.stunFactor : 1
+      const dazzleFactor = nativeDazzleTimeScale(
+        dazzleTicks,
+        dazzleMaximumTicks,
+      )
+      const movementModifierOrder = effect.movementModifierOrder.filter((kind) => {
+        switch (kind) {
+          case 'cold-slow': return coldSlowTicks > 0
+          case 'circle-slow': return circleSlowTicks > 0
+          case 'frozen': return frozenTicks > 0
+          case 'stun': return stunTicks > 0
+          case 'dazzle': return dazzleTicks > 0
+        }
+      })
       const next = {
         ...effect,
-        coldSlowFactor: coldSlowTicks > 0 ? effect.coldSlowFactor : 1,
+        circleSlowFactor,
+        circleSlowTicks,
+        coldSlowFactor,
         coldSlowMaterial: coldSlowTicks > 0 && effect.coldSlowMaterial,
         coldSlowTicks,
-        dazzleMaximumTicks: effect.dazzleTicks > 1
-          ? effect.dazzleMaximumTicks
-          : 0,
-        dazzleTicks: Math.max(0, effect.dazzleTicks - 1),
+        dazzleMaximumTicks,
+        dazzleTicks,
         disruptedTicks: Math.max(0, effect.disruptedTicks - 1),
         electricBurn,
         fleeTicks: Math.max(0, effect.fleeTicks - 1),
@@ -1260,15 +1290,18 @@ export function stepNativeSecondaryAbilities(
         frostBurnTicks,
         frozenTicks,
         frozenTimeScale,
+        movementModifierOrder,
         prismaticTicks: Math.max(0, effect.prismaticTicks - 1),
-        stunFactor: stunTicks > 0 ? effect.stunFactor : 1,
+        stunFactor,
         stunTicks,
         steamed,
-        timeScale: Math.min(
-          coldSlowTicks > 0 ? effect.coldSlowFactor : 1,
-          frozenTicks > 0 ? frozenTimeScale : 1,
-          stunTicks > 0 ? effect.stunFactor : 1,
-        ),
+        timeScale: composeNativeSecondaryTimeScale(movementModifierOrder, {
+          'circle-slow': circleSlowFactor,
+          'cold-slow': coldSlowFactor,
+          dazzle: dazzleFactor,
+          frozen: frozenTicks > 0 ? frozenTimeScale : 1,
+          stun: stunFactor,
+        }),
       }
       return hasTargetEffect(next) ? [next] : []
     }),
@@ -1862,12 +1895,10 @@ export function stepNativeSecondaryAbilities(
                   coldSlowFactor: owner.coldSlowFactor,
                   coldSlowMaterial: true,
                   coldSlowTicks: actor.freezeTicks,
-                  timeScale: owner.coldSlowFactor,
                 }
               : {
                   frozenTicks: actor.freezeTicks,
                   frozenTimeScale: 0,
-                  timeScale: 0,
                 })
             if (actor.variant === 1) {
               state = mergeEffect(state, actor.worldKey, target.id, {
@@ -2592,8 +2623,8 @@ export function stepNativeSecondaryAbilities(
               MAGIC_CIRCLE_HALF_HEIGHT,
             )) continue
             state = mergeEffect(state, actor.worldKey, target.id, {
-              coldSlowTicks: 20,
-              timeScale: Math.max(0, 1 - actor.slowFactor),
+              circleSlowFactor: Math.max(0, 1 - actor.slowFactor),
+              circleSlowTicks: 20,
             })
           }
         }
@@ -2682,7 +2713,7 @@ export function stepNativeSecondaryAbilities(
                   state = mergeEffect(state, actor.worldKey, target.id, {
                     coldSlowTicks: Math.max(50, Math.trunc(400 * charge)),
                     coldSlowMaterial: true,
-                    timeScale: actor.slowFactor,
+                    coldSlowFactor: actor.slowFactor,
                   })
                 }
                 if (actor.variant === 1) {
@@ -4251,8 +4282,8 @@ function castAbility(
           MAGIC_CIRCLE_HALF_HEIGHT,
         )) continue
         state = mergeEffect(state, authority.worldKey, target.id, {
-          coldSlowTicks: 20,
-          timeScale: Math.max(0, 1 - v.mSlow / 100),
+          circleSlowFactor: Math.max(0, 1 - v.mSlow / 100),
+          circleSlowTicks: 20,
         })
       }
       break
@@ -5713,15 +5744,21 @@ function mergeEffect(
     effect.worldKey === worldKey && effect.targetId === targetId
   ))
   const current = index < 0 ? emptyTargetEffect(worldKey, targetId) : source.targetEffects[index]!
+  const circleSlowTicks = Math.max(current.circleSlowTicks, patch.circleSlowTicks ?? 0)
   const coldSlowTicks = Math.max(current.coldSlowTicks, patch.coldSlowTicks ?? 0)
   const frozenTicks = Math.max(current.frozenTicks, patch.frozenTicks ?? 0)
   const frostBurnTicks = Math.max(current.frostBurnTicks, patch.frostBurnTicks ?? 0)
   const stunTicks = Math.max(current.stunTicks, patch.stunTicks ?? 0)
+  const movementModifierOrder = mergeMovementModifierOrder(current, patch)
   const next = {
     ...current,
+    circleSlowFactor: patch.circleSlowTicks === undefined
+      ? current.circleSlowFactor
+      : Math.min(current.circleSlowFactor, patch.circleSlowFactor ?? 1),
+    circleSlowTicks,
     coldSlowFactor: patch.coldSlowTicks === undefined
       ? current.coldSlowFactor
-      : Math.min(current.coldSlowFactor, patch.coldSlowFactor ?? patch.timeScale ?? 1),
+      : Math.min(current.coldSlowFactor, patch.coldSlowFactor ?? 1),
     coldSlowMaterial: patch.coldSlowTicks === undefined
       ? current.coldSlowMaterial
       : current.coldSlowTicks > (patch.coldSlowTicks ?? 0)
@@ -5755,21 +5792,25 @@ function mergeEffect(
     frozenTimeScale: patch.frozenTicks === undefined
       ? current.frozenTimeScale
       : Math.min(current.frozenTimeScale, patch.frozenTimeScale ?? 0),
+    movementModifierOrder,
     prismaticTicks: Math.max(current.prismaticTicks, patch.prismaticTicks ?? 0),
     stunFactor: patch.stunTicks === undefined
       ? current.stunFactor
       : Math.min(current.stunFactor, patch.stunFactor ?? 1),
     stunTicks,
     steamed: mergeSteamedEffect(current.steamed, patch.steamed),
-    timeScale: patch.timeScale === undefined
-      ? Math.min(current.timeScale, patch.stunTicks === undefined
-          ? 1
-          : patch.stunFactor ?? 1)
-      : Math.min(current.timeScale, patch.timeScale, patch.stunFactor ?? 1),
+    timeScale: 1,
     weakenFactor: patch.weakenFactor === undefined || current.weakenFactor < 1
       ? current.weakenFactor
       : patch.weakenFactor,
   }
+  next.timeScale = composeNativeSecondaryTimeScale(movementModifierOrder, {
+    'circle-slow': next.circleSlowTicks > 0 ? next.circleSlowFactor : 1,
+    'cold-slow': next.coldSlowTicks > 0 ? next.coldSlowFactor : 1,
+    dazzle: nativeDazzleTimeScale(next.dazzleTicks, next.dazzleMaximumTicks),
+    frozen: next.frozenTicks > 0 ? next.frozenTimeScale : 1,
+    stun: next.stunTicks > 0 ? next.stunFactor : 1,
+  })
   if (index < 0) return { ...source, targetEffects: [...source.targetEffects, next] }
   const targetEffects = [...source.targetEffects]
   targetEffects[index] = next
@@ -5959,22 +6000,60 @@ export function triggerNativePlayerMindblast(
 
 function emptyTargetEffect(worldKey: string, targetId: number): NativeSecondaryTargetEffectState {
   return {
+    circleSlowFactor: 1, circleSlowTicks: 0,
     coldSlowFactor: 1, coldSlowMaterial: false, coldSlowTicks: 0,
     dazzleMaximumTicks: 0, dazzleTicks: 0,
     disruptedTicks: 0, electricBurn: null, fleeTicks: 0,
     frostBurnDamagePerTick: 0, frostBurnOwnerId: null, frostBurnSkillId: null,
     frostBurnSourceActorId: null, frostBurnTicks: 0,
     frozenTicks: 0, frozenTimeScale: 1,
+    movementModifierOrder: [],
     prismaticTicks: 0, stunFactor: 1, stunTicks: 0, steamed: null,
     targetId, timeScale: 1, weakenFactor: 1, worldKey,
   }
 }
 
 function hasTargetEffect(effect: NativeSecondaryTargetEffectState): boolean {
-  return effect.coldSlowTicks > 0 || effect.dazzleTicks > 0 || effect.disruptedTicks > 0
+  return effect.circleSlowTicks > 0 || effect.coldSlowTicks > 0
+    || effect.dazzleTicks > 0 || effect.disruptedTicks > 0
     || effect.electricBurn !== null || effect.fleeTicks > 0 || effect.frostBurnTicks > 0
     || effect.frozenTicks > 0 || effect.steamed !== null
     || effect.prismaticTicks > 0 || effect.stunTicks > 0 || effect.weakenFactor < 1
+}
+
+function nativeDazzleTimeScale(ticks: number, maximumTicks: number): number {
+  return ticks <= 0 || maximumTicks <= 0
+    ? 1
+    : Math.max(1 / maximumTicks, 1 - ticks / maximumTicks)
+}
+
+function composeNativeSecondaryTimeScale(
+  order: readonly NativeSecondaryMovementModifierKind[],
+  factors: Readonly<Record<NativeSecondaryMovementModifierKind, number>>,
+): number {
+  return order.reduce(
+    (scale, kind) => Math.fround(scale * factors[kind]),
+    Math.fround(1),
+  )
+}
+
+function mergeMovementModifierOrder(
+  current: NativeSecondaryTargetEffectState,
+  patch: NativeSecondaryTargetEffectPatch,
+): readonly NativeSecondaryMovementModifierKind[] {
+  const order = [...current.movementModifierOrder]
+  for (const [kind, currentTicks, incomingTicks] of [
+    ['cold-slow', current.coldSlowTicks, patch.coldSlowTicks],
+    ['circle-slow', current.circleSlowTicks, patch.circleSlowTicks],
+    ['frozen', current.frozenTicks, patch.frozenTicks],
+    ['stun', current.stunTicks, patch.stunTicks],
+    ['dazzle', current.dazzleTicks, patch.dazzleTicks],
+  ] as const) {
+    if ((incomingTicks ?? 0) > 0 && currentTicks === 0 && !order.includes(kind)) {
+      order.push(kind)
+    }
+  }
+  return Object.freeze(order)
 }
 
 function mergeElectricBurnEffect(

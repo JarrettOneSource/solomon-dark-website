@@ -49,6 +49,7 @@
     "smoke:game:ether-tracking": "node --experimental-strip-types tools/smoke-ether-primary-tracking.mjs",
     "smoke:game:hurricane": "node --experimental-strip-types tools/smoke-hurricane.mjs",
     "smoke:game:secondary-abilities": "node --experimental-strip-types tools/smoke-secondary-abilities.mjs",
+    "smoke:game:enemy-status-effects": "node --experimental-strip-types tools/smoke-enemy-status-effects.mjs",
     "smoke:game:primary-spells:low-mana": "node --experimental-strip-types tools/smoke-low-mana-primary-spells.mjs",
     "smoke:game:fullscreen": "node tools/smoke-game-fullscreen.mjs",
     "smoke:game:waves": "node --experimental-strip-types tools/smoke-boneyard-waves.mjs",

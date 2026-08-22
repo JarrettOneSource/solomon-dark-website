@@ -402,6 +402,13 @@ existing ordered checkpoint message remains the only save payload; the response
 only identifies which checkpoint must reach durable storage before the client
 may disconnect.
 
+Protocol 56 separates target-owned `Mod_CircleSlow` from `Mod_ColdSlow`.
+The host publishes both clocks/factors, bounded modifier attachment order, and
+the fully composed movement scalar, so simultaneous ColdSlow, CircleSlow,
+Frozen, Stun, and Dazzle multiply without client inference. ColdSlow alone owns
+the cyan target material; CircleSlow does not retain that material after the
+cold modifier expires.
+
 ## Saves, identity, and content
 
 - The authoritative game host is the only producer of browser-save contents.

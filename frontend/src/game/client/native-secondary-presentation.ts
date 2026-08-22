@@ -26,6 +26,7 @@ export function copyNativeSecondaryState(
     targetEffects: source.targetEffects.map((effect) => ({
       ...effect,
       electricBurn: effect.electricBurn === null ? null : { ...effect.electricBurn },
+      movementModifierOrder: [...effect.movementModifierOrder],
       steamed: effect.steamed === null ? null : { ...effect.steamed },
     })),
   }

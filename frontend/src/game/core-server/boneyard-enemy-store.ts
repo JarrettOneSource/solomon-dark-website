@@ -1530,7 +1530,11 @@ export function stepBoneyardEnemyStore(
       ? stepDyingActor(work, timedActor, context)
       : stepLivingActor(work, timedActor, context)
     if (stepped) {
-      work.actors.push(stepped)
+      // Native 0x00625680 rebuilds status scalars from 1.0 every tick. The
+      // affected config is a current-tick view, never the next authored row.
+      work.actors.push(stepped.config === timedActor.config
+        ? stepped
+        : { ...stepped, config: timedActor.config })
     } else if (timedActor.config.enemyToken === 'IMP') {
       work.impActorCount -= 1
     }
@@ -1951,7 +1955,7 @@ function stepLivingActor(
   const effect = context.abilityEffects?.[source.id]
   const affected = effect === undefined
     ? source
-    : withNativeSecondaryEffect(source, effect)
+    : withNativeSecondaryTickScalars(source, effect)
   const targeted = refreshTarget(affected, context)
   const actor = targeted.brain.family === 'coffin'
     ? targeted
@@ -3518,7 +3522,7 @@ function skeletonFamilyMovementPausedByHit(actor: BoneyardEnemyActor): boolean {
     || actor.config.enemyToken === 'SKELETONMAGE'
 }
 
-function withNativeSecondaryEffect(
+function withNativeSecondaryTickScalars(
   actor: BoneyardEnemyActor,
   effect: NativeSecondaryTargetEffectState,
 ): BoneyardEnemyActor {
@@ -3544,14 +3548,7 @@ function withNativeSecondaryEffect(
 export function nativeSecondaryActorSpeedScale(
   effect: NativeSecondaryTargetEffectState | undefined,
 ): number {
-  if (effect === undefined) return 1
-  const dazzleScale = effect.dazzleTicks <= 0 || effect.dazzleMaximumTicks <= 0
-    ? 1
-    : Math.max(
-        1 / effect.dazzleMaximumTicks,
-        1 - effect.dazzleTicks / effect.dazzleMaximumTicks,
-      )
-  return Math.min(effect.timeScale, dazzleScale)
+  return effect?.timeScale ?? 1
 }
 
 function staffAttackSpeed(actor: BoneyardEnemyActor): number {
