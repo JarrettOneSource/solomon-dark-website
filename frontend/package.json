@@ -42,6 +42,7 @@
     "smoke:game:boneyard-complex-shadows": "node tools/smoke-boneyard-complex-shadows.mjs",
     "smoke:game:boneyard-building-lighting": "node tools/smoke-boneyard-building-lighting.mjs",
     "smoke:game:enemy-animation-projectiles": "node tools/smoke-enemy-animation-projectile-vfx.mjs",
+    "smoke:game:skeleton-upper-body": "node --experimental-strip-types tools/smoke-skeleton-upper-body.mjs",
     "smoke:game:player-damage": "node tools/smoke-player-damage-presentation.mjs",
     "smoke:game:primary-spells": "node tools/smoke-primary-spells.mjs",
     "smoke:game:earth-contact": "node --experimental-strip-types tools/smoke-earth-boulder-contact.mjs",

@@ -242,11 +242,17 @@ interface BoneyardRendererFrameDiagnostics {
   fadedTreeCount: number
   enemySamples: readonly Readonly<{
     action: string | null
+    actionProgress: number
+    bodyEntry: number | null
+    bodyPose: number
     currentHealth: number
+    enemyToken: string
+    gaitPose: number
     headFacingOffset: number
     hitFlash: number
     id: number
     lifeState: string
+    limbsEntry: number | null
     maximumHealth: number
     x: number
     y: number
@@ -983,11 +989,17 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.fadedTreeCount = painter.fadedTreeCount
       frameDiagnostics.enemySamples = snapshot.world.enemies.map((enemy) => ({
         action: enemy.animation.action,
+        actionProgress: enemy.animation.actionProgress,
+        bodyEntry: scene.enemyBodyEntry(enemy.id),
+        bodyPose: enemy.animation.bodyPose,
         currentHealth: enemy.currentHealth,
+        enemyToken: enemy.enemyToken,
+        gaitPose: enemy.animation.gaitPose,
         headFacingOffset: enemy.animation.headFacingOffset,
         hitFlash: enemy.animation.hitFlash,
         id: enemy.id,
         lifeState: enemy.animation.state,
+        limbsEntry: scene.enemyLimbsEntry(enemy.id),
         maximumHealth: enemy.maximumHealth,
         x: enemy.position.x,
         y: enemy.position.y,
@@ -2325,6 +2337,14 @@ class BoneyardDynamicScene {
 
   get enemyCount(): number {
     return this.enemies.size
+  }
+
+  enemyBodyEntry(id: number): number | null {
+    return this.enemies.bodyEntry(id)
+  }
+
+  enemyLimbsEntry(id: number): number | null {
+    return this.enemies.limbsEntry(id)
   }
 
   get enemyAttackEffectCount(): number {

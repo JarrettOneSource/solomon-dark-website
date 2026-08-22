@@ -4,9 +4,15 @@ import test from 'node:test'
 import { NATIVE_ACTOR_SEPARATION_EPSILON } from '../core-kernels/actor-physics.ts'
 import { NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM } from '../core-kernels/boneyard-zombie-beat.ts'
 import {
+  NATIVE_BADGUY_GAIT_PHASE_DIVISOR,
+  NATIVE_BADGUY_GAIT_PHASE_PERIOD,
+  NATIVE_SKELETON_BODY_GAIT_PHASE_DIVISOR,
+  NATIVE_SKELETON_BODY_GAIT_PHASE_PERIOD,
   NATIVE_SKELETON_HEAD_FACING_OFFSETS,
   NATIVE_SKELETON_HEAD_TURN_ROLL_COUNT,
   NATIVE_SKELETON_HEAD_TURN_ROLL_WINNER,
+  advanceNativeEnemyLocomotionPhase,
+  nativeSkeletonBodyGaitPose,
 } from '../core-kernels/boneyard-skeleton-family-animation.ts'
 import type { BoneyardWaveEnemyToken } from '../core-kernels/boneyard-wave-schema.ts'
 import { randomBoneyardWaveInteger } from '../core-kernels/boneyard-wave-timeline.ts'
@@ -37,7 +43,6 @@ import {
 import {
   BOUNDED_ENEMY_ACTION_PROGRAMS,
   BOUNDED_ENEMY_DEATH_PROGRAM_TICKS,
-  BOUNDED_ENEMY_GAIT_DISTANCE_PER_POSE,
   BOUNDED_ZOMBIE_KNOCKBACK_DISTANCE,
   NATIVE_ARCHER_ACTION_PROGRAM,
   NATIVE_MAGE_ACTION_PROGRAMS,
@@ -729,11 +734,12 @@ test('two-tick movement sends the recovered delta and radius through collision a
     tick: 2,
   })
 
-  const expectedStep = 0.25
-    * actor.config.chaseSpeed
-    * actor.config.baseSpeed
-    * actor.config.scale
-    * 2
+  const movementScalar = Math.fround(
+    actor.config.chaseSpeed
+      * actor.config.baseSpeed
+      * actor.config.scale,
+  )
+  const expectedStep = 0.25 * movementScalar * 2
   assert.equal(requests.length, 1)
   assert.equal(requests[0]!.actorId, actor.id)
   assert.equal(requests[0]!.delta.x, expectedStep)
@@ -742,10 +748,141 @@ test('two-tick movement sends the recovered delta and radius through collision a
   assert.equal(result.store.actors[0]!.position.x, expectedStep / 2)
   assert.equal(
     result.store.actors[0]!.gaitPose,
-    expectedStep / 2 / BOUNDED_ENEMY_GAIT_DISTANCE_PER_POSE,
+    advanceNativeEnemyLocomotionPhase(
+      actor.gaitPose,
+      movementScalar,
+      2,
+      NATIVE_BADGUY_GAIT_PHASE_DIVISOR,
+      NATIVE_BADGUY_GAIT_PHASE_PERIOD,
+    ),
   )
+  const expectedBodyPhase = advanceNativeEnemyLocomotionPhase(
+    actor.bodyGaitPhase,
+    movementScalar,
+    2,
+    NATIVE_SKELETON_BODY_GAIT_PHASE_DIVISOR,
+    NATIVE_SKELETON_BODY_GAIT_PHASE_PERIOD,
+  )
+  assert.equal(result.store.actors[0]!.bodyGaitPhase, expectedBodyPhase)
+  assert.equal(result.store.actors[0]!.bodyPose, nativeSkeletonBodyGaitPose(expectedBodyPhase))
   assert.equal(result.store.actors[0]!.lastMovementTick, 2)
   assert.equal(result.store.actors[0]!.nextMovementTick, 4)
+})
+
+test('blocked requested movement still advances Skeleton limb and upper-body locomotion', () => {
+  let result = spawnOne('blocked-skeleton-walk', 'SKELETON', { x: 0, y: 0 }, FAR_PLAYERS)
+  const gaitPoses = new Set<number>()
+  const bodyPoses = new Set<number>()
+  let movementRequests = 0
+
+  for (let tick = 1; tick <= 180; tick += 1) {
+    result = stepBoneyardEnemyStore(result.store, {
+      firstProjectileWorldContact: NO_WORLD_CONTACT,
+      players: FAR_PLAYERS,
+      resolveMovement: (request) => {
+        movementRequests += 1
+        return request.position
+      },
+      resolveSpawnIntents: () => [],
+      tick,
+    })
+    gaitPoses.add(Math.floor(result.store.actors[0]!.gaitPose))
+    bodyPoses.add(Math.floor(result.store.actors[0]!.bodyPose))
+  }
+
+  assert.ok(movementRequests > 0)
+  assert.deepEqual(result.store.actors[0]!.position, { x: 0, y: 0 })
+  assert.equal(result.store.actors[0]!.lastMovementTick, null)
+  assert.ok(gaitPoses.size > 1, JSON.stringify([...gaitPoses]))
+  assert.deepEqual([...bodyPoses].sort((left, right) => left - right), [0, 1, 2])
+})
+
+test('Skeleton-family wrappers retain or replace the common body gait exactly', () => {
+  const cases = [
+    { body: 'gait', flags: [], seed: 'bare-skeleton-gait', token: 'SKELETON' },
+    { body: 'zero', flags: ['FLAG_SWORD'], seed: 'sword-skeleton-gait', token: 'SKELETON' },
+    { body: 'zero', flags: ['FLAG_MACE'], seed: 'mace-skeleton-gait', token: 'SKELETON' },
+    { body: 'zero', flags: ['FLAG_FLAIL'], seed: 'flail-skeleton-gait', token: 'SKELETON' },
+    { body: 'zero', flags: ['FLAG_AXE'], seed: 'axe-skeleton-gait', token: 'SKELETON' },
+    { body: 'zero', flags: ['FLAG_PIKE'], seed: 'pike-skeleton-gait', token: 'SKELETON' },
+    { body: 'zero', flags: ['FLAG_ARMOR'], seed: 'armored-skeleton-gait', token: 'SKELETON' },
+    { body: 'zero', flags: ['FLAG_ARMOR', 'FLAG_SWORD'], seed: 'armored-sword-gait', token: 'SKELETON' },
+    { body: 'zero', flags: ['FLAG_ARMOR', 'FLAG_MACE'], seed: 'armored-mace-gait', token: 'SKELETON' },
+    { body: 'zero', flags: ['FLAG_ARMOR', 'FLAG_FLAIL'], seed: 'armored-flail-gait', token: 'SKELETON' },
+    { body: 'zero', flags: ['FLAG_ARMOR', 'FLAG_AXE'], seed: 'armored-axe-gait', token: 'SKELETON' },
+    { body: 'zero', flags: ['FLAG_ARMOR', 'FLAG_PIKE'], seed: 'armored-pike-gait', token: 'SKELETON' },
+    { body: 'gait', flags: [], seed: 'archer-gait', token: 'SKELETONARCHER' },
+    { body: 'rest', flags: [], seed: 'mage-gait', token: 'SKELETONMAGE' },
+    { body: 'unchanged', flags: [], seed: 'zombie-shared-gait', token: 'ZOMBIE' },
+  ] as const
+
+  for (const entry of cases) {
+    let result = spawnOne(entry.seed, entry.token, { x: 0, y: 0 }, FAR_PLAYERS, entry.flags)
+    const before = result.store.actors[0]!
+    result = step(result.store, 1, FAR_PLAYERS)
+    result = step(result.store, 2, FAR_PLAYERS)
+    const after = result.store.actors[0]!
+    const movementScalar = Math.fround(
+      before.config.chaseSpeed * before.config.baseSpeed * before.config.scale,
+    )
+    const expectedGait = advanceNativeEnemyLocomotionPhase(
+      before.gaitPose,
+      movementScalar,
+      2,
+      NATIVE_BADGUY_GAIT_PHASE_DIVISOR,
+      NATIVE_BADGUY_GAIT_PHASE_PERIOD,
+    )
+    const expectedBodyPhase = advanceNativeEnemyLocomotionPhase(
+      before.bodyGaitPhase,
+      movementScalar,
+      2,
+      NATIVE_SKELETON_BODY_GAIT_PHASE_DIVISOR,
+      NATIVE_SKELETON_BODY_GAIT_PHASE_PERIOD,
+    )
+    assert.equal(after.gaitPose, expectedGait, entry.seed)
+    assert.equal(after.bodyGaitPhase, expectedBodyPhase, entry.seed)
+    switch (entry.body) {
+      case 'gait':
+        assert.equal(after.bodyPose, nativeSkeletonBodyGaitPose(expectedBodyPhase), entry.seed)
+        break
+      case 'zero':
+        assert.equal(after.bodyPose, 0, entry.seed)
+        break
+      case 'rest':
+        assert.ok(before.restBodyPose === 0 || before.restBodyPose === 1, entry.seed)
+        assert.equal(after.bodyPose, before.restBodyPose, entry.seed)
+        break
+      case 'unchanged':
+        assert.equal(after.bodyPose, before.bodyPose, entry.seed)
+        break
+    }
+  }
+})
+
+test('Skeleton hit latch pauses both locomotion phases until its strict end', () => {
+  const spawned = spawnOne('skeleton-hit-pauses-gait', 'SKELETON', { x: 0, y: 0 }, FAR_PLAYERS)
+  const before = spawned.store.actors[0]!
+  let result = {
+    ...spawned,
+    store: damageBoneyardEnemy(spawned.store, {
+      actorId: before.id,
+      amount: 1,
+      sourcePlayerId: 'player',
+      tick: 0,
+    }).store,
+  }
+
+  for (let tick = 1; tick < 20; tick += 1) result = step(result.store, tick, FAR_PLAYERS)
+  const paused = result.store.actors[0]!
+  assert.deepEqual(paused.position, before.position)
+  assert.equal(paused.gaitPose, before.gaitPose)
+  assert.equal(paused.bodyGaitPhase, before.bodyGaitPhase)
+
+  result = step(result.store, 20, FAR_PLAYERS)
+  const resumed = result.store.actors[0]!
+  assert.notDeepEqual(resumed.position, before.position)
+  assert.notEqual(resumed.gaitPose, before.gaitPose)
+  assert.notEqual(resumed.bodyGaitPhase, before.bodyGaitPhase)
 })
 
 test('Skeleton and Mage own the native head turn while Archer remains constructor-zero', () => {
@@ -885,6 +1022,41 @@ test('Skeleton claw, weapon, and Pike preserve exact marker and strict-end ticks
   verifySkeletonProgram(['FLAG_PIKE'], 'pike', [16], 97)
 })
 
+test('Skeleton action poses take priority and locomotion body gait resumes afterward', () => {
+  const near = { player: livingTarget(10, 0) }
+  let result = spawnOne('skeleton-action-gait-resume', 'SKELETON', { x: 0, y: 0 }, near)
+  const initial = result.store.actors[0]!
+  result = step(result.store, 1, near)
+  assert.equal(result.store.actors[0]!.brain.phase, 'attack')
+  assert.equal(result.store.actors[0]!.bodyPose, 4)
+
+  let tick = 2
+  for (; tick <= 60 && result.store.actors[0]!.brain.phase === 'attack'; tick += 1) {
+    result = step(result.store, tick, near)
+  }
+  const completed = result.store.actors[0]!
+  assert.equal(completed.brain.phase, 'approach')
+  assert.equal(completed.gaitPose, initial.gaitPose)
+  assert.equal(completed.bodyGaitPhase, initial.bodyGaitPhase)
+  assert.equal(completed.bodyPose, 4)
+
+  result = step(result.store, tick, FAR_PLAYERS)
+  const resumed = result.store.actors[0]!
+  const movementScalar = Math.fround(
+    completed.config.chaseSpeed * completed.config.baseSpeed * completed.config.scale,
+  )
+  const expectedBodyPhase = advanceNativeEnemyLocomotionPhase(
+    completed.bodyGaitPhase,
+    movementScalar,
+    2,
+    NATIVE_SKELETON_BODY_GAIT_PHASE_DIVISOR,
+    NATIVE_SKELETON_BODY_GAIT_PHASE_PERIOD,
+  )
+  assert.equal(resumed.bodyGaitPhase, expectedBodyPhase)
+  assert.equal(resumed.bodyPose, nativeSkeletonBodyGaitPose(expectedBodyPhase))
+  assert.notEqual(resumed.gaitPose, completed.gaitPose)
+})
+
 test('armor selects the native claw body table and retains its wrapped first pose', () => {
   const players = { player: livingTarget(10, 0) }
   let result = spawnOne(
@@ -894,6 +1066,7 @@ test('armor selects the native claw body table and retains its wrapped first pos
     players,
     ['FLAG_ARMOR'],
   )
+  const initialGaitPose = result.store.actors[0]!.gaitPose
   result = step(result.store, 1, players)
   assert.equal(result.store.actors[0]!.config.enemyToken, 'SKELETON')
   assert.equal(result.store.actors[0]!.bodyPose, 2)
@@ -905,7 +1078,7 @@ test('armor selects the native claw body table and retains its wrapped first pos
   }
   assert.deepEqual([...bodyPoses].sort((a, b) => a - b), [2, 3, 4, 5, 6, 7, 8, 9])
   assert.equal(result.store.actors[0]!.bodyPose, 2)
-  assert.equal(result.store.actors[0]!.gaitPose, 0)
+  assert.equal(result.store.actors[0]!.gaitPose, initialGaitPose)
 })
 
 test('settled native circle contact begins a Skeleton action and reaches its marker', () => {
@@ -992,9 +1165,25 @@ test('Staff Disable persistently composes native action and movement factors', (
     slowed.store.actors[0]!.position.x - initialPosition.x,
     slowed.store.actors[0]!.position.y - initialPosition.y,
   )
-  assert.ok(
-    Math.abs(slowedDistance / baselineDistance - 0.75) < 1e-12,
-    JSON.stringify({ baselineDistance, initialPosition, slowedDistance }),
+  const baselineActor = baseline.store.actors[0]!
+  const slowedActor = slowed.store.actors[0]!
+  assert.equal(
+    baselineDistance,
+    0.25 * Math.fround(
+      baselineActor.config.chaseSpeed
+        * baselineActor.config.baseSpeed
+        * baselineActor.staffMovementFactor
+        * baselineActor.config.scale,
+    ) * 2,
+  )
+  assert.equal(
+    slowedDistance,
+    0.25 * Math.fround(
+      slowedActor.config.chaseSpeed
+        * slowedActor.config.baseSpeed
+        * slowedActor.staffMovementFactor
+        * slowedActor.config.scale,
+    ) * 2,
   )
 
   const compounded = applyBoneyardStaffDisable(
@@ -1116,6 +1305,7 @@ test('Archer and Mage use their recovered variable progress programs', () => {
     { x: 0, y: 0 },
     { player: livingTarget(200, 0) },
   )
+  const archerInitialGaitPose = archer.store.actors[0]!.gaitPose
   archer = step(archer.store, 1, { player: livingTarget(200, 0) })
   assert.equal(archer.store.actors[0]!.brain.phase, 'attack')
   const archerStartTick = 1
@@ -1144,7 +1334,7 @@ test('Archer and Mage use their recovered variable progress programs', () => {
   assert.equal(archerImpact, true)
   assert.equal(archer.store.projectiles.length, 0)
   assert.equal(archer.store.actors[0]!.bodyPose, 8)
-  assert.equal(archer.store.actors[0]!.gaitPose, 0)
+  assert.equal(archer.store.actors[0]!.gaitPose, archerInitialGaitPose)
 
   let mage = spawnOne(
     'mage-program',
@@ -1152,6 +1342,7 @@ test('Archer and Mage use their recovered variable progress programs', () => {
     { x: 0, y: 0 },
     { player: livingTarget(150, 0) },
   )
+  const mageInitialGaitPose = mage.store.actors[0]!.gaitPose
   assert.ok(mage.store.actors[0]!.bodyPose === 0 || mage.store.actors[0]!.bodyPose === 1)
   mage = step(mage.store, 1, { player: livingTarget(150, 0) })
   assert.equal(mage.store.actors[0]!.bodyPose, 2)
@@ -1190,7 +1381,7 @@ test('Archer and Mage use their recovered variable progress programs', () => {
   }
   assert.equal(mage.store.actors[0]!.brain.phase, 'range-control')
   assert.equal(mage.store.actors[0]!.bodyPose, 0)
-  assert.equal(mage.store.actors[0]!.gaitPose, 0)
+  assert.equal(mage.store.actors[0]!.gaitPose, mageInitialGaitPose)
 })
 
 test('every Archer and Mage range mode attacks, approaches, and retreats at its own band', () => {
@@ -2994,6 +3185,7 @@ function verifySkeletonProgram(
 ): void {
   const players = { player: livingTarget(10, 0) }
   let result = spawnOne(`skeleton-${expectedAction}`, 'SKELETON', { x: 0, y: 0 }, players, flags)
+  const initialGaitPose = result.store.actors[0]!.gaitPose
   result = step(result.store, 1, players)
   const began = result.store.actors[0]!.brain
   assert.equal(began.family, 'skeleton')
@@ -3023,7 +3215,7 @@ function verifySkeletonProgram(
   assert.equal(completionTick - 1, expectedCompletionTick)
   assert.ok(bodyPoses.size > 1)
   assert.equal(result.store.actors[0]!.bodyPose, firstBodyPose)
-  assert.equal(result.store.actors[0]!.gaitPose, 0)
+  assert.equal(result.store.actors[0]!.gaitPose, initialGaitPose)
 }
 
 function spawnOne(

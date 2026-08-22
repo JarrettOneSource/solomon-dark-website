@@ -8,6 +8,15 @@ import {
   stepNativeImpFlight,
 } from '../core-kernels/boneyard-imp-flight.ts'
 import {
+  NATIVE_BADGUY_GAIT_PHASE_DIVISOR,
+  NATIVE_BADGUY_GAIT_PHASE_PERIOD,
+  NATIVE_SKELETON_BODY_GAIT_PHASE_DIVISOR,
+  NATIVE_SKELETON_BODY_GAIT_PHASE_PERIOD,
+  NATIVE_SKELETON_BODY_GAIT_POSES,
+  advanceNativeEnemyLocomotionPhase,
+  nativeSkeletonBodyGaitPose,
+} from '../core-kernels/boneyard-skeleton-family-animation.ts'
+import {
   NATIVE_MAGE_CAST_BODY_POSES,
   nativeMageBodyPose,
 } from '../core-kernels/boneyard-mage-lightning.ts'
@@ -19,6 +28,25 @@ import {
   nativeZombieArticulationPose,
   nativeZombieBeatPose,
 } from './native-enemy-animation.ts'
+
+test('Badguy locomotion advances independent native gait and Skeleton body phases', () => {
+  assert.equal(NATIVE_BADGUY_GAIT_PHASE_DIVISOR, 25)
+  assert.equal(NATIVE_BADGUY_GAIT_PHASE_PERIOD, 8)
+  assert.equal(NATIVE_SKELETON_BODY_GAIT_PHASE_DIVISOR, 35)
+  assert.equal(NATIVE_SKELETON_BODY_GAIT_PHASE_PERIOD, 4)
+  assert.deepEqual(NATIVE_SKELETON_BODY_GAIT_POSES, [0, 1, 2, 1, 0.5])
+
+  assert.equal(advanceNativeEnemyLocomotionPhase(7, 25, 1, 25, 8), 8)
+  assert.equal(advanceNativeEnemyLocomotionPhase(8, 25, 1, 25, 8), 1)
+  assert.equal(advanceNativeEnemyLocomotionPhase(3, 35, 1, 35, 4), 4)
+  assert.equal(advanceNativeEnemyLocomotionPhase(4, 35, 1, 35, 4), 1)
+  assert.equal(advanceNativeEnemyLocomotionPhase(0, 17.5, 2, 35, 4), 1)
+
+  assert.deepEqual(
+    [0, 1, 2, 3, 4].map(nativeSkeletonBodyGaitPose),
+    [0, 1, 2, 1, 0.5],
+  )
+})
 
 test('stock Skeleton, Archer, Mage, and Demon selectors are recorded exactly', () => {
   assert.deepEqual(

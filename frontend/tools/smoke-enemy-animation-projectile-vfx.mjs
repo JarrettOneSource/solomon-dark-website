@@ -15,9 +15,12 @@ const skeletonLateScreenshotPath = process.env.SDR_SKELETON_ATTACK_LATE_SCREENSH
   || join(tmpdir(), 'solomon-dark-skeleton-attack-late-20260816.png')
 const skeletonHeadTurnScreenshotPath = process.env.SDR_SKELETON_HEAD_TURN_SCREENSHOT
   || join(tmpdir(), 'solomon-dark-skeleton-head-turn-20260820.png')
+const chromePath = process.env.SDR_CHROME_PATH || (process.platform === 'darwin'
+  ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+  : '/usr/bin/google-chrome')
 
 const browser = await chromium.launch({
-  executablePath: process.env.SDR_CHROME_PATH || '/usr/bin/google-chrome',
+  executablePath: chromePath,
   headless: true,
 })
 
@@ -396,6 +399,7 @@ try {
     const snapshotAt = (tick, advanced) => ({
       hostPlayerId: 'local',
       levelUpBarrier: null,
+      modEffects: [],
       players: {
         local: {
           config: {
@@ -570,7 +574,7 @@ try {
       return { changedPixels, channelDelta }
     }
 
-    const initialSnapshot = snapshotAt(120.25, false)
+    const initialSnapshot = snapshotAt(120, false)
     const auxiliaryPlans = Object.fromEntries(enemiesAt(true).map((enemy) => [
       enemy.enemyToken,
       presentationModule.nativeEnemyPresentationPlan(
@@ -613,6 +617,8 @@ try {
       boneyard: loaded,
       devicePixelRatio: 1,
       initialSnapshot,
+      modAssets: [],
+      modCatalog: [],
       playerId: 'local',
       viewport,
     })
@@ -671,6 +677,8 @@ try {
       boneyard: loaded,
       devicePixelRatio: 1,
       initialSnapshot: skeletonEarlySnapshot,
+      modAssets: [],
+      modCatalog: [],
       playerId: 'local',
       viewport,
     })

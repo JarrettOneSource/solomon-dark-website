@@ -85,6 +85,14 @@ export class NativeEnemyViews {
     for (const burst of this.attackBursts.values()) burst.setRenderable(renderable)
   }
 
+  bodyEntry(id: number): number | null {
+    return this.views.get(id)?.view.bodyEntry ?? null
+  }
+
+  limbsEntry(id: number): number | null {
+    return this.views.get(id)?.view.limbsEntry ?? null
+  }
+
   get size(): number {
     return this.views.size
   }
@@ -108,6 +116,8 @@ class NativeEnemyView {
   private readonly root: Container
   private readonly sprites: Sprite[] = []
   private readonly textures: BoneyardWorldTextures
+  private renderedBodyEntry: number | null = null
+  private renderedLimbsEntry: number | null = null
   private headingDeg = 0
 
   constructor(
@@ -135,6 +145,12 @@ class NativeEnemyView {
       tick,
       (atlas, entry) => nativeEnemySpriteRecord(atlas, entry).points,
     )
+    this.renderedBodyEntry = plan.layers.find(({ role }) => (
+      role.endsWith('-body')
+    ))?.entry ?? null
+    this.renderedLimbsEntry = plan.layers.find(({ role }) => (
+      role.endsWith('-limbs')
+    ))?.entry ?? null
     this.segments.clear()
     for (const segment of plan.segments) {
       this.segments
@@ -176,6 +192,14 @@ class NativeEnemyView {
 
   setDepth(depth: number): void {
     this.container.zIndex = depth
+  }
+
+  get bodyEntry(): number | null {
+    return this.renderedBodyEntry
+  }
+
+  get limbsEntry(): number | null {
+    return this.renderedLimbsEntry
   }
 
   get depth(): number {

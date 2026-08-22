@@ -44,12 +44,18 @@ import {
 } from '../core-kernels/boneyard-mage-lightning.ts'
 import {
   NATIVE_ARCHER_SHOT_BODY_POSES,
+  NATIVE_BADGUY_GAIT_PHASE_DIVISOR,
+  NATIVE_BADGUY_GAIT_PHASE_PERIOD,
   NATIVE_SKELETON_CLAW_BODY_POSES,
+  NATIVE_SKELETON_BODY_GAIT_PHASE_DIVISOR,
+  NATIVE_SKELETON_BODY_GAIT_PHASE_PERIOD,
   NATIVE_SKELETON_HEAD_FACING_OFFSETS,
   NATIVE_SKELETON_HEAD_TURN_ROLL_COUNT,
   NATIVE_SKELETON_HEAD_TURN_ROLL_WINNER,
   NATIVE_SKELETON_PIKE_BODY_POSES,
   NATIVE_SKELETON_WEAPON_BODY_POSES,
+  advanceNativeEnemyLocomotionPhase,
+  nativeSkeletonBodyGaitPose,
   nativeSkeletonFamilyBodyPose,
   type NativeSkeletonHeadFacingOffset,
 } from '../core-kernels/boneyard-skeleton-family-animation.ts'
@@ -80,8 +86,6 @@ export const NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS = 2
 export const NATIVE_ENEMY_TARGET_REFRESH_TICKS = 25
 export const NATIVE_ENEMY_MISSING_TARGET_REFRESH_TICKS = 3
 export const NATIVE_ENEMY_HIT_LATCH_TICKS = 20
-/** Named web presentation bound until family gait distance is closed natively. */
-export const BOUNDED_ENEMY_GAIT_DISTANCE_PER_POSE = 2
 
 const NATIVE_IMP_SPLIT_HEADING_OFFSETS = Object.freeze([-90, 90] as const)
 export const NATIVE_IMP_SPLIT_CHILD_COUNT = NATIVE_IMP_SPLIT_HEADING_OFFSETS.length
@@ -334,6 +338,7 @@ export interface BoneyardEnemyLightingState {
 }
 
 export interface BoneyardEnemyActor {
+  readonly bodyGaitPhase: number
   readonly bodyPose: number
   readonly brain: BoneyardEnemyBrain
   readonly config: EvaluatedBoneyardEnemyConfig
@@ -357,6 +362,7 @@ export interface BoneyardEnemyActor {
   readonly nextTargetRefreshTick: number
   readonly position: Readonly<BoneyardPoint>
   readonly rewardGranted: boolean
+  readonly restBodyPose: number
   readonly shieldHealth: number
   readonly shieldMaximumHealth: number
   readonly shieldPulse: number
@@ -662,6 +668,7 @@ export interface BoneyardEnemyStore {
   readonly deathEffects: readonly BoneyardEnemyDeathEffect[]
   readonly headFacingRngState: NativeRngState
   readonly lastStepTick: number
+  readonly locomotionRngState: NativeRngState
   readonly mageLightningPulses: readonly BoneyardMageLightningPulse[]
   readonly maggots: readonly BoneyardMaggotActor[]
   readonly nextActorId: BoneyardEnemyActorId
@@ -820,6 +827,7 @@ interface WorkingStep {
   events: BoneyardEnemySemanticEvent[]
   headFacingRngState: NativeRngState
   impActorCount: number
+  locomotionRngState: NativeRngState
   mageLightningPulses: BoneyardMageLightningPulse[]
   maggots: BoneyardMaggotActor[]
   nextActorId: number
@@ -861,6 +869,9 @@ export function createBoneyardEnemyStore(seed: string): BoneyardEnemyStore {
       seedBoneyardWaveRng(`${seed}:skeleton-head-facing`),
     ),
     lastStepTick: -1,
+    locomotionRngState: createNativeRng(
+      seedBoneyardWaveRng(`${seed}:enemy-locomotion`),
+    ),
     mageLightningPulses: [],
     maggots: [],
     nextActorId: 1,
@@ -1481,6 +1492,7 @@ export function stepBoneyardEnemyStore(
     events: [],
     headFacingRngState: source.headFacingRngState,
     impActorCount: source.actors.filter(({ config }) => config.enemyToken === 'IMP').length,
+    locomotionRngState: source.locomotionRngState,
     mageLightningPulses: source.mageLightningPulses.filter((pulse) => (
       context.tick - pulse.tick < NATIVE_MAGE_LIGHTNING_MAX_PULSE_AGES
     )),
@@ -1542,6 +1554,7 @@ export function stepBoneyardEnemyStore(
       deathEffects: work.deathEffects,
       headFacingRngState: work.headFacingRngState,
       lastStepTick: context.tick,
+      locomotionRngState: work.locomotionRngState,
       mageLightningPulses: work.mageLightningPulses,
       maggots: work.maggots,
       nextActorId: work.nextActorId,
@@ -1606,20 +1619,23 @@ function materializeSpawnIntents(
     })
     validatePoint(position, 'resolved enemy spawn position')
     const targetPlayerId = nearestEligibleTarget(position, context.players)
+    const gaitPose = drawLocomotionPhase(work)
+    const bodyGaitPhase = drawLocomotionPhase(work)
     const brain = createBrain(work, config)
-    const bodyPose = config.enemyToken === 'SKELETONMAGE'
-      ? drawInteger(work, 2)
+    const restBodyPose = config.enemyToken === 'SKELETONMAGE'
+      ? drawLocomotionInteger(work, 2)
       : 0
     const hurricaneContactCooldown = drawInteger(work, 100)
     const actor: BoneyardEnemyActor = {
-      bodyPose,
+      bodyGaitPhase,
+      bodyPose: restBodyPose,
       brain,
       config,
       currentHealth: config.maximumHealth,
       deathEpoch: null,
       deathStartedTick: null,
       deathTick: 0,
-      gaitPose: 0,
+      gaitPose,
       headFacingOffset: 0,
       headingDeg: targetHeading(position, targetPlayerId, context.players),
       hurricaneContactCooldown,
@@ -1639,6 +1655,7 @@ function materializeSpawnIntents(
       ),
       position: Object.freeze({ ...position }),
       rewardGranted: false,
+      restBodyPose,
       shieldHealth: 0,
       shieldMaximumHealth: 0,
       shieldPulse: 0,
@@ -3410,6 +3427,15 @@ function moveTowardTarget<B extends BoneyardEnemyBrain>(
   tangentDirection: -1 | 0 | 1 = 0,
 ): BoneyardEnemyActor {
   if (context.tick < actor.nextMovementTick || actor.targetPlayerId === null) return actor
+  if (
+    skeletonFamilyMovementPausedByHit(actor)
+    && nativeEnemyHitOverlay(actor.lastDamageTick, context.tick) > 0
+  ) {
+    return {
+      ...actor,
+      nextMovementTick: context.tick + NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS,
+    }
+  }
   const target = context.players[actor.targetPlayerId]
   if (!target) return actor
   const dx = target.position.x - actor.position.x
@@ -3420,11 +3446,12 @@ function moveTowardTarget<B extends BoneyardEnemyBrain>(
   const unitY = dy / length
   const directionX = unitX * radialDirection + -unitY * tangentDirection
   const directionY = unitY * radialDirection + unitX * tangentDirection
-  const step = 0.25
-    * actor.config.chaseSpeed
-    * staffMovementSpeed(actor)
-    * actor.config.scale
-    * NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS
+  const movementScalar = Math.fround(
+    actor.config.chaseSpeed
+      * staffMovementSpeed(actor)
+      * actor.config.scale,
+  )
+  const step = 0.25 * movementScalar * NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS
   const delta = Object.freeze({ x: directionX * step, y: directionY * step })
   const requestedPosition = Object.freeze({
     x: actor.position.x + delta.x,
@@ -3443,20 +3470,52 @@ function moveTowardTarget<B extends BoneyardEnemyBrain>(
     position.x - actor.position.x,
     position.y - actor.position.y,
   )
+  const gaitPose = advanceNativeEnemyLocomotionPhase(
+    actor.gaitPose,
+    movementScalar,
+    NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS,
+    NATIVE_BADGUY_GAIT_PHASE_DIVISOR,
+    NATIVE_BADGUY_GAIT_PHASE_PERIOD,
+  )
+  const bodyGaitPhase = advanceNativeEnemyLocomotionPhase(
+    actor.bodyGaitPhase,
+    movementScalar,
+    NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS,
+    NATIVE_SKELETON_BODY_GAIT_PHASE_DIVISOR,
+    NATIVE_SKELETON_BODY_GAIT_PHASE_PERIOD,
+  )
   return {
     ...actor,
+    bodyGaitPhase,
+    bodyPose: skeletonFamilyLocomotionBodyPose(actor, bodyGaitPhase),
     brain,
-    gaitPose: traveled === 0
-      ? actor.gaitPose
-      : positiveModulo(
-          actor.gaitPose + traveled / BOUNDED_ENEMY_GAIT_DISTANCE_PER_POSE,
-          8,
-        ),
+    gaitPose,
     headingDeg: actorHeadingFromVector(directionX, directionY),
     lastMovementTick: traveled === 0 ? actor.lastMovementTick : context.tick,
     nextMovementTick: context.tick + NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS,
     position: Object.freeze({ ...position }),
   }
+}
+
+function skeletonFamilyLocomotionBodyPose(
+  actor: BoneyardEnemyActor,
+  bodyGaitPhase: number,
+): number {
+  switch (actor.config.enemyToken) {
+    case 'SKELETON': return actor.config.family.weapon === 'claw'
+      && !actor.config.family.armor
+      ? nativeSkeletonBodyGaitPose(bodyGaitPhase)
+      : 0
+    case 'SKELETONARCHER': return nativeSkeletonBodyGaitPose(bodyGaitPhase)
+    case 'SKELETONMAGE': return actor.restBodyPose
+    default: return actor.bodyPose
+  }
+}
+
+function skeletonFamilyMovementPausedByHit(actor: BoneyardEnemyActor): boolean {
+  return actor.config.enemyToken === 'SKELETON'
+    || actor.config.enemyToken === 'SKELETONARCHER'
+    || actor.config.enemyToken === 'SKELETONMAGE'
 }
 
 function withNativeSecondaryEffect(
@@ -5546,6 +5605,18 @@ function randomRadialDisplacement(
 function drawUnit(work: WorkingStep): number {
   const draw = nextBoneyardWaveRandom(work.rngState)
   work.rngState = draw.state
+  return draw.value
+}
+
+function drawLocomotionPhase(work: WorkingStep): number {
+  const draw = drawNativeFloat(work.locomotionRngState, 4)
+  work.locomotionRngState = draw.state
+  return draw.value
+}
+
+function drawLocomotionInteger(work: WorkingStep, count: number): number {
+  const draw = drawNativeInteger(work.locomotionRngState, count)
+  work.locomotionRngState = draw.state
   return draw.value
 }
 
