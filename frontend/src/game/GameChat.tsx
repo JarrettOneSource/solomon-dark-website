@@ -4,6 +4,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type FormEvent,
   type KeyboardEvent,
 } from 'react'
@@ -41,6 +42,7 @@ type UnreadCounts = Record<GameChatChannel, number>
 
 const EMPTY_UNREAD: UnreadCounts = { global: 0, party: 0 }
 const CLOSED_MESSAGE_LIMIT = 5
+const PINNED_SCROLL_SLACK_PX = 48
 
 export default function GameChat({
   disabled,
@@ -64,12 +66,16 @@ export default function GameChat({
   const [open, setOpen] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
   const [unread, setUnread] = useState<UnreadCounts>(EMPTY_UNREAD)
+  const [viewportHeightPx, setViewportHeightPx] = useState(() => (
+    window.visualViewport?.height ?? window.innerHeight
+  ))
   const channelRef = useRef(channel)
   const inputRef = useRef<HTMLInputElement>(null)
   const manuallySelectedChannelRef = useRef(false)
   const messageListRef = useRef<HTMLOListElement>(null)
   const openButtonRef = useRef<HTMLButtonElement>(null)
   const openRef = useRef(open)
+  const pinnedToNewestRef = useRef(true)
   const previousGroupedRef = useRef(channels.length > 1)
   const previousWorldRef = useRef<GameChatWorldKind | null>(worldKind)
   channelRef.current = channel
@@ -84,8 +90,9 @@ export default function GameChat({
   const filteredMessages = messages.filter(message => message.channel === channel)
   const visibleMessages = open
     ? filteredMessages
-    : filteredMessages.slice(-CLOSED_MESSAGE_LIMIT)
+    : messages.slice(-CLOSED_MESSAGE_LIMIT)
   const faded = isGameChatFaded(open, lastActivityAtMs, nowMs)
+  const totalUnread = unread.party + unread.global
 
   useEffect(() => {
     setMessages(session.getChatMessages())
@@ -120,6 +127,15 @@ export default function GameChat({
       removeRejection()
     }
   }, [markActivity, session])
+
+  useEffect(() => {
+    const viewport = window.visualViewport
+    if (!viewport) return
+    const measure = () => setViewportHeightPx(viewport.height)
+    measure()
+    viewport.addEventListener('resize', measure)
+    return () => viewport.removeEventListener('resize', measure)
+  }, [])
 
   useEffect(() => {
     const worldChanged = previousWorldRef.current !== worldKind
@@ -170,11 +186,18 @@ export default function GameChat({
 
   useEffect(() => {
     if (!open) return
+    pinnedToNewestRef.current = true
+    const list = messageListRef.current
+    if (list) list.scrollTop = list.scrollHeight
+  }, [channel, open])
+
+  useEffect(() => {
+    if (!open) return
     setUnread(current => current[channel] === 0
       ? current
       : { ...current, [channel]: 0 })
     const list = messageListRef.current
-    if (list) list.scrollTop = list.scrollHeight
+    if (list && pinnedToNewestRef.current) list.scrollTop = list.scrollHeight
   }, [channel, messages, open])
 
   useEffect(() => {
@@ -258,6 +281,8 @@ export default function GameChat({
     markActivity()
   }
 
+  const openKeyLabel = gameBindingLabel(openKeyCode)
+
   return (
     <section
       aria-label="Game chat"
@@ -268,31 +293,40 @@ export default function GameChat({
       data-chat-open={open}
       hidden={disabled}
       onPointerDown={event => event.stopPropagation()}
+      style={{ '--game-chat-vvh': `${Math.round(viewportHeightPx)}px` } as CSSProperties}
     >
+      {open ? (
+        <div
+          className="game-chat-scrim"
+          role="presentation"
+          onPointerDown={closeChat}
+        />
+      ) : null}
+
       <div className="game-chat-panel">
-        <header className="game-chat-header">
-          <div className="game-chat-tabs" role="tablist" aria-label="Chat channel">
-            {channels.map(candidate => (
-              <button
-                aria-selected={candidate === channel}
-                className="game-chat-tab"
-                data-channel={candidate}
-                key={candidate}
-                onClick={() => chooseChannel(candidate)}
-                role="tab"
-                tabIndex={open && candidate === channel ? 0 : -1}
-                type="button"
-              >
-                {channelLabel(candidate)}
-                {unread[candidate] > 0 ? (
-                  <span className="game-chat-unread" aria-label={`${unread[candidate]} unread`}>
-                    {unread[candidate]}
-                  </span>
-                ) : null}
-              </button>
-            ))}
-          </div>
-          {open ? (
+        {open ? (
+          <header className="game-chat-header">
+            <div className="game-chat-tabs" role="tablist" aria-label="Chat channel">
+              {channels.map(candidate => (
+                <button
+                  aria-selected={candidate === channel}
+                  className="game-chat-tab"
+                  data-channel={candidate}
+                  key={candidate}
+                  onClick={() => chooseChannel(candidate)}
+                  role="tab"
+                  tabIndex={open && candidate === channel ? 0 : -1}
+                  type="button"
+                >
+                  {channelLabel(candidate)}
+                  {unread[candidate] > 0 ? (
+                    <span className="game-chat-unread" aria-label={`${unread[candidate]} unread`}>
+                      {unread[candidate]}
+                    </span>
+                  ) : null}
+                </button>
+              ))}
+            </div>
             <button
               aria-label="Close chat"
               className="game-chat-close"
@@ -301,20 +335,23 @@ export default function GameChat({
             >
               ×
             </button>
-          ) : null}
-        </header>
+          </header>
+        ) : null}
 
         <ol
           aria-atomic="false"
           aria-live="polite"
           className="game-chat-messages"
+          onScroll={event => {
+            const list = event.currentTarget
+            pinnedToNewestRef.current =
+              list.scrollHeight - list.scrollTop - list.clientHeight < PINNED_SCROLL_SLACK_PX
+          }}
           ref={messageListRef}
         >
-          {visibleMessages.length === 0 ? (
+          {visibleMessages.length === 0 && open ? (
             <li className="game-chat-empty">
-              {open
-                ? `No ${channelLabel(channel).toLowerCase()} messages yet.`
-                : `Press ${gameBindingLabel(openKeyCode)} to chat.`}
+              {`No ${channelLabel(channel).toLowerCase()} messages yet.`}
             </li>
           ) : visibleMessages.map(message => (
             <li
@@ -334,11 +371,13 @@ export default function GameChat({
 
         {open ? (
           <form aria-label={`${channelLabel(channel)} chat message`} className="game-chat-form" onSubmit={submit}>
-            <span aria-hidden="true" className="game-chat-prompt">›</span>
+            <span aria-hidden="true" className="game-chat-rune" data-channel={channel} />
             <input
               aria-label="Chat message"
+              autoCapitalize="sentences"
               autoComplete="off"
               className="game-chat-input"
+              enterKeyHint="send"
               maxLength={GAME_CHAT_MAX_TEXT_CODE_UNITS}
               onChange={event => {
                 setDraft(event.target.value)
@@ -361,15 +400,21 @@ export default function GameChat({
 
       {!open ? (
         <button
-          aria-keyshortcuts="T"
+          aria-keyshortcuts={openKeyLabel}
           aria-label="Open chat"
           className="game-chat-open"
           onClick={openChat}
           ref={openButtonRef}
           type="button"
         >
-          Chat <kbd>T</kbd>
-          {unread[channel] > 0 ? <span>{unread[channel]}</span> : null}
+          <svg aria-hidden="true" className="game-chat-open-icon" viewBox="0 0 24 24">
+            <path d="M5 4.2h14a2.6 2.6 0 0 1 2.6 2.6v7.6A2.6 2.6 0 0 1 19 17h-6.4l-4.1 3.8V17H5a2.6 2.6 0 0 1-2.6-2.6V6.8A2.6 2.6 0 0 1 5 4.2Z" />
+            <circle cx="8.1" cy="10.6" r="1.15" />
+            <circle cx="12" cy="10.6" r="1.15" />
+            <circle cx="15.9" cy="10.6" r="1.15" />
+          </svg>
+          <kbd>{openKeyLabel}</kbd>
+          {totalUnread > 0 ? <span className="game-chat-open-unread">{totalUnread}</span> : null}
         </button>
       ) : null}
     </section>
