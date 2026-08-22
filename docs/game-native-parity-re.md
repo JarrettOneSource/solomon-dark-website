@@ -30920,4 +30920,61 @@ class/content catalogs, so the Mod Loader documents remain unchanged.
 
 ### Implementation validation receipt
 
-- Pending implementation and exact-tree validation below.
+- `NativeBoneyardWeatherView.update` no longer calls the diagnostic `plan()`.
+  It visits the persistent drop/splash state directly, grows bounded Pixi
+  pools only when the active high-water count rises, and writes only the
+  mutable position, scale, alpha, and tint fields. Splash asset identity,
+  anchor, texture, rotation, and constant tint are initialized once. The
+  visitor/plan differential covers every exposed primitive and the split
+  splash-before-light/streak-after-light ownership remains intact.
+- `pack-player-character-atlas.py` reconstructs all 7,723 logical frames from
+  the 79 extracted source sheets, preserves all 1,949 transparent cells, and
+  packs the 5,338 unique nonempty rectangles into two `2048x2048` pages. Those
+  pages are `32 MiB` decoded instead of `850.66 MiB`. Pixi textures restore the
+  exact logical origin/trim, and the Hub actor, ally chip, portrait, inventory
+  preview, Hall of Fame, Boneyard actor, equipment, and death consumers all use
+  the shared page set. The production build emits exactly those two
+  `player-character-atlas-*` assets and none of the 79 padded sheets.
+- The packer reconstructs every source cell byte-for-byte on Linux and macOS.
+  `--check` compares committed page dimensions and RGBA pixels rather than PNG
+  compressor bytes, because Pillow/zlib encoding differs across the two
+  supported hosts while the decoded page is identical. The generated TypeScript
+  manifest remains byte-exact. Focused renderer/atlas tests pass `27/27` on
+  both hosts.
+- The exact Apple-arm64 tree at commits `05c73e43` plus `35619c77` and
+  `d4703661` passes `./scripts/validate.sh`: 15 Website/backend contracts,
+  frontend lint and game boundaries, 1,289 broad Boneyard/runtime tests, 21
+  inventory/tooltip tests, desktop tests, production build, game bundle budget,
+  and media policy. The only output is the repository's eight existing Fast
+  Refresh warnings and Vite's non-fatal large-chunk advisory. The corrected
+  mobile journey also passes Title, Hub input/lifecycle, Hub combat exclusion,
+  Boneyard transition teardown, simultaneous Boneyard movement/casting,
+  settings scaling, portrait handling, and empty browser error arrays.
+- Physical fixed Title (`896x364`, DPR 2) held `59.92` FPS for `71.01 s` with
+  frame p95/p99 `17/18 ms`, `56 ms` maximum, zero gaps above `100 ms`, and
+  empty error/Long Task arrays. WebContent was `219 MB`; WebKit GPU was
+  `31 MB`.
+- Physical fixed Hub held `59.97` FPS for `82.55 s` while traversing `3,841`
+  world units and rendering up to 18 students. Frame p95/p99 was `18/19 ms`,
+  maximum `74 ms`, and there was no gap above `100 ms` or browser error.
+  WebContent was `385 MB` at a sampled `32.31%` CPU; WebKit GPU was `36 MB` at
+  `15.13%`.
+- Physical fixed mode-2 Boneyard held `59.79` FPS for `107.71 s` across
+  `9,643` world units and 18 real input-path cast pulses. The run reached 593
+  drops, 319 splashes, 638 residents, 115 visible residents, 52 primary
+  presentations, and 28 complex-shadow casters/105 quads. Frame p95/p99 was
+  `17/19 ms`, maximum `184 ms`, with five gaps above `34 ms`, two above
+  `50 ms`, and one above `100 ms`; the independent timer p95/p99 was
+  `30/31 ms`, maximum `86 ms`. Error and Long Task arrays were empty.
+- The same tab then remained idle in mode 2 for `79.80 s` at `59.96` FPS with
+  frame p95/p99 `17/18 ms`, `47 ms` maximum, no gap above `50 ms`, and timer
+  p95/p99/max `30/31/47 ms`. This directly closes the pre-fix late-idle
+  degradation (`22.63` FPS, p95/p99 `118/253 ms`, `920 ms` maximum).
+  WebContent was `816 MB` after entry, `883 MB` after the active run, and fell
+  to `830 MB` after the idle restoration, versus the pre-fix `1,269-1,275 MB`.
+  The sampled active WebContent CPU was `38.01%` versus pre-fix `70.35%`.
+- The same Safari/WebContent process stayed alive through Title, Hub, active
+  Boneyard, and restoration without a navigation reload. After the complete
+  run, the device still listed only the pre-fix `11:15:46` WebContent CPU
+  resource report and the unrelated `08:31` Twitter Jetsam event; no new CPU,
+  jetsam, page, transport, or renderer failure was generated.
