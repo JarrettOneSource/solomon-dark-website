@@ -310,7 +310,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 54
+export const GAME_PROTOCOL_VERSION = 55
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
 export const GAME_CONNECTION_TIMEOUT_CLOSE_CODE = 4000
@@ -541,6 +541,11 @@ export interface ClientDisconnectMessage {
   type: 'client-disconnect'
 }
 
+export interface ClientSaveBeforeLeaveMessage {
+  type: 'client-save-before-leave'
+  requestId: number
+}
+
 export interface ClientDeploymentReadyMessage {
   type: 'client-deployment-ready'
   checkpointSequence: number
@@ -596,6 +601,7 @@ export type ClientGameMessage =
   | ClientSelectSkillMessage
   | ClientSkillQuickbarBindMessage
   | ClientPingMessage
+  | ClientSaveBeforeLeaveMessage
   | ClientSnapshotAckMessage
   | ClientStartMatchMessage
   | ClientDisconnectMessage
@@ -650,6 +656,12 @@ export interface ServerSaveCheckpointMessage {
   save: string | null
   reason: 'game-over' | 'progress'
   sequence: number
+}
+
+export interface ServerSaveBeforeLeaveMessage {
+  type: 'server-save-before-leave'
+  checkpointSequence: number
+  requestId: number
 }
 
 export interface ServerDeploymentRestartMessage {
@@ -768,6 +780,7 @@ export type ServerGameMessage =
   | ServerWelcomeMessage
   | ServerSnapshotMessage
   | ServerBoneyardLoadedMessage
+  | ServerSaveBeforeLeaveMessage
   | ServerSaveCheckpointMessage
   | ServerLeaderboardReceiptMessage
   | ServerLuaResultMessage
@@ -1013,6 +1026,13 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
     onlyKeys(value, 'message', ['type'])
     return { type: 'client-disconnect' }
   }
+  if (value.type === 'client-save-before-leave') {
+    onlyKeys(value, 'message', ['type', 'requestId'])
+    return {
+      type: 'client-save-before-leave',
+      requestId: luaRequestId(value.requestId),
+    }
+  }
   if (value.type === 'client-deployment-ready') {
     onlyKeys(value, 'message', ['type', 'checkpointSequence', 'targetRevision'])
     return {
@@ -1126,6 +1146,17 @@ export function decodeServerGameMessage(payload: string): ServerGameMessage {
       save,
       reason,
       sequence: positiveInteger(value.sequence, 'sequence'),
+    }
+  }
+  if (value.type === 'server-save-before-leave') {
+    onlyKeys(value, 'message', ['type', 'checkpointSequence', 'requestId'])
+    return {
+      type: 'server-save-before-leave',
+      checkpointSequence: nonnegativeInteger(
+        value.checkpointSequence,
+        'checkpointSequence',
+      ),
+      requestId: luaRequestId(value.requestId),
     }
   }
   if (value.type === 'server-deployment-restart') {

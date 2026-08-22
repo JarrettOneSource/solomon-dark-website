@@ -397,6 +397,11 @@ visibility and Party IDs, external join-request views, leader decisions,
 Leave/Kick, rotation, and typed party-action results. Compatibility remains an
 exact host/client match and the two bundles deploy together.
 
+Protocol 55 adds one correlated save-before-leave request and response. The
+existing ordered checkpoint message remains the only save payload; the response
+only identifies which checkpoint must reach durable storage before the client
+may disconnect.
+
 ## Saves, identity, and content
 
 - The authoritative game host is the only producer of browser-save contents.
@@ -424,11 +429,17 @@ exact host/client match and the two bundles deploy together.
   delete checkpoint. The adapter serializes that delete after prior writes, so
   the completed run cannot be resumed or recreated by an older in-flight
   checkpoint.
-- Normal semantic/five-second publication is participant-owned: every connected
-  player receives a one-wizard projection of the authoritative party state.
-  Deployment-final publication forces a fresh projection for every connected
-  player. Before a deployment disconnect, each page acknowledges the exact
-  final sequence only after its selected cloud or IndexedDB adapter is idle.
+- Semantic publication remains immediate and periodic browser autosave runs on
+  a 30-second authoritative-tick cadence. Both cover every connected player,
+  across the global Hub and private Colleges. In a party world, the host projects the same
+  authoritative state to one owner at a time, so every participant can resume
+  an individual continuation without serializing another player's actor into
+  their slot. Selecting gameplay `MAIN MENU` requests one forced final owner
+  checkpoint and keeps the session/menu alive until the selected cloud or
+  IndexedDB adapter confirms that exact sequence; only then does the client
+  disconnect and return to Title. A failed store write leaves the game paused
+  and connected for retry. Deployment-final publication uses the same durable
+  acknowledgement contract for every connected player.
 - Website slot writes use optimistic revision checks and a content hash. The
   document is capped at 8 MiB. Schema 4 carries integrity, the immutable session
   content manifest, and one bounded normalized `sd.state` snapshot per active

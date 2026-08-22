@@ -1540,6 +1540,66 @@ test('client acknowledges deployment only after the final save and keeps update 
   assert.equal(fatal, null)
 })
 
+test('client correlates a forced leave checkpoint and stays connected until storage completes', async () => {
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    profile: NULL_PROFILE,
+    credential: 'spawn-secret',
+    transport,
+  })
+  receiveWelcome(
+    transport,
+    createGameSnapshot(createGameSimulation({ 'player-1': CHARACTER }), 'player-1'),
+  )
+  const session = await connecting
+
+  const saving = session.saveBeforeLeave()
+  const request = decodeClientGameMessage(transport.sent.at(-1)!)
+  assert.deepEqual(request, {
+    type: 'client-save-before-leave',
+    requestId: 1,
+  })
+  transport.receive(encodeGameMessage({
+    type: 'server-save-checkpoint',
+    save: '{"checkpoint":"leave"}',
+    reason: 'progress',
+    sequence: 9,
+  }))
+  transport.receive(encodeGameMessage({
+    type: 'server-save-before-leave',
+    checkpointSequence: 9,
+    requestId: 1,
+  }))
+
+  assert.deepEqual(await saving, {
+    document: '{"checkpoint":"leave"}',
+    reason: 'progress',
+    sequence: 9,
+  })
+  assert.equal(transport.readyState, 'open')
+  session.destroy()
+  assert.equal(decodeClientGameMessage(transport.sent.at(-1)!).type, 'client-disconnect')
+})
+
+test('destroying a client rejects an unfinished leave save', async () => {
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    profile: NULL_PROFILE,
+    credential: 'spawn-secret',
+    transport,
+  })
+  receiveWelcome(
+    transport,
+    createGameSnapshot(createGameSimulation({ 'player-1': CHARACTER }), 'player-1'),
+  )
+  const session = await connecting
+  const saving = session.saveBeforeLeave()
+  session.destroy()
+  await assert.rejects(saving, /destroyed/)
+})
+
 function kernelParameters() {
   return {
     fixedTickSeconds: 0.01,

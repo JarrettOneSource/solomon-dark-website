@@ -131,6 +131,7 @@ export interface GameClientSession {
   samplePresentation(nowMs?: number): HubPresentationFrame
   rerollSkill(offerSequence: number): void
   requestGameplayPause(source: GameplayPauseSource | null): void
+  saveBeforeLeave(): Promise<GameSaveCheckpoint>
   saveSkill(offerSequence: number): void
   selectConcentration(skillId: number): void
   selectPrimarySkill(skillId: number): void
@@ -192,6 +193,13 @@ interface PendingLuaExecution {
   timeout: ReturnType<typeof globalThis.setTimeout>
 }
 
+interface PendingLeaveSave {
+  readonly promise: Promise<GameSaveCheckpoint>
+  readonly reject: (error: Error) => void
+  readonly requestId: number
+  readonly resolve: (checkpoint: GameSaveCheckpoint) => void
+}
+
 export function connectGameClientSession(
   options: GameClientSessionOptions,
 ): Promise<GameClientSession> {
@@ -214,6 +222,7 @@ export function connectGameClientSession(
     let lastHighPingLoggedAtMs = Number.NEGATIVE_INFINITY
     let nextPingNonce = 1
     let nextLuaRequestId = 1
+    let nextLeaveSaveRequestId = 1
     let pingTimer: ReturnType<typeof globalThis.setInterval> | undefined
     let sequence = 0
     let predictionEnabled = false
@@ -241,6 +250,7 @@ export function connectGameClientSession(
     const saveCheckpointListeners = new Set<(checkpoint: GameSaveCheckpoint) => void>()
     const pendingPings = new Map<number, number>()
     const pendingLuaExecutions = new Map<number, PendingLuaExecution>()
+    let pendingLeaveSave: PendingLeaveSave | null = null
     const entityReplication = new EntityReplicationReconstructor()
     let pendingInputs: PendingInput[] = []
     const handshakeDeadline = globalThis.setTimeout(() => {
@@ -319,6 +329,25 @@ export function connectGameClientSession(
           sequence: message.sequence,
         }
         for (const listener of saveCheckpointListeners) listener(latestSaveCheckpoint)
+        return
+      }
+      if (message.type === 'server-save-before-leave') {
+        const pending = pendingLeaveSave
+        if (!pending || pending.requestId !== message.requestId) {
+          fail(new Error('The game server sent an unexpected leave-save response.'))
+          return
+        }
+        if (message.checkpointSequence === 0) {
+          pendingLeaveSave = null
+          pending.reject(new Error('The game server could not create a final save.'))
+          return
+        }
+        if (latestSaveCheckpoint?.sequence !== message.checkpointSequence) {
+          fail(new Error('The leave response did not include its final save checkpoint.'))
+          return
+        }
+        pendingLeaveSave = null
+        pending.resolve(latestSaveCheckpoint)
         return
       }
       if (message.type === 'server-deployment-restart') {
@@ -569,6 +598,7 @@ export function connectGameClientSession(
           options.transport.send(encodeGameMessage({ type: 'client-disconnect' }))
         }
         options.transport.close(1000, 'session destroyed')
+        rejectPendingLeaveSave(new Error('The game session was destroyed.'))
         rejectPendingLuaExecutions(new Error('The game session was destroyed.'))
         snapshotListeners.clear()
         boneyardListeners.clear()
@@ -839,6 +869,34 @@ export function connectGameClientSession(
           ? { type: 'client-gameplay-pause', paused: false }
           : { type: 'client-gameplay-pause', paused: true, source }))
       },
+      saveBeforeLeave() {
+        if (!welcome || !snapshot || destroyed || deploymentRestarting) {
+          return Promise.reject(new Error('The game session is not available to save.'))
+        }
+        if (pendingLeaveSave) return pendingLeaveSave.promise
+        currentInput = copyInput(STOPPED_INPUT)
+        sentInput = copyInput(STOPPED_INPUT)
+        pendingInputs = []
+        const requestId = nextLeaveSaveRequestId
+        nextLeaveSaveRequestId = requestId === 0x7fff_ffff ? 1 : requestId + 1
+        let resolveSave!: (checkpoint: GameSaveCheckpoint) => void
+        let rejectSave!: (error: Error) => void
+        const promise = new Promise<GameSaveCheckpoint>((resolve, reject) => {
+          resolveSave = resolve
+          rejectSave = reject
+        })
+        pendingLeaveSave = {
+          promise,
+          reject: rejectSave,
+          requestId,
+          resolve: resolveSave,
+        }
+        options.transport.send(encodeGameMessage({
+          type: 'client-save-before-leave',
+          requestId,
+        }))
+        return promise
+      },
       selectSkill(choiceIndex, offerSequence, skillId) {
         if (!welcome || !snapshot || destroyed) return
         const offer = snapshot.players[welcome.playerId]?.progression.pendingOffer
@@ -1025,6 +1083,12 @@ export function connectGameClientSession(
       pendingLuaExecutions.clear()
     }
 
+    function rejectPendingLeaveSave(error: Error): void {
+      const pending = pendingLeaveSave
+      pendingLeaveSave = null
+      pending?.reject(error)
+    }
+
     function createPresentationTimeline(
       hubSnapshot: Parameters<typeof createHubPresentationTimeline>[0]['initialSnapshot'],
       receivedAtMs: number,
@@ -1184,6 +1248,7 @@ export function connectGameClientSession(
         destroyed = true
         globalThis.clearTimeout(handshakeDeadline)
         stopPing()
+        rejectPendingLeaveSave(failure)
         rejectPendingLuaExecutions(failure)
         removeClose()
         removeMessage()
@@ -1201,6 +1266,7 @@ export function connectGameClientSession(
       destroyed = true
       globalThis.clearTimeout(handshakeDeadline)
       stopPing()
+      rejectPendingLeaveSave(failure)
       rejectPendingLuaExecutions(failure)
       removeClose()
       removeMessage()
@@ -1231,6 +1297,7 @@ export function connectGameClientSession(
         return
       }
       deploymentRestarting = true
+      rejectPendingLeaveSave(new Error('The game is restarting for an update.'))
       currentInput = copyInput(STOPPED_INPUT)
       sentInput = copyInput(STOPPED_INPUT)
       pendingInputs = []
@@ -1273,6 +1340,7 @@ export function connectGameClientSession(
       destroyed = true
       globalThis.clearTimeout(handshakeDeadline)
       stopPing()
+      rejectPendingLeaveSave(new Error('The game is restarting for an update.'))
       rejectPendingLuaExecutions(new Error('The game is restarting for an update.'))
       removeClose()
       removeMessage()

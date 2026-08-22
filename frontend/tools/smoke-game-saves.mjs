@@ -7,8 +7,12 @@ const screenshotPath = process.env.SDR_GAME_SAVE_SMOKE_SCREENSHOT
   || '/tmp/solomon-dark-game-save-resume.png'
 const accountUsername = process.env.SDR_GAME_SAVE_SMOKE_USERNAME?.trim()
 const accountPassword = process.env.SDR_GAME_SAVE_SMOKE_PASSWORD?.trim()
+const failFirstLeave = process.env.SDR_GAME_SAVE_SMOKE_FAIL_FIRST_LEAVE === '1'
 if (Boolean(accountPassword) !== Boolean(accountUsername)) {
   throw new Error('SDR_GAME_SAVE_SMOKE_USERNAME and SDR_GAME_SAVE_SMOKE_PASSWORD must be set together')
+}
+if (failFirstLeave && !accountUsername) {
+  throw new Error('SDR_GAME_SAVE_SMOKE_FAIL_FIRST_LEAVE requires an authenticated smoke account')
 }
 const accountToken = accountUsername
   ? await registerSmokeAccount(accountUsername, accountPassword)
@@ -59,17 +63,48 @@ try {
   await page.keyboard.up('d')
   const movedX = await firstCanvas.evaluate((canvas) => canvas.__sdrHubFrame.playerX)
   assert.ok(movedX > startX, `expected saved wizard movement (${startX} -> ${movedX})`)
+
+  if (failFirstLeave) {
+    let failed = false
+    await page.route('**/api/game/saves/0', async (route) => {
+      if (!failed && route.request().method() === 'PUT') {
+        failed = true
+        await route.abort('failed')
+        return
+      }
+      await route.continue()
+    })
+  }
+  await page.locator('.hub-scene').focus()
+  await page.keyboard.press('Escape')
+  const pause = page.locator('.gameplay-pause-stage[data-gameplay-pause-view="owner"]')
+  await pause.waitFor({ timeout: 10_000 })
+  await pause.getByRole('button', { name: 'LEAVE GAME' }).click()
+  let failedLeaveMessage = null
+  if (failFirstLeave) {
+    const failure = page.locator('.main-menu-runtime-status[role="alert"]')
+    await failure.waitFor({ timeout: 10_000 })
+    failedLeaveMessage = (await failure.textContent())?.trim() ?? null
+    assert.ok(failedLeaveMessage)
+    assert.equal(await page.locator('.hub-scene').count(), 1)
+    const retained = await readCloudSave(page, accountToken)
+    assert.equal(retained?.revision, initialRecord.revision)
+    await page.unroute('**/api/game/saves/0')
+    const retryPause = page.locator('.gameplay-pause-stage[data-gameplay-pause-view="owner"]')
+    await retryPause.waitFor({ timeout: 10_000 })
+    await page.waitForTimeout(350)
+    await retryPause.getByRole('button', { name: 'LEAVE GAME' }).click()
+  }
+  await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 30_000 })
   const progressedRecord = await waitForSave(
     page,
     (record) => record?.revision > initialRecord.revision
       && JSON.parse(record.document).simulation.playerEntities.locomotions[0].position.x
         > startX,
-    12_000,
+    5_000,
   )
   const savedTick = JSON.parse(progressedRecord.document).summary.savedAtTick
 
-  await page.reload({ waitUntil: 'domcontentloaded' })
-  await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 90_000 })
   await assertTitleIdentity(page, accountUsername || 'Not logged in')
   await page.getByRole('button', { name: 'Play' }).click()
   const lastGame = page.getByRole('button', { name: 'Last game' })
@@ -87,9 +122,16 @@ try {
   await page.screenshot({ path: screenshotPath })
 
   assert.deepEqual(pageErrors, [])
-  assert.deepEqual(consoleErrors, [])
+  const unexpectedConsoleErrors = consoleErrors.filter(
+    (error) => !(failFirstLeave && (
+      error.includes('[game:save.sync_failed]')
+      || error.includes('Failed to load resource: net::ERR_FAILED')
+    )),
+  )
+  assert.deepEqual(unexpectedConsoleErrors, [])
   const unexpectedWarnings = consoleWarnings.filter(
-    (warning) => !/GL Driver Message .*GPU stall due to ReadPixels/.test(warning),
+    (warning) => !/GL Driver Message .*GPU stall due to ReadPixels/.test(warning)
+      && !(failFirstLeave && warning.includes('[game:save.sync_failed]')),
   )
   assert.deepEqual(unexpectedWarnings, [])
   process.stdout.write(`${JSON.stringify({
@@ -104,6 +146,8 @@ try {
     pageErrors,
     consoleErrors,
     consoleWarnings,
+    failedLeaveMessage,
+    unexpectedConsoleErrors,
     unexpectedWarnings,
   })}\n`)
 } finally {

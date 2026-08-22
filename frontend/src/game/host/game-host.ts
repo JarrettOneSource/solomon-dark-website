@@ -153,7 +153,7 @@ import {
 } from './lua/web-lua-game-extensions.ts'
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost'])
-const GAME_SAVE_CHECKPOINT_TICKS = GAME_TICK_RATE * 5
+export const GAME_SAVE_AUTOSAVE_INTERVAL_TICKS = GAME_TICK_RATE * 30
 const DEFAULT_DEPLOYMENT_SAVE_TIMEOUT_MS = 30_000
 const GAME_CHAT_RATE_LIMIT = 5
 const GAME_CHAT_RATE_WINDOW_MS = 5_000
@@ -1614,6 +1614,22 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         publishSaveCheckpoint('loadout-confirmed')
         return
       }
+      if (message.type === 'client-save-before-leave') {
+        client.activeInput = createIdlePlayerCharacterInput()
+        client.queuedInputs.clear()
+        const checkpointSequence = publishSaveCheckpointForClient(
+          client,
+          'explicit-leave',
+          true,
+          true,
+        )
+        socket.send(encodeGameMessage({
+          type: 'server-save-before-leave',
+          checkpointSequence,
+          requestId: message.requestId,
+        }))
+        return
+      }
       if (message.type === 'client-disconnect') {
         disconnectCauses.set(socket, {
           reason: 'client requested disconnect',
@@ -1850,7 +1866,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           ) broadcastSnapshot()
           if (
             state.tick !== previous.hub.tick
-            && state.tick % GAME_SAVE_CHECKPOINT_TICKS === 0
+            && state.tick % GAME_SAVE_AUTOSAVE_INTERVAL_TICKS === 0
           ) {
             publishSaveCheckpoint('periodic')
           }
@@ -1917,7 +1933,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         ) broadcastSnapshot()
         if (
           state.tick !== previousTick
-          && state.tick % GAME_SAVE_CHECKPOINT_TICKS === 0
+          && state.tick % GAME_SAVE_AUTOSAVE_INTERVAL_TICKS === 0
         ) publishSaveCheckpoint('periodic')
       }
       pruneLeaderboardRunState()

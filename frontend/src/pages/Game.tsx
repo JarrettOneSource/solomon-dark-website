@@ -306,6 +306,13 @@ export default function Game() {
     saveCoordinator.current?.accept(checkpoint)
   }, [])
 
+  const persistCheckpointAndWait = useCallback(async (checkpoint: GameSaveCheckpoint) => {
+    const coordinator = saveCoordinator.current
+    if (!coordinator) throw new Error('The game save owner is unavailable.')
+    coordinator.accept(checkpoint)
+    await coordinator.waitFor(checkpoint.sequence)
+  }, [])
+
   const loadGlobalHallOfFame = useCallback(async (
     board: HallOfFameBoard,
   ): Promise<readonly HallOfFameEntry[]> => {
@@ -349,6 +356,7 @@ export default function Game() {
               onCancelCreate={cancelCreate}
               onSaveCheckpoint={persistCheckpoint}
               onSignOut={logout}
+              persistSaveCheckpoint={persistCheckpointAndWait}
               prepareGame={prepareGame}
               refreshActiveMods={refreshActiveMods}
               resumeSave={resumeSave}

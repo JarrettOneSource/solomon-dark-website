@@ -280,6 +280,7 @@ interface MainMenuSceneProps {
   loadGlobalHallOfFame: (board: HallOfFameBoard) => Promise<readonly HallOfFameEntry[]>
   onCancelCreate: () => Promise<void>
   onSaveCheckpoint: (checkpoint: GameSaveCheckpoint) => void
+  persistSaveCheckpoint: (checkpoint: GameSaveCheckpoint) => Promise<void>
   onSignOut: () => void
   prepareGame: (admission: BrowserGameAdmission) => Promise<void>
   refreshActiveMods: () => Promise<readonly ActiveWebMod[]>
@@ -297,6 +298,7 @@ export default function MainMenuScene({
   onCancelCreate,
   onSaveCheckpoint,
   onSignOut,
+  persistSaveCheckpoint,
   prepareGame,
   refreshActiveMods,
   resumeSave,
@@ -319,6 +321,7 @@ export default function MainMenuScene({
   const [loadedBoneyard, setLoadedBoneyard] = useState<LoadedBoneyard | null>(null)
   const [gameplayPause, setGameplayPause] = useState<GameplayPauseState | null>(null)
   const [hubPauseMenuOpen, setHubPauseMenuOpen] = useState(false)
+  const [gameplayPauseMenuGeneration, setGameplayPauseMenuGeneration] = useState(0)
   const [partyState, setPartyState] = useState<LocalPartyState | null>(null)
   const [partyActionError, setPartyActionError] = useState<string | null>(null)
   const [whisperRequest, setWhisperRequest] = useState<GameChatWhisperRequest | null>(null)
@@ -336,6 +339,7 @@ export default function MainMenuScene({
   const loadingRef = useRef<MatchLoadingState | null>(null)
   const [preparing, setPreparing] = useState(false)
   const [connecting, setConnecting] = useState(false)
+  const [leaving, setLeaving] = useState(false)
   const [connectionError, setConnectionError] = useState<string | null>(null)
   const [hoveredTitleAction, setHoveredTitleAction] = useState<TitleMenuAction | null>(null)
   const [pressedTitleAction, setPressedTitleAction] = useState<TitleMenuAction | null>(null)
@@ -911,8 +915,22 @@ export default function MainMenuScene({
     : null
   const displayedGameplayPause = gameplayPause ?? localHubPause
 
-  const leaveGameplay = () => {
-    session?.destroy()
+  const leaveGameplay = async () => {
+    if (!session || leaving) return
+    setLeaving(true)
+    setConnectionError(null)
+    try {
+      const checkpoint = await session.saveBeforeLeave()
+      await persistSaveCheckpoint(checkpoint)
+      session.destroy()
+    } catch (error) {
+      setConnectionError(error instanceof Error
+        ? error.message
+        : 'The game could not be saved before leaving.')
+      setGameplayPauseMenuGeneration(current => current + 1)
+      setLeaving(false)
+      return
+    }
     setSession(null)
     setRuntimeSnapshot(null)
     setRuntimeProgression(null)
@@ -928,6 +946,7 @@ export default function MainMenuScene({
     setSkillBookOpen(false)
     setInventoryScreenOpen(false)
     setScreen('root')
+    setLeaving(false)
   }
 
   const levelUpBarrierId = runtimeSnapshot?.levelUpBarrier?.barrierId ?? null
@@ -1297,9 +1316,11 @@ export default function MainMenuScene({
             || displayedGameplayPause.ownerPlayerId !== session.playerId
           ) ? (
           <GameplayPauseMenu
+            key={gameplayPauseMenuGeneration}
             audio={audio}
             onSelect={(action) => {
-              if (action === 'leave') leaveGameplay()
+              if (leaving) return
+              if (action === 'leave') void leaveGameplay()
               else if (action === 'settings') setGameplaySettingsOpen(true)
               else if (action === 'resume') {
                 if (localHubPause) setHubPauseMenuOpen(false)
@@ -1327,9 +1348,9 @@ export default function MainMenuScene({
             />
           ) : null}
 
-        {(preparing || connectionError) && (
+        {(preparing || leaving || connectionError) && (
           <div className="main-menu-runtime-status" role={connectionError ? 'alert' : 'status'}>
-            {connectionError ?? 'Entering the shared Hub…'}
+            {connectionError ?? (leaving ? 'Saving game…' : 'Entering the shared Hub…')}
           </div>
         )}
 

@@ -1040,8 +1040,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v54 carries deployment restart, Ether replacement, party access, movement, social, mod, and gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 54)
+test('protocol v55 carries saved leave, deployment restart, Ether replacement, party access, movement, social, mod, and gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 55)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),

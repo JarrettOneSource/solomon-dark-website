@@ -419,3 +419,13 @@ test('each host owns its second-Escape result without changing the gameplay defa
     /escapeAction = 'resume'[\s\S]*const consumeEscape =[\s\S]*event\.key !== 'Escape'[\s\S]*event\.repeat[\s\S]*event\.altKey[\s\S]*event\.ctrlKey[\s\S]*event\.metaKey[\s\S]*presentation\.kind !== 'owner'[\s\S]*if \(escapeAction\) beginClose\(escapeAction\)/,
   )
 })
+
+test('gameplay Main Menu durably saves the final host checkpoint before disconnecting', () => {
+  assert.match(
+    mainMenuComponent,
+    /const leaveGameplay = async \(\) => \{[\s\S]*await session\.saveBeforeLeave\(\)[\s\S]*await persistSaveCheckpoint\(checkpoint\)[\s\S]*session\.destroy\(\)[\s\S]*setSession\(null\)/,
+  )
+  assert.match(mainMenuComponent, /setGameplayPauseMenuGeneration\(current => current \+ 1\)/)
+  assert.match(mainMenuComponent, /key=\{gameplayPauseMenuGeneration\}/)
+  assert.match(mainMenuComponent, /leaving \? 'Saving game…' : 'Entering the shared Hub…'/)
+})

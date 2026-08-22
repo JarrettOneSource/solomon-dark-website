@@ -163,6 +163,7 @@ function inertSession() {
     onSnapshot: () => () => {},
     rerollSkill() {},
     requestGameplayPause() {},
+    saveBeforeLeave: async () => { throw new Error('inert session') },
     sampleBoneyardPresentation() { throw new Error() },
     samplePresentation() { throw new Error() },
     saveSkill() {},

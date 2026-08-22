@@ -35,7 +35,10 @@ import type { PlayerSocialProfile } from '../protocol/party-state.ts'
 import { EntityReplicationReconstructor } from '../protocol/entity-replication.ts'
 import type { BoneyardScene } from '../core-kernels/boneyard.ts'
 import { createBoneyardCatalog, type ModBoneyardEntry } from './boneyard-catalog.ts'
-import { startGameHost } from './game-host.ts'
+import {
+  GAME_SAVE_AUTOSAVE_INTERVAL_TICKS,
+  startGameHost,
+} from './game-host.ts'
 import type { GameServerLogEntry } from './game-server-logger.ts'
 import { SOLOMON_DIG_FRAME_PROGRAM } from './project-boneyard.ts'
 import { GAME_WEBSOCKET_COMPRESSION } from './websocket-compression.ts'
@@ -1613,6 +1616,81 @@ test('host emits an owner checkpoint and revives it before a fresh welcome', asy
   assert.equal(resumed.snapshot.world.kind, 'hub')
 })
 
+test('host forces one correlated owner checkpoint before an explicit leave', async (context) => {
+  const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
+  context.after(() => host.close())
+  const client = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
+  context.after(() => client.socket.close())
+  const leaving = leaveSaveMessages(client.socket, 7)
+
+  client.socket.send(encodeGameMessage({
+    type: 'client-save-before-leave',
+    requestId: 7,
+  }))
+  const result = await leaving
+  assert.equal(result.response.checkpointSequence, result.checkpoint.sequence)
+  assert.equal(result.response.requestId, 7)
+  assert.equal(client.socket.readyState, WebSocket.OPEN)
+  assert.equal(
+    (JSON.parse(result.checkpoint.save!) as { summary: { playerId: string } })
+      .summary.playerId,
+    client.welcome.playerId,
+  )
+
+  const closed = socketClose(client.socket)
+  client.socket.send(encodeGameMessage({ type: 'client-disconnect' }))
+  assert.deepEqual(await closed, { code: 1000, reason: 'client disconnect' })
+})
+
+test('thirty-second autosave publishes owner-only saves to a party leader and guest', async (context) => {
+  assert.equal(GAME_SAVE_AUTOSAVE_INTERVAL_TICKS, 3_000)
+  const host = await startGameHost({
+    authentication: SHARED_HUB_AUTHENTICATION,
+    sharedHub: true,
+    snapshotRate: 100,
+  })
+  context.after(() => host.close())
+  const leader = await join(host.address.url, 'ticket-leader', FIRST_CHARACTER)
+  const guest = await join(host.address.url, 'ticket-guest', SECOND_CHARACTER)
+  context.after(() => leader.socket.close())
+  context.after(() => guest.socket.close())
+
+  const invited = nextMessage(guest.socket, message => (
+    message.type === 'server-party-state' && message.state.invitations.length === 1
+  ))
+  leader.socket.send(encodeGameMessage({
+    type: 'client-party-invite',
+    targetPlayerId: guest.welcome.playerId,
+  }))
+  const invitation = await invited
+  assert.equal(invitation.type, 'server-party-state')
+  const grouped = nextMessage(guest.socket, message => (
+    message.type === 'server-party-state' && message.state.party.memberPlayerIds.length === 2
+  ))
+  guest.socket.send(encodeGameMessage({
+    type: 'client-party-accept',
+    invitationId: invitation.state.invitations[0]!.id,
+  }))
+  await grouped
+
+  Object.assign(host.state(), { tick: GAME_SAVE_AUTOSAVE_INTERVAL_TICKS - 1 })
+  const leaderSave = nextMessage(leader.socket, message => (
+    message.type === 'server-save-checkpoint'
+    && message.reason === 'progress'
+    && JSON.parse(message.save!).summary.savedAtTick === GAME_SAVE_AUTOSAVE_INTERVAL_TICKS
+  ))
+  const guestSave = nextMessage(guest.socket, message => (
+    message.type === 'server-save-checkpoint'
+    && message.reason === 'progress'
+    && JSON.parse(message.save!).summary.savedAtTick === GAME_SAVE_AUTOSAVE_INTERVAL_TICKS
+  ))
+  const [leaderCheckpoint, guestCheckpoint] = await Promise.all([leaderSave, guestSave])
+  assert.equal(leaderCheckpoint.type, 'server-save-checkpoint')
+  assert.equal(guestCheckpoint.type, 'server-save-checkpoint')
+  assert.equal(JSON.parse(leaderCheckpoint.save!).summary.playerId, leader.welcome.playerId)
+  assert.equal(JSON.parse(guestCheckpoint.save!).summary.playerId, guest.welcome.playerId)
+})
+
 test('deployment restart checkpoints every connected private-session player before closing', async (context) => {
   const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
   context.after(() => host.close())
@@ -2346,6 +2424,39 @@ function deploymentMessages(socket: WebSocket): Promise<{
       if (checkpoint && restart && checkpoint.sequence === restart.checkpointSequence) {
         cleanup()
         resolve({ checkpoint, restart })
+      }
+    }
+    const fail = (error: Error) => {
+      cleanup()
+      reject(error)
+    }
+    const cleanup = () => {
+      clearTimeout(timeout)
+      socket.off('message', receive)
+      socket.off('error', fail)
+    }
+    socket.on('message', receive)
+    socket.on('error', fail)
+  })
+}
+
+function leaveSaveMessages(socket: WebSocket, requestId: number): Promise<{
+  checkpoint: Extract<ServerGameMessage, { type: 'server-save-checkpoint' }>
+  response: Extract<ServerGameMessage, { type: 'server-save-before-leave' }>
+}> {
+  return new Promise((resolve, reject) => {
+    let checkpoint: Extract<ServerGameMessage, { type: 'server-save-checkpoint' }> | null = null
+    const timeout = setTimeout(() => fail(new Error('timed out waiting for leave save')), 3_000)
+    const receive = (data: WebSocket.RawData) => {
+      const message = decodeServerGameMessage(data.toString())
+      if (message.type === 'server-save-checkpoint') checkpoint = message
+      if (
+        message.type === 'server-save-before-leave'
+        && message.requestId === requestId
+        && checkpoint?.sequence === message.checkpointSequence
+      ) {
+        cleanup()
+        resolve({ checkpoint, response: message })
       }
     }
     const fail = (error: Error) => {

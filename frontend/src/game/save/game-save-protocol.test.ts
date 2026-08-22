@@ -15,6 +15,7 @@ const CHARACTER = {
 } as const
 
 test('protocol carries one bounded resume document and ordered host checkpoints', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 55)
   const document = JSON.stringify({ schemaVersion: 1 })
   assert.deepEqual(decodeClientGameMessage(JSON.stringify({
     type: 'client-hello',
@@ -74,6 +75,22 @@ test('protocol carries one bounded resume document and ordered host checkpoints'
     checkpointSequence: 9,
     targetRevision,
   })
+  assert.deepEqual(decodeClientGameMessage(JSON.stringify({
+    type: 'client-save-before-leave',
+    requestId: 7,
+  })), {
+    type: 'client-save-before-leave',
+    requestId: 7,
+  })
+  assert.deepEqual(decodeServerGameMessage(JSON.stringify({
+    type: 'server-save-before-leave',
+    checkpointSequence: 10,
+    requestId: 7,
+  })), {
+    type: 'server-save-before-leave',
+    checkpointSequence: 10,
+    requestId: 7,
+  })
 })
 
 test('protocol rejects oversized and inconsistent save messages', () => {
@@ -107,5 +124,14 @@ test('protocol rejects oversized and inconsistent save messages', () => {
     type: 'client-deployment-ready',
     checkpointSequence: -1,
     targetRevision: 'a'.repeat(40),
+  })), /checkpointSequence/)
+  assert.throws(() => decodeClientGameMessage(JSON.stringify({
+    type: 'client-save-before-leave',
+    requestId: 0,
+  })), /requestId/)
+  assert.throws(() => decodeServerGameMessage(JSON.stringify({
+    type: 'server-save-before-leave',
+    checkpointSequence: -1,
+    requestId: 7,
   })), /checkpointSequence/)
 })
