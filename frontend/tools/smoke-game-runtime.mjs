@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 
 import { chromium } from 'playwright-core'
 
@@ -265,10 +266,21 @@ try {
   assert.ok(telescopeFrames.size > 1, 'expected the unculled Astronomer telescope to keep animating')
   assert.ok(studentCount > 0, `expected authoritative Students, got ${studentCount}`)
   assert.ok(orbSpriteCount >= 3, `expected the native multi-sprite Fire orb, got ${orbSpriteCount}`)
-  for (const element of ['air', 'earth', 'ether', 'fire', 'water']) {
+  // remote wizards of every element paint from the packed player-character
+  // atlas, so each page the generator declared must be among the Hub textures
+  const playerAtlasPages = [...readFileSync(
+    new URL('../src/game/renderer/player-character-atlas.generated.ts', import.meta.url),
+    'utf8',
+  ).matchAll(/player-character-atlas-(\d+)\.png/g)].map(([, page]) => Number(page))
+  assert.ok(playerAtlasPages.length > 0, 'expected the generated player-character atlas to declare its pages')
+  const loadedAtlasPages = new Set(textureSources.flatMap((source) => {
+    const match = /player-character-atlas-(\d+)(?:-[\w-]+)?\.png/.exec(source)
+    return match ? [Number(match[1])] : []
+  }))
+  for (const page of playerAtlasPages) {
     assert.ok(
-      textureSources.some((source) => source.includes(`player-character-head-${element}`)),
-      `expected the ${element} multiplayer appearance texture to be available`,
+      loadedAtlasPages.has(page),
+      `expected packed player-character atlas page ${page} among the Hub textures: ${JSON.stringify(textureSources)}`,
     )
   }
 
@@ -300,34 +312,30 @@ try {
   const thirdMobileHubAllyReceipt = await allyRosterReceipt(thirdPage)
   assert.deepEqual(hostMultiAllyReceipt.names, ['Helvidius', 'Helvidius'])
   assert.equal(hostMultiAllyReceipt.roster.x, 11)
-  assert.equal(hostMultiAllyReceipt.roster.y, 62)
+  assert.equal(hostMultiAllyReceipt.roster.y, 60)
+  assert.equal(hostMultiAllyReceipt.presentationScale, 1)
   assert.ok(
     hostMultiAllyReceipt.roster.y
       >= hostMultiAllyReceipt.diagnostics.y + hostMultiAllyReceipt.diagnostics.height,
   )
-  for (const row of hostMultiAllyReceipt.rows) {
-    assert.equal(row.bar.width, 50)
-    assert.equal(row.bar.height, 5)
-    assert.equal(row.fill.width, 50)
-    assert.equal(row.identity.x - (row.bar.x + row.bar.width), 2)
-    assert.equal(row.barColor, 'rgb(255, 128, 128)')
-    assert.equal(row.identityColor, 'rgb(217, 186, 112)')
-    assert.equal(row.healthRatio, '1')
-    assert.ok(row.glyphCount > 0)
-  }
-  assert.equal(
+  for (const row of hostMultiAllyReceipt.rows) assertAllyRowContract(row, 'host ally row')
+  assertClose(
     hostMultiAllyReceipt.rows[1].row.y - hostMultiAllyReceipt.rows[0].row.y,
-    10,
+    hostMultiAllyReceipt.rows[0].row.height + 5,
+    'host ally row pitch',
   )
   await page.screenshot({ path: allyScreenshotPath })
   await thirdPage.screenshot({ path: mobileAllyScreenshotPath })
 
   const expectedMobileViewportScale = 390 / 900
   assert.equal(thirdMobileHubAllyReceipt.coarsePointer, true)
-  assert.equal(
+  // The compact roster counters the frame's display scale so it reads in
+  // screen pixels, growing with the player's UI-scale setting.
+  const expectedMobileRosterScale = thirdMobileHubAllyReceipt.uiScale / expectedMobileViewportScale
+  assertClose(
     thirdMobileHubAllyReceipt.presentationScale,
-    2,
-    JSON.stringify(thirdMobileHubAllyReceipt),
+    expectedMobileRosterScale,
+    'mobile roster counter-scale',
   )
   assertClose(
     thirdMobileHubAllyReceipt.viewportScale,
@@ -335,34 +343,17 @@ try {
     'mobile viewport scale',
   )
   assert.deepEqual(thirdMobileHubAllyReceipt.names, ['SolonSolus', 'Helvidius'])
-  assertClose(
-    thirdMobileHubAllyReceipt.roster.x,
-    11 * expectedMobileViewportScale,
-    'mobile ally roster x',
-  )
+  assertClose(thirdMobileHubAllyReceipt.roster.x, 10, 'mobile ally roster x')
   assertClose(
     thirdMobileHubAllyReceipt.roster.y,
-    62 * expectedMobileViewportScale,
+    8 + 100 * thirdMobileHubAllyReceipt.uiScale,
     'mobile ally roster y',
   )
-  for (const row of thirdMobileHubAllyReceipt.rows) {
-    assertClose(row.bar.width, 100 * expectedMobileViewportScale, 'mobile ally bar width')
-    assertClose(row.bar.height, 10 * expectedMobileViewportScale, 'mobile ally bar height')
-    assertClose(row.fill.width, 100 * expectedMobileViewportScale, 'mobile ally fill width')
-    assertClose(
-      row.identity.x - (row.bar.x + row.bar.width),
-      4 * expectedMobileViewportScale,
-      'mobile ally identity gap',
-    )
-    assert.equal(row.barColor, 'rgb(255, 128, 128)')
-    assert.equal(row.identityColor, 'rgb(217, 186, 112)')
-    assert.equal(row.healthRatio, '1')
-    assert.ok(row.glyphCount > 0)
-  }
+  for (const row of thirdMobileHubAllyReceipt.rows) assertAllyRowContract(row, 'mobile ally row')
   assertClose(
     thirdMobileHubAllyReceipt.rows[1].row.y
       - thirdMobileHubAllyReceipt.rows[0].row.y,
-    20 * expectedMobileViewportScale,
+    thirdMobileHubAllyReceipt.rows[0].row.height + 5 * thirdMobileHubAllyReceipt.uiScale,
     'mobile ally row pitch',
   )
 
@@ -393,10 +384,14 @@ try {
   const thirdMobileBoneyardAllyReceipt = await allyRosterReceipt(thirdPage)
   assert.deepEqual(thirdMobileBoneyardAllyReceipt.names, thirdMobileHubAllyReceipt.names)
   assert.deepEqual(thirdMobileBoneyardAllyReceipt.rowIds, thirdMobileHubAllyReceipt.rowIds)
-  assert.equal(thirdMobileBoneyardAllyReceipt.presentationScale, 2)
+  assertClose(
+    thirdMobileBoneyardAllyReceipt.presentationScale,
+    expectedMobileRosterScale,
+    'mobile Boneyard roster counter-scale',
+  )
   assertClose(
     thirdMobileBoneyardAllyReceipt.rows[0].bar.width,
-    100 * expectedMobileViewportScale,
+    thirdMobileHubAllyReceipt.rows[0].bar.width,
     'mobile Boneyard ally bar width',
   )
 
@@ -687,8 +682,19 @@ async function enterHub(page, element) {
   await page.getByLabel(/College courtyard/).waitFor({ timeout: HUB_SCENE_TIMEOUT_MS })
 }
 
+function assertAllyRowContract(row, label) {
+  assert.equal(row.presence, 'present', `${label} presence`)
+  assert.equal(row.healthRatio, '1', `${label} health ratio`)
+  assert.ok(row.chipElement, `${label} carries its wizard element chip`)
+  assert.ok(row.chip.x < row.name.x, `${label} chip sits left of the name`)
+  assert.ok(row.bar.y >= row.name.y + row.name.height - 1, `${label} bar sits under the name`)
+  assert.ok(row.bar.width >= 100, `${label} bar width ${row.bar.width}`)
+  assert.ok(row.fill.width > 0 && row.fill.width <= row.bar.width, `${label} full fill`)
+  assert.ok(row.fill.width >= row.bar.width - 4, `${label} fill spans the bar at full health`)
+}
+
 async function allyRosterReceipt(page) {
-  return page.locator('.hub-hud-allies').evaluate((roster) => {
+  return page.locator('.hub-party-roster').evaluate((roster) => {
     const requireElement = (value, label) => {
       if (!(value instanceof Element)) throw new Error(`Expected ${label}`)
       return value
@@ -702,7 +708,10 @@ async function allyRosterReceipt(page) {
         y: rect.y,
       }
     }
-    const rows = [...roster.querySelectorAll('.hub-hud-ally-row')]
+    const strip = requireElement(roster.querySelector('.hub-hud-allies'), 'ally strip')
+    const compact = requireElement(roster.querySelector('.hub-party-compact'), 'compact party column')
+    const hud = requireElement(roster.closest('.hub-hud'), 'HUD root')
+    const rows = [...strip.querySelectorAll('.hub-hud-ally-row')]
     const skull = requireElement(document.querySelector('.hub-hud-skull'), 'HUD skull')
     const scene = requireElement(
       document.querySelector('.hub-scene, .boneyard-scene'),
@@ -712,11 +721,13 @@ async function allyRosterReceipt(page) {
       document.querySelector('.hub-hud-diagnostics'),
       'HUD diagnostics',
     )
-    const transform = getComputedStyle(roster).transform
+    const transform = getComputedStyle(compact).transform
     return {
+      allyCount: Number(strip.getAttribute('data-ally-count')),
       coarsePointer: matchMedia('(hover: none) and (pointer: coarse)').matches,
       diagnostics: bounds(diagnostics),
       names: rows.map((row) => row.getAttribute('aria-label')),
+      partySize: Number(roster.getAttribute('data-party-size')),
       presentationScale: transform === 'none' ? 1 : new DOMMatrixReadOnly(transform).a,
       roster: bounds(roster),
       rowIds: rows.map((row) => row.getAttribute('data-ally-id')),
@@ -726,26 +737,21 @@ async function allyRosterReceipt(page) {
           row.querySelector('.hub-hud-ally-bar-fill'),
           'ally health fill',
         )
-        const identity = requireElement(
-          row.querySelector('.hub-hud-ally-identity'),
-          'ally identity lane',
-        )
-        const glyph = requireElement(
-          row.querySelector('.hub-hud-ally-glyph, .hub-hud-ally-golem'),
-          'ally identity glyph',
-        )
+        const chip = requireElement(row.querySelector('.hub-hud-ally-chip'), 'ally element chip')
+        const name = requireElement(row.querySelector('.hub-hud-ally-name'), 'ally name')
         return {
           bar: bounds(bar),
-          barColor: getComputedStyle(fill).backgroundColor,
+          chip: bounds(chip),
+          chipElement: chip.getAttribute('data-ally-chip-element'),
           fill: bounds(fill),
-          glyphCount: identity.children.length,
           healthRatio: row.getAttribute('data-health-ratio'),
-          identity: bounds(identity),
-          identityColor: getComputedStyle(glyph).backgroundColor,
+          name: bounds(name),
+          presence: row.getAttribute('data-presence'),
           row: bounds(row),
         }
       }),
       skull: bounds(skull),
+      uiScale: Number(getComputedStyle(hud).getPropertyValue('--game-ui-scale')) || 1,
       viewportScale: Number(scene.getAttribute('data-viewport-scale')),
     }
   })

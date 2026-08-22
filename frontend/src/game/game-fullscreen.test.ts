@@ -135,7 +135,7 @@ test('the exact game route owns one persistent browser interaction surface', () 
   assert.match(shell, /import ['"]\.\.\/game\/game-surface\.css['"]/)
   assert.match(
     shell,
-    /if \(game\)[\s\S]*?<main[\s\S]*?className="game-surface h-dvh overflow-hidden"[\s\S]*?onContextMenu=\{\(event\) => event\.preventDefault\(\)\}[\s\S]*?onDragStart=\{\(event\) => event\.preventDefault\(\)\}/,
+    /if \(game\)[\s\S]*?<main[\s\S]*?className="game-surface h-dvh overflow-clip"[\s\S]*?onContextMenu=\{\(event\) => event\.preventDefault\(\)\}[\s\S]*?onDragStart=\{\(event\) => event\.preventDefault\(\)\}/,
   )
   assert.equal(shell.match(/className="game-surface /g)?.length, 1)
 })

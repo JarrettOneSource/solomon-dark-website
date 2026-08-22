@@ -51,6 +51,7 @@ import { installGameLuaConsole } from './game-lua-console.ts'
 import {
   GAME_SETTINGS_STORAGE_KEY,
   gameCheatsEnabled,
+  gameUiScale,
   gameVolume,
   readGameSettings,
   setGameSettings,
@@ -1177,10 +1178,16 @@ export default function MainMenuScene({
               onLoadingError={cancelBoneyardLoading}
               onContinueGameOver={session.continueGameOver}
               onHubAction={session.sendHubAction}
+              onMessagePlayer={(playerId, displayName) => setWhisperRequest({
+                displayName,
+                playerId,
+                requestedAtMs: Date.now(),
+              })}
               onInventoryOpenChange={setInventoryScreenOpen}
               onOpenSkills={openSkillBook}
               onPauseRequest={requestGameplayPause}
               onReady={finishBoneyardLoading}
+              partyState={partyState}
               progression={runtimeProgression ?? runtimeSnapshot.players[session.playerId]!.progression}
               presentationPaused={gameplayPause !== null}
               samplePresentation={session.sampleBoneyardPresentation}
@@ -1249,6 +1256,7 @@ export default function MainMenuScene({
             openKeyCode={gameSettings.controls.openChat}
             partyState={partyState}
             session={session}
+            uiScale={gameUiScale(gameSettings)}
             whisperRequest={whisperRequest}
             worldKind={runtimeSnapshot.world.kind}
           />
@@ -1456,11 +1464,14 @@ function placedStageStyle(placement: NativePauseMenuStagePlacement): CSSProperti
 }
 
 function stageTransformStyle(x: number, y: number, scale: number): CSSProperties {
+  // screen-space chrome inside the stage (the touch close control) divides
+  // its own geometry by this scale so it keeps real pixel sizes
   return {
+    '--game-stage-scale': scale,
     height: `${GAME_VIEWPORT_MIN_HEIGHT}px`,
     transform: `translate3d(${x}px, ${y}px, 0) scale(${scale})`,
     width: `${GAME_VIEWPORT_MIN_WIDTH}px`,
-  }
+  } as CSSProperties
 }
 
 function sameFixedViewport(

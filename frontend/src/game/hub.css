@@ -1,7 +1,10 @@
 .hub-scene {
   position: absolute;
   inset: 0;
-  overflow: hidden;
+  /* clip, not hidden: the native frame keeps its 1600x900 layout box under
+     its display-scale transform, and a hidden-overflow box is still a scroll
+     container that focus and scrollIntoView can shift off-screen */
+  overflow: clip;
   background: #000;
   cursor: auto;
 }
@@ -12,7 +15,7 @@
   position: absolute;
   top: 0;
   left: 0;
-  overflow: hidden;
+  overflow: clip;
   transform-origin: 0 0;
 }
 
@@ -34,120 +37,23 @@
   pointer-events: none;
 }
 
-.hub-hud-skull {
+.hub-hud-skull-button {
   position: absolute;
   top: 7px;
   left: 11px;
+  display: block;
+  width: 31px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.hub-hud-skull {
+  display: block;
   width: 31px;
   height: auto;
-  object-fit: contain;
-}
-
-.hub-hud-allies {
-  position: absolute;
-  top: 60px;
-  left: 11px;
-  display: grid;
-  width: 196px;
-  gap: 5px;
-}
-
-.hub-hud-ally-row[data-ally-element='ether'] { --element-accent: #b98fe6; }
-.hub-hud-ally-row[data-ally-element='fire'] { --element-accent: #e07a45; }
-.hub-hud-ally-row[data-ally-element='water'] { --element-accent: #5fb0dc; }
-.hub-hud-ally-row[data-ally-element='air'] { --element-accent: #a5cbe4; }
-.hub-hud-ally-row[data-ally-element='earth'] { --element-accent: #a8bf62; }
-
-.hub-hud-ally-row {
-  display: grid;
-  grid-template-columns: 27px minmax(0, 1fr);
-  gap: 8px;
-  align-items: center;
-  padding: 2px 9px 3px 2px;
-  border: 1px solid rgb(216 188 114 / 0.3);
-  border-left: 2px solid var(--element-accent, rgb(216 188 114 / 0.75));
-  border-radius: 3px 14px 14px 3px;
-  background:
-    linear-gradient(
-      90deg,
-      rgb(10 9 6 / 0.82),
-      rgb(9 11 15 / 0.6) 62%,
-      rgb(9 11 15 / 0.12)
-    );
-}
-
-.hub-hud-ally-chip {
-  position: relative;
-  display: block;
-  overflow: hidden;
-  /* Transformed sprite layers escape border-radius clipping under scaled ancestors; hard-clip. */
-  clip-path: circle(50%);
-  width: 27px;
-  height: 27px;
-  border: 1px solid var(--element-accent, rgb(216 188 114 / 0.6));
-  border-radius: 50%;
-  background: radial-gradient(circle at 50% 30%, rgb(56 51 39 / 0.95), rgb(8 9 12 / 0.96) 76%);
-  box-shadow: inset 0 0 7px rgb(0 0 0 / 0.85);
-}
-
-.hub-hud-ally-chip-layer {
-  position: absolute;
-  top: 0;
-  left: 0;
-  display: block;
-  width: 170px;
-  height: 170px;
-  background-repeat: no-repeat;
-  /* Sprite frame 12 holds the wizard at (86.5, 56); land it on the 27px chip's center. */
-  transform: translate(-25.4px, -11.7px) scale(0.45);
-  transform-origin: 0 0;
-}
-
-.hub-hud-ally-chip-golem img {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 17px;
-  height: auto;
-  transform: translate(-50%, -50%);
-}
-
-.hub-hud-ally-main {
-  display: grid;
-  min-width: 0;
-  gap: 3px;
-}
-
-.hub-hud-ally-name {
-  overflow: hidden;
-  color: #f0e2b6;
-  font: 12px/1.1 'IM FELL English', Georgia, serif;
-  letter-spacing: 0.02em;
-  text-overflow: ellipsis;
-  text-shadow: 0 1px 2px #000, 0 0 5px rgb(0 0 0 / 0.9);
-  white-space: nowrap;
-}
-
-.hub-hud-ally-bar {
-  position: relative;
-  display: block;
-  height: 7px;
-  overflow: hidden;
-  border: 1px solid rgb(0 0 0 / 0.85);
-  border-radius: 4px;
-  background: linear-gradient(180deg, rgb(40 21 17 / 0.92), rgb(16 8 7 / 0.94));
-  box-shadow:
-    0 0 0 1px rgb(216 188 114 / 0.26),
-    inset 0 1px 2px rgb(0 0 0 / 0.85);
-}
-
-.hub-hud-ally-bar-fill {
-  display: block;
-  height: 100%;
-  border-radius: 3px;
-  background: linear-gradient(180deg, #f08a70, #c0392b 55%, #7e1d12);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.25);
-  transition: width 220ms ease;
 }
 
 .hub-hud-diagnostics {
@@ -434,8 +340,25 @@
   background-repeat: no-repeat;
 }
 
-.hub-hud-count-red { left: calc(50% - 128px); }
-.hub-hud-count-blue { left: calc(50% + 123px); }
+.hub-hud-count-red {
+  bottom: -16px;
+  left: 21px;
+}
+
+.hub-hud-count-blue {
+  bottom: -17px;
+  left: 20px;
+}
+
+/* The dock only exists for the touch layout; on desktop its children keep
+   their native absolute positions against the HUD. */
+.hub-hud-dock-lane,
+.hub-hud-dock,
+.hub-hud-count-badge {
+  display: contents;
+}
+
+.hub-hud-quickbar-cooldown-label { display: none; }
 
 .hub-hud-xp {
   position: absolute;
@@ -497,444 +420,6 @@
   font-family: 'IM FELL English', Georgia, serif;
   text-shadow: 0 2px 2px #000;
   cursor: pointer;
-}
-
-.hub-party-panel {
-  position: absolute;
-  z-index: 15000;
-  top: 174px;
-  left: 11px;
-  box-sizing: border-box;
-  min-width: 198px;
-  max-width: 236px;
-  padding: 8px 10px 10px;
-  border: 1px solid rgb(216 188 114 / 0.5);
-  border-radius: 4px;
-  background:
-    linear-gradient(
-      160deg,
-      rgb(30 25 15 / 0.92),
-      rgb(5 7 10 / 0.93) 55%,
-      rgb(10 12 17 / 0.94)
-    );
-  box-shadow:
-    0 0 0 1px rgb(64 50 22 / 0.85),
-    0 10px 26px rgb(0 0 0 / 0.5),
-    inset 0 0 20px rgb(0 0 0 / 0.5);
-  color: #dfd0a0;
-  font: 13px 'IM FELL English', Georgia, serif;
-  pointer-events: auto;
-  text-shadow: 0 1px 2px #000;
-}
-
-.hub-party-panel h2 {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  margin: 0 0 7px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid rgb(194 161 88 / 0.3);
-  color: #f3d994;
-  font: 700 12px Cinzel, Georgia, serif;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.hub-party-panel h2 img {
-  width: 13px;
-  height: auto;
-  filter: drop-shadow(0 1px 1px #000);
-}
-
-.hub-party-count {
-  margin-left: auto;
-  color: #a49c89;
-  font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
-  font-size: 10px;
-  font-weight: 400;
-  letter-spacing: 0;
-}
-
-.hub-party-error {
-  margin: 0 0 7px;
-  color: #e6a89e;
-  font-size: 12px;
-}
-
-.hub-party-settings-open {
-  display: grid;
-  width: 28px;
-  height: 28px;
-  flex: none;
-  place-items: center;
-  padding: 0;
-  border: 1px solid rgb(202 168 84 / 0.5);
-  border-radius: 50%;
-  background: #171208;
-  color: #f3d994;
-  cursor: pointer;
-  font-size: 14px;
-}
-
-.hub-party-members {
-  display: grid;
-  gap: 2px;
-}
-
-.hub-party-member-open {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 6px;
-  border: 0;
-  border-radius: 3px;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  font: inherit;
-  text-align: left;
-  text-shadow: inherit;
-}
-
-.hub-party-member-open:hover,
-.hub-party-member-open:focus-visible {
-  background: rgb(218 176 77 / 0.13);
-  outline: none;
-}
-
-.hub-party-member-marker {
-  flex: none;
-  width: 11px;
-  height: auto;
-  filter: drop-shadow(0 1px 1px #000);
-}
-
-.hub-party-member-name {
-  overflow: hidden;
-  min-width: 0;
-  flex: 1;
-  color: #eee4ca;
-  font-size: 14px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.hub-party-member-tag {
-  flex: none;
-  padding: 1px 7px 2px;
-  border: 1px solid rgb(202 168 84 / 0.5);
-  border-radius: 8px;
-  color: #f3d994;
-  font: 700 9px Cinzel, Georgia, serif;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.hub-party-member-you {
-  border-color: rgb(141 200 227 / 0.45);
-  color: #a9d9ef;
-}
-
-.hub-party-invitation {
-  display: grid;
-  gap: 8px;
-  margin-top: 9px;
-  padding: 8px 9px 9px;
-  border: 1px solid rgb(216 188 114 / 0.5);
-  border-radius: 3px;
-  background: linear-gradient(180deg, rgb(218 176 77 / 0.13), rgb(0 0 0 / 0.28));
-  animation: hub-party-invitation-in 240ms ease-out both;
-}
-
-@keyframes hub-party-invitation-in {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-}
-
-.hub-party-invitation-text {
-  color: #eee4ca;
-  font-size: 14px;
-}
-
-.hub-party-invitation-text strong {
-  color: #f3d994;
-  font-weight: 700;
-}
-
-.hub-party-invitation-actions {
-  display: flex;
-  gap: 6px;
-}
-
-.hub-party-invitation button,
-.hub-player-profile button {
-  min-height: 34px;
-  padding: 6px 12px;
-  border: 1px solid rgb(202 168 84 / 0.66);
-  border-radius: 3px;
-  background: linear-gradient(180deg, #3a2e17, #171208);
-  box-shadow: inset 0 1px 0 rgb(255 232 160 / 0.14);
-  color: #ead293;
-  cursor: pointer;
-  font: 700 11px Cinzel, Georgia, serif;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-}
-
-.hub-party-invitation button:hover,
-.hub-party-invitation button:focus-visible,
-.hub-player-profile button:hover,
-.hub-player-profile button:focus-visible {
-  border-color: #e4c36d;
-  color: #fff0bc;
-  outline: none;
-}
-
-.hub-party-invitation-actions button { flex: 1 1 0; }
-
-.hub-party-invitation .hub-party-invitation-deny {
-  background: linear-gradient(180deg, #2a1b16, #120b08);
-  border-color: rgb(173 116 105 / 0.55);
-  color: #c9aaa1;
-}
-
-.hub-party-invitation .hub-party-invitation-deny:hover,
-.hub-party-invitation .hub-party-invitation-deny:focus-visible {
-  border-color: #ad7469;
-  color: #f1c8bd;
-}
-
-.hub-player-profile-backdrop {
-  position: absolute;
-  z-index: 31000;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  background: radial-gradient(circle at 50% 42%, rgb(20 16 8 / 0.55), rgb(0 0 0 / 0.8));
-  backdrop-filter: blur(2px);
-  pointer-events: auto;
-}
-
-.hub-player-profile[data-profile-element='ether'] { --element-accent: #b98fe6; }
-.hub-player-profile[data-profile-element='fire'] { --element-accent: #e07a45; }
-.hub-player-profile[data-profile-element='water'] { --element-accent: #5fb0dc; }
-.hub-player-profile[data-profile-element='air'] { --element-accent: #a5cbe4; }
-.hub-player-profile[data-profile-element='earth'] { --element-accent: #a8bf62; }
-
-.hub-player-profile {
-  position: relative;
-  display: grid;
-  box-sizing: border-box;
-  width: 400px;
-  max-width: calc(100% - 40px);
-  padding: 24px 26px;
-  border: 3px double rgb(216 188 114 / 0.82);
-  border-radius: 5px;
-  background:
-    linear-gradient(
-      165deg,
-      rgb(37 31 18 / 0.97),
-      rgb(9 10 14 / 0.97) 55%,
-      rgb(13 15 21 / 0.98)
-    );
-  box-shadow:
-    0 0 0 1px rgb(64 50 22 / 0.9),
-    0 18px 50px rgb(0 0 0 / 0.7),
-    inset 0 0 30px rgb(0 0 0 / 0.55);
-  color: #dfd0a0;
-  font: 14px Alegreya, Georgia, serif;
-  gap: 14px;
-  text-shadow: 0 1px 2px #000;
-}
-
-.hub-player-profile-corner {
-  position: absolute;
-  top: -5px;
-  left: -6px;
-  width: 72px;
-  height: auto;
-  filter: drop-shadow(0 2px 2px rgb(0 0 0 / 0.6));
-  pointer-events: none;
-}
-
-.hub-player-profile-corner-right {
-  left: auto;
-  right: -6px;
-  transform: scaleX(-1);
-}
-
-.hub-player-profile-header {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  margin-top: 4px;
-}
-
-.hub-wizard-portrait {
-  position: relative;
-  display: block;
-  overflow: hidden;
-  /* Transformed sprite layers escape border-radius clipping under scaled ancestors; hard-clip.
-     Square with softened corners to match the frame-gold plate, like the native loadout portraits. */
-  clip-path: inset(0 round 7px);
-  flex: none;
-  width: 92px;
-  height: 92px;
-  border-radius: 7px;
-  background: radial-gradient(circle at 50% 28%, #3b3526, #0c0b09 72%);
-  box-shadow: 0 0 14px rgb(0 0 0 / 0.65), inset 0 0 10px rgb(0 0 0 / 0.7);
-}
-
-.hub-wizard-portrait-layer {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 170px;
-  height: 170px;
-  background-repeat: no-repeat;
-  /* Sprite frame 12 holds the wizard at (86.5, 56); land it on the 92px circle's center. */
-  transform: translate(-53.5px, -18.5px) scale(1.15);
-  transform-origin: 0 0;
-}
-
-.hub-wizard-portrait-frame {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.7));
-}
-
-.hub-player-profile-title {
-  display: grid;
-  min-width: 0;
-  gap: 4px;
-}
-
-.hub-player-profile h2 {
-  margin: 0;
-  overflow-wrap: anywhere;
-  color: #f0dda0;
-  font: 28px/1.05 'IM FELL English', Georgia, serif;
-  font-weight: normal;
-  text-shadow: 0 3px 3px #000;
-}
-
-.hub-player-profile-class {
-  margin: 0;
-  color: var(--element-accent, #a9d9ef);
-  font: 700 11px Cinzel, Georgia, serif;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.hub-player-profile-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  justify-self: start;
-  margin: 2px 0 0;
-  padding: 2px 9px 3px;
-  border: 1px solid rgb(202 168 84 / 0.5);
-  border-radius: 9px;
-  color: #f3d994;
-  font: 700 9.5px Cinzel, Georgia, serif;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.hub-player-profile-badge::before {
-  content: '';
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #ffd76a;
-  box-shadow: 0 0 6px rgb(255 215 106 / 0.9);
-}
-
-.hub-player-profile-badge[data-registered='false'] {
-  border-color: rgb(164 156 137 / 0.4);
-  color: #a49c89;
-}
-
-.hub-player-profile-badge[data-registered='false']::before {
-  background: #7d776a;
-  box-shadow: none;
-}
-
-.hub-player-profile-stats {
-  display: grid;
-  margin: 0;
-  border-top: 1px solid rgb(194 161 88 / 0.25);
-  border-bottom: 1px solid rgb(194 161 88 / 0.25);
-}
-
-.hub-player-profile-stat {
-  display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) auto;
-  align-items: center;
-  padding: 8px 2px;
-  gap: 11px;
-}
-
-.hub-player-profile-stat + .hub-player-profile-stat {
-  border-top: 1px solid rgb(194 161 88 / 0.16);
-}
-
-.hub-player-profile-stat img {
-  width: 21px;
-  height: 21px;
-  filter: drop-shadow(0 1px 1px #000);
-  object-fit: contain;
-}
-
-.hub-player-profile-stat dt {
-  margin: 0;
-  color: #a49c89;
-  font: 700 10.5px Cinzel, Georgia, serif;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.hub-player-profile-stat dd {
-  margin: 0;
-  color: #fff0c0;
-  font: 18px 'IM FELL English', Georgia, serif;
-  text-align: right;
-}
-
-.hub-player-profile-stat dd[data-profile-gold] {
-  color: #ffd76a;
-}
-
-.hub-player-profile-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.hub-player-profile-actions button {
-  flex: 1 1 auto;
-}
-
-.hub-player-profile .hub-player-profile-message {
-  border-color: rgb(190 150 230 / 0.55);
-  color: #cfb0e8;
-}
-
-.hub-player-profile .hub-player-profile-message:hover,
-.hub-player-profile .hub-player-profile-message:focus-visible {
-  border-color: #c9a3e8;
-  color: #e8d7f7;
-}
-
-.hub-player-profile .hub-player-profile-close {
-  flex: 0 1 auto;
-  background: linear-gradient(180deg, #232019, #100e0a);
-  border-color: rgb(135 115 77 / 0.6);
-  color: #bdb39d;
 }
 
 .hub-boneyard-option:hover,
@@ -1040,132 +525,344 @@
   white-space: nowrap !important;
 }
 
+/* ---- touch layout ------------------------------------------------------
+   --hud-unit is one screen pixel at 100% UI scale: it counters the native
+   frame's display scale, so 44 units is a 44px tap target on any phone and the
+   player's UI-scale setting grows it like the joysticks. Safe-area insets and
+   viewport fitting use --hud-scale (true screen pixels) instead. */
+
 @media (hover: none) and (pointer: coarse) {
-  .hub-hud-quickbar-slot {
-    bottom: 132px;
-    left: calc(50% + var(--mobile-quickbar-slot-offset));
-    width: 100px;
-    height: 100px;
-    border: 2px solid rgb(226 216 181 / 0.42);
-    border-radius: 14px;
-    background: rgb(9 13 18 / 0.62);
-    box-shadow: inset 0 0 12px rgb(0 0 0 / 0.72), 0 3px 10px rgb(0 0 0 / 0.4);
-    pointer-events: auto;
-    touch-action: none;
+  .hub-hud {
+    --hud-scale: calc(var(--hud-display-scale, 1) * var(--game-ui-scale, 1));
+    --hud-unit: calc(1px / var(--hud-display-scale, 1));
+    --hud-inset-top: calc((8px + env(safe-area-inset-top, 0px)) / var(--hud-scale));
+    --hud-inset-left: calc((10px + env(safe-area-inset-left, 0px)) / var(--hud-scale));
+    --hud-inset-right: calc((10px + env(safe-area-inset-right, 0px)) / var(--hud-scale));
+    --hud-inset-bottom: calc((10px + env(safe-area-inset-bottom, 0px)) / var(--hud-scale));
+    --hud-glass-border: rgb(226 216 181 / 0.34);
+    --hud-glass-bg: linear-gradient(180deg, rgb(22 27 33 / 0.8), rgb(7 10 14 / 0.9));
   }
 
+  .hub-hud-skull-button,
+  .hub-hud-backpack-button,
+  .hub-hud-tome-button,
+  .hub-hud-map,
+  .hub-hud-potion-button,
+  .hub-hud-quickbar-slot {
+    display: grid;
+    box-sizing: border-box;
+    padding: 0;
+    border: var(--hud-unit) solid var(--hud-glass-border);
+    background: var(--hud-glass-bg);
+    box-shadow:
+      0 calc(2 * var(--hud-unit)) calc(8 * var(--hud-unit)) rgb(0 0 0 / 0.5),
+      inset 0 var(--hud-unit) 0 rgb(255 244 205 / 0.1);
+    place-items: center;
+    pointer-events: auto;
+  }
+
+  .hub-hud-skull-button:active,
+  .hub-hud-backpack-button:active:not(:disabled),
+  .hub-hud-tome-button:active:not(:disabled),
+  .hub-hud-map:active,
+  .hub-hud-potion-button:active:not(:disabled) {
+    border-color: rgb(255 240 200 / 0.6);
+    background: linear-gradient(180deg, rgb(44 52 62 / 0.9), rgb(16 20 26 / 0.95));
+  }
+
+  /* Top-left: pause · inventory · skills. Top-right: map (hub) · fullscreen. */
+  .hub-hud-skull-button,
+  .hub-hud-backpack-button,
+  .hub-hud-tome-button,
+  .hub-hud-map {
+    inset: auto;
+    width: calc(44 * var(--hud-unit));
+    height: calc(44 * var(--hud-unit));
+    border-radius: calc(10 * var(--hud-unit));
+  }
+
+  .hub-hud-skull-button {
+    top: var(--hud-inset-top);
+    left: var(--hud-inset-left);
+  }
+
+  .hub-hud-backpack-button {
+    top: var(--hud-inset-top);
+    left: calc(var(--hud-inset-left) + 50 * var(--hud-unit));
+  }
+
+  .hub-hud-tome-button {
+    top: var(--hud-inset-top);
+    left: calc(var(--hud-inset-left) + 100 * var(--hud-unit));
+  }
+
+  .hub-hud-map {
+    top: var(--hud-inset-top);
+    right: calc(var(--hud-inset-right) + 50 * var(--hud-unit));
+  }
+
+  .hub-hud-skull { width: calc(26 * var(--hud-unit)); }
+
+  .hub-hud-backpack,
+  .hub-hud-tome {
+    position: static;
+    width: calc(30 * var(--hud-unit));
+    height: auto;
+  }
+
+  .hub-hud-map img {
+    position: absolute;
+    inset: auto;
+    top: 50%;
+    left: 50%;
+    width: calc(34 * var(--hud-unit));
+    height: calc(33 * var(--hud-unit));
+    transform: translate(-50%, -50%);
+  }
+
+  .hub-hud-diagnostics {
+    top: calc(var(--hud-inset-top) + 54 * var(--hud-unit));
+    left: calc(var(--hud-inset-left) + 50 * var(--hud-unit));
+    gap: calc(8 * var(--hud-unit));
+  }
+
+  .hub-hud-fps,
+  .hub-hud-ping {
+    font-size: calc(11 * var(--hud-unit));
+  }
+
+  /* Meters grow 1.4x (1.15x on small phones) but yield — down to native size —
+     when the row between the corner buttons gets too narrow at high UI scale.
+     The fit is the free width (viewport minus the left trio at its 50-unit pitch,
+     mirrored, minus 8px clearance each side) over the meters' screen width;
+     tan(atan2()) turns that length ratio into a number for scale(). */
+  .hub-hud-meters,
+  .hub-hud-selected-skills {
+    --hud-meter-fit: tan(atan2(
+      100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 36px - 288px * var(--game-ui-scale, 1),
+      var(--native-meter-group-width, 320px) * var(--hud-scale)
+    ));
+    transform: translateY(calc(14 * var(--hud-unit))) scale(clamp(1, var(--hud-meter-fit), 1.4));
+    transform-origin: top center;
+  }
+
+  .hub-hud-loadout,
+  .hub-hud-help {
+    display: none;
+  }
+
+  /* Bottom dock lane: the strip between the two joysticks (8 screen px clear of
+     each, so it tracks the joystick insets and the UI-scale setting). It is a size
+     container so the dock can measure it: --dock-unit is one HUD unit while the
+     dock's natural width (503 units) fits, otherwise the whole dock — slots,
+     potions, XP, icons, badges — shrinks uniformly to the lane. */
+  .hub-hud-dock-lane {
+    position: absolute;
+    right: calc((16px + env(safe-area-inset-right, 0px)) / var(--hud-scale) + 128 * var(--hud-unit));
+    bottom: var(--hud-inset-bottom);
+    left: calc((16px + env(safe-area-inset-left, 0px)) / var(--hud-scale) + 128 * var(--hud-unit));
+    display: flex;
+    justify-content: center;
+    container-type: inline-size;
+  }
+
+  .hub-hud-dock {
+    --dock-unit: min(var(--hud-unit), calc(100cqw / 503));
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: calc(6 * var(--dock-unit));
+  }
+
+  .hub-hud-skill-quickbar {
+    position: static;
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: calc(5 * var(--dock-unit));
+    inset: auto;
+  }
+
+  .hub-hud-quickbar-slot {
+    position: relative;
+    inset: auto;
+    flex: 0 0 auto;
+    overflow: hidden;
+    width: calc(44 * var(--dock-unit));
+    height: calc(44 * var(--dock-unit));
+    border-width: var(--dock-unit);
+    border-radius: calc(9 * var(--dock-unit));
+    touch-action: none;
+    transition: transform 80ms ease;
+  }
+
+  /* a sealed slot still owns its hit area: a tap on it must never fall
+     through to the world canvas and walk the player */
   .hub-hud-quickbar-slot:disabled {
     border-color: rgb(226 216 181 / 0.18);
     background: rgb(9 13 18 / 0.32);
   }
 
-  .hub-hud-quickbar-cooldown {
-    inset: auto;
-    top: 50%;
-    left: 50%;
+  .hub-hud-quickbar-slot[data-empty='true'] {
+    border-style: dashed;
+    border-color: rgb(226 216 181 / 0.18);
+    background: rgb(7 10 14 / 0.42);
+    box-shadow: none;
+  }
+
+  .hub-hud-quickbar-slot[data-cooldown='true'] {
+    border-color: rgb(226 216 181 / 0.2);
+  }
+
+  .hub-hud-quickbar-slot[data-active='true'] {
+    border-color: rgb(255 196 96 / 0.85);
+    box-shadow:
+      0 0 calc(8 * var(--dock-unit)) rgb(255 170 60 / 0.45),
+      inset 0 0 calc(6 * var(--dock-unit)) rgb(255 190 80 / 0.25);
+  }
+
+  .hub-hud-quickbar-slot:active:not(:disabled) {
+    border-color: rgb(255 240 200 / 0.6);
+    background: linear-gradient(180deg, rgb(44 52 62 / 0.9), rgb(16 20 26 / 0.95));
+    transform: scale(0.94);
+  }
+
+  .hub-hud-quickbar-skill-icon {
+    --skill-icon-unit: calc(0.8 * var(--dock-unit));
     transform: translate(-50%, -50%);
   }
 
+  .hub-hud-skill-quickbar[data-mode='hub'] .hub-hud-quickbar-skill-icon {
+    filter: brightness(0.45);
+  }
+
+  .hub-hud-quickbar-cooldown {
+    width: 100%;
+    height: 100%;
+    fill: rgb(10% 4% 4% / 72%);
+  }
+
+  .hub-hud-quickbar-cooldown-label {
+    position: absolute;
+    right: 0;
+    bottom: calc(3 * var(--dock-unit));
+    left: 0;
+    display: block;
+    color: #ffe6b0;
+    font: 700 calc(11 * var(--dock-unit)) / 1 'JetBrains Mono', ui-monospace, monospace;
+    text-align: center;
+    text-shadow: 0 1px 2px #000, 0 0 4px #000;
+  }
+
   .hub-hud-quickbar-input-mouse,
-  .hub-hud-quickbar-key-backing,
-  .hub-hud-quickbar-key-glyph {
+  .hub-hud-quickbar-key-backing {
     display: none;
   }
 
-  .hub-hud-potion-button,
-  .hub-hud-backpack-button,
-  .hub-hud-tome-button {
-    width: 100px;
-    height: 100px;
+  .hub-hud-potion-button {
+    position: relative;
+    inset: auto;
+    flex: 0 0 auto;
+    width: calc(44 * var(--dock-unit));
+    height: calc(44 * var(--dock-unit));
+    border-width: var(--dock-unit);
+    border-radius: 50%;
   }
 
-  .hub-hud-potion-button-red {
-    bottom: 8px;
-    left: calc(50% - 215px);
+  .hub-hud-potion-button:disabled { opacity: 0.55; }
+
+  .hub-hud-potion {
+    position: static;
+    width: calc(24 * var(--dock-unit));
+    height: auto;
   }
 
-  .hub-hud-potion-button-blue {
-    bottom: 8px;
-    left: calc(50% + 115px);
-  }
-
-  .hub-hud-potion-red {
+  .hub-hud-count-badge {
     position: absolute;
-    bottom: 9px;
-    left: 23.5px;
+    top: calc(-5 * var(--dock-unit));
+    right: calc(-5 * var(--dock-unit));
+    display: grid;
+    width: calc(20 * var(--dock-unit));
+    height: calc(20 * var(--dock-unit));
+    border: var(--dock-unit) solid rgb(234 210 147 / 0.6);
+    border-radius: 50%;
+    background: #1a120a;
+    box-shadow: 0 var(--dock-unit) calc(3 * var(--dock-unit)) #000;
+    place-items: center;
   }
 
-  .hub-hud-potion-blue {
-    position: absolute;
-    bottom: 10px;
-    left: 25px;
+  .hub-hud-count {
+    --count-unit: calc(1.05 * var(--dock-unit));
+    position: static;
+    inset: auto;
   }
 
-  .hub-hud-backpack-button {
-    bottom: 0;
-    left: calc(50% - 105px);
+  .hub-hud-xp {
+    position: relative;
+    inset: auto;
+    flex: 0 0 auto;
+    width: calc(10 * var(--dock-unit));
+    height: calc(44 * var(--dock-unit));
   }
 
-  .hub-hud-backpack {
-    position: absolute;
-    bottom: 14px;
-    left: 21px;
+  .hub-hud-xp-frame {
+    inset: 0;
+    width: 100%;
+    height: 100%;
   }
 
-  .hub-hud-tome-button {
-    bottom: 0;
-    left: calc(50% + 5px);
+  .hub-hud-xp-fill {
+    inset: 7% auto auto 29%;
+    width: 33%;
+    height: 86%;
+  }
+}
+
+/* Small phones (iPhone SE class): a tighter dock (natural width 384 units). */
+@media (hover: none) and (pointer: coarse) and (max-width: 720px) {
+  .hub-hud-meters,
+  .hub-hud-selected-skills {
+    transform: translateY(calc(12 * var(--hud-unit))) scale(clamp(1, var(--hud-meter-fit), 1.15));
   }
 
-  .hub-hud-tome {
-    position: absolute;
-    bottom: 14px;
-    left: 21px;
+  /* The small-phone joystick is 104 units, so the lane gives the dock 16 more
+     units on each side. */
+  .hub-hud-dock-lane {
+    right: calc((16px + env(safe-area-inset-right, 0px)) / var(--hud-scale) + 112 * var(--hud-unit));
+    left: calc((16px + env(safe-area-inset-left, 0px)) / var(--hud-scale) + 112 * var(--hud-unit));
   }
 
-  .hub-hud-count-red { left: calc(50% - 170.5px); }
-  .hub-hud-count-blue { left: calc(50% + 160px); }
-
-  /* Counter the native display scale so social UI lands at true screen pixels on touch devices. */
-  .hub-party-panel {
-    top: 196px;
-    transform: scale(calc(1 / var(--hud-display-scale, 0.65)));
-    transform-origin: top left;
+  .hub-hud-dock {
+    --dock-unit: min(var(--hud-unit), calc(100cqw / 384));
+    gap: calc(5 * var(--dock-unit));
   }
 
-  .hub-party-member-open {
-    min-height: 34px;
+  .hub-hud-skill-quickbar { gap: calc(4 * var(--dock-unit)); }
+
+  .hub-hud-quickbar-slot {
+    width: calc(32 * var(--dock-unit));
+    height: calc(32 * var(--dock-unit));
+    border-radius: calc(8 * var(--dock-unit));
   }
 
-  .hub-party-invitation button {
-    min-height: 42px;
+  .hub-hud-quickbar-skill-icon {
+    --skill-icon-unit: calc(0.58 * var(--dock-unit));
   }
 
-  .hub-party-settings-open {
-    width: 44px;
-    height: 44px;
+  .hub-hud-quickbar-cooldown-label {
+    bottom: calc(2 * var(--dock-unit));
+    font-size: calc(9 * var(--dock-unit));
   }
 
-  .hub-player-profile {
-    transform: scale(calc(1 / var(--hud-display-scale, 0.65)));
-    transform-origin: center;
+  .hub-hud-potion-button {
+    width: calc(38 * var(--dock-unit));
+    height: calc(38 * var(--dock-unit));
   }
 
-  .hub-player-profile button {
-    min-height: 42px;
-  }
+  .hub-hud-potion { width: calc(21 * var(--dock-unit)); }
 
-  /* Centered under the player's own meters; the left column belongs to chat + party. */
-  .hub-hud-allies {
-    top: 96px;
-    left: 50%;
-    transform: translateX(-50%) scale(calc(1 / var(--hud-display-scale, 0.65)));
-    transform-origin: top center;
-  }
-
-  .hub-hud-loadout {
-    opacity: 0.88;
-    transform: scale(0.82);
-    transform-origin: top right;
+  .hub-hud-xp {
+    width: calc(9 * var(--dock-unit));
+    height: calc(38 * var(--dock-unit));
   }
 }

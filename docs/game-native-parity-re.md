@@ -33510,3 +33510,665 @@ screen.
 - No member is browser-platform blocked and no material unknown remains. The
   focused commits are approved for publication to `main`; deployment remains
   a separate operation and is not part of this receipt.
+
+## 2026-08-22 — Website mobile gameplay UI redesign (touch HUD, party roster, player cards)
+
+### Reported request and parity question
+
+- The owner asked for the whole mobile gameplay UI of the Website game to be
+  redesigned: chat was fine, the party surface had to scale, and the joysticks
+  and slot buttons had to look good and clean on a phone. Follow-ups: fold the
+  party list behind a button with a compact view of who is in the party, make
+  it behave with many members, make the ally health-bar area respond to a large
+  party, merge the party list and the ally health bars into one surface once
+  people join, and let a tap on an ally open their player card.
+- This is a presentation and HUD-composition change on the Website only. No
+  native fact is revised, no Mod Loader report changes, and the native HUD
+  projection for mouse players (`1600 x 900` design frame scaled by
+  `min(1, w/1600, h/900)`) is untouched.
+
+### Evidence and provenance
+
+- Before frames (`844 x 390 @2`, touch): the native projection shrank the
+  touch HUD with the frame — joysticks `82.3 px` with `34.7 px` knobs, the
+  skull button `13 x 14 px`, the help glyph `14 x 16 px`, the XP bar
+  `5 x 24 px`; the eight `43 px` skill slots floated mid-screen at `y = 289`
+  while the potions, backpack, and tome sat on the bottom edge at `y = 343`;
+  the `52 px` map tile sat in the bottom-right corner beside the primary
+  joystick; the ally health bars were a fixed top-centre column that ignored
+  the UI-scale setting.
+- Touch-HUD geometry contract, verified on real Chrome captures at every
+  preset (`844 x 390 @2`, `667 x 375 @2`, `932 x 430 @2`, `915 x 412 @2`,
+  `1024 x 768 @1`, `390 x 844 @2` portrait, `1600 x 900` mouse): joysticks
+  `120 px` (`104 px` under `720 px` wide) pinned `16 px` plus safe-area from
+  the corners; `44 px` corner buttons (skull, backpack, tome, chat on the
+  left; map, fullscreen on the right); the dock between the joysticks is
+  `502.9 x 44 px` natural (`384 x 38` on the small phone) and shrinks as one
+  unit when the lane is narrower; meters sit top-centre and scale between
+  native size and `1.4x` (`1.15x` small) as the corner buttons allow.
+- UI-scale sweeps at `75/100/125/150 %` on both phones: no overlap between
+  meters and corner buttons, dock and joysticks, or roster and dock at any
+  setting (`150 %` on the small phone yields `24.9 px` slots, the player's
+  trade-off; `100 %` keeps `32 px`).
+- Mouse parity: on `1600 x 900` the joysticks are `display: none`, the dock
+  lane and count badges are `display: contents`, the roster sits at `11, 60`,
+  and every native HUD rectangle (skull `11,7`, backpack `734,824`, tome
+  `814,824`, map `1462,766`, potions `651,833`, XP `798,828`) is unchanged.
+
+### System boundary and membership inventory
+
+- Owner: `frontend/src/game/hub.css` coarse-pointer blocks
+  (`--hud-scale`, `--hud-unit`, `--hud-inset-*`, `.hub-hud-dock-lane`,
+  `.hub-hud-dock`, `--dock-unit`, `--hud-meter-fit`), `GameHud.tsx`
+  (dock lane wrapper, `--native-meter-group-width`, percentage digit sprites),
+  `SkillQuickbar.tsx` (percentage icon sprites through `--skill-icon-unit`,
+  `data-empty`/`data-cooldown`), `input/TouchJoystick.tsx` and
+  `input/touch-joystick.css`, `GameChat.tsx`/`game-chat.css` (`--game-ui-scale`
+  on the chat root), `main-menu.css` and `game-account.css` touch scaling,
+  `HubInventoryUi.tsx`/`hub-inventory.css` (the touch close control on the
+  native inventory and trader surfaces) with `MainMenuScene.tsx` publishing
+  the stage projection as `--game-stage-scale`.
+- Party surface: `party-roster.ts` (pure roster model: `buildPartyRoster`,
+  `compactPartyRosterRows`, `compactPartyRosterRowLimit`, equality helpers)
+  and `PartyRoster.tsx` (compact strip + party pill + member sheet) replace
+  `AllyHud.tsx`; `PlayerProfileCard.tsx`/`player-profile-card.css` hold the
+  card that `HubScene.tsx` and `BoneyardScene.tsx` open for a tapped member
+  (`MainMenuScene.tsx` threads `partyState`, `uiScale`, and `onMessagePlayer`
+  into the Boneyard).
+- Unchanged members: the ally-row derivation and golem rows in `ally-hud.ts`
+  (`deriveGolemAllyHudRows`, `clampAllyHudHealthRatio`), the party protocol
+  (`LocalPartyState`, invitations, join requests, leader routing),
+  `PartySettingsDialog.tsx`/`party-settings.css` as `a10496c2` landed them,
+  the native projection for mouse players, the gameplay input gates, and the
+  chat key/Tab ownership from the 2026-08-22 chat entry.
+- Tests: `party-roster.test.ts` (new, in `test:world-nameplates`),
+  `browser-party-cutover.test.ts` (roster cutover),
+  `party-join-presentation.test.ts` (the Party-settings source contracts read
+  the files that own each element now), `game-fullscreen.test.ts`,
+  `game-chat.test.ts`, `test:hub-ui`, `test:level-up`, `test:parties`.
+
+### Web implementation consequence
+
+- The touch HUD no longer rides the native frame projection. Under
+  `(hover: none) and (pointer: coarse)` the HUD root publishes
+  `--hud-scale = displayScale * uiScale` and `--hud-unit = 1px / displayScale`,
+  so every touch control is authored in screen pixels at `100 %` and grows
+  with the player's UI-scale setting (`75–150 %`) instead of with the window.
+- Joysticks are `120 px` (`104 px` on phones under `720 px` wide) with
+  `52/46 px` knobs, inset `(16px + safe-area) / displayScale`, scaled by
+  `uiScale / displayScale` from their corners; the Hub keeps only the movement
+  joystick per the shared-Hub combat seal, the Boneyard keeps both.
+- The dock (health potion, eight skill slots, XP bar, mana potion) lives in an
+  absolute lane between the joysticks (`16 px + safe-area + 128 units` from
+  each edge, `112` on the small phone) with `container-type: inline-size`;
+  `--dock-unit = min(--hud-unit, 100cqw / 503)` (`/ 384` small) sizes every
+  slot, gap, border, radius, icon, and count badge, so the whole row shrinks
+  uniformly when the lane is narrower than its natural width and never
+  collides with a joystick. Slots are `44 px` (`32 px` small) with dashed
+  empty frames, cooldown sweeps, and a pressed `scale(0.94)`.
+- Skill icons and inventory digits use percentage sprite geometry
+  (`backgroundPosition`/`backgroundSize` as percentages of the atlas) so the
+  same element renders at any size through `--skill-icon-unit` and
+  `--count-unit`; the native `1 px` size is the default for mouse players.
+- The health/mana meters scale by
+  `clamp(1, tan(atan2(free-width, group-width * --hud-scale)), 1.4)` where
+  `free-width` is the viewport minus safe areas, `36 px`, and the
+  `288 px * uiScale` corner-button footprint, so they grow when there is room
+  and yield down to native size when the top row is tight.
+- Party roster: one surface for "who is with me". The compact strip shows
+  party members in the local world (never self) plus friendly golems as ally
+  health bars with element chips; without party authority every other wizard
+  in the world is listed. A `Party N` pill (`[data-party-toggle]`) opens a
+  member sheet listing every member in join order with `You`/`Leader` tags,
+  live health for present members, and `Fallen`/`Elsewhere` status otherwise;
+  Escape, the scrim, or the close button folds it away. The strip keeps
+  `compactPartyRosterRowLimit` rows (`6` mouse, `3` touch, `1` touch above
+  `120 %`) and folds the rest behind a `+N more` button, so a large party
+  never crowds the HUD. Invitations render inside the same strip.
+- Tapping a present member in the strip or sheet opens `PlayerProfileCard`
+  (portrait, discipline, element, gold, registration badge, message/invite
+  actions) in the Hub and the Boneyard; the card blocks scene input while open
+  and closes on Escape.
+- Mouse layout is unchanged: the roster anchors at `11, 60`, the dock and
+  badges stay `display: contents`, and the native projection still owns
+  every HUD rectangle.
+- Smokes: `smoke-game-built-joystick.mjs` now asserts the screen-pixel
+  contract (`120/52 px` joysticks, `44 px` slots and HUD buttons);
+  `smoke-game-runtime.mjs` ally-roster receipts read the roster at `10, 60`
+  on mouse and at `10, 8 + 100 * uiScale` with `presentationScale =
+  uiScale / viewportScale` on touch through `assertAllyRowContract`;
+  `smoke-shared-hub-parties.mjs` opens the party pill, captures
+  `party-sheet.png`, taps a member, and captures `party-member-card.png`.
+- Stale Hub expectations repaired: `smoke-game-built-joystick.mjs` (last
+  touched in `d8ce71f5`) and `smoke-game-devices.mjs` (last touched in
+  `1d87eb97` when this work started) both predate the shared-Hub combat seal (`86d7a704`) and still
+  waited for a Hub primary joystick and a Hub `water` cast; `scripts/validate.sh`
+  never runs either smoke, so `main` stayed green while they could not pass
+  against the sealed Hub. Both now assert the Hub renders no
+  `[data-joystick="primary"]` at `100 %` and `150 %` UI scale, prove that a
+  held walk moves the player while `primarySpellKinds` stays empty, count
+  `9` prevented pointer defaults (eight taps plus one hold on the one lane),
+  and keep the Boneyard's two-lane cast proof unchanged. The built-joystick
+  smoke also still tapped Hub slot `0` and waited for a cast; the Hub seals
+  every slot (`disabled`, label suffix `unavailable in the Hub`), so the tap
+  now proves the seal instead: the slot receives the touch `pointerdown` (it
+  stays hit-testable), starts no cooldown, spawns no secondary ability,
+  leaves `primarySpellKinds` empty, and leaves `playerX`/`playerY` untouched
+  across thirty rendered frames; the quickbar cast proof moved to the
+  Boneyard, where slot `0` is armed and the tap must start a cooldown or a
+  secondary ability.
+- Sealed slots keep their hit area: the first pass of the touch dock made
+  `:disabled` slots `pointer-events: none`, so a tap on a greyed-out Hub slot
+  fell through to the world canvas and walked the player;
+  `smoke-game-built-joystick.mjs`'s `topmost at its center` check caught it on
+  the production bundle. Disabled slots now keep the native dimmed frame
+  (`rgb(226 216 181 / 0.18)` border, `rgb(9 13 18 / 0.32)` fill) and stay
+  hit-testable, exactly as on `main`.
+- `smoke-shared-hub-parties.mjs` (last touched in `762b6067`) predates the
+  seal too: it waited for `POST /api/game/hub` right after `New Game`, but
+  `86d7a704` moved admission behind the post-loadout loading screen, so both
+  pointer modes timed out on the Mac mini before any party assertion ran. The
+  smoke now counts admission requests from `Play` through the discipline
+  reveal and requires zero, then waits for the `201` that the discipline
+  commit produces.
+- Large-party proof: the same smoke then grows the party to eight with five
+  raw wizards admitted through the leader's invitations and asserts what the
+  owner asked for: the strip folds to `compactPartyRosterRowLimit - 1` rows
+  plus `+5 more` on touch (`+2 more` with a mouse), the folded strip stays
+  inside the viewport and clear of the movement joystick, the sheet lists all
+  eight in join order, fits the viewport, and scrolls its last row into view
+  (`party-crowd-strip.png`, `party-crowd-sheet.png`); closing the five
+  sockets must drop the roster back to three with no overflow button.
+- Loader surface receipt is one browser task: `/game` mounts two
+  `NativeLoader` pages back to back (the `Suspense` fallback in `main.tsx`
+  while the lazy `Game` chunk loads, then the game's own in `pages/Game.tsx`).
+  A `MutationObserver` probe on the production bundle timed the swap three
+  times: fallback mounted at `123–135 ms`, replaced at `430–432 ms`, game
+  loader gone at `2.3 s`, and a detached loader's `closest('.game-surface')`
+  is `null`. `smoke-game-built-joystick.mjs`'s `assertGameSurface` used to
+  take a handle in one round-trip and measure it in a second, so a swap in
+  between reported the loader as outside the surface; it now detects and
+  measures inside one `page.waitForFunction` task and names a missing
+  surface separately from a missing node.
+- The member card replaces the sheet: the Mac mini desktop run caught the
+  party sheet still open under a member's Player Card (the smoke requires
+  `0` `Party` dialogs once the card is up). `PartyRoster.openMember` now
+  collapses the sheet before raising `onOpenMember`, so closing the card
+  lands on the compact strip instead of on a sheet covering the world.
+- `activatePlayer` in `smoke-shared-hub-parties.mjs` asserts that
+  `document.elementsFromPoint` at the tap lands inside `.hub-world-renderer`
+  and otherwise names the covering element stack and the `.hub-scene`
+  dataset, so a tap swallowed by a HUD layer fails with its cause instead of
+  a 30 s heading timeout.
+- The crowd meets the admission limiter: the backend's `game-sessions`
+  policy (`Program.cs`) admits six `POST /api/game/hub` per minute per
+  address in a fixed window, and the second Mac mini round hit it with `429`
+  on the fourth crowd wizard (desktop) and on the very first admission of the
+  mobile mode that followed. `enterRawHub` now waits for the next window
+  (polling every `5 s`, at most `80 s`, logging once) instead of failing, and
+  the Mac mini runner sleeps `65 s` between pointer modes; the production
+  limit is unchanged.
+- Scene roots clip; they never scroll. The third Mac mini round's mobile
+  mode failed before any party step: the tap on Cassia landed at
+  `401, -85`, above the viewport, with no HUD layer in the way. The
+  screenshot taken a moment earlier showed the whole scene shifted up about
+  `172 px` with black below it, and `activatePlayer` projects through the
+  canvas rect, so a negative canvas top is the only way to get a negative
+  tap. The cause is layout, not the camera: `.hub-native-frame` keeps its
+  `1947.69 x 900` layout box under the display-scale transform, so on a
+  `844 x 390` viewport it overflows `.hub-scene`, and `overflow: hidden`
+  still makes that box a scroll container that focus (the chat input),
+  `scrollIntoView`, and Playwright's own scroll-into-view before a click can
+  move. A `1600 x 900` desktop viewport has no overflow, which is why the
+  desktop mode never showed it. Fix: `overflow: clip` on `.hub-scene`,
+  `.hub-native-frame`, `.boneyard-scene`, `.boneyard-native-frame`, and the
+  Shell's `main.game-surface` (`overflow-clip`), so none of them can scroll
+  by any means; `game-fullscreen.test.ts` pins the Shell class. Probe
+  receipt: a Playwright probe on the dev game server (`844 x 390`, touch) measured the
+  scroll offsets of the document, `.game-surface`, `.hub-scene`, and
+  `.hub-native-frame` at nine points: Hub ready, chat open, `scrollIntoView`
+  on the chat input, programmatic `scrollTop = 200 / scrollLeft = 300` on the
+  scene, the frame, the surface, and the document, inventory open, and end.
+  The frame reports `389 x 392 px` of overflow past its client box in both
+  trees. With the previous `overflow: hidden` re-injected, the programmatic
+  frame scroll lands at `[300, 200]` and the canvas top at `-87 px` — the
+  round-three tap at `-85` reproduced; on this tree every offset stays
+  `[0, 0]` at every point with an empty page-error list
+  (`scroll-probe-after.log`, `scroll-probe-before.log`). The solo dev Hub
+  has no party service, so the party-sheet point is covered by the Mac mini
+  mobile run instead (scroll offsets all `0` with the sheet open).
+- The parties smoke explains its own failures now: `describeHubState`
+  reports the strip's `data-ally-count` and rows, the sheet's rows, the
+  world's player count against the wizards sharing the viewer's region
+  (`playerScreenPositions` only holds same-region wizards), every open
+  dialog, and the scroll offsets of the document, surface, scene, and frame;
+  `waitForAllyCount` and the `activatePlayer` coverage check embed it in
+  their messages, and `captureFailure` writes `failure-<wizard>.png/.json`
+  for every browser wizard when the run throws. Desktop crowd finding:
+  the fourth Mac mini round's desktop mode ended with the strip stuck at `5`
+  allies of `7`, `partySize 8`, `playerCount 8`, and only `6` wizards in the
+  viewer's region (`failure-Aurelia.json`): two crowd wizards had left the
+  Courtyard without any input. Every wizard spawns on the one Courtyard spawn
+  point (`950.64, 164.04`) and the Office doorway trigger
+  (`881.5–1024.5, 115.5`) lies `48 px` north of it. When Basil walks,
+  `resolveActorMotion` (the stock circle-response solver) scatters the stacked
+  bodies, and `stepParticipantTransition` opened the door for any body whose
+  circle touched the trigger, so idle wizards shoved north were carried into
+  the Office and counted `away`. A headless replay of eight wizards with
+  Basil walking right for `30` ticks reproduces the shove. Fixed at the rule,
+  not the spawn: `hubPortalEnteredBy` keeps the recovered contact geometry
+  (`hubPortalAt` is unchanged) and adds the shared Hub's own condition — the
+  wizard's planned motion this tick must have a positive component along the
+  trigger's inward normal (`hubPortalInwardNormal`, the trigger normal signed
+  toward the scripted target) — so a shove onto the threshold, standing on
+  it, or a step away never opens a door; `hub-world.ts` hands it the plan's
+  `delta`, never the solver displacement. `hub-regions.test.ts` walks every
+  Courtyard and private door inward (a diagonal door's first tick from rest
+  sits exactly on the native movement threshold, so `walkIntoDoor` allows a
+  second tick), proves the Office door ignores five idle ticks and an outward
+  step while `hubPortalAt` still reports contact, and replays the eight-wizard
+  shove for `200` ticks asserting at least one wizard was pushed onto a
+  trigger and all eight stay in the Courtyard (`18/18`). The fifth round's
+  desktop mode then reached `7` allies with all eight wizards on the fountain
+  terrace. The mobile mode of that fourth round failed on
+  `'+5 MORE' !== '+5 more'`: Playwright's `innerText` reflects the touch
+  stylesheet's `text-transform: uppercase`, so the smoke reads `textContent`.
+- Native surfaces get a touch close control. The stock inventory and trader
+  screens (`a81418c1`) paint on the `1600 x 900` stage behind a curtain that
+  covers the whole HUD, and since `90156fd9` (native inventory parity) the
+  inventory screen has no `Done` action: it closes from the keyboard, which a
+  phone does not have, so a touch player who opened the Backpack had no way
+  back to the Hub. `HubInventoryUi.tsx` renders `.hub-native-ui-close`
+  (`Close inventory`, or `Leave <trader>` on a dialogue) inside the stage;
+  `MainMenuScene.tsx` publishes the stage projection as `--game-stage-scale`
+  and every length of the control divides by it (`40 px` target `10 px` in
+  from the stage's top-right corner, `14 px` glyph, `1 px` border), so it
+  keeps real screen pixels while the stage scales. It renders only under
+  `(hover: none) and (pointer: coarse)`; the mouse stage is untouched.
+- `smoke-game-built-joystick.mjs` (`d8ce71f5`, 11:57 on 2026-08-21) still
+  clicked the inventory's `Done`, which `90156fd9` removed at 15:04 the same
+  day, so the smoke has not been able to pass on `main` since. It now closes
+  the Backpack through the touch control and asserts the counter-scaled
+  `40 x 40 px` target; the mobile evidence capture does the same on every
+  touch preset. The same smoke's joystick receipt (eight taps and one hold,
+  nine prevented pointer defaults) counted `8` on a box at load `37`: the
+  first tap followed the `Close skills` click with no wait for the `Skills`
+  dialog (`inset: 0`) to unmount. The smoke waits for the dialog to detach
+  before tapping and records every `pointerdown` that lands outside
+  `[data-joystick]` with its target, so a missed tap names what caught it.
+- World taps resolve to the frontmost wizard. The seventh Mac mini round's
+  mobile mode opened the wrong Player Card for Daria: a raw wizard spawns on
+  the pile standing at the spawn point, and `HubScene` resolves a world tap
+  through the same hit box the renderer draws, picking the wizard drawn in
+  front (the greatest `y`), so the tap landed on a neighbour. The parties
+  smoke now walks the outsider out in front of everyone in its region
+  (`stepInFront`: `12 px` of `y` clearance, proven from its own snapshot)
+  before tapping, taps the feet anchor the scene hit-tests instead of `48 px`
+  left of it, and `waitForProfileCard` checks the card's name.
+- `smoke-game-runtime.mjs` required a `player-character-head-<element>`
+  texture for all five elements; `5c5e7b79` packed those sheets into
+  `player-character-atlas-<page>.png`, so the assertion could no longer hold.
+  It now reads the pages the generator declared
+  (`player-character-atlas.generated.ts`) and requires each one among the Hub
+  textures. Its mouse ally-roster receipt reads the roster at `y = 60` with
+  `presentationScale 1` and no longer pins the retired `50 x 5 px` bar
+  geometry.
+- `main` moved thirty-seven commits while this work was in flight
+  (`05c73e43..52146891`); the branch was rebased onto `ba950926`, `b0f62d50`,
+  `a10496c2`, `db3c1f4f`, and `52146891` in turn, as one commit each time. `5c5e7b79` (physical
+  iPhone Boneyard performance) replaced the per-layer `playerCharacter`
+  sprite sheets with the packed player atlas (`PLAYER_CHARACTER_SHEETS` plus
+  `playerCharacterAtlasCssFrame`) and repaired the same Hub expectations in
+  `smoke-game-devices.mjs` (no Hub primary joystick, `hubDisabled`, a
+  Boneyard concurrent-hold receipt): `PartyRoster.tsx` and
+  `PlayerProfileCard.tsx` render their element chips and the portrait through
+  the atlas frame (the `170 x 170` layer box and its CSS transform are
+  unchanged; the trimmed frame is painted inside it at its trim offset, the
+  same markup `HubScene.tsx` and `HallOfFameScene.tsx` use on `main`),
+  `AllyHud.tsx` stays deleted, `HubScene.tsx` drops the portrait import it no
+  longer uses, and the devices smoke keeps both sides: `main`'s Boneyard
+  concurrent-hold receipt and this branch's movement-joystick/map clearance
+  (`rectsOverlap` restored, `main` had removed it with the primary-joystick
+  checks) and sealed-walk proof. `a10496c2` (private Colleges and Party ID
+  joining) added `PartySettingsDialog` — Party ID with copy and regenerate,
+  `PUBLIC`/`INVITE ONLY`/`PRIVATE` visibility, join requests, kick, leave —
+  opened from a `Party settings` cog in the old `hub-party-panel` that this
+  branch deletes, plus `partyActionError`, `sessionKind`, and the Host →
+  Leader rename. The roster carries all of it: the cog sits in the party
+  strip beside the `Party N` pill (`26 px` mouse, `36 px` touch) so a leader
+  reads and shares the Party ID without opening the sheet; `HubScene` still
+  decides who gets it (the leader, any party larger than one, or a private
+  College) and mounts the dialog exactly as `main` does; a rejected action
+  answers under the pills as `.hub-party-error` (`role="alert"`, hidden while
+  the dialog shows its own); member tags read `You`/`Leader`; the Player Card
+  invite action is leader-only. The merged parties smoke runs `main`'s
+  settings step (open the cog, read the Party ID, `REGENERATE`, `CLOSE`)
+  before the roster steps. `party-join-presentation.test.ts`'s two source
+  contracts read the files that own each element now (roster: cog and alert;
+  card: invite action; hub: the gating) and `party-roster.test.ts`'s fixture
+  carries the new `PartyMembership` fields.
+- `main`'s settings step reads a server-owned radio back synchronously.
+  `partySettings.getByLabel('PUBLIC').check()` clicks the radio and asserts
+  `checked` at once, but the radio is controlled by the host's party state
+  (`checked={state.party.visibility === visibility}`): the click sends
+  `client-party-settings`, the host applies it on receipt
+  (`setPartyVisibility`) and echoes `server-party-state`, and React restores
+  `PRIVATE` the moment the click handler returns, so the read-back passes
+  only when the echo beats Playwright. Both Mac mini pointer modes failed
+  there the same way (`Clicking the checkbox did not change its state`;
+  `failure-Aurelia.png` shows the dialog with `PRIVATE` still selected and no
+  dialog error). The step now asserts the fresh party starts `PRIVATE`
+  (`membership()` in `party-system.ts`), clicks `PUBLIC`, and waits for the
+  echoed `checked` state (`15 s`, the smoke's other waits) before
+  regenerating the Party ID. The dialog itself is unchanged; making the
+  radio optimistic is a `main`-side call.
+- The Cassia tap is the Daria tap. With the settings step passing, both Mac
+  mini pointer modes reached the first world tap: Cassia (a raw wizard) spawns
+  on the pile where Aurelia and Basil already stand, and
+  `selectHubPlayerAtPoint` (hit box `±45 x`, `-110..+30 y`, frontmost wizard
+  wins) resolved the tap at her feet to Basil (`dialogs: ["Basil"]`,
+  positions `39 px` apart in `x` and `31 px` in `y`). `stepInFront` — the
+  seventh-round repair for Daria — was never applied to Cassia because that
+  tap had passed on the pile's earlier scatter. Every raw wizard the browser
+  taps now steps in front first, `stepInFront` waits for the wizard's first
+  Hub snapshot instead of asserting one, and `activatePlayer` predicts the
+  tap through the product's own `selectHubPlayerAtPoint` (imported from
+  `src/game/hub-player-selection.ts`, fed the renderer's `playerPositions`
+  and same-region set) and fails by name before tapping.
+- `main`'s smoke invites through a member's card. After the tap opened
+  Cassia's card on the phone run, `Invite to Party` never appeared: Aurelia
+  accepted Basil's invitation, so Basil leads, and `a10496c2` made the card's
+  invite leader-only (`HubScene`: `leaderPlayerId === playerId`, matching the
+  host's `invitePartyPlayer` `not-leader` rejection) while its smoke kept the
+  older step where Aurelia invites Cassia (lines 102–106 on `main`); that
+  step cannot pass on `main` and `scripts/validate.sh all` never runs the
+  parties smoke, so nothing caught it. The branch's step proves the gate (the
+  card offers `Message` and no invite) and has the leader invite Cassia
+  (`host.invitePlayer`, inviter `Basil`).
+
+### Validation contract
+
+- `tsc` on both configs, lint, and the production build inside the game
+  bundle budget; `test:hub-ui`, `test:world-nameplates` (with
+  `party-roster.test.ts`), `test:level-up`, `test:parties`,
+  `game-fullscreen.test.ts`, `game-chat.test.ts`, and
+  `browser-party-cutover.test.ts` green.
+- Real Chrome captures on the seven presets and the UI-scale sweeps with empty
+  error lists and no rectangle overlaps; mouse parity rectangles unchanged.
+- `tools/smoke-game-built-joystick.mjs` and `tools/smoke-game-runtime.mjs`
+  against the production bundle (`vite preview` + `run-game-host.ts`),
+  `tools/smoke-game-devices.mjs` against the dev game server, and the
+  two-client `tools/smoke-shared-hub-parties.mjs` journey in desktop and
+  mobile pointer modes on the Mac mini against a real supervisor, backend, and
+  production bundle with empty page/console error lists, including the
+  eight-member crowd captures; every launched process disposed
+  (`leftovers=0`).
+
+### Implementation validation receipt
+
+- Unit coverage on the final tree: `tsc -p tsconfig.test.json` clean; the
+  related suites pass `98/98` (touch dock, party roster, ally HUD, Player
+  Card, hub regions `18/18`, world nameplates `24/24`, Hub UI `21/21`, level-up
+  `11/11`, parties `42/42`); `oxlint` plus the game-boundary check pass with
+  the pre-existing `react/only-export-components` warnings and nothing new.
+  `bash scripts/validate.sh all` from the repo root exits `0` on the final tree
+  (`2m32s`: backend contract tests, the frontend unit suites, lint, the
+  production build inside the bundle budget, the production media policy).
+- Production build: `tsc -b`, `vite build`, the game-host build, and the
+  bundle budget pass; the final Game entry is `414,087` raw / `116,007` gzip
+  bytes against the `131,072` gzip budget.
+- Smoke runners only believe their own servers. The scratch runner for the
+  built smokes accepted whoever answered on port `4181` — another worktree's
+  dev server was listening there — and measured that tree's `190 px`
+  joysticks; the Mac mini runner did the same on port `5210`, where another
+  backend answered `/game` with `200` while this run's own backend had died on
+  `address already in use`, and the parties smoke failed on a `503` from a
+  Hub that was never this run's. Both runners now require their ports free
+  before starting, take their ports from parameters, and after the readiness
+  wait require the listening socket to belong to their own process; the Mac
+  update rebuilds the backend beside the frontend, since the parties run
+  serves `bin/Debug/net10.0/Server.dll`.
+- Scroll receipt: `probe-scroll.mjs` against the production bundle on a
+  844 by 390 touch context measured nine points (Hub ready, chat open, chat
+  input `scrollIntoView`, Escape, `.hub-scene` `scrollTop=200`,
+  `.hub-native-frame` `scrollTop=200`/`scrollLeft=300`, surface and document
+  `scrollTop=200`, Backpack open, Backpack closed). With the clip roots every
+  scroll offset stays `[0,0]` while the frame still reports `[389,392]` px of
+  overflow past its client box; with `overflow:hidden` reinjected the same
+  frame step lands at `[300,200]` and the canvas top at `-87` px, which is the
+  reported tap miss. Both runs end with empty error lists.
+- The compact strip folds to the space it has, not to a row count. Round 8d on
+  the Mac mini (844 by 390 touch) showed the eight-member strip's third row
+  reaching the movement joystick by 2 px: `compactPartyRosterRowLimit` kept
+  three rows on touch whatever the screen's height. The strip's box now ends
+  8 px above the joystick (touch: `24px + safe-area + 120px * UI scale`, or
+  `104px` under 720 px wide, over the display scale, mirroring
+  touch-joystick.css) and above the chat (mouse: `364px` over the display
+  scale, mirroring game-chat.css); a hidden, inert ruler row inside the column
+  supplies the real row height, and `compactPartyRosterRowsThatFit` (unit
+  tested) turns the box height, the pills/error/invitation heights, and the
+  gaps into the rows that stack; the cap stays the touch/mouse row limit. On
+  the phone that is `2` rows of room, so the crowd shows one row and
+  `+6 more`; a three-member party still shows both allies. The roster
+  publishes `data-party-rows-fit`, and the parties smoke recomputes the fit
+  from the joystick's own rectangle and requires the two to agree (desktop: the
+  strip must not reach the chat).
+- The parties smoke's step-clear walker follows the product's hit test. The
+  tapped raw wizard walks until `selectHubPlayerAtPoint` would pick it at its
+  own feet (every same-region wizard behind it by 12 px or beyond the 45 px
+  selection half-width), not until every wizard is behind it: round 8d's
+  desktop run walked Cassia into the courtyard's bottom wall 1.4 px short of
+  a margin she could never reach. The walk leaves the pile sideways as well as
+  forward, turns to the flat walk each way when ten snapshots show no motion,
+  and fails by name with every position after 45 s.
+- The built-joystick smoke's Boneyard cast wait explains itself: when the held
+  primary joystick casts nothing in 10 s it records what sits under the touch
+  point, the joystick's active state and knob transform, whether the renderer
+  still ticks (frames in one second), the scene dataset, and a screenshot in
+  `SDR_JOYSTICK_FAILURE_DIR`, so a layout that swallowed the touch reads
+  differently from a host that never answered.
+- Mac mini parties journey (round 8f, worktree at the final tree; frontend
+  production bundle and backend Debug build from it; supervisor `5322`,
+  backend `5310`, `protocol solomon-dark/54`): desktop and mobile pointer
+  modes both exit `0` with empty console and page error lists, including the
+  eight-member crowd (desktop strip `5` rows + `+2 more` above the chat;
+  phone strip `1` row + `+6 more` above the joystick, the fit recomputed from
+  the joystick's rectangle), the sheet order, the shrink-back to three, the
+  member card, PUBLIC visibility, the leader's invite, and the crowd step
+  walker; `leftovers=0` (backend `83741`, supervisor `83740` disposed). Rounds
+  8d (`stepInFront` wall, strip/joystick overlap) and 8e (the walker's
+  constants sat below the smoke's top-level flow: TDZ on both modes) are the
+  failed runs that led here. Captures fetched through `ssh cat` with matching
+  SHA-256s: `hub-nameplates`, `party-crowd-strip`, `party-crowd-sheet`,
+  `party-member-card`, `party-sheet`, `party-invitation-deny` per mode.
+- Main's built-joystick and devices smokes cannot pass on main, and nothing
+  runs them. `a1463d9b Fix native cooldown and Dig combat admission` made
+  `game-simulation.ts` admit combat input in the Boneyard only while
+  `isBoneyardPlayerCombatEnabled(encounter)` holds (`runEventId > 0`: Solomon
+  has run), sealing it through `sealPlayerCombatInput` before that, and
+  `86d7a704 Seal Hub combat and defer shared admission` removed the Hub's
+  primary joystick (`match-loading-presentation.test.ts` asserts the Hub lane
+  count is `0`). Neither commit touched `tools/smoke-game-built-joystick.mjs`
+  (last edited in `d8ce71f5`; it still expects a Hub primary joystick that
+  casts Water and a Boneyard cast right after entry) or
+  `tools/smoke-game-devices.mjs` (last edited in `5c5e7b79`; it asserts the
+  Hub count is `0` but expects a Boneyard cast right after entry). Only
+  `package.json` names `smoke:game:built-joystick` and `smoke:game:devices`;
+  `scripts/validate.sh`, `.github`, and `frontend/scripts` never run them, so
+  the regression had no gate to trip. Mac built round r2 on this branch found
+  it: both smokes held the primary joystick for 10 s over a scene that
+  published `data-combat-enabled="false"` and `data-solomon-phase="digging"`
+  with the joystick active and the renderer at 75 frames per second, which is
+  the seal working, not a layout swallowing the touch.
+- Touch smokes now earn admission the way a player does. The shared helper
+  `tools/smoke-boneyard-combat-admission.mjs` first proves the seal (a held
+  primary joystick over the digging encounter stays `data-active="true"`,
+  `data-combat-enabled="false"`, and lists no primary spell kind for 20 settled
+  samples), then crosses the entry gate, walks to Solomon, and waits for
+  admission, every wait with two exits and a receipt on the deadline exit.
+  `walkToSolomonWithJoystick` drives the movement joystick toward
+  `data-solomon-x/y` in 150 ms pulses at full deflection (0.4 of the base:
+  the product clamps to full speed from 0.34) with the runtime smoke's
+  wall-follow (stalled four pulses: follow the wall, flip the side after 50
+  pulses, clear when 30 px nearer than the blocking distance) until the
+  encounter leaves `digging` (contact, or a 120 s deadline that names the
+  start, last, and count of receipts); `waitForBoneyardCombatAdmission`
+  waits for `data-combat-enabled="true"` and requires
+  `data-solomon-run-event-id >= 1` (30 s, last receipt on the deadline).
+- The walker alone never reached Solomon, because the arena is fenced and
+  the spawn is outside it. Boneyard layouts are random per run
+  (`default-random`: twelve native layouts, thirteen Solomon candidates), the
+  player spawns outside the fenced arena, and the entry gate is physical
+  (`core-kernels/boneyard-gate.ts`: two leaves that head-on contact pushes
+  open through 60 degrees). Main's runtime smoke knows this: `crossEntryGate`
+  aligns with the gate and pushes through on the keyboard before
+  `walkToSolomon`, but both live only under `SDR_GAME_SMOKE_PROVE_WAVES=1`,
+  which no runner sets (`encounterReceipt: null` in every Mac round). On the
+  Mac mini the wall-follow stalled against the fence and its east-reset bias
+  pinned the player at the fence corner for 728 pulses (r3: stuck at
+  `(1289.97, 280.35)` with Solomon at `(1216.46, 1260.42)`).
+  `crossEntryGateWithJoystick` ports the crossing to the movement joystick:
+  it reads the gate leaves from `data-gate-state` (`id:side:tipX,tipY|…`,
+  the gate centre is the mean of a leaf pair's tips), picks the nearest gate,
+  aligns the player's x within 3 px, pushes through the gate's y plus 35 px,
+  and then waits for the gate state to change (the leaves swung). Every
+  travel deadline derives from the distance at the player's 100 px/s steady
+  speed (`2 x travel + 3 s`, never below 8 s for the crossing; 5 s for the
+  swing), and the deadline exit reports the player's receipt. Both touch
+  smokes call it between the seal proof and the walk.
+- Real admission is a live wave, and a lone player at the dig dies in it.
+  Once Solomon runs (`data-solomon-run-event-id` 1, `solomon-laugh-1`) the
+  opening wave spawns ten skeletons around the dig and `solomon-get-him-boys`
+  sets them on the player; the old sealed smoke never faced a consequence
+  after its cast, the admitted one does. `player-combat.ts` takes a lethal
+  hit to `dying` (three death frames, then `spectating`); `playerCanCast`
+  and `playerCanAcceptInput` are `alive` only, and `game-client-session.ts`
+  sends `STOPPED_INPUT` for a player who is not alive; a solo death ends the
+  run (`game-run.ts`: `game-over`, the `GameOverOverlay` status fades in over
+  40 ticks, auto-accepts at tick 1000, fades out over 400, and the scene
+  leaves the Boneyard). Mac built r4 hit this first: the built-joystick smoke
+  earned admission, cast Water and the quickbar slot, and then waited 30 s
+  for `Open inventory` while the run ended under it (the locator never
+  matched, so the HUD was already gone). The local r3 run caught the earlier
+  race with the new failure capture: the quickbar tap came after the player
+  was already down (`Health 0 of 100`, ten live enemies, `wavePhase:
+  opening`, `solomon-get-him-boys`), so the cast was refused by
+  `playerCanCast`, not by the HUD. The built-joystick smoke now proves the
+  quickbar roster and the Inventory/Skills dialogs while the arena is still
+  sealed (they do not depend on combat; each curtain is waited detached
+  before the crossing, since an open modal blocks gameplay input; the native
+  inventory closes from the `Close inventory` stage control, asserted at a
+  real 40 px under the Boneyard's own stage scale, because the `Done` button
+  main's sequence still asked for does not exist on the native screen, which
+  local r4 found the moment the dialog step ran ahead of the wave), crosses
+  the gate,
+  walks, waits for admission, and casts at once: the first quickbar slot
+  (Ring of Ice around the player), then the primary stick, each receipted
+  with the HUD's `Health x of y` meter at the cast, with a health timeline
+  (every change of the meter with the live enemy count, from the walk's end
+  until the Water cast released) in the receipt line; the cast failure
+  reports carry the meter too, so a death race names itself. The devices
+  smoke keeps main's post-admission sequence (the primary attack, then the
+  concurrent hold: its 10 s waits are deadlines, and the sequence itself
+  takes a few seconds), inside the 8 s first-hit margin the built-joystick
+  timeline measured; its Mac passes are the receipts. The helper and both
+  smokes pass `oxlint`.
+- Mac mini built/runtime/devices rounds (worktree at the tools-only tree,
+  preview `--host 127.0.0.1 --port 4310 --strictPort`, dev `5398`, Mac load
+  between 19 and 31 throughout from codex acceptance worktrees; every round
+  disposed its own PIDs, `leftovers=0`): r2 and r3 failed in the walker
+  against the fence (above); the runtime smoke (keyboard, main's own
+  crossing) passed in r3 and r4 with `status: ok`, a `gateCrossing` receipt
+  (r4: aligned at x `1026.67`, south, y `150 -> 328.76` past the gate at
+  `293.74`), `encounterReceipt: null` (`PROVE_WAVES` unset), and zero console
+  or page errors on host, client, and third browser; the devices smoke passed
+  in r4 with the joystick crossing (gate at `(359.52, 298.96)`, aligned x
+  `360.80`, crossed y `337.71`), Solomon contact after 123 pulses (20.8 s) at
+  `(884.31, 2151.84)`, admission at run event 1 and voice event 2, the
+  primary attack and the concurrent hold after it, and the Hub touch
+  lifecycle including the post-blur gesture (`> 10 px` at line 565); the
+  built-joystick smoke passed the gate, the walk, admission, the Water hold
+  and the quickbar cast in r4 and then lost the HUD to the run's end (above).
+- Mac r5 (the final tools-only tree, bundle `mobile-ui-round8i`, Mac load
+  `17.42` at launch and `4.18` at the end as the codex worktrees went quiet;
+  the whole round took 3 minutes, `leftovers=0`): all three smokes exit `0`.
+  The built-joystick smoke crossed the gate at `(908.68, 286.49)` (aligned x
+  `909.22`, south, y `150 -> 325.71`), reached Solomon after 113 joystick
+  samples (18.8 s) at `(855.29, 1201.57)` with the encounter at `turning`,
+  was admitted at run event 1 / voice event 2 at `Health 50 of 50` with
+  Solomon `225.11` px away (`escaping`), cast the quickbar slot and the
+  Boneyard Water hold both at `Health 50 of 50`, and stopped the health
+  watch after `7,735` ms with no change recorded (`Health 50 of 50`, 10
+  enemies live), which matches the local r5 timeline where the first hit
+  landed at `+8.08` s. The runtime smoke passed with `status: ok`, the
+  keyboard gate crossing (aligned x `1336.00`, south, y `150 -> 328.82` past
+  the gate at `292.84`), `encounterReceipt: null`, and zero console or page
+  errors on host, client, and third browser. The devices smoke passed with
+  the joystick crossing (gate `(1028.47, 284.94)`, aligned x `1029.33`,
+  crossed y `324.53`), Solomon contact after 62 pulses (10.07 s) at
+  `(546.45, 1155.72)`, admission at run event 1 / voice event 2 with Solomon
+  `217.92` px away, the primary attack and the concurrent hold, a mobile
+  touch distance of `64.83` px, and the post-blur gesture reuse settling at x
+  `986.67`. Its closing Boneyard screenshot shows the player overrun at the
+  dig by the opening wave with the health bar empty: the smoke's assertions
+  all land before that, and the picture is the solo-death truth recorded
+  above, not a failure. Screenshots and the three logs are under
+  `.claude-evidence/built-20260822-r5` on the Mac worktree.
+- Main's devices smoke carries a load-sensitive assertion at line 565: after
+  a synthetic `blur` it holds the joystick 300 ms and requires the player to
+  have moved more than 10 px (nominal 26 px at 100 px/s once the hold is
+  live). Mac r2 and r3 failed it while the box sat at load 19 to 31; r4
+  passed the same line at load 27. A local probe that replays the Hub
+  lifecycle (plain, lost-capture, blur, reuse gestures with the joystick's
+  node identity and the pointer event log) moved `33.36 px` on this tree and
+  `40.94 px` on the base tree after the blur with the same joystick node
+  retained and clean `pointerup` ownership, and `TouchJoystick.tsx` differs
+  from main by four lines (`data-active`). This is main's smoke racing the
+  box, not a regression; the deadline was not widened. Run logs now record
+  `uptime` before and after each Mac round so a busy-box failure reads as
+  one.
+- Local built/runtime/devices smokes: the workstation sat at load 84 to 112
+  under concurrent codex batteries while the product tree was final, and
+  every local attempt of the three smokes timed out on its first wait with no
+  product signal; those runs are not kept as receipts. Later local rounds at
+  load 32 (r2) reproduced the fence stall in the built-joystick smoke, failed
+  the runtime smoke inside main's own `crossEntryGate` 8 s wait, and failed
+  the devices smoke's 850 ms Hub hold (`950.64 -> 973.24`, needs `> 40 px`)
+  at a simulation running at a third of real time; an earlier local devices
+  run (r1) failed under the dev server's HMR storm from the rebase. Local r3
+  (load 6 to 16, the joystick crossing in place) reached the live wave and
+  caught the quickbar death race above; local r4 ran the reordered smoke:
+  it stopped on the first dialog step (load 13 to 20), because the native
+  inventory screen has no `Done` button (above). Local r5 (load 16 to 14,
+  exit 0, `leftovers=0`) passed end to end: the dialogs while sealed, the
+  gate at `(1029.23, 307.17)` crossed south (aligned x `1075.74`, y `150 ->
+  351.87`), Solomon contact after 22 pulses (12.2 s) at `(548.70, 1149.08)`,
+  admission at run event 1 and voice event 2 at `Health 50 of 50`, the
+  quickbar cast at `47.02 of 50` and the Water cast at `47.07 of 50`. The
+  health timeline recorded the first hit 8.1 s after the walk released (one
+  hit, `50 -> 47.01`, then the native regeneration ticking it back by about
+  0.01 per 100 ms) and ended at `47.40 of 50` with ten live enemies after
+  11.8 s of watching, 42 meter changes in all: the casts have an 8 s margin
+  when they follow admission at once, and none when a 10 s wait sits
+  between them, which is the r3 race.
+  The Mac mini rounds are the receipts for the production bundle; the first
+  Mac attempt (r1) failed before any smoke because `vite preview` bound
+  `localhost` only (IPv6 first on macOS) while the runner, the smoke URL, and
+  the host's allowed origin use `127.0.0.1`; the runner now passes
+  `--host 127.0.0.1`.
+- `origin/main` moved again while the smokes ran: `8b9129f4 Mirror native
+  enemy steering and opening ambush` and `fdcf3f2a Record enemy path and
+  ambush acceptance` landed after `52146891`. The branch stays on `52146891`
+  (a diff against `origin/main` now shows main's new core-server work as
+  removals, which is drift, not this branch); the landing seat rebases.
+- Base chain after `a10496c2`: `main` landed six more commits (`4cc85192`
+  save games before leaving gameplay, `d2ed2c31`, `aa912034`, `d8c9d147`,
+  `db3c1f4f` additive FadeScale painters, `52146891` native enemy status
+  lifecycles). The rebase onto `db3c1f4f` had one conflict, the import block
+  of `core-server/hub-regions.test.ts` (`main` added
+  `isHubRegionPathTraversable`, this branch `hubPortalInwardNormal`; both
+  kept); the rebase onto `52146891` had none (the only shared file is
+  `frontend/package.json`). The commit's footprint is the same on every base:
+  `37` code files, `+4216 / -1336` against `52146891`, plus this entry.
+- Publication state: branch only. Nothing was pushed; validation and landing
+  stay with the landing seat.

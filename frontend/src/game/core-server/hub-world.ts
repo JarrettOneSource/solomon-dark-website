@@ -11,7 +11,7 @@ import {
   beginHubTransition,
   createHubParticipantState,
   hubIncomingPlacement,
-  hubPortalAt,
+  hubPortalEnteredBy,
   isHubRegionTraversable,
   moveWithHubRegionCollisionState,
   planHubScriptedMovement,
@@ -323,7 +323,7 @@ export function stepHubWorldTick(
   for (const [playerId, participant] of Object.entries(participants)) {
     const player = nextPlayers[playerId]
     if (!player) continue
-    const stepped = stepParticipantTransition(participant, player)
+    const stepped = stepParticipantTransition(participant, player, playerPlans.get(playerId)!)
     nextParticipants[playerId] = stepped.participant
     nextPlayers[playerId] = stepped.player
   }
@@ -354,9 +354,12 @@ export function stepHubWorldTick(
 function stepParticipantTransition(
   participant: HubParticipantState,
   player: PlayerCharacterState,
+  plan: PlayerCharacterMovementPlan,
 ): { participant: HubParticipantState; player: PlayerCharacterState } {
   if (!participant.transition) {
-    const portal = hubPortalAt(participant.region, player.position)
+    // the plan's delta is the wizard's own motion this tick; the solver's
+    // displacement (another body shoving it) never opens a door
+    const portal = hubPortalEnteredBy(participant.region, player.position, plan.delta)
     return {
       participant: portal
         ? beginHubTransition(participant, portal, player.position)

@@ -11,6 +11,8 @@ const moddedPlay = await readFile(new URL('./ModdedPlayDialog.tsx', import.meta.
 const partySettings = await readFile(new URL('./PartySettingsDialog.tsx', import.meta.url), 'utf8')
 const partyCss = await readFile(new URL('./party-settings.css', import.meta.url), 'utf8')
 const joinCss = await readFile(new URL('./join-party.css', import.meta.url), 'utf8')
+const roster = await readFile(new URL('./PartyRoster.tsx', import.meta.url), 'utf8')
+const playerCard = await readFile(new URL('./PlayerProfileCard.tsx', import.meta.url), 'utf8')
 
 test('Play owns a dedicated mobile Party ID and directory wrapper', () => {
   assert.match(menu, /action="join-party" accessibleLabel="Join party"/)
@@ -60,12 +62,16 @@ test('party cog owns Party ID, visibility, guest requests, copy, rotation, leave
   assert.match(partySettings, /LEAVE PARTY/)
   assert.match(partySettings, />KICK</)
   assert.match(partySettings, /\{leader \? \([\s\S]*<h3>PARTY ID<\/h3>[\s\S]*\) : null\}/)
-  assert.match(hub, /party\.memberPlayerIds\.length > 1[\s\S]*aria-label="Party settings"/)
+  // the hub decides who gets the cog; the roster strip renders it beside the
+  // Party toggle so it stays one tap away on every screen size
+  assert.match(hub, /party\.memberPlayerIds\.length > 1[\s\S]*setPartySettingsOpen\(true\)/)
+  assert.match(roster, /onOpenPartySettings && \([\s\S]*aria-label="Party settings"/)
   assert.match(partyCss, /min-height:\s*44px/)
 })
 
 test('only the current leader receives the Player Card invite action', () => {
-  assert.match(hub, /partyState\.party\.leaderPlayerId === playerId[\s\S]*!alreadyTogether[\s\S]*Invite to Party/)
+  assert.match(hub, /partyState\.party\.leaderPlayerId === playerId[\s\S]*!alreadyTogether/)
+  assert.match(playerCard, /\{canInvite && onInvite && \([\s\S]*Invite to Party/)
   assert.match(menu, /session\.onPartyAction/)
-  assert.match(hub, /className="hub-party-error" role="alert"/)
+  assert.match(roster, /className="hub-party-error" role="alert"/)
 })

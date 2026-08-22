@@ -395,7 +395,8 @@
 
 @media (hover: none) and (pointer: coarse) {
   .game-chat {
-    top: calc(env(safe-area-inset-top, 0px) + 38px);
+    /* under the 44px HUD button row (8px inset + 8px gap), following UI scale */
+    top: calc(env(safe-area-inset-top, 0px) + 16px + 44px * var(--game-ui-scale, 1));
     right: auto;
     bottom: auto;
     left: 10px;

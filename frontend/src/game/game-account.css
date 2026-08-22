@@ -23,3 +23,13 @@
   left: 11px;
   max-width: 180px;
 }
+
+@media (hover: none) and (pointer: coarse) {
+  /* Touch HUD: under the FPS/ping readout, right of the chat button. */
+  .game-account-name-hud {
+    top: calc(var(--hud-inset-top, 8px) + 70 * var(--hud-unit, 1px));
+    left: calc(var(--hud-inset-left, 10px) + 50 * var(--hud-unit, 1px));
+    max-width: calc(150 * var(--hud-unit, 1px));
+    font-size: calc(10.5 * var(--hud-unit, 1px));
+  }
+}

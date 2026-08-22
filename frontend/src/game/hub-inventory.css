@@ -70,6 +70,48 @@
   z-index: 2;
 }
 
+/* Touch close for the native surfaces: the stage is a scaled 1600x900 box, so
+   every length divides by the projection scale to land at real screen pixels
+   (a 40px target 10px in from the stage's top-right corner). */
+.hub-native-ui-close {
+  position: absolute;
+  z-index: 3;
+  top: calc(10px / var(--game-stage-scale, 1));
+  right: calc(10px / var(--game-stage-scale, 1));
+  display: none;
+  width: calc(40px / var(--game-stage-scale, 1));
+  height: calc(40px / var(--game-stage-scale, 1));
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  border: calc(1px / var(--game-stage-scale, 1)) solid rgb(202 168 84 / 0.55);
+  border-radius: calc(4px / var(--game-stage-scale, 1));
+  background: linear-gradient(180deg, #3a2e17, #171208);
+  color: #ead293;
+  box-shadow: 0 calc(2px / var(--game-stage-scale, 1)) calc(8px / var(--game-stage-scale, 1)) rgb(0 0 0 / 0.6);
+  cursor: pointer;
+  place-items: center;
+  touch-action: manipulation;
+}
+
+.hub-native-ui-close svg {
+  width: calc(14px / var(--game-stage-scale, 1));
+  height: calc(14px / var(--game-stage-scale, 1));
+  fill: none;
+  stroke: currentcolor;
+  stroke-linecap: round;
+  stroke-width: 1.8;
+}
+
+.hub-native-ui-close:active {
+  border-color: #e4c36d;
+  color: #fff0bc;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .hub-native-ui-close { display: grid; }
+}
+
 .hub-native-ui-action {
   position: absolute;
   margin: 0;

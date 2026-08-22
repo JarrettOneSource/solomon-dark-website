@@ -24,6 +24,7 @@ export default function TouchJoystick({ lane, onInput, uiScale }: TouchJoystickP
   const activePointerRef = useRef<number | null>(null)
   const inputSinkRef = useRef(onInput)
   const [knobOffset, setKnobOffset] = useState<Vector2>({ x: 0, y: 0 })
+  const [active, setActive] = useState(false)
 
   useEffect(() => {
     inputSinkRef.current = onInput
@@ -32,6 +33,7 @@ export default function TouchJoystick({ lane, onInput, uiScale }: TouchJoystickP
   const release = useCallback((pointerId?: number) => {
     if (pointerId !== undefined && pointerId !== activePointerRef.current) return
     activePointerRef.current = null
+    setActive(false)
     setKnobOffset({ x: 0, y: 0 })
     inputSinkRef.current({ x: 0, y: 0 })
   }, [])
@@ -82,6 +84,7 @@ export default function TouchJoystick({ lane, onInput, uiScale }: TouchJoystickP
     <div
       ref={baseRef}
       className={`game-touch-joystick game-touch-joystick-${lane}`}
+      data-active={active}
       data-joystick={lane}
       data-ui-scale={uiScale}
       role="region"
@@ -92,6 +95,7 @@ export default function TouchJoystick({ lane, onInput, uiScale }: TouchJoystickP
         event.preventDefault()
         if (activePointerRef.current !== null) return
         activePointerRef.current = event.pointerId
+        setActive(true)
         event.currentTarget.setPointerCapture(event.pointerId)
         update(event.clientX, event.clientY)
       }}

@@ -15,10 +15,12 @@ import {
   firstHubRegionLineObstruction,
   hubIncomingPlacement,
   hubPortalAt,
+  hubPortalInwardNormal,
   isHubRegionPathTraversable,
   isHubRegionTraversable,
   moveWithHubRegionCollisionState,
   type HubParticipantState,
+  type HubPortalDefinition,
   type HubRegionId,
 } from '../core-kernels/hub-regions.ts'
 import {
@@ -83,15 +85,39 @@ function midpoint(segment: { x1: number; x2: number; y1: number; y2: number }) {
   }
 }
 
+/** One tick of the local wizard walking through the doorway. */
+function inwardInput(portal: HubPortalDefinition) {
+  return { local: { movement: hubPortalInwardNormal(portal) } }
+}
+
+/**
+ * Walk the local wizard into the doorway until the swap begins. From rest, a
+ * diagonal door's first tick lands exactly on the native movement threshold,
+ * so a slanted trigger can need a second tick; the swap starts at alpha 0
+ * either way.
+ */
+function walkIntoDoor(
+  world: HubWorldState,
+  players: Readonly<Record<string, PlayerCharacterState>>,
+  portal: HubPortalDefinition,
+) {
+  let current = { players, world }
+  for (let ticks = 0; !current.world.participants.local.transition && ticks < 3; ticks += 1) {
+    current = step(current.world, current.players, 1, inwardInput(portal))
+  }
+  return current
+}
+
 function step(
   world: HubWorldState,
   players: Readonly<Record<string, PlayerCharacterState>>,
   count = 1,
+  input: Parameters<typeof stepHubWorldTick>[2] = IDLE_INPUT,
 ) {
   let currentWorld = world
   let currentPlayers = players
   for (let tick = 0; tick < count; tick += 1) {
-    const result = stepHubWorldTick(currentWorld, currentPlayers, IDLE_INPUT, { local: 1 })
+    const result = stepHubWorldTick(currentWorld, currentPlayers, input, { local: 1 })
     currentWorld = result.world
     currentPlayers = result.players
   }
@@ -341,7 +367,7 @@ test('each Courtyard door performs the recovered covered swap and private fade-i
       local: createPlayerCharacter(CHARACTER, midpoint(portal.trigger)),
     }
 
-    ;({ world, players } = step(world, players))
+    ;({ world, players } = walkIntoDoor(world, players, portal))
     assert.equal(world.participants.local.transition?.phase, 'outgoing', portal.destination)
     assert.equal(world.participants.local.transition?.alpha, 0, portal.destination)
 
@@ -390,7 +416,7 @@ test('each private doorway returns to its own recovered Courtyard placement', ()
       local: createPlayerCharacter(CHARACTER, midpoint(portal.trigger)),
     }
 
-    ;({ world, players } = step(world, players))
+    ;({ world, players } = walkIntoDoor(world, players, portal))
     ;({ world, players } = step(world, players, 101))
     assert.equal(world.participants.local.region, 'courtyard', source)
     assert.equal(world.participants.local.transition?.phase, 'incoming', source)
@@ -414,7 +440,7 @@ test('Mortuary return preserves contact X and does not retrigger after incoming 
     local: createPlayerCharacter(CHARACTER, { x: 300, y: portal.trigger.y1 }),
   }
 
-  ;({ world, players } = step(world, players))
+  ;({ world, players } = step(world, players, 1, inwardInput(portal)))
   assert.deepEqual(world.participants.local.transition?.scriptedTarget, {
     x: 300,
     y: 2024,
@@ -474,4 +500,53 @@ test('portal lookup is local to the participant region', () => {
   const triggerPoint = midpoint(courtyardPortal.trigger)
   assert.equal(hubPortalAt('courtyard', triggerPoint)?.destination, 'mortuary')
   assert.equal(hubPortalAt('library', triggerPoint), undefined)
+})
+
+test('a doorway opens to the wizard walking inward, not to standing on it or stepping away', () => {
+  const portal = HUB_PORTALS.find((candidate) => candidate.destination === 'office')!
+  let world = createHubWorld(['local'])
+  let players = {
+    local: createPlayerCharacter(CHARACTER, midpoint(portal.trigger)),
+  }
+
+  ;({ world, players } = step(world, players, 5))
+  assert.equal(world.participants.local.transition, null, 'standing on the threshold')
+
+  ;({ world, players } = step(world, players, 1, { local: { movement: { x: 0, y: 1 } } }))
+  assert.equal(world.participants.local.transition, null, 'stepping away from the door')
+  assert.notEqual(hubPortalAt('courtyard', players.local.position), undefined, 'still on the threshold')
+
+  // the step away leaves a little momentum; three inward ticks outrun it
+  ;({ world, players } = step(world, players, 3, inwardInput(portal)))
+  assert.equal(world.participants.local.transition?.phase, 'outgoing', 'walking into the door')
+})
+
+test('a shove onto a doorway never opens it', () => {
+  // Every wizard the shared Hub admits stands on the one spawn point until
+  // somebody moves; the circle solver then scatters the pile, and the Office
+  // door's trigger lies 48px north of the spawn, well inside the scatter.
+  const names = ['Basil', 'Aurelia', 'Cassia', 'Eamon', 'Fiora', 'Gideon', 'Hester', 'Ilse']
+  let world = createHubWorld(names)
+  let players: Record<string, PlayerCharacterState> = Object.fromEntries(
+    names.map((name) => [name, createPlayerCharacter(CHARACTER, { ...HUB_SPAWN })]),
+  )
+  let shoved = 0
+  for (let tick = 0; tick < 200; tick += 1) {
+    const result = stepHubWorldTick(
+      world,
+      players,
+      { Basil: { movement: tick < 30 ? { x: 1, y: 0 } : { x: 0, y: 0 } } },
+      {},
+    )
+    world = result.world
+    players = result.players
+    shoved = Math.max(shoved, names.filter((name) => (
+      name !== 'Basil' && hubPortalAt('courtyard', players[name].position) !== undefined
+    )).length)
+  }
+  assert.ok(shoved > 0, 'the scatter must reach the Office door for this test to prove anything')
+  for (const name of names) {
+    assert.equal(world.participants[name].region, 'courtyard', name)
+    assert.equal(world.participants[name].transition, null, name)
+  }
 })
