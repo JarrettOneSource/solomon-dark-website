@@ -31462,29 +31462,32 @@ There is no `blocked-by-platform` member and no authored table row is omitted.
   `+50/-50` spacing are absent. The impact capture hashes to
   `4152ecbcc7d503c803c8bc2bea97a025a34667e13c0cff564a3dcf8cb4978c3b`.
 - Final current-main rebase receipt: Website runtime tree
-  `76053d222999ae103fbea1d6f7311a23b0dc8dca` at Mac commit `d861c53e`
-  matched local commit `dc08f59b`; Mod Loader tree
+  `c9310c18354fd1303db8b0467f26cb9809ce2cc5` at commit `f05d7d72`,
+  rebased on current-main `ba950926`, matched byte-for-byte on WSL and Mac;
+  Mod Loader tree
   `7f84cf0b80b935ec121b9a3c992853a3c7507e72` at Mac commit `14efe194`
   matched local commit `62bc6a92`. The clean Mac canonical gate passed
   `15/15` backend/contracts, `4/4` library, `43/43` loot, `230/230`
-  prerequisites, `1310/1310` gameplay, `8/8` weather, `29/29` party,
+  prerequisites, `1310/1310` gameplay, `9/9` weather, `30/30` party,
   `11/11` level-up, `7/7` diagnostics, `17/17` Hall, `21/21` Hub UI, and
   `5/5` desktop tests, plus production builds, media policy, and bundle budget
-  (`399216` raw / `112083` gzip bytes). The final acceptance releases left
+  (`397461` raw / `111576` gzip bytes). The validation log SHA-256 is
+  `734c292923545c5afaf2c2c4935837f134bac932a048ca76389f42a6b25e2927`.
+  The final acceptance releases left
   input only after the authoritative four-child birth, then follows those exact
   IDs; ordinary held-fire repeats cannot replace the sampled cast, and the
   visual snapshot precedes map-dependent arena contact. A physical-Chrome cast
-  on that exact tree reproduced aim `52.6127730313699`, first headings
-  `62.59077453613281, 42.61277389526367, 82.59626770019531,
-  22.62514877319336`, and the same paired Smart turn inputs. The four bodies
-  remained separately visible through flight tick 18 while curving onto `enemy:6`;
+  on that exact tree reproduced aim `359.03866422593984`, first headings
+  `9.060664176940918, 349.05517578125, 29.055164337158203,
+  329.0510559082031`, and the same paired Smart turn inputs. The four bodies
+  remained separately visible through flight tick 17 while curving onto `enemy:6`;
   the maximum instruction-oracle turn slack remained
-  `4.470348358154297e-8` degrees and browser errors remained empty. The
+  `3.725290298461914e-7` degrees and browser errors remained empty. The
   inspected rebased flight capture is
-  `/tmp/solomon-ether-fan-single-cast-20260822/solomon-primary-ether-boneyard-fan-flight.png`,
-  SHA-256 `2465ce313224ef6a45a048330aef1815f7f8985dac5cdbe7969cde4dcab53008`;
+  `/tmp/solomon-ether-ba950-browser/solomon-primary-ether-boneyard-fan-flight.png`,
+  SHA-256 `ddba784bce6b246d68ac77da60f0cd20ea44173c33af85c0cbff8ae681b436d8`;
   its impact capture hashes to
-  `dd5aa8c7dfccad20dec4b79150028dfa083a2392040e0fb6e3118ac0c6a60514`.
+  `d19e1df800eaffa3cfc9c68e9faabcc94252dea1054222599ea06e5c612430bf`.
 - There are no browser-platform-blocked members or material native unknowns.
   Website and Mod Loader changes are local commits only. Nothing was pushed,
   deployed, or restarted.
