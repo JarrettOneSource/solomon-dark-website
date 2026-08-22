@@ -79,15 +79,22 @@ try {
   const receipt = await page.evaluate(() => {
     const scene = document.querySelector('.boneyard-scene')
     const canvas = document.querySelector('.boneyard-world-canvas')
+    const frame = canvas?.__sdrBoneyardFrame
     return {
       audioCue: scene?.getAttribute('data-weather-audio-cue'),
       audioGain: Number(scene?.getAttribute('data-weather-audio-gain')),
       audioOwner: scene?.getAttribute('data-weather-audio-owner'),
       canvasMode: Number(canvas?.dataset.weatherMode),
+      complexLighting: canvas?.dataset.complexLighting,
       dropCount: Number(canvas?.dataset.weatherDropCount),
+      lightCompositeZIndex: Number(canvas?.dataset.regionLightCompositeZIndex),
+      maxMainLightScalar: frame?.maxMainLightScalar,
+      minMainLightScalar: frame?.minMainLightScalar,
       splashAsset: canvas?.dataset.weatherSplashAsset,
       splashCount: Number(canvas?.dataset.weatherSplashCount),
+      splashZIndex: Number(canvas?.dataset.weatherSplashZIndex),
       streakRenderer: canvas?.dataset.weatherStreakRenderer,
+      streakZIndex: Number(canvas?.dataset.weatherStreakZIndex),
       rainfallSources: window.__sdrAudioPlaySources.filter((source) => source.includes('rainfall-loop')),
     }
   })
@@ -96,14 +103,26 @@ try {
   assert.equal(receipt.streakRenderer, 'pixi-particle-batch')
   assert.equal(receipt.audioCue, 'rainfall-loop')
   assert.equal(receipt.audioOwner, 'boneyard-weather:rainfall')
+  assert.equal(receipt.complexLighting, 'true')
   assert.ok(receipt.audioGain > 0)
   assert.ok(receipt.dropCount > 0)
   assert.ok(receipt.splashCount > 0)
+  assert.ok(receipt.splashZIndex < receipt.lightCompositeZIndex)
+  assert.ok(receipt.lightCompositeZIndex < receipt.streakZIndex)
   assert.ok(receipt.rainfallSources.length > 0)
+  await page.screenshot({ path: screenshot })
+  const flattenedOrder = await disableComplexLighting(page, boneyard)
+  assert.ok(flattenedOrder.splashZIndex < flattenedOrder.streakZIndex)
+  assert.ok(flattenedOrder.streakZIndex < flattenedOrder.lightCompositeZIndex)
   assert.deepEqual(pageErrors, [])
   assert.deepEqual(consoleErrors, [])
-  await page.screenshot({ path: screenshot })
-  process.stdout.write(`${JSON.stringify({ mode, pageErrors, consoleErrors, receipt })}\n`)
+  process.stdout.write(`${JSON.stringify({
+    flattenedOrder,
+    mode,
+    pageErrors,
+    consoleErrors,
+    receipt,
+  })}\n`)
 } finally {
   await browser.close()
 }
@@ -117,4 +136,37 @@ async function selectStormyBoneyard(page) {
   ))
   assert.equal(result.ok, true, result.error)
   assert.deepEqual(result.values, [2])
+}
+
+async function disableComplexLighting(page, boneyard) {
+  await boneyard.focus()
+  await page.keyboard.press('Escape')
+  const pause = page.locator('.gameplay-pause-stage[data-gameplay-pause-view="owner"]')
+  await pause.waitFor()
+  await pause.getByRole('button', { name: 'GAME SETTINGS' }).click()
+  const dialog = page.locator('.game-settings-dialog')
+  await dialog.waitFor()
+  await dialog.getByRole('button', { name: 'TWEAK GAME' }).click()
+  const toggle = dialog.getByRole('button', { name: 'COMPLEX LIGHTING' })
+  assert.equal(await toggle.getAttribute('aria-pressed'), 'true')
+  await toggle.click()
+  await dialog.getByRole('button', { name: 'BACK' }).click()
+  await dialog.getByRole('button', { name: 'DONE' }).click()
+  await dialog.waitFor({ state: 'detached' })
+  try {
+    await pause.waitFor({ state: 'detached', timeout: 3_000 })
+  } catch {
+    await page.keyboard.press('Escape')
+    await pause.waitFor({ state: 'detached' })
+  }
+  await page.waitForFunction(() => (
+    document.querySelector('.boneyard-world-canvas')?.dataset.complexLighting === 'false'
+      && Number(document.querySelector('.boneyard-world-canvas')?.dataset.weatherStreakZIndex)
+        < Number(document.querySelector('.boneyard-world-canvas')?.dataset.regionLightCompositeZIndex)
+  ))
+  return page.locator('.boneyard-world-canvas').evaluate((canvas) => ({
+    lightCompositeZIndex: Number(canvas.dataset.regionLightCompositeZIndex),
+    splashZIndex: Number(canvas.dataset.weatherSplashZIndex),
+    streakZIndex: Number(canvas.dataset.weatherStreakZIndex),
+  }))
 }

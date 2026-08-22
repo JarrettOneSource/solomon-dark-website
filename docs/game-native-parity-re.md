@@ -22951,9 +22951,11 @@ The retail class census identifies `Anim_WeatherRaindrop` at vtable
 | Clear mode 0 | no world drops, splashes, or rainfall request | exact-ported |
 | Rainy mode 1 | 3 procedural drops per Arena tick | exact-ported |
 | Stormy mode 2 | 10 drops, or 20 with Enhanced Effects | exact-ported with the existing enabled browser effect configuration |
-| World streak | `20 + RandomFloat(10)`, width 1, cached world-light gradient, floor retirement | corrected after audit |
+| World streak | `20 + RandomFloat(10)`, width 1, cached world-light gradient, floor retirement | exact-ported after the 2026-08-22 render-boundary reopen |
 | Spawn validity | visible-camera samples rejected only by `FUN_005238C0` with native radius 4; retry is unbounded | corrected after audit |
-| Splash child | `Anim_FadeScale` with `DeadHawg:24` (`DAT_00819994 + 0x1298`), `life=0.75..1`, scaled loss, and scaled growth | corrected after audit |
+| Splash child | `Anim_FadeScale` with `DeadHawg:24` (`DAT_00819994 + 0x1298`), `life=0.75..1`, scaled loss, scaled growth, and pre-light-composite painter ownership | exact-ported after the 2026-08-22 render-boundary reopen |
+| Complex Lighting on | splash manager, early Region light multiply, shared queue, then analytically lit streak manager | exact-ported after the 2026-08-22 render-boundary reopen |
+| Complex Lighting off | white analytic tint, splash and streak managers, then the late Region light multiply | exact-ported after the 2026-08-22 render-boundary reopen |
 | Ambient audio | shared `sounds\\rainfall__loop`, mode gain `0.4/1` times `1 - Arena+0x8E48` | corrected after audit |
 | Mode-1/2 compact scenery 25..28 | serialized authored rows already use the shared compact pass | verified-already-at-parity |
 | Snowy/Foggy labels, Hub/title scenes | not reachable from Boneyard's stock 0..2 authoring path | out-of-system |
@@ -22965,7 +22967,8 @@ tick from `MyApp+0x28 * 0xEF3` before the weather call; the browser does the
 same from the presentation tick rather than deriving a run seed. The owner
 samples the carried camera bounds, uses collision-only placement, caches the
 drop's light scalar on its first draw, and submits the splash manager before
-the streak manager.
+the streak manager with the Region light-composite boundary between them when
+Complex Lighting is enabled.
 
 ### Re-check correction — 2026-08-20
 
@@ -23019,6 +23022,113 @@ collapses the streak lane to one batched render owner.
 Performance acceptance must report the live drop/splash population together
 with frame-gap p95, p99, and maximum, long tasks, and browser errors. Average
 FPS alone is not a completion receipt.
+
+### Render-boundary reopen and correction — 2026-08-22
+
+#### Reported smell and parity question
+
+- Reported web behavior: rain looked plausible, but its circular ground
+  splashes remained visible across completely dark/non-lit map regions.
+- Stock behavior to recover: the complete splash, light-composite, shared
+  queue, and streak painter boundary under both Complex Lighting settings.
+- Reproduction: production `/game`, deterministic mode-2 Boneyard, 1600x900,
+  Complex Lighting on; compare zero-light map pixels around the lit player.
+- Falsifier: if `Anim_FadeScale` sampled the same analytic scalar as the streak
+  or both managers lay on the same side of every light composite, separate web
+  roots would be unnecessary.
+
+This is a secondary report in an already-covered system. The 2026-08-20 pass
+recorded only the relative splash-before-streak order and then put both under
+one late Pixi parent. It did not inventory the intervening Region light-map
+composite or the alternate Complex-Lighting-off location, so the prior
+`corrected after audit` disposition for the splash painter was wrong.
+
+#### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Instructions | retail `Arena::Render 0x0046EC80`, sites `0x0046F6C0`, `0x0046FAFF`, `0x0046FDAF`, `0x0046FFB7`, `0x00470107` | splash, early multiply, shared queue, streak, and alternate late multiply are five distinct ordered phases | high |
+| Instructions | `Anim_FadeScale::Draw 0x00455DF0`; `Anim_WeatherRaindrop::Draw 0x00459B60`; Region query `0x0057E490` | splash has no analytic query and relies on raster placement; streak caches analytic RGB because it follows the early multiply | high |
+| Static setting | `Game.ComplexLighting` byte `0x00B3BCA8` | on selects the early multiply; off forces common scalar white and selects the late multiply after weather | high |
+| Current web | `native-boneyard-weather-view.ts`, `boneyard-world-renderer.ts` at deployed `762b6067500d277fd1264c5c38eb1f2acf001744` and then-current main | one parent put both lanes at `foregroundZIndex+0.5`; splashes forced tint `0xffffff` | high |
+| Browser | production private-session mode-2 capture `/tmp/solomon-rain-review-production.png` | Complex Lighting `true`, 568 drops, 304 splashes, light scalar range `0..1`; streaks vanished in black regions while white splash rings remained globally visible; zero page/console errors | high |
+
+The executable is the preserved 4,723,200-byte retail image, preferred base
+`0x00400000`, SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`.
+No injected process or stale ASLR address supports this conclusion.
+
+#### System boundary and membership inventory
+
+Native system: Arena world-weather presentation from `0x00468E50` allocation
+through both local animation managers, Region lighting branches, rainfall
+renewal, and Arena teardown. Right-click Storm/Acid Rain remains separate.
+
+| Member | Native source | Disposition | Proof |
+| --- | --- | --- | --- |
+| Clear mode 0 | `Arena+0x8F20 == 0` | verified-already-at-parity | no drops, splashes, or rainfall request |
+| Rainy mode 1 | `0x00468E50`, count 3 | exact-ported | same shared split painter path at rainy density |
+| Stormy mode 2, Enhanced Effects off/on | `0x00468E50`, count 10/20, `0x00B3BCAD` | exact-ported | both density branches use the same split painter path |
+| Splash construction, recurrence, asset, and retirement | `0x00452E20`, `0x00452ED0`, `DeadHawg:24` | verified-already-at-parity | existing fixed-tick assertions remain unchanged |
+| Splash painter, Complex Lighting on | `0x00455DF0`, manager `+0x2C4` at `0x0046F6C0`, multiply `0x0046FAFF` | exact-ported | pre-composite root and render-order contract |
+| Streak painter, Complex Lighting on | `0x00459B60`, manager `+0x1E0` at `0x0046FFB7` | verified-already-at-parity | cached analytic tint plus particle alpha ramp |
+| Splash and streak, Complex Lighting off | late multiply `0x00470107` | exact-ported | both roots precede the late Region composite; streak analytic tint is white |
+| Rainfall loop and Game Over attenuation | `0x00468E50`, `0x005CF4F0`, `0x0081CBF0` | verified-already-at-parity | existing audio and lifecycle tests |
+| Arena replacement/destruction | both local managers and rainfall renewal | exact-ported | both roots share one weather owner and teardown |
+| Right-click StormCloud/AcidRain children | `0x006021A0`, `0x00604E90` | out-of-system (secondary-ability-owned rain family) | separate actor, damage, audio, and renderer contracts |
+| Snowy/Foggy and non-Arena scenes | unreachable Boneyard authoring labels | out-of-system (no stock owner path) | existing authored-mode census |
+
+There is no unextracted authored row and no browser-blocked member.
+
+#### Recovered contract and web consequence
+
+With Complex Lighting on, stock draws the unlit `DeadHawg:24` splash into the
+pre-main framebuffer, multiplies that framebuffer by the Region raster field,
+flushes the shared world queue, then draws the streak with its cached analytic
+scalar. With Complex Lighting off, analytic tint is white and the Region
+multiply moves after the streak, so both weather families are raster-darkened.
+
+The web owner must therefore expose two independent roots. The splash root
+belongs immediately before the Region composite; the batched streak root stays
+in the late weather lane. The settings owner must position the Region
+composite between those roots when enabled and after both when disabled. A
+splash scalar tint, spawn rejection, mask approximation, or one-parent z-order
+nudge would not reproduce both native branches.
+
+#### Validation contract
+
+- A render-contract regression must reject a shared splash/streak parent,
+  assert distinct roots, and prove the on/off composite ordering.
+- Focused weather tests must retain all mode, RNG, collision, recurrence,
+  cached-streak-light, audio, and teardown assertions.
+- A real mode-2 WebGL journey with Complex Lighting on must find visible
+  splashes inside the light field and no visible splash contribution in a
+  sampled zero-light region, while streak counts, splash counts, asset,
+  rainfall owner/gain, and browser-error receipts remain valid.
+- The same journey with Complex Lighting off must prove the Region composite
+  is after both weather roots. The Website canonical gate remains mandatory.
+
+#### Implementation validation receipt
+
+- `native-boneyard-weather-view.ts` now owns independent splash and streak
+  roots; `boneyard-lighting.ts` owns their shared on/off composite-order
+  contract; `boneyard-world-renderer.ts` applies and publishes that order.
+- The canonical `./scripts/validate.sh` gate exited zero. Its Boneyard suite
+  passed 1,285 tests including the two new painter-boundary contracts, the
+  newly canonical weather suite passed all eight tests, production build and
+  bundle budgets passed, and media policy passed. Exact-tree
+  `./scripts/validate.sh lint` also exited zero with only the repository's
+  existing Fast Refresh warnings.
+- Built-preview Chromium mode 2 produced 575 live streaks and 305 splashes,
+  light scalar range `0..1`, rainfall gain `1`, `DeadHawg:24`, the particle
+  batch, and zero page/console errors. Complex Lighting on reported exact
+  order `0.25 < 0.5 < 11.5`; after the in-game setting toggle, the flattened
+  branch reported `0.25 < 11.5 < 11.75`. Screenshot:
+  `/tmp/solomon-rain-light-boundary-fixed-linux.png`.
+- The before/after pixel comparison shows the globally bright splash field is
+  gone: the rings remain visible inside the Region light and contribute no
+  visible pixels across the surrounding black field. No member is
+  browser-blocked and no unknown remains in the corrected boundary.
 
 ### Implementation and validation receipt
 

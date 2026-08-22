@@ -103,6 +103,7 @@ import {
   nativeBoulderLightSource,
   nativeBoneyardLightScalar,
   nativeBoneyardLightTint,
+  nativeBoneyardWeatherLightingOrder,
   nativeLanternLightSource,
   nativeEnemyLightSources,
   nativeEnemyProjectileLightProvider,
@@ -115,6 +116,7 @@ import {
   nativeWeldMeteorLightSource,
   nativeWeldRockLightSource,
   type NativeBoneyardLightSource,
+  type NativeBoneyardWeatherLightingOrder,
   type NativeSolomonSetPieceLighting,
 } from './boneyard-lighting.ts'
 import {
@@ -339,6 +341,8 @@ interface BoneyardRendererFrameDiagnostics {
   weatherDropCount: number
   weatherMode: number
   weatherSplashCount: number
+  weatherSplashZIndex: number
+  weatherStreakZIndex: number
   worldFeedbackMagnitude: number
   worldShakeX: number
   worldShakeY: number
@@ -685,6 +689,8 @@ export async function createBoneyardWorldRenderer(
     weatherDropCount: 0,
     weatherMode: options.boneyard.scene.environmentMode,
     weatherSplashCount: 0,
+    weatherSplashZIndex: Number.NaN,
+    weatherStreakZIndex: Number.NaN,
     worldFeedbackMagnitude: 0,
     worldShakeX: 0,
     worldShakeY: 0,
@@ -793,9 +799,9 @@ export async function createBoneyardWorldRenderer(
         viewport,
         settings,
       )
-      regionLightField.setCompositeZIndex(settings.complexLighting
-        ? NATIVE_REGION_LIGHT_COMPOSITE_Z_INDEX
-        : painter.foregroundZIndex - 0.25)
+      regionLightField.setCompositeZIndex(
+        painter.weatherLightingOrder.lightCompositeZIndex,
+      )
       regionLightField.render(
         application.renderer,
         scene.currentLightSources,
@@ -1040,7 +1046,12 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.weatherDropCount = scene.weatherDropCount
       frameDiagnostics.weatherMode = scene.weatherMode
       frameDiagnostics.weatherSplashCount = scene.weatherSplashCount
+      frameDiagnostics.weatherSplashZIndex = painter.weatherLightingOrder.splashZIndex
+      frameDiagnostics.weatherStreakZIndex = painter.weatherLightingOrder.streakZIndex
       frameDiagnostics.worldFeedbackMagnitude = feedbackMagnitude
+      frameDiagnostics.regionLightCompositeZIndex = (
+        painter.weatherLightingOrder.lightCompositeZIndex
+      )
       frameDiagnostics.regionLightLogicalSide = regionLightField.targetLogicalSide
       frameDiagnostics.regionLightPhysicalSide = regionLightField.targetPhysicalSide
       frameDiagnostics.worldShakeX = worldShake.x
@@ -1076,6 +1087,11 @@ export async function createBoneyardWorldRenderer(
       canvas.dataset.weatherDropCount = `${scene.weatherDropCount}`
       canvas.dataset.weatherMode = `${scene.weatherMode}`
       canvas.dataset.weatherSplashCount = `${scene.weatherSplashCount}`
+      canvas.dataset.weatherSplashZIndex = `${painter.weatherLightingOrder.splashZIndex}`
+      canvas.dataset.weatherStreakZIndex = `${painter.weatherLightingOrder.streakZIndex}`
+      canvas.dataset.regionLightCompositeZIndex = `${
+        painter.weatherLightingOrder.lightCompositeZIndex
+      }`
     },
     resize(nextViewport, nextDevicePixelRatio = window.devicePixelRatio) {
       if (destroyed) return
@@ -1192,6 +1208,7 @@ interface BoneyardPainterFrame {
   treeCount: number
   treeForegroundResidentCount: number
   treeTintMismatchCount: number
+  weatherLightingOrder: NativeBoneyardWeatherLightingOrder
 }
 
 interface RegisteredBoneyardLightProviderOwner {
@@ -2144,7 +2161,11 @@ class BoneyardDynamicScene {
     this.solomon?.setActorDepth(positionedDynamics.get('solomon-actor')?.zIndex ?? 1)
     this.solomon?.setLanternDepth(positionedDynamics.get('lantern')?.zIndex ?? 1)
     this.foreground.zIndex = order.foregroundZIndex
-    this.weatherView.setDepth(order.foregroundZIndex + 0.5)
+    const weatherLightingOrder = nativeBoneyardWeatherLightingOrder(
+      order.foregroundZIndex,
+      settings.complexLighting,
+    )
+    this.weatherView.setDepth(weatherLightingOrder)
     const complexShadows = this.complexShadows.render(
       this.lightIndex,
       presentationFrame,
@@ -2195,6 +2216,7 @@ class BoneyardDynamicScene {
       treeCount: treePresentations.length,
       treeForegroundResidentCount: this.treeResidents.size,
       treeTintMismatchCount,
+      weatherLightingOrder,
     }
   }
 

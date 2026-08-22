@@ -13,11 +13,11 @@ import {
   NativeBoneyardWeather,
   type NativeBoneyardWeatherDropPlan,
 } from '../core-kernels/native-boneyard-weather.ts'
+import type { NativeBoneyardWeatherLightingOrder } from './boneyard-lighting.ts'
 
 const WEATHER_STREAK_RAMP_HEIGHT = 256
 
 export class NativeBoneyardWeatherView {
-  readonly container = new Container({ label: 'native-boneyard-weather' })
   private readonly dropContainer: ParticleContainer<Particle>
   private readonly dropTexture: Texture
   private readonly dropViews: Particle[] = []
@@ -52,11 +52,7 @@ export class NativeBoneyardWeatherView {
       texture: this.dropTexture,
     })
     this.dropContainer.label = 'native-boneyard-weather-streaks'
-    this.container.sortableChildren = true
-    this.splashContainer.zIndex = 0
-    this.dropContainer.zIndex = 1
-    this.container.addChild(this.splashContainer, this.dropContainer)
-    this.root.addChild(this.container)
+    this.root.addChild(this.splashContainer, this.dropContainer)
   }
 
   update(lightAt: (position: Readonly<BoneyardPoint>) => number = () => 1): void {
@@ -85,17 +81,21 @@ export class NativeBoneyardWeatherView {
     }
   }
 
-  setDepth(depth: number): void {
-    this.container.zIndex = depth
+  setDepth(order: NativeBoneyardWeatherLightingOrder): void {
+    this.splashContainer.zIndex = order.splashZIndex
+    this.dropContainer.zIndex = order.streakZIndex
   }
 
   setRenderable(renderable: boolean): void {
-    this.container.renderable = renderable
+    this.splashContainer.renderable = renderable
+    this.dropContainer.renderable = renderable
   }
 
   destroy(): void {
-    this.root.removeChild(this.container)
-    this.container.destroy({ children: true })
+    this.root.removeChild(this.splashContainer, this.dropContainer)
+    this.splashContainer.destroy({ children: true })
+    this.dropContainer.removeParticles()
+    this.dropContainer.destroy()
     this.dropTexture.destroy(true)
     this.dropViews.length = 0
     this.splashViews.length = 0

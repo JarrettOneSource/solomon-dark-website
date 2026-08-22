@@ -76,6 +76,21 @@ test('world-weather streaks share one particle batch and alpha-ramp texture', ()
   assert.doesNotMatch(weatherView, /new FillGradient/)
 })
 
+test('world-weather splash and streak painters are separate light-boundary roots', () => {
+  assert.match(weatherView, /root\.addChild\(this\.splashContainer, this\.dropContainer\)/)
+  assert.doesNotMatch(
+    weatherView,
+    /this\.container\.addChild\(this\.splashContainer, this\.dropContainer\)/,
+  )
+  assert.match(weatherView, /this\.splashContainer\.zIndex = order\.splashZIndex/)
+  assert.match(weatherView, /this\.dropContainer\.zIndex = order\.streakZIndex/)
+  assert.match(boneyardRenderer, /nativeBoneyardWeatherLightingOrder\(/)
+  assert.match(
+    boneyardRenderer,
+    /regionLightField\.setCompositeZIndex\(\s*painter\.weatherLightingOrder\.lightCompositeZIndex,?\s*\)/,
+  )
+})
+
 test('Tree foreground stays per-object and shares native alpha and root tint', () => {
   assert.match(editorRenderer, /export function nativeBoneyardForegroundLayers/)
   assert.match(editorRenderer, /export function drawNativeBoneyardForegroundBand/)

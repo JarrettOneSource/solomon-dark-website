@@ -39,6 +39,7 @@ import {
   nativeBoneyardLightScalar,
   nativeBoneyardLightTint,
   nativeBoneyardLightVisibleInManager,
+  nativeBoneyardWeatherLightingOrder,
   nativeEnemyProjectileLightProvider,
   nativeEnemyLightSources,
   nativeLanternLightSource,
@@ -1291,6 +1292,19 @@ test('stamps the recovered Region light glyph before the native main queue', () 
     x: 400,
     y: 300,
   })
+})
+
+test('world-weather lanes straddle the native Region composite in both lighting branches', () => {
+  const complex = nativeBoneyardWeatherLightingOrder(40, true)
+  assert.equal(complex.lightCompositeZIndex, NATIVE_REGION_LIGHT_COMPOSITE_Z_INDEX)
+  assert.ok(complex.splashZIndex < complex.lightCompositeZIndex)
+  assert.ok(complex.lightCompositeZIndex < complex.streakZIndex)
+
+  const flattened = nativeBoneyardWeatherLightingOrder(40, false)
+  assert.equal(flattened.splashZIndex, complex.splashZIndex)
+  assert.equal(flattened.streakZIndex, complex.streakZIndex)
+  assert.ok(flattened.splashZIndex < flattened.streakZIndex)
+  assert.ok(flattened.streakZIndex < flattened.lightCompositeZIndex)
 })
 
 test('lights Solomon Dig through the shared dirt-and-body Puppet root', () => {

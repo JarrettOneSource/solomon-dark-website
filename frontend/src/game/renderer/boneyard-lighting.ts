@@ -111,6 +111,27 @@ export const NATIVE_REGION_LIGHT_ENTRY = 18
 export const NATIVE_REGION_LIGHT_COMPOSITE_Z_INDEX = 0.5
 export const NATIVE_LIGHT_GRID_CELL_SIZE = 150
 
+export interface NativeBoneyardWeatherLightingOrder {
+  readonly lightCompositeZIndex: number
+  readonly splashZIndex: number
+  readonly streakZIndex: number
+}
+
+export function nativeBoneyardWeatherLightingOrder(
+  foregroundZIndex: number,
+  complexLighting: boolean,
+): NativeBoneyardWeatherLightingOrder {
+  const splashZIndex = NATIVE_REGION_LIGHT_COMPOSITE_Z_INDEX / 2
+  const streakZIndex = foregroundZIndex + NATIVE_REGION_LIGHT_COMPOSITE_Z_INDEX
+  return {
+    lightCompositeZIndex: complexLighting
+      ? NATIVE_REGION_LIGHT_COMPOSITE_Z_INDEX
+      : streakZIndex + splashZIndex,
+    splashZIndex,
+    streakZIndex,
+  }
+}
+
 const NATIVE_LIGHT_FALLOFF_SQUARED = (
   NATIVE_LIGHT_OUTER_DISTANCE ** 2 - NATIVE_LIGHT_INNER_DISTANCE ** 2
 )
