@@ -4,11 +4,13 @@ import {
   useState,
   type FormEvent,
   type MouseEvent,
+  type TouchEvent,
 } from 'react'
 
 import { api, type ModComment, type ModDetail, type ModSubscription, type ModSummary } from '../lib/api.ts'
 import { formatBytes, formatCount, formatDate, timeAgo } from '../lib/format.ts'
 import DarkCloudMedia from './DarkCloudMedia.tsx'
+import DarkCloudPanelOrnaments from './DarkCloudPanel.tsx'
 
 export type DarkCloudSubscriptionAction = 'disable' | 'enable' | 'subscribe' | 'unsubscribe'
 
@@ -20,6 +22,15 @@ interface DarkCloudModDetailProps {
   subscription: ModSubscription | null
 }
 
+/** Horizontal travel before a touch on the screenshot stage counts as a swipe. */
+const SWIPE_THRESHOLD_PX = 40
+
+/**
+ * Mod details on the native DARK CLOUD SETTINGS / DARK ACCOUNT dialog pattern:
+ * a framed leather panel with a gradient title band, dark inset boxes holding
+ * "Label: value" rows and full-width action rows, and the green stone DONE
+ * plate along the bottom edge.
+ */
 export default function DarkCloudModDetail({
   accountUsername,
   mod,
@@ -28,6 +39,7 @@ export default function DarkCloudModDetail({
   subscription,
 }: DarkCloudModDetailProps) {
   const closeRef = useRef<HTMLButtonElement>(null)
+  const swipeStartX = useRef<number | null>(null)
   const [detail, setDetail] = useState<ModDetail | null>(null)
   const [detailError, setDetailError] = useState<string | null>(null)
   const [detailRevision, setDetailRevision] = useState(0)
@@ -86,6 +98,7 @@ export default function DarkCloudModDetail({
 
   const images = detail?.screenshots ?? []
   const selectedImage = images[imageIndex] ?? null
+  const tags = detail?.tags ?? mod.tags
 
   const showPreviousImage = () => {
     if (images.length < 2) return
@@ -94,6 +107,19 @@ export default function DarkCloudModDetail({
   const showNextImage = () => {
     if (images.length < 2) return
     setImageIndex(index => (index + 1) % images.length)
+  }
+
+  const beginSwipe = (event: TouchEvent<HTMLDivElement>) => {
+    swipeStartX.current = event.touches[0]?.clientX ?? null
+  }
+  const endSwipe = (event: TouchEvent<HTMLDivElement>) => {
+    const start = swipeStartX.current
+    swipeStartX.current = null
+    if (start === null) return
+    const travel = (event.changedTouches[0]?.clientX ?? start) - start
+    if (Math.abs(travel) < SWIPE_THRESHOLD_PX) return
+    if (travel < 0) showNextImage()
+    else showPreviousImage()
   }
 
   const runSubscriptionAction = async (action: DarkCloudSubscriptionAction) => {
@@ -151,11 +177,12 @@ export default function DarkCloudModDetail({
   return (
     <div className="dark-cloud-detail-backdrop" role="presentation" onMouseDown={closeFromBackdrop}>
       <section
-        className="dark-cloud-detail"
+        className="dark-cloud-detail dark-cloud-panel"
         role="dialog"
         aria-modal="true"
         aria-labelledby="dark-cloud-detail-title"
       >
+        <DarkCloudPanelOrnaments />
         <header className="dark-cloud-detail-header">
           <div>
             <span>MOD DETAILS</span>
@@ -189,63 +216,73 @@ export default function DarkCloudModDetail({
                 <h3 id="dark-cloud-gallery-title">SCREENSHOTS</h3>
                 <span>{images.length === 0 ? 'NO IMAGES' : `${imageIndex + 1} / ${images.length}`}</span>
               </div>
-              <div className="dark-cloud-gallery-stage">
-                <DarkCloudMedia
-                  alt={selectedImage ? `${mod.name} screenshot ${imageIndex + 1}` : mod.name}
-                  className="dark-cloud-gallery-image"
-                  eager
-                  src={selectedImage?.url ?? null}
-                />
-                <button
-                  type="button"
-                  className="dark-cloud-gallery-previous"
-                  aria-label="PREVIOUS IMAGE"
-                  disabled={images.length < 2}
-                  onClick={showPreviousImage}
-                >
-                  <span aria-hidden>‹</span>
-                </button>
-                <button
-                  type="button"
-                  className="dark-cloud-gallery-next"
-                  aria-label="NEXT IMAGE"
-                  disabled={images.length < 2}
-                  onClick={showNextImage}
-                >
-                  <span aria-hidden>›</span>
-                </button>
-              </div>
-              {images.length > 1 ? (
-                <div className="dark-cloud-gallery-thumbnails" aria-label="Choose screenshot">
-                  {images.map((image, index) => (
-                    <button
-                      type="button"
-                      key={image.id}
-                      className={imageIndex === index ? 'selected' : ''}
-                      aria-label={`Show screenshot ${index + 1}`}
-                      aria-pressed={imageIndex === index}
-                      onClick={() => setImageIndex(index)}
-                    >
-                      <DarkCloudMedia alt={`${mod.name} screenshot ${index + 1}`} src={image.url} />
-                    </button>
-                  ))}
+              <div className="dark-cloud-inset dark-cloud-gallery-box">
+                <div className="dark-cloud-gallery-stage" onTouchStart={beginSwipe} onTouchEnd={endSwipe}>
+                  <DarkCloudMedia
+                    alt={selectedImage ? `${mod.name} screenshot ${imageIndex + 1}` : mod.name}
+                    className="dark-cloud-gallery-image"
+                    eager
+                    src={selectedImage?.url ?? null}
+                  />
+                  <button
+                    type="button"
+                    className="dark-cloud-gallery-previous"
+                    aria-label="PREVIOUS IMAGE"
+                    disabled={images.length < 2}
+                    onClick={showPreviousImage}
+                  >
+                    <span aria-hidden>‹</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="dark-cloud-gallery-next"
+                    aria-label="NEXT IMAGE"
+                    disabled={images.length < 2}
+                    onClick={showNextImage}
+                  >
+                    <span aria-hidden>›</span>
+                  </button>
                 </div>
-              ) : null}
+                {images.length > 1 ? (
+                  <div className="dark-cloud-gallery-thumbnails" aria-label="Choose screenshot">
+                    {images.map((image, index) => (
+                      <button
+                        type="button"
+                        key={image.id}
+                        className={imageIndex === index ? 'selected' : ''}
+                        aria-label={`Show screenshot ${index + 1}`}
+                        aria-pressed={imageIndex === index}
+                        onClick={() => setImageIndex(index)}
+                      >
+                        <DarkCloudMedia alt={`${mod.name} screenshot ${index + 1}`} src={image.url} />
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
             </section>
 
-            <aside className="dark-cloud-detail-summary">
-              <p className="dark-cloud-detail-deck">{detail?.summary ?? mod.summary}</p>
-              <dl>
-                <div><dt>VERSION</dt><dd>{detail?.latestVersion ?? mod.latestVersion}</dd></div>
-                <div><dt>DOWNLOADS</dt><dd>{formatCount(detail?.downloads ?? mod.downloads)}</dd></div>
-                <div><dt>PUBLISHED</dt><dd>{formatDate(detail?.createdAtUtc ?? mod.createdAtUtc)}</dd></div>
-                <div><dt>UPDATED</dt><dd>{timeAgo(detail?.updatedAtUtc ?? mod.updatedAtUtc)}</dd></div>
-              </dl>
-              {(detail?.tags ?? mod.tags).length > 0 ? (
-                <div className="dark-cloud-detail-tags" aria-label="Tags">
-                  {(detail?.tags ?? mod.tags).map(tag => <span key={tag}>{tag}</span>)}
-                </div>
-              ) : null}
+            <aside className="dark-cloud-detail-summary" aria-labelledby="dark-cloud-summary-title">
+              <div className="dark-cloud-section-heading">
+                <h3 id="dark-cloud-summary-title">ABOUT THIS MOD</h3>
+              </div>
+              <div className="dark-cloud-inset">
+                <p className="dark-cloud-detail-deck">{detail?.summary ?? mod.summary}</p>
+                <dl>
+                  <div><dt>VERSION:</dt><dd>{detail?.latestVersion ?? mod.latestVersion}</dd></div>
+                  <div><dt>DOWNLOADS:</dt><dd>{formatCount(detail?.downloads ?? mod.downloads)}</dd></div>
+                  <div><dt>PUBLISHED:</dt><dd>{formatDate(detail?.createdAtUtc ?? mod.createdAtUtc)}</dd></div>
+                  <div><dt>UPDATED:</dt><dd>{timeAgo(detail?.updatedAtUtc ?? mod.updatedAtUtc)}</dd></div>
+                </dl>
+                {tags.length > 0 ? (
+                  <div className="dark-cloud-inset-row dark-cloud-detail-tags" aria-label="Tags">
+                    <span className="dark-cloud-inset-label">TAGS:</span>
+                    <span className="dark-cloud-detail-tag-list">
+                      {tags.map(tag => <span key={tag}>{tag}</span>)}
+                    </span>
+                  </div>
+                ) : null}
+              </div>
               <SubscriptionControls
                 authenticated={accountUsername !== null}
                 busy={subscriptionBusy}
@@ -260,7 +297,9 @@ export default function DarkCloudModDetail({
             <div className="dark-cloud-section-heading">
               <h3 id="dark-cloud-description-title">DESCRIPTION</h3>
             </div>
-            <p>{detail?.description || detail?.summary || mod.summary}</p>
+            <div className="dark-cloud-inset">
+              <p>{detail?.description || detail?.summary || mod.summary}</p>
+            </div>
           </section>
 
           <section className="dark-cloud-versions" aria-labelledby="dark-cloud-versions-title">
@@ -268,18 +307,21 @@ export default function DarkCloudModDetail({
               <h3 id="dark-cloud-versions-title">VERSION HISTORY</h3>
               <span>{detail ? `${detail.versions.length} RELEASE${detail.versions.length === 1 ? '' : 'S'}` : 'LOADING'}</span>
             </div>
-            {detail?.versions.length === 0 ? <p className="dark-cloud-detail-empty">NO RELEASES LISTED.</p> : null}
-            {detail?.versions.map(version => (
-              <article key={version.id}>
-                <div>
-                  <strong>v{version.version}</strong>
-                  <span>{formatDate(version.createdAtUtc)}</span>
-                  <span>{formatBytes(version.fileSize)}</span>
-                  <span>{formatCount(version.downloads)} DOWNLOADS</span>
-                </div>
-                <p>{version.changelog || 'No changelog supplied.'}</p>
-              </article>
-            ))}
+            <div className="dark-cloud-inset">
+              {detail === null ? <p className="dark-cloud-detail-empty">CONSULTING THE DARK CLOUD…</p> : null}
+              {detail?.versions.length === 0 ? <p className="dark-cloud-detail-empty">NO RELEASES LISTED.</p> : null}
+              {detail?.versions.map(version => (
+                <article key={version.id}>
+                  <div>
+                    <strong>v{version.version}</strong>
+                    <span>{formatDate(version.createdAtUtc)}</span>
+                    <span>{formatBytes(version.fileSize)}</span>
+                    <span>{formatCount(version.downloads)} DOWNLOADS</span>
+                  </div>
+                  <p>{version.changelog || 'No changelog supplied.'}</p>
+                </article>
+              ))}
+            </div>
           </section>
 
           <section className="dark-cloud-comments" aria-labelledby="dark-cloud-comments-title">
@@ -289,7 +331,7 @@ export default function DarkCloudModDetail({
             </div>
 
             {accountUsername ? (
-              <form onSubmit={submitComment}>
+              <form className="dark-cloud-inset" onSubmit={submitComment}>
                 <label htmlFor="dark-cloud-comment">LEAVE A COMMENT</label>
                 <textarea
                   id="dark-cloud-comment"
@@ -300,42 +342,60 @@ export default function DarkCloudModDetail({
                 />
                 <div>
                   <span>{commentBody.length} / 1000</span>
-                  <button type="submit" disabled={commentBusy || commentBody.trim().length === 0}>
+                  <button
+                    type="submit"
+                    className="dark-cloud-inset-button"
+                    disabled={commentBusy || commentBody.trim().length === 0}
+                  >
                     {commentBusy ? 'POSTING…' : 'POST COMMENT'}
                   </button>
                 </div>
               </form>
             ) : (
-              <button type="button" className="dark-cloud-comment-sign-in" onClick={() => window.location.assign('/login')}>
-                SIGN IN TO COMMENT
-              </button>
+              <div className="dark-cloud-inset">
+                <button
+                  type="button"
+                  className="dark-cloud-inset-button dark-cloud-inset-button-go dark-cloud-comment-sign-in"
+                  onClick={() => window.location.assign('/login')}
+                >
+                  SIGN IN TO COMMENT
+                </button>
+              </div>
             )}
 
             {commentError ? <p className="dark-cloud-inline-error" role="alert">{commentError}</p> : null}
-            {comments?.items.length === 0 ? <p className="dark-cloud-detail-empty">NO COMMENTS YET.</p> : null}
-            <div className="dark-cloud-comment-list">
-              {comments?.items.map(comment => (
-                <article key={comment.id}>
-                  <header>
-                    <strong>{comment.author.username}</strong>
-                    <span>{timeAgo(comment.createdAtUtc)}</span>
-                    {canDeleteComment(accountUsername, detail ?? mod, comment) ? (
-                      <button
-                        type="button"
-                        disabled={commentBusy}
-                        aria-label={`Delete comment by ${comment.author.username}`}
-                        onClick={() => { void deleteComment(comment.id) }}
-                      >
-                        DELETE
-                      </button>
-                    ) : null}
-                  </header>
-                  <p>{comment.body}</p>
-                </article>
-              ))}
-            </div>
+            {comments ? (
+              <div className="dark-cloud-inset dark-cloud-comment-list">
+                {comments.items.length === 0 ? <p className="dark-cloud-detail-empty">NO COMMENTS YET.</p> : null}
+                {comments.items.map(comment => (
+                  <article key={comment.id}>
+                    <header>
+                      <strong>{comment.author.username}</strong>
+                      <span>{timeAgo(comment.createdAtUtc)}</span>
+                      {canDeleteComment(accountUsername, detail ?? mod, comment) ? (
+                        <button
+                          type="button"
+                          disabled={commentBusy}
+                          aria-label={`Delete comment by ${comment.author.username}`}
+                          onClick={() => { void deleteComment(comment.id) }}
+                        >
+                          DELETE
+                        </button>
+                      ) : null}
+                    </header>
+                    <p>{comment.body}</p>
+                  </article>
+                ))}
+              </div>
+            ) : null}
           </section>
         </div>
+
+        <footer className="dark-cloud-panel-footer">
+          <button type="button" className="dark-cloud-stone-button dark-cloud-detail-done" onClick={onClose}>
+            DONE
+          </button>
+        </footer>
       </section>
     </div>
   )
@@ -354,24 +414,47 @@ function SubscriptionControls({
   onAction: (action: DarkCloudSubscriptionAction) => void
   subscription: ModSubscription | null
 }) {
+  const state = !authenticated
+    ? 'GUEST'
+    : subscription
+      ? subscription.enabled ? 'ENABLED' : 'DISABLED'
+      : 'NOT SUBSCRIBED'
   return (
     <div className="dark-cloud-detail-subscription">
-      {!authenticated ? (
-        <button type="button" disabled={busy} onClick={() => onAction('subscribe')}>SIGN IN TO SUBSCRIBE</button>
-      ) : !subscription ? (
-        <button type="button" disabled={busy} onClick={() => onAction('subscribe')}>{busy ? 'WORKING…' : 'SUBSCRIBE'}</button>
-      ) : (
-        <>
+      <div className="dark-cloud-section-heading">
+        <h3>SUBSCRIPTION</h3>
+        <span>{state}</span>
+      </div>
+      <div className="dark-cloud-inset">
+        {!authenticated ? (
           <button
             type="button"
+            className="dark-cloud-inset-button dark-cloud-inset-button-go"
             disabled={busy}
-            onClick={() => onAction(subscription.enabled ? 'disable' : 'enable')}
+            onClick={() => onAction('subscribe')}
           >
-            {busy ? 'WORKING…' : subscription.enabled ? 'DISABLE MOD' : 'ENABLE MOD'}
+            SIGN IN TO SUBSCRIBE
           </button>
-          <button type="button" disabled={busy} onClick={() => onAction('unsubscribe')}>UNSUBSCRIBE</button>
-        </>
-      )}
+        ) : !subscription ? (
+          <button type="button" className="dark-cloud-inset-button" disabled={busy} onClick={() => onAction('subscribe')}>
+            {busy ? 'WORKING…' : 'SUBSCRIBE'}
+          </button>
+        ) : (
+          <>
+            <button
+              type="button"
+              className="dark-cloud-inset-button"
+              disabled={busy}
+              onClick={() => onAction(subscription.enabled ? 'disable' : 'enable')}
+            >
+              {busy ? 'WORKING…' : subscription.enabled ? 'DISABLE MOD' : 'ENABLE MOD'}
+            </button>
+            <button type="button" className="dark-cloud-inset-button" disabled={busy} onClick={() => onAction('unsubscribe')}>
+              UNSUBSCRIBE
+            </button>
+          </>
+        )}
+      </div>
       {error ? <p className="dark-cloud-inline-error" role="alert">{error}</p> : null}
     </div>
   )

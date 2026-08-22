@@ -21,6 +21,7 @@ import DarkCloudMedia from './DarkCloudMedia.tsx'
 import DarkCloudModDetail, {
   type DarkCloudSubscriptionAction,
 } from './DarkCloudModDetail.tsx'
+import DarkCloudPanelOrnaments from './DarkCloudPanel.tsx'
 import './dark-cloud.css'
 
 type DarkCloudTab = 'mods' | 'subscribed' | 'parties'
@@ -227,6 +228,17 @@ export default function DarkCloudScene({
     if (selected?.kind === 'mod') openMod(selected.mod)
   }
 
+  // Same controls in two homes: the footer status slot on desktop and the
+  // in-frame band that replaces the column header on phones. CSS shows one.
+  const statusControls = (
+    <>
+      <span className="dark-cloud-status-label">{statusLabel(tab, rows.length, query, loading)}</span>
+      {loading && rows.length > 0 ? <span className="dark-cloud-status-note">REFRESHING…</span> : null}
+      {query ? <button type="button" onClick={() => setQuery('')}>CLEAR SEARCH</button> : null}
+      {tab === 'parties' ? <button type="button" onClick={() => { void refreshParties() }}>REFRESH</button> : null}
+    </>
+  )
+
   return (
     <section className="dark-cloud-scene" aria-label="The Dark Cloud">
       <div className="dark-cloud-wall" aria-hidden />
@@ -277,6 +289,7 @@ export default function DarkCloudScene({
         <div className={`dark-cloud-columns dark-cloud-columns-${tab}`} aria-hidden>
           {columnLabels(tab).map(label => <span key={label}>{label}</span>)}
         </div>
+        <div className="dark-cloud-list-status">{statusControls}</div>
 
         <div className="dark-cloud-rows" role="list" aria-label={`${tab} entries`} aria-busy={loading}>
           {loading && rows.length === 0 ? <p className="dark-cloud-empty">CONSULTING THE DARK CLOUD…</p> : null}
@@ -333,11 +346,7 @@ export default function DarkCloudScene({
         >
           {tab === 'parties' ? 'ENTER SHARED HUB' : 'VIEW MOD'}
         </button>
-        <div className="dark-cloud-footer-status">
-          {loading && rows.length > 0 ? <span>REFRESHING…</span> : null}
-          {tab === 'parties' ? <button type="button" onClick={() => { void refreshParties() }}>REFRESH</button> : null}
-          {query ? <button type="button" onClick={() => setQuery('')}>CLEAR SEARCH</button> : null}
-        </div>
+        <div className="dark-cloud-footer-status">{statusControls}</div>
       </footer>
 
       {actionError ? <p className="dark-cloud-error" role="alert">{actionError}</p> : null}
@@ -345,19 +354,25 @@ export default function DarkCloudScene({
         <div className="dark-cloud-modal-backdrop" role="presentation" onMouseDown={event => {
           if (event.target === event.currentTarget) setMenuOpen(false)
         }}>
-          <section className="dark-cloud-modal" role="dialog" aria-modal="true" aria-label="Dark Cloud menu">
-            <h2>DARK CLOUD MENU</h2>
-            <div>
-              <button type="button" data-game-back="true" onClick={() => setMenuOpen(false)}>
+          <section
+            className="dark-cloud-modal dark-cloud-panel dark-cloud-menu-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Dark Cloud menu"
+          >
+            <DarkCloudPanelOrnaments crest flourishes={false} />
+            <h2 className="dark-cloud-sr-only">DARK CLOUD MENU</h2>
+            <div className="dark-cloud-panel-body dark-cloud-menu-plates">
+              <button type="button" className="dark-cloud-plate" data-game-back="true" onClick={() => setMenuOpen(false)}>
                 RESUME
               </button>
-              <button type="button" onClick={() => {
+              <button type="button" className="dark-cloud-plate" onClick={() => {
                 setMenuOpen(false)
                 onSettings()
               }}>
                 GAME SETTINGS
               </button>
-              <button type="button" onClick={() => {
+              <button type="button" className="dark-cloud-plate" onClick={() => {
                 setMenuOpen(false)
                 onBack()
               }}>
@@ -369,42 +384,68 @@ export default function DarkCloudScene({
       ) : null}
       {searchOpen ? (
         <DarkCloudModal title="SEARCH THE DARK CLOUD" onClose={() => setSearchOpen(false)}>
-          <label>
-            {tab === 'parties' ? 'LEADER, MEMBER, OR BONEYARD' : 'MOD, AUTHOR, OR TAG'}
-            <input
-              value={draftQuery}
-              onChange={event => setDraftQuery(event.target.value)}
-              onKeyDown={event => {
-                if (event.key !== 'Enter') return
-                setQuery(draftQuery)
-                setSearchOpen(false)
-              }}
-              autoFocus
-            />
-          </label>
-          <button type="button" onClick={() => {
-            setQuery(draftQuery)
-            setSearchOpen(false)
-          }}>SEARCH</button>
+          <div className="dark-cloud-inset">
+            <div className="dark-cloud-inset-row dark-cloud-field-row">
+              <label htmlFor="dark-cloud-search-input">
+                {tab === 'parties' ? 'LEADER, MEMBER, OR BONEYARD:' : 'MOD, AUTHOR, OR TAG:'}
+              </label>
+              <span className="dark-cloud-field">
+                <input
+                  id="dark-cloud-search-input"
+                  value={draftQuery}
+                  onChange={event => setDraftQuery(event.target.value)}
+                  onKeyDown={event => {
+                    if (event.key !== 'Enter') return
+                    setQuery(draftQuery)
+                    setSearchOpen(false)
+                  }}
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  className="dark-cloud-field-clear"
+                  aria-label="Clear search text"
+                  disabled={draftQuery.length === 0}
+                  onClick={() => setDraftQuery('')}
+                >
+                  <span aria-hidden>×</span>
+                </button>
+              </span>
+            </div>
+            <button type="button" className="dark-cloud-inset-button" onClick={() => {
+              setQuery(draftQuery)
+              setSearchOpen(false)
+            }}>SEARCH NOW</button>
+          </div>
         </DarkCloudModal>
       ) : null}
 
       {sortOpen ? (
-        <DarkCloudModal title={tab === 'parties' ? 'SORT PARTIES' : 'SORT MODS'} onClose={() => setSortOpen(false)}>
-          {(tab === 'parties' ? [
-            ['members', 'MOST WIZARDS'],
-            ['name', 'LEADER NAME'],
-          ] as const : [
-            ['newest', 'NEWEST'],
-            ['updated', 'UPDATED RECENTLY'],
-            ['downloads', 'MOST DOWNLOADED'],
-            ['name', 'NAME'],
-          ] as const).map(([value, label]) => (
-            <button key={value} type="button" className={sort === value ? 'selected' : ''} onClick={() => {
-              setSort(value)
-              setSortOpen(false)
-            }}>{label}</button>
-          ))}
+        <DarkCloudModal title={tab === 'parties' ? 'SORT PARTIES BY…' : 'SORT MODS BY…'} onClose={() => setSortOpen(false)}>
+          <div className="dark-cloud-inset" role="group" aria-label="Sort order">
+            {(tab === 'parties' ? [
+              ['members', 'MOST WIZARDS'],
+              ['name', 'LEADER NAME'],
+            ] as const : [
+              ['newest', 'NEWEST'],
+              ['updated', 'UPDATED RECENTLY'],
+              ['downloads', 'MOST DOWNLOADED'],
+              ['name', 'NAME'],
+            ] as const).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                className={`dark-cloud-inset-button${sort === value ? ' selected' : ''}`}
+                aria-pressed={sort === value}
+                onClick={() => {
+                  setSort(value)
+                  setSortOpen(false)
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </DarkCloudModal>
       ) : null}
 
@@ -561,10 +602,15 @@ function DarkCloudModal({
     <div className="dark-cloud-modal-backdrop" role="presentation" onMouseDown={event => {
       if (event.target === event.currentTarget) onClose()
     }}>
-      <section className="dark-cloud-modal" role="dialog" aria-modal="true" aria-label={title}>
-        <h2>{title}</h2>
-        <div>{children}</div>
-        <button type="button" className="dark-cloud-modal-done" onClick={onClose}>DONE</button>
+      <section className="dark-cloud-modal dark-cloud-panel" role="dialog" aria-modal="true" aria-label={title}>
+        <DarkCloudPanelOrnaments />
+        <div className="dark-cloud-panel-body">
+          <h2 className="dark-cloud-panel-caption">{title}</h2>
+          {children}
+        </div>
+        <div className="dark-cloud-panel-footer">
+          <button type="button" className="dark-cloud-modal-done dark-cloud-stone-button" onClick={onClose}>DONE</button>
+        </div>
       </section>
     </div>
   )
@@ -584,6 +630,14 @@ function columnLabels(tab: DarkCloudTab): readonly string[] {
   if (tab === 'parties') return ['PARTY', 'WIZARDS', 'STATUS', 'LOCATION', 'ACTION']
   if (tab === 'subscribed') return ['SUBSCRIBED MOD', 'AUTHOR', 'VERSION', 'STATUS', 'MANAGE']
   return ['MOD', 'AUTHOR', 'VERSION', 'STATUS', 'ACTION']
+}
+
+function statusLabel(tab: DarkCloudTab, count: number, query: string, loading: boolean): string {
+  if (loading && count === 0) return 'CONSULTING THE DARK CLOUD…'
+  if (query) return `"${query.toUpperCase()}" · ${count} ${count === 1 ? 'MATCH' : 'MATCHES'}`
+  if (tab === 'parties') return `${count} ${count === 1 ? 'PARTY' : 'PARTIES'}`
+  if (tab === 'subscribed') return `${count} SUBSCRIBED`
+  return `${count} ${count === 1 ? 'MOD' : 'MODS'}`
 }
 
 function emptyMessage(tab: DarkCloudTab, authenticated: boolean, query: string): string {

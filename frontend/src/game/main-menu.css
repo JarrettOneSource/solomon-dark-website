@@ -783,6 +783,11 @@
 @media (orientation: portrait) and (hover: none) and (pointer: coarse) {
   .main-menu-stage { visibility: hidden; }
 
+  /* The Dark Cloud is a list screen, not the fixed-aspect College stage: it lays
+     itself out for portrait phones, so the rotate gate must not hide it. */
+  .main-menu-page[data-game-scene='dark-cloud'] .main-menu-stage { visibility: visible; }
+  .main-menu-page[data-game-scene='dark-cloud'] .game-orientation-hint { display: none; }
+
   .game-fullscreen-control { z-index: 100001; }
 
   .game-orientation-hint {
