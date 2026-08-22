@@ -16,6 +16,7 @@ import {
   createPlayerCharacterDrawPlan,
   createPlayerDeathDrawPlan,
   playerEquippedElementEffectScale,
+  playerEquippedElementEffectPhase,
   playerDeathEquipmentAppearance,
   playerLivingEquipmentAppearance,
 } from '../player-character-presentation.ts'
@@ -40,7 +41,9 @@ export class PlayerWorldView {
   readonly container = new Container({ label: 'local-player' })
   private readonly shadow: Sprite
   private readonly staffBack: Sprite
-  private readonly orb: NativeElementVfxView
+  private readonly orbBackBase: NativeElementVfxView
+  private readonly orbFrontBase: NativeElementVfxView
+  private readonly orbFrontOverlay: NativeElementVfxView
   private readonly robe: Sprite
   private readonly robeSecondary: Sprite
   private readonly fixed: Sprite
@@ -88,13 +91,20 @@ export class PlayerWorldView {
     this.shadow.scale.set(1.25)
     this.shadow.alpha = 0.72
     this.staffBack = actorSprite(playerTextures.staffBack[0][0], 1)
-    this.orb = new NativeElementVfxView(element, textures.elementVfx)
-    this.orb.container.zIndex = 2
+    this.orbBackBase = new NativeElementVfxView(element, textures.elementVfx)
+    this.orbBackBase.container.label = 'native-element-vfx-back-base'
+    this.orbBackBase.container.zIndex = 2
     this.robe = actorSprite(playerTextures.robe[0][0], 3)
     this.robeSecondary = actorSprite(playerTextures.robe[0][0], 3)
     this.fixed = actorSprite(playerTextures.fixed[0][0], 4)
     this.fixedSecondary = actorSprite(playerTextures.fixed[0][0], 4)
     this.staffFront = actorSprite(playerTextures.staffFront[0][0], 5)
+    this.orbFrontBase = new NativeElementVfxView(element, textures.elementVfx)
+    this.orbFrontBase.container.label = 'native-element-vfx-front-base'
+    this.orbFrontBase.container.zIndex = 6
+    this.orbFrontOverlay = new NativeElementVfxView(element, textures.elementVfx)
+    this.orbFrontOverlay.container.label = 'native-element-vfx-front-overlay'
+    this.orbFrontOverlay.container.zIndex = 6
     this.head = actorSprite(playerTextures.head[0], 7)
     this.headSecondary = actorSprite(playerTextures.head[0], 7)
     this.deathShadowLayers = createDeathLayers(playerTextures.death[0][0], 1, 'shadow')
@@ -145,12 +155,14 @@ export class PlayerWorldView {
     this.container.addChild(
       this.shadow,
       this.staffBack,
-      this.orb.container,
+      this.orbBackBase.container,
       this.robe,
       this.robeSecondary,
       this.fixed,
       this.fixedSecondary,
       this.staffFront,
+      this.orbFrontBase.container,
+      this.orbFrontOverlay.container,
       this.head,
       this.headSecondary,
       ...this.deathShadowLayers,
@@ -166,12 +178,17 @@ export class PlayerWorldView {
     staffActionPose: PlayerStaffAttachmentPose | null = null,
   ): void {
     const playerTextures = this.textures.players[player.config.element]
+    const elementEffectPhase = playerEquippedElementEffectPhase(
+      player.primaryCast.weaponPulse,
+      player.lighting.overlayEffectPhase,
+    )
     const plan = createPlayerCharacterDrawPlan(
       player,
       1,
       staffActionPose,
       (this.secondaryState?.staffCastTicksRemaining ?? 0) > 0
         || (this.secondaryState?.castSpinTicksRemaining ?? 0) > 0,
+      elementEffectPhase,
     )
     const heading = spriteFrameIndex(Math.round(player.headingIndex), 24)
     const pose = spriteFrameIndex(plan.robePose, 5)
@@ -182,7 +199,6 @@ export class PlayerWorldView {
     const attachmentOffset = plan.frontAttachmentOffset
     const headOffset = plan.headOffset
     const orbOffset = plan.orbOffset
-    const staffFront = plan.staffFront
     const death = createPlayerDeathDrawPlan(
       player.headingIndex,
       player.progression.lifeState,
@@ -217,7 +233,15 @@ export class PlayerWorldView {
     // all-transparent back or front cell from Clothes point-0 depth. Keeping
     // both passes live preserves every melee pose without duplicating pixels.
     this.staffBack.visible = !death.visible && hasWeapon
-    this.orb.container.visible = !death.visible && hasStaff
+    this.orbBackBase.container.visible = !death.visible
+      && hasStaff
+      && plan.orbPasses.backBase
+    this.orbFrontBase.container.visible = !death.visible
+      && hasStaff
+      && plan.orbPasses.frontBase
+    this.orbFrontOverlay.container.visible = !death.visible
+      && hasStaff
+      && plan.orbPasses.frontOverlay
     this.robe.visible = !death.visible
     this.robeSecondary.visible = !death.visible && livingAppearance.robe !== null
     this.fixed.visible = !death.visible
@@ -290,16 +314,20 @@ export class PlayerWorldView {
     this.hitHeadSecondary.texture = this.headSecondary.texture
     this.hitHead.position.set(headOffset.x, headOffset.y)
     this.hitHeadSecondary.position.set(headOffset.x, headOffset.y)
-    this.orb.container.position.set(
-      orbOffset.x + (staffFront ? attachmentOffset.x : 0),
-      orbOffset.y + (staffFront ? attachmentOffset.y : 0),
-    )
-    this.orb.container.zIndex = staffFront ? 6 : 2
+    this.orbBackBase.container.position.set(orbOffset.x, orbOffset.y)
+    for (const orb of [this.orbFrontBase, this.orbFrontOverlay]) {
+      orb.container.position.set(
+        orbOffset.x + attachmentOffset.x,
+        orbOffset.y + attachmentOffset.y,
+      )
+    }
     this.currentElementEffectScale = playerEquippedElementEffectScale(
       player.primaryCast.weaponPulse,
       player.lighting.overlayEffectPhase,
     )
-    this.orb.update(tick, this.currentElementEffectScale)
+    this.orbBackBase.update(tick, this.currentElementEffectScale)
+    this.orbFrontBase.update(tick, this.currentElementEffectScale)
+    this.orbFrontOverlay.update(tick, this.currentElementEffectScale)
     this.applyMaterialTint()
   }
 
@@ -378,12 +406,18 @@ export class PlayerWorldView {
   }
 
   get orbSpriteCount(): number {
-    return this.orb.sprites.filter((sprite) => sprite.visible).length
+    return [this.orbBackBase, this.orbFrontBase, this.orbFrontOverlay]
+      .filter(({ container }) => container.visible)
+      .reduce((count, orb) => (
+        count + orb.sprites.filter((sprite) => sprite.visible).length
+      ), 0)
   }
 
   destroy(): void {
-    this.container.removeChild(this.orb.container)
-    this.orb.destroy()
+    for (const orb of [this.orbBackBase, this.orbFrontBase, this.orbFrontOverlay]) {
+      this.container.removeChild(orb.container)
+      orb.destroy()
+    }
     this.container.destroy({ children: true })
   }
 

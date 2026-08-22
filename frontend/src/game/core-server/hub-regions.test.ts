@@ -6,6 +6,7 @@ import {
   HUB_STOREROOM_STORY_BARRIER,
   circleOverlapsHubSegment,
   circleTouchesHubSegment,
+  pathCapsuleOverlapsHubSegment,
 } from '../core-kernels/hub-collision.ts'
 import {
   HUB_PORTALS,
@@ -14,6 +15,7 @@ import {
   firstHubRegionLineObstruction,
   hubIncomingPlacement,
   hubPortalAt,
+  isHubRegionPathTraversable,
   isHubRegionTraversable,
   moveWithHubRegionCollisionState,
   type HubParticipantState,
@@ -34,12 +36,38 @@ import {
   createPlayerCharacter,
   type PlayerCharacterState,
 } from '../core-kernels/player-character.ts'
+
 import {
   HUB_FIXED_ACTOR_COLLISION_LAYOUT,
   createHubWorld,
   stepHubWorldTick,
   type HubWorldState,
 } from './hub-world.ts'
+
+test('solid-spell capsules use the complete Hub segment path, not endpoint occupancy', () => {
+  const wall = { x1: 100, y1: 0, x2: 100, y2: 200 }
+  assert.equal(pathCapsuleOverlapsHubSegment(
+    { x: 80, y: 100 },
+    { x: 120, y: 100 },
+    5,
+    wall,
+  ), true)
+  assert.equal(pathCapsuleOverlapsHubSegment(
+    { x: 80, y: 220 },
+    { x: 120, y: 220 },
+    20,
+    wall,
+  ), false, 'native strict tangency remains clear')
+
+  const courtyardBoundary = HUB_REGION_DEFINITIONS.courtyard.segments[0]!
+  const midpointX = (courtyardBoundary.x1 + courtyardBoundary.x2) / 2
+  assert.equal(isHubRegionPathTraversable(
+    'courtyard',
+    { x: midpointX, y: 20 },
+    { x: midpointX, y: -20 },
+    5,
+  ), false)
+})
 
 const CHARACTER = {
   discipline: 'arcane',

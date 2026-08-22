@@ -20,6 +20,7 @@ import {
   playerCharacterRobePose,
   playerCharacterStaffIsFront,
   playerCharacterStaffOrbOffset,
+  playerCharacterStaffOrbPasses,
   playerStaffActionPose,
 } from './player-character-presentation.ts'
 
@@ -262,7 +263,11 @@ test('player character draw plan preserves native attachment and gait transforms
   assert.equal(plan.headingSheetOffsetY, -1020)
   assert.equal(plan.moving, true)
   assert.equal(plan.staffFront, true)
-  assert.equal(plan.orbZIndex, 6)
+  assert.deepEqual(plan.orbPasses, {
+    backBase: true,
+    frontBase: true,
+    frontOverlay: true,
+  })
   const pulsingPlan = createPlayerCharacterDrawPlan({
     config: FIRE_CONFIG,
     gaitDegrees: 0,
@@ -279,8 +284,54 @@ test('player character draw plan preserves native attachment and gait transforms
   assert.doesNotMatch(playerWorldView, /staff(?:Back|Front)\.scale\.set/)
   assert.match(
     playerWorldView,
-    /playerEquippedElementEffectScale\([\s\S]*player\.primaryCast\.weaponPulse,[\s\S]*player\.lighting\.overlayEffectPhase,[\s\S]*this\.orb\.update\(tick, this\.currentElementEffectScale\)/,
+    /playerEquippedElementEffectScale\([\s\S]*player\.primaryCast\.weaponPulse,[\s\S]*player\.lighting\.overlayEffectPhase,[\s\S]*this\.orbBackBase\.update\(tick, this\.currentElementEffectScale\)[\s\S]*this\.orbFrontBase\.update\(tick, this\.currentElementEffectScale\)[\s\S]*this\.orbFrontOverlay\.update\(tick, this\.currentElementEffectScale\)/,
   )
+})
+
+test('Staff element effects preserve the native front copy across every heading and pose', () => {
+  assert.deepEqual(playerCharacterStaffOrbPasses(0, 0, 0), {
+    backBase: true,
+    frontBase: false,
+    frontOverlay: true,
+  })
+  assert.deepEqual(playerCharacterStaffOrbPasses(6, 0, 0), {
+    backBase: true,
+    frontBase: true,
+    frontOverlay: true,
+  })
+  assert.deepEqual(playerCharacterStaffOrbPasses(7, 0, 0), {
+    backBase: false,
+    frontBase: true,
+    frontOverlay: false,
+  })
+  assert.deepEqual(playerCharacterStaffOrbPasses(18, 0, 0), {
+    backBase: false,
+    frontBase: true,
+    frontOverlay: false,
+  })
+  assert.deepEqual(playerCharacterStaffOrbPasses(19, 0, 0), {
+    backBase: true,
+    frontBase: false,
+    frontOverlay: true,
+  })
+  assert.equal(playerCharacterStaffOrbPasses(7, 0, 0.10000000149011612).frontOverlay, false)
+  assert.equal(playerCharacterStaffOrbPasses(
+    7,
+    0,
+    0.10000000149011612 + Number.EPSILON,
+  ).frontOverlay, true)
+  assert.equal(playerCharacterStaffOrbPasses(7, 9, 0).frontOverlay, true)
+
+  for (let heading = 0; heading < 24; heading += 1) {
+    for (let pose = 0; pose <= 9; pose += 1) {
+      const passes = playerCharacterStaffOrbPasses(
+        heading,
+        pose as Parameters<typeof playerCharacterStaffOrbPasses>[1],
+        0,
+      )
+      assert.equal(passes.frontBase || passes.frontOverlay, true, `${heading}:${pose}`)
+    }
+  }
 })
 
 test('player draw plan consumes the authoritative Staff Cast 1 pose bank', () => {

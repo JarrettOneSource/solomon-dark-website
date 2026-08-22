@@ -334,6 +334,71 @@ export function isTraversableAgainstHubSegments(
   return !firstOverlappingSegment(point, radius, segments)
 }
 
+export function isPathTraversableAgainstHubSegments(
+  start: Vector2,
+  end: Vector2,
+  radius: number,
+  segments: readonly HubSegment[],
+): boolean {
+  return !segments.some((segment) => pathCapsuleOverlapsHubSegment(
+    start,
+    end,
+    radius,
+    segment,
+  ))
+}
+
+export function pathCapsuleOverlapsHubSegment(
+  start: Vector2,
+  end: Vector2,
+  radius: number,
+  segment: HubSegment,
+): boolean {
+  const segmentStart = { x: segment.x1, y: segment.y1 }
+  const segmentEnd = { x: segment.x2, y: segment.y2 }
+  if (segmentsIntersect(start, end, segmentStart, segmentEnd)) return true
+  const radiusSquared = radius * radius
+  const path = { x1: start.x, y1: start.y, x2: end.x, y2: end.y }
+  return squaredDistance(start, nearestPointOnHubSegment(start, segment)) < radiusSquared
+    || squaredDistance(end, nearestPointOnHubSegment(end, segment)) < radiusSquared
+    || squaredDistance(segmentStart, nearestPointOnHubSegment(segmentStart, path)) < radiusSquared
+    || squaredDistance(segmentEnd, nearestPointOnHubSegment(segmentEnd, path)) < radiusSquared
+}
+
+function segmentsIntersect(
+  a: Vector2,
+  b: Vector2,
+  c: Vector2,
+  d: Vector2,
+): boolean {
+  const abC = cross(a, b, c)
+  const abD = cross(a, b, d)
+  const cdA = cross(c, d, a)
+  const cdB = cross(c, d, b)
+  if (abC === 0 && pointOnSegment(c, a, b)) return true
+  if (abD === 0 && pointOnSegment(d, a, b)) return true
+  if (cdA === 0 && pointOnSegment(a, c, d)) return true
+  if (cdB === 0 && pointOnSegment(b, c, d)) return true
+  return (abC > 0) !== (abD > 0) && (cdA > 0) !== (cdB > 0)
+}
+
+function cross(a: Vector2, b: Vector2, point: Vector2): number {
+  return (b.x - a.x) * (point.y - a.y) - (b.y - a.y) * (point.x - a.x)
+}
+
+function pointOnSegment(point: Vector2, start: Vector2, end: Vector2): boolean {
+  return point.x >= Math.min(start.x, end.x)
+    && point.x <= Math.max(start.x, end.x)
+    && point.y >= Math.min(start.y, end.y)
+    && point.y <= Math.max(start.y, end.y)
+}
+
+function squaredDistance(a: Vector2, b: Vector2): number {
+  const dx = a.x - b.x
+  const dy = a.y - b.y
+  return dx * dx + dy * dy
+}
+
 /** Replays the stock controller's collision-triggered two-pass sweep. */
 export function moveWithHubCollision(
   position: Vector2,

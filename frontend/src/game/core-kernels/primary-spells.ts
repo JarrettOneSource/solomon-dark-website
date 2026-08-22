@@ -105,6 +105,7 @@ import {
   stepNativeWeldWorldActor,
   updateNativeWeldPersistentActor,
   type NativeWeldProjectileState,
+  type NativeWeldEtherealBoulderState,
   type NativeWeldImpactActorState,
   type NativeWeldWorldActor,
 } from './native-weld-primary-runtime.ts'
@@ -118,6 +119,7 @@ import {
 } from './native-weld-meteor.ts'
 import { createNativeWeldGroundSparkFadeProgram } from './native-weld-ground-spark.ts'
 import {
+  createNativeWeldEtherealBoulderBreakupDebrisProgram,
   createNativeWeldBoulderDebrisParticle,
   stepNativeWeldBoulderDebrisParticle,
   type NativeWeldBoulderDebrisParticleState,
@@ -529,9 +531,10 @@ export interface PrimarySpellTickContext {
     radius: number,
   ) => boolean
   canTraverseProjectile: (
-    spell: PrimarySpellProjectileState,
+    spell: PrimarySpellProjectileState | NativeWeldEtherealBoulderState,
     from: Vector2,
     to: Vector2,
+    radius?: number,
   ) => boolean
   castAuthority: Readonly<Record<string, PrimarySpellCastAuthority>>
   inputs: Readonly<Record<string, PlayerCharacterInput>>
@@ -583,7 +586,6 @@ export const PRIMARY_SPELL_FIRE_COLLISION_RADIUS = 20
 export const PRIMARY_SPELL_EARTH_INITIAL_CHARGE = Math.fround(0.18)
 export const PRIMARY_SPELL_EARTH_CHARGE_STEP = Math.fround(0.00125)
 export const PRIMARY_SPELL_EARTH_MIN_RELEASE_CHARGE = Math.fround(0.3)
-export const PRIMARY_SPELL_EARTH_RELEASE_COLLISION_RADIUS_SCALE = 45
 export const PRIMARY_SPELL_EARTH_COLLISION_RADIUS_SCALE = 75
 export const PRIMARY_SPELL_EARTH_CALLED_ROCK_INITIAL_SPEED = Math.fround(0.1)
 export const PRIMARY_SPELL_EARTH_CALLED_ROCK_SPEED_MULTIPLIER = 1.100000023841858
@@ -929,12 +931,28 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
       }
       const stepped = stepNativeWeldWorldActor(effect, rng, (actor, from, to) => (
         actor.buildId === 1006
-          ? context.canPlaceProjectile(actor, to, actor.scale * PRIMARY_SPELL_EARTH_COLLISION_RADIUS_SCALE)
+          ? context.canTraverseProjectile(
+              actor,
+              from,
+              to,
+              actor.scale * PRIMARY_SPELL_EARTH_COLLISION_RADIUS_SCALE,
+            )
           : actor.buildId === 1008
             || context.spellObstructionPoint(actor.ownerId, from, to) === null
       ))
       rng = stepped.rng
-      if (stepped.actor) {
+      if (stepped.terrainContact) {
+        const terminal = createPrimarySpellWeldBoulderTerminal(
+          nextId,
+          stepped.terrainContact,
+          context.tick,
+          rng,
+          registerLightProvider,
+        )
+        nextId = terminal.nextId
+        rng = terminal.rng
+        transients.push(...terminal.transients)
+      } else if (stepped.actor) {
         transients.push(stepped.actor)
         if (
           stepped.actor.kind === 'weld-meteor'
@@ -1126,9 +1144,13 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
     const advanced = advanceProjectileWithPresentation(spell, targets)
     if (
       advanced.kind === 'earth'
-      && !context.canPlaceProjectile(
+      && !context.canTraverseProjectile(
         advanced,
         advanced.position,
+        {
+          x: Math.fround(advanced.position.x + advanced.velocity.x),
+          y: Math.fround(advanced.position.y + advanced.velocity.y),
+        },
         advanced.charge * PRIMARY_SPELL_EARTH_COLLISION_RADIUS_SCALE,
       )
     ) {
@@ -2131,7 +2153,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           projectiles,
           playerId,
           aimDirection,
-          context.canPlaceProjectile,
+          context.canTraverseProjectile,
           context.tick,
           nextId,
         )
@@ -2240,7 +2262,7 @@ function releaseHeldEarthProjectiles(
   projectiles: readonly PrimarySpellProjectileState[],
   playerId: string,
   aimDirection: Vector2,
-  canPlaceProjectile: PrimarySpellTickContext['canPlaceProjectile'],
+  canTraverseProjectile: PrimarySpellTickContext['canTraverseProjectile'],
   tick: number,
   sourceNextId: number,
 ): {
@@ -2287,10 +2309,14 @@ function releaseHeldEarthProjectiles(
       ),
       velocity,
     }
-    if (canPlaceProjectile(
+    if (canTraverseProjectile(
       releasedSpell,
       releasedSpell.position,
-      releasedSpell.charge * PRIMARY_SPELL_EARTH_RELEASE_COLLISION_RADIUS_SCALE,
+      {
+        x: Math.fround(releasedSpell.position.x + releasedSpell.velocity.x),
+        y: Math.fround(releasedSpell.position.y + releasedSpell.velocity.y),
+      },
+      releasedSpell.charge * PRIMARY_SPELL_EARTH_COLLISION_RADIUS_SCALE,
     )) {
       releasedProjectiles.push(releasedSpell)
     } else {
@@ -2763,6 +2789,67 @@ export function createPrimarySpellWeldImpact(
     worldKey: spell.worldKey,
     }),
     rng,
+  })
+}
+
+export function createPrimarySpellWeldBoulderTerminal(
+  sourceNextId: number,
+  actor: NativeWeldEtherealBoulderState,
+  birthTick: number,
+  sourceRng: NativeRngState,
+  registerLightProvider?: RegisterNativeLightProvider,
+): Readonly<{
+  nextId: number
+  rng: NativeRngState
+  transients: readonly PrimarySpellTransientState[]
+}> {
+  const impactId = sourceNextId
+  const transients: PrimarySpellTransientState[] = [Object.freeze({
+    ageTicks: 0,
+    alpha: 2,
+    birthTick,
+    boulderTerminalCharge: actor.scale,
+    buildId: 1006,
+    direction: Object.freeze({ ...actor.direction }),
+    id: impactId,
+    impactSoundPitch: null,
+    impactSoundVariant: null,
+    kind: 'weld-impact',
+    lightRegistration: registerLightProvider?.('transient') ?? Object.freeze({
+      managerLane: 'transient',
+      registrationOrdinal: impactId,
+    }),
+    origin: Object.freeze({ ...actor.origin }),
+    ownerId: actor.ownerId,
+    position: Object.freeze({ ...actor.origin }),
+    presentationRotationDegrees: null,
+    presentationScale: 2,
+    vector: Object.freeze([...actor.vector]),
+    worldKey: actor.worldKey,
+  })]
+  const breakup = createNativeWeldEtherealBoulderBreakupDebrisProgram({
+    rng: sourceRng,
+    scale: actor.scale,
+  })
+  let nextId = impactId + 1
+  for (const debris of breakup.debris) {
+    transients.push(createNativeWeldBoulderDebrisActor({
+      buildId: 1006,
+      debris,
+      direction: actor.direction,
+      id: nextId,
+      origin: actor.origin,
+      ownerId: actor.ownerId,
+      tick: birthTick,
+      vector: actor.vector,
+      worldKey: actor.worldKey,
+    }))
+    nextId += 1
+  }
+  return Object.freeze({
+    nextId,
+    rng: breakup.rng,
+    transients: Object.freeze(transients),
   })
 }
 

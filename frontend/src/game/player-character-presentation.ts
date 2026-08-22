@@ -45,11 +45,20 @@ export interface PlayerCharacterDrawPlan {
   headOffset: Vector2
   headingSheetOffsetY: number
   moving: boolean
+  orbPasses: PlayerStaffOrbPasses
   orbOffset: Vector2
-  orbZIndex: number
   robePose: number
   staffFront: boolean
 }
+
+export interface PlayerStaffOrbPasses {
+  readonly backBase: boolean
+  readonly frontBase: boolean
+  readonly frontOverlay: boolean
+}
+
+export const NATIVE_PLAYER_ELEMENT_EFFECT_FRONT_PULSE_THRESHOLD =
+  0.10000000149011612
 
 export interface PlayerDeathDrawPlan {
   facing: number
@@ -233,6 +242,7 @@ export function createPlayerCharacterDrawPlan(
   scale = 1,
   staffActionPose: PlayerStaffAttachmentPose | null = null,
   secondaryCastActive = false,
+  elementEffectPhase = state.primaryCast.weaponPulse,
 ): PlayerCharacterDrawPlan {
   const castElement = selectedPrimaryCastElement(
     state.primaryCast.selectedPrimaryId,
@@ -260,6 +270,11 @@ export function createPlayerCharacterDrawPlan(
     ),
     headingSheetOffsetY: -state.headingIndex * 170,
     moving: Math.hypot(state.velocity.x, state.velocity.y) > 0.01,
+    orbPasses: playerCharacterStaffOrbPasses(
+      state.headingIndex,
+      attachmentPose,
+      elementEffectPhase,
+    ),
     orbOffset: secondaryCastActive
       ? staffAttachmentEmitterOffset(state.headingIndex, 9)
       : staffActionPose === null
@@ -270,7 +285,6 @@ export function createPlayerCharacterDrawPlan(
           castElement,
         )
         : playerStaffAttachmentOffset(state.headingIndex, staffActionPose),
-    orbZIndex: staffFront ? 6 : 2,
     robePose: playerCharacterRobePose(state.walkCyclePrimary),
     staffFront,
   }
@@ -280,7 +294,17 @@ export function playerEquippedElementEffectScale(
   primaryPulse: number,
   castLightPulse: number,
 ): number {
-  return Math.fround(1 + 10 * Math.max(primaryPulse, castLightPulse))
+  return Math.fround(1 + 10 * playerEquippedElementEffectPhase(
+    primaryPulse,
+    castLightPulse,
+  ))
+}
+
+export function playerEquippedElementEffectPhase(
+  primaryPulse: number,
+  castLightPulse: number,
+): number {
+  return Math.max(primaryPulse, castLightPulse)
 }
 
 function selectedPrimaryCastElement(
@@ -298,6 +322,23 @@ function selectedPrimaryCastElement(
 
 export function playerCharacterStaffOrbOffset(headingIndex: number): Vector2 {
   return primarySpellEmitterOffset(headingIndex, -1)
+}
+
+export function playerCharacterStaffOrbPasses(
+  headingIndex: number,
+  attachmentPose: PlayerStaffAttachmentPose,
+  elementEffectPhase: number,
+): PlayerStaffOrbPasses {
+  const headingDegrees = normalizedIndex(headingIndex, 24) * 15
+  const backBase = headingDegrees <= 90 || headingDegrees > 270
+  const frontBase = headingDegrees >= 90 && headingDegrees <= 270
+  return {
+    backBase,
+    frontBase,
+    frontOverlay: attachmentPose === 9
+      || backBase
+      || elementEffectPhase > NATIVE_PLAYER_ELEMENT_EFFECT_FRONT_PULSE_THRESHOLD,
+  }
 }
 
 export function playerStaffActionPose(

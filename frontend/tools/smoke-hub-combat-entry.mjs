@@ -32,6 +32,11 @@ try {
   })
   await page.addInitScript(bypassStartupAudioPreload)
   await page.addInitScript(installProbe, { endpointUrl, publicEndpointUrl })
+  await page.route('**/deployment.json*', route => route.fulfill({
+    body: JSON.stringify({ commit: 'smoke-local' }),
+    contentType: 'application/json',
+    status: 200,
+  }))
   await page.route('**/api/game/hub', async (route) => {
     const state = await page.evaluate(() => ({
       disciplineCommittedAt: window.__sdrHubCombatDisciplineCommittedAt,
@@ -48,6 +53,7 @@ try {
       body: JSON.stringify({
         credential: endpointCredential,
         kind: 'remote',
+        sessionKind: 'global-hub',
         url: publicEndpointUrl,
       }),
       contentType: 'application/json',
@@ -87,6 +93,18 @@ try {
     .waitFor({ state: 'detached', timeout: 30_000 })
   const hubCanvas = page.locator('.hub-world-canvas[data-game-renderer="pixi-webgl"]')
   const hubBefore = await frameReceipt(hubCanvas, 'hub')
+  assert.equal(hubBefore.playerHeadingIndex, 12)
+  assert.ok(hubBefore.orbSpriteCount >= 3)
+  await page.keyboard.down('d')
+  await page.waitForTimeout(350)
+  await page.keyboard.up('d')
+  await page.waitForFunction(() => (
+    document.querySelector('.hub-world-canvas')?.__sdrHubFrame?.playerHeadingIndex === 6
+  ))
+  const hubBackFacingOrb = await frameReceipt(hubCanvas, 'hub')
+  assert.equal(hubBackFacingOrb.playerHeadingIndex, 6)
+  assert.ok(hubBackFacingOrb.orbSpriteCount > hubBefore.orbSpriteCount)
+  await page.screenshot({ path: `${screenshotRoot}/solomon-hub-staff-orb-front.png` })
   const hubManaBefore = await localMana(page)
   const disabledSecondarySlots = await page.locator(
     '.hub-hud-skill-quickbar[data-mode="hub"] .hub-hud-quickbar-slot:disabled',
@@ -165,6 +183,7 @@ try {
     disabledSecondarySlots,
     failedResponses,
     hubAfter,
+    hubBackFacingOrb,
     hubBefore,
     hubManaBefore,
     hubSampleCount: hubSamples.length,
@@ -191,8 +210,10 @@ async function frameReceipt(canvas, scene) {
   return canvas.evaluate((node, sceneName) => {
     const frame = sceneName === 'hub' ? node.__sdrHubFrame : node.__sdrBoneyardFrame
     return structuredClone({
+      orbSpriteCount: frame.orbSpriteCount ?? 0,
       playerAttachmentPose: frame.playerAttachmentPose,
       playerElementEffectScale: frame.playerElementEffectScale,
+      playerHeadingIndex: frame.playerHeadingIndex ?? null,
       playerWeaponScale: frame.playerWeaponScale,
       primarySpellCount: frame.primarySpellCount,
       secondaryAbilityCount: frame.secondaryAbilityCount ?? 0,

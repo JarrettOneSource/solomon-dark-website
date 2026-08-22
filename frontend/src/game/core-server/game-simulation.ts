@@ -19,6 +19,7 @@ import { HUB_CAMERA_SCALE } from '../core-kernels/hub-math.ts'
 import {
   HUB_REGION_DEFINITIONS,
   firstHubRegionLineObstruction,
+  isHubRegionPathTraversable,
   isHubRegionTraversable,
 } from '../core-kernels/hub-regions.ts'
 import {
@@ -2185,18 +2186,38 @@ function finishGameSimulationTick(
       const region = result.world.participants[spell.ownerId]?.region
       return region !== undefined && isHubRegionTraversable(region, position, radius)
     },
-    canTraverseProjectile: (spell, from, to) => {
-      if (result.world.kind === 'boneyard' && spell.kind === 'fire') {
-        return firstBoneyardLineObstruction(
-          from,
-          to,
-          boneyardSpellBounds!,
-          boneyardCollision!,
-          undefined,
-          NATIVE_FIREBALL_TERRAIN_EXCLUSION_MASK,
-        ) === null
+    canTraverseProjectile: (spell, from, to, radius = 0) => {
+      if (result.world.kind === 'boneyard') {
+        if (spell.kind === 'fire') {
+          return firstBoneyardLineObstruction(
+            from,
+            to,
+            boneyardSpellBounds!,
+            boneyardCollision!,
+            undefined,
+            NATIVE_FIREBALL_TERRAIN_EXCLUSION_MASK,
+          ) === null
+        }
+        return radius > 0
+          ? firstBoneyardPathBlockProgress(
+              from,
+              to,
+              boneyardSpellBounds!,
+              boneyardCollision!,
+              radius,
+            ) === null
+          : firstBoneyardLineObstruction(
+              from,
+              to,
+              boneyardSpellBounds!,
+              boneyardCollision!,
+            ) === null
       }
-      return spellObstructionPoint(spell.ownerId, from, to) === null
+      const region = result.world.participants[spell.ownerId]?.region
+      if (region === undefined) return false
+      return radius > 0
+        ? isHubRegionPathTraversable(region, from, to, radius)
+        : firstHubRegionLineObstruction(region, from, to) === null
     },
     castAuthority: Object.fromEntries(playerEntities.identities.map(({ playerId }, index) => {
       const progression = playerEntities.progressions[index]!

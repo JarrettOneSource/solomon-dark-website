@@ -476,6 +476,37 @@ test('Ethereal Boulder grows in the native float lane and releases the four-piec
   assert.ok(stepped.actor?.kind === 'weld-persistent' && stepped.actor.buildId === 1006)
   assert.equal(stepped.actor.flightTicks, 1)
   assert.notDeepEqual(stepped.actor.orientation, first.orientation)
+
+  let capsule: Readonly<{
+    from: { x: number; y: number }
+    to: { x: number; y: number }
+  }> | null = null
+  const blocked = stepNativeWeldWorldActor(
+    first,
+    createNativeRng(2),
+    (_actor, from, to) => {
+      capsule = { from, to }
+      return false
+    },
+  )
+  assert.deepEqual(capsule, {
+    from: {
+      x: Math.fround(first.origin.x + first.velocity.x),
+      y: Math.fround(first.origin.y + first.velocity.y),
+    },
+    to: {
+      x: Math.fround(
+        Math.fround(first.origin.x + first.velocity.x) + first.velocity.x,
+      ),
+      y: Math.fround(
+        Math.fround(first.origin.y + first.velocity.y) + first.velocity.y,
+      ),
+    },
+  })
+  assert.equal(blocked.actor, null)
+  assert.ok(blocked.terrainContact)
+  assert.deepEqual(blocked.terrainContact.origin, capsule!.from)
+  assert.notDeepEqual(blocked.terrainContact.orientation, first.orientation)
 })
 
 test('Hailstones bucket rebuild consumes native rock RNG in exact field order', () => {

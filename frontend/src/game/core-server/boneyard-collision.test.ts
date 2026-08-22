@@ -69,6 +69,60 @@ test('materializes native props and posts while moving gates remain world-owned'
   })))
 })
 
+test('solid-spell capsules retain every authored blocker including both Gravestone shapes', () => {
+  const scene = makeScene()
+  scene.objects = [
+    {
+      eid: 'tree', typeId: 2001, pos: { x: 100, y: 100 },
+      variant: 1, secondaryVariant: 0, secondaryVisible: false,
+    },
+    { eid: 'monument', typeId: 2009, pos: { x: 300, y: 100 }, variant: 18 },
+    { eid: 'grave-root', typeId: 2029, pos: { x: 500, y: 100 }, variant: 0 },
+    {
+      eid: 'grave-promoted', typeId: 2029, pos: { x: 700, y: 100 },
+      overlayVariant: 8, variant: 1,
+    },
+    { eid: 'building', typeId: 2040, pos: { x: 900, y: 100 }, variant: 3 },
+    { eid: 'goodie', typeId: 2061, pos: { x: 1100, y: 100 } },
+  ]
+  scene.fences = [
+    {
+      eid: 'fence', typeId: 3005, segmentCode: 0,
+      points: [{ x: 1300, y: 50 }, { x: 1300, y: 150 }],
+    },
+    {
+      eid: 'gate', typeId: 3005, segmentCode: 2,
+      points: [{ x: 1450, y: 50 }, { x: 1450, y: 150 }],
+    },
+  ]
+  const bounds = { x: 0, y: 0, w: 1600, h: 400 }
+  const base = createBoneyardCollisionWorld(scene)
+  const gateLeaves = createBoneyardGateLeaves(scene.fences, 'solid-spell-gate')
+  const world = withBoneyardGateCollision(base, gateLeaves)
+
+  for (const point of [
+    { x: 100, y: 100 },
+    { x: 300, y: 100 },
+    { x: 500, y: 100 },
+    { x: 700, y: 150 },
+    { x: 900, y: 120 },
+    { x: 1100, y: 100 },
+    { x: 1300, y: 100 },
+    gateLeaves[0]!.hinge,
+  ]) {
+    assert.equal(canPlaceBoneyardBody(point, bounds, world, 5), false, JSON.stringify(point))
+  }
+
+  const graveRootContact = firstBoneyardPathBlockProgress(
+    { x: 522.5, y: 100 },
+    { x: 519.5, y: 100 },
+    bounds,
+    world,
+    20,
+  )
+  assert.ok(graveRootContact !== null && graveRootContact > 0 && graveRootContact < 1)
+})
+
 test('Fireball terrain lookahead ignores grave, fence, post, tree, and Goodie masks', () => {
   assert.equal(NATIVE_FIREBALL_TERRAIN_EXCLUSION_MASK, 0x700)
   const bounds = { x: 0, y: 0, w: 500, h: 200 }

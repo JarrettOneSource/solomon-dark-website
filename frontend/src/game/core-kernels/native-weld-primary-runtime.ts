@@ -1267,6 +1267,7 @@ export function stepNativeWeldWorldActor(
   readonly actor: NativeWeldWorldActor | null
   readonly debris?: readonly NativeWeldMeteorDebrisSeed[]
   readonly rng: NativeRngState
+  readonly terrainContact?: NativeWeldEtherealBoulderState
 } {
   if (actor.kind === 'weld-blizzard-glow') return { actor: null, rng: sourceRng }
   if (actor.kind === 'weld-flame-lash-fade') {
@@ -1421,23 +1422,26 @@ export function stepNativeWeldWorldActor(
       x: Math.fround(actor.origin.x + actor.velocity.x),
       y: Math.fround(actor.origin.y + actor.velocity.y),
     })
-    if (!canAdvance(actor, actor.origin, origin)) return { actor: null, rng: sourceRng }
-    return {
-      actor: Object.freeze({
-        ...actor,
-        ageTicks: actor.ageTicks + 1,
-        flightTicks: actor.flightTicks + 1,
-        lifetimeTicksRemaining,
-        origin,
-        orientation: Object.freeze(earthBoulderFlightOrientationStep(
-          actor.orientation,
-          actor.direction,
-          actor.velocity,
-          actor.scale,
-        )),
-      }),
-      rng: sourceRng,
-    }
+    const advanced = Object.freeze({
+      ...actor,
+      ageTicks: actor.ageTicks + 1,
+      flightTicks: actor.flightTicks + 1,
+      lifetimeTicksRemaining,
+      origin,
+      orientation: Object.freeze(earthBoulderFlightOrientationStep(
+        actor.orientation,
+        actor.direction,
+        actor.velocity,
+        actor.scale,
+      )),
+    })
+    const lookahead = Object.freeze({
+      x: Math.fround(origin.x + actor.velocity.x),
+      y: Math.fround(origin.y + actor.velocity.y),
+    })
+    return canAdvance(advanced, origin, lookahead)
+      ? { actor: advanced, rng: sourceRng }
+      : { actor: null, rng: sourceRng, terrainContact: advanced }
   }
   const lookahead = Object.freeze({
     x: Math.fround(actor.origin.x + actor.direction.x * NATIVE_WELD_HAILSTONES_LOOKAHEAD),

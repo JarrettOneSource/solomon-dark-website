@@ -1,6 +1,7 @@
 import {
   HUB_COURTYARD_SEGMENTS,
   circleTouchesHubSegment,
+  isPathTraversableAgainstHubSegments,
   isTraversableAgainstHubSegments,
   moveWithHubSegmentsCollisionState,
   type HubCollisionMove,
@@ -294,6 +295,20 @@ export function isHubRegionTraversable(
 ): boolean {
   return isTraversableAgainstHubSegments(
     point,
+    radius,
+    HUB_REGION_DEFINITIONS[region].segments,
+  )
+}
+
+export function isHubRegionPathTraversable(
+  region: HubRegionId,
+  start: Vector2,
+  end: Vector2,
+  radius: number,
+): boolean {
+  return isPathTraversableAgainstHubSegments(
+    start,
+    end,
     radius,
     HUB_REGION_DEFINITIONS[region].segments,
   )

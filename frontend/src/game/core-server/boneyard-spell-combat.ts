@@ -2,6 +2,7 @@ import {
   createPrimarySpellContactImpact,
   createPrimarySpellEarthBoulderBit,
   createPrimarySpellFireDetonation,
+  createPrimarySpellWeldBoulderTerminal,
   createPrimarySpellWeldFireDetonation,
   PRIMARY_SPELL_EARTH_COLLISION_RADIUS_SCALE,
   PRIMARY_SPELL_ETHER_COLLISION_RADIUS,
@@ -67,7 +68,6 @@ import {
 } from '../core-kernels/native-weld-primary-runtime.ts'
 import {
   createNativeWeldBoulderContactDebrisProgram,
-  createNativeWeldEtherealBoulderBreakupDebrisProgram,
 } from '../core-kernels/native-weld-boulder-debris.ts'
 import {
   createNativeWeldHailContactPresentation,
@@ -901,50 +901,16 @@ export function resolveBoneyardSpellCombat(
         updatedTransients.set(effect.id, retained)
       } else {
         consumedTransientIds.add(effect.id)
-        const terminalScale = effect.scale
-        impactTransients.push({
-          ageTicks: 0,
-          alpha: 2,
-          birthTick: tick,
-          boulderTerminalCharge: terminalScale,
-          buildId: 1006,
-          direction: { ...effect.direction },
-          id: nextSpellId,
-          impactSoundPitch: null,
-          impactSoundVariant: null,
-          kind: 'weld-impact',
-          lightRegistration: registerLightProvider?.('transient') ?? {
-            managerLane: 'transient',
-            registrationOrdinal: nextSpellId,
-          },
-          origin: { ...effect.origin },
-          ownerId: effect.ownerId,
-          position: { ...effect.origin },
-          presentationRotationDegrees: null,
-          presentationScale: 2,
-          vector: [...effect.vector],
-          worldKey: effect.worldKey,
-        })
-        nextSpellId += 1
-        const breakup = createNativeWeldEtherealBoulderBreakupDebrisProgram({
+        const terminal = createPrimarySpellWeldBoulderTerminal(
+          nextSpellId,
+          effect,
+          tick,
           rng,
-          scale: terminalScale,
-        })
-        rng = breakup.rng
-        for (const debris of breakup.debris) {
-          impactTransients.push(createNativeWeldBoulderDebrisActor({
-            buildId: 1006,
-            debris,
-            direction: effect.direction,
-            id: nextSpellId,
-            origin: effect.origin,
-            ownerId: effect.ownerId,
-            tick,
-            vector: effect.vector,
-            worldKey: effect.worldKey,
-          }))
-          nextSpellId += 1
-        }
+          registerLightProvider,
+        )
+        impactTransients.push(...terminal.transients)
+        nextSpellId = terminal.nextId
+        rng = terminal.rng
       }
       continue
     }

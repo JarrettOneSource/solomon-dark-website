@@ -74,7 +74,12 @@ import {
 } from '../core-server/game-simulation.ts'
 import type { LoadedBoneyard } from './boneyard.ts'
 import { playerCharacterRecords } from '../core-server/player-entity-store.ts'
-import { createNativeWeldMeteor } from './native-weld-primary-runtime.ts'
+import {
+  createNativeWeldMeteor,
+  createNativeWeldPersistentActor,
+  releaseNativeWeldPersistentActor,
+  updateNativeWeldPersistentActor,
+} from './native-weld-primary-runtime.ts'
 import { createNativeEtherBlastParticleProgram } from './native-ether-blast.ts'
 
 const PLAYER_ID = 'caster'
@@ -258,6 +263,7 @@ function stepSpellKernel(
   const result = stepPrimarySpells({
     ...EMPTY_SPELL_WORLD,
     canPlaceProjectile,
+    canTraverseProjectile: canPlaceProjectile,
     castAuthority: {
       [PLAYER_ID]: {
         alive: true,
@@ -723,7 +729,7 @@ test('Earth can deplete its held weak base to zero before the release floor owns
   assert.equal(flight.remainingDamage, 0.25)
 })
 
-test('Earth zero mana freezes above 0.3 and release still uses the terrain probe', () => {
+test('Earth zero mana freezes above 0.3 and release still enters the first flight capsule', () => {
   const cost = PRIMARY_SPELL_RANK_ONE_MANA_COSTS.earth
   let state = directSpellHarness('earth')
   do {
@@ -1857,21 +1863,25 @@ test('Earth preserves long-held age and has no fixed flight range or timeout', (
   assert.equal(spells.transients.some((effect) => effect.kind === 'earth-impact'), false)
 })
 
-test('Earth publishes one authoritative breakup when its next flight position contacts terrain', () => {
+test('Earth tests the advanced-to-next native capsule and breaks at the advanced root', () => {
   let state = step(simulation('earth'), true, 97)
   state = step(state, false)
   const released = state.primarySpells.projectiles[0]
-  const checked: { position: { x: number, y: number }, radius: number }[] = []
+  const checked: {
+    from: { x: number, y: number }
+    radius: number
+    to: { x: number, y: number }
+  }[] = []
   const projectedPlayers = playerCharacterRecords(state.playerEntities)
   let collisionOrientation: readonly number[] | null = null
   const result = stepPrimarySpells({
     ...EMPTY_SPELL_WORLD,
-    canPlaceProjectile: (spell, position, radius) => {
-      checked.push({ position, radius })
+    canPlaceProjectile: () => true,
+    canTraverseProjectile: (spell, from, to, radius = 0) => {
+      checked.push({ from, radius, to })
       if (spell.kind === 'earth') collisionOrientation = spell.orientation
       return false
     },
-    canTraverseProjectile: () => true,
     castAuthority: {
       [PLAYER_ID]: {
         availableMana: 1_000_000,
@@ -1889,19 +1899,20 @@ test('Earth publishes one authoritative breakup when its next flight position co
   })
 
   assert.deepEqual(checked, [{
-    position: { x: released.position.x, y: released.position.y - 3 },
+    from: { x: released.position.x, y: released.position.y - 3 },
     radius: released.charge * 75,
+    to: { x: released.position.x, y: released.position.y - 6 },
   }])
   assert.equal(result.spells.projectiles.length, 0)
-  assert.notDeepEqual(checked[0].position, released.position)
+  assert.notDeepEqual(checked[0].from, released.position)
   assert.ok(collisionOrientation)
   assert.notDeepEqual(collisionOrientation, released.orientation)
   assert.deepEqual(collisionOrientation, earthBoulderFlightOrientationStep(
     released.orientation,
     released.direction,
     {
-      x: Math.fround(checked[0].position.x - released.position.x),
-      y: Math.fround(checked[0].position.y - released.position.y),
+      x: Math.fround(checked[0].from.x - released.position.x),
+      y: Math.fround(checked[0].from.y - released.position.y),
     },
     released.charge,
   ))
@@ -1915,25 +1926,29 @@ test('Earth publishes one authoritative breakup when its next flight position co
     kind: 'earth-impact',
     lightRegistration: null,
     lifetimeTicks: earthImpactLifetimeTicks(impact),
-    origin: checked[0].position,
+    origin: checked[0].from,
     ownerId: PLAYER_ID,
     worldKey: 'boneyard:primary-spells-run',
   })
 })
 
-test('Earth uses the native 45-charge release probe before normal 75-charge flight probes', () => {
+test('Earth release enters its first 75-charge flight capsule without a 45-charge probe', () => {
   let state = step(simulation('earth'), true, 2)
   state = step(state, false, 95)
   const heldBoulder = state.primarySpells.projectiles[0]
-  const checked: { position: { x: number, y: number }, radius: number }[] = []
+  const checked: {
+    from: { x: number, y: number }
+    radius: number
+    to: { x: number, y: number }
+  }[] = []
   const projectedPlayers = playerCharacterRecords(state.playerEntities)
   const result = stepPrimarySpells({
     ...EMPTY_SPELL_WORLD,
-    canPlaceProjectile: (_spell, position, radius) => {
-      checked.push({ position, radius })
+    canPlaceProjectile: () => true,
+    canTraverseProjectile: (_spell, from, to, radius = 0) => {
+      checked.push({ from, radius, to })
       return false
     },
-    canTraverseProjectile: () => true,
     castAuthority: {
       [PLAYER_ID]: {
         availableMana: 1_000_000,
@@ -1951,16 +1966,20 @@ test('Earth uses the native 45-charge release probe before normal 75-charge flig
   })
 
   assert.deepEqual(checked, [{
-    position: {
+    from: {
       x: Math.fround(heldBoulder.position.x),
       y: Math.fround(heldBoulder.position.y - 3),
     },
-    radius: heldBoulder.charge * 45,
+    radius: heldBoulder.charge * 75,
+    to: {
+      x: Math.fround(heldBoulder.position.x),
+      y: Math.fround(heldBoulder.position.y - 6),
+    },
   }])
   assert.equal(result.spells.projectiles.length, 0)
   const impact = result.spells.transients.find((effect) => effect.kind === 'earth-impact')
   assert.ok(impact)
-  assert.deepEqual(impact.origin, checked[0].position)
+  assert.deepEqual(impact.origin, checked[0].from)
 })
 
 test('Earth called rocks are authoritative absolute actors under a moving parent', () => {
@@ -2083,6 +2102,91 @@ test('all welded sustained families use one latch and run their native release v
       assert.equal(persistent.length, 0)
     }
   }
+})
+
+test('Ethereal Boulder solid contact uses its advanced capsule and full terminal family', () => {
+  const held = createNativeWeldPersistentActor({
+    buildId: 1006,
+    direction: { x: 0, y: -1 },
+    id: 40,
+    origin: { x: 100, y: 200 },
+    ownerId: PLAYER_ID,
+    tick: 1,
+    vector: [8, 10, 2, 1.1, 1.5, 1.2],
+    worldKey: 'boneyard:primary-spells-run',
+  })
+  const updated = updateNativeWeldPersistentActor(
+    held,
+    held.origin,
+    held.direction,
+    createNativeRng(55),
+  )
+  const released = releaseNativeWeldPersistentActor({
+    actor: updated.actor,
+    firstChildId: 41,
+    rng: updated.rng,
+    tick: 2,
+  })
+  const boulder = released.actors.find((actor) => (
+    actor.kind === 'weld-persistent' && actor.buildId === 1006
+  ))
+  assert.ok(boulder?.kind === 'weld-persistent' && boulder.buildId === 1006)
+  const player = directSpellHarness('earth').players[PLAYER_ID]!
+  let capsule: Readonly<{
+    from: { x: number; y: number }
+    radius: number
+    to: { x: number; y: number }
+  }> | null = null
+  const result = stepPrimarySpells({
+    ...EMPTY_SPELL_WORLD,
+    canPlaceProjectile: () => true,
+    canTraverseProjectile: (_actor, from, to, radius = 0) => {
+      capsule = { from, radius, to }
+      return false
+    },
+    castAuthority: {
+      [PLAYER_ID]: {
+        alive: true,
+        availableMana: 100,
+        castProgressFactor: 1,
+        eligible: true,
+        primarySkill: primarySkillRankStats('earth', 1),
+      },
+    },
+    inputs: { [PLAYER_ID]: createIdlePlayerCharacterInput() },
+    players: { [PLAYER_ID]: player },
+    previousPlayers: { [PLAYER_ID]: player },
+    rng: released.rng,
+    spells: { nextId: 100, projectiles: [], transients: [boulder] },
+    tick: 3,
+    viewScale: 1.35,
+    worldKeyForPlayer: () => 'boneyard:primary-spells-run',
+  })
+
+  const advanced = {
+    x: Math.fround(boulder.origin.x + boulder.velocity.x),
+    y: Math.fround(boulder.origin.y + boulder.velocity.y),
+  }
+  assert.deepEqual(capsule, {
+    from: advanced,
+    radius: boulder.scale * 75,
+    to: {
+      x: Math.fround(advanced.x + boulder.velocity.x),
+      y: Math.fround(advanced.y + boulder.velocity.y),
+    },
+  })
+  assert.equal(result.spells.transients.some((effect) => (
+    effect.kind === 'weld-persistent' && effect.buildId === 1006
+  )), false)
+  const impact = result.spells.transients.find((effect) => (
+    effect.kind === 'weld-impact' && effect.buildId === 1006
+  ))
+  assert.ok(impact?.kind === 'weld-impact' && impact.buildId === 1006)
+  assert.deepEqual(impact.origin, advanced)
+  assert.equal(impact.boulderTerminalCharge, boulder.scale)
+  assert.equal(result.spells.transients.filter((effect) => (
+    effect.kind === 'weld-boulder-debris' && effect.buildId === 1006
+  )).length, Math.floor(Math.max(8, 30 * boulder.scale)))
 })
 
 test('Flame Lash emission owns the independent six-word endpoint fade', () => {
