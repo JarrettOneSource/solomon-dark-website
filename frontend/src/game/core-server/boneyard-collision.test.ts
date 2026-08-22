@@ -2,8 +2,15 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import type { BoneyardScene } from '../core-kernels/boneyard.ts'
+import {
+  boneyardActiveBounds,
+  createBoneyardArenaTransition,
+  startBoneyardArenaTransition,
+  stepBoneyardArenaTransition,
+} from '../core-kernels/boneyard-arena-transition.ts'
 import { createBoneyardGateLeaves } from '../core-kernels/boneyard-gate.ts'
 import { createNativeRng, drawNativeFloat } from '../core-kernels/native-rng.ts'
+import { NATIVE_GENERATED_BONEYARDS } from '../host/native-generated-boneyards.ts'
 import {
   boneyardBodyCollides,
   canPlaceBoneyardBody,
@@ -249,7 +256,7 @@ test('native spawn retries use actor-radius rings, compressed Y, and combat boun
     empty,
     25,
     0,
-  ), { x: 250, y: 370 })
+  ), { x: 250, y: 375 })
   assert.equal(canPlaceBoneyardBody(
     resolveBoneyardSpawnPosition({ x: 250, y: 450 }, bounds, empty, 25, 0),
     bounds,
@@ -313,6 +320,23 @@ test('native spawn placement draws a fresh retry angle for every radius ring', (
   )
   assert.deepEqual(placed.rngState, secondAngle.state)
   assert.ok(Math.hypot(placed.position.x - origin.x, placed.position.y - origin.y) > 25.1)
+})
+
+test('finite generated-Arena placement resolves the exact production exterior spawn', () => {
+  const position = { x: 4.738685131072998, y: 3483.47802734375 }
+  const radius = 13.156531408429146
+  for (const template of NATIVE_GENERATED_BONEYARDS) {
+    const created = createBoneyardArenaTransition(template.scene.bounds, template.scene.spawn)
+    assert.ok(created, template.sourceLabel)
+    let transition = startBoneyardArenaTransition(created)
+    for (let tick = 0; tick < 400; tick += 1) {
+      transition = stepBoneyardArenaTransition(transition)
+    }
+    const bounds = boneyardActiveBounds(transition)
+    const world = createBoneyardCollisionWorld(template.scene)
+    const resolved = resolveBoneyardSpawnPosition(position, bounds, world, radius)
+    assert.equal(canPlaceBoneyardBody(resolved, bounds, world, radius), true)
+  }
 })
 
 test('clips spell rays against bounds and scenery while excluding the selected target', () => {

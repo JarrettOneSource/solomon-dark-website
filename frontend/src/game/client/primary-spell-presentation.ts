@@ -1,4 +1,7 @@
-import { nativeFireParticleLifetimeTicks } from '../core-kernels/primary-spell-fire-native.ts'
+import {
+  NATIVE_FIRE_EXPLOSION_LIFETIME_TICKS,
+  nativeFireParticleLifetimeTicks,
+} from '../core-kernels/primary-spell-fire-native.ts'
 import type { NativeRngState } from '../core-kernels/native-rng.ts'
 import { waterFrostJetLifetimeTicks } from '../core-kernels/primary-spell-water.ts'
 import {
@@ -276,7 +279,7 @@ function fixedTransientTiming(
     case 'fire-explosion': return {
       ageZeroTick: snapshotTick - effect.ageTicks,
       firstVisibleAge: 0,
-      lifetimeTicks: PRIMARY_SPELL_FIRE_IMPACT_LIFETIME_TICKS,
+      lifetimeTicks: NATIVE_FIRE_EXPLOSION_LIFETIME_TICKS,
     }
     case 'fire-impact': return {
       ageZeroTick: snapshotTick - effect.ageTicks,
@@ -501,7 +504,8 @@ function interpolateTransient(
         y: lerp(older.horizontalVelocity.y, newer.horizontalVelocity.y, blend),
       },
       life: lerp(older.life, newer.life, blend),
-      phase: lerp(older.phase, newer.phase, blend),
+      lightRegistration: { ...ember.lightRegistration },
+      phase: lerpForwardCycle(older.phase, newer.phase, blend, 4),
       position: {
         x: lerp(older.position.x, newer.position.x, blend),
         y: lerp(older.position.y, newer.position.y, blend),
@@ -521,6 +525,7 @@ function interpolateTransient(
     return {
       ...explosion,
       ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+      lightRegistration: { ...explosion.lightRegistration },
       origin: { ...explosion.origin },
     }
   }
@@ -1046,7 +1051,13 @@ function copyTransient(effect: PrimarySpellTransientState): PrimarySpellTransien
     return { ...effect, origin: { ...effect.origin } }
   }
   if (effect.kind === 'ether-pierce-streak' || effect.kind === 'fire-explosion') {
-    return { ...effect, origin: { ...effect.origin } }
+    return effect.kind === 'fire-explosion'
+      ? {
+          ...effect,
+          lightRegistration: { ...effect.lightRegistration },
+          origin: { ...effect.origin },
+        }
+      : { ...effect, origin: { ...effect.origin } }
   }
   if (effect.kind === 'ether-blast') {
     return {
@@ -1118,6 +1129,7 @@ function copyTransient(effect: PrimarySpellTransientState): PrimarySpellTransien
     return {
       ...effect,
       horizontalVelocity: { ...effect.horizontalVelocity },
+      lightRegistration: { ...effect.lightRegistration },
       position: { ...effect.position },
     }
   }
@@ -1363,6 +1375,16 @@ function copyWeldHailstone<
 
 function lerp(first: number, second: number, blend: number): number {
   return first + (second - first) * blend
+}
+
+function lerpForwardCycle(
+  older: number,
+  newer: number,
+  blend: number,
+  period: number,
+): number {
+  const delta = ((newer - older) % period + period) % period
+  return ((older + delta * blend) % period + period) % period
 }
 
 function lerpVector(

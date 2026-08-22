@@ -219,6 +219,7 @@ export function resolveBoneyardSpellCombat(
   const targetEffects: BoneyardSpellTargetEffectContact[] = []
   const impactTransients: PrimarySpellTransientState[] = []
   const ownedTransients: PrimarySpellTransientState[] = []
+  const pendingFireActorContacts = [...fireActorContacts]
   let nextSpellId = sourceSpells.nextId
   const queueBurn = (targetId: number, ownerId: string, damage: number): void => {
     if (damage <= 0) return
@@ -477,8 +478,10 @@ export function resolveBoneyardSpellCombat(
       rng,
       privateSeed.value,
       false,
+      registerLightProvider,
     )
     rng = detonation.rng
+    pendingFireActorContacts.push(...detonation.contacts)
     impactTransients.push(...detonation.transients)
     nextSpellId = detonation.nextId
   }
@@ -733,8 +736,11 @@ export function resolveBoneyardSpellCombat(
           tick,
           rng,
           projectile.presentationSeed ?? 0,
+          true,
+          registerLightProvider,
         )
         rng = detonation.rng
+        pendingFireActorContacts.push(...detonation.contacts)
         impactTransients.push(...detonation.transients)
         nextSpellId = detonation.nextId
       } else {
@@ -788,6 +794,7 @@ export function resolveBoneyardSpellCombat(
         registerLightProvider,
       )
       rng = detonation.rng
+      pendingFireActorContacts.push(...detonation.contacts)
       impactTransients.push(...detonation.transients)
       nextSpellId = detonation.nextId
       continue
@@ -1035,6 +1042,7 @@ export function resolveBoneyardSpellCombat(
   for (const effect of [...sourceSpells.transients].sort(bySpellId)) {
     if (effect.worldKey !== worldKey) continue
     if (effect.kind === 'fire-ember') {
+      if (!effect.contactDue) continue
       const rows = primaryTargetRows(enemies)
       const target = firstNativePrimaryPointContact({
         actorMask: 0x2,
@@ -1121,8 +1129,10 @@ export function resolveBoneyardSpellCombat(
       rng,
       effect.privateSeed,
       false,
+      registerLightProvider,
     )
     rng = detonation.rng
+    pendingFireActorContacts.push(...detonation.contacts)
     impactTransients.push(...detonation.transients)
     nextSpellId = detonation.nextId
   }
@@ -1151,8 +1161,9 @@ export function resolveBoneyardSpellCombat(
     }
   }
 
-  for (const contact of [...fireActorContacts].sort(byFireActorContactId)) {
+  for (const contact of pendingFireActorContacts.sort(byFireActorContactId)) {
     if (contact.worldKey !== worldKey) continue
+    if (contact.kind === 'fire-ember' && consumedTransientIds.has(contact.spellId)) continue
     const rows = primaryTargetRows(enemies)
     const contacted = contact.kind === 'fire-good-imp'
       ? rows.filter(({ target }) => target.id === contact.targetId)
@@ -1161,9 +1172,9 @@ export function resolveBoneyardSpellCombat(
           && !target.pendingRemove
           && (target.actorFlags & 0x2) !== 0
           && squaredDistance(target.position, contact.position) < contact.radius ** 2
-        ))
+        )).slice(0, contact.kind === 'fire-ember' ? 1 : undefined)
     for (const { actor } of contacted) {
-      if (contact.kind === 'fire-patch') {
+      if (contact.kind === 'fire-patch' || contact.kind === 'fire-ember') {
         queueBurn(
           actor.id,
           contact.ownerId,
@@ -1191,6 +1202,23 @@ export function resolveBoneyardSpellCombat(
         spellKind: contact.kind,
         tick,
       })
+      if (contact.kind === 'fire-ember') {
+        consumedTransientIds.add(contact.spellId)
+        impactTransients.push({
+          ageTicks: 0,
+          id: nextSpellId,
+          kind: 'fire-impact',
+          lightRegistration: registerLightProvider?.('transient') ?? {
+            managerLane: 'transient',
+            registrationOrdinal: nextSpellId,
+          },
+          origin: { ...contact.position },
+          ownerId: contact.ownerId,
+          worldKey: contact.worldKey,
+        })
+        nextSpellId += 1
+        break
+      }
     }
   }
 
@@ -1372,8 +1400,10 @@ export function resolveBoneyardSpellCombat(
                 rng,
                 privateSeed.value,
                 false,
+                registerLightProvider,
               )
               rng = detonation.rng
+              pendingFireActorContacts.push(...detonation.contacts)
               ownedTransients.push(...detonation.transients)
               nextSpellId = detonation.nextId
             }
@@ -1749,8 +1779,8 @@ export function resolveBoneyardSpellCombat(
         transients: [
           ...steppedTransients
             .filter((effect) => !consumedTransientIds.has(effect.id)),
-          ...impactTransients,
-          ...ownedTransients,
+          ...impactTransients.filter((effect) => !consumedTransientIds.has(effect.id)),
+          ...ownedTransients.filter((effect) => !consumedTransientIds.has(effect.id)),
         ],
       }
 

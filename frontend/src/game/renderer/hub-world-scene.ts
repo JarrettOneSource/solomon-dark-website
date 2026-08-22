@@ -168,6 +168,7 @@ export class HubWorldScene {
       playerScreenY: number
       presentationId: number
     } | null = null,
+    pointGainAt: (position: Readonly<{ x: number, y: number }>) => number = () => 1,
   ): void {
     const ambient = snapshot.world.ambient
     const colors = hubSealColors(ambient)
@@ -198,11 +199,13 @@ export class HubWorldScene {
       snapshot.primarySpells,
       'hub:courtyard',
       presentationFrame,
+      pointGainAt,
     )
     this.secondaryAbilities.update(
       snapshot.secondaryAbilities,
       'hub:courtyard',
       presentationFrame,
+      pointGainAt,
     )
     this.primarySpells.promoteOwnerOverlays((ownerId) => (
       this.players.get(ownerId)?.container.zIndex

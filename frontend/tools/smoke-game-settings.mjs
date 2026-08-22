@@ -248,9 +248,9 @@ try {
     await toggle.click()
     assert.equal(await toggle.getAttribute('aria-pressed'), 'false')
   }
-  const zoomEffects = dialog.getByRole('button', { name: 'ZOOM EFFECTS' })
-  await zoomEffects.click()
-  assert.equal(await zoomEffects.getAttribute('aria-pressed'), 'false')
+  const cameraShake = dialog.getByRole('button', { name: 'CAMERA SHAKE' })
+  await cameraShake.click()
+  assert.equal(await cameraShake.getAttribute('aria-pressed'), 'false')
   await setRange(dialog.getByRole('slider', { name: 'LIGHT QUALITY' }), 24)
 
   const boneyardCanvas = page.locator('.boneyard-world-canvas')

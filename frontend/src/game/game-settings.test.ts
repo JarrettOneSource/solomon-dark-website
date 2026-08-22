@@ -33,6 +33,14 @@ const settingsCss = readFileSync(new URL('./main-menu.css', import.meta.url), 'u
 const mainMenuScene = readFileSync(new URL('./MainMenuScene.tsx', import.meta.url), 'utf8')
 const darkCloudScene = readFileSync(new URL('./DarkCloudScene.tsx', import.meta.url), 'utf8')
 const pauseMenuContract = readFileSync(new URL('./pause-menu-contract.ts', import.meta.url), 'utf8')
+const boneyardRenderer = readFileSync(
+  new URL('./renderer/boneyard-world-renderer.ts', import.meta.url),
+  'utf8',
+)
+const hubRenderer = readFileSync(
+  new URL('./renderer/hub-world-renderer.ts', import.meta.url),
+  'utf8',
+)
 
 class MemoryStorage implements GameSettingsStorage {
   readonly values = new Map<string, string>()
@@ -144,8 +152,9 @@ test('Settings drains every ported root, Controls, Performance, and context memb
     'MULTIPLE SHADOWS',
     'LIGHT QUALITY',
     'CAST SECONDARY SPELLS AT MOUSE',
-    'ZOOM EFFECTS',
+    'CAMERA SHAKE',
   ]) assert.match(settingsComponent, new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+  assert.doesNotMatch(settingsComponent, />ZOOM EFFECTS</)
   for (const label of [
     'MOVE UP', 'MOVE DOWN', 'MOVE LEFT', 'MOVE RIGHT',
     'OPEN MENU', 'OPEN INVENTORY', 'OPEN SKILLS', 'OPEN CHAT',
@@ -175,6 +184,19 @@ test('Settings presentation consumes the untouched stock ControlPanel records', 
   assert.match(settingsCss, /background-position: -308px -89px/)
   assert.match(settingsCss, /background-position: -743px -588px/)
   assert.match(settingsCss, /background-position: -543px -205px/)
+})
+
+test('Camera Shake gates every scalar and displacement consumer without disabling tracking', () => {
+  for (const contract of [
+    /feedbackMagnitude = settings\.zoomEffects \? sampledFeedback\.magnitude : 0/,
+    /worldShake = settings\.zoomEffects[\s\S]*?sampledWorldShake/,
+    /secondaryCameraMagnitude = settings\.zoomEffects[\s\S]*?sampledSecondaryCameraMagnitude/,
+    /secondaryCameraDisplacement = settings\.zoomEffects[\s\S]*?sampledSecondaryCameraDisplacement/,
+  ]) assert.match(boneyardRenderer, contract)
+  assert.match(hubRenderer, /secondaryCameraMagnitude = zoomEffects/)
+  assert.match(hubRenderer, /secondaryCameraDisplacement = zoomEffects/)
+  assert.doesNotMatch(boneyardRenderer, /settings\.zoomEffects[\s\S]{0,80}cameraFocusFor/)
+  assert.doesNotMatch(hubRenderer, /zoomEffects[\s\S]{0,80}hubRegionCameraOrigin/)
 })
 
 test('browser Lua console installs only for enabled host and rechecks both gates per call', async () => {

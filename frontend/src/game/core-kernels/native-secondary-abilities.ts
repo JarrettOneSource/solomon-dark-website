@@ -66,6 +66,11 @@ import {
   type RegisterNativeLightProvider,
 } from './native-light-provider-order.ts'
 import type { Vector2 } from './vector.ts'
+import {
+  createNativeFireDetonation,
+  stepNativeFireEmber,
+  type NativeFireEmberContact,
+} from './primary-spell-fire-effects.ts'
 
 export type {
   NativeGolemPhase,
@@ -551,7 +556,7 @@ const FROST_BURN_FLARE_DAMPING = Math.fround(0.96)
 const FROST_BURN_FLARE_LIFETIME_TICKS = 20
 const RING_FIRE_EXPLOSION_RADIUS = 165
 const RING_FIRE_EXPLOSION_DAMAGE_FACTOR = Math.fround(0.5)
-const RING_FIRE_EXPLOSION_LIFETIME_TICKS = 30
+const RING_FIRE_EXPLOSION_LIFETIME_TICKS = 37
 const RING_FIRE_FRAGMENT_LIFETIME_TICKS = 400
 const ACID_RAIN_ACTIVE_TICKS = 1_500
 const ACID_RAIN_INITIAL_PULSE_DELAY_TICKS = 50
@@ -1836,7 +1841,14 @@ export function stepNativeSecondaryAbilities(
             }
             state = mergeEffect(state, actor.worldKey, target.id, { dazzleTicks: 400 })
             if (actor.kind === 'shockwave' && actor.skillId === 21 && actor.variant === 1) {
-              const explosion = spawnMaximumRingFireExplosion(state, rng, actor, target)
+              const explosion = spawnMaximumRingFireExplosion(
+                state,
+                rng,
+                actor,
+                target,
+                context.tick,
+                owner.fireBurnDamage,
+              )
               state = explosion.state
               rng = explosion.rng
               for (const splashTarget of stableTargets(context.targets(
@@ -1845,6 +1857,34 @@ export function stepNativeSecondaryAbilities(
                 RING_FIRE_EXPLOSION_RADIUS,
               ))) {
                 addDamage(explosion.actor, splashTarget, explosion.actor.damage, 'fire')
+              }
+              const consumedFragmentIds = new Set<number>()
+              for (const contact of explosion.contacts) {
+                if (consumedFragmentIds.has(contact.spellId)) continue
+                const fragment = state.actors.find(({ id, kind }) => (
+                  id === contact.spellId && kind === 'ring-fire-fragment'
+                ))
+                if (!fragment) continue
+                const contactTarget = stableTargets(context.targets(
+                  contact.worldKey,
+                  contact.position,
+                  contact.radius,
+                ))[0]
+                if (!contactTarget) continue
+                const contactActor = { ...fragment, position: contact.position }
+                addDamage(contactActor, contactTarget, contact.amount, 'fire')
+                fireBurnRequests.push({
+                  actor: contactActor,
+                  damage: contact.burnDamage,
+                  target: contactTarget,
+                })
+                consumedFragmentIds.add(contact.spellId)
+              }
+              if (consumedFragmentIds.size > 0) {
+                state = {
+                  ...state,
+                  actors: state.actors.filter(({ id }) => !consumedFragmentIds.has(id)),
+                }
               }
             }
           }
@@ -1934,16 +1974,15 @@ export function stepNativeSecondaryAbilities(
         break
       }
       case 'ring-fire-explosion': {
-        actor = {
-          ...actor,
-          alpha: Math.max(0, Math.fround(sourceActor.alpha - Math.fround(0.1))),
-          scale: Math.fround(sourceActor.scale * Math.fround(1.01)),
-        }
-        retain = actor.alpha > 0
+        retain = actor.ageTicks < actor.lifetimeTicks
         break
       }
       case 'ring-fire-fragment': {
         actor = { ...actor, ...stepRingFireFragment(sourceActor) }
+        if (actor.variant !== 0) {
+          retain = actor.alpha > 0
+          break
+        }
         const target = candidates(actor).find(({ id }) => !actor.hitTargetIds.includes(id))
         if (target) {
           addDamage(actor, target, actor.damage, 'fire')
@@ -4911,14 +4950,31 @@ function spawnMaximumRingFireExplosion(
   sourceRng: NativeRngState,
   wave: NativeSecondaryActorState,
   target: NativeSecondaryTarget,
+  tick: number,
+  burnDamage: number,
 ): Readonly<{
   actor: NativeSecondaryActorState
+  contacts: readonly NativeFireEmberContact[]
   rng: NativeRngState
   state: NativeSecondarySimulationState
 }> {
-  const presentationRng = sourceRng
-  const privateSeed = drawNativeInteger(sourceRng, 1_000_000)
-  const coreRotation = drawNativeFloat(privateSeed.state, 0.8, true)
+  const privateSeed = drawNativeInteger(sourceRng, 1_000_001)
+  const detonation = createNativeFireDetonation(
+    source.nextActorId + 1,
+    {
+      burnDamage,
+      emberDamage: Math.fround(wave.damage / 3),
+      emberFragments: 3,
+      explodeDamage: wave.damage,
+      explodeRadius: 10 + (1.5 - 1) / 0.18,
+      privateSeed: privateSeed.value,
+      spentEmber: Object.freeze({ kind: 'none' }),
+    },
+    target.position,
+    wave.ownerId,
+    wave.worldKey,
+    privateSeed.state,
+  )
   let state = spawn(source, actorSeed({
     alpha: 1,
     damage: Math.fround(wave.damage * RING_FIRE_EXPLOSION_DAMAGE_FACTOR),
@@ -4926,92 +4982,81 @@ function spawnMaximumRingFireExplosion(
     lifetimeTicks: RING_FIRE_EXPLOSION_LIFETIME_TICKS,
     ownerId: wave.ownerId,
     position: target.position,
-    presentationRng,
+    presentationRng: null,
     radius: RING_FIRE_EXPLOSION_RADIUS,
     rank: wave.rank,
-    rotationRadians: coreRotation.value,
+    rotationRadians: 0,
     scale: Math.fround(1.5),
     skillId: 21,
     targetId: target.id,
     worldKey: wave.worldKey,
   }))
   const actor = state.actors.at(-1)!
-
-  let fragmentRng = createNativeRng(privateSeed.value)
-  const initialHeading = drawNativeFloat(fragmentRng, 360)
-  fragmentRng = initialHeading.state
-  const headingStep = 120
-  for (let index = 0; index < 3; index += 1) {
-    const jitter = drawNativeFloat(fragmentRng, headingStep / 3, true)
-    const speed = drawNativeFloat(jitter.state, 0.5)
-    const verticalVelocity = drawNativeFloat(speed.state, 3)
-    fragmentRng = verticalVelocity.state
-    const direction = nativeHeadingVector(initialHeading.value + index * headingStep + jitter.value)
-    const velocity = {
-      x: Math.fround(direction.x * Math.fround((1.5 + speed.value) * 0.75)),
-      y: Math.fround(direction.y * Math.fround((1.5 + speed.value) * 0.75)),
-    }
-    let fragment = actorSeed({
-      alpha: Math.fround(3),
-      damage: Math.fround(wave.damage / 3),
-      frame: index,
+  state = emit(state, {
+    ...eventSeed(actor, tick, 'fireball-hit', 'pulse'),
+    pitch: detonation.soundPitch,
+  })
+  state = emit(state, {
+    ...eventSeed(actor, tick, 'throw-fire', 'pulse'),
+    pitch: Math.fround(0.8),
+  })
+  for (const ember of detonation.embers) {
+    state = spawn(state, actorSeed({
+      ageTicks: ember.ageTicks,
+      alpha: ember.life,
+      damage: ember.damage,
+      frame: ember.phase,
       kind: 'ring-fire-fragment',
       lifetimeTicks: RING_FIRE_FRAGMENT_LIFETIME_TICKS,
       ownerId: wave.ownerId,
-      phase: Math.fround(-6),
-      position: {
-        x: Math.fround(target.position.x + velocity.x * 10),
-        y: Math.fround(target.position.y + velocity.y * 10),
-      },
-      radius: 10,
+      phase: ember.height,
+      position: ember.position,
+      quantity: ember.verticalVelocity === 0 ? 1 : 0,
+      radius: 7,
       rank: wave.rank,
-      slowFactor: Math.fround(-(2 + verticalVelocity.value)),
+      slowFactor: ember.verticalVelocity,
       skillId: 21,
-      velocity,
+      variant: ember.contactCadence,
+      velocity: ember.horizontalVelocity,
       worldKey: wave.worldKey,
-    })
-    for (let tick = 0; tick < 10; tick += 1) fragment = stepRingFireFragment(fragment)
-    state = spawn(state, fragment)
+    }))
   }
-  return { actor, rng: coreRotation.state, state }
+  return { actor, contacts: detonation.contacts, rng: detonation.rng, state }
 }
 
 function stepRingFireFragment(
   source: Omit<NativeSecondaryActorState, 'id'>,
 ): Omit<NativeSecondaryActorState, 'id'> {
-  let phase = source.phase
-  let verticalVelocity = source.slowFactor
-  let velocity = source.velocity
-  let grounded = source.quantity === 1
-  let alpha = source.alpha
-  const position = {
-    x: Math.fround(source.position.x + velocity.x),
-    y: Math.fround(source.position.y + velocity.y),
-  }
-  if (!grounded) {
-    phase = Math.fround(phase + Math.max(-1, Math.min(1, verticalVelocity)))
-    verticalVelocity = Math.fround(verticalVelocity + Math.fround(0.15))
-    if (phase >= 0) {
-      phase = 0
-      verticalVelocity = Math.fround(verticalVelocity * Math.fround(-0.5))
-      velocity = {
-        x: Math.fround(velocity.x * Math.fround(0.5)),
-        y: Math.fround(velocity.y * Math.fround(0.5)),
-      }
-      grounded = Math.abs(verticalVelocity) <= 0.5
-    }
-  } else {
-    alpha = Math.fround(alpha - Math.fround(0.015))
-  }
+  const stepped = stepNativeFireEmber({
+    ageTicks: source.ageTicks,
+    burnDamage: 0,
+    contactCadence: source.variant,
+    contactDue: source.variant === 0,
+    damage: source.damage,
+    height: source.phase,
+    horizontalVelocity: source.velocity,
+    id: 1,
+    life: source.alpha,
+    ownerId: source.ownerId,
+    phase: source.frame,
+    position: source.position,
+    spentEmber: Object.freeze({ kind: 'none' }),
+    verticalVelocity: source.slowFactor,
+    worldKey: source.worldKey,
+  })
+  if (!stepped.ember) return { ...source, alpha: 0 }
+  const ember = stepped.ember
   return {
     ...source,
-    alpha,
-    frame: Math.fround((source.frame + Math.fround(0.25)) % 4),
-    phase,
-    position,
-    quantity: grounded ? 1 : 0,
-    slowFactor: verticalVelocity,
-    velocity,
+    ageTicks: ember.ageTicks,
+    alpha: ember.life,
+    frame: ember.phase,
+    phase: ember.height,
+    position: ember.position,
+    quantity: ember.verticalVelocity === 0 ? 1 : 0,
+    slowFactor: ember.verticalVelocity,
+    variant: ember.contactCadence,
+    velocity: ember.horizontalVelocity,
   }
 }
 
@@ -5080,7 +5125,6 @@ export function nativeSecondaryLightDisposition(
     case 'shockwave':
     case 'mindblast-shockwave':
     case 'fire-patch':
-    case 'ring-fire-explosion':
     case 'ring-fire-fragment':
     case 'storm-cloud':
     case 'freeze-wave':
@@ -5090,6 +5134,8 @@ export function nativeSecondaryLightDisposition(
     case 'ether-drain':
     case 'comet':
       return 'actor-provider'
+    case 'ring-fire-explosion':
+      return 'transient-provider'
     case 'ether-fade':
       return actor.variant === 1 ? 'transient-provider' : 'none'
     case 'magic-circle':
@@ -5593,12 +5639,14 @@ function advanceActor(actor: NativeSecondaryActorState): NativeSecondaryActorSta
     && actor.kind !== 'storm-drop'
     && actor.kind !== 'comet-debris'
     && actor.kind !== 'storm-strike'
+    && actor.kind !== 'ring-fire-fragment'
   const advancesAge = actor.kind !== 'golem'
   const advancesFrame = advancesAge
     && actor.kind !== 'leviathan-appendage'
     && actor.kind !== 'earthquake'
     && actor.kind !== 'earthquake-scenery-wobble'
     && actor.kind !== 'earthquake-debris'
+    && actor.kind !== 'ring-fire-fragment'
   return {
     ...actor,
     ageTicks: actor.ageTicks + (advancesAge ? 1 : 0),

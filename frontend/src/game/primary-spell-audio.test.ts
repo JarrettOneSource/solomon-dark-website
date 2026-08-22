@@ -833,6 +833,57 @@ test('plays each semantic Fire impact once without replaying an initial snapshot
   assert.deepEqual(reconnectAudio.sounds, [])
 })
 
+test('orders the shared Fire explosion hit and throw cues after the ordinary impact', () => {
+  const initial = simulation('fire')
+  const position = { ...getPlayerCharacter(initial, PLAYER_ID).position }
+  const impact = {
+    ageTicks: 0,
+    id: 1,
+    kind: 'fire-impact',
+    lightRegistration: { managerLane: 'transient', registrationOrdinal: 0 },
+    origin: position,
+    ownerId: PLAYER_ID,
+    worldKey: AUDIO_WORLD_KEY,
+  } as const
+  const explosion = {
+    ageTicks: 0,
+    burnDamage: 0,
+    damage: 6,
+    footprintDimension: 165,
+    id: 2,
+    kind: 'fire-explosion',
+    lightRegistration: { managerLane: 'transient', registrationOrdinal: 1 },
+    origin: position,
+    ownerId: PLAYER_ID,
+    soundPitch: 1.05,
+    visualScale: 1.5,
+    worldKey: AUDIO_WORLD_KEY,
+  } as const
+  const audio = new RecordingAudio()
+  const synchronizer = new PrimarySpellAudioSynchronizer(
+    audio as unknown as GameAudioDirector,
+    PLAYER_ID,
+    createGameSnapshot(initial, PLAYER_ID),
+  )
+  const detonated = createGameSnapshot({
+    ...initial,
+    primarySpells: {
+      nextId: 3,
+      projectiles: [],
+      transients: [impact, explosion],
+    },
+  }, PLAYER_ID)
+  synchronizer.update(detonated)
+  synchronizer.update(detonated)
+  assert.deepEqual(audio.sounds, ['fireball-hit', 'fireball-hit', 'throw-fire'])
+  assert.deepEqual(audio.soundOptions, [
+    { playbackRate: 1.0600220054388045, volume: 1 },
+    { playbackRate: 1.05, volume: 2 },
+    { playbackRate: Math.fround(0.8), volume: 2 },
+  ])
+  synchronizer.destroy()
+})
+
 test('plays each semantic Ether impact once with its native pitch interval', () => {
   const initial = simulation('ether')
   const player = getPlayerCharacter(initial, PLAYER_ID)

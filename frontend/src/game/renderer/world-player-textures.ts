@@ -46,6 +46,7 @@ const NATIVE_FIRE_ACTOR_BADGUYS_RECORDS = Object.freeze([
   ...integerRange(251, 254),
   ...integerRange(267, 270),
   ...integerRange(285, 342),
+  ...integerRange(401, 433),
 ])
 const NATIVE_FIRE_ACTOR_DEADHAWG_RECORDS = Object.freeze(integerRange(46, 77))
 

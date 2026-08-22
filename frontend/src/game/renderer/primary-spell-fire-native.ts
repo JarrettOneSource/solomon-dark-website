@@ -1,5 +1,6 @@
 import type {
   PrimarySpellFireEmberState,
+  PrimarySpellFireExplosionState,
   PrimarySpellFireGoodImpState,
   PrimarySpellFireImpactState,
   PrimarySpellFirePatchState,
@@ -33,6 +34,12 @@ export const NATIVE_FIRE_IMPACT_TICKS_PER_FRAME = 4
 export const NATIVE_FIRE_IMPACT_DEPTH_BIAS = 50
 export const NATIVE_FIRE_EMBER_GLOW_RECORD = 15
 export const NATIVE_FIRE_EMBER_FRAME_FIRST = 267
+export const NATIVE_FIRE_EXPLOSION_CORE_RECORD = 15
+export const NATIVE_FIRE_EXPLOSION_ARRAY_FIRST = 401
+export const NATIVE_FIRE_EXPLOSION_LIT_ARRAY_FIRST = 420
+export const NATIVE_FIRE_EXPLOSION_CORE_VISIBLE_TICKS = 10
+export const NATIVE_FIRE_EXPLOSION_ARRAY_VISIBLE_TICKS = 35
+export const NATIVE_FIRE_EXPLOSION_LIT_ARRAY_VISIBLE_TICKS = 37
 export const NATIVE_FIRE_PATCH_FRAME_FIRST = 46
 export const NATIVE_FIRE_PATCH_FRAME_COUNT = 32
 export const NATIVE_GOOD_IMP_BODY_FIRST = 285
@@ -54,6 +61,20 @@ export interface NativeFireActorDraw {
 }
 
 export interface NativeFireEmberPlan {
+  readonly draws: readonly NativeFireActorDraw[]
+  readonly groundGlow: Readonly<{
+    alpha: number
+    blend: 'normal'
+    height: number
+    tint: number
+    width: number
+  }> | null
+  readonly position: Readonly<{ x: number; y: number }>
+  readonly regionLightPoint: null
+  readonly worldY: number
+}
+
+export interface NativeFireExplosionPlan {
   readonly draws: readonly NativeFireActorDraw[]
   readonly position: Readonly<{ x: number; y: number }>
   readonly regionLightPoint: null
@@ -272,31 +293,157 @@ export function nativeFireImpactPlan(
   }
 }
 
+export function nativeFireExplosionPlan(
+  state: Pick<PrimarySpellFireExplosionState, 'ageTicks' | 'id' | 'origin' | 'visualScale'>,
+  pointGain = 1,
+): NativeFireExplosionPlan {
+  const ageTicks = Math.max(0, Math.floor(state.ageTicks))
+  const draws: NativeFireActorDraw[] = []
+  if (ageTicks < NATIVE_FIRE_EXPLOSION_CORE_VISIBLE_TICKS) {
+    draws.push(fireActorDraw(
+      'BadGuys',
+      NATIVE_FIRE_EXPLOSION_CORE_RECORD,
+      'explosion-core',
+      {
+        alpha: repeatedFloatLoss(1, Math.fround(0.1), ageTicks),
+        offset: { x: 0, y: -25 },
+        scale: Math.fround(state.visualScale * 6),
+      },
+    ))
+  }
+  if (ageTicks < NATIVE_FIRE_EXPLOSION_ARRAY_VISIBLE_TICKS) {
+    draws.push(fireActorDraw(
+      'BadGuys',
+      NATIVE_FIRE_EXPLOSION_ARRAY_FIRST + Math.trunc(explosionArrayPhase(
+        ageTicks,
+        Math.fround(0.75),
+        Math.fround(0.98),
+      )),
+      'explosion-array',
+      {
+        blend: 'add',
+        scale: Math.fround(state.visualScale * 2),
+      },
+    ))
+  }
+  if (ageTicks < NATIVE_FIRE_EXPLOSION_LIT_ARRAY_VISIBLE_TICKS) {
+    const initialY = Math.fround(state.visualScale * -15)
+    const velocityY = Math.fround(state.visualScale * -1.15)
+    draws.push(fireActorDraw(
+      'BadGuys',
+      NATIVE_FIRE_EXPLOSION_LIT_ARRAY_FIRST + Math.trunc(explosionArrayPhase(
+        ageTicks,
+        Math.fround(0.625),
+        Math.fround(0.97),
+      )),
+      'explosion-lit-array',
+      {
+        blend: 'add',
+        offset: { x: 0, y: repeatedFloatAdd(initialY, velocityY, ageTicks) },
+        scale: Math.fround(2 * Math.max(0, pointGain)),
+      },
+    ))
+  }
+  return {
+    draws,
+    position: { ...state.origin },
+    regionLightPoint: null,
+    worldY: state.origin.y,
+  }
+}
+
 export function nativeFireEmberPlan(
-  state: PrimarySpellFireEmberState,
+  state: Pick<
+    PrimarySpellFireEmberState,
+    'ageTicks' | 'height' | 'id' | 'life' | 'phase' | 'position'
+  >,
+  presentationSample = Math.floor(state.ageTicks),
 ): NativeFireEmberPlan {
   const bodyAlpha = Math.min(state.life, 1)
   const frame = NATIVE_FIRE_EMBER_FRAME_FIRST + Math.floor(state.phase) % 4
-  const position = {
-    x: state.position.x,
-    y: state.position.y + state.height,
-  }
+  const position = { ...state.position }
+  const additiveDraw = (index: 0 | 1): NativeFireActorDraw => fireActorDraw(
+    'BadGuys',
+    frame,
+    `additive-body-${index + 1}`,
+    {
+      alpha: bodyAlpha,
+      blend: 'add',
+      offset: { x: 0, y: state.height },
+      rotation: nativeFirePresentationRandom(
+        state.id,
+        presentationSample,
+        31 + index * 2,
+        0.1,
+      ) * Math.PI / 180,
+      scale: 0.75 - nativeFirePresentationRandom(
+        state.id,
+        presentationSample,
+        32 + index * 2,
+        0.5,
+      ),
+    },
+  )
   return {
     draws: [
+      fireActorDraw('BadGuys', frame, 'body', {
+        alpha: bodyAlpha,
+        offset: { x: 0, y: state.height },
+        scale: 0.5,
+      }),
+      additiveDraw(0),
+      additiveDraw(1),
       fireActorDraw('BadGuys', NATIVE_FIRE_EMBER_GLOW_RECORD, 'glow', {
         alpha: Math.min(state.life * 0.2, 1),
+        blend: 'add',
+        offset: { x: 0, y: state.height * 0.8 },
         scale: Math.min(state.life, 1),
         tint: 0xff8000,
       }),
-      fireActorDraw('BadGuys', frame, 'additive-body', {
-        alpha: bodyAlpha,
-        blend: 'add',
-      }),
-      fireActorDraw('BadGuys', frame, 'body', { alpha: bodyAlpha }),
     ],
+    groundGlow: state.height < 0
+      ? {
+          alpha: Math.fround((1 - state.height / -50 * 0.5) * 0.25),
+          blend: 'normal',
+          height: Math.fround(37 * Math.fround(0.6000000238418579)),
+          tint: 0xff8040,
+          width: Math.fround(38 * 0.75),
+        }
+      : null,
     position,
     regionLightPoint: null,
     worldY: state.position.y,
+  }
+}
+
+export function nativeFireExplosionLightSource(
+  state: Pick<PrimarySpellFireExplosionState, 'ageTicks' | 'origin'>,
+  pointGain = 1,
+  multipleShadows = NATIVE_DEFAULT_MULTIPLE_SHADOWS,
+): NativeBoneyardLightSource | null {
+  if (state.ageTicks >= NATIVE_FIRE_EXPLOSION_LIT_ARRAY_VISIBLE_TICKS) return null
+  return {
+    castsDirectionalShadow: multipleShadows,
+    intensity: 1,
+    position: { ...state.origin },
+    radius: Math.fround(2 * Math.max(0, pointGain)),
+  }
+}
+
+export function nativeFireEmberLightSource(
+  state: Pick<PrimarySpellFireEmberState, 'id' | 'life' | 'position'>,
+  presentationSample = 0,
+): NativeBoneyardLightSource {
+  return {
+    castsDirectionalShadow: false,
+    intensity: Math.fround(Math.min(state.life, 1) * 0.25),
+    position: { ...state.position },
+    radius: Math.fround(1 - nativeFirePresentationRandom(
+      state.id,
+      presentationSample,
+      39,
+      0.25,
+    )),
   }
 }
 
@@ -444,7 +591,7 @@ function fireActorDraw(
   role: string,
   options: Partial<Pick<
     NativeFireActorDraw,
-    'alpha' | 'blend' | 'offset' | 'rotation' | 'scale' | 'tint'
+    'alpha' | 'blend' | 'offset' | 'rotation' | 'scale' | 'scaleX' | 'scaleY' | 'tint'
   >> = {},
 ): NativeFireActorDraw {
   return {
@@ -456,8 +603,34 @@ function fireActorDraw(
     role,
     rotation: options.rotation ?? 0,
     scale: options.scale ?? 1,
+    ...(options.scaleX === undefined ? {} : { scaleX: options.scaleX }),
+    ...(options.scaleY === undefined ? {} : { scaleY: options.scaleY }),
     tint: options.tint ?? 0xffffff,
   }
+}
+
+function explosionArrayPhase(
+  ageTicks: number,
+  initialStep: number,
+  retention: number,
+): number {
+  let phase = Math.fround(0)
+  let step = initialStep
+  for (let tick = 0; tick < ageTicks; tick += 1) {
+    phase = Math.fround(phase + step)
+    step = Math.fround(step * retention)
+  }
+  return phase
+}
+
+function repeatedFloatAdd(initial: number, step: number, count: number): number {
+  let value = initial
+  for (let index = 0; index < count; index += 1) value = Math.fround(value + step)
+  return value
+}
+
+function repeatedFloatLoss(initial: number, loss: number, count: number): number {
+  return repeatedFloatAdd(Math.fround(initial), Math.fround(-loss), count)
 }
 
 function positiveModulo(value: number, divisor: number): number {

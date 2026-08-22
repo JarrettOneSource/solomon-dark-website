@@ -13,11 +13,12 @@ import {
   BONEYARD_WAVE_ENEMY_TYPES,
   type BoneyardEnemySpawnIntent,
 } from '../core-kernels/boneyard-wave-director.ts'
-import type {
-  PrimarySpellChannelEmission,
-  PrimarySpellProjectileState,
-  PrimarySpellSimulationState,
-  PrimarySpellTransientState,
+import {
+  createPrimarySpellFireDetonation,
+  type PrimarySpellChannelEmission,
+  type PrimarySpellProjectileState,
+  type PrimarySpellSimulationState,
+  type PrimarySpellTransientState,
 } from '../core-kernels/primary-spells.ts'
 import {
   createNativeWeldPersistentActor,
@@ -31,6 +32,7 @@ import { createNativeHurricanePresentation } from '../core-kernels/native-hurric
 import {
   spawnNativeFireGoodImp,
   stepNativeFireGoodImp,
+  type NativeFireActorContact,
 } from '../core-kernels/primary-spell-fire-effects.ts'
 import type {
   NativeWeldBuildId,
@@ -132,6 +134,7 @@ function resolveCombatWithAuthority(
       radius: number,
     ) => Readonly<{ x: number; y: number }>
     damageMultiplier?: (actorId: number, kind: string) => number
+    fireActorContacts?: readonly NativeFireActorContact[]
     rngSeed?: number
     steamedPulses?: readonly NativeSecondarySteamedPulse[]
   }> = {},
@@ -148,7 +151,7 @@ function resolveCombatWithAuthority(
     options.damageMultiplier ?? (() => 1),
     [],
     undefined,
-    [],
+    options.fireActorContacts ?? [],
     options.resolveMovement ?? ((_actorId, _start, requested) => requested),
     options.steamedPulses ?? [],
   )
@@ -219,6 +222,50 @@ test('Fire uses the post-move same-cell point query, projected slot order, and s
     projectiles: [projectile({ id: 9, kind: 'fire', position: { x: -0.25, y: 0 } })],
   }), [], 1, WORLD_KEY, COMBAT_RNG)
   assert.equal(negative.hits[0]?.actorId, 1, 'float32 truncation maps both roots to cell zero')
+})
+
+test('Fire detonation replays registered Ember pre-tick contacts once and consumes the child', () => {
+  const base = projectile({ id: 7, kind: 'fire' })
+  if (base.kind !== 'fire') throw new Error('Expected a Fire projectile fixture')
+  const detonation = createPrimarySpellFireDetonation(
+    100,
+    {
+      ...base,
+      burnDamage: 2,
+      emberDamage: 3,
+      emberFragments: 1,
+      privateSeed: 123_456,
+    },
+    { x: 0, y: 0 },
+    createNativeRng(900),
+  )
+  const firstContact = detonation.contacts[0]!
+  const enemies = spawnEnemies([{
+    position: { ...firstContact.position },
+    token: 'SKELETON',
+  }])
+  const result = resolveCombatWithAuthority(
+    enemies,
+    {
+      nextId: detonation.nextId,
+      projectiles: [],
+      transients: detonation.transients,
+    },
+    [],
+    1,
+    { fireActorContacts: detonation.contacts },
+  )
+
+  assert.deepEqual(result.hits.map(({ amount, spellKind }) => ({ amount, spellKind })), [{
+    amount: 3,
+    spellKind: 'fire-ember',
+  }])
+  assert.deepEqual(result.burns, [{ damage: 2, ownerId: 'wizard', targetId: 1 }])
+  assert.equal(result.spells.transients.some(({ id }) => id === firstContact.spellId), false)
+  assert.deepEqual(result.spells.transients.map(({ kind }) => kind), [
+    'fire-impact',
+    'fire-impact',
+  ])
 })
 
 test('Ether Blast damages current HP in the strict 175-radius query and requests EtherBurn', () => {
@@ -507,7 +554,7 @@ test('Fire contact partitions direct and rectangular splash damage and consumes 
       { id: 103, kind: 'fire-ember' },
     ],
   )
-  assert.equal(result.rng.indexA, 6)
+  assert.equal(result.rng.indexA, 8)
   assert.deepEqual(result.burns, [
     { damage: 10, ownerId: 'wizard', targetId: 1 },
     { damage: 10, ownerId: 'wizard', targetId: 1 },

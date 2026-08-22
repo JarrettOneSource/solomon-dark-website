@@ -428,6 +428,14 @@ participant. The run remains in loadout until every connected eligible member
 has confirmed; disconnect synchronization removes departed members without
 granting one client authority over another player's pair.
 
+Protocol 58 closes the shared Fire detonation lifecycle. Live Ember snapshots
+carry the native four-tick contact cadence and actor-light registration through
+the complete `(0,3]` life interval. Shared Fire explosions carry their
+transient-light registration, stable sound pitch, and 37-tick semantic life;
+clients project the three native child clocks from that one authority state.
+The host owns damage, Ember motion/contact, registration order, and retirement;
+renderers own only display-frame jitter and local Region point gain.
+
 ## Saves, identity, and content
 
 - The authoritative game host is the only producer of browser-save contents.

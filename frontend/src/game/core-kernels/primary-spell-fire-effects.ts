@@ -119,7 +119,21 @@ export interface NativeFireGoodImpContact {
   readonly worldKey: string
 }
 
-export type NativeFireActorContact = NativeFireGoodImpContact | NativeFirePatchContact
+export interface NativeFireEmberContact {
+  readonly amount: number
+  readonly burnDamage: number
+  readonly kind: 'fire-ember'
+  readonly ownerId: string
+  readonly position: Vector2
+  readonly radius: number
+  readonly spellId: number
+  readonly worldKey: string
+}
+
+export type NativeFireActorContact =
+  | NativeFireEmberContact
+  | NativeFireGoodImpContact
+  | NativeFirePatchContact
 
 export type NativeFireSpentEmber =
   | Readonly<{ damage: number; kind: 'immolate' }>
@@ -139,6 +153,8 @@ export interface NativeFireProjectilePayload {
 export interface NativeFireEmberState {
   readonly ageTicks: number
   readonly burnDamage: number
+  readonly contactCadence: number
+  readonly contactDue: boolean
   readonly damage: number
   readonly height: number
   readonly horizontalVelocity: Vector2
@@ -147,7 +163,6 @@ export interface NativeFireEmberState {
   readonly ownerId: string
   readonly phase: number
   readonly position: Vector2
-  readonly presentationVariant: number
   readonly spentEmber: NativeFireSpentEmber
   readonly verticalVelocity: number
   readonly worldKey: string
@@ -164,10 +179,12 @@ export interface NativeFireExplosionState {
 }
 
 export interface NativeFireDetonation {
+  readonly contacts: readonly NativeFireEmberContact[]
   readonly embers: readonly NativeFireEmberState[]
   readonly explosion: NativeFireExplosionState | null
   readonly nextId: number
   readonly rng: NativeRngState
+  readonly soundPitch: number
 }
 
 export type NativeFireEmberRetirement =
@@ -659,11 +676,13 @@ export function createNativeFireDetonation(
     throw new RangeError('Fire detonation fragment count must be a non-negative safe integer')
   }
   let privateRng = createNativeRng(payload.privateSeed)
-  let sharedRng = sourceRng
+  const soundPitchDraw = drawNativeFloat(sourceRng, 0.1, true)
+  let sharedRng = soundPitchDraw.state
   const startDraw = drawNativeFloat(privateRng, 360)
   privateRng = startDraw.state
   const step = payload.emberFragments === 0 ? 0 : 360 / payload.emberFragments
   const embers: NativeFireEmberState[] = []
+  const contacts: NativeFireEmberContact[] = []
   for (let index = 0; index < payload.emberFragments; index += 1) {
     // The Ember factory constructor consumes the active gameplay RNG before
     // the Fireball helper resumes its projectile-private fan stream. The
@@ -687,6 +706,8 @@ export function createNativeFireDetonation(
     let ember: NativeFireEmberState = Object.freeze({
       ageTicks: 0,
       burnDamage: payload.burnDamage,
+      contactCadence: presentationDraw.value,
+      contactDue: false,
       damage: payload.emberDamage,
       height: NATIVE_FIRE_EMBER_INITIAL_HEIGHT,
       horizontalVelocity,
@@ -698,7 +719,6 @@ export function createNativeFireDetonation(
         x: Math.fround(origin.x + horizontalVelocity.x * 10),
         y: Math.fround(origin.y + horizontalVelocity.y * 10),
       }),
-      presentationVariant: presentationDraw.value,
       spentEmber: payload.spentEmber,
       verticalVelocity: Math.fround(-(2 + verticalDraw.value)),
       worldKey,
@@ -707,14 +727,28 @@ export function createNativeFireDetonation(
       const stepped = stepNativeFireEmber(ember)
       if (!stepped.ember) throw new Error('newborn Ember retired during native pre-ticks')
       ember = stepped.ember
+      if (ember.contactDue) {
+        contacts.push(Object.freeze({
+          amount: ember.damage,
+          burnDamage: ember.burnDamage,
+          kind: 'fire-ember',
+          ownerId: ember.ownerId,
+          position: Object.freeze({ ...ember.position }),
+          radius: 7,
+          spellId: ember.id,
+          worldKey: ember.worldKey,
+        }))
+      }
     }
-    embers.push(ember)
+    embers.push(Object.freeze({ ...ember, contactDue: false }))
   }
   return Object.freeze({
+    contacts: Object.freeze(contacts),
     embers: Object.freeze(embers),
     explosion: nativeFireExplosion(payload, origin, ownerId, worldKey),
     nextId: firstId + embers.length,
     rng: sharedRng,
+    soundPitch: Math.fround(1 + soundPitchDraw.value),
   })
 }
 
@@ -751,9 +785,14 @@ export function stepNativeFireEmber(
   const phase = life > 1
     ? positiveModulo(Math.fround(source.phase + 0.25), 4)
     : source.phase
+  let contactCadence = source.contactCadence + 1
+  const contactDue = contactCadence > 3
+  if (contactDue) contactCadence = 0
   const ember = Object.freeze({
     ...source,
     ageTicks: source.ageTicks + 1,
+    contactCadence,
+    contactDue,
     height,
     horizontalVelocity,
     life,

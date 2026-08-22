@@ -230,12 +230,16 @@ export function resolveBoneyardSpawnPosition(
   radius: number,
   startingAngleDegrees = semanticSpawnAngle(position, radius),
 ): BoneyardPoint {
+  if (!Number.isFinite(radius) || radius <= 0) {
+    throw new RangeError('Boneyard spawn radius must be positive and finite')
+  }
   if (isMobileBoneyardPlacement(position, bounds, world, radius)) {
     return { ...position }
   }
 
-  if (!Number.isFinite(radius) || radius <= 0) {
-    throw new RangeError('Boneyard spawn radius must be positive and finite')
+  const searchOrigin = clampToBounds(position, bounds, radius)
+  if (isMobileBoneyardPlacement(searchOrigin, bounds, world, radius)) {
+    return searchOrigin
   }
   const maximumRadius = Math.hypot(bounds.w, bounds.h) + radius * 2
   for (let ringRadius = radius; ringRadius <= maximumRadius; ringRadius += radius) {
@@ -244,9 +248,9 @@ export function resolveBoneyardSpawnPosition(
     for (let index = 0; index < sampleCount; index += 1) {
       const angle = (startingAngleDegrees + index * angleStep) * Math.PI / 180
       const candidate = {
-        x: Math.fround(position.x + Math.sin(angle) * ringRadius),
+        x: Math.fround(searchOrigin.x + Math.sin(angle) * ringRadius),
         y: Math.fround(
-          position.y
+          searchOrigin.y
           - Math.cos(angle) * ringRadius * NATIVE_BONEYARD_SPAWN_PLACEMENT.verticalScale,
         ),
       }

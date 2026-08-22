@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 import { createNativeFirePatch } from '../core-kernels/primary-spell-fire-effects.ts'
@@ -9,6 +10,7 @@ import {
 } from '../core-kernels/primary-spell-fire-native.ts'
 import type {
   PrimarySpellFireImpactState,
+  PrimarySpellFireExplosionState,
   PrimarySpellFireProjectileState,
   PrimarySpellFireEmberState,
   PrimarySpellFireGoodImpState,
@@ -23,6 +25,9 @@ import {
   nativeFireballLightSource,
   nativeFireballPlan,
   nativeFireEmberPlan,
+  nativeFireEmberLightSource,
+  nativeFireExplosionLightSource,
+  nativeFireExplosionPlan,
   nativeFireGoodImpLightSource,
   nativeFireGoodImpPlan,
   nativeFireImpactLightSource,
@@ -195,10 +200,12 @@ test('pins exact Fire impact frame clock, recurrence, blend order, and light own
   assert.equal(light.castsDirectionalShadow, false)
 })
 
-test('projects Ember glow and dual phase passes from native atlas records', () => {
+test('projects Ember glow, dual phase passes, and the exact enhanced ground quad', () => {
   const ember = {
     ageTicks: 20,
     burnDamage: 4,
+    contactCadence: 0,
+    contactDue: true,
     damage: 8,
     height: -7,
     horizontalVelocity: { x: 0, y: 0 },
@@ -208,21 +215,103 @@ test('projects Ember glow and dual phase passes from native atlas records', () =
     ownerId: 'caster',
     phase: 2.75,
     position: { x: 100, y: 200 },
-    presentationVariant: 0,
     spentEmber: { kind: 'none' },
     verticalVelocity: -1,
     worldKey: 'hub:courtyard',
   } satisfies PrimarySpellFireEmberState
-  const plan = nativeFireEmberPlan(ember)
-  assert.deepEqual(plan.position, { x: 100, y: 193 })
+  const plan = nativeFireEmberPlan(ember, 12)
+  assert.deepEqual(plan.position, { x: 100, y: 200 })
   assert.deepEqual(plan.draws.map(({ blend, entry, role }) => ({ blend, entry, role })), [
-    { blend: 'normal', entry: 15, role: 'glow' },
-    { blend: 'add', entry: 269, role: 'additive-body' },
     { blend: 'normal', entry: 269, role: 'body' },
+    { blend: 'add', entry: 269, role: 'additive-body-1' },
+    { blend: 'add', entry: 269, role: 'additive-body-2' },
+    { blend: 'add', entry: 15, role: 'glow' },
   ])
-  assert.equal(plan.draws[0].alpha, 0.5)
-  assert.equal(plan.draws[0].scale, 1)
-  assert.deepEqual(plan.draws.slice(1).map(({ alpha }) => alpha), [1, 1])
+  assert.deepEqual(plan.groundGlow, {
+    alpha: Math.fround((1 - ember.height / -50 * 0.5) * 0.25),
+    blend: 'normal',
+    height: Math.fround(37 * Math.fround(0.6000000238418579)),
+    tint: 0xff8040,
+    width: Math.fround(38 * 0.75),
+  })
+  assert.equal(plan.draws[0].scale, 0.5)
+  assert.deepEqual(plan.draws.slice(0, 3).map(({ alpha }) => alpha), [1, 1, 1])
+  for (const draw of plan.draws.slice(1, 3)) {
+    assert.ok(draw.scale >= 0.25 && draw.scale <= 0.75)
+    assert.ok(draw.rotation >= 0 && draw.rotation <= 0.1 * Math.PI / 180)
+  }
+  assert.deepEqual(plan.draws[3], {
+    ...plan.draws[3],
+    alpha: 0.5,
+    offset: { x: 0, y: -5.6000000000000005 },
+    scale: 1,
+  })
+})
+
+test('projects all three shared explosion children through their independent native clocks', () => {
+  const explosion = {
+    ageTicks: 0,
+    burnDamage: 4,
+    damage: 6,
+    footprintDimension: 209,
+    id: 29,
+    kind: 'fire-explosion',
+    lightRegistration: { managerLane: 'transient', registrationOrdinal: 3 },
+    origin: { x: 100, y: 200 },
+    ownerId: 'caster',
+    soundPitch: 1.05,
+    visualScale: Math.fround(1.9),
+    worldKey: 'boneyard:test',
+  } satisfies PrimarySpellFireExplosionState
+  const atBirth = nativeFireExplosionPlan(explosion)
+  assert.deepEqual(
+    atBirth.draws.map(({ blend, entry, role }) => ({ blend, entry, role })),
+    [
+      { blend: 'normal', entry: 15, role: 'explosion-core' },
+      { blend: 'add', entry: 401, role: 'explosion-array' },
+      { blend: 'add', entry: 420, role: 'explosion-lit-array' },
+    ],
+  )
+  assert.deepEqual(atBirth.draws.map(({ offset, scale }) => ({ offset, scale })), [
+    { offset: { x: 0, y: -25 }, scale: Math.fround(explosion.visualScale * 6) },
+    { offset: { x: 0, y: 0 }, scale: Math.fround(explosion.visualScale * 2) },
+    { offset: { x: 0, y: Math.fround(explosion.visualScale * -15) }, scale: 2 },
+  ])
+  const afterCore = nativeFireExplosionPlan({ ...explosion, ageTicks: 10 })
+  assert.deepEqual(afterCore.draws.map(({ role }) => role), [
+    'explosion-array',
+    'explosion-lit-array',
+  ])
+  const finalNormal = nativeFireExplosionPlan({ ...explosion, ageTicks: 34 })
+  assert.equal(finalNormal.draws[0]?.entry, 419)
+  const finalLit = nativeFireExplosionPlan({ ...explosion, ageTicks: 36 })
+  assert.deepEqual(finalLit.draws.map(({ entry, role }) => ({ entry, role })), [
+    { entry: 433, role: 'explosion-lit-array' },
+  ])
+  assert.deepEqual(nativeFireExplosionPlan({ ...explosion, ageTicks: 37 }).draws, [])
+  assert.deepEqual(nativeFireExplosionLightSource(explosion, 0.5, false), {
+    castsDirectionalShadow: false,
+    intensity: 1,
+    position: explosion.origin,
+    radius: 1,
+  })
+})
+
+test('projects the native Ember actor light independently from its self-lit draws', () => {
+  const light = nativeFireEmberLightSource({
+    id: 31,
+    life: 0.5,
+    position: { x: 10, y: 20 },
+  }, 9)
+  assert.equal(light.castsDirectionalShadow, false)
+  assert.equal(light.intensity, 0.125)
+  assert.deepEqual(light.position, { x: 10, y: 20 })
+  assert.ok(light.radius >= 0.75 && light.radius <= 1)
+})
+
+test('primary world view admits the complete shared explosion member', () => {
+  const source = readFileSync(new URL('./primary-spell-world-view.ts', import.meta.url), 'utf8')
+  assert.match(source, /state\.kind === 'fire-explosion'/)
 })
 
 test('projects common Fire patches through DeadHawg 46..77 with native alpha and scale', () => {

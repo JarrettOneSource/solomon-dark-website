@@ -177,6 +177,8 @@ import {
 } from './primary-spell-ether-native.ts'
 import {
   nativeFireballLightSource,
+  nativeFireEmberLightSource,
+  nativeFireExplosionLightSource,
   nativeFireGoodImpLightSource,
   nativeFireImpactLightSource,
 } from './primary-spell-fire-native.ts'
@@ -187,6 +189,7 @@ import {
 } from './native-secondary-world-view.ts'
 import {
   NativeSecondaryScreenFeedbackPresentation,
+  nativeRegionPointGain,
   nativeSecondaryWorldShake,
 } from './native-secondary-presentation.ts'
 import { PlayerDeathBurstViews } from './player-death-burst-view.ts'
@@ -1464,6 +1467,14 @@ class BoneyardDynamicScene {
     const localPlayer = snapshot.players[localPlayerId]
     if (!localPlayer) throw new Error('Boneyard renderer lost its local player.')
     const weatherBounds = boneyardVisibleWorldBounds(camera, viewport, 0)
+    const pointGainAt = (position: Readonly<{ x: number, y: number }>): number => (
+      nativeRegionPointGain(
+        position,
+        { x: camera.x, y: camera.y },
+        weatherBounds.w,
+        localPlayer.progression.lifeState !== 'alive',
+      )
+    )
     const weatherCollisionWorld = withBoneyardGateCollision(
       this.collisionWorld,
       snapshot.world.gateLeaves,
@@ -1489,11 +1500,13 @@ class BoneyardDynamicScene {
       snapshot.primarySpells,
       `boneyard:${snapshot.world.runId}`,
       presentationFrame,
+      pointGainAt,
     )
     this.secondaryAbilities.update(
       snapshot.secondaryAbilities,
       `boneyard:${snapshot.world.runId}`,
       presentationFrame,
+      pointGainAt,
     )
     this.gates.update(snapshot.world.gateLeaves)
     this.goodies.update(snapshot.world.goodies, snapshot.tick)
@@ -1639,6 +1652,32 @@ class BoneyardDynamicScene {
         continue
       }
       if (
+        effect.kind === 'fire-ember'
+        && effect.worldKey === `boneyard:${snapshot.world.runId}`
+      ) {
+        lightProviderOwners.push({
+          registration: effect.lightRegistration,
+          sources: [nativeFireEmberLightSource(effect, presentationFrame)],
+        })
+        continue
+      }
+      if (
+        effect.kind === 'fire-explosion'
+        && effect.worldKey === `boneyard:${snapshot.world.runId}`
+      ) {
+        const source = nativeFireExplosionLightSource(
+          effect,
+          this.primarySpells.fireExplosionPointGain(effect.id)
+            ?? pointGainAt(effect.origin),
+          settings.multipleShadows,
+        )
+        lightProviderOwners.push({
+          registration: effect.lightRegistration,
+          sources: source === null ? [] : [source],
+        })
+        continue
+      }
+      if (
         effect.kind === 'fire-good-imp'
         && effect.worldKey === `boneyard:${snapshot.world.runId}`
       ) {
@@ -1695,6 +1734,8 @@ class BoneyardDynamicScene {
         actor,
         presentationFrame,
         settings.multipleShadows,
+        this.secondaryAbilities.fireExplosionPointGain(actor.id)
+          ?? pointGainAt(actor.position),
       )
       if (!source) continue
       lightProviderOwners.push({

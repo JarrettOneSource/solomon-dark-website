@@ -316,6 +316,46 @@ test('interpolates primary spells by stable identity without popping lifecycle e
   }
 })
 
+test('interpolates Ember phase forward through the native four-frame wrap', () => {
+  const ember = {
+    ageTicks: 20,
+    burnDamage: 0,
+    contactCadence: 2,
+    contactDue: false,
+    damage: 4,
+    height: -8,
+    horizontalVelocity: { x: 1, y: 0 },
+    id: 1,
+    kind: 'fire-ember' as const,
+    life: 2.5,
+    lightRegistration: { managerLane: 'actor' as const, registrationOrdinal: 4 },
+    ownerId: 'local',
+    phase: 3.75,
+    position: { x: 100, y: 200 },
+    spentEmber: { kind: 'none' as const },
+    verticalVelocity: -1,
+    worldKey: 'hub:courtyard',
+  }
+  const older = {
+    nextId: 2,
+    projectiles: [],
+    transients: [ember],
+  } satisfies PrimarySpellSimulationState
+  const newer = {
+    nextId: 2,
+    projectiles: [],
+    transients: [{ ...ember, ageTicks: 25, phase: 1 }],
+  } satisfies PrimarySpellSimulationState
+  const halfway = interpolatePrimarySpellState(
+    older,
+    newer,
+    0.5,
+    primarySpellTime(102.5),
+  )
+  assert.equal(halfway.transients[0]?.kind, 'fire-ember')
+  assert.equal(halfway.transients[0]?.phase, 0.375)
+})
+
 test('retains the state-driven Earth BoulderBit through the client presentation seam', () => {
   const program = createNativeWeldBoulderContactDebrisProgram({
     rng: createNativeRng(0x1234_5678),

@@ -24,6 +24,7 @@ import {
 } from './primary-spell-ether-view.ts'
 import {
   FireActorSpellView,
+  FireExplosionSpellView,
   FireImpactSpellView,
   FireParticleSpellView,
   FirePrimarySpellView,
@@ -58,6 +59,7 @@ interface SpellView {
   update(
     state: PrimarySpellProjectileState | PrimarySpellTransientState,
     presentationFrame?: number,
+    pointGain?: number,
   ): void
 }
 
@@ -93,6 +95,7 @@ export class PrimarySpellWorldView {
     spells: PrimarySpellSimulationState,
     worldKey: string,
     presentationFrame?: number,
+    pointGainAt: (position: Readonly<{ x: number, y: number }>) => number = () => 1,
   ): void {
     this.liveIds.clear()
     for (const state of [...spells.projectiles, ...spells.transients]) {
@@ -126,6 +129,12 @@ export class PrimarySpellWorldView {
           || state.kind === 'fire-patch'
         ) {
           view = new FireActorSpellView(state, this.textures.fireActors)
+        } else if (state.kind === 'fire-explosion') {
+          view = new FireExplosionSpellView(
+            state,
+            this.textures.fireActors,
+            pointGainAt(state.origin),
+          )
         } else if (state.kind === 'earth'
           || state.kind === 'ether'
           || (state.kind === 'fire' && 'phase' in state)) {
@@ -172,7 +181,7 @@ export class PrimarySpellWorldView {
         this.views.set(state.id, view)
         this.root.addChild(...view.containers)
       }
-      view.update(state, presentationFrame)
+      view.update(state, presentationFrame, pointGainAt(primarySpellPosition(state)))
       for (const painterRoot of view.painterRoots()) {
         painterRoot.container.zIndex = painterRoot.lane === 'post-world-queue'
           && this.postWorldQueueDepth !== null
@@ -245,6 +254,13 @@ export class PrimarySpellWorldView {
     return [...this.views.values()].map((view) => view.kind)
   }
 
+  fireExplosionPointGain(id: number): number | undefined {
+    const view = this.views.get(id)
+    return view instanceof FireExplosionSpellView
+      ? view.sampledPointGain
+      : undefined
+  }
+
   destroy(): void {
     for (const view of this.views.values()) {
       for (const container of view.containers) this.root.removeChild(container)
@@ -253,6 +269,14 @@ export class PrimarySpellWorldView {
     this.views.clear()
     this.liveIds.clear()
   }
+}
+
+function primarySpellPosition(
+  state: PrimarySpellProjectileState | PrimarySpellTransientState,
+): Readonly<{ x: number, y: number }> {
+  if ('position' in state) return state.position
+  if ('origin' in state) return state.origin
+  throw new Error(`Primary spell ${state.kind} has no presentation point`)
 }
 
 function parsePainterId(id: string): { numericId: number; suffix: string } {

@@ -161,8 +161,9 @@ test('the complete secondary light census stays split between providers and Misc
   const actorProviders = new Set<NativeSecondaryActorKind>([
     'leviathan', 'ether-bolt', 'moving-fire', 'shockwave', 'mindblast-shockwave', 'fire-patch',
     'storm-cloud', 'freeze-wave', 'golem', 'magic-trap', 'acid-rain',
-    'ether-drain', 'comet', 'ring-fire-explosion', 'ring-fire-fragment',
+    'ether-drain', 'comet', 'ring-fire-fragment',
   ])
+  const transientProviders = new Set<NativeSecondaryActorKind>(['ring-fire-explosion'])
   const miscWriters = new Set<NativeSecondaryActorKind>([
     'magic-circle', 'fire-burn', 'ether-burn', 'electric-burn',
   ])
@@ -170,13 +171,15 @@ test('the complete secondary light census stays split between providers and Misc
     const source = actor(kind)
     const expectedDisposition = actorProviders.has(kind)
       ? 'actor-provider'
+      : transientProviders.has(kind)
+        ? 'transient-provider'
       : miscWriters.has(kind)
         ? 'misc'
         : 'none'
     assert.equal(nativeSecondaryLightDisposition(source), expectedDisposition, kind)
     assert.equal(
       nativeSecondaryProviderLightSource(source) !== null,
-      actorProviders.has(kind),
+      actorProviders.has(kind) || transientProviders.has(kind),
       `${kind} provider`,
     )
     assert.equal(
@@ -640,32 +643,61 @@ test('FrostBurn and maximum Ring fire own target and contact VFX with enrolled l
 
   const explosionActor = {
     ...actor('ring-fire-explosion'),
-    alpha: 0.8,
+    ageTicks: 0,
     radius: 165,
     scale: 1.5,
   }
   assert.deepEqual(
     nativeSecondaryPresentationPlan(explosionActor).draws.map(({ entry, role }) => ({ entry, role })),
-    [{ entry: 15, role: 'ring-fire-contact-explosion-core' }],
+    [
+      { entry: 15, role: 'explosion-core' },
+      { entry: 401, role: 'explosion-array' },
+      { entry: 420, role: 'explosion-lit-array' },
+    ],
   )
   assert.deepEqual(nativeSecondaryProviderLightSource(explosionActor), {
-    castsDirectionalShadow: false,
-    intensity: 0.8,
+    castsDirectionalShadow: true,
+    intensity: 1,
     position: explosionActor.position,
-    radius: 1.5,
+    radius: 2,
   })
 
-  const fragment = { ...actor('ring-fire-fragment'), frame: 2, phase: -6 }
+  const fragment = {
+    ...actor('ring-fire-fragment'),
+    ageTicks: 0,
+    alpha: 3,
+    frame: 2,
+    phase: -6,
+  }
+  const fragmentPlan = nativeSecondaryPresentationPlan(fragment)
   assert.deepEqual(
-    nativeSecondaryPresentationPlan(fragment).draws.map(({ blend, entry }) => ({ blend, entry })),
-    [{ blend: 'normal', entry: 253 }, { blend: 'add', entry: 269 }],
+    fragmentPlan.draws.map(({ blend, entry }) => ({ blend, entry })),
+    [
+      { blend: 'normal', entry: 269 },
+      { blend: 'add', entry: 269 },
+      { blend: 'add', entry: 269 },
+      { blend: 'add', entry: 15 },
+    ],
   )
-  assert.deepEqual(nativeSecondaryProviderLightSource(fragment), {
-    castsDirectionalShadow: false,
-    intensity: 1,
-    position: fragment.position,
-    radius: 0.5,
-  })
+  assert.deepEqual(fragmentPlan.quads, [{
+    alpha: Math.fround((1 - fragment.phase / -50 * 0.5) * 0.25),
+    atlas: null,
+    blend: 'normal',
+    entry: null,
+    role: 'ring-fire-fragment-enhanced-ground-glow',
+    tint: 0xff8040,
+    vertices: [
+      -14.25, -Math.fround(37 * Math.fround(0.6000000238418579)) / 2,
+      14.25, -Math.fround(37 * Math.fround(0.6000000238418579)) / 2,
+      -14.25, Math.fround(37 * Math.fround(0.6000000238418579)) / 2,
+      14.25, Math.fround(37 * Math.fround(0.6000000238418579)) / 2,
+    ],
+  }])
+  const fragmentLight = nativeSecondaryProviderLightSource(fragment)!
+  assert.equal(fragmentLight.castsDirectionalShadow, false)
+  assert.equal(fragmentLight.intensity, 0.25)
+  assert.deepEqual(fragmentLight.position, fragment.position)
+  assert.ok(fragmentLight.radius >= 0.75 && fragmentLight.radius <= 1)
 })
 
 test('Dampen replays 360 source-over MoveFades and 30 centered additive fades', () => {

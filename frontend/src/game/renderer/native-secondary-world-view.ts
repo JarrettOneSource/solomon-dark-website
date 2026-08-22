@@ -6,6 +6,7 @@ import {
   MeshSimple,
   RenderTexture,
   Sprite,
+  Texture,
   type Renderer,
 } from 'pixi.js'
 
@@ -76,6 +77,7 @@ export interface NativeSecondaryDiagnosticSample {
 
 class NativeSecondaryActorView {
   readonly container = new Container({ label: 'native-secondary-actor' })
+  private readonly birthPointGain: number
   private currentKind: NativeSecondaryActorState['kind']
   private plan: NativeSecondaryPresentationPlan
   private regionLightPoint: Readonly<{ x: number; y: number }> | null = null
@@ -98,14 +100,16 @@ class NativeSecondaryActorView {
     state: NativeSecondarySimulationState['actors'][number],
     textures: PlayerWorldTextures,
     renderer: Renderer,
+    pointGain = 1,
   ) {
+    this.birthPointGain = pointGain
     this.currentKind = state.kind
     this.textures = textures.secondary
     this.specialTextures = textures.secondarySpecial
     this.renderer = renderer
     this.container.eventMode = 'none'
     this.container.sortableChildren = true
-    this.plan = nativeSecondaryPresentationPlan(state)
+    this.plan = nativeSecondaryPresentationPlan(state, state.ageTicks, pointGain)
     this.stormLightning = state.kind === 'storm-strike'
       ? new AirPrimarySpellView(
           stormStrikeTransient(state),
@@ -118,9 +122,17 @@ class NativeSecondaryActorView {
     this.update(state)
   }
 
-  update(state: NativeSecondarySimulationState['actors'][number], presentationFrame = state.ageTicks): void {
+  update(
+    state: NativeSecondarySimulationState['actors'][number],
+    presentationFrame = state.ageTicks,
+    pointGain = 1,
+  ): void {
     this.currentKind = state.kind
-    this.plan = nativeSecondaryPresentationPlan(state, presentationFrame)
+    this.plan = nativeSecondaryPresentationPlan(
+      state,
+      presentationFrame,
+      state.kind === 'ring-fire-explosion' ? this.birthPointGain : pointGain,
+    )
     this.regionLightPoint = state.kind === 'earthquake-debris'
       ? { ...state.position }
       : null
@@ -243,6 +255,10 @@ class NativeSecondaryActorView {
       + this.plan.quads.length
       + Number(this.plan.stormComposite !== null)
       + Number(this.stormLightning !== null)
+  }
+
+  get sampledPointGain(): number {
+    return this.birthPointGain
   }
 
   destroy(): void {
@@ -518,6 +534,7 @@ export class NativeSecondaryWorldView {
     state: Pick<NativeSecondarySimulationState, 'actors'>,
     worldKey: string,
     presentationFrame?: number,
+    pointGainAt: (position: Readonly<{ x: number, y: number }>) => number = () => 1,
   ): void {
     this.liveIds.clear()
     for (const actor of state.actors) {
@@ -526,11 +543,16 @@ export class NativeSecondaryWorldView {
       this.liveIds.add(actor.id)
       let view = this.views.get(actor.id)
       if (!view) {
-        view = new NativeSecondaryActorView(actor, this.textures, this.renderer)
+        view = new NativeSecondaryActorView(
+          actor,
+          this.textures,
+          this.renderer,
+          pointGainAt(actor.position),
+        )
         this.views.set(actor.id, view)
         this.root.addChild(view.container)
       }
-      view.update(actor, presentationFrame)
+      view.update(actor, presentationFrame, pointGainAt(actor.position))
     }
     for (const [id, view] of this.views) {
       if (this.liveIds.has(id)) continue
@@ -552,6 +574,13 @@ export class NativeSecondaryWorldView {
         hubWorldDepthForActor(layer.worldY + layer.sortBias),
       )
     }
+  }
+
+  fireExplosionPointGain(id: number): number | undefined {
+    const view = this.views.get(id)
+    return view?.kind === 'ring-fire-explosion'
+      ? view.sampledPointGain
+      : undefined
   }
 
   painterLayers(): NativeSecondaryPainterLayer[] {
@@ -734,7 +763,9 @@ function applyQuad(
   textures: PlayerWorldTextures['secondary'],
   sourceOrder: number,
 ): void {
-  const texture = textures[nativeSecondarySpriteKey(draw.atlas, draw.entry)]
+  const texture = draw.atlas === null || draw.entry === null
+    ? Texture.WHITE
+    : textures[nativeSecondarySpriteKey(draw.atlas, draw.entry)]
   if (!texture) throw new Error(`Native secondary texture was not loaded: ${draw.atlas}:${draw.entry}`)
   vertices.set(draw.vertices)
   mesh.label = `secondary:${draw.role}:${draw.atlas}:${draw.entry}`

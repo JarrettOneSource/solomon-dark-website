@@ -1059,8 +1059,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v57 carries Game Over/loadout, status composition, saved leave, deployment restart, Ether replacement, party access, movement, social, mod, and gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 57)
+test('protocol v58 carries Fire lifecycle, Game Over/loadout, status composition, saved leave, deployment restart, Ether replacement, party access, movement, social, mod, and gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 58)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -2010,16 +2010,18 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
   const fireEmber = {
     ageTicks: 10,
     burnDamage: 10,
+    contactCadence: 2,
+    contactDue: false,
     damage: 8,
     height: -5,
     horizontalVelocity: { x: 1, y: 0 },
     id: 1,
     kind: 'fire-ember',
     life: 3,
+    lightRegistration: ACTOR_LIGHT_REGISTRATION,
     ownerId: 'player-1',
     phase: 2.5,
     position: { x: 800, y: 400 },
-    presentationVariant: 7,
     spentEmber: { damage: 20, kind: 'immolate' },
     verticalVelocity: -1,
     worldKey: 'hub:courtyard',
@@ -2031,8 +2033,10 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     footprintDimension: 209,
     id: 1,
     kind: 'fire-explosion',
+    lightRegistration: TRANSIENT_LIGHT_REGISTRATION,
     origin: { x: 800, y: 400 },
     ownerId: 'player-1',
+    soundPitch: 1.05,
     visualScale: 1.9,
     worldKey: 'hub:courtyard',
   }
@@ -2256,6 +2260,35 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     assert.equal(decoded.type, 'server-snapshot')
     assert.deepEqual(decoded.frame.primarySpells.transients, [effect])
   }
+  assert.doesNotThrow(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 2,
+      projectiles: [],
+      transients: [{
+        ...fireEmber,
+        life: Math.fround(0.5),
+        spentEmber: { kind: 'none' },
+        verticalVelocity: 0,
+      }],
+    },
+  }))
+  assert.doesNotThrow(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 2,
+      projectiles: [],
+      transients: [{ ...fireExplosion, ageTicks: 36 }],
+    },
+  }))
+  assert.throws(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 2,
+      projectiles: [],
+      transients: [{ ...fireEmber, life: 0, spentEmber: { kind: 'none' } }],
+    },
+  }), /life/)
   assert.throws(() => decodeFrame({
     ...frame,
     primarySpells: {
@@ -2269,9 +2302,9 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     primarySpells: {
       nextId: 2,
       projectiles: [],
-      transients: [{ ...fireEmber, presentationVariant: 10 }],
+      transients: [{ ...fireEmber, contactCadence: 4 }],
     },
-  }), /presentationVariant/)
+  }), /contactCadence/)
   const decodedFireImpact = decodeFrame({
     ...frame,
     primarySpells: {

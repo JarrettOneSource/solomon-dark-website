@@ -64,6 +64,7 @@ import {
   NATIVE_HAIL_INITIAL_LIFE,
 } from '../core-kernels/air-water-spell-actors.ts'
 import {
+  NATIVE_FIRE_EXPLOSION_LIFETIME_TICKS,
   NATIVE_FIRE_IMPACT_LIFETIME_TICKS,
   nativeFireParticleLifetimeTicks,
   nativeFireParticleVariant,
@@ -317,7 +318,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 57
+export const GAME_PROTOCOL_VERSION = 58
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
 export const GAME_CONNECTION_TIMEOUT_CLOSE_CODE = 4000
@@ -6768,23 +6769,24 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
   }
   if (source.kind === 'fire-ember') {
     onlyKeys(source, field, [
-      'ageTicks', 'burnDamage', 'damage', 'height', 'horizontalVelocity', 'id',
-      'kind', 'life', 'ownerId', 'phase', 'position', 'presentationVariant',
+      'ageTicks', 'burnDamage', 'contactCadence', 'contactDue', 'damage', 'height',
+      'horizontalVelocity', 'id', 'kind', 'life', 'lightRegistration', 'ownerId',
+      'phase', 'position',
       'spentEmber', 'verticalVelocity', 'worldKey',
     ])
     const phase = finite(source.phase, `${field}.phase`)
     if (phase < 0 || phase >= 4) {
       throw new GameProtocolError(`${field}.phase is outside [0,4)`)
     }
-    const presentationVariant = nonnegativeInteger(
-      source.presentationVariant,
-      `${field}.presentationVariant`,
+    const contactCadence = nonnegativeInteger(
+      source.contactCadence,
+      `${field}.contactCadence`,
     )
-    if (presentationVariant > 9) {
-      throw new GameProtocolError(`${field}.presentationVariant exceeds the native range`)
+    if (contactCadence > 3) {
+      throw new GameProtocolError(`${field}.contactCadence exceeds the native range`)
     }
     const life = positiveFinite(source.life, `${field}.life`)
-    if (life < 1 || life > 3) {
+    if (life > 3) {
       throw new GameProtocolError(`${field}.life is outside the live Ember interval`)
     }
     const height = finite(source.height, `${field}.height`)
@@ -6792,16 +6794,22 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
     return {
       ageTicks: nonnegativeInteger(source.ageTicks, `${field}.ageTicks`),
       burnDamage: nonnegativeFinite(source.burnDamage, `${field}.burnDamage`),
+      contactCadence,
+      contactDue: boolean(source.contactDue, `${field}.contactDue`),
       damage: nonnegativeFinite(source.damage, `${field}.damage`),
       height,
       horizontalVelocity: vector(source.horizontalVelocity, `${field}.horizontalVelocity`),
       id: positiveInteger(source.id, `${field}.id`),
       kind: 'fire-ember',
       life,
+      lightRegistration: nativeLightProviderRegistration(
+        source.lightRegistration,
+        `${field}.lightRegistration`,
+        'actor',
+      ),
       ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
       phase,
       position: vector(source.position, `${field}.position`),
-      presentationVariant,
       spentEmber: primarySpellFireSpentEmber(source.spentEmber, `${field}.spentEmber`),
       verticalVelocity: finite(source.verticalVelocity, `${field}.verticalVelocity`),
       worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
@@ -6810,11 +6818,15 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
   if (source.kind === 'fire-explosion') {
     onlyKeys(source, field, [
       'ageTicks', 'burnDamage', 'damage', 'footprintDimension', 'id', 'kind',
-      'origin', 'ownerId', 'visualScale', 'worldKey',
+      'lightRegistration', 'origin', 'ownerId', 'soundPitch', 'visualScale', 'worldKey',
     ])
     const ageTicks = nonnegativeInteger(source.ageTicks, `${field}.ageTicks`)
-    if (ageTicks >= NATIVE_FIRE_IMPACT_LIFETIME_TICKS) {
+    if (ageTicks >= NATIVE_FIRE_EXPLOSION_LIFETIME_TICKS) {
       throw new GameProtocolError(`${field}.ageTicks exceeds the Fire explosion lifetime`)
+    }
+    const soundPitch = positiveFinite(source.soundPitch, `${field}.soundPitch`)
+    if (soundPitch < 0.9 || soundPitch > 1.1) {
+      throw new GameProtocolError(`${field}.soundPitch is outside the native range`)
     }
     return {
       ageTicks,
@@ -6826,8 +6838,14 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
       ),
       id: positiveInteger(source.id, `${field}.id`),
       kind: 'fire-explosion',
+      lightRegistration: nativeLightProviderRegistration(
+        source.lightRegistration,
+        `${field}.lightRegistration`,
+        'transient',
+      ),
       origin: vector(source.origin, `${field}.origin`),
       ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
+      soundPitch,
       visualScale: positiveFinite(source.visualScale, `${field}.visualScale`),
       worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
     }

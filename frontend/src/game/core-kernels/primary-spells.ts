@@ -53,6 +53,7 @@ import {
   stepNativeFirePatch,
   stepNativeFireEmber,
   type NativeFireActorContact,
+  type NativeFireEmberContact,
   type NativeFireEmberState,
   type NativeFireExplosionState,
   type NativeFireGoodImpState,
@@ -61,6 +62,7 @@ import {
   type NativeFireSpentEmber,
 } from './primary-spell-fire-effects.ts'
 import {
+  NATIVE_FIRE_EXPLOSION_LIFETIME_TICKS,
   NATIVE_FIRE_IMPACT_LIFETIME_TICKS,
   nativeFireParticleLifetimeTicks,
   nativeFireParticleVariant,
@@ -474,12 +476,15 @@ export interface PrimarySpellFireImpactState {
 
 export interface PrimarySpellFireEmberState extends NativeFireEmberState {
   readonly kind: 'fire-ember'
+  readonly lightRegistration: NativeLightProviderRegistration
 }
 
 export interface PrimarySpellFireExplosionState extends NativeFireExplosionState {
   readonly ageTicks: number
   readonly id: number
   readonly kind: 'fire-explosion'
+  readonly lightRegistration: NativeLightProviderRegistration
+  readonly soundPitch: number
 }
 
 export interface PrimarySpellFireGoodImpState extends NativeFireGoodImpState {
@@ -1028,7 +1033,11 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
     } else if (effect.kind === 'fire-ember') {
       const stepped = stepNativeFireEmber(effect)
       if (stepped.ember) {
-        const ember = { ...stepped.ember, kind: 'fire-ember' as const }
+        const ember = {
+          ...stepped.ember,
+          kind: 'fire-ember' as const,
+          lightRegistration: effect.lightRegistration,
+        }
         if (context.canPlaceProjectile(ember, ember.position, 7)) {
           transients.push(ember)
         } else {
@@ -1042,11 +1051,15 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           nextId += 1
         }
       } else if (stepped.retirement.kind === 'immolate') {
+        const soundPitch = drawNativeFloat(rng, 0.1, true)
+        rng = soundPitch.state
         transients.push({
           ...stepped.retirement.explosion,
           ageTicks: 0,
           id: nextId,
           kind: 'fire-explosion',
+          lightRegistration: registerLightProvider('transient'),
+          soundPitch: Math.fround(1 + soundPitch.value),
         })
         nextId += 1
       } else if (stepped.retirement.kind === 'imp') {
@@ -1110,6 +1123,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           registerLightProvider,
         )
         rng = detonation.rng
+        fireActorContacts.push(...detonation.contacts)
         transients = [...transients, ...detonation.transients]
         nextId = detonation.nextId
       } else if (spell.kind === 'ether') {
@@ -1128,8 +1142,11 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           context.tick,
           rng,
           spell.presentationSeed ?? 0,
+          true,
+          registerLightProvider,
         )
         rng = detonation.rng
+        fireActorContacts.push(...detonation.contacts)
         transients = [...transients, ...detonation.transients]
         nextId = detonation.nextId
       } else {
@@ -1504,6 +1521,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
               registerLightProvider,
             )
             rng = detonation.rng
+            fireActorContacts.push(...detonation.contacts)
             transients = [...transients, ...detonation.transients]
             nextId = detonation.nextId
           }
@@ -1559,8 +1577,11 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
               context.tick,
               rng,
               born.presentationSeed ?? 0,
+              true,
+              registerLightProvider,
             )
             rng = detonation.rng
+            fireActorContacts.push(...detonation.contacts)
             transients = [...transients, ...detonation.transients]
             nextId = detonation.nextId
           } else {
@@ -2673,7 +2694,7 @@ function transientLifetime(effect: PrimarySpellTransientState): number {
     case 'ether-pierce-streak': return 10
     case 'fire': return nativeFireParticleLifetimeTicks(effect.id)
     case 'fire-ember': throw new Error('Ember lifetime is state driven')
-    case 'fire-explosion': return PRIMARY_SPELL_FIRE_IMPACT_LIFETIME_TICKS
+    case 'fire-explosion': return NATIVE_FIRE_EXPLOSION_LIFETIME_TICKS
     case 'fire-good-imp': throw new Error('GoodImp lifetime is state driven')
     case 'fire-impact': return PRIMARY_SPELL_FIRE_IMPACT_LIFETIME_TICKS
     case 'fire-patch': throw new Error('Fire patch lifetime is state driven')
@@ -2873,7 +2894,9 @@ export function createPrimarySpellWeldFireDetonation(
   sourceRng: NativeRngState,
   privateSeed = 0,
   includeImpact = true,
+  registerLightProvider?: RegisterNativeLightProvider,
 ): Readonly<{
+  contacts: readonly NativeFireEmberContact[]
   nextId: number
   rng: NativeRngState
   transients: readonly PrimarySpellTransientState[]
@@ -2908,6 +2931,10 @@ export function createPrimarySpellWeldFireDetonation(
     : null
   const impact = impactProgram === null ? [] : [impactProgram.impact]
   const impactRng = impactProgram?.rng ?? sourceRng
+  const fallbackOrder = createNativeLightProviderOrder({
+    nextRegistrationOrdinal: { actor: sourceNextId, transient: sourceNextId },
+  })
+  const register = registerLightProvider ?? fallbackOrder.register
   const firstEffectId = sourceNextId + impact.length
   const explosionOffset = payload.explodeRadius > 0 && payload.explodeDamage > 0 ? 1 : 0
   const detonation = createNativeFireDetonation(
@@ -2925,12 +2952,16 @@ export function createPrimarySpellWeldFireDetonation(
         ageTicks: 0,
         id: firstEffectId,
         kind: 'fire-explosion' as const,
+        lightRegistration: register('transient'),
+        soundPitch: detonation.soundPitch,
       }]
   const embers = detonation.embers.map((ember): PrimarySpellFireEmberState => ({
     ...ember,
     kind: 'fire-ember',
+    lightRegistration: register('actor'),
   }))
   return Object.freeze({
+    contacts: detonation.contacts,
     nextId: detonation.nextId,
     rng: detonation.rng,
     transients: Object.freeze([...impact, ...explosion, ...embers]),
@@ -3040,21 +3071,23 @@ export function createPrimarySpellFireDetonation(
   spell: PrimarySpellFireProjectileState,
   origin: Readonly<Vector2>,
   sourceRng: NativeRngState,
-  registerLightProvider: RegisterNativeLightProvider = (managerLane) => ({
-    managerLane,
-    registrationOrdinal: sourceNextId,
-  }),
+  registerLightProvider?: RegisterNativeLightProvider,
 ): Readonly<{
+  contacts: readonly NativeFireEmberContact[]
   nextId: number
   rng: NativeRngState
   transients: readonly PrimarySpellTransientState[]
 }> {
+  const fallbackOrder = createNativeLightProviderOrder({
+    nextRegistrationOrdinal: { actor: sourceNextId, transient: sourceNextId },
+  })
+  const register = registerLightProvider ?? fallbackOrder.register
   const impact = fireImpactAt(
     sourceNextId,
     origin,
     spell.ownerId,
     spell.worldKey,
-    registerLightProvider('transient'),
+    register('transient'),
   )
   const explosionOffset = spell.explodeRadius > 0 && spell.explodeDamage > 0 ? 1 : 0
   const detonation = createNativeFireDetonation(
@@ -3072,12 +3105,16 @@ export function createPrimarySpellFireDetonation(
         ageTicks: 0,
         id: sourceNextId + 1,
         kind: 'fire-explosion' as const,
+        lightRegistration: register('transient'),
+        soundPitch: detonation.soundPitch,
       }]
   const embers = detonation.embers.map((ember): PrimarySpellFireEmberState => ({
     ...ember,
     kind: 'fire-ember',
+    lightRegistration: register('actor'),
   }))
   return Object.freeze({
+    contacts: detonation.contacts,
     nextId: detonation.nextId,
     rng: detonation.rng,
     transients: Object.freeze([impact, ...explosion, ...embers]),

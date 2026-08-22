@@ -617,6 +617,7 @@ export function nativeSecondaryProviderLightSource(
   actor: NativeSecondaryActorState,
   presentationFrame = actor.ageTicks,
   multipleShadows = NATIVE_DEFAULT_MULTIPLE_SHADOWS,
+  pointGain = 1,
 ): NativeBoneyardLightSource | null {
   if (actor.kind === 'moving-fire' || actor.kind === 'fire-patch') {
     if (!(actor.radius > 0)) return null
@@ -629,18 +630,21 @@ export function nativeSecondaryProviderLightSource(
   }
   if (actor.kind === 'ring-fire-explosion') {
     return {
-      castsDirectionalShadow: false,
-      intensity: actor.alpha,
+      castsDirectionalShadow: multipleShadows,
+      intensity: 1,
       position: actor.position,
-      radius: actor.scale,
+      radius: Math.fround(2 * Math.max(0, pointGain)),
     }
   }
   if (actor.kind === 'ring-fire-fragment') {
     return {
       castsDirectionalShadow: false,
-      intensity: Math.min(actor.alpha, 1),
+      intensity: Math.fround(Math.min(actor.alpha, 1) * 0.25),
       position: actor.position,
-      radius: 0.5,
+      radius: Math.fround(1 - nativeRandomFloatFromSemanticWord(
+        presentationRandomWord(actor.id, Math.floor(presentationFrame) ^ 0x6ac690c5),
+        0.25,
+      )),
     }
   }
   if (

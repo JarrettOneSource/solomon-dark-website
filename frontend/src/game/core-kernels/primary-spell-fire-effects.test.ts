@@ -54,14 +54,21 @@ test('creates the exact-count seeded fan, footprint, and ten pre-ticks', () => {
     { ageTicks: 10, id: 52 },
     { ageTicks: 10, id: 53 },
   ])
-  assert.equal(first.rng.indexA, 12)
+  assert.equal(first.rng.indexA, 14)
+  assert.equal(first.soundPitch, 0.9437959790229797)
+  assert.deepEqual(first.contacts.map(({ spellId }) => spellId), [50, 50, 50, 51, 51, 51, 52, 52, 53, 53, 53])
+  assert.equal(first.contacts.every(({ radius }) => radius === 7), true)
   assert.deepEqual(
-    first.embers.map(({ phase, presentationVariant }) => ({ phase, presentationVariant })),
+    first.embers.map(({ contactCadence, contactDue, phase }) => ({
+      contactCadence,
+      contactDue,
+      phase,
+    })),
     [
-      { phase: 0.7481598854064941, presentationVariant: 3 },
-      { phase: 2.831279993057251, presentationVariant: 1 },
-      { phase: 2.3449201583862305, presentationVariant: 2 },
-      { phase: 2.4824399948120117, presentationVariant: 4 },
+      { contactCadence: 1, contactDue: false, phase: 3.1682801246643066 },
+      { contactCadence: 1, contactDue: false, phase: 2.5880799293518066 },
+      { contactCadence: 3, contactDue: false, phase: 3.7922401428222656 },
+      { contactCadence: 1, contactDue: false, phase: 2.51419997215271 },
     ],
   )
   assert.deepEqual(first.explosion, {
@@ -104,6 +111,34 @@ test('Ember bounces, settles, and Immolates only on natural grounded retirement'
       worldKey: 'world',
     },
     kind: 'immolate',
+  })
+})
+
+test('Ember contact owns the native randomized-then-four-tick cadence', () => {
+  let ember = createNativeFireDetonation(
+    1,
+    { ...PAYLOAD, emberFragments: 1, spentEmber: { kind: 'none' } },
+    { x: 0, y: 0 },
+    'p1',
+    'world',
+    createNativeRng(900),
+  ).embers[0]!
+  assert.equal(ember.contactCadence, 1)
+  assert.equal(ember.contactDue, false)
+  ember = stepNativeFireEmber(ember).ember!
+  assert.deepEqual({ cadence: ember.contactCadence, due: ember.contactDue }, {
+    cadence: 2,
+    due: false,
+  })
+  ember = stepNativeFireEmber(ember).ember!
+  assert.deepEqual({ cadence: ember.contactCadence, due: ember.contactDue }, {
+    cadence: 3,
+    due: false,
+  })
+  ember = stepNativeFireEmber(ember).ember!
+  assert.deepEqual({ cadence: ember.contactCadence, due: ember.contactDue }, {
+    cadence: 0,
+    due: true,
   })
 })
 

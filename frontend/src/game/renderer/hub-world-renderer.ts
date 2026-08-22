@@ -28,7 +28,10 @@ import {
 import { HubPrivateRoomScene } from './hub-private-room-scene.ts'
 import { HubWorldScene } from './hub-world-scene.ts'
 import { NATIVE_LEVEL_UP_PRESENTATION_DURATION_MS } from './level-up-presentation.ts'
-import { NativeSecondaryScreenFeedbackPresentation } from './native-secondary-presentation.ts'
+import {
+  NativeSecondaryScreenFeedbackPresentation,
+  nativeRegionPointGain,
+} from './native-secondary-presentation.ts'
 import {
   NativeWorldNameplateLayer,
   projectNativeWorldPoint,
@@ -387,17 +390,31 @@ export async function createHubWorldRenderer(
             playerScreenY: player.position.y - camera.y,
             presentationId: armedLevelUpPresentationId,
           }
+      const visibleWorldWidth = viewport.width / baseCameraScale
+      const pointGainAt = (position: Readonly<{ x: number, y: number }>): number => (
+        nativeRegionPointGain(
+          position,
+          {
+            x: camera.x + visibleWorldWidth / 2,
+            y: camera.y + viewport.height / baseCameraScale / 2,
+          },
+          visibleWorldWidth,
+          player.progression.lifeState !== 'alive',
+        )
+      )
       courtyardScene.update(
         snapshot,
         options.playerId,
         frameCount,
         levelUpPresentation,
+        pointGainAt,
       )
       privateRoomScene.update(
         snapshot,
         options.playerId,
         frameCount,
         levelUpPresentation,
+        pointGainAt,
       )
       const inCourtyard = participant.region === 'courtyard'
       courtyardScene.stage.visible = inCourtyard
@@ -441,7 +458,6 @@ export async function createHubWorldRenderer(
         )
         secondaryScreenFeedback.set(participant.region, screenFeedback)
       }
-      const visibleWorldWidth = viewport.width / baseCameraScale
       for (const event of snapshot.secondaryAbilities.events) {
         screenFeedback.consume(event, {
           cameraCenter: {

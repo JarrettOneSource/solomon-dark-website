@@ -2347,10 +2347,50 @@ test('Burning Man adds the native Region pulse and a radius-165 half-damage expl
     scale: Math.fround(1.5),
   })
   assert.equal(state.actors.filter(({ kind }) => kind === 'ring-fire-fragment').length, 3)
+  const explosionEvents = state.events.filter(({ actorId }) => actorId === explosion.id)
+  assert.deepEqual(explosionEvents.map(({ cue }) => cue), ['fireball-hit', 'throw-fire'])
+  assert.ok(explosionEvents[0]!.pitch >= 0.9 && explosionEvents[0]!.pitch <= 1.1)
+  assert.equal(explosionEvents[1]!.pitch, Math.fround(0.8))
   assert.deepEqual(result!.damage.map(({ amount, targetId }) => ({ amount, targetId })), [
     { amount: wave.damage, targetId: first.id },
     { amount: Math.fround(wave.damage * 0.5), targetId: first.id },
     { amount: Math.fround(wave.damage * 0.5), targetId: second.id },
+  ])
+})
+
+test('Burning Man replays registered Ember pre-tick contacts and consumes contacted fragments', () => {
+  const castContext = context(21, 1, 0)
+  let state = stepNativeSecondaryAbilities(createNativeSecondarySimulation(123), {
+    ...castContext,
+    players: {
+      player: { ...castContext.players.player!, maximumRingOfFire: true },
+    },
+  }).state
+  const wave = state.actors.find(({ kind }) => kind === 'shockwave')!
+  const target = {
+    family: 'ZOMBIE', lightRegistration: TARGET_LIGHT_REGISTRATION,
+    id: 91, nativeFlags: 0x2, position: { x: 10, y: 0 }, radius: 10,
+    scale: 1, shieldHealth: 0,
+  }
+  let result: ReturnType<typeof stepNativeSecondaryAbilities> | null = null
+  for (let tick = 2; tick <= 11; tick += 1) {
+    const tickContext = context(21, tick, null)
+    result = stepNativeSecondaryAbilities(state, {
+      ...tickContext,
+      targets: (_worldKey, center, radius) => radius === 165 || radius === 7
+        ? [target]
+        : center.x === 0 ? [target] : [],
+    })
+    state = result.state
+  }
+  assert.ok(result)
+  assert.equal(state.actors.some(({ kind }) => kind === 'ring-fire-fragment'), false)
+  assert.deepEqual(result.damage.map(({ amount }) => amount), [
+    wave.damage,
+    Math.fround(wave.damage * 0.5),
+    Math.fround(wave.damage / 3),
+    Math.fround(wave.damage / 3),
+    Math.fround(wave.damage / 3),
   ])
 })
 

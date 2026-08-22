@@ -27,6 +27,11 @@ import {
   ETHER_PRIMARY_FLIGHT_RECORDS,
   etherPrimaryCompositorPlan,
 } from './primary-spell-ether-native.ts'
+import {
+  nativeFireEmberPlan,
+  nativeFireExplosionPlan,
+  type NativeFireActorDraw,
+} from './primary-spell-fire-native.ts'
 
 export interface NativeSecondarySpriteDraw {
   readonly alpha: number
@@ -44,9 +49,9 @@ export interface NativeSecondarySpriteDraw {
 
 export interface NativeSecondaryQuadDraw {
   readonly alpha: number
-  readonly atlas: NativeSecondaryAtlas
+  readonly atlas: NativeSecondaryAtlas | null
   readonly blend: 'add' | 'normal'
-  readonly entry: number
+  readonly entry: number | null
   readonly role: string
   /** Local XY pairs ordered top-left, top-right, bottom-left, bottom-right. */
   readonly vertices: readonly number[]
@@ -452,6 +457,7 @@ export class NativeSecondaryScreenFeedbackPresentation {
 export function nativeSecondaryPresentationPlan(
   actor: NativeSecondaryActorState,
   presentationFrame = actor.ageTicks,
+  pointGain = 1,
 ): NativeSecondaryPresentationPlan {
   const root = actor.position
   const draw = (
@@ -866,32 +872,44 @@ export function nativeSecondaryPresentationPlan(
     case 'shield-explosion':
       return plan(shieldExplosionDraws(actor, draw))
     case 'ring-fire-explosion': {
-      return plan([draw('BadGuys', 15, {
-        alpha: actor.alpha,
-        offset: { x: 0, y: -25 },
-        role: 'ring-fire-contact-explosion-core',
-        rotationRadians: actor.rotationRadians,
-        scaleX: actor.scale * 6,
-        scaleY: actor.scale * 6,
-      })])
+      return plan(nativeFireExplosionPlan({
+        ageTicks: actor.ageTicks,
+        id: actor.id,
+        origin: actor.position,
+        visualScale: actor.scale,
+      }, pointGain).draws.map(secondaryFireDraw))
     }
     case 'ring-fire-fragment': {
-      const frame = Math.floor(actor.frame) % 4
-      return plan([
-        draw('BadGuys', 251 + frame, {
-          alpha: Math.min(actor.alpha, 1),
-          offset: { x: 0, y: actor.phase },
-          role: 'ring-fire-ember-body',
-        }),
-        draw('BadGuys', 267 + frame, {
-          alpha: Math.min(actor.alpha, 1),
-          blend: 'add',
-          offset: { x: 0, y: actor.phase },
-          role: 'ring-fire-ember-core',
-          scaleX: 2,
-          scaleY: 2,
-        }),
-      ], 'ordinary-dynamic')
+      const ember = nativeFireEmberPlan({
+        ageTicks: actor.ageTicks,
+        height: actor.phase,
+        id: actor.id,
+        life: actor.alpha,
+        phase: actor.frame,
+        position: actor.position,
+      }, presentationFrame)
+      const groundGlow = ember.groundGlow
+      return plan(
+        ember.draws.map(secondaryFireDraw),
+        'ordinary-dynamic',
+        0,
+        groundGlow === null
+          ? []
+          : [{
+              alpha: groundGlow.alpha,
+              atlas: null,
+              blend: groundGlow.blend,
+              entry: null,
+              role: 'ring-fire-fragment-enhanced-ground-glow',
+              tint: groundGlow.tint,
+              vertices: [
+                -groundGlow.width / 2, -groundGlow.height / 2,
+                groundGlow.width / 2, -groundGlow.height / 2,
+                -groundGlow.width / 2, groundGlow.height / 2,
+                groundGlow.width / 2, groundGlow.height / 2,
+              ],
+            }],
+      )
     }
     case 'acid-rain': {
       const fieldScale = Math.fround(actor.scale)
@@ -2672,6 +2690,21 @@ function magicTrapTint(selector: number): number {
   const color = MAGIC_TRAP_SELECTOR_COLORS[selector]
   if (color === undefined) throw new RangeError(`invalid native Magic Trap selector ${selector}`)
   return packNormalizedRgb(color[0], color[1], color[2])
+}
+
+function secondaryFireDraw(draw: NativeFireActorDraw): NativeSecondarySpriteDraw {
+  return {
+    alpha: draw.alpha,
+    atlas: draw.atlas,
+    blend: draw.blend,
+    entry: draw.entry,
+    offset: { ...draw.offset },
+    role: draw.role,
+    rotationRadians: draw.rotation,
+    scaleX: draw.scaleX ?? draw.scale,
+    scaleY: draw.scaleY ?? draw.scale,
+    tint: draw.tint,
+  }
 }
 
 function hashUnit(first: number, second: number): number {

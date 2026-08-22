@@ -1,7 +1,8 @@
-import { Container, Sprite, type Texture } from 'pixi.js'
+import { Container, Sprite, Texture } from 'pixi.js'
 
 import type {
   PrimarySpellFireEmberState,
+  PrimarySpellFireExplosionState,
   PrimarySpellFireGoodImpState,
   PrimarySpellFireImpactState,
   PrimarySpellFirePatchState,
@@ -15,6 +16,7 @@ import {
   NATIVE_FIRE_IMPACT_FRAME_FIRST,
   NATIVE_FIRE_PARTICLE_FRAME_FIRST,
   nativeFireEmberPlan,
+  nativeFireExplosionPlan,
   nativeFireGoodImpPlan,
   nativeFireballPlan,
   nativeFireImpactPlan,
@@ -52,6 +54,7 @@ export class FireActorSpellView {
   readonly container: Container
   readonly containers: readonly Container[]
   readonly kind: string
+  private readonly emberGroundGlow: Sprite
   private regionLightPoint: Readonly<{ x: number; y: number }> | null = null
   private readonly sprites: Sprite[] = []
   private state: NativeFireActorState
@@ -66,10 +69,19 @@ export class FireActorSpellView {
     this.container = new Container({ label: state.kind })
     this.containers = [this.container]
     this.container.eventMode = 'none'
+    this.emberGroundGlow = new Sprite(Texture.WHITE)
+    this.emberGroundGlow.anchor.set(0.5)
+    this.emberGroundGlow.eventMode = 'none'
+    this.emberGroundGlow.label = 'enhanced-airborne-ground-glow'
+    this.emberGroundGlow.visible = false
+    this.container.addChild(this.emberGroundGlow)
     this.update(state)
   }
 
-  update(state: PrimarySpellProjectileState | PrimarySpellTransientState): void {
+  update(
+    state: PrimarySpellProjectileState | PrimarySpellTransientState,
+    presentationFrame = state.ageTicks,
+  ): void {
     if (
       state.kind !== 'fire-ember'
       && state.kind !== 'fire-good-imp'
@@ -77,7 +89,7 @@ export class FireActorSpellView {
     ) return
     this.state = state
     const plan = state.kind === 'fire-ember'
-      ? nativeFireEmberPlan(state)
+      ? nativeFireEmberPlan(state, presentationFrame)
       : state.kind === 'fire-good-imp'
         ? nativeFireGoodImpPlan(state)
         : (() => {
@@ -101,6 +113,15 @@ export class FireActorSpellView {
               worldY: patch.worldY,
             }
           })()
+    const groundGlow = 'groundGlow' in plan ? plan.groundGlow : null
+    this.emberGroundGlow.visible = groundGlow !== null
+    if (groundGlow) {
+      this.emberGroundGlow.alpha = groundGlow.alpha
+      this.emberGroundGlow.blendMode = groundGlow.blend
+      this.emberGroundGlow.height = groundGlow.height
+      this.emberGroundGlow.tint = groundGlow.tint
+      this.emberGroundGlow.width = groundGlow.width
+    }
     while (this.sprites.length < plan.draws.length) {
       const sprite = new Sprite()
       sprite.eventMode = 'none'
@@ -153,6 +174,94 @@ export class FireActorSpellView {
   destroy(): void {
     this.container.destroy({ children: true })
     this.sprites.length = 0
+  }
+}
+
+export class FireExplosionSpellView {
+  readonly container: Container
+  readonly containers: readonly Container[]
+  readonly kind = 'fire-explosion'
+  private readonly pointGain: number
+  private readonly sprites: Sprite[] = []
+  private state: PrimarySpellFireExplosionState
+  private readonly textures: NativeFireActorTextures
+
+  constructor(
+    state: PrimarySpellFireExplosionState,
+    textures: NativeFireActorTextures,
+    pointGain = 1,
+  ) {
+    this.state = state
+    this.textures = textures
+    this.pointGain = pointGain
+    this.container = new Container({ label: 'fire-explosion' })
+    this.containers = [this.container]
+    this.container.eventMode = 'none'
+    this.update(state)
+  }
+
+  update(
+    state: PrimarySpellProjectileState | PrimarySpellTransientState,
+    _presentationFrame = state.ageTicks,
+    _pointGain = this.pointGain,
+  ): void {
+    if (state.kind !== 'fire-explosion') return
+    this.state = state
+    const plan = nativeFireExplosionPlan(state, this.pointGain)
+    this.container.position.set(plan.position.x, plan.position.y)
+    while (this.sprites.length < plan.draws.length) {
+      const sprite = new Sprite()
+      sprite.eventMode = 'none'
+      this.sprites.push(sprite)
+      this.container.addChild(sprite)
+    }
+    while (this.sprites.length > plan.draws.length) {
+      const sprite = this.sprites.pop()!
+      this.container.removeChild(sprite)
+      sprite.destroy()
+    }
+    for (const [index, draw] of plan.draws.entries()) {
+      const record = nativeEnemySpriteRegistration(draw.atlas, draw.entry)
+      const texture = draw.atlas === 'BadGuys'
+        ? this.textures.badGuys[draw.entry]
+        : this.textures.deadHawg[draw.entry]
+      if (!texture) throw new Error(`Missing native Fire texture ${draw.atlas}:${draw.entry}`)
+      const sprite = this.sprites[index]!
+      sprite.label = `${draw.role}:${draw.atlas}:${draw.entry}`
+      sprite.texture = texture
+      sprite.anchor.set(record.anchorX / record.width, record.anchorY / record.height)
+      sprite.position.set(draw.offset.x, draw.offset.y)
+      sprite.rotation = draw.rotation
+      sprite.scale.set(draw.scaleX ?? draw.scale, draw.scaleY ?? draw.scale)
+      sprite.alpha = draw.alpha
+      sprite.blendMode = draw.blend
+      sprite.tint = draw.tint
+    }
+  }
+
+  painterRoots(): readonly FirePainterRoot[] {
+    const plan = nativeFireExplosionPlan(this.state, this.pointGain)
+    return [{
+      container: this.container,
+      lane: 'world-sorted',
+      queueFamily: 'zanim',
+      regionLightPoint: plan.regionLightPoint,
+      sortBias: 0,
+      suffix: '',
+      worldY: plan.worldY,
+    }]
+  }
+
+  setTint(_suffix: string, _tint: number): void {
+    // The shared children own their color/blend and the lit child draws directly.
+  }
+
+  get sampledPointGain(): number {
+    return this.pointGain
+  }
+
+  destroy(): void {
+    this.container.destroy({ children: true })
   }
 }
 

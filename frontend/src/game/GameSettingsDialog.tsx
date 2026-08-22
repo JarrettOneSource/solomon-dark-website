@@ -333,7 +333,7 @@ function PerformanceSettings({
       <SettingsGroup title="SPECIAL EFFECTS">
         <SettingsToggle
           checked={settings.zoomEffects}
-          label="ZOOM EFFECTS"
+          label="CAMERA SHAKE"
           onChange={(zoomEffects) => onChange({ ...settings, zoomEffects })}
         />
         <p className="game-settings-fixed-policy">

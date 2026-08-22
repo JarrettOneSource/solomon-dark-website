@@ -117,6 +117,7 @@ export class HubPrivateRoomScene {
       playerScreenY: number
       presentationId: number
     } | null = null,
+    pointGainAt: (position: Readonly<{ x: number, y: number }>) => number = () => 1,
   ): void {
     const localParticipant = snapshot.world.participants[localPlayerId]
     if (!localParticipant || localParticipant.region === 'courtyard') return
@@ -127,6 +128,7 @@ export class HubPrivateRoomScene {
         snapshot.primarySpells,
         `hub:${region}`,
         presentationFrame,
+        pointGainAt,
       )
       this.primarySpells[region].promoteOwnerOverlays((ownerId) => (
         this.players.get(ownerId)?.container.zIndex
@@ -135,6 +137,7 @@ export class HubPrivateRoomScene {
         snapshot.secondaryAbilities,
         `hub:${region}`,
         presentationFrame,
+        pointGainAt,
       )
     }
     this.updateRoomPresentation(snapshot, localPlayerId, localParticipant.region)

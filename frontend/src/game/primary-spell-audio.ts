@@ -209,6 +209,28 @@ export class PrimarySpellAudioSynchronizer {
           )),
         })
       }
+      const previousFireExplosions = new Set(this.previous.primarySpells.transients
+        .filter((effect) => effect.kind === 'fire-explosion')
+        .map((effect) => effect.id))
+      for (const effect of snapshot.primarySpells.transients) {
+        if (
+          effect.kind !== 'fire-explosion'
+          || effect.worldKey !== listenerWorldKey
+          || previousFireExplosions.has(effect.id)
+        ) continue
+        const volume = 2 * hubAudioAttenuation(Math.hypot(
+          effect.origin.x - listener.position.x,
+          effect.origin.y - listener.position.y,
+        ))
+        this.audio.playSound('fireball-hit', {
+          playbackRate: effect.soundPitch,
+          volume,
+        })
+        this.audio.playSound('throw-fire', {
+          playbackRate: Math.fround(0.8),
+          volume,
+        })
+      }
       const previousMeteors = new Map(this.previous.primarySpells.transients
         .filter((effect) => effect.kind === 'weld-meteor')
         .map((effect) => [`${effect.worldKey}\u0000${effect.id}`, effect]))
