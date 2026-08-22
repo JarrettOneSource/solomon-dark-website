@@ -54,15 +54,19 @@ test('the authoritative loot stream owns stable actor seed writes', () => {
 })
 
 test('successful Item materialization persists the native last-drop arena level', () => {
-  const initial = createBoneyardLootStore('last-item-level')
+  const initial = {
+    ...createBoneyardLootStore('last-item-level'),
+    lastSuccessfulItemLevel: 9,
+    sharedRng: createNativeRng(6),
+  }
   const result = materializeBoneyardEnemyLoot(initial, {
-    actorSeed: 17,
+    actorSeed: 110,
     advancedUnlocks: new Array<boolean>(8).fill(false),
     arena: {
       disableMask: 0,
       itemLevelMaximum: 100,
       itemLevelMinimum: 0,
-      level: 12,
+      level: 10,
       mode: 0,
       specialSuppression: false,
     },
@@ -73,7 +77,7 @@ test('successful Item materialization persists the native last-drop arena level'
     participantLevel: 12,
     participantSlot: 0,
     placement: NATIVE_LOOT_OPEN_PLACEMENT,
-    policies: { gold: 4, item: 3, orb: 4, potion: 4, powerup: 4, specificItem: 1 },
+    policies: { gold: 0, item: 0, orb: 0, potion: 0, powerup: 0, specificItem: 0 },
     position: { x: 10, y: 20 },
     sceneForcesHealthPotion: false,
     tick: 0,
@@ -82,7 +86,12 @@ test('successful Item materialization persists the native last-drop arena level'
   })
   assert.equal(result.store.actors.length, 1)
   assert.equal(result.store.actors[0]?.kind, 'sack')
-  assert.equal(result.store.lastSuccessfulItemLevel, 12)
+  assert.equal(result.store.actors[0]?.source, 'enemy')
+  assert.equal(result.store.actors[0]?.item?.equipmentType, 'robe')
+  assert.equal(result.store.actors[0]?.item?.name, 'Channeling Robe')
+  assert.equal(result.store.actors[0]?.item?.nativeTypeId, 7006)
+  assert.equal(result.store.actors[0]?.item?.recipeIndex, null)
+  assert.equal(result.store.lastSuccessfulItemLevel, 10)
 })
 
 test('Orb moves exactly 1.5 units, captures strictly, and credits the first canonical participant', () => {

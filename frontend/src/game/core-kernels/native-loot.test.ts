@@ -160,6 +160,97 @@ test('forced native policies materialize every drop category through shared rule
   assert.ok(key.nextKeyDropLevel >= 15 && key.nextKeyDropLevel <= 25)
 })
 
+test('ordinary enemy Item selection reaches every native equipment family', () => {
+  const expected = [
+    {
+      equipmentType: 'hat',
+      name: 'Hat of Wielding',
+      nativeSelector: 0,
+      nativeTypeId: 7005,
+      sharedSeed: 3,
+    },
+    {
+      equipmentType: 'robe',
+      name: 'Channeling Robe',
+      nativeSelector: 1,
+      nativeTypeId: 7006,
+      sharedSeed: 6,
+    },
+    {
+      equipmentType: 'staff',
+      name: 'Staff of Convergence',
+      nativeSelector: 0,
+      nativeTypeId: 7004,
+      sharedSeed: 1,
+    },
+    {
+      equipmentType: 'wand',
+      name: 'Searing Wand',
+      nativeSelector: 3,
+      nativeTypeId: 7011,
+      sharedSeed: 9,
+    },
+    {
+      equipmentType: 'ring',
+      name: 'Channeling Ring',
+      nativeSelector: 1,
+      nativeTypeId: 7002,
+      sharedSeed: 7,
+    },
+    {
+      equipmentType: 'amulet',
+      name: 'Amulet of Searing',
+      nativeSelector: 2,
+      nativeTypeId: 7003,
+      sharedSeed: 17,
+    },
+  ] as const
+
+  for (const row of expected) {
+    const result = rollNativeEnemyLoot(input({
+      actorSeed: 110,
+      arena: {
+        disableMask: 0,
+        itemLevelMaximum: 100,
+        itemLevelMinimum: 0,
+        lastSuccessfulItemLevel: 10,
+        level: 10,
+        mode: 0,
+        specialSuppression: false,
+      },
+      itemIds: createNativeLootItemIds(1),
+      policies: {
+        gold: 0,
+        item: 0,
+        orb: 0,
+        potion: 0,
+        powerup: 0,
+        specificItem: 0,
+      },
+      sharedRng: createNativeRng(row.sharedSeed),
+    }))
+
+    assert.equal(result.selectedCategory, 'item')
+    assert.equal(result.drops.length, 1)
+    const drop = result.drops[0]!
+    assert.equal(drop.kind, 'sack')
+    assert.equal(drop.nativeTypeId, 2013)
+    assert.equal(drop.source, 'enemy')
+    const item = drop.item
+    assert.ok(item)
+    assert.equal(item.kind, 'equipment')
+    assert.equal(item.equipmentType, row.equipmentType)
+    assert.equal(item.name, row.name)
+    assert.equal(item.nativeSelector, row.nativeSelector)
+    assert.equal(item.nativeTypeId, row.nativeTypeId)
+    assert.equal(item.recipeIndex, null)
+    assert.ok((item.nativeEffects?.length ?? 0) > 0)
+    if (row.equipmentType === 'hat' || row.equipmentType === 'robe') {
+      assert.equal(item.iconTints?.length, 2)
+    }
+  }
+})
+
 test('emergency health Potion short-circuits only after both strict density thresholds', () => {
   const policies = { gold: 0, item: 0, orb: 0, potion: 0, powerup: 0, specificItem: 0 } as const
   let gateSeed = -1

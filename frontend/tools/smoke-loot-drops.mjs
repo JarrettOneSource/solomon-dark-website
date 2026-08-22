@@ -93,6 +93,15 @@ await Promise.all([hostPage, guestPage].map(async (page) => {
       failedResponses.push({ status: response.status(), url: response.url() })
     }
   })
+  await page.route('**/deployment.json*', (route) => {
+    const current = new URL(route.request().url()).searchParams.get('current')
+    return route.fulfill({
+      body: JSON.stringify({ revision: current }),
+      contentType: 'application/json',
+      headers: { 'cache-control': 'no-store' },
+      status: 200,
+    })
+  })
   await page.addInitScript(installGameAudioSmokeProbe)
   await page.addInitScript((runtime) => {
     window.solomonDarkRuntime = runtime
@@ -131,13 +140,15 @@ try {
   movePlayer(host, playerId, center)
   movePlayer(host, guestPlayerId, point(center, 450, 300))
   prepareOrbDeficits(host, playerId)
+  const materialized = materializeProofDrops(host, center)
   const before = {
     backpackIds: new Set(getPlayerEconomy(host.state(), playerId).backpack.map(({ id }) => id)),
-    equipmentNameCount: backpackNameCount(
+    ringNameCount: backpackNameCount(
       host,
       playerId,
-      'Pentaclostic Ring',
+      materialized.ringItem.name,
     ),
+    robeNameCount: backpackNameCount(host, playerId, materialized.robeItem.name),
     gold: getPlayerEconomy(host.state(), playerId).gold,
     health: getPlayerProgression(host.state(), playerId).currentHealth,
     healthPotionQuantity: backpackKindQuantity(host, playerId, 'health-potion'),
@@ -146,11 +157,16 @@ try {
   assert.ok(before.health > 0)
   assert.equal(before.mana, 0)
 
-  const materialized = materializeProofDrops(host, center)
   const spawned = spawnProofDrops(host, materialized)
   assert.equal(spawned.rejectedCount, 0)
   assert.deepEqual(spawned.actors.map(({ kind }) => kind), [
-    'gold', 'sack', 'sack', 'orb', 'orb', 'bonus',
+    'gold', 'sack', 'sack', 'sack', 'orb', 'orb', 'bonus',
+  ])
+  assert.deepEqual(spawned.actors.filter(({ kind }) => kind === 'sack')
+    .map(({ item, source }) => ({ equipmentType: item?.equipmentType, source })), [
+    { equipmentType: null, source: 'script' },
+    { equipmentType: 'ring', source: 'enemy' },
+    { equipmentType: 'robe', source: 'enemy' },
   ])
   assert.deepEqual(spawned.actors.filter(({ kind }) => kind === 'orb')
     .map(({ orbKind }) => orbKind), ['health', 'mana'])
@@ -190,16 +206,26 @@ try {
   ))
   const potionMessage = await waitForBitmapMessage(page, 'Health Potion')
 
-  movePlayer(host, playerId, spawned.item.position)
-  await waitForPickup(host, spawned.item.id)
+  movePlayer(host, playerId, spawned.ring.position)
+  await waitForPickup(host, spawned.ring.id)
   await waitUntil(() => (
-    backpackNameCount(host, playerId, materialized.equipmentItem.name)
-      === before.equipmentNameCount + 1
+    backpackNameCount(host, playerId, materialized.ringItem.name)
+      === before.ringNameCount + 1
   ), (
-    'Item pickup did not append to the authoritative backpack'
+    'enemy Ring pickup did not append to the authoritative backpack'
   ))
-  const itemMessage = await waitForBitmapMessage(page, materialized.equipmentItem.name)
-  await waitForAudioCount(page, 'pickup-bag', 2)
+  const ringMessage = await waitForBitmapMessage(page, materialized.ringItem.name)
+
+  movePlayer(host, playerId, spawned.robe.position)
+  await waitForPickup(host, spawned.robe.id)
+  await waitUntil(() => (
+    backpackNameCount(host, playerId, materialized.robeItem.name)
+      === before.robeNameCount + 1
+  ), (
+    'enemy Robe pickup did not append to the authoritative backpack'
+  ))
+  const robeMessage = await waitForBitmapMessage(page, materialized.robeItem.name)
+  await waitForAudioCount(page, 'pickup-bag', 3)
 
   const healthOrbEffectStart = nextLootEffectId(host)
   movePlayer(host, playerId, spawned.healthOrb.position)
@@ -242,19 +268,20 @@ try {
       .map(({ id, kind, name }) => ({ id, kind, name })),
     damageX4TicksRemaining: getPlayerProgression(host.state(), playerId)
       .damageX4TicksRemaining,
-    equipmentNameCount: backpackNameCount(host, playerId, materialized.equipmentItem.name),
     gold: getPlayerEconomy(host.state(), playerId).gold,
     health: getPlayerProgression(host.state(), playerId).currentHealth,
     healthPotionQuantity: backpackKindQuantity(host, playerId, 'health-potion'),
     mana: getPlayerProgression(host.state(), playerId).currentMana,
+    ringNameCount: backpackNameCount(host, playerId, materialized.ringItem.name),
+    robeNameCount: backpackNameCount(host, playerId, materialized.robeItem.name),
   }
   const audio = await lootAudioReceipt(page)
   assert.equal(audio['drop-coins'], 1)
   assert.equal(audio['drop-potion'], 1)
   assert.equal(audio['pickup-coin'], 1)
-  assert.equal(audio['pickup-bag'], 2)
+  assert.equal(audio['pickup-bag'], 3)
   assert.equal(audio['goto-orb'], 2)
-  assert.equal(audio['drop-bag-1'] + audio['drop-bag-2'], 1)
+  assert.equal(audio['drop-bag-1'] + audio['drop-bag-2'], 2)
   const contention = await proveCanonicalPickupContention({
     guestPage,
     guestPlayerId,
@@ -263,9 +290,11 @@ try {
     hostPlayerId: playerId,
     position: point(center, 0, 250),
   })
-  assert.deepEqual(consoleErrors, [])
-  assert.deepEqual(failedResponses, [])
-  assert.deepEqual(pageErrors, [])
+  assert.deepEqual({ consoleErrors, failedResponses, pageErrors }, {
+    consoleErrors: [],
+    failedResponses: [],
+    pageErrors: [],
+  })
 
   process.stdout.write(`${JSON.stringify({
     after,
@@ -290,28 +319,31 @@ try {
     failedResponses,
     messages: {
       gold: goldMessage,
-      item: itemMessage,
       potion: potionMessage,
       powerup: powerupMessage,
+      ring: ringMessage,
+      robe: robeMessage,
     },
     pageErrors,
     proof: spawned.actors.map((actor) => ({
       bonusKind: actor.bonusKind,
+      equipmentType: actor.item?.equipmentType ?? null,
       id: actor.id,
       item: actor.item?.name ?? null,
       kind: actor.kind,
       orbKind: actor.orbKind,
       position: actor.position,
+      source: actor.source,
     })),
     screenshots: [visualPath, collectedPath],
   }, null, 2)}\n`)
 } finally {
+  await host.close()
   await Promise.all([
     hostContext.close(),
     guestContext.close(),
   ])
   await browser.close()
-  await host.close()
   await vite.close()
 }
 
@@ -369,12 +401,13 @@ function materializeProofDrops(host, center) {
   const source = host.state().world.loot
   const itemIds = createNativeLootItemIds(source.nextItemId)
   const positions = {
-    gold: point(center, -110, 0),
-    healthOrb: point(center, 55, 95),
-    item: point(center, 55, -95),
-    manaOrb: point(center, -55, 95),
-    potion: point(center, -55, -95),
-    powerup: point(center, 110, 0),
+    gold: point(center, -150, 0),
+    healthOrb: point(center, -75, 100),
+    manaOrb: point(center, 0, 100),
+    potion: point(center, -75, -100),
+    powerup: point(center, 150, 0),
+    ring: point(center, 0, -100),
+    robe: point(center, 75, -100),
   }
   let lastSuccessfulItemLevel = source.lastSuccessfulItemLevel
   let sharedRng = source.sharedRng
@@ -426,10 +459,8 @@ function materializeProofDrops(host, center) {
     input(positions.potion),
     { kind: 'drop-potion', subtype: 0 },
   ))
-  const item = accept(materializeNativeLootScriptAction(
-    input(positions.item),
-    { kind: 'drop-item', recipeIndex: 0 },
-  ))
+  const ring = accept(ordinaryEnemyItemRoll(input, positions.ring, 'ring'))
+  const robe = accept(ordinaryEnemyItemRoll(input, positions.robe, 'robe'))
   const healthOrb = accept(forcedRoll(
     input,
     positions.healthOrb,
@@ -450,17 +481,49 @@ function materializeProofDrops(host, center) {
   ))
   assert.equal(gold.drops.length, 1)
   assert.equal(potion.drops.length, 1)
-  assert.equal(item.drops.length, 1)
+  assert.equal(ring.drops.length, 1)
+  assert.equal(robe.drops.length, 1)
   assert.equal(healthOrb.drops.length, 1)
   assert.equal(manaOrb.drops.length, 1)
   assert.equal(powerup.drops.length, 1)
   return {
     drops: Object.freeze(drops),
-    equipmentItem: item.drops[0].item,
     lastSuccessfulItemLevel,
     nextItemId: itemIds.peek(),
+    ringItem: ring.drops[0].item,
+    robeItem: robe.drops[0].item,
     sharedRng,
   }
+}
+
+function ordinaryEnemyItemRoll(input, sourcePosition, equipmentType) {
+  const sharedSeed = equipmentType === 'ring' ? 7 : 6
+  const base = input(sourcePosition, 110)
+  const result = rollNativeEnemyLoot({
+    ...base,
+    arena: {
+      ...base.arena,
+      lastSuccessfulItemLevel: 10,
+      level: 10,
+      mode: 0,
+    },
+    policies: {
+      gold: 0,
+      item: 0,
+      orb: 0,
+      potion: 0,
+      powerup: 0,
+      specificItem: 0,
+    },
+    sharedRng: createNativeRng(sharedSeed),
+  })
+  assert.equal(result.selectedCategory, 'item')
+  assert.equal(result.drops.length, 1)
+  assert.equal(result.drops[0].kind, 'sack')
+  assert.equal(result.drops[0].source, 'enemy')
+  assert.equal(result.drops[0].item?.equipmentType, equipmentType)
+  assert.equal(result.drops[0].item?.recipeIndex, null)
+  return result
 }
 
 function forcedRoll(input, sourcePosition, category, matches) {
@@ -511,18 +574,19 @@ function spawnProofDrops(host, materialized) {
   }
   const result = spawnBoneyardLootSpecs(prepared, materialized.drops, state.tick)
   const actors = result.store.actors.slice(sourceActorCount)
-  assert.equal(actors.length, 6)
+  assert.equal(actors.length, 7)
   Object.assign(state, { world: { ...state.world, loot: result.store } })
   return {
     actors,
     gold: actors[0],
-    healthOrb: actors[3],
+    healthOrb: actors[4],
     ids: new Set(actors.map(({ id }) => id)),
-    item: actors[2],
-    manaOrb: actors[4],
+    manaOrb: actors[5],
     potion: actors[1],
-    powerup: actors[5],
+    powerup: actors[6],
     rejectedCount: result.rejectedCount,
+    ring: actors[2],
+    robe: actors[3],
   }
 }
 

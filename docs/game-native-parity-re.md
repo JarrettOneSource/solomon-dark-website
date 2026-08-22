@@ -20630,6 +20630,179 @@ root/`/game` returned 200, and all four bodies were byte-identical at SHA-256
 No loot implementation, evidence, validation, publication, or production gap
 remains open.
 
+### 2026-08-22 enemy-equipment drop source re-audit
+
+#### Reported smell and parity question
+
+- Reported concern: verify that ordinary enemy deaths can drop equippable Items,
+  specifically rings and clothing, rather than only Gold, Potions, Orbs, or
+  scripted rewards.
+- Stock question: does `Badguy` retirement enter the Item lane, which equipment
+  families can that lane materialize, and does the exact live item survive the
+  Sack/pickup/inventory boundary?
+- Falsifiers: an Item branch reachable only from a script action; a ground Sack
+  with no held item identity; a random-equipment factory that omits a compiled
+  class; or pickup that renders an item but does not insert it into authoritative
+  inventory.
+
+#### Evidence and causal trace
+
+- The preserved 4,723,200-byte PE32 retail image is still
+  `SolomonDarkAbandonware/SolomonDark.exe`, SHA-256
+  `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`,
+  preferred image base `0x00400000`. The preserved 14,755-byte
+  `data/items.cfg` is SHA-256
+  `28e26243457b246ce48ed7f37d4c14820f9e4a67d1ddf5d328e3a0783a641963`.
+- Native `Badguy` retirement reaches the common selector `0x0047C070`; its Item
+  candidate dispatches through `Arena_SelectAndDropItem (0x0046A360)`. A named
+  recipe is cloned by `0x004699B0`; one of the 110 ordinary placeholder rows
+  dispatches random equipment through `0x004645B0`. Both results are held by a
+  type-2013 Sack and transferred as the same live item by `0x005E6B50 ->
+  0x0055FF20`.
+- The authored catalog remains 47 named definitions across all six compiled
+  equipment classes: 13 Rings, 9 Amulets, 4 Staffs, 6 Hats, 7 Robes, and 8
+  Wands. Random equipment independently reaches the same six classes, so it
+  does not require a matching authored recipe.
+- Current Website `stepDyingActor` emits one reward with the actor-private loot
+  seed for every drop-bearing hostile retirement. `boneyard-world.ts` passes
+  each reward to `materializeBoneyardEnemyLoot`; `rollNativeEnemyLoot` enters
+  `selectEnemyItem`; the resulting source-`enemy` Sack is owned by
+  `BoneyardLootStore`; and `game-simulation.ts` inserts its held item through
+  `insertPlayerEntityLootItem` after the first authoritative pickup.
+- Exact ordinary-policy replay, without a forced category or script action,
+  uses actor seed `110` at Arena level 10 with last successful Item level 10.
+  Shared native RNG seeds `3,6,1,9,7,17` respectively produce Hat, Robe, Staff,
+  Wand, Ring, and Amulet carriers. This is a deterministic reachability proof,
+  not a claim that ordinary Item drops are frequent.
+
+The earlier browser receipt used explicit script action `drop-item` for its
+Pentaclostic Ring. That proved named-item Sack rendering, pickup, replication,
+audio, and inventory credit, but by itself did not prove the enemy-selector
+source. The implementation causal path is present; this re-audit tightens the
+regression and browser evidence at that source boundary.
+
+#### System boundary and membership disposition
+
+Native system: the Item member of enemy death selection, from private category
+eligibility through shared recipe/random-equipment materialization, Sack
+ownership, replication, pickup, and inventory insertion.
+
+| Equipment member | Native identity and authored/random membership | Disposition | Exact web owner/proof |
+| --- | --- | --- | --- |
+| Hat clothing | type 7005; 6 authored recipes; random selectors 0..3; class weight 2/8 | `verified-already-at-parity` | `native-loot.ts` type/selector/color materialization; protocol and inventory renderer accept Hat identity |
+| Robe clothing | type 7006; 7 authored recipes; random selectors 0..2; class weight 2/8 | `verified-already-at-parity` | `native-loot.ts` type/selector/color materialization; living equipment and inventory renderers consume the serialized colors |
+| Staff | type 7004; 4 authored recipes; random selectors 0..5; class weight 1/8 | `verified-already-at-parity` | source-`enemy` Sack retains type, selector, FX, and weapon identity through pickup |
+| Wand | type 7011; 8 authored recipes; random selectors 0..5; class weight 1/8 | `verified-already-at-parity` | source-`enemy` Sack retains type, selector, FX, and weapon identity through pickup |
+| Ring | type 7002; 13 authored recipes; random selectors 0..11; class weight 1/8 | `verified-already-at-parity` | source-`enemy` Sack retains type, selector, FX, and ring-slot identity through pickup |
+| Amulet | type 7003; 9 authored recipes; random selectors 0..11; class weight 1/8 | `verified-already-at-parity` | source-`enemy` Sack retains type, selector, FX, and amulet-slot identity through pickup |
+| Named recipe versus generated placeholder | `0x004699B0` clone versus `0x004645B0` synthesized item | `verified-already-at-parity` | recipe identity/rarity and generated selector/colors/FX remain distinct on the wire and in inventory |
+| Eight shipped hostile wave families | common reward handoff from Skeleton, Archer, Mage, Imp, Zombie, Wraith, Demon, and Coffin | `verified-already-at-parity` | every terminal reward enters the same world-owned materializer; Coffin Maggots remain the recorded non-drop-bearing child exception |
+
+No member is `blocked-by-platform`; the browser host, replication schema,
+WebGL carrier painter, and authoritative inventory can represent every member.
+The native selector probability remains deliberately low at early Arena levels,
+especially before level 5, so a short play sample with no equipment is not a
+failure by itself.
+
+#### Validation contract and implementation consequence
+
+- Add a deterministic ordinary-policy regression that reaches all six equipment
+  classes through `rollNativeEnemyLoot`, asserting source `enemy`, type-2013
+  Sack ownership, native type, selector, and generated identity.
+- Change the browser loot journey's Item proof from scripted recipe materialization
+  to enemy-selector generated Ring and Robe carriers; collect both through the
+  real authoritative host and assert inventory, bitmap messages, Sack audio,
+  replication, and empty browser error arrays.
+- Retain the existing category, recipe, random-FX, protocol, ground-art,
+  pickup, and full-inventory coverage. Run the canonical exact-tree gate plus
+  the focused browser journey before finalizing this receipt.
+- No behavior change or native-report rewrite is justified by the audit so far;
+  `Mod Loader/docs/reverse-engineering/native-loot-selector.md` and
+  `native-items-equipment-and-loot.md` already own the recovered native facts.
+
+#### Mac-only acceptance findings
+
+- The first diagnostic candidate at Website base
+  `52146891c6ac00cd25face69628c1250b826969f` passed the complete canonical
+  gate on `Jarretts-Mac-mini.local` (`arm64`, macOS 26.6.2, Node 22.17.0,
+  npm 10.9.2, .NET 10.0.302). The focused loot group passed 44/44 and the
+  complete Boneyard group passed 1339/1339 before the remaining gates and
+  production build also exited zero.
+- The first two-client Chrome 151 journey completed the gameplay assertions
+  through contention but correctly failed its final error audit. Five revision
+  polls returned 404 from the acceptance-only Vite development server at
+  `/deployment.json?current=52146891...`; there were no page exceptions.
+  Production is not missing this resource: `vite.config.ts` emits
+  `deployment.json` during the production build, and `Program.cs` serves it.
+- The focused smoke had fallen behind the repository's established browser
+  fixture contract. It must intercept `**/deployment.json*` in each isolated
+  context and return the requested current full revision with `no-store`, as
+  the existing secondary-ability and skeleton acceptance journeys do. This
+  keeps the steady-revision contract real and leaves changing-revision/reload
+  behavior owned by `smoke-game-deployment-restart.mjs`; suppressing 404s or
+  weakening the error audit is not acceptable.
+- After that harness correction, rerun both the complete canonical gate and the
+  two-client loot journey on the same Mac tree. Only the second clean run may
+  finalize the browser receipt below.
+- The corrected-resource run then produced a clean gameplay receipt with empty
+  error arrays, but exposed a separate teardown defect after printing JSON.
+  The original context -> browser -> host order retired Chrome but left the
+  host and Vite listeners; moving the host first retired its listener but then
+  left Chrome blocked in `browser.close()`. That second run falsified the idea
+  that implicit browser-owned context closure was sufficient on headless macOS.
+  The resolved ownership order is host -> both explicit contexts -> browser ->
+  Vite: clients can acknowledge the host close, context closure retires the
+  two page/session owners, and browser close can finish before the asset server
+  disappears. A final zero-exit run with no task-owned process/listener residue
+  must prove that order rather than relying on the printed JSON alone.
+
+#### Latest-main Mac browser receipt
+
+- While the first Mac candidate was running, Website `origin/main` advanced to
+  `05c5116f711b2d62b88ac561e2ea4b628f313a62`. The final candidate was rebuilt
+  from that exact head at
+  `/Users/jarrett/codex-acceptance/enemy-equipment-loot-final-20260822.Pgzb30/website`;
+  the intervening enemy pathfinding/world commits leave the terminal
+  reward-to-loot handoff intact. The four focused files were byte-identical to
+  the local isolated latest-main worktree before acceptance.
+- Mac Chrome 151 ran `npm --prefix frontend run smoke:game:loot-drops` with two
+  isolated browser contexts and the real authoritative host. It exited zero
+  after emitting source-`enemy` type-2013 carriers for generated
+  `Channeling Ring` (type 7002) and `Channeling Robe` (type 7006), then
+  collecting both into authoritative backpack IDs 15 and 16. The WebGL2
+  renderer was live; the two bitmap notifications each contained fourteen
+  extracted-atlas glyphs.
+- Sack drop audio totaled two, Sack pickup audio totaled three including the
+  Potion, Gold/Orb/Bonus effects retained their exact counts, and the contested
+  Gold actor credited canonical player 1 once while player 2 remained
+  unchanged. Console-error, failed-response, and page-error arrays were all
+  empty.
+- The zero-exit run also proved the corrected teardown order: no process whose
+  command referenced the acceptance root remained, and no task Vite listener
+  remained on port 5173. Receipt log SHA-256 is
+  `a9b5c7d02207b23c086626172a34af35e8d77a9211a1053a32904394e4dd8074`.
+- Visual inspection of the 1600 x 900 Mac screenshots confirmed the stock Sack
+  shells among the seven-family ground layout and, after collection, the
+  visible `CHANNELING RING` and `CHANNELING ROBE` bitmap rows above the wizard.
+  Visible/collected screenshot SHA-256 values are
+  `5733aff7fd03844a59873cfc6e8f96f0c43b96242f6e7dca643fa6cb21d55586`
+  and `67fb6fcb89f8feea723f8289b2e5cbbeec00bbc0e48962f65cb6bce838ea7fd3`.
+- The complete latest-main canonical Mac gate then exited zero: 17 Website/
+  backend contracts; 44 loot tests; the 233-test prerequisite group; 1,350
+  Boneyard tests; weather 9, parties 43, level-up 11, diagnostics 7, Hall 17,
+  Hub UI 21, and desktop 5; both builds; bundle budget; and production media
+  policy all passed. Its log SHA-256 is
+  `4974420e93459b06c50126d0e49bee3e00f42c00a7a9674af9df04f500996413`.
+  Because recording this result changes the ledger file itself, the final
+  handoff additionally requires one unchanged-command Mac repetition on the
+  receipt-updated tree; that last result is reported with the working-tree
+  identity rather than creating an infinite validation/receipt-edit loop.
+- Publication fetches are rechecked immediately before push. If `origin/main`
+  advances, the focused commit is rebased and the complete Mac gate/browser
+  proof is repeated. The final handoff owns that last candidate's exact base,
+  commit, acceptance path, and hashes so recording a moving publication SHA in
+  this ledger cannot itself invalidate the proven tree.
+
 ## 2026-08-20 — Player passive and equipment-effect consumers
 
 ### System boundary and evidence
