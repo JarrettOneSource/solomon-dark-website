@@ -443,16 +443,24 @@ function pointAlongHeading(origin, headingDegrees, distance) {
 function arrangeFanTargets(host, bounds, targetPosition) {
   const state = host.state()
   assert.equal(state.world.kind, 'boneyard')
+  const playerId = host.hostPlayerId()
+  assert.ok(playerId)
+  const frozenUntilTick = state.tick + 10_000
   const minimumX = bounds.x + 80
   const maximumX = bounds.x + bounds.w - 80
   const minimumY = bounds.y + 80
   const maximumY = bounds.y + bounds.h - 80
   const actors = state.world.enemies.actors.map((actor) => ({
     ...actor,
+    nextMovementTick: frozenUntilTick,
+    nextTargetRefreshTick: frozenUntilTick,
     position: {
       x: Math.max(minimumX, Math.min(maximumX, targetPosition.x)),
       y: Math.max(minimumY, Math.min(maximumY, targetPosition.y)),
     },
+    staffActionFactor: 0,
+    staffMovementFactor: 0,
+    targetPlayerId: playerId,
   }))
   Object.assign(state, {
     world: {
