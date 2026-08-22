@@ -29610,5 +29610,23 @@ welcome, renderer readiness, cancellation, and failure.
   requests were all empty. Receipts:
   `/tmp/solomon-hub-noncombat-final.png` and
   `/tmp/solomon-boneyard-staff-scale-final.png`.
-- Mac mini exact-tree canonical and browser acceptance: pending publication of
-  the isolated validation branch.
+- Rebase receipt: current `origin/main`'s fixed-stage projection and Dark Cloud
+  native SimpleMenu were preserved through the two overlapping conflicts; the
+  combined affected selection passed `105/105` after resolution.
+- Mac mini exact-tree receipt: detached Website commit
+  `4fe72cb1473611fed8b254de51f0e14d34d3b931`, Node `22.17.0`, npm `10.9.2`,
+  .NET SDK `10.0.302`, and Chrome `151.0.7922.170`. The canonical
+  `./scripts/validate.sh` passed, including `227/227` prerequisites,
+  `1288/1288` runtime tests, the concurrent weather-boundary suite `8/8`, every
+  tail suite, production build, bundle budget, and media policy. The real
+  Chrome/WebGL journey issued admission `914.2 ms`
+  after discipline commit with loading attached at `connecting_transport`;
+  70 Hub samples retained mana `100`, pose `0`, both scales `1`, and zero
+  primary/secondary actors. Boneyard Fire reached pose `8`, element-effect
+  scale `2.3500001430511475`, weapon scale `1`, and three live primary actors.
+  Error arrays were empty. Mac screenshots are
+  `/tmp/solomon-hub-cast-entry-final-20260822.ZaMcfn/solomon-hub-noncombat-final.png`
+  (SHA-256 `3ecfb25c663ef57d98b1c2b8db28e8e19084a01e2431798b3053df30044cd2fb`)
+  and `solomon-boneyard-staff-scale-final.png` (SHA-256
+  `00616cbe9136bce5ac2fad83df2787079980c1ac3d9ab0f1688d78012d9f87e9`).
+  The temporary host/Vite processes were stopped and both ports were closed.
