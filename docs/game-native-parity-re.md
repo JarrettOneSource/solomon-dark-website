@@ -31461,6 +31461,27 @@ There is no `blocked-by-platform` member and no authored table row is omitted.
   the common Staff socket; the former flat rotated streak and oversized
   `+50/-50` spacing are absent. The impact capture hashes to
   `4152ecbcc7d503c803c8bc2bea97a025a34667e13c0cff564a3dcf8cb4978c3b`.
+- Final current-main rebase receipt: Website runtime tree
+  `5f80241e8e6b652dfc571f893e7064755c574be9` at Mac commit `43fdc02e`
+  matched local commit `cace8627`; Mod Loader tree
+  `7f84cf0b80b935ec121b9a3c992853a3c7507e72` at Mac commit `14efe194`
+  matched local commit `62bc6a92`. The clean Mac canonical gate passed
+  `15/15` backend/contracts, `4/4` library, `43/43` loot, `230/230`
+  prerequisites, `1310/1310` gameplay, `8/8` weather, `29/29` party,
+  `11/11` level-up, `7/7` diagnostics, `17/17` Hall, `21/21` Hub UI, and
+  `5/5` desktop tests, plus production builds, media policy, and bundle budget
+  (`399216` raw / `112083` gzip bytes). A second physical-Chrome cast on that
+  exact tree reproduced aim `52.17050723216795`, first headings
+  `62.14850616455078, 42.18700408935547, 82.15400695800781,
+  22.18288230895996`, and the same paired Smart turn inputs. The four bodies
+  remained separately visible through tick 27 while curving onto `enemy:6`;
+  the maximum instruction-oracle turn slack remained
+  `4.470348358154297e-8` degrees and browser errors remained empty. The
+  inspected rebased flight capture is
+  `/tmp/solomon-ether-fan-final-rebased-20260822/solomon-primary-ether-boneyard-fan-flight.png`,
+  SHA-256 `50f667b5769e5bb0dc5ffb68627274a9d70feef947448518b7953b7e718cd689`;
+  its impact capture hashes to
+  `27ce292cf22f62e6b7fa53f752e07c29fc2f05a0315c523bafd2b60ca4ca16dd`.
 - There are no browser-platform-blocked members or material native unknowns.
   Website and Mod Loader changes are local commits only. Nothing was pushed,
   deployed, or restarted.
