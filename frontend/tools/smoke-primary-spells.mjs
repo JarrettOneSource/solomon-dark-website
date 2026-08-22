@@ -865,12 +865,21 @@ async function castEtherInBoneyard(page) {
   let flight = null
   let flightScreenshotPath = null
   if (etherFanAcceptance) {
+    await page.mouse.up({ button: 'left' })
     const launchFan = await waitForEtherFan(page, afterTick, 4, 10_000, 1)
     assertEtherFan(launchFan)
-    const spreadFan = await waitForEtherFan(page, afterTick, 4, 10_000, 25)
+    const launchIds = launchFan.states.map(({ id }) => id)
+    const spreadFan = await waitForEtherFan(
+      page,
+      afterTick,
+      4,
+      10_000,
+      25,
+      launchIds,
+    )
     assert.deepEqual(
       spreadFan.states.map(({ id }) => id),
-      launchFan.states.map(({ id }) => id),
+      launchIds,
     )
     const rendered = await waitForBoneyardSpell(page, 'ether')
     assert.ok(rendered.primarySpellCount >= 4)
@@ -897,7 +906,7 @@ async function castEtherInBoneyard(page) {
     flightScreenshotPath = `${screenshotRoot}/solomon-primary-ether-boneyard-low-flight.png`
     await page.screenshot({ path: flightScreenshotPath })
   }
-  await page.mouse.up({ button: 'left' })
+  if (!etherFanAcceptance) await page.mouse.up({ button: 'left' })
   const impact = await waitForWireSpell(
     page,
     'ether-impact',
@@ -1580,19 +1589,29 @@ async function waitForWireSpell(page, kind, afterTick, timeout, projectileOnly =
   return result
 }
 
-async function waitForEtherFan(page, afterTick, quantity, timeout, minimumFlightTicks) {
+async function waitForEtherFan(
+  page,
+  afterTick,
+  quantity,
+  timeout,
+  minimumFlightTicks,
+  expectedIds = null,
+) {
   const handle = await page.waitForFunction(([
     minimumTick,
     expectedQuantity,
     minimumFlight,
+    requiredIds,
   ]) => {
     for (let index = window.__primarySpellWireFrames.length - 1; index >= 0; index -= 1) {
       const wire = window.__primarySpellWireFrames[index]
       if (wire.tick <= minimumTick) continue
-      const states = wire.primarySpells.projectiles
+      let states = wire.primarySpells.projectiles
         .filter((candidate) => candidate.kind === 'ether')
         .sort((left, right) => left.id - right.id)
-        .slice(-expectedQuantity)
+      states = requiredIds === null
+        ? states.slice(-expectedQuantity)
+        : states.filter(({ id }) => requiredIds.includes(id))
       if (states.length !== expectedQuantity) continue
       if (states.some(({ flightTicks }) => flightTicks < minimumFlight)) continue
       if (states.some((state, stateIndex) => (
@@ -1607,7 +1626,7 @@ async function waitForEtherFan(page, afterTick, quantity, timeout, minimumFlight
       }
     }
     return null
-  }, [afterTick, quantity, minimumFlightTicks], { timeout })
+  }, [afterTick, quantity, minimumFlightTicks, expectedIds], { timeout })
   const result = await handle.jsonValue()
   await handle.dispose()
   return result
