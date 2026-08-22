@@ -31410,4 +31410,57 @@ There is no `blocked-by-platform` member and no authored table row is omitted.
 
 ### Implementation validation receipt
 
-- Pending implementation and exact-tree validation in this worktree.
+- `primary-spell-targeting.ts` now owns the one paired fan formula, point-root
+  target query, and resolved/inactive/unresolved target transition shared by
+  pure Ether and all three MagicMissile-derived welded classes.
+  `primary-spells.ts` copies exact More Missiles tiers and Smart state into each
+  child. Pierce continuation performs the native current-root excluded-first
+  query and no-exclusion retry. Welded actors retain their class thresholds;
+  protocol 53 carries the mutable replacement-policy byte without client
+  reconstruction.
+- Regression membership covers all authored quantities `1..14`, exact four-
+  and five-child fans, paired turn inputs, one damage roll, per-child launch
+  probes, full/weak branches, resolved active and final inactive samples,
+  unresolved Smart replacement, empty-search disable, born-null straight
+  flight, Pierce fallback, welded thresholds, and strict protocol decoding.
+  The corrected Mod Loader reports pass `491/491` static contracts on both WSL
+  and the Mac mini.
+- The exact Mac runtime tree was
+  `edca28729dc35bc5b430f7271720af8dee89b50e` at Website commit
+  `e713ee7`; it matched local commit `36b9b802` byte-for-byte by Git tree hash.
+  On `Jarretts-Mac-mini.local`, arm64 macOS `26.6.2`, Node `22.17.0`, npm
+  `10.9.2`, and .NET `10.0.302`, `./scripts/validate.sh` passed `15/15`
+  backend/contracts, `4/4` library, `43/43` loot, `227/227` prerequisites,
+  `1294/1294` gameplay, `8/8` weather, `29/29` party, `11/11` level-up,
+  `7/7` diagnostics, `17/17` Hall, `21/21` Hub UI, and `5/5` desktop tests,
+  plus production builds, media policy, and the game bundle budget
+  (`394265` raw / `110662` gzip bytes).
+- Physical-Mac Chrome `151.0.7922.170` at 1600 by 900 entered an authentic
+  ten-enemy Solomon opening wave, then applied the controlled acceptance ranks
+  Smart Missiles `1` and More Missiles `3`. One cast produced four consecutive
+  actor IDs with shared damage `2`, visual scale `1`, speed
+  `3.299999952316284`, and paired turn inputs
+  `2.200000047683716, 1.649999976158142, 1.649999976158142,
+  1.2374999523162842`. Around aim heading `52.136482384272654`, first
+  authoritative headings were
+  `62.11448287963867, 42.15298080444336, 82.11997985839844,
+  22.14885711669922`: the exact `+10,-10,+30,-30` launch tiers after only
+  their bounded first steering sample.
+- The same actor IDs remained four separate WebGL views through browser flight
+  tick 25. Actor 1 then retained its target through ticks `1..4`, with headings
+  `62.11448287963867 -> 61.98248291015625 -> 61.740482330322266 ->
+  61.38848114013672` and accumulators `0.06000000238418579 ->
+  0.10999999940395355 -> 0.1599999964237213 -> 0.20999999344348907`;
+  maximum instruction-oracle turn slack was `4.470348358154297e-8` degrees.
+  Launch, impact, audio, and teardown completed with empty page/console error
+  arrays. Hub remained correctly noncombat with zero primary actors.
+- The visually inspected tick-25 flight capture is
+  `/tmp/solomon-ether-fan-final-20260822/solomon-primary-ether-boneyard-fan-flight.png`,
+  SHA-256 `0ba8eaf21bf01ff20e28bd35c8bcebd49f4e4d0219459ae1c6f1d3210cacc1c0`.
+  It shows four separated magenta radial core/spark/ray composites curving from
+  the common Staff socket; the former flat rotated streak and oversized
+  `+50/-50` spacing are absent. The impact capture hashes to
+  `4152ecbcc7d503c803c8bc2bea97a025a34667e13c0cff564a3dcf8cb4978c3b`.
+- There are no browser-platform-blocked members or material native unknowns.
+  Website and Mod Loader changes are local commits only. Nothing was pushed,
+  deployed, or restarted.
