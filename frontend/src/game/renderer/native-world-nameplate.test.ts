@@ -6,6 +6,8 @@ import { createGameSimulation } from '../core-server/game-simulation.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
 import type { ProtocolPlayerState } from '../protocol/game-state.ts'
 import {
+  WORLD_NAMEPLATE_ELEMENT_ACCENTS,
+  WORLD_NAMEPLATE_GEOMETRY,
   WORLD_NAMEPLATE_STYLE,
   deriveNativeWorldNameplateItems,
   nativeWorldNameplateHealthRatio,
@@ -59,6 +61,7 @@ test('world nameplates exclude self, invalid entries, and off-scene players', ()
       blank: player(''),
     }, 'local', (playerId) => playerId !== 'zeroHealth'),
     [{
+      element: 'ether',
       healthRatio: 1,
       id: 'remote',
       name: 'Remote',
@@ -78,6 +81,7 @@ test('world nameplates preserve a valid zero-health actor with an empty bar', ()
   assert.deepEqual(
     deriveNativeWorldNameplateItems({ local: player('Local'), zero: zeroHealth }, 'local'),
     [{
+      element: 'ether',
       healthRatio: 0,
       id: 'zero',
       name: 'Zero',
@@ -100,7 +104,37 @@ test('world nameplate health and width use native clamping and minimums', () => 
   for (const layout of [short, long, spaced]) {
     assert.ok(Math.abs(layout.glyphBounds.left + layout.glyphBounds.right) < 0.0001)
     assert.ok(layout.width >= layout.glyphBounds.right - layout.glyphBounds.left)
+    assert.equal(layout.width % 2, 0, 'plate widths stay even so the frame lands on whole pixels')
   }
+})
+
+test('world nameplate names share one baseline centred in the name area above the rail', () => {
+  const geometry = WORLD_NAMEPLATE_GEOMETRY
+  assert.ok(geometry.plateTop < geometry.nameTop)
+  assert.ok(geometry.nameBottom < geometry.railTop)
+  assert.ok(geometry.railBottom < geometry.plateBottom)
+  assert.equal(geometry.plateBottom - geometry.plateTop, WORLD_NAMEPLATE_STYLE.plateHeight)
+  assert.equal(geometry.railBottom - geometry.railTop, WORLD_NAMEPLATE_STYLE.railHeight)
+  for (const displayName of ['Basil', 'basil', 'BASIL', '123456789', 'j']) {
+    const layout = worldNameplateVisualLayout(displayName)
+    const capCenter = (layout.capBox.top + layout.capBox.bottom) / 2
+    assert.ok(Math.abs(capCenter - geometry.nameCenterY) < 0.0001, displayName)
+    assert.ok(layout.capBox.top >= geometry.nameTop + 1, displayName)
+    assert.ok(layout.capBox.bottom <= geometry.nameBottom, displayName)
+    assert.equal(layout.glyphOffsetY, worldNameplateVisualLayout('Other').glyphOffsetY)
+  }
+})
+
+test('world nameplates carry the wizard element and every element has an accent', () => {
+  const fire = player('Ember')
+  fire.config = { ...fire.config, element: 'fire' }
+  const [item] = deriveNativeWorldNameplateItems({ local: player('Local'), fire }, 'local')
+  assert.equal(item?.element, 'fire')
+  for (const element of ['air', 'earth', 'ether', 'fire', 'water'] as const) {
+    const accent = WORLD_NAMEPLATE_ELEMENT_ACCENTS[element]
+    assert.ok(Number.isInteger(accent) && accent >= 0 && accent <= 0xffffff, element)
+  }
+  assert.equal(new Set(Object.values(WORLD_NAMEPLATE_ELEMENT_ACCENTS)).size, 5)
 })
 
 test('world nameplate projection uses the post-world screen transform', () => {
