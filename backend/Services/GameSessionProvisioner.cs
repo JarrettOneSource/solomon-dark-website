@@ -339,7 +339,10 @@ public sealed partial class GameSessionProvisioner
             party.Members.All(member => !string.IsNullOrWhiteSpace(member)) &&
             party.Status is "hub" or "playing" &&
             party.Visibility is "invite-only" or "public" &&
-            (party.Status == "playing" || party.BoneyardName is null));
+            (party.Status == "hub"
+                ? party.BoneyardName is null
+                : !string.IsNullOrWhiteSpace(party.BoneyardName) &&
+                    party.BoneyardName.Length <= 256));
     }
 
     private static bool ValidatePartyJoinResolution(GamePartyJoinResolution value) =>

@@ -7,6 +7,10 @@ const desktopScreenshotPath = process.env.SDR_DARK_CLOUD_SCREENSHOT || '/tmp/sol
 const detailScreenshotPath = process.env.SDR_DARK_CLOUD_DETAIL_SCREENSHOT || '/tmp/solomon-dark-cloud-detail.png'
 const landscapeScreenshotPath = process.env.SDR_DARK_CLOUD_LANDSCAPE_SCREENSHOT || '/tmp/solomon-dark-cloud-landscape.png'
 const mobileScreenshotPath = process.env.SDR_DARK_CLOUD_MOBILE_SCREENSHOT || '/tmp/solomon-dark-cloud-mobile.png'
+const partyScreenshotPath = process.env.SDR_DARK_CLOUD_PARTY_SCREENSHOT || '/tmp/solomon-dark-cloud-party-desktop.png'
+const partyMobileScreenshotPath = process.env.SDR_DARK_CLOUD_PARTY_MOBILE_SCREENSHOT || '/tmp/solomon-dark-cloud-party-mobile.png'
+const joinPartyScreenshotPath = process.env.SDR_JOIN_PARTY_SCREENSHOT || '/tmp/solomon-join-party-desktop.png'
+const joinPartyMobileScreenshotPath = process.env.SDR_JOIN_PARTY_MOBILE_SCREENSHOT || '/tmp/solomon-join-party-mobile.png'
 const username = `darkcloud${Date.now().toString(36)}`
 
 const registration = await fetch(`${baseUrl}/api/auth/register`, {
@@ -197,11 +201,25 @@ try {
   await partyRow.waitFor()
   await partyRow.getByText("HAGATHA'S PARTY", { exact: true }).waitFor()
   await partyRow.getByText('2 / 16', { exact: true }).waitFor()
-  await partyRow.getByText('IN GAME', { exact: true }).waitFor()
+  assert.equal(await partyRow.locator('.dark-cloud-party-status').innerText(), 'IN GAME')
   await partyRow.getByText('The Survival Grounds', { exact: true }).waitFor()
+  assert.equal(
+    await partyRow.locator('.dark-cloud-party-location').getAttribute('title'),
+    'The Survival Grounds',
+  )
+  assert.equal(await partyRow.getByRole('button', { name: 'IN GAME', exact: true }).isDisabled(), true)
+  const partyFooterAction = page.locator('.dark-cloud-primary-button')
+  assert.equal(await partyFooterAction.innerText(), 'IN GAME')
+  assert.equal(await partyFooterAction.isDisabled(), true)
   assert.equal(await page.locator('.dark-cloud-party-row').count(), 1)
+  await page.screenshot({ path: partyScreenshotPath })
 
   await page.setViewportSize({ width: 390, height: 844 })
+  for (const text of ['2 / 16', 'The Survival Grounds']) {
+    assert.ok(await partyRow.getByText(text, { exact: true }).boundingBox(), `${text} was hidden on mobile`)
+  }
+  assert.ok(await partyRow.locator('.dark-cloud-party-status').boundingBox(), 'IN GAME was hidden on mobile')
+  await page.screenshot({ path: partyMobileScreenshotPath })
   await page.getByRole('button', { name: 'MODS', exact: true }).click()
   await page.locator('.dark-cloud-mod-row').first().waitFor()
   const mobileGeometry = await darkCloudGeometry(page)
@@ -219,6 +237,31 @@ try {
   assert.ok(landscapeGeometry.minimumTouchTarget >= 44)
   await page.screenshot({ path: landscapeScreenshotPath })
 
+  await page.setViewportSize({ width: 1600, height: 900 })
+  await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'Play', exact: true }).waitFor({ timeout: 90_000 })
+  await page.getByRole('button', { name: 'Play', exact: true }).click()
+  await page.getByRole('button', { name: 'Join party', exact: true }).waitFor()
+  await page.getByRole('button', { name: 'Join party', exact: true }).click()
+  const joinParty = page.getByRole('region', { name: 'Join Party' })
+  await joinParty.waitFor()
+  const joinPartyRow = joinParty.locator('[data-party-listing="party-smoke-public"]')
+  await joinPartyRow.waitFor()
+  for (const text of ['HAGATHA', 'Hagatha · Luthacus', '2 / 16', 'The Survival Grounds']) {
+    await joinPartyRow.getByText(text, { exact: true }).waitFor()
+  }
+  assert.equal(await joinPartyRow.locator('.join-party-status').innerText(), 'IN GAME')
+  assert.equal(await joinPartyRow.getByRole('button', { name: 'IN GAME', exact: true }).isDisabled(), true)
+  await page.screenshot({ path: joinPartyScreenshotPath })
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  for (const text of ['2 / 16', 'The Survival Grounds']) {
+    assert.ok(await joinPartyRow.getByText(text, { exact: true }).boundingBox(), `${text} was hidden on Join Party mobile`)
+  }
+  assert.ok(await joinPartyRow.locator('.join-party-status').boundingBox(), 'IN GAME was hidden on Join Party mobile')
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth), 0)
+  await page.screenshot({ path: joinPartyMobileScreenshotPath })
+
   assert.deepEqual(pageErrors, [])
   assert.deepEqual(consoleErrors, [])
   assert.deepEqual(failedResponses, [])
@@ -233,8 +276,12 @@ try {
     screenshots: {
       desktop: desktopScreenshotPath,
       detail: detailScreenshotPath,
+      joinParty: joinPartyScreenshotPath,
+      joinPartyMobile: joinPartyMobileScreenshotPath,
       landscape: landscapeScreenshotPath,
       mobile: mobileScreenshotPath,
+      party: partyScreenshotPath,
+      partyMobile: partyMobileScreenshotPath,
     },
     pageErrors,
     consoleErrors,

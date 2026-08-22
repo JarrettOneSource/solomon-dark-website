@@ -286,6 +286,16 @@ test('game session supervisor admits independent players to one shared Hub and r
       : null,
     status: 'playing',
   }])
+  const playingJoin = await fetch(`${supervisor.address.url}/admin/join/public`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${ADMIN_SECRET}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ listingId: listedParty.state.party.listingId }),
+  })
+  assert.equal(playingJoin.status, 409)
+  assert.match(JSON.stringify(await playingJoin.json()), /Boneyard/i)
 
   const health = await readHealth(supervisor.address.url)
   assert.equal(health.hubPlayers, 1)

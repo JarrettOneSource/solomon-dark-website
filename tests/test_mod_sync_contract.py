@@ -157,6 +157,18 @@ class WebsiteModSyncContractTests(unittest.TestCase):
     @classmethod
     def start_supervisor_stub(cls) -> None:
         secret = cls.leaderboard_secret
+        cls.party_directory_items = [
+            {
+                "id": "listing-safe-7",
+                "leader": "Hagatha",
+                "members": ["Hagatha", "Luthacus"],
+                "memberCount": 2,
+                "maxMembers": 16,
+                "status": "playing",
+                "visibility": "invite-only",
+                "boneyardName": "The Survival Grounds",
+            }
+        ]
 
         class SupervisorHandler(BaseHTTPRequestHandler):
             def reply(self, status: int, body: object) -> None:
@@ -177,23 +189,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
                 elif self.path == "/health":
                     self.reply(200, {"players": 0, "parties": 0, "runs": 0})
                 elif self.path == "/admin/hub/parties":
-                    self.reply(
-                        200,
-                        {
-                            "items": [
-                                {
-                                    "id": "listing-safe-7",
-                                    "leader": "Hagatha",
-                                    "members": ["Hagatha", "Luthacus"],
-                                    "memberCount": 2,
-                                    "maxMembers": 16,
-                                    "status": "playing",
-                                    "visibility": "invite-only",
-                                    "boneyardName": "The Survival Grounds",
-                                }
-                            ]
-                        },
-                    )
+                    self.reply(200, {"items": cls.party_directory_items})
                 elif self.path == "/admin/join/requests/request-token-01234567890123456789":
                     self.reply(200, {"status": "pending", "intentId": None, "target": None})
                 else:
@@ -483,6 +479,32 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         serialized = json.dumps(response)
         for private_member in ("playerId", "invitation", "credential", "manifest"):
             self.assertNotIn(private_member, serialized)
+
+    def test_public_party_directory_requires_boneyard_truth_only_while_playing(self) -> None:
+        test_class = type(self)
+        original = test_class.party_directory_items
+        try:
+            for status, boneyard_name in (
+                ("playing", None),
+                ("playing", "   "),
+                ("hub", "The Survival Grounds"),
+            ):
+                with self.subTest(status=status, boneyard_name=boneyard_name):
+                    test_class.party_directory_items = [
+                        {
+                            **original[0],
+                            "status": status,
+                            "boneyardName": boneyard_name,
+                        }
+                    ]
+                    response_status, response = self.request("GET", "/api/game/parties")
+                    self.assertEqual(response_status, 503)
+                    self.assertEqual(
+                        response,
+                        {"error": "The public party directory is not available right now."},
+                    )
+        finally:
+            test_class.party_directory_items = original
 
     def test_party_join_control_plane_is_guest_capable_and_keeps_intents_in_memory(self) -> None:
         status, resolved = self.request(

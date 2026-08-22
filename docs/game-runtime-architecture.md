@@ -52,6 +52,13 @@ leader cog. Resolution creates a ten-minute in-memory intent, while the actual
 host ticket is minted only after Create. Invite-only requests are memory-only,
 guest-capable, leader-approved, and expire with their party or supervisor.
 Only the current leader can issue Courtyard Player Card invitations.
+Starting a Boneyard does not remove an opted-in party from either directory.
+The host projects the retained membership together with its active run as an
+`IN GAME` listing carrying the authored Boneyard name and current squad
+size/capacity. Both visual wrappers disable admission for that state, and the
+supervisor independently rejects stale or forged joins until the same party
+returns to the College. Visibility remains authoritative throughout the run,
+so private parties stay absent rather than becoming observable in game.
 
 The same authenticated gameplay connection carries ephemeral text chat. A
 public-Hub singleton sees Global; a grouped Hub participant defaults to Party

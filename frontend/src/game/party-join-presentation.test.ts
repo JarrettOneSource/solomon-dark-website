@@ -10,6 +10,7 @@ const consent = await readFile(new URL('./PartyJoinConsentDialog.tsx', import.me
 const moddedPlay = await readFile(new URL('./ModdedPlayDialog.tsx', import.meta.url), 'utf8')
 const partySettings = await readFile(new URL('./PartySettingsDialog.tsx', import.meta.url), 'utf8')
 const partyCss = await readFile(new URL('./party-settings.css', import.meta.url), 'utf8')
+const joinCss = await readFile(new URL('./join-party.css', import.meta.url), 'utf8')
 
 test('Play owns a dedicated mobile Party ID and directory wrapper', () => {
   assert.match(menu, /action="join-party" accessibleLabel="Join party"/)
@@ -20,6 +21,13 @@ test('Play owns a dedicated mobile Party ID and directory wrapper', () => {
   assert.match(join, /autoCorrect="off"/)
   assert.match(join, /enterKeyHint="go"/)
   assert.match(join, /window\.visualViewport/)
+  assert.match(join, /directoryPartyPresentation\(party\)/)
+  assert.match(join, /className=\{`join-party-status/)
+  assert.match(join, /className="join-party-location"/)
+  assert.match(join, /className="join-party-squad"/)
+  assert.match(joinCss, /\.join-party-squad/)
+  assert.match(joinCss, /grid-template-areas:[\s\S]*?'list'[\s\S]*?'actions'/)
+  assert.doesNotMatch(joinCss, /span:nth-child\(2\)\s*\{\s*display:\s*none/)
 })
 
 test('Dark Cloud keeps its distinct party wrapper over the same headless modules', () => {
@@ -27,6 +35,8 @@ test('Dark Cloud keeps its distinct party wrapper over the same headless modules
   assert.match(darkCloud, /usePartyJoinActions\(requesterDisplayName, onPartyResolved\)/)
   assert.match(darkCloud, /directoryPartyAction\(party\)/)
   assert.match(darkCloud, /disabled=\{busy \|\| action === 'wait'\}/)
+  assert.match(darkCloud, /directoryPartyPresentation\(party\)/)
+  assert.match(darkCloud, /selectedPartyAction === 'wait'[\s\S]*?'IN GAME'/)
   assert.match(darkCloud, /prefetchGameContent/)
   assert.match(darkCloud, /className="dark-cloud-download"/)
   assert.match(darkCloud, /REQUEST/)

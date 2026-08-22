@@ -15,6 +15,10 @@ Status: implemented contract, 2026-08-22.
   leader cog. It is not a URL, public listing identifier, or host credential.
 - Play and Dark Cloud both expose the party directory through distinct UI
   wrappers over the same headless directory/join module.
+- Public and invite-only parties remain listed while their run is in progress.
+  Both directory wrappers show `IN GAME`, the current Boneyard name, and the
+  current squad size/capacity, but expose no join or request action until the
+  party returns to the College. Private parties remain unlisted in every state.
 - Public parties join directly. Invite-only parties accept guest and signed-in
   requests; the leader accepts or denies them in the cog. The leader can invite
   any other Courtyard wizard from their Player Card regardless of visibility.

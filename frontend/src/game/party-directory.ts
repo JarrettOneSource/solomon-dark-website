@@ -52,3 +52,21 @@ export function directoryPartyAction(
   if (party.status === 'playing') return 'wait'
   return party.visibility === 'public' ? 'join' : 'request'
 }
+
+export function directoryPartyPresentation(party: {
+  readonly maxMembers: number
+  readonly memberCount: number
+} & (
+  | { readonly boneyardName: null; readonly status: 'hub' }
+  | { readonly boneyardName: string; readonly status: 'playing' }
+)): {
+  readonly location: string
+  readonly squad: string
+  readonly status: 'IN GAME' | 'IN HUB'
+} {
+  return {
+    location: party.status === 'playing' ? party.boneyardName : 'COLLEGE COURTYARD',
+    squad: `${party.memberCount} / ${party.maxMembers}`,
+    status: party.status === 'playing' ? 'IN GAME' : 'IN HUB',
+  }
+}

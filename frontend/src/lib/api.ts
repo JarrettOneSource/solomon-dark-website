@@ -137,16 +137,19 @@ export interface Stats {
   downloadsTotal: number
 }
 
-export interface PublicGameParty {
+interface PublicGamePartyBase {
   id: string
   leader: string
   members: string[]
   memberCount: number
   maxMembers: number
-  status: 'hub' | 'playing'
-  boneyardName: string | null
   visibility: 'invite-only' | 'public'
 }
+
+export type PublicGameParty = PublicGamePartyBase & (
+  | { status: 'hub'; boneyardName: null }
+  | { status: 'playing'; boneyardName: string }
+)
 
 export interface GameContentAsset {
   byteLength: number

@@ -1,7 +1,11 @@
 import { useEffect, useState, type CSSProperties } from 'react'
 
 import type { PartyJoinResolution } from '../lib/api.ts'
-import { directoryPartyAction, usePartyDirectory } from './party-directory.ts'
+import {
+  directoryPartyAction,
+  directoryPartyPresentation,
+  usePartyDirectory,
+} from './party-directory.ts'
 import {
   completePartyCode,
   normalizePartyCode,
@@ -81,13 +85,26 @@ export default function JoinPartyScene({
           <p>NO PARTIES ARE FORMING RIGHT NOW.</p>
         ) : directory.parties.map(party => {
           const action = directoryPartyAction(party)
+          const presentation = directoryPartyPresentation(party)
           return (
             <article key={party.id} role="listitem" data-party-listing={party.id}>
-              <span>
+              <span className="join-party-copy">
                 <strong>{party.leader.toUpperCase()}</strong>
                 <small>{party.members.join(' · ')}</small>
+                <small>
+                  <span className={`join-party-status ${party.status}`}>
+                    {presentation.status}
+                  </span>
+                  <span aria-hidden> · </span>
+                  <span className="join-party-location">{presentation.location}</span>
+                </small>
               </span>
-              <span>{party.memberCount} / {party.maxMembers}</span>
+              <span
+                aria-label={`${presentation.squad} wizards`}
+                className="join-party-squad"
+              >
+                {presentation.squad}
+              </span>
               <button
                 disabled={actions.busy || action === 'wait'}
                 onClick={() => {

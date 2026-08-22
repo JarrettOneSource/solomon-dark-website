@@ -279,7 +279,7 @@
   align-items: center;
   padding: 0 8px;
   border-bottom: 1px solid rgb(204 171 91 / 0.18);
-  grid-template-columns: minmax(260px, 1fr) 140px 90px 145px 220px;
+  grid-template-columns: minmax(260px, 1fr) 120px 90px 165px 220px;
   column-gap: 12px;
   color: #b99c5b;
   font-size: clamp(11px, 0.95vw, 15px);
@@ -365,7 +365,7 @@
   border: 0;
   color: #d4c59e;
   background: transparent;
-  grid-template-columns: 78px minmax(0, 1fr) 140px 90px 145px;
+  grid-template-columns: 78px minmax(0, 1fr) 120px 90px 165px;
   column-gap: 12px;
   text-align: left;
 }
@@ -493,7 +493,11 @@
 
 .dark-cloud-party-status.hub { color: var(--dark-cloud-green); }
 .dark-cloud-party-status.playing { color: #deb66b; }
-.dark-cloud-party-location { color: #8f856b; }
+.dark-cloud-party-location {
+  color: #8f856b;
+  line-height: 1.15;
+  white-space: normal;
+}
 
 .dark-cloud-empty {
   margin: clamp(20px, 6vh, 64px) auto;

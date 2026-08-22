@@ -24,7 +24,11 @@ import DarkCloudModDetail, {
   type DarkCloudSubscriptionAction,
 } from './DarkCloudModDetail.tsx'
 import DarkCloudPanelOrnaments from './DarkCloudPanel.tsx'
-import { directoryPartyAction, usePartyDirectory } from './party-directory.ts'
+import {
+  directoryPartyAction,
+  directoryPartyPresentation,
+  usePartyDirectory,
+} from './party-directory.ts'
 import { usePartyJoinActions } from './party-join.ts'
 import {
   prefetchGameContent,
@@ -249,6 +253,9 @@ export default function DarkCloudScene({
     if (action === 'join') void partyActions.joinPublic(party.id)
     if (action === 'request') void partyActions.requestInvite(party.id)
   }
+  const selectedPartyAction = selected?.kind === 'party'
+    ? directoryPartyAction(selected.party)
+    : null
 
   // Same controls in two homes: the footer status slot on desktop and the
   // in-frame band that replaces the column header on phones. CSS shows one.
@@ -369,16 +376,18 @@ export default function DarkCloudScene({
           type="button"
           className="dark-cloud-primary-button"
           disabled={tab === 'parties'
-            ? selected?.kind !== 'party'
-              || directoryPartyAction(selected.party) === 'wait'
+            ? selectedPartyAction === null
+              || selectedPartyAction === 'wait'
               || partyActions.busy
             : selected?.kind !== 'mod'}
           onClick={primaryAction}
         >
           {tab === 'parties'
-            ? selected?.kind === 'party'
-              ? directoryPartyAction(selected.party) === 'request' ? 'REQUEST TO JOIN' : 'JOIN PARTY'
-              : 'SELECT PARTY'
+            ? selectedPartyAction === null
+              ? 'SELECT PARTY'
+              : selectedPartyAction === 'wait'
+                ? 'IN GAME'
+                : selectedPartyAction === 'request' ? 'REQUEST TO JOIN' : 'JOIN PARTY'
             : 'VIEW MOD'}
         </button>
         <div className="dark-cloud-footer-status">{statusControls}</div>
@@ -561,6 +570,7 @@ function PartyRow({
   selected: boolean
 }) {
   const action = directoryPartyAction(party)
+  const presentation = directoryPartyPresentation(party)
   return (
     <article
       className={`dark-cloud-row dark-cloud-party-row${selected ? ' selected' : ''}`}
@@ -580,9 +590,11 @@ function PartyRow({
           <strong>{`${party.leader}'s party`.toUpperCase()}</strong>
           <small>{party.members.join(' · ')}</small>
         </span>
-        <span className="dark-cloud-party-members">{party.memberCount} / {party.maxMembers}</span>
-        <span className={`dark-cloud-party-status ${party.status}`}>{party.status === 'playing' ? 'IN GAME' : 'IN HUB'}</span>
-        <span className="dark-cloud-party-location">{party.boneyardName ?? 'COLLEGE COURTYARD'}</span>
+        <span className="dark-cloud-party-members">{presentation.squad}</span>
+        <span className={`dark-cloud-party-status ${party.status}`}>{presentation.status}</span>
+        <span className="dark-cloud-party-location" title={presentation.location}>
+          {presentation.location}
+        </span>
       </button>
       <div className="dark-cloud-row-actions">
         <button type="button" disabled={busy || action === 'wait'} onClick={onEnter}>
