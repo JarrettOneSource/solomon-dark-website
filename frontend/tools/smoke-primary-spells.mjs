@@ -1633,23 +1633,51 @@ async function waitForEtherFan(
 }
 
 async function waitForEtherFanFixture(page) {
-  const handle = await page.waitForFunction(() => {
-    const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
-    if (!frame || !Number.isFinite(frame.playerX) || !Number.isFinite(frame.playerY)) return null
-    const enemies = frame.enemySamples.filter(({ currentHealth }) => currentHealth > 0)
-    if (enemies.length !== 10) return null
-    const center = enemies.reduce((sum, enemy) => ({
-      x: sum.x + enemy.x / enemies.length,
-      y: sum.y + enemy.y / enemies.length,
-    }), { x: 0, y: 0 })
-    const spread = Math.max(...enemies.map((enemy) => (
-      Math.hypot(enemy.x - center.x, enemy.y - center.y)
-    )))
-    const distance = Math.hypot(center.x - frame.playerX, center.y - frame.playerY)
-    return spread <= 40 && distance >= 180 && distance <= 300
-      ? { distance, spread, tick: frame.tick }
-      : null
-  }, undefined, { timeout: 30_000 })
+  let handle
+  try {
+    handle = await page.waitForFunction(() => {
+      const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
+      if (!frame || !Number.isFinite(frame.playerX) || !Number.isFinite(frame.playerY)) return null
+      const enemies = frame.enemySamples.filter(({ currentHealth }) => currentHealth > 0)
+      if (enemies.length !== 10) return null
+      const center = enemies.reduce((sum, enemy) => ({
+        x: sum.x + enemy.x / enemies.length,
+        y: sum.y + enemy.y / enemies.length,
+      }), { x: 0, y: 0 })
+      const spread = Math.max(...enemies.map((enemy) => (
+        Math.hypot(enemy.x - center.x, enemy.y - center.y)
+      )))
+      const distance = Math.hypot(center.x - frame.playerX, center.y - frame.playerY)
+      return spread <= 40 && distance >= 180 && distance <= 300
+        ? { distance, spread, tick: frame.tick }
+        : null
+    }, undefined, { timeout: 30_000 })
+  } catch (error) {
+    const diagnostics = await page.evaluate(() => {
+      const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
+      const enemies = frame?.enemySamples.filter(({ currentHealth }) => currentHealth > 0) ?? []
+      const center = enemies.length === 0 ? null : enemies.reduce((sum, enemy) => ({
+        x: sum.x + enemy.x / enemies.length,
+        y: sum.y + enemy.y / enemies.length,
+      }), { x: 0, y: 0 })
+      return {
+        center,
+        distance: center === null ? null : Math.hypot(
+          center.x - frame.playerX,
+          center.y - frame.playerY,
+        ),
+        enemyCount: enemies.length,
+        player: frame ? { x: frame.playerX, y: frame.playerY } : null,
+        spread: center === null ? null : Math.max(...enemies.map((enemy) => (
+          Math.hypot(enemy.x - center.x, enemy.y - center.y)
+        ))),
+        tick: frame?.tick ?? null,
+      }
+    })
+    throw new Error(`Ether fan fixture was not presented: ${JSON.stringify(diagnostics)}`, {
+      cause: error,
+    })
+  }
   const result = await handle.jsonValue()
   await handle.dispose()
   return result
