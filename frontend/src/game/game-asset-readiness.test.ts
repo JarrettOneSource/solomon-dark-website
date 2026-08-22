@@ -113,6 +113,27 @@ test('formats readable asset names without Vite transport noise', () => {
   assert.equal(assetDisplayName('/assets/011-a1B2c3D4.png'), '011.png')
 })
 
+test('pins the complete extracted normal Game Over and Solomon Riff art', () => {
+  const manifest = {
+    'anim-solomon-riff.png': {
+      dimensions: [2400, 200] as const,
+      sha256: '3829e2e9b03202d1e13cbaacbe9c1d7f37506b8eab7806db9bb29e8075e407e7',
+    },
+    'game-over-game.png': {
+      dimensions: [307, 119] as const,
+      sha256: 'dd1dc600f45cad98e8e6f35e5616eb8ea0b1335e9d081dc5b29b3f97ded8007c',
+    },
+    'game-over-over.png': {
+      dimensions: [306, 120] as const,
+      sha256: '77deb9e99bfbe11b51cabfd6cc3bc85c33cb8df943254124ad7bd6a97392ba42',
+    },
+  }
+  for (const [name, expected] of Object.entries(manifest)) {
+    assert.equal(assetSha256(name), expected.sha256, name)
+    assert.deepEqual(pngDimensions(name), expected.dimensions, name)
+  }
+})
+
 test('keeps recovered Hub parity art at its native registrations', () => {
   const dimensions: Readonly<Record<string, readonly [number, number]>> = {
     'hub-astronomer-assistants.png': [1800, 150],

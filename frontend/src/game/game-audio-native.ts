@@ -147,7 +147,13 @@ export type SecondaryStreamCue =
   | 'stoneskin-on'
   | 'thunder'
   | 'trap'
-export type GameStreamCue = CreateStreamCue | SecondaryStreamCue | BoneyardSolomonVoiceCue | 'death-guitar'
+export type GameOverSolomonVoiceCue = 'solomon-laugh-big'
+export type GameStreamCue =
+  | CreateStreamCue
+  | SecondaryStreamCue
+  | BoneyardSolomonVoiceCue
+  | GameOverSolomonVoiceCue
+  | 'death-guitar'
 export type GameLoopCue =
   | 'comet-loop'
   | 'electric-loop'
@@ -1045,12 +1051,19 @@ export const NATIVE_SOLOMON_VOICE_MANIFEST = {
     sourceName: 'voices\\SAY_SOLOMON_LAUGH1.wav',
     sourceSha256: '26463c3f557378c5409fe8b37c49c9f5585dee26ffc16face1db0770a08d5716',
   },
+  'solomon-laugh-big': {
+    durationTicks: 483,
+    sourceName: 'voices\\SAY_SOLOMON_LAUGHBIG1.wav',
+    sourceSha256: '579e3f1ba524644c50cb371ef481bf8960cca34f1eb6fcd694ce350889eee42b',
+  },
   'solomon-get-him-boys': {
     durationTicks: 245,
     sourceName: 'voices\\SAY_GETHIMBOYS.wav',
     sourceSha256: 'c26e56af5c5036bdfdda8dee9c5ba8270a75156b45c0afe9f00c83b850b34541',
   },
-} as const satisfies Readonly<Record<BoneyardSolomonVoiceCue, NativeVoiceEntry>>
+} as const satisfies Readonly<
+  Record<BoneyardSolomonVoiceCue | GameOverSolomonVoiceCue, NativeVoiceEntry>
+>
 
 export const GAME_SCENE_MUSIC = {
   boneyard: { cue: 'prelude', transitionTicks: 100 },

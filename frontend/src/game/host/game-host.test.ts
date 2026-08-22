@@ -6,8 +6,8 @@ import { WebSocket } from 'ws'
 
 import { HUB_SPAWN } from '../core-kernels/hub-math.ts'
 import {
-  BONEYARD_GAME_OVER_AUTOMATIC_ACCEPT_TICK,
-  BONEYARD_GAME_OVER_EXIT_FADE_TICKS,
+  GAME_OVER_INPUT_ACCEPT_TICK,
+  GAME_OVER_INPUT_EXIT_FADE_TICKS,
 } from '../core-kernels/game-run.ts'
 import { NATIVE_HALL_OF_FAME_SCORE } from '../core-kernels/hall-of-fame-score.ts'
 import {
@@ -1884,14 +1884,16 @@ test('host returns the same multiplayer session from Game Over through loadout t
   const runId = loaded.boneyard.runId
   assert.equal(active.snapshot.run.runId, runId)
 
-  const automaticExitForFirst = nextMessage(first.socket, (message) => (
+  const inputExitForFirst = nextMessage(first.socket, (message) => (
     message.type === 'server-snapshot'
     && message.snapshot.run.phase === 'game-over'
+    && message.snapshot.run.gameOverExitKind === 'input'
     && message.snapshot.run.gameOverExitTicks === 1
   ))
-  const automaticExitForSecond = nextMessage(second.socket, (message) => (
+  const inputExitForSecond = nextMessage(second.socket, (message) => (
     message.type === 'server-snapshot'
     && message.snapshot.run.phase === 'game-over'
+    && message.snapshot.run.gameOverExitKind === 'input'
     && message.snapshot.run.gameOverExitTicks === 1
   ))
   const gameOverState = host.state()
@@ -1909,27 +1911,32 @@ test('host returns the same multiplayer session from Game Over through loadout t
   }
   Object.assign(host.state().run, {
     gameOverEventId: 1,
-    gameOverTicks: BONEYARD_GAME_OVER_AUTOMATIC_ACCEPT_TICK - 1,
+    gameOverTicks: GAME_OVER_INPUT_ACCEPT_TICK,
     nextGameOverEventId: 2,
     phase: 'game-over',
   })
   assert.equal(host.state().run.gameOverExitTicks, null)
+  second.socket.send(encodeGameMessage({
+    type: 'client-continue-game-over',
+    eventId: 1,
+    runId,
+  }))
   const [exiting, exitingForSecond] = await Promise.all([
-    automaticExitForFirst,
-    automaticExitForSecond,
+    inputExitForFirst,
+    inputExitForSecond,
   ])
   assert.equal(exiting.type, 'server-snapshot')
   assert.equal(exitingForSecond.type, 'server-snapshot')
   assert.equal(exiting.snapshot.run.runId, runId)
   assert.equal(exiting.snapshot.run.gameOverEventId, 1)
   assert.equal(exitingForSecond.snapshot.run.gameOverEventId, 1)
-  assert.equal(exiting.snapshot.run.gameOverTicks, BONEYARD_GAME_OVER_AUTOMATIC_ACCEPT_TICK)
+  assert.ok(exiting.snapshot.run.gameOverTicks >= GAME_OVER_INPUT_ACCEPT_TICK)
   assert.equal(exiting.snapshot.world.kind, 'boneyard')
   assert.equal(host.loadedBoneyard()?.runId, runId)
   const blackMessage = nextMessage(first.socket, (message) => (
     message.type === 'server-snapshot'
     && message.snapshot.run.phase === 'game-over'
-    && message.snapshot.run.gameOverExitTicks === BONEYARD_GAME_OVER_EXIT_FADE_TICKS
+    && message.snapshot.run.gameOverExitTicks === GAME_OVER_INPUT_EXIT_FADE_TICKS
     && message.snapshot.world.kind === 'boneyard'
   ))
   const loadoutMessage = nextMessage(first.socket, (message) => (
@@ -1938,10 +1945,11 @@ test('host returns the same multiplayer session from Game Over through loadout t
     && message.snapshot.world.kind === 'hub'
   ))
   Object.assign(host.state().run, {
-    gameOverExitTicks: BONEYARD_GAME_OVER_EXIT_FADE_TICKS - 1,
+    gameOverExitKind: 'input',
+    gameOverExitTicks: GAME_OVER_INPUT_EXIT_FADE_TICKS - 1,
     gameOverTicks:
-      BONEYARD_GAME_OVER_AUTOMATIC_ACCEPT_TICK
-      + BONEYARD_GAME_OVER_EXIT_FADE_TICKS
+      GAME_OVER_INPUT_ACCEPT_TICK
+      + GAME_OVER_INPUT_EXIT_FADE_TICKS
       - 2,
   })
   const [black, loadout] = await Promise.all([blackMessage, loadoutMessage])
@@ -1953,7 +1961,11 @@ test('host returns the same multiplayer session from Game Over through loadout t
   assert.ok(loadout.snapshot.players[second.welcome.playerId])
   assert.equal(host.loadedBoneyard(), null)
 
-  second.socket.send(encodeGameMessage({ type: 'client-confirm-loadout' }))
+  second.socket.send(encodeGameMessage({
+    type: 'client-confirm-loadout',
+    discipline: 'mind',
+    element: 'water',
+  }))
   await new Promise((resolve) => setImmediate(resolve))
   assert.equal(host.state().run.phase, 'loadout')
 
@@ -1961,13 +1973,27 @@ test('host returns the same multiplayer session from Game Over through loadout t
     message.type === 'server-snapshot'
     && message.snapshot.run.phase === 'hub'
   ))
-  first.socket.send(encodeGameMessage({ type: 'client-confirm-loadout' }))
+  first.socket.send(encodeGameMessage({
+    type: 'client-confirm-loadout',
+    discipline: 'body',
+    element: 'air',
+  }))
   const hub = await hubMessage
   assert.equal(hub.type, 'server-snapshot')
   assert.equal(hub.snapshot.run.lastCompletedRunId, runId)
   assert.equal(hub.snapshot.hostPlayerId, first.welcome.playerId)
   assert.ok(hub.snapshot.players[first.welcome.playerId])
   assert.ok(hub.snapshot.players[second.welcome.playerId])
+  assert.deepEqual(hub.snapshot.players[first.welcome.playerId]?.config, {
+    ...FIRST_CHARACTER,
+    discipline: 'body',
+    element: 'air',
+  })
+  assert.deepEqual(hub.snapshot.players[second.welcome.playerId]?.config, {
+    ...SECOND_CHARACTER,
+    discipline: 'mind',
+    element: 'water',
+  })
 
   const secondLoadedMessage = nextMessage(first.socket, (message) => (
     message.type === 'server-boneyard-loaded'

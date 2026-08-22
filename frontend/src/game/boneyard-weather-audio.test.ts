@@ -39,8 +39,9 @@ test('native weather audio uses the shared rainfall loop and mode gains', () => 
     cue: 'rainfall-loop',
     gain: 1,
   })
-  assert.equal(nativeBoneyardWeatherArenaFade(null), 0)
-  assert.equal(nativeBoneyardWeatherArenaFade(200), 0.5)
+  assert.equal(nativeBoneyardWeatherArenaFade(null, null), 0)
+  assert.equal(nativeBoneyardWeatherArenaFade(10, 'input'), 0.5)
+  assert.equal(nativeBoneyardWeatherArenaFade(125, 'automatic'), 0.5)
   assert.deepEqual(nativeBoneyardWeatherAudioRequest(1, 0.5), {
     cue: 'rainfall-loop',
     gain: 0.2,

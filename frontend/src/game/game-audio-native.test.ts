@@ -75,6 +75,7 @@ test('maps the stock Solomon dialogue files and authoritative PCM durations', ()
       'solomon-hello-3': 554,
       'solomon-hello-4': 735,
       'solomon-laugh-1': 247,
+      'solomon-laugh-big': 483,
       'solomon-get-him-boys': 245,
     },
   )
@@ -92,6 +93,7 @@ test('pins every checked-in Solomon voice to its untouched stock WAV', () => {
     'solomon-hello-3': 'solomon-hello-3.wav',
     'solomon-hello-4': 'solomon-hello-4.wav',
     'solomon-laugh-1': 'solomon-laugh-1.wav',
+    'solomon-laugh-big': 'solomon-laugh-big.wav',
   } as const
   for (const [cue, filename] of Object.entries(filenames)) {
     const source = readFileSync(new URL(

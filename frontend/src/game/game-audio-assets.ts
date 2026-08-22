@@ -150,6 +150,7 @@ import solomonHello2 from '../assets/game/audio/voice/solomon-hello-2.wav'
 import solomonHello3 from '../assets/game/audio/voice/solomon-hello-3.wav'
 import solomonHello4 from '../assets/game/audio/voice/solomon-hello-4.wav'
 import solomonLaugh1 from '../assets/game/audio/voice/solomon-laugh-1.wav'
+import solomonLaughBig from '../assets/game/audio/voice/solomon-laugh-big.wav'
 import type { GameAudioSources } from './game-audio-native.ts'
 
 export const GAME_AUDIO_SOURCES = {
@@ -312,5 +313,6 @@ export const GAME_AUDIO_SOURCES = {
     'solomon-hello-3': solomonHello3,
     'solomon-hello-4': solomonHello4,
     'solomon-laugh-1': solomonLaugh1,
+    'solomon-laugh-big': solomonLaughBig,
   },
 } as const satisfies GameAudioSources

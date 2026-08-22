@@ -46,6 +46,14 @@ test('wizard-name editing keeps native bitmap pixels and reaches the first playe
   assert.match(createScene, /readOnly=\{Boolean\(retainedLoadout\)\}/)
 })
 
+test('post-run Create preselects but does not lock either loadout choice', () => {
+  assert.match(createScene, /retainedLoadout\?\.element/)
+  assert.match(createScene, /data-game-default-focus=\{\(retainedLoadout/)
+  assert.doesNotMatch(createScene, /discipline !== retainedLoadout\.discipline/)
+  assert.doesNotMatch(mainScene, /if \(!session\.isHost\) return false/)
+  assert.match(mainScene, /session\.confirmLoadout\(selectedElement, selectedDiscipline\)/)
+})
+
 test('wizard-name controls own clear and stock randomization without a live rename path', () => {
   assert.match(createScene, /create-menu-name-clear/)
   assert.match(createScene, /Clear wizard name/)

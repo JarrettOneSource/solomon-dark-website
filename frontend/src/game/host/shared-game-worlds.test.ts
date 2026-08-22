@@ -2,6 +2,10 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
+import {
+  GAME_OVER_AUTOMATIC_ACCEPT_TICK,
+  GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS,
+} from '../core-kernels/game-run.ts'
 import { createGameSimulation } from '../core-server/game-simulation.ts'
 import {
   playerCharacterAt,
@@ -14,6 +18,7 @@ import {
   denySharedPartyInvitation,
   confirmSharedPartyLoadout,
   inviteSharedPartyPlayer,
+  removeSharedGamePlayer,
   restoreSharedGamePlayer,
   joinSharedPartyPlayer,
   kickSharedPartyPlayer,
@@ -281,8 +286,10 @@ test('post-run confirmation merges the progressed party back into the shared Hub
   ).state
   Object.assign(worlds.runs[0]!.state.run, {
     gameOverEventId: 1,
-    gameOverExitTicks: 400,
-    gameOverTicks: 1_399,
+    gameOverExitKind: 'automatic',
+    gameOverExitTicks: GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS,
+    gameOverTicks:
+      GAME_OVER_AUTOMATIC_ACCEPT_TICK + GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS - 1,
     nextGameOverEventId: 2,
     phase: 'game-over',
   })
@@ -290,7 +297,16 @@ test('post-run confirmation merges the progressed party back into the shared Hub
   assert.equal(worlds.runs[0]?.state.world.kind, 'hub')
   assert.equal(worlds.runs[0]?.state.run.phase, 'loadout')
 
-  const returned = confirmSharedPartyLoadout(worlds, 'player-a')
+  const firstReady = confirmSharedPartyLoadout(worlds, 'player-a', {
+    discipline: 'body',
+    element: 'air',
+  })
+  assert.equal(firstReady.accepted, true)
+  assert.equal(firstReady.state.runs.length, 1)
+  const returned = confirmSharedPartyLoadout(firstReady.state, 'player-b', {
+    discipline: 'mind',
+    element: 'water',
+  })
   assert.equal(returned.accepted, true)
   worlds = returned.state
   assert.equal(worlds.runs.length, 0)
@@ -302,5 +318,33 @@ test('post-run confirmation merges the progressed party back into the shared Hub
     worlds.parties.parties.find(({ leaderPlayerId }) => leaderPlayerId === 'player-a')
       ?.memberPlayerIds,
     ['player-a', 'player-b'],
+  )
+
+  worlds = startSharedPartyRun(
+    worlds,
+    'player-a',
+    loadedBoneyardFixture('disconnecting-party'),
+  ).state
+  Object.assign(worlds.runs[0]!.state.run, {
+    gameOverEventId: 2,
+    gameOverExitKind: 'automatic',
+    gameOverExitTicks: GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS,
+    gameOverTicks:
+      GAME_OVER_AUTOMATIC_ACCEPT_TICK + GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS - 1,
+    nextGameOverEventId: 3,
+    phase: 'game-over',
+  })
+  worlds = stepSharedGameWorlds(worlds, {})
+  const waiting = confirmSharedPartyLoadout(worlds, 'player-a', {
+    discipline: 'arcane',
+    element: 'ether',
+  })
+  assert.equal(waiting.accepted, true)
+  assert.equal(waiting.state.runs.length, 1)
+  worlds = removeSharedGamePlayer(waiting.state, 'player-b')
+  assert.equal(worlds.runs.length, 0)
+  assert.deepEqual(
+    new Set(worlds.hub.playerEntities.identities.map(({ playerId }) => playerId)),
+    new Set(['player-a', 'player-c']),
   )
 })

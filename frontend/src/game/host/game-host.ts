@@ -21,6 +21,7 @@ import {
   applyGameSimulationHubAction,
   bindGameSimulationPlayerSkillQuickbar,
   confirmGameSimulationLoadout,
+  continueGameSimulationOver,
   createGameSimulation,
   enterBoneyardWorld,
   getPlayerProgression,
@@ -37,7 +38,7 @@ import {
   type PlayerId,
 } from '../core-server/game-simulation.ts'
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
-import { BONEYARD_GAME_OVER_EXIT_FADE_TICKS } from '../core-kernels/game-run.ts'
+import { gameOverExitDurationTicks } from '../core-kernels/game-run.ts'
 import type {
   HubInventoryAction,
   ModConsumableCatalogEntry,
@@ -125,6 +126,7 @@ import {
   acceptSharedPartyInvitation,
   addSharedHubPlayer,
   confirmSharedPartyLoadout,
+  continueSharedPartyGameOver,
   createSharedGameWorlds,
   denySharedPartyInvitation,
   inviteSharedPartyPlayer,
@@ -1592,10 +1594,31 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         publishSaveCheckpoint('boneyard-entry')
         return
       }
-      if (message.type === 'client-confirm-loadout') {
-        if (client.playerId !== authorityForPlayer(client.playerId)) return
+      if (message.type === 'client-continue-game-over') {
         if (sharedWorlds) {
-          const confirmed = confirmSharedPartyLoadout(sharedWorlds, client.playerId)
+          const continued = continueSharedPartyGameOver(
+            sharedWorlds,
+            client.playerId,
+            message.runId,
+            message.eventId,
+          )
+          if (!continued.accepted) return
+          sharedWorlds = continued.state
+          state = sharedWorlds.hub
+          stopWorldClientInputs(client.playerId)
+          broadcastSnapshot()
+          return
+        }
+        const continued = continueGameSimulationOver(state, message.runId, message.eventId)
+        if (!continued) return
+        state = continued
+        stopAllClientInputs()
+        broadcastSnapshot()
+        return
+      }
+      if (message.type === 'client-confirm-loadout') {
+        if (sharedWorlds) {
+          const confirmed = confirmSharedPartyLoadout(sharedWorlds, client.playerId, message)
           if (!confirmed.accepted) return
           sharedGameplayPauses.delete(partyForPlayer(sharedWorlds.parties, client.playerId)?.id ?? '')
           sharedWorlds = confirmed.state
@@ -1603,15 +1626,17 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           stopWorldClientInputs(client.playerId)
           broadcastPartyState()
           broadcastSnapshot()
-          publishSaveCheckpoint('loadout-confirmed')
+          if (sharedGameStateForPlayer(sharedWorlds, client.playerId)?.run.phase === 'hub') {
+            publishSaveCheckpoint('loadout-confirmed')
+          }
           return
         }
-        const confirmed = confirmGameSimulationLoadout(state)
+        const confirmed = confirmGameSimulationLoadout(state, client.playerId, message)
         if (!confirmed) return
         state = confirmed
         if (privateParties) broadcastPartyState()
         broadcastSnapshot()
-        publishSaveCheckpoint('loadout-confirmed')
+        if (state.run.phase === 'hub') publishSaveCheckpoint('loadout-confirmed')
         return
       }
       if (message.type === 'client-save-before-leave') {
@@ -1912,8 +1937,11 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         }
         const barrierId = state.levelUpBarrier?.barrierId ?? null
         const reachedGameOverBlack = state.run.phase === 'game-over'
-          && state.run.gameOverExitTicks === BONEYARD_GAME_OVER_EXIT_FADE_TICKS
-          && previousGameOverExitTicks !== BONEYARD_GAME_OVER_EXIT_FADE_TICKS
+          && state.run.gameOverExitTicks !== null
+          && state.run.gameOverExitTicks === gameOverExitDurationTicks(
+            state.run.gameOverExitKind,
+          )
+          && previousGameOverExitTicks !== state.run.gameOverExitTicks
         const enteredGameOver = previousRunPhase === 'active'
           && state.run.phase === 'game-over'
         const completedGameOver = previousRunPhase === 'game-over'

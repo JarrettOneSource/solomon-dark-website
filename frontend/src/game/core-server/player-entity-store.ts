@@ -40,6 +40,7 @@ import {
   increaseRandomLearnedSkill,
   playerStatBook,
   rerollPlayerSkillOffer,
+  reselectPlayerLoadout,
   resetPlayerPotionEffects,
   stepPlayerPotionEffects,
   selectPlayerPrimarySkill,
@@ -483,6 +484,28 @@ export function replacePlayerCharacter(
   locomotions[index] = locomotionComponent(character)
   primaryCasts[index] = character.primaryCast
   return { ...source, locomotions, primaryCasts }
+}
+
+export function replacePlayerLoadout(
+  source: PlayerEntityStore,
+  playerId: string,
+  character: PlayerCharacterState,
+): PlayerEntityStore {
+  const index = playerEntityIndex(source, playerId)
+  if (index < 0) return source
+  const configs = [...source.configs]
+  configs[index] = Object.freeze({ ...character.config })
+  const replaced = {
+    ...replacePlayerCharacter(source, playerId, character),
+    configs,
+  }
+  return replacePlayerSkillState(
+    replaced,
+    index,
+    reselectPlayerLoadout(source.skillBooks[index]!, character.config),
+    source.skillRuntimes[index]!,
+    source.economies[index]!,
+  )
 }
 
 export function damagePlayerEntity(

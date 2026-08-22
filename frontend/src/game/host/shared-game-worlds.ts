@@ -7,6 +7,7 @@ import type {
 import {
   addPlayerCharacter,
   confirmGameSimulationLoadout,
+  continueGameSimulationOver,
   createGameSimulation,
   enterBoneyardWorld,
   mergeGameSimulationPlayersIntoHub,
@@ -121,18 +122,24 @@ export function removeSharedGamePlayer(
   playerId: PlayerId,
 ): SharedGameWorldsState {
   const inHub = state.hub.playerEntities.identities.some(({ playerId: id }) => id === playerId)
-  const runs = state.runs.flatMap((run) => {
+  let hub = inHub ? removePlayerCharacter(state.hub, playerId) : state.hub
+  const runs: SharedPartyRun[] = []
+  for (const run of state.runs) {
     if (!run.state.playerEntities.identities.some(({ playerId: id }) => id === playerId)) {
-      return [run]
+      runs.push(run)
+      continue
     }
     const nextState = removePlayerCharacter(run.state, playerId)
-    return nextState.playerEntities.identities.length === 0
-      ? []
-      : [{ ...run, state: nextState }]
-  })
+    if (nextState.playerEntities.identities.length === 0) continue
+    if (nextState.run.phase === 'hub') {
+      hub = mergeGameSimulationPlayersIntoHub(hub, nextState)
+      continue
+    }
+    runs.push({ ...run, state: nextState })
+  }
   return {
     ...state,
-    hub: inHub ? removePlayerCharacter(state.hub, playerId) : state.hub,
+    hub,
     parties: removePartyPlayer(state.parties, playerId),
     runs,
   }
@@ -268,18 +275,50 @@ export function startSharedPartyRun(
 
 export function confirmSharedPartyLoadout(
   state: SharedGameWorldsState,
-  leaderPlayerId: PlayerId,
+  playerId: PlayerId,
+  selection: Pick<PlayerCharacterConfig, 'discipline' | 'element'>,
 ): SharedWorldActionResult {
-  const party = partyForPlayer(state.parties, leaderPlayerId)
-  if (!party || party.leaderPlayerId !== leaderPlayerId) return rejected(state, 'not-leader')
+  const party = partyForPlayer(state.parties, playerId)
+  if (!party) return rejected(state, 'run-unavailable')
   const run = state.runs.find(({ partyId }) => partyId === party.id)
   if (!run) return rejected(state, 'run-unavailable')
-  const confirmed = confirmGameSimulationLoadout(run.state)
+  const confirmed = confirmGameSimulationLoadout(run.state, playerId, selection)
   if (!confirmed) return rejected(state, 'run-unavailable')
+  if (confirmed.run.phase !== 'hub') {
+    return accepted({
+      ...state,
+      runs: state.runs.map((candidate) => (
+        candidate.partyId === party.id ? { ...candidate, state: confirmed } : candidate
+      )),
+    })
+  }
   return accepted({
     ...state,
     hub: mergeGameSimulationPlayersIntoHub(state.hub, confirmed),
     runs: state.runs.filter(({ partyId }) => partyId !== party.id),
+  })
+}
+
+export function continueSharedPartyGameOver(
+  state: SharedGameWorldsState,
+  playerId: PlayerId,
+  runId: string,
+  eventId: number,
+): SharedWorldActionResult {
+  const party = partyForPlayer(state.parties, playerId)
+  if (!party) return rejected(state, 'run-unavailable')
+  const run = state.runs.find(({ partyId }) => partyId === party.id)
+  if (
+    !run
+    || !run.state.playerEntities.identities.some(({ playerId: id }) => id === playerId)
+  ) return rejected(state, 'run-unavailable')
+  const continued = continueGameSimulationOver(run.state, runId, eventId)
+  if (!continued) return rejected(state, 'run-unavailable')
+  return accepted({
+    ...state,
+    runs: state.runs.map((candidate) => (
+      candidate.partyId === party.id ? { ...candidate, state: continued } : candidate
+    )),
   })
 }
 

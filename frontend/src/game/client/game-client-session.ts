@@ -101,7 +101,11 @@ export interface GameClientSession {
   readonly sessionKind: GameSessionKind
   acceptPartyJoinRequest(requestId: string): void
   bindSkillQuickbar(skillId: number, slot: number): void
-  confirmLoadout(): void
+  confirmLoadout(
+    element: PlayerCharacterConfig['element'],
+    discipline: PlayerCharacterConfig['discipline'],
+  ): void
+  continueGameOver(runId: string, eventId: number): void
   destroy(): void
   denyPartyInvitation(invitationId: string): void
   denyPartyJoinRequest(requestId: string): void
@@ -555,10 +559,29 @@ export function connectGameClientSession(
           slot,
         }))
       },
-      confirmLoadout() {
-        if (!welcome || !snapshot || destroyed || !session.isHost) return
+      confirmLoadout(element, discipline) {
+        if (!welcome || !snapshot || destroyed) return
         if (snapshot.run.phase !== 'loadout') return
-        options.transport.send(encodeGameMessage({ type: 'client-confirm-loadout' }))
+        if (snapshot.run.loadoutReadyPlayerIds.includes(welcome.playerId)) return
+        options.transport.send(encodeGameMessage({
+          type: 'client-confirm-loadout',
+          discipline,
+          element,
+        }))
+      },
+      continueGameOver(runId, eventId) {
+        if (!welcome || !snapshot || destroyed) return
+        if (
+          snapshot.run.phase !== 'game-over'
+          || snapshot.run.runId !== runId
+          || snapshot.run.gameOverEventId !== eventId
+          || snapshot.run.gameOverExitTicks !== null
+        ) return
+        options.transport.send(encodeGameMessage({
+          type: 'client-continue-game-over',
+          eventId,
+          runId,
+        }))
       },
       get boneyards() {
         if (!welcome) throw new Error('game session has not been welcomed')

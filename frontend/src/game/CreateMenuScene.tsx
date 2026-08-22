@@ -86,8 +86,8 @@ export default function CreateMenuScene({
   const rendererRef = useRef<CreateMenuRenderer | null>(null)
   const onStartRef = useRef(onStart)
   const activeDisplayNameRef = useRef(retainedLoadout?.displayName ?? displayName)
-  const selectedElementRef = useRef<WizardElement | null>(retainedLoadout?.element ?? null)
-  const hoveredActionRef = useRef<CreateMenuAction | null>(null)
+  const selectedElementRef = useRef<WizardElement | null>(null)
+  const hoveredActionRef = useRef<CreateMenuAction | null>(retainedLoadout?.element ?? null)
   const phaseStartedAtRef = useRef(0)
   const previousPhaseElapsedRef = useRef(0)
   const elementButtonsRef = useRef<Partial<Record<WizardElement, HTMLButtonElement>>>({})
@@ -97,9 +97,7 @@ export default function CreateMenuScene({
   const [elementsVisible, setElementsVisible] = useState(false)
   const [disciplinesVisible, setDisciplinesVisible] = useState(false)
   const [motionSettled, setMotionSettled] = useState(false)
-  const [selectedElement, setSelectedElement] = useState<WizardElement | null>(
-    retainedLoadout?.element ?? null,
-  )
+  const [selectedElement, setSelectedElement] = useState<WizardElement | null>(null)
   const [pendingDiscipline, setPendingDiscipline] = useState<WizardDiscipline | null>(null)
   const [nameValidationMessage, setNameValidationMessage] = useState<string | null>(null)
   const [rendererError, setRendererError] = useState<string | null>(null)
@@ -258,7 +256,6 @@ export default function CreateMenuScene({
       || pendingDiscipline
       || !disciplinesVisible
       || Boolean(retainedLoadout && !retainedLoadoutCanConfirm)
-      || Boolean(retainedLoadout && discipline !== retainedLoadout.discipline)
     ) return
     audio.playSound('pick-skill')
     onDisciplineCommit()
@@ -414,7 +411,9 @@ export default function CreateMenuScene({
               type="button"
               className={`create-menu-element create-menu-element-${element}`}
               aria-label={element}
-              data-game-default-focus={element === 'earth' || undefined}
+              data-game-default-focus={(retainedLoadout
+                ? element === retainedLoadout.element
+                : element === 'earth') || undefined}
               disabled={!elementsVisible || selectedElement !== null}
               onBlur={() => highlight(null)}
               onClick={() => selectElement(element)}
@@ -448,7 +447,6 @@ export default function CreateMenuScene({
                 || pendingDiscipline !== null
                 || !nameValidation.ok
                 || Boolean(retainedLoadout && !retainedLoadoutCanConfirm)
-                || Boolean(retainedLoadout && discipline !== retainedLoadout.discipline)
               }
               onBlur={() => highlight(null)}
               onClick={() => selectDiscipline(discipline)}

@@ -46,9 +46,11 @@ function snapshot(
     run: {
       eligiblePlayerIds: [],
       gameOverEventId: 0,
+      gameOverExitKind: null,
       gameOverExitTicks: null,
       gameOverTicks: 0,
       lastCompletedRunId: null,
+      loadoutReadyPlayerIds: [],
       nextGameOverEventId: 1,
       phase: 'active',
       runId,

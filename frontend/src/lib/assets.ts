@@ -277,6 +277,9 @@ import bannerFetching from '../assets/game/banner-fetching.png'
 import skullGold from '../assets/game/skull-gold.png'
 import skullWhite from '../assets/game/skull-white.png'
 import gameover from '../assets/game/gameover.png'
+import gameOverGame from '../assets/game/game-over-game.png'
+import gameOverOver from '../assets/game/game-over-over.png'
+import animSolomonRiff from '../assets/game/anim-solomon-riff.png'
 import statueWizard from '../assets/game/statue-wizard.png'
 import gargoyle from '../assets/game/gargoyle.png'
 import parchment from '../assets/game/parchment.png'
@@ -719,6 +722,12 @@ export const boneyard = {
   lantern: boneyardLantern,
   levelUpSparkle: boneyardLevelUpSparkle,
   solomonDig: animSolomonDig,
+}
+
+export const nativeGameOver = {
+  game: gameOverGame,
+  over: gameOverOver,
+  solomonRiff: animSolomonRiff,
 }
 
 /** The skeleton death payload, keyed by BadGuys.bundle record number

@@ -27,6 +27,7 @@
     "src/game/game-audio-director.test.ts",
     "src/game/game-over-presentation.ts",
     "src/game/game-over-presentation.test.ts",
+    "src/game/game-over-audio.ts",
     "src/game/game-presentation-frame-loop.ts",
     "src/game/game-presentation-frame-loop.test.ts",
     "src/game/ally-hud.test.ts",

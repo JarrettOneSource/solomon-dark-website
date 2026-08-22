@@ -254,13 +254,16 @@ dependencies without revisiting this release invariant.
   authoritative snapshots.
 - A party-owned run lifecycle is `hub -> active -> game-over -> loadout -> hub`.
   An all-eligible-dead edge freezes the terminal Boneyard world while the
-  session tick and two replicated Game Over clocks continue. The entry/hold
-  clock opens input at 1000; host acknowledgement starts a nullable 400-tick
-  exit clock. World retirement and the retained-loadout reset occur atomically
-  on the following fixed tick, so neither client rendering nor acknowledgement
-  can destroy the image beneath an active fade. After retained-loadout
-  confirmation, the same party and player entities merge back into the shared
-  Hub; no private post-run Hub may remain resident.
+  session tick and replicated Game Over presentation clocks continue. The
+  requested normal presentation opens run/event-scoped continuation at tick
+  500 and uses a 20-tick exit; its Riff-completion fallback begins at tick 951
+  and uses the native 250-tick unattended exit. World retirement and loadout
+  reset occur atomically on the fixed tick after exact black, so neither client
+  rendering nor continuation can destroy the image beneath an active fade.
+  Loadout readiness is participant-owned: every current party member submits
+  only their own element/discipline pair, and the final confirmation merges the
+  same party and player entities into shared Hub. No private post-run Hub or
+  host-selected guest loadout may remain resident.
 - Player-character movement uses a two-phase shared kernel: first plan native
   intent/velocity, then let the active world resolve collision, then commit the
   resolved position plus native heading/gait state. Hub and Boneyard geometry
@@ -415,6 +418,15 @@ the fully composed movement scalar, so simultaneous ColdSlow, CircleSlow,
 Frozen, Stun, and Dazzle multiply without client inference. ColdSlow alone owns
 the cyan target material; CircleSlow does not retain that material after the
 cold modifier expires.
+
+Protocol 57 adds the full Game Over continuation and participant-owned post-run
+loadout state. Run snapshots carry clicked/automatic exit kind and sorted
+loadout-ready participant IDs. `client-continue-game-over` is scoped to the
+active run nonce and monotonic Game Over event. `client-confirm-loadout`
+carries one validated element/discipline pair and can update only the sending
+participant. The run remains in loadout until every connected eligible member
+has confirmed; disconnect synchronization removes departed members without
+granting one client authority over another player's pair.
 
 ## Saves, identity, and content
 

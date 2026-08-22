@@ -168,6 +168,7 @@ const SOURCES = {
     'solomon-hello-3': 'hello-3.wav',
     'solomon-hello-4': 'hello-4.wav',
     'solomon-laugh-1': 'laugh-1.wav',
+    'solomon-laugh-big': 'laugh-big.wav',
     'start-cast': 'start.wav',
     'stoneskin-on': 'stoneskin-on.wav',
     thunder: 'thunder.wav',

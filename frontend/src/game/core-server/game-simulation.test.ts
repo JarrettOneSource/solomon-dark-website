@@ -4,8 +4,8 @@ import test from 'node:test'
 import { actorHeadingFromVector, actorHeadingIndex } from '../core-kernels/actor-heading.ts'
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import {
-  BONEYARD_GAME_OVER_AUTOMATIC_ACCEPT_TICK,
-  BONEYARD_GAME_OVER_EXIT_FADE_TICKS,
+  GAME_OVER_AUTOMATIC_ACCEPT_TICK,
+  GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS,
 } from '../core-kernels/game-run.ts'
 import { NATIVE_HALL_OF_FAME_SCORE } from '../core-kernels/hall-of-fame-score.ts'
 import { NATIVE_SECONDARY_ABILITY_IDS } from '../core-kernels/native-secondary-ability-contract.ts'
@@ -2227,7 +2227,7 @@ test('one dead player spectates until all-dead Game Over returns the session thr
   assert.equal(getPlayerProgression(state, 'second').lifeState, 'spectating')
   assert.equal(playerDeathFrame(getPlayerProgression(state, 'second')), 3)
 
-  while (state.run.gameOverTicks < BONEYARD_GAME_OVER_AUTOMATIC_ACCEPT_TICK - 1) {
+  while (state.run.gameOverTicks < GAME_OVER_AUTOMATIC_ACCEPT_TICK - 1) {
     state = stepGameSimulationTick(state, {
       first: gameplayInput(1, 0),
       second: gameplayInput(1, 0),
@@ -2237,15 +2237,15 @@ test('one dead player spectates until all-dead Game Over returns the session thr
   assert.equal(archiveObserved, true)
   assert.equal(state.run.gameOverExitTicks, null)
   state = stepGameSimulationTick(state, {})
-  assert.equal(state.run.gameOverTicks, BONEYARD_GAME_OVER_AUTOMATIC_ACCEPT_TICK)
+  assert.equal(state.run.gameOverTicks, GAME_OVER_AUTOMATIC_ACCEPT_TICK)
   assert.equal(state.run.gameOverExitTicks, 1)
-  for (let exitTick = 2; exitTick <= BONEYARD_GAME_OVER_EXIT_FADE_TICKS; exitTick += 1) {
+  for (let exitTick = 2; exitTick <= GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS; exitTick += 1) {
     state = stepGameSimulationTick(state, {})
     assertFrozenGameOverWorld()
     assert.equal(state.run.gameOverExitTicks, exitTick)
   }
   assert.equal(state.run.phase, 'game-over')
-  assert.equal(state.run.gameOverExitTicks, BONEYARD_GAME_OVER_EXIT_FADE_TICKS)
+  assert.equal(state.run.gameOverExitTicks, GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS)
   const loadout = stepGameSimulationTick(state, {})
   assert.equal(loadout.run.phase, 'loadout')
   assert.equal(loadout.world.kind, 'hub')
@@ -2260,9 +2260,26 @@ test('one dead player spectates until all-dead Game Over returns the session thr
     assert.ok(restocked.every(({ id }) => id > Math.max(...initialStockIds[playerId]!)))
   }
 
-  const hub = confirmGameSimulationLoadout(loadout)
+  const firstReady = confirmGameSimulationLoadout(loadout, 'first', {
+    discipline: 'body',
+    element: 'air',
+  })
+  assert.ok(firstReady)
+  assert.equal(firstReady.run.phase, 'loadout')
+  const hub = confirmGameSimulationLoadout(firstReady, 'second', {
+    discipline: 'mind',
+    element: 'water',
+  })
   assert.ok(hub)
   assert.equal(hub.run.phase, 'hub')
+  assert.equal(getPlayerCharacter(hub, 'first').config.element, 'air')
+  assert.equal(getPlayerCharacter(hub, 'first').config.discipline, 'body')
+  assert.equal(getPlayerCharacter(hub, 'second').config.element, 'water')
+  assert.equal(getPlayerCharacter(hub, 'second').config.discipline, 'mind')
+  assert.equal(getPlayerSkillBook(hub, 'first').primarySkillId, 24)
+  assert.equal(getPlayerSkillBook(hub, 'first').skillQuickbar[0], 27)
+  assert.equal(getPlayerSkillBook(hub, 'second').primarySkillId, 32)
+  assert.equal(getPlayerSkillBook(hub, 'second').skillQuickbar[0], 35)
   const secondRun = enterBoneyardWorld(hub, combatBoneyard('clean-second-run'))
   assert.equal(secondRun.run.phase, 'active')
   assert.equal(secondRun.run.nextGameOverEventId, 2)

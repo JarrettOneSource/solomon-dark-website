@@ -45,6 +45,12 @@ const VOICES = [
     sha256: '26463c3f557378c5409fe8b37c49c9f5585dee26ffc16face1db0770a08d5716',
   },
   {
+    source: 'SAY_SOLOMON_LAUGHBIG1.wav',
+    output: 'solomon-laugh-big.wav',
+    bytes: 425720,
+    sha256: '579e3f1ba524644c50cb371ef481bf8960cca34f1eb6fcd694ce350889eee42b',
+  },
+  {
     source: 'SAY_GETHIMBOYS.wav',
     output: 'solomon-get-him-boys.wav',
     bytes: 215348,

@@ -592,8 +592,7 @@ test('host client keeps one session through Game Over, loadout, and Hub confirma
     run: {
       ...activeState.run,
       gameOverEventId: 1,
-      gameOverExitTicks: 1,
-      gameOverTicks: 1_000,
+      gameOverTicks: 500,
       nextGameOverEventId: 2,
       phase: 'game-over' as const,
     },
@@ -614,6 +613,13 @@ test('host client keeps one session through Game Over, loadout, and Hub confirma
   receiveSnapshot(transport, createGameSnapshot(gameOverState, playerId), 0)
   assert.equal(session.getSnapshot().run.phase, 'game-over')
 
+  session.continueGameOver(runId, 1)
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-continue-game-over',
+    eventId: 1,
+    runId,
+  })
+
   const beforeStoppedInput = transport.sent.length
   session.sendInput(gameplayInput({ x: 0, y: 1 }, { x: 600, y: 400 }, true, 0))
   assert.equal(transport.sent.length, beforeStoppedInput + 1)
@@ -622,17 +628,27 @@ test('host client keeps one session through Game Over, loadout, and Hub confirma
   if (stoppedInput.type !== 'client-input') assert.fail('expected stopped client input')
   assert.deepEqual(stoppedInput.input, gameplayInput({ x: 0, y: 0 }))
 
-  receiveSnapshot(transport, createGameSnapshot(gameOverState, playerId), 0)
+  const exitingState = {
+    ...gameOverState,
+    run: {
+      ...gameOverState.run,
+      gameOverExitKind: 'input' as const,
+      gameOverExitTicks: 1,
+    },
+  }
+  receiveSnapshot(transport, createGameSnapshot(exitingState, playerId), 0)
   assert.equal(session.getSnapshot().run.phase, 'game-over')
   assert.equal(session.getSnapshot().run.gameOverExitTicks, 1)
   const loadoutState = {
     ...gameOverState,
     run: {
       ...gameOverState.run,
-      eligiblePlayerIds: [],
+      eligiblePlayerIds: [playerId],
+      gameOverExitKind: null,
       gameOverExitTicks: null,
       gameOverTicks: 0,
       lastCompletedRunId: runId,
+      loadoutReadyPlayerIds: [],
       phase: 'loadout' as const,
       runId: null,
     },
@@ -643,12 +659,17 @@ test('host client keeps one session through Game Over, loadout, and Hub confirma
   assert.equal(session.getSnapshot().run.phase, 'loadout')
   assert.equal(session.getSnapshot().world.kind, 'hub')
 
-  session.confirmLoadout()
+  session.confirmLoadout('air', 'body')
   assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
     type: 'client-confirm-loadout',
+    discipline: 'body',
+    element: 'air',
   })
 
-  const confirmedState = confirmGameSimulationLoadout(loadoutState)
+  const confirmedState = confirmGameSimulationLoadout(loadoutState, playerId, {
+    discipline: 'body',
+    element: 'air',
+  })
   assert.ok(confirmedState)
   receiveSnapshot(transport, createGameSnapshot(confirmedState, playerId), 0)
   assert.equal(session.playerId, playerId)
@@ -656,7 +677,7 @@ test('host client keeps one session through Game Over, loadout, and Hub confirma
   assert.equal(session.getSnapshot().run.lastCompletedRunId, runId)
 
   const beforeInvalidConfirmation = transport.sent.length
-  session.confirmLoadout()
+  session.confirmLoadout('air', 'body')
   assert.equal(transport.sent.length, beforeInvalidConfirmation)
   session.startMatch('default-random')
   assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {

@@ -8,7 +8,10 @@ import {
   stepGameSimulationTick,
   type GameSimulationState,
 } from '../core-server/game-simulation.ts'
-import { BONEYARD_GAME_OVER_EXIT_FADE_TICKS } from '../core-kernels/game-run.ts'
+import {
+  GAME_OVER_AUTOMATIC_ACCEPT_TICK,
+  GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS,
+} from '../core-kernels/game-run.ts'
 import { earthImpactLifetimeTicks } from '../core-kernels/primary-spell-earth.ts'
 import { EARTH_BOULDER_IDENTITY_ORIENTATION } from '../core-kernels/primary-spell-earth-orientation.ts'
 import {
@@ -157,9 +160,22 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
     boneyardId: 'default-random',
   })
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
+    type: 'client-continue-game-over',
+    eventId: 7,
+    runId: 'run-7',
+  })), {
+    type: 'client-continue-game-over',
+    eventId: 7,
+    runId: 'run-7',
+  })
+  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
     type: 'client-confirm-loadout',
+    discipline: 'mind',
+    element: 'water',
   })), {
     type: 'client-confirm-loadout',
+    discipline: 'mind',
+    element: 'water',
   })
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
     type: 'client-gameplay-pause',
@@ -545,9 +561,11 @@ test('server welcome round-trips content, kernel, character, and world ownership
   assert.deepEqual(welcome.snapshot.run, {
     eligiblePlayerIds: [],
     gameOverEventId: 0,
+    gameOverExitKind: null,
     gameOverExitTicks: null,
     gameOverTicks: 0,
     lastCompletedRunId: null,
+    loadoutReadyPlayerIds: [],
     nextGameOverEventId: 1,
     phase: 'hub',
     runId: null,
@@ -1041,8 +1059,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v56 carries status composition, saved leave, deployment restart, Ether replacement, party access, movement, social, mod, and gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 56)
+test('protocol v57 carries Game Over/loadout, status composition, saved leave, deployment restart, Ether replacement, party access, movement, social, mod, and gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 57)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -1053,7 +1071,7 @@ test('protocol v56 carries status composition, saved leave, deployment restart, 
     run: {
       ...active.run,
       gameOverEventId: 1,
-      gameOverTicks: 999,
+      gameOverTicks: GAME_OVER_AUTOMATIC_ACCEPT_TICK - 1,
       nextGameOverEventId: 2,
       phase: 'game-over' as const,
     },
@@ -1112,34 +1130,37 @@ test('protocol v56 carries status composition, saved leave, deployment restart, 
   )
 
   const missingAutomaticFade = JSON.parse(encodeGameMessage(terminalMessage))
-  missingAutomaticFade.frame.run.gameOverTicks = 1_000
+  missingAutomaticFade.frame.run.gameOverTicks = GAME_OVER_AUTOMATIC_ACCEPT_TICK
   assert.throws(
     () => decodeServerGameMessage(JSON.stringify(missingAutomaticFade)),
     /gameOverExitTicks misses the native automatic fade/,
   )
   const zeroExit = JSON.parse(encodeGameMessage(terminalMessage))
+  zeroExit.frame.run.gameOverExitKind = 'automatic'
   zeroExit.frame.run.gameOverExitTicks = 0
-  zeroExit.frame.run.gameOverTicks = 1_000
+  zeroExit.frame.run.gameOverTicks = GAME_OVER_AUTOMATIC_ACCEPT_TICK
   assert.throws(
     () => decodeServerGameMessage(JSON.stringify(zeroExit)),
     /gameOverExitTicks must begin at one/,
   )
   const outOfStepExit = JSON.parse(encodeGameMessage(terminalMessage))
+  outOfStepExit.frame.run.gameOverExitKind = 'automatic'
   outOfStepExit.frame.run.gameOverExitTicks = 2
-  outOfStepExit.frame.run.gameOverTicks = 1_000
+  outOfStepExit.frame.run.gameOverTicks = GAME_OVER_AUTOMATIC_ACCEPT_TICK
   assert.throws(
     () => decodeServerGameMessage(JSON.stringify(outOfStepExit)),
-    /gameOverExitTicks is out of step with Game Over/,
+    /automatic Game Over exit is out of step/,
   )
   const overlongExit = JSON.parse(encodeGameMessage(terminalMessage))
-  overlongExit.frame.run.gameOverExitTicks = BONEYARD_GAME_OVER_EXIT_FADE_TICKS + 1
+  overlongExit.frame.run.gameOverExitKind = 'automatic'
+  overlongExit.frame.run.gameOverExitTicks = GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS + 1
   assert.throws(
     () => decodeServerGameMessage(JSON.stringify(overlongExit)),
-    /gameOverExitTicks exceeds the native fade/,
+    /gameOverExitTicks exceeds its native fade/,
   )
 
   let loadoutState: GameSimulationState = gameOverState
-  for (let tick = 0; tick <= BONEYARD_GAME_OVER_EXIT_FADE_TICKS; tick += 1) {
+  for (let tick = 0; tick <= GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS; tick += 1) {
     loadoutState = stepGameSimulationTick(loadoutState, {})
   }
   const loadoutSnapshot = createGameSnapshot(loadoutState, 'player-1')
@@ -1157,7 +1178,10 @@ test('protocol v56 carries status composition, saved leave, deployment restart, 
   assert.equal(loadoutSnapshot.run.lastCompletedRunId, 'run-v16')
   assert.equal(loadoutSnapshot.world.kind, 'hub')
 
-  const hubState = confirmGameSimulationLoadout(loadoutState)
+  const hubState = confirmGameSimulationLoadout(loadoutState, 'player-1', {
+    discipline: 'body',
+    element: 'air',
+  })
   assert.ok(hubState)
   const hubSnapshot = createGameSnapshot(hubState, 'player-1')
   assert.equal(hubSnapshot.run.phase, 'hub')

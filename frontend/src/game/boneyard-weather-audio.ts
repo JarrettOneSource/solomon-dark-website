@@ -1,5 +1,8 @@
 import type { GameAudioDirector } from './game-audio-director.ts'
-import { BONEYARD_GAME_OVER_EXIT_FADE_TICKS } from './core-kernels/game-run.ts'
+import {
+  gameOverExitDurationTicks,
+  type GameOverExitKind,
+} from './core-kernels/game-run.ts'
 
 export const BONEYARD_WEATHER_AUDIO_CUE = 'rainfall-loop' as const
 export const BONEYARD_WEATHER_AUDIO_OWNER = 'boneyard-weather:rainfall'
@@ -20,9 +23,12 @@ export function nativeBoneyardWeatherAudioRequest(
   }
 }
 
-export function nativeBoneyardWeatherArenaFade(gameOverExitTicks: number | null): number {
+export function nativeBoneyardWeatherArenaFade(
+  gameOverExitTicks: number | null,
+  gameOverExitKind: GameOverExitKind | null,
+): number {
   if (gameOverExitTicks === null) return 0
-  return clampUnit(gameOverExitTicks / BONEYARD_GAME_OVER_EXIT_FADE_TICKS)
+  return clampUnit(gameOverExitTicks / gameOverExitDurationTicks(gameOverExitKind))
 }
 
 export class BoneyardWeatherAudioSynchronizer {

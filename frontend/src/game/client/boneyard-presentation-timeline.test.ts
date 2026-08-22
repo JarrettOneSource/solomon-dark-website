@@ -196,9 +196,11 @@ function snapshotAt(tick: number, playerX: number, gateTipX: number): BoneyardGa
     run: {
       eligiblePlayerIds: ['local'],
       gameOverEventId: 0,
+      gameOverExitKind: null,
       gameOverExitTicks: null,
       gameOverTicks: 0,
       lastCompletedRunId: null,
+      loadoutReadyPlayerIds: [],
       nextGameOverEventId: 1,
       phase: 'active',
       runId: 'run-1',
@@ -786,11 +788,14 @@ test('preserves every player corpse frame at 20 Hz for all death-epoch alignment
   }
 })
 
-test('presents both native Game Over fades at the 100 Hz simulation clock', () => {
+test('presents normal Game Over entry and both exit paths at the 100 Hz clock', () => {
   const gameOverSnapshot = (
     tick: number,
     gameOverTicks: number,
     gameOverExitTicks: number | null,
+    gameOverExitKind: 'automatic' | 'input' | null = gameOverExitTicks === null
+      ? null
+      : 'input',
   ): BoneyardGameSnapshot => {
     const snapshot = snapshotAt(tick, 10, 100)
     return {
@@ -798,6 +803,7 @@ test('presents both native Game Over fades at the 100 Hz simulation clock', () =
       run: {
         ...snapshot.run,
         gameOverEventId: 1,
+        gameOverExitKind,
         gameOverExitTicks,
         gameOverTicks,
         nextGameOverEventId: 2,
@@ -816,21 +822,21 @@ test('presents both native Game Over fades at the 100 Hz simulation clock', () =
 
   const exit = createBoneyardPresentationTimeline({
     initialReceivedAtMs: 0,
-    initialSnapshot: gameOverSnapshot(110, 1_000, 1),
+    initialSnapshot: gameOverSnapshot(110, 500, 1),
     serverTickRate: 100,
     snapshotRate: 20,
   })
-  exit.push(gameOverSnapshot(115, 1_005, 6), 50)
+  exit.push(gameOverSnapshot(115, 505, 6), 50)
   assert.equal(exit.sample(75).run.gameOverExitTicks, 3)
-  assert.equal(exit.sample(75).run.gameOverTicks, 1_002)
+  assert.equal(exit.sample(75).run.gameOverTicks, 502)
 
   const automaticAcceptance = createBoneyardPresentationTimeline({
     initialReceivedAtMs: 0,
-    initialSnapshot: gameOverSnapshot(120, 999, null),
+    initialSnapshot: gameOverSnapshot(120, 950, null),
     serverTickRate: 100,
     snapshotRate: 20,
   })
-  automaticAcceptance.push(gameOverSnapshot(125, 1_004, 5), 50)
+  automaticAcceptance.push(gameOverSnapshot(125, 955, 5, 'automatic'), 50)
   assert.equal(automaticAcceptance.sample(75).run.gameOverExitTicks, null)
   assert.equal(automaticAcceptance.sample(100).run.gameOverExitTicks, 5)
 })

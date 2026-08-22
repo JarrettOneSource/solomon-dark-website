@@ -494,6 +494,36 @@ export function createPlayerSkillBook(config: PlayerCharacterConfig): PlayerSkil
   }
 }
 
+export function reselectPlayerLoadout(
+  source: PlayerSkillBookComponent,
+  config: PlayerCharacterConfig,
+): PlayerSkillBookComponent {
+  const selected = createPlayerSkillBook(config)
+  const permanentRanks = [...source.permanentRanks]
+  for (let skillId = 0; skillId < selected.permanentRanks.length; skillId += 1) {
+    if (selected.permanentRanks[skillId]! > permanentRanks[skillId]!) {
+      permanentRanks[skillId] = selected.permanentRanks[skillId]!
+    }
+  }
+  const learnedSkillOrder = [...source.learnedSkillOrder]
+  for (const skillId of selected.learnedSkillOrder) {
+    if (!learnedSkillOrder.includes(skillId)) learnedSkillOrder.push(skillId)
+  }
+  const skillQuickbar = [...source.skillQuickbar]
+  skillQuickbar[0] = selected.skillQuickbar[0]
+  return {
+    ...source,
+    disciplineRoot: selected.disciplineRoot,
+    effectiveRanks: Object.freeze([...permanentRanks]),
+    elementRoot: selected.elementRoot,
+    learnedSkillOrder: Object.freeze(learnedSkillOrder),
+    permanentRanks: Object.freeze(permanentRanks),
+    primarySkillId: selected.primarySkillId,
+    skillQuickbar: freezeSkillQuickbar(skillQuickbar),
+    weldBuildId: null,
+  }
+}
+
 export function createPlayerProgression(offerSeed: number): PlayerProgressionComponent {
   if (!Number.isInteger(offerSeed) || offerSeed < 0 || offerSeed >= 1_000_000) {
     throw new RangeError('player offer seed must be an integer from 0 through 999999')

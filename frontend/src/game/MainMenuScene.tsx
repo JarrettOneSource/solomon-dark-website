@@ -857,8 +857,7 @@ export default function MainMenuScene({
   ): Promise<boolean> => {
     if (connecting) return false
     if (session && runtimeRunPhase === 'loadout') {
-      if (!session.isHost) return false
-      session.confirmLoadout()
+      session.confirmLoadout(selectedElement, selectedDiscipline)
       return true
     }
     setConnecting(true)
@@ -1149,7 +1148,10 @@ export default function MainMenuScene({
             onDisplayNameChange={setWizardName}
             onDisciplineCommit={beginHubLoading}
             onStart={startHub}
-            retainedLoadoutCanConfirm={Boolean(session?.isHost)}
+            retainedLoadoutCanConfirm={Boolean(
+              session
+              && !runtimeSnapshot?.run.loadoutReadyPlayerIds.includes(session.playerId)
+            )}
             retainedLoadout={runtimeRunPhase === 'loadout' && session && runtimeSnapshot
               ? runtimeSnapshot.players[session.playerId]?.config
               : undefined}
@@ -1173,6 +1175,7 @@ export default function MainMenuScene({
               initialSnapshot={runtimeSnapshot}
               onInput={session.sendInput}
               onLoadingError={cancelBoneyardLoading}
+              onContinueGameOver={session.continueGameOver}
               onHubAction={session.sendHubAction}
               onInventoryOpenChange={setInventoryScreenOpen}
               onOpenSkills={openSkillBook}
@@ -1238,7 +1241,7 @@ export default function MainMenuScene({
           </Suspense>
         ) : null}
 
-        {session && runtimeSnapshot ? (
+        {session && runtimeSnapshot && runtimeRunPhase !== 'game-over' ? (
           <GameChat
             disabled={chatDisabled}
             onOpenChange={setChatOpen}

@@ -57,7 +57,6 @@ const enemyHitScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-enemy
 const enemyShieldScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-enemy-shield.png`
 const enemyShieldBreakScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-enemy-shield-break.png`
 const gameOverScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-game-over.png`
-const gameOverExitScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-game-over-exit.png`
 const levelUpScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-level-up.png`
 const levelUpWaitingScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-level-up-waiting.png`
 const loadoutScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-loadout.png`
@@ -105,6 +104,14 @@ const [hostPage, guestPage] = await Promise.all([
   guestContext.newPage(),
 ])
 await Promise.all([hostPage, guestPage].map(async (page) => {
+  await page.route('**/deployment.json*', async (route) => {
+    const current = new URL(route.request().url()).searchParams.get('current')
+    await route.fulfill({
+      body: JSON.stringify({ revision: current }),
+      contentType: 'application/json',
+      status: 200,
+    })
+  })
   await page.addInitScript(installGameAudioSmokeProbe)
   await page.addInitScript((runtime) => {
     window.solomonDarkRuntime = runtime
@@ -335,7 +342,7 @@ try {
     enemyShieldBreakScreenshotPath,
     enemyShieldScreenshotPath,
     firstSpectatorCamera,
-    gameOverExitScreenshotPath,
+    gameOverExitScreenshotPath: null,
     gameOverScreenshotPath,
     gateCrossing,
     inputLock,
@@ -386,10 +393,20 @@ try {
 
 function captureErrors(page) {
   const errors = { console: [], page: [] }
+  const failedResources = new Set()
   page.on('console', (message) => {
-    if (message.type() === 'error') errors.console.push(message.text())
+    if (message.type() !== 'error') return
+    const location = message.location().url
+    errors.console.push(location ? `${message.text()} [${location}]` : message.text())
   })
   page.on('pageerror', (error) => errors.page.push(error.message))
+  page.on('response', (response) => {
+    if (response.status() < 400) return
+    const failure = `HTTP ${response.status()} ${response.url()}`
+    if (failedResources.has(failure)) return
+    failedResources.add(failure)
+    errors.console.push(failure)
+  })
   return errors
 }
 
@@ -1524,35 +1541,88 @@ function assertRenderedDeathSequence(frame) {
 }
 
 async function returnBothPlayersToHub(hostPage, guestPage) {
-  const hostGameOver = hostPage.locator('.boneyard-game-over[role="status"]')
-  const guestGameOver = guestPage.locator('.boneyard-game-over[role="status"]')
+  const hostGameOver = hostPage.locator('.boneyard-game-over')
+  const guestGameOver = guestPage.locator('.boneyard-game-over')
   await Promise.all([
     hostGameOver.waitFor({ timeout: 30_000 }),
     guestGameOver.waitFor({ timeout: 30_000 }),
   ])
   assert.equal(await hostGameOver.getAttribute('aria-label'), 'Game over.')
   assert.equal(await guestGameOver.getAttribute('aria-label'), 'Game over.')
-  assert.equal(await hostPage.locator('.boneyard-game-over button').count(), 0)
-  assert.equal(await guestPage.locator('.boneyard-game-over button').count(), 0)
+  assert.equal(await hostGameOver.evaluate((element) => element.tagName), 'BUTTON')
+  assert.equal(await guestGameOver.evaluate((element) => element.tagName), 'BUTTON')
 
   const readyFrame = await boneyardFrame(hostPage)
-  assert.ok(readyFrame.runGameOverTicks < 1_000)
   assert.equal(readyFrame.runGameOverExitTicks, null)
   assert.equal(readyFrame.playerDeathWeaponCount, 2)
-  assert.equal(await gameOverAlpha(hostGameOver), 0)
+  await Promise.all([
+    hostPage.waitForFunction(() => (
+      document.querySelector('.boneyard-game-over')?.getAttribute('data-input-ready') === 'true'
+    ), undefined, { timeout: 30_000 }),
+    guestPage.waitForFunction(() => (
+      document.querySelector('.boneyard-game-over')?.getAttribute('data-input-ready') === 'true'
+    ), undefined, { timeout: 30_000 }),
+  ])
+  const gameOverPresentation = await hostPage.evaluate(() => {
+    const overlay = document.querySelector('.boneyard-game-over')
+    const game = document.querySelector('.game-over-word-game')
+    const over = document.querySelector('.game-over-word-over')
+    const prompt = document.querySelector('.game-over-prompt')
+    const riff = document.querySelector('.game-over-solomon-riff')
+    const canvas = document.querySelector('.boneyard-world-canvas')
+    if (!(overlay instanceof HTMLButtonElement)) throw new Error('Game Over button is missing')
+    if (!(game instanceof HTMLImageElement) || !(over instanceof HTMLImageElement)) {
+      throw new Error('Game Over title rows are missing')
+    }
+    if (!(prompt instanceof HTMLElement) || !(riff instanceof HTMLElement)) {
+      throw new Error('Game Over prompt or Solomon Riff is missing')
+    }
+    if (!(canvas instanceof HTMLCanvasElement)) throw new Error('Boneyard canvas is missing')
+    const webgl = canvas.getContext('webgl2')
+    if (!(webgl instanceof WebGL2RenderingContext)) {
+      throw new Error('Boneyard Game Over did not retain its WebGL2 context')
+    }
+    const rendererInfo = webgl.getExtension('WEBGL_debug_renderer_info')
+    return {
+      gameSize: [game.offsetWidth, game.offsetHeight],
+      overSize: [over.offsetWidth, over.offsetHeight],
+      promptAlpha: Number(getComputedStyle(prompt).opacity),
+      renderer: rendererInfo
+        ? webgl.getParameter(rendererInfo.UNMASKED_RENDERER_WEBGL)
+        : webgl.getParameter(webgl.RENDERER),
+      rendererVersion: webgl.getParameter(webgl.VERSION),
+      riffRecord: Number(overlay.getAttribute('data-riff-record')),
+      ticks: Number(overlay.getAttribute('data-game-over-ticks')),
+      titleAlpha: Number(getComputedStyle(game).opacity),
+    }
+  })
+  assert.deepEqual(gameOverPresentation.gameSize, [307, 119])
+  assert.deepEqual(gameOverPresentation.overSize, [306, 120])
+  assert.ok(gameOverPresentation.riffRecord >= 1 && gameOverPresentation.riffRecord <= 12)
+  assert.ok(gameOverPresentation.titleAlpha > 0)
+  assert.ok(gameOverPresentation.promptAlpha > 0)
+  assert.ok(gameOverPresentation.ticks >= 500)
+  assert.equal(await hostPage.locator('.hub-hud').count(), 0)
+  assert.equal(await hostPage.locator('.game-chat').count(), 0)
+  await hostPage.screenshot({ path: gameOverScreenshotPath })
 
+  await hostGameOver.click()
   await hostPage.waitForFunction(() => {
     const overlay = document.querySelector('.boneyard-game-over')
     const exitTicks = Number(overlay?.getAttribute('data-game-over-exit-ticks'))
-    return exitTicks >= 100 && exitTicks < 400
+    return overlay?.getAttribute('data-game-over-exit-kind') === 'input'
+      && exitTicks >= 1
+      && exitTicks < 20
   }, undefined, { timeout: 30_000 })
   const exitReceipt = await hostPage.evaluate(() => {
     const overlay = document.querySelector('.boneyard-game-over')
+    const exitBlack = document.querySelector('.game-over-exit-black')
     const canvas = document.querySelector('.boneyard-world-canvas')
     if (!(overlay instanceof HTMLElement)) throw new Error('Game Over overlay is missing')
+    if (!(exitBlack instanceof HTMLElement)) throw new Error('Game Over exit fade is missing')
     if (!(canvas instanceof HTMLCanvasElement)) throw new Error('Boneyard canvas is missing')
     return {
-      alpha: Number(getComputedStyle(overlay).getPropertyValue('--game-over-alpha')),
+      alpha: Number(getComputedStyle(exitBlack).opacity),
       frame: structuredClone(canvas.__sdrBoneyardFrame),
       ticks: Number(overlay.getAttribute('data-game-over-exit-ticks')),
     }
@@ -1561,13 +1631,11 @@ async function returnBothPlayersToHub(hostPage, guestPage) {
   const exitTicks = exitReceipt.ticks
   const exitAlpha = exitReceipt.alpha
   assert.equal(exitFrame.runPhase, 'game-over')
-  assert.equal(exitFrame.runGameOverTicks, 999 + exitTicks)
+  assert.ok(exitFrame.runGameOverTicks >= 499 + exitTicks)
   assert.equal(exitFrame.runGameOverExitTicks, exitTicks)
-  assert.ok(exitTicks >= 100 && exitTicks < 400)
-  assert.ok(Math.abs(exitAlpha - exitTicks / 400) < 1e-9)
+  assert.ok(exitTicks >= 1 && exitTicks < 20)
+  assert.ok(Math.abs(exitAlpha - exitTicks / 20) < 1e-9)
   assert.equal(exitFrame.playerDeathWeaponCount, 2)
-  assert.equal(await hostPage.locator('.boneyard-scene').count(), 1)
-  await hostPage.screenshot({ path: gameOverExitScreenshotPath })
   const hostLoadout = hostPage.locator(
     '.create-menu-scene[data-retained-loadout="true"][data-motion-settled="true"]',
   )
@@ -1579,16 +1647,24 @@ async function returnBothPlayersToHub(hostPage, guestPage) {
     guestLoadout.waitFor({ timeout: 90_000 }),
   ])
   assert.equal(await hostLoadout.getAttribute('data-retained-loadout-can-confirm'), 'true')
-  assert.equal(await guestLoadout.getAttribute('data-retained-loadout-can-confirm'), 'false')
-  assert.equal(await hostLoadout.getAttribute('data-element'), 'fire')
-  assert.equal(await guestLoadout.getAttribute('data-element'), 'air')
-  const hostConfirm = hostPage.locator('.create-menu-discipline-arcane')
-  const guestConfirm = guestPage.locator('.create-menu-discipline-arcane')
+  assert.equal(await guestLoadout.getAttribute('data-retained-loadout-can-confirm'), 'true')
+  await Promise.all([
+    hostPage.locator('.create-menu-element-water').click(),
+    guestPage.locator('.create-menu-element-earth').click(),
+  ])
+  await Promise.all([
+    hostPage.locator('.create-menu-scene[data-element="water"][data-motion-settled="true"]')
+      .waitFor({ timeout: 30_000 }),
+    guestPage.locator('.create-menu-scene[data-element="earth"][data-motion-settled="true"]')
+      .waitFor({ timeout: 30_000 }),
+  ])
+  const hostConfirm = hostPage.locator('.create-menu-discipline-mind')
+  const guestConfirm = guestPage.locator('.create-menu-discipline-body')
   assert.equal(await hostConfirm.isEnabled(), true)
-  assert.equal(await guestConfirm.isDisabled(), true)
+  assert.equal(await guestConfirm.isEnabled(), true)
   await hostPage.screenshot({ path: loadoutScreenshotPath })
 
-  await hostConfirm.click()
+  await Promise.all([hostConfirm.click(), guestConfirm.click()])
   await Promise.all([
     hostPage.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 90_000 }),
     guestPage.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 90_000 }),
@@ -1602,25 +1678,24 @@ async function returnBothPlayersToHub(hostPage, guestPage) {
   assert.equal(hostHub.hostPlayerId, hostHub.localPlayerId)
   assert.equal(guestHub.hostPlayerId, hostHub.localPlayerId)
   assert.notEqual(guestHub.localPlayerId, hostHub.localPlayerId)
+  assert.equal(await hostPage.locator('.hub-scene').getAttribute('data-element'), 'water')
+  assert.equal(await hostPage.locator('.hub-scene').getAttribute('data-discipline'), 'mind')
+  assert.equal(await guestPage.locator('.hub-scene').getAttribute('data-element'), 'earth')
+  assert.equal(await guestPage.locator('.hub-scene').getAttribute('data-discipline'), 'body')
   await hostPage.screenshot({ path: returnedHubScreenshotPath })
   return {
     exitFade: {
       alpha: exitAlpha,
-      screenshotPath: gameOverExitScreenshotPath,
+      screenshotPath: null,
       ticks: exitTicks,
     },
-    guestLoadoutCanConfirm: false,
+    gameOverPresentation,
+    guestLoadoutCanConfirm: true,
     guestPlayerId: guestHub.localPlayerId,
     hostLoadoutCanConfirm: true,
     hostPlayerId: hostHub.localPlayerId,
     playerCount: hostHub.playerCount,
   }
-}
-
-async function gameOverAlpha(locator) {
-  return locator.evaluate((element) => Number(
-    getComputedStyle(element).getPropertyValue('--game-over-alpha'),
-  ))
 }
 
 async function pulseTowardNearestEnemy(page, frame, durationMs) {

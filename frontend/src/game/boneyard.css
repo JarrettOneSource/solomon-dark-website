@@ -15,8 +15,92 @@
   padding: 0;
   border: 0;
   border-radius: 0;
-  background: rgb(0 0 0 / var(--game-over-alpha));
+  appearance: none;
+  background: transparent;
+  color: inherit;
   cursor: default;
+  overflow: hidden;
+}
+
+.boneyard-game-over:disabled {
+  opacity: 1;
+}
+
+.boneyard-game-over[data-input-ready='true'] {
+  cursor: pointer;
+}
+
+.game-over-black {
+  position: absolute;
+  inset: 0;
+  display: block;
+  background: #000;
+  pointer-events: none;
+}
+
+.game-over-entry-black {
+  z-index: 2;
+}
+
+.game-over-exit-black {
+  z-index: 6;
+}
+
+.game-over-word {
+  position: absolute;
+  z-index: 3;
+  display: block;
+  left: 50%;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.game-over-word-game {
+  width: 307px;
+  height: 119px;
+  top: calc(50% - 175px);
+}
+
+.game-over-word-over {
+  width: 306px;
+  height: 120px;
+  top: calc(50% + 125px);
+}
+
+.game-over-solomon-riff {
+  position: absolute;
+  z-index: 1;
+  display: block;
+  width: 200px;
+  height: 200px;
+  background-position: calc(var(--game-over-riff-frame) * -200px) 0;
+  background-repeat: no-repeat;
+  background-size: 2400px 200px;
+  image-rendering: auto;
+  pointer-events: none;
+  transform: translate(-50%, -50%) scale(var(--game-over-riff-scale));
+  transform-origin: center;
+}
+
+.game-over-prompt {
+  position: absolute;
+  z-index: 4;
+  left: 50%;
+  top: calc(100% - 50px);
+  display: block;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.game-over-prompt-text {
+  position: relative;
+  display: block;
+}
+
+.game-over-prompt-text > i {
+  position: absolute;
+  display: block;
+  background-color: #d9ba70;
 }
 
 .boneyard-scene:focus { outline: none; }

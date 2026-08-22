@@ -129,9 +129,13 @@ import {
   type NativeStaffProcSound,
 } from '../core-kernels/native-player-staff-action.ts'
 import {
-  BONEYARD_GAME_OVER_AUTOMATIC_ACCEPT_TICK,
-  BONEYARD_GAME_OVER_EXIT_FADE_TICKS,
+  GAME_OVER_AUTOMATIC_ACCEPT_TICK,
+  GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS,
+  GAME_OVER_EXIT_KINDS,
+  GAME_OVER_INPUT_ACCEPT_TICK,
+  GAME_OVER_INPUT_EXIT_FADE_TICKS,
   GAME_RUN_PHASES,
+  type GameOverExitKind,
   type GameRunLifecycleState,
   type GameRunPhase,
 } from '../core-kernels/game-run.ts'
@@ -313,7 +317,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 56
+export const GAME_PROTOCOL_VERSION = 57
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
 export const GAME_CONNECTION_TIMEOUT_CLOSE_CODE = 4000
@@ -560,8 +564,16 @@ export interface ClientStartMatchMessage {
   boneyardId: string
 }
 
+export interface ClientContinueGameOverMessage {
+  type: 'client-continue-game-over'
+  eventId: number
+  runId: string
+}
+
 export interface ClientConfirmLoadoutMessage {
   type: 'client-confirm-loadout'
+  discipline: PlayerCharacterConfig['discipline']
+  element: PlayerCharacterConfig['element']
 }
 
 export type ClientGameplayPauseMessage =
@@ -583,6 +595,7 @@ export type ClientGameMessage =
   | ClientChatMessage
   | ClientCheatModeMessage
   | ClientConfirmLoadoutMessage
+  | ClientContinueGameOverMessage
   | ClientDeploymentReadyMessage
   | ClientGameplayPauseMessage
   | ClientHelloMessage
@@ -993,9 +1006,25 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
       boneyardId: limitedString(value.boneyardId, 'boneyardId', 256),
     }
   }
+  if (value.type === 'client-continue-game-over') {
+    onlyKeys(value, 'message', ['type', 'eventId', 'runId'])
+    return {
+      type: 'client-continue-game-over',
+      eventId: positiveInteger(value.eventId, 'eventId'),
+      runId: limitedString(value.runId, 'runId', 128),
+    }
+  }
   if (value.type === 'client-confirm-loadout') {
-    onlyKeys(value, 'message', ['type'])
-    return { type: 'client-confirm-loadout' }
+    onlyKeys(value, 'message', ['type', 'discipline', 'element'])
+    const discipline = limitedString(value.discipline, 'discipline', 32)
+    const element = limitedString(value.element, 'element', 32)
+    if (!isWizardDiscipline(discipline)) {
+      throw new GameProtocolError('discipline is not supported')
+    }
+    if (!isWizardElement(element)) {
+      throw new GameProtocolError('element is not supported')
+    }
+    return { type: 'client-confirm-loadout', discipline, element }
   }
   if (value.type === 'client-gameplay-pause') {
     const paused = boolean(value.paused, 'paused')
@@ -3876,9 +3905,11 @@ function gameRunLifecycle(value: unknown, field: string): GameRunLifecycleState 
   onlyKeys(source, field, [
     'eligiblePlayerIds',
     'gameOverEventId',
+    'gameOverExitKind',
     'gameOverExitTicks',
     'gameOverTicks',
     'lastCompletedRunId',
+    'loadoutReadyPlayerIds',
     'nextGameOverEventId',
     'phase',
     'runId',
@@ -3898,6 +3929,20 @@ function gameRunLifecycle(value: unknown, field: string): GameRunLifecycleState 
   if (eligiblePlayerIds.some((playerId, index) => (
     index > 0 && playerId <= eligiblePlayerIds[index - 1]!
   ))) throw new GameProtocolError(`${field}.eligiblePlayerIds must be unique and sorted`)
+  const loadoutReadyPlayerIds = limitedArray(
+    source.loadoutReadyPlayerIds,
+    `${field}.loadoutReadyPlayerIds`,
+    MAX_PLAYERS,
+  ).map((playerId, index) => validatedPlayerId(
+    playerId,
+    `${field}.loadoutReadyPlayerIds[${index}]`,
+  ))
+  if (loadoutReadyPlayerIds.some((playerId, index) => (
+    index > 0 && playerId <= loadoutReadyPlayerIds[index - 1]!
+  ))) throw new GameProtocolError(`${field}.loadoutReadyPlayerIds must be unique and sorted`)
+  if (loadoutReadyPlayerIds.some((playerId) => !eligiblePlayerIds.includes(playerId))) {
+    throw new GameProtocolError(`${field}.loadoutReadyPlayerIds must be eligible`)
+  }
   const runId = source.runId === null
     ? null
     : limitedString(source.runId, `${field}.runId`, 128)
@@ -3922,34 +3967,60 @@ function gameRunLifecycle(value: unknown, field: string): GameRunLifecycleState 
     throw new GameProtocolError(`${field}.gameOverEventId requires a completed run`)
   }
   const gameOverTicks = nonnegativeInteger(source.gameOverTicks, `${field}.gameOverTicks`)
+  const gameOverExitKind = source.gameOverExitKind === null
+    ? null
+    : limitedString(source.gameOverExitKind, `${field}.gameOverExitKind`, 32)
+  if (
+    gameOverExitKind !== null
+    && !(GAME_OVER_EXIT_KINDS as readonly string[]).includes(gameOverExitKind)
+  ) throw new GameProtocolError(`${field}.gameOverExitKind is not supported`)
   const gameOverExitTicks = source.gameOverExitTicks === null
     ? null
     : nonnegativeInteger(source.gameOverExitTicks, `${field}.gameOverExitTicks`)
-  if (phase !== 'game-over' && gameOverExitTicks !== null) {
-    throw new GameProtocolError(`${field}.gameOverExitTicks requires Game Over`)
+  if (phase !== 'game-over' && (gameOverExitTicks !== null || gameOverExitKind !== null)) {
+    throw new GameProtocolError(`${field}.Game Over exit requires Game Over`)
   }
-  if (
-    gameOverExitTicks !== null
-    && gameOverExitTicks > BONEYARD_GAME_OVER_EXIT_FADE_TICKS
-  ) throw new GameProtocolError(`${field}.gameOverExitTicks exceeds the native fade`)
+  if ((gameOverExitTicks === null) !== (gameOverExitKind === null)) {
+    throw new GameProtocolError(`${field}.gameOverExitKind does not match exit ticks`)
+  }
+  const maximumExitTicks = gameOverExitKind === 'input'
+    ? GAME_OVER_INPUT_EXIT_FADE_TICKS
+    : GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS
+  if (gameOverExitTicks !== null && gameOverExitTicks > maximumExitTicks) {
+    throw new GameProtocolError(`${field}.gameOverExitTicks exceeds its native fade`)
+  }
   if (
     phase === 'game-over'
     && gameOverExitTicks === null
-    && gameOverTicks >= BONEYARD_GAME_OVER_AUTOMATIC_ACCEPT_TICK
+    && gameOverTicks >= GAME_OVER_AUTOMATIC_ACCEPT_TICK
   ) throw new GameProtocolError(`${field}.gameOverExitTicks misses the native automatic fade`)
   if (gameOverExitTicks !== null && gameOverExitTicks < 1) {
     throw new GameProtocolError(`${field}.gameOverExitTicks must begin at one`)
   }
   if (
-    gameOverExitTicks !== null
-    && gameOverTicks !== BONEYARD_GAME_OVER_AUTOMATIC_ACCEPT_TICK + gameOverExitTicks - 1
-  ) throw new GameProtocolError(`${field}.gameOverExitTicks is out of step with Game Over`)
+    gameOverExitKind === 'automatic'
+    && gameOverExitTicks !== null
+    && gameOverTicks !== GAME_OVER_AUTOMATIC_ACCEPT_TICK + gameOverExitTicks - 1
+  ) throw new GameProtocolError(`${field}.automatic Game Over exit is out of step`)
+  if (
+    gameOverExitKind === 'input'
+    && gameOverExitTicks !== null
+    && gameOverTicks < GAME_OVER_INPUT_ACCEPT_TICK + gameOverExitTicks - 1
+  ) throw new GameProtocolError(`${field}.input Game Over exit precedes its gate`)
+  if (phase !== 'loadout' && loadoutReadyPlayerIds.length > 0) {
+    throw new GameProtocolError(`${field}.loadoutReadyPlayerIds require loadout`)
+  }
+  if (phase === 'loadout' && eligiblePlayerIds.length === 0) {
+    throw new GameProtocolError(`${field}.loadout requires eligible players`)
+  }
   return {
     eligiblePlayerIds,
     gameOverEventId,
+    gameOverExitKind: gameOverExitKind as GameOverExitKind | null,
     gameOverExitTicks,
     gameOverTicks,
     lastCompletedRunId,
+    loadoutReadyPlayerIds,
     nextGameOverEventId,
     phase: phase as GameRunPhase,
     runId,

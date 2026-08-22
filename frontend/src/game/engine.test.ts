@@ -137,6 +137,7 @@ function inertSession() {
     resumeToken: 'r',
     sessionKind: 'standalone' as const,
     confirmLoadout() {},
+    continueGameOver() {},
     executeLua: async () => ({ error: null, ok: true, output: [], values: [] }),
     destroy() {},
     denyPartyInvitation() {},

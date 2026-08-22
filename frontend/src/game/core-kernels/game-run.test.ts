@@ -2,9 +2,12 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
-  BONEYARD_GAME_OVER_AUTOMATIC_ACCEPT_TICK,
-  BONEYARD_GAME_OVER_EXIT_FADE_TICKS,
+  GAME_OVER_AUTOMATIC_ACCEPT_TICK,
+  GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS,
+  GAME_OVER_INPUT_ACCEPT_TICK,
+  GAME_OVER_INPUT_EXIT_FADE_TICKS,
   confirmPostRunLoadout,
+  continueGameOver,
   createGameRunLifecycle,
   startGameRun,
   stepGameRunLifecycle,
@@ -22,48 +25,103 @@ test('all eligible participants dead emits one run-scoped terminal event', () =>
   const terminal = stepGameRunLifecycle(run, new Set())
   assert.equal(terminal.phase, 'game-over')
   assert.equal(terminal.gameOverEventId, 1)
+  assert.equal(terminal.gameOverExitKind, null)
+  assert.deepEqual(terminal.loadoutReadyPlayerIds, [])
   const later = stepGameRunLifecycle(terminal, new Set())
   assert.equal(later.gameOverEventId, 1)
   assert.equal(later.gameOverTicks, 1)
 })
 
-test('Boneyard Game Over accepts itself at tick 1000 and owns the exact exit fade', () => {
+test('normal Game Over accepts run-scoped input at tick 500 and owns the 20-tick exit', () => {
   let state = stepGameRunLifecycle(
     startGameRun(createGameRunLifecycle(), 'run-a', ['a']),
     new Set(),
   )
-  for (let tick = 1; tick < BONEYARD_GAME_OVER_AUTOMATIC_ACCEPT_TICK; tick += 1) {
+  for (let tick = 1; tick < GAME_OVER_INPUT_ACCEPT_TICK; tick += 1) {
     state = stepGameRunLifecycle(state, new Set())
     assert.equal(state.gameOverTicks, tick)
-    assert.equal(state.gameOverExitTicks, null)
   }
+  assert.equal(continueGameOver(state, 'run-a', 1), null)
   state = stepGameRunLifecycle(state, new Set())
-  assert.equal(state.phase, 'game-over')
-  assert.equal(state.gameOverTicks, BONEYARD_GAME_OVER_AUTOMATIC_ACCEPT_TICK)
+  assert.equal(state.gameOverTicks, GAME_OVER_INPUT_ACCEPT_TICK)
+  assert.equal(continueGameOver(state, 'wrong-run', 1), null)
+  assert.equal(continueGameOver(state, 'run-a', 2), null)
+
+  const continuing = continueGameOver(state, 'run-a', 1)
+  assert.ok(continuing)
+  state = continuing
+  assert.equal(state.gameOverExitKind, 'input')
   assert.equal(state.gameOverExitTicks, 1)
-  assert.equal(state.lastCompletedRunId, null)
-  for (let exitTick = 2; exitTick <= BONEYARD_GAME_OVER_EXIT_FADE_TICKS; exitTick += 1) {
+  assert.equal(continueGameOver(state, 'run-a', 1), null)
+
+  for (let exitTick = 2; exitTick <= GAME_OVER_INPUT_EXIT_FADE_TICKS; exitTick += 1) {
     state = stepGameRunLifecycle(state, new Set())
     assert.equal(state.gameOverExitTicks, exitTick)
-    assert.equal(
-      state.gameOverTicks,
-      BONEYARD_GAME_OVER_AUTOMATIC_ACCEPT_TICK + exitTick - 1,
-    )
   }
   assert.equal(state.phase, 'game-over')
-  assert.equal(state.gameOverExitTicks, BONEYARD_GAME_OVER_EXIT_FADE_TICKS)
   const loadout = stepGameRunLifecycle(state, new Set())
   assert.equal(loadout.phase, 'loadout')
   assert.equal(loadout.lastCompletedRunId, 'run-a')
-  assert.equal(confirmPostRunLoadout(loadout)?.phase, 'hub')
+  assert.deepEqual(loadout.eligiblePlayerIds, ['a'])
 })
 
-test('participant synchronization is deterministic and active-run-only', () => {
+test('unattended Game Over accepts at Riff completion and owns the 250-tick exit', () => {
+  let state = stepGameRunLifecycle(
+    startGameRun(createGameRunLifecycle(), 'run-a', ['a']),
+    new Set(),
+  )
+  for (let tick = 1; tick < GAME_OVER_AUTOMATIC_ACCEPT_TICK; tick += 1) {
+    state = stepGameRunLifecycle(state, new Set())
+    assert.equal(state.gameOverTicks, tick)
+    assert.equal(state.gameOverExitTicks, null)
+    assert.equal(state.gameOverExitKind, null)
+  }
+  state = stepGameRunLifecycle(state, new Set())
+  assert.equal(state.gameOverTicks, GAME_OVER_AUTOMATIC_ACCEPT_TICK)
+  assert.equal(state.gameOverExitKind, 'automatic')
+  assert.equal(state.gameOverExitTicks, 1)
+
+  for (let exitTick = 2; exitTick <= GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS; exitTick += 1) {
+    state = stepGameRunLifecycle(state, new Set())
+    assert.equal(state.gameOverExitTicks, exitTick)
+  }
+  assert.equal(state.phase, 'game-over')
+  assert.equal(stepGameRunLifecycle(state, new Set()).phase, 'loadout')
+})
+
+test('post-run loadout readiness is participant-owned and completes only when all remain ready', () => {
+  const loadout = {
+    ...createGameRunLifecycle(),
+    eligiblePlayerIds: ['a', 'b'],
+    gameOverEventId: 1,
+    lastCompletedRunId: 'run-a',
+    nextGameOverEventId: 2,
+    phase: 'loadout' as const,
+  }
+  const first = confirmPostRunLoadout(loadout, 'a')
+  assert.ok(first)
+  assert.equal(first.phase, 'loadout')
+  assert.deepEqual(first.loadoutReadyPlayerIds, ['a'])
+  assert.equal(confirmPostRunLoadout(first, 'a'), null)
+  assert.equal(confirmPostRunLoadout(first, 'missing'), null)
+
+  const hub = confirmPostRunLoadout(first, 'b')
+  assert.ok(hub)
+  assert.equal(hub.phase, 'hub')
+  assert.deepEqual(hub.eligiblePlayerIds, [])
+  assert.deepEqual(hub.loadoutReadyPlayerIds, [])
+
+  const departed = synchronizeGameRunParticipants(first, ['a'])
+  assert.equal(departed.phase, 'hub')
+})
+
+test('participant synchronization follows active, Game Over, and loadout membership', () => {
   const run = startGameRun(createGameRunLifecycle(), 'run-a', ['a'])
   const joined = synchronizeGameRunParticipants(run, ['b', 'a', 'b'])
   assert.deepEqual(joined.eligiblePlayerIds, ['a', 'b'])
   const terminal = stepGameRunLifecycle(joined, new Set())
-  assert.equal(synchronizeGameRunParticipants(terminal, ['c']), terminal)
+  const departed = synchronizeGameRunParticipants(terminal, ['b'])
+  assert.deepEqual(departed.eligiblePlayerIds, ['b'])
 })
 
 test('a second run receives a fresh terminal identity without losing session lineage', () => {
@@ -71,15 +129,15 @@ test('a second run receives a fresh terminal identity without losing session lin
     startGameRun(createGameRunLifecycle(), 'run-a', ['a']),
     new Set(),
   )
-  for (let tick = 0; tick < BONEYARD_GAME_OVER_AUTOMATIC_ACCEPT_TICK; tick += 1) {
+  for (let tick = 0; tick < GAME_OVER_AUTOMATIC_ACCEPT_TICK; tick += 1) {
     state = stepGameRunLifecycle(state, new Set())
   }
-  for (let tick = 1; tick <= BONEYARD_GAME_OVER_EXIT_FADE_TICKS; tick += 1) {
+  for (let tick = 1; tick <= GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS; tick += 1) {
     state = stepGameRunLifecycle(state, new Set())
   }
-  const hub = confirmPostRunLoadout(state)
+  const hub = confirmPostRunLoadout(state, 'a')
   assert.ok(hub)
-  const second = stepGameRunLifecycle(startGameRun(hub!, 'run-b', ['a']), new Set())
+  const second = stepGameRunLifecycle(startGameRun(hub, 'run-b', ['a']), new Set())
   assert.equal(second.gameOverEventId, 2)
   assert.equal(second.runId, 'run-b')
 })

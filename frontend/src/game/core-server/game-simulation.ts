@@ -24,6 +24,7 @@ import {
 } from '../core-kernels/hub-regions.ts'
 import {
   confirmPostRunLoadout,
+  continueGameOver,
   createGameRunLifecycle,
   startGameRun,
   stepGameRunLifecycle,
@@ -221,6 +222,7 @@ import {
   stepPlayerEntityOverlayLightingTick,
   tryDebitPlayerEntityMana,
   replacePlayerCharacter,
+  replacePlayerLoadout,
   replacePlayerCharacterRecords,
   replacePlayerEconomy,
   type PlayerEntityStore,
@@ -646,8 +648,35 @@ function enterPostRunLoadout(
 
 export function confirmGameSimulationLoadout(
   state: GameSimulationState,
+  playerId: PlayerId,
+  selection: Pick<PlayerCharacterConfig, 'discipline' | 'element'>,
 ): GameSimulationState | null {
-  const run = confirmPostRunLoadout(state.run)
+  const player = playerCharacterAt(state.playerEntities, playerId)
+  if (!player) return null
+  const run = confirmPostRunLoadout(state.run, playerId)
+  if (!run) return null
+  const config = {
+    ...player.config,
+    discipline: selection.discipline,
+    element: selection.element,
+  }
+  return {
+    ...state,
+    playerEntities: replacePlayerLoadout(
+      state.playerEntities,
+      playerId,
+      createPlayerCharacter(config, player.position),
+    ),
+    run,
+  }
+}
+
+export function continueGameSimulationOver(
+  state: GameSimulationState,
+  runId: string,
+  eventId: number,
+): GameSimulationState | null {
+  const run = continueGameOver(state.run, runId, eventId)
   return run ? { ...state, run } : null
 }
 

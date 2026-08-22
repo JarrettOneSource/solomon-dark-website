@@ -7,7 +7,7 @@ import {
 } from 'react'
 
 import { worldToScreen, type Camera } from '../editor/render.ts'
-import { boneyard } from '../lib/assets.ts'
+import { boneyard, nativeGameOver } from '../lib/assets.ts'
 import {
   boneyardDigIndicatorLayout,
   SOLOMON_DIG_HOTKEY_CODE,
@@ -35,6 +35,7 @@ import {
   type GameSettings,
 } from './game-settings.ts'
 import { loadGameImage } from './game-assets.ts'
+import { gameOverAudioEvents } from './game-over-audio.ts'
 import {
   nativeBoneyardHitPointGain,
   nativeBoneyardPointGain,
@@ -112,6 +113,7 @@ interface BoneyardSceneProps {
   onInput: (input: PlayerCharacterInput) => void
   onLoadingError: () => void
   onHubAction: (action: HubInventoryAction) => void
+  onContinueGameOver: (runId: string, eventId: number) => void
   onInventoryOpenChange: (open: boolean) => void
   onOpenSkills: () => void
   onPauseRequest: () => void
@@ -154,6 +156,7 @@ export default function BoneyardScene({
   onInput,
   onLoadingError,
   onHubAction,
+  onContinueGameOver,
   onInventoryOpenChange,
   onOpenSkills,
   onPauseRequest,
@@ -231,12 +234,15 @@ export default function BoneyardScene({
       setInventorySurface({ kind: 'inventory' })
     }
   }, [inputBlocked, inventoryRequestSequence, run.phase])
-  const deathEpochRef = useRef(
-    boneyardInitialSnapshot.players[playerId]?.progression.deathEpoch ?? 0,
-  )
+  const previousAudioRunRef = useRef(boneyardInitialSnapshot.run)
   const [viewport, setViewport] = useState<GameViewportLayout>(() => (
     gameViewportLayout(1600, 900)
   ))
+  const [gameOverAnchor, setGameOverAnchor] = useState({
+    x: 800,
+    y: 450,
+    zoom: BONEYARD_CAMERA_ZOOM,
+  })
   const viewportRef = useRef(viewport)
   const [digIndicatorRunId, setDigIndicatorRunId] = useState<string | null>(null)
   const dig = loaded.scene.solomonDig
@@ -278,9 +284,11 @@ export default function BoneyardScene({
         ? current
         : snapshot.run
     ))
-    const deathEpoch = snapshot.players[playerId]?.progression.deathEpoch ?? 0
-    if (deathEpoch > deathEpochRef.current) audio.playStream('death-guitar')
-    deathEpochRef.current = deathEpoch
+    for (const cue of gameOverAudioEvents(previousAudioRunRef.current, snapshot.run)) {
+      if (cue === 'solomon-laugh-big') audio.stopStreams(BONEYARD_SOLOMON_VOICE_CUES)
+      audio.playStream(cue)
+    }
+    previousAudioRunRef.current = snapshot.run
   }), [audio, lootEventSynchronizer, lootMessagePresentation, playerId, subscribe])
 
   useEffect(() => subscribeEnemyEvent((event) => {
@@ -531,6 +539,9 @@ export default function BoneyardScene({
       || loaded.scene.environmentMode === 2
       ? loadBoneyardEnvironmentLightPresentation()
       : Promise.resolve(null)
+    const gameOverPresentation = Promise.all(
+      Object.values(nativeGameOver).map(loadGameImage),
+    )
     const rendererPromise = createBoneyardWorldRenderer({
       boneyard: loaded,
       initialSnapshot: boneyardInitialSnapshot,
@@ -543,6 +554,7 @@ export default function BoneyardScene({
     void Promise.all([
       rendererPromise,
       environmentLightPresentation,
+      gameOverPresentation,
     ]).then(([renderer, initialEnvironmentLight]) => {
       if (cancelled) {
         renderer.destroy()
@@ -583,6 +595,22 @@ export default function BoneyardScene({
               ? current
               : snapshot.run
           ))
+          const player = snapshot.players[playerId]
+          if (player) {
+            const anchor = worldToScreen(
+              player.position,
+              camera,
+              viewportRef.current.width,
+              viewportRef.current.height,
+            )
+            setGameOverAnchor((current) => (
+              current.x === anchor.x
+              && current.y === anchor.y
+              && current.zoom === camera.zoom
+                ? current
+                : { ...anchor, zoom: camera.zoom }
+            ))
+          }
         }
         if (snapshot.world.kind === 'boneyard' && snapshot.world.encounter) {
           if (lastVoiceEventRef.current.runId !== snapshot.world.runId) {
@@ -629,7 +657,10 @@ export default function BoneyardScene({
         if (isBoneyardGameSnapshot(snapshot)) {
           const weatherRequest = weatherAudio.update(
             loaded.scene.environmentMode,
-            nativeBoneyardWeatherArenaFade(snapshot.run.gameOverExitTicks),
+            nativeBoneyardWeatherArenaFade(
+              snapshot.run.gameOverExitTicks,
+              snapshot.run.gameOverExitKind,
+            ),
           )
           const localPlayer = snapshot.players[playerId]
           const requests = enemyAmbientAudio.update(snapshot, (position) => (
@@ -779,132 +810,142 @@ export default function BoneyardScene({
           />
         ) : null}
 
-        <div className="boneyard-loot-messages" aria-live="polite" aria-atomic="false">
-          {lootMessages.map((message) => (
-            <span
-              key={message.eventId}
-              aria-label={message.text}
-              style={{
-                opacity: message.alpha,
-                transform: `scale(${message.scale})`,
-              }}
-            >
-              <NativeLootBitmapText text={message.text} tint={message.tint} />
-            </span>
-          ))}
-        </div>
+        {run.phase !== 'game-over' ? (
+          <>
+            <div className="boneyard-loot-messages" aria-live="polite" aria-atomic="false">
+              {lootMessages.map((message) => (
+                <span
+                  key={message.eventId}
+                  aria-label={message.text}
+                  style={{
+                    opacity: message.alpha,
+                    transform: `scale(${message.scale})`,
+                  }}
+                >
+                  <NativeLootBitmapText text={message.text} tint={message.tint} />
+                </span>
+              ))}
+            </div>
 
-        <GameHud
-          accountUsername={accountUsername}
-          controls={settings.controls}
-          getPingMs={getPingMs}
-          initialSnapshot={boneyardInitialSnapshot}
-          mode="run"
-          onInventoryClick={() => {
-            if (!inputBlocked && run.phase === 'active') {
-              setInventorySurface({ kind: 'inventory' })
-            }
-          }}
-          onPotionClick={(itemId) => {
-            if (!inputBlocked && run.phase === 'active') {
-              onHubAction({ type: 'consume', itemId })
-            }
-          }}
-          onQuickbarInput={(slot, pressed) => {
-            const input = inputRef.current
-            if (!input) return
-            if (!pressed) {
-              input.setTouchQuickbar(slot, false)
-              return
-            }
-            const player = samplePresentation().players[playerId]
-            input.setTouchQuickbar(
-              slot,
-              true,
-              player ? actorHeadingVector(player.headingIndex) : undefined,
-            )
-          }}
-          onSkillsClick={() => {
-            if (!inputBlocked && run.phase === 'active') {
-              setInventorySurface(null)
-              onOpenSkills()
-            }
-          }}
-          playerId={playerId}
-          progression={progression}
-          subscribePing={subscribePing}
-          subscribeSnapshot={subscribe}
-          uiScale={uiScale}
-          viewport={viewport}
-        />
-        <HubInventoryUi
-          audio={audio}
-          config={boneyardInitialSnapshot.players[playerId]!.config}
-          disabled={inputBlocked || run.phase !== 'active'}
-          economy={economy}
-          inventoryKeyCode={settings.controls.openInventory}
-          menuKeyCode={settings.controls.openMenu}
-          modAssets={modAssets}
-          nativeUiStageStyle={nativeUiStageStyle}
-          onAction={onHubAction}
-          onSurfaceChange={setInventorySurface}
-          overlayRoot={sceneRef}
-          playerPosition={playerPosition}
-          progression={progression}
-          region="courtyard"
-          surface={inventorySurface}
-          tradersEnabled={false}
-          transitionActive={false}
-        />
-        {spectatorStatus ? (
-          <div
-            className="boneyard-spectator-status"
-            data-run-id={spectatorStatus.runId}
-            data-target-player-id={spectatorStatus.targetPlayerId ?? ''}
-            role="status"
-            aria-atomic="true"
-            aria-label={spectatorStatus.accessibleLabel}
-            aria-live="polite"
-          >
-            <span>{spectatorStatus.title}</span>
-            {spectatorStatus.instruction ? (
-              <>
-                <span className="boneyard-spectator-status-divider" aria-hidden>|</span>
-                <span>{spectatorStatus.instruction}</span>
-              </>
+            <GameHud
+              accountUsername={accountUsername}
+              controls={settings.controls}
+              getPingMs={getPingMs}
+              initialSnapshot={boneyardInitialSnapshot}
+              mode="run"
+              onInventoryClick={() => {
+                if (!inputBlocked && run.phase === 'active') {
+                  setInventorySurface({ kind: 'inventory' })
+                }
+              }}
+              onPotionClick={(itemId) => {
+                if (!inputBlocked && run.phase === 'active') {
+                  onHubAction({ type: 'consume', itemId })
+                }
+              }}
+              onQuickbarInput={(slot, pressed) => {
+                const input = inputRef.current
+                if (!input) return
+                if (!pressed) {
+                  input.setTouchQuickbar(slot, false)
+                  return
+                }
+                const player = samplePresentation().players[playerId]
+                input.setTouchQuickbar(
+                  slot,
+                  true,
+                  player ? actorHeadingVector(player.headingIndex) : undefined,
+                )
+              }}
+              onSkillsClick={() => {
+                if (!inputBlocked && run.phase === 'active') {
+                  setInventorySurface(null)
+                  onOpenSkills()
+                }
+              }}
+              playerId={playerId}
+              progression={progression}
+              subscribePing={subscribePing}
+              subscribeSnapshot={subscribe}
+              uiScale={uiScale}
+              viewport={viewport}
+            />
+            <HubInventoryUi
+              audio={audio}
+              config={boneyardInitialSnapshot.players[playerId]!.config}
+              disabled={inputBlocked || run.phase !== 'active'}
+              economy={economy}
+              inventoryKeyCode={settings.controls.openInventory}
+              menuKeyCode={settings.controls.openMenu}
+              modAssets={modAssets}
+              nativeUiStageStyle={nativeUiStageStyle}
+              onAction={onHubAction}
+              onSurfaceChange={setInventorySurface}
+              overlayRoot={sceneRef}
+              playerPosition={playerPosition}
+              progression={progression}
+              region="courtyard"
+              surface={inventorySurface}
+              tradersEnabled={false}
+              transitionActive={false}
+            />
+            {spectatorStatus ? (
+              <div
+                className="boneyard-spectator-status"
+                data-run-id={spectatorStatus.runId}
+                data-target-player-id={spectatorStatus.targetPlayerId ?? ''}
+                role="status"
+                aria-atomic="true"
+                aria-label={spectatorStatus.accessibleLabel}
+                aria-live="polite"
+              >
+                <span>{spectatorStatus.title}</span>
+                {spectatorStatus.instruction ? (
+                  <>
+                    <span className="boneyard-spectator-status-divider" aria-hidden>|</span>
+                    <span>{spectatorStatus.instruction}</span>
+                  </>
+                ) : null}
+              </div>
             ) : null}
-          </div>
+            {digIndicatorVisible ? (
+              <div
+                ref={digIndicatorRef}
+                className="boneyard-dig-indicator"
+                data-hotkey="H"
+                data-ready="false"
+                role="img"
+                aria-label="Direction to Solomon Dig"
+              >
+                <svg viewBox="-40 -28 80 56" aria-hidden>
+                  <path d="M -35 -9 H 8 V -23 L 36 0 8 23 V 9 H -35 Z" />
+                </svg>
+              </div>
+            ) : null}
+            <TouchJoystick
+              lane="movement"
+              onInput={(movement) => inputRef.current?.setTouch(movement)}
+              uiScale={uiScale}
+            />
+            <TouchJoystick
+              lane="primary"
+              onInput={(direction) => inputRef.current?.setTouchPrimary(direction)}
+              uiScale={uiScale}
+            />
+          </>
         ) : null}
-        {digIndicatorVisible ? (
-          <div
-            ref={digIndicatorRef}
-            className="boneyard-dig-indicator"
-            data-hotkey="H"
-            data-ready="false"
-            role="img"
-            aria-label="Direction to Solomon Dig"
-          >
-            <svg viewBox="-40 -28 80 56" aria-hidden>
-              <path d="M -35 -9 H 8 V -23 L 36 0 8 23 V 9 H -35 Z" />
-            </svg>
-          </div>
-        ) : null}
-        <TouchJoystick
-          lane="movement"
-          onInput={(movement) => inputRef.current?.setTouch(movement)}
-          uiScale={uiScale}
-        />
-        <TouchJoystick
-          lane="primary"
-          onInput={(direction) => inputRef.current?.setTouchPrimary(direction)}
-          uiScale={uiScale}
-        />
 
         {run.phase === 'game-over' && run.runId ? (
           <GameOverOverlay
+            anchor={gameOverAnchor}
             eventId={run.gameOverEventId}
+            gameOverExitKind={run.gameOverExitKind}
             gameOverExitTicks={run.gameOverExitTicks}
             gameOverTicks={run.gameOverTicks}
+            onContinue={(eventId) => {
+              audio.playSound('click')
+              onContinueGameOver(run.runId!, eventId)
+            }}
             runId={run.runId}
           />
         ) : null}
