@@ -30941,15 +30941,18 @@ class/content catalogs, so the Mod Loader documents remain unchanged.
   supported hosts while the decoded page is identical. The generated TypeScript
   manifest remains byte-exact. Focused renderer/atlas tests pass `27/27` on
   both hosts.
-- The exact Apple-arm64 tree at commits `05c73e43` plus `35619c77` and
-  `d4703661` passes `./scripts/validate.sh`: 15 Website/backend contracts,
-  frontend lint and game boundaries, 1,289 broad Boneyard/runtime tests, 21
+- The exact Apple-arm64 tree `b5be5682`, rebased on `origin/main` `956cefce`,
+  passes `./scripts/validate.sh`: 15 Website/backend contracts, frontend lint
+  and game boundaries, 1,291 broad Boneyard/runtime tests, 21
   inventory/tooltip tests, desktop tests, production build, game bundle budget,
   and media policy. The only output is the repository's eight existing Fast
-  Refresh warnings and Vite's non-fatal large-chunk advisory. The corrected
-  mobile journey also passes Title, Hub input/lifecycle, Hub combat exclusion,
-  Boneyard transition teardown, simultaneous Boneyard movement/casting,
-  settings scaling, portrait handling, and empty browser error arrays.
+  Refresh warnings and Vite's non-fatal large-chunk advisory. A saturated
+  concurrent pass timed out the existing shared-Hub chat test; that test passed
+  unchanged in `0.91 s` in isolation and the load-controlled canonical rerun
+  passed, so no timeout or production behavior was changed. The corrected mobile
+  journey also passes Title, Hub input/lifecycle, Hub combat exclusion, Boneyard
+  transition teardown, simultaneous Boneyard movement/casting, settings scaling,
+  portrait handling, and empty browser error arrays.
 - Physical fixed Title (`896x364`, DPR 2) held `59.92` FPS for `71.01 s` with
   frame p95/p99 `17/18 ms`, `56 ms` maximum, zero gaps above `100 ms`, and
   empty error/Long Task arrays. WebContent was `219 MB`; WebKit GPU was
