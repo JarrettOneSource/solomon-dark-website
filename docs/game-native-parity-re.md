@@ -30941,9 +30941,9 @@ class/content catalogs, so the Mod Loader documents remain unchanged.
   supported hosts while the decoded page is identical. The generated TypeScript
   manifest remains byte-exact. Focused renderer/atlas tests pass `28/28` on
   both hosts.
-- The exact Apple-arm64 tree `39717100`, rebased on `origin/main` `b899b734`,
+- The exact Apple-arm64 tree `2d07a872`, rebased on `origin/main` `43a0454a`,
   passes `./scripts/validate.sh`: 15 Website/backend contracts, frontend lint
-  and game boundaries, 1,297 broad Boneyard/runtime tests, 21
+  and game boundaries, 1,305 broad Boneyard/runtime tests, 21
   inventory/tooltip tests, desktop tests, production build, game bundle budget,
   and media policy. The only output is the repository's eight existing Fast
   Refresh warnings and Vite's non-fatal large-chunk advisory. A saturated
