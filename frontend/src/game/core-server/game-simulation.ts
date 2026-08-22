@@ -502,19 +502,16 @@ export function mergeGameSimulationPlayersIntoHub(
     if (playerEntityIndex(playerEntities, playerId) >= 0) {
       throw new Error(`Hub already contains player ${playerId}`)
     }
-    const config = source.playerEntities.configs[
-      playerEntityIndex(source.playerEntities, playerId)
-    ]!
-    const character = createPlayerCharacter(config, hubSpawnPoint())
+    const participant = source.world.participants[playerId]
+    if (!participant) throw new Error(`source Hub participant ${playerId} is missing`)
     playerEntities = importPlayerEntity(
       playerEntities,
       source.playerEntities,
       playerId,
       playerId,
       lightProviderOrder.register('actor'),
-      character,
     )
-    world = addHubParticipant(world, playerId)
+    world = addHubParticipant(world, playerId, participant)
   }
   return {
     ...target,

@@ -396,6 +396,12 @@ three channels.
   simulation and loaded-Boneyard state before issuing the welcome checkpoint.
   New Game replaces slot zero only after the new authoritative host produces
   its first valid checkpoint.
+- A resumed Hub owner enters the resident shared Hub by importing the saved
+  character projection and semantic participant record. Position, velocity,
+  facing/cast state, region, and an in-flight region transition survive; entity
+  ID, light registration, and `HubWorldRuntime` remain target-host owned. Fresh
+  admission still constructs at Courtyard spawn, while post-run confirmation
+  intentionally resets its source to spawn before using the same merge.
 - The first authoritative transition from an active run to Game Over emits a
   delete checkpoint. The adapter serializes that delete after prior writes, so
   the completed run cannot be resumed or recreated by an older in-flight

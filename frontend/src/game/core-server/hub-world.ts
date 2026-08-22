@@ -149,13 +149,22 @@ export function createHubWorld(
 export function addHubParticipant(
   world: HubWorldState,
   playerId: string,
+  participant: HubParticipantState = createHubParticipantState(),
 ): HubWorldState {
   if (world.participants[playerId]) return world
   return {
     ...world,
     participants: {
       ...world.participants,
-      [playerId]: createHubParticipantState(),
+      [playerId]: {
+        region: participant.region,
+        transition: participant.transition === null
+          ? null
+          : {
+              ...participant.transition,
+              scriptedTarget: { ...participant.transition.scriptedTarget },
+            },
+      },
     },
   }
 }

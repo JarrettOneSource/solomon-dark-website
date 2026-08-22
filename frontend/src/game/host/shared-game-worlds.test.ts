@@ -2,6 +2,11 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
+import { createGameSimulation } from '../core-server/game-simulation.ts'
+import {
+  playerCharacterAt,
+  replacePlayerCharacter,
+} from '../core-server/player-entity-store.ts'
 import {
   acceptSharedPartyInvitation,
   addSharedHubPlayer,
@@ -9,10 +14,71 @@ import {
   denySharedPartyInvitation,
   confirmSharedPartyLoadout,
   inviteSharedPartyPlayer,
+  restoreSharedGamePlayer,
   sharedGameStateForPlayer,
   startSharedPartyRun,
   stepSharedGameWorlds,
 } from './shared-game-worlds.ts'
+
+test('shared Hub restore preserves the saved character and participant state', () => {
+  const playerId = 'saved-owner'
+  let saved = createGameSimulation({ [playerId]: character('Aurelia') })
+  const player = playerCharacterAt(saved.playerEntities, playerId)
+  assert.ok(player)
+  saved = {
+    ...saved,
+    playerEntities: replacePlayerCharacter(saved.playerEntities, playerId, {
+      ...player,
+      position: { x: 1_234, y: 567 },
+      velocity: { x: 4, y: -3 },
+    }),
+  }
+  if (saved.world.kind !== 'hub') assert.fail('expected saved Hub world')
+  const savedParticipant = {
+    region: 'library' as const,
+    transition: {
+      alpha: 0.4,
+      destination: 'courtyard' as const,
+      phase: 'outgoing' as const,
+      scriptedSpeed: 1,
+      scriptedTarget: { x: 445, y: 1_320 },
+      sourceRegion: 'library' as const,
+    },
+  }
+  saved = {
+    ...saved,
+    world: {
+      ...saved.world,
+      participants: {
+        ...saved.world.participants,
+        [playerId]: savedParticipant,
+      },
+    },
+  }
+
+  const worlds = restoreSharedGamePlayer(createSharedGameWorlds(), saved, null, playerId)
+  const restored = sharedGameStateForPlayer(worlds, playerId)
+  assert.ok(restored)
+  assert.deepEqual(
+    playerCharacterAt(restored.playerEntities, playerId)?.position,
+    { x: 1_234, y: 567 },
+  )
+  assert.deepEqual(
+    playerCharacterAt(restored.playerEntities, playerId)?.velocity,
+    { x: 4, y: -3 },
+  )
+  assert.equal(restored.world.kind, 'hub')
+  if (restored.world.kind !== 'hub') assert.fail('expected restored Hub world')
+  assert.deepEqual(
+    restored.world.participants[playerId],
+    savedParticipant,
+  )
+  assert.notEqual(restored.world.participants[playerId], savedParticipant)
+  assert.notEqual(
+    restored.world.participants[playerId]?.transition?.scriptedTarget,
+    savedParticipant.transition.scriptedTarget,
+  )
+})
 
 test('shared Hub denial removes the recipient invitation without moving either party', () => {
   let worlds = createSharedGameWorlds()
