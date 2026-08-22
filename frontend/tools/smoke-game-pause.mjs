@@ -128,7 +128,13 @@ try {
     name: 'Weapon, Staff',
   }).first().waitFor()
   await page.screenshot({ path: screenshots.largeHubInventory })
-  await largeHubInventory.getByRole('button', { name: 'Done' }).click()
+  const largeHubInventoryHeldTick = host.state().tick
+  await page.keyboard.press('i')
+  await largeHubInventory.waitFor({ state: 'detached' })
+  await waitForHost(
+    () => host.state().tick > largeHubInventoryHeldTick,
+    'large Hub inventory pause release',
+  )
 
   await pressPause(page, '.hub-scene')
   const largeHubPause = page.locator(
@@ -462,7 +468,13 @@ try {
     largeBoneyardInventory,
     largeBoneyardInventory.locator('.hub-inventory-native-canvas'),
   )
-  await largeBoneyardInventory.getByRole('button', { name: 'Done' }).click()
+  const largeBoneyardInventoryHeldTick = host.state().tick
+  await page.keyboard.press('i')
+  await largeBoneyardInventory.waitFor({ state: 'detached' })
+  await waitForHost(
+    () => host.state().tick > largeBoneyardInventoryHeldTick,
+    'large Boneyard inventory pause release',
+  )
 
   const peerSawBoneyardPause = nextRawMessage(peer.socket, (message) => (
     message.type === 'server-gameplay-pause' && message.pause?.ownerPlayerId === host.hostPlayerId()

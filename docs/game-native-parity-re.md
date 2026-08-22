@@ -28890,7 +28890,7 @@ its multiplayer authority or fixed-tick suspension.
 | Luthacus service/storage plus companion InventoryScreen | same service/companion owner; storage branch | `exact-ported` | shared projection and scaled drag/drop coordinates |
 | Shlorio dowsing service plus companion InventoryScreen and message box | same service owner; dowsing/message branches | `exact-ported` | shared projection, notice and action geometry |
 | all four trader dialogue surfaces | InventoryScreen modal stage shared by `HubInventoryUi` | `exact-ported` | shared projection and unchanged dialogue lifecycle |
-| inventory selection, double-activation, drag, equipment aliases, Done, and notices | native InventoryScreen semantic owners already catalogued in the 2026-08-15/16 entries | `exact-ported` | pointer coordinates invert the exact transformed native stage; focused tests retain every action branch |
+| inventory selection, double-activation, drag, equipment aliases, configured `I`/Escape close, and notices | native InventoryScreen semantic owners already catalogued in the 2026-08-15/16 entries | `exact-ported` | pointer coordinates invert the exact transformed native stage; focused tests retain every action branch and no false standalone `Done` control returns |
 | owner Pause Menu in Hub | `0x0058EA50`, `0x005ABF10`, `0x005C5A00` | `exact-ported` for fixed projection; explicit product deviation for second-Escape Resume | full-display dim, transformed chrome/hit plane, frozen tick, toggle release |
 | owner Pause Menu in active Boneyard | same pause owner | `exact-ported` for fixed projection; explicit product deviation for second-Escape Resume | same geometry, authority, freeze, and release in run scene |
 | non-owner pause waiting surface in Hub/Boneyard | Website multiplayer extension | `exact-ported` | full-display dim/projection; Escape cannot release owner |
@@ -28979,8 +28979,12 @@ No member is blocked by the browser platform.
   remain unchanged.
 - Browser journey: at 1920 by 1200 and 2560 by 1080, open Hub and Boneyard
   Inventory and Pause; assert full display coverage, exact limiting-axis stage
-  scale/centering, identical canvas/action transforms, scaled drag/drop, frozen
-  tick, second-Escape release, no catch-up, and zero page/console errors.
+  scale/centering, identical canvas/action transforms, scaled drag/drop,
+  configured-key standalone Inventory close, frozen tick, second-Escape
+  release, no catch-up, and zero page/console errors. The journey must not
+  reintroduce a semantic `Done` action for standalone Inventory; `Done` remains
+  valid only in the native dialogue/service/settings owners that actually have
+  one.
 - Stock comparison: at 1600 by 900, screenshots and action rectangles remain
   pixel/geometry identical to the checked-in Inventory and Pause witnesses.
 - Run the canonical Windows-native `./scripts/validate.sh` on the exact final
@@ -29033,7 +29037,36 @@ No member is blocked by the browser platform.
   `f81481355a82717064831a8f3199b8df88f8e4d5ca900cfb9fed9a619fd3c4cd`
   under `C:/Users/User/AppData/Local/Temp`. The unchanged 1600 by 900 pause
   member/action journey and exact pressed-row captures also passed.
+- The publication integration onto Website `origin/main` `762b6067` retained
+  that complete UI implementation plus the independently published chat
+  entry. The only cherry-pick conflict was the append-only parity ledger; both
+  entries are preserved whole. The integration audit found that the new pause
+  smoke had accidentally asked standalone Hub and Boneyard Inventory for the
+  already-refuted semantic `Done` control. The product correctly exposed no
+  such action. Both smoke branches now close through configured `I`, matching
+  the settled 2026-08-21 unforge/Inventory contract, and wait for the frozen
+  authority tick to advance before opening the next Pause owner. That explicit
+  release boundary removes a fast-machine inter-owner race without a guessed
+  delay; valid Settings `Done` remains unchanged. No product runtime code
+  changed in this correction.
+- The exact combined Linux tree passed the current canonical gate: `15/15`
+  backend/contracts, `4/4` library, `43/43` loot, `226/226` prerequisite,
+  `1274/1274` broad game, `29/29` party/chat, `11/11` level-up/HUD, `7/7`
+  diagnostics, `17/17` Hall, `17/17` Hub UI, `5/5` desktop, production build,
+  media policy, and bundle budget. `Game-DgqCErtD.js` was `393,218` raw /
+  `109,998` gzip bytes.
+- The corrected local Chrome acceptance then passed the complete Hub and
+  Boneyard journey with empty page/console errors. It retained the exact
+  1920-by-1200 and 2560-by-1080 projection assertions, scaled Staff
+  round-trip, full-display pause dim, owner second-Escape resume, modifier and
+  waiting-peer exclusion, Settings/Leave paths, disconnect release, and no
+  catch-up. Hub held at tick `6798`; Boneyard owner/peer holds were `12257` /
+  `12261`, and teardown reached tick `12304`. Inspected integration receipts
+  are `/tmp/solomon-ui-projection-integrated-final-qEYdnF/large-hub-inventory.png`
+  SHA-256 `04d9208201bc16f5b5aae69efccaec5316b763ab886cc06a7ed25687db44ba4c`
+  and `large-hub-pause.png` SHA-256
+  `08d3d765bbbade57803fada4610e01fce6793672d3c44440ca25782860ecccce`.
 - No member is blocked by the browser platform and no unknown remains. No Mod
   Loader source/report changed because no new native fact was recovered. The
-  Website change is locally committed and rebased; it is not pushed, deployed,
-  or live-verified because publication was not requested.
+  integrated Website change is authorized for normal main publication;
+  deployment remains unrequested and was not performed in this pass.
