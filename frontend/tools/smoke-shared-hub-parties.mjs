@@ -93,18 +93,27 @@ try {
   await chat.locator('xpath=self::*[@data-chat-open="true"]').waitFor()
   assert.equal(await chat.getAttribute('data-chat-channel'), 'party')
   assert.equal(await chat.getAttribute('data-chat-channels'), 'party,global')
-  assert.equal(
-    await first.page.locator('.hub-scene').getAttribute('data-gameplay-input-blocked'),
-    'true',
-  )
+  // GameChat renders data-chat-open in the commit that opens it, but the Hub
+  // only learns about it through GameChat's onOpenChange effect one commit
+  // later, so wait for the gameplay gate instead of reading it in the same tick.
+  await first.page.locator('.hub-scene[data-gameplay-input-blocked="true"]').waitFor({
+    timeout: 5_000,
+  })
   const chatInput = chat.getByRole('textbox', { name: 'Chat message' })
+  await waitForRest(first.page)
   const frameBeforeTyping = await frame(first.page)
   const positionBeforeTyping = { x: frameBeforeTyping.playerX, y: frameBeforeTyping.playerY }
   await chatInput.fill('wasd')
   await first.page.waitForTimeout(150)
   const frameAfterTyping = await frame(first.page)
   const positionAfterTyping = { x: frameAfterTyping.playerX, y: frameAfterTyping.playerY }
-  assert.deepEqual(positionAfterTyping, positionBeforeTyping)
+  // Hub reconciliation may nudge an idle wizard by a sub-pixel amount; a leaked
+  // WASD walk covers many pixels in 150 ms, so only that scale is a failure.
+  const typingDrift = Math.hypot(
+    positionAfterTyping.x - positionBeforeTyping.x,
+    positionAfterTyping.y - positionBeforeTyping.y,
+  )
+  assert.ok(typingDrift < 2, `typing in chat moved the wizard ${typingDrift}px`)
 
   const hostPartyChat = host.next((message) => (
     message.type === 'server-chat' && message.text === 'Aurelia party hello'
@@ -261,10 +270,9 @@ try {
   await chat.locator('xpath=self::*[@data-chat-open="true"]').waitFor()
   assert.equal(await chat.getAttribute('data-chat-channel'), 'party')
   assert.equal(await chat.getAttribute('data-chat-channels'), 'party')
-  assert.equal(
-    await firstBoneyard.getAttribute('data-gameplay-input-blocked'),
-    'true',
-  )
+  await firstBoneyard.locator('xpath=self::*[@data-gameplay-input-blocked="true"]').waitFor({
+    timeout: 5_000,
+  })
   const runChatInput = chat.getByRole('textbox', { name: 'Chat message' })
   const hostRunChat = host.next((message) => (
     message.type === 'server-chat' && message.text === 'Party run hello'
@@ -545,6 +553,22 @@ async function frame(page) {
   return page.locator('.hub-world-canvas').evaluate((node) => (
     structuredClone(node.__sdrHubFrame)
   ))
+}
+
+async function waitForRest(page) {
+  // activatePlayer() clicks the world, so a click-to-move walk may still be in
+  // flight; the typing check only means something once the wizard stands still.
+  await page.waitForFunction(() => {
+    const node = document.querySelector('.hub-world-canvas')
+    const current = node?.__sdrHubFrame
+    if (!current) return false
+    const previous = node.__sdrRestProbe
+    if (!previous || previous.x !== current.playerX || previous.y !== current.playerY) {
+      node.__sdrRestProbe = { at: performance.now(), x: current.playerX, y: current.playerY }
+      return false
+    }
+    return performance.now() - previous.at >= 250
+  }, undefined, { polling: 100, timeout: 15_000 })
 }
 
 async function waitForPlayers(page, count) {
