@@ -36,19 +36,23 @@ test('all eight retail wave enemy tokens map to their native type ids', () => {
   })
 })
 
-test('Solomon run emits the exact ten-plus-five weakened Skeleton opening', () => {
+test('Solomon run emits its generated weakened Skeleton opening through tick 900', () => {
   const harness = startHarness('opening-seed', [wave({ maxEnemies: 100 })])
+  const immediateCount = harness.state.openingBursts[0]!.count
+  const spreadCount = harness.state.openingBursts[1]!.count
   tick(harness, 0)
 
   assert.equal(harness.state.phase, 'opening')
-  assert.equal(harness.liveEnemyCount, 10)
-  assert.equal(harness.state.pendingSpawnBudget, 5)
-  assert.deepEqual(harness.spawnIntents.map((intent) => intent.id), [
-    1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
-  ])
+  assert.equal(harness.liveEnemyCount, immediateCount)
+  assert.equal(harness.state.pendingSpawnBudget, spreadCount)
+  assert.deepEqual(
+    harness.spawnIntents.map((intent) => intent.id),
+    Array.from({ length: immediateCount }, (_, index) => index + 1),
+  )
   assert.ok(harness.spawnIntents.every((intent) => (
     intent.enemyToken === 'SKELETON'
     && intent.locationPolicy === 'near-player'
+    && intent.positionPolicy === 'dark'
     && intent.spawnTick === 0
     && !('targetPlayerId' in intent)
   )))
@@ -66,39 +70,70 @@ test('Solomon run emits the exact ten-plus-five weakened Skeleton opening', () =
   for (let currentTick = 1; currentTick <= 900; currentTick += 1) {
     tick(harness, currentTick)
   }
-  assert.equal(harness.liveEnemyCount, 15)
+  assert.equal(harness.liveEnemyCount, immediateCount + spreadCount)
   assert.equal(harness.state.phase, 'opening-threshold')
-  assert.deepEqual(harness.spawnIntents.map((intent) => intent.spawnTick), [
-    500,
-    600,
-    700,
-    800,
-    900,
-  ])
+  assert.equal(harness.spawnIntents.length, spreadCount)
+  assert.equal(harness.spawnIntents[0]?.spawnTick, 500)
+  assert.equal(harness.spawnIntents.at(-1)?.spawnTick, 900)
 })
 
 test('near-player Spawner preserves the raw 100-unit point for placement recovery', () => {
-  const state = startBoneyardWaveDirector(createBoneyardWaveDirector('edge-6'))
-  const result = stepBoneyardWaveDirector(state, {
-    bounds: { x: 0, y: 375, w: 1_000, h: 600 },
-    liveEnemyCount: 0,
-    players: { a: { position: { x: 500, y: 375 } } },
-    tick: 0,
-  })
-  const position = result.spawnIntents[0]!.position
+  let position: BoneyardEnemySpawnIntent['position'] | null = null
+  for (let seed = 0; seed < 100 && position === null; seed += 1) {
+    const state = startBoneyardWaveDirector(createBoneyardWaveDirector(`edge-${seed}`))
+    const result = stepBoneyardWaveDirector(state, {
+      bounds: { x: 0, y: 375, w: 1_000, h: 600 },
+      liveEnemyCount: 0,
+      players: { a: { position: { x: 500, y: 375 } } },
+      tick: 0,
+    })
+    const candidate = result.spawnIntents[0]!.position
+    if (candidate.y < 375) position = candidate
+  }
 
+  assert.ok(position)
   assert.ok(position.y < 375, 'raw spawn should remain outside for the placement search')
   assert.ok(Math.abs(Math.hypot(position.x - 500, position.y - 375) - 100) < 0.001)
 })
 
+test('zero-player opening continues from the native camera-center fallback', () => {
+  const state = startBoneyardWaveDirector(createBoneyardWaveDirector('no-player-opening'))
+  const result = stepBoneyardWaveDirector(state, {
+    bounds: BOUNDS,
+    liveEnemyCount: 0,
+    players: {},
+    tick: 0,
+  })
+  assert.equal(result.spawnIntents.length, state.openingBursts[0]!.count)
+  assert.ok(result.spawnIntents.every(({ position, positionPolicy }) => (
+    positionPolicy === 'dark'
+    && Math.abs(Math.hypot(position.x - 500, position.y - 400) - 100) < 0.001
+  )))
+})
+
+test('retail compilation carries ordinary dark and Coffin light policies', () => {
+  const state = createBoneyardWaveDirector('position-policy-census')
+  const bursts = state.compiledSchedule.flatMap(({ bursts }) => bursts)
+  const coffins = bursts.filter(({ entries }) => entries[0]?.enemy === 'COFFIN')
+  const ordinary = bursts.filter(({ entries }) => entries[0]?.enemy !== 'COFFIN')
+  assert.ok(coffins.length > 0)
+  assert.ok(ordinary.length > 0)
+  assert.ok(coffins.every((burst) => (
+    burst.locationPolicy === 'near-player' && burst.positionPolicy === 'light'
+  )))
+  assert.ok(ordinary.every((burst) => (
+    burst.locationPolicy === 'anywhere' && burst.positionPolicy === 'dark'
+  )))
+})
+
 test('external nonterminal live count strictly gates opening and wave spawning', () => {
   const harness = completeOpening('opening-release', [wave({ maxEnemies: 100 })])
-  harness.liveEnemyCount = 4
+  harness.liveEnemyCount = harness.state.openingReleaseThreshold
   tick(harness, 901)
   assert.equal(harness.state.phase, 'opening-threshold')
   assert.equal(harness.state.waveOrdinal, 0)
 
-  harness.liveEnemyCount = 3
+  harness.liveEnemyCount = harness.state.openingReleaseThreshold - 1
   tick(harness, 902)
   assert.equal(harness.state.phase, 'spawning')
   assert.equal(harness.state.waveOrdinal, 1)
@@ -225,7 +260,10 @@ function completeOpening(
     tick(harness, currentTick)
   }
   assert.equal(harness.state.phase, 'opening-threshold')
-  assert.equal(harness.liveEnemyCount, 15)
+  assert.equal(
+    harness.liveEnemyCount,
+    harness.state.openingBursts.reduce((total, burst) => total + burst.count, 0),
+  )
   return harness
 }
 

@@ -40,6 +40,7 @@ import type {
   NativeWeldMeteorActorState,
 } from './core-kernels/native-weld-primary-runtime.ts'
 import { createNativeRng } from './core-kernels/native-rng.ts'
+import { createNativeEnemyPathState } from './core-kernels/native-enemy-pathfinding.ts'
 
 const PLAYER_ID = 'caster'
 const AUDIO_WORLD_KEY = 'boneyard:primary-audio-run'
@@ -557,7 +558,9 @@ test('consumes GoodImp landing and Bite banks only from replicated actor counter
     kind: 'fire-good-imp',
     lightGlow: 0.02,
     lightRegistration: { managerLane: 'actor', registrationOrdinal: 9 },
+    nextTargetRefreshTick: 300,
     ownerId: PLAYER_ID,
+    path: createNativeEnemyPathState(createNativeRng(700)).state,
     position: { ...initial.players[PLAYER_ID].position },
     remainingTicks: 298,
     targetId: 'enemy:1',

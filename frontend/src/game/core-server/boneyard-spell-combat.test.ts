@@ -28,7 +28,10 @@ import type { NativeSecondarySteamedPulse } from '../core-kernels/native-seconda
 import { spawnNativeWeldSteamActor } from '../core-kernels/native-weld-steam.ts'
 import { nativeEtherBlastDamage } from '../core-kernels/native-ether-blast.ts'
 import { createNativeHurricanePresentation } from '../core-kernels/native-hurricane.ts'
-import { spawnNativeFireGoodImp } from '../core-kernels/primary-spell-fire-effects.ts'
+import {
+  spawnNativeFireGoodImp,
+  stepNativeFireGoodImp,
+} from '../core-kernels/primary-spell-fire-effects.ts'
 import type {
   NativeWeldBuildId,
   NativeWeldCastKind,
@@ -50,6 +53,70 @@ import {
 
 const WORLD_KEY = 'boneyard:combat-test'
 const COMBAT_RNG = createNativeRng(17)
+const TEST_ENEMY_PATH = Object.freeze({
+  baseTurnRate: 0.75,
+  flankAngleDeg: 0,
+  flankRadius: 0,
+  flankTicksRemaining: 0,
+  reorientationTicksRemaining: 0,
+  speedFactor: 1,
+  stalledMovementTicks: 0,
+  turnFactor: 1,
+  wanderHeadingDeg: 0,
+})
+
+test('GoodImp keeps a valid hostile until the native 300-tick refresh edge', () => {
+  const spawned = spawnNativeFireGoodImp({
+    burnDamage: 1,
+    damage: 2,
+    id: 1,
+    lifetimeTicks: 1_000,
+    ownerId: 'player',
+    position: { x: 0, y: 0 },
+    worldKey: WORLD_KEY,
+  }, createNativeRng(31))
+  const target = (id: string, x: number): PrimarySpellTarget => ({
+    active: true,
+    actorFlags: 0x2,
+    attachment: { x: 0, y: 0 },
+    bodyRadius: 10,
+    headingDeg: 90,
+    id,
+    kind: 'enemy',
+    nativePriority: 0,
+    pendingRemove: false,
+    position: { x, y: 0 },
+    registrationOrder: id === 'a' ? 0 : 1,
+  })
+  const acquired = stepNativeFireGoodImp(spawned.goodImp, {
+    canOccupy: () => false,
+    rng: spawned.rng,
+    targets: [target('a', 1_000), target('b', 2_000)],
+  })
+  assert.equal(acquired.goodImp?.targetId, 'a')
+  assert.equal(acquired.goodImp?.nextTargetRefreshTick, 300)
+
+  const retained = stepNativeFireGoodImp({
+    ...acquired.goodImp!,
+    ageTicks: 299,
+  }, {
+    canOccupy: () => false,
+    rng: acquired.rng,
+    targets: [target('a', 2_000), target('b', 100)],
+  })
+  assert.equal(retained.goodImp?.targetId, 'a')
+
+  const refreshed = stepNativeFireGoodImp({
+    ...retained.goodImp!,
+    ageTicks: 300,
+  }, {
+    canOccupy: () => false,
+    rng: retained.rng,
+    targets: [target('a', 2_000), target('b', 100)],
+  })
+  assert.equal(refreshed.goodImp?.targetId, 'b')
+  assert.equal(refreshed.goodImp?.nextTargetRefreshTick, 600)
+})
 
 function resolveCombatWithAuthority(
   enemies: BoneyardEnemyStore,
@@ -333,7 +400,9 @@ test('Hurricane batches clockwise force, target-owned cooldown, and charge-cubed
     movementPhase: 'crawl',
     nextAttackTick: 20,
     nextMovementTick: 2,
+    nextTargetRefreshTick: 300,
     ownerCoffinActorId: 99,
+    path: TEST_ENEMY_PATH,
     poisonDamage: 0,
     poisonDuration: 0,
     position: { x: 100, y: 0 },

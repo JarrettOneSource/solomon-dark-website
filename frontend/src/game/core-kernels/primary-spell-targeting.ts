@@ -27,6 +27,7 @@ export interface PrimarySpellTarget {
   actorFlags: number
   attachment: Vector2
   bodyRadius: number
+  headingDeg?: number
   id: string
   kind: PrimarySpellTargetKind
   nativePriority: number

@@ -1,5 +1,14 @@
 import type { SpriteRef, Vec2 } from '../../editor/model.ts'
 import {
+  NATIVE_LANTERN_LIGHT_FLICKER,
+  NATIVE_LANTERN_LIGHT_MIN_INTENSITY,
+  NATIVE_LANTERN_LIGHT_RADIUS,
+  NATIVE_LIGHT_OUTER_DISTANCE,
+  NATIVE_PLAYER_LIGHT_OFFSET,
+  NATIVE_PLAYER_LIGHT_RADIUS,
+  nativeBoneyardRadialLightContribution,
+} from '../core-kernels/native-boneyard-lighting.ts'
+import {
   nativeRandomFloatFromSemanticWord,
   nativeRandomIntFromSemanticWord,
   nativeSignedRandomFloatFromSemanticWords,
@@ -15,6 +24,17 @@ import type {
   NativeWeldMeteorActorState,
   NativeWeldProjectileState,
 } from '../core-kernels/native-weld-primary-runtime.ts'
+
+export {
+  NATIVE_LANTERN_LIGHT_FLICKER,
+  NATIVE_LANTERN_LIGHT_MIN_INTENSITY,
+  NATIVE_LANTERN_LIGHT_RADIUS,
+  NATIVE_LIGHT_INNER_DISTANCE,
+  NATIVE_LIGHT_OUTER_DISTANCE,
+  NATIVE_LIGHT_VERTICAL_SCALE,
+  NATIVE_PLAYER_LIGHT_OFFSET,
+  NATIVE_PLAYER_LIGHT_RADIUS,
+} from '../core-kernels/native-boneyard-lighting.ts'
 
 export interface NativeBoneyardLightSample {
   intensity: number
@@ -94,15 +114,7 @@ export interface NativeRegionLightTargetPlan {
   renderResolution: number
 }
 
-export const NATIVE_LIGHT_INNER_DISTANCE = 75
-export const NATIVE_LIGHT_OUTER_DISTANCE = 145
-export const NATIVE_LIGHT_VERTICAL_SCALE = 0.85
-export const NATIVE_PLAYER_LIGHT_RADIUS = 2.5999999046325684
-export const NATIVE_PLAYER_LIGHT_OFFSET = 15
 export const NATIVE_PLAYER_LIGHT_RASTER_JITTER = 0.2
-export const NATIVE_LANTERN_LIGHT_RADIUS = 0.65
-export const NATIVE_LANTERN_LIGHT_MIN_INTENSITY = 0.55
-export const NATIVE_LANTERN_LIGHT_FLICKER = 0.2
 export const NATIVE_DEFAULT_MULTIPLE_SHADOWS = true
 export const NATIVE_DEFAULT_LIGHT_QUALITY = 0.25
 export const NATIVE_LOW_CAPABILITY_LIGHT_QUALITY = Math.fround(0.06)
@@ -132,9 +144,6 @@ export function nativeBoneyardWeatherLightingOrder(
   }
 }
 
-const NATIVE_LIGHT_FALLOFF_SQUARED = (
-  NATIVE_LIGHT_OUTER_DISTANCE ** 2 - NATIVE_LIGHT_INNER_DISTANCE ** 2
-)
 const EMPTY_LIGHT_SOURCES: readonly NativeBoneyardLightSource[] = Object.freeze([])
 const EMPTY_LIGHT_SOURCE_INDICES: readonly number[] = Object.freeze([])
 
@@ -1026,18 +1035,5 @@ function nativeBoneyardLightContribution(
   position: Vec2,
   source: NativeBoneyardLightSample,
 ): number {
-  const dx = (position.x - source.position.x) / source.radius
-  const dy = (
-    (position.y - source.position.y)
-    / (NATIVE_LIGHT_VERTICAL_SCALE * source.radius)
-  )
-  const distanceSquared = dx * dx + dy * dy
-  if (distanceSquared >= NATIVE_LIGHT_OUTER_DISTANCE ** 2) return 0
-  return distanceSquared < NATIVE_LIGHT_INNER_DISTANCE ** 2
-    ? source.intensity
-    : source.intensity * (
-        1
-        - (distanceSquared - NATIVE_LIGHT_INNER_DISTANCE ** 2)
-          / NATIVE_LIGHT_FALLOFF_SQUARED
-      )
+  return nativeBoneyardRadialLightContribution(position, source)
 }

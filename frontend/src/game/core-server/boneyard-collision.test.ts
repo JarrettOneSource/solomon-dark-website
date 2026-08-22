@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import type { BoneyardScene } from '../core-kernels/boneyard.ts'
 import { createBoneyardGateLeaves } from '../core-kernels/boneyard-gate.ts'
+import { createNativeRng, drawNativeFloat } from '../core-kernels/native-rng.ts'
 import {
   boneyardBodyCollides,
   canPlaceBoneyardBody,
@@ -13,6 +14,7 @@ import {
   NATIVE_FIREBALL_TERRAIN_EXCLUSION_MASK,
   nativeSpawnRingSampleCount,
   resolveBoneyardMovement,
+  resolveNativeBoneyardSpawnPosition,
   resolveBoneyardSpawnPosition,
   withBoneyardGateCollision,
 } from './boneyard-collision.ts'
@@ -254,6 +256,63 @@ test('native spawn retries use actor-radius rings, compressed Y, and combat boun
     empty,
     25,
   ), true)
+})
+
+test('native spawn policies preserve direct points and retry dark/light/offscreen/edge roots', () => {
+  const bounds = { x: 0, y: 0, w: 500, h: 500 }
+  const world = { circles: [], polygons: [], segments: [] }
+  const origin = { x: 250, y: 250 }
+  const source = createNativeRng(43)
+  const direct = resolveNativeBoneyardSpawnPosition(
+    origin, bounds, world, 25, 'direct', source, { lightAt: () => 1 },
+  )
+  assert.deepEqual(direct, { position: origin, rngState: source })
+
+  const cases = [
+    ['dark', { lightAt: (point: { x: number; y: number }) => point === origin ? 1 : (
+      point.x === origin.x && point.y === origin.y ? 1 : 0
+    ) }],
+    ['light', { lightAt: (point: { x: number; y: number }) => (
+      point.x === origin.x && point.y === origin.y ? 0 : 1
+    ) }],
+    ['offscreen', { isOffscreen: (point: { x: number; y: number }) => (
+      point.x !== origin.x || point.y !== origin.y
+    ), lightAt: () => 0 }],
+    ['edge', { isOutsidePolicyBounds: (point: { x: number; y: number }) => (
+      point.x !== origin.x || point.y !== origin.y
+    ), lightAt: () => 0 }],
+  ] as const
+  const firstAngle = drawNativeFloat(source, 360)
+  for (const [policy, context] of cases) {
+    const placed = resolveNativeBoneyardSpawnPosition(
+      origin, bounds, world, 25, policy, source, context,
+    )
+    assert.notDeepEqual(placed.position, origin)
+    assert.deepEqual(placed.rngState, firstAngle.state)
+    assert.equal(canPlaceBoneyardBody(placed.position, bounds, world, 25), true)
+  }
+})
+
+test('native spawn placement draws a fresh retry angle for every radius ring', () => {
+  const source = createNativeRng(59)
+  const firstAngle = drawNativeFloat(source, 360)
+  const secondAngle = drawNativeFloat(firstAngle.state, 360)
+  const origin = { x: 250, y: 250 }
+  const placed = resolveNativeBoneyardSpawnPosition(
+    origin,
+    { x: 0, y: 0, w: 500, h: 500 },
+    { circles: [], polygons: [], segments: [] },
+    25,
+    'dark',
+    source,
+    {
+      lightAt: (point) => Math.hypot(point.x - origin.x, point.y - origin.y) <= 25.1
+        ? 1
+        : 0,
+    },
+  )
+  assert.deepEqual(placed.rngState, secondAngle.state)
+  assert.ok(Math.hypot(placed.position.x - origin.x, placed.position.y - origin.y) > 25.1)
 })
 
 test('clips spell rays against bounds and scenery while excluding the selected target', () => {

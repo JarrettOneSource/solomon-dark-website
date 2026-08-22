@@ -3,7 +3,10 @@ import { randomBytes } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 
 import { chromium } from 'playwright-core'
-import { createServer as createViteServer } from 'vite'
+import {
+  createServer as createViteServer,
+  preview as previewBuiltFrontend,
+} from 'vite'
 
 import { solomonContactContains } from '../src/game/core-kernels/boneyard-encounter.ts'
 import { BONEYARD_GATE_INITIAL_SWAY } from '../src/game/core-kernels/boneyard-gate.ts'
@@ -31,6 +34,8 @@ const credential = randomBytes(32).toString('base64url')
 const deterministicSeedBytes = Buffer.alloc(16)
 const expectedBoneyardSeed = deterministicSeedBytes.toString('hex')
 const entranceOnly = process.argv.includes('--entrance-only')
+const openingOnly = process.argv.includes('--opening-only')
+const productionFrontend = process.env.SDR_GAME_WAVES_SMOKE_PRODUCTION === '1'
 const FIRE_ENGAGEMENT_MIN_DISTANCE = 70
 const FIRE_ENGAGEMENT_MAX_DISTANCE = 135
 const COMBAT_ENTRY_GATE_MARGIN = 40
@@ -44,13 +49,21 @@ const archerScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-archer-proj
 const deathScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-death$1')
 const gameOverScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-game-over$1')
 const loadoutScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-loadout$1')
-const vite = await createViteServer({
-  configFile: fileURLToPath(new URL('../vite.config.ts', import.meta.url)),
-  logLevel: 'error',
-  root: frontendRoot,
-  server: { host: '127.0.0.1', port: 0 },
-})
-await vite.listen()
+const viteConfig = fileURLToPath(new URL('../vite.config.ts', import.meta.url))
+const vite = productionFrontend
+  ? await previewBuiltFrontend({
+      configFile: viteConfig,
+      logLevel: 'error',
+      preview: { host: '127.0.0.1', port: 0 },
+      root: frontendRoot,
+    })
+  : await createViteServer({
+      configFile: viteConfig,
+      logLevel: 'error',
+      root: frontendRoot,
+      server: { host: '127.0.0.1', port: 0 },
+    })
+if (!productionFrontend) await vite.listen()
 const viteAddress = vite.httpServer?.address()
 if (!viteAddress || typeof viteAddress === 'string') {
   await vite.close()
@@ -177,27 +190,41 @@ try {
     await page.screenshot({ path: screenshotPath })
     await page.waitForFunction(() => {
       const scene = document.querySelector('.boneyard-scene')
-      return Number(scene?.getAttribute('data-wave-live-enemy-count')) >= 10
+      return Number(scene?.getAttribute('data-wave-live-enemy-count')) >= 8
         && window.__sdrAudioPlaySources?.some((source) => source.includes('solomon-laugh-1'))
     }, undefined, { timeout: 10_000 })
+    await page.waitForFunction(() => (
+      document.querySelector('.boneyard-scene')
+        ?.getAttribute('data-wave-phase') === 'opening-threshold'
+    ), undefined, { timeout: 15_000 })
     opening = await encounterReceipt(scene)
   } finally {
     for (const key of escapeKeys) await page.keyboard.up(key)
   }
-  assert.ok(opening.wavePhase === 'opening' || opening.wavePhase === 'opening-threshold')
-  assert.ok(opening.liveEnemies >= 10 && opening.liveEnemies <= 15)
-  assert.equal(opening.liveEnemies + opening.pendingSpawnBudget, 15)
+  assert.equal(opening.wavePhase, 'opening-threshold')
+  assert.ok(opening.liveEnemies >= 11 && opening.liveEnemies <= 17)
+  assert.equal(opening.pendingSpawnBudget, 0)
   assert.equal(opening.waveOrdinal, 0)
-  const entranceRetirement = await proveRetiredEntry(
+  const openingSteering = await captureOpeningSteering(
     page,
-    scene,
     wire,
     loadedBoneyard.runId,
-    gateCrossing,
+    opening.liveEnemies,
   )
+  const entranceRetirement = openingOnly
+    ? null
+    : await proveRetiredEntry(
+        page,
+        scene,
+        wire,
+        loadedBoneyard.runId,
+        gateCrossing,
+      )
 
-  if (entranceOnly) {
-    const runCombatAdmission = await proveRunCombatAdmitted(page, scene)
+  if (entranceOnly || openingOnly) {
+    const runCombatAdmission = entranceOnly
+      ? await proveRunCombatAdmitted(page, scene)
+      : null
     await page.screenshot({ path: combatScreenshotPath })
     assert.deepEqual(wire.errors, [])
     assert.deepEqual(errors, [])
@@ -210,6 +237,8 @@ try {
       nearDigAudio,
       nearSolomon,
       opening,
+      openingSteering,
+      productionFrontend,
       runCombatAdmission,
       speakingCombatAdmission,
       screenshotPath: combatScreenshotPath,
@@ -230,7 +259,7 @@ try {
   const taunt = await encounterReceipt(scene)
   assert.equal(taunt.voiceCue, 'solomon-get-him-boys')
   assert.equal(taunt.voiceEventId, 3)
-  assert.ok(taunt.liveEnemies >= 9 && taunt.liveEnemies <= 15)
+  assert.ok(taunt.liveEnemies >= 9 && taunt.liveEnemies <= 17)
   const archer = await proveArcherProjectileLifecycle(
     page,
     wire,
@@ -356,8 +385,10 @@ try {
     nearDigAudio,
     nearSolomon,
     opening,
+    openingSteering,
     playerDamageAudio,
     playerDamageEvents,
+    productionFrontend,
     runEdge,
     screenshotPath,
     secondRun,
@@ -394,6 +425,7 @@ function observeGameWire(page, endpoint) {
   const endpointUrl = new URL(endpoint).href
   const receipt = {
     descriptors: new Map(),
+    enemyFirstSamples: new Map(),
     errors: [],
     events: new Map(),
     latestSnapshot: null,
@@ -476,6 +508,23 @@ function recordWireEnemyEvents(receipt, snapshot) {
 
 function recordCombatBoundViolations(receipt, snapshot) {
   if (snapshot.world.kind !== 'boneyard') return
+  const player = Object.values(snapshot.players)[0]
+  for (const enemy of snapshot.world.enemies) {
+    if (receipt.enemyFirstSamples.has(enemy.id)) continue
+    boundedMapSet(receipt.enemyFirstSamples, enemy.id, {
+      distanceFromPlayer: player
+        ? Math.hypot(
+            enemy.position.x - player.position.x,
+            enemy.position.y - player.position.y,
+          )
+        : null,
+      headingDeg: enemy.headingDeg,
+      id: enemy.id,
+      observedTick: snapshot.tick,
+      position: enemy.position,
+      spawnTick: enemy.spawnTick,
+    }, 128)
+  }
   const transition = snapshot.world.arenaTransition
   if (!transition || transition.phase === 'open') return
   const bounds = transition.combatBounds
@@ -526,6 +575,7 @@ async function waitForWireValue(page, wire, read, timeoutMs, label) {
 function wireSummary(wire) {
   return {
     descriptorCount: wire.descriptors.size,
+    enemyFirstSampleCount: wire.enemyFirstSamples.size,
     errors: [...wire.errors],
     eventCount: wire.events.size,
     latestTick: wire.latestSnapshot?.tick ?? null,
@@ -535,6 +585,99 @@ function wireSummary(wire) {
     sequence: wire.sequence,
     socketCount: wire.socketCount,
   }
+}
+
+async function captureOpeningSteering(page, wire, runId, expectedCount) {
+  const before = await waitForWireValue(
+    page,
+    wire,
+    ({ latestSnapshot }) => (
+      latestSnapshot?.world.kind === 'boneyard'
+      && latestSnapshot.world.runId === runId
+      && latestSnapshot.world.enemies.length >= expectedCount
+        ? latestSnapshot
+        : null
+    ),
+    5_000,
+    'the complete immediate opening snapshot',
+  )
+  const openingEnemies = before.world.enemies.slice(0, expectedCount)
+  const roots = openingEnemies.map((enemy) => {
+    const sample = wire.enemyFirstSamples.get(enemy.id)
+    assert.ok(sample, `expected a first-position sample for enemy ${enemy.id}`)
+    return sample
+  })
+  assert.ok(
+    roots.every(({ distanceFromPlayer }) => distanceFromPlayer > 100),
+    'dark placement must resolve beyond the raw 100-unit near-player ring',
+  )
+  const spawnTickCounts = new Map()
+  for (const { spawnTick } of roots) {
+    spawnTickCounts.set(spawnTick, (spawnTickCounts.get(spawnTick) ?? 0) + 1)
+  }
+  const spawnTicks = [...spawnTickCounts].toSorted((left, right) => left[0] - right[0])
+  const immediateCount = spawnTicks[0]?.[1] ?? 0
+  const delayedCount = spawnTicks.slice(1).reduce((total, [, count]) => total + count, 0)
+  assert.ok(immediateCount >= 8 && immediateCount <= 12)
+  assert.ok(delayedCount >= 3 && delayedCount <= 5)
+  assert.equal(spawnTicks[1]?.[0] - spawnTicks[0]?.[0], 500)
+  assert.equal(spawnTicks.at(-1)?.[0] - spawnTicks[1]?.[0], 400)
+
+  const beforeById = new Map(openingEnemies.map((enemy) => [enemy.id, enemy]))
+  const after = await waitForWireValue(
+    page,
+    wire,
+    ({ latestSnapshot }) => (
+      latestSnapshot?.world.kind === 'boneyard'
+      && latestSnapshot.world.runId === runId
+      && latestSnapshot.tick >= before.tick + 25
+        ? latestSnapshot
+        : null
+    ),
+    5_000,
+    'opening steering movement',
+  )
+  const afterPlayer = Object.values(after.players)[0]
+  assert.ok(afterPlayer, 'expected the post-opening player snapshot')
+  const samples = after.world.enemies.flatMap((enemy) => {
+    const prior = beforeById.get(enemy.id)
+    if (!prior) return []
+    const directHeading = positiveHeading(Math.atan2(
+      afterPlayer.position.x - enemy.position.x,
+      -(afterPlayer.position.y - enemy.position.y),
+    ) * 180 / Math.PI)
+    return [{
+      directHeadingErrorDeg: headingDistance(enemy.headingDeg, directHeading),
+      headingAfterDeg: enemy.headingDeg,
+      headingBeforeDeg: prior.headingDeg,
+      id: enemy.id,
+      movement: Math.hypot(
+        enemy.position.x - prior.position.x,
+        enemy.position.y - prior.position.y,
+      ),
+    }]
+  })
+  assert.ok(samples.some(({ movement }) => movement > 0.5))
+  assert.ok(
+    samples.some(({ directHeadingErrorDeg }) => directHeadingErrorDeg > 0.25),
+    'opening enemies must retain gradual offset steering instead of snap-facing the target',
+  )
+  return {
+    afterTick: after.tick,
+    beforeTick: before.tick,
+    delayedCount,
+    immediateCount,
+    roots,
+    samples,
+  }
+}
+
+function positiveHeading(value) {
+  return ((value % 360) + 360) % 360
+}
+
+function headingDistance(left, right) {
+  return Math.abs(positiveHeading(left - right + 180) - 180)
 }
 
 async function proveArcherProjectileLifecycle(

@@ -40,6 +40,14 @@ import {
   type PlayerCharacterState,
 } from '../core-kernels/player-character.ts'
 import type { PrimarySpellTarget } from '../core-kernels/primary-spell-targeting.ts'
+import {
+  NATIVE_LANTERN_LIGHT_MIN_INTENSITY,
+  NATIVE_LANTERN_LIGHT_RADIUS,
+  NATIVE_PLAYER_LIGHT_OFFSET,
+  NATIVE_PLAYER_LIGHT_RADIUS,
+  nativeBoneyardRadialLightScalar,
+  type NativeBoneyardRadialLight,
+} from '../core-kernels/native-boneyard-lighting.ts'
 import type {
   NativeLightProviderRegistration,
   RegisterNativeLightProvider,
@@ -77,6 +85,7 @@ import {
   clipBoneyardSegment,
   createBoneyardCollisionWorld,
   firstBoneyardPathBlockProgress,
+  resolveNativeBoneyardSpawnPosition,
   resolveBoneyardMovement,
   resolveBoneyardSpawnPosition,
   touchingBoneyardGateLeaves,
@@ -136,6 +145,7 @@ export interface BoneyardWorldState {
   gateLeaves: readonly BoneyardGateLeafState[]
   kind: 'boneyard'
   lanternLightRegistration: NativeLightProviderRegistration | null
+  lanternPosition: Readonly<BoneyardPoint> | null
   hallOfFameRuns: Readonly<Record<string, NativeHallOfFameRunState>>
   loot: BoneyardLootStore
   lootEvents: readonly BoneyardLootEvent[]
@@ -198,6 +208,9 @@ export function createBoneyardWorld(
     gateLeaves: createBoneyardGateLeaves(loaded.scene.fences, loaded.seed),
     kind: 'boneyard',
     lanternLightRegistration,
+    lanternPosition: loaded.scene.solomonDig === null
+      ? null
+      : Object.freeze({ ...loaded.scene.solomonDig.lanternPosition }),
     hallOfFameRuns: {},
     loot: createBoneyardLootStore(
       loaded.seed,
@@ -252,6 +265,7 @@ export function boneyardPrimarySpellTargets(
       actorFlags: enemy.config.enemyToken === 'COFFIN' ? 0 : 0x2,
       attachment: { x: 0, y: 0 },
       bodyRadius: enemy.config.collisionRadius,
+      headingDeg: enemy.headingDeg,
       id: `enemy:${enemy.id}`,
       kind: 'enemy' as const,
       nativePriority: 0,
@@ -264,6 +278,7 @@ export function boneyardPrimarySpellTargets(
       actorFlags: 0x2,
       attachment: { x: 0, y: 0 },
       bodyRadius: enemy.collisionRadius,
+      headingDeg: enemy.headingDeg,
       id: `enemy:${enemy.id}`,
       kind: 'enemy' as const,
       nativePriority: 0,
@@ -471,6 +486,11 @@ export function stepBoneyardWorldTick(
     collisionResolvedEnemies,
     playerCombat,
   )
+  const spawnLightSources = boneyardSpawnLightSources(
+    world,
+    nextPlayers,
+    collisionResolvedEnemies,
+  )
   const enemyStep = stepBoneyardEnemyStore(collisionResolvedEnemies, {
     abilityEffects,
     arenaScalars: { experience: RETAIL_BONEYARD_EXPERIENCE_RECIPE_SCALAR },
@@ -497,6 +517,7 @@ export function stepBoneyardWorldTick(
           collisionRadius: PLAYER_CHARACTER_RADIUS,
           connected: true,
           eligible: combat?.eligible ?? false,
+          headingDeg: player.headingIndex * 15,
           position: player.position,
           velocityPerTick: {
             x: player.velocity.x * PLAYER_CHARACTER_MOVEMENT_TICK_SECONDS,
@@ -509,6 +530,7 @@ export function stepBoneyardWorldTick(
         collisionRadius: summon.collisionRadius,
         connected: true,
         eligible: true,
+        headingDeg: 0,
         position: summon.position,
         velocityPerTick: { x: 0, y: 0 },
       }] as const),
@@ -554,6 +576,22 @@ export function stepBoneyardWorldTick(
       if (!mover) throw new Error(`Boneyard collision lost enemy actor ${actorId}`)
       return mover.position
     },
+    resolveSpawnPlacement: ({ actorId: _actorId, position, positionPolicy, radius, rngState }) => (
+      resolveNativeBoneyardSpawnPosition(
+        { ...position },
+        activeBounds,
+        collision,
+        radius,
+        positionPolicy ?? 'direct',
+        rngState,
+        {
+          lightAt: (candidate) => nativeBoneyardRadialLightScalar(
+            candidate,
+            spawnLightSources,
+          ),
+        },
+      )
+    ),
     resolveSpawnIntents: (liveEnemyCount) => {
       const external = pendingExternalSpawnIntents
       pendingExternalSpawnIntents = []
@@ -562,7 +600,6 @@ export function stepBoneyardWorldTick(
         || encounter === null
         || wavesStarted
         || waves.phase === 'dormant'
-        || Object.keys(livingPlayers).length === 0
       ) return external
       const result = stepBoneyardWaveDirector(waves, {
         bounds: activeBounds,
@@ -673,6 +710,51 @@ export function stepBoneyardWorldTick(
       waves,
     },
   }
+}
+
+function boneyardSpawnLightSources(
+  world: BoneyardWorldState,
+  players: Readonly<Record<string, PlayerCharacterState>>,
+  enemies: BoneyardEnemyStore,
+): readonly NativeBoneyardRadialLight[] {
+  const sources: NativeBoneyardRadialLight[] = []
+  for (const player of Object.values(players)) {
+    const heading = player.headingIndex * 15 * Math.PI / 180
+    sources.push({
+      intensity: 1,
+      position: {
+        x: player.position.x + Math.sin(heading) * NATIVE_PLAYER_LIGHT_OFFSET,
+        y: player.position.y - Math.cos(heading) * NATIVE_PLAYER_LIGHT_OFFSET,
+      },
+      radius: NATIVE_PLAYER_LIGHT_RADIUS,
+    })
+  }
+  if (world.lanternPosition !== null) {
+    sources.push({
+      intensity: NATIVE_LANTERN_LIGHT_MIN_INTENSITY,
+      position: world.lanternPosition,
+      radius: NATIVE_LANTERN_LIGHT_RADIUS,
+    })
+  }
+  for (const actor of enemies.actors) {
+    if (actor.lighting.providerCopies === 0) continue
+    const radius = (() => {
+      switch (actor.config.enemyToken) {
+        case 'IMP': return 0.35
+        case 'DEMON': return 1.75
+        case 'COFFIN': return 0.65
+        case 'SKELETON':
+        case 'SKELETONARCHER':
+        case 'SKELETONMAGE':
+        case 'WRAITH': return 0.5
+        case 'ZOMBIE': return 0
+      }
+    })()
+    if (radius > 0) {
+      sources.push({ intensity: 1, position: actor.position, radius })
+    }
+  }
+  return sources
 }
 
 function createNativeLootPlacement(

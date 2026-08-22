@@ -8,6 +8,14 @@ import { NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM } from '../core-kernels/boneyard-zomb
 import type { BoneyardPoint } from '../core-kernels/boneyard.ts'
 import type { NativeSecondaryTargetEffectState } from '../core-kernels/native-secondary-abilities.ts'
 import type { NativeEnemyWorldFeedbackOutput } from '../core-kernels/native-enemy-world-feedback.ts'
+import {
+  buildNativeEnemySteering,
+  createNativeEnemyPathState,
+  nativeEnemyTargetRefreshTicks,
+  stepNativeEnemyPathRecovery,
+  stepNativeEnemyReorientation,
+  type NativeEnemyPathState,
+} from '../core-kernels/native-enemy-pathfinding.ts'
 import { NATIVE_HURRICANE_DEFAULT_MOVEMENT_STEP } from '../core-kernels/native-hurricane.ts'
 import {
   createNativeRng,
@@ -83,8 +91,6 @@ export type BoneyardEnemyEventId = number
 export type BoneyardMageLightningPulseId = number
 
 export const NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS = 2
-export const NATIVE_ENEMY_TARGET_REFRESH_TICKS = 25
-export const NATIVE_ENEMY_MISSING_TARGET_REFRESH_TICKS = 3
 export const NATIVE_ENEMY_HIT_LATCH_TICKS = 20
 
 const NATIVE_IMP_SPLIT_HEADING_OFFSETS = Object.freeze([-90, 90] as const)
@@ -360,6 +366,7 @@ export interface BoneyardEnemyActor {
   readonly lootSeed: number
   readonly nextMovementTick: number
   readonly nextTargetRefreshTick: number
+  readonly path: NativeEnemyPathState
   readonly position: Readonly<BoneyardPoint>
   readonly rewardGranted: boolean
   readonly restBodyPose: number
@@ -484,7 +491,9 @@ export interface BoneyardMaggotActor {
   readonly maximumHealth: number
   readonly nextAttackTick: number
   readonly nextMovementTick: number
+  readonly nextTargetRefreshTick: number
   readonly ownerCoffinActorId: BoneyardEnemyActorId
+  readonly path: NativeEnemyPathState
   readonly poisonDamage: number
   readonly poisonDuration: number
   readonly position: Readonly<BoneyardPoint>
@@ -682,6 +691,7 @@ export interface BoneyardEnemyStore {
   readonly projectiles: readonly BoneyardEnemyProjectile[]
   readonly projectileEffects: readonly BoneyardEnemyProjectileEffect[]
   readonly rngState: number
+  readonly steeringRngState: NativeRngState
 }
 
 export interface BoneyardPlayerDamageSoundRequest {
@@ -703,6 +713,7 @@ export interface BoneyardEnemyTargetCandidate {
   readonly collisionRadius: number
   readonly connected: boolean
   readonly eligible: boolean
+  readonly headingDeg?: number
   readonly position: Readonly<BoneyardPoint>
   readonly velocityPerTick: Readonly<BoneyardPoint>
 }
@@ -721,6 +732,23 @@ export interface BoneyardEnemyMovementRequest {
 export type ResolveBoneyardEnemyMovement = (
   request: BoneyardEnemyMovementRequest,
 ) => Readonly<BoneyardPoint>
+
+export interface BoneyardEnemySpawnPlacementRequest {
+  readonly actorId: BoneyardEnemyActorId
+  readonly position: Readonly<BoneyardPoint>
+  readonly positionPolicy: BoneyardEnemySpawnIntent['positionPolicy']
+  readonly radius: number
+  readonly rngState: NativeRngState
+}
+
+export interface BoneyardEnemySpawnPlacementResult {
+  readonly position: Readonly<BoneyardPoint>
+  readonly rngState: NativeRngState
+}
+
+export type ResolveBoneyardEnemySpawnPlacement = (
+  request: BoneyardEnemySpawnPlacementRequest,
+) => BoneyardEnemySpawnPlacementResult
 
 export interface BoneyardEnemyProjectileWorldContactRequest {
   readonly end: Readonly<BoneyardPoint>
@@ -769,6 +797,7 @@ export interface BoneyardEnemyStoreStepContext {
   readonly retirementObserver?: BoneyardEnemyRetirementObserver
   readonly rollLootSeed?: () => number
   readonly resolveMovement: ResolveBoneyardEnemyMovement
+  readonly resolveSpawnPlacement?: ResolveBoneyardEnemySpawnPlacement
   readonly resolveSpawnIntents: (
     liveEnemyCount: number,
   ) => readonly BoneyardEnemySpawnIntent[]
@@ -840,6 +869,7 @@ interface WorkingStep {
   nextSyntheticSpawnIntentId: number
   playerDamage: BoneyardEnemyPlayerDamage[]
   playerKnockbacks: BoneyardEnemyPlayerKnockback[]
+  pathStatusFactors: Map<BoneyardEnemyActorId, number>
   projectiles: BoneyardEnemyProjectile[]
   projectileEffects: BoneyardEnemyProjectileEffect[]
   registerLightProvider: RegisterNativeLightProvider
@@ -847,6 +877,7 @@ interface WorkingStep {
   retired: BoneyardEnemyRetirement[]
   rewards: BoneyardEnemyReward[]
   rngState: number
+  steeringRngState: NativeRngState
   spawnedActorIds: number[]
 }
 
@@ -885,6 +916,9 @@ export function createBoneyardEnemyStore(seed: string): BoneyardEnemyStore {
     projectiles: [],
     projectileEffects: [],
     rngState: seedBoneyardWaveRng(`${seed}:enemy-actors`),
+    steeringRngState: createNativeRng(
+      seedBoneyardWaveRng(`${seed}:enemy-steering`),
+    ),
   }
 }
 
@@ -1507,6 +1541,7 @@ export function stepBoneyardEnemyStore(
     nextSyntheticSpawnIntentId: source.nextSyntheticSpawnIntentId,
     playerDamage: [],
     playerKnockbacks: [],
+    pathStatusFactors: new Map(),
     projectiles: [...source.projectiles],
     projectileEffects: [],
     registerLightProvider: context.registerLightProvider
@@ -1517,6 +1552,7 @@ export function stepBoneyardEnemyStore(
     retired: [],
     rewards: [],
     rngState: source.rngState,
+    steeringRngState: source.steeringRngState,
     spawnedActorIds: [],
   }
   stepDeathEffects(work, source.deathEffects, context.tick)
@@ -1572,6 +1608,7 @@ export function stepBoneyardEnemyStore(
       projectiles: work.projectiles,
       projectileEffects: work.projectileEffects,
       rngState: work.rngState,
+      steeringRngState: work.steeringRngState,
     },
   }
 }
@@ -1595,7 +1632,9 @@ function materializeSpawnIntents(
     const evaluatedConfig = evaluateBoneyardEnemyConfig(intent.enemyToken, {
       arenaScalars: context.arenaScalars,
       flags: intent.flags,
+      flanking: intent.flanking,
       mageCloak: intent.mageCloak,
+      pathfindingMode: intent.pathfindingMode,
       random: {
         baseSpeedUnit: baseSpeed.value,
         collisionRadiusUnit: radius.value,
@@ -1613,7 +1652,15 @@ function materializeSpawnIntents(
       config.enemyToken === 'IMP'
       && work.impActorCount >= NATIVE_IMP_CONSTRUCTION_MAXIMUM
     ) continue
-    const position = context.resolveMovement({
+    const placement = context.resolveSpawnPlacement?.({
+      actorId: work.nextActorId,
+      position: intent.position,
+      positionPolicy: intent.positionPolicy ?? 'direct',
+      radius: config.collisionRadius,
+      rngState: work.steeringRngState,
+    })
+    if (placement) work.steeringRngState = placement.rngState
+    const position = placement?.position ?? context.resolveMovement({
       actorId: work.nextActorId,
       delta: { x: 0, y: 0 },
       position: intent.position,
@@ -1625,6 +1672,8 @@ function materializeSpawnIntents(
     const targetPlayerId = nearestEligibleTarget(position, context.players)
     const gaitPose = drawLocomotionPhase(work)
     const bodyGaitPhase = drawLocomotionPhase(work)
+    const path = createNativeEnemyPathState(work.steeringRngState)
+    work.steeringRngState = path.rngState
     const brain = createBrain(work, config)
     const restBodyPose = config.enemyToken === 'SKELETONMAGE'
       ? drawLocomotionInteger(work, 2)
@@ -1652,11 +1701,9 @@ function materializeSpawnIntents(
       lighting: Object.freeze({ charge: 0, glow: 0, providerCopies: 0 }),
       lootSeed: nextLootSeed(work, context),
       nextMovementTick: context.tick + NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS,
-      nextTargetRefreshTick: context.tick + (
-        targetPlayerId === null
-          ? NATIVE_ENEMY_MISSING_TARGET_REFRESH_TICKS
-          : NATIVE_ENEMY_TARGET_REFRESH_TICKS
-      ),
+      nextTargetRefreshTick: context.tick
+        + nativeEnemyTargetRefreshTicks(config.pathfindingMode),
+      path: path.state,
       position: Object.freeze({ ...position }),
       rewardGranted: false,
       restBodyPose,
@@ -1953,13 +2000,14 @@ function stepLivingActor(
   context: BoneyardEnemyStoreStepContext,
 ): BoneyardEnemyActor {
   const effect = context.abilityEffects?.[source.id]
+  work.pathStatusFactors.set(
+    source.id,
+    source.staffMovementFactor * nativeSecondaryActorSpeedScale(effect),
+  )
   const affected = effect === undefined
     ? source
     : withNativeSecondaryTickScalars(source, effect)
-  const targeted = refreshTarget(affected, context)
-  const actor = targeted.brain.family === 'coffin'
-    ? targeted
-    : faceTarget(targeted, context.players)
+  const actor = refreshTarget(affected, context)
   if ((effect?.disruptedTicks ?? 0) > 0) {
     const interrupted = clearSkeletonFamilyHeadFacing(
       interruptNativeSecondaryAction(actor),
@@ -1975,11 +2023,22 @@ function stepLivingActor(
       ? applyMageProviderGateAfterAction(lit)
       : lit
   }
+  if (
+    actor.path.reorientationTicksRemaining > 0
+    && actor.brain.family !== 'coffin'
+  ) {
+    const reoriented = reorientEnemyTowardTarget(actor, context.players)
+    const lit = stepEnemyLighting(reoriented)
+    return lit.brain.family === 'mage'
+      ? applyMageProviderGateAfterAction(lit)
+      : lit
+  }
   if ((effect?.fleeTicks ?? 0) > 0 && actor.brain.family !== 'coffin') {
     const interrupted = clearSkeletonFamilyHeadFacing(
       interruptNativeSecondaryAction(actor),
     )
     const fled = moveTowardTarget(
+      work,
       interrupted,
       interrupted.brain,
       context,
@@ -2171,7 +2230,10 @@ function stepSkeleton(
   brain: BoneyardSkeletonBrain,
   context: BoneyardEnemyStoreStepContext,
 ): BoneyardEnemyActor {
-  if (actor.targetPlayerId === null) return resetSkeleton(actor, brain)
+  if (actor.targetPlayerId === null) {
+    const reset = resetSkeleton(actor, brain)
+    return moveTowardTarget(work, reset, reset.brain, context, 1)
+  }
   if (brain.phase === 'attack') {
     if (brain.action === 'claw') {
       return stepSkeletonClawAction(work, actor, brain, context)
@@ -2227,7 +2289,7 @@ function stepSkeleton(
       lootSeed: nextLootSeed(work, context),
     }
   }
-  return moveTowardTarget(actor, brain, context, 1)
+  return moveTowardTarget(work, actor, brain, context, 1)
 }
 
 function stepSkeletonWeaponAction(
@@ -2365,7 +2427,10 @@ function stepArcher(
   brain: BoneyardArcherBrain,
   context: BoneyardEnemyStoreStepContext,
 ): BoneyardEnemyActor {
-  if (actor.targetPlayerId === null) return resetArcher(actor, brain)
+  if (actor.targetPlayerId === null) {
+    const reset = resetArcher(actor, brain)
+    return moveTowardTarget(work, reset, reset.brain, context, 1)
+  }
   if (brain.phase === 'attack') {
     let aimRngState = brain.aimRngState
     const stepped = stepProgressAction(
@@ -2396,7 +2461,13 @@ function stepArcher(
       lootSeed: nextLootSeed(work, context),
     }
   }
-  return moveTowardTarget(actor, brain, context, distance < range.minimum ? -1 : 1)
+  return moveTowardTarget(
+    work,
+    actor,
+    brain,
+    context,
+    distance < range.minimum ? -1 : 1,
+  )
 }
 
 function stepMage(
@@ -2408,7 +2479,8 @@ function stepMage(
   const lightningDispatches: MageLightningDispatch[] = []
   let stepped: BoneyardEnemyActor
   if (actor.targetPlayerId === null) {
-    stepped = resetMage(actor, brain)
+    const reset = resetMage(actor, brain)
+    stepped = moveTowardTarget(work, reset, reset.brain, context, 1)
   } else if (brain.phase === 'cast') {
     const base = NATIVE_MAGE_ACTION_PROGRAMS[brain.castProgram]
     let spellDispatched = false
@@ -2463,6 +2535,7 @@ function stepMage(
       }
     } else {
       stepped = moveTowardTarget(
+        work,
         actor,
         brain,
         context,
@@ -2493,7 +2566,10 @@ function stepImp(
   brain: BoneyardImpBrain,
   context: BoneyardEnemyStoreStepContext,
 ): BoneyardEnemyActor {
-  if (actor.targetPlayerId === null) return resetImp(actor, brain)
+  if (actor.targetPlayerId === null) {
+    const reset = resetImp(actor, brain)
+    return moveTowardTarget(work, reset, reset.brain, context, 1)
+  }
   if (brain.phase === 'cooldown') {
     const remaining = Math.max(0, brain.cooldownTicks - 1)
     return {
@@ -2552,7 +2628,7 @@ function stepImp(
       },
     }
   }
-  return moveTowardTarget(actor, brain, context, 1)
+  return moveTowardTarget(work, actor, brain, context, 1)
 }
 
 function stepZombie(
@@ -2561,7 +2637,10 @@ function stepZombie(
   brain: BoneyardZombieBrain,
   context: BoneyardEnemyStoreStepContext,
 ): BoneyardEnemyActor {
-  if (actor.targetPlayerId === null) return resetZombie(actor, brain)
+  if (actor.targetPlayerId === null) {
+    const reset = resetZombie(actor, brain)
+    return moveTowardTarget(work, reset, reset.brain, context, 1)
+  }
   if (brain.phase === 'knockback') {
     const remaining = Math.max(0, brain.phaseTicksRemaining - 1)
     return {
@@ -2654,7 +2733,7 @@ function stepZombie(
       },
     }
   }
-  return moveTowardTarget(actor, brain, context, 1)
+  return moveTowardTarget(work, actor, brain, context, 1)
 }
 
 function stepWraith(
@@ -2663,7 +2742,10 @@ function stepWraith(
   brain: BoneyardWraithBrain,
   context: BoneyardEnemyStoreStepContext,
 ): BoneyardEnemyActor {
-  if (actor.targetPlayerId === null) return resetWraith(actor, brain)
+  if (actor.targetPlayerId === null) {
+    const reset = resetWraith(actor, brain)
+    return moveTowardTarget(work, reset, reset.brain, context, 1)
+  }
   if (brain.phase === 'cooldown') {
     const remaining = Math.max(0, brain.phaseTicksRemaining - 1)
     return {
@@ -2681,7 +2763,7 @@ function stepWraith(
     }
   }
   if (brain.phase === 'orbit') {
-    const moved = moveTowardTarget(actor, brain, context, 0, 1)
+    const moved = moveTowardTarget(work, actor, brain, context, 0, 1)
     const movedBrain = moved.brain as BoneyardWraithBrain
     const remaining = Math.max(0, brain.phaseTicksRemaining - 1)
     return {
@@ -2734,7 +2816,7 @@ function stepWraith(
       },
     }
   }
-  return moveTowardTarget(actor, brain, context, 1)
+  return moveTowardTarget(work, actor, brain, context, 1)
 }
 
 function stepDemon(
@@ -2743,7 +2825,10 @@ function stepDemon(
   brain: BoneyardDemonBrain,
   context: BoneyardEnemyStoreStepContext,
 ): BoneyardEnemyActor {
-  if (actor.targetPlayerId === null) return resetDemon(actor, brain)
+  if (actor.targetPlayerId === null) {
+    const reset = resetDemon(actor, brain)
+    return moveTowardTarget(work, reset, reset.brain, context, 1)
+  }
   if (brain.phase === 'bomb') {
     const previousProgress = brain.actionProgress
     const nextProgress = previousProgress
@@ -2777,7 +2862,7 @@ function stepDemon(
       brain: { ...brain, actionProgress: 0, markerEmitted: false, phase: 'bomb' },
     }
   }
-  return moveTowardTarget(actor, brain, context, 1)
+  return moveTowardTarget(work, actor, brain, context, 1)
 }
 
 function advanceImpVisual(
@@ -3028,6 +3113,8 @@ function spawnCoffinMaggots(
     })
     const targetPlayerId = nearestEligibleTarget(position, context.players)
     const hurricaneContactCooldown = drawInteger(work, 100)
+    const path = createNativeEnemyPathState(work.steeringRngState)
+    work.steeringRngState = path.rngState
     work.maggots.push(Object.freeze({
       collisionRadius: BOUNDED_MAGGOT_PROGRAM.collisionRadius,
       currentHealth: family.maggotHealth,
@@ -3058,7 +3145,9 @@ function spawnCoffinMaggots(
         + BOUNDED_MAGGOT_PROGRAM.emergenceTicks
         + BOUNDED_MAGGOT_PROGRAM.attackDelayAfterEmergenceTicks,
       nextMovementTick: context.tick + 1,
+      nextTargetRefreshTick: context.tick + nativeEnemyTargetRefreshTicks(1),
       ownerCoffinActorId: actor.id,
+      path: path.state,
       poisonDamage: family.maggotPoisonDamage,
       poisonDuration: family.maggotPoisonDamage > 0
         ? BOUNDED_MAGGOT_PROGRAM.poisonDurationTicks
@@ -3150,19 +3239,32 @@ function stepMaggots(
       continue
     }
 
-    const targetPlayerId = nearestEligibleTarget(source.position, context.players)
-    if (targetPlayerId === null) {
-      retained.push({ ...source, targetPlayerId: null })
+    const targetSelection = refreshMaggotTarget(source, context)
+    const targetPlayerId = targetSelection.targetPlayerId
+    const target = targetPlayerId === null ? null : context.players[targetPlayerId] ?? null
+    if (source.path.reorientationTicksRemaining > 0) {
+      const reoriented = stepNativeEnemyReorientation(
+        source.path,
+        source.headingDeg,
+        source.position,
+        target?.position ?? null,
+      )
+      retained.push({
+        ...source,
+        ...targetSelection,
+        headingDeg: reoriented.headingDeg,
+        path: reoriented.state,
+      })
       continue
     }
-    const target = context.players[targetPlayerId]
-    if (!target) throw new Error(`Maggot target ${targetPlayerId} disappeared during one tick`)
-    const distance = Math.hypot(
-      target.position.x - source.position.x,
-      target.position.y - source.position.y,
-    )
+    const distance = target === null
+      ? Number.POSITIVE_INFINITY
+      : Math.hypot(
+          target.position.x - source.position.x,
+          target.position.y - source.position.y,
+        )
     const fleeing = (effect?.fleeTicks ?? 0) > 0
-    if (!fleeing && distance <= Math.max(
+    if (target !== null && targetPlayerId !== null && !fleeing && distance <= Math.max(
       BOUNDED_MAGGOT_PROGRAM.attackReach,
       source.collisionRadius + target.collisionRadius,
     )) {
@@ -3191,28 +3293,41 @@ function stepMaggots(
           headingDeg: targetHeading(source.position, targetPlayerId, context.players),
           lastAttackTick: context.tick,
           lifeState: 'dying',
+          nextTargetRefreshTick: targetSelection.nextTargetRefreshTick,
           targetPlayerId,
           terminalEmitted: false,
         })
       } else {
-        retained.push({ ...source, targetPlayerId })
+        retained.push({ ...source, ...targetSelection })
       }
       continue
     }
     if (context.tick < source.nextMovementTick) {
-      retained.push({ ...source, targetPlayerId })
+      retained.push({ ...source, ...targetSelection })
       continue
     }
     const direction = fleeing ? -1 : 1
-    const unitX = direction * (target.position.x - source.position.x) / distance
-    const unitY = direction * (target.position.y - source.position.y) / distance
     const speedScale = nativeSecondaryActorSpeedScale(effect)
-    const delta = Object.freeze({
-      x: unitX * BOUNDED_MAGGOT_PROGRAM.movementStep * speedScale
-        * source.staffMovementFactor,
-      y: unitY * BOUNDED_MAGGOT_PROGRAM.movementStep * speedScale
-        * source.staffMovementFactor,
+    const targetVelocity = target?.velocityPerTick ?? { x: 0, y: 0 }
+    const targetHeadingDeg = Math.hypot(targetVelocity.x, targetVelocity.y) === 0
+      ? target?.headingDeg ?? 0
+      : actorHeadingFromVector(targetVelocity.x, targetVelocity.y)
+    const steering = buildNativeEnemySteering(source.path, {
+      actorHeadingDeg: source.headingDeg,
+      actorPosition: source.position,
+      cadenceTicks: NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS,
+      movementPerTick: BOUNDED_MAGGOT_PROGRAM.movementStep
+        / NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS
+        * speedScale
+        * source.staffMovementFactor
+        * source.path.speedFactor,
+      radialDirection: direction,
+      statusFactor: speedScale,
+      tangentDirection: 0,
+      targetHeadingDeg,
+      targetPosition: target?.position ?? null,
     })
+    const delta = steering.delta
     const requestedPosition = Object.freeze({
       x: source.position.x + delta.x,
       y: source.position.y + delta.y,
@@ -3230,6 +3345,18 @@ function stepMaggots(
       position.x - source.position.x,
       position.y - source.position.y,
     )
+    const recovery = stepNativeEnemyPathRecovery(
+      steering.state,
+      work.steeringRngState,
+      {
+        flankingEnabled: true,
+        requestedDistance: Math.hypot(delta.x, delta.y),
+        statusFactor: source.staffMovementFactor * speedScale,
+        tick: context.tick,
+        traveledDistance: traveled,
+      },
+    )
+    work.steeringRngState = recovery.rngState
     retained.push({
       ...source,
       gaitPose: traveled === 0
@@ -3238,9 +3365,11 @@ function stepMaggots(
             source.gaitPose + traveled / BOUNDED_MAGGOT_PROGRAM.gaitDistancePerPose,
             2,
           ),
-      headingDeg: actorHeadingFromVector(unitX, unitY),
+      headingDeg: steering.headingDeg,
       lastMovementTick: traveled === 0 ? source.lastMovementTick : context.tick,
       nextMovementTick: context.tick + NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS,
+      nextTargetRefreshTick: targetSelection.nextTargetRefreshTick,
+      path: recovery.state,
       position: Object.freeze({ ...position }),
       targetPlayerId,
     })
@@ -3424,13 +3553,14 @@ function stepProgressAction<B extends BoneyardSkeletonBrain | BoneyardArcherBrai
 }
 
 function moveTowardTarget<B extends BoneyardEnemyBrain>(
+  work: WorkingStep,
   actor: BoneyardEnemyActor,
   brain: B,
   context: BoneyardEnemyStoreStepContext,
   radialDirection: -1 | 0 | 1,
   tangentDirection: -1 | 0 | 1 = 0,
 ): BoneyardEnemyActor {
-  if (context.tick < actor.nextMovementTick || actor.targetPlayerId === null) return actor
+  if (context.tick < actor.nextMovementTick) return actor
   if (
     skeletonFamilyMovementPausedByHit(actor)
     && nativeEnemyHitOverlay(actor.lastDamageTick, context.tick) > 0
@@ -3440,23 +3570,31 @@ function moveTowardTarget<B extends BoneyardEnemyBrain>(
       nextMovementTick: context.tick + NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS,
     }
   }
-  const target = context.players[actor.targetPlayerId]
-  if (!target) return actor
-  const dx = target.position.x - actor.position.x
-  const dy = target.position.y - actor.position.y
-  const length = Math.hypot(dx, dy)
-  if (length === 0) return { ...actor, nextMovementTick: context.tick + NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS }
-  const unitX = dx / length
-  const unitY = dy / length
-  const directionX = unitX * radialDirection + -unitY * tangentDirection
-  const directionY = unitY * radialDirection + unitX * tangentDirection
+  const target = actor.targetPlayerId === null
+    ? null
+    : context.players[actor.targetPlayerId] ?? null
+  const targetVelocity = target?.velocityPerTick ?? { x: 0, y: 0 }
+  const targetHeadingDeg = Math.hypot(targetVelocity.x, targetVelocity.y) === 0
+    ? target?.headingDeg ?? 0
+    : actorHeadingFromVector(targetVelocity.x, targetVelocity.y)
   const movementScalar = Math.fround(
     actor.config.chaseSpeed
       * staffMovementSpeed(actor)
-      * actor.config.scale,
+      * actor.config.scale
+      * actor.path.speedFactor,
   )
-  const step = 0.25 * movementScalar * NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS
-  const delta = Object.freeze({ x: directionX * step, y: directionY * step })
+  const steering = buildNativeEnemySteering(actor.path, {
+    actorHeadingDeg: actor.headingDeg,
+    actorPosition: actor.position,
+    cadenceTicks: NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS,
+    movementPerTick: 0.25 * movementScalar,
+    radialDirection,
+    statusFactor: work.pathStatusFactors.get(actor.id) ?? 1,
+    tangentDirection,
+    targetHeadingDeg,
+    targetPosition: target?.position ?? null,
+  })
+  const delta = steering.delta
   const requestedPosition = Object.freeze({
     x: actor.position.x + delta.x,
     y: actor.position.y + delta.y,
@@ -3488,15 +3626,28 @@ function moveTowardTarget<B extends BoneyardEnemyBrain>(
     NATIVE_SKELETON_BODY_GAIT_PHASE_DIVISOR,
     NATIVE_SKELETON_BODY_GAIT_PHASE_PERIOD,
   )
+  const recovery = stepNativeEnemyPathRecovery(
+    steering.state,
+    work.steeringRngState,
+    {
+      flankingEnabled: actor.config.flanking,
+      requestedDistance: Math.hypot(delta.x, delta.y),
+      statusFactor: work.pathStatusFactors.get(actor.id) ?? 1,
+      tick: context.tick,
+      traveledDistance: traveled,
+    },
+  )
+  work.steeringRngState = recovery.rngState
   return {
     ...actor,
     bodyGaitPhase,
     bodyPose: skeletonFamilyLocomotionBodyPose(actor, bodyGaitPhase),
     brain,
     gaitPose,
-    headingDeg: actorHeadingFromVector(directionX, directionY),
+    headingDeg: steering.headingDeg,
     lastMovementTick: traveled === 0 ? actor.lastMovementTick : context.tick,
     nextMovementTick: context.tick + NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS,
+    path: recovery.state,
     position: Object.freeze({ ...position }),
   }
 }
@@ -3591,12 +3742,48 @@ function refreshTarget(
   const targetPlayerId = nearestEligibleTarget(actor.position, context.players)
   return {
     ...actor,
-    nextTargetRefreshTick: context.tick + (
-      targetPlayerId === null
-        ? NATIVE_ENEMY_MISSING_TARGET_REFRESH_TICKS
-        : NATIVE_ENEMY_TARGET_REFRESH_TICKS
-    ),
+    nextTargetRefreshTick: context.tick
+      + nativeEnemyTargetRefreshTicks(actor.config.pathfindingMode),
     targetPlayerId,
+  }
+}
+
+function refreshMaggotTarget(
+  source: BoneyardMaggotActor,
+  context: BoneyardEnemyStoreStepContext,
+): Readonly<Pick<BoneyardMaggotActor, 'nextTargetRefreshTick' | 'targetPlayerId'>> {
+  const current = source.targetPlayerId === null
+    ? undefined
+    : context.players[source.targetPlayerId]
+  if (current && targetEligible(current) && context.tick < source.nextTargetRefreshTick) {
+    return {
+      nextTargetRefreshTick: source.nextTargetRefreshTick,
+      targetPlayerId: source.targetPlayerId,
+    }
+  }
+  return {
+    nextTargetRefreshTick: context.tick + nativeEnemyTargetRefreshTicks(1),
+    targetPlayerId: nearestEligibleTarget(source.position, context.players),
+  }
+}
+
+function reorientEnemyTowardTarget(
+  source: BoneyardEnemyActor,
+  players: BoneyardEnemyTargets,
+): BoneyardEnemyActor {
+  const target = source.targetPlayerId === null
+    ? null
+    : players[source.targetPlayerId] ?? null
+  const reoriented = stepNativeEnemyReorientation(
+    source.path,
+    source.headingDeg,
+    source.position,
+    target?.position ?? null,
+  )
+  return {
+    ...source,
+    headingDeg: reoriented.headingDeg,
+    path: reoriented.state,
   }
 }
 
@@ -3616,10 +3803,7 @@ function nearestEligibleTarget(
     const dx = player.position.x - position.x
     const dy = player.position.y - position.y
     const distance = dx * dx + dy * dy
-    if (
-      distance < selectedDistance
-      || (distance === selectedDistance && (selected === null || playerId < selected))
-    ) {
+    if (distance < selectedDistance) {
       selected = playerId
       selectedDistance = distance
     }
@@ -3675,20 +3859,6 @@ function targetPlayerWithinAttackReach(
       + target.collisionRadius
       + NATIVE_ACTOR_SEPARATION_EPSILON,
   )
-}
-
-function faceTarget(
-  actor: BoneyardEnemyActor,
-  players: BoneyardEnemyTargets,
-): BoneyardEnemyActor {
-  if (actor.targetPlayerId === null) return actor
-  const target = players[actor.targetPlayerId]
-  if (!target) return actor
-  const dx = target.position.x - actor.position.x
-  const dy = target.position.y - actor.position.y
-  return dx === 0 && dy === 0
-    ? actor
-    : { ...actor, headingDeg: actorHeadingFromVector(dx, dy) }
 }
 
 function targetHeading(

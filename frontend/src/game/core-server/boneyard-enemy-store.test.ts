@@ -26,6 +26,7 @@ import type {
   NativeSecondaryTargetEffectPatch,
   NativeSecondaryTargetEffectState,
 } from '../core-kernels/native-secondary-abilities.ts'
+import { buildNativeEnemySteering } from '../core-kernels/native-enemy-pathfinding.ts'
 import {
   BOUNDED_ARCHER_RANGE_BANDS,
   BOUNDED_ENEMY_COLD_SLOW_TICKS,
@@ -760,7 +761,7 @@ test('Archer death pose clears charge and every enrolled provider copy', () => {
   })
 })
 
-test('target selection is nearest, tie-stable, and immediately rejects dead peers', () => {
+test('target selection is nearest, insertion-stable, cadence-bound, and rejects dead peers', () => {
   const tiedPlayers: BoneyardEnemyTargets = {
     zulu: livingTarget(10, 0),
     alpha: livingTarget(-10, 0),
@@ -775,7 +776,7 @@ test('target selection is nearest, tie-stable, and immediately rejects dead peer
     resolveSpawnIntents: () => [intent('SKELETON', 1, { x: 0, y: 0 })],
     tick: 0,
   })
-  assert.equal(result.store.actors[0]!.targetPlayerId, 'alpha')
+  assert.equal(result.store.actors[0]!.targetPlayerId, 'zulu')
 
   result = stepBoneyardEnemyStore(result.store, {
     firstProjectileWorldContact: NO_WORLD_CONTACT,
@@ -798,9 +799,44 @@ test('target selection is nearest, tie-stable, and immediately rejects dead peer
     },
     resolveMovement: DIRECT_MOVEMENT,
     resolveSpawnIntents: () => [],
-    tick: 26,
+    tick: 300,
   })
   assert.equal(result.store.actors[0]!.targetPlayerId, 'nearer')
+})
+
+test('every mobile retail family wanders through common steering without a target', () => {
+  for (const token of TOKENS.filter((candidate) => candidate !== 'COFFIN')) {
+    let result = spawnOne(`targetless-${token}`, token, { x: 0, y: 0 }, {})
+    const initial = result.store.actors[0]!
+    result = step(result.store, 2, {})
+    const actor = result.store.actors[0]!
+    assert.equal(actor.targetPlayerId, null)
+    assert.notDeepEqual(actor.position, initial.position, `${token} must wander targetless`)
+  }
+})
+
+test('stalled state-0D reorientation faces the target while suspending locomotion', () => {
+  const spawned = spawnOne('state-0d-reorientation', 'SKELETON', { x: 0, y: 0 }, FAR_PLAYERS)
+  const source = spawned.store.actors[0]!
+  let store: BoneyardEnemyStore = {
+    ...spawned.store,
+    actors: [{
+      ...source,
+      headingDeg: 0,
+      path: { ...source.path, reorientationTicksRemaining: 2 },
+    }],
+  }
+  let result = step(store, 1, FAR_PLAYERS)
+  assert.deepEqual(result.store.actors[0]!.position, source.position)
+  assert.equal(result.store.actors[0]!.headingDeg, 90)
+  assert.equal(result.store.actors[0]!.path.reorientationTicksRemaining, 1)
+
+  result = step(result.store, 2, FAR_PLAYERS)
+  assert.deepEqual(result.store.actors[0]!.position, source.position)
+  assert.equal(result.store.actors[0]!.path.reorientationTicksRemaining, 0)
+
+  result = step(result.store, 3, FAR_PLAYERS)
+  assert.ok(result.store.actors[0]!.position.x > source.position.x)
 })
 
 test('two-tick movement sends the recovered delta and radius through collision authority', () => {
@@ -832,15 +868,25 @@ test('two-tick movement sends the recovered delta and radius through collision a
   const movementScalar = Math.fround(
     actor.config.chaseSpeed
       * actor.config.baseSpeed
-      * actor.config.scale,
+      * actor.config.scale
+      * actor.path.speedFactor,
   )
-  const expectedStep = 0.25 * movementScalar * 2
+  const expected = buildNativeEnemySteering(actor.path, {
+    actorHeadingDeg: actor.headingDeg,
+    actorPosition: actor.position,
+    cadenceTicks: 2,
+    movementPerTick: 0.25 * movementScalar,
+    radialDirection: 1,
+    statusFactor: 1,
+    tangentDirection: 0,
+    targetHeadingDeg: 0,
+    targetPosition: FAR_PLAYERS.player!.position,
+  })
   assert.equal(requests.length, 1)
   assert.equal(requests[0]!.actorId, actor.id)
-  assert.equal(requests[0]!.delta.x, expectedStep)
-  assert.equal(requests[0]!.delta.y, 0)
+  assert.deepEqual(requests[0]!.delta, expected.delta)
   assert.equal(requests[0]!.radius, actor.config.collisionRadius)
-  assert.equal(result.store.actors[0]!.position.x, expectedStep / 2)
+  assert.equal(result.store.actors[0]!.position.x, expected.delta.x / 2)
   assert.equal(
     result.store.actors[0]!.gaitPose,
     advanceNativeEnemyLocomotionPhase(
@@ -1243,6 +1289,8 @@ test('Staff Disable persistently composes native action and movement factors', (
     ...baseline,
     store: applyBoneyardStaffDisable(baseline.store, baseline.store.actors[0]!.id),
   }
+  const baselineBeforeMovement = baseline.store.actors[0]!
+  const slowedBeforeMovement = slowed.store.actors[0]!
   const initialPosition = baseline.store.actors[0]!.position
   for (let tick = 1; tick <= 20; tick += 1) {
     baseline = step(baseline.store, tick, FAR_PLAYERS)
@@ -1260,26 +1308,29 @@ test('Staff Disable persistently composes native action and movement factors', (
     slowed.store.actors[0]!.position.x - initialPosition.x,
     slowed.store.actors[0]!.position.y - initialPosition.y,
   )
-  const baselineActor = baseline.store.actors[0]!
-  const slowedActor = slowed.store.actors[0]!
-  assert.equal(
-    baselineDistance,
-    0.25 * Math.fround(
-      baselineActor.config.chaseSpeed
-        * baselineActor.config.baseSpeed
-        * baselineActor.staffMovementFactor
-        * baselineActor.config.scale,
-    ) * 2,
-  )
-  assert.equal(
-    slowedDistance,
-    0.25 * Math.fround(
-      slowedActor.config.chaseSpeed
-        * slowedActor.config.baseSpeed
-        * slowedActor.staffMovementFactor
-        * slowedActor.config.scale,
-    ) * 2,
-  )
+  const expectedDistance = (actor: BoneyardEnemyActor): number => {
+    const movementScalar = Math.fround(
+      actor.config.chaseSpeed
+        * actor.config.baseSpeed
+        * actor.staffMovementFactor
+        * actor.config.scale
+        * actor.path.speedFactor,
+    )
+    const steering = buildNativeEnemySteering(actor.path, {
+      actorHeadingDeg: actor.headingDeg,
+      actorPosition: actor.position,
+      cadenceTicks: 2,
+      movementPerTick: 0.25 * movementScalar,
+      radialDirection: 1,
+      statusFactor: actor.staffMovementFactor,
+      tangentDirection: 0,
+      targetHeadingDeg: 0,
+      targetPosition: FAR_PLAYERS.player!.position,
+    })
+    return Math.hypot(steering.delta.x, steering.delta.y)
+  }
+  assert.equal(baselineDistance, expectedDistance(baselineBeforeMovement))
+  assert.equal(slowedDistance, expectedDistance(slowedBeforeMovement))
 
   const compounded = applyBoneyardStaffDisable(
     slowed.store,
@@ -1511,7 +1562,8 @@ test('every Archer and Mage range mode attacks, approaches, and retreats at its 
         flags,
       )
       near = step(near.store, 2, { player: livingTarget(nearDistance, 0) })
-      assert.ok(near.store.actors[0]!.position.x < 0, `${token} mode ${mode} must retreat`)
+      assert.ok(near.store.actors[0]!.headingDeg < 90, `${token} mode ${mode} must turn to retreat`)
+      assert.ok(near.store.actors[0]!.position.x > 0, `${token} mode ${mode} must turn gradually`)
 
       const farDistance = range.maximum + 1
       let far = spawnOne(

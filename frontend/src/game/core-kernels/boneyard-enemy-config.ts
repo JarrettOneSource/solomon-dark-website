@@ -3,6 +3,7 @@ import {
   type BoneyardWaveEnemyToken,
 } from './boneyard-wave-schema.ts'
 import { BOUNDED_ARCHER_MAXIMUM_EXTRA_ARROWS } from './boneyard-enemy-modifiers.ts'
+import type { NativeEnemyPathfindingMode } from './native-enemy-pathfinding.ts'
 
 export const BONEYARD_ENEMY_FLAGS = [
   'FLAG_HPUP',
@@ -85,8 +86,12 @@ export interface EvaluateBoneyardEnemyConfigOptions {
   /** Custom-authoring lane; retail wave data leaves this at zero. */
   archerExtraArrows?: number
   flags?: readonly string[]
+  /** Native MonsterRecipe +0xB8; the constructor default is enabled. */
+  flanking?: boolean
   /** Native MonsterRecipe selector; retail survival-wave data leaves it false. */
   mageCloak?: boolean
+  /** Native MonsterRecipe +0xB9; the constructor default is mode 1. */
+  pathfindingMode?: NativeEnemyPathfindingMode
   random?: Partial<BoneyardEnemyConfigRandom>
   waveOrdinal?: number
 }
@@ -105,9 +110,11 @@ interface BoneyardEnemyConfigBase {
   experience: number
   extraDamage: number
   flags: readonly BoneyardEnemyFlag[]
+  flanking: boolean
   ignoredSourceFlags: readonly ('FLAG_IGNITE' | 'FLAG_IMMORTALIZE')[]
   maximumHealth: number
   nativeTypeId: number
+  pathfindingMode: NativeEnemyPathfindingMode
   primaryDamage: number | null
   scale: number
   secondaryDamage: number
@@ -327,11 +334,13 @@ export function evaluateBoneyardEnemyConfig(
     experience: config.experience,
     extraDamage: config.extraDamage,
     flags: Object.freeze([...flags]),
+    flanking: options.flanking ?? true,
     ignoredSourceFlags: Object.freeze(flags.filter((flag): flag is 'FLAG_IGNITE' | 'FLAG_IMMORTALIZE' => (
       flag === 'FLAG_IGNITE' || flag === 'FLAG_IMMORTALIZE'
     ))),
     maximumHealth: config.maximumHealth,
     nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES[enemyToken],
+    pathfindingMode: validatedPathfindingMode(options.pathfindingMode),
     primaryDamage: base.primaryDamage === null ? null : config.primaryDamage,
     scale: 1,
     secondaryDamage: config.secondaryDamage,
@@ -396,6 +405,16 @@ export function evaluateBoneyardEnemyConfig(
       },
     })
   }
+}
+
+function validatedPathfindingMode(
+  mode: NativeEnemyPathfindingMode | undefined,
+): NativeEnemyPathfindingMode {
+  const value = mode ?? 1
+  if (value !== 0 && value !== 1 && value !== 2 && value !== 3) {
+    throw new RangeError('enemy pathfinding mode must be 0, 1, 2, or 3')
+  }
+  return value
 }
 
 function validatedMageCloak(

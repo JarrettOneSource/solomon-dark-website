@@ -313,6 +313,7 @@ test('same-tick wave actors register before player primary actors', () => {
   if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
   if (state.world.waves === null) throw new Error('expected retail wave director')
   if (state.world.encounter === null) throw new Error('expected retail encounter')
+  const openingCount = state.world.waves.openingBursts[0]!.count
   const player = getPlayerCharacter(state, 'caster')
   state = {
     ...state,
@@ -321,7 +322,7 @@ test('same-tick wave actors register before player primary actors', () => {
       primaryCasts: [{
         ...state.playerEntities.primaryCasts[0]!,
         actionTick: PRIMARY_CAST_EMISSION_TICK - 1,
-        aimDirection: { x: 0, y: -1 },
+        aimDirection: { x: 1, y: 0 },
         castSequence: 1,
         held: true,
       }],
@@ -335,7 +336,7 @@ test('same-tick wave actors register before player primary actors', () => {
 
   state = stepGameSimulationTick(state, {
     caster: {
-      aim: { x: player.position.x, y: 0 },
+      aim: { x: player.position.x + 1_000, y: player.position.y },
       cast: { primary: true, quickbar: null },
       movement: { x: 0, y: 0 },
     },
@@ -343,20 +344,20 @@ test('same-tick wave actors register before player primary actors', () => {
   if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
   const fire = state.primarySpells.projectiles.find(({ kind }) => kind === 'fire')
   assert.ok(fire)
-  assert.equal(state.world.enemies.actors.length, 10)
+  assert.equal(state.world.enemies.actors.length, openingCount)
   assert.deepEqual(
     state.world.enemies.actors.map(({ lightRegistration }) => lightRegistration),
-    Array.from({ length: 10 }, (_, index) => ({
+    Array.from({ length: openingCount }, (_, index) => ({
       managerLane: 'actor' as const,
       registrationOrdinal: index + 2,
     })),
   )
   assert.deepEqual(fire.lightRegistration, {
     managerLane: 'actor',
-    registrationOrdinal: 12,
+    registrationOrdinal: openingCount + 2,
   })
   assert.deepEqual(state.lightProviderOrder.nextRegistrationOrdinal, {
-    actor: 13,
+    actor: openingCount + 3,
     transient: 0,
   })
 })

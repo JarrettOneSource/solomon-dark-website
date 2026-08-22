@@ -14,6 +14,11 @@ import {
   type LineObstruction,
 } from '../core-kernels/line-obstruction.ts'
 import { nativeRandomFloatFromSemanticWord } from '../core-kernels/native-random-domain.ts'
+import {
+  drawNativeFloat,
+  type NativeRngState,
+} from '../core-kernels/native-rng.ts'
+import type { BoneyardSpawnPositionPolicy } from '../core-kernels/boneyard-wave-timeline.ts'
 
 export interface BoneyardCollisionPolygon {
   nativeLineMask?: number
@@ -96,9 +101,21 @@ const GOODIE_RADIUS = 8
 export const NATIVE_FIREBALL_TERRAIN_EXCLUSION_MASK = 0x700
 
 export const NATIVE_BONEYARD_SPAWN_PLACEMENT = Object.freeze({
+  darkFallbackRadius: 350,
   movementProbe: 0.5,
   verticalScale: 0.8,
 })
+
+export interface NativeBoneyardSpawnPolicyContext {
+  readonly isOffscreen?: (position: Readonly<BoneyardPoint>) => boolean
+  readonly isOutsidePolicyBounds?: (position: Readonly<BoneyardPoint>) => boolean
+  readonly lightAt: (position: Readonly<BoneyardPoint>) => number
+}
+
+export interface NativeBoneyardSpawnPlacementResult {
+  readonly position: BoneyardPoint
+  readonly rngState: NativeRngState
+}
 
 export function createBoneyardCollisionWorld(scene: BoneyardScene): BoneyardCollisionWorld {
   const polygons: BoneyardCollisionPolygon[] = []
@@ -238,6 +255,61 @@ export function resolveBoneyardSpawnPosition(
   }
   throw new Error(
     `Boneyard has no collision-safe spawn placement for radius ${radius} from (${position.x}, ${position.y})`,
+  )
+}
+
+export function resolveNativeBoneyardSpawnPosition(
+  position: BoneyardPoint,
+  bounds: BoneyardBounds,
+  world: BoneyardCollisionWorld,
+  radius: number,
+  policy: BoneyardSpawnPositionPolicy,
+  sourceRngState: NativeRngState,
+  context: NativeBoneyardSpawnPolicyContext,
+): NativeBoneyardSpawnPlacementResult {
+  validateSpawnRadius(radius)
+  if (nativeSpawnPolicyAccepts(position, bounds, world, radius, policy, context)) {
+    return { position: { ...position }, rngState: sourceRngState }
+  }
+
+  let rngState = sourceRngState
+  let activePolicy = policy
+  let ringRadius = radius
+  const maximumRadius = Math.hypot(bounds.w, bounds.h) + radius * 2
+  while (ringRadius <= maximumRadius) {
+    const angle = drawNativeFloat(rngState, 360)
+    rngState = angle.state
+    const sampleCount = nativeSpawnRingSampleCount(ringRadius, radius)
+    const angleStep = 360 / sampleCount
+    for (let index = 0; index < sampleCount; index += 1) {
+      const radians = (angle.value + index * angleStep) * Math.PI / 180
+      const candidate = {
+        x: Math.fround(position.x + Math.sin(radians) * ringRadius),
+        y: Math.fround(
+          position.y
+          - Math.cos(radians) * ringRadius * NATIVE_BONEYARD_SPAWN_PLACEMENT.verticalScale,
+        ),
+      }
+      if (nativeSpawnPolicyAccepts(
+        candidate,
+        bounds,
+        world,
+        radius,
+        activePolicy,
+        context,
+      )) return { position: candidate, rngState }
+    }
+    ringRadius += radius
+    if (
+      activePolicy === 'dark'
+      && ringRadius >= NATIVE_BONEYARD_SPAWN_PLACEMENT.darkFallbackRadius
+    ) {
+      activePolicy = 'direct'
+      ringRadius = radius * 2
+    }
+  }
+  throw new Error(
+    `Boneyard has no ${policy} collision-safe spawn placement for radius ${radius} from (${position.x}, ${position.y})`,
   )
 }
 
@@ -413,6 +485,30 @@ function isMobileBoneyardPlacement(
       resolved.y - position.y,
     ) >= probe - 0.01
   })
+}
+
+function nativeSpawnPolicyAccepts(
+  position: BoneyardPoint,
+  bounds: BoneyardBounds,
+  world: BoneyardCollisionWorld,
+  radius: number,
+  policy: BoneyardSpawnPositionPolicy,
+  context: NativeBoneyardSpawnPolicyContext,
+): boolean {
+  if (!isMobileBoneyardPlacement(position, bounds, world, radius)) return false
+  switch (policy) {
+    case 'dark': return context.lightAt(position) <= 0
+    case 'light': return context.lightAt(position) > 0
+    case 'offscreen': return context.isOffscreen?.(position) ?? false
+    case 'edge': return context.isOutsidePolicyBounds?.(position) ?? false
+    case 'direct': return true
+  }
+}
+
+function validateSpawnRadius(radius: number): void {
+  if (!Number.isFinite(radius) || radius <= 0) {
+    throw new RangeError('Boneyard spawn radius must be positive and finite')
+  }
 }
 
 function appendObjectCollision(

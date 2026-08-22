@@ -3,8 +3,13 @@ import {
   type WaveDef,
   type WaveGroupEntry,
 } from './boneyard-wave-schema.ts'
+import {
+  drawNativeInteger,
+  type NativeRngState,
+} from './native-rng.ts'
 
 export type BoneyardSpawnLocationPolicy = 'anywhere' | 'near-player'
+export type BoneyardSpawnPositionPolicy = 'dark' | 'direct' | 'edge' | 'light' | 'offscreen'
 
 export interface BoneyardCompiledSpawnBurst {
   afterDelayTicks: number
@@ -12,6 +17,7 @@ export interface BoneyardCompiledSpawnBurst {
   entries: readonly WaveGroupEntry[]
   groupIndex: number
   locationPolicy: BoneyardSpawnLocationPolicy
+  positionPolicy: BoneyardSpawnPositionPolicy
   spreadTicks: number
   startDelayTicks: number
   steady: boolean
@@ -24,11 +30,19 @@ export interface BoneyardCompiledWaveSection {
 }
 
 export interface BoneyardWaveCompileResult {
-  rngState: number
+  rngState: NativeRngState
   section: BoneyardCompiledWaveSection
 }
 
-export const NATIVE_OPENING_RELEASE_THRESHOLD = 4
+export interface BoneyardOpeningCompileResult {
+  bursts: readonly BoneyardCompiledSpawnBurst[]
+  releaseThreshold: number
+  rngState: NativeRngState
+}
+
+export const NATIVE_OPENING_IMMEDIATE_COUNT = Object.freeze({ minimum: 8, randomCount: 5 })
+export const NATIVE_OPENING_SPREAD_COUNT = Object.freeze({ minimum: 3, randomCount: 3 })
+export const NATIVE_OPENING_RELEASE_THRESHOLD = Object.freeze({ minimum: 1, randomCount: 4 })
 export const NATIVE_WAVE_LABEL_TO_FIRST_SPAWN_TICKS = 10
 export const NATIVE_PAUSE_NODE_GAP_TICKS = 25
 export const NATIVE_LULL_RELEASE_TO_NEXT_SPAWN_TICKS = 85
@@ -36,28 +50,50 @@ export const NATIVE_LULL_RELEASE_TO_NEXT_SPAWN_TICKS = 85
 const OPENING_FLAGS = ['FLAG_WEAK', 'FLAG_HPDOWN', 'FLAG_XPBONUS'] as const
 const IGNORED_SOURCE_FLAGS = new Set<string>(BONEYARD_WAVE_IGNORED_SOURCE_FLAGS)
 
-export const NATIVE_SOLOMON_OPENING_BURSTS: readonly BoneyardCompiledSpawnBurst[] = [
-  {
-    afterDelayTicks: 0,
-    count: 10,
-    entries: [{ enemy: 'SKELETON', flags: [...OPENING_FLAGS] }],
-    groupIndex: -1,
-    locationPolicy: 'near-player',
-    spreadTicks: 0,
-    startDelayTicks: 0,
-    steady: true,
-  },
-  {
-    afterDelayTicks: 0,
-    count: 5,
-    entries: [{ enemy: 'SKELETON', flags: [...OPENING_FLAGS] }],
-    groupIndex: -1,
-    locationPolicy: 'near-player',
-    spreadTicks: 400,
-    startDelayTicks: 500,
-    steady: true,
-  },
-]
+export function compileBoneyardOpening(
+  sourceRngState: NativeRngState,
+): BoneyardOpeningCompileResult {
+  const immediate = drawNativeInteger(
+    sourceRngState,
+    NATIVE_OPENING_IMMEDIATE_COUNT.randomCount,
+  )
+  const spread = drawNativeInteger(
+    immediate.state,
+    NATIVE_OPENING_SPREAD_COUNT.randomCount,
+  )
+  const release = drawNativeInteger(
+    spread.state,
+    NATIVE_OPENING_RELEASE_THRESHOLD.randomCount,
+  )
+  return {
+    bursts: Object.freeze([
+      Object.freeze({
+        afterDelayTicks: 0,
+        count: NATIVE_OPENING_IMMEDIATE_COUNT.minimum + immediate.value,
+        entries: Object.freeze([{ enemy: 'SKELETON', flags: [...OPENING_FLAGS] }]),
+        groupIndex: -1,
+        locationPolicy: 'near-player',
+        positionPolicy: 'dark',
+        spreadTicks: 0,
+        startDelayTicks: 0,
+        steady: true,
+      }),
+      Object.freeze({
+        afterDelayTicks: 0,
+        count: NATIVE_OPENING_SPREAD_COUNT.minimum + spread.value,
+        entries: Object.freeze([{ enemy: 'SKELETON', flags: [...OPENING_FLAGS] }]),
+        groupIndex: -1,
+        locationPolicy: 'near-player',
+        positionPolicy: 'dark',
+        spreadTicks: 400,
+        startDelayTicks: 500,
+        steady: true,
+      }),
+    ]),
+    releaseThreshold: NATIVE_OPENING_RELEASE_THRESHOLD.minimum + release.value,
+    rngState: release.state,
+  }
+}
 
 /**
  * Compile one retail wave.txt row into the ordinary TimeLine spawn bursts.
@@ -70,7 +106,7 @@ export const NATIVE_SOLOMON_OPENING_BURSTS: readonly BoneyardCompiledSpawnBurst[
 export function compileBoneyardWaveSection(
   wave: WaveDef,
   waveOrdinal: number,
-  sourceRngState: number,
+  sourceRngState: NativeRngState,
 ): BoneyardWaveCompileResult {
   if (!Number.isInteger(waveOrdinal) || waveOrdinal < 1) {
     throw new Error('wave ordinal must be a positive integer')
@@ -78,21 +114,21 @@ export function compileBoneyardWaveSection(
 
   let rngState = sourceRngState
   const halfBudget = Math.trunc(wave.spawn / 2)
-  const budgetRoll = randomInteger(rngState, Math.max(halfBudget, 1))
+  const budgetRoll = drawNativeInteger(rngState, Math.max(halfBudget, 1))
   rngState = budgetRoll.state
   let remainingBudget = wave.spawn + halfBudget + budgetRoll.value
 
   // The retail compiler samples these parsed ranges before selecting groups.
   // Their values are retained/dead in the generated graph, but the draws are
   // part of the seeded stream and therefore remain authoritative.
-  const waveDelayDraw = randomRange(rngState, wave.waveDelay)
+  const waveDelayDraw = drawNativeRange(rngState, wave.waveDelay)
   rngState = waveDelayDraw.state
-  const singletonSpawnDraw = randomInteger(rngState, 1)
+  const singletonSpawnDraw = drawNativeInteger(rngState, 1)
   rngState = singletonSpawnDraw.state
 
   const bursts: BoneyardCompiledSpawnBurst[] = []
   while (remainingBudget > 0) {
-    const groupDraw = randomInteger(rngState, wave.groups.length)
+    const groupDraw = drawNativeInteger(rngState, wave.groups.length)
     rngState = groupDraw.state
     const groupIndex = groupDraw.value
     const group = wave.groups[groupIndex]
@@ -119,7 +155,7 @@ export function compileBoneyardWaveSection(
     if (groupCost <= 0) break
 
     const bonusBound = clampInteger(Math.trunc(waveOrdinal / 3), 1, 4)
-    const bonusDraw = randomInteger(rngState, bonusBound)
+    const bonusDraw = drawNativeInteger(rngState, bonusBound)
     rngState = bonusDraw.state
     let count = groupCost + bonusDraw.value + 1
     if (waveOrdinal >= 4) count += Math.trunc(count / 3)
@@ -128,14 +164,20 @@ export function compileBoneyardWaveSection(
 
     let spreadTicks = 0
     for (let member = 0; member < groupCost; member += 1) {
-      const delayDraw = randomRange(rngState, wave.spawnDelay)
+      const delayDraw = drawNativeRange(rngState, wave.spawnDelay)
       rngState = delayDraw.state
       spreadTicks += coffinMode ? 25 : delayDraw.value * 0.5
     }
 
     const locationPolicy = coffinMode ? 'near-player' : 'anywhere'
+    const positionPolicy = coffinMode ? 'light' : 'dark'
     const prior = bursts[bursts.length - 1]
-    if (prior && prior.groupIndex === groupIndex && prior.locationPolicy === locationPolicy) {
+    if (
+      prior
+      && prior.groupIndex === groupIndex
+      && prior.locationPolicy === locationPolicy
+      && prior.positionPolicy === positionPolicy
+    ) {
       bursts[bursts.length - 1] = {
         ...prior,
         count: prior.count + count,
@@ -151,6 +193,7 @@ export function compileBoneyardWaveSection(
         })),
         groupIndex,
         locationPolicy,
+        positionPolicy,
         spreadTicks,
         startDelayTicks: bursts.length === 0
           ? NATIVE_WAVE_LABEL_TO_FIRST_SPAWN_TICKS
@@ -162,10 +205,10 @@ export function compileBoneyardWaveSection(
   }
 
   const releaseUpper = Math.max(10, Math.trunc(waveOrdinal / 2))
-  const releaseDraw = randomInclusiveRange(rngState, 10, releaseUpper)
+  const releaseDraw = drawNativeInclusiveRange(rngState, 10, releaseUpper)
   rngState = releaseDraw.state
   const lullUpper = Math.max(4, Math.trunc(waveOrdinal / 2))
-  const lullDraw = randomInclusiveRange(rngState, 2, lullUpper)
+  const lullDraw = drawNativeInclusiveRange(rngState, 2, lullUpper)
   rngState = lullDraw.state
 
   return {
@@ -206,19 +249,19 @@ export function randomBoneyardWaveInteger(
   return randomInteger(state, count)
 }
 
-function randomRange(
-  state: number,
+function drawNativeRange(
+  state: NativeRngState,
   range: readonly [number, number],
-): { state: number; value: number } {
-  return randomInclusiveRange(state, range[0], range[1])
+): { state: NativeRngState; value: number } {
+  return drawNativeInclusiveRange(state, range[0], range[1])
 }
 
-function randomInclusiveRange(
-  state: number,
+function drawNativeInclusiveRange(
+  state: NativeRngState,
   minimum: number,
   maximum: number,
-): { state: number; value: number } {
-  const sample = randomInteger(state, maximum - minimum + 1)
+): { state: NativeRngState; value: number } {
+  const sample = drawNativeInteger(state, maximum - minimum + 1)
   return { state: sample.state, value: minimum + sample.value }
 }
 

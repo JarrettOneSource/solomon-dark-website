@@ -24,6 +24,7 @@ import {
   triggerNativePlayerMindblast,
 } from '../core-kernels/native-secondary-abilities.ts'
 import { createNativeRng } from '../core-kernels/native-rng.ts'
+import { createNativeEnemyPathState } from '../core-kernels/native-enemy-pathfinding.ts'
 import type { BoneyardEnemySemanticEvent } from '../core-server/boneyard-enemy-store.ts'
 import { spawnBoneyardLootSpecs } from '../core-server/boneyard-loot-store.ts'
 import {
@@ -2036,7 +2037,9 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     kind: 'fire-good-imp',
     lightGlow: 0.01,
     lightRegistration: { managerLane: 'actor', registrationOrdinal: 3 },
+    nextTargetRefreshTick: 300,
     ownerId: 'player-1',
+    path: createNativeEnemyPathState(createNativeRng(13)).state,
     position: { x: 800, y: 400 },
     remainingTicks: 299,
     targetId: null,

@@ -8,9 +8,7 @@ import { startBoneyardArenaTransition } from '../core-kernels/boneyard-arena-tra
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-schema.ts'
 import {
-  createBoneyardWaveDirector,
-  startBoneyardWaveDirector,
-  stepBoneyardWaveDirector,
+  type BoneyardEnemySpawnIntent,
 } from '../core-kernels/boneyard-wave-director.ts'
 import {
   PLAYER_CHARACTER_RADIUS,
@@ -46,6 +44,7 @@ function stepWorld(
   players: Parameters<typeof stepBoneyardWorldTick>[1],
   inputs: Parameters<typeof stepBoneyardWorldTick>[2],
   tick: number,
+  externalSpawnIntents: readonly BoneyardEnemySpawnIntent[] = [],
 ) {
   return stepBoneyardWorldTick(
     world,
@@ -56,6 +55,11 @@ function stepWorld(
       { alive: true, collisionEnabled: true, eligible: true, movementScale: 1 },
     ])),
     tick,
+    undefined,
+    undefined,
+    {},
+    [],
+    externalSpawnIntents,
   )
 }
 
@@ -695,10 +699,11 @@ test('default Boneyard walks through Solomon dialogue, retreat, then authoritati
     y: 0,
   })
   assert.equal(world.enemies.actors.length, 0)
+  const openingCount = world.waves!.openingBursts[0]!.count
 
   result = stepWorld(world, { player }, {}, tick)
   world = result.world
-  assert.equal(world.enemies.actors.length, 10)
+  assert.equal(world.enemies.actors.length, openingCount)
   assert.ok(world.enemies.actors.every((enemy) => (
     enemy.config.enemyToken === 'SKELETON'
     && enemy.config.flags.includes('FLAG_WEAK')
@@ -717,6 +722,7 @@ test('default Boneyard walks through Solomon dialogue, retreat, then authoritati
     actorFlags: 0x2,
     attachment: { x: 0, y: 0 },
     bodyRadius: firstEnemy.config.collisionRadius,
+    headingDeg: firstEnemy.headingDeg,
     id: `enemy:${firstEnemy.id}`,
     kind: 'enemy',
     nativePriority: 0,
@@ -734,7 +740,7 @@ test('default Boneyard walks through Solomon dialogue, retreat, then authoritati
   assert.equal(damaged.killed, true)
   assert.equal(damaged.store.actors[0].lifeState, 'dying')
 
-  const frozenWaves = world.waves
+  const wavesBeforeTargetLoss = world.waves
   for (let noTargetTick = 0; noTargetTick < 600; noTargetTick += 1) {
     result = stepBoneyardWorldTick(
       world,
@@ -753,8 +759,12 @@ test('default Boneyard walks through Solomon dialogue, retreat, then authoritati
     world = result.world
     player = result.players.player
   }
-  assert.deepEqual(world.waves, frozenWaves)
-  assert.equal(world.enemies.actors.length, 10)
+  assert.notDeepEqual(world.waves, wavesBeforeTargetLoss)
+  assert.equal(world.waves?.activeBurstIndex, 1)
+  assert.ok(
+    world.enemies.actors.length > openingCount,
+    'the delayed opening must continue through the camera-center fallback',
+  )
 })
 
 test('the retired entrance is a one-way authoritative movement boundary', () => {
@@ -791,61 +801,49 @@ test('the retired entrance is a one-way authoritative movement boundary', () => 
   assert.equal(world.gateLeaves.length, 2, 'the Gate actor remains outside the active arena')
 })
 
-test('wave materialization escapes the captured object-213 grave with a mobile body', () => {
+test('direct spawn materialization escapes the captured object-213 grave with a mobile body', () => {
   const capturedPosition = { x: 1723.75, y: 2189.125 }
   const loaded = capturedGraveBoneyard()
-  let world = createBoneyardWorld(loaded)
-  assert.ok(world.waves)
-  const startedWaves = startBoneyardWaveDirector(
-    createBoneyardWaveDirector(loaded.seed),
-  )
-  const probePlayer = { position: { x: 1000, y: 1000 } }
-  const probe = stepBoneyardWaveDirector(startedWaves, {
-    bounds: world.bounds,
-    liveEnemyCount: 0,
-    players: { player: probePlayer },
-    tick: 0,
-  })
-  const firstProbe = probe.spawnIntents[0]
-  assert.ok(firstProbe)
-  const playerPosition = {
-    x: capturedPosition.x - (firstProbe.position.x - probePlayer.position.x),
-    y: capturedPosition.y - (firstProbe.position.y - probePlayer.position.y),
+  const spawnIntent: BoneyardEnemySpawnIntent = {
+    enemyToken: 'SKELETON',
+    flags: [],
+    id: 1,
+    locationPolicy: 'anywhere',
+    nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.SKELETON,
+    position: capturedPosition,
+    positionPolicy: 'direct',
+    spawnTick: 0,
+    waveOrdinal: 1,
   }
+  const world = { ...createBoneyardWorld(loaded), encounter: null, waves: null }
   const player = {
     ...spawnPlayerCharacterInBoneyard({
       discipline: 'arcane',
       displayName: 'Captured Grave Target',
       element: 'fire',
     }, world),
-    position: playerPosition,
+    position: { x: 1000, y: 1000 },
   }
-  world = { ...world, waves: startedWaves }
 
-  const result = stepWorld(world, { player }, {}, 0)
+  const result = stepWorld(world, { player }, {}, 0, [spawnIntent])
   const controlWorld = createBoneyardWorld({
     ...loaded,
     scene: { ...loaded.scene, objects: [] },
   })
   const control = stepWorld(
-    { ...controlWorld, waves: startedWaves },
+    { ...controlWorld, encounter: null, waves: null },
     { player },
     {},
     0,
+    [spawnIntent],
   )
-  const firstActor = result.world.enemies.actors.find(({ sourceSpawnIntentId }) => (
-    sourceSpawnIntentId === 1
-  ))
-  const controlFirstActor = control.world.enemies.actors.find(({ sourceSpawnIntentId }) => (
-    sourceSpawnIntentId === 1
-  ))
+  const firstActor = result.world.enemies.actors[0]
+  const controlFirstActor = control.world.enemies.actors[0]
   assert.ok(firstActor)
   assert.ok(controlFirstActor)
   assert.deepEqual(controlFirstActor.position, capturedPosition)
   assert.notDeepEqual(firstActor.position, capturedPosition)
-  assert.deepEqual(result.world.enemies.actors.map(({ id }) => id), [
-    1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
-  ])
+  assert.deepEqual(result.world.enemies.actors.map(({ id }) => id), [1])
   assert.deepEqual(result.enemyEvents, control.enemyEvents)
   assert.deepEqual(result.world.waves, control.world.waves)
   assert.equal(result.world.enemies.nextActorId, control.world.enemies.nextActorId)
@@ -869,45 +867,36 @@ test('wave materialization escapes the captured object-213 grave with a mobile b
       waveOrdinal: actor.waveOrdinal,
     })),
   )
-  for (const actor of result.world.enemies.actors) {
-    assert.equal(
-      canPlaceBoneyardBody(
-        actor.position,
-        result.world.bounds,
-        result.world.collision,
-        actor.config.collisionRadius,
-      ),
-      true,
-      `actor ${actor.id} must materialize outside authored collision`,
+  assert.equal(canPlaceBoneyardBody(
+    firstActor.position,
+    result.world.bounds,
+    result.world.collision,
+    firstActor.config.collisionRadius,
+  ), true)
+  const canMoveOneNormalProbe = [
+    { x: 0.5, y: 0 },
+    { x: 0, y: 0.5 },
+    { x: -0.5, y: 0 },
+    { x: 0, y: -0.5 },
+  ].some((delta) => {
+    const moved = resolveBoneyardMovement(
+      firstActor.position,
+      { x: firstActor.position.x + delta.x, y: firstActor.position.y + delta.y },
+      result.world.bounds,
+      result.world.collision,
+      firstActor.config.collisionRadius,
     )
-    const canMoveOneNormalProbe = [
-      { x: 0.5, y: 0 },
-      { x: 0, y: 0.5 },
-      { x: -0.5, y: 0 },
-      { x: 0, y: -0.5 },
-    ].some((delta) => {
-      const moved = resolveBoneyardMovement(
-        actor.position,
-        { x: actor.position.x + delta.x, y: actor.position.y + delta.y },
-        result.world.bounds,
-        result.world.collision,
-        actor.config.collisionRadius,
-      )
-      return Math.hypot(
-        moved.x - actor.position.x,
-        moved.y - actor.position.y,
-      ) >= 0.49
-    })
-    assert.equal(canMoveOneNormalProbe, true, `actor ${actor.id} must have a tick-sized exit`)
-    assert.equal(actor.targetPlayerId, 'player')
-    assert.equal(
-      actor.headingDeg,
-      actorHeadingFromVector(
-        player.position.x - actor.position.x,
-        player.position.y - actor.position.y,
-      ),
-    )
-  }
+    return Math.hypot(
+      moved.x - firstActor.position.x,
+      moved.y - firstActor.position.y,
+    ) >= 0.49
+  })
+  assert.equal(canMoveOneNormalProbe, true)
+  assert.equal(firstActor.targetPlayerId, 'player')
+  assert.equal(firstActor.headingDeg, actorHeadingFromVector(
+    player.position.x - firstActor.position.x,
+    player.position.y - firstActor.position.y,
+  ))
 })
 
 test('Solomon ignores dead and ineligible proximity targets', () => {

@@ -6,21 +6,24 @@ import {
   type WaveGroupEntry,
 } from './boneyard-wave-schema.ts'
 import {
+  compileBoneyardOpening,
   compileBoneyardWaveSection,
   NATIVE_LULL_RELEASE_TO_NEXT_SPAWN_TICKS,
-  NATIVE_OPENING_RELEASE_THRESHOLD,
   NATIVE_PAUSE_NODE_GAP_TICKS,
-  NATIVE_SOLOMON_OPENING_BURSTS,
   NATIVE_WAVE_LABEL_TO_FIRST_SPAWN_TICKS,
-  nextBoneyardWaveRandom,
-  randomBoneyardWaveInteger,
   seedBoneyardWaveRng,
   type BoneyardCompiledSpawnBurst,
   type BoneyardCompiledWaveSection,
   type BoneyardSpawnLocationPolicy,
+  type BoneyardSpawnPositionPolicy,
 } from './boneyard-wave-timeline.ts'
 import { NATIVE_RETAIL_WAVES } from './native-retail-wave-schedule.ts'
-import { nativeRandomFloatFromSemanticWord } from './native-random-domain.ts'
+import {
+  createNativeRng,
+  drawNativeFloat,
+  drawNativeInteger,
+  type NativeRngState,
+} from './native-rng.ts'
 
 export { BONEYARD_WAVE_ENEMY_TYPES } from './boneyard-wave-schema.ts'
 
@@ -40,12 +43,18 @@ export type BoneyardWaveDirectorPhase = typeof BONEYARD_WAVE_DIRECTOR_PHASES[num
 export interface BoneyardEnemySpawnIntent {
   enemyToken: BoneyardWaveEnemyToken
   flags: readonly string[]
+  /** Custom MonsterRecipe lane; defaults to the native enabled value. */
+  flanking?: boolean
   id: number
   locationPolicy: BoneyardSpawnLocationPolicy
   /** Custom MonsterRecipe lane; omitted by the retail wave director. */
   mageCloak?: boolean
   nativeTypeId: number
+  /** Custom MonsterRecipe lane; defaults to native mode 1. */
+  pathfindingMode?: 0 | 1 | 2 | 3
   position: BoneyardPoint
+  /** Non-TimeLine callers use direct placement when omitted. */
+  positionPolicy?: BoneyardSpawnPositionPolicy
   spawnTick: number
   waveOrdinal: number
 }
@@ -64,10 +73,12 @@ export interface BoneyardWaveDirectorState {
   lowPopulationTicks: number
   nextSpawnIntentId: number
   nextScheduleIndex: number | null
+  openingBursts: readonly BoneyardCompiledSpawnBurst[]
+  openingReleaseThreshold: number
   pendingSpawnBudget: number
   phase: BoneyardWaveDirectorPhase
   populationThreshold: number
-  rngState: number
+  rngState: NativeRngState
   schedule: readonly WaveDef[]
   scheduleIndex: number
   spawnCountdown: number
@@ -104,7 +115,9 @@ export function createBoneyardWaveDirector(
   schedule: readonly WaveDef[] = NATIVE_RETAIL_WAVES,
 ): BoneyardWaveDirectorState {
   validateSchedule(schedule)
-  const compiledSchedule = compileSchedule(schedule, `${seed}:wave-compiler`)
+  const compilerRng = createNativeRng(seedBoneyardWaveRng(`${seed}:wave-compiler`))
+  const opening = compileBoneyardOpening(compilerRng)
+  const compiledSchedule = compileSchedule(schedule, opening.rngState)
   return {
     activeBurstIndex: null,
     activeBursts: [],
@@ -119,10 +132,12 @@ export function createBoneyardWaveDirector(
     lowPopulationTicks: 0,
     nextSpawnIntentId: 1,
     nextScheduleIndex: null,
+    openingBursts: opening.bursts,
+    openingReleaseThreshold: opening.releaseThreshold,
     pendingSpawnBudget: 0,
     phase: 'dormant',
     populationThreshold: 0,
-    rngState: seedBoneyardWaveRng(`${seed}:wave-runtime`),
+    rngState: createNativeRng(seedBoneyardWaveRng(`${seed}:wave-runtime`)),
     schedule,
     scheduleIndex: 0,
     spawnCountdown: 0,
@@ -136,10 +151,10 @@ export function startBoneyardWaveDirector(
   source: BoneyardWaveDirectorState,
 ): BoneyardWaveDirectorState {
   if (source.phase !== 'dormant') return source
-  return beginBursts(source, NATIVE_SOLOMON_OPENING_BURSTS, 'opening', {
+  return beginBursts(source, source.openingBursts, 'opening', {
     lullThreshold: 0,
     lowPopulationTicks: 0,
-    populationThreshold: NATIVE_OPENING_RELEASE_THRESHOLD,
+    populationThreshold: source.openingReleaseThreshold,
     scheduleIndex: 0,
   })
 }
@@ -174,7 +189,6 @@ function stepSpawnerGraph(
   source: BoneyardWaveDirectorState,
   context: BoneyardWaveDirectorTickContext,
 ): BoneyardWaveDirectorTickResult {
-  if (Object.keys(context.players).length === 0) return tickResult(source)
   let state = advanceSpawnerCountdown(source)
   if (!state.burstStarted && state.spawnCountdown > 0) return tickResult(state)
   if (
@@ -226,7 +240,7 @@ function spawnOneEnemy(
   tick: number,
 ): { director: BoneyardWaveDirectorState; spawnIntent: BoneyardEnemySpawnIntent } {
   const burst = activeBurst(source)
-  const entrySample = randomBoneyardWaveInteger(source.rngState, burst.entries.length)
+  const entrySample = drawNativeInteger(source.rngState, burst.entries.length)
   const entry = burst.entries[entrySample.value]
   const placed = placeEnemy(
     entrySample.state,
@@ -258,6 +272,7 @@ function spawnOneEnemy(
       locationPolicy: burst.locationPolicy,
       nativeTypeId,
       position: Object.freeze({ ...placed.position }),
+      positionPolicy: burst.positionPolicy,
       spawnTick: tick,
       waveOrdinal: source.waveOrdinal,
     },
@@ -268,7 +283,8 @@ function resetSpawnerInterval(
   source: BoneyardWaveDirectorState,
 ): BoneyardWaveDirectorState {
   const burst = activeBurst(source)
-  const baseInterval = burst.spreadTicks / Math.max(burst.count - 1, 1)
+  const baseInterval = source.burstSpreadTicksRemaining
+    / Math.max(source.burstSpawnRemaining, 1)
   if (burst.steady) {
     return {
       ...source,
@@ -277,7 +293,7 @@ function resetSpawnerInterval(
     }
   }
   const jitterBound = Math.max(1, Math.trunc(baseInterval / 2))
-  const jitter = randomBoneyardWaveInteger(source.rngState, jitterBound)
+  const jitter = drawNativeInteger(source.rngState, jitterBound)
   const spawnCountdown = baseInterval + jitter.value
   return {
     ...source,
@@ -386,7 +402,7 @@ function selectNextScheduleRow(
   source: BoneyardWaveDirectorState,
 ): BoneyardWaveDirectorState {
   const wave = source.schedule[source.scheduleIndex]
-  const edge = randomBoneyardWaveInteger(source.rngState, wave.next.length)
+  const edge = drawNativeInteger(source.rngState, wave.next.length)
   return {
     ...source,
     nextScheduleIndex: source.scheduleIndex + wave.next[edge.value],
@@ -446,23 +462,22 @@ function activeBurst(source: BoneyardWaveDirectorState): BoneyardCompiledSpawnBu
 }
 
 function placeEnemy(
-  rngState: number,
+  rngState: NativeRngState,
   policy: BoneyardSpawnLocationPolicy,
   players: BoneyardWavePlayers,
   bounds: BoneyardBounds,
 ): {
   position: BoneyardPoint
-  rngState: number
+  rngState: NativeRngState
 } {
   const entries = Object.entries(players)
   if (policy === 'near-player') {
-    const playerSample = randomBoneyardWaveInteger(rngState, entries.length)
-    const [, placementPlayer] = entries[playerSample.value]
-    const angleSample = nextBoneyardWaveRandom(playerSample.state)
-    const angle = nativeRandomFloatFromSemanticWord(
-      angleSample.state,
-      360,
-    ) * Math.PI / 180
+    const playerSample = drawNativeInteger(rngState, Math.max(1, entries.length))
+    const placementPlayer = entries.length === 0
+      ? { position: { x: bounds.x + bounds.w / 2, y: bounds.y + bounds.h / 2 } }
+      : entries[playerSample.value]![1]
+    const angleSample = drawNativeFloat(playerSample.state, 360)
+    const angle = angleSample.value * Math.PI / 180
     return {
       position: {
         x: Math.fround(
@@ -475,18 +490,12 @@ function placeEnemy(
       rngState: angleSample.state,
     }
   }
-  const xSample = nextBoneyardWaveRandom(rngState)
-  const ySample = nextBoneyardWaveRandom(xSample.state)
+  const xSample = drawNativeFloat(rngState, bounds.w)
+  const ySample = drawNativeFloat(xSample.state, bounds.h)
   return {
     position: {
-      x: Math.fround(bounds.x + nativeRandomFloatFromSemanticWord(
-        xSample.state,
-        bounds.w,
-      )),
-      y: Math.fround(bounds.y + nativeRandomFloatFromSemanticWord(
-        ySample.state,
-        bounds.h,
-      )),
+      x: Math.fround(bounds.x + xSample.value),
+      y: Math.fround(bounds.y + ySample.value),
     },
     rngState: ySample.state,
   }
@@ -494,9 +503,9 @@ function placeEnemy(
 
 function compileSchedule(
   schedule: readonly WaveDef[],
-  seed: string,
+  sourceRngState: NativeRngState,
 ): readonly BoneyardCompiledWaveSection[] {
-  let rngState = seedBoneyardWaveRng(seed)
+  let rngState = sourceRngState
   return schedule.map((wave, index) => {
     const result = compileBoneyardWaveSection(wave, index + 1, rngState)
     rngState = result.rngState

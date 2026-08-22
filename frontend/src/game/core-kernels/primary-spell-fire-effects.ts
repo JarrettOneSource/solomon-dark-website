@@ -5,7 +5,14 @@ import {
   drawNativeInteger,
   type NativeRngState,
 } from './native-rng.ts'
-import { actorHeadingFromVector } from './actor-heading.ts'
+import {
+  buildNativeEnemySteering,
+  createNativeEnemyPathState,
+  nativeEnemyTargetRefreshTicks,
+  stepNativeEnemyPathRecovery,
+  stepNativeEnemyReorientation,
+  type NativeEnemyPathState,
+} from './native-enemy-pathfinding.ts'
 import type { PrimarySpellTarget } from './primary-spell-targeting.ts'
 import type { Vector2 } from './vector.ts'
 
@@ -92,7 +99,9 @@ export interface NativeFireGoodImpState {
   readonly headingDegrees: number
   readonly id: number
   readonly lightGlow: number
+  readonly nextTargetRefreshTick: number
   readonly ownerId: string
+  readonly path: NativeEnemyPathState
   readonly position: Vector2
   readonly remainingTicks: number
   readonly targetId: string | null
@@ -373,7 +382,8 @@ export function spawnNativeFireGoodImp(
     throw new RangeError('GoodImp lifetime must be a positive safe integer')
   }
 
-  let rng = advanceNativeRngWords(sourceRng, 6)
+  const path = createNativeEnemyPathState(sourceRng)
+  let rng = advanceNativeRngWords(path.rngState, 1)
   const bodyScaleDraw = drawNativeFloat(rng, NATIVE_GOOD_IMP_BODY_SCALE_JITTER, true)
   const bodyScale = Math.fround(NATIVE_GOOD_IMP_BODY_SCALE_BASE + bodyScaleDraw.value)
   rng = advanceNativeRngWords(bodyScaleDraw.state, 6)
@@ -406,7 +416,9 @@ export function spawnNativeFireGoodImp(
       headingDegrees: 0,
       id: options.id,
       lightGlow: 0,
+      nextTargetRefreshTick: 0,
       ownerId: options.ownerId,
+      path: path.state,
       position: Object.freeze({ ...options.position }),
       remainingTicks: options.lifetimeTicks,
       targetId: null,
@@ -423,32 +435,57 @@ export function stepNativeFireGoodImp(
   source: NativeFireGoodImpState,
   context: NativeFireGoodImpStepContext,
 ): NativeFireGoodImpStep {
-  const target = goodImpTarget(source, context.targets)
+  const targetSelection = refreshGoodImpTarget(source, context.targets)
+  const target = targetSelection.target
   let headingDegrees = source.headingDegrees
   let position = source.position
-  if (target !== null) {
-    const dx = target.position.x - source.position.x
-    const dy = target.position.y - source.position.y
-    const distance = Math.hypot(dx, dy)
-    headingDegrees = distance === 0 ? source.headingDegrees : actorHeadingFromVector(dx, dy)
-    if (
-      distance > 0
-      && source.ageTicks % NATIVE_GOOD_IMP_MOVEMENT_CADENCE_TICKS === 0
-    ) {
-      const movement = Math.fround(
+  let rng = context.rng
+  let path = source.path
+  if (path.reorientationTicksRemaining > 0) {
+    const reoriented = stepNativeEnemyReorientation(
+      path,
+      source.headingDegrees,
+      source.position,
+      target?.position ?? null,
+    )
+    headingDegrees = reoriented.headingDeg
+    path = reoriented.state
+  } else if (source.ageTicks % NATIVE_GOOD_IMP_MOVEMENT_CADENCE_TICKS === 0) {
+    const steering = buildNativeEnemySteering(path, {
+      actorHeadingDeg: source.headingDegrees,
+      actorPosition: source.position,
+      cadenceTicks: NATIVE_GOOD_IMP_MOVEMENT_CADENCE_TICKS,
+      movementPerTick: Math.fround(
         source.flightSpeed
         * NATIVE_GOOD_IMP_MOVEMENT_FACTOR
-        * NATIVE_GOOD_IMP_MOVEMENT_CADENCE_TICKS,
-      )
-      const requested = Object.freeze({
-        x: Math.fround(source.position.x + dx / distance * movement),
-        y: Math.fround(source.position.y + dy / distance * movement),
-      })
-      if (context.canOccupy(requested)) position = requested
-    }
+        * source.path.speedFactor,
+      ),
+      radialDirection: 1,
+      statusFactor: 1,
+      tangentDirection: 0,
+      targetHeadingDeg: target?.headingDeg ?? 0,
+      targetPosition: target?.position ?? null,
+    })
+    const requested = Object.freeze({
+      x: Math.fround(source.position.x + steering.delta.x),
+      y: Math.fround(source.position.y + steering.delta.y),
+    })
+    if (context.canOccupy(requested)) position = requested
+    headingDegrees = steering.headingDeg
+    const traveledDistance = Math.hypot(
+      position.x - source.position.x,
+      position.y - source.position.y,
+    )
+    const recovery = stepNativeEnemyPathRecovery(steering.state, rng, {
+      flankingEnabled: true,
+      requestedDistance: Math.hypot(steering.delta.x, steering.delta.y),
+      statusFactor: 1,
+      tick: source.ageTicks,
+      traveledDistance,
+    })
+    path = recovery.state
+    rng = recovery.rngState
   }
-
-  let rng = context.rng
   let effectPhase = positiveModulo(
     Math.fround(source.effectPhase + Math.abs(source.flightSpeed) * 0.25),
     10,
@@ -557,6 +594,8 @@ export function stepNativeFireGoodImp(
       flightSpeed,
       headingDegrees,
       lightGlow: Math.min(1, Math.fround(source.lightGlow + 0.01)),
+      nextTargetRefreshTick: targetSelection.nextTargetRefreshTick,
+      path,
       position: releasePosition,
       remainingTicks,
       targetId: target?.id ?? null,
@@ -761,10 +800,13 @@ export function stepNativeFireEmber(
     : Object.freeze({ ember, retirement: Object.freeze({ kind: 'none' }) })
 }
 
-function goodImpTarget(
+function refreshGoodImpTarget(
   source: NativeFireGoodImpState,
   targets: readonly PrimarySpellTarget[],
-): PrimarySpellTarget | null {
+): Readonly<{
+  nextTargetRefreshTick: number
+  target: PrimarySpellTarget | null
+}> {
   const eligible = (target: PrimarySpellTarget): boolean => (
     target.active
     && !target.pendingRemove
@@ -773,7 +815,12 @@ function goodImpTarget(
   const current = source.targetId === null
     ? null
     : targets.find((target) => target.id === source.targetId && eligible(target)) ?? null
-  if (current !== null) return current
+  if (current !== null && source.ageTicks < source.nextTargetRefreshTick) {
+    return {
+      nextTargetRefreshTick: source.nextTargetRefreshTick,
+      target: current,
+    }
+  }
 
   let selected: PrimarySpellTarget | null = null
   let selectedDistance = Number.POSITIVE_INFINITY
@@ -792,7 +839,10 @@ function goodImpTarget(
       selectedDistance = distance
     }
   }
-  return selected
+  return {
+    nextTargetRefreshTick: source.ageTicks + nativeEnemyTargetRefreshTicks(1),
+    target: selected,
+  }
 }
 
 function goodImpAttackReach(target: PrimarySpellTarget): number {

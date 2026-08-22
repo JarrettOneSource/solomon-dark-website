@@ -25,6 +25,17 @@ import {
 } from './project-boneyard-enemies.ts'
 
 const storyFixture = new URL('../../../public/samples/story0.boneyard', import.meta.url)
+const TEST_ENEMY_PATH = Object.freeze({
+  baseTurnRate: 0.75,
+  flankAngleDeg: 0,
+  flankRadius: 0,
+  flankTicksRemaining: 0,
+  reorientationTicksRemaining: 0,
+  speedFactor: 1,
+  stalledMovementTicks: 0,
+  turnFactor: 1,
+  wanderHeadingDeg: 0,
+})
 
 test('materializes the opening Solomon set piece at the spawn-nearest eligible grave', () => {
   const scene = solomonSelectionScene([
@@ -120,7 +131,9 @@ test('projects the native refreshed 20-tick hit latch for Maggots', () => {
     movementPhase: 'crawl',
     nextAttackTick: 20,
     nextMovementTick: 12,
+    nextTargetRefreshTick: 300,
     ownerCoffinActorId: 2,
+    path: TEST_ENEMY_PATH,
     poisonDamage: 0,
     poisonDuration: 0,
     position: { x: 100, y: 200 },
@@ -514,7 +527,9 @@ function projectedMaggot(
     movementPhase: 'crawl',
     nextAttackTick: 20,
     nextMovementTick: 12,
+    nextTargetRefreshTick: 300,
     ownerCoffinActorId: 2,
+    path: TEST_ENEMY_PATH,
     poisonDamage: 0,
     poisonDuration: 0,
     position: { x: 100, y: 200 },

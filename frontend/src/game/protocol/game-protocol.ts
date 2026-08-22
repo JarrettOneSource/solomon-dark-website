@@ -37,6 +37,7 @@ import {
   type NativeLightProviderRegistration,
 } from '../core-kernels/native-light-provider-order.ts'
 import type { NativeRngState } from '../core-kernels/native-rng.ts'
+import type { NativeEnemyPathState } from '../core-kernels/native-enemy-pathfinding.ts'
 import type { NativeEnemyWorldFeedbackKernelState } from '../core-kernels/native-enemy-world-feedback.ts'
 import { NATIVE_HALL_OF_FAME_SCORE } from '../core-kernels/hall-of-fame-score.ts'
 import { ETHER_PRIMARY_INITIAL_TURN } from '../core-kernels/primary-spell-targeting.ts'
@@ -4206,6 +4207,35 @@ function nativeRngState(value: unknown, field: string): NativeRngState {
   }
 }
 
+function nativeEnemyPathState(value: unknown, field: string): NativeEnemyPathState {
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'baseTurnRate', 'flankAngleDeg', 'flankRadius', 'flankTicksRemaining',
+    'reorientationTicksRemaining', 'speedFactor', 'stalledMovementTicks',
+    'turnFactor', 'wanderHeadingDeg',
+  ])
+  return {
+    baseTurnRate: positiveFinite(source.baseTurnRate, `${field}.baseTurnRate`),
+    flankAngleDeg: finite(source.flankAngleDeg, `${field}.flankAngleDeg`),
+    flankRadius: nonnegativeFinite(source.flankRadius, `${field}.flankRadius`),
+    flankTicksRemaining: nonnegativeInteger(
+      source.flankTicksRemaining,
+      `${field}.flankTicksRemaining`,
+    ),
+    reorientationTicksRemaining: nonnegativeInteger(
+      source.reorientationTicksRemaining,
+      `${field}.reorientationTicksRemaining`,
+    ),
+    speedFactor: positiveFinite(source.speedFactor, `${field}.speedFactor`),
+    stalledMovementTicks: nonnegativeInteger(
+      source.stalledMovementTicks,
+      `${field}.stalledMovementTicks`,
+    ),
+    turnFactor: positiveFinite(source.turnFactor, `${field}.turnFactor`),
+    wanderHeadingDeg: finite(source.wanderHeadingDeg, `${field}.wanderHeadingDeg`),
+  }
+}
+
 function nativeSecondaryGolemState(
   value: unknown,
   field: string,
@@ -6738,8 +6768,8 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
       'collisionRadius', 'contactAgeTicks', 'contactOrigin', 'contactScale',
       'contactSoundIndex', 'contactSoundPitch', 'contactSoundSequence', 'damage',
       'effectAlpha', 'effectPhase', 'flightSpeed', 'headingDegrees',
-      'id', 'kind', 'lightGlow', 'lightRegistration', 'ownerId', 'position',
-      'remainingTicks', 'targetId',
+      'id', 'kind', 'lightGlow', 'lightRegistration', 'nextTargetRefreshTick',
+      'ownerId', 'path', 'position', 'remainingTicks', 'targetId',
       'verticalOffset', 'verticalVelocity', 'worldKey',
     ])
     const bodyVariant = nonnegativeInteger(source.bodyVariant, `${field}.bodyVariant`)
@@ -6833,7 +6863,12 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
         `${field}.lightRegistration`,
         'actor',
       ),
+      nextTargetRefreshTick: nonnegativeInteger(
+        source.nextTargetRefreshTick,
+        `${field}.nextTargetRefreshTick`,
+      ),
       ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
+      path: nativeEnemyPathState(source.path, `${field}.path`),
       position: vector(source.position, `${field}.position`),
       remainingTicks: positiveInteger(source.remainingTicks, `${field}.remainingTicks`),
       targetId: source.targetId === null
