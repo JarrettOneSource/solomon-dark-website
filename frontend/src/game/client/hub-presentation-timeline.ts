@@ -83,7 +83,10 @@ export function createHubPresentationTimeline(
       const latest = history.at(-1)!
       if (snapshot.tick < latest.snapshot.tick) return
       if (snapshot.tick === latest.snapshot.tick) {
-        history[history.length - 1] = { receivedAtMs, snapshot }
+        history[history.length - 1] = {
+          receivedAtMs: latest.receivedAtMs,
+          snapshot,
+        }
         return
       }
       history.push({ receivedAtMs, snapshot })

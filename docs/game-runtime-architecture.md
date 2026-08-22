@@ -537,7 +537,12 @@ There is one composed client, not one DOM client and one canvas client.
   Boneyard presentation interpolates received players and gate leaves without
   duplicating its authoritative collision simulation. The `100 Hz` simulation,
   `20 Hz` transport snapshots, and browser/display refresh remain separate
-  clocks.
+  clocks. Snapshot sequence and arrival time do not create simulation time:
+  same-tick packets atomically replace the newest payload without restarting
+  that tick's interpolation epoch, and only a strictly greater authoritative
+  tick starts another interval. Hub local prediction resets to and samples the
+  authoritative player while a level-up barrier or gameplay pause holds the
+  world, then resumes from that state without catch-up.
 - Courtyard-owned cosmetic actors with native fixed-update state retain one
   scene-local clock. Astronomer and PotionGuy advance only through elapsed
   integer ticks, while repeated display samples render the current frame

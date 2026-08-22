@@ -767,6 +767,66 @@ test('client suppresses gameplay input while a skill offer is pending and submit
   session.destroy()
 })
 
+test('client holds local Hub presentation at authoritative state during a level-up barrier', async (t) => {
+  let nowMs = 1_000
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    profile: NULL_PROFILE,
+    credential: 'spawn-secret',
+    now: () => nowMs,
+    transport,
+  })
+  const serverState = createGameSimulation({ 'player-1': CHARACTER })
+  const initialBase = createGameSnapshot(serverState, 'player-1')
+  const initialPlayer = initialBase.players['player-1']!
+  const initial = {
+    ...initialBase,
+    players: {
+      ...initialBase.players,
+      'player-1': {
+        ...initialPlayer,
+        position: { x: 100, y: initialPlayer.position.y },
+        velocity: { x: 100, y: 0 },
+      },
+    },
+    tick: 100,
+  }
+  receiveWelcome(transport, initial)
+  const session = await connecting
+  t.after(() => session.destroy())
+  session.sendInput(gameplayInput({ x: 1, y: 0 }))
+
+  nowMs += 50
+  const frozenBase = createGameSnapshot(
+    grantGameSimulationPlayerExperience(serverState, 'player-1', 100),
+    'player-1',
+  )
+  const frozenPlayer = frozenBase.players['player-1']!
+  const frozen = {
+    ...frozenBase,
+    players: {
+      ...frozenBase.players,
+      'player-1': {
+        ...frozenPlayer,
+        position: { x: 110, y: frozenPlayer.position.y },
+        velocity: { x: 100, y: 0 },
+      },
+    },
+    tick: 105,
+  }
+  assert.ok(frozen.levelUpBarrier)
+  receiveSnapshot(transport, frozen, 0)
+
+  assert.equal(session.samplePresentation().players['player-1'].position.x, 110)
+  nowMs += 40
+  assert.equal(session.samplePresentation().players['player-1'].position.x, 110)
+  nowMs += 10
+  receiveSnapshot(transport, frozen, 0)
+  nowMs += 40
+  assert.equal(session.samplePresentation().players['player-1'].position.x, 110)
+})
+
 test('client submits native quickbar bindings and primary selection against learned rows', async () => {
   const transport = new MemoryTransport()
   const connecting = connectGameClientSession({

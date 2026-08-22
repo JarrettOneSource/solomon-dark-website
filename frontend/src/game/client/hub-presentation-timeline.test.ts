@@ -1032,6 +1032,20 @@ test('ignores stale snapshots and replaces a duplicate tick atomically', () => {
   assert.equal(presentation.sample(20).players.remote.position.x, 30)
 })
 
+test('does not replay the previous Hub interval when a frozen tick is replaced', () => {
+  const presentation = timeline(snapshotAt(100, 10, 20))
+  presentation.push(snapshotAt(105, 20, 30), 50)
+  assert.equal(presentation.sample(100).players.remote.position.x, 30)
+
+  presentation.push(snapshotAt(105, 20, 30), 100)
+  assert.equal(presentation.sample(100).players.remote.position.x, 30)
+  assert.equal(presentation.sample(125).players.remote.position.x, 30)
+
+  presentation.push(snapshotAt(105, 20, 31), 150)
+  assert.equal(presentation.latest().players.remote.position.x, 31)
+  assert.equal(presentation.sample(150).players.remote.position.x, 31)
+})
+
 test('rejects invalid timeline clocks and non-Hub snapshots', () => {
   const initial = snapshotAt(0, 0, 0)
   assert.throws(() => createHubPresentationTimeline({

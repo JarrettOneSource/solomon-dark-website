@@ -966,3 +966,24 @@ test('owns returned state and ignores stale Boneyard snapshots', () => {
   )
   assert.notEqual(frame.world.maggots[0], initial.world.maggots[0])
 })
+
+test('does not replay the previous Boneyard interval when a frozen tick is replaced', () => {
+  const timeline = createBoneyardPresentationTimeline({
+    initialReceivedAtMs: 0,
+    initialSnapshot: snapshotAt(100, 10, 100),
+    serverTickRate: 100,
+    snapshotRate: 20,
+  })
+  timeline.push(snapshotAt(105, 20, 120), 50)
+  assert.equal(timeline.sample(100).players.local.position.x, 20)
+  assert.equal(timeline.sample(100).world.enemies[0].position.x, 420)
+
+  timeline.push(snapshotAt(105, 20, 120), 100)
+  assert.equal(timeline.sample(100).players.local.position.x, 20)
+  assert.equal(timeline.sample(125).world.enemies[0].position.x, 420)
+
+  timeline.push(snapshotAt(105, 21, 121), 150)
+  assert.equal(timeline.latest().players.local.position.x, 21)
+  assert.equal(timeline.sample(150).players.local.position.x, 21)
+  assert.equal(timeline.sample(150).world.enemies[0].position.x, 421)
+})

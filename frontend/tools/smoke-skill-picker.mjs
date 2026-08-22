@@ -106,11 +106,18 @@ try {
   })
   assert.ok(getPlayerEconomy(host.state(), playerId).ownedPerkSelectors.includes(17))
 
+  const playerXBeforeLevelUp = getPlayerCharacter(host.state(), playerId).position.x
+  await page.keyboard.down('d')
+  await waitForHost(
+    () => getPlayerCharacter(host.state(), playerId).position.x > playerXBeforeLevelUp,
+    'authoritative Hub movement before level-up',
+  )
   const leveled = grantGameSimulationPlayerExperience(host.state(), playerId, 300)
   Object.assign(host.state(), leveled)
+  await page.keyboard.down('w')
   const picker = page.getByRole('dialog', { name: 'Level 4. Select a skill.' })
-  await page.keyboard.down('d')
   await picker.waitFor({ timeout: 30_000 })
+  await page.keyboard.up('w')
   await page.keyboard.up('d')
   const earlyRevealObserved = await picker.getAttribute('data-reveal-interactive') === 'false'
   await page.screenshot({ path: revealScreenshotPath })
@@ -247,6 +254,7 @@ try {
   const rerollSequence = beforeChoice.pendingOffer.sequence
   const rerollRngBefore = { ...host.state().playerOfferRng }
   const summonRatesBeforeReroll = await soundRates(page, 'summon')
+  const frozenHubFramesPromise = sampleHubWorldFrames(hubCanvas)
   await picker.getByRole('button', { name: 'Roll Again' }).click()
   await waitForHost(() => (
     getPlayerProgression(host.state(), playerId).pendingOffer?.sequence !== rerollSequence
@@ -264,6 +272,20 @@ try {
     (await soundRates(page, 'summon')).slice(summonRatesBeforeReroll.length),
     [Math.fround(0.8)],
   )
+  const frozenHubFrames = await frozenHubFramesPromise
+  const frozenHubPlayerXs = frozenHubFrames.map(({ playerX }) => playerX)
+  const frozenHubReceipt = {
+    frameCount: new Set(frozenHubFrames.map(({ frameCount }) => frameCount)).size,
+    maximumPlayerX: Math.max(...frozenHubPlayerXs),
+    minimumPlayerX: Math.min(...frozenHubPlayerXs),
+    ticks: [...new Set(frozenHubFrames.map(({ tick }) => tick))],
+  }
+  assert.ok(frozenHubReceipt.frameCount > 1)
+  assert.equal(frozenHubReceipt.ticks.length, 1)
+  assert.ok(
+    frozenHubReceipt.maximumPlayerX - frozenHubReceipt.minimumPlayerX <= 1e-6,
+    `frozen Hub player replayed movement: ${JSON.stringify(frozenHubReceipt)}`,
+  )
 
   const selectedSkillId = rerolled.pendingOffer.options[0].skillId
   const previousRank = getPlayerSkillBook(host.state(), playerId).permanentRanks[selectedSkillId]
@@ -271,7 +293,7 @@ try {
   const firstCloseStartedAt = Date.now()
   const firstQueuedWaitReceiptPromise = observeQueuedWait(page)
   await picker.locator('.skill-picker-action').first().click()
-  await page.locator('.skill-picker-stage[data-picker-phase="closing"]').waitFor()
+  await waitForPickerCloseProgress(page, firstCloseSequence)
   assert.equal(await hubCanvas.getAttribute('data-level-up-dynamic-suppressed'), 'false')
   await waitForHost(() => (
     getPlayerProgression(host.state(), playerId).pendingOffer?.sequence !== firstCloseSequence
@@ -294,7 +316,7 @@ try {
   const saveCloseStartedAt = Date.now()
   const saveQueuedWaitReceiptPromise = observeQueuedWait(page)
   await picker.getByRole('button', { name: 'Save Skill' }).click()
-  await page.locator('.skill-picker-stage[data-picker-phase="closing"]').waitFor()
+  await waitForPickerCloseProgress(page, saveSequence)
   await waitForHost(() => (
     getPlayerProgression(host.state(), playerId).pendingOffer?.sequence !== saveSequence
   ), 'queued offer after Save Skill')
@@ -313,9 +335,10 @@ try {
   assert.deepEqual(saved.pendingLevels, [4])
   assert.equal(saved.sorcerorsCharmAvailable, true)
 
+  const finalFirstScreenSequence = getPlayerProgression(host.state(), playerId).pendingOffer.sequence
   const finalFirstScreenCloseStartedAt = Date.now()
   await picker.locator('.skill-picker-action').first().click()
-  await page.locator('.skill-picker-stage[data-picker-phase="closing"]').waitFor()
+  await waitForPickerCloseProgress(page, finalFirstScreenSequence)
   await picker.waitFor({ state: 'detached', timeout: 15_000 })
   assert.ok(Date.now() - finalFirstScreenCloseStartedAt >= 520)
   await waitForHost(() => host.state().levelUpBarrier === null, 'first level-up barrier release')
@@ -434,6 +457,7 @@ try {
     boneyardBackgroundReceipt,
     boneyardScreenshotPath,
     earlyRevealObserved,
+    frozenHubReceipt,
     livePresentationObserved: livePresentation !== undefined,
     openPanelSoundRates,
     pickerRenderer,
@@ -468,6 +492,34 @@ async function soundRates(page, sourceFragment) {
   return page.evaluate((fragment) => window.__sdrAudioEvents
     .filter(({ src, type }) => type === 'buffer-start' && src.includes(fragment))
     .map(({ playbackRate }) => playbackRate), sourceFragment)
+}
+
+async function sampleHubWorldFrames(canvas, count = 30) {
+  return canvas.evaluate((node, requestedCount) => new Promise((resolve) => {
+    const samples = []
+    const sample = () => {
+      const frame = node.__sdrHubFrame
+      if (frame) {
+        samples.push({
+          frameCount: frame.frameCount,
+          playerX: frame.playerX,
+          tick: frame.tick,
+        })
+      }
+      if (samples.length >= requestedCount) resolve(samples)
+      else requestAnimationFrame(sample)
+    }
+    requestAnimationFrame(sample)
+  }), count)
+}
+
+async function waitForPickerCloseProgress(page, previousSequence) {
+  await page.waitForFunction((sequence) => {
+    const stage = document.querySelector('.skill-picker-stage')
+    return !stage
+      || stage.getAttribute('data-picker-phase') !== 'settled'
+      || Number(stage.getAttribute('data-offer-sequence')) !== sequence
+  }, previousSequence, { timeout: 30_000 })
 }
 
 async function observeQueuedWait(page) {

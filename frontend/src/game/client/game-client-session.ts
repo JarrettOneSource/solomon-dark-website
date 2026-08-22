@@ -312,6 +312,7 @@ export function connectGameClientSession(
         currentInput = copyInput(STOPPED_INPUT)
         sentInput = copyInput(STOPPED_INPUT)
         pendingInputs = []
+        if (isHubGameSnapshot(snapshot)) resetLocalHubPresentation(snapshot, now())
         for (const listener of gameplayPauseListeners) listener(gameplayPause)
         return
       }
@@ -411,13 +412,19 @@ export function connectGameClientSession(
         pendingInputs = []
       }
       const previousWorldKind = snapshot.world.kind
+      const presentationWasHeld = gameplayPause !== null
+        || snapshot.levelUpBarrier !== null
       const receivedAtMs = now()
       if (isHubGameSnapshot(reconstructedSnapshot)) {
-        reconcileLocalHubPresentation(
-          reconstructedSnapshot,
-          receivedAtMs,
-          previousWorldKind === 'hub',
-        )
+        if (presentationWasHeld || reconstructedSnapshot.levelUpBarrier !== null) {
+          resetLocalHubPresentation(reconstructedSnapshot, receivedAtMs)
+        } else {
+          reconcileLocalHubPresentation(
+            reconstructedSnapshot,
+            receivedAtMs,
+            previousWorldKind === 'hub',
+          )
+        }
       } else {
         localHubPresentation = undefined
       }
@@ -667,7 +674,12 @@ export function connectGameClientSession(
           throw new Error('game session has no Hub presentation timeline')
         }
         const frame = presentationTimeline.sample(requestedNow)
-        if (!predictionEnabled || !isHubGameSnapshot(snapshot)) return frame
+        if (
+          !predictionEnabled
+          || !isHubGameSnapshot(snapshot)
+          || snapshot.levelUpBarrier !== null
+          || gameplayPause !== null
+        ) return frame
         advanceLocalHubPresentation(requestedNow)
         if (!localHubPresentation) return frame
         const player = displayedLocalPlayer(localHubPresentation, requestedNow)
