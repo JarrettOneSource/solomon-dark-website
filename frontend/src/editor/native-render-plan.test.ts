@@ -58,6 +58,30 @@ test('places Gravestone, Tree, and Building component art in their native passes
   ])
 })
 
+test('enumerates every Building and Monument lighting member from authored rows', () => {
+  const buildings = Array.from({ length: 4 }, (_, variant): PlacedObject => ({
+    eid: `building-${variant}`,
+    pos: { x: variant * 10, y: 100 + variant },
+    typeId: NATIVE.building,
+    variant,
+  }))
+  const monuments = Array.from({ length: 21 }, (_, variant): PlacedObject => ({
+    eid: `monument-${variant}`,
+    pos: { x: variant * 10, y: 200 + variant },
+    typeId: NATIVE.monument,
+    variant,
+  }))
+  const plan = buildNativeRenderPlan(doc([...buildings, ...monuments]))
+
+  assert.deepEqual(plan.main.slice(0, 4).map((layer) => (
+    layer.kind === 'object' ? layer.atlasEntry : null
+  )), [148, 149, 150, 151])
+  assert.deepEqual(plan.foreground.map((layer) => layer.atlasEntry), [152, 153, 154, 155])
+  assert.deepEqual(plan.main.slice(4).map((layer) => (
+    layer.kind === 'object' ? layer.atlasEntry : null
+  )), Array.from({ length: 21 }, (_, variant) => 156 + variant))
+})
+
 test('interleaves every stock main-prop family with actors and keeps proxy art late', () => {
   const plan = buildNativeRenderPlan(doc([
     { eid: 'grave', typeId: NATIVE.gravestone, pos: { x: 0, y: 100 }, variant: 0 },

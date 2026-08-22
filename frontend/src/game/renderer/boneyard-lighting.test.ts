@@ -37,6 +37,7 @@ import {
   nativeAcceptedBoneyardLightSources,
   nativeBoulderLightSource,
   nativeBoneyardLightScalar,
+  nativeBoneyardSurfaceLightScalar,
   nativeBoneyardLightTint,
   nativeBoneyardLightVisibleInManager,
   nativeBoneyardWeatherLightingOrder,
@@ -52,6 +53,14 @@ import {
   nativeWeldMeteorLightSource,
   nativeWeldRockLightSource,
 } from './boneyard-lighting.ts'
+import {
+  NATIVE_BUILDING_BASE_ENTRIES,
+  NATIVE_BUILDING_ROOF_ENTRIES,
+  NATIVE_MONUMENT_ENTRIES,
+  nativeBuildingLightGrid,
+  nativeBuildingMeshGrid,
+  writeNativeBuildingVertexColors,
+} from './boneyard-static-surface-lighting.ts'
 import { etherPrimaryImpactLightSource } from './primary-spell-ether-native.ts'
 import {
   nativeFireballLightSource,
@@ -515,6 +524,107 @@ test('uses the recovered elliptical plateau, squared falloff, and outer edge', (
   assert.equal(nativeBoneyardLightScalar({ x: 145, y: 0 }, source), 0)
   assert.ok(nativeBoneyardLightScalar({ x: 0, y: 123.249 }, source) > 0)
   assert.equal(nativeBoneyardLightScalar({ x: 0, y: 123.25 }, source), 0)
+})
+
+test('uses independent radial and height maxima for native elevated surfaces', () => {
+  const sources = [
+    { intensity: 0.8, position: { x: 0, y: -80 }, radius: 10 },
+    { intensity: 0.5, position: { x: 0, y: 1 }, radius: 10 },
+  ]
+
+  assert.equal(nativeBoneyardLightScalar({ x: 0, y: 0 }, sources), 0.8)
+  assert.equal(nativeBoneyardSurfaceLightScalar({ x: 0, y: 0 }, sources), 0.4)
+  assert.equal(nativeBoneyardSurfaceLightScalar({ x: 0, y: 0 }, [sources[0]]), (
+    0.8 * 0.8 * (1 - 80 * 1.5 / 145)
+  ))
+})
+
+test('squares one unattenuated source and clamps an overhead source at the height cutoff', () => {
+  assert.equal(nativeBoneyardSurfaceLightScalar({ x: 0, y: 0 }, [{
+    intensity: 0.5,
+    position: { x: 0, y: 1 },
+    radius: 10,
+  }]), 0.25)
+  assert.equal(nativeBoneyardSurfaceLightScalar({ x: 0, y: 145 / 1.5 }, [{
+    intensity: 1,
+    position: { x: 0, y: 0 },
+    radius: 10,
+  }]), 0)
+})
+
+test('closes every Building and Monument authored lighting row', () => {
+  assert.deepEqual(NATIVE_BUILDING_BASE_ENTRIES, [148, 149, 150, 151])
+  assert.deepEqual(NATIVE_BUILDING_ROOF_ENTRIES, [152, 153, 154, 155])
+  assert.deepEqual(NATIVE_MONUMENT_ENTRIES, Array.from({ length: 21 }, (_, index) => 156 + index))
+})
+
+test('builds every native Building query-grid branch in row-major order', () => {
+  const sprite = { anchorX: 150, anchorY: 150, h: 300, w: 300 }
+  const position = { x: 1_000, y: 2_000 }
+  assert.deepEqual(nativeBuildingLightGrid({
+    enhancedEffects: true,
+    position,
+    sprite,
+    variant: 0,
+  }), [
+    { x: 850, y: 1_985 }, { x: 1_000, y: 1_985 }, { x: 1_150, y: 1_985 },
+    { x: 850, y: 2_135 }, { x: 1_000, y: 2_135 }, { x: 1_150, y: 2_135 },
+    { x: 850, y: 2_150 }, { x: 1_000, y: 2_150 }, { x: 1_150, y: 2_150 },
+  ])
+  assert.deepEqual(nativeBuildingLightGrid({
+    enhancedEffects: true,
+    position,
+    sprite,
+    variant: 1,
+  }).map(({ y }) => y), [1_950, 1_950, 1_950, 2_100, 2_100, 2_100, 2_150, 2_150, 2_150])
+  for (const variant of [2, 3]) {
+    assert.deepEqual(nativeBuildingLightGrid({
+      enhancedEffects: true,
+      position,
+      sprite,
+      variant,
+    }).map(({ y }) => y), [1_850, 1_850, 1_850, 2_000, 2_000, 2_000, 2_150, 2_150, 2_150])
+  }
+  assert.deepEqual(nativeBuildingLightGrid({
+    enhancedEffects: false,
+    position,
+    sprite,
+    variant: 0,
+  }), [
+    { x: 850, y: 1_985 }, { x: 1_150, y: 1_985 },
+    { x: 850, y: 2_150 }, { x: 1_150, y: 2_150 },
+  ])
+})
+
+test('matches the native Building tessellator and packed vertex color', () => {
+  const enhanced = nativeBuildingMeshGrid(300, 200, true)
+  assert.deepEqual([...enhanced.positions], [
+    0, 0, 150, 0, 300, 0,
+    0, 100, 150, 100, 300, 100,
+    0, 200, 150, 200, 300, 200,
+  ])
+  assert.deepEqual([...enhanced.uvs], [
+    0, 0, 0.5, 0, 1, 0,
+    0, 0.5, 0.5, 0.5, 1, 0.5,
+    0, 1, 0.5, 1, 1, 1,
+  ])
+  assert.deepEqual([...enhanced.indices], [
+    0, 1, 3, 1, 3, 4,
+    1, 2, 4, 2, 4, 5,
+    3, 4, 6, 4, 6, 7,
+    4, 5, 7, 5, 7, 8,
+  ])
+  assert.deepEqual([...nativeBuildingMeshGrid(300, 200, false).indices], [0, 1, 2, 1, 2, 3])
+
+  const colors = new Uint8Array(5 * 4)
+  writeNativeBuildingVertexColors(colors, [-1, 0, 0.5, 1, 2])
+  assert.deepEqual([...colors], [
+    0, 0, 0, 255,
+    0, 0, 0, 255,
+    127, 127, 127, 255,
+    255, 255, 255, 255,
+    255, 255, 255, 255,
+  ])
 })
 
 test('takes the native maximum contribution and keeps Lantern flicker cosmetic', () => {

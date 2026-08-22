@@ -62,6 +62,7 @@ import {
 import type { GameSnapshot, LoadedBoneyard } from '../protocol/game-protocol.ts'
 import {
   DEFAULT_GAME_SETTINGS,
+  NATIVE_BROWSER_ENHANCED_EFFECTS,
   cameraZoomForFov,
   gameLightQuality,
   type GameSettings,
@@ -102,6 +103,7 @@ import {
   NATIVE_PLAYER_LIGHT_RADIUS,
   nativeBoulderLightSource,
   nativeBoneyardLightScalar,
+  nativeBoneyardSurfaceLightScalar,
   nativeBoneyardLightTint,
   nativeBoneyardWeatherLightingOrder,
   nativeLanternLightSource,
@@ -199,10 +201,20 @@ import {
   projectNativeWorldPoint,
 } from './native-world-nameplate.ts'
 import { NativeBoneyardWeatherView } from './native-boneyard-weather-view.ts'
+import {
+  createNativeBuildingSurfaceMesh,
+  type NativeBuildingSurfaceMesh,
+} from './boneyard-building-surface-view.ts'
+import { nativeBuildingLightGrid } from './boneyard-static-surface-lighting.ts'
 
 interface BoneyardRendererFrameDiagnostics {
   activeStaticPainterLayerCount: number
   arenaTransitionPhase: string
+  buildingBaseRoofColorMismatchCount: number
+  buildingCount: number
+  buildingVertexLightMaximum: number
+  buildingVertexLightMinimum: number
+  buildingVisibleCount: number
   cameraFocusX: number
   cameraFocusY: number
   complexShadowActiveMeshCount: number
@@ -279,6 +291,7 @@ interface BoneyardRendererFrameDiagnostics {
   minMainLightScalar: number
   minTreeAlpha: number
   minTreeLightScalar: number
+  monumentVisibleCount: number
   painterBandCount: number
   playerAttachmentPose: number
   playerCount: number
@@ -388,8 +401,16 @@ interface BoneyardWorldRendererOptions {
 interface ResidentTexture extends BoneyardBounds {
   mainLayerIndex: number | null
   shadowCaster: NativeBoneyardComplexShadowCaster | null
-  sprite: Sprite
+  sprite: Container
+  surfaceMesh: NativeBuildingSurfaceMesh | null
   texture: Texture
+}
+
+interface BuildingResidents {
+  main: ResidentTexture & { surfaceMesh: NativeBuildingSurfaceMesh }
+  roof: ResidentTexture & { surfaceMesh: NativeBuildingSurfaceMesh }
+  samplePoints: readonly Vec2[]
+  scalars: Float32Array
 }
 
 interface TreeResidents {
@@ -398,6 +419,7 @@ interface TreeResidents {
 }
 
 interface StaticWorldBuild {
+  buildingResidents: ReadonlyMap<string, BuildingResidents>
   foreground: Container
   mainResidents: ReadonlyMap<number, ResidentTexture>
   residents: ResidentTexture[]
@@ -525,6 +547,7 @@ export async function createBoneyardWorldRenderer(
     staticWorld.shadowCasters,
     staticWorld.treeInputs,
     staticWorld.treeResidents,
+    staticWorld.buildingResidents,
     options.initialSnapshot,
     modTextures,
     options.modCatalog,
@@ -556,6 +579,8 @@ export async function createBoneyardWorldRenderer(
   canvas.className = 'boneyard-world-canvas'
   canvas.setAttribute('aria-hidden', 'true')
   canvas.dataset.gameRenderer = 'pixi-webgl'
+  canvas.dataset.buildingLighting = 'native-elevated-vertex-grid'
+  canvas.dataset.buildingLightingGrid = NATIVE_BROWSER_ENHANCED_EFFECTS ? '3x3' : '2x2'
   canvas.dataset.complexShadows = 'native-indexed-owner-mesh'
   canvas.dataset.treeComplexShadowOutline = 'native-main-variant-table'
   canvas.dataset.rendererName = application.renderer.name
@@ -583,6 +608,11 @@ export async function createBoneyardWorldRenderer(
   const frameDiagnostics: BoneyardRendererFrameDiagnostics = {
     activeStaticPainterLayerCount: 0,
     arenaTransitionPhase: 'none',
+    buildingBaseRoofColorMismatchCount: 0,
+    buildingCount: staticWorld.buildingResidents.size,
+    buildingVertexLightMaximum: 0,
+    buildingVertexLightMinimum: 0,
+    buildingVisibleCount: 0,
     cameraFocusX: Number.NaN,
     cameraFocusY: Number.NaN,
     complexShadowActiveMeshCount: 0,
@@ -640,6 +670,7 @@ export async function createBoneyardWorldRenderer(
     minMainLightScalar: 0,
     minTreeAlpha: 1,
     minTreeLightScalar: 0,
+    monumentVisibleCount: 0,
     painterBandCount: 0,
     playerAttachmentPose: 0,
     playerCount: 0,
@@ -912,6 +943,13 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.frameCount = frameCount
       frameDiagnostics.activeStaticPainterLayerCount = painter.activeStaticPainterLayerCount
       frameDiagnostics.arenaTransitionPhase = snapshot.world.arenaTransition?.phase ?? 'none'
+      frameDiagnostics.buildingBaseRoofColorMismatchCount = (
+        painter.buildingBaseRoofColorMismatchCount
+      )
+      frameDiagnostics.buildingCount = painter.buildingCount
+      frameDiagnostics.buildingVertexLightMaximum = painter.buildingVertexLightMaximum
+      frameDiagnostics.buildingVertexLightMinimum = painter.buildingVertexLightMinimum
+      frameDiagnostics.buildingVisibleCount = painter.buildingVisibleCount
       frameDiagnostics.complexShadowActiveMeshCount = painter.complexShadowActiveMeshCount
       frameDiagnostics.complexShadowAllocatedQuadCapacity = painter.complexShadowAllocatedQuadCapacity
       frameDiagnostics.complexShadowCasterCount = painter.complexShadowCasterCount
@@ -988,6 +1026,7 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.minMainLightScalar = painter.minMainLightScalar
       frameDiagnostics.minTreeAlpha = painter.minTreeAlpha
       frameDiagnostics.minTreeLightScalar = painter.minTreeLightScalar
+      frameDiagnostics.monumentVisibleCount = painter.monumentVisibleCount
       frameDiagnostics.painterBandCount = painter.painterBandCount
       frameDiagnostics.playerCount = scene.playerCount
       frameDiagnostics.playerDeathBurstCount = scene.playerDeathBurstCount
@@ -1159,7 +1198,7 @@ export async function createBoneyardWorldRenderer(
       scene.destroy()
       regionLightField.destroy()
       secondaryScreenFlash.destroy()
-      for (const resident of staticWorld?.residents ?? []) resident.texture.destroy(true)
+      for (const resident of staticWorld?.residents ?? []) destroyResidentTexture(resident)
       staticWorld = null
       world.destroy({ children: true })
       destroyBoneyardWorldTextures(textures)
@@ -1181,6 +1220,11 @@ export async function createBoneyardWorldRenderer(
 
 interface BoneyardPainterFrame {
   activeStaticPainterLayerCount: number
+  buildingBaseRoofColorMismatchCount: number
+  buildingCount: number
+  buildingVertexLightMaximum: number
+  buildingVertexLightMinimum: number
+  buildingVisibleCount: number
   complexShadowActiveMeshCount: number
   complexShadowAllocatedQuadCapacity: number
   complexShadowCasterCount: number
@@ -1207,6 +1251,7 @@ interface BoneyardPainterFrame {
   minMainLightScalar: number
   minTreeAlpha: number
   minTreeLightScalar: number
+  monumentVisibleCount: number
   painterBandCount: number
   playerLightRadius: number
   playerLightRasterRadius: number
@@ -1231,6 +1276,7 @@ interface RegisteredBoneyardMiscLightBatch extends RegisteredBoneyardLightProvid
 class BoneyardDynamicScene {
   private readonly activeStaticPainterLayers: StaticPainterLayer[] = []
   private readonly boneyard: LoadedBoneyard
+  private readonly buildingResidents: ReadonlyMap<string, BuildingResidents>
   private readonly complexShadows: BoneyardComplexShadowPresentation
   private readonly collisionWorld: BoneyardCollisionWorld
   private readonly dynamicLayers: DynamicPainterLayer[] = []
@@ -1285,6 +1331,7 @@ class BoneyardDynamicScene {
     shadowCasters: readonly BoneyardComplexShadowStaticCaster[],
     treeInputs: readonly NativeTreeOcclusionInput[],
     treeResidents: ReadonlyMap<string, TreeResidents>,
+    buildingResidents: ReadonlyMap<string, BuildingResidents>,
     initialSnapshot: GameSnapshot,
     modTextures: ModPresentationTextures,
     modCatalog: readonly ModConsumableCatalogEntry[],
@@ -1306,6 +1353,7 @@ class BoneyardDynamicScene {
       initialSnapshot.tick,
     )
     this.treeResidents = treeResidents
+    this.buildingResidents = buildingResidents
     this.primarySpells = new PrimarySpellWorldView(root, textures)
     this.secondaryAbilities = new NativeSecondaryWorldView(root, textures, renderer)
     this.staticPainterLayers = mainLayers.map((layer, layerIndex) => ({
@@ -1757,13 +1805,50 @@ class BoneyardDynamicScene {
     this.weatherView.update(worldLightScalar)
     let maxMainLightScalar = 0
     let minMainLightScalar = 1
+    let monumentVisibleCount = 0
     for (const resident of visibleMainResidents) {
       const layerIndex = resident.mainLayerIndex
       if (layerIndex === null) continue
-      const scalar = worldLightScalar(this.mainLayers[layerIndex].pos)
+      const layer = this.mainLayers[layerIndex]
+      if (isBuildingLayer(layer)) continue
+      if (layer.kind === 'object' && layer.object.typeId === NATIVE.monument) {
+        monumentVisibleCount += 1
+      }
+      const scalar = worldLightScalar(layer.pos)
       resident.sprite.tint = nativeBoneyardLightTint(scalar)
       maxMainLightScalar = Math.max(maxMainLightScalar, scalar)
       minMainLightScalar = Math.min(minMainLightScalar, scalar)
+    }
+    let buildingBaseRoofColorMismatchCount = 0
+    let buildingVertexLightMaximum = 0
+    let buildingVertexLightMinimum = 1
+    let buildingVisibleCount = 0
+    for (const building of this.buildingResidents.values()) {
+      if (!building.main.sprite.renderable) continue
+      buildingVisibleCount += 1
+      for (let index = 0; index < building.samplePoints.length; index += 1) {
+        const scalar = settings.complexLighting
+          ? nativeBoneyardSurfaceLightScalar(
+              building.samplePoints[index]!,
+              this.lightIndex,
+            )
+          : 1
+        building.scalars[index] = scalar
+        buildingVertexLightMaximum = Math.max(buildingVertexLightMaximum, scalar)
+        buildingVertexLightMinimum = Math.min(buildingVertexLightMinimum, scalar)
+        maxMainLightScalar = Math.max(maxMainLightScalar, scalar)
+        minMainLightScalar = Math.min(minMainLightScalar, scalar)
+      }
+      building.main.surfaceMesh.update(building.scalars)
+      building.roof.surfaceMesh.update(building.scalars)
+      building.main.sprite.tint = 0xffffff
+      building.roof.sprite.tint = 0xffffff
+      if (!equalBytes(
+        building.main.surfaceMesh.colors,
+        building.roof.surfaceMesh.colors,
+      )) {
+        buildingBaseRoofColorMismatchCount += 1
+      }
     }
     const treePresentations = this.treeOcclusion.update(
       snapshot.tick,
@@ -2189,6 +2274,13 @@ class BoneyardDynamicScene {
     )
     return {
       activeStaticPainterLayerCount: activeStaticPainterLayers.length,
+      buildingBaseRoofColorMismatchCount,
+      buildingCount: this.buildingResidents.size,
+      buildingVertexLightMaximum,
+      buildingVertexLightMinimum: buildingVisibleCount > 0
+        ? buildingVertexLightMinimum
+        : 0,
+      buildingVisibleCount,
       complexShadowActiveMeshCount: complexShadows.activeMeshCount,
       complexShadowAllocatedQuadCapacity: complexShadows.allocatedQuadCapacity,
       complexShadowCasterCount: complexShadows.casterCount,
@@ -2215,6 +2307,7 @@ class BoneyardDynamicScene {
       minMainLightScalar: visibleMainResidents.length > 0 ? minMainLightScalar : 0,
       minTreeAlpha,
       minTreeLightScalar: treePresentations.length > 0 ? minTreeLightScalar : 0,
+      monumentVisibleCount,
       painterBandCount: order.bands.length,
       playerLightRadius: localPlayerLight?.radius ?? 0,
       playerLightRasterRadius: localPlayerLight?.rasterScale ?? 0,
@@ -2631,6 +2724,11 @@ async function buildStaticWorld(
   base.zIndex = 0
   root.addChild(base, foreground)
   const residents: ResidentTexture[] = []
+  const buildingMainResidents = new Map<string, {
+    resident: BuildingResidents['main']
+    samplePoints: readonly Vec2[]
+  }>()
+  const buildingResidents = new Map<string, BuildingResidents>()
   const mainResidents = new Map<number, ResidentTexture>()
   const shadowCasters: BoneyardComplexShadowStaticCaster[] = []
   const treeMainResidents = new Map<string, ResidentTexture>()
@@ -2667,6 +2765,22 @@ async function buildStaticWorld(
         if (layer.kind === 'object' && layer.object.typeId === NATIVE.tree) {
           treeMainResidents.set(layer.object.eid, resident)
         }
+        if (layer.kind === 'object' && layer.object.typeId === NATIVE.building) {
+          if (!resident.surfaceMesh) {
+            throw new Error(`Building ${layer.object.eid} main art is not a surface mesh.`)
+          }
+          const sprite = spriteRefFor(layer.atlas, layer.atlasEntry)
+          if (!sprite) throw new Error(`Building ${layer.object.eid} has no native base glyph.`)
+          buildingMainResidents.set(layer.object.eid, {
+            resident: resident as BuildingResidents['main'],
+            samplePoints: nativeBuildingLightGrid({
+              enhancedEffects: NATIVE_BROWSER_ENHANCED_EFFECTS,
+              position: layer.object.pos,
+              sprite,
+              variant: layer.object.variant ?? 0,
+            }),
+          })
+        }
       }
       if (layerIndex % 12 === 11) await nextFrame()
     }
@@ -2697,14 +2811,34 @@ async function buildStaticWorld(
           })
           treeResidents.set(object.eid, { foreground: resident, main })
         }
+        if (layer.object.typeId === NATIVE.building) {
+          const main = buildingMainResidents.get(layer.object.eid)
+          if (!main) {
+            throw new Error(`Building ${layer.object.eid} has roof art without main art.`)
+          }
+          if (!resident.surfaceMesh) {
+            throw new Error(`Building ${layer.object.eid} roof art is not a surface mesh.`)
+          }
+          buildingResidents.set(layer.object.eid, {
+            main: main.resident,
+            roof: resident as BuildingResidents['roof'],
+            samplePoints: main.samplePoints,
+            scalars: new Float32Array(main.samplePoints.length),
+          })
+        }
       }
       if (layerIndex % 12 === 11) await nextFrame()
     }
   } catch (error) {
-    for (const resident of residents) resident.texture.destroy(true)
+    for (const resident of residents) destroyResidentTexture(resident)
     throw error
   }
+  if (buildingResidents.size !== buildingMainResidents.size) {
+    for (const resident of residents) destroyResidentTexture(resident)
+    throw new Error('A native Building main resident has no roof resident.')
+  }
   return {
+    buildingResidents,
     foreground,
     mainResidents,
     residents,
@@ -2775,7 +2909,9 @@ function buildMainLayerResident(
   if (!crop) return null
   const x = bounds.x + crop.x
   const y = bounds.y + crop.y
-  const resident = residentTexture(crop.canvas, x, y, layerIndex)
+  const resident = isBuildingLayer(layer)
+    ? buildingSurfaceResidentTexture(crop.canvas, x, y, layerIndex)
+    : residentTexture(crop.canvas, x, y, layerIndex)
   resident.shadowCaster = nativeBoneyardMainLayerShadowCaster(
     document,
     layer,
@@ -2806,9 +2942,14 @@ function buildForegroundLayerResident(
     [layerIndex],
   )
   const crop = cropTransparentCanvas(canvas)
-  return crop
-    ? residentTexture(crop.canvas, bounds.x + crop.x, bounds.y + crop.y)
-    : null
+  if (!crop) return null
+  return layer.object.typeId === NATIVE.building
+    ? buildingSurfaceResidentTexture(
+        crop.canvas,
+        bounds.x + crop.x,
+        bounds.y + crop.y,
+      )
+    : residentTexture(crop.canvas, bounds.x + crop.x, bounds.y + crop.y)
 }
 
 function objectLayerCaptureBounds(
@@ -2914,11 +3055,60 @@ function residentTexture(
     mainLayerIndex,
     shadowCaster: null,
     sprite,
+    surfaceMesh: null,
     texture,
     w: canvas.width,
     x,
     y,
   }
+}
+
+function buildingSurfaceResidentTexture(
+  canvas: HTMLCanvasElement,
+  x: number,
+  y: number,
+  mainLayerIndex: number | null = null,
+): ResidentTexture {
+  const texture = Texture.from(canvas, true)
+  texture.source.style.scaleMode = 'nearest'
+  const surfaceMesh = createNativeBuildingSurfaceMesh(
+    texture,
+    canvas.width,
+    canvas.height,
+    NATIVE_BROWSER_ENHANCED_EFFECTS,
+  )
+  surfaceMesh.mesh.position.set(x, y)
+  surfaceMesh.mesh.label = mainLayerIndex === null
+    ? 'native-building-roof'
+    : 'native-building-base'
+  return {
+    h: canvas.height,
+    mainLayerIndex,
+    shadowCaster: null,
+    sprite: surfaceMesh.mesh,
+    surfaceMesh,
+    texture,
+    w: canvas.width,
+    x,
+    y,
+  }
+}
+
+function destroyResidentTexture(resident: ResidentTexture): void {
+  resident.surfaceMesh?.destroy()
+  resident.texture.destroy(true)
+}
+
+function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
+  if (left.length !== right.length) return false
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index] !== right[index]) return false
+  }
+  return true
+}
+
+function isBuildingLayer(layer: MainLayer): boolean {
+  return layer.kind === 'object' && layer.object.typeId === NATIVE.building
 }
 
 function isMovingGateBody(layer: MainLayer | undefined): layer is Extract<MainLayer, { kind: 'fence' }> {

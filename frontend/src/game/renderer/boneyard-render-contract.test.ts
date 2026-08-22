@@ -51,6 +51,10 @@ const weatherView = readFileSync(
   new URL('./native-boneyard-weather-view.ts', import.meta.url),
   'utf8',
 )
+const buildingSurfaceView = readFileSync(
+  new URL('./boneyard-building-surface-view.ts', import.meta.url),
+  'utf8',
+)
 const hubExtractor = readFileSync(
   new URL('../../../../tools/extract-hub-assets.py', import.meta.url),
   'utf8',
@@ -99,6 +103,18 @@ test('Tree foreground stays per-object and shares native alpha and root tint', (
   assert.match(boneyardRenderer, /tree\.foreground\.sprite\.alpha = presentation\.alpha/)
   assert.match(boneyardRenderer, /tree\.main\.sprite\.tint = tint/)
   assert.match(boneyardRenderer, /tree\.foreground\.sprite\.tint = tint/)
+})
+
+test('Building base and roof share retained packed vertex lighting while Monument stays root-lit', () => {
+  assert.match(buildingSurfaceView, /compileHighShaderGlProgram/)
+  assert.match(buildingSurfaceView, /colorBitGl/)
+  assert.match(buildingSurfaceView, /format: 'unorm8x4'/)
+  assert.match(boneyardRenderer, /if \(isBuildingLayer\(layer\)\) continue/)
+  assert.match(boneyardRenderer, /nativeBoneyardSurfaceLightScalar/)
+  assert.match(boneyardRenderer, /building\.main\.surfaceMesh\.update\(building\.scalars\)/)
+  assert.match(boneyardRenderer, /building\.roof\.surfaceMesh\.update\(building\.scalars\)/)
+  assert.match(boneyardRenderer, /layer\.object\.typeId === NATIVE\.monument/)
+  assert.match(boneyardRenderer, /buildingBaseRoofColorMismatchCount/)
 })
 
 test('Boneyard readiness includes the complete initial environment-lighting frame', () => {

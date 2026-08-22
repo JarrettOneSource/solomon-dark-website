@@ -776,6 +776,35 @@ export function nativeBoneyardLightScalar(
   return nativeBoneyardLightScalarFromSources(position, sources)
 }
 
+export function nativeBoneyardSurfaceLightScalar(
+  position: Vec2,
+  sources: NativeBoneyardLightSamples,
+): number {
+  let radialMaximum = 0
+  let elevatedMaximum = 0
+  if (isNativeBoneyardLightLookup(sources)) {
+    for (const sourceIndex of sources.sourceIndicesAt(position)) {
+      include(sources.acceptedSources[sourceIndex]!)
+    }
+  } else {
+    for (const source of sources) include(source)
+  }
+  return radialMaximum * elevatedMaximum
+
+  function include(source: NativeBoneyardLightSample): void {
+    const contribution = nativeBoneyardLightContribution(position, source)
+    radialMaximum = Math.max(radialMaximum, contribution)
+    const verticalGap = position.y - source.position.y
+    const heightScalar = verticalGap > 0
+      ? Math.max(0, 1 - verticalGap * 1.5 / NATIVE_LIGHT_OUTER_DISTANCE)
+      : 1
+    elevatedMaximum = Math.max(
+      elevatedMaximum,
+      contribution * heightScalar,
+    )
+  }
+}
+
 function nativeBoneyardLightScalarFromSources(
   position: Vec2,
   sources: readonly NativeBoneyardLightSample[],
