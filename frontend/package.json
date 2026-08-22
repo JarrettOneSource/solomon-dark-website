@@ -45,6 +45,7 @@
     "smoke:game:skeleton-upper-body": "node --experimental-strip-types tools/smoke-skeleton-upper-body.mjs",
     "smoke:game:player-damage": "node tools/smoke-player-damage-presentation.mjs",
     "smoke:game:primary-spells": "node tools/smoke-primary-spells.mjs",
+    "smoke:game:fire-explosion": "node --experimental-strip-types tools/smoke-fireball-explode-embers.mjs",
     "smoke:game:earth-contact": "node --experimental-strip-types tools/smoke-earth-boulder-contact.mjs",
     "smoke:game:ether-tracking": "node --experimental-strip-types tools/smoke-ether-primary-tracking.mjs",
     "smoke:game:hurricane": "node --experimental-strip-types tools/smoke-hurricane.mjs",
