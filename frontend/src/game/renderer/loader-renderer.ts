@@ -1,7 +1,7 @@
 import { Container, Graphics, Sprite, type Application, type Texture } from 'pixi.js'
 
 import { loader } from '../../lib/assets.ts'
-import { collectAssetSources } from '../game-asset-readiness.ts'
+import { LOADER_ASSET_SOURCES } from '../game-assets.ts'
 import {
   createGameWebGlApplication,
   loadGameTextureMap,
@@ -35,8 +35,6 @@ interface LoaderRendererOptions {
   devicePixelRatio?: number
   viewport: FixedGameViewportLayout
 }
-
-const LOADER_ASSET_SOURCES = collectAssetSources(loader)
 
 export async function createLoaderRenderer(
   options: LoaderRendererOptions,

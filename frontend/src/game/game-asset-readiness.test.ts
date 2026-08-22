@@ -57,6 +57,22 @@ test('reports actual task completions and resolves only after every asset', asyn
   ])
 })
 
+test('bounds concurrent browser asset work to four loads', async () => {
+  let active = 0
+  let peak = 0
+  await loadAssetBatch(
+    Array.from({ length: 20 }, (_, index) => `asset-${index}`),
+    async () => {
+      active += 1
+      peak = Math.max(peak, active)
+      await new Promise(resolve => setTimeout(resolve, 1))
+      active -= 1
+    },
+    () => undefined,
+  )
+  assert.ok(peak <= 4, `asset loader reached ${peak} concurrent loads`)
+})
+
 test('composes staged batches into one de-duplicated monotonic total', async () => {
   const loaded: string[] = []
   const progress: Array<AssetProgress & { stage: 'loader' | 'resident' }> = []

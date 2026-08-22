@@ -8,7 +8,7 @@ import {
   type Application,
 } from 'pixi.js'
 
-import { createMenu, elementVfx, hub } from '../../lib/assets.ts'
+import { createMenu, hub } from '../../lib/assets.ts'
 import {
   CREATE_ENTRY_ANIMATION_MS,
   CREATE_SELECTION_ANIMATION_MS,
@@ -29,7 +29,6 @@ import {
   validateCreateWizardName,
 } from '../create-wizard-name.ts'
 import { NATIVE_ELEMENT_VFX_SCALE } from '../element-vfx-native.ts'
-import { collectAssetSources } from '../game-asset-readiness.ts'
 import {
   CREATE_DISCIPLINES,
   CREATE_DISCIPLINE_SIZE,
@@ -47,6 +46,7 @@ import {
   loadGameTextureMap,
   textureFrom,
 } from './game-webgl.ts'
+import { CREATE_GAME_ASSET_SOURCES } from '../game-assets.ts'
 import {
   fixedGamePresentationResolution,
   fixedGameStageBounds,
@@ -100,11 +100,6 @@ interface CreateNameView {
   valueName: string | null
 }
 
-const CREATE_ASSET_SOURCES = collectAssetSources({
-  createMenu,
-  elementVfx,
-  nameFont: hub.hud.fontAtlas,
-})
 const HAND_SOURCE: Readonly<Record<CreateHandPose, string>> = {
   cupped: createMenu.handCupped,
   fist: createMenu.handFist,
@@ -114,7 +109,7 @@ const HAND_SOURCE: Readonly<Record<CreateHandPose, string>> = {
 export async function createCreateMenuRenderer(
   options: CreateMenuRendererOptions,
 ): Promise<CreateMenuRenderer> {
-  const textures = await loadGameTextureMap(CREATE_ASSET_SOURCES)
+  const textures = await loadGameTextureMap(CREATE_GAME_ASSET_SOURCES)
   const resolution = fixedGamePresentationResolution(
     options.devicePixelRatio ?? window.devicePixelRatio,
     options.viewport.displayScale,

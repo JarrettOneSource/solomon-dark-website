@@ -129,6 +129,19 @@ public clients receive only the bounded DTO from `GET /api/game/parties`.
 Private per-session provisioning remains an explicit operations/test seam and
 is not a browser New Game path.
 
+Browser visual assets follow the native screen/actor lifetime instead of one
+route-wide resident manifest. Startup owns only Loader and immediately-next
+Title images plus the app-global compiled audio registry. Title, Create, Hub,
+Boneyard, SkillPicker, inventory/traders, pause, and mod presentation each
+acquire their renderer-contracted texture membership through the renderer that
+consumes it and destroy that membership with the renderer. The shared image-promise map
+is an in-flight deduplication seam, not residency: entries are removed as soon
+as a scene has constructed its Pixi textures. Browser loading is bounded to
+four concurrent tasks so HTTP/2 and `Image.decode()` cannot turn native
+per-owner acquisition into an unbounded mobile memory spike. Scene transition
+barriers remain the readiness authority; a scene cannot accept gameplay input
+until its own renderer publishes the first ready frame.
+
 The TLS edge is part of the browser-game release contract, not an out-of-band
 host prerequisite. The release artifact carries the checked-in Caddy site;
 deployment compares its expected hash with the live site even when the runtime

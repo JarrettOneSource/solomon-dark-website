@@ -26,6 +26,17 @@ const titleRenderer = readFileSync(
   new URL('./renderer/title-menu-renderer.ts', import.meta.url),
   'utf8',
 )
+const createRenderer = readFileSync(
+  new URL('./renderer/create-menu-renderer.ts', import.meta.url),
+  'utf8',
+)
+const gameAssets = readFileSync(new URL('./game-assets.ts', import.meta.url), 'utf8')
+const gameWebgl = readFileSync(new URL('./renderer/game-webgl.ts', import.meta.url), 'utf8')
+const hubTextures = readFileSync(new URL('./renderer/hub-textures.ts', import.meta.url), 'utf8')
+const boneyardTextures = readFileSync(
+  new URL('./renderer/boneyard-textures.ts', import.meta.url),
+  'utf8',
+)
 
 test('game menu art is presented by the shared WebGL baseline', () => {
   assert.match(mainScene, /TitleMenuPresentation/)
@@ -50,6 +61,22 @@ test('startup loader exposes total readiness and the representative active item'
   assert.match(loaderScene, /currentItem/)
   assert.match(loaderScene, /items ready/)
   assert.match(loaderStyles, /\.native-loader-status/)
+})
+
+test('startup owns only Loader, Title, and global audio while scenes own visual residency', () => {
+  assert.match(gameAssets, /GAME_STARTUP_IMAGE_SOURCES/)
+  assert.match(gameAssets, /sources:\s*TITLE_GAME_ASSET_SOURCES/)
+  assert.match(gameAssets, /sources:\s*GAME_RESIDENT_AUDIO_SOURCES/)
+  assert.doesNotMatch(gameAssets, /GAME_RESIDENT_IMAGE_SOURCES/)
+  assert.doesNotMatch(gameAssets, /BONEYARD_RESIDENT_IMAGE_SOURCES/)
+  assert.match(loaderRenderer, /LOADER_ASSET_SOURCES/)
+  assert.match(titleRenderer, /TITLE_GAME_ASSET_SOURCES/)
+  assert.match(createRenderer, /CREATE_GAME_ASSET_SOURCES/)
+  assert.match(gameWebgl, /releaseGameImages\(sources\)/)
+  assert.match(hubTextures, /loadGameTextureEntries\(sources\)/)
+  assert.match(boneyardTextures, /loadGameTextureEntries\(sources/)
+  assert.doesNotMatch(hubTextures, /Promise\.all\(sources\.map/)
+  assert.doesNotMatch(boneyardTextures, /Promise\.all\(sources\.map/)
 })
 
 test('Hub and Boneyard renderer code follows the existing transition loading barriers', () => {

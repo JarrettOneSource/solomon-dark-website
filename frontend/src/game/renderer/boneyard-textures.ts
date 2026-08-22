@@ -4,7 +4,7 @@ import solomonEncounterSource from '../../assets/game/anim-solomon-encounter.png
 import { spriteRefFor } from '../../editor/assets.ts'
 import { liftedSpriteSource } from '../../editor/lifted-sprite.ts'
 import { boneyard } from '../../lib/assets.ts'
-import { loadGameImage, releaseGameImages } from '../game-assets.ts'
+import { loadGameTextureEntries } from './game-webgl.ts'
 import {
   NATIVE_REGION_LIGHT_ATLAS,
   NATIVE_REGION_LIGHT_ENTRY,
@@ -74,31 +74,9 @@ export async function loadBoneyardWorldTextures(): Promise<BoneyardWorldTextures
     solomonShadowSource,
     weatherSplashSource,
   ])]
-  let images: readonly (readonly [string, HTMLImageElement])[]
-  try {
-    images = await Promise.all(sources.map(async (source) => [
-      source,
-      await loadGameImage(source),
-    ] as const))
-  } catch (error) {
-    releaseGameImages(sources)
-    throw error
-  }
-
-  const loaded: Array<readonly [string, Texture]> = []
-  try {
-    for (const [source, image] of images) {
-      loaded.push([
-        source,
-        Texture.from(liftedSourceSet.has(source) ? liftedSpriteSource(image) : image, true),
-      ])
-    }
-  } catch (error) {
-    for (const [, texture] of loaded) texture.destroy(true)
-    releaseGameImages(sources)
-    throw error
-  }
-  releaseGameImages(sources)
+  const loaded = await loadGameTextureEntries(sources, (source, image) => (
+    Texture.from(liftedSourceSet.has(source) ? liftedSpriteSource(image) : image, true)
+  ))
   const base = Object.fromEntries(loaded) as Record<string, Texture>
   const texture = (source: string): Texture => {
     const result = base[source]

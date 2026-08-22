@@ -2,7 +2,11 @@
 import 'pixi.js/unsafe-eval'
 import { Application, Texture } from 'pixi.js'
 
-import { loadGameImage } from '../game-assets.ts'
+import {
+  loadGameImage,
+  releaseGameImages,
+} from '../game-assets.ts'
+import { mapAssetSources } from '../game-asset-readiness.ts'
 
 export interface GameWebGlApplication {
   application: Application
@@ -69,19 +73,7 @@ export async function loadGameTextureMap(
   requestedSources: readonly string[],
 ): Promise<GameTextureMap> {
   const sources = [...new Set(requestedSources)]
-  const images = await Promise.all(sources.map(async (source) => [
-    source,
-    await loadGameImage(source),
-  ] as const))
-  const entries: Array<readonly [string, Texture]> = []
-  try {
-    for (const [source, image] of images) {
-      entries.push([source, Texture.from(image, true)])
-    }
-  } catch (error) {
-    for (const [, texture] of entries) texture.destroy(true)
-    throw error
-  }
+  const entries = await loadGameTextureEntries(sources)
   const textures = Object.fromEntries(entries) as Record<string, Texture>
   let destroyed = false
   return {
@@ -93,6 +85,34 @@ export async function loadGameTextureMap(
       for (const texture of Object.values(textures)) texture.destroy(true)
     },
   }
+}
+
+export async function loadGameTextureEntries(
+  requestedSources: readonly string[],
+  createTexture: (source: string, image: HTMLImageElement) => Texture = (
+    _source,
+    image,
+  ) => Texture.from(image, true),
+): Promise<Array<readonly [string, Texture]>> {
+  const sources = [...new Set(requestedSources)]
+  const entries: Array<readonly [string, Texture]> = []
+  try {
+    await mapAssetSources(sources, async (source) => {
+      try {
+        const texture = createTexture(source, await loadGameImage(source))
+        const entry = [source, texture] as const
+        entries.push(entry)
+        return entry
+      } finally {
+        releaseGameImages([source])
+      }
+    })
+  } catch (error) {
+    for (const [, texture] of entries) texture.destroy(true)
+    releaseGameImages(sources)
+    throw error
+  }
+  return entries
 }
 
 export function textureFrom(

@@ -1,11 +1,7 @@
 import { Texture } from 'pixi.js'
 import { boneyard, hub } from '../../lib/assets.ts'
 import { WIZARD_ELEMENTS } from '../core-kernels/player-character.ts'
-import {
-  hubGameAssetSources,
-  loadGameImage,
-  releaseGameImages,
-} from '../game-assets.ts'
+import { hubGameAssetSources } from '../game-assets.ts'
 import {
   createPlayerWorldTextures,
   destroyPlayerWorldTextureFrames,
@@ -14,6 +10,7 @@ import {
   stripFrames,
   type PlayerWorldTextures,
 } from './world-player-textures.ts'
+import { loadGameTextureEntries } from './game-webgl.ts'
 
 const ACTOR_FRAME_SIZE = 170
 const ACTOR_HEADINGS = 24
@@ -86,25 +83,7 @@ export function hubWorldAssetSources(): readonly string[] {
 
 export async function loadHubWorldTextures(): Promise<HubWorldTextures> {
   const sources = hubWorldAssetSources()
-  let images: readonly (readonly [string, HTMLImageElement])[]
-  try {
-    images = await Promise.all(sources.map(async (source) => [
-      source,
-      await loadGameImage(source),
-    ] as const))
-  } catch (error) {
-    releaseGameImages(sources)
-    throw error
-  }
-  const loaded: Array<readonly [string, Texture]> = []
-  try {
-    for (const [source, image] of images) loaded.push([source, Texture.from(image, true)])
-  } catch (error) {
-    for (const [, texture] of loaded) texture.destroy(true)
-    releaseGameImages(sources)
-    throw error
-  }
-  releaseGameImages(sources)
+  const loaded = await loadGameTextureEntries(sources)
   const base = Object.fromEntries(loaded) as Record<string, Texture>
   const texture = (source: string) => {
     const result = base[source]

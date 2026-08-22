@@ -16,6 +16,8 @@ export interface StagedAssetProgress<Stage> extends AssetProgress {
 
 type AssetTree = string | readonly AssetTree[] | { readonly [key: string]: AssetTree }
 
+export const BROWSER_ASSET_LOAD_CONCURRENCY = 4
+
 export function collectAssetSources(tree: AssetTree): string[] {
   const sources: string[] = []
   const seen = new Set<string>()
@@ -49,7 +51,7 @@ export async function loadAssetBatch(
     total: uniqueSources.length,
   })
 
-  await Promise.all(uniqueSources.map(async (source) => {
+  await mapAssetSources(uniqueSources, async (source) => {
     await load(source)
     pending.delete(source)
     completed += 1
@@ -58,7 +60,38 @@ export async function loadAssetBatch(
       completed,
       total: uniqueSources.length,
     })
-  }))
+  })
+}
+
+export async function mapAssetSources<Result>(
+  sources: readonly string[],
+  load: (source: string) => Promise<Result>,
+): Promise<Result[]> {
+  const results = new Array<Result>(sources.length)
+  let nextIndex = 0
+  let stopped = false
+  let firstError: unknown
+
+  const worker = async () => {
+    while (!stopped) {
+      const index = nextIndex
+      nextIndex += 1
+      if (index >= sources.length) return
+      try {
+        results[index] = await load(sources[index]!)
+      } catch (error) {
+        stopped = true
+        firstError ??= error
+      }
+    }
+  }
+
+  await Promise.all(Array.from(
+    { length: Math.min(BROWSER_ASSET_LOAD_CONCURRENCY, sources.length) },
+    worker,
+  ))
+  if (firstError !== undefined) throw firstError
+  return results
 }
 
 export async function loadAssetBatches<Stage>(

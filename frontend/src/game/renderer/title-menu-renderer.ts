@@ -9,7 +9,6 @@ import {
 } from 'pixi.js'
 
 import { hub, mainMenu, menuSolomon } from '../../lib/assets.ts'
-import { collectAssetSources } from '../game-asset-readiness.ts'
 import {
   TITLE_BUILD_REVISION,
   layoutTitleBuildRevisionLabel,
@@ -37,6 +36,7 @@ import {
   loadGameTextureMap,
   textureFrom,
 } from './game-webgl.ts'
+import { TITLE_GAME_ASSET_SOURCES } from '../game-assets.ts'
 
 export type TitleMenuScreen = 'root' | 'play'
 export type TitleMenuAction =
@@ -82,11 +82,6 @@ interface ButtonView {
   label: Container
 }
 
-const TITLE_ASSET_SOURCES = collectAssetSources({
-  mainMenu,
-  menuSolomon,
-  revisionFont: hub.hud.fontAtlas,
-})
 const MAIN_BUTTON_X = 674.5
 const MAIN_BUTTON_Y = 421
 const MAIN_BUTTON_GAP = 7
@@ -95,7 +90,7 @@ const MAIN_BUTTON_HEIGHT = 69
 export async function createTitleMenuRenderer(
   options: TitleMenuRendererOptions,
 ): Promise<TitleMenuRenderer> {
-  const textures = await loadGameTextureMap(TITLE_ASSET_SOURCES)
+  const textures = await loadGameTextureMap(TITLE_GAME_ASSET_SOURCES)
   const resolution = fixedGamePresentationResolution(
     options.devicePixelRatio ?? window.devicePixelRatio,
     options.viewport.displayScale,

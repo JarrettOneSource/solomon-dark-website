@@ -31,6 +31,7 @@
     "test:desktop": "node --test desktop/static-client-server.test.mjs tools/stage-node-runtime.test.mjs",
     "game:host": "node --experimental-strip-types src/game/host/run-game-host.ts",
     "smoke:game": "node --experimental-strip-types tools/smoke-game-runtime.mjs",
+    "smoke:game:startup": "node tools/smoke-game-startup-memory.mjs",
     "smoke:game:weather": "node --experimental-strip-types tools/smoke-boneyard-weather.mjs",
     "smoke:game:saves": "node tools/smoke-game-saves.mjs",
     "smoke:game:match-loading": "node tools/smoke-match-loading.mjs",
