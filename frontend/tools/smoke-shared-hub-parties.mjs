@@ -47,6 +47,27 @@ try {
     ? { width: 844, height: 390, hasTouch: true, useTouch: true }
     : { width: 1600, height: 900, useTouch: false })
   await waitForPlayers(first.page, 2)
+  const chat = first.page.getByLabel('Game chat')
+  await first.page.keyboard.press('t')
+  await chat.locator('xpath=self::*[@data-chat-open="true"]').waitFor()
+  assert.equal(await chat.getAttribute('data-chat-channel'), 'global')
+  assert.equal(await chat.getAttribute('data-chat-channels'), 'global')
+  const singletonChatInput = chat.getByRole('textbox', { name: 'Chat message' })
+  await singletonChatInput.press('Tab')
+  assert.equal(await chat.getAttribute('data-chat-channel'), 'global')
+  assert.equal(
+    await singletonChatInput.evaluate(node => document.activeElement === node),
+    true,
+  )
+  const chatSingletonTabEvidencePath = evidenceRoot
+    ? join(evidenceRoot, 'chat-hub-singleton-tab.png')
+    : null
+  if (chatSingletonTabEvidencePath) {
+    await first.page.screenshot({ path: chatSingletonTabEvidencePath })
+  }
+  await singletonChatInput.press('Escape')
+  await chat.locator('xpath=self::*[@data-chat-open="false"]').waitFor()
+
   host.invitePlayer(first.playerId)
   const invitation = first.page.locator('[data-party-invitation]')
   await invitation.waitFor()
@@ -88,7 +109,6 @@ try {
   ), 'outsider singleton party')
   assert.equal(outsiderParty.state.party.leaderPlayerId, outsider.playerId)
 
-  const chat = first.page.getByLabel('Game chat')
   const hostMessageCountBeforeWhisper = host.chatMessages.length
   const memberMessageCountBeforeWhisper = member.chatMessages.length
   await activatePlayer(first, outsider.playerId)
@@ -382,6 +402,7 @@ try {
     boneyardWithoutDirectLightPath,
     chatBoneyardEvidencePath,
     chatHubEvidencePath,
+    chatSingletonTabEvidencePath,
     chatWhisperEvidencePath,
     chatFadedOpacity: fadedOpacity,
     chatGlobalSequence: globalChatMessages[0].sequence,

@@ -56,6 +56,8 @@ test('Tab cycling and channel reconciliation stay inside current membership', ()
   const channels = availableGameChatChannels('hub', grouped)
   assert.equal(nextGameChatChannel('party', channels), 'global')
   assert.equal(nextGameChatChannel('global', channels), 'party')
+  assert.equal(nextGameChatChannel('global', ['global']), 'global')
+  assert.equal(nextGameChatChannel('party', ['party']), 'party')
   assert.equal(reconcileGameChatChannel('global', ['party']), 'party')
   assert.equal(reconcileGameChatChannel('party', channels), 'party')
 })
@@ -103,7 +105,10 @@ test('chat rejections provide concise channel and retry feedback', () => {
 test('chat UI owns its configured key, real text focus, Tab channels, fade, and local gameplay exclusion', () => {
   assert.match(component, /event\.code !== openKeyCode/)
   assert.match(component, /<input/)
-  assert.match(component, /event\.key === 'Tab'/)
+  assert.match(
+    component,
+    /if \(event\.key === 'Tab'\) \{\s*event\.preventDefault\(\)\s*event\.stopPropagation\(\)\s*chooseChannel/,
+  )
   assert.match(component, /aria-live="polite"/)
   assert.match(component, /aria-label="Open chat"/)
   assert.match(css, /data-chat-faded='true'/)

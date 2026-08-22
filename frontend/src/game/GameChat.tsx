@@ -314,7 +314,7 @@ export default function GameChat({
       closeChat()
       return
     }
-    if (event.key === 'Tab' && channels.length > 1) {
+    if (event.key === 'Tab') {
       event.preventDefault()
       event.stopPropagation()
       chooseChannel(nextGameChatChannel(channel, channels))
