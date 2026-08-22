@@ -1037,6 +1037,7 @@ export function damageBoneyardEnemy(
         deathEpoch: source.nextDeathEpoch,
         deathStartedTick: request.tick,
         deathTick: 0,
+        headFacingOffset: 0,
         lastDamagedByPlayerId: request.sourcePlayerId,
         lastDamageTick: request.tick,
         lifeState: 'dying',

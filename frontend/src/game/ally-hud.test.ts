@@ -32,6 +32,7 @@ function player(displayName: string): ProtocolPlayerState {
     gaitDegrees: 0,
     headingIndex: 0,
     lighting: DEFAULT_PLAYER.lighting,
+    movementScale: DEFAULT_PLAYER.movementScale,
     position: { x: 0, y: 0 },
     primaryCast: createIdlePlayerPrimaryCast(),
     progression: DEFAULT_PLAYER.progression,

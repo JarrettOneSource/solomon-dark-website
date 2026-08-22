@@ -1138,7 +1138,15 @@ export function stepGameSimulationTick(
   }))
   switch (state.world.kind) {
     case 'hub': {
-      const result = stepHubWorldTick(state.world, players, activeInputs)
+      const result = stepHubWorldTick(
+        state.world,
+        players,
+        activeInputs,
+        Object.fromEntries(Object.keys(players).map((playerId) => [
+          playerId,
+          playerEntityMovementScale(state.playerEntities, playerId),
+        ])),
+      )
       return finishGameSimulationTick(
         state,
         result,

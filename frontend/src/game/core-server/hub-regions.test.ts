@@ -63,7 +63,7 @@ function step(
   let currentWorld = world
   let currentPlayers = players
   for (let tick = 0; tick < count; tick += 1) {
-    const result = stepHubWorldTick(currentWorld, currentPlayers, IDLE_INPUT)
+    const result = stepHubWorldTick(currentWorld, currentPlayers, IDLE_INPUT, { local: 1 })
     currentWorld = result.world
     currentPlayers = result.players
   }
@@ -133,7 +133,12 @@ test('neutral Hub input, including north-only input from spawn, reaches every po
     let world = createHubWorld(['local'])
     let players = { local: createPlayerCharacter(CHARACTER, position) }
     for (let tick = 0; tick < 300 && !world.participants.local.transition; tick += 1) {
-      const result = stepHubWorldTick(world, players, { local: { movement } })
+      const result = stepHubWorldTick(
+        world,
+        players,
+        { local: { movement } },
+        { local: 1 },
+      )
       world = result.world
       players = result.players
     }
@@ -143,6 +148,24 @@ test('neutral Hub input, including north-only input from spawn, reaches every po
       destination,
     )
   }
+})
+
+test('ordinary Hub authority consumes each player native movement multiplier', () => {
+  const world = createHubWorld(['ordinary', 'boosted'])
+  const players = {
+    boosted: createPlayerCharacter(CHARACTER, { x: 1200, y: 800 }),
+    ordinary: createPlayerCharacter(CHARACTER, { x: 500, y: 800 }),
+  }
+  const result = stepHubWorldTick(world, players, {
+    boosted: { movement: { x: 1, y: 0 } },
+    ordinary: { movement: { x: 1, y: 0 } },
+  }, {
+    boosted: 2.8125,
+    ordinary: 1,
+  })
+
+  assert.equal(result.players.ordinary.velocity.x, 9)
+  assert.equal(result.players.boosted.velocity.x, 25.3125)
 })
 
 test('private-room architecture and props own their native colliders', () => {
@@ -410,7 +433,7 @@ test('room ownership is per participant while the shared Courtyard simulation ke
     courtyard: createPlayerCharacter(CHARACTER, sharedPosition),
   }
 
-  const result = stepHubWorldTick(world, players, {})
+  const result = stepHubWorldTick(world, players, {}, { courtyard: 1, private: 1 })
   assert.deepEqual(result.players.private.position, sharedPosition)
   assert.deepEqual(result.players.courtyard.position, sharedPosition)
   assert.equal(result.world.participants.private.region, 'library')

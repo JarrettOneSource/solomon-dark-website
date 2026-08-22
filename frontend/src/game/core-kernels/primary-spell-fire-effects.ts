@@ -583,8 +583,7 @@ export function nativeFireDirectDamage(
   validateNonnegative(baseDamage, 'Fireball base damage')
   validateNonnegative(explodeDamage, 'Fireball explosion damage')
   const damage = explodeDamage > 0 ? baseDamage - explodeDamage : baseDamage
-  if (damage < 0) throw new RangeError('Fireball explosion damage exceeds base damage')
-  return damage
+  return Math.max(0, damage)
 }
 
 export function nativeFireExplosion(

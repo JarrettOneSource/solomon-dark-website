@@ -178,6 +178,7 @@ export function stepHubWorldTick(
   world: HubWorldState,
   players: Readonly<Record<string, PlayerCharacterState>>,
   inputs: Readonly<Record<string, PlayerCharacterInput>>,
+  movementScales: Readonly<Record<string, number>>,
 ): HubWorldTickResult {
   const participants = reconcileParticipants(world.participants, players)
   const runtime = world.runtime
@@ -197,7 +198,7 @@ export function stepHubWorldTick(
         : planPlayerCharacterTick(
             player,
             inputs[playerId] ?? { movement: { x: 0, y: 0 } },
-            1,
+            movementScales[playerId] ?? 1,
           ),
     )
   }

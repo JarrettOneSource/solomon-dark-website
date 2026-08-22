@@ -295,12 +295,12 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 49
+export const GAME_PROTOCOL_VERSION = 50
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
 export const GAME_CONNECTION_TIMEOUT_CLOSE_CODE = 4000
 export const GAME_HOST_ENDED_SESSION_CLOSE_CODE = 4001
-export const PLAYER_CHARACTER_KERNEL_VERSION = 'player-character-kernel-4'
+export const PLAYER_CHARACTER_KERNEL_VERSION = 'player-character-kernel-5'
 export const EMPTY_CONTENT_MANIFEST_SHA256 = '0'.repeat(64)
 
 const MAX_CONTENT_MODS = 256
@@ -1609,6 +1609,7 @@ function playerSnapshotFrame(value: unknown, field: string): ProtocolPlayerSnaps
     'gaitDegrees',
     'headingIndex',
     'lighting',
+    'movementScale',
     'position',
     'primaryCast',
     'progression',
@@ -1638,6 +1639,7 @@ function playerSnapshotFrame(value: unknown, field: string): ProtocolPlayerSnaps
     gaitDegrees: finite(source.gaitDegrees, `${field}.gaitDegrees`),
     headingIndex: integer(source.headingIndex, `${field}.headingIndex`),
     lighting,
+    movementScale: nonnegativeFinite(source.movementScale, `${field}.movementScale`),
     position: vector(source.position, `${field}.position`),
     primaryCast,
     progression,

@@ -84,6 +84,30 @@ test('player character planning replays the native fixed-tick movement lane', ()
   closeTo(fractionalAtCap.requestedVelocity.x, 29.6875)
   closeTo(fractionalAtCap.retainedVelocity.x, 26.71875)
 
+  const maximumAuthoredBoost = planPlayerCharacterTick(
+    { velocity: { x: 0, y: 0 } },
+    { movement: { x: 1, y: 0 } },
+    2.8125,
+  )
+  assert.deepEqual(maximumAuthoredBoost.requestedVelocity, { x: 28.125, y: 0 })
+  assert.deepEqual(maximumAuthoredBoost.delta, { x: 0.28125, y: 0 })
+  assert.throws(
+    () => planPlayerCharacterTick(
+      { velocity: { x: 0, y: 0 } },
+      { movement: { x: 1, y: 0 } },
+      -0.01,
+    ),
+    /non-negative/,
+  )
+  assert.throws(
+    () => planPlayerCharacterTick(
+      { velocity: { x: 0, y: 0 } },
+      { movement: { x: 1, y: 0 } },
+      Number.NaN,
+    ),
+    /non-negative/,
+  )
+
   let player = createPlayerCharacter(CHARACTER, { x: 0, y: 0 })
   for (let tick = 0; tick < 200; tick += 1) {
     const plan = planPlayerCharacterTick(player, { movement: { x: 1, y: 0 } }, 1)

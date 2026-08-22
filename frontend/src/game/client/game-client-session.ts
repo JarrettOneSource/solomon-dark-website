@@ -1051,6 +1051,7 @@ export function connectGameClientSession(
           state.player,
           currentInput,
           state.collisionRngState,
+          state.player.movementScale,
           state.participant,
         )
         state.player = {
@@ -1058,6 +1059,7 @@ export function connectGameClientSession(
           config: { ...state.player.config },
           economy: state.player.economy,
           lighting: state.player.lighting,
+          movementScale: state.player.movementScale,
           progression: state.player.progression,
         }
         state.collisionRngState = predicted.collisionRngState

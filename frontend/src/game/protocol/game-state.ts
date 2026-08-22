@@ -57,6 +57,7 @@ export interface ProtocolPlayerState extends PlayerCharacterState {
   config: PlayerCharacterConfig
   economy: ProtocolPlayerEconomy
   lighting: ProtocolPlayerLighting
+  movementScale: number
   progression: ProtocolPlayerProgression
 }
 

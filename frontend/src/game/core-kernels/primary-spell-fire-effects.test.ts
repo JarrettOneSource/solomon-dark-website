@@ -30,7 +30,8 @@ const PAYLOAD = Object.freeze({
 test('pins Fireball direct/splash partition and private seed ownership', () => {
   assert.equal(nativeFireDirectDamage(30, 12), 18)
   assert.equal(nativeFireDirectDamage(30, 0), 30)
-  assert.throws(() => nativeFireDirectDamage(5, 6), /exceeds/)
+  assert.equal(nativeFireDirectDamage(6, 6), 0)
+  assert.equal(nativeFireDirectDamage(5, 6), 0)
 
   const draw = drawNativeFirePrivateSeed(createNativeRng(7))
   assert.equal(draw.seed >= 0 && draw.seed <= 1_000_000, true)

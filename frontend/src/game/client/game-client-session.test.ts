@@ -1071,6 +1071,7 @@ test('client does not rewind a locally presented turn while acknowledgement is d
       authoritativePlayer,
       gameplayInput({ x: 1, y: 0 }),
       collisionRngState,
+      authoritativePlayer.movementScale,
       initialSnapshot.world.kind === 'hub'
         ? initialSnapshot.world.participants['player-1']
         : undefined,
@@ -1079,6 +1080,7 @@ test('client does not rewind a locally presented turn while acknowledgement is d
       ...predicted.player,
       economy: authoritativePlayer.economy,
       lighting: authoritativePlayer.lighting,
+      movementScale: authoritativePlayer.movementScale,
       progression: authoritativePlayer.progression,
     }
     collisionRngState = predicted.collisionRngState
@@ -1230,26 +1232,56 @@ test('client visually absorbs an unpredicted push over one snapshot interval', a
 
 test('client predicts the authoritative scripted transition walk without accepting input', () => {
   const player = createPlayerCharacter(CHARACTER, { x: 100, y: 100 })
+  const participant = {
+    region: 'courtyard' as const,
+    transition: {
+      alpha: 0.4,
+      destination: 'storeroom' as const,
+      phase: 'outgoing' as const,
+      scriptedSpeed: 0.45,
+      scriptedTarget: { x: 100, y: -1000 },
+      sourceRegion: 'courtyard' as const,
+    },
+  }
   const predicted = predictPlayerCharacterInHub(
     player,
     gameplayInput({ x: -1, y: 0 }),
     123,
-    {
-      region: 'courtyard',
-      transition: {
-        alpha: 0.4,
-        destination: 'storeroom',
-        phase: 'outgoing',
-        scriptedSpeed: 0.45,
-        scriptedTarget: { x: 100, y: -1000 },
-        sourceRegion: 'courtyard',
-      },
-    },
+    2.8125,
+    participant,
+  )
+  const ordinaryScale = predictPlayerCharacterInHub(
+    player,
+    gameplayInput({ x: -1, y: 0 }),
+    123,
+    1,
+    participant,
   )
 
   assert.equal(predicted.player.position.x, 100)
   assert.ok(predicted.player.position.y < 100)
+  assert.deepEqual(predicted.player.position, ordinaryScale.player.position)
   assert.equal(predicted.collisionRngState, 123)
+})
+
+test('client prediction consumes the replicated native movement multiplier', () => {
+  const player = createPlayerCharacter(CHARACTER, { x: 500, y: 700 })
+  const ordinary = predictPlayerCharacterInHub(
+    player,
+    gameplayInput({ x: 1, y: 0 }),
+    123,
+    1,
+  )
+  const boosted = predictPlayerCharacterInHub(
+    player,
+    gameplayInput({ x: 1, y: 0 }),
+    123,
+    2.8125,
+  )
+
+  assert.equal(ordinary.player.velocity.x, 9)
+  assert.equal(boosted.player.velocity.x, 25.3125)
+  assert.equal(boosted.player.position.x - player.position.x, 0.28125)
 })
 
 test('client rejects a welcome that omits its assigned player', async () => {

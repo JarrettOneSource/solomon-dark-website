@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { createHubEconomy, type HubEconomyState } from './hub-economy.ts'
+import {
+  createEquipmentInventoryItem,
+  createHubEconomy,
+  DOWSING_EQUIPMENT_RECIPES,
+  type HubEconomyState,
+} from './hub-economy.ts'
 import {
   createNativeRng,
   drawNativeFloat,
@@ -132,6 +137,38 @@ test('all sixteen rows resolve their exact rank and concentration scalars', () =
   assert.equal(derived.deflectChancePercent, 10)
   assert.equal(derived.poisonResistance, 0.2)
   assert.equal(derived.castProgressFactor, 1.1)
+})
+
+test('Rush, concentration, and the sole authored walk-speed item compose above one', () => {
+  const book = rankedBook({ 67: 8 })
+  const statBook = playerStatBook()
+  const base = createHubEconomy(1)
+  const walkRecipe = DOWSING_EQUIPMENT_RECIPES.find(({ sourceIndex }) => sourceIndex === 30)
+  assert.ok(walkRecipe)
+  const economy = {
+    ...base,
+    equipment: {
+      ...base.equipment,
+      amulet: createEquipmentInventoryItem(walkRecipe, base.nextItemId),
+    },
+  }
+  let state = createPlayerSkillRuntime(book, statBook, economy)
+  state = setPlayerConcentration(
+    state.runtime,
+    state.skillBook,
+    statBook,
+    economy,
+    67,
+  )
+  const derived = playerSkillDerivedStats(
+    state.runtime,
+    state.skillBook,
+    statBook,
+    progression(),
+    economy,
+  )
+
+  assert.equal(derived.movementFactor, 2.8125)
 })
 
 test('Life and Mana Charms multiply their final maximum-vital lanes independently', () => {

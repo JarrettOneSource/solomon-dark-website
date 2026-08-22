@@ -727,23 +727,25 @@ export function resolveBoneyardSpellCombat(
     }
 
     if (projectile.kind === 'fire') {
-      queueBurn(
-        actor.id,
-        projectile.ownerId,
-        projectile.burnDamage,
-      )
       const amount = nativeFireDirectDamage(projectile.damage, projectile.explodeDamage)
-      const damaged = damageBoneyardEnemy(enemies, {
-        lethalObserver,
-        actorId: actor.id,
-        amount,
-        sourcePlayerId: projectile.ownerId,
-        tick,
-      })
-      if (!damaged.accepted) continue
-      enemies = damaged.store
-      events.push(...damaged.events)
-      hits.push(spellHit(projectile, actor.id, amount, damaged.killed, tick))
+      if (amount > 0) {
+        const damaged = damageBoneyardEnemy(enemies, {
+          lethalObserver,
+          actorId: actor.id,
+          amount,
+          sourcePlayerId: projectile.ownerId,
+          tick,
+        })
+        if (!damaged.accepted) continue
+        queueBurn(
+          actor.id,
+          projectile.ownerId,
+          projectile.burnDamage,
+        )
+        enemies = damaged.store
+        events.push(...damaged.events)
+        hits.push(spellHit(projectile, actor.id, amount, damaged.killed, tick))
+      }
       consumedProjectileIds.add(projectile.id)
       const detonation = createPrimarySpellFireDetonation(
         nextSpellId,

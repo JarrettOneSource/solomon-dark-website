@@ -819,6 +819,14 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   delete missingCold.snapshot.players['player-1'].progression.coldSlowTicksRemaining
   assert.throws(() => decodeServerGameMessage(JSON.stringify(missingCold)), /coldSlowTicksRemaining/)
 
+  assert.equal(welcome.snapshot.players['player-1']!.movementScale, 0.01)
+  const negativeMovementScale = JSON.parse(encodeGameMessage(welcome))
+  negativeMovementScale.snapshot.players['player-1'].movementScale = -0.01
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(negativeMovementScale)),
+    /movementScale/,
+  )
+
   const oversizedDazzle = JSON.parse(encodeGameMessage(welcome))
   oversizedDazzle.snapshot.players['player-1'].progression.dazzleTicksRemaining = 51
   assert.throws(() => decodeServerGameMessage(JSON.stringify(oversizedDazzle)), /dazzleTicksRemaining/)
@@ -1014,8 +1022,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v49 carries chat, mod content, unforge state, modal pause identity, leaderboard authority, and gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 49)
+test('protocol v50 carries movement authority, chat, mod content, unforge state, modal pause identity, leaderboard authority, and gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 50)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),

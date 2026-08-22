@@ -443,6 +443,47 @@ test('Fire contact partitions direct and rectangular splash damage and consumes 
   ])
 })
 
+test('Fire impact skips a nonpositive direct remainder but still detonates and retires', () => {
+  const spawned = spawnEnemies([
+    { position: { x: 0, y: 0 }, token: 'SKELETON' },
+  ])
+  const actor = spawned.actors[0]!
+  const base = projectile({ id: 7, kind: 'fire' })
+  if (base.kind !== 'fire') throw new Error('Expected a Fire fixture')
+  const result = resolveBoneyardSpellCombat({
+    ...spawned,
+    actors: [{
+      ...actor,
+      config: { ...actor.config, maximumHealth: 100 },
+      currentHealth: 100,
+    }],
+  }, spellState({
+    projectiles: [{
+      ...base,
+      burnDamage: 10,
+      damage: 5,
+      emberDamage: 0,
+      emberFragments: 0,
+      explodeDamage: 6,
+      explodeRadius: 15,
+    }],
+  }), [], 1, WORLD_KEY, COMBAT_RNG)
+
+  assert.deepEqual(
+    result.hits.map(({ amount, spellKind }) => ({ amount, spellKind })),
+    [{ amount: 3, spellKind: 'fire-explosion' }],
+  )
+  assert.equal(result.enemies.actors[0]!.currentHealth, 97)
+  assert.deepEqual(result.burns, [
+    { damage: 10, ownerId: 'wizard', targetId: actor.id },
+  ])
+  assert.deepEqual(result.spells.projectiles, [])
+  assert.deepEqual(
+    result.spells.transients.map(({ kind }) => kind),
+    ['fire-impact', 'fire-explosion'],
+  )
+})
+
 test('persistent Fire and GoodImp contacts use authoritative semantic events', () => {
   const spawned = spawnEnemies([
     { position: { x: 0, y: 0 }, token: 'SKELETON' },

@@ -22,6 +22,7 @@ export function predictPlayerCharacterInHub(
   previous: PlayerCharacterState,
   input: PlayerCharacterInput,
   collisionRngState: number,
+  movementScale: number,
   participant: HubParticipantState = createHubParticipantState(),
 ): HubCharacterPrediction {
   if (participant.transition) {
@@ -38,7 +39,7 @@ export function predictPlayerCharacterInHub(
       }),
     }
   }
-  const plan = planPlayerCharacterTick(previous, input, 1)
+  const plan = planPlayerCharacterTick(previous, input, movementScale)
   const moved = moveWithHubRegionCollisionState(
     participant.region,
     previous.position,

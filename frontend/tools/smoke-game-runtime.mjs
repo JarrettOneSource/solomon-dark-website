@@ -237,6 +237,23 @@ try {
   const studentCount = finalFrame.studentCount
   const orbSpriteCount = finalFrame.orbSpriteCount
   const textureSources = JSON.parse(await canvas.getAttribute('data-texture-sources'))
+  const telescopeFrames = new Set(presentationSamples.map(({ telescopeFrame }) => (
+    telescopeFrame
+  )))
+  if (telescopeFrames.size === 1) {
+    const initialTelescopeFrame = presentationSamples[0].telescopeFrame
+    const changedTelescopeFrame = await page.waitForFunction(
+      (initial) => {
+        const frame = document.querySelector('.hub-world-canvas')
+          ?.__sdrHubFrame.astronomerTelescopeFrame
+        return frame !== initial ? frame : null
+      },
+      initialTelescopeFrame,
+      { timeout: 5_000 },
+    )
+    telescopeFrames.add(await changedTelescopeFrame.jsonValue())
+    await changedTelescopeFrame.dispose()
+  }
 
   assert.ok(after > before, `expected the authoritative player to move right (${before} -> ${after})`)
   assert.ok(new Set(teacherFrames).size > 1, `expected Teacher casting frames to animate (${teacherFrames.join(', ')})`)
@@ -245,7 +262,7 @@ try {
   assert.ok(presentationSamples.at(-1).frame > presentationSamples[0].frame, 'expected the GPU renderer to keep presenting frames')
   assert.ok(presentationSamples.every(({ astronomerRenderable }) => astronomerRenderable), 'expected the animated Astronomer ensemble to remain unculled')
   assert.ok(presentationSamples.every(({ cameraRenderGroupCount }) => cameraRenderGroupCount === 3), 'expected all three Hub camera banks to remain render groups')
-  assert.ok(new Set(presentationSamples.map(({ telescopeFrame }) => telescopeFrame)).size > 1, 'expected the unculled Astronomer telescope to keep animating')
+  assert.ok(telescopeFrames.size > 1, 'expected the unculled Astronomer telescope to keep animating')
   assert.ok(studentCount > 0, `expected authoritative Students, got ${studentCount}`)
   assert.ok(orbSpriteCount >= 3, `expected the native multi-sprite Fire orb, got ${orbSpriteCount}`)
   for (const element of ['air', 'earth', 'ether', 'fire', 'water']) {
@@ -466,8 +483,8 @@ try {
       assert.equal(await environmentLight.getAttribute('data-composite'), 'plus-lighter')
       const pixels = await sampleEnvironmentLightPixels(runPage)
       assert.ok(
-        pixels.centerAlpha >= 7
-          && pixels.centerAlpha <= 11
+        pixels.centerAlpha >= pixels.expectedCenterAlphaMinimum
+          && pixels.centerAlpha <= pixels.expectedCenterAlphaMaximum
           && pixels.centerRgbTotal >= 720,
         `expected an additive player environment light, got ${JSON.stringify(pixels)}`,
       )
@@ -603,6 +620,7 @@ try {
     solomonPlacementReceipts,
     studentCount,
     teacherFrames: [...new Set(teacherFrames)],
+    telescopeFrames: [...telescopeFrames],
     thirdConsoleErrors,
     thirdMobileBoneyardAllyReceipt,
     thirdMobileHubAllyReceipt,
@@ -662,6 +680,7 @@ async function enterHub(page, element) {
     })}\n`)
     throw error
   }
+  await page.getByRole('textbox', { name: 'Wizard name' }).fill('Helvidius')
   await page.getByRole('button', { name: new RegExp(element, 'i') }).click()
   await page.locator('.create-menu-disciplines[data-visible="true"]').waitFor({ timeout: 15_000 })
   await page.locator('.create-menu-discipline-arcane').click()
@@ -1219,6 +1238,7 @@ async function solomonDigIndicatorReceipt(page) {
 }
 
 async function sampleEnvironmentLightPixels(page) {
+  let lastSample = null
   for (let attempt = 0; attempt < 60; attempt += 1) {
     const sample = await page.evaluate(() => {
       const canvas = document.querySelector('.boneyard-environment-light')
@@ -1228,16 +1248,19 @@ async function sampleEnvironmentLightPixels(page) {
       if (!context || canvas.width === 0 || canvas.height === 0) return null
       const diagnostics = world.__sdrBoneyardFrame
       if (!diagnostics) return null
+      const viewportWidth = Number(world.dataset.viewportWidth)
+      const viewportHeight = Number(world.dataset.viewportHeight)
+      if (!(viewportWidth > 0) || !(viewportHeight > 0)) return null
 
-      const scaleX = canvas.width / 1600
-      const scaleY = canvas.height / 900
+      const scaleX = canvas.width / viewportWidth
+      const scaleY = canvas.height / viewportHeight
       const playerX = diagnostics.playerScreenX * scaleX
       const playerY = diagnostics.playerScreenY * scaleY
       const corners = [
         { x: 2 * scaleX, y: 2 * scaleY },
-        { x: 1598 * scaleX, y: 2 * scaleY },
-        { x: 2 * scaleX, y: 898 * scaleY },
-        { x: 1598 * scaleX, y: 898 * scaleY },
+        { x: (viewportWidth - 2) * scaleX, y: 2 * scaleY },
+        { x: 2 * scaleX, y: (viewportHeight - 2) * scaleY },
+        { x: (viewportWidth - 2) * scaleX, y: (viewportHeight - 2) * scaleY },
       ]
       const farthest = corners.reduce((best, point) => (
         Math.hypot(point.x - playerX, point.y - playerY)
@@ -1251,22 +1274,42 @@ async function sampleEnvironmentLightPixels(page) {
       const far = context.getImageData(
           Math.round(farthest.x), Math.round(farthest.y), 1, 1,
         ).data
+      const overlappingPlayerCount = diagnostics.playerSamples.filter((player) => {
+        const sampleX = (player.x - diagnostics.cameraX) * diagnostics.cameraZoom
+          + viewportWidth / 2
+        const sampleY = (player.y - diagnostics.cameraY) * diagnostics.cameraZoom
+          + viewportHeight / 2
+        return Math.hypot(sampleX - diagnostics.playerScreenX, sampleY - diagnostics.playerScreenY)
+          < 1
+      }).length
       return {
+        canvasHeight: canvas.height,
+        canvasWidth: canvas.width,
         centerAlpha: center[3],
         centerRgbTotal: center[0] + center[1] + center[2],
+        expectedCenterAlphaMaximum: 11 * Math.max(1, overlappingPlayerCount),
+        expectedCenterAlphaMinimum: 7 * Math.max(1, overlappingPlayerCount),
         farAlpha: far[3],
         farRgbTotal: far[0] + far[1] + far[2],
+        overlappingPlayerCount,
+        playerX,
+        playerY,
+        viewportHeight,
+        viewportWidth,
       }
     })
+    lastSample = sample
     if (
       sample
-      && sample.centerAlpha >= 7
-      && sample.centerAlpha <= 11
+      && sample.centerAlpha >= sample.expectedCenterAlphaMinimum
+      && sample.centerAlpha <= sample.expectedCenterAlphaMaximum
       && sample.centerRgbTotal >= 720
       && sample.farAlpha === 0
       && sample.farRgbTotal === 0
     ) return sample
     await page.waitForTimeout(50)
   }
-  throw new Error('environment-light canvas did not paint the bounded player light')
+  throw new Error(
+    `environment-light canvas did not paint the bounded player light: ${JSON.stringify(lastSample)}`,
+  )
 }

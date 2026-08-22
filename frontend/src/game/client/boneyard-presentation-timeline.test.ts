@@ -45,6 +45,7 @@ function playerAt(x: number): ProtocolPlayerState {
     gaitDegrees: x,
     headingIndex: 0,
     lighting: LIGHTING,
+    movementScale: DEFAULT_PLAYER.movementScale,
     position: { x, y: 200 },
     primaryCast: createIdlePlayerPrimaryCast(),
     progression: DEFAULT_PLAYER.progression,

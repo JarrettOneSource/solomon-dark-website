@@ -827,6 +827,51 @@ test('Skeleton and Mage own the native head turn while Archer remains constructo
   assert.deepEqual(archer.store.headFacingRngState, winningState)
 })
 
+test('lethal handoff clears active Skeleton and Mage head-facing before projection', () => {
+  const winningState = skeletonHeadTurnState(0)
+  const skeletonPlayers = { player: livingTarget(10, 0) }
+  let skeleton = spawnOne(
+    'skeleton-lethal-head-handoff',
+    'SKELETON',
+    { x: 0, y: 0 },
+    skeletonPlayers,
+  )
+  skeleton = step({
+    ...skeleton.store,
+    headFacingRngState: winningState,
+  }, 1, skeletonPlayers)
+  const activeSkeleton = skeleton.store.actors[0]!
+  assert.equal(activeSkeleton.headFacingOffset, -1)
+  const killedSkeleton = damageBoneyardEnemy(skeleton.store, {
+    actorId: activeSkeleton.id,
+    amount: activeSkeleton.currentHealth,
+    sourcePlayerId: 'player',
+    tick: 1,
+  })
+  assert.equal(killedSkeleton.store.actors[0]!.lifeState, 'dying')
+  assert.equal(killedSkeleton.store.actors[0]!.headFacingOffset, 0)
+
+  const magePlayers = { player: livingTarget(150, 0) }
+  let mage = spawnOne(
+    'mage-lethal-head-handoff',
+    'SKELETONMAGE',
+    { x: 0, y: 0 },
+    magePlayers,
+  )
+  mage = step({ ...mage.store, headFacingRngState: winningState }, 1, magePlayers)
+  mage = step({ ...mage.store, headFacingRngState: winningState }, 2, magePlayers)
+  const activeMage = mage.store.actors[0]!
+  assert.equal(activeMage.headFacingOffset, -1)
+  const killedMage = damageBoneyardEnemy(mage.store, {
+    actorId: activeMage.id,
+    amount: activeMage.currentHealth,
+    sourcePlayerId: 'player',
+    tick: 2,
+  })
+  assert.equal(killedMage.store.actors[0]!.lifeState, 'dying')
+  assert.equal(killedMage.store.actors[0]!.headFacingOffset, 0)
+})
+
 test('Skeleton claw, weapon, and Pike preserve exact marker and strict-end ticks', () => {
   assert.deepEqual(NATIVE_SKELETON_ACTION_PROGRAMS, {
     claw: { markerProgress: 4, progressPerTick: 0.125, strictEnd: 7 },

@@ -197,7 +197,12 @@ dependencies without revisiting this release invariant.
 - Player-character movement uses a two-phase shared kernel: first plan native
   intent/velocity, then let the active world resolve collision, then commit the
   resolved position plus native heading/gait state. Hub and Boneyard geometry
-  therefore vary at the world seam without forking character behavior.
+  therefore vary at the world seam without forking character behavior. The
+  player ECS derives one finite non-negative movement multiplier from native
+  status, Rush/concentration, and equipment state; every ordinary world passes
+  it to the shared planner. Protocol 50 projects that authoritative scalar so
+  Hub local prediction runs the same kernel. Scripted room-transition motion
+  keeps its separate authored speed and ignores ordinary input multipliers.
 - A single pinned build on one platform must replay the same input script
   reproducibly. Cross-platform bit-identical floating-point results are useful
   measurements, not a correctness dependency. There is no fixed-point or
@@ -293,6 +298,12 @@ the sender and recipients to remain in the shared Hub; Party routing derives
 the current party membership at receipt time. Chat events are not snapshot
 deltas and gaps in their host-global sequence are expected when other parties
 receive intervening messages.
+
+Protocol 50 adds the server-derived player movement multiplier to every player
+frame. It is not client input: the host remains the sole owner of passive,
+equipment, and status composition. The field exists so the already-bounded Hub
+predictor can use the same movement plan as authority instead of hard-coding
+scale one and reconciling every boosted tick.
 
 ## Saves, identity, and content
 

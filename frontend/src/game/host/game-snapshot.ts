@@ -15,6 +15,7 @@ import { boneyardGateSnapshot } from '../core-kernels/boneyard-gate.ts'
 import { playerLightDriveActive } from '../core-kernels/player-lighting.ts'
 import {
   playerEntityDisplayHealth,
+  playerEntityMovementScale,
   playerLightingAt,
   playerSkillRuntimeAt,
 } from '../core-server/player-entity-store.ts'
@@ -217,7 +218,7 @@ function protocolBoneyardEnemyEvent(
 function protocolPlayerState(
   state: GameSimulationState,
   playerId: string,
-  player: Omit<ProtocolPlayerState, 'economy' | 'lighting' | 'progression'>,
+  player: Omit<ProtocolPlayerState, 'economy' | 'lighting' | 'movementScale' | 'progression'>,
 ): ProtocolPlayerState {
   const progression = getPlayerProgression(state, playerId)
   const economy = getPlayerEconomy(state, playerId)
@@ -273,6 +274,7 @@ function protocolPlayerState(
       lightRegistration: lighting.lightRegistration,
       overlayEffectPhase: lighting.overlayEffectPhase,
     },
+    movementScale: playerEntityMovementScale(state.playerEntities, playerId),
     progression: {
       coldSlowTicksRemaining: progression.coldSlowTicksRemaining,
       concentrationSkillIds: [

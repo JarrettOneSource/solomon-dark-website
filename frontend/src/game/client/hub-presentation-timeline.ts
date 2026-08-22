@@ -298,6 +298,7 @@ function interpolatePlayer(
       ...discrete.lighting,
       lightRegistration: { ...discrete.lighting.lightRegistration },
     },
+    movementScale: discrete.movementScale,
     position: {
       x: lerp(older.position.x, newer.position.x, blend),
       y: lerp(older.position.y, newer.position.y, blend),

@@ -147,8 +147,8 @@ export function planPlayerCharacterTick(
   input: Pick<PlayerCharacterInput, 'movement'>,
   movementScale: number,
 ): PlayerCharacterMovementPlan {
-  if (!Number.isFinite(movementScale) || movementScale < 0 || movementScale > 1) {
-    throw new RangeError('player movement scale must be within [0, 1]')
+  if (!Number.isFinite(movementScale) || movementScale < 0) {
+    throw new RangeError('player movement scale must be finite and non-negative')
   }
   const inputLength = Math.hypot(input.movement.x, input.movement.y)
   const direction = inputLength > 0
