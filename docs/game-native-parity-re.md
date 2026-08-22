@@ -31881,7 +31881,59 @@ and connected until storage completes.
 
 ### Implementation validation receipt
 
-- Pending focused red/green implementation, canonical validation, and browser
-  acceptance. Publication is authorized after exact-tree validation;
-  deployment remains a separate operation and is not authorized by this
-  request.
+- Protocol 55 adds strict correlated `client-save-before-leave` and
+  `server-save-before-leave` messages while retaining
+  `server-save-checkpoint` as the only payload. `GameClientSession` resolves
+  only the response naming its latest checkpoint. `MainMenuScene` then waits
+  for `GameSaveCoordinator.waitFor(sequence)` before destroying the session.
+  A failed store write leaves the session and pause owner intact and remounts
+  the same native menu for retry.
+- `game-host` forces one owner-only document for every explicit leave and
+  changes only the browser-adaptation cadence from five to 30 seconds. Existing
+  participant-owned semantic publication, schema-four integrity, private-
+  College/global-Hub admission, deployment drain, and terminal clear ownership
+  remain intact.
+- Focused red/green and post-rebase coverage passed `118/118` across the strict
+  protocol, client correlation/teardown, host publication, 30-second leader and
+  guest autosave, deployment/Game Over preservation, and native pause-menu
+  order. Type checking and lint/import boundaries pass. The Mod Loader's eight
+  focused native-save contracts pass, including all three byte-exact goldens,
+  lifecycle/caller ownership, corruption behavior, and provenance.
+- The first loaded WSL canonical run passed every backend/tail/build gate and
+  `1322/1323` broad cases; only the pre-existing Hub-pause no-catch-up timing
+  assertion failed under concurrent load. That exact test passed immediately in
+  isolation. No timeout or product assertion was changed.
+- The clean exact-tree Mac gate at Website commit
+  `4cc85192575e4b0d66b0ad7e1ebcea5f9a15e11d`, tree
+  `b1f44722c68998ef4a86de47ba798fbfc96b8ed8`, passed `16/16`
+  backend/contracts, `4/4` library, `43/43` loot, `232/232` prerequisite/save,
+  `1323/1323` broad runtime, every weather/party/HUD/diagnostic/Hall/Hub UI and
+  desktop tail suite, backend build/formatting, lint/import boundaries,
+  production frontend/game-host builds, media policy, and bundle budget
+  (`415695` raw / `116365` gzip bytes). The Mac was arm64 macOS `26.6.2`,
+  Node `22.17.0`, npm `10.9.2`, .NET `10.0.302`, and Chrome
+  `151.0.7922.170`.
+- Physical-Mac Chrome/WebGL anonymous leave advanced IndexedDB revision
+  `1 -> 2`, saved tick `322`, and resumed at X `1039.0505779667071` after
+  movement from X `950.64`. Authenticated cloud slot zero likewise advanced
+  `1 -> 2`, saved tick `293`, and resumed at the same moved X. Both journeys
+  returned through gameplay `LEAVE GAME` to Title and then Last Game with empty
+  page, console-error, console-warning, and unexpected-warning arrays.
+- The fault journey deliberately aborted the first cloud PUT. The page showed
+  `The College is unreachable — check your connection.`, retained the live Hub,
+  reopened the native pause menu, then retried, advanced cloud revision
+  `1 -> 2`, saved tick `395`, and resumed at X `1039.0505779667071`.
+  Only the injected `net::ERR_FAILED` and matching `save.sync_failed` warning
+  appeared; unexpected error/warning arrays were empty.
+- Inspected Mac captures copied locally are
+  `/tmp/solomon-save-leave-anonymous-mac.png` SHA-256
+  `bd8ec495e289eb633b2cc5f9c41922bc8edd6912cb1cb983ffd78130e241d2f7`,
+  `/tmp/solomon-save-leave-cloud-mac.png`
+  `a18a1d6426a26ebbee2283b37b6d02329ffa60aa3378140c37b2e0e284d015c8`,
+  and `/tmp/solomon-save-leave-cloud-retry-mac.png`
+  `69a37843ce347c933502cd4411df3fb38c4fc4a1e2d850c6873b95abc5bbc33b`.
+- The only `blocked-by-platform` member remains abrupt browser/process loss:
+  async browser storage cannot be guaranteed after the process is gone. The
+  most recent semantic/30-second checkpoint bounds that loss; explicit in-game
+  leave has the exact durable acknowledgement. Publication is authorized and
+  pending; deployment remains a separate unauthorized operation.
