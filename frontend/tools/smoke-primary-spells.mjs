@@ -842,6 +842,7 @@ async function castEtherInBoneyard(page) {
   const canvas = await enterBoneyard(page)
   if (!hostOpenedBoneyard) return castUntargetedEtherInBoneyard(page, canvas)
 
+  if (etherFanAcceptance) await waitForEtherFanFixture(page)
   const target = await visibleBoneyardEnemy(page)
   const bounds = await canvas.boundingBox()
   assert.ok(bounds, 'expected the Boneyard canvas to have bounds')
@@ -1626,6 +1627,29 @@ async function waitForEtherFan(
     }
     return null
   }, [afterTick, quantity, minimumFlightTicks, expectedIds], { timeout })
+  const result = await handle.jsonValue()
+  await handle.dispose()
+  return result
+}
+
+async function waitForEtherFanFixture(page) {
+  const handle = await page.waitForFunction(() => {
+    const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
+    if (!frame || !Number.isFinite(frame.playerX) || !Number.isFinite(frame.playerY)) return null
+    const enemies = frame.enemySamples.filter(({ currentHealth }) => currentHealth > 0)
+    if (enemies.length !== 10) return null
+    const center = enemies.reduce((sum, enemy) => ({
+      x: sum.x + enemy.x / enemies.length,
+      y: sum.y + enemy.y / enemies.length,
+    }), { x: 0, y: 0 })
+    const spread = Math.max(...enemies.map((enemy) => (
+      Math.hypot(enemy.x - center.x, enemy.y - center.y)
+    )))
+    const distance = Math.hypot(center.x - frame.playerX, center.y - frame.playerY)
+    return spread <= 40 && distance >= 180 && distance <= 300
+      ? { distance, spread, tick: frame.tick }
+      : null
+  }, undefined, { timeout: 30_000 })
   const result = await handle.jsonValue()
   await handle.dispose()
   return result
