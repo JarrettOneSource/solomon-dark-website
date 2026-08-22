@@ -874,7 +874,7 @@ async function castEtherInBoneyard(page) {
       afterTick,
       4,
       10_000,
-      25,
+      15,
       launchIds,
     )
     assert.deepEqual(
