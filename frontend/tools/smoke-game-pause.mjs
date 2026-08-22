@@ -10,12 +10,7 @@ import { WebSocket } from 'ws'
 import {
   GAME_FIXED_TICK_SECONDS,
   gameSimulationPlayerRecords,
-  getPlayerEconomy,
 } from '../src/game/core-server/game-simulation.ts'
-import {
-  playerSkillRuntimeAt,
-  replacePlayerEconomy,
-} from '../src/game/core-server/player-entity-store.ts'
 import { HUB_TRADER_GEOMETRY } from '../src/game/hub-inventory-presentation.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 import {
@@ -34,8 +29,6 @@ const screenshots = {
     || '/tmp/solomon-dark-pause-hub-owner.png',
   inventoryOwner: process.env.SDR_GAME_PAUSE_INVENTORY_SCREENSHOT
     || '/tmp/solomon-dark-pause-inventory-owner.png',
-  skillSettings: process.env.SDR_GAME_SKILL_SETTINGS_SCREENSHOT
-    || '/tmp/solomon-dark-pause-skill-settings.png',
   hubDialogue: process.env.SDR_GAME_PAUSE_HUB_DIALOGUE_SCREENSHOT
     || '/tmp/solomon-dark-pause-hub-dialogue-live.png',
   largeHubInventory: process.env.SDR_GAME_PAUSE_LARGE_INVENTORY_SCREENSHOT
@@ -97,7 +90,6 @@ try {
     window.solomonDarkRuntime = configuration
   }, runtime)
   await enterHub(page, 'Fire')
-  grantLearnedSkill(57)
 
   await page.setViewportSize({ height: 1200, width: 1920 })
   const largeHubScene = page.locator('.hub-scene')
@@ -343,24 +335,6 @@ try {
   await complexLighting.click()
   assert.equal(await complexLighting.getAttribute('aria-pressed'), 'false')
   await settingsDialog.getByRole('button', { name: 'BACK' }).click()
-  await settingsDialog.getByRole('button', { name: 'SELECT CONCENTRATION' }).click()
-  const concentrationSelector = settingsDialog.getByRole('region', {
-    name: 'Select Concentration',
-  })
-  await concentrationSelector.getByRole('button', { name: 'Channel Mana' }).click()
-  await waitForHost(() => (
-    playerSkillRuntimeAt(host.state().playerEntities, host.hostPlayerId())
-      ?.concentrationSkillIdA === 57
-  ), 'concentration selection')
-  await settingsDialog.getByRole('button', { name: 'SELECT PRIMARY ATTACK' }).click()
-  const primarySelector = settingsDialog.getByRole('region', { name: 'Select Primary Attack' })
-  assert.equal(
-    await primarySelector.getByRole('button', { name: 'Fireball, selected' })
-      .getAttribute('aria-pressed'),
-    'true',
-  )
-  await settingsDialog.getByRole('button', { name: 'BACK' }).click()
-  await page.screenshot({ path: screenshots.skillSettings })
   await assertLiveHub(page, 'Hub Pause Menu settings', 550)
   assert.deepEqual(hubPauseEdges, [])
   await settingsDialog.getByRole('button', { name: 'Done' }).click()
@@ -616,37 +590,6 @@ function simulationReceipt() {
     tick: state.tick,
     world: JSON.stringify(state.world),
   }
-}
-
-function grantLearnedSkill(skillId) {
-  const state = host.state()
-  const playerId = host.hostPlayerId()
-  const index = state.playerEntities.identities.findIndex(({ playerId: id }) => id === playerId)
-  const sourceBook = state.playerEntities.skillBooks[index]
-  const permanentRanks = [...sourceBook.permanentRanks]
-  const effectiveRanks = [...sourceBook.effectiveRanks]
-  permanentRanks[skillId] = 1
-  effectiveRanks[skillId] = 1
-  const skillBooks = [...state.playerEntities.skillBooks]
-  const progressions = [...state.playerEntities.progressions]
-  skillBooks[index] = {
-    ...sourceBook,
-    effectiveRanks,
-    learnedSkillOrder: [...sourceBook.learnedSkillOrder, skillId],
-    permanentRanks,
-  }
-  progressions[index] = {
-    ...progressions[index],
-    revision: progressions[index].revision + 1,
-  }
-  Object.assign(state, {
-    ...state,
-    playerEntities: replacePlayerEconomy({
-      ...state.playerEntities,
-      progressions,
-      skillBooks,
-    }, playerId, getPlayerEconomy(state, playerId)),
-  })
 }
 
 function moveHostPlayerTo(position) {

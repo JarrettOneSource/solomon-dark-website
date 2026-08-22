@@ -25906,13 +25906,13 @@ bottom-HUD records, rebuilds pages from the complete learned dependency graph,
 and exposes the authored hover tooltip. This screen is the user-facing owner of
 the catalog audit rather than a static two-card mock.
 
-The separately recovered `Skills_Quickbar` settings path is also live. Game
-Settings exposes the learned category-1 `SELECT PRIMARY ATTACK` list and the
-learned category-3 `SELECT CONCENTRATION` list; both submit authoritative
-protocol-44 actions. Concentration selection preserves the native one-slot or
-Split Mind two-slot replacement policy, treats a currently selected row as a
-no-op, and remains blocked during Mind Chug. It is not incorrectly folded into
-the Skill Screen's gold/green drag membership.
+At this entry's protocol-44 implementation cutoff, the separately recovered
+`Skills_Quickbar` settings path was also live. Game Settings exposed learned
+category-1 `SELECT PRIMARY ATTACK` and category-3 `SELECT CONCENTRATION` lists.
+The 2026-08-22 product-boundary correction below supersedes that Website
+placement and removes both Settings paths; the same authoritative actions,
+one-slot/Split Mind replacement policy, selected-row no-op, and Mind Chug gate
+remain owned by the Skill Book/runtime.
 
 ### 2026-08-21 v47 Ether Blast closure
 
@@ -27454,8 +27454,8 @@ below records the completed proof contract.
 | Save Memory (Requires Restart) | `Graphics.SaveVideoMemory`, application `+0x49C` | out-of-system (browser/WebGL owns texture eviction and device recovery; the native D3D retention switch has no coherent web value) | row absent; no restart placebo |
 | Zoom Effects On/Off | `0x00B3BCAC` | exact-ported | Off suppresses native camera/world pulse magnitude while retaining screen flash, gameplay, audio, and ordinary FOV |
 | Performance Back | `0x005D8120` child return | exact-ported | applies local values and restores root without releasing gameplay suspension |
-| Select Primary Attack | control `+0x3AC` | verified-already-at-parity | learned native primary membership and selection remain in gameplay Settings |
-| Select Concentration siblings | controls `+0x46C/+0x52C` | verified-already-at-parity | learned concentration membership, active state, and Mind Chug gate remain in gameplay Settings |
+| Select Primary Attack | control `+0x3AC` | out-of-system — superseded by the 2026-08-22 Website product correction | removed from Settings; learned primary selection remains in Skill Book |
+| Select Concentration siblings | controls `+0x46C/+0x52C` | out-of-system — superseded by the 2026-08-22 Website product correction | removed from Settings; concentration selection and Mind Chug gating remain in Skill Book/runtime |
 | Enable Cheats | Website semantic Lua setting | exact-ported as explicit browser extension | defaults off, host-only runtime gate remains live, and guest never gains a VM/API |
 | Camera FOV | browser extension over Region camera projection | exact-ported as designed-not-observed | `75..125%`; actual zoom is native zoom divided by FOV factor in Hub, every private room, Boneyard, culling, lighting, hit projection, and audio viewport calculations |
 | UI Scale | browser extension over screen-space HUD/touch presentation | exact-ported as designed-not-observed | `75..150%`; top/center/bottom/right anchors remain inside logical viewport and hit boxes scale with their visuals |
@@ -27527,8 +27527,9 @@ user must activate it again.
 ### Nearby-system findings
 
 - `Select Primary Attack` and both `Select Concentration` actions are native
-  Settings members handled by `0x005D8120`; the current web skill selectors
-  are not arbitrary additions and remain under the gameplay Settings owner.
+  Settings members handled by `0x005D8120`. The 2026-08-22 Website product
+  correction intentionally excludes them from Settings and retains the shared
+  authoritative mutation behavior under the Skill Book/runtime owner.
 - The native fresh Windows default for Enhanced Effects is On even though the
   preserved sandbox profile is Off. The Website's current fixed-On policy is
   therefore the shipped-capability identity case, but it must remain visibly
@@ -27585,6 +27586,8 @@ user must activate it again.
   fullscreen, key capture and actual gameplay input, Hub and Boneyard FOV,
   UI Scale on desktop and coarse-pointer landscape, Performance toggles,
   gameplay skill selectors, Dark Cloud return, and zero page/console errors.
+  This was the 2026-08-21 cutoff contract; the 2026-08-22 correction removes
+  the selector interaction from the Settings journey.
 - The exact final tree must pass the supported `./scripts/validate.sh`
   entrypoint. The same affected Settings/device/browser matrices must pass
   independently on the Mac mini, with its evidence reported separately.
@@ -27598,8 +27601,10 @@ user must activate it again.
   The input census is the fifteen native identities plus the explicit Website
   Chat extension. Chat defaults to `T`, Skills defaults to `K`, and rebinding
   either conflict-swaps the other so one physical edge cannot open both.
-- One `GameSettingsDialog` owns title, gameplay, and redesigned Dark Cloud
-  contexts plus Controls, Performance, primary, and concentration children.
+- At the recorded implementation cutoff, one `GameSettingsDialog` owned title,
+  gameplay, and redesigned Dark Cloud contexts plus Controls, Performance,
+  primary, and concentration children. The primary/concentration children are
+  superseded and removed by the 2026-08-22 product correction.
   It consumes the untouched stock `ControlPanel.png` atlas (SHA-256
   `d63bd3ac402fcbc00a60916b6f0aa79f662501acc8f6fbe88ee1676e69b43f86`),
   native UI chrome, semantic focus/Back behavior, responsive scrolling, and
@@ -31047,3 +31052,158 @@ class/content catalogs, so the Mod Loader documents remain unchanged.
   run, the device still listed only the pre-fix `11:15:46` WebContent CPU
   resource report and the unrelated `08:31` Twitter Jetsam event; no new CPU,
   jetsam, page, transport, or renderer failure was generated.
+
+## 2026-08-22 — Remove character loadout mutation from Website Settings
+
+### Reported smell and parity question
+
+- Reported web behavior: gameplay `GAME SETTINGS` contains a `SPELL LOADOUT`
+  group with `SELECT PRIMARY ATTACK` and `SELECT CONCENTRATION` child pages.
+- Product correction: character-build choices must not be exposed from the
+  Website Settings menu. The active Skill Book remains the in-run owner for
+  primary and concentration selection; Create remains the new-character owner.
+- Reproduction scope: title, Dark Cloud, and gameplay Settings roots; gameplay
+  pause ownership; primary and concentration actions; learned-skill state;
+  Settings close/resume; and the separate Skill Book and Create surfaces.
+- Falsifiers: either loadout label or child route remains reachable from
+  Settings; Settings still receives player progression or mutation callbacks;
+  removing the rows also removes Skill Book selection, protocol mutation, or
+  Create/loadout behavior; or closing Settings changes pause lifecycle.
+- Reopened-system correction: the 2026-08-21 Settings pass correctly recovered
+  native membership, but failed the Website product-boundary check by treating
+  stock membership as sufficient reason to couple the local-preference dialog
+  to authoritative character progression. The user's explicit correction
+  makes both stock skill rows intentional Website exclusions.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Existing retail RE | Solomon Dark 0.72.5, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`; `Settings_Render 0x005D9A50`, `SettingsControl_HandleAction 0x005D8120`; `../Mod Loader/docs/reverse-engineering/native-settings-system.md` and `native-skill-screen-and-quickbar.md` | Stock conditionally exposes primary and concentration `Skills_Quickbar` actions from Settings. That native fact remains unchanged. | high |
+| Product direction | user correction, 2026-08-22 | The Website Settings menu must contain no loadout options. | authoritative |
+| Website causal trace | Website `origin/main` `05c73e43`; `GameSettingsDialog.tsx`, `MainMenuScene.tsx`, `main-menu.css`, `pause-menu-contract.test.ts`, `smoke-game-pause.mjs` | Only the gameplay invocation supplies progression and selection callbacks. That enables one root group, two child-page variants, the selector renderer/icon dependency, selector-only CSS, a positive source contract, and a browser mutation journey. | high |
+| Adjacent Website owner | `SkillBook.tsx`, `skill-book.test.ts`, `MainMenuScene.tsx`, `GameClientSession` | The Skill Book independently renders learned primary/concentration actions and submits the same authoritative session mutations; Create independently owns initial character loadout. | high |
+
+No new native fact was recovered, so the Mod Loader reports remain the durable
+source for the unchanged stock behavior and require no edit for this Website
+product-boundary correction.
+
+### System boundary and membership inventory
+
+System: the Website Settings-to-player-progression integration. It starts at
+the gameplay Settings invocation and ends at the two selector callbacks. Local
+audio, video, controls, performance, developer settings, Settings modal/pause
+lifecycle, Skill Book loadout mutation, quickbar actions, protocol handlers,
+and Create character construction are adjacent systems rather than removal
+targets.
+
+| Member (class/variant/scene/branch) | Native/product source | Disposition | Proof |
+| --- | --- | --- | --- |
+| gameplay Settings `SPELL LOADOUT` root group | stock conditional Settings rows; 2026-08-22 product direction | out-of-system (character build mutation is excluded from Website Settings) | no group or action label in component/browser |
+| primary Settings child page and learned category-1 rows | `0x005D8120`; product exclusion | out-of-system (Website Settings) | no page state, catalog traversal, icon, callback, or CSS path |
+| concentration Settings child page, one-slot/Split Mind/Mind Chug branches | `0x005D8120`; product exclusion | out-of-system (Website Settings) | no page state, catalog traversal, icon, callback, or CSS path |
+| gameplay Settings progression/callback props | Website integration seam | out-of-system (Settings is local-preference-only) | invocation and props absent |
+| title Settings | existing no-progression invocation | verified-already-at-parity | remains loadout-free and otherwise unchanged |
+| Dark Cloud Settings | existing no-progression invocation | verified-already-at-parity | remains loadout-free and otherwise unchanged |
+| gameplay pause hold, Done, and no-catch-up resume | existing Settings pause owner | verified-already-at-parity | browser journey retains frozen ticks and resume contract |
+| Skill Book primary selection | `SkillBook` category-1 action | verified-already-at-parity | existing component/session path and regression coverage remain |
+| Skill Book concentration selection and lock state | `SkillBook` category-3 action | verified-already-at-parity | existing component/session path and regression coverage remain |
+| Create/new-character and retained-loadout screens | `CreateMenuScene` | out-of-system (separate construction/post-run owner) | no touched source or changed journey |
+| quickbar bindings, progression state, and protocol mutations | shared runtime model | out-of-system (still consumed by Skill Book/gameplay) | no runtime/schema/session removal |
+| persisted `GameSettings` record | local preference owner | verified-already-at-parity | contains no character-progression/loadout fields |
+
+There are no `blocked-by-platform` members and no predicted visible browser
+difference beyond the requested absence of the two Settings actions.
+
+### Native ownership thread and corrected Website contract
+
+- Stock `MyCPanel` owns the Settings modal lifetime; `0x005D9A50` authors its
+  context-dependent rows and `0x005D8120` routes the two skill selectors.
+- Website `MainMenuScene` owns local Settings state and pause lifetime. Before
+  this correction, its gameplay invocation also injected authoritative player
+  progression and two session mutation functions into `GameSettingsDialog`.
+- The corrected Website boundary ends Settings at local preferences. It never
+  reads learned skills and never writes selected primary/concentration state.
+- `SkillBook` remains the in-run progression owner and continues to call
+  `session.selectPrimarySkill` and `session.selectConcentration`; Create and
+  retained-loadout transitions remain independent.
+- Entering child Controls/Performance pages and leaving gameplay Settings keep
+  the existing suspension, focus, Back, and no-catch-up teardown semantics.
+
+### Nearby-system findings
+
+- The native reports are not wrong: the stock Settings rows exist. This change
+  is an explicit Website product deviation, not a reinterpretation of
+  `0x005D9A50` or `0x005D8120`.
+- Selected primary/concentration fields in the progression comparison remain
+  necessary for the Skill Book and HUD to react to authoritative snapshots;
+  they must not be reverted with the Settings-only integration.
+- Session mutation methods and protocol messages remain live consumers for the
+  Skill Book. Removing them would exceed the requested surface and break the
+  retained loadout system.
+
+### Confidence and open questions
+
+- Confirmed: every Website reference unique to the Settings selectors, every
+  adjacent retained owner, and the unchanged native ownership/address thread.
+- Unknown: none material. Product direction is authoritative even though it is
+  intentionally narrower than stock Settings membership.
+
+### Web implementation consequence
+
+- Remove the progression and selection props from `GameSettingsDialog` and
+  its gameplay invocation.
+- Collapse `SettingsPage` back to `root | controls | performance`; remove the
+  `SPELL LOADOUT` group, selector component, progression/catalog/icon imports,
+  selector CSS, and selector-only browser fixture setup/screenshots.
+- Delete the stale positive Settings-selector assertions while retaining the
+  existing Skill Book ownership coverage; do not add absence-only tests.
+- Keep all local settings, pause ownership, Skill Book, Create, quickbar,
+  progression comparison, session, protocol, and persistence behavior intact.
+
+### Validation contract
+
+- The canonical type/build gate must compile the simplified Settings props and
+  retain the existing Settings and Skill Book suites without adding an
+  absence-only regression.
+- Browser journey: exercise ordinary gameplay Settings, hold simulation ticks
+  while open, close and resume without catch-up, and collect a visual capture
+  plus page/console errors.
+- Run the repository's supported `./scripts/validate.sh` gate on the exact
+  final tree and repeat the affected browser acceptance on the Mac mini before
+  publication.
+
+### Implementation validation receipt
+
+- `GameSettingsDialog.tsx` now owns local Settings preferences only. Its
+  progression/catalog/icon imports, gameplay mutation props, primary and
+  concentration page variants, `SPELL LOADOUT` group, selector renderer, and
+  selector-only CSS are deleted. `MainMenuScene` no longer injects player
+  progression or selection callbacks into either Settings invocation.
+- The selector-only browser fixture setup and stale positive Settings-selector
+  assertions were deleted. No absence-only regression was added. Existing
+  Skill Book tests and runtime/session/protocol paths remain unchanged and
+  continue to own primary and concentration selection.
+- The final rebased tree passed the complete canonical `./scripts/validate.sh`
+  gate uncontended on Apple M2: every backend, frontend, gameplay, weather,
+  party, HUD, diagnostics, Hall, Hub UI, and desktop suite passed, followed by
+  production builds, media policy, and bundle budget. A simultaneous Linux/Mac
+  diagnostic had starved existing shared-Hub socket deadlines; the same broad
+  suite and then the complete Mac gate passed alone, so no timeout or product
+  behavior was changed.
+- Mac mini acceptance used `Jarretts-Mac-mini.local`, arm64 macOS `26.6.2`,
+  Node `22.17.0`, npm `10.9.2`, .NET `10.0.302`, and Chrome
+  `151.0.7922.170`. The gameplay pause journey completed the live-Hub Settings
+  handoff and Boneyard hold/resume paths; after the independently merged
+  deployment-revision monitor, its dev server logged two expected missing
+  `deployment.json` responses. Final browser acceptance therefore used the
+  built production output, where the manifest exists: it returned `status: ok`,
+  `errors: []`, and the exact root groups `SOUND AND MUSIC`, `VIDEO SETTINGS`,
+  `CONTROLS`, `PERFORMANCE`, and `DEVELOPER`, with only `CUSTOMIZE KEYBOARD`
+  and `TWEAK GAME` child actions.
+- The inspected final Mac production capture shows those local preference
+  groups followed by `DONE`; character loadout controls are no longer present.
+  The task-owned receipt is
+  `/tmp/solomon-dark-settings-final-production-mac.png`.
+- There are no `blocked-by-platform` members or material unknowns. Deployment
+  and production restart remain separate and were not requested.

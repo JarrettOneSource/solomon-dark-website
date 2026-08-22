@@ -43,7 +43,6 @@ const PAUSE = {
 } as const
 const pauseCss = readFileSync(new URL('./gameplay-pause-menu.css', import.meta.url), 'utf8')
 const pauseComponent = readFileSync(new URL('./GameplayPauseMenu.tsx', import.meta.url), 'utf8')
-const settingsComponent = readFileSync(new URL('./GameSettingsDialog.tsx', import.meta.url), 'utf8')
 const mainMenuComponent = readFileSync(new URL('./MainMenuScene.tsx', import.meta.url), 'utf8')
 const hubComponent = readFileSync(new URL('./HubScene.tsx', import.meta.url), 'utf8')
 const hubInventoryComponent = readFileSync(new URL('./HubInventoryUi.tsx', import.meta.url), 'utf8')
@@ -242,16 +241,6 @@ test('Hub Pause Menu and NPC dialogue are local modals over a live world', () =>
   assert.match(hubComponent, /inputRef\.current\?\.setBlocked\(inputBlocked \|\| modalOpen\)/)
   assert.match(hubComponent, /data-hub-ui-surface=\{hubUiSurface\?\.kind \?\? 'none'\}/)
   assert.doesNotMatch(hubInventoryComponent, /requestGameplayPause|client-gameplay-pause/)
-})
-
-test('native Game Settings exposes learned primary and concentration selectors', () => {
-  assert.match(settingsComponent, /Select Primary Attack/)
-  assert.match(settingsComponent, /Select Concentration/)
-  assert.match(settingsComponent, /nativeSkillCategory\(skillId\)/)
-  assert.match(settingsComponent, /onSelectPrimarySkill/)
-  assert.match(settingsComponent, /onSelectConcentration/)
-  assert.match(pauseComponent, /onSelect: \(action: NativeSimpleMenuAction\) => void/)
-  assert.match(pauseComponent, /callbacksRef\.current\.onSelect\(closing\)/)
 })
 
 const near = (actual: number, expected: number, label: string) => {

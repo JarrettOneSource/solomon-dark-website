@@ -138,8 +138,6 @@ test('Settings drains every ported root, Controls, Performance, and context memb
     'UI SCALE',
     'CUSTOMIZE KEYBOARD',
     'TWEAK GAME',
-    'SELECT PRIMARY ATTACK',
-    'SELECT CONCENTRATION',
     'ENABLE CHEATS',
     'COMPLEX LIGHTING',
     'COMPLEX SHADOWS',

@@ -1160,10 +1160,6 @@ export default function MainMenuScene({
                 if (localHubPause) setHubPauseMenuOpen(false)
                 else session.requestGameplayPause(null)
               }}
-              onSelectConcentration={session.selectConcentration}
-              onSelectPrimarySkill={session.selectPrimarySkill}
-              progression={runtimeProgression
-                ?? runtimeSnapshot!.players[session.playerId]!.progression}
               settings={gameSettings}
             />
           ) : null}

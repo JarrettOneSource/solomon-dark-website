@@ -487,32 +487,6 @@
 
 .game-settings-console-help code { color: #fff0b7; font-family: var(--font-mono); }
 
-.game-settings-skill-selector { min-height: 100%; }
-
-.game-settings-skill-options {
-  display: grid;
-  gap: 10px;
-  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
-}
-
-.game-settings-skill-options > button {
-  position: relative;
-  min-height: 102px;
-  padding: 68px 6px 8px;
-  border: 1px solid #665b42;
-  color: #d9cfb0;
-  background: #100e13;
-  font: 600 12px var(--font-display);
-  cursor: pointer;
-}
-
-.game-settings-skill-options > button[aria-pressed='true'] {
-  border-color: #75cf79;
-  color: #e8ffe9;
-}
-
-.game-settings-skill-options > button:disabled { cursor: default; opacity: 0.45; }
-
 .game-settings-close {
   position: relative;
   z-index: 3;

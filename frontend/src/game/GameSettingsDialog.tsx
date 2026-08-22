@@ -29,24 +29,13 @@ import {
   type GameBindingAction,
   type GameSettings,
 } from './game-settings.ts'
-import {
-  NATIVE_SKILL_CATALOG,
-  nativeSkillCategory,
-  nativeWeldBuild,
-} from './core-kernels/player-progression.ts'
-import type { ProtocolPlayerProgression } from './protocol/game-state.ts'
-import { NativeSkillIcon } from './SkillQuickbar.tsx'
-
 export type GameSettingsContext = 'dark-cloud' | 'gameplay' | 'title'
-type SettingsPage = 'controls' | 'performance' | 'primary' | 'concentration' | 'root'
+type SettingsPage = 'controls' | 'performance' | 'root'
 
 interface GameSettingsDialogProps {
   context: GameSettingsContext
   onChange: (settings: GameSettings) => void
   onClose: () => void
-  onSelectConcentration?: (skillId: number) => void
-  onSelectPrimarySkill?: (skillId: number) => void
-  progression?: ProtocolPlayerProgression
   settings: GameSettings
 }
 
@@ -81,17 +70,11 @@ export default function GameSettingsDialog({
   context,
   onChange,
   onClose,
-  onSelectConcentration,
-  onSelectPrimarySkill,
-  progression,
   settings,
 }: GameSettingsDialogProps) {
   const [page, setPage] = useState<SettingsPage>('root')
   const [listening, setListening] = useState<GameBindingAction | null>(null)
   const contentRef = useRef<HTMLDivElement>(null)
-  const exposesSkillSelectors = progression !== undefined
-    && onSelectConcentration !== undefined
-    && onSelectPrimarySkill !== undefined
 
   useLayoutEffect(() => {
     if (contentRef.current) contentRef.current.scrollTop = 0
@@ -164,7 +147,6 @@ export default function GameSettingsDialog({
           {page === 'root' ? (
             <RootSettings
               context={context}
-              exposesSkillSelectors={exposesSkillSelectors}
               onChange={onChange}
               onOpen={setPage}
               settings={settings}
@@ -175,19 +157,9 @@ export default function GameSettingsDialog({
               onListen={setListening}
               settings={settings}
             />
-          ) : page === 'performance' ? (
+          ) : (
             <PerformanceSettings onChange={onChange} settings={settings} />
-          ) : exposesSkillSelectors ? (
-            <NativeSkillSelector
-              kind={page}
-              onSelect={(skillId) => {
-                if (page === 'primary') onSelectPrimarySkill(skillId)
-                else onSelectConcentration(skillId)
-                setPage('root')
-              }}
-              progression={progression}
-            />
-          ) : null}
+          )}
         </div>
         <button
           className="game-settings-close"
@@ -204,13 +176,11 @@ export default function GameSettingsDialog({
 
 function RootSettings({
   context,
-  exposesSkillSelectors,
   onChange,
   onOpen,
   settings,
 }: {
   context: GameSettingsContext
-  exposesSkillSelectors: boolean
   onChange: (settings: GameSettings) => void
   onOpen: (page: SettingsPage) => void
   settings: GameSettings
@@ -260,13 +230,6 @@ function RootSettings({
       <SettingsGroup title="PERFORMANCE">
         <SettingsAction label="TWEAK GAME" onClick={() => onOpen('performance')} />
       </SettingsGroup>
-
-      {exposesSkillSelectors ? (
-        <SettingsGroup title="SPELL LOADOUT">
-          <SettingsAction label="SELECT PRIMARY ATTACK" onClick={() => onOpen('primary')} />
-          <SettingsAction label="SELECT CONCENTRATION" onClick={() => onOpen('concentration')} />
-        </SettingsGroup>
-      ) : null}
 
       <SettingsGroup title="DEVELOPER">
         <SettingsToggle
@@ -515,54 +478,6 @@ function FullscreenSetting() {
   )
 }
 
-function NativeSkillSelector({
-  kind,
-  onSelect,
-  progression,
-}: {
-  kind: 'concentration' | 'primary'
-  onSelect: (skillId: number) => void
-  progression: ProtocolPlayerProgression
-}) {
-  const rows = progression.learnedSkillOrder.flatMap((skillId) => {
-    if (nativeSkillCategory(skillId) !== (kind === 'primary' ? 1 : 3)) return []
-    const skill = NATIVE_SKILL_CATALOG[skillId]
-    if (!skill || (skillId === 52 && progression.weldBuildId === null)) return []
-    const weld = skillId === 52 ? nativeWeldBuild(progression.weldBuildId!) : null
-    return [{
-      iconRecord: weld?.skillsAtlasIconRecord ?? skill.skills_atlas_icon_record,
-      name: skill.name,
-      selected: kind === 'primary'
-        ? progression.selectedPrimarySkillId === skillId
-        : progression.concentrationSkillIds.includes(skillId),
-      skillId,
-    }]
-  })
-  const title = kind === 'primary' ? 'Select Primary Attack' : 'Select Concentration'
-  return (
-    <section className="game-settings-skill-selector" aria-label={title}>
-      <div className="game-settings-skill-options">
-        {rows.length === 0 ? (
-          <p>No learned {kind === 'primary' ? 'primary attacks' : 'concentrations'}.</p>
-        ) : rows.map((row) => (
-          <button
-            key={row.skillId}
-            type="button"
-            aria-label={`${row.name}${row.selected ? ', selected' : ''}`}
-            aria-pressed={row.selected}
-            data-skill-id={row.skillId}
-            disabled={kind === 'concentration' && progression.mindChugTicksRemaining > 0}
-            onClick={() => onSelect(row.skillId)}
-          >
-            <NativeSkillIcon cooldown={false} record={row.iconRecord} />
-            <span>{row.name}</span>
-          </button>
-        ))}
-      </div>
-    </section>
-  )
-}
-
 function NativePanelArt() {
   return (
     <div className="game-settings-native-art" aria-hidden>
@@ -597,7 +512,5 @@ function captureMouseBinding(
 function pageTitle(page: SettingsPage): string {
   if (page === 'controls') return 'CUSTOMIZE KEYBOARD'
   if (page === 'performance') return 'TWEAK PERFORMANCE'
-  if (page === 'primary') return 'SELECT PRIMARY ATTACK'
-  if (page === 'concentration') return 'SELECT CONCENTRATION'
   return 'GAME SETTINGS'
 }
