@@ -32903,4 +32903,73 @@ claim.
 
 ### Implementation validation receipt
 
-Pending implementation and exact-tree validation.
+- `native-enemy-pathfinding.ts` now owns the recovered constructor fields,
+  `1000/300/100/10` target periods, two-tick gradual steering, target-relative
+  flank and ordinary wander points, 200..400-tick 1.5/float32-1.4 flank
+  factors, exact 0.995 decay, 20-tick rerolls, 25-stall recovery, and the
+  status-scaled action-`0x0D` facing hold. The authoritative enemy store uses
+  it for every mobile survival family and Coffin Maggots; Fire GoodImp uses
+  the same owner with its reversed-allegiance target query. The concurrent
+  Skeleton-gait and temporary-status changes remain intact: gait advances
+  from the native requested movement scalar, and status-scaled config is a
+  current-tick view restored by the upstream store boundary.
+- The wave compiler/director now generates `8..12`, then `3..5`, then a
+  threshold `1..4` from the native RNG in source order. Spawn location and
+  position policies survive compilation, intent transport, materialization,
+  and placement. The opening is near-player/dark, ordinary generated groups
+  are anywhere/dark, Coffins are near-player/light, and the scheduler retains
+  its no-player camera-center fallback. Placement retries use a fresh native
+  angle per radius ring and the shared recovered radial-light falloff. The
+  already named Website rule still confines post-retreat births to the combat
+  rectangle; that remains an explicit product deviation from stock exterior
+  births.
+- The exact rebased Website code commit was
+  `8b9129f48f6731354ad9953ccb60e012f7b0cda1` (tree
+  `90cf5271e68768b702a026696e8ecbf445514a59`) over status-lifecycle main
+  `52146891c6ac00cd25face69628c1250b826969f`. Local canonical
+  `./scripts/validate.sh` passed `16/16` backend contracts; frontend groups
+  `4/4`, `43/43`, `233/233`, `1350/1350`, `9/9`, `42/42`, `11/11`, `7/7`,
+  `17/17`, and `21/21`; desktop `5/5`; production build, media policy, and
+  bundle budget (`417541` raw / `116923` gzip). Log SHA-256 is
+  `fddf5be2c9fb6689f93537ef5b62135e4b24e483a97a2ffe93c6e45a66341793`.
+- The exact rebased Mod Loader documentation commit was
+  `673a196a1c7cad8af2183c6e1691b35c50e4ded4` (tree
+  `635af19a0e311f7767eded6e79600c843838d704`). Its CI-safe native suite passed
+  `491/491` locally (log SHA-256
+  `766554cc66af623afee20eae6bd8d9663c943e1d59e0a05c6cdda3306951c884`)
+  and on the Mac under Python 3.12 (`491/491`, log SHA-256
+  `845daaa470d692ecfb70a5bea7c0167aa3b2521889ef574d646dd8f869e5fd49`).
+  Apple system Python is not accepted because it lacks `zip(strict=...)`.
+- Jarrett's arm64 Mac mini ran macOS `26.6.2`, Node `22.17.0`, npm `10.9.2`,
+  .NET `10.0.302`, and Chrome `151.0.7922.170`. Its uncontended canonical
+  Website gate passed the same counts and production checks; bundle budget was
+  `417541` raw / `116924` gzip and the log SHA-256 is
+  `db0cdf0d140519e3d2d972e48f61f6be19ff51cd8336490b5ad96f81d4431cca`.
+- The built-production Chrome journey crossed the real entry Gate, completed
+  Solomon's Dig/dialogue/run transition, and reached `opening-threshold` with
+  exactly `8 + 3` Skeletons. The immediate births shared tick `7444`; delayed
+  births occurred at `+500`, `+700`, and `+900` ticks. First-observed roots
+  were `315.408..410.306` units from the player, proving that the 100-unit raw
+  proposal is not the final ambush ring; no root escaped the Website combat
+  rectangle. Across the next 25 ticks, ten actors moved `2.1875..20.375`
+  units while one was collision-held, and every actor retained a
+  `11.977..37.582` degree error from direct target heading. This is decisive
+  browser evidence of gradual/offset steering rather than snap pursuit.
+  Page, console, protocol, and combat-bound error arrays were empty.
+- Task-specific browser log SHA-256 is
+  `f284686aad86088ab75c89a89fff33a18fd905ae76c4b307ba27e8caa05c4442`.
+  Inspected Mac captures are
+  `/tmp/solomon-enemy-path-spawn-finalbase-opening-mac-combat.png` SHA-256
+  `f0a0316bd4150b841b546ffd6c39827fb4cc9f95af23f1885ccca3eea6eee15b`,
+  the speaking frame SHA-256
+  `35b166053553bb4e972903ac1d925555beafca34a071a78ee7ed90f1e20fe41b`,
+  and the run-edge frame SHA-256
+  `bfbb4cd717575ee7d7fe6eb998775d28a109d697c5f641e73e502bd2645b6502`.
+  A broader entrance smoke had already recorded the same clean opening before
+  its unrelated retired-entry return-movement assertion was collision-held;
+  the named `--opening-only` acceptance isolates this task and does not claim
+  a new entrance-retirement result.
+- Therefore the stock ambush is real and working. What is misleading is its
+  name: stock proposes near the player, then dark/collision placement can move
+  the actual roots hundreds of units away. No path/spawn member is blocked by
+  the browser platform. Deployment remains separate and was not requested.
