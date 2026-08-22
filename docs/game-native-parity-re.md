@@ -30939,11 +30939,11 @@ class/content catalogs, so the Mod Loader documents remain unchanged.
   `--check` compares committed page dimensions and RGBA pixels rather than PNG
   compressor bytes, because Pillow/zlib encoding differs across the two
   supported hosts while the decoded page is identical. The generated TypeScript
-  manifest remains byte-exact. Focused renderer/atlas tests pass `27/27` on
+  manifest remains byte-exact. Focused renderer/atlas tests pass `28/28` on
   both hosts.
-- The exact Apple-arm64 tree `b5be5682`, rebased on `origin/main` `956cefce`,
+- The exact Apple-arm64 tree `39717100`, rebased on `origin/main` `b899b734`,
   passes `./scripts/validate.sh`: 15 Website/backend contracts, frontend lint
-  and game boundaries, 1,291 broad Boneyard/runtime tests, 21
+  and game boundaries, 1,297 broad Boneyard/runtime tests, 21
   inventory/tooltip tests, desktop tests, production build, game bundle budget,
   and media policy. The only output is the repository's eight existing Fast
   Refresh warnings and Vite's non-fatal large-chunk advisory. A saturated
@@ -30976,6 +30976,15 @@ class/content catalogs, so the Mod Loader documents remain unchanged.
   WebContent was `816 MB` after entry, `883 MB` after the active run, and fell
   to `830 MB` after the idle restoration, versus the pre-fix `1,269-1,275 MB`.
   The sampled active WebContent CPU was `38.01%` versus pre-fix `70.35%`.
+- After the Building-roof renderer landed on `main`, the final merged physical
+  tree repeated mode 2 for `90.80 s` with `4,034` world units and 16 cast
+  pulses: `59.96` FPS, frame p95/p99/max `17/18/48 ms`, timer p95/p99/max
+  `30/31/46 ms`, no gap above `50 ms`, and empty error/Long Task arrays. It
+  reached 588 drops/321 splashes/104 visible residents; this generated arena
+  contains zero Building residents, so the upstream Building browser receipt
+  remains the direct proof for that separate surface shader. WebContent was
+  `828 MB` at sampled `32.82%` CPU and WebKit GPU was `85 MB`; no new CPU or
+  Jetsam report appeared.
 - The same Safari/WebContent process stayed alive through Title, Hub, active
   Boneyard, and restoration without a navigation reload. After the complete
   run, the device still listed only the pre-fix `11:15:46` WebContent CPU
