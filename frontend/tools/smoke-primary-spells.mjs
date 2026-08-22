@@ -57,6 +57,7 @@ const SPELLS = [
 const requestedSpellKind = process.env.SDR_PRIMARY_SPELL_KIND?.trim().toLowerCase()
 const lowManaAcceptance = process.env.SDR_PRIMARY_SPELL_LOW_MANA === '1'
 const hostOpenedBoneyard = process.env.SDR_PRIMARY_SPELL_HOST_OPENED_BONEYARD === '1'
+const boneyardOnlyAcceptance = process.env.SDR_PRIMARY_SPELL_BONEYARD_ONLY === '1'
 const fireGravestoneAcceptance = process.env.SDR_PRIMARY_FIRE_GRAVESTONE === '1'
 const earthContactAcceptance = process.env.SDR_PRIMARY_EARTH_CONTACT === '1'
 const etherFanAcceptance = process.env.SDR_PRIMARY_ETHER_FAN === '1'
@@ -80,6 +81,9 @@ if (etherFanAcceptance && (
   || selectedSpells[0].kind !== 'ether'
 )) {
   throw new Error('Ether-fan acceptance requires full-power SDR_PRIMARY_SPELL_KIND=ether')
+}
+if (boneyardOnlyAcceptance && selectedSpells.length !== 1) {
+  throw new Error('Boneyard-only acceptance requires one SDR_PRIMARY_SPELL_KIND')
 }
 
 const browser = await chromium.launch({
@@ -183,6 +187,17 @@ try {
     const initial = await canvas.evaluate((node) => ({ ...node.__sdrHubFrame }))
     assert.equal(initial.playerAttachmentPose, 0)
     assert.equal(initial.primarySpellCount, 0)
+    if (boneyardOnlyAcceptance) {
+      receipts.push({
+        element: spell.element,
+        hubPrimarySpellCount: initial.primarySpellCount,
+        kind: spell.kind,
+        mode: 'boneyard-only',
+      })
+      if (spell.kind === 'ether') etherPage = page
+      else throw new Error('Boneyard-only acceptance is implemented for Ether')
+      continue
+    }
     const eventStart = await audioEventCount(page)
     const poseEventStart = await page.evaluate(() => window.__primarySpellPoseEvents.length)
     const target = await castTarget(canvas, 0.67, 0.42)
