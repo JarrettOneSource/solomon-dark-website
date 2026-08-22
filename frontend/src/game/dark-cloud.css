@@ -810,21 +810,6 @@
 .dark-cloud-panel-flourish.left { right: calc(100% + 18px); }
 .dark-cloud-panel-flourish.right { left: calc(100% + 18px); transform: translateY(-50%) scaleX(-1); }
 
-.dark-cloud-panel-crest {
-  position: absolute;
-  z-index: 6;
-  bottom: calc(100% - 4px);
-  left: 50%;
-  display: flex;
-  align-items: flex-end;
-  transform: translateX(-50%);
-  pointer-events: none;
-}
-
-.dark-cloud-panel-crest img { width: auto; height: 44px; }
-.dark-cloud-panel-crest img:nth-child(2) { height: 42px; margin: 0 -8px 3px; filter: sepia(1) saturate(1.6) brightness(0.95); }
-.dark-cloud-panel-crest img.mirrored { transform: scaleX(-1); }
-
 .dark-cloud-panel-body {
   min-height: 0;
   flex: 1 1 auto;
@@ -965,19 +950,6 @@
 }
 
 .dark-cloud-modal { width: min(520px, 100%); }
-.dark-cloud-menu-panel { width: min(430px, 100%); }
-
-.dark-cloud-menu-plates {
-  display: grid;
-  gap: 14px;
-  padding: 34px 34px 26px;
-}
-
-.dark-cloud-menu-plates .dark-cloud-plate {
-  min-height: 58px;
-  padding: 0 46px;
-  font-size: 17px;
-}
 
 /* Mod details dialog ------------------------------------------------------ */
 
@@ -1496,8 +1468,6 @@
   .dark-cloud-panel-body { padding: 16px 14px 12px; }
   .dark-cloud-panel-footer { padding: 6px 14px 14px; }
   .dark-cloud-field-row { align-items: stretch; flex-direction: column; gap: 6px; padding: 10px 12px 12px; }
-  .dark-cloud-menu-plates { gap: 12px; padding: 30px 26px 22px; }
-  .dark-cloud-menu-plates .dark-cloud-plate { min-height: 54px; font-size: 15px; }
 
   .dark-cloud-detail.dark-cloud-panel {
     width: 100%;
@@ -1587,10 +1557,6 @@
   .dark-cloud-panel-flourish { display: none; }
   .dark-cloud-panel-body { padding: 12px 18px 8px; }
   .dark-cloud-panel-footer { padding: 4px 18px 10px; }
-  .dark-cloud-panel-crest img { height: 34px; }
-  .dark-cloud-panel-crest img:nth-child(2) { height: 32px; }
-  .dark-cloud-menu-plates { gap: 8px; padding: 22px 28px 16px; }
-  .dark-cloud-menu-plates .dark-cloud-plate { min-height: 48px; font-size: 15px; }
 
   .dark-cloud-detail.dark-cloud-panel {
     width: 100%;

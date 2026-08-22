@@ -32,6 +32,7 @@ const settingsComponent = readFileSync(new URL('./GameSettingsDialog.tsx', impor
 const settingsCss = readFileSync(new URL('./main-menu.css', import.meta.url), 'utf8')
 const mainMenuScene = readFileSync(new URL('./MainMenuScene.tsx', import.meta.url), 'utf8')
 const darkCloudScene = readFileSync(new URL('./DarkCloudScene.tsx', import.meta.url), 'utf8')
+const pauseMenuContract = readFileSync(new URL('./pause-menu-contract.ts', import.meta.url), 'utf8')
 
 class MemoryStorage implements GameSettingsStorage {
   readonly values = new Map<string, string>()
@@ -158,7 +159,10 @@ test('Settings drains every ported root, Controls, Performance, and context memb
   assert.match(mainMenuScene, /context="gameplay"/)
   assert.match(mainMenuScene, /setSettingsContext\('title'\)/)
   assert.match(mainMenuScene, /setSettingsContext\('dark-cloud'\)/)
-  assert.match(darkCloudScene, /GAME SETTINGS/)
+  // The Dark Cloud reaches Game Settings through the shared native pause menu, not a plate of its own.
+  assert.doesNotMatch(darkCloudScene, /GAME SETTINGS/)
+  assert.match(mainMenuScene, /className="dark-cloud-pause-stage"[\s\S]*?if \(action === 'settings'\) setSettingsContext\('dark-cloud'\)/)
+  assert.match(pauseMenuContract, /label: 'GAME SETTINGS'/)
 })
 
 test('Settings presentation consumes the untouched stock ControlPanel records', () => {

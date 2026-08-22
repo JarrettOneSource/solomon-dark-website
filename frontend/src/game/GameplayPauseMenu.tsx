@@ -16,11 +16,14 @@ import {
   NATIVE_PAUSE_ROW_END_FRAME,
   NATIVE_PAUSE_EDGE_UV_START,
   NATIVE_PAUSE_TEXT_TINT,
-  PAUSE_MENU_ACTION_BOUNDS,
+  NATIVE_PAUSE_MENU_ROWS,
+  NATIVE_SIMPLE_MENU_ROW_SIZE,
   gameplayPausePresentation,
   nativePauseMenuRenderPlan,
   nativePauseMenuReveal,
-  type NativePauseAction,
+  type NativePauseMenuRowPlan,
+  type NativeSimpleMenuAction,
+  type NativeSimpleMenuRow,
 } from './pause-menu-contract.ts'
 import type { GameplayPauseState } from './protocol/game-protocol.ts'
 import {
@@ -31,47 +34,53 @@ import './gameplay-pause-menu.css'
 
 interface GameplayPauseMenuProps {
   audio: GameAudioDirector
-  onLeave: () => void
-  onResume: () => void
-  onSettings: () => void
+  /** Extra full-display owner class for a host whose stage placement differs from gameplay's fixed stage. */
+  className?: string
+  /** Action selected by an owner Escape; null consumes the edge without closing. */
+  escapeAction?: NativeSimpleMenuAction | null
+  /** Receives the chosen row's action once the native close tick has run out. */
+  onSelect: (action: NativeSimpleMenuAction) => void
   pause: GameplayPauseState
   playerId: string
+  /** Authored rows; gameplay's RESUME GAME / GAME SETTINGS / LEAVE GAME unless the host authors its own. */
+  rows?: readonly NativeSimpleMenuRow[]
   style: CSSProperties
 }
 
 export default function GameplayPauseMenu({
   audio,
-  onLeave,
-  onResume,
-  onSettings,
+  className,
+  escapeAction = 'resume',
+  onSelect,
   pause,
   playerId,
+  rows = NATIVE_PAUSE_MENU_ROWS,
   style,
 }: GameplayPauseMenuProps) {
-  const resumeRef = useRef<HTMLButtonElement>(null)
+  const firstRowRef = useRef<HTMLButtonElement>(null)
   const rendererHostRef = useRef<HTMLDivElement>(null)
   const rendererRef = useRef<GameplayPauseRenderer | null>(null)
   const openingStartedAtRef = useRef(performance.now())
   const closingStartedAtRef = useRef<number | null>(null)
   const completedCloseRef = useRef(false)
-  const callbacksRef = useRef({ onLeave, onResume, onSettings })
-  const [closing, setClosing] = useState<NativePauseAction | null>(null)
-  const [pressedAction, setPressedAction] = useState<NativePauseAction | null>(null)
+  const callbacksRef = useRef({ onSelect })
+  const [closing, setClosing] = useState<NativeSimpleMenuAction | null>(null)
+  const [pressedAction, setPressedAction] = useState<NativeSimpleMenuAction | null>(null)
   const [reveal, setReveal] = useState(0)
   const revealRef = useRef(reveal)
   const presentation = gameplayPausePresentation(pause, playerId)
-  callbacksRef.current = { onLeave, onResume, onSettings }
+  callbacksRef.current = { onSelect }
   revealRef.current = reveal
 
   useEffect(() => {
-    if (presentation.kind === 'owner') resumeRef.current?.focus()
+    if (presentation.kind === 'owner') firstRowRef.current?.focus()
   }, [presentation.kind])
 
   useEffect(() => {
     const host = rendererHostRef.current
     if (!host || presentation.kind !== 'owner') return
     let cancelled = false
-    void createGameplayPauseRenderer().then((renderer) => {
+    void createGameplayPauseRenderer(rows).then((renderer) => {
       if (cancelled) {
         renderer.destroy()
         return
@@ -87,7 +96,7 @@ export default function GameplayPauseMenu({
       rendererRef.current?.destroy()
       rendererRef.current = null
     }
-  }, [presentation.kind])
+  }, [presentation.kind, rows])
 
   useEffect(() => {
     rendererRef.current?.render(reveal)
@@ -104,10 +113,7 @@ export default function GameplayPauseMenu({
       if (phase === 'closing' && nextReveal === 0) {
         if (!closing || completedCloseRef.current) return
         completedCloseRef.current = true
-        const { onLeave: leave, onResume: resume, onSettings: settings } = callbacksRef.current
-        if (closing === 'leave') leave()
-        else if (closing === 'settings') settings()
-        else resume()
+        callbacksRef.current.onSelect(closing)
         return
       }
       animationFrame = requestAnimationFrame(sample)
@@ -116,7 +122,7 @@ export default function GameplayPauseMenu({
     return () => cancelAnimationFrame(animationFrame)
   }, [closing])
 
-  const beginClose = (action: NativePauseAction) => {
+  const beginClose = (action: NativeSimpleMenuAction) => {
     if (closing || presentation.kind !== 'owner') return
     audio.playSound('click')
     setPressedAction(null)
@@ -134,13 +140,14 @@ export default function GameplayPauseMenu({
     ) return
     event.preventDefault()
     event.stopPropagation()
-    beginClose('resume')
+    if (escapeAction) beginClose(escapeAction)
   }
-  const renderPlan = nativePauseMenuRenderPlan(reveal, pressedAction)
+  const renderPlan = nativePauseMenuRenderPlan(reveal, pressedAction, rows)
+  const pressedRow = renderPlan.rows.find((row) => row.bodyRecord === 102)
 
   return (
     <div
-      className="gameplay-pause-overlay gameplay-pause-stage"
+      className={`gameplay-pause-overlay gameplay-pause-stage${className ? ` ${className}` : ''}`}
       data-gameplay-pause-owner-id={pause.ownerPlayerId}
       data-gameplay-pause-owner-name={pause.ownerDisplayName}
       data-gameplay-pause-source={pause.source}
@@ -162,26 +169,17 @@ export default function GameplayPauseMenu({
         {presentation.kind === 'owner' ? (
           <>
             <div ref={rendererHostRef} className="gameplay-pause-native-render" aria-hidden />
-            {pressedAction ? <NativePausePressedRow action={pressedAction} /> : null}
-            <NativePauseButton
-              action="resume"
-              buttonRef={resumeRef}
-              closing={closing}
-              onBeginClose={beginClose}
-              onPressedChange={setPressedAction}
-            />
-            <NativePauseButton
-              action="settings"
-              closing={closing}
-              onBeginClose={beginClose}
-              onPressedChange={setPressedAction}
-            />
-            <NativePauseButton
-              action="leave"
-              closing={closing}
-              onBeginClose={beginClose}
-              onPressedChange={setPressedAction}
-            />
+            {pressedRow ? <NativePausePressedRow row={pressedRow} /> : null}
+            {renderPlan.rows.map((row, index) => (
+              <NativePauseButton
+                key={row.action}
+                buttonRef={index === 0 ? firstRowRef : undefined}
+                closing={closing}
+                onBeginClose={beginClose}
+                onPressedChange={setPressedAction}
+                row={row}
+              />
+            ))}
           </>
         ) : (
           <div className="gameplay-pause-waiting" style={{ opacity: reveal }}>
@@ -195,21 +193,20 @@ export default function GameplayPauseMenu({
 }
 
 interface NativePauseButtonProps {
-  action: NativePauseAction
   buttonRef?: RefObject<HTMLButtonElement | null>
-  closing: NativePauseAction | null
-  onBeginClose: (action: NativePauseAction) => void
-  onPressedChange: (action: NativePauseAction | null) => void
+  closing: NativeSimpleMenuAction | null
+  onBeginClose: (action: NativeSimpleMenuAction) => void
+  onPressedChange: (action: NativeSimpleMenuAction | null) => void
+  row: NativePauseMenuRowPlan
 }
 
 function NativePauseButton({
-  action,
   buttonRef,
   closing,
   onBeginClose,
   onPressedChange,
+  row: { action, bodyRecord, bounds, label },
 }: NativePauseButtonProps) {
-  const label = pauseActionLabel(action)
   const press = (event: PointerEvent<HTMLButtonElement>) => {
     if (event.button === 0 && !closing) onPressedChange(action)
   }
@@ -217,16 +214,21 @@ function NativePauseButton({
     if ((event.key === 'Enter' || event.key === ' ') && !closing) onPressedChange(action)
   }
   const release = () => onPressedChange(null)
+  // Focus leaving a row releases only that row's press. The first row is auto-focused, so a pointer landing on any
+  // other row blurs it inside the same gesture, and the native pressed body (UI.102) has to survive that hand-off.
+  const blur = () => {
+    if (bodyRecord === 102) release()
+  }
 
   return (
     <button
       ref={buttonRef}
       type="button"
       className="gameplay-pause-action"
-      style={PAUSE_MENU_ACTION_BOUNDS[action]}
+      style={bounds}
       disabled={closing !== null}
       data-pause-action={action}
-      onBlur={release}
+      onBlur={blur}
       onClick={() => onBeginClose(action)}
       onKeyDown={keyDown}
       onKeyUp={release}
@@ -255,13 +257,11 @@ const PAUSE_MENU_FONT = (fontAssetsJson as unknown as {
   readonly fonts: Readonly<Record<'menu', NativePauseBitmapFont>>
 }).fonts.menu
 
-function NativePausePressedRow({ action }: { action: NativePauseAction }) {
-  const bounds = PAUSE_MENU_ACTION_BOUNDS[action]
+function NativePausePressedRow({ row: { action, bounds, label } }: { row: NativePauseMenuRowPlan }) {
   const [frameX, frameY] = NATIVE_PAUSE_PRESSED_ROW_FRAME
   const [endX, endY, endWidth, endHeight] = NATIVE_PAUSE_ROW_END_FRAME
   const edgeX = endX + endWidth * NATIVE_PAUSE_EDGE_UV_START
   const edgeWidth = endWidth * (1 - NATIVE_PAUSE_EDGE_UV_START)
-  const label = pauseActionLabel(action)
   const glyphs = layoutPauseBitmapText(label)
   const tint = `#${NATIVE_PAUSE_TEXT_TINT.toString(16).padStart(6, '0')}`
   return (
@@ -365,8 +365,8 @@ function layoutPauseBitmapText(text: string): ReadonlyArray<Readonly<{
     glyphs.push({
       code,
       frame: glyph.frame,
-      left: PAUSE_MENU_ACTION_BOUNDS.resume.width / 2 + 6 + cursor + glyph.metrics[1] - width / 2,
-      top: PAUSE_MENU_ACTION_BOUNDS.resume.height / 2 + 15 + glyph.metrics[2] - height / 2,
+      left: NATIVE_SIMPLE_MENU_ROW_SIZE.width / 2 + 6 + cursor + glyph.metrics[1] - width / 2,
+      top: NATIVE_SIMPLE_MENU_ROW_SIZE.height / 2 + 15 + glyph.metrics[2] - height / 2,
     })
     cursor += glyph.metrics[0]
     previous = code
@@ -394,10 +394,4 @@ function pauseKerning(first: number, second: number): number {
   return PAUSE_MENU_FONT.kerning.find(
     ([left, right]) => left === first && right === second,
   )?.[2] ?? 0
-}
-
-function pauseActionLabel(action: NativePauseAction): string {
-  if (action === 'resume') return 'RESUME GAME'
-  if (action === 'settings') return 'GAME SETTINGS'
-  return 'LEAVE GAME'
 }

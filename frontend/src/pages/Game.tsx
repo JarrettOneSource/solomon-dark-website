@@ -47,7 +47,7 @@ import { readTotalPlaytimeMs, trackPlaytime } from '../game/playtime-store.ts'
 type Readiness = 'loading' | 'ready'
 
 export default function Game() {
-  const { user, loading: authLoading } = useAuth()
+  const { user, loading: authLoading, logout } = useAuth()
   const preparedEndpoint = useRef<GameEndpoint | null>(null)
   const diagnosticsRef = useRef<ReturnType<typeof createGameClientDiagnostics> | null>(null)
   diagnosticsRef.current ??= createGameClientDiagnostics()
@@ -299,6 +299,7 @@ export default function Game() {
               loadGlobalHallOfFame={loadGlobalHallOfFame}
               onCancelCreate={cancelCreate}
               onSaveCheckpoint={persistCheckpoint}
+              onSignOut={logout}
               prepareNewGame={prepareNewGame}
               resumeSave={resumeSave}
               submitGlobalHallOfFame={submitGlobalHallOfFame}

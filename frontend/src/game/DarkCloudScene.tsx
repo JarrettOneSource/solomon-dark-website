@@ -33,16 +33,21 @@ type DarkCloudRow =
 
 interface DarkCloudSceneProps {
   accountUsername: string | null
-  onBack: () => void
+  /** Key code bound to the game's open-menu control (`settings.controls.openMenu`). */
+  menuKeyCode: string
+  /** True while the Esc menu or its settings own input, so the open-menu key stays quiet. */
+  menuOpen: boolean
   onEnterSharedHub: () => void
-  onSettings: () => void
+  /** Opens the native Esc menu; the host owns its state and mounts the menu. */
+  onMenu: () => void
 }
 
 export default function DarkCloudScene({
   accountUsername,
-  onBack,
+  menuKeyCode,
+  menuOpen,
   onEnterSharedHub,
-  onSettings,
+  onMenu,
 }: DarkCloudSceneProps) {
   const requestGeneration = useRef(0)
   const partyRequestGeneration = useRef(0)
@@ -62,7 +67,6 @@ export default function DarkCloudScene({
   const [draftQuery, setDraftQuery] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
   const [sortOpen, setSortOpen] = useState(false)
-  const [menuOpen, setMenuOpen] = useState(false)
   const [sort, setSort] = useState<SortMode>('newest')
 
   const load = useCallback(async () => {
@@ -103,16 +107,26 @@ export default function DarkCloudScene({
     return () => { requestGeneration.current += 1 }
   }, [load])
 
+  // The open-menu control opens the native Esc menu exactly as it does in the
+  // Hub and Boneyard; the sheets and the mod viewer consume Escape themselves
+  // while they are open, and the menu consumes it once it owns input.
   useEffect(() => {
-    if (!menuOpen) return
-    const closeMenu = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return
+    if (menuOpen || searchOpen || sortOpen || detailMod) return
+    const openMenu = (event: KeyboardEvent) => {
+      if (
+        event.code !== menuKeyCode
+        || event.repeat
+        || event.altKey
+        || event.ctrlKey
+        || event.metaKey
+      ) return
       event.preventDefault()
-      setMenuOpen(false)
+      event.stopPropagation()
+      onMenu()
     }
-    window.addEventListener('keydown', closeMenu)
-    return () => window.removeEventListener('keydown', closeMenu)
-  }, [menuOpen])
+    window.addEventListener('keydown', openMenu)
+    return () => window.removeEventListener('keydown', openMenu)
+  }, [detailMod, menuKeyCode, menuOpen, onMenu, searchOpen, sortOpen])
 
   const refreshParties = useCallback(async () => {
     const generation = ++partyRequestGeneration.current
@@ -244,7 +258,7 @@ export default function DarkCloudScene({
       <div className="dark-cloud-wall" aria-hidden />
       <img className="dark-cloud-wizard dark-cloud-wizard-left" src={wizardLeft} alt="" />
       <img className="dark-cloud-wizard dark-cloud-wizard-right" src={wizardRight} alt="" />
-      <button type="button" className="dark-cloud-menu" onClick={() => setMenuOpen(true)} aria-label="Menu">
+      <button type="button" className="dark-cloud-menu" onClick={onMenu} aria-label="Menu">
         <img src={skull} alt="" />
       </button>
 
@@ -350,38 +364,6 @@ export default function DarkCloudScene({
       </footer>
 
       {actionError ? <p className="dark-cloud-error" role="alert">{actionError}</p> : null}
-      {menuOpen ? (
-        <div className="dark-cloud-modal-backdrop" role="presentation" onMouseDown={event => {
-          if (event.target === event.currentTarget) setMenuOpen(false)
-        }}>
-          <section
-            className="dark-cloud-modal dark-cloud-panel dark-cloud-menu-panel"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Dark Cloud menu"
-          >
-            <DarkCloudPanelOrnaments crest flourishes={false} />
-            <h2 className="dark-cloud-sr-only">DARK CLOUD MENU</h2>
-            <div className="dark-cloud-panel-body dark-cloud-menu-plates">
-              <button type="button" className="dark-cloud-plate" data-game-back="true" onClick={() => setMenuOpen(false)}>
-                RESUME
-              </button>
-              <button type="button" className="dark-cloud-plate" onClick={() => {
-                setMenuOpen(false)
-                onSettings()
-              }}>
-                GAME SETTINGS
-              </button>
-              <button type="button" className="dark-cloud-plate" onClick={() => {
-                setMenuOpen(false)
-                onBack()
-              }}>
-                MAIN MENU
-              </button>
-            </div>
-          </section>
-        </div>
-      ) : null}
       {searchOpen ? (
         <DarkCloudModal title="SEARCH THE DARK CLOUD" onClose={() => setSearchOpen(false)}>
           <div className="dark-cloud-inset">

@@ -7,8 +7,10 @@ import {
   NATIVE_PAUSE_ART_RECORDS,
   NATIVE_PAUSE_EDGE_UV_START,
   NATIVE_PAUSE_TEXT_TINT,
+  NATIVE_PAUSE_MENU_ROWS,
   nativePauseMenuRenderPlan,
-  type NativePauseAction,
+  type NativeSimpleMenuAction,
+  type NativeSimpleMenuRow,
   type NativePauseMenuRenderPlan,
 } from '../pause-menu-contract.ts'
 import {
@@ -44,7 +46,7 @@ interface UiAssets {
 }
 
 interface RowView {
-  readonly action: NativePauseAction
+  readonly action: NativeSimpleMenuAction
   readonly label: Container
 }
 
@@ -72,7 +74,9 @@ const UI_RECORDS = UI_ASSETS.atlases.UI.records
 const STAGE_WIDTH = 1600
 const STAGE_HEIGHT = 900
 
-export async function createGameplayPauseRenderer(): Promise<GameplayPauseRenderer> {
+export async function createGameplayPauseRenderer(
+  rows: readonly NativeSimpleMenuRow[] = NATIVE_PAUSE_MENU_ROWS,
+): Promise<GameplayPauseRenderer> {
   let gpu: GameWebGlApplication | undefined
   let textures: GameTextureMap | undefined
   try {
@@ -110,7 +114,7 @@ export async function createGameplayPauseRenderer(): Promise<GameplayPauseRender
     NATIVE_PAUSE_ART_RECORDS.rowEnd,
     'right',
   )
-  const initialPlan = nativePauseMenuRenderPlan(0, null)
+  const initialPlan = nativePauseMenuRenderPlan(0, null, rows)
   const rowViews = initialPlan.rows.map((row): RowView => {
     const body = new Sprite(idleRowTexture)
     body.position.set(row.bounds.left, row.bounds.top)
@@ -188,7 +192,7 @@ export async function createGameplayPauseRenderer(): Promise<GameplayPauseRender
     },
     render(reveal) {
       if (destroyed) return
-      const plan = nativePauseMenuRenderPlan(reveal, null)
+      const plan = nativePauseMenuRenderPlan(reveal, null, rows)
       root.alpha = plan.alpha
       updateRows(rowViews, plan)
       updateFrame(frame, plan)

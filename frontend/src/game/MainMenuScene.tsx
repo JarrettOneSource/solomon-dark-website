@@ -55,6 +55,12 @@ import {
   type GameSettings,
 } from './game-settings.ts'
 import { createGamepadMenuNavigation } from './input/gamepad-menu-navigation.ts'
+import {
+  NATIVE_DARK_CLOUD_GUEST_MENU_ROWS,
+  NATIVE_DARK_CLOUD_MENU_ROWS,
+  nativePauseMenuStagePlacement,
+  type NativePauseMenuStagePlacement,
+} from './pause-menu-contract.ts'
 import MatchLoadingScreen from './MatchLoadingScreen.tsx'
 import {
   advanceMatchLoading,
@@ -97,6 +103,14 @@ const loadSkillPicker = () => import('./SkillPicker.tsx')
 const SkillPicker = lazy(loadSkillPicker)
 const loadSkillBook = () => import('./SkillBook.tsx')
 const SkillBook = lazy(loadSkillBook)
+
+/** The Dark Cloud's Esc menu is the native simple menu with the local viewer as its owner. */
+const DARK_CLOUD_PAUSE_OWNER_ID = 'dark-cloud'
+const DARK_CLOUD_PAUSE: GameplayPauseState = {
+  ownerDisplayName: 'The Dark Cloud',
+  ownerPlayerId: DARK_CLOUD_PAUSE_OWNER_ID,
+  source: 'pause-menu',
+}
 
 type MenuScreen = 'root' | 'play' | 'dark-cloud' | 'hall' | 'create' | 'hub'
 type FadeState = 'idle' | 'covering' | 'revealing'
@@ -250,6 +264,7 @@ interface MainMenuSceneProps {
   loadGlobalHallOfFame: (board: HallOfFameBoard) => Promise<readonly HallOfFameEntry[]>
   onCancelCreate: () => Promise<void>
   onSaveCheckpoint: (checkpoint: GameSaveCheckpoint) => void
+  onSignOut: () => void
   prepareNewGame: () => Promise<void>
   resumeSave: ResumableGameSave | null
   submitGlobalHallOfFame: (receipt: string) => Promise<void>
@@ -264,6 +279,7 @@ export default function MainMenuScene({
   loadGlobalHallOfFame,
   onCancelCreate,
   onSaveCheckpoint,
+  onSignOut,
   prepareNewGame,
   resumeSave,
   submitGlobalHallOfFame,
@@ -303,6 +319,7 @@ export default function MainMenuScene({
   const [hoveredTitleAction, setHoveredTitleAction] = useState<TitleMenuAction | null>(null)
   const [pressedTitleAction, setPressedTitleAction] = useState<TitleMenuAction | null>(null)
   const [settingsContext, setSettingsContext] = useState<GameSettingsContext | null>(null)
+  const [darkCloudMenuOpen, setDarkCloudMenuOpen] = useState(false)
   const [modMismatch, setModMismatch] = useState<GameSaveModMismatch | null>(null)
   const [gameSettings, setLocalGameSettings] = useState(readGameSettings)
   const [localHallOfFame, setLocalHallOfFame] = useState(readLocalHallOfFame)
@@ -394,6 +411,8 @@ export default function MainMenuScene({
   const updateGameSettings = useCallback((settings: GameSettings) => {
     setLocalGameSettings(setGameSettings(settings))
   }, [])
+
+  const openDarkCloudMenu = useCallback(() => setDarkCloudMenuOpen(true), [])
 
   useLayoutEffect(() => {
     const stage = stageRef.current
@@ -600,6 +619,10 @@ export default function MainMenuScene({
   const accountStageStyle = fixedStageStyle(
     fixedViewport,
     fixedGameStageBounds(fixedViewport, 'left', 'top'),
+  )
+  const darkCloudMenuRows = accountUsername ? NATIVE_DARK_CLOUD_MENU_ROWS : NATIVE_DARK_CLOUD_GUEST_MENU_ROWS
+  const darkCloudPauseStageStyle = placedStageStyle(
+    nativePauseMenuStagePlacement(fixedViewport, darkCloudMenuRows),
   )
 
   const beginNewGame = async () => {
@@ -907,14 +930,34 @@ export default function MainMenuScene({
             </div>
           </>
         ) : screen === 'dark-cloud' ? (
-          <div className="main-menu-native-stage dark-cloud-stage">
-            <DarkCloudScene
-              accountUsername={accountUsername}
-              onBack={() => transitionTo('root')}
-              onEnterSharedHub={() => { void beginNewGame() }}
-              onSettings={() => setSettingsContext('dark-cloud')}
-            />
-          </div>
+          <>
+            <div className="main-menu-native-stage dark-cloud-stage" inert={darkCloudMenuOpen || undefined}>
+              <DarkCloudScene
+                accountUsername={accountUsername}
+                menuKeyCode={gameSettings.controls.openMenu}
+                menuOpen={darkCloudMenuOpen || settingsContext !== null}
+                onEnterSharedHub={() => { void beginNewGame() }}
+                onMenu={openDarkCloudMenu}
+              />
+            </div>
+            {darkCloudMenuOpen ? (
+              <GameplayPauseMenu
+                audio={audio}
+                className="dark-cloud-pause-stage"
+                escapeAction={null}
+                onSelect={(action) => {
+                  setDarkCloudMenuOpen(false)
+                  if (action === 'settings') setSettingsContext('dark-cloud')
+                  else if (action === 'sign-out') onSignOut()
+                  else if (action === 'leave') transitionTo('root')
+                }}
+                pause={DARK_CLOUD_PAUSE}
+                playerId={DARK_CLOUD_PAUSE_OWNER_ID}
+                rows={darkCloudMenuRows}
+                style={darkCloudPauseStageStyle}
+              />
+            ) : null}
+          </>
         ) : screen === 'create' ? (
           <CreateMenuScene
             audio={audio}
@@ -1081,9 +1124,11 @@ export default function MainMenuScene({
           ) ? (
           <GameplayPauseMenu
             audio={audio}
-            onLeave={leaveGameplay}
-            onResume={() => session.requestGameplayPause(null)}
-            onSettings={() => setGameplaySettingsOpen(true)}
+            onSelect={(action) => {
+              if (action === 'leave') leaveGameplay()
+              else if (action === 'settings') setGameplaySettingsOpen(true)
+              else if (action === 'resume') session.requestGameplayPause(null)
+            }}
             pause={gameplayPause}
             playerId={session.playerId}
             style={nativeStageStyle}
@@ -1163,9 +1208,17 @@ function fixedStageStyle(
   stage: GameViewportBounds,
 ): CSSProperties {
   const bounds = fixedGameStageCssBounds(viewport, stage)
+  return stageTransformStyle(bounds.x, bounds.y, viewport.displayScale)
+}
+
+function placedStageStyle(placement: NativePauseMenuStagePlacement): CSSProperties {
+  return stageTransformStyle(placement.x, placement.y, placement.scale)
+}
+
+function stageTransformStyle(x: number, y: number, scale: number): CSSProperties {
   return {
     height: `${GAME_VIEWPORT_MIN_HEIGHT}px`,
-    transform: `translate3d(${bounds.x}px, ${bounds.y}px, 0) scale(${viewport.displayScale})`,
+    transform: `translate3d(${x}px, ${y}px, 0) scale(${scale})`,
     width: `${GAME_VIEWPORT_MIN_WIDTH}px`,
   }
 }
