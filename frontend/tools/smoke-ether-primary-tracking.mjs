@@ -9,6 +9,11 @@ import { fileURLToPath } from 'node:url'
 import { build as buildFrontend, preview as previewBuiltFrontend } from 'vite'
 
 import { getPlayerEconomy } from '../src/game/core-server/game-simulation.ts'
+import {
+  canPlaceBoneyardBody,
+  firstBoneyardLineObstruction,
+  withBoneyardGateCollision,
+} from '../src/game/core-server/boneyard-collision.ts'
 import { replacePlayerEconomy } from '../src/game/core-server/player-entity-store.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 
@@ -140,13 +145,14 @@ async function openBoneyardCombat(host) {
   assert.equal(combatState.world.kind, 'boneyard')
   const combatBounds = combatState.world.arenaTransition?.combatBounds
   assert.ok(combatBounds, 'Ether tracking proof requires sealed arena bounds')
-  const playerPosition = {
-    x: combatBounds.x + combatBounds.w * 0.5,
-    y: combatBounds.y + combatBounds.h * 0.5,
-  }
+  const { headingDegrees, playerPosition, targetPosition } = findFanAcceptanceLayout(
+    combatState.world,
+    combatBounds,
+  )
   setHostPlayerPosition(host, playerIndex, playerPosition)
-  arrangeFanTargets(host, combatBounds, playerPosition)
+  arrangeFanTargets(host, combatBounds, targetPosition)
   return {
+    corridorHeadingDegrees: headingDegrees,
     enemyCount: combatState.world.enemies.actors.filter(({ lifeState }) => (
       lifeState === 'alive'
     )).length,
@@ -386,18 +392,66 @@ function setHostPlayerPosition(host, index, position) {
   })
 }
 
-function arrangeFanTargets(host, bounds, playerPosition) {
+function findFanAcceptanceLayout(world, bounds) {
+  const collision = withBoneyardGateCollision(world.collision, world.gateLeaves)
+  const headings = Array.from({ length: 12 }, (_, index) => index * 30)
+  const fanOffsets = [-40, -30, -20, -10, 0, 10, 20, 30, 40]
+  const originOffsets = [-24, 0, 24]
+  for (let y = bounds.y + 80; y <= bounds.y + bounds.h - 80; y += 60) {
+    for (let x = bounds.x + 80; x <= bounds.x + bounds.w - 80; x += 60) {
+      const playerPosition = { x, y }
+      if (!canPlaceBoneyardBody(playerPosition, bounds, collision, 32)) continue
+      for (const headingDegrees of headings) {
+        const targetPosition = pointAlongHeading(playerPosition, headingDegrees, 240)
+        if (
+          targetPosition.x < bounds.x + 60
+          || targetPosition.x > bounds.x + bounds.w - 60
+          || targetPosition.y < bounds.y + 60
+          || targetPosition.y > bounds.y + bounds.h - 60
+        ) continue
+        const corridorIsClear = originOffsets.every((originX) => (
+          originOffsets.every((originY) => {
+            const origin = {
+              x: playerPosition.x + originX,
+              y: playerPosition.y + originY,
+            }
+            return fanOffsets.every((offset) => (
+              firstBoneyardLineObstruction(
+                origin,
+                pointAlongHeading(origin, headingDegrees + offset, 110),
+                bounds,
+                collision,
+              ) === null
+            ))
+          })
+        ))
+        if (corridorIsClear) return { headingDegrees, playerPosition, targetPosition }
+      }
+    }
+  }
+  throw new Error('Ether tracking proof could not find a clear native fan corridor')
+}
+
+function pointAlongHeading(origin, headingDegrees, distance) {
+  const radians = headingDegrees * Math.PI / 180
+  return {
+    x: origin.x + Math.sin(radians) * distance,
+    y: origin.y - Math.cos(radians) * distance,
+  }
+}
+
+function arrangeFanTargets(host, bounds, targetPosition) {
   const state = host.state()
   assert.equal(state.world.kind, 'boneyard')
   const minimumX = bounds.x + 80
   const maximumX = bounds.x + bounds.w - 80
   const minimumY = bounds.y + 80
   const maximumY = bounds.y + bounds.h - 80
-  const actors = state.world.enemies.actors.map((actor, index) => ({
+  const actors = state.world.enemies.actors.map((actor) => ({
     ...actor,
     position: {
-      x: Math.max(minimumX, Math.min(maximumX, playerPosition.x + 180 + (index % 5) * 35)),
-      y: Math.max(minimumY, Math.min(maximumY, playerPosition.y - 220 + Math.floor(index / 5) * 45)),
+      x: Math.max(minimumX, Math.min(maximumX, targetPosition.x)),
+      y: Math.max(minimumY, Math.min(maximumY, targetPosition.y)),
     },
   }))
   Object.assign(state, {

@@ -846,9 +846,8 @@ async function castEtherInBoneyard(page) {
   const bounds = await canvas.boundingBox()
   assert.ok(bounds, 'expected the Boneyard canvas to have bounds')
   const targetPoint = worldScreenPoint(bounds, target.frame, target.enemy)
-  const horizontalOffset = targetPoint.x < bounds.x + bounds.width / 2 ? 80 : -80
   const aimPoint = {
-    x: Math.max(bounds.x + 30, Math.min(bounds.x + bounds.width - 30, targetPoint.x + horizontalOffset)),
+    x: Math.max(bounds.x + 30, Math.min(bounds.x + bounds.width - 30, targetPoint.x)),
     y: Math.max(bounds.y + 30, Math.min(bounds.y + bounds.height - 30, targetPoint.y)),
   }
   const eventStart = await audioEventCount(page)
