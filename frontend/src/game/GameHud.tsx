@@ -1,6 +1,6 @@
 import { useEffect, useState, type CSSProperties } from 'react'
 import { hub } from '../lib/assets'
-import PartyRoster from './PartyRoster.tsx'
+import AllyHud from './AllyHud.tsx'
 import type { AllyHudRow } from './ally-hud.ts'
 import type {
   ProtocolPlayerEconomy,
@@ -16,7 +16,6 @@ import { hubPotionShortcut } from './hub-inventory-presentation.ts'
 import SkillQuickbar, { NativeSkillIcon } from './SkillQuickbar.tsx'
 import type { GameSnapshot } from './protocol/game-protocol.ts'
 import type { GameControlBindings } from './game-settings.ts'
-import type { LocalPartyState } from './protocol/party-state.ts'
 import {
   nativeHealthHudPresentation,
   nativeHudLeftOriginClipPath,
@@ -32,18 +31,12 @@ interface GameHudProps {
   initialSnapshot: GameSnapshot
   mapLabel?: string
   mode?: 'hub' | 'run'
-  onAcceptPartyInvitation?: (invitationId: string) => void
-  onDenyPartyInvitation?: (invitationId: string) => void
   onInventoryClick?: () => void
   onMapClick?: () => void
-  onOpenMember?: (playerId: string) => void
-  onOpenPartySettings?: () => void
-  onPauseClick?: () => void
   onPotionClick?: (itemId: number) => void
   onQuickbarInput?: (slot: number, pressed: boolean) => void
+  partyMemberIds?: readonly string[]
   onSkillsClick?: () => void
-  partyError?: string | null
-  partyState?: LocalPartyState | null
   playerId: string
   progression: ProtocolPlayerProgression
   subscribePing: (listener: (pingMs: number) => void) => () => void
@@ -62,13 +55,8 @@ function InventoryCount({ count, variant }: { count: number; variant: 'blue' | '
     <span
       className={`hub-hud-count hub-hud-count-${variant}`}
       style={{
-        // 80x14 atlas of ten 8px digits, as percentage sprite geometry so the touch
-        // dock can scale the digit through --count-unit (1px renders the native size).
         backgroundImage: `url("${hub.hud.inventoryDigits}")`,
-        backgroundPosition: `${(atlasDigit / 9) * 100}% 0`,
-        backgroundSize: '1000% 100%',
-        height: 'calc(14 * var(--count-unit, 1px))',
-        width: 'calc(8 * var(--count-unit, 1px))',
+        backgroundPosition: `${-atlasDigit * 8}px 0`,
       }}
       aria-label={`${count}`}
     />
@@ -136,18 +124,12 @@ export default function GameHud({
   initialSnapshot,
   mapLabel = 'Map',
   mode = 'hub',
-  onAcceptPartyInvitation,
-  onDenyPartyInvitation,
   onInventoryClick,
   onMapClick,
-  onOpenMember,
-  onOpenPartySettings,
-  onPauseClick,
   onPotionClick,
   onQuickbarInput,
+  partyMemberIds,
   onSkillsClick,
-  partyError = null,
-  partyState = null,
   playerId,
   progression,
   subscribePing,
@@ -210,10 +192,8 @@ export default function GameHud({
     <div
       className="hub-hud"
       aria-label="Player status"
-      data-mode={mode}
       data-ui-scale={uiScale}
       style={{
-        '--game-ui-scale': uiScale,
         height: viewport.height / uiScale,
         inset: 'auto',
         left: viewport.width / 2,
@@ -221,44 +201,22 @@ export default function GameHud({
         transform: `translate(-50%, -50%) scale(${uiScale})`,
         transformOrigin: 'center',
         width: viewport.width / uiScale,
-      } as CSSProperties}
+      }}
     >
-      <button
-        type="button"
-        className="hub-hud-skull-button"
-        aria-label="Pause menu"
-        disabled={!onPauseClick}
-        onClick={onPauseClick}
-      >
-        <img className="hub-hud-skull" src={hub.hud.skull} alt="" />
-      </button>
+      <img className="hub-hud-skull" src={hub.hud.skull} alt="Menu" />
+      <GameAccountName placement="hud" username={accountUsername} />
+      <AllyHud
+        additionalRows={additionalAllyRows}
+        initialSnapshot={initialSnapshot}
+        partyMemberIds={partyMemberIds}
+        playerId={playerId}
+        subscribeSnapshot={subscribeSnapshot}
+      />
       <div className="hub-hud-diagnostics" aria-label="Performance">
         <FpsCounter />
         <PingCounter getPingMs={getPingMs} subscribePing={subscribePing} />
       </div>
-      <GameAccountName placement="hud" username={accountUsername} />
-      <PartyRoster
-        additionalRows={additionalAllyRows}
-        initialSnapshot={initialSnapshot}
-        mode={mode}
-        onAcceptInvitation={onAcceptPartyInvitation}
-        onDenyInvitation={onDenyPartyInvitation}
-        error={partyError}
-        onOpenMember={onOpenMember}
-        onOpenPartySettings={onOpenPartySettings}
-        partyState={partyState}
-        playerId={playerId}
-        subscribeSnapshot={subscribeSnapshot}
-        uiScale={uiScale}
-      />
-      <div
-        className="hub-hud-meters"
-        style={{
-          // Both tracks plus the 100px gap between them: the touch layout scales
-          // the meters down when this would not fit between the corner buttons.
-          '--native-meter-group-width': `${100 + healthHud.trackWidth + manaHud.trackWidth}px`,
-        } as CSSProperties}
-      >
+      <div className="hub-hud-meters">
         <div
           className="hub-hud-meter hub-hud-meter-health"
           data-core-width={healthHud.coreWidth}
@@ -337,6 +295,15 @@ export default function GameHud({
         <img className="hub-hud-help" src={hub.hud.help} alt="Help" />
       ) : null}
 
+      <SkillQuickbar
+        controls={controls}
+        mode={mode}
+        onInput={onQuickbarInput}
+        playerState={quickbarHud.playerState}
+        quickbar={quickbarHud.quickbar}
+        selectedPrimarySkillId={quickbarHud.selectedPrimarySkillId}
+      />
+
       {mode === 'hub' ? (
         <div className="hub-hud-loadout" aria-label="Equipped spells">
           <HudSlot src={hub.hud.npcs.annalist} />
@@ -347,8 +314,7 @@ export default function GameHud({
         </div>
       ) : null}
 
-      <div className="hub-hud-dock-lane">
-      <div className="hub-hud-dock" aria-label="Quick actions">
+      <div className="hub-hud-inventory" aria-label="Inventory shortcuts">
         <button
           type="button"
           className="hub-hud-potion-button hub-hud-potion-button-red"
@@ -359,18 +325,17 @@ export default function GameHud({
           }}
         >
           <img className="hub-hud-potion hub-hud-potion-red" src={hub.hud.potionRed} alt="" />
-          <span className="hub-hud-count-badge">
-            <InventoryCount count={healthPotions.count} variant="red" />
-          </span>
         </button>
-        <SkillQuickbar
-          controls={controls}
-          mode={mode}
-          onInput={onQuickbarInput}
-          playerState={quickbarHud.playerState}
-          quickbar={quickbarHud.quickbar}
-          selectedPrimarySkillId={quickbarHud.selectedPrimarySkillId}
-        />
+        <InventoryCount count={healthPotions.count} variant="red" />
+        <button
+          type="button"
+          className="hub-hud-backpack-button"
+          aria-label={`Open inventory, ${economy.gold} gold`}
+          disabled={!onInventoryClick}
+          onClick={onInventoryClick}
+        >
+          <img className="hub-hud-backpack" src={hub.hud.backpack} alt="" />
+        </button>
         <div
           className="hub-hud-xp"
           role="progressbar"
@@ -389,33 +354,6 @@ export default function GameHud({
         </div>
         <button
           type="button"
-          className="hub-hud-potion-button hub-hud-potion-button-blue"
-          aria-label={`Use mana potion, ${manaPotions.count} available`}
-          disabled={manaPotions.itemId === null || !onPotionClick}
-          onClick={() => {
-            if (manaPotions.itemId !== null) onPotionClick?.(manaPotions.itemId)
-          }}
-        >
-          <img className="hub-hud-potion hub-hud-potion-blue" src={hub.hud.potionBlue} alt="" />
-          <span className="hub-hud-count-badge">
-            <InventoryCount count={manaPotions.count} variant="blue" />
-          </span>
-        </button>
-      </div>
-      </div>
-
-      <div className="hub-hud-inventory" aria-label="Inventory shortcuts">
-        <button
-          type="button"
-          className="hub-hud-backpack-button"
-          aria-label={`Open inventory, ${economy.gold} gold`}
-          disabled={!onInventoryClick}
-          onClick={onInventoryClick}
-        >
-          <img className="hub-hud-backpack" src={hub.hud.backpack} alt="" />
-        </button>
-        <button
-          type="button"
           className="hub-hud-tome-button"
           aria-label="Open skills"
           disabled={!onSkillsClick}
@@ -424,6 +362,18 @@ export default function GameHud({
         >
           <img className="hub-hud-tome" src={hub.hud.tome} alt="" />
         </button>
+        <button
+          type="button"
+          className="hub-hud-potion-button hub-hud-potion-button-blue"
+          aria-label={`Use mana potion, ${manaPotions.count} available`}
+          disabled={manaPotions.itemId === null || !onPotionClick}
+          onClick={() => {
+            if (manaPotions.itemId !== null) onPotionClick?.(manaPotions.itemId)
+          }}
+        >
+          <img className="hub-hud-potion hub-hud-potion-blue" src={hub.hud.potionBlue} alt="" />
+        </button>
+        <InventoryCount count={manaPotions.count} variant="blue" />
       </div>
 
       {mode === 'hub' ? (

@@ -1,8 +1,7 @@
 .boneyard-scene {
   position: absolute;
   inset: 0;
-  /* clip, not hidden: see .hub-scene */
-  overflow: clip;
+  overflow: hidden;
   background: #000;
   cursor: auto;
 }
@@ -143,7 +142,7 @@
   position: absolute;
   top: 0;
   left: 0;
-  overflow: clip;
+  overflow: hidden;
   transform-origin: 0 0;
 }
 

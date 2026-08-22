@@ -546,23 +546,6 @@ function NativeHubSurface({
         data-native-tooltip={semanticTooltip ?? ''}
       >
         <div ref={hostRef} className="hub-native-ui-renderer" aria-hidden />
-        {/* the stock inventory screen only closes from the keyboard and its
-            curtain covers the HUD, so touch gets a screen-space close here */}
-        <button
-          type="button"
-          className="hub-native-ui-close"
-          aria-label={surface.kind === 'inventory'
-            ? 'Close inventory'
-            : `Leave ${HUB_TRADER_DIALOGUES[surface.trader].name}`}
-          onClick={() => {
-            if (surface.kind !== 'dialogue') audio.playSound('open-panel')
-            onClose()
-          }}
-        >
-          <svg viewBox="0 0 12 12" aria-hidden>
-            <path d="M2 2l8 8M10 2l-8 8" />
-          </svg>
-        </button>
         <div className="hub-native-ui-actions">
           <span className="hub-native-ui-semantic hub-gold-ledger" data-player-gold={economy.gold}>
             {economy.gold.toLocaleString()} gold

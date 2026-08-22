@@ -5,8 +5,6 @@ import test from 'node:test'
 const gamePage = readFileSync(new URL('../pages/Game.tsx', import.meta.url), 'utf8')
 const bootstrap = readFileSync(new URL('./game-bootstrap.ts', import.meta.url), 'utf8')
 const hubScene = readFileSync(new URL('./HubScene.tsx', import.meta.url), 'utf8')
-const partyRoster = readFileSync(new URL('./PartyRoster.tsx', import.meta.url), 'utf8')
-const playerCard = readFileSync(new URL('./PlayerProfileCard.tsx', import.meta.url), 'utf8')
 const searchParties = readFileSync(new URL('../pages/SearchParties.tsx', import.meta.url), 'utf8')
 const supervisor = readFileSync(
   new URL('./host/game-session-supervisor.ts', import.meta.url),
@@ -34,13 +32,12 @@ test('browser game owns one global-Hub endpoint plus in-memory party admission a
 test('Hub player interaction shares one pointer path across mouse and touch', () => {
   assert.match(hubScene, /onPointerDownCapture=\{activatePointerTarget\}/)
   assert.match(hubScene, /selectHubPlayerAtPoint/)
-  assert.match(hubScene, /<PlayerProfileCard/)
-  assert.match(playerCard, /data-profile-player=\{playerId\}/)
-  assert.match(playerCard, /Invite to Party/)
-  assert.match(hubScene, /onAcceptPartyInvitation=\{onAcceptPartyInvitation\}/)
-  assert.match(hubScene, /onDenyPartyInvitation=\{onDenyPartyInvitation\}/)
-  assert.match(partyRoster, /data-party-invitation/)
-  assert.match(partyRoster, />\s*Deny\s*</)
+  assert.match(hubScene, /data-profile-player=\{selectedPlayerId\}/)
+  assert.match(hubScene, /Invite to Party/)
+  assert.match(hubScene, /data-party-invitation/)
+  assert.match(hubScene, /onAcceptPartyInvitation/)
+  assert.match(hubScene, /onDenyPartyInvitation/)
+  assert.match(hubScene, />\s*Deny\s*</)
   assert.doesNotMatch(hubScene, /onMouseDownCapture/)
 })
 

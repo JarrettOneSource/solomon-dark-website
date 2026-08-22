@@ -2,13 +2,6 @@ import assert from 'node:assert/strict'
 
 import { chromium } from 'playwright-core'
 
-import {
-  assertBoneyardCombatSealed,
-  crossEntryGateWithJoystick,
-  waitForBoneyardCombatAdmission,
-  walkToSolomonWithJoystick,
-} from './smoke-boneyard-combat-admission.mjs'
-
 const baseUrl = process.env.SDR_GAME_SMOKE_URL || 'http://127.0.0.1:4181'
 const deckScreenshotPath = process.env.SDR_GAME_DECK_SCREENSHOT
   || '/tmp/solomon-dark-responsive-deck.png'
@@ -51,16 +44,6 @@ function assertRect(actual, expected, label, epsilon = 0.05) {
       `${label} ${key}: expected ${expected[key]}, received ${actual[key]}`,
     )
   }
-}
-
-function rectsOverlap(first, second) {
-  assert.ok(first && second, 'expected both element bounds')
-  return (
-    first.x < second.x + second.width &&
-    first.x + first.width > second.x &&
-    first.y < second.y + second.height &&
-    first.y + first.height > second.y
-  )
 }
 
 function rectCenter(rect) {
@@ -397,14 +380,9 @@ try {
   const joystick = mobile.locator('[data-joystick="movement"]')
   const joystickKnob = joystick.locator('.game-touch-joystick-knob')
   await joystick.waitFor()
+  assert.equal(await mobile.locator('[data-joystick="primary"]').count(), 0)
   const joystickBounds = await joystick.boundingBox()
   assert.ok(joystickBounds && joystickBounds.width > 60, 'expected a visible landscape touch joystick')
-  // the shared Hub is noncombat: the primary attack lane exists only in the Boneyard
-  assert.equal(
-    await mobile.locator('[data-joystick="primary"]').count(),
-    0,
-    'the Hub must not render the primary attack joystick',
-  )
   const canvas = mobile.locator('.hub-world-canvas')
   const mobileScene = mobile.locator('.hub-scene')
   const mobileStageBounds = await mobile.locator('.main-menu-stage').boundingBox()
@@ -423,11 +401,6 @@ try {
   assert.ok(mapBounds && mapBounds.x >= 0 && mapBounds.y >= 0)
   assert.ok(mapBounds.x + mapBounds.width <= 844.05)
   assert.ok(mapBounds.y + mapBounds.height <= 390.05)
-  assert.equal(
-    rectsOverlap(joystickBounds, mapBounds),
-    false,
-    'movement joystick must not cover the Hub map control',
-  )
   const before = await canvas.evaluate((node) => node.__sdrHubFrame.playerX)
   const centerX = joystickBounds.x + joystickBounds.width / 2
   const centerY = joystickBounds.y + joystickBounds.height / 2
@@ -465,41 +438,7 @@ try {
     `expected touch input to remain active through parent snapshot renders (${before} -> ${after})`,
   )
 
-  // a held walk in the sealed Hub moves the player and never arms a cast
-  const sealedWalkBefore = normalRelease.settled
-  await mobileCdp.send('Input.dispatchTouchEvent', {
-    type: 'touchStart',
-    touchPoints: [{ id: 11, x: centerX, y: centerY }],
-  })
-  await mobileCdp.send('Input.dispatchTouchEvent', {
-    type: 'touchMove',
-    touchPoints: [{ id: 11, x: centerX - requestedOffset, y: centerY }],
-  })
-  await mobile.waitForTimeout(350)
-  const sealedWalkHeld = await canvas.evaluate((node) => ({
-    playerAttachmentPose: node.__sdrHubFrame.playerAttachmentPose,
-    playerX: node.__sdrHubFrame.playerX,
-    primarySpellKinds: [...node.__sdrHubFrame.primarySpellKinds],
-  }))
-  assert.ok(sealedWalkBefore - sealedWalkHeld.playerX > 10, 'left touch must move in the Hub')
-  assert.deepEqual(sealedWalkHeld.primarySpellKinds, [], 'the Hub walk must not arm a cast')
-  assert.equal(sealedWalkHeld.playerAttachmentPose, 0)
-  await touchEnd(mobileCdp)
-  const concurrentRelease = await settledPosition(
-    mobile,
-    () => canvas.evaluate((node) => node.__sdrHubFrame.playerX),
-    'sealed Hub walk release',
-  )
-  await mobile.waitForFunction(() => {
-    const frame = document.querySelector('.hub-world-canvas')?.__sdrHubFrame
-    return frame?.playerAttachmentPose === 0
-      && (frame.primarySpellKinds?.length ?? 0) === 0
-  }, null, { timeout: 10_000 })
-  const sealedWalkKnobCenter = rectCenter(await joystickKnob.boundingBox())
-  assert.ok(Math.abs(sealedWalkKnobCenter.x - centerX) < 1)
-  assert.ok(Math.abs(sealedWalkKnobCenter.y - centerY) < 1)
-
-  const cancelBefore = concurrentRelease.settled
+  const cancelBefore = normalRelease.settled
   await touchStart(mobileCdp, centerX, centerY)
   await touchMove(mobileCdp, centerX - requestedOffset, centerY)
   await mobile.waitForTimeout(300)
@@ -622,20 +561,11 @@ try {
   const scaledJoystickBounds = await joystick.boundingBox()
   assert.ok(scaledJoystickBounds)
   assert.ok(Math.abs(scaledJoystickBounds.width / joystickBounds.width - 1.5) < 0.01)
-  assert.equal(
-    await mobile.locator('[data-joystick="primary"]').count(),
-    0,
-    'the scaled Hub must still not render the primary attack joystick',
-  )
+  assert.equal(await mobile.locator('[data-joystick="primary"]').count(), 0)
   const scaledMapBounds = await mobile.locator('.hub-hud-map').boundingBox()
   assert.ok(scaledMapBounds && scaledMapBounds.x >= 0 && scaledMapBounds.y >= 0)
   assert.ok(scaledMapBounds.x + scaledMapBounds.width <= 844.05)
   assert.ok(scaledMapBounds.y + scaledMapBounds.height <= 390.05)
-  assert.equal(
-    rectsOverlap(scaledJoystickBounds, scaledMapBounds),
-    false,
-    'scaled movement joystick must not cover the scaled Hub map control',
-  )
   const hubResolution = Number(await canvas.getAttribute('data-resolution'))
   await mobile.screenshot({ path: mobileHubScreenshotPath })
 
@@ -726,23 +656,6 @@ try {
   assert.ok(Math.abs(boneyardKnobCenter.y - boneyardCenter.y) < 1)
 
   const boneyardPrimaryCenter = rectCenter(boneyardPrimaryBounds)
-  // combat is sealed until Solomon runs: prove the seal, then earn admission
-  // the way a player does before the primary joystick is expected to cast
-  const boneyardScene = mobile.locator('.boneyard-scene')
-  const sealedBoneyardSamples = await assertBoneyardCombatSealed(mobile, mobileCdp, boneyardScene, {
-    center: boneyardPrimaryCenter,
-    offset: boneyardPrimaryBounds.width * 0.3,
-  })
-  const gateCrossing = await crossEntryGateWithJoystick(mobile, mobileCdp, boneyardScene, boneyardJoystickBounds)
-  const solomonApproach = await walkToSolomonWithJoystick(mobile, mobileCdp, boneyardScene, boneyardJoystickBounds)
-  const combatAdmission = await waitForBoneyardCombatAdmission(mobile, boneyardScene)
-  // the approach moved the player: later gestures measure from where the walk
-  // released, which must itself latch like every other release
-  const solomonApproachRelease = await settledPosition(
-    mobile,
-    () => mobileBoneyardCanvas.evaluate((node) => node.__sdrBoneyardFrame.playerX),
-    'Solomon approach release',
-  )
   await touchStart(mobileCdp, boneyardPrimaryCenter.x, boneyardPrimaryCenter.y)
   await touchMove(
     mobileCdp,
@@ -766,7 +679,7 @@ try {
   assert.ok(Math.abs(boneyardPrimaryReleasedCenter.x - boneyardPrimaryCenter.x) < 1)
   assert.ok(Math.abs(boneyardPrimaryReleasedCenter.y - boneyardPrimaryCenter.y) < 1)
 
-  const boneyardConcurrentBefore = solomonApproachRelease.settled
+  const boneyardConcurrentBefore = boneyardRelease.settled
   const boneyardRequestedOffset = boneyardJoystickBounds.width * 0.3
   const boneyardPrimaryRequestedOffset = boneyardPrimaryBounds.width * 0.3
   await mobileCdp.send('Input.dispatchTouchEvent', {
@@ -828,12 +741,7 @@ try {
     primaryAttack: {
       boneyard: boneyardPrimaryAttack,
       concurrentHeld: boneyardConcurrentHeld,
-      boneyardSealedHoldSamples: sealedBoneyardSamples,
-      combatAdmission,
-      gateCrossing,
       hubDisabled: true,
-      hubSealedWalk: sealedWalkHeld,
-      solomonApproach,
     },
     resolution: hubResolution,
     screenshots: {
@@ -852,7 +760,6 @@ try {
       normalRelease,
       pointerCancel,
       sceneTeardown,
-      solomonApproachRelease,
       visibilityInterruption: {
         ...visibilityInterruption,
         suspensionTravel: visibilitySuspensionTravel,

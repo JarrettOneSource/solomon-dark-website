@@ -37,6 +37,9 @@ interface NativeAssetManifest {
 const nativeAssets = nativeAssetsJson as unknown as NativeAssetManifest
 const ATLAS_WIDTH = 1024
 const ATLAS_HEIGHT = 512
+const MOBILE_QUICKBAR_SLOT_OFFSETS = Object.freeze([
+  -414, -310, -206, -102, 2, 106, 210, 314,
+])
 
 interface SkillQuickbarProps {
   controls: GameControlBindings
@@ -94,11 +97,10 @@ export default function SkillQuickbar({
             data-slot={slot}
             data-binding-code={bindingCode}
             data-active={active}
-            data-cooldown={remaining > 0}
-            data-empty={skill === undefined}
             disabled={skill === undefined || !onInput || combatDisabled}
             key={slot}
             style={{
+              '--mobile-quickbar-slot-offset': `${MOBILE_QUICKBAR_SLOT_OFFSETS[slot]}px`,
               '--quickbar-slot-offset': `${offset}px`,
             } as CSSProperties}
             aria-label={label}
@@ -122,11 +124,6 @@ export default function SkillQuickbar({
                 record={skill.skills_atlas_icon_record}
               />
             )}
-            {remaining > 0 ? (
-              <span className="hub-hud-quickbar-cooldown-label" aria-hidden>
-                {formatCooldownLabel(remaining)}
-              </span>
-            ) : null}
             {bindingCode === 'Mouse2' && skill !== undefined ? (
               <img
                 className="hub-hud-quickbar-input-mouse"
@@ -166,10 +163,6 @@ export function NativeSkillIcon({
   const [x, y] = definition.frame
   const [logicalWidth, logicalHeight] = definition.logicalSize
   const [trimX, trimY] = definition.trimOrigin
-  // Percentage sprite geometry locks the atlas crop to the box, so a stylesheet
-  // can resize the icon through --skill-icon-unit (1px renders the native size).
-  const spriteOffset = (offset: number, logical: number, atlas: number) =>
-    `${(offset / (logical - atlas)) * 100}%`
   return (
     <span
       aria-hidden={ariaLabel === undefined ? true : undefined}
@@ -181,11 +174,11 @@ export function NativeSkillIcon({
       style={{
         ...style,
         backgroundImage: `url("${hub.trader.skillsAtlas}")`,
-        backgroundPosition: `${spriteOffset(trimX - x, logicalWidth, ATLAS_WIDTH)} ${spriteOffset(trimY - y, logicalHeight, ATLAS_HEIGHT)}`,
-        backgroundSize: `${(ATLAS_WIDTH / logicalWidth) * 100}% ${(ATLAS_HEIGHT / logicalHeight) * 100}%`,
-        height: `calc(${logicalHeight} * var(--skill-icon-unit, 1px))`,
+        backgroundPosition: `${trimX - x}px ${trimY - y}px`,
+        backgroundSize: `${ATLAS_WIDTH}px ${ATLAS_HEIGHT}px`,
+        height: logicalHeight,
         opacity: opacity ?? (cooldown ? 0.25 : 0.375),
-        width: `calc(${logicalWidth} * var(--skill-icon-unit, 1px))`,
+        width: logicalWidth,
       }}
     />
   )
@@ -268,9 +261,4 @@ function secondaryAbilityActive(
 
 function formatCooldown(ticks: number): string {
   return (ticks / 100).toFixed(2)
-}
-
-/** Touch slots show whole seconds until the last second, then tenths. */
-function formatCooldownLabel(ticks: number): string {
-  return ticks >= 100 ? `${Math.ceil(ticks / 100)}` : (ticks / 100).toFixed(1)
 }

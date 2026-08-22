@@ -1,20 +1,11 @@
 import assert from 'node:assert/strict'
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import { chromium } from 'playwright-core'
 import { WebSocket } from 'ws'
 
-import { HUB_PLAYER_SELECTION_HALF_WIDTH, selectHubPlayerAtPoint } from '../src/game/hub-player-selection.ts'
 import { GAME_PROTOCOL_VERSION } from '../src/game/protocol/game-protocol.ts'
-
-// stepInFront: the tapped wizard's clearance from the pile, the snapshots a
-// wizard may stand still before its step counts as stopped by a wall, and the
-// deadline for getting clear (the smoke runs at top level, so these sit above
-// the flow that uses them)
-const TAP_CLEAR_MARGIN = 12
-const STILL_SNAPSHOTS = 10
-const STEP_CLEAR_DEADLINE_MS = 45_000
 
 const baseUrl = process.env.SDR_SHARED_HUB_SMOKE_URL || 'http://127.0.0.1:5173'
 const gatewayUrl = process.env.SDR_SHARED_HUB_GATEWAY_URL?.trim()
@@ -34,7 +25,6 @@ const browser = await chromium.launch({
 })
 const contexts = []
 const rawClients = []
-const browserClients = []
 const pageErrors = []
 const consoleErrors = []
 
@@ -45,13 +35,13 @@ try {
     message.type === 'server-snapshot' && message.frame.world.kind === 'hub'
   ), 'host Hub snapshot')
   const hostX = hostBefore.frame.players[host.playerId].position.x
-  host.sendInput(hostBefore.frame.tick + 1, { x: 1, y: 0 })
+  host.sendInput(hostBefore.frame.tick + 1, 1, { x: 1, y: 0 })
   const hostMoved = await host.next((message) => (
     message.type === 'server-snapshot'
     && message.frame.world.kind === 'hub'
     && message.frame.players[host.playerId]?.position.x > hostX + 80
   ), 'host displacement')
-  host.sendInput(hostMoved.frame.tick + 1, { x: 0, y: 0 })
+  host.sendInput(hostMoved.frame.tick + 1, 2, { x: 0, y: 0 })
 
   const first = await enterHub('Aurelia', 'Fire', pointerMode === 'mobile'
     ? { width: 844, height: 390, hasTouch: true, useTouch: true }
@@ -83,21 +73,7 @@ try {
   await partySettings.waitFor()
   const initialPartyId = await partySettings.locator('code').innerText()
   assert.match(initialPartyId, /^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/)
-  // the visibility radios are controlled by the host's party state: a click
-  // sends client-party-settings and the dialog shows PUBLIC once the host
-  // echoes server-party-state, so the read-back waits for that echo instead
-  // of asserting the synchronous flip locator.check() expects (main's step
-  // passes only when the echo beats Playwright's read-back)
-  const publicVisibility = partySettings.getByLabel('PUBLIC')
-  assert.equal(await publicVisibility.isChecked(), false, 'a fresh party starts private')
-  await publicVisibility.click()
-  await first.page.waitForFunction(() => {
-    const dialog = document.querySelector('[role="dialog"][aria-label="Party settings"]')
-    const label = Array.from(dialog?.querySelectorAll('label') ?? [])
-      .find(candidate => candidate.textContent?.trim() === 'PUBLIC')
-    return label?.querySelector('input[type="radio"]')?.checked === true
-  }, undefined, { timeout: 15_000 })
-  assert.equal(await publicVisibility.isChecked(), true)
+  await partySettings.getByLabel('PUBLIC').check()
   await partySettings.getByRole('button', { name: 'REGENERATE' }).click()
   await first.page.waitForFunction(initial => (
     document.querySelector('.party-settings-code code')?.textContent !== initial
@@ -114,7 +90,7 @@ try {
   if (invitationEvidencePath) await first.page.screenshot({ path: invitationEvidencePath })
   await invitation.getByRole('button', { name: 'Deny' }).click()
   await invitation.waitFor({ state: 'detached' })
-  assert.equal(await first.page.locator('.hub-party-roster').getAttribute('data-party-size'), '1')
+  assert.equal(await first.page.locator('[data-party-member]').count(), 1)
 
   host.invitePlayer(first.playerId)
   await invitation.waitFor()
@@ -125,161 +101,19 @@ try {
 
   const member = await enterRawHub('Cassia', 'water')
   await waitForPlayers(first.page, 3)
-  await stepInFront(member)
   await activatePlayer(first, member.playerId)
-  const memberProfile = first.page.getByRole('dialog', { name: 'Cassia' })
-  await waitForProfileCard(first.page, memberProfile, 'Cassia')
-  // Aurelia accepted Basil's invitation, so Basil leads the party: her card
-  // for Cassia offers Message but no invite (the host rejects a member's
-  // invite as not-leader, and the card hides it), and the leader invites
-  await memberProfile.getByRole('button', { name: 'Message' }).waitFor()
-  assert.equal(
-    await memberProfile.getByRole('button', { name: 'Invite to Party' }).count(),
-    0,
-    'a party member who is not the leader gets no invite action',
-  )
-  await memberProfile.getByRole('button', { name: 'Close' }).click()
-  await first.page.locator('[data-profile-player]').waitFor({ state: 'detached' })
-  host.invitePlayer(member.playerId)
+  await first.page.getByRole('heading', { name: 'Cassia' }).waitFor()
+  await first.page.getByRole('button', { name: 'Invite to Party' }).click()
   const memberInvitation = await member.next((message) => (
     message.type === 'server-party-state' && message.state.invitations.length === 1
   ), 'member invitation')
-  assert.equal(memberInvitation.state.invitations[0].inviter.displayName, 'Basil')
+  assert.equal(memberInvitation.state.invitations[0].inviter.displayName, 'Aurelia')
   member.acceptInvitation(memberInvitation.state.invitations[0].id)
   await waitForPartySize(first.page, 3)
-
-  // The compact strip lists both party mates; the party sheet opens from the
-  // pill and a member row opens that member's Player Card.
-  await waitForAllyCount(first.page, 2)
-  const partyToggle = first.page.locator('[data-party-toggle]')
-  assert.equal(await partyToggle.getAttribute('aria-expanded'), 'false')
-  await partyToggle.click()
-  const partySheet = first.page.getByRole('dialog', { name: 'Party' })
-  await partySheet.waitFor()
-  assert.equal(await partySheet.locator('[data-party-member]').count(), 3)
-  assert.equal(
-    await partySheet.locator('[data-party-member][data-party-leader="true"]').getAttribute('data-party-member'),
-    host.playerId,
-  )
-  const partySheetEvidencePath = evidenceRoot ? join(evidenceRoot, 'party-sheet.png') : null
-  if (partySheetEvidencePath) await first.page.screenshot({ path: partySheetEvidencePath })
-  await partySheet.locator(`[data-party-member="${member.playerId}"] .hub-party-member-open`).click()
-  const memberCard = first.page.getByRole('dialog', { name: 'Cassia' })
-  await memberCard.waitFor()
-  assert.equal(await first.page.getByRole('dialog', { name: 'Party' }).count(), 0)
-  const memberCardEvidencePath = evidenceRoot ? join(evidenceRoot, 'party-member-card.png') : null
-  if (memberCardEvidencePath) await first.page.screenshot({ path: memberCardEvidencePath })
-  await memberCard.getByRole('button', { name: 'Close' }).click()
+  await first.page.getByRole('dialog', { name: 'Cassia' })
+    .getByRole('button', { name: 'Close' })
+    .click()
   await first.page.locator('[data-profile-player]').waitFor({ state: 'detached' })
-
-  // A crowd: five more wizards join through the leader's invitations, so the
-  // strip folds behind "+N more", the sheet lists everyone in join order, and
-  // both shrink back the moment the crowd leaves.
-  const crowd = []
-  for (const [name, element] of [
-    ['Eamon', 'earth'], ['Fiora', 'fire'], ['Gideon', 'ether'], ['Hester', 'water'], ['Ilse', 'air'],
-  ]) {
-    const wizard = await enterRawHub(name, element)
-    host.invitePlayer(wizard.playerId)
-    const crowdInvitation = await wizard.next((message) => (
-      message.type === 'server-party-state' && message.state.invitations.length === 1
-    ), `${name} invitation`)
-    assert.equal(crowdInvitation.state.invitations[0].inviter.displayName, 'Basil')
-    wizard.acceptInvitation(crowdInvitation.state.invitations[0].id)
-    crowd.push(wizard)
-  }
-  await waitForPlayers(first.page, 8)
-  await waitForPartySize(first.page, 8)
-  const allies = first.page.locator('.hub-hud-allies')
-  await waitForAllyCount(first.page, 7)
-  // compactPartyRosterRowLimit caps the strip at six rows with a mouse and
-  // three on touch; compactPartyRosterRowsThatFit folds it further to what
-  // stacks above the movement joystick, which on the 844x390 phone leaves room
-  // for one row and the overflow pill (round 8d: a third row reached the
-  // joystick). The last row yields to the overflow count.
-  const crowdFold = pointerMode === 'mobile' ? { rows: 1, hidden: 6 } : { rows: 5, hidden: 2 }
-  const moreButton = first.page.locator('.hub-party-more')
-  await moreButton.waitFor()
-  assert.equal(await allies.locator('.hub-hud-ally-row').count(), crowdFold.rows)
-  assert.equal(await moreButton.getAttribute('data-party-hidden-count'), String(crowdFold.hidden))
-  // textContent, not innerText: the touch stylesheet uppercases the label
-  assert.equal((await moreButton.textContent()).trim(), `+${crowdFold.hidden} more`)
-  const viewport = first.page.viewportSize()
-  const compactBounds = await first.page.locator('.hub-party-compact').boundingBox()
-  assert.ok(
-    compactBounds.y + compactBounds.height <= viewport.height,
-    `the folded strip must stay inside the viewport (${JSON.stringify(compactBounds)})`,
-  )
-  if (first.touch) {
-    const joystickBounds = await first.page.locator('[data-joystick="movement"]').boundingBox()
-    assert.equal(
-      rectsOverlap(compactBounds, joystickBounds),
-      false,
-      'the folded strip must not reach the movement joystick',
-    )
-    // the fold is the joystick's doing: count the rows that stack between the
-    // strip's top and 8px above the joystick from the HUD's own geometry
-    const pillsBounds = await first.page.locator('.hub-party-pills').boundingBox()
-    const rowBounds = await allies.locator('.hub-hud-ally-row').first().boundingBox()
-    const strip = await first.page.locator('.hub-party-roster').evaluate((root) => ({
-      allyGap: parseFloat(getComputedStyle(root.querySelector('.hub-hud-allies')).rowGap),
-      columnGap: parseFloat(getComputedStyle(root.querySelector('.hub-party-compact')).rowGap),
-      rowsFit: root.getAttribute('data-party-rows-fit'),
-    }))
-    const room = joystickBounds.y - 8 - compactBounds.y - pillsBounds.height - strip.columnGap
-    const rowsThatFit = Math.floor((room + strip.allyGap) / (rowBounds.height + strip.allyGap))
-    assert.equal(
-      strip.rowsFit,
-      String(rowsThatFit),
-      `the strip must fold to the rows that fit above the joystick (${room}px of room, ${rowBounds.height}px rows)`,
-    )
-    assert.equal(
-      Math.min(3, rowsThatFit) - 1,
-      crowdFold.rows,
-      `the phone fold must follow the joystick's room (${rowsThatFit} rows fit)`,
-    )
-  } else {
-    const chat = first.page.locator('.game-chat')
-    assert.equal(await chat.count(), 1, 'the desktop Hub shows its chat')
-    assert.equal(
-      rectsOverlap(compactBounds, await chat.boundingBox()),
-      false,
-      'the folded strip must not reach the chat',
-    )
-  }
-  const crowdStripEvidencePath = evidenceRoot ? join(evidenceRoot, 'party-crowd-strip.png') : null
-  if (crowdStripEvidencePath) await first.page.screenshot({ path: crowdStripEvidencePath })
-  await moreButton.click()
-  const crowdSheet = first.page.getByRole('dialog', { name: 'Party' })
-  await crowdSheet.waitFor()
-  const crowdMembers = crowdSheet.locator('[data-party-member]')
-  assert.equal(await crowdMembers.count(), 8)
-  assert.deepEqual(
-    await crowdMembers.evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-party-member'))),
-    [host.playerId, first.playerId, member.playerId, ...crowd.map((wizard) => wizard.playerId)],
-    'the sheet lists members in join order',
-  )
-  const sheetBounds = await crowdSheet.boundingBox()
-  assert.ok(
-    sheetBounds.y >= 0 && sheetBounds.y + sheetBounds.height <= viewport.height,
-    `the sheet must fit the viewport (${JSON.stringify(sheetBounds)})`,
-  )
-  await crowdMembers.last().scrollIntoViewIfNeeded()
-  const lastMemberBounds = await crowdMembers.last().boundingBox()
-  assert.ok(
-    lastMemberBounds.y >= sheetBounds.y
-      && lastMemberBounds.y + lastMemberBounds.height <= sheetBounds.y + sheetBounds.height + 1,
-    `the last member row must scroll into the sheet (${JSON.stringify(lastMemberBounds)})`,
-  )
-  const crowdSheetEvidencePath = evidenceRoot ? join(evidenceRoot, 'party-crowd-sheet.png') : null
-  if (crowdSheetEvidencePath) await first.page.screenshot({ path: crowdSheetEvidencePath })
-  await crowdSheet.getByRole('button', { name: 'Close party' }).click()
-  await crowdSheet.waitFor({ state: 'detached' })
-  for (const wizard of crowd) await wizard.close()
-  await waitForPartySize(first.page, 3)
-  await waitForPlayers(first.page, 3)
-  await waitForAllyCount(first.page, 2)
-  assert.equal(await moreButton.count(), 0, 'the overflow button leaves with the crowd')
 
   const outsider = await enterRawHub('Daria', 'air')
   await waitForPlayers(first.page, 4)
@@ -291,10 +125,9 @@ try {
 
   const hostMessageCountBeforeWhisper = host.chatMessages.length
   const memberMessageCountBeforeWhisper = member.chatMessages.length
-  await stepInFront(outsider)
   await activatePlayer(first, outsider.playerId)
   const outsiderProfile = first.page.getByRole('dialog', { name: 'Daria' })
-  await waitForProfileCard(first.page, outsiderProfile, 'Daria')
+  await outsiderProfile.waitFor()
   await outsiderProfile.getByText('Guest wizard', { exact: true }).waitFor()
   const outsiderWhisper = outsider.next((message) => (
     message.type === 'server-chat' && message.text === 'Aurelia private hello'
@@ -453,8 +286,8 @@ try {
   ), 'member Boneyard snapshot')
   const hostRunX = hostBoneyard.frame.players[host.playerId].position.x
   const memberRunX = memberBoneyard.frame.players[member.playerId].position.x
-  host.sendInput(hostBoneyard.frame.tick + 1, { x: -1, y: 0 })
-  member.sendInput(memberBoneyard.frame.tick + 1, { x: 1, y: 0 })
+  host.sendInput(hostBoneyard.frame.tick + 1, 3, { x: -1, y: 0 })
+  member.sendInput(memberBoneyard.frame.tick + 1, 1, { x: 1, y: 0 })
   const hostSeparated = await host.next((message) => (
     message.type === 'server-snapshot'
     && message.frame.world.kind === 'boneyard'
@@ -465,8 +298,8 @@ try {
     && message.frame.world.kind === 'boneyard'
     && message.frame.players[member.playerId]?.position.x > memberRunX + 60
   ), 'member Boneyard separation')
-  host.sendInput(hostSeparated.frame.tick + 1, { x: 0, y: 0 })
-  member.sendInput(memberSeparated.frame.tick + 1, { x: 0, y: 0 })
+  host.sendInput(hostSeparated.frame.tick + 1, 4, { x: 0, y: 0 })
+  member.sendInput(memberSeparated.frame.tick + 1, 2, { x: 0, y: 0 })
   await first.page.waitForTimeout(250)
   const boneyardLighting = await firstBoneyard.evaluate((scene) => {
     const canvas = scene.querySelector('.boneyard-environment-light')
@@ -546,13 +379,13 @@ try {
 
   const outsiderBefore = await outsiderHub
   const outsiderX = outsiderBefore.frame.players[outsider.playerId].position.x
-  outsider.sendInput(outsiderBefore.frame.tick + 1, { x: 1, y: 0 })
+  outsider.sendInput(outsiderBefore.frame.tick + 1, 1, { x: 1, y: 0 })
   const outsiderAfter = await outsider.next((message) => (
     message.type === 'server-snapshot'
     && message.frame.world.kind === 'hub'
     && message.frame.players[outsider.playerId]?.position.x > outsiderX + 15
   ), 'outsider Hub movement')
-  outsider.sendInput(outsiderAfter.frame.tick + 1, { x: 0, y: 0 })
+  outsider.sendInput(outsiderAfter.frame.tick + 1, 2, { x: 0, y: 0 })
 
   const healthDuringRun = await supervisorHealth()
   if (healthDuringRun) {
@@ -596,9 +429,6 @@ try {
     consoleErrors,
     pageErrors,
   })}\n`)
-} catch (error) {
-  await captureFailure()
-  throw error
 } finally {
   for (const client of rawClients.splice(0)) await client.close()
   for (const context of contexts.splice(0)) await context.close()
@@ -637,28 +467,19 @@ async function enterHub(displayName, element, viewport, existingContext) {
   })
   await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 240_000 })
   await page.getByRole('button', { name: 'Play' }).click()
-  // shared-Hub admission begins only behind the post-loadout loading screen:
-  // New Game and the whole Create flow must not request a ticket
-  const isAdmissionRequest = (request) => (
-    request.method() === 'POST' && new URL(request.url()).pathname === '/api/game/hub'
-  )
-  let earlyAdmissionRequests = 0
-  const countEarlyAdmission = (request) => {
-    if (isAdmissionRequest(request)) earlyAdmissionRequests += 1
-  }
-  page.on('request', countEarlyAdmission)
+  const admission = page.waitForResponse((response) => (
+    response.request().method() === 'POST'
+    && new URL(response.url()).pathname === '/api/game/hub'
+  ))
   await page.getByRole('button', { name: 'New Game' }).click()
+  assert.equal((await admission).status(), 201)
   await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({
     timeout: 30_000,
   })
   await page.getByRole('textbox', { name: 'Wizard name' }).fill(displayName)
   await page.getByRole('button', { name: new RegExp(element, 'i') }).click()
   await page.locator('.create-menu-disciplines[data-visible="true"]').waitFor({ timeout: 15_000 })
-  page.off('request', countEarlyAdmission)
-  assert.equal(earlyAdmissionRequests, 0, `${displayName} requested admission before the loadout`)
-  const admission = page.waitForResponse((response) => isAdmissionRequest(response.request()))
   await page.locator('.create-menu-discipline-arcane').click()
-  assert.equal((await admission).status(), 201)
   try {
     await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 240_000 })
   } catch (error) {
@@ -676,9 +497,7 @@ async function enterHub(displayName, element, viewport, existingContext) {
     window.cancelAnimationFrame = (handle) => window.clearTimeout(handle)
   })
   const current = await frame(page)
-  const client = { context, displayName, page, playerId: current.localPlayerId, touch: useTouch }
-  browserClients.push(client)
-  return client
+  return { context, page, playerId: current.localPlayerId, touch: useTouch }
 }
 
 async function activatePlayer(client, targetPlayerId) {
@@ -687,165 +506,22 @@ async function activatePlayer(client, targetPlayerId) {
     logicalHeight: Number(node.dataset.viewportHeight),
     logicalWidth: Number(node.dataset.viewportWidth),
     position: structuredClone(node.__sdrHubFrame.playerScreenPositions[playerId]),
-    sameRegionPlayers: Object.keys(node.__sdrHubFrame.playerScreenPositions),
-    worldPositions: structuredClone(node.__sdrHubFrame.playerPositions),
   }), targetPlayerId)
   assert.ok(target.position, `missing screen position for ${targetPlayerId}`)
-  // the product resolves a world tap through selectHubPlayerAtPoint (the
-  // frontmost wizard whose hit box holds the point); the smoke asks the same
-  // rule first so a tap that would open somebody else's card fails by name
-  const sameRegion = new Set(target.sameRegionPlayers)
-  const predicted = selectHubPlayerAtPoint({
-    players: Object.fromEntries(Object.entries(target.worldPositions)
-      .map(([playerId, position]) => [playerId, { position }])),
-    world: {
-      participants: Object.fromEntries(Object.keys(target.worldPositions)
-        .map((playerId) => [playerId, { region: sameRegion.has(playerId) ? 'same' : 'elsewhere' }])),
-    },
-  }, client.playerId, target.worldPositions[targetPlayerId])
-  assert.equal(
-    predicted,
-    targetPlayerId,
-    `a tap at ${targetPlayerId}'s feet would open ${predicted}'s card instead (drawn in front); `
-    + JSON.stringify(await describeHubState(client.page)),
-  )
   const bounds = await canvas.boundingBox()
   assert.ok(bounds)
-  // the tap lands on the wizard's feet anchor; HubScene resolves it through
-  // the same hit box the renderer draws, frontmost (greatest y) wizard first
-  const x = bounds.x + target.position.x * bounds.width / target.logicalWidth
+  const x = bounds.x + (target.position.x - 48) * bounds.width / target.logicalWidth
   const y = bounds.y + target.position.y * bounds.height / target.logicalHeight
-  // the world renderer owns the pointer at that point: a HUD layer sitting
-  // over the wizard would swallow the tap before the scene's capture handler
-  const covering = await client.page.evaluate(([pointX, pointY]) => {
-    const describe = (element) => {
-      const classes = typeof element.className === 'string' ? element.className.trim().split(/\s+/) : []
-      return [element.tagName.toLowerCase(), ...classes].join('.')
-    }
-    const stack = document.elementsFromPoint(pointX, pointY)
-    return {
-      onWorld: stack[0]?.closest('.hub-world-renderer') != null,
-      scene: { ...document.querySelector('.hub-scene')?.dataset },
-      stack: stack.slice(0, 4).map(describe),
-    }
-  }, [x, y])
-  if (!covering.onWorld) {
-    throw new Error(
-      `the tap on ${targetPlayerId} at ${Math.round(x)},${Math.round(y)} is covered by `
-      + `${JSON.stringify(covering.stack)}; ${JSON.stringify(await describeHubState(client.page))}`,
-    )
-  }
   if (client.touch) await client.page.touchscreen.tap(x, y)
   else await client.page.mouse.click(x, y)
 }
 
-
-// A tap at a wizard's feet opens the frontmost wizard whose selection box
-// holds that point (selectHubPlayerAtPoint), so a tapped raw wizard first
-// steps clear of the spawn pile: every other wizard in its region ends up
-// behind it by a margin or outside the selection half-width. Walking forward
-// alone runs out of floor at the courtyard's bottom wall (round 8d: Cassia
-// stopped 1.4px short of the margin), so the step leaves the pile sideways as
-// well, tries the flat walk each way when a wall stops it, and fails by name
-// with every position when it cannot get clear.
-async function stepInFront(client) {
-  const wizards = (frame) => {
-    const region = frame.world.participants[client.playerId]?.region
-    return Object.entries(frame.players)
-      .filter(([playerId]) => (
-        playerId !== client.playerId && frame.world.participants[playerId]?.region === region
-      ))
-      .map(([playerId, player]) => ({ playerId, x: player.position.x, y: player.position.y }))
-  }
-  const crowding = (frame) => {
-    const own = frame.players[client.playerId].position
-    return wizards(frame).filter((other) => (
-      Math.abs(other.x - own.x) <= HUB_PLAYER_SELECTION_HALF_WIDTH + TAP_CLEAR_MARGIN
-      && other.y + TAP_CLEAR_MARGIN > own.y
-    ))
-  }
-  let snapshot = client.latestSnapshot()?.frame.world.kind === 'hub'
-    ? client.latestSnapshot()
-    : await client.next((message) => (
-      message.type === 'server-snapshot' && message.frame.world.kind === 'hub'
-    ), `${client.playerId}'s first Hub snapshot`)
-  const pile = crowding(snapshot.frame)
-  if (pile.length === 0) return
-  // sideways toward the pile's nearer clear edge and forward while the floor
-  // allows; then flat along the wall, either way
-  const own = snapshot.frame.players[client.playerId].position
-  const clearance = HUB_PLAYER_SELECTION_HALF_WIDTH + TAP_CLEAR_MARGIN + 1
-  const leftEdge = Math.min(...pile.map((other) => other.x)) - clearance
-  const rightEdge = Math.max(...pile.map((other) => other.x)) + clearance
-  const side = own.x - leftEdge <= rightEdge - own.x ? -1 : 1
-  const plans = [
-    { x: side * Math.SQRT1_2, y: Math.SQRT1_2 },
-    { x: side, y: 0 },
-    { x: -side, y: 0 },
-  ]
-  let plan = 0
-  let last = own
-  let still = 0
-  const started = Date.now()
-  const fail = (message) => {
-    client.sendInput(snapshot.frame.tick + 1, { x: 0, y: 0 })
-    const position = snapshot.frame.players[client.playerId].position
-    throw new Error(
-      `${message}: ${client.playerId} at ${JSON.stringify(position)} after walking `
-      + `${JSON.stringify(plans.slice(0, plan + 1))}; wizards ${JSON.stringify(wizards(snapshot.frame))}`,
-    )
-  }
-  client.sendInput(snapshot.frame.tick + 1, plans[plan])
-  for (;;) {
-    const previous = snapshot
-    snapshot = await client.next((message) => (
-      message.type === 'server-snapshot'
-      && message.sequence > previous.sequence
-      && message.frame.world.kind === 'hub'
-    ), `${client.playerId}'s next Hub snapshot`)
-    if (crowding(snapshot.frame).length === 0) break
-    const position = snapshot.frame.players[client.playerId].position
-    still = Math.hypot(position.x - last.x, position.y - last.y) < 0.25 ? still + 1 : 0
-    last = position
-    if (still >= STILL_SNAPSHOTS) {
-      plan += 1
-      if (plan === plans.length) fail('a wall stops the step clear of the Hub crowd')
-      still = 0
-      client.sendInput(snapshot.frame.tick + 1, plans[plan])
-    }
-    if (Date.now() - started >= STEP_CLEAR_DEADLINE_MS) fail('the Hub crowd still covers the tapped wizard')
-  }
-  client.sendInput(snapshot.frame.tick + 1, { x: 0, y: 0 })
-}
-
-async function waitForProfileCard(page, card, displayName) {
-  try {
-    await card.waitFor({ timeout: 15_000 })
-  } catch (error) {
-    throw new Error(
-      `the tap did not open ${displayName}'s Player Card; ${JSON.stringify(await describeHubState(page))}`,
-      { cause: error },
-    )
-  }
-}
-
 async function enterRawHub(displayName, element) {
-  // the backend's `game-sessions` policy admits six wizards per minute per
-  // address; the eight-member crowd needs more than that from one machine,
-  // so a raw admission waits for the next fixed window instead of failing
-  let response
-  let admission
-  for (let attempt = 0; ; attempt += 1) {
-    response = await fetch(`${baseUrl}/api/game/hub`, {
-      method: 'POST',
-      headers: { 'x-solomon-dark-session': 'enter-hub' },
-    })
-    admission = await response.json()
-    if (response.status !== 429) break
-    assert.ok(attempt < 16, `${displayName}: shared Hub admission stayed rate-limited for over a minute`)
-    if (attempt === 0) console.error(`${displayName}: shared Hub admission rate-limited; waiting for the next window`)
-    await new Promise((resolve) => setTimeout(resolve, 5_000))
-  }
+  const response = await fetch(`${baseUrl}/api/game/hub`, {
+    method: 'POST',
+    headers: { 'x-solomon-dark-session': 'enter-hub' },
+  })
+  const admission = await response.json()
   assert.equal(response.status, 201, JSON.stringify(admission))
   const requested = new URL(admission.url)
   const socketUrl = gatewayUrl
@@ -858,12 +534,9 @@ async function enterRawHub(displayName, element) {
   })
   const next = rawMessageQueue(socket)
   const chatMessages = []
-  let latestSnapshot = null
-  let inputSequence = 0
   socket.on('message', (data) => {
     const message = JSON.parse(data.toString())
     if (message.type === 'server-chat') chatMessages.push(message)
-    if (message.type === 'server-snapshot') latestSnapshot = message
   })
   socket.send(JSON.stringify({
     type: 'client-hello',
@@ -895,17 +568,13 @@ async function enterRawHub(displayName, element) {
         targetPlayerId,
       }))
     },
-    // next() hands out buffered messages oldest-first; position checks that
-    // must not act on a stale frame read the latest snapshot instead
-    latestSnapshot: () => latestSnapshot,
     next,
     playerId: welcome.playerId,
-    sendInput(targetTick, movement) {
-      inputSequence += 1
+    sendInput(targetTick, sequence, movement) {
       socket.send(JSON.stringify({
         type: 'client-input',
         input: { aim: null, cast: { primary: false, quickbar: null }, movement },
-        sequence: inputSequence,
+        sequence,
         targetTick,
       }))
     },
@@ -990,93 +659,15 @@ async function waitForRest(page) {
   }, undefined, { polling: 100, timeout: 15_000 })
 }
 
-// Everything the party strip and the world need to agree on, for failure
-// messages: the strip's count and rows, the sheet's rows, how many wizards the
-// world holds and how many share the viewer's region, every dialog on screen,
-// and whether any surface scrolled (a scrolled scene puts wizards off-screen).
-function describeHubState(page) {
-  return page.evaluate(() => {
-    const frame = document.querySelector('.hub-world-canvas')?.__sdrHubFrame
-    const rows = (root) => [...root?.querySelectorAll('[data-presence]') ?? []].map((row) => ({
-      member: row.getAttribute('data-party-member'),
-      presence: row.getAttribute('data-presence'),
-      text: row.textContent.trim().replace(/\s+/g, ' ').slice(0, 40),
-    }))
-    const scrollOf = (selector) => {
-      const node = selector === 'document' ? document.scrollingElement : document.querySelector(selector)
-      return node ? [node.scrollLeft, node.scrollTop] : null
-    }
-    return {
-      allyCount: document.querySelector('.hub-hud-allies')?.getAttribute('data-ally-count') ?? null,
-      allyRows: rows(document.querySelector('.hub-hud-allies')),
-      dialogs: [...document.querySelectorAll('[role="dialog"]')].map((node) => (
-        node.getAttribute('aria-label')
-        ?? document.getElementById(node.getAttribute('aria-labelledby') ?? '')?.textContent?.trim()
-        ?? null
-      )),
-      layout: Object.fromEntries(
-        ['.hub-party-compact', '.hub-party-more', '[data-joystick="movement"]', '.game-chat'].map((selector) => {
-          const rect = document.querySelector(selector)?.getBoundingClientRect()
-          return [selector, rect ? [rect.x, rect.y, rect.width, rect.height].map(Math.round) : null]
-        }),
-      ),
-      playerPositions: frame ? structuredClone(frame.playerPositions) : null,
-      partyRowsFit: document.querySelector('.hub-party-roster')?.getAttribute('data-party-rows-fit') ?? null,
-      partySize: document.querySelector('.hub-party-roster')?.getAttribute('data-party-size') ?? null,
-      playerCount: frame?.playerCount ?? null,
-      sameRegionPlayers: frame ? Object.keys(frame.playerScreenPositions) : null,
-      scene: { ...document.querySelector('.hub-scene')?.dataset },
-      scroll: {
-        document: scrollOf('document'),
-        frame: scrollOf('.hub-native-frame'),
-        scene: scrollOf('.hub-scene'),
-        surface: scrollOf('.game-surface'),
-      },
-      sheetRows: rows(document.getElementById('hub-party-sheet')),
-    }
-  })
-}
-
-async function waitForAllyCount(page, count) {
-  try {
-    await page.locator('.hub-hud-allies').locator(`xpath=self::*[@data-ally-count="${count}"]`)
-      .waitFor({ timeout: 15_000 })
-  } catch (error) {
-    throw new Error(
-      `the strip never showed ${count} allies; ${JSON.stringify(await describeHubState(page))}`,
-      { cause: error },
-    )
-  }
-}
-
-async function captureFailure() {
-  if (!evidenceRoot) return
-  for (const client of browserClients) {
-    if (client.page.isClosed()) continue
-    const state = await describeHubState(client.page).catch((error) => ({ error: String(error) }))
-    await writeFile(join(evidenceRoot, `failure-${client.displayName}.json`), JSON.stringify(state, null, 2))
-    await client.page.screenshot({ path: join(evidenceRoot, `failure-${client.displayName}.png`) })
-      .catch((error) => console.error(`${client.displayName}: failure screenshot failed: ${error.message}`))
-  }
-}
-
 async function waitForPlayers(page, count) {
   await page.waitForFunction((expected) => (
     document.querySelector('.hub-world-canvas')?.__sdrHubFrame.playerCount === expected
   ), count, { timeout: 15_000 })
 }
 
-function rectsOverlap(first, second) {
-  assert.ok(first && second, 'expected both element bounds')
-  return first.x < second.x + second.width
-    && first.x + first.width > second.x
-    && first.y < second.y + second.height
-    && first.y + first.height > second.y
-}
-
 async function waitForPartySize(page, size) {
   await page.waitForFunction((expected) => (
-    document.querySelector('.hub-party-roster')?.getAttribute('data-party-size') === String(expected)
+    document.querySelectorAll('[data-party-member]').length === expected
   ), size, { timeout: 15_000 })
 }
 

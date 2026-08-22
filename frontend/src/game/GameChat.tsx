@@ -44,7 +44,6 @@ interface GameChatProps {
   openKeyCode: string
   partyState: LocalPartyState | null
   session: GameClientSession
-  uiScale: number
   whisperRequest: GameChatWhisperRequest | null
   worldKind: GameChatWorldKind
 }
@@ -62,7 +61,6 @@ export default function GameChat({
   openKeyCode,
   partyState,
   session,
-  uiScale,
   whisperRequest,
   worldKind,
 }: GameChatProps) {
@@ -348,10 +346,7 @@ export default function GameChat({
       data-whisper-target={whisperTarget?.playerId}
       hidden={disabled}
       onPointerDown={event => event.stopPropagation()}
-      style={{
-        '--game-chat-vvh': `${Math.round(viewportHeightPx)}px`,
-        '--game-ui-scale': uiScale,
-      } as CSSProperties}
+      style={{ '--game-chat-vvh': `${Math.round(viewportHeightPx)}px` } as CSSProperties}
     >
       {open ? (
         <div

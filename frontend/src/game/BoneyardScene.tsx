@@ -48,8 +48,6 @@ import {
 } from './game-audio-native.ts'
 import { startGamePresentationLoop } from './game-presentation-frame-loop.ts'
 import GameHud from './GameHud.tsx'
-import PlayerProfileCard from './PlayerProfileCard.tsx'
-import type { LocalPartyState } from './protocol/party-state.ts'
 import HubInventoryUi, { type HubUiSurface } from './HubInventoryUi.tsx'
 import GameOverOverlay from './GameOverOverlay.tsx'
 import TouchJoystick from './input/TouchJoystick.tsx'
@@ -116,12 +114,10 @@ interface BoneyardSceneProps {
   onLoadingError: () => void
   onHubAction: (action: HubInventoryAction) => void
   onContinueGameOver: (runId: string, eventId: number) => void
-  onMessagePlayer?: (playerId: string, displayName: string) => void
   onInventoryOpenChange: (open: boolean) => void
   onOpenSkills: () => void
   onPauseRequest: () => void
   onReady: () => void
-  partyState?: LocalPartyState | null
   playerId: string
   progression: ProtocolPlayerProgression
   presentationPaused: boolean
@@ -162,11 +158,9 @@ export default function BoneyardScene({
   onHubAction,
   onContinueGameOver,
   onInventoryOpenChange,
-  onMessagePlayer,
   onOpenSkills,
   onPauseRequest,
   onReady,
-  partyState = null,
   playerId,
   progression,
   presentationPaused,
@@ -190,27 +184,7 @@ export default function BoneyardScene({
   const [playerPosition, setPlayerPosition] = useState(
     boneyardInitialSnapshot.players[playerId]!.position,
   )
-  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null)
-  const [selectedGold, setSelectedGold] = useState<number | null>(null)
-  const sceneInputBlocked = inputBlocked || inventorySurface !== null || selectedPlayerId !== null
-  const openMemberCard = (memberPlayerId: string) => {
-    const member = samplePresentation().players[memberPlayerId]
-    if (!member) return
-    setSelectedGold(member.economy.gold)
-    setSelectedPlayerId(memberPlayerId)
-  }
-
-  useEffect(() => {
-    if (selectedPlayerId === null) return
-    const closeCard = (event: KeyboardEvent) => {
-      if (event.code !== 'Escape') return
-      event.preventDefault()
-      event.stopPropagation()
-      setSelectedPlayerId(null)
-    }
-    window.addEventListener('keydown', closeCard, true)
-    return () => window.removeEventListener('keydown', closeCard, true)
-  }, [selectedPlayerId])
+  const sceneInputBlocked = inputBlocked || inventorySurface !== null
 
   useEffect(() => {
     onInventoryOpenChange(inventorySurface?.kind === 'inventory')
@@ -883,17 +857,12 @@ export default function BoneyardScene({
                   player ? actorHeadingVector(player.headingIndex) : undefined,
                 )
               }}
-              onOpenMember={openMemberCard}
-              onPauseClick={() => {
-                if (!sceneInputBlocked && run.phase === 'active') onPauseRequest()
-              }}
               onSkillsClick={() => {
                 if (!inputBlocked && run.phase === 'active') {
                   setInventorySurface(null)
                   onOpenSkills()
                 }
               }}
-              partyState={partyState}
               playerId={playerId}
               progression={progression}
               subscribePing={subscribePing}
@@ -920,26 +889,6 @@ export default function BoneyardScene({
               tradersEnabled={false}
               transitionActive={false}
             />
-            {selectedPlayerId && (() => {
-              const profile = partyState?.hubPlayers.find(({ playerId: id }) => (
-                id === selectedPlayerId
-              )) ?? null
-              const presented = samplePresentation().players[selectedPlayerId]
-              return (
-                <PlayerProfileCard
-                  canInvite={false}
-                  discipline={presented?.config.discipline ?? 'arcane'}
-                  displayName={profile?.displayName ?? presented?.config.displayName ?? selectedPlayerId}
-                  element={presented?.config.element ?? 'ether'}
-                  gold={selectedGold}
-                  isSelf={selectedPlayerId === playerId}
-                  onClose={() => setSelectedPlayerId(null)}
-                  onMessage={onMessagePlayer}
-                  playerId={selectedPlayerId}
-                  profile={profile}
-                />
-              )
-            })()}
             {spectatorStatus ? (
               <div
                 className="boneyard-spectator-status"

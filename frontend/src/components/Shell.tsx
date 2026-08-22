@@ -161,7 +161,7 @@ export default function Shell() {
   if (game) {
     return (
       <main
-        className="game-surface h-dvh overflow-clip"
+        className="game-surface h-dvh overflow-hidden"
         onContextMenu={(event) => event.preventDefault()}
         onDragStart={(event) => event.preventDefault()}
       >

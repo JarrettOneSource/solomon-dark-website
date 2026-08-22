@@ -200,38 +200,6 @@ export function hubPortalAt(
   ))
 }
 
-/**
- * The door a wizard's own motion carries it into this tick. The trigger
- * contact is the recovered check; the motion test is the shared Hub's own
- * rule: other bodies can push a wizard around there, and a doorway opens only
- * to the wizard walking inward, never to a shove onto the threshold or to a
- * step away from it.
- */
-export function hubPortalEnteredBy(
-  region: HubRegionId,
-  position: Vector2,
-  motion: Vector2,
-  radius = PLAYER_CHARACTER_RADIUS,
-): HubPortalDefinition | undefined {
-  const portal = hubPortalAt(region, position, radius)
-  if (!portal) return undefined
-  const inward = hubPortalInwardNormal(portal)
-  return motion.x * inward.x + motion.y * inward.y > 0 ? portal : undefined
-}
-
-/** Unit normal of a portal's trigger pointing through the doorway. */
-export function hubPortalInwardNormal(portal: HubPortalDefinition): Vector2 {
-  const { scriptedTarget, trigger } = portal
-  const normal = { x: trigger.y1 - trigger.y2, y: trigger.x2 - trigger.x1 }
-  const length = Math.hypot(normal.x, normal.y)
-  const toward = {
-    x: scriptedTarget.x - (trigger.x1 + trigger.x2) / 2,
-    y: scriptedTarget.y - (trigger.y1 + trigger.y2) / 2,
-  }
-  const sign = normal.x * toward.x + normal.y * toward.y < 0 ? -1 : 1
-  return { x: sign * normal.x / length, y: sign * normal.y / length }
-}
-
 export function beginHubTransition(
   participant: HubParticipantState,
   portal: HubPortalDefinition,

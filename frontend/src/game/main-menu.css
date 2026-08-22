@@ -790,12 +790,3 @@
     text-align: center;
   }
 }
-
-@media (hover: none) and (pointer: coarse) {
-  /* In the College and the Boneyard the HUD owns the corners; the fullscreen
-     toggle tucks into the top-right beside the map button. */
-  .main-menu-page:has(.hub-scene, .boneyard-scene) .game-fullscreen-control {
-    top: calc(env(safe-area-inset-top, 0px) + 8px);
-    right: calc(env(safe-area-inset-right, 0px) + 10px);
-  }
-}
