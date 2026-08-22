@@ -26,6 +26,10 @@ export interface NativeHudManaPresentation extends NativeHudMeterPresentation {
   readonly reserveWidth: number
 }
 
+export function nativeHudLeftOriginClipPath(progress: number): string {
+  return `inset(0 ${(1 - clampUnit(progress)) * 100}% 0 0)`
+}
+
 export type NativeHudSkillBinding = 12 | 16 | 20
 
 export interface NativeHudSkillBindingPresentation {

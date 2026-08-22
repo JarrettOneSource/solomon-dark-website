@@ -18,6 +18,7 @@ import type { GameSnapshot } from './protocol/game-protocol.ts'
 import type { GameControlBindings } from './game-settings.ts'
 import {
   nativeHealthHudPresentation,
+  nativeHudLeftOriginClipPath,
   nativeHudSkillBindings,
   nativeManaHudPresentation,
 } from './native-hud-presentation.ts'
@@ -230,7 +231,7 @@ export default function GameHud({
               className={layer.className}
               key={layer.shield ? 'shield' : 'health'}
               src={hub.hud.barRed}
-              style={{ clipPath: `inset(0 ${(1 - layer.progress) * 100}% 0 0)` }}
+              style={{ clipPath: nativeHudLeftOriginClipPath(layer.progress) }}
               alt={layer.shield
                 ? `Magic shield ${quickbarHud.playerState!.magicShieldAbsorb} of ${quickbarHud.playerState!.magicShieldMaximum}`
                 : `Health ${progression.currentHealth} of ${progression.maximumHealth}`}
@@ -249,7 +250,7 @@ export default function GameHud({
           <img
             className="hub-hud-meter-fill"
             src={hub.hud.barBlue}
-            style={{ clipPath: `inset(0 ${(1 - manaHud.fillProgress) * 100}% 0 0)` }}
+            style={{ clipPath: nativeHudLeftOriginClipPath(manaHud.fillProgress) }}
             alt={`Mana ${progression.currentMana} of ${progression.maximumMana}`}
           />
           {manaHud.reserveProgress > 0 ? (

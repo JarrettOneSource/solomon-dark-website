@@ -4,9 +4,18 @@ import test from 'node:test'
 import { NATIVE_WELD_BUILDS } from './core-kernels/player-progression.ts'
 import {
   nativeHealthHudPresentation,
+  nativeHudLeftOriginClipPath,
   nativeHudSkillBindings,
   nativeManaHudPresentation,
 } from './native-hud-presentation.ts'
+
+test('clips local vital fills from the right so health remains left anchored', () => {
+  assert.equal(nativeHudLeftOriginClipPath(1), 'inset(0 0% 0 0)')
+  assert.equal(nativeHudLeftOriginClipPath(0.25), 'inset(0 75% 0 0)')
+  assert.equal(nativeHudLeftOriginClipPath(0), 'inset(0 100% 0 0)')
+  assert.equal(nativeHudLeftOriginClipPath(-1), 'inset(0 100% 0 0)')
+  assert.equal(nativeHudLeftOriginClipPath(2), 'inset(0 0% 0 0)')
+})
 
 test('sizes default, upgraded, fractional, shrinking, and authored-maximum vital meters', () => {
   assert.deepEqual(nativeHealthHudPresentation(50, 50), {

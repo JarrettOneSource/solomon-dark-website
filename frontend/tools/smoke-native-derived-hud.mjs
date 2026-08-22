@@ -127,6 +127,11 @@ try {
   assert.equal(charmedHud.mana.right, 997.5)
   assert.equal(charmedHud.mana.width, 147.5)
 
+  setPlayerHealthRatio(host.state(), playerId, 0.5)
+  await waitForLocalHealthDamage(page)
+  const damagedHud = await measureHud(page)
+  assertLocalHealthRetractsFromRight(damagedHud)
+
   setVitalLayers(host.state(), playerId)
   await page.locator('.hub-hud-mana-reserve').waitFor({ timeout: 10_000 })
   await page.locator('.hub-hud-meter-shield').waitFor({ timeout: 10_000 })
@@ -174,13 +179,24 @@ try {
   const planewalkerHud = await measureHud(page)
   assert.equal(planewalkerHud.bindings[0].record, 107)
 
+  await page.getByRole('button', { name: 'Enter the Boneyard' }).click()
+  await page.locator('.boneyard-scene[data-renderer-state="ready"]').waitFor({
+    timeout: 90_000,
+  })
+  setPlayerHealthRatio(host.state(), playerId, 0.5)
+  await waitForLocalHealthDamage(page)
+  const boneyardDamagedHud = await measureHud(page)
+  assertLocalHealthRetractsFromRight(boneyardDamagedHud)
+
   await page.screenshot({ path: screenshotPath })
   assert.deepEqual(pageErrors, [])
   assert.deepEqual(consoleErrors, [])
   assert.deepEqual(networkErrors, [])
   process.stdout.write(`${JSON.stringify({
+    boneyardDamagedHud,
     charmedHud,
     consoleErrors,
+    damagedHud,
     defaultHud,
     layeredHud,
     networkErrors,
@@ -260,6 +276,27 @@ function setPlanewalker(state, playerId, active) {
   })
 }
 
+function setPlayerHealthRatio(state, playerId, ratio) {
+  const index = state.playerEntities.identities.findIndex(
+    ({ playerId: id }) => id === playerId,
+  )
+  assert.notEqual(index, -1)
+  const current = state.playerEntities.progressions[index]
+  assert.ok(current)
+  const progressions = [...state.playerEntities.progressions]
+  progressions[index] = {
+    ...current,
+    currentHealth: current.maximumHealth * ratio,
+  }
+  Object.assign(state, {
+    ...state,
+    playerEntities: {
+      ...state.playerEntities,
+      progressions,
+    },
+  })
+}
+
 function setVitalLayers(state, playerId) {
   const player = state.secondaryAbilities.players[playerId]
   assert.ok(player)
@@ -318,10 +355,36 @@ async function measureHud(page) {
       }
     }
     const shield = hud.querySelector('.hub-hud-meter-shield')
+    const healthFill = hud.querySelector(
+      '.hub-hud-meter-health .hub-hud-meter-fill:not(.hub-hud-meter-shield)',
+    )
+    if (!(healthFill instanceof HTMLElement)) throw new Error('Missing local health fill')
+    const healthFillBounds = healthFill.getBoundingClientRect()
+    const healthClip = getComputedStyle(healthFill).clipPath
+    const healthRightInset = /^inset\(0px ([\d.]+)% 0px 0px\)$/.exec(healthClip)
+    if (!healthRightInset) throw new Error(`Unexpected local health clip: ${healthClip}`)
+    const healthLabel = /^Health ([\d.]+) of ([\d.]+)$/.exec(
+      healthFill.getAttribute('alt') ?? '',
+    )
+    if (!healthLabel) throw new Error(`Unexpected local health label: ${healthFill.getAttribute('alt')}`)
+    const healthRightInsetPercent = Number(healthRightInset[1])
+    const healthVisibleWidth = healthFillBounds.width
+      * (1 - healthRightInsetPercent / 100)
     return {
       bindings,
       health: rect('.hub-hud-meter-health'),
-      healthCore: rect('.hub-hud-meter-health .hub-hud-meter-fill'),
+      healthClip,
+      healthCurrent: Number(healthLabel[1]),
+      healthCore: rect(
+        '.hub-hud-meter-health .hub-hud-meter-fill:not(.hub-hud-meter-shield)',
+      ),
+      healthMaximum: Number(healthLabel[2]),
+      healthRightInsetPercent,
+      healthVisible: {
+        left: healthFillBounds.left,
+        right: healthFillBounds.left + healthVisibleWidth,
+        width: healthVisibleWidth,
+      },
       mana: rect('.hub-hud-meter-mana'),
       manaCore: rect('.hub-hud-meter-mana .hub-hud-meter-fill'),
       reserve: optionalRect('.hub-hud-mana-reserve'),
@@ -329,4 +392,26 @@ async function measureHud(page) {
       shieldClip: shield instanceof HTMLElement ? getComputedStyle(shield).clipPath : null,
     }
   })
+}
+
+async function waitForLocalHealthDamage(page) {
+  await page.waitForFunction(() => {
+    const fill = document.querySelector(
+      '.hub-hud-meter-health .hub-hud-meter-fill:not(.hub-hud-meter-shield)',
+    )
+    return fill instanceof HTMLElement
+      && getComputedStyle(fill).clipPath !== 'inset(0px 0% 0px 0px)'
+  }, undefined, { timeout: 10_000 })
+}
+
+function assertLocalHealthRetractsFromRight(hud) {
+  const healthRatio = Math.min(1, Math.max(0, hud.healthCurrent / hud.healthMaximum))
+  const expectedVisibleWidth = hud.healthCore.width * healthRatio ** 2
+  assert.ok(hud.healthRightInsetPercent > 70 && hud.healthRightInsetPercent < 80)
+  assert.equal(hud.healthVisible.left, hud.healthCore.left)
+  assert.ok(Math.abs(hud.healthVisible.width - expectedVisibleWidth) < 0.001)
+  assert.ok(Math.abs(
+    hud.healthVisible.right - (hud.healthCore.left + expectedVisibleWidth)
+  ) < 0.001)
+  assert.ok(hud.healthVisible.right < hud.healthCore.right)
 }
