@@ -865,8 +865,8 @@ async function castEtherInBoneyard(page) {
   let flight = null
   let flightScreenshotPath = null
   if (etherFanAcceptance) {
-    await page.mouse.up({ button: 'left' })
     const launchFan = await waitForEtherFan(page, afterTick, 4, 10_000, 1)
+    await page.mouse.up({ button: 'left' })
     assertEtherFan(launchFan)
     const launchIds = launchFan.states.map(({ id }) => id)
     const spreadFan = await waitForEtherFan(
