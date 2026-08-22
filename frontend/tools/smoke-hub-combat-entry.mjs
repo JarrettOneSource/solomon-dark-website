@@ -94,7 +94,7 @@ try {
   const hubCanvas = page.locator('.hub-world-canvas[data-game-renderer="pixi-webgl"]')
   const hubBefore = await frameReceipt(hubCanvas, 'hub')
   assert.equal(hubBefore.playerHeadingIndex, 12)
-  assert.ok(hubBefore.orbSpriteCount >= 3)
+  assert.equal(hubBefore.orbSpriteCount, 3)
   await page.keyboard.down('d')
   await page.waitForTimeout(350)
   await page.keyboard.up('d')
@@ -103,7 +103,7 @@ try {
   ))
   const hubBackFacingOrb = await frameReceipt(hubCanvas, 'hub')
   assert.equal(hubBackFacingOrb.playerHeadingIndex, 6)
-  assert.ok(hubBackFacingOrb.orbSpriteCount > hubBefore.orbSpriteCount)
+  assert.equal(hubBackFacingOrb.orbSpriteCount, 6)
   await page.screenshot({ path: `${screenshotRoot}/solomon-hub-staff-orb-front.png` })
   const hubManaBefore = await localMana(page)
   const disabledSecondarySlots = await page.locator(
@@ -172,12 +172,30 @@ try {
   assert.ok(boneyardCast.primarySpellCount > 0)
   await page.screenshot({ path: `${screenshotRoot}/solomon-boneyard-staff-scale-final.png` })
 
+  await page.waitForTimeout(500)
+  const secondarySampleStart = await page.evaluate(() => window.__sdrHubCombatSamples.length)
+  await page.mouse.down({ button: 'right' })
+  await page.waitForTimeout(250)
+  await page.mouse.up({ button: 'right' })
+  const secondarySampleHandle = await page.waitForFunction(start => (
+    window.__sdrHubCombatSamples.slice(start).find(sample => (
+      sample.scene === 'boneyard'
+      && sample.playerAttachmentPose === 9
+    )) ?? null
+  ), secondarySampleStart, { timeout: 10_000 })
+  const boneyardSecondary = await secondarySampleHandle.jsonValue()
+  await secondarySampleHandle.dispose()
+  assert.equal(boneyardSecondary.orbSpriteCount, 3)
+  assert.equal(boneyardSecondary.playerWeaponScale, 1)
+  assert.ok(boneyardSecondary.secondaryAbilityCount > 0)
+
   assert.deepEqual(pageErrors, [])
   assert.deepEqual(consoleErrors, [])
   assert.deepEqual(failedResponses, [])
   process.stdout.write(`${JSON.stringify({
     admissionRequests,
     boneyardCast,
+    boneyardSecondary,
     browserVersion: browser.version(),
     consoleErrors,
     disabledSecondarySlots,
@@ -274,8 +292,10 @@ function installProbe({ endpointUrl: mappedEndpoint, publicEndpointUrl: publicEn
     const scene = boneyard ? 'boneyard' : hub ? 'hub' : null
     if (frame && scene) {
       const sample = {
+        orbSpriteCount: frame.orbSpriteCount ?? 0,
         playerAttachmentPose: frame.playerAttachmentPose,
         playerElementEffectScale: frame.playerElementEffectScale,
+        playerHeadingIndex: frame.playerHeadingIndex ?? null,
         playerWeaponScale: frame.playerWeaponScale,
         primarySpellCount: frame.primarySpellCount,
         scene,

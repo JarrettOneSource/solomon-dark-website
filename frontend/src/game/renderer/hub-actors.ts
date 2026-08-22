@@ -41,7 +41,6 @@ export class PlayerWorldView {
   readonly container = new Container({ label: 'local-player' })
   private readonly shadow: Sprite
   private readonly staffBack: Sprite
-  private readonly orbBackBase: NativeElementVfxView
   private readonly orbFrontBase: NativeElementVfxView
   private readonly orbFrontOverlay: NativeElementVfxView
   private readonly robe: Sprite
@@ -91,9 +90,6 @@ export class PlayerWorldView {
     this.shadow.scale.set(1.25)
     this.shadow.alpha = 0.72
     this.staffBack = actorSprite(playerTextures.staffBack[0][0], 1)
-    this.orbBackBase = new NativeElementVfxView(element, textures.elementVfx)
-    this.orbBackBase.container.label = 'native-element-vfx-back-base'
-    this.orbBackBase.container.zIndex = 2
     this.robe = actorSprite(playerTextures.robe[0][0], 3)
     this.robeSecondary = actorSprite(playerTextures.robe[0][0], 3)
     this.fixed = actorSprite(playerTextures.fixed[0][0], 4)
@@ -155,7 +151,6 @@ export class PlayerWorldView {
     this.container.addChild(
       this.shadow,
       this.staffBack,
-      this.orbBackBase.container,
       this.robe,
       this.robeSecondary,
       this.fixed,
@@ -233,9 +228,6 @@ export class PlayerWorldView {
     // all-transparent back or front cell from Clothes point-0 depth. Keeping
     // both passes live preserves every melee pose without duplicating pixels.
     this.staffBack.visible = !death.visible && hasWeapon
-    this.orbBackBase.container.visible = !death.visible
-      && hasStaff
-      && plan.orbPasses.backBase
     this.orbFrontBase.container.visible = !death.visible
       && hasStaff
       && plan.orbPasses.frontBase
@@ -314,7 +306,6 @@ export class PlayerWorldView {
     this.hitHeadSecondary.texture = this.headSecondary.texture
     this.hitHead.position.set(headOffset.x, headOffset.y)
     this.hitHeadSecondary.position.set(headOffset.x, headOffset.y)
-    this.orbBackBase.container.position.set(orbOffset.x, orbOffset.y)
     for (const orb of [this.orbFrontBase, this.orbFrontOverlay]) {
       orb.container.position.set(
         orbOffset.x + attachmentOffset.x,
@@ -325,7 +316,6 @@ export class PlayerWorldView {
       player.primaryCast.weaponPulse,
       player.lighting.overlayEffectPhase,
     )
-    this.orbBackBase.update(tick, this.currentElementEffectScale)
     this.orbFrontBase.update(tick, this.currentElementEffectScale)
     this.orbFrontOverlay.update(tick, this.currentElementEffectScale)
     this.applyMaterialTint()
@@ -406,7 +396,7 @@ export class PlayerWorldView {
   }
 
   get orbSpriteCount(): number {
-    return [this.orbBackBase, this.orbFrontBase, this.orbFrontOverlay]
+    return [this.orbFrontBase, this.orbFrontOverlay]
       .filter(({ container }) => container.visible)
       .reduce((count, orb) => (
         count + orb.sprites.filter((sprite) => sprite.visible).length
@@ -414,7 +404,7 @@ export class PlayerWorldView {
   }
 
   destroy(): void {
-    for (const orb of [this.orbBackBase, this.orbFrontBase, this.orbFrontOverlay]) {
+    for (const orb of [this.orbFrontBase, this.orbFrontOverlay]) {
       this.container.removeChild(orb.container)
       orb.destroy()
     }

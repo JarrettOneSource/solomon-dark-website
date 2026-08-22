@@ -52,7 +52,6 @@ export interface PlayerCharacterDrawPlan {
 }
 
 export interface PlayerStaffOrbPasses {
-  readonly backBase: boolean
   readonly frontBase: boolean
   readonly frontOverlay: boolean
 }
@@ -330,13 +329,13 @@ export function playerCharacterStaffOrbPasses(
   elementEffectPhase: number,
 ): PlayerStaffOrbPasses {
   const headingDegrees = normalizedIndex(headingIndex, 24) * 15
-  const backBase = headingDegrees <= 90 || headingDegrees > 270
-  const frontBase = headingDegrees >= 90 && headingDegrees <= 270
+  const backAngle = headingDegrees <= 90 || headingDegrees > 270
   return {
-    backBase,
-    frontBase,
+    frontBase: attachmentPose !== 9
+      && headingDegrees >= 90
+      && headingDegrees <= 270,
     frontOverlay: attachmentPose === 9
-      || backBase
+      || backAngle
       || elementEffectPhase > NATIVE_PLAYER_ELEMENT_EFFECT_FRONT_PULSE_THRESHOLD,
   }
 }

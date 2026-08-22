@@ -264,7 +264,6 @@ test('player character draw plan preserves native attachment and gait transforms
   assert.equal(plan.moving, true)
   assert.equal(plan.staffFront, true)
   assert.deepEqual(plan.orbPasses, {
-    backBase: true,
     frontBase: true,
     frontOverlay: true,
   })
@@ -282,35 +281,31 @@ test('player character draw plan preserves native attachment and gait transforms
   assert.equal(playerEquippedElementEffectScale(0, 0.225), 3.25)
   assert.equal(playerEquippedElementEffectScale(0.15, 0.135), 2.5)
   assert.doesNotMatch(playerWorldView, /staff(?:Back|Front)\.scale\.set/)
+  assert.doesNotMatch(playerWorldView, /orbBackBase/)
   assert.match(
     playerWorldView,
-    /playerEquippedElementEffectScale\([\s\S]*player\.primaryCast\.weaponPulse,[\s\S]*player\.lighting\.overlayEffectPhase,[\s\S]*this\.orbBackBase\.update\(tick, this\.currentElementEffectScale\)[\s\S]*this\.orbFrontBase\.update\(tick, this\.currentElementEffectScale\)[\s\S]*this\.orbFrontOverlay\.update\(tick, this\.currentElementEffectScale\)/,
+    /playerEquippedElementEffectScale\([\s\S]*player\.primaryCast\.weaponPulse,[\s\S]*player\.lighting\.overlayEffectPhase,[\s\S]*this\.orbFrontBase\.update\(tick, this\.currentElementEffectScale\)[\s\S]*this\.orbFrontOverlay\.update\(tick, this\.currentElementEffectScale\)/,
   )
 })
 
-test('Staff element effects preserve the native front copy across every heading and pose', () => {
+test('Staff element effects preserve exact native call membership across every heading and pose', () => {
   assert.deepEqual(playerCharacterStaffOrbPasses(0, 0, 0), {
-    backBase: true,
     frontBase: false,
     frontOverlay: true,
   })
   assert.deepEqual(playerCharacterStaffOrbPasses(6, 0, 0), {
-    backBase: true,
     frontBase: true,
     frontOverlay: true,
   })
   assert.deepEqual(playerCharacterStaffOrbPasses(7, 0, 0), {
-    backBase: false,
     frontBase: true,
     frontOverlay: false,
   })
   assert.deepEqual(playerCharacterStaffOrbPasses(18, 0, 0), {
-    backBase: false,
     frontBase: true,
     frontOverlay: false,
   })
   assert.deepEqual(playerCharacterStaffOrbPasses(19, 0, 0), {
-    backBase: true,
     frontBase: false,
     frontOverlay: true,
   })
@@ -320,16 +315,37 @@ test('Staff element effects preserve the native front copy across every heading 
     0,
     0.10000000149011612 + Number.EPSILON,
   ).frontOverlay, true)
-  assert.equal(playerCharacterStaffOrbPasses(7, 9, 0).frontOverlay, true)
+  assert.deepEqual(playerCharacterStaffOrbPasses(7, 9, 0), {
+    frontBase: false,
+    frontOverlay: true,
+  })
+  assert.deepEqual(playerCharacterStaffOrbPasses(7, 9, 0.45), {
+    frontBase: false,
+    frontOverlay: true,
+  })
 
   for (let heading = 0; heading < 24; heading += 1) {
     for (let pose = 0; pose <= 9; pose += 1) {
-      const passes = playerCharacterStaffOrbPasses(
-        heading,
-        pose as Parameters<typeof playerCharacterStaffOrbPasses>[1],
-        0,
-      )
-      assert.equal(passes.frontBase || passes.frontOverlay, true, `${heading}:${pose}`)
+      for (const phase of [0, 0.10000000149011612, 0.10000000149011634, 0.45]) {
+        const passes = playerCharacterStaffOrbPasses(
+          heading,
+          pose as Parameters<typeof playerCharacterStaffOrbPasses>[1],
+          phase,
+        )
+        const frontAngle = heading >= 6 && heading <= 18
+        const backAngle = heading <= 6 || heading > 18
+        const expectedCopies = pose === 9
+          ? 1
+          : Number(frontAngle) + Number(
+              phase > 0.10000000149011612 || backAngle,
+            )
+        assert.equal('backBase' in passes, false, `${heading}:${pose}:${phase}`)
+        assert.equal(
+          Object.values(passes).filter(Boolean).length,
+          expectedCopies,
+          `${heading}:${pose}:${phase}`,
+        )
+      }
     }
   }
 })

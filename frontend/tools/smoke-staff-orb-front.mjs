@@ -48,7 +48,9 @@ try {
     unlockBoneyardCombat(host),
   ])
   assert.equal(receipt.status, 'ok')
-  assert.ok(receipt.hubBackFacingOrb.orbSpriteCount > receipt.hubBefore.orbSpriteCount)
+  assert.equal(receipt.hubBefore.orbSpriteCount, 3)
+  assert.equal(receipt.hubBackFacingOrb.orbSpriteCount, 6)
+  assert.equal(receipt.boneyardSecondary.orbSpriteCount, 3)
   process.stdout.write(`${JSON.stringify({ receipt, screenshotRoot, status: 'ok' })}\n`)
 } finally {
   await Promise.all([host.close(), frontend.close()])

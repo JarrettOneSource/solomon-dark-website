@@ -298,6 +298,7 @@ interface BoneyardRendererFrameDiagnostics {
   minTreeAlpha: number
   minTreeLightScalar: number
   monumentVisibleCount: number
+  orbSpriteCount: number
   painterBandCount: number
   playerAttachmentPose: number
   playerCount: number
@@ -678,6 +679,7 @@ export async function createBoneyardWorldRenderer(
     minTreeAlpha: 1,
     minTreeLightScalar: 0,
     monumentVisibleCount: 0,
+    orbSpriteCount: 0,
     painterBandCount: 0,
     playerAttachmentPose: 0,
     playerCount: 0,
@@ -1063,6 +1065,7 @@ export async function createBoneyardWorldRenderer(
       const playerView = scene.player(options.playerId)
       frameDiagnostics.playerAttachmentPose = playerView?.attachmentPose ?? 0
       frameDiagnostics.playerElementEffectScale = playerView?.elementEffectScale ?? 1
+      frameDiagnostics.orbSpriteCount = playerView?.orbSpriteCount ?? 0
       frameDiagnostics.playerWeaponScale = playerView?.weaponScale ?? 1
       const deathFrame = playerView?.deathFrame ?? null
       frameDiagnostics.playerDeathColorLayerCount = playerView?.deathColorLayerCount ?? 0
