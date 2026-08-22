@@ -140,10 +140,12 @@ async function openBoneyardCombat(host) {
   assert.equal(combatState.world.kind, 'boneyard')
   const combatBounds = combatState.world.arenaTransition?.combatBounds
   assert.ok(combatBounds, 'Ether tracking proof requires sealed arena bounds')
-  setHostPlayerPosition(host, playerIndex, {
+  const playerPosition = {
     x: combatBounds.x + combatBounds.w * 0.5,
     y: combatBounds.y + combatBounds.h * 0.5,
-  })
+  }
+  setHostPlayerPosition(host, playerIndex, playerPosition)
+  arrangeFanTargets(host, combatBounds, playerPosition)
   return {
     enemyCount: combatState.world.enemies.actors.filter(({ lifeState }) => (
       lifeState === 'alive'
@@ -157,10 +159,32 @@ async function openBoneyardCombat(host) {
 async function captureEtherFan(host) {
   const deadline = Date.now() + 180_000
   let fan = null
+  let maximumMissileCount = 0
+  let lastDiagnostics = null
   while (Date.now() < deadline && fan === null) {
     const state = host.state()
-    const missiles = state.primarySpells.projectiles
+    const allMissiles = state.primarySpells.projectiles
       .filter((candidate) => candidate.kind === 'ether')
+    maximumMissileCount = Math.max(maximumMissileCount, allMissiles.length)
+    const playerId = host.hostPlayerId()
+    const playerIndex = state.playerEntities.identities.findIndex(({ playerId: id }) => (
+      id === playerId
+    ))
+    const book = state.playerEntities.skillBooks[playerIndex]
+    const primaryCast = state.playerEntities.primaryCasts[playerIndex]
+    lastDiagnostics = {
+      actionTick: primaryCast?.actionTick ?? null,
+      castSequence: primaryCast?.castSequence ?? null,
+      currentMana: state.playerEntities.progressions[playerIndex]?.currentMana ?? null,
+      emissionSequence: primaryCast?.emissionSequence ?? null,
+      maximumMissileCount,
+      moreMissilesRank: book?.effectiveRanks[10] ?? null,
+      permanentMoreMissilesRank: book?.permanentRanks[10] ?? null,
+      smartMissilesRank: book?.effectiveRanks[9] ?? null,
+      tick: state.tick,
+      world: state.world.kind,
+    }
+    const missiles = allMissiles
       .sort((left, right) => left.id - right.id)
       .slice(-4)
     if (
@@ -169,11 +193,7 @@ async function captureEtherFan(host) {
         index === 0 || missile.id === missiles[index - 1].id + 1
       ))
     ) {
-      const playerId = host.hostPlayerId()
-      const playerIndex = state.playerEntities.identities.findIndex(({ playerId: id }) => (
-        id === playerId
-      ))
-      const aim = state.playerEntities.characters[playerIndex].primaryCast.aimDirection
+      const aim = state.playerEntities.primaryCasts[playerIndex].aimDirection
       const aimHeading = headingFromDirection(aim)
       const expectedOffsets = [10, -10, 30, -30]
       const expectedTurns = [2.2, 1.65, 1.65, 1.2375]
@@ -207,7 +227,10 @@ async function captureEtherFan(host) {
     }
     await new Promise((resolve) => setTimeout(resolve, 1))
   }
-  assert.ok(fan, 'expected one authoritative four-child Ether fan')
+  assert.ok(
+    fan,
+    `expected one authoritative four-child Ether fan: ${JSON.stringify(lastDiagnostics)}`,
+  )
   return { fan, tracking: await captureEtherTracking(host) }
 }
 
@@ -232,6 +255,7 @@ async function captureEtherTracking(host) {
           targetId: projectile.targetId,
           tick: host.state().tick,
           turnAccumulator: projectile.turnAccumulator,
+          turnInput: projectile.turnInput,
           velocity: { ...projectile.velocity },
         })
       }
@@ -257,7 +281,9 @@ function assertEtherTrackingSamples(samples) {
     let expectedAccumulator = previous.turnAccumulator
     let maximumTurn = 0
     for (let tick = 0; tick < elapsedFlightTicks; tick += 1) {
-      maximumTurn += Math.abs(Math.fround(2 * Math.fround(expectedAccumulator)))
+      maximumTurn += Math.abs(Math.fround(
+        previous.turnInput * Math.fround(expectedAccumulator),
+      ))
       const accumulatorStep = expectedAccumulator > 1
         ? 0.0020000000949949026
         : 0.05000000074505806
@@ -295,6 +321,7 @@ function assertEtherTrackingSamples(samples) {
       targetId: sample.targetId,
       tick: sample.tick,
       turnAccumulator: sample.turnAccumulator,
+      turnInput: sample.turnInput,
     })),
   }
 }
@@ -355,6 +382,28 @@ function setHostPlayerPosition(host, index, position) {
     playerEntities: {
       ...state.playerEntities,
       locomotions: Object.freeze(locomotions),
+    },
+  })
+}
+
+function arrangeFanTargets(host, bounds, playerPosition) {
+  const state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
+  const minimumX = bounds.x + 80
+  const maximumX = bounds.x + bounds.w - 80
+  const minimumY = bounds.y + 80
+  const maximumY = bounds.y + bounds.h - 80
+  const actors = state.world.enemies.actors.map((actor, index) => ({
+    ...actor,
+    position: {
+      x: Math.max(minimumX, Math.min(maximumX, playerPosition.x + 180 + (index % 5) * 35)),
+      y: Math.max(minimumY, Math.min(maximumY, playerPosition.y - 220 + Math.floor(index / 5) * 45)),
+    },
+  }))
+  Object.assign(state, {
+    world: {
+      ...state.world,
+      enemies: { ...state.world.enemies, actors: Object.freeze(actors) },
     },
   })
 }

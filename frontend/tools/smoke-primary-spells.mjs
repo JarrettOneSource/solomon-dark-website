@@ -794,15 +794,7 @@ async function castFireInBoneyard(page) {
   const launch = await waitForAudio(page, eventStart, '/game/audio/sfx/throw-fire.wav', 'play')
   let flight = null
   let flightScreenshotPath = null
-  if (etherFanAcceptance) {
-    flight = await waitForEtherFan(page, afterTick, 4, 10_000)
-    assertEtherFan(flight)
-    const rendered = await waitForBoneyardSpell(page, 'ether')
-    assert.ok(rendered.primarySpellCount >= 4)
-    flight = { ...flight, renderedPrimarySpellCount: rendered.primarySpellCount }
-    flightScreenshotPath = `${screenshotRoot}/solomon-primary-ether-boneyard-fan-flight.png`
-    await page.screenshot({ path: flightScreenshotPath })
-  } else if (lowManaAcceptance) {
+  if (lowManaAcceptance) {
     const fizzle = await waitForAudio(page, eventStart, '/game/audio/sfx/fizzle.wav', 'play')
     assert.ok(fizzle.at <= launch.at)
     assert.equal(fizzle.volume, 1)
@@ -872,7 +864,25 @@ async function castEtherInBoneyard(page) {
   )
   let flight = null
   let flightScreenshotPath = null
-  if (lowManaAcceptance) {
+  if (etherFanAcceptance) {
+    const launchFan = await waitForEtherFan(page, afterTick, 4, 10_000, 1)
+    assertEtherFan(launchFan)
+    const spreadFan = await waitForEtherFan(page, afterTick, 4, 10_000, 25)
+    assert.deepEqual(
+      spreadFan.states.map(({ id }) => id),
+      launchFan.states.map(({ id }) => id),
+    )
+    const rendered = await waitForBoneyardSpell(page, 'ether')
+    assert.ok(rendered.primarySpellCount >= 4)
+    flight = {
+      ...launchFan,
+      renderedPrimarySpellCount: rendered.primarySpellCount,
+      spreadStates: spreadFan.states,
+      spreadTick: spreadFan.tick,
+    }
+    flightScreenshotPath = `${screenshotRoot}/solomon-primary-ether-boneyard-fan-flight.png`
+    await page.screenshot({ path: flightScreenshotPath })
+  } else if (lowManaAcceptance) {
     const fizzle = await waitForAudio(page, eventStart, '/game/audio/sfx/fizzle.wav', 'play')
     assert.ok(fizzle.at <= launch.at)
     assert.equal(fizzle.volume, 1)
@@ -1570,8 +1580,12 @@ async function waitForWireSpell(page, kind, afterTick, timeout, projectileOnly =
   return result
 }
 
-async function waitForEtherFan(page, afterTick, quantity, timeout) {
-  const handle = await page.waitForFunction(([minimumTick, expectedQuantity]) => {
+async function waitForEtherFan(page, afterTick, quantity, timeout, minimumFlightTicks) {
+  const handle = await page.waitForFunction(([
+    minimumTick,
+    expectedQuantity,
+    minimumFlight,
+  ]) => {
     for (let index = window.__primarySpellWireFrames.length - 1; index >= 0; index -= 1) {
       const wire = window.__primarySpellWireFrames[index]
       if (wire.tick <= minimumTick) continue
@@ -1580,6 +1594,7 @@ async function waitForEtherFan(page, afterTick, quantity, timeout) {
         .sort((left, right) => left.id - right.id)
         .slice(-expectedQuantity)
       if (states.length !== expectedQuantity) continue
+      if (states.some(({ flightTicks }) => flightTicks < minimumFlight)) continue
       if (states.some((state, stateIndex) => (
         stateIndex > 0 && state.id !== states[stateIndex - 1].id + 1
       ))) continue
@@ -1592,7 +1607,7 @@ async function waitForEtherFan(page, afterTick, quantity, timeout) {
       }
     }
     return null
-  }, [afterTick, quantity], { timeout })
+  }, [afterTick, quantity, minimumFlightTicks], { timeout })
   const result = await handle.jsonValue()
   await handle.dispose()
   return result
@@ -1610,9 +1625,19 @@ function assertEtherFan(fan) {
     assert.ok(Math.abs(state.speed - Math.fround(3.3)) < 0.000_001)
     assert.ok(Math.abs(state.turnInput - Math.fround(expectedTurns[index])) < 0.000_001)
     const expectedHeading = normalizeDegrees(aimHeading + expectedOffsets[index])
-    const firstTurnBound = state.turnInput * 0.01 + 0.001
+    let turnAccumulator = 0.01
+    let cumulativeTurnBound = 0.001
+    for (let tick = 0; tick < state.flightTicks; tick += 1) {
+      cumulativeTurnBound += Math.abs(Math.fround(state.turnInput * turnAccumulator))
+      turnAccumulator = Math.min(
+        10,
+        Math.fround(turnAccumulator + (
+          turnAccumulator > 1 ? 0.0020000000949949026 : 0.05000000074505806
+        )),
+      )
+    }
     assert.ok(
-      Math.abs(signedDegrees(state.headingDegrees - expectedHeading)) <= firstTurnBound,
+      Math.abs(signedDegrees(state.headingDegrees - expectedHeading)) <= cumulativeTurnBound,
       `Ether fan child ${index} left its native launch tier`,
     )
   }
@@ -1627,6 +1652,10 @@ function headingFromDirection(direction) {
 
 function normalizeDegrees(value) {
   return ((value % 360) + 360) % 360
+}
+
+function signedDegrees(value) {
+  return ((value + 540) % 360) - 180
 }
 
 async function waitForHeldEarthCharge(page, boulderId, worldKey, minimumCharge, timeout) {
