@@ -695,6 +695,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         const activeState = stateForPlayer(client.playerId)
         const activePause = gameplayPauseForPlayer(client.playerId)
         if (message.paused) {
+          if (message.source === 'pause-menu' && activeState.world.kind === 'hub') return
           if (activePause?.ownerPlayerId === client.playerId) {
             if (activePause.source === message.source) return
             setGameplayPauseForPlayer(client.playerId, {

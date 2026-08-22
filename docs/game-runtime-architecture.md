@@ -189,13 +189,17 @@ dependencies without revisiting this release invariant.
   resolves strict pickup order, and emits semantic audio/text edges. Currency,
   resources, inventory, and Bonus state are committed at the session-owned
   player-entity boundary after that one accepted pickup.
-- Gameplay Pause Menu state is world-instance-owned rather than client-local.
-  The ESC menu, player Inventory, and Skill Book share one source-qualified
-  first-request barrier. A shared-Hub pause freezes every Hub resident while
-  party Boneyard instances keep ticking; a party-run pause freezes every party
-  member without pausing the shared Hub or another run. A pause owner closes
-  its matching modal or disconnects to release only that world-instance
-  barrier. Resumption never turns elapsed pause time into catch-up simulation.
+- Active-Boneyard Pause Menu state is world-instance-owned. The Boneyard ESC
+  menu, player Inventory, and Skill Book use one source-qualified first-request
+  barrier; a party-run hold freezes every party member without pausing the
+  shared Hub or another run. In the continuously live Hub, the ESC menu and NPC
+  dialogue/service surfaces are participant-local presentation owners: they
+  block that participant's input but keep Hub simulation and rendering live,
+  and the client and host both reject a Hub `pause-menu` network request. Hub
+  Inventory and Skill Book retain their separately requested shared-Hub book
+  barrier. An authoritative pause owner closes its matching modal or
+  disconnects to release only that world-instance barrier. Resumption never
+  turns elapsed pause time into catch-up simulation.
 - The shared player input record carries normalized movement, a nullable world
   aim point, and independent primary/secondary held levels. Browser mouse edges
   publish immediately; the authoritative queue preserves each level transition

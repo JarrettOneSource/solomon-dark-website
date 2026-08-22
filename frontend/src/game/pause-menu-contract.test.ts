@@ -44,6 +44,9 @@ const PAUSE = {
 const pauseCss = readFileSync(new URL('./gameplay-pause-menu.css', import.meta.url), 'utf8')
 const pauseComponent = readFileSync(new URL('./GameplayPauseMenu.tsx', import.meta.url), 'utf8')
 const settingsComponent = readFileSync(new URL('./GameSettingsDialog.tsx', import.meta.url), 'utf8')
+const mainMenuComponent = readFileSync(new URL('./MainMenuScene.tsx', import.meta.url), 'utf8')
+const hubComponent = readFileSync(new URL('./HubScene.tsx', import.meta.url), 'utf8')
+const hubInventoryComponent = readFileSync(new URL('./HubInventoryUi.tsx', import.meta.url), 'utf8')
 
 test('pause menu keeps the recovered native fixed-step timing and action geometry', () => {
   assert.equal(NATIVE_PAUSE_REVEAL_MS, 290)
@@ -223,6 +226,22 @@ test('pause presentation gives actions only to the authoritative owner', () => {
     kind: 'waiting',
     label: 'Helvidius is using the Skill Book.',
   })
+})
+
+test('Hub Pause Menu and NPC dialogue are local modals over a live world', () => {
+  assert.match(
+    mainMenuComponent,
+    /const \[hubPauseMenuOpen, setHubPauseMenuOpen\] = useState\(false\)/,
+  )
+  assert.match(
+    mainMenuComponent,
+    /runtimeSnapshot\?\.world\.kind === 'hub'[\s\S]*setHubPauseMenuOpen\(true\)[\s\S]*return/,
+  )
+  assert.match(mainMenuComponent, /const displayedGameplayPause = gameplayPause \?\? localHubPause/)
+  assert.match(mainMenuComponent, /presentationPaused=\{gameplayPause !== null\}/)
+  assert.match(hubComponent, /inputRef\.current\?\.setBlocked\(inputBlocked \|\| modalOpen\)/)
+  assert.match(hubComponent, /data-hub-ui-surface=\{hubUiSurface\?\.kind \?\? 'none'\}/)
+  assert.doesNotMatch(hubInventoryComponent, /requestGameplayPause|client-gameplay-pause/)
 })
 
 test('native Game Settings exposes learned primary and concentration selectors', () => {

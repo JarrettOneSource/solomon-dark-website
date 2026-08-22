@@ -558,6 +558,37 @@ test('Hub pause is first-request owned, survives late join, and releases on owne
   await waitFor(() => host.state().tick > heldTick)
 })
 
+test('Hub Pause Menu intent stays local and cannot suspend the authoritative world', async (context) => {
+  const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
+  context.after(() => host.close())
+  const first = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
+  const second = await join(host.address.url, 'test-secret', SECOND_CHARACTER)
+  context.after(() => first.socket.close())
+  context.after(() => second.socket.close())
+
+  const pauseMessages: ServerGameMessage[] = []
+  const observePause = (data: WebSocket.RawData) => {
+    const message = decodeServerGameMessage(data.toString())
+    if (message.type === 'server-gameplay-pause') pauseMessages.push(message)
+  }
+  first.socket.on('message', observePause)
+  second.socket.on('message', observePause)
+  context.after(() => {
+    first.socket.off('message', observePause)
+    second.socket.off('message', observePause)
+  })
+
+  const initialTick = host.state().tick
+  first.socket.send(encodeGameMessage({
+    type: 'client-gameplay-pause',
+    paused: true,
+    source: 'pause-menu',
+  }))
+  await waitFor(() => host.state().tick >= initialTick + 5)
+
+  assert.deepEqual(pauseMessages, [])
+})
+
 test('Boneyard pause holds the complete world and only its owner can resume', async (context) => {
   const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
   context.after(() => host.close())

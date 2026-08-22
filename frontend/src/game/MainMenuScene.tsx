@@ -299,6 +299,7 @@ export default function MainMenuScene({
   const [runtimeAudioScene, setRuntimeAudioScene] = useState<GameAudioScene | null>(null)
   const [loadedBoneyard, setLoadedBoneyard] = useState<LoadedBoneyard | null>(null)
   const [gameplayPause, setGameplayPause] = useState<GameplayPauseState | null>(null)
+  const [hubPauseMenuOpen, setHubPauseMenuOpen] = useState(false)
   const [partyState, setPartyState] = useState<LocalPartyState | null>(null)
   const [whisperRequest, setWhisperRequest] = useState<GameChatWhisperRequest | null>(null)
   const [chatOpen, setChatOpen] = useState(false)
@@ -405,8 +406,9 @@ export default function MainMenuScene({
   }, [audio, gameSettings.musicVolumePercent, gameSettings.soundVolumePercent])
 
   useEffect(() => {
-    if (!gameplayPause) setGameplaySettingsOpen(false)
-  }, [gameplayPause])
+    if (gameplayPause) setHubPauseMenuOpen(false)
+    else if (!hubPauseMenuOpen) setGameplaySettingsOpen(false)
+  }, [gameplayPause, hubPauseMenuOpen])
 
   const updateGameSettings = useCallback((settings: GameSettings) => {
     setLocalGameSettings(setGameSettings(settings))
@@ -545,6 +547,10 @@ export default function MainMenuScene({
     if (runtimeSnapshot?.world.kind === 'boneyard') void loadSkillPicker()
   }, [runtimeSnapshot?.world.kind])
 
+  useEffect(() => {
+    if (runtimeSnapshot?.world.kind !== 'hub') setHubPauseMenuOpen(false)
+  }, [runtimeSnapshot?.world.kind])
+
   const runtimeConnected = runtimeSnapshot !== null
   useEffect(() => {
     if (runtimeConnected) void loadSkillBook()
@@ -656,6 +662,7 @@ export default function MainMenuScene({
     )
     setLoadedBoneyard(nextSession.getBoneyard())
     setGameplayPause(nextSession.getGameplayPause())
+    setHubPauseMenuOpen(false)
     if (snapshot.world.kind === 'hub') advanceLoading('materializing_participants')
     setScreen('hub')
   }
@@ -743,8 +750,23 @@ export default function MainMenuScene({
   }
 
   const requestGameplayPause = useCallback(() => {
+    if (runtimeSnapshot?.world.kind === 'hub') {
+      setHubPauseMenuOpen(true)
+      return
+    }
     session?.requestGameplayPause('pause-menu')
-  }, [session])
+  }, [runtimeSnapshot?.world.kind, session])
+
+  const localHubPause: GameplayPauseState | null = hubPauseMenuOpen
+    && session
+    && runtimeSnapshot?.world.kind === 'hub'
+    ? {
+        ownerDisplayName: runtimeSnapshot.players[session.playerId]!.config.displayName,
+        ownerPlayerId: session.playerId,
+        source: 'pause-menu',
+      }
+    : null
+  const displayedGameplayPause = gameplayPause ?? localHubPause
 
   const leaveGameplay = () => {
     session?.destroy()
@@ -754,6 +776,7 @@ export default function MainMenuScene({
     setRuntimeAudioScene(null)
     setLoadedBoneyard(null)
     setGameplayPause(null)
+    setHubPauseMenuOpen(false)
     setPartyState(null)
     setWhisperRequest(null)
     setChatOpen(false)
@@ -783,11 +806,13 @@ export default function MainMenuScene({
     || levelUpModalActive
     || skillBookOpen
     || inventoryScreenOpen
+    || hubPauseMenuOpen
     || gameplayPause !== null
   const sceneInputBlocked = chatOpen
     || loading !== null
     || levelUpModalActive
     || skillBookOpen
+    || hubPauseMenuOpen
     || (gameplayPause !== null && !ownsActiveInventoryPause)
   const desiredBookPauseSource: GameplayPauseSource | null = skillBookOpen
     ? 'skill-book'
@@ -799,11 +824,12 @@ export default function MainMenuScene({
       !session
       || loading !== null
       || levelUpModalActive
+      || hubPauseMenuOpen
       || (gameplayPause !== null && !ownsBookPause)
       || (runtimeRunPhase !== 'hub' && runtimeRunPhase !== 'active')
     ) return
     setSkillBookOpen(true)
-  }, [gameplayPause, levelUpModalActive, loading, ownsBookPause, runtimeRunPhase, session])
+  }, [gameplayPause, hubPauseMenuOpen, levelUpModalActive, loading, ownsBookPause, runtimeRunPhase, session])
 
   useEffect(() => {
     if (
@@ -1101,34 +1127,38 @@ export default function MainMenuScene({
           ) : null}
 
         {session
-          && gameplayPause
+          && displayedGameplayPause
           && !gameplaySettingsOpen
           && (
-            gameplayPause.source === 'pause-menu'
-            || gameplayPause.ownerPlayerId !== session.playerId
+            displayedGameplayPause.source === 'pause-menu'
+            || displayedGameplayPause.ownerPlayerId !== session.playerId
           ) ? (
           <GameplayPauseMenu
             audio={audio}
             onSelect={(action) => {
               if (action === 'leave') leaveGameplay()
               else if (action === 'settings') setGameplaySettingsOpen(true)
-              else if (action === 'resume') session.requestGameplayPause(null)
+              else if (action === 'resume') {
+                if (localHubPause) setHubPauseMenuOpen(false)
+                else session.requestGameplayPause(null)
+              }
             }}
-            pause={gameplayPause}
+            pause={displayedGameplayPause}
             playerId={session.playerId}
             style={nativeStageStyle}
           />
         ) : null}
 
         {session
-          && gameplayPause?.ownerPlayerId === session.playerId
+          && displayedGameplayPause?.ownerPlayerId === session.playerId
           && gameplaySettingsOpen ? (
             <GameSettingsDialog
               context="gameplay"
               onChange={updateGameSettings}
               onClose={() => {
                 setGameplaySettingsOpen(false)
-                session.requestGameplayPause(null)
+                if (localHubPause) setHubPauseMenuOpen(false)
+                else session.requestGameplayPause(null)
               }}
               onSelectConcentration={session.selectConcentration}
               onSelectPrimarySkill={session.selectPrimarySkill}

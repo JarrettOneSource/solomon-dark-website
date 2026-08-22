@@ -336,7 +336,7 @@ test('client carries character config, publishes authority, and tears down', asy
   assert.equal(receivedChat.length, 1)
 })
 
-test('client projects authoritative gameplay pause and blocks input until release', async () => {
+test('client projects authoritative gameplay pause and blocks input until release', async (context) => {
   const transport = new MemoryTransport()
   const connecting = connectGameClientSession({
     character: CHARACTER,
@@ -349,7 +349,12 @@ test('client projects authoritative gameplay pause and blocks input until releas
     createGameSnapshot(createGameSimulation({ 'player-1': CHARACTER }), 'player-1'),
   )
   const session = await connecting
+  context.after(() => session.destroy())
   assert.equal(session.getGameplayPause(), null)
+
+  const messageCountBeforeHubMenu = transport.sent.length
+  session.requestGameplayPause('pause-menu')
+  assert.equal(transport.sent.length, messageCountBeforeHubMenu)
 
   session.requestGameplayPause('inventory')
   assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
@@ -380,7 +385,6 @@ test('client projects authoritative gameplay pause and blocks input until releas
   assert.equal(decodeClientGameMessage(transport.sent.at(-1)!).type, 'client-input')
 
   removePause()
-  session.destroy()
 })
 
 test('client replaces only its own modal pause source and emits a strict release', async () => {

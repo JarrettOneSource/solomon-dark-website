@@ -744,6 +744,7 @@ export function connectGameClientSession(
       requestGameplayPause(source) {
         if (!welcome || !snapshot || destroyed) return
         if (source !== null) {
+          if (source === 'pause-menu' && snapshot.world.kind === 'hub') return
           if (
             snapshot.levelUpBarrier !== null
             || (snapshot.run.phase !== 'hub' && snapshot.run.phase !== 'active')

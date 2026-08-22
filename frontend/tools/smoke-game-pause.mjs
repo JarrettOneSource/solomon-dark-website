@@ -16,6 +16,7 @@ import {
   playerSkillRuntimeAt,
   replacePlayerEconomy,
 } from '../src/game/core-server/player-entity-store.ts'
+import { HUB_TRADER_GEOMETRY } from '../src/game/hub-inventory-presentation.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 import {
   GAME_PROTOCOL_VERSION,
@@ -35,8 +36,8 @@ const screenshots = {
     || '/tmp/solomon-dark-pause-inventory-owner.png',
   skillSettings: process.env.SDR_GAME_SKILL_SETTINGS_SCREENSHOT
     || '/tmp/solomon-dark-pause-skill-settings.png',
-  hubWaiting: process.env.SDR_GAME_PAUSE_WAITING_SCREENSHOT
-    || '/tmp/solomon-dark-pause-hub-waiting.png',
+  hubDialogue: process.env.SDR_GAME_PAUSE_HUB_DIALOGUE_SCREENSHOT
+    || '/tmp/solomon-dark-pause-hub-dialogue-live.png',
   largeHubInventory: process.env.SDR_GAME_PAUSE_LARGE_INVENTORY_SCREENSHOT
     || '/tmp/solomon-dark-large-hub-inventory.png',
   largeHubPause: process.env.SDR_GAME_PAUSE_LARGE_SCREENSHOT
@@ -142,7 +143,6 @@ try {
   )
   await largeHubPause.waitFor()
   await page.waitForTimeout(350)
-  const largeHubHeld = simulationReceipt()
   await assertFixedUiGeometry(
     page,
     largeHubPause,
@@ -153,14 +153,14 @@ try {
     await largeHubPause.locator('.gameplay-pause-dim').boundingBox(),
     { height: 1200, width: 1920, x: 0, y: 0 },
   )
+  await assertLiveHub(page, 'large Hub Pause Menu')
   await page.screenshot({ path: screenshots.largeHubPause })
   await largeHubPause.dispatchEvent('keydown', { key: 'Escape', repeat: true })
   await largeHubPause.dispatchEvent('keydown', { altKey: true, key: 'Escape' })
   assert.equal(await largeHubPause.count(), 1)
-  const largeHubResumeStartedAt = performance.now()
   await page.keyboard.press('Escape')
   await largeHubPause.waitFor({ state: 'detached' })
-  assertNoCatchUp(largeHubHeld.tick, largeHubResumeStartedAt, 'large Hub Escape resume')
+  await assertLiveHub(page, 'large Hub Pause Menu close', 100)
   await page.setViewportSize({ height: 900, width: 1600 })
   await page.waitForFunction(() => (
     document.querySelector('.hub-scene')?.getAttribute('data-viewport-width') === '1600'
@@ -219,22 +219,22 @@ try {
   assert.deepEqual(modalPauseEdges, ['inventory', 'skill-book', null])
   await assertNormalResumeRate(page)
 
-  const peerSawOwnerPause = nextRawMessage(peer.socket, (message) => (
-    message.type === 'server-gameplay-pause' && message.pause !== null
-  ))
+  const hubPauseEdges = []
+  const observeHubPause = (data) => {
+    const message = decodeServerGameMessage(data.toString())
+    if (message.type === 'server-gameplay-pause') hubPauseEdges.push(message.pause)
+  }
+  peer.socket.on('message', observeHubPause)
   await pressPause(page, '.hub-scene')
   const ownerPause = page.locator(
     '.gameplay-pause-stage[data-gameplay-pause-view="owner"]',
   )
   await ownerPause.waitFor()
-  const ownerPauseMessage = await peerSawOwnerPause
-  assert.equal(ownerPauseMessage.type, 'server-gameplay-pause')
-  assert.equal(ownerPauseMessage.pause.ownerPlayerId, host.hostPlayerId())
   assert.equal(
-    ownerPauseMessage.pause.ownerDisplayName,
-    await ownerPause.getAttribute('data-gameplay-pause-owner-name'),
+    await ownerPause.getAttribute('data-gameplay-pause-owner-id'),
+    host.hostPlayerId(),
   )
-  assert.ok(ownerPauseMessage.pause.ownerDisplayName.length > 0)
+  assert.ok((await ownerPause.getAttribute('data-gameplay-pause-owner-name') || '').length > 0)
   await page.waitForTimeout(350)
 
   assert.equal(
@@ -268,12 +268,18 @@ try {
     )),
     'rgba(0, 0, 0, 0.85)',
   )
-  const idlePauseFrame = await pauseCompositeFrame(page)
+  const idlePauseRender = await pauseCanvas.evaluate((canvas) => ({
+    bodyRecords: canvas.dataset.pauseBodyRecords,
+    frameRevision: canvas.dataset.pauseFrameRevision,
+  }))
   const resumeButton = ownerPause.getByRole('button', { name: 'RESUME GAME' })
   await resumeButton.focus()
   await resumeButton.hover()
-  const hoverPauseFrame = await pauseCompositeFrame(page)
-  assert.ok(hoverPauseFrame.equals(idlePauseFrame))
+  const hoverPauseRender = await pauseCanvas.evaluate((canvas) => ({
+    bodyRecords: canvas.dataset.pauseBodyRecords,
+    frameRevision: canvas.dataset.pauseFrameRevision,
+  }))
+  assert.deepEqual(hoverPauseRender, idlePauseRender)
   assert.deepEqual(await resumeButton.evaluate((button) => {
     const computed = getComputedStyle(button)
     return {
@@ -291,39 +297,27 @@ try {
   })]
   await page.screenshot({ path: screenshots.hubOwner })
 
-  const heldHub = simulationReceipt()
-  const heldHubFrame = await canvasFrame(page, '.hub-world-canvas')
-  await page.waitForTimeout(550)
-  assert.deepEqual(simulationReceipt(), heldHub)
-  assert.deepEqual(await canvasFrame(page, '.hub-world-canvas'), heldHubFrame)
-  assert.equal(await page.locator('.hub-scene').getAttribute('data-presentation-paused'), 'true')
+  const liveHubPause = await assertLiveHub(page, 'Hub Pause Menu', 550)
+  assert.deepEqual(hubPauseEdges, [])
 
   latePeer = await joinRaw({
     discipline: 'body',
     displayName: 'Decima',
     element: 'earth',
   })
-  assert.deepEqual(latePeer.welcome.gameplayPause, ownerPauseMessage.pause)
-  assert.equal(latePeer.welcome.snapshot.tick, heldHub.tick)
+  assert.equal(latePeer.welcome.gameplayPause, null)
+  assert.ok(latePeer.welcome.snapshot.tick >= liveHubPause.after.tick)
 
-  const peerSawHubResume = nextRawMessage(peer.socket, (message) => (
-    message.type === 'server-gameplay-pause' && message.pause === null
-  ))
-  const firstHubResumeStartedAt = performance.now()
   await ownerPause.getByRole('button', { name: 'RESUME GAME' }).click()
-  await peerSawHubResume
-  assertNoCatchUp(heldHub.tick, firstHubResumeStartedAt, 'browser-owner Hub resume')
   await ownerPause.waitFor({ state: 'detached' })
-  await assertNormalResumeRate(page)
+  await assertLiveHub(page, 'Hub Pause Menu close', 100)
+  assert.deepEqual(hubPauseEdges, [])
 
-  const peerSawSettingsPause = nextRawMessage(peer.socket, (message) => (
-    message.type === 'server-gameplay-pause' && message.pause?.ownerPlayerId === host.hostPlayerId()
-  ))
   await pressPause(page, '.hub-scene')
   const settingsPause = page.locator(
     '.gameplay-pause-stage[data-gameplay-pause-view="owner"]',
   )
-  await Promise.all([settingsPause.waitFor(), peerSawSettingsPause])
+  await settingsPause.waitFor()
   await page.waitForTimeout(350)
   const settingsCanvas = settingsPause.locator('canvas[data-pause-renderer="native-simple-menu"]')
   await settingsCanvas.waitFor()
@@ -367,26 +361,16 @@ try {
   )
   await settingsDialog.getByRole('button', { name: 'BACK' }).click()
   await page.screenshot({ path: screenshots.skillSettings })
-  const settingsHeldHub = simulationReceipt()
-  await page.waitForTimeout(550)
-  assert.deepEqual(simulationReceipt(), settingsHeldHub)
-  const peerSawSettingsResume = nextRawMessage(peer.socket, (message) => (
-    message.type === 'server-gameplay-pause' && message.pause === null
-  ))
-  const hubResumeStartedAt = performance.now()
+  await assertLiveHub(page, 'Hub Pause Menu settings', 550)
+  assert.deepEqual(hubPauseEdges, [])
   await settingsDialog.getByRole('button', { name: 'Done' }).click()
-  await peerSawSettingsResume
-  assertNoCatchUp(settingsHeldHub.tick, hubResumeStartedAt, 'browser-owner Hub resume')
-  await assertNormalResumeRate(page)
+  await assertLiveHub(page, 'Hub Pause Menu settings close', 100)
 
-  const peerSawLeavePause = nextRawMessage(peer.socket, (message) => (
-    message.type === 'server-gameplay-pause' && message.pause?.ownerPlayerId === host.hostPlayerId()
-  ))
   await pressPause(page, '.hub-scene')
   const leavePause = page.locator(
     '.gameplay-pause-stage[data-gameplay-pause-view="owner"]',
   )
-  await Promise.all([leavePause.waitFor(), peerSawLeavePause])
+  await leavePause.waitFor()
   await page.waitForTimeout(350)
   const leaveCanvas = leavePause.locator('canvas[data-pause-renderer="native-simple-menu"]')
   await leaveCanvas.waitFor()
@@ -399,52 +383,41 @@ try {
   }))
   assert.equal(new Set(pressedFrames).size, 3)
 
-  const leaveTestHeldHub = simulationReceipt()
-  const peerSawLeaveTestResume = nextRawMessage(peer.socket, (message) => (
-    message.type === 'server-gameplay-pause' && message.pause === null
-  ))
-  const leaveTestResumeStartedAt = performance.now()
+  await assertLiveHub(page, 'Hub Pause Menu Leave-row press')
   await leavePause.getByRole('button', { name: 'RESUME GAME' }).click()
-  await peerSawLeaveTestResume
-  assertNoCatchUp(
-    leaveTestHeldHub.tick,
-    leaveTestResumeStartedAt,
-    'post-Leave-press Hub resume',
-  )
   await leavePause.waitFor({ state: 'detached' })
 
-  const peerPause = nextRawMessage(peer.socket, (message) => (
-    message.type === 'server-gameplay-pause' && message.pause?.ownerPlayerId === peer.welcome.playerId
-  ))
+  moveHostPlayerTo({
+    x: HUB_TRADER_GEOMETRY.fomentius.position.x - 70,
+    y: HUB_TRADER_GEOMETRY.fomentius.position.y,
+  })
+  const talkToFomentius = page.getByRole('button', { name: 'Talk to Fomentius' })
+  await talkToFomentius.waitFor()
+  await talkToFomentius.click()
+  const fomentiusDialogue = page.getByRole('dialog', { name: 'Talking to Fomentius' })
+  await fomentiusDialogue.waitFor()
+  await fomentiusDialogue.locator(
+    '.hub-inventory-native-canvas[data-native-reveal="settled"]',
+  ).waitFor()
+  await page.screenshot({ path: screenshots.hubDialogue })
+  await assertLiveHub(page, 'Fomentius dialogue', 550)
+  assert.equal(await page.locator('.hub-scene').getAttribute('data-modal-open'), 'true')
+  assert.equal(await page.locator('.hub-scene').getAttribute('data-hub-ui-surface'), 'dialogue')
+  assert.deepEqual(hubPauseEdges, [])
+  await page.keyboard.press('Escape')
+  await fomentiusDialogue.waitFor({ state: 'detached' })
+
+  const rawHubPause = simulationReceipt()
   peer.socket.send(encodeGameMessage({
     type: 'client-gameplay-pause',
     paused: true,
     source: 'pause-menu',
   }))
-  await peerPause
-  const hubWaiting = page.locator(
-    '.gameplay-pause-stage[data-gameplay-pause-view="waiting"]',
-  )
-  await hubWaiting.waitFor()
-  await page.waitForTimeout(350)
-  assert.match(await hubWaiting.textContent() || '', /Vibia has paused the game\./)
-  assert.match(await hubWaiting.textContent() || '', /Waiting for Vibia to resume\./)
-  assert.equal(await hubWaiting.getByRole('button').count(), 0)
-  await hubWaiting.dispatchEvent('keydown', { key: 'Escape' })
-  assert.equal(await hubWaiting.count(), 1)
-  await page.screenshot({ path: screenshots.hubWaiting })
-  const peerHeldHub = simulationReceipt()
-  await page.waitForTimeout(550)
-  assert.deepEqual(simulationReceipt(), peerHeldHub)
-
-  const peerSawOwnResume = nextRawMessage(peer.socket, (message) => (
-    message.type === 'server-gameplay-pause' && message.pause === null
-  ))
-  const peerHubResumeStartedAt = performance.now()
-  peer.socket.send(encodeGameMessage({ type: 'client-gameplay-pause', paused: false }))
-  await peerSawOwnResume
-  assertNoCatchUp(peerHeldHub.tick, peerHubResumeStartedAt, 'peer Hub resume')
-  await hubWaiting.waitFor({ state: 'detached' })
+  await assertLiveHub(page, 'rejected raw Hub Pause Menu request', 550)
+  assert.ok(host.state().tick > rawHubPause.tick)
+  assert.equal(await page.locator('.gameplay-pause-stage').count(), 0)
+  assert.deepEqual(hubPauseEdges, [])
+  peer.socket.off('message', observeHubPause)
 
   const peerLoaded = nextRawMessage(peer.socket, (message) => (
     message.type === 'server-boneyard-loaded'
@@ -547,7 +520,8 @@ try {
     boneyardResumeTick: host.state().tick,
     heldBoneyardOwnerTick: heldBoneyardOwner.tick,
     heldBoneyardPeerTick: heldBoneyardPeer.tick,
-    heldHubTick: heldHub.tick,
+    liveHubPauseEndTick: liveHubPause.after.tick,
+    liveHubPauseStartTick: liveHubPause.before.tick,
     screenshots,
   })}\n`)
 } catch (error) {
@@ -675,6 +649,23 @@ function grantLearnedSkill(skillId) {
   })
 }
 
+function moveHostPlayerTo(position) {
+  const state = host.state()
+  const playerId = host.hostPlayerId()
+  const index = state.playerEntities.identities.findIndex(({ playerId: id }) => id === playerId)
+  assert.ok(index >= 0)
+  const locomotions = [...state.playerEntities.locomotions]
+  locomotions[index] = {
+    ...locomotions[index],
+    position: { ...position },
+    velocity: { x: 0, y: 0 },
+  }
+  Object.assign(state, {
+    ...state,
+    playerEntities: { ...state.playerEntities, locomotions },
+  })
+}
+
 async function canvasFrame(page, selector) {
   return page.locator(selector).evaluate((canvas) => {
     const frame = canvas.__sdrHubFrame ?? canvas.__sdrBoneyardFrame
@@ -682,10 +673,23 @@ async function canvasFrame(page, selector) {
   })
 }
 
-async function pauseCompositeFrame(page) {
-  return page.screenshot({
-    clip: { height: 500, width: 500, x: 550, y: 210 },
-  })
+async function assertLiveHub(page, label, durationMs = 350) {
+  const before = simulationReceipt()
+  const beforeFrame = await canvasFrame(page, '.hub-world-canvas')
+  await page.waitForTimeout(durationMs)
+  const after = simulationReceipt()
+  const afterFrame = await canvasFrame(page, '.hub-world-canvas')
+  const minimumTicks = Math.max(1, Math.floor(durationMs / 100))
+  assert.ok(
+    after.tick - before.tick >= minimumTicks,
+    `${label} advanced only ${after.tick - before.tick} ticks in ${durationMs} ms`,
+  )
+  assert.notEqual(afterFrame, beforeFrame, `${label} retained one presentation frame`)
+  assert.equal(
+    await page.locator('.hub-scene').getAttribute('data-presentation-paused'),
+    'false',
+  )
+  return { after, before }
 }
 
 async function assertFixedUiGeometry(page, overlay, stage, canvas) {
