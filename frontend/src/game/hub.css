@@ -555,6 +555,27 @@
   letter-spacing: 0;
 }
 
+.hub-party-error {
+  margin: 0 0 7px;
+  color: #e6a89e;
+  font-size: 12px;
+}
+
+.hub-party-settings-open {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgb(202 168 84 / 0.5);
+  border-radius: 50%;
+  background: #171208;
+  color: #f3d994;
+  cursor: pointer;
+  font-size: 14px;
+}
+
 .hub-party-members {
   display: grid;
   gap: 2px;
@@ -1118,6 +1139,11 @@
 
   .hub-party-invitation button {
     min-height: 42px;
+  }
+
+  .hub-party-settings-open {
+    width: 44px;
+    height: 44px;
   }
 
   .hub-player-profile {

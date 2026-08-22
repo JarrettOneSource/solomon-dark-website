@@ -15,6 +15,7 @@ import {
   startGameHost,
   type GameHost,
   type GameHostAdmission,
+  type GameHostPartyTarget,
 } from './game-host.ts'
 import {
   materializeWebSessionContent,
@@ -37,6 +38,7 @@ const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost'])
 const DEFAULT_MAX_CONNECTIONS_PER_SESSION = 16
 const DEFAULT_MAX_SESSIONS = 64
 const DEFAULT_UNCLAIMED_TIMEOUT_MS = 2 * 60 * 1000
+const JOIN_INTENT_TIMEOUT_MS = 10 * 60 * 1000
 const MAX_PROVISION_REQUEST_BYTES = 48 * 1024 * 1024
 
 export interface GameSessionSupervisorOptions {
@@ -73,10 +75,31 @@ interface SessionRecord {
   closePromise: Promise<void> | null
   closing: boolean
   createdAt: number
+  content: GameHostAdmission['content']
   host: GameHost
-  hostCredential: string
   id: string
   kind: 'hub' | 'private'
+  tickets: Map<string, HostTicket>
+}
+
+interface HostTicket {
+  readonly admission: GameHostAdmission
+  readonly expiresAt: number
+}
+
+interface JoinIntent {
+  readonly expiresAt: number
+  readonly locator: Readonly<{ kind: 'code' | 'public' | 'request'; value: string }>
+  readonly partyId: string
+  readonly requestToken: string | null
+  readonly sessionId: string
+}
+
+interface SupervisorJoinRequest {
+  readonly expiresAt: number
+  intentId: string | null
+  readonly listingId: string
+  readonly sessionId: string
 }
 
 export async function startGameSessionSupervisor(
@@ -105,10 +128,9 @@ export async function startGameSessionSupervisor(
   )
   const maxSessions = positiveInteger(options.maxSessions ?? DEFAULT_MAX_SESSIONS, 'maxSessions')
   const sessions = new Map<string, SessionRecord>()
-  const hubTickets = new Map<string, {
-    admission: GameHostAdmission
-    expiresAt: number
-  }>()
+  const hubTickets = new Map<string, HostTicket>()
+  const joinIntents = new Map<string, JoinIntent>()
+  const joinRequests = new Map<string, SupervisorJoinRequest>()
   const downstreamSockets = new Set<WebSocket>()
   let closed = false
   let draining = false
@@ -129,6 +151,7 @@ export async function startGameSessionSupervisor(
     leaderboardReceiptSecret: options.adminSecret,
     maxPlayers: maxConnectionsPerSession,
     sharedHub: true,
+    sessionKind: 'global-hub',
     ...(options.boneyards === undefined ? {} : { boneyards: options.boneyards }),
     ...(options.snapshotRate === undefined ? {} : { snapshotRate: options.snapshotRate }),
   })
@@ -139,9 +162,10 @@ export async function startGameSessionSupervisor(
     closing: false,
     createdAt: performance.now(),
     host: hubHost,
-    hostCredential: '',
+    content: materializeWebSessionContent({ manifestSha256: '0'.repeat(64), mods: [] }),
     id: 'shared-hub',
     kind: 'hub',
+    tickets: hubTickets,
   }
 
   const websocketServer = new WebSocketServer({
@@ -168,6 +192,10 @@ export async function startGameSessionSupervisor(
         draining,
         sessions: sessions.size + Number(hubHost.playerCount() > 0),
         privateSessions: sessions.size,
+        privatePlayers: [...sessions.values()].reduce(
+          (total, session) => total + session.host.playerCount(),
+          0,
+        ),
         hubPlayers: hubHost.hubPlayerCount(),
         parties: hubHost.partyCount(),
         runs: hubHost.runCount(),
@@ -295,10 +323,32 @@ export async function startGameSessionSupervisor(
           credential,
           path: GAME_HUB_PATH,
           protocol: GAME_PROTOCOL_NAME,
+          sessionKind: 'global-hub',
         })
       }).catch(() => {
         sendJson(response, 400, { error: 'A valid game admission is required.' })
       })
+      return
+    }
+    if (request.method === 'POST' && path === '/admin/join/resolve') {
+      void handleJoinResolve(request, response, 'code')
+      return
+    }
+    if (request.method === 'POST' && path === '/admin/join/public') {
+      void handleJoinResolve(request, response, 'listing')
+      return
+    }
+    if (request.method === 'POST' && path === '/admin/join/requests') {
+      void handleJoinRequest(request, response)
+      return
+    }
+    const requestToken = /^\/admin\/join\/requests\/([A-Za-z0-9_-]{32,128})$/.exec(path)?.[1]
+    if (request.method === 'GET' && requestToken) {
+      handleJoinRequestStatus(requestToken, response)
+      return
+    }
+    if (request.method === 'POST' && path === '/admin/join/admit') {
+      void handleJoinAdmission(request, response)
       return
     }
     response.writeHead(404, { 'cache-control': 'no-store' })
@@ -316,6 +366,252 @@ export async function startGameSessionSupervisor(
     if (!socket.destroyed) socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n')
   })
 
+  async function handleJoinResolve(
+    request: IncomingMessage,
+    response: ServerResponse,
+    locatorKind: 'code' | 'listing',
+  ): Promise<void> {
+    try {
+      const body = await readJsonObject(request)
+      const locator = locatorKind === 'code'
+        ? normalizePartyJoinCode(body.code)
+        : partyLocator(body.listingId, 'listingId')
+      const resolved = resolvePartyTarget(locatorKind, locator)
+      if (!resolved) {
+        sendJson(response, 404, { error: 'That party has ended or is no longer available.' })
+        return
+      }
+      if (locatorKind === 'listing' && resolved.target.visibility !== 'public') {
+        sendJson(response, 409, { error: 'That party requires a join request.' })
+        return
+      }
+      if (resolved.target.status !== 'hub') {
+        sendJson(response, 409, { error: 'That party is in a Boneyard. Wait for it to return.' })
+        return
+      }
+      sendJson(response, 201, createJoinIntent(
+        resolved.session,
+        resolved.target,
+        { kind: locatorKind === 'code' ? 'code' : 'public', value: locator },
+      ))
+    } catch {
+      sendJson(response, 400, { error: 'A valid party join request is required.' })
+    }
+  }
+
+  async function handleJoinRequest(
+    request: IncomingMessage,
+    response: ServerResponse,
+  ): Promise<void> {
+    try {
+      const body = await readJsonObject(request)
+      const listingId = partyLocator(body.listingId, 'listingId')
+      const requester = partyJoinRequester(body.requester)
+      const resolved = resolvePartyTarget('listing', listingId)
+      if (!resolved) {
+        sendJson(response, 404, { error: 'That party has ended or is no longer available.' })
+        return
+      }
+      if (resolved.target.visibility !== 'invite-only') {
+        sendJson(response, 409, { error: 'That party does not accept join requests.' })
+        return
+      }
+      if (resolved.target.status !== 'hub') {
+        sendJson(response, 409, { error: 'That party is in a Boneyard. Wait for it to return.' })
+        return
+      }
+      const token = randomBytes(24).toString('base64url')
+      const result = resolved.session.host.createPartyJoinRequest({
+        expiresAt: performance.now() + JOIN_INTENT_TIMEOUT_MS,
+        id: `request-${randomBytes(18).toString('base64url')}`,
+        listingId,
+        requester,
+        token,
+      })
+      if (!result.accepted) {
+        sendJson(response, 409, { error: partyJoinError(result.reason) })
+        return
+      }
+      joinRequests.set(token, {
+        expiresAt: performance.now() + JOIN_INTENT_TIMEOUT_MS,
+        intentId: null,
+        listingId,
+        sessionId: resolved.session.id,
+      })
+      sendJson(response, 201, { requestToken: token, status: 'pending' })
+    } catch {
+      sendJson(response, 400, { error: 'A valid party join request is required.' })
+    }
+  }
+
+  function handleJoinRequestStatus(token: string, response: ServerResponse): void {
+    const tracked = joinRequests.get(token)
+    if (tracked && tracked.expiresAt <= performance.now()) joinRequests.delete(token)
+    const active = joinRequests.get(token)
+    const session = active ? sessionById(active.sessionId) : null
+    const status = session?.host.partyJoinRequestStatus(token)
+    if (!active || !session || !status) {
+      joinRequests.delete(token)
+      sendJson(response, 404, { error: 'That join request has expired.' })
+      return
+    }
+    if (status.status === 'denied') {
+      sendJson(response, 200, { status: 'denied' })
+      return
+    }
+    if (status.status === 'pending') {
+      sendJson(response, 200, { status: 'pending' })
+      return
+    }
+    const target = session.host.partyTargetByListingId(active.listingId)
+    if (!target || target.id !== status.partyId || target.status !== 'hub') {
+      sendJson(response, 409, { error: 'That party is no longer available.' })
+      return
+    }
+    let intentId = active.intentId
+    if (!intentId || !joinIntents.has(intentId)) {
+      const intent = createJoinIntent(
+        session,
+        target,
+        { kind: 'request', value: active.listingId },
+        token,
+      )
+      intentId = intent.intentId
+      active.intentId = intentId
+    }
+    sendJson(response, 200, {
+      status: 'accepted',
+      ...joinIntentPayload(intentId, session, target),
+    })
+  }
+
+  async function handleJoinAdmission(
+    request: IncomingMessage,
+    response: ServerResponse,
+  ): Promise<void> {
+    let reservationId: string | null = null
+    let reservedHost: GameHost | null = null
+    try {
+      const body = await readJsonObject(request)
+      const intentId = partyLocator(body.intentId, 'intentId')
+      const intent = joinIntents.get(intentId)
+      const session = intent ? sessionById(intent.sessionId) : null
+      if (!intent || intent.expiresAt <= performance.now() || !session || session.closing) {
+        joinIntents.delete(intentId)
+        sendJson(response, 404, { error: 'That party join has expired.' })
+        return
+      }
+      const target = intent.locator.kind === 'code'
+        ? session.host.partyTargetByCode(intent.locator.value)
+        : session.host.partyTargetByListingId(intent.locator.value)
+      if (!target || target.id !== intent.partyId || target.status !== 'hub') {
+        joinIntents.delete(intentId)
+        sendJson(response, 409, { error: 'That party is no longer available.' })
+        return
+      }
+      if (intent.locator.kind === 'public' && target.visibility !== 'public') {
+        joinIntents.delete(intentId)
+        sendJson(response, 409, { error: 'That party now requires a join request.' })
+        return
+      }
+      const requestedAdmission = materializeGameAdmission(body)
+      if (typeof body.activeMods !== 'boolean') {
+        throw new Error('active mod state is invalid')
+      }
+      if (session.kind === 'hub' && body.activeMods) {
+        sendJson(response, 409, { error: 'Disable active mods before joining the global Hub.' })
+        return
+      }
+      const now = performance.now()
+      pruneHostTickets(session, now)
+      if (session.host.playerCount() + session.tickets.size >= maxConnectionsPerSession) {
+        sendJson(response, 409, { error: 'That College is full.' })
+        return
+      }
+      reservationId = randomBytes(24).toString('base64url')
+      const expiresAt = now + unclaimedTimeoutMs
+      const rejected = session.host.reservePartyJoin(target.id, reservationId, expiresAt)
+      if (rejected) {
+        sendJson(response, 409, { error: partyJoinError(rejected) })
+        return
+      }
+      reservedHost = session.host
+      const admission: GameHostAdmission = {
+        content: session.kind === 'hub' ? requestedAdmission.content : session.content,
+        leaderboardUserId: requestedAdmission.leaderboardUserId,
+        partyId: target.id,
+        reservationId,
+      }
+      const credential = randomBytes(32).toString('base64url')
+      session.tickets.set(credential, { admission, expiresAt })
+      joinIntents.delete(intentId)
+      if (intent.requestToken) joinRequests.delete(intent.requestToken)
+      sendJson(response, 201, {
+        credential,
+        path: session.kind === 'hub' ? GAME_HUB_PATH : `${GAME_SESSION_PATH_PREFIX}${session.id}`,
+        protocol: GAME_PROTOCOL_NAME,
+        sessionKind: session.kind === 'hub' ? 'global-hub' : 'private-college',
+      })
+    } catch {
+      if (reservationId && reservedHost) reservedHost.cancelPartyReservation(reservationId)
+      sendJson(response, 400, { error: 'A valid party admission is required.' })
+    }
+  }
+
+  function resolvePartyTarget(
+    kind: 'code' | 'listing',
+    value: string,
+  ): { session: SessionRecord; target: GameHostPartyTarget } | null {
+    const matches: { session: SessionRecord; target: GameHostPartyTarget }[] = []
+    for (const session of [hubSession, ...sessions.values()]) {
+      if (session.closing) continue
+      const target = kind === 'code'
+        ? session.host.partyTargetByCode(value)
+        : session.host.partyTargetByListingId(value)
+      if (target) matches.push({ session, target })
+    }
+    return matches.length === 1 ? matches[0]! : null
+  }
+
+  function createJoinIntent(
+    session: SessionRecord,
+    target: GameHostPartyTarget,
+    locator: JoinIntent['locator'],
+    requestToken: string | null = null,
+  ) {
+    const intentId = randomBytes(24).toString('base64url')
+    joinIntents.set(intentId, {
+      expiresAt: performance.now() + JOIN_INTENT_TIMEOUT_MS,
+      locator,
+      partyId: target.id,
+      requestToken,
+      sessionId: session.id,
+    })
+    return joinIntentPayload(intentId, session, target)
+  }
+
+  function joinIntentPayload(
+    intentId: string,
+    session: SessionRecord,
+    target: GameHostPartyTarget,
+  ) {
+    return {
+      intentId,
+      target: {
+        content: target.content,
+        kind: session.kind === 'hub' ? 'global-hub' : 'private-college',
+        leader: target.leader,
+        memberCount: target.memberCount,
+        status: target.status,
+        visibility: target.visibility,
+      },
+    }
+  }
+
+  function sessionById(id: string): SessionRecord | null {
+    return id === hubSession.id ? hubSession : sessions.get(id) ?? null
+  }
+
   function provisionIntoResponse(
     response: ServerResponse,
     admission: GameHostAdmission,
@@ -325,11 +621,12 @@ export async function startGameSessionSupervisor(
       return
     }
     provisioning += 1
-    void provisionSession(admission).then((session) => {
+    void provisionSession(admission).then(({ credential, session }) => {
       sendJson(response, 201, {
-        credential: session.hostCredential,
+        credential,
         path: `${GAME_SESSION_PATH_PREFIX}${session.id}`,
         protocol: GAME_PROTOCOL_NAME,
+        sessionKind: 'private-college',
         sessionId: session.id,
       })
     }).catch((error) => {
@@ -399,22 +696,26 @@ export async function startGameSessionSupervisor(
 
   async function provisionSession(
     admission: GameHostAdmission,
-  ): Promise<SessionRecord> {
+  ): Promise<{ credential: string; session: SessionRecord }> {
     if (closed) throw new Error('The game session supervisor is closed')
     const id = randomBytes(24).toString('base64url')
-    const hostCredential = randomBytes(32).toString('base64url')
+    const credential = randomBytes(32).toString('base64url')
+    const tickets = new Map<string, HostTicket>()
+    tickets.set(credential, {
+      admission,
+      expiresAt: performance.now() + unclaimedTimeoutMs,
+    })
     const sessionHost = await startGameHost({
       authentication: {
-        kind: 'shared',
-        credential: hostCredential,
-        leaderboardUserId: admission.leaderboardUserId,
+        kind: 'tickets',
+        claim: candidate => claimHostTicket(tickets, candidate),
       },
       heartbeatIntervalMs,
       log: options.log,
       logContext: { sessionId: id, sessionKind: 'private' },
       luaWasmPath: options.luaWasmPath,
-      leaderboardReceiptSecret: options.adminSecret,
       content: admission.content.manifest,
+      contentSummary: admission.content.summary,
       modAssets: admission.content.assets,
       mods: admission.content.modSources,
       maxPlayers: maxConnectionsPerSession,
@@ -431,6 +732,7 @@ export async function startGameSessionSupervisor(
         ...(options.boneyards?.modEntries.values() ?? []),
         ...admission.content.boneyards,
       ]),
+      sessionKind: 'private-college',
       ...(options.snapshotRate === undefined ? {} : { snapshotRate: options.snapshotRate }),
     })
     const session: SessionRecord = {
@@ -439,10 +741,11 @@ export async function startGameSessionSupervisor(
       closePromise: null,
       closing: false,
       createdAt: performance.now(),
+      content: admission.content,
       host: sessionHost,
-      hostCredential,
       id,
       kind: 'private',
+      tickets,
     }
     if (closed) {
       await sessionHost.close()
@@ -457,7 +760,7 @@ export async function startGameSessionSupervisor(
       'An isolated browser game session was provisioned.',
       logDetails({ kind: 'private', sessionId: id, sessionCount: sessions.size }),
     )
-    return session
+    return { credential, session }
   }
 
   function proxyUpgrade(
@@ -524,7 +827,9 @@ export async function startGameSessionSupervisor(
       socket.off('close', abortPending)
       websocketServer.handleUpgrade(request, socket, head, (downstream) => {
         upgraded = true
-        stopHeartbeat = monitorWebSocketHeartbeat(downstream, heartbeatIntervalMs, {
+        // Let the authoritative host publish its explicit protocol timeout before
+        // the outer proxy becomes the fallback liveness owner.
+        stopHeartbeat = monitorWebSocketHeartbeat(downstream, heartbeatIntervalMs * 2, {
           onTimeout: () => {
             logGameServerEvent(
               options.log,
@@ -596,7 +901,14 @@ export async function startGameSessionSupervisor(
   const expiryTimer = setInterval(() => {
     const now = performance.now()
     pruneHubTickets(now)
+    for (const [intentId, intent] of joinIntents) {
+      if (intent.expiresAt <= now) joinIntents.delete(intentId)
+    }
+    for (const [token, request] of joinRequests) {
+      if (request.expiresAt <= now) joinRequests.delete(token)
+    }
     for (const session of sessions.values()) {
+      pruneHostTickets(session, now)
       if (
         !session.closing
         && !session.claimed
@@ -618,8 +930,16 @@ export async function startGameSessionSupervisor(
   }
 
   function pruneHubTickets(now = performance.now()): void {
-    for (const [credential, ticket] of hubTickets) {
-      if (ticket.expiresAt <= now) hubTickets.delete(credential)
+    pruneHostTickets(hubSession, now)
+  }
+
+  function pruneHostTickets(session: SessionRecord, now: number): void {
+    for (const [credential, ticket] of session.tickets) {
+      if (ticket.expiresAt > now) continue
+      session.tickets.delete(credential)
+      if (ticket.admission.reservationId) {
+        session.host.cancelPartyReservation(ticket.admission.reservationId)
+      }
     }
   }
 
@@ -640,6 +960,12 @@ export async function startGameSessionSupervisor(
     )
     session.closePromise = (async () => {
       try {
+        for (const ticket of session.tickets.values()) {
+          if (ticket.admission.reservationId) {
+            session.host.cancelPartyReservation(ticket.admission.reservationId)
+          }
+        }
+        session.tickets.clear()
         await session.host.close(
           reason === 'host-cancelled' ? 'host-ended-session' : 'server-shutdown',
         )
@@ -757,6 +1083,77 @@ function deploymentTargetRevision(body: Record<string, unknown>): string {
     throw new Error('deployment target revision is invalid')
   }
   return targetRevision
+}
+
+function claimHostTicket(
+  tickets: Map<string, HostTicket>,
+  credential: string,
+): GameHostAdmission | null {
+  const ticket = tickets.get(credential)
+  if (!ticket) return null
+  tickets.delete(credential)
+  return ticket.expiresAt > performance.now() ? ticket.admission : null
+}
+
+function normalizePartyJoinCode(value: unknown): string {
+  if (typeof value !== 'string' || value.length > 128) throw new Error('party code is invalid')
+  const normalized = [...value.toUpperCase()]
+    .filter(character => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'.includes(character))
+    .join('')
+    .slice(-8)
+  if (normalized.length !== 8) throw new Error('party code is invalid')
+  return `${normalized.slice(0, 4)}-${normalized.slice(4)}`
+}
+
+function partyLocator(value: unknown, field: string): string {
+  if (
+    typeof value !== 'string'
+    || value.length < 8
+    || value.length > 128
+    || !/^[A-Za-z0-9_-]+$/.test(value)
+  ) throw new Error(`${field} is invalid`)
+  return value
+}
+
+function partyJoinRequester(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('requester is invalid')
+  }
+  const source = value as Record<string, unknown>
+  const keys = Object.keys(source).sort()
+  if (keys.join('\0') !== ['accountUsername', 'displayName', 'requesterId'].join('\0')) {
+    throw new Error('requester fields are invalid')
+  }
+  if (
+    typeof source.displayName !== 'string'
+    || source.displayName.length < 1
+    || source.displayName.length > 64
+  ) throw new Error('requester display name is invalid')
+  if (
+    source.accountUsername !== null
+    && (
+      typeof source.accountUsername !== 'string'
+      || source.accountUsername.length < 1
+      || source.accountUsername.length > 64
+    )
+  ) throw new Error('requester account name is invalid')
+  return {
+    accountUsername: source.accountUsername as string | null,
+    displayName: source.displayName,
+    requesterId: partyLocator(source.requesterId, 'requesterId'),
+  }
+}
+
+function partyJoinError(reason: string): string {
+  return reason === 'party-full'
+    ? 'That party is full.'
+    : reason === 'not-in-hub'
+      ? 'That party is in a Boneyard. Wait for it to return.'
+      : reason === 'already-requested'
+        ? 'A join request is already pending for that party.'
+        : reason === 'party-private'
+          ? 'That party is private.'
+          : 'That party is no longer available.'
 }
 
 function sendJson(

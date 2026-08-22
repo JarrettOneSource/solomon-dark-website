@@ -1,0 +1,18 @@
+.party-settings-backdrop { position: absolute; z-index: 42000; inset: 0; display: grid; place-items: center; padding: 16px; background: rgb(0 0 0 / 0.72); pointer-events: auto; }
+.party-settings-dialog { box-sizing: border-box; width: min(560px, 100%); max-height: 90vh; overflow: auto; padding: 18px; border: 1px solid #947b42; background: linear-gradient(145deg, #2c2415, #090907 72%); color: #e7d7ad; font-family: 'IM FELL English', Georgia, serif; }
+.party-settings-dialog header { display: flex; align-items: center; justify-content: space-between; }
+.party-settings-dialog h2, .party-settings-dialog h3, .party-settings-dialog legend { color: #efd17d; font: 700 12px Cinzel, Georgia, serif; letter-spacing: 0.12em; }
+.party-settings-dialog fieldset { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0; border: 1px solid rgb(148 123 66 / 0.5); }
+.party-settings-dialog label { min-height: 44px; display: flex; align-items: center; gap: 6px; }
+.party-settings-dialog button { min-height: 44px; padding: 8px 12px; border: 1px solid #8f7540; background: #211a0e; color: #ead08b; cursor: pointer; font: 700 10px Cinzel, Georgia, serif; }
+.party-settings-code { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 7px; }
+.party-settings-code code { display: grid; min-height: 44px; place-items: center; border: 1px solid #594a2b; background: #050504; color: #fff0b8; font-size: 20px; letter-spacing: 0.12em; user-select: all; }
+.party-settings-request { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 7px; margin-bottom: 6px; }
+.party-settings-private { color: #b9aa86; text-align: center; }
+.party-settings-error { color: #e6a89e; text-align: center; }
+.party-settings-leave { width: 100%; margin-top: 16px; border-color: #80514a !important; color: #e0aaa0 !important; }
+
+@media (max-width: 620px) {
+  .party-settings-code { grid-template-columns: 1fr 1fr; }
+  .party-settings-code code { grid-column: 1 / -1; }
+}

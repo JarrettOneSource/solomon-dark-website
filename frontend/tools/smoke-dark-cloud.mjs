@@ -51,6 +51,7 @@ await page.route('**/api/game/parties', route => route.fulfill({
       memberCount: 2,
       maxMembers: 16,
       status: 'playing',
+      visibility: 'public',
       boneyardName: 'The Survival Grounds',
     }],
   }),
@@ -172,6 +173,14 @@ try {
   assert.equal(enabledManifest.mods.length, 1)
   assert.match(enabledManifest.manifestSha256, /^[a-f0-9]{64}$/)
   assert.notEqual(enabledManifest.manifestSha256, '0'.repeat(64))
+  const enabledAssetUrls = enabledManifest.mods.flatMap(mod => (
+    mod.assets.map(asset => `/api/game/content/${asset.sha256}`)
+  ))
+  if (enabledAssetUrls.length > 0) {
+    await page.waitForFunction(async urls => (
+      (await Promise.all(urls.map(url => caches.match(url)))).every(Boolean)
+    ), enabledAssetUrls)
+  }
 
   const unsubscribeResponse = page.waitForResponse(response => (
     response.request().method() === 'DELETE'
@@ -220,6 +229,7 @@ try {
     mobileGeometry,
     landscapeGeometry,
     partySource: 'bounded browser fixture; host/supervisor contracts prove the live projection',
+    cachedGameContent: enabledAssetUrls.length,
     screenshots: {
       desktop: desktopScreenshotPath,
       detail: detailScreenshotPath,

@@ -22,14 +22,15 @@ import type {
   HallOfFameEntry,
 } from '../game/core-kernels/hall-of-fame.ts'
 import {
-  admitSharedHubPlayer,
+  admitBrowserGame,
   configuredGameEndpoint,
+  type BrowserGameAdmission,
 } from '../game/game-bootstrap.ts'
 import MainMenuScene from '../game/MainMenuScene'
 import NativeLoader from '../game/NativeLoader'
 import GameRuntimeError from '../game/GameRuntimeError.tsx'
 import { useAuth } from '../lib/auth'
-import { api, getToken } from '../lib/api.ts'
+import { api, getToken, type ActiveWebMod } from '../lib/api.ts'
 import { GameSaveCoordinator } from '../game/save/game-save-coordinator.ts'
 import {
   createCloudGameSaveStore,
@@ -41,7 +42,6 @@ import {
   type GameSaveCheckpoint,
   type ResumableGameSave,
 } from '../game/save/game-save-contract.ts'
-import type { GameContentIdentity } from '../game/protocol/game-protocol.ts'
 import { readLocalHallOfFame } from '../game/hall-of-fame-store.ts'
 import { readTotalPlaytimeMs, trackPlaytime } from '../game/playtime-store.ts'
 import { TITLE_BUILD_REVISION } from '../game/title-build-revision.ts'
@@ -66,7 +66,7 @@ export default function Game() {
   const [fatal, setFatal] = useState<GameConnectionFailure | null>(null)
   const [saveReady, setSaveReady] = useState(false)
   const [modsReady, setModsReady] = useState(false)
-  const [activeMods, setActiveMods] = useState<readonly GameContentIdentity[]>([])
+  const [activeMods, setActiveMods] = useState<readonly ActiveWebMod[]>([])
   const [resumeSave, setResumeSave] = useState<ResumableGameSave | null>(null)
   const [deploymentRestart, setDeploymentRestart] = useState<DeploymentRestartState | null>(null)
   const saveCoordinator = useRef<GameSaveCoordinator | null>(null)
@@ -117,6 +117,7 @@ export default function Game() {
         const parsed = parseGameSaveDocument(record.document)
         setResumeSave({
           document: record.document,
+          integrity: parsed.integrity,
           mods: parsed.mods,
           summary: parsed.summary,
         })
@@ -154,22 +155,21 @@ export default function Game() {
     }
   }, [authLoading, diagnostics, user])
 
+  const refreshActiveMods = useCallback(async (): Promise<readonly ActiveWebMod[]> => {
+    if (!user) {
+      setActiveMods([])
+      return []
+    }
+    const content = await api.mods.subscriptions.active()
+    setActiveMods(content.mods)
+    return content.mods
+  }, [user])
+
   useEffect(() => {
     if (authLoading) return
     let cancelled = false
     setModsReady(false)
-    if (!user) {
-      setActiveMods([])
-      setModsReady(true)
-      return
-    }
-    void api.mods.subscriptions.active().then((content) => {
-      if (!cancelled) setActiveMods(content.mods.map(mod => ({
-        contentSha256: mod.contentSha256,
-        id: mod.id,
-        version: mod.version,
-      })))
-    }).catch((error: unknown) => {
+    void refreshActiveMods().catch((error: unknown) => {
       if (!cancelled) {
         const failure = GameConnectionFailure.from(
           error instanceof Error ? error : new Error('Subscribed mods could not be loaded.'),
@@ -182,7 +182,7 @@ export default function Game() {
       if (!cancelled) setModsReady(true)
     })
     return () => { cancelled = true }
-  }, [authLoading, diagnostics, user])
+  }, [authLoading, diagnostics, refreshActiveMods])
 
   useEffect(() => {
     const robots = document.createElement('meta')
@@ -227,7 +227,7 @@ export default function Game() {
     ? 1
     : loadProgress.completed / loadProgress.total
 
-  const prepareNewGame = useCallback(async (): Promise<void> => {
+  const prepareGame = useCallback(async (admission: BrowserGameAdmission): Promise<void> => {
     if (preparedEndpoint.current) return
     const configured = configuredGameEndpoint()
     if (configured) {
@@ -235,10 +235,10 @@ export default function Game() {
       return
     }
     try {
-      preparedEndpoint.current = await admitSharedHubPlayer(getToken())
+      preparedEndpoint.current = await admitBrowserGame(admission, getToken())
       diagnostics.info(
-        'hub.admitted',
-        'A shared Hub admission was issued.',
+        'game.admitted',
+        `A ${admission.kind} admission was issued.`,
       )
     } catch (error) {
       preparedEndpoint.current = null
@@ -349,7 +349,8 @@ export default function Game() {
               onCancelCreate={cancelCreate}
               onSaveCheckpoint={persistCheckpoint}
               onSignOut={logout}
-              prepareNewGame={prepareNewGame}
+              prepareGame={prepareGame}
+              refreshActiveMods={refreshActiveMods}
               resumeSave={resumeSave}
               submitGlobalHallOfFame={submitGlobalHallOfFame}
             />

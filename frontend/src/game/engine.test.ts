@@ -32,6 +32,7 @@ test('bootGame accepts a separate localhost server and routes through the shared
     profile: NULL_PROFILE,
     endpoint: {
       kind: 'localhost',
+      sessionKind: 'standalone',
       url: 'ws://127.0.0.1:1234/game',
       credential: 'secret',
     },
@@ -56,6 +57,7 @@ test('bootGame reports concrete transport and welcome milestones in order', asyn
     profile: NULL_PROFILE,
     endpoint: {
       kind: 'localhost',
+      sessionKind: 'standalone',
       url: 'ws://127.0.0.1:1234/game',
       credential: 'secret',
     },
@@ -84,22 +86,22 @@ test('bootGame bans website remote sessions from local and plaintext endpoints',
   await assert.rejects(() => bootGame({
     character: CHARACTER,
     profile: NULL_PROFILE,
-    endpoint: { kind: 'remote', url: 'ws://127.0.0.1:1234/game', credential: 'x' },
+    endpoint: { kind: 'remote', sessionKind: 'private-college', url: 'ws://127.0.0.1:1234/game', credential: 'x' },
   }), /private networks/)
   await assert.rejects(() => bootGame({
     character: CHARACTER,
     profile: NULL_PROFILE,
-    endpoint: { kind: 'remote', url: 'ws://game.example.test/game', credential: 'x' },
+    endpoint: { kind: 'remote', sessionKind: 'private-college', url: 'ws://game.example.test/game', credential: 'x' },
   }), /must use wss/)
   await assert.rejects(() => bootGame({
     character: CHARACTER,
     profile: NULL_PROFILE,
-    endpoint: { kind: 'remote', url: 'wss://127.12.34.56/game', credential: 'x' },
+    endpoint: { kind: 'remote', sessionKind: 'private-college', url: 'wss://127.12.34.56/game', credential: 'x' },
   }), /private networks/)
   await assert.rejects(() => bootGame({
     character: CHARACTER,
     profile: NULL_PROFILE,
-    endpoint: { kind: 'remote', url: 'wss://game.local/game', credential: 'x' },
+    endpoint: { kind: 'remote', sessionKind: 'private-college', url: 'wss://game.local/game', credential: 'x' },
   }), /private networks/)
 })
 
@@ -108,7 +110,7 @@ test('bootGame accepts any numeric IPv4 loopback address for a desktop-local ser
   const result = await bootGame({
     character: CHARACTER,
     profile: NULL_PROFILE,
-    endpoint: { kind: 'localhost', url: 'ws://127.12.34.56:1234/game', credential: 'x' },
+    endpoint: { kind: 'localhost', sessionKind: 'standalone', url: 'ws://127.12.34.56:1234/game', credential: 'x' },
     transportFactory: async () => inertTransport,
     sessionConnector: async () => session,
   })
@@ -119,12 +121,13 @@ test('bootGame rejects non-loopback addresses presented as desktop-local servers
   await assert.rejects(() => bootGame({
     character: CHARACTER,
     profile: NULL_PROFILE,
-    endpoint: { kind: 'localhost', url: 'ws://192.168.1.20:1234/game', credential: 'x' },
+    endpoint: { kind: 'localhost', sessionKind: 'standalone', url: 'ws://192.168.1.20:1234/game', credential: 'x' },
   }), /loopback/)
 })
 
 function inertSession() {
   return {
+    acceptPartyJoinRequest() {},
     acceptPartyInvitation() {},
     bindSkillQuickbar() {},
     boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' as const }],
@@ -132,10 +135,12 @@ function inertSession() {
     modAssets: [],
     playerId: 'p',
     resumeToken: 'r',
+    sessionKind: 'standalone' as const,
     confirmLoadout() {},
     executeLua: async () => ({ error: null, ok: true, output: [], values: [] }),
     destroy() {},
     denyPartyInvitation() {},
+    denyPartyJoinRequest() {},
     getBoneyard: () => null,
     getChatMessages: () => [],
     getGameplayPause: () => null,
@@ -153,6 +158,7 @@ function inertSession() {
     onEnemyEvent: () => () => {},
     onPing: () => () => {},
     onPartyState: () => () => {},
+    onPartyAction: () => () => {},
     onSaveCheckpoint: () => () => {},
     onSnapshot: () => () => {},
     rerollSkill() {},
@@ -168,6 +174,10 @@ function inertSession() {
     sendInput() {},
     setCheatsEnabled() {},
     inviteToParty() {},
+    kickPartyPlayer() {},
+    leaveParty() {},
+    rotatePartyCode() {},
+    setPartyVisibility() {},
     startMatch() {},
   }
 }

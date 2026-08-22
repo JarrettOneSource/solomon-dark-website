@@ -264,10 +264,13 @@ import type {
   ReplicatedEntityKey,
   ReplicatedEntitySample,
 } from './replicated-entity-types.ts'
-import type {
-  LocalPartyState,
-  PartyPlayerProfile,
-  PlayerSocialProfile,
+import {
+  PARTY_VISIBILITIES,
+  type PartyJoinRequester,
+  type LocalPartyState,
+  type PartyPlayerProfile,
+  type PartyVisibility,
+  type PlayerSocialProfile,
 } from './party-state.ts'
 import {
   normalizeGameChatText,
@@ -296,7 +299,9 @@ export type {
 } from './game-chat.ts'
 export type {
   LocalPartyState,
+  PartyJoinRequester,
   PartyPlayerProfile,
+  PartyVisibility,
   PlayerSocialProfile,
 } from './party-state.ts'
 export {
@@ -305,7 +310,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 53
+export const GAME_PROTOCOL_VERSION = 54
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
 export const GAME_CONNECTION_TIMEOUT_CLOSE_CODE = 4000
@@ -493,6 +498,34 @@ export interface ClientPartyDenyMessage {
   invitationId: string
 }
 
+export interface ClientPartySettingsMessage {
+  type: 'client-party-settings'
+  visibility: PartyVisibility
+}
+
+export interface ClientPartyRotateCodeMessage {
+  type: 'client-party-rotate-code'
+}
+
+export interface ClientPartyRequestAcceptMessage {
+  type: 'client-party-request-accept'
+  requestId: string
+}
+
+export interface ClientPartyRequestDenyMessage {
+  type: 'client-party-request-deny'
+  requestId: string
+}
+
+export interface ClientPartyLeaveMessage {
+  type: 'client-party-leave'
+}
+
+export interface ClientPartyKickMessage {
+  type: 'client-party-kick'
+  targetPlayerId: string
+}
+
 export interface ClientPingMessage {
   type: 'client-ping'
   nonce: number
@@ -552,6 +585,12 @@ export type ClientGameMessage =
   | ClientPartyAcceptMessage
   | ClientPartyDenyMessage
   | ClientPartyInviteMessage
+  | ClientPartyKickMessage
+  | ClientPartyLeaveMessage
+  | ClientPartyRequestAcceptMessage
+  | ClientPartyRequestDenyMessage
+  | ClientPartyRotateCodeMessage
+  | ClientPartySettingsMessage
   | ClientSelectConcentrationMessage
   | ClientSelectPrimarySkillMessage
   | ClientSelectSkillMessage
@@ -568,6 +607,7 @@ export interface ServerWelcomeMessage {
   resumeToken: string
   serverTickRate: number
   snapshotRate: number
+  sessionKind: GameSessionKind
   kernelVersion: string
   kernelParameters: PlayerCharacterKernelParameters
   content: GameContentManifest
@@ -580,10 +620,13 @@ export interface ServerWelcomeMessage {
 }
 
 export interface GameModAsset {
-  bytesBase64: string
+  byteLength: number
   modId: string
   path: string
+  sha256: string
 }
+
+export type GameSessionKind = 'global-hub' | 'private-college' | 'standalone'
 
 export interface ServerModCatalogMessage {
   type: 'server-mod-catalog'
@@ -633,6 +676,45 @@ export interface ServerGameplayPauseMessage {
 export interface ServerPartyStateMessage {
   type: 'server-party-state'
   state: LocalPartyState
+}
+
+export const PARTY_ACTIONS = [
+  'accept-invitation',
+  'deny-invitation',
+  'invite',
+  'kick',
+  'leave',
+  'request-accept',
+  'request-deny',
+  'rotate-code',
+  'settings',
+] as const
+export type PartyAction = typeof PARTY_ACTIONS[number]
+
+export const PARTY_ACTION_REJECTIONS = [
+  'already-in-party',
+  'already-invited',
+  'already-requested',
+  'invitation-missing',
+  'not-in-hub',
+  'not-leader',
+  'not-recipient',
+  'party-full',
+  'party-missing',
+  'party-private',
+  'player-missing',
+  'request-missing',
+  'same-party',
+  'self-invite',
+  'self-kick',
+] as const
+export type PartyActionRejection = typeof PARTY_ACTION_REJECTIONS[number]
+
+export interface ServerPartyActionMessage {
+  type: 'server-party-action'
+  action: PartyAction
+  ok: boolean
+  reason: PartyActionRejection | null
 }
 
 export interface ServerChatMessage extends GameChatMessage {
@@ -691,6 +773,7 @@ export type ServerGameMessage =
   | ServerLuaResultMessage
   | ServerModCatalogMessage
   | ServerPartyStateMessage
+  | ServerPartyActionMessage
   | ServerPongMessage
   | ServerDisconnectMessage
 
@@ -785,6 +868,42 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
     return {
       type: 'client-party-deny',
       invitationId: partyIdentifier(value.invitationId, 'invitationId'),
+    }
+  }
+  if (value.type === 'client-party-settings') {
+    onlyKeys(value, 'message', ['type', 'visibility'])
+    return {
+      type: 'client-party-settings',
+      visibility: partyVisibility(value.visibility, 'visibility'),
+    }
+  }
+  if (value.type === 'client-party-rotate-code') {
+    onlyKeys(value, 'message', ['type'])
+    return { type: 'client-party-rotate-code' }
+  }
+  if (value.type === 'client-party-request-accept') {
+    onlyKeys(value, 'message', ['type', 'requestId'])
+    return {
+      type: 'client-party-request-accept',
+      requestId: partyIdentifier(value.requestId, 'requestId'),
+    }
+  }
+  if (value.type === 'client-party-request-deny') {
+    onlyKeys(value, 'message', ['type', 'requestId'])
+    return {
+      type: 'client-party-request-deny',
+      requestId: partyIdentifier(value.requestId, 'requestId'),
+    }
+  }
+  if (value.type === 'client-party-leave') {
+    onlyKeys(value, 'message', ['type'])
+    return { type: 'client-party-leave' }
+  }
+  if (value.type === 'client-party-kick') {
+    onlyKeys(value, 'message', ['type', 'targetPlayerId'])
+    return {
+      type: 'client-party-kick',
+      targetPlayerId: validatedPlayerId(value.targetPlayerId, 'targetPlayerId'),
     }
   }
   if (value.type === 'client-select-skill') {
@@ -918,6 +1037,7 @@ export function decodeServerGameMessage(payload: string): ServerGameMessage {
       'resumeToken',
       'serverTickRate',
       'snapshotRate',
+      'sessionKind',
       'kernelVersion',
       'kernelParameters',
       'content',
@@ -942,6 +1062,7 @@ export function decodeServerGameMessage(payload: string): ServerGameMessage {
       resumeToken: limitedString(value.resumeToken, 'resumeToken', 512),
       serverTickRate: positiveFinite(value.serverTickRate, 'serverTickRate'),
       snapshotRate: positiveFinite(value.snapshotRate, 'snapshotRate'),
+      sessionKind: gameSessionKind(value.sessionKind),
       kernelVersion: limitedString(value.kernelVersion, 'kernelVersion', 128),
       kernelParameters: playerCharacterKernelParameters(value.kernelParameters),
       content: contentManifest(value.content),
@@ -1043,6 +1164,22 @@ export function decodeServerGameMessage(payload: string): ServerGameMessage {
   if (value.type === 'server-party-state') {
     onlyKeys(value, 'message', ['type', 'state'])
     return { type: 'server-party-state', state: localPartyState(value.state) }
+  }
+  if (value.type === 'server-party-action') {
+    onlyKeys(value, 'message', ['type', 'action', 'ok', 'reason'])
+    const ok = boolean(value.ok, 'ok')
+    const reason = value.reason === null
+      ? null
+      : memberString(value.reason, 'reason', PARTY_ACTION_REJECTIONS)
+    if (ok !== (reason === null)) {
+      throw new GameProtocolError('party action ok and reason fields are inconsistent')
+    }
+    return {
+      type: 'server-party-action',
+      action: memberString(value.action, 'action', PARTY_ACTIONS),
+      ok,
+      reason,
+    }
   }
   if (value.type === 'server-chat') {
     onlyKeys(value, 'message', ['type', 'channel', 'recipient', 'sender', 'sequence', 'text'])
@@ -1372,6 +1509,26 @@ function partyIdentifier(value: unknown, field: string): string {
   return result
 }
 
+function partyJoinCode(value: unknown, field: string): string {
+  const result = limitedString(value, field, 9)
+  if (!/^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/.test(result)) {
+    throw new GameProtocolError(`${field} must be a formatted Party ID`)
+  }
+  return result
+}
+
+function partyVisibility(value: unknown, field: string): PartyVisibility {
+  return memberString(value, field, PARTY_VISIBILITIES)
+}
+
+function gameSessionKind(value: unknown): GameSessionKind {
+  return memberString(
+    value,
+    'sessionKind',
+    ['global-hub', 'private-college', 'standalone'] as const,
+  )
+}
+
 function partyPlayerProfile(value: unknown, field: string): PartyPlayerProfile {
   const source = record(value, field)
   onlyKeys(source, field, [
@@ -1448,7 +1605,7 @@ function gameChatRejectionReason(value: unknown): GameChatRejectionReason {
 
 function localPartyState(value: unknown): LocalPartyState {
   const source = record(value, 'state')
-  onlyKeys(source, 'state', ['hubPlayers', 'invitations', 'party', 'revision'])
+  onlyKeys(source, 'state', ['hubPlayers', 'invitations', 'joinRequests', 'party', 'revision'])
   const hubPlayers = limitedArray(source.hubPlayers, 'state.hubPlayers', 64)
     .map((entry, index) => partyPlayerProfile(entry, `state.hubPlayers[${index}]`))
   const hubPlayerIds = new Set(hubPlayers.map(({ playerId }) => playerId))
@@ -1456,7 +1613,14 @@ function localPartyState(value: unknown): LocalPartyState {
     throw new GameProtocolError('state.hubPlayers contains a duplicate player id')
   }
   const party = record(source.party, 'state.party')
-  onlyKeys(party, 'state.party', ['id', 'leaderPlayerId', 'memberPlayerIds'])
+  onlyKeys(party, 'state.party', [
+    'id',
+    'joinCode',
+    'leaderPlayerId',
+    'listingId',
+    'memberPlayerIds',
+    'visibility',
+  ])
   const memberPlayerIds = limitedArray(
     party.memberPlayerIds,
     'state.party.memberPlayerIds',
@@ -1496,13 +1660,54 @@ function localPartyState(value: unknown): LocalPartyState {
   if (new Set(invitations.map(({ id }) => id)).size !== invitations.length) {
     throw new GameProtocolError('state.invitations contains a duplicate invitation id')
   }
+  const joinRequests = limitedArray(source.joinRequests, 'state.joinRequests', 16)
+    .map((entry, index) => {
+      const field = `state.joinRequests[${index}]`
+      const request = record(entry, field)
+      onlyKeys(request, field, ['id', 'requester'])
+      const requesterSource = record(request.requester, `${field}.requester`)
+      onlyKeys(requesterSource, `${field}.requester`, [
+        'accountUsername',
+        'displayName',
+        'requesterId',
+      ])
+      const requester: PartyJoinRequester = {
+        accountUsername: requesterSource.accountUsername === null
+          ? null
+          : limitedString(
+              requesterSource.accountUsername,
+              `${field}.requester.accountUsername`,
+              64,
+            ),
+        displayName: limitedString(
+          requesterSource.displayName,
+          `${field}.requester.displayName`,
+          64,
+        ),
+        requesterId: partyIdentifier(
+          requesterSource.requesterId,
+          `${field}.requester.requesterId`,
+        ),
+      }
+      return {
+        id: partyIdentifier(request.id, `${field}.id`),
+        requester,
+      }
+    })
+  if (new Set(joinRequests.map(({ id }) => id)).size !== joinRequests.length) {
+    throw new GameProtocolError('state.joinRequests contains a duplicate request id')
+  }
   return {
     hubPlayers,
     invitations,
+    joinRequests,
     party: {
       id: partyIdentifier(party.id, 'state.party.id'),
+      joinCode: partyJoinCode(party.joinCode, 'state.party.joinCode'),
       leaderPlayerId,
+      listingId: partyIdentifier(party.listingId, 'state.party.listingId'),
       memberPlayerIds,
+      visibility: partyVisibility(party.visibility, 'state.party.visibility'),
     },
     revision: nonnegativeInteger(source.revision, 'state.revision'),
   }
@@ -9419,27 +9624,31 @@ function contentManifest(value: unknown): GameContentManifest {
 
 function gameModAssets(value: unknown): readonly GameModAsset[] {
   const seen = new Set<string>()
-  return limitedArray(value, 'modAssets', 64).map((value, index) => {
+  return limitedArray(value, 'modAssets', 8_192).map((value, index) => {
     const field = `modAssets[${index}]`
     const source = record(value, field)
-    onlyKeys(source, field, ['bytesBase64', 'modId', 'path'])
+    onlyKeys(source, field, ['byteLength', 'modId', 'path', 'sha256'])
     const modId = limitedString(source.modId, `${field}.modId`, 128)
     const path = limitedString(source.path, `${field}.path`, 240)
-    const bytesBase64 = limitedString(source.bytesBase64, `${field}.bytesBase64`, 1_398_104)
+    const byteLength = integerWithin(
+      source.byteLength,
+      `${field}.byteLength`,
+      1,
+      1024 * 1024,
+    )
     const key = `${modId.toLowerCase()}\0${path.toLowerCase()}`
-    const padding = bytesBase64.endsWith('==') ? 2 : bytesBase64.endsWith('=') ? 1 : 0
-    const decodedLength = bytesBase64.length / 4 * 3 - padding
     if (
       !/^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$/.test(modId)
       || !/^sprites\/.+\.png$/.test(path)
-      || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(bytesBase64)
-      || !Number.isInteger(decodedLength)
-      || decodedLength < 1
-      || decodedLength > 1024 * 1024
       || seen.has(key)
     ) throw new GameProtocolError(`${field} is not a bounded unique PNG asset`)
     seen.add(key)
-    return { bytesBase64, modId, path }
+    return {
+      byteLength,
+      modId,
+      path,
+      sha256: sha256(source.sha256, `${field}.sha256`),
+    }
   })
 }
 

@@ -53,7 +53,7 @@ test('wizard-name controls own clear and stock randomization without a live rena
   assert.match(createScene, /Randomize wizard name/)
   assert.match(createScene, /readOnly=\{Boolean\(retainedLoadout\)\}/)
   assert.match(gamePage, /const displayName = accountUsername \?\? ''/)
-  assert.match(gamePage, /admitSharedHubPlayer\(getToken\(\)\)/)
+  assert.match(gamePage, /admitBrowserGame\(admission, getToken\(\)\)/)
 })
 
 test('wizard-name controls own only their logical bounds and a fresh Create owns its draft', () => {
@@ -66,16 +66,20 @@ test('wizard-name controls own only their logical bounds and a fresh Create owns
     mainScene.indexOf('const beginNewGame ='),
     mainScene.indexOf('const leaveCreate ='),
   )
+  const beginCreate = mainScene.slice(
+    mainScene.indexOf('const beginCreate ='),
+    mainScene.indexOf('const beginNewGame ='),
+  )
   const startHub = mainScene.slice(
     mainScene.indexOf('const startHub ='),
     mainScene.indexOf('const startBoneyard ='),
   )
-  assert.doesNotMatch(beginNewGame, /prepareNewGame/)
+  assert.doesNotMatch(beginNewGame, /prepareGame/)
   assert.match(
-    beginNewGame,
-    /setWizardName\(initialCreateWizardNameForSession\(displayName\)\)[\s\S]*transitionTo\('create'\)/,
+    beginCreate,
+    /setWizardName\([\s\S]*initialCreateWizardNameForSession\(displayName\)[\s\S]*transitionTo\('create'\)/,
   )
-  assert.match(startHub, /await prepareNewGame\(\)[\s\S]*await connectSession\(/)
+  assert.match(startHub, /await prepareGame\(pendingAdmission\)[\s\S]*await connectSession\(/)
 })
 
 test('wizard-name layout drains the native group-4 glyph and kerning membership', () => {

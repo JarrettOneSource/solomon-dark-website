@@ -23,11 +23,13 @@ import type { GameClientDiagnostics } from './client/game-diagnostics.ts'
 export type GameEndpoint =
   | {
       kind: 'localhost'
+      sessionKind: 'standalone'
       url: string
       credential: string
     }
   | {
       kind: 'remote'
+      sessionKind: 'global-hub' | 'private-college'
       url: string
       credential: string
     }

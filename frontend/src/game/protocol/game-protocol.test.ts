@@ -383,6 +383,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
     resumeToken: 'reserved-token',
     serverTickRate: 100,
     snapshotRate: 20,
+    sessionKind: 'standalone',
     kernelVersion: PLAYER_CHARACTER_KERNEL_VERSION,
     kernelParameters: {
       fixedTickSeconds: 0.01,
@@ -407,6 +408,20 @@ test('server welcome round-trips content, kernel, character, and world ownership
     snapshotSequence: 1,
   }
   assert.deepEqual(decodeServerGameMessage(encodeGameMessage(welcome)), welcome)
+  const assetWelcome: ServerWelcomeMessage = {
+    ...welcome,
+    modAssets: [{
+      byteLength: 68,
+      modId: 'tests.content',
+      path: 'sprites/item.png',
+      sha256: 'a'.repeat(64),
+    }],
+  }
+  assert.deepEqual(decodeServerGameMessage(encodeGameMessage(assetWelcome)), assetWelcome)
+  assert.throws(() => decodeServerGameMessage(encodeGameMessage({
+    ...assetWelcome,
+    modAssets: [{ ...assetWelcome.modAssets[0]!, sha256: 'not-a-hash' }],
+  })), /SHA-256/)
   assert.deepEqual(welcome.snapshot.players['player-1'].config, CHARACTER)
   assert.equal(welcome.snapshot.players['player-1'].economy.gold, 10_000)
   assert.equal(welcome.snapshot.players['player-1'].economy.fomentiusStock.length > 0, true)
@@ -760,6 +775,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
     resumeToken: 'reserved-token',
     serverTickRate: 100,
     snapshotRate: 20,
+    sessionKind: 'standalone',
     kernelVersion: PLAYER_CHARACTER_KERNEL_VERSION,
     kernelParameters: {
       fixedTickSeconds: 0.01,
@@ -1024,8 +1040,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v53 carries deployment restart, Ether replacement, Boulder, movement, social, mod, and gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 53)
+test('protocol v54 carries deployment restart, Ether replacement, party access, movement, social, mod, and gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 54)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -1396,6 +1412,7 @@ test('protocol v42 preserves the bounded run-scoped enemy semantic-event lane', 
     resumeToken: 'reserved-token',
     serverTickRate: 100,
     snapshotRate: 20,
+    sessionKind: 'standalone',
     kernelVersion: PLAYER_CHARACTER_KERNEL_VERSION,
     kernelParameters: {
       fixedTickSeconds: 0.01,
@@ -3340,6 +3357,7 @@ test('protocol bounds server-controlled world collections', () => {
     resumeToken: 'reserved-token',
     serverTickRate: 100,
     snapshotRate: 20,
+    sessionKind: 'standalone',
     kernelVersion: PLAYER_CHARACTER_KERNEL_VERSION,
     kernelParameters: {
       fixedTickSeconds: 0.01,
@@ -3580,7 +3598,7 @@ test('protocol v42 strictly round-trips loot, Goodies, and their semantic event 
   )
 })
 
-test('party protocol strictly round-trips invite, acceptance, denial, and local projection', () => {
+test('party protocol strictly round-trips membership, access settings, requests, and results', () => {
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
     type: 'client-party-invite',
     targetPlayerId: 'player-2',
@@ -3602,6 +3620,14 @@ test('party protocol strictly round-trips invite, acceptance, denial, and local 
     type: 'client-party-deny',
     invitationId: 'invite-8',
   })
+  for (const message of [
+    { type: 'client-party-settings' as const, visibility: 'invite-only' as const },
+    { type: 'client-party-rotate-code' as const },
+    { type: 'client-party-request-accept' as const, requestId: 'request-7' },
+    { type: 'client-party-request-deny' as const, requestId: 'request-8' },
+    { type: 'client-party-leave' as const },
+    { type: 'client-party-kick' as const, targetPlayerId: 'player-2' },
+  ]) assert.deepEqual(decodeClientGameMessage(encodeGameMessage(message)), message)
 
   const message = {
     type: 'server-party-state' as const,
@@ -3633,15 +3659,37 @@ test('party protocol strictly round-trips invite, acceptance, denial, and local 
         },
         partyId: 'party-1',
       }],
+      joinRequests: [{
+        id: 'request-7',
+        requester: {
+          accountUsername: null,
+          displayName: 'Guest Cassia',
+          requesterId: 'requester-cassia',
+        },
+      }],
       party: {
         id: 'party-2',
+        joinCode: 'ABCD-2345',
         leaderPlayerId: 'player-2',
+        listingId: 'listing-2',
         memberPlayerIds: ['player-2'],
+        visibility: 'invite-only' as const,
       },
       revision: 4,
     },
   }
   assert.deepEqual(decodeServerGameMessage(encodeGameMessage(message)), message)
+  assert.deepEqual(decodeServerGameMessage(encodeGameMessage({
+    type: 'server-party-action',
+    action: 'settings',
+    ok: false,
+    reason: 'not-leader',
+  })), {
+    type: 'server-party-action',
+    action: 'settings',
+    ok: false,
+    reason: 'not-leader',
+  })
 
   const duplicateMember = structuredClone(message)
   duplicateMember.state.party.memberPlayerIds.push('player-2')

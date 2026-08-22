@@ -13,6 +13,9 @@ import {
 } from 'react'
 import CreateMenuScene from './CreateMenuScene.tsx'
 import DarkCloudScene from './DarkCloudScene.tsx'
+import JoinPartyScene from './JoinPartyScene.tsx'
+import ModdedPlayDialog from './ModdedPlayDialog.tsx'
+import PartyJoinConsentDialog from './PartyJoinConsentDialog.tsx'
 import type { GameClientSession } from './client/game-client-session.ts'
 import type {
   PlayerCharacterConfig,
@@ -71,12 +74,22 @@ import {
   type MatchLoadingState,
 } from './match-loading.ts'
 import type {
-  GameContentIdentity,
   GameSnapshot,
   GameplayPauseSource,
   GameplayPauseState,
   LoadedBoneyard,
+  PartyActionRejection,
 } from './protocol/game-protocol.ts'
+import {
+  api,
+  type ActiveWebMod,
+  type PartyJoinResolution,
+} from '../lib/api.ts'
+import {
+  prefetchGameContent,
+  type GameContentDownloadProgress,
+} from './game-content-cache.ts'
+import type { BrowserGameAdmission } from './game-bootstrap.ts'
 import type { ProtocolPlayerProgression } from './protocol/game-state.ts'
 import type { LocalPartyState } from './protocol/party-state.ts'
 import type {
@@ -112,7 +125,7 @@ const DARK_CLOUD_PAUSE: GameplayPauseState = {
   source: 'pause-menu',
 }
 
-type MenuScreen = 'root' | 'play' | 'dark-cloud' | 'hall' | 'create' | 'hub'
+type MenuScreen = 'root' | 'play' | 'join-party' | 'dark-cloud' | 'hall' | 'create' | 'hub'
 type FadeState = 'idle' | 'covering' | 'revealing'
 
 interface MenuButtonProps {
@@ -155,6 +168,7 @@ function MenuButton({
       aria-label={accessibleLabel}
       disabled={disabled}
       data-game-back={isBack || undefined}
+      data-game-action={action}
       data-game-default-focus={defaultFocus || undefined}
       onBlur={() => {
         onHighlight(null)
@@ -230,6 +244,7 @@ function PlayActions({
   onBack,
   onHighlight,
   onLastGame,
+  onJoinParty,
   onNewGame,
   onPress,
   onPressState,
@@ -237,20 +252,21 @@ function PlayActions({
   canResume: boolean
   onBack: () => void
   onLastGame: () => void
+  onJoinParty: () => void
   onNewGame: () => void
 }) {
   return (
     <>
       <MenuButton action="last-game" accessibleLabel="Last game" className="main-menu-button-last-game" defaultFocus={canResume} disabled={!canResume} onClick={onLastGame} onHighlight={onHighlight} onPress={onPress} onPressState={onPressState} />
       <MenuButton action="new-game" accessibleLabel="New game" defaultFocus={!canResume} onClick={onNewGame} onHighlight={onHighlight} onPress={onPress} onPressState={onPressState} />
-      <MenuButton action="unavailable" accessibleLabel="Unavailable" className="main-menu-button-empty" disabled onHighlight={onHighlight} onPressState={onPressState} />
+      <MenuButton action="join-party" accessibleLabel="Join party" onClick={onJoinParty} onHighlight={onHighlight} onPress={onPress} onPressState={onPressState} />
       <MenuButton action="back" accessibleLabel="Back" isBack onClick={onBack} onHighlight={onHighlight} onPress={onPress} onPressState={onPressState} />
     </>
   )
 }
 
 interface MainMenuSceneProps {
-  activeMods: readonly GameContentIdentity[]
+  activeMods: readonly ActiveWebMod[]
   accountUsername: string | null
   displayName: string
   connectSession: (
@@ -265,7 +281,8 @@ interface MainMenuSceneProps {
   onCancelCreate: () => Promise<void>
   onSaveCheckpoint: (checkpoint: GameSaveCheckpoint) => void
   onSignOut: () => void
-  prepareNewGame: () => Promise<void>
+  prepareGame: (admission: BrowserGameAdmission) => Promise<void>
+  refreshActiveMods: () => Promise<readonly ActiveWebMod[]>
   resumeSave: ResumableGameSave | null
   submitGlobalHallOfFame: (receipt: string) => Promise<void>
 }
@@ -280,7 +297,8 @@ export default function MainMenuScene({
   onCancelCreate,
   onSaveCheckpoint,
   onSignOut,
-  prepareNewGame,
+  prepareGame,
+  refreshActiveMods,
   resumeSave,
   submitGlobalHallOfFame,
 }: MainMenuSceneProps) {
@@ -290,6 +308,7 @@ export default function MainMenuScene({
   const [wizardName, setWizardName] = useState(() => (
     initialScreen === 'create' ? initialCreateWizardNameForSession(displayName) : ''
   ))
+  const [partyRequesterName] = useState(() => initialCreateWizardNameForSession(displayName))
   const [fadeState, setFadeState] = useState<FadeState>('idle')
   const [fadeTarget, setFadeTarget] = useState<MenuScreen | null>(null)
   const [session, setSession] = useState<GameClientSession | null>(null)
@@ -301,6 +320,7 @@ export default function MainMenuScene({
   const [gameplayPause, setGameplayPause] = useState<GameplayPauseState | null>(null)
   const [hubPauseMenuOpen, setHubPauseMenuOpen] = useState(false)
   const [partyState, setPartyState] = useState<LocalPartyState | null>(null)
+  const [partyActionError, setPartyActionError] = useState<string | null>(null)
   const [whisperRequest, setWhisperRequest] = useState<GameChatWhisperRequest | null>(null)
   const [chatOpen, setChatOpen] = useState(false)
   const [gameplaySettingsOpen, setGameplaySettingsOpen] = useState(false)
@@ -322,6 +342,14 @@ export default function MainMenuScene({
   const [settingsContext, setSettingsContext] = useState<GameSettingsContext | null>(null)
   const [darkCloudMenuOpen, setDarkCloudMenuOpen] = useState(false)
   const [modMismatch, setModMismatch] = useState<GameSaveModMismatch | null>(null)
+  const [moddedPlayPrompt, setModdedPlayPrompt] = useState(false)
+  const [partyConsent, setPartyConsent] = useState<PartyJoinResolution | null>(null)
+  const [pendingAdmission, setPendingAdmission] = useState<BrowserGameAdmission>({
+    kind: 'global-hub',
+  })
+  const [routingBusy, setRoutingBusy] = useState(false)
+  const [contentProgress, setContentProgress] = useState<GameContentDownloadProgress | null>(null)
+  const [cheatCollegePrompt, setCheatCollegePrompt] = useState(false)
   const [gameSettings, setLocalGameSettings] = useState(readGameSettings)
   const [localHallOfFame, setLocalHallOfFame] = useState(readLocalHallOfFame)
   const [fixedViewport, setFixedViewport] = useState(() => (
@@ -413,6 +441,18 @@ export default function MainMenuScene({
   const updateGameSettings = useCallback((settings: GameSettings) => {
     setLocalGameSettings(setGameSettings(settings))
   }, [])
+
+  const requestGameSettingsUpdate = useCallback((settings: GameSettings) => {
+    if (
+      session?.sessionKind === 'global-hub'
+      && !gameSettings.enableCheats
+      && settings.enableCheats
+    ) {
+      setCheatCollegePrompt(true)
+      return
+    }
+    updateGameSettings(settings)
+  }, [gameSettings.enableCheats, session, updateGameSettings])
 
   const openDarkCloudMenu = useCallback(() => setDarkCloudMenuOpen(true), [])
 
@@ -525,6 +565,9 @@ export default function MainMenuScene({
       if (gameCheatsEnabled()) return
       void submitGlobalHallOfFame(receipt)
     })
+    const removePartyAction = session.onPartyAction(result => {
+      setPartyActionError(result.ok ? null : partyActionErrorMessage(result.reason))
+    })
     const removePartyState = session.onPartyState(setPartyState)
     const removeSaveCheckpoint = session.onSaveCheckpoint(onSaveCheckpoint)
     return () => {
@@ -532,6 +575,7 @@ export default function MainMenuScene({
       removeBoneyard()
       removeGameplayPause()
       removeLeaderboardReceipt()
+      removePartyAction()
       removePartyState()
       removeSaveCheckpoint()
     }
@@ -631,11 +675,101 @@ export default function MainMenuScene({
     nativePauseMenuStagePlacement(fixedViewport, darkCloudMenuRows),
   )
 
+  const beginCreate = (admission: BrowserGameAdmission) => {
+    setPendingAdmission(admission)
+    setPartyConsent(null)
+    setModdedPlayPrompt(false)
+    setWizardName(admission.kind === 'party'
+      ? partyRequesterName
+      : initialCreateWizardNameForSession(displayName))
+    transitionTo('create')
+  }
+
   const beginNewGame = () => {
     if (preparing || connecting) return
     setConnectionError(null)
-    setWizardName(initialCreateWizardNameForSession(displayName))
-    transitionTo('create')
+    if (activeMods.length > 0 || gameSettings.enableCheats) {
+      setModdedPlayPrompt(true)
+      return
+    }
+    beginCreate({ kind: 'global-hub' })
+  }
+
+  const playVanilla = async () => {
+    if (routingBusy) return
+    setRoutingBusy(true)
+    setConnectionError(null)
+    try {
+      if (accountUsername && activeMods.length > 0) {
+        await api.mods.subscriptions.disableAll()
+        await refreshActiveMods()
+      }
+      if (gameSettings.enableCheats) {
+        updateGameSettings({ ...gameSettings, enableCheats: false })
+      }
+      beginCreate({ kind: 'global-hub' })
+    } catch (error) {
+      setConnectionError(error instanceof Error ? error.message : 'Vanilla play could not be prepared.')
+    } finally {
+      setRoutingBusy(false)
+    }
+  }
+
+  const continueLocal = async () => {
+    if (routingBusy) return
+    setRoutingBusy(true)
+    setContentProgress(null)
+    try {
+      await prefetchGameContent(activeMods.flatMap(mod => mod.assets), setContentProgress)
+      beginCreate({ kind: 'private-college' })
+    } catch (error) {
+      setConnectionError(error instanceof Error ? error.message : 'Mod content could not be prepared.')
+    } finally {
+      setRoutingBusy(false)
+    }
+  }
+
+  const resolveParty = (resolution: PartyJoinResolution) => {
+    if (
+      resolution.target.kind === 'global-hub'
+      && activeMods.length === 0
+      && !gameSettings.enableCheats
+    ) {
+      beginCreate({ kind: 'party', intentId: resolution.intentId })
+      return
+    }
+    setPartyConsent(resolution)
+  }
+
+  const continueParty = async () => {
+    if (!partyConsent || routingBusy) return
+    setRoutingBusy(true)
+    setContentProgress(null)
+    try {
+      if (partyConsent.target.kind === 'global-hub') {
+        if (accountUsername && activeMods.length > 0) {
+          await api.mods.subscriptions.disableAll()
+          await refreshActiveMods()
+        }
+        if (gameSettings.enableCheats) {
+          updateGameSettings({ ...gameSettings, enableCheats: false })
+        }
+      } else {
+        if (accountUsername && partyConsent.target.content.mods.length > 0) {
+          await api.mods.subscriptions.sync(partyConsent.target.content.mods)
+          await refreshActiveMods()
+        }
+        await prefetchGameContent(
+          partyConsent.target.content.mods.flatMap(mod => mod.assets),
+          setContentProgress,
+        )
+      }
+      beginCreate({ kind: 'party', intentId: partyConsent.intentId })
+    } catch (error) {
+      setConnectionError(error instanceof Error ? error.message : 'The party content could not be prepared.')
+    } finally {
+      setRoutingBusy(false)
+    }
   }
 
   const leaveCreate = async () => {
@@ -676,7 +810,16 @@ export default function MainMenuScene({
     setConnectionError(null)
     beginLoading(flow, 'connecting_transport')
     try {
-      await prepareNewGame()
+      if (activeMods.length > 0) {
+        await prefetchGameContent(activeMods.flatMap(mod => mod.assets), setContentProgress)
+      }
+      await prepareGame(
+        resumeSave.integrity === 'local-only'
+          || activeMods.length > 0
+          || gameSettings.enableCheats
+          ? { kind: 'private-college' }
+          : { kind: 'global-hub' },
+      )
       const nextSession = await connectSession(
         resumeSave.summary.character,
         advanceLoading,
@@ -717,7 +860,7 @@ export default function MainMenuScene({
     setConnecting(true)
     setConnectionError(null)
     try {
-      await prepareNewGame()
+      await prepareGame(pendingAdmission)
       const nextSession = await connectSession(
         {
           discipline: selectedDiscipline,
@@ -778,6 +921,7 @@ export default function MainMenuScene({
     setGameplayPause(null)
     setHubPauseMenuOpen(false)
     setPartyState(null)
+    setPartyActionError(null)
     setWhisperRequest(null)
     setChatOpen(false)
     setGameplaySettingsOpen(false)
@@ -919,6 +1063,7 @@ export default function MainMenuScene({
                     onBack={() => setScreen('root')}
                     onHighlight={setHoveredTitleAction}
                     onLastGame={requestResumeLastGame}
+                    onJoinParty={() => transitionTo('join-party')}
                     onNewGame={beginNewGame}
                     onPress={() => audio.playSound('click')}
                     onPressState={setPressedTitleAction}
@@ -947,8 +1092,10 @@ export default function MainMenuScene({
                 accountUsername={accountUsername}
                 menuKeyCode={gameSettings.controls.openMenu}
                 menuOpen={darkCloudMenuOpen || settingsContext !== null}
-                onEnterSharedHub={beginNewGame}
                 onMenu={openDarkCloudMenu}
+                onPartyResolved={resolveParty}
+                requesterDisplayName={partyRequesterName}
+                onSubscriptionsChanged={refreshActiveMods}
               />
             </div>
             {darkCloudMenuOpen ? (
@@ -969,6 +1116,12 @@ export default function MainMenuScene({
               />
             ) : null}
           </>
+        ) : screen === 'join-party' ? (
+          <JoinPartyScene
+            onBack={() => transitionTo('play')}
+            onResolved={resolveParty}
+            requesterDisplayName={partyRequesterName}
+          />
         ) : screen === 'create' ? (
           <CreateMenuScene
             audio={audio}
@@ -1032,10 +1185,16 @@ export default function MainMenuScene({
               initialSnapshot={runtimeSnapshot}
               onInput={session.sendInput}
               onAcceptPartyInvitation={session.acceptPartyInvitation}
+              onAcceptPartyJoinRequest={session.acceptPartyJoinRequest}
               onDenyPartyInvitation={session.denyPartyInvitation}
+              onDenyPartyJoinRequest={session.denyPartyJoinRequest}
               onHubAction={session.sendHubAction}
               onInventoryOpenChange={setInventoryScreenOpen}
               onInvitePlayer={session.inviteToParty}
+              onKickPartyPlayer={session.kickPartyPlayer}
+              onLeaveParty={session.sessionKind === 'private-college'
+                ? leaveGameplay
+                : session.leaveParty}
               onLoadingError={cancelHubLoading}
               onMessagePlayer={(playerId, displayName) => setWhisperRequest({
                 displayName,
@@ -1046,10 +1205,14 @@ export default function MainMenuScene({
               onPauseRequest={requestGameplayPause}
               onReady={finishHubLoading}
               onStartMatch={startBoneyard}
+              onPartyRotateCode={session.rotatePartyCode}
+              onPartyVisibility={session.setPartyVisibility}
+              partyActionError={partyActionError}
               partyState={partyState}
               presentationPaused={gameplayPause !== null}
               samplePresentation={session.samplePresentation}
               settings={gameSettings}
+              sessionKind={session.sessionKind}
               subscribePing={session.onPing}
               subscribe={session.onSnapshot}
             />
@@ -1154,7 +1317,7 @@ export default function MainMenuScene({
           && gameplaySettingsOpen ? (
             <GameSettingsDialog
               context="gameplay"
-              onChange={updateGameSettings}
+              onChange={requestGameSettingsUpdate}
               onClose={() => {
                 setGameplaySettingsOpen(false)
                 if (localHubPause) setHubPauseMenuOpen(false)
@@ -1173,7 +1336,7 @@ export default function MainMenuScene({
         {settingsContext && !gameplaySettingsOpen ? (
           <GameSettingsDialog
             context={settingsContext}
-            onChange={updateGameSettings}
+            onChange={requestGameSettingsUpdate}
             onClose={() => setSettingsContext(null)}
             settings={gameSettings}
           />
@@ -1189,6 +1352,48 @@ export default function MainMenuScene({
             }}
             style={nativeStageStyle}
           />
+        ) : null}
+
+        {moddedPlayPrompt ? (
+          <ModdedPlayDialog
+            activeMods={activeMods}
+            busy={routingBusy}
+            cheatsEnabled={gameSettings.enableCheats}
+            onBack={() => setModdedPlayPrompt(false)}
+            onContinueLocal={() => { void continueLocal() }}
+            onPlayVanilla={() => { void playVanilla() }}
+            progress={contentProgress}
+          />
+        ) : null}
+
+        {partyConsent ? (
+          <PartyJoinConsentDialog
+            busy={routingBusy}
+            onBack={() => setPartyConsent(null)}
+            onContinue={() => { void continueParty() }}
+            progress={contentProgress}
+            requiresVanilla={partyConsent.target.kind === 'global-hub'
+              && (activeMods.length > 0 || gameSettings.enableCheats)}
+            signedIn={accountUsername !== null}
+            target={partyConsent.target}
+          />
+        ) : null}
+
+        {cheatCollegePrompt ? (
+          <div className="play-routing-backdrop" role="presentation">
+            <section className="play-routing-dialog" role="dialog" aria-modal="true" aria-label="Cheats require a private College">
+              <h2>CHEATS USE PRIVATE COLLEGES</h2>
+              <p>Leave the global Hub, then use Last Game to continue this wizard locally.</p>
+              <footer>
+                <button type="button" onClick={() => setCheatCollegePrompt(false)}>CANCEL</button>
+                <button type="button" onClick={() => {
+                  updateGameSettings({ ...gameSettings, enableCheats: true })
+                  setCheatCollegePrompt(false)
+                  leaveGameplay()
+                }}>LEAVE & CONTINUE</button>
+              </footer>
+            </section>
+          </div>
         ) : null}
 
         <div
@@ -1243,6 +1448,27 @@ function sameFixedViewport(
     && first.width === second.width
     && first.nativeStage.x === second.nativeStage.x
     && first.nativeStage.y === second.nativeStage.y
+}
+
+function partyActionErrorMessage(reason: PartyActionRejection | null): string {
+  switch (reason) {
+    case 'not-leader': return 'Only the party leader can do that.'
+    case 'party-full': return 'That party is full.'
+    case 'not-in-hub': return 'That wizard is not in the Courtyard.'
+    case 'already-in-party': return 'That wizard is already in a party.'
+    case 'already-invited': return 'That invitation is already pending.'
+    case 'already-requested': return 'That join request is already pending.'
+    case 'party-private': return 'That party is private.'
+    case 'self-invite':
+    case 'self-kick': return 'You cannot target yourself.'
+    case 'invitation-missing': return 'That invitation has expired.'
+    case 'request-missing': return 'That join request has expired.'
+    case 'not-recipient': return 'That invitation belongs to another wizard.'
+    case 'player-missing': return 'That wizard is no longer available.'
+    case 'same-party': return 'That wizard is already in your party.'
+    case 'party-missing':
+    case null: return 'That party is no longer available.'
+  }
 }
 
 function sameRuntimeScene(

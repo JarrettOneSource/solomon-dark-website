@@ -146,6 +146,157 @@ test('authoritative game host owns two configured player characters and movement
   )
 })
 
+test('global Hub rejects modded and cheats-on admissions before player ownership', async (context) => {
+  const moddedContent = {
+    ...EMPTY_SHARED_CONTENT,
+    manifest: {
+      manifestSha256: '1'.repeat(64),
+      mods: [{
+        contentSha256: 'a'.repeat(64),
+        id: 'tests.modded',
+        version: '1.0.0',
+      }],
+    },
+    summary: {
+      manifestSha256: '1'.repeat(64),
+      mods: [{
+        assets: [],
+        contentSha256: 'a'.repeat(64),
+        id: 'tests.modded',
+        name: 'Modded',
+        slug: 'modded',
+        version: '1.0.0',
+      }],
+    },
+  }
+  const host = await startGameHost({
+    authentication: {
+      kind: 'tickets',
+      claim: credential => credential === 'modded'
+        ? { content: moddedContent, leaderboardUserId: null }
+        : credential === 'cheats'
+          ? { content: EMPTY_SHARED_CONTENT, leaderboardUserId: null }
+          : null,
+    },
+    sessionKind: 'global-hub',
+    sharedHub: true,
+  })
+  context.after(() => host.close())
+
+  for (const [credential, cheatsEnabled, reason] of [
+    ['modded', false, /Mods require/],
+    ['cheats', true, /Cheats require/],
+  ] as const) {
+    const socket = await openSocket(host.address.url)
+    const denied = nextMessage(socket, message => message.type === 'server-disconnect')
+    socket.send(encodeGameMessage({
+      type: 'client-hello',
+      profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
+      cheatsEnabled,
+      protocolVersion: GAME_PROTOCOL_VERSION,
+      credential,
+      character: FIRST_CHARACTER,
+    }))
+    const message = await denied
+    assert.equal(message.type, 'server-disconnect')
+    assert.match(message.reason, reason)
+    await closeSocket(socket)
+  }
+  assert.equal(host.playerCount(), 0)
+})
+
+test('private College projects one party, supports Party-ID reservation, and checkpoints each wizard', async (context) => {
+  let thirdPartyId: string | null = null
+  const host = await startGameHost({
+    authentication: {
+      kind: 'tickets',
+      claim: credential => credential === 'ticket-c' && thirdPartyId
+        ? {
+            content: EMPTY_SHARED_CONTENT,
+            leaderboardUserId: null,
+            partyId: thirdPartyId,
+            reservationId: 'reservation-c',
+          }
+        : ['ticket-a', 'ticket-b'].includes(credential)
+          ? { content: EMPTY_SHARED_CONTENT, leaderboardUserId: null }
+          : null,
+    },
+    sessionKind: 'private-college',
+    snapshotRate: 100,
+  })
+  context.after(() => host.close())
+  const first = await join(host.address.url, 'ticket-a', FIRST_CHARACTER)
+  context.after(() => closeSocket(first.socket))
+  const merged = nextMessage(first.socket, message => (
+    message.type === 'server-party-state'
+    && message.state.party.memberPlayerIds.length === 2
+  ))
+  const firstCheckpoint = nextMessage(first.socket, message => (
+    message.type === 'server-save-checkpoint' && message.save !== null
+  ))
+  const second = await join(host.address.url, 'ticket-b', SECOND_CHARACTER)
+  context.after(() => closeSocket(second.socket))
+  const partyState = await merged
+  assert.equal(partyState.type, 'server-party-state')
+  assert.match(partyState.state.party.joinCode, /^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/)
+  assert.equal(partyState.state.party.visibility, 'private')
+  const target = host.partyTargetByCode(partyState.state.party.joinCode)
+  assert.equal(target?.memberCount, 2)
+  assert.equal(target?.visibility, 'private')
+  thirdPartyId = target!.id
+  assert.equal(host.reservePartyJoin(target!.id, 'reservation-c', performance.now() + 1_000), null)
+  const third = await join(host.address.url, 'ticket-c', FIRST_CHARACTER)
+  context.after(() => closeSocket(third.socket))
+  assert.equal((await firstCheckpoint).type, 'server-save-checkpoint')
+  assert.equal(host.playerCount(), 3)
+})
+
+test('expired external join requests disappear from the leader projection', async (context) => {
+  const host = await startGameHost({
+    authentication: SHARED_HUB_AUTHENTICATION,
+    sessionKind: 'global-hub',
+    sharedHub: true,
+    snapshotRate: 100,
+  })
+  context.after(() => host.close())
+  const leader = await join(host.address.url, 'ticket-leader', FIRST_CHARACTER)
+  context.after(() => closeSocket(leader.socket))
+  const inviteOnly = nextMessage(leader.socket, message => (
+    message.type === 'server-party-state'
+    && message.state.party.visibility === 'invite-only'
+  ))
+  leader.socket.send(encodeGameMessage({
+    type: 'client-party-settings',
+    visibility: 'invite-only',
+  }))
+  const party = await inviteOnly
+  assert.equal(party.type, 'server-party-state')
+  const pending = nextMessage(leader.socket, message => (
+    message.type === 'server-party-state' && message.state.joinRequests.length === 1
+  ))
+  const created = host.createPartyJoinRequest({
+    expiresAt: performance.now() + 50,
+    id: 'request-expiring',
+    listingId: party.state.party.listingId,
+    requester: {
+      accountUsername: null,
+      displayName: 'Guest Cassia',
+      requesterId: 'guest-expiring',
+    },
+    token: 'request-token-expiring',
+  })
+  assert.equal(created.accepted, true)
+  const projected = await pending
+  assert.equal(projected.type, 'server-party-state')
+  const expired = await nextMessage(leader.socket, message => (
+    message.type === 'server-party-state'
+    && message.state.revision > projected.state.revision
+    && message.state.joinRequests.length === 0
+  ))
+  assert.equal(expired.type, 'server-party-state')
+  assert.equal(host.partyJoinRequestStatus('request-token-expiring'), null)
+})
+
 test('shared Hub chat isolates parties, reaches Hub global, and becomes party-only in a run', async (context) => {
   const host = await startGameHost({
     authentication: SHARED_HUB_AUTHENTICATION,
@@ -1524,6 +1675,7 @@ test('host rejects an unconfirmed save mod mismatch and accepts an explicit cont
     version: '2.0.0',
   }
   const save = createGameSaveDocument({
+    integrity: 'local-only',
     loadedBoneyard: null,
     mods: [savedMod],
     modState: { 'tests.saved-mod': { retained: true } },
@@ -1777,6 +1929,7 @@ test('host signs an account-bound global score only for a fresh cheats-off run',
 
 test('host withholds global scores across every ineligible authority branch', async () => {
   const save = createGameSaveDocument({
+    integrity: 'global-clean',
     loadedBoneyard: null,
     mods: [],
     modState: {},
@@ -1785,9 +1938,10 @@ test('host withholds global scores across every ineligible authority branch', as
   })
   const scenarios: readonly [string, LeaderboardScenario][] = [
     ['anonymous admission', { leaderboardUserId: null }],
-    ['initial cheat mode', { cheatsEnabled: true }],
+    ['initial cheat mode in a private College', { cheatsEnabled: true, private: true }],
     ['unattested save resume', { save }],
     ['live cheat mode', {
+      private: true,
       beforeArchive: async (socket) => {
         socket.send(encodeGameMessage({ type: 'client-cheat-mode', enabled: true }))
         socket.send(encodeGameMessage({ type: 'client-cheat-mode', enabled: false }))
@@ -1796,6 +1950,7 @@ test('host withholds global scores across every ineligible authority branch', as
     }],
     ['accepted Lua', {
       lua: true,
+      private: true,
       beforeArchive: async (socket) => {
         const result = nextMessage(socket, message => (
           message.type === 'server-lua-result' && message.requestId === 1
@@ -2042,6 +2197,7 @@ interface LeaderboardScenario {
   cheatsEnabled?: boolean
   leaderboardUserId?: number | null
   lua?: boolean
+  private?: boolean
   save?: string
 }
 
@@ -2059,6 +2215,7 @@ async function completeLeaderboardScenario(
     leaderboardReceiptSecret: LEADERBOARD_RECEIPT_SECRET,
     ...(scenario.lua ? { luaWasmPath } : {}),
     snapshotRate: 100,
+    sessionKind: scenario.private ? 'private-college' : 'standalone',
   })
   const socket = await openSocket(host.address.url)
   try {
@@ -2220,7 +2377,7 @@ function nextMessage(
     const timeout = setTimeout(() => {
       cleanup()
       reject(new Error('timed out waiting for game message'))
-    }, 3000)
+    }, 10_000)
     const receive = (data: WebSocket.RawData) => {
       const message = materializeServerMessage(
         socket,

@@ -39,7 +39,16 @@ public sealed partial class GameSessionProvisioner
         }
 
         var provisioned = await ReadPrivateProvisionResponseAsync(response, cancellationToken);
-        return BuildEndpoint(provisioned.Path, provisioned.Credential);
+        if (!string.Equals(provisioned.SessionKind, "private-college", StringComparison.Ordinal))
+        {
+            throw new GameSessionUnavailableException(
+                "The game session supervisor returned an invalid private College endpoint.");
+        }
+        return BuildEndpoint(
+            provisioned.Path,
+            provisioned.Credential,
+            "private-college",
+            GameSessionPath());
     }
 
     public async Task<ProvisionedGameEndpoint> AdmitSharedHubAsync(
@@ -58,12 +67,17 @@ public sealed partial class GameSessionProvisioner
         }
 
         var provisioned = await ReadPrivateProvisionResponseAsync(response, cancellationToken);
-        if (!string.Equals(provisioned.Path, "/game-hub", StringComparison.Ordinal))
+        if (!string.Equals(provisioned.Path, "/game-hub", StringComparison.Ordinal) ||
+            !string.Equals(provisioned.SessionKind, "global-hub", StringComparison.Ordinal))
         {
             throw new GameSessionUnavailableException(
                 "The game session supervisor returned an invalid shared Hub endpoint.");
         }
-        return BuildEndpoint(provisioned.Path, provisioned.Credential, GameHubPath());
+        return BuildEndpoint(
+            provisioned.Path,
+            provisioned.Credential,
+            "global-hub",
+            GameHubPath());
     }
 
     public async Task<SharedHubStats> GetSharedHubStatsAsync(
@@ -90,6 +104,101 @@ public sealed partial class GameSessionProvisioner
                 "The game session supervisor returned invalid shared Hub stats.",
                 exception);
         }
+    }
+
+    public Task<GamePartyJoinResolution> ResolvePartyCodeAsync(
+        string code,
+        CancellationToken cancellationToken) =>
+        PostPartyAsync<GamePartyJoinResolution>(
+            "/admin/join/resolve",
+            new { code },
+            ValidatePartyJoinResolution,
+            cancellationToken);
+
+    public Task<GamePartyJoinResolution> ResolvePublicPartyAsync(
+        string listingId,
+        CancellationToken cancellationToken) =>
+        PostPartyAsync<GamePartyJoinResolution>(
+            "/admin/join/public",
+            new { listingId },
+            ValidatePartyJoinResolution,
+            cancellationToken);
+
+    public Task<GamePartyJoinRequestReceipt> RequestPartyJoinAsync(
+        string listingId,
+        GamePartyJoinRequester requester,
+        CancellationToken cancellationToken) =>
+        PostPartyAsync<GamePartyJoinRequestReceipt>(
+            "/admin/join/requests",
+            new { listingId, requester },
+            value => value.Status == "pending" && ValidToken(value.RequestToken),
+            cancellationToken);
+
+    public async Task<GamePartyJoinRequestStatus> GetPartyJoinRequestAsync(
+        string requestToken,
+        CancellationToken cancellationToken)
+    {
+        EnsurePrivateSessionsConfigured();
+        if (!ValidToken(requestToken))
+        {
+            throw new GamePartyJoinException("That join request is invalid.", 400);
+        }
+        using var request = CreateAdminRequest(
+            HttpMethod.Get,
+            $"/admin/join/requests/{Uri.EscapeDataString(requestToken)}");
+        using var response = await httpClient.SendAsync(request, cancellationToken);
+        return await ReadPartyResponseAsync<GamePartyJoinRequestStatus>(
+            response,
+            value => value.Status switch
+            {
+                "pending" or "denied" => value.IntentId is null && value.Target is null,
+                "accepted" => ValidToken(value.IntentId) && value.Target is not null &&
+                    ValidatePartyJoinTarget(value.Target),
+                _ => false
+            },
+            cancellationToken);
+    }
+
+    public async Task<ProvisionedGameEndpoint> AdmitPartyJoinAsync(
+        string intentId,
+        WebSessionContent content,
+        bool activeMods,
+        int? leaderboardUserId,
+        CancellationToken cancellationToken)
+    {
+        EnsurePrivateSessionsConfigured();
+        if (!ValidToken(intentId))
+        {
+            throw new GamePartyJoinException("That party join is invalid.", 400);
+        }
+        using var request = CreateAdminRequest(HttpMethod.Post, "/admin/join/admit");
+        request.Content = JsonContent.Create(new
+        {
+            activeMods,
+            content,
+            intentId,
+            leaderboardUserId
+        });
+        using var response = await httpClient.SendAsync(request, cancellationToken);
+        var provisioned = await ReadPartyResponseAsync<SupervisorProvisionResponse>(
+            response,
+            value => value.SessionKind is "global-hub" or "private-college",
+            cancellationToken);
+        return provisioned.SessionKind switch
+        {
+            "global-hub" => BuildEndpoint(
+                provisioned.Path,
+                provisioned.Credential,
+                provisioned.SessionKind,
+                GameHubPath()),
+            "private-college" => BuildEndpoint(
+                provisioned.Path,
+                provisioned.Credential,
+                provisioned.SessionKind,
+                GameSessionPath()),
+            _ => throw new GameSessionUnavailableException(
+                "The game session supervisor returned an invalid party endpoint.")
+        };
     }
 
     public async Task<IReadOnlyList<PublicGameParty>> ListPublicPartiesAsync(
@@ -130,9 +239,61 @@ public sealed partial class GameSessionProvisioner
         return request;
     }
 
+    private async Task<T> PostPartyAsync<T>(
+        string path,
+        object body,
+        Func<T, bool> validate,
+        CancellationToken cancellationToken)
+    {
+        EnsurePrivateSessionsConfigured();
+        using var request = CreateAdminRequest(HttpMethod.Post, path);
+        request.Content = JsonContent.Create(body);
+        using var response = await httpClient.SendAsync(request, cancellationToken);
+        return await ReadPartyResponseAsync(response, validate, cancellationToken);
+    }
+
+    private static async Task<T> ReadPartyResponseAsync<T>(
+        HttpResponseMessage response,
+        Func<T, bool> validate,
+        CancellationToken cancellationToken)
+    {
+        if (!response.IsSuccessStatusCode)
+        {
+            string message;
+            try
+            {
+                var error = await response.Content.ReadFromJsonAsync<PartyErrorResponse>(
+                    JsonOptions,
+                    cancellationToken);
+                message = string.IsNullOrWhiteSpace(error?.Error)
+                    ? "That party is not available right now."
+                    : error.Error;
+            }
+            catch (JsonException)
+            {
+                message = "That party is not available right now.";
+            }
+            throw new GamePartyJoinException(message, (int)response.StatusCode);
+        }
+        try
+        {
+            var value = await response.Content.ReadFromJsonAsync<T>(JsonOptions, cancellationToken)
+                ?? throw new JsonException("The response was empty.");
+            if (!validate(value)) throw new JsonException("The party response was invalid.");
+            return value;
+        }
+        catch (JsonException exception)
+        {
+            throw new GameSessionUnavailableException(
+                "The game session supervisor returned an invalid party response.",
+                exception);
+        }
+    }
+
     private ProvisionedGameEndpoint BuildEndpoint(
         string? path,
         string? credential,
+        string expectedSessionKind,
         Regex? requiredPath = null)
     {
         if (string.IsNullOrEmpty(credential) ||
@@ -145,7 +306,8 @@ public sealed partial class GameSessionProvisioner
 
         return new ProvisionedGameEndpoint(
             new Uri(publicWebSocketOrigin!, path!).ToString(),
-            credential);
+            credential,
+            expectedSessionKind);
     }
 
     private void EnsurePrivateSessionsConfigured()
@@ -171,13 +333,48 @@ public sealed partial class GameSessionProvisioner
             !string.IsNullOrWhiteSpace(party.Leader) &&
             party.Members is not null &&
             party.MemberCount == party.Members.Length &&
-            party.MemberCount >= 2 &&
+            party.MemberCount >= 1 &&
             party.MaxMembers >= party.MemberCount &&
             party.Members.Contains(party.Leader, StringComparer.Ordinal) &&
             party.Members.All(member => !string.IsNullOrWhiteSpace(member)) &&
             party.Status is "hub" or "playing" &&
+            party.Visibility is "invite-only" or "public" &&
             (party.Status == "playing" || party.BoneyardName is null));
     }
+
+    private static bool ValidatePartyJoinResolution(GamePartyJoinResolution value) =>
+        ValidToken(value.IntentId) && ValidatePartyJoinTarget(value.Target);
+
+    private static bool ValidatePartyJoinTarget(GamePartyJoinTarget? target)
+    {
+        if (target is null || target.Kind is not ("global-hub" or "private-college") ||
+            string.IsNullOrWhiteSpace(target.Leader) || target.Leader.Length > 64 ||
+            target.MemberCount < 1 || target.MemberCount > 16 ||
+            target.Status is not ("hub" or "playing") ||
+            target.Visibility is not ("invite-only" or "private" or "public") ||
+            target.Content is null || !Sha256Regex().IsMatch(target.Content.ManifestSha256) ||
+            target.Content.Mods is null || target.Content.Mods.Length > 128)
+        {
+            return false;
+        }
+        var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        return target.Content.Mods.All(mod =>
+            !string.IsNullOrWhiteSpace(mod.Id) && mod.Id.Length <= 128 && ids.Add(mod.Id) &&
+            !string.IsNullOrWhiteSpace(mod.Name) && mod.Name.Length <= 80 &&
+            !string.IsNullOrWhiteSpace(mod.Slug) && mod.Slug.Length <= 80 &&
+            !string.IsNullOrWhiteSpace(mod.Version) && mod.Version.Length <= 64 &&
+            Sha256Regex().IsMatch(mod.ContentSha256 ?? string.Empty) &&
+            mod.Assets is not null && mod.Assets.Length <= 64 && mod.Assets.All(asset =>
+                asset.ByteLength is > 0 and <= 1024 * 1024 &&
+                string.Equals(asset.ModId, mod.Id, StringComparison.OrdinalIgnoreCase) &&
+                !string.IsNullOrWhiteSpace(asset.Path) && asset.Path.Length <= 240 &&
+                asset.Path.StartsWith("sprites/", StringComparison.Ordinal) &&
+                asset.Path.EndsWith(".png", StringComparison.Ordinal) &&
+                Sha256Regex().IsMatch(asset.Sha256 ?? string.Empty)));
+    }
+
+    private static bool ValidToken(string? value) =>
+        value is not null && PartyTokenRegex().IsMatch(value);
 
     private static async Task<SupervisorProvisionResponse> ReadPrivateProvisionResponseAsync(
         HttpResponseMessage response,
@@ -217,11 +414,25 @@ public sealed partial class GameSessionProvisioner
     [GeneratedRegex("^/game-hub$", RegexOptions.CultureInvariant)]
     private static partial Regex GameHubPath();
 
-    private sealed record SupervisorProvisionResponse(string? Credential, string? Path);
+    [GeneratedRegex("^[A-Za-z0-9_-]{8,128}$", RegexOptions.CultureInvariant)]
+    private static partial Regex PartyTokenRegex();
+
+    [GeneratedRegex("^[a-f0-9]{64}$", RegexOptions.CultureInvariant)]
+    private static partial Regex Sha256Regex();
+
+    private sealed record SupervisorProvisionResponse(
+        string? Credential,
+        string? Path,
+        string? SessionKind);
+
+    private sealed record PartyErrorResponse(string? Error);
 
 }
 
-public sealed record ProvisionedGameEndpoint(string Url, string Credential);
+public sealed record ProvisionedGameEndpoint(
+    string Url,
+    string Credential,
+    string SessionKind);
 
 public sealed record SharedHubStats(int Players, int Parties, int Runs);
 
@@ -232,9 +443,48 @@ public sealed record PublicGameParty(
     int MemberCount,
     int MaxMembers,
     string Status,
+    string Visibility,
     string? BoneyardName);
 
 public sealed record PublicGamePartyDirectory(PublicGameParty[] Items);
+
+public sealed record GamePartyJoinRequester(
+    string? AccountUsername,
+    string DisplayName,
+    string RequesterId);
+
+public sealed record GamePartyAsset(
+    int ByteLength,
+    string ModId,
+    string Path,
+    string? Sha256);
+
+public sealed record GamePartyMod(
+    GamePartyAsset[] Assets,
+    string? ContentSha256,
+    string Id,
+    string Name,
+    string Slug,
+    string Version);
+
+public sealed record GamePartyContent(string ManifestSha256, GamePartyMod[] Mods);
+
+public sealed record GamePartyJoinTarget(
+    GamePartyContent? Content,
+    string Kind,
+    string Leader,
+    int MemberCount,
+    string Status,
+    string Visibility);
+
+public sealed record GamePartyJoinResolution(string IntentId, GamePartyJoinTarget Target);
+
+public sealed record GamePartyJoinRequestReceipt(string RequestToken, string Status);
+
+public sealed record GamePartyJoinRequestStatus(
+    string Status,
+    string? IntentId,
+    GamePartyJoinTarget? Target);
 
 public sealed class GameSessionUnavailableException : Exception
 {
@@ -247,4 +497,9 @@ public sealed class GameSessionUnavailableException : Exception
         : base(message, innerException)
     {
     }
+}
+
+public sealed class GamePartyJoinException(string message, int statusCode) : Exception(message)
+{
+    public int StatusCode { get; } = statusCode;
 }

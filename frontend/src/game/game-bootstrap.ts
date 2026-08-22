@@ -1,5 +1,19 @@
 import type { GameEndpoint } from './engine.ts'
 
+export type BrowserGameAdmission =
+  | { readonly kind: 'global-hub' }
+  | { readonly kind: 'party'; readonly intentId: string }
+  | { readonly kind: 'private-college' }
+
+export async function admitBrowserGame(
+  admission: BrowserGameAdmission,
+  token: string | null,
+): Promise<GameEndpoint> {
+  if (admission.kind === 'global-hub') return admitSharedHubPlayer(token)
+  if (admission.kind === 'private-college') return resolveGameEndpoint()
+  return admitPartyJoin(admission.intentId, token)
+}
+
 declare global {
   interface Window {
     solomonDarkRuntime?: {
@@ -21,11 +35,9 @@ export function configuredGameEndpoint(): GameEndpoint | null {
   const url = import.meta.env.VITE_GAME_SERVER_URL
   const credential = import.meta.env.VITE_GAME_BOOTSTRAP_CREDENTIAL
   if (!url || !credential) return null
-  return {
-    kind: import.meta.env.VITE_GAME_SERVER_KIND === 'remote' ? 'remote' : 'localhost',
-    url,
-    credential,
-  }
+  return import.meta.env.VITE_GAME_SERVER_KIND === 'remote'
+    ? { kind: 'remote', sessionKind: 'private-college', url, credential }
+    : { kind: 'localhost', sessionKind: 'standalone', url, credential }
 }
 
 export async function resolveGameEndpoint(
@@ -71,9 +83,31 @@ export async function admitSharedHubPlayer(
   return decodeProvisionedGameEndpoint(payload)
 }
 
+export async function admitPartyJoin(
+  intentId: string,
+  token: string | null,
+  request: typeof fetch = fetch,
+): Promise<GameEndpoint> {
+  const headers = new Headers({
+    accept: 'application/json',
+    'content-type': 'application/json',
+  })
+  if (token) headers.set('authorization', `Bearer ${token}`)
+  const response = await request('/api/game/join/admit', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers,
+    body: JSON.stringify({ intentId }),
+  })
+  const payload = await readJson(response)
+  if (!response.ok) throw new Error(apiError(payload, 'That party is not available right now.'))
+  return decodeProvisionedGameEndpoint(payload)
+}
+
 export function decodeProvisionedGameEndpoint(value: unknown): GameEndpoint {
   if (!record(value) ||
       value.kind !== 'remote' ||
+      (value.sessionKind !== 'global-hub' && value.sessionKind !== 'private-college') ||
       typeof value.url !== 'string' ||
       typeof value.credential !== 'string' ||
       value.credential.length === 0 ||
@@ -89,7 +123,12 @@ export function decodeProvisionedGameEndpoint(value: unknown): GameEndpoint {
   if (endpointUrl.protocol !== 'wss:' || endpointUrl.username || endpointUrl.password) {
     throw new Error('The game session provisioner returned an invalid endpoint.')
   }
-  return { kind: 'remote', url: endpointUrl.toString(), credential: value.credential }
+  return {
+    kind: 'remote',
+    sessionKind: value.sessionKind,
+    url: endpointUrl.toString(),
+    credential: value.credential,
+  }
 }
 
 async function readJson(response: Response): Promise<unknown> {

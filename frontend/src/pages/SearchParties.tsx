@@ -8,15 +8,14 @@ export default function SearchParties() {
     <div className="mx-auto max-w-3xl px-4 py-20 text-center sm:px-6">
       <Reveal>
         <img src={art.skullGold} alt="" className="mx-auto h-14 opacity-70" />
-        <div className="kicker mb-2 mt-6">Parties moved into the game</div>
-        <h1 className="h-display text-3xl">Enter the Shared Hub</h1>
+        <div className="kicker mb-2 mt-6">Party discovery lives in the game</div>
+        <h1 className="h-display text-3xl">Join Your Party</h1>
         <p className="text-fell mx-auto mt-4 max-w-xl text-bone-dim">
-          Browser parties now form face to face in the College Courtyard. Enter the
-          shared Hub, inspect another wizard, send an invitation, and let the party
-          leader choose the Boneyard. Your exact enabled mod set travels with your
-          admission and must match the party before launch.
+          Open Play, choose Join Party, then enter a Party ID or browse public and
+          invite-only groups. A modded College shows its content before you join and
+          can sync the host's mods in one step.
         </p>
-        <Link to="/game" className="btn btn-gold mt-8">Play Solomon Dark</Link>
+        <Link to="/game" className="btn btn-gold mt-8">Open Join Party</Link>
       </Reveal>
     </div>
   )

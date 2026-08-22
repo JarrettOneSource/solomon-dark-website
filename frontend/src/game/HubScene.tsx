@@ -49,8 +49,14 @@ import {
   projectNativeStickAim,
   projectNativeWorldPointer,
 } from './input/gameplay-pointer.ts'
-import type { BoneyardChoice, GameModAsset, GameSnapshot } from './protocol/game-protocol.ts'
-import type { LocalPartyState } from './protocol/party-state.ts'
+import type {
+  BoneyardChoice,
+  GameModAsset,
+  GameSessionKind,
+  GameSnapshot,
+} from './protocol/game-protocol.ts'
+import type { LocalPartyState, PartyVisibility } from './protocol/party-state.ts'
+import PartySettingsDialog from './PartySettingsDialog.tsx'
 import type {
   ProtocolPlayerEconomy,
   ProtocolPlayerProgression,
@@ -84,22 +90,30 @@ interface HubSceneProps {
   nativeUiStageStyle: CSSProperties
   onInput: (input: PlayerCharacterInput) => void
   onAcceptPartyInvitation: (invitationId: string) => void
+  onAcceptPartyJoinRequest: (requestId: string) => void
   onDenyPartyInvitation: (invitationId: string) => void
+  onDenyPartyJoinRequest: (requestId: string) => void
   onHubAction: (action: HubInventoryAction) => void
   onInventoryOpenChange: (open: boolean) => void
   onInvitePlayer: (playerId: string) => void
+  onKickPartyPlayer: (playerId: string) => void
+  onLeaveParty: () => void
   onLoadingError: () => void
   onMessagePlayer: (playerId: string, displayName: string) => void
   onOpenSkills: () => void
   onPauseRequest: () => void
   onReady: () => void
   onStartMatch: (boneyardId: string) => void
+  onPartyRotateCode: () => void
+  onPartyVisibility: (visibility: PartyVisibility) => void
+  partyActionError: string | null
   partyState: LocalPartyState | null
   playerId: string
   progression: ProtocolPlayerProgression
   presentationPaused: boolean
   samplePresentation: (nowMs?: number) => HubPresentationFrame
   settings: GameSettings
+  sessionKind: GameSessionKind
   subscribePing: (listener: (pingMs: number) => void) => () => void
   subscribe: (listener: (snapshot: GameSnapshot) => void) => () => void
 }
@@ -127,22 +141,30 @@ export default function HubScene({
   nativeUiStageStyle,
   onInput,
   onAcceptPartyInvitation,
+  onAcceptPartyJoinRequest,
   onDenyPartyInvitation,
+  onDenyPartyJoinRequest,
   onHubAction,
   onInventoryOpenChange,
   onInvitePlayer,
+  onKickPartyPlayer,
+  onLeaveParty,
   onLoadingError,
   onMessagePlayer,
   onOpenSkills,
   onPauseRequest,
   onReady,
   onStartMatch,
+  onPartyRotateCode,
+  onPartyVisibility,
+  partyActionError,
   partyState,
   playerId,
   progression,
   presentationPaused,
   samplePresentation,
   settings,
+  sessionKind,
   subscribePing,
   subscribe,
 }: HubSceneProps) {
@@ -183,6 +205,7 @@ export default function HubScene({
   const [hubUiSurface, setHubUiSurface] = useState<HubUiSurface>(null)
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null)
   const [selectedGold, setSelectedGold] = useState<number | null>(null)
+  const [partySettingsOpen, setPartySettingsOpen] = useState(false)
   const selectedPlayerIdRef = useRef<string | null>(null)
   selectedPlayerIdRef.current = selectedPlayerId
   const inventoryRequestRef = useRef(inventoryRequestSequence)
@@ -196,6 +219,7 @@ export default function HubScene({
     hubInitialSnapshot.world.participants[playerId]?.transition !== null
   ))
   const modalOpen = pickerOpen || hubUiSurface !== null || selectedPlayerId !== null
+    || partySettingsOpen
   modalOpenRef.current = modalOpen
 
   useEffect(() => {
@@ -630,7 +654,20 @@ export default function HubScene({
               <img src={art.skullGold} alt="" aria-hidden />
               Party
               <span className="hub-party-count">{partyState.party.memberPlayerIds.length}</span>
+              {partyState.party.leaderPlayerId === playerId
+                || partyState.party.memberPlayerIds.length > 1
+                || sessionKind === 'private-college' ? (
+                <button
+                  className="hub-party-settings-open"
+                  type="button"
+                  aria-label="Party settings"
+                  onClick={() => setPartySettingsOpen(true)}
+                >⚙</button>
+              ) : null}
             </h2>
+            {partyActionError ? (
+              <p className="hub-party-error" role="alert">{partyActionError}</p>
+            ) : null}
             <div className="hub-party-members" role="list">
               {partyState.party.memberPlayerIds.map((memberPlayerId) => {
                 const profile = partyState.hubPlayers.find(({ playerId: id }) => (
@@ -663,7 +700,7 @@ export default function HubScene({
                         <span className="hub-party-member-tag hub-party-member-you">You</span>
                       )}
                       {isLeader && (
-                        <span className="hub-party-member-tag hub-party-member-host">Host</span>
+                        <span className="hub-party-member-tag hub-party-member-host">Leader</span>
                       )}
                     </button>
                   </div>
@@ -698,6 +735,22 @@ export default function HubScene({
             ))}
           </section>
         )}
+
+        {partySettingsOpen && partyState ? (
+          <PartySettingsDialog
+            error={partyActionError}
+            onAcceptRequest={onAcceptPartyJoinRequest}
+            onClose={() => setPartySettingsOpen(false)}
+            onDenyRequest={onDenyPartyJoinRequest}
+            onKick={onKickPartyPlayer}
+            onLeave={onLeaveParty}
+            onRotateCode={onPartyRotateCode}
+            onVisibility={onPartyVisibility}
+            playerId={playerId}
+            sessionKind={sessionKind}
+            state={partyState}
+          />
+        ) : null}
 
         {selectedPlayerId && (() => {
           const profile = partyState?.hubPlayers.find(({ playerId: id }) => (
@@ -789,7 +842,9 @@ export default function HubScene({
                       Message
                     </button>
                   )}
-                  {partyState && !alreadyTogether && (
+                  {partyState
+                    && partyState.party.leaderPlayerId === playerId
+                    && !alreadyTogether && (
                     <button
                       type="button"
                       className="hub-player-profile-invite"

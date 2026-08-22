@@ -1,0 +1,34 @@
+.play-routing-backdrop {
+  position: absolute;
+  z-index: 52000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgb(0 0 0 / 0.82);
+  pointer-events: auto;
+}
+
+.play-routing-dialog {
+  box-sizing: border-box;
+  width: min(680px, 100%);
+  max-height: min(760px, 92vh);
+  overflow: auto;
+  padding: 25px;
+  border: 1px solid #9c8249;
+  background: radial-gradient(circle at 50% 0, #352a16, #090806 72%);
+  box-shadow: 0 18px 60px #000, inset 0 0 35px rgb(0 0 0 / 0.6);
+  color: #ded1ac;
+  font-family: 'IM FELL English', Georgia, serif;
+}
+
+.play-routing-dialog h2 { margin: 0 0 12px; color: #f0d281; font: 700 24px Cinzel, Georgia, serif; text-align: center; }
+.play-routing-dialog h3 { margin: 18px 0 6px; color: #cdb574; font: 700 11px Cinzel, Georgia, serif; letter-spacing: 0.12em; }
+.play-routing-dialog ul { max-height: 230px; overflow: auto; margin: 0; padding-left: 22px; }
+.play-routing-warning { color: #e1ad87; font: 700 12px Cinzel, Georgia, serif; letter-spacing: 0.1em; text-align: center; }
+.play-routing-dialog footer { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 22px; }
+.play-routing-dialog button { min-height: 44px; padding: 9px 16px; border: 1px solid #9c8249; background: linear-gradient(#3a2f1a, #151007); color: #efd68f; cursor: pointer; font: 700 11px Cinzel, Georgia, serif; }
+.play-routing-dialog button:disabled { cursor: default; opacity: 0.55; }
+.play-routing-progress { position: relative; height: 30px; margin-top: 16px; overflow: hidden; border: 1px solid #66552f; background: #080704; }
+.play-routing-progress > span { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg, #4b3919, #b68d3d); }
+.play-routing-progress small { position: relative; z-index: 1; display: grid; height: 100%; place-items: center; color: #fff0bf; text-shadow: 0 1px 2px #000; }

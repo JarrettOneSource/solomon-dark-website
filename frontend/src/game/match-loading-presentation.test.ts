@@ -80,10 +80,10 @@ test('owns shared-Hub admission only after the complete loadout is behind loadin
     mainScene.indexOf('const startBoneyard ='),
   )
 
-  assert.doesNotMatch(beginNewGame, /prepareNewGame/)
-  assert.match(startHub, /await prepareNewGame\(\)[\s\S]*await connectSession\(/)
+  assert.doesNotMatch(beginNewGame, /prepareGame/)
+  assert.match(startHub, /await prepareGame\(pendingAdmission\)[\s\S]*await connectSession\(/)
   assert.ok(
-    resumeLastGame.indexOf('beginLoading(flow') < resumeLastGame.indexOf('await prepareNewGame()'),
+    resumeLastGame.indexOf('beginLoading(flow') < resumeLastGame.indexOf('await prepareGame('),
     'resume must mount its loading barrier before shared-Hub admission',
   )
   assert.match(mainScene, /onDisciplineCommit=\{beginHubLoading\}/)

@@ -182,6 +182,28 @@ builder.Services.AddRateLimiter(options =>
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
                 AutoReplenishment = true
             }));
+    options.AddPolicy("party-join-status", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 120,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                AutoReplenishment = true
+            }));
+    options.AddPolicy("party-joins", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 20,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                AutoReplenishment = true
+            }));
     options.AddPolicy("leaderboard-submissions", context =>
         RateLimitPartition.GetFixedWindowLimiter(
             TokenService.GetUserId(context.User)?.ToString() ??
@@ -323,6 +345,7 @@ ModEndpoints.Map(app);
 BoneyardEndpoints.Map(app);
 WebGameSaveEndpoints.Map(app);
 GameLeaderboardEndpoints.Map(app);
+GameContentEndpoints.Map(app);
 StatsEndpoints.Map(app);
 DiagnosticLogEndpoints.Map(app);
 GameSessionEndpoints.Map(app);

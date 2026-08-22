@@ -24,9 +24,12 @@ import {
   type GameChatMessage,
   type GameChatRejection,
   type GameSnapshot,
+  type GameSessionKind,
   type GameplayPauseSource,
   type GameplayPauseState,
   type LoadedBoneyard,
+  type PartyAction,
+  type PartyActionRejection,
   type ServerLuaResultMessage,
   type ServerDeploymentRestartMessage,
   type ServerWelcomeMessage,
@@ -37,7 +40,11 @@ import type { GameSaveCheckpoint } from '../save/game-save-contract.ts'
 import type { HubParticipantState } from '../core-kernels/hub-regions.ts'
 import type { ProtocolPlayerState } from '../protocol/game-state.ts'
 import type { HubInventoryAction } from '../core-kernels/hub-economy.ts'
-import type { LocalPartyState, PlayerSocialProfile } from '../protocol/party-state.ts'
+import type {
+  LocalPartyState,
+  PartyVisibility,
+  PlayerSocialProfile,
+} from '../protocol/party-state.ts'
 import { nativeSkillCategory } from '../core-kernels/player-progression.ts'
 import type { GameTransport } from './game-transport.ts'
 import {
@@ -91,10 +98,13 @@ export interface GameClientSession {
   readonly modAssets: readonly GameModAsset[]
   readonly playerId: string
   readonly resumeToken: string
+  readonly sessionKind: GameSessionKind
+  acceptPartyJoinRequest(requestId: string): void
   bindSkillQuickbar(skillId: number, slot: number): void
   confirmLoadout(): void
   destroy(): void
   denyPartyInvitation(invitationId: string): void
+  denyPartyJoinRequest(requestId: string): void
   executeLua(code: string): Promise<GameLuaExecutionResult>
   acceptPartyInvitation(invitationId: string): void
   getBoneyard(): LoadedBoneyard | null
@@ -114,6 +124,7 @@ export interface GameClientSession {
   onEnemyEvent(listener: (event: BoneyardEnemyEventSnapshot) => void): () => void
   onPing(listener: (pingMs: number) => void): () => void
   onPartyState(listener: (state: LocalPartyState) => void): () => void
+  onPartyAction(listener: (result: GamePartyActionResult) => void): () => void
   onSaveCheckpoint(listener: (checkpoint: GameSaveCheckpoint) => void): () => void
   onSnapshot(listener: (snapshot: GameSnapshot) => void): () => void
   sampleBoneyardPresentation(nowMs?: number): BoneyardPresentationFrame
@@ -129,7 +140,17 @@ export interface GameClientSession {
   sendInput(input: PlayerCharacterInput): void
   setCheatsEnabled(enabled: boolean): void
   inviteToParty(playerId: string): void
+  kickPartyPlayer(playerId: string): void
+  leaveParty(): void
+  rotatePartyCode(): void
+  setPartyVisibility(visibility: PartyVisibility): void
   startMatch(boneyardId: string): void
+}
+
+export interface GamePartyActionResult {
+  readonly action: PartyAction
+  readonly ok: boolean
+  readonly reason: PartyActionRejection | null
 }
 
 export type GameLuaExecutionResult = Omit<
@@ -216,6 +237,7 @@ export function connectGameClientSession(
     const enemyEventListeners = new Set<(event: BoneyardEnemyEventSnapshot) => void>()
     const pingListeners = new Set<(pingMs: number) => void>()
     const partyStateListeners = new Set<(state: LocalPartyState) => void>()
+    const partyActionListeners = new Set<(result: GamePartyActionResult) => void>()
     const saveCheckpointListeners = new Set<(checkpoint: GameSaveCheckpoint) => void>()
     const pendingPings = new Map<number, number>()
     const pendingLuaExecutions = new Map<number, PendingLuaExecution>()
@@ -319,6 +341,11 @@ export function connectGameClientSession(
       if (message.type === 'server-party-state') {
         partyState = message.state
         for (const listener of partyStateListeners) listener(partyState)
+        return
+      }
+      if (message.type === 'server-party-action') {
+        const result = { action: message.action, ok: message.ok, reason: message.reason }
+        for (const listener of partyActionListeners) listener(result)
         return
       }
       if (message.type === 'server-chat') {
@@ -467,6 +494,13 @@ export function connectGameClientSession(
     })
 
     const session: GameClientSession = {
+      acceptPartyJoinRequest(requestId) {
+        if (!welcome || destroyed) return
+        options.transport.send(encodeGameMessage({
+          type: 'client-party-request-accept',
+          requestId,
+        }))
+      },
       acceptPartyInvitation(invitationId) {
         if (!welcome || destroyed) return
         options.transport.send(encodeGameMessage({
@@ -516,6 +550,10 @@ export function connectGameClientSession(
         if (!welcome) throw new Error('game session has not been welcomed')
         return welcome.resumeToken
       },
+      get sessionKind() {
+        if (!welcome) throw new Error('game session has not been welcomed')
+        return welcome.sessionKind
+      },
       destroy() {
         if (destroyed) return
         destroyed = true
@@ -542,6 +580,7 @@ export function connectGameClientSession(
         modCatalogListeners.clear()
         enemyEventListeners.clear()
         pingListeners.clear()
+        partyActionListeners.clear()
         partyStateListeners.clear()
         saveCheckpointListeners.clear()
       },
@@ -550,6 +589,13 @@ export function connectGameClientSession(
         options.transport.send(encodeGameMessage({
           type: 'client-party-deny',
           invitationId,
+        }))
+      },
+      denyPartyJoinRequest(requestId) {
+        if (!welcome || destroyed) return
+        options.transport.send(encodeGameMessage({
+          type: 'client-party-request-deny',
+          requestId,
         }))
       },
       executeLua(code) {
@@ -658,6 +704,10 @@ export function connectGameClientSession(
       onPartyState(listener) {
         partyStateListeners.add(listener)
         return () => partyStateListeners.delete(listener)
+      },
+      onPartyAction(listener) {
+        partyActionListeners.add(listener)
+        return () => partyActionListeners.delete(listener)
       },
       onSaveCheckpoint(listener) {
         saveCheckpointListeners.add(listener)
@@ -888,6 +938,28 @@ export function connectGameClientSession(
         options.transport.send(encodeGameMessage({
           type: 'client-party-invite',
           targetPlayerId: playerId,
+        }))
+      },
+      kickPartyPlayer(playerId) {
+        if (!welcome || destroyed || playerId === welcome.playerId) return
+        options.transport.send(encodeGameMessage({
+          type: 'client-party-kick',
+          targetPlayerId: playerId,
+        }))
+      },
+      leaveParty() {
+        if (!welcome || destroyed) return
+        options.transport.send(encodeGameMessage({ type: 'client-party-leave' }))
+      },
+      rotatePartyCode() {
+        if (!welcome || destroyed) return
+        options.transport.send(encodeGameMessage({ type: 'client-party-rotate-code' }))
+      },
+      setPartyVisibility(visibility) {
+        if (!welcome || destroyed) return
+        options.transport.send(encodeGameMessage({
+          type: 'client-party-settings',
+          visibility,
         }))
       },
       startMatch(boneyardId) {

@@ -107,6 +107,7 @@ test('client carries character config, publishes authority, and tears down', asy
     resumeToken: 'reserved-player-1',
     serverTickRate: 100,
     snapshotRate: 20,
+    sessionKind: 'standalone',
     kernelVersion: PLAYER_CHARACTER_KERNEL_VERSION,
     kernelParameters: kernelParameters(),
     content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
@@ -119,6 +120,7 @@ test('client carries character config, publishes authority, and tears down', asy
   }))
   const session = await connecting
   assert.equal(session.isHost, true)
+  assert.equal(session.sessionKind, 'standalone')
   session.setCheatsEnabled(true)
   assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
     type: 'client-cheat-mode',
@@ -148,10 +150,14 @@ test('client carries character config, publishes authority, and tears down', asy
         inviter: { ...NULL_PROFILE, displayName: 'Aurelia', playerId: 'player-2' },
         partyId: 'party-2',
       }],
+      joinRequests: [],
       party: {
         id: 'party-1',
+        joinCode: 'ABCD-2345',
         leaderPlayerId: 'player-1',
+        listingId: 'listing-1',
         memberPlayerIds: ['player-1'],
+        visibility: 'private',
       },
       revision: 3,
     },
@@ -173,6 +179,26 @@ test('client carries character config, publishes authority, and tears down', asy
     type: 'client-party-deny',
     invitationId: 'invite-1',
   })
+  session.setPartyVisibility('public')
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-party-settings',
+    visibility: 'public',
+  })
+  session.rotatePartyCode()
+  assert.equal(decodeClientGameMessage(transport.sent.at(-1)!).type, 'client-party-rotate-code')
+  session.acceptPartyJoinRequest('request-1')
+  assert.equal(decodeClientGameMessage(transport.sent.at(-1)!).type, 'client-party-request-accept')
+  session.denyPartyJoinRequest('request-2')
+  assert.equal(decodeClientGameMessage(transport.sent.at(-1)!).type, 'client-party-request-deny')
+  let partyAction: string | null = null
+  session.onPartyAction(result => { partyAction = `${result.action}:${result.reason}` })
+  transport.receive(encodeGameMessage({
+    type: 'server-party-action',
+    action: 'kick',
+    ok: false,
+    reason: 'not-leader',
+  }))
+  assert.equal(partyAction, 'kick:not-leader')
   const receivedChat: GameChatMessage[] = []
   const rejectedChat: GameChatRejection[] = []
   session.onChatMessage(message => receivedChat.push(message))
@@ -484,6 +510,7 @@ test('client correlates bounded host Lua results and rejects guest or retired ex
     resumeToken: 'reserved-player-1',
     serverTickRate: 100,
     snapshotRate: 20,
+    sessionKind: 'standalone',
     kernelVersion: PLAYER_CHARACTER_KERNEL_VERSION,
     kernelParameters: kernelParameters(),
     content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
@@ -926,6 +953,7 @@ test('client schedules every cast-level transition on a distinct fixed tick', as
     resumeToken: 'reserved-player-1',
     serverTickRate: 100,
     snapshotRate: 20,
+    sessionKind: 'standalone',
     kernelVersion: PLAYER_CHARACTER_KERNEL_VERSION,
     kernelParameters: kernelParameters(),
     content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
@@ -1016,6 +1044,7 @@ test('client disables prediction when the shared character kernel does not match
     resumeToken: 'reserved-player-1',
     serverTickRate: 100,
     snapshotRate: 20,
+    sessionKind: 'standalone',
     kernelVersion: 'future-player-character-kernel',
     kernelParameters: kernelParameters(),
     content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
@@ -1054,6 +1083,7 @@ test('client presents bounded display-rate movement without resending unchanged 
     resumeToken: 'reserved-player-1',
     serverTickRate: 100,
     snapshotRate: 20,
+    sessionKind: 'standalone',
     kernelVersion: PLAYER_CHARACTER_KERNEL_VERSION,
     kernelParameters: kernelParameters(),
     content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
@@ -1389,6 +1419,7 @@ test('client rejects a welcome that omits its assigned player', async () => {
     resumeToken: 'reserved-missing-player',
     serverTickRate: 100,
     snapshotRate: 20,
+    sessionKind: 'standalone',
     kernelVersion: PLAYER_CHARACTER_KERNEL_VERSION,
     kernelParameters: kernelParameters(),
     content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
@@ -1531,6 +1562,7 @@ function receiveWelcome(
     resumeToken: 'reserved-player-1',
     serverTickRate: 100,
     snapshotRate: 20,
+    sessionKind: 'standalone',
     kernelVersion: PLAYER_CHARACTER_KERNEL_VERSION,
     kernelParameters: kernelParameters(),
     content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },

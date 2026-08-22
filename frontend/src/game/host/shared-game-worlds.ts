@@ -23,10 +23,14 @@ import {
   createPartySystem,
   denyPartyInvitation,
   invitePartyPlayer,
+  joinPartyPlayer,
+  kickPartyPlayer,
+  leaveParty,
   partyForPlayer,
   registerPartyPlayer,
   removePartyPlayer,
   type PartyActionRejection,
+  type PartyIdentity,
   type PartySystemState,
 } from './party-system.ts'
 
@@ -67,12 +71,13 @@ export function addSharedHubPlayer(
   state: SharedGameWorldsState,
   playerId: PlayerId,
   config: PlayerCharacterConfig,
+  partyIdentity: PartyIdentity,
 ): SharedGameWorldsState {
   if (sharedGameStateForPlayer(state, playerId)) return state
   return {
     ...state,
     hub: addPlayerCharacter(state.hub, playerId, config),
-    parties: registerPartyPlayer(state.parties, playerId),
+    parties: registerPartyPlayer(state.parties, playerId, partyIdentity),
   }
 }
 
@@ -81,13 +86,14 @@ export function restoreSharedGamePlayer(
   restoredState: GameSimulationState,
   loadedBoneyard: LoadedBoneyard | null,
   playerId: PlayerId,
+  partyIdentity: PartyIdentity,
 ): SharedGameWorldsState {
   if (
     sharedGameStateForPlayer(state, playerId)
     || restoredState.playerEntities.identities.length !== 1
     || restoredState.playerEntities.identities[0]?.playerId !== playerId
   ) throw new Error('shared-game restore requires one unique matching player')
-  const parties = registerPartyPlayer(state.parties, playerId)
+  const parties = registerPartyPlayer(state.parties, playerId, partyIdentity)
   if (restoredState.world.kind === 'hub') {
     return {
       ...state,
@@ -177,6 +183,51 @@ export function denySharedPartyInvitation(
 ): SharedWorldActionResult {
   if (!hubHasPlayer(state, playerId)) return rejected(state, 'not-in-hub')
   const result = denyPartyInvitation(state.parties, playerId, invitationId)
+  return result.accepted
+    ? accepted({ ...state, parties: result.state })
+    : rejected(state, result.reason!)
+}
+
+export function joinSharedPartyPlayer(
+  state: SharedGameWorldsState,
+  playerId: PlayerId,
+  partyId: string,
+  maximumMembers: number,
+): SharedWorldActionResult {
+  if (!hubHasPlayer(state, playerId)) return rejected(state, 'not-in-hub')
+  const result = joinPartyPlayer(state.parties, playerId, partyId, maximumMembers)
+  return result.accepted
+    ? accepted({ ...state, parties: result.state })
+    : rejected(state, result.reason!)
+}
+
+export function leaveSharedParty(
+  state: SharedGameWorldsState,
+  playerId: PlayerId,
+  partyIdentity: PartyIdentity,
+): SharedWorldActionResult {
+  if (!hubHasPlayer(state, playerId)) return rejected(state, 'not-in-hub')
+  const result = leaveParty(state.parties, playerId, partyIdentity)
+  return result.accepted
+    ? accepted({ ...state, parties: result.state })
+    : rejected(state, result.reason!)
+}
+
+export function kickSharedPartyPlayer(
+  state: SharedGameWorldsState,
+  leaderPlayerId: PlayerId,
+  targetPlayerId: PlayerId,
+  partyIdentity: PartyIdentity,
+): SharedWorldActionResult {
+  if (!hubHasPlayer(state, leaderPlayerId) || !hubHasPlayer(state, targetPlayerId)) {
+    return rejected(state, 'not-in-hub')
+  }
+  const result = kickPartyPlayer(
+    state.parties,
+    leaderPlayerId,
+    targetPlayerId,
+    partyIdentity,
+  )
   return result.accepted
     ? accepted({ ...state, parties: result.state })
     : rejected(state, result.reason!)

@@ -3,6 +3,7 @@ import { Rectangle, Texture } from 'pixi.js'
 import type { ModConsumableContent } from '../core-kernels/hub-economy.ts'
 import { loadGameImage, releaseGameImages } from '../game-assets.ts'
 import type { GameModAsset } from '../protocol/game-protocol.ts'
+import { gameContentUrl } from '../game-content-cache.ts'
 
 export interface ModPresentationTextures {
   destroy(): void
@@ -14,7 +15,7 @@ export async function loadModPresentationTextures(
 ): Promise<ModPresentationTextures> {
   const sources = assets.map(asset => ({
     key: assetKey(asset.modId, asset.path),
-    source: `data:image/png;base64,${asset.bytesBase64}`,
+    source: gameContentUrl(asset),
   }))
   const images = await Promise.all(sources.map(async asset => ({
     ...asset,

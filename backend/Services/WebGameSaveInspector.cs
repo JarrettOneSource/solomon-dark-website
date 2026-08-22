@@ -4,11 +4,12 @@ using System.Text.Json;
 
 namespace SolomonDarkRevived.Services;
 
-public sealed record WebGameSaveInspection(long Size, string Sha256);
+public sealed record WebGameSaveInspection(int FormatVersion, long Size, string Sha256);
 
 public static class WebGameSaveInspector
 {
-    public const int FormatVersion = 3;
+    public const int FormatVersion = 4;
+    public const int LegacyFormatVersion = 3;
     public const int MaxDocumentBytes = 8 * 1024 * 1024;
     private const int MaxNodes = 250_000;
 
@@ -42,23 +43,26 @@ public static class WebGameSaveInspector
             throw new InvalidDataException("The browser game save is not valid JSON.");
         }
 
+        var inspectedFormatVersion = 0;
         using (parsed)
         {
             var root = RequireObject(parsed.RootElement, "browser game save");
+            if (!root.TryGetProperty("schemaVersion", out var schemaVersion) ||
+                !schemaVersion.TryGetInt32(out var version) ||
+                (version != FormatVersion && version != LegacyFormatVersion))
+            {
+                throw new InvalidDataException("The browser game save schema version is not supported.");
+            }
+            inspectedFormatVersion = version;
             RequireExactProperties(
                 root,
                 "browser game save",
-                "loadedBoneyard",
-                "mods",
-                "modState",
-                "schemaVersion",
-                "simulation",
-                "summary");
-            if (!root.TryGetProperty("schemaVersion", out var schemaVersion) ||
-                !schemaVersion.TryGetInt32(out var version) ||
-                version != FormatVersion)
+                version == FormatVersion
+                    ? ["integrity", "loadedBoneyard", "mods", "modState", "schemaVersion", "simulation", "summary"]
+                    : ["loadedBoneyard", "mods", "modState", "schemaVersion", "simulation", "summary"]);
+            if (version == FormatVersion)
             {
-                throw new InvalidDataException("The browser game save schema version is not supported.");
+                RequireMember(root, "integrity", "global-clean", "local-only");
             }
 
             var summary = RequireObject(root.GetProperty("summary"), "browser game save summary");
@@ -108,6 +112,7 @@ public static class WebGameSaveInspector
         }
 
         return new WebGameSaveInspection(
+            inspectedFormatVersion,
             bytes.Length,
             Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant());
     }

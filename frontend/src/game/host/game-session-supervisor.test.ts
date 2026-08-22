@@ -114,9 +114,9 @@ test('game session supervisor admits independent players to one shared Hub and r
   assert.equal((await fetch(`${supervisor.address.url}/admin/hub/parties`)).status, 401)
 
   const endpoints = await Promise.all([
-    admitHub(supervisor.address.url, MOD_CONTENT, 42),
-    admitHub(supervisor.address.url, MOD_CONTENT, 43),
-    admitHub(supervisor.address.url, MOD_CONTENT),
+    admitHub(supervisor.address.url, EMPTY_CONTENT, 42),
+    admitHub(supervisor.address.url, EMPTY_CONTENT, 43),
+    admitHub(supervisor.address.url, EMPTY_CONTENT),
   ])
   assert.deepEqual(new Set(endpoints.map(({ path }) => path)), new Set(['/game-hub']))
   assert.equal(new Set(endpoints.map(({ credential }) => credential)).size, 3)
@@ -134,12 +134,8 @@ test('game session supervisor admits independent players to one shared Hub and r
   ]).size, 3)
   for (const client of [first, second, third]) {
     assert.deepEqual(client.welcome.content, {
-      manifestSha256: MOD_CONTENT.manifestSha256,
-      mods: [{
-        contentSha256: MOD_CONTENT.mods[0].contentSha256,
-        id: MOD_CONTENT.mods[0].id,
-        version: MOD_CONTENT.mods[0].version,
-      }],
+      manifestSha256: EMPTY_CONTENT.manifestSha256,
+      mods: [],
     })
   }
   assert.deepEqual(await readPublicParties(supervisor.address.url), [])
@@ -200,17 +196,70 @@ test('game session supervisor admits independent players to one shared Hub and r
   const mergedPartyId = acceptedFirstState.state.party.id
   assert.equal(acceptedSecondState.state.party.id, mergedPartyId)
 
+  const nonLeaderInvite = second.next(message => (
+    message.type === 'server-party-action' && message.action === 'invite'
+  ))
+  second.socket.send(encodeGameMessage({
+    type: 'client-party-invite',
+    targetPlayerId: third.welcome.playerId,
+  }))
+  const nonLeaderRejection = await nonLeaderInvite
+  assert.equal(nonLeaderRejection.type, 'server-party-action')
+  assert.equal(nonLeaderRejection.ok, false)
+  assert.equal(nonLeaderRejection.reason, 'not-leader')
+
+  const publicState = first.next((message) => (
+    message.type === 'server-party-state'
+    && message.state.party.visibility === 'public'
+  ))
+  first.socket.send(encodeGameMessage({
+    type: 'client-party-settings',
+    visibility: 'public',
+  }))
+  const listedParty = await publicState
+  assert.equal(listedParty.type, 'server-party-state')
+
   const hubDirectory = await readPublicParties(supervisor.address.url)
   assert.deepEqual(hubDirectory, [{
     boneyardName: null,
-    id: mergedPartyId,
+    id: listedParty.state.party.listingId,
     leader: CHARACTER.displayName,
     maxMembers: 16,
     memberCount: 2,
     members: [CHARACTER.displayName, CHARACTER.displayName],
     status: 'hub',
+    visibility: 'public',
   }])
   assert.doesNotMatch(JSON.stringify(hubDirectory), /player-|invitation|credential|manifest/i)
+
+  const stalePublicIntent = await resolvePublicParty(
+    supervisor.address.url,
+    listedParty.state.party.listingId,
+  )
+  const inviteOnlyAgain = first.next(message => (
+    message.type === 'server-party-state'
+    && message.state.party.visibility === 'invite-only'
+  ))
+  first.socket.send(encodeGameMessage({
+    type: 'client-party-settings',
+    visibility: 'invite-only',
+  }))
+  await inviteOnlyAgain
+  const staleAdmission = await requestJoinAdmission(
+    supervisor.address.url,
+    stalePublicIntent.intentId,
+    null,
+  )
+  assert.equal(staleAdmission.status, 409)
+  assert.match(JSON.stringify(await staleAdmission.json()), /requires a join request/i)
+  const publicAgain = first.next(message => (
+    message.type === 'server-party-state' && message.state.party.visibility === 'public'
+  ))
+  first.socket.send(encodeGameMessage({
+    type: 'client-party-settings',
+    visibility: 'public',
+  }))
+  await publicAgain
 
   const firstLoaded = first.next((message) => message.type === 'server-boneyard-loaded')
   const secondLoaded = second.next((message) => message.type === 'server-boneyard-loaded')
@@ -289,7 +338,7 @@ test('game session supervisor admits independent players to one shared Hub and r
   })
 })
 
-test('shared Hub refuses a party launch when member mod manifests differ', async (context) => {
+test('shared Hub refuses a modded admission before it creates party membership', async (context) => {
   const supervisor = await startGameSessionSupervisor({
     adminSecret: ADMIN_SECRET,
     allowedOrigins: [BROWSER_ORIGIN],
@@ -297,50 +346,121 @@ test('shared Hub refuses a party launch when member mod manifests differ', async
   })
   context.after(() => supervisor.close())
 
-  const changedContent = {
-    ...MOD_CONTENT,
-    manifestSha256: '2'.repeat(64),
-    mods: [{ ...MOD_CONTENT.mods[0], contentSha256: 'b'.repeat(64), version: '2.0.0' }],
-  } as const
-  const first = await join(
-    supervisor.address.url,
-    await admitHub(supervisor.address.url, MOD_CONTENT),
+  const endpoint = await admitHub(supervisor.address.url, MOD_CONTENT)
+  const socket = await openSocket(
+    websocketUrl(supervisor.address.url, endpoint.path),
     BROWSER_ORIGIN,
   )
-  const second = await join(
-    supervisor.address.url,
-    await admitHub(supervisor.address.url, changedContent),
-    BROWSER_ORIGIN,
-  )
-  context.after(() => closeSocket(first.socket))
-  context.after(() => closeSocket(second.socket))
-
-  const invitation = second.next((message) => (
-    message.type === 'server-party-state' && message.state.invitations.length === 1
-  ))
-  first.socket.send(encodeGameMessage({
-    type: 'client-party-invite',
-    targetPlayerId: second.welcome.playerId,
+  context.after(() => closeSocket(socket))
+  const next = messageQueue(socket)
+  socket.send(encodeGameMessage({
+    type: 'client-hello',
+    profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
+    cheatsEnabled: false,
+    protocolVersion: GAME_PROTOCOL_VERSION,
+    credential: endpoint.credential,
+    character: CHARACTER,
   }))
-  const invited = await invitation
-  assert.equal(invited.type, 'server-party-state')
-  const joined = first.next((message) => (
-    message.type === 'server-party-state' && message.state.party.memberPlayerIds.length === 2
-  ))
-  second.socket.send(encodeGameMessage({
-    type: 'client-party-accept',
-    invitationId: invited.state.invitations[0]!.id,
-  }))
-  await joined
-
-  const rejected = first.next((message) => message.type === 'server-disconnect')
-  first.socket.send(encodeGameMessage({
-    type: 'client-start-match',
-    boneyardId: 'default-random',
-  }))
-  const message = await rejected
+  const message = await next(candidate => candidate.type === 'server-disconnect')
   assert.equal(message.type, 'server-disconnect')
-  assert.match(message.reason, /same mods/)
+  assert.match(message.reason, /Mods require/)
+  assert.equal((await readHealth(supervisor.address.url)).parties, 0)
+})
+
+test('party admission cannot overbook global Hub capacity across singleton parties', async (context) => {
+  const supervisor = await startGameSessionSupervisor({
+    adminSecret: ADMIN_SECRET,
+    allowedOrigins: [BROWSER_ORIGIN],
+    maxConnectionsPerSession: 2,
+    snapshotRate: 100,
+  })
+  context.after(() => supervisor.close())
+  const leader = await join(
+    supervisor.address.url,
+    await admitHub(supervisor.address.url),
+    BROWSER_ORIGIN,
+  )
+  const other = await join(
+    supervisor.address.url,
+    await admitHub(supervisor.address.url),
+    BROWSER_ORIGIN,
+  )
+  context.after(() => closeSocket(leader.socket))
+  context.after(() => closeSocket(other.socket))
+  const visible = leader.next(message => (
+    message.type === 'server-party-state' && message.state.party.visibility === 'public'
+  ))
+  leader.socket.send(encodeGameMessage({
+    type: 'client-party-settings',
+    visibility: 'public',
+  }))
+  const party = await visible
+  assert.equal(party.type, 'server-party-state')
+  const resolved = await resolvePublicParty(
+    supervisor.address.url,
+    party.state.party.listingId,
+  )
+  const overbooked = await requestJoinAdmission(supervisor.address.url, resolved.intentId, null)
+  assert.equal(overbooked.status, 409)
+  assert.match(JSON.stringify(await overbooked.json()), /full/i)
+})
+
+test('invite-only directory accepts a guest request and mints admission after leader approval', async (context) => {
+  const supervisor = await startGameSessionSupervisor({
+    adminSecret: ADMIN_SECRET,
+    allowedOrigins: [BROWSER_ORIGIN],
+    snapshotRate: 100,
+  })
+  context.after(() => supervisor.close())
+  const leader = await join(
+    supervisor.address.url,
+    await admitHub(supervisor.address.url, EMPTY_CONTENT, 42),
+    BROWSER_ORIGIN,
+  )
+  context.after(() => closeSocket(leader.socket))
+  const initial = await leader.next(message => message.type === 'server-party-state')
+  assert.equal(initial.type, 'server-party-state')
+  const visible = leader.next(message => (
+    message.type === 'server-party-state'
+    && message.state.party.visibility === 'invite-only'
+  ))
+  leader.socket.send(encodeGameMessage({
+    type: 'client-party-settings',
+    visibility: 'invite-only',
+  }))
+  const listed = await visible
+  assert.equal(listed.type, 'server-party-state')
+
+  const pendingForLeader = leader.next(message => (
+    message.type === 'server-party-state' && message.state.joinRequests.length === 1
+  ))
+  const requestToken = await requestJoin(
+    supervisor.address.url,
+    listed.state.party.listingId,
+  )
+  const pending = await pendingForLeader
+  assert.equal(pending.type, 'server-party-state')
+  assert.equal(pending.state.joinRequests[0]?.requester.displayName, 'Guest Cassia')
+  leader.socket.send(encodeGameMessage({
+    type: 'client-party-request-accept',
+    requestId: pending.state.joinRequests[0]!.id,
+  }))
+  const approved = await pollJoinRequest(supervisor.address.url, requestToken)
+  assert.equal(approved.status, 'accepted')
+  assert.equal(typeof approved.intentId, 'string')
+  const joinedParty = leader.next(message => (
+    message.type === 'server-party-state'
+    && message.state.party.memberPlayerIds.length === 2
+  ))
+  const guestEndpoint = await admitJoin(supervisor.address.url, approved.intentId!, null)
+  const consumedRequest = await fetch(
+    `${supervisor.address.url}/admin/join/requests/${requestToken}`,
+    { headers: { authorization: `Bearer ${ADMIN_SECRET}` } },
+  )
+  assert.equal(consumedRequest.status, 404)
+  const guest = await join(supervisor.address.url, guestEndpoint, BROWSER_ORIGIN)
+  context.after(() => closeSocket(guest.socket))
+  assert.equal((await joinedParty).type, 'server-party-state')
 })
 
 test('shared Hub admissions are single-use and expire before authentication', async (context) => {
@@ -521,7 +641,14 @@ test('game session supervisor closes a used session after the final player and p
 
   const endpoint = await provision(supervisor.address.url)
   const first = await join(supervisor.address.url, endpoint, BROWSER_ORIGIN)
-  const second = await join(supervisor.address.url, endpoint, BROWSER_ORIGIN)
+  const firstParty = await first.next(message => message.type === 'server-party-state')
+  assert.equal(firstParty.type, 'server-party-state')
+  const joinIntent = await resolveJoinCode(
+    supervisor.address.url,
+    firstParty.state.party.joinCode,
+  )
+  const secondEndpoint = await admitJoin(supervisor.address.url, joinIntent.intentId, 43)
+  const second = await join(supervisor.address.url, secondEndpoint, BROWSER_ORIGIN)
   const pending = await openSocket(
     websocketUrl(supervisor.address.url, endpoint.path),
     BROWSER_ORIGIN,
@@ -609,6 +736,7 @@ interface PublicPartyDirectoryEntry {
   memberCount: number
   members: string[]
   status: 'hub' | 'playing'
+  visibility: 'invite-only' | 'public'
 }
 
 async function readPublicParties(supervisorUrl: string): Promise<PublicPartyDirectoryEntry[]> {
@@ -661,6 +789,118 @@ async function admitHub(
     credential: value.credential as string,
     path: value.path as string,
   }
+}
+
+async function resolveJoinCode(
+  supervisorUrl: string,
+  code: string,
+): Promise<{ intentId: string; target: Record<string, unknown> }> {
+  const response = await fetch(`${supervisorUrl}/admin/join/resolve`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${ADMIN_SECRET}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ code }),
+  })
+  assert.equal(response.status, 201)
+  return await response.json() as { intentId: string; target: Record<string, unknown> }
+}
+
+async function resolvePublicParty(
+  supervisorUrl: string,
+  listingId: string,
+): Promise<{ intentId: string; target: Record<string, unknown> }> {
+  const response = await fetch(`${supervisorUrl}/admin/join/public`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${ADMIN_SECRET}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ listingId }),
+  })
+  assert.equal(response.status, 201)
+  return await response.json() as { intentId: string; target: Record<string, unknown> }
+}
+
+function requestJoinAdmission(
+  supervisorUrl: string,
+  intentId: string,
+  leaderboardUserId: number | null,
+): Promise<Response> {
+  return fetch(`${supervisorUrl}/admin/join/admit`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${ADMIN_SECRET}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      activeMods: false,
+      content: EMPTY_CONTENT,
+      intentId,
+      leaderboardUserId,
+    }),
+  })
+}
+
+async function admitJoin(
+  supervisorUrl: string,
+  intentId: string,
+  leaderboardUserId: number | null,
+): Promise<ProvisionedEndpoint> {
+  const response = await requestJoinAdmission(supervisorUrl, intentId, leaderboardUserId)
+  assert.equal(response.status, 201)
+  const value = await response.json() as Record<string, unknown>
+  return {
+    credential: value.credential as string,
+    path: value.path as string,
+  }
+}
+
+async function requestJoin(supervisorUrl: string, listingId: string): Promise<string> {
+  const response = await fetch(`${supervisorUrl}/admin/join/requests`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${ADMIN_SECRET}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      listingId,
+      requester: {
+        accountUsername: null,
+        displayName: 'Guest Cassia',
+        requesterId: `guest-${randomToken()}`,
+      },
+    }),
+  })
+  assert.equal(response.status, 201)
+  const value = await response.json() as { requestToken?: string }
+  assert.equal(typeof value.requestToken, 'string')
+  return value.requestToken!
+}
+
+async function pollJoinRequest(
+  supervisorUrl: string,
+  token: string,
+): Promise<{ intentId?: string; status: 'accepted' | 'denied' | 'pending' }> {
+  const deadline = performance.now() + 3_000
+  for (;;) {
+    const response = await fetch(`${supervisorUrl}/admin/join/requests/${token}`, {
+      headers: { authorization: `Bearer ${ADMIN_SECRET}` },
+    })
+    assert.equal(response.status, 200)
+    const value = await response.json() as {
+      intentId?: string
+      status: 'accepted' | 'denied' | 'pending'
+    }
+    if (value.status !== 'pending') return value
+    if (performance.now() >= deadline) throw new Error('timed out waiting for join approval')
+    await new Promise(resolve => setTimeout(resolve, 10))
+  }
+}
+
+function randomToken(): string {
+  return Math.random().toString(36).slice(2).padEnd(12, '0')
 }
 
 async function readHealth(supervisorUrl: string): Promise<SupervisorHealth> {
@@ -756,8 +996,12 @@ function messageQueue(socket: WebSocket) {
       const timeout = setTimeout(() => {
         const index = waiters.findIndex((waiter) => waiter.resolve === resolve)
         if (index >= 0) waiters.splice(index, 1)
-        reject(new Error('timed out waiting for game message'))
-      }, 3000)
+        reject(new Error(`timed out waiting for game message; buffered=${buffered.map(message => (
+          message.type === 'server-party-state'
+            ? `${message.type}:${message.state.party.memberPlayerIds.length}:${message.state.party.visibility}`
+            : message.type
+        )).join(',')}`))
+      }, 10_000)
       waiters.push({ predicate, reject, resolve, timeout })
     })
   }

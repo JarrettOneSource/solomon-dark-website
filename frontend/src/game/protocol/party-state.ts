@@ -16,9 +16,15 @@ export interface PartyPlayerProfile extends PlayerSocialProfile {
 
 export interface PartyMembership {
   readonly id: string
+  readonly joinCode: string
   readonly leaderPlayerId: string
+  readonly listingId: string
   readonly memberPlayerIds: readonly string[]
+  readonly visibility: PartyVisibility
 }
+
+export const PARTY_VISIBILITIES = ['public', 'invite-only', 'private'] as const
+export type PartyVisibility = typeof PARTY_VISIBILITIES[number]
 
 export interface PartyInvitationView {
   readonly id: string
@@ -26,9 +32,21 @@ export interface PartyInvitationView {
   readonly partyId: string
 }
 
+export interface PartyJoinRequester {
+  readonly accountUsername: string | null
+  readonly displayName: string
+  readonly requesterId: string
+}
+
+export interface PartyJoinRequestView {
+  readonly id: string
+  readonly requester: PartyJoinRequester
+}
+
 export interface LocalPartyState {
   readonly hubPlayers: readonly PartyPlayerProfile[]
   readonly invitations: readonly PartyInvitationView[]
+  readonly joinRequests: readonly PartyJoinRequestView[]
   readonly party: PartyMembership
   readonly revision: number
 }

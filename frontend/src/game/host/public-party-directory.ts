@@ -8,6 +8,7 @@ export interface PublicPartyDirectoryEntry {
   readonly memberCount: number
   readonly members: readonly string[]
   readonly status: 'hub' | 'playing'
+  readonly visibility: 'invite-only' | 'public'
 }
 
 interface PublicPartyDirectorySource {
@@ -25,7 +26,7 @@ export function projectPublicPartyDirectory(
 ): readonly PublicPartyDirectoryEntry[] {
   const runsByParty = new Map(source.runs.map(run => [run.partyId, run]))
   return source.memberships.flatMap((party) => {
-    if (party.memberPlayerIds.length < 2) return []
+    if (party.visibility === 'private') return []
     const leader = displayNames.get(party.leaderPlayerId)
     if (leader === undefined) return []
     const members: string[] = []
@@ -37,12 +38,13 @@ export function projectPublicPartyDirectory(
     const run = runsByParty.get(party.id)
     return [{
       boneyardName: run?.boneyardName ?? null,
-      id: party.id,
+      id: party.listingId,
       leader,
       maxMembers,
       memberCount: members.length,
       members,
       status: run ? 'playing' as const : 'hub' as const,
+      visibility: party.visibility,
     }]
   })
 }

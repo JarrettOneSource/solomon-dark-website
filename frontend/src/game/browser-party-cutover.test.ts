@@ -19,9 +19,10 @@ const luaSmoke = readFileSync(
   'utf8',
 )
 
-test('browser game owns one shared-Hub admission path and no lobby compatibility path', () => {
+test('browser game owns one global-Hub endpoint plus in-memory party admission and no lobby compatibility path', () => {
   const browserGameSource = [gamePage, bootstrap, supervisor].join('\n')
   assert.match(bootstrap, /request\('\/api\/game\/hub'/)
+  assert.match(bootstrap, /request\('\/api\/game\/join\/admit'/)
   assert.match(supervisor, /GAME_HUB_PATH = '\/game-hub'/)
   assert.doesNotMatch(browserGameSource, /game\/lobbies|createGameLobby|joinGameLobby/)
   assert.doesNotMatch(gamePage, /searchParams|get\('party'\)|hostedLobby/)

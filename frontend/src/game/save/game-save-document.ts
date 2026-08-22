@@ -17,12 +17,14 @@ import {
   MAX_WEB_GAME_SAVE_JSON_NODES,
   MAX_WEB_GAME_SAVE_BYTES,
   WEB_GAME_SAVE_SCHEMA_VERSION,
+  type GameSaveIntegrity,
   onlyKeys,
   parseGameSaveDocument,
   record,
 } from './game-save-contract.ts'
 
 export interface CreateGameSaveDocumentOptions {
+  readonly integrity: GameSaveIntegrity
   readonly loadedBoneyard: LoadedBoneyard | null
   readonly mods: readonly GameContentIdentity[]
   readonly modState: Readonly<Record<string, Readonly<Record<string, LuaConsoleValue>>>>
@@ -31,6 +33,7 @@ export interface CreateGameSaveDocumentOptions {
 }
 
 export interface RestoredGameSaveDocument {
+  readonly integrity: GameSaveIntegrity
   readonly loadedBoneyard: LoadedBoneyard | null
   readonly mods: readonly GameContentIdentity[]
   readonly modState: Readonly<Record<string, Readonly<Record<string, LuaConsoleValue>>>>
@@ -118,6 +121,7 @@ export function createGameSaveDocument(
       : ownerState.world,
   }
   const document = JSON.stringify({
+    integrity: options.integrity,
     loadedBoneyard: options.loadedBoneyard,
     mods: options.mods,
     modState: options.modState,
@@ -212,6 +216,7 @@ export function restoreGameSaveDocument(document: string): RestoredGameSaveDocum
   }
   createGameSnapshot(state, parsed.summary.playerId)
   return {
+    integrity: parsed.integrity,
     loadedBoneyard,
     mods: parsed.mods,
     modState: parsed.modState,

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
@@ -6,6 +7,10 @@ import { materializeWebSessionContent } from './web-mod-content.ts'
 
 test('session content materializes exact Lua identities and final Boneyard overlays', async () => {
   const fixture = await readFile(new URL('../../../../tests/fixtures/flat_multiplayer_test.boneyard', import.meta.url))
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+Xz6rAAAAAElFTkSuQmCC',
+    'base64',
+  )
   const content = materializeWebSessionContent({
     manifestSha256: 'f'.repeat(64),
     mods: [
@@ -13,7 +18,12 @@ test('session content materializes exact Lua identities and final Boneyard overl
         boneyards: [],
         contentSha256: 'a'.repeat(64),
         entryScript: "sd.state.set('first', true)",
-        files: [],
+        files: [{
+          byteLength: png.length,
+          bytesBase64: png.toString('base64'),
+          path: 'sprites/item.png',
+          sha256: createHash('sha256').update(png).digest('hex'),
+        }],
         id: 'tests.first',
         name: 'First',
         priority: 10,
@@ -50,6 +60,13 @@ test('session content materializes exact Lua identities and final Boneyard overl
   assert.equal(content.boneyards.length, 1)
   assert.equal(content.boneyards[0]?.choice.modId, 'tests.second')
   assert.equal(content.boneyards[0]?.choice.name, 'Contract')
+  assert.deepEqual(content.assets, [{
+    byteLength: png.length,
+    modId: 'tests.first',
+    path: 'sprites/item.png',
+    sha256: createHash('sha256').update(png).digest('hex'),
+  }])
+  assert.deepEqual(content.summary.mods[0]?.assets, content.assets)
 })
 
 test('session content rejects duplicate identities and native overlay targets', () => {

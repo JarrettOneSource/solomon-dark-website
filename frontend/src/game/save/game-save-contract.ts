@@ -9,7 +9,8 @@ import type {
   LuaConsoleValue,
 } from '../protocol/game-protocol.ts'
 
-export const WEB_GAME_SAVE_SCHEMA_VERSION = 3
+export const WEB_GAME_SAVE_SCHEMA_VERSION = 4
+export const LEGACY_WEB_GAME_SAVE_SCHEMA_VERSION = 3
 export const WEB_GAME_SAVE_SLOT = 0
 export const MAX_WEB_GAME_SAVE_BYTES = 8 * 1024 * 1024
 export const MAX_WEB_GAME_SAVE_JSON_DEPTH = 64
@@ -31,11 +32,15 @@ export interface GameSaveCheckpoint {
 
 export interface ResumableGameSave {
   readonly document: string
+  readonly integrity: GameSaveIntegrity
   readonly mods: readonly GameContentIdentity[]
   readonly summary: GameSaveSummary
 }
 
+export type GameSaveIntegrity = 'global-clean' | 'local-only'
+
 export interface ParsedGameSaveDocument {
+  readonly integrity: GameSaveIntegrity
   readonly loadedBoneyard: unknown
   readonly mods: readonly GameContentIdentity[]
   readonly modState: Readonly<Record<string, Readonly<Record<string, LuaConsoleValue>>>>
@@ -60,7 +65,15 @@ export function parseGameSaveDocument(document: string): ParsedGameSaveDocument 
     throw new Error('game save is not valid JSON')
   }
   const root = record(parsed, 'game save')
+  const schemaVersion = root.schemaVersion
+  if (
+    schemaVersion !== WEB_GAME_SAVE_SCHEMA_VERSION
+    && schemaVersion !== LEGACY_WEB_GAME_SAVE_SCHEMA_VERSION
+  ) {
+    throw new Error('game save schema version is not supported')
+  }
   onlyKeys(root, 'game save', [
+    ...(schemaVersion === WEB_GAME_SAVE_SCHEMA_VERSION ? ['integrity'] : []),
     'loadedBoneyard',
     'mods',
     'modState',
@@ -68,20 +81,28 @@ export function parseGameSaveDocument(document: string): ParsedGameSaveDocument 
     'simulation',
     'summary',
   ])
-  if (root.schemaVersion !== WEB_GAME_SAVE_SCHEMA_VERSION) {
-    throw new Error('game save schema version is not supported')
-  }
   const summary = parseSummary(root.summary)
+  const mods = parseMods(root.mods)
   if (!('simulation' in root) || !('loadedBoneyard' in root)) {
     throw new Error('game save is missing authoritative state')
   }
   return {
+    integrity: schemaVersion === LEGACY_WEB_GAME_SAVE_SCHEMA_VERSION
+      ? 'local-only'
+      : parseIntegrity(root.integrity),
     loadedBoneyard: root.loadedBoneyard,
-    mods: parseMods(root.mods),
+    mods,
     modState: parseModState(root.modState),
     simulation: root.simulation,
     summary,
   }
+}
+
+function parseIntegrity(value: unknown): GameSaveIntegrity {
+  if (value !== 'global-clean' && value !== 'local-only') {
+    throw new Error('game save integrity is invalid')
+  }
+  return value
 }
 
 function parseMods(value: unknown): readonly GameContentIdentity[] {

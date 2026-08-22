@@ -182,22 +182,77 @@ class WebsiteModSyncContractTests(unittest.TestCase):
                         {
                             "items": [
                                 {
-                                    "id": "party-7",
+                                    "id": "listing-safe-7",
                                     "leader": "Hagatha",
                                     "members": ["Hagatha", "Luthacus"],
                                     "memberCount": 2,
                                     "maxMembers": 16,
                                     "status": "playing",
+                                    "visibility": "invite-only",
                                     "boneyardName": "The Survival Grounds",
                                 }
                             ]
                         },
                     )
+                elif self.path == "/admin/join/requests/request-token-01234567890123456789":
+                    self.reply(200, {"status": "pending", "intentId": None, "target": None})
                 else:
                     self.reply(404, {"error": "Not found."})
 
             def do_POST(self) -> None:
-                self.reply(503, {"error": "Unavailable."})
+                if not self.authorized():
+                    self.reply(401, {"error": "Unauthorized."})
+                    return
+                empty_content = {"manifestSha256": "0" * 64, "mods": []}
+                if self.path == "/admin/join/resolve":
+                    self.reply(
+                        201,
+                        {
+                            "intentId": "intent-0123456789012345678901234",
+                            "target": {
+                                "content": empty_content,
+                                "kind": "private-college",
+                                "leader": "Hagatha",
+                                "memberCount": 2,
+                                "status": "hub",
+                                "visibility": "private",
+                            },
+                        },
+                    )
+                elif self.path == "/admin/join/public":
+                    self.reply(
+                        201,
+                        {
+                            "intentId": "intent-abcdefghijklmnopqrstuvwxyz",
+                            "target": {
+                                "content": empty_content,
+                                "kind": "global-hub",
+                                "leader": "Hagatha",
+                                "memberCount": 2,
+                                "status": "hub",
+                                "visibility": "public",
+                            },
+                        },
+                    )
+                elif self.path == "/admin/join/requests":
+                    self.reply(
+                        201,
+                        {
+                            "requestToken": "request-token-01234567890123456789",
+                            "status": "pending",
+                        },
+                    )
+                elif self.path == "/admin/join/admit":
+                    self.reply(
+                        201,
+                        {
+                            "credential": "party-ticket",
+                            "path": "/game-sessions/01234567890123456789012345678901",
+                            "sessionKind": "private-college",
+                        },
+                    )
+                else:
+                    self.reply(503, {"error": "Unavailable."})
 
             def log_message(self, _format: str, *_args: object) -> None:
                 pass
@@ -413,12 +468,13 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             {
                 "items": [
                     {
-                        "id": "party-7",
+                        "id": "listing-safe-7",
                         "leader": "Hagatha",
                         "members": ["Hagatha", "Luthacus"],
                         "memberCount": 2,
                         "maxMembers": 16,
                         "status": "playing",
+                        "visibility": "invite-only",
                         "boneyardName": "The Survival Grounds",
                     }
                 ]
@@ -427,6 +483,43 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         serialized = json.dumps(response)
         for private_member in ("playerId", "invitation", "credential", "manifest"):
             self.assertNotIn(private_member, serialized)
+
+    def test_party_join_control_plane_is_guest_capable_and_keeps_intents_in_memory(self) -> None:
+        status, resolved = self.request(
+            "POST",
+            "/api/game/join/resolve",
+            json_body={"code": "ABCD-2345"},
+        )
+        self.assertEqual(status, 200, resolved)
+        self.assertEqual(resolved["target"]["kind"], "private-college")
+        self.assertNotIn("credential", json.dumps(resolved))
+
+        status, requested = self.request(
+            "POST",
+            "/api/game/join/requests",
+            json_body={
+                "listingId": "listing-safe-7",
+                "displayName": "Guest Cassia",
+                "requesterId": "guest-requester-1234",
+            },
+        )
+        self.assertEqual(status, 200, requested)
+        self.assertEqual(requested["status"], "pending")
+        status, pending = self.request(
+            "GET",
+            f"/api/game/join/requests/{requested['requestToken']}",
+        )
+        self.assertEqual(status, 200, pending)
+        self.assertEqual(pending["status"], "pending")
+
+        status, admitted = self.request(
+            "POST",
+            "/api/game/join/admit",
+            json_body={"intentId": resolved["intentId"]},
+        )
+        self.assertEqual(status, 201, admitted)
+        self.assertEqual(admitted["sessionKind"], "private-college")
+        self.assertEqual(admitted["credential"], "party-ticket")
 
 
 
@@ -542,7 +635,8 @@ class WebsiteModSyncContractTests(unittest.TestCase):
     def test_browser_game_slot_is_account_owned_hashed_and_revision_conditional(self) -> None:
         document = json.dumps(
             {
-                "schemaVersion": 3,
+                "schemaVersion": 4,
+                "integrity": "global-clean",
                 "mods": [],
                 "modState": {},
                 "summary": {
@@ -585,7 +679,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         )
         self.assertEqual(status, 200, created)
         self.assertEqual(created["slot"], 0)
-        self.assertEqual(created["formatVersion"], 3)
+        self.assertEqual(created["formatVersion"], 4)
         self.assertEqual(created["revision"], 1)
         self.assertEqual(created["document"], document)
         self.assertEqual(created["size"], len(document.encode()))
@@ -615,16 +709,30 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         self.assertEqual(updated["revision"], 2)
         self.assertEqual(updated["document"], next_document)
 
+        legacy = json.loads(next_document)
+        legacy["schemaVersion"] = 3
+        del legacy["integrity"]
+        legacy_document = json.dumps(legacy, separators=(",", ":"))
+        status, legacy_saved = self.request(
+            "PUT",
+            "/api/game/saves/0",
+            headers=auth,
+            json_body={"document": legacy_document, "expectedRevision": 2},
+        )
+        self.assertEqual(status, 200, legacy_saved)
+        self.assertEqual(legacy_saved["formatVersion"], 3)
+        self.assertEqual(legacy_saved["revision"], 3)
+
         status, conflict = self.request(
             "DELETE",
-            "/api/game/saves/0?expectedRevision=1",
+            "/api/game/saves/0?expectedRevision=2",
             headers=auth,
         )
         self.assertEqual(status, 409, conflict)
-        self.assertEqual(conflict["currentRevision"], 2)
+        self.assertEqual(conflict["currentRevision"], 3)
         status, empty = self.request(
             "DELETE",
-            "/api/game/saves/0?expectedRevision=2",
+            "/api/game/saves/0?expectedRevision=3",
             headers=auth,
         )
         self.assertEqual(status, 204, empty)
@@ -1141,6 +1249,52 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             manifest["runtime"]["requiredCapabilities"],
         )
         self.assertEqual(resolved["assetCount"], 2)
+        self.assertEqual(len(resolved["assets"]), 1)
+        asset = resolved["assets"][0]
+        self.assertEqual(asset["byteLength"], len(ONE_PIXEL_PNG))
+        status, content_bytes, headers = self.request_bytes(
+            "GET",
+            f"/api/game/content/{asset['sha256']}",
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(content_bytes, ONE_PIXEL_PNG)
+        self.assertEqual(headers.get("Content-Type"), "image/png")
+        self.assertIn("immutable", headers.get("Cache-Control", ""))
+
+        status, sync_user = self.request(
+            "POST",
+            "/api/auth/register",
+            json_body={
+                "username": "partysync",
+                "email": "partysync@example.invalid",
+                "password": "correct-horse-battery-staple",
+            },
+        )
+        self.assertEqual(status, 201, sync_user)
+        sync_body = {
+            "mods": [
+                {
+                    "id": resolved["id"],
+                    "slug": resolved["slug"],
+                    "version": resolved["version"],
+                    "contentSha256": resolved["contentSha256"],
+                }
+            ]
+        }
+        status, _ = self.request(
+            "POST",
+            "/api/mods/subscriptions/sync",
+            json_body=sync_body,
+        )
+        self.assertEqual(status, 401)
+        status, synced = self.request(
+            "POST",
+            "/api/mods/subscriptions/sync",
+            headers={"Authorization": f"Bearer {sync_user['token']}"},
+            json_body=sync_body,
+        )
+        self.assertEqual(status, 200, synced)
+        self.assertEqual(synced["enabled"], [resolved["slug"]])
         status, _ = self.request(
             "DELETE",
             f"/api/mods/{created['slug']}/subscription",

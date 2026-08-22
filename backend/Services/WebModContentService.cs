@@ -8,7 +8,11 @@ using SolomonDarkRevived.Data;
 namespace SolomonDarkRevived.Services;
 
 public sealed record WebModBoneyard(string Target, string BytesBase64);
-public sealed record WebModPackageFile(string Path, string BytesBase64);
+public sealed record WebModPackageFile(
+    string Path,
+    string BytesBase64,
+    int ByteLength,
+    string Sha256);
 
 public sealed record WebResolvedMod(
     string Id,
@@ -106,21 +110,35 @@ public sealed class WebModContentService(AppDb db, StorageService storage)
                 "The active mod set is too large for one web game session.");
         }
 
-        var resolved = ordered.Select(package => new WebResolvedMod(
-            package.Id,
-            package.Name,
-            package.Slug,
-            package.Version,
-            package.ContentSha256,
-            package.Priority,
-            package.EntryScript,
-            package.Boneyards.Select(boneyard => new WebModBoneyard(
-                boneyard.Target,
-                Convert.ToBase64String(boneyard.Bytes))).ToArray(),
-            package.RequiredCapabilities,
-            package.Files.Select(file => new WebModPackageFile(
-                file.Path,
-                Convert.ToBase64String(file.Bytes))).ToArray())).ToArray();
+        var resolved = new List<WebResolvedMod>(ordered.Count);
+        foreach (var package in ordered)
+        {
+            var files = new List<WebModPackageFile>(package.Files.Count);
+            foreach (var file in package.Files)
+            {
+                var stored = file.Path.EndsWith(".png", StringComparison.Ordinal)
+                    ? await storage.SaveGameContentAsync(file.Bytes, cancellationToken)
+                    : null;
+                files.Add(new WebModPackageFile(
+                    file.Path,
+                    Convert.ToBase64String(file.Bytes),
+                    stored?.ByteLength ?? file.Bytes.Length,
+                    stored?.Sha256 ?? StorageService.Sha256(file.Bytes)));
+            }
+            resolved.Add(new WebResolvedMod(
+                package.Id,
+                package.Name,
+                package.Slug,
+                package.Version,
+                package.ContentSha256,
+                package.Priority,
+                package.EntryScript,
+                package.Boneyards.Select(boneyard => new WebModBoneyard(
+                    boneyard.Target,
+                    Convert.ToBase64String(boneyard.Bytes))).ToArray(),
+                package.RequiredCapabilities,
+                files));
+        }
         return new WebSessionContent(ManifestSha256(resolved), resolved);
     }
 

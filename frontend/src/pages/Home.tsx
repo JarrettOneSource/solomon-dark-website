@@ -120,10 +120,10 @@ export default function Home() {
           <div className="panel panel-ornate flex flex-wrap items-center gap-5 p-6">
             <img src={skillIcons.door} alt="" className="h-12 w-12" />
             <p className="text-fell min-w-0 flex-1 text-bone-dim">
-              Parties are no longer a lobby list. Enter the shared Hub, meet in the
-              Courtyard, and invite the wizard standing beside you.
+              Browse parties in Play or the Dark Cloud, enter a Party ID, or invite
+              the wizard standing beside you in the Courtyard.
             </p>
-            <Link to="/game" className="btn btn-gold">Enter the Hub</Link>
+            <Link to="/game" className="btn btn-gold">Join Party</Link>
           </div>
         </Reveal>
       </section>

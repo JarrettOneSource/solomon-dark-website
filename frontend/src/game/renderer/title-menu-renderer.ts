@@ -44,6 +44,7 @@ export type TitleMenuAction =
   | 'explore'
   | 'hall'
   | 'last-game'
+  | 'join-party'
   | 'new-game'
   | 'play'
   | 'quit'
@@ -204,7 +205,7 @@ export async function createTitleMenuRenderer(
       ['last-game', mainMenu.text.lastGame],
     ], 0.36),
     createMainButton(texture, 'new-game', 1, [['new-game', mainMenu.text.newGame]]),
-    createMainButton(texture, 'unavailable', 2, []),
+    createMainButton(texture, 'join-party', 2, []),
     createMainButton(texture, 'back', 3, [['back', mainMenu.text.back]]),
   ]
   rootButtons.addChild(...rootButtonViews.map((button) => button.container))

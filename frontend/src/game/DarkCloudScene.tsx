@@ -12,9 +12,11 @@ import wizardLeft from '../assets/game/dark-cloud/wizard-left.png'
 import wizardRight from '../assets/game/dark-cloud/wizard-right.png'
 import {
   api,
+  type ActiveWebMod,
   type ModList,
   type ModSubscription,
   type ModSummary,
+  type PartyJoinResolution,
   type PublicGameParty,
 } from '../lib/api.ts'
 import DarkCloudMedia from './DarkCloudMedia.tsx'
@@ -22,6 +24,12 @@ import DarkCloudModDetail, {
   type DarkCloudSubscriptionAction,
 } from './DarkCloudModDetail.tsx'
 import DarkCloudPanelOrnaments from './DarkCloudPanel.tsx'
+import { directoryPartyAction, usePartyDirectory } from './party-directory.ts'
+import { usePartyJoinActions } from './party-join.ts'
+import {
+  prefetchGameContent,
+  type GameContentDownloadProgress,
+} from './game-content-cache.ts'
 import './dark-cloud.css'
 
 type DarkCloudTab = 'mods' | 'subscribed' | 'parties'
@@ -37,28 +45,32 @@ interface DarkCloudSceneProps {
   menuKeyCode: string
   /** True while the Esc menu or its settings own input, so the open-menu key stays quiet. */
   menuOpen: boolean
-  onEnterSharedHub: () => void
   /** Opens the native Esc menu; the host owns its state and mounts the menu. */
   onMenu: () => void
+  onPartyResolved: (resolution: PartyJoinResolution) => void
+  onSubscriptionsChanged: () => Promise<readonly ActiveWebMod[]>
+  requesterDisplayName: string
 }
 
 export default function DarkCloudScene({
   accountUsername,
   menuKeyCode,
   menuOpen,
-  onEnterSharedHub,
   onMenu,
+  onPartyResolved,
+  onSubscriptionsChanged,
+  requesterDisplayName,
 }: DarkCloudSceneProps) {
   const requestGeneration = useRef(0)
-  const partyRequestGeneration = useRef(0)
+  const subscriptionBusyRef = useRef(false)
   const [tab, setTab] = useState<DarkCloudTab>('mods')
   const [mods, setMods] = useState<ModSummary[]>([])
-  const [parties, setParties] = useState<PublicGameParty[]>([])
   const [subscriptions, setSubscriptions] = useState<ModSubscription[]>([])
   const [modsError, setModsError] = useState<string | null>(null)
-  const [partiesError, setPartiesError] = useState<string | null>(null)
   const [subscriptionsError, setSubscriptionsError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [downloadError, setDownloadError] = useState<string | null>(null)
+  const [downloadProgress, setDownloadProgress] = useState<GameContentDownloadProgress | null>(null)
   const [loading, setLoading] = useState(true)
   const [busySlug, setBusySlug] = useState<string | null>(null)
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
@@ -68,13 +80,15 @@ export default function DarkCloudScene({
   const [searchOpen, setSearchOpen] = useState(false)
   const [sortOpen, setSortOpen] = useState(false)
   const [sort, setSort] = useState<SortMode>('newest')
+  const partyDirectory = usePartyDirectory(tab === 'parties')
+  const parties = partyDirectory.parties
+  const partyActions = usePartyJoinActions(requesterDisplayName, onPartyResolved)
 
   const load = useCallback(async () => {
     const generation = ++requestGeneration.current
     setLoading(true)
-    const [modsResult, partiesResult, subscriptionsResult] = await Promise.allSettled([
+    const [modsResult, subscriptionsResult] = await Promise.allSettled([
       listAllMods(),
-      api.gameParties.list(),
       accountUsername
         ? api.mods.subscriptions.list()
         : Promise.resolve({ items: [] as ModSubscription[] }),
@@ -86,12 +100,6 @@ export default function DarkCloudScene({
       setModsError(null)
     } else {
       setModsError(message(modsResult.reason, 'The mod catalog could not be loaded.'))
-    }
-    if (partiesResult.status === 'fulfilled') {
-      setParties(partiesResult.value.items)
-      setPartiesError(null)
-    } else {
-      setPartiesError(message(partiesResult.reason, 'The public party directory could not be loaded.'))
     }
     if (subscriptionsResult.status === 'fulfilled') {
       setSubscriptions(subscriptionsResult.value.items)
@@ -128,30 +136,6 @@ export default function DarkCloudScene({
     return () => window.removeEventListener('keydown', openMenu)
   }, [detailMod, menuKeyCode, menuOpen, onMenu, searchOpen, sortOpen])
 
-  const refreshParties = useCallback(async () => {
-    const generation = ++partyRequestGeneration.current
-    try {
-      const result = await api.gameParties.list()
-      if (generation !== partyRequestGeneration.current) return
-      setParties(result.items)
-      setPartiesError(null)
-    } catch (error) {
-      if (generation === partyRequestGeneration.current) {
-        setPartiesError(message(error, 'The public party directory could not be loaded.'))
-      }
-    }
-  }, [])
-
-  useEffect(() => {
-    if (tab !== 'parties') return
-    void refreshParties()
-    const timer = window.setInterval(() => { void refreshParties() }, 15_000)
-    return () => {
-      window.clearInterval(timer)
-      partyRequestGeneration.current += 1
-    }
-  }, [refreshParties, tab])
-
   const subscriptionsBySlug = useMemo(() => new Map(
     subscriptions.map(subscription => [subscription.mod.slug, subscription]),
   ), [subscriptions])
@@ -185,7 +169,7 @@ export default function DarkCloudScene({
     ? modsError
     : tab === 'subscribed'
       ? subscriptionsError
-      : partiesError
+      : partyDirectory.error
   const detailSubscription = detailMod
     ? subscriptionsBySlug.get(detailMod.slug) ?? null
     : null
@@ -211,15 +195,32 @@ export default function DarkCloudScene({
     mod: ModSummary,
     action: DarkCloudSubscriptionAction,
   ) => {
+    if (subscriptionBusyRef.current) return
+    subscriptionBusyRef.current = true
     setBusySlug(mod.slug)
     setActionError(null)
+    setDownloadError(null)
     try {
       if (action === 'subscribe') await api.mods.subscriptions.subscribe(mod.slug)
       if (action === 'enable') await api.mods.subscriptions.setEnabled(mod.slug, true)
       if (action === 'disable') await api.mods.subscriptions.setEnabled(mod.slug, false)
       if (action === 'unsubscribe') await api.mods.subscriptions.unsubscribe(mod.slug)
+      const activeMods = await onSubscriptionsChanged()
       await load()
+      if (action === 'subscribe' || action === 'enable') {
+        try {
+          await prefetchGameContent(
+            activeMods.flatMap(active => active.assets),
+            setDownloadProgress,
+          )
+        } catch (error) {
+          setDownloadError(message(error, 'The mod is enabled, but its game content was not cached.'))
+        } finally {
+          setDownloadProgress(null)
+        }
+      }
     } finally {
+      subscriptionBusyRef.current = false
       setBusySlug(null)
     }
   }
@@ -236,10 +237,17 @@ export default function DarkCloudScene({
 
   const primaryAction = () => {
     if (tab === 'parties') {
-      onEnterSharedHub()
+      if (selected?.kind === 'party') joinParty(selected.party)
       return
     }
     if (selected?.kind === 'mod') openMod(selected.mod)
+  }
+
+  const joinParty = (party: PublicGameParty) => {
+    if (partyActions.busy) return
+    const action = directoryPartyAction(party)
+    if (action === 'join') void partyActions.joinPublic(party.id)
+    if (action === 'request') void partyActions.requestInvite(party.id)
   }
 
   // Same controls in two homes: the footer status slot on desktop and the
@@ -247,9 +255,11 @@ export default function DarkCloudScene({
   const statusControls = (
     <>
       <span className="dark-cloud-status-label">{statusLabel(tab, rows.length, query, loading)}</span>
-      {loading && rows.length > 0 ? <span className="dark-cloud-status-note">REFRESHING…</span> : null}
+      {(tab === 'parties' ? partyDirectory.loading : loading) && rows.length > 0
+        ? <span className="dark-cloud-status-note">REFRESHING…</span>
+        : null}
       {query ? <button type="button" onClick={() => setQuery('')}>CLEAR SEARCH</button> : null}
-      {tab === 'parties' ? <button type="button" onClick={() => { void refreshParties() }}>REFRESH</button> : null}
+      {tab === 'parties' ? <button type="button" onClick={() => { void partyDirectory.refresh() }}>REFRESH</button> : null}
     </>
   )
 
@@ -305,20 +315,20 @@ export default function DarkCloudScene({
         </div>
         <div className="dark-cloud-list-status">{statusControls}</div>
 
-        <div className="dark-cloud-rows" role="list" aria-label={`${tab} entries`} aria-busy={loading}>
-          {loading && rows.length === 0 ? <p className="dark-cloud-empty">CONSULTING THE DARK CLOUD…</p> : null}
-          {!loading && activeError && rows.length === 0 ? (
+        <div className="dark-cloud-rows" role="list" aria-label={`${tab} entries`} aria-busy={tab === 'parties' ? partyDirectory.loading : loading}>
+          {(tab === 'parties' ? partyDirectory.loading : loading) && rows.length === 0 ? <p className="dark-cloud-empty">CONSULTING THE DARK CLOUD…</p> : null}
+          {!(tab === 'parties' ? partyDirectory.loading : loading) && activeError && rows.length === 0 ? (
             <div className="dark-cloud-empty dark-cloud-empty-error" role="alert">
               <p>{activeError}</p>
               <button type="button" onClick={() => { void load() }}>RETRY</button>
             </div>
           ) : null}
-          {!loading && !activeError && rows.length === 0 ? (
+          {!(tab === 'parties' ? partyDirectory.loading : loading) && !activeError && rows.length === 0 ? (
             <p className="dark-cloud-empty">{emptyMessage(tab, accountUsername !== null, query)}</p>
           ) : null}
           {rows.map(row => row.kind === 'mod' ? (
             <ModRow
-              busy={busySlug === row.mod.slug}
+              busy={busySlug !== null}
               key={row.key}
               mod={row.mod}
               onOpen={() => openMod(row.mod)}
@@ -330,10 +340,12 @@ export default function DarkCloudScene({
             />
           ) : (
             <PartyRow
+              busy={partyActions.busy}
               key={row.key}
-              onEnter={onEnterSharedHub}
+              onEnter={() => joinParty(row.party)}
               onSelect={() => setSelectedKey(row.key)}
               party={row.party}
+              pending={partyActions.pendingListingId === row.party.id}
               selected={selectedKey === row.key}
             />
           ))}
@@ -341,6 +353,7 @@ export default function DarkCloudScene({
       </main>
 
       <footer className="dark-cloud-footer">
+        <DarkCloudDownloadProgress progress={downloadProgress} />
         <div className="dark-cloud-footer-tools">
           <button type="button" className="dark-cloud-icon-button" onClick={() => {
             setDraftQuery(query)
@@ -355,15 +368,27 @@ export default function DarkCloudScene({
         <button
           type="button"
           className="dark-cloud-primary-button"
-          disabled={tab !== 'parties' && selected?.kind !== 'mod'}
+          disabled={tab === 'parties'
+            ? selected?.kind !== 'party'
+              || directoryPartyAction(selected.party) === 'wait'
+              || partyActions.busy
+            : selected?.kind !== 'mod'}
           onClick={primaryAction}
         >
-          {tab === 'parties' ? 'ENTER SHARED HUB' : 'VIEW MOD'}
+          {tab === 'parties'
+            ? selected?.kind === 'party'
+              ? directoryPartyAction(selected.party) === 'request' ? 'REQUEST TO JOIN' : 'JOIN PARTY'
+              : 'SELECT PARTY'
+            : 'VIEW MOD'}
         </button>
         <div className="dark-cloud-footer-status">{statusControls}</div>
       </footer>
 
-      {actionError ? <p className="dark-cloud-error" role="alert">{actionError}</p> : null}
+      {actionError || downloadError || partyActions.error ? (
+        <p className="dark-cloud-error" role="alert">
+          {actionError ?? downloadError ?? partyActions.error}
+        </p>
+      ) : null}
       {searchOpen ? (
         <DarkCloudModal title="SEARCH THE DARK CLOUD" onClose={() => setSearchOpen(false)}>
           <div className="dark-cloud-inset">
@@ -521,16 +546,21 @@ function ModRow({
 }
 
 function PartyRow({
+  busy,
   onEnter,
   onSelect,
   party,
+  pending,
   selected,
 }: {
+  busy: boolean
   onEnter: () => void
   onSelect: () => void
   party: PublicGameParty
+  pending: boolean
   selected: boolean
 }) {
+  const action = directoryPartyAction(party)
   return (
     <article
       className={`dark-cloud-row dark-cloud-party-row${selected ? ' selected' : ''}`}
@@ -555,7 +585,11 @@ function PartyRow({
         <span className="dark-cloud-party-location">{party.boneyardName ?? 'COLLEGE COURTYARD'}</span>
       </button>
       <div className="dark-cloud-row-actions">
-        <button type="button" onClick={onEnter}>ENTER HUB</button>
+        <button type="button" disabled={busy || action === 'wait'} onClick={onEnter}>
+          {pending
+            ? 'REQUESTED'
+            : action === 'request' ? 'REQUEST' : action === 'wait' ? 'IN GAME' : 'JOIN'}
+        </button>
       </div>
     </article>
   )
@@ -594,6 +628,28 @@ function DarkCloudModal({
           <button type="button" className="dark-cloud-modal-done dark-cloud-stone-button" onClick={onClose}>DONE</button>
         </div>
       </section>
+    </div>
+  )
+}
+
+function DarkCloudDownloadProgress({
+  progress,
+}: {
+  progress: GameContentDownloadProgress | null
+}) {
+  if (!progress || progress.totalBytes === 0) return null
+  const percent = Math.min(100, Math.round(progress.completedBytes / progress.totalBytes * 100))
+  return (
+    <div
+      className="dark-cloud-download"
+      role="progressbar"
+      aria-label="Caching subscribed mod content"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={percent}
+    >
+      <span style={{ width: `${percent}%` }} />
+      <small>{progress.active ? `DOWNLOADING ${progress.active.modId}` : 'CONTENT READY'} · {percent}%</small>
     </div>
   )
 }

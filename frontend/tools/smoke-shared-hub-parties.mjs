@@ -68,6 +68,20 @@ try {
   await singletonChatInput.press('Escape')
   await chat.locator('xpath=self::*[@data-chat-open="false"]').waitFor()
 
+  await first.page.getByRole('button', { name: 'Party settings' }).click()
+  const partySettings = first.page.getByRole('dialog', { name: 'Party settings' })
+  await partySettings.waitFor()
+  const initialPartyId = await partySettings.locator('code').innerText()
+  assert.match(initialPartyId, /^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/)
+  await partySettings.getByLabel('PUBLIC').check()
+  await partySettings.getByRole('button', { name: 'REGENERATE' }).click()
+  await first.page.waitForFunction(initial => (
+    document.querySelector('.party-settings-code code')?.textContent !== initial
+  ), initialPartyId)
+  assert.notEqual(await partySettings.locator('code').innerText(), initialPartyId)
+  await partySettings.getByRole('button', { name: 'CLOSE' }).click()
+  await partySettings.waitFor({ state: 'detached' })
+
   host.invitePlayer(first.playerId)
   const invitation = first.page.locator('[data-party-invitation]')
   await invitation.waitFor()

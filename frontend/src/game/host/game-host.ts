@@ -50,6 +50,7 @@ import {
 import {
   EMPTY_CONTENT_MANIFEST_SHA256,
   GAME_HOST_ENDED_SESSION_CLOSE_CODE,
+  PARTY_ACTION_REJECTIONS,
   GAME_PROTOCOL_VERSION,
   PLAYER_CHARACTER_KERNEL_VERSION,
   GameProtocolError,
@@ -57,7 +58,11 @@ import {
   encodeGameMessage,
   type GameContentManifest,
   type GameChatChannel,
+  type GameSessionKind,
   type GameplayPauseState,
+  type PartyAction,
+  type PartyActionRejection as ProtocolPartyActionRejection,
+  type PartyJoinRequester,
   type PartyPlayerProfile,
   type PlayerSocialProfile,
   type ServerDisconnectMessage,
@@ -95,8 +100,23 @@ import {
 } from '../save/game-save-document.ts'
 import { completedHallOfFameEntry } from '../hall-of-fame-entry.ts'
 import { createGameLeaderboardReceipt } from './game-leaderboard-receipt.ts'
-import { MAX_WEB_GAME_SAVE_BYTES } from '../save/game-save-contract.ts'
-import { partyForPlayer, projectPartyState } from './party-system.ts'
+import { MAX_WEB_GAME_SAVE_BYTES, type GameSaveIntegrity } from '../save/game-save-contract.ts'
+import {
+  createPartySystem,
+  decidePartyJoinRequest,
+  joinPartyPlayer,
+  partyByJoinCode,
+  partyByListingId,
+  partyForPlayer,
+  projectPartyState,
+  registerPartyPlayer,
+  removePartyPlayer as removePrivatePartyPlayer,
+  requestPartyJoin,
+  rotatePartyJoinCode,
+  setPartyVisibility,
+  type PartyIdentity,
+  type PartySystemState,
+} from './party-system.ts'
 import {
   projectPublicPartyDirectory,
   type PublicPartyDirectoryEntry,
@@ -108,6 +128,9 @@ import {
   createSharedGameWorlds,
   denySharedPartyInvitation,
   inviteSharedPartyPlayer,
+  joinSharedPartyPlayer,
+  kickSharedPartyPlayer,
+  leaveSharedParty,
   removeSharedGamePlayer,
   replaceSharedGameStateForPlayer,
   restoreSharedGamePlayer,
@@ -119,7 +142,10 @@ import {
   type SharedPartyRun,
   type SharedGameWorldsState,
 } from './shared-game-worlds.ts'
-import type { MaterializedWebSessionContent } from './web-mod-content.ts'
+import type {
+  MaterializedWebSessionContent,
+  WebSessionContentSummary,
+} from './web-mod-content.ts'
 import { WebLuaContentRegistry } from './lua/web-lua-content-registry.ts'
 import {
   createWebLuaGameExtensions,
@@ -131,6 +157,7 @@ const GAME_SAVE_CHECKPOINT_TICKS = GAME_TICK_RATE * 5
 const DEFAULT_DEPLOYMENT_SAVE_TIMEOUT_MS = 30_000
 const GAME_CHAT_RATE_LIMIT = 5
 const GAME_CHAT_RATE_WINDOW_MS = 5_000
+const PARTY_JOIN_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 
 export type GameHostAuthentication =
   | { kind: 'shared'; credential: string; leaderboardUserId?: number | null }
@@ -142,6 +169,8 @@ export type GameHostAuthentication =
 export interface GameHostAdmission {
   readonly content: MaterializedWebSessionContent
   readonly leaderboardUserId: number | null
+  readonly partyId?: string
+  readonly reservationId?: string
 }
 
 type GameHostRole = 'shared'
@@ -149,6 +178,8 @@ type GameHostRole = 'shared'
 interface AuthenticatedGameHostRole {
   readonly content: MaterializedWebSessionContent | null
   readonly leaderboardUserId: number | null
+  readonly partyId: string | null
+  readonly reservationId: string | null
   readonly role: GameHostRole
 }
 
@@ -165,6 +196,7 @@ export interface GameHostOptions {
   authentication: GameHostAuthentication
   boneyards?: BoneyardCatalog
   content?: GameContentManifest
+  contentSummary?: WebSessionContentSummary
   createBoneyardSeedBytes?: () => Buffer
   createSimulation?: () => GameSimulationState
   host?: string
@@ -180,6 +212,7 @@ export interface GameHostOptions {
   onPlayerCountChanged?: (playerCount: number) => void
   port?: number
   resetWhenEmpty?: boolean
+  sessionKind?: GameSessionKind
   sharedHub?: boolean
   snapshotRate?: number
   trustedProxy?: boolean
@@ -199,12 +232,18 @@ export interface GameHost {
   playerCount(): number
   loadedBoneyard(): LoadedBoneyard | null
   modCatalog(): readonly ModConsumableCatalogEntry[]
+  cancelPartyReservation(reservationId: string): void
+  createPartyJoinRequest(input: GameHostPartyJoinRequestInput): GameHostPartyJoinRequestResult
   partyCount(): number
+  partyJoinRequestStatus(token: string): GameHostPartyJoinRequestStatus | null
+  partyTargetByCode(joinCode: string): GameHostPartyTarget | null
+  partyTargetByListingId(listingId: string): GameHostPartyTarget | null
   publicParties(): readonly PublicPartyDirectoryEntry[]
   restartForDeployment(
     targetRevision: string,
     timeoutMs?: number,
   ): Promise<GameHostDeploymentRestartResult>
+  reservePartyJoin(partyId: string, reservationId: string, expiresAt: number): ProtocolPartyActionRejection | null
   state(): GameSimulationState
   runCount(): number
 }
@@ -213,6 +252,32 @@ export interface GameHostDeploymentRestartResult {
   readonly players: number
   readonly savedPlayers: number
   readonly unacknowledgedPlayers: number
+}
+
+export interface GameHostPartyTarget {
+  readonly content: WebSessionContentSummary
+  readonly id: string
+  readonly leader: string
+  readonly memberCount: number
+  readonly status: 'hub' | 'playing'
+  readonly visibility: 'invite-only' | 'private' | 'public'
+}
+
+export interface GameHostPartyJoinRequestInput {
+  readonly expiresAt: number
+  readonly id: string
+  readonly listingId: string
+  readonly requester: PartyJoinRequester
+  readonly token: string
+}
+
+export type GameHostPartyJoinRequestResult =
+  | { readonly accepted: true }
+  | { readonly accepted: false; readonly reason: ProtocolPartyActionRejection }
+
+export interface GameHostPartyJoinRequestStatus {
+  readonly partyId: string
+  readonly status: 'accepted' | 'denied' | 'pending'
 }
 
 export type GameHostCloseReason = 'host-ended-session' | 'server-shutdown'
@@ -231,6 +296,7 @@ interface HostClient {
   profile: PlayerSocialProfile
   forceReplicationKeyframe: boolean
   globalScoreEligible: boolean
+  localOnly: boolean
   lastReceivedSequence: number
   lastSentSnapshotSequence: number
   leaderboardUserId: number | null
@@ -239,6 +305,20 @@ interface HostClient {
   pendingLuaRequestIds: Set<number>
   sentReplicationBaselines: Map<number, ReplicatedEntityBaseline>
   socket: WebSocket
+}
+
+interface ExternalPartyJoinRequest {
+  readonly expiresAt: number
+  readonly id: string
+  readonly partyId: string
+  readonly requester: PartyJoinRequester
+  status: 'accepted' | 'denied' | 'pending'
+  readonly token: string
+}
+
+interface PartyJoinReservation {
+  readonly expiresAt: number
+  readonly partyId: string
 }
 
 interface QueuedClientInput {
@@ -273,7 +353,24 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256,
     mods: [],
   }
+  const contentSummary = options.contentSummary ?? {
+    manifestSha256: content.manifestSha256,
+    mods: content.mods.map(mod => ({
+      assets: (options.modAssets ?? []).filter(asset => (
+        asset.modId.toLowerCase() === mod.id.toLowerCase()
+      )),
+      contentSha256: mod.contentSha256,
+      id: mod.id,
+      name: mod.id,
+      slug: mod.id,
+      version: mod.version,
+    })),
+  }
   const sharedHub = options.sharedHub ?? false
+  const sessionKind = options.sessionKind ?? (sharedHub ? 'global-hub' : 'standalone')
+  if (sharedHub !== (sessionKind === 'global-hub')) {
+    throw new Error('shared Hub ownership and session kind disagree')
+  }
   if (!LOOPBACK_HOSTS.has(host) && !options.trustedProxy) {
     throw new Error('Non-loopback game hosts may only run behind an explicitly trusted secure proxy')
   }
@@ -288,6 +385,9 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   }
 
   let sharedWorlds: SharedGameWorldsState | null = sharedHub ? createSharedGameWorlds() : null
+  let privateParties: PartySystemState | null = sessionKind === 'private-college'
+    ? createPartySystem()
+    : null
   let state = sharedWorlds?.hub ?? createInitialSimulation(options.createSimulation)
   let gameplayPause: GameplayPauseState | null = null
   let sharedHubGameplayPause: GameplayPauseState | null = null
@@ -320,6 +420,8 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   let lastTickLagWarningAt = Number.NEGATIVE_INFINITY
   let nextTickAt = performance.now() + GAME_FIXED_TICK_SECONDS * 1000
   const clients = new Map<WebSocket, HostClient>()
+  const externalPartyJoinRequests = new Map<string, ExternalPartyJoinRequest>()
+  const partyJoinReservations = new Map<string, PartyJoinReservation>()
   const pendingLuaEvents: WebLuaDerivedEvent[] = []
   const cheatTaintedRunIds = new Set<string>()
   const issuedLeaderboardReceipts = new Set<string>()
@@ -493,6 +595,28 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           disconnect(socket, 'authentication-failed', 'The session credential is invalid.')
           return
         }
+        if (sharedHub && authenticated.content === null) {
+          disconnect(socket, 'authentication-failed', 'The shared Hub ticket has no content manifest.')
+          return
+        }
+        if (sharedHub && (authenticated.content?.manifest.mods.length ?? 0) > 0) {
+          disconnect(socket, 'authentication-failed', 'Mods require a private College.')
+          return
+        }
+        if (sharedHub && message.cheatsEnabled) {
+          disconnect(socket, 'authentication-failed', 'Cheats require a private College.')
+          return
+        }
+        if (
+          authenticated.partyId !== null
+          && !validPartyReservation(
+            authenticated.partyId,
+            authenticated.reservationId,
+          )
+        ) {
+          disconnect(socket, 'authentication-failed', 'That party admission has expired.')
+          return
+        }
         if (clients.size >= maxPlayers) {
           disconnect(socket, 'server-full', 'The session is full.')
           return
@@ -500,6 +624,8 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         clearTimeout(helloDeadline)
         pending.delete(socket)
         let playerId: PlayerId
+        let saveIntegrity: GameSaveIntegrity | null = null
+        const playerPartyIdentity = createPartyIdentity()
         if (message.save !== undefined) {
           if (
             !sharedHub && (
@@ -520,6 +646,11 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
               'invalid-message',
               error instanceof Error ? error.message : 'The game save is invalid.',
             )
+            return
+          }
+          saveIntegrity = restored.integrity
+          if (sharedHub && restored.integrity === 'local-only') {
+            disconnect(socket, 'invalid-message', 'Local-only saves require a private College.')
             return
           }
           const activeManifest = authenticated.content?.manifest ?? content
@@ -559,6 +690,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
                 restoredState,
                 restoredBoneyard,
                 playerId,
+                playerPartyIdentity,
               )
               state = sharedWorlds.hub
             } catch (error) {
@@ -586,7 +718,12 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             ? `player-${randomBytes(12).toString('base64url')}`
             : `player-${nextPlayerId}`
           if (sharedWorlds) {
-            sharedWorlds = addSharedHubPlayer(sharedWorlds, playerId, message.character)
+            sharedWorlds = addSharedHubPlayer(
+              sharedWorlds,
+              playerId,
+              message.character,
+              playerPartyIdentity,
+            )
             state = sharedWorlds.hub
           } else {
             nextPlayerId += 1
@@ -603,11 +740,26 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           }
         }
         if (sharedHub) {
-          if (!authenticated.content) {
-            disconnect(socket, 'authentication-failed', 'The shared Hub ticket has no content manifest.')
-            return
-          }
+          if (!authenticated.content) throw new Error('validated shared Hub content is absent')
           playerContents.set(playerId, authenticated.content)
+          if (authenticated.partyId !== null && sharedWorlds) {
+            const joined = joinSharedPartyPlayer(
+              sharedWorlds,
+              playerId,
+              authenticated.partyId,
+              availablePartyMembers(authenticated.partyId, authenticated.reservationId),
+            )
+            if (!joined.accepted) {
+              sharedWorlds = removeSharedGamePlayer(sharedWorlds, playerId)
+              state = sharedWorlds.hub
+              playerContents.delete(playerId)
+              disconnect(socket, 'invalid-message', partyRejectionMessage(joined.reason))
+              return
+            }
+            sharedWorlds = joined.state
+            state = sharedWorlds.hub
+            consumePartyReservation(authenticated.reservationId)
+          }
           const restoredBoneyard = loadedBoneyardForPlayer(playerId)
           const restoredParty = sharedWorlds
             ? partyForPlayer(sharedWorlds.parties, playerId)
@@ -640,6 +792,30 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         if (!sharedHub) {
           hostPlayerId ??= playerId
         }
+        if (privateParties) {
+          const destination = privateParties.parties[0] ?? null
+          privateParties = registerPartyPlayer(
+            privateParties,
+            playerId,
+            playerPartyIdentity,
+          )
+          if (destination) {
+            const joined = joinPartyPlayer(
+              privateParties,
+              playerId,
+              destination.id,
+              availablePartyMembers(destination.id, authenticated.reservationId),
+            )
+            if (!joined.accepted) {
+              privateParties = removePrivatePartyPlayer(privateParties, playerId)
+              state = removePlayerCharacter(state, playerId)
+              disconnect(socket, 'invalid-message', partyRejectionMessage(joined.reason))
+              return
+            }
+            privateParties = joined.state
+          }
+          consumePartyReservation(authenticated.reservationId)
+        }
         const playerState = stateForPlayer(playerId)
         const welcomeSnapshot = createGameSnapshot(playerState, authorityForPlayer(playerId))
         const snapshotSequence = nextSnapshotSequence
@@ -654,7 +830,14 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           displayName: message.character.displayName,
           profile: message.profile,
           forceReplicationKeyframe: false,
-          globalScoreEligible: message.save === undefined && !message.cheatsEnabled,
+          globalScoreEligible: sessionKind !== 'private-college'
+            && message.save === undefined
+            && !message.cheatsEnabled
+            && (authenticated.content?.manifest.mods.length ?? content.mods.length) === 0,
+          localOnly: sessionKind !== 'global-hub'
+            || message.cheatsEnabled
+            || saveIntegrity === 'local-only'
+            || (authenticated.content?.manifest.mods.length ?? content.mods.length) > 0,
           lastReceivedSequence: 0,
           lastSentSnapshotSequence: snapshotSequence,
           leaderboardUserId: authenticated.leaderboardUserId,
@@ -687,6 +870,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           resumeToken: `reserved-${playerId}`,
           serverTickRate: GAME_TICK_RATE,
           snapshotRate,
+          sessionKind,
           kernelVersion: PLAYER_CHARACTER_KERNEL_VERSION,
           kernelParameters: {
             fixedTickSeconds: GAME_FIXED_TICK_SECONDS,
@@ -711,7 +895,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             boneyard: playerBoneyard,
           }))
         }
-        if (sharedWorlds) broadcastPartyState()
+        if (sharedWorlds || privateParties) broadcastPartyState()
         publishSaveCheckpoint('connected')
         if (gameplayPauseForPlayer(playerId)) broadcastSnapshot()
         return
@@ -1064,7 +1248,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         return
       }
       if (message.type === 'client-party-invite') {
-        if (!sharedWorlds) return
+        if (!sharedWorlds) {
+          sendPartyAction(client, 'invite', rejectedPartyAction('same-party'))
+          return
+        }
         const result = inviteSharedPartyPlayer(
           sharedWorlds,
           client.playerId,
@@ -1076,10 +1263,14 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           state = sharedWorlds.hub
           broadcastPartyState()
         }
+        sendPartyAction(client, 'invite', result)
         return
       }
       if (message.type === 'client-party-accept') {
-        if (!sharedWorlds) return
+        if (!sharedWorlds) {
+          sendPartyAction(client, 'accept-invitation', rejectedPartyAction('invitation-missing'))
+          return
+        }
         const sourcePartyId = partyForPlayer(sharedWorlds.parties, client.playerId)?.id ?? null
         const invitation = sharedWorlds.parties.invitations.find(
           candidate => candidate.id === message.invitationId,
@@ -1099,10 +1290,14 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           broadcastPartyState()
           broadcastSnapshot()
         }
+        sendPartyAction(client, 'accept-invitation', result)
         return
       }
       if (message.type === 'client-party-deny') {
-        if (!sharedWorlds) return
+        if (!sharedWorlds) {
+          sendPartyAction(client, 'deny-invitation', rejectedPartyAction('invitation-missing'))
+          return
+        }
         const result = denySharedPartyInvitation(
           sharedWorlds,
           client.playerId,
@@ -1113,11 +1308,120 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           state = sharedWorlds.hub
           broadcastPartyState()
         }
+        sendPartyAction(client, 'deny-invitation', result)
+        return
+      }
+      if (message.type === 'client-party-settings') {
+        if (privateParties && message.visibility !== 'private') {
+          sendPartyAction(client, 'settings', rejectedPartyAction('party-private'))
+          return
+        }
+        const parties = activePartySystem()
+        const result = parties
+          ? setPartyVisibility(parties, client.playerId, message.visibility)
+          : rejectedPartyAction('party-missing')
+        if (result.accepted) replacePartySystem(result.state)
+        sendPartyAction(client, 'settings', result)
+        return
+      }
+      if (message.type === 'client-party-rotate-code') {
+        const parties = activePartySystem()
+        const result = parties
+          ? rotatePartyJoinCode(parties, client.playerId, createPartyJoinCode())
+          : rejectedPartyAction('party-missing')
+        if (result.accepted) replacePartySystem(result.state)
+        sendPartyAction(client, 'rotate-code', result)
+        return
+      }
+      if (
+        message.type === 'client-party-request-accept'
+        || message.type === 'client-party-request-deny'
+      ) {
+        const parties = activePartySystem()
+        const result = parties
+          ? decidePartyJoinRequest(parties, client.playerId, message.requestId)
+          : rejectedPartyAction('party-missing')
+        if (result.accepted) {
+          replacePartySystem(result.state)
+          const request = [...externalPartyJoinRequests.values()].find(candidate => (
+            candidate.id === message.requestId && candidate.status === 'pending'
+          ))
+          if (request) {
+            request.status = message.type === 'client-party-request-accept' ? 'accepted' : 'denied'
+          }
+        }
+        sendPartyAction(
+          client,
+          message.type === 'client-party-request-accept' ? 'request-accept' : 'request-deny',
+          result,
+        )
+        return
+      }
+      if (message.type === 'client-party-leave') {
+        if (!sharedWorlds) {
+          sendPartyAction(client, 'leave', { accepted: true, reason: null })
+          disconnect(socket, 'invalid-message', 'You left the private College.')
+          return
+        }
+        const sourcePartyId = partyForPlayer(sharedWorlds.parties, client.playerId)?.id ?? null
+        const result = leaveSharedParty(sharedWorlds, client.playerId, createPartyIdentity())
+        if (result.accepted) {
+          if (sourcePartyId) closePartyModRuntimes(sourcePartyId)
+          sharedWorlds = result.state
+          state = sharedWorlds.hub
+          broadcastPartyState()
+          broadcastSnapshot()
+        }
+        sendPartyAction(client, 'leave', result)
+        return
+      }
+      if (message.type === 'client-party-kick') {
+        if (!sharedWorlds) {
+          const parties = activePartySystem()
+          const party = parties ? partyForPlayer(parties, client.playerId) : null
+          const target = [...clients.values()].find(candidate => (
+            candidate.playerId === message.targetPlayerId
+          ))
+          const accepted = Boolean(
+            party
+            && party.leaderPlayerId === client.playerId
+            && party.memberPlayerIds.includes(message.targetPlayerId)
+            && message.targetPlayerId !== client.playerId
+            && target,
+          )
+          sendPartyAction(
+            client,
+            'kick',
+            accepted
+              ? { accepted: true, reason: null }
+              : rejectedPartyAction(party?.leaderPlayerId === client.playerId ? 'player-missing' : 'not-leader'),
+          )
+          if (accepted) disconnect(target!.socket, 'invalid-message', 'The College leader removed you.')
+          return
+        }
+        const result = kickSharedPartyPlayer(
+          sharedWorlds,
+          client.playerId,
+          message.targetPlayerId,
+          createPartyIdentity(),
+        )
+        if (result.accepted) {
+          sharedWorlds = result.state
+          state = sharedWorlds.hub
+          broadcastPartyState()
+          broadcastSnapshot()
+        }
+        sendPartyAction(client, 'kick', result)
         return
       }
       if (message.type === 'client-cheat-mode') {
         if (message.enabled) {
+          if (sharedHub) {
+            disconnect(socket, 'invalid-message', 'Cheats require a private College.')
+            return
+          }
           client.globalScoreEligible = false
+          client.localOnly = true
           taintActiveRun(client)
         }
         return
@@ -1180,6 +1484,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         }
         client.pendingLuaRequestIds.add(message.requestId)
         client.globalScoreEligible = false
+        client.localOnly = true
         taintActiveRun(client)
         const completeRequest = (result: Parameters<typeof sendLuaResult>[0]) => {
           client.pendingLuaRequestIds.delete(message.requestId)
@@ -1282,6 +1587,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           ))
         }
         broadcast({ type: 'server-boneyard-loaded', boneyard: selected })
+        if (privateParties) broadcastPartyState()
         broadcastSnapshot()
         publishSaveCheckpoint('boneyard-entry')
         return
@@ -1303,6 +1609,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         const confirmed = confirmGameSimulationLoadout(state)
         if (!confirmed) return
         state = confirmed
+        if (privateParties) broadcastPartyState()
         broadcastSnapshot()
         publishSaveCheckpoint('loadout-confirmed')
         return
@@ -1353,8 +1660,8 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         }
       }
       const disconnectedState = stateForPlayer(client.playerId)
-      const disconnectedPartyId = sharedWorlds
-        ? partyForPlayer(sharedWorlds.parties, client.playerId)?.id ?? null
+      const disconnectedPartyId = activePartySystem()
+        ? partyForPlayer(activePartySystem()!, client.playerId)?.id ?? null
         : null
       const disconnectedPauseScope = sharedWorlds
         ? sharedGameplayPauseScope(client.playerId)
@@ -1374,6 +1681,9 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         ) closePartyModRuntimes(disconnectedPartyId)
       } else {
         state = removePlayerCharacter(state, client.playerId)
+        if (privateParties) {
+          privateParties = removePrivatePartyPlayer(privateParties, client.playerId)
+        }
       }
       if (clients.size === 0) {
         hostPlayerId = null
@@ -1386,6 +1696,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           nextSnapshotSequence = 1
           saveDocuments.clear()
           saveSequences.clear()
+          if (privateParties) privateParties = createPartySystem()
           gameplayPause = null
           resetNextTickDeadline()
         }
@@ -1419,7 +1730,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       if (releasedGameplayPause) {
         releaseGameplayPause('owner-disconnected', client.playerId, disconnectedPauseScope)
       } else broadcastSnapshot()
-      if (sharedWorlds) broadcastPartyState()
+      if (sharedWorlds || privateParties) broadcastPartyState()
       if (clients.size > 0 && !deploymentRestart) {
         publishSaveCheckpoint('participant-disconnected')
       }
@@ -1649,18 +1960,14 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       ticking = false
     }
   }, 2)
+  const partyAccessTimer = setInterval(() => {
+    if (!closed && prunePartyAccess()) broadcastPartyState()
+  }, 1_000)
+  partyAccessTimer.unref()
 
   function publishSaveCheckpoint(source: string): void {
-    if (!sharedWorlds) {
-      const owner = [...clients.values()].find(client => client.playerId === hostPlayerId)
-      if (owner) publishSaveCheckpointForClient(owner, source)
-      return
-    }
-    const leaderIds = new Set(
-      sharedWorlds.parties.parties.map(party => party.leaderPlayerId),
-    )
     for (const client of clients.values()) {
-      if (leaderIds.has(client.playerId)) publishSaveCheckpointForClient(client, source)
+      publishSaveCheckpointForClient(client, source)
     }
   }
 
@@ -1709,6 +2016,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         ? partyModRuntimes.get(party.id)
         : null
       document = createGameSaveDocument({
+        integrity: client.localOnly ? 'local-only' : 'global-clean',
         loadedBoneyard: loadedBoneyardForPlayer(client.playerId),
         mods: sharedContent?.manifest.mods ?? content.mods,
         modState: Object.fromEntries(
@@ -1828,7 +2136,9 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   }
 
   function broadcastPartyState(): void {
-    if (!sharedWorlds) return
+    prunePartyAccess()
+    const parties = activePartySystem()
+    if (!parties) return
     const profiles = new Map<string, PartyPlayerProfile>(
       [...clients.values()].map(({ displayName, playerId, profile }) => [playerId, {
         ...profile,
@@ -1836,21 +2146,222 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         playerId,
       }]),
     )
-    const hubPlayerIds = new Set(
-      sharedWorlds.hub.playerEntities.identities.map(({ playerId }) => playerId),
-    )
+    const hubPlayerIds = new Set(sharedWorlds
+      ? sharedWorlds.hub.playerEntities.identities.map(({ playerId }) => playerId)
+      : [...clients.values()].map(({ playerId }) => playerId))
     for (const client of clients.values()) {
       if (client.socket.readyState !== WebSocket.OPEN) continue
       client.socket.send(encodeGameMessage({
         type: 'server-party-state',
         state: projectPartyState(
-          sharedWorlds.parties,
+          parties,
           client.playerId,
           profiles,
           hubPlayerIds,
         ),
       }))
     }
+  }
+
+  function activePartySystem(): PartySystemState | null {
+    return sharedWorlds?.parties ?? privateParties
+  }
+
+  function replacePartySystem(parties: PartySystemState): void {
+    if (sharedWorlds) {
+      sharedWorlds = { ...sharedWorlds, parties }
+      state = sharedWorlds.hub
+    } else if (privateParties) {
+      privateParties = parties
+    }
+    broadcastPartyState()
+  }
+
+  function createPartyIdentity(): PartyIdentity {
+    return {
+      id: `party-${randomBytes(18).toString('base64url')}`,
+      joinCode: createPartyJoinCode(),
+      listingId: `listing-${randomBytes(18).toString('base64url')}`,
+    }
+  }
+
+  function createPartyJoinCode(): string {
+    const bytes = randomBytes(8)
+    let code = ''
+    for (let index = 0; index < 8; index += 1) {
+      code += PARTY_JOIN_CODE_ALPHABET[bytes[index]! % PARTY_JOIN_CODE_ALPHABET.length]
+    }
+    return `${code.slice(0, 4)}-${code.slice(4)}`
+  }
+
+  function partyTarget(partyId: string): GameHostPartyTarget | null {
+    prunePartyAccess()
+    const parties = activePartySystem()
+    const party = parties?.parties.find(candidate => candidate.id === partyId)
+    if (!party) return null
+    const leader = [...clients.values()].find(client => client.playerId === party.leaderPlayerId)
+    if (!leader) return null
+    const partyContent = sharedWorlds
+      ? playerContents.get(party.leaderPlayerId)?.summary
+      : contentSummary
+    if (!partyContent) return null
+    const playing = sharedWorlds
+      ? sharedWorlds.runs.some(run => run.partyId === party.id)
+      : state.world.kind === 'boneyard'
+    return {
+      content: partyContent,
+      id: party.id,
+      leader: leader.displayName,
+      memberCount: party.memberPlayerIds.length,
+      status: playing ? 'playing' : 'hub',
+      visibility: party.visibility,
+    }
+  }
+
+  function targetByCode(joinCode: string): GameHostPartyTarget | null {
+    const party = activePartySystem() && partyByJoinCode(activePartySystem()!, joinCode)
+    return party ? partyTarget(party.id) : null
+  }
+
+  function targetByListingId(listingId: string): GameHostPartyTarget | null {
+    const parties = activePartySystem()
+    const party = parties && partyByListingId(parties, listingId)
+    return party && party.visibility !== 'private' ? partyTarget(party.id) : null
+  }
+
+  function createExternalPartyJoinRequest(
+    input: GameHostPartyJoinRequestInput,
+  ): GameHostPartyJoinRequestResult {
+    prunePartyAccess()
+    const parties = activePartySystem()
+    const party = parties && partyByListingId(parties, input.listingId)
+    if (!parties || !party) return { accepted: false, reason: 'party-missing' }
+    if (party.visibility !== 'invite-only') {
+      return { accepted: false, reason: 'party-private' }
+    }
+    const result = requestPartyJoin(parties, party.id, {
+      id: input.id,
+      requester: input.requester,
+    }, availablePartyMembers(party.id, null))
+    if (!result.accepted) {
+      return { accepted: false, reason: protocolPartyRejection(result.reason) }
+    }
+    externalPartyJoinRequests.set(input.token, {
+      expiresAt: input.expiresAt,
+      id: input.id,
+      partyId: party.id,
+      requester: input.requester,
+      status: 'pending',
+      token: input.token,
+    })
+    replacePartySystem(result.state)
+    return { accepted: true }
+  }
+
+  function reserveExternalPartyJoin(
+    partyId: string,
+    reservationId: string,
+    expiresAt: number,
+  ): ProtocolPartyActionRejection | null {
+    prunePartyAccess()
+    const target = partyTarget(partyId)
+    if (!target) return 'party-missing'
+    if (target.status !== 'hub') return 'not-in-hub'
+    if (target.memberCount + reservationsForParty(partyId) >= maxPlayers) return 'party-full'
+    partyJoinReservations.set(reservationId, { expiresAt, partyId })
+    return null
+  }
+
+  function validPartyReservation(partyId: string, reservationId: string | null): boolean {
+    prunePartyAccess()
+    if (!reservationId) return false
+    const reservation = partyJoinReservations.get(reservationId)
+    return reservation?.partyId === partyId && reservation.expiresAt > performance.now()
+  }
+
+  function availablePartyMembers(partyId: string, activeReservationId: string | null): number {
+    prunePartyAccess()
+    const otherReservations = [...partyJoinReservations].filter(([id, reservation]) => (
+      id !== activeReservationId && reservation.partyId === partyId
+    )).length
+    return Math.max(1, maxPlayers - otherReservations)
+  }
+
+  function reservationsForParty(partyId: string): number {
+    return [...partyJoinReservations.values()].filter(reservation => (
+      reservation.partyId === partyId
+    )).length
+  }
+
+  function consumePartyReservation(reservationId: string | null): void {
+    if (reservationId) partyJoinReservations.delete(reservationId)
+  }
+
+  function prunePartyAccess(now = performance.now()): boolean {
+    for (const [reservationId, reservation] of partyJoinReservations) {
+      if (reservation.expiresAt <= now) partyJoinReservations.delete(reservationId)
+    }
+    const parties = activePartySystem()
+    if (!parties) return false
+    const livePartyIds = new Set(parties.parties.map(({ id }) => id))
+    const expiredRequestIds = new Set<string>()
+    for (const [token, request] of externalPartyJoinRequests) {
+      if (request.expiresAt <= now || !livePartyIds.has(request.partyId)) {
+        expiredRequestIds.add(request.id)
+        externalPartyJoinRequests.delete(token)
+      }
+    }
+    if (expiredRequestIds.size === 0) return false
+    const joinRequests = parties.joinRequests.filter(({ id }) => !expiredRequestIds.has(id))
+    if (joinRequests.length === parties.joinRequests.length) return false
+    if (sharedWorlds) {
+      sharedWorlds = {
+        ...sharedWorlds,
+        parties: { ...parties, joinRequests, revision: parties.revision + 1 },
+      }
+      state = sharedWorlds.hub
+    } else if (privateParties) {
+      privateParties = { ...parties, joinRequests, revision: parties.revision + 1 }
+    }
+    return true
+  }
+
+  function sendPartyAction(
+    client: HostClient,
+    action: PartyAction,
+    result: Readonly<{ accepted: boolean; reason: string | null }>,
+  ): void {
+    if (client.socket.readyState !== WebSocket.OPEN) return
+    client.socket.send(encodeGameMessage({
+      type: 'server-party-action',
+      action,
+      ok: result.accepted,
+      reason: result.accepted ? null : protocolPartyRejection(result.reason),
+    }))
+  }
+
+  function rejectedPartyAction(reason: ProtocolPartyActionRejection) {
+    return {
+      accepted: false,
+      reason,
+      state: activePartySystem() ?? createPartySystem(),
+    }
+  }
+
+  function protocolPartyRejection(reason: string | null): ProtocolPartyActionRejection {
+    return (PARTY_ACTION_REJECTIONS as readonly string[]).includes(reason ?? '')
+      ? reason as ProtocolPartyActionRejection
+      : 'party-missing'
+  }
+
+  function partyRejectionMessage(reason: string | null): string {
+    return reason === 'party-full'
+      ? 'That party is full.'
+      : reason === 'not-in-hub'
+        ? 'That party is already in a Boneyard.'
+        : reason === 'party-private'
+          ? 'That party is private.'
+          : 'That party is no longer available.'
   }
 
   function broadcastToPlayerWorld(
@@ -2556,6 +3067,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       closed = true
       clearInterval(timer)
       deploymentRestart?.resolveReady()
+      clearInterval(partyAccessTimer)
       resetLuaRuntime()
       for (const runtime of privateModLuaRuntimes.splice(0)) runtime.close()
       privateModContentRegistry.close()
@@ -2590,7 +3102,22 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     playerCount: () => clients.size,
     loadedBoneyard: () => loadedBoneyard,
     modCatalog: () => privateModContentRegistry.catalog(),
-    partyCount: () => sharedWorlds?.parties.parties.length ?? 0,
+    cancelPartyReservation(reservationId) {
+      partyJoinReservations.delete(reservationId)
+    },
+    createPartyJoinRequest: createExternalPartyJoinRequest,
+    partyCount: () => activePartySystem()?.parties.length ?? 0,
+    partyJoinRequestStatus(token) {
+      prunePartyAccess()
+      const request = externalPartyJoinRequests.get(token)
+      if (
+        request?.status === 'pending'
+        && !activePartySystem()?.joinRequests.some(({ id }) => id === request.id)
+      ) request.status = 'denied'
+      return request ? { partyId: request.partyId, status: request.status } : null
+    },
+    partyTargetByCode: targetByCode,
+    partyTargetByListingId: targetByListingId,
     publicParties: () => sharedWorlds
       ? projectPublicPartyDirectory({
           memberships: sharedWorlds.parties.parties,
@@ -2603,6 +3130,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         ), maxPlayers)
       : [],
     restartForDeployment,
+    reservePartyJoin: reserveExternalPartyJoin,
     state: () => state,
     runCount: () => sharedWorlds?.runs.length ?? Number(state.world.kind === 'boneyard'),
   }
@@ -2725,6 +3253,8 @@ function authenticate(
       ? {
           content: null,
           leaderboardUserId: authentication.leaderboardUserId ?? null,
+          partyId: null,
+          reservationId: null,
           role: 'shared',
         }
       : null
@@ -2734,6 +3264,8 @@ function authenticate(
     return claimed && validLeaderboardUserId(claimed.leaderboardUserId) ? {
       content: claimed.content,
       leaderboardUserId: claimed.leaderboardUserId,
+      partyId: claimed.partyId ?? null,
+      reservationId: claimed.reservationId ?? null,
       role: 'shared',
     } : null
   }

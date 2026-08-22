@@ -28,6 +28,7 @@ const payload = await response.json()
 assert.equal(response.status, 200, JSON.stringify(payload))
 assert.equal(response.headers.get('cache-control'), 'no-store')
 assert.equal(payload.kind, 'remote')
+assert.equal(payload.sessionKind, 'private-college')
 assert.equal(typeof payload.url, 'string')
 assert.equal(typeof payload.credential, 'string')
 
@@ -41,6 +42,7 @@ const socket = await openSocket(transportEndpoint, browserOrigin)
 try {
   socket.send(encodeGameMessage({
     type: 'client-hello',
+    cheatsEnabled: false,
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     protocolVersion: GAME_PROTOCOL_VERSION,
     credential: payload.credential,
@@ -62,7 +64,7 @@ try {
     type: 'client-input',
     input: {
       aim: null,
-      cast: { primary: false, secondary: null },
+      cast: { primary: false, quickbar: null },
       movement: { x: 1, y: 0 },
     },
     sequence: 1,

@@ -22,6 +22,7 @@ distributed or lockstep simulation.
 | Desktop join | Packaged shared client | Peer-hosted or dedicated server |
 | Web singleton party | Shared browser client | The process-wide shared Hub host; a party-scoped run instance after launch |
 | Web multiplayer party | Shared browser clients | The same shared Hub host, then one party-scoped Boneyard run instance |
+| Web private College | Shared browser clients | One provisioned in-process host whose sealed mod set belongs to the room |
 | Dedicated | Any compatible client | The same server bundle run headlessly |
 
 The website is the control plane for browser admission, account identity,
@@ -30,12 +31,12 @@ still provide local solo play with local identity and an empty content set, but
 the Website no longer owns a DLL loader, custom-protocol launcher hand-off,
 native-lobby directory, or native-save ZIP service.
 
-Browser play has no launcher lobby directory or join-by-lobby URL. New Game
-first enters Create without requesting or reserving shared-Hub admission. The
-accepted discipline starts the Hub loading/input barrier; only behind that
-barrier does the page request one single-use shared-Hub ticket and connect the
-completed character. The authoritative host registers a singleton party when
-that complete character authenticates.
+Browser play has no launcher lobby namespace or URL join. New Game first
+chooses global-Hub versus private-College intent, then enters Create without
+requesting a transport credential. The accepted discipline starts the loading
+barrier; only behind it does the page request one single-use ticket. Mods,
+cheats, and local-only saves choose a private College. The global Hub rejects
+modded, cheats-on, and local-only handshakes at authoritative seams.
 Players discover one another in the Courtyard itself, inspect a name-only
 profile, and exchange party invitations over the gameplay protocol. The
 current party leader alone can launch; that transition freezes the current
@@ -43,13 +44,14 @@ party roster and moves exactly those player entities into a party-scoped
 Boneyard instance while unrelated Hub residents keep ticking in the shared Hub
 instance.
 
-The shared Hub and its in-world party system remain the only Website
-multiplayer authority and entry path. The Dark Cloud browser may read a public
-directory projected from that owner: it lists safe multi-member party summaries
-and sends the player through the same Create-first shared-Hub entry flow. It does not expose
-internal singleton memberships, invitations, credentials, content manifests,
-private sessions, or a direct join edge. No launcher transport participates in
-the rebuilt browser game's party model.
+The Play submenu and Dark Cloud keep distinct visual wrappers over one headless
+party-directory/join module. Opted-in singleton and grouped shared-Hub parties
+may be public or invite-only; private parties remain unlisted. A rotatable
+eight-character Party ID is a direct-join capability and appears only in the
+leader cog. Resolution creates a ten-minute in-memory intent, while the actual
+host ticket is minted only after Create. Invite-only requests are memory-only,
+guest-capable, leader-approved, and expire with their party or supervisor.
+Only the current leader can issue Courtyard Player Card invitations.
 
 The same authenticated gameplay connection carries ephemeral text chat. A
 public-Hub singleton sees Global; a grouped Hub participant defaults to Party
@@ -108,7 +110,10 @@ creates a singleton party and is its leader. Accepting an invitation atomically
 moves a singleton participant into the inviter's party; it never derives
 authority from connection order. Leader disconnect promotes the earliest
 remaining member. Invitations are invalidated when either endpoint disappears,
-the target ceases to be a singleton, or the party starts a run.
+the target ceases to be a singleton, or the party starts a run. Party identity,
+public listing identity, and Party ID are separate opaque values. Leave and Kick
+move a shared-Hub participant into a fresh private singleton. A private College
+projects all connected clients as one party whose leader follows host transfer.
 
 Chat identity is never a fifth client-provided identity. A client chat command
 contains only a channel and bounded text. The host derives player ID and
@@ -118,8 +123,7 @@ authoritative event. Client history is an 80-event presentation buffer, not an
 authority store.
 
 The browser supervisor owns one shared-Hub host for its process lifetime and a
-bounded set of single-use admission tickets. It does not create one host per
-player or party. The host owns a shared Hub simulation plus zero or more
+bounded set of single-use admission tickets. The host owns a shared Hub simulation plus zero or more
 party-scoped Boneyard simulations. Each socket receives snapshots only for its
 current world instance, while party-control messages remain session-wide.
 Leaving or a failed heartbeat removes the participant from its world and party;
@@ -132,8 +136,9 @@ empty resident Hub is not an occupied session.
 The host also owns the safe public-party projection. A bearer-protected
 supervisor control-plane read exposes that projection to the Website backend;
 public clients receive only the bounded DTO from `GET /api/game/parties`.
-Private per-session provisioning remains an explicit operations/test seam and
-is not a browser New Game path.
+Private Colleges are bounded supervisor session records with per-player tickets;
+they close after their final player and proxy leave. Their reusable standing
+credential and leaderboard signing key were removed.
 
 Browser visual assets follow the native screen/actor lifetime instead of one
 route-wide resident manifest. Startup owns only Loader and immediately-next
@@ -387,6 +392,11 @@ class-specific constructor threshold and any later failed replacement. Clients
 copy this semantic state; they do not reacquire targets or steer projectiles in
 presentation.
 
+Protocol 54 adds session kind, content-addressed mod asset references, party
+visibility and Party IDs, external join-request views, leader decisions,
+Leave/Kick, rotation, and typed party-action results. Compatibility remains an
+exact host/client match and the two bundles deploy together.
+
 ## Saves, identity, and content
 
 - The authoritative game host is the only producer of browser-save contents.
@@ -414,18 +424,15 @@ presentation.
   delete checkpoint. The adapter serializes that delete after prior writes, so
   the completed run cannot be resumed or recreated by an older in-flight
   checkpoint.
-- Normal semantic/five-second publication remains continuation-authority owned:
-  each independent party leader receives it. Deployment-final publication
-  additionally covers every connected player. In a party world, the host
-  projects the same authoritative state to one owner at a time, so every
-  participant can resume an individual continuation without serializing another
-  player's actor into their slot. Before a deployment disconnect, the page
-  acknowledges the exact final sequence only after the selected cloud or
-  IndexedDB adapter is idle.
+- Normal semantic/five-second publication is participant-owned: every connected
+  player receives a one-wizard projection of the authoritative party state.
+  Deployment-final publication forces a fresh projection for every connected
+  player. Before a deployment disconnect, each page acknowledges the exact
+  final sequence only after its selected cloud or IndexedDB adapter is idle.
 - Website slot writes use optimistic revision checks and a content hash. The
-  document is capped at 8 MiB. Schema version two carries the immutable session
-  content manifest and one bounded normalized `sd.state` snapshot per active
-  Lua mod.
+  document is capped at 8 MiB. Schema 4 carries integrity, the immutable session
+  content manifest, and one bounded normalized `sd.state` snapshot per active
+  Lua mod; schema 3 is accepted only as a conservative local-only migration.
 - Local profiles and direct-host identities require no website account. Website
   or platform identities are optional attestations; public rankings can only
   trust sessions whose authority and identity they can verify.
@@ -437,11 +444,11 @@ presentation.
   resolves exact latest published versions, validates the complete dependency
   graph, reopens and hashes every package, and sends only accepted Lua and typed
   Boneyard members with the single-use Hub ticket or private-session request.
-- In the shared Hub, each admitted player retains that immutable content
-  payload. Party launch requires every member to have the same exact manifest;
-  the run then owns one isolated Lua VM per active Lua member and a party-local
-  Boneyard catalog. Other Hub residents and other party runs cannot observe or
-  mutate that content. Subscription changes affect only a later admission.
+- The global Hub admits only the empty content manifest. A private College
+  retains one immutable host manifest for every joiner; its run owns one
+  isolated Lua VM per active Lua member and a room-local Boneyard catalog.
+  Other Colleges cannot observe or mutate that content. Subscription changes
+  affect only a later admission or explicit signed-in sync.
 - On resume, the title owner first compares the stored manifest with the
   already-loaded account preview. Once that preflight is accepted, it starts
   the matching Hub/Boneyard loading barrier before requesting a ticket; the
@@ -473,14 +480,14 @@ bound, and persists the sealed values. The browser cannot choose score fields,
 and the client bundle receives neither the supervisor/signing secret nor an
 account-id override.
 
-Global eligibility starts only on a fresh account-bound admission. Initial or
+Global eligibility starts only on a fresh account-bound global-Hub admission. Initial or
 live `Enable Cheats` state permanently revokes it for that connection; an
 accepted authoritative Lua console request revokes it independently. Any
 ineligible member taints the current party run for every participant. Local
-Hall history remains available. Current save schema 3 validates and restores
-state but carries no server authenticity proof, so a client-held resumed
-lineage is deliberately local-only rather than being promoted into a signed
-global score.
+Hall history remains available. Save schema 4 carries durable `global-clean` or
+`local-only` integrity; legacy schema-3 saves migrate conservatively to
+`local-only`. Every participant receives their own authoritative checkpoint,
+and Game Over clears every current participant's slot.
 
 ## Rendering boundary
 
@@ -1057,9 +1064,13 @@ VM, and snapshots the bounded actor-attached effect. Synchronous
 `damage.taken` and `mana.changing` filters run at the existing direct/poison
 health and primary/secondary/overload/recovery/orb/potion mana writers. Filter
 errors fail open for that handler; cancellation remains monotonic. Protocol 48
-carries package assets, catalog entries, content-identified inventory/ground
-items, and active effects together with the independently merged Unforge
-state.
+introduced package presentation, catalog entries, content-identified
+inventory/ground items, and active effects. Protocol 54 replaces embedded PNG
+bytes with immutable `{sha256, byteLength}` references. The Website persists
+those bytes under `/api/game/content/{sha256}`; the browser streams, verifies,
+and caches them before Create or party connection. A Dark Cloud Subscribe or
+Enable action warms the same cache without blocking navigation and publishes
+bounded footer progress.
 
 The browser must carry the current account token into the optional-auth
 `/api/game/hub` admission request. Loading `/api/mods/active` is only a UI

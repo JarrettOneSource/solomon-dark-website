@@ -1,4 +1,6 @@
-import type { GameContentManifest } from '../protocol/game-protocol.ts'
+import { createHash } from 'node:crypto'
+
+import type { GameContentManifest, GameModAsset } from '../protocol/game-protocol.ts'
 import {
   projectModBoneyard,
   type ModBoneyardEntry,
@@ -41,8 +43,10 @@ export interface WebSessionModPayload {
 }
 
 export interface WebModPackageFilePayload {
+  readonly byteLength: number
   readonly bytesBase64: string
   readonly path: string
+  readonly sha256: string
 }
 
 interface ParsedWebModPackageFile extends WebModPackageFilePayload {
@@ -53,23 +57,29 @@ interface ParsedWebSessionMod extends Omit<WebSessionModPayload, 'files'> {
   readonly files: readonly ParsedWebModPackageFile[]
 }
 
-export interface WebModClientAsset {
-  readonly bytesBase64: string
-  readonly modId: string
-  readonly path: string
-}
-
 export interface WebSessionContentPayload {
   readonly manifestSha256: string
   readonly mods: readonly WebSessionModPayload[]
 }
 
 export interface MaterializedWebSessionContent {
-  readonly assets: readonly WebModClientAsset[]
+  readonly assets: readonly GameModAsset[]
   readonly boneyards: readonly ModBoneyardEntry[]
   readonly manifest: GameContentManifest
   readonly modSources: readonly WebLuaModSource[]
-  readonly summary: WebSessionContentPayload
+  readonly summary: WebSessionContentSummary
+}
+
+export interface WebSessionContentSummary {
+  readonly manifestSha256: string
+  readonly mods: readonly {
+    readonly assets: readonly GameModAsset[]
+    readonly contentSha256: string
+    readonly id: string
+    readonly name: string
+    readonly slug: string
+    readonly version: string
+  }[]
 }
 
 export function materializeWebSessionContent(value: unknown): MaterializedWebSessionContent {
@@ -83,7 +93,8 @@ export function materializeWebSessionContent(value: unknown): MaterializedWebSes
   const mods = source.mods.map((value, index) => parseMod(value, index))
   const ids = new Set<string>()
   const finalBoneyards = new Map<string, ModBoneyardEntry>()
-  const assets: WebModClientAsset[] = []
+  const assets: GameModAsset[] = []
+  const assetsByMod = new Map<string, GameModAsset[]>()
   const modSources: WebLuaModSource[] = []
   let aggregateBytes = 0
   for (const mod of mods) {
@@ -102,11 +113,16 @@ export function materializeWebSessionContent(value: unknown): MaterializedWebSes
     for (const file of mod.files) {
       aggregateBytes += file.bytes.length
       if (file.path.endsWith('.png')) {
-        assets.push({
-          bytesBase64: file.bytesBase64,
+        const asset = {
+          byteLength: file.byteLength,
           modId: mod.id,
           path: file.path,
-        })
+          sha256: file.sha256,
+        }
+        assets.push(asset)
+        const modAssets = assetsByMod.get(mod.id) ?? []
+        modAssets.push(asset)
+        assetsByMod.set(mod.id, modAssets)
       }
     }
     for (const boneyard of mod.boneyards) {
@@ -140,8 +156,12 @@ export function materializeWebSessionContent(value: unknown): MaterializedWebSes
     summary: {
       manifestSha256,
       mods: mods.map(mod => ({
-        ...mod,
-        files: mod.files.map(({ bytesBase64, path }) => ({ bytesBase64, path })),
+        assets: assetsByMod.get(mod.id) ?? [],
+        contentSha256: mod.contentSha256,
+        id: mod.id,
+        name: mod.name,
+        slug: mod.slug,
+        version: mod.version,
       })),
     },
   }
@@ -197,7 +217,7 @@ function parseMod(value: unknown, index: number): ParsedWebSessionMod {
   const files = source.files.map((value, fileIndex) => {
     const fileField = `${field}.files[${fileIndex}]`
     const file = object(value, fileField)
-    exactKeys(file, ['bytesBase64', 'path'], fileField)
+    exactKeys(file, ['byteLength', 'bytesBase64', 'path', 'sha256'], fileField)
     const path = text(file.path, `${fileField}.path`, 240)
     if (!PACKAGE_FILE.test(path) || portablePaths.has(path.toLowerCase())) {
       throw new Error(`${fileField}.path is invalid or duplicated`)
@@ -209,7 +229,20 @@ function parseMod(value: unknown, index: number): ParsedWebSessionMod {
       Math.ceil(MAX_PACKAGE_FILE_BYTES / 3) * 4,
     )
     const bytes = decodeBase64(bytesBase64, `${field} ${path}`, MAX_PACKAGE_FILE_BYTES)
-    return { bytes, bytesBase64, path }
+    if (!Number.isInteger(file.byteLength) || Number(file.byteLength) !== bytes.length) {
+      throw new Error(`${fileField}.byteLength does not match its package bytes`)
+    }
+    const fileSha256 = sha256(file.sha256, `${fileField}.sha256`)
+    if (createHash('sha256').update(bytes).digest('hex') !== fileSha256) {
+      throw new Error(`${fileField}.sha256 does not match its package bytes`)
+    }
+    return {
+      byteLength: bytes.length,
+      bytes,
+      bytesBase64,
+      path,
+      sha256: fileSha256,
+    }
   })
   if (!Array.isArray(source.boneyards) || source.boneyards.length > 256) {
     throw new Error(`${field}.boneyards is invalid`)

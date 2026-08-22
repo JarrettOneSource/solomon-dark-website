@@ -39,10 +39,11 @@ protected value. Rotating it therefore requires restarting both services;
 never expose it to the browser or a build-time variable.
 
 Never place the supervisor secret or a provisioned session credential in a
-build-time Vite variable. `POST /api/game/sessions` retains the private
-provisioning contract. New Game uses `POST /api/game/hub` to receive one
-single-use admission to the process-wide Hub. Party discovery and invitations
-happen inside that Hub; there is no browser lobby directory or join URL.
+build-time Vite variable. Clean New Game uses `POST /api/game/hub`; mods,
+cheats, and local-only saves use `POST /api/game/sessions`. Party IDs and public
+listings resolve through `/api/game/join/*` into memory-only intents, followed
+by one single-use ticket after Create. There is no browser lobby namespace or
+join URL. Private Colleges never receive the leaderboard signing secret.
 Unused admissions and unclaimed private sessions expire after two minutes. A
 used private session shuts down when its final authenticated player and
 in-flight proxy have both left; the empty shared Hub host remains resident and
@@ -81,10 +82,14 @@ protocol changes. A release is healthy only when all of these pass:
 2. `http://127.0.0.1:5222/health` reports the release protocol;
 3. the live Caddy site checksum matches the release artifact, with
    `/game-hub` and `/game-sessions/*` before the Website fallback;
-4. private provisioning and shared-Hub admission responses are `no-store` and
+4. private, shared-Hub, and party admission responses are `no-store` and
    return same-origin `wss` URLs where applicable;
 5. independently admitted clients enter one Hub with distinct singleton
    parties and authoritative movement; and
-6. a real three-browser journey proves invite, accept, party-only Boneyard
-   launch, and an unrelated player continuing in the Hub without console or
-   page errors.
+6. a real three-browser journey proves invite, accept, visibility, Party ID
+   rotation, guest request approval, party-only Boneyard launch, and an
+   unrelated player continuing in the Hub without console or page errors;
+7. a private-College journey proves signed-in mod sync and guest session-only
+   content, per-player tickets/checkpoints, and final-player teardown; and
+8. `/health` reports shared and private occupancy without exposing Party IDs,
+   credentials, manifests, or request tokens.

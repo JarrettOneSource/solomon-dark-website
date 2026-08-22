@@ -81,6 +81,7 @@ export interface ModSubscription {
 }
 
 export interface ActiveWebMod {
+  assets: GameContentAsset[]
   id: string
   name: string
   slug: string
@@ -144,6 +145,51 @@ export interface PublicGameParty {
   maxMembers: number
   status: 'hub' | 'playing'
   boneyardName: string | null
+  visibility: 'invite-only' | 'public'
+}
+
+export interface GameContentAsset {
+  byteLength: number
+  modId: string
+  path: string
+  sha256: string
+}
+
+export interface PartyJoinMod {
+  assets: GameContentAsset[]
+  contentSha256: string
+  id: string
+  name: string
+  slug: string
+  version: string
+}
+
+export interface PartyJoinTarget {
+  content: {
+    manifestSha256: string
+    mods: PartyJoinMod[]
+  }
+  kind: 'global-hub' | 'private-college'
+  leader: string
+  memberCount: number
+  status: 'hub' | 'playing'
+  visibility: 'invite-only' | 'private' | 'public'
+}
+
+export interface PartyJoinResolution {
+  intentId: string
+  target: PartyJoinTarget
+}
+
+export type PartyJoinRequestStatus =
+  | { status: 'pending' | 'denied' }
+  | { status: 'accepted'; intentId: string; target: PartyJoinTarget }
+
+export interface ProvisionedGameEndpointResponse {
+  credential: string
+  kind: 'remote'
+  sessionKind: 'global-hub' | 'private-college'
+  url: string
 }
 
 export interface WebGameSave {
@@ -269,6 +315,12 @@ export const api = {
           `/api/mods/${encodeURIComponent(slug)}/subscription`,
           { ...json({ enabled }), method: 'PATCH' },
         ),
+      sync: (mods: readonly Pick<PartyJoinMod, 'contentSha256' | 'id' | 'slug' | 'version'>[]) =>
+        request<{ enabled: string[] }>('/api/mods/subscriptions/sync', json({ mods })),
+      disableAll: () => request<{ disabled: number }>(
+        '/api/mods/subscriptions/disable-all',
+        json({}),
+      ),
       unsubscribe: (slug: string) =>
         request<void>(`/api/mods/${encodeURIComponent(slug)}/subscription`, {
           method: 'DELETE',
@@ -341,6 +393,26 @@ export const api = {
 
   gameParties: {
     list: () => request<{ items: PublicGameParty[] }>('/api/game/parties'),
+    resolveCode: (code: string) => request<PartyJoinResolution>(
+      '/api/game/join/resolve',
+      json({ code }),
+    ),
+    resolvePublic: (listingId: string) => request<PartyJoinResolution>(
+      '/api/game/join/public',
+      json({ listingId }),
+    ),
+    requestJoin: (listingId: string, displayName: string, requesterId: string) =>
+      request<{ requestToken: string; status: 'pending' }>(
+        '/api/game/join/requests',
+        json({ displayName, listingId, requesterId }),
+      ),
+    requestStatus: (requestToken: string) => request<PartyJoinRequestStatus>(
+      `/api/game/join/requests/${encodeURIComponent(requestToken)}`,
+    ),
+    admit: (intentId: string) => request<ProvisionedGameEndpointResponse>(
+      '/api/game/join/admit',
+      json({ intentId }),
+    ),
   },
 
   gameSaves: {

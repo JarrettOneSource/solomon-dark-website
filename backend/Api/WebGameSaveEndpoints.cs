@@ -79,7 +79,7 @@ public static class WebGameSaveEndpoints
             db.WebGameSaves.Add(save);
         }
         save.Document = request.Document!;
-        save.FormatVersion = WebGameSaveInspector.FormatVersion;
+        save.FormatVersion = inspection.FormatVersion;
         save.Revision = currentRevision + 1;
         save.Size = inspection.Size;
         save.Sha256 = inspection.Sha256;

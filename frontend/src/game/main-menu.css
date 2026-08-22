@@ -82,6 +82,18 @@
 
 .main-menu-button:disabled { cursor: default; }
 
+.main-menu-button[data-game-action='join-party']::after {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #d8d2c0;
+  content: 'JOIN PARTY';
+  font: 700 1.08cqw Cinzel, Georgia, serif;
+  letter-spacing: 0.08em;
+  text-shadow: 0 0.12cqw 0.12cqw #000;
+}
+
 .main-menu-button:focus-visible {
   outline: 0.125cqw solid rgb(221 197 139 / 0.9);
   outline-offset: -0.1875cqw;

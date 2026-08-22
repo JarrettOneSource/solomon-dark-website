@@ -25,8 +25,11 @@ EF Core, SQLite, JWT bearer authentication, and filesystem storage rooted at
 - `/api/mods*`, `/api/tags`, and `/api/users/{username}` provide the Library,
   package validation, account subscriptions, comments, screenshots, and public
   profiles.
-- `/api/game/hub` issues one single-use admission to the resident shared browser
-  Hub. `/api/game/sessions` remains the non-discoverable private operations seam.
+- `/api/game/hub` issues one clean single-use admission to the resident shared
+  browser Hub. `/api/game/sessions` provisions a private College.
+- `/api/game/join/*` resolves Party IDs/listings, carries guest-capable
+  invite-only requests, and mints a host ticket only after Create.
+- `/api/game/content/{sha256}` serves immutable verified mod presentation bytes.
 - `/api/game/saves*` provides the authoritative browser cloud slot.
 - `/api/game/diagnostics` accepts an explicit, bounded browser connection
   report without a session credential.
@@ -35,13 +38,13 @@ EF Core, SQLite, JWT bearer authentication, and filesystem storage rooted at
 - `/api/boneyards*` provides user-scoped Boneyard editor drafts and publication.
 - `/api/stats` provides public aggregate counts.
 
-The rebuilt browser game has no lobby namespace, directory, or join URL.
-`POST /api/game/hub` resolves the authenticated account's active mod content
-and returns a `Cache-Control: no-store` credentialed WSS endpoint. The
-supervisor consumes that admission once, retains its server-only account id,
-and the authoritative host creates party membership only after the completed
-character authenticates. The browser never supplies the account id or global
-score fields to the leaderboard write boundary.
+The rebuilt browser game has no lobby namespace or join URL. `POST
+/api/game/hub` fails closed when the account has enabled mods. `POST
+/api/game/sessions` seals the caller's current content into a private College.
+Every browser credential is single-use. Party resolve returns only safe content
+metadata plus an opaque in-memory intent; `/api/game/join/admit` creates the
+credential just in time. The browser never supplies the account id or global
+score fields to the leaderboard write seam.
 
 Browser diagnostics correlate the report with exactly one of three endpoint
 classes: `null` when no provisioned session is known, `shared-hub` for the
@@ -58,12 +61,18 @@ activation, and unsubscribe. `GET /api/mods/active` reopens the exact latest
 packages, validates hashes and dependency order, and returns the manifest the
 game-session endpoints will provision.
 
-Only sandboxed Lua and typed Boneyard overlays are accepted. The backend sends
-the resolved payload with the single-use shared-Hub ticket or private session
-request. Content remains immutable for that player; a party can launch only
-when all members carry the same exact manifest. Each party run owns isolated
-Lua VMs and a content-local Boneyard catalog. Browser save schema 2 carries the
-exact manifest and bounded per-mod `sd.state`.
+`POST /api/mods/subscriptions/sync` is account-only and atomically subscribes or
+enables every exact host mod without disabling unrelated subscriptions. Guests
+download the room's client content for one session without creating rows.
+Resolved PNGs are persisted by SHA-256 and returned as safe asset references;
+Lua scripts, bundles, and Boneyards remain authoritative-host material.
+
+Only sandboxed Lua and typed Boneyard overlays are accepted. Global-Hub tickets
+carry an empty manifest. A private College owns one sealed host manifest and
+every joiner receives that exact content regardless of unrelated personal
+subscriptions. Each run owns isolated Lua VMs and a content-local Boneyard
+catalog. Browser save schema 4 carries the exact manifest, bounded per-mod
+`sd.state`, and clean/local-only integrity.
 
 ## Revision log
 

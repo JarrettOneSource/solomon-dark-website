@@ -51,6 +51,7 @@ test('host save documents round-trip the complete owner state and revive Hub run
   }
 
   const document = createGameSaveDocument({
+    integrity: 'local-only',
     loadedBoneyard: null,
     mods: MODS,
     modState: MOD_STATE,
@@ -60,6 +61,7 @@ test('host save documents round-trip the complete owner state and revive Hub run
   const encoded = JSON.parse(document) as Record<string, unknown>
   assert.deepEqual(encoded.mods, MODS)
   assert.deepEqual(encoded.modState, MOD_STATE)
+  assert.equal(encoded.integrity, 'local-only')
   assert.equal(new TextEncoder().encode(document).byteLength <= MAX_WEB_GAME_SAVE_BYTES, true)
   assert.deepEqual(readGameSaveSummary(document), {
     character: OWNER,
@@ -71,6 +73,7 @@ test('host save documents round-trip the complete owner state and revive Hub run
 
   const restored = restoreGameSaveDocument(document)
   assert.equal(restored.playerId, 'owner')
+  assert.equal(restored.integrity, 'local-only')
   assert.deepEqual(restored.mods, MODS)
   assert.deepEqual(restored.modState, MOD_STATE)
   assert.equal(restored.loadedBoneyard, null)
@@ -92,8 +95,9 @@ test('host save documents round-trip the complete owner state and revive Hub run
   assert.deepEqual(Object.keys(restored.state.world.participants), ['owner'])
 })
 
-test('schema-3 saves normalize the pre-unforge zero ledger and feedback shape', () => {
+test('schema-4 saves normalize the pre-unforge zero ledger and feedback shape', () => {
   const document = createGameSaveDocument({
+    integrity: 'global-clean',
     loadedBoneyard: null,
     mods: MODS,
     modState: MOD_STATE,
@@ -139,6 +143,7 @@ test('host save documents retain the active Boneyard and its authoritative run i
     loadedBoneyard,
   )
   const document = createGameSaveDocument({
+    integrity: 'local-only',
     loadedBoneyard,
     mods: MODS,
     modState: MOD_STATE,
@@ -163,6 +168,7 @@ test('host save documents retain the active Boneyard and its authoritative run i
 
 test('host save documents fail closed for unknown schema, extra fields, owner drift, and size', () => {
   const document = createGameSaveDocument({
+    integrity: 'global-clean',
     loadedBoneyard: null,
     mods: MODS,
     modState: MOD_STATE,
@@ -190,4 +196,20 @@ test('host save documents fail closed for unknown schema, extra fields, owner dr
     () => restoreGameSaveDocument('x'.repeat(MAX_WEB_GAME_SAVE_BYTES + 1)),
     /size limit/,
   )
+})
+
+test('schema-3 saves migrate conservatively to local-only integrity', () => {
+  const current = JSON.parse(createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard: null,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state: createGameSimulation({ owner: OWNER }),
+  }))
+  delete current.integrity
+  current.schemaVersion = 3
+
+  const restored = restoreGameSaveDocument(JSON.stringify(current))
+  assert.equal(restored.integrity, 'local-only')
 })

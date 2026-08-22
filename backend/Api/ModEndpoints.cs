@@ -26,6 +26,10 @@ public static class ModEndpoints
             .RequireAuthorization();
         app.MapGet("/api/mods/active", ActiveModsAsync)
             .RequireAuthorization();
+        app.MapPost("/api/mods/subscriptions/sync", SyncSubscriptionsAsync)
+            .RequireAuthorization();
+        app.MapPost("/api/mods/subscriptions/disable-all", DisableAllSubscriptionsAsync)
+            .RequireAuthorization();
         app.MapGet("/api/tags", ListTagsAsync);
         app.MapGet("/api/mods/popular", PopularAsync);
         app.MapGet("/api/mods/{slug}", DetailAsync);
@@ -239,7 +243,16 @@ public static class ModEndpoints
                     hasLua = mod.EntryScript is not null,
                     boneyardCount = mod.Boneyards.Count,
                     mod.RequiredCapabilities,
-                    assetCount = mod.Files.Count
+                    assetCount = mod.Files.Count,
+                    assets = mod.Files
+                        .Where(file => file.Path.EndsWith(".png", StringComparison.Ordinal))
+                        .Select(file => new
+                        {
+                            file.ByteLength,
+                            modId = mod.Id,
+                            file.Path,
+                            file.Sha256
+                        }).ToArray()
                 }).ToArray()
             });
         }
@@ -247,6 +260,97 @@ public static class ModEndpoints
         {
             return Results.Conflict(new { error = exception.Message });
         }
+    }
+
+    private static async Task<IResult> SyncSubscriptionsAsync(
+        SyncSubscriptionsRequest request,
+        HttpContext context,
+        AppDb db,
+        CancellationToken cancellationToken)
+    {
+        if (request.Mods is null || request.Mods.Length == 0 ||
+            request.Mods.Length > WebModContentService.MaxActiveMods)
+        {
+            return ApiErrors.BadRequest("Choose between one and 128 host mods to sync.");
+        }
+        if (request.Mods.Any(mod =>
+                string.IsNullOrWhiteSpace(mod.Id) || mod.Id.Length > 128 ||
+                string.IsNullOrWhiteSpace(mod.Slug) || mod.Slug.Length > 80 ||
+                string.IsNullOrWhiteSpace(mod.Version) || mod.Version.Length > 64 ||
+                mod.ContentSha256 is null ||
+                !System.Text.RegularExpressions.Regex.IsMatch(mod.ContentSha256, "^[a-f0-9]{64}$")) ||
+            request.Mods.Select(mod => mod.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count()
+                != request.Mods.Length)
+        {
+            return ApiErrors.BadRequest("The host mod set is invalid.");
+        }
+
+        var packageIds = request.Mods.Select(mod => mod.Id).ToArray();
+        var mods = await db.Mods
+            .Include(mod => mod.Versions)
+            .Where(mod => mod.PackageId != null && packageIds.Contains(mod.PackageId))
+            .ToArrayAsync(cancellationToken);
+        foreach (var requested in request.Mods)
+        {
+            var mod = mods.SingleOrDefault(candidate =>
+                string.Equals(candidate.PackageId, requested.Id, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(candidate.Slug, requested.Slug, StringComparison.Ordinal));
+            if (mod is null || !mod.Versions.Any(version =>
+                    string.Equals(version.Version, requested.Version, StringComparison.Ordinal) &&
+                    string.Equals(
+                        version.ContentSha256,
+                        requested.ContentSha256,
+                        StringComparison.OrdinalIgnoreCase)))
+            {
+                return Results.Conflict(new
+                {
+                    error = $"{requested.Id} is no longer available in the host's exact version."
+                });
+            }
+        }
+
+        var userId = TokenService.GetUserId(context.User)!.Value;
+        var modIds = mods.Select(mod => mod.Id).ToArray();
+        var subscriptions = await db.ModSubscriptions
+            .Where(subscription => subscription.UserId == userId && modIds.Contains(subscription.ModId))
+            .ToDictionaryAsync(subscription => subscription.ModId, cancellationToken);
+        var now = DateTime.UtcNow;
+        foreach (var mod in mods)
+        {
+            if (!subscriptions.TryGetValue(mod.Id, out var subscription))
+            {
+                subscription = new ModSubscription
+                {
+                    UserId = userId,
+                    ModId = mod.Id,
+                    CreatedAtUtc = now
+                };
+                db.ModSubscriptions.Add(subscription);
+            }
+            subscription.Enabled = true;
+            subscription.UpdatedAtUtc = now;
+        }
+        await db.SaveChangesAsync(cancellationToken);
+        return Results.Ok(new
+        {
+            enabled = mods.OrderBy(mod => mod.Slug).Select(mod => mod.Slug).ToArray()
+        });
+    }
+
+    private static async Task<IResult> DisableAllSubscriptionsAsync(
+        HttpContext context,
+        AppDb db,
+        CancellationToken cancellationToken)
+    {
+        var userId = TokenService.GetUserId(context.User)!.Value;
+        var disabled = await db.ModSubscriptions
+            .Where(subscription => subscription.UserId == userId && subscription.Enabled)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(subscription => subscription.Enabled, false)
+                    .SetProperty(subscription => subscription.UpdatedAtUtc, DateTime.UtcNow),
+                cancellationToken);
+        return Results.Ok(new { disabled });
     }
 
     private static async Task<IResult> SubscribeAsync(
@@ -295,6 +399,13 @@ public static class ModEndpoints
             new { enabled = subscription.Enabled, mod.Slug, subscribed = true },
             statusCode: created ? StatusCodes.Status201Created : StatusCodes.Status200OK);
     }
+
+    public sealed record SyncSubscriptionsRequest(SyncSubscriptionMod[]? Mods);
+    public sealed record SyncSubscriptionMod(
+        string? Id,
+        string? Slug,
+        string? Version,
+        string? ContentSha256);
 
     private static async Task<IResult> SetSubscriptionEnabledAsync(
         string slug,

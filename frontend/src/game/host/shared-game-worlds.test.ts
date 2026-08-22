@@ -15,6 +15,9 @@ import {
   confirmSharedPartyLoadout,
   inviteSharedPartyPlayer,
   restoreSharedGamePlayer,
+  joinSharedPartyPlayer,
+  kickSharedPartyPlayer,
+  leaveSharedParty,
   sharedGameStateForPlayer,
   startSharedPartyRun,
   stepSharedGameWorlds,
@@ -56,7 +59,13 @@ test('shared Hub restore preserves the saved character and participant state', (
     },
   }
 
-  const worlds = restoreSharedGamePlayer(createSharedGameWorlds(), saved, null, playerId)
+  const worlds = restoreSharedGamePlayer(
+    createSharedGameWorlds(),
+    saved,
+    null,
+    playerId,
+    partyIdentity('saved'),
+  )
   const restored = sharedGameStateForPlayer(worlds, playerId)
   assert.ok(restored)
   assert.deepEqual(
@@ -82,8 +91,8 @@ test('shared Hub restore preserves the saved character and participant state', (
 
 test('shared Hub denial removes the recipient invitation without moving either party', () => {
   let worlds = createSharedGameWorlds()
-  worlds = addSharedHubPlayer(worlds, 'player-a', character('Aurelia'))
-  worlds = addSharedHubPlayer(worlds, 'player-b', character('Basil'))
+  worlds = addSharedHubPlayer(worlds, 'player-a', character('Aurelia'), partyIdentity('a'))
+  worlds = addSharedHubPlayer(worlds, 'player-b', character('Basil'), partyIdentity('b'))
   worlds = inviteSharedPartyPlayer(worlds, 'player-a', 'player-b', 4).state
   const invitation = worlds.parties.invitations[0]!
 
@@ -102,6 +111,12 @@ const character = (displayName: string) => ({
   discipline: 'arcane' as const,
   displayName,
   element: 'ether' as const,
+})
+
+const partyIdentity = (suffix: string) => ({
+  id: `opaque-${suffix}`,
+  joinCode: `CODE-${suffix}`,
+  listingId: `LIST-${suffix}`,
 })
 
 function loadedBoneyardFixture(runId: string): LoadedBoneyard {
@@ -126,11 +141,41 @@ function loadedBoneyardFixture(runId: string): LoadedBoneyard {
   }
 }
 
+test('direct admission, leave, and kick preserve Hub ownership while replacing singleton access', () => {
+  let worlds = createSharedGameWorlds()
+  worlds = addSharedHubPlayer(worlds, 'player-a', character('Aurelia'), partyIdentity('a'))
+  worlds = addSharedHubPlayer(worlds, 'player-b', character('Basil'), partyIdentity('b'))
+  worlds = addSharedHubPlayer(worlds, 'player-c', character('Cassia'), partyIdentity('c'))
+
+  worlds = joinSharedPartyPlayer(worlds, 'player-b', partyIdentity('a').id, 4).state
+  assert.deepEqual(
+    worlds.parties.parties.find(({ id }) => id === partyIdentity('a').id)?.memberPlayerIds,
+    ['player-a', 'player-b'],
+  )
+  worlds = leaveSharedParty(worlds, 'player-b', partyIdentity('b-left')).state
+  assert.equal(
+    worlds.parties.parties.find(({ leaderPlayerId }) => leaderPlayerId === 'player-b')?.id,
+    partyIdentity('b-left').id,
+  )
+  worlds = joinSharedPartyPlayer(worlds, 'player-b', partyIdentity('a').id, 4).state
+  worlds = kickSharedPartyPlayer(
+    worlds,
+    'player-a',
+    'player-b',
+    partyIdentity('b-kicked'),
+  ).state
+  assert.equal(
+    worlds.parties.parties.find(({ leaderPlayerId }) => leaderPlayerId === 'player-b')?.id,
+    partyIdentity('b-kicked').id,
+  )
+  assert.equal(sharedGameStateForPlayer(worlds, 'player-b')?.world.kind, 'hub')
+})
+
 test('party launch partitions exactly its members while the shared Hub keeps ticking', () => {
   let worlds = createSharedGameWorlds()
-  worlds = addSharedHubPlayer(worlds, 'player-a', character('Aurelia'))
-  worlds = addSharedHubPlayer(worlds, 'player-b', character('Basil'))
-  worlds = addSharedHubPlayer(worlds, 'player-c', character('Cassia'))
+  worlds = addSharedHubPlayer(worlds, 'player-a', character('Aurelia'), partyIdentity('a'))
+  worlds = addSharedHubPlayer(worlds, 'player-b', character('Basil'), partyIdentity('b'))
+  worlds = addSharedHubPlayer(worlds, 'player-c', character('Cassia'), partyIdentity('c'))
   worlds = inviteSharedPartyPlayer(worlds, 'player-a', 'player-b', 4).state
   worlds = acceptSharedPartyInvitation(
     worlds,
@@ -168,8 +213,8 @@ test('party launch partitions exactly its members while the shared Hub keeps tic
 
 test('shared Hub pause freezes Hub residents while independent party runs keep ticking', () => {
   let worlds = createSharedGameWorlds()
-  worlds = addSharedHubPlayer(worlds, 'player-a', character('Aurelia'))
-  worlds = addSharedHubPlayer(worlds, 'player-b', character('Basil'))
+  worlds = addSharedHubPlayer(worlds, 'player-a', character('Aurelia'), partyIdentity('a'))
+  worlds = addSharedHubPlayer(worlds, 'player-b', character('Basil'), partyIdentity('b'))
   worlds = inviteSharedPartyPlayer(worlds, 'player-a', 'player-b', 4).state
   worlds = acceptSharedPartyInvitation(
     worlds,
@@ -182,7 +227,7 @@ test('shared Hub pause freezes Hub residents while independent party runs keep t
     'player-a',
     loadedBoneyardFixture('party-run'),
   ).state
-  worlds = addSharedHubPlayer(worlds, 'player-c', character('Cassia'))
+  worlds = addSharedHubPlayer(worlds, 'player-c', character('Cassia'), partyIdentity('c'))
 
   const hub = worlds.hub
   const runTick = worlds.runs[0]!.state.tick
@@ -194,9 +239,9 @@ test('shared Hub pause freezes Hub residents while independent party runs keep t
 
 test('only a Courtyard party leader can launch and a running member cannot be invited', () => {
   let worlds = createSharedGameWorlds()
-  worlds = addSharedHubPlayer(worlds, 'player-a', character('Aurelia'))
-  worlds = addSharedHubPlayer(worlds, 'player-b', character('Basil'))
-  worlds = addSharedHubPlayer(worlds, 'player-c', character('Cassia'))
+  worlds = addSharedHubPlayer(worlds, 'player-a', character('Aurelia'), partyIdentity('a'))
+  worlds = addSharedHubPlayer(worlds, 'player-b', character('Basil'), partyIdentity('b'))
+  worlds = addSharedHubPlayer(worlds, 'player-c', character('Cassia'), partyIdentity('c'))
   worlds = inviteSharedPartyPlayer(worlds, 'player-a', 'player-b', 4).state
   worlds = acceptSharedPartyInvitation(
     worlds,
@@ -219,9 +264,9 @@ test('only a Courtyard party leader can launch and a running member cannot be in
 
 test('post-run confirmation merges the progressed party back into the shared Hub', () => {
   let worlds = createSharedGameWorlds()
-  worlds = addSharedHubPlayer(worlds, 'player-a', character('Aurelia'))
-  worlds = addSharedHubPlayer(worlds, 'player-b', character('Basil'))
-  worlds = addSharedHubPlayer(worlds, 'player-c', character('Cassia'))
+  worlds = addSharedHubPlayer(worlds, 'player-a', character('Aurelia'), partyIdentity('a'))
+  worlds = addSharedHubPlayer(worlds, 'player-b', character('Basil'), partyIdentity('b'))
+  worlds = addSharedHubPlayer(worlds, 'player-c', character('Cassia'), partyIdentity('c'))
   worlds = inviteSharedPartyPlayer(worlds, 'player-a', 'player-b', 4).state
   worlds = acceptSharedPartyInvitation(
     worlds,

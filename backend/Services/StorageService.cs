@@ -12,12 +12,14 @@ public sealed partial class StorageService
         ScreenshotsPath = Path.Combine(RootPath, "uploads", "screenshots");
         BoneyardDraftsPath = Path.Combine(RootPath, "drafts", "boneyards");
         DiagnosticLogsPath = Path.Combine(RootPath, "diagnostic-logs");
+        GameContentPath = Path.Combine(RootPath, "game-content");
 
         Directory.CreateDirectory(RootPath);
         Directory.CreateDirectory(ModsPath);
         Directory.CreateDirectory(ScreenshotsPath);
         Directory.CreateDirectory(BoneyardDraftsPath);
         Directory.CreateDirectory(DiagnosticLogsPath);
+        Directory.CreateDirectory(GameContentPath);
     }
 
     public string RootPath { get; }
@@ -26,6 +28,7 @@ public sealed partial class StorageService
     public string ScreenshotsPath { get; }
     public string BoneyardDraftsPath { get; }
     public string DiagnosticLogsPath { get; }
+    public string GameContentPath { get; }
 
     public static bool IsSafeVersion(string version) =>
         version.Length <= 64 && SafeVersionRegex().IsMatch(version);
@@ -176,6 +179,32 @@ public sealed partial class StorageService
     public string GetDiagnosticLogPath(string relativePath) =>
         ResolvePath(DiagnosticLogsPath, relativePath);
 
+    public async Task<StoredGameContent> SaveGameContentAsync(
+        ReadOnlyMemory<byte> bytes,
+        CancellationToken cancellationToken = default)
+    {
+        if (bytes.IsEmpty)
+        {
+            throw new ArgumentException("Game content cannot be empty.", nameof(bytes));
+        }
+        var sha256 = Sha256(bytes.Span);
+        var path = GetGameContentPath(sha256);
+        if (!File.Exists(path))
+        {
+            await SaveBytesAtomicallyAsync(path, bytes, cancellationToken);
+        }
+        return new StoredGameContent(sha256, bytes.Length);
+    }
+
+    public string GetGameContentPath(string sha256)
+    {
+        if (!SafeSha256Regex().IsMatch(sha256))
+        {
+            throw new ArgumentException("Game content identity must be lowercase SHA-256.", nameof(sha256));
+        }
+        return ResolvePath(GameContentPath, $"{sha256[..2]}/{sha256}");
+    }
+
     public void DeleteDiagnosticLog(string relativePath)
     {
         var path = ResolvePath(DiagnosticLogsPath, relativePath);
@@ -312,9 +341,14 @@ public sealed partial class StorageService
 
     [GeneratedRegex("^[a-z0-9-]{1,32}$")]
     private static partial Regex SafeScreenshotTokenRegex();
+
+    [GeneratedRegex("^[a-f0-9]{64}$")]
+    private static partial Regex SafeSha256Regex();
 }
 
 public sealed record StoredDiagnosticLogFile(
     string RelativePath,
     long Size,
     string Sha256);
+
+public sealed record StoredGameContent(string Sha256, int ByteLength);

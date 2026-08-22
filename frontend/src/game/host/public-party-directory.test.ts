@@ -3,19 +3,15 @@ import test from 'node:test'
 
 import { projectPublicPartyDirectory } from './public-party-directory.ts'
 
-test('projects only complete multi-member parties with safe display data', () => {
+test('projects complete opted-in singleton and grouped parties with safe display data', () => {
   const directory = projectPublicPartyDirectory({
     memberships: [
-      { id: 'party-1', leaderPlayerId: 'player-a', memberPlayerIds: ['player-a'] },
+      membership('party-1', 'player-a', ['player-a'], 'public'),
       {
-        id: 'party-2',
-        leaderPlayerId: 'player-b',
-        memberPlayerIds: ['player-b', 'player-c'],
+        ...membership('party-2', 'player-b', ['player-b', 'player-c'], 'invite-only'),
       },
       {
-        id: 'party-3',
-        leaderPlayerId: 'player-d',
-        memberPlayerIds: ['player-d', 'player-missing'],
+        ...membership('party-3', 'player-d', ['player-d', 'player-missing'], 'public'),
       },
     ],
     runs: [],
@@ -28,23 +24,34 @@ test('projects only complete multi-member parties with safe display data', () =>
 
   assert.deepEqual(directory, [{
     boneyardName: null,
-    id: 'party-2',
+    id: 'listing-party-1',
+    leader: 'Alone',
+    maxMembers: 16,
+    memberCount: 1,
+    members: ['Alone'],
+    status: 'hub',
+    visibility: 'public',
+  }, {
+    boneyardName: null,
+    id: 'listing-party-2',
     leader: 'Hagatha',
     maxMembers: 16,
     memberCount: 2,
     members: ['Hagatha', 'Luthacus'],
     status: 'hub',
+    visibility: 'invite-only',
   }])
   assert.doesNotMatch(JSON.stringify(directory), /player-|invitation|credential|manifest/i)
 })
 
 test('projects a running party with only its public Boneyard name', () => {
   const directory = projectPublicPartyDirectory({
-    memberships: [{
-      id: 'party-4',
-      leaderPlayerId: 'player-a',
-      memberPlayerIds: ['player-a', 'player-b', 'player-c'],
-    }],
+    memberships: [membership(
+      'party-4',
+      'player-a',
+      ['player-a', 'player-b', 'player-c'],
+      'public',
+    )],
     runs: [{ boneyardName: 'The Survival Grounds', partyId: 'party-4' }],
   }, new Map([
     ['player-a', 'Fomentius'],
@@ -54,11 +61,28 @@ test('projects a running party with only its public Boneyard name', () => {
 
   assert.deepEqual(directory, [{
     boneyardName: 'The Survival Grounds',
-    id: 'party-4',
+    id: 'listing-party-4',
     leader: 'Fomentius',
     maxMembers: 8,
     memberCount: 3,
     members: ['Fomentius', 'Hagatha', 'Luthacus'],
     status: 'playing',
+    visibility: 'public',
   }])
 })
+
+function membership(
+  id: string,
+  leaderPlayerId: string,
+  memberPlayerIds: readonly string[],
+  visibility: 'invite-only' | 'private' | 'public',
+) {
+  return {
+    id,
+    joinCode: `CODE-${id}`,
+    leaderPlayerId,
+    listingId: `listing-${id}`,
+    memberPlayerIds,
+    visibility,
+  }
+}
