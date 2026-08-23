@@ -34647,5 +34647,21 @@ actor-owned slots, which is why the bank order must keep native slot order.
   (was `9` / `1`), x offset `0`. Portrait `414 × 896` is behind the rotate
   overlay; the panel keeps the opener's column there (no regression). Stack
   disposed by exact PID (`2239 2240`, leftovers `0`); local dev page + headless
-  Chrome disposed by exact PID after the before/after captures. Not landed:
-  production still serves `3e2aa260`; push / deploy is the owner's call.
+  Chrome disposed by exact PID after the before/after captures.
+- Landing re-validation (2026-08-23, owner: "push to main and clean up"): `main`
+  had moved to `163caeac` (63 ML-bot / shared-party commits, none touching
+  this change's files); rebased as `1d96d2cf`. Mac mini on the rebased tree:
+  `npm ci` + Debug backend rebuild, `scripts/validate.sh` 09:12:09 → 09:15:48
+  EDT exit `0` (now includes `test:ml-bot`); journey r8 `12` stops exit `0` on
+  bundle `Game-ydxk-gra.js`: opener `(8, 30) 30 × 30`; panel `(8, 66) 134 × 50`
+  at `896 × 414` and at `896 × 366`, `134 × 70` party, `134 × 109` invitation;
+  gap `6` px, x offset `0`, no console / page errors; stack disposed by exact
+  PID, leftovers `0`. Two journey runs before r8 failed at `enterHub` for
+  scaffolding reasons, not the HUD: r6 — on `main ≥ 163caeac` the session
+  supervisor requires `SDR_GAME_ML_BOT_CHECKPOINT` and exits at start without
+  it (backend then answers `503` on shared-Hub admission); r7 — a comment
+  inserted inside the task stack script's backslash-continued env chain
+  dropped the supervisor secret. Both fixed in the task-private stack script
+  (`SDR_GAME_ML_BOT_CHECKPOINT=frontend/server-assets/ml-bot-policy-v5-selected.sdml`,
+  the same file `smoke-game-deployment-restart.mjs` uses). Landed on `main` as
+  `1d96d2cf` plus this docs note; production deploy is the owner's call.
