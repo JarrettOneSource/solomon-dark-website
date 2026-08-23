@@ -12,7 +12,7 @@ import torch
 from .checkpoint import atomic_write, load_checkpoint
 from .model import PolicyV5
 from .optimization import classification_accuracy
-from .rollouts import ACTION_ORDER, ExpertDataset, expert_tensors
+from .rollouts import ExpertDataset
 from .spec import POLICY_SPEC
 
 FEATURE = {name: index for index, name in enumerate(POLICY_SPEC.observation_names)}
@@ -63,7 +63,11 @@ def behavior_probe_scorecard(
             }
             continue
         subset = dataset.subset(indices)
-        tensors_for_probe = expert_tensors(subset, torch.device("cpu"))
+        tensors_for_probe = (
+            torch.from_numpy(subset.observations).float(),
+            {name: torch.from_numpy(value).bool() for name, value in subset.masks.items()},
+            {name: torch.from_numpy(value).long() for name, value in subset.actions.items()},
+        )
         with torch.no_grad():
             accuracies = classification_accuracy(policy, *tensors_for_probe)
         metric, minimum = focus[name]
