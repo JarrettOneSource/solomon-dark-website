@@ -1,6 +1,6 @@
 import { getPlayerCharacter, getPlayerEconomy, getPlayerProgression, type GameSimulationState } from '../game-simulation.ts'
 import {
-  resolveMlBotPolicyDecision,
+  createMlBotPolicyActionMaskPlan,
   type MlBotPolicyActionIndices,
 } from './actions.ts'
 import type { MlBotPolicyEnemyRow } from './enemies.ts'
@@ -23,35 +23,32 @@ export function selectMlBotPolicyExpertAction(
   playerId: string,
   frame: MlBotPolicyFrame,
 ): MlBotPolicyActionIndices {
-  const target = selectTarget(frame)
-  const base = resolveMlBotPolicyDecision(state, playerId, frame, {
-    ability: 0,
-    aim: 0,
-    movement: 0,
-    target: target.action,
-  })
-  const ability = selectAbility(state, playerId, frame, target.row, base.masks.ability)
-  const aimed = resolveMlBotPolicyDecision(state, playerId, frame, {
-    ability,
-    aim: 0,
-    movement: 0,
-    target: target.action,
-  })
-  const movement = selectMovement(state, playerId, frame, target.row, base.masks.movement)
-  const aim = selectAim(target.row, aimed.masks.aim)
+  const plan = createMlBotPolicyActionMaskPlan(state, playerId, frame)
+  const target = selectTarget(frame, plan.target)
+  const ability = selectAbility(
+    state,
+    playerId,
+    frame,
+    target.row,
+    plan.abilityByTarget[target.action]!,
+  )
+  const movement = selectMovement(state, playerId, frame, target.row, plan.movement)
+  const aim = selectAim(target.row, plan.aimByAbility[ability]!)
   return { ability, aim, movement, target: target.action }
 }
 
-function selectTarget(frame: MlBotPolicyFrame): Readonly<{
+function selectTarget(frame: MlBotPolicyFrame, mask: Uint8Array): Readonly<{
   action: number
   row: MlBotPolicyEnemyRow | null
 }> {
   if (frame.targetId !== null) {
     const current = frame.enemyRows.find(({ id }) => id === frame.targetId)
-    if (current) return { action: 0, row: current }
+    if (current && mask[0] === 1) return { action: 0, row: current }
   }
-  const row = frame.enemyRows[0] ?? null
-  return { action: row === null ? 0 : 1, row }
+  for (let action = 1; action < mask.length; action += 1) {
+    if (mask[action] === 1) return { action, row: frame.enemyRows[action - 1] ?? null }
+  }
+  return { action: 0, row: null }
 }
 
 function selectAbility(

@@ -79,3 +79,20 @@ test('semantic expert emits no skill-choice label', () => {
   assert.deepEqual(Object.keys(action).sort(), ['ability', 'aim', 'movement', 'target'])
   assert.equal(action.ability, 0)
 })
+
+test('semantic expert emits only null actions under the global input gate', () => {
+  const state = enterBoneyardWorld(createGameSimulation({
+    agent: { discipline: 'arcane', displayName: 'Agent', element: 'fire' },
+  }), BONEYARD)
+  const frame = new MlBotPolicyObserver('agent').observe(state, {
+    activeInputs: {},
+    controllers: { agent: 'bot' },
+  })
+  frame.player.blockA[23] = 1
+  assert.deepEqual(selectMlBotPolicyExpertAction(state, 'agent', frame), {
+    ability: 0,
+    aim: 0,
+    movement: 0,
+    target: 0,
+  })
+})
