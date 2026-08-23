@@ -94,6 +94,9 @@ try {
 
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
+  const localPlay = page.getByRole('dialog', { name: 'Local play is active' })
+  await localPlay.waitFor()
+  await localPlay.getByRole('button', { name: 'CONTINUE LOCAL' }).click()
   await page.locator('.create-menu-scene[data-motion-settled="true"]')
     .waitFor({ timeout: 30_000 })
   await page.getByRole('button', { name: /fire/i }).click()
