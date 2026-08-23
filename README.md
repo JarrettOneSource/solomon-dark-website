@@ -109,6 +109,10 @@ browser-provisioned, and dedicated topology. This standalone host ends its
 current run when the final client leaves, so a desktop restart or browser
 refresh begins from a fresh Hub and materializes a new random Boneyard.
 
+The offline schema-v5 bot trainer, authoritative Boneyard rollout bridge,
+checkpoint format, evaluation protocol, and diagnostics are documented in
+`docs/ml-bot-training.md`.
+
 Production browser sessions use the bundled `GameHost/game-session-supervisor.mjs`.
 The website's `POST /api/game/sessions` adapter authenticates to that
 loopback-only supervisor and returns a one-session `wss` endpoint; the static
