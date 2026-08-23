@@ -16,7 +16,7 @@ from .advantages import (
     smdp_choice_advantages,
 )
 from .bridge import BoneyardRolloutBridge
-from .checkpoint import decode_checkpoint, encode_checkpoint
+from .checkpoint import decode_checkpoint, encode_checkpoint, typescript_checkpoint_report
 from .model import PolicyV6
 from .metrics import (
     episode_gameplay_summary,
@@ -233,6 +233,7 @@ def main() -> int:
         temporary = Path(temporary_name)
         summary_metadata = {
             **metadata,
+            "integralFloatCodecProbe": 1.0,
             "trainedEnvironmentSteps": 10,
             "trainedUpdates": 1,
         }
@@ -240,6 +241,8 @@ def main() -> int:
         summary_checkpoint.write_bytes(
             encode_checkpoint(summary_metadata, policy.export_tensors())
         )
+        typescript_codec = typescript_checkpoint_report(summary_checkpoint)
+        assert typescript_codec["sha256"] == typescript_codec["reencodedSha256"]
         try:
             validate_resume_state(
                 {"choiceOptimizerScope": "shared-trunk-v0"},

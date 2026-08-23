@@ -180,6 +180,8 @@ def run_validate(args: argparse.Namespace) -> Any:
     policy = PolicyV6()
     policy.load_tensors(tensors)
     typescript = typescript_checkpoint_report(Path(args.checkpoint).resolve())
+    if typescript.get("sha256") != typescript.get("reencodedSha256"):
+        raise ValueError("Python and TypeScript checkpoint codecs are not byte-identical")
     observation = checkpoint_test_observation()
     full_plans = {
         "movement": torch.ones((1, 9), dtype=torch.bool),

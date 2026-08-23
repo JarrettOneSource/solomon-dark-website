@@ -25,6 +25,7 @@ def encode_checkpoint(
 ) -> bytes:
     normalized = validate_tensors(tensors)
     POLICY_SPEC.validate_metadata(metadata)
+    canonical_metadata = canonical_json_value(dict(metadata))
     descriptors: list[dict[str, Any]] = []
     payloads: list[bytes] = []
     byte_offset = 0
@@ -41,11 +42,22 @@ def encode_checkpoint(
         payloads.append(payload)
         byte_offset += len(payload)
     header = json.dumps(
-        {"metadata": dict(metadata), "tensors": descriptors},
+        {"metadata": canonical_metadata, "tensors": descriptors},
         ensure_ascii=False,
         separators=(",", ":"),
+        allow_nan=False,
     ).encode("utf-8")
     return MAGIC + struct.pack("<I", len(header)) + header + b"".join(payloads)
+
+
+def canonical_json_value(value: Any) -> Any:
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, Mapping):
+        return {str(key): canonical_json_value(entry) for key, entry in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [canonical_json_value(entry) for entry in value]
+    return value
 
 
 def decode_checkpoint(source: bytes | bytearray | memoryview) -> tuple[dict[str, Any], dict[str, np.ndarray]]:
