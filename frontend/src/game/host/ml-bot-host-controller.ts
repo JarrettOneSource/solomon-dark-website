@@ -5,7 +5,10 @@ import type {
   PlayerCharacterInput,
 } from '../core-kernels/player-character.ts'
 import type { HubInventoryAction } from '../core-kernels/hub-economy.ts'
-import type { GameSimulationState } from '../core-server/game-simulation.ts'
+import {
+  gameSimulationPlayerRecords,
+  type GameSimulationState,
+} from '../core-server/game-simulation.ts'
 import {
   createMlBotPolicyActionMaskPlan,
   resolveMlBotPolicyDecision,
@@ -37,6 +40,10 @@ export type MlBotHostIntent =
   | Readonly<{
       input: PlayerCharacterInput
       kind: 'input'
+    }>
+  | Readonly<{
+      input: PlayerCharacterInput
+      kind: 'scripted-input'
     }>
   | Readonly<{
       choiceIndex: number
@@ -223,6 +230,11 @@ export class MlBotHostController {
       }
       return
     }
+    const entranceInput = mlBotEntranceInput(context.state, this.playerId)
+    if (entranceInput !== null) {
+      this.adapter.dispatch({ input: entranceInput, kind: 'scripted-input' })
+      return
+    }
     const skillChoice = resolveMlBotPolicySkillOffers(
       context.state,
       [this.playerId],
@@ -323,4 +335,34 @@ function requiredFinite(value: unknown, label: string): number {
 
 function policyWorldKey(state: GameSimulationState): string {
   return state.world.kind === 'boneyard' ? `boneyard:${state.world.runId}` : 'hub'
+}
+
+function mlBotEntranceInput(
+  state: GameSimulationState,
+  playerId: string,
+): PlayerCharacterInput | null {
+  if (
+    state.world.kind !== 'boneyard'
+    || state.world.encounter === null
+    || state.world.encounter.runEventId > 0
+  ) return null
+  if (state.world.encounter.phase !== 'digging') {
+    return {
+      aim: null,
+      cast: { primary: false, quickbar: null },
+      movement: { x: 0, y: 0 },
+    }
+  }
+  const player = gameSimulationPlayerRecords(state)[playerId]
+  if (!player) throw new Error(`ML bot entrance navigation has no player ${playerId}`)
+  const dx = state.world.encounter.position.x - player.position.x
+  const dy = state.world.encounter.position.y - 10 - player.position.y
+  const length = Math.hypot(dx, dy)
+  return {
+    aim: null,
+    cast: { primary: false, quickbar: null },
+    movement: length > 0
+      ? { x: dx / length, y: dy / length }
+      : { x: 0, y: 0 },
+  }
 }

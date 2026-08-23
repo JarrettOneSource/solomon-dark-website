@@ -2723,8 +2723,8 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       for (const intent of bot.queuedIntents.splice(0)) {
         const active = sharedGameStateForPlayer(sharedWorlds, bot.playerId)
         if (!active) continue
-        if (intent.kind === 'input') {
-          bot.decisions += 1
+        if (intent.kind === 'input' || intent.kind === 'scripted-input') {
+          if (intent.kind === 'input') bot.decisions += 1
           bot.activeInput = active.world.kind === 'boneyard' && active.run.phase === 'active'
             ? intent.input
             : createIdlePlayerCharacterInput()
