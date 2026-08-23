@@ -29,18 +29,21 @@ export function onSpell(handler: (e: SpellEvent) => void): () => void {
 
 // ---- mouse effects preference ----------------------------------------------
 // Gates the cursor trail and the School of Magic click rites together.
-// Per-device, like the ♪ mute.
+// Per-device, like the ♪ mute, and off until the wand is raised from the
+// effects rail (the key is only ever present when someone turned it on).
 
-const CURSOR_FX_KEY = 'sdr:no-mouse-fx'
+const CURSOR_FX_KEY = 'sdr:mouse-fx'
+const LEGACY_CURSOR_FX_KEY = 'sdr:no-mouse-fx'
 const CURSOR_FX_EVENT = 'sdr:mousefx'
 
 export function mouseFxEnabled(): boolean {
-  return localStorage.getItem(CURSOR_FX_KEY) !== '1'
+  return localStorage.getItem(CURSOR_FX_KEY) === '1'
 }
 
 export function setMouseFxEnabled(on: boolean) {
-  if (on) localStorage.removeItem(CURSOR_FX_KEY)
-  else localStorage.setItem(CURSOR_FX_KEY, '1')
+  if (on) localStorage.setItem(CURSOR_FX_KEY, '1')
+  else localStorage.removeItem(CURSOR_FX_KEY)
+  localStorage.removeItem(LEGACY_CURSOR_FX_KEY)
   window.dispatchEvent(new CustomEvent(CURSOR_FX_EVENT, { detail: on }))
 }
 

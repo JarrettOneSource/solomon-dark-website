@@ -59,15 +59,15 @@ export default function About() {
           <h2>The resurrection</h2>
           <p>
             Solomon Darker is a community web port that raises the unfinished game
-            directly in the browser: an authoritative multiplayer runtime, a sandboxed Lua grimoire with the{' '}
+            directly in the browser: an authoritative multiplayer runtime, a sandboxed Lua runtime with the{' '}
             <span className="font-mono text-sm">sd.*</span> API for community mods,
             cloud saves, and the Dark Cloud content browser the beta only hinted at.
           </p>
           <ul>
             <li><strong>Play</strong> — the complete authoritative game running directly in the browser.</li>
-            <li><strong>Explore the Dark Cloud</strong> — subscribed mods, Boneyards, and browser lobbies in the stock game’s own style.</li>
+            <li><strong>The Dark Cloud</strong> — subscribed mods, Boneyards, and browser lobbies in the stock game’s own style.</li>
             <li><strong>The Library</strong> — community web mods, uploaded, versioned, and subscribed by account.</li>
-            <li><strong>The Annals</strong> — account-owned cloud saves with exact mod-list provenance.</li>
+            <li><strong>Cloud saves</strong> — account-owned save slots with exact mod-list provenance.</li>
           </ul>
 
           <h2>Credits &amp; thanks</h2>
@@ -89,7 +89,7 @@ export default function About() {
             <div className="h-display text-lg">The Most Dedicated Students</div>
             <p className="text-fell mt-2 text-sm text-bone-dim">
               Beta testers, bug reporters, and the students who kept attending a
-              cancelled class. The Annals remember.
+              cancelled class. Remembered here.
             </p>
             <div className="mt-5 flex flex-wrap gap-2">
               {HALL_OF_FAME.map((name) => (
@@ -107,7 +107,7 @@ export default function About() {
               rel="noreferrer"
               className="btn btn-gold mt-6 !text-[#1c1508]"
             >
-              Join the College Discord ↗
+              Join the Discord ↗
             </a>
           </div>
 
@@ -133,9 +133,6 @@ export default function About() {
               className="btn btn-gold"
             >
               Play
-            </Link>
-            <Link to="/mods" className="btn btn-stone">
-              Browse the Library
             </Link>
           </div>
         </div>

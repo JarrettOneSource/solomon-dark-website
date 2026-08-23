@@ -318,57 +318,38 @@ export default function Hero() {
             />
           </div>
 
-          <p className="mt-5 max-w-sm text-[15px] leading-relaxed text-bone/90">
-            The third Solomon game never made it to launch. We dug it up —{' '}
-            <span className="text-gold-bright">multiplayer</span>, a{' '}
-            <span className="text-gold-bright">Lua modding grimoire</span>, and{' '}
-            <span className="text-gold-bright">cloud saves</span> for the beta Raptisoft
-            left behind.
-          </p>
-
           {/* menu plaques framed by the gold flourish columns from UI.png.
               The columns keep their natural proportions at a fixed height,
               and the plaque stack is pinned to that same height, each plaque
               stretching an equal share so the stack's top and bottom edges
-              land exactly on the art's. */}
-          <div className="mt-8 flex items-center justify-center gap-4">
+              land exactly on the art's. Two plaques now: the Library and
+              Search Parties moved in-game, so the columns stand shorter. */}
+          <div className="mt-10 flex items-center justify-center gap-4">
             <img
               src={art.flourishVert}
               alt=""
-              className="hidden h-60 w-auto object-contain opacity-90 drop-shadow-[0_3px_12px_rgba(0,0,0,.65)] sm:block"
+              className="hidden h-40 w-auto object-contain opacity-90 drop-shadow-[0_3px_12px_rgba(0,0,0,.65)] sm:block"
             />
-            <div className="flex w-full max-w-[320px] flex-col gap-2 sm:h-60">
+            <div className="flex w-full max-w-[320px] flex-col gap-3 sm:h-40">
+              <Link
+                to="/game"
+                className="btn-plaque btn-plaque-beacon !px-4 !py-2.5 !text-[12px] !tracking-[0.18em] sm:flex sm:flex-1 sm:items-center sm:justify-center"
+              >
+                Play Now
+              </Link>
               <a
                 href="https://discord.gg/HGHxZgyM2p"
                 target="_blank"
                 rel="noreferrer"
-                className="btn-plaque btn-plaque-beacon !px-4 !py-2.5 !text-[12px] !tracking-[0.18em] sm:flex sm:flex-1 sm:items-center sm:justify-center"
+                className="btn-plaque !px-4 !py-2.5 !text-[12px] !tracking-[0.18em] sm:flex sm:flex-1 sm:items-center sm:justify-center"
               >
                 Join the Discord
               </a>
-              <Link
-                to="/game"
-                className="btn-plaque !px-4 !py-2.5 !text-[12px] !tracking-[0.18em] sm:flex sm:flex-1 sm:items-center sm:justify-center"
-              >
-                Play in Browser
-              </Link>
-              <Link
-                to="/mods"
-                className="btn-plaque !px-4 !py-2.5 !text-[12px] !tracking-[0.18em] sm:flex sm:flex-1 sm:items-center sm:justify-center"
-              >
-                The Library
-              </Link>
-              <Link
-                to="/parties"
-                className="btn-plaque !px-4 !py-2.5 !text-[12px] !tracking-[0.18em] sm:flex sm:flex-1 sm:items-center sm:justify-center"
-              >
-                Search Parties
-              </Link>
             </div>
             <img
               src={art.flourishVert}
               alt=""
-              className="hidden h-60 w-auto -scale-x-100 object-contain opacity-90 drop-shadow-[0_3px_12px_rgba(0,0,0,.65)] sm:block"
+              className="hidden h-40 w-auto -scale-x-100 object-contain opacity-90 drop-shadow-[0_3px_12px_rgba(0,0,0,.65)] sm:block"
             />
           </div>
         </div>

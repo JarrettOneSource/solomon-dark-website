@@ -47,7 +47,7 @@ export default function Register() {
       await register(username.trim(), email.trim(), password)
       navigate('/account')
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Enrollment failed')
+      setError(err instanceof ApiError ? err.message : 'Registration failed')
       setBusy(false)
     }
   }
@@ -57,9 +57,9 @@ export default function Register() {
       <Reveal>
         <div className="mb-8 text-center">
           <img src={art.skullGold} alt="" className="mx-auto mb-4 h-12 drop-shadow-[0_0_12px_rgba(200,168,98,.5)]" />
-          <h1 className="h-display text-2xl">Enroll at the College</h1>
+          <h1 className="h-display text-2xl">Create an Account</h1>
           <p className="text-fell mt-2 text-sm text-bone-dim">
-            The Annals await your name. Penmanship counts.
+            Pick the name other players will see.
           </p>
         </div>
 
@@ -77,7 +77,7 @@ export default function Register() {
                 type="button"
                 onClick={suggest}
                 className="btn btn-stone flex-none !px-3 !text-[10px]"
-                title="Draw a name from the College registry"
+                title="Pick a random name"
               >
                 Suggest
               </button>
@@ -106,11 +106,11 @@ export default function Register() {
           {error && <ErrorNote message={error} />}
 
           <button type="submit" className="btn btn-gold w-full !py-3.5" disabled={busy}>
-            {busy ? 'Inscribing…' : 'Sign the Annals'}
+            {busy ? 'Creating…' : 'Create account'}
           </button>
 
           <p className="text-center text-xs text-bone-dim">
-            Already enrolled?{' '}
+            Already have an account?{' '}
             <Link to="/login" className="link-arcane">
               Return to your studies
             </Link>

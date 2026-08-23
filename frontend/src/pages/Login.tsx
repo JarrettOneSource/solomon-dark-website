@@ -39,7 +39,7 @@ export default function Login() {
         </div>
 
         <form onSubmit={submit} className="panel panel-ornate space-y-5 p-6 sm:p-8">
-          <Field label="Mage name or email">
+          <Field label="Username or email">
             <input
               className="input"
               value={usernameOrEmail}
@@ -61,13 +61,13 @@ export default function Login() {
           {error && <ErrorNote message={error} />}
 
           <button type="submit" className="btn btn-gold w-full !py-3.5" disabled={busy}>
-            {busy ? 'Unsealing…' : 'Sign in'}
+            {busy ? 'Signing in…' : 'Sign in'}
           </button>
 
           <p className="text-center text-xs text-bone-dim">
             New here?{' '}
             <Link to="/register" className="link-arcane">
-              Enroll at the College
+              Create an account
             </Link>
           </p>
         </form>

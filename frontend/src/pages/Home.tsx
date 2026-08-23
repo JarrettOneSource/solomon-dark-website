@@ -14,25 +14,25 @@ const FEATURES = [
     icon: skillIcons.door,
     title: 'Search Parties',
     body:
-      'Live browser co-op in one shared College Hub. Meet in the Courtyard, inspect another wizard, and form a party before hunting Solomon Dark.',
-    to: '/parties',
-    label: 'Join the hunt',
+      'Live browser co-op in one shared hub. Meet in the Courtyard, inspect another player, and form a party before taking on Solomon Dark.',
+    to: '/game',
+    label: 'Enter the Hub',
   },
   {
     icon: skillIcons.book,
-    title: 'The Lua Grimoire',
+    title: 'Lua Modding',
     body:
-      'A sandboxed authoritative Lua runtime exposing the sd.* API. Subscribe in the Library, then enable each tome in the Dark Cloud.',
-    to: '/mods',
-    label: 'Enter the Library',
+      'A sandboxed authoritative Lua runtime exposing the sd.* API. Browse, subscribe, and enable mods from the Dark Cloud, in-game.',
+    to: '/game',
+    label: 'Open the Dark Cloud',
   },
   {
     icon: skillIcons.bag,
     title: 'Cloud Saves',
     body:
-      'Your runs, immortalized in the Annals. A Solomon Darker account syncs save slots across machines, so no wizard dies of a misplaced hard drive.',
+      'A Solomon Darker account syncs save slots across machines, so no run dies of a misplaced hard drive.',
     to: '/account',
-    label: 'Open the Annals',
+    label: 'Manage your account',
   },
 ]
 
@@ -53,25 +53,25 @@ export default function Home() {
             <StatTile
               icon={skillIcons.door}
               value={stats.data?.matchesLive ?? null}
-              label="Parties on the hunt"
+              label="Live parties"
               loading={stats.loading}
             />
             <StatTile
               icon={skillIcons.hat}
               value={stats.data?.wizardsOnline ?? null}
-              label="Wizards in the field"
+              label="Players online"
               loading={stats.loading}
             />
             <StatTile
               icon={skillIcons.book}
               value={stats.data?.tomes ?? null}
-              label="Tomes in the Library"
+              label="Mods published"
               loading={stats.loading}
             />
             <StatTile
               icon={skillIcons.bag}
               value={stats.data ? formatCount(stats.data.downloadsTotal) : null}
-              label="Tomes taken"
+              label="Mod downloads"
               loading={stats.loading}
             />
           </div>
@@ -108,20 +108,12 @@ export default function Home() {
       {/* search parties */}
       <section className="mx-auto mt-24 max-w-6xl px-4 sm:px-6">
         <Reveal>
-          <SectionHead
-            kicker="Live from the college"
-            title="Search Parties"
-            action={
-              <Link to="/parties" className="link-arcane text-xs uppercase tracking-[0.15em]">
-                Join a party →
-              </Link>
-            }
-          />
+          <SectionHead kicker="Live right now" title="Search Parties" />
           <div className="panel panel-ornate flex flex-wrap items-center gap-5 p-6">
             <img src={skillIcons.door} alt="" className="h-12 w-12" />
             <p className="text-fell min-w-0 flex-1 text-bone-dim">
               Browse parties in Play or the Dark Cloud, enter a Party ID, or invite
-              the wizard standing beside you in the Courtyard.
+              the player standing beside you in the Courtyard.
             </p>
             <Link to="/game" className="btn btn-gold">Join Party</Link>
           </div>
@@ -129,14 +121,7 @@ export default function Home() {
       </section>
 
       {/* in heavy circulation */}
-      <PopularStrip
-        className="mx-auto mt-24 max-w-6xl px-4 sm:px-6"
-        action={
-          <Link to="/mods" className="link-arcane text-xs uppercase tracking-[0.15em]">
-            Enter the Library →
-          </Link>
-        }
-      />
+      <PopularStrip className="mx-auto mt-24 max-w-6xl px-4 sm:px-6" />
 
       {/* the story so far */}
       <section className="mx-auto mt-24 max-w-6xl px-4 sm:px-6">
@@ -190,22 +175,22 @@ export default function Home() {
             <>
               <h2 className="h-display text-xl">Welcome back, {user.username}</h2>
               <p className="text-fell mx-auto mt-3 max-w-md text-bone-dim">
-                The Annals are keeping your place. Your saves and tomes await.
+                Your saves and mods are right where you left them.
               </p>
               <Link to="/account" className="btn btn-gold mt-6">
-                Open the Annals
+                Open your account
               </Link>
             </>
           ) : (
             <>
-              <h2 className="h-display text-xl">Enroll at the College</h2>
+              <h2 className="h-display text-xl">Create an Account</h2>
               <p className="text-fell mx-auto mt-3 max-w-md text-bone-dim">
-                A Solomon Darker account gets you cloud saves, a place in the Annals, and the
-                right to contribute tomes to the Library. Tuition is free. Survival is
+                A Solomon Darker account gets you cloud saves synced across machines and
+                the right to publish your own mods. It costs nothing. Survival is
                 not guaranteed.
               </p>
               <Link to="/register" className="btn btn-gold mt-6">
-                Enroll
+                Create account
               </Link>
             </>
           )}

@@ -1,19 +1,15 @@
 // Music and sound effects mute independently (the header's effects rail),
-// each persisted per device.
+// each persisted per device. Both start OFF: the site is the door to the
+// game, and the game owns its own audio. Only an explicit '0' (the rail
+// toggled on) lets the public site make a sound.
 const MUSIC_KEY = 'sdr:muted'
 const SFX_KEY = 'sdr:sfx-muted'
-
-// Whoever silenced the old all-in-one ♪ meant all of it: carry that choice
-// into the sfx flag the first time the split runs on their device.
-if (localStorage.getItem(MUSIC_KEY) === '1' && localStorage.getItem(SFX_KEY) === null) {
-  localStorage.setItem(SFX_KEY, '1')
-}
 
 const activeEffects = new Set<HTMLAudioElement>()
 
 /** Music muted? (The jukebox handles its own fade/pause on toggle.) */
 export function isMuted(): boolean {
-  return localStorage.getItem(MUSIC_KEY) === '1'
+  return localStorage.getItem(MUSIC_KEY) !== '0'
 }
 
 export function setMuted(muted: boolean) {
@@ -21,7 +17,7 @@ export function setMuted(muted: boolean) {
 }
 
 export function isSfxMuted(): boolean {
-  return localStorage.getItem(SFX_KEY) === '1'
+  return localStorage.getItem(SFX_KEY) !== '0'
 }
 
 /** The effects-rail sfx toggle. Returns the new muted state. */

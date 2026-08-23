@@ -22,14 +22,14 @@ import { useAuth } from '../lib/auth'
 import { art } from '../lib/assets'
 import '../game/game-surface.css'
 
-// The Boneyard editor left the navbar deliberately: it is a maker's tool,
-// reached from the Library's drafting-table CTA and the footer passages.
+// The site is the door to the web port: Search Parties and the Library
+// live in-game now (the Dark Cloud), so they no longer get tabs. Their
+// routes stay for deep links and the Account page's mod management. The Boneyard
+// editor is a maker's tool, reached from the footer passages.
 //
 const NAV = [
   { to: '/', label: 'Home', end: true },
   { to: '/game', label: 'Play' },
-  { to: '/parties', label: 'Search Parties' },
-  { to: '/mods', label: 'Library' },
   { to: '/about', label: 'About' },
 ]
 
@@ -214,8 +214,8 @@ export default function Shell() {
                 label={quiet ? 'Unmute music' : 'Mute music'}
                 title={
                   quiet
-                    ? 'Let the College hum'
-                    : `Silence the College${currentTrack() ? ` (now playing: ${currentTrack()})` : ''}`
+                    ? 'Turn the music on'
+                    : `Turn the music off${currentTrack() ? ` (now playing: ${currentTrack()})` : ''}`
                 }
                 onClick={() => setQuiet(toggleMuted())}
               />
@@ -223,7 +223,7 @@ export default function Shell() {
                 on={!sfxQuiet}
                 glyph="✷"
                 label={sfxQuiet ? 'Unmute sound effects' : 'Mute sound effects'}
-                title={sfxQuiet ? 'Let the clicks and casts sound' : 'Hush the clicks and casts'}
+                title={sfxQuiet ? 'Turn sound effects on' : 'Turn sound effects off'}
                 onClick={() => setSfxQuiet(toggleSfxMuted())}
               />
               <FxToggle
@@ -232,8 +232,8 @@ export default function Shell() {
                 label={wandOn ? 'Disable cursor effects' : 'Enable cursor effects'}
                 title={
                   wandOn
-                    ? 'Ground the wand — no trail, no click rites'
-                    : 'Raise the wand — the trail and click rites return'
+                    ? 'Turn cursor effects off'
+                    : 'Turn cursor effects on'
                 }
                 onClick={() => {
                   setMouseFxEnabled(!wandOn)
@@ -290,7 +290,7 @@ export default function Shell() {
               ))}
               {user ? (
                 <>
-                  <NavItem to="/account" label="The Annals" />
+                  <NavItem to="/account" label="Account" />
                   <button
                     type="button"
                     onClick={logout}
@@ -335,8 +335,6 @@ export default function Shell() {
             <div className="kicker mb-3">Passages</div>
             <ul className="space-y-2 text-sm">
               <li><Link to="/boneyard" className="link-arcane">The Boneyard</Link></li>
-              <li><Link to="/parties" className="link-arcane">Search Parties</Link></li>
-              <li><Link to="/mods" className="link-arcane">The Library</Link></li>
               <li><Link to="/boneyards" className="link-arcane">Boneyard Viewer</Link></li>
               <li><Link to="/about" className="link-arcane">The Revival Story</Link></li>
               <li>

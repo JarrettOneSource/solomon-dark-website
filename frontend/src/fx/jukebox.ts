@@ -1,9 +1,10 @@
 // The site jukebox. The game keeps all of its music in one Impulse Tracker
 // module (the "Raptisoft Magic Jukebox"); tools/extract-music.sh renders the
-// ambient songs out of it, and each visit here picks one at random. The ♪ in
-// the header's effects rail governs the music (UI ticks ride the separate
-// sfx toggle); nothing plays before the first user gesture (autoplay
-// policy — and manners).
+// ambient songs out of it, and a visit with the music on picks one at
+// random. The ♪ in the header's effects rail governs the music (UI ticks
+// ride the separate sfx toggle) and starts silent on every new device;
+// even once raised, nothing plays before the first user gesture (autoplay
+// policy, and manners).
 
 import prelude from '../assets/music/prelude.mp3'
 import solomondarktheme from '../assets/music/solomondarktheme.mp3'

@@ -37,7 +37,7 @@ function SchoolPicker() {
       await api.setSchool(user.school === school ? null : school)
       await refresh()
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'The College mislaid your declaration.')
+      setError(e instanceof ApiError ? e.message : 'Saving your school choice failed.')
     } finally {
       setBusy(false)
     }
@@ -50,7 +50,7 @@ function SchoolPicker() {
         <h2 className="h-display text-xl">School of Magic</h2>
         <p className="text-fell mt-2 max-w-2xl text-sm text-bone-dim">
           Declare a school and your wand follows you around the site — cursor, click,
-          and all. Other wizards will see it beside your name. Click your school again
+          and all. Other players will see it beside your name. Click your school again
           to renounce it.
         </p>
       </Reveal>
@@ -94,7 +94,7 @@ function BrowserGameSaveSlot({
 }) {
   const [busy, setBusy] = useState(false)
   const remove = async () => {
-    if (!save || !window.confirm('Erase browser save I from the Annals?')) return
+    if (!save || !window.confirm('Erase browser save I from the cloud?')) return
     setBusy(true)
     try {
       await api.gameSaves.remove(save.slot, save.revision)
@@ -149,7 +149,7 @@ export default function Account() {
   // The public index has no author filter, so pull one page and filter client-side.
   const mods = useApi(() => api.mods.list({ pageSize: 50, sort: 'newest' }), [user?.id])
 
-  if (loading || !user) return <Spinner label="Consulting the Annals…" />
+  if (loading || !user) return <Spinner label="Loading your account…" />
 
   const myMods: ModSummary[] = (mods.data?.items ?? []).filter((m) => m.author.id === user.id)
 
@@ -164,12 +164,12 @@ export default function Account() {
             <img src={art.skullWhite} alt="" className="h-12 opacity-80" />
           </div>
           <div className="min-w-0">
-            <div className="kicker mb-1">As recorded in the Annals</div>
+            <div className="kicker mb-1">Your account</div>
             <div className="flex items-center gap-3">
               <h1 className="h-display text-2xl">{user.username}</h1>
               {user.school && <img src={elementWords[user.school]} alt={user.school} title={`School of ${user.school}`} className="h-5" />}
             </div>
-            <p className="mt-1 text-sm text-bone-dim">Enrolled {formatDate(user.createdAtUtc)}</p>
+            <p className="mt-1 text-sm text-bone-dim">Joined {formatDate(user.createdAtUtc)}</p>
           </div>
           <button type="button" onClick={() => { logout(); navigate('/') }} className="btn btn-stone ml-auto">
             Sign out
@@ -199,26 +199,25 @@ export default function Account() {
         </div>
       </section>
 
-      {/* My tomes */}
+      {/* My mods */}
       <section className="mt-12">
         <Reveal>
           <div className="flex items-end justify-between gap-4">
             <div>
               <div className="kicker mb-1.5">Authored works</div>
-              <h2 className="h-display text-xl">My Tomes</h2>
+              <h2 className="h-display text-xl">My Mods</h2>
             </div>
             <Link to="/mods/upload" className="btn btn-gold !py-2.5 !text-[11px]">
-              ✦ Contribute a Tome
+              ✦ Upload a Mod
             </Link>
           </div>
         </Reveal>
         <div className="mt-6 space-y-2">
           {mods.loading ? (
-            <Spinner label="Fetching your shelf…" />
+            <Spinner label="Loading your mods…" />
           ) : myMods.length === 0 ? (
             <div className="slab rounded px-5 py-6 text-center text-sm text-bone-dim">
-              You haven’t contributed any tomes yet. The Librarian is trying not to look
-              disappointed.
+              You haven’t uploaded any mods yet.
             </div>
           ) : (
             myMods.map((m) => (
