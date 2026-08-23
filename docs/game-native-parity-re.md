@@ -36073,10 +36073,10 @@ native row.
   deliberately excluded. The first Mac red failed exactly because
   `setSoundMuted` did not exist; the green director matrix is `42/42`, and the
   combined audio/pause matrix is `60/60`.
-- Final functional Website cutoff `593f7f1e97fdf03447c856796f14d01b9ca056ce`
-  and Mod Loader cutoff `76605ca62fdf6116c53c85fb5a9a2d47e4e239c5`
+- Final functional Website cutoff `2adbee230fbd85ae726a598956d080b71ee4d1c5`
+  and Mod Loader cutoff `4e6b34cd2af686d3d5500072f6beb2f0bb2d527c`
   were materialized as those exact commits on the Mac mini. Mod Loader portable
-  static RE passed `494/494`.
+  static RE passed `495/495`.
 - Mac `smoke:game:skill-picker` proved the Hub and Boneyard picker predicates
   `true`, their exact game master volumes `[0]`, Academy/Prelude music started
   with no later pause event, and release restored `[1]`. Picker entry/choice
@@ -36085,14 +36085,20 @@ native row.
 - Mac `smoke:game:pause` covered large/small Hub, Boneyard owner and waiting
   peer, Settings handoff, disconnect release, and no-catch-up resume. Every
   Pause surface reported the mute; Inventory and Skill Book reported false.
-  Browser ownership held ticks `1803..1859`, Boneyard owner tick `2968`, and
-  peer-owner tick `2969`, with no smoke errors.
+  Browser ownership held ticks `1618..1674`, Boneyard owner tick `2701`, and
+  peer-owner tick `2702`, with no smoke errors.
+- Mac `smoke:game:skill-book` covered the newly landed compact primary/A/B
+  selector in Hub and Boneyard. The opening click precedes modal ownership at
+  master one; every selection `click` and `concentrate` request while open had
+  `masterVolume: 0`, release restored the gain, and page/console/network arrays
+  were empty. Reviewed compact-selector capture SHA-256 is
+  `078c57f8ad29f01f510fdae91fef6408c28461a46e85183acd71b8ec80667a92`.
 - The complete Mac canonical gate passed at the same functional cutoff:
-  backend/contracts and formatting, lint/boundaries, `1410/1410` broad game,
+  backend/contracts and formatting, lint/boundaries, `1416/1416` broad game,
   `61/61` ML, `48/48` party/chat, `36/36` Hall, `23/23` Hub UI, `5/5`
   desktop, production build, media policy, and game-entry budget
-  `437184` raw / `123207` gzip. Log SHA-256 is
-  `cd15d05d49308ee4ea1248f42e41429ebaa2b1809cd00e593dc28dc1cc536a6b`.
+  `438667` raw / `123533` gzip. Log SHA-256 is
+  `34623d911e0a37baa7e8cf8a491240b8db323bbca772f4fbc755eae8c34f6a91`.
 
 ## 2026-08-23 — Incoming party-invitation cue
 
@@ -36233,20 +36239,20 @@ saves, Hall state, or Lua.
   channels, local/remote binding, stale replacement, exact alpha boundaries,
   64-speaker bound, wrapping and long words, unsupported-glyph no-fallback,
   missing/off-region actors, and both renderer integrations.
-- Built protocol-62 desktop acceptance showed local Hub sequence `3` and remote
+- Built protocol-63 desktop acceptance showed local Hub sequence `3` and remote
   sequence `5` at alpha `1`, sampled the remote fade at
-  `0.7901000000014902`, observed its retirement, and showed local Boneyard
+  `0.7812999999970198`, observed its retirement, and showed local Boneyard
   sequence `7` at alpha `1`. Mobile independently showed sequences `10`, `12`,
-  and `14`, remote fade `0.7750499999970197`, and retirement. Both finished
+  and `14`, remote fade `0.7711500000059605`, and retirement. Both finished
   with zero sessions/players/parties/runs and empty page, console, HTTP failure,
   and unexpected request-failure arrays.
 - Reviewed final screenshots: desktop Hub full/fading/Boneyard SHA-256 values
-  are `25264fb84539cd13f0efde3917520c5ded9b2a80f645ede334fd7135072f1301`,
-  `24a7d965d18a3da7065c9f6684e9aea4f39f559f7dafae92a1f993795115095b`,
-  and `df4dcf1416ff25dcececce2b6deed726b1737c2ce73f45382b9675e8ce185079`;
+  are `cd090890ac7cad95f57cfd3adc14afabce88d06183377b71b2ede738d2a78208`,
+  `fb109634a230b06ef834563d243019d2eccc147b7eb64789ce7a93d388a33bb4`,
+  and `650f3d52b52ac95e80794053e7ca958354c8b46b34d8c93d348dd7e77663b058`;
   mobile Hub/Boneyard are
-  `22467228e6752d75eb3b86adcaa523426a2583811182b76964f44460610833f8`
-  and `cac8bf17b4204cd72c9ca6e4a3eec70474c9101bbeace05a5dfd0344e91bf4ba`.
+  `10519fee80e2f853fb980566473af5564ed007886254362c504c5c49640fb04d`
+  and `e8a974c16ac412ca0e8ed59082e43ecc11711f3a1bb52df757412c8ff8c15534`.
   The panel is visibly anchored above the corresponding wizard/nameplate in
   both viewports. No member is browser-blocked and no native absence is
   mislabeled as retail parity.
