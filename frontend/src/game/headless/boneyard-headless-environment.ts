@@ -1,7 +1,9 @@
 import type { LoadedBoneyard, NativeBoneyardTemplate } from '../core-kernels/boneyard.ts'
+import { startBoneyardArenaTransition } from '../core-kernels/boneyard-arena-transition.ts'
 import { startBoneyardWaveDirector } from '../core-kernels/boneyard-wave-director.ts'
 import {
   createIdlePlayerCharacterInput,
+  PLAYER_CHARACTER_RADIUS,
   type PlayerCharacterConfig,
   type PlayerCharacterInput,
 } from '../core-kernels/player-character.ts'
@@ -14,6 +16,8 @@ import {
   stepGameSimulationTick,
   type GameSimulationState,
 } from '../core-server/game-simulation.ts'
+import { resolveBoneyardSpawnPosition } from '../core-server/boneyard-collision.ts'
+import { replacePlayerCharacter } from '../core-server/player-entity-store.ts'
 import {
   createMlBotPolicyActionMaskPlan,
   ML_BOT_POLICY_ACTION_STRIDE,
@@ -410,21 +414,49 @@ export class BoneyardHeadlessEnvironment {
       simulation.world.kind !== 'boneyard'
       || simulation.world.waves === null
       || simulation.world.encounter === null
+      || simulation.world.arenaTransition === null
     ) {
       throw new Error('headless Boneyard did not materialize its retail encounter')
     }
+    const world = simulation.world
+    const arenaTransition = startBoneyardArenaTransition(world.arenaTransition)
+    let playerEntities = simulation.playerEntities
+    const players = gameSimulationPlayerRecords(simulation)
+    const playerIds = this.playerIds()
+    for (const [index, playerId] of playerIds.entries()) {
+      const player = players[playerId]
+      if (!player) throw new Error(`headless Boneyard has no player ${playerId}`)
+      const angle = index * Math.PI * 2 / playerIds.length
+      const distance = index === 0 ? 0 : PLAYER_CHARACTER_RADIUS * 3
+      const position = resolveBoneyardSpawnPosition(
+        {
+          x: Math.fround(world.encounter.position.x + Math.cos(angle) * distance),
+          y: Math.fround(world.encounter.position.y + Math.sin(angle) * distance),
+        },
+        arenaTransition.combatBounds,
+        world.collision,
+        PLAYER_CHARACTER_RADIUS,
+        index * 137.5,
+      )
+      playerEntities = replacePlayerCharacter(playerEntities, playerId, {
+        ...player,
+        position,
+        velocity: { x: 0, y: 0 },
+      })
+    }
     return {
       ...simulation,
+      playerEntities,
       world: {
-        ...simulation.world,
-        arenaTransition: null,
+        ...world,
+        arenaTransition,
         encounter: {
-          ...simulation.world.encounter,
+          ...world.encounter,
           phase: 'gone',
-          runEventId: Math.max(1, simulation.world.encounter.runEventId),
+          runEventId: Math.max(1, world.encounter.runEventId),
           targetPlayerId: null,
         },
-        waves: startBoneyardWaveDirector(simulation.world.waves),
+        waves: startBoneyardWaveDirector(world.waves),
       },
     }
   }

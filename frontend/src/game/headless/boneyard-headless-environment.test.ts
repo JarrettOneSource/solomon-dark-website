@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import { PLAYER_CHARACTER_RADIUS } from '../core-kernels/player-character.ts'
+import {
+  canPlaceBoneyardBody,
+  withBoneyardGateCollision,
+} from '../core-server/boneyard-collision.ts'
+import { gameSimulationPlayerRecords } from '../core-server/game-simulation.ts'
 import {
   BONEYARD_HEADLESS_ACTION_STRIDE,
   BoneyardHeadlessEnvironment,
@@ -76,6 +82,27 @@ test('Boneyard headless episode starts the real wave director with combat enable
   }
   assert.equal(sawEnemy, true)
   assert.ok(environment.expertAction().target > 0)
+})
+
+test('headless wave staging places every participant inside the sealed combat arena', () => {
+  for (let seed = 0; seed < 12; seed += 1) {
+    const environment = new BoneyardHeadlessEnvironment({ seed })
+    const state = environment.state()
+    assert.equal(state.world.kind, 'boneyard')
+    if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+    const transition = state.world.arenaTransition
+    assert.ok(transition)
+    assert.notEqual(transition.phase, 'open')
+    const collision = withBoneyardGateCollision(state.world.collision, state.world.gateLeaves)
+    for (const player of Object.values(gameSimulationPlayerRecords(state))) {
+      assert.equal(canPlaceBoneyardBody(
+        player.position,
+        transition.combatBounds,
+        collision,
+        PLAYER_CHARACTER_RADIUS,
+      ), true)
+    }
+  }
 })
 
 test('Boneyard headless reset rejects seeds outside uint32', () => {
