@@ -15,7 +15,11 @@ for await (const line of input) {
     request = JSON.parse(line)
     const result = await dispatch(request)
     respond({ id: request.id, ok: true, protocol: PROTOCOL, ...result })
-    if (request.type === 'close') break
+    if (request.type === 'close') {
+      input.close()
+      process.stdin.pause()
+      break
+    }
   } catch (error) {
     respond({
       error: error instanceof Error ? error.message : String(error),
