@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import os
 from pathlib import Path
+import tempfile
 from typing import Any, Mapping, Sequence
 
 import numpy as np
@@ -41,12 +43,24 @@ class ExpertDataset:
 
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
-        np.savez_compressed(
-            path,
-            observations=self.observations,
-            **{f"mask_{name}": value for name, value in self.masks.items()},
-            **{f"action_{name}": value for name, value in self.actions.items()},
+        descriptor, temporary_name = tempfile.mkstemp(
+            prefix=f".{path.name}.", suffix=".npz", dir=path.parent
         )
+        temporary = Path(temporary_name)
+        try:
+            with os.fdopen(descriptor, "wb") as stream:
+                np.savez_compressed(
+                    stream,
+                    observations=self.observations,
+                    **{f"mask_{name}": value for name, value in self.masks.items()},
+                    **{f"action_{name}": value for name, value in self.actions.items()},
+                )
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary, path)
+        except BaseException:
+            temporary.unlink(missing_ok=True)
+            raise
 
     @classmethod
     def load(cls, path: Path) -> "ExpertDataset":

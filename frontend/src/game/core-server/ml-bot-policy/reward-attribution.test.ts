@@ -96,12 +96,46 @@ test('frozen reward formula attributes only the owning player and clamps last', 
     orbKind: null,
     playerId: 'agent',
   })
+  observer.onLootPickup?.({
+    amount: 1,
+    bonusKind: null,
+    itemKind: 'equipment',
+    itemName: 'Test Robe',
+    itemQuantity: 2,
+    kind: 'sack',
+    orbKind: null,
+    playerId: 'agent',
+  })
+  observer.onLootPickup?.({
+    amount: 1,
+    bonusKind: null,
+    itemKind: null,
+    itemName: null,
+    itemQuantity: null,
+    kind: 'orb',
+    orbKind: 'mana',
+    playerId: 'agent',
+  })
+  observer.onLootPickup?.({
+    amount: 1,
+    bonusKind: 0,
+    itemKind: null,
+    itemName: null,
+    itemQuantity: null,
+    kind: 'bonus',
+    orbKind: null,
+    playerId: 'agent',
+  })
   const result = accumulator.finish(state, false)
   assert.equal(result.terms.ownDamage, 0.13)
   assert.equal(result.terms.xp, 0.16)
   assert.equal(result.gameplay.enemyKills, 1)
   assert.deepEqual(result.gameplay.enemyKillsByKind, { SKELETON: 1 })
   assert.equal(result.gameplay.goldCollected, 12)
+  assert.equal(result.gameplay.itemsCollected, 2)
+  assert.deepEqual(result.gameplay.itemKinds, { equipment: 2 })
+  assert.equal(result.gameplay.manaOrbsCollected, 1)
+  assert.equal(result.gameplay.powerupsCollected, 1)
   assert.ok(Math.abs(result.reward - 0.29) < 1e-12)
   assert.equal(result.clamped, false)
 })

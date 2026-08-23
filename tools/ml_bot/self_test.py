@@ -15,6 +15,7 @@ from .advantages import (
 from .bridge import BoneyardRolloutBridge
 from .checkpoint import decode_checkpoint, encode_checkpoint
 from .model import PolicyV5
+from .metrics import paired_seed_comparison, promotion_decision
 from .optimization import behavior_clone, choice_ppo_epochs, ppo_epochs
 from .spec import POLICY_SPEC
 
@@ -148,6 +149,15 @@ def main() -> int:
         generator=torch.Generator().manual_seed(1_234),
     )
     assert choice_metrics and choice_scale > 0 and np.isfinite(choice_metrics[-1].value_loss)
+    paired = paired_seed_comparison([1, 2, 3, 4], [2, 3, 4, 5])
+    assert paired["candidateWins"] is True and paired["candidateRegresses"] is False
+    promotion = promotion_decision(
+        [1, 2, 3, 4],
+        [2, 3, 4, 5],
+        [2, 2, 2, 2],
+        [2, 2, 2, 2],
+    )
+    assert promotion["promoted"] is True
 
     with BoneyardRolloutBridge([0x100, 0x101], worker_count=2) as bridge:
         initial_hashes = bridge.state.hashes

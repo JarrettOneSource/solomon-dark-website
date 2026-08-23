@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import math
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -108,7 +109,12 @@ class PolicySpec:
         )
         require_nonnegative_integer(value.get("trainedUpdates"), "trained updates")
         temperature = value.get("choiceTemperature")
-        if not isinstance(temperature, (int, float)) or not 0 < float(temperature):
+        if (
+            not isinstance(temperature, (int, float))
+            or isinstance(temperature, bool)
+            or not math.isfinite(float(temperature))
+            or not 0 < float(temperature)
+        ):
             raise ValueError("checkpoint choice temperature must be positive")
         coverage = value.get("choiceCoverage")
         if not isinstance(coverage, Mapping):
