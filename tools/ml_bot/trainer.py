@@ -243,7 +243,6 @@ def train_policy(
                 steps=configuration.rollout_steps,
                 action_repeat=configuration.action_repeat,
                 generator=torch_generator,
-                target_kl=configuration.target_kl,
                 seeds=seed_stream,
                 episodes=episodes,
             )
@@ -270,6 +269,7 @@ def train_policy(
                 epochs=configuration.epochs,
                 batch_size=configuration.batch_size,
                 generator=torch_generator,
+                target_kl=configuration.target_kl,
             )
             pending_choices.extend(
                 interval for interval in rollout.choice_intervals
