@@ -36,7 +36,10 @@ export function installGameLuaConsole(
   if (!authorized()) return () => {}
   const consoleApi: SolomonDarkLuaConsole = Object.freeze({
     async execute(code: string) {
-      if (!authorized()) throw new Error('Authoritative Lua access is unavailable.')
+      if (session.developerAccess !== true) {
+        if (!isEnabled()) throw new Error('Enable Cheats is off.')
+        if (!session.isHost) throw new Error('Only the current session host may execute Lua.')
+      }
       const result = await session.executeLua(code)
       for (const line of result.output) console.info(`[Lua] ${line}`)
       if (result.ok) {

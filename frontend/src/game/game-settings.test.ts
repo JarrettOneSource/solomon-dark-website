@@ -236,4 +236,15 @@ test('browser Lua console installs only for enabled host and rechecks both gates
   await assert.rejects(target.solomonDark.lua.execute('return 1'), /session host/)
   cleanup()
   assert.equal(target.solomonDark, undefined)
+
+  enabled = false
+  const developerTarget = {} as Window
+  const developerCleanup = installGameLuaConsole(
+    developerTarget,
+    { ...session, developerAccess: true },
+    () => enabled,
+  )
+  assert.ok(developerTarget.solomonDark)
+  assert.equal((await developerTarget.solomonDark.lua.execute('return 7')).ok, true)
+  developerCleanup()
 })
