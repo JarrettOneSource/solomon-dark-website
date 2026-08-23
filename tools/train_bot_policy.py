@@ -25,6 +25,7 @@ from ml_bot.trainer import (
     TrainingConfiguration,
     bootstrap_policy,
     evaluate_policy,
+    extend_evaluation,
     train_policy,
 )
 
@@ -159,6 +160,7 @@ def run_validate(args: argparse.Namespace) -> Any:
         "ability_by_target": torch.ones((1, 9, 22), dtype=torch.bool),
         "aim_by_ability": torch.ones((1, 22, 9), dtype=torch.bool),
     }
+
     with torch.no_grad():
         python_result = policy.act(observation, full_plans, deterministic=True)
     python_actions = {name: int(value[0]) for name, value in python_result.actions.items()}
@@ -184,6 +186,32 @@ def run_validate(args: argparse.Namespace) -> Any:
             "typescript": typescript,
         },
     }
+
+
+def run_extend_evaluate(args: argparse.Namespace) -> Any:
+    source = json.loads(Path(args.report).read_text(encoding="utf-8"))
+    result = extend_evaluation(
+        Path(args.checkpoint).resolve(),
+        source,
+        workers=args.workers,
+        action_repeat=args.action_repeat,
+        maximum_steps=args.maximum_steps,
+        progress=lambda value: print(
+            json.dumps({"evaluationProgress": value}, sort_keys=True),
+            file=sys.stderr,
+            flush=True,
+        ),
+    )
+    atomic_write(
+        Path(args.output).resolve(),
+        (json.dumps(result, indent=2, allow_nan=False, sort_keys=True) + "\n").encode(),
+    )
+    if not result["validForPromotion"] and not args.allow_incomplete:
+        raise RuntimeError(
+            "extended evaluation is not promotion-valid: "
+            f"{result['completeEpisodes']}/{result['requestedEpisodes']} complete episodes"
+        )
+    return result
 
 
 def checkpoint_test_observation():
@@ -463,6 +491,18 @@ def create_parser() -> argparse.ArgumentParser:
     evaluate_parser.add_argument("--report")
     evaluate_parser.add_argument("--allow-incomplete", action="store_true")
     evaluate_parser.set_defaults(handler=run_evaluate)
+
+    extend_parser = subparsers.add_parser(
+        "extend-evaluate", help="rerun only horizon-truncated evaluation seeds"
+    )
+    extend_parser.add_argument("--checkpoint", required=True)
+    extend_parser.add_argument("--report", required=True)
+    extend_parser.add_argument("--output", required=True)
+    extend_parser.add_argument("--workers", type=positive_integer, default=8)
+    extend_parser.add_argument("--action-repeat", type=positive_integer, default=10)
+    extend_parser.add_argument("--maximum-steps", type=positive_integer, default=10_000)
+    extend_parser.add_argument("--allow-incomplete", action="store_true")
+    extend_parser.set_defaults(handler=run_extend_evaluate)
     return parser
 
 

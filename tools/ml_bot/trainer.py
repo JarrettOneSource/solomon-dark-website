@@ -444,6 +444,14 @@ def evaluate_policy(
                 "evaluatedEpisodes": len(records),
                 "requestedEpisodes": len(seeds),
             })
+    return evaluation_report(checkpoint_path, seeds, records)
+
+
+def evaluation_report(
+    checkpoint_path: Path,
+    seeds: Sequence[int],
+    records: Sequence[Mapping[str, Any]],
+) -> Mapping[str, Any]:
     completed = [record for record in records if record.get("aborted") is False]
     incomplete = [record for record in records if record.get("aborted") is True]
     returns = [float(record["return"]) for record in completed]
@@ -459,6 +467,41 @@ def evaluate_policy(
         "status": "ok",
         "waveDepth": None if not waves else bootstrap_mean_interval(waves, seed=0xE1A2),
     }
+
+
+def extend_evaluation(
+    checkpoint_path: Path,
+    source_report: Mapping[str, Any],
+    *,
+    workers: int,
+    action_repeat: int,
+    maximum_steps: int,
+    progress: Callable[[Mapping[str, Any]], None] | None = None,
+) -> Mapping[str, Any]:
+    if str(checkpoint_path.resolve()) != source_report.get("checkpoint"):
+        raise ValueError("evaluation report belongs to a different checkpoint")
+    existing = source_report.get("episodes")
+    if not isinstance(existing, list):
+        raise ValueError("evaluation report episodes are missing")
+    incomplete_seeds = [
+        int(episode["seed"]) for episode in existing if episode.get("aborted") is True
+    ]
+    if not incomplete_seeds:
+        return source_report
+    extended = evaluate_policy(
+        checkpoint_path,
+        incomplete_seeds,
+        workers=min(workers, len(incomplete_seeds)),
+        action_repeat=action_repeat,
+        maximum_steps=maximum_steps,
+        progress=progress,
+    )
+    replacements = {int(episode["seed"]): episode for episode in extended["episodes"]}
+    merged = [
+        replacements.get(int(episode["seed"]), episode) for episode in existing
+    ]
+    seeds = [int(episode["seed"]) for episode in existing]
+    return evaluation_report(checkpoint_path, seeds, merged)
 
 
 def expert_tensors(
