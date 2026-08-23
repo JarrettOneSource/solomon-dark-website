@@ -39,6 +39,7 @@ import { subscribeGamePresentationFrames } from './game-presentation-frame-loop.
 import {
   HUB_TRADER_DIALOGUES,
   equipmentSlotsForItem,
+  hubEquipmentClickAction,
   hubTraderWithinServiceRange,
   nearestHubTrader,
 } from './hub-inventory-presentation.ts'
@@ -962,6 +963,14 @@ function ServiceActions({
             onPointerLeave={() => onHoverInspection(null)}
           />
         ))}
+        <EmptyStoreGridActions
+          fromIndex={economy.hagathaOffers.length}
+          onClear={() => {
+            if (selection === null) return
+            onInteractionSound('shop-activation')
+            onSelect(null)
+          }}
+        />
         <span className="hub-native-ui-semantic hub-charm-capacity">
           Charms and curses: {economy.ownedPerkSelectors.length} / {economy.charmCapacity}
         </span>
@@ -1000,6 +1009,15 @@ function ServiceActions({
             onPointerLeave={() => onHoverInspection(null)}
           />
         ))}
+        <EmptyStoreGridActions
+          dowsing={trader === 'shlorio'}
+          fromIndex={items.length}
+          onClear={() => {
+            if (selection === null) return
+            onInteractionSound('shop-activation')
+            onSelect(null)
+          }}
+        />
         <NativeAction label="Done" rect={HUB_SHOP_PANEL.doneRect} onClick={onClose} />
       </>
     )
@@ -1064,6 +1082,15 @@ function InventoryShopStorageActions({
   const lastActivationRef = useRef<StorageActivation | null>(null)
   const projectedStorage = projectInventoryItems(economy.storage)
     .slice(0, HUB_SHOP_GRID.retainedCapacity)
+
+  const clearStorageSelection = () => {
+    pressRef.current = null
+    lastActivationRef.current = null
+    onDragChange(null)
+    if (selection === null) return
+    onInteractionSound('shop-activation')
+    onSelect(null)
+  }
 
   const sourceIsSelected = (itemId: number) => (
     selection?.id === itemId && selection.owner === 'storage'
@@ -1252,6 +1279,10 @@ function InventoryShopStorageActions({
             />
           )
         })}
+        <EmptyStoreGridActions
+          fromIndex={projectedStorage.length}
+          onClear={clearStorageSelection}
+        />
       </section>
       <NativeAction label="Done" rect={HUB_SHOP_PANEL.doneRect} onClick={onClose} />
     </>
@@ -1410,7 +1441,19 @@ function InventoryActions({
   const projectedBackpack = projectInventoryItems(economy.backpack)
     .slice(0, HUB_INVENTORY_GRID.capacity)
   const pressRef = useRef<InventoryPointerPress | null>(null)
+  const equipmentClickRef = useRef<InventoryEquipmentClickPress | null>(null)
   const lastActivationRef = useRef<InventoryActivation | null>(null)
+  const selectedBackpackItem = selection?.owner === 'backpack'
+    ? findInventoryItem(economy.backpack, selection.id)
+    : null
+
+  const clearInventorySelection = () => {
+    pressRef.current = null
+    equipmentClickRef.current = null
+    lastActivationRef.current = null
+    onDragChange(null)
+    if (selection !== null) onSelect(null)
+  }
 
   const selectSource = (source: InventoryPointerSource, startedAtMs = performance.now()) => {
     onSelect({
@@ -1487,7 +1530,44 @@ function InventoryActions({
     if (!sourceIsSelected(source)) selectSource(source, startedAtMs)
   }
 
+  const beginEquipmentSlot = (
+    slot: EquipmentSlot,
+    source: InventoryPointerSource | null,
+  ) => (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0) return
+    if (selectedBackpackItem?.equipmentType) {
+      event.preventDefault()
+      event.stopPropagation()
+      event.currentTarget.setPointerCapture(event.pointerId)
+      pressRef.current = null
+      onDragChange(null)
+      equipmentClickRef.current = {
+        action: hubEquipmentClickAction(selectedBackpackItem, slot, thirdRingUnlocked),
+        cancelled: false,
+        pointerId: event.pointerId,
+        start: pointerStagePosition(event),
+      }
+      return
+    }
+    if (source) beginPointer(source)(event)
+    else {
+      event.preventDefault()
+      event.stopPropagation()
+      clearInventorySelection()
+    }
+  }
+
   const movePointer = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const equipmentClick = equipmentClickRef.current
+    if (equipmentClick?.pointerId === event.pointerId) {
+      const point = pointerStagePosition(event)
+      const dx = point.x - equipmentClick.start.x
+      const dy = point.y - equipmentClick.start.y
+      if (Math.hypot(dx, dy) >= HUB_INVENTORY_INTERACTION.dragThresholdPixels) {
+        equipmentClick.cancelled = true
+      }
+      return
+    }
     const press = pressRef.current
     if (!press || press.pointerId !== event.pointerId) return
     const point = pointerStagePosition(event)
@@ -1507,6 +1587,18 @@ function InventoryActions({
   }
 
   const finishPointer = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const equipmentClick = equipmentClickRef.current
+    if (equipmentClick?.pointerId === event.pointerId) {
+      event.preventDefault()
+      event.stopPropagation()
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId)
+      }
+      equipmentClickRef.current = null
+      lastActivationRef.current = null
+      if (!equipmentClick.cancelled && equipmentClick.action) onAction(equipmentClick.action)
+      return
+    }
     const press = pressRef.current
     if (!press || press.pointerId !== event.pointerId) return
     event.preventDefault()
@@ -1543,6 +1635,10 @@ function InventoryActions({
   }
 
   const cancelPointer = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (equipmentClickRef.current?.pointerId === event.pointerId) {
+      equipmentClickRef.current = null
+      return
+    }
     const press = pressRef.current
     if (press?.pointerId !== event.pointerId) return
     if (press.pointerType === 'touch' && press.activeDrag) lastActivationRef.current = null
@@ -1565,8 +1661,34 @@ function InventoryActions({
     } else lastActivationRef.current = { atMs: nowMs, source }
   }
 
+  const keyboardEquipmentSlot = (
+    slot: EquipmentSlot,
+    source: InventoryPointerSource | null,
+  ) => (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return
+    if (selectedBackpackItem?.equipmentType) {
+      event.preventDefault()
+      lastActivationRef.current = null
+      const action = hubEquipmentClickAction(selectedBackpackItem, slot, thirdRingUnlocked)
+      if (action) onAction(action)
+      return
+    }
+    if (source) keyboardSelect(source)(event)
+    else {
+      event.preventDefault()
+      clearInventorySelection()
+    }
+  }
+
   return (
     <>
+      <NativeAction
+        data={{ 'data-inventory-empty-space': 'true' }}
+        label="Deselect inventory item"
+        rect={[0, 0, HUB_NATIVE_UI_SIZE.width, HUB_NATIVE_UI_SIZE.height]}
+        tabIndex={-1}
+        onClick={clearInventorySelection}
+      />
       <section aria-label="Backpack">
         {projectedBackpack.map(({ depth, item, parentSackId }, index) => {
           const position = hubInventorySlotPosition(index)
@@ -1599,6 +1721,7 @@ function InventoryActions({
       {EQUIPMENT_SLOT_ORDER.map((slot) => {
         const item = itemAtEquipmentSlot(economy, slot)
         const locked = slot === 'ring-2' && !thirdRingUnlocked
+        if (locked) return null
         const source: InventoryPointerSource | null = item ? {
           equipmentSlot: slot,
           itemId: item.id,
@@ -1617,14 +1740,13 @@ function InventoryActions({
                 ? 'true'
                 : 'false',
             }}
-            disabled={locked || !source}
-            label={`${EQUIPMENT_SLOT_LABELS[slot]}${locked ? ', locked' : item ? `, ${item.name}` : ', empty'}`}
+            label={`${EQUIPMENT_SLOT_LABELS[slot]}${item ? `, ${item.name}` : ', empty'}`}
             rect={rect}
-            onKeyDown={source ? keyboardSelect(source) : undefined}
-            onPointerCancel={source ? cancelPointer : undefined}
-            onPointerDown={source ? beginPointer(source) : undefined}
-            onPointerMove={source ? movePointer : undefined}
-            onPointerUp={source ? finishPointer : undefined}
+            onKeyDown={keyboardEquipmentSlot(slot, source)}
+            onPointerCancel={cancelPointer}
+            onPointerDown={beginEquipmentSlot(slot, source)}
+            onPointerMove={movePointer}
+            onPointerUp={finishPointer}
           />
         ))
       })}
@@ -1649,6 +1771,13 @@ interface InventoryPointerPress {
 interface InventoryActivation {
   readonly atMs: number
   readonly source: InventoryPointerSource
+}
+
+interface InventoryEquipmentClickPress {
+  readonly action: Extract<HubInventoryAction, { readonly type: 'equip' }> | null
+  cancelled: boolean
+  readonly pointerId: number
+  readonly start: { readonly x: number; readonly y: number }
 }
 
 function pointerStagePosition(
@@ -1807,6 +1936,39 @@ function ShopAction({
   )
 }
 
+function EmptyStoreGridActions({
+  dowsing = false,
+  fromIndex,
+  onClear,
+}: {
+  dowsing?: boolean
+  fromIndex: number
+  onClear: () => void
+}) {
+  const capacity = dowsing
+    ? HUB_DOWSING_GRID.retainedCapacity
+    : HUB_SHOP_GRID.retainedCapacity
+  return Array.from({ length: Math.max(0, capacity - fromIndex) }, (_, offset) => {
+    const index = fromIndex + offset
+    const position = dowsing ? hubDowsingSlotPosition(index) : hubShopSlotPosition(index)
+    return (
+      <NativeAction
+        key={`empty-store-${index}`}
+        data={{ 'data-store-empty-slot': index }}
+        label="Empty store slot"
+        rect={[
+          position.x,
+          position.y,
+          dowsing ? HUB_DOWSING_GRID.cellSize : HUB_SHOP_GRID.cellSize,
+          dowsing ? HUB_DOWSING_GRID.cellSize : HUB_SHOP_GRID.cellSize,
+        ]}
+        tabIndex={-1}
+        onClick={onClear}
+      />
+    )
+  })
+}
+
 function activateSelection(
   current: HubServiceSelection | null,
   next: HubServiceSelection,
@@ -1833,6 +1995,7 @@ function NativeAction({
   onPointerMove,
   onPointerUp,
   rect,
+  tabIndex,
 }: {
   children?: ReactNode
   data?: Record<string, number | string>
@@ -1849,6 +2012,7 @@ function NativeAction({
   onPointerMove?: (event: ReactPointerEvent<HTMLButtonElement>) => void
   onPointerUp?: (event: ReactPointerEvent<HTMLButtonElement>) => void
   rect: readonly [number, number, number, number]
+  tabIndex?: number
 }) {
   return (
     <button
@@ -1857,6 +2021,7 @@ function NativeAction({
       aria-label={label}
       disabled={disabled}
       style={rectStyle(rect)}
+      tabIndex={tabIndex}
       onBlur={onBlur}
       onClick={onClick}
       onFocus={onFocus}

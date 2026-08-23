@@ -6,6 +6,7 @@ import {
   HUB_TRADER_GRID_CAPACITY,
   HUB_TRADER_NATIVE_UI_RECORDS,
   equipmentSlotsForItem,
+  hubEquipmentClickAction,
   hubPotionShortcut,
   hubTraderAtPoint,
   hubTraderWithinServiceRange,
@@ -95,4 +96,29 @@ test('all seven equipment sinks are reachable and the third ring remains gated',
   assert.deepEqual(equipmentSlotsForItem({ equipmentType: 'staff' }, false), ['weapon'])
   assert.deepEqual(equipmentSlotsForItem({ equipmentType: 'ring' }, false), ['ring-0', 'ring-1'])
   assert.deepEqual(equipmentSlotsForItem({ equipmentType: 'ring' }, true), ['ring-0', 'ring-1', 'ring-2'])
+})
+
+test('explicit click-to-slot admission emits only compatible authoritative equip actions', () => {
+  const ring = { equipmentType: 'ring', id: 41 } as const
+  const robe = { equipmentType: 'robe', id: 42 } as const
+  const potion = { equipmentType: null, id: 43 } as const
+
+  assert.deepEqual(hubEquipmentClickAction(ring, 'ring-0', false), {
+    itemId: 41,
+    slot: 'ring-0',
+    type: 'equip',
+  })
+  assert.equal(hubEquipmentClickAction(ring, 'ring-2', false), null)
+  assert.deepEqual(hubEquipmentClickAction(ring, 'ring-2', true), {
+    itemId: 41,
+    slot: 'ring-2',
+    type: 'equip',
+  })
+  assert.deepEqual(hubEquipmentClickAction(robe, 'robe', false), {
+    itemId: 42,
+    slot: 'robe',
+    type: 'equip',
+  })
+  assert.equal(hubEquipmentClickAction(robe, 'hat', false), null)
+  assert.equal(hubEquipmentClickAction(potion, 'weapon', false), null)
 })

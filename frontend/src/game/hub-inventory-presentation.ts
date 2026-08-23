@@ -1,5 +1,6 @@
 import type {
   EquipmentSlot,
+  HubInventoryAction,
   HubInventoryItem,
   HubTraderId,
 } from './core-kernels/hub-economy.ts'
@@ -182,4 +183,13 @@ export function equipmentSlotsForItem(
       : ['ring-0', 'ring-1']
     case null: return []
   }
+}
+
+export function hubEquipmentClickAction(
+  item: Pick<HubInventoryItem, 'equipmentType' | 'id'>,
+  slot: EquipmentSlot,
+  thirdRingUnlocked: boolean,
+): Extract<HubInventoryAction, { readonly type: 'equip' }> | null {
+  if (!equipmentSlotsForItem(item, thirdRingUnlocked).includes(slot)) return null
+  return { itemId: item.id, slot, type: 'equip' }
 }

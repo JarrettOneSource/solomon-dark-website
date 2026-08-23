@@ -40,6 +40,8 @@ const CHARACTER = {
   element: 'fire',
 }
 const IDS = Object.freeze({
+  clickRingOne: 40_017,
+  clickRingTwo: 40_018,
   destinationSack: 40_006,
   dyeCarrier: 40_011,
   dyeInnerSack: 40_010,
@@ -105,6 +107,54 @@ try {
   await inventory.locator('.hub-inventory-native-canvas[data-native-reveal="settled"]').waitFor()
 
   const item = (id) => inventory.locator(`[data-inventory-item-id="${id}"]`)
+  const backpackItem = (id) => inventory.locator(
+    `[data-inventory-owner="backpack"][data-inventory-item-id="${id}"]`,
+  )
+  const equipmentSlot = (slot) => inventory.locator(`[data-equipment-slot="${slot}"]`).first()
+
+  await backpackItem(IDS.clickRingOne).click()
+  await backpackItem(IDS.clickRingOne).locator('xpath=self::*[@data-selected="true"]').waitFor()
+  await equipmentSlot('ring-0').click()
+  await waitForSavedEconomy(page, (economy) => (
+    economy.equipment.rings[0]?.id === IDS.clickRingOne
+  ))
+  await inventory.locator(
+    `[data-inventory-owner="equipment"][data-equipment-slot="ring-0"]`
+      + `[data-inventory-item-id="${IDS.clickRingOne}"]`,
+  ).waitFor()
+
+  await backpackItem(IDS.clickRingTwo).click()
+  await equipmentSlot('hat').click()
+  await inventory.locator(
+    `xpath=self::*[@data-native-inventory-selection="backpack:${IDS.clickRingTwo}"]`,
+  ).waitFor()
+  assert.equal((await savedEconomy(page)).equipment.rings[0]?.id, IDS.clickRingOne)
+
+  await equipmentSlot('ring-0').click()
+  await waitForSavedEconomy(page, (economy) => (
+    economy.equipment.rings[0]?.id === IDS.clickRingTwo
+    && flatten(economy.backpack).filter(({ id }) => id === IDS.clickRingOne).length === 1
+  ))
+  await inventory.locator('[data-inventory-empty-space="true"]').click({
+    position: { x: 800, y: 450 },
+  })
+  await inventory.locator('xpath=self::*[@data-native-inventory-selection=""]').waitFor()
+
+  const equippedRingTwo = inventory.locator(
+    `[data-inventory-owner="equipment"][data-equipment-slot="ring-0"]`
+      + `[data-inventory-item-id="${IDS.clickRingTwo}"]`,
+  ).first()
+  await dragToStagePoint(page, inventory, equippedRingTwo, { x: 1_200, y: 750 })
+  await waitForSavedEconomy(page, (economy) => (
+    economy.equipment.rings[0] === null
+    && flatten(economy.backpack).filter(({ id }) => id === IDS.clickRingTwo).length === 1
+  ))
+  await dragTo(page, backpackItem(IDS.clickRingOne), equipmentSlot('ring-1'))
+  await waitForSavedEconomy(page, (economy) => (
+    economy.equipment.rings[1]?.id === IDS.clickRingOne
+  ))
+  await page.screenshot({ path: `${screenshotRoot}-inventory-equip-interactions.png` })
+
   assert.equal(await item(IDS.rootKey).getAttribute('data-parent-sack-id'), '')
   assert.equal(
     await item(IDS.movableKey).getAttribute('data-parent-sack-id'),
@@ -225,6 +275,14 @@ try {
   const storageKey = storage.locator(
     `[data-inventory-owner="storage"][data-inventory-item-id="${IDS.storageKey}"]`,
   )
+  const storageSack = storage.locator(
+    `[data-inventory-owner="storage"][data-inventory-item-id="${IDS.storageSack}"]`,
+  )
+  await storageSack.click()
+  await storageSack.locator('xpath=self::*[@data-selected="true"]').waitFor()
+  await page.screenshot({ path: `${screenshotRoot}-take-click-again.png` })
+  await storage.locator('[data-store-empty-slot]').first().click()
+  assert.equal(await storage.locator('[data-inventory-owner="storage"][data-selected="true"]').count(), 0)
   assert.equal(await storageKey.getAttribute('data-inventory-depth'), '1')
   assert.equal(
     await storageKey.getAttribute('data-parent-sack-id'),
@@ -251,12 +309,14 @@ try {
     failedResponses,
     pageErrors,
     screenshots: [
+      `${screenshotRoot}-inventory-equip-interactions.png`,
       `${screenshotRoot}-sack-movement.png`,
       `${screenshotRoot}-dye-all-swatches.png`,
       `${screenshotRoot}-dye-cloth-choice.png`,
       `${screenshotRoot}-dye-trim-choice.png`,
       `${screenshotRoot}-dyed-robe-inventory.png`,
       `${screenshotRoot}-dyed-robe-character.png`,
+      `${screenshotRoot}-take-click-again.png`,
       `${screenshotRoot}-luthacus-recursive-storage.png`,
     ],
     status: 'ok',
@@ -275,7 +335,11 @@ function createSeededSave() {
     type === 'robe' && iconTints.every((tint) => tint !== null)
   ))
   if (!robeRecipe) throw new Error('Sack/Dye acceptance requires a tinted native robe recipe')
+  const ringRecipes = DOWSING_EQUIPMENT_RECIPES.filter(({ type }) => type === 'ring')
+  if (ringRecipes.length < 2) throw new Error('Inventory acceptance requires two native ring recipes')
   const target = createEquipmentInventoryItem(robeRecipe, IDS.target)
+  const clickRingOne = createEquipmentInventoryItem(ringRecipes[0], IDS.clickRingOne)
+  const clickRingTwo = createEquipmentInventoryItem(ringRecipes[1], IDS.clickRingTwo)
   const rootKey = inventoryItem(IDS.rootKey, 'Wizard Key', 'key', 7012, 1, [43])
   const movableKey = inventoryItem(IDS.movableKey, 'Wizard Key', 'key', 7012, 1, [43])
   const movableSackKey = inventoryItem(
@@ -325,6 +389,8 @@ function createSeededSave() {
       dyeCarrier,
       mergePotion,
       mergeSack,
+      clickRingOne,
+      clickRingTwo,
     ],
     nextItemId: 50_000,
     storage: [storageSack],

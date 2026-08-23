@@ -57,6 +57,7 @@ import {
   HUB_SHOP_GRID,
   HUB_SHOP_PANEL,
   HUB_SHOP_TEXT,
+  HUB_STOREGRID_SELECTED_RECORDS,
   HUB_STARTER_EQUIPMENT_PRIMARY_TINT,
   HUB_UNFORGE_CONFIRMATION,
   HUB_UNFORGE_RESULT,
@@ -1387,9 +1388,19 @@ function addStoreGrid(
     const selected = item.id === model.selectedItemId && model.selectedOwner === owner
     if (selected && !held) {
       const record = owner === 'storage'
-        ? 111
-        : 'price' in item && item.price > model.economy.gold ? 46 : 84
-      addAtlasSprite(context, layer, 'UI', record, x + (record === 46 ? -0.5 : 3), y + (record === 46 ? 5.5 : 11))
+        ? HUB_STOREGRID_SELECTED_RECORDS.takeClickAgain
+        : 'price' in item && item.price > model.economy.gold
+          ? HUB_STOREGRID_SELECTED_RECORDS.unaffordable
+          : HUB_STOREGRID_SELECTED_RECORDS.buyClickAgain
+      const unaffordable = record === HUB_STOREGRID_SELECTED_RECORDS.unaffordable
+      addAtlasSprite(
+        context,
+        layer,
+        'UI',
+        record,
+        x + (unaffordable ? -0.5 : 3),
+        y + (unaffordable ? 5.5 : 11),
+      )
     } else if (!held && model.trader === 'hagatha') {
       const selector = 'recipeIndex' in item ? item.recipeIndex ?? -1 : -1
       if (selector >= 0) addAtlasSprite(context, layer, 'Skills', 127 + selector, x + 36, y + 36, { anchor: 0.5 })
@@ -1449,7 +1460,18 @@ function addDowsingGrid(
     if (!item) continue
     const selected = item.id === model.selectedItemId
     if (selected) {
-      addAtlasSprite(context, layer, 'UI', item.price > model.economy.gold ? 46 : 84, x + 1, y + 11)
+      const record = item.price > model.economy.gold
+        ? HUB_STOREGRID_SELECTED_RECORDS.unaffordable
+        : HUB_STOREGRID_SELECTED_RECORDS.buyClickAgain
+      const unaffordable = record === HUB_STOREGRID_SELECTED_RECORDS.unaffordable
+      addAtlasSprite(
+        context,
+        layer,
+        'UI',
+        record,
+        x + (unaffordable ? -0.5 : 3),
+        y + (unaffordable ? 5.5 : 11),
+      )
     } else addClippedItemIcon(
       context,
       layer,

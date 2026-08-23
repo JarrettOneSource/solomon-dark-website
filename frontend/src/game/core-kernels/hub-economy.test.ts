@@ -413,6 +413,26 @@ test('all six equipment classes route through the seven sinks and third ring is 
   assert.equal(equipInventoryItem(unlocked, ring.id, 'ring-2').accepted, true)
 })
 
+test('equipping into an occupied compatible sink returns the exact displaced item once', () => {
+  const base = createHubEconomy(1)
+  const ringRecipe = DOWSING_EQUIPMENT_RECIPES.find(({ type }) => type === 'ring')!
+  const first = createEquipmentInventoryItem(ringRecipe, base.nextItemId)
+  const second = createEquipmentInventoryItem(ringRecipe, base.nextItemId + 1)
+  const stocked = {
+    ...base,
+    backpack: [...base.backpack, first, second],
+    nextItemId: base.nextItemId + 2,
+  }
+  const firstEquip = equipInventoryItem(stocked, first.id, 'ring-0')
+  assert.equal(firstEquip.accepted, true)
+  const swap = equipInventoryItem(firstEquip.state, second.id, 'ring-0')
+  assert.equal(swap.accepted, true)
+  assert.strictEqual(swap.state.equipment.rings[0], second)
+  assert.equal(swap.state.backpack.filter(({ id }) => id === first.id).length, 1)
+  assert.strictEqual(swap.state.backpack.find(({ id }) => id === first.id), first)
+  assert.equal(swap.state.backpack.some(({ id }) => id === second.id), false)
+})
+
 test('the 88-cell backpack and 28-cell scavenged-goods store enforce distinct native capacities', () => {
   const base = createHubEconomy(1)
   const health = base.backpack[0]!

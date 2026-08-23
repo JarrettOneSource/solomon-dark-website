@@ -41,6 +41,7 @@ import {
   HUB_ROBE_REMOVAL_MSGBOX,
   HUB_SHOP_GRID,
   HUB_SHOP_PANEL,
+  HUB_STOREGRID_SELECTED_RECORDS,
   HUB_SHOP_TEXT,
   HUB_STARTER_EQUIPMENT_PRIMARY_TINT,
   HUB_UNFORGE_CONFIRMATION,
@@ -199,6 +200,32 @@ test('stock inventory owns native ItemInfo, drag, double activation, and protect
   assert.match(HUB_HAT_REMOVAL_MSGBOX.body, /jaunty angle/)
   assert.equal(HUB_ROBE_REMOVAL_MSGBOX.title, 'A WIZARD WOULD NEVER REMOVE HIS ROBE!')
   assert.match(HUB_ROBE_REMOVAL_MSGBOX.body, /avoidable disintegration/)
+})
+
+test('retail StoreGrid selected state uses only the live Windows CLICK AGAIN records', () => {
+  assert.deepEqual(HUB_STOREGRID_SELECTED_RECORDS, {
+    buyClickAgain: 84,
+    buyTouchAgainDormant: 85,
+    takeClickAgain: 111,
+    takeTouchAgainDormant: 112,
+    unaffordable: 46,
+  })
+  assert.deepEqual(nativeAssetsJson.atlases.UI.records['84']?.frame, [753, 435, 66, 45])
+  assert.deepEqual(nativeAssetsJson.atlases.UI.records['85']?.frame, [847, 425, 66, 45])
+  assert.deepEqual(nativeAssetsJson.atlases.UI.records['111']?.frame, [874, 587, 66, 45])
+  assert.deepEqual(nativeAssetsJson.atlases.UI.records['112']?.frame, [933, 426, 66, 45])
+})
+
+test('semantic inventory actions expose blank deselection and explicit compatible sinks', () => {
+  const source = readFileSync(new URL('../HubInventoryUi.tsx', import.meta.url), 'utf8')
+  assert.match(source, /data-inventory-empty-space/)
+  assert.match(source, /clearInventorySelection/)
+  assert.match(source, /hubEquipmentClickAction\(selectedBackpackItem, slot, thirdRingUnlocked\)/)
+  assert.doesNotMatch(source, /disabled=\{locked \|\| !source\}/)
+  assert.doesNotMatch(
+    source,
+    /onAction\(\{ type: 'unequip', slot: source\.equipmentSlot \}\)\s*onAction\(\{ type: 'unequip', slot: source\.equipmentSlot \}\)/,
+  )
 })
 
 test('HoverBox owns exact immediate Shop and occupied-Hagatha geometry', () => {
@@ -637,7 +664,8 @@ test('visible hub inventory presentation is owned by the native WebGL renderer',
   assert.match(rendererSource, /'UI', 73/)
   assert.match(rendererSource, /'UI', 74/)
   assert.match(rendererSource, /tile\.blendMode = blendMode/)
-  assert.match(rendererSource, /item\.price > model\.economy\.gold \? 46 : 84/)
+  assert.match(rendererSource, /HUB_STOREGRID_SELECTED_RECORDS\.unaffordable/)
+  assert.match(rendererSource, /HUB_STOREGRID_SELECTED_RECORDS\.buyClickAgain/)
   assert.match(rendererSource, /`\$\{item\.price\}`,[\s\S]*?HUB_SHOP_TEXT\.priceFont/)
   assert.doesNotMatch(rendererSource, /`\$\{item\.price\}`, 'skill'/)
   assert.match(rendererSource, /'UI', 86/)
@@ -647,7 +675,7 @@ test('visible hub inventory presentation is owned by the native WebGL renderer',
   assert.match(rendererSource, /slot\.alpha = HUB_INVENTORY_GRID\.slotAlpha/)
   assert.match(rendererSource, /slot\.alpha = HUB_SHOP_GRID\.slotAlpha/)
   assert.match(rendererSource, /slot\.alpha = HUB_DOWSING_GRID\.slotAlpha/)
-  assert.match(rendererSource, /owner === 'storage'[\s\S]*111/)
+  assert.match(rendererSource, /owner === 'storage'[\s\S]*HUB_STOREGRID_SELECTED_RECORDS\.takeClickAgain/)
   assert.doesNotMatch(source, /Previous page|Next page|Goodbye|Your Prices/)
   assert.match(rendererSource, /dowsingFlash\.alpha = 1/)
   assert.match(rendererSource, /dataset\.dowsingFlash = 'active'/)

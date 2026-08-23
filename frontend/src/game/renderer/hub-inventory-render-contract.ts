@@ -209,6 +209,14 @@ export const HUB_DOWSING_GRID = {
   top: 94,
 } as const
 
+export const HUB_STOREGRID_SELECTED_RECORDS = {
+  buyClickAgain: 84,
+  buyTouchAgainDormant: 85,
+  takeClickAgain: 111,
+  takeTouchAgainDormant: 112,
+  unaffordable: 46,
+} as const
+
 export const HUB_SHOP_PANEL = {
   backgroundBlendModes: ['normal', 'add'] as const,
   backgroundTileExtent: [264, 264] as const,
