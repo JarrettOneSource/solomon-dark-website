@@ -73,7 +73,11 @@ try {
   await partySettings.waitFor()
   const initialPartyId = await partySettings.locator('code').innerText()
   assert.match(initialPartyId, /^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/)
-  await partySettings.getByLabel('PUBLIC').check()
+  await partySettings.getByLabel('PUBLIC').click()
+  await first.page.waitForFunction(() => (
+    document.querySelector('input[name="party-visibility"]:checked')
+      ?.parentElement?.textContent?.trim() === 'PUBLIC'
+  ))
   await partySettings.getByRole('button', { name: 'REGENERATE' }).click()
   await first.page.waitForFunction(initial => (
     document.querySelector('.party-settings-code code')?.textContent !== initial
