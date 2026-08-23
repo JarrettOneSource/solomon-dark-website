@@ -105,19 +105,13 @@ try {
 
   const member = await enterRawHub('Cassia', 'water')
   await waitForPlayers(first.page, 3)
-  await activatePlayer(first, member.playerId)
-  await first.page.getByRole('heading', { name: 'Cassia' }).waitFor()
-  await first.page.getByRole('button', { name: 'Invite to Party' }).click()
+  host.invitePlayer(member.playerId)
   const memberInvitation = await member.next((message) => (
     message.type === 'server-party-state' && message.state.invitations.length === 1
   ), 'member invitation')
-  assert.equal(memberInvitation.state.invitations[0].inviter.displayName, 'Aurelia')
+  assert.equal(memberInvitation.state.invitations[0].inviter.displayName, 'Basil')
   member.acceptInvitation(memberInvitation.state.invitations[0].id)
   await waitForPartySize(first.page, 3)
-  await first.page.getByRole('dialog', { name: 'Cassia' })
-    .getByRole('button', { name: 'Close' })
-    .click()
-  await first.page.locator('[data-profile-player]').waitFor({ state: 'detached' })
 
   const outsider = await enterRawHub('Daria', 'air')
   await waitForPlayers(first.page, 4)
