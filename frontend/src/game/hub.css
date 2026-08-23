@@ -1042,8 +1042,8 @@
 
 @media (hover: none) and (pointer: coarse) {
   .hub-hud-quickbar-slot {
-    bottom: 132px;
-    left: calc(50% + var(--mobile-quickbar-slot-offset));
+    bottom: var(--mobile-quickbar-slot-bottom);
+    left: calc(50% + var(--mobile-quickbar-slot-x));
     width: 100px;
     height: 100px;
     border: 2px solid rgb(226 216 181 / 0.42);
@@ -1128,22 +1128,68 @@
 
   /* Counter the native display scale so social UI lands at true screen pixels on touch devices. */
   .hub-party-panel {
-    top: 196px;
+    top: 172px;
+    width: 164px;
+    min-width: 164px;
+    max-width: 164px;
+    padding: 6px 7px 7px;
+    font-size: 12px;
     transform: scale(calc(1 / var(--hud-display-scale, 0.65)));
     transform-origin: top left;
   }
 
-  .hub-party-member-open {
-    min-height: 34px;
+  .hub-party-panel h2 {
+    gap: 5px;
+    margin-bottom: 4px;
+    padding-bottom: 4px;
+    font-size: 10px;
+    letter-spacing: 0.1em;
   }
 
+  .hub-party-panel h2 img { width: 11px; }
+
+  .hub-party-count { font-size: 9px; }
+
+  .hub-party-error {
+    margin-bottom: 4px;
+    font-size: 11px;
+  }
+
+  .hub-party-members { gap: 1px; }
+
+  .hub-party-member-open {
+    min-height: 28px;
+    gap: 5px;
+    padding: 2px 4px;
+  }
+
+  .hub-party-member-marker { width: 9px; }
+
+  .hub-party-member-name { font-size: 12px; }
+
+  .hub-party-member-tag {
+    padding: 1px 5px 2px;
+    font-size: 8px;
+  }
+
+  .hub-party-invitation {
+    gap: 5px;
+    margin-top: 5px;
+    padding: 5px 6px 6px;
+  }
+
+  .hub-party-invitation-text { font-size: 12px; }
+
   .hub-party-invitation button {
-    min-height: 42px;
+    min-height: 34px;
+    padding: 4px 7px;
+    font-size: 9px;
   }
 
   .hub-party-settings-open {
-    width: 44px;
-    height: 44px;
+    width: 32px;
+    height: 32px;
+    font-size: 12px;
   }
 
   .hub-player-profile {

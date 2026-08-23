@@ -5,6 +5,7 @@ import test from 'node:test'
 const gamePage = readFileSync(new URL('../pages/Game.tsx', import.meta.url), 'utf8')
 const bootstrap = readFileSync(new URL('./game-bootstrap.ts', import.meta.url), 'utf8')
 const hubScene = readFileSync(new URL('./HubScene.tsx', import.meta.url), 'utf8')
+const hubStyles = readFileSync(new URL('./hub.css', import.meta.url), 'utf8')
 const searchParties = readFileSync(new URL('../pages/SearchParties.tsx', import.meta.url), 'utf8')
 const supervisor = readFileSync(
   new URL('./host/game-session-supervisor.ts', import.meta.url),
@@ -39,6 +40,15 @@ test('Hub player interaction shares one pointer path across mouse and touch', ()
   assert.match(hubScene, /onDenyPartyInvitation/)
   assert.match(hubScene, />\s*Deny\s*</)
   assert.doesNotMatch(hubScene, /onMouseDownCapture/)
+})
+
+test('coarse-pointer Party panel keeps every semantic surface in a compact frame', () => {
+  const mobileStyles = hubStyles.slice(hubStyles.indexOf('@media (hover: none) and (pointer: coarse)'))
+  assert.match(mobileStyles, /\.hub-party-panel\s*\{[\s\S]*?width:\s*164px;/)
+  assert.match(mobileStyles, /\.hub-party-settings-open\s*\{[\s\S]*?width:\s*32px;[\s\S]*?height:\s*32px;/)
+  assert.match(mobileStyles, /\.hub-party-member-open\s*\{[\s\S]*?min-height:\s*28px;/)
+  assert.match(hubScene, /className="hub-party-members"/)
+  assert.match(hubScene, /data-party-invitation/)
 })
 
 test('browser game acceptance tools consume the authoritative protocol identity', () => {

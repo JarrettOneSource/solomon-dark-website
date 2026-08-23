@@ -119,6 +119,17 @@ test('chat UI owns its configured key, real text focus, Tab channels, fade, and 
   assert.match(boneyardScene, /event\.code !== settings\.controls\.openSkills/)
 })
 
+test('mobile chat uses a compact closed launcher without shrinking the open sheet', () => {
+  assert.match(
+    css,
+    /@media \(hover: none\) and \(pointer: coarse\)[\s\S]*?\.game-chat-open\s*\{\s*width:\s*34px;\s*height:\s*34px;/,
+  )
+  assert.match(
+    css,
+    /\.game-chat\[data-chat-open='true'\] \.game-chat-panel\s*\{[\s\S]*?right:\s*0;[\s\S]*?left:\s*0;/,
+  )
+})
+
 test('whisper UX runs from the Player Card into a dedicated chat thread', () => {
   assert.match(component, /data-whisper-target=/)
   assert.match(component, /whisperRequest/)
