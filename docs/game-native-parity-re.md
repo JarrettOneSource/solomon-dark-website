@@ -35754,3 +35754,12 @@ again with `audioEvents: 2`, all swatches `0..17`, final tints
 captures are retained under
 `/Users/jarrett/codex-acceptance/sacks-dyes-native-parity-fix-20260823-latest/evidence/r1/`.
 This latest-base receipt supersedes both earlier candidate paths.
+
+#### Publication authorization receipt (2026-08-23)
+
+The owner explicitly authorized a push to `main` after the latest-base Mac
+gate and production-bundle browser receipt. The focused code/RE commit is
+`d8ca75363afd416ef75527cec1d2192116b3411f` (`fix(game): restore native sacks
+and fabric dye`) on parent `b57eab6f4410b8cc80b4692654659135fdda5e2e`.
+This docs-only receipt accompanies that commit in the same normal fast-forward
+publication. Deployment was not requested and remains a separate owner action.
