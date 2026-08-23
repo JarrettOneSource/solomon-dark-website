@@ -1,5 +1,6 @@
 export function installGameAudioSmokeProbe({
   eventsGlobal = '__sdrAudioEvents',
+  masterVolumesGlobal = '__sdrAudioMasterVolumes',
   sourceMatcherGlobal = '__sdrAudioSourceMatches',
   sourcesGlobal = '__sdrAudioPlaySources',
 } = {}) {
@@ -7,10 +8,13 @@ export function installGameAudioSmokeProbe({
   const sources = []
   const encodedSources = new WeakMap()
   const decodedSources = new WeakMap()
+  const bufferMasters = []
+  const gainDestinations = new WeakMap()
   const mediaChannels = new WeakMap()
   const nativeFetch = window.fetch
   const nativeDecode = BaseAudioContext.prototype.decodeAudioData
   const nativeCreateBufferSource = BaseAudioContext.prototype.createBufferSource
+  const nativeCreateGain = BaseAudioContext.prototype.createGain
   const nativeMediaPause = HTMLMediaElement.prototype.pause
   const nativeMediaPlay = HTMLMediaElement.prototype.play
   let nextChannelId = 1
@@ -62,6 +66,15 @@ export function installGameAudioSmokeProbe({
       return buffer
     })
   }
+  BaseAudioContext.prototype.createGain = function () {
+    const gain = nativeCreateGain.call(this)
+    const nativeConnect = gain.connect.bind(gain)
+    gain.connect = function (destination, ...args) {
+      gainDestinations.set(gain, destination)
+      return nativeConnect(destination, ...args)
+    }
+    return gain
+  }
   BaseAudioContext.prototype.createBufferSource = function () {
     const node = nativeCreateBufferSource.call(this)
     const nativeConnect = node.connect.bind(node)
@@ -76,11 +89,14 @@ export function installGameAudioSmokeProbe({
     }
     node.start = function (...args) {
       const src = decodedSources.get(node.buffer) ?? ''
+      const master = gain ? gainDestinations.get(gain) : null
+      if (master instanceof GainNode) bufferMasters.push({ gain: master, src })
       events.push({
         at: performance.now(),
         channelId,
         contextTime: node.context.currentTime,
         loop: node.loop,
+        masterVolume: master instanceof GainNode ? master.gain.value : 1,
         playbackRate: node.playbackRate.value,
         semanticFootstepTick: semanticFootstepTick(),
         src,
@@ -139,6 +155,12 @@ export function installGameAudioSmokeProbe({
 
   Object.defineProperties(window, {
     [eventsGlobal]: { value: events },
+    [masterVolumesGlobal]: {
+      value: (sourceFragment = '') => [...new Set(bufferMasters
+        .filter(({ src }) => src.includes(sourceFragment))
+        .map(({ gain }) => gain))]
+        .map(({ gain }) => gain.value),
+    },
     [sourceMatcherGlobal]: { value: sourceMatches },
     [sourcesGlobal]: { value: sources },
   })

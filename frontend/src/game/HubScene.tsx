@@ -65,6 +65,7 @@ import type {
   ProtocolPlayerProgression,
 } from './protocol/game-state.ts'
 import { PlayerFootstepAudioSynchronizer } from './player-footstep-audio.ts'
+import type { GameWorldSpeech } from './world-speech-presentation.ts'
 import {
   createHubWorldRenderer,
   type HubWorldRenderer,
@@ -120,6 +121,7 @@ interface HubSceneProps {
   sessionKind: GameSessionKind
   subscribePing: (listener: (pingMs: number) => void) => () => void
   subscribe: (listener: (snapshot: GameSnapshot) => void) => () => void
+  worldSpeeches: readonly GameWorldSpeech[]
 }
 
 type RendererState = 'loading' | 'ready'
@@ -172,6 +174,7 @@ export default function HubScene({
   sessionKind,
   subscribePing,
   subscribe,
+  worldSpeeches,
 }: HubSceneProps) {
   const [hubInitialSnapshot] = useState<HubGameSnapshot>(() => {
     if (!isHubGameSnapshot(initialSnapshot)) {
@@ -181,6 +184,8 @@ export default function HubScene({
   })
   const sceneRef = useRef<HTMLDivElement>(null)
   const hostRef = useRef<HTMLDivElement>(null)
+  const worldSpeechesRef = useRef(worldSpeeches)
+  worldSpeechesRef.current = worldSpeeches
   const rendererRef = useRef<HubWorldRenderer | null>(null)
   const inputRef = useRef<BrowserGameplayInput | null>(null)
   const inputBlockedRef = useRef(inputBlocked)
@@ -450,6 +455,7 @@ export default function HubScene({
       }
       rendererRef.current = renderer
       renderer.setLevelUpPresentation(levelUpPresentationIdRef.current)
+      renderer.setWorldSpeeches(worldSpeechesRef.current)
       host.replaceChildren(renderer.canvas)
       renderer.resize(viewportRef.current)
       setRendererState('ready')
@@ -473,6 +479,7 @@ export default function HubScene({
           }
         }
         previousTeacherSeconds = teacherSeconds
+        renderer.setWorldSpeeches(worldSpeechesRef.current)
         renderer.render(snapshot)
       })
     }).catch((error: unknown) => {

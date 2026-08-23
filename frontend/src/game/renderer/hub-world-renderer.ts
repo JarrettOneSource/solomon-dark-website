@@ -12,6 +12,7 @@ import {
   hubRegionCameraOrigin,
 } from '../core-kernels/hub-math.ts'
 import type { HubRegionId } from '../core-kernels/hub-regions.ts'
+import type { GameWorldSpeech } from '../world-speech-presentation.ts'
 import { hubSouthernCameraTranslation } from '../hub-camera-presentation.ts'
 import type { GameViewportLayout } from './game-viewport.ts'
 import {
@@ -36,6 +37,7 @@ import {
   NativeWorldNameplateLayer,
   projectNativeWorldPoint,
 } from './native-world-nameplate.ts'
+import { NativeWorldSpeechLayer } from './native-world-speech.ts'
 
 export interface HubRendererDiagnostics {
   averageFrameMs: number
@@ -100,6 +102,7 @@ export interface HubWorldRenderer {
   resize(viewport: GameViewportLayout, devicePixelRatio?: number): void
   setLevelUpPresentation(presentationId: number | null): void
   setSettings(settings: HubWorldPresentationSettings): void
+  setWorldSpeeches(speeches: readonly GameWorldSpeech[]): void
 }
 
 export type HubWorldPresentationSettings = Pick<
@@ -174,10 +177,12 @@ export async function createHubWorldRenderer(
   courtyardScene.stage.scale.set(baseCameraScale)
   privateRoomScene.world.scale.set(baseCameraScale)
   const worldNameplates = new NativeWorldNameplateLayer(textures.fontAtlas)
+  const worldSpeech = new NativeWorldSpeechLayer(textures.fontAtlas)
   application.stage.addChild(
     courtyardScene.stage,
     privateRoomScene.world,
     worldNameplates.container,
+    worldSpeech.container,
   )
   const secondaryScreenFlash = new Graphics({ label: 'native-secondary-screen-flash' })
   secondaryScreenFlash.eventMode = 'none'
@@ -217,6 +222,7 @@ export async function createHubWorldRenderer(
   let levelUpPresentationStartedAt: number | null = null
   let resolution = initialResolution
   let sampledStudentCount = -1
+  let worldSpeeches: readonly GameWorldSpeech[] = []
   const frameDiagnostics: HubFrameDiagnostics = {
     astronomerRenderable: true,
     astronomerTelescopeFrame: 0,
@@ -553,6 +559,28 @@ export async function createHubWorldRenderer(
           renderable: true,
         },
       )
+      const worldSpeechDiagnostics = worldSpeech.update(
+        worldSpeeches,
+        snapshot.players,
+        frameAt,
+        (point) => projectNativeWorldPoint(
+          point,
+          worldNameplateTransform,
+          viewport,
+        ),
+        {
+          includePlayer: (playerId) => (
+            snapshot.world.participants[playerId]?.region === participant.region
+          ),
+          renderable: true,
+        },
+      )
+      canvas.dataset.worldSpeechActiveCount = `${worldSpeechDiagnostics.activeCount}`
+      canvas.dataset.worldSpeechAlphas = worldSpeechDiagnostics.alphas.join(',')
+      canvas.dataset.worldSpeechCount = `${worldSpeechDiagnostics.visibleCount}`
+      canvas.dataset.worldSpeechMaximumAlpha = `${worldSpeechDiagnostics.maximumAlpha}`
+      canvas.dataset.worldSpeechPlayerIds = worldSpeechDiagnostics.playerIds.join(',')
+      canvas.dataset.worldSpeechSequences = worldSpeechDiagnostics.sequences.join(',')
       secondaryScreenFlash.alpha = screenOverlay?.alpha ?? 0
       secondaryScreenFlash.tint = screenOverlay?.color ?? 0xffffff
       secondaryScreenFlash.visible = screenOverlay !== null
@@ -618,6 +646,10 @@ export async function createHubWorldRenderer(
       canvas.dataset.cameraZoom = `${baseCameraScale}`
       canvas.dataset.zoomEffects = `${zoomEffects}`
     },
+    setWorldSpeeches(speeches) {
+      if (destroyed || speeches === worldSpeeches) return
+      worldSpeeches = speeches
+    },
     destroy() {
       if (destroyed) return
       destroyed = true
@@ -625,12 +657,14 @@ export async function createHubWorldRenderer(
         courtyardScene.stage,
         privateRoomScene.world,
         worldNameplates.container,
+        worldSpeech.container,
         secondaryScreenFlash,
         fadeCover,
       )
       courtyardScene.destroy()
       privateRoomScene.destroy()
       worldNameplates.destroy()
+      worldSpeech.destroy()
       secondaryScreenFeedback.clear()
       secondaryScreenFlash.destroy()
       fadeCover.destroy()

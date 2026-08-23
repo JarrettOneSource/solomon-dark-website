@@ -2,6 +2,12 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
+import {
+  PARTY_INVITATION_SOUND_REQUEST,
+  advancePartyInvitationAudioCursor,
+  createPartyInvitationAudioCursor,
+} from './party-invitation-audio.ts'
+
 const join = await readFile(new URL('./JoinPartyScene.tsx', import.meta.url), 'utf8')
 const menu = await readFile(new URL('./MainMenuScene.tsx', import.meta.url), 'utf8')
 const darkCloud = await readFile(new URL('./DarkCloudScene.tsx', import.meta.url), 'utf8')
@@ -68,4 +74,50 @@ test('only the current leader receives the Player Card invite action', () => {
   assert.match(hub, /partyState\.party\.leaderPlayerId === playerId[\s\S]*!alreadyTogether[\s\S]*Invite to Party/)
   assert.match(menu, /session\.onPartyAction/)
   assert.match(hub, /className="hub-party-error" role="alert"/)
+})
+
+test('incoming invitation audio is edge-triggered from a session baseline without snapshot replay', () => {
+  assert.deepEqual(PARTY_INVITATION_SOUND_REQUEST, {
+    cue: 'click',
+    playbackRate: 1,
+    volume: 1,
+  })
+
+  let cursor = createPartyInvitationAudioCursor(['invite-1'])
+  let delta = advancePartyInvitationAudioCursor(cursor, ['invite-1'])
+  assert.equal(delta.newInvitationCount, 0)
+  cursor = delta.cursor
+
+  delta = advancePartyInvitationAudioCursor(cursor, ['invite-1', 'invite-2', 'invite-3'])
+  assert.equal(delta.newInvitationCount, 2)
+  cursor = delta.cursor
+
+  delta = advancePartyInvitationAudioCursor(cursor, [])
+  assert.equal(delta.newInvitationCount, 0)
+  cursor = delta.cursor
+  delta = advancePartyInvitationAudioCursor(cursor, ['invite-2'])
+  assert.equal(delta.newInvitationCount, 0, 'an id already seen in this session does not re-arm')
+
+  const reconnect = createPartyInvitationAudioCursor(['invite-4'])
+  assert.equal(
+    advancePartyInvitationAudioCursor(reconnect, ['invite-4']).newInvitationCount,
+    0,
+    'pending reconnect history seeds a new baseline',
+  )
+})
+
+test('Main Menu consumes invitation edges beside the session party-state owner', () => {
+  assert.match(
+    menu,
+    /partyInvitationAudioCursorRef\.current = initialPartyState\s*\? createPartyInvitationAudioCursor\(initialPartyState\.invitations\.map\(\(\{ id \}\) => id\)\)\s*: null/,
+  )
+  assert.match(
+    menu,
+    /if \(partyInvitationAudioCursorRef\.current === null\) \{[\s\S]*createPartyInvitationAudioCursor\([\s\S]*nextPartyState\.invitations\.map\(\(\{ id \}\) => id\)[\s\S]*setPartyState\(nextPartyState\)[\s\S]*return/,
+  )
+  assert.match(menu, /advancePartyInvitationAudioCursor\([\s\S]*nextPartyState\.invitations\.map\(\(\{ id \}\) => id\)/)
+  assert.match(
+    menu,
+    /for \(let index = 0; index < delta\.newInvitationCount; index \+= 1\) \{\s*audio\.playSound\(PARTY_INVITATION_SOUND_REQUEST\.cue, \{/,
+  )
 })

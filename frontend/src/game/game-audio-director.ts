@@ -66,6 +66,8 @@ export class GameAudioDirector {
   private outgoingMusic: GameMusicChannel | null = null
   private playback: GameAudioPlayback
   private requestFrame: (callback: FrameRequestCallback) => number
+  private soundVolume = 1
+  private soundsMuted = false
   private readonly sources: GameAudioSources
 
   constructor(
@@ -81,11 +83,18 @@ export class GameAudioDirector {
   }
 
   setVolumes(soundVolume: number, musicVolume: number): void {
-    this.playback.setMasterVolume(clampUnit(soundVolume))
+    this.soundVolume = clampUnit(soundVolume)
+    this.applySoundVolume()
     this.musicVolume = clampUnit(musicVolume)
     for (const channel of [this.currentMusic, this.outgoingMusic]) {
       if (channel) this.applyMusicEnvelope(channel)
     }
+  }
+
+  setSoundMuted(muted: boolean): void {
+    if (this.soundsMuted === muted) return
+    this.soundsMuted = muted
+    this.applySoundVolume()
   }
 
   setScene(scene: GameAudioScene): void {
@@ -264,6 +273,10 @@ export class GameAudioDirector {
 
   private applyMusicEnvelope(channel: GameMusicChannel): void {
     channel.volume = (this.musicEnvelopes.get(channel) ?? 0) * this.musicVolume
+  }
+
+  private applySoundVolume(): void {
+    this.playback.setMasterVolume(this.soundsMuted ? 0 : this.soundVolume)
   }
 }
 

@@ -143,6 +143,7 @@ import { NativeEnemyProjectileEffectViews } from './native-enemy-projectile-effe
 import { NativeMaggotViews } from './native-maggot-view.ts'
 import { NativeGoodieViews, NativeLootViews } from './native-loot-view.ts'
 import type { ModConsumableCatalogEntry } from '../core-kernels/hub-economy.ts'
+import type { GameWorldSpeech } from '../world-speech-presentation.ts'
 import type { GameModAsset } from '../protocol/game-protocol.ts'
 import {
   loadModPresentationTextures,
@@ -203,6 +204,7 @@ import {
   NativeWorldNameplateLayer,
   projectNativeWorldPoint,
 } from './native-world-nameplate.ts'
+import { NativeWorldSpeechLayer } from './native-world-speech.ts'
 import { NativeBoneyardWeatherView } from './native-boneyard-weather-view.ts'
 import {
   createNativeBuildingSurfaceMesh,
@@ -383,6 +385,7 @@ export interface BoneyardWorldRenderer {
   resize(viewport: GameViewportLayout, devicePixelRatio?: number): void
   setLevelUpPresentation(presentationId: number | null): void
   setSettings(settings: BoneyardWorldPresentationSettings): void
+  setWorldSpeeches(speeches: readonly GameWorldSpeech[]): void
   spectatorStatus(snapshot: GameSnapshot): BoneyardSpectatorStatusPresentation | null
 }
 
@@ -530,14 +533,16 @@ export async function createBoneyardWorldRenderer(
   world.sortableChildren = true
   application.stage.addChild(world)
   const worldNameplates = new NativeWorldNameplateLayer(textures.fontAtlas)
-  application.stage.addChild(worldNameplates.container)
+  const worldSpeech = new NativeWorldSpeechLayer(textures.fontAtlas)
+  application.stage.addChild(worldNameplates.container, worldSpeech.container)
 
   let staticWorld: StaticWorldBuild | null = null
   try {
     staticWorld = await buildStaticWorld(document, world)
   } catch (error) {
-    application.stage.removeChild(world, worldNameplates.container)
+    application.stage.removeChild(world, worldNameplates.container, worldSpeech.container)
     worldNameplates.destroy()
+    worldSpeech.destroy()
     world.destroy({ children: true })
     application.destroy({ removeView: true })
     destroyBoneyardWorldTextures(textures)
@@ -610,6 +615,7 @@ export async function createBoneyardWorldRenderer(
 
   let destroyed = false
   let frameCount = 0
+  let worldSpeeches: readonly GameWorldSpeech[] = []
   let armedLevelUpPresentationId: number | null = null
   let lastLevelUpPresentationId: number | null = null
   let levelUpPresentationStartedAt: number | null = null
@@ -924,22 +930,33 @@ export async function createBoneyardWorldRenderer(
         worldTransform.position.x + worldShake.x + secondaryCameraDisplacement.x,
         worldTransform.position.y + worldShake.y + secondaryCameraDisplacement.y,
       )
+      const worldScreenTransform = {
+        position: { x: world.position.x, y: world.position.y },
+        scale: worldTransform.scale,
+      }
       worldNameplates.update(
         snapshot.players,
         options.playerId,
         (point) => projectNativeWorldPoint(
           point,
-          {
-            position: {
-              x: worldTransform.position.x + worldShake.x,
-              y: worldTransform.position.y + worldShake.y,
-            },
-            scale: worldTransform.scale,
-          },
+          worldScreenTransform,
           viewport,
         ),
         { renderable: true },
       )
+      const worldSpeechDiagnostics = worldSpeech.update(
+        worldSpeeches,
+        snapshot.players,
+        frameAt,
+        (point) => projectNativeWorldPoint(point, worldScreenTransform, viewport),
+        { renderable: true },
+      )
+      canvas.dataset.worldSpeechActiveCount = `${worldSpeechDiagnostics.activeCount}`
+      canvas.dataset.worldSpeechAlphas = worldSpeechDiagnostics.alphas.join(',')
+      canvas.dataset.worldSpeechCount = `${worldSpeechDiagnostics.visibleCount}`
+      canvas.dataset.worldSpeechMaximumAlpha = `${worldSpeechDiagnostics.maximumAlpha}`
+      canvas.dataset.worldSpeechPlayerIds = worldSpeechDiagnostics.playerIds.join(',')
+      canvas.dataset.worldSpeechSequences = worldSpeechDiagnostics.sequences.join(',')
       const screenOverlay = secondaryScreenFeedback.sample(snapshot.tick)
       secondaryScreenFlash.alpha = screenOverlay?.alpha ?? 0
       secondaryScreenFlash.tint = screenOverlay?.color ?? 0xffffff
@@ -1207,12 +1224,17 @@ export async function createBoneyardWorldRenderer(
       canvas.dataset.multipleShadows = `${settings.multipleShadows}`
       canvas.dataset.zoomEffects = `${settings.zoomEffects}`
     },
+    setWorldSpeeches(speeches) {
+      if (destroyed || speeches === worldSpeeches) return
+      worldSpeeches = speeches
+    },
     destroy() {
       if (destroyed) return
       destroyed = true
       spectatorCamera = INITIAL_BONEYARD_SPECTATOR_CAMERA_STATE
-      application.stage.removeChild(world, worldNameplates.container)
+      application.stage.removeChild(world, worldNameplates.container, worldSpeech.container)
       worldNameplates.destroy()
+      worldSpeech.destroy()
       application.stage.removeChild(secondaryScreenFlash)
       scene.destroy()
       regionLightField.destroy()

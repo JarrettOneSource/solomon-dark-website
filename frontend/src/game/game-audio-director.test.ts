@@ -397,6 +397,35 @@ test('applies independent live sound and music user gains over native envelopes'
   assert.equal(created[1].volume, 0)
 })
 
+test('temporarily mutes every non-music class without pausing music or losing the current user gain', async () => {
+  const { created, director, frames, playback } = fixture()
+  director.setVolumes(0.4, 0.6)
+  director.setScene('title')
+  await flushPromises()
+  frames.runAt(1_000)
+  const music = created[0]!
+  assert.equal(music.volume, 0.6)
+  assert.equal(music.paused, false)
+
+  director.setSoundMuted(true)
+  assert.deepEqual(playback.masterVolumeUpdates, [0.4, 0])
+  assert.equal(music.volume, 0.6)
+  assert.equal(music.paused, false)
+
+  director.playSound('click')
+  director.playStream('start-cast')
+  director.startLoop('lightning-loop', 'muted-owner')
+  assert.equal(playback.plays.length, 1)
+  assert.equal(playback.restarts.length, 2)
+
+  director.setVolumes(0.75, 0.25)
+  assert.equal(playback.masterVolumeUpdates.at(-1), 0)
+  assert.equal(music.volume, 0.25)
+  director.setSoundMuted(false)
+  assert.equal(playback.masterVolumeUpdates.at(-1), 0.75)
+  assert.equal(music.paused, false)
+})
+
 test('holds a blocked scene at its beginning and retries on unlock', async () => {
   const { created, director, frames } = fixture({ rejectSources: new Set(['theme.mp3']) })
   director.setScene('title')

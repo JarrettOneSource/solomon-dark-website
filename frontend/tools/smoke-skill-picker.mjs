@@ -28,6 +28,7 @@ const boneyardScreenshotPath = process.env.SDR_SKILL_PICKER_BONEYARD_SMOKE_SCREE
 const credential = randomBytes(32).toString('base64url')
 const pageErrors = []
 const consoleErrors = []
+const failedResponses = []
 
 const vite = await createViteServer({
   configFile: fileURLToPath(new URL('../vite.config.ts', import.meta.url)),
@@ -57,7 +58,12 @@ const page = await browser.newPage({ viewport: { width: 1600, height: 900 } })
 try {
   page.on('pageerror', (error) => pageErrors.push(error.message))
   page.on('console', (message) => {
-    if (message.type() === 'error') consoleErrors.push(message.text())
+    if (message.type() === 'error') {
+      consoleErrors.push(`${message.text()} @ ${message.location().url}`)
+    }
+  })
+  page.on('response', (response) => {
+    if (response.status() >= 400) failedResponses.push(`${response.status()} ${response.url()}`)
   })
   await page.addInitScript(installGameAudioSmokeProbe)
   await page.addInitScript((runtime) => {
@@ -68,6 +74,10 @@ try {
       kind: 'localhost',
       url: host.address.url,
     },
+  })
+  await page.route('**/deployment.json?*', async (route) => {
+    const revision = new URL(route.request().url()).searchParams.get('current')
+    await route.fulfill({ json: { revision } })
   })
 
   await page.goto(`${baseUrl}/game`, { timeout: 90_000, waitUntil: 'domcontentloaded' })
@@ -163,6 +173,16 @@ try {
     throw error
   }
   assert.equal(await picker.getByRole('button').first().isDisabled(), false)
+  const pickerAudioMuteReceipt = await audioMuteReceipt(page, 'academy')
+  assert.equal(pickerAudioMuteReceipt.attribute, 'true')
+  assert.ok(pickerAudioMuteReceipt.masterVolumes.length > 0)
+  assert.equal(pickerAudioMuteReceipt.masterVolumes.every(volume => volume === 0), true)
+  assert.equal(pickerAudioMuteReceipt.musicStarted, true)
+  assert.equal(pickerAudioMuteReceipt.musicPausedAfterStart, false)
+  assert.equal(
+    (await soundMasterVolumes(page, ['level-up', 'openpanel'])).every(volume => volume === 0),
+    true,
+  )
 
   const initialHubCanvas = await hubCanvas.elementHandle()
   assert.ok(initialHubCanvas, 'expected the Hub WebGL canvas below the picker')
@@ -342,6 +362,11 @@ try {
   await picker.waitFor({ state: 'detached', timeout: 15_000 })
   assert.ok(Date.now() - finalFirstScreenCloseStartedAt >= 520)
   await waitForHost(() => host.state().levelUpBarrier === null, 'first level-up barrier release')
+  await page.waitForFunction(() => (
+    document.querySelector('.main-menu-page')?.getAttribute('data-game-sounds-muted') === 'false'
+    && window.__sdrAudioMasterVolumes?.('level-up').every(volume => volume > 0)
+  ), undefined, { timeout: 5_000 })
+  const releasedAudioMuteReceipt = await audioMuteReceipt(page, 'academy')
   const afterFirstScreen = getPlayerProgression(host.state(), playerId)
   assert.equal(afterFirstScreen.pendingOffer, null)
   assert.equal(afterFirstScreen.deferredSkillChoices, 1)
@@ -437,6 +462,11 @@ try {
     return canvas?.dataset.levelUpDynamicSuppressed === 'false'
       && Number(canvas.dataset.enemyCount) >= 1
   }, undefined, { timeout: 30_000 })
+  const boneyardPickerAudioMuteReceipt = await audioMuteReceipt(page, 'prelude')
+  assert.equal(boneyardPickerAudioMuteReceipt.attribute, 'true')
+  assert.equal(boneyardPickerAudioMuteReceipt.masterVolumes.every(volume => volume === 0), true)
+  assert.equal(boneyardPickerAudioMuteReceipt.musicStarted, true)
+  assert.equal(boneyardPickerAudioMuteReceipt.musicPausedAfterStart, false)
   const boneyardBackgroundReceipt = await boneyardCanvas.evaluate((canvas) => ({
     dynamicSuppressed: canvas.dataset.levelUpDynamicSuppressed,
     enemyCount: Number(canvas.dataset.enemyCount),
@@ -451,20 +481,25 @@ try {
 
   assert.deepEqual(pageErrors, [])
   assert.deepEqual(consoleErrors, [])
+  assert.deepEqual(failedResponses, [])
   process.stdout.write(`${JSON.stringify({
     actionReceipt,
     bookedRank: getPlayerSkillBook(host.state(), playerId).permanentRanks[selectedSkillId],
     boneyardBackgroundReceipt,
+    boneyardPickerAudioMuteReceipt,
     boneyardScreenshotPath,
     earlyRevealObserved,
     frozenHubReceipt,
+    failedResponses,
     livePresentationObserved: livePresentation !== undefined,
     openPanelSoundRates,
     pickerRenderer,
+    pickerAudioMuteReceipt,
     presentationReceipt,
     revealScreenshotPath,
     screenshotPath,
     selectedSkillId,
+    releasedAudioMuteReceipt,
     levelUpSoundRates,
     unlockSkillSoundRates,
   })}\n`)
@@ -472,6 +507,7 @@ try {
   process.stderr.write(`${JSON.stringify({
     body: (await page.locator('body').innerText()).slice(0, 2_000),
     consoleErrors,
+    failedResponses,
     pageErrors,
     url: page.url(),
   })}\n`)
@@ -492,6 +528,34 @@ async function soundRates(page, sourceFragment) {
   return page.evaluate((fragment) => window.__sdrAudioEvents
     .filter(({ src, type }) => type === 'buffer-start' && src.includes(fragment))
     .map(({ playbackRate }) => playbackRate), sourceFragment)
+}
+
+async function soundMasterVolumes(page, sourceFragments) {
+  return page.evaluate((fragments) => window.__sdrAudioEvents
+    .filter(({ src, type }) => (
+      type === 'buffer-start' && fragments.some(fragment => src.includes(fragment))
+    ))
+    .map(({ masterVolume }) => masterVolume), sourceFragments)
+}
+
+async function audioMuteReceipt(page, musicSourceFragment) {
+  return page.evaluate((fragment) => {
+    const events = window.__sdrAudioEvents ?? []
+    const musicStart = events.findLast(({ src, type }) => (
+      type === 'started' && src.includes(fragment)
+    ))
+    return {
+      attribute: document.querySelector('.main-menu-page')
+        ?.getAttribute('data-game-sounds-muted'),
+      masterVolumes: window.__sdrAudioMasterVolumes?.('level-up') ?? [],
+      musicPausedAfterStart: Boolean(musicStart && events.some(event => (
+        event.type === 'pause'
+        && event.channelId === musicStart.channelId
+        && event.at > musicStart.at
+      ))),
+      musicStarted: Boolean(musicStart),
+    }
+  }, musicSourceFragment)
 }
 
 async function sampleHubWorldFrames(canvas, count = 30) {

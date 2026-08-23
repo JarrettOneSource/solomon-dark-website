@@ -79,6 +79,7 @@ import {
   type MatchLoadingState,
 } from './match-loading.ts'
 import type {
+  GameChatMessage,
   GameSnapshot,
   GameplayPauseSource,
   GameplayPauseState,
@@ -97,6 +98,16 @@ import {
 import type { BrowserGameAdmission } from './game-bootstrap.ts'
 import type { ProtocolPlayerProgression } from './protocol/game-state.ts'
 import type { LocalPartyState } from './protocol/party-state.ts'
+import {
+  PARTY_INVITATION_SOUND_REQUEST,
+  advancePartyInvitationAudioCursor,
+  createPartyInvitationAudioCursor,
+  type PartyInvitationAudioCursor,
+} from './party-invitation-audio.ts'
+import {
+  appendGameWorldSpeech,
+  type GameWorldSpeech,
+} from './world-speech-presentation.ts'
 import type {
   GameSaveCheckpoint,
   ResumableGameSave,
@@ -332,9 +343,11 @@ export default function MainMenuScene({
   const [hubPauseMenuOpen, setHubPauseMenuOpen] = useState(false)
   const [gameplayPauseMenuGeneration, setGameplayPauseMenuGeneration] = useState(0)
   const [partyState, setPartyState] = useState<LocalPartyState | null>(null)
+  const partyInvitationAudioCursorRef = useRef<PartyInvitationAudioCursor | null>(null)
   const [partyActionError, setPartyActionError] = useState<string | null>(null)
   const [whisperRequest, setWhisperRequest] = useState<GameChatWhisperRequest | null>(null)
   const [chatOpen, setChatOpen] = useState(false)
+  const [worldSpeeches, setWorldSpeeches] = useState<readonly GameWorldSpeech[]>([])
   const [gameplaySettingsOpen, setGameplaySettingsOpen] = useState(false)
   const activeBoneyardRunRef = useRef<string | null>(null)
   const loadedBoneyardRunRef = useRef<string | null>(null)
@@ -418,6 +431,10 @@ export default function MainMenuScene({
     () => cancelLoading('boneyard'),
     [cancelLoading],
   )
+  const presentWorldSpeech = useCallback((message: GameChatMessage) => {
+    const receivedAtMs = performance.now()
+    setWorldSpeeches(current => appendGameWorldSpeech(current, message, receivedAtMs))
+  }, [])
 
   useEffect(() => {
     const unsubscribe = subscribeGameSettings(setLocalGameSettings)
@@ -522,6 +539,7 @@ export default function MainMenuScene({
 
   useEffect(() => {
     if (!session) return
+    setWorldSpeeches([])
     const hallRecorder = new HallOfFameRunRecorder()
     const initialSnapshot = session.getSnapshot()
     const initialBoneyard = session.getBoneyard()
@@ -537,7 +555,11 @@ export default function MainMenuScene({
     setRuntimeProgression(initialSnapshot.players[session.playerId]?.progression ?? null)
     setLoadedBoneyard(initialBoneyard)
     setGameplayPause(session.getGameplayPause())
-    setPartyState(session.getPartyState())
+    const initialPartyState = session.getPartyState()
+    partyInvitationAudioCursorRef.current = initialPartyState
+      ? createPartyInvitationAudioCursor(initialPartyState.invitations.map(({ id }) => id))
+      : null
+    setPartyState(initialPartyState)
     recordHallSnapshot(initialSnapshot)
     if (initialSnapshot.world.kind === 'boneyard') {
       if (loadingRef.current?.flow !== 'boneyard') {
@@ -594,7 +616,27 @@ export default function MainMenuScene({
     const removePartyAction = session.onPartyAction(result => {
       setPartyActionError(result.ok ? null : partyActionErrorMessage(result.reason))
     })
-    const removePartyState = session.onPartyState(setPartyState)
+    const removePartyState = session.onPartyState((nextPartyState) => {
+      if (partyInvitationAudioCursorRef.current === null) {
+        partyInvitationAudioCursorRef.current = createPartyInvitationAudioCursor(
+          nextPartyState.invitations.map(({ id }) => id),
+        )
+        setPartyState(nextPartyState)
+        return
+      }
+      const delta = advancePartyInvitationAudioCursor(
+        partyInvitationAudioCursorRef.current,
+        nextPartyState.invitations.map(({ id }) => id),
+      )
+      partyInvitationAudioCursorRef.current = delta.cursor
+      for (let index = 0; index < delta.newInvitationCount; index += 1) {
+        audio.playSound(PARTY_INVITATION_SOUND_REQUEST.cue, {
+          playbackRate: PARTY_INVITATION_SOUND_REQUEST.playbackRate,
+          volume: PARTY_INVITATION_SOUND_REQUEST.volume,
+        })
+      }
+      setPartyState(nextPartyState)
+    })
     const removeSaveCheckpoint = session.onSaveCheckpoint(onSaveCheckpoint)
     return () => {
       removeSnapshot()
@@ -603,6 +645,7 @@ export default function MainMenuScene({
       removeLeaderboardReceipt()
       removePartyAction()
       removePartyState()
+      partyInvitationAudioCursorRef.current = null
       removeSaveCheckpoint()
     }
 
@@ -612,7 +655,7 @@ export default function MainMenuScene({
       setLocalHallOfFame(recordLocalHallOfFame(entry))
       setCurrentHallRunId(entry.runId)
     }
-  }, [accountUsername, advanceLoading, beginLoading, onSaveCheckpoint, session, submitGlobalHallOfFame])
+  }, [accountUsername, advanceLoading, audio, beginLoading, onSaveCheckpoint, session, submitGlobalHallOfFame])
 
   useEffect(() => {
     if (runtimeSnapshot?.world.kind === 'boneyard') void loadSkillPicker()
@@ -967,6 +1010,7 @@ export default function MainMenuScene({
     setPartyActionError(null)
     setWhisperRequest(null)
     setChatOpen(false)
+    setWorldSpeeches([])
     setGameplaySettingsOpen(false)
     setSkillBookOpen(false)
     setHudSkillSelector(null)
@@ -985,6 +1029,14 @@ export default function MainMenuScene({
   const levelUpPickerPresentationId = levelUpBarrierId
     ?? levelUpPickerPresentationRef.current
   const levelUpModalActive = Boolean(runtimeSnapshot?.levelUpBarrier) || levelUpPickerClosing
+  const nonMusicMuted = darkCloudMenuOpen
+    || displayedGameplayPause?.source === 'pause-menu'
+    || displayedGameplayPause?.source === 'skill-selector'
+    || hudSkillSelector !== null
+    || levelUpModalActive
+  useLayoutEffect(() => {
+    audio.setSoundMuted(nonMusicMuted)
+  }, [audio, nonMusicMuted])
   const ownsModalPause = gameplayPause !== null
     && gameplayPause.ownerPlayerId === session?.playerId
     && gameplayPause.source !== 'pause-menu'
@@ -1079,6 +1131,7 @@ export default function MainMenuScene({
       className="main-menu-page"
       data-chat-open={chatOpen}
       data-game-scene={gameScene}
+      data-game-sounds-muted={nonMusicMuted}
       data-skill-book-open={skillBookOpen}
     >
       <section
@@ -1236,6 +1289,7 @@ export default function MainMenuScene({
               subscribePing={session.onPing}
               subscribeEnemyEvent={session.onEnemyEvent}
               subscribe={session.onSnapshot}
+              worldSpeeches={worldSpeeches}
             />
           </Suspense>
         ) : session && runtimeSnapshot?.world.kind === 'hub' ? (
@@ -1286,6 +1340,7 @@ export default function MainMenuScene({
               sessionKind={session.sessionKind}
               subscribePing={session.onPing}
               subscribe={session.onSnapshot}
+              worldSpeeches={worldSpeeches}
             />
           </Suspense>
         ) : null}
@@ -1293,6 +1348,7 @@ export default function MainMenuScene({
         {session && runtimeSnapshot && runtimeRunPhase !== 'game-over' ? (
           <GameChat
             disabled={chatDisabled}
+            onMessage={presentWorldSpeech}
             onOpenChange={setChatOpen}
             onWhisperRequestHandled={() => setWhisperRequest(null)}
             openKeyCode={gameSettings.controls.openChat}

@@ -35972,3 +35972,199 @@ No member is blocked by the browser platform.
   Commits are retained on the two focused local branches; push and deployment
   were not authorized and were not performed. Task acceptance worktrees and
   the evidence named above remain retained for review.
+
+## 2026-08-23 — Pause and mandatory SkillPicker non-music mute
+
+### Reported smell and parity question
+
+- Reported web behavior: gameplay sounds, voices, streams, and persistent loops
+  remain audible while the Pause Menu or mandatory skill picker owns the
+  screen.
+- Requested behavior: mute every non-music game-audio member for the complete
+  Pause/SkillPicker presentation lifetime while music and its live crossfade
+  remain audible; restore the current user sound setting afterward.
+- Reproduction scenes: local Hub Pause Menu; owner and waiting-peer Boneyard
+  pause; LevelupScreen opening, settled choice, reroll/rebuild, closing, and
+  cohort-waiting branches; compact HUD primary/A/B selector owner and waiting
+  peer; overlapping state transitions and teardown.
+- Falsifiers: a stock modal call to a sound-only mute owner; a web cue that
+  bypasses the resident-buffer master; music routed through that master; a
+  setting change while muted that restores the stale pre-change value; or a
+  closing/waiting picker branch that releases early.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Retail instructions | `SolomonDark.exe` 0.72.5 SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, image base `0x00400000`; `SimpleMenu_ModalLoop 0x005ABF10`, instruction ranges `0x005AC098..0x005AC0D4`; LevelupScreen open/destructor `0x0067CAC0..0x0067CAED` / `0x006588C0` | Both modal families hold the active region through `0x005CBD40`; neither calls an audio gain setter or `Audio::Pause`. SimpleMenu requests stream 131 on return; LevelupScreen requests `openpanel` on entry. | high |
+| Retail audio owner | `Audio::Pause 0x00407400`; sound/music setters `0x004073A0` / `0x00407340`; `Audio+0x78..+0x88`; BASS configs 4/5/6 | Native global pause is nested but calls device-wide `BASS_Pause`, which also pauses music. Sound and music otherwise have independent persisted/effective lanes. | high |
+| Native assets/classes | registry rows/classes in `native-audio-catalog.json`; `Sound`, `SoundStream`, `SoundLoop`, `AmbientSound`, `Music` | All web one-shots, streams, loops, ambience, and voice requests use the non-music resident-buffer playback master; music uses independent `HTMLAudioElement` channels. | high |
+| Current Website | `game-audio-director.ts`, `game-audio-web-playback.ts`, `MainMenuScene.tsx`, `SkillPicker.tsx`, `GameplayPauseMenu.tsx` at Website `b57eab6f` | The correct bus seam already exists, but the director stores no temporary mute multiplier and modal state never drives it. | high |
+
+### System boundary and membership inventory
+
+Native system: modal world suspension plus the sibling native audio manager.
+The sound-only mute is an explicit Website policy because stock neither mutes
+these modals nor exposes a sound-only pause operation.
+
+| Member | Native/web owner | Disposition | Proof contract |
+| --- | --- | --- | --- |
+| Local Hub Pause Menu | Website local `displayedGameplayPause` | out-of-system native extension | sound master zero from modal mount through close/Settings handoff; academy music continues |
+| Boneyard Pause owner surface | host-authoritative `gameplayPause` | out-of-system native extension | every non-music class silent; Boneyard music continues |
+| Boneyard waiting-peer surface | replicated `gameplayPause` | out-of-system native extension | the same client-local bus policy applies even without actions |
+| Dark Cloud Explore Pause Menu | Website `darkCloudMenuOpen` using the shared SimpleMenu renderer | out-of-system native extension | non-music UI lane is zero while the Pause surface is present; title music continues |
+| LevelupScreen opening and settled offer | `levelUpBarrier` plus `SkillPicker` | out-of-system native extension | mute is established before picker passive effects can request audio |
+| reroll/rebuild, close, and cohort-waiting tails | `levelUpBarrier` / `levelUpPickerClosing` | out-of-system native extension | no early release between React surface variants |
+| compact HUD primary/A/B selector owner | `hudSkillSelector` plus the `skill-selector` pause source | out-of-system native extension | mute starts with the local compact picker and covers its complete selection/cancel lifetime |
+| compact HUD selector waiting peer | replicated `gameplayPause.source === 'skill-selector'` | out-of-system native extension | the peer's frozen world is silent while music continues |
+| `Sound` one-shots, including UI cues | resident-buffer master | verified-already-at-parity audio class; temporarily muted by policy | active requests remain lifecycle-correct at zero master gain |
+| `SoundStream`, voices, and long effects | keyed resident-buffer channels | verified-already-at-parity audio class; temporarily muted by policy | no stream-specific bypass or restart on release |
+| `SoundLoop` and `AmbientSound` | owner-keyed resident-buffer loops | verified-already-at-parity audio class; temporarily muted by policy | reference/owner updates continue while inaudible |
+| `Music` current/outgoing channels and crossfade | independent music channels | verified-already-at-parity; excluded from mute | current scene track stays playing at the user music volume |
+| sound/music persisted settings | `GameSettings` plus `setVolumes` | verified-already-at-requested-policy | changing sound volume while muted updates the stored scalar; release restores the newest value |
+| Inventory, SkillScreen, traders, title/Create, focus loss | independent surfaces/application owners | out-of-system (not requested) | no mute acquisition from these states |
+| session/audio teardown | `MainMenuScene` / director destroy | exact lifecycle boundary | no retained gain node, timer, stream, or mute owner |
+
+No member is `blocked-by-platform` and there is no extracted-but-undispositioned
+native row.
+
+### Native ownership thread and recovered contract
+
+- Modal input/world ownership remains exactly as documented by the 2026-08-20
+  pause and LevelupScreen entries. This change does not alter host ticks,
+  barrier arbitration, rendering, input, or no-catch-up semantics.
+- Stock audio owns independent user/effective sound and music scalars, but its
+  only pause virtual is device-wide. The web equivalent therefore stores the
+  latest user sound scalar and applies `soundsMuted ? 0 : soundVolume` only to
+  the resident-buffer master.
+- Muting does not stop or destroy a source. One-shots, streams, and loops may
+  advance silently; owner stop/restart/teardown operations remain authoritative.
+  Release never replays events received during the mute.
+- The client-local mute predicate is Dark Cloud Pause, a displayed gameplay
+  pause whose source is `pause-menu` or `skill-selector`, a locally opening HUD
+  selector, or `levelUpModalActive`. Source qualification deliberately excludes
+  the sibling Inventory/Skill Book hold.
+  A layout-phase write establishes it before SkillPicker's entry requests; its
+  inverse restores the latest sound setting. Music volume/envelopes are never
+  multiplied by it.
+
+### Web implementation consequence and validation contract
+
+- Add one reversible sound-only multiplier to `GameAudioDirector`; do not
+  suspend the shared `AudioContext`, alter per-cue gains, stop loops, mutate
+  persisted settings, or add modal checks to every producer.
+- Drive it once from the session-level modal owner in `MainMenuScene`, covering
+  local and authoritative pause plus the full level-up opening/closing/waiting
+  state graph. Expose a diagnostic attribute for browser proof.
+- Focused tests must cover user gain before/during/after mute, a setting update
+  while muted, idempotent transitions, continuing music/crossfade, and every
+  non-music playback class sharing the master.
+- Real Mac Chrome must begin a loop/stream, enter Hub and Boneyard pause plus a
+  mandatory picker, observe zero non-music master gain throughout, observe a
+  still-advancing audible music channel, release, and see the newest sound gain
+  restored with no page, console, or failed-response errors.
+
+## 2026-08-23 — Incoming party-invitation cue
+
+### Reported smell and parity question
+
+- Reported web behavior: the authoritative Hub invitation toast appears with
+  Accept/Deny actions but produces no audible notification.
+- Requested behavior: play a small sound exactly when a new invitation is
+  received.
+- Stock boundary: retail has no Website party model or invitation trigger. Cue
+  selection and first-seen semantics are explicit Website policy; native asset
+  identity and playback class remain exact.
+
+### Evidence, membership, and ownership
+
+| Member | Source | Disposition | Contract |
+| --- | --- | --- | --- |
+| invitation creation/id/revision | `party-system.ts`, `shared-game-worlds.ts`, host party projection | verified-already-at-requested-policy | host alone introduces a unique invitation id for its recipient |
+| recipient state delivery | protocol/client `LocalPartyState.invitations` | verified-already-at-requested-policy | sound derives from delivered authoritative state, never Invite-button optimism |
+| new-id edge | session-owned invitation cursor | out-of-system native extension | one request per id introduced after the initial connected baseline |
+| revision-only/unchanged state | same cursor | out-of-system native extension | no replay |
+| accept, deny, expiry, disconnect, scene remount | existing invitation lifecycle | verified-already-at-requested-policy | removal is silent and does not re-arm an old id |
+| reconnect with pending history | new session baseline | out-of-system native extension | existing ids seed the cursor and do not replay |
+| simultaneous newly introduced ids | state delta | out-of-system native extension | one cue request per new id |
+| cue | native registry row 0 `sounds\\click`, SHA-256 `8aeebcfeb69625bee2ee78fe9c63939e6b40edcc89d5facf2c0d35e1b5920307` | exact native asset; explicit new trigger | resident overlapping one-shot at pitch 1 and gain 1 |
+| registry streams 131/150 | `MessageDone__Stream`, `yougotamessage__stream` | out-of-system | suggestive names remain unsupported by the closed native chat census |
+| Pause/SkillPicker interaction | session audio mute above | out-of-system product composition | an invite received while muted is consumed silently and never queued |
+
+No member is browser-blocked. The cursor belongs beside the session's party
+state subscription so React rerenders, Hub renderer replacement, and unchanged
+snapshots cannot retrigger it. Focused tests cover baseline, one/many new ids,
+unchanged revisions, removal/reintroduction within a session, and session reset.
+The Mac party journey must invite, observe one decoded/started `click` request,
+refresh unrelated party state with no second request, deny, invite again under
+a new id, and require clean browser error arrays.
+
+## 2026-08-23 — Authoritative chat message over the speaking wizard
+
+### Reported smell and parity question
+
+- Reported web behavior: a sent message appears only in the HTML chat history;
+  no text appears with the sending wizard in the rendered world.
+- Requested behavior: keep the transcript entry and also place the same
+  authoritative message above that wizard, hold it briefly, then fade it away
+  slowly.
+- Stock boundary: the closed native chat census remains valid. Retail `Chat`,
+  `ChatExtend`, and `Notebox` are trader/book/note surfaces, not player speech.
+  The native world-indicator ExactText primitive is the presentation sibling;
+  routing, timing, wrapping, and speech-panel styling are explicit Website
+  policy.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Native negative census | `native-player-chat-boundary.md`; fresh `Chat` update/render `0x004FFEE0`/`0x004F9380`, `ChatExtend::Render 0x004F7BA0` | No player actor, authenticated sender, transport event, or overhead speech owner exists. | high |
+| Native world-text sibling | world indicator `Arena::Render 0x0046EC80`, `PlayerWizard 0x0054BA80`, ExactText `0x0043BCD0`, Fonts group 6 | A post-world, screen-space, actor-following bitmap-text lane is already recovered and ported for remote nameplates. | high |
+| Existing Website authority | protocol 52 `GameChatMessage`; host sender/routing; client-session ordered delivery; `GameChat.tsx` | The transcript already appends one authoritative event and exposes host-authored `sender.playerId`, channel, sequence, and normalized text. | high |
+| Existing renderers | `NativeWorldNameplateLayer`, Hub/Boneyard world renderers | Both scenes already own the exact font atlas, presented player map, camera projection, active-region filtering, resize, and teardown seam needed by a sibling layer. | high |
+
+### System boundary and membership inventory
+
+| Member | Owner | Disposition | Proof contract |
+| --- | --- | --- | --- |
+| accepted local submission | existing authoritative chat echo | verified-already-at-requested-policy | transcript and world state consume the same server event; rejected drafts never appear |
+| incoming Global message | host Hub routing | out-of-system native extension | visible only to clients that received it and only beside an actor in the active Hub region |
+| incoming Party message in Hub/Boneyard | host party routing | out-of-system native extension | no cross-party widening |
+| incoming/outgoing Whisper | host pair routing | out-of-system native extension | only sender/recipient clients can derive it; off-scene actor remains hidden |
+| local sender actor | active presented player map | out-of-system native extension | local player is included even though native nameplates are remote-only |
+| remote sender actor | same map and region predicate as nameplates | out-of-system native extension | follows the presented actor/camera |
+| Courtyard and all private Hub regions | Hub renderer active-region predicate | out-of-system native extension | no bubble for another region |
+| Boneyard/Arena | Boneyard renderer | out-of-system native extension | same shared layer and lifecycle |
+| latest-per-sender replacement | client presentation model | out-of-system native extension | newer sequence replaces older; stale/duplicate sequence is inert |
+| 3,000 ms hold + 2,000 ms linear fade | client monotonic clock | out-of-system native extension | alpha 1 before hold, linearly decreases, absent at 5,000 ms |
+| wrapping/full authoritative text | bounded 180-code-unit message plus Fonts group-6 layout | out-of-system panel geometry; exact native font primitive | full supported text wraps at a bounded screen width; transcript retains unsupported glyphs |
+| unsupported glyph | native ExactText no-fallback rule | exact-ported failure boundary | omit unsupported bitmap glyph; never introduce OS-font text into WebGL |
+| absent/disconnected/off-region/invalid player | renderer derivation | exact lifecycle boundary | no item; transcript remains |
+| pause/level-up/resize/camera feedback | existing presentation loops/transforms | verified-already-at-parity sibling | layer follows the same final screen transform and expires by wall time without simulation authority |
+| session replacement/teardown | `MainMenuScene` and both renderers | exact lifecycle boundary | presentation state and derived textures are cleared/destroyed |
+| accessibility | existing HTML `aria-live` transcript | verified-already-at-requested-policy | WebGL duplicate is `aria-hidden` and never double-announces |
+
+No member is blocked by the browser. The designed panel is noninteractive,
+drawn after the world/nameplate layer and before later screen feedback. Its
+anchor is a fixed screen-space speech tail above the actor/nameplate; it does
+not enter actor painter sorting, collision, lighting, protocol snapshots,
+saves, Hall state, or Lua.
+
+### Web implementation consequence and validation contract
+
+- Add a pure bounded presentation model for authoritative receipt, latest-
+  per-sender replacement, exact hold/fade samples, expiry, and active-player
+  derivation. `GameChat` keeps history ownership and emits the same received
+  event to the session-level presentation owner.
+- Add one shared Pixi layer using the existing Fonts group-6 atlas and final
+  Hub/Boneyard screen projection. Do not add scene-local chat subscriptions,
+  optimistic drafts, protocol fields, DOM player bubbles, system-font
+  fallback, or per-message simulation state.
+- Focused tests cover all channels, local/remote ownership, stale/replacement,
+  hold/fade boundaries, wrapping/long words, unsupported glyphs, off-region and
+  disconnect filtering, projection, and bounded cleanup.
+- A real two-client Mac Chrome journey must send in Hub and Boneyard, prove the
+  same sequence/text in transcript and above the correct local/remote actor,
+  move the actor/camera, observe full alpha then an intermediate fade alpha and
+  final removal, verify another-region/outsider privacy, and finish with empty
+  page, console, and unexpected-response arrays.

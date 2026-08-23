@@ -74,6 +74,7 @@ import type {
 import type { GameRunLifecycleState } from './core-kernels/game-run.ts'
 import type { ModConsumableCatalogEntry } from './core-kernels/hub-economy.ts'
 import { PlayerFootstepAudioSynchronizer } from './player-footstep-audio.ts'
+import type { GameWorldSpeech } from './world-speech-presentation.ts'
 import { BoneyardLootEventSynchronizer } from './loot-event-audio.ts'
 import {
   NativeLootMessagePresentation,
@@ -128,6 +129,7 @@ interface BoneyardSceneProps {
   subscribePing: (listener: (pingMs: number) => void) => () => void
   subscribeEnemyEvent: (listener: (event: BoneyardEnemyEventSnapshot) => void) => () => void
   subscribe: (listener: (snapshot: GameSnapshot) => void) => () => void
+  worldSpeeches: readonly GameWorldSpeech[]
 }
 
 interface BoneyardFrameDiagnostics {
@@ -172,6 +174,7 @@ export default function BoneyardScene({
   subscribeEnemyEvent,
   subscribePing,
   subscribe,
+  worldSpeeches,
 }: BoneyardSceneProps) {
   const [boneyardInitialSnapshot] = useState<BoneyardGameSnapshot>(() => {
     if (!isBoneyardGameSnapshot(initialSnapshot)) {
@@ -199,6 +202,8 @@ export default function BoneyardScene({
   const digIndicatorRef = useRef<HTMLDivElement>(null)
   const digReceiptRef = useRef<HTMLSpanElement>(null)
   const rendererRef = useRef<BoneyardWorldRenderer | null>(null)
+  const worldSpeechesRef = useRef(worldSpeeches)
+  worldSpeechesRef.current = worldSpeeches
   const pendingEnemyPresentationEventsRef = useRef<BoneyardEnemyEventSnapshot[]>([])
   const inputRef = useRef<BrowserGameplayInput | null>(null)
   const settingsRef = useRef(settings)
@@ -566,6 +571,7 @@ export default function BoneyardScene({
       }
       rendererRef.current = renderer
       renderer.setLevelUpPresentation(levelUpPresentationIdRef.current)
+      renderer.setWorldSpeeches(worldSpeechesRef.current)
       const pendingEnemyEvents = pendingEnemyPresentationEventsRef.current
       pendingEnemyPresentationEventsRef.current = []
       for (const event of pendingEnemyEvents) {
@@ -689,6 +695,7 @@ export default function BoneyardScene({
           }
         }
         onInput(input.sample().input)
+        renderer.setWorldSpeeches(worldSpeechesRef.current)
         renderer.render(snapshot)
         const nextStatus = renderer.spectatorStatus(snapshot)
         setSpectatorStatus((current) => (

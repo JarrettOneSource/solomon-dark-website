@@ -72,6 +72,16 @@ pair. The Hub player projection is the only target-discovery surface; there is
 no cross-host directory, transcript service, offline delivery, or chat
 persistence in saves.
 
+The same authoritative chat event also feeds a client-local world-speech
+projection. It keeps at most the newest event per sender, joins the host-authored
+sender id to the active presented player map, and draws a noninteractive
+screen-space bitmap bubble above that actor in Hub or Boneyard. The transcript
+remains the semantic and historical owner. World speech adds no wire field,
+simulation state, persistence, recipient widening, or optimistic draft: a
+client can draw only an event it was already authorized to receive. It holds
+for three seconds, fades linearly for two, and then retires on the monotonic
+presentation clock.
+
 ## Shared identities and boundaries
 
 The source tree owns four distinct modules:
@@ -169,6 +179,19 @@ Browser loading is bounded to four concurrent tasks so HTTP/2 and
 mobile memory spike. Scene transition barriers remain the readiness authority;
 a scene cannot accept gameplay input until its own renderer publishes the
 first ready frame.
+
+The compiled game-audio registry has two browser output lanes. Resident
+`AudioBuffer` one-shots, keyed streams, voices, loops, and ambience share one
+Web Audio master gain; scene music and crossfades use independent music
+channels. User sound and music settings remain separate scalars. A local or
+authoritative Pause Menu, or any opening/settled/closing/waiting phase of the
+mandatory level-up picker, temporarily multiplies only the non-music master by
+zero. Source and owner lifecycles continue silently, music keeps playing, and
+release restores the newest user sound value without replaying muted events.
+The party-state subscription seeds an invitation-id cursor from the connected
+baseline and requests the native resident `click` one-shot once for each newly
+introduced id; unchanged revisions, scene remounts, and reconnect history do
+not replay it.
 
 The TLS edge is part of the browser-game release contract, not an out-of-band
 host prerequisite. The release artifact carries the checked-in Caddy site;
@@ -288,6 +311,10 @@ dependencies without revisiting this release invariant.
   that client's gameplay input; it does not acquire the world pause lane. Its
   five-second readable hold and fade are client-local wall-clock presentation,
   refreshed by local or authoritative incoming activity.
+- World speech is a second presentation consumer of the same delivered chat
+  event. Its latest-per-sender replacement, three-second hold, two-second fade,
+  active-region projection, and expiry are client-local monotonic state; they
+  cannot delay, reorder, acknowledge, or widen authoritative chat delivery.
 
 ## Protocol and transport rails
 
@@ -558,6 +585,11 @@ There is one composed client, not one DOM client and one canvas client.
   semantic live region and textual channel labels remain usable without color.
   `T` opens chat by explicit product policy; the otherwise stock SkillScreen
   remains on its HUD tome and uses `K` as the Website keyboard shortcut.
+- The transient copy over a speaking player is deliberately not another HTML
+  chat owner. A shared noninteractive Pixi layer reuses the recovered world
+  bitmap font and each scene's final camera transform, includes the local
+  sender as well as visible remote senders, and stays `aria-hidden`; the HTML
+  transcript remains the sole live-region announcement.
 - The Courtyard and Boneyard worlds and cameras now render through PixiJS
   WebGL canvases.
   Native draw plans, blend operations, frame selectors, render offsets, and

@@ -89,6 +89,10 @@ try {
   await page.addInitScript((configuration) => {
     window.solomonDarkRuntime = configuration
   }, runtime)
+  await page.route('**/deployment.json?*', async (route) => {
+    const revision = new URL(route.request().url()).searchParams.get('current')
+    await route.fulfill({ json: { revision } })
+  })
   await enterHub(page, 'Fire')
 
   await page.setViewportSize({ height: 1200, width: 1920 })
@@ -134,6 +138,7 @@ try {
     '.gameplay-pause-stage[data-gameplay-pause-view="owner"]',
   )
   await largeHubPause.waitFor()
+  await assertNonMusicMuted(page, true)
   await page.waitForTimeout(350)
   await assertFixedUiGeometry(
     page,
@@ -152,6 +157,7 @@ try {
   assert.equal(await largeHubPause.count(), 1)
   await page.keyboard.press('Escape')
   await largeHubPause.waitFor({ state: 'detached' })
+  await assertNonMusicMuted(page, false)
   await assertLiveHub(page, 'large Hub Pause Menu close', 100)
   await page.setViewportSize({ height: 900, width: 1600 })
   await page.waitForFunction(() => (
@@ -177,6 +183,7 @@ try {
   await page.getByRole('button', { name: /Open inventory/ }).click()
   const inventory = page.getByRole('dialog', { name: 'Inventory' })
   await inventory.waitFor()
+  await assertNonMusicMuted(page, false)
   const inventoryPause = await peerSawInventoryPause
   assert.equal(inventoryPause.type, 'server-gameplay-pause')
   assert.equal(inventoryPause.pause.ownerPlayerId, host.hostPlayerId())
@@ -192,6 +199,7 @@ try {
   await page.keyboard.press('k')
   const skillBook = page.getByRole('dialog', { name: 'Skills' })
   await skillBook.waitFor()
+  await assertNonMusicMuted(page, false)
   await peerSawSkillBookPause
   await inventory.waitFor({ state: 'detached' })
   assert.equal(await page.locator('.gameplay-pause-stage').count(), 0)
@@ -222,6 +230,7 @@ try {
     '.gameplay-pause-stage[data-gameplay-pause-view="owner"]',
   )
   await ownerPause.waitFor()
+  await assertNonMusicMuted(page, true)
   assert.equal(
     await ownerPause.getAttribute('data-gameplay-pause-owner-id'),
     host.hostPlayerId(),
@@ -302,6 +311,7 @@ try {
 
   await ownerPause.getByRole('button', { name: 'RESUME GAME' }).click()
   await ownerPause.waitFor({ state: 'detached' })
+  await assertNonMusicMuted(page, false)
   await assertLiveHub(page, 'Hub Pause Menu close', 100)
   assert.deepEqual(hubPauseEdges, [])
 
@@ -310,6 +320,7 @@ try {
     '.gameplay-pause-stage[data-gameplay-pause-view="owner"]',
   )
   await settingsPause.waitFor()
+  await assertNonMusicMuted(page, true)
   await page.waitForTimeout(350)
   const settingsCanvas = settingsPause.locator('canvas[data-pause-renderer="native-simple-menu"]')
   await settingsCanvas.waitFor()
@@ -323,6 +334,7 @@ try {
 
   await settingsPause.getByRole('button', { name: 'GAME SETTINGS' }).click()
   await page.getByRole('dialog', { name: 'Settings' }).waitFor()
+  await assertNonMusicMuted(page, true)
   const settingsDialog = page.locator('.game-settings-dialog')
   await settingsPause.waitFor({ state: 'detached' })
   await setRange(settingsDialog.getByRole('slider', { name: 'CAMERA FOV' }), 125)
@@ -338,6 +350,7 @@ try {
   await assertLiveHub(page, 'Hub Pause Menu settings', 550)
   assert.deepEqual(hubPauseEdges, [])
   await settingsDialog.getByRole('button', { name: 'Done' }).click()
+  await assertNonMusicMuted(page, false)
   await assertLiveHub(page, 'Hub Pause Menu settings close', 100)
 
   await pressPause(page, '.hub-scene')
@@ -345,6 +358,7 @@ try {
     '.gameplay-pause-stage[data-gameplay-pause-view="owner"]',
   )
   await leavePause.waitFor()
+  await assertNonMusicMuted(page, true)
   await page.waitForTimeout(350)
   const leaveCanvas = leavePause.locator('canvas[data-pause-renderer="native-simple-menu"]')
   await leaveCanvas.waitFor()
@@ -360,6 +374,7 @@ try {
   await assertLiveHub(page, 'Hub Pause Menu Leave-row press')
   await leavePause.getByRole('button', { name: 'RESUME GAME' }).click()
   await leavePause.waitFor({ state: 'detached' })
+  await assertNonMusicMuted(page, false)
 
   moveHostPlayerTo({
     x: HUB_TRADER_GEOMETRY.fomentius.position.x - 70,
@@ -431,6 +446,7 @@ try {
     '.gameplay-pause-stage[data-gameplay-pause-view="owner"]',
   )
   await Promise.all([boneyardOwner.waitFor(), peerSawBoneyardPause])
+  await assertNonMusicMuted(page, true)
   await page.waitForTimeout(350)
   await assertFixedUiGeometry(
     page,
@@ -458,6 +474,7 @@ try {
     'browser-owner Boneyard resume',
   )
   await boneyardOwner.waitFor({ state: 'detached' })
+  await assertNonMusicMuted(page, false)
 
   const peerBoneyardPause = nextRawMessage(peer.socket, (message) => (
     message.type === 'server-gameplay-pause' && message.pause?.ownerPlayerId === peer.welcome.playerId
@@ -472,6 +489,7 @@ try {
     '.gameplay-pause-stage[data-gameplay-pause-view="waiting"]',
   )
   await boneyardWaiting.waitFor()
+  await assertNonMusicMuted(page, true)
   await page.waitForTimeout(350)
   await page.screenshot({ path: screenshots.boneyardWaiting })
   const heldBoneyardPeer = simulationReceipt()
@@ -486,6 +504,7 @@ try {
 
   peer.socket.close(1000, 'pause owner left')
   await boneyardWaiting.waitFor({ state: 'detached' })
+  await assertNonMusicMuted(page, false)
   await waitForHost(() => host.playerCount() === 2, 'pause-owner departure')
   await waitForHost(() => host.state().tick > heldBoneyardPeer.tick, 'Boneyard disconnect resume')
 
@@ -511,6 +530,13 @@ try {
 
 async function setRange(locator, value) {
   await locator.fill(`${value}`)
+}
+
+async function assertNonMusicMuted(page, expected) {
+  await page.waitForFunction((muted) => (
+    document.querySelector('.main-menu-page')?.getAttribute('data-game-sounds-muted')
+      === `${muted}`
+  ), expected, { timeout: 5_000 })
 }
 
 async function enterHub(page, element) {

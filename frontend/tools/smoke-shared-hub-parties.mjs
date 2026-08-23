@@ -6,6 +6,7 @@ import { chromium } from 'playwright-core'
 import { WebSocket } from 'ws'
 
 import { GAME_PROTOCOL_VERSION } from '../src/game/protocol/game-protocol.ts'
+import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
 
 const baseUrl = process.env.SDR_SHARED_HUB_SMOKE_URL || 'http://127.0.0.1:5173'
 const gatewayUrl = process.env.SDR_SHARED_HUB_GATEWAY_URL?.trim()
@@ -27,6 +28,8 @@ const contexts = []
 const rawClients = []
 const pageErrors = []
 const consoleErrors = []
+const failedResponses = []
+const unexpectedRequestFailures = []
 
 try {
   if (evidenceRoot) await mkdir(evidenceRoot, { recursive: true })
@@ -39,7 +42,7 @@ try {
   const hostMoved = await host.next((message) => (
     message.type === 'server-snapshot'
     && message.frame.world.kind === 'hub'
-    && message.frame.players[host.playerId]?.position.x > hostX + 80
+    && message.frame.players[host.playerId]?.position.x > hostX + 15
   ), 'host displacement')
   host.sendInput(hostMoved.frame.tick + 1, 2, { x: 0, y: 0 })
 
@@ -86,9 +89,14 @@ try {
   await partySettings.getByRole('button', { name: 'CLOSE' }).click()
   await partySettings.waitFor({ state: 'detached' })
 
+  const firstInviteClickCountBefore = await soundCount(first.page, 'click')
   host.invitePlayer(first.playerId)
   const invitation = first.page.locator('[data-party-invitation]')
   await invitation.waitFor()
+  await waitForSoundCount(first.page, 'click', firstInviteClickCountBefore + 1)
+  const firstInviteClickCount = await soundCount(first.page, 'click')
+  await first.page.waitForTimeout(250)
+  assert.equal(await soundCount(first.page, 'click'), firstInviteClickCount)
   assert.match(await invitation.innerText(), /Basil invited you/)
   const invitationEvidencePath = evidenceRoot ? join(evidenceRoot, 'party-invitation-deny.png') : null
   if (invitationEvidencePath) await first.page.screenshot({ path: invitationEvidencePath })
@@ -96,8 +104,11 @@ try {
   await invitation.waitFor({ state: 'detached' })
   assert.equal(await first.page.locator('[data-party-member]').count(), 1)
 
+  const secondInviteClickCountBefore = await soundCount(first.page, 'click')
   host.invitePlayer(first.playerId)
   await invitation.waitFor()
+  await waitForSoundCount(first.page, 'click', secondInviteClickCountBefore + 1)
+  const secondInviteClickCount = await soundCount(first.page, 'click')
   await invitation.getByRole('button', { name: 'Accept' }).click()
   await waitForPartySize(first.page, 2)
   const hubEvidencePath = evidenceRoot ? join(evidenceRoot, 'hub-nameplates.png') : null
@@ -211,6 +222,13 @@ try {
   await chat.locator('[data-message-channel="party"]', {
     hasText: 'Aurelia party hello',
   }).waitFor()
+  const hubCanvas = first.page.locator('.hub-world-canvas')
+  const hubOwnSpeech = await waitForWorldSpeech(
+    hubCanvas,
+    first.playerId,
+    hostPartyMessage.sequence,
+  )
+  assert.equal(hubOwnSpeech.alpha, 1)
   await first.page.waitForTimeout(100)
   assert.equal(
     outsider.chatMessages.some(message => message.text === 'Aurelia party hello'),
@@ -240,11 +258,34 @@ try {
 
   const hostReply = 'Basil global reply'
   host.sendChat('global', hostReply)
-  await chat.locator('[data-message-channel="global"]', { hasText: hostReply }).waitFor()
+  const hostReplyEntry = chat.locator('[data-message-channel="global"]', { hasText: hostReply })
+  await hostReplyEntry.waitFor()
+  const hostReplySequence = Number(await hostReplyEntry.getAttribute('data-message-sequence'))
+  const hubRemoteSpeech = await waitForWorldSpeech(hubCanvas, host.playerId, hostReplySequence)
+  assert.equal(hubRemoteSpeech.alpha, 1)
+  const chatHubWorldSpeechEvidencePath = evidenceRoot
+    ? join(evidenceRoot, 'chat-hub-world-speech.png')
+    : null
+  if (chatHubWorldSpeechEvidencePath) {
+    await first.page.screenshot({ path: chatHubWorldSpeechEvidencePath })
+  }
   const chatHubEvidencePath = evidenceRoot ? join(evidenceRoot, 'chat-hub-global.png') : null
   if (chatHubEvidencePath) await first.page.screenshot({ path: chatHubEvidencePath })
   await chatInput.press('Escape')
   await chat.locator('xpath=self::*[@data-chat-open="false"]').waitFor()
+  const hubFadingSpeech = await waitForWorldSpeechAlpha(
+    hubCanvas,
+    host.playerId,
+    hostReplySequence,
+    alpha => alpha > 0.2 && alpha < 0.8,
+  )
+  const chatHubWorldSpeechFadingEvidencePath = evidenceRoot
+    ? join(evidenceRoot, 'chat-hub-world-speech-fading.png')
+    : null
+  if (chatHubWorldSpeechFadingEvidencePath) {
+    await first.page.screenshot({ path: chatHubWorldSpeechFadingEvidencePath })
+  }
+  await waitForWorldSpeechRemoval(hubCanvas, host.playerId, hostReplySequence)
   await chat.locator('xpath=self::*[@data-chat-faded="true"]').waitFor({ timeout: 7_000 })
   await first.page.waitForTimeout(700)
   const fadedOpacity = Number(await chat.locator('.game-chat-panel').evaluate(node => (
@@ -261,6 +302,7 @@ try {
     message.type === 'server-snapshot' && message.frame.world.kind === 'hub'
   ), 'outsider Hub snapshot')
   const firstBoneyard = first.page.locator('.boneyard-scene[data-renderer-state="ready"]')
+  const boneyardCanvas = first.page.locator('.boneyard-world-canvas')
   const hostLoaded = host.next(
     (message) => message.type === 'server-boneyard-loaded',
     'host Boneyard materialization',
@@ -363,6 +405,17 @@ try {
   await runChatInput.fill('Party run hello')
   await runChatInput.press('Enter')
   await Promise.all([hostRunChat, memberRunChat])
+  const runChatEntry = chat.locator('[data-message-channel="party"]', {
+    hasText: 'Party run hello',
+  })
+  await runChatEntry.waitFor()
+  const runChatSequence = Number(await runChatEntry.getAttribute('data-message-sequence'))
+  const boneyardOwnSpeech = await waitForWorldSpeech(
+    boneyardCanvas,
+    first.playerId,
+    runChatSequence,
+  )
+  assert.equal(boneyardOwnSpeech.alpha, 1)
   await first.page.waitForTimeout(100)
   assert.equal(outsider.chatMessages.length, outsiderMessageCountBeforeRunChat)
   await runChatInput.press('Tab')
@@ -392,7 +445,9 @@ try {
     assert.equal(healthDuringRun.runs, 1)
   }
   assert.deepEqual(consoleErrors, [])
+  assert.deepEqual(failedResponses, [])
   assert.deepEqual(pageErrors, [])
+  assert.deepEqual(unexpectedRequestFailures, [])
 
   await host.close()
   await member.close()
@@ -412,20 +467,30 @@ try {
     boneyardEvidencePath,
     boneyardLighting,
     boneyardWithoutDirectLightPath,
+    boneyardOwnSpeech,
     chatBoneyardEvidencePath,
     chatHubEvidencePath,
+    chatHubWorldSpeechEvidencePath,
+    chatHubWorldSpeechFadingEvidencePath,
+    hubFadingSpeech,
+    hubOwnSpeech,
+    hubRemoteSpeech,
     chatSingletonTabEvidencePath,
     chatWhisperEvidencePath,
     chatFadedOpacity: fadedOpacity,
     chatGlobalSequence: globalChatMessages[0].sequence,
     chatPartySequence: hostPartyMessage.sequence,
     chatWhisperSequence: whisperMessage.sequence,
+    firstInviteClickCount,
+    secondInviteClickCount,
     remainingHubBeforeX: outsiderX,
     remainingHubAfterX: outsiderAfter.frame.players[outsider.playerId].position.x,
     healthDuringRun,
     finalHealth,
+    failedResponses,
     consoleErrors,
     pageErrors,
+    unexpectedRequestFailures,
   })}\n`)
 } finally {
   for (const client of rawClients.splice(0)) await client.close()
@@ -444,6 +509,17 @@ async function enterHub(displayName, element, viewport, existingContext) {
   page.on('console', (message) => {
     if (message.type() === 'error') consoleErrors.push(`${displayName}: ${message.text()}`)
   })
+  page.on('response', (response) => {
+    if (response.status() >= 400) {
+      failedResponses.push(`${displayName}: ${response.status()} ${response.url()}`)
+    }
+  })
+  page.on('requestfailed', (request) => {
+    const errorText = request.failure()?.errorText ?? 'unknown failure'
+    if (errorText !== 'net::ERR_ABORTED') {
+      unexpectedRequestFailures.push(`${displayName}: ${errorText} ${request.url()}`)
+    }
+  })
   if (gatewayUrl && publicWebSocketOrigin) {
     await page.addInitScript(({ gateway, publicOrigin }) => {
       const NativeWebSocket = window.WebSocket
@@ -459,6 +535,7 @@ async function enterHub(displayName, element, viewport, existingContext) {
       }
     }, { gateway: gatewayUrl, publicOrigin: publicWebSocketOrigin })
   }
+  await page.addInitScript(installGameAudioSmokeProbe)
   await page.goto(`${baseUrl}/game`, {
     timeout: 240_000,
     waitUntil: 'domcontentloaded',
@@ -571,7 +648,12 @@ async function enterRawHub(displayName, element) {
     sendInput(targetTick, sequence, movement) {
       socket.send(JSON.stringify({
         type: 'client-input',
-        input: { aim: null, cast: { primary: false, quickbar: null }, movement },
+        input: {
+          aim: null,
+          cast: { primary: false, quickbar: null },
+          movement,
+          viewportWidth: 1600,
+        },
         sequence,
         targetTick,
       }))
@@ -599,6 +681,12 @@ async function enterRawHub(displayName, element) {
 function rawMessageQueue(socket) {
   const buffered = []
   const waiters = []
+  const rejectWaiters = (error) => {
+    for (const waiter of waiters.splice(0)) {
+      clearTimeout(waiter.timeout)
+      waiter.reject(error)
+    }
+  }
   socket.on('message', (data) => {
     const message = JSON.parse(data.toString())
     if (message.type === 'server-snapshot') {
@@ -617,12 +705,21 @@ function rawMessageQueue(socket) {
     clearTimeout(waiter.timeout)
     waiter.resolve(message)
   })
+  socket.on('close', (code, reason) => {
+    rejectWaiters(new Error(`raw game socket closed (${code}: ${reason.toString()})`))
+  })
+  socket.on('error', rejectWaiters)
   return (predicate, label = 'raw game message') => {
     const bufferedIndex = buffered.findIndex(predicate)
     if (bufferedIndex >= 0) return Promise.resolve(buffered.splice(bufferedIndex, 1)[0])
     return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error(`timed out waiting for ${label}`)), 240_000)
-      waiters.push({ predicate, reject, resolve, timeout })
+      const waiter = { predicate, reject, resolve, timeout: null }
+      waiter.timeout = setTimeout(() => {
+        const waiterIndex = waiters.indexOf(waiter)
+        if (waiterIndex >= 0) waiters.splice(waiterIndex, 1)
+        reject(new Error(`timed out waiting for ${label}`))
+      }, 240_000)
+      waiters.push(waiter)
     })
   }
 }
@@ -667,6 +764,59 @@ async function waitForPartySize(page, size) {
   await page.waitForFunction((expected) => (
     document.querySelectorAll('[data-party-member]').length === expected
   ), size, { timeout: 15_000 })
+}
+
+async function soundCount(page, sourceFragment) {
+  return page.evaluate((fragment) => (window.__sdrAudioEvents ?? [])
+    .filter(({ src, type }) => type === 'buffer-start' && src.includes(fragment))
+    .length, sourceFragment)
+}
+
+async function waitForSoundCount(page, sourceFragment, expected) {
+  await page.waitForFunction(({ count, fragment }) => (
+    (window.__sdrAudioEvents ?? [])
+      .filter(({ src, type }) => type === 'buffer-start' && src.includes(fragment))
+      .length === count
+  ), { count: expected, fragment: sourceFragment }, { timeout: 5_000 })
+}
+
+async function waitForWorldSpeech(canvas, playerId, sequence) {
+  return waitForWorldSpeechAlpha(canvas, playerId, sequence, alpha => alpha === 1)
+}
+
+async function waitForWorldSpeechAlpha(canvas, playerId, sequence, acceptAlpha) {
+  const deadline = Date.now() + 7_000
+  while (Date.now() < deadline) {
+    const receipt = await worldSpeechReceipt(canvas, playerId, sequence)
+    if (receipt && acceptAlpha(receipt.alpha)) return receipt
+    await new Promise(resolve => setTimeout(resolve, 50))
+  }
+  throw new Error(`timed out waiting for world speech ${playerId}:${sequence}`)
+}
+
+async function waitForWorldSpeechRemoval(canvas, playerId, sequence) {
+  const deadline = Date.now() + 7_000
+  while (Date.now() < deadline) {
+    if (!await worldSpeechReceipt(canvas, playerId, sequence)) return
+    await new Promise(resolve => setTimeout(resolve, 50))
+  }
+  throw new Error(`world speech ${playerId}:${sequence} did not retire`)
+}
+
+async function worldSpeechReceipt(canvas, playerId, sequence) {
+  return canvas.evaluate((node, target) => {
+    const playerIds = (node.dataset.worldSpeechPlayerIds ?? '').split(',').filter(Boolean)
+    const sequences = (node.dataset.worldSpeechSequences ?? '').split(',').map(Number)
+    const alphas = (node.dataset.worldSpeechAlphas ?? '').split(',').filter(Boolean).map(Number)
+    const index = playerIds.findIndex((id, candidate) => (
+      id === target.playerId && sequences[candidate] === target.sequence
+    ))
+    return index < 0 ? null : {
+      alpha: alphas[index],
+      playerId: playerIds[index],
+      sequence: sequences[index],
+    }
+  }, { playerId, sequence })
 }
 
 async function supervisorHealth() {

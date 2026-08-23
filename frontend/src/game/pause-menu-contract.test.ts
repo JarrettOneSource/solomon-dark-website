@@ -248,6 +248,18 @@ test('Hub Pause Menu and NPC dialogue are local modals over a live world', () =>
   assert.doesNotMatch(hubInventoryComponent, /requestGameplayPause|client-gameplay-pause/)
 })
 
+test('Pause Menu and both native skill pickers mute only the non-music audio lane', () => {
+  assert.match(
+    mainMenuComponent,
+    /const nonMusicMuted = darkCloudMenuOpen\s*\|\| displayedGameplayPause\?\.source === 'pause-menu'\s*\|\| displayedGameplayPause\?\.source === 'skill-selector'\s*\|\| hudSkillSelector !== null\s*\|\| levelUpModalActive/,
+  )
+  assert.match(
+    mainMenuComponent,
+    /useLayoutEffect\(\(\) => \{\s*audio\.setSoundMuted\(nonMusicMuted\)\s*\}, \[audio, nonMusicMuted\]\)/,
+  )
+  assert.match(mainMenuComponent, /data-game-sounds-muted=\{nonMusicMuted\}/)
+})
+
 const near = (actual: number, expected: number, label: string) => {
   assert.ok(Math.abs(actual - expected) < 1e-9, `${label}: ${actual} !== ${expected}`)
 }
