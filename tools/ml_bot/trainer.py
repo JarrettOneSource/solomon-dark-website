@@ -453,6 +453,12 @@ def evaluate_policy(
                 progress({
                     "checkpoint": str(checkpoint_path),
                     "evaluatedEpisodes": len(records),
+                    "completeEpisodes": sum(
+                        record.get("aborted") is False for record in records
+                    ),
+                    "incompleteEpisodes": sum(
+                        record.get("aborted") is True for record in records
+                    ),
                     "requestedEpisodes": len(seeds),
                 })
     return evaluation_report(
