@@ -77,4 +77,5 @@ test('semantic expert emits no skill-choice label', () => {
   })
   const action = selectMlBotPolicyExpertAction(state, 'agent', frame)
   assert.deepEqual(Object.keys(action).sort(), ['ability', 'aim', 'movement', 'target'])
+  assert.equal(action.ability, 0)
 })

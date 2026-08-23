@@ -51,6 +51,33 @@ test('Boneyard headless transition aligns the current observation, masks, action
   assert.deepEqual(environment.lastTransition(), transition)
 })
 
+test('Boneyard headless episode starts the real wave director with combat enabled', () => {
+  const environment = new BoneyardHeadlessEnvironment(RESET)
+  assert.equal(environment.state().world.kind, 'boneyard')
+  if (environment.state().world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.equal(environment.state().world.encounter?.runEventId, 1)
+  let sawEnemy = false
+  for (let decision = 0; decision < 500; decision += 1) {
+    const action = environment.expertAction()
+    const actions = Float32Array.from([
+      action.movement,
+      action.target,
+      action.ability,
+      action.aim,
+    ])
+    environment.step(actions, 10)
+    if (
+      environment.state().world.kind === 'boneyard'
+      && environment.state().world.enemies.actors.some(({ lifeState }) => lifeState === 'alive')
+    ) {
+      sawEnemy = true
+      break
+    }
+  }
+  assert.equal(sawEnemy, true)
+  assert.ok(environment.expertAction().target > 0)
+})
+
 test('Boneyard headless reset rejects seeds outside uint32', () => {
   assert.throws(() => new BoneyardHeadlessEnvironment({ seed: -1 }), /uint32/)
   assert.throws(() => new BoneyardHeadlessEnvironment({ seed: 0x1_0000_0000 }), /uint32/)

@@ -82,10 +82,9 @@ function selectAbility(
     const golemSlot = frame.player.secondarySlots.findIndex(({ skillId }) => skillId === 45)
     if (golemSlot >= 0 && mask[golemSlot + 2] === 1) return golemSlot + 2
   }
-  if (target !== null) {
-    for (let action = 2; action <= 9; action += 1) {
-      if (mask[action] === 1) return action
-    }
+  if (target === null) return 0
+  for (let action = 2; action <= 9; action += 1) {
+    if (mask[action] === 1) return action
   }
   if (mask[1] === 1) return 1
   return 0

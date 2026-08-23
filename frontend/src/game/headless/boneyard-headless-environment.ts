@@ -349,15 +349,24 @@ export class BoneyardHeadlessEnvironment {
       simulation = addPlayerCharacter(simulation, `ally-${index + 1}`, ally)
     }
     simulation = enterBoneyardWorld(simulation, deterministicBoneyard(options.seed))
-    if (simulation.world.kind !== 'boneyard' || simulation.world.waves === null) {
-      throw new Error('headless Boneyard did not materialize its wave director')
+    if (
+      simulation.world.kind !== 'boneyard'
+      || simulation.world.waves === null
+      || simulation.world.encounter === null
+    ) {
+      throw new Error('headless Boneyard did not materialize its retail encounter')
     }
     return {
       ...simulation,
       world: {
         ...simulation.world,
         arenaTransition: null,
-        encounter: null,
+        encounter: {
+          ...simulation.world.encounter,
+          phase: 'gone',
+          runEventId: Math.max(1, simulation.world.encounter.runEventId),
+          targetPlayerId: null,
+        },
         waves: startBoneyardWaveDirector(simulation.world.waves),
       },
     }
