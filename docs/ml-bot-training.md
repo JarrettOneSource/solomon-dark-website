@@ -60,6 +60,11 @@ ML_BOT_PYTHON=/path/to/ml-bot-venv/bin/python \
 The bootstrap collects real authoritative web states and labels them with the
 TypeScript semantic expert. It caps uninteresting opening rows and fails if
 the dataset does not cover multiple movement, target, and ability actions.
+Headless resets skip the presentation-only entrance sequence by placing every
+participant at a collision-safe point around Solomon's encounter anchor inside
+the production combat bounds, retaining the production arena transition, and
+then starting the production wave director. The outside entrance spawn is
+never part of a training or evaluation episode.
 
 ```sh
 python tools/train_bot_policy.py bootstrap \
