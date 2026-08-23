@@ -53,7 +53,7 @@ try {
   const summon = await executeLua(
     socket,
     1,
-    'sd.rng.set_seed(1592594436); return sd.bots.summon()',
+    'sd.rng.set_seed(518852612); return sd.bots.summon()',
   )
   assert.equal(summon.ok, true, summon.error ?? 'bot summon failed')
   await waitFor(() => host.botCount() === 1)
