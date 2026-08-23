@@ -444,23 +444,35 @@ def evaluate_policy(
                 "evaluatedEpisodes": len(records),
                 "requestedEpisodes": len(seeds),
             })
-    return evaluation_report(checkpoint_path, seeds, records)
+    return evaluation_report(
+        checkpoint_path,
+        seeds,
+        records,
+        action_repeat=action_repeat,
+        maximum_steps=maximum_steps,
+    )
 
 
 def evaluation_report(
     checkpoint_path: Path,
     seeds: Sequence[int],
     records: Sequence[Mapping[str, Any]],
+    *,
+    action_repeat: int,
+    maximum_steps: int,
 ) -> Mapping[str, Any]:
     completed = [record for record in records if record.get("aborted") is False]
     incomplete = [record for record in records if record.get("aborted") is True]
     returns = [float(record["return"]) for record in completed]
     waves = [float(record["waves_reached"]) for record in completed]
     return {
+        "evaluationVersion": 5,
         "checkpoint": str(checkpoint_path),
         "checkpointSha256": file_sha256(checkpoint_path),
         "episodes": records,
         "requestedEpisodes": len(seeds),
+        "actionRepeatTicks": action_repeat,
+        "maximumSteps": maximum_steps,
         "completeEpisodes": len(completed),
         "incompleteEpisodes": len(incomplete),
         "validForPromotion": len(completed) == len(seeds) and len(completed) >= 30,
@@ -505,7 +517,13 @@ def extend_evaluation(
         replacements.get(int(episode["seed"]), episode) for episode in existing
     ]
     seeds = [int(episode["seed"]) for episode in existing]
-    return evaluation_report(checkpoint_path, seeds, merged)
+    return evaluation_report(
+        checkpoint_path,
+        seeds,
+        merged,
+        action_repeat=action_repeat,
+        maximum_steps=maximum_steps,
+    )
 
 
 def expert_tensors(
