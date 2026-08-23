@@ -255,6 +255,14 @@ def run_promote(args: argparse.Namespace) -> Any:
     }
     if any(report.get("validForPromotion") is not True for report in reports.values()):
         raise ValueError("all four evaluation reports must be promotion-valid")
+    if reports["incumbentTrain"].get("checkpoint") != reports["incumbentHoldout"].get(
+        "checkpoint"
+    ):
+        raise ValueError("incumbent train and holdout reports use different checkpoints")
+    if reports["candidateTrain"].get("checkpoint") != reports["candidateHoldout"].get(
+        "checkpoint"
+    ):
+        raise ValueError("candidate train and holdout reports use different checkpoints")
     incumbent_train, candidate_train = paired_wave_vectors(
         reports["incumbentTrain"], reports["candidateTrain"]
     )
@@ -267,6 +275,16 @@ def run_promote(args: argparse.Namespace) -> Any:
         incumbent_holdout,
         candidate_holdout,
     )
+    incumbent_checkpoint = reports["incumbentTrain"]["checkpoint"]
+    candidate_checkpoint = reports["candidateTrain"]["checkpoint"]
+    result = {
+        **result,
+        "incumbentCheckpoint": incumbent_checkpoint,
+        "candidateCheckpoint": candidate_checkpoint,
+        "selectedCheckpoint": (
+            candidate_checkpoint if result["promoted"] else incumbent_checkpoint
+        ),
+    }
     atomic_write(
         Path(args.output).resolve(),
         (json.dumps(result, indent=2, allow_nan=False, sort_keys=True) + "\n").encode(),
