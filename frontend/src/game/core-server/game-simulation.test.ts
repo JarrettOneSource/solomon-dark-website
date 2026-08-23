@@ -18,6 +18,8 @@ import { PRIMARY_CAST_EMISSION_TICK } from '../core-kernels/primary-spells.ts'
 import {
   createEquipmentInventoryItem,
   DOWSING_EQUIPMENT_RECIPES,
+  findInventoryItem,
+  type HubInventoryItem,
 } from '../core-kernels/hub-economy.ts'
 import {
   NATIVE_PLAYER_LIGHT_OVERLAY_DECAY,
@@ -779,6 +781,124 @@ test('inventory double activation consumes one potion and applies its participan
       : null,
     0,
   )
+})
+
+test('simulation owns recursive sack moves, Fabric Dye commits, and nested potion effects', () => {
+  const first = {
+    discipline: 'arcane',
+    displayName: 'First',
+    element: 'ether',
+  } as const
+  const second = {
+    discipline: 'mind',
+    displayName: 'Second',
+    element: 'water',
+  } as const
+  let state = createGameSimulation({ first, second })
+  const economy = getPlayerEconomy(state, 'first')
+  const secondEconomy = getPlayerEconomy(state, 'second')
+  const robeRecipe = DOWSING_EQUIPMENT_RECIPES.find(({ type }) => type === 'robe')!
+  const target = createEquipmentInventoryItem(robeRecipe, economy.nextItemId)
+  const dye: HubInventoryItem = {
+    equipmentType: null,
+    iconRecords: [42],
+    id: economy.nextItemId + 1,
+    kind: 'dye',
+    name: 'Fabric Dye',
+    nativeSubtype: 0,
+    nativeTypeId: 7012,
+    quantity: 1,
+    rarity: null,
+    recipeIndex: null,
+  }
+  const health = {
+    ...economy.backpack.find(({ kind }) => kind === 'health-potion')!,
+    id: economy.nextItemId + 2,
+  }
+  const sourceSack: HubInventoryItem = {
+    contents: [dye, health, target],
+    equipmentType: null,
+    iconRecords: [70],
+    id: economy.nextItemId + 3,
+    kind: 'sack',
+    name: 'Source Sack',
+    nativeSubtype: 0,
+    nativeTypeId: 7008,
+    quantity: 1,
+    rarity: null,
+    recipeIndex: null,
+  }
+  const destinationSack: HubInventoryItem = {
+    ...sourceSack,
+    contents: [],
+    id: economy.nextItemId + 4,
+    name: 'Destination Sack',
+  }
+  const playerIndex = state.playerEntities.identities.findIndex(({ playerId }) => playerId === 'first')
+  const progressions = [...state.playerEntities.progressions]
+  progressions[playerIndex] = { ...progressions[playerIndex]!, currentHealth: 1 }
+  state = {
+    ...state,
+    playerEntities: replacePlayerEconomy({
+      ...state.playerEntities,
+      progressions: Object.freeze(progressions),
+    }, 'first', {
+      ...economy,
+      backpack: [sourceSack, destinationSack],
+      nextItemId: economy.nextItemId + 5,
+    }),
+  }
+
+  const moved = applyGameSimulationHubAction(state, 'first', {
+    type: 'move-inventory-item',
+    destinationSackId: destinationSack.id,
+    itemId: target.id,
+  })
+  assert.equal(moved.accepted, true)
+  assert.deepEqual(getPlayerEconomy(moved.state, 'first').actionFeedback, {
+    accepted: true,
+    action: 'move-inventory-item',
+    dowsingPitch: null,
+    reason: null,
+    sequence: 1,
+    transferDirection: null,
+    transferGesture: null,
+    unforgeOutcome: null,
+  })
+  assert.equal(
+    findInventoryItem(getPlayerEconomy(moved.state, 'first').backpack, destinationSack.id)
+      ?.contents?.some(({ id }) => id === target.id),
+    true,
+  )
+
+  const dyed = applyGameSimulationHubAction(moved.state, 'first', {
+    type: 'dye',
+    dyeItemId: dye.id,
+    layer: 'cloth',
+    swatchRows: [1, 9],
+    targetItemId: target.id,
+  })
+  assert.equal(dyed.accepted, true)
+  const dyedEconomy = getPlayerEconomy(dyed.state, 'first')
+  assert.equal(dyedEconomy.actionFeedback?.action, 'dye')
+  assert.equal(dyedEconomy.actionFeedback?.sequence, 2)
+  assert.equal(findInventoryItem(dyedEconomy.backpack, dye.id), null)
+  assert.deepEqual(findInventoryItem(dyedEconomy.backpack, target.id)?.iconTints, [
+    0x6d363e,
+    robeRecipe.iconTints[1],
+  ])
+
+  const consumed = applyGameSimulationHubAction(dyed.state, 'first', {
+    type: 'consume',
+    itemId: health.id,
+  })
+  assert.equal(consumed.accepted, true)
+  assert.equal(findInventoryItem(getPlayerEconomy(consumed.state, 'first').backpack, health.id), null)
+  assert.equal(
+    getPlayerProgression(consumed.state, 'first').currentHealth,
+    getPlayerProgression(consumed.state, 'first').maximumHealth,
+  )
+  assert.strictEqual(getPlayerEconomy(consumed.state, 'second'), secondEconomy)
 })
 
 test('game simulation owns fixed-step accumulation independently of its world', () => {

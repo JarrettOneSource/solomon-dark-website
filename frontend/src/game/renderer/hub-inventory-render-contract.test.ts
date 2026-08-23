@@ -21,6 +21,7 @@ import {
   HUB_CHAT_PANEL,
   HUB_CHAT_INLINE_EMPHASIS,
   HUB_DOWSING_FIELD,
+  HUB_DYE_CLOTHING,
   HUB_DOWSING_MSGBOX,
   HUB_DOWSING_PREROLL,
   HUB_DOWSING_FLASH,
@@ -47,6 +48,10 @@ import {
   HUB_UNFORGE_TARGET,
   hubDowsingSlotPosition,
   hubDowsingFieldTint,
+  hubDyeItemLayerRects,
+  hubDyeModalOpacity,
+  hubDyeSelectedPulse,
+  hubDyeSwatchRect,
   hubChatTextRuns,
   hubInventoryPrimarySpellLines,
   hubInventoryItemInfoText,
@@ -112,6 +117,56 @@ test('stock inventory owns the fixed 1600 by 900 stage and all 88 authored cells
   ])
   assert.deepEqual(hubInventoryEquipmentSlotRects('robe'), [[1354, 223, 72, 108]])
   assert.deepEqual(hubInventoryEquipmentSlotRects('robe', true), [[1301, 223, 72, 108]])
+})
+
+test('DyeClothing retains stock relative geometry and discrete update timing', () => {
+  const rendererSource = readFileSync(new URL('./hub-inventory-renderer.ts', import.meta.url), 'utf8')
+  assert.deepEqual(HUB_DYE_CLOTHING, {
+    bankSize: 9,
+    cancelRect: [690, 390, 220, 44],
+    closeDecrementPerTick: 0.1,
+    emptyTubAlpha: 0.2,
+    instructionTextBaselineY: 151,
+    itemLayerSplitOffsetY: 40,
+    nativeTickMs: 10,
+    openIncrementPerTick: 0.01,
+    panelRect: [480, 80, 640, 360],
+    selectedPulseDecrementPerTick: 0.05,
+    selectedPulseTicks: 20,
+    swatchBankOrigins: [[560, 185], [760, 185]],
+    swatchColumns: 3,
+    swatchCount: 18,
+    swatchPitchX: 40,
+    swatchPitchY: 50,
+    swatchRows: 3,
+    swatchSize: 32,
+    titleTextBaselineY: 121,
+    tubRect: [960, 198, 96, 96],
+  })
+  assert.deepEqual(hubDyeSwatchRect(0), [560, 185, 32, 32])
+  assert.deepEqual(hubDyeSwatchRect(2), [640, 185, 32, 32])
+  assert.deepEqual(hubDyeSwatchRect(3), [560, 235, 32, 32])
+  assert.deepEqual(hubDyeSwatchRect(8), [640, 285, 32, 32])
+  assert.deepEqual(hubDyeSwatchRect(9), [760, 185, 32, 32])
+  assert.deepEqual(hubDyeSwatchRect(17), [840, 285, 32, 32])
+  assert.throws(() => hubDyeSwatchRect(18), /\[0, 17\]/)
+  assert.deepEqual(hubDyeItemLayerRects(0), {
+    cloth: [24, 496, 72, 40],
+    trim: [24, 536, 72, 32],
+  })
+  assert.equal(hubDyeModalOpacity(100, null, 100), 0)
+  assert.equal(hubDyeModalOpacity(100, null, 110), 0.01)
+  assert.equal(hubDyeModalOpacity(100, null, 1_100), 1)
+  assert.equal(hubDyeModalOpacity(100, 600, 600), 0.5)
+  assert.equal(hubDyeModalOpacity(100, 600, 620), 0.3)
+  assert.equal(hubDyeModalOpacity(100, 600, 650), 0)
+  assert.equal(hubDyeSelectedPulse(null, 100), 0)
+  assert.equal(hubDyeSelectedPulse(100, 100), 1)
+  assert.equal(hubDyeSelectedPulse(100, 200), 0.5)
+  assert.equal(hubDyeSelectedPulse(100, 300), 0)
+  assert.match(rendererSource, /dyeSelectedPulse\.alpha = selectedPulse/)
+  assert.match(rendererSource, /dyeSelectedPulse\.visible = selectedPulse > 0/)
+  assert.doesNotMatch(rendererSource, /0\.35 \+ selectedPulse/)
 })
 
 test('stock inventory owns native ItemInfo, drag, double activation, and protected clothing copy', () => {
@@ -563,6 +618,7 @@ test('the port exports the complete stock UI membership', () => {
     'inventory-item-info',
     'contextual-hover-box',
     'inventory-dragger',
+    'inventory-dye-clothing',
     'inventory-required-clothing-message',
     'inventory-unforge-confirmation',
     'inventory-unforge-result',

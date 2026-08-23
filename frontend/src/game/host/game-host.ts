@@ -3923,7 +3923,10 @@ function pauseAllowsInventoryAction(
     && pause.source === 'inventory'
     && (
       action.type === 'consume'
+      || action.type === 'dye'
       || action.type === 'equip'
+      || action.type === 'move-inventory-item'
+      || action.type === 'read-skill-book'
       || action.type === 'unequip'
       || action.type === 'unforge'
     )

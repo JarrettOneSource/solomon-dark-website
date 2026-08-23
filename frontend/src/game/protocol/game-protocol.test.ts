@@ -28,6 +28,11 @@ import {
 } from '../core-kernels/native-secondary-abilities.ts'
 import { createNativeRng } from '../core-kernels/native-rng.ts'
 import { createNativeEnemyPathState } from '../core-kernels/native-enemy-pathfinding.ts'
+import {
+  DOWSING_EQUIPMENT_RECIPES,
+  HUB_SACK_REPLICATION_DEPTH_LIMIT,
+  type HubInventoryItem,
+} from '../core-kernels/hub-economy.ts'
 import type { BoneyardEnemySemanticEvent } from '../core-server/boneyard-enemy-store.ts'
 import { spawnBoneyardLootSpecs } from '../core-server/boneyard-loot-store.ts'
 import {
@@ -358,15 +363,18 @@ test('protocol v42 bounds Lua requests and structured results by wire bytes and 
   }
 })
 
-test('protocol v48 accepts every authoritative inventory action and rejects malformed variants', () => {
+test('protocol v62 accepts every authoritative inventory action and rejects malformed variants', () => {
   const actions = [
     { type: 'buy-dowsing', offerId: 1 },
     { type: 'buy-fomentius', itemId: 2 },
     { type: 'buy-hagatha', selector: -1 },
     { type: 'close-dowsing' },
     { type: 'consume', itemId: 5 },
+    { type: 'dye', dyeItemId: 7, layer: 'cloth', swatchRows: [1, 9, 5], targetItemId: 8 },
     { type: 'dowse' },
     { type: 'equip', itemId: 3, slot: 'ring-2' },
+    { type: 'move-inventory-item', destinationSackId: 10, itemId: 9 },
+    { type: 'move-inventory-item', destinationSackId: null, itemId: 9 },
     { type: 'transfer', direction: 'to-storage', gesture: 'drag', itemId: 4 },
     { type: 'transfer', direction: 'to-backpack', gesture: 'double-activation', itemId: 4 },
     { type: 'unforge', itemId: 6 },
@@ -381,7 +389,11 @@ test('protocol v48 accepts every authoritative inventory action and rejects malf
 
   for (const action of [
     { type: 'buy-hagatha', selector: 8 },
+    { type: 'dye', dyeItemId: 1, layer: 'lining', swatchRows: [1], targetItemId: 2 },
+    { type: 'dye', dyeItemId: 1, layer: 'trim', swatchRows: [], targetItemId: 2 },
+    { type: 'dye', dyeItemId: 1, layer: 'trim', swatchRows: [18], targetItemId: 2 },
     { type: 'equip', itemId: 1, slot: 'boots' },
+    { type: 'move-inventory-item', destinationSackId: 0, itemId: 1 },
     { type: 'transfer', direction: 'sell', gesture: 'drag', itemId: 1 },
     { type: 'transfer', direction: 'to-storage', gesture: 'double-activation', itemId: 1 },
     { type: 'dowse', offerId: 1 },
@@ -472,6 +484,121 @@ test('server welcome round-trips content, kernel, character, and world ownership
     },
   } as const
   assert.deepEqual(decodeServerGameMessage(encodeGameMessage(feedbackWelcome)), feedbackWelcome)
+  const robeRecipe = DOWSING_EQUIPMENT_RECIPES.find(({ type }) => type === 'robe')!
+  const dyedRobe = {
+    equipmentType: 'robe' as const,
+    iconRecords: robeRecipe.iconRecords,
+    iconTints: [0x6d363e, robeRecipe.iconTints[1]] as const,
+    id: 900_002,
+    kind: 'equipment' as const,
+    name: robeRecipe.name,
+    nativeSubtype: null,
+    nativeTypeId: robeRecipe.nativeTypeId,
+    quantity: 1,
+    rarity: robeRecipe.rarity,
+    recipeIndex: robeRecipe.sourceIndex,
+  }
+  const dyeFeedbackWelcome = {
+    ...welcome,
+    snapshot: {
+      ...welcome.snapshot,
+      players: {
+        ...welcome.snapshot.players,
+        'player-1': {
+          ...player,
+          economy: {
+            ...player.economy,
+            actionFeedback: {
+              accepted: true,
+              action: 'dye',
+              dowsingPitch: null,
+              reason: null,
+              sequence: 2,
+              transferDirection: null,
+              transferGesture: null,
+              unforgeOutcome: null,
+            },
+            backpack: [...player.economy.backpack, {
+              contents: [dyedRobe],
+              equipmentType: null,
+              iconRecords: [70],
+              id: 900_001,
+              kind: 'sack',
+              name: 'Sack',
+              nativeSubtype: 0,
+              nativeTypeId: 7008,
+              quantity: 1,
+              rarity: null,
+              recipeIndex: null,
+            }],
+          },
+        },
+      },
+    },
+  } as const
+  assert.deepEqual(
+    decodeServerGameMessage(encodeGameMessage(dyeFeedbackWelcome)),
+    dyeFeedbackWelcome,
+  )
+  const sackChain = (deepestDepth: number): HubInventoryItem => {
+    let item: HubInventoryItem | null = null
+    for (let depth = deepestDepth; depth >= 0; depth -= 1) {
+      item = {
+        contents: item === null ? [] : [item],
+        equipmentType: null,
+        iconRecords: [70],
+        id: 910_000 + depth,
+        kind: 'sack',
+        name: `Sack ${depth}`,
+        nativeSubtype: 0,
+        nativeTypeId: 7008,
+        quantity: 1,
+        rarity: null,
+        recipeIndex: null,
+      }
+    }
+    return item!
+  }
+  const nestedWelcome = (deepestDepth: number) => ({
+    ...welcome,
+    snapshot: {
+      ...welcome.snapshot,
+      players: {
+        ...welcome.snapshot.players,
+        'player-1': {
+          ...player,
+          economy: { ...player.economy, backpack: [sackChain(deepestDepth)] },
+        },
+      },
+    },
+  })
+  const maximumDepthWelcome = nestedWelcome(HUB_SACK_REPLICATION_DEPTH_LIMIT)
+  assert.deepEqual(
+    decodeServerGameMessage(encodeGameMessage(maximumDepthWelcome)),
+    maximumDepthWelcome,
+  )
+  assert.throws(() => decodeServerGameMessage(encodeGameMessage(
+    nestedWelcome(HUB_SACK_REPLICATION_DEPTH_LIMIT + 1),
+  )), /bounded native Sack depth/)
+  assert.throws(() => decodeServerGameMessage(encodeGameMessage({
+    ...dyeFeedbackWelcome,
+    snapshot: {
+      ...dyeFeedbackWelcome.snapshot,
+      players: {
+        ...dyeFeedbackWelcome.snapshot.players,
+        'player-1': {
+          ...dyeFeedbackWelcome.snapshot.players['player-1'],
+          economy: {
+            ...dyeFeedbackWelcome.snapshot.players['player-1'].economy,
+            backpack: [{
+              ...dyeFeedbackWelcome.snapshot.players['player-1'].economy.backpack.at(-1)!,
+              contents: [{ ...dyedRobe, iconTints: [null, robeRecipe.iconTints[1]] }],
+            }],
+          },
+        },
+      },
+    },
+  })), GameProtocolError)
   const unforgeWelcome = {
     ...welcome,
     snapshot: {
@@ -1063,8 +1190,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v60 carries developer access, held one-shot pose, Fire lifecycle, Game Over/loadout, status composition, saved leave, deployment restart, Ether replacement, party access, movement, social, mod, and gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 61)
+test('protocol v62 carries developer access, held one-shot pose, Fire lifecycle, Game Over/loadout, status composition, saved leave, deployment restart, Ether replacement, party access, movement, social, mod, and gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 62)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),

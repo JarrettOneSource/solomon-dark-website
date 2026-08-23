@@ -1,6 +1,10 @@
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import type { PlayerCharacterConfig } from '../core-kernels/player-character.ts'
-import { createNativeUnforgeBonuses } from '../core-kernels/hub-economy.ts'
+import {
+  createNativeUnforgeBonuses,
+  hubEconomyInventoryIsValid,
+  type HubEconomyState,
+} from '../core-kernels/hub-economy.ts'
 import type { GameContentIdentity, LuaConsoleValue } from '../protocol/game-protocol.ts'
 import {
   removePlayerCharacter,
@@ -106,6 +110,9 @@ export function createGameSaveDocument(
   )
   if (ownerIndex < 0 || ownerState.playerEntities.identities.length !== 1) {
     throw new Error('game save owner is absent from authoritative state')
+  }
+  if (!hubEconomyInventoryIsValid(ownerState.playerEntities.economies[ownerIndex]!)) {
+    throw new Error('game save owner inventory is invalid')
   }
   if (ownerState.run.phase === 'game-over' || ownerState.run.phase === 'loadout') {
     throw new Error(`game save cannot checkpoint ${ownerState.run.phase}`)
@@ -273,11 +280,15 @@ function validatePlayerStore(value: unknown, playerId: string): GameSimulationSt
       && !('unforgeOutcome' in economy.actionFeedback)
       ? { ...economy.actionFeedback, unforgeOutcome: null }
       : economy.actionFeedback
-    return {
+    const restored = {
       ...economy,
       actionFeedback: feedback,
       unforgeBonuses: economy.unforgeBonuses ?? createNativeUnforgeBonuses(),
+    } as unknown as HubEconomyState
+    if (!hubEconomyInventoryIsValid(restored)) {
+      throw new Error(`game save player economy ${index} inventory is invalid`)
     }
+    return restored
   })
   return { ...store, economies } as unknown as GameSimulationState['playerEntities']
 }

@@ -1,5 +1,6 @@
 import {
   economyHasWizardKey,
+  projectInventoryItems,
   type HubEquipmentState,
   type HubInventoryItem,
 } from '../../core-kernels/hub-economy.ts'
@@ -58,7 +59,8 @@ export function observeMlBotPolicyInventory(
   const economy = getPlayerEconomy(state, playerId)
   const progression = getPlayerProgression(state, playerId)
   const skillBook = getPlayerSkillBook(state, playerId)
-  const potionItems = economy.backpack.filter((item) => (
+  const inventoryItems = projectInventoryItems(economy.backpack).map(({ item }) => item)
+  const potionItems = inventoryItems.filter((item) => (
     item.nativeTypeId === 7001 && POTION_KINDS.has(item.kind)
   )).sort((left, right) => (
     right.quantity - left.quantity
@@ -119,8 +121,8 @@ export function observeMlBotPolicyInventory(
 
   const blockP = observeEquipment(economy.equipment, skillBook.permanentRanks)
   const blockQ = new Float32Array(9)
-  const total = economy.backpack.reduce((sum, item) => sum + Math.max(0, item.quantity), 0)
-  const count = (predicate: (item: HubInventoryItem) => boolean) => economy.backpack.reduce(
+  const total = inventoryItems.reduce((sum, item) => sum + Math.max(0, item.quantity), 0)
+  const count = (predicate: (item: HubInventoryItem) => boolean) => inventoryItems.reduce(
     (sum, item) => sum + (predicate(item) ? Math.max(0, item.quantity) : 0),
     0,
   )

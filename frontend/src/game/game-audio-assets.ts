@@ -15,6 +15,7 @@ import electricLoop from '../assets/game/audio/sfx/electric-loop.wav'
 import cometWhistle from '../assets/game/audio/sfx/comet-whistle.wav'
 import dampen from '../assets/game/audio/sfx/dampen.wav'
 import distortReality from '../assets/game/audio/sfx/distort-reality.wav'
+import dye from '../assets/game/audio/sfx/dye.wav'
 import earthquakeLoop from '../assets/game/audio/sfx/earthquake-loop.wav'
 import explodeSteam from '../assets/game/audio/sfx/explode-steam.wav'
 import chooseElement from '../assets/game/audio/sfx/choose-element.wav'
@@ -292,6 +293,7 @@ export const GAME_AUDIO_SOURCES = {
     'choose-element': chooseElement,
     'death-guitar': deathGuitar,
     dampen,
+    dye,
     'golem-die': golemDie,
     'golem-provoke': golemProvoke,
     'leviathan-roar': leviathanRoar,

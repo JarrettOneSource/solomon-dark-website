@@ -5,8 +5,14 @@ import { createIdlePlayerCharacterInput } from '../core-kernels/player-character
 import {
   createGameSimulation,
   enterBoneyardWorld,
+  getPlayerEconomy,
   stepGameSimulationTick,
 } from '../core-server/game-simulation.ts'
+import { replacePlayerEconomy } from '../core-server/player-entity-store.ts'
+import {
+  HUB_SACK_REPLICATION_DEPTH_LIMIT,
+  type HubInventoryItem,
+} from '../core-kernels/hub-economy.ts'
 import { HubStudentPopulationState } from '../core-server/hub-students.ts'
 import { HubWorldRuntime } from '../core-server/hub-world.ts'
 import { createBoneyardCatalog, materializeBoneyard } from '../host/boneyard-catalog.ts'
@@ -93,6 +99,70 @@ test('host save documents round-trip the complete owner state and revive Hub run
   assert.ok(restored.state.world.runtime instanceof HubWorldRuntime)
   assert.ok(restored.state.world.studentPopulation instanceof HubStudentPopulationState)
   assert.deepEqual(Object.keys(restored.state.world.participants), ['owner'])
+})
+
+test('save documents admit the complete Sack wire depth and reject one level beyond it', () => {
+  const sackChain = (deepestDepth: number): HubInventoryItem => {
+    let item: HubInventoryItem | null = null
+    for (let depth = deepestDepth; depth >= 0; depth -= 1) {
+      item = {
+        contents: item === null ? [] : [item],
+        equipmentType: null,
+        iconRecords: [70],
+        id: 920_000 + depth,
+        kind: 'sack',
+        name: `Sack ${depth}`,
+        nativeSubtype: 0,
+        nativeTypeId: 7008,
+        quantity: 1,
+        rarity: null,
+        recipeIndex: null,
+      }
+    }
+    return item!
+  }
+  const withDepth = (deepestDepth: number) => {
+    const initial = createGameSimulation({ owner: OWNER })
+    const economy = getPlayerEconomy(initial, 'owner')
+    return {
+      ...initial,
+      playerEntities: replacePlayerEconomy(initial.playerEntities, 'owner', {
+        ...economy,
+        backpack: [sackChain(deepestDepth)],
+        nextItemId: 930_000,
+      }),
+    }
+  }
+  const document = createGameSaveDocument({
+    integrity: 'local-only',
+    loadedBoneyard: null,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state: withDepth(HUB_SACK_REPLICATION_DEPTH_LIMIT),
+  })
+
+  const restored = restoreGameSaveDocument(document)
+  assert.equal(
+    restored.state.playerEntities.economies[0]?.backpack[0]?.id,
+    920_000,
+  )
+  assert.throws(() => createGameSaveDocument({
+    integrity: 'local-only',
+    loadedBoneyard: null,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state: withDepth(HUB_SACK_REPLICATION_DEPTH_LIMIT + 1),
+  }), /inventory is invalid/)
+  const malformed = JSON.parse(document)
+  malformed.simulation.playerEntities.economies[0].backpack = [
+    sackChain(HUB_SACK_REPLICATION_DEPTH_LIMIT + 1),
+  ]
+  assert.throws(
+    () => restoreGameSaveDocument(JSON.stringify(malformed)),
+    /inventory is invalid/,
+  )
 })
 
 test('schema-4 saves normalize the pre-unforge zero ledger and feedback shape', () => {

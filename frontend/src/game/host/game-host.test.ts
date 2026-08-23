@@ -625,6 +625,34 @@ test('Hub pause is first-request owned, survives late join, and releases on owne
   await inventoryApplied
   assert.equal(host.state().tick, heldTick)
 
+  for (const action of [
+    { type: 'move-inventory-item', destinationSackId: null, itemId: 999_991 },
+    { type: 'dye', dyeItemId: 999_992, layer: 'cloth', swatchRows: [0], targetItemId: 999_993 },
+  ] as const) {
+    const routed = nextMessage(first.socket, (message) => (
+      message.type === 'server-snapshot'
+      && message.snapshot.players[first.welcome.playerId].economy.actionFeedback?.action
+        === action.type
+    ))
+    first.socket.send(encodeGameMessage({ type: 'client-hub-action', action }))
+    const routedSnapshot = await routed
+    assert.equal(routedSnapshot.type, 'server-snapshot')
+    assert.deepEqual(
+      routedSnapshot.snapshot.players[first.welcome.playerId].economy.actionFeedback,
+      {
+        accepted: false,
+        action: action.type,
+        dowsingPitch: null,
+        reason: 'item-not-found',
+        sequence: getPlayerEconomy(host.state(), first.welcome.playerId).actionFeedback?.sequence,
+        transferDirection: null,
+        transferGesture: null,
+        unforgeOutcome: null,
+      },
+    )
+    assert.equal(host.state().tick, heldTick)
+  }
+
   const staffId = getPlayerEconomy(host.state(), first.welcome.playerId).equipment.weapon?.id
   assert.ok(staffId)
   const staffUnequipped = nextMessage(first.socket, (message) => (

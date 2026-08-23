@@ -411,7 +411,16 @@ function requiredDeathAppearance(
   if (item.equipmentType !== expectedType || appearance === undefined) {
     throw new Error(`Unsupported native ${expectedType} death appearance recipe ${item.recipeIndex}`)
   }
-  return appearance
+  const tints = item.iconTints
+  if (tints === undefined) return appearance
+  if (tints[0] === null || tints[1] === null) {
+    throw new Error(`Unsupported native ${expectedType} dye appearance recipe ${item.recipeIndex}`)
+  }
+  return {
+    ...appearance,
+    primaryTint: tints[0],
+    secondaryTint: tints[1],
+  }
 }
 
 function requiredWeaponDeathAppearance(item: HubInventoryItem): {

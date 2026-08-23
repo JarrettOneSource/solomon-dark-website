@@ -184,6 +184,7 @@ test('keeps native registry offsets on the browser cue manifest', () => {
   assert.equal(NATIVE_LOOP_MANIFEST['steam-loop'].registryOffset, 0x1c4c)
   assert.equal(NATIVE_STREAM_MANIFEST['catch-it'].registryOffset, 0x1344)
   assert.equal(NATIVE_STREAM_MANIFEST['choose-element'].registryOffset, 0x134c)
+  assert.equal(NATIVE_STREAM_MANIFEST.dye.registryOffset, 0x1374)
   assert.equal(NATIVE_STREAM_MANIFEST['pike-break'].registryOffset, 0x13e4)
   assert.equal(NATIVE_STREAM_MANIFEST['start-cast'].registryOffset, 0x141c)
 })
@@ -361,6 +362,16 @@ test('pins potion use to the untouched stock drink cue', () => {
   assert.equal(
     createHash('sha256').update(source).digest('hex'),
     NATIVE_SOUND_MANIFEST.drink.sourceSha256,
+  )
+})
+
+test('pins DyeClothing confirmation to the untouched stock dye stream', () => {
+  const source = readFileSync(
+    new URL('../assets/game/audio/sfx/dye.wav', import.meta.url),
+  )
+  assert.equal(
+    createHash('sha256').update(source).digest('hex'),
+    NATIVE_STREAM_MANIFEST.dye.sourceSha256,
   )
 })
 

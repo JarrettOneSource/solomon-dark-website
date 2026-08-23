@@ -154,6 +154,7 @@ export type GameStreamCue =
   | BoneyardSolomonVoiceCue
   | GameOverSolomonVoiceCue
   | 'death-guitar'
+  | 'dye'
 export type GameLoopCue =
   | 'comet-loop'
   | 'electric-loop'
@@ -928,6 +929,11 @@ export const NATIVE_LOOP_MANIFEST = {
 } as const satisfies Readonly<Record<GameLoopCue, NativeSoundEntry>>
 
 export const NATIVE_STREAM_MANIFEST = {
+  dye: {
+    registryOffset: 0x1374,
+    sourceName: 'sounds\\dye__Stream',
+    sourceSha256: '113708c96aafc98bae7c0d449d9d9d639e9f5290c0109d7bab0b4c781af2976e',
+  },
   dampen: {
     registryOffset: 0x135c,
     sourceName: 'sounds\\dampen__stream',
@@ -1023,7 +1029,9 @@ export const NATIVE_STREAM_MANIFEST = {
     sourceName: 'sounds\\StartCast__Stream',
     sourceSha256: 'bccf1c352893ee24d515b09df4fd0d44c733dc3bdab71fe2bf0710bdc14d93a8',
   },
-} as const satisfies Readonly<Record<CreateStreamCue | SecondaryStreamCue | 'death-guitar', NativeSoundEntry>>
+} as const satisfies Readonly<
+  Record<CreateStreamCue | SecondaryStreamCue | 'death-guitar' | 'dye', NativeSoundEntry>
+>
 
 export const NATIVE_SOLOMON_VOICE_MANIFEST = {
   'solomon-hello-1': {

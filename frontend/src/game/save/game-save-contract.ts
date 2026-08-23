@@ -13,7 +13,8 @@ export const WEB_GAME_SAVE_SCHEMA_VERSION = 4
 export const LEGACY_WEB_GAME_SAVE_SCHEMA_VERSION = 3
 export const WEB_GAME_SAVE_SLOT = 0
 export const MAX_WEB_GAME_SAVE_BYTES = 8 * 1024 * 1024
-export const MAX_WEB_GAME_SAVE_JSON_DEPTH = 64
+/** Accommodates the 32-level Sack wire bound plus the complete save-document envelope. */
+export const MAX_WEB_GAME_SAVE_JSON_DEPTH = 80
 export const MAX_WEB_GAME_SAVE_JSON_NODES = 250_000
 
 export interface GameSaveSummary {

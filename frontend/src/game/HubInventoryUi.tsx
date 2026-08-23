@@ -17,8 +17,13 @@ import nativeAssetsJson from '../assets/game/hub-trader-native-assets.json' with
 import {
   DOWSING_EQUIPMENT_RECIPES,
   HAGATHA_PERKS,
+  MAX_NATIVE_DYE_SELECTIONS,
+  findInventoryItem,
+  nativeDyeMixedTint,
+  nativeInventoryClothingItems,
   nativeInventoryItemCanUnforge,
   nativeUnforgeOutcomeText,
+  projectInventoryItems,
   type EquipmentSlot,
   type HubInventoryAction,
   type HubInventoryItem,
@@ -42,6 +47,7 @@ import type { GameModAsset } from './protocol/game-protocol.ts'
 import {
   createHubInventoryRenderer,
   type HubInventoryDragModel,
+  type HubInventoryDyeModalModel,
   type HubInventoryRenderer,
   type HubInventoryRendererModel,
   type HubInventoryRendererNotice,
@@ -52,6 +58,7 @@ import {
 import {
   HUB_CHAT_PANEL,
   HUB_DOWSING_GRID,
+  HUB_DYE_CLOTHING,
   HUB_DOWSING_INSUFFICIENT_GOLD,
   HUB_DOWSING_MSGBOX,
   HUB_DOWSING_PREROLL,
@@ -67,6 +74,8 @@ import {
   HUB_SHOP_GRID,
   HUB_SHOP_PANEL,
   hubDowsingSlotPosition,
+  hubDyeItemLayerRects,
+  hubDyeSwatchRect,
   hubHagathaTooltipLines,
   hubInventoryEquipmentSlotRects,
   hubItemTooltipLines,
@@ -310,12 +319,27 @@ function NativeHubSurface({
   const [serviceFocusInspection, setServiceFocusInspection] = useState<HubServiceInspectionModel | null>(null)
   const [inventorySelection, setInventorySelection] = useState<HubInventorySelectionModel | null>(null)
   const [inventoryDrag, setInventoryDrag] = useState<HubInventoryDragModel | null>(null)
+  const [dyeModal, setDyeModal] = useState<HubInventoryDyeModalModel | null>(null)
   const feedbackSequenceRef = useRef(economy.actionFeedback?.sequence ?? 0)
 
   useEffect(() => {
     const feedback = economy.actionFeedback
     if (!feedback || feedback.sequence <= feedbackSequenceRef.current) return
     feedbackSequenceRef.current = feedback.sequence
+    if (feedback.action === 'dye') {
+      if (!feedback.accepted) {
+        audio.playSound('bad-action')
+        setDyeModal((current) => current ? { ...current, pending: false } : current)
+        return
+      }
+      audio.playStream('dye')
+      setDyeModal((current) => current ? {
+        ...current,
+        closingAtMs: performance.now(),
+        pending: false,
+      } : current)
+      return
+    }
     if (feedback.action === 'unforge') {
       if (!feedback.accepted || !feedback.unforgeOutcome) {
         audio.playSound('bad-action')
@@ -354,11 +378,49 @@ function NativeHubSurface({
       audio.playSound('drink')
       return
     }
+    if (feedback.action === 'read-skill-book') {
+      if (feedback.accepted) onClose()
+      return
+    }
     if (feedback.action === 'transfer') {
       if (feedback.transferGesture === 'double-activation') audio.playSound('backpack-close')
       else audio.playSound('click', { playbackRate: 0.75 })
     }
-  }, [audio, economy.actionFeedback])
+  }, [audio, economy.actionFeedback, onClose])
+
+  useEffect(() => {
+    if (dyeModal?.closingAtMs === null || dyeModal === null) return
+    const timeout = window.setTimeout(() => setDyeModal(null), 120)
+    return () => window.clearTimeout(timeout)
+  }, [dyeModal])
+
+  useEffect(() => {
+    if (!dyeModal || dyeModal.pending || dyeModal.closingAtMs !== null) return
+    const dye = findInventoryItem(economy.backpack, dyeModal.dyeItemId)
+    if (!dye || dye.kind !== 'dye' || dye.nativeTypeId !== 7012 || dye.nativeSubtype !== 0) {
+      setDyeModal(null)
+      return
+    }
+    if (dyeModal.targetItemId !== null
+      && !nativeInventoryClothingItems(economy.backpack).some(
+        ({ item }) => item.id === dyeModal.targetItemId,
+      )) {
+      setDyeModal((current) => current ? { ...current, targetItemId: null } : current)
+    }
+  }, [dyeModal, economy.backpack])
+
+  useEffect(() => {
+    const selectedAtMs = dyeModal?.selectedAtMs
+    if (selectedAtMs === null || selectedAtMs === undefined) return
+    const pulseDurationMs = HUB_DYE_CLOTHING.selectedPulseTicks
+      * HUB_DYE_CLOTHING.nativeTickMs
+    const timeout = window.setTimeout(() => setDyeModal((current) => (
+      current?.selectedAtMs === selectedAtMs
+        ? { ...current, selectedAtMs: null, selectedRow: null }
+        : current
+    )), Math.max(0, selectedAtMs + pulseDurationMs - performance.now()))
+    return () => window.clearTimeout(timeout)
+  }, [dyeModal?.selectedAtMs])
 
   const beginChatPhase = useCallback((phase: HubTraderChatPhase) => {
     chatCompletionHandledRef.current = false
@@ -369,6 +431,7 @@ function NativeHubSurface({
     if (surface.kind === 'inventory') return {
       config,
       dragging: inventoryDrag,
+      dyeModal,
       economy,
       kind: 'inventory',
       notice,
@@ -385,6 +448,7 @@ function NativeHubSurface({
     return {
       config,
       dragging: inventoryDrag,
+      dyeModal,
       economy,
       inspection: serviceHoverInspection ?? serviceFocusInspection,
       inventorySelection,
@@ -399,6 +463,7 @@ function NativeHubSurface({
     chat,
     config,
     economy,
+    dyeModal,
     inventoryDrag,
     inventorySelection,
     notice,
@@ -460,7 +525,7 @@ function NativeHubSurface({
   useEffect(() => {
     if (surface.kind !== 'dialogue' && inventorySelection) {
       if (inventorySelection.owner === 'backpack') {
-        const item = economy.backpack.find(({ id }) => id === inventorySelection.id)
+        const item = findInventoryItem(economy.backpack, inventorySelection.id)
         if (!item) {
           const equippedSlot = EQUIPMENT_SLOT_ORDER.find(
             (slot) => itemAtEquipmentSlot(economy, slot)?.id === inventorySelection.id,
@@ -479,7 +544,7 @@ function NativeHubSurface({
           ? null
           : itemAtEquipmentSlot(economy, inventorySelection.equipmentSlot)
         if (equipped?.id !== inventorySelection.id) {
-          if (economy.backpack.some(({ id }) => id === inventorySelection.id)) {
+          if (findInventoryItem(economy.backpack, inventorySelection.id)) {
             setInventorySelection({
               equipmentSlot: null,
               id: inventorySelection.id,
@@ -494,7 +559,7 @@ function NativeHubSurface({
     if (!serviceSelection) return
     const present = surface.trader === 'luthacus'
       ? serviceSelection.owner === 'storage'
-        && economy.storage.some(({ id }) => id === serviceSelection.id)
+        && findInventoryItem(economy.storage, serviceSelection.id) !== null
       : surface.trader === 'fomentius'
         ? economy.fomentiusStock.some(({ id }) => id === serviceSelection.id)
         : surface.trader === 'hagatha'
@@ -507,6 +572,27 @@ function NativeHubSurface({
     audio.playSound('click')
     action()
   }
+  const openDye = (dyeItemId: number) => {
+    audio.playSound('click')
+    setNotice(null)
+    setInventoryDrag(null)
+    setDyeModal({
+      closingAtMs: null,
+      dyeItemId,
+      openedAtMs: performance.now(),
+      pending: false,
+      selectedAtMs: null,
+      selectedRow: null,
+      swatchRows: [],
+      targetItemId: null,
+    })
+  }
+  const cancelDye = () => setDyeModal((current) => {
+    if (!current || current.closingAtMs !== null || current.pending) return current
+    return current.targetItemId === null
+      ? { ...current, closingAtMs: performance.now() }
+      : { ...current, targetItemId: null }
+  })
 
   const label = surface.kind === 'inventory'
     ? 'Inventory'
@@ -543,6 +629,13 @@ function NativeHubSurface({
         data-native-inventory-dragging={inventoryDrag
           ? `${inventoryDrag.owner}:${inventoryDrag.equipmentSlot ?? inventoryDrag.itemId}`
           : ''}
+        data-native-dye-modal={dyeModal
+          ? `${dyeModal.targetItemId === null ? 'mix' : 'layer'}:${dyeModal.closingAtMs === null ? 'open' : 'closing'}`
+          : ''}
+        data-native-dye-selections={dyeModal?.swatchRows.join(',') ?? ''}
+        data-native-dye-tub={dyeModal
+          ? (nativeDyeMixedTint(dyeModal.swatchRows)?.toString(16).padStart(6, '0') ?? '')
+          : ''}
         data-native-tooltip={semanticTooltip ?? ''}
       >
         <div ref={hostRef} className="hub-native-ui-renderer" aria-hidden />
@@ -550,7 +643,40 @@ function NativeHubSurface({
           <span className="hub-native-ui-semantic hub-gold-ledger" data-player-gold={economy.gold}>
             {economy.gold.toLocaleString()} gold
           </span>
-          {notice ? (
+          {dyeModal ? (
+            <DyeClothingActions
+              economy={economy}
+              modal={dyeModal}
+              onCancel={cancelDye}
+              onCommit={(layer) => {
+                if (dyeModal.pending || dyeModal.targetItemId === null) return
+                setDyeModal((current) => current ? { ...current, pending: true } : current)
+                onAction({
+                  type: 'dye',
+                  dyeItemId: dyeModal.dyeItemId,
+                  layer,
+                  swatchRows: dyeModal.swatchRows,
+                  targetItemId: dyeModal.targetItemId,
+                })
+              }}
+              onSelectSwatch={(row) => {
+                if (dyeModal.pending || dyeModal.targetItemId !== null
+                  || dyeModal.swatchRows.length >= MAX_NATIVE_DYE_SELECTIONS) return
+                audio.playSound('click')
+                setDyeModal((current) => current ? {
+                  ...current,
+                  selectedAtMs: performance.now(),
+                  selectedRow: row,
+                  swatchRows: [...current.swatchRows, row],
+                } : current)
+              }}
+              onSelectTarget={(targetItemId) => {
+                if (dyeModal.pending || dyeModal.swatchRows.length === 0) return
+                audio.playSound('click')
+                setDyeModal((current) => current ? { ...current, targetItemId } : current)
+              }}
+            />
+          ) : notice ? (
             <>
               <span className="hub-native-ui-semantic" role="alert">
                 {notice.title} {notice.summary ? `${notice.summary} ` : ''}{notice.body}
@@ -622,6 +748,7 @@ function NativeHubSurface({
               onFocusInspection={setServiceFocusInspection}
               onHoverInspection={setServiceHoverInspection}
               onNotice={setNotice}
+              onOpenDye={openDye}
               onSelect={setServiceSelection}
             />
           ) : (
@@ -635,6 +762,7 @@ function NativeHubSurface({
               onDragChange={setInventoryDrag}
               onDragMove={(point) => rendererRef.current?.moveDrag(point)}
               onNotice={setNotice}
+              onOpenDye={openDye}
               onSelect={(next) => {
                 audio.playSound('click')
                 setInventorySelection(next)
@@ -727,6 +855,7 @@ function ServiceActions({
   onFocusInspection,
   onHoverInspection,
   onNotice,
+  onOpenDye,
   onSelect,
   selection,
   trader,
@@ -744,6 +873,7 @@ function ServiceActions({
   onFocusInspection: (inspection: HubServiceInspectionModel | null) => void
   onHoverInspection: (inspection: HubServiceInspectionModel | null) => void
   onNotice: (notice: HubInventoryUiNotice) => void
+  onOpenDye: (dyeItemId: number) => void
   onSelect: (selection: HubServiceSelection | null) => void
   selection: HubServiceSelection | null
   trader: HubTraderId
@@ -764,6 +894,7 @@ function ServiceActions({
       onDragChange={onDragChange}
       onDragMove={onDragMove}
       onNotice={onNotice}
+      onOpenDye={onOpenDye}
       onSelect={onInventorySelect}
     />
   )
@@ -931,6 +1062,8 @@ function InventoryShopStorageActions({
 }) {
   const pressRef = useRef<StoragePointerPress | null>(null)
   const lastActivationRef = useRef<StorageActivation | null>(null)
+  const projectedStorage = projectInventoryItems(economy.storage)
+    .slice(0, HUB_SHOP_GRID.retainedCapacity)
 
   const sourceIsSelected = (itemId: number) => (
     selection?.id === itemId && selection.owner === 'storage'
@@ -1080,14 +1213,16 @@ function InventoryShopStorageActions({
   return (
     <>
       <section aria-label="Scavenged Goods">
-        {economy.storage.slice(0, HUB_SHOP_GRID.retainedCapacity).map((item, index) => {
+        {projectedStorage.map(({ depth, item, parentSackId }, index) => {
           const position = hubShopSlotPosition(index)
           return (
             <NativeAction
               key={item.id}
               data={{
                 'data-inventory-item-id': item.id,
+                'data-inventory-depth': depth,
                 'data-inventory-owner': 'storage',
+                'data-parent-sack-id': parentSackId ?? '',
                 'data-selected': sourceIsSelected(item.id) ? 'true' : 'false',
               }}
               label={`${item.name}, quantity ${item.quantity}`}
@@ -1136,6 +1271,118 @@ interface StorageActivation {
   readonly itemId: number
 }
 
+function DyeClothingActions({
+  economy,
+  modal,
+  onCancel,
+  onCommit,
+  onSelectSwatch,
+  onSelectTarget,
+}: {
+  economy: ProtocolPlayerEconomy
+  modal: HubInventoryDyeModalModel
+  onCancel: () => void
+  onCommit: (layer: 'cloth' | 'trim') => void
+  onSelectSwatch: (row: number) => void
+  onSelectTarget: (targetItemId: number) => void
+}) {
+  const projected = projectInventoryItems(economy.backpack)
+    .slice(0, HUB_INVENTORY_GRID.capacity)
+  const eligibleIds = new Set(
+    nativeInventoryClothingItems(economy.backpack).map(({ item }) => item.id),
+  )
+  const targetIndex = modal.targetItemId === null
+    ? -1
+    : projected.findIndex(({ item }) => item.id === modal.targetItemId)
+  const blocked = modal.pending || modal.closingAtMs !== null
+  const phase = modal.targetItemId === null
+    ? modal.swatchRows.length === 0 ? 'mix' : 'target'
+    : 'layer'
+
+  return (
+    <section aria-label="Fabric Dye" data-native-dye-phase={phase}>
+      <span className="hub-native-ui-semantic" role="status">
+        Fabric Dye. {modal.swatchRows.length} colors mixed.
+        {phase === 'mix' ? ' Choose a color.' : ''}
+        {phase === 'target' ? ' Choose a backpack hat or robe.' : ''}
+        {phase === 'layer' ? ' Choose dye cloth or dye trim.' : ''}
+      </span>
+      {modal.targetItemId === null ? (
+        <>
+          {Array.from({ length: HUB_DYE_CLOTHING.swatchCount }, (_, row) => (
+            <NativeAction
+              key={`dye-swatch-${row}`}
+              data={{
+                'data-native-dye-swatch': row,
+                'data-selected-pulse': modal.selectedRow === row ? 'true' : 'false',
+              }}
+              disabled={blocked || modal.swatchRows.length >= MAX_NATIVE_DYE_SELECTIONS}
+              label={`Add dye color ${row + 1}`}
+              rect={hubDyeSwatchRect(row)}
+              onClick={() => onSelectSwatch(row)}
+            />
+          ))}
+          {modal.swatchRows.length > 0
+            ? projected.map(({ depth, item, parentSackId }, index) => {
+                if (!eligibleIds.has(item.id)) return null
+                const position = hubInventorySlotPosition(index)
+                return (
+                  <NativeAction
+                    key={`dye-target-${item.id}`}
+                    data={{
+                      'data-inventory-depth': depth,
+                      'data-native-dye-target': item.id,
+                      'data-parent-sack-id': parentSackId ?? '',
+                    }}
+                    disabled={blocked}
+                    label={`Dye ${item.name}`}
+                    rect={[
+                      position.x,
+                      position.y,
+                      HUB_INVENTORY_GRID.cellSize,
+                      HUB_INVENTORY_GRID.cellSize,
+                    ]}
+                    onClick={() => onSelectTarget(item.id)}
+                  />
+                )
+              })
+            : null}
+        </>
+      ) : targetIndex >= 0 ? (
+        <>
+          <NativeAction
+            data={{
+              'data-native-dye-layer': 'cloth',
+              'data-native-dye-target': modal.targetItemId,
+            }}
+            disabled={blocked}
+            label="Dye cloth"
+            rect={hubDyeItemLayerRects(targetIndex).cloth}
+            onClick={() => onCommit('cloth')}
+          />
+          <NativeAction
+            data={{
+              'data-native-dye-layer': 'trim',
+              'data-native-dye-target': modal.targetItemId,
+            }}
+            disabled={blocked}
+            label="Dye trim"
+            rect={hubDyeItemLayerRects(targetIndex).trim}
+            onClick={() => onCommit('trim')}
+          />
+        </>
+      ) : null}
+      <NativeAction
+        data={{ 'data-native-dye-cancel': phase === 'layer' ? 'layer' : 'session' }}
+        disabled={blocked}
+        label={phase === 'layer' ? 'Cancel layer choice' : 'Cancel Fabric Dye'}
+        rect={HUB_DYE_CLOTHING.cancelRect}
+        onClick={onCancel}
+      />
+    </section>
+  )
+}
+
 function InventoryActions({
   companion = false,
   economy,
@@ -1143,6 +1390,7 @@ function InventoryActions({
   onDragChange,
   onDragMove,
   onNotice,
+  onOpenDye,
   onSelect,
   selection,
   storageDropRect = null,
@@ -1153,11 +1401,14 @@ function InventoryActions({
   onDragChange: (drag: HubInventoryDragModel | null) => void
   onDragMove: (point: { readonly x: number; readonly y: number }) => void
   onNotice: (notice: HubInventoryUiNotice) => void
+  onOpenDye: (dyeItemId: number) => void
   onSelect: (selection: HubInventorySelectionModel | null) => void
   selection: HubInventorySelectionModel | null
   storageDropRect?: readonly [number, number, number, number] | null
 }) {
   const thirdRingUnlocked = economy.ownedPerkSelectors.includes(19)
+  const projectedBackpack = projectInventoryItems(economy.backpack)
+    .slice(0, HUB_INVENTORY_GRID.capacity)
   const pressRef = useRef<InventoryPointerPress | null>(null)
   const lastActivationRef = useRef<InventoryActivation | null>(null)
 
@@ -1187,10 +1438,18 @@ function InventoryActions({
       if (source.equipmentSlot !== null) onAction({ type: 'unequip', slot: source.equipmentSlot })
       return
     }
-    const item = economy.backpack.find(({ id }) => id === source.itemId)
+    const item = findInventoryItem(economy.backpack, source.itemId)
     if (!item) return
     if (item.nativeTypeId === 7001) {
       onAction({ type: 'consume', itemId: item.id })
+      return
+    }
+    if (item.kind === 'dye' && item.nativeTypeId === 7012 && item.nativeSubtype === 0) {
+      onOpenDye(item.id)
+      return
+    }
+    if (item.kind === 'skill-book' && item.nativeTypeId === 7012) {
+      onAction({ type: 'read-skill-book', itemId: item.id })
       return
     }
     const slots = equipmentSlotsForItem(item, thirdRingUnlocked)
@@ -1309,9 +1568,7 @@ function InventoryActions({
   return (
     <>
       <section aria-label="Backpack">
-        {Array.from({ length: HUB_INVENTORY_GRID.capacity }, (_, index) => {
-          const item = economy.backpack[index]
-          if (!item) return null
+        {projectedBackpack.map(({ depth, item, parentSackId }, index) => {
           const position = hubInventorySlotPosition(index)
           const source: InventoryPointerSource = {
             equipmentSlot: null,
@@ -1323,7 +1580,9 @@ function InventoryActions({
               key={item.id}
               data={{
                 'data-inventory-item-id': item.id,
+                'data-inventory-depth': depth,
                 'data-inventory-owner': 'backpack',
+                'data-parent-sack-id': parentSackId ?? '',
                 'data-selected': selection?.id === item.id && selection.owner === 'backpack' ? 'true' : 'false',
               }}
               label={`${item.name}, quantity ${item.quantity}`}
@@ -1429,7 +1688,10 @@ function dropInventorySource(
   storageDropRect: readonly [number, number, number, number] | null,
 ): void {
   if (source.owner === 'backpack') {
-    const item = economy.backpack.find(({ id }) => id === source.itemId)
+    const projected = projectInventoryItems(economy.backpack)
+      .slice(0, HUB_INVENTORY_GRID.capacity)
+    const sourceEntry = projected.find(({ item }) => item.id === source.itemId)
+    const item = sourceEntry?.item ?? null
     if (!item) return
     if (pointInRect(point, HUB_UNFORGE_TARGET.rect)) {
       if (!nativeInventoryItemCanUnforge(item)) return
@@ -1447,7 +1709,43 @@ function dropInventorySource(
     const slot = equipmentSlotsForItem(item, thirdRingUnlocked).find((candidate) => (
       hubInventoryEquipmentSlotRects(candidate, companion).some((rect) => pointInRect(point, rect))
     ))
-    if (slot) onAction({ type: 'equip', itemId: item.id, slot })
+    if (slot) {
+      onAction({ type: 'equip', itemId: item.id, slot })
+      return
+    }
+    const destinationSack = projected.find(({ item: candidate }, index) => {
+      if (candidate.nativeTypeId !== 7008) return false
+      const position = hubInventorySlotPosition(index)
+      return pointInRect(point, [
+        position.x,
+        position.y,
+        HUB_INVENTORY_GRID.cellSize,
+        HUB_INVENTORY_GRID.cellSize,
+      ])
+    })?.item ?? null
+    if (destinationSack) {
+      onAction({
+        type: 'move-inventory-item',
+        destinationSackId: destinationSack.id,
+        itemId: item.id,
+      })
+      return
+    }
+    const backpackRect = [
+      HUB_INVENTORY_GRID.left,
+      HUB_INVENTORY_GRID.top,
+      (HUB_INVENTORY_GRID.columns - 1) * HUB_INVENTORY_GRID.pitch
+        + HUB_INVENTORY_GRID.cellSize,
+      (HUB_INVENTORY_GRID.rows - 1) * HUB_INVENTORY_GRID.pitch
+        + HUB_INVENTORY_GRID.cellSize,
+    ] as const
+    if (sourceEntry && sourceEntry.parentSackId !== null && pointInRect(point, backpackRect)) {
+      onAction({
+        type: 'move-inventory-item',
+        destinationSackId: null,
+        itemId: item.id,
+      })
+    }
     return
   }
   if (source.equipmentSlot === null || !pointInRect(point, [0, 490, 1600, 310])) return
@@ -1644,7 +1942,7 @@ function serviceInspectionTooltipText(
     }))
   }
   const item = trader === 'luthacus'
-    ? economy.storage.find(({ id }) => id === inspection.id)
+    ? findInventoryItem(economy.storage, inspection.id)
     : trader === 'fomentius'
       ? economy.fomentiusStock.find(({ id }) => id === inspection.id)
       : dowsingItems(economy).find(({ id }) => id === inspection.id)

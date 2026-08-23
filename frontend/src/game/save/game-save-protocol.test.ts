@@ -15,7 +15,7 @@ const CHARACTER = {
 } as const
 
 test('protocol carries one bounded resume document and ordered host checkpoints', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 61)
+  assert.equal(GAME_PROTOCOL_VERSION, 62)
   const document = JSON.stringify({ schemaVersion: 1 })
   assert.deepEqual(decodeClientGameMessage(JSON.stringify({
     type: 'client-hello',

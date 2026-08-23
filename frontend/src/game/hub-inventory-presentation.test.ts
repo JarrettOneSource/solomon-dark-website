@@ -23,6 +23,29 @@ test('HUD potion shortcuts total the addressed kind and consume the first owned 
   assert.deepEqual(hubPotionShortcut([], 'health-potion'), { count: 0, itemId: null })
 })
 
+test('HUD potion shortcuts include recursively owned sack stacks in depth-first order', () => {
+  const backpack = [{
+    id: 20,
+    kind: 'sack',
+    quantity: 1,
+    contents: [{
+      id: 21,
+      kind: 'health-potion',
+      quantity: 2,
+    }, {
+      id: 22,
+      kind: 'sack',
+      quantity: 1,
+      contents: [{ id: 23, kind: 'health-potion', quantity: 3 }],
+    }],
+  }, {
+    id: 24,
+    kind: 'health-potion',
+    quantity: 4,
+  }] as const
+  assert.deepEqual(hubPotionShortcut(backpack, 'health-potion'), { count: 9, itemId: 21 })
+})
+
 test('merchant dialogue exposes only the four reachable retail service commands', () => {
   assert.deepEqual(
     Object.values(HUB_TRADER_DIALOGUES).map(({ actionLabel }) => actionLabel),

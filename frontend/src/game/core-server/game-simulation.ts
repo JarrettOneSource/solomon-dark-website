@@ -53,9 +53,13 @@ import {
   buyHagathaPerk,
   closeDowsingOffers,
   consumeInventoryItem,
+  dyeInventoryClothing,
   economyHasWizardKey,
   dowse,
   equipInventoryItem,
+  findInventoryItem,
+  moveInventoryItem,
+  readInventorySkillBook,
   restockFomentius,
   transferInventoryItem,
   unforgeInventoryItem,
@@ -726,7 +730,10 @@ export function applyGameSimulationHubAction(
   }
 
   const consumedPotion = action.type === 'consume'
-    ? economy.backpack.find(({ id }) => id === action.itemId) ?? null
+    ? findInventoryItem(economy.backpack, action.itemId)
+    : null
+  const skillBookItem = action.type === 'read-skill-book'
+    ? findInventoryItem(economy.backpack, action.itemId)
     : null
   if (consumedPotion?.modContent &&
       extensions?.hasConsumable(consumedPotion.modContent.contentId) !== true) {
@@ -748,8 +755,21 @@ export function applyGameSimulationHubAction(
         }
       }
       case 'consume': return consumeInventoryItem(economy, action.itemId)
+      case 'dye': return dyeInventoryClothing(
+        economy,
+        action.dyeItemId,
+        action.targetItemId,
+        action.layer,
+        action.swatchRows,
+      )
       case 'dowse': return dowse(economy, getPlayerProgression(state, playerId).level)
       case 'equip': return equipInventoryItem(economy, action.itemId, action.slot)
+      case 'move-inventory-item': return moveInventoryItem(
+        economy,
+        action.itemId,
+        action.destinationSackId,
+      )
+      case 'read-skill-book': return readInventorySkillBook(economy, action.itemId)
       case 'transfer': return transferInventoryItem(economy, action.itemId, action.direction)
       case 'unforge': return unforgeInventoryItem(
         economy,
@@ -775,6 +795,9 @@ export function applyGameSimulationHubAction(
     revision: Math.max(result.state.revision, economy.revision + 1),
   }
   let playerEntities = replacePlayerEconomy(state.playerEntities, playerId, nextEconomy)
+  let gameRng = state.gameRng
+  let levelUpBarrier: PlayerLevelUpBarrierState | null = state.levelUpBarrier
+  let nextLevelUpBarrierId = state.nextLevelUpBarrierId
   let secondaryAbilities = state.secondaryAbilities
   let world = state.world
   if (result.accepted && action.type === 'consume' && consumedPotion?.nativeSubtype != null &&
@@ -827,6 +850,41 @@ export function applyGameSimulationHubAction(
       playerEntities = { ...playerEntities, progressions: Object.freeze(progressions) }
     }
   }
+  if (result.accepted && action.type === 'read-skill-book') {
+    if (skillBookItem?.nativeSubtype === 2) {
+      const beforeInsight = playerEntities
+      playerEntities = grantPlayerEntityBonusSkillChoice(playerEntities, playerId)
+      const insight = markNewCreativityInsights(
+        beforeInsight,
+        playerEntities,
+        [playerId],
+        secondaryAbilities.rng,
+      )
+      playerEntities = insight.store
+      secondaryAbilities = { ...secondaryAbilities, rng: insight.rng }
+      const progression = playerProgressionAt(playerEntities, playerId)
+      if (progression !== null) {
+        const requested = state.run.phase === 'active'
+          ? state.run.eligiblePlayerIds
+          : playerEntities.identities.map(({ playerId: id }) => id)
+        const participantIds = stableExistingPlayerIds(playerEntities, requested)
+        levelUpBarrier = createLevelUpBarrier(
+          nextLevelUpBarrierId,
+          playerId,
+          progression.experience,
+          progression.level,
+          participantIds,
+          pendingOfferPlayerIds(playerEntities, participantIds),
+          world.kind === 'boneyard' ? world.runId : null,
+        )
+        nextLevelUpBarrierId += 1
+      }
+    } else if (skillBookItem?.nativeSubtype === 3) {
+      const increased = increaseRandomPlayerEntitySkill(playerEntities, playerId, gameRng)
+      playerEntities = increased.store
+      gameRng = increased.rng
+    }
+  }
   const modConsumption = result.accepted && action.type === 'consume' && consumedPotion?.modContent
     ? Object.freeze({
         content: consumedPotion.modContent,
@@ -859,7 +917,10 @@ export function applyGameSimulationHubAction(
     reason: result.reason,
     state: {
       ...state,
+      gameRng,
+      levelUpBarrier,
       modEffects,
+      nextLevelUpBarrierId,
       nextModConsumableUseId: modConsumption
         ? state.nextModConsumableUseId + 1
         : state.nextModConsumableUseId,
@@ -2790,7 +2851,10 @@ function traderForAction(action: HubInventoryAction): HubTraderId | null {
     case 'dowse': return 'shlorio'
     case 'close-dowsing':
     case 'consume':
+    case 'dye':
     case 'equip':
+    case 'move-inventory-item':
+    case 'read-skill-book':
     case 'unforge':
     case 'unequip': return null
   }

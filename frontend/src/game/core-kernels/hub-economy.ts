@@ -10,6 +10,12 @@ export const HUB_INVENTORY_SLOT_CAPACITY = 88
 /** Native ground pickup appends beyond the 88 visible cells when no Item_None slot remains. */
 export const NATIVE_LOOT_BACKPACK_REPLICATION_LIMIT = 2_048
 export const HUB_STORAGE_SLOT_CAPACITY = 28
+/** Participant payload guard for one native Item_Sack child list. */
+export const HUB_SACK_CHILD_REPLICATION_LIMIT = 16
+/** Maximum admitted Item_Sack nesting depth, with root inventory items at depth zero. */
+export const HUB_SACK_REPLICATION_DEPTH_LIMIT = 32
+/** Bounded wire representation for one DyeClothing mixing transaction. */
+export const MAX_NATIVE_DYE_SELECTIONS = 256
 export const SHLORIO_INITIAL_DOWSING_FEE = 650
 export const NATIVE_UNFORGE_ELIGIBLE_TYPE_IDS = [
   7002, 7003, 7004, 7005, 7006, 7008, 7011,
@@ -21,14 +27,68 @@ export const EQUIPMENT_TYPES = ['amulet', 'hat', 'ring', 'robe', 'staff', 'wand'
 export const EQUIPMENT_SLOTS = ['amulet', 'hat', 'ring-0', 'ring-1', 'ring-2', 'robe', 'weapon'] as const
 export type HubTraderId = 'fomentius' | 'hagatha' | 'luthacus' | 'shlorio'
 export const SPLIT_MIND_CHARM_SELECTOR = 21
+export const NATIVE_DYE_SWATCHES = [
+  0xffffff,
+  0xff0000,
+  0xff8000,
+  0xffff00,
+  0x80ff00,
+  0x00ff00,
+  0x00ff80,
+  0x00ffff,
+  0x0080ff,
+  0x0000ff,
+  0x8000ff,
+  0xff80ff,
+  0xff00ff,
+  0xff0080,
+  0xbfbfbf,
+  0x808080,
+  0x404040,
+  0x1a1a1a,
+] as const
+export const NATIVE_DYE_SWATCH_COLORS = [
+  [1, 1, 1],
+  [1, 0, 0],
+  [1, 0.5, 0],
+  [1, 1, 0],
+  [0.5, 1, 0],
+  [0, 1, 0],
+  [0, 1, 0.5],
+  [0, 1, 1],
+  [0, 0.5, 1],
+  [0, 0, 1],
+  [0.5, 0, 1],
+  [1, 0.5, 1],
+  [1, 0, 1],
+  [1, 0, 0.5],
+  [0.75, 0.75, 0.75],
+  [0.5, 0.5, 0.5],
+  [0.25, 0.25, 0.25],
+  [0.1, 0.1, 0.1],
+] as const
+export type NativeDyeLayer = 'cloth' | 'trim'
 export type HubInventoryAction =
   | { readonly type: 'buy-dowsing'; readonly offerId: number }
   | { readonly type: 'buy-fomentius'; readonly itemId: number }
   | { readonly type: 'buy-hagatha'; readonly selector: number }
   | { readonly type: 'close-dowsing' }
   | { readonly type: 'consume'; readonly itemId: number }
+  | {
+      readonly type: 'dye'
+      readonly dyeItemId: number
+      readonly layer: NativeDyeLayer
+      readonly swatchRows: readonly number[]
+      readonly targetItemId: number
+    }
   | { readonly type: 'dowse' }
   | { readonly type: 'equip'; readonly itemId: number; readonly slot: EquipmentSlot }
+  | {
+      readonly type: 'move-inventory-item'
+      readonly destinationSackId: number | null
+      readonly itemId: number
+    }
+  | { readonly type: 'read-skill-book'; readonly itemId: number }
   | {
       readonly type: 'transfer'
       readonly direction: 'to-backpack' | 'to-storage'
@@ -48,6 +108,7 @@ export type HubItemKind =
   | 'mod-potion'
   | 'rejuvenation-potion'
   | 'sack'
+  | 'skill-book'
   | 'wizard-chug'
 export const HUB_ITEM_KINDS = [
   'antidote',
@@ -60,6 +121,7 @@ export const HUB_ITEM_KINDS = [
   'mod-potion',
   'rejuvenation-potion',
   'sack',
+  'skill-book',
   'wizard-chug',
 ] as const
 
@@ -80,6 +142,12 @@ export interface HubInventoryItem {
   readonly quantity: number
   readonly rarity: 'Epic' | 'Rare' | null
   readonly recipeIndex: number | null
+}
+
+export interface ProjectedInventoryItem {
+  readonly depth: number
+  readonly item: HubInventoryItem
+  readonly parentSackId: number | null
 }
 
 export interface ModSpriteFrame {
@@ -234,8 +302,10 @@ export type HubEconomyRejection =
   | 'capacity-full'
   | 'ineligible-item'
   | 'insufficient-gold'
+  | 'invalid-inventory'
   | 'invalid-offer'
   | 'invalid-slot'
+  | 'invalid-target'
   | 'item-not-found'
   | 'offers-active'
   | 'perk-capacity-full'
@@ -587,29 +657,165 @@ export function buyHagathaPerk(
   })
 }
 
+export function projectInventoryItems(
+  source: readonly HubInventoryItem[],
+): readonly ProjectedInventoryItem[] {
+  const projected: ProjectedInventoryItem[] = []
+  const seenIds = new Set<number>()
+  const seenItems = new Set<HubInventoryItem>()
+  const visit = (
+    items: readonly HubInventoryItem[],
+    depth: number,
+    parentSackId: number | null,
+  ) => {
+    for (const item of items) {
+      if (seenIds.has(item.id) || seenItems.has(item)) continue
+      seenIds.add(item.id)
+      seenItems.add(item)
+      projected.push({ depth, item, parentSackId })
+      if (item.nativeTypeId === 7008 && item.contents !== undefined) {
+        visit(item.contents, depth + 1, item.id)
+      }
+    }
+  }
+  visit(source, 0, null)
+  return projected
+}
+
+export function findInventoryItem(
+  source: readonly HubInventoryItem[],
+  itemId: number,
+): HubInventoryItem | null {
+  return projectInventoryItems(source).find(({ item }) => item.id === itemId)?.item ?? null
+}
+
+export function nativeInventoryClothingItems(
+  source: readonly HubInventoryItem[],
+): readonly ProjectedInventoryItem[] {
+  return projectInventoryItems(source).filter(({ item }) => (
+    (item.nativeTypeId === 7005 && item.equipmentType === 'hat')
+    || (item.nativeTypeId === 7006 && item.equipmentType === 'robe')
+  ))
+}
+
+export function nativeDyeMixedColor(
+  swatchRows: readonly number[],
+): readonly [red: number, green: number, blue: number] | null {
+  if (swatchRows.length === 0) return null
+  if (!nativeDyeRowsAreValid(swatchRows)) {
+    throw new RangeError('native dye swatch rows are invalid')
+  }
+  let mixed = NATIVE_DYE_SWATCH_COLORS[swatchRows[0]!]!
+    .map((channel) => Math.fround(channel)) as [number, number, number]
+  for (const row of swatchRows.slice(1)) {
+    const incoming = NATIVE_DYE_SWATCH_COLORS[row]!
+      .map((channel) => Math.fround(channel)) as [number, number, number]
+    mixed = mixed.map((channel, index) => Math.fround(
+      Math.fround(channel * Math.fround(0.875))
+      + Math.fround(incoming[index]! * Math.fround(0.125)),
+    )) as [number, number, number]
+  }
+  return mixed
+}
+
+export function nativeDyeMixedTint(swatchRows: readonly number[]): number | null {
+  const mixed = nativeDyeMixedColor(swatchRows)
+  return mixed === null ? null : rgbTint(mixed)
+}
+
+export function nativeDyeCommittedTint(swatchRows: readonly number[]): number | null {
+  const mixed = nativeDyeMixedColor(swatchRows)
+  if (mixed === null) return null
+  const luminance = Math.fround(
+    Math.fround(mixed[0] * Math.fround(0.30860000848770142))
+    + Math.fround(mixed[1] * Math.fround(0.6093999743461609))
+    + Math.fround(mixed[2] * Math.fround(0.0820000022649765)),
+  )
+  return rgbTint(mixed.map((channel) => clamp01(Math.fround(
+    Math.fround(luminance * Math.fround(0.75))
+    + Math.fround(channel * Math.fround(0.25)),
+  ))) as [number, number, number])
+}
+
+export function moveInventoryItem(
+  source: HubEconomyState,
+  itemId: number,
+  destinationSackId: number | null,
+): HubEconomyResult {
+  if (!hubEconomyInventoryIsValid(source)) return rejected(source, 'invalid-inventory')
+  const projected = projectInventoryItems(source.backpack)
+  const sourceEntry = projected.find(({ item }) => item.id === itemId)
+  if (!sourceEntry) return rejected(source, 'item-not-found')
+  if (sourceEntry.parentSackId === destinationSackId) return rejected(source, 'invalid-target')
+  if (destinationSackId === itemId) return rejected(source, 'invalid-target')
+  if (destinationSackId !== null) {
+    const destination = projected.find(({ item }) => item.id === destinationSackId)?.item
+    if (!destination || destination.nativeTypeId !== 7008) {
+      return rejected(source, 'invalid-target')
+    }
+    if (findInventoryItem(sourceEntry.item.contents ?? [], destinationSackId)) {
+      return rejected(source, 'invalid-target')
+    }
+  }
+
+  const removed = removeInventoryTreeItem(source.backpack, itemId, null)
+  if (!removed) return rejected(source, 'item-not-found')
+  if (destinationSackId === null) {
+    const backpack = insertItem(
+      removed.items,
+      removed.item,
+      HUB_INVENTORY_SLOT_CAPACITY,
+    )
+    return backpack
+      ? accepted({ ...source, backpack })
+      : rejected(source, 'capacity-full')
+  }
+
+  const destination = findInventoryItem(removed.items, destinationSackId)
+  if (!destination || destination.nativeTypeId !== 7008) {
+    return rejected(source, 'invalid-target')
+  }
+  const contents = insertItem(
+    destination.contents ?? [],
+    removed.item,
+    HUB_SACK_CHILD_REPLICATION_LIMIT,
+  )
+  if (!contents) return rejected(source, 'capacity-full')
+  const backpack = replaceInventoryTreeItem(removed.items, destinationSackId, {
+    ...destination,
+    contents,
+  })
+  if (!backpack) return rejected(source, 'invalid-target')
+  const moved = { ...source, backpack }
+  return hubEconomyInventoryIsValid(moved)
+    ? accepted(moved)
+    : rejected(source, 'invalid-target')
+}
+
 export function transferInventoryItem(
   source: HubEconomyState,
   itemId: number,
   direction: 'to-backpack' | 'to-storage',
 ): HubEconomyResult {
+  if (!hubEconomyInventoryIsValid(source)) return rejected(source, 'invalid-inventory')
   const from = direction === 'to-storage' ? source.backpack : source.storage
   const to = direction === 'to-storage' ? source.storage : source.backpack
-  const item = from.find((entry) => entry.id === itemId)
-  if (!item) return rejected(source, 'item-not-found')
+  const removed = removeInventoryTreeItem(from, itemId, null)
+  if (!removed) return rejected(source, 'item-not-found')
   const inserted = insertItem(
     to,
-    item,
+    removed.item,
     direction === 'to-storage' ? HUB_STORAGE_SLOT_CAPACITY : HUB_INVENTORY_SLOT_CAPACITY,
   )
   if (!inserted) return rejected(source, 'capacity-full')
   return accepted({
     ...source,
     backpack: direction === 'to-storage'
-      ? from.filter((entry) => entry.id !== itemId)
+      ? removed.items
       : inserted,
     storage: direction === 'to-storage'
       ? inserted
-      : from.filter((entry) => entry.id !== itemId),
+      : removed.items,
   })
 }
 
@@ -617,20 +823,72 @@ export function consumeInventoryItem(
   source: HubEconomyState,
   itemId: number,
 ): HubEconomyResult {
-  const item = source.backpack.find((entry) => entry.id === itemId)
+  if (!hubEconomyInventoryIsValid(source)) return rejected(source, 'invalid-inventory')
+  const item = findInventoryItem(source.backpack, itemId)
   if (!item) return rejected(source, 'item-not-found')
   if (item.nativeTypeId !== 7001 || item.nativeSubtype === null ||
       (item.kind === 'mod-potion' && item.modContent === undefined)) {
     return rejected(source, 'ineligible-item')
   }
+  const backpack = consumeInventoryTreeItem(source.backpack, itemId)
+  if (!backpack) return rejected(source, 'item-not-found')
   return accepted({
     ...source,
-    backpack: item.quantity === 1
-      ? source.backpack.filter((entry) => entry.id !== itemId)
-      : source.backpack.map((entry) => entry.id === itemId
-        ? { ...entry, quantity: entry.quantity - 1 }
-        : entry),
+    backpack,
   })
+}
+
+export function readInventorySkillBook(
+  source: HubEconomyState,
+  itemId: number,
+): HubEconomyResult {
+  if (!hubEconomyInventoryIsValid(source)) return rejected(source, 'invalid-inventory')
+  const item = findInventoryItem(source.backpack, itemId)
+  if (!item) return rejected(source, 'item-not-found')
+  if (
+    item.kind !== 'skill-book'
+    || item.nativeTypeId !== 7012
+    || (item.nativeSubtype !== 2 && item.nativeSubtype !== 3)
+  ) return rejected(source, 'ineligible-item')
+  const backpack = consumeInventoryTreeItem(source.backpack, itemId)
+  return backpack
+    ? accepted({ ...source, backpack })
+    : rejected(source, 'item-not-found')
+}
+
+export function dyeInventoryClothing(
+  source: HubEconomyState,
+  dyeItemId: number,
+  targetItemId: number,
+  layer: NativeDyeLayer,
+  swatchRows: readonly number[],
+): HubEconomyResult {
+  if (!hubEconomyInventoryIsValid(source)) return rejected(source, 'invalid-inventory')
+  if (!nativeDyeRowsAreValid(swatchRows)) return rejected(source, 'invalid-target')
+  const dye = findInventoryItem(source.backpack, dyeItemId)
+  if (!dye) return rejected(source, 'item-not-found')
+  if (dye.nativeTypeId !== 7012 || dye.nativeSubtype !== 0 || dye.kind !== 'dye') {
+    return rejected(source, 'ineligible-item')
+  }
+  const target = findInventoryItem(source.backpack, targetItemId)
+  if (!target) return rejected(source, 'item-not-found')
+  if (!nativeInventoryClothingItems(source.backpack).some(({ item }) => item.id === targetItemId)) {
+    return rejected(source, 'invalid-target')
+  }
+  const currentTints = nativeClothingTints(target)
+  const committedTint = nativeDyeCommittedTint(swatchRows)
+  if (!currentTints || committedTint === null) return rejected(source, 'invalid-target')
+  const iconTints: readonly [number, number] = layer === 'cloth'
+    ? [committedTint, currentTints[1]]
+    : [currentTints[0], committedTint]
+  const dyed = replaceInventoryTreeItem(source.backpack, targetItemId, {
+    ...target,
+    iconTints,
+  })
+  if (!dyed) return rejected(source, 'invalid-target')
+  const backpack = consumeInventoryTreeItem(dyed, dyeItemId)
+  if (!backpack) return rejected(source, 'item-not-found')
+  return accepted({ ...source, backpack })
 }
 
 export interface NativeUnforgeVitals {
@@ -663,7 +921,8 @@ export function unforgeInventoryItem(
   itemId: number,
   vitals: NativeUnforgeVitals,
 ): HubEconomyResult {
-  const item = source.backpack.find(({ id }) => id === itemId)
+  if (!hubEconomyInventoryIsValid(source)) return rejected(source, 'invalid-inventory')
+  const item = findInventoryItem(source.backpack, itemId)
   if (!item) return rejected(source, 'item-not-found')
   if (!nativeInventoryItemCanUnforge(item)) return rejected(source, 'ineligible-item')
   if (item.nativeTypeId === 7008 && (item.contents?.length ?? 0) > 0) {
@@ -783,9 +1042,11 @@ export function unforgeInventoryItem(
     }
   }
 
+  const backpack = removeInventoryTreeItem(source.backpack, itemId, null)?.items
+  if (!backpack) return rejected(source, 'item-not-found')
   return accepted({
     ...source,
-    backpack: source.backpack.filter(({ id }) => id !== itemId),
+    backpack,
     gold,
     rng,
     unforgeBonuses,
@@ -1005,7 +1266,8 @@ export function equipInventoryItem(
   itemId: number,
   slot: EquipmentSlot,
 ): HubEconomyResult {
-  const item = source.backpack.find((entry) => entry.id === itemId)
+  if (!hubEconomyInventoryIsValid(source)) return rejected(source, 'invalid-inventory')
+  const item = findInventoryItem(source.backpack, itemId)
   if (!item) return rejected(source, 'item-not-found')
   if (!item.equipmentType) return rejected(source, 'ineligible-item')
   if (!slotAccepts(slot, item.equipmentType)) return rejected(source, 'invalid-slot')
@@ -1013,7 +1275,9 @@ export function equipInventoryItem(
     return rejected(source, 'slot-locked')
   }
   const previous = equippedAt(source.equipment, slot)
-  let backpack: readonly HubInventoryItem[] = source.backpack.filter(({ id }) => id !== itemId)
+  const removed = removeInventoryTreeItem(source.backpack, itemId, null)
+  if (!removed) return rejected(source, 'item-not-found')
+  let backpack: readonly HubInventoryItem[] = removed.items
   if (previous) {
     const inserted = insertItem(backpack, previous, HUB_INVENTORY_SLOT_CAPACITY)
     if (!inserted) return rejected(source, 'capacity-full')
@@ -1030,6 +1294,7 @@ export function unequipInventorySlot(
   source: HubEconomyState,
   slot: EquipmentSlot,
 ): HubEconomyResult {
+  if (!hubEconomyInventoryIsValid(source)) return rejected(source, 'invalid-inventory')
   if (slot === 'ring-2' && !source.ownedPerkSelectors.includes(19)) {
     return rejected(source, 'slot-locked')
   }
@@ -1174,6 +1439,139 @@ function perksFitCapacity(source: HubEconomyState, selectors: readonly number[])
     }
   }
   return ownedCount <= capacity
+}
+
+interface RemovedInventoryTreeItem {
+  readonly item: HubInventoryItem
+  readonly items: readonly HubInventoryItem[]
+  readonly parentSackId: number | null
+}
+
+function removeInventoryTreeItem(
+  source: readonly HubInventoryItem[],
+  itemId: number,
+  parentSackId: number | null,
+): RemovedInventoryTreeItem | null {
+  for (let index = 0; index < source.length; index += 1) {
+    const item = source[index]!
+    if (item.id === itemId) {
+      return {
+        item,
+        items: source.filter((_, candidateIndex) => candidateIndex !== index),
+        parentSackId,
+      }
+    }
+    if (item.nativeTypeId !== 7008 || item.contents === undefined) continue
+    const nested = removeInventoryTreeItem(item.contents, itemId, item.id)
+    if (!nested) continue
+    return {
+      ...nested,
+      items: source.map((entry, candidateIndex) => candidateIndex === index
+        ? { ...item, contents: nested.items }
+        : entry),
+    }
+  }
+  return null
+}
+
+function replaceInventoryTreeItem(
+  source: readonly HubInventoryItem[],
+  itemId: number,
+  replacement: HubInventoryItem,
+): readonly HubInventoryItem[] | null {
+  for (let index = 0; index < source.length; index += 1) {
+    const item = source[index]!
+    if (item.id === itemId) {
+      return source.map((entry, candidateIndex) => candidateIndex === index ? replacement : entry)
+    }
+    if (item.nativeTypeId !== 7008 || item.contents === undefined) continue
+    const contents = replaceInventoryTreeItem(item.contents, itemId, replacement)
+    if (!contents) continue
+    return source.map((entry, candidateIndex) => candidateIndex === index
+      ? { ...item, contents }
+      : entry)
+  }
+  return null
+}
+
+function consumeInventoryTreeItem(
+  source: readonly HubInventoryItem[],
+  itemId: number,
+): readonly HubInventoryItem[] | null {
+  const item = findInventoryItem(source, itemId)
+  if (!item) return null
+  if (item.quantity > 1) {
+    return replaceInventoryTreeItem(source, itemId, { ...item, quantity: item.quantity - 1 })
+  }
+  return removeInventoryTreeItem(source, itemId, null)?.items ?? null
+}
+
+function nativeDyeRowsAreValid(swatchRows: readonly number[]): boolean {
+  return swatchRows.length > 0
+    && swatchRows.length <= MAX_NATIVE_DYE_SELECTIONS
+    && swatchRows.every((row) => (
+      Number.isSafeInteger(row) && row >= 0 && row < NATIVE_DYE_SWATCH_COLORS.length
+    ))
+}
+
+function nativeClothingTints(
+  item: HubInventoryItem,
+): readonly [cloth: number, trim: number] | null {
+  const recipeTints = item.recipeIndex === null
+    ? undefined
+    : DOWSING_EQUIPMENT_RECIPES[item.recipeIndex]?.iconTints
+  const cloth = item.iconTints?.[0] ?? recipeTints?.[0]
+  const trim = item.iconTints?.[1] ?? recipeTints?.[1]
+  return cloth === null || cloth === undefined || trim === null || trim === undefined
+    ? null
+    : [cloth, trim]
+}
+
+export function hubEconomyInventoryIsValid(source: HubEconomyState): boolean {
+  const seenIds = new Set<number>()
+  const seenItems = new Set<HubInventoryItem>()
+  const visit = (items: readonly HubInventoryItem[], depth = 0): boolean => {
+    if (depth > HUB_SACK_REPLICATION_DEPTH_LIMIT) return false
+    for (const item of items) {
+      if (
+        !Number.isSafeInteger(item.id)
+        || item.id < 1
+        || !Number.isSafeInteger(item.quantity)
+        || item.quantity < 1
+        || seenIds.has(item.id)
+        || seenItems.has(item)
+      ) return false
+      seenIds.add(item.id)
+      seenItems.add(item)
+      const sack = item.nativeTypeId === 7008 && item.kind === 'sack'
+      if ((item.nativeTypeId === 7008) !== (item.kind === 'sack')) return false
+      if (item.contents !== undefined) {
+        if (!sack || item.contents.length > HUB_SACK_CHILD_REPLICATION_LIMIT) return false
+        if (item.contents.length > 0 && !visit(item.contents, depth + 1)) return false
+      }
+    }
+    return true
+  }
+  const equipment = [
+    source.equipment.amulet,
+    source.equipment.hat,
+    ...source.equipment.rings,
+    source.equipment.robe,
+    source.equipment.weapon,
+  ].filter((item): item is HubInventoryItem => item !== null)
+  return visit(source.backpack)
+    && visit(source.storage)
+    && visit(equipment)
+    && visit(source.fomentiusStock)
+}
+
+function rgbTint(color: readonly number[]): number {
+  const channel = (value: number) => Math.round(clamp01(value) * 255)
+  return (channel(color[0]!) << 16) | (channel(color[1]!) << 8) | channel(color[2]!)
+}
+
+function clamp01(value: number): number {
+  return Math.min(1, Math.max(0, Math.fround(value)))
 }
 
 function insertItem(

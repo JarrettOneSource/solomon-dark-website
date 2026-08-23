@@ -151,6 +151,7 @@ const SOURCES = {
     'choose-element': 'choose.wav',
     'death-guitar': 'death-guitar.wav',
     dampen: 'dampen.wav',
+    dye: 'dye.wav',
     'golem-die': 'golem-die.wav',
     'golem-provoke': 'golem-provoke.wav',
     'leviathan-roar': 'leviathan-roar.wav',

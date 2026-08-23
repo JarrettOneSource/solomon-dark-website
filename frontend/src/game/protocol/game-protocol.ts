@@ -147,6 +147,9 @@ import {
   EQUIPMENT_TYPES,
   HAGATHA_PERKS,
   HUB_ITEM_KINDS,
+  HUB_SACK_CHILD_REPLICATION_LIMIT,
+  HUB_SACK_REPLICATION_DEPTH_LIMIT,
+  MAX_NATIVE_DYE_SELECTIONS,
   NATIVE_LOOT_BACKPACK_REPLICATION_LIMIT,
   NATIVE_UNFORGE_OUTCOME_KINDS,
   type DowsingOffer,
@@ -318,7 +321,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 61
+export const GAME_PROTOCOL_VERSION = 62
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
 export const GAME_CONNECTION_TIMEOUT_CLOSE_CODE = 4000
@@ -342,7 +345,6 @@ const MAX_BONEYARD_MAGGOTS = 2_048
 const MAX_BONEYARD_LOOT = 2_047
 const MAX_BONEYARD_GOODIES = 256
 const MAX_BONEYARD_LOOT_EVENTS = 512
-const MAX_NATIVE_SACK_DEPTH = 32
 const MAX_BONEYARD_ENEMY_FLAGS = 64
 const MAX_BONEYARD_ENEMY_EFFECTS = 1
 const MAX_BONEYARD_DIG_AUDIO_EVENTS = 8
@@ -1927,9 +1929,31 @@ function hubInventoryAction(value: unknown): HubInventoryAction {
     onlyKeys(source, 'action', ['type'])
     return { type }
   }
-  if (type === 'consume') {
+  if (type === 'consume' || type === 'read-skill-book') {
     onlyKeys(source, 'action', ['type', 'itemId'])
     return { type, itemId: positiveInteger(source.itemId, 'action.itemId') }
+  }
+  if (type === 'dye') {
+    onlyKeys(source, 'action', ['type', 'dyeItemId', 'layer', 'swatchRows', 'targetItemId'])
+    const layer = limitedString(source.layer, 'action.layer', 16)
+    if (layer !== 'cloth' && layer !== 'trim') {
+      throw new GameProtocolError('action.layer is not supported')
+    }
+    const swatchRows = limitedArray(
+      source.swatchRows,
+      'action.swatchRows',
+      MAX_NATIVE_DYE_SELECTIONS,
+    ).map((row, index) => integerWithin(row, `action.swatchRows[${index}]`, 0, 17))
+    if (swatchRows.length === 0) {
+      throw new GameProtocolError('action.swatchRows must not be empty')
+    }
+    return {
+      type,
+      dyeItemId: positiveInteger(source.dyeItemId, 'action.dyeItemId'),
+      layer,
+      swatchRows,
+      targetItemId: positiveInteger(source.targetItemId, 'action.targetItemId'),
+    }
   }
   if (type === 'unforge') {
     onlyKeys(source, 'action', ['type', 'itemId'])
@@ -1941,6 +1965,16 @@ function hubInventoryAction(value: unknown): HubInventoryAction {
       type,
       itemId: positiveInteger(source.itemId, 'action.itemId'),
       slot: equipmentSlot(source.slot, 'action.slot'),
+    }
+  }
+  if (type === 'move-inventory-item') {
+    onlyKeys(source, 'action', ['type', 'destinationSackId', 'itemId'])
+    return {
+      type,
+      destinationSackId: source.destinationSackId === null
+        ? null
+        : positiveInteger(source.destinationSackId, 'action.destinationSackId'),
+      itemId: positiveInteger(source.itemId, 'action.itemId'),
     }
   }
   if (type === 'transfer') {
@@ -2175,8 +2209,11 @@ function hubActionFeedback(
     'buy-hagatha',
     'close-dowsing',
     'consume',
+    'dye',
     'dowse',
     'equip',
+    'move-inventory-item',
+    'read-skill-book',
     'transfer',
     'unforge',
     'unequip',
@@ -2188,8 +2225,10 @@ function hubActionFeedback(
     'capacity-full',
     'ineligible-item',
     'insufficient-gold',
+    'invalid-inventory',
     'invalid-offer',
     'invalid-slot',
+    'invalid-target',
     'item-not-found',
     'offers-active',
     'perk-capacity-full',
@@ -2389,12 +2428,16 @@ function inventoryItem(
           target: boundedInteger(effect.target, `${effectField}.target`, 0, 82),
         }
       })
-  if (depth > MAX_NATIVE_SACK_DEPTH) {
+  if (depth > HUB_SACK_REPLICATION_DEPTH_LIMIT) {
     throw new GameProtocolError(`${field} exceeds the bounded native Sack depth`)
   }
   const contents = source.contents === undefined
     ? undefined
-    : limitedArray(source.contents, `${field}.contents`, 16).map((item, index) => (
+    : limitedArray(
+        source.contents,
+        `${field}.contents`,
+        HUB_SACK_CHILD_REPLICATION_LIMIT,
+      ).map((item, index) => (
         inventoryItem(item, `${field}.contents[${index}]`, [], depth + 1)
       ))
   if (kind !== 'equipment') {
@@ -2453,9 +2496,11 @@ function inventoryItem(
       || iconRecords.length !== recipe.iconRecords.length
       || iconRecords.some((record, index) => record !== recipe.iconRecords[index])
       || (nativeSelector !== undefined && nativeSelector !== selector)
-      || (iconTints !== undefined && iconTints.some((tint, index) => (
-        tint !== recipe.iconTints[index]
-      )))
+      || (iconTints !== undefined && (
+        recipe.type === 'hat' || recipe.type === 'robe'
+          ? iconTints.some((tint) => tint === null)
+          : iconTints.some((tint, index) => tint !== recipe.iconTints[index])
+      ))
     ) throw new GameProtocolError(`${field} named equipment identity is inconsistent`)
   }
   if (kind === 'mod-potion') {

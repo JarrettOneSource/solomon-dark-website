@@ -11,6 +11,11 @@ import fontAssetsJson from '../../assets/game/skill-picker-native-assets.json' w
 import { elementVfx, hub, skillPicker } from '../../lib/assets.ts'
 import {
   DOWSING_EQUIPMENT_RECIPES,
+  NATIVE_DYE_SWATCHES,
+  findInventoryItem,
+  nativeDyeMixedTint,
+  nativeInventoryClothingItems,
+  projectInventoryItems,
   type EquipmentSlot,
   type HubInventoryItem,
   type HubShopItem,
@@ -34,6 +39,7 @@ import {
 } from './game-webgl.ts'
 import {
   HUB_DOWSING_FLASH,
+  HUB_DYE_CLOTHING,
   HUB_DOWSING_GRID,
   HUB_DOWSING_MSGBOX,
   HUB_DOWSING_PREROLL,
@@ -58,6 +64,10 @@ import {
   hubChatTextRuns,
   hubDowsingFieldTint,
   hubDowsingSlotPosition,
+  hubDyeItemLayerRects,
+  hubDyeModalOpacity,
+  hubDyeSelectedPulse,
+  hubDyeSwatchRect,
   hubInventoryEquipmentSlotRects,
   hubHagathaTooltipLines,
   hubItemTooltipLines,
@@ -132,6 +142,17 @@ export interface HubInventoryDragModel {
   readonly pointer: { readonly x: number; readonly y: number }
 }
 
+export interface HubInventoryDyeModalModel {
+  readonly closingAtMs: number | null
+  readonly dyeItemId: number
+  readonly openedAtMs: number
+  readonly pending: boolean
+  readonly selectedAtMs: number | null
+  readonly selectedRow: number | null
+  readonly swatchRows: readonly number[]
+  readonly targetItemId: number | null
+}
+
 export type HubServiceInspectionModel =
   | {
       readonly id: number
@@ -148,6 +169,7 @@ export type HubInventoryRendererModel =
   | {
       readonly config: PlayerCharacterConfig
       readonly dragging: HubInventoryDragModel | null
+      readonly dyeModal: HubInventoryDyeModalModel | null
       readonly economy: ProtocolPlayerEconomy
       readonly kind: 'inventory'
       readonly notice: HubInventoryRendererNotice | null
@@ -164,6 +186,7 @@ export type HubInventoryRendererModel =
   | {
       readonly config: PlayerCharacterConfig
       readonly dragging: HubInventoryDragModel | null
+      readonly dyeModal: HubInventoryDyeModalModel | null
       readonly economy: ProtocolPlayerEconomy
       readonly kind: 'service'
       readonly notice: HubInventoryRendererNotice | null
@@ -245,6 +268,8 @@ export async function createHubInventoryRenderer(
   let noticeRevealStartedAt: number | null = null
   let previousDowsingOfferCount: number | null = null
   let serviceOverlay: Container | null = null
+  let dyeLayer: Container | null = null
+  let dyeSelectedPulse: Graphics | null = null
   let chatRenderState: ChatRenderState | null = null
   let playerPreviewVfx: NativeElementVfxView | null = null
   let inventoryDragger: Container | null = null
@@ -329,6 +354,21 @@ export async function createHubInventoryRenderer(
         unforgeTarget.tint = tint
         gpu.canvas.dataset.nativeUnforgeTint = tint.toString(16).padStart(6, '0')
       } else delete gpu.canvas.dataset.nativeUnforgeTint
+      const dyeModal = currentModel?.kind === 'dialogue' ? null : currentModel?.dyeModal ?? null
+      if (dyeLayer && dyeModal) {
+        const opacity = hubDyeModalOpacity(dyeModal.openedAtMs, dyeModal.closingAtMs, nowMs)
+        dyeLayer.alpha = opacity
+        const selectedPulse = hubDyeSelectedPulse(dyeModal.selectedAtMs, nowMs)
+        if (dyeSelectedPulse) {
+          dyeSelectedPulse.alpha = selectedPulse
+          dyeSelectedPulse.visible = selectedPulse > 0
+        }
+        gpu.canvas.dataset.nativeDyeOpacity = opacity.toFixed(2)
+        gpu.canvas.dataset.nativeDyePulse = selectedPulse.toFixed(2)
+      } else {
+        delete gpu.canvas.dataset.nativeDyeOpacity
+        delete gpu.canvas.dataset.nativeDyePulse
+      }
       gpu.canvas.dataset.dowsingFlash = flashAlpha > 0 ? 'active' : 'idle'
       const noticeReveal = noticeRevealStartedAt === null
         ? 1
@@ -385,6 +425,8 @@ export async function createHubInventoryRenderer(
       currentModel = model
       curtainAlpha = model.kind === 'dialogue' ? 0 : 1
       serviceOverlay = null
+      dyeLayer = null
+      dyeSelectedPulse = null
       dowsingFieldTiles = []
       chatRenderState = null
       playerPreviewVfx = null
@@ -407,6 +449,11 @@ export async function createHubInventoryRenderer(
         dowsingFieldTiles = serviceOverlay.children.filter(
           (child): child is Sprite => child instanceof Sprite && child.label === 'native-dowsing-field',
         )
+      }
+      if (model.kind !== 'dialogue' && model.dyeModal) {
+        const dye = buildDyeClothing(context, surface, model.economy, model.dyeModal)
+        dyeLayer = dye.layer
+        dyeSelectedPulse = dye.selectedPulse
       }
       unforgeTarget = surface.children.find(
         (child): child is Sprite => child instanceof Sprite && child.label === 'native-unforge-target',
@@ -454,6 +501,8 @@ function buildInventory(
   const companion = model.companion ?? false
   const dragging = model.dragging ?? null
   const selection = model.selection ?? null
+  const projectedBackpack = projectInventoryItems(economy.backpack)
+    .slice(0, HUB_INVENTORY_GRID.capacity)
   const leftShift = companion ? 53 : 0
   const background = new Graphics().rect(0, 0, 1600, 900).fill({ color: 0x000000 })
   layer.addChild(background)
@@ -475,7 +524,7 @@ function buildInventory(
     const position = hubInventorySlotPosition(index)
     const slot = addAtlasSprite(context, layer, 'Inventory', 10, position.x, position.y)
     slot.alpha = HUB_INVENTORY_GRID.slotAlpha
-    const item = economy.backpack[index]
+    const item = projectedBackpack[index]?.item
     if (!item) continue
     const held = dragging?.owner === 'backpack' && item.id === dragging.itemId
     if (!held) addClippedItemIcon(
@@ -499,7 +548,7 @@ function buildInventory(
   }
 
   addGold(context, layer, economy.gold)
-  addBelt(context, layer, economy.backpack, model.config.element)
+  addBelt(context, layer, projectedBackpack.map(({ item }) => item), model.config.element)
   const unforgeTarget = addCenteredAtlasSprite(
     context,
     layer,
@@ -762,7 +811,7 @@ function addEquipment(
   }
   const thirdRingUnlocked = economy.ownedPerkSelectors.includes(19)
   const draggedBackpack = dragging?.owner === 'backpack'
-    ? economy.backpack.find(({ id }) => id === dragging.itemId) ?? null
+    ? findInventoryItem(economy.backpack, dragging.itemId)
     : null
   const targetItem = draggedBackpack
   const acceptingSlots = new Set(targetItem ? equipmentSlotsForItem(targetItem, thirdRingUnlocked) : [])
@@ -943,7 +992,13 @@ function buildService(
   }
 
   if (model.trader === 'luthacus') {
-    addStoreGrid(context, overlay, model.economy.storage, model, 'storage')
+    addStoreGrid(
+      context,
+      overlay,
+      projectInventoryItems(model.economy.storage).map(({ item }) => item),
+      model,
+      'storage',
+    )
   } else if (model.trader === 'shlorio') {
     addDowsingGrid(context, overlay, serviceItems(model), model)
   } else {
@@ -953,6 +1008,142 @@ function buildService(
   addServiceInspection(context, layer, model)
   if (inventory.dragger) layer.addChild(inventory.dragger)
   return { dragger: inventory.dragger, itemInfo: inventory.itemInfo, overlay }
+}
+
+function buildDyeClothing(
+  context: RenderContext,
+  root: Container,
+  economy: ProtocolPlayerEconomy,
+  model: HubInventoryDyeModalModel,
+): { readonly layer: Container; readonly selectedPulse: Graphics | null } {
+  const layer = new Container()
+  layer.label = 'native-dye-clothing'
+  layer.alpha = 0
+  layer.addChild(new Graphics()
+    .rect(0, 0, HUB_NATIVE_UI_SIZE.width, HUB_NATIVE_UI_SIZE.height)
+    .fill({ color: 0x000000, alpha: HUB_NATIVE_UI_TIMING.messageBoxCurtainAlpha }))
+  const [panelLeft, panelTop, panelWidth, panelHeight] = HUB_DYE_CLOTHING.panelRect
+  layer.addChild(new Graphics()
+    .rect(panelLeft, panelTop, panelWidth, panelHeight)
+    .fill({ color: 0x090908, alpha: 0.96 })
+    .stroke({ color: 0xd8ba70, width: 3 }))
+  layer.addChild(new Graphics()
+    .rect(panelLeft + 7, panelTop + 7, panelWidth - 14, panelHeight - 14)
+    .stroke({ color: 0xeadab3, width: 1 }))
+  addBitmapText(
+    context,
+    layer,
+    'FABRIC DYE',
+    'menu',
+    HUB_NATIVE_UI_SIZE.width / 2,
+    HUB_DYE_CLOTHING.titleTextBaselineY,
+    { tint: 0xe4c56d },
+  )
+  const instruction = model.pending
+    ? 'DYEING...'
+    : model.targetItemId !== null
+      ? 'CHOOSE DYE CLOTH OR DYE TRIM'
+      : model.swatchRows.length === 0
+        ? 'MIX ONE OR MORE COLORS'
+        : 'CHOOSE A HAT OR ROBE FROM YOUR BACKPACK'
+  addBitmapText(
+    context,
+    layer,
+    instruction,
+    'medium',
+    HUB_NATIVE_UI_SIZE.width / 2,
+    HUB_DYE_CLOTHING.instructionTextBaselineY,
+    { tint: 0xffffff },
+  )
+
+  let selectedPulse: Graphics | null = null
+  for (let index = 0; index < NATIVE_DYE_SWATCHES.length; index += 1) {
+    const rect = hubDyeSwatchRect(index)
+    layer.addChild(new Graphics()
+      .rect(...rect)
+      .fill({ color: NATIVE_DYE_SWATCHES[index]! })
+      .stroke({ color: 0x201c13, width: 2 }))
+    if (index === model.selectedRow) {
+      selectedPulse = new Graphics()
+        .rect(rect[0] - 4, rect[1] - 4, rect[2] + 8, rect[3] + 8)
+        .stroke({ color: 0xffffff, width: 3 })
+      selectedPulse.label = 'native-dye-selected-pulse'
+      layer.addChild(selectedPulse)
+    }
+  }
+
+  const mixedTint = nativeDyeMixedTint(model.swatchRows)
+  const [tubLeft, tubTop, tubWidth, tubHeight] = HUB_DYE_CLOTHING.tubRect
+  const tub = new Graphics()
+    .roundRect(tubLeft, tubTop, tubWidth, tubHeight, 18)
+    .fill({
+      color: mixedTint ?? 0xffffff,
+      alpha: mixedTint === null ? HUB_DYE_CLOTHING.emptyTubAlpha : 1,
+    })
+    .stroke({ color: 0xeadab3, width: 3 })
+  layer.addChild(tub)
+  addBitmapText(context, layer, 'DYE TUB', 'medium', tubLeft + tubWidth / 2, tubTop + tubHeight + 25, {
+    tint: 0xe4c56d,
+  })
+
+  const projected = projectInventoryItems(economy.backpack).slice(0, HUB_INVENTORY_GRID.capacity)
+  const eligibleIds = new Set(nativeInventoryClothingItems(economy.backpack).map(({ item }) => item.id))
+  projected.forEach(({ item }, index) => {
+    if (!eligibleIds.has(item.id)) return
+    const { x, y } = hubInventorySlotPosition(index)
+    layer.addChild(new Graphics()
+      .rect(x + 2, y + 2, HUB_INVENTORY_GRID.cellSize - 4, HUB_INVENTORY_GRID.cellSize - 4)
+      .stroke({ color: item.id === model.targetItemId ? 0xffffff : 0xd8ba70, width: 3 }))
+  })
+  if (model.targetItemId !== null) {
+    const targetIndex = projected.findIndex(({ item }) => item.id === model.targetItemId)
+    if (targetIndex >= 0) {
+      const rects = hubDyeItemLayerRects(targetIndex)
+      layer.addChild(new Graphics()
+        .rect(...rects.cloth)
+        .fill({ color: 0x000000, alpha: 0.38 })
+        .stroke({ color: 0xffffff, width: 2 }))
+      layer.addChild(new Graphics()
+        .rect(...rects.trim)
+        .fill({ color: 0x000000, alpha: 0.38 })
+        .stroke({ color: 0xffffff, width: 2 }))
+      addBitmapText(
+        context,
+        layer,
+        'CLOTH',
+        'body',
+        rects.cloth[0] + rects.cloth[2] / 2,
+        rects.cloth[1] + 26,
+        { tint: 0xffffff },
+      )
+      addBitmapText(
+        context,
+        layer,
+        'TRIM',
+        'body',
+        rects.trim[0] + rects.trim[2] / 2,
+        rects.trim[1] + 22,
+        { tint: 0xffffff },
+      )
+    }
+  }
+
+  const [cancelLeft, cancelTop, cancelWidth, cancelHeight] = HUB_DYE_CLOTHING.cancelRect
+  layer.addChild(new Graphics()
+    .rect(cancelLeft, cancelTop, cancelWidth, cancelHeight)
+    .fill({ color: 0x191916 })
+    .stroke({ color: 0xd8ba70, width: 2 }))
+  addBitmapText(
+    context,
+    layer,
+    'CANCEL',
+    'menu',
+    cancelLeft + cancelWidth / 2,
+    cancelTop + 31,
+    { tint: 0xffffff },
+  )
+  root.addChild(layer)
+  return { layer, selectedPulse }
 }
 
 function buildNotice(
@@ -1376,7 +1567,7 @@ function addServiceInspection(
   }
 
   const items = model.trader === 'luthacus'
-    ? model.economy.storage
+    ? projectInventoryItems(model.economy.storage).map(({ item }) => item)
     : serviceItems(model)
   const index = items.findIndex(({ id }) => id === inspection.id)
   const item = items[index]
@@ -1620,7 +1811,7 @@ function inventoryItemForSelection(
   selection: HubInventorySelectionModel,
 ): HubInventoryItem | null {
   return selection.owner === 'backpack'
-    ? economy.backpack.find(({ id }) => id === selection.id) ?? null
+    ? findInventoryItem(economy.backpack, selection.id)
     : selection.equipmentSlot === null
       ? null
       : itemAtEquipmentSlot(economy, selection.equipmentSlot)
@@ -1631,9 +1822,9 @@ function inventoryItemForDrag(
   dragging: HubInventoryDragModel,
 ): HubInventoryItem | null {
   return dragging.owner === 'backpack'
-    ? economy.backpack.find(({ id }) => id === dragging.itemId) ?? null
+    ? findInventoryItem(economy.backpack, dragging.itemId)
     : dragging.owner === 'storage'
-      ? economy.storage.find(({ id }) => id === dragging.itemId) ?? null
+      ? findInventoryItem(economy.storage, dragging.itemId)
     : dragging.equipmentSlot === null
       ? null
       : itemAtEquipmentSlot(economy, dragging.equipmentSlot)
@@ -1645,7 +1836,7 @@ function inventorySelectionCenter(
   companion: boolean,
 ): { readonly x: number; readonly y: number } | null {
   if (selection.owner === 'backpack') {
-    const index = economy.backpack.findIndex(({ id }) => id === selection.id)
+    const index = projectInventoryItems(economy.backpack).findIndex(({ item }) => item.id === selection.id)
     if (index < 0) return null
     const position = hubInventorySlotPosition(index)
     return { x: position.x + 36, y: position.y + 36 }
@@ -1833,7 +2024,10 @@ function addItemIcon(
 function addClippedItemIcon(
   context: RenderContext,
   layer: Container,
-  item: Pick<HubInventoryItem, 'equipmentType' | 'iconRecords' | 'modContent' | 'recipeIndex'>,
+  item: Pick<
+    HubInventoryItem,
+    'equipmentType' | 'iconRecords' | 'iconTints' | 'modContent' | 'recipeIndex'
+  >,
   centerX: number,
   centerY: number,
   element: WizardElement,

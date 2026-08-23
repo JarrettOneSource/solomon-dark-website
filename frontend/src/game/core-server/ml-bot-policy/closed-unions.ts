@@ -129,6 +129,7 @@ export const ML_BOT_POLICY_ITEM_CLASSES = Object.freeze({
   'mod-potion': 'potion',
   'rejuvenation-potion': 'potion',
   sack: 'sack',
+  'skill-book': 'misc',
   'wizard-chug': 'potion',
 }) satisfies Readonly<Record<HubItemKind, 'equipment' | 'key' | 'misc' | 'potion' | 'sack'>>
 

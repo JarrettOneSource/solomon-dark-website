@@ -23,14 +23,26 @@ test('inventory observation ranks potions and exposes exact state-changing legal
     playerEntities: damagePlayerEntity(replacePlayerEconomy(state.playerEntities, 'agent', {
       ...economy,
       backpack: [{
+        contents: [{
+          equipmentType: null,
+          iconRecords: [46],
+          id: 99,
+          kind: 'health-potion',
+          name: 'Health Potion',
+          nativeSubtype: 0,
+          nativeTypeId: 7001,
+          quantity: 2,
+          rarity: null,
+          recipeIndex: null,
+        }],
         equipmentType: null,
-        iconRecords: [46],
-        id: 99,
-        kind: 'health-potion',
-        name: 'Health Potion',
+        iconRecords: [70],
+        id: 98,
+        kind: 'sack',
+        name: 'Sack',
         nativeSubtype: 0,
-        nativeTypeId: 7001,
-        quantity: 2,
+        nativeTypeId: 7008,
+        quantity: 1,
         rarity: null,
         recipeIndex: null,
       }],
@@ -45,8 +57,9 @@ test('inventory observation ranks potions and exposes exact state-changing legal
   assert.equal(observed.potions[0]?.legal, true)
   assert.equal(observed.potions[0]?.itemId, 99)
   const count = Math.log(3) / Math.log(100)
+  const totalCount = Math.log(4) / Math.log(100)
   assert.ok(Math.abs(observed.blockO[1]! - count) < 1e-6)
-  assert.ok(Math.abs(observed.blockQ[0]! - count) < 1e-6)
+  assert.ok(Math.abs(observed.blockQ[0]! - totalCount) < 1e-6)
   assert.ok(Math.abs(observed.blockQ[1]! - count) < 1e-6)
 })
 

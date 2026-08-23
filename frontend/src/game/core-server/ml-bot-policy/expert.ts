@@ -1,4 +1,5 @@
 import { getPlayerCharacter, getPlayerEconomy, getPlayerProgression, type GameSimulationState } from '../game-simulation.ts'
+import { findInventoryItem } from '../../core-kernels/hub-economy.ts'
 import {
   createMlBotPolicyActionMaskPlan,
   type MlBotPolicyActionIndices,
@@ -69,7 +70,7 @@ function selectAbility(
       : null
   if (preferredPotionKind !== null) {
     const potionSlot = frame.inventory.potions.findIndex(({ itemId, legal }) => (
-      legal && economy.backpack.some(({ id, kind }) => id === itemId && kind === preferredPotionKind)
+      legal && findInventoryItem(economy.backpack, itemId)?.kind === preferredPotionKind
     ))
     if (potionSlot >= 0 && mask[potionSlot + 10] === 1) return potionSlot + 10
   }

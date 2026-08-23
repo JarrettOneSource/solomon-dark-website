@@ -6,6 +6,10 @@ import type {
 import type { HubRegionId } from './core-kernels/hub-regions.ts'
 import type { Vector2 } from './core-kernels/vector.ts'
 
+type HubPotionShortcutItem = Pick<HubInventoryItem, 'id' | 'kind' | 'quantity'> & {
+  readonly contents?: readonly HubPotionShortcutItem[]
+}
+
 export interface HubTraderDialogueDefinition {
   readonly actionLabel: string
   readonly intro: readonly string[]
@@ -21,10 +25,13 @@ export interface HubPotionShortcut {
 }
 
 export function hubPotionShortcut(
-  backpack: readonly Pick<HubInventoryItem, 'id' | 'kind' | 'quantity'>[],
+  backpack: readonly HubPotionShortcutItem[],
   kind: 'health-potion' | 'mana-potion',
 ): HubPotionShortcut {
-  const stacks = backpack.filter((item) => item.kind === kind)
+  const flatten = (items: readonly HubPotionShortcutItem[]): readonly HubPotionShortcutItem[] => (
+    items.flatMap((item) => [item, ...flatten(item.contents ?? [])])
+  )
+  const stacks = flatten(backpack).filter((item) => item.kind === kind)
   return {
     count: stacks.reduce((total, item) => total + item.quantity, 0),
     itemId: stacks[0]?.id ?? null,

@@ -8,6 +8,11 @@ import {
   type GameSimulationState,
 } from '../game-simulation.ts'
 import type { BoneyardEnemyActor } from '../boneyard-enemy-store.ts'
+import {
+  damagePlayerEntity,
+  playerEconomyAt,
+  replacePlayerEconomy,
+} from '../player-entity-store.ts'
 import { MlBotPolicyObserver } from './observer.ts'
 import { selectMlBotPolicyExpertAction } from './expert.ts'
 
@@ -95,4 +100,48 @@ test('semantic expert emits only null actions under the global input gate', () =
     movement: 0,
     target: 0,
   })
+})
+
+test('semantic expert consumes a recursively owned health potion when critically injured', () => {
+  const base = enterBoneyardWorld(createGameSimulation({
+    agent: { discipline: 'arcane', displayName: 'Agent', element: 'fire' },
+  }), BONEYARD)
+  const economy = playerEconomyAt(base.playerEntities, 'agent')!
+  const nestedPotion = {
+    equipmentType: null,
+    iconRecords: [46],
+    id: 90_001,
+    kind: 'health-potion' as const,
+    name: 'Health Potion',
+    nativeSubtype: 0,
+    nativeTypeId: 7001,
+    quantity: 1,
+    rarity: null,
+    recipeIndex: null,
+  }
+  const state = {
+    ...base,
+    playerEntities: damagePlayerEntity(replacePlayerEconomy(base.playerEntities, 'agent', {
+      ...economy,
+      backpack: [{
+        contents: [nestedPotion],
+        equipmentType: null,
+        iconRecords: [70],
+        id: 90_000,
+        kind: 'sack',
+        name: 'Sack',
+        nativeSubtype: 0,
+        nativeTypeId: 7008,
+        quantity: 1,
+        rarity: null,
+        recipeIndex: null,
+      }],
+    }), 'agent', 45, 0),
+  }
+  const frame = new MlBotPolicyObserver('agent').observe(state, {
+    activeInputs: {},
+    controllers: { agent: 'bot' },
+  })
+  assert.equal(frame.inventory.potions[0]?.itemId, nestedPotion.id)
+  assert.equal(selectMlBotPolicyExpertAction(state, 'agent', frame).ability, 10)
 })

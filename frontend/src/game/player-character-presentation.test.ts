@@ -168,6 +168,32 @@ test('generated loot equipment keeps its live selector and wearable colors after
   })
 })
 
+test('dyed named clothing keeps its recipe selector and mutable colors while living and dead', () => {
+  const dyedHat = {
+    ...equipmentItem(16, 'hat'),
+    iconTints: [0x123456, 0xabcdef] as const,
+  }
+  const dyedRobe = {
+    ...equipmentItem(25, 'robe'),
+    iconTints: [0x654321, 0xfedcba] as const,
+  }
+  const equipment = {
+    hat: dyedHat,
+    robe: dyedRobe,
+    weapon: null,
+  }
+  const expected = {
+    hat: { primaryTint: 0x123456, secondaryTint: 0xabcdef, selector: 3 },
+    robe: { primaryTint: 0x654321, secondaryTint: 0xfedcba, selector: 2 },
+    weapon: { kind: 'staff' as const, selector: 0 },
+  }
+  assert.deepEqual(playerLivingEquipmentAppearance('fire', equipment), {
+    ...expected,
+    weapon: null,
+  })
+  assert.deepEqual(playerDeathEquipmentAppearance('fire', equipment), expected)
+})
+
 test('living equipment distinguishes required starter clothes from an empty weapon slot', () => {
   assert.deepEqual(playerLivingEquipmentAppearance(
     'water',

@@ -41,6 +41,35 @@ export const HUB_INVENTORY_INTERACTION = {
   selectionTint: 0x00c020,
 } as const
 
+/**
+ * Fixed-stage projection of the stock DyeClothing overlay. The executable
+ * recovers the relative 3x3-bank geometry, 40/50 spacing, item split, and
+ * update rates; these absolute web-stage bounds keep the authored backpack
+ * cells visible because stock target HotRects remain the inventory item rects.
+ */
+export const HUB_DYE_CLOTHING = {
+  bankSize: 9,
+  cancelRect: [690, 390, 220, 44] as const,
+  closeDecrementPerTick: 0.1,
+  emptyTubAlpha: 0.2,
+  instructionTextBaselineY: 151,
+  itemLayerSplitOffsetY: 40,
+  nativeTickMs: 10,
+  openIncrementPerTick: 0.01,
+  panelRect: [480, 80, 640, 360] as const,
+  selectedPulseDecrementPerTick: 0.05,
+  selectedPulseTicks: 20,
+  swatchBankOrigins: [[560, 185], [760, 185]] as const,
+  swatchColumns: 3,
+  swatchCount: 18,
+  swatchPitchX: 40,
+  swatchPitchY: 50,
+  swatchRows: 3,
+  swatchSize: 32,
+  titleTextBaselineY: 121,
+  tubRect: [960, 198, 96, 96] as const,
+} as const
+
 export const HUB_HOVER_BOX = {
   contentMargin: 25,
   contentMaxWidth: 300,
@@ -426,10 +455,73 @@ export const HUB_NATIVE_UI_SURFACES = [
   'inventory-item-info',
   'contextual-hover-box',
   'inventory-dragger',
+  'inventory-dye-clothing',
   'inventory-required-clothing-message',
   'inventory-unforge-confirmation',
   'inventory-unforge-result',
 ] as const
+
+export function hubDyeSwatchRect(
+  index: number,
+): readonly [left: number, top: number, width: number, height: number] {
+  if (!Number.isInteger(index) || index < 0 || index >= HUB_DYE_CLOTHING.swatchCount) {
+    throw new RangeError('native dye swatch index must be within [0, 17]')
+  }
+  const bank = Math.floor(index / HUB_DYE_CLOTHING.bankSize)
+  const bankIndex = index % HUB_DYE_CLOTHING.bankSize
+  const column = bankIndex % HUB_DYE_CLOTHING.swatchColumns
+  const row = Math.floor(bankIndex / HUB_DYE_CLOTHING.swatchColumns)
+  const [originX, originY] = HUB_DYE_CLOTHING.swatchBankOrigins[bank]!
+  return [
+    originX + column * HUB_DYE_CLOTHING.swatchPitchX,
+    originY + row * HUB_DYE_CLOTHING.swatchPitchY,
+    HUB_DYE_CLOTHING.swatchSize,
+    HUB_DYE_CLOTHING.swatchSize,
+  ]
+}
+
+export function hubDyeItemLayerRects(
+  inventoryIndex: number,
+): Readonly<{
+  cloth: readonly [number, number, number, number]
+  trim: readonly [number, number, number, number]
+}> {
+  const { x, y } = hubInventorySlotPosition(inventoryIndex)
+  const split = HUB_DYE_CLOTHING.itemLayerSplitOffsetY
+  return {
+    cloth: [x, y, HUB_INVENTORY_GRID.cellSize, split],
+    trim: [
+      x,
+      y + split,
+      HUB_INVENTORY_GRID.cellSize,
+      HUB_INVENTORY_GRID.cellSize - split,
+    ],
+  }
+}
+
+export function hubDyeModalOpacity(
+  openedAtMs: number,
+  closingAtMs: number | null,
+  nowMs: number,
+): number {
+  const openedTicks = nativeElapsedTicks(openedAtMs, Math.min(nowMs, closingAtMs ?? nowMs))
+  const openedOpacity = Math.min(1, openedTicks * HUB_DYE_CLOTHING.openIncrementPerTick)
+  if (closingAtMs === null || nowMs <= closingAtMs) return openedOpacity
+  const closingTicks = nativeElapsedTicks(closingAtMs, nowMs)
+  return Math.max(0, openedOpacity - closingTicks * HUB_DYE_CLOTHING.closeDecrementPerTick)
+}
+
+export function hubDyeSelectedPulse(selectedAtMs: number | null, nowMs: number): number {
+  if (selectedAtMs === null) return 0
+  return Math.max(
+    0,
+    1 - nativeElapsedTicks(selectedAtMs, nowMs) * HUB_DYE_CLOTHING.selectedPulseDecrementPerTick,
+  )
+}
+
+function nativeElapsedTicks(startedAtMs: number, nowMs: number): number {
+  return Math.max(0, Math.floor((nowMs - startedAtMs) / HUB_DYE_CLOTHING.nativeTickMs))
+}
 
 export interface HubInventoryItemInfoText {
   readonly description: string | null
@@ -470,6 +562,13 @@ export function hubInventoryItemInfoText(item: HubInventoryItem): HubInventoryIt
         instruction: null,
         title: item.name,
       }
+    }
+    case 'skill-book': return {
+      description: item.nativeSubtype === 2
+        ? 'Double click to learn a new skill'
+        : 'Double click to improve a learned skill',
+      instruction: null,
+      title: item.name,
     }
     case 'equipment': return { description: null, instruction: null, title: item.name }
   }
