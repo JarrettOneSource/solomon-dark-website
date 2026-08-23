@@ -14,9 +14,14 @@ const currentRevision = execFileSync(
   { cwd: repositoryRoot, encoding: 'utf8' },
 ).trim().toLowerCase()
 const targetRevision = currentRevision[0] === 'f' ? 'e'.repeat(40) : 'f'.repeat(40)
-const baseUrl = process.env.SDR_GAME_DEPLOYMENT_SMOKE_URL || 'http://127.0.0.1:4187'
-const backendUrl = process.env.SDR_GAME_DEPLOYMENT_SMOKE_BACKEND_URL
-  || 'http://127.0.0.1:5210'
+const baseUrl = loopbackOrigin(
+  process.env.SDR_GAME_DEPLOYMENT_SMOKE_URL ?? 'http://127.0.0.1:4187',
+  'browser',
+)
+const backendUrl = loopbackOrigin(
+  process.env.SDR_GAME_DEPLOYMENT_SMOKE_BACKEND_URL ?? 'http://127.0.0.1:5210',
+  'backend',
+)
 const frontendAddress = new URL(baseUrl)
 const frontendRequiresVite = frontendAddress.origin !== new URL(backendUrl).origin
 const smokeScope = process.env.SDR_GAME_DEPLOYMENT_SMOKE_SCOPE || 'all'
@@ -114,6 +119,19 @@ try {
   await browser?.close()
   await Promise.all(children.reverse().map(stopProcess))
   await rm(storageRoot, { recursive: true })
+}
+
+function loopbackOrigin(value, label) {
+  const parsed = new URL(value)
+  if (
+    parsed.protocol !== 'http:'
+    || parsed.hostname !== '127.0.0.1'
+    || parsed.port.length === 0
+    || parsed.pathname !== '/'
+    || parsed.search
+    || parsed.hash
+  ) throw new Error(`${label} smoke URL must be an explicit loopback HTTP origin`)
+  return parsed.origin
 }
 
 async function exercisePlayer({ account, label }) {

@@ -23,10 +23,10 @@ that overlapping Adam ownership regressed aim lead and potion use.
 
 Python and TypeScript reproduce the selected checkpoint byte-for-byte. Main
 inference parity has action equality, value absolute error
-`4.470348358154297e-8`, and log-probability error
-`1.1609595844674914e-6`. Choice inference selects the same option with value
-error `3.725290298461914e-8` and log-probability error
-`3.5683373651729244e-9`.
+`7.450580596923828e-9`, and log-probability error
+`1.1377436281989617e-7`. Choice inference selects the same option with value
+error `5.21540641784668e-8` and log-probability error
+`4.452634903839847e-8`.
 
 ## Bootstrap and learning gates
 
