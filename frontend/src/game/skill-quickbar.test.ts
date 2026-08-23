@@ -4,7 +4,6 @@ import test from 'node:test'
 
 import {
   layoutNativeQuickbarBinding,
-  MOBILE_SKILL_QUICKBAR_SLOT_POSITIONS,
   nativeCooldownSectorPath,
   nativeSkillQuickbarCooldownPresentation,
   NATIVE_SKILL_QUICKBAR_FONT,
@@ -12,23 +11,6 @@ import {
 } from './skill-quickbar.ts'
 
 const component = readFileSync(new URL('./SkillQuickbar.tsx', import.meta.url), 'utf8')
-
-test('mobile quickbar preserves slot order across balanced four-slot side banks', () => {
-  assert.deepEqual(MOBILE_SKILL_QUICKBAR_SLOT_POSITIONS, [
-    { bank: 'left', bottom: 314, x: -560 },
-    { bank: 'left', bottom: 314, x: -456 },
-    { bank: 'left', bottom: 210, x: -560 },
-    { bank: 'left', bottom: 210, x: -456 },
-    { bank: 'right', bottom: 314, x: 356 },
-    { bank: 'right', bottom: 314, x: 460 },
-    { bank: 'right', bottom: 210, x: 356 },
-    { bank: 'right', bottom: 210, x: 460 },
-  ])
-  assert.deepEqual(
-    MOBILE_SKILL_QUICKBAR_SLOT_POSITIONS.map(({ bank }) => bank),
-    ['left', 'left', 'left', 'left', 'right', 'right', 'right', 'right'],
-  )
-})
 
 test('skill quickbar keeps the exact eight 53 px slots and 60 px pitch', () => {
   assert.deepEqual(NATIVE_SKILL_QUICKBAR_SLOT_OFFSETS, [

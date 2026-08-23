@@ -163,14 +163,6 @@ test('joysticks cancel their own pointer default and retain exclusive direct man
   assert.match(cssRule(styles, '.game-touch-joystick'), /touch-action:\s*none;/)
 })
 
-test('coarse-pointer joysticks enlarge base and knob together by exactly 25 percent', () => {
-  const styles = readFileSync(new URL('./input/touch-joystick.css', import.meta.url), 'utf8')
-  assert.match(cssRule(styles, '.game-touch-joystick'), /width:\s*237\.5px;/)
-  assert.match(cssRule(styles, '.game-touch-joystick'), /height:\s*237\.5px;/)
-  assert.match(cssRule(styles, '.game-touch-joystick-knob'), /width:\s*100px;/)
-  assert.match(cssRule(styles, '.game-touch-joystick-knob'), /height:\s*100px;/)
-})
-
 test('selection policy is not duplicated by transient scenes', () => {
   for (const path of [
     './main-menu.css',

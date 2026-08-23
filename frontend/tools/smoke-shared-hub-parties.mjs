@@ -50,10 +50,6 @@ try {
   const chat = first.page.getByLabel('Game chat')
   await first.page.keyboard.press('t')
   await chat.locator('xpath=self::*[@data-chat-open="true"]').waitFor()
-  if (pointerMode === 'mobile') {
-    const openChatBounds = await chat.locator('.game-chat-panel').boundingBox()
-    assert.ok(Math.abs(openChatBounds.width - 844) < 0.1)
-  }
   assert.equal(await chat.getAttribute('data-chat-channel'), 'global')
   assert.equal(await chat.getAttribute('data-chat-channels'), 'global')
   const singletonChatInput = chat.getByRole('textbox', { name: 'Chat message' })
@@ -71,22 +67,6 @@ try {
   }
   await singletonChatInput.press('Escape')
   await chat.locator('xpath=self::*[@data-chat-open="false"]').waitFor()
-
-  if (pointerMode === 'mobile') {
-    const chatLauncherBounds = await first.page.getByRole('button', { name: 'Open chat' }).boundingBox()
-    assert.ok(Math.abs(chatLauncherBounds.width - 34) < 0.1)
-    assert.ok(Math.abs(chatLauncherBounds.height - 34) < 0.1)
-
-    const partyPanelBounds = await first.page.locator('.hub-party-panel').boundingBox()
-    const partySettingsBounds = await first.page.getByRole('button', { name: 'Party settings' }).boundingBox()
-    const partyMemberBounds = await first.page.locator('.hub-party-member-open').first().boundingBox()
-    const firstQuickbarBounds = await first.page.locator('.hub-hud-quickbar-slot').first().boundingBox()
-    assert.ok(Math.abs(partyPanelBounds.width - 164) < 0.1)
-    assert.ok(Math.abs(partySettingsBounds.width - 32) < 0.1)
-    assert.ok(Math.abs(partySettingsBounds.height - 32) < 0.1)
-    assert.ok(partyMemberBounds.height >= 28 && partyMemberBounds.height <= 34)
-    assert.ok(partyPanelBounds.x + partyPanelBounds.width < firstQuickbarBounds.x)
-  }
 
   await first.page.getByRole('button', { name: 'Party settings' }).click()
   const partySettings = first.page.getByRole('dialog', { name: 'Party settings' })

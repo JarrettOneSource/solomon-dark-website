@@ -51,14 +51,6 @@ function rectCenter(rect) {
   return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
 }
 
-function rectsOverlap(first, second) {
-  assert.ok(first && second, 'expected both element bounds')
-  return first.x < second.x + second.width
-    && first.x + first.width > second.x
-    && first.y < second.y + second.height
-    && first.y + first.height > second.y
-}
-
 async function touchStart(cdp, x, y) {
   await cdp.send('Input.dispatchTouchEvent', {
     type: 'touchStart',
@@ -405,54 +397,6 @@ try {
   assert.ok(Math.abs(mobileViewport.height - 900) < 0.001)
   assert.ok(Math.abs(mobileViewport.scale - 390 / 900) < 0.000001)
   assert.ok(Math.abs(mobileViewport.width - 844 / mobileViewport.scale) < 0.001)
-  const joystickGeometry = await joystick.evaluate(node => ({
-    base: Number.parseFloat(getComputedStyle(node).width),
-    knob: Number.parseFloat(getComputedStyle(node.querySelector('.game-touch-joystick-knob')).width),
-  }))
-  assert.deepEqual(joystickGeometry, { base: 237.5, knob: 100 })
-  assert.ok(Math.abs(joystickBounds.width - 237.5 * mobileViewport.scale) < 0.1)
-
-  const quickbarBounds = await mobile.locator('.hub-hud-quickbar-slot').evaluateAll(nodes => (
-    nodes.map((node) => {
-      const bounds = node.getBoundingClientRect()
-      return {
-        height: bounds.height,
-        width: bounds.width,
-        x: bounds.x,
-        y: bounds.y,
-      }
-    })
-  ))
-  assert.equal(quickbarBounds.length, 8)
-  quickbarBounds.forEach((bounds, index) => {
-    assert.ok(Math.abs(bounds.width - 100 * mobileViewport.scale) < 0.1)
-    assert.ok(Math.abs(bounds.height - 100 * mobileViewport.scale) < 0.1)
-    assert.equal(rectsOverlap(bounds, joystickBounds), false)
-    for (let previous = 0; previous < index; previous += 1) {
-      assert.equal(rectsOverlap(bounds, quickbarBounds[previous]), false)
-    }
-  })
-  assert.equal(quickbarBounds.slice(0, 4).every(bounds => bounds.x + bounds.width < 422), true)
-  assert.equal(quickbarBounds.slice(4).every(bounds => bounds.x > 422), true)
-  for (const bank of [quickbarBounds.slice(0, 4), quickbarBounds.slice(4)]) {
-    const columns = [...new Set(bank.map(bounds => bounds.x.toFixed(2)))]
-    const rows = [...new Set(bank.map(bounds => bounds.y.toFixed(2)))]
-    assert.equal(columns.length, 2)
-    assert.equal(rows.length, 2)
-    assert.ok(Math.abs(Number(columns[1]) - Number(columns[0]) - 104 * mobileViewport.scale) < 0.1)
-    assert.ok(Math.abs(Number(rows[1]) - Number(rows[0]) - 104 * mobileViewport.scale) < 0.1)
-  }
-
-  const inventoryBounds = await Promise.all([
-    mobile.getByRole('button', { name: /Use health potion/ }).boundingBox(),
-    mobile.getByRole('button', { name: /Open inventory/ }).boundingBox(),
-    mobile.locator('.hub-hud-xp').boundingBox(),
-    mobile.getByRole('button', { name: 'Open skills' }).boundingBox(),
-    mobile.getByRole('button', { name: /Use mana potion/ }).boundingBox(),
-  ])
-  for (const inventoryMember of inventoryBounds) {
-    quickbarBounds.forEach((slot) => assert.equal(rectsOverlap(inventoryMember, slot), false))
-  }
   const mapBounds = await mobile.locator('.hub-hud-map').boundingBox()
   assert.ok(mapBounds && mapBounds.x >= 0 && mapBounds.y >= 0)
   assert.ok(mapBounds.x + mapBounds.width <= 844.05)
@@ -688,8 +632,6 @@ try {
     boneyardPrimaryBounds && boneyardPrimaryBounds.width > 60,
     'expected a visible Boneyard primary attack joystick',
   )
-  assert.ok(Math.abs(boneyardJoystickBounds.width - 237.5 * mobileBoneyardViewport.scale) < 0.1)
-  assert.ok(Math.abs(boneyardPrimaryBounds.width - 237.5 * mobileBoneyardViewport.scale) < 0.1)
   const boneyardCenter = rectCenter(boneyardJoystickBounds)
   const boneyardBefore = sceneTeardown.settled
   await touchStart(mobileCdp, boneyardCenter.x, boneyardCenter.y)

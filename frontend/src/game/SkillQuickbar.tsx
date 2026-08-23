@@ -14,7 +14,6 @@ import {
 } from './core-kernels/player-progression.ts'
 import {
   layoutNativeQuickbarBinding,
-  MOBILE_SKILL_QUICKBAR_SLOT_POSITIONS,
   nativeCooldownSectorPath,
   nativeSkillQuickbarCooldownPresentation,
   NATIVE_SKILL_QUICKBAR_FONT,
@@ -38,6 +37,9 @@ interface NativeAssetManifest {
 const nativeAssets = nativeAssetsJson as unknown as NativeAssetManifest
 const ATLAS_WIDTH = 1024
 const ATLAS_HEIGHT = 512
+const MOBILE_QUICKBAR_SLOT_OFFSETS = Object.freeze([
+  -414, -310, -206, -102, 2, 106, 210, 314,
+])
 
 interface SkillQuickbarProps {
   controls: GameControlBindings
@@ -63,7 +65,6 @@ export default function SkillQuickbar({
       aria-label="Skill quickbar"
     >
       {NATIVE_SKILL_QUICKBAR_SLOT_OFFSETS.map((offset, slot) => {
-        const mobilePosition = MOBILE_SKILL_QUICKBAR_SLOT_POSITIONS[slot]!
         const skillId = quickbar[slot] ?? null
         const skill = skillId === null ? undefined : NATIVE_SKILL_CATALOG[skillId]
         const secondary = skillId !== null && nativeSkillCategory(skillId) === 2
@@ -94,14 +95,12 @@ export default function SkillQuickbar({
             type="button"
             className="hub-hud-quickbar-slot"
             data-slot={slot}
-            data-mobile-bank={mobilePosition.bank}
             data-binding-code={bindingCode}
             data-active={active}
             disabled={skill === undefined || !onInput || combatDisabled}
             key={slot}
             style={{
-              '--mobile-quickbar-slot-bottom': `${mobilePosition.bottom}px`,
-              '--mobile-quickbar-slot-x': `${mobilePosition.x}px`,
+              '--mobile-quickbar-slot-offset': `${MOBILE_QUICKBAR_SLOT_OFFSETS[slot]}px`,
               '--quickbar-slot-offset': `${offset}px`,
             } as CSSProperties}
             aria-label={label}

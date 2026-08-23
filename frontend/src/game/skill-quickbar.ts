@@ -53,16 +53,6 @@ export const NATIVE_SKILL_QUICKBAR_FONT: NativeBeltFontData = nativeFontData
 export const NATIVE_SKILL_QUICKBAR_SLOT_OFFSETS = Object.freeze([
   -332, -272, -212, -152, 98, 158, 218, 278,
 ])
-export const MOBILE_SKILL_QUICKBAR_SLOT_POSITIONS = Object.freeze([
-  { bank: 'left', bottom: 314, x: -560 },
-  { bank: 'left', bottom: 314, x: -456 },
-  { bank: 'left', bottom: 210, x: -560 },
-  { bank: 'left', bottom: 210, x: -456 },
-  { bank: 'right', bottom: 314, x: 356 },
-  { bank: 'right', bottom: 314, x: 460 },
-  { bank: 'right', bottom: 210, x: 356 },
-  { bank: 'right', bottom: 210, x: 460 },
-])
 
 const SLOT_SIZE = 53
 const SECTOR_CENTER = SLOT_SIZE / 2
