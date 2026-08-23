@@ -25,7 +25,6 @@ import {
   createGameSimulation,
   enterBoneyardWorld,
   getPlayerProgression,
-  getPlayerSkillBook,
   grantGameSimulationPlayerExperience,
   removePlayerCharacter,
   returnGameSimulationToHub,
@@ -60,7 +59,6 @@ import {
   encodeGameMessage,
   type GameContentManifest,
   type GameChatChannel,
-  type ClientGameMessage,
   type GameSessionKind,
   type GameplayPauseState,
   type PartyAction,
@@ -155,13 +153,6 @@ import {
   createWebLuaGameExtensions,
   dispatchWebLuaConsumption,
 } from './lua/web-lua-game-extensions.ts'
-import {
-  MlBotHostConnection,
-  MlBotHostController,
-  mlBotDefinitionProfile,
-  validateMlBotDefinition,
-  type GameHostMlBotDefinition,
-} from './ml-bot-host-controller.ts'
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost'])
 export const GAME_SAVE_AUTOSAVE_INTERVAL_TICKS = GAME_TICK_RATE * 30
@@ -220,7 +211,6 @@ export interface GameHostOptions {
   maxPlayers?: number
   modAssets?: readonly import('../protocol/game-protocol.ts').GameModAsset[]
   mods?: readonly WebLuaModSource[]
-  mlBots?: readonly GameHostMlBotDefinition[]
   onPlayerCountChanged?: (playerCount: number) => void
   port?: number
   resetWhenEmpty?: boolean
@@ -238,7 +228,6 @@ export interface GameHostAddress {
 
 export interface GameHost {
   address: GameHostAddress
-  botPlayerIds(): readonly string[]
   close(reason?: GameHostCloseReason): Promise<void>
   hubPlayerCount(): number
   hostPlayerId(): string | null
@@ -305,8 +294,6 @@ interface HostClient {
   activeInput: PlayerCharacterInput
   chatSentAtMs: number[]
   connectedAtMs: number
-  connection: GameHostConnection
-  controller: 'bot' | 'human'
   displayName: string
   profile: PlayerSocialProfile
   forceReplicationKeyframe: boolean
@@ -319,9 +306,8 @@ interface HostClient {
   queuedInputs: Map<number, QueuedClientInput>
   pendingLuaRequestIds: Set<number>
   sentReplicationBaselines: Map<number, ReplicatedEntityBaseline>
+  socket: WebSocket
 }
-
-type GameHostConnection = WebSocket | MlBotHostConnection
 
 interface ExternalPartyJoinRequest {
   readonly expiresAt: number
@@ -361,7 +347,6 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   const host = options.host ?? '127.0.0.1'
   const port = options.port ?? 0
   const maxPlayers = options.maxPlayers ?? 16
-  const mlBots = options.mlBots ?? []
   const resetWhenEmpty = options.resetWhenEmpty ?? false
   const snapshotRate = options.snapshotRate ?? 20
   const heartbeatIntervalMs = resolveGameHeartbeatInterval(options.heartbeatIntervalMs)
@@ -397,10 +382,6 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   if (!Number.isInteger(maxPlayers) || maxPlayers < 1) {
     throw new Error('maxPlayers must be positive')
   }
-  if (mlBots.length >= maxPlayers) {
-    throw new Error('Game host ML bots must leave at least one player slot')
-  }
-  for (const definition of mlBots) validateMlBotDefinition(definition)
   if (!(snapshotRate >= 1 && snapshotRate <= GAME_TICK_RATE)) {
     throw new Error(`snapshotRate must be within 1..${GAME_TICK_RATE}`)
   }
@@ -440,17 +421,14 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   let ticking = false
   let lastTickLagWarningAt = Number.NEGATIVE_INFINITY
   let nextTickAt = performance.now() + GAME_FIXED_TICK_SECONDS * 1000
-  const clients = new Map<GameHostConnection, HostClient>()
-  const botControllers = new Map<MlBotHostConnection, MlBotHostController>()
-  const botConnections = new Map<number, MlBotHostConnection>()
-  let botStart: Promise<void> | null = null
+  const clients = new Map<WebSocket, HostClient>()
   const externalPartyJoinRequests = new Map<string, ExternalPartyJoinRequest>()
   const partyJoinReservations = new Map<string, PartyJoinReservation>()
   const pendingLuaEvents: WebLuaDerivedEvent[] = []
   const cheatTaintedRunIds = new Set<string>()
   const issuedLeaderboardReceipts = new Set<string>()
-  const pending = new Set<GameHostConnection>()
-  const disconnectCauses = new WeakMap<GameHostConnection, { reason: string; source: string }>()
+  const pending = new Set<WebSocket>()
+  const disconnectCauses = new WeakMap<WebSocket, { reason: string; source: string }>()
   const logDetails = (details: Readonly<Record<string, unknown>> = {}) => ({
     ...options.logContext,
     ...details,
@@ -534,45 +512,37 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     })
   })
 
-  websocketServer.on('connection', registerConnection)
-
-  function registerConnection(
-    socket: GameHostConnection,
-    request?: IncomingMessage,
-  ): void {
+  websocketServer.on('connection', (socket, request) => {
     pending.add(socket)
     let released = false
-    const remoteAddress = request?.socket.remoteAddress ?? 'in-process'
-    const stopHeartbeat = socket instanceof WebSocket
-      ? monitorWebSocketHeartbeat(socket, heartbeatIntervalMs, {
-          onTimeout: () => {
-            disconnectCauses.set(socket, {
-              reason: 'connection timed out',
-              source: 'heartbeat-timeout',
-            })
-            const client = clients.get(socket)
-            logGameServerEvent(
-              options.log,
-              'game-host',
-              'warning',
-              'connection.heartbeat_timeout',
-              'The game host stopped receiving transport heartbeat responses from a player.',
-              logDetails({
-                playerId: client?.playerId ?? 'pending',
-                remoteAddress,
-              }),
-            )
-          },
-          timeoutReason: 'connection timed out',
+    const stopHeartbeat = monitorWebSocketHeartbeat(socket, heartbeatIntervalMs, {
+      onTimeout: () => {
+        disconnectCauses.set(socket, {
+          reason: 'connection timed out',
+          source: 'heartbeat-timeout',
         })
-      : () => {}
+        const client = clients.get(socket)
+        logGameServerEvent(
+          options.log,
+          'game-host',
+          'warning',
+          'connection.heartbeat_timeout',
+          'The game host stopped receiving transport heartbeat responses from a player.',
+          logDetails({
+            playerId: client?.playerId ?? 'pending',
+            remoteAddress: request.socket.remoteAddress ?? 'unknown',
+          }),
+        )
+      },
+      timeoutReason: 'connection timed out',
+    })
     logGameServerEvent(
       options.log,
       'game-host',
       'debug',
       'connection.opened',
       'A WebSocket connection reached the game host.',
-      logDetails({ remoteAddress }),
+      logDetails({ remoteAddress: request.socket.remoteAddress ?? 'unknown' }),
     )
     const helloDeadline = setTimeout(() => {
       if (pending.has(socket)) disconnect(socket, 'authentication-failed', 'Handshake timed out.')
@@ -859,13 +829,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           activeInput: createIdlePlayerCharacterInput(),
           chatSentAtMs: [],
           connectedAtMs: Date.now(),
-          connection: socket,
-          controller: socket instanceof MlBotHostConnection ? 'bot' : 'human',
           displayName: message.character.displayName,
           profile: message.profile,
           forceReplicationKeyframe: false,
-          globalScoreEligible: !(socket instanceof MlBotHostConnection)
-            && sessionKind !== 'private-college'
+          globalScoreEligible: sessionKind !== 'private-college'
             && message.save === undefined
             && !message.cheatsEnabled
             && (authenticated.content?.manifest.mods.length ?? content.mods.length) === 0,
@@ -880,6 +847,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           pendingLuaRequestIds: new Set(),
           queuedInputs: new Map(),
           sentReplicationBaselines: new Map([[snapshotSequence, welcomeBaseline]]),
+          socket,
         }
         clients.set(socket, joinedClient)
         if (!joinedClient.globalScoreEligible) taintActiveRun(joinedClient)
@@ -932,17 +900,12 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         if (sharedWorlds || privateParties) broadcastPartyState()
         publishSaveCheckpoint('connected')
         if (gameplayPauseForPlayer(playerId)) broadcastSnapshot()
-        if (joinedClient.controller === 'human') {
-          queueMicrotask(() => { void ensureMlBots() })
-        }
         return
       }
 
       if (message.type === 'client-deployment-ready') {
         const restart = deploymentRestart
-        const checkpointSequence = socket instanceof WebSocket
-          ? restart?.checkpointSequences.get(socket)
-          : undefined
+        const checkpointSequence = restart?.checkpointSequences.get(socket)
         if (
           !restart
           || message.targetRevision !== restart.targetRevision
@@ -951,7 +914,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           disconnect(socket, 'invalid-message', 'The deployment acknowledgement is not current.')
           return
         }
-        if (socket instanceof WebSocket && restart.pending.delete(socket)) {
+        if (restart.pending.delete(socket)) {
           restart.acknowledged.add(socket)
           if (restart.pending.size === 0) restart.resolveReady()
         }
@@ -1227,7 +1190,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           ? [...clients.values()].find(candidate => (
               candidate.playerId === message.targetPlayerId
               && candidate.playerId !== client.playerId
-              && candidate.connection.readyState === WebSocket.OPEN
+              && candidate.socket.readyState === WebSocket.OPEN
             )) ?? null
           : null
         if (message.channel === 'whisper' && !whisperTarget) {
@@ -1282,7 +1245,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         })
         nextChatSequence += 1
         for (const recipient of recipients) {
-          if (recipient.connection.readyState === WebSocket.OPEN) recipient.connection.send(encoded)
+          if (recipient.socket.readyState === WebSocket.OPEN) recipient.socket.send(encoded)
         }
         return
       }
@@ -1435,9 +1398,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
               ? { accepted: true, reason: null }
               : rejectedPartyAction(party?.leaderPlayerId === client.playerId ? 'player-missing' : 'not-leader'),
           )
-          if (accepted) {
-            disconnect(target!.connection, 'invalid-message', 'The College leader removed you.')
-          }
+          if (accepted) disconnect(target!.socket, 'invalid-message', 'The College leader removed you.')
           return
         }
         const result = kickSharedPartyPlayer(
@@ -1733,16 +1694,8 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         return
       }
       clients.delete(socket)
-      if (socket instanceof MlBotHostConnection) {
-        for (const [index, connection] of botConnections) {
-          if (connection === socket) botConnections.delete(index)
-        }
-        const controller = botControllers.get(socket)
-        botControllers.delete(socket)
-        if (controller) void controller.close()
-      }
       const activeDeploymentRestart = deploymentRestart
-      if (socket instanceof WebSocket && activeDeploymentRestart?.pending.delete(socket)) {
+      if (activeDeploymentRestart?.pending.delete(socket)) {
         if (activeDeploymentRestart.pending.size === 0) {
           activeDeploymentRestart.resolveReady()
         }
@@ -1773,10 +1726,6 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           privateParties = removePrivatePartyPlayer(privateParties, client.playerId)
         }
       }
-      if (
-        client.controller === 'human'
-        && ![...clients.values()].some(candidate => candidate.controller === 'human')
-      ) shutdownMlBots()
       if (clients.size === 0) {
         hostPlayerId = null
         resetLuaRuntime()
@@ -1793,9 +1742,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           resetNextTickDeadline()
         }
       } else if (client.playerId === hostPlayerId) {
-        hostPlayerId = [...clients.values()].find(candidate => (
-          candidate.controller === 'human'
-        ))?.playerId ?? null
+        hostPlayerId = clients.values().next().value?.playerId ?? null
       }
       options.onPlayerCountChanged?.(clients.size)
       const source = planned?.source ?? disconnectSource(closeCode)
@@ -1831,141 +1778,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     }
     socket.once('close', (code, reason) => release(code, reason.toString()))
     socket.once('error', (error) => release(null, '', error))
-  }
-
-  function ensureMlBots(): Promise<void> {
-    if (
-      closed
-      || mlBots.length === 0
-      || ![...clients.values()].some(client => client.controller === 'human')
-    ) return Promise.resolve()
-    if (botStart !== null) return botStart
-    const starting = startMlBots()
-    botStart = starting
-    void starting.finally(() => {
-      if (botStart === starting) botStart = null
-    })
-    return starting
-  }
-
-  async function startMlBots(): Promise<void> {
-    for (let index = 0; index < mlBots.length; index += 1) {
-      if (closed || botConnections.has(index)) continue
-      const definition = mlBots[index]!
-      const connection = new MlBotHostConnection()
-      botConnections.set(index, connection)
-      registerConnection(connection)
-      connection.receive({
-        character: definition.character,
-        cheatsEnabled: false,
-        credential: definition.credential,
-        profile: mlBotDefinitionProfile(definition),
-        protocolVersion: GAME_PROTOCOL_VERSION,
-        type: 'client-hello',
-      })
-      const client = clients.get(connection)
-      if (!client) {
-        botConnections.delete(index)
-        continue
-      }
-      bindInitialBotQuickbar(connection, client.playerId)
-      try {
-        const controller = await MlBotHostController.create({
-          context: () => mlBotControllerContext(client.playerId),
-          dispatch: message => connection.receive(message),
-          fail: error => failMlBotConnection(connection, client.playerId, error),
-          isConnected: () => clients.get(connection)?.playerId === client.playerId,
-        }, definition, client.playerId)
-        if (closed || clients.get(connection)?.playerId !== client.playerId) {
-          await controller.close()
-          continue
-        }
-        botControllers.set(connection, controller)
-      } catch (error) {
-        failMlBotConnection(
-          connection,
-          client.playerId,
-          error instanceof Error ? error : new Error(String(error)),
-        )
-      }
-    }
-  }
-
-  function bindInitialBotQuickbar(connection: MlBotHostConnection, playerId: string): void {
-    const skillBook = getPlayerSkillBook(stateForPlayer(playerId), playerId)
-    for (let slot = 0; slot < skillBook.skillQuickbar.length; slot += 1) {
-      const skillId = skillBook.skillQuickbar[slot]
-      if (skillId === null) continue
-      connection.receive({ skillId, slot, type: 'client-skill-quickbar-bind' })
-    }
-  }
-
-  function mlBotControllerContext(playerId: string) {
-    const activeState = stateForPlayer(playerId)
-    const worldClients = [...clients.values()].filter(client => (
-      stateForPlayer(client.playerId) === activeState
-    ))
-    return {
-      activeInputs: Object.fromEntries(worldClients.map(client => [
-        client.playerId,
-        client.activeInput,
-      ])),
-      controllers: Object.fromEntries(worldClients.map(client => [
-        client.playerId,
-        client.controller,
-      ])),
-      state: activeState,
-    }
-  }
-
-  function stepMlBotControllers(): void {
-    for (const [connection, controller] of botControllers) {
-      const client = clients.get(connection)
-      if (!client) continue
-      try {
-        controller.tick()
-      } catch (error) {
-        failMlBotConnection(
-          connection,
-          client.playerId,
-          error instanceof Error ? error : new Error(String(error)),
-        )
-      }
-    }
-  }
-
-  function failMlBotConnection(
-    connection: MlBotHostConnection,
-    playerId: string,
-    error: Error,
-  ): void {
-    if (!clients.has(connection)) return
-    logGameServerEvent(
-      options.log,
-      'game-host',
-      'error',
-      'ml_bot.controller_failed',
-      'A server-hosted ML bot controller failed.',
-      logDetails({ playerId, ...gameServerErrorDetails(error) }),
-    )
-    disconnectCauses.set(connection, {
-      reason: error.message,
-      source: 'ml-bot-controller',
-    })
-    connection.close(1011, 'ML bot controller failed')
-  }
-
-  function shutdownMlBots(): void {
-    for (const connection of botConnections.values()) {
-      if (connection.readyState === WebSocket.OPEN) {
-        disconnectCauses.set(connection, {
-          reason: 'last human player disconnected',
-          source: 'ml-bot-controller',
-        })
-        connection.close(1_000, 'ML bot controller shutdown')
-      }
-    }
-  }
+  })
 
   const ticksPerSnapshot = Math.max(1, Math.round(GAME_TICK_RATE / snapshotRate))
   const timer = setInterval(() => {
@@ -1987,7 +1800,6 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       const now = performance.now()
       let steps = 0
       while (now >= nextTickAt && steps < 25) {
-        stepMlBotControllers()
         taintIneligibleClientRuns()
         if (sharedWorlds) {
           const inputs: Record<PlayerId, PlayerCharacterInput> = {}
@@ -2223,7 +2035,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     force = false,
     clearTerminal = false,
   ): number {
-    if (client.controller === 'bot' || client.connection.readyState !== WebSocket.OPEN) return 0
+    if (client.socket.readyState !== WebSocket.OPEN) return 0
     const saveState = sharedWorlds
       ? sharedPartySaveStateForPlayer(sharedWorlds, client.playerId)
       : state
@@ -2280,7 +2092,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     const sequence = previousSequence + 1
     saveSequences.set(client.playerId, sequence)
     saveDocuments.set(client.playerId, document)
-    client.connection.send(encodeGameMessage({
+    client.socket.send(encodeGameMessage({
       type: 'server-save-checkpoint',
       save: document,
       reason: 'progress',
@@ -2290,11 +2102,11 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   }
 
   function publishSaveClearForClient(client: HostClient): number {
-    if (client.controller === 'bot' || client.connection.readyState !== WebSocket.OPEN) return 0
+    if (client.socket.readyState !== WebSocket.OPEN) return 0
     const sequence = (saveSequences.get(client.playerId) ?? 0) + 1
     saveSequences.set(client.playerId, sequence)
     saveDocuments.delete(client.playerId)
-    client.connection.send(encodeGameMessage({
+    client.socket.send(encodeGameMessage({
       type: 'server-save-checkpoint',
       save: null,
       reason: 'game-over',
@@ -2309,7 +2121,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     nextSnapshotSequence += 1
     const periodicKeyframe = snapshotSequence % Math.max(1, snapshotRate * 5) === 0
     for (const client of clients.values()) {
-      if (client.connection.readyState !== WebSocket.OPEN) continue
+      if (client.socket.readyState !== WebSocket.OPEN) continue
       const snapshot = defaultSnapshot ?? createGameSnapshot(
         stateForPlayer(client.playerId),
         authorityForPlayer(client.playerId),
@@ -2321,7 +2133,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       const forceKeyframe = periodicKeyframe
         || client.forceReplicationKeyframe
         || !acknowledgedBaseline
-      client.connection.send(encodeGameMessage({
+      client.socket.send(encodeGameMessage({
         type: 'server-snapshot',
         acknowledgedInputSequence: client.acknowledgedSequence,
         frame: createGameSnapshotFrame(
@@ -2382,8 +2194,8 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       ? sharedWorlds.hub.playerEntities.identities.map(({ playerId }) => playerId)
       : [...clients.values()].map(({ playerId }) => playerId))
     for (const client of clients.values()) {
-      if (client.connection.readyState !== WebSocket.OPEN) continue
-      client.connection.send(encodeGameMessage({
+      if (client.socket.readyState !== WebSocket.OPEN) continue
+      client.socket.send(encodeGameMessage({
         type: 'server-party-state',
         state: projectPartyState(
           parties,
@@ -2563,8 +2375,8 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     action: PartyAction,
     result: Readonly<{ accepted: boolean; reason: string | null }>,
   ): void {
-    if (client.connection.readyState !== WebSocket.OPEN) return
-    client.connection.send(encodeGameMessage({
+    if (client.socket.readyState !== WebSocket.OPEN) return
+    client.socket.send(encodeGameMessage({
       type: 'server-party-action',
       action,
       ok: result.accepted,
@@ -2603,9 +2415,9 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     const playerState = stateForPlayer(playerId)
     for (const client of clients.values()) {
       if (
-        client.connection.readyState === WebSocket.OPEN
+        client.socket.readyState === WebSocket.OPEN
         && stateForPlayer(client.playerId) === playerState
-      ) client.connection.send(encodeGameMessage(message))
+      ) client.socket.send(encodeGameMessage(message))
     }
   }
 
@@ -2667,13 +2479,8 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     stopAllClientInputs()
     resetNextTickDeadline()
     const connected = [...clients.values()]
-      .flatMap(client => (
-        client.controller === 'human'
-        && client.connection instanceof WebSocket
-        && client.connection.readyState === WebSocket.OPEN
-          ? [client.connection]
-          : []
-      ))
+      .filter(client => client.socket.readyState === WebSocket.OPEN)
+      .map(client => client.socket)
     let resolveReady!: () => void
     const ready = new Promise<void>((resolve) => { resolveReady = resolve })
     const restart: DeploymentRestartState = {
@@ -2863,11 +2670,11 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       : null
     for (const client of clients.values()) {
       if (
-        client.connection.readyState === WebSocket.OPEN
+        client.socket.readyState === WebSocket.OPEN
         && (scope.kind === 'hub'
           ? stateForPlayer(client.playerId).world.kind === 'hub'
           : party?.memberPlayerIds.includes(client.playerId))
-      ) client.connection.send(encodeGameMessage({ type: 'server-gameplay-pause', pause }))
+      ) client.socket.send(encodeGameMessage({ type: 'server-gameplay-pause', pause }))
     }
   }
 
@@ -2918,7 +2725,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   function broadcast(message: Parameters<typeof encodeGameMessage>[0]): void {
     const encoded = encodeGameMessage(message)
     for (const client of clients.values()) {
-      if (client.connection.readyState === WebSocket.OPEN) client.connection.send(encoded)
+      if (client.socket.readyState === WebSocket.OPEN) client.socket.send(encoded)
     }
   }
 
@@ -2956,7 +2763,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         || !completedRun
         || previousRun.elapsedTicks !== null
         || completedRun.elapsedTicks === null
-        || client.connection.readyState !== WebSocket.OPEN
+        || client.socket.readyState !== WebSocket.OPEN
       ) continue
       const receiptKey = `${completed.world.runId}\0${client.playerId}`
       if (issuedLeaderboardReceipts.has(receiptKey)) continue
@@ -2973,7 +2780,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         entry,
       )
       issuedLeaderboardReceipts.add(receiptKey)
-      client.connection.send(encodeGameMessage({
+      client.socket.send(encodeGameMessage({
         type: 'server-leaderboard-receipt',
         receipt,
       }))
@@ -2997,7 +2804,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   }
 
   function disconnect(
-    socket: GameHostConnection,
+    socket: WebSocket,
     code: ServerDisconnectMessage['code'],
     reason: string,
   ): void {
@@ -3044,7 +2851,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   async function beginSharedPartyRun(
     leaderPlayerId: PlayerId,
     selected: LoadedBoneyard,
-    socket: GameHostConnection,
+    socket: WebSocket,
   ): Promise<void> {
     if (!sharedWorlds) return
     const party = partyForPlayer(sharedWorlds.parties, leaderPlayerId)
@@ -3299,17 +3106,9 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       port: address.port,
       url: `ws://${formatHost(host)}:${address.port}/game`,
     },
-    botPlayerIds: () => [...clients.values()]
-      .filter(client => client.controller === 'bot')
-      .map(client => client.playerId),
     async close(reason: GameHostCloseReason = 'server-shutdown') {
       if (closed) return
       closed = true
-      const startingBots = botStart
-      const botControllerClosures = [...botControllers.values()].map(controller => (
-        controller.close()
-      ))
-      botControllers.clear()
       clearInterval(timer)
       deploymentRestart?.resolveReady()
       clearInterval(partyAccessTimer)
@@ -3332,8 +3131,6 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       }
       websocketServer.close()
       await closeHttpServer(server)
-      await Promise.all(botControllerClosures)
-      if (startingBots) await startingBots.catch(() => {})
       logGameServerEvent(
         options.log,
         'game-host',

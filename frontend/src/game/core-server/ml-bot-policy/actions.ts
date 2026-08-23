@@ -32,13 +32,6 @@ export interface MlBotPolicyActionMasks {
   readonly target: Uint8Array
 }
 
-export interface MlBotPolicyActionMaskPlan {
-  readonly abilityByTarget: readonly Uint8Array[]
-  readonly aimByAbility: readonly Uint8Array[]
-  readonly movement: Uint8Array
-  readonly target: Uint8Array
-}
-
 export interface MlBotPolicyDecision {
   readonly committedAction: MlBotPolicyCommittedAction
   readonly hubAction: HubInventoryAction | null
@@ -69,17 +62,73 @@ export function resolveMlBotPolicyDecision(
   action: MlBotPolicyActionIndices,
 ): MlBotPolicyDecision {
   validateActionIndices(action)
-  const plan = createMlBotPolicyActionMaskPlan(state, playerId, frame)
   const players = gameSimulationPlayerRecords(state)
   const self = players[playerId]
   if (!self) throw new Error(`ML bot policy action has no player ${playerId}`)
-  requireLegal(plan.movement, action.movement, 'movement')
-  requireLegal(plan.target, action.target, 'target')
+  const progression = getPlayerProgression(state, playerId)
+  const skillBook = getPlayerSkillBook(state, playerId)
+  const globallyGated = frame.player.blockA[22] === 1
+    || frame.player.blockA[23] === 1
+    || !playerCanAcceptInput(progression)
+  const movement = new Uint8Array(9)
+  const target = new Uint8Array(9)
+  const ability = new Uint8Array(22)
+  const aim = new Uint8Array(9)
+  movement[0] = 1
+  target[0] = 1
+  ability[0] = 1
+  aim[0] = 1
+  if (!globallyGated) {
+    for (let index = 0; index < DIRECTIONS.length; index += 1) {
+      movement[index + 1] = Number(
+        frame.geometry.patchAndRays[index]!
+          > ML_BOT_POLICY_SCALES.rayStep / ML_BOT_POLICY_SCALES.rayRange,
+      )
+    }
+    target[0] = Number(frame.targetId !== null || frame.enemyRows.length === 0)
+    for (let index = 0; index < Math.min(8, frame.enemyRows.length); index += 1) {
+      target[index + 1] = 1
+    }
+  }
+  requireLegal(movement, action.movement, 'movement')
+  requireLegal(target, action.target, 'target')
   const selectedTarget = selectedEnemy(frame, action.target)
   const targetId = selectedTarget?.id ?? null
-  const ability = plan.abilityByTarget[action.target]!
+
+  const primaryFree = FREE_PRIMARY_IDS.has(skillBook.primarySkillId)
+    || (skillBook.primarySkillId === 52
+      && skillBook.weldBuildId !== null
+      && FREE_WELD_BUILD_IDS.has(skillBook.weldBuildId))
+  if (!globallyGated) {
+    const targetInPrimaryRange = selectedTarget !== null && Math.max(0, Math.hypot(
+      selectedTarget.position.x - self.position.x,
+      selectedTarget.position.y - self.position.y,
+    ) - selectedTarget.radius) <= frame.player.primaryRange
+    ability[1] = Number(
+      frame.player.blockA[7] === 1
+      && frame.player.primaryAffordable
+      && (primaryFree || targetInPrimaryRange),
+    )
+    for (let slot = 0; slot < 8; slot += 1) {
+      const secondary = frame.player.secondarySlots[slot]
+      ability[slot + 2] = Number(
+        secondary?.occupied === true
+        && secondary.ready
+        && secondary.affordable,
+      )
+    }
+    for (let slot = 0; slot < 12; slot += 1) {
+      ability[slot + 10] = Number(frame.inventory.potions[slot]?.legal ?? false)
+    }
+  }
   requireLegal(ability, action.ability, 'ability')
-  const aim = plan.aimByAbility[action.ability]!
+  const selectedSecondary = action.ability >= 2 && action.ability <= 9
+    ? frame.player.secondarySlots[action.ability - 2]?.skillId ?? null
+    : null
+  const freeAim = action.ability === 1
+    ? primaryFree
+    : selectedSecondary !== null && FREE_SECONDARY_IDS.has(selectedSecondary)
+  if (!globallyGated && freeAim) aim.fill(1)
   requireLegal(aim, action.aim, 'aim')
 
   const selectedMovement = action.movement === 0
@@ -110,84 +159,9 @@ export function resolveMlBotPolicyDecision(
     },
     hubAction,
     input,
-    masks: { ability, aim, movement: plan.movement, target: plan.target },
+    masks: { ability, aim, movement, target },
     targetId,
   }
-}
-
-export function createMlBotPolicyActionMaskPlan(
-  state: GameSimulationState,
-  playerId: string,
-  frame: MlBotPolicyFrame,
-): MlBotPolicyActionMaskPlan {
-  const players = gameSimulationPlayerRecords(state)
-  const self = players[playerId]
-  if (!self) throw new Error(`ML bot policy action has no player ${playerId}`)
-  const progression = getPlayerProgression(state, playerId)
-  const skillBook = getPlayerSkillBook(state, playerId)
-  const globallyGated = frame.player.blockA[22] === 1
-    || frame.player.blockA[23] === 1
-    || !playerCanAcceptInput(progression)
-  const movement = new Uint8Array(9)
-  const target = new Uint8Array(9)
-  movement[0] = 1
-  target[0] = 1
-  if (!globallyGated) {
-    for (let index = 0; index < DIRECTIONS.length; index += 1) {
-      movement[index + 1] = Number(
-        frame.geometry.patchAndRays[index]!
-          > ML_BOT_POLICY_SCALES.rayStep / ML_BOT_POLICY_SCALES.rayRange,
-      )
-    }
-    target[0] = Number(frame.targetId !== null || frame.enemyRows.length === 0)
-    for (let index = 0; index < Math.min(8, frame.enemyRows.length); index += 1) {
-      target[index + 1] = 1
-    }
-  }
-  const primaryFree = FREE_PRIMARY_IDS.has(skillBook.primarySkillId)
-    || (skillBook.primarySkillId === 52
-      && skillBook.weldBuildId !== null
-      && FREE_WELD_BUILD_IDS.has(skillBook.weldBuildId))
-  const abilityByTarget = Array.from({ length: 9 }, (_, targetAction) => {
-    const ability = new Uint8Array(22)
-    ability[0] = 1
-    if (globallyGated || target[targetAction] !== 1) return ability
-    const selectedTarget = selectedEnemy(frame, targetAction)
-    const targetInPrimaryRange = selectedTarget !== null && Math.max(0, Math.hypot(
-      selectedTarget.position.x - self.position.x,
-      selectedTarget.position.y - self.position.y,
-    ) - selectedTarget.radius) <= frame.player.primaryRange
-    ability[1] = Number(
-      frame.player.blockA[7] === 1
-      && frame.player.primaryAffordable
-      && (primaryFree || targetInPrimaryRange),
-    )
-    for (let slot = 0; slot < 8; slot += 1) {
-      const secondary = frame.player.secondarySlots[slot]
-      ability[slot + 2] = Number(
-        secondary?.occupied === true
-        && secondary.ready
-        && secondary.affordable,
-      )
-    }
-    for (let slot = 0; slot < 12; slot += 1) {
-      ability[slot + 10] = Number(frame.inventory.potions[slot]?.legal ?? false)
-    }
-    return ability
-  })
-  const aimByAbility = Array.from({ length: 22 }, (_, abilityAction) => {
-    const aim = new Uint8Array(9)
-    aim[0] = 1
-    const selectedSecondary = abilityAction >= 2 && abilityAction <= 9
-      ? frame.player.secondarySlots[abilityAction - 2]?.skillId ?? null
-      : null
-    const freeAim = abilityAction === 1
-      ? primaryFree
-      : selectedSecondary !== null && FREE_SECONDARY_IDS.has(selectedSecondary)
-    if (!globallyGated && freeAim) aim.fill(1)
-    return aim
-  })
-  return { abilityByTarget, aimByAbility, movement, target }
 }
 
 function selectedEnemy(frame: MlBotPolicyFrame, targetAction: number): MlBotPolicyEnemyRow | null {

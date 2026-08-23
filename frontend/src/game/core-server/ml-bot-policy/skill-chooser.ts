@@ -35,13 +35,6 @@ export interface MlBotPolicySkillResolution {
   readonly state: GameSimulationState
 }
 
-export interface MlBotPolicySkillChoice {
-  readonly choiceIndex: number
-  readonly offerSequence: number
-  readonly playerId: string
-  readonly skillId: number
-}
-
 const PRIMARY_SKILL_IDS = new Set([8, 16, 24, 32, 40])
 const ELEMENT_BANDS = Object.freeze({
   air: [24, 31],
@@ -65,8 +58,44 @@ export function resolveMlBotPolicySkillOffers(
     if (!offer || offer.options.length === 0) continue
     const description = describeMlBotPolicySkillOffer(state, playerId)
     if (description === null) throw new Error(`ML bot policy could not describe offer for ${playerId}`)
-    const selection = chooseMlBotPolicySkillOffer(state, playerId)
-    if (selection === null) throw new Error(`ML bot policy found no eligible skill for ${playerId}`)
+    const skillBook = getPlayerSkillBook(state, playerId)
+    const element = getPlayerCharacter(state, playerId).config.element
+    const [bandStart, bandEnd] = ELEMENT_BANDS[element]
+    let selectedIndex = -1
+    let selectedPriority = Number.POSITIVE_INFINITY
+    for (let index = 0; index < offer.options.length; index += 1) {
+      const option = offer.options[index]!
+      let priority = Number.POSITIVE_INFINITY
+      if (option.skillId === 52 && option.weldBuildId !== undefined) {
+        const weld = NATIVE_WELD_BUILDS.find(({ id }) => id === option.weldBuildId)
+        priority = weld?.primarySkillIds.every((skillId) => (
+          (skillBook.effectiveRanks[skillId] ?? 0) > 0
+        )) ? 0 : Number.POSITIVE_INFINITY
+      } else if (option.skillId >= bandStart && option.skillId <= bandEnd) {
+        priority = option.skillId === bandStart ? 1 : 10 + option.skillId - bandStart
+      } else if (option.skillId === 64) {
+        priority = 30
+      } else if (
+        PRIMARY_SKILL_IDS.has(option.skillId)
+        && (skillBook.effectiveRanks[option.skillId] ?? 0) === 0
+      ) {
+        priority = 50 + index
+      } else if (!PRIMARY_SKILL_IDS.has(option.skillId)) {
+        priority = 100 + index
+      }
+      if (priority < selectedPriority) {
+        selectedIndex = index
+        selectedPriority = priority
+      }
+    }
+    if (selectedIndex < 0) throw new Error(`ML bot policy found no eligible skill for ${playerId}`)
+    const option = offer.options[selectedIndex]!
+    const selection = {
+      choiceIndex: selectedIndex,
+      offerSequence: offer.sequence,
+      playerId,
+      skillId: option.skillId,
+    }
     const applied = selectGameSimulationPlayerSkill(state, playerId, selection)
     if (!applied) throw new Error(`ML bot policy skill selection was rejected for ${playerId}`)
     state = applied
@@ -82,56 +111,11 @@ export function resolveMlBotPolicySkillOffers(
         optionIds: description.optionIds,
         optionMask: description.mask.slice(),
         participantId: playerId,
-        selectedOption: selection.choiceIndex,
+        selectedOption: selectedIndex,
         simulationTick: state.tick,
         trainable: false,
       }))
     }
   }
   return { events: Object.freeze(events), selections: Object.freeze(selections), state }
-}
-
-export function chooseMlBotPolicySkillOffer(
-  state: GameSimulationState,
-  playerId: string,
-): MlBotPolicySkillChoice | null {
-  const offer = getPlayerProgression(state, playerId).pendingOffer
-  if (!offer || offer.options.length === 0) return null
-  const skillBook = getPlayerSkillBook(state, playerId)
-  const element = getPlayerCharacter(state, playerId).config.element
-  const [bandStart, bandEnd] = ELEMENT_BANDS[element]
-  let selectedIndex = -1
-  let selectedPriority = Number.POSITIVE_INFINITY
-  for (let index = 0; index < offer.options.length; index += 1) {
-    const option = offer.options[index]!
-    let priority = Number.POSITIVE_INFINITY
-    if (option.skillId === 52 && option.weldBuildId !== undefined) {
-      const weld = NATIVE_WELD_BUILDS.find(({ id }) => id === option.weldBuildId)
-      priority = weld?.primarySkillIds.every((skillId) => (
-        (skillBook.effectiveRanks[skillId] ?? 0) > 0
-      )) ? 0 : Number.POSITIVE_INFINITY
-    } else if (option.skillId >= bandStart && option.skillId <= bandEnd) {
-      priority = option.skillId === bandStart ? 1 : 10 + option.skillId - bandStart
-    } else if (option.skillId === 64) {
-      priority = 30
-    } else if (
-      PRIMARY_SKILL_IDS.has(option.skillId)
-      && (skillBook.effectiveRanks[option.skillId] ?? 0) === 0
-    ) {
-      priority = 50 + index
-    } else if (!PRIMARY_SKILL_IDS.has(option.skillId)) {
-      priority = 100 + index
-    }
-    if (priority < selectedPriority) {
-      selectedIndex = index
-      selectedPriority = priority
-    }
-  }
-  if (selectedIndex < 0) return null
-  return {
-    choiceIndex: selectedIndex,
-    offerSequence: offer.sequence,
-    playerId,
-    skillId: offer.options[selectedIndex]!.skillId,
-  }
 }
