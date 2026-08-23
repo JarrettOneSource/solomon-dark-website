@@ -345,11 +345,17 @@ interface HostBot {
   readonly controller: MlBotHostController
   readonly displayName: string
   decisions: number
+  kills: number
+  lastCompletedWaves: number
+  lastKills: number
+  lastRunId: string | null
   readonly playerId: PlayerId
   readonly profile: PlayerSocialProfile
   potionsUsed: number
   readonly queuedIntents: MlBotHostIntent[]
   skillPicks: number
+  waveReached: number
+  wavesCompleted: number
 }
 
 interface PendingBotInvitation {
@@ -1956,6 +1962,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             ])),
           )
           state = sharedWorlds.hub
+          sampleMlBotTelemetry()
           if (luaRuntime && luaRuntimeOwnerPlayerId && developerStateBeforeLua) {
             const developerStateAfterLua = sharedGameStateForPlayer(
               sharedWorlds,
@@ -2622,6 +2629,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         controller,
         displayName: pending.character.displayName,
         decisions: 0,
+        kills: 0,
+        lastCompletedWaves: 0,
+        lastKills: 0,
+        lastRunId: null,
         playerId: pending.playerId,
         profile: {
           accountUsername: null,
@@ -2631,6 +2642,8 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         potionsUsed: 0,
         queuedIntents,
         skillPicks: 0,
+        waveReached: 0,
+        wavesCompleted: 0,
       }
       bots.set(bot.playerId, bot)
       sharedWorlds = addSharedHubPlayer(
@@ -2855,14 +2868,14 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         decisions: bot.decisions,
         gold: 0,
         items: 0,
-        kills: 0,
+        kills: bot.kills,
         lifeState: 'absent',
         playerId: bot.playerId,
         potionsUsed: bot.potionsUsed,
         skillPicks: bot.skillPicks,
         tick: 0,
-        waveReached: 0,
-        wavesCompleted: 0,
+        waveReached: bot.waveReached,
+        wavesCompleted: bot.wavesCompleted,
       }
     }
     const economy = getPlayerEconomy(active, bot.playerId)
@@ -2873,17 +2886,38 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       decisions: bot.decisions,
       gold: economy.gold,
       items: economy.backpack.reduce((total, item) => total + item.quantity, 0),
-      kills: world?.hallOfFameRuns[bot.playerId]?.monstersKilled ?? 0,
+      kills: bot.kills,
       lifeState: progression.lifeState,
       playerId: bot.playerId,
       potionsUsed: bot.potionsUsed,
       skillPicks: bot.skillPicks,
       tick: active.tick,
-      waveReached,
-      wavesCompleted: Math.max(
+      waveReached: Math.max(bot.waveReached, waveReached),
+      wavesCompleted: bot.wavesCompleted,
+    }
+  }
+
+  function sampleMlBotTelemetry(): void {
+    if (!sharedWorlds) return
+    for (const bot of bots.values()) {
+      const active = sharedGameStateForPlayer(sharedWorlds, bot.playerId)
+      if (!active || active.world.kind !== 'boneyard') continue
+      if (bot.lastRunId !== active.world.runId) {
+        bot.lastCompletedWaves = 0
+        bot.lastKills = 0
+        bot.lastRunId = active.world.runId
+      }
+      const kills = active.world.hallOfFameRuns[bot.playerId]?.monstersKilled ?? 0
+      bot.kills += Math.max(0, kills - bot.lastKills)
+      bot.lastKills = kills
+      const waveReached = active.world.waves?.waveOrdinal ?? 0
+      const completedWaves = Math.max(
         0,
-        waveReached - Number(world?.waves?.phase !== 'interwave'),
-      ),
+        waveReached - Number(active.world.waves?.phase !== 'interwave'),
+      )
+      bot.wavesCompleted += Math.max(0, completedWaves - bot.lastCompletedWaves)
+      bot.lastCompletedWaves = completedWaves
+      bot.waveReached = Math.max(bot.waveReached, waveReached)
     }
   }
 
