@@ -104,7 +104,8 @@ public static class AuthEndpoints
             return ApiErrors.Unauthorized("Wrong name or password. The Annals are unforgiving.");
         }
 
-        return Results.Ok(new {
+        return Results.Ok(new
+        {
             token = tokens.Create(user),
             user = UserPayload(user, developerAccess)
         });
