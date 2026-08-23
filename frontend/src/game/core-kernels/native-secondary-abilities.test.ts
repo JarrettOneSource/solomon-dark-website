@@ -13,11 +13,13 @@ import {
   createNativeSecondaryPlayerState,
   createNativeSecondarySimulation,
   materializeNativePlayerFlashResponse,
+  NATIVE_SECONDARY_CONSTRUCTOR_COOLDOWN_TICKS,
   NATIVE_MINDBLAST_DIRECT_RADIUS,
   NATIVE_MINDBLAST_PRESENTATION_RNG_WORDS,
   NATIVE_ETHER_BURN_LIFETIME_TICKS,
   nativePlaneOrbDamage,
   nativeSecondaryAvailableMana,
+  nativeSecondaryCooldownCapacityTicks,
   nativeSecondaryStaffCastDurationTicks,
   nativeSecondaryTargetMaterialTint,
   removeNativeSecondaryOwner,
@@ -153,18 +155,18 @@ function context(
         eligible: true,
         enhancedEffects: false,
         explosiveShieldDamage: 0,
-        explosiveShieldManaCost: 0,
+        explosiveShieldRawManaCost: 0,
         fireBurnDamage: 2,
         freezeDurationMultiplier: 1,
         focusInstantRechargeChancePercent: 0,
         golemIron: false,
-        golemManaCost: 0,
+        golemRawManaCost: 50,
         golemReflectFactor: 0,
         input: input(secondary),
         maximumMana: 100,
         magicStormDurationBonusTicks: 0,
         magicStormFrequencyFactor: 1,
-        magicStormManaCost: 0,
+        magicStormRawManaCost: 0,
         maximumGolem: false,
         maximumLeviathan: false,
         maximumMagicStorm: false,
@@ -382,6 +384,7 @@ function finishCommonCastGate(state: NativeSecondarySimulationState): NativeSeco
       ...state.players,
       player: {
         ...player,
+        cooldownTicksBySkill: player.cooldownTicksBySkill.map(() => 0),
         globalCooldownTicks: 0,
         staffCastTicksRemaining: 0,
       },
@@ -463,6 +466,139 @@ test('every one of the closed 23 right-click abilities enters its native runtime
       `skill ${skillId} emitted no semantic presentation event`,
     )
   }
+})
+
+test('all 23 category-2 rows retain their constructor and effective cooldown capacities', () => {
+  assert.deepEqual(NATIVE_SECONDARY_CONSTRUCTOR_COOLDOWN_TICKS, {
+    11: 833,
+    12: 2_500,
+    15: 833,
+    21: 2_500,
+    23: 50,
+    27: 1_250,
+    30: 1_250,
+    35: 2_500,
+    41: 2_500,
+    45: 2_500,
+    46: 10_000,
+    48: 2_500,
+    49: 2_500,
+    50: 625,
+    51: 2_000,
+    54: 2_500,
+    72: 2_500,
+    73: 277,
+    74: 3_750,
+    76: 1_250,
+    77: 1_875,
+    78: 50,
+    79: 50,
+  })
+  const expectedEffective = {
+    ...NATIVE_SECONDARY_CONSTRUCTOR_COOLDOWN_TICKS,
+    15: 100,
+    48: 6_000,
+  }
+  assert.deepEqual(
+    Object.fromEntries(NATIVE_SECONDARY_ABILITY_IDS.map((skillId) => [
+      skillId,
+      nativeSecondaryCooldownCapacityTicks(book(skillId), skillId),
+    ])),
+    expectedEffective,
+  )
+
+  for (let rank = 1; rank <= 8; rank += 1) {
+    assert.equal(
+      nativeSecondaryCooldownCapacityTicks(book(48, [], rank), 48),
+      [0, 6_000, 3_000, 1_500, 1_000, 500, 400, 300, 100][rank],
+    )
+  }
+})
+
+test('every dispatcher-success row arms its native cooldown and HUD capacity', () => {
+  const effectiveCapacity = new Map<NativeSecondaryAbilityId, number>(
+    NATIVE_SECONDARY_ABILITY_IDS.map((skillId) => [
+      skillId,
+      nativeSecondaryCooldownCapacityTicks(book(skillId), skillId),
+    ] as const),
+  )
+  for (const skillId of NATIVE_SECONDARY_ABILITY_IDS) {
+    const result = cast(skillId)
+    const player = result.state.players.player!
+    const capacity = effectiveCapacity.get(skillId)!
+    assert.equal(player.cooldownMaximumTicksBySkill[skillId], capacity, `skill ${skillId} capacity`)
+    if (skillId === 78 || skillId === 79) {
+      assert.equal(player.cooldownTicksBySkill[skillId], 0, `skill ${skillId} current`)
+      assert.equal(player.globalCooldownTicks, 0, `skill ${skillId} common`)
+    } else {
+      assert.equal(
+        player.cooldownTicksBySkill[skillId],
+        capacity < 150 ? 0 : capacity,
+        `skill ${skillId} current`,
+      )
+      assert.equal(player.globalCooldownTicks, 150, `skill ${skillId} common`)
+    }
+  }
+})
+
+test('Golem sums rank-zero Iron cost before one shared native mana transform', () => {
+  const neutral = cast(45)
+  assert.deepEqual(neutral.manaSpent, { player: 60 })
+
+  const sourceContext = context(45, 1, 0)
+  const transformed = stepNativeSecondaryAbilities(createNativeSecondarySimulation(123), {
+    ...sourceContext,
+    players: {
+      player: {
+        ...sourceContext.players.player!,
+        offensiveFactors: {
+          damage: 1,
+          globalManaReduction: 5,
+          manaCost: 0.5,
+        },
+      },
+    },
+  })
+  assert.deepEqual(transformed.manaSpent, { player: 55 })
+
+  const learnedIronContext = context(45, 1, 0, 100, [75])
+  const learnedIron = stepNativeSecondaryAbilities(
+    createNativeSecondarySimulation(123),
+    learnedIronContext,
+  )
+  assert.deepEqual(learnedIron.manaSpent, neutral.manaSpent)
+
+  const maximumRank = stepNativeSecondaryAbilities(
+    createNativeSecondarySimulation(123),
+    context(45, 1, 0, 200, [], 12),
+  )
+  assert.deepEqual(maximumRank.manaSpent, { player: 150 })
+})
+
+test('neutral Golem rejects recasts for exactly 2,500 authoritative 100 Hz updates', () => {
+  const accepted = cast(45)
+  let state: NativeSecondarySimulationState = {
+    ...accepted.state,
+    actors: [],
+  }
+  for (let tick = 2; tick <= 1_001; tick += 1) {
+    state = stepNativeSecondaryAbilities(state, context(45, tick, null)).state
+  }
+  assert.equal(state.players.player?.cooldownTicksBySkill[45], 1_500)
+
+  const blocked = stepNativeSecondaryAbilities(state, context(45, 1_002, 0))
+  assert.equal(blocked.state.players.player?.castSequence, 1)
+  assert.equal(blocked.state.players.player?.fizzleSequence, 1)
+  assert.equal(blocked.state.players.player?.cooldownTicksBySkill[45], 1_499)
+
+  state = stepNativeSecondaryAbilities(blocked.state, context(45, 1_003, null)).state
+  for (let tick = 1_004; tick <= 2_501; tick += 1) {
+    state = stepNativeSecondaryAbilities(state, context(45, tick, null)).state
+  }
+  assert.equal(state.players.player?.cooldownTicksBySkill[45], 0)
+  const ready = stepNativeSecondaryAbilities(state, context(45, 2_502, 0))
+  assert.equal(ready.state.players.player?.castSequence, 2)
+  assert.deepEqual(ready.manaSpent, { player: 60 })
 })
 
 test('Phasing preserves native accepted-failure and single traversal-streak semantics', () => {
@@ -640,7 +776,15 @@ test('the shared right-click gate owns StaffCast2 occupancy and Faster Caster ti
   }
   assert.equal(state.players.player?.staffCastTicksRemaining, 0)
   assert.equal(state.players.player?.globalCooldownTicks, 0)
-  const ready = stepNativeSecondaryAbilities(state, context(11, 152, 0))
+  const rowBlocked = stepNativeSecondaryAbilities(state, context(11, 152, 0))
+  assert.equal(rowBlocked.state.players.player?.castSequence, 1)
+  assert.equal(rowBlocked.state.players.player?.fizzleSequence, 1)
+  state = stepNativeSecondaryAbilities(rowBlocked.state, context(11, 153, null)).state
+  for (let tick = 154; tick <= 834; tick += 1) {
+    state = stepNativeSecondaryAbilities(state, context(11, tick, null)).state
+  }
+  assert.equal(state.players.player?.cooldownTicksBySkill[11], 0)
+  const ready = stepNativeSecondaryAbilities(state, context(11, 835, 0))
   assert.equal(ready.state.players.player?.castSequence, 2)
   assert.equal(ready.state.players.player?.staffCastTicksRemaining, 51)
 })
@@ -688,7 +832,7 @@ test('the fixed common cooldown silently blocks otherwise-ready secondary rows',
       },
     },
   }
-  const blocked = stepNativeSecondaryAbilities(source, context(15, 2, 0))
+  const blocked = stepNativeSecondaryAbilities(source, context(15, 2, 0, 100, [48]))
   assert.equal(blocked.state.players.player?.globalCooldownTicks, 149)
   assert.equal(blocked.state.players.player?.cooldownTicksBySkill[48], 5_999)
   assert.equal(blocked.state.players.player?.cooldownTicksBySkill[15], 0)
@@ -728,6 +872,9 @@ test('state-only toggles stay actionless while accepted Planewalker and Dampen r
     players: {
       player: {
         ...activePlanewalker,
+        cooldownTicksBySkill: activePlanewalker.cooldownTicksBySkill.map((ticks, skillId) => (
+          skillId === 12 ? 0 : ticks
+        )),
         globalCooldownTicks: 0,
         heldSlot: null,
         staffCastTicksRemaining: 0,
@@ -736,6 +883,7 @@ test('state-only toggles stay actionless while accepted Planewalker and Dampen r
   }, context(12, 2, 0))
   assert.equal(planewalkerOff.state.players.player?.planewalkerTicksRemaining, 0)
   assert.equal(planewalkerOff.state.players.player?.staffCastTicksRemaining, 51)
+  assert.equal(planewalkerOff.state.players.player?.cooldownTicksBySkill[12], 2_500)
 
   const dampen = cast(51)
   assert.equal(dampen.state.players.player?.staffCastTicksRemaining, 0)
@@ -2184,6 +2332,19 @@ test('Focus accelerates retained cooldowns and its concentration owns one instan
   assert.equal(result.state.players.player?.globalCooldownTicks, 0)
   assert.equal(result.state.players.player?.staffCastTicksRemaining, 51)
   assert.deepEqual(result.state.rng, chance.state)
+})
+
+test('rank refresh clamps dynamic cooldown current before native-rate recurrence', () => {
+  const castResult = stepNativeSecondaryAbilities(
+    createNativeSecondarySimulation(123),
+    context(48, 1, 0),
+  )
+  const refreshed = stepNativeSecondaryAbilities(
+    castResult.state,
+    context(48, 2, null, 100, [], 2),
+  )
+  assert.equal(refreshed.state.players.player?.cooldownMaximumTicksBySkill[48], 3_000)
+  assert.equal(refreshed.state.players.player?.cooldownTicksBySkill[48], 2_999)
 })
 
 test('Fire Wall is the recovered 300-unit eleven-patch construction', () => {

@@ -38,6 +38,14 @@ test('cooldown presentation selects the stock common or longer row timer', () =>
     capacity: 6_000,
     remaining: 6_000,
   })
+  assert.deepEqual(nativeSkillQuickbarCooldownPresentation(2_500, 2_500, 150), {
+    capacity: 2_500,
+    remaining: 2_500,
+  })
+  assert.deepEqual(nativeSkillQuickbarCooldownPresentation(0, 50, 150), {
+    capacity: 150,
+    remaining: 150,
+  })
   assert.deepEqual(nativeSkillQuickbarCooldownPresentation(0, 0, 150), {
     capacity: 0,
     remaining: 0,

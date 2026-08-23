@@ -69,7 +69,6 @@ import {
 import { nativeEquipmentHasFeature } from '../core-kernels/native-equipment-effects.ts'
 import {
   resolveNativeSkillDamageValue,
-  resolveNativeSkillManaCostValue,
 } from '../core-kernels/native-offensive-resolution.ts'
 import { nativeHurricaneChargeTick } from '../core-kernels/native-hurricane.ts'
 import {
@@ -2014,10 +2013,11 @@ function finishGameSimulationTick(
           54,
           'mAbsorb',
         ) * effectiveSkillNumericValue(skillBook, statBook, 55, 'mDamage') / 100,
-        explosiveShieldManaCost: resolveNativeSkillManaCostValue(
+        explosiveShieldRawManaCost: rankedSkillNumericValue(
+          skillBook,
+          statBook,
           55,
-          effectiveSkillNumericValue(skillBook, statBook, 55, 'mManaCost'),
-          offensiveFactors,
+          'mManaCost',
         ),
         fireBurnDamage: resolveNativeSkillDamageValue(
           22,
@@ -2032,10 +2032,11 @@ function finishGameSimulationTick(
           'mSlowdown',
         ) / 100,
         golemIron: (skillBook.effectiveRanks[75] ?? 0) > 0,
-        golemManaCost: resolveNativeSkillManaCostValue(
+        golemRawManaCost: rankedSkillNumericValue(
+          skillBook,
+          statBook,
           75,
-          effectiveSkillNumericValue(skillBook, statBook, 75, 'mManaCost'),
-          offensiveFactors,
+          'mManaCost',
         ),
         golemReflectFactor: effectiveSkillNumericValue(skillBook, statBook, 75, 'mReflect') / 100,
         input: postStaffInputs[playerId] ?? createIdlePlayerCharacterInput(),
@@ -2052,10 +2053,11 @@ function finishGameSimulationTick(
           28,
           'mSpeed',
         ) / 100,
-        magicStormManaCost: resolveNativeSkillManaCostValue(
+        magicStormRawManaCost: rankedSkillNumericValue(
+          skillBook,
+          statBook,
           28,
-          effectiveSkillNumericValue(skillBook, statBook, 28, 'mManaCost'),
-          offensiveFactors,
+          'mManaCost',
         ),
         maximumGolem: nativeEquipmentHasFeature(runtime.equipmentModifiers, 'maximumGolem'),
         maximumLeviathan: nativeEquipmentHasFeature(
@@ -2745,6 +2747,24 @@ function effectiveSkillNumericValue(
 ): number {
   const rank = skillBook.effectiveRanks[skillId] ?? 0
   if (rank < 1) return 0
+  const configured = statBook.entries[skillId]?.numericProperties[property]
+  if (configured === undefined) return 0
+  const value = typeof configured === 'number'
+    ? configured
+    : configured[Math.min(rank, configured.length - 1)]
+  if (value === undefined || !Number.isFinite(value)) {
+    throw new RangeError(`skill ${skillId} has no finite ${property} value at rank ${rank}`)
+  }
+  return value
+}
+
+function rankedSkillNumericValue(
+  skillBook: PlayerSkillBookComponent,
+  statBook: PlayerStatBookComponent,
+  skillId: number,
+  property: string,
+): number {
+  const rank = Math.max(0, skillBook.effectiveRanks[skillId] ?? 0)
   const configured = statBook.entries[skillId]?.numericProperties[property]
   if (configured === undefined) return 0
   const value = typeof configured === 'number'

@@ -24,7 +24,10 @@ import {
   type NativeSecondaryAbilityRankStats,
   type PlayerSkillBookComponent,
 } from './player-progression.ts'
-import type { NativeSecondaryAbilityId } from './native-secondary-ability-contract.ts'
+import {
+  NATIVE_SECONDARY_ABILITY_IDS,
+  type NativeSecondaryAbilityId,
+} from './native-secondary-ability-contract.ts'
 import {
   resolveNativeSkillDamageValue,
   resolveNativeSkillManaCostValue,
@@ -129,6 +132,33 @@ export const NATIVE_SECONDARY_EVENT_KINDS = Object.freeze([
 ] as const)
 export type NativeSecondaryEventKind = typeof NATIVE_SECONDARY_EVENT_KINDS[number]
 export const NATIVE_SECONDARY_GLOBAL_COOLDOWN_TICKS = 150
+export const NATIVE_SECONDARY_CONSTRUCTOR_COOLDOWN_TICKS: Readonly<
+  Record<NativeSecondaryAbilityId, number>
+> = Object.freeze({
+  11: 833,
+  12: 2_500,
+  15: 833,
+  21: 2_500,
+  23: 50,
+  27: 1_250,
+  30: 1_250,
+  35: 2_500,
+  41: 2_500,
+  45: 2_500,
+  46: 10_000,
+  48: 2_500,
+  49: 2_500,
+  50: 625,
+  51: 2_000,
+  54: 2_500,
+  72: 2_500,
+  73: 277,
+  74: 3_750,
+  76: 1_250,
+  77: 1_875,
+  78: 50,
+  79: 50,
+})
 
 export interface NativeSecondaryActorState {
   readonly ageTicks: number
@@ -309,18 +339,18 @@ export interface NativeSecondaryPlayerAuthority {
   readonly eligible: boolean
   readonly enhancedEffects: boolean
   readonly explosiveShieldDamage: number
-  readonly explosiveShieldManaCost: number
+  readonly explosiveShieldRawManaCost: number
   readonly fireBurnDamage: number
   readonly freezeDurationMultiplier: number
   readonly focusInstantRechargeChancePercent: number
   readonly golemIron: boolean
-  readonly golemManaCost: number
+  readonly golemRawManaCost: number
   readonly golemReflectFactor: number
   readonly input: PlayerCharacterInput
   readonly maximumMana: number
   readonly magicStormDurationBonusTicks: number
   readonly magicStormFrequencyFactor: number
-  readonly magicStormManaCost: number
+  readonly magicStormRawManaCost: number
   readonly maximumGolem: boolean
   readonly maximumLeviathan: boolean
   readonly maximumMagicStorm: boolean
@@ -901,6 +931,16 @@ export function nativeSecondaryStaffCastDurationTicks(
     ticks += 1
   } while (progress <= 5)
   return ticks
+}
+
+export function nativeSecondaryCooldownCapacityTicks(
+  skillBook: PlayerSkillBookComponent,
+  skillId: NativeSecondaryAbilityId,
+): number {
+  if (skillId === 15 || skillId === 48) {
+    return Math.round(effectiveSkillNumericValue(skillBook, skillId, 'mCooldown') * 100)
+  }
+  return NATIVE_SECONDARY_CONSTRUCTOR_COOLDOWN_TICKS[skillId]
 }
 
 export function nativePlaneOrbDamage(
@@ -3699,13 +3739,6 @@ function resolvedSecondaryAbilityRankStats(
 ): NativeSecondaryAbilityRankStats {
   const ranked = effectiveSecondaryAbilityRankStats(authority.skillBook, skillId)
   const values = Object.fromEntries(Object.entries(ranked.values).map(([property, value]) => {
-    if (property === 'mManaCost') {
-      return [property, resolveNativeSkillManaCostValue(
-        skillId,
-        value,
-        authority.offensiveFactors,
-      )]
-    }
     if (property === 'mDamage' || property === 'mDamage1' || property === 'mDamage2') {
       return [property, resolveNativeSkillDamageValue(
         skillId,
@@ -3748,10 +3781,19 @@ function castAbility(
   }
   const ranked = resolvedSecondaryAbilityRankStats(authority, skillId)
   const v = ranked.values
-  let cost = v.mManaCost ?? 0
-  if (skillId === 27) cost += authority.magicStormManaCost
-  if (skillId === 45) cost += authority.golemManaCost
-  if (skillId === 54) cost += authority.explosiveShieldManaCost
+  let rawCost = v.mManaCost ?? 0
+  if (skillId === 27) rawCost += authority.magicStormRawManaCost
+  if (skillId === 45) rawCost += authority.golemRawManaCost
+  if (skillId === 54) rawCost += authority.explosiveShieldRawManaCost
+  const cost = resolveNativeSkillManaCostValue(
+    skillId,
+    rawCost,
+    authority.offensiveFactors,
+  )
+  const cooldownCapacityTicks = nativeSecondaryCooldownCapacityTicks(
+    authority.skillBook,
+    skillId,
+  )
   const togglingOff = skillId === 12 && player.planewalkerTicksRemaining > 0
     || skillId === 23 && player.firewalker
     || skillId === 78 && player.mindstar
@@ -3856,7 +3898,7 @@ function castAbility(
           state,
           nextPlayer,
           skillId,
-          0,
+          cooldownCapacityTicks,
           authority,
         ))
         return none(state, nextPlayer)
@@ -3881,7 +3923,7 @@ function castAbility(
           state,
           nextPlayer,
           skillId,
-          Math.round(v.mCooldown * 100),
+          cooldownCapacityTicks,
           authority,
         ))
         return {
@@ -3986,7 +4028,7 @@ function castAbility(
           state,
           nextPlayer,
           skillId,
-          0,
+          cooldownCapacityTicks,
           authority,
         ))
       }
@@ -4559,7 +4601,7 @@ function castAbility(
     state,
     nextPlayer,
     skillId,
-    Math.round((v.mCooldown ?? 0) * 100),
+    cooldownCapacityTicks,
     authority,
   ))
   if (skillId !== 51) {
@@ -5662,11 +5704,25 @@ function stepPlayerState(
   source: NativeSecondaryPlayerState,
   authority: NativeSecondaryPlayerAuthority,
 ): NativeSecondaryPlayerState {
+  const cooldownMaximumTicksBySkill = [...source.cooldownMaximumTicksBySkill]
+  for (const skillId of NATIVE_SECONDARY_ABILITY_IDS) {
+    cooldownMaximumTicksBySkill[skillId] = nativeSecondaryCooldownCapacityTicks(
+      authority.skillBook,
+      skillId,
+    )
+  }
   return {
     ...source,
     castSpinTicksRemaining: Math.max(0, source.castSpinTicksRemaining - 1),
+    cooldownMaximumTicksBySkill: Object.freeze(cooldownMaximumTicksBySkill),
     cooldownTicksBySkill: Object.freeze(source.cooldownTicksBySkill.map((ticks, skillId) => (
-      ticks <= 0 ? 0 : Math.max(0, ticks - nativeSecondaryRechargeFactor(authority, skillId))
+      ticks <= 0
+        ? 0
+        : Math.max(
+            0,
+            Math.min(ticks, cooldownMaximumTicksBySkill[skillId] ?? 0)
+              - nativeSecondaryRechargeFactor(authority, skillId),
+          )
     ))),
     globalCooldownTicks: Math.max(0, source.globalCooldownTicks - authority.secondaryRechargeFactor),
     magicShieldPulseTicks: Math.max(0, source.magicShieldPulseTicks - 1),

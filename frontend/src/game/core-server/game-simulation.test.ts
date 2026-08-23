@@ -34,7 +34,10 @@ import {
   drawNativeFloat,
   drawNativeInteger,
 } from '../core-kernels/native-rng.ts'
-import { createNativeSecondaryPlayerState } from '../core-kernels/native-secondary-abilities.ts'
+import {
+  createNativeSecondaryPlayerState,
+  NATIVE_SECONDARY_CONSTRUCTOR_COOLDOWN_TICKS,
+} from '../core-kernels/native-secondary-abilities.ts'
 import {
   addPlayerCharacter,
   applyGameSimulationHubAction,
@@ -44,6 +47,7 @@ import {
   createGameSimulation,
   DEFAULT_PLAYER_CHARACTER_CONFIG,
   enterBoneyardWorld,
+  GAME_TICK_RATE,
   getPlayerCharacter,
   getPlayerEconomy,
   getPlayerProgression,
@@ -775,6 +779,12 @@ test('game simulation owns fixed-step accumulation independently of its world', 
   state = stepGameSimulation(state, {}, 0.005)
   assert.equal(state.tick, 1)
   assert.equal(state.accumulatorSeconds, 0)
+})
+
+test('native Golem cooldown ticks map to 25 authoritative wall-clock seconds', () => {
+  assert.equal(GAME_TICK_RATE, 100)
+  assert.equal(NATIVE_SECONDARY_CONSTRUCTOR_COOLDOWN_TICKS[45], 2_500)
+  assert.equal(NATIVE_SECONDARY_CONSTRUCTOR_COOLDOWN_TICKS[45] / GAME_TICK_RATE, 25)
 })
 
 test('a shared level milestone freezes every gameplay clock until the fixed cohort chooses', () => {

@@ -16,6 +16,7 @@ import {
   createEquipmentInventoryItem,
 } from '../src/game/core-kernels/hub-economy.ts'
 import {
+  nativeSecondaryCooldownCapacityTicks,
   resetNativeSecondaryWorld,
 } from '../src/game/core-kernels/native-secondary-abilities.ts'
 import { createPrimarySpellSimulation } from '../src/game/core-kernels/primary-spells.ts'
@@ -48,7 +49,9 @@ const requestedSkillIds = (process.env.SDR_SECONDARY_ABILITY_ID || '')
   .filter(Boolean)
   .map(Number)
 const requestedScene = process.env.SDR_SECONDARY_ABILITY_SCENE || 'hub'
+const cooldownOnly = process.env.SDR_SECONDARY_COOLDOWN_ONLY === '1'
 const singleGolemCapture = process.env.SDR_SECONDARY_GOLEM_SINGLE === '1'
+const golemCooldownTiming = process.env.SDR_SECONDARY_GOLEM_COOLDOWN_TIMING === '1'
 const statusEffectAcceptance = process.env.SDR_STATUS_EFFECT_ACCEPTANCE === '1'
 assert.ok(requestedScene === 'hub' || requestedScene === 'boneyard')
 if (statusEffectAcceptance) assert.equal(requestedScene, 'boneyard')
@@ -96,19 +99,24 @@ assert.deepEqual(
 
 await mkdir(screenshotRoot, { recursive: true })
 const credential = 'secondary-ability-browser-parity'
-const vite = await createViteServer({
-  configFile: fileURLToPath(new URL('../vite.config.ts', import.meta.url)),
-  logLevel: 'error',
-  root: frontendRoot,
-  server: { host: '127.0.0.1', port: 0 },
-})
-await vite.listen()
-const viteAddress = vite.httpServer?.address()
-if (!viteAddress || typeof viteAddress === 'string') {
-  await vite.close()
-  throw new Error('Vite did not expose its secondary-ability smoke port')
+const externalBaseUrl = process.env.SDR_SECONDARY_ABILITY_BASE_URL?.replace(/\/$/, '')
+let vite = null
+let baseUrl = externalBaseUrl
+if (!baseUrl) {
+  vite = await createViteServer({
+    configFile: fileURLToPath(new URL('../vite.config.ts', import.meta.url)),
+    logLevel: 'error',
+    root: frontendRoot,
+    server: { host: '127.0.0.1', port: 0 },
+  })
+  await vite.listen()
+  const viteAddress = vite.httpServer?.address()
+  if (!viteAddress || typeof viteAddress === 'string') {
+    await vite.close()
+    throw new Error('Vite did not expose its secondary-ability smoke port')
+  }
+  baseUrl = `http://127.0.0.1:${viteAddress.port}`
 }
-const baseUrl = `http://127.0.0.1:${viteAddress.port}`
 const host = await startGameHost({
   allowedOrigins: [baseUrl],
   authentication: { kind: 'shared', credential },
@@ -209,6 +217,7 @@ try {
     canvas = page.locator('.boneyard-world-canvas[data-game-renderer="pixi-webgl"]')
     await canvas.waitFor({ timeout: 90_000 })
     await openBoneyardCombat(page, host, playerId)
+    if (cooldownOnly) stabilizeBoneyardCooldownEnemies(host)
     const state = host.state()
     assert.equal(state.world.kind, 'boneyard')
     boneyardEnemyBaseline = structuredClone(state.world.enemies)
@@ -258,6 +267,9 @@ try {
       window.__secondaryRenderSamples.at(-1)?.materialTint ?? null
     ))
     const audioStart = await page.evaluate(() => window.__sdrAudioEvents.length)
+    const castRequestedAtMs = performance.now()
+    const castRequestedAtTick = host.state().tick
+    const manaBeforeCast = playerProgression(host, playerId).currentMana
     let target
     let combatBaseline = null
     try {
@@ -300,6 +312,18 @@ try {
       }, null, 2)}\n`)
       throw error
     }
+    const committedState = host.state()
+    const committedPlayer = structuredClone(
+      committedState.secondaryAbilities.players[playerId],
+    )
+    const committedPlayerIndex = committedState.playerEntities.identities.findIndex(
+      ({ playerId: id }) => id === playerId,
+    )
+    assert.notEqual(committedPlayerIndex, -1)
+    const castCommittedAtMs = performance.now()
+    const castCommittedAtTick = committedState.tick
+    const manaAfterCast = committedState.playerEntities
+      .progressions[committedPlayerIndex].currentMana
     positionCombatTargetForAbility(host, contract.skillId, combatBaseline)
     await waitUntil(() => host.state().secondaryAbilities.events.some((event) => (
       event.eventId >= firstEventId && event.skillId === contract.skillId
@@ -307,9 +331,61 @@ try {
     const events = structuredClone(host.state().secondaryAbilities.events.filter((event) => (
       event.eventId >= firstEventId && event.skillId === contract.skillId
     )))
+    const authoritativeCastTick = Math.min(...events.map(({ tick }) => tick))
+    const expectedCooldownCapacity = nativeSecondaryCooldownCapacityTicks(
+      getPlayerSkillBook(committedState, playerId),
+      contract.skillId,
+    )
+    assert.equal(
+      committedPlayer?.cooldownMaximumTicksBySkill[contract.skillId],
+      expectedCooldownCapacity,
+    )
+    let cooldownPath = null
+    if (contract.skillId === 78 || contract.skillId === 79) {
+      assert.equal(committedPlayer?.cooldownTicksBySkill[contract.skillId], 0)
+      assert.equal(committedPlayer?.globalCooldownTicks, 0)
+      assert.equal(await page.locator(
+        '.hub-hud-quickbar-slot[data-slot="0"] .hub-hud-quickbar-cooldown path',
+      ).count(), 0)
+    } else {
+      const path = page.locator(
+        '.hub-hud-quickbar-slot[data-slot="0"] .hub-hud-quickbar-cooldown path',
+      )
+      await path.waitFor({ timeout: 2_000 })
+      cooldownPath = await path.getAttribute('d')
+      assert.ok(cooldownPath?.startsWith('M 26.5 26.5 L '))
+      assert.ok((committedPlayer?.globalCooldownTicks ?? 0) > 0)
+      const rowCurrent = committedPlayer?.cooldownTicksBySkill[contract.skillId] ?? 0
+      if (expectedCooldownCapacity < 150) {
+        assert.equal(rowCurrent, 0)
+      } else {
+        assert.ok(rowCurrent > expectedCooldownCapacity - 20)
+        assert.ok(rowCurrent <= expectedCooldownCapacity)
+      }
+      assert.match(
+        (await page.locator(
+          '.hub-hud-quickbar-slot[data-slot="0"]',
+        ).getAttribute('aria-label')) ?? '',
+        /cooldown remaining/,
+      )
+    }
+    const cooldownAtCast = {
+      capacityTicks: expectedCooldownCapacity,
+      authoritativeCastTick,
+      committedAtMs: castCommittedAtMs,
+      committedAtTick: castCommittedAtTick,
+      commonTicks: committedPlayer?.globalCooldownTicks ?? 0,
+      manaBefore: manaBeforeCast,
+      manaAfter: manaAfterCast,
+      path: cooldownPath,
+      requestedAtMs: castRequestedAtMs,
+      requestedAtTick: castRequestedAtTick,
+      rowTicks: committedPlayer?.cooldownTicksBySkill[contract.skillId] ?? 0,
+    }
     let maximumSet = contract.skillId === 45
       ? null
       : maximumSetReceipt(host.state(), playerId, contract.skillId)
+    let cooldownTiming = null
     let flashObservedAtCast = false
     if (proof.flash) {
       try {
@@ -375,6 +451,65 @@ try {
       )
     }
     if (contract.skillId === 45) {
+      if (golemCooldownTiming) {
+        assert.equal(expectedCooldownCapacity, 2_500)
+        assert.ok(manaBeforeCast - cooldownAtCast.manaAfter >= 59.5)
+        assert.ok(manaBeforeCast - cooldownAtCast.manaAfter <= 60.5)
+        await page.screenshot({
+          path: `${screenshotRoot}/45-raise-golem-cooldown-full.png`,
+        })
+        await waitUntil(() => {
+          const player = host.state().secondaryAbilities.players[playerId]
+          const row = player?.cooldownTicksBySkill[45] ?? 0
+          return (player?.staffCastTicksRemaining ?? 0) === 0
+            && (player?.globalCooldownTicks ?? 0) === 0
+            && row > 0
+            && row <= 1_250
+        }, 'Raise Golem did not reach its half-cooldown row', 20_000)
+        await page.screenshot({
+          path: `${screenshotRoot}/45-raise-golem-cooldown-half.png`,
+        })
+        const blockedSequence = host.state().secondaryAbilities.players[playerId]?.castSequence ?? 0
+        const blockedFizzle = host.state().secondaryAbilities.players[playerId]?.fizzleSequence ?? 0
+        await castSecondaryPointer(page, { x: target.x + 20, y: target.y })
+        await waitUntil(() => (
+          (host.state().secondaryAbilities.players[playerId]?.fizzleSequence ?? 0)
+            > blockedFizzle
+        ), 'Raise Golem row cooldown did not reject a second input')
+        assert.equal(
+          host.state().secondaryAbilities.players[playerId]?.castSequence,
+          blockedSequence,
+        )
+        await waitUntil(() => (
+          (host.state().secondaryAbilities.players[playerId]?.cooldownTicksBySkill[45] ?? 0) === 0
+        ), 'Raise Golem did not reach cooldown zero', 20_000)
+        const zeroAtMs = performance.now()
+        const zeroAtTick = host.state().tick
+        const elapsedTicks = zeroAtTick - cooldownAtCast.authoritativeCastTick
+        const elapsedMs = zeroAtMs - castRequestedAtMs
+        assert.ok(elapsedTicks >= 2_500 && elapsedTicks <= 2_505)
+        assert.ok(elapsedMs >= 24_500 && elapsedMs <= 27_500)
+        assert.equal(await page.locator(
+          '.hub-hud-quickbar-slot[data-slot="0"] .hub-hud-quickbar-cooldown path',
+        ).count(), 0)
+        await page.screenshot({
+          path: `${screenshotRoot}/45-raise-golem-cooldown-zero.png`,
+        })
+        const readySequence = host.state().secondaryAbilities.players[playerId]?.castSequence ?? 0
+        await castSecondaryPointer(page, { x: target.x + 40, y: target.y })
+        await waitUntil(() => (
+          (host.state().secondaryAbilities.players[playerId]?.castSequence ?? 0)
+            > readySequence
+        ), 'Raise Golem did not accept the first post-cooldown input')
+        cooldownTiming = {
+          acceptedAfterZero: true,
+          blockedAtHalf: true,
+          elapsedMs,
+          elapsedTicks,
+          manaDebit: manaBeforeCast - cooldownAtCast.manaAfter,
+          zeroAtTick,
+        }
+      }
       if (singleGolemCapture) {
         const golem = host.state().secondaryAbilities.actors.find(({ kind, ownerId }) => (
           kind === 'golem' && ownerId === playerId
@@ -390,7 +525,7 @@ try {
           })
         }
         maximumSet = { expectedSummonCap: 1, summons: 1 }
-      } else {
+      } else if (!golemCooldownTiming) {
         await waitUntil(() => {
           const player = host.state().secondaryAbilities.players[playerId]
           return (player?.staffCastTicksRemaining ?? 0) === 0
@@ -414,13 +549,15 @@ try {
         maximumSet = maximumSetReceipt(host.state(), playerId, contract.skillId)
       }
     }
-    const combatProof = await collectCombatProof(
-      host,
-      playerId,
-      contract.skillId,
-      combatBaseline,
-      requestedScene,
-    )
+    const combatProof = cooldownOnly
+      ? null
+      : await collectCombatProof(
+          host,
+          playerId,
+          contract.skillId,
+          combatBaseline,
+          requestedScene,
+        )
     if (combatProof && contract.skillId === 35) {
       await page.waitForFunction(() => (
         ((document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame)
@@ -430,26 +567,6 @@ try {
       await page.waitForTimeout(120)
     }
 
-    let cooldownPath = null
-    if (contract.skillId === 15 || contract.skillId === 48) {
-      const path = page.locator(
-        '.hub-hud-quickbar-slot[data-slot="0"] .hub-hud-quickbar-cooldown path',
-      )
-      await path.waitFor({ timeout: 2_000 })
-      cooldownPath = await path.getAttribute('d')
-      assert.ok(cooldownPath?.startsWith('M 26.5 26.5 L '))
-      const cooldownPlayer = host.state().secondaryAbilities.players[playerId]
-      assert.ok((cooldownPlayer?.globalCooldownTicks ?? 0) > 0)
-      if (contract.skillId === 15) {
-        assert.equal(cooldownPlayer?.cooldownTicksBySkill[contract.skillId], 0)
-        assert.equal(cooldownPlayer?.cooldownMaximumTicksBySkill[contract.skillId], 100)
-      } else {
-        assert.ok(
-          (cooldownPlayer?.cooldownTicksBySkill[contract.skillId] ?? 0)
-            > (cooldownPlayer?.globalCooldownTicks ?? 0),
-        )
-      }
-    }
     const screenshotPath = `${screenshotRoot}/${String(contract.skillId).padStart(2, '0')}-${slug(contract.name)}.png`
     await page.screenshot({ path: screenshotPath })
     await waitForAudio(page, audioStart, proof.audio)
@@ -508,7 +625,9 @@ try {
     )
     receipts.push({
       audio: proof.audio,
+      cooldownAtCast,
       cooldownPath,
+      cooldownTiming,
       combatProof,
       eventCues: events.flatMap(({ cue }) => cue === null ? [] : [cue]),
       flashObserved,
@@ -565,7 +684,7 @@ try {
 } finally {
   await host.close()
   await browser.close()
-  await vite.close()
+  await vite?.close()
 }
 
 async function capturePrimaryStatusEffectExpiry(
@@ -993,6 +1112,13 @@ function playerEconomy(host, playerId) {
   return state.playerEntities.economies[index]
 }
 
+function playerProgression(host, playerId) {
+  const state = host.state()
+  const index = state.playerEntities.identities.findIndex(({ playerId: id }) => id === playerId)
+  assert.notEqual(index, -1)
+  return state.playerEntities.progressions[index]
+}
+
 function maximumSetReceipt(state, playerId, skillId) {
   const owned = state.secondaryAbilities.actors.filter(({ ownerId }) => ownerId === playerId)
   switch (skillId) {
@@ -1188,6 +1314,28 @@ function restoreBoneyardEnemies(host, baseline) {
   Object.assign(state, { world: { ...state.world, enemies, enemyEvents: [] } })
 }
 
+function stabilizeBoneyardCooldownEnemies(host) {
+  const state = host.state()
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard host world')
+  const enemies = {
+    ...state.world.enemies,
+    actors: state.world.enemies.actors.map((actor) => ({
+      ...actor,
+      config: { ...actor.config, maximumHealth: 1_000_000_000 },
+      currentHealth: 1_000_000_000,
+      nextMovementTick: state.tick + 1_000_000,
+      nextTargetRefreshTick: state.tick + 1_000_000,
+    })),
+  }
+  Object.assign(state, {
+    world: {
+      ...state.world,
+      enemies,
+      enemyEvents: [],
+    },
+  })
+}
+
 async function abilityCastTarget(canvas, host, playerId, skillId, scene) {
   const fallback = await canvas.evaluate((node) => {
     const bounds = node.getBoundingClientRect()
@@ -1196,7 +1344,7 @@ async function abilityCastTarget(canvas, host, playerId, skillId, scene) {
       y: bounds.top + bounds.height * 0.4,
     }
   })
-  if (scene !== 'boneyard' || !COMBAT_PROOF_SKILLS.has(skillId)) {
+  if (cooldownOnly || scene !== 'boneyard' || !COMBAT_PROOF_SKILLS.has(skillId)) {
     return { combatBaseline: null, pointer: fallback }
   }
   await waitUntil(() => {
