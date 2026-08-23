@@ -228,10 +228,10 @@ def ppo_epochs(
                         approximate_kl=float(approximate_kl),
                         clip_fraction=float(clip_fraction),
                         gradient_norm=0.0,
-                        entropy_movement=float(evaluation.entropies["movement"].mean()),
-                        entropy_target=float(evaluation.entropies["target"].mean()),
-                        entropy_ability=float(evaluation.entropies["ability"].mean()),
-                        entropy_aim=float(evaluation.entropies["aim"].mean()),
+                        entropy_movement=float(evaluation.entropies["movement"].mean().detach()),
+                        entropy_target=float(evaluation.entropies["target"].mean().detach()),
+                        entropy_ability=float(evaluation.entropies["ability"].mean().detach()),
+                        entropy_aim=float(evaluation.entropies["aim"].mean().detach()),
                         early_stopped=True,
                     )
                 )
