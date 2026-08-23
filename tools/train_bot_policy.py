@@ -13,6 +13,7 @@ from typing import Any, Sequence
 import torch
 
 from ml_bot.checkpoint import atomic_write, load_checkpoint, typescript_checkpoint_report
+from ml_bot.arena import checkpoint_arena
 from ml_bot.model import PolicyV5
 from ml_bot.diagnostics import render_dashboard, render_replay
 from ml_bot.metrics import promotion_decision
@@ -216,6 +217,37 @@ def run_promote(args: argparse.Namespace) -> Any:
     return result
 
 
+def run_arena(args: argparse.Namespace) -> Any:
+    seed_document = json.loads(Path(args.seeds).read_text(encoding="utf-8"))
+    seeds = seed_document[args.seed_set][: args.seed_count]
+    checkpoints = {}
+    for entry in args.checkpoint:
+        if "=" not in entry:
+            raise ValueError("arena checkpoints must use NAME=PATH")
+        name, path = entry.split("=", 1)
+        if not name or name in checkpoints:
+            raise ValueError("arena checkpoint names must be unique and nonempty")
+        checkpoints[name] = Path(path).resolve()
+    report = checkpoint_arena(
+        checkpoints,
+        seeds,
+        workers=args.workers,
+        action_repeat=args.action_repeat,
+        maximum_steps=args.maximum_steps,
+        output=Path(args.output).resolve(),
+    )
+    return {
+        "status": "ok",
+        "winner": report["winner"],
+        "promotionScale": report["promotionScale"],
+        "ladder": [
+            {key: value for key, value in entry.items() if key != "evaluation"}
+            for entry in report["ladder"]
+        ],
+        "output": str(Path(args.output).resolve()),
+    }
+
+
 def paired_wave_vectors(first: Any, second: Any) -> tuple[list[float], list[float]]:
     def rows(report: Any) -> dict[int, float]:
         return {
@@ -326,6 +358,19 @@ def create_parser() -> argparse.ArgumentParser:
     promote_parser.add_argument("--candidate-holdout", required=True)
     promote_parser.add_argument("--output", required=True)
     promote_parser.set_defaults(handler=run_promote)
+
+    arena_parser = subparsers.add_parser("arena", help="rank checkpoints on identical seeds")
+    arena_parser.add_argument("--checkpoint", action="append", required=True)
+    arena_parser.add_argument("--seeds", default=str(DEFAULT_EVAL_SEEDS))
+    arena_parser.add_argument(
+        "--seed-set", choices=("eval_train_dist", "eval_holdout"), required=True
+    )
+    arena_parser.add_argument("--seed-count", type=positive_integer, default=4)
+    arena_parser.add_argument("--workers", type=positive_integer, default=4)
+    arena_parser.add_argument("--action-repeat", type=positive_integer, default=10)
+    arena_parser.add_argument("--maximum-steps", type=positive_integer, default=1_500)
+    arena_parser.add_argument("--output", required=True)
+    arena_parser.set_defaults(handler=run_arena)
 
     validate_parser = subparsers.add_parser("validate", help="validate a strict v5 checkpoint")
     validate_parser.add_argument("--checkpoint", required=True)
