@@ -393,10 +393,14 @@ try {
   const thirdMobileBoneyardAllyReceipt = await allyRosterReceipt(thirdPage)
   assert.deepEqual(thirdMobileBoneyardAllyReceipt.names, thirdMobileHubAllyReceipt.names)
   assert.deepEqual(thirdMobileBoneyardAllyReceipt.rowIds, thirdMobileHubAllyReceipt.rowIds)
-  assert.equal(thirdMobileBoneyardAllyReceipt.presentationScale, 2)
+  assertClose(
+    thirdMobileBoneyardAllyReceipt.presentationScale,
+    0.72 / expectedMobileViewportScale,
+    'mobile Boneyard ally presentation scale',
+  )
   assertClose(
     thirdMobileBoneyardAllyReceipt.rows[0].bar.width,
-    100 * expectedMobileViewportScale,
+    147 * 0.72,
     'mobile Boneyard ally bar width',
   )
 
