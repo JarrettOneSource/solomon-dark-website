@@ -16,7 +16,11 @@ from ml_bot.checkpoint import atomic_write, load_checkpoint, typescript_checkpoi
 from ml_bot.arena import checkpoint_arena
 from ml_bot.model import PolicyV5
 from ml_bot.diagnostics import render_dashboard, render_replay
-from ml_bot.metrics import promotion_decision, training_summary
+from ml_bot.metrics import (
+    evaluation_checkpoint_identity,
+    promotion_decision,
+    training_summary,
+)
 from ml_bot.probes import behavior_probe_scorecard
 from ml_bot.self_test import main as self_test
 from ml_bot.spec import POLICY_SPEC, REPOSITORY_ROOT
@@ -255,14 +259,12 @@ def run_promote(args: argparse.Namespace) -> Any:
     }
     if any(report.get("validForPromotion") is not True for report in reports.values()):
         raise ValueError("all four evaluation reports must be promotion-valid")
-    if reports["incumbentTrain"].get("checkpoint") != reports["incumbentHoldout"].get(
-        "checkpoint"
-    ):
-        raise ValueError("incumbent train and holdout reports use different checkpoints")
-    if reports["candidateTrain"].get("checkpoint") != reports["candidateHoldout"].get(
-        "checkpoint"
-    ):
-        raise ValueError("candidate train and holdout reports use different checkpoints")
+    incumbent_identity = evaluation_checkpoint_identity(
+        reports["incumbentTrain"], reports["incumbentHoldout"], label="incumbent"
+    )
+    candidate_identity = evaluation_checkpoint_identity(
+        reports["candidateTrain"], reports["candidateHoldout"], label="candidate"
+    )
     incumbent_train, candidate_train = paired_wave_vectors(
         reports["incumbentTrain"], reports["candidateTrain"]
     )
@@ -275,14 +277,21 @@ def run_promote(args: argparse.Namespace) -> Any:
         incumbent_holdout,
         candidate_holdout,
     )
-    incumbent_checkpoint = reports["incumbentTrain"]["checkpoint"]
-    candidate_checkpoint = reports["candidateTrain"]["checkpoint"]
+    incumbent_checkpoint = incumbent_identity["checkpoint"]
+    candidate_checkpoint = candidate_identity["checkpoint"]
     result = {
         **result,
         "incumbentCheckpoint": incumbent_checkpoint,
+        "incumbentCheckpointSha256": incumbent_identity["checkpointSha256"],
         "candidateCheckpoint": candidate_checkpoint,
+        "candidateCheckpointSha256": candidate_identity["checkpointSha256"],
         "selectedCheckpoint": (
             candidate_checkpoint if result["promoted"] else incumbent_checkpoint
+        ),
+        "selectedCheckpointSha256": (
+            candidate_identity["checkpointSha256"]
+            if result["promoted"]
+            else incumbent_identity["checkpointSha256"]
         ),
     }
     atomic_write(

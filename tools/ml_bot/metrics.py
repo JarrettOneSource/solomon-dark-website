@@ -11,6 +11,8 @@ from typing import Any, Iterable, Mapping, Sequence
 
 import numpy as np
 
+from .checkpoint import load_checkpoint
+
 
 def append_jsonl(path: Path, value: Mapping[str, Any]) -> None:
     payload = json.dumps(value, allow_nan=False, separators=(",", ":"), sort_keys=True)
@@ -98,6 +100,31 @@ def promotion_decision(
     }
 
 
+def evaluation_checkpoint_identity(
+    train_report: Mapping[str, Any],
+    holdout_report: Mapping[str, Any],
+    *,
+    label: str,
+) -> Mapping[str, str]:
+    for report in (train_report, holdout_report):
+        if report.get("evaluationVersion") != 5:
+            raise ValueError(f"{label} evaluation report is not strict version 5")
+    path = train_report.get("checkpoint")
+    if not isinstance(path, str) or path != holdout_report.get("checkpoint"):
+        raise ValueError(f"{label} train and holdout reports use different checkpoints")
+    digest = train_report.get("checkpointSha256")
+    if (
+        not isinstance(digest, str)
+        or len(digest) != 64
+        or digest != holdout_report.get("checkpointSha256")
+    ):
+        raise ValueError(f"{label} train and holdout checkpoint hashes differ")
+    checkpoint = Path(path)
+    if not checkpoint.is_file() or hashlib.sha256(checkpoint.read_bytes()).hexdigest() != digest:
+        raise ValueError(f"{label} checkpoint no longer matches its evaluation reports")
+    return {"checkpoint": str(checkpoint.resolve()), "checkpointSha256": digest}
+
+
 def aggregate_reward_terms(records: Iterable[Mapping[str, Any]]) -> dict[str, float]:
     totals: dict[str, float] = {}
     for record in records:
@@ -118,6 +145,14 @@ def training_summary(
     episodes = read_jsonl(training_directory / "episodes.jsonl")
     if not metrics:
         raise ValueError("training summary requires at least one metrics record")
+    metadata, _tensors = load_checkpoint(checkpoint)
+    last_metric = metrics[-1]
+    if (
+        int(metadata["trainedUpdates"]) != int(last_metric.get("iter", -1))
+        or int(metadata["trainedEnvironmentSteps"])
+        != int(last_metric.get("env_steps_total", -1))
+    ):
+        raise ValueError("training summary checkpoint does not match the latest metrics")
     gameplay: dict[str, Any] = {
         "enemy_kills": 0,
         "enemy_kills_by_kind": {},
@@ -155,8 +190,9 @@ def training_summary(
         "checkpoint": str(checkpoint.resolve()),
         "checkpoint_sha256": digest,
         "checkpoint_bytes": checkpoint.stat().st_size,
-        "updates": len(metrics),
-        "trained_environment_steps": metrics[-1]["env_steps_total"],
+        "updates": int(metadata["trainedUpdates"]),
+        "metric_records": len(metrics),
+        "trained_environment_steps": int(metadata["trainedEnvironmentSteps"]),
         "gameplay": gameplay,
         "episode_records": len(episodes),
         "complete_episodes": len(completed),

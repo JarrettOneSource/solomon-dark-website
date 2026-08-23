@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
+import tempfile
 
 import numpy as np
 import torch
@@ -15,7 +17,12 @@ from .advantages import (
 from .bridge import BoneyardRolloutBridge
 from .checkpoint import decode_checkpoint, encode_checkpoint
 from .model import PolicyV5
-from .metrics import paired_seed_comparison, promotion_decision
+from .metrics import (
+    evaluation_checkpoint_identity,
+    paired_seed_comparison,
+    promotion_decision,
+    training_summary,
+)
 from .optimization import behavior_clone, choice_ppo_epochs, ppo_epochs
 from .spec import POLICY_SPEC
 
@@ -158,6 +165,75 @@ def main() -> int:
         [2, 2, 2, 2],
     )
     assert promotion["promoted"] is True
+
+    with tempfile.TemporaryDirectory() as temporary_name:
+        temporary = Path(temporary_name)
+        summary_metadata = {
+            **metadata,
+            "trainedEnvironmentSteps": 10,
+            "trainedUpdates": 1,
+        }
+        summary_checkpoint = temporary / "policy-v5-update-000001.sdml"
+        summary_checkpoint.write_bytes(
+            encode_checkpoint(summary_metadata, policy.export_tensors())
+        )
+        (temporary / "metrics.jsonl").write_text(
+            json.dumps({
+                "env_steps_total": 10,
+                "episodes_completed": 1,
+                "gameplay": {"enemy_kills": 2, "waves_completed": 1},
+                "iter": 1,
+                "kl_divergence_max": 0.01,
+                "reward_terms": {"clamp_adjustment": 0.0},
+            }) + "\n",
+            encoding="utf-8",
+        )
+        (temporary / "episodes.jsonl").write_text(
+            json.dumps({
+                "aborted": False,
+                "return": 3.0,
+                "waves_reached": 2,
+            }) + "\n",
+            encoding="utf-8",
+        )
+        summary = training_summary(temporary, summary_checkpoint)
+        assert summary["updates"] == 1
+        assert summary["trained_environment_steps"] == 10
+        assert summary["gameplay"]["enemy_kills"] == 2
+        identity_report = {
+            "checkpoint": str(summary_checkpoint.resolve()),
+            "checkpointSha256": summary["checkpoint_sha256"],
+            "evaluationVersion": 5,
+        }
+        identity = evaluation_checkpoint_identity(
+            identity_report, identity_report, label="candidate"
+        )
+        assert identity["checkpointSha256"] == summary["checkpoint_sha256"]
+        try:
+            evaluation_checkpoint_identity(
+                identity_report,
+                {**identity_report, "checkpointSha256": "0" * 64},
+                label="candidate",
+            )
+        except ValueError as error:
+            assert "hashes differ" in str(error)
+        else:
+            raise AssertionError("promotion identity accepted mismatched hashes")
+        (temporary / "metrics.jsonl").write_text(
+            json.dumps({
+                "env_steps_total": 20,
+                "episodes_completed": 1,
+                "gameplay": {},
+                "iter": 2,
+            }) + "\n",
+            encoding="utf-8",
+        )
+        try:
+            training_summary(temporary, summary_checkpoint)
+        except ValueError as error:
+            assert "does not match" in str(error)
+        else:
+            raise AssertionError("training summary accepted mismatched checkpoint metrics")
 
     with BoneyardRolloutBridge([0x100, 0x101], worker_count=2) as bridge:
         initial_hashes = bridge.state.hashes

@@ -513,7 +513,7 @@ def extend_evaluation(
     if str(checkpoint_path.resolve()) != source_report.get("checkpoint"):
         raise ValueError("evaluation report belongs to a different checkpoint")
     report_hash = source_report.get("checkpointSha256")
-    if report_hash is not None and report_hash != file_sha256(checkpoint_path):
+    if not isinstance(report_hash, str) or report_hash != file_sha256(checkpoint_path):
         raise ValueError("evaluation report checkpoint hash has changed")
     existing = source_report.get("episodes")
     if not isinstance(existing, list):
