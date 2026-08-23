@@ -22,7 +22,7 @@ from .advantages import (
 from .bridge import BoneyardRolloutBridge
 from .checkpoint import atomic_write, load_checkpoint, save_checkpoint
 from .diagnostics import write_observation_audit, write_spatial_replay, write_value_calibration
-from .metrics import append_jsonl, bootstrap_mean_interval
+from .metrics import append_jsonl, bootstrap_mean_interval, episode_gameplay_summary
 from .model import PolicyV5
 from .optimization import (
     ChoiceCoverage,
@@ -461,6 +461,7 @@ def evaluate_policy(
                     "incompleteEpisodes": sum(
                         record.get("aborted") is True for record in records
                     ),
+                    "gameplay": episode_gameplay_summary(records),
                     "requestedEpisodes": len(seeds),
                 })
     return evaluation_report(
@@ -495,6 +496,7 @@ def evaluation_report(
         "completeEpisodes": len(completed),
         "incompleteEpisodes": len(incomplete),
         "validForPromotion": len(completed) == len(seeds) and len(completed) >= 30,
+        "gameplay": episode_gameplay_summary(records),
         "return": None if not returns else bootstrap_mean_interval(returns, seed=0xE1A1),
         "status": "ok",
         "waveDepth": None if not waves else bootstrap_mean_interval(waves, seed=0xE1A2),

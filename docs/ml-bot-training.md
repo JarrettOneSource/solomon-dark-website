@@ -154,7 +154,10 @@ python tools/train_bot_policy.py diagnostics \
 Each update records learning metrics plus exact gameplay outcomes: enemy kills
 and kinds, waves reached/completed, deaths, potion use, skill picks, gold,
 item kinds/counts, health/mana orbs, powerups, XP, reward decomposition, and
-action histograms. Per-update observation audits, value calibration, and a
+action histograms. Evaluation progress and final reports aggregate those same
+gameplay counters, along with authoritative simulation ticks and policy
+decisions, so a live run can be distinguished from an idle or stalled one.
+Per-update observation audits, value calibration, and a
 spatial replay JSONL are written alongside checkpoints. Render a replay with:
 
 ```sh

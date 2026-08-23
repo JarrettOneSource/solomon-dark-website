@@ -125,6 +125,50 @@ def evaluation_checkpoint_identity(
     return {"checkpoint": str(checkpoint.resolve()), "checkpointSha256": digest}
 
 
+def episode_gameplay_summary(records: Iterable[Mapping[str, Any]]) -> Mapping[str, Any]:
+    totals: dict[str, Any] = {
+        "episode_records": 0,
+        "decisions": 0,
+        "simulation_ticks": 0,
+        "deaths": 0,
+        "enemy_kills": 0,
+        "enemy_kills_by_kind": {},
+        "waves_completed": 0,
+        "potions_used": 0,
+        "skill_picks": 0,
+        "gold_collected": 0.0,
+        "items_collected": 0,
+        "item_kinds": {},
+        "health_orbs_collected": 0,
+        "mana_orbs_collected": 0,
+        "powerups_collected": 0,
+    }
+    for record in records:
+        totals["episode_records"] += 1
+        totals["decisions"] += int(record["steps"])
+        totals["simulation_ticks"] += int(record["simulation_ticks"])
+        totals["deaths"] += int(bool(record["death"]))
+        for source, target in (
+            ("enemy_kills", "enemy_kills"),
+            ("waves_completed", "waves_completed"),
+            ("consumables_used", "potions_used"),
+            ("skill_picks", "skill_picks"),
+            ("gold_collected", "gold_collected"),
+            ("items_collected", "items_collected"),
+            ("health_orbs_collected", "health_orbs_collected"),
+            ("mana_orbs_collected", "mana_orbs_collected"),
+            ("powerups_collected", "powerups_collected"),
+        ):
+            totals[target] += record[source]
+        for source, target in (
+            ("enemy_kills_by_kind", "enemy_kills_by_kind"),
+            ("item_kinds", "item_kinds"),
+        ):
+            for name, count in record[source].items():
+                totals[target][name] = totals[target].get(name, 0) + int(count)
+    return totals
+
+
 def aggregate_reward_terms(records: Iterable[Mapping[str, Any]]) -> dict[str, float]:
     totals: dict[str, float] = {}
     for record in records:

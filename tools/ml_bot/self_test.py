@@ -18,6 +18,7 @@ from .bridge import BoneyardRolloutBridge
 from .checkpoint import decode_checkpoint, encode_checkpoint
 from .model import PolicyV5
 from .metrics import (
+    episode_gameplay_summary,
     evaluation_checkpoint_identity,
     paired_seed_comparison,
     promotion_decision,
@@ -165,6 +166,26 @@ def main() -> int:
         [2, 2, 2, 2],
     )
     assert promotion["promoted"] is True
+    gameplay = episode_gameplay_summary([{
+        "consumables_used": 1,
+        "death": True,
+        "enemy_kills": 3,
+        "enemy_kills_by_kind": {"SKELETON": 3},
+        "gold_collected": 2.0,
+        "health_orbs_collected": 1,
+        "item_kinds": {"equipment": 1},
+        "items_collected": 1,
+        "mana_orbs_collected": 2,
+        "powerups_collected": 1,
+        "simulation_ticks": 40,
+        "skill_picks": 2,
+        "steps": 4,
+        "waves_completed": 1,
+    }])
+    assert gameplay["enemy_kills"] == 3
+    assert gameplay["waves_completed"] == 1
+    assert gameplay["potions_used"] == 1
+    assert gameplay["item_kinds"] == {"equipment": 1}
 
     with tempfile.TemporaryDirectory() as temporary_name:
         temporary = Path(temporary_name)
