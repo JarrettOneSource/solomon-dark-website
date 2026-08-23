@@ -27,6 +27,7 @@ class MainActionBatch:
 class MainEvaluation:
     entropies: Mapping[str, Tensor]
     log_probability: Tensor
+    log_probabilities: Mapping[str, Tensor]
     value: Tensor
 
 
@@ -133,7 +134,7 @@ class PolicyV5(nn.Module):
         actions: Mapping[str, Tensor],
     ) -> MainEvaluation:
         latent = self.encode(observations)
-        logs: list[Tensor] = []
+        logs: dict[str, Tensor] = {}
         entropies: dict[str, Tensor] = {}
         for name, layer in (
             ("movement", self.movement),
@@ -148,11 +149,13 @@ class PolicyV5(nn.Module):
             logits = masked_logits(layer(latent), mask)
             log_probabilities = torch.log_softmax(logits, dim=-1)
             probabilities = torch.softmax(logits, dim=-1)
-            logs.append(log_probabilities.gather(1, action[:, None]).squeeze(1))
+            logs[name] = log_probabilities.gather(1, action[:, None]).squeeze(1)
             entropies[name] = masked_entropy(probabilities, log_probabilities, mask)
+        ordered_logs = tuple(logs.values())
         return MainEvaluation(
             entropies=entropies,
-            log_probability=sum(logs[1:], logs[0]),
+            log_probability=sum(ordered_logs[1:], ordered_logs[0]),
+            log_probabilities=logs,
             value=self.value(latent).squeeze(-1),
         )
 

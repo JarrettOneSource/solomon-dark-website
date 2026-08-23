@@ -24,7 +24,12 @@ from .metrics import (
     promotion_decision,
     training_summary,
 )
-from .optimization import behavior_clone, choice_ppo_epochs, ppo_epochs
+from .optimization import (
+    balanced_class_weights,
+    behavior_clone,
+    choice_ppo_epochs,
+    ppo_epochs,
+)
 from .spec import POLICY_SPEC
 
 
@@ -57,6 +62,9 @@ def main() -> int:
     assert all(torch.equal(action, torch.zeros(rows, dtype=torch.long)) for action in action_batch.actions.values())
     assert torch.all(torch.isfinite(action_batch.log_probability))
     assert torch.all(torch.isfinite(action_batch.value))
+    weights = balanced_class_weights(torch.tensor([0, 0, 0, 1]), 2)
+    assert weights[1] > weights[0]
+    assert torch.isclose(weights[torch.tensor([0, 0, 0, 1])].mean(), torch.tensor(1.0))
 
     main_optimizer = torch.optim.Adam(restored.main_parameters(), lr=3e-4)
     bootstrap_metrics = behavior_clone(

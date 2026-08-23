@@ -132,6 +132,15 @@ def bootstrap_policy(
     with torch.no_grad():
         training_accuracy = classification_accuracy(policy, *training_tensors)
         validation_accuracy = classification_accuracy(policy, *validation_tensors)
+        full_tensors = expert_tensors(dataset, device)
+        potion_rows = full_tensors[2]["ability"] >= 10
+        potion_count = int(torch.count_nonzero(potion_rows))
+        potion_accuracy = 0.0 if potion_count == 0 else classification_accuracy(
+            policy,
+            full_tensors[0][potion_rows],
+            {name: value[potion_rows] for name, value in full_tensors[1].items()},
+            {name: value[potion_rows] for name, value in full_tensors[2].items()},
+        )["ability_accuracy"]
         policy.value.weight.zero_()
         policy.value.bias.zero_()
         policy.choice_value.weight.zero_()
@@ -154,12 +163,19 @@ def bootstrap_policy(
                 for name in failed
             )
         )
+    if potion_count < 8 or potion_accuracy < 0.70:
+        raise RuntimeError(
+            "bootstrap potion-imitation gate failed: "
+            f"count={potion_count}, accuracy={potion_accuracy:.4f}"
+        )
     metadata = POLICY_SPEC.checkpoint_metadata(configuration.seed)
     metadata.update(
         {
             "bootstrapConfiguration": asdict(configuration),
             "bootstrapTrainingAccuracy": training_accuracy,
             "bootstrapValidationAccuracy": validation_accuracy,
+            "bootstrapPotionAccuracy": potion_accuracy,
+            "bootstrapPotionRows": potion_count,
             "expertDatasetDiagnostics": dataset_diagnostics,
             "numpyVersion": np.__version__,
             "torchVersion": torch.__version__,
@@ -176,6 +192,8 @@ def bootstrap_policy(
         "samples": len(dataset),
         "trainingAccuracy": training_accuracy,
         "validationAccuracy": validation_accuracy,
+        "potionAccuracy": potion_accuracy,
+        "potionRows": potion_count,
         "lastBatch": asdict(metrics[-1]),
         "datasetDiagnostics": dataset_diagnostics,
     }

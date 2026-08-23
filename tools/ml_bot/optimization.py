@@ -115,6 +115,10 @@ def behavior_clone(
 ) -> list[BootstrapMetrics]:
     count = observations.shape[0]
     require_training_sizes(count, epochs, batch_size)
+    class_weights = {
+        name: balanced_class_weights(value, masks[name].shape[1])
+        for name, value in actions.items()
+    }
     metrics: list[BootstrapMetrics] = []
     for _ in range(epochs):
         order = torch.randperm(count, generator=generator, device=observations.device)
@@ -125,7 +129,13 @@ def behavior_clone(
                 {name: value[indices] for name, value in masks.items()},
                 {name: value[indices] for name, value in actions.items()},
             )
-            loss = -evaluation.log_probability.mean()
+            loss = -sum(
+                (
+                    evaluation.log_probabilities[name]
+                    * class_weights[name][actions[name][indices].long()]
+                ).mean()
+                for name in evaluation.log_probabilities
+            )
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
             gradient_norm = torch.nn.utils.clip_grad_norm_(
@@ -147,6 +157,19 @@ def behavior_clone(
                 )
             )
     return metrics
+
+
+def balanced_class_weights(actions: Tensor, width: int) -> Tensor:
+    if actions.ndim != 1 or width < 1:
+        raise ValueError("class-balanced actions must be one-dimensional with positive width")
+    normalized = actions.long()
+    if torch.any(normalized < 0) or torch.any(normalized >= width):
+        raise ValueError("class-balanced actions contain an out-of-range class")
+    counts = torch.bincount(normalized, minlength=width).to(dtype=torch.float32)
+    present = counts > 0
+    weights = torch.zeros(width, device=actions.device, dtype=torch.float32)
+    weights[present] = torch.sqrt(torch.max(counts[present]) / counts[present])
+    return weights / weights[normalized].mean()
 
 
 def classification_accuracy(

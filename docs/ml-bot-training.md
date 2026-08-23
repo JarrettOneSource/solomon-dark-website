@@ -60,6 +60,10 @@ ML_BOT_PYTHON=/path/to/ml-bot-venv/bin/python \
 The bootstrap collects real authoritative web states and labels them with the
 TypeScript semantic expert. It caps uninteresting opening rows and fails if
 the dataset does not cover multiple movement, target, and ability actions.
+Behavior cloning uses square-root inverse-frequency weights independently for
+each action head so rare legal expert actions are not erased by the dominant
+null classes. Bootstrap acceptance additionally requires at least eight expert
+potion rows and at least 70% deterministic potion-action imitation over them.
 Headless resets skip the presentation-only entrance sequence by placing every
 participant at a collision-safe point around Solomon's encounter anchor inside
 the production combat bounds, retaining the production arena transition, and
