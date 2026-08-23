@@ -85,8 +85,18 @@ try {
     if (elapsedMs - lastReportAt >= 5_000) {
       lastReportAt = elapsedMs
       process.stdout.write(`${JSON.stringify({
+        arenaTransition: active.world.kind === 'boneyard'
+          ? active.world.arenaTransition?.phase ?? null
+          : null,
         elapsedMs,
+        encounterPhase: active.world.kind === 'boneyard'
+          ? active.world.encounter?.phase ?? null
+          : null,
+        encounterPosition: active.world.kind === 'boneyard'
+          ? active.world.encounter?.position ?? null
+          : null,
         maximumTravel,
+        playerPosition: player.position,
         telemetry,
         type: 'progress',
       })}\n`)

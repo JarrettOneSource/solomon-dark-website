@@ -5,10 +5,7 @@ import type {
   PlayerCharacterInput,
 } from '../core-kernels/player-character.ts'
 import type { HubInventoryAction } from '../core-kernels/hub-economy.ts'
-import {
-  gameSimulationPlayerRecords,
-  type GameSimulationState,
-} from '../core-server/game-simulation.ts'
+import type { GameSimulationState } from '../core-server/game-simulation.ts'
 import {
   createMlBotPolicyActionMaskPlan,
   resolveMlBotPolicyDecision,
@@ -18,6 +15,7 @@ import {
 import { decodeMlBotPolicyCheckpoint } from '../core-server/ml-bot-policy/checkpoint.ts'
 import { MlBotPolicyObserver } from '../core-server/ml-bot-policy/observer.ts'
 import { resolveMlBotPolicySkillOffers } from '../core-server/ml-bot-policy/skill-chooser.ts'
+import { MlBotEntranceNavigator } from './ml-bot-entrance-navigation.ts'
 
 export const ML_BOT_CHARACTER = Object.freeze({
   discipline: 'arcane',
@@ -183,6 +181,7 @@ export class MlBotHostController {
   private readonly adapter: MlBotHostControllerAdapter
   private readonly character: PlayerCharacterConfig
   private decisionPending = false
+  private readonly entrance = new MlBotEntranceNavigator()
   private failed = false
   private readonly inference: MlBotPolicyInference
   private loadoutKey: string | null = null
@@ -230,7 +229,7 @@ export class MlBotHostController {
       }
       return
     }
-    const entranceInput = mlBotEntranceInput(context.state, this.playerId)
+    const entranceInput = this.entrance.input(context.state, this.playerId)
     if (entranceInput !== null) {
       this.adapter.dispatch({ input: entranceInput, kind: 'scripted-input' })
       return
@@ -335,34 +334,4 @@ function requiredFinite(value: unknown, label: string): number {
 
 function policyWorldKey(state: GameSimulationState): string {
   return state.world.kind === 'boneyard' ? `boneyard:${state.world.runId}` : 'hub'
-}
-
-function mlBotEntranceInput(
-  state: GameSimulationState,
-  playerId: string,
-): PlayerCharacterInput | null {
-  if (
-    state.world.kind !== 'boneyard'
-    || state.world.encounter === null
-    || state.world.encounter.runEventId > 0
-  ) return null
-  if (state.world.encounter.phase !== 'digging') {
-    return {
-      aim: null,
-      cast: { primary: false, quickbar: null },
-      movement: { x: 0, y: 0 },
-    }
-  }
-  const player = gameSimulationPlayerRecords(state)[playerId]
-  if (!player) throw new Error(`ML bot entrance navigation has no player ${playerId}`)
-  const dx = state.world.encounter.position.x - player.position.x
-  const dy = state.world.encounter.position.y - 10 - player.position.y
-  const length = Math.hypot(dx, dy)
-  return {
-    aim: null,
-    cast: { primary: false, quickbar: null },
-    movement: length > 0
-      ? { x: dx / length, y: dy / length }
-      : { x: 0, y: 0 },
-  }
 }
