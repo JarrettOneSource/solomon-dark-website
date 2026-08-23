@@ -265,10 +265,10 @@ try {
   assert.ok(telescopeFrames.size > 1, 'expected the unculled Astronomer telescope to keep animating')
   assert.ok(studentCount > 0, `expected authoritative Students, got ${studentCount}`)
   assert.ok(orbSpriteCount >= 3, `expected the native multi-sprite Fire orb, got ${orbSpriteCount}`)
-  for (const element of ['air', 'earth', 'ether', 'fire', 'water']) {
+  for (const page of ['player-character-atlas-0', 'player-character-atlas-1']) {
     assert.ok(
-      textureSources.some((source) => source.includes(`player-character-head-${element}`)),
-      `expected the ${element} multiplayer appearance texture to be available`,
+      textureSources.some((source) => source.includes(page)),
+      `expected packed multiplayer appearance page ${page} to be available`,
     )
   }
 
