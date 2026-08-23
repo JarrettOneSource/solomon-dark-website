@@ -99,6 +99,7 @@ test('client carries character config, publishes authority, and tears down', asy
     credential: 'spawn-secret',
     character: CHARACTER,
     save: '{"schemaVersion":1}',
+    saveIntent: 'resume',
   })
   const serverState = createGameSimulation({ 'player-1': CHARACTER })
   transport.receive(encodeGameMessage({

@@ -657,23 +657,33 @@ class WebsiteModSyncContractTests(unittest.TestCase):
     def test_browser_game_slot_is_account_owned_hashed_and_revision_conditional(self) -> None:
         document = json.dumps(
             {
-                "schemaVersion": 4,
+                "schemaVersion": 5,
                 "integrity": "global-clean",
                 "mods": [],
                 "modState": {},
-                "summary": {
-                    "character": {
-                        "discipline": "arcane",
-                        "displayName": "modsync",
-                        "element": "ether",
+                "profile": {
+                    "economy": {},
+                    "hagathaRuntime": {
+                        "cheatDeathCharges": 0,
+                        "reverieActive": False,
+                        "serendipityActive": False,
                     },
-                    "phase": "hub",
-                    "playerId": "player-1",
-                    "savedAtTick": 42,
-                    "worldKind": "hub",
                 },
-                "simulation": {},
-                "loadedBoneyard": None,
+                "continuation": {
+                    "summary": {
+                        "character": {
+                            "discipline": "arcane",
+                            "displayName": "modsync",
+                            "element": "ether",
+                        },
+                        "phase": "hub",
+                        "playerId": "player-1",
+                        "savedAtTick": 42,
+                        "worldKind": "hub",
+                    },
+                    "simulation": {},
+                    "loadedBoneyard": None,
+                },
             },
             separators=(",", ":"),
         )
@@ -701,7 +711,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         )
         self.assertEqual(status, 200, created)
         self.assertEqual(created["slot"], 0)
-        self.assertEqual(created["formatVersion"], 4)
+        self.assertEqual(created["formatVersion"], 5)
         self.assertEqual(created["revision"], 1)
         self.assertEqual(created["document"], document)
         self.assertEqual(created["size"], len(document.encode()))
@@ -731,9 +741,15 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         self.assertEqual(updated["revision"], 2)
         self.assertEqual(updated["document"], next_document)
 
-        legacy = json.loads(next_document)
-        legacy["schemaVersion"] = 3
-        del legacy["integrity"]
+        current = json.loads(next_document)
+        legacy = {
+            "loadedBoneyard": current["continuation"]["loadedBoneyard"],
+            "mods": current["mods"],
+            "modState": current["modState"],
+            "schemaVersion": 3,
+            "simulation": current["continuation"]["simulation"],
+            "summary": current["continuation"]["summary"],
+        }
         legacy_document = json.dumps(legacy, separators=(",", ":"))
         status, legacy_saved = self.request(
             "PUT",

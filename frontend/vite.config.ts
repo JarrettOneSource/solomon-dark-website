@@ -27,6 +27,8 @@ if (requestedRevision !== undefined && requestedRevision !== checkoutRevision) {
 }
 
 const buildRevision = requestedRevision ?? checkoutRevision
+const developmentBackendUrl = process.env.SDR_VITE_BACKEND_URL?.trim()
+  || 'http://localhost:5210'
 const deploymentRevisionManifest: Plugin = {
   name: 'deployment-revision-manifest',
   generateBundle() {
@@ -45,8 +47,8 @@ export default defineConfig({
   plugins: [deploymentRevisionManifest, react(), tailwindcss()],
   server: {
     proxy: {
-      '/api': 'http://localhost:5210',
-      '/uploads': 'http://localhost:5210',
+      '/api': developmentBackendUrl,
+      '/uploads': developmentBackendUrl,
     },
     // A WSL dev server watching the repo through /mnt/c gets no inotify
     // events from Windows, so HMR silently serves stale modules. Poll there;

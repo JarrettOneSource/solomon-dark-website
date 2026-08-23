@@ -42,7 +42,11 @@ import {
 import type { GameServerLogEntry } from './game-server-logger.ts'
 import { SOLOMON_DIG_FRAME_PROGRAM } from './project-boneyard.ts'
 import { GAME_WEBSOCKET_COMPRESSION } from './websocket-compression.ts'
-import { createGameSaveDocument } from '../save/game-save-document.ts'
+import {
+  createGameProfileSaveDocument,
+  createGameSaveDocument,
+  restoreGameSaveProfile,
+} from '../save/game-save-document.ts'
 
 const FIRST_CHARACTER = {
   discipline: 'arcane',
@@ -1732,6 +1736,7 @@ test('host emits an owner checkpoint and revives it before a fresh welcome', asy
     credential: 'test-secret',
     character: FIRST_CHARACTER,
     save: checkpoint.save,
+    saveIntent: 'resume',
   }))
   const resumed = await resumedMessage
   assert.equal(resumed.type, 'server-welcome', JSON.stringify(resumed))
@@ -1739,6 +1744,53 @@ test('host emits an owner checkpoint and revives it before a fresh welcome', asy
   assert.equal(resumed.snapshot.tick, welcomed.snapshot.tick)
   assert.deepEqual(resumed.snapshot.players[resumed.playerId].config, FIRST_CHARACTER)
   assert.equal(resumed.snapshot.world.kind, 'hub')
+})
+
+test('host starts a fresh character from the durable profile without reviving its old run', async (context) => {
+  const source = createGameSimulation({ 'saved-owner': FIRST_CHARACTER })
+  const economy = source.playerEntities.economies[0]!
+  const profiledSource = {
+    ...source,
+    playerEntities: {
+      ...source.playerEntities,
+      economies: [{
+        ...economy,
+        gold: 12_345,
+        unforgeBonuses: { ...economy.unforgeBonuses, maximumHealth: 20 },
+      }],
+    },
+  }
+  const profile = createGameProfileSaveDocument({
+    integrity: 'global-clean',
+    mods: [],
+    modState: {},
+    playerId: 'saved-owner',
+    state: profiledSource,
+  })
+  const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
+  context.after(() => host.close())
+  const socket = await openSocket(host.address.url)
+  context.after(() => socket.close())
+  const welcomed = nextMessage(socket, message => message.type === 'server-welcome')
+  socket.send(encodeGameMessage({
+    type: 'client-hello',
+    profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
+    cheatsEnabled: false,
+    protocolVersion: GAME_PROTOCOL_VERSION,
+    credential: 'test-secret',
+    character: SECOND_CHARACTER,
+    save: profile,
+    saveIntent: 'new-game',
+  }))
+
+  const welcome = await welcomed
+  assert.equal(welcome.type, 'server-welcome')
+  assert.notEqual(welcome.playerId, 'saved-owner')
+  assert.deepEqual(welcome.snapshot.players[welcome.playerId]?.config, SECOND_CHARACTER)
+  assert.equal(welcome.snapshot.players[welcome.playerId]?.economy.gold, 12_345)
+  assert.equal(welcome.snapshot.players[welcome.playerId]?.progression.maximumHealth, 70)
+  assert.equal(welcome.snapshot.run.phase, 'hub')
+  assert.equal(welcome.snapshot.run.runId, null)
 })
 
 test('host forces one correlated owner checkpoint before an explicit leave', async (context) => {
@@ -1757,8 +1809,9 @@ test('host forces one correlated owner checkpoint before an explicit leave', asy
   assert.equal(result.response.requestId, 7)
   assert.equal(client.socket.readyState, WebSocket.OPEN)
   assert.equal(
-    (JSON.parse(result.checkpoint.save!) as { summary: { playerId: string } })
-      .summary.playerId,
+    (JSON.parse(result.checkpoint.save) as {
+      continuation: { summary: { playerId: string } }
+    }).continuation.summary.playerId,
     client.welcome.playerId,
   )
 
@@ -1802,18 +1855,26 @@ test('thirty-second autosave publishes owner-only saves to a party leader and gu
   const leaderSave = nextMessage(leader.socket, message => (
     message.type === 'server-save-checkpoint'
     && message.reason === 'progress'
-    && JSON.parse(message.save!).summary.savedAtTick === GAME_SAVE_AUTOSAVE_INTERVAL_TICKS
+    && JSON.parse(message.save).continuation.summary.savedAtTick
+      === GAME_SAVE_AUTOSAVE_INTERVAL_TICKS
   ))
   const guestSave = nextMessage(guest.socket, message => (
     message.type === 'server-save-checkpoint'
     && message.reason === 'progress'
-    && JSON.parse(message.save!).summary.savedAtTick === GAME_SAVE_AUTOSAVE_INTERVAL_TICKS
+    && JSON.parse(message.save).continuation.summary.savedAtTick
+      === GAME_SAVE_AUTOSAVE_INTERVAL_TICKS
   ))
   const [leaderCheckpoint, guestCheckpoint] = await Promise.all([leaderSave, guestSave])
   assert.equal(leaderCheckpoint.type, 'server-save-checkpoint')
   assert.equal(guestCheckpoint.type, 'server-save-checkpoint')
-  assert.equal(JSON.parse(leaderCheckpoint.save!).summary.playerId, leader.welcome.playerId)
-  assert.equal(JSON.parse(guestCheckpoint.save!).summary.playerId, guest.welcome.playerId)
+  assert.equal(
+    JSON.parse(leaderCheckpoint.save).continuation.summary.playerId,
+    leader.welcome.playerId,
+  )
+  assert.equal(
+    JSON.parse(guestCheckpoint.save).continuation.summary.playerId,
+    guest.welcome.playerId,
+  )
 })
 
 test('deployment restart checkpoints every connected private-session player before closing', async (context) => {
@@ -1837,13 +1898,15 @@ test('deployment restart checkpoints every connected private-session player befo
     assert.equal(deployment.restart.targetRevision, targetRevision)
   }
   assert.equal(
-    (JSON.parse(firstDeployment.checkpoint.save!) as { summary: { playerId: string } })
-      .summary.playerId,
+    (JSON.parse(firstDeployment.checkpoint.save) as {
+      continuation: { summary: { playerId: string } }
+    }).continuation.summary.playerId,
     first.welcome.playerId,
   )
   assert.equal(
-    (JSON.parse(secondDeployment.checkpoint.save!) as { summary: { playerId: string } })
-      .summary.playerId,
+    (JSON.parse(secondDeployment.checkpoint.save) as {
+      continuation: { summary: { playerId: string } }
+    }).continuation.summary.playerId,
     second.welcome.playerId,
   )
   for (const [socket, deployment] of [
@@ -1908,6 +1971,7 @@ test('host rejects an unconfirmed save mod mismatch and accepts an explicit cont
     credential: 'test-secret',
     character: FIRST_CHARACTER,
     save,
+    saveIntent: 'resume',
   }))
   const rejected = await rejectedMessage
   assert.equal(rejected.type, 'server-disconnect')
@@ -1930,6 +1994,7 @@ test('host rejects an unconfirmed save mod mismatch and accepts an explicit cont
     credential: 'test-secret',
     character: FIRST_CHARACTER,
     save,
+    saveIntent: 'resume',
   }))
   const continued = await continuedMessage
   assert.equal(continued.type, 'server-welcome')
@@ -1938,7 +2003,7 @@ test('host rejects an unconfirmed save mod mismatch and accepts an explicit cont
   assert.equal(continued.snapshot.world.kind, 'hub')
 })
 
-test('host clears the resumable document on the first authoritative Game Over edge', async (context) => {
+test('host retains the profile and removes only the continuation on Game Over', async (context) => {
   const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
   context.after(() => host.close())
   const client = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
@@ -1953,21 +2018,21 @@ test('host clears the resumable document on the first authoritative Game Over ed
   }))
   await active
 
-  const cleared = nextMessage(client.socket, (message) => (
+  const profiled = nextMessage(client.socket, (message) => (
     message.type === 'server-save-checkpoint'
     && message.reason === 'game-over'
   ))
   Object.assign(host.state().playerEntities.progressions[0]!, {
     lifeState: 'spectating',
   })
-  const checkpoint = await cleared
+  const checkpoint = await profiled
   assert.equal(checkpoint.type, 'server-save-checkpoint')
-  assert.deepEqual(checkpoint, {
-    type: 'server-save-checkpoint',
-    save: null,
-    reason: 'game-over',
-    sequence: checkpoint.sequence,
-  })
+  assert.equal(checkpoint.reason, 'game-over')
+  const profile = restoreGameSaveProfile(checkpoint.save)
+  assert.equal(profile.continuation, null)
+  assert.equal(profile.economy.gold, 10_000)
+  assert.equal(profile.economy.storage.at(-1)?.kind, 'sack')
+  assert.equal(profile.economy.storage.at(-1)?.contents?.length, 5)
   assert.equal(host.state().run.phase, 'game-over')
 
   let laterProgress = 0
@@ -2462,7 +2527,9 @@ async function completeLeaderboardScenario(
       protocolVersion: GAME_PROTOCOL_VERSION,
       credential: 'test-secret',
       character: FIRST_CHARACTER,
-      ...(scenario.save === undefined ? {} : { save: scenario.save }),
+      ...(scenario.save === undefined
+        ? {}
+        : { save: scenario.save, saveIntent: 'resume' as const }),
     }))
     const welcome = await welcomeMessage
     assert.equal(welcome.type, 'server-welcome')

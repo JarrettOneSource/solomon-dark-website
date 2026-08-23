@@ -55,6 +55,7 @@ import {
 } from '../core-kernels/native-hagatha-effects.ts'
 import {
   archiveHagathaLastWordItems,
+  archiveCompletedRunEconomy,
   buyDowsingOffer,
   buyFomentiusItem,
   buyHagathaPerk,
@@ -68,7 +69,6 @@ import {
   hagathaOffers,
   moveInventoryItem,
   readInventorySkillBook,
-  restockFomentius,
   transferInventoryItem,
   unforgeInventoryItem,
   unequipInventorySlot,
@@ -649,8 +649,8 @@ function enterPostRunLoadout(
   )
   playerEntities = clearPlayerEntityMindstars(playerEntities)
   for (const { playerId } of playerEntities.identities) {
-    const economy = playerEconomyAt(playerEntities, playerId)
-    if (economy) playerEntities = replacePlayerEconomy(playerEntities, playerId, restockFomentius(economy))
+    const economy = gameSimulationDurableProfileEconomy(state, playerId)
+    playerEntities = replacePlayerEconomy(playerEntities, playerId, economy)
   }
   return {
     ...state,
@@ -664,6 +664,33 @@ function enterPostRunLoadout(
     run,
     world,
   }
+}
+
+export function gameSimulationDurableProfileEconomy(
+  state: GameSimulationState,
+  playerId: PlayerId,
+): HubEconomyState {
+  const economy = playerEconomyAt(state.playerEntities, playerId)
+  const player = playerCharacterAt(state.playerEntities, playerId)
+  if (!economy || !player) throw new Error(`game simulation has no profile owner ${playerId}`)
+  if (state.run.phase === 'loadout' && state.world.kind === 'hub') return economy
+  const completedRun = state.world.kind === 'boneyard'
+    && (state.run.phase === 'game-over' || state.run.phase === 'loadout')
+  const lastWord = completedRun && economy.ownedPerkSelectors.includes(12)
+  return archiveCompletedRunEconomy(economy, {
+    displayName: player.config.displayName,
+    groundGold: lastWord && state.world.kind === 'boneyard'
+      ? state.world.loot.actors
+          .filter(actor => actor.kind === 'gold')
+          .reduce((total, actor) => total + actor.amount, 0)
+      : 0,
+    groundItems: lastWord && state.world.kind === 'boneyard'
+      ? state.world.loot.actors.flatMap(actor => (
+          actor.kind === 'sack' && actor.item ? [actor.item] : []
+        ))
+      : [],
+    transferCarriedItems: completedRun,
+  })
 }
 
 export function confirmGameSimulationLoadout(

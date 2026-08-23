@@ -99,11 +99,12 @@ try {
   const progressedRecord = await waitForSave(
     page,
     (record) => record?.revision > initialRecord.revision
-      && JSON.parse(record.document).simulation.playerEntities.locomotions[0].position.x
+      && JSON.parse(record.document).continuation.simulation
+        .playerEntities.locomotions[0].position.x
         > startX,
     5_000,
   )
-  const savedTick = JSON.parse(progressedRecord.document).summary.savedAtTick
+  const savedTick = JSON.parse(progressedRecord.document).continuation.summary.savedAtTick
 
   await assertTitleIdentity(page, accountUsername || 'Not logged in')
   await page.getByRole('button', { name: 'Play' }).click()

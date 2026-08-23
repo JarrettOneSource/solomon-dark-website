@@ -54,6 +54,7 @@ import {
   getPlayerEconomy,
   getPlayerProgression,
   getPlayerSkillBook,
+  gameSimulationDurableProfileEconomy,
   grantGameSimulationPlayerExperience,
   removePlayerCharacter,
   returnGameSimulationToHub,
@@ -2449,6 +2450,59 @@ test('the published tick-159 death frame leaves collision before Boneyard motion
   assert.equal(state.run.gameOverEventId, 0)
 })
 
+test('Last Word adds ground Gold and Sack contents to the durable terminal profile', () => {
+  let state = enterBoneyardWorld(
+    createGameSimulation({ owner: DEFAULT_PLAYER_CHARACTER_CONFIG }),
+    combatBoneyard('last-word-profile'),
+  )
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+  const economy = getPlayerEconomy(state, 'owner')
+  const spawned = spawnBoneyardLootSpecs(state.world.loot, [
+    {
+      activationDelayTicks: 0,
+      amount: 9,
+      id: 1,
+      kind: 'gold',
+      nativeTypeId: 2012,
+      phase: 0,
+      position: { x: 500, y: 500 },
+      source: 'script',
+      tier: 3,
+    },
+    {
+      activationDelayTicks: 0,
+      id: 2,
+      item: { ...economy.backpack[0]!, id: 90_000 },
+      kind: 'sack',
+      nativeTypeId: 2013,
+      phase: 0,
+      position: { x: 500, y: 500 },
+      source: 'script',
+    },
+  ], state.tick)
+  state = {
+    ...state,
+    playerEntities: replacePlayerEconomy(state.playerEntities, 'owner', {
+      ...economy,
+      ownedPerkSelectors: [12],
+    }),
+    run: { ...state.run, phase: 'game-over' },
+    world: { ...state.world, loot: spawned.store },
+  }
+
+  const profile = gameSimulationDurableProfileEconomy(state, 'owner')
+  assert.equal(profile.gold, economy.gold + 9)
+  assert.equal(profile.storage.at(-1)?.kind, 'sack')
+  assert.equal(profile.storage.at(-1)?.contents?.length, 6)
+
+  const withoutLastWord = gameSimulationDurableProfileEconomy({
+    ...state,
+    playerEntities: replacePlayerEconomy(state.playerEntities, 'owner', economy),
+  }, 'owner')
+  assert.equal(withoutLastWord.gold, economy.gold)
+  assert.equal(withoutLastWord.storage.at(-1)?.contents?.length, 5)
+})
+
 test('one dead player spectates until all-dead Game Over returns the session through loadout', () => {
   const first = {
     discipline: 'arcane',
@@ -2592,9 +2646,18 @@ test('one dead player spectates until all-dead Game Over returns the session thr
     ['first', 'second'],
   )
   for (const playerId of ['first', 'second']) {
-    const restocked = getPlayerEconomy(loadout, playerId).fomentiusStock
+    const economy = getPlayerEconomy(loadout, playerId)
+    const restocked = economy.fomentiusStock
     assert.notDeepEqual(restocked.map(({ id }) => id), initialStockIds[playerId])
     assert.ok(restocked.every(({ id }) => id > Math.max(...initialStockIds[playerId]!)))
+    assert.deepEqual(economy.backpack.map(({ kind }) => kind), [
+      'health-potion',
+      'mana-potion',
+    ])
+    const retained = economy.storage.at(-1)!
+    assert.equal(retained.kind, 'sack')
+    assert.match(retained.name, new RegExp(`^${playerId === 'first' ? 'First' : 'Second'}'s `))
+    assert.equal(retained.contents?.length, 5)
   }
 
   const firstReady = confirmGameSimulationLoadout(loadout, 'first', {

@@ -14,9 +14,11 @@ import {
   MAX_NATIVE_DYE_SELECTIONS,
   NATIVE_DYE_SWATCH_COLORS,
   NATIVE_DYE_SWATCHES,
+  NATIVE_RETAINED_SACK_SUFFIXES,
   NATIVE_UNFORGE_ELIGIBLE_TYPE_IDS,
   STARTING_PLAYER_GOLD,
   archiveHagathaLastWordItems,
+  archiveCompletedRunEconomy,
   buyDowsingOffer,
   buyFomentiusItem,
   buyHagathaPerk,
@@ -37,6 +39,7 @@ import {
   hasFrostburnJewels,
   hasPandimensionalBugMasterOutfit,
   hasTempestOutfit,
+  hubEconomyInventoryIsValid,
   insertLootInventoryItem,
   moveInventoryItem,
   nativeDyeCommittedTint,
@@ -54,6 +57,13 @@ import {
   type HubEconomyState,
   type HubInventoryItem,
 } from './hub-economy.ts'
+
+function maximumSackChildren(item: HubInventoryItem): number {
+  return Math.max(
+    item.contents?.length ?? 0,
+    ...(item.contents ?? []).map(maximumSackChildren),
+  )
+}
 
 test('a fresh participant owns the hard-coded 10k ledger and complete native starter loadout', () => {
   const state = createHubEconomy(1)
@@ -113,6 +123,68 @@ test('Last Word retains every ground item in one bounded named Luthacus Sack', (
   )).length, 20)
   const ids = projectInventoryItems(archived.state.storage).map(({ item }) => item.id)
   assert.equal(new Set(ids).size, ids.length)
+})
+
+test('completed-run archival retains carried and Last Word goods in one named Sack', () => {
+  const source = createHubEconomy(1)
+  const archived = archiveCompletedRunEconomy(source, {
+    displayName: 'Helvidius',
+    groundGold: 11,
+    groundItems: [{ ...source.backpack[0]!, id: 90_000 }],
+    transferCarriedItems: true,
+  })
+
+  assert.equal(archived.gold, source.gold + 11)
+  assert.deepEqual(
+    archived.backpack.map(({ kind }) => kind),
+    ['health-potion', 'mana-potion'],
+  )
+  const retained = archived.storage.at(-1)!
+  assert.equal(retained.kind, 'sack')
+  assert.ok(NATIVE_RETAINED_SACK_SUFFIXES.some(suffix => (
+    retained.name === `Helvidius's ${suffix}`
+  )))
+  assert.equal(retained.contents?.length, 6)
+  assert.deepEqual(
+    retained.contents?.map(({ name }) => name).sort(),
+    ['Hat', 'Health Potion', 'Health Potion', 'Mana Potion', 'Robe', 'Staff'],
+  )
+  assert.equal(archived.unforgeBonuses, source.unforgeBonuses)
+  const ids = [
+    ...archived.backpack.map(({ id }) => id),
+    ...[archived.equipment.hat, archived.equipment.robe, archived.equipment.weapon]
+      .flatMap(item => item ? [item.id] : []),
+  ]
+  assert.equal(new Set(ids).size, ids.length)
+  assert.ok(ids.every(id => id > retained.id))
+})
+
+test('completed-run archival packs overflow and a full storage root without losing validity', () => {
+  const base = createHubEconomy(1)
+  const backpack = Array.from({ length: 20 }, (_, index) => ({
+    ...base.backpack[0]!,
+    id: 20_000 + index,
+  }))
+  const storage = Array.from({ length: HUB_STORAGE_SLOT_CAPACITY }, (_, index) => ({
+    ...base.backpack[1]!,
+    id: 30_000 + index,
+  }))
+  const archived = archiveCompletedRunEconomy({
+    ...base,
+    backpack,
+    nextItemId: 40_000,
+    storage,
+  }, {
+    displayName: 'Helvidius',
+    groundGold: 0,
+    groundItems: [],
+    transferCarriedItems: true,
+  })
+
+  assert.equal(archived.storage.length, 1)
+  assert.equal(archived.storage[0]?.name, "Helvidius's Stored Possessions")
+  assert.equal(hubEconomyInventoryIsValid(archived), true)
+  assert.ok(maximumSackChildren(archived.storage[0]!) <= HUB_SACK_CHILD_REPLICATION_LIMIT)
 })
 
 test('Fomentius preserves every native generator row and seed-1 roll order', () => {
@@ -752,7 +824,7 @@ test('sack relinking honors participant child and root replication bounds', () =
     { length: HUB_SACK_CHILD_REPLICATION_LIMIT },
     (_, index) => ({ ...template, id: 11_100 + index }),
   ))
-  const loose = nativeTestSack(11_500)
+  const loose = nativeTestSack(20_000)
   const childCapacity = moveInventoryItem(
     { ...base, backpack: [fullSack, loose] },
     loose.id,

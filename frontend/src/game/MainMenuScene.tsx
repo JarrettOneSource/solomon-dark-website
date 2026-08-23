@@ -109,7 +109,9 @@ import {
   type GameWorldSpeech,
 } from './world-speech-presentation.ts'
 import type {
+  GameProfileSave,
   GameSaveCheckpoint,
+  GameSaveIntent,
   ResumableGameSave,
 } from './save/game-save-contract.ts'
 import { gameSaveModMismatch, type GameSaveModMismatch } from './save/game-save-mods.ts'
@@ -292,6 +294,7 @@ interface MainMenuSceneProps {
     onProgress: (stage: GameConnectionStage) => void,
     cheatsEnabled: boolean,
     saveDocument?: string,
+    saveIntent?: GameSaveIntent,
     allowModMismatch?: boolean,
   ) => Promise<GameClientSession>
   developerAccess: boolean
@@ -302,6 +305,7 @@ interface MainMenuSceneProps {
   persistSaveCheckpoint: (checkpoint: GameSaveCheckpoint) => Promise<void>
   onSignOut: () => void
   prepareGame: (admission: BrowserGameAdmission) => Promise<void>
+  profileSave: GameProfileSave | null
   refreshActiveMods: () => Promise<readonly ActiveWebMod[]>
   resumeSave: ResumableGameSave | null
   submitGlobalHallOfFame: (receipt: string) => Promise<void>
@@ -320,6 +324,7 @@ export default function MainMenuScene({
   onSignOut,
   persistSaveCheckpoint,
   prepareGame,
+  profileSave,
   refreshActiveMods,
   resumeSave,
   submitGlobalHallOfFame,
@@ -369,6 +374,9 @@ export default function MainMenuScene({
   const [settingsContext, setSettingsContext] = useState<GameSettingsContext | null>(null)
   const [darkCloudMenuOpen, setDarkCloudMenuOpen] = useState(false)
   const [modMismatch, setModMismatch] = useState<GameSaveModMismatch | null>(null)
+  const [newGameMismatchAdmission, setNewGameMismatchAdmission] =
+    useState<BrowserGameAdmission | null>(null)
+  const [newGameModMismatchAllowed, setNewGameModMismatchAllowed] = useState(false)
   const [moddedPlayPrompt, setModdedPlayPrompt] = useState(false)
   const [partyConsent, setPartyConsent] = useState<PartyJoinResolution | null>(null)
   const [pendingAdmission, setPendingAdmission] = useState<BrowserGameAdmission>({
@@ -748,14 +756,32 @@ export default function MainMenuScene({
     nativePauseMenuStagePlacement(fixedViewport, darkCloudMenuRows),
   )
 
-  const beginCreate = (admission: BrowserGameAdmission) => {
+  const beginCreate = (
+    admission: BrowserGameAdmission,
+    allowModMismatch = false,
+  ) => {
     setPendingAdmission(admission)
+    setNewGameModMismatchAllowed(allowModMismatch)
     setPartyConsent(null)
     setModdedPlayPrompt(false)
     setWizardName(admission.kind === 'party'
       ? partyRequesterName
       : initialCreateWizardNameForSession(displayName))
     transitionTo('create')
+  }
+
+  const requestNewGameCreate = (
+    admission: BrowserGameAdmission,
+    mods: readonly ActiveWebMod[] = activeMods,
+  ) => {
+    const mismatch = profileSave ? gameSaveModMismatch(profileSave.mods, mods) : null
+    if (mismatch) {
+      setNewGameMismatchAdmission(admission)
+      setModMismatch(mismatch)
+      return
+    }
+    setNewGameMismatchAdmission(null)
+    beginCreate(admission)
   }
 
   const beginNewGame = () => {
@@ -765,7 +791,9 @@ export default function MainMenuScene({
       setModdedPlayPrompt(true)
       return
     }
-    beginCreate({ kind: 'global-hub' })
+    requestNewGameCreate({
+      kind: profileSave?.integrity === 'local-only' ? 'private-college' : 'global-hub',
+    })
   }
 
   const playVanilla = async () => {
@@ -780,7 +808,9 @@ export default function MainMenuScene({
       if (cheatsEnabled) {
         updateGameSettings({ ...gameSettings, enableCheats: false })
       }
-      beginCreate({ kind: 'global-hub' })
+      requestNewGameCreate({
+        kind: profileSave?.integrity === 'local-only' ? 'private-college' : 'global-hub',
+      }, [])
     } catch (error) {
       setConnectionError(error instanceof Error ? error.message : 'Vanilla play could not be prepared.')
     } finally {
@@ -794,7 +824,7 @@ export default function MainMenuScene({
     setContentProgress(null)
     try {
       await prefetchGameContent(activeMods.flatMap(mod => mod.assets), setContentProgress)
-      beginCreate({ kind: 'private-college' })
+      requestNewGameCreate({ kind: 'private-college' })
     } catch (error) {
       setConnectionError(error instanceof Error ? error.message : 'Mod content could not be prepared.')
     } finally {
@@ -898,6 +928,7 @@ export default function MainMenuScene({
         advanceLoading,
         cheatsEnabled,
         resumeSave.document,
+        'resume',
         allowModMismatch,
       )
       activateSession(nextSession)
@@ -913,6 +944,7 @@ export default function MainMenuScene({
     if (!resumeSave) return
     const mismatch = gameSaveModMismatch(resumeSave.mods, activeMods)
     if (mismatch) {
+      setNewGameMismatchAdmission(null)
       setModMismatch(mismatch)
       return
     }
@@ -941,8 +973,12 @@ export default function MainMenuScene({
         },
         advanceLoading,
         cheatsEnabled,
+        profileSave?.document,
+        profileSave ? 'new-game' : undefined,
+        newGameModMismatchAllowed,
       )
       activateSession(nextSession)
+      setNewGameModMismatchAllowed(false)
       return true
     } catch (error) {
       cancelLoading('hub')
@@ -1489,10 +1525,16 @@ export default function MainMenuScene({
         {modMismatch ? (
           <GameSaveModMismatchDialog
             mismatch={modMismatch}
-            onCancel={() => setModMismatch(null)}
-            onContinue={() => {
+            onCancel={() => {
               setModMismatch(null)
-              void resumeLastGame(true)
+              setNewGameMismatchAdmission(null)
+            }}
+            onContinue={() => {
+              const admission = newGameMismatchAdmission
+              setModMismatch(null)
+              setNewGameMismatchAdmission(null)
+              if (admission) beginCreate(admission, true)
+              else void resumeLastGame(true)
             }}
             style={nativeStageStyle}
           />

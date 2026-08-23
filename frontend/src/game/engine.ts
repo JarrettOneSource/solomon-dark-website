@@ -9,6 +9,7 @@ import {
   type GameTransport,
 } from './client/game-transport.ts'
 import type { PlayerCharacterConfig } from './core-kernels/player-character.ts'
+import type { GameSaveIntent } from './save/game-save-contract.ts'
 import type { PlayerSocialProfile } from './protocol/party-state.ts'
 import type { GameConnectionFailure } from './client/game-connection-failure.ts'
 import type { GameClientDiagnostics } from './client/game-diagnostics.ts'
@@ -45,6 +46,7 @@ export interface SessionOptions {
   onProgress?: (stage: GameConnectionStage) => void
   profile: PlayerSocialProfile
   saveDocument?: string
+  saveIntent?: GameSaveIntent
   transportFactory?: (url: string) => Promise<GameTransport>
   sessionConnector?: GameSessionConnector
 }
@@ -90,7 +92,9 @@ export async function bootGame(options: SessionOptions): Promise<GameSession> {
     ...(options.onDeploymentRestart
       ? { onDeploymentRestart: options.onDeploymentRestart }
       : {}),
-    ...(options.saveDocument ? { saveDocument: options.saveDocument } : {}),
+    ...(options.saveDocument
+      ? { saveDocument: options.saveDocument, saveIntent: options.saveIntent ?? 'resume' }
+      : {}),
   })
   options.onProgress?.('receiving_host_checkpoint')
   options.diagnostics?.info(

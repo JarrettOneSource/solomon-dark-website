@@ -527,7 +527,7 @@ async function savedEconomy(targetPage) {
     }
   }))
   if (!record) throw new Error('Sack/Dye local save is missing')
-  return JSON.parse(record.document).simulation.playerEntities.economies[0]
+  return JSON.parse(record.document).continuation.simulation.playerEntities.economies[0]
 }
 
 function flatten(items) {

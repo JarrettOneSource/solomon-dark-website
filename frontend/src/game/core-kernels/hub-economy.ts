@@ -10,13 +10,20 @@ export const HUB_INVENTORY_SLOT_CAPACITY = 88
 /** Native ground pickup appends beyond the 88 visible cells when no Item_None slot remains. */
 export const NATIVE_LOOT_BACKPACK_REPLICATION_LIMIT = 2_048
 export const HUB_STORAGE_SLOT_CAPACITY = 28
-/** Participant payload guard for one native Item_Sack child list. */
-export const HUB_SACK_CHILD_REPLICATION_LIMIT = 16
+/** One completed-run Sack can retain the hidden backpack lane plus all seven equipment sinks. */
+export const HUB_SACK_CHILD_REPLICATION_LIMIT = NATIVE_LOOT_BACKPACK_REPLICATION_LIMIT + 7
 /** Maximum admitted Item_Sack nesting depth, with root inventory items at depth zero. */
 export const HUB_SACK_REPLICATION_DEPTH_LIMIT = 32
 /** Bounded wire representation for one DyeClothing mixing transaction. */
 export const MAX_NATIVE_DYE_SELECTIONS = 256
 export const SHLORIO_INITIAL_DOWSING_FEE = 650
+export const NATIVE_RETAINED_SACK_SUFFIXES = [
+  'Earthly Possessions',
+  'Stuff',
+  'Dead Stuff',
+  'Bag',
+  'Loot',
+] as const
 export const NATIVE_UNFORGE_ELIGIBLE_TYPE_IDS = [
   7002, 7003, 7004, 7005, 7006, 7008, 7011,
 ] as const
@@ -326,6 +333,13 @@ export interface HubLootInventoryResult {
   readonly state: HubEconomyState
 }
 
+export interface CompletedRunEconomyArchive {
+  readonly displayName: string
+  readonly groundGold: number
+  readonly groundItems: readonly HubInventoryItem[]
+  readonly transferCarriedItems: boolean
+}
+
 export interface HubWizardKeyResult {
   readonly consumed: boolean
   readonly state: HubEconomyState
@@ -539,18 +553,16 @@ export function createHubEconomy(
   seed: number,
   options: { readonly hagathaBundleSelectors?: readonly number[] } = {},
 ): HubEconomyState {
-  const stock = rollFomentiusStock(createNativeRng(seed), 6)
+  const starters = starterLoadout(1)
+  const stock = rollFomentiusStock(createNativeRng(seed), starters.nextItemId)
   const bundleSelectors = stableSelectors(options.hagathaBundleSelectors ?? [])
   return {
     actionFeedback: null,
-    backpack: [
-      starterPotion(1, 'health-potion', 'Health Potion', 0, 46),
-      starterPotion(2, 'mana-potion', 'Mana Potion', 1, 47),
-    ],
+    backpack: starters.backpack,
     charmCapacity: 3,
     dowsingFee: SHLORIO_INITIAL_DOWSING_FEE,
     dowsingOffers: [],
-    equipment: starterEquipment(),
+    equipment: starters.equipment,
     firstMixedSelectors: [],
     fomentiusStock: stock.items,
     gold: STARTING_PLAYER_GOLD,
@@ -563,6 +575,112 @@ export function createHubEconomy(
     storage: [],
     tonicPurchases: 0,
     unforgeBonuses: createNativeUnforgeBonuses(),
+  }
+}
+
+export function archiveCompletedRunEconomy(
+  source: HubEconomyState,
+  archive: CompletedRunEconomyArchive,
+): HubEconomyState {
+  let nextItemId = source.nextItemId
+  let rng = source.rng
+  const groundItems: HubInventoryItem[] = []
+  for (const item of archive.groundItems) {
+    const identified = identifyLootItemTree(item, nextItemId)
+    groundItems.push(identified.item)
+    nextItemId = identified.nextItemId
+  }
+  const carried = archive.transferCarriedItems
+    ? [
+        ...equippedItems(source.equipment),
+        ...source.backpack,
+      ]
+    : []
+  const contents = [...carried, ...groundItems]
+  let storage = source.storage
+  if (contents.length > 0) {
+    const suffix = drawNativeInteger(rng, NATIVE_RETAINED_SACK_SUFFIXES.length)
+    rng = suffix.state
+    const packed = packSackContents(contents, nextItemId)
+    nextItemId = packed.nextItemId
+    const retained = archiveSack(
+      nextItemId,
+      `${archive.displayName}'s ${NATIVE_RETAINED_SACK_SUFFIXES[suffix.value]}`,
+      packed.contents,
+    )
+    nextItemId += 1
+    if (storage.length < HUB_STORAGE_SLOT_CAPACITY) {
+      storage = [...storage, retained]
+    } else {
+      const consolidated = packSackContents([...storage, retained], nextItemId)
+      nextItemId = consolidated.nextItemId
+      storage = [archiveSack(nextItemId, `${archive.displayName}'s Stored Possessions`, consolidated.contents)]
+      nextItemId += 1
+    }
+  }
+  const starters = starterLoadout(nextItemId)
+  nextItemId = starters.nextItemId
+  const stock = rollFomentiusStock(rng, nextItemId)
+  const result = {
+    ...source,
+    actionFeedback: null,
+    backpack: starters.backpack,
+    dowsingOffers: [],
+    equipment: starters.equipment,
+    fomentiusStock: stock.items,
+    gold: Math.max(0, source.gold + archive.groundGold),
+    nextItemId: stock.nextItemId,
+    revision: source.revision + 1,
+    rng: stock.rng,
+    storage,
+  }
+  if (!hubEconomyInventoryIsValid(result)) {
+    throw new Error('completed-run archive exceeds the bounded browser inventory tree')
+  }
+  return result
+}
+
+function packSackContents(
+  source: readonly HubInventoryItem[],
+  firstItemId: number,
+): {
+  readonly contents: readonly HubInventoryItem[]
+  readonly nextItemId: number
+} {
+  let contents = [...source]
+  let nextItemId = firstItemId
+  while (contents.length > HUB_SACK_CHILD_REPLICATION_LIMIT) {
+    const parents: HubInventoryItem[] = []
+    for (let index = 0; index < contents.length; index += HUB_SACK_CHILD_REPLICATION_LIMIT) {
+      parents.push(archiveSack(
+        nextItemId,
+        'Sack',
+        contents.slice(index, index + HUB_SACK_CHILD_REPLICATION_LIMIT),
+      ))
+      nextItemId += 1
+    }
+    contents = parents
+  }
+  return { contents, nextItemId }
+}
+
+function archiveSack(
+  id: number,
+  name: string,
+  contents: readonly HubInventoryItem[],
+): HubInventoryItem {
+  return {
+    contents,
+    equipmentType: null,
+    iconRecords: [70],
+    id,
+    kind: 'sack',
+    name,
+    nativeSubtype: 0,
+    nativeTypeId: 7008,
+    quantity: 1,
+    rarity: null,
+    recipeIndex: null,
   }
 }
 
@@ -1456,14 +1574,39 @@ function starterEquipmentItem(
   }
 }
 
-function starterEquipment(): HubEquipmentState {
+function starterEquipment(firstItemId = 3): HubEquipmentState {
   return {
     amulet: null,
-    hat: starterEquipmentItem(3, 'hat', 'Hat', 7005, [34, 38]),
+    hat: starterEquipmentItem(firstItemId, 'hat', 'Hat', 7005, [34, 38]),
     rings: [null, null, null],
-    robe: starterEquipmentItem(4, 'robe', 'Robe', 7006, [64, 67]),
-    weapon: starterEquipmentItem(5, 'staff', 'Staff', 7004, [72]),
+    robe: starterEquipmentItem(firstItemId + 1, 'robe', 'Robe', 7006, [64, 67]),
+    weapon: starterEquipmentItem(firstItemId + 2, 'staff', 'Staff', 7004, [72]),
   }
+}
+
+function starterLoadout(firstItemId: number): {
+  readonly backpack: readonly HubInventoryItem[]
+  readonly equipment: HubEquipmentState
+  readonly nextItemId: number
+} {
+  return {
+    backpack: [
+      starterPotion(firstItemId, 'health-potion', 'Health Potion', 0, 46),
+      starterPotion(firstItemId + 1, 'mana-potion', 'Mana Potion', 1, 47),
+    ],
+    equipment: starterEquipment(firstItemId + 2),
+    nextItemId: firstItemId + 5,
+  }
+}
+
+function equippedItems(equipment: HubEquipmentState): readonly HubInventoryItem[] {
+  return [
+    equipment.amulet,
+    equipment.hat,
+    ...equipment.rings,
+    equipment.robe,
+    equipment.weapon,
+  ].filter((item): item is HubInventoryItem => item !== null)
 }
 
 function stableSelectors(source: readonly number[]): readonly number[] {

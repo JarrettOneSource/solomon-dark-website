@@ -34,14 +34,9 @@ class RecordingStore implements GameSaveStore {
     return this.record
   }
 
-  async clear(expectedRevision: number): Promise<void> {
-    this.operations.push(`clear:${expectedRevision}`)
-    if ((this.record?.revision ?? 0) !== expectedRevision) throw new Error('revision conflict')
-    this.record = null
-  }
 }
 
-test('save coordinator serializes progress before Game Over deletion', async () => {
+test('save coordinator serializes progress before the Game Over profile checkpoint', async () => {
   const store = new RecordingStore()
   const changes: Array<StoredGameSave | null> = []
   const coordinator = new GameSaveCoordinator(store, (record) => changes.push(record))
@@ -49,17 +44,17 @@ test('save coordinator serializes progress before Game Over deletion', async () 
 
   coordinator.accept({ document: 'checkpoint-one', reason: 'progress', sequence: 1 })
   coordinator.accept({ document: 'checkpoint-two', reason: 'progress', sequence: 2 })
-  coordinator.accept({ document: null, reason: 'game-over', sequence: 3 })
+  coordinator.accept({ document: 'profile-only', reason: 'game-over', sequence: 3 })
   await coordinator.idle()
 
   assert.deepEqual(store.operations, [
     'read',
     'write:0:checkpoint-one',
     'write:1:checkpoint-two',
-    'clear:2',
+    'write:2:profile-only',
   ])
-  assert.equal(coordinator.current(), null)
-  assert.equal(changes.at(-1), null)
+  assert.equal(coordinator.current()?.document, 'profile-only')
+  assert.equal(changes.at(-1)?.document, 'profile-only')
 })
 
 test('save coordinator ignores replayed and byte-identical checkpoints', async () => {

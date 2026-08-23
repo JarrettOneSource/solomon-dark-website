@@ -53,6 +53,7 @@ import {
 import {
   EMPTY_CONTENT_MANIFEST_SHA256,
   GAME_HOST_ENDED_SESSION_CLOSE_CODE,
+  GAME_WEBSOCKET_MAX_PAYLOAD_BYTES,
   PARTY_ACTION_REJECTIONS,
   GAME_PROTOCOL_VERSION,
   PLAYER_CHARACTER_KERNEL_VERSION,
@@ -104,12 +105,16 @@ import {
   type MlBotPolicyInference,
 } from './ml-bot-host-controller.ts'
 import {
+  createGameProfileSaveDocument,
   createGameSaveDocument,
+  hydrateGameSaveProfile,
   restoreGameSaveDocument,
+  restoreGameSaveProfile,
+  type RestoredGameSaveProfile,
 } from '../save/game-save-document.ts'
 import { completedHallOfFameEntry } from '../hall-of-fame-entry.ts'
 import { createGameLeaderboardReceipt } from './game-leaderboard-receipt.ts'
-import { MAX_WEB_GAME_SAVE_BYTES, type GameSaveIntegrity } from '../save/game-save-contract.ts'
+import type { GameSaveIntegrity } from '../save/game-save-contract.ts'
 import {
   createPartySystem,
   decidePartyJoinRequest,
@@ -519,7 +524,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   })
   const websocketServer = new WebSocketServer({
     noServer: true,
-    maxPayload: MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024,
+    maxPayload: GAME_WEBSOCKET_MAX_PAYLOAD_BYTES,
     perMessageDeflate: GAME_WEBSOCKET_COMPRESSION,
   })
 
@@ -694,10 +699,15 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         }
         clearTimeout(helloDeadline)
         pending.delete(socket)
-        let playerId: PlayerId
+        let playerId: PlayerId | null = null
         let saveIntegrity: GameSaveIntegrity | null = null
+        let savedProfile: RestoredGameSaveProfile | null = null
         const playerPartyIdentity = createPartyIdentity()
         if (message.save !== undefined) {
+          if (message.saveIntent === undefined) {
+            disconnect(socket, 'invalid-message', 'The game save intent is missing.')
+            return
+          }
           if (
             !sharedHub && (
               clients.size !== 0
@@ -705,12 +715,11 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
               || state.playerEntities.identities.length !== 0
             )
           ) {
-            disconnect(socket, 'invalid-message', 'A save may resume only on a fresh host owner.')
+            disconnect(socket, 'invalid-message', 'A save may load only on a fresh host owner.')
             return
           }
-          let restored
           try {
-            restored = restoreGameSaveDocument(message.save)
+            savedProfile = restoreGameSaveProfile(message.save)
           } catch (error) {
             disconnect(
               socket,
@@ -719,72 +728,85 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             )
             return
           }
-          saveIntegrity = restored.integrity
-          if (sharedHub && restored.integrity === 'local-only') {
+          saveIntegrity = savedProfile.integrity
+          if (sharedHub && savedProfile.integrity === 'local-only') {
             disconnect(socket, 'invalid-message', 'Local-only saves require a private College.')
             return
           }
           const activeManifest = authenticated.content?.manifest ?? content
-          const modMismatch = !sameContentMods(restored.mods, activeManifest.mods)
+          const modMismatch = !sameContentMods(savedProfile.mods, activeManifest.mods)
           if (modMismatch && !message.allowModMismatch) {
             disconnect(
               socket,
               'invalid-message',
-              'The saved mod list does not match this session. Confirm the mismatch before resuming.',
+              'The saved mod list does not match this session. Confirm the mismatch before loading it.',
             )
             return
           }
-          const restoredCharacter = restored.state.playerEntities.configs[0]
-          if (!restoredCharacter || !sameCharacter(restoredCharacter, message.character)) {
-            disconnect(socket, 'invalid-message', 'The game save character does not match the resume request.')
-            return
-          }
-          playerId = restored.playerId
-          let restoredState = restored.state
-          let restoredBoneyard = restored.loadedBoneyard
-          if (
-            modMismatch
-            && restoredBoneyard?.choice.source === 'mod'
-            && restoredBoneyard.choice.modId !== undefined
-            && !activeManifest.mods.some(mod => (
-              mod.id.toLowerCase() === restoredBoneyard!.choice.modId!.toLowerCase()
-              && restored.mods.some(saved => sameContentMod(saved, mod))
-            ))
-          ) {
-            restoredState = returnGameSimulationToHub(restoredState)
-            restoredBoneyard = null
-          }
-          if (sharedWorlds) {
+          if (message.saveIntent === 'resume') {
+            let restored
             try {
-              sharedWorlds = restoreSharedGamePlayer(
-                sharedWorlds,
-                restoredState,
-                restoredBoneyard,
-                playerId,
-                playerPartyIdentity,
-              )
-              state = sharedWorlds.hub
+              restored = restoreGameSaveDocument(message.save)
             } catch (error) {
               disconnect(
                 socket,
                 'invalid-message',
-                error instanceof Error ? error.message : 'The game save cannot enter the shared Hub.',
+                error instanceof Error ? error.message : 'The game save is invalid.',
               )
               return
             }
-          } else {
-            state = restoredState
-            loadedBoneyard = restoredBoneyard
-            nextPlayerId = Math.max(nextPlayerId, nextPlayerNumber(playerId) + 1)
+            const restoredCharacter = restored.state.playerEntities.configs[0]
+            if (!restoredCharacter || !sameCharacter(restoredCharacter, message.character)) {
+              disconnect(
+                socket,
+                'invalid-message',
+                'The game save character does not match the resume request.',
+              )
+              return
+            }
+            playerId = restored.playerId
+            let restoredState = restored.state
+            let restoredBoneyard = restored.loadedBoneyard
+            if (
+              modMismatch
+              && restoredBoneyard?.choice.source === 'mod'
+              && restoredBoneyard.choice.modId !== undefined
+              && !activeManifest.mods.some(mod => (
+                mod.id.toLowerCase() === restoredBoneyard!.choice.modId!.toLowerCase()
+                && restored.mods.some(saved => sameContentMod(saved, mod))
+              ))
+            ) {
+              restoredState = returnGameSimulationToHub(restoredState)
+              restoredBoneyard = null
+            }
+            if (sharedWorlds) {
+              try {
+                sharedWorlds = restoreSharedGamePlayer(
+                  sharedWorlds,
+                  restoredState,
+                  restoredBoneyard,
+                  playerId,
+                  playerPartyIdentity,
+                )
+                state = sharedWorlds.hub
+              } catch (error) {
+                disconnect(
+                  socket,
+                  'invalid-message',
+                  error instanceof Error
+                    ? error.message
+                    : 'The game save cannot enter the shared Hub.',
+                )
+                return
+              }
+            } else {
+              state = restoredState
+              loadedBoneyard = restoredBoneyard
+              nextPlayerId = Math.max(nextPlayerId, nextPlayerNumber(playerId) + 1)
+            }
           }
-          if (sharedHub) pendingRestoredModState.set(playerId, restored.modState)
-          else restoreMatchingModState(
-            privateModLuaRuntimes,
-            restored.mods,
-            restored.modState,
-            content.mods,
-          )
-        } else {
+        }
+        if (message.save === undefined || message.saveIntent === 'new-game') {
           playerId = sharedWorlds
             ? `player-${randomBytes(12).toString('base64url')}`
             : `player-${nextPlayerId}`
@@ -800,6 +822,14 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             nextPlayerId += 1
             state = addPlayerCharacter(state, playerId, message.character)
           }
+          if (savedProfile) {
+            const hydrated = hydrateGameSaveProfile(
+              stateForPlayer(playerId),
+              playerId,
+              savedProfile,
+            )
+            replaceStateForPlayer(playerId, hydrated)
+          }
           if (options.initialPlayerExperience) {
             const activeState = stateForPlayer(playerId)
             const experienced = grantGameSimulationPlayerExperience(
@@ -809,6 +839,19 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             )
             replaceStateForPlayer(playerId, experienced)
           }
+        }
+        if (playerId === null) {
+          disconnect(socket, 'invalid-message', 'The game save intent is invalid.')
+          return
+        }
+        if (savedProfile) {
+          if (sharedHub) pendingRestoredModState.set(playerId, savedProfile.modState)
+          else restoreMatchingModState(
+            privateModLuaRuntimes,
+            savedProfile.mods,
+            savedProfile.modState,
+            content.mods,
+          )
         }
         if (sharedHub) {
           if (!authenticated.content) throw new Error('validated shared Hub content is absent')
@@ -2027,7 +2070,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
               }
             }
             publishLeaderboardReceipts(before.state, run.state)
-            if (enteredGameOver) publishSharedSaveClear(run.partyId)
+            if (enteredGameOver) publishSharedProfileCheckpoint(run.partyId)
             if (enteredGameOver || completedGameOver || previousBarrierId !== barrierId) {
               stopPartyInputs(run.partyId)
               lifecycleBoundary = true
@@ -2100,7 +2143,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           && state.run.phase === 'game-over'
         const completedGameOver = previousRunPhase === 'game-over'
           && state.run.phase === 'loadout'
-        if (enteredGameOver) publishSaveClear()
+        if (enteredGameOver) publishProfileCheckpoint()
         if (completedGameOver) loadedBoneyard = null
         if (enteredGameOver || completedGameOver) stopAllClientInputs()
         if (previousBarrierId === null && barrierId !== null) stopAllClientInputs()
@@ -2169,17 +2212,21 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     }
   }
 
-  function publishSaveClear(): void {
-    for (const client of clients.values()) publishSaveClearForClient(client)
+  function publishProfileCheckpoint(): void {
+    for (const client of clients.values()) {
+      publishSaveCheckpointForClient(client, 'game-over', true, true)
+    }
   }
 
-  function publishSharedSaveClear(partyId: string): void {
+  function publishSharedProfileCheckpoint(partyId: string): void {
     if (!sharedWorlds) return
     const party = sharedWorlds.parties.parties.find(({ id }) => id === partyId)
     if (!party) return
     const memberIds = new Set(party.memberPlayerIds)
     for (const client of clients.values()) {
-      if (memberIds.has(client.playerId)) publishSaveClearForClient(client)
+      if (memberIds.has(client.playerId)) {
+        publishSaveCheckpointForClient(client, 'game-over', true, true)
+      }
     }
   }
 
@@ -2187,16 +2234,15 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     client: HostClient,
     source: string,
     force = false,
-    clearTerminal = false,
+    includeTerminalProfile = false,
   ): number {
     if (client.socket.readyState !== WebSocket.OPEN) return 0
     const saveState = sharedWorlds
       ? sharedPartySaveStateForPlayer(sharedWorlds, client.playerId)
       : state
     if (!saveState) return 0
-    if (saveState.run.phase === 'game-over' || saveState.run.phase === 'loadout') {
-      return clearTerminal ? publishSaveClearForClient(client) : 0
-    }
+    const terminal = saveState.run.phase === 'game-over' || saveState.run.phase === 'loadout'
+    if (terminal && !includeTerminalProfile) return 0
     let document: string
     try {
       const party = sharedWorlds
@@ -2213,9 +2259,9 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       const scope = party && saveState.world.kind === 'boneyard'
         ? partyModRuntimes.get(party.id)
         : null
-      document = createGameSaveDocument({
-        integrity: client.localOnly ? 'local-only' : 'global-clean',
-        loadedBoneyard: loadedBoneyardForPlayer(client.playerId),
+      const integrity: GameSaveIntegrity = client.localOnly ? 'local-only' : 'global-clean'
+      const documentOptions = {
+        integrity,
         mods: sharedContent?.manifest.mods ?? content.mods,
         modState: Object.fromEntries(
           (scope?.runtimes ?? privateModLuaRuntimes)
@@ -2223,7 +2269,13 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         ),
         playerId: client.playerId,
         state: saveState,
-      })
+      }
+      document = terminal
+        ? createGameProfileSaveDocument(documentOptions)
+        : createGameSaveDocument({
+            ...documentOptions,
+            loadedBoneyard: loadedBoneyardForPlayer(client.playerId),
+          })
     } catch (error) {
       logGameServerEvent(
         options.log,
@@ -2249,21 +2301,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     client.socket.send(encodeGameMessage({
       type: 'server-save-checkpoint',
       save: document,
-      reason: 'progress',
-      sequence,
-    }))
-    return sequence
-  }
-
-  function publishSaveClearForClient(client: HostClient): number {
-    if (client.socket.readyState !== WebSocket.OPEN) return 0
-    const sequence = (saveSequences.get(client.playerId) ?? 0) + 1
-    saveSequences.set(client.playerId, sequence)
-    saveDocuments.delete(client.playerId)
-    client.socket.send(encodeGameMessage({
-      type: 'server-save-checkpoint',
-      save: null,
-      reason: 'game-over',
+      reason: terminal ? 'game-over' : 'progress',
       sequence,
     }))
     return sequence

@@ -47,6 +47,7 @@ test('bootGame accepts a separate localhost server and routes through the shared
   assert.equal(connected?.credential, 'secret')
   assert.deepEqual(connected?.character, CHARACTER)
   assert.equal(connected?.saveDocument, '{"schemaVersion":1}')
+  assert.equal(connected?.saveIntent, 'resume')
 })
 
 test('bootGame reports concrete transport and welcome milestones in order', async () => {

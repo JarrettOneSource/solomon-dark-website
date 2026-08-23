@@ -328,7 +328,9 @@ test('game session supervisor admits independent players to one shared Hub and r
     ))
     assert.equal(checkpoint.type, 'server-save-checkpoint')
     assert.equal(
-      (JSON.parse(checkpoint.save!) as { summary: { playerId: string } }).summary.playerId,
+      (JSON.parse(checkpoint.save) as {
+        continuation: { summary: { playerId: string } }
+      }).continuation.summary.playerId,
       client.welcome.playerId,
     )
     client.socket.send(encodeGameMessage({

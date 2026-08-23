@@ -32,12 +32,6 @@ export class GameSaveCoordinator {
     if (checkpoint.sequence <= this.lastSequence) return
     this.lastSequence = checkpoint.sequence
     const operation = this.pending.then(async () => {
-      if (checkpoint.document === null) {
-        if (this.record !== null) await this.store.clear(this.record.revision)
-        this.record = null
-        this.onChange(null)
-        return
-      }
       if (this.record?.document === checkpoint.document) return
       this.record = await this.store.write(
         checkpoint.document,

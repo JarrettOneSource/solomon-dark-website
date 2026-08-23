@@ -39,7 +39,9 @@ import {
 } from '../game/save/game-save-store.ts'
 import {
   parseGameSaveDocument,
+  type GameProfileSave,
   type GameSaveCheckpoint,
+  type GameSaveIntent,
   type ResumableGameSave,
 } from '../game/save/game-save-contract.ts'
 import { readLocalHallOfFame } from '../game/hall-of-fame-store.ts'
@@ -67,6 +69,7 @@ export default function Game() {
   const [saveReady, setSaveReady] = useState(false)
   const [modsReady, setModsReady] = useState(false)
   const [activeMods, setActiveMods] = useState<readonly ActiveWebMod[]>([])
+  const [profileSave, setProfileSave] = useState<GameProfileSave | null>(null)
   const [resumeSave, setResumeSave] = useState<ResumableGameSave | null>(null)
   const [deploymentRestart, setDeploymentRestart] = useState<DeploymentRestartState | null>(null)
   const saveCoordinator = useRef<GameSaveCoordinator | null>(null)
@@ -105,23 +108,29 @@ export default function Game() {
     if (authLoading) return
     let cancelled = false
     setSaveReady(false)
+    setProfileSave(null)
     setResumeSave(null)
     const store = user ? createCloudGameSaveStore() : createLocalGameSaveStore()
     const present = (record: StoredGameSave | null) => {
       if (cancelled) return
       if (!record) {
+        setProfileSave(null)
         setResumeSave(null)
         return
       }
       try {
         const parsed = parseGameSaveDocument(record.document)
-        setResumeSave({
+        const profile = {
           document: record.document,
           integrity: parsed.integrity,
           mods: parsed.mods,
-          summary: parsed.summary,
-        })
+        }
+        setProfileSave(profile)
+        setResumeSave(parsed.continuation === null
+          ? null
+          : { ...profile, summary: parsed.continuation.summary })
       } catch (error) {
+        setProfileSave(null)
         setResumeSave(null)
         diagnostics.warning(
           'save.invalid',
@@ -270,6 +279,7 @@ export default function Game() {
     onProgress: (stage: GameConnectionStage) => void,
     cheatsEnabled: boolean,
     saveDocument?: string,
+    saveIntent?: GameSaveIntent,
     allowModMismatch?: boolean,
   ): Promise<GameSession> => {
     try {
@@ -290,6 +300,7 @@ export default function Game() {
           totalPlaytimeMs: readTotalPlaytimeMs(),
         },
         ...(saveDocument ? { saveDocument } : {}),
+        ...(saveIntent ? { saveIntent } : {}),
       })
       preparedEndpoint.current = null
       return session
@@ -359,6 +370,7 @@ export default function Game() {
               onSignOut={logout}
               persistSaveCheckpoint={persistCheckpointAndWait}
               prepareGame={prepareGame}
+              profileSave={profileSave}
               refreshActiveMods={refreshActiveMods}
               resumeSave={resumeSave}
               submitGlobalHallOfFame={submitGlobalHallOfFame}

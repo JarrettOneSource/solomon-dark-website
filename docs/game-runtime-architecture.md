@@ -115,10 +115,11 @@ selector are shared by Hub and Boneyard; scenes request the participant-owned
 surface but never clone its state. Protocol 36 introduced strict belt, primary,
 and general concentration intents. Protocol 63 added a distinct addressed A/B
 concentration command for the HUD buttons while retaining the general
-SkillScreen command. Current protocol 64 also carries the authoritative
-Hagatha one-shot state and the six frozen active-Weld component ranks. The host
-applies either skill selection only to the authenticated
-participant before publishing a new progression revision. The compact selector
+SkillScreen command. Current protocol 65 retains both selection paths, carries
+the authoritative Hagatha one-shot state and six frozen active-Weld component
+ranks, and distinguishes resume from profile-backed New Game. The host applies
+either skill selection only to the authenticated participant before publishing
+a new progression revision. The compact selector
 uses its own `skill-selector` pause source, so the host cannot accept an
 addressed HUD mutation from a full SkillScreen pause (or vice versa).
 The session also owns the fixed-step accumulator and tick; neither clock is
@@ -476,23 +477,32 @@ Protocol 59 adds the authoritative held one-shot attack-pose latch. The
 fixed-tick host publishes it with player cast state, and Hub/Boneyard clients
 retain it discretely without inferring pose lifetime from render frames.
 
+Protocol 65 separates `resume` from `new-game` when a client supplies a saved
+document while retaining protocol 64's Hagatha/Weld state. Resume revives the nullable continuation and requires the saved
+character; New Game hydrates only the durable profile into the newly selected
+character and constructs a fresh world/run. Every checkpoint, including Game
+Over, carries a document; terminal checkpoints carry a null continuation rather
+than a null document.
+
 ## Saves, identity, and content
 
 - The authoritative game host is the only producer of browser-save contents.
-  It emits one explicitly versioned normalized document at semantic
-  progression/world boundaries and bounded active-run checkpoints. Browser
-  code transports that opaque document but never derives authority from a
-  rendered snapshot.
+  Schema 5 is one atomic envelope with a durable participant profile (economy
+  plus Hagatha one-shot runtime) and a nullable active continuation. It is emitted at semantic progression/world
+  boundaries and bounded active-run checkpoints. Browser code transports that
+  opaque document but never derives authority from a rendered snapshot.
 - The first browser slot is always zero. An authenticated website account uses
   its owner-scoped transactional database row; an anonymous browser uses an
   IndexedDB row on that device. Both adapters store the same host-authored
   document and revision contract. Retired launcher-native ZIP slots are not a
   browser-save surface.
-- `Last Game` gives the stored document to a fresh game host during the
-  authenticated handshake. The host bounds, validates, and revives its
-  simulation and loaded-Boneyard state before issuing the welcome checkpoint.
-  New Game replaces slot zero only after the new authoritative host produces
-  its first valid checkpoint.
+- `Last Game` is enabled only when the stored envelope contains a continuation.
+  It gives that document to a fresh game host, which bounds, migrates, validates,
+  and revives the simulation and loaded-Boneyard state before welcome. New Game
+  passes the same envelope under a distinct intent: the host keeps gold,
+  storage, Hagatha state, Shlorio fee, permanent unforge/stat bonuses, and
+  retained items while constructing the selected character and a fresh world.
+  Slot zero is replaced only after that new host produces its first checkpoint.
 - A resumed Hub owner enters the resident shared Hub by importing the saved
   character projection and semantic participant record. Position, velocity,
   facing/cast state, region, and an in-flight region transition survive; entity
@@ -500,9 +510,18 @@ retain it discretely without inferring pose lifetime from render frames.
   admission still constructs at Courtyard spawn, while post-run confirmation
   intentionally resets its source to spawn before using the same merge.
 - The first authoritative transition from an active run to Game Over emits a
-  delete checkpoint. The adapter serializes that delete after prior writes, so
-  the completed run cannot be resumed or recreated by an older in-flight
-  checkpoint.
+  profile-only checkpoint. Its completed-run projection retains represented
+  carried goods, applies the Last Word ground Sack/Gold sweep, preserves durable
+  economy/stat state, and sets the continuation to null. The adapter serializes
+  that write after prior checkpoints, so the completed run cannot be resumed or
+  recreated by an older in-flight checkpoint while the profile survives.
+- Schemas 1 through 4 are explicit historical inputs. Their envelope, RNG,
+  skill-runtime, primary-cast, run-lifecycle, Hall, and Boneyard fields are
+  normalized before authority changes; the first new checkpoint rewrites schema
+  5. Unknown schemas and malformed trees still fail closed.
+- The public supervisor proxy and inner authoritative host share one exported
+  WebSocket payload bound sized above the 8-MiB document maximum. The proxy may
+  not close a valid save-bearing hello before the host's strict decoder sees it.
 - Semantic publication remains immediate and periodic browser autosave runs on
   a 30-second authoritative-tick cadence. Both cover every connected player,
   across the global Hub and private Colleges. In a party world, the host projects the same
@@ -569,10 +588,11 @@ Global eligibility starts only on a fresh account-bound global-Hub admission. In
 live `Enable Cheats` state permanently revokes it for that connection; an
 accepted authoritative Lua console request revokes it independently. Any
 ineligible member taints the current party run for every participant. Local
-Hall history remains available. Save schema 4 carries durable `global-clean` or
-`local-only` integrity; legacy schema-3 saves migrate conservatively to
-`local-only`. Every participant receives their own authoritative checkpoint,
-and Game Over clears every current participant's slot.
+Hall history remains available. Save schema 5 carries durable `global-clean` or
+`local-only` integrity; schemas 1 through 3 migrate conservatively to
+`local-only`, while schema 4 preserves its authored integrity. Every participant
+receives their own authoritative profile/continuation checkpoint, and Game Over
+removes only each participant's active continuation.
 
 ## Rendering boundary
 
@@ -1120,10 +1140,11 @@ This preserves one mutation boundary and prevents Lua callbacks from entering
 the simulation recursively. The host checks dynamic session host identity or
 the account-bound developer entitlement on every console request. `Enable
 Cheats` controls ordinary-host installation of the DevTools API; it is never
-trusted as network authorization. Protocol 64 retains the server-authored
-developer boolean from a one-use admission into the welcome. An entitled
-account keeps the setting and ordinary shared-Hub routing off while still
-receiving the DevTools API. No client-authored field can grant the entitlement.
+trusted as network authorization. Current protocol 65 retains the
+server-authored developer boolean from a one-use admission into the welcome.
+An entitled account keeps the setting and ordinary shared-Hub routing off
+while still receiving the DevTools API. No client-authored field can grant the
+entitlement.
 Initial and live setting state is nevertheless replicated as a separate
 global-score eligibility input, and accepting a console request revokes that
 eligibility even if a crafted client misreported the setting.

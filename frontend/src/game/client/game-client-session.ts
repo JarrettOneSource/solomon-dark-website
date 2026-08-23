@@ -36,7 +36,7 @@ import {
   type GameModAsset,
 } from '../protocol/game-protocol.ts'
 import type { ModConsumableCatalogEntry } from '../core-kernels/hub-economy.ts'
-import type { GameSaveCheckpoint } from '../save/game-save-contract.ts'
+import type { GameSaveCheckpoint, GameSaveIntent } from '../save/game-save-contract.ts'
 import type { HubParticipantState } from '../core-kernels/hub-regions.ts'
 import type { ProtocolPlayerState } from '../protocol/game-state.ts'
 import type { HubInventoryAction } from '../core-kernels/hub-economy.ts'
@@ -84,6 +84,7 @@ export interface GameClientSessionOptions {
   profile: PlayerSocialProfile
   resumeToken?: string
   saveDocument?: string
+  saveIntent?: GameSaveIntent
   transport: GameTransport
 }
 
@@ -1091,7 +1092,9 @@ export function connectGameClientSession(
       character: options.character,
       profile: options.profile,
       ...(options.resumeToken ? { resumeToken: options.resumeToken } : {}),
-      ...(options.saveDocument ? { save: options.saveDocument } : {}),
+      ...(options.saveDocument
+        ? { save: options.saveDocument, saveIntent: options.saveIntent ?? 'resume' }
+        : {}),
     }))
 
     function sendPing(): void {

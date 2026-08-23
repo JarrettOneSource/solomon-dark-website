@@ -293,6 +293,7 @@ import {
 } from './game-chat.ts'
 import {
   MAX_WEB_GAME_SAVE_BYTES,
+  type GameSaveIntent,
 } from '../save/game-save-contract.ts'
 
 export type { BoneyardEnemyEventSnapshot, GameSnapshot } from './game-state.ts'
@@ -321,7 +322,8 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 64
+export const GAME_PROTOCOL_VERSION = 65
+export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
 export const GAME_CONNECTION_TIMEOUT_CLOSE_CODE = 4000
@@ -442,6 +444,7 @@ export interface ClientHelloMessage {
   profile: PlayerSocialProfile
   resumeToken?: string
   save?: string
+  saveIntent?: GameSaveIntent
 }
 
 export interface ClientInputMessage {
@@ -680,7 +683,7 @@ export interface ServerBoneyardLoadedMessage {
 
 export interface ServerSaveCheckpointMessage {
   type: 'server-save-checkpoint'
-  save: string | null
+  save: string
   reason: 'game-over' | 'progress'
   sequence: number
 }
@@ -834,7 +837,11 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
       'profile',
       'resumeToken',
       'save',
+      'saveIntent',
     ])
+    if ((value.save === undefined) !== (value.saveIntent === undefined)) {
+      throw new GameProtocolError('save and saveIntent must be supplied together')
+    }
     return {
       type: 'client-hello',
       cheatsEnabled: boolean(value.cheatsEnabled, 'cheatsEnabled'),
@@ -855,6 +862,11 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
               value.save,
               'save',
               MAX_WEB_GAME_SAVE_BYTES,
+            ),
+            saveIntent: memberString(
+              value.saveIntent,
+              'saveIntent',
+              ['new-game', 'resume'] as const,
             ),
           }),
     }
@@ -1187,15 +1199,7 @@ export function decodeServerGameMessage(payload: string): ServerGameMessage {
       'reason',
       ['game-over', 'progress'] as const,
     )
-    const save = value.save === null
-      ? null
-      : byteLimitedString(value.save, 'save', MAX_WEB_GAME_SAVE_BYTES)
-    if (reason === 'progress' && save === null) {
-      throw new GameProtocolError('progress save checkpoint requires save data')
-    }
-    if (reason === 'game-over' && save !== null) {
-      throw new GameProtocolError('game-over save checkpoint must clear save data')
-    }
+    const save = byteLimitedString(value.save, 'save', MAX_WEB_GAME_SAVE_BYTES)
     return {
       type: 'server-save-checkpoint',
       save,

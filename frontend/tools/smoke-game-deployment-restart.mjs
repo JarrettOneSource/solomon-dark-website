@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import { execFileSync, spawn } from 'node:child_process'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
-import { resolve } from 'node:path'
+import { basename, resolve } from 'node:path'
 
 import { chromium } from 'playwright-core'
 
@@ -14,8 +14,14 @@ const currentRevision = execFileSync(
   { cwd: repositoryRoot, encoding: 'utf8' },
 ).trim().toLowerCase()
 const targetRevision = currentRevision[0] === 'f' ? 'e'.repeat(40) : 'f'.repeat(40)
-const baseUrl = 'http://127.0.0.1:4187'
-const backendUrl = 'http://127.0.0.1:5210'
+const baseUrl = process.env.SDR_GAME_DEPLOYMENT_SMOKE_URL || 'http://127.0.0.1:4187'
+const backendUrl = process.env.SDR_GAME_DEPLOYMENT_SMOKE_BACKEND_URL
+  || 'http://127.0.0.1:5210'
+const frontendAddress = new URL(baseUrl)
+const legacySavePaths = (process.env.SDR_GAME_DEPLOYMENT_LEGACY_SAVES || '')
+  .split(',')
+  .map(path => path.trim())
+  .filter(Boolean)
 const adminSecret = 'deployment-smoke-supervisor-secret-0123456789'
 const storageRoot = await mkdtemp(`${tmpdir()}/solomon-deployment-smoke-`)
 const children = []
@@ -24,19 +30,28 @@ let browser = null
 try {
   const backend = startProcess(
     process.env.SDR_DOTNET || resolve(homedir(), '.dotnet/dotnet'),
-    ['run', '--project', '../backend/Server.csproj', '--configuration', 'Release', '--no-build'],
+    [resolve(repositoryRoot, 'backend/bin/Release/net10.0/Server.dll')],
     {
       ASPNETCORE_ENVIRONMENT: 'Development',
       ASPNETCORE_URLS: backendUrl,
       Jwt__Secret: 'deployment-smoke-jwt-secret-that-is-long-enough-0123456789',
       Storage__Root: storageRoot,
     },
+    resolve(repositoryRoot, 'backend'),
   )
   children.push(backend)
   await waitForHttp(`${backendUrl}/api/game/saves/0`, 401)
   const vite = startProcess(
     process.execPath,
-    ['node_modules/vite/bin/vite.js', '--host', '127.0.0.1', '--port', '4187', '--strictPort'],
+    [
+      'node_modules/vite/bin/vite.js',
+      '--host',
+      frontendAddress.hostname,
+      '--port',
+      frontendAddress.port,
+      '--strictPort',
+    ],
+    { SDR_VITE_BACKEND_URL: backendUrl },
   )
   children.push(vite)
   await waitForHttp(`${baseUrl}/game`, 200)
@@ -44,20 +59,36 @@ try {
     executablePath: process.env.SDR_CHROME_PATH || '/usr/bin/google-chrome',
     headless: true,
   })
-  const anonymous = await exercisePlayer({ account: null, label: 'anonymous' })
+  const anonymousRun = await exercisePlayer({ account: null, label: 'anonymous' })
+  const { finalDocument, ...anonymous } = anonymousRun
   const username = `DeploySmoke${Date.now()}`
   const password = 'Deployment-smoke-password-42!'
   const token = await registerAccount(username, password)
-  const authenticated = await exercisePlayer({
+  const authenticatedRun = await exercisePlayer({
     account: { token, username },
     label: 'authenticated',
   })
+  const { finalDocument: _authenticatedDocument, ...authenticated } = authenticatedRun
+  const profileDocument = JSON.parse(finalDocument)
+  profileDocument.continuation = null
+  profileDocument.profile.economy.gold = 12_345
+  profileDocument.profile.economy.unforgeBonuses.maximumHealth = 20
+  const profileOnly = await exerciseProfileOnly(JSON.stringify(profileDocument))
+  const legacyResumes = []
+  for (const path of legacySavePaths) {
+    legacyResumes.push(await exerciseHistoricalSave(
+      await readFile(path, 'utf8'),
+      basename(path, '.json'),
+    ))
+  }
   process.stdout.write(`${JSON.stringify({
     status: 'ok',
     currentRevision,
     targetRevision,
     anonymous,
     authenticated,
+    profileOnly,
+    legacyResumes,
   })}\n`)
 } finally {
   await browser?.close()
@@ -67,6 +98,7 @@ try {
 
 async function exercisePlayer({ account, label }) {
   const supervisor = await startSupervisor()
+  let replacementSupervisor = null
   children.push(supervisor.child)
   try {
     const ticket = await issueHubTicket(supervisor.url)
@@ -93,9 +125,16 @@ async function exercisePlayer({ account, label }) {
     }))
     const pageErrors = []
     const consoleErrors = []
+    const failedResponses = []
     page.on('pageerror', error => pageErrors.push(error.message))
     page.on('console', message => {
       if (message.type() === 'error') consoleErrors.push(message.text())
+    })
+    page.on('response', response => {
+      if (response.status() >= 400) failedResponses.push({
+        status: response.status(),
+        url: response.url(),
+      })
     })
 
     await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
@@ -114,7 +153,9 @@ async function exercisePlayer({ account, label }) {
     await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 30_000 })
     await canvas.waitFor({ timeout: 30_000 })
     const initialSave = await waitForSave(page, account, record => record?.revision >= 1)
-    const initialTick = JSON.parse(initialSave.document).summary.savedAtTick
+    const initialTick = JSON.parse(initialSave.document).continuation.summary.savedAtTick
+    const initialX = JSON.parse(initialSave.document).continuation.simulation
+      .playerEntities.locomotions[0].position.x
     await page.keyboard.down('d')
     await page.waitForTimeout(600)
     await page.keyboard.up('d')
@@ -147,8 +188,16 @@ async function exercisePlayer({ account, label }) {
       account,
       record => record?.revision > initialSave.revision,
     )
-    const finalTick = JSON.parse(finalSave.document).summary.savedAtTick
+    const finalTick = JSON.parse(finalSave.document).continuation.summary.savedAtTick
+    const finalX = JSON.parse(finalSave.document).continuation.simulation
+      .playerEntities.locomotions[0].position.x
     assert.ok(finalTick >= initialTick)
+
+    replacementSupervisor = await startSupervisor()
+    children.push(replacementSupervisor.child)
+    const replacementTicket = await issueHubTicket(replacementSupervisor.url)
+    const replacementEndpoint = new URL('/game-hub', replacementSupervisor.url)
+    replacementEndpoint.protocol = 'ws:'
 
     const reloaded = page.waitForEvent('framenavigated', frame => (
       frame === page.mainFrame() && new URL(frame.url()).pathname === '/game'
@@ -156,26 +205,227 @@ async function exercisePlayer({ account, label }) {
     manifestRevision = targetRevision
     await reloaded
     manifestRevision = currentRevision
+    await page.evaluate(({ credential, url }) => {
+      window.solomonDarkRuntime = {
+        gameEndpoint: { kind: 'localhost', credential, url },
+      }
+    }, {
+      credential: replacementTicket.credential,
+      url: replacementEndpoint.toString(),
+    })
     await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 90_000 })
     await page.getByRole('button', { name: 'Play' }).click()
-    assert.equal(await page.getByRole('button', { name: 'Last game' }).isEnabled(), true)
+    const lastGame = page.getByRole('button', { name: 'Last game' })
+    assert.equal(await lastGame.isEnabled(), true)
+    await lastGame.click()
+    const resumedCanvas = page.locator('.hub-world-canvas[data-game-renderer="pixi-webgl"]')
+    await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 30_000 })
+    await resumedCanvas.waitFor({ timeout: 30_000 })
+    const resumed = await resumedCanvas.evaluate(node => ({
+      tick: node.__sdrHubFrame.tick,
+      x: node.__sdrHubFrame.playerX,
+    }))
+    assert.ok(resumed.x > initialX, JSON.stringify({ finalX, initialX, resumed }))
     assert.deepEqual(pageErrors, [])
     assert.deepEqual(consoleErrors, [])
+    assert.deepEqual(failedResponses, [])
     await context.close()
     return {
       finalRevision: finalSave.revision,
+      finalDocument: finalSave.document,
       finalTick,
       initialRevision: initialSave.revision,
       initialTick,
+      initialX,
       label,
+      resumedTick: resumed.tick,
+      resumedX: resumed.x,
       screenshotPath,
       updateMessage: 'Game updating',
+    }
+  } finally {
+    for (const owned of [replacementSupervisor, supervisor]) {
+      if (!owned) continue
+      const index = children.indexOf(owned.child)
+      if (index >= 0) children.splice(index, 1)
+      await stopProcess(owned.child)
+    }
+  }
+}
+
+async function exerciseProfileOnly(document) {
+  const supervisor = await startSupervisor()
+  children.push(supervisor.child)
+  try {
+    const ticket = await issueHubTicket(supervisor.url)
+    const endpoint = new URL('/game-hub', supervisor.url)
+    endpoint.protocol = 'ws:'
+    const context = await browser.newContext({ viewport: { width: 1600, height: 900 } })
+    await context.addInitScript(({ credential, gameUrl }) => {
+      window.solomonDarkRuntime = {
+        gameEndpoint: { kind: 'localhost', credential, url: gameUrl },
+      }
+    }, { credential: ticket.credential, gameUrl: endpoint.toString() })
+    const page = await context.newPage()
+    const consoleErrors = []
+    const failedResponses = []
+    const pageErrors = []
+    page.on('console', message => {
+      if (message.type() === 'error') consoleErrors.push(message.text())
+    })
+    page.on('pageerror', error => pageErrors.push(error.message))
+    page.on('response', response => {
+      if (response.status() >= 400) failedResponses.push({
+        status: response.status(),
+        url: response.url(),
+      })
+    })
+    await page.route('**/deployment.json*', route => route.fulfill({
+      body: JSON.stringify({ revision: currentRevision }),
+      contentType: 'application/json',
+      headers: { 'cache-control': 'no-store' },
+      status: 200,
+    }))
+
+    await page.goto(baseUrl, { waitUntil: 'domcontentloaded' })
+    await seedLocalSave(page, document)
+    await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
+    await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 90_000 })
+    await page.getByRole('button', { name: 'Play' }).click()
+    const lastGame = page.getByRole('button', { name: 'Last game' })
+    assert.equal(await lastGame.isDisabled(), true)
+    await page.getByRole('button', { name: 'New game' }).click()
+    await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({
+      timeout: 30_000,
+    })
+    await page.getByRole('button', { name: /fire/i }).click()
+    await page.locator('.create-menu-disciplines[data-visible="true"]').waitFor({
+      timeout: 15_000,
+    })
+    await page.locator('.create-menu-discipline-arcane').click()
+    await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 30_000 })
+    await page.getByRole('button', { name: 'Open inventory, 12345 gold' }).waitFor({
+      timeout: 30_000,
+    })
+    const screenshotPath = '/tmp/solomon-profile-only-new-game.png'
+    await page.screenshot({ path: screenshotPath })
+    assert.deepEqual(pageErrors, [])
+    assert.deepEqual(consoleErrors, [])
+    assert.deepEqual(failedResponses, [])
+    await context.close()
+    return { gold: 12_345, lastGameDisabled: true, screenshotPath }
+  } finally {
+    const index = children.indexOf(supervisor.child)
+    if (index >= 0) children.splice(index, 1)
+    await stopProcess(supervisor.child)
+  }
+}
+
+async function exerciseHistoricalSave(document, label) {
+  const supervisor = await startSupervisor()
+  children.push(supervisor.child)
+  try {
+    const parsed = JSON.parse(document)
+    const ticket = parsed.schemaVersion < 4
+      ? await issuePrivateTicket(supervisor.url)
+      : await issueHubTicket(supervisor.url)
+    const endpoint = new URL(ticket.path, supervisor.url)
+    endpoint.protocol = 'ws:'
+    const context = await browser.newContext({ viewport: { width: 1600, height: 900 } })
+    await context.addInitScript(({ credential, gameUrl }) => {
+      window.solomonDarkRuntime = {
+        gameEndpoint: { kind: 'localhost', credential, url: gameUrl },
+      }
+    }, { credential: ticket.credential, gameUrl: endpoint.toString() })
+    const page = await context.newPage()
+    const consoleErrors = []
+    const failedResponses = []
+    const pageErrors = []
+    page.on('console', message => {
+      if (message.type() === 'error') consoleErrors.push(message.text())
+    })
+    page.on('pageerror', error => pageErrors.push(error.message))
+    page.on('response', response => {
+      if (response.status() >= 400) failedResponses.push({
+        status: response.status(),
+        url: response.url(),
+      })
+    })
+    await page.route('**/deployment.json*', route => route.fulfill({
+      body: JSON.stringify({ revision: currentRevision }),
+      contentType: 'application/json',
+      headers: { 'cache-control': 'no-store' },
+      status: 200,
+    }))
+
+    await page.goto(baseUrl, { waitUntil: 'domcontentloaded' })
+    await seedLocalSave(page, document)
+    await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
+    await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 90_000 })
+    await page.getByRole('button', { name: 'Play' }).click()
+    const lastGame = page.getByRole('button', { name: 'Last game' })
+    assert.equal(await lastGame.isEnabled(), true)
+    await lastGame.click()
+    const scene = parsed.summary.worldKind === 'boneyard'
+      ? '.boneyard-scene[data-renderer-state="ready"]'
+      : '.hub-scene[data-renderer-state="ready"]'
+    try {
+      await page.locator(scene).waitFor({ timeout: 30_000 })
+    } catch (error) {
+      throw new Error(`historical save ${label} did not resume: ${JSON.stringify({
+        body: await page.locator('body').innerText(),
+        consoleErrors,
+        failedResponses,
+        pageErrors,
+      })}`, { cause: error })
+    }
+    const screenshotPath = `/tmp/solomon-${label}-resume.png`
+    await page.screenshot({ path: screenshotPath })
+    assert.deepEqual(pageErrors, [])
+    assert.deepEqual(consoleErrors, [])
+    assert.deepEqual(failedResponses, [])
+    await context.close()
+    return {
+      label,
+      schemaVersion: parsed.schemaVersion,
+      screenshotPath,
+      worldKind: parsed.summary.worldKind,
     }
   } finally {
     const index = children.indexOf(supervisor.child)
     if (index >= 0) children.splice(index, 1)
     await stopProcess(supervisor.child)
   }
+}
+
+async function seedLocalSave(page, document) {
+  await page.evaluate(async (saveDocument) => {
+    const database = await new Promise((resolve, reject) => {
+      const request = indexedDB.open('solomon-dark-game-saves', 1)
+      request.onupgradeneeded = () => {
+        if (!request.result.objectStoreNames.contains('slots')) {
+          request.result.createObjectStore('slots', { keyPath: 'slot' })
+        }
+      }
+      request.onerror = () => reject(request.error)
+      request.onsuccess = () => resolve(request.result)
+    })
+    await new Promise((resolve, reject) => {
+      const transaction = database.transaction('slots', 'readwrite')
+      transaction.objectStore('slots').put({
+        document: saveDocument,
+        formatVersion: JSON.parse(saveDocument).schemaVersion,
+        revision: 1,
+        sha256: '0'.repeat(64),
+        slot: 0,
+        updatedAtUtc: new Date().toISOString(),
+      })
+      transaction.onabort = () => reject(transaction.error)
+      transaction.oncomplete = () => resolve()
+      transaction.onerror = () => reject(transaction.error)
+    })
+    database.close()
+  }, document)
 }
 
 async function startSupervisor() {
@@ -207,6 +457,22 @@ async function startSupervisor() {
 
 async function issueHubTicket(supervisorUrl) {
   const response = await fetch(`${supervisorUrl}/admin/hub/tickets`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${adminSecret}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      content: { manifestSha256: '0'.repeat(64), mods: [] },
+      leaderboardUserId: null,
+    }),
+  })
+  assert.equal(response.status, 201)
+  return response.json()
+}
+
+async function issuePrivateTicket(supervisorUrl) {
+  const response = await fetch(`${supervisorUrl}/admin/sessions`, {
     method: 'POST',
     headers: {
       authorization: `Bearer ${adminSecret}`,
@@ -261,9 +527,14 @@ async function registerAccount(username, password) {
   return (await response.json()).token
 }
 
-function startProcess(command, arguments_, extraEnvironment = {}) {
+function startProcess(
+  command,
+  arguments_,
+  extraEnvironment = {},
+  workingDirectory = frontendRoot,
+) {
   return spawn(command, arguments_, {
-    cwd: frontendRoot,
+    cwd: workingDirectory,
     env: { ...process.env, ...extraEnvironment },
     stdio: 'ignore',
   })

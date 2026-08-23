@@ -8,8 +8,8 @@ public sealed record WebGameSaveInspection(int FormatVersion, long Size, string 
 
 public static class WebGameSaveInspector
 {
-    public const int FormatVersion = 4;
-    public const int LegacyFormatVersion = 3;
+    public const int FormatVersion = 5;
+    private static readonly int[] LegacyFormatVersions = [1, 2, 3, 4];
     public const int MaxDocumentBytes = 8 * 1024 * 1024;
     private const int MaxNodes = 250_000;
 
@@ -49,61 +49,71 @@ public static class WebGameSaveInspector
             var root = RequireObject(parsed.RootElement, "browser game save");
             if (!root.TryGetProperty("schemaVersion", out var schemaVersion) ||
                 !schemaVersion.TryGetInt32(out var version) ||
-                (version != FormatVersion && version != LegacyFormatVersion))
+                (version != FormatVersion && !LegacyFormatVersions.Contains(version)))
             {
                 throw new InvalidDataException("The browser game save schema version is not supported.");
             }
             inspectedFormatVersion = version;
-            RequireExactProperties(
-                root,
-                "browser game save",
-                version == FormatVersion
-                    ? ["integrity", "loadedBoneyard", "mods", "modState", "schemaVersion", "simulation", "summary"]
-                    : ["loadedBoneyard", "mods", "modState", "schemaVersion", "simulation", "summary"]);
             if (version == FormatVersion)
             {
+                RequireExactProperties(
+                    root,
+                    "browser game save",
+                    "continuation",
+                    "integrity",
+                    "mods",
+                    "modState",
+                    "profile",
+                    "schemaVersion");
                 RequireMember(root, "integrity", "global-clean", "local-only");
+                var profile = RequireObject(root.GetProperty("profile"), "browser game save profile");
+                RequireExactProperties(
+                    profile,
+                    "browser game save profile",
+                    "economy",
+                    "hagathaRuntime");
+                RequireObject(profile.GetProperty("economy"), "browser game save profile economy");
+                RequireObject(
+                    profile.GetProperty("hagathaRuntime"),
+                    "browser game save profile Hagatha runtime");
+                var continuation = root.GetProperty("continuation");
+                if (continuation.ValueKind == JsonValueKind.Object)
+                {
+                    RequireExactProperties(
+                        continuation,
+                        "browser game save continuation",
+                        "loadedBoneyard",
+                        "simulation",
+                        "summary");
+                    ValidateContinuation(
+                        continuation.GetProperty("summary"),
+                        continuation.GetProperty("simulation"),
+                        continuation.GetProperty("loadedBoneyard"));
+                }
+                else if (continuation.ValueKind != JsonValueKind.Null)
+                {
+                    throw new InvalidDataException(
+                        "The browser game save continuation must be an object or null.");
+                }
             }
-
-            var summary = RequireObject(root.GetProperty("summary"), "browser game save summary");
-            RequireExactProperties(
-                summary,
-                "browser game save summary",
-                "character",
-                "phase",
-                "playerId",
-                "savedAtTick",
-                "worldKind");
-            var character = RequireObject(
-                summary.GetProperty("character"),
-                "browser game save character");
-            RequireExactProperties(
-                character,
-                "browser game save character",
-                "discipline",
-                "displayName",
-                "element");
-            RequireMember(character, "discipline", "arcane", "body", "mind");
-            RequireMember(character, "element", "air", "earth", "ether", "fire", "water");
-            RequireString(character, "displayName", 64);
-            RequireString(summary, "playerId", 128);
-            RequireMember(summary, "phase", "hub", "active");
-            RequireMember(summary, "worldKind", "hub", "boneyard");
-            if (!summary.GetProperty("savedAtTick").TryGetInt64(out var savedAtTick) ||
-                savedAtTick < 0)
+            else
             {
-                throw new InvalidDataException("The browser game save tick is invalid.");
-            }
-            if (root.GetProperty("simulation").ValueKind != JsonValueKind.Object)
-            {
-                throw new InvalidDataException("The browser game save simulation is invalid.");
-            }
-            var worldKind = summary.GetProperty("worldKind").GetString();
-            var loadedKind = root.GetProperty("loadedBoneyard").ValueKind;
-            if ((worldKind == "hub" && loadedKind != JsonValueKind.Null) ||
-                (worldKind == "boneyard" && loadedKind != JsonValueKind.Object))
-            {
-                throw new InvalidDataException("The browser game save world and Boneyard disagree.");
+                RequireExactProperties(
+                    root,
+                    "browser game save",
+                    version switch
+                    {
+                        1 => ["loadedBoneyard", "schemaVersion", "simulation", "summary"],
+                        2 or 3 => ["loadedBoneyard", "mods", "modState", "schemaVersion", "simulation", "summary"],
+                        4 => ["integrity", "loadedBoneyard", "mods", "modState", "schemaVersion", "simulation", "summary"],
+                        _ => throw new InvalidDataException(
+                            "The browser game save schema version is not supported.")
+                    });
+                if (version == 4) RequireMember(root, "integrity", "global-clean", "local-only");
+                ValidateContinuation(
+                    root.GetProperty("summary"),
+                    root.GetProperty("simulation"),
+                    root.GetProperty("loadedBoneyard"));
             }
             if (CountNodes(root, 0) > MaxNodes)
             {
@@ -115,6 +125,52 @@ public static class WebGameSaveInspector
             inspectedFormatVersion,
             bytes.Length,
             Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant());
+    }
+
+    private static void ValidateContinuation(
+        JsonElement summaryValue,
+        JsonElement simulation,
+        JsonElement loadedBoneyard)
+    {
+        var summary = RequireObject(summaryValue, "browser game save summary");
+        RequireExactProperties(
+            summary,
+            "browser game save summary",
+            "character",
+            "phase",
+            "playerId",
+            "savedAtTick",
+            "worldKind");
+        var character = RequireObject(
+            summary.GetProperty("character"),
+            "browser game save character");
+        RequireExactProperties(
+            character,
+            "browser game save character",
+            "discipline",
+            "displayName",
+            "element");
+        RequireMember(character, "discipline", "arcane", "body", "mind");
+        RequireMember(character, "element", "air", "earth", "ether", "fire", "water");
+        RequireString(character, "displayName", 64);
+        RequireString(summary, "playerId", 128);
+        RequireMember(summary, "phase", "hub", "active");
+        RequireMember(summary, "worldKind", "hub", "boneyard");
+        if (!summary.GetProperty("savedAtTick").TryGetInt64(out var savedAtTick) ||
+            savedAtTick < 0)
+        {
+            throw new InvalidDataException("The browser game save tick is invalid.");
+        }
+        if (simulation.ValueKind != JsonValueKind.Object)
+        {
+            throw new InvalidDataException("The browser game save simulation is invalid.");
+        }
+        var worldKind = summary.GetProperty("worldKind").GetString();
+        if ((worldKind == "hub" && loadedBoneyard.ValueKind != JsonValueKind.Null) ||
+            (worldKind == "boneyard" && loadedBoneyard.ValueKind != JsonValueKind.Object))
+        {
+            throw new InvalidDataException("The browser game save world and Boneyard disagree.");
+        }
     }
 
     private static JsonElement RequireObject(JsonElement value, string field)

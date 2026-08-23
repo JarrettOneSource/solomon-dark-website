@@ -1,6 +1,11 @@
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
-import type { PlayerCharacterConfig } from '../core-kernels/player-character.ts'
 import {
+  createIdlePlayerPrimaryCast,
+  type PlayerCharacterConfig,
+  type PlayerPrimaryCastState,
+} from '../core-kernels/player-character.ts'
+import {
+  archiveCompletedRunEconomy,
   createNativeUnforgeBonuses,
   hubEconomyInventoryIsValid,
   type HubEconomyState,
@@ -8,21 +13,34 @@ import {
 import {
   applyNativeHagathaPurchaseRuntime,
   createNativeHagathaRuntimeState,
+  type NativeHagathaRuntimeState,
 } from '../core-kernels/native-hagatha-effects.ts'
+import { createNativeRng } from '../core-kernels/native-rng.ts'
 import {
   nativeWeldBuild,
   nativeWeldComponentRanksForBuild,
+  type PlayerSkillBookComponent,
+  type PlayerStatBookComponent,
 } from '../core-kernels/player-progression.ts'
+import {
+  createPlayerSkillRuntime,
+  refreshPlayerSkillRuntime,
+  type PlayerSkillRuntimeComponent,
+} from '../core-kernels/player-skill-runtime.ts'
+import { createNativeHallOfFameRun } from '../core-kernels/hall-of-fame-score.ts'
 import type { GameContentIdentity, LuaConsoleValue } from '../protocol/game-protocol.ts'
 import {
+  gameSimulationDurableProfileEconomy,
   removePlayerCharacter,
   type GameSimulationState,
 } from '../core-server/game-simulation.ts'
+import { replacePlayerEconomy } from '../core-server/player-entity-store.ts'
 import {
   HubStudentPopulationState,
   type HubStudentPopulationOptions,
 } from '../core-server/hub-students.ts'
 import { HubWorldRuntime, type HubWorldState } from '../core-server/hub-world.ts'
+import { createBoneyardWorld, type BoneyardWorldState } from '../core-server/boneyard-world.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
 import {
   MAX_WEB_GAME_SAVE_JSON_DEPTH,
@@ -30,6 +48,7 @@ import {
   MAX_WEB_GAME_SAVE_BYTES,
   WEB_GAME_SAVE_SCHEMA_VERSION,
   type GameSaveIntegrity,
+  type ParsedGameSaveContinuation,
   onlyKeys,
   parseGameSaveDocument,
   record,
@@ -42,6 +61,23 @@ export interface CreateGameSaveDocumentOptions {
   readonly modState: Readonly<Record<string, Readonly<Record<string, LuaConsoleValue>>>>
   readonly playerId: string
   readonly state: GameSimulationState
+}
+
+export interface CreateGameProfileSaveDocumentOptions {
+  readonly integrity: GameSaveIntegrity
+  readonly mods: readonly GameContentIdentity[]
+  readonly modState: Readonly<Record<string, Readonly<Record<string, LuaConsoleValue>>>>
+  readonly playerId: string
+  readonly state: GameSimulationState
+}
+
+export interface RestoredGameSaveProfile {
+  readonly continuation: ParsedGameSaveContinuation | null
+  readonly economy: HubEconomyState
+  readonly hagathaRuntime: NativeHagathaRuntimeState
+  readonly integrity: GameSaveIntegrity
+  readonly mods: readonly GameContentIdentity[]
+  readonly modState: Readonly<Record<string, Readonly<Record<string, LuaConsoleValue>>>>
 }
 
 export interface RestoredGameSaveDocument {
@@ -84,6 +120,29 @@ const PLAYER_STORE_KEYS = [
   'skillRuntimes',
   'statBooks',
 ] as const
+const LEGACY_PLAYER_STORE_KEYS = [
+  ...PLAYER_STORE_KEYS,
+] as const
+const ECONOMY_KEYS = [
+  'actionFeedback',
+  'backpack',
+  'charmCapacity',
+  'dowsingFee',
+  'dowsingOffers',
+  'equipment',
+  'firstMixedSelectors',
+  'fomentiusStock',
+  'gold',
+  'hagathaBundleSelectors',
+  'nextItemId',
+  'nextOfferId',
+  'ownedPerkSelectors',
+  'revision',
+  'rng',
+  'storage',
+  'tonicPurchases',
+  'unforgeBonuses',
+] as const
 const HUB_WORLD_KEYS = [
   'ambient',
   'collisionRngState',
@@ -107,21 +166,7 @@ const encoder = new TextEncoder()
 export function createGameSaveDocument(
   options: CreateGameSaveDocumentOptions,
 ): string {
-  let ownerState = options.state
-  for (const { playerId } of options.state.playerEntities.identities) {
-    if (playerId !== options.playerId) {
-      ownerState = removePlayerCharacter(ownerState, playerId)
-    }
-  }
-  const ownerIndex = ownerState.playerEntities.identities.findIndex(
-    ({ playerId }) => playerId === options.playerId,
-  )
-  if (ownerIndex < 0 || ownerState.playerEntities.identities.length !== 1) {
-    throw new Error('game save owner is absent from authoritative state')
-  }
-  if (!hubEconomyInventoryIsValid(ownerState.playerEntities.economies[ownerIndex]!)) {
-    throw new Error('game save owner inventory is invalid')
-  }
+  const { ownerIndex, ownerState } = ownerProjection(options.state, options.playerId)
   if (ownerState.run.phase === 'game-over' || ownerState.run.phase === 'loadout') {
     throw new Error(`game save cannot checkpoint ${ownerState.run.phase}`)
   }
@@ -135,39 +180,92 @@ export function createGameSaveDocument(
       ? serializeHubWorld(ownerState.world)
       : ownerState.world,
   }
-  const document = JSON.stringify({
+  return encodeDocument({
+    continuation: {
+      loadedBoneyard: options.loadedBoneyard,
+      simulation,
+      summary: {
+        character,
+        phase: ownerState.run.phase,
+        playerId: options.playerId,
+        savedAtTick: ownerState.tick,
+        worldKind: ownerState.world.kind,
+      },
+    },
     integrity: options.integrity,
-    loadedBoneyard: options.loadedBoneyard,
     mods: options.mods,
     modState: options.modState,
-    schemaVersion: WEB_GAME_SAVE_SCHEMA_VERSION,
-    simulation,
-    summary: {
-      character,
-      phase: ownerState.run.phase,
-      playerId: options.playerId,
-      savedAtTick: ownerState.tick,
-      worldKind: ownerState.world.kind,
+    profile: {
+      economy: gameSimulationDurableProfileEconomy(ownerState, options.playerId),
+      hagathaRuntime: ownerState.playerEntities.progressions[ownerIndex]!.hagathaRuntime,
     },
   })
-  if (encoder.encode(document).byteLength > MAX_WEB_GAME_SAVE_BYTES) {
+}
+
+export function createGameProfileSaveDocument(
+  options: CreateGameProfileSaveDocumentOptions,
+): string {
+  const { ownerIndex, ownerState } = ownerProjection(options.state, options.playerId)
+  return encodeDocument({
+    continuation: null,
+    integrity: options.integrity,
+    mods: options.mods,
+    modState: options.modState,
+    profile: {
+      economy: gameSimulationDurableProfileEconomy(ownerState, options.playerId),
+      hagathaRuntime: ownerState.playerEntities.progressions[ownerIndex]!.hagathaRuntime,
+    },
+  })
+}
+
+function encodeDocument(document: Omit<Record<string, unknown>, 'schemaVersion'>): string {
+  const encoded = JSON.stringify({ ...document, schemaVersion: WEB_GAME_SAVE_SCHEMA_VERSION })
+  if (encoder.encode(encoded).byteLength > MAX_WEB_GAME_SAVE_BYTES) {
     throw new Error('game save exceeds its size limit')
   }
-  return document
+  return encoded
+}
+
+function ownerProjection(
+  state: GameSimulationState,
+  playerId: string,
+): { readonly ownerIndex: number; readonly ownerState: GameSimulationState } {
+  let ownerState = state
+  for (const identity of state.playerEntities.identities) {
+    if (identity.playerId !== playerId) {
+      ownerState = removePlayerCharacter(ownerState, identity.playerId)
+    }
+  }
+  const ownerIndex = ownerState.playerEntities.identities.findIndex(
+    identity => identity.playerId === playerId,
+  )
+  if (ownerIndex < 0 || ownerState.playerEntities.identities.length !== 1) {
+    throw new Error('game save owner is absent from authoritative state')
+  }
+  if (!hubEconomyInventoryIsValid(ownerState.playerEntities.economies[ownerIndex]!)) {
+    throw new Error('game save owner inventory is invalid')
+  }
+  return { ownerIndex, ownerState }
 }
 
 export function restoreGameSaveDocument(document: string): RestoredGameSaveDocument {
   const parsed = parseGameSaveDocument(document)
   assertBoundedJsonTree(JSON.parse(document))
-  const rawState = record(parsed.simulation, 'game save simulation')
+  const continuation = parsed.continuation
+  if (continuation === null) throw new Error('game save has no resumable continuation')
+  const rawState = normalizeSimulation(
+    continuation.simulation,
+    continuation.loadedBoneyard,
+    continuation.summary.playerId,
+  )
   const modIds = new Set(parsed.mods.map(mod => mod.id.toLowerCase()))
   if (Object.keys(parsed.modState).some(modId => !modIds.has(modId.toLowerCase()))) {
     throw new Error('game save state belongs to an inactive mod')
   }
   onlyKeys(rawState, 'game save simulation', SIMULATION_KEYS)
-  const playerEntities = validatePlayerStore(rawState.playerEntities, parsed.summary.playerId)
+  const playerEntities = validatePlayerStore(rawState.playerEntities, continuation.summary.playerId)
   const rawRun = record(rawState.run, 'game save run')
-  if (rawRun.phase !== parsed.summary.phase) throw new Error('game save phase summary drifted')
+  if (rawRun.phase !== continuation.summary.phase) throw new Error('game save phase summary drifted')
   if (!Number.isSafeInteger(rawState.tick) || Number(rawState.tick) < 0) {
     throw new Error('game save simulation tick is invalid')
   }
@@ -176,7 +274,9 @@ export function restoreGameSaveDocument(document: string): RestoredGameSaveDocum
     || Number(rawState.hallOfFameClockStartedAtTick) < 0
     || Number(rawState.hallOfFameClockStartedAtTick) > Number(rawState.tick)
   ) throw new Error('game save Hall clock is invalid')
-  if (rawState.tick !== parsed.summary.savedAtTick) throw new Error('game save tick summary drifted')
+  if (rawState.tick !== continuation.summary.savedAtTick) {
+    throw new Error('game save tick summary drifted')
+  }
   if (!Array.isArray(rawState.modEffects) || rawState.modEffects.length !== 0) {
     throw new Error('game save may not persist active mod effects')
   }
@@ -184,17 +284,19 @@ export function restoreGameSaveDocument(document: string): RestoredGameSaveDocum
     throw new Error('game save mod consumable sequence is invalid')
   }
   const rawWorld = record(rawState.world, 'game save world')
-  if (rawWorld.kind !== parsed.summary.worldKind) throw new Error('game save world summary drifted')
+  if (rawWorld.kind !== continuation.summary.worldKind) {
+    throw new Error('game save world summary drifted')
+  }
 
   let world: GameSimulationState['world']
   let loadedBoneyard: LoadedBoneyard | null
   if (rawWorld.kind === 'hub') {
-    if (parsed.loadedBoneyard !== null) throw new Error('Hub game save carries a Boneyard')
+    if (continuation.loadedBoneyard !== null) throw new Error('Hub game save carries a Boneyard')
     onlyKeys(rawWorld, 'game save Hub world', HUB_WORLD_KEYS)
     const participants = record(rawWorld.participants, 'game save Hub participants')
     if (
       Object.keys(participants).length !== 1
-      || !(parsed.summary.playerId in participants)
+      || !(continuation.summary.playerId in participants)
     ) throw new Error('game save owner is not the sole Hub participant')
     const population = parseHubStudentPopulation(rawWorld.studentPopulation)
     world = {
@@ -206,7 +308,7 @@ export function restoreGameSaveDocument(document: string): RestoredGameSaveDocum
     } as HubWorldState
     loadedBoneyard = null
   } else if (rawWorld.kind === 'boneyard') {
-    loadedBoneyard = parseLoadedBoneyard(parsed.loadedBoneyard)
+    loadedBoneyard = parseLoadedBoneyard(continuation.loadedBoneyard)
     if (
       rawWorld.runId !== loadedBoneyard.runId
       || rawRun.runId !== loadedBoneyard.runId
@@ -226,18 +328,308 @@ export function restoreGameSaveDocument(document: string): RestoredGameSaveDocum
     world,
   } as unknown as GameSimulationState
   const config = state.playerEntities.configs[0]
-  if (!sameCharacter(config, parsed.summary.character)) {
+  if (!sameCharacter(config, continuation.summary.character)) {
     throw new Error('game save owner character summary drifted')
   }
-  createGameSnapshot(state, parsed.summary.playerId)
+  createGameSnapshot(state, continuation.summary.playerId)
   return {
     integrity: parsed.integrity,
     loadedBoneyard,
     mods: parsed.mods,
     modState: parsed.modState,
-    playerId: parsed.summary.playerId,
+    playerId: continuation.summary.playerId,
     state,
   }
+}
+
+export function restoreGameSaveProfile(document: string): RestoredGameSaveProfile {
+  const parsed = parseGameSaveDocument(document)
+  assertBoundedJsonTree(JSON.parse(document))
+  let economy = normalizeEconomy(parsed.profile.economy)
+  if (parsed.sourceSchemaVersion < WEB_GAME_SAVE_SCHEMA_VERSION) {
+    economy = archiveCompletedRunEconomy(economy, {
+      displayName: parsed.continuation?.summary.character.displayName ?? 'Wizard',
+      groundGold: 0,
+      groundItems: [],
+      transferCarriedItems: false,
+    })
+  }
+  const hagathaRuntime = parsed.profile.hagathaRuntime === undefined
+    ? applyNativeHagathaPurchaseRuntime(
+        createNativeHagathaRuntimeState(),
+        economy.ownedPerkSelectors,
+      )
+    : parseHagathaRuntime(parsed.profile.hagathaRuntime, 0)
+  return {
+    continuation: parsed.continuation,
+    economy,
+    hagathaRuntime,
+    integrity: parsed.integrity,
+    mods: parsed.mods,
+    modState: parsed.modState,
+  }
+}
+
+export function hydrateGameSaveProfile(
+  state: GameSimulationState,
+  playerId: string,
+  profile: RestoredGameSaveProfile,
+): GameSimulationState {
+  const economyStore = replacePlayerEconomy(state.playerEntities, playerId, profile.economy)
+  if (economyStore === state.playerEntities) {
+    throw new Error('game save profile owner is absent from the fresh game')
+  }
+  const ownerIndex = economyStore.identities.findIndex(identity => identity.playerId === playerId)
+  const progressions = [...economyStore.progressions]
+  progressions[ownerIndex] = {
+    ...progressions[ownerIndex]!,
+    hagathaRuntime: profile.hagathaRuntime,
+  }
+  const playerEntities = { ...economyStore, progressions: Object.freeze(progressions) }
+  const hydrated = { ...state, playerEntities }
+  createGameSnapshot(hydrated, playerId)
+  return hydrated
+}
+
+function normalizeSimulation(
+  value: unknown,
+  loadedBoneyardValue: unknown,
+  playerId: string,
+): Record<string, unknown> {
+  const source = record(value, 'game save simulation')
+  rejectUnexpectedKeys(source, 'game save simulation', [
+    ...SIMULATION_KEYS,
+    'playerOfferRng',
+  ])
+  const gameRng = source.gameRng ?? source.playerOfferRng
+  if (gameRng === undefined) throw new Error('game save simulation is missing its game RNG')
+  return {
+    accumulatorSeconds: source.accumulatorSeconds,
+    combatRng: source.combatRng ?? createNativeRng(0),
+    gameRng,
+    hallOfFameClockStartedAtTick: source.hallOfFameClockStartedAtTick ?? 0,
+    levelUpBarrier: source.levelUpBarrier,
+    lightProviderOrder: source.lightProviderOrder,
+    modEffects: source.modEffects ?? [],
+    nextLevelUpBarrierId: source.nextLevelUpBarrierId,
+    nextModConsumableUseId: source.nextModConsumableUseId ?? 1,
+    playerEntities: normalizePlayerStore(source.playerEntities),
+    primarySpells: source.primarySpells,
+    run: normalizeRun(source.run),
+    secondaryAbilities: source.secondaryAbilities,
+    tick: source.tick,
+    world: normalizeWorld(source.world, loadedBoneyardValue, playerId),
+  }
+}
+
+function normalizePlayerStore(value: unknown): GameSimulationState['playerEntities'] {
+  const source = record(value, 'game save players')
+  rejectUnexpectedKeys(source, 'game save players', LEGACY_PLAYER_STORE_KEYS)
+  if (
+    !Array.isArray(source.configs)
+    || !Array.isArray(source.economies)
+    || !Array.isArray(source.primaryCasts)
+    || !Array.isArray(source.skillBooks)
+    || !Array.isArray(source.statBooks)
+  ) throw new Error('game save player components are invalid')
+  const count = source.configs.length
+  if (
+    source.economies.length !== count
+    || source.primaryCasts.length !== count
+    || source.skillBooks.length !== count
+    || source.statBooks.length !== count
+  ) throw new Error('game save player component cardinality drifted')
+
+  const economies = source.economies.map(normalizeEconomy)
+  const primaryCasts: PlayerPrimaryCastState[] = []
+  const skillBooks: PlayerSkillBookComponent[] = []
+  const skillRuntimes: PlayerSkillRuntimeComponent[] = []
+  const persistedRuntimes = Array.isArray(source.skillRuntimes) ? source.skillRuntimes : null
+  if (persistedRuntimes && persistedRuntimes.length !== count) {
+    throw new Error('game save skill runtime cardinality drifted')
+  }
+  for (let index = 0; index < count; index += 1) {
+    const legacyBook = record(source.skillBooks[index], `game save skill book ${index}`)
+    let skillBook = normalizeSkillBook(legacyBook, index)
+    const statBook = source.statBooks[index] as PlayerStatBookComponent
+    const economy = economies[index]!
+    let runtime: PlayerSkillRuntimeComponent
+    if (persistedRuntimes) {
+      runtime = persistedRuntimes[index] as PlayerSkillRuntimeComponent
+    } else {
+      const created = createPlayerSkillRuntime(skillBook, statBook, economy)
+      skillBook = created.skillBook
+      const concentrations = Array.isArray(legacyBook.concentrationSkillIds)
+        ? legacyBook.concentrationSkillIds
+        : []
+      runtime = {
+        ...created.runtime,
+        concentrationSkillIdA: numericOrNull(concentrations[0]),
+        concentrationSkillIdB: numericOrNull(concentrations[1]),
+        nextConcentrationReplacementSlot: legacyBook.nextConcentrationSlot === 1 ? 'b' : 'a',
+      }
+    }
+    const refreshed = refreshPlayerSkillRuntime(runtime, skillBook, statBook, economy)
+    primaryCasts.push(normalizePrimaryCast(source.primaryCasts[index], refreshed.skillBook))
+    skillBooks.push(refreshed.skillBook)
+    skillRuntimes.push(refreshed.runtime)
+  }
+
+  return {
+    ...source,
+    economies,
+    primaryCasts,
+    skillBooks,
+    skillRuntimes,
+  } as unknown as GameSimulationState['playerEntities']
+}
+
+function normalizeEconomy(value: unknown): HubEconomyState {
+  const source = record(value, 'game save player economy')
+  rejectUnexpectedKeys(source, 'game save player economy', ECONOMY_KEYS)
+  const feedback = source.actionFeedback && typeof source.actionFeedback === 'object'
+    && !('unforgeOutcome' in source.actionFeedback)
+    ? { ...source.actionFeedback, unforgeOutcome: null }
+    : source.actionFeedback
+  const restored = {
+    ...source,
+    actionFeedback: feedback,
+    unforgeBonuses: source.unforgeBonuses ?? createNativeUnforgeBonuses(),
+  } as unknown as HubEconomyState
+  if (!hubEconomyInventoryIsValid(restored)) {
+    throw new Error('game save player economy inventory is invalid')
+  }
+  return restored
+}
+
+function normalizeSkillBook(
+  source: Record<string, unknown>,
+  index: number,
+): PlayerSkillBookComponent {
+  const permanentRanks = array(source.permanentRanks, 'game save permanent skill ranks')
+  const effectiveRanks = array(source.effectiveRanks, 'game save effective skill ranks') as number[]
+  const learnedSkillOrder = Array.isArray(source.learnedSkillOrder)
+    ? source.learnedSkillOrder
+    : permanentRanks.flatMap((rank, skillId) => (
+        Number(rank) > 0 && skillId >= 8 && skillId <= 79 ? [skillId] : []
+      ))
+  const skillQuickbar = Array.isArray(source.skillQuickbar)
+    ? source.skillQuickbar
+    : array(source.secondaryBelt, 'game save secondary belt')
+  if (skillQuickbar.length !== 8) throw new Error('game save skill quickbar is invalid')
+  const weldBuildId = numericOrNull(source.weldBuildId ?? source.activeWeldBuildId)
+  const build = weldBuildId === null ? null : nativeWeldBuild(weldBuildId)
+  const weldComponentRanks = source.weldComponentRanks === undefined
+    ? build === null
+      ? null
+      : nativeWeldComponentRanksForBuild(effectiveRanks.map(Number), build)
+    : source.weldComponentRanks === null
+      ? null
+      : parseWeldComponentRanks(source.weldComponentRanks, index)
+  if ((build === null) !== (weldComponentRanks === null)) {
+    throw new Error(`game save player skill book ${index} Weld cache is invalid`)
+  }
+  return {
+    advancedUnlocks: array(source.advancedUnlocks, 'game save advanced unlocks') as boolean[],
+    disciplineRoot: finiteNumber(source.disciplineRoot, 'game save discipline root'),
+    effectiveRanks,
+    elementRoot: finiteNumber(source.elementRoot, 'game save element root'),
+    learnedSkillOrder: learnedSkillOrder as number[],
+    permanentRanks: permanentRanks as number[],
+    primarySkillId: finiteNumber(
+      source.primarySkillId,
+      'game save primary skill',
+    ) as PlayerSkillBookComponent['primarySkillId'],
+    skillQuickbar: skillQuickbar as unknown as PlayerSkillBookComponent['skillQuickbar'],
+    weldBuildId,
+    weldComponentRanks,
+  }
+}
+
+function normalizePrimaryCast(
+  value: unknown,
+  skillBook: PlayerSkillBookComponent,
+): PlayerPrimaryCastState {
+  const source = record(value, 'game save primary cast')
+  return {
+    ...createIdlePlayerPrimaryCast(),
+    ...source,
+    oneShotAttackPoseHeld: source.oneShotAttackPoseHeld === true,
+    selectedPrimaryId: typeof source.selectedPrimaryId === 'number'
+      ? source.selectedPrimaryId
+      : skillBook.primarySkillId === 52
+        ? skillBook.weldBuildId ?? -1
+        : skillBook.primarySkillId,
+  } as PlayerPrimaryCastState
+}
+
+function normalizeRun(value: unknown): Record<string, unknown> {
+  const source = record(value, 'game save run')
+  return {
+    ...source,
+    gameOverExitKind: source.gameOverExitKind ?? null,
+    loadoutReadyPlayerIds: source.loadoutReadyPlayerIds ?? [],
+  }
+}
+
+function normalizeWorld(
+  value: unknown,
+  loadedBoneyardValue: unknown,
+  playerId: string,
+): unknown {
+  const source = record(value, 'game save world')
+  if (source.kind !== 'boneyard') return source
+  const loadedBoneyard = parseLoadedBoneyard(loadedBoneyardValue)
+  const defaults = createBoneyardWorld(loadedBoneyard)
+  const enemies = record(source.enemies, 'game save Boneyard enemies')
+  const waves = source.waves === null
+    ? null
+    : record(source.waves, 'game save Boneyard waves')
+  return {
+    ...source,
+    enemies: {
+      ...enemies,
+      locomotionRngState: enemies.locomotionRngState ?? defaults.enemies.locomotionRngState,
+      steeringRngState: enemies.steeringRngState ?? defaults.enemies.steeringRngState,
+    },
+    enemyWorldFeedback: source.enemyWorldFeedback ?? defaults.enemyWorldFeedback,
+    hallOfFameRuns: source.hallOfFameRuns ?? {
+      [playerId]: createNativeHallOfFameRun(0),
+    },
+    lanternPosition: source.lanternPosition ?? defaults.lanternPosition,
+    waves: waves === null
+      ? null
+      : {
+          ...waves,
+          openingBursts: waves.openingBursts ?? [],
+          openingReleaseThreshold: waves.openingReleaseThreshold ?? 0,
+        },
+  } as BoneyardWorldState
+}
+
+function rejectUnexpectedKeys(
+  source: Record<string, unknown>,
+  field: string,
+  allowed: readonly string[],
+): void {
+  const members = new Set(allowed)
+  for (const key of Object.keys(source)) {
+    if (!members.has(key)) throw new Error(`${field} has unexpected field ${key}`)
+  }
+}
+
+function array(value: unknown, field: string): unknown[] {
+  if (!Array.isArray(value)) throw new Error(`${field} is invalid`)
+  return value
+}
+
+function finiteNumber(value: unknown, field: string): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`${field} is invalid`)
+  return value
+}
+
+function numericOrNull(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
 function serializeHubWorld(world: HubWorldState): Omit<HubWorldState, 'runtime' | 'studentPopulation'> & {

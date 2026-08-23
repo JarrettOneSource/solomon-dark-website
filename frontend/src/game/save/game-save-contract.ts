@@ -9,8 +9,8 @@ import type {
   LuaConsoleValue,
 } from '../protocol/game-protocol.ts'
 
-export const WEB_GAME_SAVE_SCHEMA_VERSION = 4
-export const LEGACY_WEB_GAME_SAVE_SCHEMA_VERSION = 3
+export const WEB_GAME_SAVE_SCHEMA_VERSION = 5
+export const LEGACY_WEB_GAME_SAVE_SCHEMA_VERSIONS = [1, 2, 3, 4] as const
 export const WEB_GAME_SAVE_SLOT = 0
 export const MAX_WEB_GAME_SAVE_BYTES = 8 * 1024 * 1024
 /** Accommodates the 32-level Sack wire bound plus the complete save-document envelope. */
@@ -26,27 +26,43 @@ export interface GameSaveSummary {
 }
 
 export interface GameSaveCheckpoint {
-  readonly document: string | null
+  readonly document: string
   readonly reason: 'game-over' | 'progress'
   readonly sequence: number
 }
 
-export interface ResumableGameSave {
+export type GameSaveIntent = 'new-game' | 'resume'
+
+export interface GameProfileSave {
   readonly document: string
   readonly integrity: GameSaveIntegrity
   readonly mods: readonly GameContentIdentity[]
+}
+
+export interface ResumableGameSave extends GameProfileSave {
   readonly summary: GameSaveSummary
 }
 
 export type GameSaveIntegrity = 'global-clean' | 'local-only'
 
-export interface ParsedGameSaveDocument {
-  readonly integrity: GameSaveIntegrity
+export interface ParsedGameSaveProfile {
+  readonly economy: unknown
+  readonly hagathaRuntime: unknown
+}
+
+export interface ParsedGameSaveContinuation {
   readonly loadedBoneyard: unknown
-  readonly mods: readonly GameContentIdentity[]
-  readonly modState: Readonly<Record<string, Readonly<Record<string, LuaConsoleValue>>>>
   readonly simulation: unknown
   readonly summary: GameSaveSummary
+}
+
+export interface ParsedGameSaveDocument {
+  readonly continuation: ParsedGameSaveContinuation | null
+  readonly integrity: GameSaveIntegrity
+  readonly mods: readonly GameContentIdentity[]
+  readonly modState: Readonly<Record<string, Readonly<Record<string, LuaConsoleValue>>>>
+  readonly profile: ParsedGameSaveProfile
+  readonly sourceSchemaVersion: number
 }
 
 const encoder = new TextEncoder()
@@ -67,36 +83,121 @@ export function parseGameSaveDocument(document: string): ParsedGameSaveDocument 
   }
   const root = record(parsed, 'game save')
   const schemaVersion = root.schemaVersion
-  if (
-    schemaVersion !== WEB_GAME_SAVE_SCHEMA_VERSION
-    && schemaVersion !== LEGACY_WEB_GAME_SAVE_SCHEMA_VERSION
-  ) {
+  if (!knownGameSaveSchemaVersion(schemaVersion)) {
     throw new Error('game save schema version is not supported')
   }
+  return schemaVersion === WEB_GAME_SAVE_SCHEMA_VERSION
+    ? parseCurrentDocument(root)
+    : parseLegacyDocument(root, schemaVersion)
+}
+
+function knownGameSaveSchemaVersion(value: unknown): value is number {
+  return value === WEB_GAME_SAVE_SCHEMA_VERSION
+    || (LEGACY_WEB_GAME_SAVE_SCHEMA_VERSIONS as readonly unknown[]).includes(value)
+}
+
+function parseCurrentDocument(root: Record<string, unknown>): ParsedGameSaveDocument {
   onlyKeys(root, 'game save', [
-    ...(schemaVersion === WEB_GAME_SAVE_SCHEMA_VERSION ? ['integrity'] : []),
-    'loadedBoneyard',
+    'continuation',
+    'integrity',
     'mods',
     'modState',
+    'profile',
+    'schemaVersion',
+  ])
+  const profile = parseProfile(root.profile)
+  return {
+    continuation: root.continuation === null
+      ? null
+      : parseContinuation(root.continuation),
+    integrity: parseIntegrity(root.integrity),
+    mods: parseMods(root.mods),
+    modState: parseModState(root.modState),
+    profile,
+    sourceSchemaVersion: WEB_GAME_SAVE_SCHEMA_VERSION,
+  }
+}
+
+function parseLegacyDocument(
+  root: Record<string, unknown>,
+  schemaVersion: number,
+): ParsedGameSaveDocument {
+  onlyKeys(root, 'game save', [
+    ...(schemaVersion === 4 ? ['integrity'] : []),
+    'loadedBoneyard',
+    ...(schemaVersion >= 2 ? ['mods', 'modState'] : []),
     'schemaVersion',
     'simulation',
     'summary',
   ])
   const summary = parseSummary(root.summary)
-  const mods = parseMods(root.mods)
   if (!('simulation' in root) || !('loadedBoneyard' in root)) {
     throw new Error('game save is missing authoritative state')
   }
   return {
-    integrity: schemaVersion === LEGACY_WEB_GAME_SAVE_SCHEMA_VERSION
-      ? 'local-only'
-      : parseIntegrity(root.integrity),
-    loadedBoneyard: root.loadedBoneyard,
-    mods,
-    modState: parseModState(root.modState),
-    simulation: root.simulation,
-    summary,
+    continuation: {
+      loadedBoneyard: root.loadedBoneyard,
+      simulation: root.simulation,
+      summary,
+    },
+    integrity: schemaVersion === 4 ? parseIntegrity(root.integrity) : 'local-only',
+    mods: schemaVersion >= 2 ? parseMods(root.mods) : [],
+    modState: schemaVersion >= 2 ? parseModState(root.modState) : {},
+    profile: profileFromLegacySimulation(root.simulation, summary.playerId),
+    sourceSchemaVersion: schemaVersion,
   }
+}
+
+function parseProfile(value: unknown): ParsedGameSaveProfile {
+  const profile = record(value, 'game save profile')
+  onlyKeys(profile, 'game save profile', ['economy', 'hagathaRuntime'])
+  record(profile.economy, 'game save profile economy')
+  record(profile.hagathaRuntime, 'game save profile Hagatha runtime')
+  return {
+    economy: profile.economy,
+    hagathaRuntime: profile.hagathaRuntime,
+  }
+}
+
+function parseContinuation(value: unknown): ParsedGameSaveContinuation {
+  const continuation = record(value, 'game save continuation')
+  onlyKeys(continuation, 'game save continuation', [
+    'loadedBoneyard',
+    'simulation',
+    'summary',
+  ])
+  if (!('simulation' in continuation) || !('loadedBoneyard' in continuation)) {
+    throw new Error('game save continuation is missing authoritative state')
+  }
+  return {
+    loadedBoneyard: continuation.loadedBoneyard,
+    simulation: continuation.simulation,
+    summary: parseSummary(continuation.summary),
+  }
+}
+
+function profileFromLegacySimulation(
+  value: unknown,
+  playerId: string,
+): ParsedGameSaveProfile {
+  const simulation = record(value, 'game save simulation')
+  const players = record(simulation.playerEntities, 'game save players')
+  if (!Array.isArray(players.identities) || !Array.isArray(players.economies)) {
+    throw new Error('game save player profile is invalid')
+  }
+  const index = players.identities.findIndex((identity) => {
+    const entry = record(identity, 'game save player identity')
+    return entry.playerId === playerId
+  })
+  const economy = players.economies[index]
+  if (index < 0 || economy === undefined) throw new Error('game save profile owner is absent')
+  record(economy, 'game save profile economy')
+  const progressions = Array.isArray(players.progressions) ? players.progressions : []
+  const progression = progressions[index]
+  const hagathaRuntime = progression && typeof progression === 'object'
+    ? (progression as Record<string, unknown>).hagathaRuntime
+    : undefined
+  return { economy, hagathaRuntime }
 }
 
 function parseIntegrity(value: unknown): GameSaveIntegrity {
@@ -178,8 +279,8 @@ function validateModStateValue(value: unknown, depth: number): void {
   }
 }
 
-export function readGameSaveSummary(document: string): GameSaveSummary {
-  return parseGameSaveDocument(document).summary
+export function readGameSaveSummary(document: string): GameSaveSummary | null {
+  return parseGameSaveDocument(document).continuation?.summary ?? null
 }
 
 function parseSummary(value: unknown): GameSaveSummary {

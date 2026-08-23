@@ -9,7 +9,10 @@ import type { Duplex } from 'node:stream'
 
 import { WebSocket, WebSocketServer } from 'ws'
 
-import { GAME_PROTOCOL_NAME } from '../protocol/game-protocol.ts'
+import {
+  GAME_PROTOCOL_NAME,
+  GAME_WEBSOCKET_MAX_PAYLOAD_BYTES,
+} from '../protocol/game-protocol.ts'
 import { createBoneyardCatalog, type BoneyardCatalog } from './boneyard-catalog.ts'
 import {
   startGameHost,
@@ -173,7 +176,7 @@ export async function startGameSessionSupervisor(
 
   const websocketServer = new WebSocketServer({
     noServer: true,
-    maxPayload: 64 * 1024,
+    maxPayload: GAME_WEBSOCKET_MAX_PAYLOAD_BYTES,
     perMessageDeflate: GAME_WEBSOCKET_COMPRESSION,
   })
   websocketServer.on('error', (error) => {

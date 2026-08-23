@@ -11,7 +11,6 @@ export interface StoredGameSave {
 }
 
 export interface GameSaveStore {
-  clear(expectedRevision: number): Promise<void>
   read(): Promise<StoredGameSave | null>
   write(document: string, expectedRevision: number): Promise<StoredGameSave>
 }
@@ -29,10 +28,6 @@ export function createCloudGameSaveStore(): GameSaveStore {
     write: (document, expectedRevision) => api.gameSaves.put(
       WEB_GAME_SAVE_SLOT,
       { document, expectedRevision },
-    ),
-    clear: (expectedRevision) => api.gameSaves.remove(
-      WEB_GAME_SAVE_SLOT,
-      expectedRevision,
     ),
   }
 }
@@ -75,20 +70,6 @@ export function createLocalGameSaveStore(factory: IDBFactory = indexedDB): GameS
       store.put(record)
       await transactionDone(transaction)
       return record
-    },
-    async clear(expectedRevision) {
-      const db = await database
-      const transaction = db.transaction(LOCAL_STORE_NAME, 'readwrite')
-      const store = transaction.objectStore(LOCAL_STORE_NAME)
-      const existing = await requestResult<StoredGameSave | undefined>(
-        store.get(WEB_GAME_SAVE_SLOT),
-      )
-      if ((existing?.revision ?? 0) !== expectedRevision) {
-        transaction.abort()
-        throw new Error('Local game save changed in another tab.')
-      }
-      store.delete(WEB_GAME_SAVE_SLOT)
-      await transactionDone(transaction)
     },
   }
 }
