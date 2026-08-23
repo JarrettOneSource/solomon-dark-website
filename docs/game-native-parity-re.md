@@ -36064,6 +36064,36 @@ native row.
   still-advancing audible music channel, release, and see the newest sound gain
   restored with no page, console, or failed-response errors.
 
+### Implementation validation receipt
+
+- `GameAudioDirector` now retains the current user sound scalar and applies one
+  reversible sound-only master multiplier. `MainMenuScene` drives it in a
+  layout effect from Dark Cloud Pause, source-qualified gameplay Pause, and the
+  complete `levelUpModalActive` state. Inventory and Skill Book holds remain
+  deliberately excluded. The first Mac red failed exactly because
+  `setSoundMuted` did not exist; the green director matrix is `42/42`, and the
+  combined audio/pause matrix is `60/60`.
+- Final functional Website cutoff `593f7f1e97fdf03447c856796f14d01b9ca056ce`
+  and Mod Loader cutoff `76605ca62fdf6116c53c85fb5a9a2d47e4e239c5`
+  were materialized as those exact commits on the Mac mini. Mod Loader portable
+  static RE passed `494/494`.
+- Mac `smoke:game:skill-picker` proved the Hub and Boneyard picker predicates
+  `true`, their exact game master volumes `[0]`, Academy/Prelude music started
+  with no later pause event, and release restored `[1]`. Picker entry/choice
+  sources still advanced silently at their exact pitches; failed responses,
+  page errors, and console errors were empty.
+- Mac `smoke:game:pause` covered large/small Hub, Boneyard owner and waiting
+  peer, Settings handoff, disconnect release, and no-catch-up resume. Every
+  Pause surface reported the mute; Inventory and Skill Book reported false.
+  Browser ownership held ticks `1803..1859`, Boneyard owner tick `2968`, and
+  peer-owner tick `2969`, with no smoke errors.
+- The complete Mac canonical gate passed at the same functional cutoff:
+  backend/contracts and formatting, lint/boundaries, `1410/1410` broad game,
+  `61/61` ML, `48/48` party/chat, `36/36` Hall, `23/23` Hub UI, `5/5`
+  desktop, production build, media policy, and game-entry budget
+  `437184` raw / `123207` gzip. Log SHA-256 is
+  `cd15d05d49308ee4ea1248f42e41429ebaa2b1809cd00e593dc28dc1cc536a6b`.
+
 ## 2026-08-23 — Incoming party-invitation cue
 
 ### Reported smell and parity question
@@ -36098,6 +36128,22 @@ unchanged revisions, removal/reintroduction within a session, and session reset.
 The Mac party journey must invite, observe one decoded/started `click` request,
 refresh unrelated party state with no second request, deny, invite again under
 a new id, and require clean browser error arrays.
+
+### Implementation validation receipt
+
+- `party-invitation-audio.ts` owns a bounded 128-id session cursor and the exact
+  registry-zero `click` request. A nullable session cursor seeds whichever
+  party-state view arrives first, so reconnect history is silent even when the
+  initial state follows welcome. Revision-only updates, removal, and a recently
+  seen reintroduction are inert; each genuinely new id produces one request.
+- Focused party/chat coverage passed `48/48`. The built protocol-62 desktop and
+  mobile journeys each observed the first invite advance the click count to
+  `3` and the second to `4`, with no intervening snapshot replay. Both denial
+  and later acceptance retained their existing authoritative party semantics.
+- The old party smoke failed closed before feature assertions because its raw
+  protocol-62 input omitted required `viewportWidth`; the harness now sends the
+  strict current shape and rejects pending waits immediately on socket close.
+  This changes acceptance scaffolding only, not game input behavior.
 
 ## 2026-08-23 — Authoritative chat message over the speaking wizard
 
@@ -36168,3 +36214,39 @@ saves, Hall state, or Lua.
   move the actor/camera, observe full alpha then an intermediate fade alpha and
   final removal, verify another-region/outsider privacy, and finish with empty
   page, console, and unexpected-response arrays.
+
+### Implementation validation receipt
+
+- `world-speech-presentation.ts` owns the bounded latest-per-sender records and
+  monotonic hold/expiry deadlines. `GameChat` emits only the authoritative
+  received event while retaining transcript ownership. One shared
+  `NativeWorldSpeechLayer` renders the native group-6 bitmap glyphs, dark/gold
+  speech panel, and tail for local and remote players; Hub and Boneyard keep
+  active-region filtering, screen-space scale, resize, and teardown.
+- The integration sweep found that Boneyard nameplates omitted the secondary
+  camera-displacement term even though the world applied it. The refuted split
+  transform was replaced for both nameplates and speech with the actual final
+  `world.position`/scale in the same pass; focused source and projection tests
+  pin the shared transform.
+- Mac red began with missing presentation/renderer modules. Green coverage is
+  `19/19` world nameplate/speech plus the `48/48` party/chat matrix: all three
+  channels, local/remote binding, stale replacement, exact alpha boundaries,
+  64-speaker bound, wrapping and long words, unsupported-glyph no-fallback,
+  missing/off-region actors, and both renderer integrations.
+- Built protocol-62 desktop acceptance showed local Hub sequence `3` and remote
+  sequence `5` at alpha `1`, sampled the remote fade at
+  `0.7901000000014902`, observed its retirement, and showed local Boneyard
+  sequence `7` at alpha `1`. Mobile independently showed sequences `10`, `12`,
+  and `14`, remote fade `0.7750499999970197`, and retirement. Both finished
+  with zero sessions/players/parties/runs and empty page, console, HTTP failure,
+  and unexpected request-failure arrays.
+- Reviewed final screenshots: desktop Hub full/fading/Boneyard SHA-256 values
+  are `25264fb84539cd13f0efde3917520c5ded9b2a80f645ede334fd7135072f1301`,
+  `24a7d965d18a3da7065c9f6684e9aea4f39f559f7dafae92a1f993795115095b`,
+  and `df4dcf1416ff25dcececce2b6deed726b1737c2ce73f45382b9675e8ce185079`;
+  mobile Hub/Boneyard are
+  `22467228e6752d75eb3b86adcaa523426a2583811182b76964f44460610833f8`
+  and `cac8bf17b4204cd72c9ca6e4a3eec70474c9101bbeace05a5dfd0344e91bf4ba`.
+  The panel is visibly anchored above the corresponding wizard/nameplate in
+  both viewports. No member is browser-blocked and no native absence is
+  mislabeled as retail parity.
