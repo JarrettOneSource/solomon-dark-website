@@ -37,6 +37,7 @@ from .rollouts import (
     ExpertDataset,
     SeedStream,
     collect_expert_dataset,
+    expert_dataset_diagnostics,
     collect_policy_rollout,
     split_expert_dataset,
     state_tensors,
@@ -104,6 +105,14 @@ def bootstrap_policy(
         validation_fraction=configuration.validation_fraction,
         rng=np.random.default_rng(configuration.seed + 1),
     )
+    dataset_diagnostics = expert_dataset_diagnostics(dataset)
+    if (
+        dataset_diagnostics["interestingFraction"] < 0.5
+        or dataset_diagnostics["uniqueActions"]["movement"] < 2
+        or dataset_diagnostics["uniqueActions"]["target"] < 2
+        or dataset_diagnostics["uniqueActions"]["ability"] < 2
+    ):
+        raise RuntimeError(f"expert dataset diversity gate failed: {dataset_diagnostics}")
     device = torch.device("cpu")
     policy = PolicyV5.initialize(configuration.seed).to(device)
     optimizer = torch.optim.Adam(policy.main_parameters(), lr=configuration.learning_rate)
@@ -148,6 +157,7 @@ def bootstrap_policy(
             "bootstrapConfiguration": asdict(configuration),
             "bootstrapTrainingAccuracy": training_accuracy,
             "bootstrapValidationAccuracy": validation_accuracy,
+            "expertDatasetDiagnostics": dataset_diagnostics,
             "numpyVersion": np.__version__,
             "torchVersion": torch.__version__,
             "trainingKind": "web-semantic-expert-bootstrap-v5",
@@ -164,6 +174,7 @@ def bootstrap_policy(
         "trainingAccuracy": training_accuracy,
         "validationAccuracy": validation_accuracy,
         "lastBatch": asdict(metrics[-1]),
+        "datasetDiagnostics": dataset_diagnostics,
     }
     (output_directory / "bootstrap-report.json").write_text(
         json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8"

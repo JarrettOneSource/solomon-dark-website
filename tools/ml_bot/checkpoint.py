@@ -6,12 +6,14 @@ import json
 import os
 from pathlib import Path
 import struct
+import subprocess
 import tempfile
 from typing import Any, Mapping
 
 import numpy as np
 
 from .spec import POLICY_SPEC, TENSOR_SHAPES
+from .spec import REPOSITORY_ROOT
 
 MAGIC = b"SDMLV5\x00\x01"
 PREFIX_BYTES = len(MAGIC) + 4
@@ -141,3 +143,26 @@ def atomic_write(path: Path, payload: bytes) -> None:
     except BaseException:
         temporary.unlink(missing_ok=True)
         raise
+
+
+def typescript_checkpoint_report(path: Path, *, node: str = "node") -> Mapping[str, Any]:
+    completed = subprocess.run(
+        [
+            node,
+            "--experimental-strip-types",
+            "frontend/tools/inspect-ml-bot-checkpoint.mjs",
+            str(path.resolve()),
+        ],
+        cwd=REPOSITORY_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    try:
+        value = json.loads(completed.stdout)
+    except json.JSONDecodeError as error:
+        raise ValueError("TypeScript checkpoint inspector returned invalid JSON") from error
+    if not isinstance(value, dict) or value.get("status") != "ok":
+        raise ValueError("TypeScript checkpoint inspector rejected the checkpoint")
+    return value

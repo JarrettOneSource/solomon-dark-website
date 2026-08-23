@@ -104,26 +104,55 @@ def collect_expert_dataset(
     initial_seeds = [stream.take() for _ in range(worlds)]
     observations: list[np.ndarray] = []
     masks: dict[str, list[np.ndarray]] = {name: [] for name in ACTION_ORDER}
-    actions: dict[str, list[np.ndarray]] = {name: [] for name in ACTION_ORDER}
+    actions: dict[str, list[int]] = {name: [] for name in ACTION_ORDER}
+    idle_limit = max(worlds, round(samples * 0.10))
+    idle_count = 0
+    attempts = 0
+    maximum_attempts = max(10_000, samples * 100)
     with BoneyardRolloutBridge(initial_seeds, worker_count=worker_count) as bridge:
-        while sum(value.shape[0] for value in observations) < samples:
+        while len(observations) < samples:
+            attempts += bridge.world_count
+            if attempts > maximum_attempts:
+                raise RuntimeError(
+                    f"expert collection found only {len(observations)} useful rows "
+                    f"within {maximum_attempts} authoritative decisions"
+                )
             result = bridge.expert_step(ticks=action_repeat)
             transition = result.transition
-            observations.append(transition.observations.copy())
-            for name in ACTION_ORDER:
-                masks[name].append(transition.masks[name].astype(bool, copy=True))
-            for column, name in enumerate(ACTION_ORDER):
-                actions[name].append(transition.actions[:, column].astype(np.int64, copy=True))
+            for world in range(bridge.world_count):
+                observation = transition.observations[world]
+                action = transition.actions[world]
+                interesting = expert_row_is_interesting(observation, action)
+                if not interesting and idle_count >= idle_limit:
+                    continue
+                if not interesting:
+                    idle_count += 1
+                observations.append(observation.copy())
+                for name in ACTION_ORDER:
+                    masks[name].append(transition.masks[name][world].astype(bool, copy=True))
+                for column, name in enumerate(ACTION_ORDER):
+                    actions[name].append(int(action[column]))
+                if len(observations) >= samples:
+                    break
             reset_seeds = [stream.take() if done else None for done in transition.dones]
             if any(seed_value is not None for seed_value in reset_seeds):
                 bridge.reset(reset_seeds)
     dataset = ExpertDataset(
-        observations=np.concatenate(observations, axis=0)[:samples],
-        masks={name: np.concatenate(values, axis=0)[:samples] for name, values in masks.items()},
-        actions={name: np.concatenate(values, axis=0)[:samples] for name, values in actions.items()},
+        observations=np.stack(observations),
+        masks={name: np.stack(values) for name, values in masks.items()},
+        actions={name: np.asarray(values, dtype=np.int64) for name, values in actions.items()},
     )
     validate_expert_dataset(dataset)
     return dataset
+
+
+def expert_row_is_interesting(observation: np.ndarray, actions: np.ndarray) -> bool:
+    return bool(
+        observation[FEATURE["enemy_count_scaled"]] > 0
+        or observation[FEATURE["hazard_count_scaled"]] > 0
+        or observation[FEATURE["pickup_count_scaled"]] > 0
+        or np.any(actions != 0)
+    )
 
 
 def split_expert_dataset(
@@ -390,6 +419,31 @@ def validate_expert_dataset(dataset: ExpertDataset) -> None:
             raise ValueError(f"expert {name} arrays have the wrong shape")
         if not np.all(np.any(mask, axis=1)) or not np.all(mask[np.arange(count), action]):
             raise ValueError(f"expert {name} contains an illegal label")
+
+
+def expert_dataset_diagnostics(dataset: ExpertDataset) -> Mapping[str, Any]:
+    validate_expert_dataset(dataset)
+    interesting = np.asarray([
+        expert_row_is_interesting(
+            dataset.observations[index],
+            np.asarray([dataset.actions[name][index] for name in ACTION_ORDER]),
+        )
+        for index in range(len(dataset))
+    ])
+    histograms = {
+        name: np.bincount(dataset.actions[name], minlength=dataset.masks[name].shape[1]).tolist()
+        for name in ACTION_ORDER
+    }
+    return {
+        "interestingFraction": float(np.mean(interesting)),
+        "enemyPresentFraction": float(np.mean(
+            dataset.observations[:, FEATURE["enemy_count_scaled"]] > 0
+        )),
+        "actionHistograms": histograms,
+        "uniqueActions": {
+            name: int(np.count_nonzero(histogram)) for name, histogram in histograms.items()
+        },
+    }
 
 
 def new_episode(value: Mapping[str, Any]) -> EpisodeAccumulator:

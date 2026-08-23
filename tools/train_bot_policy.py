@@ -10,7 +10,9 @@ from pathlib import Path
 import sys
 from typing import Any, Sequence
 
-from ml_bot.checkpoint import atomic_write, load_checkpoint
+import torch
+
+from ml_bot.checkpoint import atomic_write, load_checkpoint, typescript_checkpoint_report
 from ml_bot.model import PolicyV5
 from ml_bot.self_test import main as self_test
 from ml_bot.spec import POLICY_SPEC, REPOSITORY_ROOT
@@ -111,6 +113,25 @@ def run_validate(args: argparse.Namespace) -> Any:
     metadata, tensors = load_checkpoint(Path(args.checkpoint).resolve())
     policy = PolicyV5()
     policy.load_tensors(tensors)
+    typescript = typescript_checkpoint_report(Path(args.checkpoint).resolve())
+    observation = checkpoint_test_observation()
+    full_plans = {
+        "movement": torch.ones((1, 9), dtype=torch.bool),
+        "target": torch.ones((1, 9), dtype=torch.bool),
+        "ability_by_target": torch.ones((1, 9, 22), dtype=torch.bool),
+        "aim_by_ability": torch.ones((1, 22, 9), dtype=torch.bool),
+    }
+    with torch.no_grad():
+        python_result = policy.act(observation, full_plans, deterministic=True)
+    python_actions = {name: int(value[0]) for name, value in python_result.actions.items()}
+    if python_actions != typescript.get("actions"):
+        raise ValueError("Python and TypeScript checkpoint actions disagree")
+    value_error = abs(float(python_result.value[0]) - float(typescript["value"]))
+    log_error = abs(
+        float(python_result.log_probability[0]) - float(typescript["logProbability"])
+    )
+    if value_error > 1e-4 or log_error > 1e-4:
+        raise ValueError("Python and TypeScript checkpoint numerics disagree")
     return {
         "status": "ok",
         "checkpoint": str(Path(args.checkpoint).resolve()),
@@ -118,7 +139,20 @@ def run_validate(args: argparse.Namespace) -> Any:
         "observationSize": POLICY_SPEC.observation_size,
         "optionDescriptorSize": POLICY_SPEC.option_descriptor_size,
         "parameterCount": sum(parameter.numel() for parameter in policy.parameters()),
+        "inferenceParity": {
+            "actions": python_actions,
+            "logProbabilityAbsoluteError": log_error,
+            "valueAbsoluteError": value_error,
+            "typescript": typescript,
+        },
     }
+
+
+def checkpoint_test_observation():
+    import numpy as np
+
+    values = np.asarray([((index % 97) - 48) / 48 for index in range(1_784)], dtype=np.float32)
+    return torch.from_numpy(values[None, :])
 
 
 def run_self_test(_args: argparse.Namespace) -> None:
