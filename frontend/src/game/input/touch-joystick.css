@@ -1,7 +1,8 @@
 /* Geometry constants are shared with src/game/mobile-quickbar-layout.ts (base 237.5,
-   knob 100, edge inset 48, bottom inset 56) and pinned by its contract test. The
-   joystick lives inside the display-scaled native frame, so screen-pixel safe-area
-   insets are divided by --hud-display-scale to land in logical pixels. */
+   knob 100, edge inset 48, bottom inset 56) and pinned by its contract test. The stage
+   the joystick lives in is already safe-area inset by main-menu.css, so the edge insets
+   are plain root pixels — adding env() here would inset the sticks twice on a notched
+   phone (ledger 2026-08-23 addendum). */
 .game-touch-joystick {
   position: absolute;
   z-index: 11000;
@@ -18,12 +19,12 @@
 }
 
 .game-touch-joystick-movement {
-  left: calc(48px * var(--game-ui-scale, 1) + env(safe-area-inset-left, 0px) / var(--hud-display-scale, 1));
+  left: calc(48px * var(--game-ui-scale, 1));
   transform-origin: bottom left;
 }
 
 .game-touch-joystick-primary {
-  right: calc(48px * var(--game-ui-scale, 1) + env(safe-area-inset-right, 0px) / var(--hud-display-scale, 1));
+  right: calc(48px * var(--game-ui-scale, 1));
   transform-origin: bottom right;
 }
 
@@ -49,10 +50,10 @@
   }
 
   .game-touch-joystick-movement {
-    left: calc(54px * var(--game-ui-scale, 1) + env(safe-area-inset-left, 0px) / var(--hud-display-scale, 1));
+    left: calc(54px * var(--game-ui-scale, 1));
   }
 
   .game-touch-joystick-primary {
-    right: calc(54px * var(--game-ui-scale, 1) + env(safe-area-inset-right, 0px) / var(--hud-display-scale, 1));
+    right: calc(54px * var(--game-ui-scale, 1));
   }
 }

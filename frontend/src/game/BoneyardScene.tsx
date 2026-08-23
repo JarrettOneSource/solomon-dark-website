@@ -833,6 +833,10 @@ export default function BoneyardScene({
               getPingMs={getPingMs}
               initialSnapshot={boneyardInitialSnapshot}
               mode="run"
+              onMenuClick={() => {
+                if (sceneInputBlocked || run.phase !== 'active') return
+                onPauseRequest()
+              }}
               onInventoryClick={() => {
                 if (!inputBlocked && run.phase === 'active') {
                   setInventorySurface({ kind: 'inventory' })

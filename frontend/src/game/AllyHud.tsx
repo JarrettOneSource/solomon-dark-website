@@ -22,6 +22,8 @@ const ALLY_CHIP_HEADING_INDEX = 12
 
 interface AllyHudProps {
   additionalRows?: readonly AllyHudRow[]
+  /** Touch: the roster yields to an open party column (HubScene owns the condition). */
+  hidden?: boolean
   initialSnapshot: GameSnapshot
   partyMemberIds?: readonly string[]
   playerId: string
@@ -29,6 +31,7 @@ interface AllyHudProps {
 }
 
 interface AllyHudRosterProps {
+  hidden?: boolean
   rows: readonly AllyHudRow[]
 }
 
@@ -84,11 +87,12 @@ function GolemChip() {
   )
 }
 
-export function AllyHudRoster({ rows }: AllyHudRosterProps) {
+export function AllyHudRoster({ hidden, rows }: AllyHudRosterProps) {
   return (
     <div
       className="hub-hud-allies"
       data-ally-count={rows.length}
+      hidden={hidden}
       role="list"
       aria-label="Allies"
     >
@@ -135,6 +139,7 @@ export function AllyHudRoster({ rows }: AllyHudRosterProps) {
 
 export default function AllyHud({
   additionalRows = EMPTY_ADDITIONAL_ROWS,
+  hidden,
   initialSnapshot,
   partyMemberIds,
   playerId,
@@ -155,5 +160,5 @@ export default function AllyHud({
     return subscribeSnapshot(publish)
   }, [initialSnapshot, partyMemberIds, playerId, subscribeSnapshot])
 
-  return <AllyHudRoster rows={combineAllyHudRows(snapshotRows, additionalRows)} />
+  return <AllyHudRoster hidden={hidden} rows={combineAllyHudRows(snapshotRows, additionalRows)} />
 }

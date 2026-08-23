@@ -1,7 +1,7 @@
 .game-chat {
   position: absolute;
   z-index: 40000;
-  bottom: max(34px, env(safe-area-inset-bottom));
+  bottom: 34px;
   left: clamp(14px, 2.2vw, 34px);
   display: flex;
   width: min(480px, calc(100% - 28px));
@@ -393,12 +393,15 @@
 
 /* ---- touch layout: dock top-left, clear of the joysticks --------------- */
 
+/* The opener is the second member of the top-left row: pause skull 4..48, opener 56..86
+   (30 px box, 44 px halo), both vertically centred on y = 26. The stage is already
+   safe-area inset (main-menu.css), so these are plain stage pixels — no env(). */
 @media (hover: none) and (pointer: coarse) {
   .game-chat {
-    top: calc(env(safe-area-inset-top, 0px) + 30px);
+    top: 11px;
     right: auto;
     bottom: auto;
-    left: calc(8px + env(safe-area-inset-left, 0px));
+    left: 56px;
     width: min(430px, 62vw);
     flex-direction: column-reverse;
     gap: 8px;
@@ -430,7 +433,7 @@
     display: flex;
     max-height: min(calc(var(--game-chat-vvh, 100vh) - 8px), 336px);
     flex-direction: column;
-    padding-top: env(safe-area-inset-top, 0px);
+    padding-top: 0;
     border-top: 0;
     border-right: 0;
     border-left: 0;
@@ -452,7 +455,7 @@
   .game-chat-close { width: 44px; font-size: 24px; }
 
   .game-chat-form {
-    padding: 8px calc(9px + env(safe-area-inset-left, 0px)) max(8px, env(safe-area-inset-bottom, 0px)) calc(9px + env(safe-area-inset-left, 0px));
+    padding: 8px 9px;
   }
 
   /* 16px font keeps iOS Safari from zooming the page on focus */

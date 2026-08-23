@@ -9,11 +9,14 @@ import {
   MOBILE_JOYSTICK_KNOB,
   MOBILE_QUICKBAR_BANK_BOTTOM,
   MOBILE_QUICKBAR_BANK_INSET,
+  MOBILE_QUICKBAR_BANK_MIN_INSET,
   MOBILE_QUICKBAR_SLOT_GAP,
   MOBILE_QUICKBAR_SLOT_MIN_SIZE,
   MOBILE_QUICKBAR_SLOT_SIZE,
+  MOBILE_DOCK_HALF_WIDTH,
+  MOBILE_QUICKBAR_DOCK_GAP,
+  mobileQuickbarBankLayout,
   mobileQuickbarSlotPlacement,
-  mobileQuickbarSlotSize,
 } from './mobile-quickbar-layout.ts'
 
 // iPhone XR landscape: 896 x 414 CSS px -> display scale 0.46 -> 1947.83 logical px wide.
@@ -34,7 +37,8 @@ test('joystick constants are the 2026-08-21 geometry scaled by exactly 1.25', ()
 test('slots split into two mirrored 2x2 banks that keep native slot order', () => {
   const size = MOBILE_QUICKBAR_SLOT_SIZE
   const pitch = size + MOBILE_QUICKBAR_SLOT_GAP
-  const placements = Array.from({ length: 8 }, (_, slot) => mobileQuickbarSlotPlacement(slot, size))
+  const bank = { inset: MOBILE_QUICKBAR_BANK_INSET, size }
+  const placements = Array.from({ length: 8 }, (_, slot) => mobileQuickbarSlotPlacement(slot, bank))
   assert.deepEqual(placements.map((placement) => placement.bank), [
     'left', 'left', 'left', 'left', 'right', 'right', 'right', 'right',
   ])
@@ -53,10 +57,11 @@ test('slots split into two mirrored 2x2 banks that keep native slot order', () =
     [MOBILE_QUICKBAR_BANK_INSET, MOBILE_QUICKBAR_BANK_BOTTOM],
   ])
   assert.ok(placements.every((placement) => placement.size === size))
-  assert.throws(() => mobileQuickbarSlotPlacement(8, size), RangeError)
-  assert.throws(() => mobileQuickbarSlotPlacement(-1, size), RangeError)
-  assert.throws(() => mobileQuickbarSlotPlacement(1.5, size), RangeError)
-  assert.throws(() => mobileQuickbarSlotPlacement(0, 0), RangeError)
+  assert.throws(() => mobileQuickbarSlotPlacement(8, bank), RangeError)
+  assert.throws(() => mobileQuickbarSlotPlacement(-1, bank), RangeError)
+  assert.throws(() => mobileQuickbarSlotPlacement(1.5, bank), RangeError)
+  assert.throws(() => mobileQuickbarSlotPlacement(0, { inset: bank.inset, size: 0 }), RangeError)
+  assert.throws(() => mobileQuickbarSlotPlacement(0, { inset: 0, size }), RangeError)
 })
 
 test('the bank clears the joystick on its own edge', () => {
@@ -64,25 +69,50 @@ test('the bank clears the joystick on its own edge', () => {
     MOBILE_QUICKBAR_BANK_INSET >= MOBILE_JOYSTICK_EDGE_INSET + MOBILE_JOYSTICK_BASE + 24,
     'bank inset must leave a thumb gap beyond the joystick',
   )
+  assert.equal(MOBILE_QUICKBAR_BANK_MIN_INSET, MOBILE_JOYSTICK_EDGE_INSET + MOBILE_JOYSTICK_BASE + 8)
   const joystickTop = MOBILE_JOYSTICK_BOTTOM_INSET + MOBILE_JOYSTICK_BASE
   const bankTop = MOBILE_QUICKBAR_BANK_BOTTOM + 2 * MOBILE_QUICKBAR_SLOT_SIZE + MOBILE_QUICKBAR_SLOT_GAP
   assert.ok(Math.abs(joystickTop - bankTop) < 40, 'bank and joystick share the thumb band')
 })
 
-test('slot size stays full at uiScale <= 125% on an XR and shrinks instead of overlapping at 150%', () => {
+test('full slots at the preferred inset at uiScale <= 125% on an XR and at the 1600 logical floor', () => {
+  const full = { inset: MOBILE_QUICKBAR_BANK_INSET, size: MOBILE_QUICKBAR_SLOT_SIZE }
   for (const uiScale of [0.75, 1, 1.25]) {
-    assert.equal(mobileQuickbarSlotSize(XR_LOGICAL_WIDTH, uiScale), MOBILE_QUICKBAR_SLOT_SIZE, `uiScale ${uiScale}`)
+    assert.deepEqual(mobileQuickbarBankLayout(XR_LOGICAL_WIDTH, uiScale), full, `uiScale ${uiScale}`)
   }
-  const shrunk = mobileQuickbarSlotSize(XR_LOGICAL_WIDTH, 1.5)
-  assert.ok(shrunk < MOBILE_QUICKBAR_SLOT_SIZE && shrunk >= MOBILE_QUICKBAR_SLOT_MIN_SIZE, `shrunk ${shrunk}`)
-  // The bank's inboard edge must still clear the dock's outer potion at that scale.
-  const rootHalfWidth = XR_LOGICAL_WIDTH / 1.5 / 2
-  const bankInboardEdge = MOBILE_QUICKBAR_BANK_INSET + 2 * shrunk + MOBILE_QUICKBAR_SLOT_GAP
-  assert.ok(bankInboardEdge <= rootHalfWidth - 215, 'shrunk bank overlaps the dock')
-  // 16:9 at the 1600-wide logical floor (e.g. 667 x 375) keeps the full size at 100%.
-  assert.equal(mobileQuickbarSlotSize(1600, 1), MOBILE_QUICKBAR_SLOT_SIZE)
-  assert.throws(() => mobileQuickbarSlotSize(0, 1), RangeError)
-  assert.throws(() => mobileQuickbarSlotSize(XR_LOGICAL_WIDTH, Number.NaN), RangeError)
+  // 16:9 at the 1600-wide logical floor (e.g. 667 x 375) keeps the full layout at 100%.
+  assert.deepEqual(mobileQuickbarBankLayout(1600, 1), full)
+  assert.throws(() => mobileQuickbarBankLayout(0, 1), RangeError)
+  assert.throws(() => mobileQuickbarBankLayout(XR_LOGICAL_WIDTH, Number.NaN), RangeError)
+})
+
+test('the thumb gap yields before the slots shrink and the bank never crosses the dock', () => {
+  const fullBankWidth = 2 * MOBILE_QUICKBAR_SLOT_SIZE + MOBILE_QUICKBAR_SLOT_GAP
+  // 1500 logical px at 100%: full slots fit only by giving up part of the thumb gap.
+  const yielded = mobileQuickbarBankLayout(1500, 1)
+  assert.equal(yielded.size, MOBILE_QUICKBAR_SLOT_SIZE)
+  assert.ok(yielded.inset < MOBILE_QUICKBAR_BANK_INSET && yielded.inset >= MOBILE_QUICKBAR_BANK_MIN_INSET, `inset ${yielded.inset}`)
+  assert.equal(yielded.inset + fullBankWidth, 750 - MOBILE_DOCK_HALF_WIDTH - MOBILE_QUICKBAR_DOCK_GAP)
+  // XR at 150% and 667 x 375 at 125%: even the minimum gap cannot host full slots, so the
+  // slots shrink to the touch floor at the minimum inset.
+  for (const [logicalWidth, uiScale] of [[XR_LOGICAL_WIDTH, 1.5], [1600, 1.25]] as const) {
+    const floor = mobileQuickbarBankLayout(logicalWidth, uiScale)
+    assert.equal(floor.inset, MOBILE_QUICKBAR_BANK_MIN_INSET, `${logicalWidth} x ${uiScale} inset`)
+    assert.equal(floor.size, MOBILE_QUICKBAR_SLOT_MIN_SIZE, `${logicalWidth} x ${uiScale} size`)
+  }
+  // The floor itself is bounded by the narrowest supported case (1600 logical at 125%):
+  // a floor that crosses the dock there is not a floor.
+  assert.ok(
+    MOBILE_QUICKBAR_BANK_MIN_INSET + 2 * MOBILE_QUICKBAR_SLOT_MIN_SIZE + MOBILE_QUICKBAR_SLOT_GAP
+      <= 1600 / 1.25 / 2 - MOBILE_DOCK_HALF_WIDTH,
+    'slot floor crosses the dock at 1600 x 1.25',
+  )
+  for (const [logicalWidth, uiScale] of [[XR_LOGICAL_WIDTH, 1.5], [1600, 1.25], [1500, 1], [XR_LOGICAL_WIDTH, 1]] as const) {
+    const { inset, size } = mobileQuickbarBankLayout(logicalWidth, uiScale)
+    const rootHalfWidth = logicalWidth / uiScale / 2
+    assert.ok(inset >= MOBILE_JOYSTICK_EDGE_INSET + MOBILE_JOYSTICK_BASE + 8, `bank overlaps the joystick at ${logicalWidth} x ${uiScale}`)
+    assert.ok(inset + 2 * size + MOBILE_QUICKBAR_SLOT_GAP <= rootHalfWidth - MOBILE_DOCK_HALF_WIDTH, `bank overlaps the dock at ${logicalWidth} x ${uiScale}`)
+  }
 })
 
 test('touch joystick CSS carries the shared constants', () => {
@@ -96,10 +126,10 @@ test('touch joystick CSS carries the shared constants', () => {
   assert.match(knob, new RegExp(`height:\\s*${MOBILE_JOYSTICK_KNOB}px;`))
   const movement = cssRule(styles, '.game-touch-joystick-movement')
   assert.match(movement, new RegExp(`left:\\s*calc\\(${MOBILE_JOYSTICK_EDGE_INSET}px \\* var\\(--game-ui-scale, 1\\)`))
-  assert.match(movement, /safe-area-inset-left/)
+  assert.doesNotMatch(movement, /safe-area-inset/)
   const primary = cssRule(styles, '.game-touch-joystick-primary')
   assert.match(primary, new RegExp(`right:\\s*calc\\(${MOBILE_JOYSTICK_EDGE_INSET}px \\* var\\(--game-ui-scale, 1\\)`))
-  assert.match(primary, /safe-area-inset-right/)
+  assert.doesNotMatch(primary, /safe-area-inset/)
 })
 
 test('coarse quickbar CSS reads the per-slot bank placement variables', () => {
@@ -107,7 +137,8 @@ test('coarse quickbar CSS reads the per-slot bank placement variables', () => {
   const coarse = styles.slice(styles.indexOf('@media (hover: none) and (pointer: coarse)'))
   assert.match(coarse, /\.hub-hud-quickbar-slot\s*\{[^}]*bottom:\s*var\(--mobile-quickbar-slot-bottom\);/)
   assert.match(coarse, /\.hub-hud-quickbar-slot\s*\{[^}]*width:\s*var\(--mobile-quickbar-slot-size\);/)
-  assert.match(coarse, /\.hub-hud-quickbar-slot\[data-quickbar-bank='left'\]\s*\{[^}]*left:\s*calc\(var\(--mobile-quickbar-slot-inset\)/)
-  assert.match(coarse, /\.hub-hud-quickbar-slot\[data-quickbar-bank='right'\]\s*\{[^}]*right:\s*calc\(var\(--mobile-quickbar-slot-inset\)/)
+  assert.match(coarse, /\.hub-hud-quickbar-slot\[data-quickbar-bank='left'\]\s*\{[^}]*left:\s*var\(--mobile-quickbar-slot-inset\);/)
+  assert.match(coarse, /\.hub-hud-quickbar-slot\[data-quickbar-bank='right'\]\s*\{[^}]*right:\s*var\(--mobile-quickbar-slot-inset\);/)
+  assert.doesNotMatch(coarse, /safe-area-inset/)
   assert.doesNotMatch(coarse, /--mobile-quickbar-slot-offset/)
 })

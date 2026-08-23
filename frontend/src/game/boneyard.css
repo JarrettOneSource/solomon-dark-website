@@ -6,6 +6,17 @@
   cursor: auto;
 }
 
+@media (hover: none) and (pointer: coarse) {
+  /* Twin-stick play must not start a page pinch-zoom or pan (hub.css coarse block). */
+  .boneyard-scene { touch-action: none; }
+
+  /* Touch ally roster: a run has no party chip, so the roster takes the chip's anchor
+     (6, 54); hub.css's coarse `.hub-hud-allies` owns the rest of the rule. */
+  .boneyard-native-frame .hub-hud-allies {
+    top: calc(54px / var(--hud-display-scale, 1) / var(--game-ui-scale, 1));
+  }
+}
+
 .boneyard-game-over {
   position: absolute;
   z-index: 20000;

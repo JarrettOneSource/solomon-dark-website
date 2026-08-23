@@ -34,10 +34,25 @@
   pointer-events: none;
 }
 
-.hub-hud-skull {
+/* Stock: the skull is paint only (HUD painter 0x005D2520); OPEN MENU is a keyboard edge
+   (0x005CB360 / 0x0058F320). The button is inert here and becomes the touch pause control
+   in the coarse-pointer block below. Same (11, 7) / 31 px box as the stock sprite. */
+.hub-hud-skull-button {
   position: absolute;
   top: 7px;
   left: 11px;
+  display: block;
+  width: 31px;
+  height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: default;
+  pointer-events: none;
+}
+
+.hub-hud-skull {
+  display: block;
   width: 31px;
   height: auto;
   object-fit: contain;
@@ -51,6 +66,11 @@
   width: 196px;
   gap: 5px;
 }
+
+/* On touch the roster yields to an open party column through the `hidden` attribute
+   (Tailwind's preflight forces `[hidden]` to `display: none !important`; this rule states
+   the intent beside the grid rule above, as `.hub-party-members[hidden]` does). */
+.hub-hud-allies[hidden] { display: none; }
 
 .hub-hud-ally-row[data-ally-element='ether'] { --element-accent: #b98fe6; }
 .hub-hud-ally-row[data-ally-element='fire'] { --element-accent: #e07a45; }
@@ -581,6 +601,17 @@
   gap: 2px;
 }
 
+/* The touch chip collapses the member list through the `hidden` attribute. Tailwind's
+   preflight (`index.css`, `@layer base`) already forces `[hidden]` to `display: none
+   !important`; this rule states the intent beside the grid rule above. */
+.hub-party-members[hidden] { display: none; }
+
+.hub-party-settings-gear {
+  display: block;
+  width: 15px;
+  height: 15px;
+}
+
 .hub-party-member-open {
   display: flex;
   width: 100%;
@@ -1041,9 +1072,40 @@
 }
 
 @media (hover: none) and (pointer: coarse) {
+  /* Twin-stick play: no pinch-zoom or pan of the page may start on the scene. Safari
+     re-fits the visual viewport on rotation, which is why a zoomed layout "fixes itself"
+     after a rotate-and-back; the correct state is never leaving it. Scroll containers
+     inside the scene (chat log, dialogs) keep their own default behaviour. */
+  .hub-scene { touch-action: none; }
+
+  /* Touch pause. Screen pixels: 44 px hit box at (4, 4), 36 px art; HUD-root px =
+     screen px / display scale / UI scale. The stage origin is already safe-area inset
+     (main-menu.css), so no member in this block adds env() again. */
+  .hub-hud-skull-button {
+    top: calc(4px / var(--hud-display-scale, 1) / var(--game-ui-scale, 1));
+    left: calc(4px / var(--hud-display-scale, 1) / var(--game-ui-scale, 1));
+    display: grid;
+    width: calc(44px / var(--hud-display-scale, 1) / var(--game-ui-scale, 1));
+    height: calc(44px / var(--hud-display-scale, 1) / var(--game-ui-scale, 1));
+    place-items: center;
+    cursor: pointer;
+    pointer-events: auto;
+  }
+
+  .hub-hud-skull-button:disabled { pointer-events: none; }
+
+  .hub-hud-skull { width: calc(36px / var(--hud-display-scale, 1) / var(--game-ui-scale, 1)); }
+
+  /* FPS / ping read at 85 % of their desktop size, right of the chat opener. */
+  .hub-hud-diagnostics {
+    top: calc(15px / var(--hud-display-scale, 1) / var(--game-ui-scale, 1));
+    left: calc(92px / var(--hud-display-scale, 1) / var(--game-ui-scale, 1));
+    transform: scale(calc(0.85 / var(--hud-display-scale, 1) / var(--game-ui-scale, 1)));
+    transform-origin: top left;
+  }
+
   /* Two 2x2 quickbar banks beside the thumbs. Per-slot placement variables are HUD-root
-     pixels from mobile-quickbar-layout.ts; screen-pixel safe-area insets are divided by the
-     display scale and the UI scale to land in the same space. */
+     pixels from mobile-quickbar-layout.ts. */
   .hub-hud-quickbar-slot {
     bottom: var(--mobile-quickbar-slot-bottom);
     width: var(--mobile-quickbar-slot-size);
@@ -1058,11 +1120,11 @@
 
   .hub-hud-quickbar-slot[data-quickbar-bank='left'] {
     right: auto;
-    left: calc(var(--mobile-quickbar-slot-inset) + env(safe-area-inset-left, 0px) / var(--hud-display-scale, 1) / var(--game-ui-scale, 1));
+    left: var(--mobile-quickbar-slot-inset);
   }
 
   .hub-hud-quickbar-slot[data-quickbar-bank='right'] {
-    right: calc(var(--mobile-quickbar-slot-inset) + env(safe-area-inset-right, 0px) / var(--hud-display-scale, 1) / var(--game-ui-scale, 1));
+    right: var(--mobile-quickbar-slot-inset);
     left: auto;
   }
 
@@ -1084,21 +1146,31 @@
     display: none;
   }
 
-  .hub-hud-potion-button,
-  .hub-hud-backpack-button,
-  .hub-hud-tome-button {
+  /* Dock, HUD-root px (owner pick B, 2026-08-23). Potion hit boxes stay 100; backpack /
+     tome hit boxes are 130 with the 58 x 62 stock art at 2x (116 x 124), so on an iPhone
+     XR (display scale 0.46) the two buttons read at 59.8 px with 53 x 57 px art instead
+     of 27 x 29 px. Order from the centre: red potion -230..-130, backpack -130..0, tome
+     0..130, blue potion 130..230; MOBILE_DOCK_HALF_WIDTH (230) in
+     mobile-quickbar-layout.ts follows. */
+  .hub-hud-potion-button {
     width: 100px;
     height: 100px;
   }
 
+  .hub-hud-backpack-button,
+  .hub-hud-tome-button {
+    width: 130px;
+    height: 130px;
+  }
+
   .hub-hud-potion-button-red {
     bottom: 8px;
-    left: calc(50% - 215px);
+    left: calc(50% - 230px);
   }
 
   .hub-hud-potion-button-blue {
     bottom: 8px;
-    left: calc(50% + 115px);
+    left: calc(50% + 130px);
   }
 
   .hub-hud-potion-red {
@@ -1115,90 +1187,164 @@
 
   .hub-hud-backpack-button {
     bottom: 0;
-    left: calc(50% - 105px);
-  }
-
-  .hub-hud-backpack {
-    position: absolute;
-    bottom: 14px;
-    left: 21px;
+    left: calc(50% - 130px);
   }
 
   .hub-hud-tome-button {
     bottom: 0;
-    left: calc(50% + 5px);
+    left: 50%;
   }
 
+  .hub-hud-backpack,
   .hub-hud-tome {
     position: absolute;
-    bottom: 14px;
-    left: 21px;
+    bottom: 3px;
+    left: 7px;
+    width: 116px;
+    height: 124px;
   }
 
-  .hub-hud-count-red { left: calc(50% - 170.5px); }
-  .hub-hud-count-blue { left: calc(50% + 160px); }
+  .hub-hud-count-red { left: calc(50% - 185.5px); }
+  .hub-hud-count-blue { left: calc(50% + 175px); }
 
-  /* Counter the native display scale so social UI lands at true screen pixels on touch
-     devices, and keep the card in the SAME screen-pixel column as the chat opener: the
-     opener sits at (8px + safe-area-left, safe-area-top + 30px) with a 30px box, so the
-     card starts 6px under it at every viewport height and on the same safe-area edge.
-     The frame is scaled by the display scale, hence the division; a frame-logical `top`
-     would drift into the opener on short viewports (Safari landscape is 896 x 366). */
+  /* Social column in true screen pixels: the panel sits outside the HUD root but inside
+     the display-scaled frame, hence the 1 / display-scale counter-scale and the divided
+     offsets. Top-left row: pause skull 4..48, chat opener 56..86 (game-chat.css); the
+     party chip starts 6 px under the skull. Collapsed (the default) it is a 22 px pill
+     (skull, PARTY, count, chevron) plus the 22 px gear; tapped open the pill squares
+     into a tab and the 96 px member card hangs from it (owner pick "mini" + chevron,
+     2026-08-23). The ally roster continues the column 6 px under the pill (hub-hud-allies
+     below) and yields while anything opens under the chip. */
   .hub-party-panel {
-    top: calc((env(safe-area-inset-top, 0px) + 66px) / var(--hud-display-scale, 0.65));
-    left: calc((8px + env(safe-area-inset-left, 0px)) / var(--hud-display-scale, 0.65));
-    width: 134px;
+    top: calc(54px / var(--hud-display-scale, 1));
+    left: calc(6px / var(--hud-display-scale, 1));
+    display: grid;
+    gap: 0;
+    width: max-content;
     min-width: 0;
-    max-width: 134px;
-    padding: 3px 6px 4px;
-    border-radius: 3px;
+    max-width: 164px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
     font-size: 10px;
-    transform: scale(calc(1 / var(--hud-display-scale, 0.65)));
+    justify-items: start;
+    transform: scale(calc(1 / var(--hud-display-scale, 1)));
     transform-origin: top left;
   }
 
   .hub-party-panel h2 {
     gap: 4px;
-    margin: 0 0 2px;
-    padding-bottom: 2px;
-    font-size: 8.5px;
-    letter-spacing: 0.1em;
+    margin: 0;
+    padding: 0;
+    border: 0;
   }
 
-  .hub-party-panel h2 img { width: 9px; }
+  .hub-party-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 22px;
+    padding: 0 6px;
+    border: 1px solid rgb(216 188 114 / 0.55);
+    border-radius: 11px;
+    background: linear-gradient(160deg, rgb(30 25 15 / 0.94), rgb(5 7 10 / 0.95));
+    box-shadow: 0 0 0 1px rgb(64 50 22 / 0.85), 0 3px 8px rgb(0 0 0 / 0.5);
+    color: #f3d994;
+    cursor: pointer;
+    font: 700 8px Cinzel, Georgia, serif;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
 
-  .hub-party-count { font-size: 8px; }
+  .hub-party-toggle img {
+    width: 10px;
+    height: auto;
+    filter: drop-shadow(0 1px 1px #000);
+  }
+
+  .hub-party-toggle .hub-party-count {
+    display: grid;
+    min-width: 13px;
+    height: 13px;
+    margin-left: 1px;
+    padding: 0 3px;
+    border-radius: 7px;
+    background: #e9cd7c;
+    color: #1b150a;
+    font-size: 8px;
+    font-weight: 700;
+    line-height: 13px;
+    place-items: center;
+  }
+
+  .hub-party-toggle-chevron {
+    width: 0;
+    height: 0;
+    border-top: 4px solid currentColor;
+    border-right: 3.5px solid transparent;
+    border-left: 3.5px solid transparent;
+    transition: transform 160ms ease;
+  }
+
+  .hub-party-panel[data-party-expanded='true'] .hub-party-toggle-chevron { transform: rotate(180deg); }
+
+  /* Tapped open: the pill becomes the tab the member card hangs from. */
+  .hub-party-panel[data-party-expanded='true'] .hub-party-toggle {
+    border-radius: 3px 3px 0 0;
+    box-shadow: none;
+  }
 
   .hub-party-error {
-    margin: 0 0 3px;
+    margin: 3px 0;
     font-size: 9.5px;
   }
 
-  /* Small gear (16px glyph), thumb-sized hit halo (40px). */
+  /* Gear beside the chip: 22 px disc, 44 px hit halo. */
   .hub-party-settings-open {
     position: relative;
-    width: 16px;
-    height: 16px;
-    font-size: 9px;
+    width: 22px;
+    height: 22px;
   }
 
   .hub-party-settings-open::after {
     content: '';
     position: absolute;
-    inset: -12px;
+    inset: -11px;
   }
 
-  .hub-party-members { gap: 0; }
+  .hub-party-settings-gear {
+    width: 12px;
+    height: 12px;
+  }
+
+  .hub-party-members {
+    box-sizing: border-box;
+    width: 96px;
+    padding: 2px 4px 3px;
+    border: 1px solid rgb(216 188 114 / 0.5);
+    border-radius: 0 3px 3px 3px;
+    background:
+      linear-gradient(
+        160deg,
+        rgb(30 25 15 / 0.92),
+        rgb(5 7 10 / 0.93) 55%,
+        rgb(10 12 17 / 0.94)
+      );
+    box-shadow: 0 0 0 1px rgb(64 50 22 / 0.85), 0 6px 16px rgb(0 0 0 / 0.5);
+    gap: 0;
+  }
 
   .hub-party-member-open {
-    min-height: 20px;
+    min-height: 18px;
     gap: 4px;
     padding: 0 3px;
   }
 
   .hub-party-member-marker { width: 8px; }
 
-  .hub-party-member-name { font-size: 10.5px; }
+  .hub-party-member-name { font-size: 9.5px; }
 
   .hub-party-member-tag {
     padding: 0 3px 1px;
@@ -1207,8 +1353,10 @@
   }
 
   .hub-party-invitation {
+    box-sizing: border-box;
+    width: 150px;
     gap: 4px;
-    margin-top: 4px;
+    margin: 4px 0 0;
     padding: 4px 5px 5px;
   }
 
@@ -1292,12 +1440,18 @@
     font-size: 9px;
   }
 
-  /* Centered under the player's own meters at 72% screen size; the left column belongs to chat + party. */
+  /* Touch ally roster: the social column continues under the party chip. The anchor is
+     screen px like the skull (chip 54 + 22 px pill + 6 px gap = 82); 164 root px wide at
+     72 % so the rows read 118 px, the width of the chip-and-gear row, and grow with the
+     UI scale like every HUD-root member. The Boneyard has no chip and takes the chip's
+     anchor (boneyard.css). While the party column is open below the chip (member card,
+     invitation toast, action error) HubScene sets `hidden` and the roster yields. */
   .hub-hud-allies {
-    top: 96px;
-    left: 50%;
-    transform: translateX(-50%) scale(calc(0.72 / var(--hud-display-scale, 0.65)));
-    transform-origin: top center;
+    top: calc(82px / var(--hud-display-scale, 1) / var(--game-ui-scale, 1));
+    left: calc(6px / var(--hud-display-scale, 1) / var(--game-ui-scale, 1));
+    width: 164px;
+    transform: scale(calc(0.72 / var(--hud-display-scale, 1)));
+    transform-origin: top left;
   }
 
   .hub-hud-loadout {

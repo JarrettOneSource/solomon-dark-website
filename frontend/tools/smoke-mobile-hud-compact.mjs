@@ -8,21 +8,25 @@ import { WebSocket } from 'ws'
 import {
   MOBILE_JOYSTICK_BASE,
   MOBILE_JOYSTICK_KNOB,
+  mobileQuickbarBankLayout,
   mobileQuickbarSlotPlacement,
-  mobileQuickbarSlotSize,
 } from '../src/game/mobile-quickbar-layout.ts'
 import { GAME_PROTOCOL_VERSION } from '../src/game/protocol/game-protocol.ts'
 
 // Mobile compact-HUD journey. Boots one iPhone XR-class landscape touch page
-// (896 x 414 CSS px, DPR 2 by default) through Hub solo, a party invitation,
-// the party panel, the party settings dialog, a member card, open chat, and a
-// party Boneyard run with both joysticks held. Every stop captures a settled
-// screenshot plus a geometry receipt for each touch-HUD member, and the stops
-// assert the compact layout contract recorded in
-// docs/game-native-parity-re.md (2026-08-22 compact touch HUD entry): the
-// 2x2 quickbar banks sit between each joystick and the centre dock without
-// overlap, the dock keeps its pre-change positions, the social chrome stays
-// within its compact envelopes, and the run ends with empty error arrays.
+// (896 x 414 CSS px, DPR 2 by default) through Hub solo, orientation round
+// trips, the touch pause skull, a party invitation, the party chip (collapsed
+// and expanded), the party settings dialog, a member card, open chat, and a
+// party Boneyard run with the pause skull and both joysticks held. Every stop
+// captures a settled screenshot plus a geometry receipt for each touch-HUD
+// member, and the stops assert the contract recorded in
+// docs/game-native-parity-re.md (2026-08-23 reopened touch HUD entry): the
+// top-left row (44 px pause skull, 30 px chat opener, party chip 6 px under
+// the skull) in stage pixels, the enlarged dock with the quickbar banks beside
+// it without overlap, rotation returning to the identical layout, dialogs
+// fitting the 896 x 366 Safari viewport, the ally roster continuing the
+// social column under the party chip and yielding while the column is open
+// (owner picks, 2026-08-23 round 4), and empty error arrays.
 // The Hub map control is not a stop: with one catalogued Boneyard it starts
 // the run directly (the picker needs two), so it stays out of this system.
 const baseUrl = process.env.SDR_MOBILE_HUD_URL || 'http://127.0.0.1:5173'
@@ -66,11 +70,20 @@ const MEMBER_SELECTORS = Object.freeze({
   potionBlue: '.hub-hud-potion-button-blue',
   potionRed: '.hub-hud-potion-button-red',
   quickbarSlots: '.hub-hud-quickbar-slot',
+  partyMembersList: '.hub-party-members',
+  partySettingsGear: '.hub-party-settings-gear',
+  partyToggle: '.hub-party-toggle',
+  pauseOverlay: '.gameplay-pause-overlay',
   selectedSkills: '.hub-hud-selected-skill',
   skull: '.hub-hud-skull',
+  skullButton: '.hub-hud-skull-button',
   tome: '.hub-hud-tome-button',
   xp: '.hub-hud-xp',
 })
+
+// Dimensions that are intrinsic text, not layout: the FPS readout is left-anchored and its width
+// follows the digit count ("9 FPS" vs "58 FPS"), so only its anchor and height prove the round trip.
+const CONTENT_SIZED = { diagnostics: ['width'] }
 
 const browser = await chromium.launch({
   executablePath: process.env.SDR_CHROME_PATH || '/usr/bin/google-chrome',
@@ -127,27 +140,49 @@ try {
   const playerId = await enterHub(page, 'Aurelia', 'Water')
   const solo = await capture(page, 'hub-solo')
   assertHubLayout(solo, 'hub-solo', { primaryJoystick: false })
-  assertPartyPanelEnvelope(solo, 'hub-solo', { maxHeight: 58, maxWidth: 140 })
+  assertCluster(solo, 'hub-solo', { expanded: false })
+  assertEnvelope(solo.members.partyPanel[0], 'hub-solo party chip', { maxHeight: 24, maxWidth: 124 })
+  assertAllyColumn(solo, 'hub-solo', { hidden: false, rows: 0, top: 82 })
 
-  // The card is positioned in the chat opener's screen-pixel column, so the gap under the
-  // opener must not depend on the viewport height: on Safari's 896 x 366 it used to drop
-  // from 9 px to 1 px (the card's frame-logical top scaled with the frame).
+  // Orientation round trip: portrait and back must reproduce the landscape layout exactly.
+  await page.setViewportSize({ width: height, height: width })
+  const portrait = await capture(page, 'hub-solo-portrait')
+  assert.equal(portrait.window.width, height, 'hub-solo-portrait: viewport width')
+  await page.setViewportSize({ width, height })
+  const rotatedBack = await capture(page, 'hub-solo-rotated-back')
+  assertHubLayout(rotatedBack, 'hub-solo-rotated-back', { primaryJoystick: false })
+  assertSameMembers(solo, rotatedBack, 'hub-solo-rotated-back')
+
+  // Safari keeps its address bar in landscape (896 x 366): the row is in stage pixels, so
+  // nothing moves, and the leader's settings dialog must still fit.
   await page.setViewportSize({ width, height: shortHeight })
   const soloShort = await capture(page, 'hub-solo-short')
   assert.equal(soloShort.window.height, shortHeight, 'hub-solo-short: viewport height')
-  assertPartyPanelEnvelope(soloShort, 'hub-solo-short', { maxHeight: 58, maxWidth: 140 })
-  assertEnvelope(soloShort.members.chatOpen[0], 'hub-solo-short chat opener', { maxHeight: 32, maxWidth: 32 })
+  assertCluster(soloShort, 'hub-solo-short', { expanded: false })
+  assertAllyColumn(soloShort, 'hub-solo-short', { hidden: false, rows: 0, top: 82 })
+  await page.locator(MEMBER_SELECTORS.partySettingsOpen).tap()
+  const shortSettings = page.locator(MEMBER_SELECTORS.partySettingsDialog)
+  await shortSettings.waitFor({ timeout: 10_000 })
+  const shortSettingsStop = await capture(page, 'hub-solo-settings-short')
+  assertDialogFits(shortSettingsStop.members.partySettingsDialog[0], 'hub-solo-settings-short', { minWidth: 300 }, shortHeight)
+  await shortSettings.getByRole('button', { name: /close/i }).click()
+  await shortSettings.waitFor({ state: 'detached', timeout: 10_000 })
   await page.setViewportSize({ width, height })
   const soloRestored = await capture(page, 'hub-solo-restored')
   assertHubLayout(soloRestored, 'hub-solo-restored', { primaryJoystick: false })
-  assertPartyPanelEnvelope(soloRestored, 'hub-solo-restored', { maxHeight: 58, maxWidth: 140 })
+  assertSameMembers(solo, soloRestored, 'hub-solo-restored')
 
-  // Leader view of the settings dialog (invite code, requests, privacy).
+  // The pause skull is a real control on touch: tap → pause menu → RESUME.
+  await pauseRoundTrip(page, 'hub-pause')
+
+  // Leader view of the settings dialog (visibility, Party ID, requests) in both skins.
   await page.locator(MEMBER_SELECTORS.partySettingsOpen).tap()
   const soloSettings = page.locator(MEMBER_SELECTORS.partySettingsDialog)
   await soloSettings.waitFor({ timeout: 10_000 })
   const soloSettingsStop = await capture(page, 'hub-solo-settings')
-  assertDialogFits(soloSettingsStop.members.partySettingsDialog[0], 'hub-solo-settings', { minWidth: 300 })
+  const soloDialog = soloSettingsStop.members.partySettingsDialog[0]
+  assertDialogFits(soloDialog, 'hub-solo-settings', { minWidth: 300 }, height)
+  assert.ok(soloSettingsStop.members.partySettingsGear.length === 1, 'hub-solo-settings: the gear opener is the inline SVG')
   await soloSettings.getByRole('button', { name: /close/i }).click()
   await soloSettings.waitFor({ state: 'detached', timeout: 10_000 })
 
@@ -160,28 +195,43 @@ try {
   await invitation.waitFor({ timeout: 15_000 })
   const invited = await capture(page, 'hub-invitation')
   assertHubLayout(invited, 'hub-invitation', { primaryJoystick: false })
-  assertPartyPanelEnvelope(invited, 'hub-invitation', { maxHeight: 130, maxWidth: 140 })
+  assertCluster(invited, 'hub-invitation', { expanded: false })
+  assertEnvelope(invited.members.partyPanel[0], 'hub-invitation party column', { maxHeight: 100, maxWidth: 160 })
   assert.equal(invited.members.partyInvitation.length, 1, 'hub-invitation: invitation card present')
+  // The invitation toast extends the column under the chip: the roster yields.
+  assertAllyColumn(invited, 'hub-invitation', { hidden: true, rows: 0, top: 82 })
   await invitation.getByRole('button', { name: 'Accept' }).click()
   await waitForPartySize(page, 2)
   await page.locator('.hub-hud-allies[data-ally-count="1"]').waitFor({ timeout: 15_000 })
   const party = await capture(page, 'hub-party')
   assertHubLayout(party, 'hub-party', { primaryJoystick: false })
-  assertPartyPanelEnvelope(party, 'hub-party', { maxHeight: 80, maxWidth: 140 })
-  assert.equal(party.members.partyMembers.length, 2, 'hub-party: two member rows')
-  const allyRows = party.members.allyRows.filter((row) => row.visible)
-  assert.equal(allyRows.length, 1, 'hub-party: one ally roster row')
-  assertEnvelope(allyRows[0], 'hub-party ally row', { maxHeight: 27, maxWidth: 145 })
+  assertCluster(party, 'hub-party', { expanded: false })
+  assertEnvelope(party.members.partyPanel[0], 'hub-party party chip', { maxHeight: 24, maxWidth: 124 })
+  // Collapsed chip: the partner's health bar sits directly under it in the column.
+  assertAllyColumn(party, 'hub-party', { hidden: false, rows: 1, top: 82 })
+
+  await page.locator(MEMBER_SELECTORS.partyToggle).tap()
+  await page.locator(`${MEMBER_SELECTORS.partyMembersList}:not([hidden])`).waitFor({ timeout: 10_000 })
+  const expanded = await capture(page, 'hub-party-expanded')
+  assertHubLayout(expanded, 'hub-party-expanded', { primaryJoystick: false })
+  assertCluster(expanded, 'hub-party-expanded', { expanded: true })
+  assertEnvelope(expanded.members.partyPanel[0], 'hub-party-expanded party column', { maxHeight: 72, maxWidth: 124 })
+  assert.equal(expanded.members.partyMembers.filter((row) => row.visible).length, 2, 'hub-party-expanded: two member rows')
+  // The 96 px member card hangs from the chip as a tab (no gap), and the roster yields to it.
+  const [expandedToggle] = expanded.members.partyToggle
+  const [expandedList] = expanded.members.partyMembersList
+  nearRect(expandedList, { width: 96, x: expandedToggle.x, y: expandedToggle.y + expandedToggle.height }, 'hub-party-expanded member card')
+  assertAllyColumn(expanded, 'hub-party-expanded', { hidden: true, rows: 1, top: 82 })
   assertOverlapFree(
-    [[`allies`, party.members.allies[0]], [`partyPanel`, party.members.partyPanel[0]], [`meterHealth`, party.members.meterHealth[0]], [`meterMana`, party.members.meterMana[0]]],
-    'hub-party',
+    [[`allies`, expanded.members.allies[0]], [`partyPanel`, expanded.members.partyPanel[0]], [`meterHealth`, expanded.members.meterHealth[0]], [`meterMana`, expanded.members.meterMana[0]]],
+    'hub-party-expanded',
   )
 
   await page.locator(MEMBER_SELECTORS.partySettingsOpen).tap()
   const settings = page.locator(MEMBER_SELECTORS.partySettingsDialog)
   await settings.waitFor({ timeout: 10_000 })
   const settingsStop = await capture(page, 'hub-party-settings')
-  assertDialogFits(settingsStop.members.partySettingsDialog[0], 'hub-party-settings', { minWidth: 300 })
+  assertDialogFits(settingsStop.members.partySettingsDialog[0], 'hub-party-settings', { minWidth: 300 }, height)
   await settings.getByRole('button', { name: /close/i }).click()
   await settings.waitFor({ state: 'detached', timeout: 10_000 })
 
@@ -215,6 +265,10 @@ try {
   await page.locator(MEMBER_SELECTORS.joystickPrimary).waitFor({ timeout: 15_000 })
   const runIdle = await capture(page, 'run-idle')
   assertHubLayout(runIdle, 'run-idle', { primaryJoystick: true })
+  assertSkullButton(runIdle, 'run-idle')
+  // A run has no party chip: the roster takes the chip's anchor.
+  assertAllyColumn(runIdle, 'run-idle', { hidden: false, rows: 1, top: 54 })
+  await pauseRoundTrip(page, 'run-pause')
 
   const cdp = await context.newCDPSession(page)
   const movement = rectCenter(await page.locator(MEMBER_SELECTORS.joystickMovement).boundingBox())
@@ -244,6 +298,7 @@ try {
   assert.ok(Math.abs(releasedKnob.x - movement.x) < 1 && Math.abs(releasedKnob.y - movement.y) < 1,
     `run-released: movement knob recentred (${releasedKnob.x}, ${releasedKnob.y}) vs (${movement.x}, ${movement.y})`)
   assertHubLayout(runReleased, 'run-released', { primaryJoystick: true })
+  assertAllyColumn(runReleased, 'run-released', { hidden: false, rows: 1, top: 54 })
 
   receipts.errors = { consoleErrors, pageErrors }
   receipts.layoutContract = layoutContract()
@@ -273,6 +328,19 @@ async function capture(page, label) {
   await page.screenshot({ path: join(evidenceRoot, `${label}.png`) })
   receipts[label] = geometry
   return geometry
+}
+
+// Tap the skull, expect the pause menu, resume through its own RESUME action.
+async function pauseRoundTrip(page, label) {
+  await page.locator(MEMBER_SELECTORS.skullButton).tap()
+  const overlay = page.locator(MEMBER_SELECTORS.pauseOverlay)
+  await overlay.waitFor({ timeout: 10_000 })
+  const paused = await capture(page, label)
+  assert.ok(paused.members.pauseOverlay[0]?.visible, `${label}: pause menu visible after the skull tap`)
+  await page.locator('[data-pause-action="resume"]').tap()
+  await overlay.waitFor({ state: 'detached', timeout: 10_000 })
+  const resumed = await settledGeometry(page)
+  assert.equal(resumed.members.pauseOverlay.length, 0, `${label}: pause menu closed by RESUME`)
 }
 
 async function settledGeometry(page) {
@@ -307,6 +375,7 @@ function readGeometry(page) {
           x: round(rect.x),
           y: round(rect.y),
         }
+        if (node.hasAttribute('hidden')) entry.hidden = true
         const slot = node.getAttribute('data-slot')
         if (slot !== null) entry.slot = Number(slot)
         const bank = node.getAttribute('data-quickbar-bank')
@@ -336,16 +405,24 @@ function layoutContract() {
   const displayScale = Math.min(width / 1600, height / 900)
   const logicalWidth = width / displayScale
   const uiScale = 1
-  const slotSize = mobileQuickbarSlotSize(logicalWidth, uiScale)
+  const bank = mobileQuickbarBankLayout(logicalWidth, uiScale)
+  const slotSize = bank.size
   const dock = (logicalLeftFromCentre) => (logicalWidth / 2 + logicalLeftFromCentre) * displayScale
   return {
     displayScale,
-    dock: { backpackX: dock(-105), potionBlueX: dock(115), potionRedX: dock(-215), tomeX: dock(5), size: 100 * displayScale },
+    // 2026-08-23 dock, owner pick B: potions 100, backpack / tome 130 root px, zero-gap
+    // order from the centre (-230 | -130 | 0 | 130).
+    dock: {
+      backpack: { size: 130 * displayScale, x: dock(-130) },
+      potionBlue: { size: 100 * displayScale, x: dock(130) },
+      potionRed: { size: 100 * displayScale, x: dock(-230) },
+      tome: { size: 130 * displayScale, x: dock(0) },
+    },
     joystick: { base: MOBILE_JOYSTICK_BASE * displayScale, knob: MOBILE_JOYSTICK_KNOB * displayScale },
     logicalWidth,
     slotSize: slotSize * displayScale,
     slots: Array.from({ length: 8 }, (_, slot) => {
-      const placement = mobileQuickbarSlotPlacement(slot, slotSize)
+      const placement = mobileQuickbarSlotPlacement(slot, bank)
       const x = placement.bank === 'left'
         ? placement.inset * displayScale
         : width - (placement.inset + slotSize) * displayScale
@@ -380,18 +457,13 @@ function assertHubLayout(geometry, label, { primaryJoystick }) {
     near(actual.width, expected.width, `slot ${actual.slot} width`)
     near(actual.height, expected.height, `slot ${actual.slot} height`)
   }
-  const dockMembers = [
-    ['potionRed', contract.dock.potionRedX],
-    ['backpack', contract.dock.backpackX],
-    ['tome', contract.dock.tomeX],
-    ['potionBlue', contract.dock.potionBlueX],
-  ]
-  for (const [name, expectedX] of dockMembers) {
+  const dockMembers = ['potionRed', 'backpack', 'tome', 'potionBlue'].map((name) => [name, contract.dock[name]])
+  for (const [name, expected] of dockMembers) {
     const [member] = geometry.members[name]
     assert.ok(member?.visible, `${label}: ${name} visible`)
-    near(member.x, expectedX, `${name} x`)
-    near(member.width, contract.dock.size, `${name} width`)
-    near(member.height, contract.dock.size, `${name} height`)
+    near(member.x, expected.x, `${name} x`)
+    near(member.width, expected.size, `${name} width`)
+    near(member.height, expected.size, `${name} height`)
   }
   const [movement] = geometry.members.joystickMovement
   assert.ok(movement?.visible, `${label}: movement joystick visible`)
@@ -428,25 +500,93 @@ function assertHubLayout(geometry, label, { primaryJoystick }) {
   assertEnvelope(chatOpen, `${label} chat opener`, { maxHeight: 32, maxWidth: 32 })
 }
 
-function assertPartyPanelEnvelope(geometry, label, envelope) {
-  const [panel] = geometry.members.partyPanel
-  assert.ok(panel?.visible, `${label}: party panel visible`)
-  assertEnvelope(panel, `${label} party panel`, envelope)
+// Top-left row in stage pixels (the stage is already safe-area inset): 44 px pause skull
+// at (4, 4) with 36 px art, 30 px chat opener at (56, 11), party chip at (6, 54) with a
+// 22 px pill and a 22 px gear; the 96 px member card hangs from the pill as a tab only
+// while expanded, and the ally roster continues the column at (6, 82) otherwise.
+function assertSkullButton(geometry, label) {
+  const [button] = geometry.members.skullButton
+  assert.ok(button?.visible, `${label}: pause skull button visible`)
+  nearRect(button, { height: 44, width: 44, x: 4, y: 4 }, `${label} pause skull button`)
+  const [art] = geometry.members.skull
+  assert.ok(Math.abs(art.width - 36) <= 0.75, `${label}: skull art ${art.width} px wide (expected 36)`)
+}
+
+function assertCluster(geometry, label, { expanded }) {
+  assertSkullButton(geometry, label)
   const [chatOpen] = geometry.members.chatOpen
   assert.ok(chatOpen?.visible, `${label}: chat opener visible`)
-  assertOverlapFree([['chatOpen', chatOpen], ['partyPanel', panel], ['meterHealth', geometry.members.meterHealth[0]], ['meterMana', geometry.members.meterMana[0]]], label)
-  // Same screen-pixel column as the opener, a fixed 6 px (±2) under its 30 px box.
-  const gap = panel.y - (chatOpen.y + chatOpen.height)
-  assert.ok(gap >= 4 && gap <= 8, `${label}: party panel sits ${gap.toFixed(2)} px under the chat opener (expected 4–8)`)
-  assert.ok(Math.abs(panel.x - chatOpen.x) <= 0.75, `${label}: party panel x ${panel.x} is not the chat opener column x ${chatOpen.x}`)
+  nearRect(chatOpen, { height: 30, width: 30, x: 56, y: 11 }, `${label} chat opener`)
+  const [panel] = geometry.members.partyPanel
+  assert.ok(panel?.visible, `${label}: party panel visible`)
+  assert.ok(Math.abs(panel.x - 6) <= 0.75 && Math.abs(panel.y - 54) <= 0.75,
+    `${label}: party chip at (${panel.x}, ${panel.y}), expected (6, 54)`)
+  const [toggle] = geometry.members.partyToggle
+  assert.ok(toggle?.visible, `${label}: party chip toggle visible`)
+  assert.ok(Math.abs(toggle.height - 22) <= 0.75, `${label}: party chip ${toggle.height} px tall (expected 22)`)
+  const [gear] = geometry.members.partySettingsOpen
+  if (gear) nearRect(gear, { height: 22, width: 22 }, `${label} party gear`)
+  const [list] = geometry.members.partyMembersList
+  assert.equal(Boolean(list?.visible), expanded, `${label}: member card ${expanded ? 'expanded' : 'collapsed'}`)
+  assertOverlapFree([
+    ['skullButton', geometry.members.skullButton[0]],
+    ['chatOpen', chatOpen],
+    ['partyPanel', panel],
+    ['meterHealth', geometry.members.meterHealth[0]],
+    ['meterMana', geometry.members.meterMana[0]],
+    ['allies', geometry.members.allies[0]],
+    ['joystickMovement', geometry.members.joystickMovement[0]],
+  ], label)
+}
+
+// The ally roster is the social column's tail: at `top` in screen pixels (Hub 82 under the
+// chip, Boneyard 54 at the chip's anchor), `rows` visible health bars no wider than the
+// chip-and-gear row, and the `hidden` attribute set while the Hub party column is open
+// (member card, invitation toast, action error). Hidden means no row renders.
+function assertAllyColumn(geometry, label, { hidden, rows, top }) {
+  const [roster] = geometry.members.allies
+  assert.ok(roster, `${label}: ally roster mounted`)
+  assert.equal(Boolean(roster.hidden), hidden, `${label}: ally roster ${hidden ? 'hidden' : 'shown'}`)
+  const visibleRows = geometry.members.allyRows.filter((row) => row.visible)
+  assert.equal(visibleRows.length, hidden ? 0 : rows, `${label}: ${hidden ? 0 : rows} visible ally rows`)
+  if (hidden) {
+    assert.ok(!roster.visible, `${label}: hidden ally roster does not render`)
+    return
+  }
+  nearRect(roster, { x: 6, y: top }, `${label} ally roster`)
+  if (rows === 0) return
+  assert.ok(roster.visible, `${label}: ally roster visible`)
+  for (const row of visibleRows) assertEnvelope(row, `${label} ally row`, { maxHeight: 25, maxWidth: 120 })
+}
+
+function nearRect(rect, expected, label) {
+  for (const [key, value] of Object.entries(expected)) {
+    assert.ok(Math.abs(rect[key] - value) <= 0.75, `${label}: ${key} ${rect[key]} (expected ${value})`)
+  }
+}
+
+// Every member must come back to the same screen rectangle after an orientation change.
+function assertSameMembers(before, after, label) {
+  for (const [name, rects] of Object.entries(before.members)) {
+    const next = after.members[name]
+    const intrinsic = CONTENT_SIZED[name] ?? []
+    assert.equal(next.length, rects.length, `${label}: ${name} count ${rects.length} -> ${next.length}`)
+    rects.forEach((rect, index) => {
+      for (const key of ['x', 'y', 'width', 'height']) {
+        if (intrinsic.includes(key)) continue
+        assert.ok(Math.abs(rect[key] - next[index][key]) <= 0.75,
+          `${label}: ${name}[${index}].${key} ${rect[key]} -> ${next[index][key]}`)
+      }
+    })
+  }
 }
 
 // Modal dialogs must land at screen scale (not the 0.46 frame scale) and fit the viewport.
-function assertDialogFits(dialog, label, { minWidth }) {
+function assertDialogFits(dialog, label, { minWidth }, viewportHeight) {
   assert.ok(dialog?.visible, `${label}: dialog visible`)
   assert.ok(dialog.width >= minWidth, `${label}: dialog ${dialog.width} px wide renders below screen scale (min ${minWidth})`)
-  assert.ok(dialog.x >= 0 && dialog.y >= 0 && dialog.x + dialog.width <= width && dialog.y + dialog.height <= height,
-    `${label}: dialog inside the viewport ${JSON.stringify(dialog)}`)
+  assert.ok(dialog.x >= 0 && dialog.y >= 0 && dialog.x + dialog.width <= width && dialog.y + dialog.height <= viewportHeight,
+    `${label}: dialog inside the ${width} x ${viewportHeight} viewport ${JSON.stringify(dialog)}`)
 }
 
 function assertEnvelope(rect, label, { maxHeight, maxWidth }) {

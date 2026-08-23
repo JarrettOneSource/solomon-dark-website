@@ -19,7 +19,7 @@ import {
   NATIVE_SKILL_QUICKBAR_FONT,
   NATIVE_SKILL_QUICKBAR_SLOT_OFFSETS,
 } from './skill-quickbar.ts'
-import { mobileQuickbarSlotPlacement, mobileQuickbarSlotSize } from './mobile-quickbar-layout.ts'
+import { mobileQuickbarBankLayout, mobileQuickbarSlotPlacement } from './mobile-quickbar-layout.ts'
 
 interface AtlasRecord {
   frame: readonly [number, number, number, number]
@@ -62,7 +62,7 @@ export default function SkillQuickbar({
   uiScale,
   viewportWidth,
 }: SkillQuickbarProps) {
-  const mobileSlotSize = mobileQuickbarSlotSize(viewportWidth, uiScale)
+  const mobileBank = mobileQuickbarBankLayout(viewportWidth, uiScale)
   return (
     <div
       className="hub-hud-skill-quickbar"
@@ -71,7 +71,7 @@ export default function SkillQuickbar({
     >
       {NATIVE_SKILL_QUICKBAR_SLOT_OFFSETS.map((offset, slot) => {
         const skillId = quickbar[slot] ?? null
-        const mobilePlacement = mobileQuickbarSlotPlacement(slot, mobileSlotSize)
+        const mobilePlacement = mobileQuickbarSlotPlacement(slot, mobileBank)
         const skill = skillId === null ? undefined : NATIVE_SKILL_CATALOG[skillId]
         const secondary = skillId !== null && nativeSkillCategory(skillId) === 2
         const combatDisabled = mode === 'hub' && secondary

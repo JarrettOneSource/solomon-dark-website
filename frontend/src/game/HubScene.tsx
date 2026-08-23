@@ -57,6 +57,8 @@ import type {
 } from './protocol/game-protocol.ts'
 import type { LocalPartyState, PartyVisibility } from './protocol/party-state.ts'
 import PartySettingsDialog from './PartySettingsDialog.tsx'
+import PartySettingsGearIcon from './PartySettingsGearIcon.tsx'
+import { useCoarsePointer } from './input/use-coarse-pointer.ts'
 import type {
   ProtocolPlayerEconomy,
   ProtocolPlayerProgression,
@@ -206,6 +208,13 @@ export default function HubScene({
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null)
   const [selectedGold, setSelectedGold] = useState<number | null>(null)
   const [partySettingsOpen, setPartySettingsOpen] = useState(false)
+  const [partyExpanded, setPartyExpanded] = useState(false)
+  const coarsePointer = useCoarsePointer()
+  // Touch: every state that extends the party column below the chip (member card,
+  // action error, invitation toast) makes the ally roster under the chip yield.
+  const partyColumnOpen = partyExpanded
+    || Boolean(partyActionError)
+    || (partyState?.invitations.length ?? 0) > 0
   const selectedPlayerIdRef = useRef<string | null>(null)
   selectedPlayerIdRef.current = selectedPlayerId
   const inventoryRequestRef = useRef(inventoryRequestSequence)
@@ -585,6 +594,7 @@ export default function HubScene({
 
         <GameHud
           accountUsername={accountUsername}
+          allyRosterHidden={coarsePointer && partyColumnOpen}
           controls={settings.controls}
           getPingMs={getPingMs}
           initialSnapshot={hubInitialSnapshot}
@@ -595,6 +605,10 @@ export default function HubScene({
             }
           }}
           onMapClick={beginMatch}
+          onMenuClick={() => {
+            if (inputBlocked || modalOpen || transitionActive) return
+            onPauseRequest()
+          }}
           onPotionClick={(itemId) => {
             if (!inputBlocked && !pickerOpen && !transitionActive) {
               onHubAction({ type: 'consume', itemId })
@@ -649,11 +663,33 @@ export default function HubScene({
         />
 
         {partyState && (
-          <section className="hub-party-panel" aria-label="Party" data-party-id={partyState.party.id}>
+          <section
+            className="hub-party-panel"
+            aria-label="Party"
+            data-party-id={partyState.party.id}
+            data-party-expanded={!coarsePointer || partyExpanded}
+          >
             <h2>
-              <img src={art.skullGold} alt="" aria-hidden />
-              Party
-              <span className="hub-party-count">{partyState.party.memberPlayerIds.length}</span>
+              {coarsePointer ? (
+                <button
+                  type="button"
+                  className="hub-party-toggle"
+                  aria-expanded={partyExpanded}
+                  aria-controls="hub-party-members"
+                  onClick={() => setPartyExpanded((open) => !open)}
+                >
+                  <img src={art.skullGold} alt="" aria-hidden />
+                  Party
+                  <span className="hub-party-count">{partyState.party.memberPlayerIds.length}</span>
+                  <span className="hub-party-toggle-chevron" aria-hidden />
+                </button>
+              ) : (
+                <>
+                  <img src={art.skullGold} alt="" aria-hidden />
+                  Party
+                  <span className="hub-party-count">{partyState.party.memberPlayerIds.length}</span>
+                </>
+              )}
               {partyState.party.leaderPlayerId === playerId
                 || partyState.party.memberPlayerIds.length > 1
                 || sessionKind === 'private-college' ? (
@@ -662,13 +698,18 @@ export default function HubScene({
                   type="button"
                   aria-label="Party settings"
                   onClick={() => setPartySettingsOpen(true)}
-                >⚙</button>
+                ><PartySettingsGearIcon /></button>
               ) : null}
             </h2>
             {partyActionError ? (
               <p className="hub-party-error" role="alert">{partyActionError}</p>
             ) : null}
-            <div className="hub-party-members" role="list">
+            <div
+              className="hub-party-members"
+              id="hub-party-members"
+              role="list"
+              hidden={coarsePointer && !partyExpanded}
+            >
               {partyState.party.memberPlayerIds.map((memberPlayerId) => {
                 const profile = partyState.hubPlayers.find(({ playerId: id }) => (
                   id === memberPlayerId
