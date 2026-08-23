@@ -300,34 +300,34 @@ try {
   const thirdMobileHubAllyReceipt = await allyRosterReceipt(thirdPage)
   assert.deepEqual(hostMultiAllyReceipt.names, ['Helvidius', 'Helvidius'])
   assert.equal(hostMultiAllyReceipt.roster.x, 11)
-  assert.equal(hostMultiAllyReceipt.roster.y, 62)
+  assert.equal(hostMultiAllyReceipt.roster.y, 60)
   assert.ok(
     hostMultiAllyReceipt.roster.y
       >= hostMultiAllyReceipt.diagnostics.y + hostMultiAllyReceipt.diagnostics.height,
   )
   for (const row of hostMultiAllyReceipt.rows) {
-    assert.equal(row.bar.width, 50)
-    assert.equal(row.bar.height, 5)
-    assert.equal(row.fill.width, 50)
-    assert.equal(row.identity.x - (row.bar.x + row.bar.width), 2)
-    assert.equal(row.barColor, 'rgb(255, 128, 128)')
-    assert.equal(row.identityColor, 'rgb(217, 186, 112)')
+    assert.equal(row.bar.width, 147)
+    assert.equal(row.bar.height, 7)
+    assert.equal(row.fill.width, 145)
+    assert.equal(row.bar.x - (row.identity.x + row.identity.width), 8)
+    assert.notEqual(row.barBackground, 'none')
+    assert.equal(row.identityColor, row.rowAccent)
     assert.equal(row.healthRatio, '1')
     assert.ok(row.glyphCount > 0)
   }
   assert.equal(
     hostMultiAllyReceipt.rows[1].row.y - hostMultiAllyReceipt.rows[0].row.y,
-    10,
+    39,
   )
   await page.screenshot({ path: allyScreenshotPath })
   await thirdPage.screenshot({ path: mobileAllyScreenshotPath })
 
   const expectedMobileViewportScale = 390 / 900
   assert.equal(thirdMobileHubAllyReceipt.coarsePointer, true)
-  assert.equal(
+  assertClose(
     thirdMobileHubAllyReceipt.presentationScale,
-    2,
-    JSON.stringify(thirdMobileHubAllyReceipt),
+    0.72 / expectedMobileViewportScale,
+    'mobile ally presentation scale',
   )
   assertClose(
     thirdMobileHubAllyReceipt.viewportScale,
@@ -337,32 +337,32 @@ try {
   assert.deepEqual(thirdMobileHubAllyReceipt.names, ['SolonSolus', 'Helvidius'])
   assertClose(
     thirdMobileHubAllyReceipt.roster.x,
-    11 * expectedMobileViewportScale,
+    (thirdMobileHubAllyReceipt.viewport.width - 196 * 0.72) / 2,
     'mobile ally roster x',
   )
   assertClose(
     thirdMobileHubAllyReceipt.roster.y,
-    62 * expectedMobileViewportScale,
+    96 * expectedMobileViewportScale,
     'mobile ally roster y',
   )
   for (const row of thirdMobileHubAllyReceipt.rows) {
-    assertClose(row.bar.width, 100 * expectedMobileViewportScale, 'mobile ally bar width')
-    assertClose(row.bar.height, 10 * expectedMobileViewportScale, 'mobile ally bar height')
-    assertClose(row.fill.width, 100 * expectedMobileViewportScale, 'mobile ally fill width')
+    assertClose(row.bar.width, 147 * 0.72, 'mobile ally bar width')
+    assertClose(row.bar.height, 7 * 0.72, 'mobile ally bar height')
+    assertClose(row.fill.width, 145 * 0.72, 'mobile ally fill width')
     assertClose(
-      row.identity.x - (row.bar.x + row.bar.width),
-      4 * expectedMobileViewportScale,
+      row.bar.x - (row.identity.x + row.identity.width),
+      8 * 0.72,
       'mobile ally identity gap',
     )
-    assert.equal(row.barColor, 'rgb(255, 128, 128)')
-    assert.equal(row.identityColor, 'rgb(217, 186, 112)')
+    assert.notEqual(row.barBackground, 'none')
+    assert.equal(row.identityColor, row.rowAccent)
     assert.equal(row.healthRatio, '1')
     assert.ok(row.glyphCount > 0)
   }
   assertClose(
     thirdMobileHubAllyReceipt.rows[1].row.y
       - thirdMobileHubAllyReceipt.rows[0].row.y,
-    20 * expectedMobileViewportScale,
+    39 * 0.72,
     'mobile ally row pitch',
   )
 
@@ -727,25 +727,27 @@ async function allyRosterReceipt(page) {
           'ally health fill',
         )
         const identity = requireElement(
-          row.querySelector('.hub-hud-ally-identity'),
-          'ally identity lane',
+          row.querySelector('.hub-hud-ally-chip'),
+          'ally identity chip',
         )
-        const glyph = requireElement(
-          row.querySelector('.hub-hud-ally-glyph, .hub-hud-ally-golem'),
+        requireElement(
+          row.querySelector('.hub-hud-ally-chip-layer > span, .hub-hud-ally-chip-golem img'),
           'ally identity glyph',
         )
         return {
           bar: bounds(bar),
-          barColor: getComputedStyle(fill).backgroundColor,
+          barBackground: getComputedStyle(fill).backgroundImage,
           fill: bounds(fill),
           glyphCount: identity.children.length,
           healthRatio: row.getAttribute('data-health-ratio'),
           identity: bounds(identity),
-          identityColor: getComputedStyle(glyph).backgroundColor,
+          identityColor: getComputedStyle(identity).borderTopColor,
           row: bounds(row),
+          rowAccent: getComputedStyle(row).borderLeftColor,
         }
       }),
       skull: bounds(skull),
+      viewport: { height: innerHeight, width: innerWidth },
       viewportScale: Number(scene.getAttribute('data-viewport-scale')),
     }
   })
