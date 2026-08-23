@@ -154,6 +154,7 @@ def main() -> int:
         expert = bridge.expert_step(ticks=2)
         assert expert.transition.actions.shape == (2, 4)
         assert expert.transition.observations.shape == (2, POLICY_SPEC.observation_size)
+        assert len(expert.transition.gameplay_counters) == 2
         assert expert.state.plans.ability_by_target.shape == (2, 9, 22)
         reset = bridge.reset([0x100, None])
         assert reset.hashes[0] == initial_hashes[0]

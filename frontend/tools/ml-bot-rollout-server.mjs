@@ -88,6 +88,7 @@ function stepResult(result, type) {
       choiceEvents: transition.choiceEvents.map(encodeIndexedChoiceEvent),
       choiceIntervals: transition.choiceIntervals.map(encodeIndexedChoiceInterval),
       dones: encodeView(transition.dones),
+      gameplayCounters: transition.gameplayCounters,
       masks: {
         ability: encodeView(transition.masks.ability),
         aim: encodeView(transition.masks.aim),

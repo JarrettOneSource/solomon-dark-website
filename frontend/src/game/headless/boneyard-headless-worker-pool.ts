@@ -2,6 +2,7 @@ import { Worker } from 'node:worker_threads'
 
 import type { MlBotPolicyActionMasks } from '../core-server/ml-bot-policy/actions.ts'
 import type { MlBotPolicyChoiceTrajectoryRecord } from '../core-server/ml-bot-policy/choice-trajectory.ts'
+import type { MlBotPolicyGameplayCounters } from '../core-server/ml-bot-policy/reward.ts'
 import type {
   MlBotPolicyScriptedChoiceEvent,
   MlBotPolicySkillSelection,
@@ -199,6 +200,7 @@ export class BoneyardHeadlessWorkerPool {
     const choiceEvents: BoneyardHeadlessIndexedValue<MlBotPolicyScriptedChoiceEvent>[] = []
     const choiceIntervals: BoneyardHeadlessIndexedValue<MlBotPolicyChoiceTrajectoryRecord>[] = []
     const dones = new Uint8Array(this.worldCount)
+    const gameplayCounters: MlBotPolicyGameplayCounters[] = []
     const nextSimulationTicks = new Float64Array(this.worldCount)
     const observations = new Float32Array(this.worldCount * this.observationLength)
     const rawRewards = new Float64Array(this.worldCount)
@@ -217,6 +219,7 @@ export class BoneyardHeadlessWorkerPool {
       const observationOffset = worldOffset * this.observationLength
       actions.set(uint8(source.actions, laneWorldCount * BONEYARD_HEADLESS_ACTION_STRIDE, 'actions'), actionOffset)
       dones.set(uint8(source.dones, laneWorldCount, 'dones'), worldOffset)
+      gameplayCounters.push(...requiredGameplayCounters(source.gameplayCounters, laneWorldCount))
       nextSimulationTicks.set(float64(source.nextSimulationTicks, laneWorldCount, 'nextSimulationTicks'), worldOffset)
       observations.set(
         float32(source.observations, laneWorldCount * this.observationLength, 'observations'),
@@ -266,6 +269,7 @@ export class BoneyardHeadlessWorkerPool {
         choiceEvents,
         choiceIntervals,
         dones,
+        gameplayCounters,
         masks: combined.masks,
         nextObservations: combined.observations,
         nextSimulationTicks,
@@ -435,6 +439,52 @@ function requiredEpisodeMetadata(
       geometrySha256: source.geometrySha256,
       runId: source.runId,
       seed: Number(source.seed),
+    }
+  })
+}
+
+function requiredGameplayCounters(
+  value: unknown,
+  worldCount: number,
+): MlBotPolicyGameplayCounters[] {
+  if (!Array.isArray(value) || value.length !== worldCount) {
+    throw new Error('Boneyard headless worker returned invalid gameplay counters')
+  }
+  return value.map((entry): MlBotPolicyGameplayCounters => {
+    const source = requiredObject(entry, 'Boneyard headless worker gameplay counters')
+    const count = (name: string): number => {
+      const result = source[name]
+      if (typeof result !== 'number' || !Number.isFinite(result) || result < 0) {
+        throw new Error(`Boneyard headless worker returned invalid gameplay ${name}`)
+      }
+      return Number(result)
+    }
+    const counts = (name: string): Readonly<Record<string, number>> => {
+      const values = requiredObject(source[name], `Boneyard headless worker gameplay ${name}`)
+      for (const [key, result] of Object.entries(values)) {
+        if (
+          key.length === 0
+          || typeof result !== 'number'
+          || !Number.isFinite(result)
+          || result < 0
+        ) {
+          throw new Error(`Boneyard headless worker returned invalid gameplay ${name}`)
+        }
+      }
+      return values as Readonly<Record<string, number>>
+    }
+    return {
+      enemyKills: count('enemyKills'),
+      enemyKillsByKind: counts('enemyKillsByKind'),
+      goldCollected: count('goldCollected'),
+      healthOrbsCollected: count('healthOrbsCollected'),
+      itemKinds: counts('itemKinds'),
+      itemsCollected: count('itemsCollected'),
+      manaOrbsCollected: count('manaOrbsCollected'),
+      potionsUsed: count('potionsUsed'),
+      powerupsCollected: count('powerupsCollected'),
+      skillPicks: count('skillPicks'),
+      wavesCompleted: count('wavesCompleted'),
     }
   })
 }

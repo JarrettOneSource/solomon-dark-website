@@ -82,3 +82,18 @@ test('Boneyard headless reset rejects seeds outside uint32', () => {
   assert.throws(() => new BoneyardHeadlessEnvironment({ seed: -1 }), /uint32/)
   assert.throws(() => new BoneyardHeadlessEnvironment({ seed: 0x1_0000_0000 }), /uint32/)
 })
+
+test('Boneyard action repeat stops on the first terminal simulation tick', () => {
+  const environment = new BoneyardHeadlessEnvironment(RESET)
+  const actions = createBoneyardHeadlessActionBuffer()
+  const transition = environment.stepTransition(actions, 100_000)
+  assert.equal(transition.done, true)
+  assert.ok(transition.ticks > 0 && transition.ticks < 100_000)
+  assert.equal(transition.nextSimulationTick - transition.simulationTick, transition.ticks)
+  assert.equal(environment.state().world.kind, 'boneyard')
+  const repeated = environment.stepTransition(actions, 10)
+  assert.equal(repeated.done, true)
+  assert.equal(repeated.ticks, 0)
+  assert.equal(repeated.reward.reward, 0)
+  assert.equal(repeated.nextStateHash, transition.nextStateHash)
+})

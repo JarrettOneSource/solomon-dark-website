@@ -3,7 +3,10 @@ import type {
   MlBotPolicyActionMasks,
 } from '../core-server/ml-bot-policy/actions.ts'
 import type { MlBotPolicyChoiceTrajectoryRecord } from '../core-server/ml-bot-policy/choice-trajectory.ts'
-import type { MlBotPolicyRewardTerms } from '../core-server/ml-bot-policy/reward.ts'
+import type {
+  MlBotPolicyGameplayCounters,
+  MlBotPolicyRewardTerms,
+} from '../core-server/ml-bot-policy/reward.ts'
 import type {
   MlBotPolicyScriptedChoiceEvent,
   MlBotPolicySkillSelection,
@@ -41,6 +44,7 @@ export interface BoneyardHeadlessBatchTransition {
   readonly choiceEvents: readonly BoneyardHeadlessIndexedValue<MlBotPolicyScriptedChoiceEvent>[]
   readonly choiceIntervals: readonly BoneyardHeadlessIndexedValue<MlBotPolicyChoiceTrajectoryRecord>[]
   readonly dones: Uint8Array
+  readonly gameplayCounters: readonly MlBotPolicyGameplayCounters[]
   readonly masks: MlBotPolicyActionMasks
   readonly nextObservations: Float32Array
   readonly nextSimulationTicks: Float64Array
@@ -150,6 +154,7 @@ export class BoneyardHeadlessBatch {
     const skillSelections: BoneyardHeadlessIndexedValue<MlBotPolicySkillSelection>[] = []
     const stateHashes: string[] = []
     const nextStateHashes: string[] = []
+    const gameplayCounters: MlBotPolicyGameplayCounters[] = []
     for (let index = 0; index < this.worldCount; index += 1) {
       const environment = this.environments[index]!
       const actionOffset = index * BONEYARD_HEADLESS_ACTION_STRIDE
@@ -166,6 +171,7 @@ export class BoneyardHeadlessBatch {
       rawRewards[index] = transition.reward.raw
       rewardClamped[index] = Number(transition.reward.clamped)
       rewards[index] = transition.reward.reward
+      gameplayCounters.push(transition.reward.gameplay)
       setRewardTerms(rewardTerms, index, transition.reward.terms)
       simulationTicks[index] = transition.simulationTick
       stepTicks[index] = transition.ticks
@@ -184,6 +190,7 @@ export class BoneyardHeadlessBatch {
       choiceEvents,
       choiceIntervals,
       dones,
+      gameplayCounters,
       masks: { ability, aim, movement, target },
       nextObservations,
       nextSimulationTicks,

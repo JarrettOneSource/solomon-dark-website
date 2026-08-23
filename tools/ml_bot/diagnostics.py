@@ -92,6 +92,7 @@ table{{width:100%;border-collapse:collapse}}th,td{{padding:6px;text-align:right;
 <section><h2>Per-head entropy</h2><canvas id="entropy" width="720" height="300"></canvas></section>
 <section><h2>SMDP watchlist</h2><canvas id="smdp" width="720" height="300"></canvas></section>
 <section><h2>Reward decomposition</h2><table id="rewards"></table></section>
+<section><h2>Gameplay outcomes</h2><table id="gameplay"></table></section>
 <section><h2>Action totals</h2><table id="actions"></table></section>
 </div></main><script id="data" type="application/json">{payload}</script><script>
 const data=JSON.parse(document.getElementById('data').textContent);const M=data.metrics,E=data.episodes;
@@ -104,6 +105,7 @@ plot('entropy',[{{n:'move',v:M.map(x=>x.entropy_move)}},{{n:'target',v:M.map(x=>
 plot('smdp',[{{n:'policy',v:M.map(x=>x.smdp.policy_loss)}},{{n:'value',v:M.map(x=>x.smdp.value_loss)}},{{n:'entropy',v:M.map(x=>x.smdp.entropy_normalized)}}]);
 function table(id,rows){{document.getElementById(id).innerHTML='<tr><th>Metric</th><th>Total</th></tr>'+rows.map(([n,v])=>`<tr><td>${{n}}</td><td>${{v}}</td></tr>`).join('')}}
 const reward={{}};E.forEach(e=>Object.entries(e.reward_terms||{{}}).forEach(([k,v])=>reward[k]=(reward[k]||0)+v));table('rewards',Object.entries(reward));
+const gameplay={{}};M.forEach(m=>Object.entries(m.gameplay||{{}}).forEach(([k,v])=>{{if(typeof v==='number')gameplay[k]=(gameplay[k]||0)+v}}));table('gameplay',Object.entries(gameplay));
 const action={{move:0,target:0,ability:0,aim:0}};E.forEach(e=>Object.entries(e.action_histograms||{{}}).forEach(([k,v])=>action[k]=(action[k]||0)+v.reduce((a,b)=>a+b,0)));table('actions',Object.entries(action));
 </script></body></html>"""
     atomic_write(output, document.encode("utf-8"))

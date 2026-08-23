@@ -52,6 +52,19 @@ test('frozen reward formula is zero when state and attributed counters do not ch
   accumulator.begin(state)
   assert.deepEqual(accumulator.finish(state, false), {
     clamped: false,
+    gameplay: {
+      enemyKills: 0,
+      enemyKillsByKind: {},
+      goldCollected: 0,
+      healthOrbsCollected: 0,
+      itemKinds: {},
+      itemsCollected: 0,
+      manaOrbsCollected: 0,
+      potionsUsed: 0,
+      powerupsCollected: 0,
+      skillPicks: 0,
+      wavesCompleted: 0,
+    },
     raw: 0,
     reward: 0,
     terms: { death: 0, ownDamage: 0, selfHp: 0, wave: 0, xp: 0 },
@@ -67,10 +80,28 @@ test('frozen reward formula attributes only the owning player and clamps last', 
   const observer = accumulator.attributionObserver()
   observer.onEnemyHealthDamage({ actorId: 1, amount: 20, maximumHealth: 100, playerId: 'ally' })
   observer.onEnemyHealthDamage({ actorId: 1, amount: 20, maximumHealth: 100, playerId: 'agent' })
-  observer.onEnemyKillExperience({ amount: 4, playerId: 'agent' })
+  observer.onEnemyKillExperience({
+    actorId: 1,
+    amount: 4,
+    enemyToken: 'SKELETON',
+    playerId: 'agent',
+  })
+  observer.onLootPickup?.({
+    amount: 12,
+    bonusKind: null,
+    itemKind: null,
+    itemName: null,
+    itemQuantity: null,
+    kind: 'gold',
+    orbKind: null,
+    playerId: 'agent',
+  })
   const result = accumulator.finish(state, false)
   assert.equal(result.terms.ownDamage, 0.13)
   assert.equal(result.terms.xp, 0.16)
+  assert.equal(result.gameplay.enemyKills, 1)
+  assert.deepEqual(result.gameplay.enemyKillsByKind, { SKELETON: 1 })
+  assert.equal(result.gameplay.goldCollected, 12)
   assert.ok(Math.abs(result.reward - 0.29) < 1e-12)
   assert.equal(result.clamped, false)
 })

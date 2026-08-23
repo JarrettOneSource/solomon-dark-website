@@ -181,7 +181,7 @@ export class BoneyardHeadlessEnvironment {
       reward: transition.reward.reward,
       rewardTerms: transition.reward.terms,
       simulationTick: transition.simulationTick,
-      ticks,
+      ticks: transition.ticks,
       trajectoryVersion: 5,
     })
     return Object.freeze({
@@ -203,6 +203,50 @@ export class BoneyardHeadlessEnvironment {
       target: actions[offset + 1]!,
       ability: actions[offset + 2]!,
       aim: actions[offset + 3]!,
+    }
+    if (mlBotPolicyTerminal(this.simulation, HEADLESS_PLAYER_ID)) {
+      if (Object.values(selected).some(action => action !== 0)) {
+        throw new Error('terminal Boneyard environments accept only null actions')
+      }
+      const stateHash = this.stateHash()
+      const masks = terminalActionMasks()
+      const transition: BoneyardHeadlessTransition = Object.freeze({
+        actions: Object.freeze({ ...selected }),
+        choiceEvents: Object.freeze([]),
+        choiceIntervals: Object.freeze([]),
+        done: true,
+        masks,
+        nextObservation: this.frame.values.slice(),
+        nextSimulationTick: this.simulation.tick,
+        nextStateHash: stateHash,
+        observation: this.frame.values.slice(),
+        reward: Object.freeze({
+          clamped: false,
+          gameplay: Object.freeze({
+            enemyKills: 0,
+            enemyKillsByKind: Object.freeze({}),
+            goldCollected: 0,
+            healthOrbsCollected: 0,
+            itemKinds: Object.freeze({}),
+            itemsCollected: 0,
+            manaOrbsCollected: 0,
+            potionsUsed: 0,
+            powerupsCollected: 0,
+            skillPicks: 0,
+            wavesCompleted: 0,
+          }),
+          raw: 0,
+          reward: 0,
+          terms: Object.freeze({ death: 0, ownDamage: 0, selfHp: 0, wave: 0, xp: 0 }),
+        }),
+        simulationTick: this.simulation.tick,
+        skillSelections: Object.freeze([]),
+        stateHash,
+        ticks: 0,
+      })
+      this.lastMasks = masks
+      this.lastTransitionValue = transition
+      return transition
     }
     const decision = resolveMlBotPolicyDecision(
       this.simulation,
@@ -241,6 +285,7 @@ export class BoneyardHeadlessEnvironment {
       }
       this.simulation = applied.state
     }
+    let executedTicks = 0
     for (let tick = 0; tick < ticks; tick += 1) {
       const inputs: Record<string, PlayerCharacterInput> = {
         [HEADLESS_PLAYER_ID]: decision.input,
@@ -249,11 +294,23 @@ export class BoneyardHeadlessEnvironment {
       this.simulation = stepGameSimulationTick(this.simulation, inputs, {
         attributionObserver: rewardAccumulator.attributionObserver(),
       })
+      executedTicks += 1
       this.frame = this.observeState(inputs)
+      if (mlBotPolicyTerminal(this.simulation, HEADLESS_PLAYER_ID)) break
     }
     const done = mlBotPolicyTerminal(this.simulation, HEADLESS_PLAYER_ID)
-    const reward = rewardAccumulator.finish(this.simulation, done)
-    this.choiceTracker.accumulate(reward.reward, ticks)
+    const baseReward = rewardAccumulator.finish(this.simulation, done)
+    const reward = Object.freeze({
+      ...baseReward,
+      gameplay: Object.freeze({
+        ...baseReward.gameplay,
+        potionsUsed: Number(decision.hubAction?.type === 'consume'),
+        skillPicks: skillSelections.filter(({ playerId }) => (
+          playerId === HEADLESS_PLAYER_ID
+        )).length,
+      }),
+    })
+    this.choiceTracker.accumulate(reward.reward, executedTicks)
     if (done) this.choiceTracker.finish(true)
     const transition = Object.freeze({
       actions: Object.freeze({ ...selected }),
@@ -269,7 +326,7 @@ export class BoneyardHeadlessEnvironment {
       simulationTick,
       skillSelections: Object.freeze(skillSelections),
       stateHash,
-      ticks,
+      ticks: executedTicks,
     })
     this.lastTransitionValue = transition
     return transition
@@ -468,6 +525,18 @@ function validateActionSlice(actions: Float32Array, offset: number): void {
     || offset < 0
     || offset + ML_BOT_POLICY_ACTION_STRIDE > actions.length
   ) throw new RangeError('packed Boneyard action slice is out of bounds')
+}
+
+function terminalActionMasks(): MlBotPolicyActionMasks {
+  const movement = new Uint8Array(9)
+  const target = new Uint8Array(9)
+  const ability = new Uint8Array(22)
+  const aim = new Uint8Array(9)
+  movement[0] = 1
+  target[0] = 1
+  ability[0] = 1
+  aim[0] = 1
+  return { ability, aim, movement, target }
 }
 
 function validateTicks(ticks: number): void {

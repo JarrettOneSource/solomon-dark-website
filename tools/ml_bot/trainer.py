@@ -549,6 +549,7 @@ def iteration_record(
         "death": float(np.sum(rollout.reward_terms["death"])),
         "clamp_adjustment": float(np.sum(rollout.reward_terms["clampAdjustment"])),
     }
+    gameplay = aggregate_gameplay(rollout.gameplay_counters)
     return {
         "metrics_version": 5,
         "iter": iteration,
@@ -586,12 +587,49 @@ def iteration_record(
             ),
         },
         "reward_terms": reward_terms,
+        "gameplay": gameplay,
         "return_normalization_std": return_scale,
         "choice_return_normalization_std": choice_return_scale,
         "gamma": configuration.gamma,
         "gae_lambda": configuration.gae_lambda,
         "action_repeat_ticks": configuration.action_repeat,
     }
+
+
+def aggregate_gameplay(
+    steps: Sequence[Sequence[Mapping[str, Any]]],
+) -> Mapping[str, Any]:
+    totals: dict[str, Any] = {
+        "enemy_kills": 0,
+        "enemy_kills_by_kind": {},
+        "waves_completed": 0,
+        "potions_used": 0,
+        "skill_picks": 0,
+        "gold_collected": 0.0,
+        "items_collected": 0,
+        "item_kinds": {},
+        "health_orbs_collected": 0,
+        "mana_orbs_collected": 0,
+        "powerups_collected": 0,
+    }
+    for worlds in steps:
+        for row in worlds:
+            totals["enemy_kills"] += int(row["enemyKills"])
+            totals["waves_completed"] += int(row["wavesCompleted"])
+            totals["potions_used"] += int(row["potionsUsed"])
+            totals["skill_picks"] += int(row["skillPicks"])
+            totals["gold_collected"] += float(row["goldCollected"])
+            totals["items_collected"] += int(row["itemsCollected"])
+            totals["health_orbs_collected"] += int(row["healthOrbsCollected"])
+            totals["mana_orbs_collected"] += int(row["manaOrbsCollected"])
+            totals["powerups_collected"] += int(row["powerupsCollected"])
+            for source_name, target_name in (
+                ("enemyKillsByKind", "enemy_kills_by_kind"),
+                ("itemKinds", "item_kinds"),
+            ):
+                for name, value in row[source_name].items():
+                    totals[target_name][name] = totals[target_name].get(name, 0) + int(value)
+    return totals
 
 
 def save_trainer_state(path: Path, value: Mapping[str, Any]) -> None:

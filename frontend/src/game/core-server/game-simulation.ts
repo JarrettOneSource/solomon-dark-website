@@ -1569,12 +1569,12 @@ function finishGameSimulationTick(
       receiverLevel: getPlayerProgression(progressionState, reward.playerId).level,
       receiverXpBonus: rewardDerived?.experienceBonus ?? 0,
     })
-    if (creditedExperience > 0) {
-      attributionObserver?.onEnemyKillExperience({
-        amount: creditedExperience,
-        playerId: reward.playerId,
-      })
-    }
+    attributionObserver?.onEnemyKillExperience({
+      actorId: reward.actorId,
+      amount: creditedExperience,
+      enemyToken: reward.lootSource.enemyToken,
+      playerId: reward.playerId,
+    })
     const awarded = grantSharedGameSimulationExperience(
       progressionState,
       reward.playerId,
@@ -1612,6 +1612,16 @@ function finishGameSimulationTick(
   const lootTextOverrides = new Map<number, string>()
   for (const pickup of result.lootPickups ?? []) {
     if (playerEntityIndex(playerEntities, pickup.playerId) < 0) continue
+    attributionObserver?.onLootPickup?.({
+      amount: pickup.amount,
+      bonusKind: pickup.bonusKind,
+      itemKind: pickup.item?.kind ?? null,
+      itemName: pickup.item?.name ?? null,
+      itemQuantity: pickup.item?.quantity ?? null,
+      kind: pickup.kind,
+      orbKind: pickup.orbKind,
+      playerId: pickup.playerId,
+    })
     switch (pickup.kind) {
       case 'gold':
         playerEntities = creditPlayerEntityLootGold(

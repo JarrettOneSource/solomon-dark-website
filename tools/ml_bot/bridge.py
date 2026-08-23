@@ -40,6 +40,7 @@ class RolloutTransition:
     choice_events: tuple[Mapping[str, Any], ...]
     choice_intervals: tuple[Mapping[str, Any], ...]
     dones: np.ndarray
+    gameplay_counters: tuple[Mapping[str, Any], ...]
     masks: Mapping[str, np.ndarray]
     next_simulation_ticks: np.ndarray
     next_state_hashes: tuple[str, ...]
@@ -245,6 +246,7 @@ def decode_transition(value: Any, worlds: int) -> RolloutTransition:
             source.get("choiceIntervals"), "choice intervals"
         )),
         dones=decode_array(source.get("dones"), "u1", (worlds,), "dones").astype(bool),
+        gameplay_counters=decode_gameplay_counters(source.get("gameplayCounters"), worlds),
         masks={
             "movement": decode_array(masks.get("movement"), "u1", (worlds, 9), "movement masks"),
             "target": decode_array(masks.get("target"), "u1", (worlds, 9), "target masks"),
@@ -299,6 +301,43 @@ def decode_indexed_choice(value: Any, *, interval: bool) -> Mapping[str, Any]:
             raise RolloutProtocolError("choice interval is not trajectory v5")
     event["worldIndex"] = world_index
     return event
+
+
+def decode_gameplay_counters(value: Any, worlds: int) -> tuple[Mapping[str, Any], ...]:
+    rows = required_list(value, "gameplay counters")
+    if len(rows) != worlds:
+        raise RolloutProtocolError("gameplay counters do not match world count")
+    numeric = (
+        "enemyKills",
+        "goldCollected",
+        "healthOrbsCollected",
+        "itemsCollected",
+        "manaOrbsCollected",
+        "potionsUsed",
+        "powerupsCollected",
+        "skillPicks",
+        "wavesCompleted",
+    )
+    result: list[Mapping[str, Any]] = []
+    for row in rows:
+        source = dict(required_mapping(row, "gameplay counter row"))
+        for name in numeric:
+            number = source.get(name)
+            if not isinstance(number, (int, float)) or isinstance(number, bool) or number < 0:
+                raise RolloutProtocolError(f"gameplay counter {name} is invalid")
+        for name in ("enemyKillsByKind", "itemKinds"):
+            counts = required_mapping(source.get(name), f"gameplay counter {name}")
+            if any(
+                not isinstance(key, str)
+                or not key
+                or not isinstance(count, (int, float))
+                or isinstance(count, bool)
+                or count < 0
+                for key, count in counts.items()
+            ):
+                raise RolloutProtocolError(f"gameplay counter {name} is invalid")
+        result.append(source)
+    return tuple(result)
 
 
 def validate_actions(value: np.ndarray, worlds: int) -> np.ndarray:

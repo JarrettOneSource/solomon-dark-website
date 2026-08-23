@@ -33,6 +33,10 @@ test('rollout server carries exact plans, expert transitions, and selective rese
     assert.equal(bytes(expert.transition.observations), 2 * 1_784 * 4)
     assert.equal(bytes(expert.transition.rewards), 2 * 8)
     assert.equal(bytes(expert.transition.ticks), 2 * 4)
+    assert.equal(expert.transition.gameplayCounters.length, 2)
+    assert.ok(expert.transition.gameplayCounters.every(({ enemyKills, wavesCompleted }) => (
+      enemyKills >= 0 && wavesCompleted >= 0
+    )))
     assert.notDeepEqual(expert.hashes, initialized.hashes)
 
     const reset = await bridge.request({ seeds: [101, null], type: 'reset' })

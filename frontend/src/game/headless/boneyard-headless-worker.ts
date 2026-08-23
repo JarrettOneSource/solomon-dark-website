@@ -140,6 +140,7 @@ function postStepResult(
       choiceEvents: transition.choiceEvents,
       choiceIntervals: transition.choiceIntervals,
       dones,
+      gameplayCounters: transition.gameplayCounters,
       nextSimulationTicks,
       nextStateHashes: transition.nextStateHashes,
       observations: previousObservations,

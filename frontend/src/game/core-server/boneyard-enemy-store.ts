@@ -841,7 +841,19 @@ export interface BoneyardEnemyAttributionObserver {
     playerId: string
   }>) => void
   readonly onEnemyKillExperience: (event: Readonly<{
+    actorId: number
     amount: number
+    enemyToken: string
+    playerId: string
+  }>) => void
+  readonly onLootPickup?: (event: Readonly<{
+    amount: number
+    bonusKind: number | null
+    itemKind: string | null
+    itemName: string | null
+    itemQuantity: number | null
+    kind: 'bonus' | 'gold' | 'orb' | 'sack'
+    orbKind: 'health' | 'mana' | null
     playerId: string
   }>) => void
 }

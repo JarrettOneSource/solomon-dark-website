@@ -69,6 +69,7 @@ class PolicyRollout:
     old_log_probabilities: np.ndarray
     values: np.ndarray
     rewards: np.ndarray
+    gameplay_counters: tuple[tuple[Mapping[str, Any], ...], ...]
     reward_terms: Mapping[str, np.ndarray]
     dones: np.ndarray
     ticks: np.ndarray
@@ -195,6 +196,7 @@ def collect_policy_rollout(
     dones: list[np.ndarray] = []
     ticks: list[np.ndarray] = []
     choice_intervals: list[Mapping[str, Any]] = []
+    gameplay_counters: list[tuple[Mapping[str, Any], ...]] = []
     completed: list[Mapping[str, Any]] = []
     episodes.ensure_started(bridge.state)
     for _ in range(steps):
@@ -220,6 +222,7 @@ def collect_policy_rollout(
         old_logs.append(selected.log_probability.cpu().numpy().copy())
         values.append(selected.value.cpu().numpy().copy())
         rewards.append(transition.rewards.copy())
+        gameplay_counters.append(transition.gameplay_counters)
         for name in ("death", "ownDamage", "selfHp", "wave", "xp"):
             reward_terms[name].append(transition.reward_terms[name].copy())
         reward_terms["clampAdjustment"].append(
@@ -244,6 +247,7 @@ def collect_policy_rollout(
         old_log_probabilities=np.stack(old_logs),
         values=np.stack(values),
         rewards=np.stack(rewards),
+        gameplay_counters=tuple(gameplay_counters),
         reward_terms={name: np.stack(value) for name, value in reward_terms.items()},
         dones=np.stack(dones),
         ticks=np.stack(ticks),
@@ -276,7 +280,16 @@ class EpisodeAccumulator:
         "aim": [0] * 9,
     })
     consumables_used: int = 0
+    enemy_kills: int = 0
+    enemy_kills_by_kind: dict[str, int] = field(default_factory=dict)
+    gold_collected: float = 0.0
+    health_orbs_collected: int = 0
+    item_kinds: dict[str, int] = field(default_factory=dict)
+    items_collected: int = 0
+    mana_orbs_collected: int = 0
     powerups_collected: int = 0
+    skill_picks: int = 0
+    waves_completed: int = 0
     keys_held_max: int = 0
     waves_reached: int = 0
     final_level: int = 1
@@ -329,13 +342,19 @@ class EpisodeLedger:
             accumulator.clamp_count += int(transition.reward_clamped[world])
             for column, name in enumerate(("move", "target", "ability", "aim")):
                 accumulator.action_histograms[name][int(actions[world, column])] += 1
-            accumulator.consumables_used += int(actions[world, 2] >= 10)
-            previous = before.observations[world]
+            gameplay = transition.gameplay_counters[world]
+            accumulator.consumables_used += int(gameplay["potionsUsed"])
+            accumulator.enemy_kills += int(gameplay["enemyKills"])
+            add_counts(accumulator.enemy_kills_by_kind, gameplay["enemyKillsByKind"])
+            accumulator.gold_collected += float(gameplay["goldCollected"])
+            accumulator.health_orbs_collected += int(gameplay["healthOrbsCollected"])
+            accumulator.items_collected += int(gameplay["itemsCollected"])
+            add_counts(accumulator.item_kinds, gameplay["itemKinds"])
+            accumulator.mana_orbs_collected += int(gameplay["manaOrbsCollected"])
+            accumulator.powerups_collected += int(gameplay["powerupsCollected"])
+            accumulator.skill_picks += int(gameplay["skillPicks"])
+            accumulator.waves_completed += int(gameplay["wavesCompleted"])
             current = after.observations[world]
-            accumulator.powerups_collected += int(
-                previous[FEATURE["self_damage_x4"]] < 0.5
-                and current[FEATURE["self_damage_x4"]] >= 0.5
-            )
             accumulator.keys_held_max = max(
                 accumulator.keys_held_max,
                 int(current[FEATURE["inventory_has_wizard_key"]] >= 0.5),
@@ -477,7 +496,16 @@ def episode_record(
         "reward_clamp_count": accumulator.clamp_count,
         "action_histograms": accumulator.action_histograms,
         "consumables_used": accumulator.consumables_used,
+        "enemy_kills": accumulator.enemy_kills,
+        "enemy_kills_by_kind": accumulator.enemy_kills_by_kind,
+        "gold_collected": accumulator.gold_collected,
+        "health_orbs_collected": accumulator.health_orbs_collected,
+        "items_collected": accumulator.items_collected,
+        "item_kinds": accumulator.item_kinds,
+        "mana_orbs_collected": accumulator.mana_orbs_collected,
         "powerups_collected": accumulator.powerups_collected,
+        "skill_picks": accumulator.skill_picks,
+        "waves_completed": accumulator.waves_completed,
         "keys_held_max": accumulator.keys_held_max,
         "death": accumulator.reward_terms["death"] < 0,
         "final_level": accumulator.final_level,
@@ -485,3 +513,8 @@ def episode_record(
         "aborted": aborted,
         "error": error,
     }
+
+
+def add_counts(target: dict[str, int], source: Mapping[str, Any]) -> None:
+    for name, value in source.items():
+        target[str(name)] = target.get(str(name), 0) + int(value)
