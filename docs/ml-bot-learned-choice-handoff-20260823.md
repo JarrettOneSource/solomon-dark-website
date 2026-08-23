@@ -1,5 +1,12 @@
 # ML bot learned-choice handoff — 2026-08-23
 
+> **Superseded on 2026-08-23:** the schema-v5 continuation below is historical.
+> Both original jobs finished, schema v6 closed the equipped-spell identity
+> gap, and update 17 passed the paired 30+30 promotion rule. No trainer from
+> this handoff is currently live. Continue from
+> [`ml-bot-policy-v6-selection.md`](ml-bot-policy-v6-selection.md) and validated
+> local commit `75c8ac27eb13cdeeaa4ff6faf085e32c0acb78e3`; production remains unchanged.
+
 This is the restart point for the extended schema-v5 bot-training campaign.
 All execution, tests, training, and evaluation must stay on the Mac Mini. Do
 not run any of them on the Linux/WSL workstation. The production GameHost and

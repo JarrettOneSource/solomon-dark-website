@@ -88,12 +88,63 @@ decoded from the current loadout row at each decision, not slot-only counters.
 
 ## Publication state
 
-- Local task branch: selected checkpoint and receipt update pending final exact
-  commit.
-- Mac canonical gate and real GameHost/browser acceptance for the selected
-  asset: pending below.
+- Validated code/checkpoint/harness commit:
+  `75c8ac27eb13cdeeaa4ff6faf085e32c0acb78e3` on local branch
+  `codex/ml-bot-learned-choice-finish-20260823-root`.
+- Final clean Mac worktree:
+  `/Users/jarrett/codex-acceptance/ml-bot-v6-20260823/final`.
+- Canonical Mac gate: exit zero; backend build 0 warnings/errors, ML tests
+  70/70, every remaining test group zero failures, production Game entry
+  435,085 raw / 122,488 gzip bytes within budget, and media policy green.
+  Log SHA-256: `8d3afaf28c67d01757dd247d057b45d2fa3a686869cc2ffda872e0ff39158244`.
+- Final GameHost smoke: the developer Lua summon joined the party, traveled
+  1,392.46 world units through the authored entrance, made 25 policy decisions,
+  killed four enemies, and remained alive. Log SHA-256:
+  `48e7a8520afb6abc8d4f0b9d511b8783492a3f2f86db9c6b45b654eb5e364d76`.
+- Final Mac Chrome acceptance: anonymous and authenticated players entered the
+  real Hub, saved, observed deployment drain/reload, and resumed; internal page
+  and console error arrays were empty. Anonymous ticks `957 → 1198`;
+  authenticated `839 → 1052`. Log SHA-256:
+  `61a88d78b41e102d2550c453ef205bc6d1a829ea9488fbff94c3f592a7a25fac`.
+- All task-owned backend, Vite, Chrome, supervisor, trainer, rollout, and
+  listener processes were stopped; ports 48187/48210 are clear.
 - Remote `main`, public Git, production checkpoint, upload, and deployment:
   unchanged and not authorized by this training pass.
 - Production/deployed incumbent remains schema v5 SHA-256
   `bf9f21ee7d149a7f46a40265bd9a03659b255468e198fee614f54ebded136f8b`
   until an explicit publication/deployment request.
+
+## Run and continue training on the Mac
+
+Run the packaged selected bot through the real GameHost integration:
+
+```sh
+cd /Users/jarrett/codex-acceptance/ml-bot-v6-20260823/final/frontend
+npm run smoke:game:ml-bot -- --duration-ms 90000
+```
+
+Start a new isolated ten-update PPO experiment from the selected checkpoint:
+
+```sh
+cd /Users/jarrett/codex-acceptance/ml-bot-v6-20260823/final
+python=/Users/jarrett/codex-acceptance/ml-bot-training-f12db3b6/venv/bin/python
+output=/Users/jarrett/codex-acceptance/ml-bot-v6-user-training
+
+PATH=/Users/jarrett/.local/bin:/Users/jarrett/.dotnet:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin \
+PYTHONPATH=tools "$python" tools/train_bot_policy.py train \
+  --checkpoint frontend/server-assets/ml-bot-policy-v6-selected.sdml \
+  --output "$output" --iterations 10 --rollout-steps 512 \
+  --ppo-epochs 4 --ppo-batch-size 128 \
+  --choice-batch-size 32 --minimum-choice-batch 32 \
+  --learning-rate 0.0001 --choice-learning-rate 0.0001 \
+  --gamma 0.995 --gae-lambda 0.95 --target-kl 0.02 \
+  --worlds 8 --workers 8 --action-repeat 10 --seed 0x5eed3000 \
+  --experiment "User continuation from promoted schema-v6 update 17" \
+  --expected-metric "paired frozen-seed wave depth increases" \
+  --eval-condition "frozen train-dist and holdout seeds"
+```
+
+The new output directory is required: update 17 is a selected runtime
+checkpoint, not a matching trainer-state resume. Screen each saved checkpoint
+with `probes`, `choice-retention`, and `arena`; stop a trajectory at the first
+failed behavior probe and never overwrite the packaged selected asset directly.
