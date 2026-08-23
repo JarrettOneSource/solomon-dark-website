@@ -1,5 +1,9 @@
 # ML bot policy v5 training
 
+The first corrected campaign's selected checkpoint, frozen evaluation, PPO
+rejection table, and closed findings are recorded in
+[`ml-bot-policy-v5-selection.md`](ml-bot-policy-v5-selection.md).
+
 The Website owns the schema-v5 observation/action contract, deterministic
 Boneyard training environment, PyTorch trainer, evaluation artifacts, and
 compact runtime checkpoint. Attaching a trained policy to a live game client
