@@ -35138,3 +35138,32 @@ the commit carrying this entry is the round-3/4 tree rebased onto `e75cdb1d`
 (`main` moved while the picks were under review — only this ledger overlapped),
 and the r8 re-validation receipt follows in its own entry. Deploy: none;
 production served `3e2aa260` at the time of writing.
+
+#### Publication receipt (round 4, 2026-08-23 13:35–13:50 EDT)
+
+`origin/main` had moved to `e75cdb1d` (the Category-2 cooldown / Golem mana
+entry above) while the picks were under review. The round-3/4 tree was
+committed as `f9bc9b4c` on `87f86254`, rebased onto `e75cdb1d` as `97e2c9fd`
+(the only conflict was this ledger — both entries appended, upstream's kept
+first), and re-validated on the Mac from a clean detached checkout of that
+exact commit (tree `f1a051a7…` identical on both machines; nothing
+transferred by file this time).
+
+| Run (EDT) | Build | Journey | `validate.sh` | Disposition |
+| --- | --- | --- | --- | --- |
+| r8 13:40 | 0 | 18 stops, errors `[]` | 1872 / 1872 across 12 TAP suites, 0 failures (exit 0) | publication receipt; `leftovers=0` |
+
+r8 against the r7 receipt: every contract member is identical — chip, member
+card, ally roster in all four states, dock B, quickbar banks, skull, chat
+opener, settings dialog. The only deltas are the FPS readout's intrinsic
+text width (`diagnostics`, excluded from the contract) and the hidden
+zero-size chat panel's anchor `y` in `run-held` (49 → 57; not rendered). The
++11 tests over r7 are upstream's. Mac load was ~16 from another task's ML
+rollout server and trainers; none were validation jobs and none were touched.
+
+Publication: `97e2c9fd` (code + ledger) and the docs-only commit carrying
+this receipt go to `main` as a fast-forward. Deploy: none — production keeps
+serving `3e2aa260` until the owner deploys. After the push proof the
+acceptance clone, bundle, and runner are removed; the evidence and logs named
+above (`/Users/jarrett/codex-acceptance/mobile-hud-iter-20260823/{evidence,logs}/r7`
+and `r8`) are retained as the receipt's evidence.
