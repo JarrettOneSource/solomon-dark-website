@@ -215,6 +215,7 @@ function entryGate(state: GameSimulationState): Readonly<{
   y: number
 }> | null {
   if (state.world.kind !== 'boneyard' || state.world.gateLeaves.length === 0) return null
+  const spawn = state.world.spawn
   const groups = new Map<string, typeof state.world.gateLeaves>()
   for (const leaf of state.world.gateLeaves) {
     groups.set(leaf.fenceEid, [...(groups.get(leaf.fenceEid) ?? []), leaf])
@@ -227,7 +228,7 @@ function entryGate(state: GameSimulationState): Readonly<{
       }]
     : [])
   return centers.toSorted((left, right) => (
-    distance(left, state.world.spawn) - distance(right, state.world.spawn)
+    distance(left, spawn) - distance(right, spawn)
   ))[0] ?? null
 }
 
