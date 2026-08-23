@@ -412,38 +412,49 @@ def evaluate_policy(
     policy.load_tensors(tensors)
     policy.eval()
     records: list[Mapping[str, Any]] = []
-    for start in range(0, len(seeds), workers):
-        chunk = list(seeds[start : start + workers])
-        ledger = EpisodeLedger()
-        with BoneyardRolloutBridge(chunk, worker_count=min(workers, len(chunk))) as bridge:
-            ledger.ensure_started(bridge.state)
-            active = np.ones(len(chunk), dtype=bool)
-            generator = torch.Generator().manual_seed(chunk[0])
-            for _ in range(maximum_steps):
-                before = bridge.state
-                observations, plans = state_tensors(before, torch.device("cpu"))
-                with torch.no_grad():
-                    selected = policy.act(
-                        observations, plans, deterministic=True, generator=generator
-                    )
-                actions = np.stack(
-                    [selected.actions[name].numpy() for name in ACTION_ORDER], axis=1
-                ).astype(np.uint8)
-                actions[~active] = 0
-                result = bridge.step(actions, ticks=action_repeat)
-                newly_completed = ledger.observe(before, result.state, result.transition, actions)
-                records.extend(newly_completed)
-                active &= ~result.transition.dones
-                if not np.any(active):
-                    break
-            if np.any(active):
-                records.extend(ledger.aborted_records("evaluation step limit"))
-        if progress is not None:
-            progress({
-                "checkpoint": str(checkpoint_path),
-                "evaluatedEpisodes": len(records),
-                "requestedEpisodes": len(seeds),
-            })
+    initial_count = min(workers, len(seeds))
+    initial_seeds = list(seeds[:initial_count])
+    next_seed_index = initial_count
+    ledger = EpisodeLedger()
+    with BoneyardRolloutBridge(initial_seeds, worker_count=initial_count) as bridge:
+        ledger.ensure_started(bridge.state)
+        active = np.ones(initial_count, dtype=bool)
+        decision_counts = np.zeros(initial_count, dtype=np.int64)
+        while len(records) < len(seeds):
+            before = bridge.state
+            observations, plans = state_tensors(before, torch.device("cpu"))
+            with torch.no_grad():
+                selected = policy.act(observations, plans, deterministic=True)
+            actions = np.stack(
+                [selected.actions[name].numpy() for name in ACTION_ORDER], axis=1
+            ).astype(np.uint8)
+            actions[~active] = 0
+            result = bridge.step(actions, ticks=action_repeat)
+            decision_counts[active] += 1
+            records.extend(ledger.observe(before, result.state, result.transition, actions))
+            terminal = active & result.transition.dones
+            timed_out = active & ~terminal & (decision_counts >= maximum_steps)
+            records.extend(ledger.abort_worlds(timed_out, "evaluation step limit"))
+            reusable = terminal | timed_out
+            reset_seeds: list[int | None] = [None] * initial_count
+            reset_mask = np.zeros(initial_count, dtype=bool)
+            for world in np.flatnonzero(reusable):
+                if next_seed_index < len(seeds):
+                    reset_seeds[world] = int(seeds[next_seed_index])
+                    next_seed_index += 1
+                    decision_counts[world] = 0
+                    reset_mask[world] = True
+                else:
+                    active[world] = False
+            if np.any(reset_mask):
+                reset_state = bridge.reset(reset_seeds)
+                ledger.reset_worlds(reset_state, reset_mask)
+            if progress is not None and np.any(reusable):
+                progress({
+                    "checkpoint": str(checkpoint_path),
+                    "evaluatedEpisodes": len(records),
+                    "requestedEpisodes": len(seeds),
+                })
     return evaluation_report(
         checkpoint_path,
         seeds,

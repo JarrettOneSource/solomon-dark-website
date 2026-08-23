@@ -402,12 +402,25 @@ class EpisodeLedger:
         return completed
 
     def aborted_records(self, reason: str) -> tuple[Mapping[str, Any], ...]:
-        records = tuple(
-            episode_record(accumulator, aborted=True, error=reason)
-            for accumulator in self._active
-            if accumulator is not None
-        )
-        self._active = []
+        return tuple(self.abort_worlds(
+            np.asarray([accumulator is not None for accumulator in self._active]),
+            reason,
+        ))
+
+    def abort_worlds(
+        self,
+        mask: np.ndarray,
+        reason: str,
+    ) -> list[Mapping[str, Any]]:
+        if mask.shape != (len(self._active),):
+            raise ValueError("episode abort mask does not match world count")
+        records: list[Mapping[str, Any]] = []
+        for world, abort in enumerate(mask):
+            accumulator = self._active[world]
+            if not abort or accumulator is None:
+                continue
+            records.append(episode_record(accumulator, aborted=True, error=reason))
+            self._active[world] = None
         return records
 
 
