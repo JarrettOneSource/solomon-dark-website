@@ -286,6 +286,23 @@ def main() -> int:
             identity_report, identity_report, label="candidate"
         )
         assert identity["checkpointSha256"] == summary["checkpoint_sha256"]
+        legacy_identity = evaluation_checkpoint_identity(
+            {**identity_report, "evaluationVersion": 5},
+            {**identity_report, "evaluationVersion": 5},
+            label="incumbent",
+            accepted_versions=(5, 6),
+        )
+        assert legacy_identity == identity
+        try:
+            evaluation_checkpoint_identity(
+                {**identity_report, "evaluationVersion": 5},
+                {**identity_report, "evaluationVersion": 5},
+                label="candidate",
+            )
+        except ValueError as error:
+            assert "version must be one of 6" in str(error)
+        else:
+            raise AssertionError("candidate accepted a legacy evaluation version")
         try:
             evaluation_checkpoint_identity(
                 identity_report,

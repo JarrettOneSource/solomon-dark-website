@@ -11,8 +11,8 @@ import torch
 
 from .checkpoint import atomic_write, load_checkpoint
 from .model import PolicyV6
-from .optimization import classification_accuracy
-from .rollouts import ExpertDataset
+from .optimization import choice_classification_accuracy, classification_accuracy
+from .rollouts import ChoiceExpertDataset, ExpertDataset, split_choice_expert_dataset
 from .spec import POLICY_SPEC
 
 FEATURE = {name: index for index, name in enumerate(POLICY_SPEC.observation_names)}
@@ -93,3 +93,62 @@ def behavior_probe_scorecard(
         (json.dumps(report, allow_nan=False, indent=2, sort_keys=True) + "\n").encode(),
     )
     return report
+
+
+def choice_retention_scorecard(
+    checkpoint: Path,
+    dataset_path: Path,
+    output: Path,
+    *,
+    seed: int,
+    validation_fraction: float,
+) -> Mapping[str, Any]:
+    metadata, tensors = load_checkpoint(checkpoint)
+    if metadata.get("choicePolicyMode") != "learned":
+        raise ValueError("choice retention requires a learned-choice checkpoint")
+    dataset = ChoiceExpertDataset.load(dataset_path)
+    training, validation = split_choice_expert_dataset(
+        dataset,
+        validation_fraction=validation_fraction,
+        rng=np.random.default_rng(seed + 1),
+    )
+    policy = PolicyV6()
+    policy.load_tensors(tensors)
+    policy.eval()
+    with torch.no_grad():
+        training_accuracy = choice_classification_accuracy(
+            policy,
+            *choice_tensors(training),
+        )
+        validation_accuracy = choice_classification_accuracy(
+            policy,
+            *choice_tensors(validation),
+        )
+    report = {
+        "choice_retention_version": 6,
+        "checkpoint": str(checkpoint.resolve()),
+        "dataset": str(dataset_path.resolve()),
+        "passed": training_accuracy >= 0.95 and validation_accuracy >= 0.85,
+        "seed": seed,
+        "trainingAccuracy": training_accuracy,
+        "trainingMinimum": 0.95,
+        "trainingRows": len(training),
+        "validationAccuracy": validation_accuracy,
+        "validationFraction": validation_fraction,
+        "validationMinimum": 0.85,
+        "validationRows": len(validation),
+    }
+    atomic_write(
+        output,
+        (json.dumps(report, allow_nan=False, indent=2, sort_keys=True) + "\n").encode(),
+    )
+    return report
+
+
+def choice_tensors(dataset: ChoiceExpertDataset) -> tuple[torch.Tensor, ...]:
+    return (
+        torch.from_numpy(dataset.observations).float(),
+        torch.from_numpy(dataset.option_descriptors).float(),
+        torch.from_numpy(dataset.option_masks).bool(),
+        torch.from_numpy(dataset.selected_options).long(),
+    )

@@ -22,7 +22,7 @@ from ml_bot.metrics import (
     promotion_decision,
     training_summary,
 )
-from ml_bot.probes import behavior_probe_scorecard
+from ml_bot.probes import behavior_probe_scorecard, choice_retention_scorecard
 from ml_bot.self_test import main as self_test
 from ml_bot.spec import POLICY_SPEC, REPOSITORY_ROOT
 from ml_bot.trainer import (
@@ -322,6 +322,16 @@ def run_probes(args: argparse.Namespace) -> Any:
     )
 
 
+def run_choice_retention(args: argparse.Namespace) -> Any:
+    return choice_retention_scorecard(
+        Path(args.checkpoint).resolve(),
+        Path(args.dataset).resolve(),
+        Path(args.output).resolve(),
+        seed=args.seed,
+        validation_fraction=args.validation_fraction,
+    )
+
+
 def run_promote(args: argparse.Namespace) -> Any:
     reports = {
         name: json.loads(Path(path).read_text(encoding="utf-8"))
@@ -335,7 +345,10 @@ def run_promote(args: argparse.Namespace) -> Any:
     if any(report.get("validForPromotion") is not True for report in reports.values()):
         raise ValueError("all four evaluation reports must be promotion-valid")
     incumbent_identity = evaluation_checkpoint_identity(
-        reports["incumbentTrain"], reports["incumbentHoldout"], label="incumbent"
+        reports["incumbentTrain"],
+        reports["incumbentHoldout"],
+        label="incumbent",
+        accepted_versions=(5, 6),
     )
     candidate_identity = evaluation_checkpoint_identity(
         reports["candidateTrain"], reports["candidateHoldout"], label="candidate"
@@ -521,6 +534,17 @@ def create_parser() -> argparse.ArgumentParser:
     probes_parser.add_argument("--dataset", required=True)
     probes_parser.add_argument("--output", required=True)
     probes_parser.set_defaults(handler=run_probes)
+
+    choice_retention_parser = subparsers.add_parser(
+        "choice-retention",
+        help="score learned-choice imitation retention on the frozen expert split",
+    )
+    choice_retention_parser.add_argument("--checkpoint", required=True)
+    choice_retention_parser.add_argument("--dataset", required=True)
+    choice_retention_parser.add_argument("--output", required=True)
+    choice_retention_parser.add_argument("--seed", type=uint32, default=0x5EED_2000)
+    choice_retention_parser.add_argument("--validation-fraction", type=fraction, default=0.2)
+    choice_retention_parser.set_defaults(handler=run_choice_retention)
 
     promote_parser = subparsers.add_parser("promote", help="apply the frozen paired-seed rule")
     promote_parser.add_argument("--incumbent-train", required=True)

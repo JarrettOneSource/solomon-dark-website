@@ -200,6 +200,11 @@ python tools/train_bot_policy.py probes \
   --dataset runtime/ml-training/web-v6/expert-v6.npz \
   --output runtime/ml-training/web-v6/probes.json
 
+python tools/train_bot_policy.py choice-retention \
+  --checkpoint runtime/ml-training/web-v6/latest.sdml \
+  --dataset runtime/ml-training/web-v6/choice-expert-v6.npz \
+  --output runtime/ml-training/web-v6/choice-retention.json
+
 python tools/train_bot_policy.py diagnostics \
   --training-directory runtime/ml-training/web-v6 \
   --output runtime/ml-training/web-v6/dashboard.html
@@ -209,7 +214,8 @@ Each update records learning metrics plus exact gameplay outcomes: enemy kills
 and kinds, waves reached/completed, deaths, potion use, skill picks, gold,
 item kinds/counts, health/mana orbs, powerups, XP, reward decomposition, and
 action histograms. Learned runs additionally record selected skill IDs,
-descriptor families, choice mode, and SMDP interval length. Evaluation progress
+descriptor families, choice mode, SMDP interval length, spell actions by exact
+equipped skill id, and maximum observed equipped ranks. Evaluation progress
 and final reports aggregate those same gameplay counters and chosen-skill IDs,
 along with authoritative simulation ticks and policy decisions, so a live run
 can be distinguished from an idle or stalled one.
@@ -238,6 +244,11 @@ python tools/train_bot_policy.py arena \
 An arena with fewer than 30 fully terminated episodes is explicitly marked
 `promotionScale=false`. After both 30-seed sets complete for incumbent and
 candidate, apply the paired confidence rule:
+
+The promotion reader accepts a version-5 report only for the incumbent slot so
+the deployed checkpoint can be compared during the strict v6 cutover. Candidate
+reports must be version 6. This is evaluation-only lineage support; the v6
+runtime and checkpoint codec still reject every v5 artifact.
 
 ```sh
 python tools/train_bot_policy.py promote \

@@ -105,10 +105,17 @@ def evaluation_checkpoint_identity(
     holdout_report: Mapping[str, Any],
     *,
     label: str,
+    accepted_versions: Sequence[int] = (6,),
 ) -> Mapping[str, str]:
+    if not accepted_versions or any(
+        not isinstance(version, int) or isinstance(version, bool) or version < 1
+        for version in accepted_versions
+    ):
+        raise ValueError("accepted evaluation versions must be positive integers")
     for report in (train_report, holdout_report):
-        if report.get("evaluationVersion") != 6:
-            raise ValueError(f"{label} evaluation report is not strict version 6")
+        if report.get("evaluationVersion") not in accepted_versions:
+            allowed = ", ".join(str(version) for version in accepted_versions)
+            raise ValueError(f"{label} evaluation report version must be one of {allowed}")
     path = train_report.get("checkpoint")
     if not isinstance(path, str) or path != holdout_report.get("checkpoint"):
         raise ValueError(f"{label} train and holdout reports use different checkpoints")
