@@ -78,7 +78,9 @@ class TestRolloutBridge {
   async close() {
     if (this.#process.exitCode !== null) return
     await this.request({ type: 'close' })
-    await new Promise(resolve => this.#process.once('exit', resolve))
+    if (this.#process.exitCode === null) {
+      await new Promise(resolve => this.#process.once('exit', resolve))
+    }
   }
 
   #rejectAll(error) {
