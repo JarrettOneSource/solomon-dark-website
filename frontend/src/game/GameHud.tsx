@@ -35,6 +35,7 @@ interface GameHudProps {
   /** Touch: hide the ally roster while the Hub party column is open under the chip. */
   allyRosterHidden?: boolean
   controls: GameControlBindings
+  controllerQuickbarSlot?: number
   getPingMs: () => number | null
   initialSnapshot: GameSnapshot
   mapLabel?: string
@@ -131,6 +132,7 @@ export default function GameHud({
   additionalAllyRows,
   allyRosterHidden,
   controls,
+  controllerQuickbarSlot,
   getPingMs,
   initialSnapshot,
   mapLabel = 'Map',
@@ -350,6 +352,7 @@ export default function GameHud({
 
       <SkillQuickbar
         controls={controls}
+        controllerQuickbarSlot={controllerQuickbarSlot}
         mode={mode}
         onInput={onQuickbarInput}
         playerState={quickbarHud.playerState}

@@ -699,6 +699,7 @@ function NativeHubSurface({
               />
               {notice.variant === 'unforge-confirmation' ? (
                 <NativeAction
+                  gameBack
                   label={notice.secondaryActionLabel ?? 'CANCEL'}
                   rect={HUB_UNFORGE_CONFIRMATION.secondaryButtonRect}
                   onClick={() => click(() => setNotice(null))}
@@ -773,6 +774,14 @@ function NativeHubSurface({
           {semanticTooltip ? (
             <span className="hub-native-ui-semantic" role="tooltip">{semanticTooltip}</span>
           ) : null}
+          <button
+            className="hub-native-ui-semantic"
+            data-game-back="true"
+            onClick={onClose}
+            type="button"
+          >
+            Close {label}
+          </button>
         </div>
         {rendererState === 'error' ? (
           <p className="hub-native-ui-error" role="alert">Native inventory renderer unavailable.</p>
@@ -821,7 +830,7 @@ function DialogueActions({
           {dialogue.priceLabel ? (
             <NativeAction label={dialogue.priceLabel} rect={HUB_CHAT_PANEL.secondaryChoiceRect} onClick={onPrices} />
           ) : null}
-          <NativeAction label="Done" rect={HUB_CHAT_PANEL.doneRect} onClick={onClose} />
+          <NativeAction gameBack label="Done" rect={HUB_CHAT_PANEL.doneRect} onClick={onClose} />
         </>
       ) : (
         <>
@@ -926,7 +935,7 @@ function ServiceActions({
             ? onInsufficientGold()
             : onAction({ type: 'dowse' })}
         />
-        <NativeAction label="Done" rect={HUB_SHOP_PANEL.doneRect} onClick={onClose} />
+        <NativeAction gameBack label="Done" rect={HUB_SHOP_PANEL.doneRect} onClick={onClose} />
       </>
     )
   } else if (trader === 'hagatha') {
@@ -974,7 +983,7 @@ function ServiceActions({
         <span className="hub-native-ui-semantic hub-charm-capacity">
           Charms and curses: {economy.ownedPerkSelectors.length} / {economy.charmCapacity}
         </span>
-        <NativeAction label="Done" rect={HUB_SHOP_PANEL.doneRect} onClick={onClose} />
+        <NativeAction gameBack label="Done" rect={HUB_SHOP_PANEL.doneRect} onClick={onClose} />
       </>
     )
   } else {
@@ -1018,7 +1027,7 @@ function ServiceActions({
             onSelect(null)
           }}
         />
-        <NativeAction label="Done" rect={HUB_SHOP_PANEL.doneRect} onClick={onClose} />
+        <NativeAction gameBack label="Done" rect={HUB_SHOP_PANEL.doneRect} onClick={onClose} />
       </>
     )
   }
@@ -1284,7 +1293,7 @@ function InventoryShopStorageActions({
           onClear={clearStorageSelection}
         />
       </section>
-      <NativeAction label="Done" rect={HUB_SHOP_PANEL.doneRect} onClick={onClose} />
+      <NativeAction gameBack label="Done" rect={HUB_SHOP_PANEL.doneRect} onClick={onClose} />
     </>
   )
 }
@@ -1406,6 +1415,7 @@ function DyeClothingActions({
       <NativeAction
         data={{ 'data-native-dye-cancel': phase === 'layer' ? 'layer' : 'session' }}
         disabled={blocked}
+        gameBack
         label={phase === 'layer' ? 'Cancel layer choice' : 'Cancel Fabric Dye'}
         rect={HUB_DYE_CLOTHING.cancelRect}
         onClick={onCancel}
@@ -1983,6 +1993,7 @@ function NativeAction({
   children,
   data,
   disabled = false,
+  gameBack = false,
   label,
   onBlur,
   onClick,
@@ -2000,6 +2011,7 @@ function NativeAction({
   children?: ReactNode
   data?: Record<string, number | string>
   disabled?: boolean
+  gameBack?: boolean
   label: string
   onBlur?: () => void
   onClick?: () => void
@@ -2019,6 +2031,7 @@ function NativeAction({
       type="button"
       className="hub-native-ui-action"
       aria-label={label}
+      data-game-back={gameBack || undefined}
       disabled={disabled}
       style={rectStyle(rect)}
       tabIndex={tabIndex}

@@ -294,6 +294,15 @@
   pointer-events: none;
 }
 
+.hub-hud-quickbar-slot[data-controller-selected='true']::after {
+  position: absolute;
+  inset: -4px;
+  border: 2px solid rgb(231 193 105 / 90%);
+  border-radius: 6px;
+  box-shadow: 0 0 8px rgb(231 193 105 / 65%);
+  content: '';
+}
+
 .hub-hud-quickbar-skill-icon {
   position: absolute;
   top: 50%;

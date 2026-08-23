@@ -171,6 +171,14 @@ export default function HudSkillSelector({
           )
         })}
       </div>
+      <button
+        className="hud-skill-selector-semantic-title"
+        data-game-back="true"
+        onClick={onClose}
+        type="button"
+      >
+        Close skill selector
+      </button>
       {rendererState === 'error' ? (
         <p className="hud-skill-selector-error" role="alert">Skill selector unavailable.</p>
       ) : null}

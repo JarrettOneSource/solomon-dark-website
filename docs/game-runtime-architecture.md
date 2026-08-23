@@ -613,6 +613,16 @@ There is one composed client, not one DOM client and one canvas client.
   bitmap font and each scene's final camera transform, includes the local
   sender as well as visible remote senders, and stays `aria-hidden`; the HTML
   transcript remains the sole live-region announcement.
+- Controller input is one browser producer over the same semantic seams as
+  keyboard/mouse/touch. Standard-mapped pads provide radial left-stick/D-pad
+  movement, retained right-stick torso aim, held RT primary and X quickbar
+  levels, LB/RB eight-slot selection, and edge-only Hub/inventory/skills/pause
+  actions. One persistent focus router owns menu/modal A/B/D-pad/bumper input;
+  Hub and Boneyard keep those controls in gameplay until a modal becomes the
+  top input owner. Blur, hidden/pagehide, loading, pause, disconnect, and scene
+  teardown clear every controller lane and require neutral before rearming.
+  Raw pads without the W3C `standard` mapping are not guessed; Steam Input or
+  the browser must provide the canonical layout.
 - The Courtyard and Boneyard worlds and cameras now render through PixiJS
   WebGL canvases.
   Native draw plans, blend operations, frame selectors, render offsets, and

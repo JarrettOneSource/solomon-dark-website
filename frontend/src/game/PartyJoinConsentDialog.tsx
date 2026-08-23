@@ -46,7 +46,7 @@ export default function PartyJoinConsentDialog({
         ) : null}
         <DownloadProgress progress={progress} />
         <footer>
-          <button disabled={busy} type="button" onClick={onBack}>BACK</button>
+          <button data-game-back="true" disabled={busy} type="button" onClick={onBack}>BACK</button>
           <button disabled={busy} type="button" onClick={onContinue}>
             {busy
               ? 'PREPARING…'

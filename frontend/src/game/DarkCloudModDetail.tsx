@@ -193,6 +193,7 @@ export default function DarkCloudModDetail({
             ref={closeRef}
             type="button"
             className="dark-cloud-detail-close"
+            data-game-back="true"
             aria-label="Close mod details"
             onClick={onClose}
           >

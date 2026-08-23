@@ -172,6 +172,7 @@ export default function GameplayPauseMenu({
             {pressedRow ? <NativePausePressedRow row={pressedRow} /> : null}
             {renderPlan.rows.map((row, index) => (
               <NativePauseButton
+                back={escapeAction === row.action}
                 key={row.action}
                 buttonRef={index === 0 ? firstRowRef : undefined}
                 closing={closing}
@@ -193,6 +194,7 @@ export default function GameplayPauseMenu({
 }
 
 interface NativePauseButtonProps {
+  back: boolean
   buttonRef?: RefObject<HTMLButtonElement | null>
   closing: NativeSimpleMenuAction | null
   onBeginClose: (action: NativeSimpleMenuAction) => void
@@ -201,6 +203,7 @@ interface NativePauseButtonProps {
 }
 
 function NativePauseButton({
+  back,
   buttonRef,
   closing,
   onBeginClose,
@@ -228,6 +231,7 @@ function NativePauseButton({
       style={bounds}
       disabled={closing !== null}
       data-pause-action={action}
+      data-game-back={back || undefined}
       onBlur={blur}
       onClick={() => onBeginClose(action)}
       onKeyDown={keyDown}

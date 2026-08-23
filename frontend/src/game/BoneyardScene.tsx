@@ -182,7 +182,9 @@ export default function BoneyardScene({
     }
     return initialSnapshot
   })
+  const [run, setRun] = useState<GameRunLifecycleState>(boneyardInitialSnapshot.run)
   const [inventorySurface, setInventorySurface] = useState<HubUiSurface>(null)
+  const [controllerQuickbarSlot, setControllerQuickbarSlot] = useState<number | undefined>()
   const inventoryRequestRef = useRef(inventoryRequestSequence)
   const [economy, setEconomy] = useState<ProtocolPlayerEconomy>(
     boneyardInitialSnapshot.players[playerId]!.economy,
@@ -190,7 +192,7 @@ export default function BoneyardScene({
   const [playerPosition, setPlayerPosition] = useState(
     boneyardInitialSnapshot.players[playerId]!.position,
   )
-  const sceneInputBlocked = inputBlocked || inventorySurface !== null
+  const sceneInputBlocked = inputBlocked || inventorySurface !== null || run.phase !== 'active'
 
   useEffect(() => {
     onInventoryOpenChange(inventorySurface?.kind === 'inventory')
@@ -218,11 +220,13 @@ export default function BoneyardScene({
   const levelUpPresentationIdRef = useRef(levelUpPresentationId)
   const onLoadingErrorRef = useRef(onLoadingError)
   const onReadyRef = useRef(onReady)
+  const controllerActionsRef = useRef({ onOpenSkills, onPauseRequest })
   inputBlockedRef.current = sceneInputBlocked
   presentationPausedRef.current = presentationPaused
   levelUpPresentationIdRef.current = levelUpPresentationId
   onLoadingErrorRef.current = onLoadingError
   onReadyRef.current = onReady
+  controllerActionsRef.current = { onOpenSkills, onPauseRequest }
   const [rendererState, setRendererState] = useState<RendererState>('loading')
   const [lootEventSynchronizer] = useState(() => (
     new BoneyardLootEventSynchronizer(boneyardInitialSnapshot)
@@ -234,7 +238,6 @@ export default function BoneyardScene({
   const [rendererError, setRendererError] = useState<string | null>(null)
   const [spectatorStatus, setSpectatorStatus] =
     useState<BoneyardSpectatorStatusPresentation | null>(null)
-  const [run, setRun] = useState<GameRunLifecycleState>(boneyardInitialSnapshot.run)
   useEffect(() => {
     if (inventoryRequestRef.current === inventoryRequestSequence) return
     inventoryRequestRef.current = inventoryRequestSequence
@@ -491,6 +494,22 @@ export default function BoneyardScene({
       },
       controls: settingsRef.current.controls,
       mouseTarget: host,
+      onGamepadAction: (action) => {
+        if (samplePresentation().run.phase !== 'active') return
+        const callbacks = controllerActionsRef.current
+        if (action === 'inventory') {
+          setInventorySurface({ kind: 'inventory' })
+        } else if (action === 'skills') {
+          setInventorySurface(null)
+          callbacks.onOpenSkills()
+        } else if (action === 'pause') {
+          callbacks.onPauseRequest()
+        }
+      },
+      onGamepadPresenceChange: (present) => {
+        if (!present) setControllerQuickbarSlot(undefined)
+      },
+      onGamepadQuickbarSelection: setControllerQuickbarSlot,
       onInput,
       projectDirection: (direction) => {
         const renderer = rendererRef.current
@@ -841,6 +860,7 @@ export default function BoneyardScene({
             <GameHud
               accountUsername={accountUsername}
               controls={settings.controls}
+              controllerQuickbarSlot={controllerQuickbarSlot}
               getPingMs={getPingMs}
               initialSnapshot={boneyardInitialSnapshot}
               mode="run"

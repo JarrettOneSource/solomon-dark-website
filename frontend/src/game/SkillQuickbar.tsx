@@ -41,6 +41,7 @@ const ATLAS_HEIGHT = 512
 
 interface SkillQuickbarProps {
   controls: GameControlBindings
+  controllerQuickbarSlot?: number
   mode: 'hub' | 'run'
   onInput?: (slot: number, pressed: boolean) => void
   playerState: NativeSecondaryPlayerState | undefined
@@ -54,6 +55,7 @@ interface SkillQuickbarProps {
 
 export default function SkillQuickbar({
   controls,
+  controllerQuickbarSlot,
   mode,
   onInput,
   playerState,
@@ -104,6 +106,7 @@ export default function SkillQuickbar({
             data-quickbar-bank={mobilePlacement.bank}
             data-binding-code={bindingCode}
             data-active={active}
+            data-controller-selected={controllerQuickbarSlot === slot || undefined}
             disabled={skill === undefined || !onInput || combatDisabled}
             key={slot}
             style={{
@@ -112,7 +115,7 @@ export default function SkillQuickbar({
               '--mobile-quickbar-slot-size': `${mobilePlacement.size}px`,
               '--quickbar-slot-offset': `${offset}px`,
             } as CSSProperties}
-            aria-label={label}
+            aria-label={`${label}${controllerQuickbarSlot === slot ? ', controller selected' : ''}`}
             onPointerDown={(event) => {
               const unsupportedMouseButton = event.pointerType === 'mouse' && event.button !== 0
               if (unsupportedMouseButton || skill === undefined || !onInput || combatDisabled) return

@@ -637,7 +637,7 @@ function DarkCloudModal({
           {children}
         </div>
         <div className="dark-cloud-panel-footer">
-          <button type="button" className="dark-cloud-modal-done dark-cloud-stone-button" onClick={onClose}>DONE</button>
+          <button data-game-back="true" type="button" className="dark-cloud-modal-done dark-cloud-stone-button" onClick={onClose}>DONE</button>
         </div>
       </section>
     </div>

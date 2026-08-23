@@ -4,6 +4,7 @@ import type { Vector2 } from './core-kernels/vector.ts'
 export const HUB_PLAYER_SELECTION_HALF_WIDTH = 45
 export const HUB_PLAYER_SELECTION_TOP = 110
 export const HUB_PLAYER_SELECTION_BOTTOM = 30
+export const HUB_CONTROLLER_PLAYER_INTERACTION_RADIUS = 120
 
 export function selectHubPlayerAtPoint(
   snapshot: HubGameSnapshot,
@@ -34,4 +35,30 @@ export function selectHubPlayerAtPoint(
     }
   }
   return selected?.playerId ?? null
+}
+
+export function nearestHubPlayer(
+  snapshot: HubGameSnapshot,
+  localPlayerId: string,
+  maximumDistance = HUB_CONTROLLER_PLAYER_INTERACTION_RADIUS,
+): string | null {
+  const local = snapshot.players[localPlayerId]
+  const localRegion = snapshot.world.participants[localPlayerId]?.region
+  if (!local || !localRegion || !(maximumDistance > 0) || !Number.isFinite(maximumDistance)) {
+    return null
+  }
+  let nearest: { distanceSquared: number; playerId: string } | null = null
+  for (const [playerId, player] of Object.entries(snapshot.players)) {
+    if (playerId === localPlayerId || snapshot.world.participants[playerId]?.region !== localRegion) {
+      continue
+    }
+    const dx = player.position.x - local.position.x
+    const dy = player.position.y - local.position.y
+    const distanceSquared = dx * dx + dy * dy
+    if (distanceSquared > maximumDistance * maximumDistance) continue
+    if (!nearest || distanceSquared < nearest.distanceSquared) {
+      nearest = { distanceSquared, playerId }
+    }
+  }
+  return nearest?.playerId ?? null
 }

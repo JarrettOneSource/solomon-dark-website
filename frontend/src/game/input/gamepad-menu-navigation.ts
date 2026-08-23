@@ -6,6 +6,8 @@ export interface MenuGamepadState {
   back: boolean
   confirm: boolean
   direction: MenuDirection | null
+  next: boolean
+  previous: boolean
 }
 
 export interface SpatialCandidate<T> {
@@ -20,9 +22,11 @@ export interface GamepadMenuNavigation {
 interface NavigationOptions {
   cancelFrame?: (frame: number) => void
   document?: Document
+  enabled?: () => boolean
   getGamepads?: () => readonly (GamepadLike & { buttons: readonly GamepadButton[] } | null)[]
   now?: () => number
   requestFrame?: (callback: FrameRequestCallback) => number
+  requireModal?: () => boolean
   root?: ParentNode
 }
 
@@ -44,20 +48,52 @@ export function createGamepadMenuNavigation(
 ): GamepadMenuNavigation {
   const ownerDocument = options.document ?? document
   const root = options.root ?? ownerDocument
-  const getGamepads = options.getGamepads ?? (() => navigator.getGamepads())
+  const getGamepads = options.getGamepads ?? (() => (
+    typeof navigator.getGamepads === 'function' ? navigator.getGamepads() : []
+  ))
   const requestFrame = options.requestFrame ?? requestAnimationFrame
   const cancelFrame = options.cancelFrame ?? cancelAnimationFrame
   const now = options.now ?? (() => performance.now())
   let frame = 0
+  let initialized = false
+  let lastScope: ParentNode | null = null
   let previous = emptyGamepadState()
   let nextRepeatAt = 0
+  let requiresNeutral = false
 
   const update = () => {
     const currentTime = now()
     const current = readMenuGamepad(getGamepads())
-    const scope = activeNavigationRoot(root)
+    const scope = options.enabled?.() === false
+      ? null
+      : activeNavigationRoot(root, options.requireModal?.() === true)
+    if (!initialized) {
+      initialized = true
+      lastScope = scope
+    } else if (scope !== lastScope) {
+      lastScope = scope
+      nextRepeatAt = 0
+      requiresNeutral = requiresNeutralAfterMenuScopeChange(previous, current)
+      if (requiresNeutral) previous = emptyGamepadState()
+    }
+    if (scope === null) {
+      if (!gamepadStateActive(current)) requiresNeutral = false
+      previous = current
+      frame = requestFrame(update)
+      return
+    }
+    if (requiresNeutral) {
+      if (!gamepadStateActive(current)) {
+        requiresNeutral = false
+        previous = current
+      }
+      frame = requestFrame(update)
+      return
+    }
     if (current.confirm && !previous.confirm) confirm(scope, ownerDocument)
     if (current.back && !previous.back) activateBack(scope)
+    if (current.previous && !previous.previous) moveLinearFocus(scope, ownerDocument, -1)
+    if (current.next && !previous.next) moveLinearFocus(scope, ownerDocument, 1)
     if (current.direction) {
       const changed = current.direction !== previous.direction
       if (changed || currentTime >= nextRepeatAt) {
@@ -84,9 +120,9 @@ export function readMenuGamepad(
   gamepads: readonly (GamepadLike & { buttons: readonly GamepadButton[] } | null)[],
 ): MenuGamepadState {
   for (const gamepad of gamepads) {
-    if (!gamepad?.connected) continue
+    if (!gamepad?.connected || gamepad.mapping !== 'standard') continue
     const state = readConnectedGamepad(gamepad)
-    if (state.back || state.confirm || state.direction) return state
+    if (state.back || state.confirm || state.direction || state.next || state.previous) return state
   }
   return emptyGamepadState()
 }
@@ -106,6 +142,8 @@ function readConnectedGamepad(
     back: pressed(1),
     confirm: pressed(0),
     direction,
+    next: pressed(5),
+    previous: pressed(4),
   }
 }
 
@@ -154,7 +192,7 @@ function moveFocus(root: ParentNode, ownerDocument: Document, direction: MenuDir
     ? ownerDocument.activeElement
     : null
   if (!active) {
-    const preferred = Array.from(root.querySelectorAll<HTMLElement>(DEFAULT_FOCUS_SELECTOR))
+    const preferred = matchingElements(root, DEFAULT_FOCUS_SELECTOR)
     chooseInitialMenuTarget(
       elements,
       preferred,
@@ -178,6 +216,22 @@ function moveFocus(root: ParentNode, ownerDocument: Document, direction: MenuDir
   elements[(index + delta + elements.length) % elements.length].focus()
 }
 
+function moveLinearFocus(root: ParentNode, ownerDocument: Document, delta: -1 | 1): void {
+  const elements = focusableElements(root)
+  if (elements.length === 0) return
+  const active = ownerDocument.activeElement instanceof HTMLElement
+    && elements.includes(ownerDocument.activeElement)
+    ? ownerDocument.activeElement
+    : null
+  if (!active) {
+    const preferred = matchingElements(root, DEFAULT_FOCUS_SELECTOR)
+    chooseInitialMenuTarget(elements, preferred, delta < 0)?.focus()
+    return
+  }
+  const index = elements.indexOf(active)
+  elements[(index + delta + elements.length) % elements.length].focus()
+}
+
 function adjustRange(element: HTMLElement, direction: MenuDirection): boolean {
   if (!(element instanceof HTMLInputElement) || element.type !== 'range') return false
   if (direction !== 'left' && direction !== 'right') return false
@@ -189,25 +243,34 @@ function adjustRange(element: HTMLElement, direction: MenuDirection): boolean {
 }
 
 function confirm(root: ParentNode, ownerDocument: Document): void {
+  const elements = focusableElements(root)
   const active = ownerDocument.activeElement
-  if (active instanceof HTMLElement && contains(root, active) && isFocusable(active)) {
+  if (active instanceof HTMLElement && contains(root, active) && elements.includes(active)) {
     active.click()
     return
   }
-  const elements = focusableElements(root)
-  const preferred = Array.from(root.querySelectorAll<HTMLElement>(DEFAULT_FOCUS_SELECTOR))
-  chooseInitialMenuTarget(elements, preferred)?.focus()
+  const preferred = matchingElements(root, DEFAULT_FOCUS_SELECTOR)
+  const target = chooseInitialMenuTarget(elements, preferred)
+  target?.focus()
+  target?.click()
 }
 
 function activateBack(root: ParentNode): void {
-  const back = Array.from(root.querySelectorAll<HTMLElement>('[data-game-back="true"]'))
+  const back = matchingElements(root, '[data-game-back="true"]')
     .find(isVisible)
   back?.click()
 }
 
 function focusableElements(root: ParentNode): HTMLElement[] {
-  return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
+  return matchingElements(root, FOCUSABLE_SELECTOR)
     .filter((element) => isFocusable(element) && isVisible(element))
+}
+
+function matchingElements(root: ParentNode, selector: string): HTMLElement[] {
+  const descendants = Array.from(root.querySelectorAll<HTMLElement>(selector))
+  return root instanceof HTMLElement && root.matches(selector)
+    ? [root, ...descendants]
+    : descendants
 }
 
 function isFocusable(element: HTMLElement): boolean {
@@ -227,16 +290,33 @@ function center(bounds: SpatialCandidate<unknown>['bounds']): { x: number; y: nu
 }
 
 function emptyGamepadState(): MenuGamepadState {
-  return { back: false, confirm: false, direction: null }
+  return {
+    back: false,
+    confirm: false,
+    direction: null,
+    next: false,
+    previous: false,
+  }
 }
 
 function contains(root: ParentNode, element: Element): boolean {
   return root === element || Array.from(root.querySelectorAll('*')).includes(element)
 }
 
-function activeNavigationRoot(root: ParentNode): ParentNode {
+function activeNavigationRoot(root: ParentNode, requireModal: boolean): ParentNode | null {
   const modals = Array.from(root.querySelectorAll<HTMLElement>(
-    '[role="dialog"][aria-modal="true"]',
+    '[role="dialog"][aria-modal="true"], [data-game-controller-navigation-root="true"]',
   )).filter(isVisible)
-  return modals.at(-1) ?? root
+  return modals.at(-1) ?? (requireModal ? null : root)
+}
+
+export function requiresNeutralAfterMenuScopeChange(
+  previous: MenuGamepadState,
+  current: MenuGamepadState,
+): boolean {
+  return gamepadStateActive(previous) && gamepadStateActive(current)
+}
+
+function gamepadStateActive(state: MenuGamepadState): boolean {
+  return state.back || state.confirm || state.direction !== null || state.next || state.previous
 }

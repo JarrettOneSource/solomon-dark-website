@@ -4,6 +4,7 @@ import test from 'node:test'
 import type { PlayerCharacterInput } from '../core-kernels/player-character.ts'
 import { DEFAULT_GAME_CONTROL_BINDINGS, rebindGameControl } from '../game-settings.ts'
 import { createBrowserGameplayInput } from './gameplay-input.ts'
+import type { GamepadLike } from './movement-input.ts'
 
 class FakeMouseEvent extends Event {
   readonly button: number
@@ -36,6 +37,23 @@ class FakeKeyboardEvent extends Event {
 
 class FakeVisibilityTarget extends EventTarget {
   visibilityState: DocumentVisibilityState = 'visible'
+}
+
+function mutableStandardGamepad(index = 0, mapping = 'standard') {
+  const axes = [0, 0, 0, 0]
+  const buttons = Array.from({ length: 17 }, () => ({ pressed: false, value: 0 }))
+  const gamepad: GamepadLike = { axes, buttons, connected: true, index, mapping }
+  return {
+    axes,
+    buttons,
+    gamepad,
+    releaseButton(button: number) {
+      buttons[button] = { pressed: false, value: 0 }
+    },
+    pressButton(button: number, value = 1) {
+      buttons[button] = { pressed: true, value }
+    },
+  }
 }
 
 function expectedInput(
@@ -472,5 +490,198 @@ test('touch addresses all eight quickbar slots without stealing mouse or older t
   assert.equal(published.at(-1)?.cast.quickbar, 2)
   input.setTouchQuickbar(2, false)
   assert.equal(published.at(-1)?.cast.quickbar, null)
+  input.destroy()
+})
+
+test('standard gamepad supplies retained twin-stick aim and authoritative held cast levels', () => {
+  const mouseTarget = new EventTarget()
+  const target = new EventTarget()
+  const pad = mutableStandardGamepad()
+  let playerX = 100
+  const input = createBrowserGameplayInput({
+    getGamepads: () => [pad.gamepad],
+    mouseTarget,
+    onInput: () => {},
+    projectDirection: ({ x, y }) => ({ x: playerX + x * 100, y: 200 + y * 100 }),
+    projectPointer: ({ x, y }) => ({ x, y }),
+    target,
+    visibilityTarget: new FakeVisibilityTarget(),
+  })
+
+  pad.axes[2] = 1
+  pad.pressButton(7, 0.75)
+  assert.deepEqual(input.sample().input, {
+    aim: { x: 200, y: 200 },
+    cast: { primary: true, quickbar: null },
+    movement: { x: 0, y: 0 },
+    viewportWidth: 1_600,
+  })
+
+  pad.axes[2] = 0
+  pad.releaseButton(7)
+  playerX = 300
+  assert.deepEqual(input.sample().input, {
+    aim: { x: 400, y: 200 },
+    cast: { primary: false, quickbar: null },
+    movement: { x: 0, y: 0 },
+    viewportWidth: 1_600,
+  })
+  input.destroy()
+})
+
+test('gamepad bumpers select every quickbar slot and X holds the stable selected slot', () => {
+  const pad = mutableStandardGamepad()
+  const selected: number[] = []
+  const input = createBrowserGameplayInput({
+    getGamepads: () => [pad.gamepad],
+    mouseTarget: new EventTarget(),
+    onGamepadQuickbarSelection: (slot) => selected.push(slot),
+    onInput: () => {},
+    projectDirection: ({ x, y }) => ({ x, y }),
+    projectPointer: ({ x, y }) => ({ x, y }),
+    target: new EventTarget(),
+    visibilityTarget: new FakeVisibilityTarget(),
+  })
+
+  const pulse = (button: number) => {
+    pad.pressButton(button)
+    input.sample()
+    pad.releaseButton(button)
+    input.sample()
+  }
+  pulse(5)
+  assert.deepEqual(selected, [1])
+
+  pad.pressButton(2)
+  assert.equal(input.sample().input.cast.quickbar, 1)
+  pad.pressButton(5)
+  assert.equal(input.sample().input.cast.quickbar, 1)
+  assert.deepEqual(selected, [1], 'a held cast owns its slot until release')
+  pad.releaseButton(2)
+  pad.releaseButton(5)
+  assert.equal(input.sample().input.cast.quickbar, null)
+
+  for (let slot = 2; slot <= 7; slot += 1) pulse(5)
+  assert.deepEqual(selected, [1, 2, 3, 4, 5, 6, 7])
+  pulse(5)
+  assert.equal(selected.at(-1), 0)
+  pulse(4)
+  assert.equal(selected.at(-1), 7)
+  pad.pressButton(2)
+  assert.equal(input.sample().input.cast.quickbar, 7)
+  input.destroy()
+})
+
+test('gamepad scene actions are rising edges and an idle earlier pad cannot mask the active pad', () => {
+  const idle = mutableStandardGamepad(0)
+  const active = mutableStandardGamepad(1)
+  const actions: string[] = []
+  const input = createBrowserGameplayInput({
+    getGamepads: () => [idle.gamepad, active.gamepad],
+    mouseTarget: new EventTarget(),
+    onGamepadAction: (action) => actions.push(action),
+    onInput: () => {},
+    projectDirection: ({ x, y }) => ({ x: x * 10, y: y * 10 }),
+    projectPointer: ({ x, y }) => ({ x, y }),
+    target: new EventTarget(),
+    visibilityTarget: new FakeVisibilityTarget(),
+  })
+
+  for (const [button, action] of [
+    [0, 'interact'],
+    [3, 'skills'],
+    [8, 'inventory'],
+    [9, 'pause'],
+  ] as const) {
+    active.pressButton(button)
+    input.sample()
+    input.sample()
+    active.releaseButton(button)
+    input.sample()
+    assert.equal(actions.at(-1), action)
+  }
+  assert.deepEqual(actions, ['interact', 'skills', 'inventory', 'pause'])
+
+  active.axes[0] = 1
+  assert.equal(input.sample().device, 'gamepad')
+  assert.deepEqual(input.sample().input.movement, { x: 1, y: 0 })
+  input.destroy()
+})
+
+test('blocking, interruption, and disconnect require neutral before controller input rearms', () => {
+  const pad = mutableStandardGamepad()
+  const pads: Array<GamepadLike | null> = [pad.gamepad]
+  const target = new EventTarget()
+  const input = createBrowserGameplayInput({
+    getGamepads: () => pads,
+    mouseTarget: new EventTarget(),
+    onInput: () => {},
+    projectDirection: ({ x, y }) => ({ x: x * 100, y: y * 100 }),
+    projectPointer: ({ x, y }) => ({ x, y }),
+    target,
+    visibilityTarget: new FakeVisibilityTarget(),
+  })
+
+  pad.axes[0] = 1
+  pad.axes[2] = 1
+  pad.pressButton(7)
+  assert.equal(input.sample().device, 'gamepad')
+  assert.equal(input.sample().input.cast.primary, true)
+
+  input.setBlocked(true)
+  input.setBlocked(false)
+  assert.deepEqual(input.sample(), {
+    device: 'none',
+    input: expectedInput(null, false, null),
+  })
+  pad.axes.fill(0)
+  pad.releaseButton(7)
+  assert.deepEqual(input.sample(), {
+    device: 'none',
+    input: expectedInput(null, false, null),
+  })
+  pad.axes[0] = 1
+  pad.pressButton(7)
+  assert.equal(input.sample().device, 'gamepad')
+  assert.equal(input.sample().input.cast.primary, true)
+
+  target.dispatchEvent(new Event('blur'))
+  assert.deepEqual(input.sample(), {
+    device: 'none',
+    input: expectedInput(null, false, null),
+  })
+  pad.axes.fill(0)
+  pad.releaseButton(7)
+  input.sample()
+  pad.axes[0] = -1
+  assert.deepEqual(input.sample().input.movement, { x: -1, y: 0 })
+
+  pads[0] = null
+  assert.deepEqual(input.sample(), {
+    device: 'none',
+    input: expectedInput(null, false, null),
+  })
+  input.destroy()
+})
+
+test('unmapped raw pads do not guess the standard button and axis layout', () => {
+  const pad = mutableStandardGamepad(0, '')
+  pad.axes[0] = 1
+  pad.axes[2] = 1
+  pad.pressButton(7)
+  const input = createBrowserGameplayInput({
+    getGamepads: () => [pad.gamepad],
+    mouseTarget: new EventTarget(),
+    onInput: () => {},
+    projectDirection: ({ x, y }) => ({ x, y }),
+    projectPointer: ({ x, y }) => ({ x, y }),
+    target: new EventTarget(),
+    visibilityTarget: new FakeVisibilityTarget(),
+  })
+
+  assert.deepEqual(input.sample(), {
+    device: 'none',
+    input: expectedInput(null, false, null),
+  })
   input.destroy()
 })

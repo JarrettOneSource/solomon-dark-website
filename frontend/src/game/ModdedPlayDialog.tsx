@@ -33,7 +33,7 @@ export default function ModdedPlayDialog({
         {cheatsEnabled ? <p className="play-routing-warning">CHEATS ENABLED</p> : null}
         <DownloadProgress progress={progress} />
         <footer>
-          <button disabled={busy} type="button" onClick={onBack}>BACK</button>
+          <button data-game-back="true" disabled={busy} type="button" onClick={onBack}>BACK</button>
           <button disabled={busy} type="button" onClick={onPlayVanilla}>
             {activeMods.length > 0 && cheatsEnabled
               ? 'DISABLE MODS & CHEATS'

@@ -3,6 +3,9 @@ import assert from 'node:assert/strict'
 import { chromium } from 'playwright-core'
 
 const baseUrl = process.env.SDR_GAME_SMOKE_URL || 'http://127.0.0.1:4181'
+const endpointUrl = process.env.SDR_GAME_ENDPOINT_URL
+const endpointCredential = process.env.SDR_GAME_ENDPOINT_CREDENTIAL
+const controllerOnly = process.env.SDR_GAME_CONTROLLER_ONLY === '1'
 const deckScreenshotPath = process.env.SDR_GAME_DECK_SCREENSHOT
   || '/tmp/solomon-dark-responsive-deck.png'
 const mobileHubScreenshotPath = process.env.SDR_GAME_MOBILE_HUB_SCREENSHOT
@@ -34,6 +37,19 @@ async function pulseGamepad(page, buttonIndex) {
   await page.waitForTimeout(90)
   await page.evaluate((index) => window.__sdrTestGamepad.setButton(index, false), buttonIndex)
   await page.waitForTimeout(140)
+}
+
+async function installRuntimeEndpoint(page) {
+  if (!endpointUrl && !endpointCredential) return
+  assert.ok(endpointUrl && endpointCredential, 'game endpoint URL and credential must be paired')
+  await page.addInitScript(([url, credential]) => {
+    window.solomonDarkRuntime = { gameEndpoint: { kind: 'localhost', url, credential } }
+  }, [endpointUrl, endpointCredential])
+}
+
+async function waitForControllerRearm(page, sceneSelector) {
+  await page.locator(`${sceneSelector}[data-gameplay-input-blocked="false"]`).waitFor()
+  await page.waitForTimeout(100)
 }
 
 function assertRect(actual, expected, label, epsilon = 0.05) {
@@ -71,6 +87,19 @@ async function touchEnd(cdp, type = 'touchEnd') {
 
 async function installLifecycleHarness(page) {
   await page.addInitScript(() => {
+    const nativeSend = WebSocket.prototype.send
+    window.__sdrTouchInputs = []
+    WebSocket.prototype.send = function send(data) {
+      if (typeof data === 'string') {
+        try {
+          const message = JSON.parse(data)
+          if (message.type === 'client-input') window.__sdrTouchInputs.push(structuredClone(message))
+        } catch {
+          // Non-JSON frames retain the native transport path unchanged.
+        }
+      }
+      return nativeSend.call(this, data)
+    }
     const nativeDecode = HTMLImageElement.prototype.decode
     HTMLImageElement.prototype.decode = function decode() {
       if (this.src.includes('/create-hand-')) {
@@ -152,8 +181,19 @@ async function settledPosition(page, readPosition, label) {
       document.querySelector('.hub-world-canvas')?.__sdrHubFrame?.playerMoving === false
     ), null, { timeout: 3_000 })
   }
-  const afterTail = await readPosition()
-  const afterTailMotion = await presentationMotion(page)
+  let afterTail = await readPosition()
+  let afterTailMotion = await presentationMotion(page)
+  let stableSamples = 0
+  for (let sample = 0; sample < 30 && stableSamples < 3; sample += 1) {
+    await page.waitForTimeout(100)
+    const next = await readPosition()
+    const motion = await presentationMotion(page)
+    const stopped = motion?.kind !== 'hub' || motion.moving === false
+    stableSamples = stopped && Math.abs(next - afterTail) < 1 ? stableSamples + 1 : 0
+    afterTail = next
+    afterTailMotion = motion
+  }
+  assert.equal(stableSamples, 3, `${label} never reached a stable stopped presentation`)
   await page.waitForTimeout(600)
   const settled = await readPosition()
   const settledMotion = await presentationMotion(page)
@@ -178,9 +218,33 @@ async function presentationMotion(page) {
 const reports = {}
 try {
   const deck = await browser.newPage({ viewport: { width: 1280, height: 800 } })
+  const deckConsoleErrors = []
   const deckErrors = []
+  const deckFailedResponses = []
+  deck.on('console', (message) => {
+    if (message.type() === 'error') deckConsoleErrors.push(message.text())
+  })
   deck.on('pageerror', (error) => deckErrors.push(error.message))
+  deck.on('response', (response) => {
+    if (response.status() >= 400) deckFailedResponses.push(`${response.status()} ${response.url()}`)
+  })
+  await installRuntimeEndpoint(deck)
   await deck.addInitScript(() => {
+    const nativeSend = WebSocket.prototype.send
+    window.__sdrControllerInputs = []
+    WebSocket.prototype.send = function send(data) {
+      if (typeof data === 'string') {
+        try {
+          const message = JSON.parse(data)
+          if (message.type === 'client-input') {
+            window.__sdrControllerInputs.push(structuredClone(message))
+          }
+        } catch {
+          // Non-JSON frames retain the native transport path unchanged.
+        }
+      }
+      return nativeSend.call(this, data)
+    }
     const buttons = Array.from({ length: 16 }, () => ({ pressed: false, touched: false, value: 0 }))
     const pad = {
       axes: [0, 0, 0, 0],
@@ -200,6 +264,11 @@ try {
       setAxes(x, y) {
         pad.axes[0] = x
         pad.axes[1] = y
+        pad.timestamp += 1
+      },
+      setRightAxes(x, y) {
+        pad.axes[2] = x
+        pad.axes[3] = y
         pad.timestamp += 1
       },
       setButton(index, pressed) {
@@ -252,9 +321,7 @@ try {
   await deck.getByRole('button', { name: 'Play' }).waitFor({ timeout: 90_000 })
 
   await pulseGamepad(deck, 0)
-  await pulseGamepad(deck, 0)
   await deck.getByRole('button', { name: 'New Game' }).waitFor()
-  await pulseGamepad(deck, 0)
   await pulseGamepad(deck, 0)
   await deck.locator('.create-menu-scene[data-motion-settled="true"]').waitFor()
   const createCanvas = deck.locator('.create-menu-canvas')
@@ -281,10 +348,10 @@ try {
   assert.equal(Number(await createCanvas.getAttribute('data-viewport-height')), 1000)
   assert.equal(await createCanvasHandle.evaluate((node) => node.isConnected), true)
   assert.equal(await createFullscreenButton.getAttribute('aria-label'), 'Enter fullscreen')
-  await pulseGamepad(deck, 0)
+  await pulseGamepad(deck, 13)
+  await pulseGamepad(deck, 13)
   await pulseGamepad(deck, 0)
   await deck.locator('.create-menu-disciplines[data-visible="true"]').waitFor({ timeout: 15_000 })
-  await pulseGamepad(deck, 0)
   await pulseGamepad(deck, 0)
   const deckCanvas = deck.locator('.hub-world-canvas')
   await deckCanvas.waitFor({ timeout: 30_000 })
@@ -306,6 +373,7 @@ try {
   assertRect(stageBounds, { x: 0, y: 0, width: 1280, height: 800 }, 'Steam Deck stage')
   assertRect(deckCanvasBounds, stageBounds, 'Steam Deck canvas')
   const deckScene = deck.locator('.hub-scene')
+  assert.equal(await deckScene.getAttribute('data-element'), 'water')
   assert.equal(Number(await deckScene.getAttribute('data-viewport-width')), 1600)
   assert.equal(Number(await deckScene.getAttribute('data-viewport-height')), 1000)
   assert.equal(Number(await deckScene.getAttribute('data-viewport-scale')), 0.8)
@@ -345,16 +413,164 @@ try {
       width: Number(await deckScene.getAttribute('data-viewport-width')),
     },
   }
+
+  const selectedControllerSlot = () => deck.locator(
+    '.hub-hud-quickbar-slot[data-controller-selected="true"]',
+  )
+  assert.equal(await selectedControllerSlot().getAttribute('data-slot'), '0')
+  for (let slot = 1; slot <= 7; slot += 1) {
+    await pulseGamepad(deck, 5)
+    assert.equal(await selectedControllerSlot().getAttribute('data-slot'), `${slot}`)
+  }
+  await pulseGamepad(deck, 5)
+  assert.equal(await selectedControllerSlot().getAttribute('data-slot'), '0')
+  await pulseGamepad(deck, 4)
+  assert.equal(await selectedControllerSlot().getAttribute('data-slot'), '7')
+
+  await pulseGamepad(deck, 8)
+  await deck.getByRole('dialog', { name: 'Inventory' }).waitFor()
+  await pulseGamepad(deck, 1)
+  await deck.getByRole('dialog', { name: 'Inventory' }).waitFor({ state: 'detached' })
+  await waitForControllerRearm(deck, '.hub-scene')
+
+  await pulseGamepad(deck, 3)
+  await deck.getByRole('dialog', { name: 'Skills' }).waitFor()
+  await pulseGamepad(deck, 1)
+  await deck.getByRole('dialog', { name: 'Skills' }).waitFor({ state: 'detached' })
+  await waitForControllerRearm(deck, '.hub-scene')
+
+  await pulseGamepad(deck, 9)
+  await deck.getByRole('dialog', { name: /Game paused/i }).waitFor()
+  await pulseGamepad(deck, 1)
+  await deck.getByRole('dialog', { name: /Game paused/i }).waitFor({ state: 'detached' })
+  await waitForControllerRearm(deck, '.hub-scene')
+
+  await deck.evaluate(() => window.__sdrTestGamepad.setAxes(1, 0))
+  await pulseGamepad(deck, 0)
+  const deckBoneyardCanvas = deck.locator('.boneyard-world-canvas')
+  await deckBoneyardCanvas.waitFor({ timeout: 30_000 })
+  const heldAcrossLoadStart = await deckBoneyardCanvas.evaluate(
+    (node) => node.__sdrBoneyardFrame.playerX,
+  )
+  await deck.waitForTimeout(700)
+  const heldAcrossLoadEnd = await deckBoneyardCanvas.evaluate(
+    (node) => node.__sdrBoneyardFrame.playerX,
+  )
+  assert.ok(
+    Math.abs(heldAcrossLoadEnd - heldAcrossLoadStart) < 1,
+    `loading barrier replayed held gamepad movement (${heldAcrossLoadStart} -> ${heldAcrossLoadEnd})`,
+  )
+  await deck.evaluate(() => window.__sdrTestGamepad.setAxes(0, 0))
+  await deck.waitForTimeout(150)
+  await deck.evaluate(() => window.__sdrTestGamepad.setAxes(1, 0))
+  await deck.waitForTimeout(700)
+  await deck.evaluate(() => window.__sdrTestGamepad.setAxes(0, 0))
+  const freshBoneyardMovement = await deckBoneyardCanvas.evaluate(
+    (node) => node.__sdrBoneyardFrame.playerX,
+  )
+  assert.ok(
+    freshBoneyardMovement > heldAcrossLoadEnd + 10,
+    `fresh post-barrier gamepad movement did not rearm (${heldAcrossLoadEnd} -> ${freshBoneyardMovement})`,
+  )
+
+  await deck.evaluate(() => {
+    window.__sdrTestGamepad.setRightAxes(1, 0)
+    window.__sdrTestGamepad.setButton(7, true)
+  })
+  await deck.waitForFunction(() => {
+    const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
+    return frame?.playerHeadingIndex === 6
+      && window.__sdrControllerInputs.some(({ input }) => input.cast.primary && input.aim !== null)
+  }, null, { timeout: 10_000 })
+  const controllerHeld = await deck.evaluate(() => ({
+    input: [...window.__sdrControllerInputs].reverse().find(
+      ({ input }) => input.cast.primary && input.aim !== null,
+    ),
+    renderer: { ...document.querySelector('.boneyard-world-canvas').__sdrBoneyardFrame },
+  }))
+  assert.ok(controllerHeld.input, 'RT hold must publish a primary controller input')
+  const controllerHeldFrame = {
+    aim: controllerHeld.input.input.aim,
+    headingIndex: controllerHeld.renderer.playerHeadingIndex,
+    primarySpellCount: controllerHeld.renderer.primarySpellCount,
+    primarySpellKinds: [...controllerHeld.renderer.primarySpellKinds],
+  }
+  await deck.evaluate(() => {
+    window.__sdrTestGamepad.setButton(7, false)
+    window.__sdrTestGamepad.setRightAxes(0, 0)
+  })
+  await deck.waitForFunction(() => {
+    const input = window.__sdrControllerInputs.at(-1)?.input
+    return input && !input.cast.primary
+  }, null, { timeout: 10_000 })
+  const controllerReleased = await deck.evaluate(() => (
+    window.__sdrControllerInputs.at(-1).input
+  ))
+  const controllerCombat = await deckBoneyardCanvas.evaluate((node, held) => ({
+    aim: held.aim,
+    headingIndex: held.headingIndex,
+    heldPrimarySpellCount: held.primarySpellCount,
+    heldPrimarySpellKinds: held.primarySpellKinds,
+    releasedPrimary: false,
+    releasedPrimarySpellKinds: [...node.__sdrBoneyardFrame.primarySpellKinds],
+    selectedQuickbarSlot: Number(document.querySelector(
+      '.hub-hud-quickbar-slot[data-controller-selected="true"]',
+    )?.getAttribute('data-slot')),
+  }), controllerHeldFrame)
+  assert.equal(controllerReleased.cast.primary, false)
+
+  await pulseGamepad(deck, 8)
+  await deck.getByRole('dialog', { name: 'Inventory' }).waitFor()
+  await pulseGamepad(deck, 1)
+  await deck.getByRole('dialog', { name: 'Inventory' }).waitFor({ state: 'detached' })
+  await waitForControllerRearm(deck, '.boneyard-scene')
+  await pulseGamepad(deck, 3)
+  await deck.getByRole('dialog', { name: 'Skills' }).waitFor()
+  await pulseGamepad(deck, 1)
+  await deck.getByRole('dialog', { name: 'Skills' }).waitFor({ state: 'detached' })
+  await waitForControllerRearm(deck, '.boneyard-scene')
+
+  await pulseGamepad(deck, 9)
+  await deck.getByRole('dialog', { name: /Game paused/i }).waitFor()
+  await pulseGamepad(deck, 13)
+  await pulseGamepad(deck, 0)
+  await deck.getByRole('dialog', { name: 'Game Settings' }).waitFor()
+  await pulseGamepad(deck, 1)
+  await deck.getByRole('dialog', { name: 'Game Settings' }).waitFor({ state: 'detached' })
+  await waitForControllerRearm(deck, '.boneyard-scene')
+  reports.steamDeck.controller = {
+    ...controllerCombat,
+    heldAcrossLoadDelta: heldAcrossLoadEnd - heldAcrossLoadStart,
+    freshBoneyardMovement: freshBoneyardMovement - heldAcrossLoadEnd,
+  }
+  reports.steamDeck.errors = {
+    console: deckConsoleErrors,
+    failedResponses: deckFailedResponses,
+    page: deckErrors,
+  }
+  assert.deepEqual(deckConsoleErrors, [])
+  assert.deepEqual(deckErrors, [])
+  assert.deepEqual(deckFailedResponses, [])
   await deck.close()
 
+  if (!controllerOnly) {
   const mobile = await browser.newPage({
     hasTouch: true,
     isMobile: true,
     viewport: { width: 844, height: 390 },
   })
+  await installRuntimeEndpoint(mobile)
   await installLifecycleHarness(mobile)
   const mobileErrors = []
+  const mobileConsoleErrors = []
+  const mobileFailedResponses = []
+  mobile.on('console', (message) => {
+    if (message.type() === 'error') mobileConsoleErrors.push(message.text())
+  })
   mobile.on('pageerror', (error) => mobileErrors.push(error.message))
+  mobile.on('response', (response) => {
+    if (response.status() >= 400) mobileFailedResponses.push(`${response.status()} ${response.url()}`)
+  })
   await mobile.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
   await mobile.getByRole('button', { name: 'Play' }).waitFor({ timeout: 90_000 })
   const mobileTitleCanvas = mobile.locator('.title-menu-canvas')
@@ -496,17 +712,17 @@ try {
   await touchStart(mobileCdp, centerX, centerY)
   await touchMove(mobileCdp, centerX + requestedOffset, centerY)
   await mobile.waitForTimeout(300)
+  const reuseHeld = await canvas.evaluate((node) => node.__sdrHubFrame.playerX)
+  assert.ok(
+    reuseHeld - reuseBefore > 10,
+    `expected a new gesture after focus interruption (${reuseBefore} -> ${reuseHeld})`,
+  )
   await touchEnd(mobileCdp)
   const gestureReuse = await settledPosition(
     mobile,
     () => canvas.evaluate((node) => node.__sdrHubFrame.playerX),
     'gesture after focus interruption',
   )
-  assert.ok(
-    gestureReuse.afterTail - reuseBefore > 10,
-    'expected a new gesture after focus interruption',
-  )
-
   const visibilityStart = gestureReuse.settled
   await touchStart(mobileCdp, centerX, centerY)
   await touchMove(mobileCdp, centerX - requestedOffset, centerY)
@@ -656,25 +872,27 @@ try {
   assert.ok(Math.abs(boneyardKnobCenter.y - boneyardCenter.y) < 1)
 
   const boneyardPrimaryCenter = rectCenter(boneyardPrimaryBounds)
+  const primaryInputStart = await mobile.evaluate(() => window.__sdrTouchInputs.length)
   await touchStart(mobileCdp, boneyardPrimaryCenter.x, boneyardPrimaryCenter.y)
   await touchMove(
     mobileCdp,
     boneyardPrimaryCenter.x + boneyardPrimaryBounds.width * 0.3,
     boneyardPrimaryCenter.y,
   )
-  const boneyardPrimaryAttackHandle = await mobile.waitForFunction(() => {
-    const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
-    return frame?.primarySpellKinds?.includes('water')
-      ? { ...frame, primarySpellKinds: [...frame.primarySpellKinds] }
-      : null
-  }, null, { timeout: 10_000 })
-  const boneyardPrimaryAttack = await boneyardPrimaryAttackHandle.jsonValue()
-  await boneyardPrimaryAttackHandle.dispose()
+  await mobile.waitForFunction((start) => (
+    window.__sdrTouchInputs.slice(start).some(({ input }) => input.cast.primary && input.aim !== null)
+  ), primaryInputStart, { timeout: 10_000 })
+  const boneyardPrimaryAttack = await mobile.evaluate((start) => ({
+    input: [...window.__sdrTouchInputs.slice(start)].reverse().find(
+      ({ input }) => input.cast.primary && input.aim !== null,
+    ),
+    renderer: { ...document.querySelector('.boneyard-world-canvas').__sdrBoneyardFrame },
+  }), primaryInputStart)
   await touchEnd(mobileCdp)
-  await mobile.waitForFunction(() => {
-    const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
-    return frame && !frame.primarySpellKinds?.includes('water')
-  }, null, { timeout: 10_000 })
+  await mobile.waitForFunction((start) => {
+    const input = window.__sdrTouchInputs.slice(start).at(-1)?.input
+    return input && !input.cast.primary
+  }, primaryInputStart, { timeout: 10_000 })
   const boneyardPrimaryReleasedCenter = rectCenter(await boneyardPrimaryKnob.boundingBox())
   assert.ok(Math.abs(boneyardPrimaryReleasedCenter.x - boneyardPrimaryCenter.x) < 1)
   assert.ok(Math.abs(boneyardPrimaryReleasedCenter.y - boneyardPrimaryCenter.y) < 1)
@@ -709,11 +927,13 @@ try {
     playerX: node.__sdrBoneyardFrame.playerX,
     primarySpellKinds: [...node.__sdrBoneyardFrame.primarySpellKinds],
   }))
+  const concurrentInput = await mobile.evaluate(() => window.__sdrTouchInputs.at(-1)?.input)
   assert.ok(
     boneyardConcurrentBefore - boneyardConcurrentHeld.playerX > 10,
     'left touch must move during a Boneyard attack',
   )
-  assert.ok(boneyardConcurrentHeld.primarySpellKinds.includes('water'))
+  assert.equal(concurrentInput.cast.primary, true)
+  assert.ok(concurrentInput.movement.x < -0.1)
   await touchEnd(mobileCdp)
   const boneyardConcurrentRelease = await settledPosition(
     mobile,
@@ -721,8 +941,8 @@ try {
     'simultaneous Boneyard movement and primary attack release',
   )
   await mobile.waitForFunction(() => {
-    const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
-    return frame && !frame.primarySpellKinds?.includes('water')
+    const input = window.__sdrTouchInputs.at(-1)?.input
+    return input && !input.cast.primary && Math.hypot(input.movement.x, input.movement.y) < 0.001
   }, null, { timeout: 10_000 })
   const boneyardConcurrentMovementCenter = rectCenter(await boneyardKnob.boundingBox())
   const boneyardConcurrentPrimaryCenter = rectCenter(await boneyardPrimaryKnob.boundingBox())
@@ -731,10 +951,17 @@ try {
   assert.ok(Math.abs(boneyardConcurrentPrimaryCenter.x - boneyardPrimaryCenter.x) < 1)
   assert.ok(Math.abs(boneyardConcurrentPrimaryCenter.y - boneyardPrimaryCenter.y) < 1)
   await mobile.screenshot({ path: mobileBoneyardScreenshotPath })
+  assert.deepEqual(mobileConsoleErrors, [])
   assert.deepEqual(mobileErrors, [])
+  assert.deepEqual(mobileFailedResponses, [])
   reports.mobileLandscape = {
     before,
     after,
+    errors: {
+      console: mobileConsoleErrors,
+      failedResponses: mobileFailedResponses,
+      page: mobileErrors,
+    },
     joystickWidth: joystickBounds.width,
     scaledJoystickWidth: scaledJoystickBounds.width,
     boneyardPrimaryJoystickWidth: boneyardPrimaryBounds.width,
@@ -785,6 +1012,7 @@ try {
   assert.ok(await orientationHint.isVisible())
   reports.mobilePortrait = { orientationHint: true }
   await portrait.close()
+  }
 
   process.stdout.write(JSON.stringify({ status: 'ok', ...reports }) + '\n')
 } finally {

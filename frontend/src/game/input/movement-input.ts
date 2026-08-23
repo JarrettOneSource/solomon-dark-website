@@ -22,7 +22,7 @@ export interface MovementInputState {
 
 export interface BrowserMovementInput {
   destroy(): void
-  sample(): MovementInputSample
+  sample(gamepads?: readonly (GamepadLike | null)[]): MovementInputSample
   setBlocked(blocked: boolean): void
   setControls(controls: GameControlBindings): void
   setTouch(movement: Vector2): void
@@ -59,6 +59,7 @@ interface BrowserMovementInputOptions {
 }
 
 export const GAMEPAD_MOVEMENT_DEAD_ZONE = 0.2
+export const GAMEPAD_MOVEMENT_OUTER_DEAD_ZONE = 0.95
 
 export function createMovementInputState(
   initialControls = DEFAULT_GAME_CONTROL_BINDINGS,
@@ -110,7 +111,7 @@ export function createMovementInputState(
 
 export function createBrowserMovementInput({
   controls = DEFAULT_GAME_CONTROL_BINDINGS,
-  getGamepads = () => navigator.getGamepads(),
+  getGamepads = () => typeof navigator.getGamepads === 'function' ? navigator.getGamepads() : [],
   onStop,
   target = window,
   visibilityTarget = document,
@@ -149,9 +150,9 @@ export function createBrowserMovementInput({
       visibilityTarget.removeEventListener('visibilitychange', visibilityChange)
       stop()
     },
-    sample: () => blocked
+    sample: (gamepads) => blocked
       ? { device: 'none', movement: { x: 0, y: 0 } }
-      : state.sample(getGamepads()),
+      : state.sample(gamepads ?? getGamepads()),
     setBlocked(nextBlocked) {
       if (blocked === nextBlocked) return
       blocked = nextBlocked
@@ -186,7 +187,7 @@ export function movementFromGamepads(
   deadZone = GAMEPAD_MOVEMENT_DEAD_ZONE,
 ): Vector2 {
   for (const gamepad of gamepads) {
-    if (!gamepad?.connected) continue
+    if (!gamepad?.connected || gamepad.mapping !== 'standard') continue
     const dpad = normalizeMovement({
       x: Number(Boolean(gamepad.buttons?.[15]?.pressed))
         - Number(Boolean(gamepad.buttons?.[14]?.pressed)),
@@ -195,18 +196,32 @@ export function movementFromGamepads(
     })
     const movement = Math.hypot(dpad.x, dpad.y) > 0
       ? dpad
-      : radialDeadZone(gamepad.axes[0] ?? 0, gamepad.axes[1] ?? 0, deadZone)
+      : radialDeadZone(
+          gamepad.axes[0] ?? 0,
+          gamepad.axes[1] ?? 0,
+          deadZone,
+          GAMEPAD_MOVEMENT_OUTER_DEAD_ZONE,
+        )
     if (Math.hypot(movement.x, movement.y) > 0) return movement
   }
   return { x: 0, y: 0 }
 }
 
-export function radialDeadZone(x: number, y: number, deadZone: number): Vector2 {
+export function radialDeadZone(
+  x: number,
+  y: number,
+  deadZone: number,
+  outerDeadZone = 1,
+): Vector2 {
   if (!Number.isFinite(x) || !Number.isFinite(y)) return { x: 0, y: 0 }
   const clampedDeadZone = Math.min(0.95, Math.max(0, deadZone))
+  const clampedOuterDeadZone = Math.min(1, Math.max(clampedDeadZone, outerDeadZone))
   const magnitude = Math.hypot(x, y)
   if (magnitude <= clampedDeadZone) return { x: 0, y: 0 }
-  const normalizedMagnitude = Math.min(1, (magnitude - clampedDeadZone) / (1 - clampedDeadZone))
+  const range = clampedOuterDeadZone - clampedDeadZone
+  const normalizedMagnitude = range === 0
+    ? 1
+    : Math.min(1, (magnitude - clampedDeadZone) / range)
   return {
     x: x / magnitude * normalizedMagnitude,
     y: y / magnitude * normalizedMagnitude,

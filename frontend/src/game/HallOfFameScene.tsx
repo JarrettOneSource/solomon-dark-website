@@ -274,6 +274,7 @@ export default function HallOfFameScene({
         type="button"
         className="hall-of-fame-main-menu"
         aria-label="Main Menu"
+        data-game-back="true"
         onClick={onBack}
       />
     </section>

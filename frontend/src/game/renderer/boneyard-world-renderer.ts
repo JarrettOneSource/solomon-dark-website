@@ -321,6 +321,7 @@ interface BoneyardRendererFrameDiagnostics {
   playerDeathWeaponCount: number
   playerElementEffectScale: number
   seekerSegmentCount: number
+  playerHeadingIndex: number
   playerLightRadius: number
   playerLightRasterRadius: number
   playerMagicShieldScale: number
@@ -702,6 +703,7 @@ export async function createBoneyardWorldRenderer(
     playerDeathWeaponCount: 0,
     playerElementEffectScale: 1,
     seekerSegmentCount: 0,
+    playerHeadingIndex: 0,
     playerLightRadius: 0,
     playerLightRasterRadius: 0,
     playerMagicShieldScale: 1.5,
@@ -1084,6 +1086,7 @@ export async function createBoneyardWorldRenderer(
         + viewport.width / 2
       frameDiagnostics.playerScreenY = (player.position.y - camera.y) * camera.zoom
         + viewport.height / 2
+      frameDiagnostics.playerHeadingIndex = player.headingIndex
       frameDiagnostics.playerWalkPose = scene.playerWalkPose(options.playerId)
       const playerView = scene.player(options.playerId)
       frameDiagnostics.playerAttachmentPose = playerView?.attachmentPose ?? 0

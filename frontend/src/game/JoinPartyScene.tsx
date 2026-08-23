@@ -124,7 +124,7 @@ export default function JoinPartyScene({
         })}
       </div>
       <footer>
-        <button type="button" onClick={onBack}>BACK</button>
+        <button data-game-back="true" type="button" onClick={onBack}>BACK</button>
         <button type="button" onClick={() => { void directory.refresh() }}>REFRESH</button>
       </footer>
     </section>

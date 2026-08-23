@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import {
   chooseInitialMenuTarget,
   chooseSpatialTarget,
   readMenuGamepad,
+  requiresNeutralAfterMenuScopeChange,
   type SpatialCandidate,
 } from './gamepad-menu-navigation.ts'
 
@@ -24,11 +26,15 @@ test('reads standard confirm, back, d-pad, and stick navigation', () => {
     back: false,
     confirm: true,
     direction: 'left',
+    next: false,
+    previous: false,
   })
   assert.deepEqual(readMenuGamepad([gamepad([0.8, 0], [1])]), {
     back: true,
     confirm: false,
     direction: 'right',
+    next: false,
+    previous: false,
   })
   assert.equal(readMenuGamepad([gamepad([0, -0.61])]).direction, null)
   assert.equal(readMenuGamepad([gamepad([0, -0.62])]).direction, 'up')
@@ -41,11 +47,47 @@ test('ignores disconnected pads and uses the first connected pad', () => {
     back: false,
     confirm: false,
     direction: null,
+    next: false,
+    previous: false,
   })
 })
 
 test('accepts activity from a later controller when the first connected pad is idle', () => {
   assert.equal(readMenuGamepad([gamepad(), gamepad([-0.8, 0])]).direction, 'left')
+})
+
+test('maps bumpers to previous and next and ignores raw unmapped layouts', () => {
+  assert.deepEqual(readMenuGamepad([gamepad([0, 0], [4])]), {
+    back: false,
+    confirm: false,
+    direction: null,
+    next: false,
+    previous: true,
+  })
+  assert.deepEqual(readMenuGamepad([gamepad([0, 0], [5])]), {
+    back: false,
+    confirm: false,
+    direction: null,
+    next: true,
+    previous: false,
+  })
+  assert.deepEqual(readMenuGamepad([{ ...gamepad([1, 0], [0]), mapping: '' }]), {
+    back: false,
+    confirm: false,
+    direction: null,
+    next: false,
+    previous: false,
+  })
+})
+
+test('a fresh modal action survives a neutral sample before the scope appears', () => {
+  const neutral = readMenuGamepad([gamepad()])
+  const confirm = readMenuGamepad([gamepad([0, 0], [0])])
+  const back = readMenuGamepad([gamepad([0, 0], [1])])
+
+  assert.equal(requiresNeutralAfterMenuScopeChange(neutral, back), false)
+  assert.equal(requiresNeutralAfterMenuScopeChange(confirm, back), true)
+  assert.equal(requiresNeutralAfterMenuScopeChange(confirm, neutral), false)
 })
 
 test('spatial navigation favours the nearest candidate in the requested half-plane', () => {
@@ -72,4 +114,49 @@ test('initial navigation waits for a declared default instead of falling into an
   assert.equal(chooseInitialMenuTarget([back], [preferred]), null)
   assert.equal(chooseInitialMenuTarget([back, preferred], [preferred]), preferred)
   assert.equal(chooseInitialMenuTarget([back], []), back)
+})
+
+test('the persistent shell routes gamepad input to gameplay modals without stealing world movement', () => {
+  const mainMenu = readFileSync(new URL('../MainMenuScene.tsx', import.meta.url), 'utf8')
+  assert.match(mainMenu, /createGamepadMenuNavigation\(\{[\s\S]*enabled:/)
+  assert.match(mainMenu, /requireModal:/)
+  assert.match(mainMenu, /requireModal:\s*screen === 'hub'/)
+  assert.doesNotMatch(mainMenu, /if \(screen === 'hub'/)
+})
+
+test('both gameplay scenes feed standard gamepad actions and quickbar selection into shared owners', () => {
+  for (const file of ['../HubScene.tsx', '../BoneyardScene.tsx']) {
+    const source = readFileSync(new URL(file, import.meta.url), 'utf8')
+    assert.match(source, /onGamepadAction:/)
+    assert.match(source, /onGamepadPresenceChange:/)
+    assert.match(source, /onGamepadQuickbarSelection:/)
+    assert.match(source, /controllerQuickbarSlot=\{controllerQuickbarSlot\}/)
+  }
+})
+
+test('controller modal roots declare explicit back policy and Game Over declares its gated root', () => {
+  const dismissible = [
+    '../DarkCloudModDetail.tsx',
+    '../DarkCloudScene.tsx',
+    '../GameSaveModMismatchDialog.tsx',
+    '../GameSettingsDialog.tsx',
+    '../GameplayPauseMenu.tsx',
+    '../HudSkillSelector.tsx',
+    '../HubInventoryUi.tsx',
+    '../HubScene.tsx',
+    '../ModdedPlayDialog.tsx',
+    '../PartyJoinConsentDialog.tsx',
+    '../PartySettingsDialog.tsx',
+    '../SkillBook.tsx',
+  ]
+  for (const file of dismissible) {
+    assert.match(
+      readFileSync(new URL(file, import.meta.url), 'utf8'),
+      /data-game-back/,
+      `${file} must expose a controller back owner`,
+    )
+  }
+  const gameOver = readFileSync(new URL('../GameOverOverlay.tsx', import.meta.url), 'utf8')
+  assert.match(gameOver, /data-game-controller-navigation-root="true"/)
+  assert.match(gameOver, /disabled=\{!presentation\.acceptsInput\}/)
 })

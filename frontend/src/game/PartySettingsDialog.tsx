@@ -64,7 +64,7 @@ export default function PartySettingsDialog({
           <span className="party-settings-size">
             {memberCount} {memberCount === 1 ? 'MEMBER' : 'MEMBERS'}
           </span>
-          <button className="party-settings-close" type="button" onClick={onClose}>CLOSE</button>
+          <button className="party-settings-close" data-game-back="true" type="button" onClick={onClose}>CLOSE</button>
         </header>
         {error ? <p className="party-settings-error" role="alert">{error}</p> : null}
         <div className="party-settings-body">

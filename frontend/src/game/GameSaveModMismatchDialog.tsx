@@ -39,7 +39,7 @@ export default function GameSaveModMismatchDialog({
           Missing or changed mod state will be discarded. If the save is inside a missing mod Boneyard, the wizard returns to the College.
         </p>
         <div className="game-save-mod-mismatch-actions">
-          <button type="button" onClick={onCancel}>CANCEL</button>
+          <button data-game-back="true" type="button" onClick={onCancel}>CANCEL</button>
           <button type="button" onClick={onContinue}>CONTINUE</button>
         </div>
       </section>

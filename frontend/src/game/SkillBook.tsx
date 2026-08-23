@@ -238,6 +238,7 @@ export default function SkillBook({
         type="button"
         className="skill-book-close-action"
         aria-label="Close skills"
+        data-game-back="true"
         onClick={() => beginClose()}
       />
       <div className="skill-book-pages" aria-label="Learned skill dependency pages">
@@ -364,6 +365,7 @@ function SkillBookEntry({
     <button
       type="button"
       className="skill-book-entry-action"
+      data-game-default-focus={index === 0 || undefined}
       style={{ left: index === 0 ? 56.5 : 236.5 + 160 * (index - 1) }}
       aria-label={`${row.name}, rank ${row.effectiveRank}${draggable ? ', assign to selected quickbar slot' : ''}`}
       aria-disabled={!draggable && !selectable}

@@ -40,6 +40,7 @@ import HubInventoryUi, { type HubUiSurface } from './HubInventoryUi.tsx'
 import {
   hubTraderAtPoint,
   hubTraderWithinServiceRange,
+  nearestHubTrader,
 } from './hub-inventory-presentation.ts'
 import TouchJoystick from './input/TouchJoystick.tsx'
 import {
@@ -78,7 +79,7 @@ import {
   PLAYER_CHARACTER_SHEETS,
   playerCharacterAtlasCssFrame,
 } from './renderer/player-character-atlas.ts'
-import { selectHubPlayerAtPoint } from './hub-player-selection.ts'
+import { nearestHubPlayer, selectHubPlayerAtPoint } from './hub-player-selection.ts'
 import './hub.css'
 
 interface HubSceneProps {
@@ -195,12 +196,14 @@ export default function HubScene({
   const levelUpPresentationIdRef = useRef(levelUpPresentationId)
   const onLoadingErrorRef = useRef(onLoadingError)
   const onReadyRef = useRef(onReady)
+  const controllerActionsRef = useRef({ boneyards, onOpenSkills, onPauseRequest, onStartMatch })
   inputBlockedRef.current = inputBlocked
   settingsRef.current = settings
   presentationPausedRef.current = presentationPaused
   levelUpPresentationIdRef.current = levelUpPresentationId
   onLoadingErrorRef.current = onLoadingError
   onReadyRef.current = onReady
+  controllerActionsRef.current = { boneyards, onOpenSkills, onPauseRequest, onStartMatch }
   const [rendererState, setRendererState] = useState<RendererState>('loading')
   const [rendererError, setRendererError] = useState<string | null>(null)
   const [viewport, setViewport] = useState<GameViewportLayout>(() => (
@@ -212,6 +215,7 @@ export default function HubScene({
     hubInitialSnapshot.world.participants[playerId]?.region ?? 'courtyard',
   )
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [controllerQuickbarSlot, setControllerQuickbarSlot] = useState<number | undefined>()
   const [hubUiSurface, setHubUiSurface] = useState<HubUiSurface>(null)
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null)
   const [selectedGold, setSelectedGold] = useState<number | null>(null)
@@ -383,6 +387,47 @@ export default function HubScene({
     const input = createBrowserGameplayInput({
       controls: settingsRef.current.controls,
       mouseTarget: host,
+      onGamepadAction: (action) => {
+        const callbacks = controllerActionsRef.current
+        const snapshot = samplePresentation()
+        const participant = snapshot.world.participants[playerId]
+        const player = snapshot.players[playerId]
+        if (!participant || !player || participant.transition) return
+        if (action === 'inventory') {
+          setHubUiSurface({ kind: 'inventory' })
+          return
+        }
+        if (action === 'skills') {
+          setHubUiSurface(null)
+          callbacks.onOpenSkills()
+          return
+        }
+        if (action === 'pause') {
+          callbacks.onPauseRequest()
+          return
+        }
+        const nearbyPlayer = nearestHubPlayer(snapshot, playerId)
+        if (nearbyPlayer) {
+          setSelectedGold(snapshot.players[nearbyPlayer]?.economy.gold ?? null)
+          setSelectedPlayerId(nearbyPlayer)
+          return
+        }
+        const trader = nearestHubTrader(participant.region, player.position)
+        if (trader) {
+          setHubUiSurface({ kind: 'dialogue', trader })
+          return
+        }
+        if (snapshot.hostPlayerId !== playerId || participant.region !== 'courtyard') return
+        if (callbacks.boneyards.length === 1) {
+          callbacks.onStartMatch(callbacks.boneyards[0]!.id)
+        } else {
+          setPickerOpen(true)
+        }
+      },
+      onGamepadPresenceChange: (present) => {
+        if (!present) setControllerQuickbarSlot(undefined)
+      },
+      onGamepadQuickbarSelection: setControllerQuickbarSlot,
       onInput,
       primaryCastingEnabled: false,
       viewportWidth: () => viewportRef.current.width,
@@ -607,6 +652,7 @@ export default function HubScene({
           accountUsername={accountUsername}
           allyRosterHidden={coarsePointer && partyColumnOpen}
           controls={settings.controls}
+          controllerQuickbarSlot={controllerQuickbarSlot}
           getPingMs={getPingMs}
           initialSnapshot={hubInitialSnapshot}
           mapLabel="Enter the Boneyard"
@@ -914,6 +960,7 @@ export default function HubScene({
                   <button
                     type="button"
                     className="hub-player-profile-close"
+                    data-game-back="true"
                     onClick={() => setSelectedPlayerId(null)}
                   >
                     Close
@@ -954,6 +1001,7 @@ export default function HubScene({
               <button
                 type="button"
                 className="hub-boneyard-cancel"
+                data-game-back="true"
                 onClick={() => setPickerOpen(false)}
               >
                 Cancel

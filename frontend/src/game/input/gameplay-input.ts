@@ -14,6 +14,10 @@ import {
   type GamepadLike,
   type MovementInputDevice,
 } from './movement-input.ts'
+import {
+  createStandardGamepadGameplayState,
+  type StandardGamepadAction,
+} from './standard-gamepad.ts'
 
 interface BrowserInputTarget {
   addEventListener(type: string, listener: EventListener): void
@@ -41,7 +45,7 @@ export interface BrowserGameplayInput {
   setTouchQuickbar(slot: number, pressed: boolean, fallbackDirection?: Vector2): void
 }
 
-type QuickbarInputSource = `mouse:${number}` | `keyboard:${number}` | `touch:${number}`
+type QuickbarInputSource = 'gamepad' | `mouse:${number}` | `keyboard:${number}` | `touch:${number}`
 
 interface HeldQuickbarInput {
   source: QuickbarInputSource
@@ -53,6 +57,9 @@ interface BrowserGameplayInputOptions {
   controls?: GameControlBindings
   getGamepads?: () => readonly (GamepadLike | null)[]
   mouseTarget: BrowserInputTarget
+  onGamepadAction?: (action: StandardGamepadAction) => void
+  onGamepadPresenceChange?: (present: boolean) => void
+  onGamepadQuickbarSelection?: (slot: number) => void
   onInput: (input: PlayerCharacterInput) => void
   primaryCastingEnabled?: boolean
   projectDirection: (direction: Vector2) => Vector2 | null
@@ -67,8 +74,11 @@ interface BrowserGameplayInputOptions {
 export function createBrowserGameplayInput({
   claimMouseCastStart = () => false,
   controls: initialControls = DEFAULT_GAME_CONTROL_BINDINGS,
-  getGamepads = () => navigator.getGamepads(),
+  getGamepads = () => typeof navigator.getGamepads === 'function' ? navigator.getGamepads() : [],
   mouseTarget,
+  onGamepadAction = () => {},
+  onGamepadPresenceChange = () => {},
+  onGamepadQuickbarSelection = () => {},
   onInput,
   primaryCastingEnabled = true,
   projectDirection,
@@ -80,6 +90,10 @@ export function createBrowserGameplayInput({
   visibilityTarget = document,
 }: BrowserGameplayInputOptions): BrowserGameplayInput {
   let aim: Vector2 | null = null
+  let aimOwner: 'gamepad' | 'mouse' | 'touch' | null = null
+  let gamepadAimDirection: Vector2 | null = null
+  let gamepadPresent = false
+  let gamepadPrimary = false
   let mousePrimary = false
   let heldQuickbarInputs: HeldQuickbarInput[] = []
   let touchPrimaryDirection: Vector2 | null = null
@@ -88,11 +102,18 @@ export function createBrowserGameplayInput({
   let controls = initialControls
   let destroyed = false
 
+  const gamepad = createStandardGamepadGameplayState()
   const movement = createBrowserMovementInput({
     controls,
     getGamepads,
     onStop: () => {
       aim = null
+      aimOwner = null
+      gamepad.clear()
+      gamepadAimDirection = null
+      if (gamepadPresent) onGamepadPresenceChange(false)
+      gamepadPresent = false
+      gamepadPrimary = false
       mousePrimary = false
       heldQuickbarInputs = []
       touchPrimaryDirection = null
@@ -110,6 +131,26 @@ export function createBrowserGameplayInput({
         input: createIdlePlayerCharacterInput(),
       }
     }
+    const controller = gamepad.sample(getGamepads())
+    const nextGamepadPresent = controller.gamepad !== null
+    const becamePresent = !gamepadPresent && nextGamepadPresent
+    if (gamepadPresent !== nextGamepadPresent) {
+      gamepadPresent = nextGamepadPresent
+      onGamepadPresenceChange(gamepadPresent)
+    }
+    if (controller.quickbarSelectionChanged || becamePresent) {
+      onGamepadQuickbarSelection(controller.selectedQuickbarSlot)
+    }
+    for (const action of controller.actions) onGamepadAction(action)
+    gamepadPrimary = primaryCastingEnabled && controller.primary
+    gamepadAimDirection = controller.aimDirection
+    if (controller.aimActive) aimOwner = 'gamepad'
+    if (aimOwner === 'gamepad' && gamepadAimDirection === null) {
+      aim = null
+      aimOwner = null
+    }
+    syncGamepadQuickbar(controller.quickbar)
+
     if (touchPrimaryDirection) {
       aim = projectDirection(touchPrimaryDirection) ?? aim
     } else if (capturedPointer && (
@@ -117,10 +158,12 @@ export function createBrowserGameplayInput({
       || (mouseQuickbarHeld() && secondaryAtPointer())
     )) {
       aim = projectPointer(capturedPointer) ?? aim
+    } else if (aimOwner === 'gamepad' && gamepadAimDirection) {
+      aim = projectDirection(gamepadAimDirection) ?? aim
     } else if (mouseQuickbarHeld()) {
       aim = projectSecondaryAim() ?? aim
     }
-    const movementSample = movement.sample()
+    const movementSample = movement.sample(controller.gamepad ? [controller.gamepad] : [])
     const currentViewportWidth = viewportWidth()
     if (!Number.isFinite(currentViewportWidth) || currentViewportWidth < 1) {
       throw new RangeError('gameplay viewport width must be positive and finite')
@@ -130,7 +173,7 @@ export function createBrowserGameplayInput({
       input: {
         aim: aim ? { ...aim } : null,
         cast: {
-          primary: mousePrimary || touchPrimaryDirection !== null,
+          primary: mousePrimary || touchPrimaryDirection !== null || gamepadPrimary,
           quickbar: heldQuickbarInputs.at(-1)?.slot ?? null,
         },
         movement: { ...movementSample.movement },
@@ -155,6 +198,7 @@ export function createBrowserGameplayInput({
     if (!nextAim) return
     capturedPointer = mouse
     aim = nextAim
+    aimOwner = 'mouse'
     if (lane === 'primary') mousePrimary = true
     else {
       const slot = quickbarSlotForBinding(controls, `Mouse${mouse.button}`)
@@ -170,6 +214,7 @@ export function createBrowserGameplayInput({
     const mouse = mouseEvent(event)
     if (!mouse) return
     capturedPointer = mouse
+    aimOwner = 'mouse'
     aim = mousePrimary || secondaryAtPointer()
       ? projectPointer(mouse) ?? aim
       : projectSecondaryAim() ?? aim
@@ -186,6 +231,7 @@ export function createBrowserGameplayInput({
       : null
     if (lane === 'primary' ? !mousePrimary : slot === null || !quickbarInputHeld(`mouse:${slot}`, slot)) return
     capturedPointer = mouse
+    aimOwner = 'mouse'
     aim = lane === 'secondary' && !secondaryAtPointer()
       ? projectSecondaryAim() ?? aim
       : projectPointer(mouse) ?? aim
@@ -235,6 +281,17 @@ export function createBrowserGameplayInput({
     return heldQuickbarInputs.some(({ source }) => source.startsWith('mouse:'))
   }
 
+  function syncGamepadQuickbar(slot: number | null): void {
+    const held = heldQuickbarInputs.find(({ source }) => source === 'gamepad')
+    if (slot === null) {
+      if (held) releaseQuickbarInput('gamepad', held.slot)
+      return
+    }
+    if (held?.slot === slot) return
+    if (held) releaseQuickbarInput('gamepad', held.slot)
+    holdQuickbarInput('gamepad', slot)
+  }
+
   mouseTarget.addEventListener('mousedown', mouseDown)
   mouseTarget.addEventListener('contextmenu', contextMenu)
   target.addEventListener('mousemove', mouseMove)
@@ -270,6 +327,7 @@ export function createBrowserGameplayInput({
     setTouchPrimary(direction) {
       if (blocked || !primaryCastingEnabled) return
       touchPrimaryDirection = primaryDirection(direction)
+      if (touchPrimaryDirection) aimOwner = 'touch'
       publish()
     },
     setTouchQuickbar(slot, pressed, fallbackDirection) {
@@ -279,7 +337,10 @@ export function createBrowserGameplayInput({
         if (quickbarInputHeld(source, slot)) return
         if (aim === null && fallbackDirection) {
           const direction = primaryDirection(fallbackDirection)
-          if (direction) aim = projectDirection(direction)
+          if (direction) {
+            aim = projectDirection(direction)
+            aimOwner = 'touch'
+          }
         }
         holdQuickbarInput(source, slot)
       } else {

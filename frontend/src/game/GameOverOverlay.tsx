@@ -49,6 +49,8 @@ export default function GameOverOverlay({
       data-game-over-exit-ticks={gameOverExitTicks ?? ''}
       data-game-over-ticks={gameOverTicks}
       data-input-ready={presentation.acceptsInput}
+      data-game-controller-navigation-root="true"
+      data-game-default-focus="true"
       data-riff-record={riff.frameRecord ?? ''}
       data-run-id={runId}
       disabled={!presentation.acceptsInput}

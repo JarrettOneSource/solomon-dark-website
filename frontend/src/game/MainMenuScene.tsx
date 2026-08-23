@@ -709,12 +709,23 @@ export default function MainMenuScene({
     }
   }, [audio, session])
 
+  const controllerNavigationRef = useRef({
+    enabled: true,
+    requireModal: false,
+  })
+  controllerNavigationRef.current = {
+    enabled: loading === null && !connecting && !leaving && !preparing && fadeState === 'idle',
+    requireModal: screen === 'hub',
+  }
   useEffect(() => {
-    if (screen === 'hub' || settingsContext || gameplaySettingsOpen
-      || modMismatch || !stageRef.current) return
-    const navigation = createGamepadMenuNavigation({ root: stageRef.current })
+    if (!stageRef.current) return
+    const navigation = createGamepadMenuNavigation({
+      enabled: () => controllerNavigationRef.current.enabled,
+      requireModal: () => controllerNavigationRef.current.requireModal,
+      root: stageRef.current,
+    })
     return () => navigation.destroy()
-  }, [gameplaySettingsOpen, modMismatch, screen, settingsContext])
+  }, [])
 
   const transitionTo = (target: MenuScreen) => {
     if (fadeState !== 'idle') return
@@ -1571,7 +1582,7 @@ export default function MainMenuScene({
               <h2>CHEATS USE PRIVATE COLLEGES</h2>
               <p>Leave the global Hub, then use Last Game to continue this wizard locally.</p>
               <footer>
-                <button type="button" onClick={() => setCheatCollegePrompt(false)}>CANCEL</button>
+                <button data-game-back="true" type="button" onClick={() => setCheatCollegePrompt(false)}>CANCEL</button>
                 <button type="button" onClick={() => {
                   updateGameSettings({ ...gameSettings, enableCheats: true })
                   setCheatCollegePrompt(false)

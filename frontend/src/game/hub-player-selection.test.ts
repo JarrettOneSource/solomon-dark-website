@@ -3,7 +3,7 @@ import test from 'node:test'
 
 import { createGameSimulation } from './core-server/game-simulation.ts'
 import { createGameSnapshot } from './host/game-snapshot.ts'
-import { selectHubPlayerAtPoint } from './hub-player-selection.ts'
+import { nearestHubPlayer, selectHubPlayerAtPoint } from './hub-player-selection.ts'
 
 function sharedHubSnapshot() {
   const snapshot = createGameSnapshot(createGameSimulation({
@@ -39,4 +39,16 @@ test('Hub player selection uses a mobile-friendly visual actor target', () => {
   snapshot.players.front!.position = { x: 400, y: 400 }
   assert.equal(selectHubPlayerAtPoint(snapshot, 'local', { x: 235, y: 180 }), 'back')
   assert.equal(selectHubPlayerAtPoint(snapshot, 'local', { x: 260, y: 150 }), null)
+})
+
+test('controller interaction selects only the nearest in-region player inside its fixed range', () => {
+  const snapshot = sharedHubSnapshot()
+  snapshot.players.back!.position = { x: 180, y: 100 }
+  snapshot.players.front!.position = { x: 160, y: 100 }
+  snapshot.players.private!.position = { x: 101, y: 100 }
+  assert.equal(nearestHubPlayer(snapshot, 'local'), 'front')
+  snapshot.players.front!.position = { x: 221, y: 100 }
+  snapshot.players.back!.position = { x: 220, y: 100 }
+  assert.equal(nearestHubPlayer(snapshot, 'local'), 'back')
+  assert.equal(nearestHubPlayer(snapshot, 'local', 119), null)
 })

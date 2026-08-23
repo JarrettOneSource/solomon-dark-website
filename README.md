@@ -95,9 +95,13 @@ The authoritative host remains loopback-only; a browser on another machine is
 not a desktop-local client and therefore needs a separately configured secure
 remote development gateway.
 
-The shared client accepts keyboard (`WASD` or arrows), a standard controller
-(left stick or D-pad, south button to confirm, east button to go back), and a
-Pointer Events joystick on coarse-pointer mobile browsers. The game preserves
+The shared client accepts keyboard (`WASD` or arrows), a standard controller,
+and Pointer Events joysticks on coarse-pointer mobile browsers. Controller
+gameplay uses left stick or D-pad to move, right stick to aim, right trigger for
+the primary spell, X to cast the selected quickbar slot, bumpers to select all
+eight slots, A to interact, Y for Skills, View for Inventory, and Menu/Start to
+pause. Menus use D-pad or left stick, A to confirm, B to go back, and bumpers to
+move between adjacent controls. The game preserves
 its `1600x900` native stage within wider `16:10` displays such as Steam Deck,
 and asks portrait mobile devices to rotate before play.
 

@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import {
   GAMEPAD_MOVEMENT_DEAD_ZONE,
+  GAMEPAD_MOVEMENT_OUTER_DEAD_ZONE,
   createBrowserMovementInput,
   createMovementInputState,
   movementFromGamepads,
@@ -143,6 +144,14 @@ test('radial gamepad dead zone removes drift and rescales useful travel continuo
   const diagonal = radialDeadZone(1, 1, GAMEPAD_MOVEMENT_DEAD_ZONE)
   closeTo(Math.hypot(diagonal.x, diagonal.y), 1)
   assert.deepEqual(radialDeadZone(Number.NaN, 1, GAMEPAD_MOVEMENT_DEAD_ZONE), { x: 0, y: 0 })
+})
+
+test('standard gameplay movement reaches half speed midway between the authored dead-zone edges', () => {
+  const movement = movementFromGamepads([
+    gamepad((GAMEPAD_MOVEMENT_DEAD_ZONE + GAMEPAD_MOVEMENT_OUTER_DEAD_ZONE) / 2, 0),
+  ])
+  closeTo(movement.x, 0.5)
+  assert.equal(movement.y, 0)
 })
 
 test('selects the first active connected gamepad and ignores disconnected reports', () => {
