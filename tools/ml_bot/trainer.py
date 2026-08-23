@@ -437,14 +437,20 @@ def evaluate_policy(
                     break
             if np.any(active):
                 records.extend(ledger.aborted_records("evaluation step limit"))
-    returns = [float(record["return"]) for record in records]
-    waves = [float(record["waves_reached"]) for record in records]
+    completed = [record for record in records if record.get("aborted") is False]
+    incomplete = [record for record in records if record.get("aborted") is True]
+    returns = [float(record["return"]) for record in completed]
+    waves = [float(record["waves_reached"]) for record in completed]
     return {
         "checkpoint": str(checkpoint_path),
         "episodes": records,
-        "return": bootstrap_mean_interval(returns, seed=0xE1A1),
+        "requestedEpisodes": len(seeds),
+        "completeEpisodes": len(completed),
+        "incompleteEpisodes": len(incomplete),
+        "validForPromotion": len(completed) == len(seeds) and len(completed) >= 30,
+        "return": None if not returns else bootstrap_mean_interval(returns, seed=0xE1A1),
         "status": "ok",
-        "waveDepth": bootstrap_mean_interval(waves, seed=0xE1A2),
+        "waveDepth": None if not waves else bootstrap_mean_interval(waves, seed=0xE1A2),
     }
 
 

@@ -15,6 +15,7 @@ import torch
 from ml_bot.checkpoint import atomic_write, load_checkpoint, typescript_checkpoint_report
 from ml_bot.model import PolicyV5
 from ml_bot.diagnostics import render_dashboard, render_replay
+from ml_bot.metrics import promotion_decision
 from ml_bot.probes import behavior_probe_scorecard
 from ml_bot.self_test import main as self_test
 from ml_bot.spec import POLICY_SPEC, REPOSITORY_ROOT
@@ -108,6 +109,11 @@ def run_evaluate(args: argparse.Namespace) -> Any:
             Path(args.report).resolve(),
             (json.dumps(result, indent=2, allow_nan=False, sort_keys=True) + "\n").encode(),
         )
+    if not result["validForPromotion"] and not args.allow_incomplete:
+        raise RuntimeError(
+            "evaluation is not promotion-valid: "
+            f"{result['completeEpisodes']}/{result['requestedEpisodes']} complete episodes"
+        )
     return result
 
 
@@ -177,6 +183,53 @@ def run_probes(args: argparse.Namespace) -> Any:
         Path(args.dataset).resolve(),
         Path(args.output).resolve(),
     )
+
+
+def run_promote(args: argparse.Namespace) -> Any:
+    reports = {
+        name: json.loads(Path(path).read_text(encoding="utf-8"))
+        for name, path in {
+            "incumbentTrain": args.incumbent_train,
+            "candidateTrain": args.candidate_train,
+            "incumbentHoldout": args.incumbent_holdout,
+            "candidateHoldout": args.candidate_holdout,
+        }.items()
+    }
+    if any(report.get("validForPromotion") is not True for report in reports.values()):
+        raise ValueError("all four evaluation reports must be promotion-valid")
+    incumbent_train, candidate_train = paired_wave_vectors(
+        reports["incumbentTrain"], reports["candidateTrain"]
+    )
+    incumbent_holdout, candidate_holdout = paired_wave_vectors(
+        reports["incumbentHoldout"], reports["candidateHoldout"]
+    )
+    result = promotion_decision(
+        incumbent_train,
+        candidate_train,
+        incumbent_holdout,
+        candidate_holdout,
+    )
+    atomic_write(
+        Path(args.output).resolve(),
+        (json.dumps(result, indent=2, allow_nan=False, sort_keys=True) + "\n").encode(),
+    )
+    return result
+
+
+def paired_wave_vectors(first: Any, second: Any) -> tuple[list[float], list[float]]:
+    def rows(report: Any) -> dict[int, float]:
+        return {
+            int(episode["seed"]): float(episode["waves_reached"])
+            for episode in report["episodes"]
+            if episode.get("aborted") is False
+        }
+
+    first_rows = rows(first)
+    second_rows = rows(second)
+    if set(first_rows) != set(second_rows):
+        raise ValueError("evaluation reports do not contain the same seeds")
+    seeds = sorted(first_rows)
+    return [first_rows[seed] for seed in seeds], [second_rows[seed] for seed in seeds]
 
 
 def bootstrap_configuration(args: argparse.Namespace) -> BootstrapConfiguration:
@@ -266,6 +319,14 @@ def create_parser() -> argparse.ArgumentParser:
     probes_parser.add_argument("--output", required=True)
     probes_parser.set_defaults(handler=run_probes)
 
+    promote_parser = subparsers.add_parser("promote", help="apply the frozen paired-seed rule")
+    promote_parser.add_argument("--incumbent-train", required=True)
+    promote_parser.add_argument("--candidate-train", required=True)
+    promote_parser.add_argument("--incumbent-holdout", required=True)
+    promote_parser.add_argument("--candidate-holdout", required=True)
+    promote_parser.add_argument("--output", required=True)
+    promote_parser.set_defaults(handler=run_promote)
+
     validate_parser = subparsers.add_parser("validate", help="validate a strict v5 checkpoint")
     validate_parser.add_argument("--checkpoint", required=True)
     validate_parser.set_defaults(handler=run_validate)
@@ -299,6 +360,7 @@ def create_parser() -> argparse.ArgumentParser:
     evaluate_parser.add_argument("--action-repeat", type=positive_integer, default=10)
     evaluate_parser.add_argument("--maximum-steps", type=positive_integer, default=3_000)
     evaluate_parser.add_argument("--report")
+    evaluate_parser.add_argument("--allow-incomplete", action="store_true")
     evaluate_parser.set_defaults(handler=run_evaluate)
     return parser
 
