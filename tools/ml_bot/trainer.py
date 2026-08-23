@@ -428,7 +428,9 @@ def evaluate_policy(
             actions = np.stack(
                 [selected.actions[name].numpy() for name in ACTION_ORDER], axis=1
             ).astype(np.uint8)
-            actions[~active] = 0
+            # The bridge has a fixed lane count. Retired lanes still have to
+            # receive actions that are legal for their current mask; their
+            # ledger entries are already closed and their results are ignored.
             result = bridge.step(actions, ticks=action_repeat)
             decision_counts[active] += 1
             records.extend(ledger.observe(before, result.state, result.transition, actions))
