@@ -12,6 +12,7 @@ test('persistent Boneyard workers are deterministic across reset and worker lane
   })
   try {
     const initial = await pool.reset(resets)
+    assert.deepEqual(initial.metadata.map(({ seed }) => seed), [0x1234_5678, 0x1234_5679])
     assert.equal(initial.plans.abilityByTarget.length, 2 * 9 * 22)
     assert.equal(initial.plans.aimByAbility.length, 2 * 22 * 9)
     const actions = createBoneyardHeadlessActionBuffer(2)

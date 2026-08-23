@@ -70,6 +70,7 @@ async function dispatch(request) {
 function stateResult(result, type) {
   return {
     hashes: result.hashes,
+    metadata: result.metadata,
     observationLength: pool.observationLength,
     observations: encodeView(result.observations),
     plans: encodePlans(result.plans),

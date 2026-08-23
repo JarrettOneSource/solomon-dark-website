@@ -89,6 +89,12 @@ export interface BoneyardHeadlessPolicyStep {
   readonly transition: BoneyardHeadlessTransition
 }
 
+export interface BoneyardHeadlessEpisodeMetadata {
+  readonly geometrySha256: string
+  readonly runId: string
+  readonly seed: number
+}
+
 export class BoneyardHeadlessEnvironment {
   readonly observationLength = BONEYARD_HEADLESS_OBSERVATION_LENGTH
   private readonly agent: PlayerCharacterConfig
@@ -322,6 +328,15 @@ export class BoneyardHeadlessEnvironment {
 
   state(): Readonly<GameSimulationState> {
     return this.simulation
+  }
+
+  episodeMetadata(): BoneyardHeadlessEpisodeMetadata {
+    const boneyard = deterministicBoneyard(this.resetOptions.seed)
+    return {
+      geometrySha256: boneyard.geometrySha256,
+      runId: boneyard.runId,
+      seed: this.resetOptions.seed,
+    }
   }
 
   private createSimulation(options: BoneyardHeadlessResetOptions): GameSimulationState {

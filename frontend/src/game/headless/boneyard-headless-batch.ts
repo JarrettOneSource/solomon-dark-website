@@ -12,6 +12,7 @@ import {
   BONEYARD_HEADLESS_ACTION_STRIDE,
   BoneyardHeadlessEnvironment,
   type BoneyardHeadlessEnvironmentOptions,
+  type BoneyardHeadlessEpisodeMetadata,
   type BoneyardHeadlessResetOptions,
 } from './boneyard-headless-environment.ts'
 
@@ -104,6 +105,10 @@ export class BoneyardHeadlessBatch {
       setActionMaskPlan(result, index, this.environments[index]!.actionMaskPlan())
     }
     return result
+  }
+
+  episodeMetadata(): readonly BoneyardHeadlessEpisodeMetadata[] {
+    return this.environments.map(environment => environment.episodeMetadata())
   }
 
   step(

@@ -14,6 +14,7 @@ import type {
 } from './boneyard-headless-batch.ts'
 import {
   BONEYARD_HEADLESS_ACTION_STRIDE,
+  type BoneyardHeadlessEpisodeMetadata,
   type BoneyardHeadlessEnvironmentOptions,
   type BoneyardHeadlessResetOptions,
 } from './boneyard-headless-environment.ts'
@@ -26,6 +27,7 @@ export interface BoneyardHeadlessWorkerPoolOptions {
 export interface BoneyardHeadlessWorkerResult {
   readonly hashes: readonly string[]
   readonly masks: MlBotPolicyActionMasks
+  readonly metadata: readonly BoneyardHeadlessEpisodeMetadata[]
   readonly observations: Float32Array
   readonly plans: BoneyardHeadlessPackedActionMaskPlan
 }
@@ -151,6 +153,7 @@ export class BoneyardHeadlessWorkerPool {
     const planMovement = new Uint8Array(this.worldCount * 9)
     const planTarget = new Uint8Array(this.worldCount * 9)
     const hashes: string[] = []
+    const metadata: BoneyardHeadlessEpisodeMetadata[] = []
     let worldOffset = 0
     for (const result of results) {
       if (!(result.observations instanceof ArrayBuffer) || !Array.isArray(result.hashes)) {
@@ -158,6 +161,7 @@ export class BoneyardHeadlessWorkerPool {
       }
       const masks = requiredMasks(result.masks)
       const laneWorldCount = result.hashes.length
+      const laneMetadata = requiredEpisodeMetadata(result.metadata, laneWorldCount)
       const plans = requiredActionMaskPlan(result.plans, laneWorldCount)
       const laneObservations = new Float32Array(result.observations)
       observations.set(laneObservations, worldOffset * this.observationLength)
@@ -170,10 +174,12 @@ export class BoneyardHeadlessWorkerPool {
       planMovement.set(plans.movement, worldOffset * 9)
       planTarget.set(plans.target, worldOffset * 9)
       hashes.push(...result.hashes.map((hash) => String(hash)))
+      metadata.push(...laneMetadata)
       worldOffset += result.hashes.length
     }
     return {
       hashes,
+      metadata,
       masks: { ability, aim, movement, target },
       observations,
       plans: {
@@ -405,6 +411,32 @@ function requiredStringArray(value: unknown, name: string): string[] {
     throw new Error(`Boneyard headless worker returned invalid ${name}`)
   }
   return value
+}
+
+function requiredEpisodeMetadata(
+  value: unknown,
+  worldCount: number,
+): BoneyardHeadlessEpisodeMetadata[] {
+  if (!Array.isArray(value) || value.length !== worldCount) {
+    throw new Error('Boneyard headless worker returned invalid episode metadata')
+  }
+  return value.map((entry): BoneyardHeadlessEpisodeMetadata => {
+    const source = requiredObject(entry, 'Boneyard headless worker episode metadata')
+    if (
+      typeof source.geometrySha256 !== 'string'
+      || source.geometrySha256.length === 0
+      || typeof source.runId !== 'string'
+      || source.runId.length === 0
+      || !Number.isInteger(source.seed)
+      || Number(source.seed) < 0
+      || Number(source.seed) > 0xffff_ffff
+    ) throw new Error('Boneyard headless worker returned invalid episode metadata')
+    return {
+      geometrySha256: source.geometrySha256,
+      runId: source.runId,
+      seed: Number(source.seed),
+    }
+  })
 }
 
 function createPackedRewardTerms(worldCount: number): BoneyardHeadlessPackedRewardTerms {

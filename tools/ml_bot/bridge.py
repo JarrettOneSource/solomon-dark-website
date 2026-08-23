@@ -29,6 +29,7 @@ class ActionMaskPlans:
 @dataclass(frozen=True)
 class RolloutState:
     hashes: tuple[str, ...]
+    metadata: tuple[Mapping[str, Any], ...]
     observations: np.ndarray
     plans: ActionMaskPlans
 
@@ -192,6 +193,7 @@ def decode_state(value: Mapping[str, Any], worlds: int) -> RolloutState:
     hashes = string_tuple(value.get("hashes"), worlds, "state hashes")
     return RolloutState(
         hashes=hashes,
+        metadata=decode_episode_metadata(value.get("metadata"), worlds),
         observations=decode_array(
             value.get("observations"), "<f4", (worlds, POLICY_SPEC.observation_size), "observations"
         ),
@@ -211,6 +213,23 @@ def decode_plans(value: Any, worlds: int) -> ActionMaskPlans:
             source.get("aimByAbility"), "u1", (worlds, 22, 9), "aim plan"
         ),
     )
+
+
+def decode_episode_metadata(value: Any, worlds: int) -> tuple[Mapping[str, Any], ...]:
+    rows = required_list(value, "episode metadata")
+    if len(rows) != worlds:
+        raise RolloutProtocolError("episode metadata does not match world count")
+    result: list[Mapping[str, Any]] = []
+    for row in rows:
+        source = required_mapping(row, "episode metadata row")
+        geometry = source.get("geometrySha256")
+        run_id = source.get("runId")
+        seed = source.get("seed")
+        if not isinstance(geometry, str) or not geometry or not isinstance(run_id, str) or not run_id:
+            raise RolloutProtocolError("episode metadata identity is invalid")
+        require_uint32(seed, "episode metadata seed")
+        result.append({"geometrySha256": geometry, "runId": run_id, "seed": seed})
+    return tuple(result)
 
 
 def decode_transition(value: Any, worlds: int) -> RolloutTransition:

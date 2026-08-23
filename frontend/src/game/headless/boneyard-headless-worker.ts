@@ -7,6 +7,7 @@ import {
 } from './boneyard-headless-batch.ts'
 import type {
   BoneyardHeadlessEnvironmentOptions,
+  BoneyardHeadlessEpisodeMetadata,
   BoneyardHeadlessResetOptions,
 } from './boneyard-headless-environment.ts'
 
@@ -44,6 +45,7 @@ parentPort.on('message', (message: WorkerRequest) => {
         message.id,
         batch.stepTransitions(actions, message.ticks),
         batch.actionMaskPlans(),
+        batch.episodeMetadata(),
       )
       return
     }
@@ -62,6 +64,7 @@ parentPort.on('message', (message: WorkerRequest) => {
     parentPort!.postMessage({
       hashes: batch.stateHashes(),
       id: message.id,
+      metadata: batch.episodeMetadata(),
       masks: { ability, aim, movement, target },
       observations: observationBuffer,
       plans: {
@@ -95,6 +98,7 @@ function postStepResult(
   id: number,
   transition: BoneyardHeadlessBatchTransition,
   plans: BoneyardHeadlessPackedActionMaskPlan,
+  metadata: readonly BoneyardHeadlessEpisodeMetadata[],
 ): void {
   const observations = transition.nextObservations.buffer as ArrayBuffer
   const ability = transition.masks.ability.buffer as ArrayBuffer
@@ -122,6 +126,7 @@ function postStepResult(
   parentPort!.postMessage({
     hashes: transition.nextStateHashes,
     id,
+    metadata,
     masks: { ability, aim, movement, target },
     observations,
     plans: {

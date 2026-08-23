@@ -17,6 +17,10 @@ test('rollout server carries exact plans, expert transitions, and selective rese
     assert.equal(initialized.ok, true)
     assert.equal(initialized.protocol, 'solomon-dark-ml-rollout-v5')
     assert.equal(initialized.worldCount, 2)
+    assert.deepEqual(initialized.metadata.map(({ seed }) => seed), [101, 102])
+    assert.ok(initialized.metadata.every(({ geometrySha256, runId }) => (
+      geometrySha256.length > 0 && runId.length > 0
+    )))
     assert.equal(bytes(initialized.observations), 2 * 1_784 * 4)
     assert.equal(bytes(initialized.plans.movement), 2 * 9)
     assert.equal(bytes(initialized.plans.target), 2 * 9)
