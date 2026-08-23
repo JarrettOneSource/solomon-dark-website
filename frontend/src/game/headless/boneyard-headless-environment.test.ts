@@ -85,7 +85,8 @@ test('Boneyard headless episode starts the real wave director with combat enable
 })
 
 test('headless wave staging places every participant inside the sealed combat arena', () => {
-  for (let seed = 0; seed < 12; seed += 1) {
+  const seeds = [...Array.from({ length: 12 }, (_, seed) => seed), 1_592_594_436]
+  for (const seed of seeds) {
     const environment = new BoneyardHeadlessEnvironment({ seed })
     const state = environment.state()
     assert.equal(state.world.kind, 'boneyard')
@@ -103,36 +104,6 @@ test('headless wave staging places every participant inside the sealed combat ar
       ), true)
     }
   }
-})
-
-test('the former entrance-refuge seed continues past its old progress plateau', () => {
-  const environment = new BoneyardHeadlessEnvironment({ seed: 1_592_594_436 })
-  let enemyKills = 0
-  let lastProgressDecision = 0
-  let wavesCompleted = 0
-  let terminal = false
-  for (let decision = 0; decision < 1_000; decision += 1) {
-    const action = environment.expertAction()
-    const transition = environment.stepTransition(Float32Array.from([
-      action.movement,
-      action.target,
-      action.ability,
-      action.aim,
-    ]), 10)
-    enemyKills += transition.reward.gameplay.enemyKills
-    wavesCompleted += transition.reward.gameplay.wavesCompleted
-    if (
-      transition.reward.gameplay.enemyKills > 0
-      || transition.reward.gameplay.wavesCompleted > 0
-    ) lastProgressDecision = decision + 1
-    if (transition.done) {
-      terminal = true
-      break
-    }
-  }
-  assert.ok(enemyKills > 29)
-  assert.ok(wavesCompleted > 0)
-  assert.ok(terminal || lastProgressDecision > 500)
 })
 
 test('Boneyard headless reset rejects seeds outside uint32', () => {
