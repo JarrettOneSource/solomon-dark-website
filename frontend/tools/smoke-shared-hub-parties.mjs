@@ -472,7 +472,6 @@ async function enterHub(displayName, element, viewport, existingContext) {
     && new URL(response.url()).pathname === '/api/game/hub'
   ))
   await page.getByRole('button', { name: 'New Game' }).click()
-  assert.equal((await admission).status(), 201)
   await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({
     timeout: 30_000,
   })
@@ -480,6 +479,7 @@ async function enterHub(displayName, element, viewport, existingContext) {
   await page.getByRole('button', { name: new RegExp(element, 'i') }).click()
   await page.locator('.create-menu-disciplines[data-visible="true"]').waitFor({ timeout: 15_000 })
   await page.locator('.create-menu-discipline-arcane').click()
+  assert.equal((await admission).status(), 201)
   try {
     await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 240_000 })
   } catch (error) {
