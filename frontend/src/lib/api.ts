@@ -4,6 +4,7 @@
 export type School = 'fire' | 'air' | 'water' | 'ether' | 'earth'
 
 export interface User {
+  developerAccess: boolean
   id: number
   username: string
   email?: string

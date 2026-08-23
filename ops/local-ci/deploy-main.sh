@@ -204,6 +204,8 @@ if [[ -z "$artifact_checksum" ]]; then
         Server.dll \
         GameHost/game-session-supervisor.mjs \
         GameHost/lua54.wasm \
+        GameHost/ml-bot-policy-v5-selected.sdml \
+        GameHost/ml-bot-policy-worker.mjs \
         wwwroot/deployment.json \
         wwwroot/index.html \
         DEPLOYED_GIT_SHA; do
@@ -396,6 +398,8 @@ for required_file in \
     Server.dll \
     GameHost/game-session-supervisor.mjs \
     GameHost/lua54.wasm \
+    GameHost/ml-bot-policy-v5-selected.sdml \
+    GameHost/ml-bot-policy-worker.mjs \
     wwwroot/deployment.json \
     wwwroot/index.html \
     DEPLOYED_GIT_SHA; do

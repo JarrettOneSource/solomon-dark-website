@@ -24,6 +24,7 @@ import {
   continueGameSimulationOver,
   createGameSimulation,
   enterBoneyardWorld,
+  getPlayerEconomy,
   getPlayerProgression,
   grantGameSimulationPlayerExperience,
   removePlayerCharacter,
@@ -95,6 +96,12 @@ import {
   WEB_LUA_MAX_PENDING_EXECUTIONS,
   type WebLuaModSource,
 } from './lua/web-lua-contract.ts'
+import {
+  ML_BOT_CHARACTER,
+  MlBotHostController,
+  type MlBotHostIntent,
+  type MlBotPolicyInference,
+} from './ml-bot-host-controller.ts'
 import {
   createGameSaveDocument,
   restoreGameSaveDocument,
@@ -170,6 +177,7 @@ export type GameHostAuthentication =
 
 export interface GameHostAdmission {
   readonly content: MaterializedWebSessionContent
+  readonly developerAccess?: boolean
   readonly leaderboardUserId: number | null
   readonly partyId?: string
   readonly reservationId?: string
@@ -179,6 +187,7 @@ type GameHostRole = 'shared'
 
 interface AuthenticatedGameHostRole {
   readonly content: MaterializedWebSessionContent | null
+  readonly developerAccess: boolean
   readonly leaderboardUserId: number | null
   readonly partyId: string | null
   readonly reservationId: string | null
@@ -209,6 +218,7 @@ export interface GameHostOptions {
   logContext?: Readonly<Record<string, unknown>>
   luaWasmPath?: string
   maxPlayers?: number
+  mlBotPolicy?: MlBotPolicyInference
   modAssets?: readonly import('../protocol/game-protocol.ts').GameModAsset[]
   mods?: readonly WebLuaModSource[]
   onPlayerCountChanged?: (playerCount: number) => void
@@ -228,8 +238,12 @@ export interface GameHostAddress {
 
 export interface GameHost {
   address: GameHostAddress
+  botCount(): number
+  botPlayerIds(): readonly string[]
+  botTelemetry(): readonly GameHostMlBotTelemetry[]
   close(reason?: GameHostCloseReason): Promise<void>
   hubPlayerCount(): number
+  humanPlayerCount(): number
   hostPlayerId(): string | null
   playerCount(): number
   loadedBoneyard(): LoadedBoneyard | null
@@ -240,6 +254,7 @@ export interface GameHost {
   partyJoinRequestStatus(token: string): GameHostPartyJoinRequestStatus | null
   partyTargetByCode(joinCode: string): GameHostPartyTarget | null
   partyTargetByListingId(listingId: string): GameHostPartyTarget | null
+  playerState(playerId: string): GameSimulationState | null
   publicParties(): readonly PublicPartyDirectoryEntry[]
   restartForDeployment(
     targetRevision: string,
@@ -248,6 +263,20 @@ export interface GameHost {
   reservePartyJoin(partyId: string, reservationId: string, expiresAt: number): ProtocolPartyActionRejection | null
   state(): GameSimulationState
   runCount(): number
+}
+
+export interface GameHostMlBotTelemetry {
+  readonly decisions: number
+  readonly gold: number
+  readonly items: number
+  readonly kills: number
+  readonly lifeState: string
+  readonly playerId: string
+  readonly potionsUsed: number
+  readonly skillPicks: number
+  readonly tick: number
+  readonly waveReached: number
+  readonly wavesCompleted: number
 }
 
 export interface GameHostDeploymentRestartResult {
@@ -294,6 +323,7 @@ interface HostClient {
   activeInput: PlayerCharacterInput
   chatSentAtMs: number[]
   connectedAtMs: number
+  developerAccess: boolean
   displayName: string
   profile: PlayerSocialProfile
   forceReplicationKeyframe: boolean
@@ -307,6 +337,30 @@ interface HostClient {
   pendingLuaRequestIds: Set<number>
   sentReplicationBaselines: Map<number, ReplicatedEntityBaseline>
   socket: WebSocket
+}
+
+interface HostBot {
+  activeInput: PlayerCharacterInput
+  readonly character: PlayerCharacterConfig
+  readonly controller: MlBotHostController
+  readonly displayName: string
+  decisions: number
+  readonly playerId: PlayerId
+  readonly profile: PlayerSocialProfile
+  potionsUsed: number
+  readonly queuedIntents: MlBotHostIntent[]
+  skillPicks: number
+}
+
+interface PendingBotInvitation {
+  readonly acceptAtMs: number
+  readonly invitationId: string
+  readonly playerId: PlayerId
+}
+
+interface PendingBotSummon {
+  readonly character: PlayerCharacterConfig
+  readonly playerId: PlayerId
 }
 
 interface ExternalPartyJoinRequest {
@@ -405,6 +459,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   let luaRuntime: WebLuaRuntime | null = null
   let luaRuntimeInitialization: Promise<WebLuaRuntime> | null = null
   let luaRuntimeGeneration = 0
+  let luaRuntimeOwnerPlayerId: PlayerId | null = null
   const privateModLuaRuntimes: WebLuaRuntime[] = []
   const privateModContentRegistry = new WebLuaContentRegistry()
   let privateModExtensions: import('../core-server/game-simulation.ts').GameSimulationExtensions | undefined
@@ -422,6 +477,11 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   let lastTickLagWarningAt = Number.NEGATIVE_INFINITY
   let nextTickAt = performance.now() + GAME_FIXED_TICK_SECONDS * 1000
   const clients = new Map<WebSocket, HostClient>()
+  const bots = new Map<PlayerId, HostBot>()
+  const failedBots = new Map<PlayerId, Error>()
+  const pendingBotInvitations: PendingBotInvitation[] = []
+  const pendingBotSummons: PendingBotSummon[] = []
+  let nextBotOrdinal = 1
   const externalPartyJoinRequests = new Map<string, ExternalPartyJoinRequest>()
   const partyJoinReservations = new Map<string, PartyJoinReservation>()
   const pendingLuaEvents: WebLuaDerivedEvent[] = []
@@ -439,7 +499,9 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       response.end(JSON.stringify({
         status: 'ok',
         tick: state.tick,
-        players: clients.size,
+        bots: bots.size,
+        humanPlayers: clients.size,
+        players: participantCount(),
         lua: luaRuntime?.metrics ?? null,
         scene: state.world.kind,
       }))
@@ -605,7 +667,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           disconnect(socket, 'authentication-failed', 'Mods require a private College.')
           return
         }
-        if (sharedHub && message.cheatsEnabled) {
+        if (sharedHub && message.cheatsEnabled && !authenticated.developerAccess) {
           disconnect(socket, 'authentication-failed', 'Cheats require a private College.')
           return
         }
@@ -619,7 +681,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           disconnect(socket, 'authentication-failed', 'That party admission has expired.')
           return
         }
-        if (clients.size >= maxPlayers) {
+        if (participantCount() >= maxPlayers) {
           disconnect(socket, 'server-full', 'The session is full.')
           return
         }
@@ -823,21 +885,23 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         const snapshotSequence = nextSnapshotSequence
         nextSnapshotSequence += 1
         const welcomeBaseline = createReplicatedEntityBaseline(welcomeSnapshot)
+        const clientCheatsEnabled = message.cheatsEnabled && !authenticated.developerAccess
         const joinedClient: HostClient = {
           acknowledgedSequence: 0,
           acknowledgedSnapshotSequence: snapshotSequence,
           activeInput: createIdlePlayerCharacterInput(),
           chatSentAtMs: [],
           connectedAtMs: Date.now(),
+          developerAccess: authenticated.developerAccess,
           displayName: message.character.displayName,
           profile: message.profile,
           forceReplicationKeyframe: false,
           globalScoreEligible: sessionKind !== 'private-college'
             && message.save === undefined
-            && !message.cheatsEnabled
+            && !clientCheatsEnabled
             && (authenticated.content?.manifest.mods.length ?? content.mods.length) === 0,
           localOnly: sessionKind !== 'global-hub'
-            || message.cheatsEnabled
+            || clientCheatsEnabled
             || saveIntegrity === 'local-only'
             || (authenticated.content?.manifest.mods.length ?? content.mods.length) > 0,
           lastReceivedSequence: 0,
@@ -867,6 +931,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         options.onPlayerCountChanged?.(clients.size)
         socket.send(encodeGameMessage({
           type: 'server-welcome',
+          developerAccess: joinedClient.developerAccess,
           protocolVersion: GAME_PROTOCOL_VERSION,
           playerId,
           resumeToken: `reserved-${playerId}`,
@@ -1263,6 +1328,17 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         if (result.accepted) {
           sharedWorlds = result.state
           state = sharedWorlds.hub
+          const invitation = sharedWorlds.parties.invitations.find(candidate => (
+            candidate.inviterPlayerId === client.playerId
+            && candidate.invitedPlayerId === message.targetPlayerId
+          ))
+          if (invitation && bots.has(message.targetPlayerId)) {
+            pendingBotInvitations.push({
+              acceptAtMs: performance.now() + 3_000,
+              invitationId: invitation.id,
+              playerId: message.targetPlayerId,
+            })
+          }
           broadcastPartyState()
         }
         sendPartyAction(client, 'invite', result)
@@ -1418,10 +1494,11 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       }
       if (message.type === 'client-cheat-mode') {
         if (message.enabled) {
-          if (sharedHub) {
+          if (sharedHub && !client.developerAccess) {
             disconnect(socket, 'invalid-message', 'Cheats require a private College.')
             return
           }
+          if (client.developerAccess) return
           client.globalScoreEligible = false
           client.localOnly = true
           taintActiveRun(client)
@@ -1444,7 +1521,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             ...result,
           }))
         }
-        if (sharedHub) {
+        if (sharedHub && !client.developerAccess) {
           sendLuaResult({
             error: 'Authoritative Lua is unavailable on the shared Hub host.',
             ok: false,
@@ -1453,7 +1530,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           })
           return
         }
-        if (client.playerId !== authorityForPlayer(client.playerId)) {
+        if (!client.developerAccess && client.playerId !== authorityForPlayer(client.playerId)) {
           sendLuaResult({
             error: 'Only the current session host may execute authoritative Lua.',
             ok: false,
@@ -1462,7 +1539,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           })
           return
         }
-        if (gameplayPause !== null) {
+        if (gameplayPauseForPlayer(client.playerId) !== null) {
           sendLuaResult({
             error: 'Lua execution is unavailable while gameplay is paused.',
             ok: false,
@@ -1492,7 +1569,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           client.pendingLuaRequestIds.delete(message.requestId)
           sendLuaResult(result)
         }
-        void ensureLuaRuntime().then((runtime) => {
+        void ensureLuaRuntime(client.playerId).then((runtime) => {
           if (closed || !clients.has(socket)) {
             completeRequest({
               error: 'The game session closed before Lua initialized.',
@@ -1726,6 +1803,8 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           privateParties = removePrivatePartyPlayer(privateParties, client.playerId)
         }
       }
+      if (client.playerId === luaRuntimeOwnerPlayerId) resetLuaRuntime()
+      if (clients.size === 0) removeAllBots('last human player disconnected')
       if (clients.size === 0) {
         hostPlayerId = null
         resetLuaRuntime()
@@ -1800,6 +1879,11 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       const now = performance.now()
       let steps = 0
       while (now >= nextTickAt && steps < 25) {
+        processFailedBots()
+        processPendingBotSummons()
+        processPendingBotInvitations(now)
+        stepBotControllers()
+        drainBotIntents()
         taintIneligibleClientRuns()
         if (sharedWorlds) {
           const inputs: Record<PlayerId, PlayerCharacterInput> = {}
@@ -1808,13 +1892,33 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             applyQueuedInput(client, activeState.tick + 1)
             inputs[client.playerId] = client.activeInput
           }
-          const statesBeforeLua = new Map(
-            sharedWorlds.runs.map(run => [run.partyId, run.state]),
-          )
+          for (const bot of bots.values()) inputs[bot.playerId] = bot.activeInput
           const enemySpawnIntents = new Map<
             string,
             import('../core-kernels/boneyard-wave-director.ts').BoneyardEnemySpawnIntent[]
           >()
+          let developerStateBeforeLua: GameSimulationState | null = null
+          let developerPartyId: string | null = null
+          if (luaRuntime && luaRuntimeOwnerPlayerId) {
+            const ownerState = sharedGameStateForPlayer(sharedWorlds, luaRuntimeOwnerPlayerId)
+            if (ownerState) {
+              developerStateBeforeLua = ownerState
+              developerPartyId = partyForPlayer(
+                sharedWorlds.parties,
+                luaRuntimeOwnerPlayerId,
+              )?.id ?? null
+              luaRuntime.beginTick(ownerState.tick + 1)
+              const applied = applyWebLuaCommands(ownerState, luaRuntime.drainCommands())
+              replaceStateForPlayer(luaRuntimeOwnerPlayerId, applied.state)
+              if (applied.nextRunSeed !== null) nextLuaRunSeed = applied.nextRunSeed
+              if (developerPartyId && applied.enemySpawnIntents.length > 0) {
+                enemySpawnIntents.set(developerPartyId, [...applied.enemySpawnIntents])
+              }
+            }
+          }
+          const statesBeforeLua = new Map(
+            sharedWorlds.runs.map(run => [run.partyId, run.state]),
+          )
           for (const [partyId, scope] of partyModRuntimes) {
             const run: SharedPartyRun | undefined = sharedWorlds.runs.find(
               candidate => candidate.partyId === partyId,
@@ -1834,7 +1938,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
                 candidate.partyId === partyId ? { ...candidate, state: runState } : candidate
               )),
             }
-            enemySpawnIntents.set(partyId, intents)
+            enemySpawnIntents.set(partyId, [
+              ...(enemySpawnIntents.get(partyId) ?? []),
+              ...intents,
+            ])
           }
           const previous = sharedWorlds
           sharedWorlds = stepSharedGameWorlds(
@@ -1849,6 +1956,20 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             ])),
           )
           state = sharedWorlds.hub
+          if (luaRuntime && luaRuntimeOwnerPlayerId && developerStateBeforeLua) {
+            const developerStateAfterLua = sharedGameStateForPlayer(
+              sharedWorlds,
+              luaRuntimeOwnerPlayerId,
+            )
+            if (developerStateAfterLua) {
+              const events = deriveWebLuaEvents(
+                developerStateBeforeLua,
+                developerStateAfterLua,
+                name => luaRuntime!.wantsEvent(name),
+              )
+              for (const event of events) luaRuntime.dispatch(event.name, event.payload)
+            }
+          }
           let lifecycleBoundary = false
           for (const run of sharedWorlds.runs) {
             const before = previous.runs.find(({ partyId }) => partyId === run.partyId)
@@ -1903,6 +2024,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           applyQueuedInput(client, nextTick)
           inputs[client.playerId] = client.activeInput
         }
+        for (const bot of bots.values()) inputs[bot.playerId] = bot.activeInput
         const previousTick = state.tick
         const previousBarrierId = state.levelUpBarrier?.barrierId ?? null
         const previousRunPhase = state.run.phase
@@ -2184,11 +2306,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     const parties = activePartySystem()
     if (!parties) return
     const profiles = new Map<string, PartyPlayerProfile>(
-      [...clients.values()].map(({ displayName, playerId, profile }) => [playerId, {
-        ...profile,
-        displayName,
+      [...clients.values(), ...bots.values()].map(({ displayName, playerId, profile }) => [
         playerId,
-      }]),
+        { ...profile, displayName, playerId },
+      ]),
     )
     const hubPlayerIds = new Set(sharedWorlds
       ? sharedWorlds.hub.playerEntities.identities.map(({ playerId }) => playerId)
@@ -2455,10 +2576,329 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     return 0
   }
 
+  function queueMlBotSummon(summonerPlayerId: PlayerId) {
+    if (!sharedWorlds || sessionKind !== 'global-hub') {
+      throw new Error('sd.bots.summon requires the shared Hub')
+    }
+    if (!options.mlBotPolicy) throw new Error('The ML bot policy is unavailable')
+    const summoner = [...clients.values()].find(client => client.playerId === summonerPlayerId)
+    if (!summoner?.developerAccess) throw new Error('sd.bots.summon requires developer access')
+    if (stateForPlayer(summonerPlayerId).world.kind !== 'hub') {
+      throw new Error('sd.bots.summon may only be called in the Hub')
+    }
+    if (participantCount() + pendingBotSummons.length >= maxPlayers) {
+      throw new Error('The shared Hub is full')
+    }
+    const ordinal = nextBotOrdinal
+    nextBotOrdinal += 1
+    const playerId = `bot-${randomBytes(12).toString('base64url')}`
+    const character = Object.freeze({
+      ...ML_BOT_CHARACTER,
+      displayName: `${ML_BOT_CHARACTER.displayName} ${ordinal}`,
+    })
+    pendingBotSummons.push({ character, playerId })
+    return {
+      display_name: character.displayName,
+      player_id: playerId,
+    }
+  }
+
+  function processPendingBotSummons(): void {
+    if (!sharedWorlds || !options.mlBotPolicy || pendingBotSummons.length === 0) return
+    for (const pending of pendingBotSummons.splice(0)) {
+      if (participantCount() >= maxPlayers || bots.has(pending.playerId)) continue
+      const queuedIntents: MlBotHostIntent[] = []
+      const controller = new MlBotHostController({
+        context: () => mlBotContext(pending.playerId),
+        dispatch: intent => {
+          const bot = bots.get(pending.playerId)
+          if (bot && bot.queuedIntents.length < 8) bot.queuedIntents.push(intent)
+        },
+        fail: error => failedBots.set(pending.playerId, error),
+      }, pending.character, options.mlBotPolicy, pending.playerId)
+      const bot: HostBot = {
+        activeInput: createIdlePlayerCharacterInput(),
+        character: pending.character,
+        controller,
+        displayName: pending.character.displayName,
+        decisions: 0,
+        playerId: pending.playerId,
+        profile: {
+          accountUsername: null,
+          highestWave: null,
+          totalPlaytimeMs: null,
+        },
+        potionsUsed: 0,
+        queuedIntents,
+        skillPicks: 0,
+      }
+      bots.set(bot.playerId, bot)
+      sharedWorlds = addSharedHubPlayer(
+        sharedWorlds,
+        bot.playerId,
+        bot.character,
+        createPartyIdentity(),
+      )
+      state = sharedWorlds.hub
+      logGameServerEvent(
+        options.log,
+        'game-host',
+        'info',
+        'ml_bot.summoned',
+        'A developer summoned an ML policy bot in the shared Hub.',
+        logDetails({
+          botCount: bots.size,
+          displayName: bot.displayName,
+          playerId: bot.playerId,
+        }),
+      )
+    }
+    broadcastPartyState()
+    broadcastSnapshot()
+  }
+
+  function processPendingBotInvitations(nowMs: number): void {
+    if (!sharedWorlds || pendingBotInvitations.length === 0) return
+    let changed = false
+    for (let index = pendingBotInvitations.length - 1; index >= 0; index -= 1) {
+      const pending = pendingBotInvitations[index]!
+      if (pending.acceptAtMs > nowMs) continue
+      pendingBotInvitations.splice(index, 1)
+      if (!bots.has(pending.playerId)) continue
+      const invitation = sharedWorlds.parties.invitations.find(
+        candidate => candidate.id === pending.invitationId,
+      )
+      if (!invitation || invitation.invitedPlayerId !== pending.playerId) continue
+      const sourcePartyId = partyForPlayer(sharedWorlds.parties, pending.playerId)?.id ?? null
+      const result = acceptSharedPartyInvitation(
+        sharedWorlds,
+        pending.playerId,
+        pending.invitationId,
+        maxPlayers,
+      )
+      if (!result.accepted) continue
+      if (sourcePartyId) closePartyModRuntimes(sourcePartyId)
+      closePartyModRuntimes(invitation.partyId)
+      sharedWorlds = result.state
+      state = sharedWorlds.hub
+      changed = true
+      logGameServerEvent(
+        options.log,
+        'game-host',
+        'info',
+        'ml_bot.party_invitation_accepted',
+        'An ML policy bot accepted a party invitation after the developer delay.',
+        logDetails({ invitationId: invitation.id, playerId: pending.playerId }),
+      )
+    }
+    if (changed) {
+      broadcastPartyState()
+      broadcastSnapshot()
+    }
+  }
+
+  function stepBotControllers(): void {
+    for (const bot of bots.values()) {
+      try {
+        const active = sharedWorlds
+          ? sharedGameStateForPlayer(sharedWorlds, bot.playerId)
+          : null
+        if (!active || active.world.kind === 'hub' || active.run.phase !== 'active') {
+          bot.activeInput = createIdlePlayerCharacterInput()
+        }
+        bot.controller.tick()
+      } catch (error) {
+        failedBots.set(
+          bot.playerId,
+          error instanceof Error ? error : new Error(String(error)),
+        )
+      }
+    }
+  }
+
+  function drainBotIntents(): void {
+    if (!sharedWorlds) return
+    let lifecycleChanged = false
+    for (const bot of bots.values()) {
+      for (const intent of bot.queuedIntents.splice(0)) {
+        const active = sharedGameStateForPlayer(sharedWorlds, bot.playerId)
+        if (!active) continue
+        if (intent.kind === 'input') {
+          bot.decisions += 1
+          bot.activeInput = active.world.kind === 'boneyard' && active.run.phase === 'active'
+            ? intent.input
+            : createIdlePlayerCharacterInput()
+          continue
+        }
+        bot.activeInput = createIdlePlayerCharacterInput()
+        if (intent.kind === 'hub-action') {
+          const applied = applyGameSimulationHubAction(active, bot.playerId, intent.action)
+          bot.decisions += 1
+          if (applied.accepted) {
+            bot.potionsUsed += 1
+            replaceStateForPlayer(bot.playerId, applied.state)
+          }
+          continue
+        }
+        if (intent.kind === 'select-skill') {
+          const selected = selectGameSimulationPlayerSkill(active, bot.playerId, intent)
+          if (selected) {
+            bot.skillPicks += 1
+            replaceStateForPlayer(bot.playerId, selected)
+            lifecycleChanged = true
+          }
+          continue
+        }
+        const confirmed = confirmSharedPartyLoadout(
+          sharedWorlds,
+          bot.playerId,
+          intent.character,
+        )
+        if (confirmed.accepted) {
+          sharedWorlds = confirmed.state
+          state = sharedWorlds.hub
+          lifecycleChanged = true
+        }
+      }
+    }
+    if (lifecycleChanged) {
+      broadcastPartyState()
+      broadcastSnapshot()
+    }
+  }
+
+  function mlBotContext(playerId: PlayerId) {
+    if (!sharedWorlds || !bots.has(playerId)) return null
+    const activeState = sharedGameStateForPlayer(sharedWorlds, playerId)
+    if (!activeState) return null
+    const humanPlayers = [...clients.values()].filter(client => (
+      sharedGameStateForPlayer(sharedWorlds!, client.playerId) === activeState
+    ))
+    const botPlayers = [...bots.values()].filter(bot => (
+      sharedGameStateForPlayer(sharedWorlds!, bot.playerId) === activeState
+    ))
+    return {
+      activeInputs: Object.fromEntries([
+        ...humanPlayers.map(client => [client.playerId, client.activeInput] as const),
+        ...botPlayers.map(bot => [bot.playerId, bot.activeInput] as const),
+      ]),
+      controllers: Object.fromEntries([
+        ...humanPlayers.map(client => [client.playerId, 'human'] as const),
+        ...botPlayers.map(bot => [bot.playerId, 'bot'] as const),
+      ]),
+      state: activeState,
+    }
+  }
+
+  function processFailedBots(): void {
+    for (const [playerId, error] of failedBots) {
+      failedBots.delete(playerId)
+      logGameServerEvent(
+        options.log,
+        'game-host',
+        'error',
+        'ml_bot.controller_failed',
+        'An ML policy bot controller failed and was removed.',
+        logDetails({ playerId, ...gameServerErrorDetails(error) }),
+      )
+      removeBot(playerId)
+    }
+  }
+
+  function removeBot(playerId: PlayerId, broadcastChanges = true): void {
+    const bot = bots.get(playerId)
+    if (!bot) return
+    bots.delete(playerId)
+    failedBots.delete(playerId)
+    for (let index = pendingBotInvitations.length - 1; index >= 0; index -= 1) {
+      if (pendingBotInvitations[index]!.playerId === playerId) {
+        pendingBotInvitations.splice(index, 1)
+      }
+    }
+    if (sharedWorlds) {
+      const partyId = partyForPlayer(sharedWorlds.parties, playerId)?.id ?? null
+      sharedWorlds = removeSharedGamePlayer(sharedWorlds, playerId)
+      state = sharedWorlds.hub
+      if (partyId && !sharedWorlds.parties.parties.some(party => party.id === partyId)) {
+        closePartyModRuntimes(partyId)
+      }
+    }
+    if (broadcastChanges) {
+      broadcastPartyState()
+      broadcastSnapshot()
+    }
+  }
+
+  function removeAllBots(reason: string): void {
+    if (bots.size === 0 && pendingBotSummons.length === 0) return
+    pendingBotSummons.length = 0
+    pendingBotInvitations.length = 0
+    for (const playerId of [...bots.keys()]) removeBot(playerId, false)
+    logGameServerEvent(
+      options.log,
+      'game-host',
+      'info',
+      'ml_bot.cleared',
+      'All ML policy bots were removed.',
+      logDetails({ reason }),
+    )
+    broadcastPartyState()
+    broadcastSnapshot()
+  }
+
+  function mlBotTelemetry(bot: HostBot): GameHostMlBotTelemetry {
+    const active = sharedWorlds
+      ? sharedGameStateForPlayer(sharedWorlds, bot.playerId)
+      : null
+    if (!active) {
+      return {
+        decisions: bot.decisions,
+        gold: 0,
+        items: 0,
+        kills: 0,
+        lifeState: 'absent',
+        playerId: bot.playerId,
+        potionsUsed: bot.potionsUsed,
+        skillPicks: bot.skillPicks,
+        tick: 0,
+        waveReached: 0,
+        wavesCompleted: 0,
+      }
+    }
+    const economy = getPlayerEconomy(active, bot.playerId)
+    const progression = getPlayerProgression(active, bot.playerId)
+    const world = active.world.kind === 'boneyard' ? active.world : null
+    const waveReached = world?.waves?.waveOrdinal ?? 0
+    return {
+      decisions: bot.decisions,
+      gold: economy.gold,
+      items: economy.backpack.reduce((total, item) => total + item.quantity, 0),
+      kills: world?.hallOfFameRuns[bot.playerId]?.monstersKilled ?? 0,
+      lifeState: progression.lifeState,
+      playerId: bot.playerId,
+      potionsUsed: bot.potionsUsed,
+      skillPicks: bot.skillPicks,
+      tick: active.tick,
+      waveReached,
+      wavesCompleted: Math.max(
+        0,
+        waveReached - Number(world?.waves?.phase !== 'interwave'),
+      ),
+    }
+  }
+
+  function participantCount(): number {
+    return clients.size + bots.size
+  }
+
   function stopAllClientInputs(): void {
     for (const client of clients.values()) {
       client.activeInput = createIdlePlayerCharacterInput()
       client.queuedInputs.clear()
+    }
+    for (const bot of bots.values()) {
+      bot.activeInput = createIdlePlayerCharacterInput()
+      bot.queuedIntents.length = 0
     }
   }
 
@@ -2597,6 +3037,11 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       client.activeInput = createIdlePlayerCharacterInput()
       client.queuedInputs.clear()
     }
+    for (const bot of bots.values()) {
+      if (stateForPlayer(bot.playerId) !== playerState) continue
+      bot.activeInput = createIdlePlayerCharacterInput()
+      bot.queuedIntents.length = 0
+    }
   }
 
   function stopPartyInputs(partyId: string): void {
@@ -2608,6 +3053,11 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       client.activeInput = createIdlePlayerCharacterInput()
       client.queuedInputs.clear()
     }
+    for (const bot of bots.values()) {
+      if (!party.memberPlayerIds.includes(bot.playerId)) continue
+      bot.activeInput = createIdlePlayerCharacterInput()
+      bot.queuedIntents.length = 0
+    }
   }
 
   function stopSharedHubInputs(): void {
@@ -2616,6 +3066,11 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       if (stateForPlayer(client.playerId).world.kind !== 'hub') continue
       client.activeInput = createIdlePlayerCharacterInput()
       client.queuedInputs.clear()
+    }
+    for (const bot of bots.values()) {
+      if (stateForPlayer(bot.playerId).world.kind !== 'hub') continue
+      bot.activeInput = createIdlePlayerCharacterInput()
+      bot.queuedIntents.length = 0
     }
   }
 
@@ -2740,6 +3195,14 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     for (const client of clients.values()) {
       if (!client.globalScoreEligible) taintActiveRun(client)
     }
+    if (!sharedWorlds || bots.size === 0) return
+    for (const run of sharedWorlds.runs) {
+      const party = sharedWorlds.parties.parties.find(candidate => candidate.id === run.partyId)
+      if (
+        run.state.world.kind === 'boneyard'
+        && party?.memberPlayerIds.some(playerId => bots.has(playerId))
+      ) cheatTaintedRunIds.add(run.state.world.runId)
+    }
   }
 
   function publishLeaderboardReceipts(
@@ -2834,6 +3297,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     const leaderContent = playerContents.get(party.leaderPlayerId)
     if (!leaderContent) return null
     return party.memberPlayerIds.every(playerId => {
+      if (bots.has(playerId)) return leaderContent.manifest.mods.length === 0
       const memberContent = playerContents.get(playerId)
       return memberContent !== undefined
         && sameContentMods(memberContent.manifest.mods, leaderContent.manifest.mods)
@@ -3106,12 +3570,16 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       port: address.port,
       url: `ws://${formatHost(host)}:${address.port}/game`,
     },
+    botCount: () => bots.size,
+    botPlayerIds: () => [...bots.keys()],
+    botTelemetry: () => [...bots.values()].map(bot => mlBotTelemetry(bot)),
     async close(reason: GameHostCloseReason = 'server-shutdown') {
       if (closed) return
       closed = true
       clearInterval(timer)
       deploymentRestart?.resolveReady()
       clearInterval(partyAccessTimer)
+      removeAllBots('game host closed')
       resetLuaRuntime()
       for (const runtime of privateModLuaRuntimes.splice(0)) runtime.close()
       privateModContentRegistry.close()
@@ -3143,7 +3611,8 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     hostPlayerId: () => hostPlayerId,
     hubPlayerCount: () => sharedWorlds?.hub.playerEntities.identities.length
       ?? Number(state.world.kind === 'hub') * clients.size,
-    playerCount: () => clients.size,
+    humanPlayerCount: () => clients.size,
+    playerCount: participantCount,
     loadedBoneyard: () => loadedBoneyard,
     modCatalog: () => privateModContentRegistry.catalog(),
     cancelPartyReservation(reservationId) {
@@ -3162,6 +3631,11 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     },
     partyTargetByCode: targetByCode,
     partyTargetByListingId: targetByListingId,
+    playerState: playerId => sharedWorlds
+      ? sharedGameStateForPlayer(sharedWorlds, playerId)
+      : state.playerEntities.identities.some(identity => identity.playerId === playerId)
+        ? state
+        : null,
     publicParties: () => sharedWorlds
       ? projectPublicPartyDirectory({
           memberships: sharedWorlds.parties.parties,
@@ -3170,7 +3644,9 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             partyId: run.partyId,
           })),
         }, new Map(
-          [...clients.values()].map(({ displayName, playerId }) => [playerId, displayName]),
+          [...clients.values(), ...bots.values()].map(
+            ({ displayName, playerId }) => [playerId, displayName],
+          ),
         ), maxPlayers)
       : [],
     restartForDeployment,
@@ -3179,17 +3655,41 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     runCount: () => sharedWorlds?.runs.length ?? Number(state.world.kind === 'boneyard'),
   }
 
-  async function ensureLuaRuntime(): Promise<WebLuaRuntime> {
-    if (luaRuntime !== null) return luaRuntime
+  async function ensureLuaRuntime(playerId: PlayerId): Promise<WebLuaRuntime> {
+    if (luaRuntime !== null) {
+      if (luaRuntimeOwnerPlayerId !== playerId) {
+        throw new Error('Another developer connection owns the active Lua console.')
+      }
+      return luaRuntime
+    }
     if (!options.luaWasmPath) throw new Error('Lua runtime is not configured for this game host.')
-    if (luaRuntimeInitialization !== null) return luaRuntimeInitialization
+    if (luaRuntimeInitialization !== null) {
+      if (luaRuntimeOwnerPlayerId !== playerId) {
+        throw new Error('Another developer connection is initializing the Lua console.')
+      }
+      return luaRuntimeInitialization
+    }
+    const owner = [...clients.values()].find(client => client.playerId === playerId)
+    if (!owner) throw new Error('The Lua console owner is no longer connected.')
+    luaRuntimeOwnerPlayerId = playerId
     const generation = luaRuntimeGeneration
     let initialization: Promise<WebLuaRuntime>
     initialization = WebLuaRuntime.create({
       bindings: {
-        getAuthorityPlayerId: () => hostPlayerId,
-        getFrame: () => createWebLuaFrameState(state, hostPlayerId, loadedBoneyard),
+        getAuthorityPlayerId: () => {
+          const active = [...clients.values()].find(client => client.playerId === playerId)
+          if (!active) return null
+          return active.developerAccess ? playerId : hostPlayerId
+        },
+        getFrame: () => createWebLuaFrameState(
+          stateForPlayer(playerId),
+          playerId,
+          loadedBoneyardForPlayer(playerId),
+        ),
       },
+      ...(owner.developerAccess ? {
+        developer: { summonBot: () => queueMlBotSummon(playerId) },
+      } : {}),
       log: (level, event, detail) => logGameServerEvent(
         options.log,
         'game-host',
@@ -3217,6 +3717,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       return runtime
     }, (error) => {
       if (luaRuntimeInitialization === initialization) luaRuntimeInitialization = null
+      if (luaRuntimeOwnerPlayerId === playerId) luaRuntimeOwnerPlayerId = null
       throw error
     })
     luaRuntimeInitialization = initialization
@@ -3227,6 +3728,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     luaRuntimeGeneration += 1
     luaRuntime?.close()
     luaRuntime = null
+    luaRuntimeOwnerPlayerId = null
     pendingLuaEvents.length = 0
     const initializing = luaRuntimeInitialization
     luaRuntimeInitialization = null
@@ -3296,6 +3798,7 @@ function authenticate(
     return credentialsEqual(credential, authentication.credential)
       ? {
           content: null,
+          developerAccess: false,
           leaderboardUserId: authentication.leaderboardUserId ?? null,
           partyId: null,
           reservationId: null,
@@ -3307,6 +3810,7 @@ function authenticate(
     const claimed = authentication.claim(credential)
     return claimed && validLeaderboardUserId(claimed.leaderboardUserId) ? {
       content: claimed.content,
+      developerAccess: claimed.developerAccess === true,
       leaderboardUserId: claimed.leaderboardUserId,
       partyId: claimed.partyId ?? null,
       reservationId: claimed.reservationId ?? null,

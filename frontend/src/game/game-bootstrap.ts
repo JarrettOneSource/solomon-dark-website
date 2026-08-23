@@ -10,7 +10,7 @@ export async function admitBrowserGame(
   token: string | null,
 ): Promise<GameEndpoint> {
   if (admission.kind === 'global-hub') return admitSharedHubPlayer(token)
-  if (admission.kind === 'private-college') return resolveGameEndpoint()
+  if (admission.kind === 'private-college') return resolveGameEndpoint(token)
   return admitPartyJoin(admission.intentId, token)
 }
 
@@ -41,18 +41,21 @@ export function configuredGameEndpoint(): GameEndpoint | null {
 }
 
 export async function resolveGameEndpoint(
+  token: string | null = null,
   request: typeof fetch = fetch,
 ): Promise<GameEndpoint> {
   const configured = configuredGameEndpoint()
   if (configured) return configured
 
+  const headers = new Headers({
+    accept: 'application/json',
+    'x-solomon-dark-session': 'provision',
+  })
+  if (token) headers.set('authorization', `Bearer ${token}`)
   const response = await request('/api/game/sessions', {
     method: 'POST',
     credentials: 'same-origin',
-    headers: {
-      accept: 'application/json',
-      'x-solomon-dark-session': 'provision',
-    },
+    headers,
   })
   const payload = await readJson(response)
   if (!response.ok) {

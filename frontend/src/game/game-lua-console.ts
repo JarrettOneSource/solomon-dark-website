@@ -28,14 +28,15 @@ const HELP = [
 
 export function installGameLuaConsole(
   target: Window,
-  session: Pick<GameClientSession, 'executeLua' | 'isHost'>,
+  session: Pick<GameClientSession, 'executeLua' | 'isHost'>
+    & Partial<Pick<GameClientSession, 'developerAccess'>>,
   isEnabled: () => boolean = gameCheatsEnabled,
 ): () => void {
-  if (!isEnabled() || !session.isHost) return () => {}
+  const authorized = () => session.developerAccess === true || (isEnabled() && session.isHost)
+  if (!authorized()) return () => {}
   const consoleApi: SolomonDarkLuaConsole = Object.freeze({
     async execute(code: string) {
-      if (!isEnabled()) throw new Error('Enable Cheats is off.')
-      if (!session.isHost) throw new Error('Only the current session host may execute Lua.')
+      if (!authorized()) throw new Error('Authoritative Lua access is unavailable.')
       const result = await session.executeLua(code)
       for (const line of result.output) console.info(`[Lua] ${line}`)
       if (result.ok) {
@@ -57,7 +58,7 @@ export function installGameLuaConsole(
     value: developerApi,
     writable: false,
   })
-  console.info('[Solomon Dark] Cheats enabled. Run solomonDark.lua.help() for Lua usage.')
+  console.info('[Solomon Dark] Developer Lua ready. Run solomonDark.lua.help() for Lua usage.')
   return () => {
     if (target.solomonDark === developerApi) delete target.solomonDark
   }

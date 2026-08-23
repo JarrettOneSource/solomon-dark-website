@@ -94,6 +94,7 @@ export interface GameDeploymentRestartRequest {
 
 export interface GameClientSession {
   readonly boneyards: readonly BoneyardChoice[]
+  readonly developerAccess: boolean
   readonly isHost: boolean
   readonly modAssets: readonly GameModAsset[]
   readonly playerId: string
@@ -587,6 +588,9 @@ export function connectGameClientSession(
         if (!welcome) throw new Error('game session has not been welcomed')
         return welcome.boneyards
       },
+      get developerAccess() {
+        return welcome?.developerAccess === true
+      },
       get isHost() {
         return !!welcome && snapshot?.hostPlayerId === welcome.playerId
       },
@@ -655,7 +659,7 @@ export function connectGameClientSession(
         if (!welcome || !snapshot || destroyed) {
           return Promise.reject(new Error('The game session is not connected.'))
         }
-        if (!session.isHost) {
+        if (!session.developerAccess && !session.isHost) {
           return Promise.reject(new Error('Only the session host may execute Lua.'))
         }
         if (gameplayPause !== null) {

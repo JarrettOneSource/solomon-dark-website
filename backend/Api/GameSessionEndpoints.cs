@@ -55,6 +55,7 @@ public static class GameSessionEndpoints
     private static async Task<IResult> ProvisionAsync(
         HttpContext context,
         GameSessionProvisioner provisioner,
+        DeveloperAccessPolicy developerAccess,
         WebModContentService contentService,
         ILogger<GameSessionProvisioner> logger,
         CancellationToken cancellationToken)
@@ -71,7 +72,11 @@ public static class GameSessionEndpoints
                 userId,
                 recordDownloads: true,
                 cancellationToken: cancellationToken);
-            var endpoint = await provisioner.ProvisionAsync(content, userId, cancellationToken);
+            var endpoint = await provisioner.ProvisionAsync(
+                content,
+                userId,
+                developerAccess.Allows(userId),
+                cancellationToken);
             return Results.Ok(new
             {
                 kind = "remote",
@@ -104,6 +109,7 @@ public static class GameSessionEndpoints
     private static async Task<IResult> EnterHubAsync(
         HttpContext context,
         GameSessionProvisioner provisioner,
+        DeveloperAccessPolicy developerAccess,
         WebModContentService contentService,
         ILogger<GameSessionProvisioner> logger,
         CancellationToken cancellationToken)
@@ -130,6 +136,7 @@ public static class GameSessionEndpoints
             var endpoint = await provisioner.AdmitSharedHubAsync(
                 content,
                 userId,
+                developerAccess.Allows(userId),
                 cancellationToken);
             return Results.Created("/api/game/hub", new
             {
@@ -208,6 +215,7 @@ public static class GameSessionEndpoints
         AdmitPartyJoinRequest request,
         HttpContext context,
         GameSessionProvisioner provisioner,
+        DeveloperAccessPolicy developerAccess,
         AppDb db,
         CancellationToken cancellationToken)
     {
@@ -224,6 +232,7 @@ public static class GameSessionEndpoints
                 content,
                 activeMods,
                 userId,
+                developerAccess.Allows(userId),
                 cancellationToken);
             return Results.Created("/api/game/join/admit", new
             {

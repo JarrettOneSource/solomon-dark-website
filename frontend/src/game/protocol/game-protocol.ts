@@ -318,7 +318,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 59
+export const GAME_PROTOCOL_VERSION = 60
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
 export const GAME_CONNECTION_TIMEOUT_CLOSE_CODE = 4000
@@ -625,6 +625,7 @@ export type ClientGameMessage =
 
 export interface ServerWelcomeMessage {
   type: 'server-welcome'
+  developerAccess: boolean
   protocolVersion: number
   playerId: string
   resumeToken: string
@@ -1085,6 +1086,7 @@ export function decodeServerGameMessage(payload: string): ServerGameMessage {
   if (value.type === 'server-welcome') {
     onlyKeys(value, 'message', [
       'type',
+      'developerAccess',
       'protocolVersion',
       'playerId',
       'resumeToken',
@@ -1110,6 +1112,7 @@ export function decodeServerGameMessage(payload: string): ServerGameMessage {
     }
     return {
       type: 'server-welcome',
+      developerAccess: boolean(value.developerAccess, 'developerAccess'),
       protocolVersion: integer(value.protocolVersion, 'protocolVersion'),
       playerId: validatedPlayerId(value.playerId, 'playerId'),
       resumeToken: limitedString(value.resumeToken, 'resumeToken', 512),

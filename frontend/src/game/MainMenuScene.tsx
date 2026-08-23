@@ -276,6 +276,7 @@ interface MainMenuSceneProps {
     saveDocument?: string,
     allowModMismatch?: boolean,
   ) => Promise<GameClientSession>
+  developerAccess: boolean
   initialScreen?: 'create' | 'root'
   loadGlobalHallOfFame: (board: HallOfFameBoard) => Promise<readonly HallOfFameEntry[]>
   onCancelCreate: () => Promise<void>
@@ -292,6 +293,7 @@ export default function MainMenuScene({
   activeMods,
   accountUsername,
   connectSession,
+  developerAccess,
   displayName,
   initialScreen = 'root',
   loadGlobalHallOfFame,
@@ -355,6 +357,7 @@ export default function MainMenuScene({
   const [contentProgress, setContentProgress] = useState<GameContentDownloadProgress | null>(null)
   const [cheatCollegePrompt, setCheatCollegePrompt] = useState(false)
   const [gameSettings, setLocalGameSettings] = useState(readGameSettings)
+  const cheatsEnabled = gameSettings.enableCheats && !developerAccess
   const [localHallOfFame, setLocalHallOfFame] = useState(readLocalHallOfFame)
   const [currentHallRunId, setCurrentHallRunId] = useState<string | null>(null)
   const [fixedViewport, setFixedViewport] = useState(() => (
@@ -423,13 +426,13 @@ export default function MainMenuScene({
   }, [])
 
   useEffect(() => {
-    if (!session || !gameSettings.enableCheats || !session.isHost) return
+    if (!session || (!session.developerAccess && (!cheatsEnabled || !session.isHost))) return
     return installGameLuaConsole(window, session)
-  }, [gameSettings.enableCheats, runtimeSnapshot?.hostPlayerId, session])
+  }, [cheatsEnabled, runtimeSnapshot?.hostPlayerId, session])
 
   useEffect(() => {
-    session?.setCheatsEnabled(gameSettings.enableCheats)
-  }, [gameSettings.enableCheats, session])
+    session?.setCheatsEnabled(cheatsEnabled)
+  }, [cheatsEnabled, session])
 
   useEffect(() => {
     audio.setVolumes(
@@ -447,17 +450,27 @@ export default function MainMenuScene({
     setLocalGameSettings(setGameSettings(settings))
   }, [])
 
+  useEffect(() => {
+    if (developerAccess && gameSettings.enableCheats) {
+      updateGameSettings({ ...gameSettings, enableCheats: false })
+    }
+  }, [developerAccess, gameSettings, updateGameSettings])
+
   const requestGameSettingsUpdate = useCallback((settings: GameSettings) => {
+    if (developerAccess && settings.enableCheats) {
+      updateGameSettings({ ...settings, enableCheats: false })
+      return
+    }
     if (
       session?.sessionKind === 'global-hub'
-      && !gameSettings.enableCheats
+      && !cheatsEnabled
       && settings.enableCheats
     ) {
       setCheatCollegePrompt(true)
       return
     }
     updateGameSettings(settings)
-  }, [gameSettings.enableCheats, session, updateGameSettings])
+  }, [cheatsEnabled, developerAccess, session, updateGameSettings])
 
   const openDarkCloudMenu = useCallback(() => setDarkCloudMenuOpen(true), [])
 
@@ -694,7 +707,7 @@ export default function MainMenuScene({
   const beginNewGame = () => {
     if (preparing || connecting) return
     setConnectionError(null)
-    if (activeMods.length > 0 || gameSettings.enableCheats) {
+    if (activeMods.length > 0 || cheatsEnabled) {
       setModdedPlayPrompt(true)
       return
     }
@@ -710,7 +723,7 @@ export default function MainMenuScene({
         await api.mods.subscriptions.disableAll()
         await refreshActiveMods()
       }
-      if (gameSettings.enableCheats) {
+      if (cheatsEnabled) {
         updateGameSettings({ ...gameSettings, enableCheats: false })
       }
       beginCreate({ kind: 'global-hub' })
@@ -739,7 +752,7 @@ export default function MainMenuScene({
     if (
       resolution.target.kind === 'global-hub'
       && activeMods.length === 0
-      && !gameSettings.enableCheats
+      && !cheatsEnabled
     ) {
       beginCreate({ kind: 'party', intentId: resolution.intentId })
       return
@@ -757,7 +770,7 @@ export default function MainMenuScene({
           await api.mods.subscriptions.disableAll()
           await refreshActiveMods()
         }
-        if (gameSettings.enableCheats) {
+        if (cheatsEnabled) {
           updateGameSettings({ ...gameSettings, enableCheats: false })
         }
       } else {
@@ -822,14 +835,14 @@ export default function MainMenuScene({
       await prepareGame(
         resumeSave.integrity === 'local-only'
           || activeMods.length > 0
-          || gameSettings.enableCheats
+          || cheatsEnabled
           ? { kind: 'private-college' }
           : { kind: 'global-hub' },
       )
       const nextSession = await connectSession(
         resumeSave.summary.character,
         advanceLoading,
-        gameSettings.enableCheats,
+        cheatsEnabled,
         resumeSave.document,
         allowModMismatch,
       )
@@ -873,7 +886,7 @@ export default function MainMenuScene({
           element: selectedElement,
         },
         advanceLoading,
-        gameSettings.enableCheats,
+        cheatsEnabled,
       )
       activateSession(nextSession)
       return true
@@ -1385,7 +1398,7 @@ export default function MainMenuScene({
           <ModdedPlayDialog
             activeMods={activeMods}
             busy={routingBusy}
-            cheatsEnabled={gameSettings.enableCheats}
+            cheatsEnabled={cheatsEnabled}
             onBack={() => setModdedPlayPrompt(false)}
             onContinueLocal={() => { void continueLocal() }}
             onPlayVanilla={() => { void playVanilla() }}
@@ -1400,7 +1413,7 @@ export default function MainMenuScene({
             onContinue={() => { void continueParty() }}
             progress={contentProgress}
             requiresVanilla={partyConsent.target.kind === 'global-hub'
-              && (activeMods.length > 0 || gameSettings.enableCheats)}
+              && (activeMods.length > 0 || cheatsEnabled)}
             signedIn={accountUsername !== null}
             target={partyConsent.target}
           />

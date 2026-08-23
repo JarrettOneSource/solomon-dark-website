@@ -174,6 +174,13 @@ export interface WebLuaRuntimeBindings {
   getFrame(): WebLuaFrameState
 }
 
+export interface WebLuaDeveloperBindings {
+  summonBot(): Readonly<{
+    display_name: string
+    player_id: string
+  }>
+}
+
 export interface WebLuaRuntimeLog {
   (level: 'debug' | 'info' | 'warning', event: string, detail: string): void
 }

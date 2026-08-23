@@ -27,6 +27,7 @@ public static class AuthEndpoints
     private static async Task<IResult> RegisterAsync(
         RegisterRequest request,
         AppDb db,
+        DeveloperAccessPolicy developerAccess,
         IPasswordHasher<User> passwordHasher,
         TokenService tokens,
         CancellationToken cancellationToken)
@@ -79,13 +80,14 @@ public static class AuthEndpoints
         }
 
         return Results.Json(
-            new { token = tokens.Create(user), user = UserPayload(user) },
+            new { token = tokens.Create(user), user = UserPayload(user, developerAccess) },
             statusCode: StatusCodes.Status201Created);
     }
 
     private static async Task<IResult> LoginAsync(
         LoginRequest request,
         AppDb db,
+        DeveloperAccessPolicy developerAccess,
         IPasswordHasher<User> passwordHasher,
         TokenService tokens,
         CancellationToken cancellationToken)
@@ -102,12 +104,16 @@ public static class AuthEndpoints
             return ApiErrors.Unauthorized("Wrong name or password. The Annals are unforgiving.");
         }
 
-        return Results.Ok(new { token = tokens.Create(user), user = UserPayload(user) });
+        return Results.Ok(new {
+            token = tokens.Create(user),
+            user = UserPayload(user, developerAccess)
+        });
     }
 
     private static async Task<IResult> MeAsync(
         HttpContext context,
         AppDb db,
+        DeveloperAccessPolicy developerAccess,
         CancellationToken cancellationToken)
     {
         var userId = TokenService.GetUserId(context.User);
@@ -128,13 +134,14 @@ public static class AuthEndpoints
             save => save.UserId == user.Id,
             cancellationToken);
 
-        return Results.Ok(new { user = UserPayload(user), modCount, saveCount });
+        return Results.Ok(new { user = UserPayload(user, developerAccess), modCount, saveCount });
     }
 
     private static async Task<IResult> SetSchoolAsync(
         SchoolRequest request,
         HttpContext context,
         AppDb db,
+        DeveloperAccessPolicy developerAccess,
         CancellationToken cancellationToken)
     {
         if (!IsValidSchool(request.School))
@@ -158,19 +165,20 @@ public static class AuthEndpoints
         user.School = request.School;
         await db.SaveChangesAsync(cancellationToken);
 
-        return Results.Ok(new { user = UserPayload(user) });
+        return Results.Ok(new { user = UserPayload(user, developerAccess) });
     }
 
     private static bool IsValidSchool(string? school) =>
         school is null or "fire" or "air" or "water" or "ether" or "earth";
 
-    private static object UserPayload(User user) => new
+    private static object UserPayload(User user, DeveloperAccessPolicy developerAccess) => new
     {
         user.Id,
         user.Username,
         user.Email,
         user.School,
-        user.CreatedAtUtc
+        user.CreatedAtUtc,
+        DeveloperAccess = developerAccess.Allows(user.Id)
     };
 
     public sealed record RegisterRequest(string? Username, string? Email, string? Password);

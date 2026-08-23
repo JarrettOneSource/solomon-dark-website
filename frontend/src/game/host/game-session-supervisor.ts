@@ -30,6 +30,7 @@ import {
   logGameServerEvent,
   type GameServerLogSink,
 } from './game-server-logger.ts'
+import type { MlBotPolicyInference } from './ml-bot-host-controller.ts'
 
 export const GAME_SESSION_PATH_PREFIX = '/game-sessions/'
 export const GAME_HUB_PATH = '/game-hub'
@@ -52,6 +53,7 @@ export interface GameSessionSupervisorOptions {
   luaWasmPath?: string
   maxConnectionsPerSession?: number
   maxSessions?: number
+  mlBotPolicy?: MlBotPolicyInference
   port?: number
   snapshotRate?: number
   unclaimedTimeoutMs?: number
@@ -150,6 +152,7 @@ export async function startGameSessionSupervisor(
     luaWasmPath: options.luaWasmPath,
     leaderboardReceiptSecret: options.adminSecret,
     maxPlayers: maxConnectionsPerSession,
+    mlBotPolicy: options.mlBotPolicy,
     sharedHub: true,
     sessionKind: 'global-hub',
     ...(options.boneyards === undefined ? {} : { boneyards: options.boneyards }),
@@ -193,10 +196,12 @@ export async function startGameSessionSupervisor(
         sessions: sessions.size + Number(hubHost.playerCount() > 0),
         privateSessions: sessions.size,
         privatePlayers: [...sessions.values()].reduce(
-          (total, session) => total + session.host.playerCount(),
+          (total, session) => total + session.host.humanPlayerCount(),
           0,
         ),
         hubPlayers: hubHost.hubPlayerCount(),
+        hubHumanPlayers: hubHost.humanPlayerCount(),
+        bots: hubHost.botCount(),
         parties: hubHost.partyCount(),
         runs: hubHost.runCount(),
         players: hubHost.playerCount(),
@@ -538,6 +543,7 @@ export async function startGameSessionSupervisor(
       reservedHost = session.host
       const admission: GameHostAdmission = {
         content: session.kind === 'hub' ? requestedAdmission.content : session.content,
+        developerAccess: requestedAdmission.developerAccess,
         leaderboardUserId: requestedAdmission.leaderboardUserId,
         partyId: target.id,
         reservationId,
@@ -1068,8 +1074,12 @@ function materializeGameAdmission(body: Record<string, unknown>): GameHostAdmiss
     && value !== null
     && (!Number.isSafeInteger(value) || Number(value) < 1 || Number(value) > 0x7fff_ffff)
   ) throw new Error('leaderboard user id is invalid')
+  if (body.developerAccess !== undefined && typeof body.developerAccess !== 'boolean') {
+    throw new Error('developer access is invalid')
+  }
   return {
     content: materializeWebSessionContent(body.content),
+    developerAccess: body.developerAccess === true,
     leaderboardUserId: value === undefined || value === null ? null : Number(value),
   }
 }

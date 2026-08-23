@@ -26,6 +26,16 @@
              CopyToOutputDirectory="PreserveNewest"
              CopyToPublishDirectory="PreserveNewest"
              Condition="Exists('../frontend/dist-game-host/lua54.wasm')" />
+    <Content Include="../frontend/dist-game-host/ml-bot-policy-worker.mjs"
+             Link="GameHost/ml-bot-policy-worker.mjs"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest"
+             Condition="Exists('../frontend/dist-game-host/ml-bot-policy-worker.mjs')" />
+    <Content Include="../frontend/dist-game-host/ml-bot-policy-v5-selected.sdml"
+             Link="GameHost/ml-bot-policy-v5-selected.sdml"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest"
+             Condition="Exists('../frontend/dist-game-host/ml-bot-policy-v5-selected.sdml')" />
   </ItemGroup>
 
 </Project>

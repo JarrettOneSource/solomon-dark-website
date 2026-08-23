@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises'
+
 import { GAME_PROTOCOL_NAME } from '../protocol/game-protocol.ts'
 import { startGameSessionSupervisor } from './game-session-supervisor.ts'
 import { resolveWebLuaWasmPath } from './lua/web-lua-wasm-path.ts'
@@ -7,6 +9,7 @@ import {
   logGameServerEvent,
   parseGameServerLogLevel,
 } from './game-server-logger.ts'
+import { MlBotPolicyInferenceWorker } from './ml-bot-host-controller.ts'
 
 const log = createJsonGameServerLogSink(
   parseGameServerLogLevel(process.env.SDR_GAME_LOG_LEVEL),
@@ -34,6 +37,9 @@ process.on('warning', (warning) => {
 })
 
 const adminSecret = requiredEnvironment('SDR_GAME_SUPERVISOR_SECRET')
+const mlBotPolicy = await MlBotPolicyInferenceWorker.create(
+  await readFile(requiredEnvironment('SDR_GAME_ML_BOT_CHECKPOINT')),
+)
 const allowedOrigins = requiredEnvironment('SDR_GAME_ALLOWED_ORIGINS')
   .split(',')
   .map((origin) => origin.trim())
@@ -50,20 +56,24 @@ const supervisor = await startGameSessionSupervisor({
   host: process.env.SDR_GAME_SUPERVISOR_HOST?.trim() || '127.0.0.1',
   log,
   luaWasmPath: resolveWebLuaWasmPath(import.meta.url),
-  port: parseInteger(process.env.SDR_GAME_SUPERVISOR_PORT, 5222, 0, 65535),
-  maxSessions: parseInteger(process.env.SDR_GAME_MAX_SESSIONS, 64, 1, 10_000),
   maxConnectionsPerSession: parseInteger(
     process.env.SDR_GAME_MAX_CONNECTIONS_PER_SESSION,
     16,
     1,
     10_000,
   ),
+  maxSessions: parseInteger(process.env.SDR_GAME_MAX_SESSIONS, 64, 1, 10_000),
+  mlBotPolicy,
+  port: parseInteger(process.env.SDR_GAME_SUPERVISOR_PORT, 5222, 0, 65535),
   unclaimedTimeoutMs: parseInteger(
     process.env.SDR_GAME_UNCLAIMED_TIMEOUT_SECONDS,
     120,
     1,
     86_400,
   ) * 1000,
+}).catch(async (error: unknown) => {
+  await mlBotPolicy.close()
+  throw error
 })
 
 process.stdout.write(`${JSON.stringify({
@@ -77,6 +87,7 @@ async function stop(): Promise<void> {
   if (stopping) return
   stopping = true
   await supervisor.close()
+  await mlBotPolicy.close()
   process.exitCode = 0
 }
 

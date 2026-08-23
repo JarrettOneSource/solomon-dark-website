@@ -67,6 +67,7 @@ const server = await startGameHost({
                 manifestSha256: '0'.repeat(64),
                 mods: [],
               }),
+              developerAccess: false,
               leaderboardUserId: null,
             }
           : null,

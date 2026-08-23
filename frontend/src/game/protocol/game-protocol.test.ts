@@ -395,6 +395,7 @@ test('protocol v48 accepts every authoritative inventory action and rejects malf
 test('server welcome round-trips content, kernel, character, and world ownership', () => {
   const welcome: ServerWelcomeMessage = {
     type: 'server-welcome',
+    developerAccess: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     playerId: 'player-1',
     resumeToken: 'reserved-token',
@@ -789,6 +790,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   }]
   const welcome: ServerWelcomeMessage = {
     type: 'server-welcome',
+    developerAccess: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     playerId: 'player-1',
     resumeToken: 'reserved-token',
@@ -1432,6 +1434,7 @@ test('protocol v42 preserves the bounded run-scoped enemy semantic-event lane', 
 
   const welcome: ServerWelcomeMessage = {
     type: 'server-welcome',
+    developerAccess: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     playerId: 'player-1',
     resumeToken: 'reserved-token',
@@ -3484,6 +3487,7 @@ test('protocol bounds server-controlled world collections', () => {
   const hubWorld = snapshot.world
   assert.throws(() => decodeServerGameMessage(JSON.stringify({
     type: 'server-welcome',
+    developerAccess: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     playerId: 'player-1',
     resumeToken: 'reserved-token',

@@ -102,6 +102,7 @@ test('client carries character config, publishes authority, and tears down', asy
   const serverState = createGameSimulation({ 'player-1': CHARACTER })
   transport.receive(encodeGameMessage({
     type: 'server-welcome',
+    developerAccess: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     playerId: 'player-1',
     resumeToken: 'reserved-player-1',
@@ -505,6 +506,7 @@ test('client correlates bounded host Lua results and rejects guest or retired ex
   })
   guestTransport.receive(encodeGameMessage({
     type: 'server-welcome',
+    developerAccess: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     playerId: 'player-1',
     resumeToken: 'reserved-player-1',
@@ -969,6 +971,7 @@ test('client schedules every cast-level transition on a distinct fixed tick', as
   const serverState = createGameSimulation({ 'player-1': CHARACTER })
   transport.receive(encodeGameMessage({
     type: 'server-welcome',
+    developerAccess: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     playerId: 'player-1',
     resumeToken: 'reserved-player-1',
@@ -1060,6 +1063,7 @@ test('client disables prediction when the shared character kernel does not match
   const serverState = createGameSimulation({ 'player-1': CHARACTER })
   transport.receive(encodeGameMessage({
     type: 'server-welcome',
+    developerAccess: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     playerId: 'player-1',
     resumeToken: 'reserved-player-1',
@@ -1099,6 +1103,7 @@ test('client presents bounded display-rate movement without resending unchanged 
   const serverState = createGameSimulation({ 'player-1': CHARACTER })
   transport.receive(encodeGameMessage({
     type: 'server-welcome',
+    developerAccess: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     playerId: 'player-1',
     resumeToken: 'reserved-player-1',
@@ -1436,6 +1441,7 @@ test('client rejects a welcome that omits its assigned player', async () => {
   })
   transport.receive(encodeGameMessage({
     type: 'server-welcome',
+    developerAccess: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     playerId: 'missing-player',
     resumeToken: 'reserved-missing-player',
@@ -1639,6 +1645,7 @@ function receiveWelcome(
 ): void {
   transport.receive(encodeGameMessage({
     type: 'server-welcome',
+    developerAccess: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     playerId: 'player-1',
     resumeToken: 'reserved-player-1',

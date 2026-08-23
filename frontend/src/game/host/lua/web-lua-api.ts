@@ -9,6 +9,7 @@ import {
   WEB_LUA_MAX_STATE_KEYS,
   WEB_LUA_STOCK_ENEMIES,
   type WebLuaCommand,
+  type WebLuaDeveloperBindings,
   type WebLuaEventName,
   type WebLuaFilterName,
   type WebLuaFrameState,
@@ -42,6 +43,7 @@ interface WebLuaApiBindings {
   cancelTimer(handle: number): boolean
   clearTimers(): number
   currentTick(): number
+  developer?: WebLuaDeveloperBindings
   getActivePlayerId(): string | null
   getAuthorityPlayerId(): string | null
   getFrame(): WebLuaFrameState
@@ -84,6 +86,11 @@ export class WebLuaApi {
     )
     engine.global.set('print', (...values: unknown[]) => this.#bindings.print(values))
     engine.global.set('sd', {
+      ...(this.#bindings.developer ? {
+        bots: {
+          summon: () => this.#bindings.developer!.summonBot(),
+        },
+      } : {}),
       enemies: {
         get: (identity: unknown) => {
           const descriptor = stockEnemyDescriptor(identity)

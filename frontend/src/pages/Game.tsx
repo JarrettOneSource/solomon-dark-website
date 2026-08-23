@@ -350,6 +350,7 @@ export default function Game() {
               activeMods={activeMods}
               accountUsername={accountUsername}
               connectSession={connectSession}
+              developerAccess={user?.developerAccess === true}
               displayName={displayName}
               initialScreen="root"
               loadGlobalHallOfFame={loadGlobalHallOfFame}

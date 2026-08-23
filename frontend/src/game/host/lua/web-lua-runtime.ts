@@ -23,6 +23,7 @@ import {
   WEB_LUA_TICK_BUDGET_MS,
   WEB_LUA_VM_MEMORY_BYTES,
   type WebLuaCommand,
+  type WebLuaDeveloperBindings,
   type WebLuaEventName,
   type WebLuaFilterName,
   type WebLuaExecutionRequest,
@@ -56,6 +57,7 @@ const maximumTimerDelayMs = 24 * 60 * 60 * 1_000
 interface WebLuaRuntimeOptions {
   readonly bindings: WebLuaRuntimeBindings
   readonly contentRegistry?: WebLuaContentRegistry
+  readonly developer?: WebLuaDeveloperBindings
   readonly log?: WebLuaRuntimeLog
   readonly mod?: WebLuaModIdentity
   readonly modSource?: WebLuaModSource
@@ -189,6 +191,7 @@ export class WebLuaRuntime {
         return count
       },
       currentTick: () => this.#currentTick,
+      developer: options.developer,
       getActivePlayerId: () => this.#activePlayerId,
       getAuthorityPlayerId: () => this.#bindings.getAuthorityPlayerId(),
       getFrame: () => this.#frame(),
