@@ -14,6 +14,7 @@ import torch
 
 from ml_bot.checkpoint import atomic_write, load_checkpoint, typescript_checkpoint_report
 from ml_bot.model import PolicyV5
+from ml_bot.diagnostics import render_dashboard
 from ml_bot.self_test import main as self_test
 from ml_bot.spec import POLICY_SPEC, REPOSITORY_ROOT
 from ml_bot.trainer import (
@@ -161,6 +162,10 @@ def run_self_test(_args: argparse.Namespace) -> None:
     return None
 
 
+def run_diagnostics(args: argparse.Namespace) -> Any:
+    return render_dashboard(Path(args.training_directory).resolve(), Path(args.output).resolve())
+
+
 def bootstrap_configuration(args: argparse.Namespace) -> BootstrapConfiguration:
     return BootstrapConfiguration(
         samples=args.samples,
@@ -226,6 +231,13 @@ def create_parser() -> argparse.ArgumentParser:
 
     self_parser = subparsers.add_parser("self-test", help="exercise every training boundary")
     self_parser.set_defaults(handler=run_self_test)
+
+    diagnostics_parser = subparsers.add_parser(
+        "diagnostics", help="render a self-contained training dashboard"
+    )
+    diagnostics_parser.add_argument("--training-directory", required=True)
+    diagnostics_parser.add_argument("--output", required=True)
+    diagnostics_parser.set_defaults(handler=run_diagnostics)
 
     validate_parser = subparsers.add_parser("validate", help="validate a strict v5 checkpoint")
     validate_parser.add_argument("--checkpoint", required=True)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+import hashlib
 import io
 import json
 import math
@@ -20,6 +21,7 @@ from .advantages import (
 )
 from .bridge import BoneyardRolloutBridge
 from .checkpoint import atomic_write, load_checkpoint, save_checkpoint
+from .diagnostics import write_observation_audit, write_value_calibration
 from .metrics import append_jsonl, bootstrap_mean_interval
 from .model import PolicyV5
 from .optimization import (
@@ -211,6 +213,7 @@ def train_policy(
     trainer_state_path = output_directory / "trainer-state-v5.pt"
     if resume and trainer_state_path.exists():
         state = load_trainer_state(trainer_state_path)
+        validate_resume_state(state, checkpoint_path, configuration, metadata)
         policy.load_state_dict(state["model"])
         main_optimizer.load_state_dict(state["mainOptimizer"])
         choice_optimizer.load_state_dict(state["choiceOptimizer"])
@@ -328,6 +331,15 @@ def train_policy(
                 configuration=configuration,
             )
             append_jsonl(metrics_path, record)
+            write_observation_audit(
+                output_directory / f"observation-audit-{completed_updates:06d}.json",
+                rollout.observations,
+            )
+            write_value_calibration(
+                output_directory / f"value-calibration-{completed_updates:06d}.json",
+                rollout.values,
+                returns,
+            )
             metadata = {
                 **metadata,
                 "choiceCoverage": dict(sorted(coverage.counts.items())),
@@ -359,6 +371,7 @@ def train_policy(
                     "nextSeed": seed_stream.next_seed,
                     "torchGeneratorState": torch_generator.get_state(),
                     "configuration": asdict(configuration),
+                    "runtimeCheckpointSha256": file_sha256(last_checkpoint),
                 },
             )
             print(json.dumps(record, allow_nan=False, sort_keys=True), flush=True)
@@ -588,6 +601,39 @@ def load_trainer_state(path: Path) -> Mapping[str, Any]:
     if not isinstance(value, Mapping) or value.get("trainerVersion") != 5:
         raise ValueError("trainer state is not strict version 5")
     return value
+
+
+def validate_resume_state(
+    state: Mapping[str, Any],
+    checkpoint_path: Path,
+    configuration: TrainingConfiguration,
+    metadata: Mapping[str, Any],
+) -> None:
+    expected_hash = state.get("runtimeCheckpointSha256")
+    if not isinstance(expected_hash, str) or expected_hash != file_sha256(checkpoint_path):
+        raise ValueError("trainer state does not belong to the supplied runtime checkpoint")
+    stored_configuration = state.get("configuration")
+    if not isinstance(stored_configuration, Mapping):
+        raise ValueError("trainer state configuration is missing")
+    current = asdict(configuration)
+    for name, value in stored_configuration.items():
+        if name == "iterations":
+            continue
+        if current.get(name) != value:
+            raise ValueError(f"resume configuration changed immutable field {name}")
+    if (
+        int(metadata.get("trainedEnvironmentSteps", -1)) != int(state.get("environmentSteps", -2))
+        or int(metadata.get("trainedUpdates", -1)) != int(state.get("completedUpdates", -2))
+    ):
+        raise ValueError("runtime checkpoint and trainer progress counters disagree")
+
+
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def configure_torch(seed: int) -> None:
