@@ -11,7 +11,10 @@ import numpy as np
 
 from .checkpoint import atomic_write
 from .metrics import read_jsonl
+from .metrics import append_jsonl
 from .spec import POLICY_SPEC
+
+FEATURE_INDEX = {name: index for index, name in enumerate(POLICY_SPEC.observation_names)}
 
 
 def write_observation_audit(path: Path, observations: np.ndarray) -> None:
@@ -110,6 +113,66 @@ const action={{move:0,target:0,ability:0,aim:0}};E.forEach(e=>Object.entries(e.a
         "episodes": len(episodes),
         "output": str(output),
     }
+
+
+def write_spatial_replay(path: Path, rollout: Any, *, world: int = 0) -> None:
+    if not 0 <= world < rollout.observations.shape[1]:
+        raise ValueError("replay world index is invalid")
+    metadata = rollout.initial_metadata[world]
+    elapsed_ticks = 0
+    for decision in range(rollout.observations.shape[0]):
+        observation = rollout.observations[decision, world]
+        enemies = []
+        for slot in range(1, 9):
+            prefix = f"enemy_{slot}_"
+            present = observation[FEATURE_INDEX[prefix + "present"]]
+            if present < 0.5:
+                continue
+            enemies.append({
+                "slot": slot,
+                "dx": float(observation[FEATURE_INDEX[prefix + "dx"]]),
+                "dy": float(observation[FEATURE_INDEX[prefix + "dy"]]),
+                "hp": float(observation[FEATURE_INDEX[prefix + "hp_ratio"]]),
+            })
+        ticks = int(rollout.ticks[decision, world])
+        elapsed_ticks += ticks
+        append_jsonl(path, {
+            "replay_version": 5,
+            "episode_id": metadata["runId"],
+            "geometry_sha256": metadata["geometrySha256"],
+            "seed": metadata["seed"],
+            "decision": decision,
+            "elapsed_ticks": elapsed_ticks,
+            "position": {
+                "x": float(observation[FEATURE_INDEX["arena_x_normalized"]]),
+                "y": float(observation[FEATURE_INDEX["arena_y_normalized"]]),
+            },
+            "enemies": enemies,
+            "actions": {
+                name: int(rollout.actions[name][decision, world])
+                for name in ("movement", "target", "ability", "aim")
+            },
+            "value": float(rollout.values[decision, world]),
+            "reward": float(rollout.rewards[decision, world]),
+            "done": bool(rollout.dones[decision, world]),
+        })
+
+
+def render_replay(source: Path, output: Path) -> Mapping[str, Any]:
+    rows = read_jsonl(source)
+    payload = json.dumps(rows, allow_nan=False, separators=(",", ":")).replace("</", "<\\/")
+    document = f"""<!doctype html><html><head><meta charset="utf-8"><title>ML policy replay</title>
+<style>body{{margin:0;background:#10141a;color:#e5e7eb;font:14px system-ui}}main{{padding:20px}}canvas{{background:#080b10;border:1px solid #334155;max-width:95vw}}</style></head>
+<body><main><h1>ML policy v5 spatial replay</h1><p id="label"></p><canvas id="view" width="900" height="700"></canvas></main>
+<script id="data" type="application/json">{payload}</script><script>
+const rows=JSON.parse(document.getElementById('data').textContent),c=document.getElementById('view'),x=c.getContext('2d');let i=0;
+function frame(){{const r=rows[i%rows.length];x.fillStyle='#080b10';x.fillRect(0,0,c.width,c.height);const px=r.position.x*c.width,py=r.position.y*c.height;
+x.strokeStyle='#334155';x.beginPath();rows.slice(0,i+1).forEach((q,j)=>{{const a=q.position.x*c.width,b=q.position.y*c.height;j?x.lineTo(a,b):x.moveTo(a,b)}});x.stroke();
+x.fillStyle='#5eead4';x.beginPath();x.arc(px,py,7,0,Math.PI*2);x.fill();r.enemies.forEach(e=>{{x.fillStyle='#fb7185';x.beginPath();x.arc(px+e.dx*120,py+e.dy*120,5,0,Math.PI*2);x.fill()}});
+document.getElementById('label').textContent=`decision ${{r.decision}} · tick ${{r.elapsed_ticks}} · reward ${{r.reward.toFixed(3)}} · value ${{r.value.toFixed(3)}}`;i++;setTimeout(frame,80)}}if(rows.length)frame();
+</script></body></html>"""
+    atomic_write(output, document.encode("utf-8"))
+    return {"status": "ok", "frames": len(rows), "output": str(output)}
 
 
 def finite_stat(values: np.ndarray, function: Any) -> float | None:

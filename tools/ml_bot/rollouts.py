@@ -62,6 +62,7 @@ class ExpertDataset:
 
 @dataclass(frozen=True)
 class PolicyRollout:
+    initial_metadata: tuple[Mapping[str, Any], ...]
     observations: np.ndarray
     masks: Mapping[str, np.ndarray]
     actions: Mapping[str, np.ndarray]
@@ -181,6 +182,7 @@ def collect_policy_rollout(
 ) -> PolicyRollout:
     if steps < 1 or action_repeat < 1:
         raise ValueError("rollout steps and action repeat must be positive")
+    initial_metadata = bridge.state.metadata
     observations: list[np.ndarray] = []
     masks: dict[str, list[np.ndarray]] = {name: [] for name in ACTION_ORDER}
     actions: dict[str, list[np.ndarray]] = {name: [] for name in ACTION_ORDER}
@@ -235,6 +237,7 @@ def collect_policy_rollout(
     with torch.no_grad():
         next_values = policy.value(policy.encode(next_observations)).squeeze(-1).cpu().numpy()
     return PolicyRollout(
+        initial_metadata=initial_metadata,
         observations=np.stack(observations),
         masks={name: np.stack(value) for name, value in masks.items()},
         actions={name: np.stack(value) for name, value in actions.items()},

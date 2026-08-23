@@ -14,7 +14,8 @@ import torch
 
 from ml_bot.checkpoint import atomic_write, load_checkpoint, typescript_checkpoint_report
 from ml_bot.model import PolicyV5
-from ml_bot.diagnostics import render_dashboard
+from ml_bot.diagnostics import render_dashboard, render_replay
+from ml_bot.probes import behavior_probe_scorecard
 from ml_bot.self_test import main as self_test
 from ml_bot.spec import POLICY_SPEC, REPOSITORY_ROOT
 from ml_bot.trainer import (
@@ -166,6 +167,18 @@ def run_diagnostics(args: argparse.Namespace) -> Any:
     return render_dashboard(Path(args.training_directory).resolve(), Path(args.output).resolve())
 
 
+def run_replay(args: argparse.Namespace) -> Any:
+    return render_replay(Path(args.source).resolve(), Path(args.output).resolve())
+
+
+def run_probes(args: argparse.Namespace) -> Any:
+    return behavior_probe_scorecard(
+        Path(args.checkpoint).resolve(),
+        Path(args.dataset).resolve(),
+        Path(args.output).resolve(),
+    )
+
+
 def bootstrap_configuration(args: argparse.Namespace) -> BootstrapConfiguration:
     return BootstrapConfiguration(
         samples=args.samples,
@@ -238,6 +251,19 @@ def create_parser() -> argparse.ArgumentParser:
     diagnostics_parser.add_argument("--training-directory", required=True)
     diagnostics_parser.add_argument("--output", required=True)
     diagnostics_parser.set_defaults(handler=run_diagnostics)
+
+    replay_parser = subparsers.add_parser("replay", help="render a spatial replay")
+    replay_parser.add_argument("--source", required=True)
+    replay_parser.add_argument("--output", required=True)
+    replay_parser.set_defaults(handler=run_replay)
+
+    probes_parser = subparsers.add_parser(
+        "probes", help="score checkpoint decisions on curated expert-state slices"
+    )
+    probes_parser.add_argument("--checkpoint", required=True)
+    probes_parser.add_argument("--dataset", required=True)
+    probes_parser.add_argument("--output", required=True)
+    probes_parser.set_defaults(handler=run_probes)
 
     validate_parser = subparsers.add_parser("validate", help="validate a strict v5 checkpoint")
     validate_parser.add_argument("--checkpoint", required=True)

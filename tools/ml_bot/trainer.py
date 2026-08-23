@@ -21,7 +21,7 @@ from .advantages import (
 )
 from .bridge import BoneyardRolloutBridge
 from .checkpoint import atomic_write, load_checkpoint, save_checkpoint
-from .diagnostics import write_observation_audit, write_value_calibration
+from .diagnostics import write_observation_audit, write_spatial_replay, write_value_calibration
 from .metrics import append_jsonl, bootstrap_mean_interval
 from .model import PolicyV5
 from .optimization import (
@@ -339,6 +339,10 @@ def train_policy(
                 output_directory / f"value-calibration-{completed_updates:06d}.json",
                 rollout.values,
                 returns,
+            )
+            write_spatial_replay(
+                output_directory / "replays" / f"update-{completed_updates:06d}-world-0.jsonl",
+                rollout,
             )
             metadata = {
                 **metadata,
