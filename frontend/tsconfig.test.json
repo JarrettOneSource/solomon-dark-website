@@ -57,6 +57,8 @@
     "src/game/core-server/hub-student-store.test.ts",
     "src/game/headless/hub-headless-environment.test.ts",
     "src/game/player-character-presentation.test.ts",
+    "src/game/hall-of-fame-presentation.ts",
+    "src/game/hall-of-fame-presentation.test.ts",
     "src/game/hub-math.test.ts",
     "src/game/protocol/game-protocol.ts",
     "src/game/protocol/entity-replication.test.ts",

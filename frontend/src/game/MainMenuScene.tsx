@@ -356,6 +356,7 @@ export default function MainMenuScene({
   const [cheatCollegePrompt, setCheatCollegePrompt] = useState(false)
   const [gameSettings, setLocalGameSettings] = useState(readGameSettings)
   const [localHallOfFame, setLocalHallOfFame] = useState(readLocalHallOfFame)
+  const [currentHallRunId, setCurrentHallRunId] = useState<string | null>(null)
   const [fixedViewport, setFixedViewport] = useState(() => (
     fixedGameViewportLayout(GAME_VIEWPORT_MIN_WIDTH, GAME_VIEWPORT_MIN_HEIGHT)
   ))
@@ -588,6 +589,7 @@ export default function MainMenuScene({
       const entry = hallRecorder.observe(snapshot, session!.playerId, accountUsername)
       if (!entry) return
       setLocalHallOfFame(recordLocalHallOfFame(entry))
+      setCurrentHallRunId(entry.runId)
     }
   }, [accountUsername, advanceLoading, beginLoading, onSaveCheckpoint, session, submitGlobalHallOfFame])
 
@@ -1043,6 +1045,7 @@ export default function MainMenuScene({
         {screen === 'hall' ? (
           <HallOfFameScene
             loadGlobal={loadGlobalHallOfFame}
+            currentRunId={currentHallRunId}
             localEntries={localHallOfFame}
             onBack={() => transitionTo('root')}
             stageStyle={nativeStageStyle}
