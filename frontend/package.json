@@ -77,6 +77,7 @@
     "smoke:game:dark-cloud": "node tools/smoke-dark-cloud.mjs",
     "smoke:library:subscriptions": "node tools/smoke-library-subscriptions.mjs",
     "smoke:game:lua-console": "node --experimental-strip-types tools/smoke-game-lua-console.mjs",
+    "smoke:game:ml-bot": "node --experimental-strip-types tools/smoke-ml-bot-game-integration.mjs",
     "smoke:game-audio": "node tools/smoke-game-audio.mjs",
     "smoke:game:devices": "node tools/smoke-game-devices.mjs",
     "smoke:game:built-joystick": "node tools/smoke-game-built-joystick.mjs",
