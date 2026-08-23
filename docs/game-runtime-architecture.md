@@ -1076,9 +1076,13 @@ accepted host console requests + per-mod due Lua timers + runtime.tick callbacks
 ```
 
 This preserves one mutation boundary and prevents Lua callbacks from entering
-the simulation recursively. The host checks dynamic session host identity on
-every console request. `Enable Cheats` controls only whether the browser
-installs its DevTools API; it is never trusted as network authorization.
+the simulation recursively. The host checks dynamic session host identity or
+the account-bound developer entitlement on every console request. `Enable
+Cheats` controls ordinary-host installation of the DevTools API; it is never
+trusted as network authorization. Protocol 60 carries the server-authored
+developer boolean from a one-use admission into the welcome. An entitled
+account keeps the setting and ordinary shared-Hub routing off while still
+receiving the DevTools API. No client-authored field can grant the entitlement.
 Initial and live setting state is nevertheless replicated as a separate
 global-score eligibility input, and accepting a console request revokes that
 eligibility even if a crafted client misreported the setting.
@@ -1096,6 +1100,26 @@ UTF-8/JSON wire expansion, output capture, state, queued commands, and every
 allocator have explicit per-VM and aggregate bounds. Instruction hooks
 interrupt both entry chunks and stored callbacks. A package with no Lua member
 creates no VM.
+
+The developer-only `sd.bots.summon()` adapter exists only in the console VM.
+It accepts only an entitled player currently in the resident shared Hub,
+reserves one server-capacity slot, and queues participant creation at the fixed
+tick boundary. Each call creates a unique Arcane/Fire player with the ordinary
+entity, replication, Hub, party, loadout, progression, and inventory paths.
+The participant has idle input in the Hub. Any ordinary
+eligible party leader can issue the existing invitation; the bot accepts that
+same invitation after a three-second monotonic delay if it is still live.
+
+After party launch, a host-side entrance adapter follows collision-safe
+waypoints through the authored moving gate and into Solomon contact. It idles
+during dialogue, then hands control to the selected schema-v5 checkpoint at a
+ten-tick decision cadence. Inference runs in one server-only worker shared by
+all summoned participants; each bot retains its own observer and intent queue.
+Potion actions use the ordinary consume path and skill offers use the scripted
+schema-v5 chooser. Bot-assisted runs cannot receive global leaderboard
+receipts. Bots never enter the WebSocket client map or human player-count
+callback, and all remaining bots are removed when the last human disconnects,
+so they cannot keep a private session or deployment drain alive.
 
 API `0.2.0` adds one host-owned content registry beneath the VMs. Admission
 provides each mod only its validated immutable package files. During its sole
@@ -1133,8 +1157,10 @@ regression before it can strand a mixed-content party in the Hub.
 checkpoints snapshot it as bounded JSON and restore it only for an exact mod
 identity match; live Lua callbacks, timers, and active consumable effects are
 run-scoped and deliberately not checkpointed. Client-authored Lua,
-cross-mod buses, raw Lua networking, bots, input synthesis, time scaling,
-navigation, recipe-backed dynamic items, and every native-memory/debug path
-remain absent until their web owners exist.
+cross-mod buses, raw Lua networking, general-purpose input synthesis, time
+scaling, recipe-backed dynamic items, and every native-memory/debug path remain
+absent until their web owners exist. The only bot and navigation surface is the
+developer-entitled server participant path described above; it is not
+available to mod VMs.
 The complete disposition is recorded in `game-native-parity-re.md` and the Mod
 Loader's `web-lua-runtime-parity-contract.md`.

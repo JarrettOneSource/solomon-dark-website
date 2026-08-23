@@ -22,8 +22,9 @@ declare global {
 const HELP = [
   'Solomon Dark web Lua console',
   "await solomonDark.lua.execute('return sd.runtime.get_frame_state()')",
-  'Supported namespaces: runtime, state, events, timer, rng, scene, gameplay, hub, player, world, waves, enemies.',
-  'Authoritative execution is restricted to the current session host.',
+  'Supported namespaces: runtime, state, events, timer, rng, scene, gameplay, hub, player, world, waves, enemies; developer accounts also receive bots.',
+  "Summon a Hub bot: await solomonDark.lua.execute('return sd.bots.summon()')",
+  'Authoritative execution requires current session-host authority or an account-bound developer entitlement.',
 ].join('\n')
 
 export function installGameLuaConsole(

@@ -1,8 +1,9 @@
 # ML bot policy v5 selection receipt
 
 The first corrected Web Port campaign was trained on Mac from source commit
-`6db12a72ee44dd5f685fafc31dca34c204baa779`. Live game attachment remains
-outside this training package.
+`6db12a72ee44dd5f685fafc31dca34c204baa779`. The selected checkpoint is now a
+server-only GameHost asset; training remains frozen and separate from runtime
+integration.
 
 ## Selected checkpoint
 
@@ -18,6 +19,17 @@ outside this training package.
 The bootstrap passes every fixed representation probe: combat target `1.0`,
 combat cast `0.9971`, no-target idle `1.0`, aim lead `0.9067`, hazard exit
 `0.7619`, and potion use `0.75` over 16 expert potion rows.
+
+## Live GameHost integration receipt
+
+The deterministic Mac integration smoke uses allowed run seed `518852612`, a
+real developer Lua summon, the normal three-second party invitation, the
+authored moving entry gate, Solomon's complete encounter sequence, and the
+selected worker checkpoint. Its first passing sample traveled `1,376.398`
+world units, made `25` learned decisions, killed `4` opening enemies, used one
+potion, retained one inventory item, remained alive, and had not yet reached a
+numbered wave. This is an integration liveness receipt, not a replacement for
+the frozen 30-episode evaluation below.
 
 ## Frozen evaluation
 
@@ -65,5 +77,8 @@ totals do not override the pre-registered paired waves-reached rule.
    square-root inverse-frequency weighting raised potion imitation to 75%, and
    bootstrap now fails closed below eight potion rows or 70% accuracy.
 
-Bots remain ordinary game participants when the owner integrates this
-checkpoint. Bot presence does not keep an otherwise human-empty server alive.
+Runtime integration preserves bots as ordinary replicated game participants.
+The developer-only Lua summon is Hub-bound and repeatable, party acceptance
+uses the real invitation after three seconds, and the live adapter handles the
+authored Boneyard entrance before checkpoint control begins. Bot presence does
+not keep an otherwise human-empty server alive.

@@ -46,6 +46,13 @@ metadata plus an opaque in-memory intent; `/api/game/join/admit` creates the
 credential just in time. The browser never supplies the account id or global
 score fields to the leaderboard write seam.
 
+The protected `DeveloperAccess:UserIds` allowlist is resolved from the
+authenticated JWT subject. Its boolean result is sealed into the one-use game
+admission and protocol welcome; no request body, client hello, setting, or
+profile field can grant it. An entitled account keeps `Enable Cheats` off and
+uses the ordinary Hub route while the GameHost independently authorizes each
+Lua request.
+
 Browser diagnostics correlate the report with exactly one of three endpoint
 classes: `null` when no provisioned session is known, `shared-hub` for the
 resident Hub, or the existing 32-character URL-safe private-session id. Other

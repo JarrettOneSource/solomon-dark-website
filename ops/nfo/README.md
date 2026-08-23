@@ -22,6 +22,7 @@ SDR_GAME_MAX_CONNECTIONS_PER_SESSION=16
 SDR_GAME_DEPLOYMENT_SAVE_TIMEOUT_SECONDS=30
 SDR_GAME_UNCLAIMED_TIMEOUT_SECONDS=120
 SDR_GAME_LOG_LEVEL=info
+SDR_GAME_ML_BOT_CHECKPOINT=/opt/solomon-dark-revived/GameHost/ml-bot-policy-v5-selected.sdml
 ```
 
 The same secret is supplied to the website through its existing protected
@@ -31,6 +32,7 @@ environment file using these keys:
 GameSessions__AdminSecret=<the same random value>
 GameSessions__SupervisorUrl=http://127.0.0.1:5222
 GameSessions__PublicWebSocketOrigin=wss://solomondarker.com
+DeveloperAccess__UserIds=<comma-separated authenticated user IDs>
 ```
 
 The supervisor also uses this secret as the key for domain-separated global
@@ -50,6 +52,21 @@ in-flight proxy have both left; the empty shared Hub host remains resident and
 reports zero occupancy. The game host and browser-facing proxy send WebSocket
 control pings every five seconds and close an unresponsive connection with an
 explicit timeout code and reason.
+
+`DeveloperAccess__UserIds` is a protected server allowlist, not a browser
+secret. The Website resolves it from the authenticated JWT subject and seals
+the result into the single-use ticket. Entitled users retain ordinary
+shared-Hub routing with `Enable Cheats` off. In DevTools, summon one bot per
+call with:
+
+```js
+await solomonDark.lua.execute('return sd.bots.summon()')
+```
+
+The checkpoint and inference worker are immutable release members under
+`GameHost/`; neither is served by the static Website. A bot is a normal party
+participant but is excluded from human occupancy, private-session teardown,
+and deployment-save counts.
 
 The supervisor writes structured JSON events to stderr, which systemd captures
 in the `solomon-dark-game.service` journal. `info` records session and player
