@@ -231,6 +231,7 @@ try {
   await primaryAction.click()
   const primarySelector = page.getByRole('dialog', { name: 'Select Primary Attack' })
   await primarySelector.locator('.hud-skill-selector-canvas').waitFor({ timeout: 15_000 })
+  await assertGameSoundMuted(page, true)
   const primaryOpenAudio = await waitForSelectorAudio(page, primaryOpenAudioStart, ['click'])
   assert.equal(await hubScene.getAttribute('data-gameplay-input-blocked'), 'true')
   assert.deepEqual(await page.locator('.hub-hud-selected-skill-action').evaluateAll(
@@ -265,15 +266,18 @@ try {
     page,
     primarySelectionAudioStart,
     ['click'],
+    0,
   )
   await page.getByRole('img', { name: 'Magic Missile primary spell' }).waitFor({ timeout: 10_000 })
   await hubScene.locator('xpath=self::*[@data-gameplay-input-blocked="false"]').waitFor()
+  await assertGameSoundMuted(page, false)
 
   await page.getByRole('button', {
     name: 'Select concentration A, current Channel Mana',
   }).click()
   const concentrationA = page.getByRole('dialog', { name: 'Select Concentration' })
   await concentrationA.locator('.hud-skill-selector-canvas').waitFor({ timeout: 15_000 })
+  await assertGameSoundMuted(page, true)
   assert.deepEqual(await concentrationA.locator('.hud-skill-selector-action').evaluateAll(
     (buttons) => buttons.map((button) => Number(button.getAttribute('data-skill-id'))),
   ), [57, 59])
@@ -283,17 +287,20 @@ try {
     page,
     concentrationSelectionAudioStart,
     ['click', 'concentrate'],
+    0,
   )
   await page.getByRole('button', {
     name: 'Select concentration A, current Battle Mage',
   }).waitFor({ timeout: 10_000 })
   await hubScene.locator('xpath=self::*[@data-gameplay-input-blocked="false"]').waitFor()
+  await assertGameSoundMuted(page, false)
 
   await page.getByRole('button', {
     name: 'Select concentration B, current Meditation',
   }).click()
   const concentrationB = page.getByRole('dialog', { name: 'Select Concentration' })
   await concentrationB.locator('.hud-skill-selector-canvas').waitFor({ timeout: 15_000 })
+  await assertGameSoundMuted(page, true)
   assert.deepEqual(await concentrationB.locator('.hud-skill-selector-action').evaluateAll(
     (buttons) => buttons.map((button) => Number(button.getAttribute('data-skill-id'))),
   ), [57, 58])
@@ -302,16 +309,19 @@ try {
     name: 'Select concentration B, current Channel Mana',
   }).waitFor({ timeout: 10_000 })
   await hubScene.locator('xpath=self::*[@data-gameplay-input-blocked="false"]').waitFor()
+  await assertGameSoundMuted(page, false)
   await page.screenshot({ path: `${screenshotRoot}-hud-selectors.png` })
 
   await page.getByRole('button', {
     name: 'Select primary attack, current Magic Missile',
   }).click()
   await primarySelector.waitFor()
+  await assertGameSoundMuted(page, true)
   await page.mouse.click(1_500, 500)
   await primarySelector.waitFor({ state: 'detached' })
   await page.getByRole('img', { name: 'Magic Missile primary spell' }).waitFor()
   await hubScene.locator('xpath=self::*[@data-gameplay-input-blocked="false"]').waitFor()
+  await assertGameSoundMuted(page, false)
 
   await page.getByRole('button', { name: 'Enter the Boneyard' }).click()
   const picker = page.getByRole('dialog', { name: 'Choose a Boneyard' })
@@ -322,6 +332,7 @@ try {
     name: 'Select primary attack, current Magic Missile',
   }).click()
   await primarySelector.locator('.hud-skill-selector-canvas').waitFor({ timeout: 15_000 })
+  await assertGameSoundMuted(page, true)
   assert.equal(await boneyardScene.getAttribute('data-gameplay-input-blocked'), 'true')
   const beforeCancelledPointer = host.state()
   const beforeCancelledIndex = beforeCancelledPointer.playerEntities.identities.findIndex(
@@ -339,6 +350,7 @@ try {
   await page.mouse.click(1_500, 500)
   await primarySelector.waitFor({ state: 'detached' })
   await boneyardScene.locator('xpath=self::*[@data-gameplay-input-blocked="false"]').waitFor()
+  await assertGameSoundMuted(page, false)
   await page.waitForTimeout(150)
   const afterCancelledPointer = host.state()
   const afterCancelledPosition =
@@ -354,10 +366,12 @@ try {
     name: 'Select primary attack, current Magic Missile',
   }).click()
   await primarySelector.locator('.hud-skill-selector-canvas').waitFor({ timeout: 15_000 })
+  await assertGameSoundMuted(page, true)
   await page.screenshot({ path: `${screenshotRoot}-boneyard-selector.png` })
   await primarySelector.getByRole('button', { name: /Fireball/ }).click()
   await page.getByRole('img', { name: 'Fireball primary spell' }).waitFor({ timeout: 10_000 })
   await boneyardScene.locator('xpath=self::*[@data-gameplay-input-blocked="false"]').waitFor()
+  await assertGameSoundMuted(page, false)
 
   const selectedState = host.state()
   const selectedIndex = selectedState.playerEntities.identities.findIndex(
@@ -406,7 +420,7 @@ async function audioEventCount(target) {
   return target.evaluate(() => window.__sdrAudioEvents.length)
 }
 
-async function waitForSelectorAudio(target, start, expectedStems) {
+async function waitForSelectorAudio(target, start, expectedStems, expectedMasterVolume) {
   await target.waitForFunction(({ eventStart, stems }) => {
     const events = window.__sdrAudioEvents.slice(eventStart).filter(({ src, type }) => (
       type === 'buffer-start'
@@ -422,11 +436,33 @@ async function waitForSelectorAudio(target, start, expectedStems) {
         type === 'buffer-start'
         && stems.some((stem) => window.__sdrAudioSourceMatches(src, `${stem}.wav`))
       ))
-      .map(({ playbackRate, src, volume }) => ({ playbackRate, src, volume }))
+      .map(({ masterVolume, playbackRate, src, volume }) => ({
+        masterVolume,
+        playbackRate,
+        src,
+        volume,
+      }))
   ), { eventStart: start, stems: expectedStems })
   assert.deepEqual(
     events.map(({ playbackRate, volume }) => ({ playbackRate, volume })),
     expectedStems.map(() => ({ playbackRate: 1, volume: 1 })),
   )
+  if (expectedMasterVolume !== undefined) {
+    assert.deepEqual(
+      events.map(({ masterVolume }) => masterVolume),
+      expectedStems.map(() => expectedMasterVolume),
+    )
+  }
   return events
+}
+
+async function assertGameSoundMuted(target, expected) {
+  await target.waitForFunction((muted) => {
+    const attribute = document.querySelector('.main-menu-page')
+      ?.getAttribute('data-game-sounds-muted')
+    const masterVolumes = window.__sdrAudioMasterVolumes?.('click') ?? []
+    return attribute === `${muted}`
+      && masterVolumes.length > 0
+      && masterVolumes.every(volume => muted ? volume === 0 : volume > 0)
+  }, expected, { timeout: 5_000 })
 }

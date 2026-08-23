@@ -184,8 +184,9 @@ The compiled game-audio registry has two browser output lanes. Resident
 `AudioBuffer` one-shots, keyed streams, voices, loops, and ambience share one
 Web Audio master gain; scene music and crossfades use independent music
 channels. User sound and music settings remain separate scalars. A local or
-authoritative Pause Menu, or any opening/settled/closing/waiting phase of the
-mandatory level-up picker, temporarily multiplies only the non-music master by
+authoritative Pause Menu, any opening/settled/closing/waiting phase of the
+mandatory level-up picker, and the compact primary/A/B HUD skill selector for
+its owner or a waiting peer temporarily multiply only the non-music master by
 zero. Source and owner lifecycles continue silently, music keeps playing, and
 release restores the newest user sound value without replaying muted events.
 The party-state subscription seeds an invitation-id cursor from the connected
