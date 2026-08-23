@@ -164,6 +164,7 @@ import {
   nativeWizardOuchCooldownReady,
   type BoneyardEnemyAttributionObserver,
   type BoneyardEnemyLethalObserver,
+  type BoneyardEnemyReward,
   type BoneyardEnemySemanticEvent,
 } from './boneyard-enemy-store.ts'
 import { stepPlayerStaffCombatSystem } from './player-staff-combat-system.ts'
@@ -1282,10 +1283,7 @@ function finishGameSimulationTick(
       poisonDuration: number
     }>[]
     players: Readonly<Record<PlayerId, PlayerCharacterState>>
-    rewards?: readonly Readonly<{
-      experience: number
-      playerId: string | null
-    }>[]
+    rewards?: readonly BoneyardEnemyReward[]
     world: GameWorldState
   },
   inputs: PlayerCharacterInputs,
