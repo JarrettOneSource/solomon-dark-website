@@ -1,5 +1,6 @@
 import {
   createIdlePlayerCharacterInput,
+  NATIVE_GAMEPLAY_VIEWPORT_WIDTH,
   type PlayerCharacterInput,
 } from '../core-kernels/player-character.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
@@ -59,6 +60,7 @@ interface BrowserGameplayInputOptions {
   projectSecondaryAim?: () => Vector2 | null
   secondaryAtPointer?: () => boolean
   target?: BrowserInputTarget
+  viewportWidth?: () => number
   visibilityTarget?: BrowserVisibilityTarget
 }
 
@@ -74,6 +76,7 @@ export function createBrowserGameplayInput({
   projectSecondaryAim = () => null,
   secondaryAtPointer = () => true,
   target = window,
+  viewportWidth = () => NATIVE_GAMEPLAY_VIEWPORT_WIDTH,
   visibilityTarget = document,
 }: BrowserGameplayInputOptions): BrowserGameplayInput {
   let aim: Vector2 | null = null
@@ -118,6 +121,10 @@ export function createBrowserGameplayInput({
       aim = projectSecondaryAim() ?? aim
     }
     const movementSample = movement.sample()
+    const currentViewportWidth = viewportWidth()
+    if (!Number.isFinite(currentViewportWidth) || currentViewportWidth < 1) {
+      throw new RangeError('gameplay viewport width must be positive and finite')
+    }
     return {
       device: movementSample.device,
       input: {
@@ -127,6 +134,7 @@ export function createBrowserGameplayInput({
           quickbar: heldQuickbarInputs.at(-1)?.slot ?? null,
         },
         movement: { ...movementSample.movement },
+        viewportWidth: currentViewportWidth,
       },
     }
   }

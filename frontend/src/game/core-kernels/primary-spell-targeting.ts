@@ -12,6 +12,10 @@ export const ETHER_PRIMARY_TURN_FAST_STEP = 0.05000000074505806
 export const ETHER_PRIMARY_TURN_SLOW_STEP = 0.0020000000949949026
 export const ETHER_PRIMARY_TURN_THRESHOLD = 1
 export const ETHER_PRIMARY_TURN_CAP = 10
+export const NATIVE_FIREBALL_HOSTILE_CORRIDOR_HALF_WIDTH = 20
+export const NATIVE_FIREBALL_SCENERY_EXCEPTION_DISTANCE_SQUARED = 2
+export const NATIVE_MAGIC_MISSILE_BIRTH_TERRAIN_EXCLUSION_MASK = 0x380
+export const NATIVE_PRIMARY_FLIGHT_TERRAIN_EXCLUSION_MASK = 0x700
 export const NATIVE_PRIMARY_ACTOR_CELL_SIZE = 100
 export const NATIVE_PRIMARY_HOSTILE_FLAG = 0x2
 
@@ -27,6 +31,7 @@ export interface PrimarySpellTarget {
   actorFlags: number
   attachment: Vector2
   bodyRadius: number
+  cellBindingOrder: number
   headingDeg?: number
   id: string
   kind: PrimarySpellTargetKind
@@ -41,6 +46,11 @@ export interface NativePrimaryPointContactQuery {
   position: Vector2
   queryRadius: number
   targets: readonly PrimarySpellTarget[]
+}
+
+export interface NativeFireballPointContactQuery extends NativePrimaryPointContactQuery {
+  direction: Vector2
+  hostileCorridorLength: number
 }
 
 export interface NativePrimaryConeQuery {
@@ -211,13 +221,13 @@ export function selectEtherPrimaryTargetAtPoint(
 export function firstNativePrimaryPointContact(
   query: NativePrimaryPointContactQuery,
 ): PrimarySpellTarget | null {
-  const cellX = nativeCellCoordinate(query.position.x)
-  const cellY = nativeCellCoordinate(query.position.y)
-  for (const target of nativeRegistrationOrder(query.targets)) {
+  const cellX = nativePrimaryCellCoordinate(query.position.x)
+  const cellY = nativePrimaryCellCoordinate(query.position.y)
+  for (const target of nativeCellBindingOrder(query.targets)) {
     if (!nativePrimaryTargetEligible(target, query.actorMask)) continue
     if (
-      nativeCellCoordinate(target.position.x) !== cellX
-      || nativeCellCoordinate(target.position.y) !== cellY
+      nativePrimaryCellCoordinate(target.position.x) !== cellX
+      || nativePrimaryCellCoordinate(target.position.y) !== cellY
     ) continue
     const radius = query.queryRadius + target.bodyRadius
     if (squaredLength(subtract(target.position, query.position)) < radius * radius) {
@@ -225,6 +235,43 @@ export function firstNativePrimaryPointContact(
     }
   }
   return null
+}
+
+export function firstNativeFireballPointContact(
+  query: NativeFireballPointContactQuery,
+): PrimarySpellTarget | null {
+  const contact = firstNativePrimaryPointContact(query)
+  if (contact === null || (contact.actorFlags & NATIVE_PRIMARY_HOSTILE_FLAG) !== 0) {
+    return contact
+  }
+  const contactDelta = subtract(contact.position, query.position)
+  if (squaredLength(contactDelta) < NATIVE_FIREBALL_SCENERY_EXCEPTION_DISTANCE_SQUARED) {
+    return contact
+  }
+  if (!Number.isFinite(query.hostileCorridorLength) || query.hostileCorridorLength <= 0) {
+    throw new RangeError('Fireball hostile corridor length must be positive and finite')
+  }
+  const direction = normalized(query.direction)
+  if (squaredLength(direction) === 0) return contact
+  const side = {
+    x: Math.fround(direction.y * NATIVE_FIREBALL_HOSTILE_CORRIDOR_HALF_WIDTH),
+    y: Math.fround(-direction.x * NATIVE_FIREBALL_HOSTILE_CORRIDOR_HALF_WIDTH),
+  }
+  const far = {
+    x: Math.fround(query.position.x + direction.x * query.hostileCorridorLength),
+    y: Math.fround(query.position.y + direction.y * query.hostileCorridorLength),
+  }
+  const polygon = [
+    { x: Math.fround(query.position.x + side.x), y: Math.fround(query.position.y + side.y) },
+    { x: Math.fround(query.position.x - side.x), y: Math.fround(query.position.y - side.y) },
+    { x: Math.fround(far.x - side.x), y: Math.fround(far.y - side.y) },
+    { x: Math.fround(far.x + side.x), y: Math.fround(far.y + side.y) },
+  ]
+  const hostileAhead = query.targets.some((target) => (
+    nativePrimaryTargetEligible(target, NATIVE_PRIMARY_HOSTILE_FLAG)
+    && nativePointInPolygon(target.position, polygon)
+  ))
+  return hostileAhead ? null : contact
 }
 
 export function nativePrimaryConeTargets(
@@ -428,6 +475,14 @@ function nativeRegistrationOrder(
   ))
 }
 
+function nativeCellBindingOrder(
+  targets: readonly PrimarySpellTarget[],
+): PrimarySpellTarget[] {
+  return [...targets].sort((left, right) => (
+    left.cellBindingOrder - right.cellBindingOrder
+  ))
+}
+
 function nativeBroadphaseOrder(
   origin: Vector2,
   reach: number,
@@ -436,27 +491,48 @@ function nativeBroadphaseOrder(
   const minX = Math.fround(origin.x - reach)
   const minY = Math.fround(origin.y - reach)
   const diameter = Math.fround(reach + reach)
-  const minCellX = nativeCellCoordinate(minX)
-  const minCellY = nativeCellCoordinate(minY)
-  const maxCellX = nativeCellCoordinate(Math.fround(minX + diameter))
-  const maxCellY = nativeCellCoordinate(Math.fround(minY + diameter))
+  const minCellX = nativePrimaryCellCoordinate(minX)
+  const minCellY = nativePrimaryCellCoordinate(minY)
+  const maxCellX = nativePrimaryCellCoordinate(Math.fround(minX + diameter))
+  const maxCellY = nativePrimaryCellCoordinate(Math.fround(minY + diameter))
   return targets.filter((target) => {
-    const cellX = nativeCellCoordinate(target.position.x)
-    const cellY = nativeCellCoordinate(target.position.y)
+    const cellX = nativePrimaryCellCoordinate(target.position.x)
+    const cellY = nativePrimaryCellCoordinate(target.position.y)
     return cellX >= minCellX
       && cellX <= maxCellX
       && cellY >= minCellY
       && cellY <= maxCellY
   }).sort((left, right) => {
-    const leftCellX = nativeCellCoordinate(left.position.x)
-    const rightCellX = nativeCellCoordinate(right.position.x)
+    const leftCellX = nativePrimaryCellCoordinate(left.position.x)
+    const rightCellX = nativePrimaryCellCoordinate(right.position.x)
     if (leftCellX !== rightCellX) return leftCellX - rightCellX
-    const leftCellY = nativeCellCoordinate(left.position.y)
-    const rightCellY = nativeCellCoordinate(right.position.y)
-    return leftCellY - rightCellY || left.registrationOrder - right.registrationOrder
+    const leftCellY = nativePrimaryCellCoordinate(left.position.y)
+    const rightCellY = nativePrimaryCellCoordinate(right.position.y)
+    return leftCellY - rightCellY || left.cellBindingOrder - right.cellBindingOrder
   })
 }
 
-function nativeCellCoordinate(position: number): number {
+export function nativePrimaryCellCoordinate(position: number): number {
   return Math.trunc(Math.fround(position / NATIVE_PRIMARY_ACTOR_CELL_SIZE))
+}
+
+function nativePointInPolygon(
+  point: Readonly<Vector2>,
+  polygon: readonly Readonly<Vector2>[],
+): boolean {
+  let inside = false
+  let previous = polygon.at(-1)
+  if (!previous) return false
+  for (const current of polygon) {
+    if (
+      (point.y < current.y) !== (point.y < previous.y)
+      && point.x < (
+        (previous.x - current.x) * (point.y - current.y)
+        / (previous.y - current.y)
+        + current.x
+      )
+    ) inside = !inside
+    previous = current
+  }
+  return inside
 }

@@ -240,6 +240,7 @@ function movementInput(
   const dy = target.y - position.y
   const length = Math.hypot(dx, dy)
   return {
+    ...createIdlePlayerCharacterInput(),
     aim: null,
     cast: { primary: false, quickbar: null },
     movement: length > 0

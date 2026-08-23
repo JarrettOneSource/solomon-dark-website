@@ -318,7 +318,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 60
+export const GAME_PROTOCOL_VERSION = 61
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
 export const GAME_CONNECTION_TIMEOUT_CLOSE_CODE = 4000
@@ -1798,9 +1798,13 @@ function gitRevision(value: unknown, field: string): string {
 
 function playerCharacterInput(value: unknown, field: string): PlayerCharacterInput {
   const source = record(value, field)
-  onlyKeys(source, field, ['aim', 'cast', 'movement'])
+  onlyKeys(source, field, ['aim', 'cast', 'movement', 'viewportWidth'])
   const cast = record(source.cast, `${field}.cast`)
   onlyKeys(cast, `${field}.cast`, ['primary', 'quickbar'])
+  const viewportWidth = finite(source.viewportWidth, `${field}.viewportWidth`)
+  if (viewportWidth < 1 || viewportWidth > 32_768) {
+    throw new GameProtocolError(`${field}.viewportWidth is outside the native surface range`)
+  }
   return {
     aim: source.aim === null ? null : vector(source.aim, `${field}.aim`),
     cast: {
@@ -1808,6 +1812,7 @@ function playerCharacterInput(value: unknown, field: string): PlayerCharacterInp
       quickbar: skillQuickbarSlot(cast.quickbar, `${field}.cast.quickbar`),
     },
     movement: unitVector(source.movement, `${field}.movement`),
+    viewportWidth,
   }
 }
 

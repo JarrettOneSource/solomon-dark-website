@@ -1525,6 +1525,12 @@ export function isOneShotBuild(buildId: NativeWeldBuildId): buildId is NativeWel
   return buildId === 1000 || buildId === 1001 || buildId === 1002 || buildId === 1009
 }
 
+export function isMagicMissileDerivedWeldBuild(
+  buildId: NativeWeldBuildId,
+): buildId is 1000 | 1001 | 1002 {
+  return buildId === 1000 || buildId === 1001 || buildId === 1002
+}
+
 export function isChannelBuild(buildId: NativeWeldBuildId): buildId is NativeWeldChannelBuildId {
   return buildId === 1003 || buildId === 1004 || buildId === 1005
 }

@@ -217,6 +217,7 @@ test('GoodImp preserves the native constructor stream, landing attack, flight st
     actorFlags: 0x2,
     attachment: { x: 0, y: 0 },
     bodyRadius: 8,
+    cellBindingOrder: 0,
     id: 'enemy:4',
     kind: 'enemy' as const,
     nativePriority: 0,

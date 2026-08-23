@@ -528,6 +528,7 @@ export default function BoneyardScene({
         )
       },
       secondaryAtPointer: () => settingsRef.current.castSecondariesAtMouse,
+      viewportWidth: () => viewportRef.current.width,
     })
     input.setBlocked(true)
     inputRef.current = input

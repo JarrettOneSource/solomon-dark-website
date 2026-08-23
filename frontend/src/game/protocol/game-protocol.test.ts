@@ -139,6 +139,7 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
       aim: { x: 800, y: 450 },
       cast: { primary: true, quickbar: 7 },
       movement: { x: 1, y: 0 },
+      viewportWidth: 1_600,
     },
     sequence: 4,
     targetTick: 19,
@@ -148,6 +149,7 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
       aim: { x: 800, y: 450 },
       cast: { primary: true, quickbar: 7 },
       movement: { x: 1, y: 0 },
+      viewportWidth: 1_600,
     },
     sequence: 4,
     targetTick: 19,
@@ -1062,7 +1064,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
 })
 
 test('protocol v60 carries developer access, held one-shot pose, Fire lifecycle, Game Over/loadout, status composition, saved leave, deployment restart, Ether replacement, party access, movement, social, mod, and gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 60)
+  assert.equal(GAME_PROTOCOL_VERSION, 61)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -1684,6 +1686,7 @@ test('protocol rejects legacy, malformed, and unsupported discriminated payloads
       aim: null,
       cast: { primary: false, quickbar: null },
       movement: { x: 2, y: 0 },
+      viewportWidth: 1_600,
     },
     sequence: 1,
     targetTick: 1,
@@ -1694,6 +1697,7 @@ test('protocol rejects legacy, malformed, and unsupported discriminated payloads
       aim: { x: 1, y: Number.POSITIVE_INFINITY },
       cast: { primary: false, quickbar: null },
       movement: { x: 0, y: 0 },
+      viewportWidth: 1_600,
     },
     sequence: 1,
     targetTick: 1,
@@ -1704,6 +1708,7 @@ test('protocol rejects legacy, malformed, and unsupported discriminated payloads
       aim: null,
       cast: { primary: 1, quickbar: null },
       movement: { x: 0, y: 0 },
+      viewportWidth: 1_600,
     },
     sequence: 1,
     targetTick: 1,
@@ -1714,6 +1719,17 @@ test('protocol rejects legacy, malformed, and unsupported discriminated payloads
     sequence: 1,
     targetTick: 1,
   })), /aim|cast/)
+  assert.throws(() => decodeClientGameMessage(JSON.stringify({
+    type: 'client-input',
+    input: {
+      aim: null,
+      cast: { primary: false, quickbar: null },
+      movement: { x: 0, y: 0 },
+      viewportWidth: 0,
+    },
+    sequence: 1,
+    targetTick: 1,
+  })), /viewportWidth/)
   assert.throws(() => decodeClientGameMessage(JSON.stringify({
     type: 'client-ping',
     nonce: -1,

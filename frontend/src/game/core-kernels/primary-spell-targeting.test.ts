@@ -8,9 +8,12 @@ import {
   ETHER_PRIMARY_PROBE_DISTANCE,
   ETHER_PRIMARY_TURN_FAST_STEP,
   ETHER_PRIMARY_TURN_INPUT,
+  NATIVE_FIREBALL_HOSTILE_CORRIDOR_HALF_WIDTH,
+  NATIVE_FIREBALL_SCENERY_EXCEPTION_DISTANCE_SQUARED,
   airPrimaryBoltGeometry,
   advanceEtherPrimaryHoming,
   firstNativePrimaryPointContact,
+  firstNativeFireballPointContact,
   nativeHeadingTurnDirection,
   nativeMissileFanHeading,
   nativeMissileFanTurnScale,
@@ -30,6 +33,7 @@ const enemy = (
   actorFlags: 0x2,
   attachment: { x: 0, y: 0 },
   bodyRadius: 20,
+  cellBindingOrder: Number(id.replace(/\D/g, '')) || 0,
   id,
   kind: 'enemy',
   nativePriority: 0,
@@ -47,6 +51,7 @@ const grave = (
   actorFlags: 0x4,
   attachment: { x: 0, y: 0 },
   bodyRadius: 0,
+  cellBindingOrder: Number(id.replace(/\D/g, '')) || 0,
   id,
   kind: 'gravestone',
   nativePriority: 1000,
@@ -188,13 +193,15 @@ test('Magic Missile fan drains all authored quantities through paired heading an
   )
 })
 
-test('Air and Magic Missile preserve projected native per-cell order on exact target ties', () => {
+test('Air exact ties use cell slots while Magic Missile acquisition uses manager order', () => {
   const first = {
     ...enemy('enemy:first', 0, -100),
+    cellBindingOrder: 8,
     registrationOrder: 3,
   }
   const later = {
     ...enemy('enemy:later', 0, -100),
+    cellBindingOrder: 3,
     registrationOrder: 8,
   }
   const reversedInput = [later, first]
@@ -206,7 +213,7 @@ test('Air and Magic Missile preserve projected native per-cell order on exact ta
     origin: { x: 0, y: 0 },
     previousTargetId: null,
     targets: reversedInput,
-  })?.id, first.id)
+  })?.id, later.id)
   assert.equal(selectEtherPrimaryTarget({
     aimDirection: { x: 0, y: -1 },
     origin: { x: 0, y: 0 },
@@ -317,9 +324,19 @@ test('Magic Missile grows its accumulator only while a target handle resolves', 
   assert.equal(capped.turnAccumulator, 10)
 })
 
-test('native point contact uses trunc0 cells, strict radii, and projected slot order', () => {
-  const fartherFirst = { ...enemy('enemy:1', 18, 0), bodyRadius: 2, registrationOrder: 1 }
-  const nearerSecond = { ...enemy('enemy:2', 5, 0), bodyRadius: 20, registrationOrder: 2 }
+test('native point contact uses trunc0 cells, strict radii, and destination cell-slot order', () => {
+  const fartherFirst = {
+    ...enemy('enemy:1', 18, 0),
+    bodyRadius: 2,
+    cellBindingOrder: 1,
+    registrationOrder: 9,
+  }
+  const nearerSecond = {
+    ...enemy('enemy:2', 5, 0),
+    bodyRadius: 20,
+    cellBindingOrder: 2,
+    registrationOrder: 1,
+  }
   assert.equal(firstNativePrimaryPointContact({
     actorMask: 0x2,
     position: { x: 0, y: 0 },
@@ -347,6 +364,77 @@ test('native point contact uses trunc0 cells, strict radii, and projected slot o
     queryRadius: 20,
     targets: [{ ...nearerSecond, position: { x: 0.25, y: 0 } }],
   })?.id, nearerSecond.id, 'native cell conversion truncates float32 toward zero')
+})
+
+test('Fireball gives a forward hostile precedence over an earlier scenery cell slot', () => {
+  assert.equal(NATIVE_FIREBALL_HOSTILE_CORRIDOR_HALF_WIDTH, 20)
+  assert.equal(NATIVE_FIREBALL_SCENERY_EXCEPTION_DISTANCE_SQUARED, 2)
+  const scenery = {
+    ...grave('scenery:tree', 10, 0),
+    bodyRadius: 20,
+    cellBindingOrder: 1,
+    kind: 'scenery' as const,
+    nativePriority: 1000,
+    registrationOrder: 1,
+  }
+  const hostile = {
+    ...enemy('enemy:hostile', 60, 0),
+    cellBindingOrder: 2,
+    registrationOrder: 2,
+  }
+  const base = {
+    actorMask: 0x6,
+    direction: { x: 1, y: 0 },
+    hostileCorridorLength: 1_600,
+    position: { x: 0, y: 0 },
+    queryRadius: 20,
+    targets: [hostile, scenery],
+  }
+
+  assert.equal(firstNativePrimaryPointContact(base)?.id, scenery.id)
+  assert.equal(firstNativeFireballPointContact(base), null)
+  assert.equal(firstNativeFireballPointContact({
+    ...base,
+    targets: [{ ...hostile, position: { x: 60, y: 19.999 } }, scenery],
+  }), null)
+  assert.equal(firstNativeFireballPointContact({
+    ...base,
+    targets: [{ ...hostile, position: { x: 60, y: 20 } }, scenery],
+  })?.id, scenery.id, 'the ray-cast polygon excludes its upper edge')
+  assert.equal(firstNativeFireballPointContact({
+    ...base,
+    hostileCorridorLength: 50,
+  })?.id, scenery.id)
+  assert.equal(firstNativeFireballPointContact({
+    ...base,
+    targets: [{ ...hostile, position: { x: -1, y: 0 } }, scenery],
+  })?.id, scenery.id)
+})
+
+test('Fireball strict squared-distance-two exception survives hostile corridor suppression', () => {
+  const hostile = enemy('enemy:hostile', 60, 0)
+  const scenery = {
+    ...grave('scenery:tree', 1, 1),
+    actorFlags: 0x4,
+    bodyRadius: 20,
+    cellBindingOrder: 1,
+    kind: 'scenery' as const,
+    registrationOrder: 1,
+  }
+  const query = {
+    actorMask: 0x6,
+    direction: { x: 1, y: 0 },
+    hostileCorridorLength: 1_600,
+    position: { x: 0, y: 0 },
+    queryRadius: 20,
+    targets: [{ ...hostile, cellBindingOrder: 2 }, scenery],
+  }
+
+  assert.equal(firstNativeFireballPointContact({
+    ...query,
+    targets: [query.targets[0]!, { ...scenery, position: { x: 1.4, y: 0 } }],
+  })?.id, scenery.id)
+  assert.equal(firstNativeFireballPointContact(query), null, 'distance-squared equality suppresses')
 })
 
 test('Air and Water queries skip inactive, pending, and actor-flag-ineligible Coffins', () => {
@@ -381,6 +469,7 @@ test('Air and Water queries skip inactive, pending, and actor-flag-ineligible Co
 test('Water cone uses root-only strict reach, LOS, aperture, and column-first cell order', () => {
   const atAngle = (id: string, distance: number, degrees: number, order: number) => ({
     ...enemy(id, Math.sin(degrees * Math.PI / 180) * distance, -Math.cos(degrees * Math.PI / 180) * distance),
+    cellBindingOrder: order,
     registrationOrder: order,
   })
   const laterNear = atAngle('enemy:2', 20, 0, 8)
@@ -401,11 +490,13 @@ test('Water cone uses root-only strict reach, LOS, aperture, and column-first ce
 
   const leftColumn = {
     ...enemy('enemy:left-column', 199, 150),
-    registrationOrder: 99,
+    cellBindingOrder: 99,
+    registrationOrder: 1,
   }
   const rightColumn = {
     ...enemy('enemy:right-column', 201, 150),
-    registrationOrder: 1,
+    cellBindingOrder: 1,
+    registrationOrder: 99,
   }
   assert.deepEqual(nativePrimaryConeTargets({
     actorMask: 0x1082,
@@ -422,11 +513,24 @@ test('Earth root gather ignores body radius, rejects equality, and keeps column-
   const outsideBodyOverlap = {
     ...enemy('enemy:3', 76, 0),
     bodyRadius: 100,
+    cellBindingOrder: 1,
     registrationOrder: 1,
   }
-  const exactRoot = { ...enemy('enemy:2', 75, 0), registrationOrder: 2 }
-  const laterNear = { ...enemy('enemy:1', 4, 0), registrationOrder: 8 }
-  const firstFar = { ...enemy('enemy:4', 74.999, 0), registrationOrder: 3 }
+  const exactRoot = {
+    ...enemy('enemy:2', 75, 0),
+    cellBindingOrder: 2,
+    registrationOrder: 2,
+  }
+  const laterNear = {
+    ...enemy('enemy:1', 4, 0),
+    cellBindingOrder: 8,
+    registrationOrder: 8,
+  }
+  const firstFar = {
+    ...enemy('enemy:4', 74.999, 0),
+    cellBindingOrder: 3,
+    registrationOrder: 3,
+  }
   assert.deepEqual(nativePrimaryRootTargets(
     { x: 0, y: 0 },
     75,
@@ -437,11 +541,13 @@ test('Earth root gather ignores body radius, rejects equality, and keeps column-
 
   const firstColumn = {
     ...enemy('enemy:first-column', 99, 150),
-    registrationOrder: 99,
+    cellBindingOrder: 99,
+    registrationOrder: 1,
   }
   const nextColumn = {
     ...enemy('enemy:next-column', 101, 150),
-    registrationOrder: 1,
+    cellBindingOrder: 1,
+    registrationOrder: 99,
   }
   assert.deepEqual(nativePrimaryRootTargets(
     { x: 100, y: 150 },

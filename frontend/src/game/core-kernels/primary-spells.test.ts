@@ -25,6 +25,8 @@ import {
 } from './native-rng.ts'
 import {
   createPrimarySpellSimulation,
+  nativePrimaryBirthTerrainExclusionMask,
+  nativePrimaryFlightTerrainExclusionMask,
   PRIMARY_CAST_EMISSION_TICK,
   PRIMARY_CAST_ETHER_ACTION_END_TICK,
   PRIMARY_CAST_ETHER_EMISSION_TICK,
@@ -46,6 +48,7 @@ import {
   stepPrimarySpells,
   type PrimarySpellChannelEmission,
   type PrimarySpellSimulationState,
+  type PrimarySpellTickContext,
 } from './primary-spells.ts'
 import { earthImpactLifetimeTicks } from './primary-spell-earth.ts'
 import {
@@ -118,6 +121,7 @@ function hostileTarget(
     actorFlags: 0x2,
     attachment: { x: 0, y: 0 },
     bodyRadius: 20,
+    cellBindingOrder: 1,
     id,
     kind: 'enemy',
     nativePriority: 0,
@@ -255,6 +259,7 @@ function stepSpellKernel(
   eligible = true,
   canPlaceProjectile: () => boolean = () => true,
   primarySkill: NativePrimarySkillProfile = state.primarySkill,
+  canTraverseProjectile: PrimarySpellTickContext['canTraverseProjectile'] = canPlaceProjectile,
 ): {
   channelEmissions: readonly PrimarySpellChannelEmission[]
   manaSpent: number
@@ -264,7 +269,7 @@ function stepSpellKernel(
   const result = stepPrimarySpells({
     ...EMPTY_SPELL_WORLD,
     canPlaceProjectile,
-    canTraverseProjectile: canPlaceProjectile,
+    canTraverseProjectile,
     castAuthority: {
       [PLAYER_ID]: {
         alive: true,
@@ -350,6 +355,71 @@ test('one-shot primaries debit at emission across every low-mana boundary', () =
         expected.underpowered ? 1 : 0,
       )
     }
+  }
+})
+
+test('one-shot projectile births and first flight checks use every native exclusion mask', () => {
+  const cases = [
+    {
+      element: 'ether' as const,
+      expected: [0x380, 0x700],
+      profile: primarySkillRankStats('ether', 1),
+    },
+    {
+      element: 'fire' as const,
+      expected: [0x700, 0x700],
+      profile: primarySkillRankStats('fire', 1),
+    },
+    {
+      element: 'ether' as const,
+      expected: [0x380, 0x700, 0x380, 0x700],
+      profile: weldedProfile(1000, 'one-shot', [4, 10, 12, 2, 1.25, 3, 8, 2, 3]),
+    },
+    {
+      element: 'ether' as const,
+      expected: [0x380, 0x700, 0x380, 0x700],
+      profile: weldedProfile(1001, 'one-shot', [4, 10, 12, 2, 1.1, 0.5, 0.1]),
+    },
+    {
+      element: 'ether' as const,
+      expected: [0x380, 0x700, 0x380, 0x700],
+      profile: weldedProfile(1002, 'one-shot', [4, 10, 12, 2, 1.1, 1, 0.5]),
+    },
+    {
+      element: 'ether' as const,
+      expected: [0, 0, 0],
+      profile: weldedProfile(1009, 'one-shot', [4, 12, 1, 0.5, 1, 1]),
+    },
+  ]
+  for (const { element, expected, profile } of cases) {
+    let harness = { ...directSpellHarness(element), primarySkill: profile }
+    const masks: number[] = []
+    const traverse: PrimarySpellTickContext['canTraverseProjectile'] = (
+      _spell,
+      _from,
+      _to,
+      _radius,
+      nativeExclusionMask = 0,
+    ) => {
+      masks.push(nativeExclusionMask)
+      return true
+    }
+    let result = stepSpellKernel(harness, true, 1_000, true, () => true, profile, traverse)
+    harness = result.state
+    const emissionTick = profile.kind === 'weld'
+      ? PRIMARY_CAST_EMISSION_TICK
+      : primaryCastEmissionTick(element)
+    for (let tick = 0; tick < emissionTick; tick += 1) {
+      result = stepSpellKernel(harness, true, 1_000, true, () => true, profile, traverse)
+      harness = result.state
+    }
+    assert.deepEqual(masks, expected, `native terrain masks for ${profile.skillId}`)
+    const projectile = harness.spells.projectiles[0]!
+    assert.equal(nativePrimaryBirthTerrainExclusionMask(projectile), expected[0])
+    assert.equal(
+      nativePrimaryFlightTerrainExclusionMask(projectile),
+      expected.at(-1),
+    )
   }
 })
 
@@ -1081,6 +1151,7 @@ test('Ether snapshots the forward-probe target and steers after its first moveme
     actorFlags: 0x2,
     attachment: { x: 0, y: 0 },
     bodyRadius: 20,
+    cellBindingOrder: 41,
     id: 'enemy:41',
     kind: 'enemy',
     nativePriority: 0,
@@ -1650,6 +1721,7 @@ test('one-shot casts retain accepted facing against movement through projectile 
       aim: eastAim,
       cast: { primary, quickbar: null },
       movement: { x: -1, y: 0 },
+      viewportWidth: 1_600,
     })
 
     state = stepGameSimulationTick(state, { [PLAYER_ID]: castInput(true) })

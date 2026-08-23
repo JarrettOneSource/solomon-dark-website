@@ -20,6 +20,7 @@ export interface PlayerCharacterInput {
     quickbar: number | null
   }
   movement: Vector2
+  viewportWidth: number
 }
 
 export interface PlayerPrimaryCastState {
@@ -76,12 +77,16 @@ export const PLAYER_CHARACTER_MOVEMENT_LANE_CAP = 118.75
 export const PLAYER_CHARACTER_MOVEMENT_RETENTION = 0.9
 export const PLAYER_CHARACTER_MOVEMENT_THRESHOLD_SQUARED = Math.fround(0.01)
 export const PLAYER_CHARACTER_FOOTSTEP_TICK_INTERVAL = 25
+export const NATIVE_GAMEPLAY_VIEWPORT_WIDTH = 1_600
 
-export function createIdlePlayerCharacterInput(): PlayerCharacterInput {
+export function createIdlePlayerCharacterInput(
+  viewportWidth = NATIVE_GAMEPLAY_VIEWPORT_WIDTH,
+): PlayerCharacterInput {
   return {
     aim: null,
     cast: { primary: false, quickbar: null },
     movement: { x: 0, y: 0 },
+    viewportWidth,
   }
 }
 

@@ -75,6 +75,8 @@ import {
 import {
   AIR_PRIMARY_TARGET_Y_OFFSET,
   ETHER_PRIMARY_INITIAL_TURN,
+  NATIVE_MAGIC_MISSILE_BIRTH_TERRAIN_EXCLUSION_MASK,
+  NATIVE_PRIMARY_FLIGHT_TERRAIN_EXCLUSION_MASK,
   airPrimaryBoltGeometry,
   advanceEtherPrimaryTracking,
   directionFromHeading,
@@ -99,6 +101,7 @@ import {
   createNativeWeldPersistentActor,
   drawNativeWeldDamage,
   isChannelBuild,
+  isMagicMissileDerivedWeldBuild,
   isPersistentBuild,
   releaseNativeWeldPersistentActor,
   spawnNativeWeldOneShot,
@@ -540,6 +543,7 @@ export interface PrimarySpellTickContext {
     from: Vector2,
     to: Vector2,
     radius?: number,
+    nativeExclusionMask?: number,
   ) => boolean
   castAuthority: Readonly<Record<string, PrimarySpellCastAuthority>>
   inputs: Readonly<Record<string, PlayerCharacterInput>>
@@ -592,6 +596,29 @@ export const PRIMARY_SPELL_EARTH_INITIAL_CHARGE = Math.fround(0.18)
 export const PRIMARY_SPELL_EARTH_CHARGE_STEP = Math.fround(0.00125)
 export const PRIMARY_SPELL_EARTH_MIN_RELEASE_CHARGE = Math.fround(0.3)
 export const PRIMARY_SPELL_EARTH_COLLISION_RADIUS_SCALE = 75
+
+export function nativePrimaryBirthTerrainExclusionMask(
+  spell: PrimarySpellProjectileState,
+): number {
+  if (spell.kind === 'fire') return NATIVE_PRIMARY_FLIGHT_TERRAIN_EXCLUSION_MASK
+  if (spell.kind === 'ether') return NATIVE_MAGIC_MISSILE_BIRTH_TERRAIN_EXCLUSION_MASK
+  if (spell.kind === 'weld' && isMagicMissileDerivedWeldBuild(spell.buildId)) {
+    return NATIVE_MAGIC_MISSILE_BIRTH_TERRAIN_EXCLUSION_MASK
+  }
+  return 0
+}
+
+export function nativePrimaryFlightTerrainExclusionMask(
+  spell: PrimarySpellProjectileState | NativeWeldEtherealBoulderState,
+): number {
+  if (spell.kind === 'fire' || spell.kind === 'ether') {
+    return NATIVE_PRIMARY_FLIGHT_TERRAIN_EXCLUSION_MASK
+  }
+  if (spell.kind === 'weld' && isMagicMissileDerivedWeldBuild(spell.buildId)) {
+    return NATIVE_PRIMARY_FLIGHT_TERRAIN_EXCLUSION_MASK
+  }
+  return 0
+}
 export const PRIMARY_SPELL_EARTH_CALLED_ROCK_INITIAL_SPEED = Math.fround(0.1)
 export const PRIMARY_SPELL_EARTH_CALLED_ROCK_SPEED_MULTIPLIER = 1.100000023841858
 export const PRIMARY_SPELL_EARTH_CALLED_ROCK_SPEED_CAP = 5
@@ -1120,6 +1147,8 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           x: spell.position.x + spell.velocity.x * 5,
           y: spell.position.y + spell.velocity.y * 5,
         },
+        0,
+        nativePrimaryFlightTerrainExclusionMask(spell),
       )
     ) {
       if (spell.kind === 'fire') {
@@ -1513,10 +1542,14 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
       nextId += birth.projectiles.length
       for (const born of birth.projectiles) {
         if (born.kind === 'fire') {
+          const birthMask = nativePrimaryBirthTerrainExclusionMask(born)
+          const flightMask = nativePrimaryFlightTerrainExclusionMask(born)
           const initialClear = context.canTraverseProjectile(
             born,
             nextPlayer.position,
             born.position,
+            0,
+            birthMask,
           )
           const firstLookaheadClear = initialClear && context.canTraverseProjectile(
             born,
@@ -1525,6 +1558,8 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
               x: born.position.x + born.velocity.x * 5,
               y: born.position.y + born.velocity.y * 5,
             },
+            0,
+            flightMask,
           )
           if (initialClear && firstLookaheadClear) {
             const spell = advanceProjectileWithPresentation(born, [])
@@ -1545,13 +1580,22 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             nextId = detonation.nextId
           }
         } else if (born.kind === 'ether') {
-          const firstLookaheadClear = context.canTraverseProjectile(
+          const initialClear = context.canTraverseProjectile(
+            born,
+            nextPlayer.position,
+            born.position,
+            0,
+            nativePrimaryBirthTerrainExclusionMask(born),
+          )
+          const firstLookaheadClear = initialClear && context.canTraverseProjectile(
             born,
             born.position,
             {
               x: born.position.x + born.velocity.x * 5,
               y: born.position.y + born.velocity.y * 5,
             },
+            0,
+            nativePrimaryFlightTerrainExclusionMask(born),
           )
           if (firstLookaheadClear) {
             const spell = advanceProjectileWithPresentation(
@@ -1570,13 +1614,23 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             nextId += 1
           }
         } else {
-          const firstLookaheadClear = context.canTraverseProjectile(
+          const initialClear = !isMagicMissileDerivedWeldBuild(born.buildId)
+            || context.canTraverseProjectile(
+              born,
+              nextPlayer.position,
+              born.position,
+              0,
+              nativePrimaryBirthTerrainExclusionMask(born),
+            )
+          const firstLookaheadClear = initialClear && context.canTraverseProjectile(
             born,
             born.position,
             {
               x: born.position.x + born.velocity.x * 5,
               y: born.position.y + born.velocity.y * 5,
             },
+            0,
+            nativePrimaryFlightTerrainExclusionMask(born),
           )
           if (firstLookaheadClear) {
             const spell = advanceProjectileWithPresentation(

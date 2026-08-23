@@ -62,6 +62,7 @@ const fireGravestoneAcceptance = process.env.SDR_PRIMARY_FIRE_GRAVESTONE === '1'
 const earthContactAcceptance = process.env.SDR_PRIMARY_EARTH_CONTACT === '1'
 const etherFanAcceptance = process.env.SDR_PRIMARY_ETHER_FAN === '1'
 const heldPoseAcceptance = process.env.SDR_PRIMARY_HELD_POSE === '1'
+const combatAdmissionAcceptance = process.env.SDR_PRIMARY_SPELL_COMBAT_ADMISSION === '1'
 const selectedSpells = requestedSpellKind
   ? SPELLS.filter((spell) => spell.kind === requestedSpellKind)
   : SPELLS
@@ -93,6 +94,12 @@ if (heldPoseAcceptance && (
 }
 if (boneyardOnlyAcceptance && selectedSpells.length !== 1) {
   throw new Error('Boneyard-only acceptance requires one SDR_PRIMARY_SPELL_KIND')
+}
+if (combatAdmissionAcceptance && (
+  selectedSpells.length !== 1
+  || (selectedSpells[0].kind !== 'ether' && selectedSpells[0].kind !== 'air')
+)) {
+  throw new Error('Combat-admission acceptance requires Ether or Air')
 }
 
 const browser = await chromium.launch({
@@ -228,7 +235,8 @@ try {
         mode: 'boneyard-only',
       })
       if (spell.kind === 'ether') etherPage = page
-      else throw new Error('Boneyard-only acceptance is implemented for Ether')
+      else if (spell.kind === 'air') airPage = page
+      else throw new Error('Boneyard-only acceptance is implemented for Ether and Air')
       continue
     }
     const eventStart = await audioEventCount(page)
@@ -715,7 +723,11 @@ async function enterBoneyard(page) {
 
 async function castAirInBoneyard(page) {
   const canvas = await enterBoneyard(page)
-  const gate = await crossEntryGate(page, page.locator('.boneyard-scene'))
+  const scene = page.locator('.boneyard-scene')
+  const gate = await crossEntryGate(page, scene)
+  const combatAdmission = combatAdmissionAcceptance
+    ? await enableSolomonCombat(page, scene)
+    : null
   const bounds = await canvas.boundingBox()
   assert.ok(bounds, 'expected the Boneyard canvas to have bounds')
   const frame = await boneyardFrame(page)
@@ -809,6 +821,7 @@ async function castAirInBoneyard(page) {
     const screenshotPath = `${screenshotRoot}/solomon-primary-air-boneyard-target.png`
     await page.screenshot({ path: screenshotPath })
     receipt = {
+      combatAdmission,
       gate,
       held,
       idleEnvironmentLight,
@@ -1019,10 +1032,10 @@ async function castEtherInBoneyard(page) {
 
 async function castUntargetedEtherInBoneyard(page, canvas) {
   const scene = page.locator('.boneyard-scene')
-  const gate = heldPoseAcceptance
+  const gate = heldPoseAcceptance || combatAdmissionAcceptance
     ? await crossEntryGate(page, scene)
     : null
-  const combatAdmission = heldPoseAcceptance
+  const combatAdmission = heldPoseAcceptance || combatAdmissionAcceptance
     ? await enableSolomonCombat(page, scene)
     : null
   const eventStart = await audioEventCount(page)
@@ -2254,6 +2267,15 @@ function watchErrors(page, errors, label) {
   page.on('console', (message) => {
     if (message.type() === 'error') {
       errors.push({ label, message: message.text(), type: 'console' })
+    }
+  })
+  page.on('response', (response) => {
+    if (response.status() >= 400) {
+      errors.push({
+        label,
+        message: `${response.status()} ${response.url()}`,
+        type: 'http',
+      })
     }
   })
 }

@@ -89,6 +89,7 @@ function gameplayInput(x: number, y: number) {
     aim: null,
     cast: { primary: false, quickbar: null },
     movement: { x, y },
+    viewportWidth: 1_600,
   }
 }
 
@@ -278,6 +279,7 @@ test('same-tick player primary actors register before projectiles spawned by lat
       aim: { x: player.position.x, y: 0 },
       cast: { primary: true, quickbar: null },
       movement: { x: 0, y: 0 },
+      viewportWidth: 1_600,
     },
   })
   if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
@@ -343,6 +345,7 @@ test('same-tick wave actors register before player primary actors', () => {
       aim: { x: player.position.x + 1_000, y: player.position.y },
       cast: { primary: true, quickbar: null },
       movement: { x: 0, y: 0 },
+      viewportWidth: 1_600,
     },
   })
   if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
@@ -410,6 +413,7 @@ test('Hub combat seal preserves movement and primary selection while rejecting e
     aim: { x: 400, y: 300 },
     cast: { primary: true, quickbar: 0 },
     movement: { x: 1, y: -1 },
+    viewportWidth: 1_600,
   }
   const weldIds = NATIVE_WELD_BUILDS.map(({ id }) => id)
   assert.deepEqual(weldIds, [1000, 1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009])
@@ -420,6 +424,7 @@ test('Hub combat seal preserves movement and primary selection while rejecting e
         aim: null,
         cast: { primary: false, quickbar: 0 },
         movement: { x: 1, y: -1 },
+        viewportWidth: 1_600,
       },
       `primary ${skillId} crossed the Hub combat seal`,
     )
@@ -438,6 +443,7 @@ test('Hub combat seal preserves movement and primary selection while rejecting e
         aim: null,
         cast: { primary: false, quickbar: null },
         movement: { x: 1, y: -1 },
+        viewportWidth: 1_600,
       },
       `secondary ${skillId} crossed the Hub combat seal`,
     )
@@ -454,6 +460,7 @@ test('Hub combat seal preserves movement and primary selection while rejecting e
     aim: { x: before.position.x, y: before.position.y - 200 },
     cast: { primary: true, quickbar: null },
     movement: { x: 1, y: 0 },
+    viewportWidth: 1_600,
   } })
   const after = getPlayerCharacter(state, 'caster')
   assert.ok(after.position.x > before.position.x)
@@ -502,6 +509,7 @@ test('the retail Solomon run edge admits primary and secondary combat on its own
       aim: { x: player.position.x, y: player.position.y - 100 },
       cast: { primary: true, quickbar: null },
       movement: { x: 1, y: 0 },
+      viewportWidth: 1_600,
     },
   }
   assert.equal(prelude.world.encounter.runEventId, 0)
@@ -519,6 +527,7 @@ test('the retail Solomon run edge admits primary and secondary combat on its own
       aim: { x: player.position.x, y: player.position.y - 100 },
       cast: { primary: false, quickbar: 0 },
       movement: { x: 0, y: 0 },
+      viewportWidth: 1_600,
     },
   })
   assert.equal(blockedSecondary.secondaryAbilities.players.caster?.castSequence, 0)
@@ -547,6 +556,7 @@ test('the retail Solomon run edge admits primary and secondary combat on its own
       aim: { x: player.position.x, y: player.position.y - 100 },
       cast: { primary: false, quickbar: 0 },
       movement: { x: 0, y: 0 },
+      viewportWidth: 1_600,
     },
   })
   assert.equal(admittedSecondary.world.kind, 'boneyard')
@@ -1138,6 +1148,7 @@ test('disconnect and world replacement clean spell actors and cast ownership', (
     },
     cast: { primary, quickbar: null },
     movement: { x: 0, y: 0 },
+    viewportWidth: 1_600,
   })
   state = stepGameSimulationTick(state, { caster: cast(true) })
   assert.equal(state.primarySpells.projectiles.length, 1)
@@ -1172,6 +1183,7 @@ test('authoritative player ticks reset and decay StaffConstant lighting before p
       aim: { x: player.position.x, y: player.position.y - 200 },
       cast: { primary, quickbar: null },
       movement: { x: 0, y: 0 },
+      viewportWidth: 1_600,
     }
   }
   state = stepGameSimulationTick(state, { caster: cast(true) })
@@ -1209,6 +1221,7 @@ test('Boneyard Air falls back to a Gravestone and publishes the native curved se
     aim: { x: 250, y: 50 },
     cast: { primary: true, quickbar: null },
     movement: { x: 0, y: 0 },
+    viewportWidth: 1_600,
   } })
 
   const bolt = state.primarySpells.transients[0]
@@ -1265,6 +1278,7 @@ test('sealed generated Arena clips player spell range at the retired entrance bo
     aim: { x: 250, y: 0 },
     cast: { primary: true, quickbar: null },
     movement: { x: 0, y: 0 },
+    viewportWidth: 1_600,
   } })
 
   const bolt = state.primarySpells.transients[0]
@@ -1290,6 +1304,7 @@ test('booked primary ranks feed new casts while existing projectile payloads sta
       aim: { x: player.position.x, y: player.position.y - 200 },
       cast: { primary, quickbar: null },
       movement: { x: 0, y: 0 },
+      viewportWidth: 1_600,
     }
   }
 
@@ -1337,6 +1352,7 @@ test('Battle and Siege factors reach the authoritative primary payment and birth
       aim: { x: player.position.x, y: player.position.y - 200 },
       cast: { primary: true, quickbar: null },
       movement: { x: 0, y: 0 },
+      viewportWidth: 1_600,
     }
   }
   for (let tick = 0; tick <= PRIMARY_CAST_EMISSION_TICK; tick += 1) {
@@ -1400,6 +1416,7 @@ test('Boneyard simulation debits mana, applies spell contact, and begins enemy d
     aim: { x: 250, y: 0 },
     cast: { primary, quickbar: null },
     movement: { x: 0, y: 0 },
+    viewportWidth: 1_600,
   })
   const initialMana = getPlayerProgression(state, 'caster').currentMana
   const initialExperience = getPlayerProgression(state, 'caster').experience
@@ -2324,6 +2341,7 @@ test('a primary quickbar edge selects the learned primary before cast authority 
       aim: null,
       cast: { primary: false, quickbar: 7 },
       movement: { x: 0, y: 0 },
+      viewportWidth: 1_600,
     },
   })
   assert.equal(getPlayerSkillBook(state).primarySkillId, 16)

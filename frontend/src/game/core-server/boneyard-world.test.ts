@@ -36,6 +36,7 @@ function movementInput(x: number, y: number) {
     aim: null,
     cast: { primary: false, quickbar: null },
     movement: { x, y },
+    viewportWidth: 1_600,
   }
 }
 
@@ -722,13 +723,14 @@ test('default Boneyard walks through Solomon dialogue, retreat, then authoritati
     actorFlags: 0x2,
     attachment: { x: 0, y: 0 },
     bodyRadius: firstEnemy.config.collisionRadius,
+    cellBindingOrder: firstEnemy.nativeCellBindingOrder,
     headingDeg: firstEnemy.headingDeg,
     id: `enemy:${firstEnemy.id}`,
     kind: 'enemy',
     nativePriority: 0,
     pendingRemove: false,
     position: firstEnemy.position,
-    registrationOrder: world.scenerySpellTargets.length,
+    registrationOrder: firstEnemy.nativeRegistrationOrder,
   })
   const enemyId = world.enemies.actors[0].id
   const damaged = damageBoneyardEnemy(world.enemies, {
@@ -1010,7 +1012,7 @@ test('mod Boneyards retain opaque script ownership instead of receiving retail w
   assert.equal(world.waves, null)
 })
 
-test('retains Gravestones as stable lower-priority Lightning targets', () => {
+test('retains Gravestones in the grave-specific scenery lane', () => {
   const loaded = gatedBoneyard()
   loaded.scene.objects = [
     { eid: 'grave-7', typeId: 2029, pos: { x: 300, y: 320 }, variant: 2 },
@@ -1021,6 +1023,7 @@ test('retains Gravestones as stable lower-priority Lightning targets', () => {
     actorFlags: 0x4,
     attachment: { x: 0, y: 0 },
     bodyRadius: 0,
+    cellBindingOrder: 0,
     id: 'scenery:grave-7',
     kind: 'gravestone',
     nativePriority: 1000,
@@ -1030,7 +1033,7 @@ test('retains Gravestones as stable lower-priority Lightning targets', () => {
   }])
 })
 
-test('retains the complete native flag-four Fireball scenery roots and radii', () => {
+test('retains the complete native flag-four primary scenery roots, priorities, and radii', () => {
   const loaded = gatedBoneyard()
   loaded.scene.objects = [
     { eid: 'tree', typeId: 2001, pos: { x: 80, y: 90 }, variant: 1 },
@@ -1041,13 +1044,39 @@ test('retains the complete native flag-four Fireball scenery roots and radii', (
     { eid: 'scrub', typeId: 2062, pos: { x: 180, y: 190 }, variant: 0 },
   ]
 
-  assert.deepEqual(createBoneyardWorld(loaded).fireballSceneryTargets, [
-    fireballSceneryTarget('tree', 0, 8, { x: 80, y: 90 }),
-    fireballSceneryTarget('monument', 1, 1, { x: 100, y: 110 }),
-    fireballSceneryTarget('grave', 2, 0.01, { x: 120, y: 130 }),
-    fireballSceneryTarget('building', 3, 1, { x: 140, y: 150 }),
-    fireballSceneryTarget('goodie', 4, 20, { x: 160, y: 170 }),
+  assert.deepEqual(createBoneyardWorld(loaded).primarySceneryTargets, [
+    primarySceneryTarget('tree', 2001, 0, 8, { x: 80, y: 90 }),
+    primarySceneryTarget('monument', 2009, 1, 1, { x: 100, y: 110 }),
+    primarySceneryTarget('grave', 2029, 2, 0.01, { x: 120, y: 130 }),
+    primarySceneryTarget('building', 2040, 3, 1, { x: 140, y: 150 }),
+    primarySceneryTarget('goodie', 2061, 4, 20, { x: 160, y: 170 }),
   ])
+})
+
+test('retains Goodie actor membership after its contents materialize', () => {
+  const loaded = gatedBoneyard()
+  loaded.scene.objects = [
+    { eid: 'goodie', typeId: 2061, pos: { x: 160, y: 170 }, variant: 0 },
+  ]
+  const world = createBoneyardWorld(loaded)
+  const exhaustedWorld = {
+    ...world,
+    loot: {
+      ...world.loot,
+      goodies: world.loot.goodies.map((goodie) => ({
+        ...goodie,
+        active: false,
+        exhausted: true,
+        phase: 2 as const,
+        timer: 250,
+      })),
+    },
+  }
+
+  assert.deepEqual(
+    boneyardPrimarySpellTargets(exhaustedWorld),
+    [primarySceneryTarget('goodie', 2061, 0, 20, { x: 160, y: 170 })],
+  )
 })
 
 test('retains every native group-four scene-object family for Earthquake wobble ownership', () => {
@@ -1128,8 +1157,9 @@ function gatedBoneyard(): LoadedBoneyard {
   }
 }
 
-function fireballSceneryTarget(
+function primarySceneryTarget(
   eid: string,
+  typeId: number,
   registrationOrder: number,
   bodyRadius: number,
   position: Readonly<{ x: number; y: number }>,
@@ -1139,9 +1169,10 @@ function fireballSceneryTarget(
     actorFlags: 0x4,
     attachment: { x: 0, y: 0 },
     bodyRadius,
+    cellBindingOrder: registrationOrder,
     id: `scenery:${eid}`,
-    kind: 'scenery',
-    nativePriority: 0,
+    kind: typeId === 2029 ? 'gravestone' : 'scenery',
+    nativePriority: 1000,
     pendingRemove: false,
     position: { ...position },
     registrationOrder,

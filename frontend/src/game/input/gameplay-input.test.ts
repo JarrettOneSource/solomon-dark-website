@@ -47,6 +47,7 @@ function expectedInput(
     aim,
     cast: { primary, quickbar },
     movement: { x: 0, y: 0 },
+    viewportWidth: 1_600,
   }
 }
 
@@ -137,6 +138,7 @@ test('a noncombat scene suppresses primary mouse and touch without blocking move
     aim: { x: 0, y: -100 },
     cast: { primary: false, quickbar: 3 },
     movement: { x: 1, y: 0 },
+    viewportWidth: 1_600,
   })
   input.destroy()
 })
@@ -209,6 +211,7 @@ test('reprojects held aim while sampling and synchronously clears every lane on 
       aim: { x: 201, y: 0 },
       cast: { primary: true, quickbar: 0 },
       movement: { x: 1, y: 0 },
+      viewportWidth: 1_600,
     },
   })
 
@@ -285,6 +288,7 @@ test('blocking owns input immediately and drops barrier-time state', () => {
     aim: { x: 60, y: 70 },
     cast: { primary: false, quickbar: 0 },
     movement: { x: 0, y: 1 },
+    viewportWidth: 1_600,
   })
   input.destroy()
 })
@@ -310,6 +314,7 @@ test('touch primary reprojects held direction, retains released aim, and coexist
     aim: { x: 110, y: 200 },
     cast: { primary: true, quickbar: null },
     movement: { x: -1, y: 0 },
+    viewportWidth: 1_600,
   })
   assert.equal(input.sample().device, 'touch')
 
@@ -318,6 +323,7 @@ test('touch primary reprojects held direction, retains released aim, and coexist
     aim: { x: 310, y: 200 },
     cast: { primary: true, quickbar: null },
     movement: { x: -1, y: 0 },
+    viewportWidth: 1_600,
   })
 
   input.setTouchPrimary({ x: 0, y: 0 })
@@ -325,6 +331,7 @@ test('touch primary reprojects held direction, retains released aim, and coexist
     aim: { x: 310, y: 200 },
     cast: { primary: false, quickbar: null },
     movement: { x: -1, y: 0 },
+    viewportWidth: 1_600,
   })
   input.destroy()
 })

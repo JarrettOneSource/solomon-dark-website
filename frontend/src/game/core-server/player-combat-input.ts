@@ -12,8 +12,8 @@ export function sealPlayerCombatInput(
     : null
   if (!input.cast.primary && input.cast.quickbar === safeSlot && input.aim === null) return input
   return {
+    ...input,
     aim: null,
     cast: { primary: false, quickbar: safeSlot },
-    movement: input.movement,
   }
 }

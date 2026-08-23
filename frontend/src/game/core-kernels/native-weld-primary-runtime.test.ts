@@ -693,6 +693,7 @@ function target(id: string, x: number, y: number) {
     actorFlags: 0x2,
     attachment: { x: 0, y: 0 },
     bodyRadius: 10,
+    cellBindingOrder: 0,
     id,
     kind: 'enemy' as const,
     nativePriority: 0,

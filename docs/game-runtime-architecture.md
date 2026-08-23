@@ -1079,13 +1079,16 @@ This preserves one mutation boundary and prevents Lua callbacks from entering
 the simulation recursively. The host checks dynamic session host identity or
 the account-bound developer entitlement on every console request. `Enable
 Cheats` controls ordinary-host installation of the DevTools API; it is never
-trusted as network authorization. Protocol 60 carries the server-authored
+trusted as network authorization. Protocol 61 carries the server-authored
 developer boolean from a one-use admission into the welcome. An entitled
 account keeps the setting and ordinary shared-Hub routing off while still
 receiving the DevTools API. No client-authored field can grant the entitlement.
 Initial and live setting state is nevertheless replicated as a separate
 global-score eligibility input, and accepting a console request revokes that
 eligibility even if a crafted client misreported the setting.
+The same protocol revision adds the validated logical viewport width to
+ordinary input. The host consumes it only as the stock Fireball forward-query
+geometry; collision selection and all consequences remain server-owned.
 Authoritative gameplay pause freezes this fixed-tick Lua lane together with the
 world; new console requests fail immediately while paused instead of waiting on
 a tick that cannot run.

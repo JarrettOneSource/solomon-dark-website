@@ -377,6 +377,7 @@ export default function HubScene({
       mouseTarget: host,
       onInput,
       primaryCastingEnabled: false,
+      viewportWidth: () => viewportRef.current.width,
       projectDirection: (direction) => {
         const snapshot = samplePresentation()
         const player = snapshot.players[playerId]

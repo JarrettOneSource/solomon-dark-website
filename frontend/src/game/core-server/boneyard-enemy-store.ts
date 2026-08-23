@@ -7,6 +7,7 @@ import {
 import { NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM } from '../core-kernels/boneyard-zombie-beat.ts'
 import type { BoneyardPoint } from '../core-kernels/boneyard.ts'
 import type { NativeSecondaryTargetEffectState } from '../core-kernels/native-secondary-abilities.ts'
+import { nativePrimaryCellCoordinate } from '../core-kernels/primary-spell-targeting.ts'
 import type { NativeEnemyWorldFeedbackOutput } from '../core-kernels/native-enemy-world-feedback.ts'
 import {
   buildNativeEnemySteering,
@@ -366,6 +367,8 @@ export interface BoneyardEnemyActor {
   readonly lootSeed: number
   readonly nextMovementTick: number
   readonly nextTargetRefreshTick: number
+  readonly nativeCellBindingOrder: number
+  readonly nativeRegistrationOrder: number
   readonly path: NativeEnemyPathState
   readonly position: Readonly<BoneyardPoint>
   readonly rewardGranted: boolean
@@ -417,6 +420,8 @@ export interface BoneyardEnemyProjectile {
   readonly lifetimeTicks: number
   readonly minimumSpeed: number
   readonly nativeTypeId: 0x7da | 0x7eb | 0x7ec | 0x7f7 | 0x806
+  readonly nativeCellBindingOrder: number
+  readonly nativeRegistrationOrder: number
   readonly ownerActorId: BoneyardEnemyActorId
   readonly payload: BoneyardEnemyProjectilePayload
   readonly poisonDamage: number
@@ -492,6 +497,8 @@ export interface BoneyardMaggotActor {
   readonly nextAttackTick: number
   readonly nextMovementTick: number
   readonly nextTargetRefreshTick: number
+  readonly nativeCellBindingOrder: number
+  readonly nativeRegistrationOrder: number
   readonly ownerCoffinActorId: BoneyardEnemyActorId
   readonly path: NativeEnemyPathState
   readonly poisonDamage: number
@@ -685,6 +692,8 @@ export interface BoneyardEnemyStore {
   readonly nextDeathEffectId: BoneyardEnemyDeathEffectId
   readonly nextEventId: BoneyardEnemyEventId
   readonly nextMageLightningPulseId: BoneyardMageLightningPulseId
+  readonly nextNativeCellBindingOrder: number
+  readonly nextNativeRegistrationOrder: number
   readonly nextProjectileId: BoneyardEnemyProjectileId
   readonly nextProjectileEffectId: BoneyardEnemyProjectileEffectId
   readonly nextSyntheticSpawnIntentId: number
@@ -892,6 +901,8 @@ interface WorkingStep {
   nextDeathEffectId: number
   nextEventId: number
   nextMageLightningPulseId: number
+  nextNativeCellBindingOrder: number
+  nextNativeRegistrationOrder: number
   nextProjectileId: number
   nextProjectileEffectId: number
   nextSyntheticSpawnIntentId: number
@@ -920,7 +931,13 @@ interface DeathEffectOwner {
   readonly position: Readonly<BoneyardPoint>
 }
 
-export function createBoneyardEnemyStore(seed: string): BoneyardEnemyStore {
+export function createBoneyardEnemyStore(
+  seed: string,
+  nativeRegistrationBase = 0,
+): BoneyardEnemyStore {
+  if (!Number.isSafeInteger(nativeRegistrationBase) || nativeRegistrationBase < 0) {
+    throw new RangeError('native enemy registration base must be a non-negative safe integer')
+  }
   return {
     actors: [],
     deathEffects: [],
@@ -938,6 +955,8 @@ export function createBoneyardEnemyStore(seed: string): BoneyardEnemyStore {
     nextDeathEffectId: 1,
     nextEventId: 1,
     nextMageLightningPulseId: 1,
+    nextNativeCellBindingOrder: nativeRegistrationBase,
+    nextNativeRegistrationOrder: nativeRegistrationBase,
     nextProjectileId: 1,
     nextProjectileEffectId: 1,
     nextSyntheticSpawnIntentId: 1,
@@ -1278,8 +1297,22 @@ export function positionBoneyardEnemy(
   if (actor) {
     if (actor.lifeState !== 'alive') return { accepted: false, store: source }
     const actors = [...source.actors]
-    actors[actorIndex] = { ...actor, position: Object.freeze({ ...position }) }
-    return { accepted: true, store: { ...source, actors } }
+    const rebound = nativePrimaryCellChanged(actor.position, position)
+    actors[actorIndex] = {
+      ...actor,
+      nativeCellBindingOrder: rebound
+        ? source.nextNativeCellBindingOrder
+        : actor.nativeCellBindingOrder,
+      position: Object.freeze({ ...position }),
+    }
+    return {
+      accepted: true,
+      store: {
+        ...source,
+        actors,
+        nextNativeCellBindingOrder: source.nextNativeCellBindingOrder + Number(rebound),
+      },
+    }
   }
   const maggotIndex = source.maggots.findIndex((maggot) => maggot.id === actorId)
   const maggot = source.maggots[maggotIndex]
@@ -1287,8 +1320,22 @@ export function positionBoneyardEnemy(
     return { accepted: false, store: source }
   }
   const maggots = [...source.maggots]
-  maggots[maggotIndex] = { ...maggot, position: Object.freeze({ ...position }) }
-  return { accepted: true, store: { ...source, maggots } }
+  const rebound = nativePrimaryCellChanged(maggot.position, position)
+  maggots[maggotIndex] = {
+    ...maggot,
+    nativeCellBindingOrder: rebound
+      ? source.nextNativeCellBindingOrder
+      : maggot.nativeCellBindingOrder,
+    position: Object.freeze({ ...position }),
+  }
+  return {
+    accepted: true,
+    store: {
+      ...source,
+      maggots,
+      nextNativeCellBindingOrder: source.nextNativeCellBindingOrder + Number(rebound),
+    },
+  }
 }
 
 /** Raw Badguy +0x1DA Hurricane contact clock, shared by every source. */
@@ -1587,6 +1634,8 @@ export function stepBoneyardEnemyStore(
     nextDeathEffectId: source.nextDeathEffectId,
     nextEventId: source.nextEventId,
     nextMageLightningPulseId: source.nextMageLightningPulseId,
+    nextNativeCellBindingOrder: source.nextNativeCellBindingOrder,
+    nextNativeRegistrationOrder: source.nextNativeRegistrationOrder,
     nextProjectileId: source.nextProjectileId,
     nextProjectileEffectId: source.nextProjectileEffectId,
     nextSyntheticSpawnIntentId: source.nextSyntheticSpawnIntentId,
@@ -1617,18 +1666,32 @@ export function stepBoneyardEnemyStore(
       ? stepDyingActor(work, timedActor, context)
       : stepLivingActor(work, timedActor, context)
     if (stepped) {
+      const rebound = withNativeCellRebindOrder(work, actor, stepped)
       // Native 0x00625680 rebuilds status scalars from 1.0 every tick. The
       // affected config is a current-tick view, never the next authored row.
-      work.actors.push(stepped.config === timedActor.config
-        ? stepped
-        : { ...stepped, config: timedActor.config })
+      work.actors.push(rebound.config === timedActor.config
+        ? rebound
+        : { ...rebound, config: timedActor.config })
     } else if (timedActor.config.enemyToken === 'IMP') {
       work.impActorCount -= 1
     }
   }
   stepMageShields(work, context)
+  const maggotsBeforeStep = new Map(work.maggots.map((maggot) => [maggot.id, maggot]))
   stepMaggots(work, context, context.tick - source.lastStepTick)
+  work.maggots = work.maggots.map((maggot) => {
+    const before = maggotsBeforeStep.get(maggot.id)
+    return before ? withNativeCellRebindOrder(work, before, maggot) : maggot
+  })
+  const projectilesBeforeStep = new Map(work.projectiles.map((projectile) => [
+    projectile.id,
+    projectile,
+  ]))
   stepProjectiles(work, context)
+  work.projectiles = work.projectiles.map((projectile) => {
+    const before = projectilesBeforeStep.get(projectile.id)
+    return before ? withNativeCellRebindOrder(work, before, projectile) : projectile
+  })
   const spawnIntents = context.resolveSpawnIntents(
     work.actors.length + work.maggots.length,
   )
@@ -1653,6 +1716,8 @@ export function stepBoneyardEnemyStore(
       nextDeathEffectId: work.nextDeathEffectId,
       nextEventId: work.nextEventId,
       nextMageLightningPulseId: work.nextMageLightningPulseId,
+      nextNativeCellBindingOrder: work.nextNativeCellBindingOrder,
+      nextNativeRegistrationOrder: work.nextNativeRegistrationOrder,
       nextProjectileId: work.nextProjectileId,
       nextProjectileEffectId: work.nextProjectileEffectId,
       nextSyntheticSpawnIntentId: work.nextSyntheticSpawnIntentId,
@@ -1754,6 +1819,8 @@ function materializeSpawnIntents(
       nextMovementTick: context.tick + NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS,
       nextTargetRefreshTick: context.tick
         + nativeEnemyTargetRefreshTicks(config.pathfindingMode),
+      nativeCellBindingOrder: work.nextNativeCellBindingOrder,
+      nativeRegistrationOrder: work.nextNativeRegistrationOrder,
       path: path.state,
       position: Object.freeze({ ...position }),
       rewardGranted: false,
@@ -1770,6 +1837,8 @@ function materializeSpawnIntents(
       terminalEmitted: false,
       waveOrdinal: intent.waveOrdinal,
     }
+    work.nextNativeCellBindingOrder += 1
+    work.nextNativeRegistrationOrder += 1
     work.nextActorId += 1
     if (config.enemyToken === 'IMP') work.impActorCount += 1
     work.spawnedActorIds.push(actor.id)
@@ -3197,6 +3266,8 @@ function spawnCoffinMaggots(
         + BOUNDED_MAGGOT_PROGRAM.attackDelayAfterEmergenceTicks,
       nextMovementTick: context.tick + 1,
       nextTargetRefreshTick: context.tick + nativeEnemyTargetRefreshTicks(1),
+      nativeCellBindingOrder: work.nextNativeCellBindingOrder,
+      nativeRegistrationOrder: work.nextNativeRegistrationOrder,
       ownerCoffinActorId: actor.id,
       path: path.state,
       poisonDamage: family.maggotPoisonDamage,
@@ -3210,6 +3281,8 @@ function spawnCoffinMaggots(
       targetPlayerId,
       terminalEmitted: false,
     }))
+    work.nextNativeCellBindingOrder += 1
+    work.nextNativeRegistrationOrder += 1
     work.spawnedActorIds.push(work.nextActorId)
     emitEvent(work, context.tick, 'enemy-spawned', work.nextActorId, {
       targetPlayerId,
@@ -3780,6 +3853,33 @@ function positiveModulo(value: number, period: number): number {
   return ((value % period) + period) % period
 }
 
+interface NativeCellBoundActor {
+  readonly nativeCellBindingOrder: number
+  readonly position: Readonly<BoneyardPoint>
+}
+
+function withNativeCellRebindOrder<T extends NativeCellBoundActor>(
+  work: WorkingStep,
+  before: NativeCellBoundActor,
+  after: T,
+): T {
+  if (!nativePrimaryCellChanged(before.position, after.position)) return after
+  const rebound = {
+    ...after,
+    nativeCellBindingOrder: work.nextNativeCellBindingOrder,
+  }
+  work.nextNativeCellBindingOrder += 1
+  return rebound
+}
+
+function nativePrimaryCellChanged(
+  before: Readonly<BoneyardPoint>,
+  after: Readonly<BoneyardPoint>,
+): boolean {
+  return nativePrimaryCellCoordinate(before.x) !== nativePrimaryCellCoordinate(after.x)
+    || nativePrimaryCellCoordinate(before.y) !== nativePrimaryCellCoordinate(after.y)
+}
+
 function refreshTarget(
   actor: BoneyardEnemyActor,
   context: BoneyardEnemyStoreStepContext,
@@ -4242,6 +4342,8 @@ function spawnProjectile(
     lifetimeTicks: kind === 'demon-bomb' ? settledTicksRemaining : program.lifetimeTicks,
     minimumSpeed,
     nativeTypeId: projectileNativeTypeId(kind),
+    nativeCellBindingOrder: work.nextNativeCellBindingOrder,
+    nativeRegistrationOrder: work.nextNativeRegistrationOrder,
     ownerActorId: actor.id,
     payload,
     poisonDamage: kind === 'poison-pool' ? damage : (options.poisonDamage ?? 0),
@@ -4262,6 +4364,8 @@ function spawnProjectile(
     visualPhaseDeg: 0,
     visualScale,
   })
+  work.nextNativeCellBindingOrder += 1
+  work.nextNativeRegistrationOrder += 1
   work.nextProjectileId += 1
   work.projectiles.push(projectile)
   emitEvent(work, tick, 'projectile-spawned', actor.id, {

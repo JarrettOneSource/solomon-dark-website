@@ -535,6 +535,7 @@ function scriptedAllyInput(state: GameSimulationState, playerId: string): Player
   const distance = Math.hypot(dx, dy)
   const scale = distance > 1e-9 ? 1 / distance : 0
   return {
+    ...createIdlePlayerCharacterInput(),
     aim: { ...target.position },
     cast: { primary: true, quickbar: null },
     movement: distance > 180 ? { x: dx * scale, y: dy * scale } : { x: 0, y: 0 },

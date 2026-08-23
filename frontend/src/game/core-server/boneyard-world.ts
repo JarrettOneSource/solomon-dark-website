@@ -137,7 +137,7 @@ export interface BoneyardWorldState {
   bounds: BoneyardBounds
   collision: BoneyardCollisionWorld
   earthquakeSceneryTargets: readonly NativeSecondarySceneryTarget[]
-  fireballSceneryTargets: readonly PrimarySpellTarget[]
+  primarySceneryTargets: readonly PrimarySpellTarget[]
   encounter: BoneyardSolomonEncounterState | null
   enemies: BoneyardEnemyStore
   enemyWorldFeedback: NativeEnemyWorldFeedbackKernelState
@@ -184,16 +184,17 @@ export function createBoneyardWorld(
       position: Object.freeze({ ...object.pos }),
       typeId: object.typeId,
     })),
-    fireballSceneryTargets: loaded.scene.objects.flatMap((object, registrationOrder) => {
+    primarySceneryTargets: loaded.scene.objects.flatMap((object, registrationOrder) => {
       const bodyRadius = fireballSceneryRadius(object.typeId)
       return bodyRadius === null ? [] : [Object.freeze({
         active: true,
         actorFlags: 0x4,
         attachment: Object.freeze({ x: 0, y: 0 }),
         bodyRadius,
+        cellBindingOrder: registrationOrder,
         id: `scenery:${object.eid}`,
-        kind: 'scenery' as const,
-        nativePriority: 0,
+        kind: object.typeId === 2029 ? 'gravestone' as const : 'scenery' as const,
+        nativePriority: 1000,
         pendingRemove: false,
         position: Object.freeze({ ...object.pos }),
         registrationOrder,
@@ -202,7 +203,7 @@ export function createBoneyardWorld(
     encounter: ownsRetailEncounter
       ? createSolomonEncounter(loaded.scene.solomonDig!, loaded.seed)
       : null,
-    enemies: createBoneyardEnemyStore(loaded.seed),
+    enemies: createBoneyardEnemyStore(loaded.seed, loaded.scene.objects.length),
     enemyWorldFeedback: createNativeEnemyWorldFeedbackState(),
     enemyEvents: [],
     gateLeaves: createBoneyardGateLeaves(loaded.scene.fences, loaded.seed),
@@ -225,20 +226,21 @@ export function createBoneyardWorld(
     lootEvents: [],
     playerOuchDeadlineTick: 0,
     runId: loaded.runId,
-    scenerySpellTargets: loaded.scene.objects
-      .filter(({ typeId }) => typeId === 2029)
-      .map((object, registrationOrder) => ({
+    scenerySpellTargets: loaded.scene.objects.flatMap((object, registrationOrder) => (
+      object.typeId === 2029 ? [{
         active: true,
         actorFlags: 0x4,
         attachment: { x: 0, y: 0 },
         bodyRadius: 0,
+        cellBindingOrder: registrationOrder,
         id: `scenery:${object.eid}`,
         kind: 'gravestone' as const,
         nativePriority: 1000,
         pendingRemove: false,
         position: { ...object.pos },
         registrationOrder,
-      })),
+      }] : []
+    )),
     spawn: { ...loaded.scene.spawn },
     waves: ownsRetailEncounter ? createBoneyardWaveDirector(loaded.seed) : null,
   }
@@ -258,19 +260,20 @@ function fireballSceneryRadius(typeId: number): number | null {
 export function boneyardPrimarySpellTargets(
   world: BoneyardWorldState,
 ): readonly PrimarySpellTarget[] {
-  const enemyRegistrationBase = world.scenerySpellTargets.length
   const actors = world.enemies.actors
     .map((enemy) => ({
       active: enemy.lifeState === 'alive',
       actorFlags: enemy.config.enemyToken === 'COFFIN' ? 0 : 0x2,
       attachment: { x: 0, y: 0 },
       bodyRadius: enemy.config.collisionRadius,
+      cellBindingOrder: enemy.nativeCellBindingOrder,
       headingDeg: enemy.headingDeg,
       id: `enemy:${enemy.id}`,
       kind: 'enemy' as const,
       nativePriority: 0,
       pendingRemove: false,
       position: { ...enemy.position },
+      registrationOrder: enemy.nativeRegistrationOrder,
     }))
   const maggots = world.enemies.maggots
     .map((enemy) => ({
@@ -278,18 +281,17 @@ export function boneyardPrimarySpellTargets(
       actorFlags: 0x2,
       attachment: { x: 0, y: 0 },
       bodyRadius: enemy.collisionRadius,
+      cellBindingOrder: enemy.nativeCellBindingOrder,
       headingDeg: enemy.headingDeg,
       id: `enemy:${enemy.id}`,
       kind: 'enemy' as const,
       nativePriority: 0,
       pendingRemove: false,
       position: { ...enemy.position },
+      registrationOrder: enemy.nativeRegistrationOrder,
     }))
-  const enemies: PrimarySpellTarget[] = [...actors, ...maggots].map((enemy, index) => ({
-    ...enemy,
-    registrationOrder: enemyRegistrationBase + index,
-  }))
-  return [...world.scenerySpellTargets, ...enemies]
+  const enemies: PrimarySpellTarget[] = [...actors, ...maggots]
+  return [...world.primarySceneryTargets, ...enemies]
 }
 
 export function spawnPlayerCharacterInBoneyard(

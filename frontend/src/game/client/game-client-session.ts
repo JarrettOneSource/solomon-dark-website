@@ -830,12 +830,16 @@ export function connectGameClientSession(
             )
           )
         ) throw new Error('game input must contain a primary level and native skill quickbar slot')
+        if (!Number.isFinite(requestedInput.viewportWidth) || requestedInput.viewportWidth < 1) {
+          throw new Error('game input must contain a positive finite viewport width')
+        }
         const input: PlayerCharacterInput = {
           aim: requestedInput.aim ? { ...requestedInput.aim } : null,
           cast: { ...requestedInput.cast },
           movement: length > 1
             ? { x: movement.x / length, y: movement.y / length }
             : { ...movement },
+          viewportWidth: requestedInput.viewportWidth,
         }
         if (!sameInput(input, currentInput)) advanceLocalHubPresentation(now())
         currentInput = input
@@ -1484,6 +1488,7 @@ function copyInput(input: PlayerCharacterInput): PlayerCharacterInput {
     aim: input.aim ? { ...input.aim } : null,
     cast: { ...input.cast },
     movement: { ...input.movement },
+    viewportWidth: input.viewportWidth,
   }
 }
 
@@ -1493,6 +1498,7 @@ function sameInput(first: PlayerCharacterInput, second: PlayerCharacterInput): b
     && first.aim?.y === second.aim?.y
     && first.movement.x === second.movement.x
     && first.movement.y === second.movement.y
+    && first.viewportWidth === second.viewportWidth
 }
 
 function sameCast(first: PlayerCharacterInput, second: PlayerCharacterInput): boolean {

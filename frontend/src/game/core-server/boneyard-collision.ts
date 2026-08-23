@@ -19,6 +19,7 @@ import {
   type NativeRngState,
 } from '../core-kernels/native-rng.ts'
 import type { BoneyardSpawnPositionPolicy } from '../core-kernels/boneyard-wave-timeline.ts'
+import { NATIVE_PRIMARY_FLIGHT_TERRAIN_EXCLUSION_MASK } from '../core-kernels/primary-spell-targeting.ts'
 
 export interface BoneyardCollisionPolygon {
   nativeLineMask?: number
@@ -98,7 +99,8 @@ const GOODIE_POLYGON = rectangle(-25.125, -8.625, 25.875, 16.875)
 const FENCE_POST_RADIUS = 10
 const GOODIE_RADIUS = 8
 
-export const NATIVE_FIREBALL_TERRAIN_EXCLUSION_MASK = 0x700
+export const NATIVE_FIREBALL_TERRAIN_EXCLUSION_MASK =
+  NATIVE_PRIMARY_FLIGHT_TERRAIN_EXCLUSION_MASK
 
 export const NATIVE_BONEYARD_SPAWN_PLACEMENT = Object.freeze({
   darkFallbackRadius: 350,

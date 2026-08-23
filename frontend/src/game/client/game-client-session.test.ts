@@ -56,6 +56,7 @@ function gameplayInput(
     aim,
     cast: { primary, quickbar },
     movement,
+    viewportWidth: 1_600,
   }
 }
 

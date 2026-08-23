@@ -92,6 +92,7 @@ export function resolveMlBotPolicyDecision(
       }
     : null
   const input = hubAction ? createIdlePlayerCharacterInput() : {
+    ...createIdlePlayerCharacterInput(),
     aim: action.ability === 0 ? null : aimPoint(self, selectedTarget, action.aim),
     cast: {
       primary: action.ability === 1,

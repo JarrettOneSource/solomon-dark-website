@@ -2,6 +2,7 @@ import {
   PLAYER_CHARACTER_FOOTSTEP_TICK_INTERVAL,
   PLAYER_CHARACTER_MOVEMENT_TICK_SECONDS,
   PLAYER_CHARACTER_RADIUS,
+  NATIVE_GAMEPLAY_VIEWPORT_WIDTH,
   createIdlePlayerCharacterInput,
   createPlayerCharacter,
   type PlayerCharacterConfig,
@@ -142,7 +143,6 @@ import {
   canPlaceBoneyardBody,
   firstBoneyardLineObstruction,
   firstBoneyardPathBlockProgress,
-  NATIVE_FIREBALL_TERRAIN_EXCLUSION_MASK,
   resolveBoneyardMovement,
   withBoneyardGateCollision,
 } from './boneyard-collision.ts'
@@ -2239,18 +2239,8 @@ function finishGameSimulationTick(
       const region = result.world.participants[spell.ownerId]?.region
       return region !== undefined && isHubRegionTraversable(region, position, radius)
     },
-    canTraverseProjectile: (spell, from, to, radius = 0) => {
+    canTraverseProjectile: (spell, from, to, radius = 0, nativeExclusionMask = 0) => {
       if (result.world.kind === 'boneyard') {
-        if (spell.kind === 'fire') {
-          return firstBoneyardLineObstruction(
-            from,
-            to,
-            boneyardSpellBounds!,
-            boneyardCollision!,
-            undefined,
-            NATIVE_FIREBALL_TERRAIN_EXCLUSION_MASK,
-          ) === null
-        }
         return radius > 0
           ? firstBoneyardPathBlockProgress(
               from,
@@ -2264,6 +2254,8 @@ function finishGameSimulationTick(
               to,
               boneyardSpellBounds!,
               boneyardCollision!,
+              undefined,
+              nativeExclusionMask,
             ) === null
       }
       const region = result.world.participants[spell.ownerId]?.region
@@ -2517,7 +2509,7 @@ function finishGameSimulationTick(
         )?.prismaticTicks ?? 0) > 0
         ? 2
         : 1,
-      boneyardWorld.fireballSceneryTargets,
+      boneyardWorld.primarySceneryTargets,
       lethalObserver,
       cast.fireActorContacts,
       (_actorId, start, requested, radius) => resolveBoneyardMovement(
@@ -2528,6 +2520,8 @@ function finishGameSimulationTick(
         radius,
       ),
       secondaryResult.steamedPulses,
+      (ownerId) => primaryInputs[ownerId]?.viewportWidth
+        ?? NATIVE_GAMEPLAY_VIEWPORT_WIDTH,
     )
     combatRng = spellCombat.rng
     primarySpells = spellCombat.spells

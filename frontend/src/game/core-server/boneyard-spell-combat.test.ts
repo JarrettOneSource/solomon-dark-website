@@ -82,6 +82,7 @@ test('GoodImp keeps a valid hostile until the native 300-tick refresh edge', () 
     actorFlags: 0x2,
     attachment: { x: 0, y: 0 },
     bodyRadius: 10,
+    cellBindingOrder: id === 'a' ? 0 : 1,
     headingDeg: 90,
     id,
     kind: 'enemy',
@@ -135,6 +136,8 @@ function resolveCombatWithAuthority(
     ) => Readonly<{ x: number; y: number }>
     damageMultiplier?: (actorId: number, kind: string) => number
     fireActorContacts?: readonly NativeFireActorContact[]
+    fireballCorridorLength?: number
+    primarySceneryTargets?: readonly PrimarySpellTarget[]
     rngSeed?: number
     steamedPulses?: readonly NativeSecondarySteamedPulse[]
   }> = {},
@@ -149,11 +152,12 @@ function resolveCombatWithAuthority(
     options.firstWorldContact ?? null,
     undefined,
     options.damageMultiplier ?? (() => 1),
-    [],
+    options.primarySceneryTargets ?? [],
     undefined,
     options.fireActorContacts ?? [],
     options.resolveMovement ?? ((_actorId, _start, requested) => requested),
     options.steamedPulses ?? [],
+    () => options.fireballCorridorLength ?? 1_600,
   )
 }
 
@@ -445,6 +449,8 @@ test('Hurricane batches clockwise force, target-owned cooldown, and charge-cubed
     lightRegistration: { managerLane: 'actor', registrationOrdinal: 1 },
     maximumHealth: 100,
     movementPhase: 'crawl',
+    nativeCellBindingOrder: 1,
+    nativeRegistrationOrder: 1,
     nextAttackTick: 20,
     nextMovementTick: 2,
     nextTargetRefreshTick: 300,
@@ -685,7 +691,7 @@ test('Fire and Ether skip an ineligible Coffin and contact the next hostile acto
 })
 
 test('Fire consumes on flag-four scenery roots without applying hostile damage', () => {
-  const enemies = spawnEnemies([{ position: { x: 10, y: 0 }, token: 'SKELETON' }])
+  const enemies = spawnEnemies([{ position: { x: -10, y: 0 }, token: 'SKELETON' }])
   const spells = spellState({
     projectiles: [projectile({ id: 7, kind: 'fire', position: { x: 0, y: 0 } })],
   })
@@ -721,6 +727,98 @@ test('Fire consumes on flag-four scenery roots without applying hostile damage',
     [sceneryTarget('grave-edge', 0.01, 20.01)],
   )
   assert.equal(equality.spells, spells, 'strict radius equality must miss the grave root')
+})
+
+test('Fireball suppresses an earlier scenery slot while a hostile occupies its live-width corridor', () => {
+  const spawned = spawnEnemies([{ position: { x: 60, y: 0 }, token: 'SKELETON' }])
+  const enemies = {
+    ...spawned,
+    actors: spawned.actors.map((actor) => ({
+      ...actor,
+      nativeCellBindingOrder: 1,
+      nativeRegistrationOrder: 1,
+    })),
+  }
+  const fire = projectile({
+    id: 7,
+    kind: 'fire',
+    position: { x: 0, y: 0 },
+    velocity: { x: 4.5, y: 0 },
+  })
+  const scenery = sceneryTarget('tree', 8, 10)
+  const passed = resolveCombatWithAuthority(enemies, spellState({ projectiles: [fire] }), [], 9, {
+    fireballCorridorLength: 100,
+    primarySceneryTargets: [scenery],
+  })
+  assert.deepEqual(passed.hits, [])
+  assert.deepEqual(passed.spells.projectiles.map(({ id }) => id), [fire.id])
+  assert.deepEqual(passed.spells.transients, [])
+
+  const pointBlank = resolveCombatWithAuthority(
+    enemies,
+    spellState({ projectiles: [fire] }),
+    [],
+    9,
+    {
+      fireballCorridorLength: 100,
+      primarySceneryTargets: [{ ...scenery, position: { x: 1, y: 0 } }],
+    },
+  )
+  assert.deepEqual(pointBlank.spells.projectiles, [])
+  assert.deepEqual(pointBlank.spells.transients.map(({ kind }) => kind), ['fire-impact'])
+})
+
+test('MagicMissile family widens from hostile-only to flags-four scenery contact', () => {
+  const spawned = spawnEnemies([{ position: { x: 50, y: 0 }, token: 'SKELETON' }])
+  const scenery = sceneryTarget('tree', 8, 0)
+  const retainedTargetId = `enemy:${spawned.actors[0]!.id}`
+  const young = projectile({
+    ageTicks: 199,
+    id: 8,
+    kind: 'ether',
+    targetId: retainedTargetId,
+  })
+  const retained = resolveCombatWithAuthority(
+    spawned,
+    spellState({ projectiles: [young] }),
+    [],
+    199,
+    { primarySceneryTargets: [scenery] },
+  )
+  assert.deepEqual(retained.spells.projectiles.map(({ id }) => id), [young.id])
+
+  for (const widened of [
+    projectile({ ageTicks: 199, id: 9, kind: 'ether', targetId: null }),
+    projectile({ ageTicks: 200, id: 10, kind: 'ether', targetId: retainedTargetId }),
+  ]) {
+    const result = resolveCombatWithAuthority(
+      spawned,
+      spellState({ projectiles: [widened] }),
+      [],
+      widened.ageTicks,
+      { primarySceneryTargets: [scenery] },
+    )
+    assert.deepEqual(result.hits, [])
+    assert.deepEqual(result.spells.projectiles, [])
+    assert.deepEqual(result.spells.transients.map(({ kind }) => kind), ['ether-impact'])
+  }
+})
+
+test('all three MagicMissile-derived welds inherit widened scenery retirement', () => {
+  const scenery = sceneryTarget('tree', 8, 0)
+  for (const buildId of [1000, 1001, 1002] as const) {
+    const spell = projectile({ ageTicks: 200, buildId, id: buildId, kind: 'weld' })
+    const result = resolveCombatWithAuthority(
+      createBoneyardEnemyStore(`weld-scenery-${buildId}`),
+      spellState({ projectiles: [spell] }),
+      [],
+      200,
+      { primarySceneryTargets: [scenery] },
+    )
+    assert.deepEqual(result.hits, [])
+    assert.deepEqual(result.spells.projectiles, [])
+    assert.ok(result.spells.transients.some(({ kind }) => kind === 'weld-impact'))
+  }
 })
 
 test('welded missile contacts preserve each native elemental payload and impact owner', () => {
@@ -2017,6 +2115,7 @@ function spellState(options: {
 }
 
 function projectile(options: {
+  ageTicks?: number
   buildId?: NativeWeldOneShotBuildId
   charge?: number
   contactsRemaining?: number
@@ -2027,13 +2126,14 @@ function projectile(options: {
   position?: Readonly<{ x: number; y: number }>
   remainingDamage?: number
   toughness?: number
+  targetId?: string | null
   velocity?: Readonly<{ x: number; y: number }>
   vector?: readonly number[]
   worldKey?: string
 }): PrimarySpellProjectileState {
   const velocity = options.velocity ?? { x: 0, y: 0 }
   const common = {
-    ageTicks: 1,
+    ageTicks: options.ageTicks ?? 1,
     charge: options.charge ?? 1,
     damage: options.damage ?? { earth: 10, ether: 2, fire: 4, weld: 5 }[options.kind],
     direction: normalized(velocity),
@@ -2068,7 +2168,7 @@ function projectile(options: {
         piercesRemaining: 0,
         reacquiresTarget: false,
         speed: 3,
-        targetId: null,
+        targetId: options.targetId ?? null,
         turnInput: 2,
         turnAccumulator: ETHER_PRIMARY_INITIAL_TURN,
         underpowered: false,
@@ -2117,7 +2217,7 @@ function projectile(options: {
         reacquiresTarget: false,
         secondaryPresentationPhaseDegrees: options.buildId === 1001 ? 0 : null,
         speed: 3,
-        targetId: null,
+        targetId: options.targetId ?? null,
         turnAccumulator: ETHER_PRIMARY_INITIAL_TURN,
         turnInput: options.buildId === 1009 ? 0 : 2,
         underpowered: false,
@@ -2263,6 +2363,7 @@ function sceneryTarget(id: string, bodyRadius: number, x: number): PrimarySpellT
     actorFlags: 0x4,
     attachment: { x: 0, y: 0 },
     bodyRadius,
+    cellBindingOrder: 0,
     id: `scenery:${id}`,
     kind: 'scenery',
     nativePriority: 0,
@@ -2292,6 +2393,8 @@ function enemyArrow(options: {
     lifetimeTicks: 300,
     minimumSpeed: 0,
     nativeTypeId: 0x7da,
+    nativeCellBindingOrder: options.id,
+    nativeRegistrationOrder: options.id,
     ownerActorId: 3,
     payload: 'normal',
     poisonDamage: 0,

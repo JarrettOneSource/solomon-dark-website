@@ -1,4 +1,7 @@
-import type { PlayerCharacterInput } from '../core-kernels/player-character.ts'
+import {
+  createIdlePlayerCharacterInput,
+  type PlayerCharacterInput,
+} from '../core-kernels/player-character.ts'
 import { createHubStudentFixturePopulation } from '../core-server/hub-student-fixtures.ts'
 import type { HubStudentRouteEndBehavior } from '../core-server/hub-students.ts'
 import {
@@ -32,11 +35,7 @@ export interface HubHeadlessEnvironmentOptions extends HubHeadlessResetOptions {
 
 export class HubHeadlessEnvironment {
   readonly observationLength: number
-  private readonly action: PlayerCharacterInput = {
-    aim: null,
-    cast: { primary: false, quickbar: null },
-    movement: { x: 0, y: 0 },
-  }
+  private readonly action: PlayerCharacterInput = createIdlePlayerCharacterInput()
   private readonly maximumStudents: number
   private resetOptions: HubHeadlessResetOptions
   private readonly routeEndBehavior: HubStudentRouteEndBehavior

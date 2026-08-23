@@ -65,6 +65,7 @@ import {
   emitBoneyardPlayerDamageSound,
   nativeWizardOuchCooldownReady,
   nativeSecondaryActorSpeedScale,
+  positionBoneyardEnemy,
   setBoneyardEnemyHurricaneContactCooldown,
   stepBoneyardEnemyStore,
   type BoneyardEnemyActor,
@@ -89,6 +90,41 @@ const FAR_PLAYERS: BoneyardEnemyTargets = {
 const DIRECT_MOVEMENT = (request: BoneyardEnemyMovementRequest) => request.requestedPosition
 const NO_WORLD_CONTACT = () => null
 const CLEAR_SPELL_SEGMENT = (request: BoneyardEnemySpellSegmentRequest) => request.end
+
+test('native cell binding preserves same-cell order and appends cross-cell rebinds at the tail', () => {
+  const spawned = stepBoneyardEnemyStore(createBoneyardEnemyStore('cell-order', 10), {
+    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    players: {},
+    resolveMovement: DIRECT_MOVEMENT,
+    resolveSpawnIntents: () => [
+      intent('SKELETON', 1, { x: 50, y: 50 }),
+      intent('SKELETON', 2, { x: 75, y: 50 }),
+    ],
+    tick: 0,
+  }).store
+  assert.deepEqual(spawned.actors.map((actor) => ({
+    cell: actor.nativeCellBindingOrder,
+    registration: actor.nativeRegistrationOrder,
+  })), [
+    { cell: 10, registration: 10 },
+    { cell: 11, registration: 11 },
+  ])
+  assert.equal(spawned.nextNativeCellBindingOrder, 12)
+  assert.equal(spawned.nextNativeRegistrationOrder, 12)
+
+  const sameCell = positionBoneyardEnemy(spawned, 2, { x: 90, y: 50 }).store
+  assert.equal(sameCell.actors[1]!.nativeCellBindingOrder, 11)
+  assert.equal(sameCell.nextNativeCellBindingOrder, 12)
+
+  const crossed = positionBoneyardEnemy(sameCell, 1, { x: 110, y: 50 }).store
+  assert.equal(crossed.actors[0]!.nativeCellBindingOrder, 12)
+  assert.equal(crossed.actors[0]!.nativeRegistrationOrder, 10)
+  const returned = positionBoneyardEnemy(crossed, 1, { x: 50, y: 50 }).store
+  assert.equal(returned.actors[0]!.nativeCellBindingOrder, 13)
+  assert.equal(returned.actors[1]!.nativeCellBindingOrder, 11)
+  assert.equal(returned.nextNativeCellBindingOrder, 14)
+  assert.equal(returned.nextNativeRegistrationOrder, 12)
+})
 
 test('Badguy Hurricane cooldown is constructor-randomized, target-owned, and drops ten per tick', () => {
   const spawned = spawnOne('hurricane-cooldown', 'SKELETON', { x: 0, y: 0 }, FAR_PLAYERS)

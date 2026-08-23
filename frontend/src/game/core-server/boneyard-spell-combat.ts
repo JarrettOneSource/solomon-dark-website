@@ -46,6 +46,7 @@ import {
 } from '../core-kernels/native-ether-blast.ts'
 import {
   airPrimaryBoltGeometry,
+  firstNativeFireballPointContact,
   firstNativePrimaryPointContact,
   nativePrimaryConeTargets,
   nativePrimaryRootTargets,
@@ -61,6 +62,7 @@ import type {
 } from '../core-kernels/native-secondary-abilities.ts'
 import {
   createNativeWeldBoulderDebrisActor,
+  isMagicMissileDerivedWeldBuild,
   nativeWeldHailstoneDrawOffset,
   nativeWeldHailstoneFlightContactSubsteps,
   retainNativeWeldHailstoneDamage,
@@ -197,13 +199,14 @@ export function resolveBoneyardSpellCombat(
   firstWorldContact: BoneyardSpellWorldContact | null = null,
   registerLightProvider?: RegisterNativeLightProvider,
   damageMultiplier: BoneyardSpellDamageMultiplier = () => 1,
-  fireballSceneryTargets: readonly PrimarySpellTarget[] = [],
+  primarySceneryTargets: readonly PrimarySpellTarget[] = [],
   lethalObserver?: BoneyardEnemyLethalObserver,
   fireActorContacts: readonly NativeFireActorContact[] = [],
   resolveEnemyMovement: ResolveBoneyardSpellEnemyMovement = (_actorId, _start, requested) => (
     requested
   ),
   steamedPulses: readonly NativeSecondarySteamedPulse[] = [],
+  fireballHostileCorridorLength: (ownerId: string) => number = () => 1_600,
 ): BoneyardSpellCombatResult {
   validateTick(tick)
   let enemies = sourceEnemies
@@ -559,15 +562,10 @@ export function resolveBoneyardSpellCombat(
 
   for (const projectile of [...sourceSpells.projectiles].sort(bySpellId)) {
     if (projectile.phase !== 'flight' || projectile.worldKey !== worldKey) continue
-    const enemyRows = primaryTargetRows(
-      enemies,
-      projectile.kind === 'fire'
-        ? nextRegistrationOrder(fireballSceneryTargets)
-        : 0,
-    )
-    const rows = projectile.kind === 'fire'
+    const enemyRows = primaryTargetRows(enemies)
+    const rows = primaryProjectileOwnsSceneryContact(projectile)
       ? [
-          ...fireballSceneryTargets.map((target) => ({
+          ...primarySceneryTargets.map((target) => ({
             actor: null,
             kind: 'scenery' as const,
             target,
@@ -636,7 +634,9 @@ export function resolveBoneyardSpellCombat(
 
     if (projectile.kind === 'weld') {
       const target = firstNativePrimaryPointContact({
-        actorMask: 0x2,
+        actorMask: isMagicMissileDerivedWeldBuild(projectile.buildId)
+          ? nativeMagicMissileActorMask(projectile)
+          : 0x2,
         position: projectile.position,
         queryRadius: projectile.buildId === 1009
           ? NATIVE_WELD_GROUND_SPARK_COLLISION_RADIUS
@@ -645,7 +645,28 @@ export function resolveBoneyardSpellCombat(
       })
       if (!target) continue
       const actor = rows.find(({ target: candidate }) => candidate.id === target.id)?.actor
-      if (!actor) continue
+      if (!actor) {
+        consumedProjectileIds.add(projectile.id)
+        if (projectile.buildId === 1000) {
+          const detonation = createPrimarySpellWeldFireDetonation(
+            nextSpellId,
+            projectile,
+            projectile.position,
+            tick,
+            rng,
+            projectile.presentationSeed ?? 0,
+            true,
+            registerLightProvider,
+          )
+          rng = detonation.rng
+          pendingFireActorContacts.push(...detonation.contacts)
+          impactTransients.push(...detonation.transients)
+          nextSpellId = detonation.nextId
+        } else {
+          publishContactImpact(projectile, projectile.position)
+        }
+        continue
+      }
 
       if (projectile.buildId === 1001 && projectile.vector[5]! > 0) {
         queueTargetEffect(actor.id, {
@@ -751,14 +772,22 @@ export function resolveBoneyardSpellCombat(
       continue
     }
 
-    const target = firstNativePrimaryPointContact({
-      actorMask: 0x6,
-      position: projectile.position,
-      queryRadius: projectile.kind === 'fire'
-        ? PRIMARY_SPELL_FIRE_COLLISION_RADIUS
-        : PRIMARY_SPELL_ETHER_COLLISION_RADIUS,
-      targets: rows.map(({ target }) => target),
-    })
+    const targets = rows.map(({ target }) => target)
+    const target = projectile.kind === 'fire'
+      ? firstNativeFireballPointContact({
+          actorMask: 0x6,
+          direction: projectile.direction,
+          hostileCorridorLength: fireballHostileCorridorLength(projectile.ownerId),
+          position: projectile.position,
+          queryRadius: PRIMARY_SPELL_FIRE_COLLISION_RADIUS,
+          targets,
+        })
+      : firstNativePrimaryPointContact({
+          actorMask: nativeMagicMissileActorMask(projectile),
+          position: projectile.position,
+          queryRadius: PRIMARY_SPELL_ETHER_COLLISION_RADIUS,
+          targets,
+        })
     if (!target) continue
     const actor = rows.find(({ target: candidate }) => candidate.id === target.id)?.actor
     if (!actor) {
@@ -1251,7 +1280,7 @@ export function resolveBoneyardSpellCombat(
           !emission.underpowered
           && emission.primarySkill.disintegrateChance > 0
           && (row.target.actorFlags & 0x2) !== 0
-          && tick % 40 === row.target.registrationOrder % 40
+          && tick % 40 === row.disintegratePhase % 40
         ) {
           const draw = drawNativeDisintegratePercentile(
             rng,
@@ -1868,6 +1897,7 @@ type BoneyardSpellTarget = BoneyardEnemyActor | BoneyardMaggotActor
 
 interface PrimaryTargetRow {
   readonly actor: BoneyardSpellTarget
+  readonly disintegratePhase: number
   readonly kind: 'enemy'
   readonly target: PrimarySpellTarget
 }
@@ -2111,31 +2141,25 @@ function selectedWeldTarget(
 
 function primaryTargetRows(
   store: BoneyardEnemyStore,
-  registrationOrderBase = 0,
 ): readonly PrimaryTargetRow[] {
-  return [...store.actors, ...store.maggots].map((actor, registrationOrder) => ({
+  return [...store.actors, ...store.maggots].map((actor, disintegratePhase) => ({
     actor,
+    disintegratePhase,
     kind: 'enemy',
     target: {
       active: actor.lifeState === 'alive',
       actorFlags: 'config' in actor && actor.config.enemyToken === 'COFFIN' ? 0 : 0x2,
       attachment: { x: 0, y: 0 },
       bodyRadius: 'config' in actor ? actor.config.collisionRadius : actor.collisionRadius,
+      cellBindingOrder: actor.nativeCellBindingOrder,
       id: `enemy:${actor.id}`,
       kind: 'enemy',
       nativePriority: 0,
       pendingRemove: false,
       position: { ...actor.position },
-      registrationOrder: registrationOrderBase + registrationOrder,
+      registrationOrder: actor.nativeRegistrationOrder,
     },
   }))
-}
-
-function nextRegistrationOrder(targets: readonly PrimarySpellTarget[]): number {
-  return targets.reduce(
-    (next, target) => Math.max(next, target.registrationOrder + 1),
-    0,
-  )
 }
 
 function primaryWaterTargetRows(
@@ -2144,7 +2168,7 @@ function primaryWaterTargetRows(
   const enemies = primaryTargetRows(store)
   const arrows = store.projectiles
     .filter((projectile) => projectile.kind === 'arrow')
-    .map((projectile, index): PrimaryProjectileTargetRow => ({
+    .map((projectile): PrimaryProjectileTargetRow => ({
       kind: 'arrow',
       projectile,
       target: {
@@ -2152,15 +2176,30 @@ function primaryWaterTargetRows(
         actorFlags: 0x80,
         attachment: { x: 0, y: 0 },
         bodyRadius: projectile.contactRadius,
+        cellBindingOrder: projectile.nativeCellBindingOrder,
         id: `projectile:${projectile.id}`,
         kind: 'projectile',
         nativePriority: 0,
         pendingRemove: false,
         position: { ...projectile.position },
-        registrationOrder: enemies.length + index,
+        registrationOrder: projectile.nativeRegistrationOrder,
       },
     }))
   return [...enemies, ...arrows]
+}
+
+function primaryProjectileOwnsSceneryContact(
+  projectile: PrimarySpellProjectileState,
+): boolean {
+  return projectile.kind === 'fire'
+    || projectile.kind === 'ether'
+    || (projectile.kind === 'weld' && isMagicMissileDerivedWeldBuild(projectile.buildId))
+}
+
+function nativeMagicMissileActorMask(
+  projectile: Extract<PrimarySpellProjectileState, { kind: 'ether' | 'weld' }>,
+): 0x2 | 0x6 {
+  return projectile.ageTicks >= 200 || projectile.targetId === null ? 0x6 : 0x2
 }
 
 function projectileDamage(projectile: PrimarySpellProjectileState): number {
