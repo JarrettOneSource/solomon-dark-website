@@ -50,12 +50,13 @@ import {
   type MlBotPolicySkillSelection,
 } from '../core-server/ml-bot-policy/skill-chooser.ts'
 import { describeMlBotPolicySkillOffer } from '../core-server/ml-bot-policy/skill-options.ts'
+import { ML_BOT_POLICY_OBSERVATION_NAMES } from '../core-server/ml-bot-policy/spec.ts'
 import type { MlBotPolicyMainTrajectoryRecord } from '../core-server/ml-bot-policy/trajectory.ts'
 import { NATIVE_GENERATED_BONEYARDS } from '../host/native-generated-boneyards.ts'
 import { deterministicStateHash } from './hub-headless-environment.ts'
 
 export { ML_BOT_POLICY_ACTION_STRIDE as BONEYARD_HEADLESS_ACTION_STRIDE }
-export const BONEYARD_HEADLESS_OBSERVATION_LENGTH = 1_784
+export const BONEYARD_HEADLESS_OBSERVATION_LENGTH = ML_BOT_POLICY_OBSERVATION_NAMES.length
 
 const HEADLESS_PLAYER_ID = 'agent'
 const DEFAULT_AGENT: PlayerCharacterConfig = Object.freeze({
@@ -232,7 +233,7 @@ export class BoneyardHeadlessEnvironment {
       rewardTerms: transition.reward.terms,
       simulationTick: transition.simulationTick,
       ticks: transition.ticks,
-      trajectoryVersion: 5,
+      trajectoryVersion: 6,
     })
     return Object.freeze({
       nextObservation: transition.nextObservation,

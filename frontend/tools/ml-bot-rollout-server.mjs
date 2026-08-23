@@ -4,7 +4,7 @@ import {
   BoneyardHeadlessWorkerPool,
 } from '../src/game/headless/boneyard-headless-worker-pool.ts'
 
-const PROTOCOL = 'solomon-dark-ml-rollout-v5-choice1'
+const PROTOCOL = 'solomon-dark-ml-rollout-v6-choice1'
 let pool = null
 
 const input = readline.createInterface({ input: process.stdin, crlfDelay: Infinity })

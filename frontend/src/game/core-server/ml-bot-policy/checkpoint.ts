@@ -12,7 +12,7 @@ export const ML_BOT_POLICY_TENSOR_SPECS = Object.freeze({
   aim_bias: [9],
   aim_weight: [9, 256],
   choice_hidden_bias: [128],
-  choice_hidden_weight: [128, 312],
+  choice_hidden_weight: [128, 362],
   choice_score_bias: [1],
   choice_score_weight: [1, 128],
   choice_value_bias: [1],
@@ -22,7 +22,7 @@ export const ML_BOT_POLICY_TENSOR_SPECS = Object.freeze({
   target_bias: [9],
   target_weight: [9, 256],
   trunk_1_bias: [512],
-  trunk_1_weight: [512, 1_784],
+  trunk_1_weight: [512, 2_738],
   trunk_2_bias: [256],
   trunk_2_weight: [256, 512],
   value_bias: [1],
@@ -69,7 +69,7 @@ interface EncodedHeader {
   readonly tensors: readonly EncodedTensorDescriptor[]
 }
 
-const MAGIC = Uint8Array.from([0x53, 0x44, 0x4d, 0x4c, 0x56, 0x35, 0x00, 0x01])
+const MAGIC = Uint8Array.from([0x53, 0x44, 0x4d, 0x4c, 0x56, 0x36, 0x00, 0x01])
 const PREFIX_BYTES = MAGIC.length + 4
 
 export function createZeroMlBotPolicyCheckpoint(seed: number): MlBotPolicyCheckpoint {
@@ -85,13 +85,13 @@ export function createZeroMlBotPolicyCheckpoint(seed: number): MlBotPolicyCheckp
       choiceHiddenSize: 128,
       choicePolicyMode: 'scripted',
       choiceTemperature: 1.25,
-      choiceTrajectoryVersion: 5,
+      choiceTrajectoryVersion: 6,
       hiddenSizes: Object.freeze([512, 256]),
-      mainTrajectoryVersion: 5,
+      mainTrajectoryVersion: 6,
       modelFormat: ML_BOT_POLICY_MODEL_FORMAT,
-      modelVersion: 5,
+      modelVersion: 6,
       observationNames: ML_BOT_POLICY_OBSERVATION_NAMES,
-      observationVersion: 5,
+      observationVersion: 6,
       optionDescriptorNames: ML_BOT_POLICY_OPTION_DESCRIPTOR_NAMES,
       seed,
       trainedEnvironmentSteps: 0,
@@ -115,7 +115,7 @@ export function validateMlBotPolicyCheckpoint(checkpoint: MlBotPolicyCheckpoint)
     ['main trajectory', metadata.mainTrajectoryVersion],
     ['choice trajectory', metadata.choiceTrajectoryVersion],
   ] as const) {
-    if (value !== 5) throw new Error(`ML bot policy ${label} version 5 is required; legacy artifacts have no shim`)
+    if (value !== 6) throw new Error(`ML bot policy ${label} version 6 is required; legacy artifacts have no shim`)
   }
   requireNames(metadata.observationNames, ML_BOT_POLICY_OBSERVATION_NAMES, 'observation names')
   requireNames(
@@ -277,7 +277,7 @@ function elementCount(shape: readonly number[]): number {
 
 function requireNames(actual: readonly string[], expected: readonly string[], label: string): void {
   if (actual.length !== expected.length || actual.some((value, index) => value !== expected[index])) {
-    throw new Error(`ML bot policy ${label} do not match schema v5`)
+    throw new Error(`ML bot policy ${label} do not match schema v6`)
   }
 }
 

@@ -18,7 +18,7 @@ test('deterministic chooser clears pending offers through the production selecti
   assert.equal(first.events.length, 1)
   assert.equal(first.events[0]?.choiceMode, 'scripted')
   assert.equal(first.events[0]?.trainable, false)
-  assert.equal(first.events[0]?.optionDescriptors.length, 3 * 56)
+  assert.equal(first.events[0]?.optionDescriptors.length, 3 * 106)
   assert.deepEqual(first.events[0]?.observation, observation)
   assert.equal(getPlayerProgression(first.state, 'agent').pendingOffer, null)
   assert.equal(first.state.levelUpBarrier, null)

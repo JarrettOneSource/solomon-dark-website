@@ -10,7 +10,7 @@ import {
 import { MlBotPolicyRuntime } from './runtime.ts'
 import { ML_BOT_POLICY_OBSERVATION_NAMES } from './spec.ts'
 
-test('strict v5 runtime applies all four masks and returns one composite action', () => {
+test('strict v6 runtime applies all four masks and returns one composite action', () => {
   const checkpoint = createZeroMlBotPolicyCheckpoint(0x1234_5678)
   checkpoint.tensors.movement_bias[2] = 3
   checkpoint.tensors.target_bias[1] = 4
@@ -40,9 +40,9 @@ test('choice scorer is permutation-equivariant and mask-aware', () => {
   checkpoint.tensors.choice_score_bias[0] = 0.5
   const runtime = new MlBotPolicyRuntime(checkpoint)
   const observation = new Float32Array(ML_BOT_POLICY_OBSERVATION_NAMES.length)
-  const descriptors = new Float32Array(3 * 56)
+  const descriptors = new Float32Array(3 * 106)
   descriptors[0] = 1
-  descriptors[56] = 1
+  descriptors[106] = 1
   descriptors[112] = 1
   const result = runtime.choose(observation, descriptors, Uint8Array.from([1, 0, 1]), {
     mode: 'argmax',
@@ -96,7 +96,7 @@ test('runtime rejects legacy versions and ordered-name drift with no shim', () =
   assert.throws(() => validateMlBotPolicyCheckpoint({
     ...checkpoint,
     metadata: { ...checkpoint.metadata, modelVersion: 4 },
-  }), /model version 5/)
+  }), /model version 6/)
   assert.throws(() => validateMlBotPolicyCheckpoint({
     ...checkpoint,
     metadata: {

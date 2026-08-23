@@ -1,4 +1,4 @@
-"""Schema-v5 Solomon Dark web policy training package."""
+"""Schema-v6 Solomon Dark web policy training package."""
 
 from .spec import POLICY_SPEC
 

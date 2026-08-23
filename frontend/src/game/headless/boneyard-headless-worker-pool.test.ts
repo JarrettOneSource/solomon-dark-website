@@ -18,7 +18,7 @@ test('persistent Boneyard workers are deterministic across reset and worker lane
     const actions = createBoneyardHeadlessActionBuffer(2)
     const stepped = await pool.step(actions, 10)
     assert.notDeepEqual(stepped.hashes, initial.hashes)
-    assert.equal(stepped.observations.length, 2 * 1_784)
+    assert.equal(stepped.observations.length, 2 * 2_738)
     assert.equal(stepped.masks.ability.length, 2 * 22)
     assert.deepEqual(stepped.transition.observations, initial.observations)
     assert.deepEqual(stepped.transition.nextObservations, stepped.observations)
@@ -77,7 +77,7 @@ test('worker pool exposes and applies externally evaluated learned choices', asy
     }])
     assert.notEqual(selected.hashes[0], beforeHash)
     assert.equal(selected.choices[0], null)
-    const stepped = await pool.step(createBoneyardHeadlessActionBuffer(), 10)
+    const stepped = await pool.expertStep(10)
     assert.equal(stepped.transition.choiceEvents[0]?.value.choiceMode, 'learned')
     assert.equal(stepped.transition.choiceEvents[0]?.value.trainable, true)
   } finally {

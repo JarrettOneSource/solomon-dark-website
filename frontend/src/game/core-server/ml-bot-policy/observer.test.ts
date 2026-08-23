@@ -26,7 +26,7 @@ const BONEYARD: LoadedBoneyard = {
   sourceSha256: 'source',
 }
 
-test('stateful observer assembles the exact finite schema-v5 vector', () => {
+test('stateful observer assembles the exact finite schema-v6 vector', () => {
   const state = enterBoneyardWorld(createGameSimulation({
     agent: { discipline: 'arcane', displayName: 'Agent', element: 'fire' },
   }), BONEYARD)
@@ -35,7 +35,7 @@ test('stateful observer assembles the exact finite schema-v5 vector', () => {
     activeInputs: {},
     controllers: { agent: 'bot' },
   })
-  assert.equal(frame.values.length, 1_784)
+  assert.equal(frame.values.length, 2_738)
   assert.ok(frame.values.every(Number.isFinite))
   assert.deepEqual(frame.blocks.map(({ key, values }) => [key, values.length]),
     ML_BOT_POLICY_BLOCKS.map(({ key, names }) => [key, names.length]))

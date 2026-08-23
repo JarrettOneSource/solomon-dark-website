@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Train, evaluate, and validate the Solomon Dark web policy-v5 bot."""
+"""Train, evaluate, and validate the Solomon Dark web policy-v6 bot."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ import torch
 
 from ml_bot.checkpoint import atomic_write, load_checkpoint, typescript_checkpoint_report
 from ml_bot.arena import checkpoint_arena
-from ml_bot.model import PolicyV5
+from ml_bot.model import PolicyV6
 from ml_bot.diagnostics import render_dashboard, render_replay
 from ml_bot.metrics import (
     evaluation_checkpoint_identity,
@@ -36,7 +36,7 @@ from ml_bot.trainer import (
     train_policy,
 )
 
-DEFAULT_OUTPUT = REPOSITORY_ROOT / "runtime/ml-training/web-v5"
+DEFAULT_OUTPUT = REPOSITORY_ROOT / "runtime/ml-training/web-v6"
 DEFAULT_EVAL_SEEDS = REPOSITORY_ROOT / "tools/ml_bot/eval-seeds.json"
 
 
@@ -177,7 +177,7 @@ def run_evaluate(args: argparse.Namespace) -> Any:
 
 def run_validate(args: argparse.Namespace) -> Any:
     metadata, tensors = load_checkpoint(Path(args.checkpoint).resolve())
-    policy = PolicyV5()
+    policy = PolicyV6()
     policy.load_tensors(tensors)
     typescript = typescript_checkpoint_report(Path(args.checkpoint).resolve())
     observation = checkpoint_test_observation()
@@ -192,8 +192,9 @@ def run_validate(args: argparse.Namespace) -> Any:
         python_result = policy.act(observation, full_plans, deterministic=True)
         choice_descriptors = torch.from_numpy(
             np.asarray([
-                ((index % 31) - 15) / 15 for index in range(3 * 56)
-            ], dtype=np.float32).reshape(1, 3, 56)
+                ((index % 31) - 15) / 15
+                for index in range(3 * POLICY_SPEC.option_descriptor_size)
+            ], dtype=np.float32).reshape(1, 3, POLICY_SPEC.option_descriptor_size)
         )
         choice_selected, choice_result = policy.select_choice(
             observation,
@@ -230,7 +231,20 @@ def run_validate(args: argparse.Namespace) -> Any:
     return {
         "status": "ok",
         "checkpoint": str(Path(args.checkpoint).resolve()),
-        "metadata": metadata,
+        "metadata": {
+            name: metadata.get(name)
+            for name in (
+                "architecture",
+                "choiceOptimizerScope",
+                "choicePolicyMode",
+                "choiceTemperature",
+                "modelVersion",
+                "observationVersion",
+                "seed",
+                "trainedEnvironmentSteps",
+                "trainedUpdates",
+            )
+        },
         "observationSize": POLICY_SPEC.observation_size,
         "optionDescriptorSize": POLICY_SPEC.option_descriptor_size,
         "parameterCount": sum(parameter.numel() for parameter in policy.parameters()),
@@ -277,7 +291,10 @@ def run_extend_evaluate(args: argparse.Namespace) -> Any:
 def checkpoint_test_observation():
     import numpy as np
 
-    values = np.asarray([((index % 97) - 48) / 48 for index in range(1_784)], dtype=np.float32)
+    values = np.asarray(
+        [((index % 97) - 48) / 48 for index in range(POLICY_SPEC.observation_size)],
+        dtype=np.float32,
+    )
     return torch.from_numpy(values[None, :])
 
 
@@ -530,7 +547,7 @@ def create_parser() -> argparse.ArgumentParser:
     summary_parser.add_argument("--output", required=True)
     summary_parser.set_defaults(handler=run_summary)
 
-    validate_parser = subparsers.add_parser("validate", help="validate a strict v5 checkpoint")
+    validate_parser = subparsers.add_parser("validate", help="validate a strict v6 checkpoint")
     validate_parser.add_argument("--checkpoint", required=True)
     validate_parser.set_defaults(handler=run_validate)
 
@@ -641,7 +658,7 @@ def add_training(
         parser.set_defaults(gamma=0.995)
     parser.add_argument("--gae-lambda", type=closed_fraction, default=0.95)
     parser.add_argument("--target-kl", type=positive_float, default=0.02)
-    parser.add_argument("--experiment", default="First schema-v5 web headless PPO campaign")
+    parser.add_argument("--experiment", default="First schema-v6 web headless PPO campaign")
     parser.add_argument("--expected-metric", default="holdout wave depth increases")
     parser.add_argument("--eval-condition", default="frozen train-dist and holdout seeds")
     if environment:

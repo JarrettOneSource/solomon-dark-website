@@ -9,10 +9,10 @@ test('choice tracker emits only complete variable-duration intervals', () => {
     accepted: true,
     choiceMode: 'scripted',
     generation: 1,
-    observation: new Float32Array(1_784),
+    observation: new Float32Array(2_738),
     oldLogProbability: 0,
     oldValue: 0,
-    optionDescriptors: new Float32Array(3 * 56),
+    optionDescriptors: new Float32Array(3 * 106),
     optionIds: [1, 2, 3],
     optionMask: Uint8Array.from([1, 1, 1]),
     selectedOption: 1,
@@ -26,10 +26,10 @@ test('choice tracker emits only complete variable-duration intervals', () => {
     accepted: true,
     choiceMode: 'scripted',
     generation: 2,
-    observation: new Float32Array(1_784),
+    observation: new Float32Array(2_738),
     oldLogProbability: 0,
     oldValue: 0.25,
-    optionDescriptors: new Float32Array(2 * 56),
+    optionDescriptors: new Float32Array(2 * 106),
     optionIds: [4, 5],
     optionMask: Uint8Array.from([1, 1]),
     selectedOption: 0,
@@ -38,7 +38,7 @@ test('choice tracker emits only complete variable-duration intervals', () => {
   })
   const [closed] = tracker.drain()
   assert.ok(closed)
-  assert.equal(closed.choiceTrajectoryVersion, 5)
+  assert.equal(closed.choiceTrajectoryVersion, 6)
   assert.equal(closed.durationTicks, 20)
   assert.deepEqual(closed.rewards, [0.2, 0.1])
   assert.equal(closed.nextValue, 0.25)
@@ -52,10 +52,10 @@ test('terminal close flushes the final interval exactly once', () => {
     accepted: true,
     choiceMode: 'learned',
     generation: 1,
-    observation: new Float32Array(1_784),
+    observation: new Float32Array(2_738),
     oldLogProbability: -1,
     oldValue: 0.5,
-    optionDescriptors: new Float32Array(56),
+    optionDescriptors: new Float32Array(106),
     optionIds: [52],
     optionMask: Uint8Array.from([1]),
     selectedOption: 0,

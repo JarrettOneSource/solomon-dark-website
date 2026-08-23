@@ -15,11 +15,11 @@ import {
 
 const RESET = { seed: 0x1234_5678 }
 
-test('Boneyard headless reset reproduces schema-v5 observations and authoritative hashes', () => {
+test('Boneyard headless reset reproduces schema-v6 observations and authoritative hashes', () => {
   const environment = new BoneyardHeadlessEnvironment(RESET)
   const initialObservation = environment.observe()
   const initialHash = environment.stateHash()
-  assert.equal(initialObservation.length, 1_784)
+  assert.equal(initialObservation.length, 2_738)
   assert.equal(initialObservation[25], 1)
   assert.equal(environment.state().world.kind, 'boneyard')
   if (environment.state().world.kind !== 'boneyard') throw new Error('expected Boneyard')
@@ -153,7 +153,13 @@ test('learned skill choices are externally selected and open trainable SMDP cred
   assert.equal(selection.choiceIndex, 0)
   assert.equal(environment.choicePlan(), null)
 
-  const transition = environment.stepTransition(createBoneyardHeadlessActionBuffer(), 10)
+  const nextAction = environment.expertAction()
+  const transition = environment.stepTransition(Float32Array.from([
+    nextAction.movement,
+    nextAction.target,
+    nextAction.ability,
+    nextAction.aim,
+  ]), 10)
   assert.equal(transition.choiceEvents.length, 1)
   assert.equal(transition.choiceEvents[0]?.choiceMode, 'learned')
   assert.equal(transition.choiceEvents[0]?.trainable, true)

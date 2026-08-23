@@ -18,7 +18,7 @@ export interface MlBotPolicyChoiceEventSeed {
 }
 
 export interface MlBotPolicyChoiceTrajectoryRecord extends MlBotPolicyChoiceEventSeed {
-  readonly choiceTrajectoryVersion: 5
+  readonly choiceTrajectoryVersion: 6
   readonly done: boolean
   readonly durationSteps: number
   readonly durationTicks: number
@@ -98,7 +98,7 @@ export class MlBotPolicyChoiceTrajectoryTracker {
     const durationTicks = interval.rewardTicks.reduce((sum, ticks) => sum + ticks, 0)
     this.completed.push(Object.freeze({
       ...interval.event,
-      choiceTrajectoryVersion: 5,
+      choiceTrajectoryVersion: 6,
       done,
       durationSteps: interval.rewards.length,
       durationTicks,

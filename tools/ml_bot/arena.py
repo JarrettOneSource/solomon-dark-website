@@ -52,7 +52,7 @@ def checkpoint_arena(
         key=lambda entry: (entry["meanWaveDepth"], entry["meanReturn"]), reverse=True
     )
     report = {
-        "arena_version": 5,
+        "arena_version": 6,
         "seeds": list(seeds),
         "maximumSteps": maximum_steps,
         "promotionScale": len(seeds) >= 30 and all(

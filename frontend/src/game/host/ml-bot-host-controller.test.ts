@@ -16,6 +16,7 @@ import {
 } from '../protocol/game-protocol.ts'
 import { BoneyardHeadlessEnvironment } from '../headless/boneyard-headless-environment.ts'
 import { getPlayerProgression } from '../core-server/game-simulation.ts'
+import { ML_BOT_POLICY_OPTION_DESCRIPTOR_NAMES } from '../core-server/ml-bot-policy/spec.ts'
 import type { MlBotPolicyInference } from './ml-bot-host-controller.ts'
 import {
   ML_BOT_CHARACTER,
@@ -62,7 +63,7 @@ const idlePolicy: MlBotPolicyInference = {
 
 test('the packaged selected checkpoint loads in the host worker and returns legal actions', async () => {
   const worker = await MlBotPolicyInferenceWorker.create(
-    await readFile('server-assets/ml-bot-policy-v5-selected.sdml'),
+    await readFile('server-assets/ml-bot-policy-v6-selected.sdml'),
   )
   try {
     const environment = new BoneyardHeadlessEnvironment({
@@ -104,7 +105,10 @@ test('learned checkpoints select live host skill offers through the choice head'
     },
     async inferChoice(_observation, optionDescriptors, optionMask) {
       evaluatedOptions = optionMask.length
-      assert.equal(optionDescriptors.length, optionMask.length * 56)
+      assert.equal(
+        optionDescriptors.length,
+        optionMask.length * ML_BOT_POLICY_OPTION_DESCRIPTOR_NAMES.length,
+      )
       return {
         logProbability: -0.5,
         selectedOption: optionMask.length - 1,

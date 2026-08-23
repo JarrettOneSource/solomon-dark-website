@@ -26,6 +26,6 @@ await build({
 
 await copyFile(require.resolve('wasmoon/dist/glue.wasm'), 'dist-game-host/lua54.wasm')
 await copyFile(
-  'server-assets/ml-bot-policy-v5-selected.sdml',
-  'dist-game-host/ml-bot-policy-v5-selected.sdml',
+  'server-assets/ml-bot-policy-v6-selected.sdml',
+  'dist-game-host/ml-bot-policy-v6-selected.sdml',
 )

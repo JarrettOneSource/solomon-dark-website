@@ -12,7 +12,7 @@ import {
 
 const outputPath = resolve(
   import.meta.dirname,
-  '../src/game/core-server/ml-bot-policy/policy-spec-v5.json',
+  '../src/game/core-server/ml-bot-policy/policy-spec-v6.json',
 )
 const artifact = {
   ...ML_BOT_POLICY_SPEC,

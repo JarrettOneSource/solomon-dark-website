@@ -13,7 +13,7 @@ if (!checkpointPath) throw new Error('usage: inspect-ml-bot-checkpoint.mjs CHECK
 const source = new Uint8Array(await readFile(resolve(checkpointPath)))
 const checkpoint = decodeMlBotPolicyCheckpoint(source)
 const runtime = new MlBotPolicyRuntime(checkpoint)
-const observation = new Float32Array(1_784)
+const observation = new Float32Array(checkpoint.metadata.observationNames.length)
 for (let index = 0; index < observation.length; index += 1) {
   observation[index] = Math.fround(((index % 97) - 48) / 48)
 }
@@ -28,7 +28,9 @@ const result = runtime.inferAutoregressive(
   () => aim,
   { mode: 'argmax' },
 )
-const choiceDescriptors = new Float32Array(3 * 56)
+const choiceDescriptors = new Float32Array(
+  3 * checkpoint.metadata.optionDescriptorNames.length,
+)
 for (let index = 0; index < choiceDescriptors.length; index += 1) {
   choiceDescriptors[index] = Math.fround(((index % 31) - 15) / 15)
 }

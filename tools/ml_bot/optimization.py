@@ -10,7 +10,7 @@ import numpy as np
 import torch
 from torch import Tensor
 
-from .model import PolicyV5
+from .model import PolicyV6
 from .spec import POLICY_SPEC
 
 ENTROPY_COEFFICIENTS = {
@@ -109,7 +109,7 @@ class ChoiceCoverage:
 
 
 def behavior_clone(
-    policy: PolicyV5,
+    policy: PolicyV6,
     optimizer: torch.optim.Optimizer,
     observations: Tensor,
     masks: Mapping[str, Tensor],
@@ -180,7 +180,7 @@ def balanced_class_weights(actions: Tensor, width: int) -> Tensor:
 
 
 def classification_accuracy(
-    policy: PolicyV5,
+    policy: PolicyV6,
     observations: Tensor,
     masks: Mapping[str, Tensor],
     actions: Mapping[str, Tensor],
@@ -206,7 +206,7 @@ def classification_accuracy(
 
 
 def choice_behavior_clone(
-    policy: PolicyV5,
+    policy: PolicyV6,
     optimizer: torch.optim.Optimizer,
     observations: Tensor,
     descriptors: Tensor,
@@ -256,7 +256,7 @@ def choice_behavior_clone(
 
 
 def choice_classification_accuracy(
-    policy: PolicyV5,
+    policy: PolicyV6,
     observations: Tensor,
     descriptors: Tensor,
     masks: Tensor,
@@ -273,7 +273,7 @@ def choice_classification_accuracy(
 
 
 def ppo_epochs(
-    policy: PolicyV5,
+    policy: PolicyV6,
     optimizer: torch.optim.Optimizer,
     observations: Tensor,
     masks: Mapping[str, Tensor],
@@ -357,7 +357,7 @@ def ppo_epochs(
 
 
 def choice_ppo_epochs(
-    policy: PolicyV5,
+    policy: PolicyV6,
     optimizer: torch.optim.Optimizer,
     observations: Tensor,
     descriptors: Tensor,
@@ -409,7 +409,7 @@ def choice_ppo_epochs(
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
             gradient_norm = torch.nn.utils.clip_grad_norm_(
-                policy.choice_parameters(), maximum_gradient_norm
+                policy.choice_ppo_parameters(), maximum_gradient_norm
             )
             optimizer.step()
             with torch.no_grad():

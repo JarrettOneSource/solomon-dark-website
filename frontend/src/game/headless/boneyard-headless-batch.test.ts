@@ -7,7 +7,7 @@ import {
   createBoneyardHeadlessActionBuffer,
 } from './boneyard-headless-environment.ts'
 
-test('packed Boneyard batches isolate worlds and preserve schema-v5 strides', () => {
+test('packed Boneyard batches isolate worlds and preserve schema-v6 strides', () => {
   const first = { seed: 0x1234_5678 }
   const second = { seed: 0x1234_5679 }
   const batch = new BoneyardHeadlessBatch([first, second])
@@ -18,8 +18,8 @@ test('packed Boneyard batches isolate worlds and preserve schema-v5 strides', ()
   actions[BONEYARD_HEADLESS_ACTION_STRIDE + 2] = 0
   const transition = batch.stepTransitions(actions, 5)
   const observations = transition.nextObservations
-  assert.equal(observations.length, 2 * 1_784)
-  assert.equal(transition.observations.length, 2 * 1_784)
+  assert.equal(observations.length, 2 * 2_738)
+  assert.equal(transition.observations.length, 2 * 2_738)
   assert.deepEqual(transition.actions, Uint8Array.from(actions))
   assert.deepEqual(transition.stateHashes, initial)
   assert.deepEqual(transition.nextStateHashes, batch.stateHashes())

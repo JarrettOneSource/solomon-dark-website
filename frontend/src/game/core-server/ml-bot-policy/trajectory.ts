@@ -14,5 +14,5 @@ export interface MlBotPolicyMainTrajectoryRecord {
   readonly rewardTerms: MlBotPolicyRewardTerms
   readonly simulationTick: number
   readonly ticks: number
-  readonly trajectoryVersion: 5
+  readonly trajectoryVersion: 6
 }

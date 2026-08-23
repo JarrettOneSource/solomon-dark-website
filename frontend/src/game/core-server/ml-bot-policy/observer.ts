@@ -26,6 +26,7 @@ import {
   observeMlBotPolicyPlayerState,
   type MlBotPolicyPlayerObservation,
 } from './player-state.ts'
+import { observeMlBotPolicySkillLoadout } from './skill-loadout.ts'
 import {
   ML_BOT_POLICY_BLOCKS,
   ML_BOT_POLICY_OBSERVATION_NAMES,
@@ -54,6 +55,7 @@ export interface MlBotPolicyFrame {
   readonly enemyRows: readonly MlBotPolicyEnemyRow[]
   readonly geometry: MlBotPolicyGeometryObservation
   readonly inventory: MlBotPolicyInventoryObservation
+  readonly loadout: Float32Array
   readonly minions: MlBotPolicyMinionObservation
   readonly player: MlBotPolicyPlayerObservation
   readonly targetId: number | null
@@ -120,6 +122,7 @@ export class MlBotPolicyObserver {
     const inventory = observeMlBotPolicyInventory(state, this.playerId, {
       hasConsumable: context.hasConsumable,
     })
+    const loadout = observeMlBotPolicySkillLoadout(state, this.playerId)
     const targetId = enemies.next.memory.targetId
     const world = observeMlBotPolicyWorldState(state, this.playerId, enemies.rows, {
       activeInputs: context.activeInputs,
@@ -148,11 +151,12 @@ export class MlBotPolicyObserver {
       ['Q', inventory.blockQ],
       ['R', ownEffects.blockR],
       ['S', minions.blockS],
+      ['T', loadout],
     ])
     const blocks = ML_BOT_POLICY_BLOCKS.map(({ key, names }) => {
       const values = byKey.get(key)
       if (!values || values.length !== names.length) {
-        throw new Error(`ML bot policy Block ${key} does not match schema v5`)
+        throw new Error(`ML bot policy Block ${key} does not match schema v6`)
       }
       return Object.freeze({ key, values })
     })
@@ -170,6 +174,7 @@ export class MlBotPolicyObserver {
       enemyRows: enemies.rows,
       geometry,
       inventory,
+      loadout,
       minions,
       player,
       targetId,

@@ -107,8 +107,8 @@ def evaluation_checkpoint_identity(
     label: str,
 ) -> Mapping[str, str]:
     for report in (train_report, holdout_report):
-        if report.get("evaluationVersion") != 5:
-            raise ValueError(f"{label} evaluation report is not strict version 5")
+        if report.get("evaluationVersion") != 6:
+            raise ValueError(f"{label} evaluation report is not strict version 6")
     path = train_report.get("checkpoint")
     if not isinstance(path, str) or path != holdout_report.get("checkpoint"):
         raise ValueError(f"{label} train and holdout reports use different checkpoints")
@@ -138,6 +138,8 @@ def episode_gameplay_summary(records: Iterable[Mapping[str, Any]]) -> Mapping[st
         "skill_picks": 0,
         "skill_choices_by_id": {},
         "skill_choice_modes": {},
+        "spell_actions_by_skill_id": {},
+        "maximum_equipped_skill_ranks": {},
         "gold_collected": 0.0,
         "items_collected": 0,
         "item_kinds": {},
@@ -165,9 +167,15 @@ def episode_gameplay_summary(records: Iterable[Mapping[str, Any]]) -> Mapping[st
         for source, target in (
             ("enemy_kills_by_kind", "enemy_kills_by_kind"),
             ("item_kinds", "item_kinds"),
+            ("spell_actions_by_skill_id", "spell_actions_by_skill_id"),
         ):
-            for name, count in record[source].items():
+            for name, count in record.get(source, {}).items():
                 totals[target][name] = totals[target].get(name, 0) + int(count)
+        for skill_id, rank in record.get("maximum_equipped_skill_ranks", {}).items():
+            totals["maximum_equipped_skill_ranks"][skill_id] = max(
+                int(rank),
+                totals["maximum_equipped_skill_ranks"].get(skill_id, 0),
+            )
         for choice in record.get("choice_events", []):
             if choice.get("interval_steps") is not None:
                 continue
@@ -220,6 +228,8 @@ def training_summary(
         "potions_used": 0,
         "skill_picks": 0,
         "skill_choices_by_id": {},
+        "spell_actions_by_skill_id": {},
+        "maximum_equipped_skill_ranks": {},
         "gold_collected": 0.0,
         "items_collected": 0,
         "item_kinds": {},
@@ -248,10 +258,19 @@ def training_summary(
             gameplay["skill_choices_by_id"][skill_id] = (
                 gameplay["skill_choices_by_id"].get(skill_id, 0) + count
             )
+        for skill_id, count in record.get("spell_actions_by_skill_id", {}).items():
+            gameplay["spell_actions_by_skill_id"][skill_id] = (
+                gameplay["spell_actions_by_skill_id"].get(skill_id, 0) + count
+            )
+        for skill_id, rank in record.get("maximum_equipped_skill_ranks", {}).items():
+            gameplay["maximum_equipped_skill_ranks"][skill_id] = max(
+                rank,
+                gameplay["maximum_equipped_skill_ranks"].get(skill_id, 0),
+            )
     completed = [episode for episode in episodes if episode.get("aborted") is False]
     digest = hashlib.sha256(checkpoint.read_bytes()).hexdigest()
     return {
-        "summary_version": 5,
+        "summary_version": 6,
         "checkpoint": str(checkpoint.resolve()),
         "checkpoint_sha256": digest,
         "checkpoint_bytes": checkpoint.stat().st_size,

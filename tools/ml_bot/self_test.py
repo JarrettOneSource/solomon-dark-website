@@ -11,12 +11,13 @@ import torch
 
 from .advantages import (
     RunningReturnNormalizer,
+    discount_choice_rewards,
     normalized_main_advantages,
     smdp_choice_advantages,
 )
 from .bridge import BoneyardRolloutBridge
 from .checkpoint import decode_checkpoint, encode_checkpoint
-from .model import PolicyV5
+from .model import PolicyV6
 from .metrics import (
     episode_gameplay_summary,
     evaluation_checkpoint_identity,
@@ -31,17 +32,18 @@ from .optimization import (
     ppo_epochs,
 )
 from .spec import POLICY_SPEC
+from .trainer import TrainingConfiguration, validate_resume_state
 
 
 def main() -> int:
     torch.use_deterministic_algorithms(True)
     torch.manual_seed(0x5EED)
-    policy = PolicyV5.initialize(0x5EED)
+    policy = PolicyV6.initialize(0x5EED)
     metadata = POLICY_SPEC.checkpoint_metadata(0x5EED)
     encoded = encode_checkpoint(metadata, policy.export_tensors())
     decoded_metadata, decoded_tensors = decode_checkpoint(encoded)
     assert decoded_metadata == metadata
-    restored = PolicyV5()
+    restored = PolicyV6()
     restored.load_tensors(decoded_tensors)
     for name, tensor in policy.export_tensors().items():
         np.testing.assert_array_equal(tensor, restored.export_tensors()[name])
@@ -142,13 +144,36 @@ def main() -> int:
             "rewardTicks": [10],
         },
     ]
+    credit_rewards = [0.65, 1.5, -2.0]
+    credit_ticks = [10, 20, 10]
+    expected_credit = (
+        credit_rewards[0]
+        + 0.995**10 * credit_rewards[1]
+        + 0.995**30 * credit_rewards[2]
+    )
+    assert np.isclose(
+        discount_choice_rewards(
+            {"rewards": credit_rewards, "rewardTicks": credit_ticks},
+            gamma=0.995,
+        ),
+        expected_credit,
+    )
     choice_advantages, choice_returns, choice_scale = smdp_choice_advantages(
         choice_intervals,
         RunningReturnNormalizer(),
         gamma=0.995,
         gae_lambda=0.95,
     )
-    choice_optimizer = torch.optim.Adam(restored.choice_parameters(), lr=3e-4)
+    shared_trunk_before = [
+        parameter.detach().clone()
+        for module in (restored.trunk_1, restored.trunk_2)
+        for parameter in module.parameters()
+    ]
+    assert not (
+        {id(parameter) for parameter in restored.main_parameters()}
+        & {id(parameter) for parameter in restored.choice_ppo_parameters()}
+    )
+    choice_optimizer = torch.optim.Adam(restored.choice_ppo_parameters(), lr=3e-4)
     choice_metrics = choice_ppo_epochs(
         restored,
         choice_optimizer,
@@ -165,6 +190,15 @@ def main() -> int:
         generator=torch.Generator().manual_seed(1_234),
     )
     assert choice_metrics and choice_scale > 0 and np.isfinite(choice_metrics[-1].value_loss)
+    shared_trunk_after = [
+        parameter.detach()
+        for module in (restored.trunk_1, restored.trunk_2)
+        for parameter in module.parameters()
+    ]
+    assert all(
+        torch.equal(before, after)
+        for before, after in zip(shared_trunk_before, shared_trunk_after, strict=True)
+    )
     paired = paired_seed_comparison([1, 2, 3, 4], [2, 3, 4, 5])
     assert paired["candidateWins"] is True and paired["candidateRegresses"] is False
     promotion = promotion_decision(
@@ -202,10 +236,21 @@ def main() -> int:
             "trainedEnvironmentSteps": 10,
             "trainedUpdates": 1,
         }
-        summary_checkpoint = temporary / "policy-v5-update-000001.sdml"
+        summary_checkpoint = temporary / "policy-v6-update-000001.sdml"
         summary_checkpoint.write_bytes(
             encode_checkpoint(summary_metadata, policy.export_tensors())
         )
+        try:
+            validate_resume_state(
+                {"choiceOptimizerScope": "shared-trunk-v0"},
+                summary_checkpoint,
+                TrainingConfiguration(),
+                summary_metadata,
+            )
+        except ValueError as error:
+            assert "incompatible choice optimizer scope" in str(error)
+        else:
+            raise AssertionError("legacy overlapping choice optimizer state was accepted")
         (temporary / "metrics.jsonl").write_text(
             json.dumps({
                 "env_steps_total": 10,
@@ -232,7 +277,7 @@ def main() -> int:
         identity_report = {
             "checkpoint": str(summary_checkpoint.resolve()),
             "checkpointSha256": summary["checkpoint_sha256"],
-            "evaluationVersion": 5,
+            "evaluationVersion": 6,
         }
         identity = evaluation_checkpoint_identity(
             identity_report, identity_report, label="candidate"
@@ -266,6 +311,18 @@ def main() -> int:
 
     with BoneyardRolloutBridge([0x100, 0x101], worker_count=2) as bridge:
         initial_hashes = bridge.state.hashes
+        primary_id_index = POLICY_SPEC.observation_names.index(
+            "equipped_primary_option_id_index_scaled"
+        )
+        primary_present_index = POLICY_SPEC.observation_names.index(
+            "equipped_primary_present"
+        )
+        assert np.all(bridge.state.observations[:, primary_present_index] == 1)
+        assert np.allclose(
+            bridge.state.observations[:, primary_id_index]
+            * POLICY_SPEC.scales["skillId"],
+            16,
+        )
         expert = bridge.expert_step(ticks=2)
         assert expert.transition.actions.shape == (2, 4)
         assert expert.transition.observations.shape == (2, POLICY_SPEC.observation_size)

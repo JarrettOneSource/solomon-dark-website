@@ -1,4 +1,4 @@
-"""Strict compact checkpoint-v5 codec shared with the TypeScript runtime."""
+"""Strict compact checkpoint-v6 codec shared with the TypeScript runtime."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ import numpy as np
 from .spec import POLICY_SPEC, TENSOR_SHAPES
 from .spec import REPOSITORY_ROOT
 
-MAGIC = b"SDMLV5\x00\x01"
+MAGIC = b"SDMLV6\x00\x01"
 PREFIX_BYTES = len(MAGIC) + 4
 
 
@@ -95,7 +95,7 @@ def decode_checkpoint(source: bytes | bytearray | memoryview) -> tuple[dict[str,
             TENSOR_SHAPES[name]
         )
     if set(tensors) != set(TENSOR_SHAPES):
-        raise ValueError("checkpoint tensor names do not match schema v5")
+        raise ValueError("checkpoint tensor names do not match schema v6")
     if not occupied or max(end for _, end in occupied) != len(encoded):
         raise ValueError("checkpoint contains trailing or missing payload data")
     metadata = dict(header["metadata"])
@@ -106,7 +106,7 @@ def decode_checkpoint(source: bytes | bytearray | memoryview) -> tuple[dict[str,
 
 def validate_tensors(tensors: Mapping[str, np.ndarray]) -> dict[str, np.ndarray]:
     if set(tensors) != set(TENSOR_SHAPES):
-        raise ValueError("checkpoint tensor names do not match schema v5")
+        raise ValueError("checkpoint tensor names do not match schema v6")
     normalized: dict[str, np.ndarray] = {}
     for name, shape in TENSOR_SHAPES.items():
         value = np.asarray(tensors[name], dtype=np.float32)

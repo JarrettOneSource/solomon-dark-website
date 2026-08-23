@@ -1,4 +1,4 @@
-"""PyTorch implementation of the strict schema-v5 policy architecture."""
+"""PyTorch implementation of the strict schema-v6 policy architecture."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ class ChoiceEvaluation:
     value: Tensor
 
 
-class PolicyV5(nn.Module):
+class PolicyV6(nn.Module):
     def __init__(self) -> None:
         super().__init__()
         self.trunk_1 = nn.Linear(POLICY_SPEC.observation_size, 512)
@@ -53,7 +53,7 @@ class PolicyV5(nn.Module):
         self.choice_value = nn.Linear(256, 1)
 
     @classmethod
-    def initialize(cls, seed: int) -> "PolicyV5":
+    def initialize(cls, seed: int) -> "PolicyV6":
         if not isinstance(seed, int) or isinstance(seed, bool) or not 0 <= seed <= 0xFFFF_FFFF:
             raise ValueError("policy seed must be a uint32")
         with torch.random.fork_rng(devices=[]):
@@ -240,14 +240,15 @@ class PolicyV5(nn.Module):
             self.value,
         )
 
-    def choice_parameters(self) -> list[nn.Parameter]:
-        return parameters_of(
-            self.trunk_1,
-            self.trunk_2,
-            self.choice_hidden,
-            self.choice_score,
-            self.choice_value,
-        )
+    def choice_ppo_parameters(self) -> list[nn.Parameter]:
+        """Return the choice-only parameters updated by SMDP PPO.
+
+        The shared observation trunk belongs to the main optimizer. Giving the
+        trunk to a second Adam optimizer creates independent moment estimates
+        for the same tensors and allows choice updates to erase frozen combat
+        behaviors such as aim lead and potion use.
+        """
+        return parameters_of(self.choice_hidden, self.choice_score, self.choice_value)
 
     def choice_scorer_parameters(self) -> list[nn.Parameter]:
         return parameters_of(self.choice_hidden, self.choice_score)
@@ -282,7 +283,7 @@ class PolicyV5(nn.Module):
 
     def load_tensors(self, tensors: Mapping[str, np.ndarray]) -> None:
         if set(tensors) != set(TENSOR_SHAPES):
-            raise ValueError("model tensors do not match schema v5")
+            raise ValueError("model tensors do not match schema v6")
         targets = {
             "ability_bias": self.ability.bias,
             "ability_weight": self.ability.weight,

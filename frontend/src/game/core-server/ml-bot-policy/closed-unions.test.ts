@@ -9,7 +9,7 @@ import {
   validateMlBotPolicyClosedUnions,
 } from './closed-unions.ts'
 
-test('schema v5 closes every simulation union named by the policy contract', () => {
+test('schema v6 closes every simulation union named by the policy contract', () => {
   assert.doesNotThrow(validateMlBotPolicyClosedUnions)
   assert.equal(Object.keys(ML_BOT_POLICY_ENEMY_PHASE_MAP).length, 8)
   assert.equal(Object.keys(ML_BOT_POLICY_SECONDARY_ACTOR_CLASSES).length, 58)

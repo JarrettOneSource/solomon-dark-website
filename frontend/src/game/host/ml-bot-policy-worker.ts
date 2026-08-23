@@ -2,6 +2,7 @@ import { parentPort } from 'node:worker_threads'
 
 import { decodeMlBotPolicyCheckpoint } from '../core-server/ml-bot-policy/checkpoint.ts'
 import { MlBotPolicyRuntime } from '../core-server/ml-bot-policy/runtime.ts'
+import { ML_BOT_POLICY_OBSERVATION_NAMES } from '../core-server/ml-bot-policy/spec.ts'
 
 type WorkerRequest =
   | { readonly checkpoint: ArrayBuffer; readonly id: number; readonly type: 'initialize' }
@@ -35,7 +36,7 @@ parentPort.on('message', (message: WorkerRequest) => {
     if (runtime === null) throw new Error('ML bot policy worker is not initialized')
     if (message.type === 'choose') {
       const result = runtime.choose(
-        float32(message.observation, 1_784, 'choice observation'),
+        float32(message.observation, ML_BOT_POLICY_OBSERVATION_NAMES.length, 'choice observation'),
         float32Any(message.optionDescriptors, 'choice descriptors'),
         uint8Any(message.optionMask, 'choice mask'),
         { mode: 'argmax' },
@@ -49,7 +50,11 @@ parentPort.on('message', (message: WorkerRequest) => {
       })
       return
     }
-    const observation = float32(message.observation, 1_784, 'observation')
+    const observation = float32(
+      message.observation,
+      ML_BOT_POLICY_OBSERVATION_NAMES.length,
+      'observation',
+    )
     const movement = uint8(message.movement, 9, 'movement mask')
     const target = uint8(message.target, 9, 'target mask')
     const abilityByTarget = uint8(message.abilityByTarget, 9 * 22, 'ability mask plan')

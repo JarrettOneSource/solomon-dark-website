@@ -18,7 +18,7 @@ from .bridge import (
     RolloutState,
     RolloutTransition,
 )
-from .model import MainActionBatch, PolicyV5
+from .model import MainActionBatch, PolicyV6
 from .spec import POLICY_SPEC
 
 FEATURE = {name: index for index, name in enumerate(POLICY_SPEC.observation_names)}
@@ -329,7 +329,7 @@ def split_choice_expert_dataset(
 
 
 def collect_policy_rollout(
-    policy: PolicyV5,
+    policy: PolicyV6,
     bridge: BoneyardRolloutBridge,
     *,
     steps: int,
@@ -431,7 +431,7 @@ def collect_policy_rollout(
 
 
 def resolve_policy_choices(
-    policy: PolicyV5,
+    policy: PolicyV6,
     bridge: BoneyardRolloutBridge,
     *,
     temperature: float,
@@ -498,6 +498,8 @@ class EpisodeAccumulator:
         "ability": [0] * 22,
         "aim": [0] * 9,
     })
+    spell_actions_by_skill_id: dict[str, int] = field(default_factory=dict)
+    maximum_equipped_skill_ranks: dict[str, int] = field(default_factory=dict)
     consumables_used: int = 0
     enemy_kills: int = 0
     enemy_kills_by_kind: dict[str, int] = field(default_factory=dict)
@@ -561,6 +563,19 @@ class EpisodeLedger:
             accumulator.clamp_count += int(transition.reward_clamped[world])
             for column, name in enumerate(("move", "target", "ability", "aim")):
                 accumulator.action_histograms[name][int(actions[world, column])] += 1
+            observation = before.observations[world]
+            skill_id = spell_action_skill_id(observation, int(actions[world, 2]))
+            if skill_id is not None:
+                key = str(skill_id)
+                accumulator.spell_actions_by_skill_id[key] = (
+                    accumulator.spell_actions_by_skill_id.get(key, 0) + 1
+                )
+            for equipped_id, rank in equipped_skill_ranks(observation).items():
+                key = str(equipped_id)
+                accumulator.maximum_equipped_skill_ranks[key] = max(
+                    rank,
+                    accumulator.maximum_equipped_skill_ranks.get(key, 0),
+                )
             gameplay = transition.gameplay_counters[world]
             accumulator.consumables_used += int(gameplay["potionsUsed"])
             accumulator.enemy_kills += int(gameplay["enemyKills"])
@@ -784,7 +799,7 @@ def episode_record(
     error: str | None,
 ) -> Mapping[str, Any]:
     return {
-        "metrics_version": 5,
+        "metrics_version": 6,
         "seed": accumulator.seed,
         "composition": "solo",
         "boneyard_layout": accumulator.geometry_sha256,
@@ -796,6 +811,8 @@ def episode_record(
         "reward_terms": accumulator.reward_terms,
         "reward_clamp_count": accumulator.clamp_count,
         "action_histograms": accumulator.action_histograms,
+        "spell_actions_by_skill_id": accumulator.spell_actions_by_skill_id,
+        "maximum_equipped_skill_ranks": accumulator.maximum_equipped_skill_ranks,
         "consumables_used": accumulator.consumables_used,
         "enemy_kills": accumulator.enemy_kills,
         "enemy_kills_by_kind": accumulator.enemy_kills_by_kind,
@@ -819,3 +836,68 @@ def episode_record(
 def add_counts(target: dict[str, int], source: Mapping[str, Any]) -> None:
     for name, value in source.items():
         target[str(name)] = target.get(str(name), 0) + int(value)
+
+
+def spell_action_summary(
+    observations: np.ndarray,
+    ability_actions: np.ndarray,
+) -> Mapping[str, int]:
+    if observations.shape[:2] != ability_actions.shape:
+        raise ValueError("spell action observations and actions do not align")
+    result: dict[str, int] = {}
+    for step in range(ability_actions.shape[0]):
+        for world in range(ability_actions.shape[1]):
+            skill_id = spell_action_skill_id(
+                observations[step, world],
+                int(ability_actions[step, world]),
+            )
+            if skill_id is not None:
+                key = str(skill_id)
+                result[key] = result.get(key, 0) + 1
+    return result
+
+
+def equipped_skill_rank_summary(observations: np.ndarray) -> Mapping[str, int]:
+    result: dict[str, int] = {}
+    for observation in observations.reshape(-1, observations.shape[-1]):
+        for skill_id, rank in equipped_skill_ranks(observation).items():
+            key = str(skill_id)
+            result[key] = max(rank, result.get(key, 0))
+    return result
+
+
+def spell_action_skill_id(observation: np.ndarray, ability_action: int) -> int | None:
+    if ability_action == 1:
+        return equipped_skill_id(observation, "equipped_primary")
+    if 2 <= ability_action <= 9:
+        return equipped_skill_id(observation, f"equipped_secondary_{ability_action - 1}")
+    return None
+
+
+def equipped_skill_ranks(observation: np.ndarray) -> Mapping[int, int]:
+    result: dict[int, int] = {}
+    for prefix in (
+        "equipped_primary",
+        *(f"equipped_secondary_{slot}" for slot in range(1, 9)),
+    ):
+        skill_id = equipped_skill_id(observation, prefix)
+        if skill_id is None:
+            continue
+        rank = round(
+            float(observation[FEATURE[f"{prefix}_effective_rank_scaled"]])
+            * POLICY_SPEC.scales["skillRank"]
+        )
+        result[skill_id] = max(rank, result.get(skill_id, 0))
+    return result
+
+
+def equipped_skill_id(observation: np.ndarray, prefix: str) -> int | None:
+    if float(observation[FEATURE[f"{prefix}_present"]]) < 0.5:
+        return None
+    skill_id = round(
+        float(observation[FEATURE[f"{prefix}_option_id_index_scaled"]])
+        * POLICY_SPEC.scales["skillId"]
+    )
+    if not 0 <= skill_id <= POLICY_SPEC.scales["skillId"]:
+        raise ValueError("equipped skill identity is outside the policy contract")
+    return skill_id

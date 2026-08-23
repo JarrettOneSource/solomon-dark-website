@@ -1286,11 +1286,11 @@ same invitation after a three-second monotonic delay if it is still live.
 
 After party launch, a host-side entrance adapter follows collision-safe
 waypoints through the authored moving gate and into Solomon contact. It idles
-during dialogue, then hands control to the selected schema-v5 checkpoint at a
+during dialogue, then hands control to the selected schema-v6 checkpoint at a
 ten-tick decision cadence. Inference runs in one server-only worker shared by
 all summoned participants; each bot retains its own observer and intent queue.
 Potion actions use the ordinary consume path. Checkpoints without an explicit
-learned-choice marker retain the scripted schema-v5 chooser. A checkpoint
+learned-choice marker retain the scripted schema-v6 chooser. A checkpoint
 marked `choicePolicyMode=learned` evaluates the live offer observation,
 56-value option rows, and legality mask in that same worker, then dispatches
 the selected option through the ordinary progression path. Bot-assisted runs

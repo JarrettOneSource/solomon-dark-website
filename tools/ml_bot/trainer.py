@@ -23,7 +23,7 @@ from .bridge import BoneyardRolloutBridge
 from .checkpoint import atomic_write, load_checkpoint, save_checkpoint
 from .diagnostics import write_observation_audit, write_spatial_replay, write_value_calibration
 from .metrics import append_jsonl, bootstrap_mean_interval, episode_gameplay_summary
-from .model import PolicyV5
+from .model import PolicyV6
 from .optimization import (
     ChoiceCoverage,
     behavior_clone,
@@ -47,11 +47,16 @@ from .rollouts import (
     expert_dataset_diagnostics,
     collect_policy_rollout,
     resolve_policy_choices,
+    equipped_skill_rank_summary,
+    spell_action_summary,
     split_expert_dataset,
     split_choice_expert_dataset,
     state_tensors,
 )
 from .spec import POLICY_SPEC
+
+
+CHOICE_OPTIMIZER_SCOPE = "choice-head-and-value-v1"
 
 
 @dataclass(frozen=True)
@@ -108,7 +113,7 @@ def bootstrap_policy(
     validate_bootstrap_configuration(configuration)
     configure_torch(configuration.seed)
     output_directory.mkdir(parents=True, exist_ok=True)
-    cache = dataset_path or output_directory / "expert-v5.npz"
+    cache = dataset_path or output_directory / "expert-v6.npz"
     if cache.exists():
         dataset = ExpertDataset.load(cache)
         if len(dataset) < configuration.samples:
@@ -137,7 +142,7 @@ def bootstrap_policy(
     ):
         raise RuntimeError(f"expert dataset diversity gate failed: {dataset_diagnostics}")
     device = torch.device("cpu")
-    policy = PolicyV5.initialize(configuration.seed).to(device)
+    policy = PolicyV6.initialize(configuration.seed).to(device)
     optimizer = torch.optim.Adam(policy.main_parameters(), lr=configuration.learning_rate)
     training_tensors = expert_tensors(training, device)
     validation_tensors = expert_tensors(validation, device)
@@ -199,10 +204,10 @@ def bootstrap_policy(
             "expertDatasetDiagnostics": dataset_diagnostics,
             "numpyVersion": np.__version__,
             "torchVersion": torch.__version__,
-            "trainingKind": "web-semantic-expert-bootstrap-v5",
+            "trainingKind": "web-semantic-expert-bootstrap-v6",
         }
     )
-    checkpoint = output_directory / "bootstrap-v5.sdml"
+    checkpoint = output_directory / "bootstrap-v6.sdml"
     save_checkpoint(checkpoint, metadata, policy.export_tensors())
     save_checkpoint(output_directory / "latest.sdml", metadata, policy.export_tensors())
     result = {
@@ -233,7 +238,7 @@ def bootstrap_choice_policy(
     validate_choice_bootstrap_configuration(configuration)
     configure_torch(configuration.seed)
     output_directory.mkdir(parents=True, exist_ok=True)
-    cache = dataset_path or output_directory / "choice-expert-v5.npz"
+    cache = dataset_path or output_directory / "choice-expert-v6.npz"
     if cache.exists():
         dataset = ChoiceExpertDataset.load(cache)
         if len(dataset) < configuration.samples:
@@ -265,7 +270,7 @@ def bootstrap_choice_policy(
         rng=np.random.default_rng(configuration.seed + 1),
     )
     metadata, tensors = load_checkpoint(checkpoint_path)
-    policy = PolicyV5().to(torch.device("cpu"))
+    policy = PolicyV6().to(torch.device("cpu"))
     policy.load_tensors(tensors)
     protected = {
         name: value.copy()
@@ -318,9 +323,9 @@ def bootstrap_choice_policy(
         "choiceCoverage": {},
         "choicePolicyMode": "learned",
         "choiceTemperature": 1.25,
-        "trainingKind": "web-choice-expert-bootstrap-v5",
+        "trainingKind": "web-choice-expert-bootstrap-v6",
     }
-    checkpoint = output_directory / "choice-bootstrap-v5.sdml"
+    checkpoint = output_directory / "choice-bootstrap-v6.sdml"
     save_checkpoint(checkpoint, metadata, exported)
     save_checkpoint(output_directory / "latest.sdml", metadata, exported)
     result = {
@@ -351,12 +356,16 @@ def train_policy(
     configure_torch(configuration.seed)
     output_directory.mkdir(parents=True, exist_ok=True)
     metadata, tensors = load_checkpoint(checkpoint_path)
-    policy = PolicyV5().to(torch.device("cpu"))
+    policy = PolicyV6().to(torch.device("cpu"))
     policy.load_tensors(tensors)
-    main_optimizer = torch.optim.Adam(policy.main_parameters(), lr=configuration.learning_rate)
-    choice_optimizer = torch.optim.Adam(
-        policy.choice_parameters(), lr=configuration.choice_learning_rate
-    )
+    main_parameters = policy.main_parameters()
+    choice_parameters = policy.choice_ppo_parameters()
+    if {id(parameter) for parameter in main_parameters} & {
+        id(parameter) for parameter in choice_parameters
+    }:
+        raise RuntimeError("main and choice optimizers must own disjoint parameters")
+    main_optimizer = torch.optim.Adam(main_parameters, lr=configuration.learning_rate)
+    choice_optimizer = torch.optim.Adam(choice_parameters, lr=configuration.choice_learning_rate)
     main_normalizer = RunningReturnNormalizer()
     choice_normalizer = RunningReturnNormalizer()
     coverage = ChoiceCoverage(metadata.get("choiceCoverage", {}))
@@ -366,7 +375,7 @@ def train_policy(
     completed_episode_count = 0
     seed_stream = SeedStream(configuration.seed)
     torch_generator = torch.Generator().manual_seed(configuration.seed + 1)
-    trainer_state_path = output_directory / "trainer-state-v5.pt"
+    trainer_state_path = output_directory / "trainer-state-v6.pt"
     if resume and trainer_state_path.exists():
         state = load_trainer_state(trainer_state_path)
         validate_resume_state(state, checkpoint_path, configuration, metadata)
@@ -511,24 +520,26 @@ def train_policy(
             metadata = {
                 **metadata,
                 "choiceCoverage": dict(sorted(coverage.counts.items())),
+                "choiceOptimizerScope": CHOICE_OPTIMIZER_SCOPE,
                 "choiceTemperature": coverage.temperature,
                 "choiceReturnNormalizer": choice_normalizer.state_dict(),
                 "mainReturnNormalizer": main_normalizer.state_dict(),
                 "trainedEnvironmentSteps": environment_steps,
                 "trainedUpdates": completed_updates,
                 "trainingConfiguration": asdict(configuration),
-                "trainingKind": "web-headless-pytorch-ppo-v5",
+                "trainingKind": "web-headless-pytorch-ppo-v6",
             }
-            last_checkpoint = output_directory / f"policy-v5-update-{completed_updates:06d}.sdml"
+            last_checkpoint = output_directory / f"policy-v6-update-{completed_updates:06d}.sdml"
             save_checkpoint(last_checkpoint, metadata, policy.export_tensors())
             save_checkpoint(output_directory / "latest.sdml", metadata, policy.export_tensors())
             save_trainer_state(
                 trainer_state_path,
                 {
-                    "trainerVersion": 5,
+                    "trainerVersion": 6,
                     "model": policy.state_dict(),
                     "mainOptimizer": main_optimizer.state_dict(),
                     "choiceOptimizer": choice_optimizer.state_dict(),
+                    "choiceOptimizerScope": CHOICE_OPTIMIZER_SCOPE,
                     "mainNormalizer": main_normalizer.state_dict(),
                     "choiceNormalizer": choice_normalizer.state_dict(),
                     "choiceCoverage": coverage.counts,
@@ -567,7 +578,7 @@ def evaluate_policy(
     if len(seeds) < 1 or workers < 1 or action_repeat < 1 or maximum_steps < 1:
         raise ValueError("evaluation sizes must be positive")
     metadata, tensors = load_checkpoint(checkpoint_path)
-    policy = PolicyV5()
+    policy = PolicyV6()
     policy.load_tensors(tensors)
     policy.eval()
     records: list[Mapping[str, Any]] = []
@@ -659,7 +670,7 @@ def evaluation_report(
     returns = [float(record["return"]) for record in completed]
     waves = [float(record["waves_reached"]) for record in completed]
     return {
-        "evaluationVersion": 5,
+        "evaluationVersion": 6,
         "checkpoint": str(checkpoint_path),
         "checkpointSha256": file_sha256(checkpoint_path),
         "episodes": records,
@@ -843,7 +854,7 @@ def iteration_record(
     gameplay = aggregate_gameplay(rollout.gameplay_counters)
     choice_selections = choice_selection_summary(rollout.choice_intervals)
     return {
-        "metrics_version": 5,
+        "metrics_version": 6,
         "iter": iteration,
         "wall_seconds": wall_seconds,
         "env_steps_total": environment_steps,
@@ -883,6 +894,13 @@ def iteration_record(
         },
         "reward_terms": reward_terms,
         "gameplay": gameplay,
+        "spell_actions_by_skill_id": spell_action_summary(
+            rollout.observations,
+            rollout.actions["ability"],
+        ),
+        "maximum_equipped_skill_ranks": equipped_skill_rank_summary(
+            rollout.observations,
+        ),
         "return_normalization_std": return_scale,
         "choice_return_normalization_std": choice_return_scale,
         "gamma": configuration.gamma,
@@ -966,8 +984,8 @@ def save_trainer_state(path: Path, value: Mapping[str, Any]) -> None:
 
 def load_trainer_state(path: Path) -> Mapping[str, Any]:
     value = torch.load(path, map_location="cpu", weights_only=False)
-    if not isinstance(value, Mapping) or value.get("trainerVersion") != 5:
-        raise ValueError("trainer state is not strict version 5")
+    if not isinstance(value, Mapping) or value.get("trainerVersion") != 6:
+        raise ValueError("trainer state is not strict version 6")
     return value
 
 
@@ -977,6 +995,11 @@ def validate_resume_state(
     configuration: TrainingConfiguration,
     metadata: Mapping[str, Any],
 ) -> None:
+    if state.get("choiceOptimizerScope") != CHOICE_OPTIMIZER_SCOPE:
+        raise ValueError(
+            "trainer state uses an incompatible choice optimizer scope; "
+            "start a clean output directory from the runtime checkpoint"
+        )
     expected_hash = state.get("runtimeCheckpointSha256")
     if not isinstance(expected_hash, str) or expected_hash != file_sha256(checkpoint_path):
         raise ValueError("trainer state does not belong to the supplied runtime checkpoint")

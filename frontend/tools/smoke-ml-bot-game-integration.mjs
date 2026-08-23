@@ -15,7 +15,7 @@ import { MlBotPolicyInferenceWorker } from '../src/game/host/ml-bot-host-control
 
 const require = createRequire(import.meta.url)
 const checkpointPath = process.env.SDR_ML_BOT_CHECKPOINT
-  ?? 'server-assets/ml-bot-policy-v5-selected.sdml'
+  ?? 'server-assets/ml-bot-policy-v6-selected.sdml'
 const durationMs = integerArgument('--duration-ms', 90_000)
 const policy = await MlBotPolicyInferenceWorker.create(await readFile(checkpointPath))
 const admission = {

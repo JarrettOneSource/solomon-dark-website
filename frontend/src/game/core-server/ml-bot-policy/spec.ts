@@ -1,5 +1,5 @@
 export const ML_BOT_POLICY_MODEL_FORMAT = 'solomon-dark-web-bot-policy'
-export const ML_BOT_POLICY_ARCHITECTURE = 'mlp-tanh-four-head-v5'
+export const ML_BOT_POLICY_ARCHITECTURE = 'mlp-tanh-four-head-v6'
 
 function names(...values: readonly string[]): readonly string[] {
   return Object.freeze(values)
@@ -10,6 +10,32 @@ function repeated(prefix: string, count: number, suffixes: readonly string[]): r
     suffixes.map((suffix) => `${prefix}_${index + 1}_${suffix}`)
   )).flat())
 }
+
+const EXTENDED_SKILL_MECHANICS = names(
+  'quantity', 'strength', 'absorb', 'arcs', 'armor_plus', 'charges', 'flee',
+  'fragments', 'freeze', 'hp', 'hoard', 'loss', 'max_armor', 'percent',
+  'pierces', 'pushback', 'reflect', 'size', 'slow', 'slowdown', 'speed',
+  'speed_up', 'stun_amount', 'to_hit', 'weaken', 'widen',
+)
+
+export const ML_BOT_POLICY_OPTION_DESCRIPTOR_NAMES = names(
+  'present', 'option_id_index_scaled', 'catalog_known', 'apply_count_scaled',
+  'learned_rank_scaled', 'effective_rank_scaled', 'cap_rank_scaled',
+  'max_rank_scaled', 'band_index_scaled', 'family_element', 'family_discipline',
+  'family_ether', 'family_fire', 'family_air', 'family_water', 'family_earth',
+  'family_arcane', 'family_mind', 'family_body', 'family_advanced',
+  'family_runtime_only', 'is_primary', 'is_secondary', 'is_passive',
+  'is_utility', 'is_weld', 'is_health_up', 'is_mana_up', 'weld_element_ether',
+  'weld_element_fire', 'weld_element_air', 'weld_element_water',
+  'weld_element_earth', 'weld_build_index_scaled', 'mana_cost_scaled',
+  'damage_min_scaled', 'damage_max_scaled', 'range_scaled', 'cooldown_scaled',
+  'radius_scaled', 'duration_scaled', 'value_scaled', 'concentration_scaled',
+  'chance_scaled', 'mana_cost_present',
+  'damage_min_present', 'damage_max_present', 'range_present',
+  'cooldown_present', 'radius_present', 'duration_present', 'value_present',
+  'concentration_present', 'chance_present',
+  ...EXTENDED_SKILL_MECHANICS.flatMap((name) => [`${name}_scaled`, `${name}_present`]),
+)
 
 const BLOCK_A = names(
   'self_hp_ratio',
@@ -428,12 +454,17 @@ const BLOCK_S = Object.freeze([
   'ally_minion_count_scaled',
 ])
 
+const BLOCK_T = Object.freeze([
+  ...ML_BOT_POLICY_OPTION_DESCRIPTOR_NAMES.map((name) => `equipped_primary_${name}`),
+  ...repeated('equipped_secondary', 8, ML_BOT_POLICY_OPTION_DESCRIPTOR_NAMES),
+])
+
 const BLOCK_DEFINITIONS = [
   ['A', BLOCK_A], ['B', BLOCK_B], ['C', BLOCK_C], ['D', BLOCK_D],
   ['E', BLOCK_E], ['F', BLOCK_F], ['G', BLOCK_G], ['I', BLOCK_I],
   ['H', BLOCK_H], ['J', BLOCK_J], ['K', BLOCK_K], ['L', BLOCK_L],
   ['M', BLOCK_M], ['N', BLOCK_N], ['O', BLOCK_O], ['P', BLOCK_P],
-  ['Q', BLOCK_Q], ['R', BLOCK_R], ['S', BLOCK_S],
+  ['Q', BLOCK_Q], ['R', BLOCK_R], ['S', BLOCK_S], ['T', BLOCK_T],
 ] as const
 
 export interface MlBotPolicyBlock {
@@ -459,24 +490,6 @@ export const ML_BOT_POLICY_BLOCKS: readonly MlBotPolicyBlock[] = Object.freeze(
 
 export const ML_BOT_POLICY_OBSERVATION_NAMES = Object.freeze(
   ML_BOT_POLICY_BLOCKS.flatMap(({ names: blockNames }) => blockNames),
-)
-
-export const ML_BOT_POLICY_OPTION_DESCRIPTOR_NAMES = names(
-  'present', 'option_id_index_scaled', 'catalog_known', 'apply_count_scaled',
-  'learned_rank_scaled', 'effective_rank_scaled', 'cap_rank_scaled',
-  'max_rank_scaled', 'band_index_scaled', 'family_element', 'family_discipline',
-  'family_ether', 'family_fire', 'family_air', 'family_water', 'family_earth',
-  'family_arcane', 'family_mind', 'family_body', 'family_advanced',
-  'family_runtime_only', 'is_primary', 'is_secondary', 'is_passive',
-  'is_utility', 'is_weld', 'is_health_up', 'is_mana_up', 'weld_element_ether',
-  'weld_element_fire', 'weld_element_air', 'weld_element_water',
-  'weld_element_earth', 'weld_build_index_scaled', 'mana_cost_scaled',
-  'damage_min_scaled', 'damage_max_scaled', 'range_scaled', 'cooldown_scaled',
-  'radius_scaled', 'duration_scaled', 'value_scaled', 'concentration_scaled',
-  'chance_scaled', 'quantity_or_strength_scaled', 'mana_cost_present',
-  'damage_min_present', 'damage_max_present', 'range_present',
-  'cooldown_present', 'radius_present', 'duration_present', 'value_present',
-  'concentration_present', 'chance_present', 'quantity_or_strength_present',
 )
 
 const COMPASS_ACTIONS = names(
@@ -532,14 +545,39 @@ export const ML_BOT_POLICY_SCALES = Object.freeze({
   rayStep: 60,
   skillDamage: 500,
   skillBand: 8,
+  skillAbsorb: 600,
+  skillArcs: 12,
+  skillArmorPlus: 60,
   skillChance: 100,
+  skillCharges: 6,
   skillConcentration: 25,
   skillDurationSeconds: 30,
+  skillFlee: 6,
+  skillFragments: 10,
+  skillFreeze: 100,
+  skillHp: 700,
+  skillHoard: 60,
   skillId: 81,
-  skillQuantityOrStrength: 2_100,
+  skillLoss: 80,
+  skillMaxArmor: 300,
+  skillPercent: 90,
+  skillPierces: 8,
+  skillPushback: 100,
+  skillQuantity: 14,
+  skillReflect: 250,
   skillRadius: 20,
   skillRank: 20,
+  skillSize: 210,
+  skillSlow: 95,
+  skillSlowdown: 50,
+  skillSpeed: 350,
+  skillSpeedUp: 350,
+  skillStrength: 2_100,
+  skillStunAmount: 100,
+  skillToHit: 25,
   skillValue: 1_250,
+  skillWeaken: 85,
+  skillWiden: 150,
   statusDurationSeconds: 60,
   targetAction: 8,
   threatCount: 8,
@@ -567,23 +605,23 @@ export const ML_BOT_POLICY_SPEC: MlBotPolicyContract = Object.freeze({
   actionHeads: ML_BOT_POLICY_ACTION_HEADS,
   architecture: ML_BOT_POLICY_ARCHITECTURE,
   choiceHiddenSize: 128,
-  choiceTrajectoryVersion: 5,
+  choiceTrajectoryVersion: 6,
   hiddenSizes: Object.freeze([512, 256]),
-  mainTrajectoryVersion: 5,
+  mainTrajectoryVersion: 6,
   modelFormat: ML_BOT_POLICY_MODEL_FORMAT,
-  modelVersion: 5,
+  modelVersion: 6,
   observationNames: ML_BOT_POLICY_OBSERVATION_NAMES,
-  observationVersion: 5,
+  observationVersion: 6,
   optionDescriptorNames: ML_BOT_POLICY_OPTION_DESCRIPTOR_NAMES,
 })
 
 export function validateMlBotPolicyContract(candidate: MlBotPolicyContract): void {
   requireEqual(candidate.modelFormat, ML_BOT_POLICY_MODEL_FORMAT, 'model format')
   requireEqual(candidate.architecture, ML_BOT_POLICY_ARCHITECTURE, 'architecture')
-  requireEqual(candidate.modelVersion, 5, 'model version')
-  requireEqual(candidate.observationVersion, 5, 'observation version')
-  requireEqual(candidate.mainTrajectoryVersion, 5, 'main trajectory version')
-  requireEqual(candidate.choiceTrajectoryVersion, 5, 'choice trajectory version')
+  requireEqual(candidate.modelVersion, 6, 'model version')
+  requireEqual(candidate.observationVersion, 6, 'observation version')
+  requireEqual(candidate.mainTrajectoryVersion, 6, 'main trajectory version')
+  requireEqual(candidate.choiceTrajectoryVersion, 6, 'choice trajectory version')
   requireNames(candidate.hiddenSizes.map(String), ['512', '256'], 'hidden sizes')
   requireEqual(candidate.choiceHiddenSize, 128, 'choice hidden size')
   requireNames(candidate.observationNames, ML_BOT_POLICY_OBSERVATION_NAMES, 'observation names')
@@ -598,7 +636,7 @@ export function validateMlBotPolicyContract(candidate: MlBotPolicyContract): voi
 }
 
 function requireEqual(actual: unknown, expected: unknown, label: string): void {
-  if (actual !== expected) throw new Error(`ML bot policy ${label} does not match schema v5`)
+  if (actual !== expected) throw new Error(`ML bot policy ${label} does not match schema v6`)
 }
 
 function requireNames(
@@ -607,6 +645,6 @@ function requireNames(
   label: string,
 ): void {
   if (actual.length !== expected.length || actual.some((value, index) => value !== expected[index])) {
-    throw new Error(`ML bot policy ${label} do not match schema v5`)
+    throw new Error(`ML bot policy ${label} do not match schema v6`)
   }
 }
