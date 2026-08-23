@@ -7,6 +7,12 @@ import {
 } from './native-rng.ts'
 import { resolveNativeSkillDamageValue } from './native-offensive-resolution.ts'
 import {
+  NATIVE_HAGATHA_FACTORS,
+  NATIVE_HAGATHA_SELECTORS,
+  nativeHagathaDerivedModifiers,
+  ownsNativeHagathaSelector,
+} from './native-hagatha-effects.ts'
+import {
   applyNativeEquipmentTransform,
   nativeEquipmentHasFeature,
   resolveEquippedNativeEffects,
@@ -28,6 +34,8 @@ import type {
 import {
   NATIVE_SKILL_CATALOG,
   NATIVE_WELD_COMPONENT_SKILL_IDS,
+  nativeWeldBuild,
+  nativeWeldComponentRanksForBuild,
   nativeSkillCategory,
   nativeSkillRoot,
 } from './player-progression.ts'
@@ -44,7 +52,7 @@ export const NATIVE_CONCENTRATED_ENCHANT_STAFF_TIMING_FACTOR = 1.75
 export const NATIVE_CONCENTRATED_DEFLECT_DAMAGE_FACTOR = 5
 export const NATIVE_DEFLECT_REFLECTION_PADDING = 25
 export const NATIVE_FLASH_RESPONSE_RADIUS = 100
-export const NATIVE_HAGATHA_MAXIMUM_VITAL_FACTOR = 1.25
+export const NATIVE_HAGATHA_MAXIMUM_VITAL_FACTOR = NATIVE_HAGATHA_FACTORS.life
 
 export type PlayerConcentrationSlot = 'a' | 'b'
 export type PlayerStaffDamageLane = 'primary' | 'secondary'
@@ -83,6 +91,7 @@ export interface PlayerSkillDerivedStats {
   readonly flailingChancePercent: number
   readonly goldAmountMultiplier: number
   readonly healthRecoveryPerTick: number
+  readonly incomingDamageFactor: number
   readonly magicResistance: number
   readonly manaRecoveryPerTick: number
   readonly maximumHealth: number
@@ -90,6 +99,7 @@ export interface PlayerSkillDerivedStats {
   readonly meditationConcentrated: boolean
   readonly meditationIdleDelayTicks: number
   readonly meditationRecoveryMultiplier: number
+  readonly meleeDamageFactor: number
   readonly movementFactor: number
   readonly offensiveDamageFactor: number
   readonly offensiveDamageFlat: number
@@ -98,6 +108,8 @@ export interface PlayerSkillDerivedStats {
   readonly orbPullMultiplier: number
   readonly pickupRangeScalar: number
   readonly poisonResistance: number
+  readonly poisonDamageFactor: number
+  readonly pushStrengthFactor: number
   readonly secondaryRechargeFactor: number
   readonly staffActionTimingFactor: number
   readonly staffDamagePrimary: number
@@ -191,9 +203,27 @@ export function refreshPlayerSkillRuntime(
     ),
     source.mindstarActive,
   )
-  const nextSkillBook = ranksEqual(effectiveRanks, skillBook.effectiveRanks)
+  let nextSkillBook = ranksEqual(effectiveRanks, skillBook.effectiveRanks)
     ? skillBook
     : { ...skillBook, effectiveRanks }
+  const weldBuild = nextSkillBook.weldBuildId === null
+    ? null
+    : nativeWeldBuild(nextSkillBook.weldBuildId)
+  if (
+    weldBuild !== null
+    && (
+      nextSkillBook.weldComponentRanks === null
+      || ownsNativeHagathaSelector(
+        economy.ownedPerkSelectors,
+        NATIVE_HAGATHA_SELECTORS.spellwelder,
+      )
+    )
+  ) {
+    const weldComponentRanks = nativeWeldComponentRanksForBuild(effectiveRanks, weldBuild)
+    if (!sameNumbers(nextSkillBook.weldComponentRanks, weldComponentRanks)) {
+      nextSkillBook = { ...nextSkillBook, weldComponentRanks }
+    }
+  }
   const splitMind = economy.ownedPerkSelectors.includes(21)
   const concentrationSkillIdA = validConcentrationSelection(
     source.concentrationSkillIdA,
@@ -241,7 +271,7 @@ export function playerSkillDerivedStats(
   skillBook: PlayerSkillBookComponent,
   statBook: PlayerStatBookComponent,
   progression: Pick<PlayerProgressionComponent,
-    'damageX4TicksRemaining' | 'mindChugTicksRemaining'
+    'damageX4TicksRemaining' | 'hagathaRuntime' | 'mindChugTicksRemaining'
   >,
   economy: HubEconomyState,
 ): PlayerSkillDerivedStats {
@@ -265,24 +295,39 @@ export function playerSkillDerivedStats(
   const fasterCaster = value(70, 'mValue')
   const staffEquipped = economy.equipment.weapon?.nativeTypeId === 7004
     && economy.equipment.weapon.equipmentType === 'staff'
+  const hagatha = nativeHagathaDerivedModifiers(
+    economy.ownedPerkSelectors,
+    progression.hagathaRuntime,
+    economy.equipment.weapon !== null,
+  )
   const modifiers = runtime.equipmentModifiers
-  const offensiveDamageFactor = (
+  const baseOffensiveDamageFactor = (
     1 + (siegeMage + (selected(61) ? value(61, 'mConcentration') : 0)) / 100
   ) * (progression.damageX4TicksRemaining > 0 ? 4 : 1)
+  const offensiveDamageFactor = baseOffensiveDamageFactor * hagatha.spellDamageFactor
   const offensiveManaCostFactor = Math.max(
     0,
     1 - (battleMage + (selected(59) ? value(59, 'mConcentration') : 0)) / 100,
+  ) * hagatha.offensiveManaFactor
+  const castProgressFactor = multiplyNativeHagathaFactor(
+    applyClassCastSpeed(
+      modifiers,
+      1 + (fasterCaster + (selected(70) ? value(70, 'mConcentration') : 0)) / 100,
+      skillBook.primarySkillId,
+    ),
+    hagatha.castSpeedFactor,
   )
-  const castProgressFactor = applyClassCastSpeed(
-    modifiers,
-    1 + (fasterCaster + (selected(70) ? value(70, 'mConcentration') : 0)) / 100,
-    skillBook.primarySkillId,
+  const lifeCharmFactor = ownsNativeHagathaSelector(
+    economy.ownedPerkSelectors,
+    NATIVE_HAGATHA_SELECTORS.life,
   )
-  const lifeCharmFactor = economy.ownedPerkSelectors.includes(0)
-    ? NATIVE_HAGATHA_MAXIMUM_VITAL_FACTOR
+    ? NATIVE_HAGATHA_FACTORS.life
     : 1
-  const manaCharmFactor = economy.ownedPerkSelectors.includes(1)
-    ? NATIVE_HAGATHA_MAXIMUM_VITAL_FACTOR
+  const manaCharmFactor = ownsNativeHagathaSelector(
+    economy.ownedPerkSelectors,
+    NATIVE_HAGATHA_SELECTORS.mana,
+  )
+    ? NATIVE_HAGATHA_FACTORS.mana
     : 1
   return Object.freeze({
     castProgressFactor,
@@ -298,6 +343,7 @@ export function playerSkillDerivedStats(
       modifiers.healthRecovery,
       PLAYER_HEALTH_RECOVERY_PER_TICK,
     ),
+    incomingDamageFactor: hagatha.incomingDamageFactor,
     magicResistance: clampUnit(
       (resistMagic + (selected(62) ? value(62, 'mConcentration') : 0)) / 100
       + modifiers.magicResistance,
@@ -323,9 +369,13 @@ export function playerSkillDerivedStats(
     meditationConcentrated: selected(58),
     meditationIdleDelayTicks: meditationIdleDelayTicks(skillBook, statBook),
     meditationRecoveryMultiplier: rank(skillBook, 58) > 0 ? value(58, 'mValue') : 1,
-    movementFactor: applyNativeEquipmentTransform(
-      modifiers.walkSpeed,
-      (1 + rush / 100) * (selected(67) ? 1 + value(67, 'mConcentration') / 100 : 1),
+    meleeDamageFactor: baseOffensiveDamageFactor * hagatha.meleeDamageFactor,
+    movementFactor: multiplyNativeHagathaFactor(
+      applyNativeEquipmentTransform(
+        modifiers.walkSpeed,
+        (1 + rush / 100) * (selected(67) ? 1 + value(67, 'mConcentration') / 100 : 1),
+      ),
+      hagatha.movementFactor,
     ),
     offensiveDamageFactor,
     offensiveDamageFlat: economy.unforgeBonuses.offensiveDamage,
@@ -337,9 +387,14 @@ export function playerSkillDerivedStats(
       (resistPoison + (selected(69) ? value(69, 'mConcentration') : 0)) / 100
       + modifiers.poisonResistance,
     ),
-    secondaryRechargeFactor: applyNativeEquipmentTransform(
-      modifiers.recharge,
-      1 + focus / 100,
+    poisonDamageFactor: hagatha.poisonDamageFactor,
+    pushStrengthFactor: hagatha.pushStrengthFactor,
+    secondaryRechargeFactor: multiplyNativeHagathaFactor(
+      applyNativeEquipmentTransform(
+        modifiers.recharge,
+        1 + focus / 100,
+      ),
+      hagatha.rechargeFactor,
     ),
     staffActionTimingFactor: selected(65)
       ? NATIVE_CONCENTRATED_ENCHANT_STAFF_TIMING_FACTOR
@@ -506,7 +561,7 @@ export function playerStaffDamage(
     65,
     derived.staffDamagePrimary,
     {
-      damage: derived.offensiveDamageFactor,
+      damage: derived.meleeDamageFactor,
       equipment: runtime.equipmentModifiers,
       globalFlatDamage: derived.offensiveDamageFlat,
       globalManaReduction: derived.offensiveManaCostReduction,
@@ -852,6 +907,19 @@ function rank(skillBook: PlayerSkillBookComponent, skillId: number): number {
 function ranksEqual(first: readonly number[], second: readonly number[]): boolean {
   return first.length === second.length
     && first.every((rank, index) => rank === second[index])
+}
+
+function sameNumbers(
+  first: readonly number[] | null,
+  second: readonly number[],
+): boolean {
+  return first !== null
+    && first.length === second.length
+    && first.every((value, index) => value === second[index])
+}
+
+function multiplyNativeHagathaFactor(value: number, factor: number): number {
+  return factor === 1 ? value : Math.fround(value * factor)
 }
 
 function clampUnit(value: number): number {

@@ -165,7 +165,7 @@ test('save documents admit the complete Sack wire depth and reject one level bey
   )
 })
 
-test('schema-4 saves normalize the pre-unforge zero ledger and feedback shape', () => {
+test('schema-4 saves normalize pre-unforge and pre-Hagatha runtime fields', () => {
   const document = createGameSaveDocument({
     integrity: 'global-clean',
     loadedBoneyard: null,
@@ -176,7 +176,10 @@ test('schema-4 saves normalize the pre-unforge zero ledger and feedback shape', 
   })
   const parsed = JSON.parse(document)
   const economy = parsed.simulation.playerEntities.economies[0]
+  economy.ownedPerkSelectors = [7, 24, 25]
   delete economy.unforgeBonuses
+  delete parsed.simulation.playerEntities.progressions[0].hagathaRuntime
+  delete parsed.simulation.playerEntities.skillBooks[0].weldComponentRanks
   economy.actionFeedback = {
     accepted: true,
     action: 'consume',
@@ -199,6 +202,12 @@ test('schema-4 saves normalize the pre-unforge zero ledger and feedback shape', 
     restored.state.playerEntities.economies[0]?.actionFeedback?.unforgeOutcome,
     null,
   )
+  assert.deepEqual(restored.state.playerEntities.progressions[0]?.hagathaRuntime, {
+    cheatDeathCharges: 1,
+    reverieActive: true,
+    serendipityActive: true,
+  })
+  assert.equal(restored.state.playerEntities.skillBooks[0]?.weldComponentRanks, null)
 })
 
 test('host save documents retain the active Boneyard and its authoritative run id', () => {
@@ -261,6 +270,18 @@ test('host save documents fail closed for unknown schema, extra fields, owner dr
       summary: { ...parsed.summary, playerId: 'someone-else' },
     })),
     /owner/,
+  )
+  const invalidHagatha = structuredClone(parsed)
+  invalidHagatha.simulation.playerEntities.progressions[0].hagathaRuntime.cheatDeathCharges = 2
+  assert.throws(
+    () => restoreGameSaveDocument(JSON.stringify(invalidHagatha)),
+    /Hagatha runtime/,
+  )
+  const invalidWeld = structuredClone(parsed)
+  invalidWeld.simulation.playerEntities.skillBooks[0].weldComponentRanks = [1]
+  assert.throws(
+    () => restoreGameSaveDocument(JSON.stringify(invalidWeld)),
+    /Weld cache/,
   )
   assert.throws(
     () => restoreGameSaveDocument('x'.repeat(MAX_WEB_GAME_SAVE_BYTES + 1)),

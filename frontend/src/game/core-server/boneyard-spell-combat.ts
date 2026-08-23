@@ -174,6 +174,7 @@ export type BoneyardSpellWorldContact = (
 export type BoneyardSpellDamageMultiplier = (
   actorId: number,
   spellKind: BoneyardSpellHitKind,
+  ownerId: string,
 ) => number
 
 export type ResolveBoneyardSpellEnemyMovement = (
@@ -207,6 +208,7 @@ export function resolveBoneyardSpellCombat(
   ),
   steamedPulses: readonly NativeSecondarySteamedPulse[] = [],
   fireballHostileCorridorLength: (ownerId: string) => number = () => 1_600,
+  pushStrengthMultiplier: (ownerId: string) => number = () => 1,
 ): BoneyardSpellCombatResult {
   validateTick(tick)
   let enemies = sourceEnemies
@@ -284,7 +286,9 @@ export function resolveBoneyardSpellCombat(
       )
       rng = damage.rng
       const amount = Math.fround(
-        damage.damage * validatedDamageMultiplier(damageMultiplier(row.actor.id, 'air')),
+        damage.damage * validatedDamageMultiplier(
+          damageMultiplier(row.actor.id, 'air', contact.ownerId),
+        ),
       )
       if (amount > 0) {
         const damaged = damageBoneyardEnemy(enemies, {
@@ -599,7 +603,9 @@ export function resolveBoneyardSpellCombat(
           toughness: projectile.toughness,
         })
         const amount = contact.damage
-          * validatedDamageMultiplier(damageMultiplier(actor.id, projectile.kind))
+          * validatedDamageMultiplier(
+            damageMultiplier(actor.id, projectile.kind, projectile.ownerId),
+          )
         const damaged = damageBoneyardEnemy(enemies, {
           actorId: actor.id,
           amount,
@@ -698,7 +704,9 @@ export function resolveBoneyardSpellCombat(
 
       const electric = projectile.buildId === 1002 || projectile.buildId === 1009
       const amount = electric
-        ? projectile.damage * validatedDamageMultiplier(damageMultiplier(actor.id, 'air'))
+        ? projectile.damage * validatedDamageMultiplier(
+            damageMultiplier(actor.id, 'air', projectile.ownerId),
+          )
         : projectile.damage
       const damaged = damageBoneyardEnemy(enemies, {
         lethalObserver,
@@ -832,7 +840,9 @@ export function resolveBoneyardSpellCombat(
     }
 
     const amount = projectileDamage(projectile)
-      * validatedDamageMultiplier(damageMultiplier(actor.id, projectile.kind))
+      * validatedDamageMultiplier(
+        damageMultiplier(actor.id, projectile.kind, projectile.ownerId),
+      )
     const damaged = damageBoneyardEnemy(enemies, {
       actorId: actor.id,
       amount,
@@ -1213,7 +1223,9 @@ export function resolveBoneyardSpellCombat(
         )
       }
       const amount = contact.amount
-        * validatedDamageMultiplier(damageMultiplier(actor.id, contact.kind))
+        * validatedDamageMultiplier(
+          damageMultiplier(actor.id, contact.kind, contact.ownerId),
+        )
       const damaged = damageBoneyardEnemy(enemies, {
         lethalObserver,
         actorId: actor.id,
@@ -1294,7 +1306,7 @@ export function resolveBoneyardSpellCombat(
         const contactScalar = drawNativeFloat(rng, Math.fround(0.5))
         rng = contactScalar.state
         const electricDamage = damage * validatedDamageMultiplier(
-          damageMultiplier(row.actor.id, 'air'),
+          damageMultiplier(row.actor.id, 'air', emission.ownerId),
         )
         const contact = applyDamageWithDisintegrate(
           enemies,
@@ -1385,7 +1397,7 @@ export function resolveBoneyardSpellCombat(
               })
             }
             const amount = damage * validatedDamageMultiplier(
-              damageMultiplier(row.actor.id, 'air'),
+              damageMultiplier(row.actor.id, 'air', emission.ownerId),
             )
             const damaged = damageBoneyardEnemy(enemies, {
               lethalObserver,
@@ -1518,13 +1530,13 @@ export function resolveBoneyardSpellCombat(
                   enemies,
                   row.actor,
                   emission.queryOrigin,
-                  profile.vector.values[5]!,
+                  profile.vector.values[5]! * pushStrengthMultiplier(emission.ownerId),
                   205 + 4 * widen,
                   resolveEnemyMovement,
                 )
               }
               const amount = damage * validatedDamageMultiplier(
-                damageMultiplier(row.actor.id, 'air'),
+                damageMultiplier(row.actor.id, 'air', emission.ownerId),
               )
               const damaged = damageBoneyardEnemy(enemies, {
                 lethalObserver,
@@ -1601,7 +1613,7 @@ export function resolveBoneyardSpellCombat(
               enemies,
               row.actor,
               emission.queryOrigin,
-              pushback,
+              pushback * pushStrengthMultiplier(emission.ownerId),
               205 + 4 * widen,
               resolveEnemyMovement,
             )
@@ -1688,7 +1700,9 @@ export function resolveBoneyardSpellCombat(
       if (!row) continue
       if (row.kind === 'arrow') {
         const tumbleGain = Math.fround(
-          profile.pushbackPercent * NATIVE_CHILL_ARROW_TUMBLE_FACTOR,
+          profile.pushbackPercent
+            * pushStrengthMultiplier(emission.ownerId)
+            * NATIVE_CHILL_ARROW_TUMBLE_FACTOR,
         )
         if (tumbleGain < 1) continue
         const tumbled = tumbleBoneyardArrow(
@@ -1713,13 +1727,13 @@ export function resolveBoneyardSpellCombat(
           enemies,
           row.actor,
           emission.queryOrigin,
-          profile.pushbackPercent,
+          profile.pushbackPercent * pushStrengthMultiplier(emission.ownerId),
           profile.reach,
           resolveEnemyMovement,
         )
       }
       const amount = emission.damage * validatedDamageMultiplier(
-        damageMultiplier(row.actor.id, 'water'),
+        damageMultiplier(row.actor.id, 'water', emission.ownerId),
       )
       const damaged = damageBoneyardEnemy(enemies, {
         actorId: row.actor.id,

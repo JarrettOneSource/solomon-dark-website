@@ -142,6 +142,7 @@ import { NativeEnemyProjectileViews } from './native-enemy-projectile-view.ts'
 import { NativeEnemyProjectileEffectViews } from './native-enemy-projectile-effect-view.ts'
 import { NativeMaggotViews } from './native-maggot-view.ts'
 import { NativeGoodieViews, NativeLootViews } from './native-loot-view.ts'
+import { NativeHagathaSeekerView } from './native-hagatha-seeker-view.ts'
 import type { ModConsumableCatalogEntry } from '../core-kernels/hub-economy.ts'
 import type { GameWorldSpeech } from '../world-speech-presentation.ts'
 import type { GameModAsset } from '../protocol/game-protocol.ts'
@@ -319,6 +320,7 @@ interface BoneyardRendererFrameDiagnostics {
   playerDeathBurstCount: number
   playerDeathWeaponCount: number
   playerElementEffectScale: number
+  seekerSegmentCount: number
   playerLightRadius: number
   playerLightRasterRadius: number
   playerMagicShieldScale: number
@@ -699,6 +701,7 @@ export async function createBoneyardWorldRenderer(
     playerDeathBurstCount: 0,
     playerDeathWeaponCount: 0,
     playerElementEffectScale: 1,
+    seekerSegmentCount: 0,
     playerLightRadius: 0,
     playerLightRasterRadius: 0,
     playerMagicShieldScale: 1.5,
@@ -1085,6 +1088,7 @@ export async function createBoneyardWorldRenderer(
       const playerView = scene.player(options.playerId)
       frameDiagnostics.playerAttachmentPose = playerView?.attachmentPose ?? 0
       frameDiagnostics.playerElementEffectScale = playerView?.elementEffectScale ?? 1
+      frameDiagnostics.seekerSegmentCount = scene.seekerSegmentCount
       frameDiagnostics.orbSpriteCount = playerView?.orbSpriteCount ?? 0
       frameDiagnostics.playerWeaponScale = playerView?.weaponScale ?? 1
       const deathFrame = playerView?.deathFrame ?? null
@@ -1160,6 +1164,7 @@ export async function createBoneyardWorldRenderer(
       canvas.dataset.goodieCount = `${scene.goodieCount}`
       canvas.dataset.mageLightningCount = `${scene.mageLightningCount}`
       canvas.dataset.playerDeathBurstCount = `${scene.playerDeathBurstCount}`
+      canvas.dataset.seekerSegmentCount = `${scene.seekerSegmentCount}`
       canvas.dataset.worldFeedbackMagnitude = `${feedbackMagnitude}`
       canvas.dataset.secondaryCameraMagnitude = `${secondaryCameraMagnitude}`
       canvas.dataset.worldShakeX = `${worldShake.x}`
@@ -1349,6 +1354,7 @@ class BoneyardDynamicScene {
   private readonly mageLightningPulses: NativeMageLightningPulseViews
   private readonly primarySpells: PrimarySpellWorldView
   private readonly secondaryAbilities: NativeSecondaryWorldView
+  private readonly seeker: NativeHagathaSeekerView
   private readonly positionedDynamics = new Map<string, { row: number; zIndex: number }>()
   private readonly root: Container
   private readonly solomon: BoneyardSolomonView | null
@@ -1414,6 +1420,7 @@ class BoneyardDynamicScene {
     this.enemyProjectiles = new NativeEnemyProjectileViews(root, textures)
     this.maggots = new NativeMaggotViews(root, textures)
     this.loot = new NativeLootViews(root, textures, modTextures, modCatalog)
+    this.seeker = new NativeHagathaSeekerView(root)
     this.modEffects = new ModConsumableEffectViews(root, textures)
     this.mageLightningPulses = new NativeMageLightningPulseViews(
       root,
@@ -1538,6 +1545,7 @@ class BoneyardDynamicScene {
     this.enemyProjectiles.update(snapshot.world.enemyProjectiles, snapshot.tick)
     this.maggots.update(snapshot.world.maggots)
     this.loot.update(snapshot.world.loot)
+    this.seeker.update(snapshot, localPlayerId)
     this.modEffects.update(snapshot)
     this.mageLightningPulses.update(
       snapshot.world.mageLightningPulses,
@@ -2249,6 +2257,9 @@ class BoneyardDynamicScene {
         positionedDynamics.get(`player-death-weapon:${id}`)?.zIndex ?? depth,
       )
     }
+    this.seeker.setDepth(
+      (positionedDynamics.get(`player:${localPlayerId}`)?.zIndex ?? 1) + 0.25,
+    )
     for (const layer of this.primarySpells.painterLayers()) {
       this.primarySpells.setDepth(
         layer.id,
@@ -2454,6 +2465,10 @@ class BoneyardDynamicScene {
     return this.loot.size
   }
 
+  get seekerSegmentCount(): number {
+    return this.seeker.segmentCount
+  }
+
   get modEffectCount(): number {
     return this.modEffects.size
   }
@@ -2536,6 +2551,7 @@ class BoneyardDynamicScene {
     this.enemyProjectiles.destroy()
     this.maggots.destroy()
     this.loot.destroy()
+    this.seeker.destroy()
     this.modEffects.destroy()
     this.goodies.destroy()
     this.mageLightningPulses.destroy()

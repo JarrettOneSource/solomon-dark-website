@@ -16,6 +16,7 @@ import {
   NATIVE_DYE_SWATCHES,
   NATIVE_UNFORGE_ELIGIBLE_TYPE_IDS,
   STARTING_PLAYER_GOLD,
+  archiveHagathaLastWordItems,
   buyDowsingOffer,
   buyFomentiusItem,
   buyHagathaPerk,
@@ -83,6 +84,35 @@ test('a fresh participant owns the hard-coded 10k ledger and complete native sta
   assert.equal(state.equipment.amulet, null)
   assert.deepEqual(state.equipment.rings, [null, null, null])
   assert.ok(state.fomentiusStock.every(({ id }) => id >= 6))
+})
+
+test('Last Word retains every ground item in one bounded named Luthacus Sack', () => {
+  const source = createHubEconomy(1)
+  const items = Array.from({ length: 20 }, (_, index): HubInventoryItem => ({
+    equipmentType: null,
+    iconRecords: [46],
+    id: 90_000 + index,
+    kind: 'health-potion',
+    name: `Retained ${index}`,
+    nativeSubtype: 0,
+    nativeTypeId: 7001,
+    quantity: 1,
+    rarity: null,
+    recipeIndex: null,
+  }))
+  const archived = archiveHagathaLastWordItems(
+    source,
+    items,
+    "Test Wizard's Earthly Possessions",
+  )
+  assert.equal(archived.accepted, true)
+  assert.equal(archived.state.storage.length, 1)
+  assert.equal(archived.state.storage[0]?.name, "Test Wizard's Earthly Possessions")
+  assert.equal(projectInventoryItems(archived.state.storage).filter(({ item }) => (
+    item.nativeTypeId === 7001
+  )).length, 20)
+  const ids = projectInventoryItems(archived.state.storage).map(({ item }) => item.id)
+  assert.equal(new Set(ids).size, ids.length)
 })
 
 test('Fomentius preserves every native generator row and seed-1 roll order', () => {

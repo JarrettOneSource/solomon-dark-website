@@ -5,7 +5,7 @@ import {
   createIdlePlayerPrimaryCast,
   createPlayerCharacter,
 } from '../core-kernels/player-character.ts'
-import { buyFomentiusItem } from '../core-kernels/hub-economy.ts'
+import { buyFomentiusItem, projectInventoryItems } from '../core-kernels/hub-economy.ts'
 import { createNativeRng } from '../core-kernels/native-rng.ts'
 import {
   NATIVE_PLAYER_LIGHT_OVERLAY_DECAY,
@@ -15,10 +15,12 @@ import {
 } from '../core-kernels/player-lighting.ts'
 import {
   addPlayerEntity,
+  applyPlayerEntityHagathaPurchaseEffects,
   coldSlowPlayerEntity,
   createPlayerEntityStore,
   creditPlayerEntityLootGold,
   damagePlayerEntity,
+  damagePlayerEntityWithResult,
   dazzlePlayerEntity,
   grantPlayerEntityExperience,
   grantPlayerEntityBonusSkillChoice,
@@ -375,4 +377,141 @@ test('loot credits exactly one dense participant economy or skill row', () => {
   assert.notEqual(increased.skillId, null)
   store = increased.store
   assert.strictEqual(playerSkillBookAt(store, 'second'), untouchedSkills)
+})
+
+test('Hagatha purchase state resolves Revelation, Weird Caster, and offer bias atomically', () => {
+  let store = addPlayerEntity(
+    createPlayerEntityStore(),
+    'first',
+    FIRST,
+    createPlayerCharacter(FIRST, { x: 0, y: 0 }),
+    10,
+  )
+  store = replacePlayerEconomy(store, 'first', {
+    ...playerEconomyAt(store, 'first')!,
+    ownedPerkSelectors: [6, 14],
+  })
+  store = {
+    ...store,
+    skillRuntimes: [{
+      ...store.skillRuntimes[0]!,
+      concentrationSkillIdA: 11,
+    }],
+  }
+  const applied = applyPlayerEntityHagathaPurchaseEffects(
+    store,
+    'first',
+    [6, 14],
+    createNativeRng(123),
+  )
+  const book = playerSkillBookAt(applied.store, 'first')!
+  assert.equal(book.permanentRanks[11], 2)
+  assert.notEqual(applied.weirdCasterSkillId, null)
+  assert.equal(book.permanentRanks[applied.weirdCasterSkillId!], 2)
+  assert.equal(playerProgressionAt(applied.store, 'first')?.disciplineOfferBias, true)
+})
+
+test('Drinker precedes Cheat Death and both clear until-hurt one-shots on real damage', () => {
+  let store = addPlayerEntity(
+    createPlayerEntityStore(),
+    'first',
+    FIRST,
+    createPlayerCharacter(FIRST, { x: 0, y: 0 }),
+    10,
+  )
+  store = replacePlayerEconomy(store, 'first', {
+    ...playerEconomyAt(store, 'first')!,
+    ownedPerkSelectors: [7, 15, 24, 25],
+  })
+  store = applyPlayerEntityHagathaPurchaseEffects(
+    store,
+    'first',
+    [7, 24, 25],
+    createNativeRng(1),
+  ).store
+  const healthBefore = projectInventoryItems(
+    playerEconomyAt(store, 'first')!.backpack,
+  ).find(({ item }) => item.nativeSubtype === 0)!.item.quantity
+  const drank = damagePlayerEntityWithResult(store, 'first', 60, 1)
+  assert.equal(drank.autoHealthPotionUsed, true)
+  assert.equal(drank.cheatDeathTriggered, false)
+  assert.equal(playerProgressionAt(drank.store, 'first')?.currentHealth, 50)
+  assert.deepEqual(playerProgressionAt(drank.store, 'first')?.hagathaRuntime, {
+    cheatDeathCharges: 1,
+    reverieActive: false,
+    serendipityActive: false,
+  })
+  const healthAfter = projectInventoryItems(
+    playerEconomyAt(drank.store, 'first')!.backpack,
+  ).find(({ item }) => item.nativeSubtype === 0)?.item.quantity ?? 0
+  assert.equal(healthAfter, healthBefore - 1)
+
+  store = replacePlayerEconomy(store, 'first', {
+    ...playerEconomyAt(store, 'first')!,
+    backpack: playerEconomyAt(store, 'first')!.backpack.filter((item) => (
+      item.nativeSubtype !== 0
+    )),
+    ownedPerkSelectors: [7, 24, 25],
+  })
+  const cheated = damagePlayerEntityWithResult(store, 'first', 60, 2)
+  assert.equal(cheated.autoHealthPotionUsed, false)
+  assert.equal(cheated.cheatDeathTriggered, true)
+  assert.equal(playerProgressionAt(cheated.store, 'first')?.currentHealth, 25)
+  assert.equal(playerProgressionAt(cheated.store, 'first')?.lifeState, 'alive')
+  assert.equal(playerProgressionAt(cheated.store, 'first')?.hagathaRuntime.cheatDeathCharges, 0)
+})
+
+test('Drinker consumes one nested mana potion and retries the same debit once', () => {
+  let store = addPlayerEntity(
+    createPlayerEntityStore(),
+    'first',
+    FIRST,
+    createPlayerCharacter(FIRST, { x: 0, y: 0 }),
+    10,
+  )
+  store = replacePlayerEconomy(store, 'first', {
+    ...playerEconomyAt(store, 'first')!,
+    ownedPerkSelectors: [15],
+  })
+  store = {
+    ...store,
+    progressions: [{ ...store.progressions[0]!, currentMana: 5 }],
+  }
+  const quantityBefore = projectInventoryItems(
+    playerEconomyAt(store, 'first')!.backpack,
+  ).find(({ item }) => item.nativeSubtype === 1)!.item.quantity
+  const debit = tryDebitPlayerEntityMana(store, 'first', 6)
+  assert.equal(debit.accepted, true)
+  assert.equal(debit.autoManaPotionUsed, true)
+  assert.equal(playerProgressionAt(debit.store, 'first')?.currentMana, 94)
+  const quantityAfter = projectInventoryItems(
+    playerEconomyAt(debit.store, 'first')!.backpack,
+  ).find(({ item }) => item.nativeSubtype === 1)?.item.quantity ?? 0
+  assert.equal(quantityAfter, quantityBefore - 1)
+})
+
+test('Last Word emits its native death and archive milestones only for its owner', () => {
+  let store = addPlayerEntity(
+    createPlayerEntityStore(),
+    'first',
+    FIRST,
+    createPlayerCharacter(FIRST, { x: 0, y: 0 }),
+    10,
+  )
+  store = replacePlayerEconomy(store, 'first', {
+    ...playerEconomyAt(store, 'first')!,
+    ownedPerkSelectors: [12],
+  })
+  store = {
+    ...store,
+    progressions: [{ ...store.progressions[0]!, deathTick: 199, lifeState: 'dying' }],
+  }
+  const burst = stepPlayerEntityCombatTick(store)
+  assert.deepEqual(burst.lastWordBurstPlayerIds, ['first'])
+  store = {
+    ...burst.store,
+    progressions: [{ ...burst.store.progressions[0]!, deathTick: 299 }],
+  }
+  const archive = stepPlayerEntityCombatTick(store)
+  assert.deepEqual(archive.lastWordArchivePlayerIds, ['first'])
 })

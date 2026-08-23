@@ -61,8 +61,11 @@ export function nativeWeldPrimaryVector(
     throw new RangeError('weld effect must be finite and positive')
   }
   const id = build.id as NativeWeldBuildId
-  const ranks = Object.fromEntries(build.componentSkillIds.map((skillId) => (
-    [skillId, effectiveRank(skillBook, skillId)]
+  const frozenRanks = skillBook.weldBuildId === id
+    ? skillBook.weldComponentRanks
+    : null
+  const ranks = Object.fromEntries(build.componentSkillIds.map((skillId, index) => (
+    [skillId, frozenRanks?.[index] ?? effectiveRank(skillBook, skillId)]
   ))) as Readonly<Record<number, number>>
   for (const primarySkillId of build.primarySkillIds) {
     if (ranks[primarySkillId] < 1) {

@@ -29,6 +29,7 @@ import {
   tryDebitPlayerMana,
 } from '../core-kernels/player-combat.ts'
 import {
+  applyNativeRevelationToConcentrations,
   applyPlayerPotionEffect,
   applyPlayerSkillChoice,
   bindPlayerSkillQuickbar,
@@ -37,6 +38,7 @@ import {
   deferPlayerSkillChoice,
   grantPlayerExperience,
   grantPlayerBonusSkillChoice,
+  grantNativeWeirdCasterSkill,
   increaseRandomLearnedSkill,
   playerStatBook,
   rerollPlayerSkillOffer,
@@ -51,14 +53,27 @@ import {
   type PlayerStatBookComponent,
 } from '../core-kernels/player-progression.ts'
 import {
+  consumeInventoryItem,
   consumeWizardKey,
   creditLootGold,
   createHubEconomy,
   insertLootInventoryItem,
+  projectInventoryItems,
   SORCERORS_CHARM_SELECTOR,
   type HubInventoryItem,
   type HubEconomyState,
 } from '../core-kernels/hub-economy.ts'
+import {
+  NATIVE_HAGATHA_LAST_WORD_ARCHIVE_TICK,
+  NATIVE_HAGATHA_LAST_WORD_DEATH_TICK,
+  NATIVE_HAGATHA_SELECTORS,
+  applyNativeHagathaPurchaseRuntime,
+  clearNativeHagathaUntilHurt,
+  consumeNativeHagathaCheatDeath,
+  nativeHagathaDrinkerShouldUseHealthPotion,
+  nativeHagathaDrinkerShouldUseManaPotion,
+  ownsNativeHagathaSelector,
+} from '../core-kernels/native-hagatha-effects.ts'
 import {
   createPlayerSkillRuntime,
   markPlayerCreativityInsight,
@@ -97,14 +112,31 @@ export interface PlayerEntityStore {
 }
 
 export interface PlayerEntityCombatTickResult {
+  readonly autoHealthPotionPlayerIds: readonly string[]
   readonly beganDeathEpochPlayerIds: readonly string[]
+  readonly cheatDeathPlayerIds: readonly string[]
   readonly deathBurstPlayerIds: readonly string[]
+  readonly lastWordArchivePlayerIds: readonly string[]
+  readonly lastWordBurstPlayerIds: readonly string[]
   readonly store: PlayerEntityStore
 }
 
 export interface PlayerEntityManaDebitResult {
   readonly accepted: boolean
+  readonly autoManaPotionUsed: boolean
   readonly store: PlayerEntityStore
+}
+
+export interface PlayerEntityDamageResult {
+  readonly autoHealthPotionUsed: boolean
+  readonly cheatDeathTriggered: boolean
+  readonly store: PlayerEntityStore
+}
+
+export interface PlayerEntityHagathaPurchaseResult {
+  readonly rng: NativeRngState
+  readonly store: PlayerEntityStore
+  readonly weirdCasterSkillId: number | null
 }
 
 export interface PlayerEntitySharedExperienceResult {
@@ -538,18 +570,104 @@ export function replacePlayerLoadout(
   )
 }
 
+export function applyPlayerEntityHagathaPurchaseEffects(
+  source: PlayerEntityStore,
+  playerId: string,
+  purchasedSelectors: readonly number[],
+  rng: NativeRngState,
+): PlayerEntityHagathaPurchaseResult {
+  const index = playerEntityIndex(source, playerId)
+  if (index < 0) return { rng, store: source, weirdCasterSkillId: null }
+  const economy = source.economies[index]!
+  let progression = source.progressions[index]!
+  let skillBook = source.skillBooks[index]!
+  const hagathaRuntime = applyNativeHagathaPurchaseRuntime(
+    progression.hagathaRuntime,
+    purchasedSelectors,
+  )
+  if (hagathaRuntime !== progression.hagathaRuntime) {
+    progression = { ...progression, hagathaRuntime }
+  }
+  if (purchasedSelectors.includes(NATIVE_HAGATHA_SELECTORS.revelation)) {
+    const runtime = source.skillRuntimes[index]!
+    skillBook = applyNativeRevelationToConcentrations(skillBook, [
+      runtime.concentrationSkillIdA,
+      runtime.concentrationSkillIdB,
+    ])
+  }
+  let weirdCasterSkillId: number | null = null
+  if (purchasedSelectors.includes(NATIVE_HAGATHA_SELECTORS.weirdCaster)) {
+    const granted = grantNativeWeirdCasterSkill(
+      skillBook,
+      rng,
+      economy.ownedPerkSelectors,
+    )
+    rng = granted.rng
+    skillBook = granted.skillBook
+    weirdCasterSkillId = granted.skillId
+  }
+  const progressions = [...source.progressions]
+  progressions[index] = progression
+  return {
+    rng,
+    store: replacePlayerSkillState(
+      { ...source, progressions },
+      index,
+      skillBook,
+      source.skillRuntimes[index]!,
+      economy,
+    ),
+    weirdCasterSkillId,
+  }
+}
+
 export function damagePlayerEntity(
   source: PlayerEntityStore,
   playerId: string,
   damage: number,
   tick: number,
 ): PlayerEntityStore {
+  return damagePlayerEntityWithResult(source, playerId, damage, tick).store
+}
+
+export function damagePlayerEntityWithResult(
+  source: PlayerEntityStore,
+  playerId: string,
+  damage: number,
+  tick: number,
+  damageAlreadyScaled = false,
+): PlayerEntityDamageResult {
   const index = playerEntityIndex(source, playerId)
-  if (index < 0) return source
-  const progression = damagePlayer(source.progressions[index]!, damage, tick)
-  return progression === source.progressions[index]
-    ? source
-    : replacePlayerProgression(source, index, progression)
+  if (index < 0) {
+    return { autoHealthPotionUsed: false, cheatDeathTriggered: false, store: source }
+  }
+  const appliedDamage = damageAlreadyScaled
+    ? damage
+    : Math.fround(damage * playerSkillDerivedStats(
+        source.skillRuntimes[index]!,
+        source.skillBooks[index]!,
+        source.statBooks[index]!,
+        source.progressions[index]!,
+        source.economies[index]!,
+      ).incomingDamageFactor)
+  const damaged = damagePlayer(source.progressions[index]!, appliedDamage, tick)
+  if (damaged === source.progressions[index]) {
+    return { autoHealthPotionUsed: false, cheatDeathTriggered: false, store: source }
+  }
+  const resolved = resolveNativeHagathaDamage(
+    damaged,
+    source.economies[index]!,
+    appliedDamage,
+  )
+  const economies = [...source.economies]
+  const progressions = [...source.progressions]
+  economies[index] = resolved.economy
+  progressions[index] = resolved.progression
+  return {
+    autoHealthPotionUsed: resolved.autoHealthPotionUsed,
+    cheatDeathTriggered: resolved.cheatDeathTriggered,
+    store: { ...source, economies, progressions },
+  }
 }
 
 export function poisonPlayerEntity(
@@ -617,13 +735,42 @@ export function tryDebitPlayerEntityMana(
   cost: number,
 ): PlayerEntityManaDebitResult {
   const index = playerEntityIndex(source, playerId)
-  if (index < 0) return { accepted: false, store: source }
-  const debit = tryDebitPlayerMana(source.progressions[index]!, cost)
+  if (index < 0) return { accepted: false, autoManaPotionUsed: false, store: source }
+  const progression = source.progressions[index]!
+  let economy = source.economies[index]!
+  let debit = tryDebitPlayerMana(progression, cost)
+  let autoManaPotionUsed = false
+  if (
+    !debit.accepted
+    && nativeHagathaDrinkerShouldUseManaPotion(
+      economy.ownedPerkSelectors,
+      progression.currentMana,
+      progression.maximumMana,
+      cost,
+    )
+  ) {
+    const potion = firstNativePotion(economy, 1)
+    if (potion !== null) {
+      const consumed = consumeInventoryItem(economy, potion.id)
+      if (consumed.accepted) {
+        economy = consumed.state
+        debit = tryDebitPlayerMana(applyPlayerPotionEffect(progression, 1), cost)
+        autoManaPotionUsed = true
+      }
+    }
+  }
+  const economies = economy === source.economies[index]
+    ? source.economies
+    : replaceIndex(source.economies, index, economy)
+  const progressions = debit.combat === source.progressions[index]
+    ? source.progressions
+    : replaceIndex(source.progressions, index, debit.combat)
   return {
     accepted: debit.accepted,
-    store: debit.combat === source.progressions[index]
+    autoManaPotionUsed,
+    store: economies === source.economies && progressions === source.progressions
       ? source
-      : replacePlayerProgression(source, index, debit.combat),
+      : { ...source, economies, progressions },
   }
 }
 
@@ -701,11 +848,17 @@ export function stepPlayerEntityCombatTick(
     filterPoisonDamage?: (playerId: string, amount: number) => number
   }> = {},
 ): PlayerEntityCombatTickResult {
+  const autoHealthPotionPlayerIds: string[] = []
   const beganDeathEpochPlayerIds: string[] = []
+  const cheatDeathPlayerIds: string[] = []
   const deathBurstPlayerIds: string[] = []
+  const lastWordArchivePlayerIds: string[] = []
+  const lastWordBurstPlayerIds: string[] = []
   let changed = false
+  const economies = [...source.economies]
   const skillRuntimes = [...source.skillRuntimes]
-  const progressions = source.progressions.map((progression, index) => {
+  const progressions = [...source.progressions]
+  for (const [index, progression] of source.progressions.entries()) {
     const derived = playerSkillDerivedStats(
       source.skillRuntimes[index]!,
       source.skillBooks[index]!,
@@ -739,28 +892,68 @@ export function stepPlayerEntityCombatTick(
           potionStepped.maximumMana,
         )
       : skillTick.manaRecoveryPerTick
+    const nativePoisonDamagePerTick = Math.fround(
+      potionStepped.poisonDamagePerTick
+        * derived.poisonDamageFactor
+        * derived.incomingDamageFactor,
+    )
     const poisonDamagePerTick = mutations.filterPoisonDamage
       ? mutations.filterPoisonDamage(
           source.identities[index]!.playerId,
-          potionStepped.poisonDamagePerTick,
+          nativePoisonDamagePerTick,
         )
-      : potionStepped.poisonDamagePerTick
+      : nativePoisonDamagePerTick
     const result = stepPlayerCombatTick(potionStepped, {
       healthRecoveryPerTick: derived.healthRecoveryPerTick,
       manaRecoveryPerTick,
       poisonDamagePerTick,
     })
     const playerId = source.identities[index]!.playerId
-    if (result.beganDeathEpoch) beganDeathEpochPlayerIds.push(playerId)
+    const resolved = poisonDamagePerTick > 0 && potionStepped.poisonTicksRemaining > 0
+      ? resolveNativeHagathaDamage(
+          result.combat,
+          source.economies[index]!,
+          poisonDamagePerTick,
+        )
+      : {
+          autoHealthPotionUsed: false,
+          cheatDeathTriggered: false,
+          economy: source.economies[index]!,
+          progression: result.combat,
+        }
+    progressions[index] = resolved.progression
+    economies[index] = resolved.economy
+    if (resolved.autoHealthPotionUsed) autoHealthPotionPlayerIds.push(playerId)
+    if (resolved.cheatDeathTriggered) cheatDeathPlayerIds.push(playerId)
+    if (result.beganDeathEpoch && resolved.progression.lifeState === 'dying') {
+      beganDeathEpochPlayerIds.push(playerId)
+    }
     if (result.emittedDeathBurst) deathBurstPlayerIds.push(playerId)
-    changed ||= result.combat !== progression
+    if (
+      ownsNativeHagathaSelector(
+        source.economies[index]!.ownedPerkSelectors,
+        NATIVE_HAGATHA_SELECTORS.lastWord,
+      )
+    ) {
+      if (resolved.progression.deathTick === NATIVE_HAGATHA_LAST_WORD_DEATH_TICK) {
+        lastWordBurstPlayerIds.push(playerId)
+      }
+      if (resolved.progression.deathTick === NATIVE_HAGATHA_LAST_WORD_ARCHIVE_TICK) {
+        lastWordArchivePlayerIds.push(playerId)
+      }
+    }
+    changed ||= resolved.progression !== progression
+      || resolved.economy !== source.economies[index]
       || skillTick.runtime !== source.skillRuntimes[index]
-    return result.combat
-  })
+  }
   return {
+    autoHealthPotionPlayerIds: Object.freeze(autoHealthPotionPlayerIds),
     beganDeathEpochPlayerIds: Object.freeze(beganDeathEpochPlayerIds),
+    cheatDeathPlayerIds: Object.freeze(cheatDeathPlayerIds),
     deathBurstPlayerIds: Object.freeze(deathBurstPlayerIds),
-    store: changed ? { ...source, progressions, skillRuntimes } : source,
+    lastWordArchivePlayerIds: Object.freeze(lastWordArchivePlayerIds),
+    lastWordBurstPlayerIds: Object.freeze(lastWordBurstPlayerIds),
+    store: changed ? { ...source, economies, progressions, skillRuntimes } : source,
   }
 }
 
@@ -1068,6 +1261,7 @@ export function applyPlayerEntitySkillChoice(
     source.skillBooks[index]!,
     selection,
     ownsSorcerorsCharm(source, index),
+    source.economies[index]!.ownedPerkSelectors,
   )
   if (!applied) return null
   const progressions = [...source.progressions]
@@ -1114,8 +1308,90 @@ export function deferPlayerEntitySkillChoice(
   return progression === null ? null : replacePlayerProgression(source, index, progression)
 }
 
+function resolveNativeHagathaDamage(
+  source: PlayerProgressionComponent,
+  sourceEconomy: HubEconomyState,
+  remainingDamage: number,
+): Readonly<{
+  autoHealthPotionUsed: boolean
+  cheatDeathTriggered: boolean
+  economy: HubEconomyState
+  progression: PlayerProgressionComponent
+}> {
+  const hagathaRuntime = clearNativeHagathaUntilHurt(
+    source.hagathaRuntime,
+    remainingDamage,
+  )
+  let progression = hagathaRuntime === source.hagathaRuntime
+    ? source
+    : { ...source, hagathaRuntime }
+  let economy = sourceEconomy
+  let autoHealthPotionUsed = false
+  if (
+    progression.lifeState === 'lethal-pending'
+    && nativeHagathaDrinkerShouldUseHealthPotion(
+      economy.ownedPerkSelectors,
+      progression.currentHealth,
+    )
+  ) {
+    const potion = firstNativePotion(economy, 0)
+    if (potion !== null) {
+      const consumed = consumeInventoryItem(economy, potion.id)
+      if (consumed.accepted) {
+        economy = consumed.state
+        progression = {
+          ...applyPlayerPotionEffect(progression, 0),
+          deathTick: 0,
+          lifeState: 'alive',
+        }
+        autoHealthPotionUsed = true
+      }
+    }
+  }
+  let cheatDeathTriggered = false
+  if (progression.lifeState === 'lethal-pending') {
+    const cheatDeath = consumeNativeHagathaCheatDeath(
+      progression.hagathaRuntime,
+      progression.maximumHealth,
+    )
+    if (cheatDeath.triggered) {
+      progression = {
+        ...progression,
+        currentHealth: cheatDeath.currentHealth,
+        deathTick: 0,
+        hagathaRuntime: cheatDeath.runtime,
+        lifeState: 'alive',
+      }
+      cheatDeathTriggered = true
+    }
+  }
+  return Object.freeze({
+    autoHealthPotionUsed,
+    cheatDeathTriggered,
+    economy,
+    progression,
+  })
+}
+
+function firstNativePotion(
+  economy: HubEconomyState,
+  subtype: 0 | 1,
+): HubInventoryItem | null {
+  return projectInventoryItems(economy.backpack).find(({ item }) => (
+    item.nativeTypeId === 7001
+    && item.nativeSubtype === subtype
+    && item.modContent === undefined
+  ))?.item ?? null
+}
+
 function withoutIndex<T>(source: readonly T[], index: number): T[] {
   return [...source.slice(0, index), ...source.slice(index + 1)]
+}
+
+function replaceIndex<T>(source: readonly T[], index: number, value: T): readonly T[] {
+  const replaced = [...source]
+  replaced[index] = value
+  return replaced
 }
 
 function replacePlayerProgression(
@@ -1158,9 +1434,14 @@ function replacePlayerSkillState(
     refreshed.runtime.equipmentModifiers,
     'weldCalling',
   )
+  const disciplineOfferBias = ownsNativeHagathaSelector(
+    economy.ownedPerkSelectors,
+    NATIVE_HAGATHA_SELECTORS.weirdCaster,
+  )
   const biasedProgression = currentProgression.weldingOfferBias === weldingOfferBias
+      && currentProgression.disciplineOfferBias === disciplineOfferBias
     ? currentProgression
-    : { ...currentProgression, weldingOfferBias }
+    : { ...currentProgression, disciplineOfferBias, weldingOfferBias }
   progressions[index] = refreshPlayerCombatFromSkillStats(
     biasedProgression,
     derived,

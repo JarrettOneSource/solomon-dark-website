@@ -308,7 +308,7 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
   })), /source/)
 })
 
-test('protocol 63 requires an exact A or B slot only for HUD concentration replacement', () => {
+test('protocol 64 retains exact A or B slots for HUD concentration replacement', () => {
   assert.throws(() => decodeClientGameMessage(JSON.stringify({
     type: 'client-select-concentration-slot',
     skillId: 57,
@@ -696,6 +696,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
   })
   assert.deepEqual(welcome.snapshot.players['player-1'].progression, {
     weldBuildId: null,
+    weldComponentRanks: null,
     concentrationSkillIds: [null, null],
     currentHealth: 50,
     currentMana: 100,
@@ -705,6 +706,11 @@ test('server welcome round-trips content, kernel, character, and world ownership
     deathEpoch: 0,
     deathTick: 0,
     experience: 0,
+    hagathaRuntime: {
+      cheatDeathCharges: 0,
+      reverieActive: false,
+      serendipityActive: false,
+    },
     learnedSkills: [[0, 1, 1], [7, 1, 1], [8, 1, 1], [11, 1, 1]],
     learnedSkillOrder: [8, 11],
     level: 1,
@@ -1227,7 +1233,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
 })
 
 test('protocol v62 carries developer access, held one-shot pose, Fire lifecycle, Game Over/loadout, status composition, saved leave, deployment restart, Ether replacement, party access, movement, social, mod, and gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 63)
+  assert.equal(GAME_PROTOCOL_VERSION, 64)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -3554,6 +3560,24 @@ test('protocol strictly reserves nullable skill ownership for the two Mindblast 
   const decoded = decodeServerGameMessage(JSON.stringify(message))
   assert.equal(decoded.type, 'server-snapshot')
   assert.deepEqual(decoded.frame.secondaryAbilities.actors, mindblast.actors)
+
+  const lastWord = triggerNativePlayerMindblast(createNativeSecondarySimulation(10), {
+    directDamage: 5_000,
+    element: 'fire',
+    level: 10_000,
+    lightRegistration: ACTOR_LIGHT_REGISTRATION,
+    ownerId: 'player-1',
+    position: { x: 800, y: 400 },
+    presentationScale: 15,
+    worldKey: 'hub:courtyard',
+  }).state
+  const lastWordMessage = structuredClone(message)
+  lastWordMessage.frame.secondaryAbilities.actors = lastWord.actors
+  lastWordMessage.frame.secondaryAbilities.nextActorId = lastWord.nextActorId
+  const decodedLastWord = decodeServerGameMessage(JSON.stringify(lastWordMessage))
+  assert.equal(decodedLastWord.type, 'server-snapshot')
+  if (decodedLastWord.type !== 'server-snapshot') throw new Error('expected snapshot')
+  assert.deepEqual(decodedLastWord.frame.secondaryAbilities.actors, lastWord.actors)
 
   const ownedMindblast = JSON.parse(JSON.stringify(message))
   ownedMindblast.frame.secondaryAbilities.actors[0]!.skillId = 11

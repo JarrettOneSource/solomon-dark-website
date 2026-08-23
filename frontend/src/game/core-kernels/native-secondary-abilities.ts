@@ -6052,16 +6052,27 @@ export function emitNativePlayerScreenFlash(
 export function triggerNativePlayerMindblast(
   source: NativeSecondarySimulationState,
   input: Readonly<{
+    directDamage?: number
     element: WizardElement
     level: number
     lightRegistration: NativeLightProviderRegistration
     ownerId: string
     position: Readonly<Vector2>
+    presentationScale?: number
     worldKey: string
   }>,
 ): NativePlayerMindblastTriggerResult {
   if (!Number.isSafeInteger(input.level) || input.level < 1) {
     throw new RangeError('Mindblast level must be a positive safe integer')
+  }
+  const presentationScale = input.presentationScale ?? 9
+  const directDamage = input.directDamage
+    ?? (input.element === 'ether' ? input.level * 0.5 : 0)
+  if (!Number.isFinite(presentationScale) || presentationScale <= 0) {
+    throw new RangeError('Mindblast presentation scale must be finite and positive')
+  }
+  if (!Number.isFinite(directDamage) || directDamage < 0) {
+    throw new RangeError('Mindblast direct damage must be finite and non-negative')
   }
   const presentationRng = source.rng
   let state: NativeSecondarySimulationState = {
@@ -6076,7 +6087,7 @@ export function triggerNativePlayerMindblast(
     position: { ...input.position },
     presentationRng,
     rank: input.level,
-    scale: 9,
+    scale: presentationScale,
     skillId: null,
     variant,
     worldKey: input.worldKey,
@@ -6096,10 +6107,43 @@ export function triggerNativePlayerMindblast(
     worldKey: input.worldKey,
   }))
   return Object.freeze({
-    directDamage: input.element === 'ether' ? input.level * 0.5 : 0,
-    directRadius: NATIVE_MINDBLAST_DIRECT_RADIUS,
+    directDamage,
+    directRadius: Math.fround(
+      NATIVE_MINDBLAST_DIRECT_RADIUS * presentationScale / 9,
+    ),
     state,
   })
+}
+
+/** Advances Last Word's common Mindblast actors after the run enters Game Over. */
+export function stepNativeMindblastPresentation(
+  source: NativeSecondarySimulationState,
+): NativeSecondarySimulationState {
+  const actors = source.actors.flatMap((sourceActor): NativeSecondaryActorState[] => {
+    if (sourceActor.kind !== 'mindblast-burst' && sourceActor.kind !== 'mindblast-shockwave') {
+      return [sourceActor]
+    }
+    let actor = advanceActor(sourceActor)
+    if (actor.ageTicks >= actor.lifetimeTicks) return []
+    if (actor.kind === 'mindblast-shockwave') {
+      const remainingLife = Math.fround(sourceActor.phase - WAVE_LIFE_PER_TICK)
+      if (remainingLife <= 0) return []
+      actor = {
+        ...actor,
+        alpha: remainingLife < sourceActor.slowFactor
+          ? Math.fround(sourceActor.alpha * WAVE_FADE_FACTOR)
+          : sourceActor.alpha,
+        phase: remainingLife,
+        radius: Math.fround(sourceActor.radius + sourceActor.quantity),
+        scale: Math.fround(1 + actor.ageTicks * 0.08),
+      }
+    }
+    return [actor]
+  })
+  return actors.length === source.actors.length
+      && actors.every((actor, index) => actor === source.actors[index])
+    ? source
+    : { ...source, actors: Object.freeze(actors) }
 }
 
 function emptyTargetEffect(worldKey: string, targetId: number): NativeSecondaryTargetEffectState {

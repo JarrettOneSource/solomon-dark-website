@@ -48,6 +48,13 @@ import {
 } from '../core-kernels/native-rng.ts'
 import { nativeLootModifiers, type NativeLootItem } from '../core-kernels/native-loot.ts'
 import {
+  NATIVE_HAGATHA_LAST_WORD_DAMAGE,
+  NATIVE_HAGATHA_LAST_WORD_PRESENTATION_SCALE,
+  NATIVE_HAGATHA_LAST_WORD_SACK_SUFFIXES,
+  nativeHagathaBossDamageFactor,
+} from '../core-kernels/native-hagatha-effects.ts'
+import {
+  archiveHagathaLastWordItems,
   buyDowsingOffer,
   buyFomentiusItem,
   buyHagathaPerk,
@@ -58,6 +65,7 @@ import {
   dowse,
   equipInventoryItem,
   findInventoryItem,
+  hagathaOffers,
   moveInventoryItem,
   readInventorySkillBook,
   restockFomentius,
@@ -111,6 +119,7 @@ import {
   nativeSecondaryTargetEffect,
   removeNativeSecondaryOwner,
   resetNativeSecondaryWorld,
+  stepNativeMindblastPresentation,
   stepNativeSecondaryAbilities,
   triggerNativePlayerMindblast,
   type NativeSecondarySimulationState,
@@ -183,6 +192,7 @@ import {
 import type { HubStudentPopulationState } from './hub-students.ts'
 import {
   addPlayerEntity,
+  applyPlayerEntityHagathaPurchaseEffects,
   applyPlayerEntityPotionEffect,
   applyPlayerEntitySkillChoice,
   bindPlayerEntitySkillQuickbar,
@@ -190,7 +200,7 @@ import {
   consumePlayerEntityWizardKey,
   createPlayerEntityStore,
   creditPlayerEntityLootGold,
-  damagePlayerEntity,
+  damagePlayerEntityWithResult,
   dazzlePlayerEntity,
   grantPlayerEntityExperience,
   grantPlayerEntityBonusSkillChoice,
@@ -235,6 +245,8 @@ import {
 } from './player-entity-store.ts'
 import {
   NATIVE_LOOT_EVENT_RETENTION_TICKS,
+  nativeHagathaLastWordLoot,
+  removeBoneyardLootActors,
   type BoneyardGoodieUnlock,
   type BoneyardLootEvent,
   type BoneyardLootPickup,
@@ -737,6 +749,9 @@ export function applyGameSimulationHubAction(
   const skillBookItem = action.type === 'read-skill-book'
     ? findInventoryItem(economy.backpack, action.itemId)
     : null
+  const purchasedHagathaSelectors = action.type === 'buy-hagatha'
+    ? hagathaOffers(economy).find(({ selector }) => selector === action.selector)?.members ?? []
+    : []
   if (consumedPotion?.modContent &&
       extensions?.hasConsumable(consumedPotion.modContent.contentId) !== true) {
     return { accepted: false, modConsumption: null, reason: 'service-unavailable', state }
@@ -802,6 +817,16 @@ export function applyGameSimulationHubAction(
   let nextLevelUpBarrierId = state.nextLevelUpBarrierId
   let secondaryAbilities = state.secondaryAbilities
   let world = state.world
+  if (result.accepted && action.type === 'buy-hagatha') {
+    const applied = applyPlayerEntityHagathaPurchaseEffects(
+      playerEntities,
+      playerId,
+      purchasedHagathaSelectors,
+      gameRng,
+    )
+    playerEntities = applied.store
+    gameRng = applied.rng
+  }
   if (result.accepted && action.type === 'consume' && consumedPotion?.nativeSubtype != null &&
       consumedPotion.modContent === undefined) {
     const beforeMana = getPlayerProgression(state, playerId).currentMana
@@ -1178,6 +1203,7 @@ export function stepGameSimulationTick(
     if (state.world.kind !== 'boneyard') {
       throw new Error('Game Over requires the terminal Boneyard world')
     }
+    const lightProviderOrder = createNativeLightProviderOrder(state.lightProviderOrder)
     let playerEntities = stepPlayerEntityOverlayLightingTick(state.playerEntities)
     const combat = stepPlayerEntityCombatTick(
       playerEntities,
@@ -1185,7 +1211,7 @@ export function stepGameSimulationTick(
       playerCombatMutations(options.extensions, state.tick),
     )
     playerEntities = combat.store
-    let secondaryAbilities = state.secondaryAbilities
+    let secondaryAbilities = stepNativeMindblastPresentation(state.secondaryAbilities)
     for (const playerId of combat.deathBurstPlayerIds) {
       playerEntities = setPlayerEntitySpectating(playerEntities, playerId)
       playerEntities = setPlayerEntityMindstar(playerEntities, playerId, false)
@@ -1195,6 +1221,29 @@ export function stepGameSimulationTick(
     const tick = state.tick + 1
     let gameRng = state.gameRng
     let world = state.world
+    for (const playerId of combat.lastWordBurstPlayerIds) {
+      const triggered = triggerHagathaLastWord(
+        playerEntities,
+        secondaryAbilities,
+        world,
+        playerId,
+        tick,
+        lightProviderOrder,
+      )
+      secondaryAbilities = triggered.secondaryAbilities
+      world = triggered.world
+    }
+    for (const playerId of combat.lastWordArchivePlayerIds) {
+      const archived = archiveHagathaLastWordGroundLoot(
+        playerEntities,
+        world,
+        playerId,
+        gameRng,
+      )
+      playerEntities = archived.playerEntities
+      gameRng = archived.rng
+      world = archived.world
+    }
     if (run.gameOverTicks === NATIVE_HALL_OF_FAME_SCORE.archiveDeathTick) {
       const hallOfFameRuns: Record<string, ReturnType<typeof archiveNativeHallOfFameRun>> = {}
       for (const [playerId, hallRun] of Object.entries(state.world.hallOfFameRuns).sort()) {
@@ -1217,11 +1266,12 @@ export function stepGameSimulationTick(
           Math.fround(NATIVE_HALL_OF_FAME_SCORE.portraitScaleBase + scale.value),
         )
       }
-      world = { ...state.world, hallOfFameRuns }
+      world = { ...world, hallOfFameRuns }
     }
     const frozen = {
       ...state,
       gameRng,
+      lightProviderOrder: lightProviderOrder.state(),
       playerEntities,
       run,
       secondaryAbilities,
@@ -1504,7 +1554,7 @@ function finishGameSimulationTick(
           runtime,
           derived,
           progression,
-          damage.amount,
+          damage.amount * derived.incomingDamageFactor,
           damage.damageKind,
           damage.deflectable,
           character !== undefined
@@ -1590,12 +1640,13 @@ function finishGameSimulationTick(
       : intercepted.healthDamage
     if (!Number.isFinite(filteredHealthDamage) || filteredHealthDamage <= 0) continue
     const before = playerProgressionAt(playerEntities, damage.playerId)
-    playerEntities = damagePlayerEntity(
+    playerEntities = damagePlayerEntityWithResult(
       playerEntities,
       damage.playerId,
       filteredHealthDamage,
       tick,
-    )
+      true,
+    ).store
     const after = playerProgressionAt(playerEntities, damage.playerId)
     if (
       world.kind === 'boneyard'
@@ -2540,6 +2591,15 @@ function finishGameSimulationTick(
       secondaryResult,
       tick,
       lethalObserver,
+      (targetId, ownerId) => {
+        const nativeTypeId = world.kind === 'boneyard'
+          ? world.enemies.actors.find(({ id }) => id === targetId)?.config.nativeTypeId
+          : undefined
+        const economy = playerEconomyAt(playerEntities, ownerId)
+        return nativeTypeId === undefined || economy === null
+          ? 1
+          : nativeHagathaBossDamageFactor(economy.ownedPerkSelectors, nativeTypeId)
+      },
     )
     world = {
       ...world,
@@ -2553,7 +2613,25 @@ function finishGameSimulationTick(
     world = applyBoneyardSecondaryEnemyKnockbacks(
       world,
       secondaryPlayers,
-      secondaryResult.knockbacks,
+      secondaryResult.knockbacks.map((knockback) => {
+        const ownerId = secondaryAbilities.actors.find(({ id }) => (
+          id === knockback.sourceActorId
+        ))?.ownerId ?? previous.secondaryAbilities.actors.find(({ id }) => (
+          id === knockback.sourceActorId
+        ))?.ownerId
+        const pushStrengthFactor = ownerId === undefined
+          ? 1
+          : playerSkillDerivedStatsAt(playerEntities, ownerId)?.pushStrengthFactor ?? 1
+        return pushStrengthFactor === 1
+          ? knockback
+          : {
+              ...knockback,
+              delta: {
+                x: Math.fround(knockback.delta.x * pushStrengthFactor),
+                y: Math.fround(knockback.delta.y * pushStrengthFactor),
+              },
+            }
+      }),
       Object.fromEntries(playerEntities.identities.map(({ playerId }, index) => [
         playerId,
         {
@@ -2586,14 +2664,23 @@ function finishGameSimulationTick(
         radius,
       ),
       lightProviderOrder.register,
-      (targetId, kind) => kind === 'air'
-        && (nativeSecondaryTargetEffect(
-          secondaryAbilities,
-          `boneyard:${boneyardWorld.runId}`,
-          targetId,
-        )?.prismaticTicks ?? 0) > 0
-        ? 2
-        : 1,
+      (targetId, kind, ownerId) => {
+        const prismatic = kind === 'air'
+          && (nativeSecondaryTargetEffect(
+            secondaryAbilities,
+            `boneyard:${boneyardWorld.runId}`,
+            targetId,
+          )?.prismaticTicks ?? 0) > 0
+          ? 2
+          : 1
+        const nativeTypeId = boneyardWorld.enemies.actors.find(({ id }) => (
+          id === targetId
+        ))?.config.nativeTypeId
+        const economy = playerEconomyAt(playerEntities, ownerId)
+        return prismatic * (nativeTypeId === undefined || economy === null
+          ? 1
+          : nativeHagathaBossDamageFactor(economy.ownedPerkSelectors, nativeTypeId))
+      },
       boneyardWorld.primarySceneryTargets,
       lethalObserver,
       cast.fireActorContacts,
@@ -2607,6 +2694,10 @@ function finishGameSimulationTick(
       secondaryResult.steamedPulses,
       (ownerId) => primaryInputs[ownerId]?.viewportWidth
         ?? NATIVE_GAMEPLAY_VIEWPORT_WIDTH,
+      (ownerId) => playerSkillDerivedStatsAt(
+        playerEntities,
+        ownerId,
+      )?.pushStrengthFactor ?? 1,
     )
     combatRng = spellCombat.rng
     primarySpells = spellCombat.spells
@@ -2670,6 +2761,32 @@ function finishGameSimulationTick(
     playerCombatMutations(extensions, tick),
   )
   playerEntities = combat.store
+  if (world.kind === 'boneyard') {
+    for (const playerId of combat.lastWordBurstPlayerIds) {
+      const triggered = triggerHagathaLastWord(
+        playerEntities,
+        secondaryAbilities,
+        world,
+        playerId,
+        tick,
+        lightProviderOrder,
+        lethalObserver,
+      )
+      secondaryAbilities = triggered.secondaryAbilities
+      world = triggered.world
+    }
+    for (const playerId of combat.lastWordArchivePlayerIds) {
+      const archived = archiveHagathaLastWordGroundLoot(
+        playerEntities,
+        world,
+        playerId,
+        gameRng,
+      )
+      playerEntities = archived.playerEntities
+      gameRng = archived.rng
+      world = archived.world
+    }
+  }
   for (const playerId of combat.deathBurstPlayerIds) {
     playerEntities = setPlayerEntitySpectating(playerEntities, playerId)
     secondaryAbilities = removeNativeSecondaryOwner(secondaryAbilities, playerId)
@@ -2949,6 +3066,128 @@ function economyContainsHealthPotion(economy: HubEconomyState): boolean {
     && item.nativeSubtype === 0
     || ((item as NativeLootItem).contents ?? []).some(contains)
   return economy.backpack.some(contains)
+}
+
+function triggerHagathaLastWord(
+  playerEntities: PlayerEntityStore,
+  secondaryAbilities: NativeSecondarySimulationState,
+  sourceWorld: BoneyardWorldState,
+  playerId: PlayerId,
+  tick: number,
+  lightProviderOrder: NativeLightProviderOrder,
+  lethalObserver?: BoneyardEnemyLethalObserver,
+): Readonly<{
+  secondaryAbilities: NativeSecondarySimulationState
+  world: BoneyardWorldState
+}> {
+  const character = playerCharacterAt(playerEntities, playerId)
+  if (character === null) return { secondaryAbilities, world: sourceWorld }
+  const triggered = triggerNativePlayerMindblast(secondaryAbilities, {
+    directDamage: NATIVE_HAGATHA_LAST_WORD_DAMAGE,
+    element: character.config.element,
+    level: NATIVE_HAGATHA_LAST_WORD_DAMAGE * 2,
+    lightRegistration: lightProviderOrder.register('actor'),
+    ownerId: playerId,
+    position: character.position,
+    presentationScale: NATIVE_HAGATHA_LAST_WORD_PRESENTATION_SCALE,
+    worldKey: `boneyard:${sourceWorld.runId}`,
+  })
+  let enemies = sourceWorld.enemies
+  const events: BoneyardEnemySemanticEvent[] = []
+  const targets = boneyardNativeSecondaryTargets(
+    enemies,
+    character.position,
+    triggered.directRadius,
+  ).filter((target) => {
+    const x = target.position.x - character.position.x
+    const y = target.position.y - character.position.y
+    return x * x + y * y
+      < triggered.directRadius * triggered.directRadius + target.radius * target.radius
+  })
+  for (const target of targets) {
+    const nativeTypeId = enemies.actors.find(({ id }) => id === target.id)?.config.nativeTypeId
+    const economy = playerEconomyAt(playerEntities, playerId)
+    const amount = triggered.directDamage * (
+      nativeTypeId === undefined || economy === null
+        ? 1
+        : nativeHagathaBossDamageFactor(economy.ownedPerkSelectors, nativeTypeId)
+    )
+    const damaged = damageBoneyardEnemy(enemies, {
+      actorId: target.id,
+      amount,
+      lethalObserver,
+      sourcePlayerId: playerId,
+      tick,
+    })
+    if (damaged.accepted) {
+      enemies = damaged.store
+      events.push(...damaged.events)
+    }
+  }
+  return Object.freeze({
+    secondaryAbilities: triggered.state,
+    world: enemies === sourceWorld.enemies
+      ? sourceWorld
+      : {
+          ...sourceWorld,
+          enemies,
+          enemyEvents: retainBoneyardEnemyEvents(sourceWorld.enemyEvents, events, tick),
+        },
+  })
+}
+
+function archiveHagathaLastWordGroundLoot(
+  playerEntities: PlayerEntityStore,
+  sourceWorld: BoneyardWorldState,
+  playerId: PlayerId,
+  sourceRng: NativeRngState,
+): Readonly<{
+  playerEntities: PlayerEntityStore
+  rng: NativeRngState
+  world: BoneyardWorldState
+}> {
+  const retained = nativeHagathaLastWordLoot(sourceWorld.loot)
+  if (retained.actorIds.length === 0) {
+    return { playerEntities, rng: sourceRng, world: sourceWorld }
+  }
+  const goldActorIds = sourceWorld.loot.actors.filter(({ nativeTypeId }) => (
+    nativeTypeId === 2012
+  )).map(({ id }) => id)
+  const sackActorIds = sourceWorld.loot.actors.filter(({ nativeTypeId }) => (
+    nativeTypeId === 2013
+  )).map(({ id }) => id)
+  let removedActorIds = [...goldActorIds]
+  if (retained.gold > 0) {
+    playerEntities = creditPlayerEntityLootGold(playerEntities, playerId, retained.gold)
+  }
+  let rng = sourceRng
+  if (retained.items.length > 0) {
+    const suffix = drawNativeInteger(rng, NATIVE_HAGATHA_LAST_WORD_SACK_SUFFIXES.length)
+    rng = suffix.state
+    const character = playerCharacterAt(playerEntities, playerId)
+    const economy = playerEconomyAt(playerEntities, playerId)
+    if (character !== null && economy !== null) {
+      const archived = archiveHagathaLastWordItems(
+        economy,
+        retained.items,
+        `${character.config.displayName}'s ${NATIVE_HAGATHA_LAST_WORD_SACK_SUFFIXES[suffix.value]!}`,
+      )
+      if (archived.accepted) {
+        playerEntities = replacePlayerEconomy(playerEntities, playerId, archived.state)
+        removedActorIds = [...removedActorIds, ...sackActorIds]
+      }
+    }
+  }
+  return Object.freeze({
+    playerEntities,
+    rng,
+    world: removedActorIds.length === 0
+      ? sourceWorld
+      : {
+          ...sourceWorld,
+          loot: removeBoneyardLootActors(sourceWorld.loot, removedActorIds),
+        },
+  })
 }
 
 function triggerMindblowingRing(

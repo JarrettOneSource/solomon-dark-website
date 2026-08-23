@@ -321,7 +321,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 63
+export const GAME_PROTOCOL_VERSION = 64
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
 export const GAME_CONNECTION_TIMEOUT_CLOSE_CODE = 4000
@@ -3010,6 +3010,7 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
   const source = record(value, field)
   onlyKeys(source, field, [
     'weldBuildId',
+    'weldComponentRanks',
     'coldSlowTicksRemaining',
     'concentrationSkillIds',
     'currentHealth',
@@ -3019,6 +3020,7 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
     'deathEpoch',
     'deathTick',
     'experience',
+    'hagathaRuntime',
     'learnedSkills',
     'learnedSkillOrder',
     'level',
@@ -3074,6 +3076,30 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
   const experience = nonnegativeFinite(source.experience, `${field}.experience`)
   if (experience > 10_000_000) {
     throw new GameProtocolError(`${field}.experience is out of range`)
+  }
+  const rawHagathaRuntime = record(source.hagathaRuntime, `${field}.hagathaRuntime`)
+  onlyKeys(rawHagathaRuntime, `${field}.hagathaRuntime`, [
+    'cheatDeathCharges',
+    'reverieActive',
+    'serendipityActive',
+  ])
+  const cheatDeathCharges = nonnegativeInteger(
+    rawHagathaRuntime.cheatDeathCharges,
+    `${field}.hagathaRuntime.cheatDeathCharges`,
+  )
+  if (cheatDeathCharges > 1) {
+    throw new GameProtocolError(`${field}.hagathaRuntime.cheatDeathCharges is out of range`)
+  }
+  const hagathaRuntime = {
+    cheatDeathCharges,
+    reverieActive: boolean(
+      rawHagathaRuntime.reverieActive,
+      `${field}.hagathaRuntime.reverieActive`,
+    ),
+    serendipityActive: boolean(
+      rawHagathaRuntime.serendipityActive,
+      `${field}.hagathaRuntime.serendipityActive`,
+    ),
   }
   const learnedSkills = limitedArray(
     source.learnedSkills,
@@ -3164,6 +3190,20 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
   if ((weldBuildId === null) !== (spellWeldingRank === 0)) {
     throw new GameProtocolError(`${field}.weldBuildId does not match Spell Welding`)
   }
+  const weldComponentRanks = source.weldComponentRanks === null
+    ? null
+    : limitedArray(source.weldComponentRanks, `${field}.weldComponentRanks`, 6)
+      .map((entry, index) => {
+        const rank = nonnegativeInteger(entry, `${field}.weldComponentRanks[${index}]`)
+        if (rank > 255) {
+          throw new GameProtocolError(`${field}.weldComponentRanks[${index}] is out of range`)
+        }
+        return rank
+      })
+  if (
+    (weldBuildId === null) !== (weldComponentRanks === null)
+    || (weldComponentRanks !== null && weldComponentRanks.length !== 6)
+  ) throw new GameProtocolError(`${field}.weldComponentRanks does not match Spell Welding`)
   const selectedPrimarySkillId = nonnegativeInteger(
     source.selectedPrimarySkillId,
     `${field}.selectedPrimarySkillId`,
@@ -3192,6 +3232,7 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
     deathEpoch: nonnegativeInteger(source.deathEpoch, `${field}.deathEpoch`),
     deathTick: nonnegativeInteger(source.deathTick, `${field}.deathTick`),
     experience,
+    hagathaRuntime,
     learnedSkills,
     learnedSkillOrder,
     level,
@@ -3227,6 +3268,7 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
     skillQuickbar,
     splitMind,
     weldBuildId,
+    weldComponentRanks: weldComponentRanks as [number, number, number, number, number, number] | null,
   }
 }
 
@@ -4291,7 +4333,10 @@ function nativeSecondaryActor(
     if (
       lifetimeTicks !== NATIVE_MINDBLAST_BURST_LIFETIME_TICKS
       || presentationRng === null
-      || source.scale !== 9
+      || (
+        source.scale !== 9
+        && !(source.scale === 15 && source.rank === 10_000)
+      )
     ) {
       throw new GameProtocolError(`${field} violates the native Mindblast burst contract`)
     }

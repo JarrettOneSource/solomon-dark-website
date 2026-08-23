@@ -190,6 +190,12 @@ export interface SpawnBoneyardLootResult {
   readonly store: BoneyardLootStore
 }
 
+export interface NativeHagathaLastWordLoot {
+  readonly actorIds: readonly number[]
+  readonly gold: number
+  readonly items: readonly HubInventoryItem[]
+}
+
 export interface BoneyardEnemyLootMaterializationInput {
   readonly advancedUnlocks: readonly boolean[]
   readonly actorSeed: number
@@ -287,6 +293,36 @@ export function rollBoneyardLootSeed(
     seed: draw.value,
     store: { ...source, sharedRng: draw.state },
   }
+}
+
+export function nativeHagathaLastWordLoot(
+  source: BoneyardLootStore,
+): NativeHagathaLastWordLoot {
+  const actors = source.actors.filter(({ nativeTypeId }) => (
+    nativeTypeId === 2012 || nativeTypeId === 2013
+  ))
+  return Object.freeze({
+    actorIds: Object.freeze(actors.map(({ id }) => id)),
+    gold: actors.reduce((sum, actor) => (
+      actor.nativeTypeId === 2012 ? sum + actor.amount : sum
+    ), 0),
+    items: Object.freeze(actors.flatMap((actor) => (
+      actor.nativeTypeId === 2013 && actor.item !== null ? [actor.item] : []
+    ))),
+  })
+}
+
+export function removeBoneyardLootActors(
+  source: BoneyardLootStore,
+  actorIds: readonly number[],
+): BoneyardLootStore {
+  if (actorIds.length === 0) return source
+  const removed = new Set(actorIds)
+  const actors = source.actors.filter(({ id }) => !removed.has(id))
+  const effects = source.effects.filter(({ ownerActorId }) => !removed.has(ownerActorId))
+  return actors.length === source.actors.length && effects.length === source.effects.length
+    ? source
+    : { ...source, actors: Object.freeze(actors), effects: Object.freeze(effects) }
 }
 
 export function activateBoneyardGoodie(

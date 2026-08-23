@@ -33,7 +33,11 @@ import type { NativeLightProviderRegistration } from '../core-kernels/native-lig
 import type { NativeSecondarySimulationState } from '../core-kernels/native-secondary-abilities.ts'
 import type { NativeEnemyWorldFeedbackKernelState } from '../core-kernels/native-enemy-world-feedback.ts'
 import type { GameRunLifecycleState } from '../core-kernels/game-run.ts'
-import type { PlayerLevelUpBarrierState } from '../core-kernels/player-progression.ts'
+import type {
+  NativeWeldComponentRanks,
+  PlayerLevelUpBarrierState,
+} from '../core-kernels/player-progression.ts'
+import type { NativeHagathaRuntimeState } from '../core-kernels/native-hagatha-effects.ts'
 import type { NativeSkeletonHeadFacingOffset } from '../core-kernels/boneyard-skeleton-family-animation.ts'
 import type { ReplicatedEntityFrame } from './replicated-entity-types.ts'
 
@@ -110,6 +114,7 @@ export interface ProtocolPlayerProgression {
   deathTick: number
   dazzleTicksRemaining: number
   experience: number
+  hagathaRuntime: NativeHagathaRuntimeState
   learnedSkills: readonly (readonly [number, number, number])[]
   learnedSkillOrder: readonly number[]
   level: number
@@ -129,6 +134,7 @@ export interface ProtocolPlayerProgression {
   splitMind: boolean
   skillQuickbar: readonly (number | null)[]
   weldBuildId: number | null
+  weldComponentRanks: NativeWeldComponentRanks | null
 }
 
 export type NativeSecondarySnapshotState = Omit<

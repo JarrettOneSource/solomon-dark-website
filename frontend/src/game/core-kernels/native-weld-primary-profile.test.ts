@@ -90,6 +90,28 @@ test('rebuilds every mixed native weld vector at base, rank one, rank two, and e
   }
 })
 
+test('active Weld reads its construction snapshot until Spellwelder refreshes it', () => {
+  const stats = playerStatBook()
+  const rankOne = book(1000, Object.fromEntries(
+    NATIVE_WELD_BUILDS[0]!.componentSkillIds.map((skillId) => [skillId, 1]),
+  ))
+  const frozen = {
+    ...rankOne,
+    weldComponentRanks: Object.freeze([1, 1, 1, 1, 1, 1] as const),
+  }
+  const increasedRanks = [...frozen.effectiveRanks]
+  for (const skillId of NATIVE_WELD_BUILDS[0]!.componentSkillIds) increasedRanks[skillId] = 2
+  const increased = { ...frozen, effectiveRanks: Object.freeze(increasedRanks) }
+  assertVector(nativeWeldPrimaryVector(increased, stats, 1000), GOLDENS[1000].rank1)
+  assertVector(
+    nativeWeldPrimaryVector({
+      ...increased,
+      weldComponentRanks: Object.freeze([2, 2, 2, 2, 2, 2] as const),
+    }, stats, 1000),
+    GOLDENS[1000].rank2,
+  )
+})
+
 test('classifies the four one-shot, three immediate channels, and three persistent welded actors', () => {
   const stats = playerStatBook()
   const expected = new Map<NativeWeldBuildId, string>([

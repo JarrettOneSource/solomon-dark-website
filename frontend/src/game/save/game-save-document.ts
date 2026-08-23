@@ -5,6 +5,14 @@ import {
   hubEconomyInventoryIsValid,
   type HubEconomyState,
 } from '../core-kernels/hub-economy.ts'
+import {
+  applyNativeHagathaPurchaseRuntime,
+  createNativeHagathaRuntimeState,
+} from '../core-kernels/native-hagatha-effects.ts'
+import {
+  nativeWeldBuild,
+  nativeWeldComponentRanksForBuild,
+} from '../core-kernels/player-progression.ts'
 import type { GameContentIdentity, LuaConsoleValue } from '../protocol/game-protocol.ts'
 import {
   removePlayerCharacter,
@@ -290,7 +298,75 @@ function validatePlayerStore(value: unknown, playerId: string): GameSimulationSt
     }
     return restored
   })
-  return { ...store, economies } as unknown as GameSimulationState['playerEntities']
+  const progressions = (store.progressions as unknown[]).map((value, index) => {
+    const progression = record(value, `game save player progression ${index}`)
+    const rawRuntime = progression.hagathaRuntime
+    const hagathaRuntime = rawRuntime === undefined
+      ? applyNativeHagathaPurchaseRuntime(
+          createNativeHagathaRuntimeState(),
+          economies[index]!.ownedPerkSelectors,
+        )
+      : parseHagathaRuntime(rawRuntime, index)
+    return { ...progression, hagathaRuntime }
+  })
+  const skillBooks = (store.skillBooks as unknown[]).map((value, index) => {
+    const skillBook = record(value, `game save player skill book ${index}`)
+    const buildId = skillBook.weldBuildId
+    const build = typeof buildId === 'number' ? nativeWeldBuild(buildId) : null
+    const effectiveRanks = skillBook.effectiveRanks
+    if (skillBook.weldComponentRanks !== undefined) {
+      const weldComponentRanks = skillBook.weldComponentRanks === null
+        ? null
+        : parseWeldComponentRanks(skillBook.weldComponentRanks, index)
+      if ((build === null) !== (weldComponentRanks === null)) {
+        throw new Error(`game save player skill book ${index} Weld cache is invalid`)
+      }
+      return { ...skillBook, weldComponentRanks }
+    }
+    return {
+      ...skillBook,
+      weldComponentRanks: build !== null && Array.isArray(effectiveRanks)
+        ? nativeWeldComponentRanksForBuild(effectiveRanks.map(Number), build)
+        : null,
+    }
+  })
+  return {
+    ...store,
+    economies,
+    progressions,
+    skillBooks,
+  } as unknown as GameSimulationState['playerEntities']
+}
+
+function parseWeldComponentRanks(value: unknown, index: number) {
+  if (!Array.isArray(value) || value.length !== 6) {
+    throw new Error(`game save player skill book ${index} Weld cache is invalid`)
+  }
+  return value.map((rank) => {
+    if (!Number.isInteger(rank) || rank < 0 || rank > 255) {
+      throw new Error(`game save player skill book ${index} Weld cache is invalid`)
+    }
+    return rank
+  }) as [number, number, number, number, number, number]
+}
+
+function parseHagathaRuntime(value: unknown, index: number) {
+  const runtime = record(value, `game save Hagatha runtime ${index}`)
+  onlyKeys(runtime, `game save Hagatha runtime ${index}`, [
+    'cheatDeathCharges',
+    'reverieActive',
+    'serendipityActive',
+  ])
+  if (
+    (runtime.cheatDeathCharges !== 0 && runtime.cheatDeathCharges !== 1)
+    || typeof runtime.reverieActive !== 'boolean'
+    || typeof runtime.serendipityActive !== 'boolean'
+  ) throw new Error(`game save Hagatha runtime ${index} is invalid`)
+  return {
+    cheatDeathCharges: runtime.cheatDeathCharges,
+    reverieActive: runtime.reverieActive,
+    serendipityActive: runtime.serendipityActive,
+  }
 }
 
 function parseLoadedBoneyard(value: unknown): LoadedBoneyard {

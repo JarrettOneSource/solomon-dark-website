@@ -113,9 +113,11 @@ primary, two concentration slots and their replacement cursor, plus the eight
 secondary intent slots. Inventory, SkillScreen, and the compact selected-HUD
 selector are shared by Hub and Boneyard; scenes request the participant-owned
 surface but never clone its state. Protocol 36 introduced strict belt, primary,
-and general concentration intents. Current protocol 63 adds a distinct
-addressed A/B concentration command for the HUD buttons while retaining the
-general SkillScreen command. The host applies either only to the authenticated
+and general concentration intents. Protocol 63 added a distinct addressed A/B
+concentration command for the HUD buttons while retaining the general
+SkillScreen command. Current protocol 64 also carries the authoritative
+Hagatha one-shot state and the six frozen active-Weld component ranks. The host
+applies either skill selection only to the authenticated
 participant before publishing a new progression revision. The compact selector
 uses its own `skill-selector` pause source, so the host cannot accept an
 addressed HUD mutation from a full SkillScreen pause (or vice versa).
@@ -1118,7 +1120,7 @@ This preserves one mutation boundary and prevents Lua callbacks from entering
 the simulation recursively. The host checks dynamic session host identity or
 the account-bound developer entitlement on every console request. `Enable
 Cheats` controls ordinary-host installation of the DevTools API; it is never
-trusted as network authorization. Protocol 63 retains the server-authored
+trusted as network authorization. Protocol 64 retains the server-authored
 developer boolean from a one-use admission into the welcome. An entitled
 account keeps the setting and ordinary shared-Hub routing off while still
 receiving the DevTools API. No client-authored field can grant the entitlement.

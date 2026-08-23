@@ -1466,8 +1466,12 @@ function copyPlayer(player: ProtocolPlayerState): ProtocolPlayerState {
     position: { ...player.position },
     progression: {
       ...player.progression,
+      hagathaRuntime: { ...player.progression.hagathaRuntime },
       learnedSkills: player.progression.learnedSkills.map((entry) => [...entry]),
       skillQuickbar: [...player.progression.skillQuickbar],
+      weldComponentRanks: player.progression.weldComponentRanks === null
+        ? null
+        : [...player.progression.weldComponentRanks],
       pendingOffer: player.progression.pendingOffer
         ? {
             ...player.progression.pendingOffer,

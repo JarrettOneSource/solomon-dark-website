@@ -531,9 +531,16 @@ export function createNativeStaffKnockback(
   id: number,
   action: NativePlayerStaffAction,
   targetIds: readonly string[],
+  pushStrengthFactor = 1,
 ): NativeStaffKnockbackActor | null {
+  if (!Number.isFinite(pushStrengthFactor) || pushStrengthFactor < 0) {
+    throw new RangeError('staff push-strength factor must be finite and non-negative')
+  }
   const arcDegrees = nativeStaffKnockbackArc(action.outcome)
-  const remainingDistance = nativeStaffKnockbackDistance(action.outcome)
+  const nativeDistance = nativeStaffKnockbackDistance(action.outcome)
+  const remainingDistance = nativeDistance === null
+    ? null
+    : Math.fround(nativeDistance * pushStrengthFactor)
   return arcDegrees === null || remainingDistance === null
     ? null
     : Object.freeze({

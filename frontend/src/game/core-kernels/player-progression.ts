@@ -9,6 +9,11 @@ import {
   createPlayerCombat,
   type PlayerCombatComponent,
 } from './player-combat.ts'
+import {
+  createNativeHagathaRuntimeState,
+  nativeHagathaRevelationRank,
+  type NativeHagathaRuntimeState,
+} from './native-hagatha-effects.ts'
 import { createNativeRng, drawNativeInteger, type NativeRngState } from './native-rng.ts'
 import {
   NATIVE_SECONDARY_ABILITY_IDS,
@@ -109,7 +114,10 @@ export interface PlayerSkillBookComponent {
   readonly primarySkillId: NativePlayerPrimarySkillId
   readonly skillQuickbar: PlayerSkillQuickbar
   readonly weldBuildId: number | null
+  readonly weldComponentRanks: NativeWeldComponentRanks | null
 }
+
+export type NativeWeldComponentRanks = readonly [number, number, number, number, number, number]
 
 export interface PlayerSkillOfferOption {
   readonly insight?: true
@@ -131,6 +139,7 @@ export interface PlayerProgressionComponent extends PlayerCombatComponent {
   readonly excludeActiveWeldBuildFromOffers: boolean
   readonly experience: number
   readonly forcedOfferSkillIds: readonly number[]
+  readonly hagathaRuntime: NativeHagathaRuntimeState
   readonly level: number
   readonly mindChugTicksRemaining: number
   readonly nextThreshold: number
@@ -186,6 +195,8 @@ export interface NativeRandomSkillIncreaseResult {
   readonly skillBook: PlayerSkillBookComponent
   readonly skillId: number | null
 }
+
+export interface NativeWeirdCasterGrantResult extends NativeRandomSkillIncreaseResult {}
 
 interface SkillRule {
   readonly all?: readonly number[]
@@ -469,6 +480,19 @@ export function nativeWeldBuild(buildId: number): NativeWeldBuild | null {
   return NATIVE_WELD_BUILDS[buildId - NATIVE_WELD_BUILDS[0]!.id] ?? null
 }
 
+export function nativeWeldComponentRanksForBuild(
+  ranks: readonly number[],
+  build: NativeWeldBuild,
+): NativeWeldComponentRanks {
+  return Object.freeze(build.componentSkillIds.map((skillId) => {
+    const rank = ranks[skillId] ?? 0
+    if (!Number.isInteger(rank) || rank < 0 || rank > 255) {
+      throw new RangeError(`weld component ${skillId} has invalid rank ${String(rank)}`)
+    }
+    return rank
+  }) as unknown as NativeWeldComponentRanks)
+}
+
 export function createPlayerSkillBook(config: PlayerCharacterConfig): PlayerSkillBookComponent {
   const elementRoot = ELEMENT_ROOT[config.element]
   const disciplineRoot = DISCIPLINE_ROOT[config.discipline]
@@ -497,6 +521,7 @@ export function createPlayerSkillBook(config: PlayerCharacterConfig): PlayerSkil
       null,
     ]),
     weldBuildId: null,
+    weldComponentRanks: null,
   }
 }
 
@@ -527,6 +552,7 @@ export function reselectPlayerLoadout(
     primarySkillId: selected.primarySkillId,
     skillQuickbar: freezeSkillQuickbar(skillQuickbar),
     weldBuildId: null,
+    weldComponentRanks: null,
   }
 }
 
@@ -542,6 +568,7 @@ export function createPlayerProgression(offerSeed: number): PlayerProgressionCom
     excludeActiveWeldBuildFromOffers: false,
     experience: 0,
     forcedOfferSkillIds: Object.freeze([]),
+    hagathaRuntime: createNativeHagathaRuntimeState(),
     level: 1,
     mindChugTicksRemaining: 0,
     nextThreshold: NATIVE_LEVEL_THRESHOLDS[1],
@@ -839,6 +866,7 @@ export function applyPlayerSkillChoice(
   skillBook: PlayerSkillBookComponent,
   selection: { choiceIndex: number; offerSequence: number; skillId: number },
   sorcerorsCharmOwned = false,
+  ownedHagathaSelectors: readonly number[] = [],
 ): { progression: PlayerProgressionComponent; skillBook: PlayerSkillBookComponent } | null {
   const offer = progression.pendingOffer
   if (!offer || offer.sequence !== selection.offerSequence) return null
@@ -861,9 +889,12 @@ export function applyPlayerSkillChoice(
 
   const permanentRanks = [...skillBook.permanentRanks]
   const effectiveRanks = [...skillBook.effectiveRanks]
-  const nextRank = chosen.skillId === SPELL_WELDING_SKILL_ID
+  const selectedRank = chosen.skillId === SPELL_WELDING_SKILL_ID
     ? 1
     : rank + (chosen.insight === true ? 2 : 1)
+  const nextRank = chosen.skillId === SPELL_WELDING_SKILL_ID
+    ? selectedRank
+    : Math.min(maximum, nativeHagathaRevelationRank(selectedRank, ownedHagathaSelectors))
   permanentRanks[chosen.skillId] = nextRank
   effectiveRanks[chosen.skillId] = nextRank
   const nextBook: PlayerSkillBookComponent = {
@@ -882,6 +913,9 @@ export function applyPlayerSkillChoice(
       ? autofillSkillQuickbar(skillBook.skillQuickbar, chosen.skillId)
       : skillBook.skillQuickbar,
     weldBuildId: weldBuild?.id ?? skillBook.weldBuildId,
+    weldComponentRanks: weldBuild === null
+      ? skillBook.weldComponentRanks
+      : nativeWeldComponentRanksForBuild(effectiveRanks, weldBuild),
   }
   let nextProgression: PlayerProgressionComponent = {
     ...progression,
@@ -994,6 +1028,75 @@ export function increaseRandomLearnedSkill(
     },
     skillId,
   }
+}
+
+/** Native Hagatha selector 14 purchase-time category-two grant. */
+export function grantNativeWeirdCasterSkill(
+  skillBook: PlayerSkillBookComponent,
+  sourceRng: NativeRngState,
+  ownedHagathaSelectors: readonly number[],
+): NativeWeirdCasterGrantResult {
+  const learnedCategoryTwoCount = NATIVE_SECONDARY_ABILITY_IDS.filter((skillId) => (
+    (skillBook.permanentRanks[skillId] ?? 0) > 0
+  )).length
+  if (learnedCategoryTwoCount >= 2) {
+    return { rng: sourceRng, skillBook, skillId: null }
+  }
+  const candidates = NATIVE_SECONDARY_ABILITY_IDS.filter((skillId) => (
+    (skillBook.permanentRanks[skillId] ?? 0) === 0
+  ))
+  if (candidates.length === 0) {
+    return { rng: sourceRng, skillBook, skillId: null }
+  }
+  const selected = drawNativeInteger(sourceRng, candidates.length)
+  const skillId = candidates[selected.value]!
+  const maximum = SHARED_STAT_BOOK.entries[skillId]?.maximumLevel ?? 0
+  if (maximum < 1) throw new Error(`native Weird Caster row ${skillId} has no rank`)
+  const grantedRank = Math.min(
+    maximum,
+    nativeHagathaRevelationRank(1, ownedHagathaSelectors),
+  )
+  const permanentRanks = [...skillBook.permanentRanks]
+  const effectiveRanks = [...skillBook.effectiveRanks]
+  permanentRanks[skillId] = grantedRank
+  effectiveRanks[skillId] = grantedRank
+  return {
+    rng: selected.state,
+    skillBook: {
+      ...skillBook,
+      effectiveRanks: Object.freeze(effectiveRanks),
+      learnedSkillOrder: Object.freeze([...skillBook.learnedSkillOrder, skillId]),
+      permanentRanks: Object.freeze(permanentRanks),
+      skillQuickbar: autofillSkillQuickbar(skillBook.skillQuickbar, skillId),
+    },
+    skillId,
+  }
+}
+
+/** Native Revelation immediately promotes only the two selected concentration rows. */
+export function applyNativeRevelationToConcentrations(
+  skillBook: PlayerSkillBookComponent,
+  concentrationSkillIds: readonly (number | null)[],
+): PlayerSkillBookComponent {
+  const permanentRanks = [...skillBook.permanentRanks]
+  const effectiveRanks = [...skillBook.effectiveRanks]
+  let changed = false
+  for (const skillId of new Set(concentrationSkillIds)) {
+    if (skillId === null) continue
+    const rank = permanentRanks[skillId] ?? 0
+    const maximum = SHARED_STAT_BOOK.entries[skillId]?.maximumLevel ?? 0
+    if (rank !== 1 || maximum < 2) continue
+    permanentRanks[skillId] = 2
+    effectiveRanks[skillId] = 2
+    changed = true
+  }
+  return changed
+    ? {
+        ...skillBook,
+        effectiveRanks: Object.freeze(effectiveRanks),
+        permanentRanks: Object.freeze(permanentRanks),
+      }
+    : skillBook
 }
 
 export function buildPlayerSkillOffer(

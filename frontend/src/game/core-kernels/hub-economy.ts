@@ -1179,6 +1179,31 @@ export function insertLootInventoryItem(
   }
 }
 
+/** Native Last Word retention writes one named Sack into Luthacus storage. */
+export function archiveHagathaLastWordItems(
+  source: HubEconomyState,
+  items: readonly HubInventoryItem[],
+  sackName: string,
+): HubLootInventoryResult {
+  if (items.length === 0) return { accepted: true, state: source }
+  if (source.storage.length >= HUB_STORAGE_SLOT_CAPACITY) {
+    return { accepted: false, state: source }
+  }
+  if (sackName.length === 0) throw new RangeError('Last Word Sack name must not be empty')
+  const retained = retainedLastWordSack(items, sackName, 0)
+  if (retained === null) return { accepted: false, state: source }
+  const identified = identifyLootItemTree(retained, source.nextItemId)
+  const state = {
+    ...source,
+    nextItemId: identified.nextItemId,
+    revision: source.revision + 1,
+    storage: [...source.storage, identified.item],
+  }
+  return hubEconomyInventoryIsValid(state)
+    ? { accepted: true, state }
+    : { accepted: false, state: source }
+}
+
 export function economyHasWizardKey(source: HubEconomyState): boolean {
   return source.backpack.some(itemHasWizardKey)
 }
@@ -1233,6 +1258,38 @@ function identifyLootItemTree(
       ...(contents === undefined ? {} : { contents }),
     },
     nextItemId,
+  }
+}
+
+function retainedLastWordSack(
+  source: readonly HubInventoryItem[],
+  name: string,
+  depth: number,
+): HubInventoryItem | null {
+  if (depth >= HUB_SACK_REPLICATION_DEPTH_LIMIT) return null
+  const continuation = source.length > HUB_SACK_CHILD_REPLICATION_LIMIT
+    ? retainedLastWordSack(
+        source.slice(HUB_SACK_CHILD_REPLICATION_LIMIT - 1),
+        name,
+        depth + 1,
+      )
+    : null
+  if (source.length > HUB_SACK_CHILD_REPLICATION_LIMIT && continuation === null) return null
+  const contents = source.length > HUB_SACK_CHILD_REPLICATION_LIMIT
+    ? [...source.slice(0, HUB_SACK_CHILD_REPLICATION_LIMIT - 1), continuation!]
+    : [...source]
+  return {
+    contents: Object.freeze(contents),
+    equipmentType: null,
+    iconRecords: Object.freeze([70]),
+    id: 1,
+    kind: 'sack',
+    name,
+    nativeSubtype: 0,
+    nativeTypeId: 7008,
+    quantity: 1,
+    rarity: null,
+    recipeIndex: null,
   }
 }
 

@@ -32,6 +32,7 @@ import {
   type NativeRngState,
 } from '../core-kernels/native-rng.ts'
 import { playerStaffDamage, togglePlayerStaffMeleeLane } from '../core-kernels/player-skill-runtime.ts'
+import { nativeHagathaBossDamageFactor } from '../core-kernels/native-hagatha-effects.ts'
 import type {
   PrimarySpellSimulationState,
   PrimarySpellTransientState,
@@ -48,6 +49,7 @@ import {
 } from './boneyard-enemy-store.ts'
 import {
   playerProgressionAt,
+  playerEconomyAt,
   playerSkillBookAt,
   playerSkillDerivedStatsAt,
   playerSkillRuntimeAt,
@@ -102,6 +104,7 @@ export interface PlayerStaffCombatSystemResult {
 interface StaffCombatTarget extends NativeStaffTarget {
   readonly actorId: number
   readonly headingDegrees: number
+  readonly nativeTypeId: number
   readonly pike: boolean
 }
 
@@ -265,11 +268,18 @@ export function stepPlayerStaffCombatSystem(
           }
         }
         if (impact.contactKnockbackDelta !== null) {
+          const pushStrengthFactor = playerSkillDerivedStatsAt(
+            playerEntities,
+            stepped.sample.ownerId,
+          )?.pushStrengthFactor ?? 1
           spawned.push(createNativeStaffContactKnockback(
             nextId,
             stepped.sample,
             impact.targetId,
-            impact.contactKnockbackDelta,
+            {
+              x: Math.fround(impact.contactKnockbackDelta.x * pushStrengthFactor),
+              y: Math.fround(impact.contactKnockbackDelta.y * pushStrengthFactor),
+            },
           ))
           nextId += 1
         }
@@ -297,6 +307,10 @@ export function stepPlayerStaffCombatSystem(
           nextId,
           stepped.sample,
           knockbackTargets.map(({ id }) => id),
+          playerSkillDerivedStatsAt(
+            playerEntities,
+            stepped.sample.ownerId,
+          )?.pushStrengthFactor ?? 1,
         )
         if (knockback !== null) {
           spawned.push(knockback)
@@ -413,12 +427,19 @@ function applyStaffContact(
     action.outcome === 'whirl',
   )
   let enemies = source
+  const ownedPerkSelectors = playerEconomyAt(
+    playerEntities,
+    action.ownerId,
+  )?.ownedPerkSelectors ?? []
   const events: BoneyardEnemySemanticEvent[] = []
   const acceptedTargets: StaffCombatTarget[] = []
   for (const target of targets) {
     const damaged = damageBoneyardEnemy(enemies, {
       actorId: target.actorId,
-      amount: damage,
+      amount: damage * nativeHagathaBossDamageFactor(
+        ownedPerkSelectors,
+        target.nativeTypeId,
+      ),
       lethalObserver,
       sourcePlayerId: action.ownerId,
       tick,
@@ -470,6 +491,7 @@ function staffCombatTargets(enemies: BoneyardEnemyStore): StaffCombatTarget[] {
             collisionRadius: actor.config.collisionRadius,
             headingDegrees: actor.headingDeg,
             id: `enemy:${actor.id}`,
+            nativeTypeId: actor.config.nativeTypeId,
             pike: actor.brain.family === 'skeleton'
               && actor.config.flags.includes('FLAG_PIKE'),
             position: actor.position,
@@ -483,6 +505,7 @@ function staffCombatTargets(enemies: BoneyardEnemyStore): StaffCombatTarget[] {
             collisionRadius: maggot.collisionRadius,
             headingDegrees: maggot.headingDeg,
             id: `enemy:${maggot.id}`,
+            nativeTypeId: 0,
             pike: false,
             position: maggot.position,
           }]

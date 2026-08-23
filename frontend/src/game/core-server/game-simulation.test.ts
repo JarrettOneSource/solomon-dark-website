@@ -78,6 +78,7 @@ import {
   dazzlePlayerEntity,
   playerCharacterRecords,
   playerLightingAt,
+  playerSkillDerivedStatsAt,
   playerSkillRuntimeAt,
   poisonPlayerEntity,
   replacePlayerCharacter,
@@ -659,6 +660,38 @@ test('hub trader actions require the authenticated participant to be in native s
     type: 'buy-fomentius',
     itemId: getPlayerEconomy(fading, 'first').fomentiusStock[0]!.id,
   }).reason, 'service-unavailable')
+})
+
+test('Hagatha purchase actions arm and consume their authoritative until-hurt effect', () => {
+  let state = createGameSimulation({
+    owner: {
+      discipline: 'arcane',
+      displayName: 'Hagatha Test',
+      element: 'ether',
+    },
+  })
+  state = {
+    ...state,
+    playerEntities: replacePlayerCharacter(
+      state.playerEntities,
+      'owner',
+      { ...getPlayerCharacter(state, 'owner'), position: { x: 1340, y: 280 } },
+    ),
+  }
+  const purchased = applyGameSimulationHubAction(state, 'owner', {
+    type: 'buy-hagatha',
+    selector: 24,
+  })
+  assert.equal(purchased.accepted, true)
+  assert.equal(
+    playerSkillDerivedStatsAt(purchased.state.playerEntities, 'owner')?.offensiveDamageFactor,
+    3,
+  )
+  const hurt = {
+    ...purchased.state,
+    playerEntities: damagePlayerEntity(purchased.state.playerEntities, 'owner', 1, 1),
+  }
+  assert.equal(playerSkillDerivedStatsAt(hurt.playerEntities, 'owner')?.offensiveDamageFactor, 1)
 })
 
 test('unforge is participant-owned and applies full rejuvenation plus Mind Dredge authoritatively', () => {
@@ -2206,6 +2239,124 @@ test('terminal direct damage suppresses Wizard ouch and yields to death presenta
   )
 })
 
+test('Last Word explodes at death tick 200, triples Demon damage, and archives only final Gold and Sacks', () => {
+  let state = enterBoneyardWorld(
+    createGameSimulation(),
+    combatBoneyard('last-word-run'),
+  )
+  state = withDemonAtPlayer(state)
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+  const demon = state.world.enemies.actors[0]!
+  const loot = spawnBoneyardLootSpecs(state.world.loot, [
+    {
+      activationDelayTicks: 0,
+      amount: 7,
+      id: 1,
+      kind: 'gold',
+      nativeTypeId: 2012,
+      phase: 0,
+      position: { x: 400, y: 400 },
+      source: 'script',
+      tier: 3,
+    },
+    {
+      activationDelayTicks: 0,
+      id: 2,
+      item: {
+        equipmentType: null,
+        iconRecords: [46],
+        id: 1,
+        kind: 'health-potion',
+        name: 'Final Potion',
+        nativeSubtype: 0,
+        nativeTypeId: 7001,
+        quantity: 1,
+        rarity: null,
+        recipeIndex: null,
+      },
+      kind: 'sack',
+      nativeTypeId: 2013,
+      phase: 0,
+      position: { x: 400, y: 400 },
+      source: 'script',
+    },
+    {
+      activationDelayTicks: 0,
+      bonusKind: 0,
+      id: 3,
+      kind: 'bonus',
+      nativeTypeId: 2038,
+      phase: 0,
+      position: { x: 400, y: 400 },
+      source: 'script',
+    },
+  ], state.tick).store
+  const index = state.playerEntities.identities.findIndex(({ playerId }) => (
+    playerId === 'local-player'
+  ))
+  state = {
+    ...state,
+    playerEntities: replacePlayerEconomy({
+      ...state.playerEntities,
+      progressions: [{
+        ...state.playerEntities.progressions[index]!,
+        currentHealth: -10,
+        deathTick: 199,
+        lifeState: 'spectating',
+      }],
+    }, 'local-player', {
+      ...getPlayerEconomy(state),
+      ownedPerkSelectors: [12, 22],
+    }),
+    run: {
+      ...state.run,
+      gameOverEventId: 1,
+      gameOverTicks: 0,
+      phase: 'game-over',
+    },
+    world: {
+      ...state.world,
+      enemies: {
+        ...state.world.enemies,
+        actors: [{
+          ...demon,
+          config: { ...demon.config, maximumHealth: 10_000 },
+          currentHealth: 10_000,
+        }],
+      },
+      loot,
+    },
+  }
+
+  state = stepGameSimulationTick(state, {})
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+  assert.equal(state.world.enemies.actors[0]?.lifeState, 'dying')
+  assert.deepEqual(state.secondaryAbilities.actors.filter(({ kind }) => (
+    kind === 'mindblast-burst' || kind === 'mindblast-shockwave'
+  )).map(({ kind }) => kind), ['mindblast-burst', 'mindblast-shockwave'])
+  assert.equal(state.secondaryAbilities.actors.find(({ kind }) => (
+    kind === 'mindblast-burst'
+  ))?.scale, 15)
+
+  state = {
+    ...state,
+    playerEntities: {
+      ...state.playerEntities,
+      progressions: [{ ...state.playerEntities.progressions[index]!, deathTick: 299 }],
+    },
+  }
+  const goldBefore = getPlayerEconomy(state).gold
+  state = stepGameSimulationTick(state, {})
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+  assert.equal(getPlayerEconomy(state).gold, goldBefore + 7)
+  assert.equal(getPlayerEconomy(state).storage.length, 1)
+  assert.match(
+    getPlayerEconomy(state).storage[0]!.name,
+    /^Helvidius's (Earthly Possessions|Stuff|Dead Stuff|Bag|Loot)$/,
+  )
+  assert.deepEqual(state.world.loot.actors.map(({ kind }) => kind), ['bonus'])
+})
+
 test('poison begins the native death epoch before all-dead Game Over', () => {
   let state = enterBoneyardWorld(
     createGameSimulation(),
@@ -2530,6 +2681,37 @@ function withRottenZombieAtPlayer(state: GameSimulationState): GameSimulationSta
       id: 1,
       locationPolicy: 'anywhere',
       nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.ZOMBIE,
+      position: { ...player.position },
+      spawnTick: state.tick,
+      waveOrdinal: 1,
+    }],
+    tick: state.tick,
+  })
+  return { ...state, world: { ...state.world, enemies: seeded.store } }
+}
+
+function withDemonAtPlayer(state: GameSimulationState): GameSimulationState {
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+  const player = getPlayerCharacter(state)
+  const seeded = stepBoneyardEnemyStore(state.world.enemies, {
+    firstProjectileWorldContact: () => null,
+    players: {
+      'local-player': {
+        alive: true,
+        collisionRadius: 25,
+        connected: true,
+        eligible: true,
+        position: player.position,
+        velocityPerTick: { x: 0, y: 0 },
+      },
+    },
+    resolveMovement: ({ requestedPosition }) => requestedPosition,
+    resolveSpawnIntents: () => [{
+      enemyToken: 'DEMON',
+      flags: [],
+      id: 1,
+      locationPolicy: 'anywhere',
+      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.DEMON,
       position: { ...player.position },
       spawnTick: state.tick,
       waveOrdinal: 1,

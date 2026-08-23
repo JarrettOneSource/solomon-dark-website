@@ -257,6 +257,7 @@ export function resolveBoneyardNativeSecondaryCombat(
   >,
   tick: number,
   lethalObserver?: BoneyardEnemyLethalObserver,
+  damageMultiplier: (targetId: number, ownerId: string) => number = () => 1,
 ): BoneyardSecondaryCombatResult {
   const removedProjectileIds = new Set(result.removedProjectileIds)
   let enemies = removedProjectileIds.size === 0
@@ -282,7 +283,13 @@ export function resolveBoneyardNativeSecondaryCombat(
   }
 
   for (const contact of result.damage) {
-    const damaged = applyContact(enemies, contact, tick, lethalObserver)
+    const damaged = applyContact(
+      enemies,
+      contact,
+      tick,
+      lethalObserver,
+      damageMultiplier(contact.targetId, contact.ownerId),
+    )
     enemies = damaged.enemies
     events.push(...damaged.events)
   }
@@ -341,10 +348,14 @@ function applyContact(
   contact: NativeSecondaryDamageContact,
   tick: number,
   lethalObserver?: BoneyardEnemyLethalObserver,
+  damageMultiplier = 1,
 ): BoneyardSecondaryCombatResult {
+  if (!Number.isFinite(damageMultiplier) || damageMultiplier < 0) {
+    throw new RangeError('secondary damage multiplier must be finite and non-negative')
+  }
   const damaged = damageBoneyardEnemy(source, {
     actorId: contact.targetId,
-    amount: contact.amount,
+    amount: contact.amount * damageMultiplier,
     lethalObserver,
     sourcePlayerId: contact.ownerId,
     tick,

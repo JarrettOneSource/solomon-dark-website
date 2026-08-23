@@ -16,6 +16,8 @@ import {
   activateBoneyardGoodie,
   createBoneyardLootStore,
   materializeBoneyardEnemyLoot,
+  nativeHagathaLastWordLoot,
+  removeBoneyardLootActors,
   rollBoneyardLootSeed,
   spawnBoneyardLootSpecs,
   stepBoneyardLootStore as stepBoneyardLootStoreExact,
@@ -51,6 +53,20 @@ test('the authoritative loot stream owns stable actor seed writes', () => {
   assert.ok(second.seed >= 0 && second.seed < 10_000_000)
   assert.notEqual(first.seed, second.seed)
   assert.notDeepEqual(second.store.sharedRng, initial.sharedRng)
+})
+
+test('Last Word selects only ground Gold and Sacks and removes their actor-owned effects', () => {
+  const spawned = spawnBoneyardLootSpecs(
+    createBoneyardLootStore('last-word'),
+    [gold(7), sack(createNativeLootItemIds(1)), bonus(0), orb()],
+    1,
+  ).store
+  const retained = nativeHagathaLastWordLoot(spawned)
+  assert.equal(retained.gold, 7)
+  assert.equal(retained.items.length, 1)
+  assert.equal(retained.actorIds.length, 2)
+  const removed = removeBoneyardLootActors(spawned, retained.actorIds)
+  assert.deepEqual(removed.actors.map(({ kind }) => kind).sort(), ['bonus', 'orb'])
 })
 
 test('successful Item materialization persists the native last-drop arena level', () => {

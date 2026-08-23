@@ -288,6 +288,7 @@ function protocolPlayerState(
       deathEpoch: progression.deathEpoch,
       deathTick: progression.deathTick,
       experience: progression.experience,
+      hagathaRuntime: { ...progression.hagathaRuntime },
       learnedSkills,
       learnedSkillOrder: [...skillBook.learnedSkillOrder],
       level: progression.level,
@@ -307,6 +308,9 @@ function protocolPlayerState(
       splitMind: economy.ownedPerkSelectors.includes(SPLIT_MIND_CHARM_SELECTOR),
       skillQuickbar: [...skillBook.skillQuickbar],
       weldBuildId: skillBook.weldBuildId,
+      weldComponentRanks: skillBook.weldComponentRanks === null
+        ? null
+        : [...skillBook.weldComponentRanks],
     },
   }
 }
