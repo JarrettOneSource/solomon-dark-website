@@ -16,3 +16,15 @@
   .party-settings-code { grid-template-columns: 1fr 1fr; }
   .party-settings-code code { grid-column: 1 / -1; }
 }
+
+@media (hover: none) and (pointer: coarse) {
+  .party-settings-backdrop { padding: 10px; }
+  /* The dialog sits inside the display-scaled native frame; counter-scale it so it lands at
+     true screen pixels (vw/vh lengths then map 1:1 to the screen). */
+  .party-settings-dialog { width: min(520px, calc(100vw - 24px)); max-height: calc(100vh - 24px); padding: 12px 14px; transform: scale(calc(1 / var(--hud-display-scale, 0.65))); transform-origin: center; }
+  .party-settings-dialog fieldset { gap: 8px; margin: 8px 0; }
+  .party-settings-dialog label { min-height: 36px; }
+  .party-settings-dialog button { min-height: 36px; padding: 6px 10px; }
+  .party-settings-code code { min-height: 36px; font-size: 16px; }
+  .party-settings-leave { margin-top: 10px; }
+}

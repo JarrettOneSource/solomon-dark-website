@@ -19,6 +19,7 @@ import {
   NATIVE_SKILL_QUICKBAR_FONT,
   NATIVE_SKILL_QUICKBAR_SLOT_OFFSETS,
 } from './skill-quickbar.ts'
+import { mobileQuickbarSlotPlacement, mobileQuickbarSlotSize } from './mobile-quickbar-layout.ts'
 
 interface AtlasRecord {
   frame: readonly [number, number, number, number]
@@ -37,9 +38,6 @@ interface NativeAssetManifest {
 const nativeAssets = nativeAssetsJson as unknown as NativeAssetManifest
 const ATLAS_WIDTH = 1024
 const ATLAS_HEIGHT = 512
-const MOBILE_QUICKBAR_SLOT_OFFSETS = Object.freeze([
-  -414, -310, -206, -102, 2, 106, 210, 314,
-])
 
 interface SkillQuickbarProps {
   controls: GameControlBindings
@@ -48,6 +46,10 @@ interface SkillQuickbarProps {
   playerState: NativeSecondaryPlayerState | undefined
   quickbar: readonly (number | null)[]
   selectedPrimarySkillId: number
+  /** Settings UI scale; coarse-pointer bank placement is computed in HUD-root pixels. */
+  uiScale: number
+  /** Logical viewport width (display-scale space) used to keep the touch banks clear of the dock. */
+  viewportWidth: number
 }
 
 export default function SkillQuickbar({
@@ -57,7 +59,10 @@ export default function SkillQuickbar({
   playerState,
   quickbar,
   selectedPrimarySkillId,
+  uiScale,
+  viewportWidth,
 }: SkillQuickbarProps) {
+  const mobileSlotSize = mobileQuickbarSlotSize(viewportWidth, uiScale)
   return (
     <div
       className="hub-hud-skill-quickbar"
@@ -66,6 +71,7 @@ export default function SkillQuickbar({
     >
       {NATIVE_SKILL_QUICKBAR_SLOT_OFFSETS.map((offset, slot) => {
         const skillId = quickbar[slot] ?? null
+        const mobilePlacement = mobileQuickbarSlotPlacement(slot, mobileSlotSize)
         const skill = skillId === null ? undefined : NATIVE_SKILL_CATALOG[skillId]
         const secondary = skillId !== null && nativeSkillCategory(skillId) === 2
         const combatDisabled = mode === 'hub' && secondary
@@ -95,12 +101,15 @@ export default function SkillQuickbar({
             type="button"
             className="hub-hud-quickbar-slot"
             data-slot={slot}
+            data-quickbar-bank={mobilePlacement.bank}
             data-binding-code={bindingCode}
             data-active={active}
             disabled={skill === undefined || !onInput || combatDisabled}
             key={slot}
             style={{
-              '--mobile-quickbar-slot-offset': `${MOBILE_QUICKBAR_SLOT_OFFSETS[slot]}px`,
+              '--mobile-quickbar-slot-bottom': `${mobilePlacement.bottom}px`,
+              '--mobile-quickbar-slot-inset': `${mobilePlacement.inset}px`,
+              '--mobile-quickbar-slot-size': `${mobilePlacement.size}px`,
               '--quickbar-slot-offset': `${offset}px`,
             } as CSSProperties}
             aria-label={label}

@@ -194,6 +194,7 @@ export default function GameHud({
       aria-label="Player status"
       data-ui-scale={uiScale}
       style={{
+        '--game-ui-scale': uiScale,
         height: viewport.height / uiScale,
         inset: 'auto',
         left: viewport.width / 2,
@@ -201,7 +202,7 @@ export default function GameHud({
         transform: `translate(-50%, -50%) scale(${uiScale})`,
         transformOrigin: 'center',
         width: viewport.width / uiScale,
-      }}
+      } as CSSProperties}
     >
       <img className="hub-hud-skull" src={hub.hud.skull} alt="Menu" />
       <GameAccountName placement="hud" username={accountUsername} />
@@ -302,6 +303,8 @@ export default function GameHud({
         playerState={quickbarHud.playerState}
         quickbar={quickbarHud.quickbar}
         selectedPrimarySkillId={quickbarHud.selectedPrimarySkillId}
+        uiScale={uiScale}
+        viewportWidth={viewport.width}
       />
 
       {mode === 'hub' ? (

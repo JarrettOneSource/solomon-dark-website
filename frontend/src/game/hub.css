@@ -1041,17 +1041,29 @@
 }
 
 @media (hover: none) and (pointer: coarse) {
+  /* Two 2x2 quickbar banks beside the thumbs. Per-slot placement variables are HUD-root
+     pixels from mobile-quickbar-layout.ts; screen-pixel safe-area insets are divided by the
+     display scale and the UI scale to land in the same space. */
   .hub-hud-quickbar-slot {
-    bottom: 132px;
-    left: calc(50% + var(--mobile-quickbar-slot-offset));
-    width: 100px;
-    height: 100px;
+    bottom: var(--mobile-quickbar-slot-bottom);
+    width: var(--mobile-quickbar-slot-size);
+    height: var(--mobile-quickbar-slot-size);
     border: 2px solid rgb(226 216 181 / 0.42);
     border-radius: 14px;
     background: rgb(9 13 18 / 0.62);
     box-shadow: inset 0 0 12px rgb(0 0 0 / 0.72), 0 3px 10px rgb(0 0 0 / 0.4);
     pointer-events: auto;
     touch-action: none;
+  }
+
+  .hub-hud-quickbar-slot[data-quickbar-bank='left'] {
+    right: auto;
+    left: calc(var(--mobile-quickbar-slot-inset) + env(safe-area-inset-left, 0px) / var(--hud-display-scale, 1) / var(--game-ui-scale, 1));
+  }
+
+  .hub-hud-quickbar-slot[data-quickbar-bank='right'] {
+    right: calc(var(--mobile-quickbar-slot-inset) + env(safe-area-inset-right, 0px) / var(--hud-display-scale, 1) / var(--game-ui-scale, 1));
+    left: auto;
   }
 
   .hub-hud-quickbar-slot:disabled {
@@ -1126,40 +1138,160 @@
   .hub-hud-count-red { left: calc(50% - 170.5px); }
   .hub-hud-count-blue { left: calc(50% + 160px); }
 
-  /* Counter the native display scale so social UI lands at true screen pixels on touch devices. */
+  /* Counter the native display scale so social UI lands at true screen pixels on touch
+     devices, then keep it compact: the left column is the chat opener above this panel. */
   .hub-party-panel {
-    top: 196px;
+    top: 150px;
+    width: 156px;
+    min-width: 0;
+    max-width: 156px;
+    padding: 5px 7px 6px;
+    border-radius: 3px;
+    font-size: 11px;
     transform: scale(calc(1 / var(--hud-display-scale, 0.65)));
     transform-origin: top left;
   }
 
-  .hub-party-member-open {
-    min-height: 34px;
+  .hub-party-panel h2 {
+    gap: 4px;
+    margin: 0 0 4px;
+    padding-bottom: 3px;
+    font-size: 9.5px;
+    letter-spacing: 0.12em;
   }
+
+  .hub-party-panel h2 img { width: 10px; }
+
+  .hub-party-count { font-size: 8.5px; }
+
+  .hub-party-error {
+    margin: 0 0 4px;
+    font-size: 10px;
+  }
+
+  /* Small gear, thumb-sized hit area. */
+  .hub-party-settings-open {
+    position: relative;
+    width: 22px;
+    height: 22px;
+    font-size: 10px;
+  }
+
+  .hub-party-settings-open::after {
+    content: '';
+    position: absolute;
+    inset: -8px;
+  }
+
+  .hub-party-members { gap: 1px; }
+
+  .hub-party-member-open {
+    min-height: 22px;
+    gap: 5px;
+    padding: 1px 4px;
+  }
+
+  .hub-party-member-marker { width: 9px; }
+
+  .hub-party-member-name { font-size: 11px; }
+
+  .hub-party-member-tag {
+    padding: 0 4px 1px;
+    border-radius: 6px;
+    font-size: 7.5px;
+  }
+
+  .hub-party-invitation {
+    gap: 5px;
+    margin-top: 5px;
+    padding: 5px 6px 6px;
+  }
+
+  .hub-party-invitation-text { font-size: 11px; }
+
+  .hub-party-invitation-actions { gap: 4px; }
 
   .hub-party-invitation button {
-    min-height: 42px;
-  }
-
-  .hub-party-settings-open {
-    width: 44px;
-    height: 44px;
+    min-height: 32px;
+    padding: 4px 6px;
+    font-size: 9px;
   }
 
   .hub-player-profile {
+    width: 300px;
+    padding: 12px 14px;
+    border-width: 2px;
+    font-size: 12px;
+    gap: 8px;
     transform: scale(calc(1 / var(--hud-display-scale, 0.65)));
     transform-origin: center;
   }
 
-  .hub-player-profile button {
-    min-height: 42px;
+  .hub-player-profile-corner {
+    top: -4px;
+    left: -4px;
+    width: 44px;
   }
 
-  /* Centered under the player's own meters; the left column belongs to chat + party. */
+  .hub-player-profile-corner-right {
+    left: auto;
+    right: -4px;
+  }
+
+  .hub-player-profile-header {
+    gap: 10px;
+    margin-top: 2px;
+  }
+
+  .hub-player-profile .hub-wizard-portrait {
+    width: 72px;
+    height: 72px;
+  }
+
+  /* 72/92 of the 92 px mapping: translate(-53.5px, -18.5px) scale(1.15) scaled by 0.7826. */
+  .hub-player-profile .hub-wizard-portrait-layer {
+    transform: translate(-41.87px, -14.48px) scale(0.9);
+  }
+
+  .hub-player-profile-title { gap: 2px; }
+
+  .hub-player-profile h2 { font-size: 19px; }
+
+  .hub-player-profile-class { font-size: 9px; }
+
+  .hub-player-profile-badge {
+    padding: 1px 7px 2px;
+    font-size: 8px;
+  }
+
+  .hub-player-profile-stat {
+    grid-template-columns: 18px minmax(0, 1fr) auto;
+    padding: 4px 2px;
+    gap: 8px;
+  }
+
+  .hub-player-profile-stat img {
+    width: 15px;
+    height: 15px;
+  }
+
+  .hub-player-profile-stat dt { font-size: 8.5px; }
+
+  .hub-player-profile-stat dd { font-size: 13px; }
+
+  .hub-player-profile-actions { gap: 6px; }
+
+  .hub-player-profile button {
+    min-height: 30px;
+    padding: 4px 8px;
+    font-size: 9px;
+  }
+
+  /* Centered under the player's own meters at 72% screen size; the left column belongs to chat + party. */
   .hub-hud-allies {
     top: 96px;
     left: 50%;
-    transform: translateX(-50%) scale(calc(1 / var(--hud-display-scale, 0.65)));
+    transform: translateX(-50%) scale(calc(0.72 / var(--hud-display-scale, 0.65)));
     transform-origin: top center;
   }
 

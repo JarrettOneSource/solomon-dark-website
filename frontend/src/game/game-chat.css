@@ -395,10 +395,10 @@
 
 @media (hover: none) and (pointer: coarse) {
   .game-chat {
-    top: calc(env(safe-area-inset-top, 0px) + 38px);
+    top: calc(env(safe-area-inset-top, 0px) + 30px);
     right: auto;
     bottom: auto;
-    left: 10px;
+    left: calc(8px + env(safe-area-inset-left, 0px));
     width: min(430px, 62vw);
     flex-direction: column-reverse;
     gap: 8px;
@@ -462,15 +462,23 @@
 
   .game-chat-help { display: none; }
 
+  /* Compact opener: 30 px visual, thumb-sized hit area via the pseudo-element. */
   .game-chat-open {
-    width: 42px;
-    height: 42px;
+    position: relative;
+    width: 30px;
+    height: 30px;
     justify-content: center;
     padding: 0;
-    border-radius: 8px;
+    border-radius: 6px;
   }
 
-  .game-chat-open-icon { width: 21px; height: 21px; }
+  .game-chat-open::after {
+    content: '';
+    position: absolute;
+    inset: -7px;
+  }
+
+  .game-chat-open-icon { width: 16px; height: 16px; }
 
   .game-chat-open kbd { display: none; }
 }

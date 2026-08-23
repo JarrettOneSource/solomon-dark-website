@@ -1,10 +1,14 @@
+/* Geometry constants are shared with src/game/mobile-quickbar-layout.ts (base 237.5,
+   knob 100, edge inset 48, bottom inset 56) and pinned by its contract test. The
+   joystick lives inside the display-scaled native frame, so screen-pixel safe-area
+   insets are divided by --hud-display-scale to land in logical pixels. */
 .game-touch-joystick {
   position: absolute;
   z-index: 11000;
-  bottom: calc(74px * var(--game-ui-scale, 1));
+  bottom: calc(56px * var(--game-ui-scale, 1));
   display: none;
-  width: 190px;
-  height: 190px;
+  width: 237.5px;
+  height: 237.5px;
   border: 3px solid rgb(226 216 181 / 0.48);
   border-radius: 50%;
   background: radial-gradient(circle, rgb(13 18 24 / 0.12) 0 34%, rgb(9 13 18 / 0.48) 36% 100%);
@@ -14,12 +18,12 @@
 }
 
 .game-touch-joystick-movement {
-  left: calc(42px * var(--game-ui-scale, 1));
+  left: calc(48px * var(--game-ui-scale, 1) + env(safe-area-inset-left, 0px) / var(--hud-display-scale, 1));
   transform-origin: bottom left;
 }
 
 .game-touch-joystick-primary {
-  right: calc(170px * var(--game-ui-scale, 1));
+  right: calc(48px * var(--game-ui-scale, 1) + env(safe-area-inset-right, 0px) / var(--hud-display-scale, 1));
   transform-origin: bottom right;
 }
 
@@ -27,8 +31,8 @@
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 80px;
-  height: 80px;
+  width: 100px;
+  height: 100px;
   border: 2px solid rgb(232 220 181 / 0.62);
   border-radius: 50%;
   background: radial-gradient(circle at 40% 35%, #6d716b, #252b2c 68%, #111);
@@ -41,12 +45,14 @@
 
 @media (orientation: portrait) and (hover: none) and (pointer: coarse) {
   .game-touch-joystick {
-    bottom: calc(92px * var(--game-ui-scale, 1));
+    bottom: calc(74px * var(--game-ui-scale, 1));
   }
 
   .game-touch-joystick-movement {
-    left: calc(54px * var(--game-ui-scale, 1));
+    left: calc(54px * var(--game-ui-scale, 1) + env(safe-area-inset-left, 0px) / var(--hud-display-scale, 1));
   }
 
-  .game-touch-joystick-primary { right: calc(182px * var(--game-ui-scale, 1)); }
+  .game-touch-joystick-primary {
+    right: calc(54px * var(--game-ui-scale, 1) + env(safe-area-inset-right, 0px) / var(--hud-display-scale, 1));
+  }
 }

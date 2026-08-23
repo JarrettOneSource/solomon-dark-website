@@ -155,9 +155,9 @@ try {
     base: Number.parseFloat(getComputedStyle(node).width),
     knob: Number.parseFloat(getComputedStyle(node.querySelector('.game-touch-joystick-knob')).width),
   }))
-  assert.deepEqual(joystickGeometry, { base: 190, knob: 80 })
-  assert.ok(Math.abs(movementBase.width - 190 * 390 / 900) < 0.1)
-  assert.ok(Math.abs(primaryBase.width - 190 * 390 / 900) < 0.1)
+  assert.deepEqual(joystickGeometry, { base: 237.5, knob: 100 })
+  assert.ok(Math.abs(movementBase.width - 237.5 * 390 / 900) < 0.1)
+  assert.ok(Math.abs(primaryBase.width - 237.5 * 390 / 900) < 0.1)
   assert.ok(Math.abs(primaryIdleCenter.x - primaryCenter.x) < 1)
   assert.ok(Math.abs(primaryIdleCenter.y - primaryCenter.y) < 1)
   assert.equal(
@@ -459,7 +459,7 @@ try {
   assert.deepEqual(consoleErrors, [])
   assert.deepEqual(pageErrors, [])
   process.stdout.write(
-    `built-bundle mobile controls smoke passed: 190px movement (${movementIdleCenter.x.toFixed(2)}, ${movementIdleCenter.y.toFixed(2)}), `
+    `built-bundle mobile controls smoke passed: 237.5px movement (${movementIdleCenter.x.toFixed(2)}, ${movementIdleCenter.y.toFixed(2)}), `
     + `primary attack (${primaryIdleCenter.x.toFixed(2)}, ${primaryIdleCenter.y.toFixed(2)}), `
     + 'eight quickbar buttons, red/blue potion taps, inventory/skills in both scenes, '
     + 'rightward Water heading 6, simultaneous movement, Boneyard cast, '
