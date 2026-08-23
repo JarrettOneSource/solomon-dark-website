@@ -69,6 +69,7 @@ class PolicySpec:
             "architecture": self.architecture,
             "choiceCoverage": {},
             "choiceHiddenSize": self.choice_hidden_size,
+            "choicePolicyMode": "scripted",
             "choiceTemperature": 1.25,
             "choiceTrajectoryVersion": self.choice_trajectory_version,
             "hiddenSizes": list(self.hidden_sizes),
@@ -123,6 +124,8 @@ class PolicySpec:
             if not isinstance(key, str) or not key:
                 raise ValueError("checkpoint choice coverage keys must not be empty")
             require_nonnegative_integer(count, f"choice coverage {key}")
+        if value.get("choicePolicyMode", "scripted") not in ("learned", "scripted"):
+            raise ValueError("checkpoint choice policy mode must be learned or scripted")
 
 
 def load_policy_spec(path: Path = SPEC_PATH) -> PolicySpec:

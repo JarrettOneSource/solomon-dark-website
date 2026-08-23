@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 import os
 from pathlib import Path
 import tempfile
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 import numpy as np
 import torch
@@ -71,6 +71,63 @@ class ExpertDataset:
                 actions={name: archive[f"action_{name}"].copy() for name in ACTION_ORDER},
             )
         validate_expert_dataset(dataset)
+        return dataset
+
+
+@dataclass(frozen=True)
+class ChoiceExpertDataset:
+    observations: np.ndarray
+    option_descriptors: np.ndarray
+    option_ids: np.ndarray
+    option_masks: np.ndarray
+    selected_options: np.ndarray
+
+    def __len__(self) -> int:
+        return self.observations.shape[0]
+
+    def subset(self, indices: np.ndarray) -> "ChoiceExpertDataset":
+        return ChoiceExpertDataset(
+            observations=self.observations[indices],
+            option_descriptors=self.option_descriptors[indices],
+            option_ids=self.option_ids[indices],
+            option_masks=self.option_masks[indices],
+            selected_options=self.selected_options[indices],
+        )
+
+    def save(self, path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        descriptor, temporary_name = tempfile.mkstemp(
+            prefix=f".{path.name}.", suffix=".npz", dir=path.parent
+        )
+        temporary = Path(temporary_name)
+        try:
+            with os.fdopen(descriptor, "wb") as stream:
+                np.savez_compressed(
+                    stream,
+                    observations=self.observations,
+                    option_descriptors=self.option_descriptors,
+                    option_ids=self.option_ids,
+                    option_masks=self.option_masks,
+                    selected_options=self.selected_options,
+                )
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary, path)
+        except BaseException:
+            temporary.unlink(missing_ok=True)
+            raise
+
+    @classmethod
+    def load(cls, path: Path) -> "ChoiceExpertDataset":
+        with np.load(path, allow_pickle=False) as archive:
+            dataset = cls(
+                observations=archive["observations"].copy(),
+                option_descriptors=archive["option_descriptors"].copy(),
+                option_ids=archive["option_ids"].copy(),
+                option_masks=archive["option_masks"].copy(),
+                selected_options=archive["selected_options"].copy(),
+            )
+        validate_choice_expert_dataset(dataset)
         return dataset
 
 
@@ -162,6 +219,80 @@ def collect_expert_dataset(
     return dataset
 
 
+def collect_choice_expert_dataset(
+    samples: int,
+    *,
+    worlds: int,
+    worker_count: int,
+    action_repeat: int,
+    seed: int,
+    progress: Callable[[Mapping[str, Any]], None] | None = None,
+) -> ChoiceExpertDataset:
+    if samples < 1 or worlds < 1 or worker_count < 1 or action_repeat < 1:
+        raise ValueError("choice expert collection sizes must be positive")
+    stream = SeedStream(seed)
+    initial_seeds = [stream.take() for _ in range(worlds)]
+    observations: list[np.ndarray] = []
+    descriptors: list[np.ndarray] = []
+    option_ids: list[np.ndarray] = []
+    masks: list[np.ndarray] = []
+    selected: list[int] = []
+    attempts = 0
+    maximum_attempts = max(10_000, samples * 1_000)
+    next_progress_count = min(16, samples)
+    with BoneyardRolloutBridge(initial_seeds, worker_count=worker_count) as bridge:
+        while len(observations) < samples:
+            attempts += bridge.world_count
+            if attempts > maximum_attempts:
+                raise RuntimeError(
+                    f"choice expert collection found only {len(observations)} events "
+                    f"within {maximum_attempts} authoritative decisions"
+                )
+            result = bridge.expert_step(ticks=action_repeat)
+            for event in result.transition.choice_events:
+                if event.get("choiceMode") != "scripted" or event.get("accepted") is not True:
+                    continue
+                observations.append(np.asarray(event["observation"], dtype=np.float32).copy())
+                descriptors.append(
+                    np.asarray(event["optionDescriptors"], dtype=np.float32).copy()
+                )
+                option_ids.append(np.asarray(event["optionIds"], dtype=np.int64).copy())
+                masks.append(np.asarray(event["optionMask"], dtype=bool).copy())
+                selected.append(int(event["selectedOption"]))
+                if progress is not None and len(observations) >= next_progress_count:
+                    progress({
+                        "authoritativeDecisions": attempts,
+                        "collectedChoices": len(observations),
+                        "requestedChoices": samples,
+                    })
+                    next_progress_count = min(samples, next_progress_count + 16)
+                if len(observations) >= samples:
+                    break
+            reset_seeds = [stream.take() if done else None for done in result.transition.dones]
+            if any(seed_value is not None for seed_value in reset_seeds):
+                bridge.reset(reset_seeds)
+    option_count = max(row.shape[0] for row in descriptors)
+    packed_descriptors = np.zeros(
+        (samples, option_count, POLICY_SPEC.option_descriptor_size), dtype=np.float32
+    )
+    packed_ids = np.full((samples, option_count), -1, dtype=np.int64)
+    packed_masks = np.zeros((samples, option_count), dtype=bool)
+    for index, row in enumerate(descriptors):
+        count = row.shape[0]
+        packed_descriptors[index, :count] = row
+        packed_ids[index, :count] = option_ids[index]
+        packed_masks[index, :count] = masks[index]
+    dataset = ChoiceExpertDataset(
+        observations=np.stack(observations),
+        option_descriptors=packed_descriptors,
+        option_ids=packed_ids,
+        option_masks=packed_masks,
+        selected_options=np.asarray(selected, dtype=np.int64),
+    )
+    validate_choice_expert_dataset(dataset)
+    return dataset
+
+
 def expert_row_is_interesting(observation: np.ndarray, actions: np.ndarray) -> bool:
     return bool(
         observation[FEATURE["enemy_count_scaled"]] > 0
@@ -184,6 +315,19 @@ def split_expert_dataset(
     return dataset.subset(order[validation_count:]), dataset.subset(order[:validation_count])
 
 
+def split_choice_expert_dataset(
+    dataset: ChoiceExpertDataset,
+    *,
+    validation_fraction: float,
+    rng: np.random.Generator,
+) -> tuple[ChoiceExpertDataset, ChoiceExpertDataset]:
+    if not 0 < validation_fraction < 1 or len(dataset) < 2:
+        raise ValueError("choice expert split requires at least two rows and a fractional holdout")
+    order = rng.permutation(len(dataset))
+    validation_count = max(1, min(len(dataset) - 1, round(len(dataset) * validation_fraction)))
+    return dataset.subset(order[validation_count:]), dataset.subset(order[:validation_count])
+
+
 def collect_policy_rollout(
     policy: PolicyV5,
     bridge: BoneyardRolloutBridge,
@@ -194,6 +338,7 @@ def collect_policy_rollout(
     seeds: SeedStream,
     episodes: "EpisodeLedger",
     deterministic: bool = False,
+    choice_temperature: float = 1.25,
 ) -> PolicyRollout:
     if steps < 1 or action_repeat < 1:
         raise ValueError("rollout steps and action repeat must be positive")
@@ -214,6 +359,13 @@ def collect_policy_rollout(
     completed: list[Mapping[str, Any]] = []
     episodes.ensure_started(bridge.state)
     for _ in range(steps):
+        resolve_policy_choices(
+            policy,
+            bridge,
+            temperature=choice_temperature,
+            deterministic=deterministic,
+            generator=generator,
+        )
         before = bridge.state
         observation_tensor, plan_tensors = state_tensors(before, next(policy.parameters()).device)
         with torch.no_grad():
@@ -250,6 +402,13 @@ def collect_policy_rollout(
         if any(seed_value is not None for seed_value in reset_seeds):
             reset_state = bridge.reset(reset_seeds)
             episodes.reset_worlds(reset_state, transition.dones)
+    resolve_policy_choices(
+        policy,
+        bridge,
+        temperature=choice_temperature,
+        deterministic=deterministic,
+        generator=generator,
+    )
     next_observations, _ = state_tensors(bridge.state, next(policy.parameters()).device)
     with torch.no_grad():
         next_values = policy.value(policy.encode(next_observations)).squeeze(-1).cpu().numpy()
@@ -269,6 +428,52 @@ def collect_policy_rollout(
         choice_intervals=tuple(choice_intervals),
         completed_episodes=tuple(completed),
     )
+
+
+def resolve_policy_choices(
+    policy: PolicyV5,
+    bridge: BoneyardRolloutBridge,
+    *,
+    temperature: float,
+    deterministic: bool,
+    generator: torch.Generator | None = None,
+) -> None:
+    if not np.isfinite(temperature) or temperature <= 0:
+        raise ValueError("choice temperature must be positive and finite")
+    device = next(policy.parameters()).device
+    for _ in range(100):
+        if all(plan is None for plan in bridge.state.choices):
+            return
+        choices: list[Mapping[str, int | float] | None] = []
+        for plan in bridge.state.choices:
+            if plan is None:
+                choices.append(None)
+                continue
+            observations = torch.from_numpy(plan.observation[None, :]).to(
+                device=device, dtype=torch.float32
+            )
+            descriptors = torch.from_numpy(plan.option_descriptors[None, :, :]).to(
+                device=device, dtype=torch.float32
+            )
+            mask = torch.from_numpy(plan.option_mask[None, :]).to(
+                device=device, dtype=torch.bool
+            )
+            with torch.no_grad():
+                selected, evaluation = policy.select_choice(
+                    observations,
+                    descriptors,
+                    mask,
+                    temperature=temperature,
+                    deterministic=deterministic,
+                    generator=None if deterministic else generator,
+                )
+            choices.append({
+                "oldLogProbability": float(evaluation.log_probability[0].cpu()),
+                "oldValue": float(evaluation.value[0].cpu()),
+                "selectedOption": int(selected[0].cpu()),
+            })
+        bridge.select_choices(choices)
+    raise RuntimeError("learned choice resolution did not settle")
 
 
 @dataclass
@@ -381,19 +586,29 @@ class EpisodeLedger:
                 1, round(float(current[FEATURE["self_level_scaled"]]) * 75)
             )
             for event in events_by_world.get(world, []):
+                selected_option = int(event.get("selectedOption", -1))
+                option_ids = list(event.get("optionIds", []))
                 accumulator.choice_events.append({
                     "accepted": bool(event.get("accepted")),
-                    "chosen": int(event.get("selectedOption", -1)),
+                    "chosen": selected_option,
+                    "chosen_skill": option_ids[selected_option]
+                    if 0 <= selected_option < len(option_ids) else None,
                     "interval_steps": None,
-                    "options": list(event.get("optionIds", [])),
+                    "mode": event.get("choiceMode"),
+                    "options": option_ids,
                     "trainable": bool(event.get("trainable")),
                 })
             for interval in intervals_by_world.get(world, []):
+                selected_option = int(interval.get("selectedOption", -1))
+                option_ids = list(interval.get("optionIds", []))
                 accumulator.choice_events.append({
                     "accepted": bool(interval.get("accepted")),
-                    "chosen": int(interval.get("selectedOption", -1)),
+                    "chosen": selected_option,
+                    "chosen_skill": option_ids[selected_option]
+                    if 0 <= selected_option < len(option_ids) else None,
                     "interval_steps": int(interval.get("durationSteps", 0)),
-                    "options": list(interval.get("optionIds", [])),
+                    "mode": interval.get("choiceMode"),
+                    "options": option_ids,
                     "trainable": bool(interval.get("trainable")),
                 })
             if transition.dones[world]:
@@ -468,6 +683,65 @@ def validate_expert_dataset(dataset: ExpertDataset) -> None:
             raise ValueError(f"expert {name} arrays have the wrong shape")
         if not np.all(np.any(mask, axis=1)) or not np.all(mask[np.arange(count), action]):
             raise ValueError(f"expert {name} contains an illegal label")
+
+
+def validate_choice_expert_dataset(dataset: ChoiceExpertDataset) -> None:
+    count = len(dataset)
+    if dataset.observations.shape != (count, POLICY_SPEC.observation_size):
+        raise ValueError("choice expert observations have the wrong shape")
+    if (
+        dataset.option_descriptors.ndim != 3
+        or dataset.option_descriptors.shape[0] != count
+        or dataset.option_descriptors.shape[2] != POLICY_SPEC.option_descriptor_size
+    ):
+        raise ValueError("choice expert descriptors have the wrong shape")
+    option_count = dataset.option_descriptors.shape[1]
+    if (
+        dataset.option_ids.shape != (count, option_count)
+        or dataset.option_masks.shape != (count, option_count)
+        or dataset.selected_options.shape != (count,)
+    ):
+        raise ValueError("choice expert option arrays have the wrong shape")
+    if not np.all(np.isfinite(dataset.observations)) or not np.all(
+        np.isfinite(dataset.option_descriptors)
+    ):
+        raise ValueError("choice expert dataset contains non-finite values")
+    masks = np.asarray(dataset.option_masks, dtype=bool)
+    selected = np.asarray(dataset.selected_options, dtype=np.int64)
+    if (
+        not np.all(np.any(masks, axis=1))
+        or np.any(selected < 0)
+        or np.any(selected >= option_count)
+        or not np.all(masks[np.arange(count), selected])
+        or np.any(dataset.option_ids[masks] < 0)
+        or np.any(dataset.option_ids[~masks] != -1)
+    ):
+        raise ValueError("choice expert dataset contains an illegal label")
+
+
+def choice_expert_dataset_diagnostics(dataset: ChoiceExpertDataset) -> Mapping[str, Any]:
+    validate_choice_expert_dataset(dataset)
+    selected_skill_ids = dataset.option_ids[
+        np.arange(len(dataset)), dataset.selected_options
+    ]
+    offered = dataset.option_ids[dataset.option_masks]
+    option_counts = np.sum(dataset.option_masks, axis=1)
+    return {
+        "optionCountHistogram": {
+            str(count): int(np.count_nonzero(option_counts == count))
+            for count in np.unique(option_counts)
+        },
+        "selectedOptionHistogram": np.bincount(
+            dataset.selected_options,
+            minlength=dataset.option_masks.shape[1],
+        ).tolist(),
+        "selectedSkillHistogram": {
+            str(skill_id): int(np.count_nonzero(selected_skill_ids == skill_id))
+            for skill_id in np.unique(selected_skill_ids)
+        },
+        "uniqueOfferedSkills": int(np.unique(offered).size),
+        "uniqueSelectedSkills": int(np.unique(selected_skill_ids).size),
+    }
 
 
 def expert_dataset_diagnostics(dataset: ExpertDataset) -> Mapping[str, Any]:

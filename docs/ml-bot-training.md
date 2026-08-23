@@ -6,8 +6,9 @@ rejection table, and closed findings are recorded in
 
 The Website owns the schema-v5 observation/action contract, deterministic
 Boneyard training environment, PyTorch trainer, evaluation artifacts, and
-compact runtime checkpoint. Attaching a trained policy to a live game client
-is intentionally outside this training package.
+compact runtime checkpoint. The server-only GameHost worker consumes the
+selected artifact for summoned policy participants; checkpoints remain
+separate from browser assets.
 
 ## Contract
 
@@ -50,7 +51,8 @@ Run the boundary test before training:
 
 That test crosses the TypeScript spec, compact checkpoint codec, PyTorch
 inference, BC, main PPO, choice SMDP PPO, Node worker bridge, expert action,
-and selective-reset boundaries.
+externally selected learned offers, live-host choice dispatch, and
+selective-reset boundaries.
 
 The pinned gate can also be invoked as:
 
@@ -113,11 +115,31 @@ python tools/train_bot_policy.py gamma-sweep \
   [the shared training arguments]
 ```
 
-Skill choices in the current web runtime are scripted and carry
-`trainable=false`. They are recorded but excluded from SMDP batches. The
-separate choice scorer, normalized entropy, coverage temperature, variable
-duration advantages, optimizer, and checkpoint state remain implemented for
-learned-choice experiments.
+Before enabling learned choices, warm-start the option scorer from real skill
+offers resolved by the authoritative scripted expert. Only
+`choice_hidden`/`choice_score` are updated; the trunk, four combat heads, both
+value heads, and every other tensor must remain byte-identical. Collection and
+bootstrap fail closed on weak offer diversity or less than 95% training / 85%
+holdout imitation.
+
+```sh
+python tools/train_bot_policy.py bootstrap-choices \
+  --checkpoint runtime/ml-training/web-v5/latest.sdml \
+  --output runtime/ml-training/web-v5/learned-choice \
+  --samples 512 --epochs 40 --batch-size 64 \
+  --worlds 8 --workers 8 --action-repeat 10
+```
+
+The resulting checkpoint is marked `choicePolicyMode=learned`. A level-up then
+pauses the headless action lane, exposes the exact observation, variable option
+rows, option IDs, generation, and legality mask through the strict
+`solomon-dark-ml-rollout-v5-choice1` bridge, and accepts the sampled option with
+its old log probability and choice value without advancing simulation time.
+The interval closes at the next learned choice or terminal state. Only those
+`choiceMode=learned`, `trainable=true` intervals enter SMDP PPO; scripted
+incumbents remain scripted during frozen evaluation. The live GameHost follows
+the same checkpoint gate and dispatches the learned result through the ordinary
+player skill-selection intent.
 
 ## Resume and validate
 
@@ -135,8 +157,9 @@ python tools/train_bot_policy.py validate \
   --checkpoint runtime/ml-training/web-v5/latest.sdml
 ```
 
-Validation loads the same checkpoint in Python and TypeScript and compares a
-fixed-input action/value/log-probability result.
+Validation loads the same checkpoint in Python and TypeScript and compares
+fixed-input main action/value/log-probability and masked choice
+selection/value/log-probability results.
 
 ## Evaluation and diagnostics
 
@@ -167,9 +190,11 @@ python tools/train_bot_policy.py diagnostics \
 Each update records learning metrics plus exact gameplay outcomes: enemy kills
 and kinds, waves reached/completed, deaths, potion use, skill picks, gold,
 item kinds/counts, health/mana orbs, powerups, XP, reward decomposition, and
-action histograms. Evaluation progress and final reports aggregate those same
-gameplay counters, along with authoritative simulation ticks and policy
-decisions, so a live run can be distinguished from an idle or stalled one.
+action histograms. Learned runs additionally record selected skill IDs,
+descriptor families, choice mode, and SMDP interval length. Evaluation progress
+and final reports aggregate those same gameplay counters and chosen-skill IDs,
+along with authoritative simulation ticks and policy decisions, so a live run
+can be distinguished from an idle or stalled one.
 Per-update observation audits, value calibration, and a
 spatial replay JSONL are written alongside checkpoints. Render a replay with:
 

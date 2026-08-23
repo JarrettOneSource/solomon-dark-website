@@ -14,7 +14,7 @@ import numpy as np
 
 from .spec import POLICY_SPEC, REPOSITORY_ROOT, require_uint32
 
-PROTOCOL = "solomon-dark-ml-rollout-v5"
+PROTOCOL = "solomon-dark-ml-rollout-v5-choice1"
 SERVER_PATH = REPOSITORY_ROOT / "frontend/tools/ml-bot-rollout-server.mjs"
 
 
@@ -27,7 +27,17 @@ class ActionMaskPlans:
 
 
 @dataclass(frozen=True)
+class ChoicePlan:
+    generation: int
+    observation: np.ndarray
+    option_descriptors: np.ndarray
+    option_ids: tuple[int, ...]
+    option_mask: np.ndarray
+
+
+@dataclass(frozen=True)
 class RolloutState:
+    choices: tuple[ChoicePlan | None, ...]
     hashes: tuple[str, ...]
     metadata: tuple[Mapping[str, Any], ...]
     observations: np.ndarray
@@ -71,6 +81,7 @@ class BoneyardRolloutBridge:
         seeds: Sequence[int],
         *,
         worker_count: int | None = None,
+        learned_choices: bool = False,
         node: str = "node",
         repository_root: Path = REPOSITORY_ROOT,
     ) -> None:
@@ -93,6 +104,7 @@ class BoneyardRolloutBridge:
         response = self._request(
             {
                 "seeds": normalized_seeds,
+                "learnedChoices": learned_choices,
                 "type": "initialize",
                 **({} if worker_count is None else {"workerCount": worker_count}),
             }
@@ -131,6 +143,33 @@ class BoneyardRolloutBridge:
         if len(normalized) != self.world_count:
             raise ValueError("selective reset seeds must match bridge world count")
         response = self._request({"seeds": normalized, "type": "reset"})
+        self.state = decode_state(response, self.world_count)
+        return self.state
+
+    def select_choices(
+        self,
+        choices: Sequence[Mapping[str, Any] | None],
+    ) -> RolloutState:
+        if len(choices) != self.world_count:
+            raise ValueError("learned choices must match bridge world count")
+        normalized: list[Mapping[str, int | float] | None] = []
+        for choice in choices:
+            if choice is None:
+                normalized.append(None)
+                continue
+            old_log_probability = required_finite(
+                choice.get("oldLogProbability"), "choice old log probability"
+            )
+            old_value = required_finite(choice.get("oldValue"), "choice old value")
+            selected_option = required_integer(
+                choice.get("selectedOption"), "selected choice option", minimum=0
+            )
+            normalized.append({
+                "oldLogProbability": old_log_probability,
+                "oldValue": old_value,
+                "selectedOption": selected_option,
+            })
+        response = self._request({"choices": normalized, "type": "select-choices"})
         self.state = decode_state(response, self.world_count)
         return self.state
 
@@ -193,6 +232,7 @@ class BoneyardRolloutBridge:
 def decode_state(value: Mapping[str, Any], worlds: int) -> RolloutState:
     hashes = string_tuple(value.get("hashes"), worlds, "state hashes")
     return RolloutState(
+        choices=decode_choice_plans(value.get("choices"), worlds),
         hashes=hashes,
         metadata=decode_episode_metadata(value.get("metadata"), worlds),
         observations=decode_array(
@@ -200,6 +240,51 @@ def decode_state(value: Mapping[str, Any], worlds: int) -> RolloutState:
         ),
         plans=decode_plans(value.get("plans"), worlds),
     )
+
+
+def decode_choice_plans(value: Any, worlds: int) -> tuple[ChoicePlan | None, ...]:
+    rows = required_list(value, "choice plans")
+    if len(rows) != worlds:
+        raise RolloutProtocolError("choice plans do not match world count")
+    result: list[ChoicePlan | None] = []
+    for row in rows:
+        if row is None:
+            result.append(None)
+            continue
+        source = required_mapping(row, "choice plan")
+        option_ids_value = required_list(source.get("optionIds"), "choice option ids")
+        if not option_ids_value or any(
+            not isinstance(option_id, int) or isinstance(option_id, bool)
+            for option_id in option_ids_value
+        ):
+            raise RolloutProtocolError("choice option ids are invalid")
+        option_ids = tuple(int(option_id) for option_id in option_ids_value)
+        descriptors = decode_array(
+            source.get("optionDescriptors"),
+            "<f4",
+            (len(option_ids), POLICY_SPEC.option_descriptor_size),
+            "choice plan descriptors",
+        )
+        mask = decode_array(
+            source.get("optionMask"), "u1", (len(option_ids),), "choice plan mask"
+        ).astype(bool)
+        if not np.any(mask):
+            raise RolloutProtocolError("choice plan has no legal option")
+        result.append(ChoicePlan(
+            generation=required_integer(
+                source.get("generation"), "choice generation", minimum=0
+            ),
+            observation=decode_array(
+                source.get("observation"),
+                "<f4",
+                (POLICY_SPEC.observation_size,),
+                "choice plan observation",
+            ),
+            option_descriptors=descriptors,
+            option_ids=option_ids,
+            option_mask=mask,
+        ))
+    return tuple(result)
 
 
 def decode_plans(value: Any, worlds: int) -> ActionMaskPlans:
@@ -417,3 +502,13 @@ def required_integer(
     ):
         raise ValueError(f"{label} must be an integer in range")
     return value
+
+
+def required_finite(value: Any, label: str) -> float:
+    if (
+        not isinstance(value, (int, float))
+        or isinstance(value, bool)
+        or not np.isfinite(value)
+    ):
+        raise ValueError(f"{label} must be finite")
+    return float(value)

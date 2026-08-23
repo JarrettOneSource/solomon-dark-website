@@ -59,6 +59,13 @@ class ChoicePpoMetrics:
     temperature: float
 
 
+@dataclass(frozen=True)
+class ChoiceBootstrapMetrics:
+    loss: float
+    gradient_norm: float
+    accuracy: float
+
+
 class ChoiceCoverage:
     def __init__(self, counts: Mapping[str, int] | None = None) -> None:
         self.counts = dict(counts or {})
@@ -196,6 +203,73 @@ def classification_accuracy(
         "aim_accuracy": float(correct["aim"].float().mean()),
         "joint_accuracy": float(torch.stack(tuple(correct.values())).all(dim=0).float().mean()),
     }
+
+
+def choice_behavior_clone(
+    policy: PolicyV5,
+    optimizer: torch.optim.Optimizer,
+    observations: Tensor,
+    descriptors: Tensor,
+    masks: Tensor,
+    selected_options: Tensor,
+    *,
+    epochs: int,
+    batch_size: int,
+    generator: torch.Generator,
+    maximum_gradient_norm: float = 1.0,
+) -> list[ChoiceBootstrapMetrics]:
+    count = observations.shape[0]
+    require_training_sizes(count, epochs, batch_size)
+    metrics: list[ChoiceBootstrapMetrics] = []
+    for _ in range(epochs):
+        order = torch.randperm(count, generator=generator, device=observations.device)
+        for start in range(0, count, batch_size):
+            indices = order[start : start + batch_size]
+            evaluation = policy.evaluate_choice(
+                observations[indices],
+                descriptors[indices],
+                masks[indices],
+                selected_options[indices],
+                temperature=1.0,
+            )
+            loss = -evaluation.log_probability.mean()
+            optimizer.zero_grad(set_to_none=True)
+            loss.backward()
+            gradient_norm = torch.nn.utils.clip_grad_norm_(
+                policy.choice_scorer_parameters(), maximum_gradient_norm
+            )
+            optimizer.step()
+            with torch.no_grad():
+                accuracy = choice_classification_accuracy(
+                    policy,
+                    observations[indices],
+                    descriptors[indices],
+                    masks[indices],
+                    selected_options[indices],
+                )
+            metrics.append(ChoiceBootstrapMetrics(
+                accuracy=accuracy,
+                gradient_norm=float(gradient_norm),
+                loss=float(loss.detach()),
+            ))
+    return metrics
+
+
+def choice_classification_accuracy(
+    policy: PolicyV5,
+    observations: Tensor,
+    descriptors: Tensor,
+    masks: Tensor,
+    selected_options: Tensor,
+) -> float:
+    predicted, _evaluation = policy.select_choice(
+        observations,
+        descriptors,
+        masks,
+        temperature=1.0,
+        deterministic=True,
+    )
+    return float((predicted == selected_options.long()).float().mean())
 
 
 def ppo_epochs(

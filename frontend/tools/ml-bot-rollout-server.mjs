@@ -4,7 +4,7 @@ import {
   BoneyardHeadlessWorkerPool,
 } from '../src/game/headless/boneyard-headless-worker-pool.ts'
 
-const PROTOCOL = 'solomon-dark-ml-rollout-v5'
+const PROTOCOL = 'solomon-dark-ml-rollout-v5-choice1'
 let pool = null
 
 const input = readline.createInterface({ input: process.stdin, crlfDelay: Infinity })
@@ -37,8 +37,14 @@ async function dispatch(request) {
   if (request.type === 'initialize') {
     if (pool !== null) throw new Error('ML rollout server is already initialized')
     const seeds = requireSeeds(request.seeds, false)
+    if (request.learnedChoices !== undefined && typeof request.learnedChoices !== 'boolean') {
+      throw new Error('learnedChoices must be boolean')
+    }
     pool = await BoneyardHeadlessWorkerPool.create({
-      environments: seeds.map(seed => ({ seed })),
+      environments: seeds.map(seed => ({
+        choiceMode: request.learnedChoices === true ? 'learned' : 'scripted',
+        seed,
+      })),
       workerCount: optionalPositiveInteger(request.workerCount, seeds.length, 'workerCount'),
     })
     return stateResult(await pool.reset(seeds.map(seed => ({ seed }))), 'initialized')
@@ -56,6 +62,12 @@ async function dispatch(request) {
     if (seeds.length !== pool.worldCount) throw new Error('reset seeds must match world count')
     return stateResult(await pool.reset(seeds.map(seed => seed === null ? null : { seed })), 'reset')
   }
+  if (request.type === 'select-choices') {
+    return stateResult(
+      await pool.selectChoices(requireChoices(request.choices, pool.worldCount)),
+      'select-choices',
+    )
+  }
   const ticks = optionalPositiveInteger(request.ticks, 1, 'ticks')
   if (request.type === 'expert-step') {
     return stepResult(await pool.expertStep(ticks), 'expert-step')
@@ -69,6 +81,7 @@ async function dispatch(request) {
 
 function stateResult(result, type) {
   return {
+    choices: result.choices.map(encodeChoicePlan),
     hashes: result.hashes,
     metadata: result.metadata,
     observationLength: pool.observationLength,
@@ -76,6 +89,16 @@ function stateResult(result, type) {
     plans: encodePlans(result.plans),
     type,
     worldCount: pool.worldCount,
+  }
+}
+
+function encodeChoicePlan(choice) {
+  if (choice === null) return null
+  return {
+    ...choice,
+    observation: encodeView(choice.observation),
+    optionDescriptors: encodeView(choice.optionDescriptors),
+    optionMask: encodeView(choice.optionMask),
   }
 }
 
@@ -176,6 +199,29 @@ function requireSeeds(value, allowNull) {
       throw new Error('ML rollout seeds must be uint32 values')
     }
     return seed
+  })
+}
+
+function requireChoices(value, worldCount) {
+  if (!Array.isArray(value) || value.length !== worldCount) {
+    throw new Error('learned choices must match world count')
+  }
+  return value.map((choice) => {
+    if (choice === null) return null
+    if (choice === null || typeof choice !== 'object' || Array.isArray(choice)) {
+      throw new Error('learned choice must be an object or null')
+    }
+    if (
+      !Number.isFinite(choice.oldLogProbability)
+      || !Number.isFinite(choice.oldValue)
+      || !Number.isSafeInteger(choice.selectedOption)
+      || choice.selectedOption < 0
+    ) throw new Error('learned choice evaluation is invalid')
+    return {
+      oldLogProbability: choice.oldLogProbability,
+      oldValue: choice.oldValue,
+      selectedOption: choice.selectedOption,
+    }
   })
 }
 

@@ -37,6 +37,7 @@ export interface MlBotPolicyCheckpointMetadata {
   readonly architecture: string
   readonly choiceCoverage: Readonly<Record<string, number>>
   readonly choiceHiddenSize: number
+  readonly choicePolicyMode?: 'learned' | 'scripted'
   readonly choiceTemperature: number
   readonly choiceTrajectoryVersion: number
   readonly hiddenSizes: readonly number[]
@@ -82,6 +83,7 @@ export function createZeroMlBotPolicyCheckpoint(seed: number): MlBotPolicyCheckp
       architecture: ML_BOT_POLICY_ARCHITECTURE,
       choiceCoverage: Object.freeze({}),
       choiceHiddenSize: 128,
+      choicePolicyMode: 'scripted',
       choiceTemperature: 1.25,
       choiceTrajectoryVersion: 5,
       hiddenSizes: Object.freeze([512, 256]),
@@ -132,6 +134,11 @@ export function validateMlBotPolicyCheckpoint(checkpoint: MlBotPolicyCheckpoint)
   if (!Number.isFinite(metadata.choiceTemperature) || metadata.choiceTemperature <= 0) {
     throw new Error('ML bot policy choice temperature must be positive and finite')
   }
+  if (
+    metadata.choicePolicyMode !== undefined
+    && metadata.choicePolicyMode !== 'learned'
+    && metadata.choicePolicyMode !== 'scripted'
+  ) throw new Error('ML bot policy choice mode must be learned or scripted')
   for (const [key, value] of Object.entries(metadata.choiceCoverage)) {
     if (key.length === 0) throw new Error('ML bot policy choice coverage keys must not be empty')
     requireNonnegativeInteger(value, `choice coverage ${key}`)

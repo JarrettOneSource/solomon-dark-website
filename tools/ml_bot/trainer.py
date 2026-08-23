@@ -27,6 +27,8 @@ from .model import PolicyV5
 from .optimization import (
     ChoiceCoverage,
     behavior_clone,
+    choice_behavior_clone,
+    choice_classification_accuracy,
     choice_ppo_epochs,
     classification_accuracy,
     mean_metrics,
@@ -36,12 +38,17 @@ from .rollouts import (
     ACTION_ORDER,
     FEATURE,
     EpisodeLedger,
+    ChoiceExpertDataset,
     ExpertDataset,
     SeedStream,
     collect_expert_dataset,
+    collect_choice_expert_dataset,
+    choice_expert_dataset_diagnostics,
     expert_dataset_diagnostics,
     collect_policy_rollout,
+    resolve_policy_choices,
     split_expert_dataset,
+    split_choice_expert_dataset,
     state_tensors,
 )
 from .spec import POLICY_SPEC
@@ -77,6 +84,19 @@ class TrainingConfiguration:
     workers: int = 8
     action_repeat: int = 10
     seed: int = 0x5EED_1000
+
+
+@dataclass(frozen=True)
+class ChoiceBootstrapConfiguration:
+    samples: int = 512
+    epochs: int = 30
+    batch_size: int = 64
+    learning_rate: float = 0.001
+    validation_fraction: float = 0.2
+    worlds: int = 8
+    workers: int = 8
+    action_repeat: int = 10
+    seed: int = 0x5EED_2000
 
 
 def bootstrap_policy(
@@ -203,6 +223,123 @@ def bootstrap_policy(
     return result
 
 
+def bootstrap_choice_policy(
+    checkpoint_path: Path,
+    output_directory: Path,
+    configuration: ChoiceBootstrapConfiguration,
+    *,
+    dataset_path: Path | None = None,
+) -> Mapping[str, Any]:
+    validate_choice_bootstrap_configuration(configuration)
+    configure_torch(configuration.seed)
+    output_directory.mkdir(parents=True, exist_ok=True)
+    cache = dataset_path or output_directory / "choice-expert-v5.npz"
+    if cache.exists():
+        dataset = ChoiceExpertDataset.load(cache)
+        if len(dataset) < configuration.samples:
+            raise ValueError("cached choice expert dataset has fewer rows than requested")
+        dataset = dataset.subset(np.arange(configuration.samples))
+    else:
+        dataset = collect_choice_expert_dataset(
+            configuration.samples,
+            worlds=configuration.worlds,
+            worker_count=configuration.workers,
+            action_repeat=configuration.action_repeat,
+            seed=configuration.seed,
+            progress=lambda value: print(
+                json.dumps({"choiceBootstrapProgress": value}, sort_keys=True),
+                flush=True,
+            ),
+        )
+        dataset.save(cache)
+    diagnostics = choice_expert_dataset_diagnostics(dataset)
+    if (
+        diagnostics["uniqueOfferedSkills"] < 8
+        or diagnostics["uniqueSelectedSkills"] < 3
+        or sum(count > 0 for count in diagnostics["selectedOptionHistogram"]) < 2
+    ):
+        raise RuntimeError(f"choice expert dataset diversity gate failed: {diagnostics}")
+    training, validation = split_choice_expert_dataset(
+        dataset,
+        validation_fraction=configuration.validation_fraction,
+        rng=np.random.default_rng(configuration.seed + 1),
+    )
+    metadata, tensors = load_checkpoint(checkpoint_path)
+    policy = PolicyV5().to(torch.device("cpu"))
+    policy.load_tensors(tensors)
+    protected = {
+        name: value.copy()
+        for name, value in policy.export_tensors().items()
+        if name not in {
+            "choice_hidden_bias",
+            "choice_hidden_weight",
+            "choice_score_bias",
+            "choice_score_weight",
+        }
+    }
+    main_parameters = policy.main_parameters()
+    for parameter in main_parameters:
+        parameter.requires_grad_(False)
+    optimizer = torch.optim.Adam(
+        policy.choice_scorer_parameters(), lr=configuration.learning_rate
+    )
+    training_tensors = choice_expert_tensors(training, torch.device("cpu"))
+    validation_tensors = choice_expert_tensors(validation, torch.device("cpu"))
+    try:
+        metrics = choice_behavior_clone(
+            policy,
+            optimizer,
+            *training_tensors,
+            epochs=configuration.epochs,
+            batch_size=configuration.batch_size,
+            generator=torch.Generator().manual_seed(configuration.seed + 2),
+        )
+    finally:
+        for parameter in main_parameters:
+            parameter.requires_grad_(True)
+    with torch.no_grad():
+        training_accuracy = choice_classification_accuracy(policy, *training_tensors)
+        validation_accuracy = choice_classification_accuracy(policy, *validation_tensors)
+    exported = policy.export_tensors()
+    if any(not np.array_equal(exported[name], value) for name, value in protected.items()):
+        raise RuntimeError("choice bootstrap changed a protected policy tensor")
+    if training_accuracy < 0.95 or validation_accuracy < 0.85:
+        raise RuntimeError(
+            "choice bootstrap accuracy gate failed: "
+            f"training={training_accuracy:.4f}, validation={validation_accuracy:.4f}"
+        )
+    metadata = {
+        **metadata,
+        "choiceBootstrapConfiguration": asdict(configuration),
+        "choiceBootstrapDatasetDiagnostics": diagnostics,
+        "choiceBootstrapSourceCheckpointSha256": file_sha256(checkpoint_path),
+        "choiceBootstrapTrainingAccuracy": training_accuracy,
+        "choiceBootstrapValidationAccuracy": validation_accuracy,
+        "choiceCoverage": {},
+        "choicePolicyMode": "learned",
+        "choiceTemperature": 1.25,
+        "trainingKind": "web-choice-expert-bootstrap-v5",
+    }
+    checkpoint = output_directory / "choice-bootstrap-v5.sdml"
+    save_checkpoint(checkpoint, metadata, exported)
+    save_checkpoint(output_directory / "latest.sdml", metadata, exported)
+    result = {
+        "status": "ok",
+        "checkpoint": str(checkpoint),
+        "dataset": str(cache),
+        "samples": len(dataset),
+        "trainingAccuracy": training_accuracy,
+        "validationAccuracy": validation_accuracy,
+        "lastBatch": asdict(metrics[-1]),
+        "datasetDiagnostics": diagnostics,
+    }
+    atomic_write(
+        output_directory / "choice-bootstrap-report.json",
+        (json.dumps(result, indent=2, sort_keys=True) + "\n").encode(),
+    )
+    return result
+
+
 def train_policy(
     checkpoint_path: Path,
     output_directory: Path,
@@ -251,8 +388,11 @@ def train_policy(
     metrics_path = output_directory / "metrics.jsonl"
     episodes_path = output_directory / "episodes.jsonl"
     last_checkpoint = checkpoint_path
+    learned_choices = metadata.get("choicePolicyMode") == "learned"
     with BoneyardRolloutBridge(
-        initial_seeds, worker_count=configuration.workers
+        initial_seeds,
+        worker_count=configuration.workers,
+        learned_choices=learned_choices,
     ) as bridge:
         for local_iteration in range(1, configuration.iterations + 1):
             rollout = collect_policy_rollout(
@@ -263,6 +403,7 @@ def train_policy(
                 generator=torch_generator,
                 seeds=seed_stream,
                 episodes=episodes,
+                choice_temperature=coverage.temperature,
             )
             advantages, returns, return_scale = normalized_main_advantages(
                 rollout.rewards,
@@ -425,20 +566,32 @@ def evaluate_policy(
 ) -> Mapping[str, Any]:
     if len(seeds) < 1 or workers < 1 or action_repeat < 1 or maximum_steps < 1:
         raise ValueError("evaluation sizes must be positive")
-    _metadata, tensors = load_checkpoint(checkpoint_path)
+    metadata, tensors = load_checkpoint(checkpoint_path)
     policy = PolicyV5()
     policy.load_tensors(tensors)
     policy.eval()
     records: list[Mapping[str, Any]] = []
+    learned_choices = metadata.get("choicePolicyMode") == "learned"
+    choice_temperature = float(metadata.get("choiceTemperature", 1.25))
     initial_count = min(workers, len(seeds))
     initial_seeds = list(seeds[:initial_count])
     next_seed_index = initial_count
     ledger = EpisodeLedger()
-    with BoneyardRolloutBridge(initial_seeds, worker_count=initial_count) as bridge:
+    with BoneyardRolloutBridge(
+        initial_seeds,
+        worker_count=initial_count,
+        learned_choices=learned_choices,
+    ) as bridge:
         ledger.ensure_started(bridge.state)
         active = np.ones(initial_count, dtype=bool)
         decision_counts = np.zeros(initial_count, dtype=np.int64)
         while len(records) < len(seeds):
+            resolve_policy_choices(
+                policy,
+                bridge,
+                temperature=choice_temperature,
+                deterministic=True,
+            )
             before = bridge.state
             observations, plans = state_tensors(before, torch.device("cpu"))
             with torch.no_grad():
@@ -487,6 +640,7 @@ def evaluate_policy(
         seeds,
         records,
         action_repeat=action_repeat,
+        choice_policy_mode="learned" if learned_choices else "scripted",
         maximum_steps=maximum_steps,
     )
 
@@ -497,6 +651,7 @@ def evaluation_report(
     records: Sequence[Mapping[str, Any]],
     *,
     action_repeat: int,
+    choice_policy_mode: str,
     maximum_steps: int,
 ) -> Mapping[str, Any]:
     completed = [record for record in records if record.get("aborted") is False]
@@ -510,6 +665,7 @@ def evaluation_report(
         "episodes": records,
         "requestedEpisodes": len(seeds),
         "actionRepeatTicks": action_repeat,
+        "choicePolicyMode": choice_policy_mode,
         "maximumSteps": maximum_steps,
         "completeEpisodes": len(completed),
         "incompleteEpisodes": len(incomplete),
@@ -561,6 +717,7 @@ def extend_evaluation(
         seeds,
         merged,
         action_repeat=action_repeat,
+        choice_policy_mode=str(extended["choicePolicyMode"]),
         maximum_steps=maximum_steps,
     )
 
@@ -579,6 +736,18 @@ def expert_tensors(
             name: torch.from_numpy(value).to(device=device, dtype=torch.long)
             for name, value in dataset.actions.items()
         },
+    )
+
+
+def choice_expert_tensors(
+    dataset: ChoiceExpertDataset,
+    device: torch.device,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    return (
+        torch.from_numpy(dataset.observations).to(device=device, dtype=torch.float32),
+        torch.from_numpy(dataset.option_descriptors).to(device=device, dtype=torch.float32),
+        torch.from_numpy(dataset.option_masks).to(device=device, dtype=torch.bool),
+        torch.from_numpy(dataset.selected_options).to(device=device, dtype=torch.long),
     )
 
 
@@ -672,6 +841,7 @@ def iteration_record(
         "clamp_adjustment": float(np.sum(rollout.reward_terms["clampAdjustment"])),
     }
     gameplay = aggregate_gameplay(rollout.gameplay_counters)
+    choice_selections = choice_selection_summary(rollout.choice_intervals)
     return {
         "metrics_version": 5,
         "iter": iteration,
@@ -703,7 +873,8 @@ def iteration_record(
             "value_loss": choice_metrics.get("value_loss", 0.0),
             "entropy_normalized": choice_metrics.get("normalized_entropy", 0.0),
             "temperature": choice_temperature,
-            "selections_per_family": {},
+            "selected_skill_ids": choice_selections["skills"],
+            "selections_per_family": choice_selections["families"],
             "loss_alarm": bool(
                 choice_metrics
                 and abs(choice_metrics.get("policy_loss", 0.0))
@@ -718,6 +889,36 @@ def iteration_record(
         "gae_lambda": configuration.gae_lambda,
         "action_repeat_ticks": configuration.action_repeat,
         "target_kl": configuration.target_kl,
+    }
+
+
+def choice_selection_summary(
+    intervals: Sequence[Mapping[str, Any]],
+) -> Mapping[str, Mapping[str, int]]:
+    descriptor_indices = {
+        name: index for index, name in enumerate(POLICY_SPEC.option_descriptor_names)
+    }
+    families: dict[str, int] = {}
+    skills: dict[str, int] = {}
+    for interval in intervals:
+        selected = int(interval["selectedOption"])
+        option_ids = interval["optionIds"]
+        descriptors = np.asarray(interval["optionDescriptors"], dtype=np.float32)
+        skill = str(int(option_ids[selected]))
+        skills[skill] = skills.get(skill, 0) + 1
+        row = descriptors[selected]
+        selected_families = [
+            name.removeprefix("family_")
+            for name, index in descriptor_indices.items()
+            if name.startswith("family_")
+            and name not in ("family_element", "family_discipline")
+            and row[index] > 0.5
+        ] or ["unknown"]
+        for family in selected_families:
+            families[family] = families.get(family, 0) + 1
+    return {
+        "families": dict(sorted(families.items())),
+        "skills": dict(sorted(skills.items(), key=lambda entry: int(entry[0]))),
     }
 
 
@@ -815,6 +1016,21 @@ def validate_bootstrap_configuration(value: BootstrapConfiguration) -> None:
         raise ValueError("bootstrap configuration is invalid")
     if not math.isfinite(value.learning_rate) or value.learning_rate <= 0:
         raise ValueError("bootstrap learning rate must be positive")
+
+
+def validate_choice_bootstrap_configuration(value: ChoiceBootstrapConfiguration) -> None:
+    positive = (
+        value.samples,
+        value.epochs,
+        value.batch_size,
+        value.worlds,
+        value.workers,
+        value.action_repeat,
+    )
+    if any(entry < 1 for entry in positive) or not 0 < value.validation_fraction < 1:
+        raise ValueError("choice bootstrap configuration is invalid")
+    if not math.isfinite(value.learning_rate) or value.learning_rate <= 0:
+        raise ValueError("choice bootstrap learning rate must be positive")
 
 
 def validate_training_configuration(value: TrainingConfiguration) -> None:

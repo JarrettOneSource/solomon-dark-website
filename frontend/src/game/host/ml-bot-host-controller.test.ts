@@ -15,9 +15,11 @@ import {
   type ServerWelcomeMessage,
 } from '../protocol/game-protocol.ts'
 import { BoneyardHeadlessEnvironment } from '../headless/boneyard-headless-environment.ts'
+import { getPlayerProgression } from '../core-server/game-simulation.ts'
 import type { MlBotPolicyInference } from './ml-bot-host-controller.ts'
 import {
   ML_BOT_CHARACTER,
+  MlBotHostController,
   MlBotPolicyInferenceWorker,
 } from './ml-bot-host-controller.ts'
 import { startGameHost } from './game-host.ts'
@@ -38,6 +40,7 @@ const CHARACTER = {
 } as const
 
 const idlePolicy: MlBotPolicyInference = {
+  choiceMode: 'scripted',
   async infer(_observation, plan) {
     const target = firstLegal(plan.target)
     const ability = firstLegal(plan.abilityByTarget[target]!)
@@ -51,6 +54,9 @@ const idlePolicy: MlBotPolicyInference = {
       logProbability: 0,
       value: 0,
     }
+  },
+  async inferChoice() {
+    throw new Error('scripted test policy does not infer choices')
   },
 }
 
@@ -72,6 +78,63 @@ test('the packaged selected checkpoint loads in the host worker and returns lega
   } finally {
     await worker.close()
   }
+})
+
+test('learned checkpoints select live host skill offers through the choice head', async () => {
+  const environment = new BoneyardHeadlessEnvironment({
+    agent: ML_BOT_CHARACTER,
+    seed: 0x1234_5678,
+  })
+  for (let decision = 0; environment.state().levelUpBarrier === null && decision < 2_000; decision += 1) {
+    const action = environment.expertAction()
+    environment.step(Float32Array.from([
+      action.movement,
+      action.target,
+      action.ability,
+      action.aim,
+    ]), 10)
+  }
+  assert.notEqual(environment.state().levelUpBarrier, null)
+  const intents: unknown[] = []
+  let evaluatedOptions = 0
+  const learnedPolicy: MlBotPolicyInference = {
+    choiceMode: 'learned',
+    async infer() {
+      throw new Error('main inference is not expected while a skill offer is pending')
+    },
+    async inferChoice(_observation, optionDescriptors, optionMask) {
+      evaluatedOptions = optionMask.length
+      assert.equal(optionDescriptors.length, optionMask.length * 56)
+      return {
+        logProbability: -0.5,
+        selectedOption: optionMask.length - 1,
+        value: 1.25,
+      }
+    },
+  }
+  const controller = new MlBotHostController({
+    context: () => ({
+      activeInputs: {},
+      controllers: { agent: 'bot' },
+      state: environment.state(),
+    }),
+    dispatch: intent => intents.push(intent),
+    fail: error => { throw error },
+  }, ML_BOT_CHARACTER, learnedPolicy, 'agent')
+  controller.tick()
+  await waitFor(() => intents.length === 1)
+  assert.ok(evaluatedOptions > 1)
+  const offer = getPlayerProgression(environment.state(), 'agent').pendingOffer
+  assert.ok(offer)
+  assert.deepEqual(intents[0], {
+    choiceIndex: evaluatedOptions - 1,
+    kind: 'select-skill',
+    offerSequence: offer.sequence,
+    skillId: offer.options[evaluatedOptions - 1]?.skillId,
+  })
+  controller.tick()
+  await delay(0)
+  assert.equal(intents.length, 1)
 })
 
 test('developer Lua summons repeatable inert participants that accept a real party invite after three seconds', async (context) => {

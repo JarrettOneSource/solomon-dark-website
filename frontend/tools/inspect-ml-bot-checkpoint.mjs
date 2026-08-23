@@ -28,10 +28,25 @@ const result = runtime.inferAutoregressive(
   () => aim,
   { mode: 'argmax' },
 )
+const choiceDescriptors = new Float32Array(3 * 56)
+for (let index = 0; index < choiceDescriptors.length; index += 1) {
+  choiceDescriptors[index] = Math.fround(((index % 31) - 15) / 15)
+}
+const choice = runtime.choose(
+  observation,
+  choiceDescriptors,
+  Uint8Array.from([1, 1, 0]),
+  { mode: 'argmax' },
+)
 const reencoded = encodeMlBotPolicyCheckpoint(checkpoint)
 process.stdout.write(`${JSON.stringify({
   actions: result.actions,
   bytes: source.byteLength,
+  choice: {
+    logProbability: choice.logProbability,
+    selectedOption: choice.selectedOption,
+    value: choice.value,
+  },
   logProbability: result.logProbability,
   modelVersion: checkpoint.metadata.modelVersion,
   observationVersion: checkpoint.metadata.observationVersion,

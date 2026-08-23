@@ -8,6 +8,7 @@ import {
 import type {
   BoneyardHeadlessEnvironmentOptions,
   BoneyardHeadlessEpisodeMetadata,
+  BoneyardHeadlessLearnedChoice,
   BoneyardHeadlessResetOptions,
 } from './boneyard-headless-environment.ts'
 
@@ -15,6 +16,11 @@ type WorkerRequest =
   | { id: number; type: 'initialize'; options: readonly BoneyardHeadlessEnvironmentOptions[] }
   | { actions: ArrayBuffer; id: number; ticks: number; type: 'step' }
   | { id: number; ticks: number; type: 'expert-step' }
+  | {
+      choices: readonly (BoneyardHeadlessLearnedChoice | null)[]
+      id: number
+      type: 'select-choices'
+    }
   | {
       id: number
       options: readonly (BoneyardHeadlessResetOptions | null)[]
@@ -49,7 +55,26 @@ parentPort.on('message', (message: WorkerRequest) => {
       )
       return
     }
-    const observations = batch.reset(message.options)
+    if (message.type === 'select-choices') {
+      postStateResult(message.id, batch.selectChoices(message.choices), batch, 'choices-selected')
+      return
+    }
+    postStateResult(message.id, batch.reset(message.options), batch, 'result')
+  } catch (error) {
+    parentPort!.postMessage({
+      error: error instanceof Error ? error.message : String(error),
+      id: message.id,
+      type: 'error',
+    })
+  }
+})
+
+function postStateResult(
+  id: number,
+  observations: Float32Array,
+  batch: BoneyardHeadlessBatch,
+  type: 'choices-selected' | 'result',
+): void {
     const masks = batch.lastActionMasks()
     const plans = batch.actionMaskPlans()
     const observationBuffer = observations.buffer as ArrayBuffer
@@ -62,8 +87,9 @@ parentPort.on('message', (message: WorkerRequest) => {
     const planMovement = plans.movement.buffer as ArrayBuffer
     const planTarget = plans.target.buffer as ArrayBuffer
     parentPort!.postMessage({
+      choices: batch.choicePlans(),
       hashes: batch.stateHashes(),
-      id: message.id,
+      id,
       metadata: batch.episodeMetadata(),
       masks: { ability, aim, movement, target },
       observations: observationBuffer,
@@ -73,7 +99,7 @@ parentPort.on('message', (message: WorkerRequest) => {
         movement: planMovement,
         target: planTarget,
       },
-      type: 'result',
+      type,
     }, [
       observationBuffer,
       ability,
@@ -85,14 +111,7 @@ parentPort.on('message', (message: WorkerRequest) => {
       planMovement,
       planTarget,
     ])
-  } catch (error) {
-    parentPort!.postMessage({
-      error: error instanceof Error ? error.message : String(error),
-      id: message.id,
-      type: 'error',
-    })
-  }
-})
+}
 
 function postStepResult(
   id: number,
@@ -124,6 +143,7 @@ function postStepResult(
   const planMovement = plans.movement.buffer as ArrayBuffer
   const planTarget = plans.target.buffer as ArrayBuffer
   parentPort!.postMessage({
+    choices: batch!.choicePlans(),
     hashes: transition.nextStateHashes,
     id,
     metadata,

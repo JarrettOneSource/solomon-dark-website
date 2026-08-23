@@ -275,6 +275,27 @@ def main() -> int:
         assert reset.hashes[0] == initial_hashes[0]
         assert reset.hashes[1] == expert.state.hashes[1]
 
+    with BoneyardRolloutBridge(
+        [0x1234_5678], worker_count=1, learned_choices=True
+    ) as bridge:
+        for _ in range(2_000):
+            if bridge.state.choices[0] is not None:
+                break
+            bridge.expert_step(ticks=10)
+        plan = bridge.state.choices[0]
+        assert plan is not None
+        before_hash = bridge.state.hashes[0]
+        selected_state = bridge.select_choices([{
+            "oldLogProbability": -0.5,
+            "oldValue": 1.25,
+            "selectedOption": int(np.flatnonzero(plan.option_mask)[0]),
+        }])
+        assert selected_state.hashes[0] != before_hash
+        assert selected_state.choices[0] is None
+        choice_step = bridge.expert_step(ticks=10)
+        assert choice_step.transition.choice_events[0]["choiceMode"] == "learned"
+        assert choice_step.transition.choice_events[0]["trainable"] is True
+
     print(json.dumps({
         "checkpointBytes": len(encoded),
         "observationSize": POLICY_SPEC.observation_size,

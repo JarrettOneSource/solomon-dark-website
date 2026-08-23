@@ -8,15 +8,17 @@ import type {
   MlBotPolicyRewardTerms,
 } from '../core-server/ml-bot-policy/reward.ts'
 import type {
-  MlBotPolicyScriptedChoiceEvent,
   MlBotPolicySkillSelection,
 } from '../core-server/ml-bot-policy/skill-chooser.ts'
 import {
   BONEYARD_HEADLESS_ACTION_STRIDE,
   BoneyardHeadlessEnvironment,
+  type BoneyardHeadlessChoicePlan,
   type BoneyardHeadlessEnvironmentOptions,
   type BoneyardHeadlessEpisodeMetadata,
+  type BoneyardHeadlessLearnedChoice,
   type BoneyardHeadlessResetOptions,
+  type MlBotPolicyChoiceEvent,
 } from './boneyard-headless-environment.ts'
 
 export interface BoneyardHeadlessIndexedValue<Value> {
@@ -41,7 +43,7 @@ export interface BoneyardHeadlessPackedActionMaskPlan {
 
 export interface BoneyardHeadlessBatchTransition {
   readonly actions: Uint8Array
-  readonly choiceEvents: readonly BoneyardHeadlessIndexedValue<MlBotPolicyScriptedChoiceEvent>[]
+  readonly choiceEvents: readonly BoneyardHeadlessIndexedValue<MlBotPolicyChoiceEvent>[]
   readonly choiceIntervals: readonly BoneyardHeadlessIndexedValue<MlBotPolicyChoiceTrajectoryRecord>[]
   readonly dones: Uint8Array
   readonly gameplayCounters: readonly MlBotPolicyGameplayCounters[]
@@ -111,6 +113,30 @@ export class BoneyardHeadlessBatch {
     return result
   }
 
+  choicePlans(): readonly (BoneyardHeadlessChoicePlan | null)[] {
+    return this.environments.map(environment => environment.choicePlan())
+  }
+
+  selectChoices(
+    choices: readonly (BoneyardHeadlessLearnedChoice | null)[],
+  ): Float32Array {
+    if (choices.length !== this.worldCount) {
+      throw new RangeError('learned choices must match the Boneyard batch world count')
+    }
+    const observations = new Float32Array(this.worldCount * this.observationLength)
+    for (let index = 0; index < this.worldCount; index += 1) {
+      const environment = this.environments[index]!
+      const plan = environment.choicePlan()
+      const choice = choices[index]!
+      if ((plan === null) !== (choice === null)) {
+        throw new Error(`learned choice presence disagrees for Boneyard world ${index}`)
+      }
+      if (choice !== null) environment.selectLearnedChoice(choice)
+      environment.observe(observations, index * this.observationLength)
+    }
+    return observations
+  }
+
   episodeMetadata(): readonly BoneyardHeadlessEpisodeMetadata[] {
     return this.environments.map(environment => environment.episodeMetadata())
   }
@@ -149,7 +175,7 @@ export class BoneyardHeadlessBatch {
     const aim = new Uint8Array(this.worldCount * 9)
     const movement = new Uint8Array(this.worldCount * 9)
     const target = new Uint8Array(this.worldCount * 9)
-    const choiceEvents: BoneyardHeadlessIndexedValue<MlBotPolicyScriptedChoiceEvent>[] = []
+    const choiceEvents: BoneyardHeadlessIndexedValue<MlBotPolicyChoiceEvent>[] = []
     const choiceIntervals: BoneyardHeadlessIndexedValue<MlBotPolicyChoiceTrajectoryRecord>[] = []
     const skillSelections: BoneyardHeadlessIndexedValue<MlBotPolicySkillSelection>[] = []
     const stateHashes: string[] = []

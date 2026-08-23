@@ -15,7 +15,7 @@ test('rollout server carries exact plans, expert transitions, and selective rese
       workerCount: 2,
     })
     assert.equal(initialized.ok, true)
-    assert.equal(initialized.protocol, 'solomon-dark-ml-rollout-v5')
+    assert.equal(initialized.protocol, 'solomon-dark-ml-rollout-v5-choice1')
     assert.equal(initialized.worldCount, 2)
     assert.deepEqual(initialized.metadata.map(({ seed }) => seed), [101, 102])
     assert.ok(initialized.metadata.every(({ geometrySha256, runId }) => (
@@ -46,6 +46,35 @@ test('rollout server carries exact plans, expert transitions, and selective rese
     const rejected = await bridge.request({ actions: '', type: 'step' })
     assert.equal(rejected.ok, false)
     assert.match(rejected.error, /byte length/)
+  } finally {
+    await bridge.close()
+  }
+})
+
+test('rollout server round-trips learned choice plans and evaluations', async () => {
+  const bridge = new TestRolloutBridge()
+  try {
+    let state = await bridge.request({
+      learnedChoices: true,
+      seeds: [0x1234_5678],
+      type: 'initialize',
+      workerCount: 1,
+    })
+    assert.equal(state.ok, true)
+    for (let decision = 0; state.choices[0] === null && decision < 2_000; decision += 1) {
+      state = await bridge.request({ ticks: 10, type: 'expert-step' })
+    }
+    const choice = state.choices[0]
+    assert.ok(choice)
+    assert.equal(bytes(choice.observation), 1_784 * 4)
+    assert.equal(bytes(choice.optionDescriptors) % (56 * 4), 0)
+    assert.equal(bytes(choice.optionMask), choice.optionIds.length)
+    const selected = await bridge.request({
+      choices: [{ oldLogProbability: -0.5, oldValue: 1.25, selectedOption: 0 }],
+      type: 'select-choices',
+    })
+    assert.equal(selected.ok, true)
+    assert.equal(selected.choices[0], null)
   } finally {
     await bridge.close()
   }

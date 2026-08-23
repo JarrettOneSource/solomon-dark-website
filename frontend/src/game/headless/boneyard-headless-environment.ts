@@ -13,6 +13,8 @@ import {
   createGameSimulation,
   enterBoneyardWorld,
   gameSimulationPlayerRecords,
+  getPlayerProgression,
+  selectGameSimulationPlayerSkill,
   stepGameSimulationTick,
   type GameSimulationState,
 } from '../core-server/game-simulation.ts'
@@ -47,6 +49,7 @@ import {
   type MlBotPolicyScriptedChoiceEvent,
   type MlBotPolicySkillSelection,
 } from '../core-server/ml-bot-policy/skill-chooser.ts'
+import { describeMlBotPolicySkillOffer } from '../core-server/ml-bot-policy/skill-options.ts'
 import type { MlBotPolicyMainTrajectoryRecord } from '../core-server/ml-bot-policy/trajectory.ts'
 import { NATIVE_GENERATED_BONEYARDS } from '../host/native-generated-boneyards.ts'
 import { deterministicStateHash } from './hub-headless-environment.ts'
@@ -68,11 +71,46 @@ export interface BoneyardHeadlessResetOptions {
 export interface BoneyardHeadlessEnvironmentOptions extends BoneyardHeadlessResetOptions {
   readonly agent?: PlayerCharacterConfig
   readonly allies?: readonly PlayerCharacterConfig[]
+  readonly choiceMode?: 'learned' | 'scripted'
 }
+
+export interface BoneyardHeadlessChoicePlan {
+  readonly generation: number
+  readonly observation: Float32Array
+  readonly optionDescriptors: Float32Array
+  readonly optionIds: readonly number[]
+  readonly optionMask: Uint8Array
+}
+
+export interface BoneyardHeadlessLearnedChoice {
+  readonly oldLogProbability: number
+  readonly oldValue: number
+  readonly selectedOption: number
+}
+
+export interface MlBotPolicyLearnedChoiceEvent {
+  readonly accepted: true
+  readonly choiceMode: 'learned'
+  readonly generation: number
+  readonly observation: Float32Array
+  readonly oldLogProbability: number
+  readonly oldValue: number
+  readonly optionDescriptors: Float32Array
+  readonly optionIds: readonly number[]
+  readonly optionMask: Uint8Array
+  readonly participantId: string
+  readonly selectedOption: number
+  readonly simulationTick: number
+  readonly trainable: true
+}
+
+export type MlBotPolicyChoiceEvent =
+  | MlBotPolicyLearnedChoiceEvent
+  | MlBotPolicyScriptedChoiceEvent
 
 export interface BoneyardHeadlessTransition {
   readonly actions: MlBotPolicyActionIndices
-  readonly choiceEvents: readonly MlBotPolicyScriptedChoiceEvent[]
+  readonly choiceEvents: readonly MlBotPolicyChoiceEvent[]
   readonly choiceIntervals: readonly MlBotPolicyChoiceTrajectoryRecord[]
   readonly done: boolean
   readonly masks: MlBotPolicyActionMasks
@@ -103,22 +141,28 @@ export class BoneyardHeadlessEnvironment {
   readonly observationLength = BONEYARD_HEADLESS_OBSERVATION_LENGTH
   private readonly agent: PlayerCharacterConfig
   private readonly allies: readonly PlayerCharacterConfig[]
+  private readonly choiceMode: 'learned' | 'scripted'
   private choiceTracker: MlBotPolicyChoiceTrajectoryTracker
   private frame: MlBotPolicyFrame
   private lastTransitionValue: BoneyardHeadlessTransition | null = null
   private lastMasks: MlBotPolicyActionMasks
   private readonly observer = new MlBotPolicyObserver(HEADLESS_PLAYER_ID)
+  private readonly pendingChoiceEvents: MlBotPolicyChoiceEvent[] = []
+  private readonly pendingSkillSelections: MlBotPolicySkillSelection[] = []
   private resetOptions: BoneyardHeadlessResetOptions
   private simulation: GameSimulationState
 
   constructor(options: BoneyardHeadlessEnvironmentOptions) {
     this.agent = Object.freeze({ ...(options.agent ?? DEFAULT_AGENT) })
     this.allies = Object.freeze((options.allies ?? []).map((ally) => Object.freeze({ ...ally })))
+    this.choiceMode = options.choiceMode ?? 'scripted'
     this.resetOptions = validatedResetOptions(options)
     this.choiceTracker = this.createChoiceTracker(this.resetOptions)
     this.simulation = this.createSimulation(this.resetOptions)
     this.frame = this.observeState({})
     this.lastTransitionValue = null
+    this.pendingChoiceEvents.length = 0
+    this.pendingSkillSelections.length = 0
     this.lastMasks = resolveMlBotPolicyDecision(this.simulation, HEADLESS_PLAYER_ID, this.frame, {
       ability: 0,
       aim: 0,
@@ -134,6 +178,8 @@ export class BoneyardHeadlessEnvironment {
     this.simulation = this.createSimulation(this.resetOptions)
     this.frame = this.observeState({})
     this.lastTransitionValue = null
+    this.pendingChoiceEvents.length = 0
+    this.pendingSkillSelections.length = 0
     this.lastMasks = resolveMlBotPolicyDecision(this.simulation, HEADLESS_PLAYER_ID, this.frame, {
       ability: 0,
       aim: 0,
@@ -202,6 +248,12 @@ export class BoneyardHeadlessEnvironment {
   ): BoneyardHeadlessTransition {
     validateActionSlice(actions, offset)
     validateTicks(ticks)
+    if (this.choiceMode === 'learned') {
+      if (this.choicePlan() !== null) {
+        throw new Error('learned Boneyard skill choice must be selected before stepping')
+      }
+      this.resolveScriptedAllies()
+    }
     const selected: MlBotPolicyActionIndices = {
       movement: actions[offset]!,
       target: actions[offset + 1]!,
@@ -265,9 +317,9 @@ export class BoneyardHeadlessEnvironment {
     this.observer.commit(decision.committedAction, decision.targetId)
     const rewardAccumulator = new MlBotPolicyRewardAccumulator(HEADLESS_PLAYER_ID)
     rewardAccumulator.begin(this.simulation)
-    const skillSelections: MlBotPolicySkillSelection[] = []
-    const choiceEvents: MlBotPolicyScriptedChoiceEvent[] = []
-    if (this.simulation.levelUpBarrier !== null) {
+    const skillSelections: MlBotPolicySkillSelection[] = this.pendingSkillSelections.splice(0)
+    const choiceEvents: MlBotPolicyChoiceEvent[] = this.pendingChoiceEvents.splice(0)
+    if (this.choiceMode === 'scripted' && this.simulation.levelUpBarrier !== null) {
       const resolved = resolveMlBotPolicySkillOffers(
         this.simulation,
         this.playerIds(),
@@ -345,6 +397,70 @@ export class BoneyardHeadlessEnvironment {
     }
     target.set(this.frame.values, offset)
     return target
+  }
+
+  choicePlan(): BoneyardHeadlessChoicePlan | null {
+    if (this.choiceMode !== 'learned') return null
+    const description = describeMlBotPolicySkillOffer(this.simulation, HEADLESS_PLAYER_ID)
+    if (description === null) return null
+    return Object.freeze({
+      generation: description.generation,
+      observation: this.frame.values.slice(),
+      optionDescriptors: description.descriptors.slice(),
+      optionIds: Object.freeze([...description.optionIds]),
+      optionMask: description.mask.slice(),
+    })
+  }
+
+  selectLearnedChoice(choice: BoneyardHeadlessLearnedChoice): MlBotPolicySkillSelection {
+    if (this.choiceMode !== 'learned') {
+      throw new Error('scripted Boneyard environments do not accept learned skill choices')
+    }
+    if (!Number.isFinite(choice.oldLogProbability) || !Number.isFinite(choice.oldValue)) {
+      throw new RangeError('learned Boneyard skill choice policy values must be finite')
+    }
+    const plan = this.choicePlan()
+    const offer = getPlayerProgression(this.simulation, HEADLESS_PLAYER_ID).pendingOffer
+    if (plan === null || offer === null) {
+      throw new Error('learned Boneyard environment has no pending agent skill choice')
+    }
+    if (
+      !Number.isInteger(choice.selectedOption)
+      || choice.selectedOption < 0
+      || choice.selectedOption >= offer.options.length
+      || plan.optionMask[choice.selectedOption] !== 1
+    ) throw new RangeError('learned Boneyard skill choice selected an illegal option')
+    const option = offer.options[choice.selectedOption]!
+    const selection: MlBotPolicySkillSelection = Object.freeze({
+      choiceIndex: choice.selectedOption,
+      offerSequence: offer.sequence,
+      playerId: HEADLESS_PLAYER_ID,
+      skillId: option.skillId,
+    })
+    const event: MlBotPolicyLearnedChoiceEvent = Object.freeze({
+      accepted: true,
+      choiceMode: 'learned',
+      generation: plan.generation,
+      observation: plan.observation,
+      oldLogProbability: choice.oldLogProbability,
+      oldValue: choice.oldValue,
+      optionDescriptors: plan.optionDescriptors,
+      optionIds: plan.optionIds,
+      optionMask: plan.optionMask,
+      participantId: HEADLESS_PLAYER_ID,
+      selectedOption: choice.selectedOption,
+      simulationTick: this.simulation.tick,
+      trainable: true,
+    })
+    const applied = selectGameSimulationPlayerSkill(this.simulation, HEADLESS_PLAYER_ID, selection)
+    if (applied === null) throw new Error('learned Boneyard agent skill choice was rejected')
+    this.simulation = applied
+    this.choiceTracker.open(event)
+    this.pendingChoiceEvents.push(event)
+    this.pendingSkillSelections.push(selection)
+    this.resolveScriptedAllies()
+    this.frame = this.observeState({})
+    return selection
   }
 
   actionMasks(targetAction = 0, abilityAction = 0): MlBotPolicyActionMasks {
@@ -477,6 +593,13 @@ export class BoneyardHeadlessEnvironment {
       oldLogProbability: 0,
       oldValue: 0,
     })
+  }
+
+  private resolveScriptedAllies(): void {
+    if (this.simulation.levelUpBarrier === null || this.allies.length === 0) return
+    const resolved = resolveMlBotPolicySkillOffers(this.simulation, this.allyIds())
+    this.simulation = resolved.state
+    this.pendingSkillSelections.push(...resolved.selections)
   }
 
   private observeState(activeInputs: Readonly<Record<string, PlayerCharacterInput>>): MlBotPolicyFrame {

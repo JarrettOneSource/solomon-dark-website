@@ -14,6 +14,13 @@ type WorkerRequest =
       readonly target: ArrayBuffer
       readonly type: 'infer'
     }
+  | {
+      readonly id: number
+      readonly observation: ArrayBuffer
+      readonly optionDescriptors: ArrayBuffer
+      readonly optionMask: ArrayBuffer
+      readonly type: 'choose'
+    }
 
 if (!parentPort) throw new Error('ML bot policy worker requires a parent port')
 
@@ -26,6 +33,22 @@ parentPort.on('message', (message: WorkerRequest) => {
       return
     }
     if (runtime === null) throw new Error('ML bot policy worker is not initialized')
+    if (message.type === 'choose') {
+      const result = runtime.choose(
+        float32(message.observation, 1_784, 'choice observation'),
+        float32Any(message.optionDescriptors, 'choice descriptors'),
+        uint8Any(message.optionMask, 'choice mask'),
+        { mode: 'argmax' },
+      )
+      parentPort!.postMessage({
+        id: message.id,
+        logProbability: result.logProbability,
+        selectedOption: result.selectedOption,
+        type: 'choice-result',
+        value: result.value,
+      })
+      return
+    }
     const observation = float32(message.observation, 1_784, 'observation')
     const movement = uint8(message.movement, 9, 'movement mask')
     const target = uint8(message.target, 9, 'target mask')
@@ -65,5 +88,17 @@ function float32(value: ArrayBuffer, length: number, label: string): Float32Arra
 function uint8(value: ArrayBuffer, length: number, label: string): Uint8Array {
   const result = new Uint8Array(value)
   if (result.length !== length) throw new RangeError(`ML bot policy worker ${label} length is invalid`)
+  return result
+}
+
+function float32Any(value: ArrayBuffer, label: string): Float32Array {
+  const result = new Float32Array(value)
+  if (result.length === 0) throw new RangeError(`ML bot policy worker ${label} must not be empty`)
+  return result
+}
+
+function uint8Any(value: ArrayBuffer, label: string): Uint8Array {
+  const result = new Uint8Array(value)
+  if (result.length === 0) throw new RangeError(`ML bot policy worker ${label} must not be empty`)
   return result
 }

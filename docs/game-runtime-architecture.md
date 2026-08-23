@@ -1289,8 +1289,12 @@ waypoints through the authored moving gate and into Solomon contact. It idles
 during dialogue, then hands control to the selected schema-v5 checkpoint at a
 ten-tick decision cadence. Inference runs in one server-only worker shared by
 all summoned participants; each bot retains its own observer and intent queue.
-Potion actions use the ordinary consume path and skill offers use the scripted
-schema-v5 chooser. Bot-assisted runs cannot receive global leaderboard
+Potion actions use the ordinary consume path. Checkpoints without an explicit
+learned-choice marker retain the scripted schema-v5 chooser. A checkpoint
+marked `choicePolicyMode=learned` evaluates the live offer observation,
+56-value option rows, and legality mask in that same worker, then dispatches
+the selected option through the ordinary progression path. Bot-assisted runs
+cannot receive global leaderboard
 receipts. Bots never enter the WebSocket client map or human player-count
 callback, and all remaining bots are removed when the last human disconnects,
 so they cannot keep a private session or deployment drain alive.

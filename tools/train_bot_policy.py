@@ -10,6 +10,7 @@ from pathlib import Path
 import sys
 from typing import Any, Sequence
 
+import numpy as np
 import torch
 
 from ml_bot.checkpoint import atomic_write, load_checkpoint, typescript_checkpoint_report
@@ -26,7 +27,9 @@ from ml_bot.self_test import main as self_test
 from ml_bot.spec import POLICY_SPEC, REPOSITORY_ROOT
 from ml_bot.trainer import (
     BootstrapConfiguration,
+    ChoiceBootstrapConfiguration,
     TrainingConfiguration,
+    bootstrap_choice_policy,
     bootstrap_policy,
     evaluate_policy,
     extend_evaluation,
@@ -51,6 +54,26 @@ def main(argv: Sequence[str] | None = None) -> int:
 def run_bootstrap(args: argparse.Namespace) -> Any:
     configuration = bootstrap_configuration(args)
     return bootstrap_policy(
+        Path(args.output).resolve(),
+        configuration,
+        dataset_path=None if args.dataset is None else Path(args.dataset).resolve(),
+    )
+
+
+def run_choice_bootstrap(args: argparse.Namespace) -> Any:
+    configuration = ChoiceBootstrapConfiguration(
+        samples=args.samples,
+        epochs=args.epochs,
+        batch_size=args.batch_size,
+        learning_rate=args.learning_rate,
+        validation_fraction=args.validation_fraction,
+        worlds=args.worlds,
+        workers=args.workers,
+        action_repeat=args.action_repeat,
+        seed=args.seed,
+    )
+    return bootstrap_choice_policy(
+        Path(args.checkpoint).resolve(),
         Path(args.output).resolve(),
         configuration,
         dataset_path=None if args.dataset is None else Path(args.dataset).resolve(),
@@ -167,6 +190,18 @@ def run_validate(args: argparse.Namespace) -> Any:
 
     with torch.no_grad():
         python_result = policy.act(observation, full_plans, deterministic=True)
+        choice_descriptors = torch.from_numpy(
+            np.asarray([
+                ((index % 31) - 15) / 15 for index in range(3 * 56)
+            ], dtype=np.float32).reshape(1, 3, 56)
+        )
+        choice_selected, choice_result = policy.select_choice(
+            observation,
+            choice_descriptors,
+            torch.tensor([[True, True, False]]),
+            temperature=float(metadata["choiceTemperature"]),
+            deterministic=True,
+        )
     python_actions = {name: int(value[0]) for name, value in python_result.actions.items()}
     if python_actions != typescript.get("actions"):
         raise ValueError("Python and TypeScript checkpoint actions disagree")
@@ -176,6 +211,22 @@ def run_validate(args: argparse.Namespace) -> Any:
     )
     if value_error > 1e-4 or log_error > 1e-4:
         raise ValueError("Python and TypeScript checkpoint numerics disagree")
+    typescript_choice = typescript.get("choice")
+    if not isinstance(typescript_choice, dict):
+        raise ValueError("TypeScript checkpoint choice result is missing")
+    choice_value_error = abs(
+        float(choice_result.value[0]) - float(typescript_choice["value"])
+    )
+    choice_log_error = abs(
+        float(choice_result.log_probability[0])
+        - float(typescript_choice["logProbability"])
+    )
+    if (
+        int(choice_selected[0]) != int(typescript_choice["selectedOption"])
+        or choice_value_error > 1e-4
+        or choice_log_error > 1e-4
+    ):
+        raise ValueError("Python and TypeScript checkpoint choice numerics disagree")
     return {
         "status": "ok",
         "checkpoint": str(Path(args.checkpoint).resolve()),
@@ -188,6 +239,11 @@ def run_validate(args: argparse.Namespace) -> Any:
             "logProbabilityAbsoluteError": log_error,
             "valueAbsoluteError": value_error,
             "typescript": typescript,
+        },
+        "choiceInferenceParity": {
+            "selectedOption": int(choice_selected[0]),
+            "logProbabilityAbsoluteError": choice_log_error,
+            "valueAbsoluteError": choice_value_error,
         },
     }
 
@@ -482,6 +538,21 @@ def create_parser() -> argparse.ArgumentParser:
     add_output(bootstrap_parser)
     add_bootstrap(bootstrap_parser)
     bootstrap_parser.set_defaults(handler=run_bootstrap)
+
+    choice_bootstrap_parser = subparsers.add_parser(
+        "bootstrap-choices",
+        help="warm-start the learned skill chooser from authoritative scripted offers",
+    )
+    add_output(choice_bootstrap_parser)
+    choice_bootstrap_parser.add_argument("--checkpoint", required=True)
+    choice_bootstrap_parser.add_argument("--samples", type=positive_integer, default=512)
+    choice_bootstrap_parser.add_argument("--epochs", type=positive_integer, default=30)
+    choice_bootstrap_parser.add_argument("--batch-size", type=positive_integer, default=64)
+    choice_bootstrap_parser.add_argument("--learning-rate", type=positive_float, default=0.001)
+    choice_bootstrap_parser.add_argument("--validation-fraction", type=fraction, default=0.2)
+    choice_bootstrap_parser.add_argument("--dataset")
+    add_environment(choice_bootstrap_parser)
+    choice_bootstrap_parser.set_defaults(handler=run_choice_bootstrap)
 
     train_parser = subparsers.add_parser("train", help="run headless PyTorch PPO")
     add_output(train_parser)

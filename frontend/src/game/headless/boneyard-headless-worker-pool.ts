@@ -3,8 +3,8 @@ import { Worker } from 'node:worker_threads'
 import type { MlBotPolicyActionMasks } from '../core-server/ml-bot-policy/actions.ts'
 import type { MlBotPolicyChoiceTrajectoryRecord } from '../core-server/ml-bot-policy/choice-trajectory.ts'
 import type { MlBotPolicyGameplayCounters } from '../core-server/ml-bot-policy/reward.ts'
+import { ML_BOT_POLICY_OPTION_DESCRIPTOR_NAMES } from '../core-server/ml-bot-policy/spec.ts'
 import type {
-  MlBotPolicyScriptedChoiceEvent,
   MlBotPolicySkillSelection,
 } from '../core-server/ml-bot-policy/skill-chooser.ts'
 import type {
@@ -15,9 +15,12 @@ import type {
 } from './boneyard-headless-batch.ts'
 import {
   BONEYARD_HEADLESS_ACTION_STRIDE,
+  type BoneyardHeadlessChoicePlan,
   type BoneyardHeadlessEpisodeMetadata,
   type BoneyardHeadlessEnvironmentOptions,
+  type BoneyardHeadlessLearnedChoice,
   type BoneyardHeadlessResetOptions,
+  type MlBotPolicyChoiceEvent,
 } from './boneyard-headless-environment.ts'
 
 export interface BoneyardHeadlessWorkerPoolOptions {
@@ -26,6 +29,7 @@ export interface BoneyardHeadlessWorkerPoolOptions {
 }
 
 export interface BoneyardHeadlessWorkerResult {
+  readonly choices: readonly (BoneyardHeadlessChoicePlan | null)[]
   readonly hashes: readonly string[]
   readonly masks: MlBotPolicyActionMasks
   readonly metadata: readonly BoneyardHeadlessEpisodeMetadata[]
@@ -126,6 +130,19 @@ export class BoneyardHeadlessWorkerPool {
     return this.combineStep(laneResults)
   }
 
+  async selectChoices(
+    choices: readonly (BoneyardHeadlessLearnedChoice | null)[],
+  ): Promise<BoneyardHeadlessWorkerResult> {
+    if (choices.length !== this.worldCount) {
+      throw new RangeError('learned choices must match the Boneyard worker-pool world count')
+    }
+    const results = await Promise.all(this.lanes.map((lane) => lane.rpc.call({
+      choices: choices.slice(lane.offset, lane.offset + lane.count),
+      type: 'select-choices',
+    })))
+    return this.combine(results)
+  }
+
   async reset(
     options: readonly (BoneyardHeadlessResetOptions | null)[],
   ): Promise<BoneyardHeadlessWorkerResult> {
@@ -154,6 +171,7 @@ export class BoneyardHeadlessWorkerPool {
     const planMovement = new Uint8Array(this.worldCount * 9)
     const planTarget = new Uint8Array(this.worldCount * 9)
     const hashes: string[] = []
+    const choices: (BoneyardHeadlessChoicePlan | null)[] = []
     const metadata: BoneyardHeadlessEpisodeMetadata[] = []
     let worldOffset = 0
     for (const result of results) {
@@ -162,6 +180,11 @@ export class BoneyardHeadlessWorkerPool {
       }
       const masks = requiredMasks(result.masks)
       const laneWorldCount = result.hashes.length
+      const laneChoices = requiredChoicePlans(
+        result.choices,
+        laneWorldCount,
+        this.observationLength,
+      )
       const laneMetadata = requiredEpisodeMetadata(result.metadata, laneWorldCount)
       const plans = requiredActionMaskPlan(result.plans, laneWorldCount)
       const laneObservations = new Float32Array(result.observations)
@@ -175,10 +198,12 @@ export class BoneyardHeadlessWorkerPool {
       planMovement.set(plans.movement, worldOffset * 9)
       planTarget.set(plans.target, worldOffset * 9)
       hashes.push(...result.hashes.map((hash) => String(hash)))
+      choices.push(...laneChoices)
       metadata.push(...laneMetadata)
       worldOffset += result.hashes.length
     }
     return {
+      choices,
       hashes,
       metadata,
       masks: { ability, aim, movement, target },
@@ -197,7 +222,7 @@ export class BoneyardHeadlessWorkerPool {
   ): BoneyardHeadlessWorkerStepResult {
     const combined = this.combine(results)
     const actions = new Uint8Array(this.worldCount * BONEYARD_HEADLESS_ACTION_STRIDE)
-    const choiceEvents: BoneyardHeadlessIndexedValue<MlBotPolicyScriptedChoiceEvent>[] = []
+    const choiceEvents: BoneyardHeadlessIndexedValue<MlBotPolicyChoiceEvent>[] = []
     const choiceIntervals: BoneyardHeadlessIndexedValue<MlBotPolicyChoiceTrajectoryRecord>[] = []
     const dones = new Uint8Array(this.worldCount)
     const gameplayCounters: MlBotPolicyGameplayCounters[] = []
@@ -372,6 +397,40 @@ function requiredActionMaskPlan(
     movement: uint8(source.movement, worldCount * 9, 'plan movement'),
     target: uint8(source.target, worldCount * 9, 'plan target'),
   }
+}
+
+function requiredChoicePlans(
+  value: unknown,
+  worldCount: number,
+  observationLength: number,
+): (BoneyardHeadlessChoicePlan | null)[] {
+  if (!Array.isArray(value) || value.length !== worldCount) {
+    throw new Error('Boneyard headless worker returned invalid learned choice plans')
+  }
+  return value.map((entry): BoneyardHeadlessChoicePlan | null => {
+    if (entry === null) return null
+    const source = requiredObject(entry, 'Boneyard headless worker learned choice plan')
+    if (
+      !Number.isSafeInteger(source.generation)
+      || Number(source.generation) < 0
+      || !(source.observation instanceof Float32Array)
+      || source.observation.length !== observationLength
+      || !(source.optionDescriptors instanceof Float32Array)
+      || !(source.optionMask instanceof Uint8Array)
+      || !Array.isArray(source.optionIds)
+      || source.optionIds.some(optionId => !Number.isSafeInteger(optionId))
+      || source.optionMask.length !== source.optionIds.length
+      || source.optionDescriptors.length
+        !== source.optionIds.length * ML_BOT_POLICY_OPTION_DESCRIPTOR_NAMES.length
+    ) throw new Error('Boneyard headless worker returned invalid learned choice plan')
+    return {
+      generation: Number(source.generation),
+      observation: source.observation,
+      optionDescriptors: source.optionDescriptors,
+      optionIds: source.optionIds as number[],
+      optionMask: source.optionMask,
+    }
+  })
 }
 
 function requiredObject(value: unknown, name: string): Record<string, unknown> {

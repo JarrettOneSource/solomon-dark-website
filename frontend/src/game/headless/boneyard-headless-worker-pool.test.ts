@@ -57,3 +57,30 @@ test('worker pool supports authoritative expert steps and selective terminal res
     await pool.close()
   }
 })
+
+test('worker pool exposes and applies externally evaluated learned choices', async () => {
+  const pool = await BoneyardHeadlessWorkerPool.create({
+    environments: [{ choiceMode: 'learned', seed: 0x1234_5678 }],
+    workerCount: 1,
+  })
+  try {
+    let state = await pool.reset([{ seed: 0x1234_5678 }])
+    for (let decision = 0; state.choices[0] === null && decision < 2_000; decision += 1) {
+      state = await pool.expertStep(10)
+    }
+    assert.ok(state.choices[0])
+    const beforeHash = state.hashes[0]
+    const selected = await pool.selectChoices([{
+      oldLogProbability: -0.5,
+      oldValue: 1.25,
+      selectedOption: 0,
+    }])
+    assert.notEqual(selected.hashes[0], beforeHash)
+    assert.equal(selected.choices[0], null)
+    const stepped = await pool.step(createBoneyardHeadlessActionBuffer(), 10)
+    assert.equal(stepped.transition.choiceEvents[0]?.value.choiceMode, 'learned')
+    assert.equal(stepped.transition.choiceEvents[0]?.value.trainable, true)
+  } finally {
+    await pool.close()
+  }
+})

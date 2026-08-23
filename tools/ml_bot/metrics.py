@@ -136,6 +136,8 @@ def episode_gameplay_summary(records: Iterable[Mapping[str, Any]]) -> Mapping[st
         "waves_completed": 0,
         "potions_used": 0,
         "skill_picks": 0,
+        "skill_choices_by_id": {},
+        "skill_choice_modes": {},
         "gold_collected": 0.0,
         "items_collected": 0,
         "item_kinds": {},
@@ -166,6 +168,20 @@ def episode_gameplay_summary(records: Iterable[Mapping[str, Any]]) -> Mapping[st
         ):
             for name, count in record[source].items():
                 totals[target][name] = totals[target].get(name, 0) + int(count)
+        for choice in record.get("choice_events", []):
+            if choice.get("interval_steps") is not None:
+                continue
+            skill_id = choice.get("chosen_skill")
+            mode = choice.get("mode")
+            if isinstance(skill_id, int):
+                key = str(skill_id)
+                totals["skill_choices_by_id"][key] = (
+                    totals["skill_choices_by_id"].get(key, 0) + 1
+                )
+            if isinstance(mode, str):
+                totals["skill_choice_modes"][mode] = (
+                    totals["skill_choice_modes"].get(mode, 0) + 1
+                )
     return totals
 
 
@@ -203,6 +219,7 @@ def training_summary(
         "waves_completed": 0,
         "potions_used": 0,
         "skill_picks": 0,
+        "skill_choices_by_id": {},
         "gold_collected": 0.0,
         "items_collected": 0,
         "item_kinds": {},
@@ -227,6 +244,10 @@ def training_summary(
         for name in ("enemy_kills_by_kind", "item_kinds"):
             for key, count in row.get(name, {}).items():
                 gameplay[name][key] = gameplay[name].get(key, 0) + count
+        for skill_id, count in record.get("smdp", {}).get("selected_skill_ids", {}).items():
+            gameplay["skill_choices_by_id"][skill_id] = (
+                gameplay["skill_choices_by_id"].get(skill_id, 0) + count
+            )
     completed = [episode for episode in episodes if episode.get("aborted") is False]
     digest = hashlib.sha256(checkpoint.read_bytes()).hexdigest()
     return {

@@ -15,6 +15,7 @@ import {
 import { decodeMlBotPolicyCheckpoint } from '../core-server/ml-bot-policy/checkpoint.ts'
 import { MlBotPolicyObserver } from '../core-server/ml-bot-policy/observer.ts'
 import { resolveMlBotPolicySkillOffers } from '../core-server/ml-bot-policy/skill-chooser.ts'
+import { describeMlBotPolicySkillOffer } from '../core-server/ml-bot-policy/skill-options.ts'
 import { MlBotEntranceNavigator } from './ml-bot-entrance-navigation.ts'
 
 export const ML_BOT_CHARACTER = Object.freeze({
@@ -66,14 +67,27 @@ export interface MlBotPolicyInferenceResult {
   readonly value: number
 }
 
+export interface MlBotPolicyChoiceInferenceResult {
+  readonly logProbability: number
+  readonly selectedOption: number
+  readonly value: number
+}
+
 export interface MlBotPolicyInference {
+  readonly choiceMode: 'learned' | 'scripted'
   infer(
     observation: Float32Array,
     plan: MlBotPolicyActionMaskPlan,
   ): Promise<MlBotPolicyInferenceResult>
+  inferChoice(
+    observation: Float32Array,
+    optionDescriptors: Float32Array,
+    optionMask: Uint8Array,
+  ): Promise<MlBotPolicyChoiceInferenceResult>
 }
 
 export class MlBotPolicyInferenceWorker implements MlBotPolicyInference {
+  readonly choiceMode: 'learned' | 'scripted'
   private closed = false
   private nextId = 1
   private readonly pending = new Map<number, {
@@ -82,7 +96,8 @@ export class MlBotPolicyInferenceWorker implements MlBotPolicyInference {
   }>()
   private readonly worker: Worker
 
-  private constructor() {
+  private constructor(choiceMode: 'learned' | 'scripted') {
+    this.choiceMode = choiceMode
     const workerModule = import.meta.url.endsWith('.ts')
       ? './ml-bot-policy-worker.ts'
       : './ml-bot-policy-worker.mjs'
@@ -109,8 +124,10 @@ export class MlBotPolicyInferenceWorker implements MlBotPolicyInference {
   }
 
   static async create(checkpoint: Uint8Array): Promise<MlBotPolicyInferenceWorker> {
-    decodeMlBotPolicyCheckpoint(checkpoint)
-    const inference = new MlBotPolicyInferenceWorker()
+    const decoded = decodeMlBotPolicyCheckpoint(checkpoint)
+    const inference = new MlBotPolicyInferenceWorker(
+      decoded.metadata.choicePolicyMode === 'learned' ? 'learned' : 'scripted',
+    )
     const copy = checkpoint.slice()
     try {
       await inference.call({ checkpoint: copy.buffer, type: 'initialize' }, [copy.buffer])
@@ -151,6 +168,30 @@ export class MlBotPolicyInferenceWorker implements MlBotPolicyInference {
     }
   }
 
+  async inferChoice(
+    observation: Float32Array,
+    optionDescriptors: Float32Array,
+    optionMask: Uint8Array,
+  ): Promise<MlBotPolicyChoiceInferenceResult> {
+    if (this.choiceMode !== 'learned') {
+      throw new Error('scripted ML bot checkpoint does not expose learned skill inference')
+    }
+    const observationCopy = observation.slice()
+    const descriptorCopy = optionDescriptors.slice()
+    const maskCopy = optionMask.slice()
+    const response = await this.call({
+      observation: observationCopy.buffer,
+      optionDescriptors: descriptorCopy.buffer,
+      optionMask: maskCopy.buffer,
+      type: 'choose',
+    }, [observationCopy.buffer, descriptorCopy.buffer, maskCopy.buffer])
+    return {
+      logProbability: requiredFinite(response.logProbability, 'worker choice log probability'),
+      selectedOption: requiredInteger(response.selectedOption, 'worker selected choice option'),
+      value: requiredFinite(response.value, 'worker choice value'),
+    }
+  }
+
   async close(): Promise<void> {
     if (this.closed) return
     this.closed = true
@@ -184,6 +225,7 @@ export class MlBotHostController {
   private readonly entrance = new MlBotEntranceNavigator()
   private failed = false
   private readonly inference: MlBotPolicyInference
+  private dispatchedChoiceGeneration: number | null = null
   private loadoutKey: string | null = null
   private nextDecisionTick = 0
   private readonly observer: MlBotPolicyObserver
@@ -213,6 +255,7 @@ export class MlBotHostController {
       this.observer.reset()
       this.nextDecisionTick = context.state.tick
       this.loadoutKey = null
+      this.dispatchedChoiceGeneration = null
     }
     if (context.state.world.kind === 'hub') return
     if (context.state.run.phase === 'loadout') {
@@ -234,11 +277,53 @@ export class MlBotHostController {
       this.adapter.dispatch({ input: entranceInput, kind: 'scripted-input' })
       return
     }
-    const skillChoice = resolveMlBotPolicySkillOffers(
-      context.state,
-      [this.playerId],
-    ).selections[0] ?? null
-    if (skillChoice !== null) {
+    const skillOffer = describeMlBotPolicySkillOffer(context.state, this.playerId)
+    if (skillOffer !== null) {
+      if (this.dispatchedChoiceGeneration === skillOffer.generation) return
+      if (this.inference.choiceMode === 'learned') {
+        if (this.decisionPending) return
+        const frame = this.observer.observe(context.state, {
+          activeInputs: context.activeInputs,
+          controllers: context.controllers,
+        })
+        const choiceWorldKey = worldKey
+        this.decisionPending = true
+        void this.inference.inferChoice(
+          frame.values,
+          skillOffer.descriptors,
+          skillOffer.mask,
+        ).then(({ selectedOption }) => {
+          const current = this.adapter.context()
+          if (!current || policyWorldKey(current.state) !== choiceWorldKey) return
+          const currentOffer = describeMlBotPolicySkillOffer(current.state, this.playerId)
+          if (
+            currentOffer === null
+            || currentOffer.generation !== skillOffer.generation
+            || selectedOption < 0
+            || selectedOption >= currentOffer.optionIds.length
+            || currentOffer.mask[selectedOption] !== 1
+          ) return
+          this.dispatchedChoiceGeneration = currentOffer.generation
+          this.adapter.dispatch({
+            choiceIndex: selectedOption,
+            kind: 'select-skill',
+            offerSequence: currentOffer.generation,
+            skillId: currentOffer.optionIds[selectedOption]!,
+          })
+        }).catch((error: unknown) => this.fail(error)).finally(() => {
+          this.decisionPending = false
+        })
+        return
+      }
+      const skillChoice = resolveMlBotPolicySkillOffers(
+        context.state,
+        [this.playerId],
+      ).selections[0]
+      if (skillChoice === undefined) {
+        this.fail(new Error('scripted ML bot could not resolve a pending skill offer'))
+        return
+      }
+      this.dispatchedChoiceGeneration = skillChoice.offerSequence
       this.adapter.dispatch({
         choiceIndex: skillChoice.choiceIndex,
         kind: 'select-skill',
@@ -247,6 +332,7 @@ export class MlBotHostController {
       })
       return
     }
+    this.dispatchedChoiceGeneration = null
     if (
       context.state.run.phase !== 'active'
       || this.decisionPending

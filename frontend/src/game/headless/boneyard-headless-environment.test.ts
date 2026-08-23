@@ -125,3 +125,39 @@ test('Boneyard action repeat stops on the first terminal simulation tick', () =>
   assert.equal(repeated.reward.reward, 0)
   assert.equal(repeated.nextStateHash, transition.nextStateHash)
 })
+
+test('learned skill choices are externally selected and open trainable SMDP credit', () => {
+  const environment = new BoneyardHeadlessEnvironment({
+    ...RESET,
+    choiceMode: 'learned',
+  })
+  let choice = environment.choicePlan()
+  for (let decision = 0; choice === null && decision < 2_000; decision += 1) {
+    const action = environment.expertAction()
+    environment.step(Float32Array.from([
+      action.movement,
+      action.target,
+      action.ability,
+      action.aim,
+    ]), 10)
+    choice = environment.choicePlan()
+  }
+  assert.ok(choice)
+  const stateHash = environment.stateHash()
+  const selection = environment.selectLearnedChoice({
+    oldLogProbability: -0.25,
+    oldValue: 0.5,
+    selectedOption: 0,
+  })
+  assert.notEqual(environment.stateHash(), stateHash)
+  assert.equal(selection.choiceIndex, 0)
+  assert.equal(environment.choicePlan(), null)
+
+  const transition = environment.stepTransition(createBoneyardHeadlessActionBuffer(), 10)
+  assert.equal(transition.choiceEvents.length, 1)
+  assert.equal(transition.choiceEvents[0]?.choiceMode, 'learned')
+  assert.equal(transition.choiceEvents[0]?.trainable, true)
+  assert.equal(transition.choiceEvents[0]?.oldLogProbability, -0.25)
+  assert.equal(transition.choiceEvents[0]?.oldValue, 0.5)
+  assert.equal(transition.reward.gameplay.skillPicks, 1)
+})

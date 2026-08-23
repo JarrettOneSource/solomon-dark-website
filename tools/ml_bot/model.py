@@ -203,6 +203,14 @@ class PolicyV5(nn.Module):
         generator: torch.Generator | None = None,
     ) -> tuple[Tensor, ChoiceEvaluation]:
         latent = self.encode(observations)
+        require_shape(
+            descriptors,
+            (latent.shape[0], None, POLICY_SPEC.option_descriptor_size),
+            "choice descriptors",
+        )
+        require_finite(descriptors, "choice descriptors")
+        if not np.isfinite(temperature) or temperature <= 0:
+            raise ValueError("choice temperature must be positive and finite")
         option_count = descriptors.shape[1]
         normalized_mask = require_mask(mask, latent.shape[0], option_count, "choice mask")
         state = latent[:, None, :].expand(-1, option_count, -1)
@@ -240,6 +248,9 @@ class PolicyV5(nn.Module):
             self.choice_score,
             self.choice_value,
         )
+
+    def choice_scorer_parameters(self) -> list[nn.Parameter]:
+        return parameters_of(self.choice_hidden, self.choice_score)
 
     def export_tensors(self) -> dict[str, np.ndarray]:
         tensors = {
