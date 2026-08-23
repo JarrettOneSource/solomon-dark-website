@@ -14,9 +14,7 @@ import {
   type ServerPartyStateMessage,
   type ServerWelcomeMessage,
 } from '../protocol/game-protocol.ts'
-import { createGameSimulation } from '../core-server/game-simulation.ts'
-import { createMlBotPolicyActionMaskPlan } from '../core-server/ml-bot-policy/actions.ts'
-import { MlBotPolicyObserver } from '../core-server/ml-bot-policy/observer.ts'
+import { BoneyardHeadlessEnvironment } from '../headless/boneyard-headless-environment.ts'
 import type { MlBotPolicyInference } from './ml-bot-host-controller.ts'
 import {
   ML_BOT_CHARACTER,
@@ -61,13 +59,12 @@ test('the packaged selected checkpoint loads in the host worker and returns lega
     await readFile('server-assets/ml-bot-policy-v5-selected.sdml'),
   )
   try {
-    const state = createGameSimulation({ agent: ML_BOT_CHARACTER })
-    const frame = new MlBotPolicyObserver('agent').observe(state, {
-      activeInputs: {},
-      controllers: { agent: 'bot' },
+    const environment = new BoneyardHeadlessEnvironment({
+      agent: ML_BOT_CHARACTER,
+      seed: 0x5eed_0001,
     })
-    const plan = createMlBotPolicyActionMaskPlan(state, 'agent', frame)
-    const result = await worker.infer(frame.values, plan)
+    const plan = environment.actionMaskPlan()
+    const result = await worker.infer(environment.observe(), plan)
     assert.equal(plan.movement[result.actions.movement], 1)
     assert.equal(plan.target[result.actions.target], 1)
     assert.equal(plan.abilityByTarget[result.actions.target]![result.actions.ability], 1)
