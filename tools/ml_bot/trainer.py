@@ -72,6 +72,7 @@ class TrainingConfiguration:
     choice_learning_rate: float = 0.0003
     gamma: float = 0.995
     gae_lambda: float = 0.95
+    target_kl: float = 0.02
     worlds: int = 8
     workers: int = 8
     action_repeat: int = 10
@@ -242,6 +243,7 @@ def train_policy(
                 steps=configuration.rollout_steps,
                 action_repeat=configuration.action_repeat,
                 generator=torch_generator,
+                target_kl=configuration.target_kl,
                 seeds=seed_stream,
                 episodes=episodes,
             )
@@ -313,6 +315,9 @@ def train_policy(
                 append_jsonl(episodes_path, episode)
             completed_episode_count += len(rollout.completed_episodes)
             aggregate_main = mean_metrics(main_metrics)
+            aggregate_main["approximate_kl_max"] = max(
+                metric.approximate_kl for metric in main_metrics
+            )
             aggregate_choice = mean_metrics(choice_metrics)
             record = iteration_record(
                 iteration=completed_updates,
@@ -564,7 +569,9 @@ def iteration_record(
         "policy_loss": main_metrics.get("policy_loss", 0.0),
         "value_loss": main_metrics.get("value_loss", 0.0),
         "kl_divergence": main_metrics.get("approximate_kl", 0.0),
+        "kl_divergence_max": main_metrics.get("approximate_kl_max", 0.0),
         "clip_fraction": main_metrics.get("clip_fraction", 0.0),
+        "ppo_early_stop_fraction": main_metrics.get("early_stopped", 0.0),
         "grad_norm": main_metrics.get("gradient_norm", 0.0),
         "adv_mean": float(np.mean(advantages)),
         "adv_std": float(np.std(advantages)),
@@ -593,6 +600,7 @@ def iteration_record(
         "gamma": configuration.gamma,
         "gae_lambda": configuration.gae_lambda,
         "action_repeat_ticks": configuration.action_repeat,
+        "target_kl": configuration.target_kl,
     }
 
 
@@ -712,3 +720,5 @@ def validate_training_configuration(value: TrainingConfiguration) -> None:
         raise ValueError("GAE lambda must be within [0, 1]")
     if value.learning_rate <= 0 or value.choice_learning_rate <= 0:
         raise ValueError("training learning rates must be positive")
+    if not math.isfinite(value.target_kl) or value.target_kl <= 0:
+        raise ValueError("target KL must be positive and finite")

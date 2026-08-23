@@ -45,6 +45,7 @@ class PpoMetrics:
     entropy_target: float
     entropy_ability: float
     entropy_aim: float
+    early_stopped: bool
 
 
 @dataclass(frozen=True)
@@ -190,6 +191,7 @@ def ppo_epochs(
     clip_ratio: float = 0.2,
     value_coefficient: float = 0.5,
     maximum_gradient_norm: float = 1.0,
+    target_kl: float = 0.02,
 ) -> list[PpoMetrics]:
     count = observations.shape[0]
     require_training_sizes(count, epochs, batch_size)
@@ -215,15 +217,31 @@ def ppo_epochs(
                 for name in ENTROPY_COEFFICIENTS
             )
             loss = policy_loss + value_coefficient * value_loss - entropy_loss
+            with torch.no_grad():
+                approximate_kl = (old_log - evaluation.log_probability).mean()
+                clip_fraction = (torch.abs(ratio - 1.0) > clip_ratio).float().mean()
+            if approximate_kl > target_kl:
+                metrics.append(
+                    PpoMetrics(
+                        policy_loss=float(policy_loss.detach()),
+                        value_loss=float(value_loss.detach()),
+                        approximate_kl=float(approximate_kl),
+                        clip_fraction=float(clip_fraction),
+                        gradient_norm=0.0,
+                        entropy_movement=float(evaluation.entropies["movement"].mean()),
+                        entropy_target=float(evaluation.entropies["target"].mean()),
+                        entropy_ability=float(evaluation.entropies["ability"].mean()),
+                        entropy_aim=float(evaluation.entropies["aim"].mean()),
+                        early_stopped=True,
+                    )
+                )
+                return metrics
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
             gradient_norm = torch.nn.utils.clip_grad_norm_(
                 policy.main_parameters(), maximum_gradient_norm
             )
             optimizer.step()
-            with torch.no_grad():
-                approximate_kl = (old_log - evaluation.log_probability).mean()
-                clip_fraction = (torch.abs(ratio - 1.0) > clip_ratio).float().mean()
             metrics.append(
                 PpoMetrics(
                     policy_loss=float(policy_loss.detach()),
@@ -235,6 +253,7 @@ def ppo_epochs(
                     entropy_target=float(evaluation.entropies["target"].mean().detach()),
                     entropy_ability=float(evaluation.entropies["ability"].mean().detach()),
                     entropy_aim=float(evaluation.entropies["aim"].mean().detach()),
+                    early_stopped=False,
                 )
             )
     return metrics

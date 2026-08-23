@@ -205,6 +205,7 @@ def training_configuration(args: argparse.Namespace) -> TrainingConfiguration:
         choice_learning_rate=args.choice_learning_rate,
         gamma=args.gamma,
         gae_lambda=args.gae_lambda,
+        target_kl=args.target_kl,
         worlds=args.worlds,
         workers=args.workers,
         action_repeat=args.action_repeat,
@@ -328,6 +329,7 @@ def add_training(parser: argparse.ArgumentParser, *, environment: bool = True) -
     parser.add_argument("--choice-learning-rate", type=positive_float, default=0.0003)
     parser.add_argument("--gamma", type=float, choices=(0.99, 0.995, 0.997, 0.999), default=0.995)
     parser.add_argument("--gae-lambda", type=closed_fraction, default=0.95)
+    parser.add_argument("--target-kl", type=positive_float, default=0.02)
     parser.add_argument("--experiment", default="First schema-v5 web headless PPO campaign")
     parser.add_argument("--expected-metric", default="holdout wave depth increases")
     parser.add_argument("--eval-condition", default="frozen train-dist and holdout seeds")
