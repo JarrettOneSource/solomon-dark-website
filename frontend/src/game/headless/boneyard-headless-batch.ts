@@ -1,4 +1,7 @@
-import type { MlBotPolicyActionMasks } from '../core-server/ml-bot-policy/actions.ts'
+import type {
+  MlBotPolicyActionMaskPlan,
+  MlBotPolicyActionMasks,
+} from '../core-server/ml-bot-policy/actions.ts'
 import type { MlBotPolicyChoiceTrajectoryRecord } from '../core-server/ml-bot-policy/choice-trajectory.ts'
 import type { MlBotPolicyRewardTerms } from '../core-server/ml-bot-policy/reward.ts'
 import type {
@@ -23,6 +26,13 @@ export interface BoneyardHeadlessPackedRewardTerms {
   readonly selfHp: Float64Array
   readonly wave: Float64Array
   readonly xp: Float64Array
+}
+
+export interface BoneyardHeadlessPackedActionMaskPlan {
+  readonly abilityByTarget: Uint8Array
+  readonly aimByAbility: Uint8Array
+  readonly movement: Uint8Array
+  readonly target: Uint8Array
 }
 
 export interface BoneyardHeadlessBatchTransition {
@@ -57,16 +67,43 @@ export class BoneyardHeadlessBatch {
     this.observationLength = this.environments[0]!.observationLength
   }
 
-  reset(options: readonly BoneyardHeadlessResetOptions[]): Float32Array {
+  reset(options: readonly (BoneyardHeadlessResetOptions | null)[]): Float32Array {
     if (options.length !== this.worldCount) {
       throw new RangeError('reset options must match the Boneyard batch world count')
     }
     const observations = new Float32Array(this.worldCount * this.observationLength)
     for (let index = 0; index < this.worldCount; index += 1) {
-      this.environments[index]!.reset(options[index])
+      const reset = options[index]!
+      if (reset !== null) this.environments[index]!.reset(reset)
       this.environments[index]!.observe(observations, index * this.observationLength)
     }
     return observations
+  }
+
+  expertActions(): Float32Array {
+    const actions = new Float32Array(this.worldCount * BONEYARD_HEADLESS_ACTION_STRIDE)
+    for (let index = 0; index < this.worldCount; index += 1) {
+      const action = this.environments[index]!.expertAction()
+      const offset = index * BONEYARD_HEADLESS_ACTION_STRIDE
+      actions[offset] = action.movement
+      actions[offset + 1] = action.target
+      actions[offset + 2] = action.ability
+      actions[offset + 3] = action.aim
+    }
+    return actions
+  }
+
+  actionMaskPlans(): BoneyardHeadlessPackedActionMaskPlan {
+    const result = {
+      abilityByTarget: new Uint8Array(this.worldCount * 9 * 22),
+      aimByAbility: new Uint8Array(this.worldCount * 22 * 9),
+      movement: new Uint8Array(this.worldCount * 9),
+      target: new Uint8Array(this.worldCount * 9),
+    }
+    for (let index = 0; index < this.worldCount; index += 1) {
+      setActionMaskPlan(result, index, this.environments[index]!.actionMaskPlan())
+    }
+    return result
   }
 
   step(
@@ -175,6 +212,27 @@ export class BoneyardHeadlessBatch {
       aim.set(masks.aim, index * 9)
     }
     return { ability, aim, movement, target }
+  }
+}
+
+function setActionMaskPlan(
+  target: BoneyardHeadlessPackedActionMaskPlan,
+  worldIndex: number,
+  source: MlBotPolicyActionMaskPlan,
+): void {
+  target.movement.set(source.movement, worldIndex * 9)
+  target.target.set(source.target, worldIndex * 9)
+  for (let targetAction = 0; targetAction < 9; targetAction += 1) {
+    target.abilityByTarget.set(
+      source.abilityByTarget[targetAction]!,
+      worldIndex * 9 * 22 + targetAction * 22,
+    )
+  }
+  for (let abilityAction = 0; abilityAction < 22; abilityAction += 1) {
+    target.aimByAbility.set(
+      source.aimByAbility[abilityAction]!,
+      worldIndex * 22 * 9 + abilityAction * 9,
+    )
   }
 }
 

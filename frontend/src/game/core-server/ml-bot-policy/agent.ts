@@ -1,5 +1,6 @@
 import type { GameSimulationState } from '../game-simulation.ts'
 import {
+  createMlBotPolicyActionMaskPlan,
   resolveMlBotPolicyDecision,
   type MlBotPolicyDecision,
 } from './actions.ts'
@@ -22,28 +23,12 @@ export function evaluateMlBotPolicyDecision(
   frame: MlBotPolicyFrame,
   options: MlBotPolicySelectionOptions,
 ): MlBotPolicyEvaluatedDecision {
-  const safeTarget = frame.targetId !== null || frame.enemyRows.length === 0 ? 0 : 1
-  const base = resolveMlBotPolicyDecision(state, playerId, frame, {
-    ability: 0,
-    aim: 0,
-    movement: 0,
-    target: safeTarget,
-  })
+  const plan = createMlBotPolicyActionMaskPlan(state, playerId, frame)
   const evaluation = runtime.inferAutoregressive(
     frame.values,
-    { movement: base.masks.movement, target: base.masks.target },
-    target => resolveMlBotPolicyDecision(state, playerId, frame, {
-      ability: 0,
-      aim: 0,
-      movement: 0,
-      target,
-    }).masks.ability,
-    (target, ability) => resolveMlBotPolicyDecision(state, playerId, frame, {
-      ability,
-      aim: 0,
-      movement: 0,
-      target,
-    }).masks.aim,
+    { movement: plan.movement, target: plan.target },
+    target => plan.abilityByTarget[target]!,
+    (_target, ability) => plan.aimByAbility[ability]!,
     options,
   )
   const decision = resolveMlBotPolicyDecision(

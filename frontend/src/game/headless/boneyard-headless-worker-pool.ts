@@ -9,6 +9,7 @@ import type {
 import type {
   BoneyardHeadlessBatchTransition,
   BoneyardHeadlessIndexedValue,
+  BoneyardHeadlessPackedActionMaskPlan,
   BoneyardHeadlessPackedRewardTerms,
 } from './boneyard-headless-batch.ts'
 import {
@@ -26,6 +27,7 @@ export interface BoneyardHeadlessWorkerResult {
   readonly hashes: readonly string[]
   readonly masks: MlBotPolicyActionMasks
   readonly observations: Float32Array
+  readonly plans: BoneyardHeadlessPackedActionMaskPlan
 }
 
 export interface BoneyardHeadlessWorkerStepResult extends BoneyardHeadlessWorkerResult {
@@ -113,8 +115,16 @@ export class BoneyardHeadlessWorkerPool {
     return this.combineStep(laneResults)
   }
 
+  async expertStep(ticks = 1): Promise<BoneyardHeadlessWorkerStepResult> {
+    const laneResults = await Promise.all(this.lanes.map(lane => lane.rpc.call({
+      ticks,
+      type: 'expert-step',
+    })))
+    return this.combineStep(laneResults)
+  }
+
   async reset(
-    options: readonly BoneyardHeadlessResetOptions[],
+    options: readonly (BoneyardHeadlessResetOptions | null)[],
   ): Promise<BoneyardHeadlessWorkerResult> {
     if (options.length !== this.worldCount) {
       throw new RangeError('reset options must match the Boneyard worker-pool world count')
@@ -136,6 +146,10 @@ export class BoneyardHeadlessWorkerPool {
     const aim = new Uint8Array(this.worldCount * 9)
     const movement = new Uint8Array(this.worldCount * 9)
     const target = new Uint8Array(this.worldCount * 9)
+    const abilityByTarget = new Uint8Array(this.worldCount * 9 * 22)
+    const aimByAbility = new Uint8Array(this.worldCount * 22 * 9)
+    const planMovement = new Uint8Array(this.worldCount * 9)
+    const planTarget = new Uint8Array(this.worldCount * 9)
     const hashes: string[] = []
     let worldOffset = 0
     for (const result of results) {
@@ -143,16 +157,32 @@ export class BoneyardHeadlessWorkerPool {
         throw new Error('Boneyard headless worker returned an invalid result')
       }
       const masks = requiredMasks(result.masks)
+      const laneWorldCount = result.hashes.length
+      const plans = requiredActionMaskPlan(result.plans, laneWorldCount)
       const laneObservations = new Float32Array(result.observations)
       observations.set(laneObservations, worldOffset * this.observationLength)
       ability.set(masks.ability, worldOffset * 22)
       aim.set(masks.aim, worldOffset * 9)
       movement.set(masks.movement, worldOffset * 9)
       target.set(masks.target, worldOffset * 9)
+      abilityByTarget.set(plans.abilityByTarget, worldOffset * 9 * 22)
+      aimByAbility.set(plans.aimByAbility, worldOffset * 22 * 9)
+      planMovement.set(plans.movement, worldOffset * 9)
+      planTarget.set(plans.target, worldOffset * 9)
       hashes.push(...result.hashes.map((hash) => String(hash)))
       worldOffset += result.hashes.length
     }
-    return { hashes, masks: { ability, aim, movement, target }, observations }
+    return {
+      hashes,
+      masks: { ability, aim, movement, target },
+      observations,
+      plans: {
+        abilityByTarget,
+        aimByAbility,
+        movement: planMovement,
+        target: planTarget,
+      },
+    }
   }
 
   private combineStep(
@@ -318,6 +348,19 @@ function requiredMasks(value: unknown): MlBotPolicyActionMasks {
     aim: buffer('aim'),
     movement: buffer('movement'),
     target: buffer('target'),
+  }
+}
+
+function requiredActionMaskPlan(
+  value: unknown,
+  worldCount: number,
+): BoneyardHeadlessPackedActionMaskPlan {
+  const source = requiredObject(value, 'Boneyard headless worker action mask plan')
+  return {
+    abilityByTarget: uint8(source.abilityByTarget, worldCount * 9 * 22, 'abilityByTarget'),
+    aimByAbility: uint8(source.aimByAbility, worldCount * 22 * 9, 'aimByAbility'),
+    movement: uint8(source.movement, worldCount * 9, 'plan movement'),
+    target: uint8(source.target, worldCount * 9, 'plan target'),
   }
 }
 

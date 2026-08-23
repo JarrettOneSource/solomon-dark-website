@@ -2,6 +2,7 @@ import { parentPort } from 'node:worker_threads'
 
 import {
   BoneyardHeadlessBatch,
+  type BoneyardHeadlessPackedActionMaskPlan,
   type BoneyardHeadlessBatchTransition,
 } from './boneyard-headless-batch.ts'
 import type {
@@ -12,7 +13,12 @@ import type {
 type WorkerRequest =
   | { id: number; type: 'initialize'; options: readonly BoneyardHeadlessEnvironmentOptions[] }
   | { actions: ArrayBuffer; id: number; ticks: number; type: 'step' }
-  | { id: number; options: readonly BoneyardHeadlessResetOptions[]; type: 'reset' }
+  | { id: number; ticks: number; type: 'expert-step' }
+  | {
+      id: number
+      options: readonly (BoneyardHeadlessResetOptions | null)[]
+      type: 'reset'
+    }
 
 if (!parentPort) throw new Error('Boneyard headless worker requires a parent port')
 
@@ -30,27 +36,52 @@ parentPort.on('message', (message: WorkerRequest) => {
       return
     }
     if (!batch) throw new Error('Boneyard headless worker is not initialized')
-    if (message.type === 'step') {
+    if (message.type === 'step' || message.type === 'expert-step') {
+      const actions = message.type === 'step'
+        ? new Float32Array(message.actions)
+        : batch.expertActions()
       postStepResult(
         message.id,
-        batch.stepTransitions(new Float32Array(message.actions), message.ticks),
+        batch.stepTransitions(actions, message.ticks),
+        batch.actionMaskPlans(),
       )
       return
     }
     const observations = batch.reset(message.options)
     const masks = batch.lastActionMasks()
+    const plans = batch.actionMaskPlans()
     const observationBuffer = observations.buffer as ArrayBuffer
     const ability = masks.ability.buffer as ArrayBuffer
     const aim = masks.aim.buffer as ArrayBuffer
     const movement = masks.movement.buffer as ArrayBuffer
     const target = masks.target.buffer as ArrayBuffer
+    const abilityByTarget = plans.abilityByTarget.buffer as ArrayBuffer
+    const aimByAbility = plans.aimByAbility.buffer as ArrayBuffer
+    const planMovement = plans.movement.buffer as ArrayBuffer
+    const planTarget = plans.target.buffer as ArrayBuffer
     parentPort!.postMessage({
       hashes: batch.stateHashes(),
       id: message.id,
       masks: { ability, aim, movement, target },
       observations: observationBuffer,
+      plans: {
+        abilityByTarget,
+        aimByAbility,
+        movement: planMovement,
+        target: planTarget,
+      },
       type: 'result',
-    }, [observationBuffer, ability, aim, movement, target])
+    }, [
+      observationBuffer,
+      ability,
+      aim,
+      movement,
+      target,
+      abilityByTarget,
+      aimByAbility,
+      planMovement,
+      planTarget,
+    ])
   } catch (error) {
     parentPort!.postMessage({
       error: error instanceof Error ? error.message : String(error),
@@ -60,7 +91,11 @@ parentPort.on('message', (message: WorkerRequest) => {
   }
 })
 
-function postStepResult(id: number, transition: BoneyardHeadlessBatchTransition): void {
+function postStepResult(
+  id: number,
+  transition: BoneyardHeadlessBatchTransition,
+  plans: BoneyardHeadlessPackedActionMaskPlan,
+): void {
   const observations = transition.nextObservations.buffer as ArrayBuffer
   const ability = transition.masks.ability.buffer as ArrayBuffer
   const aim = transition.masks.aim.buffer as ArrayBuffer
@@ -80,11 +115,21 @@ function postStepResult(id: number, transition: BoneyardHeadlessBatchTransition)
   const selfHp = transition.rewardTerms.selfHp.buffer as ArrayBuffer
   const wave = transition.rewardTerms.wave.buffer as ArrayBuffer
   const xp = transition.rewardTerms.xp.buffer as ArrayBuffer
+  const abilityByTarget = plans.abilityByTarget.buffer as ArrayBuffer
+  const aimByAbility = plans.aimByAbility.buffer as ArrayBuffer
+  const planMovement = plans.movement.buffer as ArrayBuffer
+  const planTarget = plans.target.buffer as ArrayBuffer
   parentPort!.postMessage({
     hashes: transition.nextStateHashes,
     id,
     masks: { ability, aim, movement, target },
     observations,
+    plans: {
+      abilityByTarget,
+      aimByAbility,
+      movement: planMovement,
+      target: planTarget,
+    },
     transition: {
       actions,
       choiceEvents: transition.choiceEvents,
@@ -123,5 +168,9 @@ function postStepResult(id: number, transition: BoneyardHeadlessBatchTransition)
     selfHp,
     wave,
     xp,
+    abilityByTarget,
+    aimByAbility,
+    planMovement,
+    planTarget,
   ])
 }

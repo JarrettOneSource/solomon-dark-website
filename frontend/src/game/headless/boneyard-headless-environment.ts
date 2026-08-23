@@ -15,12 +15,15 @@ import {
   type GameSimulationState,
 } from '../core-server/game-simulation.ts'
 import {
+  createMlBotPolicyActionMaskPlan,
   ML_BOT_POLICY_ACTION_STRIDE,
   resolveMlBotPolicyDecision,
   type MlBotPolicyActionIndices,
+  type MlBotPolicyActionMaskPlan,
   type MlBotPolicyActionMasks,
 } from '../core-server/ml-bot-policy/actions.ts'
 import { evaluateMlBotPolicyDecision } from '../core-server/ml-bot-policy/agent.ts'
+import { selectMlBotPolicyExpertAction } from '../core-server/ml-bot-policy/expert.ts'
 import {
   MlBotPolicyChoiceTrajectoryTracker,
   type MlBotPolicyChoiceTrajectoryRecord,
@@ -284,6 +287,22 @@ export class BoneyardHeadlessEnvironment {
       movement: 0,
       target: targetAction,
     }).masks
+  }
+
+  actionMaskPlan(): MlBotPolicyActionMaskPlan {
+    return createMlBotPolicyActionMaskPlan(
+      this.simulation,
+      HEADLESS_PLAYER_ID,
+      this.frame,
+    )
+  }
+
+  expertAction(): MlBotPolicyActionIndices {
+    return selectMlBotPolicyExpertAction(
+      this.simulation,
+      HEADLESS_PLAYER_ID,
+      this.frame,
+    )
   }
 
   lastActionMasks(): MlBotPolicyActionMasks {
