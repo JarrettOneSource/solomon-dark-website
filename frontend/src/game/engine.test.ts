@@ -131,6 +131,7 @@ function inertSession() {
     acceptPartyInvitation() {},
     bindSkillQuickbar() {},
     boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' as const }],
+    developerAccess: false,
     isHost: true,
     modAssets: [],
     playerId: 'p',

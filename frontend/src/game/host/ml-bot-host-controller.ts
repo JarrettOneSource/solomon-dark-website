@@ -14,7 +14,7 @@ import {
 } from '../core-server/ml-bot-policy/actions.ts'
 import { decodeMlBotPolicyCheckpoint } from '../core-server/ml-bot-policy/checkpoint.ts'
 import { MlBotPolicyObserver } from '../core-server/ml-bot-policy/observer.ts'
-import { chooseMlBotPolicySkillOffer } from '../core-server/ml-bot-policy/skill-chooser.ts'
+import { resolveMlBotPolicySkillOffers } from '../core-server/ml-bot-policy/skill-chooser.ts'
 
 export const ML_BOT_CHARACTER = Object.freeze({
   discipline: 'arcane',
@@ -173,20 +173,28 @@ export class MlBotPolicyInferenceWorker implements MlBotPolicyInference {
 }
 
 export class MlBotHostController {
+  private readonly adapter: MlBotHostControllerAdapter
+  private readonly character: PlayerCharacterConfig
   private decisionPending = false
   private failed = false
+  private readonly inference: MlBotPolicyInference
   private loadoutKey: string | null = null
   private nextDecisionTick = 0
   private readonly observer: MlBotPolicyObserver
+  private readonly playerId: string
   private worldKey: string | null = null
 
   constructor(
-    private readonly adapter: MlBotHostControllerAdapter,
-    private readonly character: PlayerCharacterConfig,
-    private readonly inference: MlBotPolicyInference,
-    private readonly playerId: string,
+    adapter: MlBotHostControllerAdapter,
+    character: PlayerCharacterConfig,
+    inference: MlBotPolicyInference,
+    playerId: string,
   ) {
+    this.adapter = adapter
+    this.character = character
+    this.inference = inference
     this.observer = new MlBotPolicyObserver(playerId)
+    this.playerId = playerId
   }
 
   tick(): void {
@@ -215,7 +223,10 @@ export class MlBotHostController {
       }
       return
     }
-    const skillChoice = chooseMlBotPolicySkillOffer(context.state, this.playerId)
+    const skillChoice = resolveMlBotPolicySkillOffers(
+      context.state,
+      [this.playerId],
+    ).selections[0] ?? null
     if (skillChoice !== null) {
       this.adapter.dispatch({
         choiceIndex: skillChoice.choiceIndex,
@@ -268,9 +279,9 @@ function flattenMasks(
   rowCount: number,
   width: number,
   label: string,
-): Uint8Array {
+): Uint8Array<ArrayBuffer> {
   if (rows.length !== rowCount) throw new RangeError(`ML bot ${label} mask rows are invalid`)
-  const result = new Uint8Array(rowCount * width)
+  const result = new Uint8Array(new ArrayBuffer(rowCount * width))
   for (let index = 0; index < rows.length; index += 1) {
     const row = rows[index]!
     if (row.length !== width) throw new RangeError(`ML bot ${label} mask width is invalid`)
