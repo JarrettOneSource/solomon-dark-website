@@ -34568,5 +34568,35 @@ actor-owned slots, which is why the bank order must keep native slot order.
   `5205`) disposed by exact PID; every stack run disposed its own supervisor +
   backend (`leftovers=0`). The Mac worktree and `evidence/` are retained for
   owner review; they are removed only after an authorized push.
-- Not done and not authorized by this entry: push, merge, deploy. Owner review
-  of the `r3` screenshots is the next step.
+- Owner authorized the push (2026-08-22 late evening) and then "push to main".
+  Between the first push (`a9eaee42`) and the landing, `main` moved to
+  `3827f89e` (Hall of Fame rows); the branch was rebased onto it as
+  `774070ac` — only `frontend/package.json` (auto-merged, disjoint script
+  edits) and this ledger (both entries appended at EOF; resolved by keeping
+  main's entry followed by this one) overlapped, no touch-HUD code.
+
+#### Rebase re-validation (`774070ac`, fresh Mac clone from GitHub)
+
+- `validate.sh` attempt 1 (23:43:08 → 23:45:25 EDT) failed on one check:
+  `web Lua trivial execution stays below the fixed-tick budget`
+  (`src/game/host/lua/web-lua-runtime.test.ts:279`, p99 `36.673` ms vs the
+  `20` ms budget). The Mac was at load average `20.6` from another task's two
+  `ml-bot-rollout-server.mjs` processes (~300 % CPU each) plus a C++ collector;
+  the test file is untouched by both commits and measures wall-clock latency, so
+  this is scheduling contention, not a regression. Those processes belong to
+  another task and were left alone; the gate stops at the first failure, so the
+  whole script was re-run.
+- `validate.sh` attempt 2 (23:46:21 → 23:49:12 EDT) exit `0`: 11 frontend
+  suites `# fail 0` (1,791 tests, including main's new Hall of Fame
+  presentation tests), backend build + contracts + formatting, frontend lint,
+  desktop tests, production build (`Game` chunk `434,638` raw /
+  `122,303` gz ≤ `131,072`), media policy.
+- Journey `r4` on that production bundle: 10 stops, exit `0`, zero page and
+  console errors. A recursive diff of the `r4` receipt against `r3` compares
+  1,821 leaves and finds 2 differences, both the diagnostics FPS readout width
+  (`37.73` → `41.05` px, longer frame-time text under load); every HUD member
+  (quickbar banks, joysticks, dock, party chrome, dialogs, player card, held /
+  released knob) is identical to `r3`.
+- This paragraph is the only change on top of the validated tree (docs only).
+- Landing: branch fast-forwarded onto `main`; deploy remains a separate owner
+  call.
