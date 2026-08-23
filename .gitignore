@@ -11,6 +11,7 @@ frontend/dist/
 # Runtime data (db, uploads, saves)
 backend/data/
 backend/wwwroot/
+runtime/ml-training/
 
 # Misc
 .env
