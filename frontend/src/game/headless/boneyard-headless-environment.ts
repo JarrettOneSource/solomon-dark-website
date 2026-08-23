@@ -410,16 +410,17 @@ export class BoneyardHeadlessEnvironment {
       simulation = addPlayerCharacter(simulation, `ally-${index + 1}`, ally)
     }
     simulation = enterBoneyardWorld(simulation, deterministicBoneyard(options.seed))
-    if (
-      simulation.world.kind !== 'boneyard'
-      || simulation.world.waves === null
-      || simulation.world.encounter === null
-      || simulation.world.arenaTransition === null
-    ) {
+    const world = simulation.world
+    if (world.kind !== 'boneyard') {
       throw new Error('headless Boneyard did not materialize its retail encounter')
     }
-    const world = simulation.world
-    const arenaTransition = startBoneyardArenaTransition(world.arenaTransition)
+    const encounter = world.encounter
+    const sourceArenaTransition = world.arenaTransition
+    const waves = world.waves
+    if (encounter === null || sourceArenaTransition === null || waves === null) {
+      throw new Error('headless Boneyard did not materialize its retail encounter')
+    }
+    const arenaTransition = startBoneyardArenaTransition(sourceArenaTransition)
     let playerEntities = simulation.playerEntities
     const players = gameSimulationPlayerRecords(simulation)
     const playerIds = this.playerIds()
@@ -430,8 +431,8 @@ export class BoneyardHeadlessEnvironment {
       const distance = index === 0 ? 0 : PLAYER_CHARACTER_RADIUS * 3
       const position = resolveBoneyardSpawnPosition(
         {
-          x: Math.fround(world.encounter.position.x + Math.cos(angle) * distance),
-          y: Math.fround(world.encounter.position.y + Math.sin(angle) * distance),
+          x: Math.fround(encounter.position.x + Math.cos(angle) * distance),
+          y: Math.fround(encounter.position.y + Math.sin(angle) * distance),
         },
         arenaTransition.combatBounds,
         world.collision,
@@ -451,12 +452,12 @@ export class BoneyardHeadlessEnvironment {
         ...world,
         arenaTransition,
         encounter: {
-          ...world.encounter,
+          ...encounter,
           phase: 'gone',
-          runEventId: Math.max(1, world.encounter.runEventId),
+          runEventId: Math.max(1, encounter.runEventId),
           targetPlayerId: null,
         },
-        waves: startBoneyardWaveDirector(world.waves),
+        waves: startBoneyardWaveDirector(waves),
       },
     }
   }

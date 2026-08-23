@@ -54,7 +54,7 @@ export class MlBotPolicyRewardAccumulator {
   constructor(playerId: string) {
     if (playerId.length === 0) throw new Error('ML bot policy reward player id must not be empty')
     this.playerId = playerId
-    this.observer = Object.freeze({
+    const observer: BoneyardEnemyAttributionObserver = {
       onEnemyHealthDamage: ({ amount, maximumHealth, playerId: sourcePlayerId }) => {
         if (sourcePlayerId !== this.playerId || maximumHealth <= 0) return
         this.ownDamageRatio += Math.max(0, amount) / maximumHealth
@@ -77,7 +77,8 @@ export class MlBotPolicyRewardAccumulator {
         if (event.kind === 'orb' && event.orbKind === 'mana') this.manaOrbsCollected += 1
         if (event.kind === 'bonus') this.powerupsCollected += 1
       },
-    })
+    }
+    this.observer = Object.freeze(observer)
   }
 
   begin(state: GameSimulationState): void {
