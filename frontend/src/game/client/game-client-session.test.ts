@@ -441,6 +441,12 @@ test('client replaces only its own modal pause source and emits a strict release
     source: 'skill-book',
     type: 'client-gameplay-pause',
   })
+  session.requestGameplayPause('skill-selector')
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    paused: true,
+    source: 'skill-selector',
+    type: 'client-gameplay-pause',
+  })
   session.requestGameplayPause(null)
   assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
     paused: false,
@@ -919,6 +925,13 @@ test('client submits native quickbar bindings and primary selection against lear
     type: 'client-select-concentration',
     skillId: 57,
   })
+  session.selectConcentrationSlot(57, 0)
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-select-concentration-slot',
+    skillId: 57,
+    slot: 0,
+  })
+  assert.throws(() => session.selectConcentrationSlot(57, 1), /unavailable/)
   assert.throws(() => session.bindSkillQuickbar(57, 1), /unavailable/)
   assert.throws(() => session.selectPrimarySkill(16), /unavailable/)
   session.destroy()

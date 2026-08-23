@@ -19,10 +19,14 @@ import SkillQuickbar, { NativeSkillIcon } from './SkillQuickbar.tsx'
 import type { GameSnapshot } from './protocol/game-protocol.ts'
 import type { GameControlBindings } from './game-settings.ts'
 import {
+  NATIVE_HUD_SKILL_ACTION_HEIGHT,
+  NATIVE_HUD_SKILL_ACTION_TOP,
+  NATIVE_HUD_SKILL_ACTION_WIDTH,
   nativeHealthHudPresentation,
   nativeHudLeftOriginClipPath,
   nativeHudSkillBindings,
   nativeManaHudPresentation,
+  type NativeHudSkillBinding,
 } from './native-hud-presentation.ts'
 
 interface GameHudProps {
@@ -40,6 +44,7 @@ interface GameHudProps {
   onMenuClick?: () => void
   onPotionClick?: (itemId: number) => void
   onQuickbarInput?: (slot: number, pressed: boolean) => void
+  onSkillBindingClick?: (binding: NativeHudSkillBinding) => void
   partyMemberIds?: readonly string[]
   onSkillsClick?: () => void
   playerId: string
@@ -135,6 +140,7 @@ export default function GameHud({
   onMenuClick,
   onPotionClick,
   onQuickbarInput,
+  onSkillBindingClick,
   partyMemberIds,
   onSkillsClick,
   playerId,
@@ -311,6 +317,32 @@ export default function GameHud({
             } as CSSProperties}
           />
         ))}
+        {skillBindings.map(({ binding, centerOffset, skillId }) => {
+          const name = NATIVE_SKILL_CATALOG[skillId]?.name ?? `Skill ${skillId}`
+          const planeOrbOverride = binding === 12 && skillId === 80
+          return (
+            <button
+              type="button"
+              aria-disabled={planeOrbOverride || !onSkillBindingClick}
+              aria-label={binding === 12
+                ? `Select primary attack, current ${name}`
+                : `Select concentration ${binding === 16 ? 'A' : 'B'}, current ${name}`}
+              className="hub-hud-selected-skill-action"
+              data-binding={binding}
+              key={`action-${binding}`}
+              onClick={() => {
+                if (!planeOrbOverride) onSkillBindingClick?.(binding)
+              }}
+              onPointerDown={(event) => event.preventDefault()}
+              style={{
+                height: NATIVE_HUD_SKILL_ACTION_HEIGHT,
+                left: `calc(50% + ${centerOffset}px - ${NATIVE_HUD_SKILL_ACTION_WIDTH / 2}px)`,
+                top: NATIVE_HUD_SKILL_ACTION_TOP,
+                width: NATIVE_HUD_SKILL_ACTION_WIDTH,
+              }}
+            />
+          )
+        })}
       </div>
       {mode === 'hub' ? (
         <img className="hub-hud-help" src={hub.hud.help} alt="Help" />

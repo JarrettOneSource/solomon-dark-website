@@ -222,6 +222,7 @@ import {
   setPlayerEntityMana,
   setPlayerEntityMindstar,
   selectPlayerEntityConcentrationSkill,
+  selectPlayerEntityConcentrationSlot,
   setPlayerEntitySpectating,
   stepPlayerEntityCombatTick,
   stepPlayerEntityOverlayLightingTick,
@@ -561,6 +562,7 @@ export function enterBoneyardWorld(
     state.playerEntities,
     placements,
     playerLightRegistrations,
+    { preserveConcentrations: true },
   ))
   return {
     ...state,
@@ -991,6 +993,28 @@ export function selectGameSimulationPlayerConcentration(
         state.playerEntities,
         playerId,
         skillId,
+      ),
+    }
+  } catch {
+    return null
+  }
+}
+
+export function selectGameSimulationPlayerConcentrationSlot(
+  state: GameSimulationState,
+  playerId: PlayerId,
+  skillId: number,
+  slot: 0 | 1,
+): GameSimulationState | null {
+  if (!gameSimulationPlayerCanEditBooks(state, playerId)) return null
+  try {
+    return {
+      ...state,
+      playerEntities: selectPlayerEntityConcentrationSlot(
+        state.playerEntities,
+        playerId,
+        skillId,
+        slot,
       ),
     }
   } catch {

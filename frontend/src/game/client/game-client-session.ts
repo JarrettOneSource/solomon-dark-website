@@ -139,6 +139,7 @@ export interface GameClientSession {
   saveBeforeLeave(): Promise<GameSaveCheckpoint>
   saveSkill(offerSequence: number): void
   selectConcentration(skillId: number): void
+  selectConcentrationSlot(skillId: number, slot: 0 | 1): void
   selectPrimarySkill(skillId: number): void
   selectSkill(choiceIndex: number, offerSequence: number, skillId: number): void
   sendChatMessage(channel: GameChatChannel, text: string, targetPlayerId?: string): void
@@ -986,6 +987,24 @@ export function connectGameClientSession(
         options.transport.send(encodeGameMessage({
           type: 'client-select-concentration',
           skillId,
+        }))
+      },
+      selectConcentrationSlot(skillId, slot) {
+        if (!welcome || !snapshot || destroyed) return
+        const progression = snapshot.players[welcome.playerId]?.progression
+        if (
+          !progression
+          || nativeSkillCategory(skillId) !== 3
+          || progression.mindChugTicksRemaining !== 0
+          || (slot === 1 && !progression.splitMind)
+          || progression.concentrationSkillIds[slot === 0 ? 1 : 0] === skillId
+          || (progression.learnedSkills.find(([id]) => id === skillId)?.[1] ?? 0) < 1
+        ) throw new Error('The concentration is unavailable.')
+        session.sendInput(STOPPED_INPUT)
+        options.transport.send(encodeGameMessage({
+          type: 'client-select-concentration-slot',
+          skillId,
+          slot,
         }))
       },
       selectPrimarySkill(skillId) {

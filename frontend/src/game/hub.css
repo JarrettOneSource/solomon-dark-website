@@ -208,6 +208,19 @@
   transform-origin: center;
 }
 
+.hub-hud-selected-skill-action {
+  position: absolute;
+  z-index: 1;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.hub-hud-selected-skill-action[aria-disabled='true'] { cursor: default; }
+
 .hub-hud-meter {
   position: absolute;
   top: 14.5px;

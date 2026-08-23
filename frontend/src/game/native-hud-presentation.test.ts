@@ -4,6 +4,7 @@ import test from 'node:test'
 import { NATIVE_WELD_BUILDS } from './core-kernels/player-progression.ts'
 import {
   nativeHealthHudPresentation,
+  nativeHudSkillActionRect,
   nativeHudLeftOriginClipPath,
   nativeHudSkillBindings,
   nativeManaHudPresentation,
@@ -143,4 +144,20 @@ test('lays out primary, A, and B in native draw order and visual centers', () =>
     [16, 40, 85],
     [20, 0, 86],
   ])
+})
+
+test('aligns the exact 40 by 65 hit targets with every selected-skill center', () => {
+  assert.deepEqual([-40, 0, 40].map((centerOffset) => (
+    nativeHudSkillActionRect(centerOffset)
+  )), [
+    { height: 65, left: 740, top: -7, width: 40 },
+    { height: 65, left: 780, top: -7, width: 40 },
+    { height: 65, left: 820, top: -7, width: 40 },
+  ])
+  assert.deepEqual(nativeHudSkillActionRect(20, 1280, -80), {
+    height: 65,
+    left: 640,
+    top: -87,
+    width: 40,
+  })
 })

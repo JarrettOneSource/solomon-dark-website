@@ -529,6 +529,13 @@ function measureBitmapText(text: string, font: BitmapFont): number {
   return width
 }
 
+export function measureNativeBitmapText(
+  text: string,
+  fontName: keyof NativeAssets['fonts'],
+): number {
+  return measureBitmapText(text, NATIVE_ASSETS.fonts[fontName])
+}
+
 function kerning(font: BitmapFont, first: number, second: number): number {
   if (first < 0) return 0
   return font.kerning.find(([left, right]) => left === first && right === second)?.[2] ?? 0

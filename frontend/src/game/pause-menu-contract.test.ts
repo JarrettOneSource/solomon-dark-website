@@ -225,6 +225,11 @@ test('pause presentation gives actions only to the authoritative owner', () => {
     kind: 'waiting',
     label: 'Helvidius is using the Skill Book.',
   })
+  assert.deepEqual(gameplayPausePresentation({ ...PAUSE, source: 'skill-selector' }, 'player-2'), {
+    detail: 'Waiting for Helvidius to close the skill selector.',
+    kind: 'waiting',
+    label: 'Helvidius is using the skill selector.',
+  })
 })
 
 test('Hub Pause Menu and NPC dialogue are local modals over a live world', () => {

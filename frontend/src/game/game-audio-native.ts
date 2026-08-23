@@ -41,6 +41,7 @@ export type GameSoundCue =
   | 'bite-3'
   | 'bone-crack'
   | 'click'
+  | 'concentrate'
   | 'coffin-break'
   | 'critical-hit'
   | 'comet-whistle'
@@ -263,6 +264,11 @@ export const NATIVE_SOUND_MANIFEST = {
     registryOffset: 0x18,
     sourceName: 'sounds\\click',
     sourceSha256: '8aeebcfeb69625bee2ee78fe9c63939e6b40edcc89d5facf2c0d35e1b5920307',
+  },
+  concentrate: {
+    registryOffset: 0x304,
+    sourceName: 'sounds\\concentrate',
+    sourceSha256: 'ca8b10ff2ce00ca913a382c05f3e1c0c600a22d2e206e386e52a4e83d704a47c',
   },
   'coffin-break': {
     registryOffset: 0x2ac,

@@ -35,6 +35,7 @@ import {
 } from './game-audio-native.ts'
 import { startGamePresentationLoop } from './game-presentation-frame-loop.ts'
 import GameHud from './GameHud.tsx'
+import type { NativeHudSkillBinding } from './native-hud-presentation.ts'
 import HubInventoryUi, { type HubUiSurface } from './HubInventoryUi.tsx'
 import {
   hubTraderAtPoint,
@@ -102,6 +103,7 @@ interface HubSceneProps {
   onLeaveParty: () => void
   onLoadingError: () => void
   onMessagePlayer: (playerId: string, displayName: string) => void
+  onOpenSkillSelector: (binding: NativeHudSkillBinding) => void
   onOpenSkills: () => void
   onPauseRequest: () => void
   onReady: () => void
@@ -153,6 +155,7 @@ export default function HubScene({
   onLeaveParty,
   onLoadingError,
   onMessagePlayer,
+  onOpenSkillSelector,
   onOpenSkills,
   onPauseRequest,
   onReady,
@@ -628,6 +631,12 @@ export default function HubScene({
               true,
               player ? actorHeadingVector(player.headingIndex) : undefined,
             )
+          }}
+          onSkillBindingClick={(binding) => {
+            if (!inputBlocked && !pickerOpen && !transitionActive) {
+              setHubUiSurface(null)
+              onOpenSkillSelector(binding)
+            }
           }}
           partyMemberIds={partyState?.party.memberPlayerIds}
           onSkillsClick={() => {

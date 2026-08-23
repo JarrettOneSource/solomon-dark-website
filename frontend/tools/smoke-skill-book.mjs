@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
 import { createServer as createViteServer } from 'vite'
 
+import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
 import { getPlayerEconomy } from '../src/game/core-server/game-simulation.ts'
 import { replacePlayerEconomy } from '../src/game/core-server/player-entity-store.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
@@ -40,17 +41,35 @@ const browser = await chromium.launch({
   headless: true,
 })
 const page = await browser.newPage({ viewport: { width: 1600, height: 900 } })
+await page.addInitScript(installGameAudioSmokeProbe)
 
 try {
   page.on('pageerror', (error) => pageErrors.push(error.message))
-  page.on('requestfailed', (request) => networkErrors.push(
-    `${request.url()}: ${request.failure()?.errorText ?? 'failed'}`,
-  ))
+  page.on('requestfailed', (request) => {
+    const failure = request.failure()?.errorText ?? 'failed'
+    if (
+      failure === 'net::ERR_ABORTED'
+      && (
+        /\.(?:mp3|ogg)(?:\?|$)/.test(request.url())
+        || new URL(request.url()).pathname === '/deployment.json'
+      )
+    ) return
+    networkErrors.push(`${request.url()}: ${failure}`)
+  })
   page.on('response', (response) => {
     if (response.status() >= 400) networkErrors.push(`${response.status()} ${response.url()}`)
   })
   page.on('console', (message) => {
     if (message.type() === 'error') consoleErrors.push(message.text())
+  })
+  await page.route('**/deployment.json*', (route) => {
+    const current = new URL(route.request().url()).searchParams.get('current') ?? 'local'
+    return route.fulfill({
+      body: JSON.stringify({ revision: current }),
+      contentType: 'application/json',
+      headers: { 'cache-control': 'no-store' },
+      status: 200,
+    })
   })
   await page.addInitScript((runtime) => {
     window.solomonDarkRuntime = runtime
@@ -151,27 +170,33 @@ try {
   const sourceBook = state.playerEntities.skillBooks[index]
   const permanentRanks = [...sourceBook.permanentRanks]
   const effectiveRanks = [...sourceBook.effectiveRanks]
-  permanentRanks[16] = 1
-  effectiveRanks[16] = 1
+  for (const skillId of [16, 57, 58, 59]) {
+    permanentRanks[skillId] = 1
+    effectiveRanks[skillId] = 1
+  }
   const skillBooks = [...state.playerEntities.skillBooks]
   const progressions = [...state.playerEntities.progressions]
   skillBooks[index] = {
     ...sourceBook,
     effectiveRanks,
-    learnedSkillOrder: [...sourceBook.learnedSkillOrder, 16],
+    learnedSkillOrder: [...sourceBook.learnedSkillOrder, 16, 57, 58, 59],
     permanentRanks,
   }
   progressions[index] = {
     ...progressions[index],
     revision: progressions[index].revision + 1,
   }
+  const sourceEconomy = getPlayerEconomy(state, playerId)
   Object.assign(state, {
     ...state,
     playerEntities: replacePlayerEconomy({
       ...state.playerEntities,
       progressions,
       skillBooks,
-    }, playerId, getPlayerEconomy(state, playerId)),
+    }, playerId, {
+      ...sourceEconomy,
+      ownedPerkSelectors: [...new Set([...sourceEconomy.ownedPerkSelectors, 21])],
+    }),
   })
   await page.waitForTimeout(200)
   await page.getByRole('button', { name: 'Open skills' }).click()
@@ -183,26 +208,225 @@ try {
   await fireball.waitFor({ timeout: 10_000 })
   await fireball.click()
   await page.getByRole('img', { name: 'Fireball primary spell' }).waitFor({ timeout: 10_000 })
+  await book.getByRole('button', { name: /Channel Mana, rank 1/ }).click()
+  await book.locator(
+    '.skill-book-entry-action[data-skill-id="57"][aria-pressed="true"]',
+  ).waitFor({ timeout: 10_000 })
+  await book.getByRole('button', { name: /Meditation, rank 1/ }).click()
+  await book.locator(
+    '.skill-book-entry-action[data-skill-id="58"][aria-pressed="true"]',
+  ).waitFor({ timeout: 10_000 })
+  await page.getByRole('img', { name: /Channel Mana, concentration A/ }).waitFor({ timeout: 10_000 })
+  await page.getByRole('img', { name: /Meditation, concentration B/ }).waitFor({ timeout: 10_000 })
   await page.screenshot({ path: `${screenshotRoot}-mixed-quickbar.png` })
 
   await page.keyboard.press('Escape')
   await book.waitFor({ state: 'detached', timeout: 5_000 })
   await hubScene.locator('xpath=self::*[@data-gameplay-input-blocked="false"]').waitFor()
+
+  const primaryAction = page.getByRole('button', {
+    name: 'Select primary attack, current Fireball',
+  })
+  const primaryOpenAudioStart = await audioEventCount(page)
+  await primaryAction.click()
+  const primarySelector = page.getByRole('dialog', { name: 'Select Primary Attack' })
+  await primarySelector.locator('.hud-skill-selector-canvas').waitFor({ timeout: 15_000 })
+  const primaryOpenAudio = await waitForSelectorAudio(page, primaryOpenAudioStart, ['click'])
+  assert.equal(await hubScene.getAttribute('data-gameplay-input-blocked'), 'true')
+  assert.deepEqual(await page.locator('.hub-hud-selected-skill-action').evaluateAll(
+    (buttons) => buttons.map((button) => {
+      const bounds = button.getBoundingClientRect()
+      return {
+        binding: Number(button.getAttribute('data-binding')),
+        height: bounds.height,
+        left: bounds.left,
+        top: bounds.top,
+        width: bounds.width,
+      }
+    }),
+  ), [
+    { binding: 12, height: 65, left: 740, top: -7, width: 40 },
+    { binding: 16, height: 65, left: 820, top: -7, width: 40 },
+    { binding: 20, height: 65, left: 780, top: -7, width: 40 },
+  ])
+  assert.deepEqual(await primarySelector.locator('.hud-skill-selector-action').evaluateAll(
+    (buttons) => buttons.map((button) => Number(button.getAttribute('data-skill-id'))),
+  ), [8, 16])
+  assert.deepEqual(await primarySelector.locator('.hud-skill-selector-canvas').evaluate((canvas) => ({
+    height: canvas.height,
+    webgl2: canvas.getContext('webgl2') instanceof WebGL2RenderingContext,
+    width: canvas.width,
+  })), { height: 900, webgl2: true, width: 1600 })
+  await page.screenshot({ path: `${screenshotRoot}-hud-primary-selector.png` })
+  const primarySelectionAudioStart = await audioEventCount(page)
+  await primarySelector.getByRole('button', { name: /Magic Missile/ }).click()
+  await primarySelector.waitFor({ state: 'detached' })
+  const primarySelectionAudio = await waitForSelectorAudio(
+    page,
+    primarySelectionAudioStart,
+    ['click'],
+  )
+  await page.getByRole('img', { name: 'Magic Missile primary spell' }).waitFor({ timeout: 10_000 })
+  await hubScene.locator('xpath=self::*[@data-gameplay-input-blocked="false"]').waitFor()
+
+  await page.getByRole('button', {
+    name: 'Select concentration A, current Channel Mana',
+  }).click()
+  const concentrationA = page.getByRole('dialog', { name: 'Select Concentration' })
+  await concentrationA.locator('.hud-skill-selector-canvas').waitFor({ timeout: 15_000 })
+  assert.deepEqual(await concentrationA.locator('.hud-skill-selector-action').evaluateAll(
+    (buttons) => buttons.map((button) => Number(button.getAttribute('data-skill-id'))),
+  ), [57, 59])
+  const concentrationSelectionAudioStart = await audioEventCount(page)
+  await concentrationA.getByRole('button', { name: /Battle Mage/ }).click()
+  const concentrationSelectionAudio = await waitForSelectorAudio(
+    page,
+    concentrationSelectionAudioStart,
+    ['click', 'concentrate'],
+  )
+  await page.getByRole('button', {
+    name: 'Select concentration A, current Battle Mage',
+  }).waitFor({ timeout: 10_000 })
+  await hubScene.locator('xpath=self::*[@data-gameplay-input-blocked="false"]').waitFor()
+
+  await page.getByRole('button', {
+    name: 'Select concentration B, current Meditation',
+  }).click()
+  const concentrationB = page.getByRole('dialog', { name: 'Select Concentration' })
+  await concentrationB.locator('.hud-skill-selector-canvas').waitFor({ timeout: 15_000 })
+  assert.deepEqual(await concentrationB.locator('.hud-skill-selector-action').evaluateAll(
+    (buttons) => buttons.map((button) => Number(button.getAttribute('data-skill-id'))),
+  ), [57, 58])
+  await concentrationB.getByRole('button', { name: /Channel Mana/ }).click()
+  await page.getByRole('button', {
+    name: 'Select concentration B, current Channel Mana',
+  }).waitFor({ timeout: 10_000 })
+  await hubScene.locator('xpath=self::*[@data-gameplay-input-blocked="false"]').waitFor()
+  await page.screenshot({ path: `${screenshotRoot}-hud-selectors.png` })
+
+  await page.getByRole('button', {
+    name: 'Select primary attack, current Magic Missile',
+  }).click()
+  await primarySelector.waitFor()
+  await page.mouse.click(1_500, 500)
+  await primarySelector.waitFor({ state: 'detached' })
+  await page.getByRole('img', { name: 'Magic Missile primary spell' }).waitFor()
+  await hubScene.locator('xpath=self::*[@data-gameplay-input-blocked="false"]').waitFor()
+
+  await page.getByRole('button', { name: 'Enter the Boneyard' }).click()
+  const picker = page.getByRole('dialog', { name: 'Choose a Boneyard' })
+  if (await picker.count()) await picker.getByRole('button').first().click()
+  const boneyardScene = page.locator('.boneyard-scene[data-renderer-state="ready"]')
+  await boneyardScene.waitFor({ timeout: 90_000 })
+  await page.getByRole('button', {
+    name: 'Select primary attack, current Magic Missile',
+  }).click()
+  await primarySelector.locator('.hud-skill-selector-canvas').waitFor({ timeout: 15_000 })
+  assert.equal(await boneyardScene.getAttribute('data-gameplay-input-blocked'), 'true')
+  const beforeCancelledPointer = host.state()
+  const beforeCancelledIndex = beforeCancelledPointer.playerEntities.identities.findIndex(
+    ({ playerId: id }) => id === playerId,
+  )
+  assert.notEqual(beforeCancelledIndex, -1)
+  const beforeCancelledPosition = {
+    ...beforeCancelledPointer.playerEntities.locomotions[beforeCancelledIndex].position,
+  }
+  assert.equal(
+    beforeCancelledPointer.playerEntities.primaryCasts[beforeCancelledIndex].actionTick,
+    -1,
+  )
+  await page.keyboard.press('w')
+  await page.mouse.click(1_500, 500)
+  await primarySelector.waitFor({ state: 'detached' })
+  await boneyardScene.locator('xpath=self::*[@data-gameplay-input-blocked="false"]').waitFor()
+  await page.waitForTimeout(150)
+  const afterCancelledPointer = host.state()
+  const afterCancelledPosition =
+    afterCancelledPointer.playerEntities.locomotions[beforeCancelledIndex].position
+  assert.deepEqual(afterCancelledPosition, beforeCancelledPosition)
+  assert.equal(
+    afterCancelledPointer.playerEntities.primaryCasts[beforeCancelledIndex].actionTick,
+    -1,
+  )
+  assert.equal(afterCancelledPointer.playerEntities.primaryCasts[beforeCancelledIndex].held, false)
+
+  await page.getByRole('button', {
+    name: 'Select primary attack, current Magic Missile',
+  }).click()
+  await primarySelector.locator('.hud-skill-selector-canvas').waitFor({ timeout: 15_000 })
+  await page.screenshot({ path: `${screenshotRoot}-boneyard-selector.png` })
+  await primarySelector.getByRole('button', { name: /Fireball/ }).click()
+  await page.getByRole('img', { name: 'Fireball primary spell' }).waitFor({ timeout: 10_000 })
+  await boneyardScene.locator('xpath=self::*[@data-gameplay-input-blocked="false"]').waitFor()
+
+  const selectedState = host.state()
+  const selectedIndex = selectedState.playerEntities.identities.findIndex(
+    ({ playerId: id }) => id === playerId,
+  )
+  assert.notEqual(selectedIndex, -1)
+  assert.deepEqual([
+    selectedState.playerEntities.skillRuntimes[selectedIndex].concentrationSkillIdA,
+    selectedState.playerEntities.skillRuntimes[selectedIndex].concentrationSkillIdB,
+  ], [59, 57])
   assert.deepEqual(pageErrors, [])
+  assert.deepEqual(networkErrors, [])
   assert.deepEqual(consoleErrors, [])
   process.stdout.write(`${JSON.stringify({
+    boneyardSelector: true,
     consoleErrors,
     duplicateSecondary: true,
+    hudConcentrationA: 59,
+    hudConcentrationB: 57,
+    hudSelectorCancel: true,
+    hudSelectorWebGl2: true,
     mixedQuickbar: true,
+    networkErrors,
     pageErrors,
-    primarySelection: 'Fireball',
+    selectorAudio: {
+      concentrationSelectionAudio,
+      primaryOpenAudio,
+      primarySelectionAudio,
+    },
+    primarySelection: 'Fireball after Boneyard selector',
     screenshots: [
       `${screenshotRoot}-tooltip.png`,
       `${screenshotRoot}-mixed-quickbar.png`,
+      `${screenshotRoot}-hud-primary-selector.png`,
+      `${screenshotRoot}-hud-selectors.png`,
+      `${screenshotRoot}-boneyard-selector.png`,
     ],
   })}\n`)
 } finally {
   await browser.close()
   await host.close()
   await vite.close()
+}
+
+async function audioEventCount(target) {
+  return target.evaluate(() => window.__sdrAudioEvents.length)
+}
+
+async function waitForSelectorAudio(target, start, expectedStems) {
+  await target.waitForFunction(({ eventStart, stems }) => {
+    const events = window.__sdrAudioEvents.slice(eventStart).filter(({ src, type }) => (
+      type === 'buffer-start'
+      && stems.some((stem) => window.__sdrAudioSourceMatches(src, `${stem}.wav`))
+    ))
+    return stems.every((stem, index) => (
+      window.__sdrAudioSourceMatches(events[index]?.src ?? '', `${stem}.wav`)
+    ))
+  }, { eventStart: start, stems: expectedStems })
+  const events = await target.evaluate(({ eventStart, stems }) => (
+    window.__sdrAudioEvents.slice(eventStart)
+      .filter(({ src, type }) => (
+        type === 'buffer-start'
+        && stems.some((stem) => window.__sdrAudioSourceMatches(src, `${stem}.wav`))
+      ))
+      .map(({ playbackRate, src, volume }) => ({ playbackRate, src, volume }))
+  ), { eventStart: start, stems: expectedStems })
+  assert.deepEqual(
+    events.map(({ playbackRate, volume }) => ({ playbackRate, volume })),
+    expectedStems.map(() => ({ playbackRate: 1, volume: 1 })),
+  )
+  return events
 }

@@ -178,6 +178,14 @@ try {
   })
   const planewalkerHud = await measureHud(page)
   assert.equal(planewalkerHud.bindings[0].record, 107)
+  await page.locator('.hub-hud-selected-skill-action[data-binding="12"]').click({ force: true })
+  await page.waitForTimeout(100)
+  assert.equal(await page.getByRole('dialog', { name: 'Select Primary Attack' }).count(), 0)
+  assert.equal(await hubScene.getAttribute('data-gameplay-input-blocked'), 'false')
+  setPlanewalker(host.state(), playerId, false)
+  await page.locator('.hub-hud-selected-skill[data-binding="12"][data-record="81"]').waitFor({
+    timeout: 10_000,
+  })
 
   await page.getByRole('button', { name: 'Enter the Boneyard' }).click()
   await page.locator('.boneyard-scene[data-renderer-state="ready"]').waitFor({
@@ -201,6 +209,7 @@ try {
     layeredHud,
     networkErrors,
     pageErrors,
+    planeOrbSelectorGate: true,
     planewalkerHud,
     screenshotPath,
     splitMindHud,

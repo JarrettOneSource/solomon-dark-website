@@ -78,6 +78,7 @@ import {
   dazzlePlayerEntity,
   playerCharacterRecords,
   playerLightingAt,
+  playerSkillRuntimeAt,
   poisonPlayerEntity,
   replacePlayerCharacter,
   replacePlayerCharacterRecords,
@@ -1288,6 +1289,44 @@ test('disconnect and world replacement clean spell actors and cast ownership', (
   assert.deepEqual(state.primarySpells, { nextId: 1, projectiles: [], transients: [] })
   assert.equal(getPlayerCharacter(state, 'caster').primaryCast.actionTick, -1)
   assert.equal(getPlayerCharacter(state, 'caster').primaryCast.channelActive, false)
+})
+
+test('Hub-to-Boneyard entry preserves both selected concentrations and replacement order', () => {
+  let state = createGameSimulation()
+  for (const skillId of [57, 58]) {
+    state = withPlayerSkillRank(state, 'local-player', skillId, 1)
+  }
+  state = {
+    ...state,
+    playerEntities: replacePlayerEconomy(
+      state.playerEntities,
+      'local-player',
+      {
+        ...getPlayerEconomy(state),
+        ownedPerkSelectors: [21],
+      },
+    ),
+  }
+  let playerEntities = selectPlayerEntityConcentration(
+    state.playerEntities,
+    'local-player',
+    57,
+  )
+  playerEntities = selectPlayerEntityConcentration(playerEntities, 'local-player', 58)
+  const selected = playerSkillRuntimeAt(playerEntities, 'local-player')!
+  assert.deepEqual([
+    selected.concentrationSkillIdA,
+    selected.concentrationSkillIdB,
+    selected.nextConcentrationReplacementSlot,
+  ], [57, 58, 'a'])
+
+  const entered = enterBoneyardWorld({ ...state, playerEntities }, emptyBoneyard())
+  const carried = playerSkillRuntimeAt(entered.playerEntities, 'local-player')!
+  assert.deepEqual([
+    carried.concentrationSkillIdA,
+    carried.concentrationSkillIdB,
+    carried.nextConcentrationReplacementSlot,
+  ], [57, 58, 'a'])
 })
 
 test('authoritative player ticks reset and decay StaffConstant lighting before projection', () => {

@@ -95,14 +95,20 @@ selection, static geometry, ambient actors, enemies, projectiles, and other
 location rules. It may query player locomotion, resolve requested movement,
 and commit locomotion components, but it neither owns nor clones player
 progression. Hub-to-Boneyard placement resets the location-facing locomotion
-slice while retaining the same player entity and progression books.
+slice while retaining the same player entity, progression books, selected
+concentrations, and A/B replacement cursor. Post-run loadout reconstruction
+remains the separate boundary that clears those per-run selections.
 The skill-book column also owns first-learned public-row order, the selected
 primary, two concentration slots and their replacement cursor, plus the eight
-secondary intent slots. Inventory and SkillScreen presentation is shared by
-Hub and Boneyard; scenes request the participant-owned screen but never clone
-its state. Protocol 36 carries strict belt, primary, and concentration intents,
-and the host applies them only to the authenticated participant before
-publishing a new progression revision.
+secondary intent slots. Inventory, SkillScreen, and the compact selected-HUD
+selector are shared by Hub and Boneyard; scenes request the participant-owned
+surface but never clone its state. Protocol 36 introduced strict belt, primary,
+and general concentration intents. Current protocol 63 adds a distinct
+addressed A/B concentration command for the HUD buttons while retaining the
+general SkillScreen command. The host applies either only to the authenticated
+participant before publishing a new progression revision. The compact selector
+uses its own `skill-selector` pause source, so the host cannot accept an
+addressed HUD mutation from a full SkillScreen pause (or vice versa).
 The session also owns the fixed-step accumulator and tick; neither clock is
 nested inside a Hub ambient actor or another world-specific subsystem.
 
@@ -1079,14 +1085,14 @@ This preserves one mutation boundary and prevents Lua callbacks from entering
 the simulation recursively. The host checks dynamic session host identity or
 the account-bound developer entitlement on every console request. `Enable
 Cheats` controls ordinary-host installation of the DevTools API; it is never
-trusted as network authorization. Protocol 61 carries the server-authored
+trusted as network authorization. Protocol 63 retains the server-authored
 developer boolean from a one-use admission into the welcome. An entitled
 account keeps the setting and ordinary shared-Hub routing off while still
 receiving the DevTools API. No client-authored field can grant the entitlement.
 Initial and live setting state is nevertheless replicated as a separate
 global-score eligibility input, and accepting a console request revokes that
 eligibility even if a crafted client misreported the setting.
-The same protocol revision adds the validated logical viewport width to
+The protocol-61 lineage added the validated logical viewport width to
 ordinary input. The host consumes it only as the stock Fireball forward-query
 geometry; collision selection and all consequences remain server-owned.
 Authoritative gameplay pause freezes this fixed-tick Lua lane together with the

@@ -1,0 +1,57 @@
+.main-menu-native-stage.hud-skill-selector-stage {
+  z-index: 76;
+  width: 1600px;
+  height: 900px;
+  overflow: hidden;
+  outline: none;
+  pointer-events: auto;
+  user-select: none;
+}
+
+.hud-skill-selector-renderer,
+.hud-skill-selector-canvas,
+.hud-skill-selector-actions {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 1600px !important;
+  height: 900px !important;
+}
+
+.hud-skill-selector-renderer,
+.hud-skill-selector-canvas,
+.hud-skill-selector-actions { pointer-events: none; }
+
+.hud-skill-selector-action {
+  position: absolute;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  background: transparent;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.hud-skill-selector-action:focus { outline: none; }
+
+.hud-skill-selector-semantic-title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.hud-skill-selector-error {
+  position: absolute;
+  top: 140px;
+  left: 50%;
+  margin: 0;
+  color: #d8d4c8;
+  font: 18px serif;
+  transform: translateX(-50%);
+}

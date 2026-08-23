@@ -321,7 +321,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 62
+export const GAME_PROTOCOL_VERSION = 63
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
 export const GAME_CONNECTION_TIMEOUT_CLOSE_CODE = 4000
@@ -424,7 +424,7 @@ export interface PlayerCharacterKernelParameters {
   playerRadius: number
 }
 
-export type GameplayPauseSource = 'inventory' | 'pause-menu' | 'skill-book'
+export type GameplayPauseSource = 'inventory' | 'pause-menu' | 'skill-book' | 'skill-selector'
 
 export interface GameplayPauseState {
   ownerDisplayName: string
@@ -472,6 +472,12 @@ export interface ClientSelectPrimarySkillMessage {
 export interface ClientSelectConcentrationMessage {
   type: 'client-select-concentration'
   skillId: number
+}
+
+export interface ClientSelectConcentrationSlotMessage {
+  type: 'client-select-concentration-slot'
+  skillId: number
+  slot: 0 | 1
 }
 
 export interface ClientLevelUpActionMessage {
@@ -616,6 +622,7 @@ export type ClientGameMessage =
   | ClientPartyRotateCodeMessage
   | ClientPartySettingsMessage
   | ClientSelectConcentrationMessage
+  | ClientSelectConcentrationSlotMessage
   | ClientSelectPrimarySkillMessage
   | ClientSelectSkillMessage
   | ClientSkillQuickbarBindMessage
@@ -978,6 +985,16 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
       throw new GameProtocolError('skillId is not a native concentration')
     }
     return { type: 'client-select-concentration', skillId }
+  }
+  if (value.type === 'client-select-concentration-slot') {
+    onlyKeys(value, 'message', ['type', 'skillId', 'slot'])
+    const skillId = nonnegativeInteger(value.skillId, 'skillId')
+    const slot = nonnegativeInteger(value.slot, 'slot')
+    if (nativeSkillCategory(skillId) !== 3) {
+      throw new GameProtocolError('skillId is not a native concentration')
+    }
+    if (slot > 1) throw new GameProtocolError('concentration slot is out of range')
+    return { type: 'client-select-concentration-slot', skillId, slot: slot as 0 | 1 }
   }
   if (value.type === 'client-level-up-action') {
     onlyKeys(value, 'message', ['type', 'action', 'offerSequence'])
@@ -1902,7 +1919,12 @@ function gameplayPauseState(value: unknown, field: string): GameplayPauseState {
 }
 
 function gameplayPauseSource(value: unknown): GameplayPauseSource {
-  if (value === 'inventory' || value === 'pause-menu' || value === 'skill-book') return value
+  if (
+    value === 'inventory'
+    || value === 'pause-menu'
+    || value === 'skill-book'
+    || value === 'skill-selector'
+  ) return value
   throw new GameProtocolError('gameplay pause source is not supported')
 }
 

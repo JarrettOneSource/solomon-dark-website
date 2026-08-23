@@ -170,6 +170,7 @@ function inertSession() {
     samplePresentation() { throw new Error() },
     saveSkill() {},
     selectConcentration() {},
+    selectConcentrationSlot() {},
     selectPrimarySkill() {},
     selectSkill() {},
     sendChatMessage() {},

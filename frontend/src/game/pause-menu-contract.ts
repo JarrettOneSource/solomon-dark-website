@@ -249,7 +249,9 @@ export function gameplayPausePresentation(
     ? 'Inventory'
     : pause.source === 'skill-book'
       ? 'the Skill Book'
-      : null
+      : pause.source === 'skill-selector'
+        ? 'the skill selector'
+        : null
   return {
     detail: activity
       ? `Waiting for ${pause.ownerDisplayName} to close ${activity}.`

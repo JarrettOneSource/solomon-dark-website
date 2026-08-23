@@ -68,6 +68,7 @@ render_music academy 6 155 158
 render_music selection 7 19 21
 
 copy_sfx click.wav click.wav 8aeebcfeb69625bee2ee78fe9c63939e6b40edcc89d5facf2c0d35e1b5920307
+copy_sfx concentrate.wav concentrate.wav ca8b10ff2ce00ca913a382c05f3e1c0c600a22d2e206e386e52a4e83d704a47c
 copy_sfx levelup.wav level-up.wav ca01cafec3167ee5bb37f0cb6605196d38bca45c7b755d5fa11781d3e4a5ea92
 copy_sfx pickskill.wav pickskill.wav 494d1b973bd3f319199199ec9cf851491caee10c3d72dbe61acda69d28daabe4
 copy_sfx catchit__stream.wav catchit.wav d2d26d32d0701fb7c08432f59eca099d75e33842f01ec89eae60b467ad90bf39

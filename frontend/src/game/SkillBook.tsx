@@ -10,6 +10,7 @@ import {
 } from 'react'
 
 import { NATIVE_SKILL_CATALOG } from './core-kernels/player-progression.ts'
+import type { GameAudioDirector } from './game-audio-director.ts'
 import { subscribeGamePresentationFrames } from './game-presentation-frame-loop.ts'
 import type {
   ProtocolPlayerEconomy,
@@ -29,6 +30,7 @@ import {
 import './skill-book.css'
 
 interface SkillBookProps {
+  audio: GameAudioDirector
   economy: ProtocolPlayerEconomy
   onAssignQuickbarSkill: (skillId: number, slot: number) => void
   onClose: () => void
@@ -43,6 +45,7 @@ interface SkillBookProps {
 }
 
 export default function SkillBook({
+  audio,
   economy: initialEconomy,
   onAssignQuickbarSkill,
   onClose,
@@ -262,8 +265,15 @@ export default function SkillBook({
                   const slot = quickbarSlotAt(clientX, clientY)
                   if (slot !== null) setTargetQuickbarSlot(slot)
                 }}
-                onSelectConcentration={() => onSelectConcentration(row.id)}
-                onSelectPrimary={() => onSelectPrimarySkill(row.id)}
+                onSelectConcentration={() => {
+                  onSelectConcentration(row.id)
+                  audio.playSound('click')
+                  audio.playSound('concentrate')
+                }}
+                onSelectPrimary={() => {
+                  onSelectPrimarySkill(row.id)
+                  audio.playSound('click')
+                }}
                 concentrationLocked={progression.mindChugTicksRemaining > 0}
               />
             ))}

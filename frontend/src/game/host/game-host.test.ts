@@ -1140,6 +1140,102 @@ test('game host authoritatively projects each player quickbar and rejects unlear
   })
 })
 
+test('game host authorizes HUD concentration replacement only for the addressed selector', async (context) => {
+  const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
+  context.after(() => host.close())
+  const client = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
+  context.after(() => client.socket.close())
+  const playerId = client.welcome.playerId
+  const state = host.state()
+  const index = state.playerEntities.identities.findIndex(({ playerId: id }) => id === playerId)
+  assert.notEqual(index, -1)
+  const sourceBook = state.playerEntities.skillBooks[index]!
+  const permanentRanks = [...sourceBook.permanentRanks]
+  const effectiveRanks = [...sourceBook.effectiveRanks]
+  for (const skillId of [57, 58, 59]) {
+    permanentRanks[skillId] = 1
+    effectiveRanks[skillId] = 1
+  }
+  const skillBooks = [...state.playerEntities.skillBooks]
+  skillBooks[index] = {
+    ...sourceBook,
+    effectiveRanks,
+    learnedSkillOrder: [...sourceBook.learnedSkillOrder, 57, 58, 59],
+    permanentRanks,
+  }
+  const economy = getPlayerEconomy(state, playerId)
+  Object.assign(state, {
+    ...state,
+    playerEntities: replacePlayerEconomy({
+      ...state.playerEntities,
+      skillBooks,
+    }, playerId, {
+      ...economy,
+      ownedPerkSelectors: [...new Set([...economy.ownedPerkSelectors, 21])],
+    }),
+  })
+
+  const skillBookPause = nextMessage(client.socket, (message) => (
+    message.type === 'server-gameplay-pause' && message.pause?.source === 'skill-book'
+  ))
+  client.socket.send(encodeGameMessage({
+    type: 'client-gameplay-pause',
+    paused: true,
+    source: 'skill-book',
+  }))
+  await skillBookPause
+  client.socket.send(encodeGameMessage({
+    type: 'client-select-concentration-slot',
+    skillId: 57,
+    slot: 0,
+  }))
+
+  const selectorPause = nextMessage(client.socket, (message) => (
+    message.type === 'server-gameplay-pause' && message.pause?.source === 'skill-selector'
+  ))
+  client.socket.send(encodeGameMessage({
+    type: 'client-gameplay-pause',
+    paused: true,
+    source: 'skill-selector',
+  }))
+  await selectorPause
+  assert.equal(host.state().playerEntities.skillRuntimes[index]!.concentrationSkillIdA, null)
+
+  for (const [skillId, slot, expected] of [
+    [57, 0, [57, null]],
+    [58, 1, [57, 58]],
+    [59, 0, [59, 58]],
+  ] as const) {
+    const selected = nextMessage(client.socket, (message) => (
+      message.type === 'server-snapshot'
+      && message.snapshot.players[playerId].progression.concentrationSkillIds[slot] === skillId
+    ))
+    client.socket.send(encodeGameMessage({
+      type: 'client-select-concentration-slot',
+      skillId,
+      slot,
+    }))
+    await selected
+    const runtime = host.state().playerEntities.skillRuntimes[index]!
+    assert.deepEqual([runtime.concentrationSkillIdA, runtime.concentrationSkillIdB], expected)
+  }
+
+  Object.assign(host.state().playerEntities.progressions[index]!, {
+    mindChugTicksRemaining: 10,
+  })
+  const rejected = nextMessage(client.socket, (message) => message.type === 'server-disconnect')
+  client.socket.send(encodeGameMessage({
+    type: 'client-select-concentration-slot',
+    skillId: 57,
+    slot: 0,
+  }))
+  assert.deepEqual(await rejected, {
+    type: 'server-disconnect',
+    code: 'invalid-message',
+    reason: 'The concentration is unavailable.',
+  })
+})
+
 test('game host accepts an empty deterministic Hub fixture factory', async (context) => {
   let factoryCalls = 0
   const host = await startGameHost({

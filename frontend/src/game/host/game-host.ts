@@ -32,6 +32,7 @@ import {
   rerollGameSimulationPlayerSkill,
   saveGameSimulationPlayerSkill,
   selectGameSimulationPlayerConcentration,
+  selectGameSimulationPlayerConcentrationSlot,
   selectGameSimulationPlayerPrimarySkill,
   selectGameSimulationPlayerSkill,
   stepGameSimulationTick,
@@ -1151,7 +1152,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             activePause.ownerPlayerId !== client.playerId
             || (
               activePause.source !== 'skill-book'
-              && activePause.source !== 'pause-menu'
+              && activePause.source !== 'skill-selector'
             )
           )
         ) return
@@ -1178,10 +1179,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           activePause !== null
           && (
             activePause.ownerPlayerId !== client.playerId
-            || (
-              activePause.source !== 'skill-book'
-              && activePause.source !== 'pause-menu'
-            )
+            || activePause.source !== 'skill-book'
           )
         ) return
         const activeState = stateForPlayer(client.playerId)
@@ -1189,6 +1187,33 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           activeState,
           client.playerId,
           message.skillId,
+        )
+        if (!selected) {
+          disconnect(socket, 'invalid-message', 'The concentration is unavailable.')
+          return
+        }
+        replaceStateForPlayer(client.playerId, selected)
+        client.activeInput = createIdlePlayerCharacterInput()
+        client.queuedInputs.clear()
+        broadcastSnapshot()
+        publishSaveCheckpoint('concentration-selected')
+        return
+      }
+      if (message.type === 'client-select-concentration-slot') {
+        const activePause = gameplayPauseForPlayer(client.playerId)
+        if (
+          activePause !== null
+          && (
+            activePause.ownerPlayerId !== client.playerId
+            || activePause.source !== 'skill-selector'
+          )
+        ) return
+        const activeState = stateForPlayer(client.playerId)
+        const selected = selectGameSimulationPlayerConcentrationSlot(
+          activeState,
+          client.playerId,
+          message.skillId,
+          message.slot,
         )
         if (!selected) {
           disconnect(socket, 'invalid-message', 'The concentration is unavailable.')

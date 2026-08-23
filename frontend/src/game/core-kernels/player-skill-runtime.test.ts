@@ -26,6 +26,7 @@ import {
   refreshPlayerSkillRuntime,
   resolvePlayerHarmfulContact,
   setPlayerConcentration,
+  setPlayerConcentrationSlot,
   setPlayerMindstarActive,
   stepPlayerSkillRuntime,
 } from './player-skill-runtime.ts'
@@ -326,6 +327,88 @@ test('Split Mind owns two distinct selections and replacement alternates A then 
   assert.equal(unchanged.runtime, state.runtime)
   assert.equal(unchanged.skillBook, state.skillBook)
   assert.equal(unchanged.runtime.nextConcentrationReplacementSlot, 'b')
+})
+
+test('HUD concentration selectors replace the addressed A or B slot exactly', () => {
+  const book = rankedBook({ 57: 1, 58: 1, 59: 1, 60: 1 })
+  const statBook = playerStatBook()
+  const baseEconomy = createHubEconomy(1)
+  const single = setPlayerConcentrationSlot(
+    createPlayerSkillRuntime(book, statBook, baseEconomy).runtime,
+    book,
+    statBook,
+    baseEconomy,
+    57,
+    0,
+  )
+  assert.deepEqual([
+    single.runtime.concentrationSkillIdA,
+    single.runtime.concentrationSkillIdB,
+    single.runtime.nextConcentrationReplacementSlot,
+  ], [57, null, 'a'])
+  const economy: HubEconomyState = {
+    ...baseEconomy,
+    ownedPerkSelectors: [21],
+  }
+  let state = createPlayerSkillRuntime(book, statBook, economy)
+  state = setPlayerConcentrationSlot(
+    state.runtime,
+    state.skillBook,
+    statBook,
+    economy,
+    57,
+    0,
+  )
+  state = setPlayerConcentrationSlot(
+    state.runtime,
+    state.skillBook,
+    statBook,
+    economy,
+    58,
+    1,
+  )
+  state = setPlayerConcentrationSlot(
+    state.runtime,
+    state.skillBook,
+    statBook,
+    economy,
+    59,
+    0,
+  )
+  assert.deepEqual([
+    state.runtime.concentrationSkillIdA,
+    state.runtime.concentrationSkillIdB,
+    state.runtime.nextConcentrationReplacementSlot,
+  ], [59, 58, 'b'])
+  state = setPlayerConcentrationSlot(
+    state.runtime,
+    state.skillBook,
+    statBook,
+    economy,
+    60,
+    1,
+  )
+  assert.deepEqual([
+    state.runtime.concentrationSkillIdA,
+    state.runtime.concentrationSkillIdB,
+    state.runtime.nextConcentrationReplacementSlot,
+  ], [59, 60, 'a'])
+  assert.throws(() => setPlayerConcentrationSlot(
+    state.runtime,
+    state.skillBook,
+    statBook,
+    economy,
+    59,
+    1,
+  ), /other concentration slot/)
+  assert.throws(() => setPlayerConcentrationSlot(
+    state.runtime,
+    state.skillBook,
+    statBook,
+    baseEconomy,
+    58,
+    1,
+  ), /requires Split Mind/)
 })
 
 test('equipment skill effects compose before Mindstar and refresh back to permanent state', () => {

@@ -52,6 +52,7 @@ const SOURCES = {
     'bite-2': 'bite-2.wav',
     'bite-3': 'bite-3.wav',
     click: 'click.wav',
+    concentrate: 'concentrate.wav',
     'coffin-break': 'coffin.wav',
     'critical-hit': 'critical-hit.wav',
     'comet-whistle': 'comet-whistle.wav',

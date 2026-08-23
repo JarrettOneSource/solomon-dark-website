@@ -24184,7 +24184,7 @@ implementation receipt.
 | --- | --- | --- | --- |
 | Clean stock | unmodified retail Beta 0.72.5 `SolomonDark.exe`, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, directly launched from isolated `sd-stock-skillbook-D64dCC`, no loader | Hub and Boneyard use the same opaque full-screen SkillScreen and InventoryScreen; `T` replaces Inventory; dragging Call Leviathan from the page to slot 1 leaves it simultaneously in slots 0 and 1 | high |
 | Clean-stock captures | Mod Loader `tests/fixtures/webgame/menu-reference-captures/skill-screen.png` SHA-256 `5b2423d5daf56e6bb5d154dd2ce0abc80d947286f087c8f81134b01686bb1c87`; `skill-screen-duplicate-belt.png` SHA-256 `e934a18512ef5ed92753be150f5a37e5182751c8ed25644f5030a5d63b87f05d`; settled Inventory witness SHA-256 `0d99c6bb3f1815aa061fd4ee49e7bfccbd0ee058ea69b0e8936155c7e5156d8b` | fixes complete settled composition, starter page/card state, bottom HUD/belt membership, duplicate-slot behavior, and Inventory geometry | high |
-| Instructions | `0x00689750`, Inventory opener `0x005C6F10`, Skill opener `0x005CA640`, ctor `0x006576C0`, open `0x0067CAC0`, tick `0x006567E0`, close `0x006568E0`, root render `0x0065B550`, page builder `0x0066B380`, page open/render `0x00673EE0/0x006720F0`, quickbar `0x00657A70/0x0066F330/0x00659AD0`, category selector `0x0066F0B0`, settings action `0x005D8120` | fixes ownership, scene-independent entry, mutual exclusion, 40-tick envelopes, silence, page order/layout, all eight belt slots, duplicate legality, and primary/concentration branches | high |
+| Instructions | `0x00689750`, Inventory opener `0x005C6F10`, Skill opener `0x005CA640`, ctor `0x006576C0`, open `0x0067CAC0`, tick `0x006567E0`, close `0x006568E0`, root render `0x0065B550`, page builder `0x0066B380`, page open/render `0x00673EE0/0x006720F0`, quickbar `0x00657A70/0x0066F330/0x00659AD0`, category selector `0x0066F0B0`, Game HUD action `0x005D8120` | fixes ownership, scene-independent entry, mutual exclusion, 40-tick envelopes, silence, page order/layout, all eight belt slots, duplicate legality, and primary/concentration branches | high |
 | Asset/data | Mod Loader `native-asset-object-map.json`, 83-row native skill catalog, Inventory/Skills/UI/Fonts bundles | SkillScreen drains direct UI `3,30,31,32,49` plus shared rails `10,79`; Skills `5,6,12,14,27..122,164..165`; Fonts groups `1..92,93..184,216..307,350..375`; public page rows are exactly `8..79` | high |
 | Web baseline | Website `origin/main` `3754115`; `HubInventoryUi`, `GameHud`, Boneyard/Hub scenes, protocol 35, `equipPlayerSecondaryAbility` | authoritative Inventory actions exist but Boneyard cannot send them; tome has no action; secondary belt moves a skill instead of allowing stock duplicates; no SkillScreen/loadout command family exists | high |
 
@@ -26216,12 +26216,13 @@ and exposes the authored hover tooltip. This screen is the user-facing owner of
 the catalog audit rather than a static two-card mock.
 
 At this entry's protocol-44 implementation cutoff, the separately recovered
-`Skills_Quickbar` settings path was also live. Game Settings exposed learned
-category-1 `SELECT PRIMARY ATTACK` and category-3 `SELECT CONCENTRATION` lists.
-The 2026-08-22 product-boundary correction below supersedes that Website
-placement and removes both Settings paths; the same authoritative actions,
-one-slot/Split Mind replacement policy, selected-row no-op, and Mind Chug gate
-remain owned by the Skill Book/runtime.
+`Skills_Quickbar` path was misattributed to Settings, and the Website exposed
+learned category-1 `SELECT PRIMARY ATTACK` and category-3
+`SELECT CONCENTRATION` lists there. The 2026-08-22 correction below removed the
+wrong Settings placement. The 2026-08-23 selected-HUD trace supersedes the
+remaining ownership claim: HUD buttons own the compact selectors and exact A/B
+replacement, while SkillScreen retains its category-1 and general category-3
+direct-selection paths.
 
 ### 2026-08-21 v47 Ether Blast closure
 
@@ -27688,7 +27689,7 @@ SkillScreen remains available from the tome HUD button and moves to `K`.
 ### Reported smell and parity question
 
 - The title and gameplay `GAME SETTINGS` actions currently open a generic DOM
-  dialog containing only Enable Cheats and the already recovered gameplay
+  dialog containing only Enable Cheats and the then-existing web
   primary/concentration selectors. Stock's Settings root, Audio and Video
   controls, Customize Keyboard child, Performance child, context branches,
   persistence, native panel presentation, and live consumers are absent.
@@ -27712,7 +27713,7 @@ SkillScreen remains available from the tome HUD button and moves to `K`.
 
 | Evidence class | Exact source | Observation | Confidence |
 | --- | --- | --- | --- |
-| Retail binary and fresh static analysis | `SolomonDarkAbandonware/SolomonDark.exe`, 0.72.5, `4,723,200` bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`; preferred image base `0x00400000`; Ghidra 12.0.3 read-only replica | `MyCPanel` vtable `0x0079BEDC` owns adjacent root/audio/controls slots `+0xB4/+0xB8/+0xBC`; `0x005A81A0` allocates it, `0x005D8DC0/0x005D8F30` acquire/release gameplay suspension, and `0x005D8120` dispatches every root/skill child action. | high |
+| Retail binary and fresh static analysis | `SolomonDarkAbandonware/SolomonDark.exe`, 0.72.5, `4,723,200` bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`; preferred image base `0x00400000`; Ghidra 12.0.3 read-only replica | `MyCPanel` vtable `0x0079BEDC` owns adjacent root/audio/controls slots `+0xB4/+0xB8/+0xBC`; `0x005A81A0` allocates it and `0x005D8DC0/0x005D8F30` acquire/release gameplay suspension. The 2026-08-23 selected-HUD entry supersedes the former `0x005D8120` ownership claim. | high |
 | Root and controls instructions | builders `0x005D9A50` and `0x005DAEF0`; audio apply `0x005D8FC0`; display init/apply `0x0041CE20/0x0041D4A0`; config init `0x005BAB60` | The complete root, 15 key/mouse rows, nine Performance rows, globals, defaults, capability gate, and context-only Resolution branch are directly instruction-backed. | high |
 | Live native menu fixtures | `../Mod Loader/tests/fixtures/webgame/menu-layouts/{game-settings-title,game-settings-gameplay,game-settings-dark-cloud,controls,performance}.json` and paired reference PNGs | All three root contexts and both child families have independent settled/confirmation captures bound to the same retail executable. Title Settings process `13876` settled for 40 samples and confirmation process `17980` reproduced the family. | high |
 | Native persistence/audio/lighting reports | `native-settings-system.md`, `native-save-format.md`, `native-audio-system.md`, `native-lighting-and-shadow-system.md`, `native-input-model.md`, `native-camera-control.md` | Audio user gain is live and independent by lane; renderer settings are local process presentation state; camera projection and screen UI are separate from actors/collision; native Settings has no adjustable FOV or UI scale. | high |
@@ -27745,7 +27746,7 @@ below records the completed proof contract.
 | Fullscreen live state | `Graphics.Fullscreen`; `0x0041D4A0` | exact-ported | standard and WebKit enter/exit plus installed-display fallback use the existing browser owner |
 | Fullscreen automatic persisted re-entry | stock persisted `Graphics.Fullscreen` | blocked-by-platform (Fullscreen API requires a current user activation; browsers prohibit automatic re-entry on reload) | row always reports actual document/display state and never claims a persisted mode was restored |
 | Resolution | title enumeration/gameplay restriction at `0x005D9A50` | out-of-system (user-directed browser-fit viewport already owns size and FOV expansion) | no resolution row or stale `data-resolution` preference; renderer backing density remains independent |
-| Login Info / native Dark Name and password | control `+0x22C`, `0x005D8120 -> 0x005C6F10` | out-of-system (the authenticated Website account owns identity; legacy credentials must never enter game-local storage) | Settings exposes no credential field or token copy |
+| Login Info / native Dark Name and password | MyCPanel root/action family | out-of-system (the authenticated Website account owns identity; legacy credentials must never enter game-local storage) | Settings exposes no credential field or token copy |
 | Move Up/Down/Left/Right | `0x00B3BCBC/C0/B4/B8` | exact-ported | persisted physical key codes drive the same movement state; controller/touch remain independent browser inputs |
 | Open Menu/Inventory | `0x00B3BCCC/C4` | exact-ported | displayed bindings match every Hub/Boneyard key listener and modal gate |
 | Open Skills | `0x00B3BCC8`; native fresh value `T` | exact-ported row with documented web-default adaptation | Website defaults this row to `K` because current-main browser chat owns `T`; rebinding either row conflict-swaps the other, and `T` remains selectable |
@@ -27762,9 +27763,9 @@ below records the completed proof contract.
 | Enhanced Effects user toggle / Off branch | `0x00B3BCAD` consumers across authoritative effect actor births and peer-local presentation | out-of-system (current multiplayer snapshots authoritatively materialize optional effect actors; partial client culling or host-wide preference would not reproduce native per-process semantics) | no misleading toggle; fixed On policy stays explicit until optional actors are fully presentation-local |
 | Save Memory (Requires Restart) | `Graphics.SaveVideoMemory`, application `+0x49C` | out-of-system (browser/WebGL owns texture eviction and device recovery; the native D3D retention switch has no coherent web value) | row absent; no restart placebo |
 | Zoom Effects On/Off | `0x00B3BCAC` | exact-ported | Off suppresses native camera/world pulse magnitude while retaining screen flash, gameplay, audio, and ordinary FOV |
-| Performance Back | `0x005D8120` child return | exact-ported | applies local values and restores root without releasing gameplay suspension |
-| Select Primary Attack | control `+0x3AC` | out-of-system — superseded by the 2026-08-22 Website product correction | removed from Settings; learned primary selection remains in Skill Book |
-| Select Concentration siblings | controls `+0x46C/+0x52C` | out-of-system — superseded by the 2026-08-22 Website product correction | removed from Settings; concentration selection and Mind Chug gating remain in Skill Book/runtime |
+| Performance Back | MyCPanel child return | exact-ported | applies local values and restores root without releasing gameplay suspension |
+| Select Primary Attack | Game HUD control `+0x3AC`, not MyCPanel | out-of-system (never a Settings member; superseded by the 2026-08-23 selected-HUD correction) | Settings remains loadout-free; HUD selector owns the native action |
+| Select Concentration siblings | Game HUD controls `+0x46C/+0x52C`, not MyCPanel | out-of-system (never Settings members; superseded by the 2026-08-23 selected-HUD correction) | Settings remains loadout-free; HUD selectors own A/B mutation |
 | Enable Cheats | Website semantic Lua setting | exact-ported as explicit browser extension | defaults off, host-only runtime gate remains live, and guest never gains a VM/API |
 | Camera FOV | browser extension over Region camera projection | exact-ported as designed-not-observed | `75..125%`; actual zoom is native zoom divided by FOV factor in Hub, every private room, Boneyard, culling, lighting, hit projection, and audio viewport calculations |
 | UI Scale | browser extension over screen-space HUD/touch presentation | exact-ported as designed-not-observed | `75..150%`; top/center/bottom/right anchors remain inside logical viewport and hit boxes scale with their visuals |
@@ -27835,10 +27836,11 @@ user must activate it again.
 
 ### Nearby-system findings
 
-- `Select Primary Attack` and both `Select Concentration` actions are native
-  Settings members handled by `0x005D8120`. The 2026-08-22 Website product
-  correction intentionally excludes them from Settings and retains the shared
-  authoritative mutation behavior under the Skill Book/runtime owner.
+- `Select Primary Attack` and both `Select Concentration` actions were
+  misattributed here. The 2026-08-23 correction proves `0x005D8120` is the Game
+  HUD callback, not a MyCPanel callback. Their absence from Website Settings is
+  native parity; the top-center HUD selectors retain the authoritative mutation
+  behavior.
 - The native fresh Windows default for Enhanced Effects is On even though the
   preserved sandbox profile is Off. The Website's current fixed-On policy is
   therefore the shipped-capability identity case, but it must remain visibly
@@ -31369,8 +31371,9 @@ class/content catalogs, so the Mod Loader documents remain unchanged.
 - Reported web behavior: gameplay `GAME SETTINGS` contains a `SPELL LOADOUT`
   group with `SELECT PRIMARY ATTACK` and `SELECT CONCENTRATION` child pages.
 - Product correction: character-build choices must not be exposed from the
-  Website Settings menu. The active Skill Book remains the in-run owner for
-  primary and concentration selection; Create remains the new-character owner.
+  Website Settings menu. The 2026-08-23 native correction additionally proves
+  the selected-skill HUD is the in-run compact-selector owner; SkillScreen keeps
+  its category-1 card action, and Create remains the new-character owner.
 - Reproduction scope: title, Dark Cloud, and gameplay Settings roots; gameplay
   pause ownership; primary and concentration actions; learned-skill state;
   Settings close/resume; and the separate Skill Book and Create surfaces.
@@ -31378,24 +31381,22 @@ class/content catalogs, so the Mod Loader documents remain unchanged.
   Settings; Settings still receives player progression or mutation callbacks;
   removing the rows also removes Skill Book selection, protocol mutation, or
   Create/loadout behavior; or closing Settings changes pause lifecycle.
-- Reopened-system correction: the 2026-08-21 Settings pass correctly recovered
-  native membership, but failed the Website product-boundary check by treating
-  stock membership as sufficient reason to couple the local-preference dialog
-  to authoritative character progression. The user's explicit correction
-  makes both stock skill rows intentional Website exclusions.
+- Reopened-system correction as understood on 2026-08-22: removing the web
+  `SPELL LOADOUT` group was correct. The 2026-08-23 selected-HUD trace supersedes
+  the rationale: the two rows were never native Settings members; Game HUD
+  controls had been assigned to the wrong owner.
 
 ### Evidence and provenance
 
 | Evidence class | Exact source | Observation | Confidence |
 | --- | --- | --- | --- |
-| Existing retail RE | Solomon Dark 0.72.5, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`; `Settings_Render 0x005D9A50`, `SettingsControl_HandleAction 0x005D8120`; `../Mod Loader/docs/reverse-engineering/native-settings-system.md` and `native-skill-screen-and-quickbar.md` | Stock conditionally exposes primary and concentration `Skills_Quickbar` actions from Settings. That native fact remains unchanged. | high |
+| Existing retail RE, corrected 2026-08-23 | Solomon Dark 0.72.5, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`; Game vslot `+0x10 -> 0x005D8120`; MyCPanel vslot `+0x10 -> 0x00434C60`; corrected `../Mod Loader/docs/reverse-engineering/native-settings-system.md` and `native-skill-screen-and-quickbar.md` | Stock exposes primary and concentration `Skills_Quickbar` actions from selected-skill HUD buttons, never from Settings. | high |
 | Product direction | user correction, 2026-08-22 | The Website Settings menu must contain no loadout options. | authoritative |
 | Website causal trace | Website `origin/main` `05c73e43`; `GameSettingsDialog.tsx`, `MainMenuScene.tsx`, `main-menu.css`, `pause-menu-contract.test.ts`, `smoke-game-pause.mjs` | Only the gameplay invocation supplies progression and selection callbacks. That enables one root group, two child-page variants, the selector renderer/icon dependency, selector-only CSS, a positive source contract, and a browser mutation journey. | high |
 | Adjacent Website owner | `SkillBook.tsx`, `skill-book.test.ts`, `MainMenuScene.tsx`, `GameClientSession` | The Skill Book independently renders learned primary/concentration actions and submits the same authoritative session mutations; Create independently owns initial character loadout. | high |
 
-No new native fact was recovered, so the Mod Loader reports remain the durable
-source for the unchanged stock behavior and require no edit for this Website
-product-boundary correction.
+At this historical cutoff no new native fact was recorded. The 2026-08-23
+selected-HUD entry supersedes that conclusion and updates the Mod Loader reports.
 
 ### System boundary and membership inventory
 
@@ -31408,15 +31409,15 @@ targets.
 
 | Member (class/variant/scene/branch) | Native/product source | Disposition | Proof |
 | --- | --- | --- | --- |
-| gameplay Settings `SPELL LOADOUT` root group | stock conditional Settings rows; 2026-08-22 product direction | out-of-system (character build mutation is excluded from Website Settings) | no group or action label in component/browser |
-| primary Settings child page and learned category-1 rows | `0x005D8120`; product exclusion | out-of-system (Website Settings) | no page state, catalog traversal, icon, callback, or CSS path |
-| concentration Settings child page, one-slot/Split Mind/Mind Chug branches | `0x005D8120`; product exclusion | out-of-system (Website Settings) | no page state, catalog traversal, icon, callback, or CSS path |
+| gameplay Settings `SPELL LOADOUT` root group | web-only mistaken integration; no native MyCPanel row | out-of-system (not a stock Settings member) | no group or action label in component/browser |
+| primary Settings child page and learned category-1 rows | web-only page; actual native owner is Game HUD `+0x3AC` | out-of-system (Website Settings) | no page state, catalog traversal, icon, callback, or CSS path |
+| concentration Settings child page, one-slot/Split Mind/Mind Chug branches | web-only page; actual native owners are Game HUD `+0x46C/+0x52C` | out-of-system (Website Settings) | no page state, catalog traversal, icon, callback, or CSS path |
 | gameplay Settings progression/callback props | Website integration seam | out-of-system (Settings is local-preference-only) | invocation and props absent |
 | title Settings | existing no-progression invocation | verified-already-at-parity | remains loadout-free and otherwise unchanged |
 | Dark Cloud Settings | existing no-progression invocation | verified-already-at-parity | remains loadout-free and otherwise unchanged |
 | gameplay pause hold, Done, and no-catch-up resume | existing Settings pause owner | verified-already-at-parity | browser journey retains frozen ticks and resume contract |
 | Skill Book primary selection | `SkillBook` category-1 action | verified-already-at-parity | existing component/session path and regression coverage remain |
-| Skill Book concentration selection and lock state | `SkillBook` category-3 action | verified-already-at-parity | existing component/session path and regression coverage remain |
+| Skill Book category-3 selection | `0x00674110 -> 0x005D5600` | verified-already-at-parity | retained as the native first-A/general replacement path |
 | Create/new-character and retained-loadout screens | `CreateMenuScene` | out-of-system (separate construction/post-run owner) | no touched source or changed journey |
 | quickbar bindings, progression state, and protocol mutations | shared runtime model | out-of-system (still consumed by Skill Book/gameplay) | no runtime/schema/session removal |
 | persisted `GameSettings` record | local preference owner | verified-already-at-parity | contains no character-progression/loadout fields |
@@ -31427,23 +31428,24 @@ difference beyond the requested absence of the two Settings actions.
 ### Native ownership thread and corrected Website contract
 
 - Stock `MyCPanel` owns the Settings modal lifetime; `0x005D9A50` authors its
-  context-dependent rows and `0x005D8120` routes the two skill selectors.
+  context-dependent rows. Game callback `0x005D8120` independently routes the
+  selected-skill HUD and is not part of MyCPanel.
 - Website `MainMenuScene` owns local Settings state and pause lifetime. Before
   this correction, its gameplay invocation also injected authoritative player
   progression and two session mutation functions into `GameSettingsDialog`.
 - The corrected Website boundary ends Settings at local preferences. It never
   reads learned skills and never writes selected primary/concentration state.
-- `SkillBook` remains the in-run progression owner and continues to call
-  `session.selectPrimarySkill` and `session.selectConcentration`; Create and
-  retained-loadout transitions remain independent.
+- `SkillBook` retains native category-1 primary and category-3 general
+  selection. The selected-skill HUD owns compact primary and addressed A/B
+  selectors; Create and retained-loadout transitions remain independent.
 - Entering child Controls/Performance pages and leaving gameplay Settings keep
   the existing suspension, focus, Back, and no-catch-up teardown semantics.
 
 ### Nearby-system findings
 
-- The native reports are not wrong: the stock Settings rows exist. This change
-  is an explicit Website product deviation, not a reinterpretation of
-  `0x005D9A50` or `0x005D8120`.
+- The 2026-08-23 native reports correct this entry: the stock Settings rows do
+  not exist. Removing the web rows was still correct, but it is native parity,
+  not a Website product deviation.
 - Selected primary/concentration fields in the progression comparison remain
   necessary for the Skill Book and HUD to react to authoritative snapshots;
   they must not be reverted with the Settings-only integration.
@@ -35763,3 +35765,210 @@ gate and production-bundle browser receipt. The focused code/RE commit is
 and fabric dye`) on parent `b57eab6f4410b8cc80b4692654659135fdda5e2e`.
 This docs-only receipt accompanies that commit in the same normal fast-forward
 publication. Deployment was not requested and remains a separate owner action.
+
+## 2026-08-23 — Selected-spell HUD controls and compact loadout selectors
+
+### Reported smell and parity question
+
+- Reported web behavior: the selected spell emblem between the Health and Mana
+  bars is visual only. Clicking it does not enter the stock spell/concentration
+  swap interaction and may instead reach the gameplay pointer path.
+- Stock behavior to recover: the selected primary and each occupied
+  concentration emblem are separate HUD buttons. They open compact learned-row
+  selectors, replace the addressed primary/A/B binding, suspend local input,
+  and close on selection or outside click.
+- Reproduction inputs/scenes: primary-only, primary+A, and Split Mind A+B HUDs
+  in Hub and active Boneyard; primary, A, and B clicks; outside cancel; pure and
+  Weld primaries; every concentration; Plane Orb and Mind Chug gates.
+- Falsifiers: opening the full Skill Screen, using one generic concentration
+  replacement cursor for both HUD icons, displaying acquisition order instead
+  of native row order, permitting a duplicate A/B concentration, allowing the
+  click to cast, or mutating loadout state client-side.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Stock behavior | user-reported retail comparison, 2026-08-23 | Clicking the top-center spell icon opens the stock swap surface rather than casting. | high for the reported entry behavior |
+| Retail identity | unmodified `SolomonDarkAbandonware/SolomonDark.exe`, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred base `0x00400000` | Same 0.72.5 image as the owned HUD, SkillScreen, progression, and audio corpora. | high |
+| Read-only instructions | canonical Ghidra replica; `0x005CBA00`, `0x005C7200`, `0x005D50E0`, `0x005D76C0`, Game vslot `+0x10 -> 0x005D8120`; selector `0x00657A70/0x0066F0B0/0x0066F330/0x00659AD0/0x00658DC0`; modal `0x004281F0` | Fixes Game ownership, all three button fields, dynamic rectangles, option membership/order, slot-specific clearing, modal geometry, pointer cancel, and teardown. | high |
+| Static data/audio | skill rows `0..82`; Skills records `27..122`; Fonts group `93..184`; audio registry offsets `+0x18` and `+0x304` | Fixes full primary/concentration membership, exact icons/font, `click`, and `concentrate`. | high |
+| Current web trace | `GameHud`, `native-hud-presentation`, `SkillBook`, `MainMenuScene`, Hub/Boneyard scenes, protocol 61/session/host | Emblems render exact records/centers but have no hit target; only tome/`K` opens SkillBook; concentration messages carry no addressed slot. | high |
+
+No injected process or runtime address is used. All executable addresses are
+preferred-image virtual addresses from the canonical read-only project.
+
+### System boundary and membership inventory
+
+Native system: `Game`'s selected-skill HUD controls and the transient
+`Skills_Quickbar` learned-category selector, from reverse-z pointer ownership
+through actor-private authoritative binding mutation and modal teardown.
+
+| Member (class/variant/scene/branch) | Native source | Disposition | Proof |
+| --- | --- | --- | --- |
+| selected-primary binding 12 button | Game `+0x3AC`, `0x005D8120` | exact-ported | `40 x 65` hit/action and primary selector tests |
+| concentration-A binding 16 button | Game `+0x46C`, `0x005D8120` | exact-ported | addressed slot-A option/mutation tests |
+| concentration-B binding 20 button | Game `+0x52C`, `0x005D8120` | exact-ported | Split Mind/addressed slot-B tests |
+| zero/one/two-concentration hit layouts and HUD-hide offset | `0x005D50E0`, `0x005C7200`, `0x005D76C0` | exact-ported | per-layout rectangle assertions |
+| reverse-z click ownership and world-cast swallow | common router `0x00428620`, Game children `0x005CBA00` | exact-ported | pointer journey plus stopped-input assertion |
+| pure primaries 8/16/24/32/40 | category-1 rows | exact-ported | table-driven selector membership |
+| Spell Welding 52 and builds 1000..1009 | category-1 row/build icon table | exact-ported | every build icon option assertion |
+| persisted Game `+0x1668` row-exclusion bytes | constructor zero, `0x005C7AB0` raw native state import/export, selector read | out-of-system (Website does not ingest raw native Game saves and has no producer for this array) | all supported web sessions use the native zero/default branch |
+| Plane Orb 80 temporary primary gate | `0x005D82A3` | exact-ported | no-open/swallowed-click branch |
+| concentrations 57..63 and 65..71 | category-3 rows | exact-ported | fourteen-row selector membership |
+| opposite-slot exclusion and duplicate rejection | `0x005D83C1`, `0x005D84B3`, `0x0066F0B0` | exact-ported | A/B option and strict protocol tests |
+| no Split Mind / empty A / empty B / full A+B replacement | `0x005D8409..0x005D8440`, `0x005D8516..0x005D8533`, `0x005D5600` | exact-ported | every slot/capacity transition |
+| Mind Chug mutation lock | progression `+0x828`, `0x005D5703` | exact-ported | rejection/no-feedback test |
+| selector title, black panel, medium bitmap font and full-alpha icons | `0x0066F330` | exact-ported | deterministic render-contract assertions |
+| strict option and outside-cancel hit tests | `0x00659AD0` | exact-ported | pointer option/cancel tests |
+| open/primary-select click and concentration click+concentrate audio | `0x005D82D7`, `0x005D8389`, `0x005D8481`, `0x005D5686`, `0x005D57EF` | exact-ported | ordered audio assertions |
+| local suspension, close, interruption, teardown | `0x0066F0B0`, `0x004281F0`, `0x00658DC0` | exact-ported | source-qualified pause/close tests |
+| Hub and Boneyard consumers | shared Game HUD owner | exact-ported | both-scene browser journey |
+| SkillScreen primary card selection | `0x00674110` category 1 | verified-already-at-parity | retained primary card action |
+| SkillScreen category-3 cards | `0x00674110 -> 0x005D5600` | verified-already-at-parity | non-draggable click seeds A or uses the general replacement cursor |
+| Settings primary/concentration rows | prior ownership inference | out-of-system (the rows never belonged to `MyCPanel`; `0x005D8120` is a Game vslot) | native report and Website historical ledger correction |
+
+No member is blocked by the browser platform.
+
+### Native ownership thread
+
+- Owner and construction: `Game` embeds and registers the three `UIButton`
+  children. HUD paint remains in `0x005D2520`; button state is not React-local
+  decoration in native.
+- State producers: authoritative learned/effective ranks, selected primary,
+  concentration A/B, Split Mind, active Weld build, Plane Orb override, Mind
+  Chug, viewport width, and HUD reveal offset.
+- State transitions: click -> registry-0 cue -> synchronous selector modal ->
+  option or `-1`; primary writes the selected row; concentration pre-clears the
+  clicked slot then runs the shared category router; accepted A/B selection
+  plays click then concentrate.
+- Downstream consumers: progression refresh, HUD emblem resolver, casting and
+  concentrated gameplay, save checkpoint, replicated snapshot, and audio.
+- Siblings: SkillScreen category-1 direct selection remains valid; category-3
+  card clicks seed the first concentration and retain the general Split Mind
+  replacement cursor, while occupied HUD A/B buttons target an exact slot.
+- Entry/teardown: selector exists only during active gameplay, owns the local
+  suspension depth, cancels on outside/Back/interruption, and releases without
+  a catch-up tick or leaked pointer edge. Hub-to-Boneyard placement preserves
+  A/B and the replacement cursor; post-run loadout reconstruction clears them.
+
+### Recovered behavioral contract
+
+- Every HUD action rectangle is `40 x 65`, normally top `-7`, centered on its
+  emblem. Centers are primary `800`; primary/A `780/820`; and primary/B/A
+  `760/800/840`.
+- The primary button is inert but still pointer-owning during Plane Orb. A/B
+  buttons exist only for occupied slots; B requires Split Mind.
+- Selector options are learned positive-rank rows in ascending numeric ID,
+  category `1` or `3`. A selector excludes current B; B excludes current A.
+- Each option cell is `52 x 52`, centered as one strip at `y=100`. The panel is
+  centered at `x=800`, top `52`, height `79`, and width
+  `max(52 * optionCount, titleWidth) + 10`.
+- The title baseline is `69`, medium bitmap font, RGBA
+  `(0.85,0.73,0.44,0.75)`. The panel is black alpha `0.95`; icons are authored
+  Skills records at white/full alpha.
+- Outside click or Back closes silently. Open and accepted primary play
+  `sounds\\click`; accepted concentration plays `sounds\\click` followed by
+  `sounds\\concentrate` at gain/pitch one.
+- The browser host authenticates the actor and target slot, validates active
+  phase/pause owner/rank/category/Weld/Split Mind/duplicate/Mind Chug, applies
+  the mutation, stops queued input, publishes a snapshot, and checkpoints.
+
+### Nearby-system findings
+
+- The earlier `SettingsControl_HandleAction` name is disproved by the class
+  catalog: `0x005D8120` is `Game::vftable +0x10`; `MyCPanel::vftable +0x10` is
+  `0x00434C60`. The 2026-08-21/22 Settings entries misattributed three HUD
+  controls as Settings rows. Removing Website loadout mutation from Settings
+  remains correct, but it is now native parity rather than a product deviation.
+- Durable native reports updated: `native-hud.md`,
+  `native-skill-screen-and-quickbar.md`, `native-progression-and-skills.md`,
+  `native-gameplay-pause.md`, `native-settings-system.md`, and the class catalog.
+
+### Confidence and open questions
+
+- Confirmed: owner/vtable, three fields, registration, every layout branch,
+  exact dimensions/centers, category/row order, opposite-slot exclusions,
+  primary/Plane Orb and A/B/Split Mind/Mind Chug branches, renderer geometry,
+  fonts/icons/colors, audio identities/order, pointer cancel, suspension, and
+  teardown.
+- Inferred: none material.
+- Unknown: none. Browser focus support can be additive semantic access while
+  pointer geometry and visible presentation remain native.
+
+### Web implementation consequence
+
+- Keep icon resolution and centers in `native-hud-presentation`; add the exact
+  `40 x 65` semantic buttons in `GameHud` and route binding 12/16/20 through one
+  scene-independent selector owner.
+- Add a compact `HudSkillSelector` with a WebGL native-font/icon renderer and
+  transparent semantic `52 x 52` option buttons. Do not open `SkillBook` as a
+  substitute.
+- Retain category-1 and category-3 SkillScreen click routing; category 3 remains
+  non-draggable. Add the compact HUD selectors as a sibling, not a replacement.
+- Protocol 63 adds a distinct addressed-slot concentration command beside the
+  retained general SkillScreen command and a source-distinct `skill-selector`
+  pause owner. Do not infer HUD A/B from arrival order or authorize the command
+  from a full SkillScreen pause.
+- Add exact `concentrate.wav` as audio registry member 17 and fire cues only at
+  the recovered lifecycle edges.
+
+### Validation contract
+
+- Focused contracts: all hit layouts; every pure/Weld primary; every
+  concentration; numeric option order; A/B exclusions and exact replacement;
+  Split Mind, duplicates, Mind Chug and Plane Orb; panel/title/icon geometry;
+  click/concentrate order; protocol decoding/rejection; pause ownership and
+  teardown; SkillScreen category branches.
+- Mac full gate: `/opt/homebrew/bin/bash ./scripts/validate.sh` on the exact
+  candidate tree, plus Mod Loader `python3 tests/re/run_static_re_tests.py --ci`.
+- Browser: Mac Chrome/WebGL2 clicks primary, A, and B in Hub, cancels outside,
+  selects a different primary and both concentration slots, enters Boneyard,
+  repeats the selector, verifies stopped movement/cast beneath it, captures the
+  panel, and records empty page/console/failed-response arrays.
+- Stock comparison: match control/option rectangles, visible option records and
+  order, final binding state, and ordered audio requests to the preferred-image
+  contract above.
+
+### Implementation validation receipt
+
+- Implementation: `GameHud` owns three exact action rectangles;
+  `HudSkillSelector` and its WebGL renderer own the compact modal; protocol 63
+  separates the general SkillScreen command from addressed A/B replacement and
+  its `skill-selector` pause source; the host remains authoritative; the exact
+  stock `concentrate.wav` is pinned and reproducibly extracted.
+- The first Mac browser pass exposed that Hub-to-Boneyard placement rebuilt
+  `PlayerSkillRuntime` with null A/B. That shared reset now preserves only the
+  selected concentrations and replacement cursor for this scene transition;
+  the real post-run loadout boundary still clears them. The transition has a
+  deterministic regression and the original browser failure no longer
+  reproduces.
+- Exact candidate paths are local
+  `/home/user/.codex-worktrees/solomon-website-hud-spell-picker-20260823-root`
+  and `/home/user/.codex-worktrees/solomon-loader-hud-spell-picker-20260823-root`,
+  with Mac mirrors under
+  `/Users/jarrett/codex-acceptance/hud-spell-selector-20260823/`. The pre-receipt
+  manifests matched byte-for-byte across 42 Website and 11 Mod Loader files.
+- Mac Website gate r3 passed backend build/integration and formatting, lint and
+  architecture boundaries, frontend suites `4/44/249/1414/6/61/9/43/12/7/36/23`,
+  desktop `5/5`, production TypeScript/Vite/game-host build, bundle budget, and
+  media policy. `Game-B_DDC9XZ.js` was `437025` raw / `122982` gzip bytes under
+  `524288` / `131072`; log SHA-256
+  `7c1e591251027589e0f185e1b15de111c9ae11dd8e4d4831666bc70422aed514`.
+- Mac Mod Loader static RE r3 passed `495/495`; log SHA-256
+  `a779047082ae6895277464b6b7a966ed328440b483f25b9385523120eff7da04`.
+- Mac Chrome/WebGL2 r5 passed SkillScreen first-A seeding, primary/A/B compact
+  selectors in numeric order, exact `40 x 65` HUD rectangles, outside cancel,
+  Plane Orb no-open, Hub-to-Boneyard A/B preservation `[59,57]`, Boneyard
+  selection, and no movement/cast leak. Audio requests were open `click`,
+  primary accept `click`, and concentration accept `click -> concentrate`, all
+  at playback rate/gain one. Page, console, and failed-response arrays were
+  empty; log SHA-256
+  `4374f481228d6167dd72ed4e55604b4af959ac06232457a16de7cc69e9387364`.
+  Reviewed Hub/Boneyard selector captures have SHA-256
+  `d1665e2eddfd21de70f231072c10c4026ab94314acbaa505278842018d1104a5`
+  and `558df03960586d96693cb36f3964d79833c71dbab02f49df7f05e6a81aaff1fd`.
+- No member is blocked by the browser platform and no material unknown remains.
+  Commits are retained on the two focused local branches; push and deployment
+  were not authorized and were not performed. Task acceptance worktrees and
+  the evidence named above remain retained for review.

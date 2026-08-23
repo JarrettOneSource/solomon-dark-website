@@ -48,6 +48,7 @@ import {
 } from './game-audio-native.ts'
 import { startGamePresentationLoop } from './game-presentation-frame-loop.ts'
 import GameHud from './GameHud.tsx'
+import type { NativeHudSkillBinding } from './native-hud-presentation.ts'
 import HubInventoryUi, { type HubUiSurface } from './HubInventoryUi.tsx'
 import GameOverOverlay from './GameOverOverlay.tsx'
 import TouchJoystick from './input/TouchJoystick.tsx'
@@ -115,6 +116,7 @@ interface BoneyardSceneProps {
   onHubAction: (action: HubInventoryAction) => void
   onContinueGameOver: (runId: string, eventId: number) => void
   onInventoryOpenChange: (open: boolean) => void
+  onOpenSkillSelector: (binding: NativeHudSkillBinding) => void
   onOpenSkills: () => void
   onPauseRequest: () => void
   onReady: () => void
@@ -158,6 +160,7 @@ export default function BoneyardScene({
   onHubAction,
   onContinueGameOver,
   onInventoryOpenChange,
+  onOpenSkillSelector,
   onOpenSkills,
   onPauseRequest,
   onReady,
@@ -861,6 +864,12 @@ export default function BoneyardScene({
                   true,
                   player ? actorHeadingVector(player.headingIndex) : undefined,
                 )
+              }}
+              onSkillBindingClick={(binding) => {
+                if (!inputBlocked && run.phase === 'active') {
+                  setInventorySurface(null)
+                  onOpenSkillSelector(binding)
+                }
               }}
               onSkillsClick={() => {
                 if (!inputBlocked && run.phase === 'active') {

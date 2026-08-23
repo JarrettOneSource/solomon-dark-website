@@ -113,6 +113,11 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
     skillId: 57,
   })), { type: 'client-select-concentration', skillId: 57 })
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
+    type: 'client-select-concentration-slot',
+    skillId: 57,
+    slot: 1,
+  })), { type: 'client-select-concentration-slot', skillId: 57, slot: 1 })
+  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
     type: 'client-lua-execute',
     code: 'return sd.runtime.get_frame_state()',
     requestId: 9,
@@ -264,6 +269,21 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
       ownerDisplayName: 'Helvidius',
       ownerPlayerId: 'player-1',
       source: 'skill-book',
+    },
+  })
+  assert.deepEqual(decodeServerGameMessage(encodeGameMessage({
+    type: 'server-gameplay-pause',
+    pause: {
+      ownerDisplayName: 'Helvidius',
+      ownerPlayerId: 'player-1',
+      source: 'skill-selector',
+    },
+  })), {
+    type: 'server-gameplay-pause',
+    pause: {
+      ownerDisplayName: 'Helvidius',
+      ownerPlayerId: 'player-1',
+      source: 'skill-selector',
     },
   })
   assert.deepEqual(decodeServerGameMessage(encodeGameMessage({
@@ -286,6 +306,22 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
     paused: true,
     source: 'dialogue',
   })), /source/)
+})
+
+test('protocol 63 requires an exact A or B slot only for HUD concentration replacement', () => {
+  assert.throws(() => decodeClientGameMessage(JSON.stringify({
+    type: 'client-select-concentration-slot',
+    skillId: 57,
+  })), /slot/)
+  assert.throws(() => decodeClientGameMessage(JSON.stringify({
+    type: 'client-select-concentration-slot',
+    skillId: 57,
+    slot: 2,
+  })), /out of range/)
+  assert.deepEqual(decodeClientGameMessage(JSON.stringify({
+    type: 'client-select-concentration',
+    skillId: 57,
+  })), { type: 'client-select-concentration', skillId: 57 })
 })
 
 test('server protocol carries only one bounded opaque leaderboard receipt', () => {
@@ -1191,7 +1227,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
 })
 
 test('protocol v62 carries developer access, held one-shot pose, Fire lifecycle, Game Over/loadout, status composition, saved leave, deployment restart, Ether replacement, party access, movement, social, mod, and gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 62)
+  assert.equal(GAME_PROTOCOL_VERSION, 63)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),

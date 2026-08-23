@@ -59,6 +59,11 @@ import {
 } from './game-settings.ts'
 import { createGamepadMenuNavigation } from './input/gamepad-menu-navigation.ts'
 import {
+  nativeHudSkillSelectorTarget,
+  type NativeHudSkillSelectorTarget,
+} from './hud-skill-selector.ts'
+import type { NativeHudSkillBinding } from './native-hud-presentation.ts'
+import {
   NATIVE_DARK_CLOUD_GUEST_MENU_ROWS,
   NATIVE_DARK_CLOUD_MENU_ROWS,
   nativePauseMenuStagePlacement,
@@ -116,6 +121,8 @@ const loadSkillPicker = () => import('./SkillPicker.tsx')
 const SkillPicker = lazy(loadSkillPicker)
 const loadSkillBook = () => import('./SkillBook.tsx')
 const SkillBook = lazy(loadSkillBook)
+const loadHudSkillSelector = () => import('./HudSkillSelector.tsx')
+const HudSkillSelector = lazy(loadHudSkillSelector)
 
 /** The Dark Cloud's Esc menu is the native simple menu with the local viewer as its owner. */
 const DARK_CLOUD_PAUSE_OWNER_ID = 'dark-cloud'
@@ -335,6 +342,7 @@ export default function MainMenuScene({
   const levelUpSoundBarrierRef = useRef<number | null>(null)
   const [levelUpPickerClosing, setLevelUpPickerClosing] = useState(false)
   const [skillBookOpen, setSkillBookOpen] = useState(false)
+  const [hudSkillSelector, setHudSkillSelector] = useState<NativeHudSkillSelectorTarget | null>(null)
   const [inventoryScreenOpen, setInventoryScreenOpen] = useState(false)
   const [inventoryRequestSequence, setInventoryRequestSequence] = useState(0)
   const [loading, setLoading] = useState<MatchLoadingState | null>(null)
@@ -616,7 +624,10 @@ export default function MainMenuScene({
 
   const runtimeConnected = runtimeSnapshot !== null
   useEffect(() => {
-    if (runtimeConnected) void loadSkillBook()
+    if (runtimeConnected) {
+      void loadSkillBook()
+      void loadHudSkillSelector()
+    }
   }, [runtimeConnected])
 
   useEffect(() => {
@@ -958,6 +969,7 @@ export default function MainMenuScene({
     setChatOpen(false)
     setGameplaySettingsOpen(false)
     setSkillBookOpen(false)
+    setHudSkillSelector(null)
     setInventoryScreenOpen(false)
     setScreen('root')
     setLeaving(false)
@@ -973,15 +985,16 @@ export default function MainMenuScene({
   const levelUpPickerPresentationId = levelUpBarrierId
     ?? levelUpPickerPresentationRef.current
   const levelUpModalActive = Boolean(runtimeSnapshot?.levelUpBarrier) || levelUpPickerClosing
-  const ownsBookPause = gameplayPause !== null
+  const ownsModalPause = gameplayPause !== null
     && gameplayPause.ownerPlayerId === session?.playerId
     && gameplayPause.source !== 'pause-menu'
-  const ownsActiveInventoryPause = ownsBookPause
+  const ownsActiveInventoryPause = ownsModalPause
     && gameplayPause?.source === 'inventory'
     && inventoryScreenOpen
   const chatDisabled = loading !== null
     || levelUpModalActive
     || skillBookOpen
+    || hudSkillSelector !== null
     || inventoryScreenOpen
     || hubPauseMenuOpen
     || gameplayPause !== null
@@ -989,45 +1002,63 @@ export default function MainMenuScene({
     || loading !== null
     || levelUpModalActive
     || skillBookOpen
+    || hudSkillSelector !== null
     || hubPauseMenuOpen
     || (gameplayPause !== null && !ownsActiveInventoryPause)
-  const desiredBookPauseSource: GameplayPauseSource | null = skillBookOpen
+  const desiredModalPauseSource: GameplayPauseSource | null = skillBookOpen
     ? 'skill-book'
-    : inventoryScreenOpen
-      ? 'inventory'
-      : null
+    : hudSkillSelector !== null
+      ? 'skill-selector'
+      : inventoryScreenOpen
+        ? 'inventory'
+        : null
   const openSkillBook = useCallback(() => {
     if (
       !session
       || loading !== null
       || levelUpModalActive
       || hubPauseMenuOpen
-      || (gameplayPause !== null && !ownsBookPause)
+      || (gameplayPause !== null && !ownsModalPause)
       || (runtimeRunPhase !== 'hub' && runtimeRunPhase !== 'active')
     ) return
     setSkillBookOpen(true)
-  }, [gameplayPause, hubPauseMenuOpen, levelUpModalActive, loading, ownsBookPause, runtimeRunPhase, session])
+  }, [gameplayPause, hubPauseMenuOpen, levelUpModalActive, loading, ownsModalPause, runtimeRunPhase, session])
+
+  const openHudSkillSelector = useCallback((binding: NativeHudSkillBinding) => {
+    if (
+      !session
+      || loading !== null
+      || levelUpModalActive
+      || hubPauseMenuOpen
+      || (gameplayPause !== null && !ownsModalPause)
+      || (runtimeRunPhase !== 'hub' && runtimeRunPhase !== 'active')
+    ) return
+    audio.playSound('click')
+    setSkillBookOpen(false)
+    setHudSkillSelector(nativeHudSkillSelectorTarget(binding))
+  }, [audio, gameplayPause, hubPauseMenuOpen, levelUpModalActive, loading, ownsModalPause, runtimeRunPhase, session])
 
   useEffect(() => {
     if (
       loading !== null
       || levelUpModalActive
-      || (gameplayPause !== null && !ownsBookPause)
+      || (gameplayPause !== null && !ownsModalPause)
     ) {
       setSkillBookOpen(false)
+      setHudSkillSelector(null)
       setInventoryScreenOpen(false)
     }
-  }, [gameplayPause, levelUpModalActive, loading, ownsBookPause])
+  }, [gameplayPause, levelUpModalActive, loading, ownsModalPause])
   useEffect(() => {
     if (!session) return
-    if (desiredBookPauseSource !== null) {
-      if (gameplayPause === null || ownsBookPause) {
-        session.requestGameplayPause(desiredBookPauseSource)
+    if (desiredModalPauseSource !== null) {
+      if (gameplayPause === null || ownsModalPause) {
+        session.requestGameplayPause(desiredModalPauseSource)
       }
       return
     }
-    if (ownsBookPause) session.requestGameplayPause(null)
-  }, [desiredBookPauseSource, gameplayPause, ownsBookPause, session])
+    if (ownsModalPause) session.requestGameplayPause(null)
+  }, [desiredModalPauseSource, gameplayPause, ownsModalPause, session])
   useEffect(() => {
     if (levelUpBarrierId === null) {
       levelUpSoundBarrierRef.current = null
@@ -1194,6 +1225,7 @@ export default function MainMenuScene({
               onContinueGameOver={session.continueGameOver}
               onHubAction={session.sendHubAction}
               onInventoryOpenChange={setInventoryScreenOpen}
+              onOpenSkillSelector={openHudSkillSelector}
               onOpenSkills={openSkillBook}
               onPauseRequest={requestGameplayPause}
               onReady={finishBoneyardLoading}
@@ -1239,6 +1271,7 @@ export default function MainMenuScene({
                 playerId,
                 requestedAtMs: Date.now(),
               })}
+              onOpenSkillSelector={openHudSkillSelector}
               onOpenSkills={openSkillBook}
               onPauseRequest={requestGameplayPause}
               onReady={finishHubLoading}
@@ -1273,6 +1306,7 @@ export default function MainMenuScene({
         {session && skillBookOpen && runtimeProgression ? (
           <Suspense fallback={null}>
             <SkillBook
+              audio={audio}
               economy={runtimeSnapshot!.players[session.playerId]!.economy}
               onAssignQuickbarSkill={session.bindSkillQuickbar}
               onClose={() => setSkillBookOpen(false)}
@@ -1287,6 +1321,20 @@ export default function MainMenuScene({
               style={nativeStageStyle}
               subscribeSnapshot={session.onSnapshot}
               topMost
+            />
+          </Suspense>
+        ) : null}
+
+        {session && hudSkillSelector && runtimeProgression ? (
+          <Suspense fallback={null}>
+            <HudSkillSelector
+              audio={audio}
+              onClose={() => setHudSkillSelector(null)}
+              onSelectConcentrationSlot={session.selectConcentrationSlot}
+              onSelectPrimarySkill={session.selectPrimarySkill}
+              progression={runtimeProgression}
+              style={nativeStageStyle}
+              target={hudSkillSelector}
             />
           </Suspense>
         ) : null}

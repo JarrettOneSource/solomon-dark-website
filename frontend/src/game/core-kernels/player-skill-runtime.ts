@@ -663,6 +663,38 @@ export function setPlayerConcentration(
   }, skillBook, statBook, economy)
 }
 
+export function setPlayerConcentrationSlot(
+  source: PlayerSkillRuntimeComponent,
+  skillBook: PlayerSkillBookComponent,
+  statBook: PlayerStatBookComponent,
+  economy: HubEconomyState,
+  skillId: number,
+  slot: 0 | 1,
+): PlayerSkillRuntimeRefreshResult {
+  if (validConcentrationSelection(skillId, skillBook) === null) {
+    throw new RangeError(`skill ${skillId} cannot be concentrated by this player`)
+  }
+  const splitMind = economy.ownedPerkSelectors.includes(21)
+  if (slot === 1 && !splitMind) {
+    throw new RangeError('concentration slot B requires Split Mind')
+  }
+  const otherSkillId = slot === 0
+    ? source.concentrationSkillIdB
+    : source.concentrationSkillIdA
+  if (otherSkillId === skillId) {
+    throw new RangeError(`skill ${skillId} already occupies the other concentration slot`)
+  }
+  return refreshPlayerSkillRuntime({
+    ...source,
+    ...(slot === 0
+      ? { concentrationSkillIdA: skillId }
+      : { concentrationSkillIdB: skillId }),
+    nextConcentrationReplacementSlot: splitMind
+      ? slot === 0 ? 'b' : 'a'
+      : 'a',
+  }, skillBook, statBook, economy)
+}
+
 export function isPlayerSkillConcentrated(
   source: Pick<PlayerSkillRuntimeComponent,
     'concentrationSkillIdA' | 'concentrationSkillIdB'

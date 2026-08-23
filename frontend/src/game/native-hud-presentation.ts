@@ -32,11 +32,35 @@ export function nativeHudLeftOriginClipPath(progress: number): string {
 
 export type NativeHudSkillBinding = 12 | 16 | 20
 
+export const NATIVE_HUD_SKILL_ACTION_HEIGHT = 65
+export const NATIVE_HUD_SKILL_ACTION_TOP = -7
+export const NATIVE_HUD_SKILL_ACTION_WIDTH = 40
+
+export interface NativeHudSkillActionRect {
+  readonly height: number
+  readonly left: number
+  readonly top: number
+  readonly width: number
+}
+
 export interface NativeHudSkillBindingPresentation {
   readonly binding: NativeHudSkillBinding
   readonly centerOffset: number
   readonly record: number
   readonly skillId: number
+}
+
+export function nativeHudSkillActionRect(
+  centerOffset: number,
+  viewportWidth = 1_600,
+  hudVerticalOffset = 0,
+): NativeHudSkillActionRect {
+  return Object.freeze({
+    height: NATIVE_HUD_SKILL_ACTION_HEIGHT,
+    left: viewportWidth / 2 + centerOffset - NATIVE_HUD_SKILL_ACTION_WIDTH / 2,
+    top: NATIVE_HUD_SKILL_ACTION_TOP + hudVerticalOffset,
+    width: NATIVE_HUD_SKILL_ACTION_WIDTH,
+  })
 }
 
 export function nativeHealthHudPresentation(

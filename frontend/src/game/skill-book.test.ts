@@ -18,6 +18,12 @@ import {
 } from './skill-book-model.ts'
 
 const component = readFileSync(new URL('./SkillBook.tsx', import.meta.url), 'utf8')
+const hudSelector = readFileSync(new URL('./HudSkillSelector.tsx', import.meta.url), 'utf8')
+const hudSelectorCss = readFileSync(new URL('./hud-skill-selector.css', import.meta.url), 'utf8')
+const hudSelectorRenderer = readFileSync(
+  new URL('./renderer/hud-skill-selector-renderer.ts', import.meta.url),
+  'utf8',
+)
 const css = readFileSync(new URL('./skill-book.css', import.meta.url), 'utf8')
 const renderer = readFileSync(new URL('./renderer/skill-book-renderer.ts', import.meta.url), 'utf8')
 const hud = readFileSync(new URL('./GameHud.tsx', import.meta.url), 'utf8')
@@ -129,4 +135,19 @@ test('renderer owns the stock screen chrome, draggable primary/secondary frames,
   assert.match(scene, /onAssignQuickbarSkill=\{session\.bindSkillQuickbar\}/)
   assert.match(hubScene, /event\.code !== settings\.controls\.openSkills/)
   assert.match(boneyardScene, /event\.code !== settings\.controls\.openSkills/)
+})
+
+test('selected HUD bindings open the compact native selector in both gameplay scenes', () => {
+  assert.match(hud, /hub-hud-selected-skill-action/)
+  assert.match(hud, /NATIVE_HUD_SKILL_ACTION_WIDTH/)
+  assert.match(hubScene, /onOpenSkillSelector\(binding\)/)
+  assert.match(boneyardScene, /onOpenSkillSelector\(binding\)/)
+  assert.match(scene, /nativeHudSkillSelectorTarget\(binding\)/)
+  assert.match(scene, /onSelectConcentrationSlot=\{session\.selectConcentrationSlot\}/)
+  assert.match(hudSelector, /data-selector-kind=\{target\.kind\}/)
+  assert.match(hudSelector, /audio\.playSound\('concentrate'\)/)
+  assert.match(hudSelectorRenderer, /fill\(\{ color: 0x000000, alpha: 0\.95 \}\)/)
+  assert.match(hudSelectorRenderer, /tint: 0xd9ba70/)
+  assert.match(hudSelector, /top: layout\.optionTop/)
+  assert.match(hudSelectorCss, /\.hud-skill-selector-action[\s\S]*pointer-events: auto/)
 })

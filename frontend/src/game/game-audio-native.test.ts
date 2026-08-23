@@ -302,6 +302,21 @@ test('pins the complete skill-picker lifecycle cues to the untouched stock WAVs'
   }
 })
 
+test('pins the selected-skill HUD concentration cue to registry member 17', () => {
+  const source = readFileSync(
+    new URL('../assets/game/audio/sfx/concentrate.wav', import.meta.url),
+  )
+  assert.deepEqual(NATIVE_SOUND_MANIFEST.concentrate, {
+    registryOffset: 0x304,
+    sourceName: 'sounds\\concentrate',
+    sourceSha256: 'ca8b10ff2ce00ca913a382c05f3e1c0c600a22d2e206e386e52a4e83d704a47c',
+  })
+  assert.equal(
+    createHash('sha256').update(source).digest('hex'),
+    NATIVE_SOUND_MANIFEST.concentrate.sourceSha256,
+  )
+})
+
 test('pins Magic Trap ElectricBurn loop to the untouched stock WAV', () => {
   const source = readFileSync(
     new URL('../assets/game/audio/sfx/electric-loop.wav', import.meta.url),

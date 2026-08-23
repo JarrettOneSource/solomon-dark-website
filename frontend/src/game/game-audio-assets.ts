@@ -24,6 +24,7 @@ import boneCrack from '../assets/game/audio/sfx/bone-crack.wav'
 import backpackClose from '../assets/game/audio/sfx/backpack-close.wav'
 import badAction from '../assets/game/audio/sfx/bad-action.wav'
 import click from '../assets/game/audio/sfx/click.wav'
+import concentrate from '../assets/game/audio/sfx/concentrate.wav'
 import coffinBreak from '../assets/game/audio/sfx/coffin-break.wav'
 import criticalHit from '../assets/game/audio/sfx/critical-hit.wav'
 import demonDie from '../assets/game/audio/sfx/demon-die.wav'
@@ -194,6 +195,7 @@ export const GAME_AUDIO_SOURCES = {
     'bite-2': bite2,
     'bite-3': bite3,
     click,
+    concentrate,
     'coffin-break': coffinBreak,
     'critical-hit': criticalHit,
     'comet-whistle': cometWhistle,

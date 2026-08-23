@@ -66,6 +66,7 @@ import {
   playerSkillDerivedStats,
   refreshPlayerSkillRuntime,
   setPlayerConcentration,
+  setPlayerConcentrationSlot,
   setPlayerMindstarActive,
   stepPlayerSkillRuntime,
   type PlayerSkillDerivedStats,
@@ -347,6 +348,34 @@ export function selectPlayerEntityConcentration(
     source.statBooks[index]!,
     source.economies[index]!,
     skillId,
+  )
+  return replacePlayerSkillState(
+    source,
+    index,
+    selected.skillBook,
+    selected.runtime,
+    source.economies[index]!,
+  )
+}
+
+export function selectPlayerEntityConcentrationSlot(
+  source: PlayerEntityStore,
+  playerId: string,
+  skillId: number,
+  slot: 0 | 1,
+): PlayerEntityStore {
+  const index = playerEntityIndex(source, playerId)
+  if (index < 0) return source
+  if (source.progressions[index]!.mindChugTicksRemaining > 0) {
+    throw new Error('concentration cannot change while Mind Chug is active')
+  }
+  const selected = setPlayerConcentrationSlot(
+    source.skillRuntimes[index]!,
+    source.skillBooks[index]!,
+    source.statBooks[index]!,
+    source.economies[index]!,
+    skillId,
+    slot,
   )
   return replacePlayerSkillState(
     source,
@@ -815,6 +844,7 @@ export function resetPlayerEntitiesForNewRun(
   source: PlayerEntityStore,
   placements: Readonly<Record<string, PlayerCharacterState>>,
   lightRegistrations: Readonly<Record<string, NativeLightProviderRegistration>> | null = null,
+  options: Readonly<{ preserveConcentrations?: boolean }> = {},
 ): PlayerEntityStore {
   const placementIds = Object.keys(placements)
   if (
@@ -832,11 +862,21 @@ export function resetPlayerEntitiesForNewRun(
   ) {
     throw new Error('new run requires exactly one light registration for every player entity')
   }
-  const skillStates = source.identities.map((_, index) => createPlayerSkillRuntime(
-    source.skillBooks[index]!,
-    source.statBooks[index]!,
-    source.economies[index]!,
-  ))
+  const skillStates = source.identities.map((_, index) => {
+    const created = createPlayerSkillRuntime(
+      source.skillBooks[index]!,
+      source.statBooks[index]!,
+      source.economies[index]!,
+    )
+    if (options.preserveConcentrations !== true) return created
+    const current = source.skillRuntimes[index]!
+    return refreshPlayerSkillRuntime({
+      ...created.runtime,
+      concentrationSkillIdA: current.concentrationSkillIdA,
+      concentrationSkillIdB: current.concentrationSkillIdB,
+      nextConcentrationReplacementSlot: current.nextConcentrationReplacementSlot,
+    }, created.skillBook, source.statBooks[index]!, source.economies[index]!)
+  })
   const resetSkillBooks = skillStates.map(({ skillBook }) => skillBook)
   const progressions = source.progressions.map((progression, index) => {
     const reset = resetPlayerPotionEffects(resetPlayerCombatForNewRun(progression))
