@@ -6,6 +6,7 @@ import json
 import math
 import os
 from pathlib import Path
+import hashlib
 from typing import Any, Iterable, Mapping, Sequence
 
 import numpy as np
@@ -107,3 +108,64 @@ def aggregate_reward_terms(records: Iterable[Mapping[str, Any]]) -> dict[str, fl
             if isinstance(value, (int, float)) and math.isfinite(float(value)):
                 totals[str(name)] = totals.get(str(name), 0.0) + float(value)
     return totals
+
+
+def training_summary(
+    training_directory: Path,
+    checkpoint: Path,
+) -> Mapping[str, Any]:
+    metrics = read_jsonl(training_directory / "metrics.jsonl")
+    episodes = read_jsonl(training_directory / "episodes.jsonl")
+    if not metrics:
+        raise ValueError("training summary requires at least one metrics record")
+    gameplay: dict[str, Any] = {
+        "enemy_kills": 0,
+        "enemy_kills_by_kind": {},
+        "waves_completed": 0,
+        "potions_used": 0,
+        "skill_picks": 0,
+        "gold_collected": 0.0,
+        "items_collected": 0,
+        "item_kinds": {},
+        "health_orbs_collected": 0,
+        "mana_orbs_collected": 0,
+        "powerups_collected": 0,
+    }
+    for record in metrics:
+        row = record.get("gameplay", {})
+        for name in (
+            "enemy_kills",
+            "waves_completed",
+            "potions_used",
+            "skill_picks",
+            "gold_collected",
+            "items_collected",
+            "health_orbs_collected",
+            "mana_orbs_collected",
+            "powerups_collected",
+        ):
+            gameplay[name] += row.get(name, 0)
+        for name in ("enemy_kills_by_kind", "item_kinds"):
+            for key, count in row.get(name, {}).items():
+                gameplay[name][key] = gameplay[name].get(key, 0) + count
+    completed = [episode for episode in episodes if episode.get("aborted") is False]
+    digest = hashlib.sha256(checkpoint.read_bytes()).hexdigest()
+    return {
+        "summary_version": 5,
+        "checkpoint": str(checkpoint.resolve()),
+        "checkpoint_sha256": digest,
+        "checkpoint_bytes": checkpoint.stat().st_size,
+        "updates": len(metrics),
+        "trained_environment_steps": metrics[-1]["env_steps_total"],
+        "gameplay": gameplay,
+        "episode_records": len(episodes),
+        "complete_episodes": len(completed),
+        "incomplete_episodes": len(episodes) - len(completed),
+        "best_wave": max((episode["waves_reached"] for episode in completed), default=0),
+        "best_return": max((episode["return"] for episode in completed), default=0.0),
+        "maximum_kl": max(record.get("kl_divergence_max", 0.0) for record in metrics),
+        "reward_clamp_adjustment": sum(
+            record.get("reward_terms", {}).get("clamp_adjustment", 0.0)
+            for record in metrics
+        ),
+    }

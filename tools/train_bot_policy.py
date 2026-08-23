@@ -16,7 +16,7 @@ from ml_bot.checkpoint import atomic_write, load_checkpoint, typescript_checkpoi
 from ml_bot.arena import checkpoint_arena
 from ml_bot.model import PolicyV5
 from ml_bot.diagnostics import render_dashboard, render_replay
-from ml_bot.metrics import promotion_decision
+from ml_bot.metrics import promotion_decision, training_summary
 from ml_bot.probes import behavior_probe_scorecard
 from ml_bot.self_test import main as self_test
 from ml_bot.spec import POLICY_SPEC, REPOSITORY_ROOT
@@ -272,6 +272,18 @@ def run_arena(args: argparse.Namespace) -> Any:
     }
 
 
+def run_summary(args: argparse.Namespace) -> Any:
+    result = training_summary(
+        Path(args.training_directory).resolve(),
+        Path(args.checkpoint).resolve(),
+    )
+    atomic_write(
+        Path(args.output).resolve(),
+        (json.dumps(result, indent=2, allow_nan=False, sort_keys=True) + "\n").encode(),
+    )
+    return result
+
+
 def paired_wave_vectors(first: Any, second: Any) -> tuple[list[float], list[float]]:
     def rows(report: Any) -> dict[int, float]:
         return {
@@ -395,6 +407,12 @@ def create_parser() -> argparse.ArgumentParser:
     arena_parser.add_argument("--maximum-steps", type=positive_integer, default=1_500)
     arena_parser.add_argument("--output", required=True)
     arena_parser.set_defaults(handler=run_arena)
+
+    summary_parser = subparsers.add_parser("summarize", help="write one campaign report")
+    summary_parser.add_argument("--training-directory", required=True)
+    summary_parser.add_argument("--checkpoint", required=True)
+    summary_parser.add_argument("--output", required=True)
+    summary_parser.set_defaults(handler=run_summary)
 
     validate_parser = subparsers.add_parser("validate", help="validate a strict v5 checkpoint")
     validate_parser.add_argument("--checkpoint", required=True)
