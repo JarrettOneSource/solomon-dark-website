@@ -48,6 +48,13 @@ That test crosses the TypeScript spec, compact checkpoint codec, PyTorch
 inference, BC, main PPO, choice SMDP PPO, Node worker bridge, expert action,
 and selective-reset boundaries.
 
+The pinned gate can also be invoked as:
+
+```sh
+ML_BOT_PYTHON=/path/to/ml-bot-venv/bin/python \
+  ./scripts/validate-ml-bot-training.sh
+```
+
 ## Bootstrap and training
 
 The bootstrap collects real authoritative web states and labels them with the
