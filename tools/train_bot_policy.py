@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import asdict
+from dataclasses import asdict, replace
 import json
 from pathlib import Path
 import sys
@@ -89,6 +89,28 @@ def run_campaign(args: argparse.Namespace) -> Any:
         configuration,
     )
     return {"status": "ok", "bootstrap": bootstrap, "training": trained}
+
+
+def run_gamma_sweep(args: argparse.Namespace) -> Any:
+    output = Path(args.output).resolve()
+    base = training_configuration(args)
+    results = {}
+    for gamma in args.gammas:
+        configuration = replace(base, gamma=gamma)
+        destination = output / f"gamma-{str(gamma).replace('.', 'p')}"
+        register_experiment(
+            destination,
+            f"Gamma sweep {gamma}",
+            args.expected_metric,
+            args.eval_condition,
+            configuration,
+        )
+        results[str(gamma)] = train_policy(
+            Path(args.checkpoint).resolve(),
+            destination,
+            configuration,
+        )
+    return {"status": "ok", "gammas": results}
 
 
 def run_evaluate(args: argparse.Namespace) -> Any:
@@ -388,6 +410,15 @@ def create_parser() -> argparse.ArgumentParser:
     train_parser.add_argument("--resume", action="store_true")
     train_parser.set_defaults(handler=run_train)
 
+    sweep_parser = subparsers.add_parser("gamma-sweep", help="train the four approved horizons")
+    add_output(sweep_parser)
+    add_training(sweep_parser, gamma=False)
+    sweep_parser.add_argument("--checkpoint", required=True)
+    sweep_parser.add_argument(
+        "--gammas", type=gamma_list, default=[0.99, 0.995, 0.997, 0.999]
+    )
+    sweep_parser.set_defaults(handler=run_gamma_sweep)
+
     campaign_parser = subparsers.add_parser("campaign", help="bootstrap then train")
     add_output(campaign_parser)
     add_bootstrap(campaign_parser, environment=False)
@@ -425,7 +456,12 @@ def add_bootstrap(parser: argparse.ArgumentParser, *, environment: bool = True) 
         add_environment(parser)
 
 
-def add_training(parser: argparse.ArgumentParser, *, environment: bool = True) -> None:
+def add_training(
+    parser: argparse.ArgumentParser,
+    *,
+    environment: bool = True,
+    gamma: bool = True,
+) -> None:
     parser.add_argument("--iterations", type=positive_integer, default=10)
     parser.add_argument("--rollout-steps", type=positive_integer, default=1_024)
     parser.add_argument("--ppo-epochs", type=positive_integer, default=4)
@@ -434,7 +470,12 @@ def add_training(parser: argparse.ArgumentParser, *, environment: bool = True) -
     parser.add_argument("--minimum-choice-batch", type=positive_integer, default=32)
     parser.add_argument("--learning-rate", type=positive_float, default=0.0003)
     parser.add_argument("--choice-learning-rate", type=positive_float, default=0.0003)
-    parser.add_argument("--gamma", type=float, choices=(0.99, 0.995, 0.997, 0.999), default=0.995)
+    if gamma:
+        parser.add_argument(
+            "--gamma", type=float, choices=(0.99, 0.995, 0.997, 0.999), default=0.995
+        )
+    else:
+        parser.set_defaults(gamma=0.995)
     parser.add_argument("--gae-lambda", type=closed_fraction, default=0.95)
     parser.add_argument("--target-kl", type=positive_float, default=0.02)
     parser.add_argument("--experiment", default="First schema-v5 web headless PPO campaign")
@@ -483,6 +524,14 @@ def closed_fraction(value: str) -> float:
     parsed = float(value)
     if not 0 <= parsed <= 1:
         raise argparse.ArgumentTypeError("expected a fraction within [0, 1]")
+    return parsed
+
+
+def gamma_list(value: str) -> list[float]:
+    parsed = [float(entry) for entry in value.split(",") if entry]
+    allowed = {0.99, 0.995, 0.997, 0.999}
+    if not parsed or any(entry not in allowed for entry in parsed) or len(set(parsed)) != len(parsed):
+        raise argparse.ArgumentTypeError("expected unique approved gammas separated by commas")
     return parsed
 
 

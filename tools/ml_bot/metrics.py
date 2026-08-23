@@ -67,11 +67,16 @@ def paired_seed_comparison(
     standard_error = float(np.std(difference, ddof=1) / math.sqrt(difference.size)) \
         if difference.size > 1 else 0.0
     mean = float(np.mean(difference))
+    lower = mean - 1.96 * standard_error
+    upper = mean + 1.96 * standard_error
     return {
         "count": int(difference.size),
         "meanDifference": mean,
         "standardError": standard_error,
-        "candidateWins": mean > 0 and (standard_error == 0 or mean > 1.96 * standard_error),
+        "lower95": lower,
+        "upper95": upper,
+        "candidateWins": lower > 0,
+        "candidateRegresses": upper < 0,
     }
 
 
@@ -83,12 +88,12 @@ def promotion_decision(
 ) -> Mapping[str, Any]:
     train = paired_seed_comparison(incumbent_train, candidate_train)
     holdout = paired_seed_comparison(incumbent_holdout, candidate_holdout)
-    promoted = bool(train["candidateWins"]) and float(holdout["meanDifference"]) >= 0
+    promoted = bool(train["candidateWins"]) and not bool(holdout["candidateRegresses"])
     return {
         "promoted": promoted,
         "trainDistribution": train,
         "holdout": holdout,
-        "rule": "paired train win with no holdout regression",
+        "rule": "paired train lower CI above zero with no holdout upper CI below zero",
     }
 
 

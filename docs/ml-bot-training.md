@@ -78,6 +78,16 @@ returns scales rewards before tick-aware GAE. Each decision uses
 `gamma ** executed_ticks`; an action repeat stops on the first terminal tick.
 The approved gamma values are 0.99, 0.995, 0.997, and 0.999.
 
+Run the same registered short campaign at every approved horizon with:
+
+```sh
+python tools/train_bot_policy.py gamma-sweep \
+  --checkpoint runtime/ml-training/web-v5/bootstrap-v5.sdml \
+  --output runtime/ml-training/web-v5/gamma-sweep \
+  --gammas 0.99,0.995,0.997,0.999 \
+  [the shared training arguments]
+```
+
 Skill choices in the current web runtime are scripted and carry
 `trainable=false`. They are recorded but excluded from SMDP batches. The
 separate choice scorer, normalized entropy, coverage temperature, variable
