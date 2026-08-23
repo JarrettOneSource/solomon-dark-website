@@ -128,6 +128,11 @@ def run_evaluate(args: argparse.Namespace) -> Any:
         workers=args.workers,
         action_repeat=args.action_repeat,
         maximum_steps=args.maximum_steps,
+        progress=lambda value: print(
+            json.dumps({"evaluationProgress": value}, sort_keys=True),
+            file=sys.stderr,
+            flush=True,
+        ),
     )
     if args.report:
         atomic_write(

@@ -9,7 +9,7 @@ import json
 import math
 from pathlib import Path
 import time
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 import numpy as np
 import torch
@@ -403,6 +403,7 @@ def evaluate_policy(
     workers: int,
     action_repeat: int,
     maximum_steps: int,
+    progress: Callable[[Mapping[str, Any]], None] | None = None,
 ) -> Mapping[str, Any]:
     if len(seeds) < 1 or workers < 1 or action_repeat < 1 or maximum_steps < 1:
         raise ValueError("evaluation sizes must be positive")
@@ -437,6 +438,12 @@ def evaluate_policy(
                     break
             if np.any(active):
                 records.extend(ledger.aborted_records("evaluation step limit"))
+        if progress is not None:
+            progress({
+                "checkpoint": str(checkpoint_path),
+                "evaluatedEpisodes": len(records),
+                "requestedEpisodes": len(seeds),
+            })
     completed = [record for record in records if record.get("aborted") is False]
     incomplete = [record for record in records if record.get("aborted") is True]
     returns = [float(record["return"]) for record in completed]
