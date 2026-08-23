@@ -26,9 +26,9 @@ test('records one row from host-owned Hall counters without inferring from exper
     element: 'ether',
     headingIndex: 4,
     highestSkills: [
-      { rank: 3, skillId: 2 },
-      { rank: 2, skillId: 7 },
-      { rank: 1, skillId: 1 },
+      { rank: 3, skillId: 11 },
+      { rank: 2, skillId: 13 },
+      { rank: 1, skillId: 8 },
     ],
     level: 4,
     monstersKilled: 17,
@@ -39,6 +39,45 @@ test('records one row from host-owned Hall counters without inferring from exper
     wizardName: 'Volusius',
   })
   assert.equal(recorder.observe(snapshot('game-over', 440, 339), 'local', 'account'), null)
+})
+
+test('records only the ordered public skill list, never element or discipline roots', () => {
+  const completed = new HallOfFameRunRecorder(
+    () => new Date('2026-08-23T12:00:00.000Z'),
+  ).observe(levelOneSnapshot(), 'local', null)
+
+  assert.deepEqual(completed?.highestSkills, [
+    { rank: 1, skillId: 8 },
+    { rank: 1, skillId: 11 },
+  ])
+})
+
+test('keeps learned-list order across equal ranks and caps the Hall projection at three', () => {
+  const source = levelOneSnapshot()
+  const player = source.players.local!
+  const completed = new HallOfFameRunRecorder().observe({
+    ...source,
+    players: {
+      local: {
+        ...player,
+        progression: {
+          ...player.progression,
+          learnedSkills: [
+            ...player.progression.learnedSkills,
+            [13, 1, 1] as const,
+            [15, 1, 1] as const,
+          ],
+          learnedSkillOrder: [8, 11, 15, 13],
+        },
+      },
+    },
+  }, 'local', null)
+
+  assert.deepEqual(completed?.highestSkills, [
+    { rank: 1, skillId: 8 },
+    { rank: 1, skillId: 11 },
+    { rank: 1, skillId: 15 },
+  ])
 })
 
 function snapshot(
@@ -82,12 +121,43 @@ function player(): ProtocolPlayerState {
     progression: {
       experience: 50_000,
       learnedSkills: [
-        [1, 1, 1],
-        [2, 3, 3],
-        [7, 2, 2],
-        [9, 0, 1],
+        [0, 1, 1],
+        [7, 1, 1],
+        [8, 1, 1],
+        [11, 3, 3],
+        [13, 2, 2],
+        [15, 0, 1],
       ],
+      learnedSkillOrder: [8, 11, 13],
       level: 4,
     },
   } as ProtocolPlayerState
+}
+
+function levelOneSnapshot(): GameSnapshot {
+  const source = snapshot('game-over', 439, 339)
+  return {
+    ...source,
+    players: {
+      local: {
+        ...source.players.local!,
+        config: {
+          discipline: 'mind',
+          displayName: 'Volusius',
+          element: 'ether',
+        },
+        progression: {
+          ...source.players.local!.progression,
+          learnedSkills: [
+            [0, 1, 1],
+            [6, 1, 1],
+            [8, 1, 1],
+            [11, 1, 1],
+          ],
+          learnedSkillOrder: [8, 11],
+          level: 1,
+        },
+      },
+    },
+  }
 }

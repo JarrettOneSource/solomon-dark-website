@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 
+import { nativeSkillColorRoot } from './core-kernels/player-progression.ts'
 import {
   HALL_BOX,
   HALL_CHEVRON_SIZE,
@@ -28,6 +29,10 @@ import {
   layoutHallText,
   measureHallText,
 } from './hall-of-fame-presentation.ts'
+import {
+  SKILL_PICKER_ROOT_TINTS,
+  skillPickerRootTint,
+} from './renderer/skill-picker-render-contract.ts'
 
 const RANK_WIDTH = 24
 const AWESOMENESS_WIDTH = 120
@@ -171,6 +176,34 @@ describe('hall of fame atlas records', () => {
       [0, 83, 80, 74],
       [1021, 83, 80, 74],
     ])
+  })
+})
+
+describe('hall of fame skill colours', () => {
+  it('resolves the exact native colour root for every renderable skill row', () => {
+    const expectedRoots = [
+      0, 1, 2, 3, 4, 5, 6, 7,
+      ...new Array(8).fill(0),
+      ...new Array(8).fill(1),
+      ...new Array(8).fill(2),
+      ...new Array(8).fill(3),
+      ...new Array(8).fill(4),
+      ...new Array(8).fill(7),
+      ...new Array(8).fill(6),
+      ...new Array(8).fill(5),
+      2, 1, 0, 4, 3, 7, 6, 5, 0,
+    ]
+    assert.equal(expectedRoots.length, 81)
+    assert.deepEqual(
+      Array.from({ length: 81 }, (_, skillId) => nativeSkillColorRoot(skillId)),
+      expectedRoots,
+    )
+    for (const root of expectedRoots) {
+      assert.equal(skillPickerRootTint(root), SKILL_PICKER_ROOT_TINTS[root])
+    }
+    assert.equal(nativeSkillColorRoot(81), null)
+    assert.equal(nativeSkillColorRoot(82), null)
+    assert.equal(nativeSkillColorRoot(-1), null)
   })
 })
 

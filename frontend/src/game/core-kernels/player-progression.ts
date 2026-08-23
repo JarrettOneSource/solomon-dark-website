@@ -302,6 +302,12 @@ export function nativeSkillRoot(skillId: number): number | null {
   return RULES[skillId]?.root ?? (skillId === 80 ? 0 : null)
 }
 
+/** Native Skills_Wizard row-colour ownership (`vftable +0x90`, 0x00660CE0). */
+export function nativeSkillColorRoot(skillId: number): number | null {
+  if (Number.isSafeInteger(skillId) && skillId >= 0 && skillId <= 7) return skillId
+  return nativeSkillRoot(skillId)
+}
+
 export function nativeSkillDependencies(skillId: number): readonly number[] {
   const rule = RULES[skillId]
   if (!rule) throw new RangeError(`native skill ${skillId} has no dependency rule`)

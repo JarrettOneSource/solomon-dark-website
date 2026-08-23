@@ -18,7 +18,7 @@ import {
   type HallOfFameEntry,
   type HallOfFameSkill,
 } from './core-kernels/hall-of-fame.ts'
-import { nativeSkillRoot } from './core-kernels/player-progression.ts'
+import { nativeSkillColorRoot } from './core-kernels/player-progression.ts'
 import { HallNineSlice, HallSprite, HallText, HallWizard } from './HallOfFamePrimitives.tsx'
 import {
   HALL_ATLAS_SIZES,
@@ -493,7 +493,7 @@ function HallSkillCell({ cell, skill }: { readonly cell: HallSkillCellLayout; re
         atlas="Skills"
         record={HALL_RECORDS.skills.backplate}
         scale={HALL_SKILL_CELL.backplateScale}
-        tint={skillPickerRootTint(nativeSkillRoot(skill.skillId))}
+        tint={skillPickerRootTint(nativeSkillColorRoot(skill.skillId))}
         x={cell.center.x}
         y={cell.center.y}
       />

@@ -19,7 +19,10 @@ const entries = [
   // (8-16); the ether wizard sits in row 2 so the orb compares like-for-like with the
   // stock capture's Seer in row 2.
   seed('smoke-1', 'IGNATIUS', 'fire', 'body', 9, 41, 18, 250, 4, [[52, 5], [48, 4], [36, 3]], [1, 4, 7, 9], 0.97, 'Skeleton King', 39_850, 2_104),
-  seed('smoke-5', 'AETHER', 'ether', 'mind', 8, 18, 7, 88, 1, [[80, 1]], [], 0.95, null, 36_000, 310),
+  // A pre-correction Website row can contain the element/discipline roots.
+  // Stock selection excludes them, but its row-colour virtual supports them;
+  // expanding durable legacy data must therefore remain renderable.
+  seed('smoke-5', 'AETHER', 'ether', 'mind', 8, 18, 7, 88, 1, [[0, 1], [6, 1], [8, 1]], [], 0.95, null, 36_000, 310),
   seed('smoke-2', 'MARISOL', 'water', 'mind', 14, 37, 15, 211, 6, [[64, 4], [60, 3], [12, 2]], [2, 5, 8], 1, 'Bone Golem', 33_120, 1_760),
   seed('smoke-3', 'ZEPHYR', 'air', 'arcane', 11, 30, 12, 164, 3, [[44, 3], [40, 2], [9, 1]], [3, 6, 10, 11, 12, 13, 14, 15, 16], 0.9, 'Ghoul', 24_000, 1_190),
   seed('smoke-4', 'TERRENCE', 'earth', 'body', 16, 24, 9, 120, 2, [[76, 2], [72, 1]], [4], 0.88, 'Zombie', 16_410, 640),
@@ -162,6 +165,25 @@ try {
   await shoot('03c-row-1-expanded', { height: 420, width: 1120, x: 240, y: 130 })
 
   await page.getByRole('button', { name: 'Show details for AETHER' }).click()
+  await page.locator('.hall-row[data-hall-rank="2"][data-hall-expanded="true"]').waitFor({ state: 'attached' })
+  const legacyRootSkills = await page.locator('.hall-row[data-hall-rank="2"] .hall-skill-cell').evaluateAll(
+    (cells) => cells.map((cell) => Number(cell.getAttribute('data-hall-skill'))),
+  )
+  if (legacyRootSkills.join(',') !== '0,6,8') {
+    throw new Error(`legacy root row rendered ${legacyRootSkills.join(',')}`)
+  }
+  const legacyRootTints = await page.locator('.hall-row[data-hall-rank="2"] .hall-skill-cell').evaluateAll(
+    (cells) => cells.map((cell) => getComputedStyle(cell.querySelector('.hall-sprite-tint')).backgroundColor),
+  )
+  const expectedRootTints = [
+    'rgb(255, 229, 255)',
+    'rgb(203, 216, 255)',
+    'rgb(255, 229, 255)',
+  ]
+  if (legacyRootTints.join(',') !== expectedRootTints.join(',')) {
+    throw new Error(`legacy root row tints ${legacyRootTints.join(',')}`)
+  }
+  step('legacy root row expanded', { skills: legacyRootSkills, tints: legacyRootTints })
   await page.getByRole('button', { name: 'Show details for MARISOL' }).click()
   await page.locator('.hall-row[data-hall-rank="3"][data-hall-expanded="true"]').waitFor({ state: 'attached' })
   await page.evaluate(() => {

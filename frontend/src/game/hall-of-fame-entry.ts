@@ -34,11 +34,19 @@ function completedEntry(
   accountUsername: string | null,
   completedAtUtc: string,
 ): HallOfFameEntry {
-  const highestSkills = player.progression.learnedSkills
-    .filter(([, permanentRank]) => permanentRank > 0)
-    .map(([skillId, permanentRank]) => ({ rank: permanentRank, skillId }))
-    .sort((left, right) => right.rank - left.rank || left.skillId - right.skillId)
+  const permanentRanks = new Map(player.progression.learnedSkills.map(
+    ([skillId, permanentRank]) => [skillId, permanentRank],
+  ))
+  const highestSkills = player.progression.learnedSkillOrder
+    .map((skillId, learnedIndex) => ({
+      learnedIndex,
+      rank: permanentRanks.get(skillId) ?? 0,
+      skillId,
+    }))
+    .filter(({ rank }) => rank > 0)
+    .sort((left, right) => right.rank - left.rank || left.learnedIndex - right.learnedIndex)
     .slice(0, 3)
+    .map(({ rank, skillId }) => ({ rank, skillId }))
   return {
     accountUsername,
     awesomeness: run.awesomeness,
