@@ -29,6 +29,8 @@ const baseUrl = process.env.SDR_MOBILE_HUD_URL || 'http://127.0.0.1:5173'
 const evidenceRoot = process.env.SDR_MOBILE_HUD_EVIDENCE_DIR || '/tmp/solomon-mobile-hud-compact'
 const width = Number(process.env.SDR_MOBILE_HUD_WIDTH || 896)
 const height = Number(process.env.SDR_MOBILE_HUD_HEIGHT || 414)
+// Safari keeps its address bar in landscape on the iPhone XR: the page sees 896 x 366.
+const shortHeight = Number(process.env.SDR_MOBILE_HUD_SHORT_HEIGHT || 366)
 const deviceScaleFactor = Number(process.env.SDR_MOBILE_HUD_DPR || 2)
 // The backend only issues wss:// admissions; a local stack rewrites them onto
 // the plain supervisor socket exactly like smoke-shared-hub-parties.mjs does.
@@ -125,7 +127,20 @@ try {
   const playerId = await enterHub(page, 'Aurelia', 'Water')
   const solo = await capture(page, 'hub-solo')
   assertHubLayout(solo, 'hub-solo', { primaryJoystick: false })
-  assertPartyPanelEnvelope(solo, 'hub-solo', { maxHeight: 120, maxWidth: 170 })
+  assertPartyPanelEnvelope(solo, 'hub-solo', { maxHeight: 58, maxWidth: 140 })
+
+  // The card is positioned in the chat opener's screen-pixel column, so the gap under the
+  // opener must not depend on the viewport height: on Safari's 896 x 366 it used to drop
+  // from 9 px to 1 px (the card's frame-logical top scaled with the frame).
+  await page.setViewportSize({ width, height: shortHeight })
+  const soloShort = await capture(page, 'hub-solo-short')
+  assert.equal(soloShort.window.height, shortHeight, 'hub-solo-short: viewport height')
+  assertPartyPanelEnvelope(soloShort, 'hub-solo-short', { maxHeight: 58, maxWidth: 140 })
+  assertEnvelope(soloShort.members.chatOpen[0], 'hub-solo-short chat opener', { maxHeight: 32, maxWidth: 32 })
+  await page.setViewportSize({ width, height })
+  const soloRestored = await capture(page, 'hub-solo-restored')
+  assertHubLayout(soloRestored, 'hub-solo-restored', { primaryJoystick: false })
+  assertPartyPanelEnvelope(soloRestored, 'hub-solo-restored', { maxHeight: 58, maxWidth: 140 })
 
   // Leader view of the settings dialog (invite code, requests, privacy).
   await page.locator(MEMBER_SELECTORS.partySettingsOpen).tap()
@@ -145,14 +160,14 @@ try {
   await invitation.waitFor({ timeout: 15_000 })
   const invited = await capture(page, 'hub-invitation')
   assertHubLayout(invited, 'hub-invitation', { primaryJoystick: false })
-  assertPartyPanelEnvelope(invited, 'hub-invitation', { maxHeight: 190, maxWidth: 170 })
+  assertPartyPanelEnvelope(invited, 'hub-invitation', { maxHeight: 130, maxWidth: 140 })
   assert.equal(invited.members.partyInvitation.length, 1, 'hub-invitation: invitation card present')
   await invitation.getByRole('button', { name: 'Accept' }).click()
   await waitForPartySize(page, 2)
   await page.locator('.hub-hud-allies[data-ally-count="1"]').waitFor({ timeout: 15_000 })
   const party = await capture(page, 'hub-party')
   assertHubLayout(party, 'hub-party', { primaryJoystick: false })
-  assertPartyPanelEnvelope(party, 'hub-party', { maxHeight: 150, maxWidth: 170 })
+  assertPartyPanelEnvelope(party, 'hub-party', { maxHeight: 80, maxWidth: 140 })
   assert.equal(party.members.partyMembers.length, 2, 'hub-party: two member rows')
   const allyRows = party.members.allyRows.filter((row) => row.visible)
   assert.equal(allyRows.length, 1, 'hub-party: one ally roster row')
@@ -418,7 +433,12 @@ function assertPartyPanelEnvelope(geometry, label, envelope) {
   assert.ok(panel?.visible, `${label}: party panel visible`)
   assertEnvelope(panel, `${label} party panel`, envelope)
   const [chatOpen] = geometry.members.chatOpen
+  assert.ok(chatOpen?.visible, `${label}: chat opener visible`)
   assertOverlapFree([['chatOpen', chatOpen], ['partyPanel', panel], ['meterHealth', geometry.members.meterHealth[0]], ['meterMana', geometry.members.meterMana[0]]], label)
+  // Same screen-pixel column as the opener, a fixed 6 px (±2) under its 30 px box.
+  const gap = panel.y - (chatOpen.y + chatOpen.height)
+  assert.ok(gap >= 4 && gap <= 8, `${label}: party panel sits ${gap.toFixed(2)} px under the chat opener (expected 4–8)`)
+  assert.ok(Math.abs(panel.x - chatOpen.x) <= 0.75, `${label}: party panel x ${panel.x} is not the chat opener column x ${chatOpen.x}`)
 }
 
 // Modal dialogs must land at screen scale (not the 0.46 frame scale) and fit the viewport.

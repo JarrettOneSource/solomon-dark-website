@@ -34600,3 +34600,52 @@ actor-owned slots, which is why the bank order must keep native slot order.
 - This paragraph is the only change on top of the validated tree (docs only).
 - Landing: branch fast-forwarded onto `main`; deploy remains a separate owner
   call.
+
+#### Follow-up 2026-08-23 — party panel vs chat opener on the real phone viewport
+
+- Owner report after the landing: "in the hub the party card is still too large
+  on a small screen like iPhone XR and the chat button overlaps it." Production
+  was already on this build (`DEPLOYED_GIT_SHA` = `3e2aa260`, `wwwroot`
+  swapped 23:55 EDT; `Game` chunk `434,638` bytes = the validated size), so the
+  report is about the landed touch HUD, not the previous one.
+- Reproduced in a browser at iPhone XR emulation against the dev build, with the
+  panel markup mounted verbatim (the backend-less `dev:game` flow has no party
+  state). Measured at `896 × 414`: chat opener `(8, 30) 30 × 30`, panel
+  `(5.1, 69) 156 × 65` — a `9` px gap, which is what the journey captured. The
+  two live in different coordinate spaces: the opener is screen-pixel
+  positioned (`top: safe-area-top + 30px; left: 8px + safe-area-left`), the
+  panel is frame-logical (`top: 150px; left: 11px`, then counter-scaled), so its
+  screen top is `150 × display-scale`. Safari's landscape viewport on the XR is
+  `896 × 366` (address bar visible): display scale `0.4067`, panel top `61` px,
+  gap `1` px — the opener's border and its `-7px` hit halo sit on the card. The
+  panel also ignores `safe-area-inset-left`, so with the notch on the left the
+  opener moves `44` px right and lands directly above the card's header: the
+  two read as one overlapping cluster, and a `156 × 65` card in a `366` px tall
+  view is a third of the height together with the opener.
+- Fix (CSS only, coarse-pointer block): place the panel in the opener's screen
+  column — `top = (safe-area-top + 66px) / display-scale`, `left = (8px +
+  safe-area-left) / display-scale` — a constant `6` px below the `30` px
+  opener at every viewport height, aligned on the same safe-area edge; and
+  shrink the card: `134` px wide, `3px 6px 4px` padding, `8.5` px header with a
+  `16` px gear (hit halo kept at `40` px), `20` px member rows, `10.5` px names,
+  `7` px tags, `28` px invitation buttons. Prototype at `896 × 414`: solo card
+  `(8, 66) 134 × 50`.
+- Journey: `smoke-mobile-hud-compact.mjs` gains a minimum-gap assertion between
+  the opener and the card and a second solo stop at Safari's `896 × 366`
+  viewport (`hub-solo-short`), plus tightened envelopes (solo ≤ `140 × 58`,
+  party ≤ `140 × 80`, invitation ≤ `140 × 130`).
+- Receipt (Mac mini, 2026-08-23, fresh clone of `3e2aa260` + this patch):
+  `scripts/validate.sh` 00:26:31 → 00:28:40 EDT, exit `0`; production bundle
+  `Game-CKwSnHoX.js` `434,638` B raw / `122,300` B gzip, within budget; journey
+  r5 against the Debug backend + session supervisor serving that bundle, real
+  Chrome with CDP touch emulation, `12` stops, exit `0`, evidence under
+  `codex-acceptance/mobile-hud-compact-20260822/evidence/r5`. Measured on the
+  BUILT bundle: opener `(8, 30) 30 × 30` at every stop; panel `(8, 66)
+  134 × 50` solo at `896 × 414` and at `896 × 366` (`hub-solo-short`, display
+  scale `0.4067`), `134 × 70` with two members, `134 × 109` with an
+  invitation; gap to the opener `6` px in every state and at both heights
+  (was `9` / `1`), x offset `0`. Portrait `414 × 896` is behind the rotate
+  overlay; the panel keeps the opener's column there (no regression). Stack
+  disposed by exact PID (`2239 2240`, leftovers `0`); local dev page + headless
+  Chrome disposed by exact PID after the before/after captures. Not landed:
+  production still serves `3e2aa260`; push / deploy is the owner's call.
