@@ -165,11 +165,18 @@ async function exercisePlayer({ account, label }) {
     const pageErrors = []
     const consoleErrors = []
     const failedResponses = []
+    const saveResponses = []
     page.on('pageerror', error => pageErrors.push(error.message))
     page.on('console', message => {
       if (message.type() === 'error') consoleErrors.push(message.text())
     })
     page.on('response', response => {
+      if (new URL(response.url()).pathname.startsWith('/api/game/saves/')) {
+        saveResponses.push({
+          method: response.request().method(),
+          status: response.status(),
+        })
+      }
       if (response.status() >= 400) failedResponses.push({
         status: response.status(),
         url: response.url(),
@@ -205,7 +212,18 @@ async function exercisePlayer({ account, label }) {
     const canvas = page.locator('.hub-world-canvas[data-game-renderer="pixi-webgl"]')
     await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 30_000 })
     await canvas.waitFor({ timeout: 30_000 })
-    const initialSave = await waitForSave(page, account, record => record?.revision >= 1)
+    let initialSave
+    try {
+      initialSave = await waitForSave(page, account, record => record?.revision >= 1)
+    } catch (error) {
+      throw new Error(`${label} initial save did not persist: ${JSON.stringify({
+        body: (await page.locator('body').innerText()).slice(0, 2_000),
+        consoleErrors,
+        failedResponses,
+        pageErrors,
+        saveResponses,
+      })}`, { cause: error })
+    }
     const initialDocument = JSON.parse(initialSave.document)
     assert.equal(initialDocument.continuation.summary.activeRun, false)
     const initialTick = initialDocument.continuation.summary.savedAtTick
