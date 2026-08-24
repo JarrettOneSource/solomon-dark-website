@@ -1562,7 +1562,7 @@ async function collectCombatProof(host, playerId, skillId, baseline, scene) {
         exactEdgeDistance: 200,
         exactEdgeHealthAfter: edgeEnemy?.currentHealth,
         exactEdgeHealthBefore: edgeHealth,
-        exactEdgePosition,
+        exactEdgePosition: edgePosition,
       },
     }
   }

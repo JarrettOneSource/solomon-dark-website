@@ -41619,9 +41619,25 @@ There are no browser-platform-blocked members and no extractable unknowns.
   asks the existing world adapter for a radius-200 superset, then applies the
   native strict root-distance-squared boundary before shuffle. Exact distance
   200, the overhead proxy, and body overlap beyond the edge are all rejected;
-  roots immediately inside and inside-diagonal roots remain eligible.
-- Final gate and browser combat receipts for the attack-area correction remain
-  pending below.
+  roots immediately inside and inside-diagonal roots remain eligible. Red-log
+  SHA-256 is
+  `9e2944a45eb1465100ce1680df3b0063b4ea93eba6dea0981f9ebf75a9df5284`.
+- On native Windows, TypeScript plus the five touched Acid/VFX files passed
+  `187/187`, including center, just-inside, exact-edge, outside-diagonal,
+  body-overlap, and overhead-proxy membership. Focused-log SHA-256 is
+  `ce2462a13b426f0aa49d48e2ee67005a1b2d634879f3e6a4638e261381af7283`.
+- Built Windows Chrome `151.0.7922.170`/WebGL2 traversed the real first-run
+  Tutorial, cast skill 72 at ground `(1025,1653)`, and damaged the isolated
+  center-root enemy from `2` to `1.6666666567325592`. The same enemy was then
+  moved to exact root distance `200`; its collision radius
+  `12.789562169462442` did not extend the boundary, and health remained
+  `1.6666666567325592` through the next pulse. Cloud offsets `[-175,-225]`,
+  proxy Y `2003`, residue depth `0.5`, all Acid child kinds, and empty page,
+  console, failed-response, and wire arrays remained intact. Inspected
+  screenshot SHA-256 is
+  `9a92108e5ee63c538d901b4303ebf7c463afb358a9f45dda767efaa3d6c6f353`;
+  receipt-log SHA-256 is
+  `ec55753464a1c52fdb3967ba4f1a14b38abadaa512d8dc27335ef0d681a23a5f`.
 
 - The presenter now gives Acid Rain two physical owners. Its world-sorted
   `PuppetPointer` plan keeps the native `rootY+350` queue key and zero bias while
@@ -41666,15 +41682,16 @@ There are no browser-platform-blocked members and no extractable unknowns.
   receipt-log SHA-256 is
   `61531a87089d685f50fbbc4550a3929135b53b884eccf562200bbcb6277f43f3`.
 - The sibling Mod Loader static RE suite passed `499/499` natively on Windows
-  with explicit worktree Git provenance; log SHA-256 is
-  `cadbf589c5e2365675589c42d5e22b26923d8bd00de8ae6869aaba29922c2218`.
+  with the strict attack-area catalog and explicit worktree Git provenance;
+  log SHA-256 is
+  `b70b1e08a7da6ac18fbe41dc3b8b065899c1b819f89d67cbfd71fbbc033b1ee4`.
 - An older task-owned validation process and static server were found still
   running after the first Windows gate attempt. After their exact process trees
   were stopped, unchanged `game-host.test.ts` passed `56/56`. The complete
-  native Windows Git-Bash `./scripts/validate.sh` gate then passed on final HEAD
-  `3b85d93dc7662926bbb6229a3e48f9d4060f4c7d`: backend build and integration
+  native Windows Git-Bash `./scripts/validate.sh` gate then passed on final
+  product HEAD `43265de5b03f3857ff2cb0d49ef066bbcbc170fe`: backend build and integration
   tests, formatting, lint, every frontend group, desktop tests, production
-  build, bundle budget, and media policy. Its final `Game-CwGqmwRT.js` is
-  461,214 raw bytes and 129,650 gzip bytes; gate-log SHA-256 is
-  `18530f70f0a33543128cec7b553d2d7631e561b784fed1de056b44c5bceb170a`.
+  build, bundle budget, and media policy. Its final `Game-fW6glSES.js` is
+  461,214 raw bytes and 129,652 gzip bytes; gate-log SHA-256 is
+  `c8b507cc358ca20ebea652c6a8ae7d7c5142d7f5b1916bb5d8d1c8e8bf3463cd`.
 - Publication and deployment were not authorized and remain separate.
