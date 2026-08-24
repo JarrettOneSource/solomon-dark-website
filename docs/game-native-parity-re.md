@@ -41627,19 +41627,20 @@ There are no browser-platform-blocked members and no extractable unknowns.
   body-overlap, and overhead-proxy membership. Focused-log SHA-256 is
   `ce2462a13b426f0aa49d48e2ee67005a1b2d634879f3e6a4638e261381af7283`.
 - Built Windows Chrome `151.0.7922.170`/WebGL2 traversed ordinary Boneyard on
-  exact rebased product HEAD `1b09200192c975d4573be2af73f017af1cbaf652`.
-  Skill 72 at ground `(1144.6099853515625,1829.6492739076969)` damaged the
+  exact publication-candidate product HEAD
+  `16dbe01e6c870cf59d2ffba49323f8bc1ad34653`. Skill 72 at ground
+  `(1327.1300048828125,1647.1292543764469)` damaged the
   isolated center-root enemy from `2.5` to `2.166666656732559`. The same enemy
   was then moved to exact root distance `200`; its collision radius
-  `17.946246245875955` did not extend the boundary, and health remained
+  `12.273558896034956` did not extend the boundary, and health remained
   `2.166666656732559` through the next pulse. Cloud offsets `[-225,-175]`,
-  proxy Y `2179.6492739076966`, residue depth `0.5`, maximum 174 actors and 221
+  proxy Y `1997.1292543764469`, residue depth `0.5`, maximum 174 actors and 221
   primitives, all Acid child kinds, the `magic-storm` cue, and empty page,
   console, and failed-response arrays remained intact. Inspected
   screenshot SHA-256 is
-  `25662212340ba9fb8ca84a98679d75f4da1bdbd9a79a9f055be61a35f55d5a9a`;
+  `01865757413cb7f76319d472b954219d558ab068ae82fe171a2d6a0647c46b9c`;
   receipt-log SHA-256 is
-  `bbbb789cca5e977a7bef8126e736caefc6c1d165742cb2cc98efdd6be821e3aa`.
+  `67c5481b47d0608509886de4361726690f3923ffab549465f91030b840cb6fa4`.
 
 - The presenter now gives Acid Rain two physical owners. Its world-sorted
   `PuppetPointer` plan keeps the native `rootY+350` queue key and zero bias while
@@ -41691,9 +41692,10 @@ There are no browser-platform-blocked members and no extractable unknowns.
   running after the first Windows gate attempt. After their exact process trees
   were stopped, unchanged `game-host.test.ts` passed `56/56`. The complete
   native Windows Git-Bash `./scripts/validate.sh` gate then passed on final
-  product HEAD `1b09200192c975d4573be2af73f017af1cbaf652`: backend build and integration
+  publication-candidate product HEAD
+  `16dbe01e6c870cf59d2ffba49323f8bc1ad34653`: backend build and integration
   tests, formatting, lint, every frontend group, desktop tests, production
-  build, bundle budget, and media policy. Its final `Game-Cj6TO9SP.js` is
-  461,214 raw bytes and 129,649 gzip bytes; gate-log SHA-256 is
-  `cced7cedd83ac0f5497aa60ee8815d94720bf9082932c77e5d12cca7a3b9c451`.
+  build, bundle budget, and media policy. Its final `Game-Bom7p45Z.js` is
+  461,214 raw bytes and 129,650 gzip bytes; gate-log SHA-256 is
+  `199e29b653dd64ddd69ee439807b38ab270efca6da2f68307d91b3123a460fe4`.
 - Publication and deployment were not authorized and remain separate.
