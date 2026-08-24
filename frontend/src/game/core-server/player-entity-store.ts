@@ -46,9 +46,11 @@ import {
   rerollPlayerSkillOffer,
   reselectPlayerLoadout,
   resetPlayerPotionEffects,
+  setAutomaticPlayerSkillChoice,
   stepPlayerPotionEffects,
   selectPlayerPrimarySkill,
   synchronizePlayerLevelMilestone,
+  unlockPlayerAdvancedSkill,
   type PlayerProgressionComponent,
   type SharedPlayerLevelMilestone,
   type PlayerSkillBookComponent,
@@ -335,6 +337,34 @@ export function playerSkillBookAt(
 ): PlayerSkillBookComponent | null {
   const index = playerEntityIndex(source, playerId)
   return index < 0 ? null : source.skillBooks[index] ?? null
+}
+
+export function setPlayerEntityAutomaticSkillChoice(
+  source: PlayerEntityStore,
+  playerId: string,
+  choiceIndex: number,
+): PlayerEntityStore | null {
+  const index = playerEntityIndex(source, playerId)
+  if (index < 0) return null
+  const progression = setAutomaticPlayerSkillChoice(source.progressions[index]!, choiceIndex)
+  return progression === null ? null : replacePlayerProgression(source, index, progression)
+}
+
+export function unlockPlayerEntityAdvancedSkill(
+  source: PlayerEntityStore,
+  playerId: string,
+  skillId: number,
+): PlayerEntityStore | null {
+  const index = playerEntityIndex(source, playerId)
+  if (index < 0) return null
+  const skillBook = unlockPlayerAdvancedSkill(source.skillBooks[index]!, skillId)
+  return skillBook === null ? null : replacePlayerSkillState(
+    source,
+    index,
+    skillBook,
+    source.skillRuntimes[index]!,
+    source.economies[index]!,
+  )
 }
 
 export function playerSkillRuntimeAt(

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { createIdlePlayerCharacterInput } from '../core-kernels/player-character.ts'
+import { createNativeHubNpcState } from '../core-kernels/native-hub-npc.ts'
 import {
   createGameSimulation,
   enterBoneyardWorld,
@@ -57,7 +58,7 @@ const MOD_STATE = {
 
 test('host save documents round-trip the complete owner state and revive Hub runtimes', () => {
   let state = createGameSimulation({ owner: OWNER, guest: GUEST }, {
-    hubTraderAnimationSeed: 73,
+    hubTraderAnimationSeed: 2,
     gameRngSeed: 91,
   })
   for (let tick = 0; tick < 17; tick += 1) {
@@ -76,7 +77,7 @@ test('host save documents round-trip the complete owner state and revive Hub run
     state,
   })
   const encoded = JSON.parse(document) as Record<string, unknown>
-  assert.equal(encoded.schemaVersion, 7)
+  assert.equal(encoded.schemaVersion, 8)
   assert.deepEqual(encoded.mods, MODS)
   assert.deepEqual(encoded.modState, MOD_STATE)
   assert.equal(encoded.integrity, 'local-only')
@@ -109,6 +110,11 @@ test('host save documents round-trip the complete owner state and revive Hub run
   )
   assert.equal(restored.state.world.kind, 'hub')
   if (restored.state.world.kind !== 'hub') throw new Error('expected restored Hub')
+  assert.ok(state.world.kind === 'hub' && state.world.skorcha !== null)
+  assert.deepEqual(
+    restored.state.world.skorcha,
+    state.world.kind === 'hub' ? state.world.skorcha : null,
+  )
   assert.ok(restored.state.world.runtime instanceof HubWorldRuntime)
   assert.ok(restored.state.world.studentPopulation instanceof HubStudentPopulationState)
   assert.deepEqual(Object.keys(restored.state.world.participants), ['owner'])
@@ -117,7 +123,7 @@ test('host save documents round-trip the complete owner state and revive Hub run
   assert.equal(restored.state.world.participants.owner?.transition, null)
 })
 
-test('Hub resume discards scene-local departure position and regenerates the Hub', () => {
+test('Hub resume regenerates scene-local actors but preserves its authoritative Skorcha population', () => {
   const state = createGameSimulation({ owner: OWNER }, {
     hubTraderAnimationSeed: 73,
     gameRngSeed: 91,
@@ -147,6 +153,10 @@ test('Hub resume discards scene-local departure position and regenerates the Hub
   assert.equal(restored.state.world.participants.owner?.region, 'courtyard')
   assert.equal(restored.state.world.participants.owner?.transition, null)
   assert.notEqual(restored.state.world.traderAnimationSeed, 73)
+  assert.deepEqual(
+    restored.state.world.skorcha,
+    state.world.kind === 'hub' ? state.world.skorcha : null,
+  )
 })
 
 test('save documents admit the complete Sack wire depth and reject one level beyond it', () => {
@@ -301,7 +311,7 @@ test('host save documents retain the active Boneyard and its authoritative run i
   assert.equal(restored.state.run.phase, 'active')
 })
 
-test('schema 7 resumes the complete stock Tutorial controller and exact level identity', () => {
+test('schema 8 resumes the complete stock Tutorial controller and exact level identity', () => {
   const loadedBoneyard = materializeStockTutorial(Buffer.alloc(16, 19))
   let state = enterBoneyardWorld(
     createGameSimulation({ owner: OWNER }),
@@ -327,7 +337,7 @@ test('schema 7 resumes the complete stock Tutorial controller and exact level id
     state,
   })
   const encoded = JSON.parse(document)
-  assert.equal(encoded.schemaVersion, 7)
+  assert.equal(encoded.schemaVersion, 8)
   assert.equal(encoded.continuation.simulation.world.tutorial.stage, 0)
   assert.deepEqual(
     encoded.profile.economy,
@@ -363,7 +373,7 @@ test('schema 7 resumes the complete stock Tutorial controller and exact level id
   assert.equal(restored.state.world.arenaTransition, null)
 })
 
-test('schema 6 current-layout saves migrate without completed-run profile archival', () => {
+test('schema 7 and 6 current-layout saves default absent NPC state without completed-run archival', () => {
   const current = createGameSaveDocument({
     integrity: 'global-clean',
     loadedBoneyard: null,
@@ -372,14 +382,20 @@ test('schema 6 current-layout saves migrate without completed-run profile archiv
     playerId: 'owner',
     state: createGameSimulation({ owner: OWNER }),
   })
-  const previous = JSON.parse(current)
-  previous.schemaVersion = 6
-  const document = JSON.stringify(previous)
   const currentProfile = restoreGameSaveProfile(current)
-  const profile = restoreGameSaveProfile(document)
-  const restored = restoreGameSaveDocument(document)
-  assert.deepEqual(profile.economy, currentProfile.economy)
-  assert.equal(restored.state.world.kind, 'hub')
+  for (const schemaVersion of [7, 6]) {
+    const previous = JSON.parse(current)
+    previous.schemaVersion = schemaVersion
+    delete previous.profile.economy.npc
+    delete previous.continuation.simulation.playerEntities.economies[0].npc
+    delete previous.continuation.simulation.world.skorcha
+    const document = JSON.stringify(previous)
+    const profile = restoreGameSaveProfile(document)
+    const restored = restoreGameSaveDocument(document)
+    assert.deepEqual(profile.economy, currentProfile.economy)
+    assert.equal(restored.state.world.kind, 'hub')
+    assert.deepEqual(getPlayerEconomy(restored.state, 'owner').npc, createNativeHubNpcState())
+  }
 })
 
 test('host save documents fail closed for unknown schema, extra fields, owner drift, and size', () => {
@@ -597,8 +613,12 @@ function legacyDocument(document: string, schemaVersion: number): string {
   const playerStore = simulation.playerEntities
   const run = simulation.run
 
+  delete simulation.world.skorcha
   delete continuation.summary.activeRun
-  for (const economy of playerStore.economies) delete economy.tutorialPending
+  for (const economy of playerStore.economies) {
+    delete economy.npc
+    delete economy.tutorialPending
+  }
 
   delete run.gameOverExitKind
   delete run.loadoutReadyPlayerIds
@@ -640,8 +660,11 @@ function legacyDocument(document: string, schemaVersion: number): string {
 function legacySchema5Document(document: string): string {
   const legacy = JSON.parse(document)
   legacy.schemaVersion = 5
+  delete legacy.profile.economy.npc
+  delete legacy.continuation.simulation.world.skorcha
   delete legacy.continuation.summary.activeRun
   for (const economy of legacy.continuation.simulation.playerEntities.economies) {
+    delete economy.npc
     delete economy.tutorialPending
   }
   return JSON.stringify(legacy)

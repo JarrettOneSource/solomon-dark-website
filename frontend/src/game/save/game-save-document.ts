@@ -17,7 +17,7 @@ import {
   createNativeHagathaRuntimeState,
   type NativeHagathaRuntimeState,
 } from '../core-kernels/native-hagatha-effects.ts'
-import { createNativeRng } from '../core-kernels/native-rng.ts'
+import { createNativeRng, type NativeRngState } from '../core-kernels/native-rng.ts'
 import {
   nativeWeldBuild,
   nativeWeldComponentRanksForBuild,
@@ -30,6 +30,12 @@ import {
   type PlayerSkillRuntimeComponent,
 } from '../core-kernels/player-skill-runtime.ts'
 import { createNativeHallOfFameRun } from '../core-kernels/hall-of-fame-score.ts'
+import {
+  NATIVE_HUB_NPC_CATALOG,
+  createNativeHubNpcState,
+  nativeBoastDefinition,
+  type NativeHubNpcState,
+} from '../core-kernels/native-hub-npc.ts'
 import type { GameContentIdentity, LuaConsoleValue } from '../protocol/game-protocol.ts'
 import {
   gameSimulationDurableProfileEconomy,
@@ -44,6 +50,7 @@ import {
 import {
   type HubStudentPopulationOptions,
 } from '../core-server/hub-students.ts'
+import type { HubSkorchaState } from '../core-server/hub-skorcha.ts'
 import { createHubWorld, hubSpawnPoint, type HubWorldState } from '../core-server/hub-world.ts'
 import { createBoneyardWorld, type BoneyardWorldState } from '../core-server/boneyard-world.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
@@ -141,6 +148,7 @@ const ECONOMY_KEYS = [
   'hagathaBundleSelectors',
   'nextItemId',
   'nextOfferId',
+  'npc',
   'ownedPerkSelectors',
   'revision',
   'rng',
@@ -154,6 +162,7 @@ const HUB_WORLD_KEYS = [
   'collisionRngState',
   'kind',
   'participants',
+  'skorcha',
   'studentPopulation',
   'traderAnimationSeed',
 ] as const
@@ -328,20 +337,31 @@ export function restoreGameSaveDocument(document: string): RestoredGameSaveDocum
   let loadedBoneyard: LoadedBoneyard | null
   if (rawWorld.kind === 'hub') {
     if (continuation.loadedBoneyard !== null) throw new Error('Hub game save carries a Boneyard')
-    onlyKeys(rawWorld, 'game save Hub world', HUB_WORLD_KEYS)
+    onlyKeys(
+      rawWorld,
+      'game save Hub world',
+      parsed.sourceSchemaVersion >= 8
+        ? HUB_WORLD_KEYS
+        : HUB_WORLD_KEYS.filter(key => key !== 'skorcha'),
+    )
     const participants = record(rawWorld.participants, 'game save Hub participants')
     if (
       Object.keys(participants).length !== 1
       || !(continuation.summary.playerId in participants)
     ) throw new Error('game save owner is not the sole Hub participant')
     parseHubStudentPopulation(rawWorld.studentPopulation)
+    const skorcha = rawWorld.skorcha === undefined
+      ? undefined
+      : parseHubSkorcha(rawWorld.skorcha)
     const config = playerEntities.configs[0]!
     playerEntities = replacePlayerCharacter(
       playerEntities,
       continuation.summary.playerId,
       createPlayerCharacter(config, hubSpawnPoint()),
     )
-    world = createHubWorld([continuation.summary.playerId])
+    world = createHubWorld([continuation.summary.playerId], {
+      skorcha,
+    })
     loadedBoneyard = null
   } else if (rawWorld.kind === 'boneyard') {
     loadedBoneyard = parseLoadedBoneyard(continuation.loadedBoneyard)
@@ -530,6 +550,7 @@ function normalizeEconomy(value: unknown): HubEconomyState {
   const restored = {
     ...source,
     actionFeedback: feedback,
+    npc: normalizeNativeHubNpcState(source.npc),
     tutorialPending: source.tutorialPending === true,
     unforgeBonuses: source.unforgeBonuses ?? createNativeUnforgeBonuses(),
   } as unknown as HubEconomyState
@@ -566,8 +587,14 @@ function normalizeSkillBook(
   if ((build === null) !== (weldComponentRanks === null)) {
     throw new Error(`game save player skill book ${index} Weld cache is invalid`)
   }
+  const advancedUnlocks = source.advancedUnlocks === undefined
+    ? Array.from({ length: 8 }, () => false)
+    : array(source.advancedUnlocks, 'game save advanced unlocks')
+  if (advancedUnlocks.length !== 8 || advancedUnlocks.some(value => typeof value !== 'boolean')) {
+    throw new Error('game save advanced unlocks are invalid')
+  }
   return {
-    advancedUnlocks: array(source.advancedUnlocks, 'game save advanced unlocks') as boolean[],
+    advancedUnlocks: advancedUnlocks as boolean[],
     disciplineRoot: finiteNumber(source.disciplineRoot, 'game save discipline root'),
     effectiveRanks,
     elementRoot: finiteNumber(source.elementRoot, 'game save element root'),
@@ -700,6 +727,13 @@ function finiteNumber(value: unknown, field: string): number {
   return value
 }
 
+function integerWithin(value: unknown, field: string, minimum: number, maximum: number): number {
+  if (!Number.isSafeInteger(value) || Number(value) < minimum || Number(value) > maximum) {
+    throw new Error(`${field} is invalid`)
+  }
+  return Number(value)
+}
+
 function numericOrNull(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
@@ -712,6 +746,11 @@ function serializeHubWorld(world: HubWorldState): Omit<HubWorldState, 'runtime' 
     collisionRngState: world.collisionRngState,
     kind: 'hub',
     participants: world.participants,
+    skorcha: world.skorcha === null ? null : {
+      ...world.skorcha,
+      position: { ...world.skorcha.position },
+      rng: { ...world.skorcha.rng, words: [...world.skorcha.rng.words] },
+    },
     studentPopulation: {
       nextId: world.studentPopulation.nextId,
       rarePathDenominator: world.studentPopulation.rarePathDenominator,
@@ -731,6 +770,86 @@ function parseHubStudentPopulation(value: unknown): HubStudentPopulationOptions 
   onlyKeys(population, 'game save Hub students', HUB_STUDENT_POPULATION_KEYS)
   if (!Array.isArray(population.students)) throw new Error('game save Hub students are invalid')
   return population as unknown as HubStudentPopulationOptions
+}
+
+function parseHubSkorcha(value: unknown): HubSkorchaState | null {
+  if (value === null) return null
+  const source = record(value, 'game save Skorcha')
+  onlyKeys(source, 'game save Skorcha', [
+    'dismissalIndex',
+    'gesture',
+    'gestureTicksRemaining',
+    'hatActive',
+    'hatPhaseDegrees',
+    'hatRateDegreesPerTick',
+    'position',
+    'rng',
+    'variant',
+  ])
+  const variant = integerWithin(source.variant, 'game save Skorcha variant', 0, 2)
+  const placement = NATIVE_HUB_NPC_CATALOG.skorcha.placements[variant]!
+  const position = record(source.position, 'game save Skorcha position')
+  onlyKeys(position, 'game save Skorcha position', ['x', 'y'])
+  const x = finiteNumber(position.x, 'game save Skorcha x')
+  const y = finiteNumber(position.y, 'game save Skorcha y')
+  if (x !== placement.x || y !== placement.y) {
+    throw new Error('game save Skorcha placement drifted')
+  }
+  if (typeof source.hatActive !== 'boolean') {
+    throw new Error('game save Skorcha hat state is invalid')
+  }
+  const hatActive = source.hatActive
+  const hatPhaseDegrees = finiteNumber(
+    source.hatPhaseDegrees,
+    'game save Skorcha hat phase',
+  )
+  const hatRateDegreesPerTick = finiteNumber(
+    source.hatRateDegreesPerTick,
+    'game save Skorcha hat rate',
+  )
+  if (
+    hatPhaseDegrees < 0
+    || hatPhaseDegrees >= 180
+    || hatRateDegreesPerTick < 0
+    || hatRateDegreesPerTick > 1.8
+    || (!hatActive && hatPhaseDegrees !== 0)
+    || (hatActive && hatRateDegreesPerTick < 0.45)
+  ) throw new Error('game save Skorcha hat state is invalid')
+  return {
+    dismissalIndex: integerWithin(
+      source.dismissalIndex,
+      'game save Skorcha dismissal',
+      0,
+      2,
+    ) as 0 | 1 | 2,
+    gesture: integerWithin(source.gesture, 'game save Skorcha gesture', 0, 2) as 0 | 1 | 2,
+    gestureTicksRemaining: integerWithin(
+      source.gestureTicksRemaining,
+      'game save Skorcha gesture timer',
+      1,
+      29,
+    ),
+    hatActive,
+    hatPhaseDegrees,
+    hatRateDegreesPerTick,
+    position: { x, y },
+    rng: parseNativeRng(source.rng, 'game save Skorcha RNG'),
+    variant: variant as 0 | 1 | 2,
+  }
+}
+
+function parseNativeRng(value: unknown, field: string): NativeRngState {
+  const source = record(value, field)
+  onlyKeys(source, field, ['indexA', 'indexB', 'words'])
+  const words = array(source.words, `${field} words`).map((word, index) => (
+    integerWithin(word, `${field} words ${index}`, 0, 0x3fffffff)
+  ))
+  if (words.length !== 55) throw new Error(`${field} is invalid`)
+  return {
+    indexA: integerWithin(source.indexA, `${field} index A`, 0, 54),
+    indexB: integerWithin(source.indexB, `${field} index B`, 0, 54),
+    words,
+  }
 }
 
 function validatePlayerStore(value: unknown, playerId: string): GameSimulationState['playerEntities'] {
@@ -755,6 +874,7 @@ function validatePlayerStore(value: unknown, playerId: string): GameSimulationSt
     const restored = {
       ...economy,
       actionFeedback: feedback,
+      npc: normalizeNativeHubNpcState(economy.npc),
       tutorialPending: economy.tutorialPending === true,
       unforgeBonuses: economy.unforgeBonuses ?? createNativeUnforgeBonuses(),
     } as unknown as HubEconomyState
@@ -801,6 +921,41 @@ function validatePlayerStore(value: unknown, playerId: string): GameSimulationSt
     progressions,
     skillBooks,
   } as unknown as GameSimulationState['playerEntities']
+}
+
+function normalizeNativeHubNpcState(value: unknown): NativeHubNpcState {
+  if (value === undefined) return createNativeHubNpcState()
+  const state = record(value, 'game save Hub NPC state')
+  onlyKeys(state, 'game save Hub NPC state', ['boast', 'librarianLaceRead'])
+  const boast = record(state.boast, 'game save Boast state')
+  onlyKeys(boast, 'game save Boast state', [
+    'failed',
+    'failureSequence',
+    'selected',
+    'succeeded',
+  ])
+  const selected = boast.selected
+  if (
+    (selected !== null && (typeof selected !== 'number' || nativeBoastDefinition(selected) === null))
+    || typeof boast.failed !== 'boolean'
+    || !Number.isSafeInteger(boast.failureSequence)
+    || Number(boast.failureSequence) < 0
+    || Number(boast.failureSequence) > 1
+    || typeof boast.succeeded !== 'boolean'
+    || boast.failed !== (boast.failureSequence === 1)
+    || (boast.failed === true && boast.succeeded === true)
+    || (selected === null && (boast.failed === true || boast.succeeded === true))
+    || typeof state.librarianLaceRead !== 'boolean'
+  ) throw new Error('game save Hub NPC state is invalid')
+  return {
+    boast: {
+      failed: boast.failed,
+      failureSequence: Number(boast.failureSequence),
+      selected,
+      succeeded: boast.succeeded,
+    } as NativeHubNpcState['boast'],
+    librarianLaceRead: state.librarianLaceRead,
+  }
 }
 
 function parseWeldComponentRanks(value: unknown, index: number) {

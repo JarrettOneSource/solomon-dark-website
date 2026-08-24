@@ -39,6 +39,7 @@ import {
   projectBoneyardMageLightningPulses,
   projectBoneyardMaggots,
 } from './project-boneyard-enemies.ts'
+import { hubSkorchaHatFrame } from '../core-server/hub-skorcha.ts'
 
 export function createGameSnapshot(
   state: GameSimulationState,
@@ -70,6 +71,14 @@ export function createGameSnapshot(
               transition: participant.transition,
             }],
           )),
+          skorcha: state.world.skorcha === null ? null : {
+            dismissalIndex: state.world.skorcha.dismissalIndex,
+            gesture: state.world.skorcha.gesture,
+            gestureTicksRemaining: state.world.skorcha.gestureTicksRemaining,
+            hatFrame: hubSkorchaHatFrame(state.world.skorcha),
+            position: { ...state.world.skorcha.position },
+            variant: state.world.skorcha.variant,
+          },
           students: hubStudentSnapshotStates(state.world.studentPopulation)
             .map(protocolStudentState),
           traderAnimationSeed: state.world.traderAnimationSeed,
@@ -275,6 +284,10 @@ function protocolPlayerState(
         ...offer,
         members: [...offer.members],
       })),
+      npc: {
+        boast: { ...economy.npc.boast },
+        librarianLaceRead: economy.npc.librarianLaceRead,
+      },
       ownedPerkSelectors: [...economy.ownedPerkSelectors],
       revision: economy.revision,
       storage: economy.storage.map(protocolInventoryItem),
@@ -292,6 +305,7 @@ function protocolPlayerState(
     },
     movementScale: playerEntityMovementScale(state.playerEntities, playerId),
     progression: {
+      advancedUnlocks: [...skillBook.advancedUnlocks],
       coldSlowTicksRemaining: progression.coldSlowTicksRemaining,
       concentrationSkillIds: [
         skillRuntime.concentrationSkillIdA,

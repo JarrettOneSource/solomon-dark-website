@@ -8,6 +8,9 @@ import {
 
 import type { GameAudioDirector } from './game-audio-director.ts'
 import {
+  NATIVE_SELECTOR_ACCEPT_TICKS,
+} from './core-kernels/native-hub-npc.ts'
+import {
   NATIVE_SKILL_CATALOG,
   SPELL_WELDING_QUICK_DESCRIPTION,
   SPELL_WELDING_SKILL_ID,
@@ -53,6 +56,7 @@ interface SkillPickerProps {
 
 const NATIVE_REROLL_REBUILD_DELAY_MS = 20
 const NATIVE_QUEUED_REBUILD_DELAY_MS = 100
+const NATIVE_TICK_MS = 10
 
 export default function SkillPicker({
   audio,
@@ -88,6 +92,7 @@ export default function SkillPicker({
   const rendererRef = useRef<SkillPickerRenderer | null>(null)
   const selectedIndexRef = useRef(0)
   const submittingRef = useRef(false)
+  const chooseRef = useRef<(index: number, automatic?: boolean) => void>(() => undefined)
   const [displayedOffer, setDisplayedOffer] = useState(initialOfferRef.current)
   const [phase, setPhase] = useState<SkillPickerPhase>('opening')
   const [rendererState, setRendererState] = useState<'loading' | 'ready' | 'error'>('loading')
@@ -270,7 +275,11 @@ export default function SkillPicker({
   }
 
   const moveSelection = (delta: number) => {
-    if (submittingRef.current || !revealReadyRef.current) return
+    if (
+      submittingRef.current
+      || !revealReadyRef.current
+      || displayedOfferRef.current.automaticChoiceIndex !== undefined
+    ) return
     const options = displayedOfferRef.current.options
     const next = (selectedIndexRef.current + delta + options.length) % options.length
     setSelection(next)
@@ -289,9 +298,10 @@ export default function SkillPicker({
     onClosingChangeRef.current(true)
   }
 
-  const choose = (index: number) => {
+  const choose = (index: number, automatic = false) => {
     if (submittingRef.current || !revealReadyRef.current) return
     const currentOffer = displayedOfferRef.current
+    if (!automatic && currentOffer.automaticChoiceIndex !== undefined) return
     const option = currentOffer.options[index]
     if (!option) return
     setSelection(index)
@@ -300,12 +310,28 @@ export default function SkillPicker({
     beginClose(-0.75)
     onSelect(index, currentOffer.sequence, option.skillId)
   }
+  chooseRef.current = choose
+
+  useEffect(() => {
+    const choiceIndex = displayedOffer.automaticChoiceIndex
+    if (phase !== 'settled' || choiceIndex === undefined) return
+    if (!displayedOffer.options[choiceIndex]) return
+    selectedIndexRef.current = choiceIndex
+    setSelectedIndex(choiceIndex)
+    buttonRefs.current[choiceIndex]?.focus()
+    const timeout = window.setTimeout(
+      () => chooseRef.current(choiceIndex, true),
+      NATIVE_SELECTOR_ACCEPT_TICKS * NATIVE_TICK_MS,
+    )
+    return () => window.clearTimeout(timeout)
+  }, [displayedOffer.automaticChoiceIndex, displayedOffer.options, displayedOffer.sequence, phase])
 
   const reroll = () => {
     if (
       submittingRef.current
       || !revealReadyRef.current
       || !displayedAvailabilityRef.current
+      || displayedOfferRef.current.automaticChoiceIndex !== undefined
     ) return
     submittingRef.current = true
     displayedAvailabilityRef.current = false
@@ -324,6 +350,7 @@ export default function SkillPicker({
       submittingRef.current
       || !revealReadyRef.current
       || !displayedAvailabilityRef.current
+      || displayedOfferRef.current.automaticChoiceIndex !== undefined
     ) return
     const offerSequence = displayedOfferRef.current.sequence
     audio.playSound('click', { playbackRate: 1 })
@@ -353,7 +380,8 @@ export default function SkillPicker({
 
   const centers = skillPickerCardCenters(displayedOffer.options.length)
   const specialBounds = skillPickerSpecialActionBounds(displayedOffer.options.length)
-  const disabled = submitting || !revealReady || phase !== 'settled'
+  const automaticChoice = displayedOffer.automaticChoiceIndex !== undefined
+  const disabled = automaticChoice || submitting || !revealReady || phase !== 'settled'
   const offerContentVisible = phase !== 'queued-wait'
   return (
     <div
@@ -364,6 +392,7 @@ export default function SkillPicker({
       aria-modal="true"
       aria-label={`Level ${displayedOffer.level}. Select a skill.`}
       data-offer-sequence={displayedOffer.sequence}
+      data-automatic-choice-index={displayedOffer.automaticChoiceIndex ?? ''}
       data-picker-phase={phase}
       data-presentation-id={presentationId}
       data-renderer-state={rendererState}

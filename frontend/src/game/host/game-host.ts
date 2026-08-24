@@ -512,7 +512,9 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     throw new Error(`snapshotRate must be within 1..${GAME_TICK_RATE}`)
   }
 
-  let sharedWorlds: SharedGameWorldsState | null = sharedHub ? createSharedGameWorlds() : null
+  let sharedWorlds: SharedGameWorldsState | null = sharedHub
+    ? createSharedGameWorlds(randomBytes(4).readUInt32LE())
+    : null
   let privateParties: PartySystemState | null = sessionKind === 'private-college'
     ? createPartySystem()
     : null
@@ -4648,7 +4650,11 @@ function socketRemoteAddress(socket: Duplex): string {
 function createInitialSimulation(
   factory: (() => GameSimulationState) | undefined,
 ): GameSimulationState {
-  const state = factory?.() ?? createGameSimulation({})
+  const seed = randomBytes(4).readUInt32LE()
+  const state = factory?.() ?? createGameSimulation({}, {
+    gameRngSeed: seed,
+    hubTraderAnimationSeed: seed,
+  })
   if (state.world.kind !== 'hub') {
     throw new Error('Game hosts must start in the Hub')
   }

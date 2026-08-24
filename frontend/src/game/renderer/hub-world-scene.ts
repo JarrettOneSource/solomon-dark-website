@@ -53,6 +53,7 @@ import { PrimarySpellWorldView } from './primary-spell-world-view.ts'
 import { nativeLevelUpPresentationFrame } from './level-up-presentation.ts'
 import { NativeLevelUpWorldView } from './level-up-world-view.ts'
 import { NativeSecondaryWorldView } from './native-secondary-world-view.ts'
+import type { ProtocolHubSkorchaState } from '../protocol/game-state.ts'
 
 export class HubWorldScene {
   readonly stage = new Container({ label: 'college-courtyard-camera-banks' })
@@ -73,6 +74,7 @@ export class HubWorldScene {
   private readonly hagatha: HubHagathaView
   private readonly luthacus: HubCommonTraderView
   private readonly potion: HubPotionTraderView
+  private readonly skorcha: HubSkorchaView
   private readonly teacher: HubTeacherView
   private readonly players = new Map<string, HubPlayerView>()
   private readonly playerElements = new Map<string, WizardElement>()
@@ -142,6 +144,9 @@ export class HubWorldScene {
     this.teacher = new HubTeacherView(textures, 576.5, 710.5)
     this.world.addChild(this.teacher.container)
 
+    this.skorcha = new HubSkorchaView(textures)
+    this.world.addChild(this.skorcha.container)
+
     this.astronomer = new HubAstronomerView(textures, createdAtTick)
 
     this.addCourtyardDepthProps()
@@ -192,6 +197,7 @@ export class HubWorldScene {
     this.hagatha.update(snapshot.tick)
     this.luthacus.update(snapshot.tick)
     this.teacher.update(snapshot.tick / 100)
+    this.skorcha.update(snapshot.world.skorcha)
     this.astronomer.update(snapshot.tick)
     this.updateStudents(snapshot)
     this.updatePlayers(snapshot)
@@ -793,6 +799,37 @@ class HubCommonTraderView {
 
   update(tick: number): void {
     this.sprite.texture = this.textures.traders.luthacus[this.clock.advanceTo(tick)]
+  }
+}
+
+class HubSkorchaView {
+  readonly container = new Container({ label: 'skorcha' })
+  private readonly body: Sprite
+  private readonly hat: Sprite
+  private readonly textures: HubWorldTextures
+
+  constructor(textures: HubWorldTextures) {
+    this.textures = textures
+    this.container.sortableChildren = true
+    this.container.eventMode = 'none'
+    this.container.visible = false
+    const shadow = actorSprite(textures.base[hub.npcs.teacher.shadow], 0)
+    shadow.scale.set(1.25)
+    shadow.alpha = 0.62
+    this.body = actorSprite(textures.skorcha[0], 1)
+    this.hat = actorSprite(textures.skorcha[3], 2)
+    this.container.addChild(shadow, this.body, this.hat)
+  }
+
+  update(state: ProtocolHubSkorchaState | null): void {
+    this.container.visible = state !== null
+    if (state === null) return
+    this.container.position.copyFrom(state.position)
+    this.container.zIndex = hubWorldDepthForActor(state.position.y)
+    this.container.scale.x = state.variant === 1 ? -1 : 1
+    this.body.texture = this.textures.skorcha[state.gesture]
+    this.hat.visible = state.hatFrame < 4
+    if (state.hatFrame < 4) this.hat.texture = this.textures.skorcha[3 + state.hatFrame]
   }
 }
 

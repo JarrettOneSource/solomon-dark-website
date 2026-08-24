@@ -1,0 +1,1204 @@
+{
+  "badEulogies": [
+    "Pathetic example of wizardry, really.",
+    "What a senseless waste of human life.",
+    "This would be tragic if it wasn't so utterly predictable.",
+    "Tsk.  More bravado than magic.",
+    "Whoever sent this guy out should be ashamed.",
+    "Powerful magic.. But slow.. So slow.",
+    "Practice makes perfect. Not potions.",
+    "Dodged when he should have parried."
+  ],
+  "boastInstruction": "To succeed at your boast, you must\nsurvive until at least Wave 30",
+  "boastScoreMultiplier": 1.100000023841858,
+  "boasts": [
+    {
+      "failureProducer": "potion-use",
+      "id": 0,
+      "label": "POTIONS ARE FOR PEASANTS!",
+      "response": "ANNAL_POTIONBOAST",
+      "statement": "\"I can do this entire mission without drinking a single potion of any kind!\""
+    },
+    {
+      "failureProducer": "magical-equipment",
+      "id": 1,
+      "label": "I'M TOO MACHO FOR MAGIC!",
+      "response": "ANNAL_ITEMBOAST",
+      "statement": "\"A true magician does not wear magical clothing, rings, or other implements!\""
+    },
+    {
+      "failureProducer": "secondary-cast",
+      "id": 2,
+      "label": "SECONDARIES ARE SISSY!",
+      "response": "ANNAL_SECONDARIESBOAST",
+      "statement": "\"The learned wizard need not cast secondary spells at all!\""
+    },
+    {
+      "failureProducer": null,
+      "id": 3,
+      "label": "I AM ONE WITH THE MAGIC!",
+      "response": "ANNAL_RANDOMBOAST",
+      "statement": "\"A master sorceror does not choose magic, the magic chooses him!\""
+    },
+    {
+      "failureProducer": "mana-underflow",
+      "id": 4,
+      "label": "I NEVER RUN OUT OF MANA!",
+      "response": "ANNAL_MANABOAST",
+      "statement": "\"A profound practicioner of magic never allows his mana pool to empty!\""
+    }
+  ],
+  "books": [
+    {
+      "id": 0,
+      "key": "BOOK0",
+      "lines": [
+        "Ah, the Hex Handbooks--written by the grand wizard Merdalf of Old. ",
+        "A great magic user but, between you and me, not much of a writer.",
+        "Much of his books are made up of angry letters to the editors of various contemporary publications, lambasting new inventions like fire and the wheel. It's usually a good idea to skip everything from pages 4 to, uh, say 200 or so.",
+        "This volume does give some enlightening insight into Ether, though.",
+        "You see, the Ether is technically an \"unformed plane,\" a magical realm beneath the conventional universe.",
+        "The best way to describe the Ether dimension is that it's a bit like bathing in purple. Occasionally bits of pure Ether manifest in our universe, in the form of magical substances. The magic missile spell, for instance, is comprised of ether-energy bolts.",
+        "Merdalf was a bit put out by the fact that Ether is technically both a place and a substance, depending on the magical context.  Hence, this book features \"Merdalf's Cat,\" a famous thought experiment in which Merdalf annihiliates a cat because it fails to properly define its terms."
+      ],
+      "oneShot": false,
+      "title": "Merdalf's Hex Handbook Vol One: Elementus Ether"
+    },
+    {
+      "id": 1,
+      "key": "BOOK1",
+      "lines": [
+        "Hrm, you're interested in this one?  Let me see here, it's rarely requested, so the binding is a bit stiff.",
+        "\"Don't get caught.\"",
+        "No, that wasn't a summary, that's the entire book."
+      ],
+      "oneShot": false,
+      "title": "Ethics and Magic: A Moral Philosophy"
+    },
+    {
+      "id": 2,
+      "key": "BOOK2",
+      "lines": [
+        "This book is a fairly lengthy essay on the story of twin brothers Prometh-Ias and Promith-Ian.",
+        "While Prometh-Ias tried to steal fire from the Gods, and subsequently suffered a very nasty fate, Promith-Ian simply borrowed it at a very reasonable 1.05% rate of interest, and later made quite the tidy profit leasing it out to man.",
+        "A little known fact this book mentions--the reason fire spells involve lots of hand rubbing and waving is that they need a bit of natural heat to get going.",
+        "In the old days, wizards used to light a match, until we realised that even the slightest palm friction is enough to start a flame reaction.",
+        "For more information on that discovery, see: \"The Accidental Eunuchs,\" by P. Thommius."
+      ],
+      "oneShot": false,
+      "title": "The Mythology of Theft: Fire"
+    },
+    {
+      "id": 3,
+      "key": "BOOK3",
+      "lines": [
+        "The library holds the only known copy of this book--the genuine diary of Kyblybork Vkar Knaargh, which loosely translates to \"Apocalypdeath the Destroyer.\"",
+        "Knaargh was exiled to our universe from one of the various Hell dimensions, and took it upon himself to \"civilise\" humans--and by civilise, I mean mind control. Fortunately, he was slain by Qlthulu Fnkan, a Chaos Monger who had himself been exiled from a slightly different Hell realm.",
+        "This sort of thing used to happen quite often in the First Age of Magick, until the wizards of the day finally got fed up.",
+        "By way of retaliation, they invented the Hell-Targeting Sewage Disposal Portal, also known as the \"some other dimension's problem toilet.\"",
+        "Pretty soon after that, the Hell dimensions stopped dumping their trash on our metaphorical lawn."
+      ],
+      "oneShot": false,
+      "title": "The Magenta Man's Burden"
+    },
+    {
+      "id": 4,
+      "key": "BOOK4",
+      "lines": [
+        "Ah, now this book-- an interesting book, I'm told.  However, that's not very reliable information, since everyone who has read it has gone mad.",
+        "In fact... wizards probably shouldn't read this one.  Shouldn't even talk about it.  I keep meaning to move it to the forbidden shelf."
+      ],
+      "oneShot": false,
+      "title": "The Book of A Thousand Madnesses"
+    },
+    {
+      "id": 5,
+      "key": "BOOK5",
+      "lines": [
+        "It raises my spirits to see young people inquire about the classics!",
+        "Brothers Karagrimm is the story of two brothers who get into a fight over an enchanted apple tree.",
+        "Whenever one manages to win the tree, the other sacrifices everything to get it back.",
+        "Soon, both brothers have lost all they ever held dear-- their jobs, their friends, their families... then, as the tree gets struck by lightning, the brothers realise the futility of their obsession, and die together in despair.",
+        "In the end, it turns out a wizard did it, because he was tired of all the noise."
+      ],
+      "oneShot": false,
+      "title": "The Brothers Karagrimm"
+    },
+    {
+      "id": 6,
+      "key": "BOOK6",
+      "lines": [
+        "Harrumph, I've read this one a dozen times, and I admit I'm still no better at wielding the Air Element.",
+        "It's by far the trickiest spell class!  But, as this book mentions quite a lot, it's also rapidly becoming the most fashionable.",
+        "Oh sure, frosties and fire mages are technically more common on campus, but Air Magic's what all the under-century year old \"cafe culture\" students are talking about.",
+        "I suppose it has something to do with it being a comparatively new discipline. Mages really weren't interested in wind magic while it was just a load of hot air, until some bright spark found a way to extract static charges from said air and produce lightning bolts. I'm sure I don't have to tell you why *that* discovery took off. ",
+        "The funny thing is, lightning spells aren't very compatible with being sociable. They tend to arc into whatever's nearby--trees, buildings, other people...",
+        "I suppose that's why Air Element students seem to prefer telling other people how great their discipline is over actually practicing it. "
+      ],
+      "oneShot": false,
+      "title": "Elementus Air (For Dullards)"
+    },
+    {
+      "id": 7,
+      "key": "BOOK7",
+      "lines": [
+        "Hmph, a bit of a pulp read, this is.",
+        "It's the story of an old miser who is visited by the ghosts of three wizards.",
+        "They warn him away from his penny pinching ways, the miser reforms, and gives all his money away to a charity run by a local circle of warlocks.",
+        "Based on a true story, I believe. "
+      ],
+      "oneShot": false,
+      "title": "A Solstice Story"
+    },
+    {
+      "id": 8,
+      "key": "BOOK8",
+      "lines": [
+        "Ah yes, this would be the story of Thorinius the Elder, the wizard who first created frost magic.",
+        "Legend has it that, during a particularly hot summer in the First Age of Magick, Thorinius happened upon a group of small children playing happily on his lawn, and vowed to put a stop to it.",
+        "Not wanting the mess of maiming these children with one of his famous fire spells, Thorinius hit upon the idea of removing heat rather than providing it.",
+        "His new ice hex quickly ended the summer, along with its irritating happy people. ",
+        "Subsequently, Thorinius held quite the profitable monopoly on all cold-producing spells, until the Thousand Year Cooling War destroyed his business empire. Nowadays, frost magic is the second most popular of all spell types--behind fire, of course. "
+      ],
+      "oneShot": false,
+      "title": "Feeling Chill: Frost Magic"
+    },
+    {
+      "id": 9,
+      "key": "BOOK9",
+      "lines": [
+        "This one is about a common soldier in Highland Province.  ",
+        "He is told by witches that he is destined to ascend to the throne--but first, he must kill the King!",
+        "The soldier knows better than to trust witches, and so goes home and takes up gardening instead.",
+        "The rest of the book is an excellent guide to raising your own chrysanthemums."
+      ],
+      "oneShot": false,
+      "title": "MacBlandish"
+    },
+    {
+      "id": 10,
+      "key": "BOOK10",
+      "lines": [
+        "This book chronicles some rather... regrettable actions during the Second Age of Magick. If you ever wondered why that period is sometimes called the Age of Poor Decisions, this is the reason. ",
+        "At the time, wizards more or less ignored ordinary people in favour of fighting amongst themselves.",
+        "Then one peasant village, in a fit of sudden pique, decided to hold a witch hunt.",
+        "By some miracle, they actually managed to catch and hang a rather senile warlock who happened to be fishing nearby. This didn't go down well with the magic community, and the infuriated wizards decided to take charge of, uh... the world.",
+        "To make a long story short, the wizards were very poor at management.",
+        "They tried giving everyone infinite gold, and so all the economies collapsed. They tried being dictators, but didn't have the necessary attention span.",
+        "Eventually, at the start of the Third Age of Magick, the wizards declared that they'd had enough, ordered the remaining humans to elect a king or something, and retreated into higher pursuits.",
+        "And so the modern world was born! "
+      ],
+      "oneShot": false,
+      "title": "Wizards in History: The Mild Embarrassment"
+    },
+    {
+      "id": 11,
+      "key": "BOOK11",
+      "lines": [
+        "Ah-ah! I wrote this one!  Glad to see it in the rotation!",
+        "It took three years of intensive research, two years writing time and fourteen years of pre-publication peer review.",
+        "The first print run was only seven strong, but they were a *damn good* seven. The university publishing house has assured me that they're still considering a second run.",
+        "The Great Censure took place just after the terrible Wizard World War, at the end of the First Age of Magick.",
+        "In the conflict's aftermath, all Wizard-to-Wizard communication was presaged by a posted note, at least twelve pages long, apologising for any property damage or attempted killing partaken of during the war.",
+        "Unfortunately, Wizards aren't very good at apologies, and the increasingly obvious sarcasm involved in each note quickly led to the Second, Third and Fourth through Ninth Wizard World Wars."
+      ],
+      "oneShot": false,
+      "title": "Wizards in History: The Great Censure"
+    },
+    {
+      "id": 12,
+      "key": "BOOK12",
+      "lines": [
+        "This one was written by the infamous wizardly historian Diniviym Bind, who, if you ask me--and this is just *my* opinion- is a brain rotting hack who deserves slow bloody death by a thousand agonising cuts.",
+        "Not only did he write this book while I was working on the same topic, he used a *time travel* spell to do his research, which is cheating on multiple levels.",
+        "The book's barely worth reading anyhow--it's just the old story of that time First Age wizards accidentally blew up one of the twin moons, which-- if you ask me-- isn't half the crime modern historians make out. We still have one moon left, and frankly, I think even that's extravagant--we barely use it!",
+        "Not an important topic, not worth researching, and certainly not worth blighting your soul with the knowledge that you endangered all of causality just so you could publish first."
+      ],
+      "oneShot": false,
+      "title": "Wizards in History: We Didn't Need Two Moons"
+    },
+    {
+      "id": 13,
+      "key": "BOOK13",
+      "lines": [
+        "This was contemporary fiction about two hundred years ago.  Most describe it as a sort of cautionary tale, replete with allegory.",
+        "After a fishing mission goes tragically awry, the captain of a longship becomes obsessed with hunting down the Songwhale that ate his foot.",
+        "Meanwhile, the whale lays siege to a beachside town in the middle of tourist season-- the town's greedy governor refuses to heed the danger and close his beaches, and so many are killed.",
+        "Later, the whale is captured and put on show in a zoo, but a young boy takes pity on the creature and sets it free."
+      ],
+      "oneShot": false,
+      "title": "The Rime of Sovereign Sea"
+    },
+    {
+      "id": 14,
+      "key": "BOOK14",
+      "lines": [
+        "This book is a bit of a dense read--especially the 93 page speech in the middle, where the main character just goes on and on about his own consummate greatness.",
+        "Essentially, the book is about a young man whose genius gifts are not fully appreciated by his obtuse peers, and so he lashes out by bringing entirely justified doom down on all of them, often while speaking at great length about the essential role of payback in a free society.",
+        "Curious. Someone seems to have gone through the pages and underlined multiple sections, particularly the bits on \"doom.\" An eager student, I suppose. They even initialled it: \"S.D.\"  ",
+        "Hmph. I hate it when students touch the books, they really shouldn't be allowed to."
+      ],
+      "oneShot": false,
+      "title": "How to Win Friends and Immolate People"
+    },
+    {
+      "id": 15,
+      "key": "BOOK15",
+      "lines": [
+        "Let me see here... a yes, Merdalf.  Merdalf is quite popular and his Elementus Prospectum crosses my desk frequently.",
+        "Merdalf of Old, despite being one of the greatest wizards who ever lived, has often been lambasted for his rather... conservative... attitudes.  He liked his magic plain and simple.",
+        "Because of this, he never had much patience for practitioners of traditional Earth Magic. ",
+        "All wizards have a bit of an affinity for earth, because we spend so much time standing on it. In Merdalf's time, it was rather regarded as peasant magic, and used mainly in healing charms-- channelling the power of growth and life from the soil and so forth.",
+        "Merdalf's genius, catalogued at length in this 900 page volume, was realising that the category \"earth\" must include by extension rocks, boulders and indeed volcanoes.",
+        "Thanks to him, Earth Magic quickly outgrew its \"healing ghetto\" and became a respectably dangerous wizarding practice.",
+        "Interestingly, if you read the epilogue, you'll find Merdalf never really came around to liking the Earth Mages; his desire to shift their focus was mostly motivated by a chronic fear of universal healthcare."
+      ],
+      "oneShot": false,
+      "title": "Merdalf's Hex Handbook Vol Five: Elementus Earth"
+    },
+    {
+      "id": 16,
+      "key": "BOOK16",
+      "lines": [
+        "Ah, this is a guidebook for senior wizards.",
+        "There tend to be a lot of Chosen Ones out there in the world--usually conveniently orphaned farmboys with overactive imaginations and suspiciously glowing swords.",
+        "If you're not careful, you'll end up with one following you around. They always seem to want a wizard's approval before going off to slay a dragon or whatever.",
+        "It can be good for the ego, and there are usually a few free meals in it; just make sure to duck out before the hero starts getting really confident in his skills. That's the point where you, as a good mentor, will be expected to die or retire to make way for your pupil, which no self-respecting mage should ever consider.",
+        "This book actually suggests sending your charge on an impossible quest about then, and honestly, why not?"
+      ],
+      "oneShot": false,
+      "title": "How to Train Your Chosen One"
+    },
+    {
+      "id": 17,
+      "key": "BOOK17",
+      "lines": [
+        "The Arcane Discipline is a bit of a strange one. It's basically a big category to dump all the unfashionable odds and ends of wizardry into.",
+        "Not every spell can be as clear cut as \"makes things cold,\" or \"makes things explode,\" ...although, thinking about it, most of them do make things explode... but the point is, the University needs a class in which to put all the spells that don't come colour coded for convenience.",
+        "Because of this, the Arcane Index is essentially a huge list of all the weird spells that are pretty much only practiced by oddball mages who desperately want to be different. "
+      ],
+      "oneShot": false,
+      "title": "The Discipline Arcane: Index"
+    },
+    {
+      "id": 18,
+      "key": "BOOK18",
+      "lines": [
+        "Ah, this one is supposedly a list of forbidden magicks--Necromancy, World Merging, Income Tax--but since they're all, uh, forbidden, it's written in a runic script that will cause you to suffer a stroke if you concentrate on it.",
+        "Glad to see that whoever checked it out this time managed to return it."
+      ],
+      "oneShot": false,
+      "title": "Vie Spells Forbade"
+    },
+    {
+      "id": 19,
+      "key": "BOOK19",
+      "lines": [
+        "This one was quite the bestseller when it came out. Just look at some of the praise on the back cover.",
+        "\"The...[Archchancellor]...is... a [great] man!\" --New Pitchfork Times",
+        "\"Would consider a positive review even without the money!\" --Hexington Post",
+        "\"Reading this book could save your life. From me.\" --Ral Qursia",
+        "Alas, Archchancellor Qursia died in ambiguous circumstances not long ago--he was found bitten to death by a rabid Bloodhawk Bat. We went through quite a few Archchancellors that year, actually, although I was so busy with the library that I never really bothered to learn the details. ",
+        "Historically speaking, losing high up faculty members is actually fairly rare.",
+        "Archchancellors are very good at picking up on potential rivals years, even decades before they mature. They usually send them off to die on some impossible suicide mission, pre-emptively eliminating the threat."
+      ],
+      "oneShot": false,
+      "title": "Ral Qursia: The Noble Archchancellor (An Autobiography)"
+    },
+    {
+      "id": 20,
+      "key": "BOOK20",
+      "lines": [
+        "Ah, if this book is making the rounds, it must mean that Elemental Welding is back in vogue again.",
+        "Every few decades, it becomes a fad. You don't find too many who master it though, it's more of a passing interest.",
+        "This book was written last time the practice was popular, about fifty years ago, so there are quite a lot of references to music saving the world, free love, and unicorns.",
+        "Even if some passages have dated badly, the book's factual information remains quite valid.",
+        "Element Welding is a troublesome practice--combining two spells together usually results in a weak hybrid less effective than either ingredient.",
+        "Some of its stronger proponents--like Tythicus the Intractable--insist that it has the potential to create superior double strength spells, but for most, the best it can manage is a damp squib and a huge mana cost."
+      ],
+      "oneShot": false,
+      "title": "Elemental Welding (For Dullards)"
+    },
+    {
+      "id": 21,
+      "key": "BOOK21",
+      "lines": [
+        "Oh, this is one of those silly self-help books that gullible types are always falling for.",
+        "It says all sorts of things about conquering your fears by focusing your mind, drinking herbal tea, and doing crossword puzzles. I like a good crossword puzzle as much as the next bicentogenarian, but the rest is all rancid hippy nonsense.",
+        "There's even a whole section on using the power of the mind to spread calming psychic energy, which is just rubbish. Psychic magic has one use: blackmail.",
+        "There's also some stuff about focusing your mind to maximise your mana, but I can't think of anyone who's ever managed to do anything but recover their mana slightly faster."
+      ],
+      "oneShot": false,
+      "title": "Meditation: Mastering the Mind"
+    },
+    {
+      "id": 22,
+      "key": "BOOK22",
+      "lines": [
+        "Ah, this book is one of the rare books that discuss the Body.  A worthwhile read on an uninteresting subject.",
+        "I'm sure that you--like most mages--are firmly in the anti-physical effort camp. Why bother picking something up with your hands when you can just cast a good old fashioned telekinesis spell?",
+        "But, mastering the body is about precision and economy.  A lot of mages waste energy flailing around to cast their spells.  With a little more physical discipline, they could easily halve the number of calories burned.",
+        "We've devoted a whole school of magic to getting around the deficiencies of the body, and I'm told that with some of these new arcane branches of research, it'll soon be possible to experience your entire life without ever once having to get out of bed."
+      ],
+      "oneShot": false,
+      "title": "Discipline of the Body"
+    },
+    {
+      "id": 23,
+      "key": "BOOK23",
+      "lines": [
+        "This one was fairly controversial upon its release, but has since faded into obscurity.  Odd to see it come across my desk.",
+        "It's essentially a long-winded diatribe on the supposedly \"toothless\" ways of modern wizards; it goes on to state that the natural place of magic users is one of innate superiority. Mages should not sublime their powers; they should enjoy them in the most expressive, melodramatic fashions, striking perpetual fear into all non-magical inferiors, et-cetera, et-cetera.",
+        "I think it's rather insulting to assert that academia is a waste of wizardly potential--academia is clearly a higher pursuit than petty world conquest.  And showing off your powers without peer review is so... cheap.",
+        "Also, the chapter on enslaving all humanity is a bit grisly, although clearly at least one person seems to have liked it--it's all underlined and highlighted. Initialled, too... S.O, I think. Or possibly S.D.",
+        "It's in pencil, I'll rub it out."
+      ],
+      "oneShot": false,
+      "title": "The Sorcerer's Supremacy"
+    },
+    {
+      "id": 24,
+      "key": "BOOK24",
+      "lines": [
+        "Ah, this is a very old old book.  Many read it, fewer comprehend it.",
+        "It contains the secrets of making enormous amounts of money *without* associating with demons, politicians, or other infernal creatures.",
+        "Not very popular-- while the methods therein are reported to work flawlessly, they require considerable effort.  And let's face it, it's less than a day's work to just conjure up a demon and ask for some gold."
+      ],
+      "oneShot": false,
+      "title": "The Economicon"
+    },
+    {
+      "id": 25,
+      "key": "BOOK25_LACE",
+      "lines": [
+        "Oh, is that--how on Earth did *that get there?* Uh, vulgar trash, of course. Here, give it to me, I'll just... put it somewhere safe so that I can destroy it later."
+      ],
+      "oneShot": true,
+      "title": "Lace! The Scarlet Witch's Stocking"
+    }
+  ],
+  "dialogue": {
+    "ANNAL_INTRO": {
+      "key": "ANNAL_INTRO",
+      "label": "The Mission?",
+      "lines": [
+        "Well well, more grist for the mill, eh?",
+        "I say, I hope you do better than some of these others that were sent out.",
+        "Well, give me your name, speciality, et-cetera, and I'll see that your story is immortilized in the Annals.",
+        "You know that recording these Annals is a frightfully dull task, right?  I don't suppose there's anything interesting or spectacular about you that could liven up my job a bit?"
+      ]
+    },
+    "ANNAL_ITEMBOAST": {
+      "key": "ANNAL_ITEMBOAST",
+      "label": "My boast?",
+      "lines": [
+        "So let me understand, and this is for posterity... you're telling me that you are so confident-- overconfident?-- that you will refrain from donning even the simplest of magical items?",
+        "Splendid!  I've made a note that you're a good sport, and I'll see to it that your pages get written in blue ink, with full illumination on the first letter."
+      ]
+    },
+    "ANNAL_MANABOAST": {
+      "key": "ANNAL_MANABOAST",
+      "label": "My boast?",
+      "lines": [
+        "Ho ho!  Not one in a hundred wizards makes this claim!  Now, if you can really pull this off, people will be cross-referencing your chapters for centuries!",
+        "I'm excited!  It's always a pleasant surprise to meet a wizard who isn't a fussy prig.  I'll see if I can even sneak a few illustrations into your pages."
+      ]
+    },
+    "ANNAL_POTIONBOAST": {
+      "key": "ANNAL_POTIONBOAST",
+      "label": "My boast?",
+      "lines": [
+        "Now let me get this straight, you are telling me that you will take on this entire endeavor without once restoring or fortifying yourself with any kind of potion?",
+        "Oh yes, now that's a bit interesting!  Good on you!  For once there will be payoff for my hand cramps and blurred vision.  Game on, then!"
+      ]
+    },
+    "ANNAL_RANDOMBOAST": {
+      "key": "ANNAL_RANDOMBOAST",
+      "label": "My boast?",
+      "lines": [
+        "Hold on, hold on, you're telling me that you actually intend to invoke the Thaumaturgic Channelling and submit yourself to the will of the magic?  To take whatever chaotic skills and powers it deigns to bestow upon you?",
+        "Madness!  But inspired madness!  And for such a feat as this, I shall delve into my limited supply of glitter ink!"
+      ]
+    },
+    "ANNAL_SECONDARIESBOAST": {
+      "key": "ANNAL_SECONDARIESBOAST",
+      "label": "My boast?",
+      "lines": [
+        "As I understand it, your assertion is that you will completely abstain from casting secondary magic spells?  No shields, no storms, none of that?",
+        "Well, now you have engaged my enthusiasm.  I will chronicle your story with more adjectives than most."
+      ]
+    },
+    "ARCH_DISMISS": {
+      "key": "ARCH_DISMISS",
+      "label": "Dismiss",
+      "lines": [
+        "All right then, there's a good fellow.  Carry on, find Solomon Dark, won't you?  He's certainly not in here!"
+      ]
+    },
+    "ARCH_INTRO": {
+      "key": "ARCH_INTRO",
+      "label": "The Mission?",
+      "lines": [
+        "Oh are you back again?  I thought we had covered things adequately a few minutes ago.",
+        "Find Solomon Dark and bring him to justice. The reputation of the university is counting on you!"
+      ]
+    },
+    "ARCH_Q": {
+      "key": "ARCH_Q",
+      "label": "Equipment?",
+      "lines": [
+        "Yes, yes, in the courtyard you will find all the help you need.",
+        "Lucritius has clothing and artifacts from some of our earlier... miscalculations.  You can take your pick of the lot.",
+        "Hagatha the witch has some weird swamp-woman magic that is primitive and incomprehensible, but seems to work."
+      ]
+    },
+    "DOWSER_INTRO": {
+      "key": "DOWSER_INTRO",
+      "label": "Greetings?",
+      "lines": [
+        "Good morning.",
+        "Are you interested in what can be found within the luminiferous ether?",
+        "My magic mirror and I are eager to assist you.  "
+      ]
+    },
+    "DOWSER_Q": {
+      "key": "DOWSER_Q",
+      "label": "Dowsing Prices?",
+      "lines": [
+        "I am sure you appreciate that dowsing is an inexact science.  The price varies.",
+        "Peering into the mirror is so mentally taxing that I must charge you even to take a look.  ",
+        "Drawing an item out causes actual physical pain, and is understandably expensive.  The price of retrieving an item will depend on how entangled it is, as well as how many vapor burns I expect to sustain.",
+        "Disturbing the ether changes the entire ethereal contour, so the price will fluctuate depending on the state of the infirmament as well."
+      ]
+    },
+    "ENFORCER_DISMISS1": {
+      "key": "ENFORCER_DISMISS1",
+      "label": "Dismiss",
+      "lines": [
+        "Move along now before I take notice of your violation of College Grounds propriety rule 26B-theta subsection 2: Illegal hat angle."
+      ]
+    },
+    "ENFORCER_DISMISS2": {
+      "key": "ENFORCER_DISMISS2",
+      "label": "Dismiss",
+      "lines": [
+        "Move along now before I write you up on Section 42 luxina8(z) of the University Charter: Improper facial expression."
+      ]
+    },
+    "ENFORCER_DISMISS3": {
+      "key": "ENFORCER_DISMISS3",
+      "label": "Dismiss",
+      "lines": [
+        "Move along now before I inquire too closely about the provenance of that robe.  It looks to be a flagrant violation of University Charter section 659 ardius22(d): Improper hemming."
+      ]
+    },
+    "ENFORCER_INTRO": {
+      "key": "ENFORCER_INTRO",
+      "label": "Greetings?",
+      "lines": [
+        "Don't disturb me, can't you see I'm writing up a citation?",
+        "This wizard is violating fully sixteen of the college by-laws.",
+        "Now stop loitering!"
+      ]
+    },
+    "LIBRARIAN_INTRO": {
+      "key": "LIBRARIAN_INTRO",
+      "label": "Greetings?",
+      "lines": [
+        "Oh, hum, hello there.  You're young Benigustus, aren't you?",
+        "No?",
+        "Nobody ever told you it's not polite to correct your seniors, young fellow?",
+        "Now then, I must tell you that at this time the library is not lending books, circumstances being what they are.",
+        "But if you are interested in a particular book, I can give you a brief synopsis.  That will have to do for the time being."
+      ]
+    },
+    "MEMORATOR_DISMISS": {
+      "key": "MEMORATOR_DISMISS",
+      "label": "Dismiss",
+      "lines": [
+        "Just walk up to a painting and I'll burden you with the tragic story of a desperate mage."
+      ]
+    },
+    "MEMORATOR_INTRO": {
+      "key": "MEMORATOR_INTRO",
+      "label": "Greetings?",
+      "lines": [
+        "Welcome to the palace of *dead* careers.",
+        "Cast your eyes on these legions of lost souls.  Learn their stories that you might avoid their fate!",
+        "Also to show respect, that too."
+      ]
+    },
+    "MEMORATOR_Q1": {
+      "key": "MEMORATOR_Q1",
+      "label": "This memorial?",
+      "lines": [
+        "There's been some secret hush hush wink mission regarding an ex-graduate, and wizards started coming back dead when they came back at all.",
+        "I think when the count passed seven someone decided we needed an official memorial to commemorate the victims.  Otherwise it might have all looked like a mistake.",
+        "This way, it was a noble endeavor that we can all take inspiration from."
+      ]
+    },
+    "MEMORATOR_Q2": {
+      "key": "MEMORATOR_Q2",
+      "label": "These mages?",
+      "lines": [
+        "Lead me to a painting and I'll give you the official eulogy along with some suitably funereal banter."
+      ]
+    },
+    "POTIONGUY_INTRO": {
+      "key": "POTIONGUY_INTRO",
+      "label": "Greetings?",
+      "lines": [
+        "Hello Hello!",
+        "Can I interest you in a high quality and *very legal* herbal potion? Brewed with all the best natural magicks, minimal chance of causing intestinal combustion!"
+      ]
+    },
+    "SCAVENGER_INTRO": {
+      "key": "SCAVENGER_INTRO",
+      "label": "Greetings?",
+      "lines": [
+        "Pleased to meet you, mate.  I'm the College's Official Unreal Crime Scene Investigator.",
+        "Basically, that means it's my humble jobbing duty to trudge out into the field and retrieve the remains-- and by remains, I mean little bits and pieces-- of wizards and witches who've gone and done themselves a magical mishap.  So they can get buried proper.",
+        "Now, between you and me, there's no point burying the dead with all their stuff, eh?  They don't need it.  Other people might.  Have a look here and see if there's anything you can use.  By order of the Archchancellor, o'course."
+      ]
+    },
+    "TEACHER_INTRO": {
+      "key": "TEACHER_INTRO",
+      "label": "Greetings?",
+      "lines": [
+        "Oh hello.",
+        "Don't mind me, if you stay outside the circle you're *perfectly safe.*",
+        "I'm just testing a few of the experimental spells that students have come up with over the years.",
+        "No, no-- don't ask me to teach you these spells.  It would be both unethical and dangerous.  Many have asked, none recieve.",
+        "Yes, yes, you hunger for these spells *now*, I can see it.  But alas, they're not ready yet.  I am a professional, and it would take considerable *persuasion* to get me to put them on the roster early."
+      ]
+    },
+    "TEACHER_Q": {
+      "key": "TEACHER_Q",
+      "label": "Spell Testing?",
+      "lines": [
+        "Well, first we test the spells within a magic circle-- that's what I'm doing right now.  Just need to make sure it doesn't destroy the whole universe, you know.",
+        "If that works, we move up to testing on demons.  If all is successful there, we test on animals, then humans.",
+        "I'll be done with that in a few days.  It's the peer review, certification, licensing, and MAG approval that takes the brunt of the time."
+      ]
+    },
+    "WITCH_INTRO": {
+      "key": "WITCH_INTRO",
+      "label": "Greetings?",
+      "lines": [
+        "All right then wizard, what do you want?",
+        "I have a wide variety of charms, blessings, curses and talismans.  Good for the digestion, good for the soul."
+      ]
+    },
+    "WITCH_Q": {
+      "key": "WITCH_Q",
+      "label": "Charm Prices?",
+      "lines": [
+        "Well, see here: Mixing up these things is a lot of work.",
+        "But it's a lot *less* work once I've opened the right bags and cleaned the right tools and measured out the right ingredients.",
+        "So, fair do's, my embellishments are a lot less expensive if I've mixed them up recently."
+      ]
+    }
+  },
+  "eulogies": {
+    "0": "This portrait is of Sirmin the Wizard.",
+    "1": "This portrait is of Lucritius the Fire Mage.",
+    "100": null,
+    "3": "This portrait is of Morth the Icebinder.",
+    "4": "This portrait is of Griselda the Sorceress.",
+    "5": "This portrait is of Vorpus the Magician.",
+    "6": "This portrait is of Wegnus, called 'The White'.",
+    "7": "This portrait is of Wazoo the Storm Mage.",
+    "8": "This portrait is of Athicus the Diviner.",
+    "9": "This portrait is of Andra the Medium."
+  },
+  "interactionOrder": [
+    "hagatha",
+    "fomentius",
+    "annalist",
+    "luthacus",
+    "skorcha",
+    "teacher",
+    "memorator",
+    "painting-0",
+    "painting-1",
+    "painting-100",
+    "painting-3",
+    "painting-4",
+    "painting-5",
+    "painting-6",
+    "painting-7",
+    "painting-8",
+    "painting-9",
+    "librarian",
+    "shlorio",
+    "arch-chancellor"
+  ],
+  "interactions": {
+    "hagatha": {
+      "commands": [
+        {
+          "label": "Buy Charms and Curses",
+          "nativeCommand": "!BUYPERKS",
+          "selector": "hagatha"
+        }
+      ],
+      "dismissals": [],
+      "geometry": {
+        "position": {
+          "x": 1340,
+          "y": 280
+        },
+        "radius": 15,
+        "region": "courtyard"
+      },
+      "intro": "WITCH_INTRO",
+      "name": "Hagatha",
+      "questions": [
+        "WITCH_Q"
+      ],
+      "serviceTitle": "HAGATHA'S CHARMS AND CURSES"
+    },
+    "fomentius": {
+      "commands": [
+        {
+          "label": "Buy",
+          "nativeCommand": "!BUYPOTIONS",
+          "selector": "fomentius"
+        }
+      ],
+      "dismissals": [],
+      "geometry": {
+        "position": {
+          "x": 1397,
+          "y": 664
+        },
+        "radius": 30,
+        "region": "courtyard"
+      },
+      "intro": "POTIONGUY_INTRO",
+      "name": "Fomentius",
+      "questions": [],
+      "serviceTitle": "FOMENTIUS' USEFUL THYNGS"
+    },
+    "annalist": {
+      "commands": [
+        {
+          "label": "Boast",
+          "nativeCommand": "!BOAST",
+          "selector": "boast"
+        }
+      ],
+      "dismissals": [],
+      "geometry": {
+        "position": {
+          "x": 895.5,
+          "y": 455.5
+        },
+        "radius": 8,
+        "region": "courtyard"
+      },
+      "intro": "ANNAL_INTRO",
+      "name": "Provokatus",
+      "questions": [],
+      "serviceTitle": "Select a Boast"
+    },
+    "luthacus": {
+      "commands": [
+        {
+          "label": "Examine Items",
+          "nativeCommand": "!INVENTORY",
+          "selector": "luthacus"
+        }
+      ],
+      "dismissals": [],
+      "geometry": {
+        "position": {
+          "x": 1700.5,
+          "y": 449.5
+        },
+        "radius": 25,
+        "region": "courtyard"
+      },
+      "intro": "SCAVENGER_INTRO",
+      "name": "Luthacus",
+      "questions": [],
+      "serviceTitle": "LUTHACUS' SCAVENGED GOODS"
+    },
+    "skorcha": {
+      "commands": [],
+      "dismissals": [
+        "ENFORCER_DISMISS1",
+        "ENFORCER_DISMISS2",
+        "ENFORCER_DISMISS3"
+      ],
+      "geometry": {
+        "position": {
+          "x": 669,
+          "y": 705.5
+        },
+        "radius": 10,
+        "region": "courtyard"
+      },
+      "intro": "ENFORCER_INTRO",
+      "name": "Skorcha",
+      "questions": [],
+      "serviceTitle": null
+    },
+    "teacher": {
+      "commands": [
+        {
+          "label": "Per$uade",
+          "nativeCommand": "!SPELLS",
+          "selector": "teacher-spells"
+        }
+      ],
+      "dismissals": [],
+      "geometry": {
+        "position": {
+          "x": 576.5,
+          "y": 710.5
+        },
+        "radius": 25,
+        "region": "courtyard"
+      },
+      "intro": "TEACHER_INTRO",
+      "name": "Professor Machinimbus",
+      "questions": [
+        "TEACHER_Q"
+      ],
+      "serviceTitle": "Select a Spell"
+    },
+    "memorator": {
+      "commands": [],
+      "dismissals": [
+        "MEMORATOR_DISMISS"
+      ],
+      "geometry": {
+        "position": {
+          "x": 628,
+          "y": 770
+        },
+        "radius": 25,
+        "region": "mortuary"
+      },
+      "intro": "MEMORATOR_INTRO",
+      "name": "Declarius",
+      "questions": [
+        "MEMORATOR_Q1",
+        "MEMORATOR_Q2"
+      ],
+      "serviceTitle": null
+    },
+    "librarian": {
+      "commands": [
+        {
+          "label": "Inquire about Books",
+          "nativeCommand": "!BOOKS",
+          "selector": "books"
+        }
+      ],
+      "dismissals": [],
+      "geometry": {
+        "position": {
+          "x": 512,
+          "y": 595
+        },
+        "radius": 55,
+        "region": "library"
+      },
+      "intro": "LIBRARIAN_INTRO",
+      "name": "Professor Semicus",
+      "questions": [],
+      "serviceTitle": "Select a Book"
+    },
+    "shlorio": {
+      "commands": [
+        {
+          "label": "Dowse",
+          "nativeCommand": "!DOWSE",
+          "selector": "shlorio"
+        }
+      ],
+      "dismissals": [],
+      "geometry": {
+        "position": {
+          "x": 900,
+          "y": 642.5
+        },
+        "radius": 25,
+        "region": "library"
+      },
+      "intro": "DOWSER_INTRO",
+      "name": "Shlorio",
+      "questions": [
+        "DOWSER_Q"
+      ],
+      "serviceTitle": "SHLORIO'S DISCOUNT DOWSING"
+    },
+    "arch-chancellor": {
+      "commands": [],
+      "dismissals": [
+        "ARCH_DISMISS"
+      ],
+      "geometry": {
+        "position": {
+          "x": 514,
+          "y": 467
+        },
+        "radius": 55,
+        "region": "office"
+      },
+      "intro": "ARCH_INTRO",
+      "name": "The Archchancellor",
+      "questions": [
+        "ARCH_Q"
+      ],
+      "serviceTitle": null
+    },
+    "painting-0": {
+      "commands": [],
+      "dismissals": [],
+      "eulogyIndex": 0,
+      "geometry": {
+        "position": {
+          "x": 512,
+          "y": 697
+        },
+        "radius": 15,
+        "region": "mortuary",
+        "rangeRadius": 40
+      },
+      "intro": null,
+      "name": "Declarius",
+      "questions": [],
+      "serviceTitle": null
+    },
+    "painting-1": {
+      "commands": [],
+      "dismissals": [],
+      "eulogyIndex": 1,
+      "geometry": {
+        "position": {
+          "x": 350,
+          "y": 683
+        },
+        "radius": 15,
+        "region": "mortuary",
+        "rangeRadius": 40
+      },
+      "intro": null,
+      "name": "Declarius",
+      "questions": [],
+      "serviceTitle": null
+    },
+    "painting-100": {
+      "commands": [],
+      "dismissals": [],
+      "eulogyIndex": 100,
+      "geometry": {
+        "position": {
+          "x": 673,
+          "y": 683
+        },
+        "radius": 15,
+        "region": "mortuary",
+        "rangeRadius": 40
+      },
+      "intro": null,
+      "name": "Declarius",
+      "questions": [],
+      "serviceTitle": null
+    },
+    "painting-3": {
+      "commands": [],
+      "dismissals": [],
+      "eulogyIndex": 3,
+      "geometry": {
+        "position": {
+          "x": 744,
+          "y": 540
+        },
+        "radius": 15,
+        "region": "mortuary",
+        "rangeRadius": 40
+      },
+      "intro": null,
+      "name": "Declarius",
+      "questions": [],
+      "serviceTitle": null
+    },
+    "painting-4": {
+      "commands": [],
+      "dismissals": [],
+      "eulogyIndex": 4,
+      "geometry": {
+        "position": {
+          "x": 590,
+          "y": 540
+        },
+        "radius": 15,
+        "region": "mortuary",
+        "rangeRadius": 40
+      },
+      "intro": null,
+      "name": "Declarius",
+      "questions": [],
+      "serviceTitle": null
+    },
+    "painting-5": {
+      "commands": [],
+      "dismissals": [],
+      "eulogyIndex": 5,
+      "geometry": {
+        "position": {
+          "x": 434,
+          "y": 540
+        },
+        "radius": 15,
+        "region": "mortuary",
+        "rangeRadius": 40
+      },
+      "intro": null,
+      "name": "Declarius",
+      "questions": [],
+      "serviceTitle": null
+    },
+    "painting-6": {
+      "commands": [],
+      "dismissals": [],
+      "eulogyIndex": 6,
+      "geometry": {
+        "position": {
+          "x": 279,
+          "y": 540
+        },
+        "radius": 15,
+        "region": "mortuary",
+        "rangeRadius": 40
+      },
+      "intro": null,
+      "name": "Declarius",
+      "questions": [],
+      "serviceTitle": null
+    },
+    "painting-7": {
+      "commands": [],
+      "dismissals": [],
+      "eulogyIndex": 7,
+      "geometry": {
+        "position": {
+          "x": 354,
+          "y": 400
+        },
+        "radius": 15,
+        "region": "mortuary",
+        "rangeRadius": 40
+      },
+      "intro": null,
+      "name": "Declarius",
+      "questions": [],
+      "serviceTitle": null
+    },
+    "painting-8": {
+      "commands": [],
+      "dismissals": [],
+      "eulogyIndex": 8,
+      "geometry": {
+        "position": {
+          "x": 512,
+          "y": 400
+        },
+        "radius": 15,
+        "region": "mortuary",
+        "rangeRadius": 40
+      },
+      "intro": null,
+      "name": "Declarius",
+      "questions": [],
+      "serviceTitle": null
+    },
+    "painting-9": {
+      "commands": [],
+      "dismissals": [],
+      "eulogyIndex": 9,
+      "geometry": {
+        "position": {
+          "x": 670,
+          "y": 400
+        },
+        "radius": 15,
+        "region": "mortuary",
+        "rangeRadius": 40
+      },
+      "intro": null,
+      "name": "Declarius",
+      "questions": [],
+      "serviceTitle": null
+    }
+  },
+  "interruptEulogies": [
+    "Oh, okay, you're not interested in that?  Well thank you very much.",
+    "Oh, yes, just walk away.  I'd hate to bore you.",
+    "Oh, never mind this guy's story, right?  I'm sure he'd want it that way.",
+    "Ummm-hmmm"
+  ],
+  "schema": "solomon-dark-native-hub-npc-interactions-v1",
+  "skorcha": {
+    "animationDelay": {
+      "drawCount": 10,
+      "offsetTicks": 20
+    },
+    "animationStateCount": 3,
+    "artRecords": [
+      510,
+      511,
+      512,
+      513,
+      514,
+      515,
+      516
+    ],
+    "placements": [
+      {
+        "variant": 0,
+        "x": 732.5,
+        "y": 1437.5
+      },
+      {
+        "variant": 1,
+        "x": 403.5,
+        "y": 1637
+      },
+      {
+        "variant": 2,
+        "x": 669,
+        "y": 705.5
+      }
+    ],
+    "presenceDrawCount": 3,
+    "presenceDrawValue": 1
+  },
+  "source": {
+    "dialogueHashes": {
+      "survival.txt": "5e792f4dc692667d0ecaa4e7304202f11d2d1cdc664820b97be83145fa3b2d67",
+      "books.txt": "d7ca0a36c2fe6af90a4a950d5ff3dab7638f43640de97684eb6a7583a02b24a1",
+      "spellfacts.txt": "1d78d408664ea830465e7e5a8b56df2c6373cb4f6685dc025a1a6d0f90ab0e17",
+      "narration.txt": "5a80f605f8fcac7fc634f8234d5b0a0173d3d4aa563dc076cc6d1b4dbc649174"
+    },
+    "executableSha256": "03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3",
+    "preferredImageBase": "0x00400000",
+    "retailVersion": "0.72.5"
+  },
+  "teacherSpells": [
+    {
+      "explanationLabel": "Acid Rain?",
+      "explanationLines": [
+        "Ah yes, this is a very interesting modification to Magic Storm.  It was prototyped a long time ago, but recently a young fellow-- I think his name is Sirmin, or Sirmeon?-- took to refining it.",
+        "Well, I haven't had any trouble with it, but remember that it's not licensed or certified.  And if anyone asks you where you learned it, you happened upon old Sirmeon's notes, right?"
+      ],
+      "key": "ACID_RAIN",
+      "name": "ACID RAIN",
+      "price": 3000,
+      "quickDescription": "A modified version of Magic Storm that produces a shower of hot acid.",
+      "skillId": 72
+    },
+    {
+      "explanationLabel": "Fire Wall?",
+      "explanationLines": [
+        "Now this is truly a classic spell.  It gets certified and decertified every few centuries.",
+        "Always someone complains that it doesn't have a proper warning label.  Yes, make note-- \"Fire Wall\" will set things on fire.  Unauthorized use of this spell may burn you and all you love to a crisp.",
+        "And if anyone asks where you learned it, you were perusing back issues of the Infernium Mythos, hmm?"
+      ],
+      "key": "FIRE_WALL",
+      "name": "FIRE WALL",
+      "price": 3500,
+      "quickDescription": "Calls up a flaming wall that burns enemies as they pass through it.",
+      "skillId": 73
+    },
+    {
+      "explanationLabel": "Ether Drain?",
+      "explanationLines": [
+        "This one you must be cautious with.",
+        "As you unquestionably know from your schooling, the Theta(g)-27 psuedoquadrant of the Ether has a very severe pressure differential.",
+        "This can be useful for getting rid of dirty dishes, trash, or other unwanted items, but you must be careful not to get sucked in yourself.",
+        "In fact, if you *do* open a drain, you should keep an eye out for a wizard named Claudicus.  He invented the spell, and after all this time he's presumably near to finding a way to get back through the hole."
+      ],
+      "key": "ETHER_DRAIN",
+      "name": "ETHER DRAIN",
+      "price": 4200,
+      "quickDescription": "Opens a hole into a quadrant of the ether that sucks.",
+      "skillId": 74
+    },
+    {
+      "explanationLabel": "Iron Golem?",
+      "explanationLines": [
+        "Hm, yes, this is a nice variant on raising golems, particularly if you're going up against fighters.",
+        "So what you have here is a modified pull at the earth.  When you pull at the clay to bring your golem up, it's possible to reach a bit deeper into the lithosphere and infuse your golem with some harder metals.  Careful concentration can bring a dangerously spiky construct that causes harm to anyone who strikes it.",
+        "A student named Predominus came up with this one.  Unfortunately he died of  metal poisoning after commanding his golem to figure out some silly thing with the number zero.  "
+      ],
+      "key": "IRON_GOLEM",
+      "name": "IRON GOLEM",
+      "price": 5000,
+      "quickDescription": "Upgrades your golem with iron spikes that reflect physical damage.",
+      "skillId": 75
+    },
+    {
+      "explanationLabel": "Regenerate?",
+      "explanationLines": [
+        "Now, regenerate is one of the class-S spells, where the S is for sissy.",
+        "Some mages hold that there's nothing to be ashamed of in boosting your regeneration of health.",
+        "Less pathetic mages argue that a true wizard is so deeply protected by various hexes and shields that regeneration is more a mark of incompetence than skill.",
+        "This spell, or one like it, is very popular amongst druids, too.  Says it all, doesn't it?",
+        "I'd remind you not to let anyone know I gave you an unapproved spell, but honestly, if you told anyone you were regenerating, they would stop thinking of you, and anything you might have to say, at once."
+      ],
+      "key": "REGENERATE",
+      "name": "REGENERATE",
+      "price": 5100,
+      "quickDescription": "Magically supplements your visceral recovery node for quicker healing.",
+      "skillId": 79
+    },
+    {
+      "explanationLabel": "Mindstar?",
+      "explanationLines": [
+        "There are some who say that you shouldn't mess with things you don't understand.  But if you don't, what's the point of being a wizard?",
+        "This little spell, Mindstar, has been off the roster because technically it can make you insane, murderous, monomaniacal, or a vegetable if you don't cast it just right.  We've been working on that, and I feel confident that you've given me enough gold to use this version safely.",
+        "It bridges the nodes of your cortex with magical energies-- or possibly magical entities-- that reduce the amount of space your cognitive impulses need to travel to nearly zero.  The younger fellows like to call it 'quantum thinking,' but it's really just ordinary hoodoo.",
+        "And of course, if asked, you got this spell from the Forbidden Compendium, and I will back you up in that assertion."
+      ],
+      "key": "MINDSTAR",
+      "name": "MINDSTAR",
+      "price": 5300,
+      "quickDescription": "Supplements your cognitive nexus with magical force.",
+      "skillId": 78
+    },
+    {
+      "explanationLabel": "Turn Undead?",
+      "explanationLines": [
+        "After travelling with one of those insufferable Brothers of Infinite Light or whatever, Archchancellor Doniner-- may he rest in peace-- commanded that the college put all energy into creating a turn undead spell.",
+        "It works out that this is very difficult to do without the backing of a diety, so this is a little less powerful than the devastating shout that you may have seen paladins or priests use.  But it works.  It definitely turns undead.  And, um, the nearly dead as well.",
+        "For you see, it's not a true turn undead spell-- it's a sort of hacked together shortcut that resonates with bones or flesh that lack a certain vitality.  In fact, it's probably not completely safe to use this around the very old or the very ill.  It would be tragic, though amusing, to watch someone on his deathbed suddenly leap up and flee the premises, as his skeleton tries desperately to get away from you.  Hrm, yes... that needs more testing.",
+        "So, then... we're agreed that if asked you happened to spot this spell in Blasenstance's *Simulating the Religions of the World*."
+      ],
+      "key": "TURN_UNDEAD",
+      "name": "TURN UNDEAD",
+      "price": 6100,
+      "quickDescription": "Weakens nearby undead and causes them to flee the caster.",
+      "skillId": 77
+    },
+    {
+      "explanationLabel": "Call Comet?",
+      "explanationLines": [
+        "Look here, this spell is a true testament to the perseverence of wizardry.",
+        "We've been trying to call things down from the firmament forever, but it's so high up there that it's hard to concentrate on.  And so mistakes were made in earlier eras, such as, ahem, \"The Incident,\" the \"Missing Mountain,\" and \"The Perfectly Round Ocean.\"",
+        "But across the centuries, various wizards, astrologers, and philosophers have been carefully working failsafes and baffles into this spell and now we finally believe it is almost completely nearly safe to call a comet down from the firmament in virtually all circumstances very often in many cases.",
+        "Remember that it does take a long time for ice to fall from that high... plan accordingly.  Comets are in the third level of firmament, so if you've dealt with meteors, expect a longer delay and, hem hem, more damage.",
+        "Also, I'd work with this spell well away from the college.  You don't want to get a nasty memo and/or executed."
+      ],
+      "key": "CALL_COMET",
+      "name": "CALL COMET",
+      "price": 10000,
+      "quickDescription": "Calls a frozen ball of ice down from the firmanent.",
+      "skillId": 76
+    }
+  ]
+}

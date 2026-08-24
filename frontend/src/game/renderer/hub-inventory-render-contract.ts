@@ -261,6 +261,19 @@ export const HUB_CHAT_PANEL = {
   width: 647,
 } as const
 
+export const HUB_NPC_SELECTOR = {
+  detailTextBaselineY: 350,
+  emptyTextBaselineY: 232,
+  nextRect: [930, 365, 80, 38] as const,
+  previousRect: [590, 365, 80, 38] as const,
+  rowCount: 5,
+  rowHeight: 43,
+  rowLeft: 570,
+  rowTop: 121,
+  rowWidth: 460,
+  titleTextBaselineY: 95,
+} as const
+
 export const HUB_CHAT_INLINE_EMPHASIS = {
   exactTextCommand: 'i',
   exactTextMarker: '_',

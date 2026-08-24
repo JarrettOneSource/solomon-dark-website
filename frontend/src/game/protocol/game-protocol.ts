@@ -248,6 +248,7 @@ import type {
   HubPlayerActivity,
   HubWorldSnapshot,
   ProtocolHubParticipantState,
+  ProtocolHubSkorchaState,
   ProtocolAmbientState,
   ProtocolPlayerProgression,
   ProtocolPlayerEconomy,
@@ -341,7 +342,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 70
+export const GAME_PROTOCOL_VERSION = 71
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -2031,6 +2032,18 @@ function hubInventoryAction(value: unknown): HubInventoryAction {
     }
     return { type, selector }
   }
+  if (type === 'buy-teacher-spell') {
+    onlyKeys(source, 'action', ['type', 'skillId'])
+    return { type, skillId: integerWithin(source.skillId, 'action.skillId', 72, 79) }
+  }
+  if (type === 'read-librarian-book') {
+    onlyKeys(source, 'action', ['type', 'bookId'])
+    return { type, bookId: integerWithin(source.bookId, 'action.bookId', 0, 25) }
+  }
+  if (type === 'select-boast') {
+    onlyKeys(source, 'action', ['type', 'boastId'])
+    return { type, boastId: integerWithin(source.boastId, 'action.boastId', 0, 4) }
+  }
   if (type === 'close-dowsing' || type === 'dowse' || type === 'interact-goodie') {
     onlyKeys(source, 'action', ['type'])
     return { type }
@@ -2184,6 +2197,7 @@ function playerEconomy(value: unknown, field: string): ProtocolPlayerEconomy {
     'fomentiusStock',
     'gold',
     'hagathaOffers',
+    'npc',
     'ownedPerkSelectors',
     'revision',
     'storage',
@@ -2257,12 +2271,47 @@ function playerEconomy(value: unknown, field: string): ProtocolPlayerEconomy {
     fomentiusStock,
     gold: boundedInteger(source.gold, `${field}.gold`, 0, 10_000_000),
     hagathaOffers,
+    npc: nativeHubNpcState(source.npc, `${field}.npc`),
     ownedPerkSelectors,
     revision: nonnegativeInteger(source.revision, `${field}.revision`),
     storage,
     tonicPurchases,
     tutorialPending: boolean(source.tutorialPending, `${field}.tutorialPending`),
     unforgeBonuses: nativeUnforgeBonuses(source.unforgeBonuses, `${field}.unforgeBonuses`),
+  }
+}
+
+function nativeHubNpcState(
+  value: unknown,
+  field: string,
+): ProtocolPlayerEconomy['npc'] {
+  const source = record(value, field)
+  onlyKeys(source, field, ['boast', 'librarianLaceRead'])
+  const rawBoast = record(source.boast, `${field}.boast`)
+  onlyKeys(rawBoast, `${field}.boast`, [
+    'failed',
+    'failureSequence',
+    'selected',
+    'succeeded',
+  ])
+  const selected = (rawBoast.selected === null
+    ? null
+    : integerWithin(rawBoast.selected, `${field}.boast.selected`, 0, 4)) as 0 | 1 | 2 | 3 | 4 | null
+  const failed = boolean(rawBoast.failed, `${field}.boast.failed`)
+  const succeeded = boolean(rawBoast.succeeded, `${field}.boast.succeeded`)
+  const failureSequence = nonnegativeInteger(
+    rawBoast.failureSequence,
+    `${field}.boast.failureSequence`,
+  )
+  if (
+    failureSequence > 1
+    || failed !== (failureSequence === 1)
+    || failed && succeeded
+    || selected === null && (failed || succeeded)
+  ) throw new GameProtocolError(`${field}.boast state is inconsistent`)
+  return {
+    boast: { failed, failureSequence, selected, succeeded },
+    librarianLaceRead: boolean(source.librarianLaceRead, `${field}.librarianLaceRead`),
   }
 }
 
@@ -2315,6 +2364,7 @@ function hubActionFeedback(
     'buy-dowsing',
     'buy-fomentius',
     'buy-hagatha',
+    'buy-teacher-spell',
     'close-dowsing',
     'consume',
     'dye',
@@ -2322,7 +2372,9 @@ function hubActionFeedback(
     'equip',
     'interact-goodie',
     'move-inventory-item',
+    'read-librarian-book',
     'read-skill-book',
+    'select-boast',
     'transfer',
     'unforge',
     'unequip',
@@ -3128,6 +3180,7 @@ function selectedPrimaryElement(
 function playerProgression(value: unknown, field: string): ProtocolPlayerProgression {
   const source = record(value, field)
   onlyKeys(source, field, [
+    'advancedUnlocks',
     'weldBuildId',
     'weldComponentRanks',
     'coldSlowTicksRemaining',
@@ -3159,6 +3212,14 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
     'skillQuickbar',
     'splitMind',
   ])
+  const advancedUnlocks = limitedArray(
+    source.advancedUnlocks,
+    `${field}.advancedUnlocks`,
+    8,
+  ).map((entry, index) => boolean(entry, `${field}.advancedUnlocks[${index}]`))
+  if (advancedUnlocks.length !== 8) {
+    throw new GameProtocolError(`${field}.advancedUnlocks must contain eight flags`)
+  }
   const maximumHealth = positiveFinite(source.maximumHealth, `${field}.maximumHealth`)
   const maximumMana = positiveFinite(source.maximumMana, `${field}.maximumMana`)
   const currentHealth = finite(source.currentHealth, `${field}.currentHealth`)
@@ -3339,6 +3400,7 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
     throw new GameProtocolError(`${field}.lifeState is not supported`)
   }
   return {
+    advancedUnlocks,
     coldSlowTicksRemaining,
     concentrationSkillIds: concentrationSkillIds as [number | null, number | null],
     currentHealth,
@@ -3393,14 +3455,23 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
 
 function playerSkillOffer(value: unknown, field: string, playerLevel: number) {
   const source = record(value, field)
-  onlyKeys(source, field, ['level', 'options', 'sequence'])
+  onlyKeys(source, field, ['automaticChoiceIndex', 'level', 'options', 'sequence'])
   const level = positiveInteger(source.level, `${field}.level`)
   if (level > playerLevel) throw new GameProtocolError(`${field}.level is ahead of the player`)
   const options = limitedArray(source.options, `${field}.options`, 4)
   if (options.length !== 3 && options.length !== 4) {
     throw new GameProtocolError(`${field}.options must contain three or four choices`)
   }
+  const automaticChoiceIndex = source.automaticChoiceIndex === undefined
+    ? undefined
+    : integerWithin(
+        source.automaticChoiceIndex,
+        `${field}.automaticChoiceIndex`,
+        0,
+        options.length - 1,
+      )
   return {
+    ...(automaticChoiceIndex === undefined ? {} : { automaticChoiceIndex }),
     level,
     options: options.map((option, index) => {
       const optionField = `${field}.options[${index}]`
@@ -3869,6 +3940,7 @@ function hubWorldSnapshot(value: unknown, field: string): HubWorldSnapshot {
     'collisionRngState',
     'kind',
     'participants',
+    'skorcha',
     'students',
     'traderAnimationSeed',
   ])
@@ -3895,6 +3967,7 @@ function hubWorldSnapshot(value: unknown, field: string): HubWorldSnapshot {
     ),
     kind: 'hub',
     participants,
+    skorcha: hubSkorchaState(source.skorcha, `${field}.skorcha`),
     students: limitedArray(source.students, `${field}.students`, MAX_STUDENTS).map(
       (student, index) => studentState(student, `${field}.students[${index}]`),
     ),
@@ -10128,6 +10201,7 @@ function gameWorldSnapshotFrame(
     'entities',
     'kind',
     'participants',
+    'skorcha',
     'traderAnimationSeed',
   ])
   const rawParticipants = record(source.participants, `${field}.participants`)
@@ -10153,10 +10227,37 @@ function gameWorldSnapshotFrame(
     entities: replicatedEntityFrame(source.entities, `${field}.entities`),
     kind: 'hub',
     participants,
+    skorcha: hubSkorchaState(source.skorcha, `${field}.skorcha`),
     traderAnimationSeed: nonnegativeInteger(
       source.traderAnimationSeed,
       `${field}.traderAnimationSeed`,
     ),
+  }
+}
+
+function hubSkorchaState(value: unknown, field: string): ProtocolHubSkorchaState | null {
+  if (value === null) return null
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'dismissalIndex',
+    'gesture',
+    'gestureTicksRemaining',
+    'hatFrame',
+    'position',
+    'variant',
+  ])
+  return {
+    dismissalIndex: integerWithin(source.dismissalIndex, `${field}.dismissalIndex`, 0, 2) as 0 | 1 | 2,
+    gesture: integerWithin(source.gesture, `${field}.gesture`, 0, 2) as 0 | 1 | 2,
+    gestureTicksRemaining: integerWithin(
+      source.gestureTicksRemaining,
+      `${field}.gestureTicksRemaining`,
+      1,
+      29,
+    ),
+    hatFrame: integerWithin(source.hatFrame, `${field}.hatFrame`, 0, 4) as 0 | 1 | 2 | 3 | 4,
+    position: vector(source.position, `${field}.position`),
+    variant: integerWithin(source.variant, `${field}.variant`, 0, 2) as 0 | 1 | 2,
   }
 }
 

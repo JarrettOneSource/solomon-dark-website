@@ -1727,6 +1727,11 @@ def main() -> int:
         output_dir,
         "hub-teacher-frames",
     )
+    save(
+        build_registered_strip(college, college_records, tuple(range(510, 517))),
+        output_dir,
+        "hub-npc-skorcha-frames",
+    )
 
     college_assets = {
         "hub-fountain-particle": 38,

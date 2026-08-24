@@ -2005,10 +2005,14 @@ function sameRuntimeProgression(
     && current.lifeState === next.lifeState
     && current.maximumHealth === next.maximumHealth
     && current.maximumMana === next.maximumMana
+    && current.pendingOffer?.automaticChoiceIndex === next.pendingOffer?.automaticChoiceIndex
     && current.poisonDamagePerTick === next.poisonDamagePerTick
     && current.poisonTicksRemaining === next.poisonTicksRemaining
     && current.selectedPrimarySkillId === next.selectedPrimarySkillId
     && current.weldBuildId === next.weldBuildId
+    && current.advancedUnlocks.every((unlocked, index) => (
+      unlocked === next.advancedUnlocks[index]
+    ))
     && current.skillQuickbar.every((skillId, index) => skillId === next.skillQuickbar[index])
     && current.concentrationSkillIds.every((skillId, index) => (
       skillId === next.concentrationSkillIds[index]

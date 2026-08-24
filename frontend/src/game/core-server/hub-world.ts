@@ -44,6 +44,11 @@ import {
   type HubStudentState,
 } from './hub-students.ts'
 import { HubStudentNeighborGrid } from './hub-student-grid.ts'
+import {
+  createHubSkorcha,
+  stepHubSkorcha,
+  type HubSkorchaState,
+} from './hub-skorcha.ts'
 
 export interface HubWorldState {
   ambient: HubAmbientState
@@ -51,6 +56,7 @@ export interface HubWorldState {
   kind: 'hub'
   participants: Readonly<Record<string, HubParticipantState>>
   runtime: HubWorldRuntime
+  skorcha: HubSkorchaState | null
   studentPopulation: HubStudentPopulationState
   traderAnimationSeed: number
 }
@@ -73,6 +79,7 @@ export interface HubWorldTickResult {
 }
 
 export interface HubWorldOptions {
+  skorcha?: HubSkorchaState | null
   studentPopulation?: HubStudentPopulationState
   traderAnimationSeed?: number
 }
@@ -141,6 +148,9 @@ export function createHubWorld(
       playerIds.map((playerId) => [playerId, createHubParticipantState()]),
     ),
     runtime: new HubWorldRuntime(),
+    skorcha: options.skorcha === undefined
+      ? createHubSkorcha(options.traderAnimationSeed ?? DEFAULT_HUB_TRADER_ANIMATION_SEED)
+      : options.skorcha,
     studentPopulation,
     traderAnimationSeed: options.traderAnimationSeed ?? DEFAULT_HUB_TRADER_ANIMATION_SEED,
   }
@@ -263,6 +273,15 @@ export function stepHubWorldTick(
     })
   }
   bodies.push(...HUB_FIXED_ACTOR_COLLISION_LAYOUT)
+  if (world.skorcha !== null) {
+    bodies.push(fixedActor(
+      'skorcha',
+      'courtyard',
+      world.skorcha.position.x,
+      world.skorcha.position.y,
+      10,
+    ))
+  }
   for (const body of bodies) bodyRegions.set(body.id, body.region)
 
   let collisionRngState = world.collisionRngState
@@ -345,6 +364,7 @@ export function stepHubWorldTick(
       kind: 'hub',
       participants: nextParticipants,
       runtime,
+      skorcha: world.skorcha === null ? null : stepHubSkorcha(world.skorcha),
       studentPopulation,
       traderAnimationSeed: world.traderAnimationSeed,
     },

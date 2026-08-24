@@ -217,6 +217,14 @@ function interpolateSnapshot(
         newer.world.participants,
         blend,
       ),
+      skorcha: (blend < 1 ? older.world.skorcha : newer.world.skorcha) === null
+        ? null
+        : {
+            ...(blend < 1 ? older.world.skorcha! : newer.world.skorcha!),
+            position: {
+              ...(blend < 1 ? older.world.skorcha! : newer.world.skorcha!).position,
+            },
+          },
       students: interpolateStudents(older.world.students, newer.world.students, blend),
       traderAnimationSeed: blend < 1
         ? older.world.traderAnimationSeed
@@ -474,6 +482,10 @@ function presentationCopy(snapshot: HubGameSnapshot): HubPresentationFrame {
           copyParticipant(participant),
         ]),
       ),
+      skorcha: snapshot.world.skorcha === null ? null : {
+        ...snapshot.world.skorcha,
+        position: { ...snapshot.world.skorcha.position },
+      },
       students: snapshot.world.students.map(copyStudent),
       traderAnimationSeed: snapshot.world.traderAnimationSeed,
     },

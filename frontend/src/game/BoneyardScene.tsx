@@ -192,6 +192,7 @@ export default function BoneyardScene({
   })
   const [run, setRun] = useState<GameRunLifecycleState>(boneyardInitialSnapshot.run)
   const [inventorySurface, setInventorySurface] = useState<HubUiSurface>(null)
+  const [npcNoteboxOpen, setNpcNoteboxOpen] = useState(false)
   const [controllerQuickbarSlot, setControllerQuickbarSlot] = useState<number | undefined>()
   const [tutorial, setTutorial] = useState<NativeTutorialState | null>(
     boneyardInitialSnapshot.world.tutorial,
@@ -219,7 +220,10 @@ export default function BoneyardScene({
   })
   const goodieTargetIdRef = useRef(goodieTargetId)
   goodieTargetIdRef.current = goodieTargetId
-  const sceneInputBlocked = inputBlocked || inventorySurface !== null || run.phase !== 'active'
+  const sceneInputBlocked = inputBlocked
+    || inventorySurface !== null
+    || npcNoteboxOpen
+    || run.phase !== 'active'
 
   useEffect(() => {
     onInventoryOpenChange(inventorySurface?.kind === 'inventory')
@@ -1019,6 +1023,7 @@ export default function BoneyardScene({
               modAssets={modAssets}
               nativeUiStageStyle={nativeUiStageStyle}
               onAction={onHubAction}
+              onBlockingOverlayChange={setNpcNoteboxOpen}
               onSurfaceChange={setInventorySurface}
               overlayRoot={sceneRef}
               playerPosition={playerPosition}

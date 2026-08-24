@@ -470,6 +470,7 @@ export interface NativeSecondaryTickResult {
   readonly dispelledShieldTargetIds: readonly number[]
   readonly disruptedTargetIds: readonly number[]
   readonly manaRecovered: Readonly<Record<string, number>>
+  readonly manaUnderflowPlayerIds: readonly string[]
   readonly manaSpent: Readonly<Record<string, number>>
   readonly healthRecovered: Readonly<Record<string, number>>
   readonly headingPerturbations: readonly NativeSecondaryHeadingPerturbation[]
@@ -1403,6 +1404,7 @@ export function stepNativeSecondaryAbilities(
   const removedProjectileIds = new Set<number>()
   const dispelledShieldTargetIds = new Set<number>()
   const overloadedPlayerIds = new Set<string>()
+  const manaUnderflowPlayerIds = new Set<string>()
   const primaryOverridePlayerIds = new Set<string>()
   const staffCastPulsePlayerIds = new Set<string>()
   const advancedActors: NativeSecondaryActorState[] = []
@@ -3709,6 +3711,7 @@ export function stepNativeSecondaryAbilities(
         if (cast.manaRecovered > 0) {
           manaRecovered[playerId] = (manaRecovered[playerId] ?? 0) + cast.manaRecovered
         }
+        if (cast.manaUnderflow) manaUnderflowPlayerIds.add(playerId)
         if (cast.manaSpent > 0) manaSpent[playerId] = cast.manaSpent
         if (cast.relocated) relocatedPlayers[playerId] = cast.relocated
         if (cast.facingHeadingIndex !== null) {
@@ -3760,6 +3763,7 @@ export function stepNativeSecondaryAbilities(
     healthRecovered: Object.freeze(healthRecovered),
     knockbacks: Object.freeze(knockbacks),
     manaRecovered: Object.freeze(manaRecovered),
+    manaUnderflowPlayerIds: Object.freeze([...manaUnderflowPlayerIds].sort()),
     manaSpent: Object.freeze(manaSpent),
     overloadedPlayerIds: Object.freeze([...overloadedPlayerIds].sort()),
     primaryOverridePlayerIds: Object.freeze([...primaryOverridePlayerIds].sort()),
@@ -3775,6 +3779,7 @@ interface CastResult {
   readonly dispelledShieldTargetIds: readonly number[]
   readonly disruptedTargetIds: readonly number[]
   readonly manaRecovered: number
+  readonly manaUnderflow: boolean
   readonly manaSpent: number
   readonly facingHeadingIndex: number | null
   readonly player: NativeSecondaryPlayerState
@@ -3809,8 +3814,13 @@ function castAbility(
   authority: NativeSecondaryPlayerAuthority,
   context: NativeSecondaryTickContext,
 ): CastResult {
-  const none = (state = source, nextPlayer = player): CastResult => ({
-    dispelledShieldTargetIds: [], disruptedTargetIds: [], manaRecovered: 0, manaSpent: 0, player: nextPlayer,
+  const none = (
+    state = source,
+    nextPlayer = player,
+    manaUnderflow = false,
+  ): CastResult => ({
+    dispelledShieldTargetIds: [], disruptedTargetIds: [], manaRecovered: 0, manaUnderflow,
+    manaSpent: 0, player: nextPlayer,
     facingHeadingIndex: null, relocated: null, removedProjectileIds: [], state,
   })
   if (!authority.eligible) {
@@ -3851,7 +3861,7 @@ function castAbility(
   if (!togglingOff && cost > nativeSecondaryAvailableMana(authority.currentMana, player)) {
     return none(fizzle(source, playerId, skillId, authority, context.tick), {
       ...player, fizzleSequence: player.fizzleSequence + 1, lastSkillId: skillId,
-    })
+    }, true)
   }
   const origin = authority.character.position
   const aim = authority.input.aim ?? origin
@@ -3981,6 +3991,7 @@ function castAbility(
           disruptedTargetIds,
           facingHeadingIndex: null,
           manaRecovered: castManaRecovered,
+          manaUnderflow: false,
           manaSpent,
           player: nextPlayer,
           relocated: null,
@@ -4673,6 +4684,7 @@ function castAbility(
     disruptedTargetIds,
     facingHeadingIndex,
     manaRecovered: castManaRecovered,
+    manaUnderflow: false,
     manaSpent,
     player: nextPlayer,
     relocated,

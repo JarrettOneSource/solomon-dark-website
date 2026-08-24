@@ -68,6 +68,7 @@ export interface HubWorldTextures extends PlayerWorldTextures {
   base: Readonly<Record<string, Texture>>
   levelUpSparkle: Texture
   potion: HubPotionTextureFrames
+  skorcha: readonly Texture[]
   students: HubStudentTextureFrames
   teacher: HubTeacherTextureFrames
   traders: HubTraderTextureFrames
@@ -128,6 +129,7 @@ export async function loadHubWorldTextures(): Promise<HubWorldTextures> {
       actor: stripFrames(texture(hub.npcs.potion), 5, 35, 49, 'horizontal'),
       balloons: stripFrames(texture(hub.tent.balloons), 5, 54, 72, 'horizontal'),
     },
+    skorcha: stripFrames(texture(hub.npcs.skorchaFrames), 7, 350, 350, 'horizontal'),
     students: {
       head: stripFrames(texture(hub.npcs.studentHead), ACTOR_HEADINGS, ACTOR_FRAME_SIZE, ACTOR_FRAME_SIZE, 'vertical'),
       props: hub.npcs.studentProps.map((source) => stripFrames(texture(source), ACTOR_HEADINGS, ACTOR_FRAME_SIZE, ACTOR_FRAME_SIZE, 'vertical')),
@@ -165,6 +167,7 @@ export function hubDeferredAnimationTextures(
     textures.base[hub.npcs.teacher.burst.column],
     textures.base[hub.npcs.teacher.burst.core],
     textures.base[hub.npcs.teacher.burst.flare],
+    textures.skorcha[0],
     textures.teacher.burst[0],
     textures.traders.hagatha.body[0],
     textures.traders.hagatha.crossfades[0],
@@ -190,6 +193,7 @@ export function destroyHubWorldTextureFrames(textures: HubWorldTextures): void {
   destroyPlayerWorldTextureFrames(textures)
   add(textures.potion.actor)
   add(textures.potion.balloons)
+  add(textures.skorcha)
   add(textures.students.head)
   textures.students.props.forEach(add)
   textures.students.read.forEach(add)

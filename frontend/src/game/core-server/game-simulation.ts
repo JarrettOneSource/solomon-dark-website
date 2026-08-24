@@ -46,6 +46,13 @@ import {
   drawNativeInteger,
   type NativeRngState,
 } from '../core-kernels/native-rng.ts'
+import {
+  failNativeBoast,
+  nativeBoastScore,
+  NATIVE_BOAST_SUCCESS_WAVE,
+  succeedNativeBoast,
+  type NativeBoastFailureProducer,
+} from '../core-kernels/native-hub-npc.ts'
 import { nativeLootModifiers, type NativeLootItem } from '../core-kernels/native-loot.ts'
 import {
   NATIVE_HAGATHA_LAST_WORD_DAMAGE,
@@ -59,6 +66,7 @@ import {
   buyDowsingOffer,
   buyFomentiusItem,
   buyHagathaPerk,
+  buyTeacherSpell,
   closeDowsingOffers,
   consumeInventoryItem,
   dyeInventoryClothing,
@@ -67,7 +75,9 @@ import {
   findInventoryItem,
   hagathaOffers,
   moveInventoryItem,
+  readLibrarianBook,
   readInventorySkillBook,
+  selectHubBoast,
   transferInventoryItem,
   unforgeInventoryItem,
   unequipInventorySlot,
@@ -79,7 +89,10 @@ import {
   type HubTraderId,
 } from '../core-kernels/hub-economy.ts'
 import { nearestBoneyardGoodie } from '../core-kernels/boneyard-goodie-interaction.ts'
-import { nativeEquipmentHasFeature } from '../core-kernels/native-equipment-effects.ts'
+import {
+  nativeEquipmentHasFeature,
+  nativeEquipmentRecipeEffects,
+} from '../core-kernels/native-equipment-effects.ts'
 import {
   resolveNativeSkillDamageValue,
 } from '../core-kernels/native-offensive-resolution.ts'
@@ -246,6 +259,8 @@ import {
   replacePlayerEconomy,
   respawnPlayerEntityAt,
   preparePlayerEntityTutorialLoadout,
+  setPlayerEntityAutomaticSkillChoice,
+  unlockPlayerEntityAdvancedSkill,
   type PlayerEntityStore,
 } from './player-entity-store.ts'
 import {
@@ -632,7 +647,11 @@ export function enterBoneyardWorld(
 }
 
 export function returnGameSimulationToHub(state: GameSimulationState): GameSimulationState {
-  const world = createHubWorld(state.playerEntities.identities.map(({ playerId }) => playerId))
+  const hubSeed = drawNativeInteger(state.gameRng, 0x40000000)
+  const world = createHubWorld(
+    state.playerEntities.identities.map(({ playerId }) => playerId),
+    { traderAnimationSeed: hubSeed.value },
+  )
   const lightProviderOrder = createNativeLightProviderOrder()
   const playerLightRegistrations = Object.fromEntries(
     state.playerEntities.identities.map(({ playerId }) => [
@@ -646,6 +665,7 @@ export function returnGameSimulationToHub(state: GameSimulationState): GameSimul
   }))
   return {
     ...state,
+    gameRng: hubSeed.state,
     modEffects: Object.freeze([]),
     levelUpBarrier: null,
     lightProviderOrder: lightProviderOrder.state(),
@@ -668,7 +688,11 @@ function enterPostRunLoadout(
   if (run.phase !== 'loadout') {
     throw new Error('post-run loadout requires a completed Game Over fade')
   }
-  const world = createHubWorld(state.playerEntities.identities.map(({ playerId }) => playerId))
+  const hubSeed = drawNativeInteger(state.gameRng, 0x40000000)
+  const world = createHubWorld(
+    state.playerEntities.identities.map(({ playerId }) => playerId),
+    { traderAnimationSeed: hubSeed.value },
+  )
   const lightProviderOrder = createNativeLightProviderOrder()
   const playerLightRegistrations = Object.fromEntries(
     state.playerEntities.identities.map(({ playerId }) => [
@@ -692,6 +716,7 @@ function enterPostRunLoadout(
   }
   return {
     ...state,
+    gameRng: hubSeed.state,
     hallOfFameClockStartedAtTick: state.tick,
     levelUpBarrier: null,
     lightProviderOrder: lightProviderOrder.state(),
@@ -850,18 +875,22 @@ export function applyGameSimulationHubAction(
 ): GameSimulationInventoryActionResult {
   const economy = playerEconomyAt(state.playerEntities, playerId)
   const player = playerCharacterAt(state.playerEntities, playerId)
-  if (!economy || !player || state.levelUpBarrier !== null) {
+  const skillBook = playerSkillBookAt(state.playerEntities, playerId)
+  if (!economy || !player || !skillBook || state.levelUpBarrier !== null) {
     return { accepted: false, modConsumption: null, reason: 'service-unavailable', state }
   }
   if (action.type === 'interact-goodie') {
     return interactWithBoneyardGoodie(state, playerId, player)
   }
   const trader = traderForAction(action)
-  if (trader && !hubServiceAvailable(state, playerId)) {
+  if ((trader || isHubNpcAction(action)) && !hubServiceAvailable(state, playerId)) {
     return { accepted: false, modConsumption: null, reason: 'service-unavailable', state }
   }
 
   const consumedPotion = action.type === 'consume'
+    ? findInventoryItem(economy.backpack, action.itemId)
+    : null
+  const equippedItem = action.type === 'equip'
     ? findInventoryItem(economy.backpack, action.itemId)
     : null
   const skillBookItem = action.type === 'read-skill-book'
@@ -879,6 +908,11 @@ export function applyGameSimulationHubAction(
       case 'buy-dowsing': return buyDowsingOffer(economy, action.offerId)
       case 'buy-fomentius': return buyFomentiusItem(economy, action.itemId)
       case 'buy-hagatha': return buyHagathaPerk(economy, action.selector)
+      case 'buy-teacher-spell': return buyTeacherSpell(
+        economy,
+        action.skillId,
+        skillBook.advancedUnlocks,
+      )
       case 'close-dowsing': {
         const next = closeDowsingOffers(economy)
         return {
@@ -904,7 +938,9 @@ export function applyGameSimulationHubAction(
         action.itemId,
         action.destinationSackId,
       )
+      case 'read-librarian-book': return readLibrarianBook(economy, action.bookId)
       case 'read-skill-book': return readInventorySkillBook(economy, action.itemId)
+      case 'select-boast': return selectHubBoast(economy, action.boastId)
       case 'transfer': return transferInventoryItem(economy, action.itemId, action.direction)
       case 'unforge': return unforgeInventoryItem(
         economy,
@@ -945,8 +981,18 @@ export function applyGameSimulationHubAction(
     playerEntities = applied.store
     gameRng = applied.rng
   }
+  if (result.accepted && action.type === 'buy-teacher-spell') {
+    const unlocked = unlockPlayerEntityAdvancedSkill(playerEntities, playerId, action.skillId)
+    if (unlocked === null) {
+      throw new Error(`Teacher spell transaction diverged for skill ${action.skillId}`)
+    }
+    playerEntities = unlocked
+  }
   if (result.accepted && action.type === 'consume' && consumedPotion?.nativeSubtype != null &&
       consumedPotion.modContent === undefined) {
+    if (consumedPotion.nativeTypeId === 7001) {
+      playerEntities = failPlayerEntityBoast(playerEntities, playerId, 'potion-use')
+    }
     const beforeMana = getPlayerProgression(state, playerId).currentMana
     playerEntities = applyPlayerEntityPotionEffect(
       playerEntities,
@@ -983,6 +1029,14 @@ export function applyGameSimulationHubAction(
       }
     }
   }
+  if (
+    result.accepted
+    && action.type === 'equip'
+    && equippedItem !== null
+    && inventoryItemHasMagicalEffects(equippedItem)
+  ) {
+    playerEntities = failPlayerEntityBoast(playerEntities, playerId, 'magical-equipment')
+  }
   if (result.accepted && action.type === 'unforge' && result.unforgeOutcome) {
     const index = playerEntityIndex(playerEntities, playerId)
     const progressions = [...playerEntities.progressions]
@@ -1007,6 +1061,9 @@ export function applyGameSimulationHubAction(
       )
       playerEntities = insight.store
       secondaryAbilities = { ...secondaryAbilities, rng: insight.rng }
+      const automatic = assignAutomaticSkillChoices(playerEntities, [playerId], gameRng)
+      playerEntities = automatic.store
+      gameRng = automatic.rng
       const progression = playerProgressionAt(playerEntities, playerId)
       if (progression !== null) {
         const requested = state.run.phase === 'active'
@@ -1374,8 +1431,12 @@ export function stepGameSimulationTick(
           NATIVE_HALL_OF_FAME_SCORE.portraitScaleJitter,
         )
         gameRng = scale.state
+        const boast = playerEconomyAt(playerEntities, playerId)?.npc.boast
+        const scoredRun = boast === undefined
+          ? hallRun
+          : { ...hallRun, awesomeness: nativeBoastScore(hallRun.awesomeness, boast) }
         hallOfFameRuns[playerId] = archiveNativeHallOfFameRun(
-          hallRun,
+          scoredRun,
           tick,
           Math.fround(
             NATIVE_HALL_OF_FAME_SCORE.portraitHeadingCenterDegrees + heading.value,
@@ -1891,6 +1952,7 @@ function finishGameSimulationTick(
     const previousLevel = playerProgressionAt(playerEntities, reward.playerId)?.level
     const progressionState: GameSimulationState = {
       ...previous,
+      gameRng,
       levelUpBarrier,
       nextLevelUpBarrierId,
       playerEntities,
@@ -1920,6 +1982,7 @@ function finishGameSimulationTick(
     levelUpBarrier = awarded.levelUpBarrier
     nextLevelUpBarrierId = awarded.nextLevelUpBarrierId
     secondaryAbilities = awarded.secondaryAbilities
+    gameRng = awarded.gameRng
     const level = playerProgressionAt(playerEntities, reward.playerId)?.level
     if (previousLevel !== undefined && level !== undefined && level > previousLevel) {
       const triggered = triggerMindblowingRing(
@@ -1998,6 +2061,13 @@ function finishGameSimulationTick(
           )
           playerEntities = insight.store
           secondaryAbilities = { ...secondaryAbilities, rng: insight.rng }
+          const automatic = assignAutomaticSkillChoices(
+            playerEntities,
+            [pickup.playerId],
+            gameRng,
+          )
+          playerEntities = automatic.store
+          gameRng = automatic.rng
           bonusSkillChoicePlayerIds.push(pickup.playerId)
         } else if (pickup.bonusKind === 1 && world.kind === 'boneyard') {
           const increased = increaseRandomPlayerEntitySkill(
@@ -2175,6 +2245,8 @@ function finishGameSimulationTick(
     const skillId = skillBook?.skillQuickbar[slot] ?? null
     if (skillId !== null && nativeSkillCategory(skillId) === 1) {
       playerEntities = selectPlayerEntityPrimarySkill(playerEntities, playerId, skillId)
+    } else if (skillId !== null && nativeSkillCategory(skillId) === 2) {
+      playerEntities = failPlayerEntityBoast(playerEntities, playerId, 'secondary-cast')
     }
   }
   const secondaryResult = stepNativeSecondaryAbilities({
@@ -2529,6 +2601,9 @@ function finishGameSimulationTick(
       `secondary ability mana authority diverged for ${playerId}`,
     )
   }
+  for (const playerId of secondaryResult.manaUnderflowPlayerIds) {
+    playerEntities = failPlayerEntityBoast(playerEntities, playerId, 'mana-underflow')
+  }
   for (const playerId of secondaryResult.overloadedPlayerIds) {
     const progression = playerProgressionAt(playerEntities, playerId)
     if (progression) {
@@ -2665,6 +2740,9 @@ function finishGameSimulationTick(
       ? `hub:${result.world.participants[playerId]?.region ?? 'courtyard'}`
       : `boneyard:${result.world.runId}`,
   })
+  for (const playerId of cast.manaUnderflowPlayerIds) {
+    playerEntities = failPlayerEntityBoast(playerEntities, playerId, 'mana-underflow')
+  }
   for (const [playerId, cost] of Object.entries(cast.manaSpent)) {
     if (cost <= 0) continue
     playerEntities = applyFilteredManaDelta(
@@ -3017,6 +3095,13 @@ function finishGameSimulationTick(
     && world.kind === 'boneyard'
     && completedBoneyardWaveBoundary(previous.world, world)
   ) {
+    if (world.waves !== null && world.waves.waveOrdinal >= NATIVE_BOAST_SUCCESS_WAVE) {
+      for (const playerId of previous.run.eligiblePlayerIds) {
+        if (playerProgressionAt(playerEntities, playerId)?.lifeState === 'alive') {
+          playerEntities = succeedPlayerEntityBoast(playerEntities, playerId)
+        }
+      }
+    }
     for (const playerId of previous.run.eligiblePlayerIds) {
       playerEntities = respawnPlayerEntityAt(
         playerEntities,
@@ -3141,10 +3226,14 @@ function applyFilteredManaDelta(
       )
     : requestedDelta
   if (delta < 0) {
-    const debit = tryDebitPlayerEntityMana(source, playerId, -delta)
+    const underflow = -delta > progression.currentMana
+    const next = underflow
+      ? failPlayerEntityBoast(source, playerId, 'mana-underflow')
+      : source
+    const debit = tryDebitPlayerEntityMana(next, playerId, -delta)
     if (debit.accepted) return debit.store
     if (!extensions && divergenceMessage) throw new Error(divergenceMessage)
-    return source
+    return next
   }
   return delta > 0 ? restorePlayerEntityMana(source, playerId, delta) : source
 }
@@ -3262,16 +3351,64 @@ function traderForAction(action: HubInventoryAction): HubTraderId | null {
     case 'transfer': return 'luthacus'
     case 'buy-dowsing':
     case 'dowse': return 'shlorio'
+    case 'buy-teacher-spell':
     case 'close-dowsing':
     case 'consume':
     case 'dye':
     case 'equip':
     case 'interact-goodie':
     case 'move-inventory-item':
+    case 'read-librarian-book':
     case 'read-skill-book':
+    case 'select-boast':
     case 'unforge':
     case 'unequip': return null
   }
+}
+
+function failPlayerEntityBoast(
+  source: PlayerEntityStore,
+  playerId: string,
+  producer: NativeBoastFailureProducer,
+): PlayerEntityStore {
+  const economy = playerEconomyAt(source, playerId)
+  if (economy === null) return source
+  const npc = failNativeBoast(economy.npc, producer)
+  return npc === economy.npc
+    ? source
+    : replacePlayerEconomy(source, playerId, {
+        ...economy,
+        npc,
+        revision: economy.revision + 1,
+      })
+}
+
+function succeedPlayerEntityBoast(
+  source: PlayerEntityStore,
+  playerId: string,
+): PlayerEntityStore {
+  const economy = playerEconomyAt(source, playerId)
+  if (economy === null) return source
+  const npc = succeedNativeBoast(economy.npc)
+  return npc === economy.npc
+    ? source
+    : replacePlayerEconomy(source, playerId, {
+        ...economy,
+        npc,
+        revision: economy.revision + 1,
+      })
+}
+
+function isHubNpcAction(action: HubInventoryAction): boolean {
+  return action.type === 'buy-teacher-spell'
+    || action.type === 'read-librarian-book'
+    || action.type === 'select-boast'
+}
+
+function inventoryItemHasMagicalEffects(item: HubInventoryItem): boolean {
+  return item.nativeEffects !== undefined
+    ? item.nativeEffects.length > 0
+    : item.recipeIndex !== null && nativeEquipmentRecipeEffects(item.recipeIndex).length > 0
 }
 
 function hubServiceAvailable(
@@ -3562,6 +3699,11 @@ function grantSharedGameSimulationExperience(
     participantIds,
     state.secondaryAbilities.rng,
   )
+  const automatic = assignAutomaticSkillChoices(
+    insights.store,
+    participantIds,
+    state.gameRng,
+  )
   const pendingPlayerIds = pendingOfferPlayerIds(insights.store, participantIds)
   if (pendingPlayerIds.length === 0) {
     throw new Error('shared level milestone did not create a player offer')
@@ -3590,7 +3732,8 @@ function grantSharedGameSimulationExperience(
     nextLevelUpBarrierId: existing === null
       ? state.nextLevelUpBarrierId + 1
       : state.nextLevelUpBarrierId,
-    playerEntities: insights.store,
+    gameRng: automatic.rng,
+    playerEntities: automatic.store,
     secondaryAbilities: {
       ...state.secondaryAbilities,
       rng: insights.rng,
@@ -3613,6 +3756,33 @@ function markNewCreativityInsights(
     const insight = markPlayerEntityCreativityInsight(store, playerId, rng)
     rng = insight.rng
     store = insight.store
+  }
+  return Object.freeze({ rng, store })
+}
+
+function assignAutomaticSkillChoices(
+  source: PlayerEntityStore,
+  playerIds: readonly string[],
+  sourceRng: NativeRngState,
+): Readonly<{ rng: NativeRngState; store: PlayerEntityStore }> {
+  let rng = sourceRng
+  let store = source
+  for (const playerId of [...new Set(playerIds)].sort()) {
+    const economy = playerEconomyAt(store, playerId)
+    const offer = playerProgressionAt(store, playerId)?.pendingOffer
+    if (
+      economy?.npc.boast.selected !== 3
+      || economy.npc.boast.failed
+      || !offer
+      || offer.automaticChoiceIndex !== undefined
+    ) continue
+    const choice = drawNativeInteger(rng, offer.options.length)
+    rng = choice.state
+    const selected = setPlayerEntityAutomaticSkillChoice(store, playerId, choice.value)
+    if (selected === null) {
+      throw new Error(`automatic native skill choice diverged for ${playerId}`)
+    }
+    store = selected
   }
   return Object.freeze({ rng, store })
 }

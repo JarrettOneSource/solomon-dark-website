@@ -85,3 +85,14 @@ test('Hall of Fame is actionable and owns local plus four global boards', () => 
   assert.match(scene, /if \(gameCheatsEnabled\(\)\) return/)
   assert.doesNotMatch(scene, /submitGlobalHallOfFame\(entry\)/)
 })
+
+test('runtime progression invalidates the Hub scene when Teacher unlock flags change', () => {
+  assert.match(
+    scene,
+    /current\.advancedUnlocks\.every\(\(unlocked, index\) => \([\s\S]*?unlocked === next\.advancedUnlocks\[index\]/,
+  )
+  assert.match(
+    scene,
+    /current\.pendingOffer\?\.automaticChoiceIndex === next\.pendingOffer\?\.automaticChoiceIndex/,
+  )
+})

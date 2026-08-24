@@ -25,6 +25,12 @@ import {
   equipmentSlotsForItem,
   type HubInteractionId,
 } from '../hub-inventory-presentation.ts'
+import {
+  hubNpcChatChoices,
+  hubNpcSelectorTitle,
+  type HubNpcChatContent,
+  type HubNpcSelectorRow,
+} from '../hub-npc-dialogue.ts'
 import { playerCharacterStaffIsFront, playerCharacterStaffOrbOffset } from '../player-character-presentation.ts'
 import type { ProtocolPlayerEconomy, ProtocolPlayerProgression } from '../protocol/game-state.ts'
 import type { GameModAsset } from '../protocol/game-protocol.ts'
@@ -71,6 +77,7 @@ import {
   HUB_ITEM_ICON_TRANSFORMS,
   HUB_NATIVE_UI_TIMING,
   HUB_NATIVE_UI_SIZE,
+  HUB_NPC_SELECTOR,
   HUB_PRIMARY_SPELL_PANE,
   HUB_SHOP_GRID,
   HUB_SHOP_PANEL,
@@ -120,8 +127,6 @@ export interface HubInventoryRendererNotice {
   readonly title: string
   readonly variant?: 'standard' | 'unforge-confirmation' | 'unforge-result'
 }
-
-export type HubTraderChatPhase = 'choices' | 'intro' | 'prices'
 
 export interface HubInventorySelectionModel {
   readonly equipmentSlot: EquipmentSlot | null
@@ -173,10 +178,13 @@ export type HubInventoryRendererModel =
     }
   | {
       readonly acceleratedAtMs: number | null
+      readonly content: HubNpcChatContent
       readonly interaction: HubInteractionId
       readonly kind: 'dialogue'
-      readonly phase: HubTraderChatPhase
       readonly phaseStartedAtMs: number
+      readonly selectedSelectorId: number | null
+      readonly selectorOffset: number
+      readonly selectorRows: readonly HubNpcSelectorRow[]
     }
   | {
       readonly config: PlayerCharacterConfig
@@ -369,7 +377,8 @@ export async function createHubInventoryRenderer(
         }
       }
       let chatComplete = false
-      if (currentModel?.kind === 'dialogue' && chatRenderState && currentModel.phase !== 'choices') {
+      if (currentModel?.kind === 'dialogue' && chatRenderState
+        && currentModel.content.kind === 'speech') {
         const acceleratedAtMs = currentModel.acceleratedAtMs
         const normalElapsedMs = acceleratedAtMs === null
           ? Math.max(0, nowMs - currentModel.phaseStartedAtMs)
@@ -860,12 +869,14 @@ function buildDialogue(
   layer: Container,
   model: Extract<HubInventoryRendererModel, { kind: 'dialogue' }>,
 ): ChatRenderState {
-  const dialogue = HUB_INTERACTION_DIALOGUES[model.interaction]
+      const dialogue = HUB_INTERACTION_DIALOGUES[model.interaction]
   addChatPanel(context, layer)
   addBitmapText(
     context,
     layer,
-    dialogue.name.toUpperCase(),
+    model.content.kind === 'selector'
+      ? hubNpcSelectorTitle(model.content.selector)
+      : dialogue.name.toUpperCase(),
     'menu',
     HUB_CHAT_PANEL.titleCenterX,
     HUB_CHAT_PANEL.titleTextBaselineY,
@@ -883,35 +894,62 @@ function buildDialogue(
   layer.addChild(viewport)
 
   let contentHeight = 0
-  if (model.phase === 'choices') {
-    const hasPriceQuestion = dialogue.priceLabel !== null
-    if (dialogue.actionLabel !== null && dialogue.service !== null) {
+  if (model.content.kind === 'choices') {
+    const choices = hubNpcChatChoices(model.interaction)
+    const rowHeight = Math.min(52, HUB_CHAT_PANEL.contentHeight / Math.max(1, choices.length))
+    choices.forEach((choice, index) => addBitmapText(
+      context,
+      content,
+      choice.label,
+      'menu',
+      HUB_CHAT_PANEL.contentWidth / 2,
+      54 + index * rowHeight,
+      {
+        scale: choice.kind === 'command' ? 1.25 : 1,
+        tint: choice.kind === 'command'
+          ? HUB_CHAT_PANEL.actionTextTint
+          : HUB_CHAT_PANEL.textTint,
+      },
+    ))
+  } else if (model.content.kind === 'selector') {
+    const rows = model.selectorRows.slice(
+      model.selectorOffset,
+      model.selectorOffset + HUB_NPC_SELECTOR.rowCount,
+    )
+    if (rows.length === 0) {
       addBitmapText(
         context,
         content,
-        dialogue.actionLabel,
+        model.content.selector === 'teacher-spells'
+          ? 'ALL SPELLS\nALREADY BOUGHT!'
+          : 'NO ENTRIES',
         'menu',
         HUB_CHAT_PANEL.contentWidth / 2,
-        HUB_CHAT_PANEL.primaryChoiceTextBaselineY - HUB_CHAT_PANEL.contentTop,
+        HUB_NPC_SELECTOR.emptyTextBaselineY - HUB_CHAT_PANEL.contentTop,
+        { align: 'center', tint: HUB_CHAT_PANEL.textTint },
+      )
+    }
+    rows.forEach((row, index) => {
+      const baselineY = 30 + index * HUB_NPC_SELECTOR.rowHeight
+      const price = row.price === null ? '' : `  $${row.price.toLocaleString()}`
+      addBitmapText(
+        context,
+        content,
+        `${row.label}${price}`,
+        'menu',
+        8,
+        baselineY,
         {
-          scale: 1.25,
-          tint: HUB_CHAT_PANEL.actionTextTint,
+          align: 'left',
+          scale: 0.82,
+          tint: row.id === model.selectedSelectorId
+            ? 0xffffff
+            : HUB_CHAT_PANEL.actionTextTint,
         },
       )
-    }
-    if (hasPriceQuestion) {
-      addBitmapText(
-        context,
-        content,
-        dialogue.priceLabel!,
-        'menu',
-        HUB_CHAT_PANEL.contentWidth / 2,
-        HUB_CHAT_PANEL.secondaryChoiceTextBaselineY - HUB_CHAT_PANEL.contentTop,
-        { tint: HUB_CHAT_PANEL.textTint },
-      )
-    }
+    })
   } else {
-    const paragraphs = model.phase === 'prices' ? dialogue.priceExplanation : dialogue.intro
+    const paragraphs = model.content.lines
     const lineHeight = 27
     for (const paragraph of paragraphs) {
       const lineCount = addChatBitmapText(context, content, paragraph, 0, contentHeight, {
@@ -925,12 +963,24 @@ function buildDialogue(
   addBitmapText(
     context,
     layer,
-    model.phase === 'choices' ? 'Done' : 'Skip',
+    model.content.kind === 'speech' ? 'Skip' : 'Done',
     'menu',
     800,
     HUB_CHAT_PANEL.doneTextBaselineY,
     { tint: HUB_CHAT_PANEL.textTint },
   )
+  if (model.content.kind === 'selector') {
+    if (model.selectorOffset > 0) {
+      addBitmapText(context, layer, 'PREVIOUS', 'body', 630, 393, {
+        tint: HUB_CHAT_PANEL.textTint,
+      })
+    }
+    if (model.selectorOffset + HUB_NPC_SELECTOR.rowCount < model.selectorRows.length) {
+      addBitmapText(context, layer, 'MORE', 'body', 970, 393, {
+        tint: HUB_CHAT_PANEL.textTint,
+      })
+    }
+  }
   return { content, contentHeight }
 }
 

@@ -87,11 +87,13 @@ const server = await startGameHost({
     ? {}
     : {
         createSimulation: () => createGameSimulation({}, {
+          gameRngSeed: benchmarkStudentSeed,
           hubStudentPopulation: createHubStudentFixturePopulation({
             count: benchmarkStudentCount,
             routeEndBehavior: 'reverse',
             seed: benchmarkStudentSeed,
           }),
+          hubTraderAnimationSeed: benchmarkStudentSeed,
         }),
       }),
 })

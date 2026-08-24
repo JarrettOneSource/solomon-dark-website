@@ -4,6 +4,14 @@ import {
   drawNativeInteger,
   type NativeRngState,
 } from './native-rng.ts'
+import {
+  createNativeHubNpcState,
+  nativeTeacherSpellDefinition,
+  readNativeLibrarianBook,
+  resetNativeRunNpcState,
+  selectNativeBoast,
+  type NativeHubNpcState,
+} from './native-hub-npc.ts'
 
 /** Retail missing-profile initializer 0x005A8390 writes profile +0x58 = 500. */
 export const NATIVE_FRESH_PROFILE_GOLD = 500
@@ -80,6 +88,7 @@ export type HubInventoryAction =
   | { readonly type: 'buy-dowsing'; readonly offerId: number }
   | { readonly type: 'buy-fomentius'; readonly itemId: number }
   | { readonly type: 'buy-hagatha'; readonly selector: number }
+  | { readonly type: 'buy-teacher-spell'; readonly skillId: number }
   | { readonly type: 'close-dowsing' }
   | { readonly type: 'consume'; readonly itemId: number }
   | {
@@ -97,7 +106,9 @@ export type HubInventoryAction =
       readonly destinationSackId: number | null
       readonly itemId: number
     }
+  | { readonly type: 'read-librarian-book'; readonly bookId: number }
   | { readonly type: 'read-skill-book'; readonly itemId: number }
+  | { readonly type: 'select-boast'; readonly boastId: number }
   | {
       readonly type: 'transfer'
       readonly direction: 'to-backpack' | 'to-storage'
@@ -299,6 +310,7 @@ export interface HubEconomyState {
   readonly hagathaBundleSelectors: readonly number[]
   readonly nextItemId: number
   readonly nextOfferId: number
+  readonly npc: NativeHubNpcState
   readonly ownedPerkSelectors: readonly number[]
   readonly revision: number
   readonly rng: NativeRngState
@@ -572,6 +584,7 @@ export function createHubEconomy(
     hagathaBundleSelectors: bundleSelectors,
     nextItemId: stock.nextItemId,
     nextOfferId: 1,
+    npc: createNativeHubNpcState(),
     ownedPerkSelectors: [],
     revision: 0,
     rng: stock.rng,
@@ -634,6 +647,7 @@ export function archiveCompletedRunEconomy(
     fomentiusStock: stock.items,
     gold: Math.max(0, source.gold + archive.groundGold),
     nextItemId: stock.nextItemId,
+    npc: resetNativeRunNpcState(source.npc),
     revision: source.revision + 1,
     rng: stock.rng,
     storage,
@@ -794,6 +808,27 @@ export function buyHagathaPerk(
     ownedPerkSelectors: [...owned].sort((left, right) => left - right),
     tonicPurchases,
   })
+}
+
+export function selectHubBoast(source: HubEconomyState, boastId: number): HubEconomyResult {
+  const npc = selectNativeBoast(source.npc, boastId)
+  return npc === null ? rejected(source, 'invalid-offer') : accepted({ ...source, npc })
+}
+
+export function readLibrarianBook(source: HubEconomyState, bookId: number): HubEconomyResult {
+  const npc = readNativeLibrarianBook(source.npc, bookId)
+  return npc === null ? rejected(source, 'invalid-offer') : accepted({ ...source, npc })
+}
+
+export function buyTeacherSpell(
+  source: HubEconomyState,
+  skillId: number,
+  advancedUnlocks: readonly boolean[],
+): HubEconomyResult {
+  const spell = nativeTeacherSpellDefinition(skillId)
+  if (!spell || advancedUnlocks[skillId - 72]) return rejected(source, 'invalid-offer')
+  if (source.gold < spell.price) return rejected(source, 'insufficient-gold')
+  return accepted({ ...source, gold: source.gold - spell.price })
 }
 
 export function projectInventoryItems(

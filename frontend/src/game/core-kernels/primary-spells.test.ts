@@ -268,6 +268,7 @@ function stepSpellKernel(
   castProgressFactor = 1,
 ): {
   channelEmissions: readonly PrimarySpellChannelEmission[]
+  manaUnderflow: boolean
   manaSpent: number
   state: DirectSpellHarness
 } {
@@ -303,6 +304,7 @@ function stepSpellKernel(
   })
   return {
     channelEmissions: result.channelEmissions,
+    manaUnderflow: result.manaUnderflowPlayerIds.includes(PLAYER_ID),
     manaSpent: result.manaSpent[PLAYER_ID]!,
     state: {
       players: result.players,
@@ -415,10 +417,10 @@ test('one-shot primaries debit at emission across every low-mana boundary', () =
     const cost = PRIMARY_SPELL_RANK_ONE_MANA_COSTS[element]
     const normalDamage = element === 'ether' ? 2 : 4
     for (const expected of [
-      { availableMana: cost + 1, spent: cost, underpowered: false },
-      { availableMana: cost, spent: cost, underpowered: true },
-      { availableMana: cost / 2, spent: cost / 2, underpowered: true },
-      { availableMana: 0, spent: 0, underpowered: true },
+      { availableMana: cost + 1, spent: cost, underpowered: false, underflow: false },
+      { availableMana: cost, spent: cost, underpowered: true, underflow: false },
+      { availableMana: cost / 2, spent: cost / 2, underpowered: true, underflow: true },
+      { availableMana: 0, spent: 0, underpowered: true, underflow: true },
     ]) {
       let state = directSpellHarness(element)
       let outcome = stepSpellKernel(state, true, expected.availableMana)
@@ -434,6 +436,7 @@ test('one-shot primaries debit at emission across every low-mana boundary', () =
 
       const projectile = state.spells.projectiles[0]!
       assert.equal(outcome.manaSpent, expected.spent)
+      assert.equal(outcome.manaUnderflow, expected.underflow)
       assert.equal(state.spells.projectiles.length, 1)
       assert.equal(projectile.kind, element)
       if (projectile.kind === 'earth') throw new Error('expected a one-shot projectile')

@@ -40508,3 +40508,143 @@ undispositioned.
 - No member is blocked by the browser platform and no material unknown remains.
   Publication and task-scaffolding cleanup are recorded separately after the
   authorized fast-forward push.
+
+## 2026-08-24 — Complete survival-Hub NPC dialogue and services
+
+### Reported smell and parity question
+
+- Reported web behavior: named NPCs open a flat intro followed by Done.
+  Provokatus has story-phase copy and no Boast menu; the same model drops the
+  Machinimbus and Semicus selectors, ordinary questions/dismissals, and all
+  downstream state effects.
+- Stock behavior to recover: every named survival-Hub actor and Painting,
+  complete `Chat` graphs, `Boast`, `BookReview`, `SellSpell`, exact content and
+  prices, state/authority/persistence, optional Skorcha, and teardown.
+- Reproduction: all named Courtyard/private-room actors, ten Paintings, five
+  Boasts, 26 books, eight Teacher rows, insufficient gold, Lace one-shot,
+  representative Boast failures, automatic choice, and Wave 30 success.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Retail image | `SolomonDark.exe` 0.72.5, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, base `0x00400000` | Canonical analyzed executable. | high |
+| Runtime data | `survival.txt` SHA-256 `5e792f4dc692667d0ecaa4e7304202f11d2d1cdc664820b97be83145fa3b2d67`; `books.txt` `d7ca0a36c2fe6af90a4a950d5ff3dab7638f43640de97684eb6a7583a02b24a1`; `spellfacts.txt` `1d78d408664ea830465e7e5a8b56df2c6373cb4f6685dc025a1a6d0f90ab0e17`; `narration.txt` `5a80f605f8fcac7fc634f8234d5b0a0173d3d4aa563dc076cc6d1b4dbc649174` | Complete runtime graph and selector/eulogy content. | high |
+| Instructions | `0x005CC800`, `0x005CDC70`, `0x0050B720`, `0x00501800`, `0x004FB890`; Chat `0x004F5D90/0x004FFB00/0x004F9380`; selector and downstream functions in the native report | Construction, live rows, mutations, generated population, interruption, and teardown. | high |
+| Native report | Mod Loader `docs/reverse-engineering/native-hub-npc-interactions.md` | Full causal trace and membership; supersedes the formerly open G6 content. | high |
+| Current web trace | base `d35a1e54`; `hub-inventory-presentation.ts`, `HubInventoryUi.tsx`, renderer, simulation/protocol/save/Hall modules | Only `intro -> choices`, one action and one price answer exist; all three selector classes/effects and Skorcha are absent. | high |
+
+### System boundary and membership inventory
+
+Native system: named survival-Hub interaction from actor/Painting hit through
+Chat, selector/service replacement, response and downstream mutation. Rows
+marked exact-ported are the required closing disposition; the completed proof
+is summarized in the implementation receipt below.
+
+| Member | Native source | Disposition | Proof |
+| --- | --- | --- | --- |
+| Hagatha intro/price/PerkShop | `WITCH_INTRO/WITCH_Q`, `!BUYPERKS` | exact-ported | catalog, graph tests, Mac browser |
+| Fomentius intro/Shop | `POTIONGUY_INTRO`, `!BUYPOTIONS` | exact-ported | catalog, graph tests, Mac browser |
+| Provokatus intro/five Boasts | `ANNAL_INTRO`; `0x004F7D20/0x004F99F0/0x004FC340` | exact-ported | five-row tests and Mac selector/auto-choice journey |
+| Luthacus intro/InventoryShop | `SCAVENGER_INTRO`, `!INVENTORY` | exact-ported | catalog, graph tests, Mac browser |
+| optional Skorcha, three placements/gestures/dismissals | type 5007; `0x0050B720/0x0050B1F0/0x0051C560`; College 510..516 | exact-ported | absent/present/three-placement tests and Mac variant-2 receipt |
+| Machinimbus question/eight SellSpell rows | `TEACHER_INTRO/TEACHER_Q`; `0x004F82D0/0x004F8480/0x004F91D0` | exact-ported | row/price/rejection tests and Mac purchase/omission receipt |
+| Declarius intro/two questions/dismissal | `MEMORATOR_INTRO/Q1/Q2/DISMISS` | exact-ported | graph tests and Mac room journey |
+| Paintings `0,1,100,3,4,5,6,7,8,9` | `0x00506190/0x00506100`; narration | exact-ported | complete speech tests and ten-target Mac room journey |
+| Semicus and 26 BookReview rows | `LIBRARIAN_INTRO`; `0x004FA090/0x004FC550/0x004FA290` | exact-ported | 26-row tests and Mac Lace present/absent receipt |
+| Shlorio intro/price/Dowsing | `DOWSER_INTRO/DOWSER_Q`, `!DOWSE` | exact-ported | catalog, graph tests, Mac browser |
+| Archchancellor intro/question/dismissal | `ARCH_INTRO/ARCH_Q/ARCH_DISMISS` | exact-ported | graph tests and Mac room journey |
+| all five Boast failures, automatic choice, Wave-30 1.1 award | `0x005CB110`, `0x005CB810`, `0x00577760`, `0x0054CC50`, `0x0052B150`, `0x0066F920`, `0x005BC400` | exact-ported | kernel/integration tests and Mac automatic-choice receipt |
+| Lace one-shot; Teacher unlocks 72..79 | profile `+0x105`; `0x00B3BDD8..DF` | exact-ported | save/protocol/action tests and Mac mutation receipts |
+| Students / StoreRoom | no-op action / no actor | out-of-system (native noninteractive/no producer) | existing census |
+| Solomon Dig / recipe `GameNPC` | separate Arena prelude / Boneyard scripting | out-of-system (separate systems) | existing reports |
+| story Polisher/Annalist2/Arch variants | alternate builder `0x00513BE0` | out-of-system (Website survival mode) | static census |
+| `ANNAL_Q`, `!RANDOMEQUIP`, targeted Dowsing | dormant data with no normal producer | out-of-system (unreachable retail behavior) | caller/dispatcher sweep |
+
+No member is browser-blocked.
+
+### Recovered behavioral contract
+
+- `survival.txt` is runtime authority when retained per-speaker files differ.
+  ExactText emphasis, spelling, punctuation, repeated/trailing spaces remain
+  unedited.
+- Chat scrolls answer -> questions or random dismissal. Regular answers return
+  to questions; commands replace Chat; back/range/Region transition destroy the
+  current owner.
+- Boasts are exact indices 0..4. Potion use, magical equipment, any secondary
+  dispatch, and strict mana underflow fail their respective rows once. Exact
+  zero mana is not failure. Boast 3 auto-selects `Integer(option_count)` after
+  100 ticks. Surviving Wave 30 latches success and Hall score becomes
+  `trunc(float(score) * 1.100000023841858)` once.
+- BookReview initially exposes 26 rows. Reading `BOOK25_LACE` persists the
+  profile flag and removes only that row later.
+- SellSpell exposes unowned IDs `72,73,74,75,79,78,77,76` for prices
+  `3000,3500,4200,5000,5100,5300,6100,10000`. Purchase unlocks future
+  acquisition, not a rank/binding. Empty membership reads
+  `ALL SPELLS\nALREADY BOUGHT!`.
+- Skorcha is present only on `Integer(3)==1`; the next draw chooses
+  `(732.5,1437.5)`, `(403.5,1637)`, or `(669,705.5)`. A distinct one of three
+  gestures is chosen every `Integer(10)+20` ticks. Hub authority generates once.
+
+### Web implementation consequence
+
+- Replace the flat definition with a generated, hash-pinned graph catalog and
+  explicit Chat/selector state machine.
+- Fresh render disassembly splits Skorcha's College `510..516` sheet exactly:
+  gesture `+0x178` selects body records `510..512`, rounded common-animation
+  phase `+0x144` selects hat records `513..516`, and actor `+0x17C` flips
+  placement variant 1.
+  The inherited hat sweep retains its `Integer(200)==2` start, randomized
+  `0.45..1.8`-degree rate, sine index `0..4`, and blank index-4 apex.
+- Live Mac traversal exposed the Painting ownership distinction already present
+  in the stock callbacks: radius-15 Paintings sit behind paired radius-40
+  solids, and `0x00506190 -> 0x00506100` starts Memorator speech rather than a
+  Painting `Chat`. Pointer hit geometry therefore remains 15 while the web
+  controller proximity adapter uses the paired 40; applying the ordinary
+  radius-15 Chat teardown rule made every portrait unreachable.
+- Keep Boast/Lace with participant economy lifetime, Teacher flags in the
+  existing skill book, failures/success in authoritative simulation, Skorcha in
+  Hub world state, and Hall bonus in the score owner.
+- Render visible surfaces in the Pixi native stage; HTML remains aligned
+  semantic controls/accessibility text. Preserve the existing direct trader HUD
+  shortcuts and requested useful Provokatus shortcut.
+
+### Validation contract
+
+- Assert every graph line, five Boasts/failures/strict zero/auto choice/success,
+  26 books/Lace, eight prices/unlocks/rejection/all-bought, every NPC/Painting,
+  three Skorcha placements/gestures, authority/save/protocol, scrolling, return,
+  back/range/Region teardown, and Hall receipt.
+- Mac Chrome must traverse every named NPC and selector family, representative
+  state mutations/failure/success, visible native surfaces, and empty page,
+  console, and failed-response arrays.
+
+### Implementation validation receipt
+
+- Generated authority: `native-hub-npc-catalog.json` SHA-256
+  `79df7f5a3b79b5ca776ee89d6d5850f1a96496ae12d987b3d76ba2c13d1cbd3f`;
+  extracted `hub-npc-skorcha-frames.png` SHA-256
+  `8c1892384b12148013c072a50e31d2ff0a6d16f4ceec6678229ca0862abd52c7`.
+- Implementation owners: generated catalog/extractor; pure NPC dialogue and
+  Skorcha kernels; economy/progression/simulation authority; protocol 71 and
+  save schema 8; Chat/selectors/Notebox/Pixi presentation; extracted art;
+  regression and browser acceptance tools.
+- Focused Mac proof: all 54 NPC/Hub UI tests; strict primary/secondary mana
+  boundaries; all five Boast mutation families; Wave-30/Hall award; protocol,
+  replication, save migration, and present/absent Skorcha tests. The complete
+  Boneyard group passed 1,487 tests and its prerequisite group passed 265.
+- Hardware-browser proof: arm64 macOS 26.6.2, Chrome 151, WebGL2
+  `ANGLE Metal Renderer: Apple M2`. One continuous journey opened all 20
+  interaction targets, all three selectors, every question/dismissal, all ten
+  Paintings, Skorcha variant 2, a Teacher purchase/row omission, Lace
+  present-then-absent, and Provokatus's host-selected automatic card after
+  2,106 ms. Page-error, console-error, and failed-response arrays were empty.
+- Screenshot family: `/tmp/solomon-dark-hub-npcs-*.png` on the acceptance Mac,
+  including Boast, automatic picker, Teacher, Lace, Skorcha, Painting 100, and
+  Archchancellor frames.
+- Canonical gate: the final Mac `./scripts/validate.sh` ran through production
+  media policy with no failures: 22 backend/contracts tests; frontend groups
+  `9,4,45,265,1487,6,77,9,63,12,14,7,36,54,5`; production build and game-host
+  build; and a game-entry bundle below the `131072`-byte gzip budget.
+- Explicitly out of scope: story-campaign actors and recipe-authored Boneyard
+  `GameNPC`, dispositioned above.

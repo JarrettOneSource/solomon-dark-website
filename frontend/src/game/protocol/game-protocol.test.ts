@@ -439,11 +439,12 @@ test('protocol v42 bounds Lua requests and structured results by wire bytes and 
   }
 })
 
-test('protocol v69 accepts every authoritative inventory and contextual action and rejects malformed variants', () => {
+test('protocol v71 accepts every authoritative inventory and NPC action and rejects malformed variants', () => {
   const actions = [
     { type: 'buy-dowsing', offerId: 1 },
     { type: 'buy-fomentius', itemId: 2 },
     { type: 'buy-hagatha', selector: -1 },
+    { type: 'buy-teacher-spell', skillId: 72 },
     { type: 'close-dowsing' },
     { type: 'consume', itemId: 5 },
     { type: 'dye', dyeItemId: 7, layer: 'cloth', swatchRows: [1, 9, 5], targetItemId: 8 },
@@ -452,6 +453,8 @@ test('protocol v69 accepts every authoritative inventory and contextual action a
     { type: 'interact-goodie' },
     { type: 'move-inventory-item', destinationSackId: 10, itemId: 9 },
     { type: 'move-inventory-item', destinationSackId: null, itemId: 9 },
+    { type: 'read-librarian-book', bookId: 25 },
+    { type: 'select-boast', boastId: 4 },
     { type: 'transfer', direction: 'to-storage', gesture: 'drag', itemId: 4 },
     { type: 'transfer', direction: 'to-backpack', gesture: 'double-activation', itemId: 4 },
     { type: 'unforge', itemId: 6 },
@@ -466,11 +469,14 @@ test('protocol v69 accepts every authoritative inventory and contextual action a
 
   for (const action of [
     { type: 'buy-hagatha', selector: 8 },
+    { type: 'buy-teacher-spell', skillId: 71 },
     { type: 'dye', dyeItemId: 1, layer: 'lining', swatchRows: [1], targetItemId: 2 },
     { type: 'dye', dyeItemId: 1, layer: 'trim', swatchRows: [], targetItemId: 2 },
     { type: 'dye', dyeItemId: 1, layer: 'trim', swatchRows: [18], targetItemId: 2 },
     { type: 'equip', itemId: 1, slot: 'boots' },
     { type: 'move-inventory-item', destinationSackId: 0, itemId: 1 },
+    { type: 'read-librarian-book', bookId: 26 },
+    { type: 'select-boast', boastId: 5 },
     { type: 'transfer', direction: 'sell', gesture: 'drag', itemId: 1 },
     { type: 'transfer', direction: 'to-storage', gesture: 'double-activation', itemId: 1 },
     { type: 'dowse', offerId: 1 },
@@ -481,6 +487,26 @@ test('protocol v69 accepts every authoritative inventory and contextual action a
       action,
     })), GameProtocolError)
   }
+})
+
+test('protocol v71 carries authoritative present Skorcha population and animation state', () => {
+  const snapshot = createGameSnapshot(createGameSimulation({
+    'player-1': CHARACTER,
+  }, { hubTraderAnimationSeed: 2 }), 'player-1')
+  assert.equal(snapshot.world.kind, 'hub')
+  if (snapshot.world.kind !== 'hub') throw new Error('expected Hub snapshot')
+  assert.ok(snapshot.world.skorcha)
+  assert.deepEqual(snapshot.world.skorcha.position, { x: 669, y: 705.5 })
+  const message = {
+    acknowledgedInputSequence: 0,
+    frame: createGameSnapshotFrame(snapshot, 0, undefined, true),
+    sequence: 1,
+    type: 'server-snapshot' as const,
+  }
+  assert.deepEqual(decodeServerGameMessage(encodeGameMessage(message)), message)
+  const malformed = JSON.parse(encodeGameMessage(message))
+  malformed.frame.world.skorcha.hatFrame = 5
+  assert.throws(() => decodeServerGameMessage(JSON.stringify(malformed)), /hatFrame/)
 })
 
 test('server welcome round-trips content, kernel, character, and world ownership', () => {
@@ -848,6 +874,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
     overlayEffectPhase: 0,
   })
   assert.deepEqual(welcome.snapshot.players['player-1'].progression, {
+    advancedUnlocks: Array<boolean>(8).fill(false),
     weldBuildId: null,
     weldComponentRanks: null,
     concentrationSkillIds: [null, null],
@@ -1394,8 +1421,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v70 carries observer mode, Hub activity, Goodie actions, tutorial fields/state, Hagatha runtime, Imp effects, save intent, selected skills, sacks, dyes, and gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 70)
+test('protocol v71 carries observer mode, Hub activity, NPC state, Goodie actions, tutorial fields/state, Hagatha runtime, Imp effects, save intent, selected skills, sacks, dyes, and gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 71)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),

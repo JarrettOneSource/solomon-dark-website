@@ -222,6 +222,7 @@ export default function HubScene({
   const [pickerOpen, setPickerOpen] = useState(false)
   const [controllerQuickbarSlot, setControllerQuickbarSlot] = useState<number | undefined>()
   const [hubUiSurface, setHubUiSurface] = useState<HubUiSurface>(null)
+  const [npcNoteboxOpen, setNpcNoteboxOpen] = useState(false)
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null)
   const [selectedGold, setSelectedGold] = useState<number | null>(null)
   const [partySettingsOpen, setPartySettingsOpen] = useState(false)
@@ -249,7 +250,7 @@ export default function HubScene({
   const [transitionActive, setTransitionActive] = useState(() => (
     hubInitialSnapshot.world.participants[playerId]?.transition !== null
   ))
-  const modalOpen = pickerOpen || hubUiSurface !== null || selectedPlayerId !== null
+  const modalOpen = pickerOpen || hubUiSurface !== null || npcNoteboxOpen || selectedPlayerId !== null
     || partySettingsOpen
   modalOpenRef.current = modalOpen
 
@@ -438,7 +439,11 @@ export default function HubScene({
           setSelectedPlayerId(nearbyPlayer)
           return
         }
-        const interaction = nearestHubInteraction(participant.region, player.position)
+        const interaction = nearestHubInteraction(
+          participant.region,
+          player.position,
+          { skorchaPosition: snapshot.world.skorcha?.position ?? null },
+        )
         if (interaction) {
           setHubUiSurface({ interaction, kind: 'dialogue', source: 'world' })
           return
@@ -626,11 +631,16 @@ export default function HubScene({
       setSelectedPlayerId(selectedPlayer)
       return
     }
-    const interaction = hubInteractionAtPoint(participant.region, point)
+    const interaction = hubInteractionAtPoint(
+      participant.region,
+      point,
+      { skorchaPosition: snapshot.world.skorcha?.position ?? null },
+    )
     if (!interaction || !hubInteractionWithinRange(
       interaction,
       participant.region,
       player.position,
+      { skorchaPosition: snapshot.world.skorcha?.position ?? null },
     )) return
     event.preventDefault()
     event.stopPropagation()
@@ -752,11 +762,14 @@ export default function HubScene({
           modAssets={modAssets}
           nativeUiStageStyle={nativeUiStageStyle}
           onAction={onHubAction}
+          onBlockingOverlayChange={setNpcNoteboxOpen}
           onSurfaceChange={setHubUiSurface}
           overlayRoot={sceneRef}
           playerPosition={playerPosition}
           progression={progression}
           region={currentRegion}
+          skorchaDismissalIndex={hubInitialSnapshot.world.skorcha?.dismissalIndex ?? 0}
+          skorchaPosition={hubInitialSnapshot.world.skorcha?.position ?? null}
           surface={hubUiSurface}
           transitionActive={transitionActive}
         />

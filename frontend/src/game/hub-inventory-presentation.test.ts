@@ -91,7 +91,7 @@ test('merchant proximity uses the exact native radius formula and room ownership
 
 test('the contextual interaction census covers every rendered named NPC and Mortuary portrait', () => {
   assert.deepEqual(HUB_INTERACTION_IDS, [
-    'hagatha', 'fomentius', 'annalist', 'luthacus', 'teacher',
+    'hagatha', 'fomentius', 'annalist', 'luthacus', 'skorcha', 'teacher',
     'memorator',
     'painting-0', 'painting-1', 'painting-100', 'painting-3', 'painting-4',
     'painting-5', 'painting-6', 'painting-7', 'painting-8', 'painting-9',
@@ -99,13 +99,24 @@ test('the contextual interaction census covers every rendered named NPC and Mort
   ])
   assert.equal(nearestHubInteraction('courtyard', { x: 895.5, y: 455.5 }), 'annalist')
   assert.equal(nearestHubInteraction('courtyard', { x: 576.5, y: 710.5 }), 'teacher')
+  assert.equal(nearestHubInteraction('courtyard', { x: 669, y: 705.5 }), null)
+  assert.equal(nearestHubInteraction(
+    'courtyard',
+    { x: 669, y: 705.5 },
+    { skorchaPosition: { x: 669, y: 705.5 } },
+  ), 'skorcha')
+  assert.equal(hubInteractionAtPoint(
+    'courtyard',
+    { x: 403.5, y: 1637 },
+    { skorchaPosition: { x: 403.5, y: 1637 } },
+  ), 'skorcha')
   assert.equal(nearestHubInteraction('mortuary', { x: 628, y: 770 }), 'memorator')
   assert.equal(nearestHubInteraction('mortuary', { x: 673, y: 683 }), 'painting-100')
   assert.equal(nearestHubInteraction('library', { x: 512, y: 595 }), 'librarian')
   assert.equal(nearestHubInteraction('office', { x: 514, y: 467 }), 'arch-chancellor')
   assert.equal(nearestHubInteraction('storeroom', { x: 538, y: 324 }), null)
   assert.equal(hubInteractionAtPoint('mortuary', { x: 688, y: 683 }), 'painting-100')
-  const paintingRange = Math.sqrt(5 * 15 * 15 + 1500)
+  const paintingRange = Math.sqrt(5 * 40 * 40 + 1500)
   assert.equal(hubInteractionWithinRange('painting-100', 'mortuary', {
     x: 673 + paintingRange - 1e-9,
     y: 683,
@@ -126,7 +137,7 @@ test('the Hub shortcut rail uses all five native records and routes the fifth me
     { interaction: 'shlorio', levelPickerRecord: 2, mode: 'service', name: 'Shlorio' },
   ])
   assert.equal(HUB_INTERACTION_DIALOGUES.annalist.name, 'Provokatus')
-  assert.equal(HUB_INTERACTION_DIALOGUES.teacher.name, 'Machinimbus')
+  assert.equal(HUB_INTERACTION_DIALOGUES.teacher.name, 'Professor Machinimbus')
   assert.equal(HUB_INTERACTION_DIALOGUES['painting-100'].intro.length, 0)
   assert.equal(HUB_INTERACTION_DIALOGUES.shlorio.service, 'shlorio')
 })

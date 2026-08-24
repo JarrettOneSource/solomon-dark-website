@@ -60,9 +60,12 @@ export interface SharedWorldActionResult {
   readonly state: SharedGameWorldsState
 }
 
-export function createSharedGameWorlds(): SharedGameWorldsState {
+export function createSharedGameWorlds(hubSeed = 0): SharedGameWorldsState {
   return {
-    hub: createGameSimulation({}),
+    hub: createGameSimulation({}, {
+      gameRngSeed: hubSeed,
+      hubTraderAnimationSeed: hubSeed,
+    }),
     parties: createPartySystem(),
     runs: [],
   }

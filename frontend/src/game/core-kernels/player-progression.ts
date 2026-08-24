@@ -127,9 +127,26 @@ export interface PlayerSkillOfferOption {
 }
 
 export interface PlayerSkillOffer {
+  readonly automaticChoiceIndex?: number
   readonly level: number
   readonly options: readonly PlayerSkillOfferOption[]
   readonly sequence: number
+}
+
+export function setAutomaticPlayerSkillChoice(
+  source: PlayerProgressionComponent,
+  choiceIndex: number,
+): PlayerProgressionComponent | null {
+  const offer = source.pendingOffer
+  if (!offer || !Number.isSafeInteger(choiceIndex)
+    || choiceIndex < 0 || choiceIndex >= offer.options.length) return null
+  return offer.automaticChoiceIndex === choiceIndex
+    ? source
+    : {
+        ...source,
+        pendingOffer: Object.freeze({ ...offer, automaticChoiceIndex: choiceIndex }),
+        revision: source.revision + 1,
+      }
 }
 
 export interface PlayerProgressionComponent extends PlayerCombatComponent {
@@ -554,6 +571,18 @@ export function reselectPlayerLoadout(
     weldBuildId: null,
     weldComponentRanks: null,
   }
+}
+
+export function unlockPlayerAdvancedSkill(
+  source: PlayerSkillBookComponent,
+  skillId: number,
+): PlayerSkillBookComponent | null {
+  if (!Number.isSafeInteger(skillId) || skillId < 72 || skillId > 79) return null
+  const unlockIndex = skillId - 72
+  if (source.advancedUnlocks[unlockIndex]) return null
+  const advancedUnlocks = [...source.advancedUnlocks]
+  advancedUnlocks[unlockIndex] = true
+  return { ...source, advancedUnlocks: Object.freeze(advancedUnlocks) }
 }
 
 export function createPlayerProgression(offerSeed: number): PlayerProgressionComponent {

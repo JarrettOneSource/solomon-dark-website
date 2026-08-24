@@ -575,6 +575,7 @@ export interface PrimarySpellTickContext {
 export interface PrimarySpellTickResult {
   channelEmissions: readonly PrimarySpellChannelEmission[]
   fireActorContacts: readonly NativeFireActorContact[]
+  manaUnderflowPlayerIds: readonly string[]
   manaSpent: Readonly<Record<string, number>>
   players: Readonly<Record<string, PlayerCharacterState>>
   rng: NativeRngState
@@ -1235,6 +1236,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
     projectiles.push(advanced)
   }
   const manaSpent: Record<string, number> = {}
+  const manaUnderflowPlayerIds = new Set<string>()
   const channelEmissions: PrimarySpellChannelEmission[] = []
   const players: Record<string, PlayerCharacterState> = { ...context.players }
 
@@ -1258,13 +1260,17 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
     let availableMana = authority?.availableMana ?? 0
     manaSpent[playerId] = 0
     const debitMana = (cost = manaCost): boolean => {
+      if (cost > availableMana) manaUnderflowPlayerIds.add(playerId)
       const spent = Math.min(Math.max(0, availableMana), cost)
       availableMana = Math.max(0, availableMana - spent)
       manaSpent[playerId] += spent
       return availableMana <= 0
     }
     const spendAmount = (cost: number): boolean => {
-      if (availableMana < cost) return false
+      if (availableMana < cost) {
+        manaUnderflowPlayerIds.add(playerId)
+        return false
+      }
       availableMana -= cost
       manaSpent[playerId] += cost
       return true
@@ -2337,6 +2343,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
   return {
     channelEmissions,
     fireActorContacts,
+    manaUnderflowPlayerIds: Object.freeze([...manaUnderflowPlayerIds].sort()),
     manaSpent,
     players,
     rng,

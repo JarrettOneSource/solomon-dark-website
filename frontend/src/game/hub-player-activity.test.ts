@@ -85,7 +85,7 @@ test('Hub card and post-world badge consume one replicated activity field', () =
   assert.match(hubSceneSource, /hubPlayerActivityLabel\(activity\)/)
   assert.match(
     hubSceneSource,
-    /const modalOpen = pickerOpen \|\| hubUiSurface !== null \|\| selectedPlayerId !== null\s*\|\| partySettingsOpen/,
+    /const modalOpen = pickerOpen \|\| hubUiSurface !== null \|\| npcNoteboxOpen \|\| selectedPlayerId !== null\s*\|\| partySettingsOpen/,
   )
   assert.match(hubSceneSource, /onOccupiedChange\(modalOpen\)/)
   assert.match(rendererSource, /new HubPlayerActivityLayer\(\)/)

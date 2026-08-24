@@ -41,6 +41,7 @@ import type { NativeHagathaRuntimeState } from '../core-kernels/native-hagatha-e
 import type { NativeSkeletonHeadFacingOffset } from '../core-kernels/boneyard-skeleton-family-animation.ts'
 import type { ReplicatedEntityFrame } from './replicated-entity-types.ts'
 import type { NativeTutorialState } from '../core-kernels/native-tutorial.ts'
+import type { NativeHubNpcState } from '../core-kernels/native-hub-npc.ts'
 
 export interface ProtocolFountainParticleState {
   id: number
@@ -80,6 +81,7 @@ export interface ProtocolPlayerEconomy {
   fomentiusStock: readonly HubShopItem[]
   gold: number
   hagathaOffers: readonly HagathaOffer[]
+  npc: NativeHubNpcState
   ownedPerkSelectors: readonly number[]
   revision: number
   storage: readonly HubInventoryItem[]
@@ -101,12 +103,14 @@ export interface ProtocolPlayerSkillOfferOption {
 }
 
 export interface ProtocolPlayerSkillOffer {
+  automaticChoiceIndex?: number
   level: number
   options: readonly ProtocolPlayerSkillOfferOption[]
   sequence: number
 }
 
 export interface ProtocolPlayerProgression {
+  advancedUnlocks: readonly boolean[]
   coldSlowTicksRemaining: number
   concentrationSkillIds: readonly [number | null, number | null]
   currentHealth: number
@@ -162,6 +166,15 @@ export interface ProtocolStudentState {
   scale: number
 }
 
+export interface ProtocolHubSkorchaState {
+  dismissalIndex: 0 | 1 | 2
+  gesture: 0 | 1 | 2
+  gestureTicksRemaining: number
+  hatFrame: 0 | 1 | 2 | 3 | 4
+  position: Vector2
+  variant: 0 | 1 | 2
+}
+
 export const HUB_PLAYER_ACTIVITIES = ['paused', 'occupied'] as const
 export type HubPlayerActivity = typeof HUB_PLAYER_ACTIVITIES[number]
 
@@ -179,6 +192,7 @@ export interface HubWorldSnapshot {
   collisionRngState: number
   kind: 'hub'
   participants: Readonly<Record<string, ProtocolHubParticipantState>>
+  skorcha: ProtocolHubSkorchaState | null
   students: readonly ProtocolStudentState[]
   traderAnimationSeed: number
 }
@@ -702,6 +716,7 @@ export interface HubWorldSnapshotFrame {
   entities: ReplicatedEntityFrame
   kind: 'hub'
   participants: Readonly<Record<string, ProtocolHubParticipantState>>
+  skorcha: ProtocolHubSkorchaState | null
   traderAnimationSeed: number
 }
 

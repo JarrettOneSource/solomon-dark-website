@@ -32,6 +32,11 @@ import {
   type NativeUnforgeOutcome,
 } from './core-kernels/hub-economy.ts'
 import type { HubRegionId } from './core-kernels/hub-regions.ts'
+import {
+  NATIVE_HUB_NPC_CATALOG,
+  NATIVE_SELECTOR_ACCEPT_TICKS,
+  nativeBoastFailureText,
+} from './core-kernels/native-hub-npc.ts'
 import type { PlayerCharacterConfig } from './core-kernels/player-character.ts'
 import type { Vector2 } from './core-kernels/vector.ts'
 import type { GameAudioDirector } from './game-audio-director.ts'
@@ -46,6 +51,20 @@ import {
   nearestHubInteraction,
   type HubInteractionId,
 } from './hub-inventory-presentation.ts'
+import {
+  createHubNpcChatContent,
+  hubNpcChatChoices,
+  hubNpcDismissal,
+  hubNpcQuestion,
+  hubNpcSelectorAction,
+  hubNpcSelectorContent,
+  hubNpcSelectorResponse,
+  hubNpcSelectorRows,
+  hubNpcSelectorTitle,
+  type HubNpcChatChoice,
+  type HubNpcChatContent,
+  type HubNpcSelectorRow,
+} from './hub-npc-dialogue.ts'
 import type { ProtocolPlayerEconomy, ProtocolPlayerProgression } from './protocol/game-state.ts'
 import type { GameModAsset } from './protocol/game-protocol.ts'
 import {
@@ -57,7 +76,6 @@ import {
   type HubInventoryRendererNotice,
   type HubInventorySelectionModel,
   type HubServiceInspectionModel,
-  type HubTraderChatPhase,
 } from './renderer/hub-inventory-renderer.ts'
 import {
   HUB_CHAT_PANEL,
@@ -71,6 +89,7 @@ import {
   HUB_INVENTORY_INTERACTION,
   HUB_NATIVE_UI_SIZE,
   HUB_NATIVE_UI_TIMING,
+  HUB_NPC_SELECTOR,
   HUB_ROBE_REMOVAL_MSGBOX,
   HUB_UNFORGE_CONFIRMATION,
   HUB_UNFORGE_RESULT,
@@ -117,6 +136,19 @@ interface HubInventoryUiNotice extends HubInventoryRendererNotice {
   readonly unforgeItemId?: number
 }
 
+interface HubNpcChatPresentation {
+  readonly acceleratedAtMs: number | null
+  readonly content: HubNpcChatContent
+  readonly phaseStartedAtMs: number
+  readonly selectorOffset: number
+}
+
+interface PendingHubNpcSelection {
+  readonly action: 'buy-teacher-spell' | 'read-librarian-book' | 'select-boast'
+  readonly id: number
+  readonly selector: 'boast' | 'books' | 'teacher-spells'
+}
+
 const HUB_UNFORGE_CONFIRMATION_NOTICE: HubInventoryRendererNotice = {
   actionLabel: 'UNFORGE',
   body: 'Unforging grants you a permanent small bonus to your stats, but utterly destroys the item.',
@@ -160,6 +192,7 @@ interface HubInventoryUiProps {
   menuKeyCode: string
   nativeUiStageStyle: CSSProperties
   onAction: (action: HubInventoryAction) => void
+  onBlockingOverlayChange?: (open: boolean) => void
   modAssets: readonly GameModAsset[]
   onSurfaceChange: (surface: HubUiSurface) => void
   overlayRoot: RefObject<HTMLDivElement | null>
@@ -167,6 +200,8 @@ interface HubInventoryUiProps {
   progression: ProtocolPlayerProgression
   region: HubRegionId
   surface: HubUiSurface
+  skorchaDismissalIndex?: number
+  skorchaPosition?: Vector2 | null
   transitionActive: boolean
   interactionsEnabled?: boolean
 }
@@ -180,6 +215,7 @@ export default function HubInventoryUi({
   menuKeyCode,
   nativeUiStageStyle,
   onAction,
+  onBlockingOverlayChange,
   modAssets,
   onSurfaceChange,
   overlayRoot,
@@ -187,14 +223,18 @@ export default function HubInventoryUi({
   progression,
   region,
   surface,
+  skorchaDismissalIndex = 0,
+  skorchaPosition = null,
   transitionActive,
   interactionsEnabled = true,
 }: HubInventoryUiProps) {
+  const failureSequenceRef = useRef(economy.npc.boast.failureSequence)
+  const [npcNotebox, setNpcNotebox] = useState<string | null>(null)
   const nearestInteraction = useMemo(
     () => disabled || transitionActive || !interactionsEnabled
       ? null
-      : nearestHubInteraction(region, playerPosition),
-    [disabled, interactionsEnabled, playerPosition, region, transitionActive],
+      : nearestHubInteraction(region, playerPosition, { skorchaPosition }),
+    [disabled, interactionsEnabled, playerPosition, region, skorchaPosition, transitionActive],
   )
 
   const closeSurface = useCallback(() => {
@@ -215,8 +255,9 @@ export default function HubInventoryUi({
       surface.kind === 'dialogue' ? surface.interaction : surface.trader,
       region,
       playerPosition,
+      { skorchaPosition },
     )) closeSurface()
-  }, [closeSurface, disabled, playerPosition, region, surface, transitionActive])
+  }, [closeSurface, disabled, playerPosition, region, skorchaPosition, surface, transitionActive])
 
   useEffect(() => {
     const keyDown = (event: KeyboardEvent) => {
@@ -225,6 +266,7 @@ export default function HubInventoryUi({
         event.code === menuKeyCode
         || (surface.kind === 'inventory' && event.code === inventoryKeyCode)
       )) {
+        if (surface.kind === 'dialogue' && event.code === menuKeyCode) return
         event.preventDefault()
         event.stopImmediatePropagation()
         if (surface.kind !== 'dialogue') audio.playSound('open-panel')
@@ -261,8 +303,19 @@ export default function HubInventoryUi({
     transitionActive,
   ])
 
-  if (!surface) {
-    return nearestInteraction ? (
+  useEffect(() => {
+    const sequence = economy.npc.boast.failureSequence
+    if (sequence <= failureSequenceRef.current) return
+    failureSequenceRef.current = sequence
+    setNpcNotebox(nativeBoastFailureText(economy.npc.boast))
+  }, [economy.npc.boast])
+
+  useEffect(() => {
+    onBlockingOverlayChange?.(npcNotebox !== null)
+    return () => onBlockingOverlayChange?.(false)
+  }, [npcNotebox, onBlockingOverlayChange])
+
+  const prompt = !surface && nearestInteraction ? (
       <ContextualInteractButton
         label={hubInteractionPromptLabel(nearestInteraction)}
         target={`hub:${nearestInteraction}`}
@@ -276,27 +329,41 @@ export default function HubInventoryUi({
         }}
       />
     ) : null
-  }
 
-  const surfaceKey = surface.kind === 'dialogue'
-    ? `${surface.kind}-${surface.interaction}`
-    : `${surface.kind}-${'trader' in surface ? surface.trader : 'player'}`
-  const overlay = (
+  const overlay = surface ? (
     <NativeHubSurface
-      key={surfaceKey}
+      key={surface.kind === 'dialogue'
+        ? `${surface.kind}-${surface.interaction}`
+        : `${surface.kind}-${'trader' in surface ? surface.trader : 'player'}`}
       audio={audio}
       config={config}
       economy={economy}
       modAssets={modAssets}
+      menuKeyCode={menuKeyCode}
       onAction={onAction}
       onClose={closeSurface}
+      onNotebox={setNpcNotebox}
       onSurfaceChange={onSurfaceChange}
       progression={progression}
+      skorchaDismissalIndex={skorchaDismissalIndex}
       style={nativeUiStageStyle}
       surface={surface}
     />
+  ) : null
+  return (
+    <>
+      {prompt}
+      {overlay && overlayRoot.current ? createPortal(overlay, overlayRoot.current) : null}
+      {npcNotebox && overlayRoot.current ? createPortal(
+        <NativeNpcNotebox
+          style={nativeUiStageStyle}
+          text={npcNotebox}
+          onClose={() => setNpcNotebox(null)}
+        />,
+        overlayRoot.current,
+      ) : null}
+    </>
   )
-  return overlayRoot.current ? createPortal(overlay, overlayRoot.current) : null
 }
 
 function NativeHubSurface({
@@ -304,10 +371,13 @@ function NativeHubSurface({
   config,
   economy,
   modAssets,
+  menuKeyCode,
   onAction,
   onClose,
+  onNotebox,
   onSurfaceChange,
   progression,
+  skorchaDismissalIndex,
   style,
   surface,
 }: {
@@ -315,10 +385,13 @@ function NativeHubSurface({
   config: PlayerCharacterConfig
   economy: ProtocolPlayerEconomy
   modAssets: readonly GameModAsset[]
+  menuKeyCode: string
   onAction: (action: HubInventoryAction) => void
   onClose: () => void
+  onNotebox: (text: string) => void
   onSurfaceChange: (surface: HubUiSurface) => void
   progression: ProtocolPlayerProgression
+  skorchaDismissalIndex: number
   style: CSSProperties
   surface: Exclude<HubUiSurface, null>
 }) {
@@ -327,13 +400,29 @@ function NativeHubSurface({
   const modelRef = useRef<HubInventoryRendererModel | null>(null)
   const revealStartedAtRef = useRef<number | null>(null)
   const chatCompletionHandledRef = useRef(false)
+  const advanceChatRef = useRef<() => void>(() => undefined)
+  const chatRandomIndexRef = useRef(
+    surface.kind === 'dialogue' && surface.interaction === 'skorcha'
+      ? skorchaDismissalIndex - 1
+      : economy.revision + economy.npc.boast.failureSequence,
+  )
+  const selectorResponseTimeoutRef = useRef<number | null>(null)
   const [rendererState, setRendererState] = useState<'error' | 'loading' | 'ready'>('loading')
   const [notice, setNotice] = useState<HubInventoryUiNotice | null>(null)
-  const [chat, setChat] = useState<{
-    acceleratedAtMs: number | null
-    phase: HubTraderChatPhase
-    phaseStartedAtMs: number
-  }>(() => ({ acceleratedAtMs: null, phase: 'intro', phaseStartedAtMs: performance.now() }))
+  const [chat, setChat] = useState<HubNpcChatPresentation>(() => ({
+    acceleratedAtMs: null,
+    content: surface.kind === 'dialogue'
+      ? createHubNpcChatContent(
+          surface.interaction,
+          economy.npc,
+          chatRandomIndexRef.current,
+        )
+      : { kind: 'choices' },
+    phaseStartedAtMs: performance.now(),
+    selectorOffset: 0,
+  }))
+  const [pendingNpcSelection, setPendingNpcSelection] =
+    useState<PendingHubNpcSelection | null>(null)
   const [serviceSelection, setServiceSelection] = useState<HubServiceSelection | null>(null)
   const [serviceHoverInspection, setServiceHoverInspection] = useState<HubServiceInspectionModel | null>(null)
   const [serviceFocusInspection, setServiceFocusInspection] = useState<HubServiceInspectionModel | null>(null)
@@ -346,6 +435,33 @@ function NativeHubSurface({
     const feedback = economy.actionFeedback
     if (!feedback || feedback.sequence <= feedbackSequenceRef.current) return
     feedbackSequenceRef.current = feedback.sequence
+    if (pendingNpcSelection && feedback.action === pendingNpcSelection.action) {
+      if (!feedback.accepted) {
+        audio.playSound('bad-action')
+        setPendingNpcSelection(null)
+        return
+      }
+      audio.playSound(pendingNpcSelection.action === 'buy-teacher-spell'
+        ? 'drop-coins'
+        : 'pick-skill')
+      const response = hubNpcSelectorResponse(
+        pendingNpcSelection.selector,
+        pendingNpcSelection.id,
+      )
+      if (!response) setPendingNpcSelection(null)
+      else selectorResponseTimeoutRef.current = window.setTimeout(() => {
+        selectorResponseTimeoutRef.current = null
+        setPendingNpcSelection(null)
+        chatCompletionHandledRef.current = false
+        setChat({
+          acceleratedAtMs: null,
+          content: response,
+          phaseStartedAtMs: performance.now(),
+          selectorOffset: 0,
+        })
+      }, NATIVE_SELECTOR_ACCEPT_TICKS * 10)
+      return
+    }
     if (feedback.action === 'dye') {
       if (!feedback.accepted) {
         audio.playSound('bad-action')
@@ -406,7 +522,13 @@ function NativeHubSurface({
       if (feedback.transferGesture === 'double-activation') audio.playSound('backpack-close')
       else audio.playSound('click', { playbackRate: 0.75 })
     }
-  }, [audio, economy.actionFeedback, onClose])
+  }, [audio, economy.actionFeedback, onClose, pendingNpcSelection])
+
+  useEffect(() => () => {
+    if (selectorResponseTimeoutRef.current !== null) {
+      window.clearTimeout(selectorResponseTimeoutRef.current)
+    }
+  }, [])
 
   useEffect(() => {
     if (dyeModal?.closingAtMs === null || dyeModal === null) return
@@ -442,10 +564,70 @@ function NativeHubSurface({
     return () => window.clearTimeout(timeout)
   }, [dyeModal?.selectedAtMs])
 
-  const beginChatPhase = useCallback((phase: HubTraderChatPhase) => {
+  const beginChatContent = useCallback((content: HubNpcChatContent) => {
     chatCompletionHandledRef.current = false
-    setChat({ acceleratedAtMs: null, phase, phaseStartedAtMs: performance.now() })
+    setChat({
+      acceleratedAtMs: null,
+      content,
+      phaseStartedAtMs: performance.now(),
+      selectorOffset: 0,
+    })
   }, [])
+
+  const selectorRows = useMemo((): readonly HubNpcSelectorRow[] => (
+    chat.content.kind === 'selector'
+      ? hubNpcSelectorRows(chat.content.selector, economy.npc, progression)
+      : []
+  ), [chat.content, economy.npc, progression])
+
+  const advanceChat = useCallback(() => {
+    if (surface.kind !== 'dialogue' || chat.content.kind !== 'speech') return
+    if (chat.content.next === 'choices') {
+      beginChatContent({ kind: 'choices' })
+      return
+    }
+    if (chat.content.next === 'dismissal') {
+      chatRandomIndexRef.current += 1
+      const dismissal = hubNpcDismissal(surface.interaction, chatRandomIndexRef.current)
+      if (dismissal) beginChatContent(dismissal)
+      else onClose()
+      return
+    }
+    if (chat.content.key.startsWith('ANNAL_') && economy.npc.boast.selected !== null) {
+      onNotebox(NATIVE_HUB_NPC_CATALOG.boastInstruction)
+    }
+    onClose()
+  }, [beginChatContent, chat.content, economy.npc.boast.selected, onClose, onNotebox, surface])
+  advanceChatRef.current = advanceChat
+
+  const dismissOrCloseChat = useCallback(() => {
+    if (surface.kind !== 'dialogue') return
+    const dismissal = hubNpcDismissal(
+      surface.interaction,
+      ++chatRandomIndexRef.current,
+    )
+    if (dismissal) beginChatContent(dismissal)
+    else onClose()
+  }, [beginChatContent, onClose, surface])
+
+  useEffect(() => {
+    if (surface.kind !== 'dialogue') return
+    const back = (event: KeyboardEvent) => {
+      if (event.repeat || event.code !== menuKeyCode) return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      audio.playSound('click')
+      if (chat.content.kind === 'selector') {
+        beginChatContent({ kind: 'choices' })
+      } else if (chat.content.kind === 'speech' && chat.content.next === 'close') {
+        advanceChatRef.current()
+      } else {
+        dismissOrCloseChat()
+      }
+    }
+    window.addEventListener('keydown', back, { capture: true })
+    return () => window.removeEventListener('keydown', back, { capture: true })
+  }, [audio, beginChatContent, chat.content, dismissOrCloseChat, menuKeyCode, surface.kind])
 
   const model = useMemo((): HubInventoryRendererModel => {
     if (surface.kind === 'inventory') return {
@@ -460,10 +642,13 @@ function NativeHubSurface({
     }
     if (surface.kind === 'dialogue') return {
       acceleratedAtMs: chat.acceleratedAtMs,
+      content: chat.content,
       interaction: surface.interaction,
       kind: 'dialogue',
-      phase: chat.phase,
       phaseStartedAtMs: chat.phaseStartedAtMs,
+      selectedSelectorId: pendingNpcSelection?.id ?? null,
+      selectorOffset: chat.selectorOffset,
+      selectorRows,
     }
     return {
       config,
@@ -487,10 +672,12 @@ function NativeHubSurface({
     inventoryDrag,
     inventorySelection,
     notice,
+    pendingNpcSelection,
     progression,
     serviceFocusInspection,
     serviceHoverInspection,
     serviceSelection,
+    selectorRows,
     surface,
   ])
 
@@ -528,9 +715,9 @@ function NativeHubSurface({
       const frame = renderer.render(nowMs, Math.min(1, ticks * step))
       const current = modelRef.current
       if (frame.chatComplete && current?.kind === 'dialogue'
-        && current.phase !== 'choices' && !chatCompletionHandledRef.current) {
+        && current.content.kind === 'speech' && !chatCompletionHandledRef.current) {
         chatCompletionHandledRef.current = true
-        beginChatPhase('choices')
+        advanceChatRef.current()
       }
     })
     return () => {
@@ -540,7 +727,7 @@ function NativeHubSurface({
       renderer?.destroy()
       host.replaceChildren()
     }
-  }, [beginChatPhase, modAssets, surface.kind])
+  }, [modAssets, surface.kind])
 
   useEffect(() => {
     if (surface.kind !== 'dialogue' && inventorySelection) {
@@ -641,7 +828,10 @@ function NativeHubSurface({
         data-native-ui-schema={nativeAssetsJson.schema}
         data-source-executable={nativeAssetsJson.sourceExecutableSha256}
         data-renderer-state={rendererState}
-        data-native-chat-phase={surface.kind === 'dialogue' ? chat.phase : ''}
+        data-native-chat-phase={surface.kind === 'dialogue' ? chat.content.kind : ''}
+        data-native-chat-record={surface.kind === 'dialogue' && chat.content.kind === 'speech'
+          ? chat.content.key
+          : ''}
         data-native-notice={notice?.title ?? ''}
         data-native-inventory-selection={inventorySelection
           ? `${inventorySelection.owner}:${inventorySelection.equipmentSlot ?? inventorySelection.id}`
@@ -729,20 +919,44 @@ function NativeHubSurface({
             <DialogueActions
               chat={chat}
               interaction={surface.interaction}
-              onClose={onClose}
+              pendingSelection={pendingNpcSelection !== null}
+              selectorRows={selectorRows}
               onAccelerate={() => setChat((current) => current.acceleratedAtMs === null
                 ? { ...current, acceleratedAtMs: performance.now() }
                 : current)}
-              onAdvance={() => beginChatPhase('choices')}
-              onPrices={() => click(() => beginChatPhase('prices'))}
-              onService={() => {
-                const trader = HUB_INTERACTION_DIALOGUES[surface.interaction].service
-                if (trader !== null) click(() => onSurfaceChange({
+              onAdvance={advanceChat}
+              onChoice={(choice) => click(() => {
+                if (choice.kind === 'question') {
+                  const answer = hubNpcQuestion(surface.interaction, choice.key)
+                  if (answer) beginChatContent(answer)
+                  return
+                }
+                const selector = hubNpcSelectorContent(choice.selector)
+                if (selector) {
+                  beginChatContent(selector)
+                  return
+                }
+                onSurfaceChange({
                   kind: 'service',
                   source: surface.source,
-                  trader,
-                }))
+                  trader: choice.selector as HubTraderId,
+                })
+              })}
+              onDone={() => click(() => {
+                dismissOrCloseChat()
+              })}
+              onSelectRow={(selector, id) => {
+                if (pendingNpcSelection) return
+                const action = hubNpcSelectorAction(selector, id)
+                setPendingNpcSelection({ action: action.type, id, selector })
+                audio.playSound('click')
+                onAction(action)
               }}
+              onSelectorOffset={(selectorOffset) => setChat(current => ({
+                ...current,
+                selectorOffset,
+              }))}
+              onSelectorDone={() => click(() => beginChatContent({ kind: 'choices' }))}
             />
           ) : surface.kind === 'service' ? (
             <ServiceActions
@@ -817,64 +1031,158 @@ function NativeHubSurface({
   )
 }
 
+function NativeNpcNotebox({
+  onClose,
+  style,
+  text,
+}: {
+  onClose: () => void
+  style: CSSProperties
+  text: string
+}) {
+  return (
+    <div className="hub-native-notebox-overlay" data-native-notebox-text={text}>
+      <section
+        className="hub-native-notebox"
+        role="alertdialog"
+        aria-label="Boast notice"
+        style={style}
+      >
+        <p>{text}</p>
+        <button type="button" onClick={onClose}>OKAY</button>
+      </section>
+    </div>
+  )
+}
+
 function DialogueActions({
   chat,
   interaction,
   onAccelerate,
   onAdvance,
-  onClose,
-  onPrices,
-  onService,
+  onChoice,
+  onDone,
+  onSelectRow,
+  onSelectorDone,
+  onSelectorOffset,
+  pendingSelection,
+  selectorRows,
 }: {
-  chat: {
-    acceleratedAtMs: number | null
-    phase: HubTraderChatPhase
-    phaseStartedAtMs: number
-  }
+  chat: HubNpcChatPresentation
   onAccelerate: () => void
   onAdvance: () => void
-  onClose: () => void
-  onPrices: () => void
-  onService: () => void
+  onChoice: (choice: HubNpcChatChoice) => void
+  onDone: () => void
+  onSelectRow: (
+    selector: 'boast' | 'books' | 'teacher-spells',
+    id: number,
+  ) => void
+  onSelectorDone: () => void
+  onSelectorOffset: (offset: number) => void
+  pendingSelection: boolean
+  selectorRows: readonly HubNpcSelectorRow[]
   interaction: HubInteractionId
 }) {
-  const dialogue = HUB_INTERACTION_DIALOGUES[interaction]
-  const paragraphs = chat.phase === 'prices' ? dialogue.priceExplanation : dialogue.intro
+  if (chat.content.kind === 'speech') {
+    const speech = chat.content
+    return (
+      <div className="hub-native-dialogue-actions">
+        <div className="hub-native-ui-semantic">
+          {speech.lines.map((line, index) => <p key={`${speech.key}-${index}`}>{line}</p>)}
+        </div>
+        <NativeAction
+          label="Accelerate dialogue"
+          rect={[
+            HUB_CHAT_PANEL.contentLeft,
+            HUB_CHAT_PANEL.contentTop,
+            HUB_CHAT_PANEL.contentWidth,
+            HUB_CHAT_PANEL.contentHeight,
+          ]}
+          onClick={onAccelerate}
+        />
+        <NativeAction label="Skip" rect={HUB_CHAT_PANEL.doneRect} onClick={onAdvance} />
+      </div>
+    )
+  }
+
+  if (chat.content.kind === 'selector') {
+    const selector = chat.content.selector
+    const maximumOffset = Math.max(0, selectorRows.length - HUB_NPC_SELECTOR.rowCount)
+    const offset = Math.min(chat.selectorOffset, maximumOffset)
+    const visibleRows = selectorRows.slice(offset, offset + HUB_NPC_SELECTOR.rowCount)
+    return (
+      <section
+        className="hub-native-dialogue-actions"
+        aria-label={hubNpcSelectorTitle(selector)}
+        data-native-selector={selector}
+        data-native-selector-offset={offset}
+      >
+        <span className="hub-native-ui-semantic" role="status">
+          {visibleRows.length === 0 && selector === 'teacher-spells'
+            ? 'ALL SPELLS ALREADY BOUGHT!'
+            : `${hubNpcSelectorTitle(selector)}. ${selectorRows.length} entries.`}
+        </span>
+        {visibleRows.map((row, index) => (
+          <NativeAction
+            key={`${selector}-${row.id}`}
+            data={{
+              'data-native-selector-id': row.id,
+              'data-native-selector-kind': selector,
+              'data-native-selector-price': row.price ?? '',
+            }}
+            disabled={pendingSelection}
+            label={`${row.label}${row.price === null ? '' : `, ${row.price} gold`}. ${row.detail}`}
+            rect={[
+              HUB_NPC_SELECTOR.rowLeft,
+              HUB_NPC_SELECTOR.rowTop + index * HUB_NPC_SELECTOR.rowHeight,
+              HUB_NPC_SELECTOR.rowWidth,
+              HUB_NPC_SELECTOR.rowHeight - 3,
+            ]}
+            onClick={() => onSelectRow(selector, row.id)}
+          />
+        ))}
+        {offset > 0 ? (
+          <NativeAction
+            label="Previous entries"
+            rect={HUB_NPC_SELECTOR.previousRect}
+            onClick={() => onSelectorOffset(Math.max(0, offset - HUB_NPC_SELECTOR.rowCount))}
+          />
+        ) : null}
+        {offset < maximumOffset ? (
+          <NativeAction
+            label="More entries"
+            rect={HUB_NPC_SELECTOR.nextRect}
+            onClick={() => onSelectorOffset(Math.min(
+              maximumOffset,
+              offset + HUB_NPC_SELECTOR.rowCount,
+            ))}
+          />
+        ) : null}
+        <NativeAction gameBack label="Done" rect={HUB_CHAT_PANEL.doneRect} onClick={onSelectorDone} />
+      </section>
+    )
+  }
+
+  const choices = hubNpcChatChoices(interaction)
   return (
     <div className="hub-native-dialogue-actions">
-      <div className="hub-native-ui-semantic">
-        {(chat.phase === 'choices' ? [] : paragraphs).map((line) => <p key={line}>{line}</p>)}
-      </div>
-      {chat.phase === 'choices' ? (
-        <>
-          {dialogue.actionLabel !== null && dialogue.service !== null ? (
-            <NativeAction
-              data={{ 'data-service-trader': dialogue.service }}
-              label={dialogue.actionLabel}
-              rect={HUB_CHAT_PANEL.primaryChoiceRect}
-              onClick={onService}
-            />
-          ) : null}
-          {dialogue.priceLabel ? (
-            <NativeAction label={dialogue.priceLabel} rect={HUB_CHAT_PANEL.secondaryChoiceRect} onClick={onPrices} />
-          ) : null}
-          <NativeAction gameBack label="Done" rect={HUB_CHAT_PANEL.doneRect} onClick={onClose} />
-        </>
-      ) : (
-        <>
-          <NativeAction
-            label="Accelerate dialogue"
-            rect={[
-              HUB_CHAT_PANEL.contentLeft,
-              HUB_CHAT_PANEL.contentTop,
-              HUB_CHAT_PANEL.contentWidth,
-              HUB_CHAT_PANEL.contentHeight,
-            ]}
-            onClick={onAccelerate}
-          />
-          <NativeAction label="Skip" rect={HUB_CHAT_PANEL.doneRect} onClick={onAdvance} />
-        </>
-      )}
+      {choices.map((choice, index) => (
+        <NativeAction
+          key={choice.kind === 'question' ? choice.key : choice.selector}
+          data={{
+            'data-native-chat-choice': choice.kind,
+            'data-native-chat-key': choice.kind === 'question' ? choice.key : choice.selector,
+            'data-service-trader': choice.kind === 'command'
+              && ['fomentius', 'hagatha', 'luthacus', 'shlorio'].includes(choice.selector)
+              ? choice.selector
+              : '',
+          }}
+          label={choice.label}
+          rect={[590, 145 + index * 52, 420, 45]}
+          onClick={() => onChoice(choice)}
+        />
+      ))}
+      <NativeAction gameBack label="Done" rect={HUB_CHAT_PANEL.doneRect} onClick={onDone} />
     </div>
   )
 }

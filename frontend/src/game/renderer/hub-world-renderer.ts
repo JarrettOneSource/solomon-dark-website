@@ -83,6 +83,14 @@ interface HubFrameDiagnostics {
   secondaryAbilitySamples: readonly NativeSecondaryDiagnosticSample[]
   secondaryScreenFlashAlpha: number
   secondaryScreenFlashColor: number
+  skorcha: {
+    dismissalIndex: number
+    gesture: number
+    hatFrame: number
+    variant: number
+    x: number
+    y: number
+  } | null
   pooledStudentViewCount: number
   southernArchitectureCount: number
   southernArtRenderable: boolean
@@ -260,6 +268,14 @@ export async function createHubWorldRenderer(
     secondaryAbilitySamples: [],
     secondaryScreenFlashAlpha: 0,
     secondaryScreenFlashColor: 0xffffff,
+    skorcha: options.initialSnapshot.world.skorcha === null ? null : {
+      dismissalIndex: options.initialSnapshot.world.skorcha.dismissalIndex,
+      gesture: options.initialSnapshot.world.skorcha.gesture,
+      hatFrame: options.initialSnapshot.world.skorcha.hatFrame,
+      variant: options.initialSnapshot.world.skorcha.variant,
+      x: options.initialSnapshot.world.skorcha.position.x,
+      y: options.initialSnapshot.world.skorcha.position.y,
+    },
     pooledStudentViewCount: 0,
     southernArchitectureCount: courtyardScene.southernArchitectureCount,
     southernArtRenderable: true,
@@ -313,6 +329,14 @@ export async function createHubWorldRenderer(
     frameDiagnostics.secondaryAbilityKinds = currentScene.secondaryAbilityKinds
     frameDiagnostics.secondaryAbilityPrimitiveCount = currentScene.secondaryAbilityPrimitiveCount
     frameDiagnostics.secondaryAbilitySamples = currentScene.secondaryAbilitySamples
+    frameDiagnostics.skorcha = snapshot.world.skorcha === null ? null : {
+      dismissalIndex: snapshot.world.skorcha.dismissalIndex,
+      gesture: snapshot.world.skorcha.gesture,
+      hatFrame: snapshot.world.skorcha.hatFrame,
+      variant: snapshot.world.skorcha.variant,
+      x: snapshot.world.skorcha.position.x,
+      y: snapshot.world.skorcha.position.y,
+    }
     frameDiagnostics.pooledStudentViewCount = courtyardScene.pooledStudentViewCount
     frameDiagnostics.southernArchitectureCount = courtyardScene.southernArchitectureCount
     frameDiagnostics.southernArtRenderable = courtyardScene.southernArtRenderable
@@ -614,6 +638,10 @@ export async function createHubWorldRenderer(
       canvas.dataset.transitionPhase = participant.transition?.phase ?? 'none'
       canvas.dataset.levelUpDynamicSuppressed = 'false'
       canvas.dataset.levelUpParticleCount = `${frameDiagnostics.levelUpParticleCount}`
+      canvas.dataset.skorchaPresent = snapshot.world.skorcha === null ? 'false' : 'true'
+      canvas.dataset.skorchaVariant = snapshot.world.skorcha === null
+        ? ''
+        : `${snapshot.world.skorcha.variant}`
       application.render()
       updateFrameDiagnostics(snapshot)
       if (frameCount % HUB_DIAGNOSTIC_WINDOW_FRAMES !== 0) return

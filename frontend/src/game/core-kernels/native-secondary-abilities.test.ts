@@ -196,6 +196,22 @@ function cast(skillId: NativeSecondaryAbilityId): ReturnType<typeof stepNativeSe
   )
 }
 
+test('secondary mana underflow is strict: cost greater than mana fails, exact zero succeeds', () => {
+  const insufficient = stepNativeSecondaryAbilities(
+    createNativeSecondarySimulation(123),
+    context(11, 1, 0, 74),
+  )
+  assert.deepEqual(insufficient.manaUnderflowPlayerIds, ['player'])
+  assert.equal(insufficient.manaSpent.player, undefined)
+
+  const exact = stepNativeSecondaryAbilities(
+    createNativeSecondarySimulation(123),
+    context(11, 1, 0, 75),
+  )
+  assert.deepEqual(exact.manaUnderflowPlayerIds, [])
+  assert.equal(exact.manaSpent.player, 75)
+})
+
 test('Mindblowing Ring births its exact burst and actor-light Shockwave from 502 RNG words', () => {
   const source = createNativeSecondarySimulation(0x52a220)
   const lightRegistration = { managerLane: 'actor' as const, registrationOrdinal: 7 }

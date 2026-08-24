@@ -303,6 +303,7 @@ export function createGameSnapshotFrame(
         entities,
         kind: 'hub',
         participants: snapshot.world.participants,
+        skorcha: snapshot.world.skorcha,
         traderAnimationSeed: snapshot.world.traderAnimationSeed,
       },
     }
@@ -485,6 +486,10 @@ export class EntityReplicationReconstructor {
           collisionRngState: frame.world.collisionRngState,
           kind: 'hub',
           participants: frame.world.participants,
+          skorcha: frame.world.skorcha === null ? null : {
+            ...frame.world.skorcha,
+            position: { ...frame.world.skorcha.position },
+          },
           students,
           traderAnimationSeed: frame.world.traderAnimationSeed,
         },
