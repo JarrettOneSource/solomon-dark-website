@@ -1278,26 +1278,35 @@ creates no VM.
 The developer-only `sd.bots.summon()` adapter exists only in the console VM.
 It accepts only an entitled player currently in the resident shared Hub,
 reserves one server-capacity slot, and queues participant creation at the fixed
-tick boundary. Each call creates a unique Arcane/Fire player with the ordinary
-entity, replication, Hub, party, loadout, progression, and inventory paths.
+tick boundary. With no options each call creates a unique Arcane/Fire player;
+developers may supply an exact native `element` and `discipline` table to run
+the same policy through any pure-primary character. Both paths use the ordinary
+entity, replication, Hub, party, loadout, progression, and inventory owners.
 The participant has idle input in the Hub. Any ordinary
 eligible party leader can issue the existing invitation; the bot accepts that
 same invitation after a three-second monotonic delay if it is still live.
 
 After party launch, a host-side entrance adapter follows collision-safe
 waypoints through the authored moving gate and into Solomon contact. It idles
-during dialogue, then hands control to the selected schema-v6 checkpoint at a
+during dialogue, then hands control to the selected schema-v7 checkpoint at a
 ten-tick decision cadence. Inference runs in one server-only worker shared by
 all summoned participants; each bot retains its own observer and intent queue.
 Potion actions use the ordinary consume path. Checkpoints without an explicit
-learned-choice marker retain the scripted schema-v6 chooser. A checkpoint
+learned-choice marker retain the scripted schema-v7 chooser. A checkpoint
 marked `choicePolicyMode=learned` evaluates the live offer observation,
-56-value option rows, and legality mask in that same worker, then dispatches
+138-value option rows, and legality mask in that same worker, then dispatches
 the selected option through the ordinary progression path. Bot-assisted runs
 cannot receive global leaderboard
 receipts. Bots never enter the WebSocket client map or human player-count
 callback, and all remaining bots are removed when the last human disconnects,
 so they cannot keep a private session or deployment drain alive.
+
+The training bridge derives five pure-primary and ten Weld start rows from the
+native skill catalog and `NATIVE_WELD_BUILDS`; consecutive seeds rotate the
+entire 15-row curriculum. Schema v7 carries exact uint16 skill/build identities.
+Channel-active primary remains a legal held action on the next policy decision,
+and episode metrics attribute decisions, ticks, runs, kills, and wave depth to
+the exact current loadout even if a learned choice changes primary mid-run.
 
 API `0.2.0` adds one host-owned content registry beneath the VMs. Admission
 provides each mod only its validated immutable package files. During its sole

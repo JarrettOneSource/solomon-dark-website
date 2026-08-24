@@ -88,7 +88,7 @@ export class WebLuaApi {
     engine.global.set('sd', {
       ...(this.#bindings.developer ? {
         bots: {
-          summon: () => this.#bindings.developer!.summonBot(),
+          summon: (options?: unknown) => this.#summonBot(options),
         },
       } : {}),
       enemies: {
@@ -325,6 +325,36 @@ export class WebLuaApi {
       x,
       y,
     }
+  }
+
+  #summonBot(options?: unknown) {
+    const source = options === undefined || options === null
+      ? {}
+      : options
+    if (typeof source !== 'object' || Array.isArray(source)) {
+      throw new Error('sd.bots.summon options must be a table')
+    }
+    const values = source as Record<string, unknown>
+    const unexpected = Object.keys(values).find((key) => (
+      key !== 'discipline' && key !== 'element'
+    ))
+    if (unexpected) throw new Error(`unsupported sd.bots.summon option: ${unexpected}`)
+    const discipline = values.discipline === undefined
+      ? 'arcane'
+      : requireString(values.discipline, 'bot discipline', 16)
+    const element = values.element === undefined
+      ? 'fire'
+      : requireString(values.element, 'bot element', 16)
+    if (!['arcane', 'body', 'mind'].includes(discipline)) {
+      throw new Error(`unsupported bot discipline: ${discipline}`)
+    }
+    if (!['air', 'earth', 'ether', 'fire', 'water'].includes(element)) {
+      throw new Error(`unsupported bot element: ${element}`)
+    }
+    return this.#bindings.developer!.summonBot({
+      discipline: discipline as 'arcane' | 'body' | 'mind',
+      element: element as 'air' | 'earth' | 'ether' | 'fire' | 'water',
+    })
   }
 
   #setRunSeed(seed: unknown): number {

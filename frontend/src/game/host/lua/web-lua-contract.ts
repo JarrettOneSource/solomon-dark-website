@@ -1,5 +1,9 @@
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../../core-kernels/boneyard-wave-director.ts'
 import type { BoneyardWaveEnemyToken } from '../../core-kernels/boneyard-wave-schema.ts'
+import type {
+  WizardDiscipline,
+  WizardElement,
+} from '../../core-kernels/player-character.ts'
 import type { LuaConsoleValue } from '../../protocol/game-protocol.ts'
 
 export const WEB_LUA_API_VERSION = '0.2.0'
@@ -175,10 +179,15 @@ export interface WebLuaRuntimeBindings {
 }
 
 export interface WebLuaDeveloperBindings {
-  summonBot(): Readonly<{
+  summonBot(config: WebLuaBotConfig): Readonly<{
     display_name: string
     player_id: string
   }>
+}
+
+export interface WebLuaBotConfig {
+  readonly discipline: WizardDiscipline
+  readonly element: WizardElement
 }
 
 export interface WebLuaRuntimeLog {

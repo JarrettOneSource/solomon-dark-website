@@ -168,7 +168,11 @@ test('developer Lua summons repeatable inert participants that accept a real par
   assert.equal(host.humanPlayerCount(), 1)
 
   const first = await executeLua(socket, 1, 'return sd.bots.summon()')
-  const second = await executeLua(socket, 2, 'return sd.bots.summon()')
+  const second = await executeLua(
+    socket,
+    2,
+    'return sd.bots.summon({ element = "air", discipline = "mind" })',
+  )
   assert.equal(first.ok, true)
   assert.equal(second.ok, true)
   await waitFor(() => host.botCount() === 2)
@@ -184,6 +188,24 @@ test('developer Lua summons repeatable inert participants that accept a real par
   assert.deepEqual(second.values[0], {
     display_name: 'Policy Bot 2',
     player_id: botPlayerIds[1],
+  })
+  const invalid = await executeLua(
+    socket,
+    3,
+    'return sd.bots.summon({ element = "void" })',
+  )
+  assert.equal(invalid.ok, false)
+  assert.match(invalid.error ?? '', /unsupported bot element/)
+  assert.equal(host.botCount(), 2)
+  const secondState = host.playerState(botPlayerIds[1]!)
+  assert.ok(secondState)
+  const secondIndex = secondState.playerEntities.identities.findIndex(({ playerId }) => (
+    playerId === botPlayerIds[1]
+  ))
+  assert.deepEqual(secondState.playerEntities.configs[secondIndex], {
+    discipline: 'mind',
+    displayName: 'Policy Bot 2',
+    element: 'air',
   })
 
   const invitedState = nextPartyState(socket, message => (

@@ -3348,7 +3348,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     return 0
   }
 
-  function queueMlBotSummon(summonerPlayerId: PlayerId) {
+  function queueMlBotSummon(
+    summonerPlayerId: PlayerId,
+    config: Pick<PlayerCharacterConfig, 'discipline' | 'element'>,
+  ) {
     if (!sharedWorlds || sessionKind !== 'global-hub') {
       throw new Error('sd.bots.summon requires the shared Hub')
     }
@@ -3366,6 +3369,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     const playerId = `bot-${randomBytes(12).toString('base64url')}`
     const character = Object.freeze({
       ...ML_BOT_CHARACTER,
+      ...config,
       displayName: `${ML_BOT_CHARACTER.displayName} ${ordinal}`,
     })
     pendingBotSummons.push({ character, playerId })
@@ -4520,7 +4524,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         ),
       },
       ...(owner.developerAccess ? {
-        developer: { summonBot: () => queueMlBotSummon(playerId) },
+        developer: { summonBot: config => queueMlBotSummon(playerId, config) },
       } : {}),
       log: (level, event, detail) => logGameServerEvent(
         options.log,
