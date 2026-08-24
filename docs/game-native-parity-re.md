@@ -37554,41 +37554,48 @@ No member is blocked by the browser platform.
   departure. Exact explicit product pitches are chat `1.10`, join `1.25`, and
   leave/depart-for-Solomon `0.85`, all at gain `0.65`; the existing non-music
   master consumes muted edges silently without replay.
-- The focused branch rebased over Website `origin/main` `e3d50b0f`, preserving
-  both the concurrent schema-5 durable-profile implementation and the later
-  native inventory-slot interaction correction. The first Mac gate
-  found one strict test-only record cast; the second found one stale selector
-  test still trying to acquire a Hub book pause. The fixture now copies a
-  strict record, and the source-qualified selector authorization journey now
-  runs in Boneyard, where that barrier still exists.
-- Exact Mac commit `f49cca25f5d8d269ff90576c8dcfb5d2883e0446` and the local
-  candidate had a byte-identical 32-file manifest. On Apple arm64 macOS
-  `26.6.2`, Node `22.17.0`, npm `10.9.2`, .NET `10.0.302`, and Chrome
-  `151.0.7922.170`, the final canonical `./scripts/validate.sh` gate passed:
-  backend build and `17/17` contracts, lint/import boundaries, all
-  `1950/1950` frontend/desktop tests, production build, media policy, and game
-  bundle budget (`443511` raw / `124843` gzip). Gate-log SHA-256 is
-  `791e32dae102d1e9f4f335d9dcf5820af021626354bae8f9f2947300dc0ace45`.
+- The focused branch ultimately rebased over Website `origin/main`
+  `70849ccfdf02b6eede996caa8669fb4d6d804f4b`, preserving the concurrent
+  durable-profile, native inventory interaction, complete controller, and Imp
+  landing/presentation closures. The protocol-66 conflict resolution retains
+  both the Imp effect/state fields and Hub activity. Earlier Mac gates exposed
+  one strict test-only record cast and one stale Hub selector-pause fixture;
+  both now exercise their correct strict/Boneyard owners.
+- Exact functional candidate
+  `4417da2534cc8ef0bcbd0d77527cadf5bee0c101` and the Mac checkout had a
+  byte-identical 31-file manifest with aggregate SHA-256
+  `c2792d5879d47e2c48b2945d4d77bff7e554ef06dc5fb98a24930d2a1060f10b`.
+  On Apple arm64 macOS `26.6.2`, Node `22.17.0`, npm `10.9.2`, .NET
+  `10.0.302`, and Chrome `151.0.7922.170`, the canonical
+  `./scripts/validate.sh` gate passed: backend build and `17/17` contracts,
+  lint with zero errors and the eight existing warnings, import boundaries,
+  all `1975/1975` frontend/desktop tests, production build, media policy, and
+  game bundle budget (`445958` raw / `125546` gzip). Gate-log SHA-256 is
+  `34b1a5592becde2bfb2b2cb66787c56529b69e512fbc2f914dcfe0ca62715880`.
 - Mac Chrome Pause/Inventory/SkillScreen/compact-selector/dialogue/Settings
   acceptance kept the authoritative Hub and local frame advancing. The local
-  Hub Pause advanced tick `2140 -> 2196`; Boneyard owner/peer barriers held at
-  `3179`/`3181` and resumed at `3183`. The exact pause-smoke log SHA-256 is
-  `f1b665157ff44244db9c6ae4513b636cd728b24b5e7c209dc5cf2559d3b0f82a`.
+  Hub Pause advanced tick `2076 -> 2132`; Boneyard owner/peer barriers held at
+  `3127`/`3129` and resumed at `3132`. The exact pause-smoke log SHA-256 is
+  `c4b6b50bfbec81110d2a179ff1f8f675890ffc0f2ea82bd3738323adbcb8d6f9`.
 - Production-bundle desktop and mobile shared-Hub journeys each observed
   exactly `7` chat cues, `4` College join cues, `1` disconnect cue, and `3`
   simultaneous party-departure cues when the group went to find Solomon.
   Both retained two live Hub observers while the party run advanced, finished
   at zero sessions/players/parties/runs, and returned empty page, console,
   failed-response, and unexpected-request arrays. Log SHA-256 values are
-  `f91283fd737ea411223a39d1c7948cf7376992303bf931caca6859d57e619c04`
+  `624cc6573ffe3d9c28a468935b11e738061b477afd02f1afa8bfd140ed223713`
   (desktop) and
-  `8ad4f70ed3e16b73d7726ac69966ee1c7e74919ed2d08a436eca5107c296d0ca`
+  `9a9e4d3f8baf8aef36d5c7093420258ef3639073aa156a915e8945327a46ec98`
   (mobile).
 - Reviewed same-region pause-badge captures are visibly clear at both
   viewports: desktop SHA-256
-  `d206a642e33da255554025555acd03af444919e28d307e8656872c0f9104a5fb`
+  `7e7fd2143e3c5f278b1cd80083a18f40e649a0d180a27729721be7d6aaad397a`
   and mobile SHA-256
-  `0be191d8a1626cd788346876230e0663797cc714785e9e537cefb857e7745f75`.
+  `11915f7c17742a1f7e5db32f67fcdb88eff8158b6406366fafa58099416f046e`.
+  Reviewed desktop/mobile fading world-speech captures are
+  `cb6cacaeab93859376e4d3a7dd52ee020a542c5ae6522d92b2f27b2061b6d38c`
+  and
+  `c56b83551d0bc0fc615c741a587f5e6b759802c30d1faf0004424db122342152`.
   The Player Card label was asserted in the same real-browser journeys. No
   member is browser-blocked. Nothing was pushed, deployed, or restarted in
   production.
