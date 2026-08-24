@@ -4,7 +4,9 @@ import {
   createIdlePlayerCharacterInput,
   type PlayerCharacterInput,
 } from '../../core-kernels/player-character.ts'
+import { nativePrimaryCastMode } from '../../core-kernels/native-primary-skill-profile.ts'
 import { playerCanAcceptInput } from '../../core-kernels/player-combat.ts'
+import { nativeWeldPrimaryCastMode } from '../../core-kernels/native-weld-primary-profile.ts'
 import {
   gameSimulationPlayerRecords,
   getPlayerProgression,
@@ -149,6 +151,8 @@ export function createMlBotPolicyActionMaskPlan(
     || (skillBook.primarySkillId === 52
       && skillBook.weldBuildId !== null
       && FREE_WELD_BUILD_IDS.has(skillBook.weldBuildId))
+  const continuingPrimary = frame.player.blockA[6] === 1
+    && primaryCastMode(skillBook.primarySkillId, skillBook.weldBuildId) === 'continuous'
   const abilityByTarget = Array.from({ length: 9 }, (_, targetAction) => {
     const ability = new Uint8Array(22)
     ability[0] = 1
@@ -158,11 +162,11 @@ export function createMlBotPolicyActionMaskPlan(
       selectedTarget.position.x - self.position.x,
       selectedTarget.position.y - self.position.y,
     ) - selectedTarget.radius) <= frame.player.primaryRange
-    ability[1] = Number(
+    ability[1] = Number(continuingPrimary || (
       frame.player.blockA[7] === 1
-      && frame.player.primaryAffordable
-      && (primaryFree || targetInPrimaryRange),
-    )
+        && frame.player.primaryAffordable
+        && (primaryFree || targetInPrimaryRange)
+    ))
     for (let slot = 0; slot < 8; slot += 1) {
       const secondary = frame.player.secondarySlots[slot]
       ability[slot + 2] = Number(
@@ -189,6 +193,15 @@ export function createMlBotPolicyActionMaskPlan(
     return aim
   })
   return { abilityByTarget, aimByAbility, movement, target }
+}
+
+function primaryCastMode(
+  primarySkillId: ReturnType<typeof getPlayerSkillBook>['primarySkillId'],
+  weldBuildId: number | null,
+): 'continuous' | 'one-shot' {
+  if (primarySkillId !== 52) return nativePrimaryCastMode(primarySkillId)
+  if (weldBuildId === null) throw new Error('ML bot policy selected Weld has no build')
+  return nativeWeldPrimaryCastMode(weldBuildId) === 'channel' ? 'continuous' : 'one-shot'
 }
 
 function selectedEnemy(frame: MlBotPolicyFrame, targetAction: number): MlBotPolicyEnemyRow | null {

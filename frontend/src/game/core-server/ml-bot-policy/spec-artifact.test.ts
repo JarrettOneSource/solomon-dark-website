@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import artifact from './policy-spec-v6.json' with { type: 'json' }
+import { ML_BOT_PRIMARY_CURRICULUM } from './primary-curriculum.ts'
 import {
   ML_BOT_POLICY_ACTION_HEADS,
   ML_BOT_POLICY_BLOCKS,
@@ -18,6 +19,7 @@ test('trainer artifact is an exact deterministic projection of the TypeScript po
     blocks: ML_BOT_POLICY_BLOCKS,
     observationNames: ML_BOT_POLICY_OBSERVATION_NAMES,
     optionDescriptorNames: ML_BOT_POLICY_OPTION_DESCRIPTOR_NAMES,
+    primaryCurriculum: ML_BOT_PRIMARY_CURRICULUM,
     scales: ML_BOT_POLICY_SCALES,
   })
 })
