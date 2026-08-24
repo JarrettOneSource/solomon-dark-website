@@ -64,8 +64,6 @@ export const ML_BOT_POLICY_ENEMY_PHASE_MAP = Object.freeze({
   }),
   demon: Object.freeze({ approach: 'approach', bomb: 'clocked-attack', death: null }),
   imp: Object.freeze({
-    contact: 'clocked-attack',
-    cooldown: 'cooldown',
     death: null,
     flight: 'approach',
   }),

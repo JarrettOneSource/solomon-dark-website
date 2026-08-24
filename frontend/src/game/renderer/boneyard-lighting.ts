@@ -14,6 +14,7 @@ import {
   nativeSignedRandomFloatFromSemanticWords,
 } from '../core-kernels/native-random-domain.ts'
 import type {
+  BoneyardEnemyProjectileEffectSnapshot,
   BoneyardEnemyProjectileSnapshot,
   BoneyardEnemySnapshot,
 } from '../protocol/game-state.ts'
@@ -458,6 +459,21 @@ export function nativeEnemyProjectileLightProvider(
       return null
     default:
       return assertNever(projectile.kind)
+  }
+}
+
+export function nativeEnemyProjectileEffectLightProvider(
+  effect: BoneyardEnemyProjectileEffectSnapshot,
+): NativeBoneyardLightProviderCandidate | null {
+  if (effect.kind !== 'fire-burst-glow') return null
+  return {
+    lane: 'transient',
+    source: {
+      castsDirectionalShadow: false,
+      intensity: Math.max(0, 1 - Math.fround(0.04) * effect.ageTicks),
+      position: { ...effect.position },
+      radius: 1.5,
+    },
   }
 }
 

@@ -9,6 +9,7 @@ import {
   NATIVE_MAGE_ACTION_PROGRAMS,
   NATIVE_ENEMY_HIT_LATCH_TICKS,
   stepBoneyardEnemyStore,
+  type BoneyardEnemyDeathEffect,
   type BoneyardMaggotActor,
 } from '../core-server/boneyard-enemy-store.ts'
 import { NATIVE_IMP_BODY_POSE_COUNT } from '../core-kernels/boneyard-imp-flight.ts'
@@ -19,6 +20,7 @@ import {
   projectBoneyard,
 } from './project-boneyard.ts'
 import {
+  projectBoneyardEnemyDeathEffect,
   projectBoneyardEnemies,
   projectBoneyardMageLightningPulses,
   projectBoneyardMaggots,
@@ -88,6 +90,49 @@ test('projects explicit Fencepost selectors and omits the native sentinel', () =
   const projected = projectBoneyard(document).fences[0]
   assert.equal(projected.startPostVariant, 4)
   assert.equal('endPostVariant' in projected, false)
+})
+
+test('projects only Demon raw FireBurst death layers into the direct post-world owner', () => {
+  const effect: BoneyardEnemyDeathEffect = {
+    ageTicks: 0,
+    alpha: 0.5,
+    alphaLossPerTick: 0.02,
+    angularVelocityDeg: 1,
+    atlas: 'BadGuys',
+    blendMode: 'add',
+    bounceVelocity: 0,
+    entry: 251,
+    firstEntry: 251,
+    frameCount: 4,
+    frameTicks: 16 / 3,
+    height: 0,
+    id: 1,
+    kind: 'sprite-array',
+    lastStepTick: 10,
+    lifetimeTicks: 22,
+    opacityTimer: 0,
+    ownerActorId: 7,
+    position: { x: 100, y: 200 },
+    role: 'demon-death-fire-burst-frame',
+    rotationDeg: 90,
+    scale: 2,
+    shadow: false,
+    spawnTick: 10,
+    tint: 0xffffbf,
+    velocity: { x: 0, y: -1 },
+    verticalVelocity: 0,
+  }
+  assert.equal(
+    projectBoneyardEnemyDeathEffect(effect).presentationOwner,
+    'direct-post-world',
+  )
+  assert.equal(
+    projectBoneyardEnemyDeathEffect({
+      ...effect,
+      role: 'demon-death-body',
+    }).presentationOwner,
+    'world-sorted',
+  )
 })
 
 function solomonSelectionScene(objects: BoneyardScene['objects']): BoneyardScene {

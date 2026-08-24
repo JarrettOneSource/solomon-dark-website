@@ -16,7 +16,7 @@ const CHARACTER = {
 } as const
 
 test('protocol carries one bounded resume document and ordered host checkpoints', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 65)
+  assert.equal(GAME_PROTOCOL_VERSION, 66)
   assert.equal(
     GAME_WEBSOCKET_MAX_PAYLOAD_BYTES,
     MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024,

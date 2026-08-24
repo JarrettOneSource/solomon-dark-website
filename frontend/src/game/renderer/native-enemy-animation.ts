@@ -22,7 +22,6 @@ export type NativeEnemyActionProgramName =
 
 export type NativeEnemyActionName =
   | NativeEnemyActionProgramName
-  | 'imp-contact'
   | 'zombie-beat'
   | 'wraith-drain'
 

@@ -264,7 +264,6 @@ test('every live combat and Coffin child plan resolves through the runtime prelo
     }
   }
   for (const [family, action] of [
-    ['IMP', 'imp-contact'],
     ['ZOMBIE', 'zombie-beat'],
     ['WRAITH', 'wraith-drain'],
   ] as const) {
@@ -274,12 +273,23 @@ test('every live combat and Coffin child plan resolves through the runtime prelo
         animation: nativeEnemyIdleAnimationSample({
           action,
           actionProgress: action === 'zombie-beat' ? 100 : 4,
-          impEffectFrame: action === 'imp-contact' ? 9 : -1,
           state: 'action',
           zombieBodyType: 2,
           zombieFlyblownSide: 1,
           zombieFrontArmPose: action === 'zombie-beat' ? 2 : 0,
           zombieHeadType: 2,
+        }),
+      }, 500))
+    }
+  }
+  for (const headingDeg of familyHeadings('IMP')) {
+    for (let impEffectFrame = 0; impEffectFrame < 10; impEffectFrame += 1) {
+      plans.push(nativeEnemyPresentationPlan({
+        ...enemy('IMP', 7, headingDeg, []),
+        animation: nativeEnemyIdleAnimationSample({
+          impEffectAlpha: 1,
+          impEffectFrame,
+          state: 'locomotion',
         }),
       }, 500))
     }

@@ -3,7 +3,16 @@ import { Container, Graphics, Sprite, type Texture } from 'pixi.js'
 import type { BoneyardWorldTextures } from './boneyard-textures.ts'
 import type { BoneyardEnemyEventSnapshot } from '../protocol/game-state.ts'
 import { nativeEnemySpriteRecord } from './native-enemy-assets.ts'
-import { nativeImpContactFireBurstSample } from './native-enemy-attack-effect.ts'
+import {
+  nativeEnemyRawFireBurstSample,
+  nativeEnemyRawFireBurstPainterPolicy,
+  nativeDemonBombMuzzleOrigin,
+  nativeImpContactBurstOrigin,
+  nativeImpLandingFlarePainterPolicy,
+  nativeImpLandingFlareSample,
+  type NativeEnemyAuxiliaryPainterPolicy,
+  type NativeEnemyRawFireBurstKind,
+} from './native-enemy-attack-effect.ts'
 import {
   nativeEnemyPresentationPlan,
   type NativeEnemyFamily,
@@ -15,8 +24,22 @@ interface ManagedEnemyView {
   view: NativeEnemyView
 }
 
+export interface NativeEnemyAuxiliaryPainterLayer extends NativeEnemyAuxiliaryPainterPolicy {
+  readonly eventId: number
+  readonly id: string
+  readonly worldY: number
+}
+
+interface NativeEnemyAuxiliaryEffectView {
+  destroy(): void
+  painterLayer(): NativeEnemyAuxiliaryPainterLayer
+  setDepth(depth: number): void
+  setRenderable(renderable: boolean): void
+  update(tick: number): boolean
+}
+
 export class NativeEnemyViews {
-  private readonly attackBursts = new Map<number, NativeEnemyAttackBurstView>()
+  private readonly auxiliaryEffects = new Map<number, NativeEnemyAuxiliaryEffectView>()
   private readonly liveIds = new Set<number>()
   private readonly root: Container
   private readonly textures: BoneyardWorldTextures
@@ -51,25 +74,55 @@ export class NativeEnemyViews {
       managed.view.destroy()
       this.views.delete(id)
     }
-    for (const [eventId, burst] of this.attackBursts) {
-      if (burst.update(tick)) continue
-      burst.destroy()
-      this.attackBursts.delete(eventId)
+    for (const [eventId, effect] of this.auxiliaryEffects) {
+      if (effect.update(tick)) continue
+      effect.destroy()
+      this.auxiliaryEffects.delete(eventId)
     }
   }
 
   consumeEvent(event: BoneyardEnemyEventSnapshot): void {
-    if (event.type !== 'attack-marker' || this.attackBursts.has(event.eventId)) return
+    if (this.auxiliaryEffects.has(event.eventId)) return
     const managed = this.views.get(event.actorId)
-    if (!managed || managed.family !== 'IMP') return
-    this.attackBursts.set(event.eventId, new NativeEnemyAttackBurstView(
+    if (!managed) return
+    if (
+      event.type === 'enemy-action-sound'
+      && managed.family === 'IMP'
+      && event.sound?.startsWith('imp-vocal-')
+    ) {
+      this.auxiliaryEffects.set(event.eventId, new NativeImpLandingFlareView(
+        this.root,
+        this.textures,
+        event.eventId,
+        event.tick,
+        managed.view.position,
+      ))
+      return
+    }
+    if (event.type !== 'attack-marker') return
+    if (managed.family !== 'IMP' && managed.family !== 'DEMON') return
+    const kind: NativeEnemyRawFireBurstKind = managed.family === 'IMP'
+      ? 'imp-contact'
+      : 'demon-bomb-muzzle'
+    const position = kind === 'imp-contact'
+      ? managed.view.impContactOrigin()
+      : managed.view.demonBombMuzzleOrigin()
+    this.auxiliaryEffects.set(event.eventId, new NativeEnemyRawFireBurstView(
       this.root,
       this.textures,
+      kind,
       event.eventId,
       event.tick,
-      managed.view.effectOrigin(15),
-      managed.view.depth,
+      position,
     ))
+  }
+
+  painterLayers(): readonly NativeEnemyAuxiliaryPainterLayer[] {
+    return [...this.auxiliaryEffects.values()].map((effect) => effect.painterLayer())
+  }
+
+  setAuxiliaryEffectDepth(eventId: number, depth: number): void {
+    this.auxiliaryEffects.get(eventId)?.setDepth(depth)
   }
 
   setDepth(id: number, depth: number): void {
@@ -82,7 +135,7 @@ export class NativeEnemyViews {
 
   setRenderable(renderable: boolean): void {
     for (const managed of this.views.values()) managed.view.setRenderable(renderable)
-    for (const burst of this.attackBursts.values()) burst.setRenderable(renderable)
+    for (const effect of this.auxiliaryEffects.values()) effect.setRenderable(renderable)
   }
 
   bodyEntry(id: number): number | null {
@@ -97,15 +150,15 @@ export class NativeEnemyViews {
     return this.views.size
   }
 
-  get attackBurstCount(): number {
-    return this.attackBursts.size
+  get auxiliaryEffectCount(): number {
+    return this.auxiliaryEffects.size
   }
 
   destroy(): void {
     for (const managed of this.views.values()) managed.view.destroy()
     this.views.clear()
-    for (const burst of this.attackBursts.values()) burst.destroy()
-    this.attackBursts.clear()
+    for (const effect of this.auxiliaryEffects.values()) effect.destroy()
+    this.auxiliaryEffects.clear()
     this.liveIds.clear()
   }
 }
@@ -119,6 +172,7 @@ class NativeEnemyView {
   private renderedBodyEntry: number | null = null
   private renderedLimbsEntry: number | null = null
   private headingDeg = 0
+  private demonMuzzleOffset: Readonly<{ x: number; y: number }> | null = null
 
   constructor(
     root: Container,
@@ -151,6 +205,23 @@ class NativeEnemyView {
     this.renderedLimbsEntry = plan.layers.find(({ role }) => (
       role.endsWith('-limbs')
     ))?.entry ?? null
+    const demonController = plan.layers.find(({ role }) => role === 'demon-controller-body')
+    if (demonController) {
+      const points = nativeEnemySpriteRecord(
+        demonController.atlas,
+        demonController.entry,
+      ).points
+      const muzzle = points[5]
+      if (!muzzle) throw new Error(`Demon controller ${demonController.entry} lacks point 5`)
+      this.demonMuzzleOffset = nativeDemonBombMuzzleOrigin(
+        { x: 0, y: 0 },
+        enemy.headingDeg,
+        { x: muzzle.x + demonController.offset.x, y: muzzle.y },
+        demonController.offset.y,
+      )
+    } else {
+      this.demonMuzzleOffset = null
+    }
     this.segments.clear()
     for (const segment of plan.segments) {
       this.segments
@@ -202,15 +273,19 @@ class NativeEnemyView {
     return this.renderedLimbsEntry
   }
 
-  get depth(): number {
-    return this.container.zIndex
+  get position(): Readonly<{ x: number; y: number }> {
+    return { x: this.container.position.x, y: this.container.position.y }
   }
 
-  effectOrigin(distance: number): Readonly<{ x: number; y: number }> {
-    const radians = this.headingDeg * Math.PI / 180
+  impContactOrigin(): Readonly<{ x: number; y: number }> {
+    return nativeImpContactBurstOrigin(this.position, this.headingDeg)
+  }
+
+  demonBombMuzzleOrigin(): Readonly<{ x: number; y: number }> {
+    if (!this.demonMuzzleOffset) throw new Error('Demon bomb marker has no controller point 5')
     return {
-      x: this.container.position.x + Math.sin(radians) * distance,
-      y: this.container.position.y - Math.cos(radians) * distance - 1,
+      x: this.container.position.x + this.demonMuzzleOffset.x,
+      y: this.container.position.y + this.demonMuzzleOffset.y,
     }
   }
 
@@ -229,12 +304,13 @@ class NativeEnemyView {
   }
 }
 
-class NativeEnemyAttackBurstView {
+class NativeEnemyRawFireBurstView {
   private readonly basePosition: Readonly<{ x: number; y: number }>
   private readonly container: Container
   private readonly eventId: number
   private readonly frame: Sprite
   private readonly glow: Sprite
+  private readonly kind: NativeEnemyRawFireBurstKind
   private readonly root: Container
   private readonly spawnTick: number
   private readonly textures: BoneyardWorldTextures
@@ -242,24 +318,24 @@ class NativeEnemyAttackBurstView {
   constructor(
     root: Container,
     textures: BoneyardWorldTextures,
+    kind: NativeEnemyRawFireBurstKind,
     eventId: number,
     spawnTick: number,
     position: Readonly<{ x: number; y: number }>,
-    depth: number,
   ) {
     this.root = root
     this.textures = textures
     this.eventId = eventId
+    this.kind = kind
     this.spawnTick = spawnTick
     this.basePosition = { ...position }
-    this.container = new Container({ label: `imp-contact-fire-burst:${eventId}` })
+    this.container = new Container({ label: `${kind}-fire-burst:${eventId}` })
     this.container.eventMode = 'none'
     this.container.position.set(position.x, position.y)
-    this.container.zIndex = depth + 0.01
     this.glow = new Sprite()
     this.frame = new Sprite()
-    this.glow.label = `imp-contact-fire-burst-glow:${eventId}`
-    this.frame.label = `imp-contact-fire-burst-frame:${eventId}`
+    this.glow.label = `${kind}-fire-burst-glow:${eventId}`
+    this.frame.label = `${kind}-fire-burst-frame:${eventId}`
     this.glow.eventMode = 'none'
     this.frame.eventMode = 'none'
     this.container.addChild(this.glow, this.frame)
@@ -269,7 +345,7 @@ class NativeEnemyAttackBurstView {
 
   update(tick: number): boolean {
     const age = Math.max(0, tick - this.spawnTick)
-    const sample = nativeImpContactFireBurstSample(this.eventId, age)
+    const sample = nativeEnemyRawFireBurstSample(this.kind, this.eventId, age)
     if (!sample) return false
     const glowRecord = nativeEnemySpriteRecord('BadGuys', 110)
     const frameRecord = nativeEnemySpriteRecord(
@@ -293,6 +369,19 @@ class NativeEnemyAttackBurstView {
     return true
   }
 
+  painterLayer(): NativeEnemyAuxiliaryPainterLayer {
+    return {
+      eventId: this.eventId,
+      id: `enemy-auxiliary-effect:${this.eventId}`,
+      ...nativeEnemyRawFireBurstPainterPolicy(this.kind),
+      worldY: this.container.position.y,
+    }
+  }
+
+  setDepth(depth: number): void {
+    this.container.zIndex = depth
+  }
+
   setRenderable(renderable: boolean): void {
     this.container.renderable = renderable
   }
@@ -300,6 +389,74 @@ class NativeEnemyAttackBurstView {
   destroy(): void {
     this.root.removeChild(this.container)
     this.container.destroy({ children: true })
+  }
+}
+
+class NativeImpLandingFlareView {
+  private readonly eventId: number
+  private readonly position: Readonly<{ x: number; y: number }>
+  private readonly root: Container
+  private readonly spawnTick: number
+  private readonly sprite = new Sprite()
+  private readonly textures: BoneyardWorldTextures
+
+  constructor(
+    root: Container,
+    textures: BoneyardWorldTextures,
+    eventId: number,
+    spawnTick: number,
+    position: Readonly<{ x: number; y: number }>,
+  ) {
+    this.root = root
+    this.textures = textures
+    this.eventId = eventId
+    this.spawnTick = spawnTick
+    this.position = { ...position }
+    this.sprite.eventMode = 'none'
+    this.sprite.label = `imp-landing-flare:${eventId}`
+    root.addChild(this.sprite)
+    this.update(spawnTick)
+  }
+
+  update(tick: number): boolean {
+    const sample = nativeImpLandingFlareSample(
+      this.eventId,
+      Math.max(0, tick - this.spawnTick),
+    )
+    if (!sample) return false
+    configureBurstSprite(
+      this.sprite,
+      nativeEnemySpriteRecord('BadGuys', 15),
+      this.textures,
+    )
+    this.sprite.position.set(this.position.x, this.position.y)
+    this.sprite.alpha = sample.alpha
+    this.sprite.blendMode = 'add'
+    this.sprite.scale.set(sample.scaleX, sample.scaleY)
+    this.sprite.tint = 0xff0000 | (Math.round(sample.green * 255) << 8)
+    return true
+  }
+
+  painterLayer(): NativeEnemyAuxiliaryPainterLayer {
+    return {
+      eventId: this.eventId,
+      id: `enemy-auxiliary-effect:${this.eventId}`,
+      ...nativeImpLandingFlarePainterPolicy(),
+      worldY: this.position.y,
+    }
+  }
+
+  setDepth(depth: number): void {
+    this.sprite.zIndex = depth
+  }
+
+  setRenderable(renderable: boolean): void {
+    this.sprite.renderable = renderable
+  }
+
+  destroy(): void {
+    this.root.removeChild(this.sprite)
+    this.sprite.destroy()
   }
 }
 

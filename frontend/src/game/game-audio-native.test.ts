@@ -600,6 +600,22 @@ test('pins Deflect swipe to its stock PCM and maps the successful global feedbac
     sourcePosition: null,
     volume: 1,
   })
+  assert.deepEqual(nativeEnemyEventSoundRequest({
+    actorId: 4,
+    eventId: 4,
+    gainScale: 1,
+    pitch: 1.125,
+    runId: 'run-1',
+    sound: 'bite-2',
+    sourcePosition: { x: 10, y: 20 },
+    tick: 121,
+    type: 'enemy-action-sound',
+  }), {
+    cue: 'bite-2',
+    playbackRate: 1.125,
+    sourcePosition: { x: 10, y: 20 },
+    volume: 1,
+  })
 })
 
 test('maps authoritative combat sounds to host-authored requests', () => {

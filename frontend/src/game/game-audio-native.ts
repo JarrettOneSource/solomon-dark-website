@@ -777,7 +777,8 @@ export function nativeEnemyEventSoundRequest(
     }
   }
   if (
-    event.type !== 'enemy-damage-sound'
+    event.type !== 'enemy-action-sound'
+    && event.type !== 'enemy-damage-sound'
     && event.type !== 'enemy-death-sound'
     && event.type !== 'player-damage-sound'
   ) {

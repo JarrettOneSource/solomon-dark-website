@@ -9,6 +9,8 @@ import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
 const baseUrl = process.env.SDR_GAME_SMOKE_URL || 'http://127.0.0.1:4182'
 const screenshotPath = process.env.SDR_ENEMY_VFX_SCREENSHOT
   || join(tmpdir(), 'solomon-dark-enemy-animation-projectile-vfx-20260815.png')
+const impContactScreenshotPath = process.env.SDR_IMP_CONTACT_SCREENSHOT
+  || join(tmpdir(), 'solomon-dark-imp-contact-authority-20260823.png')
 const skeletonEarlyScreenshotPath = process.env.SDR_SKELETON_ATTACK_EARLY_SCREENSHOT
   || join(tmpdir(), 'solomon-dark-skeleton-attack-early-20260816.png')
 const skeletonLateScreenshotPath = process.env.SDR_SKELETON_ATTACK_LATE_SCREENSHOT
@@ -66,6 +68,8 @@ try {
       audioAssetsModule,
       audioBrowserModule,
       economyModule,
+      enemyProjectionModule,
+      enemyStoreModule,
       playerModule,
       presentationModule,
       rendererModule,
@@ -77,6 +81,8 @@ try {
       import('/src/game/game-audio-assets.ts'),
       import('/src/game/game-audio-browser.ts'),
       import('/src/game/core-kernels/hub-economy.ts'),
+      import('/src/game/host/project-boneyard-enemies.ts'),
+      import('/src/game/core-server/boneyard-enemy-store.ts'),
       import('/src/game/core-kernels/player-character.ts'),
       import('/src/game/renderer/native-enemy-presentation.ts'),
       import('/src/game/renderer/boneyard-world-renderer.ts'),
@@ -215,12 +221,11 @@ try {
         1004,
         { x: 880, y: 190 },
         makeAnimation({
-          action: 'imp-contact',
           bodyPose: advanced ? 1 : 3,
           impBodyRotationRadians: advanced ? radians(-30) : radians(35),
           impEffectAlpha: advanced ? 0.45 : 0.9,
           impEffectFrame: advanced ? 9 : 4,
-          state: 'action',
+          state: 'locomotion',
           verticalOffset: advanced ? -8 : -28,
         }),
       ),
@@ -351,6 +356,9 @@ try {
       entry,
       id,
       kind,
+      lightRegistration: kind === 'fire-burst-glow'
+        ? { managerLane: 'transient', registrationOrdinal: 11 }
+        : null,
       lifetimeTicks: 20,
       ownerActorId: id % 8 + 1,
       ownerProjectileId: 100 + id % 8 + 1,
@@ -630,7 +638,26 @@ try {
     const initialPixels = capture(renderer.canvas)
     renderer.consumeEnemyEvent({
       actorId: 4,
+      eventId: 899,
+      gainScale: 1,
+      pitch: 1.05,
+      runId,
+      sound: 'imp-vocal-1',
+      sourcePosition: { x: 880, y: 190 },
+      tick: 120.5,
+      type: 'enemy-action-sound',
+    })
+    renderer.consumeEnemyEvent({
+      actorId: 4,
       eventId: 900,
+      runId,
+      targetPlayerId: 'local',
+      tick: 120.5,
+      type: 'attack-marker',
+    })
+    renderer.consumeEnemyEvent({
+      actorId: 7,
+      eventId: 901,
       runId,
       targetPlayerId: 'local',
       tick: 120.5,
@@ -645,6 +672,116 @@ try {
     enemyVfxImage.src = enemyVfxCopy.toDataURL('image/png')
     document.body.append(enemyVfxImage)
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+
+    const impTarget = {
+      alive: true,
+      collisionRadius: 25,
+      connected: true,
+      eligible: true,
+      headingDeg: 90,
+      position: playerPosition,
+      velocityPerTick: { x: 0, y: 0 },
+    }
+    const stepImpAuthority = (store, tick, spawnIntents = []) => (
+      enemyStoreModule.stepBoneyardEnemyStore(store, {
+        firstProjectileWorldContact: () => null,
+        players: { local: impTarget },
+        resolveMovement: ({ requestedPosition }) => requestedPosition,
+        resolveSpawnIntents: () => spawnIntents,
+        tick,
+      })
+    )
+    let impAuthority = stepImpAuthority(
+      enemyStoreModule.createBoneyardEnemyStore('imp-browser-authority'),
+      0,
+      [{
+        enemyToken: 'IMP',
+        flags: [],
+        id: 1,
+        locationPolicy: 'anywhere',
+        nativeTypeId: 1004,
+        position: { x: playerPosition.x + 50, y: playerPosition.y },
+        spawnTick: 0,
+        waveOrdinal: 10,
+      }],
+    )
+    impAuthority = stepImpAuthority(impAuthority.store, 1)
+    const impSnapshot = (store, tick, events = []) => {
+      const source = snapshotAt(tick, false)
+      return {
+        ...source,
+        players: {
+          ...source.players,
+          local: {
+            ...source.players.local,
+            lighting: {
+              ...source.players.local.lighting,
+              lightRegistration: { managerLane: 'actor', registrationOrdinal: 100 },
+            },
+          },
+        },
+        world: {
+          ...source.world,
+          deathEffects: enemyProjectionModule.projectBoneyardEnemyDeathEffects(store),
+          enemies: enemyProjectionModule.projectBoneyardEnemies(store, tick),
+          enemyEvents: events.map((event) => ({ ...event, runId })),
+          enemyProjectileEffects:
+            enemyProjectionModule.projectBoneyardEnemyProjectileEffects(store),
+          enemyProjectiles: enemyProjectionModule.projectBoneyardEnemyProjectiles(store),
+          mageLightningPulses: [],
+          maggots: enemyProjectionModule.projectBoneyardMaggots(store, tick),
+        },
+      }
+    }
+    const impBeforeSnapshot = impSnapshot(impAuthority.store, 1)
+    const impRenderer = await rendererModule.createBoneyardWorldRenderer({
+      boneyard: loaded,
+      devicePixelRatio: 1,
+      initialSnapshot: impBeforeSnapshot,
+      modAssets: [],
+      modCatalog: [],
+      playerId: 'local',
+      viewport,
+    })
+    impRenderer.canvas.id = 'imp-authority-canvas'
+    document.body.append(impRenderer.canvas)
+    const impBeforeCrop = cropCanvas(copyCanvas(impRenderer.canvas), 760, 350, 220, 200)
+    const impBeforePixels = capture(impBeforeCrop)
+    impAuthority = stepImpAuthority(impAuthority.store, 2)
+    for (const event of impAuthority.events) {
+      impRenderer.consumeEnemyEvent({ ...event, runId })
+    }
+    const impContactSnapshot = impSnapshot(impAuthority.store, 2, impAuthority.events)
+    impRenderer.render(impContactSnapshot)
+    const impContactCrop = cropCanvas(copyCanvas(impRenderer.canvas), 760, 350, 220, 200)
+    const impContactPixels = capture(impContactCrop)
+    const impContactImage = document.createElement('img')
+    impContactImage.id = 'imp-authority-contact-probe'
+    impContactImage.src = impContactCrop.toDataURL('image/png')
+    document.body.append(impContactImage)
+    const impActor = impAuthority.store.actors[0]
+    if (!impActor || impActor.brain.family !== 'imp') {
+      throw new Error('controlled Imp authority lost its actor')
+    }
+    const impAuthorityReceipt = {
+      action: impContactSnapshot.world.enemies[0]?.animation.action,
+      auxiliaryEffectCount: impRenderer.canvas.__sdrBoneyardFrame.enemyAuxiliaryEffectCount,
+      auxiliaryEffectLanes:
+        impRenderer.canvas.__sdrBoneyardFrame.enemyAuxiliaryEffectLanes,
+      damageCount: impAuthority.playerDamage.length,
+      escapeHeadingDeg: impActor.brain.escapeHeadingDeg,
+      horizontalSpeed: impActor.brain.horizontalSpeed,
+      phase: impActor.brain.phase,
+      pixelDifference: compare(impBeforePixels, impContactPixels),
+      sounds: impAuthority.events
+        .filter(({ type }) => type === 'enemy-action-sound')
+        .map(({ sound }) => sound),
+      types: impAuthority.events.map(({ type }) => type),
+      upperAlpha: impActor.brain.effectAlpha,
+      verticalOffset: impActor.brain.verticalOffset,
+    }
+    impRenderer.destroy()
+    impRenderer.canvas.remove()
 
     const skeletonAttackSnapshotAt = (actionProgress, headFacingOffset = 0) => {
       const snapshot = snapshotAt(130, false)
@@ -745,6 +882,7 @@ try {
       auxiliaryPlans,
       context: renderer.canvas.getContext('webgl2') ? 'webgl2' : 'webgl',
       frame: structuredClone(renderer.canvas.__sdrBoneyardFrame),
+      impAuthority: impAuthorityReceipt,
       renderer: renderer.canvas.dataset.gameRenderer,
       rendererName: renderer.canvas.dataset.rendererName,
       skeletonAttackDifference: compare(
@@ -780,7 +918,12 @@ try {
   assert.match(receipt.rendererName.toLowerCase(), /webgl/)
   assert.equal(receipt.context, 'webgl2')
   assert.equal(receipt.frame.enemyCount, 8)
-  assert.equal(receipt.frame.enemyAttackEffectCount, 1)
+  assert.equal(receipt.frame.enemyAuxiliaryEffectCount, 3)
+  assert.deepEqual(receipt.frame.enemyAuxiliaryEffectLanes, [
+    'pre-world-queue',
+    'world-sorted',
+    'post-world-queue',
+  ])
   assert.equal(receipt.frame.enemyFamilies, expectedFamilies)
   assert.equal(receipt.frame.enemyProjectileCount, 8)
   assert.equal(receipt.frame.enemyProjectileEffectCount, 9)
@@ -788,6 +931,30 @@ try {
   assert.deepEqual(receipt.frame.enemyProjectileEffectIds, [201, 202, 203, 204, 205, 206, 207, 208, 209])
   assert.equal(receipt.frame.maggotCount, 1)
   assert.equal(receipt.frame.mageLightningCount, 1)
+  assert.equal(receipt.impAuthority.action, null)
+  assert.equal(receipt.impAuthority.auxiliaryEffectCount, 2)
+  assert.deepEqual(receipt.impAuthority.auxiliaryEffectLanes, [
+    'pre-world-queue',
+    'world-sorted',
+  ])
+  assert.equal(receipt.impAuthority.damageCount, 1)
+  assert.equal(receipt.impAuthority.phase, 'flight')
+  assert.ok(receipt.impAuthority.escapeHeadingDeg !== null)
+  assert.ok(
+    receipt.impAuthority.horizontalSpeed >= 4.5
+      && receipt.impAuthority.horizontalSpeed <= 11.25,
+  )
+  assert.equal(receipt.impAuthority.upperAlpha, 1)
+  assert.equal(receipt.impAuthority.verticalOffset, 0)
+  assert.deepEqual(receipt.impAuthority.types, [
+    'enemy-action-sound',
+    'enemy-action-sound',
+    'attack-marker',
+  ])
+  assert.match(receipt.impAuthority.sounds[0], /^imp-vocal-[1-8]$/)
+  assert.match(receipt.impAuthority.sounds[1], /^bite-[1-3]$/)
+  assert.ok(receipt.impAuthority.pixelDifference.changedPixels > 50)
+  assert.ok(receipt.impAuthority.pixelDifference.channelDelta > 1_000)
   assert.deepEqual(receipt.ambientRequests, [
     { cue: 'flyblown-loop', gain: 1 },
     { cue: 'maggots-loop', gain: 0.0025 },
@@ -882,6 +1049,9 @@ try {
   await page.locator('#enemy-animation-projectile-vfx-probe').screenshot({
     path: screenshotPath,
   })
+  await page.locator('#imp-authority-contact-probe').screenshot({
+    path: impContactScreenshotPath,
+  })
   await page.locator('#skeleton-attack-early-probe').screenshot({
     path: skeletonEarlyScreenshotPath,
   })
@@ -901,6 +1071,7 @@ try {
     ...receipt,
     consoleErrors,
     failedResponses,
+    impContactScreenshotPath,
     pageErrors,
     screenshotPath,
     skeletonEarlyScreenshotPath,

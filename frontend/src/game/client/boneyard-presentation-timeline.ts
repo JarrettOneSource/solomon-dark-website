@@ -826,7 +826,13 @@ function copyLightRegistration<T extends { managerLane: 'actor' | 'transient'; r
 function copyEnemyProjectileEffect(
   effect: BoneyardEnemyProjectileEffectSnapshot,
 ): BoneyardEnemyProjectileEffectSnapshot {
-  return { ...effect, position: { ...effect.position } }
+  return {
+    ...effect,
+    lightRegistration: effect.lightRegistration === null
+      ? null
+      : { ...effect.lightRegistration },
+    position: { ...effect.position },
+  }
 }
 
 function copyEnemyDeathEffect(

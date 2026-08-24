@@ -183,31 +183,36 @@ test('Zombie beat selects exactly one arm at native thresholds', () => {
 })
 
 test('Imp flight uses constructor fields and collision-driven bounce VFX', () => {
-  const constructorDraws = draws([0.25, 0.6, 0.75])
-  assert.deepEqual(createNativeImpFlightState(constructorDraws), {
-    bodyRotationDeg: 22.5,
+  const constructorDraws = draws([0.25, 0.6, 0.75, 0.75])
+  assert.deepEqual(createNativeImpFlightState(constructorDraws, 4.5), {
+    baseHorizontalSpeed: 4.5,
+    bodyRotationDeg: 33.75,
     bodyVariant: 2,
     effectAlpha: 0,
     effectPhase: 2.5,
+    horizontalSpeed: 4.5,
     verticalOffset: 0,
     verticalVelocity: 0,
   })
 
   const bounce = stepNativeImpFlight({
+    baseHorizontalSpeed: 4.5,
     bodyRotationDeg: 22.5,
     bodyVariant: 2,
     effectAlpha: 0.4,
     effectPhase: 9.9,
+    horizontalSpeed: 2,
     verticalOffset: 0,
     verticalVelocity: 0.4,
-  }, 2, draws([0.5, 0.99, 0, 0.15]))
+  }, draws([0.5, 0.99, 0, 0.15, 0.75, 0]))
   assert.equal(bounce.bounced, true)
   assert.equal(bounce.state.effectPhase, 0.40000000000000036)
   assert.equal(bounce.state.effectAlpha, 1)
-  assert.equal(bounce.state.bodyVariant, 3)
-  assert.equal(bounce.state.bodyRotationDeg, -60)
+  assert.equal(bounce.state.horizontalSpeed, 7.875)
+  assert.equal(bounce.state.bodyVariant, 0)
+  assert.equal(bounce.state.bodyRotationDeg, 9)
   assert.equal(bounce.state.verticalOffset, 0)
-  assert.equal(bounce.state.verticalVelocity, -6.75)
+  assert.ok(Math.abs(bounce.state.verticalVelocity + 5.97) < 1e-12)
   assert.equal(nativeImpEffectFrame(9.999), 9)
 })
 

@@ -1,5 +1,8 @@
 import type { BoneyardEnemyDeathEffectSnapshot } from './game-state.ts'
-import { BONEYARD_ENEMY_DEATH_EFFECT_KINDS } from './game-state.ts'
+import {
+  BONEYARD_ENEMY_DEATH_EFFECT_KINDS,
+  BONEYARD_ENEMY_DEATH_EFFECT_PRESENTATION_OWNERS,
+} from './game-state.ts'
 import type {
   ReplicatedEntityDescriptor,
   ReplicatedEntitySample,
@@ -10,7 +13,7 @@ export const BONEYARD_ENEMY_DEATH_EFFECT_ENTITY_TYPE_ID = 5
 const POSITION_SCALE = 16
 const VALUE_SCALE = 1024
 const ANGLE_SCALE = 4096
-const DESCRIPTOR_LENGTH = 8
+const DESCRIPTOR_LENGTH = 9
 const SAMPLE_LENGTH = 11
 const ATLASES = ['BadGuys', 'DeadHawg', 'Demon'] as const
 const BLEND_MODES = ['add', 'normal'] as const
@@ -28,6 +31,10 @@ export const BONEYARD_ENEMY_DEATH_EFFECT_ENTITY_REGISTRATION = {
       && arrayIndex(descriptor[5], BLEND_MODES.length)
       && nonnegativeInteger(descriptor[6])
       && (descriptor[7] === 0 || descriptor[7] === 1)
+      && arrayIndex(
+        descriptor[8],
+        BONEYARD_ENEMY_DEATH_EFFECT_PRESENTATION_OWNERS.length,
+      )
   },
   sampleIsValid(sample: ReplicatedEntitySample): boolean {
     return sample.length === SAMPLE_LENGTH
@@ -54,6 +61,11 @@ export function boneyardEnemyDeathEffectDescriptor(
     requiredIndex(BLEND_MODES, effect.blendMode, 'death effect blend mode'),
     effect.spawnTick,
     Number(effect.shadow),
+    requiredIndex(
+      BONEYARD_ENEMY_DEATH_EFFECT_PRESENTATION_OWNERS,
+      effect.presentationOwner,
+      'death effect presentation owner',
+    ),
   ]
 }
 
@@ -109,6 +121,7 @@ export function materializeBoneyardEnemyDeathEffect(
     id: descriptor[1],
     kind: BONEYARD_ENEMY_DEATH_EFFECT_KINDS[descriptor[3]]!,
     ownerActorId: descriptor[2],
+    presentationOwner: BONEYARD_ENEMY_DEATH_EFFECT_PRESENTATION_OWNERS[descriptor[8]]!,
     position: {
       x: dequantize(sample[2], POSITION_SCALE),
       y: dequantize(sample[3], POSITION_SCALE) - height,

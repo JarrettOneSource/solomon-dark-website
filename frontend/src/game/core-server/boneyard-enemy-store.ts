@@ -3,6 +3,7 @@ import { NATIVE_ACTOR_SEPARATION_EPSILON } from '../core-kernels/actor-physics.t
 import {
   createNativeImpFlightState,
   stepNativeImpFlight,
+  type NativeImpFlightState,
 } from '../core-kernels/boneyard-imp-flight.ts'
 import { NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM } from '../core-kernels/boneyard-zombie-beat.ts'
 import type { BoneyardPoint } from '../core-kernels/boneyard.ts'
@@ -98,6 +99,12 @@ const NATIVE_IMP_SPLIT_HEADING_OFFSETS = Object.freeze([-90, 90] as const)
 export const NATIVE_IMP_SPLIT_CHILD_COUNT = NATIVE_IMP_SPLIT_HEADING_OFFSETS.length
 export const NATIVE_IMP_SPLIT_LIVE_GUARD_MAXIMUM = 68
 export const NATIVE_IMP_CONSTRUCTION_MAXIMUM = 70
+export const NATIVE_IMP_CONTACT_BASE_RADIUS = 45
+export const NATIVE_IMP_CONTACT_RADIUS_SCALE = 1.25
+export const NATIVE_DEMON_RAW_FIRE_BURST_PHASE_PER_TICK = 0.25 * 0.75
+export const NATIVE_DEMON_RAW_FIRE_BURST_TICKS = Math.ceil(
+  4 / NATIVE_DEMON_RAW_FIRE_BURST_PHASE_PER_TICK,
+)
 
 export const NATIVE_SKELETON_ACTION_PROGRAMS = Object.freeze({
   claw: Object.freeze({ markerProgress: 4, progressPerTick: 0.125, strictEnd: 7 }),
@@ -127,7 +134,6 @@ export const NATIVE_DEMON_BOMB_ACTION_PROGRAM = Object.freeze({
 
 /** Named deterministic web programs for families whose exact action clocks remain open. */
 export const BOUNDED_ENEMY_ACTION_PROGRAMS = Object.freeze({
-  impContact: Object.freeze({ cooldownTicks: 18, markerTick: 6, strictEndTick: 11 }),
   wraithDrain: Object.freeze({ cooldownTicks: 50, markerTick: 4, strictEndTick: 9 }),
 })
 
@@ -138,7 +144,6 @@ export const BOUNDED_ZOMBIE_KNOCKBACK_DISTANCE = 10
 export const BOUNDED_ENEMY_ATTACK_REACH = Object.freeze({
   COFFIN: 0,
   DEMON: 180,
-  IMP: 28,
   SKELETON: 36,
   SKELETONARCHER: 240,
   SKELETONMAGE: 220,
@@ -262,19 +267,10 @@ export interface BoneyardMageBrain extends ActionClock {
   readonly shieldTicksRemaining: number
 }
 
-export interface BoneyardImpBrain {
-  readonly actionTick: number
-  readonly bodyRotationDeg: number
-  readonly bodyVariant: number
-  readonly contactTargetPlayerId: string | null
-  readonly cooldownTicks: number
-  readonly effectAlpha: number
-  readonly effectPhase: number
+export interface BoneyardImpBrain extends NativeImpFlightState {
+  readonly escapeHeadingDeg: number | null
   readonly family: 'imp'
-  readonly markerEmitted: boolean
-  readonly phase: 'flight' | 'contact' | 'cooldown' | 'death'
-  readonly verticalOffset: number
-  readonly verticalVelocity: number
+  readonly phase: 'flight' | 'death'
   readonly visualRngState: number
 }
 
@@ -460,6 +456,7 @@ export interface BoneyardEnemyProjectileEffect {
   readonly id: BoneyardEnemyProjectileEffectId
   readonly kind: BoneyardEnemyProjectileEffectKind
   readonly lastStepTick: number
+  readonly lightRegistration: NativeLightProviderRegistration | null
   readonly lifetimeTicks: number
   readonly ownerActorId: BoneyardEnemyActorId
   readonly ownerProjectileId: BoneyardEnemyProjectileId
@@ -603,7 +600,38 @@ export type BoneyardPlayerDamageSound =
   | 'wizard-ouch-2'
   | 'wizard-ouch-3'
 
+export type BoneyardEnemyActionSound =
+  | 'bite-1'
+  | 'bite-2'
+  | 'bite-3'
+  | 'imp-vocal-1'
+  | 'imp-vocal-2'
+  | 'imp-vocal-3'
+  | 'imp-vocal-4'
+  | 'imp-vocal-5'
+  | 'imp-vocal-6'
+  | 'imp-vocal-7'
+  | 'imp-vocal-8'
+
+const NATIVE_IMP_VOCAL_SOUNDS = Object.freeze([
+  'imp-vocal-1',
+  'imp-vocal-2',
+  'imp-vocal-3',
+  'imp-vocal-4',
+  'imp-vocal-5',
+  'imp-vocal-6',
+  'imp-vocal-7',
+  'imp-vocal-8',
+] as const)
+
+const NATIVE_IMP_BITE_SOUNDS = Object.freeze([
+  'bite-1',
+  'bite-2',
+  'bite-3',
+] as const)
+
 export type BoneyardCombatSound =
+  | BoneyardEnemyActionSound
   | BoneyardEnemyDamageSound
   | BoneyardEnemyDeathSound
   | BoneyardPlayerDamageSound
@@ -611,6 +639,7 @@ export type BoneyardCombatSound =
 export type BoneyardEnemySemanticEventType =
   | 'attack-marker'
   | 'coffin-maggot-release'
+  | 'enemy-action-sound'
   | 'enemy-death'
   | 'enemy-death-sound'
   | 'enemy-damage-sound'
@@ -1016,6 +1045,7 @@ function standaloneEnemyLightProviderOrderState(source: BoneyardEnemyStore) {
     ...source.actors.map(({ lightRegistration }) => lightRegistration),
     ...source.maggots.map(({ lightRegistration }) => lightRegistration),
     ...source.projectiles.map(({ lightRegistration }) => lightRegistration),
+    ...source.projectileEffects.map(({ lightRegistration }) => lightRegistration),
   ]) {
     if (registration === null) continue
     nextRegistrationOrdinal[registration.managerLane] = Math.max(
@@ -1408,6 +1438,7 @@ export function tumbleBoneyardArrow(
     id: source.nextProjectileEffectId,
     kind: 'arrow-tumble',
     lastStepTick: tick,
+    lightRegistration: null,
     lifetimeTicks: 60,
     ownerActorId: projectile.ownerActorId,
     ownerProjectileId: projectile.id,
@@ -1905,14 +1936,14 @@ function createBrain(
         : 0,
     }
     case 'IMP': {
-      const flight = createNativeImpFlightState(() => drawUnit(work))
+      const flight = createNativeImpFlightState(
+        () => drawUnit(work),
+        config.baseSpeed,
+      )
       return {
-        actionTick: 0,
         ...flight,
-        contactTargetPlayerId: null,
-        cooldownTicks: 0,
+        escapeHeadingDeg: null,
         family: 'imp',
-        markerEmitted: false,
         phase: 'flight',
         visualRngState: work.rngState,
       }
@@ -2180,10 +2211,7 @@ function stepLivingActor(
     switch (articulated.brain.family) {
       case 'skeleton': return stepSkeleton(work, articulated, articulated.brain, context)
       case 'archer': return stepArcher(work, articulated, articulated.brain, context)
-      case 'imp': return advanceImpVisual(
-        articulated,
-        stepImp(work, articulated, articulated.brain, context),
-      )
+      case 'imp': return stepImp(work, articulated, articulated.brain, context)
       case 'zombie': return advanceZombieVisual(
         articulated,
         stepZombie(work, articulated, articulated.brain, context),
@@ -2686,69 +2714,163 @@ function stepImp(
   brain: BoneyardImpBrain,
   context: BoneyardEnemyStoreStepContext,
 ): BoneyardEnemyActor {
-  if (actor.targetPlayerId === null) {
-    const reset = resetImp(actor, brain)
-    return moveTowardTarget(work, reset, reset.brain, context, 1)
+  if (brain.phase === 'death') return actor
+  const moved = moveImp(actor, brain, work, context)
+  let visualRngState = brain.visualRngState
+  const random = (): number => {
+    const draw = nextBoneyardWaveRandom(visualRngState)
+    visualRngState = draw.state
+    return draw.value
   }
-  if (brain.phase === 'cooldown') {
-    const remaining = Math.max(0, brain.cooldownTicks - 1)
+  const flight = stepNativeImpFlight(brain, random)
+  let stepped: BoneyardEnemyActor = {
+    ...moved,
+    brain: {
+      ...brain,
+      ...flight.state,
+      visualRngState,
+    },
+  }
+  if (!flight.bounced) return stepped
+
+  const vocal = randomIntegerFromUnit(random, 8)
+  emitEnemyActionSound(
+    work,
+    context.tick,
+    stepped,
+    NATIVE_IMP_VOCAL_SOUNDS[vocal]!,
+    1 + random() * 0.1,
+  )
+  // Landing vslot +0x98 record-15 scale and green-channel draws occur before
+  // the contact-distance branch. Clients key the cosmetic recipe from the
+  // replay-safe vocal event identity while authority retains native draw order.
+  random()
+  random()
+  const targetPlayerId = stepped.targetPlayerId
+  const target = targetPlayerId === null ? undefined : context.players[targetPlayerId]
+  if (
+    targetPlayerId === null
+    || !target
+    || !targetEligible(target)
+    || !targetPlayerWithinAttackReach(
+      stepped,
+      targetPlayerId,
+      context.players,
+      (target.collisionRadius + NATIVE_IMP_CONTACT_BASE_RADIUS)
+        * NATIVE_IMP_CONTACT_RADIUS_SCALE,
+    )
+  ) {
+    const steppedBrain = stepped.brain
+    if (steppedBrain.family !== 'imp') throw new Error('Imp flight changed brain family')
     return {
-      ...actor,
-      brain: remaining === 0
-        ? {
-            ...brain,
-            actionTick: 0,
-            contactTargetPlayerId: null,
-            cooldownTicks: 0,
-            markerEmitted: false,
-            phase: 'flight',
-          }
-        : { ...brain, cooldownTicks: remaining },
+      ...stepped,
+      brain: { ...steppedBrain, visualRngState },
     }
   }
-  if (brain.phase === 'contact') {
-    const nextTick = brain.actionTick + staffAttackSpeed(actor)
-    let markerEmitted = brain.markerEmitted
-    if (!markerEmitted && nextTick >= BOUNDED_ENEMY_ACTION_PROGRAMS.impContact.markerTick) {
-      const eventId = attackMarker(work, actor, context.tick, brain.contactTargetPlayerId)
-      directContactPlayerDamage(
-        work,
-        actor,
-        brain.contactTargetPlayerId,
-        context.players,
-        BOUNDED_ENEMY_ATTACK_REACH.IMP,
-        eventId,
-      )
-      markerEmitted = true
-    }
-    if (nextTick > BOUNDED_ENEMY_ACTION_PROGRAMS.impContact.strictEndTick) {
-      return {
-        ...actor,
-        brain: {
-          ...brain,
-          actionTick: 0,
-          contactTargetPlayerId: null,
-          cooldownTicks: BOUNDED_ENEMY_ACTION_PROGRAMS.impContact.cooldownTicks,
-          markerEmitted: false,
-          phase: 'cooldown',
-        },
-      }
-    }
-    return { ...actor, brain: { ...brain, actionTick: nextTick, markerEmitted } }
+
+  const bite = randomIntegerFromUnit(random, 3)
+  emitEnemyActionSound(
+    work,
+    context.tick,
+    stepped,
+    NATIVE_IMP_BITE_SOUNDS[bite]!,
+    1 + random() * 0.25,
+  )
+
+  const eventId = attackMarker(work, stepped, context.tick, targetPlayerId)
+  // Raw FireBurst constructor rotation/magnitude/sign and caller scale.
+  random()
+  random()
+  random()
+  random()
+  const escapeHeadingDeg = positiveModulo(stepped.headingDeg + 180 + random() * 45, 360)
+  const steppedBrain = stepped.brain
+  if (steppedBrain.family !== 'imp') throw new Error('Imp contact changed brain family')
+  stepped = {
+    ...stepped,
+    headingDeg: escapeHeadingDeg,
+    brain: {
+      ...steppedBrain,
+      escapeHeadingDeg,
+      visualRngState,
+    },
   }
-  if (targetWithinAttackReach(actor, context.players, BOUNDED_ENEMY_ATTACK_REACH.IMP)) {
-    return {
-      ...actor,
-      brain: {
-        ...brain,
-        actionTick: 0,
-        contactTargetPlayerId: actor.targetPlayerId,
-        markerEmitted: false,
-        phase: 'contact',
-      },
-    }
+  directContactPlayerDamage(
+    work,
+    stepped,
+    targetPlayerId,
+    context.players,
+    (target.collisionRadius + NATIVE_IMP_CONTACT_BASE_RADIUS)
+      * NATIVE_IMP_CONTACT_RADIUS_SCALE,
+    eventId,
+  )
+  return stepped
+}
+
+function moveImp(
+  actor: BoneyardEnemyActor,
+  brain: BoneyardImpBrain,
+  work: WorkingStep,
+  context: BoneyardEnemyStoreStepContext,
+): BoneyardEnemyActor {
+  if (context.tick < actor.nextMovementTick) return actor
+  const headingDeg = brain.escapeHeadingDeg ?? (
+    actor.targetPlayerId === null
+      ? actor.headingDeg
+      : targetHeading(actor.position, actor.targetPlayerId, context.players)
+  )
+  const statusFactor = work.pathStatusFactors.get(actor.id) ?? 1
+  const movementScalar = Math.fround(
+    actor.config.chaseSpeed
+      * brain.horizontalSpeed
+      * actor.staffMovementFactor
+      * actor.config.scale
+      * actor.path.speedFactor
+      * statusFactor,
+  )
+  const radians = headingDeg * Math.PI / 180
+  const distance = 0.25 * movementScalar * NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS
+  const delta = Object.freeze({
+    x: Math.sin(radians) * distance,
+    y: -Math.cos(radians) * distance,
+  })
+  const position = context.resolveMovement({
+    actorId: actor.id,
+    delta,
+    position: actor.position,
+    purpose: 'movement',
+    radius: actor.config.collisionRadius,
+    requestedPosition: {
+      x: actor.position.x + delta.x,
+      y: actor.position.y + delta.y,
+    },
+  })
+  validatePoint(position, 'resolved Imp position')
+  const traveled = Math.hypot(
+    position.x - actor.position.x,
+    position.y - actor.position.y,
+  )
+  const recovery = stepNativeEnemyPathRecovery(
+    actor.path,
+    work.steeringRngState,
+    {
+      flankingEnabled: actor.config.flanking,
+      requestedDistance: distance,
+      statusFactor,
+      tick: context.tick,
+      traveledDistance: traveled,
+    },
+  )
+  work.steeringRngState = recovery.rngState
+  return {
+    ...actor,
+    brain,
+    headingDeg,
+    lastMovementTick: traveled === 0 ? actor.lastMovementTick : context.tick,
+    nextMovementTick: context.tick + NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS,
+    path: recovery.state,
+    position: Object.freeze({ ...position }),
   }
-  return moveTowardTarget(work, actor, brain, context, 1)
 }
 
 function stepZombie(
@@ -2960,6 +3082,10 @@ function stepDemon(
       && nextProgress >= NATIVE_DEMON_BOMB_ACTION_PROGRAM.markerProgress
     ) {
       attackMarker(work, actor, context.tick)
+      // Raw Anim_FireBurst constructor: rotation, angular magnitude, sign.
+      drawUnit(work)
+      drawUnit(work)
+      drawInteger(work, 2)
       spawnProjectile(work, actor, context.tick, 'demon-bomb', actor.config.primaryDamage ?? 0)
       markerEmitted = true
     }
@@ -2983,34 +3109,6 @@ function stepDemon(
     }
   }
   return moveTowardTarget(work, actor, brain, context, 1)
-}
-
-function advanceImpVisual(
-  source: BoneyardEnemyActor,
-  stepped: BoneyardEnemyActor,
-): BoneyardEnemyActor {
-  if (source.brain.family !== 'imp' || stepped.brain.family !== 'imp') return stepped
-  let visualRngState = source.brain.visualRngState
-  const random = (): number => {
-    const draw = nextBoneyardWaveRandom(visualRngState)
-    visualRngState = draw.state
-    return draw.value
-  }
-  const horizontalVelocity = source.targetPlayerId === null
-    ? 0
-    : 0.25
-      * source.config.chaseSpeed
-      * staffMovementSpeed(source)
-      * source.config.scale
-  const flight = stepNativeImpFlight(source.brain, horizontalVelocity, random)
-  return {
-    ...stepped,
-    brain: {
-      ...stepped.brain,
-      ...flight.state,
-      visualRngState,
-    },
-  }
 }
 
 function advanceZombieVisual(
@@ -3841,7 +3939,7 @@ function interruptNativeSecondaryAction(
     case 'skeleton': return resetSkeleton(actor, actor.brain)
     case 'archer': return resetArcher(actor, actor.brain)
     case 'mage': return resetMage(actor, actor.brain)
-    case 'imp': return resetImp(actor, actor.brain)
+    case 'imp': return actor
     case 'zombie': return resetZombie(actor, actor.brain)
     case 'wraith': return resetWraith(actor, actor.brain)
     case 'demon': return resetDemon(actor, actor.brain)
@@ -4383,6 +4481,7 @@ interface SpawnProjectileEffectOptions {
   readonly blendMode?: BoneyardEnemyProjectileEffect['blendMode']
   readonly entry: number
   readonly lifetimeTicks: number
+  readonly lightRegistration?: NativeLightProviderRegistration
   readonly phaseOriginTicks?: number
   readonly rotationDeg?: number
   readonly scale?: number
@@ -4409,6 +4508,7 @@ function spawnProjectileEffect(
     id: work.nextProjectileEffectId,
     kind,
     lastStepTick: tick,
+    lightRegistration: options.lightRegistration ?? null,
     lifetimeTicks: options.lifetimeTicks,
     ownerActorId: projectile.ownerActorId,
     ownerProjectileId: projectile.id,
@@ -4561,17 +4661,23 @@ function spawnFireBurst(
   projectile: BoneyardEnemyProjectile,
   tick: number,
   position: Readonly<BoneyardPoint>,
-  baseScale: number,
+  scaleDomain: 'fire-arrow' | 'firebolt',
 ): void {
-  const scale = baseScale + (drawUnit(work) * 2 - 1) * 0.1
   const rotationDeg = drawUnit(work) * 360
-  const angularDirection = drawUnit(work) < 0.5 ? -1 : 1
-  const angularVelocityDeg = angularDirection * (0.5 + drawUnit(work))
-  const burstPosition = Object.freeze({ x: position.x, y: position.y - 1 })
+  const angularMagnitude = 0.5 + drawUnit(work)
+  const angularDirection = drawInteger(work, 2) === 0 ? -1 : 1
+  const angularVelocityDeg = angularDirection * angularMagnitude
+  const scaleMagnitude = drawUnit(work) * 0.1
+  const scale = scaleDomain === 'fire-arrow'
+    ? 0.5 + scaleMagnitude
+    : 0.75 + (drawInteger(work, 2) === 0 ? -scaleMagnitude : scaleMagnitude)
+  const burstPosition = Object.freeze({ x: position.x, y: position.y - 10 })
+  const lightRegistration = work.registerProjectileLightProvider('transient')
   spawnProjectileEffect(work, projectile, tick, burstPosition, 'fire-burst-glow', {
     alpha: 0.5,
     alphaLossPerTick: 0.5 / NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS.fireBurstTicks,
     entry: 110,
+    lightRegistration,
     lifetimeTicks: NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS.fireBurstTicks,
     scale: scale * 5,
     tint: 0xff8000,
@@ -4628,10 +4734,12 @@ function spawnProjectileImpactEffects(
 ): void {
   switch (projectile.kind) {
     case 'arrow':
-      if (projectile.payload === 'fire') spawnFireBurst(work, projectile, tick, position, 0.5)
+      if (projectile.payload === 'fire') {
+        spawnFireBurst(work, projectile, tick, position, 'fire-arrow')
+      }
       return
     case 'firebolt':
-      spawnFireBurst(work, projectile, tick, position, 0.75)
+      spawnFireBurst(work, projectile, tick, position, 'firebolt')
       return
     case 'guided-missile': {
       const mainEntry = projectile.payload === 'cold' ? 110 : 111
@@ -5388,32 +5496,46 @@ function spawnEnemyDeathEffects(
           },
         )
       }
-      const burstScale = 0.9 + drawUnit(work) * 0.2
+      const burstRotationDeg = drawUnit(work) * 360
+      const burstAngularMagnitude = 0.5 + drawUnit(work)
+      const burstAngularVelocityDeg = (drawInteger(work, 2) === 0 ? -1 : 1)
+        * burstAngularMagnitude
       spawnSimpleDeathEffect(work, actor, tick, {
         alpha: 0.5,
-        alphaLossPerTick: 0.5 / NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS.fireBurstTicks,
+        alphaLossPerTick: 0.5 * NATIVE_DEMON_RAW_FIRE_BURST_PHASE_PER_TICK / 4,
         atlas: 'BadGuys',
         blendMode: 'normal',
         entry: 110,
         kind: 'fade',
-        lifetimeTicks: NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS.fireBurstTicks,
-        position: { x: actor.position.x, y: actor.position.y - 1 },
+        lifetimeTicks: NATIVE_DEMON_RAW_FIRE_BURST_TICKS,
+        position: { x: actor.position.x, y: actor.position.y - 20 },
         role: 'demon-death-fire-burst-glow',
-        scale: burstScale * 5,
+        scale: 10,
         spawnDelayTicks: 95,
         tint: 0xff8000,
         velocity: { x: 0, y: -1 },
       })
-      spawnSpriteArray(work, actor, tick, 'demon-death-fire-burst-frame', 251, 4, 4, {
-        alphaLossPerTick: 0,
-        blendMode: 'add',
-        lifetimeTicks: NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS.fireBurstTicks,
-        position: { x: actor.position.x, y: actor.position.y - 1 },
-        scale: burstScale,
-        spawnDelayTicks: 95,
-        tint: 0xffffbf,
-        velocity: { x: 0, y: -1 },
-      })
+      spawnSpriteArray(
+        work,
+        actor,
+        tick,
+        'demon-death-fire-burst-frame',
+        251,
+        4,
+        1 / NATIVE_DEMON_RAW_FIRE_BURST_PHASE_PER_TICK,
+        {
+          alphaLossPerTick: 0,
+          angularVelocityDeg: burstAngularVelocityDeg,
+          blendMode: 'add',
+          lifetimeTicks: NATIVE_DEMON_RAW_FIRE_BURST_TICKS,
+          position: { x: actor.position.x, y: actor.position.y - 20 },
+          rotationDeg: burstRotationDeg,
+          scale: 2,
+          spawnDelayTicks: 95,
+          tint: 0xffffbf,
+          velocity: { x: 0, y: -1 },
+        },
+      )
       return
     case 'COFFIN': {
       for (const entry of SKELETON_BASE_FRAGMENT_ENTRIES) {
@@ -5532,6 +5654,21 @@ function emitEnemyDeathSound(
 ): void {
   emitEvent(work, tick, 'enemy-death-sound', actor.id, {
     gainScale,
+    pitch,
+    sound,
+    sourcePosition: { ...actor.position },
+  })
+}
+
+function emitEnemyActionSound(
+  work: WorkingStep,
+  tick: number,
+  actor: DeathEffectOwner,
+  sound: BoneyardEnemyActionSound,
+  pitch: number,
+): void {
+  emitEvent(work, tick, 'enemy-action-sound', actor.id, {
+    gainScale: 1,
     pitch,
     sound,
     sourcePosition: { ...actor.position },
@@ -5819,11 +5956,13 @@ function spawnSpriteArray(
   frameTicks: number,
   options: Readonly<{
     alphaLossPerTick?: number
+    angularVelocityDeg?: number
     atlas?: BoneyardEnemyDeathEffect['atlas']
     blendMode?: BoneyardEnemyDeathEffect['blendMode']
     kind?: 'fire-array' | 'sprite-array'
     lifetimeTicks?: number
     position?: Readonly<BoneyardPoint>
+    rotationDeg?: number
     scale?: number
     spawnDelayTicks?: number
     tint?: number
@@ -5834,6 +5973,7 @@ function spawnSpriteArray(
     alpha: 1,
     alphaLossPerTick: options.alphaLossPerTick
       ?? (options.kind === 'fire-array' ? 0 : 1 / (frameCount * frameTicks)),
+    angularVelocityDeg: options.angularVelocityDeg ?? 0,
     atlas: options.atlas ?? 'BadGuys',
     blendMode: options.blendMode ?? 'add',
     entry: firstEntry,
@@ -5847,6 +5987,7 @@ function spawnSpriteArray(
         : frameCount * frameTicks),
     position: options.position,
     role,
+    rotationDeg: options.rotationDeg ?? 0,
     scale: options.scale ?? 1,
     spawnDelayTicks: options.spawnDelayTicks,
     tint: options.tint,
@@ -5928,6 +6069,13 @@ function drawUnit(work: WorkingStep): number {
   const draw = nextBoneyardWaveRandom(work.rngState)
   work.rngState = draw.state
   return draw.value
+}
+
+function randomIntegerFromUnit(random: () => number, count: number): number {
+  if (!Number.isSafeInteger(count) || count <= 0) {
+    throw new RangeError('random integer count must be a positive safe integer')
+  }
+  return Math.min(count - 1, Math.floor(random() * count))
 }
 
 function drawLocomotionPhase(work: WorkingStep): number {
@@ -6128,20 +6276,6 @@ function resetMage(actor: BoneyardEnemyActor, brain: BoneyardMageBrain): Boneyar
   return brain.phase === 'range-control' ? actor : {
     ...actor,
     brain: { ...brain, actionProgress: 0, markerEmitted: false, phase: 'range-control' },
-  }
-}
-
-function resetImp(actor: BoneyardEnemyActor, brain: BoneyardImpBrain): BoneyardEnemyActor {
-  return brain.phase === 'flight' ? actor : {
-    ...actor,
-    brain: {
-      ...brain,
-      actionTick: 0,
-      contactTargetPlayerId: null,
-      cooldownTicks: 0,
-      markerEmitted: false,
-      phase: 'flight',
-    },
   }
 }
 

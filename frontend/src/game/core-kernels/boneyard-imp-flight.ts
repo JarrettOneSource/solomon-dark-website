@@ -4,10 +4,12 @@ export const NATIVE_IMP_BODY_POSE_COUNT = 4
 export const NATIVE_IMP_UPPER_EFFECT_FRAME_COUNT = 10
 
 export interface NativeImpFlightState {
+  readonly baseHorizontalSpeed: number
   readonly bodyRotationDeg: number
   readonly bodyVariant: number
   readonly effectAlpha: number
   readonly effectPhase: number
+  readonly horizontalSpeed: number
   readonly verticalOffset: number
   readonly verticalVelocity: number
 }
@@ -20,15 +22,19 @@ export interface NativeImpFlightStep {
 /** Constructor 0x00473E30, restricted to fields consumed by renderer 0x00492E10. */
 export function createNativeImpFlightState(
   random: () => number,
+  baseHorizontalSpeed: number,
 ): NativeImpFlightState {
+  requirePositiveFinite(baseHorizontalSpeed, 'Imp base horizontal speed')
   const effectPhase = random() * NATIVE_IMP_UPPER_EFFECT_FRAME_COUNT
   const bodyVariant = randomInteger(random, NATIVE_IMP_BODY_POSE_COUNT)
   const bodyRotationDeg = signedRandom(random, 45)
   return {
+    baseHorizontalSpeed,
     bodyRotationDeg,
     bodyVariant,
     effectAlpha: 0,
     effectPhase,
+    horizontalSpeed: baseHorizontalSpeed,
     verticalOffset: 0,
     verticalVelocity: 0,
   }
@@ -37,27 +43,26 @@ export function createNativeImpFlightState(
 /** Fixed-tick flight fields from Imp::Tick 0x00485DC0. */
 export function stepNativeImpFlight(
   source: NativeImpFlightState,
-  horizontalVelocity: number,
   random: () => number,
 ): NativeImpFlightStep {
-  if (!Number.isFinite(horizontalVelocity)) {
-    throw new RangeError('Imp horizontal velocity must be finite')
-  }
-  if (horizontalVelocity === 0) return { bounced: false, state: source }
+  requirePositiveFinite(source.baseHorizontalSpeed, 'Imp base horizontal speed')
+  requirePositiveFinite(source.horizontalSpeed, 'Imp horizontal speed')
 
   let effectPhase = positiveModulo(
-    source.effectPhase + Math.abs(horizontalVelocity) * 0.25,
+    source.effectPhase + Math.abs(source.horizontalSpeed) * 0.25,
     NATIVE_IMP_UPPER_EFFECT_FRAME_COUNT,
   )
   let verticalOffset = source.verticalOffset + source.verticalVelocity
   let verticalVelocity = source.verticalVelocity + 0.4
   let effectAlpha = Math.max(0, source.effectAlpha - 0.05)
+  let horizontalSpeed = source.horizontalSpeed
   let bodyRotationDeg = source.bodyRotationDeg
   let bodyVariant = source.bodyVariant
   let bounced = false
 
   if (verticalOffset > 0) {
     bounced = true
+    horizontalSpeed = source.baseHorizontalSpeed * (1 + random() * 1.5)
     verticalOffset = 0
     verticalVelocity = -(3 + random() * 3)
     bodyVariant = randomInteger(random, NATIVE_IMP_BODY_POSE_COUNT)
@@ -69,10 +74,12 @@ export function stepNativeImpFlight(
   return {
     bounced,
     state: {
+      baseHorizontalSpeed: source.baseHorizontalSpeed,
       bodyRotationDeg,
       bodyVariant,
       effectAlpha,
       effectPhase,
+      horizontalSpeed,
       verticalOffset,
       verticalVelocity,
     },
@@ -94,9 +101,16 @@ function randomInteger(random: () => number, count: number): number {
 }
 
 function signedRandom(random: () => number, magnitude: number): number {
-  return (random() * 2 - 1) * magnitude
+  const value = random() * magnitude
+  return random() < 0.5 ? -value : value
 }
 
 function positiveModulo(value: number, period: number): number {
   return ((value % period) + period) % period
+}
+
+function requirePositiveFinite(value: number, label: string): void {
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new RangeError(`${label} must be finite and positive`)
+  }
 }

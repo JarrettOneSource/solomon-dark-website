@@ -3,7 +3,10 @@ import { Container, Sprite, type Texture } from 'pixi.js'
 import type { BoneyardEnemyProjectileEffectSnapshot } from '../protocol/game-state.ts'
 import type { BoneyardWorldTextures } from './boneyard-textures.ts'
 import { nativeEnemySpriteRecord } from './native-enemy-assets.ts'
-import { nativeEnemyProjectileEffectPlan } from './native-enemy-projectile-effect-presentation.ts'
+import {
+  nativeEnemyProjectileEffectBypassesWorldTint,
+  nativeEnemyProjectileEffectPlan,
+} from './native-enemy-projectile-effect-presentation.ts'
 
 export class NativeEnemyProjectileEffectViews {
   private readonly liveIds = new Set<number>()
@@ -58,6 +61,7 @@ export class NativeEnemyProjectileEffectViews {
 }
 
 class NativeEnemyProjectileEffectView {
+  private bypassesWorldTint = false
   private readonly container: Container
   private readonly root: Container
   private readonly sprite = new Sprite()
@@ -86,6 +90,7 @@ class NativeEnemyProjectileEffectView {
     this.sprite.tint = plan.tint
     this.container.label = `enemy-projectile-effect:${effect.kind}:${effect.id}`
     this.container.position.set(plan.position.x, plan.position.y)
+    this.bypassesWorldTint = nativeEnemyProjectileEffectBypassesWorldTint(effect)
   }
 
   setDepth(depth: number): void {
@@ -93,7 +98,7 @@ class NativeEnemyProjectileEffectView {
   }
 
   setWorldTint(tint: number): void {
-    this.container.tint = tint
+    this.container.tint = this.bypassesWorldTint ? 0xffffff : tint
   }
 
   destroy(): void {

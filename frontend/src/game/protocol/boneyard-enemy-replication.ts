@@ -44,7 +44,6 @@ const ACTIONS: readonly (BoneyardEnemyAction | null)[] = [
   'archer-shot',
   'mage-cast-short',
   'mage-cast-long',
-  'imp-contact',
   'zombie-beat',
   'wraith-drain',
   'demon-bomb',

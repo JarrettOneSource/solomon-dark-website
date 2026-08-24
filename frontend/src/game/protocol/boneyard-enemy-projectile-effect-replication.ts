@@ -12,8 +12,9 @@ export const BONEYARD_ENEMY_PROJECTILE_EFFECT_ENTITY_TYPE_ID = 6
 const POSITION_SCALE = 16
 const VALUE_SCALE = 1024
 const ANGLE_SCALE = 4096
-const DESCRIPTOR_LENGTH = 10
+const DESCRIPTOR_LENGTH = 12
 const SAMPLE_LENGTH = 10
+const LIGHT_KIND_INDEX = BONEYARD_ENEMY_PROJECTILE_EFFECT_KINDS.indexOf('fire-burst-glow')
 const ATLASES = ['BadGuys', 'DeadHawg'] as const
 const BLEND_MODES = ['add', 'normal'] as const
 
@@ -32,6 +33,9 @@ export const BONEYARD_ENEMY_PROJECTILE_EFFECT_ENTITY_REGISTRATION = {
       && nonnegativeInteger(descriptor[7])
       && positiveInteger(descriptor[8])
       && nonnegativeInteger(descriptor[9])
+      && (descriptor[2] === LIGHT_KIND_INDEX
+        ? descriptor[10] === 1 && nonnegativeInteger(descriptor[11])
+        : descriptor[10] === -1 && descriptor[11] === -1)
   },
   sampleIsValid(sample: ReplicatedEntitySample): boolean {
     return sample.length === SAMPLE_LENGTH
@@ -49,6 +53,14 @@ export const BONEYARD_ENEMY_PROJECTILE_EFFECT_ENTITY_REGISTRATION = {
 export function boneyardEnemyProjectileEffectDescriptor(
   effect: BoneyardEnemyProjectileEffectSnapshot,
 ): ReplicatedEntityDescriptor {
+  const lightRegistration = effect.lightRegistration
+  if (effect.kind === 'fire-burst-glow') {
+    if (lightRegistration?.managerLane !== 'transient') {
+      throw new Error('enemy FireBurst glow requires a transient light registration')
+    }
+  } else if (lightRegistration !== null) {
+    throw new Error(`enemy projectile effect ${effect.kind} must not register a light`)
+  }
   return [
     BONEYARD_ENEMY_PROJECTILE_EFFECT_ENTITY_TYPE_ID,
     effect.id,
@@ -60,6 +72,8 @@ export function boneyardEnemyProjectileEffectDescriptor(
     effect.spawnTick,
     effect.lifetimeTicks,
     effect.phaseOriginTicks,
+    lightRegistration === null ? -1 : 1,
+    lightRegistration?.registrationOrdinal ?? -1,
   ]
 }
 
@@ -101,6 +115,9 @@ export function materializeBoneyardEnemyProjectileEffect(
     entry: sample[7],
     id: descriptor[1],
     kind: BONEYARD_ENEMY_PROJECTILE_EFFECT_KINDS[descriptor[2]]!,
+    lightRegistration: descriptor[10] === -1
+      ? null
+      : { managerLane: 'transient', registrationOrdinal: descriptor[11] },
     lifetimeTicks: descriptor[8],
     ownerActorId: descriptor[3],
     ownerProjectileId: descriptor[4],

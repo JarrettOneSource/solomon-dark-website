@@ -70,9 +70,15 @@ export function nativeEnemyProjectileEffectPainterLayer(
 ): DynamicPainterLayer {
   return {
     id: `enemy-projectile-effect:${effect.id}`,
-    queueFamily: 'ordinary-dynamic',
-    sortBias: 0,
+    queueFamily: effect.kind.startsWith('fire-burst-') ? 'zanim' : 'ordinary-dynamic',
+    sortBias: effect.kind.startsWith('fire-burst-') ? 50 : 0,
     sourceOrder,
     worldY: effect.position.y,
   }
+}
+
+export function nativeEnemyProjectileEffectBypassesWorldTint(
+  effect: BoneyardEnemyProjectileEffectSnapshot,
+): boolean {
+  return effect.kind.startsWith('fire-burst-')
 }

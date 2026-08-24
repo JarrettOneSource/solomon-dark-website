@@ -53,6 +53,9 @@ export function nativeEnemyDeathEffectPainterLayer(
   effect: BoneyardEnemyDeathEffectSnapshot,
   sourceOrder: number,
 ): DynamicPainterLayer {
+  if (nativeEnemyDeathEffectPainterLane(effect) !== 'world-sorted') {
+    throw new Error('direct post-world death effect cannot enter the world-sorted painter')
+  }
   return {
     id: `enemy-death-effect:${effect.id}`,
     queueFamily: 'ordinary-dynamic',
@@ -60,4 +63,18 @@ export function nativeEnemyDeathEffectPainterLayer(
     sourceOrder,
     worldY: effect.position.y,
   }
+}
+
+export function nativeEnemyDeathEffectPainterLane(
+  effect: BoneyardEnemyDeathEffectSnapshot,
+): 'post-world-queue' | 'world-sorted' {
+  return effect.presentationOwner === 'direct-post-world'
+    ? 'post-world-queue'
+    : 'world-sorted'
+}
+
+export function nativeEnemyDeathEffectBypassesWorldTint(
+  effect: BoneyardEnemyDeathEffectSnapshot,
+): boolean {
+  return effect.presentationOwner === 'direct-post-world'
 }

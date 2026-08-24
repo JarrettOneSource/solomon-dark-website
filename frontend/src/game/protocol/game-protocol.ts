@@ -253,8 +253,10 @@ import {
 } from './boneyard-mage-lightning-replication.ts'
 import {
   BONEYARD_ENEMY_EFFECT_ROLES,
+  BONEYARD_ENEMY_ACTION_SOUNDS,
   BONEYARD_ENEMY_DAMAGE_SOUNDS,
   BONEYARD_ENEMY_DEATH_EFFECT_KINDS,
+  BONEYARD_ENEMY_DEATH_EFFECT_PRESENTATION_OWNERS,
   BONEYARD_ENEMY_DEATH_SOUNDS,
   BONEYARD_ENEMY_EVENT_TYPES,
   BONEYARD_ENEMY_PROJECTILE_PAYLOADS,
@@ -322,7 +324,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 65
+export const GAME_PROTOCOL_VERSION = 66
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -393,7 +395,6 @@ const BONEYARD_ENEMY_ACTIONS = [
   'archer-shot',
   'mage-cast-short',
   'mage-cast-long',
-  'imp-contact',
   'zombie-beat',
   'wraith-drain',
   'demon-bomb',
@@ -8490,6 +8491,7 @@ function boneyardEnemyDeathEffectSnapshot(
     'id',
     'kind',
     'ownerActorId',
+    'presentationOwner',
     'position',
     'rotationRadians',
     'scale',
@@ -8509,6 +8511,16 @@ function boneyardEnemyDeathEffectSnapshot(
   const kind = limitedString(source.kind, `${field}.kind`, 32)
   if (!(BONEYARD_ENEMY_DEATH_EFFECT_KINDS as readonly string[]).includes(kind)) {
     throw new GameProtocolError(`${field}.kind is not supported`)
+  }
+  const presentationOwner = limitedString(
+    source.presentationOwner,
+    `${field}.presentationOwner`,
+    32,
+  )
+  if (!(
+    BONEYARD_ENEMY_DEATH_EFFECT_PRESENTATION_OWNERS as readonly string[]
+  ).includes(presentationOwner)) {
+    throw new GameProtocolError(`${field}.presentationOwner is not supported`)
   }
   const entry = nonnegativeInteger(source.entry, `${field}.entry`)
   const maximumAlpha = atlas === 'BadGuys'
@@ -8534,6 +8546,8 @@ function boneyardEnemyDeathEffectSnapshot(
     id: positiveInteger(source.id, `${field}.id`),
     kind: kind as BoneyardEnemyDeathEffectSnapshot['kind'],
     ownerActorId: positiveInteger(source.ownerActorId, `${field}.ownerActorId`),
+    presentationOwner:
+      presentationOwner as BoneyardEnemyDeathEffectSnapshot['presentationOwner'],
     position: boneyardPoint(source.position, `${field}.position`),
     rotationRadians: finite(source.rotationRadians, `${field}.rotationRadians`),
     scale: positiveFinite(source.scale, `${field}.scale`),
@@ -8741,6 +8755,7 @@ function boneyardEnemyEvents(
         case 'coffin-maggot-release': return ['count']
         case 'enemy-death':
         case 'enemy-retired': return []
+        case 'enemy-action-sound':
         case 'enemy-damage-sound':
         case 'enemy-death-sound': return [
           'gainScale',
@@ -8820,15 +8835,18 @@ function boneyardEnemyEvents(
       }
       case 'enemy-death':
       case 'enemy-retired': return base
+      case 'enemy-action-sound':
       case 'enemy-damage-sound':
       case 'enemy-death-sound':
       case 'player-damage-sound': {
         const sound = limitedString(source.sound, `${eventField}.sound`, 64)
-        const supportedSounds = type === 'enemy-damage-sound'
-          ? BONEYARD_ENEMY_DAMAGE_SOUNDS
-          : type === 'enemy-death-sound'
-            ? BONEYARD_ENEMY_DEATH_SOUNDS
-            : BONEYARD_PLAYER_DAMAGE_SOUNDS
+        const supportedSounds = type === 'enemy-action-sound'
+          ? BONEYARD_ENEMY_ACTION_SOUNDS
+          : type === 'enemy-damage-sound'
+            ? BONEYARD_ENEMY_DAMAGE_SOUNDS
+            : type === 'enemy-death-sound'
+              ? BONEYARD_ENEMY_DEATH_SOUNDS
+              : BONEYARD_PLAYER_DAMAGE_SOUNDS
         if (!(supportedSounds as readonly string[]).includes(sound)) {
           throw new GameProtocolError(`${eventField}.sound is not supported`)
         }
@@ -9263,6 +9281,7 @@ function boneyardEnemyProjectileEffectSnapshot(
     'entry',
     'id',
     'kind',
+    'lightRegistration',
     'lifetimeTicks',
     'ownerActorId',
     'ownerProjectileId',
@@ -9302,6 +9321,16 @@ function boneyardEnemyProjectileEffectSnapshot(
     entry: nonnegativeInteger(source.entry, `${field}.entry`),
     id: positiveInteger(source.id, `${field}.id`),
     kind: kind as BoneyardEnemyProjectileEffectSnapshot['kind'],
+    lightRegistration: kind === 'fire-burst-glow'
+      ? nativeLightProviderRegistration(
+          source.lightRegistration,
+          `${field}.lightRegistration`,
+          'transient',
+        )
+      : absentNativeLightProviderRegistration(
+          source.lightRegistration,
+          `${field}.lightRegistration`,
+        ),
     lifetimeTicks,
     ownerActorId: positiveInteger(source.ownerActorId, `${field}.ownerActorId`),
     ownerProjectileId: positiveInteger(

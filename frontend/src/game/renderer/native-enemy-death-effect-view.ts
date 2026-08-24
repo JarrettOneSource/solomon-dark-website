@@ -3,7 +3,10 @@ import { Container, Sprite, type Texture } from 'pixi.js'
 import type { BoneyardEnemyDeathEffectSnapshot } from '../protocol/game-state.ts'
 import type { BoneyardWorldTextures } from './boneyard-textures.ts'
 import { nativeEnemySpriteRecord } from './native-enemy-assets.ts'
-import { nativeEnemyDeathEffectPlan } from './native-enemy-death-effect-presentation.ts'
+import {
+  nativeEnemyDeathEffectBypassesWorldTint,
+  nativeEnemyDeathEffectPlan,
+} from './native-enemy-death-effect-presentation.ts'
 import { nativeLootSpriteRecord } from './native-loot-assets.ts'
 
 export class NativeEnemyDeathEffectViews {
@@ -59,6 +62,7 @@ export class NativeEnemyDeathEffectViews {
 }
 
 class NativeEnemyDeathEffectView {
+  private bypassesWorldTint = false
   private readonly container: Container
   private readonly effect = new Sprite()
   private readonly root: Container
@@ -87,6 +91,7 @@ class NativeEnemyDeathEffectView {
     }
     this.container.label = `enemy-death-effect:${effect.kind}:${effect.id}`
     this.container.position.set(plan.position.x, plan.position.y)
+    this.bypassesWorldTint = nativeEnemyDeathEffectBypassesWorldTint(effect)
   }
 
   setDepth(depth: number): void {
@@ -94,7 +99,7 @@ class NativeEnemyDeathEffectView {
   }
 
   setWorldTint(tint: number): void {
-    this.container.tint = tint
+    this.container.tint = this.bypassesWorldTint ? 0xffffff : tint
   }
 
   setRenderable(renderable: boolean): void {

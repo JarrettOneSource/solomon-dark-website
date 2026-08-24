@@ -54,6 +54,9 @@ export function projectBoneyardEnemyDeathEffect(
     id: effect.id,
     kind: effect.kind,
     ownerActorId: effect.ownerActorId,
+    presentationOwner: effect.role.startsWith('demon-death-fire-burst-')
+      ? 'direct-post-world'
+      : 'world-sorted',
     position: { ...effect.position },
     rotationRadians: effect.rotationDeg * Math.PI / 180,
     scale: effect.scale,
@@ -123,6 +126,7 @@ export function projectBoneyardEnemyProjectileEffects(
     entry: effect.entry,
     id: effect.id,
     kind: effect.kind,
+    lightRegistration: effect.lightRegistration,
     lifetimeTicks: effect.lifetimeTicks,
     ownerActorId: effect.ownerActorId,
     ownerProjectileId: effect.ownerProjectileId,
@@ -332,7 +336,7 @@ function brainAction(actor: BoneyardEnemyActor): BoneyardEnemyAction | null {
     case 'mage': return brain.phase === 'cast'
       ? brain.castProgram === 'long' ? 'mage-cast-long' : 'mage-cast-short'
       : null
-    case 'imp': return brain.phase === 'contact' ? 'imp-contact' : null
+    case 'imp': return null
     case 'zombie': return brain.phase === 'swipe' ? 'zombie-beat' : null
     case 'wraith': return brain.phase === 'drain' ? 'wraith-drain' : null
     case 'demon': return brain.phase === 'bomb' ? 'demon-bomb' : null
@@ -345,7 +349,7 @@ function actionProgress(brain: BoneyardEnemyBrain): number {
     case 'skeleton':
     case 'archer':
     case 'mage': return brain.actionProgress
-    case 'imp':
+    case 'imp': return 0
     case 'wraith': return brain.actionTick
     case 'zombie':
     case 'demon': return brain.actionProgress

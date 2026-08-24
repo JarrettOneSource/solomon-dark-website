@@ -5,6 +5,7 @@ import test from 'node:test'
 import type { AtlasManifest } from '../../editor/manifest/index.ts'
 import type { BoneyardEnemyProjectileEffectSnapshot } from '../protocol/game-state.ts'
 import {
+  nativeEnemyProjectileEffectBypassesWorldTint,
   nativeEnemyProjectileEffectPainterLayer,
   nativeEnemyProjectileEffectPlan,
 } from './native-enemy-projectile-effect-presentation.ts'
@@ -77,15 +78,22 @@ test('GuidedMissile impact retains the four-layer Anim_FadeGM compositor', () =>
   assert.ok(Math.abs(auraTwo.alpha - 1.1) < 1e-12)
 })
 
-test('projectile-owned transients retain ordinary world painter ownership', () => {
+test('wrapped FireBurst children retain one native bias and bypass Region tint', () => {
   const source = effect('fire-burst-frame', 'BadGuys', 251, 'add')
   assert.deepEqual(nativeEnemyProjectileEffectPainterLayer(source, 17), {
     id: `enemy-projectile-effect:${source.id}`,
-    queueFamily: 'ordinary-dynamic',
-    sortBias: 0,
+    queueFamily: 'zanim',
+    sortBias: 50,
     sourceOrder: 17,
     worldY: source.position.y,
   })
+  assert.equal(nativeEnemyProjectileEffectBypassesWorldTint(source), true)
+  assert.equal(
+    nativeEnemyProjectileEffectBypassesWorldTint(
+      effect('guided-impact-main', 'BadGuys', 110, 'add'),
+    ),
+    false,
+  )
 })
 
 function effect(
@@ -103,6 +111,9 @@ function effect(
     entry,
     id: entry + 1,
     kind,
+    lightRegistration: kind === 'fire-burst-glow'
+      ? { managerLane: 'transient', registrationOrdinal: 3 }
+      : null,
     lifetimeTicks: 20,
     ownerActorId: 7,
     ownerProjectileId: 9,

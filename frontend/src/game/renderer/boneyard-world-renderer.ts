@@ -108,6 +108,7 @@ import {
   nativeBoneyardWeatherLightingOrder,
   nativeLanternLightSource,
   nativeEnemyLightSources,
+  nativeEnemyProjectileEffectLightProvider,
   nativeEnemyProjectileLightProvider,
   nativeMissileLightSource,
   nativePlayerLightSource,
@@ -163,6 +164,7 @@ import {
 } from './native-mage-lightning-pulse-view.ts'
 import {
   nativeEnemyDeathEffectPainterLayer,
+  nativeEnemyDeathEffectPainterLane,
 } from './native-enemy-death-effect-presentation.ts'
 import {
   nativeEnemyPainterLayer,
@@ -230,7 +232,8 @@ interface BoneyardRendererFrameDiagnostics {
   complexShadowQuadCount: number
   complexShadowRecordCount: number
   complexShadowZOrderMismatchCount: number
-  enemyAttackEffectCount: number
+  enemyAuxiliaryEffectCount: number
+  enemyAuxiliaryEffectLanes: readonly string[]
   enemyCount: number
   enemyOutsideCombatBoundsCount: number
   enemyDeathEffectCount: number
@@ -642,7 +645,8 @@ export async function createBoneyardWorldRenderer(
     complexShadowQuadCount: 0,
     complexShadowRecordCount: 0,
     complexShadowZOrderMismatchCount: 0,
-    enemyAttackEffectCount: 0,
+    enemyAuxiliaryEffectCount: 0,
+    enemyAuxiliaryEffectLanes: [],
     enemyCount: 0,
     enemyOutsideCombatBoundsCount: 0,
     enemyDeathEffectCount: 0,
@@ -991,7 +995,8 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.complexShadowQuadCount = painter.complexShadowQuadCount
       frameDiagnostics.complexShadowRecordCount = painter.complexShadowRecordCount
       frameDiagnostics.complexShadowZOrderMismatchCount = painter.complexShadowZOrderMismatchCount
-      frameDiagnostics.enemyAttackEffectCount = scene.enemyAttackEffectCount
+      frameDiagnostics.enemyAuxiliaryEffectCount = scene.enemyAuxiliaryEffectCount
+      frameDiagnostics.enemyAuxiliaryEffectLanes = scene.enemyAuxiliaryEffectLanes
       frameDiagnostics.enemyCount = scene.enemyCount
       const combatBounds = snapshot.world.arenaTransition?.combatBounds
       frameDiagnostics.enemyOutsideCombatBoundsCount = combatBounds === undefined
@@ -1151,7 +1156,8 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.secondaryScreenFlashAlpha = screenOverlay?.alpha ?? 0
       frameDiagnostics.secondaryScreenFlashColor = screenOverlay?.color ?? 0xffffff
       canvas.dataset.enemyCount = `${scene.enemyCount}`
-      canvas.dataset.enemyAttackEffectCount = `${scene.enemyAttackEffectCount}`
+      canvas.dataset.enemyAuxiliaryEffectCount = `${scene.enemyAuxiliaryEffectCount}`
+      canvas.dataset.enemyAuxiliaryEffectLanes = scene.enemyAuxiliaryEffectLanes.join(',')
       canvas.dataset.enemyDeathEffectCount = `${scene.enemyDeathEffectCount}`
       canvas.dataset.complexShadowCasterCount = `${painter.complexShadowCasterCount}`
       canvas.dataset.complexShadowQuadCount = `${painter.complexShadowQuadCount}`
@@ -1661,6 +1667,18 @@ class BoneyardDynamicScene {
       }
       lightProviderOwners.push({ registration, sources: [candidate.source] })
     }
+    for (const effect of snapshot.world.enemyProjectileEffects) {
+      const candidate = nativeEnemyProjectileEffectLightProvider(effect)
+      if (!candidate) continue
+      const registration = requiredLightRegistration(
+        effect.lightRegistration,
+        `enemy projectile effect ${effect.id}`,
+      )
+      if (registration.managerLane !== candidate.lane) {
+        throw new Error(`enemy projectile effect ${effect.id} changed native light-manager lane`)
+      }
+      lightProviderOwners.push({ registration, sources: [candidate.source] })
+    }
     for (const effect of snapshot.primarySpells.transients) {
       if (
         effect.kind === 'weld-meteor'
@@ -2094,6 +2112,7 @@ class BoneyardDynamicScene {
     }
     const dynamicLayers = this.dynamicLayers
     dynamicLayers.length = 0
+    const enemyAuxiliaryPainterLayers = this.enemies.painterLayers()
     for (const playerId in snapshot.players) {
       const player = snapshot.players[playerId]
       dynamicLayers.push({
@@ -2148,6 +2167,7 @@ class BoneyardDynamicScene {
     }
     dynamicLayers.push(...this.modEffects.painterLayers(snapshot, dynamicLayers.length))
     for (const effect of snapshot.world.deathEffects) {
+      if (nativeEnemyDeathEffectPainterLane(effect) !== 'world-sorted') continue
       dynamicLayers.push(nativeEnemyDeathEffectPainterLayer(effect, dynamicLayers.length))
     }
     for (const projectile of snapshot.world.enemyProjectiles) {
@@ -2164,6 +2184,16 @@ class BoneyardDynamicScene {
         effect,
         dynamicLayers.length,
       ))
+    }
+    for (const layer of enemyAuxiliaryPainterLayers) {
+      if (layer.lane !== 'world-sorted' || layer.queueFamily === null) continue
+      dynamicLayers.push({
+        id: layer.id,
+        queueFamily: layer.queueFamily,
+        worldY: layer.worldY,
+        sortBias: layer.sortBias,
+        sourceOrder: dynamicLayers.length,
+      })
     }
     for (const maggot of snapshot.world.maggots) {
       dynamicLayers.push({
@@ -2298,6 +2328,14 @@ class BoneyardDynamicScene {
         positionedDynamics.get(`enemy:${enemy.id}`)?.zIndex ?? 1,
       )
     }
+    for (const layer of enemyAuxiliaryPainterLayers) {
+      const depth = layer.lane === 'pre-world-queue'
+        ? 0.5
+        : layer.lane === 'post-world-queue'
+          ? order.foregroundZIndex - 0.5
+          : positionedDynamics.get(layer.id)?.zIndex ?? 1
+      this.enemies.setAuxiliaryEffectDepth(layer.eventId, depth)
+    }
     for (const actor of snapshot.world.loot) {
       this.loot.setDepth(
         actor.id,
@@ -2320,7 +2358,9 @@ class BoneyardDynamicScene {
     for (const effect of snapshot.world.deathEffects) {
       this.enemyDeathEffects.setDepth(
         effect.id,
-        positionedDynamics.get(`enemy-death-effect:${effect.id}`)?.zIndex ?? 1,
+        nativeEnemyDeathEffectPainterLane(effect) === 'post-world-queue'
+          ? order.foregroundZIndex - 0.5
+          : positionedDynamics.get(`enemy-death-effect:${effect.id}`)?.zIndex ?? 1,
       )
     }
     for (const projectile of snapshot.world.enemyProjectiles) {
@@ -2428,8 +2468,12 @@ class BoneyardDynamicScene {
     return this.enemies.limbsEntry(id)
   }
 
-  get enemyAttackEffectCount(): number {
-    return this.enemies.attackBurstCount
+  get enemyAuxiliaryEffectCount(): number {
+    return this.enemies.auxiliaryEffectCount
+  }
+
+  get enemyAuxiliaryEffectLanes(): readonly string[] {
+    return this.enemies.painterLayers().map(({ lane }) => lane)
   }
 
   get enemyDeathEffectCount(): number {

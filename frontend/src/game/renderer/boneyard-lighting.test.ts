@@ -41,6 +41,7 @@ import {
   nativeBoneyardLightTint,
   nativeBoneyardLightVisibleInManager,
   nativeBoneyardWeatherLightingOrder,
+  nativeEnemyProjectileEffectLightProvider,
   nativeEnemyProjectileLightProvider,
   nativeEnemyLightSources,
   nativeLanternLightSource,
@@ -728,6 +729,37 @@ test('Multiple Shadows changes every MS provider without changing literal flags'
   }, 1, true)?.castsDirectionalShadow, true)
 })
 
+test('enemy FireBurst ZAnimLit follows the rising child and fades by 0.04 per tick', () => {
+  const provider = nativeEnemyProjectileEffectLightProvider({
+    ageTicks: 5,
+    alpha: 0.25,
+    atlas: 'BadGuys',
+    blendMode: 'normal',
+    entry: 110,
+    id: 52,
+    kind: 'fire-burst-glow',
+    lightRegistration: { managerLane: 'transient', registrationOrdinal: 12 },
+    lifetimeTicks: 16,
+    ownerActorId: 4,
+    ownerProjectileId: 9,
+    phaseOriginTicks: 0,
+    position: { x: 10, y: 15 },
+    rotationRadians: 0,
+    scale: 3,
+    spawnTick: 10,
+    tint: 0xff8000,
+  })
+  assert.deepEqual(provider, {
+    lane: 'transient',
+    source: {
+      castsDirectionalShadow: false,
+      intensity: 0.8000000044703484,
+      position: { x: 10, y: 15 },
+      radius: 1.5,
+    },
+  })
+})
+
 test('projects every welded projectile and retained-rock light provider exactly', () => {
   const missile = nativeWeldProjectileLightSource(weldProjectile(1000), 41)
   assert.equal(missile.intensity, 0.75)
@@ -993,6 +1025,34 @@ test('table-drives every source-family disposition exposed by the pure lighting 
       family,
       project: () => projectEnemyProjectile(overrides),
     })),
+    {
+      directional: false,
+      expectedCount: 1,
+      expectedLane: 'transient',
+      family: 'enemy FireBurst ZAnimLit',
+      project: () => {
+        const provider = nativeEnemyProjectileEffectLightProvider({
+          ageTicks: 5,
+          alpha: 0.25,
+          atlas: 'BadGuys',
+          blendMode: 'normal',
+          entry: 110,
+          id: 52,
+          kind: 'fire-burst-glow',
+          lightRegistration: { managerLane: 'transient', registrationOrdinal: 12 },
+          lifetimeTicks: 16,
+          ownerActorId: 4,
+          ownerProjectileId: 9,
+          phaseOriginTicks: 0,
+          position: { x: 400, y: 300 },
+          rotationRadians: 0,
+          scale: 3,
+          spawnTick: 10,
+          tint: 0xff8000,
+        })
+        return provider ? projectSources(provider.lane, [provider.source]) : none()
+      },
+    },
     {
       directional: false,
       expectedCount: 1,

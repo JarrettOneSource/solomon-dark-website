@@ -121,17 +121,9 @@ function enemyClock(actor: BoneyardEnemyActor): EnemyClockObservation {
         brain.markerEmitted,
       )
     }
-    case 'imp':
-      if (brain.phase === 'flight') return passiveClock('approach')
-      if (brain.phase === 'cooldown') return passiveClock('cooldown', brain.cooldownTicks)
-      if (brain.phase === 'death') return passiveClock('recover')
-      return tickClock(
-        brain.actionTick,
-        BOUNDED_ENEMY_ACTION_PROGRAMS.impContact.markerTick,
-        BOUNDED_ENEMY_ACTION_PROGRAMS.impContact.strictEndTick,
-        speed,
-        brain.markerEmitted,
-      )
+    case 'imp': return brain.phase === 'death'
+      ? passiveClock('recover')
+      : passiveClock('approach')
     case 'zombie':
       if (brain.phase === 'approach') return passiveClock('approach', brain.phaseTicksRemaining)
       if (brain.phase === 'knockback') return passiveClock('knockback', brain.impactStateTicksRemaining)

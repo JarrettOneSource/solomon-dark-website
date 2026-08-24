@@ -11,11 +11,18 @@ import {
   nativeEnemyIdleAnimationSample,
 } from './native-enemy-animation.ts'
 import {
-  NATIVE_IMP_CONTACT_FIRE_BURST_TICKS,
-  nativeImpContactFireBurstSample,
+  NATIVE_IMP_LANDING_FLARE_TICKS,
+  nativeDemonBombMuzzleOrigin,
+  nativeEnemyRawFireBurstPainterPolicy,
+  nativeEnemyRawFireBurstSample,
+  nativeImpContactBurstOrigin,
+  nativeImpLandingFlarePainterPolicy,
+  nativeImpLandingFlareSample,
 } from './native-enemy-attack-effect.ts'
 import {
+  nativeEnemyDeathEffectBypassesWorldTint,
   nativeEnemyDeathEffectPainterLayer,
+  nativeEnemyDeathEffectPainterLane,
   nativeEnemyDeathEffectPlan,
 } from './native-enemy-death-effect-presentation.ts'
 import {
@@ -317,10 +324,10 @@ test('Imp renderer consumes native pose, rotation, bounce, and upper-effect alph
   assert.equal(source.spawnTick, 100)
 })
 
-test('Imp attack markers own one finite native Anim_FireBurst child', () => {
+test('Imp contact and landing own distinct FireBurst and record-15 children', () => {
   const frames = Array.from(
-    { length: NATIVE_IMP_CONTACT_FIRE_BURST_TICKS },
-    (_, age) => nativeImpContactFireBurstSample(17, age)!,
+    { length: 16 },
+    (_, age) => nativeEnemyRawFireBurstSample('imp-contact', 17, age)!,
   )
   assert.deepEqual(frames.map(({ frameEntry }) => frameEntry), [
     251, 251, 251, 251,
@@ -331,8 +338,67 @@ test('Imp attack markers own one finite native Anim_FireBurst child', () => {
   assert.equal(frames[0]?.glowAlpha, 0.5)
   assert.equal(frames[15]?.glowAlpha, 0.5 / 16)
   assert.equal(frames[15]?.verticalOffset, -15)
-  assert.equal(nativeImpContactFireBurstSample(17, 16), null)
-  assert.throws(() => nativeImpContactFireBurstSample(0, 0), /positive safe integer/)
+  assert.ok(frames.every(({ scale }) => scale >= 0.5 && scale < 0.6))
+  assert.equal(nativeEnemyRawFireBurstSample('imp-contact', 17, 16), null)
+  assert.deepEqual(nativeEnemyRawFireBurstPainterPolicy('imp-contact'), {
+    lane: 'world-sorted',
+    queueFamily: 'zanim',
+    sortBias: 0,
+  })
+
+  const flares = Array.from(
+    { length: NATIVE_IMP_LANDING_FLARE_TICKS },
+    (_, age) => nativeImpLandingFlareSample(17, age)!,
+  )
+  assert.equal(flares[0]?.alpha, 1)
+  assert.ok(flares[12]!.alpha > 0)
+  assert.ok(flares.every(({ green }) => green >= 0.25 && green < 0.75))
+  assert.ok(flares.every(({ scaleX, scaleY }) => scaleY === scaleX * 0.8))
+  assert.equal(nativeImpLandingFlareSample(17, 13), null)
+  assert.deepEqual(nativeImpLandingFlarePainterPolicy(), {
+    lane: 'pre-world-queue',
+    queueFamily: null,
+    sortBias: 0,
+  })
+  assert.throws(
+    () => nativeEnemyRawFireBurstSample('imp-contact', 0, 0),
+    /positive safe integer/,
+  )
+})
+
+test('Demon bomb muzzle uses the slower raw FireBurst clock and fixed scale', () => {
+  const frames = Array.from(
+    { length: 22 },
+    (_, age) => nativeEnemyRawFireBurstSample('demon-bomb-muzzle', 19, age)!,
+  )
+  assert.deepEqual(frames.map(({ frameEntry }) => frameEntry), [
+    251, 251, 251, 251, 251, 251,
+    252, 252, 252, 252, 252,
+    253, 253, 253, 253, 253,
+    254, 254, 254, 254, 254, 254,
+  ])
+  assert.ok(frames.every(({ scale }) => scale === 1))
+  assert.equal(nativeEnemyRawFireBurstSample('demon-bomb-muzzle', 19, 22), null)
+  assert.deepEqual(nativeEnemyRawFireBurstPainterPolicy('demon-bomb-muzzle'), {
+    lane: 'post-world-queue',
+    queueFamily: null,
+    sortBias: 0,
+  })
+  assert.deepEqual(
+    nativeDemonBombMuzzleOrigin({ x: 100, y: 200 }, 0, { x: 3, y: -4 }, -2),
+    { x: 103, y: 169 },
+  )
+})
+
+test('Imp contact burst keeps the separate -15 plant and 15-unit heading offset', () => {
+  assert.deepEqual(nativeImpContactBurstOrigin({ x: 100, y: 200 }, 0), {
+    x: 100,
+    y: 170,
+  })
+  assert.deepEqual(nativeImpContactBurstOrigin({ x: 100, y: 200 }, 90), {
+    x: 115,
+    y: 185,
+  })
 })
 
 test('Zombie keeps its native constructor selectors independent', () => {
@@ -1141,6 +1207,7 @@ test('death-effect presentation keeps airborne art and enhanced shadow on the gr
     id: 41,
     kind: 'bouncer' as const,
     ownerActorId: 7,
+    presentationOwner: 'world-sorted' as const,
     position: { x: 125, y: 240 },
     rotationRadians: 0.5,
     scale: 1.2,
@@ -1180,4 +1247,21 @@ test('death-effect presentation keeps airborne art and enhanced shadow on the gr
     sourceOrder: 3,
     worldY: 240,
   })
+  assert.equal(nativeEnemyDeathEffectPainterLane(effect), 'world-sorted')
+  assert.equal(nativeEnemyDeathEffectBypassesWorldTint(effect), false)
+  assert.equal(nativeEnemyDeathEffectPainterLane({
+    ...effect,
+    presentationOwner: 'direct-post-world',
+  }), 'post-world-queue')
+  assert.equal(nativeEnemyDeathEffectBypassesWorldTint({
+    ...effect,
+    presentationOwner: 'direct-post-world',
+  }), true)
+  assert.throws(
+    () => nativeEnemyDeathEffectPainterLayer({
+      ...effect,
+      presentationOwner: 'direct-post-world',
+    }, 3),
+    /cannot enter the world-sorted painter/,
+  )
 })

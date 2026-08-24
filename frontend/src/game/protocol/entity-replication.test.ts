@@ -606,7 +606,7 @@ test('enemy projectile effects replicate after their owner projectile retires', 
   const sample = keyframe.world.entities.samples.find((entry) => (
     entry[0] === REPLICATED_ENTITY_TYPES.boneyardEnemyProjectileEffect
   ))!
-  assert.equal(descriptor.length, 10)
+  assert.equal(descriptor.length, 12)
   assert.equal(sample.length, 10)
 
   const registration = REPLICATED_ENTITY_TYPE_REGISTRY.get(
@@ -642,6 +642,39 @@ test('enemy projectile effects replicate after their owner projectile retires', 
     REPLICATED_ENTITY_TYPES.boneyardEnemyProjectileEffect,
     10,
   ]])
+})
+
+test('enemy FireBurst glow alone carries the transient ZAnimLit registration', () => {
+  const initial = boneyardSnapshot('projectile-effect-light-run')
+  if (initial.world.kind !== 'boneyard') throw new Error('expected Boneyard snapshot')
+  const glow = {
+    ...enemyProjectileEffectSnapshot(),
+    kind: 'fire-burst-glow' as const,
+    lightRegistration: { managerLane: 'transient' as const, registrationOrdinal: 12 },
+  }
+  const frame = {
+    ...glow,
+    id: glow.id + 1,
+    kind: 'fire-burst-frame' as const,
+    lightRegistration: null,
+  }
+  initial.world.enemyProjectileEffects = [glow, frame]
+  const keyframe = createGameSnapshotFrame(initial, 0, undefined, true)
+  const reconstructed = new EntityReplicationReconstructor().apply(keyframe, 1)
+  if (reconstructed.world.kind !== 'boneyard') throw new Error('expected Boneyard snapshot')
+  assert.deepEqual(
+    reconstructed.world.enemyProjectileEffects.map(({ kind, lightRegistration }) => ({
+      kind,
+      lightRegistration,
+    })),
+    [{
+      kind: 'fire-burst-glow',
+      lightRegistration: { managerLane: 'transient', registrationOrdinal: 12 },
+    }, {
+      kind: 'fire-burst-frame',
+      lightRegistration: null,
+    }],
+  )
 })
 
 test('Coffin Maggots replicate as independently retiring combat actors', () => {
@@ -739,13 +772,18 @@ test('enemy death effects replicate independent motion and exact retirement iden
   const sample = keyframe.world.entities.samples.find((entry) => (
     entry[0] === REPLICATED_ENTITY_TYPES.boneyardEnemyDeathEffect
   ))!
-  assert.equal(descriptor.length, 8)
+  assert.equal(descriptor.length, 9)
   assert.equal(sample.length, 11)
 
   const registration = REPLICATED_ENTITY_TYPE_REGISTRY.get(
     REPLICATED_ENTITY_TYPES.boneyardEnemyDeathEffect,
   )!
   assert.equal(registration.descriptorIsValid(descriptor), true)
+  const invalidPresentationOwner = [
+    ...descriptor.slice(0, 8),
+    99,
+  ] as unknown as [number, number, ...number[]]
+  assert.equal(registration.descriptorIsValid(invalidPresentationOwner), false)
   assert.equal(registration.sampleIsValid(sample), true)
   assert.equal(registration.sampleIsValid(
     sample.slice(0, -1) as [number, number, ...number[]],
@@ -1054,6 +1092,7 @@ function enemyProjectileEffectSnapshot(): BoneyardEnemyProjectileEffectSnapshot 
     entry: 110,
     id: 10,
     kind: 'guided-impact-main',
+    lightRegistration: null,
     lifetimeTicks: 20,
     ownerActorId: 7,
     ownerProjectileId: 4,
@@ -1099,6 +1138,7 @@ function enemyDeathEffectSnapshot(): BoneyardEnemyDeathEffectSnapshot {
     id: 9,
     kind: 'bouncer',
     ownerActorId: 7,
+    presentationOwner: 'world-sorted',
     position: { x: 133.5, y: 463.25 },
     rotationRadians: 0.5,
     scale: 1.2,

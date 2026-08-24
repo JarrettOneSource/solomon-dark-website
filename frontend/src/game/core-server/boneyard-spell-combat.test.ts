@@ -1267,6 +1267,7 @@ test('Chill Wind tumbles hostile Arrows through the native vslot and SpinAway pr
     id: 20,
     kind: 'arrow-tumble',
     lastStepTick: 1,
+    lightRegistration: null,
     lifetimeTicks: 60,
     ownerActorId: 3,
     ownerProjectileId: 7,

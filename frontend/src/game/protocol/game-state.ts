@@ -280,6 +280,11 @@ export const BONEYARD_ENEMY_DEATH_EFFECT_KINDS = [
   'unbind',
 ] as const
 
+export const BONEYARD_ENEMY_DEATH_EFFECT_PRESENTATION_OWNERS = [
+  'direct-post-world',
+  'world-sorted',
+] as const
+
 export interface BoneyardEnemyDeathEffectSnapshot {
   ageTicks: number
   alpha: number
@@ -290,6 +295,7 @@ export interface BoneyardEnemyDeathEffectSnapshot {
   id: number
   kind: typeof BONEYARD_ENEMY_DEATH_EFFECT_KINDS[number]
   ownerActorId: number
+  presentationOwner: typeof BONEYARD_ENEMY_DEATH_EFFECT_PRESENTATION_OWNERS[number]
   position: Vector2
   rotationRadians: number
   scale: number
@@ -340,6 +346,7 @@ export type BoneyardMageLightningPulseFrame = readonly [
 export const BONEYARD_ENEMY_EVENT_TYPES = [
   'attack-marker',
   'coffin-maggot-release',
+  'enemy-action-sound',
   'enemy-damage-sound',
   'player-damage-sound',
   'enemy-death',
@@ -351,6 +358,20 @@ export const BONEYARD_ENEMY_EVENT_TYPES = [
   'projectile-retired',
   'projectile-spawned',
   'reward',
+] as const
+
+export const BONEYARD_ENEMY_ACTION_SOUNDS = [
+  'bite-1',
+  'bite-2',
+  'bite-3',
+  'imp-vocal-1',
+  'imp-vocal-2',
+  'imp-vocal-3',
+  'imp-vocal-4',
+  'imp-vocal-5',
+  'imp-vocal-6',
+  'imp-vocal-7',
+  'imp-vocal-8',
 ] as const
 
 export const BONEYARD_ENEMY_DAMAGE_SOUNDS = [
@@ -385,6 +406,7 @@ export const BONEYARD_PLAYER_DAMAGE_SOUNDS = [
 ] as const
 
 export const BONEYARD_ENEMY_SOUNDS = [
+  ...BONEYARD_ENEMY_ACTION_SOUNDS,
   ...BONEYARD_ENEMY_DAMAGE_SOUNDS,
   ...BONEYARD_ENEMY_DEATH_SOUNDS,
 ] as const
@@ -406,6 +428,7 @@ export const BONEYARD_ENEMY_TERMINAL_OUTPUTS = [
 ] as const
 
 export type BoneyardEnemyEventType = typeof BONEYARD_ENEMY_EVENT_TYPES[number]
+export type BoneyardEnemyActionSound = typeof BONEYARD_ENEMY_ACTION_SOUNDS[number]
 export type BoneyardEnemyDamageSound = typeof BONEYARD_ENEMY_DAMAGE_SOUNDS[number]
 export type BoneyardEnemyDeathSound = typeof BONEYARD_ENEMY_DEATH_SOUNDS[number]
 export type BoneyardEnemySound = typeof BONEYARD_ENEMY_SOUNDS[number]
@@ -489,6 +512,7 @@ export interface BoneyardEnemyProjectileEffectSnapshot {
   entry: number
   id: number
   kind: typeof BONEYARD_ENEMY_PROJECTILE_EFFECT_KINDS[number]
+  lightRegistration: NativeLightProviderRegistration | null
   lifetimeTicks: number
   ownerActorId: number
   ownerProjectileId: number
@@ -533,7 +557,6 @@ export type BoneyardEnemyAction =
   | 'archer-shot'
   | 'mage-cast-short'
   | 'mage-cast-long'
-  | 'imp-contact'
   | 'zombie-beat'
   | 'wraith-drain'
   | 'demon-bomb'

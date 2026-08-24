@@ -15,7 +15,10 @@ import {
   nativeSkeletonBodyGaitPose,
 } from '../core-kernels/boneyard-skeleton-family-animation.ts'
 import type { BoneyardWaveEnemyToken } from '../core-kernels/boneyard-wave-schema.ts'
-import { randomBoneyardWaveInteger } from '../core-kernels/boneyard-wave-timeline.ts'
+import {
+  nextBoneyardWaveRandom,
+  randomBoneyardWaveInteger,
+} from '../core-kernels/boneyard-wave-timeline.ts'
 import {
   createNativeRng,
   drawNativeInteger,
@@ -51,10 +54,15 @@ import {
   BOUNDED_ENEMY_DEATH_PROGRAM_TICKS,
   BOUNDED_ZOMBIE_KNOCKBACK_DISTANCE,
   NATIVE_ARCHER_ACTION_PROGRAM,
+  NATIVE_DEMON_BOMB_ACTION_PROGRAM,
   NATIVE_MAGE_ACTION_PROGRAMS,
   NATIVE_IMP_CONSTRUCTION_MAXIMUM,
+  NATIVE_IMP_CONTACT_BASE_RADIUS,
+  NATIVE_IMP_CONTACT_RADIUS_SCALE,
   NATIVE_IMP_SPLIT_CHILD_COUNT,
   NATIVE_IMP_SPLIT_LIVE_GUARD_MAXIMUM,
+  NATIVE_DEMON_RAW_FIRE_BURST_PHASE_PER_TICK,
+  NATIVE_DEMON_RAW_FIRE_BURST_TICKS,
   NATIVE_SKELETON_ACTION_PROGRAMS,
   NATIVE_SKELETON_CLAW_MARKERS,
   NATIVE_SKELETON_WEAPON_MARKERS,
@@ -1682,6 +1690,43 @@ test('Archer modes consume target velocity and RNG while payload and extra arrow
   })
 })
 
+test('Fire Arrow impact uses its unsigned half-scale burst and one transient wrapper', () => {
+  const players = { player: livingTarget(200, 0) }
+  const spawned = forcedArcherVolley(
+    'archer-fire-impact-burst',
+    ['FLAG_FIREARROW'],
+    players,
+  )
+  const projectile = spawned.store.projectiles[0]!
+  const rotation = nextBoneyardWaveRandom(spawned.store.rngState)
+  const angularMagnitude = nextBoneyardWaveRandom(rotation.state)
+  const angularSign = randomBoneyardWaveInteger(angularMagnitude.state, 2)
+  const scale = nextBoneyardWaveRandom(angularSign.state)
+  const result = stepBoneyardEnemyStore(spawned.store, {
+    firstProjectileWorldContact: () => 1,
+    players,
+    resolveMovement: DIRECT_MOVEMENT,
+    resolveSpawnIntents: () => [],
+    tick: 2,
+  })
+  const glow = result.store.projectileEffects.find(
+    ({ kind }) => kind === 'fire-burst-glow',
+  )!
+  const frame = result.store.projectileEffects.find(
+    ({ kind }) => kind === 'fire-burst-frame',
+  )!
+  assert.deepEqual(frame.position, { x: 5, y: -10 })
+  assert.deepEqual(glow.position, frame.position)
+  assert.ok(frame.scale >= 0.5 && frame.scale <= 0.6)
+  assert.equal(glow.scale, frame.scale * 5)
+  assert.deepEqual(glow.lightRegistration, {
+    managerLane: 'transient',
+    registrationOrdinal: projectile.lightRegistration!.registrationOrdinal + 1,
+  })
+  assert.equal(frame.lightRegistration, null)
+  assert.equal(result.store.rngState, scale.state)
+})
+
 test('Mage self and ally shields preserve 50/450 strength and 1000/500 cadence', () => {
   for (const [shieldFlag, strong, expectedStrength, expectedInterval] of [
     ['FLAG_SHIELD', false, 50, 1_000],
@@ -2193,7 +2238,114 @@ test('Zombie beat keeps its native rate, doubled pre-impact clock, and 125 compl
   assert.ok(completed.phaseTicksRemaining > 0)
 })
 
-test('remaining bounded families keep separate approach, special, and cooldown states', () => {
+test('Imp contact is an immediate landing edge with native escape, VFX, and audio ownership', () => {
+  const players = { player: livingTarget(80, 0) }
+  let result = spawnOne('imp-landing-contact', 'IMP', { x: 0, y: 0 }, players)
+  const brain = result.store.actors[0]!.brain
+  if (brain.family !== 'imp') throw new Error('expected Imp brain')
+  let expectedContactVisualRngState = brain.visualRngState
+  for (let draw = 0; draw < 17; draw += 1) {
+    expectedContactVisualRngState = nextBoneyardWaveRandom(expectedContactVisualRngState).state
+  }
+  result = withActorBrain(result, 0, {
+    ...brain,
+    verticalOffset: 0,
+    verticalVelocity: 0.4,
+  })
+
+  result = step(result.store, 1, players)
+  const landed = result.store.actors[0]!
+  const landedBrain = landed.brain
+  if (landedBrain.family !== 'imp') throw new Error('expected Imp brain')
+  assert.equal(landedBrain.phase, 'flight')
+  assert.ok(landedBrain.horizontalSpeed >= 4.5 && landedBrain.horizontalSpeed <= 11.25)
+  assert.equal(landedBrain.effectAlpha, 1)
+  assert.equal(landedBrain.verticalOffset, 0)
+  assert.ok(landedBrain.verticalVelocity < 0)
+  assert.notEqual(landedBrain.escapeHeadingDeg, null)
+  assert.equal(landed.headingDeg, landedBrain.escapeHeadingDeg)
+  assert.equal(landedBrain.visualRngState, expectedContactVisualRngState)
+  assert.equal(result.playerDamage.length, 1)
+  const marker = result.events.find(({ type }) => type === 'attack-marker')
+  assert.equal(marker?.eventId, result.playerDamage[0]?.eventId)
+  assert.deepEqual(result.events.map(({ type }) => type), [
+    'enemy-action-sound',
+    'enemy-action-sound',
+    'attack-marker',
+  ])
+  const actionSounds = result.events.filter(({ type }) => type === 'enemy-action-sound')
+  assert.equal(actionSounds.length, 2)
+  assert.match(actionSounds[0]!.sound!, /^imp-vocal-[1-8]$/)
+  assert.ok(actionSounds[0]!.pitch! >= 1 && actionSounds[0]!.pitch! <= 1.1)
+  assert.match(actionSounds[1]!.sound!, /^bite-[1-3]$/)
+  assert.ok(actionSounds[1]!.pitch! >= 1 && actionSounds[1]!.pitch! <= 1.25)
+
+  const firstPosition = landed.position
+  result = step(result.store, 2, players)
+  assert.equal(result.playerDamage.length, 0)
+  assert.notDeepEqual(result.store.actors[0]!.position, firstPosition)
+
+  const outsideDistance = (25 + NATIVE_IMP_CONTACT_BASE_RADIUS)
+    * NATIVE_IMP_CONTACT_RADIUS_SCALE + 0.01
+  let outside = spawnOne(
+    'imp-landing-outside-contact',
+    'IMP',
+    { x: 0, y: 0 },
+    { player: livingTarget(outsideDistance, 0) },
+  )
+  const outsideBrain = outside.store.actors[0]!.brain
+  if (outsideBrain.family !== 'imp') throw new Error('expected Imp brain')
+  let expectedOutsideVisualRngState = outsideBrain.visualRngState
+  for (let draw = 0; draw < 10; draw += 1) {
+    expectedOutsideVisualRngState = nextBoneyardWaveRandom(expectedOutsideVisualRngState).state
+  }
+  outside = withActorBrain(outside, 0, {
+    ...outsideBrain,
+    verticalOffset: 0,
+    verticalVelocity: 0.4,
+  })
+  outside = step(
+    outside.store,
+    1,
+    { player: livingTarget(outsideDistance, 0) },
+  )
+  assert.equal(outside.playerDamage.length, 0)
+  const outsideSteppedBrain = outside.store.actors[0]!.brain
+  if (outsideSteppedBrain.family !== 'imp') throw new Error('expected Imp brain')
+  assert.equal(outsideSteppedBrain.visualRngState, expectedOutsideVisualRngState)
+  assert.equal(
+    outside.events.filter(({ type }) => type === 'enemy-action-sound').length,
+    1,
+  )
+})
+
+test('Demon bomb marker consumes its raw FireBurst constructor before projectile RNG', () => {
+  const players = { player: livingTarget(100, 0) }
+  let result = spawnOne('demon-bomb-muzzle-rng', 'DEMON', { x: 0, y: 0 }, players)
+  const brain = result.store.actors[0]!.brain
+  if (brain.family !== 'demon') throw new Error('expected Demon brain')
+  result = withActorBrain(result, 0, {
+    ...brain,
+    actionProgress: NATIVE_DEMON_BOMB_ACTION_PROGRAM.markerProgress
+      - NATIVE_DEMON_BOMB_ACTION_PROGRAM.progressPerTick,
+    markerEmitted: false,
+    phase: 'bomb',
+  })
+  let expectedRngState = result.store.rngState
+  for (let draw = 0; draw < 5; draw += 1) {
+    expectedRngState = nextBoneyardWaveRandom(expectedRngState).state
+  }
+
+  result = step(result.store, 1, players)
+  assert.equal(result.store.rngState, expectedRngState)
+  assert.deepEqual(result.events.map(({ type }) => type), [
+    'attack-marker',
+    'projectile-spawned',
+  ])
+  assert.equal(result.store.projectiles[0]?.kind, 'demon-bomb')
+})
+
+test('remaining action families keep separate approach, special, and cooldown states', () => {
   let result = stepBoneyardEnemyStore(createBoneyardEnemyStore('bounded-families'), {
     firstProjectileWorldContact: NO_WORLD_CONTACT,
     players: { player: livingTarget(10, 0) },
@@ -2209,7 +2361,7 @@ test('remaining bounded families keep separate approach, special, and cooldown s
   })
   result = step(result.store, 1, { player: livingTarget(10, 0) })
   assert.deepEqual(result.store.actors.map((actor) => actor.brain.phase), [
-    'contact',
+    'flight',
     'swipe',
     'orbit',
     'bomb',
@@ -2377,6 +2529,10 @@ test('Firebolt trail and impact VFX outlive the retired projectile on native clo
   const spawned = forcedMageAttack('firebolt-vfx', ['FLAG_CASTFIRE'])
   const projectile = spawned.store.projectiles[0]!
   assert.equal(projectile.kind, 'firebolt')
+  let expectedImpactRngState = spawned.store.rngState
+  for (let draw = 0; draw < 9; draw += 1) {
+    expectedImpactRngState = nextBoneyardWaveRandom(expectedImpactRngState).state
+  }
 
   let result = stepBoneyardEnemyStore(spawned.store, {
     firstProjectileWorldContact: () => 1,
@@ -2386,11 +2542,26 @@ test('Firebolt trail and impact VFX outlive the retired projectile on native clo
     tick: 3,
   })
   assert.equal(result.store.projectiles.length, 0)
+  assert.equal(result.store.rngState, expectedImpactRngState)
   assert.deepEqual(result.store.projectileEffects.map(({ entry, kind }) => ({ entry, kind })), [
     { entry: 256, kind: 'firebolt-trail' },
     { entry: 110, kind: 'fire-burst-glow' },
     { entry: 251, kind: 'fire-burst-frame' },
   ])
+  const burstGlow = result.store.projectileEffects.find(
+    ({ kind }) => kind === 'fire-burst-glow',
+  )!
+  const burstFrame = result.store.projectileEffects.find(
+    ({ kind }) => kind === 'fire-burst-frame',
+  )!
+  assert.deepEqual(burstGlow.lightRegistration, {
+    managerLane: 'transient',
+    registrationOrdinal: projectile.lightRegistration!.registrationOrdinal + 1,
+  })
+  assert.equal(burstFrame.lightRegistration, null)
+  assert.deepEqual(burstGlow.position, burstFrame.position)
+  assert.ok(burstFrame.scale >= 0.65 && burstFrame.scale <= 0.85)
+  assert.equal(burstGlow.scale, burstFrame.scale * 5)
 
   result = step(result.store, 4, { player: livingTarget(150, 0) })
   const trail = result.store.projectileEffects.find(({ kind }) => kind === 'firebolt-trail')
@@ -3123,6 +3294,19 @@ test('Demon death retains its body flames and delayed Anim_FireBurst choreograph
     effects.find(({ role }) => role === 'demon-death-fire-burst-frame')?.spawnTick,
     96,
   )
+  const burstGlow = effects.find(
+    ({ role }) => role === 'demon-death-fire-burst-glow',
+  )!
+  const burstFrame = effects.find(
+    ({ role }) => role === 'demon-death-fire-burst-frame',
+  )!
+  assert.deepEqual(burstGlow.position, { x: 12, y: 14 })
+  assert.equal(burstGlow.scale, 10)
+  assert.equal(burstGlow.lifetimeTicks, NATIVE_DEMON_RAW_FIRE_BURST_TICKS)
+  assert.equal(burstFrame.scale, 2)
+  assert.equal(burstFrame.frameTicks, 1 / NATIVE_DEMON_RAW_FIRE_BURST_PHASE_PER_TICK)
+  assert.equal(burstFrame.lifetimeTicks, NATIVE_DEMON_RAW_FIRE_BURST_TICKS)
+  assert.notEqual(burstFrame.angularVelocityDeg, 0)
 
   result = step(result.store, 96, FAR_PLAYERS)
   assert.equal(
@@ -3137,7 +3321,7 @@ test('Demon death retains its body flames and delayed Anim_FireBurst choreograph
     )?.alpha,
     0.5,
   )
-  result = step(result.store, 100, FAR_PLAYERS)
+  result = step(result.store, 102, FAR_PLAYERS)
   assert.equal(
     result.store.deathEffects.find(
       ({ role }) => role === 'demon-death-fire-burst-frame',

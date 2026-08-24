@@ -110,7 +110,7 @@ const ACTIONS_BY_FAMILY: Readonly<
   SKELETON: ['skeleton-claw-a', 'skeleton-claw-b', 'skeleton-weapon', 'skeleton-pike'],
   SKELETONARCHER: ['archer-shot'],
   SKELETONMAGE: ['mage-cast-short', 'mage-cast-long'],
-  IMP: ['imp-contact'],
+  IMP: [],
   ZOMBIE: ['zombie-beat'],
   WRAITH: ['wraith-drain'],
   DEMON: ['demon-bomb'],

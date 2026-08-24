@@ -912,6 +912,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
     entry: 110,
     id: 5,
     kind: 'guided-impact-main',
+    lightRegistration: null,
     lifetimeTicks: 4,
     ownerActorId: 1,
     ownerProjectileId: 2,
@@ -952,6 +953,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
     id: 4,
     kind: 'fade',
     ownerActorId: 1,
+    presentationOwner: 'world-sorted',
     position: { x: 130, y: 100 },
     rotationRadians: 0.5,
     scale: 1.7,
@@ -1199,6 +1201,13 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
     /deathEffects\[0\]\.alpha/,
   )
 
+  const invalidDeathEffectOwner = JSON.parse(encodeGameMessage(welcome))
+  invalidDeathEffectOwner.snapshot.world.deathEffects[0].presentationOwner = 'actor'
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(invalidDeathEffectOwner)),
+    /deathEffects\[0\]\.presentationOwner/,
+  )
+
   const invalidBrightDeathEffectShape = JSON.parse(encodeGameMessage(welcome))
   invalidBrightDeathEffectShape.snapshot.world.deathEffects[0].entry = 70
   assert.throws(
@@ -1232,8 +1241,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v65 carries Hagatha runtime, save intent, selected skills, sacks, dyes, and gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 65)
+test('protocol v66 carries saves, Hagatha runtime, Imp effects, and gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 66)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
