@@ -148,6 +148,7 @@ def episode_gameplay_summary(records: Iterable[Mapping[str, Any]]) -> Mapping[st
         "skill_choice_modes": {},
         "spell_actions_by_skill_id": {},
         "maximum_equipped_skill_ranks": {},
+        "primary_action_loadouts": {},
         "primary_loadouts": {},
         "gold_collected": 0.0,
         "items_collected": 0,
@@ -201,6 +202,10 @@ def episode_gameplay_summary(records: Iterable[Mapping[str, Any]]) -> Mapping[st
                 )
         loadout_key = record.get("primary_loadout_key")
         if isinstance(loadout_key, str) and loadout_key:
+            initial_actions = record.get("primary_actions_by_loadout", {}).get(
+                loadout_key,
+                {},
+            )
             loadout = totals["primary_loadouts"].setdefault(loadout_key, {
                 "continuousPrimaryCast": bool(record.get("continuous_primary_cast")),
                 "deaths": 0,
@@ -227,37 +232,65 @@ def episode_gameplay_summary(records: Iterable[Mapping[str, Any]]) -> Mapping[st
             loadout["enemyKills"] += int(record.get("enemy_kills", 0))
             loadout["wavesCompleted"] += int(record.get("waves_completed", 0))
             loadout["wavesReached"] += int(record.get("waves_reached", 0))
-            loadout["primaryActionDecisions"] += int(record.get("primary_action_decisions", 0))
-            loadout["primaryActionTicks"] += int(record.get("primary_action_ticks", 0))
-            loadout["primaryCastRuns"] += int(record.get("primary_cast_runs", 0))
+            loadout["primaryActionDecisions"] += int(
+                initial_actions.get("primaryActionDecisions", 0)
+            )
+            loadout["primaryActionTicks"] += int(initial_actions.get("primaryActionTicks", 0))
+            loadout["primaryCastRuns"] += int(initial_actions.get("primaryCastRuns", 0))
             loadout["maximumPrimaryCastRunTicks"] = max(
                 loadout["maximumPrimaryCastRunTicks"],
-                int(record.get("maximum_primary_cast_run_ticks", 0)),
+                int(initial_actions.get("maximumPrimaryCastRunTicks", 0)),
             )
+        for action_key, actions in record.get("primary_actions_by_loadout", {}).items():
+            target = totals["primary_action_loadouts"].setdefault(action_key, {
+                "maximumPrimaryCastRunTicks": 0,
+                "primaryActionDecisions": 0,
+                "primaryActionTicks": 0,
+                "primaryCastRuns": 0,
+                "primarySkillId": int(actions["primarySkillId"]),
+                "weldBuildId": actions.get("weldBuildId"),
+            })
+            if (
+                target["primarySkillId"] != int(actions["primarySkillId"])
+                or target["weldBuildId"] != actions.get("weldBuildId")
+            ):
+                raise ValueError(f"primary action identity changed for {action_key}")
+            target["primaryActionDecisions"] += int(actions["primaryActionDecisions"])
+            target["primaryActionTicks"] += int(actions["primaryActionTicks"])
+            target["primaryCastRuns"] += int(actions["primaryCastRuns"])
+            target["maximumPrimaryCastRunTicks"] = max(
+                target["maximumPrimaryCastRunTicks"],
+                int(actions["maximumPrimaryCastRunTicks"]),
+            )
+    totals["primary_action_loadouts"] = dict(sorted(totals["primary_action_loadouts"].items()))
     totals["primary_loadouts"] = dict(sorted(totals["primary_loadouts"].items()))
     return totals
 
 
 def primary_curriculum_coverage(records: Sequence[Mapping[str, Any]]) -> Mapping[str, Any]:
-    loadouts = episode_gameplay_summary(records)["primary_loadouts"]
+    gameplay = episode_gameplay_summary(records)
+    initial_loadouts = gameplay["primary_loadouts"]
+    action_loadouts = gameplay["primary_action_loadouts"]
     expected = {str(row["key"]): row for row in POLICY_SPEC.primary_curriculum}
-    missing = sorted(set(expected) - set(loadouts))
+    missing = sorted(set(expected) - set(initial_loadouts))
     without_actions = sorted(
-        key for key, row in loadouts.items() if int(row["primaryActionDecisions"]) < 1
+        key for key in expected
+        if key not in action_loadouts or int(action_loadouts[key]["primaryActionDecisions"]) < 1
     )
     continuous_failures = sorted(
         key
         for key, contract in expected.items()
         if contract["castMode"] == "continuous"
         and (
-            key not in loadouts
-            or int(loadouts[key]["maximumPrimaryCastRunTicks"]) < 20
+            key not in action_loadouts
+            or int(action_loadouts[key]["maximumPrimaryCastRunTicks"]) < 20
         )
     )
     return {
         "coverageVersion": 1,
         "expectedLoadouts": sorted(expected),
-        "observedLoadouts": sorted(loadouts),
+        "observedLoadouts": sorted(initial_loadouts),
+        "actionLoadouts": sorted(action_loadouts),
         "missingLoadouts": missing,
         "loadoutsWithoutPrimaryActions": without_actions,
         "continuousCastFailures": continuous_failures,

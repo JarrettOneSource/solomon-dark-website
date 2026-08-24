@@ -503,11 +503,9 @@ class EpisodeAccumulator:
         "aim": [0] * 9,
     })
     spell_actions_by_skill_id: dict[str, int] = field(default_factory=dict)
-    primary_action_decisions: int = 0
-    primary_action_ticks: int = 0
-    primary_cast_runs: int = 0
-    current_primary_cast_run_ticks: int = 0
-    maximum_primary_cast_run_ticks: int = 0
+    primary_actions_by_loadout: dict[str, dict[str, int]] = field(default_factory=dict)
+    active_primary_cast_loadout: str | None = None
+    active_primary_cast_run_ticks: int = 0
     maximum_equipped_skill_ranks: dict[str, int] = field(default_factory=dict)
     consumables_used: int = 0
     enemy_kills: int = 0
@@ -580,19 +578,13 @@ class EpisodeLedger:
                     accumulator.spell_actions_by_skill_id.get(key, 0) + 1
                 )
             if int(actions[world, 2]) == 1:
-                if skill_id != accumulator.primary_skill_id:
-                    raise RuntimeError("primary action identity disagrees with episode curriculum")
-                action_ticks = int(transition.ticks[world])
-                accumulator.primary_action_decisions += 1
-                accumulator.primary_action_ticks += action_ticks
-                accumulator.current_primary_cast_run_ticks += action_ticks
-                accumulator.maximum_primary_cast_run_ticks = max(
-                    accumulator.maximum_primary_cast_run_ticks,
-                    accumulator.current_primary_cast_run_ticks,
+                observe_primary_action(
+                    accumulator,
+                    observation,
+                    int(transition.ticks[world]),
                 )
-            elif accumulator.current_primary_cast_run_ticks > 0:
-                accumulator.primary_cast_runs += 1
-                accumulator.current_primary_cast_run_ticks = 0
+            else:
+                close_primary_cast_run(accumulator)
             for equipped_id, rank in equipped_skill_ranks(observation).items():
                 key = str(equipped_id)
                 accumulator.maximum_equipped_skill_ranks[key] = max(
@@ -834,6 +826,8 @@ def episode_record(
     aborted: bool,
     error: str | None,
 ) -> Mapping[str, Any]:
+    primary_actions = primary_action_records(accumulator)
+    initial_primary = primary_actions.get(accumulator.primary_loadout_key, {})
     return {
         "metrics_version": 7,
         "seed": accumulator.seed,
@@ -852,13 +846,13 @@ def episode_record(
         "primary_skill_id": accumulator.primary_skill_id,
         "weld_build_id": accumulator.weld_build_id,
         "continuous_primary_cast": accumulator.continuous_primary_cast,
-        "primary_action_decisions": accumulator.primary_action_decisions,
-        "primary_action_ticks": accumulator.primary_action_ticks,
-        "primary_cast_runs": (
-            accumulator.primary_cast_runs
-            + int(accumulator.current_primary_cast_run_ticks > 0)
+        "primary_actions_by_loadout": primary_actions,
+        "primary_action_decisions": int(initial_primary.get("primaryActionDecisions", 0)),
+        "primary_action_ticks": int(initial_primary.get("primaryActionTicks", 0)),
+        "primary_cast_runs": int(initial_primary.get("primaryCastRuns", 0)),
+        "maximum_primary_cast_run_ticks": int(
+            initial_primary.get("maximumPrimaryCastRunTicks", 0)
         ),
-        "maximum_primary_cast_run_ticks": accumulator.maximum_primary_cast_run_ticks,
         "maximum_equipped_skill_ranks": accumulator.maximum_equipped_skill_ranks,
         "consumables_used": accumulator.consumables_used,
         "enemy_kills": accumulator.enemy_kills,
@@ -877,7 +871,71 @@ def episode_record(
         "choice_events": accumulator.choice_events,
         "aborted": aborted,
         "error": error,
+}
+
+
+def observe_primary_action(
+    accumulator: EpisodeAccumulator,
+    observation: np.ndarray,
+    action_ticks: int,
+) -> None:
+    loadout_key = equipped_primary_loadout_key(observation)
+    if accumulator.active_primary_cast_loadout not in (None, loadout_key):
+        close_primary_cast_run(accumulator)
+    skill_id = equipped_skill_id(observation, "equipped_primary")
+    if skill_id is None:
+        raise ValueError("primary action has no equipped identity")
+    weld_build_id = None if skill_id != 52 else observation_unsigned_identity(
+        observation,
+        "equipped_primary",
+        "weld_build_id",
+    )
+    row = accumulator.primary_actions_by_loadout.setdefault(loadout_key, {
+        "maximumPrimaryCastRunTicks": 0,
+        "primaryActionDecisions": 0,
+        "primaryActionTicks": 0,
+        "primaryCastRuns": 0,
+        "primarySkillId": skill_id,
+        "weldBuildId": -1 if weld_build_id is None else weld_build_id,
+    })
+    if (
+        row["primarySkillId"] != skill_id
+        or row["weldBuildId"] != (-1 if weld_build_id is None else weld_build_id)
+    ):
+        raise ValueError(f"primary loadout identity changed for {loadout_key}")
+    accumulator.active_primary_cast_loadout = loadout_key
+    accumulator.active_primary_cast_run_ticks += action_ticks
+    row["primaryActionDecisions"] += 1
+    row["primaryActionTicks"] += action_ticks
+    row["maximumPrimaryCastRunTicks"] = max(
+        row["maximumPrimaryCastRunTicks"],
+        accumulator.active_primary_cast_run_ticks,
+    )
+
+
+def close_primary_cast_run(accumulator: EpisodeAccumulator) -> None:
+    key = accumulator.active_primary_cast_loadout
+    if key is not None and accumulator.active_primary_cast_run_ticks > 0:
+        accumulator.primary_actions_by_loadout[key]["primaryCastRuns"] += 1
+    accumulator.active_primary_cast_loadout = None
+    accumulator.active_primary_cast_run_ticks = 0
+
+
+def primary_action_records(accumulator: EpisodeAccumulator) -> Mapping[str, Mapping[str, Any]]:
+    result = {
+        key: {
+            **row,
+            "weldBuildId": None if row["weldBuildId"] < 0 else row["weldBuildId"],
+        }
+        for key, row in accumulator.primary_actions_by_loadout.items()
     }
+    active = accumulator.active_primary_cast_loadout
+    if active is not None and accumulator.active_primary_cast_run_ticks > 0:
+        result[active] = {
+            **result[active],
+            "primaryCastRuns": int(result[active]["primaryCastRuns"]) + 1,
+        }
+    return dict(sorted(result.items()))
 
 
 def add_counts(target: dict[str, int], source: Mapping[str, Any]) -> None:

@@ -284,6 +284,16 @@ def main() -> int:
                 "powerups_collected": 0,
                 "primary_action_decisions": 1,
                 "primary_action_ticks": 10,
+                "primary_actions_by_loadout": {
+                    "primary:16": {
+                        "maximumPrimaryCastRunTicks": 10,
+                        "primaryActionDecisions": 1,
+                        "primaryActionTicks": 10,
+                        "primaryCastRuns": 1,
+                        "primarySkillId": 16,
+                        "weldBuildId": None,
+                    }
+                },
                 "primary_cast_runs": 1,
                 "primary_loadout_key": "primary:16",
                 "primary_skill_id": 16,
