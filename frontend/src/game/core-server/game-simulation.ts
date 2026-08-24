@@ -3289,7 +3289,14 @@ function retainBoneyardEnemyEvents(
   tick: number,
 ): readonly BoneyardEnemySemanticEvent[] {
   const minimumTick = tick - BONEYARD_ENEMY_EVENT_RETENTION_TICKS
-  const retained = [...previous, ...emitted].filter((event) => event.tick >= minimumTick)
+  const retained = [...previous, ...emitted]
+    .filter((event) => event.tick >= minimumTick)
+    .sort((left, right) => left.eventId - right.eventId)
+  for (let index = 1; index < retained.length; index += 1) {
+    if (retained[index]!.eventId === retained[index - 1]!.eventId) {
+      throw new Error(`duplicate Boneyard enemy event ID ${retained[index]!.eventId}`)
+    }
+  }
   return retained.length <= BONEYARD_ENEMY_EVENT_LANE_CAPACITY
     ? retained
     : retained.slice(-BONEYARD_ENEMY_EVENT_LANE_CAPACITY)

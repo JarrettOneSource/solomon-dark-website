@@ -1240,6 +1240,90 @@ test('a death reward consumes Mindblast RNG in reward order without advancing it
   }])
 })
 
+test('same-tick world and reward-triggered damage events retain authoritative ID order', () => {
+  let state = enterBoneyardWorld(createGameSimulation({ caster: {
+    discipline: 'arcane',
+    displayName: 'Ordered Event Caster',
+    element: 'ether',
+  } }), combatBoneyard('ordered-event-run'))
+  state = equipMindblowingRing(state, 'caster')
+  state = grantGameSimulationPlayerExperience(state, 'caster', 90)
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+  const player = getPlayerCharacter(state, 'caster')
+  const seeded = stepBoneyardEnemyStore(state.world.enemies, {
+    firstProjectileWorldContact: () => null,
+    players: {},
+    resolveMovement: ({ requestedPosition }) => requestedPosition,
+    resolveSpawnIntents: () => [1, 2].map((id) => ({
+      enemyToken: 'SKELETON' as const,
+      flags: [],
+      id,
+      locationPolicy: 'anywhere' as const,
+      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.SKELETON,
+      position: { x: player.position.x + id * 100, y: player.position.y },
+      spawnTick: 0,
+      waveOrdinal: 1,
+    })),
+    tick: 0,
+  }).store
+  const killed = damageBoneyardEnemy({
+    ...seeded,
+    actors: seeded.actors.map((actor) => ({
+      ...actor,
+      currentHealth: actor.id === 1 ? actor.currentHealth : 100,
+      nextMovementTick: Number.MAX_SAFE_INTEGER,
+    })),
+  }, {
+    actorId: 1,
+    amount: 1_000,
+    sourcePlayerId: 'caster',
+    tick: state.tick,
+  })
+  state = {
+    ...state,
+    world: { ...state.world, enemies: killed.store, enemyEvents: killed.events },
+  }
+
+  state = stepGameSimulationTick(state, { caster: gameplayInput(0, 0) })
+
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+  const eventIds = state.world.enemyEvents.map(({ eventId }) => eventId)
+  assert.ok(
+    eventIds.every((eventId, index) => index === 0 || eventId > eventIds[index - 1]!),
+    `enemy event IDs are not increasing: ${eventIds.join(',')}`,
+  )
+  assert.ok(state.world.enemyEvents.some(({ actorId, type }) => (
+    actorId === 2 && type === 'enemy-damage-sound'
+  )))
+})
+
+test('Boneyard enemy event retention rejects duplicate authoritative identity', () => {
+  let state = enterBoneyardWorld(
+    createGameSimulation(),
+    combatBoneyard('duplicate-event-run'),
+  )
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+  const duplicated = {
+    actorId: 1,
+    eventId: 1,
+    tick: state.tick,
+    type: 'enemy-death' as const,
+  }
+  state = {
+    ...state,
+    world: {
+      ...state.world,
+      enemies: { ...state.world.enemies, nextEventId: 2 },
+      enemyEvents: [duplicated, { ...duplicated, actorId: 2 }],
+    },
+  }
+
+  assert.throws(
+    () => stepGameSimulationTick(state, {}),
+    /duplicate Boneyard enemy event ID 1/,
+  )
+})
+
 test('shared picker cohort excludes late joiners and releases disconnected waiters', () => {
   const first = {
     discipline: 'arcane',
