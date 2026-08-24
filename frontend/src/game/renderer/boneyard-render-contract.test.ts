@@ -30,6 +30,10 @@ import {
   WEB_DIRECT_ENVIRONMENT_LIGHT_SCALE,
   nativeDirectEnvironmentLightAlpha,
 } from './boneyard-environment-light-plan.ts'
+import {
+  NATIVE_SPECTATOR_HUD_CONTRACT,
+  nativeSpectatorHudLayout,
+} from '../native-spectator-hud.ts'
 
 const boneyardRenderer = readFileSync(new URL('./boneyard-world-renderer.ts', import.meta.url), 'utf8')
 const boneyardScene = readFileSync(
@@ -37,6 +41,10 @@ const boneyardScene = readFileSync(
   'utf8',
 ).replaceAll('\r\n', '\n')
 const boneyardStyles = readFileSync(new URL('../boneyard.css', import.meta.url), 'utf8')
+const nativeSpectatorStatus = readFileSync(
+  new URL('../NativeSpectatorStatus.tsx', import.meta.url),
+  'utf8',
+)
 const environmentLight = readFileSync(
   new URL('./boneyard-environment-light.ts', import.meta.url),
   'utf8',
@@ -392,6 +400,7 @@ test('spectator follow starts after local death presentation and uses the first 
   )
   assert.deepEqual(boneyardSpectatorStatus(spectating, 'local', following), {
     accessibleLabel: 'Spectating Alpha. Left or right click to select the next player.',
+    displayText: 'Spectating Alpha  |  Left / Right click: next player',
     instruction: 'Left / Right click: next player',
     runId: 'run-1',
     targetPlayerId: 'alpha',
@@ -471,6 +480,7 @@ test('spectator cycling wraps living peers and lifecycle barriers clear camera a
   state = boneyardSpectatorCameraState(waiting, 'local', state)
   assert.deepEqual(boneyardSpectatorStatus(waiting, 'local', state), {
     accessibleLabel: 'Spectating - waiting for an alive player.',
+    displayText: 'Spectating - waiting for an alive player',
     instruction: null,
     runId: 'run-1',
     targetPlayerId: null,
@@ -481,10 +491,57 @@ test('spectator cycling wraps living peers and lifecycle barriers clear camera a
 test('spectator status is an atomic accessible product surface', () => {
   assert.match(boneyardRenderer, /boneyardSpectatorCameraState/)
   assert.match(boneyardRenderer, /boneyardCameraFocus/)
-  assert.match(boneyardScene, /className="boneyard-spectator-status"/)
-  assert.match(boneyardScene, /role="status"/)
-  assert.match(boneyardScene, /aria-live="polite"/)
-  assert.match(boneyardScene, /aria-label=\{spectatorStatus\.accessibleLabel\}/)
+  assert.match(boneyardScene, /<NativeSpectatorStatus/)
+  assert.match(nativeSpectatorStatus, /className="boneyard-spectator-status"/)
+  assert.match(nativeSpectatorStatus, /role="status"/)
+  assert.match(nativeSpectatorStatus, /aria-live="polite"/)
+  assert.match(nativeSpectatorStatus, /aria-label=\{status\.accessibleLabel\}/)
+  assert.match(nativeSpectatorStatus, /font=\{NATIVE_SPECTATOR_HUD_CONTRACT\.font\}/)
+  assert.match(nativeSpectatorStatus, /NATIVE_SPECTATOR_HUD_CONTRACT\.panelRecords/)
+  assert.doesNotMatch(boneyardStyles, /font: 20px 'IM FELL English'/)
+})
+
+test('spectator status uses the MP product panel, font, tint, and normalized geometry', () => {
+  assert.deepEqual(
+    NATIVE_SPECTATOR_HUD_CONTRACT.panelRecords,
+    [10, 79, 107, 108, 109, 110],
+  )
+  assert.equal(NATIVE_SPECTATOR_HUD_CONTRACT.font, 'medium')
+  assert.equal(NATIVE_SPECTATOR_HUD_CONTRACT.tint, 0xffe68c)
+  assert.deepEqual(NATIVE_SPECTATOR_HUD_CONTRACT.textOffset, { x: 18, y: 20 })
+
+  const layout = nativeSpectatorHudLayout({ height: 900, width: 1_600 })
+  assert.deepEqual(layout.surface, {
+    height: 67.5,
+    width: 960,
+    x: 320,
+    y: 49.5,
+  })
+  assert.deepEqual(layout.horizontalRails.map(({ record, width, x, y }) => ({
+    record,
+    width,
+    x,
+    y,
+  })), [
+    { record: 10, width: 940, x: 10, y: -2 },
+    { record: 10, width: 940, x: 10, y: 52.5 },
+  ])
+  assert.deepEqual(layout.verticalRails.map(({ height, record, x, y }) => ({
+    height,
+    record,
+    x,
+    y,
+  })), [
+    { height: 47.5, record: 79, x: 0, y: 10 },
+    { height: 47.5, record: 79, x: 943, y: 10 },
+  ])
+  assert.deepEqual(layout.corners.map(({ record }) => record), [107, 108, 109, 110])
+
+  const wide = nativeSpectatorHudLayout({ height: 1_080, width: 1_920 })
+  assert.equal(wide.surface.height, 81)
+  assert.equal(wide.surface.width, 1_152)
+  assert.equal(wide.surface.x, 384)
+  assert.ok(Math.abs(wide.surface.y - 59.4) < 1e-10)
 })
 
 test('native death tick 159 moves the corpse to the recovered back render bias', () => {

@@ -5,6 +5,10 @@ import {
   createIdlePlayerPrimaryCast,
   createPlayerCharacter,
 } from '../core-kernels/player-character.ts'
+import {
+  PLAYER_DEATH_PRESENTATION_DURATION_TICKS,
+  PLAYER_DEATH_PRESENTATION_MAXIMUM_HELD_TICK,
+} from '../core-kernels/player-combat.ts'
 import { buyFomentiusItem, projectInventoryItems } from '../core-kernels/hub-economy.ts'
 import { createNativeRng } from '../core-kernels/native-rng.ts'
 import {
@@ -43,6 +47,7 @@ import {
   removePlayerEntity,
   replacePlayerEconomy,
   replacePlayerCharacter,
+  respawnPlayerEntityAt,
   restorePlayerEntityHealth,
   resetPlayerEntitiesForNewRun,
   setPlayerEntitySpectating,
@@ -258,6 +263,7 @@ test('entity combat APIs update only the indexed progression and publish one-sho
   const tick = stepPlayerEntityCombatTick(store)
   store = tick.store
   assert.deepEqual(tick.beganDeathEpochPlayerIds, ['first'])
+  assert.deepEqual(tick.completedDeathPresentationPlayerIds, [])
   assert.deepEqual(tick.deathBurstPlayerIds, [])
   assert.equal(playerProgressionAt(store, 'first')?.deathEpoch, 1)
   assert.equal(playerProgressionAt(store, 'second')?.currentHealth, 50)
@@ -265,6 +271,68 @@ test('entity combat APIs update only the indexed progression and publish one-sho
   store = poisonPlayerEntity(store, 'second', 5, 10)
   assert.equal(playerProgressionAt(store, 'second')?.poisonDamagePerTick, 0.05)
   assert.equal(playerProgressionAt(store, 'second')?.poisonTicksRemaining, 1_000)
+})
+
+test('wave respawn restores only a non-positive player on the same durable entity', () => {
+  let store = createPlayerEntityStore()
+  store = addPlayerEntity(store, 'first', FIRST, createPlayerCharacter(FIRST, { x: 10, y: 20 }), 10)
+  store = addPlayerEntity(store, 'second', SECOND, createPlayerCharacter(SECOND, { x: 30, y: 40 }), 20)
+  store = grantPlayerEntityExperience(store, 'first', 100)
+  store = replacePlayerCharacter(store, 'first', {
+    ...playerCharacterAt(store, 'first')!,
+    headingIndex: 7,
+    primaryCast: {
+      ...playerCharacterAt(store, 'first')!.primaryCast,
+      actionTick: 12,
+      channelActive: true,
+      held: true,
+    },
+    velocity: { x: 4, y: -3 },
+  })
+  store = damagePlayerEntity(store, 'first', 60, 100)
+  store = stepPlayerEntityCombatTick(store).store
+
+  const entityIds = store.entityIds
+  const identities = store.identities
+  const configs = store.configs
+  const economies = store.economies
+  const skillBooks = store.skillBooks
+  const statBooks = store.statBooks
+  const deathEpoch = playerProgressionAt(store, 'first')!.deathEpoch
+  const secondBefore = playerProgressionAt(store, 'second')
+  const respawn = respawnPlayerEntityAt(store, 'first', { x: 123, y: 234 })
+  store = respawn.store
+
+  assert.equal(respawn.didRespawn, true)
+  assert.equal(store.entityIds, entityIds)
+  assert.equal(store.identities, identities)
+  assert.equal(store.configs, configs)
+  assert.equal(store.economies, economies)
+  assert.equal(store.skillBooks, skillBooks)
+  assert.equal(store.statBooks, statBooks)
+  assert.equal(playerProgressionAt(store, 'first')?.deathEpoch, deathEpoch)
+  assert.equal(playerProgressionAt(store, 'first')?.deathAgeTicks, 0)
+  assert.equal(playerProgressionAt(store, 'first')?.deathTick, 0)
+  assert.equal(playerProgressionAt(store, 'first')?.lifeState, 'alive')
+  assert.equal(
+    playerProgressionAt(store, 'first')?.currentHealth,
+    playerProgressionAt(store, 'first')?.maximumHealth,
+  )
+  assert.equal(
+    playerProgressionAt(store, 'first')?.currentMana,
+    playerProgressionAt(store, 'first')?.maximumMana,
+  )
+  assert.deepEqual(playerCharacterAt(store, 'first')?.position, { x: 123, y: 234 })
+  assert.deepEqual(playerCharacterAt(store, 'first')?.velocity, { x: 0, y: 0 })
+  assert.equal(playerCharacterAt(store, 'first')?.headingIndex, 7)
+  assert.equal(playerCharacterAt(store, 'first')?.primaryCast.actionTick, -1)
+  assert.equal(playerCharacterAt(store, 'first')?.primaryCast.channelActive, false)
+  assert.equal(playerProgressionAt(store, 'second'), secondBefore)
+
+  const living = respawnPlayerEntityAt(store, 'second', { x: 999, y: 999 })
+  assert.equal(living.didRespawn, false)
+  assert.equal(living.store, store)
+  assert.deepEqual(playerCharacterAt(living.store, 'second')?.position, { x: 30, y: 40 })
 })
 
 test('new-run placement resets transient combat while retaining dense identity and progression books', () => {
@@ -506,14 +574,24 @@ test('Last Word emits its native death and archive milestones only for its owner
   })
   store = {
     ...store,
-    progressions: [{ ...store.progressions[0]!, deathTick: 199, lifeState: 'dying' }],
+    progressions: [{
+      ...store.progressions[0]!,
+      deathAgeTicks: 333,
+      deathTick: 199,
+      lifeState: 'dying',
+    }],
   }
   const burst = stepPlayerEntityCombatTick(store)
   assert.deepEqual(burst.lastWordBurstPlayerIds, ['first'])
   store = {
     ...burst.store,
-    progressions: [{ ...burst.store.progressions[0]!, deathTick: 299 }],
+    progressions: [{
+      ...burst.store.progressions[0]!,
+      deathAgeTicks: PLAYER_DEATH_PRESENTATION_DURATION_TICKS - 1,
+      deathTick: PLAYER_DEATH_PRESENTATION_MAXIMUM_HELD_TICK,
+    }],
   }
   const archive = stepPlayerEntityCombatTick(store)
   assert.deepEqual(archive.lastWordArchivePlayerIds, ['first'])
+  assert.deepEqual(archive.completedDeathPresentationPlayerIds, ['first'])
 })

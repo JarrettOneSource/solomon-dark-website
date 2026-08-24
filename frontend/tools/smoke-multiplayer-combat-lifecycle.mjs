@@ -9,6 +9,7 @@ import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
 import { solomonContactContains } from '../src/game/core-kernels/boneyard-encounter.ts'
 import { BONEYARD_GATE_INITIAL_SWAY } from '../src/game/core-kernels/boneyard-gate.ts'
 import { PLAYER_CHARACTER_RADIUS } from '../src/game/core-kernels/player-character.ts'
+import { PLAYER_DEATH_PRESENTATION_MAXIMUM_HELD_TICK } from '../src/game/core-kernels/player-combat.ts'
 import {
   PRIMARY_CAST_ACTION_END_TICK,
   PRIMARY_SPELL_FIRE_COLLISION_RADIUS,
@@ -19,7 +20,10 @@ import {
   resolveBoneyardMovement,
 } from '../src/game/core-server/boneyard-collision.ts'
 import { damagePlayerEntity } from '../src/game/core-server/player-entity-store.ts'
-import { getPlayerProgression } from '../src/game/core-server/game-simulation.ts'
+import {
+  getPlayerCharacter,
+  getPlayerProgression,
+} from '../src/game/core-server/game-simulation.ts'
 import {
   createBoneyardCatalog,
   DEFAULT_BONEYARD_CHOICE,
@@ -261,7 +265,10 @@ try {
     assert.equal(firstDeath.fallen.label, 'host')
     assert.equal(firstDeath.survivor.label, 'guest')
     assert.equal(firstDeath.fallenFrame.localPlayerLifeState, 'spectating')
-    assert.ok(firstDeath.fallenFrame.localPlayerDeathTick >= 159)
+    assert.equal(
+      firstDeath.fallenFrame.localPlayerDeathTick,
+      PLAYER_DEATH_PRESENTATION_MAXIMUM_HELD_TICK,
+    )
     assert.equal(firstDeath.fallenFrame.playerDeathWeaponCount, 1)
     assert.equal(firstDeath.fallenFrame.runPhase, 'active')
     assert.equal(firstDeath.survivorFrame.localPlayerLifeState, 'alive')
@@ -287,7 +294,16 @@ try {
   } finally {
     await survivorEvasion.stop()
   }
-  const terminalDamage = applyDeterministicLethalDamage(host, guestHub.localPlayerId)
+  const waveRespawn = await forceCompletedWaveRespawn({
+    host,
+    observerPage: firstDeath.survivor.page,
+    ownerPage: firstDeath.fallen.page,
+    playerId: hostHub.localPlayerId,
+  })
+  const terminalDamage = {
+    guest: applyDeterministicLethalDamage(host, guestHub.localPlayerId),
+    host: applyDeterministicLethalDamage(host, hostHub.localPlayerId),
+  }
   const terminal = await driveSurvivorToGameOver(firstDeath.survivor.page)
   await Promise.all([
     waitForGameOver(firstDeath.fallen.page),
@@ -298,11 +314,15 @@ try {
     boneyardFrame(firstDeath.fallen.page),
     boneyardFrame(firstDeath.survivor.page),
   ])
-  assert.equal(fallenTerminalFrame.localPlayerLifeState, 'spectating')
+  assert.notEqual(fallenTerminalFrame.localPlayerLifeState, 'alive')
   assert.equal(fallenTerminalFrame.runPhase, 'game-over')
   assert.notEqual(survivorTerminalFrame.localPlayerLifeState, 'alive')
   assert.equal(survivorTerminalFrame.runPhase, 'game-over')
   assert.equal(fallenTerminalFrame.runId, survivorTerminalFrame.runId)
+  assert.equal(
+    getPlayerProgression(host.state(), hostHub.localPlayerId).deathEpoch,
+    waveRespawn.authority.deathEpoch + 1,
+  )
   assert.ok(survivorTerminalFrame.runGameOverTicks >= 0)
   assert.equal(fallenTerminalFrame.runGameOverExitTicks, null)
   assert.equal(survivorTerminalFrame.runGameOverExitTicks, null)
@@ -355,6 +375,7 @@ try {
       runId: hostInitial.runId,
     },
     spectatorHud,
+    waveRespawn,
     returnToHub,
     returnedHubScreenshotPath,
     scope: deathGameOverOnly ? 'player-death-game-over' : 'multiplayer-combat-lifecycle',
@@ -746,6 +767,76 @@ function applyDeterministicLethalDamage(host, playerId) {
     healthBefore: before.currentHealth,
     playerId,
   }
+}
+
+async function forceCompletedWaveRespawn({ host, observerPage, ownerPage, playerId }) {
+  const state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
+  assert.ok(state.world.waves, 'wave respawn proof requires native wave authority')
+  const runId = state.world.runId
+  const deathEpoch = getPlayerProgression(state, playerId).deathEpoch
+  const spawn = { x: state.world.spawn.x, y: state.world.spawn.y }
+  state.world = {
+    ...state.world,
+    waves: {
+      ...state.world.waves,
+      phase: 'wave-threshold',
+      populationThreshold: Number.MAX_SAFE_INTEGER,
+      waveOrdinal: Math.max(1, state.world.waves.waveOrdinal),
+    },
+  }
+
+  const deadline = Date.now() + 30_000
+  let authorityReceipt = null
+  while (Date.now() < deadline) {
+    const current = host.state()
+    if (
+      current.world.kind === 'boneyard'
+      && current.world.runId === runId
+      && current.world.waves?.phase === 'wave-lull-delay'
+      && getPlayerProgression(current, playerId).lifeState === 'alive'
+    ) {
+      const player = getPlayerCharacter(current, playerId)
+      authorityReceipt = {
+        deathEpoch: getPlayerProgression(current, playerId).deathEpoch,
+        health: getPlayerProgression(current, playerId).currentHealth,
+        mana: getPlayerProgression(current, playerId).currentMana,
+        position: { ...player.position },
+        runId,
+        spawn,
+        tick: current.tick,
+        waveOrdinal: current.world.waves.waveOrdinal,
+      }
+      break
+    }
+    await new Promise((resolve) => setImmediate(resolve))
+  }
+  assert.ok(authorityReceipt, 'completed wave did not respawn the dead owner')
+  assert.equal(authorityReceipt.deathEpoch, deathEpoch)
+  assert.deepEqual(authorityReceipt.position, spawn)
+
+  await Promise.all([ownerPage, observerPage].map((page) => page.waitForFunction((id) => {
+    const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
+    const sample = frame?.playerSamples?.find((player) => player.id === id)
+    return sample?.lifeState === 'alive'
+  }, playerId, { timeout: 30_000 })))
+  const [ownerFrame, observerFrame] = await Promise.all([
+    boneyardFrame(ownerPage),
+    boneyardFrame(observerPage),
+  ])
+  assert.equal(ownerFrame.localPlayerLifeState, 'alive')
+  assert.equal(ownerFrame.spectatorTargetPlayerId, null)
+  assert.equal(ownerFrame.cameraSubjectPlayerId, playerId)
+  assert.equal(ownerFrame.playerDeathWeaponCount, 0)
+  assert.equal(
+    await ownerPage.locator('.boneyard-spectator-status').count(),
+    0,
+  )
+  assert.equal(
+    observerFrame.playerSamples.find((player) => player.id === playerId)?.lifeState,
+    'alive',
+  )
+  return { authority: authorityReceipt, observerTick: observerFrame.tick, ownerTick: ownerFrame.tick }
 }
 
 async function armAirTargetShield(page, host, deadline = Date.now() + 30_000) {
@@ -1456,17 +1547,37 @@ async function spectatorStatusReceipt(page, frame, targetPlayerId) {
   const status = page.locator('.boneyard-spectator-status')
   await status.waitFor({ timeout: 30_000 })
   assert.equal(await status.getAttribute('data-target-player-id'), targetPlayerId)
-  const text = (await status.innerText()).replace(/\s+/g, ' ').trim()
+  const text = await status.getAttribute('data-display-text')
   assert.equal(
     text,
-    `Spectating ${target.displayName} | Left / Right click: next player`,
+    `Spectating ${target.displayName}  |  Left / Right click: next player`,
   )
   const accessibleLabel = await status.getAttribute('aria-label')
   assert.equal(
     accessibleLabel,
     `Spectating ${target.displayName}. Left or right click to select the next player.`,
   )
-  return { accessibleLabel, targetPlayerId, text }
+  assert.equal(await status.getAttribute('data-native-font'), 'Fonts.93-184')
+  assert.equal(
+    await status.getAttribute('data-native-ui-records'),
+    '10,79,107,108,109,110',
+  )
+  const records = await status.locator('[data-native-ui-record]').evaluateAll((nodes) => (
+    [...new Set(nodes.map((node) => Number(node.getAttribute('data-native-ui-record'))))]
+      .sort((left, right) => left - right)
+  ))
+  assert.deepEqual(records, [10, 79, 107, 108, 109, 110])
+  const [bounds, canvasBounds] = await Promise.all([
+    status.boundingBox(),
+    page.locator('.boneyard-world-canvas').boundingBox(),
+  ])
+  assert.ok(bounds)
+  assert.ok(canvasBounds)
+  assert.ok(Math.abs((bounds.x - canvasBounds.x) / canvasBounds.width - 0.20) < 0.002)
+  assert.ok(Math.abs((bounds.y - canvasBounds.y) / canvasBounds.height - 0.055) < 0.002)
+  assert.ok(Math.abs(bounds.width / canvasBounds.width - 0.60) < 0.002)
+  assert.ok(Math.abs(bounds.height / canvasBounds.height - 0.075) < 0.002)
+  return { accessibleLabel, bounds, records, targetPlayerId, text }
 }
 
 async function driveSurvivorToGameOver(page) {

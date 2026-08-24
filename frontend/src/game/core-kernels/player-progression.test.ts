@@ -267,6 +267,7 @@ test('death ticks own the recovered corpse frame boundaries and the tick-159 bur
   const beforeBurst = {
     ...createPlayerProgression(0),
     currentHealth: -10,
+    deathAgeTicks: 264,
     deathEpoch: 1,
     deathTick: 158,
     lifeState: 'dying' as const,

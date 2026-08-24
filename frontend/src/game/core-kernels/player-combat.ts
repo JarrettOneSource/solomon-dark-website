@@ -14,6 +14,9 @@ export const PLAYER_DEATH_EFFECT_TICK = 150
 export const PLAYER_DEATH_FRAME_ONE_TICK = 153
 export const PLAYER_DEATH_FRAME_TWO_TICK = 156
 export const PLAYER_DEATH_FRAME_THREE_TICK = 159
+export const PLAYER_DEATH_PRESENTATION_DURATION_TICKS = 500
+export const PLAYER_DEATH_PRESENTATION_NATIVE_TICKS = 300
+export const PLAYER_DEATH_PRESENTATION_MAXIMUM_HELD_TICK = 298
 export const PLAYER_HIT_LATCH_TICKS = 20
 
 export const PLAYER_LIFE_STATES = [
@@ -30,6 +33,7 @@ export interface PlayerCombatComponent {
   readonly currentHealth: number
   readonly currentMana: number
   readonly dazzleTicksRemaining: number
+  readonly deathAgeTicks: number
   readonly deathEpoch: number
   readonly deathTick: number
   readonly lifeState: PlayerLifeState
@@ -43,6 +47,7 @@ export interface PlayerCombatComponent {
 export interface PlayerCombatTickResult<T extends PlayerCombatComponent> {
   readonly beganDeathEpoch: boolean
   readonly combat: T
+  readonly completedDeathPresentation: boolean
   readonly emittedDeathBurst: boolean
 }
 
@@ -64,6 +69,7 @@ export function createPlayerCombat(): PlayerCombatComponent {
     currentHealth: PLAYER_INITIAL_HEALTH,
     currentMana: PLAYER_INITIAL_MANA,
     dazzleTicksRemaining: 0,
+    deathAgeTicks: 0,
     deathEpoch: 0,
     deathTick: 0,
     lifeState: 'alive',
@@ -102,7 +108,9 @@ export function dazzlePlayer<T extends PlayerCombatComponent>(
   }
 }
 
-export function playerMovementScale(source: PlayerCombatComponent): number {
+export function playerMovementScale(
+  source: Pick<PlayerCombatComponent, 'coldSlowTicksRemaining' | 'dazzleTicksRemaining'>,
+): number {
   const coldScale = source.coldSlowTicksRemaining > 0
     ? BOUNDED_ENEMY_COLD_MOVEMENT_SCALE
     : 1
@@ -152,7 +160,7 @@ export function damagePlayer<T extends PlayerCombatComponent>(
 }
 
 export function playerHitOverlayAlpha(
-  source: PlayerCombatComponent,
+  source: Pick<PlayerCombatComponent, 'lastDamageTick' | 'lifeState'>,
   tick: number,
 ): number {
   requireNonnegativeFinite(tick, 'player presentation tick')
@@ -194,7 +202,9 @@ export function setPlayerMana<T extends PlayerCombatComponent>(
   return currentMana === source.currentMana ? source : { ...source, currentMana }
 }
 
-export function playerDisplayHealth(source: PlayerCombatComponent): number {
+export function playerDisplayHealth(
+  source: Pick<PlayerCombatComponent, 'currentHealth' | 'maximumHealth'>,
+): number {
   return Math.min(source.maximumHealth, Math.max(0, source.currentHealth))
 }
 
@@ -239,6 +249,7 @@ export function stepPlayerCombatTick<T extends PlayerCombatComponent>(
       beganDeathEpoch: true,
       combat: {
         ...source,
+        deathAgeTicks: 0,
         deathEpoch: source.deathEpoch + 1,
         deathTick: 0,
         coldSlowTicksRemaining: 0,
@@ -248,16 +259,40 @@ export function stepPlayerCombatTick<T extends PlayerCombatComponent>(
         poisonDamagePerTick: 0,
         poisonTicksRemaining: 0,
       },
+      completedDeathPresentation: false,
       emittedDeathBurst: false,
     }
   }
 
-  if (source.lifeState === 'dying' || source.lifeState === 'spectating') {
-    const deathTick = Math.min(Number.MAX_SAFE_INTEGER, source.deathTick + 1)
+  if (source.lifeState === 'spectating') {
     return {
       beganDeathEpoch: false,
-      combat: { ...source, deathTick },
-      emittedDeathBurst: deathTick === PLAYER_DEATH_FRAME_THREE_TICK,
+      combat: source,
+      completedDeathPresentation: false,
+      emittedDeathBurst: false,
+    }
+  }
+
+  if (source.lifeState === 'dying') {
+    requireNonnegativeTicks(source.deathAgeTicks, 'player death age')
+    if (source.deathAgeTicks >= PLAYER_DEATH_PRESENTATION_DURATION_TICKS) {
+      return {
+        beganDeathEpoch: false,
+        combat: source,
+        completedDeathPresentation: false,
+        emittedDeathBurst: false,
+      }
+    }
+    const deathAgeTicks = source.deathAgeTicks + 1
+    const deathTick = playerDeathPresentationTickAtAge(deathAgeTicks)
+    return {
+      beganDeathEpoch: false,
+      combat: { ...source, deathAgeTicks, deathTick },
+      completedDeathPresentation:
+        deathAgeTicks === PLAYER_DEATH_PRESENTATION_DURATION_TICKS,
+      emittedDeathBurst:
+        source.deathTick < PLAYER_DEATH_FRAME_THREE_TICK
+        && deathTick >= PLAYER_DEATH_FRAME_THREE_TICK,
     }
   }
 
@@ -300,6 +335,7 @@ export function stepPlayerCombatTick<T extends PlayerCombatComponent>(
   return {
     beganDeathEpoch: false,
     combat,
+    completedDeathPresentation: false,
     emittedDeathBurst: false,
   }
 }
@@ -309,15 +345,33 @@ export function setPlayerSpectating<T extends PlayerCombatComponent>(source: T):
   return { ...source, lifeState: 'spectating' }
 }
 
-export function playerCanAcceptInput(source: PlayerCombatComponent): boolean {
+export function respawnPlayerCombat<T extends PlayerCombatComponent>(source: T): T {
+  if (source.currentHealth > 0) return source
+  return {
+    ...source,
+    currentHealth: source.maximumHealth,
+    currentMana: source.maximumMana,
+    deathAgeTicks: 0,
+    deathTick: 0,
+    lifeState: 'alive',
+  }
+}
+
+export function playerCanAcceptInput(
+  source: Pick<PlayerCombatComponent, 'lifeState'>,
+): boolean {
   return source.lifeState === 'alive'
 }
 
-export function playerCanCast(source: PlayerCombatComponent): boolean {
+export function playerCanCast(
+  source: Pick<PlayerCombatComponent, 'lifeState'>,
+): boolean {
   return source.lifeState === 'alive'
 }
 
-export function playerCollisionEnabled(source: PlayerCombatComponent): boolean {
+export function playerCollisionEnabled(
+  source: Pick<PlayerCombatComponent, 'deathTick' | 'lifeState'>,
+): boolean {
   return source.lifeState !== 'spectating'
     && !(source.lifeState === 'dying' && source.deathTick >= PLAYER_DEATH_FRAME_THREE_TICK)
 }
@@ -328,7 +382,9 @@ export function playerCollisionEnabledAfterCombatTick(
   return playerCollisionEnabled(stepPlayerCombatTick(source).combat)
 }
 
-export function playerDeathFrame(source: PlayerCombatComponent): 0 | 1 | 2 | 3 | null {
+export function playerDeathFrame(
+  source: Pick<PlayerCombatComponent, 'deathTick' | 'lifeState'>,
+): 0 | 1 | 2 | 3 | null {
   if (source.lifeState === 'alive' || source.lifeState === 'lethal-pending') return null
   return playerDeathFrameAtTick(source.deathTick)
 }
@@ -343,12 +399,29 @@ export function playerDeathFrameAtTick(deathTick: number): 0 | 1 | 2 | 3 {
   return 3
 }
 
+export function playerDeathPresentationTickAtAge(deathAgeTicks: number): number {
+  requireNonnegativeTicks(deathAgeTicks, 'player death age')
+  const boundedAge = Math.min(
+    PLAYER_DEATH_PRESENTATION_DURATION_TICKS,
+    deathAgeTicks,
+  )
+  return Math.min(
+    PLAYER_DEATH_PRESENTATION_MAXIMUM_HELD_TICK,
+    Math.floor(
+      boundedAge
+      * PLAYER_DEATH_PRESENTATION_NATIVE_TICKS
+      / PLAYER_DEATH_PRESENTATION_DURATION_TICKS,
+    ),
+  )
+}
+
 export function resetPlayerCombatForNewRun<T extends PlayerCombatComponent>(source: T): T {
   return {
     ...source,
     coldSlowTicksRemaining: 0,
     currentHealth: source.maximumHealth,
     currentMana: source.maximumMana,
+    deathAgeTicks: 0,
     deathEpoch: 0,
     deathTick: 0,
     dazzleTicksRemaining: 0,

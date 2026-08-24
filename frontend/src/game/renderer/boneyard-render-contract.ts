@@ -81,6 +81,7 @@ export function boneyardPlayerSortBias(player: Readonly<{
 
 export interface BoneyardSpectatorStatusPresentation {
   readonly accessibleLabel: string
+  readonly displayText: string
   readonly instruction: string | null
   readonly runId: string
   readonly targetPlayerId: string | null
@@ -184,6 +185,7 @@ export function boneyardSpectatorStatus(
     const title = 'Spectating - waiting for an alive player'
     return {
       accessibleLabel: `${title}.`,
+      displayText: title,
       instruction: null,
       runId,
       targetPlayerId: null,
@@ -193,6 +195,7 @@ export function boneyardSpectatorStatus(
   const title = `Spectating ${targetName}`
   return {
     accessibleLabel: `${title}. Left or right click to select the next player.`,
+    displayText: `${title}  |  Left / Right click: next player`,
     instruction: 'Left / Right click: next player',
     runId,
     targetPlayerId,
@@ -208,6 +211,7 @@ export function boneyardSpectatorStatusesEqual(
     left !== null
     && right !== null
     && left.accessibleLabel === right.accessibleLabel
+    && left.displayText === right.displayText
     && left.instruction === right.instruction
     && left.runId === right.runId
     && left.targetPlayerId === right.targetPlayerId

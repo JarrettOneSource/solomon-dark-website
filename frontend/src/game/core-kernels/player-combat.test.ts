@@ -2,12 +2,19 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  PLAYER_DEATH_FRAME_ONE_TICK,
+  PLAYER_DEATH_FRAME_THREE_TICK,
+  PLAYER_DEATH_FRAME_TWO_TICK,
+  PLAYER_DEATH_PRESENTATION_DURATION_TICKS,
+  PLAYER_DEATH_PRESENTATION_MAXIMUM_HELD_TICK,
   coldSlowPlayer,
   createPlayerCombat,
   damagePlayer,
   dazzlePlayer,
   playerCollisionEnabled,
   playerCollisionEnabledAfterCombatTick,
+  playerDeathFrame,
+  playerDeathPresentationTickAtAge,
   playerHitOverlayAlpha,
   playerMovementScale,
   poisonPlayer,
@@ -88,6 +95,7 @@ test('native death tick 159 disables the player collision body', () => {
   const combat = createPlayerCombat()
   const dyingAt158 = {
     ...combat,
+    deathAgeTicks: 264,
     deathTick: 158,
     lifeState: 'dying' as const,
   }
@@ -95,6 +103,7 @@ test('native death tick 159 disables the player collision body', () => {
   assert.equal(playerCollisionEnabled(combat), true)
   assert.equal(playerCollisionEnabledAfterCombatTick({
     ...combat,
+    deathAgeTicks: 263,
     deathTick: 157,
     lifeState: 'dying',
   }), true)
@@ -112,4 +121,51 @@ test('native death tick 159 disables the player collision body', () => {
     deathTick: 159,
     lifeState: 'spectating',
   }), false)
+})
+
+test('MP death presentation scales 100 Hz age to the native clock and completes at five seconds', () => {
+  assert.equal(playerDeathPresentationTickAtAge(0), 0)
+  assert.equal(playerDeathPresentationTickAtAge(254), 152)
+  assert.equal(playerDeathPresentationTickAtAge(255), PLAYER_DEATH_FRAME_ONE_TICK)
+  assert.equal(playerDeathPresentationTickAtAge(260), PLAYER_DEATH_FRAME_TWO_TICK)
+  assert.equal(playerDeathPresentationTickAtAge(265), PLAYER_DEATH_FRAME_THREE_TICK)
+  assert.equal(
+    playerDeathPresentationTickAtAge(PLAYER_DEATH_PRESENTATION_DURATION_TICKS - 1),
+    PLAYER_DEATH_PRESENTATION_MAXIMUM_HELD_TICK,
+  )
+  assert.equal(
+    playerDeathPresentationTickAtAge(PLAYER_DEATH_PRESENTATION_DURATION_TICKS),
+    PLAYER_DEATH_PRESENTATION_MAXIMUM_HELD_TICK,
+  )
+
+  let combat = stepPlayerCombatTick(damagePlayer(createPlayerCombat(), 60, 10)).combat
+  assert.equal(combat.lifeState, 'dying')
+  assert.equal(combat.deathAgeTicks, 0)
+  assert.equal(combat.deathTick, 0)
+
+  let burstCount = 0
+  for (let age = 1; age < PLAYER_DEATH_PRESENTATION_DURATION_TICKS; age += 1) {
+    const result = stepPlayerCombatTick(combat)
+    combat = result.combat
+    burstCount += Number(result.emittedDeathBurst)
+    assert.equal(result.completedDeathPresentation, false)
+    assert.equal(combat.deathAgeTicks, age)
+    assert.equal(combat.deathTick, playerDeathPresentationTickAtAge(age))
+  }
+  assert.equal(burstCount, 1)
+  assert.equal(combat.lifeState, 'dying')
+  assert.equal(combat.deathAgeTicks, PLAYER_DEATH_PRESENTATION_DURATION_TICKS - 1)
+  assert.equal(combat.deathTick, PLAYER_DEATH_PRESENTATION_MAXIMUM_HELD_TICK)
+  assert.equal(playerDeathFrame(combat), 3)
+
+  const completed = stepPlayerCombatTick(combat)
+  assert.equal(completed.completedDeathPresentation, true)
+  assert.equal(completed.emittedDeathBurst, false)
+  assert.equal(completed.combat.deathAgeTicks, PLAYER_DEATH_PRESENTATION_DURATION_TICKS)
+  assert.equal(completed.combat.deathTick, PLAYER_DEATH_PRESENTATION_MAXIMUM_HELD_TICK)
+
+  const held = stepPlayerCombatTick(completed.combat)
+  assert.equal(held.completedDeathPresentation, false)
+  assert.equal(held.emittedDeathBurst, false)
+  assert.equal(held.combat, completed.combat)
 })

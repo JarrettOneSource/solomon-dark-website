@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { createIdlePlayerPrimaryCast } from '../core-kernels/player-character.ts'
+import { PLAYER_DEATH_PRESENTATION_MAXIMUM_HELD_TICK } from '../core-kernels/player-combat.ts'
 import { createPrimarySpellSimulation } from '../core-kernels/primary-spells.ts'
 import {
   createBoneyardArenaTransition,
@@ -317,7 +318,9 @@ function deathSnapshotAt(tick: number, deathEpochTick: number): BoneyardGameSnap
           currentHealth: 0,
           deathEpoch: 1,
           deathTick,
-          lifeState: deathTick >= 159 ? 'spectating' : 'dying',
+          lifeState: deathTick >= PLAYER_DEATH_PRESENTATION_MAXIMUM_HELD_TICK
+            ? 'spectating'
+            : 'dying',
         },
       },
     },

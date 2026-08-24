@@ -56,6 +56,7 @@ import { hubPotionBeltShortcut } from './hub-inventory-presentation.ts'
 import GameOverOverlay from './GameOverOverlay.tsx'
 import TouchJoystick from './input/TouchJoystick.tsx'
 import NativeLootBitmapText from './NativeLootBitmapText.tsx'
+import NativeSpectatorStatus from './NativeSpectatorStatus.tsx'
 import {
   createBrowserGameplayInput,
   type BrowserGameplayInput,
@@ -986,23 +987,7 @@ export default function BoneyardScene({
               />
             ) : null}
             {spectatorStatus ? (
-              <div
-                className="boneyard-spectator-status"
-                data-run-id={spectatorStatus.runId}
-                data-target-player-id={spectatorStatus.targetPlayerId ?? ''}
-                role="status"
-                aria-atomic="true"
-                aria-label={spectatorStatus.accessibleLabel}
-                aria-live="polite"
-              >
-                <span>{spectatorStatus.title}</span>
-                {spectatorStatus.instruction ? (
-                  <>
-                    <span className="boneyard-spectator-status-divider" aria-hidden>|</span>
-                    <span>{spectatorStatus.instruction}</span>
-                  </>
-                ) : null}
-              </div>
+              <NativeSpectatorStatus status={spectatorStatus} viewport={viewport} />
             ) : null}
             {digIndicatorVisible ? (
               <div

@@ -2,6 +2,7 @@ import {
   type PlayerCharacterConfig,
   type PlayerPrimaryCastState,
   type PlayerCharacterState,
+  resetPlayerPrimaryCast,
 } from '../core-kernels/player-character.ts'
 import {
   createPlayerLighting,
@@ -20,6 +21,7 @@ import {
   playerDisplayHealth,
   poisonPlayer,
   playerMovementScale,
+  respawnPlayerCombat,
   restorePlayerHealth,
   restorePlayerMana,
   resetPlayerCombatForNewRun,
@@ -64,7 +66,6 @@ import {
   type HubEconomyState,
 } from '../core-kernels/hub-economy.ts'
 import {
-  NATIVE_HAGATHA_LAST_WORD_ARCHIVE_TICK,
   NATIVE_HAGATHA_LAST_WORD_DEATH_TICK,
   NATIVE_HAGATHA_SELECTORS,
   applyNativeHagathaPurchaseRuntime,
@@ -115,6 +116,7 @@ export interface PlayerEntityCombatTickResult {
   readonly autoHealthPotionPlayerIds: readonly string[]
   readonly beganDeathEpochPlayerIds: readonly string[]
   readonly cheatDeathPlayerIds: readonly string[]
+  readonly completedDeathPresentationPlayerIds: readonly string[]
   readonly deathBurstPlayerIds: readonly string[]
   readonly lastWordArchivePlayerIds: readonly string[]
   readonly lastWordBurstPlayerIds: readonly string[]
@@ -130,6 +132,11 @@ export interface PlayerEntityManaDebitResult {
 export interface PlayerEntityDamageResult {
   readonly autoHealthPotionUsed: boolean
   readonly cheatDeathTriggered: boolean
+  readonly store: PlayerEntityStore
+}
+
+export interface PlayerEntityRespawnResult {
+  readonly didRespawn: boolean
   readonly store: PlayerEntityStore
 }
 
@@ -548,6 +555,35 @@ export function replacePlayerCharacter(
   return { ...source, locomotions, primaryCasts }
 }
 
+export function respawnPlayerEntityAt(
+  source: PlayerEntityStore,
+  playerId: string,
+  position: Readonly<{ x: number; y: number }>,
+): PlayerEntityRespawnResult {
+  if (!Number.isFinite(position.x) || !Number.isFinite(position.y)) {
+    throw new RangeError('player respawn position must be finite')
+  }
+  const index = playerEntityIndex(source, playerId)
+  if (index < 0) return { didRespawn: false, store: source }
+  const progression = respawnPlayerCombat(source.progressions[index]!)
+  if (progression === source.progressions[index]) {
+    return { didRespawn: false, store: source }
+  }
+  const character = playerCharacterProjection(source, index)
+  const progressions = [...source.progressions]
+  progressions[index] = progression
+  const store = replacePlayerCharacter(
+    { ...source, progressions },
+    playerId,
+    resetPlayerPrimaryCast({
+      ...character,
+      position: { x: position.x, y: position.y },
+      velocity: { x: 0, y: 0 },
+    }),
+  )
+  return { didRespawn: true, store }
+}
+
 export function replacePlayerLoadout(
   source: PlayerEntityStore,
   playerId: string,
@@ -851,6 +887,7 @@ export function stepPlayerEntityCombatTick(
   const autoHealthPotionPlayerIds: string[] = []
   const beganDeathEpochPlayerIds: string[] = []
   const cheatDeathPlayerIds: string[] = []
+  const completedDeathPresentationPlayerIds: string[] = []
   const deathBurstPlayerIds: string[] = []
   const lastWordArchivePlayerIds: string[] = []
   const lastWordBurstPlayerIds: string[] = []
@@ -928,6 +965,10 @@ export function stepPlayerEntityCombatTick(
     if (result.beganDeathEpoch && resolved.progression.lifeState === 'dying') {
       beganDeathEpochPlayerIds.push(playerId)
     }
+    if (
+      result.completedDeathPresentation
+      && resolved.progression.lifeState === 'dying'
+    ) completedDeathPresentationPlayerIds.push(playerId)
     if (result.emittedDeathBurst) deathBurstPlayerIds.push(playerId)
     if (
       ownsNativeHagathaSelector(
@@ -935,10 +976,13 @@ export function stepPlayerEntityCombatTick(
         NATIVE_HAGATHA_SELECTORS.lastWord,
       )
     ) {
-      if (resolved.progression.deathTick === NATIVE_HAGATHA_LAST_WORD_DEATH_TICK) {
+      if (
+        progression.deathTick < NATIVE_HAGATHA_LAST_WORD_DEATH_TICK
+        && resolved.progression.deathTick >= NATIVE_HAGATHA_LAST_WORD_DEATH_TICK
+      ) {
         lastWordBurstPlayerIds.push(playerId)
       }
-      if (resolved.progression.deathTick === NATIVE_HAGATHA_LAST_WORD_ARCHIVE_TICK) {
+      if (result.completedDeathPresentation) {
         lastWordArchivePlayerIds.push(playerId)
       }
     }
@@ -950,6 +994,9 @@ export function stepPlayerEntityCombatTick(
     autoHealthPotionPlayerIds: Object.freeze(autoHealthPotionPlayerIds),
     beganDeathEpochPlayerIds: Object.freeze(beganDeathEpochPlayerIds),
     cheatDeathPlayerIds: Object.freeze(cheatDeathPlayerIds),
+    completedDeathPresentationPlayerIds: Object.freeze(
+      completedDeathPresentationPlayerIds,
+    ),
     deathBurstPlayerIds: Object.freeze(deathBurstPlayerIds),
     lastWordArchivePlayerIds: Object.freeze(lastWordArchivePlayerIds),
     lastWordBurstPlayerIds: Object.freeze(lastWordBurstPlayerIds),
@@ -1341,6 +1388,7 @@ function resolveNativeHagathaDamage(
         economy = consumed.state
         progression = {
           ...applyPlayerPotionEffect(progression, 0),
+          deathAgeTicks: 0,
           deathTick: 0,
           lifeState: 'alive',
         }
@@ -1358,6 +1406,7 @@ function resolveNativeHagathaDamage(
       progression = {
         ...progression,
         currentHealth: cheatDeath.currentHealth,
+        deathAgeTicks: 0,
         deathTick: 0,
         hagathaRuntime: cheatDeath.runtime,
         lifeState: 'alive',

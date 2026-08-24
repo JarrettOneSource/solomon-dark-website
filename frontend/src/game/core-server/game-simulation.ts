@@ -241,6 +241,7 @@ import {
   replacePlayerLoadout,
   replacePlayerCharacterRecords,
   replacePlayerEconomy,
+  respawnPlayerEntityAt,
   type PlayerEntityStore,
 } from './player-entity-store.ts'
 import {
@@ -1259,7 +1260,6 @@ export function stepGameSimulationTick(
     playerEntities = combat.store
     let secondaryAbilities = stepNativeMindblastPresentation(state.secondaryAbilities)
     for (const playerId of combat.deathBurstPlayerIds) {
-      playerEntities = setPlayerEntitySpectating(playerEntities, playerId)
       playerEntities = setPlayerEntityMindstar(playerEntities, playerId, false)
       secondaryAbilities = removeNativeSecondaryOwner(secondaryAbilities, playerId)
     }
@@ -2825,9 +2825,11 @@ function finishGameSimulationTick(
     }
   }
   for (const playerId of combat.deathBurstPlayerIds) {
-    playerEntities = setPlayerEntitySpectating(playerEntities, playerId)
     secondaryAbilities = removeNativeSecondaryOwner(secondaryAbilities, playerId)
     playerEntities = setPlayerEntityMindstar(playerEntities, playerId, false)
+  }
+  for (const playerId of combat.completedDeathPresentationPlayerIds) {
+    playerEntities = setPlayerEntitySpectating(playerEntities, playerId)
   }
   for (const damage of appliedPlayerDamage) {
     playerEntities = coldSlowPlayerEntity(
@@ -2840,6 +2842,19 @@ function finishGameSimulationTick(
       damage.playerId,
       damage.dazzleTicks,
     )
+  }
+  if (
+    previous.world.kind === 'boneyard'
+    && world.kind === 'boneyard'
+    && completedBoneyardWaveBoundary(previous.world, world)
+  ) {
+    for (const playerId of previous.run.eligiblePlayerIds) {
+      playerEntities = respawnPlayerEntityAt(
+        playerEntities,
+        playerId,
+        world.spawn,
+      ).store
+    }
   }
   const alivePlayerIds = new Set(playerEntities.identities.flatMap(({ playerId }, index) => (
     playerEntities.progressions[index]!.lifeState === 'alive'
@@ -2870,6 +2885,18 @@ function gameWorldKey(world: GameWorldState, playerId: string): string {
   return world.kind === 'hub'
     ? `hub:${world.participants[playerId]?.region ?? 'courtyard'}`
     : `boneyard:${world.runId}`
+}
+
+function completedBoneyardWaveBoundary(
+  previous: BoneyardWorldState,
+  next: BoneyardWorldState,
+): boolean {
+  return previous.runId === next.runId
+    && previous.waves !== null
+    && next.waves !== null
+    && next.waves.waveOrdinal > 0
+    && previous.waves.phase === 'wave-threshold'
+    && next.waves.phase === 'wave-lull-delay'
 }
 
 function playerCombatMutations(

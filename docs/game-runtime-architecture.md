@@ -126,6 +126,19 @@ progression. Hub-to-Boneyard placement resets the location-facing locomotion
 slice while retaining the same player entity, progression books, selected
 concentrations, and A/B replacement cursor. Post-run loadout reconstruction
 remains the separate boundary that clears those per-run selections.
+Connected-run death likewise stays on that player entity. The progression
+column owns an internal 100 Hz death age and derives the multiplayer mod's
+60 Hz logical corpse clock from it; tick 159 owns only the corpse burst and
+collision retirement, while five-second expiry owns `dying -> spectating`.
+The selected spectator target and camera remain client-local presentation
+derived from authoritative eligible-player snapshots. A scheduled Boneyard
+wave's one `wave-threshold -> wave-lull-delay` completion transition is the
+host-owned respawn edge: before
+all-dead arbitration it restores only eligible non-positive-HP entities at the
+world's authored spawn, clears their cast/locomotion/death slice, and preserves
+entity ID, death epoch, heading, progression, books, inventory, equipment, and
+every living peer. Ordered snapshots publish that one mutation; there is no
+client respawn command or parallel vitals-correction authority.
 The skill-book column also owns first-learned public-row order, the selected
 primary, two concentration slots and their replacement cursor, plus the eight
 secondary intent slots. Inventory, SkillScreen, and the compact selected-HUD

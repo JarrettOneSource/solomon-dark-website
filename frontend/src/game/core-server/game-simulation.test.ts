@@ -13,7 +13,12 @@ import { NATIVE_WELD_BUILDS } from '../core-kernels/player-progression.ts'
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-schema.ts'
 import { startBoneyardArenaTransition } from '../core-kernels/boneyard-arena-transition.ts'
 import { startBoneyardWaveDirector } from '../core-kernels/boneyard-wave-director.ts'
-import { playerCollisionEnabled, playerDeathFrame } from '../core-kernels/player-combat.ts'
+import {
+  PLAYER_DEATH_PRESENTATION_DURATION_TICKS,
+  PLAYER_DEATH_PRESENTATION_MAXIMUM_HELD_TICK,
+  playerCollisionEnabled,
+  playerDeathFrame,
+} from '../core-kernels/player-combat.ts'
 import { PRIMARY_CAST_EMISSION_TICK } from '../core-kernels/primary-spells.ts'
 import {
   createEquipmentInventoryItem,
@@ -2367,8 +2372,9 @@ test('Last Word explodes at death tick 200, triples Demon damage, and archives o
       progressions: [{
         ...state.playerEntities.progressions[index]!,
         currentHealth: -10,
+        deathAgeTicks: 333,
         deathTick: 199,
-        lifeState: 'spectating',
+        lifeState: 'dying',
       }],
     }, 'local-player', {
       ...getPlayerEconomy(state),
@@ -2408,7 +2414,11 @@ test('Last Word explodes at death tick 200, triples Demon damage, and archives o
     ...state,
     playerEntities: {
       ...state.playerEntities,
-      progressions: [{ ...state.playerEntities.progressions[index]!, deathTick: 299 }],
+      progressions: [{
+        ...state.playerEntities.progressions[index]!,
+        deathAgeTicks: PLAYER_DEATH_PRESENTATION_DURATION_TICKS - 1,
+        deathTick: PLAYER_DEATH_PRESENTATION_MAXIMUM_HELD_TICK,
+      }],
     },
   }
   const goldBefore = getPlayerEconomy(state).gold
@@ -2489,6 +2499,7 @@ test('the published tick-159 death frame leaves collision before Boneyard motion
   progressions[corpseIndex] = {
     ...progressions[corpseIndex]!,
     currentHealth: -10,
+    deathAgeTicks: 264,
     deathEpoch: 1,
     deathTick: 158,
     lifeState: 'dying',
@@ -2506,13 +2517,128 @@ test('the published tick-159 death frame leaves collision before Boneyard motion
   const publishedCorpse = getPlayerProgression(state, 'corpse')
   assert.equal(publishedCorpse.deathEpoch, 1)
   assert.equal(publishedCorpse.deathTick, 159)
-  assert.equal(publishedCorpse.lifeState, 'spectating')
+  assert.equal(publishedCorpse.lifeState, 'dying')
   assert.equal(playerCollisionEnabled(publishedCorpse), false)
   assert.deepEqual(getPlayerCharacter(state, 'corpse').position, { x: 250, y: 250 })
   assert.deepEqual(getPlayerCharacter(state, 'living').position, { x: 200.5, y: 250 })
   assert.equal(getPlayerProgression(state, 'living').lifeState, 'alive')
   assert.equal(state.run.phase, 'active')
   assert.equal(state.run.gameOverEventId, 0)
+})
+
+test('completed wave respawns only dead run members at the authored spawn on the same entity', () => {
+  const loaded = emptyBoneyard()
+  loaded.runId = 'wave-respawn-run'
+  loaded.scene.spawn = { facingDeg: 225, x: 321, y: 234 }
+  loaded.scene.solomonDig = {
+    frameProgram: [0, 3, 1],
+    gravePosition: { x: 240, y: 240 },
+    lanternPosition: { x: 245, y: 245 },
+    position: { x: 250, y: 250 },
+    ticksPerFrame: 5,
+  }
+  let state = enterBoneyardWorld(createGameSimulation({
+    first: { discipline: 'arcane', displayName: 'First', element: 'ether' },
+    second: { discipline: 'mind', displayName: 'Second', element: 'water' },
+  }), loaded)
+  if (state.world.kind !== 'boneyard' || state.world.waves === null) {
+    throw new Error('expected retail Boneyard wave authority')
+  }
+
+  state = {
+    ...state,
+    playerEntities: replacePlayerCharacter(state.playerEntities, 'first', {
+      ...getPlayerCharacter(state, 'first'),
+      headingIndex: 7,
+      position: { x: 111, y: 112 },
+      velocity: { x: 0, y: 0 },
+    }),
+  }
+  state = {
+    ...state,
+    playerEntities: damagePlayerEntity(state.playerEntities, 'first', 60, state.tick),
+  }
+  state = stepGameSimulationTick(state, {})
+  assert.equal(getPlayerProgression(state, 'first').lifeState, 'dying')
+  assert.equal(getPlayerProgression(state, 'first').deathAgeTicks, 0)
+  assert.equal(state.run.phase, 'active')
+  if (state.world.kind !== 'boneyard' || state.world.waves === null) {
+    throw new Error('expected retail Boneyard wave authority')
+  }
+
+  const entityIds = state.playerEntities.entityIds
+  const identities = state.playerEntities.identities
+  const configs = state.playerEntities.configs
+  const economies = state.playerEntities.economies
+  const skillBooks = state.playerEntities.skillBooks
+  const statBooks = state.playerEntities.statBooks
+  const firstDeathEpoch = getPlayerProgression(state, 'first').deathEpoch
+  const firstExperience = getPlayerProgression(state, 'first').experience
+  const secondProgression = getPlayerProgression(state, 'second')
+  const secondPosition = getPlayerCharacter(state, 'second').position
+  state = {
+    ...state,
+    world: {
+      ...state.world,
+      encounter: state.world.encounter === null
+        ? null
+        : { ...state.world.encounter, phase: 'gone', runEventId: 1 },
+      waves: {
+        ...state.world.waves,
+        phase: 'wave-threshold',
+        populationThreshold: 1,
+        waveOrdinal: 1,
+      },
+    },
+  }
+
+  state = stepGameSimulationTick(state, {})
+  if (state.world.kind !== 'boneyard' || state.world.waves === null) {
+    throw new Error('expected retail Boneyard wave authority')
+  }
+  assert.equal(state.world.waves.phase, 'wave-lull-delay')
+  assert.equal(state.playerEntities.entityIds, entityIds)
+  assert.equal(state.playerEntities.identities, identities)
+  assert.equal(state.playerEntities.configs, configs)
+  assert.deepEqual(state.playerEntities.economies, economies)
+  assert.equal(state.playerEntities.skillBooks, skillBooks)
+  assert.equal(state.playerEntities.statBooks, statBooks)
+  assert.equal(getPlayerProgression(state, 'first').lifeState, 'alive')
+  assert.equal(getPlayerProgression(state, 'first').deathAgeTicks, 0)
+  assert.equal(getPlayerProgression(state, 'first').deathTick, 0)
+  assert.equal(getPlayerProgression(state, 'first').deathEpoch, firstDeathEpoch)
+  assert.equal(getPlayerProgression(state, 'first').experience, firstExperience)
+  assert.equal(
+    getPlayerProgression(state, 'first').currentHealth,
+    getPlayerProgression(state, 'first').maximumHealth,
+  )
+  assert.equal(
+    getPlayerProgression(state, 'first').currentMana,
+    getPlayerProgression(state, 'first').maximumMana,
+  )
+  assert.deepEqual(getPlayerCharacter(state, 'first').position, {
+    x: state.world.spawn.x,
+    y: state.world.spawn.y,
+  })
+  assert.deepEqual(getPlayerCharacter(state, 'first').velocity, { x: 0, y: 0 })
+  assert.equal(getPlayerCharacter(state, 'first').headingIndex, 7)
+  assert.equal(getPlayerCharacter(state, 'first').primaryCast.actionTick, -1)
+  assert.equal(getPlayerProgression(state, 'second'), secondProgression)
+  assert.deepEqual(getPlayerCharacter(state, 'second').position, secondPosition)
+  assert.equal(state.run.phase, 'active')
+
+  state = {
+    ...state,
+    playerEntities: setPlayerEntityMana(state.playerEntities, 'first', 50),
+  }
+  state = stepGameSimulationTick(state, {})
+  assert.ok(getPlayerProgression(state, 'first').currentMana < 51)
+  assert.ok(getPlayerProgression(state, 'first').currentMana > 50)
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+  assert.deepEqual(getPlayerCharacter(state, 'first').position, {
+    x: state.world.spawn.x,
+    y: state.world.spawn.y,
+  })
 })
 
 test('Last Word adds ground Gold and Sack contents to the durable terminal profile', () => {
@@ -2599,13 +2725,36 @@ test('one dead player spectates until all-dead Game Over returns the session thr
   assert.ok(getPlayerCharacter(state, 'second').velocity.x > 0)
   assert.equal(state.run.phase, 'active')
 
-  for (let tick = 0; tick < 159; tick += 1) {
+  for (let tick = 0; tick < 265; tick += 1) {
     state = stepGameSimulationTick(state, {})
   }
-  assert.equal(getPlayerProgression(state, 'first').lifeState, 'spectating')
+  assert.equal(getPlayerProgression(state, 'first').lifeState, 'dying')
   assert.equal(getPlayerProgression(state, 'first').deathTick, 159)
   assert.equal(getPlayerProgression(state, 'second').lifeState, 'alive')
   assert.equal(state.run.phase, 'active')
+
+  for (let tick = 265; tick < PLAYER_DEATH_PRESENTATION_DURATION_TICKS - 1; tick += 1) {
+    state = stepGameSimulationTick(state, {})
+  }
+  assert.equal(getPlayerProgression(state, 'first').lifeState, 'dying')
+  assert.equal(
+    getPlayerProgression(state, 'first').deathAgeTicks,
+    PLAYER_DEATH_PRESENTATION_DURATION_TICKS - 1,
+  )
+  assert.equal(
+    getPlayerProgression(state, 'first').deathTick,
+    PLAYER_DEATH_PRESENTATION_MAXIMUM_HELD_TICK,
+  )
+  state = stepGameSimulationTick(state, {})
+  assert.equal(getPlayerProgression(state, 'first').lifeState, 'spectating')
+  assert.equal(
+    getPlayerProgression(state, 'first').deathAgeTicks,
+    PLAYER_DEATH_PRESENTATION_DURATION_TICKS,
+  )
+  assert.equal(
+    getPlayerProgression(state, 'first').deathTick,
+    PLAYER_DEATH_PRESENTATION_MAXIMUM_HELD_TICK,
+  )
 
   state = {
     ...state,
@@ -2659,28 +2808,30 @@ test('one dead player spectates until all-dead Game Over returns the session thr
     }
     assert.equal(state.world, frozenWorld)
   }
-  for (let deathTick = 1; deathTick <= 152; deathTick += 1) {
+  for (let age = 1; age <= 254; age += 1) {
     state = stepGameSimulationTick(state, {
       first: gameplayInput(1, 0),
       second: gameplayInput(1, 0),
     })
     assertFrozenGameOverWorld()
-    assert.equal(getPlayerProgression(state, 'second').deathTick, deathTick)
+    assert.equal(getPlayerProgression(state, 'second').deathAgeTicks, age)
   }
+  assert.equal(getPlayerProgression(state, 'second').deathTick, 152)
   assert.equal(playerDeathFrame(getPlayerProgression(state, 'second')), 0)
   state = stepGameSimulationTick(state, {})
+  assert.equal(getPlayerProgression(state, 'second').deathAgeTicks, 255)
   assert.equal(getPlayerProgression(state, 'second').deathTick, 153)
   assert.equal(playerDeathFrame(getPlayerProgression(state, 'second')), 1)
-  for (let deathTick = 154; deathTick <= 156; deathTick += 1) {
+  for (let age = 256; age <= 260; age += 1) {
     state = stepGameSimulationTick(state, {})
   }
   assert.equal(getPlayerProgression(state, 'second').deathTick, 156)
   assert.equal(playerDeathFrame(getPlayerProgression(state, 'second')), 2)
-  for (let deathTick = 157; deathTick <= 159; deathTick += 1) {
+  for (let age = 261; age <= 265; age += 1) {
     state = stepGameSimulationTick(state, {})
   }
   assert.equal(getPlayerProgression(state, 'second').deathTick, 159)
-  assert.equal(getPlayerProgression(state, 'second').lifeState, 'spectating')
+  assert.equal(getPlayerProgression(state, 'second').lifeState, 'dying')
   assert.equal(playerDeathFrame(getPlayerProgression(state, 'second')), 3)
 
   while (state.run.gameOverTicks < GAME_OVER_AUTOMATIC_ACCEPT_TICK - 1) {
