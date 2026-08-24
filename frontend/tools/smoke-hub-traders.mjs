@@ -33,6 +33,10 @@ const browserErrors = []
 for (const page of [hostPage, guestPage]) {
   await page.addInitScript(installGameAudioSmokeProbe)
   await page.addInitScript(bypassStartupAudioPreload)
+  await page.route('**/deployment.json?*', async (route) => {
+    const revision = new URL(route.request().url()).searchParams.get('current')
+    await route.fulfill({ json: { revision } })
+  })
   await page.addInitScript(() => {
     const NativeWebSocket = window.WebSocket
     window.__sdrSmokeKeyEvents = []
@@ -73,7 +77,9 @@ for (const page of [hostPage, guestPage]) {
   })
   page.on('pageerror', (error) => browserErrors.push(error.message))
   page.on('console', (message) => {
-    if (message.type() === 'error') browserErrors.push(message.text())
+    if (message.type() === 'error') {
+      browserErrors.push(`${message.text()} @ ${message.location().url}`)
+    }
   })
 }
 

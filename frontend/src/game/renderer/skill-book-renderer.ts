@@ -9,13 +9,14 @@ import {
   TilingSprite,
 } from 'pixi.js'
 
-import nativeAssetsJson from '../../assets/game/skill-picker-native-assets.json' with { type: 'json' }
 import { hub, skillPicker } from '../../lib/assets.ts'
 import {
   NATIVE_SKILL_CATALOG,
   nativeSkillRoot,
   nativeWeldBuild,
 } from '../core-kernels/player-progression.ts'
+import { nativeUiFont } from '../native-ui/native-ui-catalog.ts'
+import { destroyNativeUiPixiFor } from '../native-ui/native-ui-pixi.ts'
 import type {
   ProtocolPlayerEconomy,
   ProtocolPlayerProgression,
@@ -37,12 +38,6 @@ import {
 } from './skill-picker-renderer.ts'
 import { skillPickerRootTint } from './skill-picker-render-contract.ts'
 
-interface NativeAssets {
-  readonly fonts: Readonly<Record<'body' | 'medium' | 'menu' | 'skill', {
-    readonly metrics: readonly [number, number, number]
-  }>>
-}
-
 export interface SkillBookRendererPresentation {
   readonly draggedSkillId: number | null
   readonly economy: ProtocolPlayerEconomy
@@ -59,7 +54,6 @@ export interface SkillBookRenderer {
   setPresentation(presentation: SkillBookRendererPresentation): void
 }
 
-const NATIVE_ASSETS = nativeAssetsJson as unknown as NativeAssets
 const QUICKBAR_SLOT_X = [468, 528, 588, 648, 898, 958, 1018, 1078] as const
 const QUICKBAR_SLOT_Y = 832.5
 
@@ -110,6 +104,7 @@ export async function createSkillBookRenderer(): Promise<SkillBookRenderer> {
       if (destroyed) return
       destroyed = true
       application.destroy({ removeView: true })
+      destroyNativeUiPixiFor(resources)
       resources.destroy()
     },
     setPresentation(presentation) {
@@ -544,7 +539,7 @@ function addShadowedText(
   tint: number,
   maxWidth = Number.POSITIVE_INFINITY,
 ): void {
-  const lineHeight = NATIVE_ASSETS.fonts[font].metrics[0]
+  const lineHeight = nativeUiFont(font === 'skill' ? 'skill-uppercase' : font).metrics[0]
   addBitmapText(layer, textures, text, font, x + 2, y + 2, {
     lineHeight,
     maxWidth,

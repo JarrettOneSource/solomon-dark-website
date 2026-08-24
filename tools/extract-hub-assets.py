@@ -1177,57 +1177,6 @@ def save(image: Image.Image, output_dir: Path, name: str) -> None:
     image.save(output_dir / f"{name}.png", optimize=True)
 
 
-def trader_record_json(record: SpriteRecord) -> dict[str, object]:
-    return {
-        "frame": [record.x, record.y, record.width, record.height],
-        "logicalSize": [record.logical_width, record.logical_height],
-        "trimOrigin": [
-            (record.logical_width - record.width) / 2 + record.center_x,
-            (record.logical_height - record.height) / 2 + record.center_y,
-        ],
-    }
-
-
-def write_trader_asset_data(
-    inventory_records: list[SpriteRecord],
-    skills_records: list[SpriteRecord],
-    ui_records: list[SpriteRecord],
-    output_dir: Path,
-) -> None:
-    selected = {
-        "Inventory": range(len(inventory_records)),
-        "Skills": range(len(skills_records)),
-        "UI": range(len(ui_records)),
-    }
-    records = {
-        "Inventory": inventory_records,
-        "Skills": skills_records,
-        "UI": ui_records,
-    }
-    data = {
-        "schema": "solomon-dark-hub-trader-assets-v1",
-        "sourceExecutableSha256": (
-            "03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3"
-        ),
-        "atlases": {
-            name: {
-                "file": {
-                    "Inventory": "hub-trader-inventory-atlas.png",
-                    "Skills": "skill-picker-skills-atlas.png",
-                    "UI": "skill-picker-ui-atlas.png",
-                }[name],
-                "records": {
-                    str(index): trader_record_json(records[name][index])
-                    for index in indices
-                },
-            }
-            for name, indices in selected.items()
-        },
-    }
-    path = output_dir / "hub-trader-native-assets.json"
-    path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-
-
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("images_dir", type=Path)
@@ -1926,7 +1875,6 @@ def main() -> int:
         destination = output_dir / f"skill-picker-{source_name.lower()}-atlas.png"
         if not destination.exists():
             shutil.copyfile(images_dir / f"{source_name}.png", destination)
-    write_trader_asset_data(inventory_records, skills_records, ui_records, output_dir)
     save(crop(skills, skills_records[99]), output_dir, "hub-hud-secondary-acid-rain")
     save(
         build_inventory_digit_strip(skills, skills_records[7]),

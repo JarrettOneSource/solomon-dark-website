@@ -1,7 +1,5 @@
-import { Container, Rectangle, Sprite, Texture } from 'pixi.js'
+import { Container, Sprite, Texture } from 'pixi.js'
 
-import fontAssetsJson from '../../assets/game/skill-picker-native-assets.json' with { type: 'json' }
-import uiAssetsJson from '../../assets/game/hub-trader-native-assets.json' with { type: 'json' }
 import { skillPicker } from '../../lib/assets.ts'
 import {
   NATIVE_PAUSE_ART_RECORDS,
@@ -16,34 +14,11 @@ import {
 import {
   createGameWebGlApplication,
   loadGameTextureMap,
-  textureFrom,
   type GameTextureMap,
   type GameWebGlApplication,
 } from './game-webgl.ts'
-
-interface AtlasRecord {
-  readonly frame: readonly [number, number, number, number]
-  readonly logicalSize: readonly [number, number]
-  readonly metrics?: readonly [number, number, number]
-  readonly trimOrigin: readonly [number, number]
-}
-
-interface BitmapFont {
-  readonly glyphs: Readonly<Record<string, AtlasRecord>>
-  readonly kerning: readonly (readonly [number, number, number])[]
-  readonly metrics: readonly [number, number, number]
-  readonly spaceAdvance: number
-}
-
-interface FontAssets {
-  readonly fonts: Readonly<Record<'menu', BitmapFont>>
-}
-
-interface UiAssets {
-  readonly atlases: Readonly<Record<'UI', {
-    readonly records: Readonly<Record<string, AtlasRecord>>
-  }>>
-}
+import { nativeUiRecord } from '../native-ui/native-ui-catalog.ts'
+import { createNativeUiPixiAdapter } from '../native-ui/native-ui-pixi.ts'
 
 interface RowView {
   readonly action: NativeSimpleMenuAction
@@ -67,10 +42,6 @@ export interface GameplayPauseRenderer {
   render(reveal: number): void
 }
 
-const FONT_ASSETS = fontAssetsJson as unknown as FontAssets
-const UI_ASSETS = uiAssetsJson as unknown as UiAssets
-const MENU_FONT = FONT_ASSETS.fonts.menu
-const UI_RECORDS = UI_ASSETS.atlases.UI.records
 const STAGE_WIDTH = 1600
 const STAGE_HEIGHT = 900
 
@@ -98,6 +69,7 @@ export async function createGameplayPauseRenderer(
 
   const application = gpu.application
   const resources = textures
+  const nativeUi = createNativeUiPixiAdapter(resources)
   const root = new Container({ label: 'native-simple-menu' })
   const rowsLayer = new Container({ label: 'native-simple-menu-rows' })
   const chromeLayer = new Container({ label: 'native-simple-menu-chrome' })
@@ -107,12 +79,12 @@ export async function createGameplayPauseRenderer(
   root.addChild(rowsLayer, chromeLayer)
   application.stage.addChild(root)
 
-  const idleRowTexture = textureForUiRecord(resources, NATIVE_PAUSE_ART_RECORDS.idleRow)
-  const rowEndTexture = textureForUiRecord(resources, NATIVE_PAUSE_ART_RECORDS.rowEnd)
-  const rowEdgeTexture = edgeTexture(
-    resources,
+  const idleRowTexture = nativeUi.texture('UI', NATIVE_PAUSE_ART_RECORDS.idleRow)
+  const rowEndTexture = nativeUi.texture('UI', NATIVE_PAUSE_ART_RECORDS.rowEnd)
+  const rowEdgeTexture = nativeUi.slice(
+    'UI',
     NATIVE_PAUSE_ART_RECORDS.rowEnd,
-    'right',
+    [NATIVE_PAUSE_EDGE_UV_START, 0, 1, 1],
   )
   const initialPlan = nativePauseMenuRenderPlan(0, null, rows)
   const rowViews = initialPlan.rows.map((row): RowView => {
@@ -125,7 +97,7 @@ export async function createGameplayPauseRenderer(
     const surroundTop = row.bounds.top - 6
     const surroundRight = row.bounds.left + row.bounds.width + 6
     const surroundWidth = surroundRight - surroundLeft
-    const [rowEndWidth, rowEndHeight] = record(NATIVE_PAUSE_ART_RECORDS.rowEnd).logicalSize
+    const [rowEndWidth, rowEndHeight] = nativeUiRecord('UI', NATIVE_PAUSE_ART_RECORDS.rowEnd).logicalSize
     const leftEnd = new Sprite(rowEndTexture)
     leftEnd.position.set(surroundLeft, surroundTop)
     leftEnd.eventMode = 'none'
@@ -140,22 +112,28 @@ export async function createGameplayPauseRenderer(
     rightEnd.eventMode = 'none'
     rowsLayer.addChild(leftEnd, connector, rightEnd)
 
-    const label = createBitmapText(resources, row.label)
+    const label = nativeUi.text({
+      font: 'menu',
+      text: row.label,
+      tint: NATIVE_PAUSE_TEXT_TINT,
+      x: 0,
+      y: 0,
+    })
     label.position.set(row.labelX, row.labelY)
     rowsLayer.addChild(label)
     return { action: row.action, label }
   })
 
-  const frameTexture = textureForUiRecord(resources, NATIVE_PAUSE_ART_RECORDS.frame)
-  const frameHorizontalEdge = edgeTexture(
-    resources,
+  const frameTexture = nativeUi.texture('UI', NATIVE_PAUSE_ART_RECORDS.frame)
+  const frameHorizontalEdge = nativeUi.slice(
+    'UI',
     NATIVE_PAUSE_ART_RECORDS.frame,
-    'right',
+    [NATIVE_PAUSE_EDGE_UV_START, 0, 1, 1],
   )
-  const frameVerticalEdge = edgeTexture(
-    resources,
+  const frameVerticalEdge = nativeUi.slice(
+    'UI',
     NATIVE_PAUSE_ART_RECORDS.frame,
-    'bottom',
+    [0, NATIVE_PAUSE_EDGE_UV_START, 1, 1],
   )
   const frame = createFrameView(
     chromeLayer,
@@ -164,12 +142,12 @@ export async function createGameplayPauseRenderer(
     frameVerticalEdge,
   )
 
-  const header = new Sprite(textureForUiRecord(resources, NATIVE_PAUSE_ART_RECORDS.header))
+  const header = new Sprite(nativeUi.texture('UI', NATIVE_PAUSE_ART_RECORDS.header))
   header.anchor.set(0.5)
   header.eventMode = 'none'
   chromeLayer.addChild(header)
 
-  const arrowTexture = textureForUiRecord(resources, NATIVE_PAUSE_ART_RECORDS.arrow)
+  const arrowTexture = nativeUi.texture('UI', NATIVE_PAUSE_ART_RECORDS.arrow)
   const arrows = initialPlan.arrows.map(() => {
     const arrow = new Sprite(arrowTexture)
     arrow.anchor.set(0.5)
@@ -188,6 +166,7 @@ export async function createGameplayPauseRenderer(
       if (destroyed) return
       destroyed = true
       application.destroy({ removeView: true })
+      nativeUi.destroy()
       resources.destroy()
     },
     render(reveal) {
@@ -241,7 +220,7 @@ function createFrameView(
 }
 
 function updateFrame(frame: FrameView, plan: NativePauseMenuRenderPlan): void {
-  const [cornerWidth, cornerHeight] = record(NATIVE_PAUSE_ART_RECORDS.frame).logicalSize
+  const [cornerWidth, cornerHeight] = nativeUiRecord('UI', NATIVE_PAUSE_ART_RECORDS.frame).logicalSize
   const { bottom, height, left, right, top, width } = plan.chrome
   frame.topLeft.position.set(left, top)
   frame.topRight.position.set(right, top)
@@ -277,103 +256,4 @@ function updateRows(
     const row = plan.rows.find(({ action }) => action === view.action)!
     view.label.position.set(row.labelX, row.labelY)
   }
-}
-
-function createBitmapText(resources: GameTextureMap, text: string): Container {
-  const container = new Container({ label: text })
-  container.eventMode = 'none'
-  const width = measureBitmapText(text)
-  let cursor = -width / 2
-  let previous = -1
-  for (const character of text) {
-    const code = character.codePointAt(0)!
-    if (character === ' ') {
-      cursor += MENU_FONT.spaceAdvance
-      previous = code
-      continue
-    }
-    const glyph = MENU_FONT.glyphs[`${code}`]
-    if (!glyph?.metrics) continue
-    cursor += kerning(previous, code)
-    const sprite = spriteForGlyph(resources, glyph)
-    sprite.anchor.set(0.5)
-    sprite.position.set(cursor + glyph.metrics[1], glyph.metrics[2])
-    sprite.tint = NATIVE_PAUSE_TEXT_TINT
-    sprite.eventMode = 'none'
-    container.addChild(sprite)
-    cursor += glyph.metrics[0]
-    previous = code
-  }
-  return container
-}
-
-function measureBitmapText(text: string): number {
-  let width = 0
-  let previous = -1
-  for (const character of text) {
-    const code = character.codePointAt(0)!
-    if (character === ' ') width += MENU_FONT.spaceAdvance
-    else {
-      const glyph = MENU_FONT.glyphs[`${code}`]
-      if (glyph?.metrics) width += kerning(previous, code) + glyph.metrics[0]
-    }
-    previous = code
-  }
-  return width
-}
-
-function kerning(first: number, second: number): number {
-  if (first < 0) return 0
-  return MENU_FONT.kerning.find(([left, right]) => left === first && right === second)?.[2] ?? 0
-}
-
-function spriteForGlyph(resources: GameTextureMap, glyph: AtlasRecord): Sprite {
-  const source = textureFrom(resources.textures, skillPicker.fontsAtlas)
-  const [x, y, width, height] = glyph.frame
-  return new Sprite(new Texture({
-    frame: new Rectangle(x, y, width, height),
-    source: source.source,
-  }))
-}
-
-function textureForUiRecord(resources: GameTextureMap, recordId: number): Texture {
-  const atlasRecord = record(recordId)
-  const source = textureFrom(resources.textures, skillPicker.uiAtlas)
-  const [x, y, width, height] = atlasRecord.frame
-  const [logicalWidth, logicalHeight] = atlasRecord.logicalSize
-  const [trimX, trimY] = atlasRecord.trimOrigin
-  return new Texture({
-    frame: new Rectangle(x, y, width, height),
-    orig: new Rectangle(0, 0, logicalWidth, logicalHeight),
-    source: source.source,
-    trim: new Rectangle(trimX, trimY, width, height),
-  })
-}
-
-function edgeTexture(
-  resources: GameTextureMap,
-  recordId: number,
-  edge: 'bottom' | 'right',
-): Texture {
-  const atlasRecord = record(recordId)
-  const source = textureFrom(resources.textures, skillPicker.uiAtlas)
-  const [x, y, width, height] = atlasRecord.frame
-  if (edge === 'right') {
-    const edgeWidth = width * (1 - NATIVE_PAUSE_EDGE_UV_START)
-    return new Texture({
-      frame: new Rectangle(x + width - edgeWidth, y, edgeWidth, height),
-      source: source.source,
-    })
-  }
-  const edgeHeight = height * (1 - NATIVE_PAUSE_EDGE_UV_START)
-  return new Texture({
-    frame: new Rectangle(x, y + height - edgeHeight, width, edgeHeight),
-    source: source.source,
-  })
-}
-
-function record(recordId: number): AtlasRecord {
-  const atlasRecord = UI_RECORDS[`${recordId}`]
-  if (!atlasRecord) throw new Error(`native UI.${recordId} was not extracted`)
-  return atlasRecord
 }

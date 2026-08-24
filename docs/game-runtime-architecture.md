@@ -670,6 +670,14 @@ There is one composed client, not one DOM client and one canvas client.
   transparent semantic controls, focus, gamepad/touch routing, status text, and
   the HUD; those overlays are input/accessibility surfaces, not a second visual
   game renderer.
+- Stock UI art and bitmap text cross one pure plan seam. The complete generated
+  catalog owns all presentation-atlas records and ten finite font wrappers;
+  `native-ui-plan.ts` composes raw sprites, text, frames, buttons, tabs,
+  messages, and SimpleMenu without owning screen state. A scene-scoped Pixi
+  adapter renders the visible plan and destroys its derived subtextures before
+  its source page set. `NativeBitmapText.tsx` consumes the same glyph layout
+  for DOM-owned presentation. React semantic controls use the plan's returned
+  action rectangles, so the accessible hit plane and WebGL art share geometry.
 - Player-authored chat is deliberately an HTML overlay: its real focusable
   `<input>` supports IME and the Steam Deck on-screen keyboard, while its
   semantic live region and textual channel labels remain usable without color.

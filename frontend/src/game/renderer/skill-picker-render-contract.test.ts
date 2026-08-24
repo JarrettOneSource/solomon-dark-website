@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
-import nativeAssets from '../../assets/game/skill-picker-native-assets.json' with { type: 'json' }
+import nativeAssets from '../../assets/game/native-ui-assets.json' with { type: 'json' }
 import { NATIVE_WELD_BUILDS } from '../core-kernels/player-progression.ts'
 import {
   SKILL_PICKER_CARD_CENTERS,
@@ -58,12 +58,12 @@ test('the picker keeps the sealed 1600x900 stock card geometry and records', () 
 
 test('the picker consumes the exact extracted UI, Skills, and bitmap-font atlases', () => {
   assert.equal(nativeAssets.sourceExecutableSha256, '03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3')
-  assert.equal(nativeAssets.catalogSha256, '7f1f777f738ed3fc1089a3c4f06ef0b8935cd2a3bc1b0fbcc671a0baff0e775b')
+  assert.deepEqual(nativeAssets.summary, { atlasCount: 12, fontCount: 10, glyphCount: 718, recordCount: 1259 })
   assert.deepEqual(pngDimensions('skill-picker-ui-atlas.png'), [1024, 1024])
   assert.deepEqual(pngDimensions('skill-picker-skills-atlas.png'), [1024, 512])
   assert.deepEqual(pngDimensions('skill-picker-fonts-atlas.png'), [512, 256])
   assert.deepEqual(nativeAssets.fonts.menu.metrics, [24, 6, 28])
-  assert.deepEqual(nativeAssets.fonts.skill.metrics, [14, 4, 28])
+  assert.deepEqual(nativeAssets.fonts['skill-uppercase'].metrics, [14, 4, 28])
   assert.deepEqual(nativeAssets.atlases.UI.records['49'].logicalSize, [264, 264])
   assert.deepEqual(nativeAssets.atlases.UI.records['10'].logicalSize, [106, 19])
   assert.deepEqual(nativeAssets.atlases.UI.records['79'].logicalSize, [21, 108])

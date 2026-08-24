@@ -86,11 +86,9 @@
   transform-origin: 0 0;
 }
 
-.gameplay-pause-pressed-row > i {
-  position: absolute;
+.gameplay-pause-pressed-row-label {
   z-index: 1;
   display: block;
-  transform: translate(6px, 6px);
 }
 
 .gameplay-pause-waiting {

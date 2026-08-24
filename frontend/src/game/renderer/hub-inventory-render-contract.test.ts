@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
-import nativeAssetsJson from '../../assets/game/hub-trader-native-assets.json' with { type: 'json' }
+import nativeAssetsJson from '../../assets/game/native-ui-assets.json' with { type: 'json' }
 import {
   createEquipmentInventoryItem,
   DOWSING_EQUIPMENT_RECIPES,

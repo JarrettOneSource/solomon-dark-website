@@ -31,7 +31,7 @@ const scene = readFileSync(new URL('./MainMenuScene.tsx', import.meta.url), 'utf
 const hubScene = readFileSync(new URL('./HubScene.tsx', import.meta.url), 'utf8')
 const boneyardScene = readFileSync(new URL('./BoneyardScene.tsx', import.meta.url), 'utf8')
 const nativeAssets = JSON.parse(readFileSync(
-  new URL('../assets/game/skill-picker-native-assets.json', import.meta.url),
+  new URL('../assets/game/native-ui-assets.json', import.meta.url),
   'utf8',
 ))
 const baseline = createGameSnapshot(createGameSimulation(), null)

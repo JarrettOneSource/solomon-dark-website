@@ -2,13 +2,11 @@ import {
   Container,
   Graphics,
   NineSliceSprite,
-  Rectangle,
   Sprite,
-  Texture,
   TilingSprite,
+  type Texture,
 } from 'pixi.js'
 
-import nativeAssetsJson from '../../assets/game/skill-picker-native-assets.json' with { type: 'json' }
 import { skillPicker } from '../../lib/assets.ts'
 import {
   NATIVE_SKILL_CATALOG,
@@ -24,7 +22,6 @@ import type {
 import {
   createGameWebGlApplication,
   loadGameTextureMap,
-  textureFrom,
   type GameTextureMap,
   type GameWebGlApplication,
 } from './game-webgl.ts'
@@ -38,27 +35,12 @@ import {
   skillPickerSpecialActionBounds,
 } from './skill-picker-render-contract.ts'
 import type { NativeSkillPickerReveal } from './level-up-presentation.ts'
-
-interface AtlasRecord {
-  readonly frame: readonly [number, number, number, number]
-  readonly logicalSize: readonly [number, number]
-  readonly metrics?: readonly [number, number, number]
-  readonly trimOrigin: readonly [number, number]
-}
-
-interface BitmapFont {
-  readonly glyphs: Readonly<Record<string, AtlasRecord>>
-  readonly kerning: readonly (readonly [number, number, number])[]
-  readonly metrics: readonly [number, number, number]
-  readonly spaceAdvance: number
-}
-
-interface NativeAssets {
-  readonly atlases: Readonly<Record<'Fonts' | 'Skills' | 'UI', {
-    readonly records: Readonly<Record<string, AtlasRecord>>
-  }>>
-  readonly fonts: Readonly<Record<'body' | 'medium' | 'menu' | 'skill', BitmapFont>>
-}
+import { nativeUiRecord } from '../native-ui/native-ui-catalog.ts'
+import {
+  destroyNativeUiPixiFor,
+  nativeUiPixiFor,
+} from '../native-ui/native-ui-pixi.ts'
+import { measureNativeUiText } from '../native-ui/native-ui-text.ts'
 
 interface AnimatedCorner {
   readonly baseX: number
@@ -80,7 +62,7 @@ export interface SkillPickerRenderer {
   setOffer(offer: ProtocolPlayerSkillOffer, specialActionsAvailable: boolean): void
 }
 
-const NATIVE_ASSETS = nativeAssetsJson as unknown as NativeAssets
+export type SkillPickerFontName = 'body' | 'medium' | 'menu' | 'skill'
 
 export async function createSkillPickerRenderer(): Promise<SkillPickerRenderer> {
   let gpu: GameWebGlApplication | undefined
@@ -161,6 +143,7 @@ export async function createSkillPickerRenderer(): Promise<SkillPickerRenderer> 
       if (destroyed) return
       destroyed = true
       application.destroy({ removeView: true })
+      destroyNativeUiPixiFor(resources)
       resources.destroy()
     },
     render(nowMs, selectedIndex, reveal) {
@@ -326,7 +309,7 @@ function rebuildPanel(
 ): { cards: NineSliceSprite[]; corners: AnimatedCorner[] } {
   layer.removeChildren().forEach((child) => child.destroy({ children: true }))
   const bounds = skillPickerPanelBounds(optionCount)
-  const backgroundRecord = NATIVE_ASSETS.atlases.UI.records['49']!
+  const backgroundRecord = nativeUiRecord('UI', 49)
   const background = new TilingSprite({
     height: bounds.height,
     texture: textureFor(textures, 'UI', 49),
@@ -418,7 +401,7 @@ export function spriteFor(
   atlas: 'Fonts' | 'Skills' | 'UI',
   record: number,
 ): Sprite {
-  return new Sprite(textureFor(textures, atlas, record))
+  return nativeUiPixiFor(textures).sprite({ atlas, kind: 'sprite', record, x: 0, y: 0 })
 }
 
 export function textureFor(
@@ -426,29 +409,14 @@ export function textureFor(
   atlas: 'Fonts' | 'Skills' | 'UI',
   record: number,
 ): Texture {
-  const atlasRecord = NATIVE_ASSETS.atlases[atlas].records[`${record}`]
-  if (!atlasRecord) throw new Error(`native ${atlas}.${record} was not extracted`)
-  const source = textureFrom(textures.textures, atlas === 'Fonts'
-    ? skillPicker.fontsAtlas
-    : atlas === 'Skills'
-      ? skillPicker.skillsAtlas
-      : skillPicker.uiAtlas)
-  const [x, y, width, height] = atlasRecord.frame
-  const [logicalWidth, logicalHeight] = atlasRecord.logicalSize
-  const [trimX, trimY] = atlasRecord.trimOrigin
-  return new Texture({
-    frame: new Rectangle(x, y, width, height),
-    orig: new Rectangle(0, 0, logicalWidth, logicalHeight),
-    source: source.source,
-    trim: new Rectangle(trimX, trimY, width, height),
-  })
+  return nativeUiPixiFor(textures).texture(atlas, record)
 }
 
 export function addBitmapText(
   layer: Container,
   textures: GameTextureMap,
   text: string,
-  fontName: keyof NativeAssets['fonts'],
+  fontName: SkillPickerFontName,
   x: number,
   y: number,
   options: {
@@ -458,85 +426,25 @@ export function addBitmapText(
     tint?: number
   } = {},
 ): void {
-  const font = NATIVE_ASSETS.fonts[fontName]
-  const lines = wrapBitmapText(text, font, options.maxWidth ?? Number.POSITIVE_INFINITY)
-  const lineHeight = options.lineHeight ?? font.metrics[0]
-  lines.forEach((line, lineIndex) => {
-    const width = measureBitmapText(line, font)
-    let cursor = options.align === 'left' ? x : x - width / 2
-    let previous = -1
-    for (const character of line) {
-      const code = character.codePointAt(0)!
-      if (character === ' ') {
-        cursor += font.spaceAdvance
-        previous = code
-        continue
-      }
-      const glyph = font.glyphs[`${code}`]
-      if (!glyph?.metrics) continue
-      cursor += kerning(font, previous, code)
-      const sprite = spriteForGlyph(textures, glyph)
-      sprite.anchor.set(0.5)
-      sprite.tint = options.tint ?? 0xffffff
-      sprite.position.set(
-        cursor + glyph.metrics[1],
-        y + lineIndex * lineHeight + glyph.metrics[2],
-      )
-      layer.addChild(sprite)
-      cursor += glyph.metrics[0]
-      previous = code
-    }
-  })
-}
-
-function spriteForGlyph(textures: GameTextureMap, glyph: AtlasRecord): Sprite {
-  const source = textureFrom(textures.textures, skillPicker.fontsAtlas)
-  const [x, y, width, height] = glyph.frame
-  return new Sprite(new Texture({
-    frame: new Rectangle(x, y, width, height),
-    source: source.source,
+  layer.addChild(nativeUiPixiFor(textures).text({
+    align: options.align,
+    font: nativeUiFontName(fontName),
+    lineHeight: options.lineHeight,
+    maxWidth: options.maxWidth,
+    text,
+    tint: options.tint,
+    x,
+    y,
   }))
-}
-
-function wrapBitmapText(text: string, font: BitmapFont, maxWidth: number): string[] {
-  if (!Number.isFinite(maxWidth)) return text.split('\n')
-  const words = text.split(/\s+/).filter(Boolean)
-  const lines: string[] = []
-  let current = ''
-  for (const word of words) {
-    const next = current ? `${current} ${word}` : word
-    if (current && measureBitmapText(next, font) > maxWidth) {
-      lines.push(current)
-      current = word
-    } else current = next
-  }
-  if (current) lines.push(current)
-  return lines.length > 0 ? lines : ['']
-}
-
-function measureBitmapText(text: string, font: BitmapFont): number {
-  let width = 0
-  let previous = -1
-  for (const character of text) {
-    const code = character.codePointAt(0)!
-    if (character === ' ') width += font.spaceAdvance
-    else {
-      const glyph = font.glyphs[`${code}`]
-      if (glyph?.metrics) width += kerning(font, previous, code) + glyph.metrics[0]
-    }
-    previous = code
-  }
-  return width
 }
 
 export function measureNativeBitmapText(
   text: string,
-  fontName: keyof NativeAssets['fonts'],
+  fontName: SkillPickerFontName,
 ): number {
-  return measureBitmapText(text, NATIVE_ASSETS.fonts[fontName])
+  return measureNativeUiText(text, nativeUiFontName(fontName))
 }
 
-function kerning(font: BitmapFont, first: number, second: number): number {
-  if (first < 0) return 0
-  return font.kerning.find(([left, right]) => left === first && right === second)?.[2] ?? 0
+function nativeUiFontName(fontName: SkillPickerFontName) {
+  return fontName === 'skill' ? 'skill-uppercase' as const : fontName
 }

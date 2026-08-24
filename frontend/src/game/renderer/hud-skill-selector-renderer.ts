@@ -8,6 +8,7 @@ import {
   nativeHudSkillSelectorLayout,
   type NativeHudSkillSelectorOption,
 } from '../hud-skill-selector.ts'
+import { destroyNativeUiPixiFor } from '../native-ui/native-ui-pixi.ts'
 import {
   createGameWebGlApplication,
   loadGameTextureMap,
@@ -66,6 +67,7 @@ export async function createHudSkillSelectorRenderer(): Promise<HudSkillSelector
       if (destroyed) return
       destroyed = true
       application.destroy({ removeView: true })
+      destroyNativeUiPixiFor(resources)
       resources.destroy()
     },
     setPresentation({ options, title }) {

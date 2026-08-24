@@ -13,7 +13,7 @@ import {
 } from 'react'
 import { createPortal } from 'react-dom'
 
-import nativeAssetsJson from '../assets/game/hub-trader-native-assets.json' with { type: 'json' }
+import nativeAssetsJson from '../assets/game/native-ui-assets.json' with { type: 'json' }
 import {
   DOWSING_EQUIPMENT_RECIPES,
   HAGATHA_PERKS,

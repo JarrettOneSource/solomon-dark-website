@@ -1,6 +1,5 @@
 import headingFontJson from '../assets/game/create-name-font-group-4.json' with { type: 'json' }
-import traderAssetsJson from '../assets/game/hub-trader-native-assets.json' with { type: 'json' }
-import skillPickerAssetsJson from '../assets/game/skill-picker-native-assets.json' with { type: 'json' }
+import nativeUiAssetsJson from '../assets/game/native-ui-assets.json' with { type: 'json' }
 
 /**
  * Pure presentation kernel for the native Hall of Fame rows
@@ -200,11 +199,11 @@ interface HeadingFont {
   readonly spaceAdvance: number
 }
 
-const PICKER_FONTS = (skillPickerAssetsJson as unknown as {
+const PICKER_FONTS = (nativeUiAssetsJson as unknown as {
   readonly fonts: Readonly<Record<'body' | 'medium' | 'menu', PickerFont>>
 }).fonts
 const HEADING_FONT = headingFontJson as unknown as HeadingFont
-const ATLASES = (traderAssetsJson as unknown as {
+const ATLASES = (nativeUiAssetsJson as unknown as {
   readonly atlases: Readonly<Record<HallAtlas, {
     readonly records: Readonly<Record<string, HallAtlasRecord>>
   }>>

@@ -8,16 +8,15 @@ import {
   type RefObject,
 } from 'react'
 
-import fontAssetsJson from '../assets/game/skill-picker-native-assets.json' with { type: 'json' }
 import { skillPicker } from '../lib/assets.ts'
 import type { GameAudioDirector } from './game-audio-director.ts'
+import NativeBitmapText from './native-ui/NativeBitmapText.tsx'
 import {
   NATIVE_PAUSE_PRESSED_ROW_FRAME,
   NATIVE_PAUSE_ROW_END_FRAME,
   NATIVE_PAUSE_EDGE_UV_START,
   NATIVE_PAUSE_TEXT_TINT,
   NATIVE_PAUSE_MENU_ROWS,
-  NATIVE_SIMPLE_MENU_ROW_SIZE,
   gameplayPausePresentation,
   nativePauseMenuRenderPlan,
   nativePauseMenuReveal,
@@ -246,28 +245,11 @@ function NativePauseButton({
   )
 }
 
-interface NativePauseGlyphRecord {
-  readonly frame: readonly [number, number, number, number]
-  readonly metrics?: readonly [number, number, number]
-}
-
-interface NativePauseBitmapFont {
-  readonly glyphs: Readonly<Record<string, NativePauseGlyphRecord>>
-  readonly kerning: readonly (readonly [number, number, number])[]
-  readonly spaceAdvance: number
-}
-
-const PAUSE_MENU_FONT = (fontAssetsJson as unknown as {
-  readonly fonts: Readonly<Record<'menu', NativePauseBitmapFont>>
-}).fonts.menu
-
 function NativePausePressedRow({ row: { action, bounds, label } }: { row: NativePauseMenuRowPlan }) {
   const [frameX, frameY] = NATIVE_PAUSE_PRESSED_ROW_FRAME
   const [endX, endY, endWidth, endHeight] = NATIVE_PAUSE_ROW_END_FRAME
   const edgeX = endX + endWidth * NATIVE_PAUSE_EDGE_UV_START
   const edgeWidth = endWidth * (1 - NATIVE_PAUSE_EDGE_UV_START)
-  const glyphs = layoutPauseBitmapText(label)
-  const tint = `#${NATIVE_PAUSE_TEXT_TINT.toString(16).padStart(6, '0')}`
   return (
     <span
       className="gameplay-pause-pressed-row"
@@ -321,81 +303,15 @@ function NativePausePressedRow({ row: { action, bounds, label } }: { row: Native
           width: endWidth,
         }}
       />
-      {glyphs.map(({ code, frame: [x, y, width, height], left, top }, index) => (
-        <i
-          key={`${index}:${code}`}
-          style={{
-            backgroundColor: tint,
-            height,
-            left,
-            maskImage: `url("${skillPicker.fontsAtlas}")`,
-            maskPosition: `${-x}px ${-y}px`,
-            maskRepeat: 'no-repeat',
-            maskSize: '512px 256px',
-            top,
-            WebkitMaskImage: `url("${skillPicker.fontsAtlas}")`,
-            WebkitMaskPosition: `${-x}px ${-y}px`,
-            WebkitMaskRepeat: 'no-repeat',
-            WebkitMaskSize: '512px 256px',
-            width,
-          }}
-        />
-      ))}
+      <NativeBitmapText
+        align="center"
+        className="gameplay-pause-pressed-row-label"
+        font="menu"
+        style={{ left: 12, position: 'absolute', top: 43.5 }}
+        text={label}
+        tint={NATIVE_PAUSE_TEXT_TINT}
+        width={bounds.width}
+      />
     </span>
   )
-}
-
-function layoutPauseBitmapText(text: string): ReadonlyArray<Readonly<{
-  code: number
-  frame: readonly [number, number, number, number]
-  left: number
-  top: number
-}>> {
-  const measuredWidth = measurePauseBitmapText(text)
-  const glyphs = []
-  let cursor = -measuredWidth / 2
-  let previous = -1
-  for (const character of text) {
-    const code = character.codePointAt(0)!
-    if (character === ' ') {
-      cursor += PAUSE_MENU_FONT.spaceAdvance
-      previous = code
-      continue
-    }
-    const glyph = PAUSE_MENU_FONT.glyphs[`${code}`]
-    if (!glyph?.metrics) continue
-    cursor += pauseKerning(previous, code)
-    const [, , width, height] = glyph.frame
-    glyphs.push({
-      code,
-      frame: glyph.frame,
-      left: NATIVE_SIMPLE_MENU_ROW_SIZE.width / 2 + 6 + cursor + glyph.metrics[1] - width / 2,
-      top: NATIVE_SIMPLE_MENU_ROW_SIZE.height / 2 + 15 + glyph.metrics[2] - height / 2,
-    })
-    cursor += glyph.metrics[0]
-    previous = code
-  }
-  return glyphs
-}
-
-function measurePauseBitmapText(text: string): number {
-  let width = 0
-  let previous = -1
-  for (const character of text) {
-    const code = character.codePointAt(0)!
-    if (character === ' ') width += PAUSE_MENU_FONT.spaceAdvance
-    else {
-      const glyph = PAUSE_MENU_FONT.glyphs[`${code}`]
-      if (glyph?.metrics) width += pauseKerning(previous, code) + glyph.metrics[0]
-    }
-    previous = code
-  }
-  return width
-}
-
-function pauseKerning(first: number, second: number): number {
-  if (first < 0) return 0
-  return PAUSE_MENU_FONT.kerning.find(
-    ([left, right]) => left === first && right === second,
-  )?.[2] ?? 0
 }

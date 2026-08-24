@@ -1,42 +1,22 @@
 #!/usr/bin/env python3
-"""Extract the stock skill-picker atlases, records, fonts, and skill catalog.
+"""Validate/copy stock skill-picker pages and the authoritative skill catalog.
 
-The picker uses trimmed records from the shipped UI/Skills atlases and four
-compiled bitmap-font wrappers from Fonts.bundle. Keeping the source atlases
-intact avoids hand-cropped geometry drift; this script emits the exact record
-metadata needed to create Pixi subtextures at runtime.
+The complete reusable atlas/font manifest is owned by
+`extract-native-ui-kit.py`; this focused extractor no longer writes a second
+partial UI manifest.
 """
 
 from __future__ import annotations
 
 import argparse
-import hashlib
-import json
 import math
 import shutil
 import struct
 from dataclasses import dataclass
 from pathlib import Path
 
-from PIL import Image
-
-
-GAME_EXECUTABLE_SHA256 = (
-    "03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3"
-)
 COMMON_HEADER_SIZE = 45
 POINT_SIZE = 8
-UI_RECORDS = (
-    3, 10, 30, 31, 32, 37, 42, 47, 48, 49, 51, 56, 57, 59, 62, 79,
-    82, 100, 107, 108, 109, 110,
-)
-SKILLS_RECORDS = (0, 5, 6, 12, 13, 14, *range(27, 123), 164, 165)
-FONT_GROUPS = {
-    "body": 0,
-    "medium": 1,
-    "menu": 3,
-    "skill": 5,
-}
 
 
 @dataclass(frozen=True)
@@ -67,14 +47,6 @@ class FontGroup:
     header: tuple[float, float, float]
     kerning: tuple[tuple[int, int, float], ...]
     glyphs: tuple[FontGlyph, ...]
-
-
-def sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as source:
-        for chunk in iter(lambda: source.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def require_bytes(data: bytes, offset: int, size: int, label: str) -> None:
@@ -177,76 +149,6 @@ def parse_bundle(path: Path) -> tuple[list[SpriteRecord], list[FontGroup]]:
     return [*direct, *glyph_records], groups
 
 
-def integer(value: float, label: str) -> int:
-    result = round(value)
-    if not math.isclose(value, result):
-        raise ValueError(f"{label} is not integral: {value}")
-    return result
-
-
-def record_json(record: SpriteRecord) -> dict[str, object]:
-    width = integer(record.width, "record width")
-    height = integer(record.height, "record height")
-    trim_x = (record.logical_width - width) / 2 + record.center_x
-    trim_y = (record.logical_height - height) / 2 + record.center_y
-    return {
-        "frame": [
-            integer(record.x, "record x"),
-            integer(record.y, "record y"),
-            width,
-            height,
-        ],
-        "logicalSize": [record.logical_width, record.logical_height],
-        "trimOrigin": [trim_x, trim_y],
-        "rotated": bool(record.rotated),
-    }
-
-
-def selected_records(
-    records: list[SpriteRecord], indices: tuple[int, ...]
-) -> dict[str, object]:
-    return {str(index): record_json(records[index]) for index in indices}
-
-
-def font_json(
-    group: FontGroup,
-    all_records: list[SpriteRecord],
-) -> dict[str, object]:
-    record_index_by_offset = {
-        record.offset: index for index, record in enumerate(all_records)
-    }
-    return {
-        "metrics": list(group.header),
-        "spaceAdvance": group.header[1],
-        "kerning": [list(pair) for pair in group.kerning],
-        "glyphs": {
-            str(glyph.glyph_id): {
-                "record": record_index_by_offset[glyph.record.offset],
-                "metrics": list(glyph.metrics),
-                **record_json(glyph.record),
-            }
-            for glyph in group.glyphs
-        },
-    }
-
-
-def atlas_descriptor(
-    name: str,
-    image_path: Path,
-    bundle_path: Path,
-    records: dict[str, object],
-) -> dict[str, object]:
-    with Image.open(image_path) as image:
-        dimensions = list(image.size)
-    return {
-        "file": f"skill-picker-{name.lower()}-atlas.png",
-        "dimensions": dimensions,
-        "atlasSha256": sha256(image_path),
-        "bundleSha256": sha256(bundle_path),
-        "records": records,
-    }
-
-
 def write_if_changed(path: Path, payload: bytes) -> None:
     if path.exists() and path.read_bytes() == payload:
         return
@@ -292,47 +194,10 @@ def main() -> None:
             args.asset_dir / f"skill-picker-{name.lower()}-atlas.png",
         )
 
-    manifest = {
-        "schema": "solomon-dark-skill-picker-assets-v1",
-        "sourceExecutableSha256": GAME_EXECUTABLE_SHA256,
-        "atlases": {
-            "UI": atlas_descriptor(
-                "UI",
-                args.images_dir / "UI.png",
-                args.images_dir / "UI.bundle",
-                selected_records(ui_records, UI_RECORDS),
-            ),
-            "Skills": atlas_descriptor(
-                "Skills",
-                args.images_dir / "Skills.png",
-                args.images_dir / "Skills.bundle",
-                selected_records(skill_records, SKILLS_RECORDS),
-            ),
-            "Fonts": atlas_descriptor(
-                "Fonts",
-                args.images_dir / "Fonts.png",
-                args.images_dir / "Fonts.bundle",
-                {},
-            ),
-        },
-        "fonts": {
-            name: font_json(font_groups[index], font_records)
-            for name, index in FONT_GROUPS.items()
-        },
-        "catalogSha256": sha256(args.catalog),
-    }
-    manifest_bytes = (
-        json.dumps(manifest, indent=2, sort_keys=True) + "\n"
-    ).encode("utf-8")
-    write_if_changed(
-        args.asset_dir / "skill-picker-native-assets.json",
-        manifest_bytes,
-    )
     write_if_changed(args.catalog_output, args.catalog.read_bytes())
     print(
-        "Extracted stock skill picker: "
-        f"{len(UI_RECORDS)} UI records, {len(SKILLS_RECORDS)} Skills records, "
-        f"{len(FONT_GROUPS)} bitmap fonts, and 82 catalog entries."
+        "Validated stock skill-picker pages and copied the 82-row skill catalog; "
+        "the complete UI manifest is generated by extract-native-ui-kit.py."
     )
 
 

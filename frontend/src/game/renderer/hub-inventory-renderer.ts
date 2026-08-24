@@ -1,13 +1,10 @@
 import {
   Container,
   Graphics,
-  Rectangle,
   Sprite,
   Texture,
 } from 'pixi.js'
 
-import traderAssetsJson from '../../assets/game/hub-trader-native-assets.json' with { type: 'json' }
-import fontAssetsJson from '../../assets/game/skill-picker-native-assets.json' with { type: 'json' }
 import { elementVfx, hub, skillPicker } from '../../lib/assets.ts'
 import {
   DOWSING_EQUIPMENT_RECIPES,
@@ -31,6 +28,22 @@ import {
 import { playerCharacterStaffIsFront, playerCharacterStaffOrbOffset } from '../player-character-presentation.ts'
 import type { ProtocolPlayerEconomy, ProtocolPlayerProgression } from '../protocol/game-state.ts'
 import type { GameModAsset } from '../protocol/game-protocol.ts'
+import {
+  nativeUiAtlas,
+  nativeUiFont,
+  nativeUiRecord,
+  type NativeUiAtlasRecord,
+  type NativeUiFontName,
+} from '../native-ui/native-ui-catalog.ts'
+import {
+  destroyNativeUiPixiFor,
+  nativeUiPixiFor,
+} from '../native-ui/native-ui-pixi.ts'
+import {
+  measureNativeUiText,
+  nativeUiKerning,
+  wrapNativeUiText,
+} from '../native-ui/native-ui-text.ts'
 import {
   loadModPresentationTextures,
   type ModPresentationTextures,
@@ -97,30 +110,6 @@ import { createNativeElementVfxTextures, type PlayerWorldTextures } from './worl
 
 type AtlasName = 'Inventory' | 'Skills' | 'UI'
 type FontName = 'body' | 'medium' | 'menu' | 'skill'
-
-interface AtlasRecord {
-  readonly frame: readonly [number, number, number, number]
-  readonly logicalSize: readonly [number, number]
-  readonly metrics?: readonly [number, number, number]
-  readonly trimOrigin: readonly [number, number]
-}
-
-interface BitmapFont {
-  readonly glyphs: Readonly<Record<string, AtlasRecord>>
-  readonly kerning: readonly (readonly [number, number, number])[]
-  readonly metrics: readonly [number, number, number]
-  readonly spaceAdvance: number
-}
-
-interface TraderAssets {
-  readonly atlases: Readonly<Record<AtlasName, {
-    readonly records: Readonly<Record<string, AtlasRecord>>
-  }>>
-}
-
-interface FontAssets {
-  readonly fonts: Readonly<Record<FontName, BitmapFont>>
-}
 
 export interface HubInventoryRendererNotice {
   readonly actionLabel: string
@@ -212,14 +201,6 @@ export interface HubInventoryRenderer {
   setModel(model: HubInventoryRendererModel): void
 }
 
-const TRADER_ASSETS = traderAssetsJson as unknown as TraderAssets
-const FONT_ASSETS = fontAssetsJson as unknown as FontAssets
-const ATLAS_SOURCE: Readonly<Record<AtlasName, string>> = {
-  Inventory: hub.trader.inventoryAtlas,
-  Skills: hub.trader.skillsAtlas,
-  UI: hub.trader.uiAtlas,
-}
-
 export async function createHubInventoryRenderer(
   modAssets: readonly GameModAsset[] = [],
 ): Promise<HubInventoryRenderer> {
@@ -255,8 +236,6 @@ export async function createHubInventoryRenderer(
 
   const application = gpu.application
   const textures = resources
-  const atlasTextureCache = new Map<string, Texture>()
-  const glyphTextureCache = new Map<string, Texture>()
   const root = new Container()
   const dimmer = new Graphics().rect(0, 0, HUB_NATIVE_UI_SIZE.width, HUB_NATIVE_UI_SIZE.height).fill({ color: 0x000000 })
   const surface = new Container()
@@ -290,9 +269,7 @@ export async function createHubInventoryRenderer(
   ))
 
   const context: RenderContext = {
-    atlasTextureCache,
     elementVfxTextures,
-    glyphTextureCache,
     modTextures,
     playerCharacterAtlas,
     textures,
@@ -305,8 +282,7 @@ export async function createHubInventoryRenderer(
       destroyed = true
       application.destroy({ removeView: true })
       playerCharacterAtlas.destroy()
-      for (const texture of atlasTextureCache.values()) texture.destroy(false)
-      for (const texture of glyphTextureCache.values()) texture.destroy(false)
+      destroyNativeUiPixiFor(textures)
       for (const frames of Object.values(elementVfxTextures)) {
         for (const texture of frames) texture.destroy(false)
       }
@@ -471,9 +447,7 @@ export async function createHubInventoryRenderer(
 }
 
 interface RenderContext {
-  readonly atlasTextureCache: Map<string, Texture>
   readonly elementVfxTextures: PlayerWorldTextures['elementVfx']
-  readonly glyphTextureCache: Map<string, Texture>
   readonly modTextures: ModPresentationTextures
   readonly playerCharacterAtlas: PlayerCharacterAtlas
   readonly textures: GameTextureMap
@@ -980,7 +954,7 @@ function buildService(
   const { width } = HUB_SHOP_PANEL
   addShopPanel(context, overlay, model.trader === 'shlorio' && model.economy.dowsingOffers.length > 0)
   const dialogue = HUB_TRADER_DIALOGUES[model.trader]
-  const titleFont: FontName = measureBitmapText(dialogue.title, FONT_ASSETS.fonts.menu) > width - 55
+  const titleFont: FontName = measureNativeUiText(dialogue.title, 'menu') > width - 55
     ? 'medium'
     : 'menu'
   addBitmapText(context, overlay, dialogue.title, titleFont, 800, HUB_SHOP_TEXT.titleTextBaselineY, {
@@ -1229,9 +1203,9 @@ function buildUnforgeNotice(
 ): void {
   const confirmation = notice.variant === 'unforge-confirmation'
   const resultLayout = confirmation ? null : hubUnforgeResultLayout(Math.max(
-    measureBitmapText(notice.title, FONT_ASSETS.fonts.menu),
-    measureBitmapText(notice.summary ?? 'Unforging bonus:', FONT_ASSETS.fonts.medium),
-    measureBitmapText(notice.body, FONT_ASSETS.fonts.medium),
+    measureNativeUiText(notice.title, 'menu'),
+    measureNativeUiText(notice.summary ?? 'Unforging bonus:', 'medium'),
+    measureNativeUiText(notice.body, 'medium'),
   ))
   const innerPanelRect = confirmation
     ? HUB_UNFORGE_CONFIRMATION.innerPanelRect
@@ -1921,12 +1895,12 @@ function addNativeContextualHoverBox(
   sourceGap: number,
 ): Container {
   const rendered = lines.map((line) => {
-    const font = FONT_ASSETS.fonts[line.font]
-    const wrapped = wrapBitmapText(line.text, font, HUB_HOVER_BOX.contentMaxWidth)
+    const font = nativeUiFont(line.font)
+    const wrapped = wrapNativeUiText(line.text, line.font, HUB_HOVER_BOX.contentMaxWidth)
     return { font, line, wrapped }
   })
-  const contentWidth = Math.max(0, ...rendered.flatMap(({ font, wrapped }) => (
-    wrapped.map((text) => measureBitmapText(text, font))
+  const contentWidth = Math.max(0, ...rendered.flatMap(({ line, wrapped }) => (
+    wrapped.map((text) => measureNativeUiText(text, line.font))
   )))
   const contentHeight = rendered.reduce((height, { font, wrapped }, index) => (
     height
@@ -2032,7 +2006,7 @@ function addItemIcon(
     : [null, null]
   const sprites: Sprite[] = []
   for (const [index, record] of item.iconRecords.entries()) {
-    if (!TRADER_ASSETS.atlases.Inventory.records[`${record}`]) continue
+    if (!nativeUiAtlas('Inventory').records[`${record}`]) continue
     const sprite = addAtlasSprite(
       context,
       layer,
@@ -2114,8 +2088,7 @@ function addNativeNineSlice(
   height: number,
   edgeUvOrigin: number,
 ): void {
-  const definition = TRADER_ASSETS.atlases[atlas].records[`${record}`]
-  if (!definition) throw new Error(`native ${atlas}.${record} was not extracted`)
+  const definition = nativeUiRecord(atlas, record)
   const [cornerWidth, cornerHeight] = definition.logicalSize
   const middleWidth = width - cornerWidth * 2
   const middleHeight = height - cornerHeight * 2
@@ -2175,8 +2148,7 @@ function addTiledAtlas(
   height: number,
   scale = 1,
 ): void {
-  const definition = TRADER_ASSETS.atlases[atlas].records[`${record}`]
-  if (!definition) throw new Error(`native ${atlas}.${record} was not extracted`)
+  const definition = nativeUiRecord(atlas, record)
   const tileWidth = definition.logicalSize[0] * scale
   const tileHeight = definition.logicalSize[1] * scale
   for (let tileY = 0; tileY < height; tileY += tileHeight) {
@@ -2214,8 +2186,7 @@ function addRepeatedAtlas(
   rows: number,
 ): Sprite[] {
   const sprites: Sprite[] = []
-  const definition = TRADER_ASSETS.atlases[atlas].records[`${record}`]
-  if (!definition) throw new Error(`native ${atlas}.${record} was not extracted`)
+  const definition = nativeUiRecord(atlas, record)
   const [tileWidth, tileHeight] = definition.logicalSize
   for (let row = 0; row < rows; row += 1) {
     for (let column = 0; column < columns; column += 1) {
@@ -2250,23 +2221,7 @@ function addRepeatedAtlas(
 }
 
 function atlasTexture(context: RenderContext, atlas: AtlasName, record: number): Texture {
-  const key = `${atlas}.${record}`
-  const cached = context.atlasTextureCache.get(key)
-  if (cached) return cached
-  const definition = TRADER_ASSETS.atlases[atlas].records[`${record}`]
-  if (!definition) throw new Error(`native ${atlas}.${record} was not extracted`)
-  const source = textureFrom(context.textures.textures, ATLAS_SOURCE[atlas])
-  const [x, y, width, height] = definition.frame
-  const [logicalWidth, logicalHeight] = definition.logicalSize
-  const [trimX, trimY] = definition.trimOrigin
-  const texture = new Texture({
-    frame: new Rectangle(x, y, width, height),
-    orig: new Rectangle(0, 0, logicalWidth, logicalHeight),
-    source: source.source,
-    trim: new Rectangle(trimX, trimY, width, height),
-  })
-  context.atlasTextureCache.set(key, texture)
-  return texture
+  return nativeUiPixiFor(context.textures).texture(atlas, record)
 }
 
 function atlasSliceTexture(
@@ -2278,22 +2233,7 @@ function atlasSliceTexture(
   right: number,
   bottom: number,
 ): Texture {
-  const key = `${atlas}.${record}:slice:${left},${top},${right},${bottom}`
-  const cached = context.atlasTextureCache.get(key)
-  if (cached) return cached
-  const definition = TRADER_ASSETS.atlases[atlas].records[`${record}`]
-  if (!definition) throw new Error(`native ${atlas}.${record} was not extracted`)
-  const [x, y, width, height] = definition.frame
-  const sliceWidth = width * (right - left)
-  const sliceHeight = height * (bottom - top)
-  const source = textureFrom(context.textures.textures, ATLAS_SOURCE[atlas])
-  const texture = new Texture({
-    frame: new Rectangle(x + width * left, y + height * top, sliceWidth, sliceHeight),
-    orig: new Rectangle(0, 0, sliceWidth, sliceHeight),
-    source: source.source,
-  })
-  context.atlasTextureCache.set(key, texture)
-  return texture
+  return nativeUiPixiFor(context.textures).slice(atlas, record, [left, top, right, bottom])
 }
 
 function addBitmapText(
@@ -2311,41 +2251,17 @@ function addBitmapText(
     readonly tint?: number
   } = {},
 ): void {
-  const font = FONT_ASSETS.fonts[fontName]
-  const scale = options.scale ?? 1
-  const lines = wrapBitmapText(text, font, (options.maxWidth ?? Number.POSITIVE_INFINITY) / scale)
-  const lineHeight = (options.lineHeight ?? font.metrics[0]) * scale
-  lines.forEach((line, lineIndex) => {
-    const width = measureBitmapText(line, font) * scale
-    let cursor = options.align === 'left'
-      ? x
-      : options.align === 'right'
-        ? x - width
-        : x - width / 2
-    let previous = -1
-    for (const character of line) {
-      const code = character.codePointAt(0)!
-      if (character === ' ') {
-        cursor += font.spaceAdvance * scale
-        previous = code
-        continue
-      }
-      const glyph = font.glyphs[`${code}`]
-      if (!glyph?.metrics) continue
-      cursor += kerning(font, previous, code) * scale
-      const sprite = new Sprite(glyphTexture(context, glyph, code))
-      sprite.anchor.set(0.5)
-      sprite.scale.set(scale)
-      sprite.tint = options.tint ?? 0xffffff
-      sprite.position.set(
-        cursor + glyph.metrics[1] * scale,
-        y + lineIndex * lineHeight + glyph.metrics[2] * scale,
-      )
-      layer.addChild(sprite)
-      cursor += glyph.metrics[0] * scale
-      previous = code
-    }
-  })
+  layer.addChild(nativeUiPixiFor(context.textures).text({
+    align: options.align,
+    font: nativeUiFontName(fontName),
+    lineHeight: options.lineHeight,
+    maxWidth: options.maxWidth,
+    scale: options.scale,
+    text,
+    tint: options.tint,
+    x,
+    y,
+  }))
 }
 
 interface BitmapTextRun {
@@ -2366,7 +2282,8 @@ function addBitmapTextRuns(
   y: number,
   tint: number,
 ): void {
-  const font = FONT_ASSETS.fonts[fontName]
+  const nativeFontName = nativeUiFontName(fontName)
+  const font = nativeUiFont(nativeFontName)
   let cursor = x
   let previous = -1
   for (const run of runs) {
@@ -2381,8 +2298,8 @@ function addBitmapTextRuns(
       }
       const glyph = font.glyphs[`${code}`]
       if (!glyph?.metrics) continue
-      cursor += kerning(font, previous, code) * advanceScale
-      const sprite = new Sprite(glyphTexture(context, glyph, code))
+      cursor += nativeUiKerning(nativeFontName, previous, code) * advanceScale
+      const sprite = nativeUiPixiFor(context.textures).glyph(nativeFontName, code)
       sprite.anchor.set(0.5)
       sprite.scale.set(scale)
       if (run.italic) applyExactTextItalic(sprite, glyph)
@@ -2415,8 +2332,8 @@ function addChatBitmapText(
     readonly tint: number
   },
 ): number {
-  const font = FONT_ASSETS.fonts.menu
-  const lines = wrapChatBitmapText(source, font, options.maxWidth)
+  const font = nativeUiFont('menu')
+  const lines = wrapChatBitmapText(source, options.maxWidth)
   lines.forEach((line, lineIndex) => {
     let cursor = x
     let previous = -1
@@ -2429,8 +2346,8 @@ function addChatBitmapText(
       }
       const glyph = font.glyphs[`${code}`]
       if (!glyph?.metrics) continue
-      cursor += kerning(font, previous, code)
-      const sprite = new Sprite(glyphTexture(context, glyph, code))
+      cursor += nativeUiKerning('menu', previous, code)
+      const sprite = nativeUiPixiFor(context.textures).glyph('menu', code)
       sprite.anchor.set(0.5)
       if (italic) applyExactTextItalic(sprite, glyph)
       sprite.tint = options.tint
@@ -2446,7 +2363,7 @@ function addChatBitmapText(
   return lines.length
 }
 
-function applyExactTextItalic(sprite: Sprite, glyph: AtlasRecord): void {
+function applyExactTextItalic(sprite: Sprite, glyph: NativeUiAtlasRecord): void {
   const glyphHeight = glyph.frame[3]
   if (glyphHeight <= 0) return
   const totalDelta = HUB_CHAT_INLINE_EMPHASIS.glyphTopDelta
@@ -2456,14 +2373,14 @@ function applyExactTextItalic(sprite: Sprite, glyph: AtlasRecord): void {
   sprite.scale.y /= Math.cos(italicAngle)
 }
 
-function wrapChatBitmapText(source: string, font: BitmapFont, maxWidth: number): StyledGlyphCharacter[][] {
+function wrapChatBitmapText(source: string, maxWidth: number): StyledGlyphCharacter[][] {
   const characters = hubChatTextRuns(source).flatMap(({ italic, text }) => (
     [...text].map((character) => ({ character, italic }))
   ))
   const lines: StyledGlyphCharacter[][] = []
   let paragraph: StyledGlyphCharacter[] = []
   const flushParagraph = (): void => {
-    lines.push(...wrapChatParagraph(paragraph, font, maxWidth))
+    lines.push(...wrapChatParagraph(paragraph, maxWidth))
     paragraph = []
   }
   for (const character of characters) {
@@ -2476,7 +2393,6 @@ function wrapChatBitmapText(source: string, font: BitmapFont, maxWidth: number):
 
 function wrapChatParagraph(
   paragraph: readonly StyledGlyphCharacter[],
-  font: BitmapFont,
   maxWidth: number,
 ): StyledGlyphCharacter[][] {
   if (paragraph.length === 0) return [[]]
@@ -2489,7 +2405,7 @@ function wrapChatParagraph(
     const word: StyledGlyphCharacter[] = []
     while (index < paragraph.length && paragraph[index]!.character !== ' ') word.push(paragraph[index++]!)
     const candidate = [...line, ...spaces, ...word]
-    if (line.length > 0 && word.length > 0 && measureStyledBitmapText(candidate, font) > maxWidth) {
+    if (line.length > 0 && word.length > 0 && measureStyledBitmapText(candidate) > maxWidth) {
       lines.push(line)
       line = word
     } else {
@@ -2500,58 +2416,12 @@ function wrapChatParagraph(
   return lines
 }
 
-function measureStyledBitmapText(text: readonly StyledGlyphCharacter[], font: BitmapFont): number {
-  return measureBitmapText(text.map(({ character }) => character).join(''), font)
+function measureStyledBitmapText(text: readonly StyledGlyphCharacter[]): number {
+  return measureNativeUiText(text.map(({ character }) => character).join(''), 'menu')
 }
 
-function glyphTexture(context: RenderContext, glyph: AtlasRecord, code: number): Texture {
-  const [x, y, width, height] = glyph.frame
-  const key = `${code}.${x}.${y}.${width}.${height}`
-  const cached = context.glyphTextureCache.get(key)
-  if (cached) return cached
-  const source = textureFrom(context.textures.textures, skillPicker.fontsAtlas)
-  const texture = new Texture({ frame: new Rectangle(x, y, width, height), source: source.source })
-  context.glyphTextureCache.set(key, texture)
-  return texture
-}
-
-function wrapBitmapText(text: string, font: BitmapFont, maxWidth: number): string[] {
-  if (!Number.isFinite(maxWidth)) return text.split('\n')
-  const lines: string[] = []
-  for (const paragraph of text.split('\n')) {
-    const words = paragraph.split(/\s+/).filter(Boolean)
-    let current = ''
-    for (const word of words) {
-      const next = current ? `${current} ${word}` : word
-      if (current && measureBitmapText(next, font) > maxWidth) {
-        lines.push(current)
-        current = word
-      } else current = next
-    }
-    if (current) lines.push(current)
-    else lines.push('')
-  }
-  return lines
-}
-
-function measureBitmapText(text: string, font: BitmapFont): number {
-  let width = 0
-  let previous = -1
-  for (const character of text) {
-    const code = character.codePointAt(0)!
-    if (character === ' ') width += font.spaceAdvance
-    else {
-      const glyph = font.glyphs[`${code}`]
-      if (glyph?.metrics) width += kerning(font, previous, code) + glyph.metrics[0]
-    }
-    previous = code
-  }
-  return width
-}
-
-function kerning(font: BitmapFont, first: number, second: number): number {
-  if (first < 0) return 0
-  return font.kerning.find(([left, right]) => left === first && right === second)?.[2] ?? 0
+function nativeUiFontName(fontName: FontName): NativeUiFontName {
+  return fontName === 'skill' ? 'skill-uppercase' : fontName
 }
 
 function easeOutCubic(value: number): number {

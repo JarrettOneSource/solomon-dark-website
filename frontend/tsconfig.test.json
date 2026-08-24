@@ -17,6 +17,7 @@
     "src/editor/sprite-registration.ts",
     "src/game/create-menu-motion.ts",
     "src/game/create-menu-motion.test.ts",
+    "src/game/native-ui/native-ui.test.ts",
     "src/game/game-asset-readiness.ts",
     "src/game/game-asset-readiness.test.ts",
     "src/game/game-audio-native.ts",

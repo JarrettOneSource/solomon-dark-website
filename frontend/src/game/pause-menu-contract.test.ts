@@ -2,8 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
-import fontAssetsJson from '../assets/game/skill-picker-native-assets.json' with { type: 'json' }
-import uiAssetsJson from '../assets/game/hub-trader-native-assets.json' with { type: 'json' }
+import nativeUiAssetsJson from '../assets/game/native-ui-assets.json' with { type: 'json' }
 import {
   NATIVE_PAUSE_ART_COUNTS,
   NATIVE_PAUSE_ART_RECORDS,
@@ -51,6 +50,18 @@ const clientSessionSource = readFileSync(
   'utf8',
 )
 const hostSource = readFileSync(new URL('./host/game-host.ts', import.meta.url), 'utf8')
+
+function recordGeometry(record: {
+  readonly frame: readonly number[]
+  readonly logicalSize: readonly number[]
+  readonly trimOrigin: readonly number[]
+}) {
+  return {
+    frame: record.frame,
+    logicalSize: record.logicalSize,
+    trimOrigin: record.trimOrigin,
+  }
+}
 
 test('pause menu keeps the recovered native fixed-step timing and action geometry', () => {
   assert.equal(NATIVE_PAUSE_REVEAL_MS, 290)
@@ -102,39 +113,39 @@ test('pause menu drains the exact UI and bitmap-font membership', () => {
     spaceAdvance: 6,
   })
 
-  const ui = uiAssetsJson.atlases.UI.records
-  assert.deepEqual(ui['8'], {
+  const ui = nativeUiAssetsJson.atlases.UI.records
+  assert.deepEqual(recordGeometry(ui['8']), {
     frame: [824, 587, 49, 112],
     logicalSize: [49, 112],
     trimOrigin: [0, 0],
   })
-  assert.deepEqual(ui['17'], {
+  assert.deepEqual(recordGeometry(ui['17']), {
     frame: [743, 588, 80, 83],
     logicalSize: [80, 83],
     trimOrigin: [0, 0],
   })
-  assert.deepEqual(ui['18'], {
+  assert.deepEqual(recordGeometry(ui['18']), {
     frame: [543, 205, 67, 262],
     logicalSize: [86, 262],
     trimOrigin: [19, 0],
   })
-  assert.deepEqual(ui['54'], {
+  assert.deepEqual(recordGeometry(ui['54']), {
     frame: [679, 394, 70, 85],
     logicalSize: [70, 85],
     trimOrigin: [0, 0],
   })
-  assert.deepEqual(ui['101'], {
+  assert.deepEqual(recordGeometry(ui['101']), {
     frame: [266, 482, 353, 69],
     logicalSize: [353, 69],
     trimOrigin: [0, 0],
   })
-  assert.deepEqual(ui['102'], {
+  assert.deepEqual(recordGeometry(ui['102']), {
     frame: [620, 482, 353, 69],
     logicalSize: [353, 69],
     trimOrigin: [0, 0],
   })
-  assert.equal(Object.keys(fontAssetsJson.fonts.menu.glyphs).length, 92)
-  assert.equal(fontAssetsJson.fonts.menu.kerning.length, 210)
+  assert.equal(Object.keys(nativeUiAssetsJson.fonts.menu.glyphs).length, 92)
+  assert.equal(nativeUiAssetsJson.fonts.menu.kerning.length, 210)
 })
 
 test('settled and closed render plans preserve native chrome ownership', () => {
@@ -283,7 +294,7 @@ const near = (actual: number, expected: number, label: string) => {
 }
 
 test('pause menu extent spans the rotated header through the large arrow', () => {
-  const ui = uiAssetsJson.atlases.UI.records
+  const ui = nativeUiAssetsJson.atlases.UI.records
   assert.deepEqual(ui['8'].logicalSize, [NATIVE_PAUSE_CHROME_ART_SIZES.arrow.width, NATIVE_PAUSE_CHROME_ART_SIZES.arrow.height])
   assert.deepEqual(ui['18'].logicalSize, [NATIVE_PAUSE_CHROME_ART_SIZES.header.width, NATIVE_PAUSE_CHROME_ART_SIZES.header.height])
   // Settled chrome is (583.5, 299.5, 433×301); the header sits 43 above its top edge

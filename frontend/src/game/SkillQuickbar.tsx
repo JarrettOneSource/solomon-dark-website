@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
 
-import nativeAssetsJson from '../assets/game/skill-picker-native-assets.json' with { type: 'json' }
+import nativeAssetsJson from '../assets/game/native-ui-assets.json' with { type: 'json' }
 import { hub } from '../lib/assets.ts'
 import type { NativeSecondaryPlayerState } from './core-kernels/native-secondary-abilities.ts'
 import {
