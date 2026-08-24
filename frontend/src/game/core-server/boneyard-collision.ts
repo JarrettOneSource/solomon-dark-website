@@ -105,6 +105,8 @@ export const NATIVE_FIREBALL_TERRAIN_EXCLUSION_MASK =
 export const NATIVE_BONEYARD_SPAWN_PLACEMENT = Object.freeze({
   darkFallbackRadius: 350,
   movementProbe: 0.5,
+  policyViewHeight: 900 / 1.35,
+  policyViewWidth: 1600 / 1.35,
   verticalScale: 0.8,
 })
 
@@ -328,6 +330,26 @@ export function nativeSpawnRingSampleCount(
   ))
 }
 
+export function boneyardSpawnPositionIsOffscreen(
+  position: Readonly<BoneyardPoint>,
+  bounds: Readonly<BoneyardBounds>,
+  focuses: readonly Readonly<BoneyardPoint>[],
+): boolean {
+  if (focuses.length === 0) {
+    throw new Error('Boneyard offscreen placement requires a camera focus')
+  }
+  const halfWidth = NATIVE_BONEYARD_SPAWN_PLACEMENT.policyViewWidth / 2
+  const halfHeight = NATIVE_BONEYARD_SPAWN_PLACEMENT.policyViewHeight / 2
+  return focuses.every((focus) => {
+    const cameraX = clampSpawnCameraAxis(focus.x, bounds.x, bounds.w, halfWidth)
+    const cameraY = clampSpawnCameraAxis(focus.y, bounds.y, bounds.h, halfHeight)
+    return position.x < cameraX - halfWidth
+      || position.x > cameraX + halfWidth
+      || position.y < cameraY - halfHeight
+      || position.y > cameraY + halfHeight
+  })
+}
+
 export function firstBoneyardLineObstruction(
   start: BoneyardPoint,
   end: BoneyardPoint,
@@ -515,6 +537,16 @@ function validateSpawnRadius(radius: number): void {
   if (!Number.isFinite(radius) || radius <= 0) {
     throw new RangeError('Boneyard spawn radius must be positive and finite')
   }
+}
+
+function clampSpawnCameraAxis(
+  position: number,
+  start: number,
+  size: number,
+  halfView: number,
+): number {
+  if (size <= halfView * 2) return start + size / 2
+  return Math.min(start + size - halfView, Math.max(start + halfView, position))
 }
 
 function appendObjectCollision(

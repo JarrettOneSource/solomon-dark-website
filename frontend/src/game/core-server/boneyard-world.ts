@@ -89,6 +89,7 @@ import {
   type NativeEnemyWorldFeedbackKernelState,
 } from '../core-kernels/native-enemy-world-feedback.ts'
 import {
+  boneyardSpawnPositionIsOffscreen,
   canPlaceBoneyardBody,
   clipBoneyardSegment,
   createBoneyardCollisionWorld,
@@ -510,6 +511,13 @@ export function stepBoneyardWorldTick(
     nextPlayers,
     collisionResolvedEnemies,
   )
+  const spawnPolicyFocuses = Object.values(livingPlayers).map(({ position }) => position)
+  if (spawnPolicyFocuses.length === 0) {
+    spawnPolicyFocuses.push({
+      x: activeBounds.x + activeBounds.w / 2,
+      y: activeBounds.y + activeBounds.h / 2,
+    })
+  }
   const enemyStep = stepBoneyardEnemyStore(collisionResolvedEnemies, {
     abilityEffects,
     arenaScalars: { experience: RETAIL_BONEYARD_EXPERIENCE_RECIPE_SCALAR },
@@ -604,6 +612,11 @@ export function stepBoneyardWorldTick(
         positionPolicy ?? 'direct',
         rngState,
         {
+          isOffscreen: (candidate) => boneyardSpawnPositionIsOffscreen(
+            candidate,
+            activeBounds,
+            spawnPolicyFocuses,
+          ),
           lightAt: (candidate) => nativeBoneyardRadialLightScalar(
             candidate,
             spawnLightSources,

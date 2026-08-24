@@ -294,6 +294,7 @@ export default function Game() {
     saveDocument?: string,
     saveIntent?: GameSaveIntent,
     allowModMismatch?: boolean,
+    resumeToken?: string,
   ): Promise<GameSession> => {
     try {
       const endpoint = preparedEndpoint.current
@@ -314,6 +315,7 @@ export default function Game() {
         },
         ...(saveDocument ? { saveDocument } : {}),
         ...(saveIntent ? { saveIntent } : {}),
+        ...(resumeToken ? { resumeToken } : {}),
       })
       preparedEndpoint.current = null
       return session

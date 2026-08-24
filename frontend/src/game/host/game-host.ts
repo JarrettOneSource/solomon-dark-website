@@ -56,6 +56,7 @@ import {
 import {
   EMPTY_CONTENT_MANIFEST_SHA256,
   GAME_HOST_ENDED_SESSION_CLOSE_CODE,
+  GAME_SESSION_REPLACED_CLOSE_CODE,
   GAME_WEBSOCKET_MAX_PAYLOAD_BYTES,
   PARTY_ACTION_REJECTIONS,
   GAME_PROTOCOL_VERSION,
@@ -378,6 +379,7 @@ interface HostClient {
   playerId: PlayerId
   queuedInputs: Map<number, QueuedClientInput>
   pendingLuaRequestIds: Set<number>
+  resumeToken: string
   sentReplicationBaselines: Map<number, ReplicatedEntityBaseline>
   socket: WebSocket
 }
@@ -558,6 +560,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   const leaderboardIneligibleRunIds = new Set<string>()
   const issuedLeaderboardReceipts = new Set<string>()
   const pending = new Set<WebSocket>()
+  const supersededClients = new WeakSet<WebSocket>()
   const disconnectCauses = new WeakMap<WebSocket, { reason: string; source: string }>()
   const logDetails = (details: Readonly<Record<string, unknown>> = {}) => ({
     ...options.logContext,
@@ -907,6 +910,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         clearTimeout(helloDeadline)
         pending.delete(socket)
         let playerId: PlayerId | null = null
+        let replacedClient: HostClient | null = null
         let saveIntegrity: GameSaveIntegrity | null = null
         let savedProfile: RestoredGameSaveProfile | null = null
         const playerPartyIdentity = createPartyIdentity()
@@ -992,24 +996,54 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
               restoredBoneyard = null
             }
             if (sharedWorlds) {
-              try {
-                sharedWorlds = restoreSharedGamePlayer(
-                  sharedWorlds,
-                  restoredState,
-                  restoredBoneyard,
-                  playerId,
-                  playerPartyIdentity,
+              const liveState = sharedGameStateForPlayer(sharedWorlds, playerId)
+              if (liveState) {
+                const liveClient = [...clients.values()].find(
+                  candidate => candidate.playerId === playerId,
                 )
+                if (
+                  !liveClient
+                  || message.resumeToken === undefined
+                  || !credentialsEqual(message.resumeToken, liveClient.resumeToken)
+                ) {
+                  disconnect(
+                    socket,
+                    'invalid-message',
+                    'This wizard is already active in another browser.',
+                  )
+                  return
+                }
+                const liveCharacter = liveState.playerEntities.configs[0]
+                if (!liveCharacter || !sameCharacter(liveCharacter, message.character)) {
+                  disconnect(
+                    socket,
+                    'invalid-message',
+                    'The active wizard does not match the resume request.',
+                  )
+                  return
+                }
+                replacedClient = liveClient
                 state = sharedWorlds.hub
-              } catch (error) {
-                disconnect(
-                  socket,
-                  'invalid-message',
-                  error instanceof Error
-                    ? error.message
-                    : 'The game save cannot enter the shared Hub.',
-                )
-                return
+              } else {
+                try {
+                  sharedWorlds = restoreSharedGamePlayer(
+                    sharedWorlds,
+                    restoredState,
+                    restoredBoneyard,
+                    playerId,
+                    playerPartyIdentity,
+                  )
+                  state = sharedWorlds.hub
+                } catch (error) {
+                  disconnect(
+                    socket,
+                    'invalid-message',
+                    error instanceof Error
+                      ? error.message
+                      : 'The game save cannot enter the shared Hub.',
+                  )
+                  return
+                }
               }
             } else {
               state = restoredState
@@ -1151,6 +1185,19 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         const snapshotSequence = nextSnapshotSequence
         nextSnapshotSequence += 1
         const welcomeBaseline = createReplicatedEntityBaseline(welcomeSnapshot)
+        const resumeToken = randomBytes(32).toString('base64url')
+        if (replacedClient) {
+          clients.delete(replacedClient.socket)
+          supersededClients.add(replacedClient.socket)
+          disconnectCauses.set(replacedClient.socket, {
+            reason: 'wizard resumed in another browser',
+            source: 'resume-takeover',
+          })
+          replacedClient.socket.close(
+            GAME_SESSION_REPLACED_CLOSE_CODE,
+            'wizard resumed in another browser',
+          )
+        }
         const clientCheatsEnabled = message.cheatsEnabled && !authenticated.developerAccess
         const joinedClient: HostClient = {
           acknowledgedSequence: 0,
@@ -1177,6 +1224,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           playerId,
           pendingLuaRequestIds: new Set(),
           queuedInputs: new Map(),
+          resumeToken,
           sentReplicationBaselines: new Map([[snapshotSequence, welcomeBaseline]]),
           socket,
         }
@@ -1194,6 +1242,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           partyMemberCount: connectedParty?.memberPlayerIds.length ?? null,
           playerId,
           playerCount: clients.size,
+          replacedConnection: replacedClient !== null,
           role: authenticated.role,
         }
         logGameServerEvent(
@@ -1215,7 +1264,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           developerAccess: joinedClient.developerAccess,
           protocolVersion: GAME_PROTOCOL_VERSION,
           playerId,
-          resumeToken: `reserved-${playerId}`,
+          resumeToken,
           serverTickRate: GAME_TICK_RATE,
           snapshotRate,
           sessionKind,
@@ -2265,6 +2314,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       const client = clients.get(socket)
       const planned = disconnectCauses.get(socket)
       const observer = observers.get(socket)
+      if (supersededClients.delete(socket)) return
       if (observer) {
         observers.delete(socket)
         const details = {

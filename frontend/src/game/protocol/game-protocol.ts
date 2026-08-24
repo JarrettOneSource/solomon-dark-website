@@ -346,6 +346,7 @@ export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
 export const GAME_CONNECTION_TIMEOUT_CLOSE_CODE = 4000
 export const GAME_HOST_ENDED_SESSION_CLOSE_CODE = 4001
+export const GAME_SESSION_REPLACED_CLOSE_CODE = 4002
 export const PLAYER_CHARACTER_KERNEL_VERSION = 'player-character-kernel-5'
 export const EMPTY_CONTENT_MANIFEST_SHA256 = '0'.repeat(64)
 
@@ -8270,6 +8271,7 @@ function boneyardLootSnapshot(value: unknown, field: string): BoneyardLootSnapsh
     'bounceHeight',
     'framePhase',
     'id',
+    'itemContentId',
     'itemNativeSubtype',
     'itemNativeTypeId',
     'kind',

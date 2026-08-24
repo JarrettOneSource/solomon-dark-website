@@ -13,6 +13,7 @@ import { createNativeRng, drawNativeFloat } from '../core-kernels/native-rng.ts'
 import { NATIVE_GENERATED_BONEYARDS } from '../host/native-generated-boneyards.ts'
 import {
   boneyardBodyCollides,
+  boneyardSpawnPositionIsOffscreen,
   canPlaceBoneyardBody,
   clipBoneyardSegment,
   createBoneyardCollisionWorld,
@@ -320,6 +321,36 @@ test('native spawn placement draws a fresh retry angle for every radius ring', (
   )
   assert.deepEqual(placed.rngState, secondAngle.state)
   assert.ok(Math.hypot(placed.position.x - origin.x, placed.position.y - origin.y) > 25.1)
+})
+
+test('native offscreen policy views clamp strictly and reject a point visible to any player', () => {
+  const bounds = { x: 0, y: 0, w: 2_000, h: 1_600 }
+  const center = { x: 1_000, y: 800 }
+  const second = { x: 1_400, y: 1_000 }
+  const halfWidth = 800 / 1.35
+  const halfHeight = 450 / 1.35
+
+  assert.equal(boneyardSpawnPositionIsOffscreen(
+    { x: center.x + halfWidth, y: center.y }, bounds, [center],
+  ), false)
+  assert.equal(boneyardSpawnPositionIsOffscreen(
+    { x: center.x + halfWidth + 0.001, y: center.y }, bounds, [center],
+  ), true)
+  assert.equal(boneyardSpawnPositionIsOffscreen(
+    { x: 390, y: center.y }, bounds, [center, second],
+  ), true)
+  assert.equal(boneyardSpawnPositionIsOffscreen(
+    { x: 900, y: center.y + halfHeight + 0.001 }, bounds, [center, second],
+  ), false)
+  assert.equal(boneyardSpawnPositionIsOffscreen(
+    { x: 1, y: 1 },
+    { x: 0, y: 0, w: 500, h: 400 },
+    [{ x: 0, y: 0 }],
+  ), false)
+  assert.throws(
+    () => boneyardSpawnPositionIsOffscreen(center, bounds, []),
+    /requires a camera focus/,
+  )
 })
 
 test('finite generated-Arena placement resolves the exact production exterior spawn', () => {

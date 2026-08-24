@@ -6,6 +6,7 @@ import {
   failureFromServerDisconnect,
   failureFromTransportClose,
 } from './game-connection-failure.ts'
+import { GAME_SESSION_REPLACED_CLOSE_CODE } from '../protocol/game-protocol.ts'
 
 test('server disconnects retain the authoritative detail and add a plain-English explanation', () => {
   const failure = failureFromServerDisconnect(
@@ -58,7 +59,7 @@ test('transport timeouts, restarts, and abnormal losses have distinct explanatio
   assert.match(hostEnded.message, /hosting.*ended/i)
 
   const replaced = failureFromTransportClose({
-    code: 4002,
+    code: GAME_SESSION_REPLACED_CLOSE_CODE,
     reason: 'wizard resumed in another browser',
     wasClean: true,
   })

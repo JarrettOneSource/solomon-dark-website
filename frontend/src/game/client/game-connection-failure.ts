@@ -1,6 +1,7 @@
 import {
   GAME_CONNECTION_TIMEOUT_CLOSE_CODE,
   GAME_HOST_ENDED_SESSION_CLOSE_CODE,
+  GAME_SESSION_REPLACED_CLOSE_CODE,
   type GameDisconnectCode,
 } from '../protocol/game-protocol.ts'
 
@@ -86,6 +87,14 @@ export function failureFromTransportClose(
     return new GameConnectionFailure({
       code: 'session-ended',
       explanation: 'The player hosting this game ended the session.',
+      technicalDetail,
+      transport,
+    })
+  }
+  if (transport.code === GAME_SESSION_REPLACED_CLOSE_CODE) {
+    return new GameConnectionFailure({
+      code: 'session-ended',
+      explanation: 'This wizard resumed in another browser tab.',
       technicalDetail,
       transport,
     })

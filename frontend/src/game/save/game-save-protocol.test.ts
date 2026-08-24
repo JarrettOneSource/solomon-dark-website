@@ -8,6 +8,7 @@ import {
   decodeServerGameMessage,
 } from '../protocol/game-protocol.ts'
 import { MAX_WEB_GAME_SAVE_BYTES } from './game-save-contract.ts'
+import { readGameResumeToken, rememberGameResumeToken } from './game-resume-token.ts'
 
 const CHARACTER = {
   discipline: 'arcane',
@@ -160,4 +161,29 @@ test('protocol rejects oversized and inconsistent save messages', () => {
     checkpointSequence: -1,
     requestId: 7,
   })), /checkpointSequence/)
+})
+
+test('resume tokens stay scoped to one saved player and rotate in session storage', () => {
+  const values = new Map<string, string>()
+  const storage = {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => { values.set(key, value) },
+  }
+
+  assert.equal(readGameResumeToken('player-one', storage), undefined)
+  rememberGameResumeToken('player-one', 'first-token', storage)
+  rememberGameResumeToken('player-two', 'other-token', storage)
+  assert.equal(readGameResumeToken('player-one', storage), 'first-token')
+  assert.equal(readGameResumeToken('player-two', storage), 'other-token')
+  rememberGameResumeToken('player-one', 'rotated-token', storage)
+  assert.equal(readGameResumeToken('player-one', storage), 'rotated-token')
+})
+
+test('resume-token storage denial preserves ordinary save restore', () => {
+  const blocked = {
+    getItem: () => { throw new Error('blocked') },
+    setItem: () => { throw new Error('blocked') },
+  }
+  assert.equal(readGameResumeToken('player-one', blocked), undefined)
+  assert.doesNotThrow(() => rememberGameResumeToken('player-one', 'token', blocked))
 })

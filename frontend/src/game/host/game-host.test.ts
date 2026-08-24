@@ -25,6 +25,7 @@ import type {
 } from '../core-kernels/player-character.ts'
 import {
   GAME_PROTOCOL_VERSION,
+  GAME_SESSION_REPLACED_CLOSE_CODE,
   decodeServerGameMessage,
   encodeGameMessage,
   type ServerGameMessage,
@@ -2051,7 +2052,7 @@ test('a valid same-tab resume replaces only the live Tutorial transport and rota
     : null, loaded.boneyard.runId)
   assert.ok(replacement.snapshot.tick > savedTick, 'live authority must not roll back to the save')
   assert.deepEqual(await firstClosed, {
-    code: 4002,
+    code: GAME_SESSION_REPLACED_CLOSE_CODE,
     reason: 'wizard resumed in another browser',
   })
   await new Promise(resolve => setTimeout(resolve, 20))

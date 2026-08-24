@@ -36,6 +36,7 @@ test('bootGame accepts a separate localhost server and routes through the shared
       url: 'ws://127.0.0.1:1234/game',
       credential: 'secret',
     },
+    resumeToken: 'same-tab-token',
     saveDocument: '{"schemaVersion":1}',
     transportFactory: async () => inertTransport,
     sessionConnector: async (options) => {
@@ -48,6 +49,7 @@ test('bootGame accepts a separate localhost server and routes through the shared
   assert.deepEqual(connected?.character, CHARACTER)
   assert.equal(connected?.saveDocument, '{"schemaVersion":1}')
   assert.equal(connected?.saveIntent, 'resume')
+  assert.equal(connected?.resumeToken, 'same-tab-token')
 })
 
 test('bootGame reports concrete transport and welcome milestones in order', async () => {

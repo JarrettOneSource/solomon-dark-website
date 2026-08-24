@@ -106,6 +106,10 @@ import {
 } from './game-content-cache.ts'
 import type { BrowserGameAdmission } from './game-bootstrap.ts'
 import type { ProtocolPlayerProgression } from './protocol/game-state.ts'
+import {
+  readGameResumeToken,
+  rememberGameResumeToken,
+} from './save/game-resume-token.ts'
 import type { LocalPartyState } from './protocol/party-state.ts'
 import {
   PARTY_INVITATION_SOUND_REQUEST,
@@ -312,6 +316,7 @@ interface MainMenuSceneProps {
     saveDocument?: string,
     saveIntent?: GameSaveIntent,
     allowModMismatch?: boolean,
+    resumeToken?: string,
   ) => Promise<GameClientSession>
   connectObserver: (
     matchId: string,
@@ -1052,6 +1057,7 @@ export default function MainMenuScene({
 
   const activateSession = (nextSession: GameClientSession, preserveScreen = false) => {
     const snapshot = nextSession.getSnapshot()
+    rememberGameResumeToken(nextSession.playerId, nextSession.resumeToken)
     setWhisperRequest(null)
     setSession(nextSession)
     setRuntimeSnapshot(snapshot)
@@ -1091,6 +1097,7 @@ export default function MainMenuScene({
         resumeSave.document,
         'resume',
         allowModMismatch,
+        readGameResumeToken(resumeSave.summary.playerId),
       )
       activateSession(nextSession)
     } catch (error) {

@@ -49,6 +49,7 @@ export interface SessionOptions {
   onDeploymentRestart?: (request: GameDeploymentRestartRequest) => Promise<void>
   onProgress?: (stage: GameConnectionStage) => void
   profile: PlayerSocialProfile
+  resumeToken?: string
   saveDocument?: string
   saveIntent?: GameSaveIntent
   transportFactory?: (url: string) => Promise<GameTransport>
@@ -104,6 +105,7 @@ export async function bootGame(options: SessionOptions): Promise<GameSession> {
     character: options.character,
     cheatsEnabled: options.cheatsEnabled === true,
     profile: options.profile,
+    ...(options.resumeToken ? { resumeToken: options.resumeToken } : {}),
     transport,
     credential: options.endpoint.credential,
     ...(options.diagnostics ? { diagnostics: options.diagnostics } : {}),
