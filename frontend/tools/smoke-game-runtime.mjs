@@ -323,7 +323,13 @@ try {
   await page.screenshot({ path: allyScreenshotPath })
   await thirdPage.screenshot({ path: mobileAllyScreenshotPath })
 
+  // Touch ally roster contract (hub.css `.hub-hud-allies` in the coarse-pointer block): the
+  // roster continues the social column under the party chip, anchored in screen px like the
+  // skull at (6, 82), 164 root px wide at 72 % so the rows read 118 px. The row internals are
+  // the desktop ones (bar = roster width - 49, fill = bar - 2, identity gap 8, pitch 39) at
+  // that same 72 %.
   const expectedMobileViewportScale = 390 / 900
+  const touchRosterWidth = 164
   assert.equal(thirdMobileHubAllyReceipt.coarsePointer, true)
   assertClose(
     thirdMobileHubAllyReceipt.presentationScale,
@@ -336,20 +342,22 @@ try {
     'mobile viewport scale',
   )
   assert.deepEqual(thirdMobileHubAllyReceipt.names, ['SolonSolus', 'Helvidius'])
+  assertClose(thirdMobileHubAllyReceipt.roster.x, 6, 'mobile ally roster x')
+  assertClose(thirdMobileHubAllyReceipt.roster.y, 82, 'mobile ally roster y')
   assertClose(
-    thirdMobileHubAllyReceipt.roster.x,
-    (thirdMobileHubAllyReceipt.viewport.width - 196 * 0.72) / 2,
-    'mobile ally roster x',
+    thirdMobileHubAllyReceipt.roster.width,
+    touchRosterWidth * 0.72,
+    'mobile ally roster width',
   )
-  assertClose(
-    thirdMobileHubAllyReceipt.roster.y,
-    96 * expectedMobileViewportScale,
-    'mobile ally roster y',
+  assert.ok(
+    thirdMobileHubAllyReceipt.roster.y
+      >= thirdMobileHubAllyReceipt.skull.y + thirdMobileHubAllyReceipt.skull.height,
+    'mobile ally roster sits below the skull',
   )
   for (const row of thirdMobileHubAllyReceipt.rows) {
-    assertClose(row.bar.width, 147 * 0.72, 'mobile ally bar width')
+    assertClose(row.bar.width, (touchRosterWidth - 49) * 0.72, 'mobile ally bar width')
     assertClose(row.bar.height, 7 * 0.72, 'mobile ally bar height')
-    assertClose(row.fill.width, 145 * 0.72, 'mobile ally fill width')
+    assertClose(row.fill.width, (touchRosterWidth - 51) * 0.72, 'mobile ally fill width')
     assertClose(
       row.bar.x - (row.identity.x + row.identity.width),
       8 * 0.72,
@@ -399,9 +407,12 @@ try {
     0.72 / expectedMobileViewportScale,
     'mobile Boneyard ally presentation scale',
   )
+  // A run has no party chip, so the roster takes the chip's anchor (boneyard.css: 6, 54).
+  assertClose(thirdMobileBoneyardAllyReceipt.roster.x, 6, 'mobile Boneyard ally roster x')
+  assertClose(thirdMobileBoneyardAllyReceipt.roster.y, 54, 'mobile Boneyard ally roster y')
   assertClose(
     thirdMobileBoneyardAllyReceipt.rows[0].bar.width,
-    147 * 0.72,
+    (touchRosterWidth - 49) * 0.72,
     'mobile Boneyard ally bar width',
   )
 

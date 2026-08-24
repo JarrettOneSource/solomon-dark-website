@@ -70,6 +70,13 @@ try {
     contentType: 'application/json',
     status: 200,
   }))
+  // The deployment-revision poll (deployment-revision.ts, every 15 s from Game.tsx) asks for
+  // deployment.json; Vite dev serves none, and each 404 lands in `errors`, so answer with the
+  // current revision like the other smokes do.
+  await page.route('**/deployment.json?*', async (route) => {
+    const revision = new URL(route.request().url()).searchParams.get('current')
+    await route.fulfill({ json: { revision } })
+  })
   await page.addInitScript(bypassStartupAudioPreload)
   await page.addInitScript((configuration) => {
     window.solomonDarkRuntime = configuration

@@ -52,9 +52,13 @@ if (!viteAddress || typeof viteAddress === 'string') {
   throw new Error('Vite did not expose its local mobile-menus port')
 }
 const baseUrl = `http://127.0.0.1:${viteAddress.port}`
+// A private College like the provisioned production runtime: only 'private-college' and
+// 'global-hub' sessions own a party system (game-host.ts `privateParties`), and the Hub party
+// chip, member card and Player Card that this journey drives exist only with a party.
 const host = await startGameHost({
   allowedOrigins: [baseUrl],
   authentication: { kind: 'shared', credential },
+  sessionKind: 'private-college',
   snapshotRate: 20,
 })
 const runtime = { gameEndpoint: { credential, kind: 'localhost', url: host.address.url } }
@@ -90,6 +94,13 @@ try {
     contentType: 'application/json',
     status: 200,
   }))
+  // The deployment-revision poll (deployment-revision.ts, every 15 s from Game.tsx) asks for
+  // deployment.json; Vite dev serves none, and each 404 lands in `errors`, so answer with the
+  // current revision like the other smokes do.
+  await page.route('**/deployment.json?*', async (route) => {
+    const revision = new URL(route.request().url()).searchParams.get('current')
+    await route.fulfill({ json: { revision } })
+  })
   await page.addInitScript(bypassStartupAudioPreload)
   await page.addInitScript((configuration) => {
     window.solomonDarkRuntime = configuration
