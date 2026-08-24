@@ -35,12 +35,15 @@ import {
   applyPlayerPotionEffect,
   applyPlayerSkillChoice,
   bindPlayerSkillQuickbar,
+  buildPlayerSkillOffer,
   createPlayerProgression,
   createPlayerSkillBook,
   deferPlayerSkillChoice,
   grantPlayerExperience,
   grantPlayerBonusSkillChoice,
   grantNativeWeirdCasterSkill,
+  grantPlayerSkillRanks,
+  grantPlayerWeldBuild,
   increaseRandomLearnedSkill,
   playerStatBook,
   rerollPlayerSkillOffer,
@@ -61,7 +64,9 @@ import {
   consumeWizardKey,
   creditLootGold,
   createHubEconomy,
+  NATIVE_LOOT_BACKPACK_REPLICATION_LIMIT,
   insertLootInventoryItem,
+  hubEconomyInventoryIsValid,
   projectInventoryItems,
   SORCERORS_CHARM_SELECTOR,
   type HubInventoryItem,
@@ -1318,6 +1323,72 @@ export function insertPlayerEntityLootItem(
   return { accepted: true, store: { ...source, economies } }
 }
 
+export function grantPlayerEntityInventoryItems(
+  source: PlayerEntityStore,
+  playerId: string,
+  items: readonly HubInventoryItem[],
+): PlayerEntityLootItemResult {
+  const index = playerEntityIndex(source, playerId)
+  if (index < 0 || items.length === 0) return { accepted: false, store: source }
+  let economy = source.economies[index]!
+  for (const item of items) {
+    const inserted = insertLootInventoryItem(economy, item)
+    if (!inserted.accepted) return { accepted: false, store: source }
+    economy = inserted.state
+  }
+  if (
+    projectInventoryItems(economy.backpack).length > NATIVE_LOOT_BACKPACK_REPLICATION_LIMIT
+    || !hubEconomyInventoryIsValid(economy)
+  ) {
+    return { accepted: false, store: source }
+  }
+  const economies = [...source.economies]
+  economies[index] = economy
+  return { accepted: true, store: { ...source, economies } }
+}
+
+export function grantPlayerEntitySkillRanks(
+  source: PlayerEntityStore,
+  playerId: string,
+  skillId: number,
+  ranks: number,
+): PlayerEntityStore {
+  const index = playerEntityIndex(source, playerId)
+  if (index < 0) return source
+  const skillBook = grantPlayerSkillRanks(source.skillBooks[index]!, skillId, ranks)
+  return skillBook === source.skillBooks[index]
+    ? source
+    : refreshPendingPlayerSkillOffer(
+        replacePlayerSkillState(
+          source,
+          index,
+          skillBook,
+          source.skillRuntimes[index]!,
+          source.economies[index]!,
+        ),
+        index,
+      )
+}
+
+export function grantPlayerEntityWeldBuild(
+  source: PlayerEntityStore,
+  playerId: string,
+  buildId: number,
+): PlayerEntityStore {
+  const index = playerEntityIndex(source, playerId)
+  if (index < 0) return source
+  return refreshPendingPlayerSkillOffer(
+    replacePlayerSkillState(
+      source,
+      index,
+      grantPlayerWeldBuild(source.skillBooks[index]!, buildId),
+      source.skillRuntimes[index]!,
+      source.economies[index]!,
+    ),
+    index,
+  )
+}
+
 export function consumePlayerEntityWizardKey(
   source: PlayerEntityStore,
   playerId: string,
@@ -1582,6 +1653,25 @@ function replacePlayerProgression(
 ): PlayerEntityStore {
   const progressions = [...source.progressions]
   progressions[index] = progression
+  return { ...source, progressions }
+}
+
+function refreshPendingPlayerSkillOffer(
+  source: PlayerEntityStore,
+  index: number,
+): PlayerEntityStore {
+  const progression = source.progressions[index]!
+  if (progression.pendingOffer === null) return source
+  const progressions = [...source.progressions]
+  progressions[index] = {
+    ...progression,
+    pendingOffer: buildPlayerSkillOffer(
+      progression,
+      source.skillBooks[index]!,
+      progression.pendingOffer.sequence,
+    ),
+    revision: progression.revision + 1,
+  }
   return { ...source, progressions }
 }
 

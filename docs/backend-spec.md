@@ -51,7 +51,9 @@ authenticated JWT subject. Its boolean result is sealed into the one-use game
 admission and protocol welcome; no request body, client hello, setting, or
 profile field can grant it. An entitled account keeps `Enable Cheats` off and
 uses the ordinary Hub route while the GameHost independently authorizes each
-Lua request.
+Lua request. Developer-authored cheat/Lua commands do not change save integrity
+or global-score eligibility; ordinary cheat mode and ordinary-host Lua retain
+their existing permanent taint.
 
 Browser diagnostics correlate the report with exactly one of three endpoint
 classes: `null` when no provisioned session is known, `shared-hub` for the

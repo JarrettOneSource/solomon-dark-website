@@ -692,7 +692,7 @@ export default function MainMenuScene({
     const removeGameplayPause = session.onGameplayPause(setGameplayPause)
     const removeChatMessage = session.onChatMessage(presentWorldSpeech)
     const removeLeaderboardReceipt = session.onLeaderboardReceipt((receipt) => {
-      if (gameCheatsEnabled()) return
+      if (!session.developerAccess && gameCheatsEnabled()) return
       void submitGlobalHallOfFame(receipt)
     })
     const removePartyAction = session.onPartyAction(result => {

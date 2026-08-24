@@ -17,6 +17,14 @@ import {
 } from './web-lua-contract.ts'
 import type { WebLuaContentModBinding } from './web-lua-content-registry.ts'
 import {
+  WEB_LUA_DEVELOPER_ITEMS,
+  WEB_LUA_DEVELOPER_SKILLS,
+  WEB_LUA_DEVELOPER_WELDS,
+  webLuaDeveloperItemExists,
+  webLuaDeveloperSkill,
+  webLuaDeveloperWeld,
+} from './web-lua-developer-grants.ts'
+import {
   encodedByteLength,
   luaObjectString,
   normalizeLuaValue,
@@ -89,6 +97,41 @@ export class WebLuaApi {
       ...(this.#bindings.developer ? {
         bots: {
           summon: (options?: unknown) => this.#summonBot(options),
+        },
+        dev: {
+          grant_gold: (amount: unknown, playerId?: unknown) => (
+            this.#grantGold(amount, playerId)
+          ),
+          grant_item: (
+            itemKey: unknown,
+            quantity?: unknown,
+            playerId?: unknown,
+          ) => this.#grantItem(itemKey, quantity, playerId),
+          grant_skill: (
+            skillId: unknown,
+            ranks?: unknown,
+            playerId?: unknown,
+          ) => this.#grantSkill(skillId, ranks, playerId),
+          grant_weld: (buildId: unknown, playerId?: unknown) => (
+            this.#grantWeld(buildId, playerId)
+          ),
+          list_items: () => WEB_LUA_DEVELOPER_ITEMS.map(item => ({
+            key: item.key,
+            kind: item.kind,
+            name: item.name,
+            native_type_id: item.native_type_id,
+            ...(item.native_subtype === null
+              ? {}
+              : { native_subtype: item.native_subtype }),
+            ...(item.recipe_index === null
+              ? {}
+              : { recipe_index: item.recipe_index }),
+          })),
+          list_skills: () => WEB_LUA_DEVELOPER_SKILLS.map(skill => ({ ...skill })),
+          list_welds: () => WEB_LUA_DEVELOPER_WELDS.map(weld => ({
+            ...weld,
+            component_skill_ids: [...weld.component_skill_ids],
+          })),
         },
       } : {}),
       enemies: {
@@ -294,6 +337,58 @@ export class WebLuaApi {
     result[0] = true
     result[1] = player.maximumMana
     return result
+  }
+
+  #grantGold(amount: unknown, candidate?: unknown): boolean {
+    const player = this.#resolvePlayer(candidate)
+    this.#bindings.queueCommand({
+      amount: requireIntegerWithin(amount, 'Gold grant', 1, 10_000_000),
+      playerId: player.id,
+      type: 'grant-gold',
+    })
+    return true
+  }
+
+  #grantItem(itemKey: unknown, quantity: unknown, candidate?: unknown): boolean {
+    const key = requireString(itemKey, 'developer item key', 128)
+    if (!webLuaDeveloperItemExists(key)) throw new Error(`unknown developer item: ${key}`)
+    const player = this.#resolvePlayer(candidate)
+    this.#bindings.queueCommand({
+      itemKey: key,
+      playerId: player.id,
+      quantity: requireIntegerWithin(quantity ?? 1, 'item quantity', 1, 100),
+      type: 'grant-item',
+    })
+    return true
+  }
+
+  #grantSkill(skillId: unknown, ranks: unknown, candidate?: unknown): boolean {
+    const id = requireIntegerWithin(skillId, 'skill id', 8, 79)
+    const skill = webLuaDeveloperSkill(id)
+    if (!skill) throw new Error(`unknown developer skill: ${id}`)
+    if (skill.weld_only) {
+      throw new Error('Spell Welding must be granted with sd.dev.grant_weld')
+    }
+    const player = this.#resolvePlayer(candidate)
+    this.#bindings.queueCommand({
+      playerId: player.id,
+      ranks: requireIntegerWithin(ranks ?? 1, 'skill ranks', 1, skill.maximum_rank),
+      skillId: id,
+      type: 'grant-skill',
+    })
+    return true
+  }
+
+  #grantWeld(buildId: unknown, candidate?: unknown): boolean {
+    const id = requireIntegerWithin(buildId, 'Weld build id', 1000, 1009)
+    if (!webLuaDeveloperWeld(id)) throw new Error(`unknown native Weld build: ${id}`)
+    const player = this.#resolvePlayer(candidate)
+    this.#bindings.queueCommand({
+      buildId: id,
+      playerId: player.id,
+      type: 'grant-weld',
+    })
+    return true
   }
 
   #spawnEnemy(identity: unknown, options: unknown) {

@@ -410,6 +410,15 @@ export interface FomentiusStockDefinition {
   readonly rollBound: number
 }
 
+export interface NativeSkillBookDefinition {
+  readonly iconRecords: readonly number[]
+  readonly key: string
+  readonly kind: 'skill-book'
+  readonly name: string
+  readonly nativeSubtype: 2 | 3
+  readonly nativeTypeId: 7012
+}
+
 export const FOMENTIUS_STOCK_DEFINITIONS: readonly FomentiusStockDefinition[] = [
   { kind: 'health-potion', name: 'Health Potion', nativeTypeId: 7001, nativeSubtype: 0, iconRecords: [46], price: 150, rollBound: 3, quantityOffset: 2 },
   { kind: 'mana-potion', name: 'Mana Potion', nativeTypeId: 7001, nativeSubtype: 1, iconRecords: [47], price: 75, rollBound: 6, quantityOffset: 2 },
@@ -420,6 +429,25 @@ export const FOMENTIUS_STOCK_DEFINITIONS: readonly FomentiusStockDefinition[] = 
   { kind: 'antidote', name: 'Antidote', nativeTypeId: 7001, nativeSubtype: 3, iconRecords: [49], price: 100, rollBound: 3, quantityOffset: 1 },
   { kind: 'wizard-chug', name: 'Wizard Chug', nativeTypeId: 7001, nativeSubtype: 2, iconRecords: [48], price: 2500, rollBound: 8, gateValue: 3 },
   { kind: 'mind-chug', name: 'Mind Chug', nativeTypeId: 7001, nativeSubtype: 4, iconRecords: [50], price: 1500, rollBound: 8, gateValue: 3 },
+]
+
+export const NATIVE_SKILL_BOOK_DEFINITIONS: readonly NativeSkillBookDefinition[] = [
+  {
+    iconRecords: [44],
+    key: 'skill-choice-book',
+    kind: 'skill-book',
+    name: 'Book of Skill',
+    nativeSubtype: 2,
+    nativeTypeId: 7012,
+  },
+  {
+    iconRecords: [45],
+    key: 'skill-rank-book',
+    kind: 'skill-book',
+    name: 'Book of Skill',
+    nativeSubtype: 3,
+    nativeTypeId: 7012,
+  },
 ]
 
 const EQUIPMENT_RECIPE_ROWS = [
@@ -1541,8 +1569,30 @@ export function unequipInventorySlot(
   })
 }
 
-function inventoryItemFromStock(
+export function createFomentiusInventoryItem(
   definition: FomentiusStockDefinition,
+  id: number,
+  quantity = 1,
+): HubInventoryItem {
+  if (!Number.isSafeInteger(quantity) || quantity < 1) {
+    throw new RangeError('Fomentius inventory quantity must be a positive safe integer')
+  }
+  return {
+    equipmentType: null,
+    iconRecords: definition.iconRecords,
+    id,
+    kind: definition.kind,
+    name: definition.name,
+    nativeSubtype: definition.nativeSubtype,
+    nativeTypeId: definition.nativeTypeId,
+    quantity,
+    rarity: null,
+    recipeIndex: null,
+  }
+}
+
+export function createNativeSkillBookInventoryItem(
+  definition: NativeSkillBookDefinition,
   id: number,
 ): HubInventoryItem {
   return {
@@ -1574,7 +1624,7 @@ function rollFomentiusStock(
       : Number(draw.value === definition.gateValue)
     for (let index = 0; index < quantity; index += 1) {
       items.push({
-        ...inventoryItemFromStock(definition, nextItemId),
+        ...createFomentiusInventoryItem(definition, nextItemId),
         price: definition.price,
       })
       nextItemId += 1

@@ -4,8 +4,10 @@ Status: implemented contract, 2026-08-22.
 
 ## Product rules
 
-- The global Hub is vanilla-only. Enabled mods, cheats, or a local-only save use
-  a private College and cannot create global leaderboard receipts.
+- The global Hub is vanilla-only. Enabled mods, ordinary cheat mode, or a
+  local-only save use a private College and cannot create global leaderboard
+  receipts. Server-authenticated developer cheats remain on the ordinary route
+  and are score/save neutral.
 - New Game decides global versus private before Create, but the actual host
   ticket is minted only after the discipline is committed.
 - Every party starts private. Global-Hub leaders may choose Public, Invite Only,

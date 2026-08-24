@@ -47,7 +47,11 @@ function frame(overrides: Partial<WebLuaFrameState> = {}): WebLuaFrameState {
   }
 }
 
-async function runtimeHarness(initialFrame = frame(), useRealClock = false) {
+async function runtimeHarness(
+  initialFrame = frame(),
+  useRealClock = false,
+  developer = false,
+) {
   let currentFrame = initialFrame
   const logs: Array<{ detail: string; event: string; level: string }> = []
   const runtime = await WebLuaRuntime.create({
@@ -55,6 +59,11 @@ async function runtimeHarness(initialFrame = frame(), useRealClock = false) {
       getAuthorityPlayerId: () => currentFrame.authorityPlayerId,
       getFrame: () => currentFrame,
     },
+    ...(developer ? {
+      developer: {
+        summonBot: () => ({ display_name: 'Test Bot', player_id: 'bot-1' }),
+      },
+    } : {}),
     log: (level, event, detail) => logs.push({ detail, event, level }),
     now: useRealClock ? performance.now.bind(performance) : () => 0,
     wasmPath,
@@ -78,6 +87,85 @@ async function runtimeHarness(initialFrame = frame(), useRealClock = false) {
     setFrame: (value: WebLuaFrameState) => { currentFrame = value },
   }
 }
+
+test('web Lua exposes bounded stock grants only to developer console VMs', async () => {
+  const ordinary = await runtimeHarness()
+  try {
+    assert.deepEqual(
+      ordinary.execute('return {dev = type(sd.dev), bots = type(sd.bots)}').values,
+      [{ bots: 'nil', dev: 'nil' }],
+    )
+  } finally {
+    ordinary.runtime.close()
+  }
+
+  const developerFrame = frame({
+    multiplayer: true,
+    playerCount: 2,
+    players: [
+      ...frame().players,
+      {
+        ...frame().players[0]!,
+        displayName: 'Target Wizard',
+        id: 'player-2',
+      },
+    ],
+  })
+  const developer = await runtimeHarness(developerFrame, false, true)
+  try {
+    const types = developer.execute('return type(sd.dev), type(sd.bots)')
+    assert.equal(types.ok, true, types.error ?? 'developer namespaces failed')
+    assert.deepEqual(types.values, ['table', 'table'])
+    const items = developer.execute(`
+      local items = sd.dev.list_items()
+      return #items, items[1].key, items[1].recipe_index == nil,
+        items[12].native_subtype == nil
+    `)
+    assert.equal(items.ok, true, items.error ?? 'developer item catalog failed')
+    assert.deepEqual(items.values, [58, 'health-potion', true, true])
+    const skills = developer.execute(`
+      local skills = sd.dev.list_skills()
+      return #skills, skills[1].id, skills[#skills].id
+    `)
+    assert.equal(skills.ok, true, skills.error ?? 'developer skill catalog failed')
+    assert.deepEqual(skills.values, [72, 8, 79])
+    const welds = developer.execute(`
+      local welds = sd.dev.list_welds()
+      return #welds, welds[1].id, welds[#welds].id
+    `)
+    assert.equal(welds.ok, true, welds.error ?? 'developer Weld catalog failed')
+    assert.deepEqual(welds.values, [10, 1000, 1009])
+
+    const granted = developer.execute(`
+      return sd.dev.grant_gold(250, 'player-2'),
+        sd.dev.grant_item('health-potion', 3, 'player-2'),
+        sd.dev.grant_item('equipment:0', 1, 'player-2'),
+        sd.dev.grant_skill(72, 2, 'player-2'),
+        sd.dev.grant_weld(1000, 'player-2')
+    `)
+    assert.deepEqual(granted.values, [true, true, true, true, true])
+    assert.deepEqual(developer.runtime.drainCommands(), [
+      { amount: 250, playerId: 'player-2', type: 'grant-gold' },
+      { itemKey: 'health-potion', playerId: 'player-2', quantity: 3, type: 'grant-item' },
+      { itemKey: 'equipment:0', playerId: 'player-2', quantity: 1, type: 'grant-item' },
+      { playerId: 'player-2', ranks: 2, skillId: 72, type: 'grant-skill' },
+      { buildId: 1000, playerId: 'player-2', type: 'grant-weld' },
+    ])
+
+    assert.equal(developer.execute("return sd.dev.grant_item('missing', 1)").ok, false)
+    assert.equal(
+      developer.execute("return sd.dev.grant_item('health-potion', 101)").ok,
+      false,
+    )
+    assert.equal(developer.execute('return sd.dev.grant_skill(7, 1)').ok, false)
+    assert.equal(developer.execute('return sd.dev.grant_skill(52, 1)').ok, false)
+    assert.equal(developer.execute('return sd.dev.grant_weld(999)').ok, false)
+    assert.equal(developer.execute("return sd.dev.grant_gold(1, 'missing')").ok, false)
+    assert.deepEqual(developer.runtime.drainCommands(), [])
+  } finally {
+    developer.runtime.close()
+  }
+})
 
 test('web Lua runtime is Lua 5.4, persistent, bounded, and stripped of unsafe libraries', async () => {
   const harness = await runtimeHarness()

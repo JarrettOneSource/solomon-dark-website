@@ -1,6 +1,8 @@
 import {
   DOWSING_EQUIPMENT_RECIPES,
+  NATIVE_SKILL_BOOK_DEFINITIONS,
   createEquipmentInventoryItem,
+  createNativeSkillBookInventoryItem,
   type EquipmentRecipe,
   type EquipmentType,
   type HubInventoryItem,
@@ -1260,11 +1262,18 @@ function potionItem(itemIds: NativeLootItemIds, subtype: number): NativeLootItem
 }
 
 function miscItem(itemIds: NativeLootItemIds, subtype: number): NativeLootItem {
+  const skillBook = NATIVE_SKILL_BOOK_DEFINITIONS.find((definition) => (
+    definition.nativeSubtype === subtype
+  ))
+  if (skillBook) {
+    return {
+      ...createNativeSkillBookInventoryItem(skillBook, itemIds.next()),
+      nativeSelector: subtype,
+    }
+  }
   const rows = [
     ['dye', 'Fabric Dye Kit', 42],
     ['key', 'Wizard Key', 43],
-    ['skill-book', 'Book of Skill', 44],
-    ['skill-book', 'Book of Skill', 45],
   ] as const
   const row = rows[subtype]
   if (!row) throw new RangeError('native miscellaneous subtype must be within [0,3]')

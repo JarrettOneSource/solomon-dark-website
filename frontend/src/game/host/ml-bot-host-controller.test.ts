@@ -15,7 +15,12 @@ import {
   type ServerWelcomeMessage,
 } from '../protocol/game-protocol.ts'
 import { BoneyardHeadlessEnvironment } from '../headless/boneyard-headless-environment.ts'
-import { getPlayerProgression } from '../core-server/game-simulation.ts'
+import { NATIVE_HALL_OF_FAME_SCORE } from '../core-kernels/hall-of-fame-score.ts'
+import {
+  getPlayerEconomy,
+  getPlayerProgression,
+} from '../core-server/game-simulation.ts'
+import { playerSkillBookAt } from '../core-server/player-entity-store.ts'
 import { ML_BOT_POLICY_OPTION_DESCRIPTOR_NAMES } from '../core-server/ml-bot-policy/spec.ts'
 import type { MlBotPolicyInference } from './ml-bot-host-controller.ts'
 import {
@@ -155,6 +160,7 @@ test('developer Lua summons repeatable inert participants that accept a real par
       claim: credential => tickets.get(credential) ?? null,
     },
     luaWasmPath,
+    leaderboardReceiptSecret: 'developer-bot-leaderboard-secret-that-is-long-enough',
     mlBotPolicy: idlePolicy,
     sessionKind: 'global-hub',
     sharedHub: true,
@@ -197,6 +203,27 @@ test('developer Lua summons repeatable inert participants that accept a real par
   assert.equal(invalid.ok, false)
   assert.match(invalid.error ?? '', /unsupported bot element/)
   assert.equal(host.botCount(), 2)
+  const grants = await executeLua(socket, 4, `
+    sd.dev.grant_gold(250, '${botPlayerIds[0]}')
+    sd.dev.grant_item('health-potion', 3, '${botPlayerIds[0]}')
+    sd.dev.grant_item('equipment:0', 1, '${botPlayerIds[0]}')
+    sd.dev.grant_skill(72, 2, '${botPlayerIds[0]}')
+    sd.dev.grant_weld(1000, '${botPlayerIds[0]}')
+    return true
+  `)
+  assert.equal(grants.ok, true, grants.error ?? 'developer grants failed')
+  await waitFor(() => {
+    const target = host.playerState(botPlayerIds[0]!)
+    if (!target) return false
+    const economy = getPlayerEconomy(target, botPlayerIds[0]!)
+    const skills = playerSkillBookAt(target.playerEntities, botPlayerIds[0]!)
+    return economy.gold === 750
+      && economy.backpack.some(item => item.kind === 'health-potion' && item.quantity === 4)
+      && economy.backpack.some(item => item.recipeIndex === 0)
+      && skills?.permanentRanks[72] === 2
+      && skills.primarySkillId === 52
+      && skills.weldBuildId === 1000
+  })
   const secondState = host.playerState(botPlayerIds[1]!)
   assert.ok(secondState)
   const secondIndex = secondState.playerEntities.identities.findIndex(({ playerId }) => (
@@ -228,6 +255,46 @@ test('developer Lua summons repeatable inert participants that accept a real par
   assert.equal(acceptedEarly, false)
   const joined = await joinedState
   assert.deepEqual(joined.state.party.memberPlayerIds, [welcome.playerId, botPlayerIds[0]])
+
+  const loaded = nextMessage(socket, message => message.type === 'server-boneyard-loaded')
+  socket.send(encodeGameMessage({
+    type: 'client-start-match',
+    boneyardId: welcome.boneyards[0]!.id,
+  }))
+  await loaded
+  await waitFor(() => host.playerState(welcome.playerId)?.world.kind === 'boneyard')
+  const carried = host.playerState(botPlayerIds[0]!)
+  assert.ok(carried)
+  assert.equal(getPlayerEconomy(carried, botPlayerIds[0]!).gold, 750)
+  assert.equal(
+    playerSkillBookAt(carried.playerEntities, botPlayerIds[0]!)?.weldBuildId,
+    1000,
+  )
+  const inRunGrant = await executeLua(
+    socket,
+    5,
+    `return sd.dev.grant_gold(1, '${botPlayerIds[0]}')`,
+  )
+  assert.equal(inRunGrant.ok, true, inRunGrant.error ?? 'in-run developer grant failed')
+  await waitFor(() => {
+    const target = host.playerState(botPlayerIds[0]!)
+    return target !== null && getPlayerEconomy(target, botPlayerIds[0]!).gold === 751
+  })
+  const leaderboardReceipt = nextMessage(socket, message => (
+    message.type === 'server-leaderboard-receipt'
+  ))
+  const active = host.playerState(welcome.playerId)
+  assert.ok(active)
+  Object.assign(active.run, {
+    gameOverEventId: 1,
+    gameOverTicks: NATIVE_HALL_OF_FAME_SCORE.archiveDeathTick - 1,
+    nextGameOverEventId: 2,
+    phase: 'game-over',
+  })
+  const ranked = await leaderboardReceipt
+  assert.equal(ranked.type, 'server-leaderboard-receipt')
+  const [payloadPart] = ranked.receipt.split('.')
+  assert.equal(JSON.parse(Buffer.from(payloadPart!, 'base64url').toString('utf8')).userId, 1)
 
   await closeSocket(socket)
   await waitFor(() => host.humanPlayerCount() === 0 && host.botCount() === 0)

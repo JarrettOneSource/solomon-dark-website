@@ -147,6 +147,20 @@ export interface WebLuaFrameState {
 
 export type WebLuaCommand =
   | Readonly<{ amount: number; playerId: string; type: 'grant-experience' }>
+  | Readonly<{ amount: number; playerId: string; type: 'grant-gold' }>
+  | Readonly<{
+      itemKey: string
+      playerId: string
+      quantity: number
+      type: 'grant-item'
+    }>
+  | Readonly<{
+      playerId: string
+      ranks: number
+      skillId: number
+      type: 'grant-skill'
+    }>
+  | Readonly<{ buildId: number; playerId: string; type: 'grant-weld' }>
   | Readonly<{ amount: number; playerId: string; type: 'restore-health' }>
   | Readonly<{ amount: number; playerId: string; type: 'restore-mana' }>
   | Readonly<{ playerId: string; type: 'set-gold'; value: number }>

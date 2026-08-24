@@ -10,6 +10,9 @@ import {
   type GameSimulationState,
 } from '../../core-server/game-simulation.ts'
 import {
+  grantPlayerEntityInventoryItems,
+  grantPlayerEntitySkillRanks,
+  grantPlayerEntityWeldBuild,
   playerEntityIndex,
   replacePlayerEconomy,
   restorePlayerEntityHealth,
@@ -23,6 +26,11 @@ import {
   type WebLuaEventName,
   type WebLuaFrameState,
 } from './web-lua-contract.ts'
+import {
+  createWebLuaDeveloperGrantItems,
+  webLuaDeveloperSkill,
+  webLuaDeveloperWeld,
+} from './web-lua-developer-grants.ts'
 
 export interface AppliedWebLuaCommands {
   readonly enemySpawnIntents: readonly BoneyardEnemySpawnIntent[]
@@ -116,6 +124,63 @@ export function applyWebLuaCommands(
     switch (command.type) {
       case 'grant-experience':
         state = grantGameSimulationPlayerExperience(state, command.playerId, command.amount)
+        break
+      case 'grant-gold': {
+        if (!Number.isSafeInteger(command.amount) || command.amount < 1) break
+        const economy = getPlayerEconomy(state, command.playerId)
+        if (economy.gold >= 10_000_000) break
+        const gold = Math.min(10_000_000, economy.gold + command.amount)
+        if (gold === economy.gold) break
+        state = {
+          ...state,
+          playerEntities: replacePlayerEconomy(
+            state.playerEntities,
+            command.playerId,
+            { ...economy, gold, revision: economy.revision + 1 },
+          ),
+        }
+        break
+      }
+      case 'grant-item': {
+        const items = createWebLuaDeveloperGrantItems(command.itemKey, command.quantity)
+        if (!items) break
+        const granted = grantPlayerEntityInventoryItems(
+          state.playerEntities,
+          command.playerId,
+          items,
+        )
+        if (granted.accepted) state = { ...state, playerEntities: granted.store }
+        break
+      }
+      case 'grant-skill': {
+        const skill = webLuaDeveloperSkill(command.skillId)
+        if (
+          !skill
+          || skill.weld_only
+          || !Number.isSafeInteger(command.ranks)
+          || command.ranks < 1
+        ) break
+        state = {
+          ...state,
+          playerEntities: grantPlayerEntitySkillRanks(
+            state.playerEntities,
+            command.playerId,
+            command.skillId,
+            command.ranks,
+          ),
+        }
+        break
+      }
+      case 'grant-weld':
+        if (!webLuaDeveloperWeld(command.buildId)) break
+        state = {
+          ...state,
+          playerEntities: grantPlayerEntityWeldBuild(
+            state.playerEntities,
+            command.playerId,
+            command.buildId,
+          ),
+        }
         break
       case 'restore-health':
         state = {

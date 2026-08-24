@@ -2041,9 +2041,11 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           return
         }
         client.pendingLuaRequestIds.add(message.requestId)
-        client.globalScoreEligible = false
-        client.localOnly = true
-        taintActiveRun(client)
+        if (!client.developerAccess) {
+          client.globalScoreEligible = false
+          client.localOnly = true
+          taintActiveRun(client)
+        }
         const completeRequest = (result: Parameters<typeof sendLuaResult>[0]) => {
           client.pendingLuaRequestIds.delete(message.requestId)
           sendLuaResult(result)
@@ -4011,14 +4013,6 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   function taintIneligibleClientRuns(): void {
     for (const client of clients.values()) {
       if (!client.globalScoreEligible) taintActiveRun(client)
-    }
-    if (!sharedWorlds || bots.size === 0) return
-    for (const run of sharedWorlds.runs) {
-      const party = sharedWorlds.parties.parties.find(candidate => candidate.id === run.partyId)
-      if (
-        run.state.world.kind === 'boneyard'
-        && party?.memberPlayerIds.some(playerId => bots.has(playerId))
-      ) leaderboardIneligibleRunIds.add(run.state.world.runId)
     }
   }
 

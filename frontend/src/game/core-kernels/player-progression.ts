@@ -585,6 +585,77 @@ export function unlockPlayerAdvancedSkill(
   return { ...source, advancedUnlocks: Object.freeze(advancedUnlocks) }
 }
 
+export function grantPlayerSkillRanks(
+  source: PlayerSkillBookComponent,
+  skillId: number,
+  ranks: number,
+): PlayerSkillBookComponent {
+  if (!Number.isSafeInteger(ranks) || ranks < 1) {
+    throw new RangeError('granted skill ranks must be a positive safe integer')
+  }
+  const maximum = SHARED_STAT_BOOK.entries[skillId]?.maximumLevel ?? 0
+  if (!Number.isSafeInteger(skillId) || skillId < 8 || skillId > 79 || maximum < 1) {
+    throw new RangeError(`skill ${skillId} is not a grantable native skill`)
+  }
+  if (skillId === SPELL_WELDING_SKILL_ID) {
+    throw new RangeError('Spell Welding must be granted through a native Weld build')
+  }
+  const currentRank = source.permanentRanks[skillId] ?? 0
+  const targetRank = Math.min(maximum, currentRank + ranks)
+  const unlockIndex = skillId >= 72 ? skillId - 72 : -1
+  const unlockChanged = unlockIndex >= 0 && !source.advancedUnlocks[unlockIndex]
+  if (targetRank === currentRank && !unlockChanged) return source
+  const permanentRanks = [...source.permanentRanks]
+  const effectiveRanks = [...source.effectiveRanks]
+  const advancedUnlocks = [...source.advancedUnlocks]
+  permanentRanks[skillId] = targetRank
+  effectiveRanks[skillId] = targetRank
+  if (unlockIndex >= 0) advancedUnlocks[unlockIndex] = true
+  return {
+    ...source,
+    advancedUnlocks: Object.freeze(advancedUnlocks),
+    effectiveRanks: Object.freeze(effectiveRanks),
+    learnedSkillOrder: currentRank === 0 && !source.learnedSkillOrder.includes(skillId)
+      ? Object.freeze([...source.learnedSkillOrder, skillId])
+      : source.learnedSkillOrder,
+    permanentRanks: Object.freeze(permanentRanks),
+    skillQuickbar: currentRank === 0
+      && (nativeSkillCategory(skillId) === 1 || nativeSkillCategory(skillId) === 2)
+      ? autofillSkillQuickbar(source.skillQuickbar, skillId)
+      : source.skillQuickbar,
+  }
+}
+
+export function grantPlayerWeldBuild(
+  source: PlayerSkillBookComponent,
+  buildId: number,
+): PlayerSkillBookComponent {
+  const build = nativeWeldBuild(buildId)
+  if (!build) throw new RangeError(`unknown native Weld build ${buildId}`)
+  let next = source
+  for (const skillId of build.componentSkillIds) {
+    if ((next.permanentRanks[skillId] ?? 0) < 1) {
+      next = grantPlayerSkillRanks(next, skillId, 1)
+    }
+  }
+  const permanentRanks = [...next.permanentRanks]
+  const effectiveRanks = [...next.effectiveRanks]
+  const learned = (permanentRanks[SPELL_WELDING_SKILL_ID] ?? 0) === 0
+  permanentRanks[SPELL_WELDING_SKILL_ID] = 1
+  effectiveRanks[SPELL_WELDING_SKILL_ID] = 1
+  return {
+    ...next,
+    effectiveRanks: Object.freeze(effectiveRanks),
+    learnedSkillOrder: learned
+      ? Object.freeze([...next.learnedSkillOrder, SPELL_WELDING_SKILL_ID])
+      : next.learnedSkillOrder,
+    permanentRanks: Object.freeze(permanentRanks),
+    primarySkillId: SPELL_WELDING_SKILL_ID,
+    weldBuildId: build.id,
+    weldComponentRanks: nativeWeldComponentRanksForBuild(effectiveRanks, build),
+  }
+}
+
 export function createPlayerProgression(offerSeed: number): PlayerProgressionComponent {
   if (!Number.isInteger(offerSeed) || offerSeed < 0 || offerSeed >= 1_000_000) {
     throw new RangeError('player offer seed must be an integer from 0 through 999999')

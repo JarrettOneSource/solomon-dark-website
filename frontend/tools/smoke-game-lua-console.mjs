@@ -79,6 +79,10 @@ try {
 
   await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 90_000 })
+  const tutorialOffer = page.getByRole('dialog', { name: 'Play the Tutorial?' })
+  if (await tutorialOffer.isVisible()) {
+    await tutorialOffer.getByRole('button', { exact: true, name: 'NO' }).click()
+  }
   assert.equal(await page.evaluate(() => window.solomonDark), undefined)
 
   await page.getByRole('button', { name: 'Settings' }).click()
@@ -111,7 +115,7 @@ try {
     print('web-lua', _VERSION)
     return _VERSION, sd.runtime.api_version, sd.state.is_authority(),
       sd.runtime.has_capability('player.resources.write'),
-      type(io), type(os), type(package), type(require), type(debug)
+      type(io), type(os), type(package), type(require), type(debug), type(sd.dev)
   `)
   assert.equal(identity.ok, true, identity.error)
   assert.deepEqual(identity.output, ['web-lua\tLua 5.4'])
@@ -120,6 +124,7 @@ try {
     '0.2.0',
     true,
     true,
+    'nil',
     'nil',
     'nil',
     'nil',

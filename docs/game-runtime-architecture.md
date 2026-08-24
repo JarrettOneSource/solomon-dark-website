@@ -690,8 +690,10 @@ and the client bundle receives neither the supervisor/signing secret nor an
 account-id override.
 
 Global eligibility starts only on a fresh account-bound global-Hub admission. Initial or
-live `Enable Cheats` state permanently revokes it for that connection; an
-accepted authoritative Lua console request revokes it independently. Any
+live ordinary `Enable Cheats` state permanently revokes it for that connection;
+an accepted ordinary-host authoritative Lua console request revokes it
+independently. A server-authenticated developer connection is exempt from both
+cheat-origin taints, including developer-only bot and player-grant commands. Any
 ineligible member taints the current party run for every participant. Local
 Hall history remains available. Save schema 8 carries durable `global-clean` or
 `local-only` integrity and explicit active-run state; schemas 1 through 3
@@ -1272,8 +1274,11 @@ An entitled account keeps the setting and ordinary shared-Hub routing off
 while still receiving the DevTools API. No client-authored field can grant the
 entitlement.
 Initial and live setting state is nevertheless replicated as a separate
-global-score eligibility input, and accepting a console request revokes that
-eligibility even if a crafted client misreported the setting.
+global-score eligibility input for ordinary connections, and accepting an
+ordinary-host console request revokes eligibility even if a crafted client
+misreported the setting. The same paths consult the sealed developer admission
+before changing score eligibility or save integrity; the browser cannot claim
+that exemption.
 The protocol-61 lineage added the validated logical viewport width to
 ordinary input. The host consumes it only as the stock Fireball forward-query
 geometry; collision selection and all consequences remain server-owned.
@@ -1292,8 +1297,16 @@ allocator have explicit per-VM and aggregate bounds. Instruction hooks
 interrupt both entry chunks and stored callbacks. A package with no Lua member
 creates no VM.
 
-The developer-only `sd.bots.summon()` adapter exists only in the console VM.
-It accepts only an entitled player currently in the resident shared Hub,
+The developer-only `sd.dev` and `sd.bots.summon()` adapters exist only in the
+console VM. `sd.dev` enumerates and grants the complete stock browser-owned
+inventory catalog (nine Fomentius rows, two skill books, and 47 equipment recipes), all
+72 skill rows, and ten native Weld builds. Gold, item, skill, and Weld commands
+target the active developer by default or another live player id in the same
+Hub/run, enter the bounded fixed-tick command queue, and mutate the ordinary
+player economy/skill components. Hub grants therefore cross run launch through
+the same shared-world partition and player-entity reset as earned state.
+
+`sd.bots.summon()` accepts only an entitled player currently in the resident shared Hub,
 reserves one server-capacity slot, and queues participant creation at the fixed
 tick boundary. With no options each call creates a unique Arcane/Fire player;
 developers may supply an exact native `element` and `discipline` table to run
@@ -1312,9 +1325,10 @@ Potion actions use the ordinary consume path. Checkpoints without an explicit
 learned-choice marker retain the scripted schema-v7 chooser. A checkpoint
 marked `choicePolicyMode=learned` evaluates the live offer observation,
 138-value option rows, and legality mask in that same worker, then dispatches
-the selected option through the ordinary progression path. Bot-assisted runs
-cannot receive global leaderboard
-receipts. Bots never enter the WebSocket client map or human player-count
+the selected option through the ordinary progression path. Because every bot
+originates from the sealed developer binding, bot-assisted runs are
+developer-cheat neutral and otherwise eligible human participants may receive
+global leaderboard receipts. Bots never enter the WebSocket client map or human player-count
 callback, and all remaining bots are removed when the last human disconnects,
 so they cannot keep a private session or deployment drain alive.
 

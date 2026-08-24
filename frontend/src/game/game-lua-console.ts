@@ -22,7 +22,10 @@ declare global {
 const HELP = [
   'Solomon Dark web Lua console',
   "await solomonDark.lua.execute('return sd.runtime.get_frame_state()')",
-  'Supported namespaces: runtime, state, events, timer, rng, scene, gameplay, hub, player, world, waves, enemies; developer accounts also receive bots.',
+  'Supported namespaces: runtime, state, events, timer, rng, scene, gameplay, hub, player, world, waves, enemies; developer accounts also receive dev and bots.',
+  "Grant another live player Gold: await solomonDark.lua.execute(\"return sd.dev.grant_gold(5000, sd.player.list()[2].id)\")",
+  "List developer stock items/skills/Welds with sd.dev.list_items(), sd.dev.list_skills(), and sd.dev.list_welds().",
+  "Grant stock state with sd.dev.grant_item(key, quantity, player_id), sd.dev.grant_skill(id, ranks, player_id), or sd.dev.grant_weld(build_id, player_id).",
   "Summon a Hub bot: await solomonDark.lua.execute('return sd.bots.summon()')",
   'Authoritative execution requires current session-host authority or an account-bound developer entitlement.',
 ].join('\n')
