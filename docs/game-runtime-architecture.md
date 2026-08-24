@@ -703,6 +703,16 @@ their authored integrity and active-run summary. Each participant receives an
 authoritative profile/continuation checkpoint, and Game Over removes only that
 participant's current-wizard continuation.
 
+Every save document held by a browser is mutable, including an authenticated
+cloud document after it has been returned to the client. Supplying any such
+document in `client-hello` therefore prevents global eligibility for both
+`resume` and profile-hydrating `new-game`; the host tests document presence and
+does not trust the document's `integrity` claim. Anonymous clients persist slot
+zero only in IndexedDB. Authenticated clients use only the JWT-owned cloud slot,
+whose read, write, and delete endpoints all require an account; a cloud failure
+never falls back to local storage. Cloud persistence is continuity, not save
+attestation, so it does not make a loaded lineage globally rankable.
+
 ## Rendering boundary
 
 There is one composed client, not one DOM client and one canvas client.

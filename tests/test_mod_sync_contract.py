@@ -881,10 +881,17 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         )
         auth = {"Authorization": f"Bearer {self.token}"}
 
+        status, rejected = self.request("GET", "/api/game/saves/0")
+        self.assertEqual(status, 401, rejected)
         status, rejected = self.request(
             "PUT",
             "/api/game/saves/0",
             json_body={"document": document, "expectedRevision": 0},
+        )
+        self.assertEqual(status, 401, rejected)
+        status, rejected = self.request(
+            "DELETE",
+            "/api/game/saves/0?expectedRevision=0",
         )
         self.assertEqual(status, 401, rejected)
         status, rejected = self.request(

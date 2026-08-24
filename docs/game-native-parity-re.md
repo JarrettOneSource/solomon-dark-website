@@ -24821,6 +24821,19 @@ Boneyard runtime behavior remain downstream siblings already closed by the
 > trust boundary across the whole global-submission path; local Hall history is
 > intentionally unaffected.
 
+> **2026-08-24 client-held save provenance verification.** A security review
+> asked whether an editable anonymous/local save could reach the Website-global
+> boards and whether cloud saving requires an account. The prior authority pass
+> already made every client-held save ineligible by testing the presence of the
+> save document at the authoritative host, independently of its editable
+> `integrity` member, and the cloud slot already requires JWT authentication.
+> Its proof matrix did not separately exercise a profile supplied with
+> `saveIntent: 'new-game'`, a forged `global-clean` local document admitted to
+> the real global-Hub branch, or unauthenticated cloud read/delete. This pass
+> closes those missing proof members without weakening the conservative rule:
+> neither anonymous local saves nor account cloud saves can restore global
+> eligibility once any client-held document has been loaded.
+
 ### Reported smell and parity question
 
 - Reported web behavior: the stock-styled `HALL of FAME` main-menu control has
@@ -24901,6 +24914,9 @@ composition and its reachable branch dispositions.
 | server-authoritative global provenance | Website host/supervisor extension | exact-ported | only the authoritative host can sign the immutable completed row; arbitrary and tampered browser bodies fail closed |
 | cheats-off eligibility for the complete run | Website host/protocol extension | exact-ported | initial and live cheat-mode state taints the active party run permanently; accepted direct Lua execution also taints it; tainted runs receive no receipt |
 | client-held save resume without server attestation | Website save boundary | out-of-system — the current save document proves shape, not server provenance, so resumed lineages remain local-only instead of receiving a global receipt | forged-save regression and host withholding test |
+| client-held profile hydration for New Game | Website save boundary | out-of-system — profile-only state is still editable client material, regardless of claimed `global-clean` integrity | global-Hub `saveIntent: 'new-game'` withholding test |
+| anonymous local slot | Website IndexedDB adapter | exact-ported web policy | guest play persists locally, but anonymous admission has no leaderboard account id and every later save-bearing admission remains ineligible |
+| authenticated cloud slot | Website API/account adapter | exact-ported web policy | JWT is required for read, write, and delete; the page never falls back to IndexedDB for an authenticated account |
 | global Awesomeness board | Website extension over native field | exact-ported | API/client ordering test |
 | global Wave board | Website extension over native field | exact-ported | API/client ordering test |
 | global Kills board | Website extension over native field | exact-ported | API/client ordering test |
@@ -25041,7 +25057,8 @@ No member is blocked by the browser platform.
 - Focused automated test: newest-first tie ordering, 100 cap, time formatting,
   every score/pulse/name branch, authoritative snapshot entry completion,
   potion streak reset, local persistence, account-bound host receipt issuance,
-  no receipt for anonymous, resumed, or cheat-tainted runs,
+  no receipt for anonymous, resumed, profile-hydrated New Game, forged
+  `global-clean`, or cheat-tainted runs; authenticated-only cloud read/write/delete,
   signature/body/account tamper rejection, strict API
   validation/auth/idempotency/four sorts, Hall source contract, and record-5
   asset/count/position/blend/depth.

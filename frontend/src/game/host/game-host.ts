@@ -1211,6 +1211,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           displayName: message.character.displayName,
           profile: message.profile,
           forceReplicationKeyframe: false,
+          // Browser-held documents are editable, including documents read back
+          // from the account cloud slot. Only a save-free admission can begin a
+          // globally ranked lineage; the document's own integrity claim is not
+          // evidence of server provenance.
           globalScoreEligible: sessionKind !== 'private-college'
             && message.save === undefined
             && !clientCheatsEnabled

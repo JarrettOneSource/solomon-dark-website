@@ -53,6 +53,7 @@ import {
   createGameSaveDocument,
   restoreGameSaveProfile,
 } from '../save/game-save-document.ts'
+import type { GameSaveIntent } from '../save/game-save-contract.ts'
 
 const FIRST_CHARACTER = {
   discipline: 'arcane',
@@ -2630,7 +2631,16 @@ test('host withholds global scores across every ineligible authority branch', as
   const scenarios: readonly [string, LeaderboardScenario][] = [
     ['anonymous admission', { leaderboardUserId: null }],
     ['initial cheat mode in a private College', { cheatsEnabled: true, private: true }],
-    ['unattested save resume', { save }],
+    ['forged global-clean local save resumed in the global Hub', {
+      globalHub: true,
+      save,
+      saveIntent: 'resume',
+    }],
+    ['client-held profile hydrated into New Game in the global Hub', {
+      globalHub: true,
+      save,
+      saveIntent: 'new-game',
+    }],
     ['live cheat mode', {
       private: true,
       beforeArchive: async (socket) => {
@@ -2892,19 +2902,20 @@ interface LeaderboardScenario {
   lua?: boolean
   private?: boolean
   save?: string
+  saveIntent?: GameSaveIntent
 }
 
 async function completeLeaderboardScenario(
   scenario: LeaderboardScenario = {},
 ): Promise<{ receipts: string[]; runId: string }> {
   const host = await startGameHost({
-    authentication: scenario.developerAccess
+    authentication: scenario.developerAccess || scenario.globalHub
       ? {
           kind: 'tickets',
           claim: credential => credential === 'test-secret'
             ? {
                 content: EMPTY_SHARED_CONTENT,
-                developerAccess: true,
+                developerAccess: scenario.developerAccess === true,
                 leaderboardUserId: scenario.leaderboardUserId === undefined
                   ? 42
                   : scenario.leaderboardUserId,
@@ -2944,7 +2955,7 @@ async function completeLeaderboardScenario(
       character: FIRST_CHARACTER,
       ...(scenario.save === undefined
         ? {}
-        : { save: scenario.save, saveIntent: 'resume' as const }),
+        : { save: scenario.save, saveIntent: scenario.saveIntent ?? 'resume' }),
     }))
     const welcome = await welcomeMessage
     assert.equal(welcome.type, 'server-welcome')
