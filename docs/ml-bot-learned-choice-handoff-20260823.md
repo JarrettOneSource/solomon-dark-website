@@ -1,11 +1,11 @@
 # ML bot learned-choice handoff — 2026-08-23
 
-> **Superseded on 2026-08-23:** the schema-v5 continuation below is historical.
-> Both original jobs finished, schema v6 closed the equipped-spell identity
-> gap, and update 17 passed the paired 30+30 promotion rule. No trainer from
-> this handoff is currently live. Continue from
-> [`ml-bot-policy-v6-selection.md`](ml-bot-policy-v6-selection.md) and validated
-> local commit `75c8ac27eb13cdeeaa4ff6faf085e32c0acb78e3`; production remains unchanged.
+> **Superseded on 2026-08-24:** the schema-v5 continuation below is historical.
+> Schema v7 now covers all five pure primaries, ten Welds, continuous casting,
+> exact future-safe identities, and learned choices. No trainer from this
+> handoff is live. Continue from
+> [`ml-bot-policy-v7-selection.md`](ml-bot-policy-v7-selection.md) and validated
+> local commit `9477c332c93b49a8fceb54ccffc73ca01cb95d41`; production remains unchanged.
 
 This is the restart point for the extended schema-v5 bot-training campaign.
 All execution, tests, training, and evaluation must stay on the Mac Mini. Do

@@ -39336,7 +39336,39 @@ class/element expansion.
 
 ### All-primary v7 implementation validation receipt
 
-Pending fresh bootstrap, all-primary/Weld training, complete per-loadout and
-continuous-cast coverage, paired frozen evaluation, exact-tree Mac gate, and
-browser/GameHost acceptance. The earlier v6 Fire checkpoint remains evidence
-and an evaluation incumbent; it is not eligible as the final all-primary bot.
+- Strict v7 uses 3,026 observations and nine 138-value shared descriptor rows.
+  Sixteen exact skill-id bits and sixteen exact Weld-build bits distinguish
+  later ids after the scaled feature saturates. The model has 1,744,948
+  parameters; SDMLV7, trajectories, trainer, bridge, GameHost, and selected
+  asset have no v5/v6 runtime shim.
+- The curriculum derives five pure primaries and all ten Welds from native
+  owners. Mac tests enumerate every row, exact identity, and future ids 81/82.
+  Channel-active primary remains legal across policy decisions; direct Mac
+  proof covers Lightning, Frost Jet, Boulder, Flame Lash, Blizzard Beam, and
+  Steam Jet.
+- Bootstrap used 15,000 authoritative states and represented every primary
+  action. Learned-choice bootstrap used 512 authentic offers after 158,790
+  decisions: all 15 contexts, 38 offered / 33 selected skills, all option
+  positions, 100% train / 89.22% holdout imitation.
+- Three retained PPO experiments advanced more than 3.8 million ticks. The
+  selected v7 lineage itself reached 1,458,211 ticks, 9,295 kills, 142 waves,
+  325 potions, and 501 learned choices. All screened checkpoints retained the
+  six combat probes and frozen choice gate.
+- Packaged update 19 is strict SHA-256
+  `85edda9d6bd7f7f08eca209fb9790c8d4d5e570e20b8ff8d5bb08284b3dd055c`,
+  7,086,446 bytes. Python and TypeScript reproduce it byte-for-byte.
+- Canonical train: 30/30 deaths, mean wave 1.467 (95% 0.833..2.233),
+  1,535 kills, 23 waves, 66 choices, 39 potions. Canonical holdout: 30/30
+  deaths, mean 1.167 (0.800..1.600), 965 kills, 13 waves, 53 choices,
+  38 potions. Both sets observe every primary and pass all continuous casts.
+- The official comparison against the stronger unpublished all-primary v6
+  candidate is `promoted=false`: train `+0.467`, 95% `-0.148..+1.081`;
+  holdout `+0.133`, `-0.239..+0.506`. V7 is packaged only on this local
+  capability branch; no performance-promotion or production claim is made.
+- Exact Mac commit `9477c332`: canonical gate exit zero, ML 77/77, all other
+  suites/build/lint/desktop/media green, Game 448,703 raw / 125,805 gzip.
+  Real Chrome deployment/save/reload/killed/profile flows passed. Live
+  GameHost smokes passed Ether, Fire, Air, Water, and Earth with ordinary
+  entrance traversal and at least one kill each.
+- Remote `main`, public Git, production checkpoint, upload, and deployment are
+  unchanged and unauthorized.

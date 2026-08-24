@@ -1,5 +1,10 @@
 # ML bot policy v6 selection receipt
 
+> Superseded as the active capability branch on 2026-08-24 by
+> [`ml-bot-policy-v7-selection.md`](ml-bot-policy-v7-selection.md). This v6
+> receipt remains the unpublished performance comparison; production is still
+> v5.
+
 Schema v6 is the equipped-spell semantic cutover. It replaces the ambiguous v5
 loadout projection with one exact shared descriptor for the current primary,
 all eight quickbar slots, and every offered skill. It also isolates choice PPO
