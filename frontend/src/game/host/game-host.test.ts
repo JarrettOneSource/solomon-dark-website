@@ -40,6 +40,11 @@ import {
   startGameHost,
 } from './game-host.ts'
 import type { GameServerLogEntry } from './game-server-logger.ts'
+import {
+  deriveGameActivityEvents,
+  type GameActivityPlayer,
+  type GameActivitySnapshot,
+} from './game-activity-events.ts'
 import { SOLOMON_DIG_FRAME_PROGRAM } from './project-boneyard.ts'
 import { GAME_WEBSOCKET_COMPRESSION } from './websocket-compression.ts'
 import {
@@ -91,6 +96,89 @@ interface TestReplicationState {
 }
 
 const replicationBySocket = new WeakMap<WebSocket, TestReplicationState>()
+
+test('game activity derivation emits detailed run, wave, death, level, and ending edges once', () => {
+  const player = (changes: Partial<GameActivityPlayer> = {}): GameActivityPlayer => ({
+    currentHealth: 100,
+    deathEpoch: 0,
+    discipline: 'arcane',
+    displayName: 'Helvidius',
+    element: 'ether',
+    level: 1,
+    lifeState: 'alive',
+    maximumHealth: 100,
+    playerId: 'player-1',
+    x: 10,
+    y: 20,
+    ...changes,
+  })
+  const snapshot = (
+    changes: Partial<GameActivitySnapshot> = {},
+  ): GameActivitySnapshot => ({
+    phase: 'hub',
+    players: [player()],
+    runId: null,
+    tick: 0,
+    wave: null,
+    ...changes,
+  })
+
+  const runStarted = snapshot({ phase: 'active', runId: 'run-1', tick: 10 })
+  assert.deepEqual(
+    deriveGameActivityEvents(snapshot(), runStarted).map(({ event }) => event),
+    ['run.started'],
+  )
+
+  const waveStarted = snapshot({
+    phase: 'active',
+    runId: 'run-1',
+    tick: 20,
+    wave: { eventId: 7, ordinal: 1, phase: 'wave-spawning' },
+  })
+  assert.deepEqual(
+    deriveGameActivityEvents(runStarted, waveStarted).map(({ event }) => event),
+    ['wave.started'],
+  )
+
+  const threshold = snapshot({
+    phase: 'active',
+    runId: 'run-1',
+    tick: 30,
+    wave: { eventId: 7, ordinal: 1, phase: 'wave-threshold' },
+  })
+  const diedAndLeveled = snapshot({
+    phase: 'game-over',
+    players: [player({ currentHealth: 0, deathEpoch: 1, level: 2, lifeState: 'dying' })],
+    runId: 'run-1',
+    tick: 31,
+    wave: { eventId: 7, ordinal: 1, phase: 'wave-lull-delay' },
+  })
+  const terminalEvents = deriveGameActivityEvents(threshold, diedAndLeveled)
+  assert.deepEqual(terminalEvents.map(({ event }) => event), [
+    'wave.completed',
+    'player.died',
+    'player.leveled_up',
+    'run.game_over',
+  ])
+  assert.deepEqual(
+    terminalEvents.find(({ event }) => event === 'player.died')?.details,
+    {
+      ...player({ currentHealth: 0, deathEpoch: 1, level: 2, lifeState: 'dying' }),
+      runId: 'run-1',
+      serverTick: 31,
+      wave: 1,
+    },
+  )
+
+  assert.deepEqual(
+    deriveGameActivityEvents(diedAndLeveled, snapshot({
+      phase: 'loadout',
+      players: diedAndLeveled.players,
+      tick: 40,
+    })).map(({ event }) => event),
+    ['run.ended'],
+  )
+})
 
 test('snapshot compression is bounded and skips sub-kilobyte control messages', () => {
   assert.deepEqual(GAME_WEBSOCKET_COMPRESSION, {

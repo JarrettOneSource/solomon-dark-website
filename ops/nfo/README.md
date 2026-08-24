@@ -23,6 +23,8 @@ SDR_GAME_DEPLOYMENT_SAVE_TIMEOUT_SECONDS=30
 SDR_GAME_UNCLAIMED_TIMEOUT_SECONDS=120
 SDR_GAME_LOG_LEVEL=info
 SDR_GAME_ML_BOT_CHECKPOINT=/opt/solomon-dark-revived/GameHost/ml-bot-policy-v5-selected.sdml
+SDR_RUNTIME_EVENT_ENDPOINT=http://127.0.0.1:5220/api/internal/runtime-events
+SDR_RUNTIME_EVENT_SECRET=<a separate random 32-byte base64url value>
 ```
 
 The same secret is supplied to the website through its existing protected
@@ -33,7 +35,14 @@ GameSessions__AdminSecret=<the same random value>
 GameSessions__SupervisorUrl=http://127.0.0.1:5222
 GameSessions__PublicWebSocketOrigin=wss://solomondarker.com
 DeveloperAccess__UserIds=<comma-separated authenticated user IDs>
+RuntimeEvents__Secret=<the same separate runtime-event value>
 ```
+
+Runtime activity is retained in the Website SQLite `RuntimeEvents` outbox for
+30 minutes, capped at 2,000 rows, and pruned by the Website every minute. The
+game host submits transient party, run, wave, and player events through the
+authenticated loopback endpoint; external consumers may read the outbox
+directly without receiving any Website or game-session credential.
 
 The supervisor also uses this secret as the key for domain-separated global
 leaderboard receipts. The website verifies those receipts with the matching

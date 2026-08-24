@@ -10,6 +10,7 @@ import {
   parseGameServerLogLevel,
 } from './game-server-logger.ts'
 import { MlBotPolicyInferenceWorker } from './ml-bot-host-controller.ts'
+import { createRuntimeEventPublisher } from './runtime-event-publisher.ts'
 
 const log = createJsonGameServerLogSink(
   parseGameServerLogLevel(process.env.SDR_GAME_LOG_LEVEL),
@@ -37,6 +38,14 @@ process.on('warning', (warning) => {
 })
 
 const adminSecret = requiredEnvironment('SDR_GAME_SUPERVISOR_SECRET')
+const runtimeEventEndpoint = process.env.SDR_RUNTIME_EVENT_ENDPOINT?.trim() || ''
+const runtimeEventSecret = process.env.SDR_RUNTIME_EVENT_SECRET?.trim() || ''
+if (Boolean(runtimeEventEndpoint) !== Boolean(runtimeEventSecret)) {
+  throw new Error('SDR_RUNTIME_EVENT_ENDPOINT and SDR_RUNTIME_EVENT_SECRET must be configured together')
+}
+const runtimeEvents = runtimeEventEndpoint
+  ? createRuntimeEventPublisher(runtimeEventEndpoint, runtimeEventSecret)
+  : null
 const mlBotPolicy = await MlBotPolicyInferenceWorker.create(
   await readFile(requiredEnvironment('SDR_GAME_ML_BOT_CHECKPOINT')),
 )
@@ -65,6 +74,7 @@ const supervisor = await startGameSessionSupervisor({
   maxSessions: parseInteger(process.env.SDR_GAME_MAX_SESSIONS, 64, 1, 10_000),
   mlBotPolicy,
   port: parseInteger(process.env.SDR_GAME_SUPERVISOR_PORT, 5222, 0, 65535),
+  ...(runtimeEvents ? { runtimeEvents: runtimeEvents.publish } : {}),
   unclaimedTimeoutMs: parseInteger(
     process.env.SDR_GAME_UNCLAIMED_TIMEOUT_SECONDS,
     120,
@@ -72,6 +82,7 @@ const supervisor = await startGameSessionSupervisor({
     86_400,
   ) * 1000,
 }).catch(async (error: unknown) => {
+  await runtimeEvents?.close()
   await mlBotPolicy.close()
   throw error
 })
@@ -87,6 +98,7 @@ async function stop(): Promise<void> {
   if (stopping) return
   stopping = true
   await supervisor.close()
+  await runtimeEvents?.close()
   await mlBotPolicy.close()
   process.exitCode = 0
 }

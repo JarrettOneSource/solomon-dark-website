@@ -33,6 +33,8 @@ builder.Services.AddDbContext<AppDb>(options =>
     options.UseSqlite($"Data Source={storage.DatabasePath}"));
 builder.Services.AddScoped<ModPublishingService>();
 builder.Services.AddScoped<WebModContentService>();
+builder.Services.AddScoped<RuntimeEventService>();
+builder.Services.AddHostedService<RuntimeEventCleanupService>();
 builder.Services.AddSingleton<DeveloperAccessPolicy>();
 builder.Services.AddSingleton<GameLeaderboardReceiptVerifier>();
 builder.Services.AddHttpClient<GameSessionProvisioner>(client =>
@@ -301,6 +303,8 @@ app.UseStatusCodePages(async statusContext =>
     await context.Response.WriteAsJsonAsync(new { error = message });
 });
 
+app.UseMiddleware<WebsiteVisitEventMiddleware>();
+
 // The editor bundle ships a .boneyard asset (the blank plot template); the
 // default provider has no mapping for it and would 404.
 var frontendContentTypes = new FileExtensionContentTypeProvider();
@@ -350,6 +354,7 @@ GameContentEndpoints.Map(app);
 StatsEndpoints.Map(app);
 DiagnosticLogEndpoints.Map(app);
 GameSessionEndpoints.Map(app);
+RuntimeEventEndpoints.Map(app);
 
 app.MapMethods(
     "/api/{**path}",

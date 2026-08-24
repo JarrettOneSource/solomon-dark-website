@@ -220,6 +220,23 @@ public static class DatabaseSchema
             """,
             cancellationToken);
 
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS RuntimeEvents (
+                Id INTEGER NOT NULL CONSTRAINT PK_RuntimeEvents PRIMARY KEY AUTOINCREMENT,
+                Source TEXT NOT NULL,
+                Component TEXT NOT NULL,
+                EventName TEXT NOT NULL,
+                Message TEXT NOT NULL,
+                DetailsJson TEXT NOT NULL,
+                OccurredAtUtc TEXT NOT NULL,
+                ExpiresAtUtc TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS IX_RuntimeEvents_ExpiresAtUtc
+                ON RuntimeEvents (ExpiresAtUtc);
+            """,
+            cancellationToken);
+
 
         if (await HasColumnAsync(db, "Mods", "Type", cancellationToken))
         {

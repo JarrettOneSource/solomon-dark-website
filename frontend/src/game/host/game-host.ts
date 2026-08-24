@@ -89,6 +89,11 @@ import {
   type GameServerLogSink,
 } from './game-server-logger.ts'
 import {
+  deriveGameActivityEvents,
+  projectGameActivity,
+} from './game-activity-events.ts'
+import type { RuntimeEventSink } from './runtime-event-publisher.ts'
+import {
   applyWebLuaCommands,
   createWebLuaFrameState,
   deriveWebLuaEvents,
@@ -235,6 +240,7 @@ export interface GameHostOptions {
   onPlayerCountChanged?: (playerCount: number) => void
   port?: number
   resetWhenEmpty?: boolean
+  runtimeEvents?: RuntimeEventSink
   sessionKind?: GameSessionKind
   sharedHub?: boolean
   snapshotRate?: number
@@ -508,6 +514,17 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   const logDetails = (details: Readonly<Record<string, unknown>> = {}) => ({
     ...options.logContext,
     ...details,
+  })
+  const emitRuntimeEvent = (
+    event: string,
+    message: string,
+    details: Readonly<Record<string, unknown>> = {},
+  ) => options.runtimeEvents?.({
+    component: 'game-host',
+    details: logDetails(details),
+    event,
+    message,
+    occurredAtUtc: new Date().toISOString(),
   })
   const server = createServer((request, response) => {
     if (request.url === '/health') {
@@ -974,18 +991,32 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         }
         clients.set(socket, joinedClient)
         if (!joinedClient.globalScoreEligible) taintActiveRun(joinedClient)
+        const connectedParty = activePartySystem()
+          ? partyForPlayer(activePartySystem()!, playerId)
+          : null
+        const connectedDetails = {
+          accountUsername: message.profile.accountUsername,
+          discipline: message.character.discipline,
+          displayName: message.character.displayName,
+          element: message.character.element,
+          partyId: connectedParty?.id ?? null,
+          partyMemberCount: connectedParty?.memberPlayerIds.length ?? null,
+          playerId,
+          playerCount: clients.size,
+          role: authenticated.role,
+        }
         logGameServerEvent(
           options.log,
           'game-host',
           'info',
           'player.connected',
           'A player authenticated with the game host.',
-          logDetails({
-            displayName: message.character.displayName,
-            playerId,
-            playerCount: clients.size,
-            role: authenticated.role,
-          }),
+          logDetails(connectedDetails),
+        )
+        emitRuntimeEvent(
+          'player.connected',
+          'A player authenticated with the game host.',
+          connectedDetails,
         )
         options.onPlayerCountChanged?.(clients.size)
         socket.send(encodeGameMessage({
@@ -1110,6 +1141,16 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
               serverTick: activeState.tick,
               source: message.source,
             }),
+          )
+          emitRuntimeEvent(
+            'gameplay.paused',
+            'A player paused the authoritative gameplay world.',
+            {
+              displayName: client.displayName,
+              playerId: client.playerId,
+              serverTick: activeState.tick,
+              source: message.source,
+            },
           )
           return
         }
@@ -1436,6 +1477,18 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
               playerId: message.targetPlayerId,
             })
           }
+          if (invitation) {
+            logPartyActivity(
+              'party.invitation_sent',
+              'A player invited someone to a party.',
+              invitation.partyId,
+              {
+                invitationId: invitation.id,
+                invited: activityPlayer(message.targetPlayerId),
+                inviter: activityPlayer(client.playerId),
+              },
+            )
+          }
           broadcastPartyState()
         }
         sendPartyAction(client, 'invite', result)
@@ -1462,6 +1515,18 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           if (destinationPartyId) closePartyModRuntimes(destinationPartyId)
           sharedWorlds = result.state
           state = sharedWorlds.hub
+          if (invitation) {
+            logPartyActivity(
+              'party.invitation_accepted',
+              'A player accepted a party invitation.',
+              invitation.partyId,
+              {
+                invitationId: invitation.id,
+                invited: activityPlayer(client.playerId),
+                inviter: activityPlayer(invitation.inviterPlayerId),
+              },
+            )
+          }
           broadcastPartyState()
           broadcastSnapshot()
         }
@@ -1473,6 +1538,9 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           sendPartyAction(client, 'deny-invitation', rejectedPartyAction('invitation-missing'))
           return
         }
+        const invitation = sharedWorlds.parties.invitations.find(
+          candidate => candidate.id === message.invitationId,
+        )
         const result = denySharedPartyInvitation(
           sharedWorlds,
           client.playerId,
@@ -1481,6 +1549,18 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         if (result.accepted) {
           sharedWorlds = result.state
           state = sharedWorlds.hub
+          if (invitation) {
+            logPartyActivity(
+              'party.invitation_denied',
+              'A player denied a party invitation.',
+              invitation.partyId,
+              {
+                invitationId: invitation.id,
+                invited: activityPlayer(client.playerId),
+                inviter: activityPlayer(invitation.inviterPlayerId),
+              },
+            )
+          }
           broadcastPartyState()
         }
         sendPartyAction(client, 'deny-invitation', result)
@@ -1492,19 +1572,41 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           return
         }
         const parties = activePartySystem()
+        const party = parties ? partyForPlayer(parties, client.playerId) : null
         const result = parties
           ? setPartyVisibility(parties, client.playerId, message.visibility)
           : rejectedPartyAction('party-missing')
-        if (result.accepted) replacePartySystem(result.state)
+        if (result.accepted) {
+          replacePartySystem(result.state)
+          logPartyActivity(
+            'party.visibility_changed',
+            'A party leader changed party visibility.',
+            party?.id ?? null,
+            {
+              actor: activityPlayer(client.playerId),
+              previousVisibility: party?.visibility ?? null,
+              visibility: message.visibility,
+            },
+          )
+        }
         sendPartyAction(client, 'settings', result)
         return
       }
       if (message.type === 'client-party-rotate-code') {
         const parties = activePartySystem()
+        const party = parties ? partyForPlayer(parties, client.playerId) : null
         const result = parties
           ? rotatePartyJoinCode(parties, client.playerId, createPartyJoinCode())
           : rejectedPartyAction('party-missing')
-        if (result.accepted) replacePartySystem(result.state)
+        if (result.accepted) {
+          replacePartySystem(result.state)
+          logPartyActivity(
+            'party.join_code_rotated',
+            'A party leader rotated the private Party ID.',
+            party?.id ?? null,
+            { actor: activityPlayer(client.playerId) },
+          )
+        }
         sendPartyAction(client, 'rotate-code', result)
         return
       }
@@ -1513,17 +1615,31 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         || message.type === 'client-party-request-deny'
       ) {
         const parties = activePartySystem()
+        const request = [...externalPartyJoinRequests.values()].find(candidate => (
+          candidate.id === message.requestId && candidate.status === 'pending'
+        ))
         const result = parties
           ? decidePartyJoinRequest(parties, client.playerId, message.requestId)
           : rejectedPartyAction('party-missing')
         if (result.accepted) {
           replacePartySystem(result.state)
-          const request = [...externalPartyJoinRequests.values()].find(candidate => (
-            candidate.id === message.requestId && candidate.status === 'pending'
-          ))
           if (request) {
             request.status = message.type === 'client-party-request-accept' ? 'accepted' : 'denied'
           }
+          logPartyActivity(
+            message.type === 'client-party-request-accept'
+              ? 'party.join_request_accepted'
+              : 'party.join_request_denied',
+            message.type === 'client-party-request-accept'
+              ? 'A party leader accepted a join request.'
+              : 'A party leader denied a join request.',
+            request?.partyId ?? partyForPlayer(result.state, client.playerId)?.id ?? null,
+            {
+              actor: activityPlayer(client.playerId),
+              requestId: message.requestId,
+              requester: request?.requester ?? null,
+            },
+          )
         }
         sendPartyAction(
           client,
@@ -1544,6 +1660,12 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           if (sourcePartyId) closePartyModRuntimes(sourcePartyId)
           sharedWorlds = result.state
           state = sharedWorlds.hub
+          logPartyActivity(
+            'party.member_left',
+            'A player left a party.',
+            sourcePartyId,
+            { player: activityPlayer(client.playerId) },
+          )
           broadcastPartyState()
           broadcastSnapshot()
         }
@@ -1571,9 +1693,21 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
               ? { accepted: true, reason: null }
               : rejectedPartyAction(party?.leaderPlayerId === client.playerId ? 'player-missing' : 'not-leader'),
           )
-          if (accepted) disconnect(target!.socket, 'invalid-message', 'The College leader removed you.')
+          if (accepted) {
+            logPartyActivity(
+              'party.member_kicked',
+              'A party leader removed a player.',
+              party!.id,
+              {
+                actor: activityPlayer(client.playerId),
+                removedPlayer: activityPlayer(message.targetPlayerId),
+              },
+            )
+            disconnect(target!.socket, 'invalid-message', 'The College leader removed you.')
+          }
           return
         }
+        const sourcePartyId = partyForPlayer(sharedWorlds.parties, client.playerId)?.id ?? null
         const result = kickSharedPartyPlayer(
           sharedWorlds,
           client.playerId,
@@ -1583,6 +1717,15 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         if (result.accepted) {
           sharedWorlds = result.state
           state = sharedWorlds.hub
+          logPartyActivity(
+            'party.member_kicked',
+            'A party leader removed a player.',
+            sourcePartyId,
+            {
+              actor: activityPlayer(client.playerId),
+              removedPlayer: activityPlayer(message.targetPlayerId),
+            },
+          )
           broadcastPartyState()
           broadcastSnapshot()
         }
@@ -1755,6 +1898,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         loadedBoneyard = selected
         const previousState = state
         state = enterBoneyardWorld(state, selected)
+        logGameActivity(previousState, state, selected, null)
         taintIneligibleClientRuns()
         if (activePrivateLuaRuntimes().length > 0) {
           pendingLuaEvents.push(...deriveWebLuaEvents(
@@ -1923,6 +2067,19 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       }
       options.onPlayerCountChanged?.(clients.size)
       const source = planned?.source ?? disconnectSource(closeCode)
+      const disconnectedDetails = {
+        closeCode,
+        closeReason,
+        disconnectReason: planned?.reason || closeReason || 'no reason received',
+        disconnectSource: source,
+        displayName: client.displayName,
+        durationMs: Math.max(0, Date.now() - client.connectedAtMs),
+        lastInputSequence: client.lastReceivedSequence,
+        playerCount: clients.size,
+        playerId: client.playerId,
+        serverTick: disconnectedState.tick,
+        ...(socketError ? gameServerErrorDetails(socketError) : {}),
+      }
       logGameServerEvent(
         options.log,
         'game-host',
@@ -1931,19 +2088,12 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           : 'warning',
         'player.disconnected',
         'A player disconnected from the game host.',
-        logDetails({
-          closeCode,
-          closeReason,
-          disconnectReason: planned?.reason || closeReason || 'no reason received',
-          disconnectSource: source,
-          displayName: client.displayName,
-          durationMs: Math.max(0, Date.now() - client.connectedAtMs),
-          lastInputSequence: client.lastReceivedSequence,
-          playerCount: clients.size,
-          playerId: client.playerId,
-          serverTick: disconnectedState.tick,
-          ...(socketError ? gameServerErrorDetails(socketError) : {}),
-        }),
+        logDetails(disconnectedDetails),
+      )
+      emitRuntimeEvent(
+        'player.disconnected',
+        'A player disconnected from the game host.',
+        disconnectedDetails,
       )
       if (releasedGameplayPause) {
         releaseGameplayPause('owner-disconnected', client.playerId, disconnectedPauseScope)
@@ -2072,6 +2222,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           for (const run of sharedWorlds.runs) {
             const before = previous.runs.find(({ partyId }) => partyId === run.partyId)
             if (!before) continue
+            logGameActivity(before.state, run.state, run.loadedBoneyard, run.partyId)
             const enteredGameOver = before.state.run.phase === 'active'
               && run.state.run.phase === 'game-over'
             const completedGameOver = before.state.run.phase === 'game-over'
@@ -2141,6 +2292,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           enemySpawnIntents,
           extensions: privateModExtensions,
         })
+        logGameActivity(stateBeforeLua, state, loadedBoneyard, null)
         publishLeaderboardReceipts(stateBeforeLua, state)
         if (runtimes.length > 0) {
           const events = [
@@ -2411,6 +2563,67 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       : loadedBoneyard
   }
 
+  function logGameActivity(
+    previous: GameSimulationState,
+    current: GameSimulationState,
+    loaded: LoadedBoneyard | null,
+    partyId: string | null,
+  ): void {
+    for (const activity of deriveGameActivityEvents(
+      projectGameActivity(previous),
+      projectGameActivity(current),
+    )) {
+      emitRuntimeEvent(
+        activity.event,
+        activity.message,
+        {
+          boneyardId: loaded?.choice.id ?? null,
+          boneyardName: loaded?.choice.name ?? null,
+          boneyardSource: loaded?.choice.source ?? null,
+          partyId,
+          ...activity.details,
+        },
+      )
+    }
+  }
+
+  function activityPlayer(playerId: string): Readonly<Record<string, unknown>> {
+    const participant = [...clients.values(), ...bots.values()].find(candidate => (
+      candidate.playerId === playerId
+    ))
+    return {
+      accountUsername: participant?.profile.accountUsername ?? null,
+      displayName: participant?.displayName ?? playerId,
+      playerId,
+    }
+  }
+
+  function activityParty(partyId: string | null): Readonly<Record<string, unknown>> {
+    const party = partyId
+      ? activePartySystem()?.parties.find(candidate => candidate.id === partyId) ?? null
+      : null
+    return {
+      partyId,
+      partyLeader: party ? activityPlayer(party.leaderPlayerId) : null,
+      partyMemberCount: party?.memberPlayerIds.length ?? null,
+      partyMembers: party?.memberPlayerIds.map(activityPlayer) ?? [],
+      partyVisibility: party?.visibility ?? null,
+    }
+  }
+
+  function logPartyActivity(
+    event: string,
+    message: string,
+    partyId: string | null,
+    details: Readonly<Record<string, unknown>> = {},
+  ): void {
+    emitRuntimeEvent(
+      event,
+      message,
+      { ...activityParty(partyId), ...details },
+    )
+  }
+
   function broadcastPartyState(): void {
     prunePartyAccess()
     const parties = activePartySystem()
@@ -2530,6 +2743,15 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       token: input.token,
     })
     replacePartySystem(result.state)
+    logPartyActivity(
+      'party.join_requested',
+      'Someone requested to join a party.',
+      party.id,
+      {
+        requestId: input.id,
+        requester: input.requester,
+      },
+    )
     return { accepted: true }
   }
 
@@ -3284,6 +3506,16 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         source,
       }),
     )
+    emitRuntimeEvent(
+      'gameplay.resumed',
+      'The authoritative gameplay world resumed.',
+      {
+        displayName: released.ownerDisplayName,
+        playerId: released.ownerPlayerId,
+        serverTick: state.tick,
+        source,
+      },
+    )
   }
 
   function broadcast(message: Parameters<typeof encodeGameMessage>[0]): void {
@@ -3462,6 +3694,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       sharedWorlds = started.state
       state = sharedWorlds.hub
       const run = sharedWorlds.runs.find(candidate => candidate.partyId === party.id)!
+      logGameActivity(before, run.state, selected, party.id)
       scope.pendingEvents.push(...deriveWebLuaEvents(
         before,
         run.state,

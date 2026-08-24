@@ -34,6 +34,7 @@ import {
   type GameServerLogSink,
 } from './game-server-logger.ts'
 import type { MlBotPolicyInference } from './ml-bot-host-controller.ts'
+import type { RuntimeEventSink } from './runtime-event-publisher.ts'
 
 export const GAME_SESSION_PATH_PREFIX = '/game-sessions/'
 export const GAME_HUB_PATH = '/game-hub'
@@ -58,6 +59,7 @@ export interface GameSessionSupervisorOptions {
   maxSessions?: number
   mlBotPolicy?: MlBotPolicyInference
   port?: number
+  runtimeEvents?: RuntimeEventSink
   snapshotRate?: number
   unclaimedTimeoutMs?: number
 }
@@ -141,6 +143,17 @@ export async function startGameSessionSupervisor(
   let draining = false
   let provisioning = 0
   const logDetails = (details: Readonly<Record<string, unknown>> = {}) => details
+  const emitRuntimeEvent = (
+    event: string,
+    message: string,
+    details: Readonly<Record<string, unknown>> = {},
+  ) => options.runtimeEvents?.({
+    component: 'session-supervisor',
+    details,
+    event,
+    message,
+    occurredAtUtc: new Date().toISOString(),
+  })
   const claimHubTicket = (credential: string): GameHostAdmission | null => {
     const ticket = hubTickets.get(credential)
     if (ticket === undefined) return null
@@ -156,6 +169,7 @@ export async function startGameSessionSupervisor(
     leaderboardReceiptSecret: options.adminSecret,
     maxPlayers: maxConnectionsPerSession,
     mlBotPolicy: options.mlBotPolicy,
+    runtimeEvents: options.runtimeEvents,
     sharedHub: true,
     sessionKind: 'global-hub',
     ...(options.boneyards === undefined ? {} : { boneyards: options.boneyards }),
@@ -752,6 +766,7 @@ export async function startGameSessionSupervisor(
         }
         closeClaimedSessionIfEmpty(session)
       },
+      runtimeEvents: options.runtimeEvents,
       boneyards: createBoneyardCatalog([
         ...(options.boneyards?.modEntries.values() ?? []),
         ...admission.content.boneyards,
@@ -783,6 +798,11 @@ export async function startGameSessionSupervisor(
       'session.provisioned',
       'An isolated browser game session was provisioned.',
       logDetails({ kind: 'private', sessionId: id, sessionCount: sessions.size }),
+    )
+    emitRuntimeEvent(
+      'session.provisioned',
+      'An isolated browser game session was provisioned.',
+      { kind: 'private', sessionId: id, sessionCount: sessions.size },
     )
     return { credential, session }
   }
@@ -1013,6 +1033,11 @@ export async function startGameSessionSupervisor(
         'session.closed',
         'A browser game session closed.',
         logDetails({ reason, sessionCount: sessions.size, sessionId: session.id }),
+      )
+      emitRuntimeEvent(
+        'session.closed',
+        'A browser game session closed.',
+        { reason, sessionCount: sessions.size, sessionId: session.id },
       )
     })()
     return session.closePromise

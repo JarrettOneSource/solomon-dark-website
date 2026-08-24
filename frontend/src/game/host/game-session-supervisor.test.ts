@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { createServer } from 'node:http'
 import test from 'node:test'
 
 import { WebSocket } from 'ws'
@@ -10,6 +11,10 @@ import {
   type ServerGameMessage,
 } from '../protocol/game-protocol.ts'
 import type { GameServerLogEntry } from './game-server-logger.ts'
+import {
+  createRuntimeEventPublisher,
+  type RuntimeEventEntry,
+} from './runtime-event-publisher.ts'
 import { startGameSessionSupervisor } from './game-session-supervisor.ts'
 import type { HostPresenceEntry } from './host-presence.ts'
 
@@ -36,6 +41,59 @@ const MOD_CONTENT = {
     version: '1.0.0',
   }],
 } as const
+
+test('runtime event publisher retries and posts bounded activity to the loopback outbox', async (context) => {
+  const requests: Array<{ authorization: string; body: Record<string, unknown> }> = []
+  let attempts = 0
+  const receiver = createServer(async (request, response) => {
+    attempts += 1
+    const chunks: Buffer[] = []
+    for await (const chunk of request) chunks.push(Buffer.from(chunk))
+    requests.push({
+      authorization: request.headers.authorization ?? '',
+      body: JSON.parse(Buffer.concat(chunks).toString('utf8')),
+    })
+    response.writeHead(attempts === 1 ? 503 : 202)
+    response.end()
+  })
+  await new Promise<void>((resolve, reject) => {
+    receiver.once('error', reject)
+    receiver.listen(0, '127.0.0.1', resolve)
+  })
+  context.after(() => new Promise<void>((resolve, reject) => {
+    receiver.close(error => error ? reject(error) : resolve())
+  }))
+  const address = receiver.address()
+  if (!address || typeof address === 'string') throw new Error('receiver did not bind')
+  const secret = 'runtime-event-test-secret-that-is-long-enough'
+  const publisher = createRuntimeEventPublisher(
+    `http://127.0.0.1:${address.port}/api/internal/runtime-events`,
+    secret,
+  )
+  publisher.publish({
+    component: 'game-host',
+    details: { displayName: 'Helvidius', wave: 3 },
+    event: 'wave.started',
+    message: 'A Boneyard wave started.',
+    occurredAtUtc: '2026-08-23T12:00:00.000Z',
+  })
+  await waitFor(() => requests.length === 2)
+  await publisher.close()
+
+  assert.equal(requests[1]?.authorization, `Bearer ${secret}`)
+  assert.deepEqual(requests[1]?.body, {
+    schemaVersion: 1,
+    component: 'game-host',
+    event: 'wave.started',
+    message: 'A Boneyard wave started.',
+    occurredAtUtc: '2026-08-23T12:00:00.000Z',
+    details: { displayName: 'Helvidius', wave: 3 },
+  })
+  assert.throws(
+    () => createRuntimeEventPublisher('https://example.com/events', secret),
+    /loopback HTTP/,
+  )
+})
 
 test('game session supervisor provisions isolated authenticated game sessions', async (context) => {
   const supervisor = await startGameSessionSupervisor({
@@ -118,9 +176,11 @@ test('game session supervisor enforces private capacity and expires unclaimed se
 })
 
 test('game session supervisor admits independent players to one shared Hub and removes lobby routes', async (context) => {
+  const runtimeEvents: RuntimeEventEntry[] = []
   const supervisor = await startGameSessionSupervisor({
     adminSecret: ADMIN_SECRET,
     allowedOrigins: [BROWSER_ORIGIN],
+    runtimeEvents: entry => runtimeEvents.push(entry),
     snapshotRate: 100,
   })
   context.after(() => supervisor.close())
@@ -348,6 +408,22 @@ test('game session supervisor admits independent players to one shared Hub and r
   assert.equal(health.hubPlayers, 1)
   assert.equal(health.parties, 2)
   assert.equal(health.runs, 1)
+  await waitFor(() => runtimeEvents.some(entry => entry.event === 'run.started'))
+  assert.equal(runtimeEvents.filter(entry => entry.event === 'party.invitation_sent').length, 2)
+  assert.equal(runtimeEvents.filter(entry => entry.event === 'party.invitation_denied').length, 1)
+  assert.equal(runtimeEvents.filter(entry => entry.event === 'party.invitation_accepted').length, 1)
+  const acceptedInvitation = runtimeEvents.find(
+    entry => entry.event === 'party.invitation_accepted',
+  )
+  assert.deepEqual(acceptedInvitation?.details?.invited, {
+    accountUsername: null,
+    displayName: CHARACTER.displayName,
+    playerId: second.welcome.playerId,
+  })
+  const runStarted = runtimeEvents.find(entry => entry.event === 'run.started')
+  assert.equal(runStarted?.details?.partyId, mergedPartyId)
+  assert.equal(runStarted?.details?.boneyardName, firstRun.boneyard.choice.name)
+  assert.equal(runStarted?.details?.playerCount, 2)
   assert.equal((await fetch(`${supervisor.address.url}/admin/lobbies`, {
     headers: { authorization: `Bearer ${ADMIN_SECRET}` },
   })).status, 404)

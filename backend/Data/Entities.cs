@@ -161,3 +161,15 @@ public sealed class DiagnosticLog
 
     public User? SubmitterUser { get; set; }
 }
+
+public sealed class RuntimeEvent
+{
+    public long Id { get; set; }
+    public string Source { get; set; } = string.Empty;
+    public string Component { get; set; } = string.Empty;
+    public string EventName { get; set; } = string.Empty;
+    public string Message { get; set; } = string.Empty;
+    public string DetailsJson { get; set; } = "{}";
+    public DateTime OccurredAtUtc { get; set; }
+    public DateTime ExpiresAtUtc { get; set; }
+}

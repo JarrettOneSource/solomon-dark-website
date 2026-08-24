@@ -16,6 +16,7 @@ public sealed class AppDb(DbContextOptions<AppDb> options) : DbContext(options)
     public DbSet<GameLeaderboardEntry> GameLeaderboardEntries => Set<GameLeaderboardEntry>();
     public DbSet<BoneyardDraft> BoneyardDrafts => Set<BoneyardDraft>();
     public DbSet<DiagnosticLog> DiagnosticLogs => Set<DiagnosticLog>();
+    public DbSet<RuntimeEvent> RuntimeEvents => Set<RuntimeEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -149,6 +150,15 @@ public sealed class AppDb(DbContextOptions<AppDb> options) : DbContext(options)
                 .WithMany()
                 .HasForeignKey(draft => draft.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<RuntimeEvent>(entity =>
+        {
+            entity.Property(runtimeEvent => runtimeEvent.Source).HasMaxLength(32);
+            entity.Property(runtimeEvent => runtimeEvent.Component).HasMaxLength(64);
+            entity.Property(runtimeEvent => runtimeEvent.EventName).HasMaxLength(96);
+            entity.Property(runtimeEvent => runtimeEvent.Message).HasMaxLength(256);
+            entity.HasIndex(runtimeEvent => runtimeEvent.ExpiresAtUtc);
         });
     }
 }
