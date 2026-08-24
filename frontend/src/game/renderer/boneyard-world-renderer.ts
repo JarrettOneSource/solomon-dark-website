@@ -2219,8 +2219,10 @@ class BoneyardDynamicScene {
       })
     }
     for (const layer of this.secondaryAbilities.painterLayers()) {
+      if (layer.lane !== 'world-sorted' || layer.queueFamily === null) continue
       dynamicLayers.push({
         ...layer,
+        queueFamily: layer.queueFamily,
         sourceOrder: dynamicLayers.length,
       })
     }
@@ -2387,7 +2389,9 @@ class BoneyardDynamicScene {
     for (const layer of this.secondaryAbilities.painterLayers()) {
       this.secondaryAbilities.setDepth(
         layer.id,
-        positionedDynamics.get(layer.id)?.zIndex ?? 1,
+        layer.lane === 'pre-world-queue'
+          ? 0.5
+          : positionedDynamics.get(layer.id)?.zIndex ?? 1,
       )
     }
     for (const enemy of enemySnapshots) {

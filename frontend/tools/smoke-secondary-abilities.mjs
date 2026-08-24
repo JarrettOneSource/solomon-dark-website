@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { execFileSync } from 'node:child_process'
 import { mkdir } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 
@@ -35,12 +34,6 @@ import {
 import { startGameHost } from '../src/game/host/game-host.ts'
 
 const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
-const repositoryRoot = fileURLToPath(new URL('../../', import.meta.url))
-const currentRevision = execFileSync(
-  'git',
-  ['rev-parse', '--verify', 'HEAD'],
-  { cwd: repositoryRoot, encoding: 'utf8' },
-).trim().toLowerCase()
 const screenshotRoot = process.env.SDR_SECONDARY_ABILITY_SCREENSHOT_ROOT
   || '/tmp/solomon-dark-secondary-abilities-20260816'
 const chromePath = process.env.SDR_CHROME_PATH || '/usr/bin/google-chrome'
@@ -133,12 +126,15 @@ const responseErrors = []
 
 try {
   const page = await browser.newPage({ viewport: { width: 1600, height: 900 } })
-  await page.route('**/deployment.json*', route => route.fulfill({
-    body: JSON.stringify({ revision: currentRevision }),
-    contentType: 'application/json',
-    headers: { 'cache-control': 'no-store' },
-    status: 200,
-  }))
+  await page.route('**/deployment.json*', async (route) => {
+    const revision = new URL(route.request().url()).searchParams.get('current')
+    await route.fulfill({
+      body: JSON.stringify({ revision }),
+      contentType: 'application/json',
+      headers: { 'cache-control': 'no-store' },
+      status: 200,
+    })
+  })
   page.on('pageerror', (error) => pageErrors.push(error.message))
   page.on('console', (message) => {
     if (message.type() === 'error') consoleErrors.push(message.text())
@@ -441,6 +437,17 @@ try {
         }, null, 2)}\n`)
         throw error
       }
+    }
+    if (contract.skillId === 72) {
+      await page.waitForFunction(() => {
+        const canvas = document.querySelector('.hub-world-canvas, .boneyard-world-canvas')
+        const frame = canvas?.__sdrHubFrame ?? canvas?.__sdrBoneyardFrame
+        return frame?.secondaryAbilityKinds.includes('acid-drop')
+          && frame.secondaryAbilityKinds.includes('acid-splash')
+          && frame.secondaryAbilitySamples.some(({ kind, underlayPrimitiveCount }) => (
+            kind === 'acid-rain' && underlayPrimitiveCount === 1
+          ))
+      }, undefined, { timeout: 5_000 })
     }
     let playerPresentation = null
     if (contract.skillId === 46 || contract.skillId === 54) {
@@ -1001,6 +1008,10 @@ async function releasePrimaryPointer(page) {
 async function enterHub(page, baseUrl) {
   await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 180_000 })
+  const tutorialOffer = page.getByRole('dialog', { name: 'Play the Tutorial?' })
+  if (await tutorialOffer.isVisible()) {
+    await tutorialOffer.getByRole('button', { exact: true, name: 'NO' }).click()
+  }
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
   await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({
@@ -1237,6 +1248,38 @@ function assertReportedPresentation(state, playerId, skillId, samples) {
       return {
         assemblyPrimitiveCounts: [...new Set(primitiveCounts)].sort((a, b) => a - b),
         maximumGolemPrimitives: Math.max(...primitiveCounts),
+      }
+    }
+    case 72: {
+      const rain = state.secondaryAbilities.actors.find(({ kind, ownerId }) => (
+        kind === 'acid-rain' && ownerId === playerId
+      ))
+      const rendered = actorSamples.filter(({ id }) => id === rain?.id)
+      assert.ok(rain && rendered.length > 0)
+      const withResidue = rendered.filter(({ underlayPrimitiveCount }) => (
+        underlayPrimitiveCount === 1
+      ))
+      assert.ok(withResidue.length > 0)
+      assert.ok(rendered.every(({ sortBias }) => sortBias === 0))
+      assert.ok(rendered.every(({ worldY }) => worldY === rain.position.y + 350))
+      assert.ok(withResidue.every(({ underlayDepth }) => underlayDepth === 0.5))
+      assert.ok(withResidue.every(({ depth, underlayDepth }) => depth > underlayDepth))
+      assert.ok(rendered.every(({ mainDrawOffsetsY }) => (
+        mainDrawOffsetsY.length === 2
+          && mainDrawOffsetsY[0] === -175
+          && mainDrawOffsetsY[1] <= -175
+          && mainDrawOffsetsY[1] >= -225
+      )))
+      assert.ok(samples.some(({ kinds }) => kinds.includes('acid-drop')))
+      assert.ok(samples.some(({ kinds }) => kinds.includes('acid-splash')))
+      return {
+        cloudLocalYRange: [
+          Math.min(...rendered.flatMap(({ mainDrawOffsetsY }) => mainDrawOffsetsY)),
+          Math.max(...rendered.flatMap(({ mainDrawOffsetsY }) => mainDrawOffsetsY)),
+        ],
+        cloudProxyWorldY: rain.position.y + 350,
+        groundResidueDepth: 0.5,
+        groundResiduePrimitives: 1,
       }
     }
     default:

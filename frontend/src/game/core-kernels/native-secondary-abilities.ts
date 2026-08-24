@@ -2915,17 +2915,17 @@ export function stepNativeSecondaryAbilities(
       }
       case 'acid-rain': {
         const active = actor.ageTicks <= ACID_RAIN_ACTIVE_TICKS
-        const rainAlphaBeforeFade = sourceActor.scale >= 1
+        const residueAlphaBeforeFade = sourceActor.scale >= 1
           && sourceActor.ageTicks < ACID_RAIN_ACTIVE_TICKS
           ? Math.min(1, sourceActor.alpha + 0.005)
           : sourceActor.alpha
         if (!active) {
-          const groundAlpha = Math.max(0, sourceActor.phase - 0.01)
-          const rainAlpha = groundAlpha > 0
-            ? rainAlphaBeforeFade
-            : Math.max(0, rainAlphaBeforeFade - 0.0005)
-          actor = { ...actor, alpha: rainAlpha, phase: groundAlpha }
-          retain = groundAlpha > 0 || rainAlpha > 0
+          const cloudAlpha = Math.max(0, sourceActor.phase - 0.01)
+          const residueAlpha = cloudAlpha > 0
+            ? residueAlphaBeforeFade
+            : Math.max(0, residueAlphaBeforeFade - 0.0005)
+          actor = { ...actor, alpha: residueAlpha, phase: cloudAlpha }
+          retain = cloudAlpha > 0 || residueAlpha > 0
           break
         }
 
@@ -3019,7 +3019,7 @@ export function stepNativeSecondaryAbilities(
         }
         actor = {
           ...actor,
-          alpha: rainAlphaBeforeFade,
+          alpha: residueAlphaBeforeFade,
           phase: Math.min(1, Math.fround(sourceActor.phase + 0.05)),
           quantity: pulseCountdown,
           scale,

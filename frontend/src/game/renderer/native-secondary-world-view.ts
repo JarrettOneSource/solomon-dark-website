@@ -40,6 +40,7 @@ const QUAD_INDICES = new Uint32Array([0, 1, 2, 1, 2, 3])
 const STORM_RENDER_TARGET_SIZE = 256
 const LEVIATHAN_RENDER_TARGET_SIZE = 256
 const DIAGNOSTIC_ACTOR_KINDS = new Set<NativeSecondaryActorState['kind']>([
+  'acid-rain',
   'freeze-wave-visual',
   'golem',
   'leviathan',
@@ -56,8 +57,8 @@ WHITE_ALPHA_MASK_FILTER.matrix = [
 
 export interface NativeSecondaryPainterLayer {
   readonly id: string
-  readonly lane: 'world-sorted'
-  readonly queueFamily: 'ordinary-dynamic' | 'zanim'
+  readonly lane: 'pre-world-queue' | 'world-sorted'
+  readonly queueFamily: 'ordinary-dynamic' | 'zanim' | null
   readonly regionLightPoint: Readonly<{ x: number; y: number }> | null
   readonly sortBias: number
   readonly sourceOrder: number
@@ -69,14 +70,18 @@ export interface NativeSecondaryDiagnosticSample {
   readonly depth: number
   readonly id: number
   readonly kind: NativeSecondaryActorState['kind']
+  readonly mainDrawOffsetsY: readonly number[]
   readonly primitiveCount: number
   readonly sortBias: number
+  readonly underlayDepth: number | null
+  readonly underlayPrimitiveCount: number
   readonly worldX: number
   readonly worldY: number
 }
 
 class NativeSecondaryActorView {
   readonly container = new Container({ label: 'native-secondary-actor' })
+  readonly underlayContainer: Container | null
   private readonly birthPointGain: number
   private currentKind: NativeSecondaryActorState['kind']
   private plan: NativeSecondaryPresentationPlan
@@ -95,6 +100,7 @@ class NativeSecondaryActorView {
   private stormWeather: NativeStormWeatherView | null = null
   private readonly textures: PlayerWorldTextures['secondary']
   private readonly specialTextures: PlayerWorldTextures['secondarySpecial']
+  private readonly underlaySprites: Sprite[] = []
 
   constructor(
     state: NativeSecondarySimulationState['actors'][number],
@@ -110,6 +116,13 @@ class NativeSecondaryActorView {
     this.container.eventMode = 'none'
     this.container.sortableChildren = true
     this.plan = nativeSecondaryPresentationPlan(state, state.ageTicks, pointGain)
+    this.underlayContainer = state.kind === 'acid-rain'
+      ? new Container({ label: 'native-secondary-underlay' })
+      : null
+    if (this.underlayContainer) {
+      this.underlayContainer.eventMode = 'none'
+      this.underlayContainer.sortableChildren = true
+    }
     this.stormLightning = state.kind === 'storm-strike'
       ? new AirPrimarySpellView(
           stormStrikeTransient(state),
@@ -138,6 +151,10 @@ class NativeSecondaryActorView {
       : null
     this.container.label = `native-secondary:${state.kind}:${state.id}`
     this.container.position.set(this.plan.root.x, this.plan.root.y)
+    if (this.underlayContainer) {
+      this.underlayContainer.label = `native-secondary-underlay:${state.kind}:${state.id}`
+      this.underlayContainer.position.set(this.plan.root.x, this.plan.root.y)
+    }
     if (state.kind === 'storm-strike') {
       this.stormLightning?.update(stormStrikeTransient(state))
     }
@@ -206,6 +223,18 @@ class NativeSecondaryActorView {
         this.plan.meshes.length + this.plan.quads.length + index,
       )
     }
+    while (this.underlaySprites.length < this.plan.underlayDraws.length) {
+      const sprite = new Sprite()
+      sprite.eventMode = 'none'
+      this.underlaySprites.push(sprite)
+      this.underlayContainer?.addChild(sprite)
+    }
+    for (let index = 0; index < this.underlaySprites.length; index += 1) {
+      const sprite = this.underlaySprites[index]!
+      const draw = this.plan.underlayDraws[index]
+      sprite.visible = draw !== undefined
+      if (draw) applyDraw(sprite, draw, this.textures, index)
+    }
   }
 
   painterLayer(id: number, sourceOrder: number): NativeSecondaryPainterLayer {
@@ -220,6 +249,21 @@ class NativeSecondaryActorView {
     }
   }
 
+  painterLayers(id: number, sourceOrder: number): NativeSecondaryPainterLayer[] {
+    const underlay = this.plan.underlayDraws.length > 0
+      ? [{
+        id: `secondary-underlay:${id}`,
+        lane: 'pre-world-queue' as const,
+        queueFamily: null,
+        regionLightPoint: null,
+        sortBias: 0,
+        sourceOrder,
+        worldY: this.plan.root.y,
+      }]
+      : []
+    return [...underlay, this.painterLayer(id, sourceOrder + underlay.length)]
+  }
+
   diagnosticSample(
     id: number,
     compositeOwnerId: number,
@@ -229,8 +273,13 @@ class NativeSecondaryActorView {
       depth: this.container.zIndex,
       id,
       kind: this.currentKind,
+      mainDrawOffsetsY: this.plan.draws.map(({ offset }) => offset.y),
       primitiveCount: this.primitiveCount,
       sortBias: this.plan.sortBias,
+      underlayDepth: this.plan.underlayDraws.length > 0
+        ? this.underlayContainer?.zIndex ?? null
+        : null,
+      underlayPrimitiveCount: this.plan.underlayDraws.length,
       worldX: this.plan.root.x,
       worldY: this.plan.worldY,
     }
@@ -238,6 +287,10 @@ class NativeSecondaryActorView {
 
   setDepth(depth: number): void {
     this.container.zIndex = depth
+  }
+
+  setUnderlayDepth(depth: number): void {
+    if (this.underlayContainer) this.underlayContainer.zIndex = depth
   }
 
   setTint(tint: number): void {
@@ -253,6 +306,7 @@ class NativeSecondaryActorView {
       + this.plan.gradients.length
       + this.plan.meshes.length
       + this.plan.quads.length
+      + this.plan.underlayDraws.length
       + Number(this.plan.stormComposite !== null)
       + Number(this.stormLightning !== null)
   }
@@ -268,6 +322,7 @@ class NativeSecondaryActorView {
       this.stormWeather = null
     }
     this.container.destroy({ children: true })
+    this.underlayContainer?.destroy({ children: true })
     for (const gradient of this.gradientFills) gradient.destroy()
     this.gradientFills.length = 0
     this.gradients.length = 0
@@ -278,6 +333,7 @@ class NativeSecondaryActorView {
     this.quadMeshes.length = 0
     this.quadVertices.length = 0
     this.sprites.length = 0
+    this.underlaySprites.length = 0
   }
 
   private addQuadMesh(): void {
@@ -550,12 +606,16 @@ export class NativeSecondaryWorldView {
           pointGainAt(actor.position),
         )
         this.views.set(actor.id, view)
+        if (view.underlayContainer) this.root.addChild(view.underlayContainer)
         this.root.addChild(view.container)
       }
       view.update(actor, presentationFrame, pointGainAt(actor.position))
     }
     for (const [id, view] of this.views) {
       if (this.liveIds.has(id)) continue
+      if (view.underlayContainer) {
+        view.underlayContainer.parent?.removeChild(view.underlayContainer)
+      }
       view.container.parent?.removeChild(view.container)
       view.destroy()
       this.views.delete(id)
@@ -571,7 +631,9 @@ export class NativeSecondaryWorldView {
     for (const layer of this.painterLayers()) {
       this.setDepth(
         layer.id,
-        hubWorldDepthForActor(layer.worldY + layer.sortBias),
+        layer.lane === 'pre-world-queue'
+          ? 0.5
+          : hubWorldDepthForActor(layer.worldY + layer.sortBias),
       )
     }
   }
@@ -587,12 +649,17 @@ export class NativeSecondaryWorldView {
     const layers: NativeSecondaryPainterLayer[] = []
     for (const [id, view] of this.views) {
       if (this.compositeOwnerByActorId.has(id)) continue
-      layers.push(view.painterLayer(id, layers.length))
+      layers.push(...view.painterLayers(id, layers.length))
     }
     return layers
   }
 
   setDepth(id: string, depth: number): void {
+    if (id.startsWith('secondary-underlay:')) {
+      const requestedId = Number(id.slice('secondary-underlay:'.length))
+      this.views.get(requestedId)?.setUnderlayDepth(depth)
+      return
+    }
     const requestedId = Number(id.slice('secondary:'.length))
     const ownerId = this.compositeOwnerByActorId.get(requestedId) ?? requestedId
     const composite = this.leviathanComposites.get(ownerId)
@@ -601,6 +668,7 @@ export class NativeSecondaryWorldView {
   }
 
   setTint(id: string, tint: number): void {
+    if (id.startsWith('secondary-underlay:')) return
     const requestedId = Number(id.slice('secondary:'.length))
     const ownerId = this.compositeOwnerByActorId.get(requestedId) ?? requestedId
     const composite = this.leviathanComposites.get(ownerId)
@@ -614,6 +682,7 @@ export class NativeSecondaryWorldView {
     }
     for (const [id, view] of this.views) {
       view.container.renderable = this.compositeForMember(id) ? true : renderable
+      if (view.underlayContainer) view.underlayContainer.renderable = renderable
     }
   }
 
@@ -649,6 +718,9 @@ export class NativeSecondaryWorldView {
     }
     this.leviathanComposites.clear()
     for (const view of this.views.values()) {
+      if (view.underlayContainer) {
+        view.underlayContainer.parent?.removeChild(view.underlayContainer)
+      }
       view.container.parent?.removeChild(view.container)
       view.destroy()
     }

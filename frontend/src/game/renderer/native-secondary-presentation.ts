@@ -89,6 +89,7 @@ export interface NativeSecondaryPresentationPlan {
   readonly root: Vector2
   readonly sortBias: number
   readonly stormComposite: NativeStormWeatherComposite | null
+  readonly underlayDraws: readonly NativeSecondarySpriteDraw[]
   readonly worldY: number
 }
 
@@ -494,6 +495,7 @@ export function nativeSecondaryPresentationPlan(
     root,
     sortBias,
     stormComposite,
+    underlayDraws: [],
     worldY: root.y,
   })
 
@@ -913,41 +915,47 @@ export function nativeSecondaryPresentationPlan(
     }
     case 'acid-rain': {
       const fieldScale = Math.fround(actor.scale)
-      const groundScalar = Math.max(0, Math.min(1, Math.fround(actor.phase)))
+      const cloudAlpha = Math.max(0, Math.min(1, Math.fround(actor.phase)))
       const constructorPhase = Math.fround(actor.rotationRadians)
       const age = Math.fround(presentationFrame)
       const firstScaleX = Math.fround(fieldScale * 5)
       const secondBaseScale = Math.fround(Math.fround(fieldScale * Math.fround(3.75)) * 2)
-      const draws: NativeSecondarySpriteDraw[] = [
+      const cloudDraws: NativeSecondarySpriteDraw[] = [
         draw('BadGuys', 10, {
-          alpha: Math.fround(groundScalar * Math.fround(0.75)),
+          alpha: Math.fround(cloudAlpha * Math.fround(0.75)),
           blend: 'add',
-          role: 'acid-rain-ground',
+          offset: { x: 0, y: -175 },
+          role: 'acid-rain-cloud-additive',
           rotationRadians: Math.fround(Math.fround(age * Math.fround(0.03125)) * constructorPhase) * Math.PI / 180,
           scaleX: firstScaleX,
           scaleY: Math.fround(firstScaleX * Math.fround(0.8)),
           tint: 0x698c52,
         }),
         draw('BadGuys', 10, {
-          alpha: groundScalar,
-          offset: { x: 0, y: Math.fround(fieldScale * -50) },
-          role: 'acid-rain-cloud',
+          alpha: cloudAlpha,
+          offset: { x: 0, y: Math.fround(-175 + fieldScale * -50) },
+          role: 'acid-rain-cloud-source-over',
           rotationRadians: Math.fround(age * Math.fround(-0.5)) * Math.PI / 180,
           scaleX: Math.fround(secondBaseScale * constructorPhase),
           scaleY: Math.fround(secondBaseScale * Math.fround(0.8)),
           tint: 0x407326,
         }),
       ]
+      const underlayDraws: NativeSecondarySpriteDraw[] = []
       if (actor.alpha > 0) {
-        draws.push(draw('BadGuys', 10, {
+        underlayDraws.push(draw('BadGuys', 10, {
           alpha: Math.max(0, Math.min(1, actor.alpha)),
-          role: 'acid-rain-residue',
+          role: 'acid-rain-ground-residue',
           scaleX: 4.5,
           scaleY: 4.5,
           tint: 0x0d1a0d,
         }))
       }
-      return plan(draws)
+      return {
+        ...plan(cloudDraws),
+        underlayDraws,
+        worldY: actor.position.y + 350,
+      }
     }
     case 'acid-drop':
       return actor.phase < 0
@@ -1874,6 +1882,7 @@ export function nativeGolemPresentationPlan(
     root: { ...actor.position },
     sortBias: 0,
     stormComposite: null,
+    underlayDraws: [],
     worldY: actor.position.y + center.y,
   }
 }
@@ -1925,6 +1934,7 @@ export function nativeGolemDeathPresentationPlan(
     root: { ...actor.position },
     sortBias: 0,
     stormComposite: null,
+    underlayDraws: [],
     worldY: actor.position.y,
   }
 }

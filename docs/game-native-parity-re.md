@@ -41482,7 +41482,7 @@ and narration remain unchanged except for dispositioning stage-2 lifetime.
 | --- | --- | --- | --- |
 | Retail identity | `SolomonDarkAbandonware/SolomonDark.exe`, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred image base `0x00400000` | Identity matches the canonical analyzed 0.72.5 image. No stale PID, runtime address, or injected-loader observation is used. | high |
 | Raw instructions | read-only canonical Ghidra replica through `Invoke-GhidraHeadless.ps1`; `0x005EB290`, especially `0x005EB2A3..0x005EB2C9` and `0x005EB580..0x005EB5AB`; constants `0x007DE840=0.0` and `0x00786C10=175.0` as doubles | The painter adds zero to renderer X and subtracts 175 from renderer Y before both BadGuys-10 cloud glyphs, then restores both globals. The prior web model omitted this enclosing transform. | high |
-| Instructions and queue ownership | `AcidRain +0x0C -> 0x005E3600`; `PuppetPointer 0x0064E910`; delegate `0x0063ED70`; sorted insert `0x0068C0F0`; Arena auxiliary calls around `0x0046F8F9` and shared queue flush `0x0046FDAF` | Positive cloud alpha creates a proxy at actor root with proxy Y `rootY+350`; its draw delegates to Acid slot `+0x24`. Sorted insertion compares object `+0x1C`. Slot `+0x28 -> 0x005EB1D0` is a direct pre-flush ground pass, not part of that proxy. | high |
+| Instructions and queue ownership | `AcidRain +0x0C -> 0x005E3600`; `PuppetPointer 0x0064E910`; delegate `0x0063ED70`; sorted insert `0x0068C0F0`; Arena auxiliary calls around `0x0046F8F9` and shared queue flush `0x0046FDAF`; tick tail `0x00605461..0x006054B3` | Positive cloud alpha creates a proxy at actor root with proxy Y `rootY+350`; its draw delegates to Acid slot `+0x24`. Sorted insertion compares object `+0x1C`. Slot `+0x28 -> 0x005EB1D0` is a direct pre-flush ground pass, not part of that proxy. The tick tail scales the shared rainfall maximum and provider enrollment from cloud alpha `+0x144`, not residue alpha `+0x158`. | high |
 | Full class/membership sweep | `AcidRain::vftable 0x0079CF9C`; `Anim_AcidRaindrop::vftable 0x0079DCA0`; constructor/tick/draw `0x005E3540/0x00604E90/0x004541A0/0x00459130`; all four vtable xrefs; sibling `RainOfBones::vftable 0x0079D06C` | Acid Rain has no additional vtable installer or hidden authored row. `RainOfBones` calls the Acid constructor only as a base initializer, then replaces type, tick, render registration, painter, and light callbacks. | high |
 | Asset/data | BadGuys records `0` and `10`; compiled floats in `0x005EB1D0/0x005EB290`; existing exact extracted atlas records | Both cloud glyphs and the ground residue use record 10 with separate tint/blend/alpha programs. Drop head/ground use record 0. No browser-generated substitute is required. | high |
 | Current web causal trace | clean `origin/main` `4021fce5bfe65e8d3201b7d33db148a6cf60f56b`; `native-secondary-abilities.ts`, `native-secondary-presentation.ts`, `native-secondary-world-view.ts`, `boneyard-world-renderer.ts`, focused presentation tests | Host state and protocol retain parent/drop/splash members. The presenter places the first parent glyph at local Y `0`, the second at `-50*s`, and residue at `0`; one `NativeSecondaryActorView` gives all three one world-sorted depth. | high |
@@ -41502,14 +41502,14 @@ exact candidate passes Mac validation and browser acceptance.
 | parent scale, cloud alpha, residue alpha, age, damage delay, and active/fade clocks | `0x00604E90`, fields `+0x13C..+0x158` | verified-already-at-parity | existing lifecycle and pulse tests plus final browser ages |
 | overhead additive cloud glyph | slot `+0x24 -> 0x005EB290`, renderer Y `-175` | exact-ported | plan asserts local `(0,-175)`, tint/blend/alpha/rotation/scale, and world lane |
 | overhead source-over cloud glyph | same slot/function; additional local `-50*s` | exact-ported | plan asserts local `(0,-175-50*s)` and complete scalar program |
-| cloud proxy queue key and culling ownership | `0x005E3600 -> 0x0064E910`; proxy Y `rootY+350`; `0x0068C0F0` | exact-ported | separate world-sorted cloud root reports bias `+350`; it is not shared with residue |
+| cloud proxy queue key and culling ownership | `0x005E3600 -> 0x0064E910`; proxy Y `rootY+350`; `0x0068C0F0` | exact-ported | separate world-sorted cloud root reports `worldY=rootY+350`, bias zero; it is not shared with residue |
 | ground residue glyph | slot `+0x28 -> 0x005EB1D0` | exact-ported | separate pre-world layer at actor root; exact tint, alpha, scale, and source-over blend |
 | ordinary and Enhanced Effects density | two/five `Anim_AcidRaindrop` births per tick in `0x00604E90` | verified-already-at-parity | existing child-count/RNG tests and both-setting browser checks |
 | falling procedural streak and quarter-alpha head | `Anim_AcidRaindrop +0x20 -> 0x00459130` | verified-already-at-parity | width-three green/cyan gradient and BadGuys-0 head contract |
 | drop ground sprite and retirement | `0x004541A0/0x00459130` | verified-already-at-parity | scale `0.1*1.1^n`, `1-s^2` alpha, retirement boundary |
 | one-in-four splash and five-draw RNG suffix | `0x00604E90`; generic fade/move perspective child | verified-already-at-parity | existing RNG/state/presenter assertions |
-| provider light | slot `+0x30 -> 0x005EB5C0` | verified-already-at-parity | radius 2, intensity `0.5*cloudAlpha`, no shadow; provider-order tests |
-| cast, pulse, residue, and ambient audio | `magicstorm`, pitched `acidsizzle`, shared `rainfall__loop` | verified-already-at-parity | existing audio contract and browser event/gain receipt |
+| provider light | slot `+0x30 -> 0x005EB5C0`; enrollment at tick tail | exact-ported | radius 2, intensity `0.5*cloudAlpha`, no shadow, no residue-only source; stable actor-manager registration remains until teardown |
+| cast, damage-pulse, and ambient audio | `magicstorm`, pitched `acidsizzle`, shared `rainfall__loop` | exact-ported | damage-only sizzle; rain gain equals cloud alpha and stops before residue-only ownership |
 | target query, shuffle, direct-damage subset, and authority | `0x00604E90`; `0x005E41F0`; 400-wide query | verified-already-at-parity | existing host target-count/damage/RNG assertions |
 | snapshot decode and peer materialization | protocol secondary actor union; parent/drop/splash rows | verified-already-at-parity | round-trip tests and browser actor-kind/count receipt |
 | Tutorial and ordinary Boneyard consumers | shared skill-72 actor family | exact-ported | one renderer path; real Tutorial cast plus ordinary fixture journey |
@@ -41531,15 +41531,18 @@ There are no browser-platform-blocked members and no extractable unknowns.
   its own `-50*s` local offset.
 - Cloud pixels and their painter key are deliberately different. The
   `PuppetPointer` copies the ground root, adds 350 to proxy Y, and delegates
-  only slot `+0x24`. The Website needs one world-sorted cloud root with bias
-  `+350`; changing sprite Y alone does not recover native inter-object order.
+  only slot `+0x24`. The Website needs one world-sorted cloud proxy at
+  `worldY=rootY+350` with bias zero; changing sprite Y alone or inventing a
+  sort bias does not recover native overflow ordering.
 - Slot `+0x28` draws the long-lived dark residue directly at the ground root
   before the world queue flush. It needs a pre-world physical layer, not a fake
   negative/positive sort bias and not a child of the cloud container.
 - Cloud alpha ramps and later fades over 100 ticks after activity. Ground
   residue persists and then fades over 2,000 additional ticks; child drops stop
-  with active rain. Light intensity follows cloud alpha, while the rain loop
-  retains the already recovered shared maximum-gain ownership.
+  with active rain. Light intensity and rainfall gain both follow cloud alpha.
+  Once cloud alpha reaches zero, the residue-only actor submits no light source
+  and retains no rainfall ownership; its stable actor-manager registration
+  remains until teardown. `acidsizzle` belongs only to live damage pulses.
 - The host retains every random choice and child state. Clients reproduce the
   two physical parent lanes and child primitives without presentation RNG,
   protocol, authority, or audio changes.
@@ -41567,21 +41570,26 @@ There are no browser-platform-blocked members and no extractable unknowns.
   inversion.
 - In `native-secondary-world-view.ts`, give the Acid underlay its own top-level
   container and physical painter-layer identity. Keep the cloud container in
-  `world-sorted` with native proxy bias `+350`.
+  `world-sorted` with native proxy world Y `rootY+350` and bias zero.
 - In `boneyard-world-renderer.ts`, admit only secondary world layers to the
   dynamic queue and place secondary pre-world layers at the established
   underlay depth. Do not simulate the pass with an extreme Y value.
+- Make Acid Rain provider-source admission state-dependent on positive cloud
+  alpha, drive intensity and rainfall gain from that field, and leave the later
+  residue-only phase unlit and silent. Keep its actor-manager registration and
+  StormCloud's alpha path unchanged.
 - Remove the old test assertions that place cloud at `0/-50*s` and that treat
   all three parent glyphs as one world-sorted primitive group.
 
 ### Validation contract
 
-- Red regression on untouched `4021fce5`: exact plan requires overhead offsets,
-  a separate underlay member, and world proxy bias `+350`; the old plan must
-  fail those assertions.
+- Red regression on untouched `4a81a616`: exact plan requires overhead offsets,
+  a separate underlay member, and proxy `worldY=rootY+350` with bias zero; the
+  old plan must fail those assertions.
 - Pure plan/view: assert both cloud glyph programs, residue program, distinct
-  physical lanes/depths, primitive counts, teardown, and ordinary/enhanced
-  drop/splash membership. Re-run all Storm sibling assertions unchanged.
+  physical lanes/depths, primitive counts, cloud-alpha light/provider/audio
+  lifetime, protocol shape, teardown, and ordinary/enhanced drop/splash
+  membership. Re-run all Storm sibling assertions unchanged.
 - Mac canonical Website gate only: `/opt/homebrew/bin/bash
   ./scripts/validate.sh` against a manifest-identical isolated candidate.
 - Mac Chrome built-candidate journey: cast Acid Rain in the Tutorial and an

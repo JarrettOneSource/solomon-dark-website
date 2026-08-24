@@ -59,6 +59,10 @@ const weatherView = readFileSync(
   new URL('./native-boneyard-weather-view.ts', import.meta.url),
   'utf8',
 )
+const secondaryWorldView = readFileSync(
+  new URL('./native-secondary-world-view.ts', import.meta.url),
+  'utf8',
+)
 const buildingSurfaceView = readFileSync(
   new URL('./boneyard-building-surface-view.ts', import.meta.url),
   'utf8',
@@ -108,6 +112,17 @@ test('world-weather streaks share one particle batch and alpha-ramp texture', ()
   assert.match(weatherView, /this\.weather\.visitSplashes\(/)
   assert.doesNotMatch(weatherView, /sprite\.label\s*=/)
   assert.doesNotMatch(weatherView, /sprite\.texture\s*=/)
+})
+
+test('Acid Rain keeps ground residue outside its world-sorted cloud proxy', () => {
+  assert.match(secondaryWorldView, /id: `secondary-underlay:\$\{id\}`/)
+  assert.match(secondaryWorldView, /lane: 'pre-world-queue'/)
+  assert.match(secondaryWorldView, /this\.root\.addChild\(view\.underlayContainer\)/)
+  assert.match(
+    boneyardRenderer,
+    /layer\.lane !== 'world-sorted' \|\| layer\.queueFamily === null/,
+  )
+  assert.match(boneyardRenderer, /layer\.lane === 'pre-world-queue'\s*\? 0\.5/)
 })
 
 test('world-weather splash and streak painters are separate light-boundary roots', () => {

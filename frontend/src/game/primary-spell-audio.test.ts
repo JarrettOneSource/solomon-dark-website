@@ -1323,6 +1323,50 @@ test('every persistent secondary audio owner starts and retires its exact native
   synchronizer.destroy()
 })
 
+test('Acid Rain scales rainfall by cloud alpha and leaves residue silent', () => {
+  const state = simulation('air')
+  const initial = createGameSnapshot(state, PLAYER_ID)
+  const audio = new RecordingAudio()
+  const synchronizer = new PrimarySpellAudioSynchronizer(
+    audio as unknown as GameAudioDirector,
+    PLAYER_ID,
+    initial,
+  )
+  const acid = {
+    ...secondaryActor('acid-rain', 1, PLAYER_ID, initial),
+    alpha: 1,
+    phase: 0.4,
+  }
+  const live = {
+    ...initial,
+    secondaryAbilities: {
+      ...initial.secondaryAbilities,
+      actors: [acid],
+    },
+    tick: initial.tick + 1,
+  }
+  synchronizer.update(live)
+  assert.deepEqual(audio.starts, [[
+    'rainfall-loop',
+    'native-ambient:rainfall-loop',
+  ]])
+  assert.deepEqual(audio.startOptions, [{ playbackRate: 1, volume: 0.4 }])
+
+  synchronizer.update({
+    ...live,
+    secondaryAbilities: {
+      ...live.secondaryAbilities,
+      actors: [{ ...acid, phase: 0 }],
+    },
+    tick: live.tick + 1,
+  })
+  assert.deepEqual(audio.stops, [[
+    'rainfall-loop',
+    'native-ambient:rainfall-loop',
+  ]])
+  synchronizer.destroy()
+})
+
 test('Hurricane renews the shared steady-wind wrapper from contact charge', () => {
   const initial = createGameSnapshot(simulation('air'), PLAYER_ID)
   const audio = new RecordingAudio()

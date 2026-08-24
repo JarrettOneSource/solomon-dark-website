@@ -168,7 +168,9 @@ test('the complete secondary light census stays split between providers and Misc
     'magic-circle', 'fire-burn', 'ether-burn', 'electric-burn',
   ])
   for (const kind of KINDS) {
-    const source = actor(kind)
+    const source = kind === 'acid-rain'
+      ? { ...actor(kind), phase: 1 }
+      : actor(kind)
     const expectedDisposition = actorProviders.has(kind)
       ? 'actor-provider'
       : transientProviders.has(kind)
@@ -1275,7 +1277,8 @@ test('Acid Rain splits its overhead cloud proxy from the pre-world ground residu
     scale: 0.5,
   }
   const plan = nativeSecondaryPresentationPlan(source, 80)
-  assert.equal(plan.sortBias, 350)
+  assert.equal(plan.sortBias, 0)
+  assert.equal(plan.worldY, source.position.y + 350)
   assert.deepEqual(plan.draws.map((draw) => ({
     alpha: draw.alpha,
     blend: draw.blend,
@@ -1698,17 +1701,26 @@ test('Shockwave and FreezeWave share the expanding Region-light callback', () =>
     position: { x: 100, y: 200 },
     radius: 1,
   })
-  for (const kind of ['storm-cloud', 'acid-rain'] as const) {
-    assert.deepEqual(nativeSecondaryProviderLightSource({
-      ...actor(kind),
-      alpha: 0.8,
-    }), {
-      castsDirectionalShadow: false,
-      intensity: 0.4,
-      position: { x: 100, y: 200 },
-      radius: 2,
-    })
-  }
+  assert.deepEqual(nativeSecondaryProviderLightSource({
+    ...actor('storm-cloud'),
+    alpha: 0.8,
+  }), {
+    castsDirectionalShadow: false,
+    intensity: 0.4,
+    position: { x: 100, y: 200 },
+    radius: 2,
+  })
+  const acid = { ...actor('acid-rain'), alpha: 1, phase: 0.8 }
+  assert.equal(nativeSecondaryLightDisposition(acid), 'actor-provider')
+  assert.deepEqual(nativeSecondaryProviderLightSource(acid), {
+    castsDirectionalShadow: false,
+    intensity: 0.4,
+    position: { x: 100, y: 200 },
+    radius: 2,
+  })
+  const residueOnly = { ...acid, phase: 0 }
+  assert.equal(nativeSecondaryLightDisposition(residueOnly), 'actor-provider')
+  assert.equal(nativeSecondaryProviderLightSource(residueOnly), null)
   assert.deepEqual(nativeSecondaryProviderLightSource({
     ...actor('comet'),
     alpha: 0.1,

@@ -633,7 +633,14 @@ export class PrimarySpellAudioSynchronizer {
               requestSecondaryLoop('steady-wind-loop', actor.ownerId, actor.position)
               break
             case 'acid-rain':
-              requestSecondaryLoop('rainfall-loop', actor.ownerId, actor.position)
+              if (actor.phase > 0) {
+                requestSecondaryLoop(
+                  'rainfall-loop',
+                  actor.ownerId,
+                  actor.position,
+                  actor.phase,
+                )
+              }
               break
             case 'earthquake':
               requestSecondaryLoop('earthquake-loop', actor.ownerId, actor.position)

@@ -677,10 +677,19 @@ export function nativeSecondaryProviderLightSource(
       radius: actor.radius / 140,
     }
   }
-  if (actor.kind === 'storm-cloud' || actor.kind === 'acid-rain') {
+  if (actor.kind === 'storm-cloud') {
     return {
       castsDirectionalShadow: false,
       intensity: actor.alpha * 0.5,
+      position: actor.position,
+      radius: 2,
+    }
+  }
+  if (actor.kind === 'acid-rain') {
+    if (actor.phase <= 0) return null
+    return {
+      castsDirectionalShadow: false,
+      intensity: actor.phase * 0.5,
       position: actor.position,
       radius: 2,
     }

@@ -4535,14 +4535,18 @@ test('FreezeWave selects ColdSlow for flag 0x40 and Frostburn adds exact damage 
   assert.equal(state.actors.some(({ kind }) => kind === 'frost-burn-flare'), true)
 })
 
-test('Acid Rain creates exact drop/splash state and owns the two-stage residue', () => {
+test('Acid Rain creates exact children and separates cloud from residue ownership', () => {
   let state = cast(72).state
   const field = state.actors.find(({ kind }) => kind === 'acid-rain')!
   assert.equal(field.damage, Math.fround(2 / 6))
   assert.equal(field.quantity, 50)
+  assert.equal(field.lightRegistration?.managerLane, 'actor')
   assert.ok(field.rotationRadians >= 0 && field.rotationRadians < 1)
 
   state = stepNativeSecondaryAbilities(state, context(72, 2, null)).state
+  const activeField = state.actors.find(({ kind }) => kind === 'acid-rain')!
+  assert.equal(activeField.phase, Math.fround(0.05))
+  assert.equal(activeField.lightRegistration?.managerLane, 'actor')
   const firstDrops = state.actors.filter(({ kind }) => kind === 'acid-drop')
   assert.equal(firstDrops.length, 2)
   assert.ok(firstDrops.every((drop) => (
@@ -4578,7 +4582,10 @@ test('Acid Rain creates exact drop/splash state and owns the two-stage residue',
   for (let tick = 0; tick < 2_099; tick += 1) {
     state = stepNativeSecondaryAbilities(state, context(72, 2_000 + tick, null)).state
   }
-  assert.ok(state.actors.some(({ kind }) => kind === 'acid-rain'))
+  const residue = state.actors.find(({ kind }) => kind === 'acid-rain')!
+  assert.ok(residue)
+  assert.equal(residue.phase, 0)
+  assert.equal(residue.lightRegistration?.managerLane, 'actor')
   state = stepNativeSecondaryAbilities(state, context(72, 4_099, null)).state
   assert.equal(state.actors.some(({ kind }) => kind === 'acid-rain'), false)
 })
