@@ -49,6 +49,9 @@ export class WebLuaDefinitionRuntime {
   #closed = false
   #definition: WebLuaModDefinition | null = null
   #modCalled = false
+  #reducerResult: Readonly<{ intents: unknown; state: unknown }> | null = null
+  #reducerResultSubmitted = false
+  #reducerRunning = false
 
   static async create(
     options: WebLuaDefinitionRuntimeOptions,
@@ -116,8 +119,43 @@ export class WebLuaDefinitionRuntime {
     return this.#reducers.get(key) ?? null
   }
 
+  invokeReducer(
+    key: string,
+    state: unknown,
+    event: unknown,
+    context: unknown,
+  ): Readonly<{ intents: unknown; state: unknown }> {
+    this.#requireOpen()
+    if (this.#reducerRunning) throw new Error('advanced reducers may not run recursively')
+    const reducer = this.#reducers.get(key)
+    if (!reducer) throw new Error(`unknown advanced reducer: ${key}`)
+    this.#reducerRunning = true
+    this.#reducerResult = null
+    this.#reducerResultSubmitted = false
+    try {
+      const returned = reducer.callback(luaPayload(state), luaPayload(event), luaPayload(context))
+      if (returned instanceof Promise) throw new Error('advanced reducer may not yield')
+      const captured = this.#capturedReducerResult()
+      if (!this.#reducerResultSubmitted || !captured) {
+        throw new Error(`advanced reducer ${key} returned no captured result`)
+      }
+      return Object.freeze({
+        intents: cloneRuntimeValue(captured.intents, `${key} intents`),
+        state: cloneRuntimeValue(captured.state, `${key} state`),
+      })
+    } finally {
+      this.#reducerRunning = false
+      this.#reducerResult = null
+      this.#reducerResultSubmitted = false
+    }
+  }
+
   get memoryBytes(): number {
     return this.#closed ? 0 : this.#engine.global.getMemoryUsed()
+  }
+
+  #capturedReducerResult(): Readonly<{ intents: unknown; state: unknown }> | null {
+    return this.#reducerResult
   }
 
   close(): void {
@@ -215,6 +253,13 @@ export class WebLuaDefinitionRuntime {
     this.#engine.global.set('print', (...values: unknown[]) => {
       this.#log(values.map(value => typeof value === 'string' ? value : String(value)).join('\t'))
     })
+    this.#engine.global.set('__sd_submit_reducer_result', (state: unknown, intents: unknown) => {
+      if (!this.#reducerRunning || this.#reducerResultSubmitted) {
+        throw new Error('advanced reducer result submission is outside its callback')
+      }
+      this.#reducerResult = Object.freeze({ intents, state })
+      this.#reducerResultSubmitted = true
+    })
     this.#engine.global.set('sd', {
       advanced: {
         reducer: (value: unknown) => this.#reducer(value),
@@ -299,9 +344,12 @@ export class WebLuaDefinitionRuntime {
   }
 
   #intent(intentKind: string, value: unknown): WebLuaIntentDefinition {
+    const normalizedKind = intentKind.startsWith('intent.')
+      ? intentKind.slice('intent.'.length)
+      : intentKind
     return Object.freeze({
       fields: cloneDefinitionRecord(record(value, `${intentKind} intent`), `${intentKind} intent`),
-      intentKind,
+      intentKind: normalizedKind,
       kind: 'intent-definition',
       source: this.#source(),
     })
@@ -527,6 +575,17 @@ function cloneDefinitionRecord(
 }
 
 const DEFINITION_SANDBOX_BOOTSTRAP = `
+  local register_reducer = sd.advanced.reducer
+  local submit_reducer_result = __sd_submit_reducer_result
+  sd.advanced.reducer = function(spec)
+    local reduce = spec.reduce
+    spec.reduce = function(state, event, context)
+      local next_state, intents = reduce(state, event, context)
+      submit_reducer_result(next_state, intents)
+    end
+    return register_reducer(spec)
+  end
+  __sd_submit_reducer_result = nil
   io = nil
   os = nil
   package = nil
@@ -539,3 +598,43 @@ const DEFINITION_SANDBOX_BOOTSTRAP = `
   collectgarbage = nil
   coroutine = nil
 `
+
+function luaPayload(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(luaPayload)
+  if (!value || typeof value !== 'object') return value
+  return Object.fromEntries(Object.entries(value)
+    .filter(([, child]) => child !== null && child !== undefined)
+    .map(([key, child]) => [key, luaPayload(child)]))
+}
+
+function cloneRuntimeValue(value: unknown, field: string): unknown {
+  const seen = new WeakSet<object>()
+  let nodes = 0
+  const clone = (candidate: unknown, path: string, depth: number): unknown => {
+    nodes += 1
+    if (nodes > 65_536) throw new Error(`${field} exceeds its node limit`)
+    if (depth > 32) throw new Error(`${path} exceeds its nesting limit`)
+    if (candidate === undefined || candidate === null) return null
+    if (typeof candidate === 'boolean' || typeof candidate === 'string') return candidate
+    if (typeof candidate === 'number') {
+      if (!Number.isFinite(candidate)) throw new Error(`${path} must be finite`)
+      return candidate
+    }
+    if (typeof candidate === 'function') throw new Error(`${path} may not contain a function`)
+    if (typeof candidate !== 'object') throw new Error(`${path} contains unsupported data`)
+    if (seen.has(candidate)) throw new Error(`${path} is cyclic`)
+    seen.add(candidate)
+    try {
+      if (Array.isArray(candidate)) {
+        return candidate.map((entry, index) => clone(entry, `${path}[${index}]`, depth + 1))
+      }
+      return Object.fromEntries(Object.entries(candidate).map(([key, entry]) => [
+        key,
+        clone(entry, `${path}.${key}`, depth + 1),
+      ]))
+    } finally {
+      seen.delete(candidate)
+    }
+  }
+  return clone(value, field, 0)
+}

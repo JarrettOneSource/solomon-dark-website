@@ -110,6 +110,15 @@ test('definition VM builds and compiles the complete family census without runti
     assert.equal(compiled.assets[0]?.key, 'icon')
     assert.equal(compiled.reducers[0]?.key, 'counter')
     assert.equal(typeof runtime.reducer('counter')?.callback, 'function')
+    assert.deepEqual(runtime.invokeReducer(
+      'counter',
+      { count: 0, phase: 'normal' },
+      { kind: 'enemy.death' },
+      { entity: { health_ratio: 0.5 } },
+    ), {
+      intents: {},
+      state: { count: 1 },
+    })
     assert.deepEqual(output, ['definition loaded'])
     assert.ok(runtime.memoryBytes > 0)
   } finally {
