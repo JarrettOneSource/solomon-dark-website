@@ -316,8 +316,6 @@ app.UseStatusCodePages(async statusContext =>
     await context.Response.WriteAsJsonAsync(new { error = message });
 });
 
-app.UseMiddleware<WebsiteVisitEventMiddleware>();
-
 // The editor bundle ships a .boneyard asset (the blank plot template); the
 // default provider has no mapping for it and would 404.
 var frontendContentTypes = new FileExtensionContentTypeProvider();

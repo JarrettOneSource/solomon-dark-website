@@ -149,7 +149,7 @@ class RuntimeEventContractTests(unittest.TestCase):
         )
         self.assertEqual(accepted, 202)
 
-        visit, _ = self.request(
+        document, _ = self.request(
             "GET",
             "/game",
             headers={
@@ -160,7 +160,7 @@ class RuntimeEventContractTests(unittest.TestCase):
                 "X-Forwarded-For": "203.0.113.45",
             },
         )
-        self.assertEqual(visit, 200)
+        self.assertEqual(document, 200)
         self.assertEqual(self.request("GET", "/api/stats")[0], 200)
 
         deadline = time.monotonic() + 5
@@ -174,17 +174,13 @@ class RuntimeEventContractTests(unittest.TestCase):
                     FROM RuntimeEvents ORDER BY Id
                     """
                 ).fetchall()
-            if len(rows) == 2:
+            if len(rows) == 1:
                 break
             time.sleep(0.05)
-        self.assertEqual([row[3] for row in rows], ["wave.started", "website.visited"])
+        self.assertEqual([row[3] for row in rows], ["wave.started"])
         game_details = json.loads(rows[0][5])
         self.assertEqual(game_details["displayName"], "Helvidius")
         self.assertEqual(game_details["wave"], 3)
-        visit_details = json.loads(rows[1][5])
-        self.assertEqual(visit_details["path"], "/game")
-        self.assertEqual(visit_details["remoteAddress"], "203.0.113.45")
-        self.assertFalse(visit_details["likelyBot"])
         occurred_at = datetime.fromisoformat(rows[0][6]).replace(tzinfo=timezone.utc)
         expires_at = datetime.fromisoformat(rows[0][7]).replace(tzinfo=timezone.utc)
         self.assertAlmostEqual((expires_at - occurred_at).total_seconds(), 30 * 60, delta=1)
