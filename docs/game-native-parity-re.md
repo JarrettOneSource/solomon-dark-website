@@ -37554,40 +37554,41 @@ No member is blocked by the browser platform.
   departure. Exact explicit product pitches are chat `1.10`, join `1.25`, and
   leave/depart-for-Solomon `0.85`, all at gain `0.65`; the existing non-music
   master consumes muted edges silently without replay.
-- The focused branch rebased over Website `origin/main` `1a195086`, preserving
-  the concurrent schema-5 durable-profile implementation. The first Mac gate
+- The focused branch rebased over Website `origin/main` `e3d50b0f`, preserving
+  both the concurrent schema-5 durable-profile implementation and the later
+  native inventory-slot interaction correction. The first Mac gate
   found one strict test-only record cast; the second found one stale selector
   test still trying to acquire a Hub book pause. The fixture now copies a
   strict record, and the source-qualified selector authorization journey now
   runs in Boneyard, where that barrier still exists.
-- Exact Mac commit `9bae31f844b78c9ff9ecbcd36312344acd7afdfc` and the local
+- Exact Mac commit `f49cca25f5d8d269ff90576c8dcfb5d2883e0446` and the local
   candidate had a byte-identical 32-file manifest. On Apple arm64 macOS
   `26.6.2`, Node `22.17.0`, npm `10.9.2`, .NET `10.0.302`, and Chrome
   `151.0.7922.170`, the final canonical `./scripts/validate.sh` gate passed:
   backend build and `17/17` contracts, lint/import boundaries, all
   `1950/1950` frontend/desktop tests, production build, media policy, and game
-  bundle budget (`443511` raw / `124842` gzip). Gate-log SHA-256 is
-  `f1a685f3812662be4f02412f8c1ed533b29dcba3df47f86bc5dc1305c3fc9a0c`.
+  bundle budget (`443511` raw / `124843` gzip). Gate-log SHA-256 is
+  `791e32dae102d1e9f4f335d9dcf5820af021626354bae8f9f2947300dc0ace45`.
 - Mac Chrome Pause/Inventory/SkillScreen/compact-selector/dialogue/Settings
   acceptance kept the authoritative Hub and local frame advancing. The local
-  Hub Pause advanced tick `2115 -> 2171`; Boneyard owner/peer barriers held at
-  `3173`/`3174` and resumed at `3176`. The exact pause-smoke log SHA-256 is
-  `e11b61995bbe117e78af146949175c8c889db4b9a6c1177201d32fca6ff4e465`.
+  Hub Pause advanced tick `2140 -> 2196`; Boneyard owner/peer barriers held at
+  `3179`/`3181` and resumed at `3183`. The exact pause-smoke log SHA-256 is
+  `f1b665157ff44244db9c6ae4513b636cd728b24b5e7c209dc5cf2559d3b0f82a`.
 - Production-bundle desktop and mobile shared-Hub journeys each observed
   exactly `7` chat cues, `4` College join cues, `1` disconnect cue, and `3`
   simultaneous party-departure cues when the group went to find Solomon.
   Both retained two live Hub observers while the party run advanced, finished
   at zero sessions/players/parties/runs, and returned empty page, console,
   failed-response, and unexpected-request arrays. Log SHA-256 values are
-  `1053e2de662dadc256f329cc2c413d5a0dd10c8147890bc7ff04ded8b56e5f36`
+  `f91283fd737ea411223a39d1c7948cf7376992303bf931caca6859d57e619c04`
   (desktop) and
-  `feab9f03160fccb62c3d1ec05d4c344abe315de69bdb09799df55375919553f2`
+  `8ad4f70ed3e16b73d7726ac69966ee1c7e74919ed2d08a436eca5107c296d0ca`
   (mobile).
 - Reviewed same-region pause-badge captures are visibly clear at both
   viewports: desktop SHA-256
-  `36a5ef7c354e4041601433f7107f406de2382d9e5e329973123f6493c1fd7cbc`
+  `d206a642e33da255554025555acd03af444919e28d307e8656872c0f9104a5fb`
   and mobile SHA-256
-  `e253fbb6a637f26a2e6353c1443eba0026baa31a0d1d2b35c0a8717aec44526d`.
+  `0be191d8a1626cd788346876230e0663797cc714785e9e537cefb857e7745f75`.
   The Player Card label was asserted in the same real-browser journeys. No
   member is browser-blocked. Nothing was pushed, deployed, or restarted in
   production.
