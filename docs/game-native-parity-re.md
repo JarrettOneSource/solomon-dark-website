@@ -42129,4 +42129,44 @@ sample and is visibly indistinguishable; authoritative lifetime remains exact.
 
 ### Implementation validation receipt
 
-- Pending implementation and Mac validation.
+- `boneyard-loot-replication.ts` now treats compact alpha zero as the legal
+  nearest 1/1024 sample for a live Bonus. The authoritative store and full
+  snapshot remain strictly positive, all other Bonus fields remain strict, and
+  Gold/Orb/Sack predicates are unchanged. Implementation commit is
+  `7a478d9fac3462950eca9fdbeae2eb8a9eb0f0bf` on current-main base
+  `a390c357f6ce122de487922710e1fe6bf4eaa281`.
+- The regression was run red on untouched deployed base `b5c8d429`: the real
+  store reached alpha `6.705522537231445e-7`, compact alpha became zero, and
+  reconstruction threw the exact production error. Red-log SHA-256 is
+  `08c401fe8dc47c6f5242bd796ebf71ee5e5d6d145ef4e18dbd1b4b3fe269370a`.
+- Final coverage lives beside the existing authoritative 1,300-update lifetime
+  test in `boneyard-loot-store.test.ts`. It proves the exact update-1299
+  residue, zero compact sample, successful reconstruction for Bonus kinds
+  0/1/2, and update-1300 retirement while retained Gold/Sack siblings remain.
+  The sequential loot group passed `45/45`; the current Acid Rain-integrated
+  broad Boneyard group passed `1495/1495` with the unchanged Game Over,
+  supervisor, Lua, and entity-replication suites.
+- The manifest-identical detached Mac candidate passed the complete canonical
+  `/opt/homebrew/bin/bash ./scripts/validate.sh`: backend build and 22
+  integration contracts; formatting, lint, and import boundaries; every
+  frontend/desktop group; production frontend and GameHost builds; media
+  policy; and bundle budget. Final `Game-D06tixt1.js` is 460,880 raw bytes and
+  129,101 gzip bytes against 524,288/131,072 limits. Gate-log SHA-256 is
+  `f4dc71b8e7fd61ce5e6093e761d0650de59a91614d5e5d2dad500b75a8261c71`.
+- Built Mac Chrome/WebGL2 ran the expanded two-client loot journey at 100
+  snapshots per second. Uncollected Bonus actor 8 crossed every compact sample
+  and retired normally after 1,302 observed host ticks; both host and guest
+  remained in ready Boneyard scenes. Gold, three Sack payloads, health/mana
+  Orbs, Damage x4, pickup contention, audio, bitmap messages, and effects also
+  passed. Page, console, failed-response, and runtime-error arrays were empty.
+  Browser-log SHA-256 is
+  `74c80c8c2caffea59ea9cb0aa26077c1018cfc199a46134ffcf00882ad93cd3b`.
+- The final visible/collected 1600x900 frames were inspected; they retain the
+  complete loot family, native lighting/shadows, HUD, messages, and ordinary
+  post-collection world with no error surface. Screenshot SHA-256 values are
+  `2840367d805876a0f5d0beff946af7b3180e3b289dcd8095f76fc11a5a6acfa3`
+  and `f80d398420c30dc8c0d546b659fc5ae35f16ce30bcd5c1cf39dca89afee5df3d`.
+- No Mod Loader change was needed because its existing native loot report
+  already owns the exact float residue and all family lifetimes. No member is
+  browser-blocked and no material unknown remains. Publication and deployment
+  were not authorized and were not performed.
