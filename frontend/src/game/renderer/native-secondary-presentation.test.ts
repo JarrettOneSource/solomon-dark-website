@@ -145,7 +145,10 @@ function screenEvent(
 test('every authoritative secondary actor kind has an explicit stock presentation disposition', () => {
   assert.deepEqual(KINDS, NATIVE_SECONDARY_ACTOR_KINDS)
   for (const kind of KINDS) {
-    const plan = nativeSecondaryPresentationPlan(actor(kind))
+    const source = kind === 'acid-rain'
+      ? { ...actor(kind), phase: 1 }
+      : actor(kind)
+    const plan = nativeSecondaryPresentationPlan(source)
     assert.equal(plan.root.x, 100, kind)
     assert.ok(['ordinary-dynamic', 'zanim'].includes(plan.queueFamily), kind)
     if (![
@@ -1339,6 +1342,9 @@ test('Acid Rain splits its overhead cloud proxy from the pre-world ground residu
   const noResidue = nativeSecondaryPresentationPlan({ ...source, alpha: 0 }, 80)
   assert.equal(noResidue.draws.length, 2)
   assert.equal(noResidue.underlayDraws.length, 0)
+  const residueOnly = nativeSecondaryPresentationPlan({ ...source, phase: 0 }, 80)
+  assert.equal(residueOnly.draws.length, 0)
+  assert.equal(residueOnly.underlayDraws.length, 1)
 })
 
 test('Enhanced moving Storm replays fifteen controls into thirty spline arcs and its cloud core', () => {

@@ -119,6 +119,10 @@ test('Acid Rain keeps ground residue outside its world-sorted cloud proxy', () =
   assert.match(secondaryWorldView, /lane: 'pre-world-queue'/)
   assert.match(secondaryWorldView, /this\.root\.addChild\(view\.underlayContainer\)/)
   assert.match(
+    secondaryWorldView,
+    /this\.currentKind !== 'acid-rain' \|\| this\.plan\.draws\.length > 0/,
+  )
+  assert.match(
     boneyardRenderer,
     /layer\.lane !== 'world-sorted' \|\| layer\.queueFamily === null/,
   )

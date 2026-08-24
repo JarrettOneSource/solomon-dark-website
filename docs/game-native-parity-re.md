@@ -41605,7 +41605,8 @@ There are no browser-platform-blocked members and no extractable unknowns.
   `PuppetPointer` plan keeps the native `rootY+350` queue key and zero bias while
   drawing BadGuys-10 at local Y `-175` and `-175-50*s`. Its separate
   `pre-world-queue` underlay draws the BadGuys-10 ground residue at depth `0.5`.
-  The Boneyard renderer excludes that underlay from the dynamic world queue.
+  The Boneyard renderer excludes that underlay from the dynamic world queue and
+  removes the cloud proxy itself once cloud alpha reaches zero.
 - The host/view names now distinguish `cloudAlpha` from `residueAlpha`.
   Provider admission, radius-2 light intensity `0.5*cloudAlpha`, and the shared
   rainfall-loop gain all follow positive cloud alpha; the residue-only tail is

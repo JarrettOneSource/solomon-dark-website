@@ -261,7 +261,10 @@ class NativeSecondaryActorView {
         worldY: this.plan.root.y,
       }]
       : []
-    return [...underlay, this.painterLayer(id, sourceOrder + underlay.length)]
+    const world = this.currentKind !== 'acid-rain' || this.plan.draws.length > 0
+      ? [this.painterLayer(id, sourceOrder + underlay.length)]
+      : []
+    return [...underlay, ...world]
   }
 
   diagnosticSample(

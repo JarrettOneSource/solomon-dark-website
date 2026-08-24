@@ -920,7 +920,7 @@ export function nativeSecondaryPresentationPlan(
       const age = Math.fround(presentationFrame)
       const firstScaleX = Math.fround(fieldScale * 5)
       const secondBaseScale = Math.fround(Math.fround(fieldScale * Math.fround(3.75)) * 2)
-      const cloudDraws: NativeSecondarySpriteDraw[] = [
+      const cloudDraws: NativeSecondarySpriteDraw[] = cloudAlpha > 0 ? [
         draw('BadGuys', 10, {
           alpha: Math.fround(cloudAlpha * Math.fround(0.75)),
           blend: 'add',
@@ -940,7 +940,7 @@ export function nativeSecondaryPresentationPlan(
           scaleY: Math.fround(secondBaseScale * Math.fround(0.8)),
           tint: 0x407326,
         }),
-      ]
+      ] : []
       const underlayDraws: NativeSecondarySpriteDraw[] = []
       if (actor.alpha > 0) {
         underlayDraws.push(draw('BadGuys', 10, {
