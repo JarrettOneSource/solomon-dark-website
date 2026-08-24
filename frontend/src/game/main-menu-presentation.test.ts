@@ -13,6 +13,8 @@ const renderer = readFileSync(
 const accountStyles = readFileSync(new URL('./game-account.css', import.meta.url), 'utf8')
 const hall = readFileSync(new URL('./HallOfFameScene.tsx', import.meta.url), 'utf8')
 const hallStyles = readFileSync(new URL('./hall-of-fame.css', import.meta.url), 'utf8')
+const activeWizard = readFileSync(new URL('./ActiveWizardDialog.tsx', import.meta.url), 'utf8')
+const activeWizardStyles = readFileSync(new URL('./active-wizard-dialog.css', import.meta.url), 'utf8')
 
 test('contains the Solomon Darker artwork inside the native GPU title slot', () => {
   const mainMenuManifest = assetManifest.match(/export const mainMenu = \{([\s\S]*?)\n\}/)
@@ -43,6 +45,21 @@ test('title identity stays at the native left corner while Last Game uses its sa
   assert.doesNotMatch(accountStyles, /\.game-account-name-title[\s\S]*right:\s*11px/)
   assert.match(scene, /action="last-game" accessibleLabel="Last game"/)
   assert.match(scene, /onClick=\{onLastGame\}/)
+  assert.match(scene, /canResume=\{resumeSave !== null\}/)
+  assert.match(renderer, /playButtonViews\[0\]\.label\.alpha = frame\.canResume \? 1 : 0\.36/)
+})
+
+test('New Game owns the current-wizard resume-or-kill decision before Create', () => {
+  assert.match(scene, /if \(resumeSave\) \{[\s\S]*setActiveWizardPrompt\(true\)/)
+  assert.match(scene, /await onKillWizard\(\)[\s\S]*continueNewGame\(\)/)
+  assert.match(scene, /onResume=\{resumePromptWizard\}/)
+  assert.match(scene, /inert=\{activeWizardPrompt \|\| undefined\}/)
+  assert.match(activeWizard, /KILL CHARACTER\?/)
+  assert.match(activeWizard, /Starting a new game will kill off your current game and character/)
+  assert.match(activeWizard, /RESUME LAST GAME/)
+  assert.match(activeWizard, /KILL WIZARD/)
+  assert.match(activeWizard, /aria-modal="true"/)
+  assert.match(activeWizardStyles, /background:\s*rgb\(0 0 0 \/ 75%\)/)
 })
 
 test('Hall of Fame is actionable and owns local plus four global boards', () => {

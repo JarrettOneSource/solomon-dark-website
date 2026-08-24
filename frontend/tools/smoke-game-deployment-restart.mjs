@@ -18,6 +18,11 @@ const baseUrl = process.env.SDR_GAME_DEPLOYMENT_SMOKE_URL || 'http://127.0.0.1:4
 const backendUrl = process.env.SDR_GAME_DEPLOYMENT_SMOKE_BACKEND_URL
   || 'http://127.0.0.1:5210'
 const frontendAddress = new URL(baseUrl)
+const frontendRequiresVite = frontendAddress.origin !== new URL(backendUrl).origin
+const smokeScope = process.env.SDR_GAME_DEPLOYMENT_SMOKE_SCOPE || 'all'
+if (!['all', 'legacy', 'primary'].includes(smokeScope)) {
+  throw new Error('SDR_GAME_DEPLOYMENT_SMOKE_SCOPE must be all, legacy, or primary')
+}
 const legacySavePaths = (process.env.SDR_GAME_DEPLOYMENT_LEGACY_SAVES || '')
   .split(',')
   .map(path => path.trim())
@@ -41,52 +46,67 @@ try {
   )
   children.push(backend)
   await waitForHttp(`${backendUrl}/api/game/saves/0`, 401)
-  const vite = startProcess(
-    process.execPath,
-    [
-      'node_modules/vite/bin/vite.js',
-      '--host',
-      frontendAddress.hostname,
-      '--port',
-      frontendAddress.port,
-      '--strictPort',
-    ],
-    { SDR_VITE_BACKEND_URL: backendUrl },
-  )
-  children.push(vite)
+  if (frontendRequiresVite) {
+    const vite = startProcess(
+      process.execPath,
+      [
+        'node_modules/vite/bin/vite.js',
+        '--host',
+        frontendAddress.hostname,
+        '--port',
+        frontendAddress.port,
+        '--strictPort',
+      ],
+      { SDR_VITE_BACKEND_URL: backendUrl },
+    )
+    children.push(vite)
+  }
   await waitForHttp(`${baseUrl}/game`, 200)
   browser = await chromium.launch({
     executablePath: process.env.SDR_CHROME_PATH || '/usr/bin/google-chrome',
     headless: true,
   })
-  const anonymousRun = await exercisePlayer({ account: null, label: 'anonymous' })
-  const { finalDocument, ...anonymous } = anonymousRun
-  const username = `DeploySmoke${Date.now()}`
-  const password = 'Deployment-smoke-password-42!'
-  const token = await registerAccount(username, password)
-  const authenticatedRun = await exercisePlayer({
-    account: { token, username },
-    label: 'authenticated',
-  })
-  const { finalDocument: _authenticatedDocument, ...authenticated } = authenticatedRun
-  const profileDocument = JSON.parse(finalDocument)
-  profileDocument.continuation = null
-  profileDocument.profile.economy.gold = 12_345
-  profileDocument.profile.economy.unforgeBonuses.maximumHealth = 20
-  const profileOnly = await exerciseProfileOnly(JSON.stringify(profileDocument))
+  let anonymous = null
+  let authenticated = null
+  let profileOnly = null
+  let killedWizard = null
+  if (smokeScope !== 'legacy') {
+    const anonymousRun = await exercisePlayer({ account: null, label: 'anonymous' })
+    const { finalDocument, ...anonymousReceipt } = anonymousRun
+    anonymous = anonymousReceipt
+    const username = `DeploySmoke${Date.now()}`
+    const password = 'Deployment-smoke-password-42!'
+    const token = await registerAccount(username, password)
+    const authenticatedRun = await exercisePlayer({
+      account: { token, username },
+      label: 'authenticated',
+    })
+    const { finalDocument: _authenticatedDocument, ...authenticatedReceipt } = authenticatedRun
+    authenticated = authenticatedReceipt
+    const profileDocument = JSON.parse(finalDocument)
+    profileDocument.continuation = null
+    profileDocument.profile.economy.gold = 12_345
+    profileDocument.profile.economy.unforgeBonuses.maximumHealth = 20
+    profileOnly = await exerciseProfileOnly(JSON.stringify(profileDocument))
+    killedWizard = await exerciseKilledWizard(finalDocument)
+  }
   const legacyResumes = []
-  for (const path of legacySavePaths) {
-    legacyResumes.push(await exerciseHistoricalSave(
-      await readFile(path, 'utf8'),
-      basename(path, '.json'),
-    ))
+  if (smokeScope !== 'primary') {
+    for (const path of legacySavePaths) {
+      legacyResumes.push(await exerciseHistoricalSave(
+        await readFile(path, 'utf8'),
+        basename(path, '.json'),
+      ))
+    }
   }
   process.stdout.write(`${JSON.stringify({
     status: 'ok',
+    smokeScope,
     currentRevision,
     targetRevision,
     anonymous,
     authenticated,
+    killedWizard,
     profileOnly,
     legacyResumes,
   })}\n`)
@@ -116,6 +136,7 @@ async function exercisePlayer({ account, label }) {
       token: account?.token ?? null,
     })
     const page = await context.newPage()
+    if (account) await routeBackendApi(page)
     let manifestRevision = currentRevision
     await page.route('**/deployment.json*', route => route.fulfill({
       body: JSON.stringify({ revision: manifestRevision }),
@@ -138,7 +159,17 @@ async function exercisePlayer({ account, label }) {
     })
 
     await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
-    await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 90_000 })
+    try {
+      await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 180_000 })
+    } catch (error) {
+      throw new Error(`${label} title did not become ready: ${JSON.stringify({
+        body: (await page.locator('body').innerText()).slice(0, 2_000),
+        consoleErrors,
+        failedResponses,
+        pageErrors,
+        url: page.url(),
+      })}`, { cause: error })
+    }
     await page.getByRole('button', { name: 'Play' }).click()
     await page.getByRole('button', { name: 'New game' }).click()
     await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({
@@ -153,14 +184,19 @@ async function exercisePlayer({ account, label }) {
     await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 30_000 })
     await canvas.waitFor({ timeout: 30_000 })
     const initialSave = await waitForSave(page, account, record => record?.revision >= 1)
-    const initialTick = JSON.parse(initialSave.document).continuation.summary.savedAtTick
-    const initialX = JSON.parse(initialSave.document).continuation.simulation
+    const initialDocument = JSON.parse(initialSave.document)
+    assert.equal(initialDocument.continuation.summary.activeRun, false)
+    const initialTick = initialDocument.continuation.summary.savedAtTick
+    const initialX = initialDocument.continuation.simulation
       .playerEntities.locomotions[0].position.x
+    await page.getByRole('button', { name: 'Open inventory, 500 gold' }).waitFor({
+      timeout: 30_000,
+    })
     await page.keyboard.down('d')
     await page.waitForTimeout(600)
     await page.keyboard.up('d')
 
-    const drainResponse = fetch(`${supervisor.url}/admin/deployments/restart`, {
+    const drainResponse = fetchWithRetry(`${supervisor.url}/admin/deployments/restart`, {
       method: 'POST',
       headers: {
         authorization: `Bearer ${adminSecret}`,
@@ -188,8 +224,10 @@ async function exercisePlayer({ account, label }) {
       account,
       record => record?.revision > initialSave.revision,
     )
-    const finalTick = JSON.parse(finalSave.document).continuation.summary.savedAtTick
-    const finalX = JSON.parse(finalSave.document).continuation.simulation
+    const finalDocument = JSON.parse(finalSave.document)
+    assert.equal(finalDocument.continuation.summary.activeRun, false)
+    const finalTick = finalDocument.continuation.summary.savedAtTick
+    const finalX = finalDocument.continuation.simulation
       .playerEntities.locomotions[0].position.x
     assert.ok(finalTick >= initialTick)
 
@@ -216,19 +254,55 @@ async function exercisePlayer({ account, label }) {
     await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 90_000 })
     await page.getByRole('button', { name: 'Play' }).click()
     const lastGame = page.getByRole('button', { name: 'Last game' })
+    await page.locator('.main-menu-button-last-game:not(:disabled)')
+      .waitFor({ timeout: 30_000 })
     assert.equal(await lastGame.isEnabled(), true)
-    await lastGame.click()
+    await page.locator('.title-menu-canvas[data-can-resume="true"]')
+      .waitFor({ timeout: 30_000 })
+    await page.getByRole('button', { name: 'New game' }).click()
+    const activeWizardDialog = page.getByRole('dialog', {
+      name: 'Resume or kill the current wizard',
+    })
+    await activeWizardDialog.waitFor({ timeout: 10_000 })
+    await activeWizardDialog.getByText('KILL CHARACTER?').waitFor()
+    await activeWizardDialog.getByText(/Lucritius will scavenge his equipment/).waitFor()
+    const promptScreenshotPath = `/tmp/solomon-active-wizard-${label}.png`
+    await page.screenshot({ path: promptScreenshotPath })
+    await activeWizardDialog.getByRole('button', { name: 'Resume Last Game' }).click()
     const resumedCanvas = page.locator('.hub-world-canvas[data-game-renderer="pixi-webgl"]')
     await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 30_000 })
     await resumedCanvas.waitFor({ timeout: 30_000 })
     const resumed = await resumedCanvas.evaluate(node => ({
       tick: node.__sdrHubFrame.tick,
       x: node.__sdrHubFrame.playerX,
+      y: node.__sdrHubFrame.playerY,
     }))
-    assert.ok(resumed.x > initialX, JSON.stringify({ finalX, initialX, resumed }))
+    assert.ok(Math.abs(resumed.x - 950.64) < 0.01, JSON.stringify({ finalX, initialX, resumed }))
+    assert.ok(Math.abs(resumed.y - 164.04) < 0.01, JSON.stringify({ finalX, initialX, resumed }))
+    const resumedDrainResponse = fetchWithRetry(`${replacementSupervisor.url}/admin/deployments/restart`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${adminSecret}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ targetRevision }),
+    })
+    await page.locator('.game-deployment-update').getByText(/Your game is saved/)
+      .waitFor({ timeout: 10_000 })
+    const resumedDrain = await resumedDrainResponse
+    assert.equal(resumedDrain.status, 200)
+    const resumedReceipt = await resumedDrain.json()
+    assert.equal(resumedReceipt.savedPlayers, 1)
+    assert.equal(resumedReceipt.unacknowledgedPlayers, 0)
+    const resumedSave = await waitForSave(
+      page,
+      account,
+      record => record?.revision > finalSave.revision,
+    )
+    assert.equal(JSON.parse(resumedSave.document).continuation.summary.activeRun, false)
     assert.deepEqual(pageErrors, [])
-    assert.deepEqual(consoleErrors, [])
     assert.deepEqual(failedResponses, [])
+    assert.deepEqual(consoleErrors, [])
     await context.close()
     return {
       finalRevision: finalSave.revision,
@@ -240,6 +314,10 @@ async function exercisePlayer({ account, label }) {
       label,
       resumedTick: resumed.tick,
       resumedX: resumed.x,
+      resumedY: resumed.y,
+      resumedRevision: resumedSave.revision,
+      resumedSavedPlayers: resumedReceipt.savedPlayers,
+      promptScreenshotPath,
       screenshotPath,
       updateMessage: 'Game updating',
     }
@@ -250,6 +328,81 @@ async function exercisePlayer({ account, label }) {
       if (index >= 0) children.splice(index, 1)
       await stopProcess(owned.child)
     }
+  }
+}
+
+async function exerciseKilledWizard(document) {
+  const supervisor = await startSupervisor()
+  children.push(supervisor.child)
+  try {
+    const ticket = await issueHubTicket(supervisor.url)
+    const endpoint = new URL('/game-hub', supervisor.url)
+    endpoint.protocol = 'ws:'
+    const context = await browser.newContext({ viewport: { width: 1600, height: 900 } })
+    await context.addInitScript(({ credential, gameUrl }) => {
+      window.solomonDarkRuntime = {
+        gameEndpoint: { kind: 'localhost', credential, url: gameUrl },
+      }
+    }, { credential: ticket.credential, gameUrl: endpoint.toString() })
+    const page = await context.newPage()
+    const consoleErrors = []
+    const failedResponses = []
+    const pageErrors = []
+    page.on('console', message => {
+      if (message.type() === 'error') consoleErrors.push(message.text())
+    })
+    page.on('pageerror', error => pageErrors.push(error.message))
+    page.on('response', response => {
+      if (response.status() >= 400) failedResponses.push({
+        status: response.status(),
+        url: response.url(),
+      })
+    })
+    await page.route('**/deployment.json*', route => route.fulfill({
+      body: JSON.stringify({ revision: currentRevision }),
+      contentType: 'application/json',
+      headers: { 'cache-control': 'no-store' },
+      status: 200,
+    }))
+
+    await page.goto(baseUrl, { waitUntil: 'domcontentloaded' })
+    await seedLocalSave(page, document)
+    await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
+    await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 90_000 })
+    await page.getByRole('button', { name: 'Play' }).click()
+    await page.getByRole('button', { name: 'New game' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Resume or kill the current wizard' })
+    await dialog.waitFor({ timeout: 10_000 })
+    const promptScreenshotPath = '/tmp/solomon-kill-wizard-prompt.png'
+    await page.screenshot({ path: promptScreenshotPath })
+    await dialog.getByRole('button', { name: 'Kill Wizard' }).click()
+    await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({
+      timeout: 30_000,
+    })
+    const retired = await waitForSave(page, null, record => (
+      record?.revision >= 2 && JSON.parse(record.document).continuation === null
+    ))
+    const retiredDocument = JSON.parse(retired.document)
+    assert.equal(retiredDocument.profile.economy.gold, 500)
+    assert.equal(retiredDocument.profile.economy.storage.at(-1)?.kind, 'sack')
+    assert.equal(retiredDocument.profile.economy.storage.at(-1)?.contents.length, 5)
+    const screenshotPath = '/tmp/solomon-kill-wizard-create.png'
+    await page.screenshot({ path: screenshotPath })
+    assert.deepEqual(pageErrors, [])
+    assert.deepEqual(consoleErrors, [])
+    assert.deepEqual(failedResponses, [])
+    await context.close()
+    return {
+      gold: retiredDocument.profile.economy.gold,
+      retainedItems: retiredDocument.profile.economy.storage.at(-1)?.contents.length,
+      revision: retired.revision,
+      promptScreenshotPath,
+      screenshotPath,
+    }
+  } finally {
+    const index = children.indexOf(supervisor.child)
+    if (index >= 0) children.splice(index, 1)
+    await stopProcess(supervisor.child)
   }
 }
 
@@ -364,13 +517,15 @@ async function exerciseHistoricalSave(document, label) {
     await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 90_000 })
     await page.getByRole('button', { name: 'Play' }).click()
     const lastGame = page.getByRole('button', { name: 'Last game' })
+    await page.locator('.main-menu-button-last-game:not(:disabled)')
+      .waitFor({ timeout: 30_000 })
     assert.equal(await lastGame.isEnabled(), true)
     await lastGame.click()
     const scene = parsed.summary.worldKind === 'boneyard'
       ? '.boneyard-scene[data-renderer-state="ready"]'
       : '.hub-scene[data-renderer-state="ready"]'
     try {
-      await page.locator(scene).waitFor({ timeout: 30_000 })
+      await page.locator(scene).waitFor({ timeout: 90_000 })
     } catch (error) {
       throw new Error(`historical save ${label} did not resume: ${JSON.stringify({
         body: await page.locator('body').innerText(),
@@ -378,6 +533,18 @@ async function exerciseHistoricalSave(document, label) {
         failedResponses,
         pageErrors,
       })}`, { cause: error })
+    }
+    const migrated = await waitForSave(page, null, record => record?.revision > 1)
+    const migratedSummary = JSON.parse(migrated.document).continuation.summary
+    assert.equal(migratedSummary.activeRun, parsed.summary.worldKind === 'boneyard')
+    let resumedHubPosition = null
+    if (parsed.summary.worldKind === 'hub') {
+      resumedHubPosition = await page.locator('.hub-world-canvas').evaluate(node => ({
+        x: node.__sdrHubFrame.playerX,
+        y: node.__sdrHubFrame.playerY,
+      }))
+      assert.ok(Math.abs(resumedHubPosition.x - 950.64) < 0.01)
+      assert.ok(Math.abs(resumedHubPosition.y - 164.04) < 0.01)
     }
     const screenshotPath = `/tmp/solomon-${label}-resume.png`
     await page.screenshot({ path: screenshotPath })
@@ -387,6 +554,8 @@ async function exerciseHistoricalSave(document, label) {
     await context.close()
     return {
       label,
+      activeRun: migratedSummary.activeRun,
+      resumedHubPosition,
       schemaVersion: parsed.schemaVersion,
       screenshotPath,
       worldKind: parsed.summary.worldKind,
@@ -456,7 +625,7 @@ async function startSupervisor() {
 }
 
 async function issueHubTicket(supervisorUrl) {
-  const response = await fetch(`${supervisorUrl}/admin/hub/tickets`, {
+  const response = await fetchWithRetry(`${supervisorUrl}/admin/hub/tickets`, {
     method: 'POST',
     headers: {
       authorization: `Bearer ${adminSecret}`,
@@ -472,7 +641,7 @@ async function issueHubTicket(supervisorUrl) {
 }
 
 async function issuePrivateTicket(supervisorUrl) {
-  const response = await fetch(`${supervisorUrl}/admin/sessions`, {
+  const response = await fetchWithRetry(`${supervisorUrl}/admin/sessions`, {
     method: 'POST',
     headers: {
       authorization: `Bearer ${adminSecret}`,
@@ -491,13 +660,12 @@ async function waitForSave(page, account, predicate) {
   const deadline = Date.now() + 15_000
   while (Date.now() < deadline) {
     const record = account
-      ? await page.evaluate(async (token) => {
-          const response = await fetch('/api/game/saves/0', {
-            headers: { authorization: `Bearer ${token}` },
-          })
+      ? await fetchWithRetry(`${backendUrl}/api/game/saves/0`, {
+          headers: { authorization: `Bearer ${account.token}` },
+        }).then(async (response) => {
           if (!response.ok) throw new Error(`cloud save read failed (${response.status})`)
-          return response.json().then(value => value.save)
-        }, account.token)
+          return (await response.json()).save
+        })
       : await page.evaluate(() => new Promise((resolveSave, reject) => {
           const open = indexedDB.open('solomon-dark-game-saves', 1)
           open.onerror = () => reject(open.error)
@@ -513,8 +681,30 @@ async function waitForSave(page, account, predicate) {
   throw new Error(`timed out waiting for ${account ? 'cloud' : 'IndexedDB'} save`)
 }
 
+async function routeBackendApi(page) {
+  await page.route('**/api/**', async (route) => {
+    const target = new URL(route.request().url())
+    const backend = new URL(backendUrl)
+    target.protocol = backend.protocol
+    target.host = backend.host
+    let lastError = null
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      try {
+        const response = await route.fetch({ url: target.toString() })
+        await route.fulfill({ response })
+        return
+      } catch (error) {
+        lastError = error
+        await new Promise(resolve => setTimeout(resolve, 100))
+      }
+    }
+    await route.abort('connectionfailed')
+    throw lastError
+  })
+}
+
 async function registerAccount(username, password) {
-  const response = await fetch(`${backendUrl}/api/auth/register`, {
+  const response = await fetchWithRetry(`${backendUrl}/api/auth/register`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -579,6 +769,19 @@ async function waitForHttp(url, expectedStatus) {
     await new Promise(resolveWait => setTimeout(resolveWait, 100))
   }
   throw new Error(`timed out waiting for ${url}`)
+}
+
+async function fetchWithRetry(url, options) {
+  let lastError = null
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      return await fetch(url, options)
+    } catch (error) {
+      lastError = error
+      await new Promise(resolve => setTimeout(resolve, 100))
+    }
+  }
+  throw lastError
 }
 
 function stopProcess(child) {

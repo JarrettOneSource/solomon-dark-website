@@ -267,8 +267,8 @@ export default function Game() {
     setDeploymentRestart({ saved: false, targetRevision: request.targetRevision })
     const coordinator = saveCoordinator.current
     if (!coordinator) throw new Error('The game save owner is unavailable.')
-    if (request.checkpoint) coordinator.accept(request.checkpoint)
-    await coordinator.waitFor(request.checkpoint?.sequence ?? 0)
+    if (request.checkpoint) await coordinator.accept(request.checkpoint)
+    else await coordinator.idle()
     setDeploymentRestart(current => current?.targetRevision === request.targetRevision
       ? { ...current, saved: true }
       : current)
@@ -314,14 +314,22 @@ export default function Game() {
   }, [accountUsername, diagnostics, saveForDeployment])
 
   const persistCheckpoint = useCallback((checkpoint: GameSaveCheckpoint) => {
-    saveCoordinator.current?.accept(checkpoint)
+    const outcome = saveCoordinator.current?.accept(checkpoint)
+    void outcome?.catch(() => {})
   }, [])
 
   const persistCheckpointAndWait = useCallback(async (checkpoint: GameSaveCheckpoint) => {
     const coordinator = saveCoordinator.current
     if (!coordinator) throw new Error('The game save owner is unavailable.')
-    coordinator.accept(checkpoint)
-    await coordinator.waitFor(checkpoint.sequence)
+    await coordinator.accept(checkpoint)
+  }, [])
+
+  const killWizard = useCallback(async (): Promise<void> => {
+    const coordinator = saveCoordinator.current
+    const current = coordinator?.current()
+    if (!coordinator || !current) throw new Error('The current wizard save is unavailable.')
+    const { retireGameSaveWizard } = await import('../game/save/game-save-document.ts')
+    await coordinator.replace(retireGameSaveWizard(current.document))
   }, [])
 
   const loadGlobalHallOfFame = useCallback(async (
@@ -366,6 +374,7 @@ export default function Game() {
               initialScreen="root"
               loadGlobalHallOfFame={loadGlobalHallOfFame}
               onCancelCreate={cancelCreate}
+              onKillWizard={killWizard}
               onSaveCheckpoint={persistCheckpoint}
               onSignOut={logout}
               persistSaveCheckpoint={persistCheckpointAndWait}

@@ -83,6 +83,7 @@ export interface ProtocolPlayerEconomy {
   revision: number
   storage: readonly HubInventoryItem[]
   tonicPurchases: number
+  tutorialPending: boolean
   unforgeBonuses: NativeUnforgeBonuses
 }
 

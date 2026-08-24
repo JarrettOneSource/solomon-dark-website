@@ -52,6 +52,7 @@ export type TitleMenuAction =
   | 'unavailable'
 
 export interface TitleMenuRenderFrame {
+  canResume: boolean
   elapsedMs: number
   hoveredAction: TitleMenuAction | null
   pressedAction: TitleMenuAction | null
@@ -203,7 +204,7 @@ export async function createTitleMenuRenderer(
     createMainButton(texture, 'last-game', 0, [
       ['resume', mainMenu.text.resume],
       ['last-game', mainMenu.text.lastGame],
-    ], 0.36),
+    ]),
     createMainButton(texture, 'new-game', 1, [['new-game', mainMenu.text.newGame]]),
     createMainButton(texture, 'join-party', 2, []),
     createMainButton(texture, 'back', 3, [['back', mainMenu.text.back]]),
@@ -225,8 +226,10 @@ export async function createTitleMenuRenderer(
   let presentedSimulationTick = -1
   let presentedHoveredAction: TitleMenuAction | null | undefined
   let presentedPressedAction: TitleMenuAction | null | undefined
+  let presentedCanResume: boolean | undefined
   let presentedScreen: TitleMenuScreen | undefined
   const diagnostics = {
+    canResume: false,
     frameCount: 0,
     graveCounts: graveSimulation.rows.map((row) => row.graves.length),
     screen: 'root' as TitleMenuScreen,
@@ -286,6 +289,10 @@ export async function createTitleMenuRenderer(
         playButtons.visible = frame.screen === 'play'
         presentedScreen = frame.screen
       }
+      if (presentedCanResume !== frame.canResume) {
+        playButtonViews[0].label.alpha = frame.canResume ? 1 : 0.36
+        presentedCanResume = frame.canResume
+      }
       if (presentedHoveredAction !== frame.hoveredAction
         || presentedPressedAction !== frame.pressedAction) {
         for (const button of allButtons) {
@@ -300,10 +307,12 @@ export async function createTitleMenuRenderer(
       }
       application.render()
       diagnostics.frameCount += 1
+      diagnostics.canResume = frame.canResume
       diagnostics.graveCounts = graveSimulation.rows.map((row) => row.graves.length)
       diagnostics.screen = frame.screen
       diagnostics.solomonFrame = Math.floor(solomonPhase)
       canvas.dataset.screen = frame.screen
+      canvas.dataset.canResume = `${frame.canResume}`
     },
     resize(viewport, nextDevicePixelRatio = window.devicePixelRatio) {
       if (destroyed) return
@@ -355,6 +364,7 @@ export async function createTitleMenuRenderer(
     resolution,
   )
   renderer.render({
+    canResume: false,
     elapsedMs: 0,
     hoveredAction: null,
     pressedAction: null,

@@ -324,7 +324,7 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
   })), /activity/)
 })
 
-test('protocol 67 retains exact A or B slots for HUD concentration replacement', () => {
+test('protocol 68 retains exact A or B slots for HUD concentration replacement', () => {
   assert.throws(() => decodeClientGameMessage(JSON.stringify({
     type: 'client-select-concentration-slot',
     skillId: 57,
@@ -415,7 +415,7 @@ test('protocol v42 bounds Lua requests and structured results by wire bytes and 
   }
 })
 
-test('protocol v67 accepts every authoritative inventory and contextual action and rejects malformed variants', () => {
+test('protocol v68 accepts every authoritative inventory and contextual action and rejects malformed variants', () => {
   const actions = [
     { type: 'buy-dowsing', offerId: 1 },
     { type: 'buy-fomentius', itemId: 2 },
@@ -508,7 +508,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
     modAssets: [{ ...assetWelcome.modAssets[0]!, sha256: 'not-a-hash' }],
   })), /SHA-256/)
   assert.deepEqual(welcome.snapshot.players['player-1'].config, CHARACTER)
-  assert.equal(welcome.snapshot.players['player-1'].economy.gold, 10_000)
+  assert.equal(welcome.snapshot.players['player-1'].economy.gold, 500)
   assert.equal(welcome.snapshot.players['player-1'].economy.fomentiusStock.length > 0, true)
   const player = welcome.snapshot.players['player-1']
   const feedbackWelcome = {
@@ -1258,8 +1258,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v67 carries Hub activity, Goodie actions, saves, Hagatha runtime, Imp effects, and gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 67)
+test('protocol v68 carries Hub activity, Goodie actions, tutorial state, Hagatha runtime, Imp effects, save intent, selected skills, sacks, dyes, and gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 68)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),

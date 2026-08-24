@@ -71,7 +71,7 @@ test('players occupy aligned dense ECS columns with stable entity IDs', () => {
   assert.equal(store.skillBooks.length, store.skillRuntimes.length)
   assert.equal(store.skillBooks.length, store.statBooks.length)
   assert.equal(playerEntityId(store, 'second'), 2)
-  assert.equal(playerEconomyAt(store, 'first')?.gold, 10_000)
+  assert.equal(playerEconomyAt(store, 'first')?.gold, 500)
   assert.deepEqual(playerLightingAt(store, 'second'), {
     lightRegistration: { managerLane: 'actor', registrationOrdinal: 1 },
     overlayEffectPhase: 0,
@@ -358,6 +358,8 @@ test('loot credits exactly one dense participant economy or skill row', () => {
   let store = createPlayerEntityStore()
   store = addPlayerEntity(store, 'first', FIRST, createPlayerCharacter(FIRST, { x: 0, y: 0 }), 10)
   store = addPlayerEntity(store, 'second', SECOND, createPlayerCharacter(SECOND, { x: 0, y: 0 }), 20)
+  const firstEconomy = playerEconomyAt(store, 'first')!
+  store = replacePlayerEconomy(store, 'first', { ...firstEconomy, gold: 10_000 })
   const untouchedEconomy = playerEconomyAt(store, 'second')
   const untouchedSkills = playerSkillBookAt(store, 'second')
 

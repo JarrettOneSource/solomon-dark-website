@@ -13,6 +13,7 @@ import {
   HUB_SACK_REPLICATION_DEPTH_LIMIT,
   type HubInventoryItem,
 } from '../core-kernels/hub-economy.ts'
+import { HUB_SPAWN } from '../core-kernels/hub-math.ts'
 import { HubStudentPopulationState } from '../core-server/hub-students.ts'
 import { HubWorldRuntime } from '../core-server/hub-world.ts'
 import { createBoneyardCatalog, materializeBoneyard } from '../host/boneyard-catalog.ts'
@@ -20,6 +21,7 @@ import {
   createGameProfileSaveDocument,
   createGameSaveDocument,
   hydrateGameSaveProfile,
+  retireGameSaveWizard,
   restoreGameSaveDocument,
   restoreGameSaveProfile,
 } from './game-save-document.ts'
@@ -68,11 +70,13 @@ test('host save documents round-trip the complete owner state and revive Hub run
     state,
   })
   const encoded = JSON.parse(document) as Record<string, unknown>
+  assert.equal(encoded.schemaVersion, 6)
   assert.deepEqual(encoded.mods, MODS)
   assert.deepEqual(encoded.modState, MOD_STATE)
   assert.equal(encoded.integrity, 'local-only')
   assert.equal(new TextEncoder().encode(document).byteLength <= MAX_WEB_GAME_SAVE_BYTES, true)
   assert.deepEqual(readGameSaveSummary(document), {
+    activeRun: false,
     character: OWNER,
     phase: 'hub',
     playerId: 'owner',
@@ -102,6 +106,41 @@ test('host save documents round-trip the complete owner state and revive Hub run
   assert.ok(restored.state.world.runtime instanceof HubWorldRuntime)
   assert.ok(restored.state.world.studentPopulation instanceof HubStudentPopulationState)
   assert.deepEqual(Object.keys(restored.state.world.participants), ['owner'])
+  assert.deepEqual(restored.state.playerEntities.locomotions[0]?.position, HUB_SPAWN)
+  assert.equal(restored.state.world.participants.owner?.region, 'courtyard')
+  assert.equal(restored.state.world.participants.owner?.transition, null)
+})
+
+test('Hub resume discards scene-local departure position and regenerates the Hub', () => {
+  const state = createGameSimulation({ owner: OWNER }, {
+    hubTraderAnimationSeed: 73,
+    gameRngSeed: 91,
+  })
+  const document = JSON.parse(createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard: null,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state,
+  }))
+  document.continuation.simulation.playerEntities.locomotions[0].position = {
+    x: 1_700,
+    y: 700,
+  }
+  document.continuation.simulation.world.participants.owner = {
+    region: 'library',
+    transition: null,
+  }
+  document.continuation.simulation.world.traderAnimationSeed = 73
+
+  const restored = restoreGameSaveDocument(JSON.stringify(document))
+  assert.equal(restored.state.world.kind, 'hub')
+  assert.deepEqual(restored.state.playerEntities.locomotions[0]?.position, HUB_SPAWN)
+  if (restored.state.world.kind !== 'hub') throw new Error('expected restored Hub')
+  assert.equal(restored.state.world.participants.owner?.region, 'courtyard')
+  assert.equal(restored.state.world.participants.owner?.transition, null)
+  assert.notEqual(restored.state.world.traderAnimationSeed, 73)
 })
 
 test('save documents admit the complete Sack wire depth and reject one level beyond it', () => {
@@ -146,6 +185,8 @@ test('save documents admit the complete Sack wire depth and reject one level bey
   })
 
   const restored = restoreGameSaveDocument(document)
+  const retiredProfile = restoreGameSaveProfile(document)
+  assert.equal(retiredProfile.economy.storage.at(-1)?.kind, 'sack')
   assert.equal(
     restored.state.playerEntities.economies[0]?.backpack[0]?.id,
     920_000,
@@ -211,6 +252,7 @@ test('schema-4 saves normalize pre-unforge and pre-Hagatha runtime fields', () =
     serendipityActive: true,
   })
   assert.equal(restored.state.playerEntities.skillBooks[0]?.weldComponentRanks, null)
+  assert.equal(restored.state.playerEntities.economies[0]?.tutorialPending, false)
 })
 
 test('host save documents retain the active Boneyard and its authoritative run id', () => {
@@ -233,6 +275,11 @@ test('host save documents retain the active Boneyard and its authoritative run i
     state,
   })
   const restored = restoreGameSaveDocument(document)
+
+  assert.equal(readGameSaveSummary(document)?.activeRun, true)
+  const schema5 = legacySchema5Document(document)
+  assert.equal(readGameSaveSummary(schema5)?.activeRun, true)
+  assert.equal(restoreGameSaveDocument(schema5).state.world.kind, 'boneyard')
 
   assert.deepEqual(restored.loadedBoneyard, loadedBoneyard)
   assert.equal(restored.state.world.kind, 'boneyard')
@@ -290,6 +337,12 @@ test('host save documents fail closed for unknown schema, extra fields, owner dr
     () => restoreGameSaveDocument(JSON.stringify(invalidWeld)),
     /Weld cache/,
   )
+  const invalidRun = structuredClone(parsed)
+  invalidRun.continuation.summary.activeRun = true
+  assert.throws(
+    () => restoreGameSaveDocument(JSON.stringify(invalidRun)),
+    /active run/,
+  )
   assert.throws(
     () => restoreGameSaveDocument('x'.repeat(MAX_WEB_GAME_SAVE_BYTES + 1)),
     /size limit/,
@@ -310,7 +363,7 @@ test('schema-3 saves migrate conservatively to local-only integrity', () => {
   assert.equal(restored.integrity, 'local-only')
 })
 
-test('known schema 1 through 4 continuations migrate through current authority', () => {
+test('known schema 1 through 5 continuations migrate through current authority', () => {
   const document = createGameSaveDocument({
     integrity: 'global-clean',
     loadedBoneyard: null,
@@ -320,17 +373,22 @@ test('known schema 1 through 4 continuations migrate through current authority',
     state: createGameSimulation({ owner: OWNER }),
   })
 
-  for (const schemaVersion of [1, 2, 3, 4]) {
-    const restored = restoreGameSaveDocument(legacyDocument(document, schemaVersion))
+  for (const schemaVersion of [1, 2, 3, 4, 5]) {
+    const migrated = schemaVersion === 5
+      ? legacySchema5Document(document)
+      : legacyDocument(document, schemaVersion)
+    const restored = restoreGameSaveDocument(migrated)
     assert.equal(restored.playerId, 'owner')
     assert.equal(restored.state.world.kind, 'hub')
+    assert.equal(readGameSaveSummary(migrated)?.activeRun, false)
     assert.equal(restored.state.playerEntities.identities[0]?.playerId, 'owner')
+    assert.equal(restored.state.playerEntities.economies[0]?.tutorialPending, false)
     assert.equal(restored.state.run.gameOverExitKind, null)
     assert.deepEqual(restored.state.run.loadoutReadyPlayerIds, [])
     assert.equal(restored.state.playerEntities.primaryCasts[0]?.oneShotAttackPoseHeld, false)
     assert.equal(
       restored.state.playerEntities.primaryCasts[0]?.selectedPrimaryId,
-      schemaVersion === 4 ? -1 : 8,
+      -1,
     )
     assert.ok(restored.state.playerEntities.skillRuntimes[0])
     assert.deepEqual(restored.state.playerEntities.skillBooks[0]?.learnedSkillOrder, [8, 11])
@@ -382,6 +440,7 @@ test('Game Over retains a durable profile while removing only the continuation',
   assert.equal(profile.economy.gold, 12_345)
   assert.equal(profile.economy.dowsingFee, 950)
   assert.equal(profile.economy.storage.length, 1)
+  assert.equal(profile.economy.tutorialPending, true)
   assert.deepEqual(profile.hagathaRuntime, {
     cheatDeathCharges: 0,
     reverieActive: false,
@@ -412,12 +471,47 @@ test('Game Over retains a durable profile while removing only the continuation',
   )
 })
 
+test('killing the current wizard scavenges carried items and removes only the continuation', () => {
+  const state = createGameSimulation({ owner: OWNER })
+  const liveDocument = createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard: null,
+    mods: MODS,
+    modState: MOD_STATE,
+    playerId: 'owner',
+    state,
+  })
+  const latent = restoreGameSaveProfile(liveDocument)
+  assert.equal(latent.continuation?.summary.activeRun, false)
+  assert.equal(latent.economy.storage.at(-1)?.kind, 'sack')
+  assert.equal(latent.economy.tutorialPending, true)
+  assert.deepEqual(
+    latent.economy.storage.at(-1)?.contents?.map(({ name }) => name).sort(),
+    ['Hat', 'Health Potion', 'Mana Potion', 'Robe', 'Staff'],
+  )
+  assert.deepEqual(
+    restoreGameSaveDocument(liveDocument).state.playerEntities.economies[0]?.backpack
+      .map(({ kind }) => kind),
+    ['health-potion', 'mana-potion'],
+  )
+
+  const retiredDocument = retireGameSaveWizard(liveDocument)
+  const retired = restoreGameSaveProfile(retiredDocument)
+  assert.equal(retired.continuation, null)
+  assert.equal(retired.economy.gold, state.playerEntities.economies[0]?.gold)
+  assert.deepEqual(retired.economy.storage, latent.economy.storage)
+  assert.throws(() => restoreGameSaveDocument(retiredDocument), /no resumable continuation/)
+})
+
 function legacyDocument(document: string, schemaVersion: number): string {
   const current = JSON.parse(document)
   const continuation = current.continuation
   const simulation = continuation.simulation
   const playerStore = simulation.playerEntities
   const run = simulation.run
+
+  delete continuation.summary.activeRun
+  for (const economy of playerStore.economies) delete economy.tutorialPending
 
   delete run.gameOverExitKind
   delete run.loadoutReadyPlayerIds
@@ -452,6 +546,16 @@ function legacyDocument(document: string, schemaVersion: number): string {
     schemaVersion,
     simulation,
     summary: continuation.summary,
+  }
+  return JSON.stringify(legacy)
+}
+
+function legacySchema5Document(document: string): string {
+  const legacy = JSON.parse(document)
+  legacy.schemaVersion = 5
+  delete legacy.continuation.summary.activeRun
+  for (const economy of legacy.continuation.simulation.playerEntities.economies) {
+    delete economy.tutorialPending
   }
   return JSON.stringify(legacy)
 }

@@ -331,7 +331,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 67
+export const GAME_PROTOCOL_VERSION = 68
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -2131,6 +2131,7 @@ function playerEconomy(value: unknown, field: string): ProtocolPlayerEconomy {
     'revision',
     'storage',
     'tonicPurchases',
+    'tutorialPending',
     'unforgeBonuses',
   ])
   const backpack = inventoryItems(
@@ -2203,6 +2204,7 @@ function playerEconomy(value: unknown, field: string): ProtocolPlayerEconomy {
     revision: nonnegativeInteger(source.revision, `${field}.revision`),
     storage,
     tonicPurchases,
+    tutorialPending: boolean(source.tutorialPending, `${field}.tutorialPending`),
     unforgeBonuses: nativeUnforgeBonuses(source.unforgeBonuses, `${field}.unforgeBonuses`),
   }
 }

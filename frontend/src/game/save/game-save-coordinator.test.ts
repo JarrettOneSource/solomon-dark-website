@@ -42,9 +42,9 @@ test('save coordinator serializes progress before the Game Over profile checkpoi
   const coordinator = new GameSaveCoordinator(store, (record) => changes.push(record))
   await coordinator.load()
 
-  coordinator.accept({ document: 'checkpoint-one', reason: 'progress', sequence: 1 })
-  coordinator.accept({ document: 'checkpoint-two', reason: 'progress', sequence: 2 })
-  coordinator.accept({ document: 'profile-only', reason: 'game-over', sequence: 3 })
+  void coordinator.accept({ document: 'checkpoint-one', reason: 'progress', sequence: 1, streamId: 1 })
+  void coordinator.accept({ document: 'checkpoint-two', reason: 'progress', sequence: 2, streamId: 1 })
+  void coordinator.accept({ document: 'profile-only', reason: 'game-over', sequence: 3, streamId: 1 })
   await coordinator.idle()
 
   assert.deepEqual(store.operations, [
@@ -70,9 +70,12 @@ test('save coordinator ignores replayed and byte-identical checkpoints', async (
   const coordinator = new GameSaveCoordinator(store, () => {})
   await coordinator.load()
 
-  coordinator.accept({ document: 'same-document', reason: 'progress', sequence: 7 })
-  coordinator.accept({ document: 'stale', reason: 'progress', sequence: 6 })
-  coordinator.accept({ document: 'new-document', reason: 'progress', sequence: 8 })
+  await coordinator.accept({ document: 'same-document', reason: 'progress', sequence: 7, streamId: 1 })
+  await assert.rejects(
+    coordinator.accept({ document: 'stale', reason: 'progress', sequence: 6, streamId: 1 }),
+    /out of order/,
+  )
+  await coordinator.accept({ document: 'new-document', reason: 'progress', sequence: 8, streamId: 1 })
   await coordinator.idle()
 
   assert.deepEqual(store.operations, ['read', 'write:4:new-document'])
@@ -85,16 +88,102 @@ test('save coordinator exposes exact checkpoint completion and failure to deploy
   const coordinator = new GameSaveCoordinator(store, () => {}, error => failures.push(error))
   await coordinator.load()
 
-  coordinator.accept({ document: 'checkpoint-one', reason: 'progress', sequence: 1 })
-  await coordinator.waitFor(1)
+  await coordinator.accept({ document: 'checkpoint-one', reason: 'progress', sequence: 1, streamId: 1 })
   assert.equal(coordinator.current()?.document, 'checkpoint-one')
 
   store.record = {
     ...store.record!,
     revision: 9,
   }
-  coordinator.accept({ document: 'checkpoint-two', reason: 'progress', sequence: 2 })
-  await assert.rejects(() => coordinator.waitFor(2), /revision conflict/)
-  await assert.rejects(() => coordinator.waitFor(0), /revision conflict/)
+  await assert.rejects(
+    coordinator.accept({ document: 'checkpoint-two', reason: 'progress', sequence: 2, streamId: 1 }),
+    /revision conflict/,
+  )
+  await assert.rejects(() => coordinator.idle(), /revision conflict/)
   assert.match(failures.at(-1)?.message ?? '', /revision conflict/)
+})
+
+test('save coordinator scopes sequences per session and exposes exact accepted outcomes', async () => {
+  const store = new RecordingStore()
+  const coordinator = new GameSaveCoordinator(store, () => {})
+  await coordinator.load()
+
+  const first = coordinator.accept({
+    document: 'session-one-checkpoint-three',
+    reason: 'progress',
+    sequence: 3,
+    streamId: 41,
+  })
+  const later = coordinator.accept({
+    document: 'session-one-checkpoint-four',
+    reason: 'progress',
+    sequence: 4,
+    streamId: 41,
+  })
+  assert.equal(coordinator.accept({
+    document: 'session-one-checkpoint-three',
+    reason: 'progress',
+    sequence: 3,
+    streamId: 41,
+  }), first)
+  await first
+  await later
+  assert.equal(coordinator.accept({
+    document: 'session-one-checkpoint-four',
+    reason: 'progress',
+    sequence: 4,
+    streamId: 41,
+  }), later)
+
+  await coordinator.accept({
+    document: 'session-two-checkpoint-one',
+    reason: 'progress',
+    sequence: 1,
+    streamId: 42,
+  })
+  assert.deepEqual(store.operations, [
+    'read',
+    'write:0:session-one-checkpoint-three',
+    'write:1:session-one-checkpoint-four',
+    'write:2:session-two-checkpoint-one',
+  ])
+})
+
+test('title replacement persists profile-only state before a later session stream', async () => {
+  const store = new RecordingStore()
+  const coordinator = new GameSaveCoordinator(store, () => {})
+  await coordinator.load()
+
+  await coordinator.accept({
+    document: 'active-wizard',
+    reason: 'progress',
+    sequence: 3,
+    streamId: 41,
+  })
+  await coordinator.replace('profile-only')
+  await assert.rejects(coordinator.accept({
+    document: 'late-active-wizard',
+    reason: 'progress',
+    sequence: 4,
+    streamId: 41,
+  }), /stream 41 is retired/)
+  await coordinator.accept({
+    document: 'new-wizard',
+    reason: 'progress',
+    sequence: 1,
+    streamId: 42,
+  })
+  await assert.rejects(coordinator.accept({
+    document: 'stale-active-wizard',
+    reason: 'progress',
+    sequence: 5,
+    streamId: 41,
+  }), /stream 41 is stale/)
+
+  assert.deepEqual(store.operations, [
+    'read',
+    'write:0:active-wizard',
+    'write:1:profile-only',
+    'write:2:new-wizard',
+  ])
 })

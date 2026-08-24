@@ -8,8 +8,8 @@ public sealed record WebGameSaveInspection(int FormatVersion, long Size, string 
 
 public static class WebGameSaveInspector
 {
-    public const int FormatVersion = 5;
-    private static readonly int[] LegacyFormatVersions = [1, 2, 3, 4];
+    public const int FormatVersion = 6;
+    private static readonly int[] LegacyFormatVersions = [1, 2, 3, 4, 5];
     public const int MaxDocumentBytes = 8 * 1024 * 1024;
     private const int MaxNodes = 250_000;
 
@@ -54,7 +54,7 @@ public static class WebGameSaveInspector
                 throw new InvalidDataException("The browser game save schema version is not supported.");
             }
             inspectedFormatVersion = version;
-            if (version == FormatVersion)
+            if (version is FormatVersion or 5)
             {
                 RequireExactProperties(
                     root,
@@ -88,7 +88,8 @@ public static class WebGameSaveInspector
                     ValidateContinuation(
                         continuation.GetProperty("summary"),
                         continuation.GetProperty("simulation"),
-                        continuation.GetProperty("loadedBoneyard"));
+                        continuation.GetProperty("loadedBoneyard"),
+                        version == FormatVersion);
                 }
                 else if (continuation.ValueKind != JsonValueKind.Null)
                 {
@@ -113,7 +114,8 @@ public static class WebGameSaveInspector
                 ValidateContinuation(
                     root.GetProperty("summary"),
                     root.GetProperty("simulation"),
-                    root.GetProperty("loadedBoneyard"));
+                    root.GetProperty("loadedBoneyard"),
+                    false);
             }
             if (CountNodes(root, 0) > MaxNodes)
             {
@@ -130,17 +132,21 @@ public static class WebGameSaveInspector
     private static void ValidateContinuation(
         JsonElement summaryValue,
         JsonElement simulation,
-        JsonElement loadedBoneyard)
+        JsonElement loadedBoneyard,
+        bool includesActiveRun)
     {
         var summary = RequireObject(summaryValue, "browser game save summary");
         RequireExactProperties(
             summary,
             "browser game save summary",
-            "character",
-            "phase",
-            "playerId",
-            "savedAtTick",
-            "worldKind");
+            includesActiveRun
+                ? ["activeRun", "character", "phase", "playerId", "savedAtTick", "worldKind"]
+                : ["character", "phase", "playerId", "savedAtTick", "worldKind"]);
+        if (includesActiveRun &&
+            summary.GetProperty("activeRun").ValueKind is not JsonValueKind.True and not JsonValueKind.False)
+        {
+            throw new InvalidDataException("The browser game save active run is invalid.");
+        }
         var character = RequireObject(
             summary.GetProperty("character"),
             "browser game save character");

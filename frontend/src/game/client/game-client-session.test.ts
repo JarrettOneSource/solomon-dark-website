@@ -33,6 +33,7 @@ import type { GameConnectionFailure } from './game-connection-failure.ts'
 import { createGameClientDiagnostics } from './game-diagnostics.ts'
 import { predictPlayerCharacterInHub } from './hub-prediction.ts'
 import type { GameTransport, GameTransportClose } from './game-transport.ts'
+import type { GameSaveCheckpoint } from '../save/game-save-contract.ts'
 
 const CHARACTER = {
   discipline: 'arcane',
@@ -245,9 +246,9 @@ test('client carries character config, publishes authority, and tears down', asy
     reason: 'rate-limited',
     retryAfterMs: 2_000,
   }])
-  let receivedCheckpoint = null
+  const receivedCheckpoints: GameSaveCheckpoint[] = []
   const removeCheckpoint = session.onSaveCheckpoint((checkpoint) => {
-    receivedCheckpoint = checkpoint
+    receivedCheckpoints.push(checkpoint)
   })
   transport.receive(encodeGameMessage({
     type: 'server-save-checkpoint',
@@ -255,11 +256,14 @@ test('client carries character config, publishes authority, and tears down', asy
     reason: 'progress',
     sequence: 1,
   }))
+  const receivedCheckpoint = receivedCheckpoints[0]!
   assert.deepEqual(receivedCheckpoint, {
     document: '{"schemaVersion":1,"checkpoint":true}',
     reason: 'progress',
     sequence: 1,
+    streamId: receivedCheckpoint.streamId,
   })
+  assert.ok(receivedCheckpoint.streamId > 0)
   assert.deepEqual(session.getSaveCheckpoint(), receivedCheckpoint)
   removeCheckpoint()
   const stockItemId = session.getSnapshot().players[session.playerId].economy.fomentiusStock[0]!.id
@@ -1667,6 +1671,7 @@ test('client correlates a forced leave checkpoint and stays connected until stor
     document: '{"checkpoint":"leave"}',
     reason: 'progress',
     sequence: 9,
+    streamId: session.getSaveCheckpoint()!.streamId,
   })
   assert.equal(transport.readyState, 'open')
   session.destroy()

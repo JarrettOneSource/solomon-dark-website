@@ -197,6 +197,7 @@ const PING_TIMEOUT_MS = 10_000
 const LUA_EXECUTION_TIMEOUT_MS = 10_000
 const MAX_PENDING_LUA_EXECUTIONS = 8
 const luaTextEncoder = new TextEncoder()
+let nextGameSaveStreamId = 1
 
 interface PendingLuaExecution {
   reject: (error: Error) => void
@@ -214,6 +215,8 @@ interface PendingLeaveSave {
 export function connectGameClientSession(
   options: GameClientSessionOptions,
 ): Promise<GameClientSession> {
+  const saveStreamId = nextGameSaveStreamId
+  nextGameSaveStreamId += 1
   return new Promise((resolve, reject) => {
     let settled = false
     let destroyed = false
@@ -342,6 +345,7 @@ export function connectGameClientSession(
           document: message.save,
           reason: message.reason,
           sequence: message.sequence,
+          streamId: saveStreamId,
         }
         for (const listener of saveCheckpointListeners) listener(latestSaveCheckpoint)
         return

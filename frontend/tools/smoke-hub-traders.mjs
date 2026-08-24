@@ -16,6 +16,7 @@ import {
 } from '../src/game/core-kernels/hub-math.ts'
 import { PLAYER_CHARACTER_RADIUS } from '../src/game/core-kernels/player-character.ts'
 import { DOWSING_EQUIPMENT_RECIPES } from '../src/game/core-kernels/hub-economy.ts'
+import { GAME_SETTINGS_STORAGE_KEY } from '../src/game/game-settings.ts'
 import { HUB_TRADER_GEOMETRY } from '../src/game/hub-inventory-presentation.ts'
 
 const baseUrl = process.env.SDR_GAME_TRADER_SMOKE_URL || 'http://127.0.0.1:4189'
@@ -89,11 +90,12 @@ try {
   }
 
   const canvas = hostPage.locator('.hub-world-canvas')
-  if (!singleClient) assert.equal(await inventoryGold(guestPage), 10_000)
+  if (!singleClient) assert.equal(await inventoryGold(guestPage), 500)
   await focusPage(hostPage)
   const hostStartingGold = await inventoryGold(hostPage)
-  assert.equal(hostStartingGold, 10_000)
-  step('both participants start with 10,000 gold')
+  assert.equal(hostStartingGold, 500)
+  step('both participants start with the retail 500 gold')
+  await fundTraderSmoke(hostPage)
   await exerciseStarterInventory(hostPage)
 
   step('walking to Fomentius')
@@ -507,7 +509,7 @@ try {
   assert.equal(await inventoryGold(hostPage), finalHostGold)
   if (!singleClient) {
     await focusPage(guestPage)
-    assert.equal(await inventoryGold(guestPage), 10_000)
+    assert.equal(await inventoryGold(guestPage), 500)
     await guestPage.keyboard.press('i')
     const guestInventory = guestPage.getByRole('dialog', { name: 'Inventory' })
     await guestInventory.waitFor()
@@ -526,7 +528,7 @@ try {
     dowsingItem,
     equipmentSlot,
     finalHostGold,
-    guestGold: singleClient ? null : 10_000,
+    guestGold: singleClient ? null : 500,
     singleClient,
     status: 'ok',
     stock,
@@ -633,6 +635,24 @@ async function inventoryGold(page) {
   const gold = await dialogGold(inventory)
   await closeInventory(page, inventory)
   return gold
+}
+
+async function fundTraderSmoke(page) {
+  await page.evaluate((key) => {
+    const current = JSON.parse(localStorage.getItem(key) || '{}')
+    localStorage.setItem(key, JSON.stringify({ ...current, enableCheats: true }))
+    window.dispatchEvent(new StorageEvent('storage', { key }))
+  }, GAME_SETTINGS_STORAGE_KEY)
+  await page.waitForFunction(() => Boolean(window.solomonDark?.lua), null, {
+    timeout: 10_000,
+  })
+  const result = await page.evaluate((gold) => (
+    window.solomonDark.lua.execute(`sd.player.set_gold(${gold})`)
+  ), 10_000)
+  assert.equal(result.ok, true, result.error)
+  await page.waitForTimeout(100)
+  assert.equal(await inventoryGold(page), 10_000)
+  step('host received an explicit Lua-funded trader test bankroll')
 }
 
 async function exerciseStarterInventory(page) {

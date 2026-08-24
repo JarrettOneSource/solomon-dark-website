@@ -11,6 +11,7 @@ import {
 } from './renderer/title-menu-renderer.ts'
 
 interface TitleMenuPresentationProps {
+  canResume: boolean
   hoveredAction: TitleMenuAction | null
   pressedAction: TitleMenuAction | null
   screen: TitleMenuScreen
@@ -18,6 +19,7 @@ interface TitleMenuPresentationProps {
 }
 
 export default function TitleMenuPresentation({
+  canResume,
   hoveredAction,
   pressedAction,
   screen,
@@ -26,6 +28,7 @@ export default function TitleMenuPresentation({
   const hostRef = useRef<HTMLDivElement>(null)
   const rendererRef = useRef<TitleMenuRenderer | null>(null)
   const frameRef = useRef<Omit<TitleMenuRenderFrame, 'elapsedMs'>>({
+    canResume,
     hoveredAction,
     pressedAction,
     reducedMotion: false,
@@ -35,6 +38,7 @@ export default function TitleMenuPresentation({
   const [rendererError, setRendererError] = useState<string | null>(null)
 
   frameRef.current.hoveredAction = hoveredAction
+  frameRef.current.canResume = canResume
   frameRef.current.pressedAction = pressedAction
   frameRef.current.screen = screen
   viewportRef.current = viewport

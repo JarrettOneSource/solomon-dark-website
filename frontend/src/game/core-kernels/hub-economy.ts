@@ -5,7 +5,8 @@ import {
   type NativeRngState,
 } from './native-rng.ts'
 
-export const STARTING_PLAYER_GOLD = 10_000
+/** Retail missing-profile initializer 0x005A8390 writes profile +0x58 = 500. */
+export const NATIVE_FRESH_PROFILE_GOLD = 500
 export const HUB_INVENTORY_SLOT_CAPACITY = 88
 /** Native ground pickup appends beyond the 88 visible cells when no Item_None slot remains. */
 export const NATIVE_LOOT_BACKPACK_REPLICATION_LIMIT = 2_048
@@ -303,6 +304,7 @@ export interface HubEconomyState {
   readonly rng: NativeRngState
   readonly storage: readonly HubInventoryItem[]
   readonly tonicPurchases: number
+  readonly tutorialPending: boolean
   readonly unforgeBonuses: NativeUnforgeBonuses
 }
 
@@ -566,7 +568,7 @@ export function createHubEconomy(
     equipment: starters.equipment,
     firstMixedSelectors: [],
     fomentiusStock: stock.items,
-    gold: STARTING_PLAYER_GOLD,
+    gold: NATIVE_FRESH_PROFILE_GOLD,
     hagathaBundleSelectors: bundleSelectors,
     nextItemId: stock.nextItemId,
     nextOfferId: 1,
@@ -575,6 +577,7 @@ export function createHubEconomy(
     rng: stock.rng,
     storage: [],
     tonicPurchases: 0,
+    tutorialPending: true,
     unforgeBonuses: createNativeUnforgeBonuses(),
   }
 }
@@ -648,7 +651,10 @@ function packSackContents(
   readonly contents: readonly HubInventoryItem[]
   readonly nextItemId: number
 } {
-  let contents = [...source]
+  let contents = source.flatMap(item => archiveSafeRoots(
+    item,
+    HUB_SACK_REPLICATION_DEPTH_LIMIT - 2,
+  ))
   let nextItemId = firstItemId
   while (contents.length > HUB_SACK_CHILD_REPLICATION_LIMIT) {
     const parents: HubInventoryItem[] = []
@@ -663,6 +669,20 @@ function packSackContents(
     contents = parents
   }
   return { contents, nextItemId }
+}
+
+function archiveSafeRoots(
+  item: HubInventoryItem,
+  maximumDepth: number,
+): readonly HubInventoryItem[] {
+  if (inventoryTreeDepth(item) <= maximumDepth) return [item]
+  return item.contents?.flatMap(child => archiveSafeRoots(child, maximumDepth)) ?? []
+}
+
+function inventoryTreeDepth(item: HubInventoryItem): number {
+  return item.contents?.length
+    ? 1 + Math.max(...item.contents.map(inventoryTreeDepth))
+    : 0
 }
 
 function archiveSack(

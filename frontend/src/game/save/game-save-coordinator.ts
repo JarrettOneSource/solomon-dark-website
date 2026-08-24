@@ -3,10 +3,19 @@ import type { GameSaveStore, StoredGameSave } from './game-save-store.ts'
 
 export type { GameSaveStore, StoredGameSave } from './game-save-store.ts'
 
+interface AcceptedGameSaveCheckpoint {
+  readonly document: string
+  readonly outcome: Promise<void>
+  settled: boolean
+}
+
 export class GameSaveCoordinator {
   private record: StoredGameSave | null = null
+  private streamId: number | null = null
+  private streamSealed = false
   private lastSequence = 0
   private lastOutcome: Promise<void> = Promise.resolve()
+  private readonly accepted = new Map<number, AcceptedGameSaveCheckpoint>()
   private pending: Promise<void> = Promise.resolve()
   private readonly store: GameSaveStore
   private readonly onChange: (record: StoredGameSave | null) => void
@@ -28,13 +37,64 @@ export class GameSaveCoordinator {
     return this.record
   }
 
-  accept(checkpoint: GameSaveCheckpoint): void {
-    if (checkpoint.sequence <= this.lastSequence) return
+  accept(checkpoint: GameSaveCheckpoint): Promise<void> {
+    if (this.streamId !== null && checkpoint.streamId < this.streamId) {
+      return Promise.reject(new Error(
+        `Game save checkpoint stream ${checkpoint.streamId} is stale.`,
+      ))
+    }
+    if (checkpoint.streamId !== this.streamId) {
+      this.streamId = checkpoint.streamId
+      this.streamSealed = false
+      this.lastSequence = 0
+      this.accepted.clear()
+    }
+    if (this.streamSealed) {
+      return Promise.reject(new Error(
+        `Game save checkpoint stream ${checkpoint.streamId} is retired.`,
+      ))
+    }
+    const previous = this.accepted.get(checkpoint.sequence)
+    if (previous) {
+      if (previous.document !== checkpoint.document) {
+        return Promise.reject(new Error(
+          `Game save checkpoint ${checkpoint.sequence} changed within one stream.`,
+        ))
+      }
+      return previous.outcome
+    }
+    if (checkpoint.sequence <= this.lastSequence) {
+      return Promise.reject(new Error(
+        `Game save checkpoint ${checkpoint.sequence} arrived out of order.`,
+      ))
+    }
     this.lastSequence = checkpoint.sequence
+    this.pruneAccepted()
+    const outcome = this.persist(checkpoint.document)
+    const accepted = {
+      document: checkpoint.document,
+      outcome,
+      settled: false,
+    }
+    this.accepted.set(checkpoint.sequence, accepted)
+    void outcome.finally(() => {
+      accepted.settled = true
+      this.pruneAccepted()
+    }).catch(() => {})
+    return outcome
+  }
+
+  replace(document: string): Promise<void> {
+    this.streamSealed = this.streamId !== null
+    this.accepted.clear()
+    return this.persist(document)
+  }
+
+  private persist(document: string): Promise<void> {
     const operation = this.pending.then(async () => {
-      if (this.record?.document === checkpoint.document) return
+      if (this.record?.document === document) return
       this.record = await this.store.write(
-        checkpoint.document,
+        document,
         this.record?.revision ?? 0,
       )
       this.onChange(this.record)
@@ -46,6 +106,7 @@ export class GameSaveCoordinator {
     })
     void this.lastOutcome.catch(() => {})
     this.pending = this.lastOutcome.catch(() => {})
+    return this.lastOutcome
   }
 
   current(): StoredGameSave | null {
@@ -53,16 +114,14 @@ export class GameSaveCoordinator {
   }
 
   idle(): Promise<void> {
-    return this.pending
+    return this.lastOutcome
   }
 
-  waitFor(sequence: number): Promise<void> {
-    if (sequence === 0) return this.lastSequence === 0 ? this.pending : this.lastOutcome
-    if (sequence !== this.lastSequence) {
-      return Promise.reject(new Error(
-        `Game save checkpoint ${sequence} is not the latest accepted sequence.`,
-      ))
+  private pruneAccepted(): void {
+    for (const [sequence, checkpoint] of this.accepted) {
+      if (checkpoint.settled && sequence !== this.lastSequence) {
+        this.accepted.delete(sequence)
+      }
     }
-    return this.lastOutcome
   }
 }

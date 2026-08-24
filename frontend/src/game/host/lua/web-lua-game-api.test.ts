@@ -57,7 +57,7 @@ test('web Lua frame and commands use existing authoritative player and enemy own
   const hub = createGameSimulation({ 'player-1': DEFAULT_PLAYER_CHARACTER_CONFIG })
   const frame = createWebLuaFrameState(hub, 'player-1', null)
   assert.equal(frame.world, 'hub')
-  assert.equal(frame.players[0]?.gold, 10_000)
+  assert.equal(frame.players[0]?.gold, 500)
 
   const applied = applyWebLuaCommands(hub, [
     { playerId: 'player-1', type: 'set-gold', value: 321 },
@@ -102,15 +102,15 @@ test('web Lua derives run lifecycle events without inventing presentation events
 test('web Lua derives existing gold and level semantic events in player order', () => {
   const hub = createGameSimulation({ 'player-1': DEFAULT_PLAYER_CHARACTER_CONFIG })
   const changed = applyWebLuaCommands(hub, [
-    { playerId: 'player-1', type: 'set-gold', value: 500 },
+    { playerId: 'player-1', type: 'set-gold', value: 400 },
     { amount: 10_000, playerId: 'player-1', type: 'grant-experience' },
   ]).state
   const events = deriveWebLuaEvents(hub, changed)
   assert.deepEqual(events.map(({ name }) => name), ['gold.changed', 'level.up'])
   assert.deepEqual(events[0]?.payload, {
-    delta: -9_500,
+    delta: -100,
     event: 'gold.changed',
-    gold: 500,
+    gold: 400,
     player_id: 'player-1',
     source: 'web-authority',
   })

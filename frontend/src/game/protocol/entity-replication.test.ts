@@ -199,7 +199,7 @@ test('player economy is revision-delta replicated instead of repeated on every f
   const purchaseFrame = createGameSnapshotFrame(purchased, 2, createReplicatedEntityBaseline(unchanged))
   assert.equal(Object.hasOwn(purchaseFrame.players.wizard!, 'economy'), true)
   const afterPurchase = reconstructor.apply(purchaseFrame, 3)
-  assert.equal(afterPurchase.players.wizard!.economy.gold, 9_850)
+  assert.equal(afterPurchase.players.wizard!.economy.gold, 350)
 
   const keyframe = createGameSnapshotFrame(purchased, 0, undefined, true)
   assert.equal(Object.hasOwn(keyframe.players.wizard!, 'economy'), true)

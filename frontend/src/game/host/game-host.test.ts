@@ -919,7 +919,7 @@ test('game host routes global Hub shortcuts and rejects stale inventory commands
   }))
   const snapshot = await reconciled
   assert.equal(snapshot.type, 'server-snapshot')
-  assert.equal(snapshot.snapshot.players[playerId].economy.gold, 9_850)
+  assert.equal(snapshot.snapshot.players[playerId].economy.gold, 350)
 
   const rejected = nextMessage(client.socket, (message) => (
     message.type === 'server-snapshot'
@@ -1818,6 +1818,42 @@ test('host starts a fresh character from the durable profile without reviving it
   assert.equal(welcome.snapshot.run.runId, null)
 })
 
+test('new-game intent retires an active wizard and scavenges carried equipment', async (context) => {
+  const active = createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard: null,
+    mods: [],
+    modState: {},
+    playerId: 'saved-owner',
+    state: createGameSimulation({ 'saved-owner': FIRST_CHARACTER }),
+  })
+  const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
+  context.after(() => host.close())
+  const socket = await openSocket(host.address.url)
+  context.after(() => socket.close())
+  const welcomed = nextMessage(socket, message => message.type === 'server-welcome')
+  socket.send(encodeGameMessage({
+    type: 'client-hello',
+    profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
+    cheatsEnabled: false,
+    protocolVersion: GAME_PROTOCOL_VERSION,
+    credential: 'test-secret',
+    character: SECOND_CHARACTER,
+    save: active,
+    saveIntent: 'new-game',
+  }))
+
+  const welcome = await welcomed
+  assert.equal(welcome.type, 'server-welcome')
+  const economy = welcome.snapshot.players[welcome.playerId]?.economy
+  assert.equal(economy?.gold, 500)
+  assert.equal(economy?.storage.at(-1)?.kind, 'sack')
+  assert.deepEqual(
+    economy?.storage.at(-1)?.contents?.map(({ name }) => name).sort(),
+    ['Hat', 'Health Potion', 'Mana Potion', 'Robe', 'Staff'],
+  )
+})
+
 test('host forces one correlated owner checkpoint before an explicit leave', async (context) => {
   const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
   context.after(() => host.close())
@@ -2055,7 +2091,7 @@ test('host retains the profile and removes only the continuation on Game Over', 
   assert.equal(checkpoint.reason, 'game-over')
   const profile = restoreGameSaveProfile(checkpoint.save)
   assert.equal(profile.continuation, null)
-  assert.equal(profile.economy.gold, 10_000)
+  assert.equal(profile.economy.gold, 500)
   assert.equal(profile.economy.storage.at(-1)?.kind, 'sack')
   assert.equal(profile.economy.storage.at(-1)?.contents?.length, 5)
   assert.equal(host.state().run.phase, 'game-over')

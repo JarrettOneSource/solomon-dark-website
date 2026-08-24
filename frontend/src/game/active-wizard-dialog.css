@@ -1,0 +1,62 @@
+.main-menu-native-stage.active-wizard-stage {
+  z-index: 120;
+  display: grid;
+  width: 1600px;
+  height: 900px;
+  background: rgb(0 0 0 / 75%);
+  pointer-events: auto;
+  place-items: center;
+}
+
+.active-wizard-dialog {
+  box-sizing: border-box;
+  display: grid;
+  width: 519px;
+  min-height: 374px;
+  padding: 72px 68px 54px;
+  border: 8px double #9b814e;
+  color: #fff;
+  background: #17140f;
+  box-shadow: 0 0 0 7px #252118, 0 12px 32px #000;
+  grid-template-rows: auto 1fr auto;
+}
+
+.active-wizard-dialog h2 {
+  margin: 0 0 24px;
+  color: #fff;
+  font: 700 22px Cinzel, Georgia, serif;
+  letter-spacing: 0.04em;
+}
+
+.active-wizard-dialog p {
+  margin: 0;
+  font: 600 16px/1.45 Cinzel, Georgia, serif;
+}
+
+.active-wizard-actions {
+  display: grid;
+  gap: 12px;
+  margin-top: 30px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.active-wizard-actions button {
+  min-height: 54px;
+  border: 2px solid #9b814e;
+  color: #d9ba70;
+  background: #15120d;
+  cursor: pointer;
+  font: 700 13px Cinzel, Georgia, serif;
+}
+
+.active-wizard-actions button:focus-visible,
+.active-wizard-actions button:hover {
+  border-color: #ecd38d;
+  color: #fff1ba;
+  outline: none;
+}
+
+.active-wizard-actions button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}

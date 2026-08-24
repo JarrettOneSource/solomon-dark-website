@@ -694,6 +694,21 @@ export function gameSimulationDurableProfileEconomy(
   })
 }
 
+export function gameSimulationRetiredWizardEconomy(
+  state: GameSimulationState,
+  playerId: PlayerId,
+): HubEconomyState {
+  const economy = playerEconomyAt(state.playerEntities, playerId)
+  const player = playerCharacterAt(state.playerEntities, playerId)
+  if (!economy || !player) throw new Error(`game simulation has no profile owner ${playerId}`)
+  return archiveCompletedRunEconomy(economy, {
+    displayName: player.config.displayName,
+    groundGold: 0,
+    groundItems: [],
+    transferCarriedItems: true,
+  })
+}
+
 export function confirmGameSimulationLoadout(
   state: GameSimulationState,
   playerId: PlayerId,

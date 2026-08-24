@@ -114,13 +114,17 @@ import {
   createGameProfileSaveDocument,
   createGameSaveDocument,
   hydrateGameSaveProfile,
+  retireGameSaveWizard,
   restoreGameSaveDocument,
   restoreGameSaveProfile,
   type RestoredGameSaveProfile,
 } from '../save/game-save-document.ts'
 import { completedHallOfFameEntry } from '../hall-of-fame-entry.ts'
 import { createGameLeaderboardReceipt } from './game-leaderboard-receipt.ts'
-import type { GameSaveIntegrity } from '../save/game-save-contract.ts'
+import {
+  parseGameSaveDocument,
+  type GameSaveIntegrity,
+} from '../save/game-save-contract.ts'
 import {
   createPartySystem,
   decidePartyJoinRequest,
@@ -740,7 +744,12 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             return
           }
           try {
-            savedProfile = restoreGameSaveProfile(message.save)
+            const parsedSave = parseGameSaveDocument(message.save)
+            const profileDocument = message.saveIntent === 'new-game'
+              && parsedSave.continuation !== null
+              ? retireGameSaveWizard(message.save)
+              : message.save
+            savedProfile = restoreGameSaveProfile(profileDocument)
           } catch (error) {
             disconnect(
               socket,

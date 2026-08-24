@@ -16,7 +16,7 @@ import {
   NATIVE_DYE_SWATCHES,
   NATIVE_RETAINED_SACK_SUFFIXES,
   NATIVE_UNFORGE_ELIGIBLE_TYPE_IDS,
-  STARTING_PLAYER_GOLD,
+  NATIVE_FRESH_PROFILE_GOLD,
   archiveHagathaLastWordItems,
   archiveCompletedRunEconomy,
   buyDowsingOffer,
@@ -65,18 +65,19 @@ function maximumSackChildren(item: HubInventoryItem): number {
   )
 }
 
-test('a fresh participant owns the hard-coded 10k ledger and complete native starter loadout', () => {
+test('a fresh participant owns the retail 500-gold profile and complete native starter loadout', () => {
   const state = createHubEconomy(1)
 
-  assert.equal(STARTING_PLAYER_GOLD, 10_000)
+  assert.equal(NATIVE_FRESH_PROFILE_GOLD, 500)
   assert.equal(HUB_INVENTORY_SLOT_CAPACITY, 88)
   assert.equal(HUB_STORAGE_SLOT_CAPACITY, 28)
-  assert.equal(state.gold, 10_000)
+  assert.equal(state.gold, 500)
   assert.deepEqual(
     state.backpack.map(({ kind, quantity }) => [kind, quantity]),
     [['health-potion', 1], ['mana-potion', 1]],
   )
   assert.deepEqual(state.storage, [])
+  assert.equal(state.tutorialPending, true)
   assert.deepEqual(
     [state.equipment.hat, state.equipment.robe, state.equipment.weapon].map((item) => ({
       iconRecords: item?.iconRecords,
@@ -221,7 +222,7 @@ test('Fomentius preserves every native generator row and seed-1 roll order', () 
 })
 
 test('ordinary purchase is atomic, removes one stock object, and stacks potions', () => {
-  const initial = createHubEconomy(1)
+  const initial = { ...createHubEconomy(1), gold: 10_000 }
   const stock = initial.fomentiusStock.find(({ kind }) => kind === 'health-potion')!
   const bought = buyFomentiusItem(initial, stock.id)
 
@@ -279,7 +280,7 @@ test('Hagatha exposes all authored rows, hides selector 8, and preserves price h
   assert.equal(HAGATHA_PERKS.length, 28)
   assert.deepEqual(HAGATHA_PERKS.map(({ selector }) => selector), [...Array(28).keys()])
 
-  const initial = createHubEconomy(1)
+  const initial = { ...createHubEconomy(1), gold: 10_000 }
   assert.equal(hagathaOffers(initial).length, 27)
   assert.equal(hagathaOffers(initial).some(({ selector }) => selector === 8), false)
   assert.equal(hagathaOffers(initial).find(({ selector }) => selector === 0)?.price, 600)
@@ -294,7 +295,10 @@ test('Hagatha exposes all authored rows, hides selector 8, and preserves price h
 })
 
 test('Hagatha bundle price is ceiling-half and Tonic raises capacity only twice', () => {
-  const initial = createHubEconomy(1, { hagathaBundleSelectors: [0, 1] })
+  const initial = {
+    ...createHubEconomy(1, { hagathaBundleSelectors: [0, 1] }),
+    gold: 10_000,
+  }
   const bundle = hagathaOffers(initial).find(({ selector }) => selector === -1)
   assert.deepEqual(bundle?.members, [0, 1])
   assert.equal(bundle?.price, 600)
@@ -304,7 +308,7 @@ test('Hagatha bundle price is ceiling-half and Tonic raises capacity only twice'
   assert.equal(bought.state.gold, 9_400)
   assert.deepEqual(bought.state.ownedPerkSelectors, [0, 1])
 
-  const firstTonic = buyHagathaPerk(createHubEconomy(1), 27)
+  const firstTonic = buyHagathaPerk({ ...createHubEconomy(1), gold: 10_000 }, 27)
   assert.equal(firstTonic.accepted, true)
   assert.equal(firstTonic.state.charmCapacity, 6)
   assert.equal(hagathaOffers(firstTonic.state).find(({ selector }) => selector === 27)?.price, 1_000)
@@ -350,7 +354,7 @@ test('Shlorio consumes the fee, offers unique complete-catalog recipes, and clea
     .filter(({ type }) => type === 'ring' || type === 'amulet' || type === 'staff' || type === 'wand')
     .every(({ iconTints }) => iconTints[0] === null && iconTints[1] === null))
 
-  const initial = createHubEconomy(1)
+  const initial = { ...createHubEconomy(1), gold: 10_000 }
   const rolled = dowse(initial, 75)
   assert.equal(rolled.accepted, true)
   assert.equal(rolled.dowsingPitch, 0.8968220129609108)
@@ -373,7 +377,7 @@ test('Shlorio consumes the fee, offers unique complete-catalog recipes, and clea
   assert.ok(bought.state.backpack.some(({ recipeIndex }) => recipeIndex === offer.recipeIndex))
   assert.equal(bought.state.dowsingFee, 700)
 
-  const closed = closeDowsingOffers(dowse(createHubEconomy(1), 75).state)
+  const closed = closeDowsingOffers(dowse({ ...createHubEconomy(1), gold: 10_000 }, 75).state)
   assert.equal(closed.dowsingOffers.length, 0)
   assert.equal(closed.gold, 9_350)
 })
@@ -512,7 +516,7 @@ test('two participants never share gold, stock, offers, or inventory mutations',
   const bought = buyFomentiusItem(first, first.fomentiusStock[0]!.id)
 
   assert.equal(bought.accepted, true)
-  assert.equal(second.gold, 10_000)
+  assert.equal(second.gold, 500)
   assert.equal(second.backpack.length, 2)
   assert.notDeepEqual(bought.state.fomentiusStock, second.fomentiusStock)
 })
@@ -520,7 +524,7 @@ test('two participants never share gold, stock, offers, or inventory mutations',
 test('authoritative loot credit owns Gold and exact inventory transfer semantics', () => {
   const initial = createHubEconomy(1)
   const credited = creditLootGold(initial, 37)
-  assert.equal(credited.gold, 10_037)
+  assert.equal(credited.gold, 537)
   assert.equal(credited.revision, initial.revision + 1)
 
   const potion = { ...initial.backpack[0]!, id: 99_001, quantity: 2 }

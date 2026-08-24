@@ -275,6 +275,7 @@ function protocolPlayerState(
       revision: economy.revision,
       storage: economy.storage.map(protocolInventoryItem),
       tonicPurchases: economy.tonicPurchases,
+      tutorialPending: economy.tutorialPending,
       unforgeBonuses: { ...economy.unforgeBonuses },
     },
     lighting: {

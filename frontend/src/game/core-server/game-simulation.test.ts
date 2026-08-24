@@ -583,7 +583,15 @@ test('Hub shortcut services are participant-private, global inside a settled Hub
     displayName: 'Second',
     element: 'water',
   } as const
-  const state = createGameSimulation({ first, second })
+  let state = createGameSimulation({ first, second })
+  const firstEconomy = getPlayerEconomy(state, 'first')
+  state = {
+    ...state,
+    playerEntities: replacePlayerEconomy(state.playerEntities, 'first', {
+      ...firstEconomy,
+      gold: 10_000,
+    }),
+  }
   const firstStock = getPlayerEconomy(state, 'first').fomentiusStock[0]!
   const purchased = applyGameSimulationHubAction(state, 'first', {
     type: 'buy-fomentius',
@@ -601,7 +609,7 @@ test('Hub shortcut services are participant-private, global inside a settled Hub
     transferGesture: null,
     unforgeOutcome: null,
   })
-  assert.equal(getPlayerEconomy(purchased.state, 'second').gold, 10_000)
+  assert.equal(getPlayerEconomy(purchased.state, 'second').gold, 500)
   assert.strictEqual(
     getPlayerEconomy(purchased.state, 'second'),
     getPlayerEconomy(state, 'second'),
@@ -727,10 +735,11 @@ test('Hagatha purchase actions arm and consume their authoritative until-hurt ef
       element: 'ether',
     },
   })
+  const economy = getPlayerEconomy(state, 'owner')
   state = {
     ...state,
     playerEntities: replacePlayerCharacter(
-      state.playerEntities,
+      replacePlayerEconomy(state.playerEntities, 'owner', { ...economy, gold: 10_000 }),
       'owner',
       { ...getPlayerCharacter(state, 'owner'), position: { x: 1340, y: 280 } },
     ),

@@ -9,8 +9,8 @@ import type {
   LuaConsoleValue,
 } from '../protocol/game-protocol.ts'
 
-export const WEB_GAME_SAVE_SCHEMA_VERSION = 5
-export const LEGACY_WEB_GAME_SAVE_SCHEMA_VERSIONS = [1, 2, 3, 4] as const
+export const WEB_GAME_SAVE_SCHEMA_VERSION = 6
+export const LEGACY_WEB_GAME_SAVE_SCHEMA_VERSIONS = [1, 2, 3, 4, 5] as const
 export const WEB_GAME_SAVE_SLOT = 0
 export const MAX_WEB_GAME_SAVE_BYTES = 8 * 1024 * 1024
 /** Accommodates the 32-level Sack wire bound plus the complete save-document envelope. */
@@ -18,6 +18,7 @@ export const MAX_WEB_GAME_SAVE_JSON_DEPTH = 80
 export const MAX_WEB_GAME_SAVE_JSON_NODES = 250_000
 
 export interface GameSaveSummary {
+  readonly activeRun: boolean
   readonly character: PlayerCharacterConfig
   readonly phase: GameRunPhase
   readonly playerId: string
@@ -29,6 +30,7 @@ export interface GameSaveCheckpoint {
   readonly document: string
   readonly reason: 'game-over' | 'progress'
   readonly sequence: number
+  readonly streamId: number
 }
 
 export type GameSaveIntent = 'new-game' | 'resume'
@@ -88,7 +90,9 @@ export function parseGameSaveDocument(document: string): ParsedGameSaveDocument 
   }
   return schemaVersion === WEB_GAME_SAVE_SCHEMA_VERSION
     ? parseCurrentDocument(root)
-    : parseLegacyDocument(root, schemaVersion)
+    : schemaVersion === 5
+      ? parseLegacyEnvelope(root)
+      : parseLegacyDocument(root, schemaVersion)
 }
 
 function knownGameSaveSchemaVersion(value: unknown): value is number {
@@ -109,12 +113,33 @@ function parseCurrentDocument(root: Record<string, unknown>): ParsedGameSaveDocu
   return {
     continuation: root.continuation === null
       ? null
-      : parseContinuation(root.continuation),
+      : parseContinuation(root.continuation, false),
     integrity: parseIntegrity(root.integrity),
     mods: parseMods(root.mods),
     modState: parseModState(root.modState),
     profile,
     sourceSchemaVersion: WEB_GAME_SAVE_SCHEMA_VERSION,
+  }
+}
+
+function parseLegacyEnvelope(root: Record<string, unknown>): ParsedGameSaveDocument {
+  onlyKeys(root, 'game save', [
+    'continuation',
+    'integrity',
+    'mods',
+    'modState',
+    'profile',
+    'schemaVersion',
+  ])
+  return {
+    continuation: root.continuation === null
+      ? null
+      : parseContinuation(root.continuation, true),
+    integrity: parseIntegrity(root.integrity),
+    mods: parseMods(root.mods),
+    modState: parseModState(root.modState),
+    profile: parseProfile(root.profile),
+    sourceSchemaVersion: 5,
   }
 }
 
@@ -159,7 +184,10 @@ function parseProfile(value: unknown): ParsedGameSaveProfile {
   }
 }
 
-function parseContinuation(value: unknown): ParsedGameSaveContinuation {
+function parseContinuation(
+  value: unknown,
+  legacySummary: boolean,
+): ParsedGameSaveContinuation {
   const continuation = record(value, 'game save continuation')
   onlyKeys(continuation, 'game save continuation', [
     'loadedBoneyard',
@@ -172,7 +200,7 @@ function parseContinuation(value: unknown): ParsedGameSaveContinuation {
   return {
     loadedBoneyard: continuation.loadedBoneyard,
     simulation: continuation.simulation,
-    summary: parseSummary(continuation.summary),
+    summary: parseSummary(continuation.summary, legacySummary),
   }
 }
 
@@ -283,9 +311,10 @@ export function readGameSaveSummary(document: string): GameSaveSummary | null {
   return parseGameSaveDocument(document).continuation?.summary ?? null
 }
 
-function parseSummary(value: unknown): GameSaveSummary {
+function parseSummary(value: unknown, legacy = true): GameSaveSummary {
   const summary = record(value, 'game save summary')
   onlyKeys(summary, 'game save summary', [
+    ...(legacy ? [] : ['activeRun']),
     'character',
     'phase',
     'playerId',
@@ -324,6 +353,9 @@ function parseSummary(value: unknown): GameSaveSummary {
     throw new Error('game save tick is invalid')
   }
   return {
+    activeRun: legacy
+      ? summary.worldKind === 'boneyard' && summary.phase === 'active'
+      : boolean(summary.activeRun, 'game save active run'),
     character: {
       discipline: character.discipline as PlayerCharacterConfig['discipline'],
       displayName: character.displayName,
@@ -334,6 +366,11 @@ function parseSummary(value: unknown): GameSaveSummary {
     savedAtTick: Number(summary.savedAtTick),
     worldKind: summary.worldKind,
   }
+}
+
+function boolean(value: unknown, field: string): boolean {
+  if (typeof value !== 'boolean') throw new Error(`${field} is invalid`)
+  return value
 }
 
 export function record(value: unknown, field: string): Record<string, unknown> {

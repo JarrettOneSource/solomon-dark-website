@@ -12,6 +12,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react'
 import CreateMenuScene from './CreateMenuScene.tsx'
+import ActiveWizardDialog from './ActiveWizardDialog.tsx'
 import DarkCloudScene from './DarkCloudScene.tsx'
 import JoinPartyScene from './JoinPartyScene.tsx'
 import ModdedPlayDialog from './ModdedPlayDialog.tsx'
@@ -308,6 +309,7 @@ interface MainMenuSceneProps {
   initialScreen?: 'create' | 'root'
   loadGlobalHallOfFame: (board: HallOfFameBoard) => Promise<readonly HallOfFameEntry[]>
   onCancelCreate: () => Promise<void>
+  onKillWizard: () => Promise<void>
   onSaveCheckpoint: (checkpoint: GameSaveCheckpoint) => void
   persistSaveCheckpoint: (checkpoint: GameSaveCheckpoint) => Promise<void>
   onSignOut: () => void
@@ -327,6 +329,7 @@ export default function MainMenuScene({
   initialScreen = 'root',
   loadGlobalHallOfFame,
   onCancelCreate,
+  onKillWizard,
   onSaveCheckpoint,
   onSignOut,
   persistSaveCheckpoint,
@@ -387,6 +390,8 @@ export default function MainMenuScene({
     useState<BrowserGameAdmission | null>(null)
   const [newGameModMismatchAllowed, setNewGameModMismatchAllowed] = useState(false)
   const [moddedPlayPrompt, setModdedPlayPrompt] = useState(false)
+  const [activeWizardPrompt, setActiveWizardPrompt] = useState(false)
+  const [retiringWizard, setRetiringWizard] = useState(false)
   const [partyConsent, setPartyConsent] = useState<PartyJoinResolution | null>(null)
   const [pendingAdmission, setPendingAdmission] = useState<BrowserGameAdmission>({
     kind: 'global-hub',
@@ -842,7 +847,7 @@ export default function MainMenuScene({
     beginCreate(admission)
   }
 
-  const beginNewGame = () => {
+  const continueNewGame = () => {
     if (preparing || connecting) return
     setConnectionError(null)
     if (activeMods.length > 0 || cheatsEnabled) {
@@ -852,6 +857,39 @@ export default function MainMenuScene({
     requestNewGameCreate({
       kind: profileSave?.integrity === 'local-only' ? 'private-college' : 'global-hub',
     })
+  }
+
+  const beginNewGame = () => {
+    if (preparing || connecting) return
+    if (resumeSave) {
+      setConnectionError(null)
+      setActiveWizardPrompt(true)
+      return
+    }
+    continueNewGame()
+  }
+
+  const resumePromptWizard = () => {
+    if (retiringWizard) return
+    setActiveWizardPrompt(false)
+    requestResumeLastGame()
+  }
+
+  const killPromptWizard = async () => {
+    if (retiringWizard) return
+    setRetiringWizard(true)
+    setConnectionError(null)
+    try {
+      await onKillWizard()
+      setActiveWizardPrompt(false)
+      continueNewGame()
+    } catch (error) {
+      setConnectionError(error instanceof Error
+        ? error.message
+        : 'The current wizard could not be retired.')
+    } finally {
+      setRetiringWizard(false)
+    }
   }
 
   const playVanilla = async () => {
@@ -1264,6 +1302,7 @@ export default function MainMenuScene({
         ) : titleScreen ? (
           <>
             <TitleMenuPresentation
+              canResume={resumeSave !== null}
               hoveredAction={hoveredTitleAction}
               pressedAction={pressedTitleAction}
               screen={screen === 'play' ? 'play' : 'root'}
@@ -1278,7 +1317,12 @@ export default function MainMenuScene({
             </div>
 
             <div className="main-menu-native-stage" style={nativeStageStyle}>
-              <nav key={screen} className="main-menu-actions" aria-label={screen === 'root' ? 'Main menu actions' : 'Play menu actions'}>
+              <nav
+                key={screen}
+                aria-label={screen === 'root' ? 'Main menu actions' : 'Play menu actions'}
+                className="main-menu-actions"
+                inert={activeWizardPrompt || undefined}
+              >
                 {screen === 'root' ? (
                   <RootActions
                     onHall={() => transitionTo('hall')}
@@ -1597,6 +1641,16 @@ export default function MainMenuScene({
             onChange={requestGameSettingsUpdate}
             onClose={() => setSettingsContext(null)}
             settings={gameSettings}
+          />
+        ) : null}
+
+        {activeWizardPrompt && resumeSave ? (
+          <ActiveWizardDialog
+            busy={retiringWizard}
+            onCancel={() => setActiveWizardPrompt(false)}
+            onKill={() => { void killPromptWizard() }}
+            onResume={resumePromptWizard}
+            style={nativeStageStyle}
           />
         ) : null}
 

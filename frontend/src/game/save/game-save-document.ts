@@ -1,5 +1,6 @@
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import {
+  createPlayerCharacter,
   createIdlePlayerPrimaryCast,
   type PlayerCharacterConfig,
   type PlayerPrimaryCastState,
@@ -31,15 +32,18 @@ import { createNativeHallOfFameRun } from '../core-kernels/hall-of-fame-score.ts
 import type { GameContentIdentity, LuaConsoleValue } from '../protocol/game-protocol.ts'
 import {
   gameSimulationDurableProfileEconomy,
+  gameSimulationRetiredWizardEconomy,
   removePlayerCharacter,
   type GameSimulationState,
 } from '../core-server/game-simulation.ts'
-import { replacePlayerEconomy } from '../core-server/player-entity-store.ts'
 import {
-  HubStudentPopulationState,
+  replacePlayerCharacter,
+  replacePlayerEconomy,
+} from '../core-server/player-entity-store.ts'
+import {
   type HubStudentPopulationOptions,
 } from '../core-server/hub-students.ts'
-import { HubWorldRuntime, type HubWorldState } from '../core-server/hub-world.ts'
+import { createHubWorld, hubSpawnPoint, type HubWorldState } from '../core-server/hub-world.ts'
 import { createBoneyardWorld, type BoneyardWorldState } from '../core-server/boneyard-world.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
 import {
@@ -141,6 +145,7 @@ const ECONOMY_KEYS = [
   'rng',
   'storage',
   'tonicPurchases',
+  'tutorialPending',
   'unforgeBonuses',
 ] as const
 const HUB_WORLD_KEYS = [
@@ -185,6 +190,7 @@ export function createGameSaveDocument(
       loadedBoneyard: options.loadedBoneyard,
       simulation,
       summary: {
+        activeRun: ownerState.world.kind === 'boneyard' && ownerState.run.phase === 'active',
         character,
         phase: ownerState.run.phase,
         playerId: options.playerId,
@@ -196,7 +202,7 @@ export function createGameSaveDocument(
     mods: options.mods,
     modState: options.modState,
     profile: {
-      economy: gameSimulationDurableProfileEconomy(ownerState, options.playerId),
+      economy: gameSimulationRetiredWizardEconomy(ownerState, options.playerId),
       hagathaRuntime: ownerState.playerEntities.progressions[ownerIndex]!.hagathaRuntime,
     },
   })
@@ -214,6 +220,24 @@ export function createGameProfileSaveDocument(
     profile: {
       economy: gameSimulationDurableProfileEconomy(ownerState, options.playerId),
       hagathaRuntime: ownerState.playerEntities.progressions[ownerIndex]!.hagathaRuntime,
+    },
+  })
+}
+
+export function retireGameSaveWizard(document: string): string {
+  const restored = restoreGameSaveDocument(document)
+  const ownerIndex = restored.state.playerEntities.identities.findIndex(
+    identity => identity.playerId === restored.playerId,
+  )
+  if (ownerIndex < 0) throw new Error('game save profile owner is absent')
+  return encodeDocument({
+    continuation: null,
+    integrity: restored.integrity,
+    mods: restored.mods,
+    modState: restored.modState,
+    profile: {
+      economy: gameSimulationRetiredWizardEconomy(restored.state, restored.playerId),
+      hagathaRuntime: restored.state.playerEntities.progressions[ownerIndex]!.hagathaRuntime,
     },
   })
 }
@@ -263,7 +287,7 @@ export function restoreGameSaveDocument(document: string): RestoredGameSaveDocum
     throw new Error('game save state belongs to an inactive mod')
   }
   onlyKeys(rawState, 'game save simulation', SIMULATION_KEYS)
-  const playerEntities = validatePlayerStore(rawState.playerEntities, continuation.summary.playerId)
+  let playerEntities = validatePlayerStore(rawState.playerEntities, continuation.summary.playerId)
   const rawRun = record(rawState.run, 'game save run')
   if (rawRun.phase !== continuation.summary.phase) throw new Error('game save phase summary drifted')
   if (!Number.isSafeInteger(rawState.tick) || Number(rawState.tick) < 0) {
@@ -287,6 +311,10 @@ export function restoreGameSaveDocument(document: string): RestoredGameSaveDocum
   if (rawWorld.kind !== continuation.summary.worldKind) {
     throw new Error('game save world summary drifted')
   }
+  const activeRun = rawWorld.kind === 'boneyard' && rawRun.phase === 'active'
+  if (continuation.summary.activeRun !== activeRun) {
+    throw new Error('game save active run summary drifted')
+  }
 
   let world: GameSimulationState['world']
   let loadedBoneyard: LoadedBoneyard | null
@@ -298,14 +326,14 @@ export function restoreGameSaveDocument(document: string): RestoredGameSaveDocum
       Object.keys(participants).length !== 1
       || !(continuation.summary.playerId in participants)
     ) throw new Error('game save owner is not the sole Hub participant')
-    const population = parseHubStudentPopulation(rawWorld.studentPopulation)
-    world = {
-      ...rawWorld,
-      kind: 'hub',
-      participants: participants as HubWorldState['participants'],
-      runtime: new HubWorldRuntime(),
-      studentPopulation: new HubStudentPopulationState(population),
-    } as HubWorldState
+    parseHubStudentPopulation(rawWorld.studentPopulation)
+    const config = playerEntities.configs[0]!
+    playerEntities = replacePlayerCharacter(
+      playerEntities,
+      continuation.summary.playerId,
+      createPlayerCharacter(config, hubSpawnPoint()),
+    )
+    world = createHubWorld([continuation.summary.playerId])
     loadedBoneyard = null
   } else if (rawWorld.kind === 'boneyard') {
     loadedBoneyard = parseLoadedBoneyard(continuation.loadedBoneyard)
@@ -494,6 +522,7 @@ function normalizeEconomy(value: unknown): HubEconomyState {
   const restored = {
     ...source,
     actionFeedback: feedback,
+    tutorialPending: source.tutorialPending === true,
     unforgeBonuses: source.unforgeBonuses ?? createNativeUnforgeBonuses(),
   } as unknown as HubEconomyState
   if (!hubEconomyInventoryIsValid(restored)) {
@@ -683,6 +712,7 @@ function validatePlayerStore(value: unknown, playerId: string): GameSimulationSt
     const restored = {
       ...economy,
       actionFeedback: feedback,
+      tutorialPending: economy.tutorialPending === true,
       unforgeBonuses: economy.unforgeBonuses ?? createNativeUnforgeBonuses(),
     } as unknown as HubEconomyState
     if (!hubEconomyInventoryIsValid(restored)) {
