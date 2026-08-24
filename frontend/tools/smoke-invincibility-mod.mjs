@@ -14,10 +14,14 @@ import {
   spawnBoneyardCustomLootItems,
 } from '../src/game/core-server/boneyard-loot-store.ts'
 import {
+  gameSimulationPlayerRecords,
   getPlayerCharacter,
   getPlayerEconomy,
   getPlayerProgression,
 } from '../src/game/core-server/game-simulation.ts'
+import { stepBoneyardWorldTick } from '../src/game/core-server/boneyard-world.ts'
+import { boneyardSpawnPositionIsOffscreen } from '../src/game/core-server/boneyard-collision.ts'
+import { BONEYARD_WAVE_ENEMY_TYPES } from '../src/game/core-kernels/boneyard-wave-schema.ts'
 import {
   poisonPlayerEntity,
   replacePlayerCharacter,
@@ -54,7 +58,7 @@ await mkdir(screenshotRoot, { recursive: true })
 const content = await loadInvincibilityContent(resolve(modRoot))
 const credential = 'invincibility-mod-browser-parity'
 const hostLogs = []
-const staticServer = await startStaticServer(webRoot)
+const staticServer = await startStaticServer(webRoot, resolve(modRoot), content)
 const staticAddress = staticServer.address()
 if (!staticAddress || typeof staticAddress === 'string') {
   await new Promise(resolveClose => staticServer.close(resolveClose))
@@ -90,6 +94,8 @@ const [hostPage, initialGuestPage] = await Promise.all([
   guestContext.newPage(),
 ])
 let guestPage = initialGuestPage
+let lateJoinContext = null
+let lateJoinPage = null
 const consoleErrors = []
 const failedResponses = []
 const pageErrors = []
@@ -130,6 +136,14 @@ try {
   ])
 
   assert.equal(host.state().world.kind, 'boneyard')
+  Object.assign(host.state(), {
+    world: {
+      ...host.state().world,
+      arenaTransition: null,
+      encounter: null,
+      waves: null,
+    },
+  })
   const hostPlayerId = host.hostPlayerId()
   assert.ok(hostPlayerId)
   const guestPlayerId = host.state().playerEntities.identities
@@ -139,6 +153,35 @@ try {
   const center = arenaCenter(host.state().world.bounds)
   movePlayer(host, hostPlayerId, point(center, -500, -300))
   movePlayer(host, guestPlayerId, point(center, 300, 180))
+
+  const offscreen = materializeOffscreenEnemy(host)
+  assert.equal(boneyardSpawnPositionIsOffscreen(
+    offscreen.actor.position,
+    host.state().world.bounds,
+    offscreen.focuses,
+  ), true)
+  await Promise.all([
+    waitForEnemyCount(hostPage, 1),
+    waitForEnemyCount(guestPage, 1),
+  ])
+  const offscreenPath = join(screenshotRoot, 'offscreen-spawn-active.png')
+  const offscreenScreenshot = await hostPage.screenshot({ path: offscreenPath })
+  assert.ok(offscreenScreenshot.byteLength > 20_000)
+  Object.assign(host.state(), {
+    world: {
+      ...host.state().world,
+      enemies: {
+        ...host.state().world.enemies,
+        actors: host.state().world.enemies.actors.filter(({ id }) => (
+          id !== offscreen.actor.id
+        )),
+      },
+    },
+  })
+  await Promise.all([
+    waitForEnemyCount(hostPage, 0),
+    waitForEnemyCount(guestPage, 0),
+  ])
 
   const dropPosition = point(center, 0, 0)
   const spawned = spawnBoneyardCustomLootItems(
@@ -162,22 +205,19 @@ try {
   const groundScreenshot = await guestPage.screenshot({ path: groundPath })
   assert.ok(groundScreenshot.byteLength > 20_000)
 
-  const resumeStorage = await guestPage.evaluate(() => Object.entries(sessionStorage))
-  const resumedGuestPage = await guestContext.newPage()
-  resumedGuestPage.on('console', (message) => {
+  lateJoinContext = await browser.newContext({ viewport: { height: 900, width: 1_600 } })
+  lateJoinPage = await lateJoinContext.newPage()
+  lateJoinPage.on('console', (message) => {
     if (message.type() === 'error') consoleErrors.push(message.text())
   })
-  resumedGuestPage.on('pageerror', (error) => pageErrors.push(error.message))
-  resumedGuestPage.on('response', (response) => {
+  lateJoinPage.on('pageerror', (error) => pageErrors.push(error.message))
+  lateJoinPage.on('response', (response) => {
     if (response.status() >= 400) {
       failedResponses.push({ status: response.status(), url: response.url() })
     }
   })
-  await resumedGuestPage.addInitScript((entries) => {
-    for (const [key, value] of entries) sessionStorage.setItem(key, value)
-  }, resumeStorage)
-  await resumedGuestPage.addInitScript(installGameAudioSmokeProbe)
-  await resumedGuestPage.addInitScript((runtime) => {
+  await lateJoinPage.addInitScript(installGameAudioSmokeProbe)
+  await lateJoinPage.addInitScript((runtime) => {
     window.solomonDarkRuntime = runtime
   }, {
     gameEndpoint: {
@@ -186,17 +226,16 @@ try {
       url: host.address.url,
     },
   })
-  await resumedGuestPage.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
-  await resumedGuestPage.getByRole('button', { name: 'Play' }).waitFor({ timeout: 90_000 })
-  await resumedGuestPage.getByRole('button', { name: 'Play' }).click()
-  await resumedGuestPage.getByRole('button', { name: 'Last game' }).click()
-  await waitForBoneyard(resumedGuestPage, 2)
-  await waitForLootCount(resumedGuestPage, 1)
-  await waitUntil(() => host.playerCount() === 2, 'resume transport duplicated a player')
-  guestPage = resumedGuestPage
-  const resumedGroundPath = join(screenshotRoot, 'invincibility-potion-resumed-ground.png')
-  const resumedGroundScreenshot = await guestPage.screenshot({ path: resumedGroundPath })
-  assert.ok(resumedGroundScreenshot.byteLength > 20_000)
+  await joinLiveBoneyard(lateJoinPage, baseUrl, 'Water', 3)
+  await waitForLootCount(lateJoinPage, 1)
+  await waitUntil(() => host.playerCount() === 3, 'late join did not add one player')
+  const lateJoinGroundPath = join(screenshotRoot, 'invincibility-potion-late-join-ground.png')
+  const lateJoinGroundScreenshot = await lateJoinPage.screenshot({ path: lateJoinGroundPath })
+  assert.ok(lateJoinGroundScreenshot.byteLength > 20_000)
+  await lateJoinContext.close()
+  lateJoinContext = null
+  lateJoinPage = null
+  await waitUntil(() => host.playerCount() === 2, 'late join did not tear down')
 
   movePlayer(host, guestPlayerId, dropPosition)
   await waitForPickup(host, actor.id)
@@ -316,6 +355,11 @@ try {
       poisonHealthBefore: protectedHealth,
       useId: guestEffect.useId,
     },
+    offscreenSpawn: {
+      id: offscreen.actor.id,
+      position: offscreen.actor.position,
+      radius: offscreen.actor.config.collisionRadius,
+    },
     browser: canvasReceipt,
     catalog: catalog.map(entry => ({
       contentId: entry.content.contentId,
@@ -334,7 +378,8 @@ try {
     pageErrors,
     screenshots: [
       groundPath,
-      resumedGroundPath,
+      offscreenPath,
+      lateJoinGroundPath,
       inventoryPath,
       effectGuestPath,
       effectHostPath,
@@ -342,8 +387,27 @@ try {
   }, null, 2)}\n`)
 } catch (error) {
   const state = host.state()
+  const browserPages = await Promise.all([
+    hostPage,
+    initialGuestPage,
+    guestPage,
+    ...(lateJoinPage ? [lateJoinPage] : []),
+  ].map(async page => (
+    page.isClosed()
+      ? { closed: true }
+      : page.evaluate(() => ({
+          body: document.body.innerText.slice(0, 1_000),
+          boneyardScenes: document.querySelectorAll('.boneyard-scene').length,
+          loadingScreens: document.querySelectorAll('.match-loading-screen').length,
+          runtimeErrors: document.querySelectorAll('.game-runtime-error').length,
+          url: location.href,
+        }))
+  )))
   process.stderr.write(`${JSON.stringify({
+    browserPages,
+    consoleErrors,
     failure: error instanceof Error ? error.message : String(error),
+    failedResponses,
     hostLogs: hostLogs.filter(({ event }) => (
       !['lua.tick_budget_exceeded', 'replication.baseline_missing'].includes(event)
     )).slice(-100),
@@ -358,6 +422,7 @@ try {
       playerId,
       progression: getPlayerProgression(state, playerId),
     })),
+    pageErrors,
     world: state.world.kind,
   }, null, 2)}\n`)
   throw error
@@ -365,6 +430,7 @@ try {
   await Promise.all([
     hostContext.close(),
     guestContext.close(),
+    ...(lateJoinContext ? [lateJoinContext.close()] : []),
   ])
   await browser.close()
   await host.close()
@@ -383,10 +449,15 @@ async function loadInvincibilityContent(root) {
     'sprites/invincibility_potion.bundle',
     'sprites/invincibility_potion.png',
   ]
-  const files = await Promise.all(paths.map(async path => ({
-    bytesBase64: (await readFile(join(root, path))).toString('base64'),
-    path,
-  })))
+  const files = await Promise.all(paths.map(async path => {
+    const bytes = await readFile(join(root, path))
+    return {
+      byteLength: bytes.length,
+      bytesBase64: bytes.toString('base64'),
+      path,
+      sha256: createHash('sha256').update(bytes).digest('hex'),
+    }
+  }))
   const contentSha256 = createHash('sha256')
     .update(manifest.id)
     .update('\0')
@@ -420,6 +491,10 @@ async function enterHub(page, baseUrl, element) {
   await page.bringToFront()
   await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 90_000 })
+  const tutorialOffer = page.getByRole('dialog', { name: 'Play the Tutorial?' })
+  if (await tutorialOffer.isVisible()) {
+    await tutorialOffer.getByRole('button', { exact: true, name: 'NO' }).click()
+  }
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
   await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({
@@ -436,6 +511,27 @@ async function enterHub(page, baseUrl, element) {
       timeout: 60_000,
     }),
   ])
+}
+
+async function joinLiveBoneyard(page, baseUrl, element, playerCount) {
+  await page.bringToFront()
+  await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 90_000 })
+  const tutorialOffer = page.getByRole('dialog', { name: 'Play the Tutorial?' })
+  if (await tutorialOffer.isVisible()) {
+    await tutorialOffer.getByRole('button', { exact: true, name: 'NO' }).click()
+  }
+  await page.getByRole('button', { name: 'Play' }).click()
+  await page.getByRole('button', { name: 'New Game' }).click()
+  await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({
+    timeout: 30_000,
+  })
+  await page.getByRole('button', { name: element }).click()
+  await page.locator('.create-menu-disciplines[data-visible="true"]').waitFor({
+    timeout: 15_000,
+  })
+  await page.locator('.create-menu-discipline-arcane').click()
+  await waitForBoneyard(page, playerCount)
 }
 
 async function waitForPlayers(page, count) {
@@ -465,6 +561,53 @@ function movePlayer(host, playerId, position) {
   })
 }
 
+function materializeOffscreenEnemy(host) {
+  const state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
+  const players = gameSimulationPlayerRecords(state)
+  const focuses = Object.values(players).map(({ position }) => ({ ...position }))
+  const origin = focuses[0]
+  assert.ok(origin)
+  const tick = state.tick + 1
+  const result = stepBoneyardWorldTick(
+    state.world,
+    players,
+    {},
+    Object.fromEntries(Object.keys(players).map(playerId => [playerId, {
+      alive: true,
+      collisionEnabled: true,
+      eligible: true,
+      movementScale: 1,
+    }])),
+    tick,
+    undefined,
+    undefined,
+    {},
+    [],
+    [{
+      enemyToken: 'SKELETON',
+      flags: [],
+      id: 90_001,
+      locationPolicy: 'near-player',
+      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.SKELETON,
+      position: { x: origin.x + 100, y: origin.y },
+      positionPolicy: 'offscreen',
+      spawnTick: tick,
+      waveOrdinal: 2,
+    }],
+  )
+  let playerEntities = state.playerEntities
+  for (const [playerId, player] of Object.entries(result.players)) {
+    playerEntities = replacePlayerCharacter(playerEntities, playerId, player)
+  }
+  Object.assign(state, { playerEntities, tick, world: result.world })
+  const actor = result.world.enemies.actors.find(({ sourceSpawnIntentId }) => (
+    sourceSpawnIntentId === 90_001
+  ))
+  assert.ok(actor)
+  return { actor, focuses }
+}
+
 function arenaCenter(bounds) {
   return {
     x: Math.fround(bounds.x + bounds.w / 2),
@@ -487,6 +630,12 @@ async function waitForPickup(host, actorId) {
 async function waitForLootCount(page, count) {
   await page.waitForFunction(expected => (
     document.querySelector('.boneyard-world-canvas')?.dataset.lootCount === `${expected}`
+  ), count, { timeout: 30_000 })
+}
+
+async function waitForEnemyCount(page, count) {
+  await page.waitForFunction(expected => (
+    document.querySelector('.boneyard-world-canvas')?.dataset.enemyCount === `${expected}`
   ), count, { timeout: 30_000 })
 }
 
@@ -517,12 +666,45 @@ async function waitUntil(predicate, message, timeoutMs = 10_000) {
   throw new Error(message)
 }
 
-async function startStaticServer(root) {
+async function startStaticServer(root, assetRoot, content) {
   const rootPrefix = root.endsWith(sep) ? root : `${root}${sep}`
   const index = resolve(root, 'index.html')
+  const contentAssets = new Map(content.assets.map(asset => [
+    `/api/game/content/${asset.sha256}`,
+    {
+      path: resolve(assetRoot, asset.path),
+      type: contentType(asset.path),
+    },
+  ]))
   const server = createServer(async (request, response) => {
     try {
       const pathname = decodeURIComponent(new URL(request.url || '/', 'http://localhost').pathname)
+      if (pathname === '/api/mods/active') {
+        response.writeHead(200, {
+          'cache-control': 'no-store',
+          'content-type': 'application/json; charset=utf-8',
+        })
+        response.end(JSON.stringify({
+          manifestSha256: content.manifest.manifestSha256,
+          mods: content.summary.mods.map(mod => ({
+            ...mod,
+            boneyardCount: 0,
+            hasLua: true,
+            priority: 0,
+          })),
+        }))
+        return
+      }
+      const asset = contentAssets.get(pathname)
+      if (asset) {
+        const body = await readFile(asset.path)
+        response.writeHead(200, {
+          'cache-control': 'public, max-age=31536000, immutable',
+          'content-type': asset.type,
+        })
+        response.end(body)
+        return
+      }
       const relative = pathname === '/' || extname(pathname) === ''
         ? 'index.html'
         : pathname.slice(1)
