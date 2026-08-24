@@ -37534,4 +37534,60 @@ No member is blocked by the browser platform.
 
 ### Implementation validation receipt
 
-- Pending implementation and exact-tree Mac/browser evidence.
+- Protocol 66 adds strict `client-hub-activity` edges and a required ephemeral
+  activity field on protocol Hub participants while preserving protocol 65's
+  durable save intent. `GameHost` stores activity on the authenticated live
+  connection, clears only that participant's Hub input, and projects it into
+  snapshots without changing the core Hub participant or save shapes. Every
+  crafted Hub gameplay-pause source is rejected; the shared-world scheduler no
+  longer has a Hub hold branch. Dedicated and party Boneyards retain their
+  source-qualified first-owner pause barriers.
+- `MainMenuScene` reduces the complete optional Hub UI inventory to
+  `paused`/`occupied`/clear and requests book/selector pause only in Boneyard.
+  `HubScene` reports every scene-local input-owning surface but no longer owns a
+  presentation-pause switch. The selected Player Card shows `Paused` or
+  `Occupied`, and one post-world Pixi layer draws pause bars or occupied dots
+  above local and remote same-region wizards.
+- Chat/world-speech audio moved to the session-level authoritative message
+  subscription. The bounded Hub membership cursor seeds initial/re-entry state
+  silently and produces one native `click` request per observed join or
+  departure. Exact explicit product pitches are chat `1.10`, join `1.25`, and
+  leave/depart-for-Solomon `0.85`, all at gain `0.65`; the existing non-music
+  master consumes muted edges silently without replay.
+- The focused branch rebased over Website `origin/main` `1a195086`, preserving
+  the concurrent schema-5 durable-profile implementation. The first Mac gate
+  found one strict test-only record cast; the second found one stale selector
+  test still trying to acquire a Hub book pause. The fixture now copies a
+  strict record, and the source-qualified selector authorization journey now
+  runs in Boneyard, where that barrier still exists.
+- Exact Mac commit `9bae31f844b78c9ff9ecbcd36312344acd7afdfc` and the local
+  candidate had a byte-identical 32-file manifest. On Apple arm64 macOS
+  `26.6.2`, Node `22.17.0`, npm `10.9.2`, .NET `10.0.302`, and Chrome
+  `151.0.7922.170`, the final canonical `./scripts/validate.sh` gate passed:
+  backend build and `17/17` contracts, lint/import boundaries, all
+  `1950/1950` frontend/desktop tests, production build, media policy, and game
+  bundle budget (`443511` raw / `124842` gzip). Gate-log SHA-256 is
+  `f1a685f3812662be4f02412f8c1ed533b29dcba3df47f86bc5dc1305c3fc9a0c`.
+- Mac Chrome Pause/Inventory/SkillScreen/compact-selector/dialogue/Settings
+  acceptance kept the authoritative Hub and local frame advancing. The local
+  Hub Pause advanced tick `2115 -> 2171`; Boneyard owner/peer barriers held at
+  `3173`/`3174` and resumed at `3176`. The exact pause-smoke log SHA-256 is
+  `e11b61995bbe117e78af146949175c8c889db4b9a6c1177201d32fca6ff4e465`.
+- Production-bundle desktop and mobile shared-Hub journeys each observed
+  exactly `7` chat cues, `4` College join cues, `1` disconnect cue, and `3`
+  simultaneous party-departure cues when the group went to find Solomon.
+  Both retained two live Hub observers while the party run advanced, finished
+  at zero sessions/players/parties/runs, and returned empty page, console,
+  failed-response, and unexpected-request arrays. Log SHA-256 values are
+  `1053e2de662dadc256f329cc2c413d5a0dd10c8147890bc7ff04ded8b56e5f36`
+  (desktop) and
+  `feab9f03160fccb62c3d1ec05d4c344abe315de69bdb09799df55375919553f2`
+  (mobile).
+- Reviewed same-region pause-badge captures are visibly clear at both
+  viewports: desktop SHA-256
+  `36a5ef7c354e4041601433f7107f406de2382d9e5e329973123f6493c1fd7cbc`
+  and mobile SHA-256
+  `e253fbb6a637f26a2e6353c1443eba0026baa31a0d1d2b35c0a8717aec44526d`.
+  The Player Card label was asserted in the same real-browser journeys. No
+  member is browser-blocked. Nothing was pushed, deployed, or restarted in
+  production.
