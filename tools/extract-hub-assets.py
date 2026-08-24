@@ -482,6 +482,17 @@ def build_mortuary_painting_strip(
     return strip
 
 
+def build_mortuary_painting_overlay(
+    atlas: Image.Image,
+    records: list[SpriteRecord],
+    record_index: int,
+    offset: tuple[int, int],
+) -> Image.Image:
+    frame = Image.new("RGBA", (records[3].logical_width, records[3].logical_height))
+    frame.alpha_composite(registered_sprite(atlas, records[record_index]), offset)
+    return frame
+
+
 def build_cropped_strip(
     atlas: Image.Image,
     records: list[SpriteRecord],
@@ -1213,6 +1224,26 @@ def main() -> int:
         build_mortuary_painting_strip(mortuary, mortuary_records),
         output_dir,
         "hub-room-mortuary-paintings",
+    )
+    save(
+        registered_sprite(mortuary, mortuary_records[3]),
+        output_dir,
+        "hub-room-mortuary-painting-easel",
+    )
+    save(
+        build_mortuary_painting_overlay(mortuary, mortuary_records, 7, (15, 28)),
+        output_dir,
+        "hub-room-mortuary-painting-front",
+    )
+    save(
+        build_mortuary_painting_overlay(mortuary, mortuary_records, 8, (35, 46)),
+        output_dir,
+        "hub-room-mortuary-painting-marker",
+    )
+    save(
+        Image.open(images_dir / "paintbkg.png").convert("RGBA"),
+        output_dir,
+        "hub-room-mortuary-portrait-background",
     )
     save(
         build_registered_composite_strip(

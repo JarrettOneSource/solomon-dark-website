@@ -19,6 +19,7 @@ import {
   HUB_INCOMING_FADE_RATES,
   HUB_OUTGOING_FADE_RATE,
 } from '../core-kernels/hub-regions.ts'
+import { copyHubMemorialState } from '../core-kernels/hub-memorial.ts'
 
 export type HubGameSnapshot = Omit<GameSnapshot, 'world'> & {
   world: HubWorldSnapshot
@@ -212,6 +213,9 @@ function interpolateSnapshot(
         ? older.world.collisionRngState
         : newer.world.collisionRngState,
       kind: 'hub',
+      memorial: copyHubMemorialState(
+        blend < 1 ? older.world.memorial : newer.world.memorial,
+      ),
       participants: interpolateParticipants(
         older.world.participants,
         newer.world.participants,
@@ -476,6 +480,7 @@ function presentationCopy(snapshot: HubGameSnapshot): HubPresentationFrame {
       ambient: interpolateAmbient(snapshot.world.ambient, snapshot.world.ambient, 0),
       collisionRngState: snapshot.world.collisionRngState,
       kind: 'hub',
+      memorial: copyHubMemorialState(snapshot.world.memorial),
       participants: Object.fromEntries(
         Object.entries(snapshot.world.participants).map(([id, participant]) => [
           id,

@@ -156,9 +156,14 @@ hello/welcome contract. Protocol 70 added the host-owned stock Tutorial
 controller/narration state plus its bounded start and modal-surface facts.
 Protocol 71 added the complete survival-Hub NPC interaction state, optional
 Skorcha population, and bounded dialogue/service actions.
-Current protocol 72 adds the Tutorial's selected-HUD acknowledgement byte and
+Protocol 72 added the Tutorial's selected-HUD acknowledgement byte and
 the two bounded primary/concentration-A selector-open facts. It also carries
 Solomon's authoritative dig-body offset and ticked dirt/audio semantic events.
+Current protocol 73 adds the shared-Hub Memoratorium's ten-slot portrait
+archive: fixed slot ages/markers, the `100..109` portrait-id ring, and frozen
+semantic portrait recipes. The host publishes the complete bounded state so a
+live update and a late join consume one authority value rather than browser
+history.
 The host applies
 either skill selection only to the authenticated
 participant before publishing a new progression revision.
@@ -197,6 +202,13 @@ The browser supervisor owns one shared-Hub host for its process lifetime and a
 bounded set of single-use admission tickets. The host owns a shared Hub simulation plus zero or more
 party-scoped Boneyard simulations. Each socket receives snapshots only for its
 current world instance, while party-control messages remain session-wide.
+The shared Hub world also owns one ten-slot Memoratorium archive. When any
+party run crosses the authoritative Hall archive edge, the world coordinator
+adds every completed participant in deterministic writer order, consumes the
+native marker draw, evicts the smallest persisted slot age, and publishes the
+new portrait atomically. Party partition/merge, disconnect, and a client-held
+save cannot fork or erase that archive; the process-lifetime shared Hub is its
+reset boundary.
 Leaving or a failed heartbeat removes the participant from its world and party;
 an empty run retires independently, and an empty shared Hub remains ready for
 the next ticket. Health reports active players, parties, runs, and
@@ -336,6 +348,13 @@ dependencies without revisiting this release invariant.
   suppresses primary mouse output, but the server gate remains decisive for a
   crafted client. Party Boneyards continue to consume the complete combat
   input, including primary, secondary, and staff-action families.
+- The shared-Hub Memoratorium is world-owned presentation history, not an
+  account leaderboard. Its ten physical Painting slots start with the stock
+  residents and persisted age permutation. A completed run participant freezes
+  identity, equipment appearance, heading, scale, and capture tick; strict-min
+  age eviction supplies FIFO behavior and the portrait id wraps through
+  `100..109`. Hub frames carry that bounded state discretely, so every resident
+  and late joiner renders and interacts with the same current portrait ids.
 - The client predicts only explicitly shared kernels needed for the local
   player. Remote actors and server-only systems are presented from buffered
   authoritative snapshots.
@@ -1277,9 +1296,11 @@ This preserves one mutation boundary and prevents Lua callbacks from entering
 the simulation recursively. The host checks dynamic session host identity or
 the account-bound developer entitlement on every console request. `Enable
 Cheats` controls ordinary-host installation of the DevTools API; it is never
-trusted as network authorization. Current protocol 72 retains the
+trusted as network authorization. Protocol 72 retained the
 server-authored developer boolean from a one-use admission into the welcome
 and gives observer admissions a distinct read-only handshake.
+Protocol 73 retains that authorization contract unchanged while adding the
+bounded shared memorial to Hub snapshots and frames.
 An entitled account keeps the setting and ordinary shared-Hub routing off
 while still receiving the DevTools API. No client-authored field can grant the
 entitlement.

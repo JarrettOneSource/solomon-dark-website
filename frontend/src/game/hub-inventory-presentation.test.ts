@@ -2,6 +2,11 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  archiveHubMemorialPortrait,
+  createHubMemorialState,
+} from './core-kernels/hub-memorial.ts'
+
+import {
   HUB_HUD_SHORTCUTS,
   HUB_INTERACTION_DIALOGUES,
   HUB_INTERACTION_IDS,
@@ -13,12 +18,39 @@ import {
   hubPotionBeltShortcut,
   hubInteractionAtPoint,
   hubInteractionWithinRange,
+  hubMemorialEulogyIndex,
   hubPotionShortcut,
   hubTraderAtPoint,
   hubTraderWithinServiceRange,
   nearestHubInteraction,
   nearestHubTrader,
 } from './hub-inventory-presentation.ts'
+
+test('Painting eulogies follow the current shared memorial portrait id', () => {
+  const initial = createHubMemorialState()
+  assert.equal(hubMemorialEulogyIndex('painting-100', initial), 2)
+  const first = archiveHubMemorialPortrait(initial, {
+    capturedAtTick: 300,
+    config: { discipline: 'arcane', displayName: 'Aurelia', element: 'ether' },
+    equipment: { hat: null, robe: null, weapon: null },
+    headingIndex: 12,
+    playerId: 'player-a',
+    portraitScale: 0.925,
+    runId: 'run-a',
+  }, 0)
+  assert.equal(hubMemorialEulogyIndex('painting-100', first), 100)
+  const second = archiveHubMemorialPortrait(first, {
+    capturedAtTick: 600,
+    config: { discipline: 'mind', displayName: 'Basil', element: 'water' },
+    equipment: { hat: null, robe: null, weapon: null },
+    headingIndex: 4,
+    playerId: 'player-b',
+    portraitScale: 0.9,
+    runId: 'run-b',
+  }, 1)
+  assert.equal(hubMemorialEulogyIndex('painting-1', second), 101)
+  assert.equal(hubMemorialEulogyIndex('memorator', second), null)
+})
 
 test('HUD potion shortcuts total the addressed kind and consume the first owned stack', () => {
   const backpack = [

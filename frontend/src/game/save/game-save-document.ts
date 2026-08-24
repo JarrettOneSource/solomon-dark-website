@@ -783,7 +783,11 @@ function numericOrNull(value: unknown): number | null {
 
 function serializeHubWorld(world: HubWorldState): Omit<
   HubWorldState,
-  'courtyardPopulationActive' | 'runtime' | 'skorchaPopulationRng' | 'studentPopulation'
+  | 'courtyardPopulationActive'
+  | 'memorial'
+  | 'runtime'
+  | 'skorchaPopulationRng'
+  | 'studentPopulation'
 > & {
   studentPopulation: HubStudentPopulationOptions
 } {

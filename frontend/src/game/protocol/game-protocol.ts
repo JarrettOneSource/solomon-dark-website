@@ -39,6 +39,15 @@ import type { NativeRngState } from '../core-kernels/native-rng.ts'
 import type { NativeEnemyPathState } from '../core-kernels/native-enemy-pathfinding.ts'
 import type { NativeEnemyWorldFeedbackKernelState } from '../core-kernels/native-enemy-world-feedback.ts'
 import { NATIVE_HALL_OF_FAME_SCORE } from '../core-kernels/hall-of-fame-score.ts'
+import {
+  HUB_MEMORIAL_FIRST_EXTERNAL_PORTRAIT_ID,
+  HUB_MEMORIAL_INITIAL_MARKERS,
+  HUB_MEMORIAL_INITIAL_SLOT_AGES,
+  HUB_MEMORIAL_LAST_EXTERNAL_PORTRAIT_ID,
+  HUB_MEMORIAL_SLOT_COUNT,
+  type HubMemorialState,
+} from '../core-kernels/hub-memorial.ts'
+import type { PlayerLivingEquipmentAppearance } from '../core-kernels/player-equipment-appearance.ts'
 import { ETHER_PRIMARY_INITIAL_TURN } from '../core-kernels/primary-spell-targeting.ts'
 import { NATIVE_ETHER_BLAST_PARTICLE_LIFETIME_TICKS } from '../core-kernels/native-ether-blast.ts'
 import { earthImpactLifetimeTicks } from '../core-kernels/primary-spell-earth.ts'
@@ -342,7 +351,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 72
+export const GAME_PROTOCOL_VERSION = 73
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -3939,6 +3948,7 @@ function hubWorldSnapshot(value: unknown, field: string): HubWorldSnapshot {
     'ambient',
     'collisionRngState',
     'kind',
+    'memorial',
     'participants',
     'skorcha',
     'students',
@@ -3966,6 +3976,7 @@ function hubWorldSnapshot(value: unknown, field: string): HubWorldSnapshot {
       `${field}.collisionRngState`,
     ),
     kind: 'hub',
+    memorial: hubMemorialState(source.memorial, `${field}.memorial`),
     participants,
     skorcha: hubSkorchaState(source.skorcha, `${field}.skorcha`),
     students: limitedArray(source.students, `${field}.students`, MAX_STUDENTS).map(
@@ -3975,6 +3986,165 @@ function hubWorldSnapshot(value: unknown, field: string): HubWorldSnapshot {
       source.traderAnimationSeed,
       `${field}.traderAnimationSeed`,
     ),
+  }
+}
+
+function hubMemorialState(value: unknown, field: string): HubMemorialState {
+  const source = record(value, field)
+  onlyKeys(source, field, ['nextAge', 'nextPortraitId', 'slots'])
+  const nextAge = positiveInteger(source.nextAge, `${field}.nextAge`)
+  const nextPortraitId = integerWithin(
+    source.nextPortraitId,
+    `${field}.nextPortraitId`,
+    HUB_MEMORIAL_FIRST_EXTERNAL_PORTRAIT_ID,
+    HUB_MEMORIAL_LAST_EXTERNAL_PORTRAIT_ID,
+  )
+  const rawSlots = array(source.slots, `${field}.slots`)
+  if (rawSlots.length !== HUB_MEMORIAL_SLOT_COUNT) {
+    throw new GameProtocolError(`${field}.slots must contain ten Painting slots`)
+  }
+  const identities = new Set<string>()
+  const portraitIds = new Set<number>()
+  const ages = new Set<number>()
+  const slots = rawSlots.map((value, index) => {
+    const slotField = `${field}.slots[${index}]`
+    const slot = record(value, slotField)
+    onlyKeys(slot, slotField, ['age', 'marker', 'portrait', 'portraitId'])
+    const age = nonnegativeInteger(slot.age, `${slotField}.age`)
+    if (ages.has(age)) throw new GameProtocolError(`${field}.slots duplicates age ${age}`)
+    ages.add(age)
+    const marker = boolean(slot.marker, `${slotField}.marker`)
+    const portraitId = nonnegativeInteger(slot.portraitId, `${slotField}.portraitId`)
+    if (slot.portrait === null) {
+      if (
+        portraitId !== index
+        || age !== HUB_MEMORIAL_INITIAL_SLOT_AGES[index]
+        || marker !== HUB_MEMORIAL_INITIAL_MARKERS[index]
+      ) throw new GameProtocolError(`${slotField} does not match its stock resident`)
+      return { age, marker, portrait: null, portraitId }
+    }
+    if (
+      portraitId < HUB_MEMORIAL_FIRST_EXTERNAL_PORTRAIT_ID
+      || portraitId > HUB_MEMORIAL_LAST_EXTERNAL_PORTRAIT_ID
+      || portraitIds.has(portraitId)
+    ) throw new GameProtocolError(`${slotField}.portraitId is not a unique external id`)
+    portraitIds.add(portraitId)
+    const portraitField = `${slotField}.portrait`
+    const portrait = record(slot.portrait, portraitField)
+    onlyKeys(portrait, portraitField, [
+      'capturedAtTick',
+      'config',
+      'equipment',
+      'headingIndex',
+      'playerId',
+      'portraitScale',
+      'runId',
+    ])
+    const playerId = validatedPlayerId(portrait.playerId, `${portraitField}.playerId`)
+    const runId = limitedString(portrait.runId, `${portraitField}.runId`, 128)
+    const identity = `${runId}\0${playerId}`
+    if (identities.has(identity)) {
+      throw new GameProtocolError(`${field}.slots duplicates a completed run participant`)
+    }
+    identities.add(identity)
+    const portraitScale = positiveFinite(
+      portrait.portraitScale,
+      `${portraitField}.portraitScale`,
+    )
+    if (
+      portraitScale < NATIVE_HALL_OF_FAME_SCORE.portraitScaleBase
+      || portraitScale > 1
+    ) throw new GameProtocolError(`${portraitField}.portraitScale is outside its native range`)
+    return {
+      age,
+      marker,
+      portrait: {
+        capturedAtTick: nonnegativeInteger(
+          portrait.capturedAtTick,
+          `${portraitField}.capturedAtTick`,
+        ),
+        config: playerCharacterConfig(portrait.config, `${portraitField}.config`),
+        equipment: hubMemorialEquipmentAppearance(
+          portrait.equipment,
+          `${portraitField}.equipment`,
+        ),
+        headingIndex: integerWithin(
+          portrait.headingIndex,
+          `${portraitField}.headingIndex`,
+          0,
+          23,
+        ),
+        playerId,
+        portraitScale,
+        runId,
+      },
+      portraitId,
+    }
+  })
+  const completionCount = nextAge - 1001
+  if (completionCount < 0) throw new GameProtocolError(`${field}.nextAge precedes stock defaults`)
+  const dynamicSlots = slots.filter(({ portrait }) => portrait !== null)
+  if (dynamicSlots.length !== Math.min(completionCount, HUB_MEMORIAL_SLOT_COUNT)) {
+    throw new GameProtocolError(`${field}.slots do not match the portrait age counter`)
+  }
+  const expectedAges = Array.from(
+    { length: dynamicSlots.length },
+    (_, index) => nextAge - dynamicSlots.length + index,
+  )
+  const dynamicAges = dynamicSlots.map(({ age }) => age).sort((left, right) => left - right)
+  if (dynamicAges.some((age, index) => age !== expectedAges[index])) {
+    throw new GameProtocolError(`${field}.slots do not retain the newest FIFO ages`)
+  }
+  const expectedPortraitId = HUB_MEMORIAL_FIRST_EXTERNAL_PORTRAIT_ID
+    + completionCount % HUB_MEMORIAL_SLOT_COUNT
+  if (nextPortraitId !== expectedPortraitId) {
+    throw new GameProtocolError(`${field}.nextPortraitId does not match the ten-id ring`)
+  }
+  return { nextAge, nextPortraitId, slots }
+}
+
+function hubMemorialEquipmentAppearance(
+  value: unknown,
+  field: string,
+): PlayerLivingEquipmentAppearance {
+  const source = record(value, field)
+  onlyKeys(source, field, ['hat', 'robe', 'weapon'])
+  return {
+    hat: source.hat === null ? null : hubMemorialTintedSelector(source.hat, `${field}.hat`, 3),
+    robe: source.robe === null ? null : hubMemorialTintedSelector(source.robe, `${field}.robe`, 2),
+    weapon: source.weapon === null
+      ? null
+      : (() => {
+          const weapon = record(source.weapon, `${field}.weapon`)
+          onlyKeys(weapon, `${field}.weapon`, ['kind', 'selector'])
+          const kind = limitedString(weapon.kind, `${field}.weapon.kind`, 8)
+          if (kind !== 'staff' && kind !== 'wand') {
+            throw new GameProtocolError(`${field}.weapon.kind is not supported`)
+          }
+          return {
+            kind,
+            selector: integerWithin(
+              weapon.selector,
+              `${field}.weapon.selector`,
+              0,
+              kind === 'staff' ? 3 : 5,
+            ),
+          }
+        })(),
+  }
+}
+
+function hubMemorialTintedSelector(
+  value: unknown,
+  field: string,
+  maximumSelector: number,
+) {
+  const source = record(value, field)
+  onlyKeys(source, field, ['primaryTint', 'secondaryTint', 'selector'])
+  return {
+    primaryTint: integerWithin(source.primaryTint, `${field}.primaryTint`, 0, 0xffffff),
+    secondaryTint: integerWithin(source.secondaryTint, `${field}.secondaryTint`, 0, 0xffffff),
+    selector: integerWithin(source.selector, `${field}.selector`, 0, maximumSelector),
   }
 }
 
@@ -10223,6 +10393,7 @@ function gameWorldSnapshotFrame(
     'collisionRngState',
     'entities',
     'kind',
+    'memorial',
     'participants',
     'skorcha',
     'traderAnimationSeed',
@@ -10249,6 +10420,7 @@ function gameWorldSnapshotFrame(
     ),
     entities: replicatedEntityFrame(source.entities, `${field}.entities`),
     kind: 'hub',
+    memorial: hubMemorialState(source.memorial, `${field}.memorial`),
     participants,
     skorcha: hubSkorchaState(source.skorcha, `${field}.skorcha`),
     traderAnimationSeed: nonnegativeInteger(

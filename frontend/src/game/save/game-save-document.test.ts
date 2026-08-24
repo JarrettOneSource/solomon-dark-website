@@ -18,6 +18,7 @@ import {
 } from '../core-kernels/hub-economy.ts'
 import { HUB_SPAWN } from '../core-kernels/hub-math.ts'
 import { nativeTutorialAmuletItem } from '../core-kernels/native-tutorial.ts'
+import { archiveHubMemorialPortrait } from '../core-kernels/hub-memorial.ts'
 import { HubStudentPopulationState } from '../core-server/hub-students.ts'
 import { createHubSkorchaAtVariant } from '../core-server/hub-skorcha.ts'
 import { createHubWorld, HubWorldRuntime } from '../core-server/hub-world.ts'
@@ -169,6 +170,40 @@ test('Hub resume reconstructs its authoritative Skorcha population with the othe
   assert.deepEqual(restored.state.world.skorcha, reconstructedHub.skorcha)
   assert.notDeepEqual(restored.state.world.skorcha, serializedSkorcha)
   assert.deepEqual(restored.state.gameRng, hubSeed.state)
+})
+
+test('a client-held save cannot fork the process-owned shared memorial', () => {
+  let state = createGameSimulation({ owner: OWNER })
+  if (state.world.kind !== 'hub') throw new Error('expected Hub')
+  state = {
+    ...state,
+    world: {
+      ...state.world,
+      memorial: archiveHubMemorialPortrait(state.world.memorial, {
+        capturedAtTick: 300,
+        config: OWNER,
+        equipment: { hat: null, robe: null, weapon: null },
+        headingIndex: 12,
+        playerId: 'owner',
+        portraitScale: 0.925,
+        runId: 'completed-run',
+      }, 0),
+    },
+  }
+  const document = createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard: null,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state,
+  })
+  const encoded = JSON.parse(document)
+  assert.equal('memorial' in encoded.continuation.simulation.world, false)
+  const restored = restoreGameSaveDocument(document)
+  if (restored.state.world.kind !== 'hub') throw new Error('expected restored Hub')
+  assert.equal(restored.state.world.memorial.nextAge, 1001)
+  assert.equal(restored.state.world.memorial.slots.every(({ portrait }) => portrait === null), true)
 })
 
 test('save documents admit the complete Sack wire depth and reject one level beyond it', () => {

@@ -172,7 +172,11 @@ import hubStudentProp3 from '../assets/game/hub-student-prop-3.png'
 import hubStudentProp4 from '../assets/game/hub-student-prop-4.png'
 import hubRoomMortuaryBackground from '../assets/game/hub-room-mortuary-background.png'
 import hubRoomMortuaryFlame from '../assets/game/hub-room-mortuary-flame.png'
+import hubRoomMortuaryPaintingEasel from '../assets/game/hub-room-mortuary-painting-easel.png'
+import hubRoomMortuaryPaintingFront from '../assets/game/hub-room-mortuary-painting-front.png'
+import hubRoomMortuaryPaintingMarker from '../assets/game/hub-room-mortuary-painting-marker.png'
 import hubRoomMortuaryPaintings from '../assets/game/hub-room-mortuary-paintings.png'
+import hubRoomMortuaryPortraitBackground from '../assets/game/hub-room-mortuary-portrait-background.png'
 import hubRoomMemorator from '../assets/game/hub-room-memorator.png'
 import hubRoomMemoratorMarker from '../assets/game/hub-room-memorator-marker.png'
 import hubRoomMortuaryMemorialGlow from '../assets/game/hub-room-mortuary-memorial-glow.png'
@@ -548,7 +552,11 @@ export const hub = {
       background: hubRoomMortuaryBackground,
       flame: hubRoomMortuaryFlame,
       memorialGlow: hubRoomMortuaryMemorialGlow,
+      paintingEasel: hubRoomMortuaryPaintingEasel,
+      paintingFront: hubRoomMortuaryPaintingFront,
+      paintingMarker: hubRoomMortuaryPaintingMarker,
       paintings: hubRoomMortuaryPaintings,
+      portraitBackground: hubRoomMortuaryPortraitBackground,
       memorator: hubRoomMemorator,
       memoratorMarker: hubRoomMemoratorMarker,
     },

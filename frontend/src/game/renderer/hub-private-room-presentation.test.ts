@@ -35,6 +35,31 @@ test('locks the ordinary visible Mortuary portrait and marker state', () => {
   )
 })
 
+test('locks the external portrait capture and dynamic Painting compositor', () => {
+  const assets = [
+    ['hub-room-mortuary-painting-easel.png', '5849462fe549fcc18565e39ab1e2f3663a4df0fb6f8a939b09f6631b51d657b8'],
+    ['hub-room-mortuary-painting-front.png', 'b32f0c7810c75f10827147567344b56f7b4638d3f19bfb9641ea5a958f542b2a'],
+    ['hub-room-mortuary-painting-marker.png', 'e8c8bc20048d4341ed94836997cdb41060aa7290b0d04f55de2a7d7f5bda54a8'],
+    ['hub-room-mortuary-portrait-background.png', '7f5ac11bf5ac7cd4df73fc76d23f3a66ef6e431dcff96e3f4e79501f20faf632'],
+  ] as const
+  for (const [filename, digest] of assets) {
+    assert.equal(createHash('sha256').update(readFileSync(
+      new URL(`../../assets/game/${filename}`, import.meta.url),
+    )).digest('hex'), digest)
+  }
+  const source = readFileSync(
+    new URL('./hub-memorial-painting-view.ts', import.meta.url),
+    'utf8',
+  )
+  assert.match(source, /const CAPTURE_SIZE = 64/)
+  assert.match(source, /const CAPTURE_CENTER_Y = -58/)
+  assert.match(source, /const WIZARD_CAPTURE_OFFSET_Y = 20/)
+  assert.match(source, /capture\.mask = mask/)
+  assert.match(source, /paintingEasel/)
+  assert.match(source, /paintingFront/)
+  assert.match(source, /paintingMarker/)
+})
+
 test('selects the recovered 16-heading Memorator bank toward the local player', () => {
   assert.equal(hubMemoratorHeadingIndex({ x: 628, y: 700 }), 0)
   assert.equal(hubMemoratorHeadingIndex({ x: 700, y: 700 }), 2)

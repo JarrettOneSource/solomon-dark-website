@@ -6,6 +6,10 @@ import {
   type HubPrivateRoomLayoutDefinition,
 } from '../core-kernels/hub-private-room-layout.ts'
 import {
+  createHubMemorialState,
+  type HubMemorialState,
+} from '../core-kernels/hub-memorial.ts'
+import {
   HUB_INCOMING_FADE_RATES,
   HUB_OUTGOING_FADE_RATE,
   beginHubTransition,
@@ -57,6 +61,7 @@ export interface HubWorldState {
   collisionRngState: number
   courtyardPopulationActive: boolean
   kind: 'hub'
+  memorial: HubMemorialState
   participants: Readonly<Record<string, HubParticipantState>>
   runtime: HubWorldRuntime
   skorcha: HubSkorchaState | null
@@ -83,6 +88,7 @@ export interface HubWorldTickResult {
 }
 
 export interface HubWorldOptions {
+  memorial?: HubMemorialState
   skorcha?: HubSkorchaState | null
   studentPopulation?: HubStudentPopulationState
   traderAnimationSeed?: number
@@ -151,6 +157,7 @@ export function createHubWorld(
     collisionRngState: 0x51a7c011,
     courtyardPopulationActive: true,
     kind: 'hub',
+    memorial: options.memorial ?? createHubMemorialState(),
     participants: Object.fromEntries(
       playerIds.map((playerId) => [playerId, createHubParticipantState()]),
     ),
@@ -387,6 +394,7 @@ export function stepHubWorldTick(
       collisionRngState,
       courtyardPopulationActive: population.courtyardPopulationActive,
       kind: 'hub',
+      memorial: world.memorial,
       participants: nextParticipants,
       runtime,
       skorcha: population.skorcha === null ? null : stepHubSkorcha(population.skorcha),

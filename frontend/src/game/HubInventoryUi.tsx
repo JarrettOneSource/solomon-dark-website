@@ -38,6 +38,7 @@ import {
   nativeBoastFailureText,
 } from './core-kernels/native-hub-npc.ts'
 import type { PlayerCharacterConfig } from './core-kernels/player-character.ts'
+import type { HubMemorialState } from './core-kernels/hub-memorial.ts'
 import type { Vector2 } from './core-kernels/vector.ts'
 import type { GameAudioDirector } from './game-audio-director.ts'
 import { subscribeGamePresentationFrames } from './game-presentation-frame-loop.ts'
@@ -48,6 +49,7 @@ import {
   hubEquipmentClickAction,
   hubInteractionPromptLabel,
   hubInteractionWithinRange,
+  hubMemorialEulogyIndex,
   nearestHubInteraction,
   type HubInteractionId,
 } from './hub-inventory-presentation.ts'
@@ -192,6 +194,7 @@ interface HubInventoryUiProps {
   economy: ProtocolPlayerEconomy
   inventoryKeyCode: string
   menuKeyCode: string
+  memorial?: HubMemorialState | null
   nativeUiStageStyle: CSSProperties
   onAction: (action: HubInventoryAction) => void
   onBlockingOverlayChange?: (open: boolean) => void
@@ -215,6 +218,7 @@ export default function HubInventoryUi({
   economy,
   inventoryKeyCode,
   menuKeyCode,
+  memorial = null,
   nativeUiStageStyle,
   onAction,
   onBlockingOverlayChange,
@@ -342,6 +346,7 @@ export default function HubInventoryUi({
       economy={economy}
       modAssets={modAssets}
       menuKeyCode={menuKeyCode}
+      memorial={memorial}
       onAction={onAction}
       onClose={closeSurface}
       onNotebox={setNpcNotebox}
@@ -374,6 +379,7 @@ function NativeHubSurface({
   economy,
   modAssets,
   menuKeyCode,
+  memorial,
   onAction,
   onClose,
   onNotebox,
@@ -388,6 +394,7 @@ function NativeHubSurface({
   economy: ProtocolPlayerEconomy
   modAssets: readonly GameModAsset[]
   menuKeyCode: string
+  memorial: HubMemorialState | null
   onAction: (action: HubInventoryAction) => void
   onClose: () => void
   onNotebox: (text: string) => void
@@ -419,6 +426,9 @@ function NativeHubSurface({
           surface.interaction,
           economy.npc,
           chatRandomIndexRef.current,
+          memorial === null
+            ? null
+            : hubMemorialEulogyIndex(surface.interaction, memorial),
         )
       : { kind: 'choices' },
     phaseStartedAtMs: performance.now(),

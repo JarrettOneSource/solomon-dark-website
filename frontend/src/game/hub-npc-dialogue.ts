@@ -54,15 +54,18 @@ export function createHubNpcChatContent(
   interactionId: HubInteractionId,
   npc: NativeHubNpcState,
   randomIndex: number,
+  eulogyIndexOverride: number | null = null,
 ): HubNpcChatContent {
   const interaction = HUB_INTERACTION_DIALOGUES[interactionId]
-  if (interaction.eulogyIndex !== null) {
+  const eulogyIndex = eulogyIndexOverride ?? interaction.eulogyIndex
+  if (eulogyIndex !== null) {
+    const eulogyLine = NATIVE_HUB_NPC_CATALOG.eulogies[`${eulogyIndex}`] ?? null
     const badEulogy = npc.boast.succeeded
       ? []
       : [pick(NATIVE_HUB_NPC_CATALOG.badEulogies, randomIndex)]
     return speech(
-      `SAY_EULOGY_${interaction.eulogyIndex}`,
-      [...(interaction.eulogyLine === null ? [] : [interaction.eulogyLine]), ...badEulogy],
+      `SAY_EULOGY_${eulogyIndex}`,
+      [...(eulogyLine === null ? [] : [eulogyLine]), ...badEulogy],
       'close',
     )
   }

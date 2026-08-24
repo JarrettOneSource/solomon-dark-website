@@ -42,6 +42,7 @@ import type { NativeSkeletonHeadFacingOffset } from '../core-kernels/boneyard-sk
 import type { ReplicatedEntityFrame } from './replicated-entity-types.ts'
 import type { NativeTutorialState } from '../core-kernels/native-tutorial.ts'
 import type { NativeHubNpcState } from '../core-kernels/native-hub-npc.ts'
+import type { HubMemorialState } from '../core-kernels/hub-memorial.ts'
 
 export interface ProtocolFountainParticleState {
   id: number
@@ -191,6 +192,7 @@ export interface HubWorldSnapshot {
   ambient: ProtocolAmbientState
   collisionRngState: number
   kind: 'hub'
+  memorial: HubMemorialState
   participants: Readonly<Record<string, ProtocolHubParticipantState>>
   skorcha: ProtocolHubSkorchaState | null
   students: readonly ProtocolStudentState[]
@@ -716,6 +718,7 @@ export interface HubWorldSnapshotFrame {
   collisionRngState: number
   entities: ReplicatedEntityFrame
   kind: 'hub'
+  memorial: HubMemorialState
   participants: Readonly<Record<string, ProtocolHubParticipantState>>
   skorcha: ProtocolHubSkorchaState | null
   traderAnimationSeed: number

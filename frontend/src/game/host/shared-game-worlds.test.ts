@@ -242,6 +242,55 @@ test('party pause can hold its Boneyard run but the shared Hub always ticks', ()
   assert.equal(worlds.runs[0]!.state.tick, runTick)
 })
 
+test('every completed party member enters the one live shared-Hub memorial', () => {
+  let worlds = createSharedGameWorlds()
+  worlds = addSharedHubPlayer(worlds, 'player-a', character('Aurelia'), partyIdentity('a'))
+  worlds = addSharedHubPlayer(worlds, 'player-b', character('Basil'), partyIdentity('b'))
+  worlds = addSharedHubPlayer(worlds, 'player-c', character('Cassia'), partyIdentity('c'))
+  worlds = inviteSharedPartyPlayer(worlds, 'player-a', 'player-b', 4).state
+  worlds = acceptSharedPartyInvitation(
+    worlds,
+    'player-b',
+    worlds.parties.invitations[0]!.id,
+    4,
+  ).state
+  worlds = startSharedPartyRun(
+    worlds,
+    'player-a',
+    loadedBoneyardFixture('memorial-party-run'),
+  ).state
+  Object.assign(worlds.runs[0]!.state.run, {
+    gameOverEventId: 1,
+    gameOverExitKind: null,
+    gameOverExitTicks: null,
+    gameOverTicks: 299,
+    nextGameOverEventId: 2,
+    phase: 'game-over',
+  })
+
+  worlds = stepSharedGameWorlds(worlds, {})
+  if (worlds.hub.world.kind !== 'hub') assert.fail('expected shared Hub world')
+  const completed = worlds.hub.world.memorial.slots
+    .filter(({ portrait }) => portrait !== null)
+    .toSorted((left, right) => left.age - right.age)
+  assert.deepEqual(
+    completed.map(({ portrait }) => portrait?.config.displayName),
+    ['Aurelia', 'Basil'],
+  )
+  assert.deepEqual(completed.map(({ portraitId }) => portraitId), [100, 101])
+  assert.equal(completed[1]?.portrait?.playerId, 'player-b')
+
+  worlds = addSharedHubPlayer(worlds, 'player-d', character('Daria'), partyIdentity('d'))
+  if (worlds.hub.world.kind !== 'hub') assert.fail('expected shared Hub world')
+  assert.deepEqual(
+    worlds.hub.world.memorial.slots
+      .filter(({ portrait }) => portrait !== null)
+      .toSorted((left, right) => left.age - right.age)
+      .map(({ portrait }) => portrait?.config.displayName),
+    ['Aurelia', 'Basil'],
+  )
+})
+
 test('only a Courtyard party leader can launch and a running member cannot be invited', () => {
   let worlds = createSharedGameWorlds()
   worlds = addSharedHubPlayer(worlds, 'player-a', character('Aurelia'), partyIdentity('a'))

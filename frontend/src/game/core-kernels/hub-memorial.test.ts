@@ -44,7 +44,7 @@ test('starts with the ten stock slots and replaces them in persisted FIFO-age or
     ))
   }
 
-  assert.deepEqual(replacementSlots, [2, 1, 3, 6, 5, 9, 4, 7, 0, 8])
+  assert.deepEqual(replacementSlots, [2, 1, 3, 6, 5, 8, 9, 4, 7, 0])
   assert.deepEqual(
     memorial.slots
       .filter(({ portrait }) => portrait !== null)
@@ -96,4 +96,8 @@ test('strict minimum-age comparisons keep the lower physical slot on a tie', () 
 test('the same authoritative run-player completion is admitted only once while retained', () => {
   const first = archiveHubMemorialPortrait(createHubMemorialState(), portrait(30), 0)
   assert.equal(archiveHubMemorialPortrait(first, portrait(30), 1), first)
+  assert.throws(
+    () => archiveHubMemorialPortrait(first, portrait(31), 5),
+    /marker draw/,
+  )
 })

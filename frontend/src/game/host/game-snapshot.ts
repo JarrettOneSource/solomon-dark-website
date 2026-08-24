@@ -64,6 +64,7 @@ export function createGameSnapshot(
           ambient: state.world.ambient,
           collisionRngState: state.world.collisionRngState,
           kind: 'hub',
+          memorial: state.world.memorial,
           participants: Object.fromEntries(Object.entries(state.world.participants).map(
             ([playerId, participant]) => [playerId, {
               activity: hubActivities[playerId] ?? null,

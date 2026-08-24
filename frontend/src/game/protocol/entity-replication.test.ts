@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import { createHubStudentFixturePopulation } from '../core-server/hub-student-fixtures.ts'
 import { createGameSimulation } from '../core-server/game-simulation.ts'
+import { archiveHubMemorialPortrait } from '../core-kernels/hub-memorial.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
 import type {
   BoneyardEnemyDeathEffectSnapshot,
@@ -147,6 +148,37 @@ test('registry gives Students stable static descriptors and compact dynamic samp
   const fullBytes = Buffer.byteLength(JSON.stringify(initial))
   const frameBytes = Buffer.byteLength(JSON.stringify(frame))
   assert.ok(frameBytes < fullBytes * 0.4, `${frameBytes} is not compact against ${fullBytes}`)
+})
+
+test('a Hub delta carries one atomic memorial update to the reconstructor', () => {
+  const initial = hubSnapshot(0)
+  const updated = cloneSnapshot(initial)
+  if (updated.world.kind !== 'hub') throw new Error('expected Hub snapshot')
+  updated.tick += 1
+  updated.world.memorial = archiveHubMemorialPortrait(updated.world.memorial, {
+    capturedAtTick: 300,
+    config: { discipline: 'arcane', displayName: 'Memoria', element: 'earth' },
+    equipment: { hat: null, robe: null, weapon: null },
+    headingIndex: 12,
+    playerId: 'completed-player',
+    portraitScale: 0.925,
+    runId: 'completed-run',
+  }, 0)
+  const frame = createGameSnapshotFrame(
+    updated,
+    1,
+    createReplicatedEntityBaseline(initial),
+  )
+  assert.equal(frame.world.kind, 'hub')
+  if (frame.world.kind !== 'hub') throw new Error('expected Hub frame')
+  assert.equal(frame.world.memorial.nextAge, 1002)
+
+  const reconstructor = new EntityReplicationReconstructor()
+  reconstructor.reset(initial, 1)
+  const reconstructed = reconstructor.apply(frame, 2)
+  assert.equal(reconstructed.world.kind, 'hub')
+  if (reconstructed.world.kind !== 'hub') throw new Error('expected reconstructed Hub')
+  assert.deepEqual(reconstructed.world.memorial, updated.world.memorial)
 })
 
 test('player economy is revision-delta replicated instead of repeated on every frame', () => {

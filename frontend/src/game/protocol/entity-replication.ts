@@ -302,6 +302,7 @@ export function createGameSnapshotFrame(
         collisionRngState: snapshot.world.collisionRngState,
         entities,
         kind: 'hub',
+        memorial: snapshot.world.memorial,
         participants: snapshot.world.participants,
         skorcha: snapshot.world.skorcha,
         traderAnimationSeed: snapshot.world.traderAnimationSeed,
@@ -485,6 +486,7 @@ export class EntityReplicationReconstructor {
           ambient: frame.world.ambient,
           collisionRngState: frame.world.collisionRngState,
           kind: 'hub',
+          memorial: frame.world.memorial,
           participants: frame.world.participants,
           skorcha: frame.world.skorcha === null ? null : {
             ...frame.world.skorcha,

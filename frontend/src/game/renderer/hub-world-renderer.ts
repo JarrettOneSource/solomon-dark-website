@@ -642,6 +642,15 @@ export async function createHubWorldRenderer(
       canvas.dataset.skorchaVariant = snapshot.world.skorcha === null
         ? ''
         : `${snapshot.world.skorcha.variant}`
+      canvas.dataset.memorialNextAge = `${snapshot.world.memorial.nextAge}`
+      canvas.dataset.memorialRenderedPortraits = `${privateRoomScene.memorialPortraitCount}`
+      canvas.dataset.memorialPortraits = JSON.stringify(snapshot.world.memorial.slots.map(
+        ({ portrait, portraitId }, slot) => ({
+          name: portrait?.config.displayName ?? null,
+          portraitId,
+          slot,
+        }),
+      ))
       application.render()
       updateFrameDiagnostics(snapshot)
       if (frameCount % HUB_DIAGNOSTIC_WINDOW_FRAMES !== 0) return

@@ -25,6 +25,7 @@ import {
   hubRoomFlameTransform,
 } from './hub-private-room-presentation.ts'
 import { hubWorldDepthForActor } from './hub-render-contract.ts'
+import { HubMemorialPaintingView } from './hub-memorial-painting-view.ts'
 import type { HubWorldTextures } from './hub-textures.ts'
 import { nativeLevelUpPresentationFrame } from './level-up-presentation.ts'
 import { NativeLevelUpWorldView } from './level-up-world-view.ts'
@@ -61,6 +62,8 @@ export class HubPrivateRoomScene {
   private readonly secondaryAbilities: Record<PrivateHubRegionId, NativeSecondaryWorldView>
   private readonly livePlayerIds = new Set<string>()
   private readonly derivedTextures: Texture[] = []
+  private readonly mortuaryDynamicPaintings: HubMemorialPaintingView[] = []
+  private readonly mortuaryStaticPaintings: Sprite[] = []
   private readonly roomFlames = new Map<PrivateHubRegionId, readonly Sprite[]>()
   private readonly textures: HubWorldTextures
   private memoratorBody!: Sprite
@@ -190,6 +193,10 @@ export class HubPrivateRoomScene {
     return this.secondaryAbilities[this.activeRegion].primitiveCount
   }
 
+  get memorialPortraitCount(): number {
+    return this.mortuaryDynamicPaintings.filter(({ container }) => container.visible).length
+  }
+
   get secondaryAbilitySamples() {
     return this.secondaryAbilities[this.activeRegion].diagnosticSamples
   }
@@ -199,6 +206,9 @@ export class HubPrivateRoomScene {
     this.levelUp.destroy()
     for (const view of Object.values(this.primarySpells)) view.destroy()
     for (const view of Object.values(this.secondaryAbilities)) view.destroy()
+    for (const view of this.mortuaryDynamicPaintings) view.destroy()
+    this.mortuaryDynamicPaintings.length = 0
+    this.mortuaryStaticPaintings.length = 0
     this.players.clear()
     this.playerElements.clear()
     this.livePlayerIds.clear()
@@ -435,6 +445,13 @@ export class HubPrivateRoomScene {
         const sprite = this.actorTexture(texture, visual.position.x, visual.position.y)
         sprite.zIndex = hubWorldDepthForActor(visual.painterY)
         room.addChild(sprite)
+        const dynamic = new HubMemorialPaintingView(this.textures)
+        dynamic.container.position.copyFrom(visual.position)
+        dynamic.container.zIndex = hubWorldDepthForActor(visual.painterY)
+        dynamic.container.visible = false
+        room.addChild(dynamic.container)
+        this.mortuaryStaticPaintings.push(sprite)
+        this.mortuaryDynamicPaintings.push(dynamic)
         continue
       }
       const sprite = new Sprite(texture)
@@ -486,6 +503,11 @@ export class HubPrivateRoomScene {
     region: PrivateHubRegionId,
   ): void {
     if (region === 'mortuary') {
+      for (let index = 0; index < snapshot.world.memorial.slots.length; index += 1) {
+        const slot = snapshot.world.memorial.slots[index]!
+        this.mortuaryStaticPaintings[index]!.visible = slot.portrait === null
+        this.mortuaryDynamicPaintings[index]!.update(slot)
+      }
       const player = snapshot.players[localPlayerId]
       if (player) {
         this.memoratorBody.texture = this.memoratorFrames[

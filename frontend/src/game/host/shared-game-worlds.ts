@@ -1,5 +1,8 @@
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import type { BoneyardEnemySpawnIntent } from '../core-kernels/boneyard-wave-director.ts'
+import { archiveHubMemorialPortrait } from '../core-kernels/hub-memorial.ts'
+import { drawNativeInteger } from '../core-kernels/native-rng.ts'
+import { playerLivingEquipmentAppearance } from '../core-kernels/player-equipment-appearance.ts'
 import type {
   PlayerCharacterConfig,
   PlayerCharacterInput,
@@ -34,6 +37,7 @@ import {
   type PartyIdentity,
   type PartySystemState,
 } from './party-system.ts'
+import { createGameSnapshot } from './game-snapshot.ts'
 
 export interface SharedPartyRun {
   readonly loadedBoneyard: LoadedBoneyard
@@ -332,22 +336,71 @@ export function stepSharedGameWorlds(
   enemySpawnIntents: ReadonlyMap<string, readonly BoneyardEnemySpawnIntent[]> = new Map(),
   extensions: ReadonlyMap<string, GameSimulationExtensions> = new Map(),
 ): SharedGameWorldsState {
+  if (state.hub.world.kind !== 'hub') {
+    throw new Error('shared-game Hub owner is not a Hub world')
+  }
+  const hub = stepGameSimulationTick(state.hub, inputsForState(state.hub, inputs))
+  if (hub.world.kind !== 'hub') throw new Error('shared-game Hub stepped out of its world')
+  let memorial = hub.world.memorial
+  const runs = state.runs.map((run): SharedPartyRun => {
+    if (pausedPartyIds.has(run.partyId)) return run
+    const previous = run.state
+    let next = stepGameSimulationTick(
+      previous,
+      inputsForState(previous, inputs),
+      {
+        enemySpawnIntents: enemySpawnIntents.get(run.partyId) ?? [],
+        extensions: extensions.get(run.partyId),
+      },
+    )
+    const previousWorld = previous.world
+    const nextWorld = next.world
+    if (
+      previousWorld.kind === 'boneyard'
+      && nextWorld.kind === 'boneyard'
+      && previousWorld.runId === nextWorld.runId
+    ) {
+      const completedPlayerIds = Object.keys(nextWorld.hallOfFameRuns)
+        .filter((playerId) => (
+          previousWorld.hallOfFameRuns[playerId]?.elapsedTicks === null
+          && nextWorld.hallOfFameRuns[playerId]?.elapsedTicks !== null
+        ))
+        .sort()
+      if (completedPlayerIds.length > 0) {
+        const snapshot = createGameSnapshot(next, null)
+        for (const playerId of completedPlayerIds) {
+          if (snapshot.world.kind !== 'boneyard') break
+          const player = snapshot.players[playerId]
+          const completed = snapshot.world.hallOfFameRuns[playerId]
+          if (
+            !player
+            || !completed
+            || completed.portraitHeadingIndex === null
+            || completed.portraitScale === null
+          ) continue
+          const marker = drawNativeInteger(next.gameRng, 5)
+          next = { ...next, gameRng: marker.state }
+          memorial = archiveHubMemorialPortrait(memorial, {
+            capturedAtTick: next.tick,
+            config: player.config,
+            equipment: playerLivingEquipmentAppearance(
+              player.config.element,
+              player.economy.equipment,
+            ),
+            headingIndex: completed.portraitHeadingIndex,
+            playerId,
+            portraitScale: completed.portraitScale,
+            runId: nextWorld.runId,
+          }, marker.value)
+        }
+      }
+    }
+    return { ...run, state: next }
+  })
   return {
     ...state,
-    hub: stepGameSimulationTick(state.hub, inputsForState(state.hub, inputs)),
-    runs: state.runs.map((run) => pausedPartyIds.has(run.partyId)
-      ? run
-      : {
-          ...run,
-          state: stepGameSimulationTick(
-            run.state,
-            inputsForState(run.state, inputs),
-            {
-              enemySpawnIntents: enemySpawnIntents.get(run.partyId) ?? [],
-              extensions: extensions.get(run.partyId),
-            },
-          ),
-        }),
+    hub: { ...hub, world: { ...hub.world, memorial } },
+    runs,
   }
 }
 

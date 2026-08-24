@@ -28,6 +28,7 @@ import {
 } from '../core-kernels/native-secondary-abilities.ts'
 import { createNativeRng } from '../core-kernels/native-rng.ts'
 import { createNativeEnemyPathState } from '../core-kernels/native-enemy-pathfinding.ts'
+import { archiveHubMemorialPortrait } from '../core-kernels/hub-memorial.ts'
 import { nativeTutorialAmuletItem } from '../core-kernels/native-tutorial.ts'
 import {
   DOWSING_EQUIPMENT_RECIPES,
@@ -1425,7 +1426,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
 })
 
 test('protocol v72 carries observer mode, Hub activity, NPC state, Goodie actions, tutorial fields/state, Hagatha runtime, Imp effects, save intent, selected skills, sacks, dyes, and gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 72)
+  assert.equal(GAME_PROTOCOL_VERSION, 73)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -3848,6 +3849,45 @@ test('protocol validates participant ownership and the recovered Hub room graph'
   if (withPausedActivity.type !== 'server-snapshot'
     || withPausedActivity.frame.world.kind !== 'hub') throw new Error('expected Hub frame')
   assert.equal(withPausedActivity.frame.world.participants['player-1']?.activity, 'paused')
+
+  const memorial = archiveHubMemorialPortrait(frame.world.memorial, {
+    capturedAtTick: 300,
+    config: CHARACTER,
+    equipment: { hat: null, robe: null, weapon: null },
+    headingIndex: 12,
+    playerId: 'player-1',
+    portraitScale: 0.925,
+    runId: 'completed-run',
+  }, 0)
+  const withMemorial = decodeServerGameMessage(message({
+    ...frame.world,
+    memorial,
+  }))
+  assert.equal(withMemorial.type, 'server-snapshot')
+  if (withMemorial.type !== 'server-snapshot'
+    || withMemorial.frame.world.kind !== 'hub') throw new Error('expected Hub frame')
+  assert.equal(withMemorial.frame.world.memorial.slots[2]?.portrait?.config.displayName, 'Helvidius')
+
+  const shortMemorial = JSON.parse(JSON.stringify(memorial))
+  shortMemorial.slots.pop()
+  assert.throws(() => decodeServerGameMessage(message({
+    ...frame.world,
+    memorial: shortMemorial,
+  })), /ten Painting slots/)
+
+  const brokenRing = JSON.parse(JSON.stringify(memorial))
+  brokenRing.nextPortraitId = 109
+  assert.throws(() => decodeServerGameMessage(message({
+    ...frame.world,
+    memorial: brokenRing,
+  })), /ten-id ring/)
+
+  const invalidPortrait = JSON.parse(JSON.stringify(memorial))
+  invalidPortrait.slots[2]!.portrait!.portraitScale = 1.01
+  assert.throws(() => decodeServerGameMessage(message({
+    ...frame.world,
+    memorial: invalidPortrait,
+  })), /portraitScale is outside/)
 
   const missingActivity: Record<string, unknown> = {
     ...structuredClone(frame.world.participants['player-1']!),

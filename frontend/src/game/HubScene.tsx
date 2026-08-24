@@ -234,6 +234,7 @@ export default function HubScene({
   const [playerActivities, setPlayerActivities] = useState(() => (
     hubPlayerActivities(hubInitialSnapshot.world.participants)
   ))
+  const [memorial, setMemorial] = useState(hubInitialSnapshot.world.memorial)
   const coarsePointer = useCoarsePointer()
   // Touch: every state that extends the party column below the chip (member card,
   // action error, invitation toast) makes the ally roster under the chip yield.
@@ -384,6 +385,9 @@ export default function HubScene({
       setPlayerActivities((current) => (
         sameHubPlayerActivities(current, nextActivities) ? current : nextActivities
       ))
+      setMemorial((current) => current.nextAge === snapshot.world.memorial.nextAge
+        ? current
+        : snapshot.world.memorial)
       const participant = snapshot.world.participants[playerId]
       setSkorchaInteraction((current) => {
         const next = snapshot.world.skorcha
@@ -789,6 +793,7 @@ export default function HubScene({
           economy={economy}
           inventoryKeyCode={settings.controls.openInventory}
           menuKeyCode={settings.controls.openMenu}
+          memorial={memorial}
           modAssets={modAssets}
           nativeUiStageStyle={nativeUiStageStyle}
           onAction={onHubAction}

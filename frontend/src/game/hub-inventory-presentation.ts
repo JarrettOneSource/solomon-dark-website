@@ -13,6 +13,10 @@ import {
   type NativeHubNpcCommand,
 } from './core-kernels/native-hub-npc.ts'
 import type { Vector2 } from './core-kernels/vector.ts'
+import {
+  hubMemorialSlotIndexForInteraction,
+  type HubMemorialState,
+} from './core-kernels/hub-memorial.ts'
 
 type HubPotionShortcutItem = Pick<HubInventoryItem, 'id' | 'kind' | 'quantity'> & {
   readonly contents?: readonly HubPotionShortcutItem[]
@@ -217,6 +221,14 @@ export function hubInteractionPromptLabel(interaction: HubInteractionId): string
   return interaction.startsWith('painting-')
     ? 'Hear memorial eulogy'
     : `Talk to ${HUB_INTERACTION_DIALOGUES[interaction].name}`
+}
+
+export function hubMemorialEulogyIndex(
+  interaction: HubInteractionId,
+  memorial: HubMemorialState,
+): number | null {
+  const slotIndex = hubMemorialSlotIndexForInteraction(interaction)
+  return slotIndex === null ? null : memorial.slots[slotIndex]?.portraitId ?? null
 }
 
 export function hubTraderWithinServiceRange(

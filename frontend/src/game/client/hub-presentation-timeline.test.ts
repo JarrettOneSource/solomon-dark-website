@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import { createGameSimulation } from '../core-server/game-simulation.ts'
 import { createHubParticipantState } from '../core-kernels/hub-regions.ts'
+import { archiveHubMemorialPortrait } from '../core-kernels/hub-memorial.ts'
 import { createIdlePlayerPrimaryCast } from '../core-kernels/player-character.ts'
 import { nativeFireParticleVariant } from '../core-kernels/primary-spell-fire-native.ts'
 import { createNativeRng } from '../core-kernels/native-rng.ts'
@@ -113,6 +114,30 @@ test('returns an owned presentation copy until a second authoritative snapshot e
   assert.notEqual(presentation.players.local.lighting, initial.players.local.lighting)
   assert.notEqual(presentation.world, initial.world)
   assert.notEqual(presentation.world.ambient, initial.world.ambient)
+  assert.notEqual(presentation.world.memorial, initial.world.memorial)
+})
+
+test('publishes a memorial replacement atomically at the newer snapshot edge', () => {
+  const older = snapshotAt(100, 10, 20)
+  const newer = snapshotAt(105, 15, 25)
+  newer.world.memorial = archiveHubMemorialPortrait(newer.world.memorial, {
+    capturedAtTick: 300,
+    config: { discipline: 'arcane', displayName: 'Memoria', element: 'earth' },
+    equipment: { hat: null, robe: null, weapon: null },
+    headingIndex: 12,
+    playerId: 'completed-player',
+    portraitScale: 0.925,
+    runId: 'completed-run',
+  }, 0)
+  const presentation = timeline(older)
+  presentation.push(newer, INTERVAL_MS)
+
+  assert.equal(presentation.sample(75).world.memorial.nextAge, 1001)
+  assert.equal(presentation.sample(100).world.memorial.nextAge, 1002)
+  assert.equal(
+    presentation.sample(100).world.memorial.slots[2]?.portrait?.config.displayName,
+    'Memoria',
+  )
 })
 
 test('interpolates the shared player effect phase while keeping light ownership discrete in Hub', () => {
