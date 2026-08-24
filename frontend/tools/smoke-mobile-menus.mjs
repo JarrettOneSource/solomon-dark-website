@@ -370,6 +370,7 @@ async function touchDrag(x1, y1, x2, y2, steps = 12) {
 
 async function capture(label, selectors) {
   await settleAnimations()
+  await settlePauseReveal()
   await nextPaint()
   const geometry = await page.evaluate((map) => {
     const round = (value) => Math.round(value * 100) / 100
@@ -418,6 +419,22 @@ async function settleAnimations() {
       .map((animation) => animation.finished.catch(() => {}))),
     new Promise((resolve) => setTimeout(resolve, 2_000)),
   ]))
+}
+
+/**
+ * The scene menu's reveal is JS-driven, not a CSS animation: GameplayPauseMenu samples
+ * nativePauseMenuReveal on requestAnimationFrame (29 ticks of 10 ms), drives the dim
+ * alpha, the native panel and the waiting note from it, and stamps it on the overlay as
+ * data-gameplay-pause-reveal. document.getAnimations() cannot see that ramp, so wait until
+ * every mounted menu reports the settled value before measuring and shooting.
+ */
+async function settlePauseReveal() {
+  await page.waitForFunction(
+    () => [...document.querySelectorAll('[data-gameplay-pause-reveal]')]
+      .every((node) => node.getAttribute('data-gameplay-pause-reveal') === '1'),
+    undefined,
+    { timeout: 5_000 },
+  )
 }
 
 function bypassStartupAudioPreload() {
