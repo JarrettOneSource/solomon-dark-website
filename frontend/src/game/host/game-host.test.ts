@@ -1071,7 +1071,7 @@ test('game host authoritatively projects each player quickbar and rejects unlear
   })
 })
 
-test('game host authorizes HUD concentration replacement only for the addressed selector', async (context) => {
+test('Boneyard host authorizes HUD concentration replacement only for the addressed selector', async (context) => {
   const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
   context.after(() => host.close())
   const client = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
@@ -1105,6 +1105,16 @@ test('game host authorizes HUD concentration replacement only for the addressed 
       ownedPerkSelectors: [...new Set([...economy.ownedPerkSelectors, 21])],
     }),
   })
+
+  const loaded = nextMessage(client.socket, (message) => (
+    message.type === 'server-boneyard-loaded'
+  ))
+  client.socket.send(encodeGameMessage({
+    type: 'client-start-match',
+    boneyardId: 'default-random',
+  }))
+  await loaded
+  assert.equal(host.state().world.kind, 'boneyard')
 
   const skillBookPause = nextMessage(client.socket, (message) => (
     message.type === 'server-gameplay-pause' && message.pause?.source === 'skill-book'
