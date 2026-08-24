@@ -10,7 +10,7 @@ import numpy as np
 import torch
 
 from .checkpoint import atomic_write, load_checkpoint
-from .model import PolicyV6
+from .model import PolicyV7
 from .optimization import choice_classification_accuracy, classification_accuracy
 from .rollouts import ChoiceExpertDataset, ExpertDataset, split_choice_expert_dataset
 from .spec import POLICY_SPEC
@@ -24,7 +24,7 @@ def behavior_probe_scorecard(
     output: Path,
 ) -> Mapping[str, Any]:
     _metadata, tensors = load_checkpoint(checkpoint)
-    policy = PolicyV6()
+    policy = PolicyV7()
     policy.load_tensors(tensors)
     policy.eval()
     dataset = ExpertDataset.load(dataset_path)
@@ -82,7 +82,7 @@ def behavior_probe_scorecard(
             "accuracies": accuracies,
         }
     report = {
-        "probe_version": 6,
+        "probe_version": 7,
         "checkpoint": str(checkpoint.resolve()),
         "dataset": str(dataset_path.resolve()),
         "passed": all(bool(value["passed"]) for value in probes.values()),
@@ -112,7 +112,7 @@ def choice_retention_scorecard(
         validation_fraction=validation_fraction,
         rng=np.random.default_rng(seed + 1),
     )
-    policy = PolicyV6()
+    policy = PolicyV7()
     policy.load_tensors(tensors)
     policy.eval()
     with torch.no_grad():
@@ -125,7 +125,7 @@ def choice_retention_scorecard(
             *choice_tensors(validation),
         )
     report = {
-        "choice_retention_version": 6,
+        "choice_retention_version": 7,
         "checkpoint": str(checkpoint.resolve()),
         "dataset": str(dataset_path.resolve()),
         "passed": training_accuracy >= 0.95 and validation_accuracy >= 0.85,

@@ -63,7 +63,7 @@ const idlePolicy: MlBotPolicyInference = {
 
 test('the packaged selected checkpoint loads in the host worker and returns legal actions', async () => {
   const worker = await MlBotPolicyInferenceWorker.create(
-    await readFile('server-assets/ml-bot-policy-v6-selected.sdml'),
+    await readFile('server-assets/ml-bot-policy-v7-selected.sdml'),
   )
   try {
     const environment = new BoneyardHeadlessEnvironment({

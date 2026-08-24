@@ -19,11 +19,11 @@ import {
 
 const RESET = { seed: 0x1234_5678 }
 
-test('Boneyard headless reset reproduces schema-v6 observations and authoritative hashes', () => {
+test('Boneyard headless reset reproduces schema-v7 observations and authoritative hashes', () => {
   const environment = new BoneyardHeadlessEnvironment(RESET)
   const initialObservation = environment.observe()
   const initialHash = environment.stateHash()
-  assert.equal(initialObservation.length, 2_738)
+  assert.equal(initialObservation.length, 3_026)
   assert.equal(initialObservation[25], 1)
   assert.equal(environment.state().world.kind, 'boneyard')
   if (environment.state().world.kind !== 'boneyard') throw new Error('expected Boneyard')

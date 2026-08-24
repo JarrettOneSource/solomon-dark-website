@@ -1,4 +1,4 @@
-"""Single-source schema-v6 contract loaded from the TypeScript artifact."""
+"""Single-source schema-v7 contract loaded from the TypeScript artifact."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from typing import Any, Mapping
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 SPEC_PATH = (
     REPOSITORY_ROOT
-    / "frontend/src/game/core-server/ml-bot-policy/policy-spec-v6.json"
+    / "frontend/src/game/core-server/ml-bot-policy/policy-spec-v7.json"
 )
 
 TENSOR_SHAPES: dict[str, tuple[int, ...]] = {
@@ -20,7 +20,7 @@ TENSOR_SHAPES: dict[str, tuple[int, ...]] = {
     "aim_bias": (9,),
     "aim_weight": (9, 256),
     "choice_hidden_bias": (128,),
-    "choice_hidden_weight": (128, 362),
+    "choice_hidden_weight": (128, 394),
     "choice_score_bias": (1,),
     "choice_score_weight": (1, 128),
     "choice_value_bias": (1,),
@@ -30,7 +30,7 @@ TENSOR_SHAPES: dict[str, tuple[int, ...]] = {
     "target_bias": (9,),
     "target_weight": (9, 256),
     "trunk_1_bias": (512,),
-    "trunk_1_weight": (512, 2_738),
+    "trunk_1_weight": (512, 3_026),
     "trunk_2_bias": (256,),
     "trunk_2_weight": (256, 512),
     "value_bias": (1,),
@@ -81,6 +81,7 @@ class PolicySpec:
             "observationNames": list(self.observation_names),
             "observationVersion": self.observation_version,
             "optionDescriptorNames": list(self.option_descriptor_names),
+            "primaryCurriculum": [dict(row) for row in self.primary_curriculum],
             "seed": seed,
             "trainedEnvironmentSteps": 0,
             "trainedUpdates": 0,
@@ -98,14 +99,15 @@ class PolicySpec:
             "observationNames": list(self.observation_names),
             "observationVersion": self.observation_version,
             "optionDescriptorNames": list(self.option_descriptor_names),
+            "primaryCurriculum": [dict(row) for row in self.primary_curriculum],
         }
         for name, expected in exact.items():
             if value.get(name) != expected:
-                raise ValueError(f"checkpoint {name} does not match schema v6")
+                raise ValueError(f"checkpoint {name} does not match schema v7")
         if value.get("actionHeads") != {
             name: list(values) for name, values in self.action_heads.items()
         }:
-            raise ValueError("checkpoint action heads do not match schema v6")
+            raise ValueError("checkpoint action heads do not match schema v7")
         require_uint32(value.get("seed"), "checkpoint seed")
         require_nonnegative_integer(
             value.get("trainedEnvironmentSteps"), "trained environment steps"
@@ -204,23 +206,23 @@ def load_policy_spec(path: Path = SPEC_PATH) -> PolicySpec:
     }
     if len(scales) != len(raw_scales):
         raise ValueError("policy spec scales must be positive finite numbers")
-    if len(observation_names) != 2_738 or len(set(observation_names)) != 2_738:
-        raise ValueError("policy spec must contain 2,738 unique observations")
-    if len(descriptor_names) != 106 or len(set(descriptor_names)) != 106:
-        raise ValueError("policy spec must contain 106 unique option descriptors")
+    if len(observation_names) != 3_026 or len(set(observation_names)) != 3_026:
+        raise ValueError("policy spec must contain 3,026 unique observations")
+    if len(descriptor_names) != 138 or len(set(descriptor_names)) != 138:
+        raise ValueError("policy spec must contain 138 unique option descriptors")
     expected = {
-        "architecture": "mlp-tanh-four-head-v6",
+        "architecture": "mlp-tanh-four-head-v7",
         "choiceHiddenSize": 128,
-        "choiceTrajectoryVersion": 6,
+        "choiceTrajectoryVersion": 7,
         "hiddenSizes": [512, 256],
-        "mainTrajectoryVersion": 6,
+        "mainTrajectoryVersion": 7,
         "modelFormat": "solomon-dark-web-bot-policy",
-        "modelVersion": 6,
-        "observationVersion": 6,
+        "modelVersion": 7,
+        "observationVersion": 7,
     }
     for name, required in expected.items():
         if value.get(name) != required:
-            raise ValueError(f"policy spec {name} does not match schema v6")
+            raise ValueError(f"policy spec {name} does not match schema v7")
     return PolicySpec(
         action_heads=normalized_heads,
         architecture=str(value["architecture"]),

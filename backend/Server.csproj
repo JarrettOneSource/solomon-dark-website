@@ -31,11 +31,11 @@
              CopyToOutputDirectory="PreserveNewest"
              CopyToPublishDirectory="PreserveNewest"
              Condition="Exists('../frontend/dist-game-host/ml-bot-policy-worker.mjs')" />
-    <Content Include="../frontend/dist-game-host/ml-bot-policy-v6-selected.sdml"
-             Link="GameHost/ml-bot-policy-v6-selected.sdml"
+    <Content Include="../frontend/dist-game-host/ml-bot-policy-v7-selected.sdml"
+             Link="GameHost/ml-bot-policy-v7-selected.sdml"
              CopyToOutputDirectory="PreserveNewest"
              CopyToPublishDirectory="PreserveNewest"
-             Condition="Exists('../frontend/dist-game-host/ml-bot-policy-v6-selected.sdml')" />
+             Condition="Exists('../frontend/dist-game-host/ml-bot-policy-v7-selected.sdml')" />
   </ItemGroup>
 
 </Project>

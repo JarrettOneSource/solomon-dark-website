@@ -28,7 +28,7 @@ from .metrics import (
     episode_gameplay_summary,
     primary_curriculum_coverage,
 )
-from .model import PolicyV6
+from .model import PolicyV7
 from .optimization import (
     ChoiceCoverage,
     behavior_clone,
@@ -118,7 +118,7 @@ def bootstrap_policy(
     validate_bootstrap_configuration(configuration)
     configure_torch(configuration.seed)
     output_directory.mkdir(parents=True, exist_ok=True)
-    cache = dataset_path or output_directory / "expert-v6.npz"
+    cache = dataset_path or output_directory / "expert-v7.npz"
     if cache.exists():
         dataset = ExpertDataset.load(cache)
         if len(dataset) < configuration.samples:
@@ -156,7 +156,7 @@ def bootstrap_policy(
     ):
         raise RuntimeError(f"expert dataset diversity gate failed: {dataset_diagnostics}")
     device = torch.device("cpu")
-    policy = PolicyV6.initialize(configuration.seed).to(device)
+    policy = PolicyV7.initialize(configuration.seed).to(device)
     optimizer = torch.optim.Adam(policy.main_parameters(), lr=configuration.learning_rate)
     training_tensors = expert_tensors(training, device)
     validation_tensors = expert_tensors(validation, device)
@@ -218,10 +218,10 @@ def bootstrap_policy(
             "expertDatasetDiagnostics": dataset_diagnostics,
             "numpyVersion": np.__version__,
             "torchVersion": torch.__version__,
-            "trainingKind": "web-semantic-expert-bootstrap-v6",
+            "trainingKind": "web-semantic-expert-bootstrap-v7",
         }
     )
-    checkpoint = output_directory / "bootstrap-v6.sdml"
+    checkpoint = output_directory / "bootstrap-v7.sdml"
     save_checkpoint(checkpoint, metadata, policy.export_tensors())
     save_checkpoint(output_directory / "latest.sdml", metadata, policy.export_tensors())
     result = {
@@ -252,7 +252,7 @@ def bootstrap_choice_policy(
     validate_choice_bootstrap_configuration(configuration)
     configure_torch(configuration.seed)
     output_directory.mkdir(parents=True, exist_ok=True)
-    cache = dataset_path or output_directory / "choice-expert-v6.npz"
+    cache = dataset_path or output_directory / "choice-expert-v7.npz"
     if cache.exists():
         dataset = ChoiceExpertDataset.load(cache)
         if len(dataset) < configuration.samples:
@@ -284,7 +284,7 @@ def bootstrap_choice_policy(
         rng=np.random.default_rng(configuration.seed + 1),
     )
     metadata, tensors = load_checkpoint(checkpoint_path)
-    policy = PolicyV6().to(torch.device("cpu"))
+    policy = PolicyV7().to(torch.device("cpu"))
     policy.load_tensors(tensors)
     protected = {
         name: value.copy()
@@ -337,9 +337,9 @@ def bootstrap_choice_policy(
         "choiceCoverage": {},
         "choicePolicyMode": "learned",
         "choiceTemperature": 1.25,
-        "trainingKind": "web-choice-expert-bootstrap-v6",
+        "trainingKind": "web-choice-expert-bootstrap-v7",
     }
-    checkpoint = output_directory / "choice-bootstrap-v6.sdml"
+    checkpoint = output_directory / "choice-bootstrap-v7.sdml"
     save_checkpoint(checkpoint, metadata, exported)
     save_checkpoint(output_directory / "latest.sdml", metadata, exported)
     result = {
@@ -370,7 +370,7 @@ def train_policy(
     configure_torch(configuration.seed)
     output_directory.mkdir(parents=True, exist_ok=True)
     metadata, tensors = load_checkpoint(checkpoint_path)
-    policy = PolicyV6().to(torch.device("cpu"))
+    policy = PolicyV7().to(torch.device("cpu"))
     policy.load_tensors(tensors)
     main_parameters = policy.main_parameters()
     choice_parameters = policy.choice_ppo_parameters()
@@ -389,7 +389,7 @@ def train_policy(
     completed_episode_count = 0
     seed_stream = SeedStream(configuration.seed)
     torch_generator = torch.Generator().manual_seed(configuration.seed + 1)
-    trainer_state_path = output_directory / "trainer-state-v6.pt"
+    trainer_state_path = output_directory / "trainer-state-v7.pt"
     if resume and trainer_state_path.exists():
         state = load_trainer_state(trainer_state_path)
         validate_resume_state(state, checkpoint_path, configuration, metadata)
@@ -541,15 +541,15 @@ def train_policy(
                 "trainedEnvironmentSteps": environment_steps,
                 "trainedUpdates": completed_updates,
                 "trainingConfiguration": asdict(configuration),
-                "trainingKind": "web-headless-pytorch-ppo-v6",
+                "trainingKind": "web-headless-pytorch-ppo-v7",
             }
-            last_checkpoint = output_directory / f"policy-v6-update-{completed_updates:06d}.sdml"
+            last_checkpoint = output_directory / f"policy-v7-update-{completed_updates:06d}.sdml"
             save_checkpoint(last_checkpoint, metadata, policy.export_tensors())
             save_checkpoint(output_directory / "latest.sdml", metadata, policy.export_tensors())
             save_trainer_state(
                 trainer_state_path,
                 {
-                    "trainerVersion": 6,
+                    "trainerVersion": 7,
                     "model": policy.state_dict(),
                     "mainOptimizer": main_optimizer.state_dict(),
                     "choiceOptimizer": choice_optimizer.state_dict(),
@@ -592,7 +592,7 @@ def evaluate_policy(
     if len(seeds) < 1 or workers < 1 or action_repeat < 1 or maximum_steps < 1:
         raise ValueError("evaluation sizes must be positive")
     metadata, tensors = load_checkpoint(checkpoint_path)
-    policy = PolicyV6()
+    policy = PolicyV7()
     policy.load_tensors(tensors)
     policy.eval()
     records: list[Mapping[str, Any]] = []
@@ -685,7 +685,7 @@ def evaluation_report(
     returns = [float(record["return"]) for record in completed]
     waves = [float(record["waves_reached"]) for record in completed]
     return {
-        "evaluationVersion": 6,
+        "evaluationVersion": 7,
         "checkpoint": str(checkpoint_path),
         "checkpointSha256": file_sha256(checkpoint_path),
         "episodes": records,
@@ -874,7 +874,7 @@ def iteration_record(
     gameplay = aggregate_gameplay(rollout.gameplay_counters)
     choice_selections = choice_selection_summary(rollout.choice_intervals)
     return {
-        "metrics_version": 6,
+        "metrics_version": 7,
         "iter": iteration,
         "wall_seconds": wall_seconds,
         "env_steps_total": environment_steps,
@@ -1004,8 +1004,8 @@ def save_trainer_state(path: Path, value: Mapping[str, Any]) -> None:
 
 def load_trainer_state(path: Path) -> Mapping[str, Any]:
     value = torch.load(path, map_location="cpu", weights_only=False)
-    if not isinstance(value, Mapping) or value.get("trainerVersion") != 6:
-        raise ValueError("trainer state is not strict version 6")
+    if not isinstance(value, Mapping) or value.get("trainerVersion") != 7:
+        raise ValueError("trainer state is not strict version 7")
     return value
 
 

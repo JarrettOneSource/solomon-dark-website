@@ -13,7 +13,7 @@ const EXPECTED_BLOCKS = [
   ['A', 32], ['B', 11], ['C', 120], ['D', 88], ['E', 9], ['F', 56],
   ['G', 85], ['I', 41], ['H', 43], ['J', 3], ['K', 352], ['L', 4],
   ['M', 104], ['N', 289], ['O', 230], ['P', 105], ['Q', 9], ['R', 141],
-  ['S', 62], ['T', 954],
+  ['S', 62], ['T', 1_242],
 ] as const
 
 const EXPECTED_BOUNDARIES = [
@@ -22,22 +22,22 @@ const EXPECTED_BOUNDARIES = [
   ['H', 442, 485], ['J', 485, 488], ['K', 488, 840], ['L', 840, 844],
   ['M', 844, 948], ['N', 948, 1_237], ['O', 1_237, 1_467],
   ['P', 1_467, 1_572], ['Q', 1_572, 1_581], ['R', 1_581, 1_722],
-  ['S', 1_722, 1_784], ['T', 1_784, 2_738],
+  ['S', 1_722, 1_784], ['T', 1_784, 3_026],
 ] as const
 
-test('schema v6 exposes the exact 2,738-value policy contract', () => {
-  assert.equal(ML_BOT_POLICY_SPEC.modelVersion, 6)
-  assert.equal(ML_BOT_POLICY_SPEC.observationVersion, 6)
-  assert.equal(ML_BOT_POLICY_SPEC.mainTrajectoryVersion, 6)
-  assert.equal(ML_BOT_POLICY_SPEC.choiceTrajectoryVersion, 6)
+test('schema v7 exposes the exact 3,026-value policy contract', () => {
+  assert.equal(ML_BOT_POLICY_SPEC.modelVersion, 7)
+  assert.equal(ML_BOT_POLICY_SPEC.observationVersion, 7)
+  assert.equal(ML_BOT_POLICY_SPEC.mainTrajectoryVersion, 7)
+  assert.equal(ML_BOT_POLICY_SPEC.choiceTrajectoryVersion, 7)
   assert.deepEqual(ML_BOT_POLICY_SPEC.hiddenSizes, [512, 256])
   assert.deepEqual(ML_BOT_POLICY_BLOCKS.map(({ key, names }) => [key, names.length]), EXPECTED_BLOCKS)
   assert.deepEqual(
     ML_BOT_POLICY_BLOCKS.map(({ end, key, start }) => [key, start, end]),
     EXPECTED_BOUNDARIES,
   )
-  assert.equal(ML_BOT_POLICY_OBSERVATION_NAMES.length, 2_738)
-  assert.equal(new Set(ML_BOT_POLICY_OBSERVATION_NAMES).size, 2_738)
+  assert.equal(ML_BOT_POLICY_OBSERVATION_NAMES.length, 3_026)
+  assert.equal(new Set(ML_BOT_POLICY_OBSERVATION_NAMES).size, 3_026)
   assert.deepEqual(Object.fromEntries(Object.entries(ML_BOT_POLICY_ACTION_HEADS).map(
     ([head, actions]) => [head, actions.length],
   )), { ability: 22, aim: 9, movement: 9, target: 9 })

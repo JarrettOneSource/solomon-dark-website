@@ -48,6 +48,7 @@ test('equipped primary rows identify all five elements and ten weld builds exact
     const row = equippedRow(state, 0)
     assert.equal(row[COLUMN.present!], 1)
     assertClose(row[COLUMN.option_id_index_scaled!]!, skillId / ML_BOT_POLICY_SCALES.skillId)
+    assert.equal(exactIdentity(row, 'skill_id'), skillId)
     assert.equal(row[COLUMN.is_primary!], 1)
     assert.equal(row[COLUMN.is_weld!], 0)
     identities.add(row.join(','))
@@ -68,6 +69,8 @@ test('equipped primary rows identify all five elements and ten weld builds exact
     })
     const row = equippedRow(state, 0)
     assertClose(row[COLUMN.option_id_index_scaled!]!, 52 / ML_BOT_POLICY_SCALES.skillId)
+    assert.equal(exactIdentity(row, 'skill_id'), 52)
+    assert.equal(exactIdentity(row, 'weld_build_id'), weld.id)
     assert.equal(row[COLUMN.is_weld!], 1)
     assertClose(row[COLUMN.weld_build_index_scaled!]!, (weld.id - 1_000) / 10)
     identities.add(row.join(','))
@@ -85,6 +88,7 @@ test('all 23 equipped secondary spells have collision-free rank-aware semantic r
     assert.equal(row[COLUMN.present!], 1)
     assert.equal(row[COLUMN.catalog_known!], 1)
     assertClose(row[COLUMN.option_id_index_scaled!]!, skillId / ML_BOT_POLICY_SCALES.skillId)
+    assert.equal(exactIdentity(row, 'skill_id'), skillId)
     assertClose(row[COLUMN.effective_rank_scaled!]!, 1 / ML_BOT_POLICY_SCALES.skillRank)
     assert.equal(row[COLUMN.is_secondary!], 1)
     assert.ok(ML_BOT_POLICY_OPTION_DESCRIPTOR_NAMES.some((name, index) => (
@@ -97,6 +101,27 @@ test('all 23 equipped secondary spells have collision-free rank-aware semantic r
     equippedRow(stateWithSecondarySlots([skillId]), 1).join(',')
   ))
   assert.equal(new Set(formerlyAmbiguous).size, FORMERLY_AMBIGUOUS_SECONDARIES.length)
+})
+
+test('exact identity bits keep future ids distinct after the smooth scaled feature saturates', () => {
+  const state = baseState()
+  const skillBook = getPlayerSkillBook(state, PLAYER_ID)
+  const statBook = getPlayerStatBook(state, PLAYER_ID)
+  const first = describeMlBotPolicySkill(skillBook, statBook, {
+    applyCount: 0,
+    skillId: 81,
+    targetRank: 0,
+  })
+  const second = describeMlBotPolicySkill(skillBook, statBook, {
+    applyCount: 0,
+    skillId: 82,
+    targetRank: 0,
+  })
+  assert.equal(first[COLUMN.option_id_index_scaled!], 1)
+  assert.equal(second[COLUMN.option_id_index_scaled!], 1)
+  assert.equal(exactIdentity(first, 'skill_id'), 81)
+  assert.equal(exactIdentity(second, 'skill_id'), 82)
+  assert.notDeepEqual(first, second)
 })
 
 test('equipped rows preserve all eight quickbar positions and exact empty rows', () => {
@@ -267,4 +292,10 @@ function equippedRow(state: GameSimulationState, row: number): Float32Array {
 
 function assertClose(actual: number, expected: number): void {
   assert.ok(Math.abs(actual - expected) < 1e-6, `${actual} is not close to ${expected}`)
+}
+
+function exactIdentity(row: Float32Array, prefix: 'skill_id' | 'weld_build_id'): number {
+  return Array.from({ length: 16 }, (_, bit) => (
+    Number(row[COLUMN[`${prefix}_bit_${bit}`]!] ?? 0) << bit
+  )).reduce((value, bit) => value | bit, 0)
 }

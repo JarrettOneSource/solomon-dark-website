@@ -35,6 +35,7 @@ export function describeMlBotPolicySkill(
   const values = descriptorValues()
   values.present = 1
   values.option_id_index_scaled = scaledUnsigned(skillId, ML_BOT_POLICY_SCALES.skillId)
+  setUnsignedIdentity(values, 'skill_id', skillId)
   values.catalog_known = Number(catalog !== undefined && stats !== undefined)
   values.apply_count_scaled = scaledUnsigned(applyCount, ML_BOT_POLICY_SCALES.skillRank)
   values.learned_rank_scaled = scaledUnsigned(
@@ -71,6 +72,7 @@ export function describeMlBotPolicySkill(
       values[`weld_element_${primaryElement(primaryId)}`] = 1
     }
     values.weld_build_index_scaled = scaledUnsigned(weld.id - 1_000, 10)
+    setUnsignedIdentity(values, 'weld_build_id', weld.id)
   }
   const mechanics = {
     mana_cost: ranked(stats?.numericProperties.mManaCost, targetRank),
@@ -137,6 +139,19 @@ export function describeMlBotPolicySkill(
   return Float32Array.from(
     ML_BOT_POLICY_OPTION_DESCRIPTOR_NAMES.map((name) => values[name] ?? 0),
   )
+}
+
+function setUnsignedIdentity(
+  values: Record<DescriptorName, number>,
+  prefix: 'skill_id' | 'weld_build_id',
+  value: number,
+): void {
+  if (!Number.isInteger(value) || value < 0 || value > 0xffff) {
+    throw new RangeError(`ML bot policy ${prefix} ${value} is outside uint16`)
+  }
+  for (let bit = 0; bit < 16; bit += 1) {
+    values[`${prefix}_bit_${bit}` as DescriptorName] = (value >>> bit) & 1
+  }
 }
 
 export function mlBotPolicySkillCoverageKey(

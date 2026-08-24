@@ -17,7 +17,7 @@ from .advantages import (
 )
 from .bridge import BoneyardRolloutBridge
 from .checkpoint import decode_checkpoint, encode_checkpoint, typescript_checkpoint_report
-from .model import PolicyV6
+from .model import PolicyV7
 from .metrics import (
     episode_gameplay_summary,
     evaluation_checkpoint_identity,
@@ -38,12 +38,12 @@ from .trainer import TrainingConfiguration, validate_resume_state
 def main() -> int:
     torch.use_deterministic_algorithms(True)
     torch.manual_seed(0x5EED)
-    policy = PolicyV6.initialize(0x5EED)
+    policy = PolicyV7.initialize(0x5EED)
     metadata = POLICY_SPEC.checkpoint_metadata(0x5EED)
     encoded = encode_checkpoint(metadata, policy.export_tensors())
     decoded_metadata, decoded_tensors = decode_checkpoint(encoded)
     assert decoded_metadata == metadata
-    restored = PolicyV6()
+    restored = PolicyV7()
     restored.load_tensors(decoded_tensors)
     for name, tensor in policy.export_tensors().items():
         np.testing.assert_array_equal(tensor, restored.export_tensors()[name])
@@ -237,7 +237,7 @@ def main() -> int:
             "trainedEnvironmentSteps": 10,
             "trainedUpdates": 1,
         }
-        summary_checkpoint = temporary / "policy-v6-update-000001.sdml"
+        summary_checkpoint = temporary / "policy-v7-update-000001.sdml"
         summary_checkpoint.write_bytes(
             encode_checkpoint(summary_metadata, policy.export_tensors())
         )
@@ -305,27 +305,27 @@ def main() -> int:
         identity_report = {
             "checkpoint": str(summary_checkpoint.resolve()),
             "checkpointSha256": summary["checkpoint_sha256"],
-            "evaluationVersion": 6,
+            "evaluationVersion": 7,
         }
         identity = evaluation_checkpoint_identity(
             identity_report, identity_report, label="candidate"
         )
         assert identity["checkpointSha256"] == summary["checkpoint_sha256"]
         legacy_identity = evaluation_checkpoint_identity(
-            {**identity_report, "evaluationVersion": 5},
-            {**identity_report, "evaluationVersion": 5},
+            {**identity_report, "evaluationVersion": 6},
+            {**identity_report, "evaluationVersion": 6},
             label="incumbent",
-            accepted_versions=(5, 6),
+            accepted_versions=(5, 6, 7),
         )
         assert legacy_identity == identity
         try:
             evaluation_checkpoint_identity(
-                {**identity_report, "evaluationVersion": 5},
-                {**identity_report, "evaluationVersion": 5},
+                {**identity_report, "evaluationVersion": 6},
+                {**identity_report, "evaluationVersion": 6},
                 label="candidate",
             )
         except ValueError as error:
-            assert "version must be one of 6" in str(error)
+            assert "version must be one of 7" in str(error)
         else:
             raise AssertionError("candidate accepted a legacy evaluation version")
         try:

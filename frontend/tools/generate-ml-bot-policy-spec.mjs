@@ -13,7 +13,7 @@ import { ML_BOT_PRIMARY_CURRICULUM } from '../src/game/core-server/ml-bot-policy
 
 const outputPath = resolve(
   import.meta.dirname,
-  '../src/game/core-server/ml-bot-policy/policy-spec-v6.json',
+  '../src/game/core-server/ml-bot-policy/policy-spec-v7.json',
 )
 const artifact = {
   ...ML_BOT_POLICY_SPEC,

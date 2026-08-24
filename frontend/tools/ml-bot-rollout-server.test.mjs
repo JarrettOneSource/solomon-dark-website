@@ -15,7 +15,7 @@ test('rollout server carries exact plans, expert transitions, and selective rese
       workerCount: 2,
     })
     assert.equal(initialized.ok, true)
-    assert.equal(initialized.protocol, 'solomon-dark-ml-rollout-v6-choice1')
+    assert.equal(initialized.protocol, 'solomon-dark-ml-rollout-v7-choice1')
     assert.equal(initialized.worldCount, 2)
     assert.deepEqual(initialized.metadata.map(({ seed }) => seed), [101, 102])
     assert.deepEqual(
@@ -25,7 +25,7 @@ test('rollout server carries exact plans, expert transitions, and selective rese
     assert.ok(initialized.metadata.every(({ geometrySha256, runId }) => (
       geometrySha256.length > 0 && runId.length > 0
     )))
-    assert.equal(bytes(initialized.observations), 2 * 2_738 * 4)
+    assert.equal(bytes(initialized.observations), 2 * 3_026 * 4)
     assert.equal(bytes(initialized.plans.movement), 2 * 9)
     assert.equal(bytes(initialized.plans.target), 2 * 9)
     assert.equal(bytes(initialized.plans.abilityByTarget), 2 * 9 * 22)
@@ -34,7 +34,7 @@ test('rollout server carries exact plans, expert transitions, and selective rese
     const expert = await bridge.request({ ticks: 2, type: 'expert-step' })
     assert.equal(expert.ok, true)
     assert.equal(bytes(expert.transition.actions), 2 * 4)
-    assert.equal(bytes(expert.transition.observations), 2 * 2_738 * 4)
+    assert.equal(bytes(expert.transition.observations), 2 * 3_026 * 4)
     assert.equal(bytes(expert.transition.rewards), 2 * 8)
     assert.equal(bytes(expert.transition.ticks), 2 * 4)
     assert.equal(expert.transition.gameplayCounters.length, 2)
@@ -71,8 +71,8 @@ test('rollout server round-trips learned choice plans and evaluations', async ()
     }
     const choice = state.choices[0]
     assert.ok(choice)
-    assert.equal(bytes(choice.observation), 2_738 * 4)
-    assert.equal(bytes(choice.optionDescriptors) % (106 * 4), 0)
+    assert.equal(bytes(choice.observation), 3_026 * 4)
+    assert.equal(bytes(choice.optionDescriptors) % (138 * 4), 0)
     assert.equal(bytes(choice.optionMask), choice.optionIds.length)
     const selected = await bridge.request({
       choices: [{ oldLogProbability: -0.5, oldValue: 1.25, selectedOption: 0 }],

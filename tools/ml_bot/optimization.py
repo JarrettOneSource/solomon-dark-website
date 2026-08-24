@@ -10,7 +10,7 @@ import numpy as np
 import torch
 from torch import Tensor
 
-from .model import PolicyV6
+from .model import PolicyV7
 from .spec import POLICY_SPEC
 
 ENTROPY_COEFFICIENTS = {
@@ -109,7 +109,7 @@ class ChoiceCoverage:
 
 
 def behavior_clone(
-    policy: PolicyV6,
+    policy: PolicyV7,
     optimizer: torch.optim.Optimizer,
     observations: Tensor,
     masks: Mapping[str, Tensor],
@@ -180,7 +180,7 @@ def balanced_class_weights(actions: Tensor, width: int) -> Tensor:
 
 
 def classification_accuracy(
-    policy: PolicyV6,
+    policy: PolicyV7,
     observations: Tensor,
     masks: Mapping[str, Tensor],
     actions: Mapping[str, Tensor],
@@ -206,7 +206,7 @@ def classification_accuracy(
 
 
 def choice_behavior_clone(
-    policy: PolicyV6,
+    policy: PolicyV7,
     optimizer: torch.optim.Optimizer,
     observations: Tensor,
     descriptors: Tensor,
@@ -256,7 +256,7 @@ def choice_behavior_clone(
 
 
 def choice_classification_accuracy(
-    policy: PolicyV6,
+    policy: PolicyV7,
     observations: Tensor,
     descriptors: Tensor,
     masks: Tensor,
@@ -273,7 +273,7 @@ def choice_classification_accuracy(
 
 
 def ppo_epochs(
-    policy: PolicyV6,
+    policy: PolicyV7,
     optimizer: torch.optim.Optimizer,
     observations: Tensor,
     masks: Mapping[str, Tensor],
@@ -357,7 +357,7 @@ def ppo_epochs(
 
 
 def choice_ppo_epochs(
-    policy: PolicyV6,
+    policy: PolicyV7,
     optimizer: torch.optim.Optimizer,
     observations: Tensor,
     descriptors: Tensor,
@@ -448,13 +448,22 @@ def descriptor_keys(descriptor: np.ndarray) -> tuple[str, ...]:
         for name in POLICY_SPEC.option_descriptor_names
         if name.startswith("family_") and descriptor[feature[name]] > 0.5
     ) or ("unknown",)
+    skill_id = sum(
+        int(descriptor[feature[f"skill_id_bit_{bit}"]] > 0.5) << bit
+        for bit in range(16)
+    )
     keys = [f"family:{family}" for family in families]
+    keys.append(f"skill:{skill_id}")
     if descriptor[feature["is_weld"]] > 0.5:
         elements = "".join(
             "1" if descriptor[feature[f"weld_element_{element}"]] > 0.5 else "0"
             for element in ("ether", "fire", "air", "water", "earth")
         )
-        keys.append(f"weld:{elements}:{descriptor[feature['weld_build_index_scaled']]:.9g}")
+        build_id = sum(
+            int(descriptor[feature[f"weld_build_id_bit_{bit}"]] > 0.5) << bit
+            for bit in range(16)
+        )
+        keys.append(f"weld:{build_id}:{elements}")
     return tuple(sorted(set(keys)))
 
 

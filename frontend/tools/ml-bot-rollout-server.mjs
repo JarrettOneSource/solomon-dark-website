@@ -7,7 +7,7 @@ import {
   mlBotPrimaryCurriculumEntryForSeed,
 } from '../src/game/core-server/ml-bot-policy/primary-curriculum.ts'
 
-const PROTOCOL = 'solomon-dark-ml-rollout-v6-choice1'
+const PROTOCOL = 'solomon-dark-ml-rollout-v7-choice1'
 let pool = null
 
 const input = readline.createInterface({ input: process.stdin, crlfDelay: Infinity })

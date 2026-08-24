@@ -156,7 +156,7 @@ export class MlBotPolicyObserver {
     const blocks = ML_BOT_POLICY_BLOCKS.map(({ key, names }) => {
       const values = byKey.get(key)
       if (!values || values.length !== names.length) {
-        throw new Error(`ML bot policy Block ${key} does not match schema v6`)
+        throw new Error(`ML bot policy Block ${key} does not match schema v7`)
       }
       return Object.freeze({ key, values })
     })

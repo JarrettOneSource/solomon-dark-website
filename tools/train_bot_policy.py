@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Train, evaluate, and validate the Solomon Dark web policy-v6 bot."""
+"""Train, evaluate, and validate the Solomon Dark web policy-v7 bot."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ import torch
 
 from ml_bot.checkpoint import atomic_write, load_checkpoint, typescript_checkpoint_report
 from ml_bot.arena import checkpoint_arena
-from ml_bot.model import PolicyV6
+from ml_bot.model import PolicyV7
 from ml_bot.diagnostics import render_dashboard, render_replay
 from ml_bot.metrics import (
     evaluation_checkpoint_identity,
@@ -36,7 +36,7 @@ from ml_bot.trainer import (
     train_policy,
 )
 
-DEFAULT_OUTPUT = REPOSITORY_ROOT / "runtime/ml-training/web-v6"
+DEFAULT_OUTPUT = REPOSITORY_ROOT / "runtime/ml-training/web-v7"
 DEFAULT_EVAL_SEEDS = REPOSITORY_ROOT / "tools/ml_bot/eval-seeds.json"
 
 
@@ -177,7 +177,7 @@ def run_evaluate(args: argparse.Namespace) -> Any:
 
 def run_validate(args: argparse.Namespace) -> Any:
     metadata, tensors = load_checkpoint(Path(args.checkpoint).resolve())
-    policy = PolicyV6()
+    policy = PolicyV7()
     policy.load_tensors(tensors)
     typescript = typescript_checkpoint_report(Path(args.checkpoint).resolve())
     if typescript.get("sha256") != typescript.get("reencodedSha256"):
@@ -348,7 +348,7 @@ def run_promote(args: argparse.Namespace) -> Any:
         reports["incumbentTrain"],
         reports["incumbentHoldout"],
         label="incumbent",
-        accepted_versions=(5, 6),
+        accepted_versions=(5, 6, 7),
     )
     candidate_identity = evaluation_checkpoint_identity(
         reports["candidateTrain"], reports["candidateHoldout"], label="candidate"
@@ -573,7 +573,7 @@ def create_parser() -> argparse.ArgumentParser:
     summary_parser.add_argument("--output", required=True)
     summary_parser.set_defaults(handler=run_summary)
 
-    validate_parser = subparsers.add_parser("validate", help="validate a strict v6 checkpoint")
+    validate_parser = subparsers.add_parser("validate", help="validate a strict v7 checkpoint")
     validate_parser.add_argument("--checkpoint", required=True)
     validate_parser.set_defaults(handler=run_validate)
 
@@ -684,7 +684,7 @@ def add_training(
         parser.set_defaults(gamma=0.995)
     parser.add_argument("--gae-lambda", type=closed_fraction, default=0.95)
     parser.add_argument("--target-kl", type=positive_float, default=0.02)
-    parser.add_argument("--experiment", default="First schema-v6 web headless PPO campaign")
+    parser.add_argument("--experiment", default="First schema-v7 web headless PPO campaign")
     parser.add_argument("--expected-metric", default="holdout wave depth increases")
     parser.add_argument("--eval-condition", default="frozen train-dist and holdout seeds")
     if environment:

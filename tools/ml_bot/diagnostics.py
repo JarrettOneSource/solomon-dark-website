@@ -1,4 +1,4 @@
-"""Read-only schema-v6 rollout audits and self-contained training dashboard."""
+"""Read-only schema-v7 rollout audits and self-contained training dashboard."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ def write_observation_audit(path: Path, observations: np.ndarray) -> None:
     )
     finite = np.isfinite(values)
     report = {
-        "audit_version": 6,
+        "audit_version": 7,
         "rows": values.shape[0],
         "nonfinite_total": int(np.size(finite) - np.count_nonzero(finite)),
         "features": [
@@ -57,7 +57,7 @@ def write_value_calibration(
     ):
         raise ValueError("value calibration arrays must be equal and finite")
     payload = {
-        "calibration_version": 6,
+        "calibration_version": 7,
         "count": int(predicted.size),
         "mean_error": float(np.mean(predicted - realized)),
         "root_mean_square_error": float(np.sqrt(np.mean((predicted - realized) ** 2))),
@@ -80,13 +80,13 @@ def render_dashboard(training_directory: Path, output: Path) -> Mapping[str, Any
     ).replace("</", "<\\/")
     document = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
-<title>Solomon Dark ML policy v6 diagnostics</title>
+<title>Solomon Dark ML policy v7 diagnostics</title>
 <style>
 body{{margin:0;background:#11151b;color:#e8edf2;font:14px system-ui,sans-serif}}main{{max-width:1200px;margin:auto;padding:24px}}
 h1,h2{{font-weight:600}}.grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:16px}}
 section{{background:#1a2029;border:1px solid #303946;border-radius:8px;padding:16px}}canvas{{width:100%;height:220px;background:#0d1117}}
 table{{width:100%;border-collapse:collapse}}th,td{{padding:6px;text-align:right;border-bottom:1px solid #303946}}th:first-child,td:first-child{{text-align:left}}
-</style></head><body><main><h1>ML policy v6 diagnostics</h1><p id="summary"></p><div class="grid">
+</style></head><body><main><h1>ML policy v7 diagnostics</h1><p id="summary"></p><div class="grid">
 <section><h2>Return and wave depth</h2><canvas id="returns" width="720" height="300"></canvas></section>
 <section><h2>Losses and KL</h2><canvas id="losses" width="720" height="300"></canvas></section>
 <section><h2>Per-head entropy</h2><canvas id="entropy" width="720" height="300"></canvas></section>
@@ -139,7 +139,7 @@ def write_spatial_replay(path: Path, rollout: Any, *, world: int = 0) -> None:
         ticks = int(rollout.ticks[decision, world])
         elapsed_ticks += ticks
         append_jsonl(path, {
-            "replay_version": 6,
+            "replay_version": 7,
             "episode_id": metadata["runId"],
             "geometry_sha256": metadata["geometrySha256"],
             "primary_loadout_key": metadata["primaryLoadoutKey"],
@@ -169,7 +169,7 @@ def render_replay(source: Path, output: Path) -> Mapping[str, Any]:
     payload = json.dumps(rows, allow_nan=False, separators=(",", ":")).replace("</", "<\\/")
     document = f"""<!doctype html><html><head><meta charset="utf-8"><title>ML policy replay</title>
 <style>body{{margin:0;background:#10141a;color:#e5e7eb;font:14px system-ui}}main{{padding:20px}}canvas{{background:#080b10;border:1px solid #334155;max-width:95vw}}</style></head>
-<body><main><h1>ML policy v6 spatial replay</h1><p id="label"></p><canvas id="view" width="900" height="700"></canvas></main>
+<body><main><h1>ML policy v7 spatial replay</h1><p id="label"></p><canvas id="view" width="900" height="700"></canvas></main>
 <script id="data" type="application/json">{payload}</script><script>
 const rows=JSON.parse(document.getElementById('data').textContent),c=document.getElementById('view'),x=c.getContext('2d');let i=0;
 function frame(){{const r=rows[i%rows.length];x.fillStyle='#080b10';x.fillRect(0,0,c.width,c.height);const px=r.position.x*c.width,py=r.position.y*c.height;

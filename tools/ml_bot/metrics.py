@@ -106,7 +106,7 @@ def evaluation_checkpoint_identity(
     holdout_report: Mapping[str, Any],
     *,
     label: str,
-    accepted_versions: Sequence[int] = (6,),
+    accepted_versions: Sequence[int] = (7,),
 ) -> Mapping[str, str]:
     if not accepted_versions or any(
         not isinstance(version, int) or isinstance(version, bool) or version < 1
@@ -345,7 +345,7 @@ def training_summary(
     gameplay["primary_loadouts"] = episode_gameplay["primary_loadouts"]
     digest = hashlib.sha256(checkpoint.read_bytes()).hexdigest()
     return {
-        "summary_version": 6,
+        "summary_version": 7,
         "checkpoint": str(checkpoint.resolve()),
         "checkpoint_sha256": digest,
         "checkpoint_bytes": checkpoint.stat().st_size,

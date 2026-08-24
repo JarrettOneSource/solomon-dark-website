@@ -4,6 +4,7 @@ import {
   ML_BOT_POLICY_MODEL_FORMAT,
   ML_BOT_POLICY_OBSERVATION_NAMES,
   ML_BOT_POLICY_OPTION_DESCRIPTOR_NAMES,
+  ML_BOT_POLICY_SPEC,
 } from './spec.ts'
 
 export const ML_BOT_POLICY_TENSOR_SPECS = Object.freeze({
@@ -12,7 +13,7 @@ export const ML_BOT_POLICY_TENSOR_SPECS = Object.freeze({
   aim_bias: [9],
   aim_weight: [9, 256],
   choice_hidden_bias: [128],
-  choice_hidden_weight: [128, 362],
+  choice_hidden_weight: [128, 394],
   choice_score_bias: [1],
   choice_score_weight: [1, 128],
   choice_value_bias: [1],
@@ -22,7 +23,7 @@ export const ML_BOT_POLICY_TENSOR_SPECS = Object.freeze({
   target_bias: [9],
   target_weight: [9, 256],
   trunk_1_bias: [512],
-  trunk_1_weight: [512, 2_738],
+  trunk_1_weight: [512, 3_026],
   trunk_2_bias: [256],
   trunk_2_weight: [256, 512],
   value_bias: [1],
@@ -47,6 +48,7 @@ export interface MlBotPolicyCheckpointMetadata {
   readonly observationNames: readonly string[]
   readonly observationVersion: number
   readonly optionDescriptorNames: readonly string[]
+  readonly primaryCurriculum: typeof ML_BOT_POLICY_SPEC.primaryCurriculum
   readonly seed: number
   readonly trainedEnvironmentSteps: number
   readonly trainedUpdates: number
@@ -69,7 +71,7 @@ interface EncodedHeader {
   readonly tensors: readonly EncodedTensorDescriptor[]
 }
 
-const MAGIC = Uint8Array.from([0x53, 0x44, 0x4d, 0x4c, 0x56, 0x36, 0x00, 0x01])
+const MAGIC = Uint8Array.from([0x53, 0x44, 0x4d, 0x4c, 0x56, 0x37, 0x00, 0x01])
 const PREFIX_BYTES = MAGIC.length + 4
 
 export function createZeroMlBotPolicyCheckpoint(seed: number): MlBotPolicyCheckpoint {
@@ -85,14 +87,15 @@ export function createZeroMlBotPolicyCheckpoint(seed: number): MlBotPolicyCheckp
       choiceHiddenSize: 128,
       choicePolicyMode: 'scripted',
       choiceTemperature: 1.25,
-      choiceTrajectoryVersion: 6,
+      choiceTrajectoryVersion: 7,
       hiddenSizes: Object.freeze([512, 256]),
-      mainTrajectoryVersion: 6,
+      mainTrajectoryVersion: 7,
       modelFormat: ML_BOT_POLICY_MODEL_FORMAT,
-      modelVersion: 6,
+      modelVersion: 7,
       observationNames: ML_BOT_POLICY_OBSERVATION_NAMES,
-      observationVersion: 6,
+      observationVersion: 7,
       optionDescriptorNames: ML_BOT_POLICY_OPTION_DESCRIPTOR_NAMES,
+      primaryCurriculum: ML_BOT_POLICY_SPEC.primaryCurriculum,
       seed,
       trainedEnvironmentSteps: 0,
       trainedUpdates: 0,
@@ -115,7 +118,7 @@ export function validateMlBotPolicyCheckpoint(checkpoint: MlBotPolicyCheckpoint)
     ['main trajectory', metadata.mainTrajectoryVersion],
     ['choice trajectory', metadata.choiceTrajectoryVersion],
   ] as const) {
-    if (value !== 6) throw new Error(`ML bot policy ${label} version 6 is required; legacy artifacts have no shim`)
+    if (value !== 7) throw new Error(`ML bot policy ${label} version 7 is required; legacy artifacts have no shim`)
   }
   requireNames(metadata.observationNames, ML_BOT_POLICY_OBSERVATION_NAMES, 'observation names')
   requireNames(
@@ -124,6 +127,9 @@ export function validateMlBotPolicyCheckpoint(checkpoint: MlBotPolicyCheckpoint)
     'option descriptor names',
   )
   requireNames(metadata.hiddenSizes.map(String), ['512', '256'], 'hidden sizes')
+  if (JSON.stringify(metadata.primaryCurriculum) !== JSON.stringify(ML_BOT_POLICY_SPEC.primaryCurriculum)) {
+    throw new Error('ML bot policy primary curriculum does not match schema v7')
+  }
   if (metadata.choiceHiddenSize !== 128) throw new Error('ML bot policy choice hidden size must be 128')
   for (const head of ['movement', 'target', 'ability', 'aim'] as const) {
     requireNames(metadata.actionHeads[head], ML_BOT_POLICY_ACTION_HEADS[head], `${head} actions`)
@@ -277,7 +283,7 @@ function elementCount(shape: readonly number[]): number {
 
 function requireNames(actual: readonly string[], expected: readonly string[], label: string): void {
   if (actual.length !== expected.length || actual.some((value, index) => value !== expected[index])) {
-    throw new Error(`ML bot policy ${label} do not match schema v6`)
+    throw new Error(`ML bot policy ${label} do not match schema v7`)
   }
 }
 

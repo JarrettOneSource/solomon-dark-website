@@ -14,7 +14,7 @@ import numpy as np
 
 from .spec import POLICY_SPEC, REPOSITORY_ROOT, require_uint32
 
-PROTOCOL = "solomon-dark-ml-rollout-v6-choice1"
+PROTOCOL = "solomon-dark-ml-rollout-v7-choice1"
 SERVER_PATH = REPOSITORY_ROOT / "frontend/tools/ml-bot-rollout-server.mjs"
 
 
@@ -118,7 +118,7 @@ class BoneyardRolloutBridge:
             or self.observation_length != POLICY_SPEC.observation_size
         ):
             self.close()
-            raise RolloutProtocolError("rollout server dimensions do not match schema v6")
+            raise RolloutProtocolError("rollout server dimensions do not match schema v7")
         self.state = decode_state(response, self.world_count)
 
     def step(self, actions: np.ndarray, *, ticks: int = 1) -> RolloutStep:
@@ -226,7 +226,7 @@ class BoneyardRolloutBridge:
         if not isinstance(response, dict) or response.get("id") != request_id:
             raise RolloutProtocolError("rollout server response id is invalid")
         if response.get("protocol") != PROTOCOL:
-            raise RolloutProtocolError("rollout server protocol is not schema v6")
+            raise RolloutProtocolError("rollout server protocol is not schema v7")
         if response.get("ok") is not True:
             raise RolloutProtocolError(str(response.get("error", "rollout request failed")))
         return response
@@ -416,8 +416,8 @@ def decode_indexed_choice(value: Any, *, interval: bool) -> Mapping[str, Any]:
         event.get("optionMask"), "u1", (event["optionDescriptors"].shape[0],), "choice mask"
     )
     if interval:
-        if event.get("choiceTrajectoryVersion") != 6:
-            raise RolloutProtocolError("choice interval is not trajectory v6")
+        if event.get("choiceTrajectoryVersion") != 7:
+            raise RolloutProtocolError("choice interval is not trajectory v7")
     event["worldIndex"] = world_index
     return event
 

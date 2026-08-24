@@ -1,4 +1,4 @@
-"""PyTorch implementation of the strict schema-v6 policy architecture."""
+"""PyTorch implementation of the strict schema-v7 policy architecture."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ class ChoiceEvaluation:
     value: Tensor
 
 
-class PolicyV6(nn.Module):
+class PolicyV7(nn.Module):
     def __init__(self) -> None:
         super().__init__()
         self.trunk_1 = nn.Linear(POLICY_SPEC.observation_size, 512)
@@ -53,7 +53,7 @@ class PolicyV6(nn.Module):
         self.choice_value = nn.Linear(256, 1)
 
     @classmethod
-    def initialize(cls, seed: int) -> "PolicyV6":
+    def initialize(cls, seed: int) -> "PolicyV7":
         if not isinstance(seed, int) or isinstance(seed, bool) or not 0 <= seed <= 0xFFFF_FFFF:
             raise ValueError("policy seed must be a uint32")
         with torch.random.fork_rng(devices=[]):
@@ -283,7 +283,7 @@ class PolicyV6(nn.Module):
 
     def load_tensors(self, tensors: Mapping[str, np.ndarray]) -> None:
         if set(tensors) != set(TENSOR_SHAPES):
-            raise ValueError("model tensors do not match schema v6")
+            raise ValueError("model tensors do not match schema v7")
         targets = {
             "ability_bias": self.ability.bias,
             "ability_weight": self.ability.weight,

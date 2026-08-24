@@ -1,5 +1,7 @@
+import { ML_BOT_PRIMARY_CURRICULUM } from './primary-curriculum.ts'
+
 export const ML_BOT_POLICY_MODEL_FORMAT = 'solomon-dark-web-bot-policy'
-export const ML_BOT_POLICY_ARCHITECTURE = 'mlp-tanh-four-head-v6'
+export const ML_BOT_POLICY_ARCHITECTURE = 'mlp-tanh-four-head-v7'
 
 function names(...values: readonly string[]): readonly string[] {
   return Object.freeze(values)
@@ -19,7 +21,9 @@ const EXTENDED_SKILL_MECHANICS = names(
 )
 
 export const ML_BOT_POLICY_OPTION_DESCRIPTOR_NAMES = names(
-  'present', 'option_id_index_scaled', 'catalog_known', 'apply_count_scaled',
+  'present', 'option_id_index_scaled',
+  ...Array.from({ length: 16 }, (_, bit) => `skill_id_bit_${bit}`),
+  'catalog_known', 'apply_count_scaled',
   'learned_rank_scaled', 'effective_rank_scaled', 'cap_rank_scaled',
   'max_rank_scaled', 'band_index_scaled', 'family_element', 'family_discipline',
   'family_ether', 'family_fire', 'family_air', 'family_water', 'family_earth',
@@ -27,7 +31,9 @@ export const ML_BOT_POLICY_OPTION_DESCRIPTOR_NAMES = names(
   'family_runtime_only', 'is_primary', 'is_secondary', 'is_passive',
   'is_utility', 'is_weld', 'is_health_up', 'is_mana_up', 'weld_element_ether',
   'weld_element_fire', 'weld_element_air', 'weld_element_water',
-  'weld_element_earth', 'weld_build_index_scaled', 'mana_cost_scaled',
+  'weld_element_earth', 'weld_build_index_scaled',
+  ...Array.from({ length: 16 }, (_, bit) => `weld_build_id_bit_${bit}`),
+  'mana_cost_scaled',
   'damage_min_scaled', 'damage_max_scaled', 'range_scaled', 'cooldown_scaled',
   'radius_scaled', 'duration_scaled', 'value_scaled', 'concentration_scaled',
   'chance_scaled', 'mana_cost_present',
@@ -599,29 +605,31 @@ export interface MlBotPolicyContract {
   readonly observationNames: readonly string[]
   readonly observationVersion: number
   readonly optionDescriptorNames: readonly string[]
+  readonly primaryCurriculum: typeof ML_BOT_PRIMARY_CURRICULUM
 }
 
 export const ML_BOT_POLICY_SPEC: MlBotPolicyContract = Object.freeze({
   actionHeads: ML_BOT_POLICY_ACTION_HEADS,
   architecture: ML_BOT_POLICY_ARCHITECTURE,
   choiceHiddenSize: 128,
-  choiceTrajectoryVersion: 6,
+  choiceTrajectoryVersion: 7,
   hiddenSizes: Object.freeze([512, 256]),
-  mainTrajectoryVersion: 6,
+  mainTrajectoryVersion: 7,
   modelFormat: ML_BOT_POLICY_MODEL_FORMAT,
-  modelVersion: 6,
+  modelVersion: 7,
   observationNames: ML_BOT_POLICY_OBSERVATION_NAMES,
-  observationVersion: 6,
+  observationVersion: 7,
   optionDescriptorNames: ML_BOT_POLICY_OPTION_DESCRIPTOR_NAMES,
+  primaryCurriculum: ML_BOT_PRIMARY_CURRICULUM,
 })
 
 export function validateMlBotPolicyContract(candidate: MlBotPolicyContract): void {
   requireEqual(candidate.modelFormat, ML_BOT_POLICY_MODEL_FORMAT, 'model format')
   requireEqual(candidate.architecture, ML_BOT_POLICY_ARCHITECTURE, 'architecture')
-  requireEqual(candidate.modelVersion, 6, 'model version')
-  requireEqual(candidate.observationVersion, 6, 'observation version')
-  requireEqual(candidate.mainTrajectoryVersion, 6, 'main trajectory version')
-  requireEqual(candidate.choiceTrajectoryVersion, 6, 'choice trajectory version')
+  requireEqual(candidate.modelVersion, 7, 'model version')
+  requireEqual(candidate.observationVersion, 7, 'observation version')
+  requireEqual(candidate.mainTrajectoryVersion, 7, 'main trajectory version')
+  requireEqual(candidate.choiceTrajectoryVersion, 7, 'choice trajectory version')
   requireNames(candidate.hiddenSizes.map(String), ['512', '256'], 'hidden sizes')
   requireEqual(candidate.choiceHiddenSize, 128, 'choice hidden size')
   requireNames(candidate.observationNames, ML_BOT_POLICY_OBSERVATION_NAMES, 'observation names')
@@ -630,13 +638,18 @@ export function validateMlBotPolicyContract(candidate: MlBotPolicyContract): voi
     ML_BOT_POLICY_OPTION_DESCRIPTOR_NAMES,
     'option descriptor names',
   )
+  requireEqual(
+    JSON.stringify(candidate.primaryCurriculum),
+    JSON.stringify(ML_BOT_PRIMARY_CURRICULUM),
+    'primary curriculum',
+  )
   for (const head of ['movement', 'target', 'ability', 'aim'] as const) {
     requireNames(candidate.actionHeads[head], ML_BOT_POLICY_ACTION_HEADS[head], `${head} actions`)
   }
 }
 
 function requireEqual(actual: unknown, expected: unknown, label: string): void {
-  if (actual !== expected) throw new Error(`ML bot policy ${label} does not match schema v6`)
+  if (actual !== expected) throw new Error(`ML bot policy ${label} does not match schema v7`)
 }
 
 function requireNames(
@@ -645,6 +658,6 @@ function requireNames(
   label: string,
 ): void {
   if (actual.length !== expected.length || actual.some((value, index) => value !== expected[index])) {
-    throw new Error(`ML bot policy ${label} do not match schema v6`)
+    throw new Error(`ML bot policy ${label} do not match schema v7`)
   }
 }

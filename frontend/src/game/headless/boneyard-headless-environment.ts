@@ -250,7 +250,7 @@ export class BoneyardHeadlessEnvironment {
       rewardTerms: transition.reward.terms,
       simulationTick: transition.simulationTick,
       ticks: transition.ticks,
-      trajectoryVersion: 6,
+      trajectoryVersion: 7,
     })
     return Object.freeze({
       nextObservation: transition.nextObservation,

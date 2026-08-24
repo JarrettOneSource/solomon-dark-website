@@ -18,7 +18,7 @@ from .bridge import (
     RolloutState,
     RolloutTransition,
 )
-from .model import MainActionBatch, PolicyV6
+from .model import MainActionBatch, PolicyV7
 from .spec import POLICY_SPEC
 
 FEATURE = {name: index for index, name in enumerate(POLICY_SPEC.observation_names)}
@@ -329,7 +329,7 @@ def split_choice_expert_dataset(
 
 
 def collect_policy_rollout(
-    policy: PolicyV6,
+    policy: PolicyV7,
     bridge: BoneyardRolloutBridge,
     *,
     steps: int,
@@ -431,7 +431,7 @@ def collect_policy_rollout(
 
 
 def resolve_policy_choices(
-    policy: PolicyV6,
+    policy: PolicyV7,
     bridge: BoneyardRolloutBridge,
     *,
     temperature: float,
@@ -835,7 +835,7 @@ def episode_record(
     error: str | None,
 ) -> Mapping[str, Any]:
     return {
-        "metrics_version": 6,
+        "metrics_version": 7,
         "seed": accumulator.seed,
         "composition": "solo",
         "boneyard_layout": accumulator.geometry_sha256,
@@ -941,13 +941,7 @@ def equipped_skill_ranks(observation: np.ndarray) -> Mapping[int, int]:
 def equipped_skill_id(observation: np.ndarray, prefix: str) -> int | None:
     if float(observation[FEATURE[f"{prefix}_present"]]) < 0.5:
         return None
-    skill_id = round(
-        float(observation[FEATURE[f"{prefix}_option_id_index_scaled"]])
-        * POLICY_SPEC.scales["skillId"]
-    )
-    if not 0 <= skill_id <= POLICY_SPEC.scales["skillId"]:
-        raise ValueError("equipped skill identity is outside the policy contract")
-    return skill_id
+    return observation_unsigned_identity(observation, prefix, "skill_id")
 
 
 def equipped_primary_loadout_key(observation: np.ndarray) -> str:
@@ -956,7 +950,23 @@ def equipped_primary_loadout_key(observation: np.ndarray) -> str:
         raise ValueError("equipped primary loadout is absent")
     if skill_id != 52:
         return f"primary:{skill_id}"
-    build_id = 1_000 + round(
-        float(observation[FEATURE["equipped_primary_weld_build_index_scaled"]]) * 10
+    build_id = observation_unsigned_identity(
+        observation,
+        "equipped_primary",
+        "weld_build_id",
     )
     return f"weld:{build_id}"
+
+
+def observation_unsigned_identity(
+    observation: np.ndarray,
+    prefix: str,
+    field: str,
+) -> int:
+    result = 0
+    for bit in range(16):
+        value = float(observation[FEATURE[f"{prefix}_{field}_bit_{bit}"]])
+        if value not in (0.0, 1.0):
+            raise ValueError(f"{prefix} {field} bit {bit} is not binary")
+        result |= int(value) << bit
+    return result

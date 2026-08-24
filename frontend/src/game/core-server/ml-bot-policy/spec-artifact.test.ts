@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import artifact from './policy-spec-v6.json' with { type: 'json' }
+import artifact from './policy-spec-v7.json' with { type: 'json' }
 import { ML_BOT_PRIMARY_CURRICULUM } from './primary-curriculum.ts'
 import {
   ML_BOT_POLICY_ACTION_HEADS,

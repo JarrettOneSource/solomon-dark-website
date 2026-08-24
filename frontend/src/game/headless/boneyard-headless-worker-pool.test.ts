@@ -18,7 +18,7 @@ test('persistent Boneyard workers are deterministic across reset and worker lane
     const actions = createBoneyardHeadlessActionBuffer(2)
     const stepped = await pool.step(actions, 10)
     assert.notDeepEqual(stepped.hashes, initial.hashes)
-    assert.equal(stepped.observations.length, 2 * 2_738)
+    assert.equal(stepped.observations.length, 2 * 3_026)
     assert.equal(stepped.masks.ability.length, 2 * 22)
     assert.deepEqual(stepped.transition.observations, initial.observations)
     assert.deepEqual(stepped.transition.nextObservations, stepped.observations)
