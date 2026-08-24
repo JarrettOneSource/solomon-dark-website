@@ -13,8 +13,9 @@ const renderer = readFileSync(
 const accountStyles = readFileSync(new URL('./game-account.css', import.meta.url), 'utf8')
 const hall = readFileSync(new URL('./HallOfFameScene.tsx', import.meta.url), 'utf8')
 const hallStyles = readFileSync(new URL('./hall-of-fame.css', import.meta.url), 'utf8')
-const activeWizard = readFileSync(new URL('./ActiveWizardDialog.tsx', import.meta.url), 'utf8')
-const activeWizardStyles = readFileSync(new URL('./active-wizard-dialog.css', import.meta.url), 'utf8')
+const stockPrompt = readFileSync(new URL('./StockPromptDialog.tsx', import.meta.url), 'utf8')
+const stockPromptContract = readFileSync(new URL('./title-menu-prompt.ts', import.meta.url), 'utf8')
+const stockPromptStyles = readFileSync(new URL('./stock-prompt-dialog.css', import.meta.url), 'utf8')
 
 test('contains the Solomon Darker artwork inside the native GPU title slot', () => {
   const mainMenuManifest = assetManifest.match(/export const mainMenu = \{([\s\S]*?)\n\}/)
@@ -49,17 +50,22 @@ test('title identity stays at the native left corner while Last Game uses its sa
   assert.match(renderer, /playButtonViews\[0\]\.label\.alpha = frame\.canResume \? 1 : 0\.36/)
 })
 
-test('New Game owns the current-wizard resume-or-kill decision before Create', () => {
+test('New Game uses the stock current-wizard YES or NO decision before Create', () => {
   assert.match(scene, /if \(resumeSave\) \{[\s\S]*setActiveWizardPrompt\(true\)/)
   assert.match(scene, /await onKillWizard\(\)[\s\S]*continueNewGame\(\)/)
-  assert.match(scene, /onResume=\{resumePromptWizard\}/)
-  assert.match(scene, /inert=\{activeWizardPrompt \|\| undefined\}/)
-  assert.match(activeWizard, /KILL CHARACTER\?/)
-  assert.match(activeWizard, /Starting a new game will kill off your current game and character/)
-  assert.match(activeWizard, /RESUME LAST GAME/)
-  assert.match(activeWizard, /KILL WIZARD/)
-  assert.match(activeWizard, /aria-modal="true"/)
-  assert.match(activeWizardStyles, /background:\s*rgb\(0 0 0 \/ 75%\)/)
+  assert.match(scene, /inert=\{titlePrompt !== null \|\| undefined\}/)
+  assert.doesNotMatch(scene, /resumePromptWizard|onResume=/)
+  assert.match(stockPromptContract, /NATIVE_KILL_CHARACTER_TITLE = 'Kill character\?'/)
+  assert.match(stockPromptContract, /Starting a new game will kill off your current game and character/)
+  assert.match(stockPromptContract, /Are you sure you want to do this\?/)
+  assert.match(stockPromptContract, /primaryLabel: 'YES'/)
+  assert.match(stockPromptContract, /secondaryLabel: 'NO'/)
+  assert.match(stockPromptContract, /planNativeUiMessage/)
+  assert.match(renderer, /title-menu-prompt-stage/)
+  assert.match(renderer, /nativeUi\.render\(planTitleMenuPrompt/)
+  assert.match(stockPrompt, /aria-modal="true"/)
+  assert.match(stockPrompt, /role="dialog"/)
+  assert.match(stockPromptStyles, /background:\s*transparent/)
 })
 
 test('Hall of Fame is actionable and owns local plus four global boards', () => {

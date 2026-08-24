@@ -119,6 +119,7 @@ export interface NativeUiTabsSpec {
 }
 
 export interface NativeUiMessageAction {
+  readonly bounds?: NativeUiRect
   readonly id: string
   readonly label: string
   readonly state?: NativeUiButtonState
@@ -175,6 +176,8 @@ export const NATIVE_UI_TAB = Object.freeze({
 export const NATIVE_UI_MESSAGE = Object.freeze({
   arrowRecord: 8,
   backgroundRecord: 49,
+  bodyBaselineOffset: 130.5,
+  bodyLineHeight: 17,
   cornerRecords: [107, 108, 109, 110] as const,
   edgeInsetX: 71.5,
   edgeInsetY: 76.5,
@@ -182,6 +185,8 @@ export const NATIVE_UI_MESSAGE = Object.freeze({
   horizontalEdgeRecord: 10,
   innerEdgeUvOrigin: 0.95,
   innerFrameRecord: 17,
+  textInsetX: 76,
+  titleBaselineOffset: 95,
   verticalEdgeRecord: 79,
 })
 
@@ -450,12 +455,13 @@ export function planNativeUiMessage(spec: NativeUiMessageSpec): NativeUiPlan {
       kind: 'text',
       label: 'message:title',
       text: {
+        align: 'left',
         font: 'menu',
-        maxWidth: bounds.width - 120,
+        maxWidth: 400,
         text: spec.title,
         tint: 0xffffff,
-        x: centerX,
-        y: bounds.top + 94,
+        x: bounds.left + NATIVE_UI_MESSAGE.textInsetX,
+        y: bounds.top + NATIVE_UI_MESSAGE.titleBaselineOffset,
       },
     },
     {
@@ -464,12 +470,12 @@ export function planNativeUiMessage(spec: NativeUiMessageSpec): NativeUiPlan {
       text: {
         align: 'left',
         font: 'medium',
-        lineHeight: 24,
-        maxWidth: bounds.width - 140,
+        lineHeight: NATIVE_UI_MESSAGE.bodyLineHeight,
+        maxWidth: 400,
         text: spec.body,
         tint: 0xffffff,
-        x: bounds.left + 70,
-        y: bounds.top + 135,
+        x: bounds.left + NATIVE_UI_MESSAGE.textInsetX,
+        y: bounds.top + NATIVE_UI_MESSAGE.bodyBaselineOffset,
       },
     },
   )
@@ -488,8 +494,12 @@ export function planNativeUiMessage(spec: NativeUiMessageSpec): NativeUiPlan {
     : Math.min(260, (availableWidth - actionGap) / 2)
   const actionsWidth = actionWidth * spec.actions.length + actionGap * (spec.actions.length - 1)
   const actionTop = bounds.top + bounds.height - 92
+  const suppliedActionBounds = spec.actions.filter(({ bounds: actionBounds }) => actionBounds !== undefined).length
+  if (suppliedActionBounds !== 0 && suppliedActionBounds !== spec.actions.length) {
+    throw new RangeError('native UI message action bounds must be supplied for every action or none')
+  }
   const actionFragments = spec.actions.map((action, index) => planNativeUiButton({
-    bounds: nativeUiRect(
+    bounds: action.bounds ?? nativeUiRect(
       centerX - actionsWidth / 2 + index * (actionWidth + actionGap),
       actionTop,
       actionWidth,

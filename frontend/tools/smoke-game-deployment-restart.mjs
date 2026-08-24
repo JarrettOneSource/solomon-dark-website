@@ -301,14 +301,17 @@ async function exercisePlayer({ account, label }) {
       .waitFor({ timeout: 30_000 })
     await page.getByRole('button', { name: 'New game' }).click()
     const activeWizardDialog = page.getByRole('dialog', {
-      name: 'Resume or kill the current wizard',
+      name: 'Kill character?',
     })
     await activeWizardDialog.waitFor({ timeout: 10_000 })
-    await activeWizardDialog.getByText('KILL CHARACTER?').waitFor()
+    await activeWizardDialog.getByText('Kill character?').waitFor()
     await activeWizardDialog.getByText(/Lucritius will scavenge his equipment/).waitFor()
+    await activeWizardDialog.getByText('Are you sure you want to do this?').waitFor()
     const promptScreenshotPath = `/tmp/solomon-active-wizard-${label}.png`
     await page.screenshot({ path: promptScreenshotPath })
-    await activeWizardDialog.getByRole('button', { name: 'Resume Last Game' }).click()
+    await activeWizardDialog.getByRole('button', { exact: true, name: 'NO' }).click()
+    await activeWizardDialog.waitFor({ state: 'detached' })
+    await lastGame.click()
     const resumedCanvas = page.locator('.hub-world-canvas[data-game-renderer="pixi-webgl"]')
     await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 30_000 })
     await resumedCanvas.waitFor({ timeout: 30_000 })
@@ -411,11 +414,12 @@ async function exerciseKilledWizard(document) {
     await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 90_000 })
     await page.getByRole('button', { name: 'Play' }).click()
     await page.getByRole('button', { name: 'New game' }).click()
-    const dialog = page.getByRole('dialog', { name: 'Resume or kill the current wizard' })
+    const dialog = page.getByRole('dialog', { name: 'Kill character?' })
     await dialog.waitFor({ timeout: 10_000 })
+    await dialog.getByText('Are you sure you want to do this?').waitFor()
     const promptScreenshotPath = '/tmp/solomon-kill-wizard-prompt.png'
     await page.screenshot({ path: promptScreenshotPath })
-    await dialog.getByRole('button', { name: 'Kill Wizard' }).click()
+    await dialog.getByRole('button', { exact: true, name: 'YES' }).click()
     await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({
       timeout: 30_000,
     })

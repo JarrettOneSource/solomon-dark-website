@@ -94,6 +94,12 @@ and `disabled`.
 arrows, curtain, and action rectangles. The screen owner continues to supply
 opening/closing progress and to decide what an action means.
 
+`planNativeUiMessage` uses the recovered MsgBox text inset, baselines, 17-pixel
+body-line advance, and 400-pixel wrap limit. A concrete native consumer may
+supply `bounds` on every message action when its recovered controls do not use
+the generic centered row; omitting action bounds retains the reusable one/two-
+button layout. Mixed supplied/derived action geometry fails closed.
+
 ## Bitmap text
 
 `native-ui-text.ts` is the shared measurement and glyph-layout seam for both

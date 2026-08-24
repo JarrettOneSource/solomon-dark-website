@@ -24,6 +24,12 @@ import {
   measureNativeUiText,
   wrapNativeUiText,
 } from './native-ui-text.ts'
+import {
+  NATIVE_KILL_CHARACTER_BODY,
+  NATIVE_KILL_CHARACTER_QUESTION,
+  NATIVE_KILL_CHARACTER_TITLE,
+  planTitleMenuPrompt,
+} from '../title-menu-prompt.ts'
 
 test('native UI catalog drains all stock presentation records and font wrappers', () => {
   assert.deepEqual(NATIVE_UI_MANIFEST.summary, {
@@ -146,6 +152,63 @@ test('stock messages compose exact chrome and one or two action rows in order', 
     assert.ok(plan.nodes.some((node) => node.kind === 'nine-slice' && node.record === 17))
     assert.ok(plan.nodes.some((node) => node.kind === 'text' && node.text.text === 'STOCK MESSAGE'))
   }
+})
+
+test('title Kill Character prompt preserves the settled stock lines and action geometry', () => {
+  const plan = planTitleMenuPrompt({
+    busy: false,
+    hoveredAction: 'prompt-secondary',
+    kind: 'kill-wizard',
+    pressedAction: null,
+  })
+  assert.equal(NATIVE_KILL_CHARACTER_TITLE, 'Kill character?')
+  assert.equal(
+    NATIVE_KILL_CHARACTER_BODY,
+    'Starting a new game will kill off your current game and character (Lucritius will scavenge his equipment)!',
+  )
+  assert.equal(NATIVE_KILL_CHARACTER_QUESTION, 'Are you sure you want to do this?')
+  assert.deepEqual(plan.actions.map(({ bounds, id }) => ({ bounds, id })), [
+    { bounds: nativeUiRect(595, 484, 200, 69), id: 'prompt-primary' },
+    { bounds: nativeUiRect(811, 484, 200, 69), id: 'prompt-secondary' },
+  ])
+  const background = plan.nodes.find(({ label }) => label === 'message:background')
+  assert.ok(background?.kind === 'tile')
+  assert.deepEqual(background.bounds, nativeUiRect(550, 268, 500, 362))
+  const title = plan.nodes.find(({ label }) => label === 'message:title')
+  const body = plan.nodes.find(({ label }) => label === 'message:body')
+  assert.ok(title?.kind === 'text' && body?.kind === 'text')
+  assert.deepEqual([title.text.align, title.text.x, title.text.y], ['left', 626, 363])
+  assert.deepEqual([body.text.x, body.text.y, body.text.lineHeight], [626, 398.5, 17])
+  assert.deepEqual(layoutNativeUiText(body.text).lines.map(({ text }) => text), [
+    'Starting a new game will kill off your',
+    'current game and character (Lucritius',
+    'will scavenge his equipment)!',
+    'Are you sure you want to do this?',
+  ])
+  assert.equal(
+    plan.nodes.find(({ label }) => label === 'prompt-secondary:body')?.kind,
+    'sprite',
+  )
+  const secondaryBody = plan.nodes.find(({ label }) => label === 'prompt-secondary:body')
+  assert.ok(secondaryBody?.kind === 'sprite')
+  assert.equal(secondaryBody.record, NATIVE_UI_BUTTON.pressedRecord)
+})
+
+test('tutorial offer reuses the same exact stock MsgBox composition', () => {
+  const plan = planTitleMenuPrompt({
+    busy: false,
+    hoveredAction: null,
+    kind: 'tutorial',
+    pressedAction: null,
+  })
+  const body = plan.nodes.find(({ label }) => label === 'message:body')
+  assert.ok(body?.kind === 'text')
+  assert.deepEqual(layoutNativeUiText(body.text).lines.map(({ text }) => text), [
+    'Learn the controls and confront',
+    'Solomon Dark before beginning your',
+    'first game.',
+  ])
+  assert.deepEqual(plan.actions.map(({ id }) => id), ['prompt-primary', 'prompt-secondary'])
 })
 
 test('SimpleMenu is a reusable composition over the same stock primitives', () => {

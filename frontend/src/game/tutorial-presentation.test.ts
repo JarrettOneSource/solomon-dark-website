@@ -1,39 +1,17 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import test from 'node:test'
 
 const source = (name: string) => readFileSync(new URL(name, import.meta.url), 'utf8')
 const nativeUi = JSON.parse(source('../assets/game/native-ui-assets.json'))
 
-test('keeps only the two native-visible control panels at their stock rectangles', () => {
-  const picker = source('./TutorialControlPicker.tsx')
+test('accepting the offer enters the tutorial prelude without a control picker', () => {
   const menu = source('./MainMenuScene.tsx')
   const css = source('./tutorial.css')
-  assert.match(picker, /tutorial-control-choice-arrows/)
-  assert.match(picker, /tutorial-control-choice-wasd/)
-  assert.doesNotMatch(picker, /tutorial-control-choice-mouse/)
-  assert.match(css, /tutorial-control-choice-arrows[\s\S]*left: 477\.5px;[\s\S]*top: 290px;[\s\S]*width: 245px;[\s\S]*height: 320px;/)
-  assert.match(css, /tutorial-control-choice-wasd[\s\S]*left: 850\.5px;[\s\S]*top: 324px;[\s\S]*width: 299px;[\s\S]*height: 252px;/)
-  assert.match(css, /tutorial-control-picker[\s\S]*pointer-events: auto;/)
-  assert.deepEqual(nativeUi.atlases.Controls.records['0'], {
-    frame: [0, 550, 245, 320], logicalSize: [245, 320], points: [], rotated: false, trimOrigin: [0, 0],
-  })
-  assert.deepEqual(nativeUi.atlases.Controls.records['2'], {
-    frame: [0, 0, 299, 252], logicalSize: [299, 252], points: [], rotated: false, trimOrigin: [0, 0],
-  })
-  for (const binding of [
-    "['openMenu', 'Escape']",
-    "['openInventory', 'KeyI']",
-    "['openSkills', 'KeyT']",
-    "['belt1', 'Mouse2']",
-    "['belt2', 'Delete']",
-    "['belt3', 'End']",
-    "['belt4', 'Backspace']",
-    "['belt5', 'PageUp']",
-    "['belt6', 'PageDown']",
-    "['belt7', 'Insert']",
-    "['belt8', 'Home']",
-  ]) assert.ok(menu.includes(binding), binding)
+  assert.match(menu, /titlePrompt === 'kill-wizard'[\s\S]*?else \{[\s\S]*?setTutorialOfferOpen\(false\)[\s\S]*?setScreen\('tutorial-prelude'\)/)
+  assert.doesNotMatch(menu, /tutorial-controls|TutorialControlPicker|tutorialControlSelection|chooseTutorialControls/)
+  assert.doesNotMatch(css, /tutorial-control-picker|tutorial-control-choice/)
+  assert.equal(existsSync(new URL('./TutorialControlPicker.tsx', import.meta.url)), false)
 })
 
 test('renders exact stock UI records for the prelude and blinking lesson pointer', () => {
@@ -59,15 +37,18 @@ test('renders exact stock UI records for the prelude and blinking lesson pointer
   })
   assert.match(overlay, /state\.stageTicks % 50 > 19/)
   assert.match(overlay, /durationTicks[\s\S]*?- state\.narration\.ticksRemaining[\s\S]*?\/ 100/)
-  assert.match(menu, /screen === 'tutorial-controls' \|\| screen === 'tutorial-prelude'[\s\S]*?\? 'boneyard'/)
+  assert.match(menu, /screen === 'tutorial-prelude'[\s\S]*?\? 'boneyard'/)
 })
 
-test('uses the stock heading and common-gold render family', () => {
-  const picker = source('./TutorialControlPicker.tsx')
-  const overlay = source('./TutorialOverlay.tsx')
+test('uses the stock MsgBox offer and common-gold teaching family', () => {
   const css = source('./tutorial.css')
-  assert.match(picker, /font="heading"[\s\S]*?tint=\{0xd9ba70\}/)
-  assert.match(css, /tutorial-control-picker-heading[\s\S]*?top: 30px;/)
+  const overlay = source('./TutorialOverlay.tsx')
+  const prompt = source('./title-menu-prompt.ts')
+  const renderer = source('./renderer/title-menu-renderer.ts')
+  assert.match(prompt, /title: 'PLAY THE TUTORIAL\?'/)
+  assert.match(prompt, /Learn the controls and confront/)
+  assert.match(prompt, /planNativeUiMessage/)
+  assert.match(renderer, /nativeUi\.render\(planTitleMenuPrompt/)
   assert.match(overlay, /baseline=\{instructionBaselines!\.heading\}[\s\S]*?font="heading"/)
   assert.match(overlay, /const TUTORIAL_GOLD = 0xd9ba70/)
   assert.match(overlay, /left: 'calc\(50% \+ 2\.25px\)'/)

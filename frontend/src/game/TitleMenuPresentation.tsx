@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 
 import { startGamePresentationLoop } from './game-presentation-frame-loop.ts'
 import type { FixedGameViewportLayout } from './renderer/game-viewport.ts'
+import type { TitleMenuPromptKind } from './title-menu-prompt.ts'
 import {
   createTitleMenuRenderer,
   type TitleMenuAction,
@@ -14,6 +15,8 @@ interface TitleMenuPresentationProps {
   canResume: boolean
   hoveredAction: TitleMenuAction | null
   pressedAction: TitleMenuAction | null
+  prompt: TitleMenuPromptKind | null
+  promptBusy: boolean
   screen: TitleMenuScreen
   viewport: FixedGameViewportLayout
 }
@@ -22,6 +25,8 @@ export default function TitleMenuPresentation({
   canResume,
   hoveredAction,
   pressedAction,
+  prompt,
+  promptBusy,
   screen,
   viewport,
 }: TitleMenuPresentationProps) {
@@ -31,6 +36,8 @@ export default function TitleMenuPresentation({
     canResume,
     hoveredAction,
     pressedAction,
+    prompt,
+    promptBusy,
     reducedMotion: false,
     screen,
   })
@@ -40,6 +47,8 @@ export default function TitleMenuPresentation({
   frameRef.current.hoveredAction = hoveredAction
   frameRef.current.canResume = canResume
   frameRef.current.pressedAction = pressedAction
+  frameRef.current.prompt = prompt
+  frameRef.current.promptBusy = promptBusy
   frameRef.current.screen = screen
   viewportRef.current = viewport
 

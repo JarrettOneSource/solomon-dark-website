@@ -37,6 +37,12 @@ import {
   textureFrom,
 } from './game-webgl.ts'
 import { TITLE_GAME_ASSET_SOURCES } from '../game-assets.ts'
+import { createNativeUiPixiAdapter } from '../native-ui/native-ui-pixi.ts'
+import {
+  planTitleMenuPrompt,
+  type TitleMenuPromptAction,
+  type TitleMenuPromptKind,
+} from '../title-menu-prompt.ts'
 
 export type TitleMenuScreen = 'root' | 'play'
 export type TitleMenuAction =
@@ -50,12 +56,15 @@ export type TitleMenuAction =
   | 'quit'
   | 'settings'
   | 'unavailable'
+  | TitleMenuPromptAction
 
 export interface TitleMenuRenderFrame {
   canResume: boolean
   elapsedMs: number
   hoveredAction: TitleMenuAction | null
   pressedAction: TitleMenuAction | null
+  prompt: TitleMenuPromptKind | null
+  promptBusy: boolean
   reducedMotion: boolean
   screen: TitleMenuScreen
 }
@@ -114,6 +123,7 @@ export async function createTitleMenuRenderer(
   canvas.dataset.buildRevision = TITLE_BUILD_REVISION.full ?? 'local'
   canvas.dataset.textureSources = JSON.stringify(textures.sources)
   const texture = (source: string) => textureFrom(textures.textures, source)
+  const nativeUi = createNativeUiPixiAdapter(textures)
   const root = new Container({ label: 'title-menu' })
   root.sortableChildren = true
   root.eventMode = 'none'
@@ -125,7 +135,8 @@ export async function createTitleMenuRenderer(
   const centerStage = titleStage('title-menu-center-stage', 21)
   const versionStage = titleStage('title-menu-version-stage', 22)
   const quitStage = titleStage('title-menu-quit-stage', 24)
-  root.addChild(backdrop, solomonStage, centerStage, versionStage, quitStage)
+  const promptStage = titleStage('title-menu-prompt-stage', 30)
+  root.addChild(backdrop, solomonStage, centerStage, versionStage, quitStage, promptStage)
 
   const gradients: FillGradient[] = []
   const background = new Graphics().rect(
@@ -227,6 +238,10 @@ export async function createTitleMenuRenderer(
   let presentedHoveredAction: TitleMenuAction | null | undefined
   let presentedPressedAction: TitleMenuAction | null | undefined
   let presentedCanResume: boolean | undefined
+  let presentedPrompt: TitleMenuPromptKind | null | undefined
+  let presentedPromptBusy: boolean | undefined
+  let presentedPromptHoveredAction: TitleMenuPromptAction | null | undefined
+  let presentedPromptPressedAction: TitleMenuPromptAction | null | undefined
   let presentedScreen: TitleMenuScreen | undefined
   const diagnostics = {
     canResume: false,
@@ -305,6 +320,27 @@ export async function createTitleMenuRenderer(
         presentedHoveredAction = frame.hoveredAction
         presentedPressedAction = frame.pressedAction
       }
+      const promptHoveredAction = titleMenuPromptAction(frame.hoveredAction)
+      const promptPressedAction = titleMenuPromptAction(frame.pressedAction)
+      if (presentedPrompt !== frame.prompt
+        || presentedPromptBusy !== frame.promptBusy
+        || presentedPromptHoveredAction !== promptHoveredAction
+        || presentedPromptPressedAction !== promptPressedAction) {
+        for (const child of promptStage.removeChildren()) child.destroy({ children: true })
+        promptStage.visible = frame.prompt !== null
+        if (frame.prompt) {
+          promptStage.addChild(nativeUi.render(planTitleMenuPrompt({
+            busy: frame.promptBusy,
+            hoveredAction: promptHoveredAction,
+            kind: frame.prompt,
+            pressedAction: promptPressedAction,
+          }), `title-menu-${frame.prompt}-prompt`))
+        }
+        presentedPrompt = frame.prompt
+        presentedPromptBusy = frame.promptBusy
+        presentedPromptHoveredAction = promptHoveredAction
+        presentedPromptPressedAction = promptPressedAction
+      }
       application.render()
       diagnostics.frameCount += 1
       diagnostics.canResume = frame.canResume
@@ -313,6 +349,7 @@ export async function createTitleMenuRenderer(
       diagnostics.solomonFrame = Math.floor(solomonPhase)
       canvas.dataset.screen = frame.screen
       canvas.dataset.canResume = `${frame.canResume}`
+      canvas.dataset.prompt = frame.prompt ?? 'none'
     },
     resize(viewport, nextDevicePixelRatio = window.devicePixelRatio) {
       if (destroyed) return
@@ -334,6 +371,7 @@ export async function createTitleMenuRenderer(
         centerStage,
         versionStage,
         quitStage,
+        promptStage,
         viewport,
         currentResolution,
       )
@@ -348,6 +386,7 @@ export async function createTitleMenuRenderer(
       root.destroy({ children: true })
       for (const gradient of gradients) gradient.destroy()
       for (const glyphTexture of buildRevision.glyphTextures) glyphTexture.destroy(false)
+      nativeUi.destroy()
       textures.destroy()
       application.destroy({ removeView: true })
       canvas.remove()
@@ -360,6 +399,7 @@ export async function createTitleMenuRenderer(
     centerStage,
     versionStage,
     quitStage,
+    promptStage,
     options.viewport,
     resolution,
   )
@@ -368,6 +408,8 @@ export async function createTitleMenuRenderer(
     elapsedMs: 0,
     hoveredAction: null,
     pressedAction: null,
+    prompt: null,
+    promptBusy: false,
     reducedMotion: false,
     screen: 'root',
   })
@@ -381,6 +423,7 @@ function applyTitleViewport(
   centerStage: Container,
   versionStage: Container,
   quitStage: Container,
+  promptStage: Container,
   viewport: FixedGameViewportLayout,
   resolution: number,
 ): void {
@@ -402,6 +445,7 @@ function applyTitleViewport(
   centerStage.position.set(centerBounds.x, centerBounds.y)
   versionStage.position.set(versionBounds.x, versionBounds.y)
   quitStage.position.set(quitBounds.x, quitBounds.y)
+  promptStage.position.set(centerBounds.x, centerBounds.y)
   const canvas = application.canvas as HTMLCanvasElement
   canvas.dataset.centerStage = `${centerBounds.x},${centerBounds.y}`
   canvas.dataset.quitStage = `${quitBounds.x},${quitBounds.y}`
@@ -417,6 +461,10 @@ function titleStage(label: string, zIndex: number): Container {
   stage.sortableChildren = true
   stage.zIndex = zIndex
   return stage
+}
+
+function titleMenuPromptAction(action: TitleMenuAction | null): TitleMenuPromptAction | null {
+  return action === 'prompt-primary' || action === 'prompt-secondary' ? action : null
 }
 
 function createTitleBuildRevisionView(atlas: Texture): {

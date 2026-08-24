@@ -12,13 +12,11 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react'
 import CreateMenuScene from './CreateMenuScene.tsx'
-import ActiveWizardDialog from './ActiveWizardDialog.tsx'
 import DarkCloudScene from './DarkCloudScene.tsx'
 import JoinPartyScene from './JoinPartyScene.tsx'
 import ModdedPlayDialog from './ModdedPlayDialog.tsx'
 import PartyJoinConsentDialog from './PartyJoinConsentDialog.tsx'
-import TutorialControlPicker, { type TutorialControlScheme } from './TutorialControlPicker.tsx'
-import TutorialOfferDialog from './TutorialOfferDialog.tsx'
+import StockPromptDialog from './StockPromptDialog.tsx'
 import TutorialPrelude from './TutorialPrelude.tsx'
 import { TutorialModalCallouts } from './TutorialOverlay.tsx'
 import type { GameClientSession } from './client/game-client-session.ts'
@@ -59,9 +57,7 @@ import {
   gameCheatsEnabled,
   gameVolume,
   readGameSettings,
-  rebindGameControl,
   setGameSettings,
-  type GameBindingAction,
   subscribeGameSettings,
   type GameSettings,
 } from './game-settings.ts'
@@ -144,6 +140,7 @@ import {
   type GameViewportBounds,
 } from './renderer/game-viewport.ts'
 import type { TitleMenuAction } from './renderer/title-menu-renderer.ts'
+import type { TitleMenuPromptKind } from './title-menu-prompt.ts'
 import TitleMenuPresentation from './TitleMenuPresentation.tsx'
 import './main-menu.css'
 
@@ -165,7 +162,7 @@ const DARK_CLOUD_PAUSE: GameplayPauseState = {
   source: 'pause-menu',
 }
 
-type MenuScreen = 'root' | 'play' | 'join-party' | 'dark-cloud' | 'hall' | 'create' | 'tutorial-controls' | 'tutorial-prelude' | 'hub' | 'observer'
+type MenuScreen = 'root' | 'play' | 'join-party' | 'dark-cloud' | 'hall' | 'create' | 'tutorial-prelude' | 'hub' | 'observer'
 type FadeState = 'idle' | 'covering' | 'revealing'
 
 interface MenuButtonProps {
@@ -365,8 +362,6 @@ export default function MainMenuScene({
   const [tutorialOfferOpen, setTutorialOfferOpen] = useState(
     initialScreen === 'root' && tutorialOfferEligible,
   )
-  const [tutorialControlSelection, setTutorialControlSelection] =
-    useState<TutorialControlScheme | null>(null)
   const [wizardName, setWizardName] = useState(() => (
     initialScreen === 'create' ? initialCreateWizardNameForSession(displayName) : ''
   ))
@@ -583,7 +578,7 @@ export default function MainMenuScene({
     const audioScene: GameAudioScene = runtimeAudioScene
       ?? (runtimeSnapshot?.world.kind === 'boneyard'
       ? 'boneyard'
-      : screen === 'tutorial-controls' || screen === 'tutorial-prelude'
+      : screen === 'tutorial-prelude'
         ? 'boneyard'
       : screen === 'create'
         ? 'create'
@@ -837,6 +832,12 @@ export default function MainMenuScene({
   }
 
   const titleScreen = screen === 'root' || screen === 'play'
+  const titlePrompt: TitleMenuPromptKind | null = activeWizardPrompt && resumeSave
+    ? 'kill-wizard'
+    : tutorialOfferOpen
+      ? 'tutorial'
+      : null
+  const titlePromptBusy = titlePrompt === 'kill-wizard' && retiringWizard
   const gameScene = screen === 'hub' && runtimeSnapshot?.world.kind === 'boneyard'
     ? 'boneyard'
     : screen
@@ -905,12 +906,6 @@ export default function MainMenuScene({
       return
     }
     continueNewGame()
-  }
-
-  const resumePromptWizard = () => {
-    if (retiringWizard) return
-    setActiveWizardPrompt(false)
-    requestResumeLastGame()
   }
 
   const killPromptWizard = async () => {
@@ -1199,57 +1194,6 @@ export default function MainMenuScene({
     }
   }
 
-  const chooseTutorialControls = (scheme: TutorialControlScheme) => {
-    if (tutorialControlSelection !== null) return
-    const bindings: readonly (readonly [GameBindingAction, string])[] = scheme === 'arrows'
-      ? [
-          ['moveUp', 'ArrowUp'],
-          ['moveDown', 'ArrowDown'],
-          ['moveLeft', 'ArrowLeft'],
-          ['moveRight', 'ArrowRight'],
-          ['openMenu', 'Escape'],
-          ['openInventory', 'KeyI'],
-          ['openSkills', 'KeyT'],
-          ['belt1', 'Mouse2'],
-          ['belt2', 'Delete'],
-          ['belt3', 'End'],
-          ['belt4', 'Backspace'],
-          ['belt5', 'PageUp'],
-          ['belt6', 'PageDown'],
-          ['belt7', 'Insert'],
-          ['belt8', 'Home'],
-        ]
-      : [
-          ['moveUp', 'KeyW'],
-          ['moveDown', 'KeyS'],
-          ['moveLeft', 'KeyA'],
-          ['moveRight', 'KeyD'],
-          ['openMenu', 'Escape'],
-          ['openInventory', 'KeyI'],
-          ['openSkills', 'KeyT'],
-          ['belt1', 'Mouse2'],
-          ['belt2', 'Digit1'],
-          ['belt3', 'Digit2'],
-          ['belt4', 'Digit3'],
-          ['belt5', 'Digit4'],
-          ['belt6', 'Digit5'],
-          ['belt7', 'Digit6'],
-          ['belt8', 'Digit7'],
-        ]
-    let controls = gameSettings.controls
-    for (const [action, code] of bindings) {
-      controls = rebindGameControl(controls, action, code)
-    }
-    updateGameSettings({ ...gameSettings, controls })
-    setTutorialControlSelection(scheme)
-  }
-
-  useEffect(() => {
-    if (screen !== 'tutorial-controls' || tutorialControlSelection === null) return
-    const timeout = window.setTimeout(() => setScreen('tutorial-prelude'), 1_000)
-    return () => window.clearTimeout(timeout)
-  }, [screen, tutorialControlSelection])
-
   const startTutorialRef = useRef(startTutorial)
   startTutorialRef.current = startTutorial
   useEffect(() => {
@@ -1477,12 +1421,15 @@ export default function MainMenuScene({
               canResume={resumeSave !== null}
               hoveredAction={hoveredTitleAction}
               pressedAction={pressedTitleAction}
+              prompt={titlePrompt}
+              promptBusy={titlePromptBusy}
               screen={screen === 'play' ? 'play' : 'root'}
               viewport={fixedViewport}
             />
 
             <div
               className="main-menu-native-stage main-menu-account-stage"
+              hidden={titlePrompt !== null}
               style={accountStageStyle}
             >
               <GameAccountName placement="title" username={accountUsername} />
@@ -1493,7 +1440,7 @@ export default function MainMenuScene({
                 key={screen}
                 aria-label={screen === 'root' ? 'Main menu actions' : 'Play menu actions'}
                 className="main-menu-actions"
-                inert={activeWizardPrompt || undefined}
+                inert={titlePrompt !== null || undefined}
               >
                 {screen === 'root' ? (
                   <RootActions
@@ -1520,7 +1467,11 @@ export default function MainMenuScene({
               </nav>
             </div>
 
-            <div className="main-menu-native-stage main-menu-quit-stage" style={quitStageStyle}>
+            <div
+              className="main-menu-native-stage main-menu-quit-stage"
+              inert={titlePrompt !== null || undefined}
+              style={quitStageStyle}
+            >
               <div className="main-menu-quit">
                 <MenuButton
                   action="quit"
@@ -1533,14 +1484,6 @@ export default function MainMenuScene({
               </div>
             </div>
           </>
-        ) : screen === 'tutorial-controls' ? (
-          <div className="main-menu-native-stage" style={nativeStageStyle}>
-            <TutorialControlPicker
-              busy={connecting || tutorialControlSelection !== null}
-              onChoose={chooseTutorialControls}
-              selected={tutorialControlSelection}
-            />
-          </div>
         ) : screen === 'tutorial-prelude' ? (
           <div className="main-menu-native-stage" style={nativeStageStyle}>
             <TutorialPrelude />
@@ -1858,12 +1801,28 @@ export default function MainMenuScene({
           />
         ) : null}
 
-        {activeWizardPrompt && resumeSave ? (
-          <ActiveWizardDialog
-            busy={retiringWizard}
-            onCancel={() => setActiveWizardPrompt(false)}
-            onKill={() => { void killPromptWizard() }}
-            onResume={resumePromptWizard}
+        {titlePrompt ? (
+          <StockPromptDialog
+            busy={titlePromptBusy}
+            kind={titlePrompt}
+            onHighlight={setHoveredTitleAction}
+            onPress={() => audio.playSound('click')}
+            onPressState={setPressedTitleAction}
+            onPrimary={() => {
+              setHoveredTitleAction(null)
+              setPressedTitleAction(null)
+              if (titlePrompt === 'kill-wizard') void killPromptWizard()
+              else {
+                setTutorialOfferOpen(false)
+                setScreen('tutorial-prelude')
+              }
+            }}
+            onSecondary={() => {
+              setHoveredTitleAction(null)
+              setPressedTitleAction(null)
+              if (titlePrompt === 'kill-wizard') setActiveWizardPrompt(false)
+              else setTutorialOfferOpen(false)
+            }}
             style={nativeStageStyle}
           />
         ) : null}
@@ -1926,17 +1885,6 @@ export default function MainMenuScene({
               </footer>
             </section>
           </div>
-        ) : null}
-
-        {tutorialOfferOpen ? (
-          <TutorialOfferDialog
-            onNo={() => setTutorialOfferOpen(false)}
-            onYes={() => {
-              setTutorialOfferOpen(false)
-              setTutorialControlSelection(null)
-              setScreen('tutorial-controls')
-            }}
-          />
         ) : null}
 
         <div

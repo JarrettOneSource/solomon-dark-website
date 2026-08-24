@@ -1,0 +1,24 @@
+.main-menu-native-stage.stock-prompt-stage {
+  z-index: 120;
+  pointer-events: auto;
+}
+
+.stock-prompt-dialog {
+  position: absolute;
+  inset: 0;
+  width: 1600px;
+  height: 900px;
+}
+
+.stock-prompt-action {
+  position: absolute;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: transparent;
+  cursor: pointer;
+}
+
+.stock-prompt-action:disabled { cursor: default; }

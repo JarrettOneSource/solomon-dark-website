@@ -7,6 +7,7 @@ import {
   menuSolomon,
 } from '../lib/assets.ts'
 import type { WizardElement } from './core-kernels/player-character.ts'
+import { NATIVE_UI_ATLAS_SOURCES } from './native-ui/native-ui-assets.ts'
 import {
   GAME_RESIDENT_AUDIO_SOURCES,
   loadGameAudioAsset,
@@ -21,6 +22,8 @@ export const LOADER_ASSET_SOURCES = collectAssetSources(loader)
 export const TITLE_GAME_ASSET_SOURCES = collectAssetSources({
   mainMenu,
   menuSolomon,
+  promptFonts: NATIVE_UI_ATLAS_SOURCES.Fonts,
+  promptUi: NATIVE_UI_ATLAS_SOURCES.UI,
   revisionFont: hub.hud.fontAtlas,
 })
 export const CREATE_GAME_ASSET_SOURCES = collectAssetSources({

@@ -69,6 +69,10 @@
   animation: main-menu-actions-in 100ms linear both;
 }
 
+.main-menu-actions[inert] .main-menu-button[data-game-action='join-party']::after {
+  visibility: hidden;
+}
+
 .main-menu-button {
   position: relative;
   display: block;
