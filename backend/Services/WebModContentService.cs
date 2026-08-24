@@ -10,6 +10,8 @@ namespace SolomonDarkRevived.Services;
 public sealed record WebModBoneyard(string Target, string BytesBase64);
 public sealed record WebModPackageFile(
     string Path,
+    string Kind,
+    string ContentType,
     string BytesBase64,
     int ByteLength,
     string Sha256);
@@ -23,7 +25,6 @@ public sealed record WebResolvedMod(
     int Priority,
     string? EntryScript,
     IReadOnlyList<WebModBoneyard> Boneyards,
-    IReadOnlyList<string> RequiredCapabilities,
     IReadOnlyList<WebModPackageFile> Files);
 
 public sealed record WebSessionContent(
@@ -38,9 +39,9 @@ public sealed class WebModContentService(AppDb db, StorageService storage)
     public const int MaxActiveLuaMods = 8;
     private const int MaxEntryScriptBytes = 256 * 1024;
     private const int MaxBoneyardBytes = 8 * 1024 * 1024;
-    private const int MaxPackageFileBytes = 1024 * 1024;
-    private const int MaxPackageFiles = 64;
-    private const int MaxPackageFilesBytes = 4 * 1024 * 1024;
+    private const int MaxPackageFileBytes = 16 * 1024 * 1024;
+    private const int MaxPackageFiles = 256;
+    private const int MaxPackageFilesBytes = 32 * 1024 * 1024;
     private const int MaxProvisionedContentBytes = 32 * 1024 * 1024;
 
     public async Task<WebSessionContent> ResolveAsync(
@@ -116,14 +117,17 @@ public sealed class WebModContentService(AppDb db, StorageService storage)
             var files = new List<WebModPackageFile>(package.Files.Count);
             foreach (var file in package.Files)
             {
-                var stored = file.Path.EndsWith(".png", StringComparison.Ordinal)
-                    ? await storage.SaveGameContentAsync(file.Bytes, cancellationToken)
-                    : null;
+                var stored = await storage.SaveGameContentAsync(
+                    file.Bytes,
+                    file.ContentType,
+                    cancellationToken);
                 files.Add(new WebModPackageFile(
                     file.Path,
+                    file.Kind,
+                    file.ContentType,
                     Convert.ToBase64String(file.Bytes),
-                    stored?.ByteLength ?? file.Bytes.Length,
-                    stored?.Sha256 ?? StorageService.Sha256(file.Bytes)));
+                    stored.ByteLength,
+                    stored.Sha256));
             }
             resolved.Add(new WebResolvedMod(
                 package.Id,
@@ -136,7 +140,6 @@ public sealed class WebModContentService(AppDb db, StorageService storage)
                 package.Boneyards.Select(boneyard => new WebModBoneyard(
                     boneyard.Target,
                     Convert.ToBase64String(boneyard.Bytes))).ToArray(),
-                package.RequiredCapabilities,
                 files));
         }
         return new WebSessionContent(ManifestSha256(resolved), resolved);
@@ -198,7 +201,6 @@ public sealed class WebModContentService(AppDb db, StorageService storage)
             inspection.ContentSha256.ToLowerInvariant(),
             inspection.Priority,
             inspection.RequiredMods,
-            inspection.RequiredCapabilities,
             entryScript,
             boneyards,
             files);
@@ -280,38 +282,82 @@ public sealed class WebModContentService(AppDb db, StorageService storage)
         CancellationToken cancellationToken)
     {
         var entries = archive.Entries
-            .Where(entry =>
-                entry.FullName.StartsWith("sprites/", StringComparison.Ordinal) &&
-                (entry.FullName.EndsWith(".png", StringComparison.Ordinal) ||
-                 entry.FullName.EndsWith(".bundle", StringComparison.Ordinal)))
-            .OrderBy(entry => entry.FullName, StringComparer.Ordinal)
+            .Select(entry => (Entry: entry, Asset: PackageAsset(entry.FullName)))
+            .Where(candidate => candidate.Asset is not null)
+            .OrderBy(candidate => candidate.Entry.FullName, StringComparer.Ordinal)
             .ToArray();
         if (entries.Length > MaxPackageFiles)
         {
             throw new WebModContentException(
-                $"A web mod may provision at most {MaxPackageFiles} sprite files.");
+                $"A web mod may provision at most {MaxPackageFiles} typed asset files.");
         }
         var files = new List<LoadedPackageFile>(entries.Length);
         var totalBytes = 0;
-        foreach (var entry in entries)
+        foreach (var candidate in entries)
         {
+            var entry = candidate.Entry;
+            var asset = candidate.Asset!;
             if (entry.Length <= 0 || entry.Length > MaxPackageFileBytes)
             {
                 throw new WebModContentException(
-                    $"The mod sprite file has an invalid size: {entry.FullName}");
+                    $"The mod asset file has an invalid size: {entry.FullName}");
             }
             totalBytes = checked(totalBytes + (int)entry.Length);
             if (totalBytes > MaxPackageFilesBytes)
             {
                 throw new WebModContentException(
-                    "The mod sprite files exceed the 4 MiB web-session limit.");
+                    "The mod asset files exceed the 32 MiB web-session limit.");
             }
             await using var source = entry.Open();
             using var destination = new MemoryStream((int)entry.Length);
             await source.CopyToAsync(destination, cancellationToken);
-            files.Add(new LoadedPackageFile(entry.FullName, destination.ToArray()));
+            files.Add(new LoadedPackageFile(
+                entry.FullName,
+                asset.Value.Kind,
+                asset.Value.ContentType,
+                destination.ToArray()));
         }
         return files;
+    }
+
+    private static (string Kind, string ContentType)? PackageAsset(string path)
+    {
+        var extension = Path.GetExtension(path);
+        if (path.StartsWith("sprites/", StringComparison.Ordinal) ||
+            path.StartsWith("art/", StringComparison.Ordinal))
+        {
+            return extension switch
+            {
+                ".png" => ("image", "image/png"),
+                ".bundle" => ("sprite-bundle", "application/vnd.solomon-dark.sprite-bundle"),
+                ".json" => ("art-metadata", "application/json"),
+                _ => null
+            };
+        }
+        if (path.StartsWith("audio/", StringComparison.Ordinal))
+        {
+            return extension switch
+            {
+                ".ogg" => ("audio", "audio/ogg"),
+                ".wav" => ("audio", "audio/wav"),
+                ".mp3" => ("audio", "audio/mpeg"),
+                _ => null
+            };
+        }
+        if (path.StartsWith("levels/", StringComparison.Ordinal))
+        {
+            return extension switch
+            {
+                ".boneyard" => ("boneyard", "application/vnd.solomon-dark.boneyard"),
+                ".json" => ("level-metadata", "application/json"),
+                _ => null
+            };
+        }
+        if (path.StartsWith("scenes/", StringComparison.Ordinal) && extension == ".json")
+        {
+            return ("scene", "application/json");
+        }
+        return null;
     }
 
     private static IReadOnlyList<LoadedPackage> DependencyOrder(
@@ -369,7 +415,11 @@ public sealed class WebModContentService(AppDb db, StorageService storage)
         public int ByteCount => Bytes.Length;
     }
 
-    private sealed record LoadedPackageFile(string Path, byte[] Bytes)
+    private sealed record LoadedPackageFile(
+        string Path,
+        string Kind,
+        string ContentType,
+        byte[] Bytes)
     {
         public int ByteCount => Bytes.Length;
     }
@@ -384,7 +434,6 @@ public sealed class WebModContentService(AppDb db, StorageService storage)
         string ContentSha256,
         int Priority,
         IReadOnlyList<string> RequiredMods,
-        IReadOnlyList<string> RequiredCapabilities,
         string? EntryScript,
         IReadOnlyList<LoadedBoneyard> Boneyards,
         IReadOnlyList<LoadedPackageFile> Files);

@@ -35,6 +35,7 @@ const luaWasmPath = require.resolve('wasmoon/dist/glue.wasm')
 const EMPTY_CONTENT = {
   assets: [],
   boneyards: [],
+  compiledMods: [],
   manifest: { manifestSha256: '0'.repeat(64), mods: [] },
   modSources: [],
   summary: { manifestSha256: '0'.repeat(64), mods: [] },

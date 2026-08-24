@@ -1,5 +1,3 @@
-import type { LuaConsoleValue } from '../../protocol/game-protocol.ts'
-
 export const WEB_LUA_DEFINITION_API_VERSION = '1.0.0'
 
 export const WEB_LUA_CONTENT_KINDS = [
@@ -120,11 +118,20 @@ export type WebLuaDefinitionToken =
   | WebLuaRuleDefinition
   | WebLuaSchemaDefinition
 
+export interface WebLuaDefinitionArray extends ReadonlyArray<WebLuaDefinitionValue> {}
+
+export interface WebLuaDefinitionObject {
+  readonly [key: string]: WebLuaDefinitionValue
+}
+
 export type WebLuaDefinitionValue =
-  | LuaConsoleValue
+  | boolean
+  | null
+  | number
+  | string
   | WebLuaDefinitionToken
-  | readonly WebLuaDefinitionValue[]
-  | Readonly<Record<string, WebLuaDefinitionValue>>
+  | WebLuaDefinitionArray
+  | WebLuaDefinitionObject
 
 export interface WebLuaReducerRegistration {
   readonly callback: (...args: unknown[]) => unknown

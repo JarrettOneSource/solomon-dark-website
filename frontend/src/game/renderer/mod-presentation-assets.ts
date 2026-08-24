@@ -13,7 +13,7 @@ export interface ModPresentationTextures {
 export async function loadModPresentationTextures(
   assets: readonly GameModAsset[],
 ): Promise<ModPresentationTextures> {
-  const sources = assets.map(asset => ({
+  const sources = assets.filter(asset => asset.kind === 'image').map(asset => ({
     key: assetKey(asset.modId, asset.path),
     source: gameContentUrl(asset),
   }))

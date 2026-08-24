@@ -2,14 +2,15 @@ import { createHash } from 'node:crypto'
 
 import type { GameContentManifest, GameModAsset } from '../protocol/game-protocol.ts'
 import {
+  compileWebLuaDefinition,
+  WebLuaDefinitionRuntime,
+  type CompiledWebLuaMod,
+} from '../modding/definition/index.ts'
+import {
   projectModBoneyard,
   type ModBoneyardEntry,
 } from './boneyard-catalog.ts'
 import type { WebLuaModSource } from './lua/web-lua-contract.ts'
-import {
-  WEB_LUA_CAPABILITIES,
-  type WebLuaCapability,
-} from './lua/web-lua-contract.ts'
 
 const SHA256 = /^[a-f0-9]{64}$/
 const PACKAGE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
@@ -18,11 +19,10 @@ const MAX_ACTIVE_MODS = 128
 const MAX_ACTIVE_LUA_MODS = 8
 const MAX_ENTRY_SCRIPT_BYTES = 256 * 1024
 const MAX_BONEYARD_BYTES = 8 * 1024 * 1024
-const MAX_PACKAGE_FILE_BYTES = 1024 * 1024
-const MAX_PACKAGE_FILES = 64
+const MAX_PACKAGE_FILE_BYTES = 16 * 1024 * 1024
+const MAX_PACKAGE_FILES = 256
 const MAX_PROVISIONED_CONTENT_BYTES = 32 * 1024 * 1024
-const PACKAGE_FILE = /^sprites\/.+\.(?:bundle|png)$/
-const capabilitySet = new Set<string>(WEB_LUA_CAPABILITIES)
+const PACKAGE_FILE = /^(?:sprites|art|audio|levels|scenes)\/.+\.(?:boneyard|bundle|json|mp3|ogg|png|wav)$/
 
 export interface WebModBoneyardPayload {
   readonly bytesBase64: string
@@ -37,7 +37,6 @@ export interface WebSessionModPayload {
   readonly id: string
   readonly name: string
   readonly priority: number
-  readonly requiredCapabilities: readonly WebLuaCapability[]
   readonly slug: string
   readonly version: string
 }
@@ -45,6 +44,8 @@ export interface WebSessionModPayload {
 export interface WebModPackageFilePayload {
   readonly byteLength: number
   readonly bytesBase64: string
+  readonly contentType: string
+  readonly kind: string
   readonly path: string
   readonly sha256: string
 }
@@ -65,6 +66,7 @@ export interface WebSessionContentPayload {
 export interface MaterializedWebSessionContent {
   readonly assets: readonly GameModAsset[]
   readonly boneyards: readonly ModBoneyardEntry[]
+  readonly compiledMods: readonly CompiledWebLuaMod[]
   readonly manifest: GameContentManifest
   readonly modSources: readonly WebLuaModSource[]
   readonly summary: WebSessionContentSummary
@@ -75,6 +77,7 @@ export interface WebSessionContentSummary {
   readonly mods: readonly {
     readonly assets: readonly GameModAsset[]
     readonly contentSha256: string
+    readonly graphSha256: string | null
     readonly id: string
     readonly name: string
     readonly slug: string
@@ -107,23 +110,23 @@ export function materializeWebSessionContent(value: unknown): MaterializedWebSes
         entryScript: mod.entryScript,
         files: Object.fromEntries(mod.files.map(file => [file.path, file.bytes])),
         identity: { id: mod.id, name: mod.name, version: mod.version },
-        requiredCapabilities: mod.requiredCapabilities,
+        requiredCapabilities: [],
       })
     }
     for (const file of mod.files) {
       aggregateBytes += file.bytes.length
-      if (file.path.endsWith('.png')) {
-        const asset = {
-          byteLength: file.byteLength,
-          modId: mod.id,
-          path: file.path,
-          sha256: file.sha256,
-        }
-        assets.push(asset)
-        const modAssets = assetsByMod.get(mod.id) ?? []
-        modAssets.push(asset)
-        assetsByMod.set(mod.id, modAssets)
+      const asset = {
+        byteLength: file.byteLength,
+        contentType: file.contentType,
+        kind: file.kind,
+        modId: mod.id,
+        path: file.path,
+        sha256: file.sha256,
       }
+      assets.push(asset)
+      const modAssets = assetsByMod.get(mod.id) ?? []
+      modAssets.push(asset)
+      assetsByMod.set(mod.id, modAssets)
     }
     for (const boneyard of mod.boneyards) {
       const bytes = decodeBase64(boneyard.bytesBase64, `${mod.id} ${boneyard.target}`)
@@ -151,6 +154,7 @@ export function materializeWebSessionContent(value: unknown): MaterializedWebSes
   return {
     assets,
     boneyards: [...finalBoneyards.values()],
+    compiledMods: [],
     manifest,
     modSources,
     summary: {
@@ -158,6 +162,7 @@ export function materializeWebSessionContent(value: unknown): MaterializedWebSes
       mods: mods.map(mod => ({
         assets: assetsByMod.get(mod.id) ?? [],
         contentSha256: mod.contentSha256,
+        graphSha256: null,
         id: mod.id,
         name: mod.name,
         slug: mod.slug,
@@ -165,6 +170,44 @@ export function materializeWebSessionContent(value: unknown): MaterializedWebSes
       })),
     },
   }
+}
+
+export async function compileWebSessionContentDefinitions(
+  content: MaterializedWebSessionContent,
+  wasmPath: string,
+): Promise<MaterializedWebSessionContent> {
+  if (content.modSources.length === 0) return content
+  const compiledMods: CompiledWebLuaMod[] = []
+  for (const source of content.modSources) {
+    const runtime = await WebLuaDefinitionRuntime.create({
+      entryScript: 'scripts/main.lua',
+      identity: source.identity,
+      wasmPath,
+    })
+    try {
+      const definition = runtime.run(source.entryScript)
+      compiledMods.push(compileWebLuaDefinition(source.identity, definition, {
+        dependencies: compiledMods.map(mod => ({
+          content: mod.content,
+          id: mod.identity.id,
+        })),
+      }))
+    } finally {
+      runtime.close()
+    }
+  }
+  const graphByMod = new Map(compiledMods.map(mod => [mod.identity.id, mod.graphSha256]))
+  return Object.freeze({
+    ...content,
+    compiledMods: Object.freeze(compiledMods),
+    summary: Object.freeze({
+      ...content.summary,
+      mods: Object.freeze(content.summary.mods.map(mod => Object.freeze({
+        ...mod,
+        graphSha256: graphByMod.get(mod.id) ?? null,
+      }))),
+    }),
+  })
 }
 
 function parseMod(value: unknown, index: number): ParsedWebSessionMod {
@@ -178,7 +221,6 @@ function parseMod(value: unknown, index: number): ParsedWebSessionMod {
     'id',
     'name',
     'priority',
-    'requiredCapabilities',
     'slug',
     'version',
   ], field)
@@ -197,19 +239,6 @@ function parseMod(value: unknown, index: number): ParsedWebSessionMod {
   if (entryScript !== null && Buffer.byteLength(entryScript, 'utf8') > MAX_ENTRY_SCRIPT_BYTES) {
     throw new Error(`${field}.entryScript exceeds its byte limit`)
   }
-  if (!Array.isArray(source.requiredCapabilities) || source.requiredCapabilities.length > 256) {
-    throw new Error(`${field}.requiredCapabilities is invalid`)
-  }
-  const requiredCapabilities = source.requiredCapabilities.map((value, index) => {
-    const capability = text(value, `${field}.requiredCapabilities[${index}]`, 128)
-    if (!capabilitySet.has(capability)) {
-      throw new Error(`${field}.requiredCapabilities requests unsupported ${capability}`)
-    }
-    return capability as WebLuaCapability
-  })
-  if (new Set(requiredCapabilities).size !== requiredCapabilities.length) {
-    throw new Error(`${field}.requiredCapabilities contains duplicates`)
-  }
   if (!Array.isArray(source.files) || source.files.length > MAX_PACKAGE_FILES) {
     throw new Error(`${field}.files is invalid`)
   }
@@ -217,12 +246,18 @@ function parseMod(value: unknown, index: number): ParsedWebSessionMod {
   const files = source.files.map((value, fileIndex) => {
     const fileField = `${field}.files[${fileIndex}]`
     const file = object(value, fileField)
-    exactKeys(file, ['byteLength', 'bytesBase64', 'path', 'sha256'], fileField)
+    exactKeys(file, ['byteLength', 'bytesBase64', 'contentType', 'kind', 'path', 'sha256'], fileField)
     const path = text(file.path, `${fileField}.path`, 240)
     if (!PACKAGE_FILE.test(path) || portablePaths.has(path.toLowerCase())) {
       throw new Error(`${fileField}.path is invalid or duplicated`)
     }
     portablePaths.add(path.toLowerCase())
+    const kind = text(file.kind, `${fileField}.kind`, 64)
+    const contentType = text(file.contentType, `${fileField}.contentType`, 128)
+    const expected = expectedPackageFile(path)
+    if (!expected || expected.kind !== kind || expected.contentType !== contentType) {
+      throw new Error(`${fileField} kind or contentType does not match its typed package path`)
+    }
     const bytesBase64 = text(
       file.bytesBase64,
       `${fileField}.bytesBase64`,
@@ -240,6 +275,8 @@ function parseMod(value: unknown, index: number): ParsedWebSessionMod {
       byteLength: bytes.length,
       bytes,
       bytesBase64,
+      contentType,
+      kind,
       path,
       sha256: fileSha256,
     }
@@ -268,10 +305,35 @@ function parseMod(value: unknown, index: number): ParsedWebSessionMod {
     id,
     name,
     priority: Number(source.priority),
-    requiredCapabilities,
     slug,
     version,
   }
+}
+
+function expectedPackageFile(path: string): Readonly<{ contentType: string; kind: string }> | null {
+  const extension = path.slice(path.lastIndexOf('.'))
+  if (path.startsWith('sprites/') || path.startsWith('art/')) {
+    if (extension === '.png') return { contentType: 'image/png', kind: 'image' }
+    if (extension === '.bundle') {
+      return { contentType: 'application/vnd.solomon-dark.sprite-bundle', kind: 'sprite-bundle' }
+    }
+    if (extension === '.json') return { contentType: 'application/json', kind: 'art-metadata' }
+  }
+  if (path.startsWith('audio/')) {
+    if (extension === '.ogg') return { contentType: 'audio/ogg', kind: 'audio' }
+    if (extension === '.wav') return { contentType: 'audio/wav', kind: 'audio' }
+    if (extension === '.mp3') return { contentType: 'audio/mpeg', kind: 'audio' }
+  }
+  if (path.startsWith('levels/')) {
+    if (extension === '.boneyard') {
+      return { contentType: 'application/vnd.solomon-dark.boneyard', kind: 'boneyard' }
+    }
+    if (extension === '.json') return { contentType: 'application/json', kind: 'level-metadata' }
+  }
+  if (path.startsWith('scenes/') && extension === '.json') {
+    return { contentType: 'application/json', kind: 'scene' }
+  }
+  return null
 }
 
 function decodeBase64(value: string, field: string, maximum = MAX_BONEYARD_BYTES): Buffer {

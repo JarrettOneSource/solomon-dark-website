@@ -1296,14 +1296,14 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             "version": "1.0.0",
             "priority": 10,
             "runtime": {
-                "apiVersion": "0.2.0",
+                "apiVersion": "1.0.0",
                 "entryScript": "scripts/main.lua",
             },
         }
         status, dependency = self.upload(
             "Web Dependency",
             "1.0.0",
-            package({"scripts/main.lua": b"sd.state.set('loaded', true)\n"}, dependency_manifest),
+            package({"scripts/main.lua": b"return sd.mod({api = '1.0.0'})\n"}, dependency_manifest),
         )
         self.assertEqual(status, 201, dependency)
 
@@ -1320,7 +1320,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
                 }
             ],
             "runtime": {
-                "apiVersion": "0.2.0",
+                "apiVersion": "1.0.0",
                 "entryScript": "scripts/main.lua",
             },
             "requiredMods": ["tests.web-dependency"],
@@ -1331,7 +1331,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             package(
                 {
                     "files/Contract.boneyard": BONEYARD_FIXTURE.read_bytes(),
-                    "scripts/main.lua": b"sd.state.set('combined', true)\n",
+                    "scripts/main.lua": b"return sd.mod({api = '1.0.0'})\n",
                 },
                 combined_manifest,
             ),
@@ -1449,7 +1449,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             "id": "tests.native",
             "name": "Native",
             "version": "1.0.0",
-            "runtime": {"apiVersion": "0.2.0", "entryDll": "native/mod.dll"},
+            "runtime": {"apiVersion": "1.0.0", "entryDll": "native/mod.dll"},
         }
         status, _ = self.upload(
             "Native Rejected",
@@ -1462,14 +1462,14 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             "id": "tests.hidden-native",
             "name": "Hidden Native",
             "version": "1.0.0",
-            "runtime": {"apiVersion": "0.2.0", "entryScript": "scripts/main.lua"},
+            "runtime": {"apiVersion": "1.0.0", "entryScript": "scripts/main.lua"},
         }
         status, _ = self.upload(
             "Hidden Native Rejected",
             "1.0.0",
             package(
                 {
-                    "scripts/main.lua": b"return true\n",
+                    "scripts/main.lua": b"return sd.mod({api = '1.0.0'})\n",
                     "native/hidden.DLL": b"not a dll",
                 },
                 lua_with_hidden_dll,
@@ -1481,12 +1481,12 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             "id": "tests.version-mismatch",
             "name": "Mismatch",
             "version": "2.0.0",
-            "runtime": {"apiVersion": "0.2.0", "entryScript": "scripts/main.lua"},
+            "runtime": {"apiVersion": "1.0.0", "entryScript": "scripts/main.lua"},
         }
         status, _ = self.upload(
             "Version Mismatch",
             "1.0.0",
-            package({"scripts/main.lua": b"return true\n"}, mismatch_manifest),
+            package({"scripts/main.lua": b"return sd.mod({api = '1.0.0'})\n"}, mismatch_manifest),
         )
         self.assertEqual(status, 400)
 
@@ -1503,7 +1503,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             "name": "Unknown Field",
             "version": "1.0.0",
             "runtime": {
-                "apiVersion": "0.2.0",
+                "apiVersion": "1.0.0",
                 "entryScript": "scripts/main.lua",
                 "notInTheContract": True,
             },
@@ -1511,7 +1511,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         status, _ = self.upload(
             "Unknown Field Rejected",
             "1.0.0",
-            package({"scripts/main.lua": b"return true\n"}, unknown_field_manifest),
+            package({"scripts/main.lua": b"return sd.mod({api = '1.0.0'})\n"}, unknown_field_manifest),
         )
         self.assertEqual(status, 400)
 
@@ -1533,25 +1533,14 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         )
         self.assertEqual(status, 400)
 
-    def test_web_lua_api_02_consumable_package_resolves_active_assets(self) -> None:
+    def test_web_lua_api_1_package_resolves_active_assets(self) -> None:
         manifest = {
             "id": "tests.web-consumable",
             "name": "Web Consumable",
             "version": "1.0.0",
-            "minimumLoaderVersion": "0.1.0-beta.29",
             "runtime": {
-                "apiVersion": "0.2.0",
+                "apiVersion": "1.0.0",
                 "entryScript": "scripts/main.lua",
-                "requiredCapabilities": [
-                    "events.filters.damage",
-                    "events.filters.resources",
-                    "items.consumables.register",
-                    "loot.register",
-                    "player.resources.owner",
-                    "sprites.local.read",
-                    "sprites.local.register",
-                    "timer.local.scheduler",
-                ],
             },
         }
         status, created = self.upload(
@@ -1559,7 +1548,8 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             "1.0.0",
             package(
                 {
-                    "scripts/main.lua": b"return true\n",
+                    "scripts/main.lua": b"return sd.mod({api = '1.0.0'})\n",
+                    "audio/chime.ogg": b"OggSweb-lua-test",
                     "sprites/item.bundle": ONE_FRAME_BUNDLE,
                     "sprites/item.png": ONE_PIXEL_PNG,
                 },
@@ -1577,13 +1567,11 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         status, active = self.request("GET", "/api/mods/active", headers=authorization)
         self.assertEqual(status, 200, active)
         resolved = next(mod for mod in active["mods"] if mod["id"] == manifest["id"])
-        self.assertEqual(
-            resolved["requiredCapabilities"],
-            manifest["runtime"]["requiredCapabilities"],
-        )
-        self.assertEqual(resolved["assetCount"], 2)
-        self.assertEqual(len(resolved["assets"]), 1)
-        asset = resolved["assets"][0]
+        self.assertNotIn("requiredCapabilities", resolved)
+        self.assertEqual(resolved["assetCount"], 3)
+        self.assertEqual(len(resolved["assets"]), 3)
+        asset = next(item for item in resolved["assets"] if item["contentType"] == "image/png")
+        self.assertEqual(asset["kind"], "image")
         self.assertEqual(asset["byteLength"], len(ONE_PIXEL_PNG))
         status, content_bytes, headers = self.request_bytes(
             "GET",
@@ -1593,6 +1581,15 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         self.assertEqual(content_bytes, ONE_PIXEL_PNG)
         self.assertEqual(headers.get("Content-Type"), "image/png")
         self.assertIn("immutable", headers.get("Cache-Control", ""))
+        audio = next(item for item in resolved["assets"] if item["contentType"] == "audio/ogg")
+        self.assertEqual(audio["kind"], "audio")
+        status, content_bytes, headers = self.request_bytes(
+            "GET",
+            f"/api/game/content/{audio['sha256']}",
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(content_bytes, b"OggSweb-lua-test")
+        self.assertEqual(headers.get("Content-Type"), "audio/ogg")
 
         status, sync_user = self.request(
             "POST",

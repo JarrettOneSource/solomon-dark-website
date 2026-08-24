@@ -383,9 +383,10 @@ function validateExclusiveMounts(
   definitions.forEach((definition, index) => {
     const mount = definition.fields.mount
     if (!mount || Array.isArray(mount) || typeof mount !== 'object') return
-    if (mount.exclusive === false) return
-    const scene = typeof mount.scene === 'string' ? mount.scene : null
-    const anchor = typeof mount.anchor === 'string' ? mount.anchor : null
+    const mountFields = mount as Readonly<Record<string, WebLuaDefinitionValue>>
+    if (mountFields.exclusive === false) return
+    const scene = typeof mountFields.scene === 'string' ? mountFields.scene : null
+    const anchor = typeof mountFields.anchor === 'string' ? mountFields.anchor : null
     if (!scene || !anchor) return
     const claim = `${scene}:${anchor}`
     const previous = owners.get(claim)

@@ -22,6 +22,7 @@ import {
   type GameHostPartyTarget,
 } from './game-host.ts'
 import {
+  compileWebSessionContentDefinitions,
   materializeWebSessionContent,
 } from './web-mod-content.ts'
 import {
@@ -397,16 +398,16 @@ export async function startGameSessionSupervisor(
       return
     }
     if (request.method === 'POST' && path === '/admin/sessions') {
-      void readJsonObject(request).then((body) => {
-        provisionIntoResponse(response, materializeGameAdmission(body))
+      void readJsonObject(request).then(async (body) => {
+        provisionIntoResponse(response, await materializeGameAdmission(body, options.luaWasmPath))
       }).catch(() => {
         sendJson(response, 400, { error: 'A valid game admission is required.' })
       })
       return
     }
     if (request.method === 'POST' && path === '/admin/hub/tickets') {
-      void readJsonObject(request).then((body) => {
-        const admission = materializeGameAdmission(body)
+      void readJsonObject(request).then(async (body) => {
+        const admission = await materializeGameAdmission(body, options.luaWasmPath)
         pruneHubTickets()
         if (hubHost.playerCount() + playerTicketCount(hubTickets) >= maxConnectionsPerSession) {
           sendJson(response, 503, { error: 'The shared Hub is full.' }, { 'retry-after': '5' })
@@ -616,7 +617,7 @@ export async function startGameSessionSupervisor(
         sendJson(response, 409, { error: 'That party now requires a join request.' })
         return
       }
-      const requestedAdmission = materializeGameAdmission(body)
+      const requestedAdmission = await materializeGameAdmission(body, options.luaWasmPath)
       if (typeof body.activeMods !== 'boolean') {
         throw new Error('active mod state is invalid')
       }
@@ -1274,7 +1275,10 @@ async function readJsonObject(request: IncomingMessage): Promise<Record<string, 
   return value as Record<string, unknown>
 }
 
-function materializeGameAdmission(body: Record<string, unknown>): GameHostAdmission {
+async function materializeGameAdmission(
+  body: Record<string, unknown>,
+  luaWasmPath: string | undefined,
+): Promise<GameHostAdmission> {
   const value = body.leaderboardUserId
   if (
     value !== undefined
@@ -1284,8 +1288,14 @@ function materializeGameAdmission(body: Record<string, unknown>): GameHostAdmiss
   if (body.developerAccess !== undefined && typeof body.developerAccess !== 'boolean') {
     throw new Error('developer access is invalid')
   }
+  const content = materializeWebSessionContent(body.content)
+  if (content.modSources.length > 0 && !luaWasmPath) {
+    throw new Error('Lua runtime is not configured for this game admission')
+  }
   return {
-    content: materializeWebSessionContent(body.content),
+    content: content.modSources.length === 0
+      ? content
+      : await compileWebSessionContentDefinitions(content, luaWasmPath!),
     developerAccess: body.developerAccess === true,
     leaderboardUserId: value === undefined || value === null ? null : Number(value),
   }

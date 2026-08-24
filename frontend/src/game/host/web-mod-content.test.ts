@@ -1,9 +1,16 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
+import { createRequire } from 'node:module'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
-import { materializeWebSessionContent } from './web-mod-content.ts'
+import {
+  compileWebSessionContentDefinitions,
+  materializeWebSessionContent,
+} from './web-mod-content.ts'
+
+const require = createRequire(import.meta.url)
+const wasmPath = require.resolve('wasmoon/dist/glue.wasm')
 
 test('session content materializes exact Lua identities and final Boneyard overlays', async () => {
   const fixture = await readFile(new URL('../../../../tests/fixtures/flat_multiplayer_test.boneyard', import.meta.url))
@@ -11,23 +18,35 @@ test('session content materializes exact Lua identities and final Boneyard overl
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+Xz6rAAAAAElFTkSuQmCC',
     'base64',
   )
-  const content = materializeWebSessionContent({
+  const audio = Buffer.from('OggSweb-lua-test', 'utf8')
+  const content = await compileWebSessionContentDefinitions(materializeWebSessionContent({
     manifestSha256: 'f'.repeat(64),
     mods: [
       {
         boneyards: [],
         contentSha256: 'a'.repeat(64),
-        entryScript: "sd.state.set('first', true)",
-        files: [{
-          byteLength: png.length,
-          bytesBase64: png.toString('base64'),
-          path: 'sprites/item.png',
-          sha256: createHash('sha256').update(png).digest('hex'),
-        }],
+        entryScript: "return sd.mod({api = '1.0.0'})",
+        files: [
+          {
+            byteLength: png.length,
+            bytesBase64: png.toString('base64'),
+            contentType: 'image/png',
+            kind: 'image',
+            path: 'sprites/item.png',
+            sha256: createHash('sha256').update(png).digest('hex'),
+          },
+          {
+            byteLength: audio.length,
+            bytesBase64: audio.toString('base64'),
+            contentType: 'audio/ogg',
+            kind: 'audio',
+            path: 'audio/chime.ogg',
+            sha256: createHash('sha256').update(audio).digest('hex'),
+          },
+        ],
         id: 'tests.first',
         name: 'First',
         priority: 10,
-        requiredCapabilities: [],
         slug: 'first',
         version: '1.0.0',
       },
@@ -42,12 +61,11 @@ test('session content materializes exact Lua identities and final Boneyard overl
         id: 'tests.second',
         name: 'Second',
         priority: 20,
-        requiredCapabilities: [],
         slug: 'second',
         version: '2.0.0',
       },
     ],
-  })
+  }), wasmPath)
   assert.deepEqual(content.manifest, {
     manifestSha256: 'f'.repeat(64),
     mods: [
@@ -56,16 +74,30 @@ test('session content materializes exact Lua identities and final Boneyard overl
     ],
   })
   assert.equal(content.modSources.length, 1)
+  assert.equal(content.compiledMods.length, 1)
   assert.equal(content.modSources[0]?.identity.id, 'tests.first')
+  assert.equal(content.summary.mods[0]?.graphSha256, content.compiledMods[0]?.graphSha256)
   assert.equal(content.boneyards.length, 1)
   assert.equal(content.boneyards[0]?.choice.modId, 'tests.second')
   assert.equal(content.boneyards[0]?.choice.name, 'Contract')
-  assert.deepEqual(content.assets, [{
-    byteLength: png.length,
-    modId: 'tests.first',
-    path: 'sprites/item.png',
-    sha256: createHash('sha256').update(png).digest('hex'),
-  }])
+  assert.deepEqual(content.assets, [
+    {
+      byteLength: png.length,
+      contentType: 'image/png',
+      kind: 'image',
+      modId: 'tests.first',
+      path: 'sprites/item.png',
+      sha256: createHash('sha256').update(png).digest('hex'),
+    },
+    {
+      byteLength: audio.length,
+      contentType: 'audio/ogg',
+      kind: 'audio',
+      modId: 'tests.first',
+      path: 'audio/chime.ogg',
+      sha256: createHash('sha256').update(audio).digest('hex'),
+    },
+  ])
   assert.deepEqual(content.summary.mods[0]?.assets, content.assets)
 })
 
@@ -78,7 +110,6 @@ test('session content rejects duplicate identities and native overlay targets', 
     id: 'tests.same',
     name: 'Same',
     priority: 0,
-    requiredCapabilities: [],
     slug: 'same',
     version: '1.0.0',
   }

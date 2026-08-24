@@ -713,6 +713,8 @@ export interface ServerWelcomeMessage {
 
 export interface GameModAsset {
   byteLength: number
+  contentType: string
+  kind: string
   modId: string
   path: string
   sha256: string
@@ -10660,24 +10662,28 @@ function gameModAssets(value: unknown): readonly GameModAsset[] {
   return limitedArray(value, 'modAssets', 8_192).map((value, index) => {
     const field = `modAssets[${index}]`
     const source = record(value, field)
-    onlyKeys(source, field, ['byteLength', 'modId', 'path', 'sha256'])
+    onlyKeys(source, field, ['byteLength', 'contentType', 'kind', 'modId', 'path', 'sha256'])
+    const contentType = limitedString(source.contentType, `${field}.contentType`, 128)
+    const kind = limitedString(source.kind, `${field}.kind`, 64)
     const modId = limitedString(source.modId, `${field}.modId`, 128)
     const path = limitedString(source.path, `${field}.path`, 240)
     const byteLength = integerWithin(
       source.byteLength,
       `${field}.byteLength`,
       1,
-      1024 * 1024,
+      16 * 1024 * 1024,
     )
     const key = `${modId.toLowerCase()}\0${path.toLowerCase()}`
     if (
       !/^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$/.test(modId)
-      || !/^sprites\/.+\.png$/.test(path)
+      || !/^(?:sprites|art|audio|levels|scenes)\/.+\.(?:boneyard|bundle|json|mp3|ogg|png|wav)$/.test(path)
       || seen.has(key)
-    ) throw new GameProtocolError(`${field} is not a bounded unique PNG asset`)
+    ) throw new GameProtocolError(`${field} is not a bounded unique typed asset`)
     seen.add(key)
     return {
       byteLength,
+      contentType,
+      kind,
       modId,
       path,
       sha256: sha256(source.sha256, `${field}.sha256`),

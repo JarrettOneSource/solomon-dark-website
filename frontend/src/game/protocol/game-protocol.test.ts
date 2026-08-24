@@ -558,6 +558,8 @@ test('server welcome round-trips content, kernel, character, and world ownership
     ...welcome,
     modAssets: [{
       byteLength: 68,
+      contentType: 'image/png',
+      kind: 'image',
       modId: 'tests.content',
       path: 'sprites/item.png',
       sha256: 'a'.repeat(64),

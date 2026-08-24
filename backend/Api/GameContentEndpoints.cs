@@ -27,8 +27,17 @@ public static class GameContentEndpoints
         {
             return ApiErrors.NotFound("That game content is unavailable.");
         }
+        string contentType;
+        try
+        {
+            contentType = storage.GetGameContentType(sha256);
+        }
+        catch (FileNotFoundException)
+        {
+            return ApiErrors.NotFound("That game content is unavailable.");
+        }
         context.Response.Headers.CacheControl = "public, max-age=31536000, immutable";
         context.Response.Headers.ETag = $"\"{sha256}\"";
-        return Results.File(path, "image/png", enableRangeProcessing: false);
+        return Results.File(path, contentType, enableRangeProcessing: false);
     }
 }

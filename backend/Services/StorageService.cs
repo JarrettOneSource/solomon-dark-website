@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace SolomonDarkRevived.Services;
@@ -181,19 +182,41 @@ public sealed partial class StorageService
 
     public async Task<StoredGameContent> SaveGameContentAsync(
         ReadOnlyMemory<byte> bytes,
+        string contentType,
         CancellationToken cancellationToken = default)
     {
         if (bytes.IsEmpty)
         {
             throw new ArgumentException("Game content cannot be empty.", nameof(bytes));
         }
+        if (string.IsNullOrWhiteSpace(contentType) || contentType.Length > 128 ||
+            contentType.Contains('\r') || contentType.Contains('\n'))
+        {
+            throw new ArgumentException("Game content type is invalid.", nameof(contentType));
+        }
         var sha256 = Sha256(bytes.Span);
         var path = GetGameContentPath(sha256);
+        var metadataPath = GetGameContentMetadataPath(sha256);
         if (!File.Exists(path))
         {
             await SaveBytesAtomicallyAsync(path, bytes, cancellationToken);
         }
-        return new StoredGameContent(sha256, bytes.Length);
+        if (File.Exists(metadataPath))
+        {
+            var storedContentType = await File.ReadAllTextAsync(metadataPath, cancellationToken);
+            if (!string.Equals(storedContentType, contentType, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("Identical game content was assigned conflicting media types.");
+            }
+        }
+        else
+        {
+            await SaveBytesAtomicallyAsync(
+                metadataPath,
+                Encoding.UTF8.GetBytes(contentType),
+                cancellationToken);
+        }
+        return new StoredGameContent(sha256, bytes.Length, contentType);
     }
 
     public string GetGameContentPath(string sha256)
@@ -204,6 +227,19 @@ public sealed partial class StorageService
         }
         return ResolvePath(GameContentPath, $"{sha256[..2]}/{sha256}");
     }
+
+    public string GetGameContentType(string sha256)
+    {
+        var metadataPath = GetGameContentMetadataPath(sha256);
+        if (!File.Exists(metadataPath))
+        {
+            throw new FileNotFoundException("Game content metadata is unavailable.", metadataPath);
+        }
+        return File.ReadAllText(metadataPath);
+    }
+
+    private string GetGameContentMetadataPath(string sha256) =>
+        $"{GetGameContentPath(sha256)}.content-type";
 
     public void DeleteDiagnosticLog(string relativePath)
     {
@@ -351,4 +387,4 @@ public sealed record StoredDiagnosticLogFile(
     long Size,
     string Sha256);
 
-public sealed record StoredGameContent(string Sha256, int ByteLength);
+public sealed record StoredGameContent(string Sha256, int ByteLength, string ContentType);

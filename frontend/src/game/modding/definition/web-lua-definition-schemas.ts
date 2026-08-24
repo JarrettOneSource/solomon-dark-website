@@ -241,8 +241,9 @@ function validateLootProbabilities(
   issues: WebLuaDefinitionIssue[],
 ): void {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return
+  const loot = value as Readonly<Record<string, WebLuaDefinitionValue>>
   for (const field of ['ordinary', 'boss']) {
-    const candidate = value[field]
+    const candidate = loot[field]
     if (candidate === undefined) continue
     if (typeof candidate === 'number' && Number.isFinite(candidate) && candidate >= 0 && candidate <= 1) {
       continue

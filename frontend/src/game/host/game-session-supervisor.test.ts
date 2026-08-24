@@ -36,7 +36,6 @@ const MOD_CONTENT = {
     id: 'tests.shared-content',
     name: 'Shared Content',
     priority: 0,
-    requiredCapabilities: [],
     slug: 'shared-content',
     version: '1.0.0',
   }],

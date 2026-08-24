@@ -71,6 +71,7 @@ const LEADERBOARD_RECEIPT_SECRET = 'leaderboard-receipt-test-secret-that-is-long
 const EMPTY_SHARED_CONTENT = {
   assets: [],
   boneyards: [],
+  compiledMods: [],
   manifest: { manifestSha256: '0'.repeat(64), mods: [] },
   modSources: [],
   summary: { manifestSha256: '0'.repeat(64), mods: [] },
@@ -453,6 +454,7 @@ test('global Hub rejects modded and cheats-on admissions before player ownership
       mods: [{
         assets: [],
         contentSha256: 'a'.repeat(64),
+        graphSha256: 'b'.repeat(64),
         id: 'tests.modded',
         name: 'Modded',
         slug: 'modded',

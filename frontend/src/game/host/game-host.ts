@@ -567,6 +567,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         asset.modId.toLowerCase() === mod.id.toLowerCase()
       )),
       contentSha256: mod.contentSha256,
+      graphSha256: null,
       id: mod.id,
       name: mod.id,
       slug: mod.id,

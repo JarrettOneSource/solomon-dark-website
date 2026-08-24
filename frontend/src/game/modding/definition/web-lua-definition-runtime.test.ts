@@ -125,7 +125,7 @@ test('definition VM rejects an entrypoint without one sd.mod definition', async 
     wasmPath,
   })
   try {
-    assert.throws(() => runtime.run('return true'), /must call and return sd\.mod/)
+    assert.throws(() => runtime.run('return true'), /must return the receipt from sd\.mod/)
   } finally {
     runtime.close()
   }

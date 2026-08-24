@@ -242,13 +242,13 @@ public static class ModEndpoints
                     mod.Priority,
                     hasLua = mod.EntryScript is not null,
                     boneyardCount = mod.Boneyards.Count,
-                    mod.RequiredCapabilities,
                     assetCount = mod.Files.Count,
                     assets = mod.Files
-                        .Where(file => file.Path.EndsWith(".png", StringComparison.Ordinal))
                         .Select(file => new
                         {
                             file.ByteLength,
+                            file.ContentType,
+                            file.Kind,
                             modId = mod.Id,
                             file.Path,
                             file.Sha256

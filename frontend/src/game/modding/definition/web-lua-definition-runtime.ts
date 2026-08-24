@@ -89,7 +89,10 @@ export class WebLuaDefinitionRuntime {
     try {
       thread.loadString(code, `@${this.#entryScript}`)
       thread.setTimeout(Date.now() + WEB_LUA_EXECUTION_TIMEOUT_MS)
-      const _values = [...thread.runSync()]
+      const values = [...thread.runSync()]
+      if (values.length !== 1 || !isToken(values[0], 'mod-definition-receipt')) {
+        throw new Error('entrypoint must return the receipt from sd.mod')
+      }
     } catch (error) {
       this.#definition = null
       this.#reducers.clear()
@@ -337,7 +340,7 @@ export class WebLuaDefinitionRuntime {
       schemaVersion: Number(source.schema_version),
       scope: scope as WebLuaScopeKind,
       source: this.#source(),
-      state: source.state as WebLuaSchemaDefinition,
+      state: source.state as unknown as WebLuaSchemaDefinition,
     })
     this.#reducers.set(key, registration)
     return Object.freeze({ key, kind: 'reducer-token' as const })
@@ -367,13 +370,13 @@ export class WebLuaDefinitionRuntime {
       if (entry.mapKey !== null && entry.mapKey !== entry.value.key) {
         throw new Error(`content map key ${entry.mapKey} does not match definition key ${entry.value.key}`)
       }
-      return entry.value as WebLuaContentDefinition
+      return entry.value as unknown as WebLuaContentDefinition
     })
     const rules = this.#definitionList(source.rules, 'rules').map((entry, index) => {
       if (!isToken(entry.value, 'rule-definition')) {
         throw new Error(`rules[${index}] must be created by sd.rules or sd.effect`)
       }
-      return entry.value as WebLuaRuleDefinition
+      return entry.value as unknown as WebLuaRuleDefinition
     })
     const systems = this.#definitionList(source.systems, 'systems')
     const systemKeys = systems.map((entry, index) => {
@@ -439,8 +442,8 @@ export class WebLuaDefinitionRuntime {
 function constructorTable(
   namespace: string,
   members: readonly string[],
-  create: (operation: string, value: unknown) => Record<string, unknown>,
-): Record<string, (value: unknown) => Record<string, unknown>> {
+  create: (operation: string, value: unknown) => unknown,
+): Record<string, (value: unknown) => unknown> {
   return Object.fromEntries(members.map(member => [member, (value: unknown) => (
     create(`${namespace}.${member}`, value)
   )]))
