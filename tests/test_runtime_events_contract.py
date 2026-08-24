@@ -12,6 +12,7 @@ import time
 import unittest
 import urllib.error
 import urllib.request
+from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -165,7 +166,7 @@ class RuntimeEventContractTests(unittest.TestCase):
         deadline = time.monotonic() + 5
         rows = []
         while time.monotonic() < deadline:
-            with sqlite3.connect(self.database) as db:
+            with closing(sqlite3.connect(self.database)) as db:
                 rows = db.execute(
                     """
                     SELECT Id, Source, Component, EventName, Message, DetailsJson,
@@ -189,7 +190,7 @@ class RuntimeEventContractTests(unittest.TestCase):
         self.assertAlmostEqual((expires_at - occurred_at).total_seconds(), 30 * 60, delta=1)
 
         self.stop_server()
-        with sqlite3.connect(self.database) as db:
+        with closing(sqlite3.connect(self.database)) as db:
             db.execute(
                 "UPDATE RuntimeEvents SET ExpiresAtUtc = ? WHERE Id = ?",
                 ("2000-01-01 00:00:00", rows[0][0]),
@@ -210,7 +211,7 @@ class RuntimeEventContractTests(unittest.TestCase):
         self.start_server()
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline:
-            with sqlite3.connect(self.database) as db:
+            with closing(sqlite3.connect(self.database)) as db:
                 count = db.execute("SELECT COUNT(*) FROM RuntimeEvents").fetchone()[0]
                 expired = db.execute(
                     "SELECT COUNT(*) FROM RuntimeEvents WHERE ExpiresAtUtc <= ?",
