@@ -57,6 +57,14 @@ test('transport timeouts, restarts, and abnormal losses have distinct explanatio
   assert.equal(hostEnded.code, 'session-ended')
   assert.match(hostEnded.message, /hosting.*ended/i)
 
+  const replaced = failureFromTransportClose({
+    code: 4002,
+    reason: 'wizard resumed in another browser',
+    wasClean: true,
+  })
+  assert.equal(replaced.code, 'session-ended')
+  assert.equal(replaced.message, 'This wizard resumed in another browser tab.')
+
   const abnormal = failureFromTransportClose({
     code: 1006,
     reason: '',

@@ -1001,6 +1001,23 @@ test('loot registration rejects cross-kind descriptor and sample identities', ()
   assert.equal(BONEYARD_LOOT_ENTITY_REGISTRATION.descriptorIsValid(
     invalidPotion as unknown as ReplicatedEntityDescriptor,
   ), false)
+
+  const modSack: BoneyardLootSnapshot = {
+    ...sack,
+    itemContentId: '8068156596081641415',
+    itemNativeSubtype: 6,
+  }
+  const modDescriptor = boneyardLootDescriptor(modSack)
+  const modSample = boneyardLootSample(modSack)
+  assert.equal(BONEYARD_LOOT_ENTITY_REGISTRATION.descriptorIsValid(modDescriptor), true)
+  assert.equal(BONEYARD_LOOT_ENTITY_REGISTRATION.sampleIsValid(modSample), true)
+  assert.deepEqual(materializeBoneyardLoot(modDescriptor, modSample), modSack)
+
+  const nativePotionWithContent = [...modDescriptor]
+  nativePotionWithContent[9] = 0
+  assert.equal(BONEYARD_LOOT_ENTITY_REGISTRATION.descriptorIsValid(
+    nativePotionWithContent as unknown as ReplicatedEntityDescriptor,
+  ), false)
 })
 
 function cloneSnapshot(snapshot: GameSnapshot): GameSnapshot {

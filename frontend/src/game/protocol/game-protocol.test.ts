@@ -4014,6 +4014,106 @@ test('protocol v42 strictly round-trips loot, Goodies, and their semantic event 
   )
 })
 
+test('full Boneyard welcome strictly round-trips a content-identified mod Sack', () => {
+  const runId = 'mod-sack-welcome-run'
+  let state = enterBoneyardWorld(
+    createGameSimulation({ 'player-1': CHARACTER }),
+    loadedBoneyardFixture(runId),
+  )
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  const content = {
+    consumeVfx: {
+      color: [0, 1, 0, 1] as const,
+      kind: 'spell_glow' as const,
+    },
+    contentId: '8068156596081641415',
+    description: 'Prevents damage and mana loss.',
+    durationMs: 180_000,
+    icon: {
+      atlasId: 'canary.lua.invincibility_potion:invincibility-potion',
+      frame: {
+        centerOffsetX: 0,
+        centerOffsetY: 0,
+        contentHeight: 32,
+        contentWidth: 32,
+        height: 32,
+        logicalHeight: 32,
+        logicalWidth: 32,
+        width: 32,
+        x: 0,
+        y: 0,
+      },
+      frameIndex: 0,
+      imagePath: 'sprites/invincibility_potion.png',
+    },
+    key: 'invincibility-potion',
+    modId: 'canary.lua.invincibility_potion',
+  }
+  const spawned = spawnBoneyardLootSpecs(state.world.loot, [{
+    activationDelayTicks: 0,
+    id: 0,
+    item: {
+      equipmentType: null,
+      iconRecords: [],
+      id: 77,
+      kind: 'mod-potion',
+      modContent: content,
+      name: 'Invincibility Potion',
+      nativeSubtype: 6,
+      nativeTypeId: 7001,
+      quantity: 1,
+      rarity: null,
+      recipeIndex: null,
+    },
+    kind: 'sack',
+    nativeTypeId: 2013,
+    phase: 0,
+    position: { x: 800, y: 600 },
+    source: 'enemy',
+  }], 1)
+  state = { ...state, tick: 1, world: { ...state.world, loot: spawned.store } }
+  const welcome: ServerWelcomeMessage = {
+    type: 'server-welcome',
+    boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' }],
+    content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
+    developerAccess: false,
+    gameplayPause: null,
+    kernelParameters: {
+      fixedTickSeconds: 0.01,
+      movementAcceleration: 10,
+      movementLaneCap: 118.75,
+      movementRetention: 0.9,
+      movementThresholdSquared: Math.fround(0.01),
+      playerRadius: 25,
+    },
+    kernelVersion: PLAYER_CHARACTER_KERNEL_VERSION,
+    modAssets: [],
+    modCatalog: [{ content, name: 'Invincibility Potion', nativeSubtype: 6 }],
+    playerId: 'player-1',
+    protocolVersion: GAME_PROTOCOL_VERSION,
+    resumeToken: 'reserved-token',
+    serverTickRate: 100,
+    sessionKind: 'standalone',
+    snapshot: createGameSnapshot(state, 'player-1'),
+    snapshotRate: 20,
+    snapshotSequence: 1,
+  }
+  assert.deepEqual(decodeServerGameMessage(encodeGameMessage(welcome)), welcome)
+
+  const nativePotionWithContent = JSON.parse(encodeGameMessage(welcome))
+  nativePotionWithContent.snapshot.world.loot[0].itemNativeSubtype = 0
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(nativePotionWithContent)),
+    /item identity is not a native Sack payload/,
+  )
+  const undeclaredField = JSON.parse(encodeGameMessage(welcome))
+  undeclaredField.snapshot.world.loot[0].itemContentHint = content.contentId
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(undeclaredField)),
+    /itemContentHint is not allowed/,
+  )
+})
+
 test('party protocol strictly round-trips membership, access settings, requests, and results', () => {
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
     type: 'client-party-invite',

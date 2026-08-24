@@ -85,10 +85,11 @@ const [hostContext, guestContext] = await Promise.all([
   browser.newContext({ viewport: { height: 900, width: 1_600 } }),
   browser.newContext({ viewport: { height: 900, width: 1_600 } }),
 ])
-const [hostPage, guestPage] = await Promise.all([
+const [hostPage, initialGuestPage] = await Promise.all([
   hostContext.newPage(),
   guestContext.newPage(),
 ])
+let guestPage = initialGuestPage
 const consoleErrors = []
 const failedResponses = []
 const pageErrors = []
@@ -160,6 +161,42 @@ try {
   const groundPath = join(screenshotRoot, 'invincibility-potion-ground.png')
   const groundScreenshot = await guestPage.screenshot({ path: groundPath })
   assert.ok(groundScreenshot.byteLength > 20_000)
+
+  const resumeStorage = await guestPage.evaluate(() => Object.entries(sessionStorage))
+  const resumedGuestPage = await guestContext.newPage()
+  resumedGuestPage.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text())
+  })
+  resumedGuestPage.on('pageerror', (error) => pageErrors.push(error.message))
+  resumedGuestPage.on('response', (response) => {
+    if (response.status() >= 400) {
+      failedResponses.push({ status: response.status(), url: response.url() })
+    }
+  })
+  await resumedGuestPage.addInitScript((entries) => {
+    for (const [key, value] of entries) sessionStorage.setItem(key, value)
+  }, resumeStorage)
+  await resumedGuestPage.addInitScript(installGameAudioSmokeProbe)
+  await resumedGuestPage.addInitScript((runtime) => {
+    window.solomonDarkRuntime = runtime
+  }, {
+    gameEndpoint: {
+      credential,
+      kind: 'localhost',
+      url: host.address.url,
+    },
+  })
+  await resumedGuestPage.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
+  await resumedGuestPage.getByRole('button', { name: 'Play' }).waitFor({ timeout: 90_000 })
+  await resumedGuestPage.getByRole('button', { name: 'Play' }).click()
+  await resumedGuestPage.getByRole('button', { name: 'Last game' }).click()
+  await waitForBoneyard(resumedGuestPage, 2)
+  await waitForLootCount(resumedGuestPage, 1)
+  await waitUntil(() => host.playerCount() === 2, 'resume transport duplicated a player')
+  guestPage = resumedGuestPage
+  const resumedGroundPath = join(screenshotRoot, 'invincibility-potion-resumed-ground.png')
+  const resumedGroundScreenshot = await guestPage.screenshot({ path: resumedGroundPath })
+  assert.ok(resumedGroundScreenshot.byteLength > 20_000)
 
   movePlayer(host, guestPlayerId, dropPosition)
   await waitForPickup(host, actor.id)
@@ -295,7 +332,13 @@ try {
       version: content.manifest.mods[0]?.version,
     },
     pageErrors,
-    screenshots: [groundPath, inventoryPath, effectGuestPath, effectHostPath],
+    screenshots: [
+      groundPath,
+      resumedGroundPath,
+      inventoryPath,
+      effectGuestPath,
+      effectHostPath,
+    ],
   }, null, 2)}\n`)
 } catch (error) {
   const state = host.state()

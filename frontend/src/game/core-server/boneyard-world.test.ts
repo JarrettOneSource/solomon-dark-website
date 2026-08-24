@@ -26,10 +26,7 @@ import {
   NATIVE_COFFIN_OPENING_MAGGOT_EMISSIONS,
   stepBoneyardEnemyStore,
 } from './boneyard-enemy-store.ts'
-import {
-  canPlaceBoneyardBody,
-  resolveBoneyardMovement,
-} from './boneyard-collision.ts'
+import { canPlaceBoneyardBody, resolveBoneyardMovement } from './boneyard-collision.ts'
 
 function movementInput(x: number, y: number) {
   return {
@@ -901,6 +898,58 @@ test('direct spawn materialization escapes the captured object-213 grave with a 
   ))
 })
 
+test('authoritative offscreen placement materializes the logged Tutorial policy with and without a living player', () => {
+  const loggedPosition = { x: 1455.7955322265625, y: 1313.0782470703125 }
+  const loaded = encounterBoneyard('mod')
+  const spawnIntent: BoneyardEnemySpawnIntent = {
+    enemyToken: 'SKELETON',
+    flags: [],
+    id: 1,
+    locationPolicy: 'near-player',
+    nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.SKELETON,
+    position: loggedPosition,
+    positionPolicy: 'offscreen',
+    spawnTick: 0,
+    waveOrdinal: 2,
+  }
+  const initialWorld = { ...createBoneyardWorld(loaded), encounter: null, waves: null }
+  const player = {
+    ...spawnPlayerCharacterInBoneyard({
+      discipline: 'arcane',
+      displayName: 'Tutorial Offscreen Target',
+      element: 'ether',
+    }, initialWorld),
+    position: { x: loggedPosition.x, y: loggedPosition.y + 100 },
+  }
+
+  const withPlayer = stepWorld(initialWorld, { player }, {}, 0, [spawnIntent])
+  const actor = withPlayer.world.enemies.actors[0]
+  assert.ok(actor)
+  assert.equal(spawnIsOutsideNativePolicyView(
+    actor.position,
+    withPlayer.world.bounds,
+    [player.position],
+  ), true)
+  assert.equal(canPlaceBoneyardBody(
+    actor.position,
+    withPlayer.world.bounds,
+    withPlayer.world.collision,
+    actor.config.collisionRadius,
+  ), true)
+
+  const withoutPlayer = stepWorld(initialWorld, {}, {}, 0, [spawnIntent])
+  const fallbackActor = withoutPlayer.world.enemies.actors[0]
+  assert.ok(fallbackActor)
+  assert.equal(spawnIsOutsideNativePolicyView(
+    fallbackActor.position,
+    withoutPlayer.world.bounds,
+    [{
+      x: withoutPlayer.world.bounds.x + withoutPlayer.world.bounds.w / 2,
+      y: withoutPlayer.world.bounds.y + withoutPlayer.world.bounds.h / 2,
+    }],
+  ), true)
+})
+
 test('Solomon ignores dead and ineligible proximity targets', () => {
   let world = createBoneyardWorld(encounterBoneyard('default'))
   const player = spawnPlayerCharacterInBoneyard({
@@ -1235,4 +1284,26 @@ function capturedGraveBoneyard(): LoadedBoneyard {
       }],
     },
   }
+}
+
+function spawnIsOutsideNativePolicyView(
+  position: Readonly<{ x: number; y: number }>,
+  bounds: Readonly<{ h: number; w: number; x: number; y: number }>,
+  focuses: readonly Readonly<{ x: number; y: number }>[],
+): boolean {
+  const halfWidth = 800 / 1.35
+  const halfHeight = 450 / 1.35
+  return focuses.every((focus) => {
+    const x = clampCameraAxis(focus.x, bounds.x, bounds.w, halfWidth)
+    const y = clampCameraAxis(focus.y, bounds.y, bounds.h, halfHeight)
+    return position.x < x - halfWidth
+      || position.x > x + halfWidth
+      || position.y < y - halfHeight
+      || position.y > y + halfHeight
+  })
+}
+
+function clampCameraAxis(position: number, start: number, size: number, halfView: number): number {
+  if (size <= halfView * 2) return start + size / 2
+  return Math.min(start + size - halfView, Math.max(start + halfView, position))
 }

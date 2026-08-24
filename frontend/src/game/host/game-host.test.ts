@@ -1969,6 +1969,96 @@ test('host emits an owner checkpoint and revives it before a fresh welcome', asy
   assert.equal(resumed.snapshot.world.kind, 'hub')
 })
 
+test('a valid same-tab resume replaces only the live Tutorial transport and rotates its token', async (context) => {
+  const host = await startGameHost({
+    authentication: SHARED_HUB_AUTHENTICATION,
+    sessionKind: 'global-hub',
+    sharedHub: true,
+    snapshotRate: 100,
+  })
+  context.after(() => host.close())
+  const first = await join(host.address.url, 'ticket-first', FIRST_CHARACTER)
+  context.after(() => first.socket.close())
+  assert.doesNotMatch(first.welcome.resumeToken, /^reserved-/)
+  assert.ok(first.welcome.resumeToken.length >= 43)
+
+  const loadedMessage = nextMessage(first.socket, message => (
+    message.type === 'server-boneyard-loaded'
+  ))
+  first.socket.send(encodeGameMessage({ type: 'client-start-tutorial' }))
+  const loaded = await loadedMessage
+  assert.equal(loaded.type, 'server-boneyard-loaded')
+  await waitFor(() => host.playerState(first.welcome.playerId)?.world.kind === 'boneyard')
+  const savedState = host.playerState(first.welcome.playerId)
+  assert.ok(savedState)
+  const save = createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard: loaded.boneyard,
+    mods: [],
+    modState: {},
+    playerId: first.welcome.playerId,
+    state: savedState,
+  })
+  const savedTick = savedState.tick
+  await waitFor(() => (host.playerState(first.welcome.playerId)?.tick ?? 0) > savedTick)
+
+  const rejectedSocket = await openSocket(host.address.url)
+  context.after(() => rejectedSocket.close())
+  const rejectedMessage = nextMessage(rejectedSocket, message => (
+    message.type === 'server-disconnect'
+  ))
+  rejectedSocket.send(encodeGameMessage({
+    type: 'client-hello',
+    profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
+    cheatsEnabled: false,
+    protocolVersion: GAME_PROTOCOL_VERSION,
+    credential: 'ticket-rejected',
+    character: FIRST_CHARACTER,
+    resumeToken: 'wrong-resume-token',
+    save,
+    saveIntent: 'resume',
+  }))
+  const rejected = await rejectedMessage
+  assert.equal(rejected.type, 'server-disconnect')
+  assert.match(rejected.reason, /already active in another browser/i)
+  assert.equal(first.socket.readyState, WebSocket.OPEN)
+  assert.equal(host.playerCount(), 1)
+
+  const firstClosed = socketClose(first.socket)
+  const replacementSocket = await openSocket(host.address.url)
+  context.after(() => replacementSocket.close())
+  const replacementMessage = nextMessage(replacementSocket, message => (
+    message.type === 'server-welcome'
+  ))
+  replacementSocket.send(encodeGameMessage({
+    type: 'client-hello',
+    profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
+    cheatsEnabled: false,
+    protocolVersion: GAME_PROTOCOL_VERSION,
+    credential: 'ticket-replacement',
+    character: FIRST_CHARACTER,
+    resumeToken: first.welcome.resumeToken,
+    save,
+    saveIntent: 'resume',
+  }))
+  const replacement = await replacementMessage
+  assert.equal(replacement.type, 'server-welcome')
+  assert.equal(replacement.playerId, first.welcome.playerId)
+  assert.notEqual(replacement.resumeToken, first.welcome.resumeToken)
+  assert.equal(replacement.snapshot.world.kind, 'boneyard')
+  assert.equal(replacement.snapshot.world.kind === 'boneyard'
+    ? replacement.snapshot.world.runId
+    : null, loaded.boneyard.runId)
+  assert.ok(replacement.snapshot.tick > savedTick, 'live authority must not roll back to the save')
+  assert.deepEqual(await firstClosed, {
+    code: 4002,
+    reason: 'wizard resumed in another browser',
+  })
+  await new Promise(resolve => setTimeout(resolve, 20))
+  assert.equal(host.playerCount(), 1)
+  assert.equal(host.playerState(replacement.playerId)?.world.kind, 'boneyard')
+})
+
 test('host starts a fresh character from the durable profile without reviving its old run', async (context) => {
   const source = createGameSimulation({ 'saved-owner': FIRST_CHARACTER })
   const economy = source.playerEntities.economies[0]!
