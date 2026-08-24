@@ -32,7 +32,11 @@ from .optimization import (
     ppo_epochs,
 )
 from .spec import POLICY_SPEC
-from .trainer import TrainingConfiguration, validate_resume_state
+from .trainer import (
+    TrainingConfiguration,
+    checkpoint_training_configuration,
+    validate_resume_state,
+)
 
 
 def main() -> int:
@@ -234,9 +238,16 @@ def main() -> int:
         summary_metadata = {
             **metadata,
             "integralFloatCodecProbe": 1.0,
+            "trainingConfiguration": checkpoint_training_configuration(
+                TrainingConfiguration(
+                    learning_rate=0.000025,
+                    choice_learning_rate=0.000025,
+                )
+            ),
             "trainedEnvironmentSteps": 10,
             "trainedUpdates": 1,
         }
+        assert summary_metadata["trainingConfiguration"]["learning_rate"] == "0.000025"
         summary_checkpoint = temporary / "policy-v7-update-000001.sdml"
         summary_checkpoint.write_bytes(
             encode_checkpoint(summary_metadata, policy.export_tensors())

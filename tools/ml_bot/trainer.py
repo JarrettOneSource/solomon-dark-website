@@ -542,7 +542,7 @@ def train_policy(
                 "mainReturnNormalizer": main_normalizer.state_dict(),
                 "trainedEnvironmentSteps": environment_steps,
                 "trainedUpdates": completed_updates,
-                "trainingConfiguration": asdict(configuration),
+                "trainingConfiguration": checkpoint_training_configuration(configuration),
                 "trainingKind": "web-headless-pytorch-ppo-v7",
             }
             last_checkpoint = output_directory / f"policy-v7-update-{completed_updates:06d}.sdml"
@@ -1047,6 +1047,19 @@ def file_sha256(path: Path) -> str:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def checkpoint_training_configuration(
+    configuration: TrainingConfiguration,
+) -> Mapping[str, Any]:
+    return {
+        name: (
+            np.format_float_positional(value, unique=True, trim="-")
+            if isinstance(value, float)
+            else value
+        )
+        for name, value in asdict(configuration).items()
+    }
 
 
 def configure_torch(seed: int) -> None:
