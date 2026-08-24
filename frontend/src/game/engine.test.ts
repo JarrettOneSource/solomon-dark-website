@@ -178,6 +178,7 @@ function inertSession() {
     sendHubAction() {},
     sendInput() {},
     setCheatsEnabled() {},
+    setHubActivity() {},
     inviteToParty() {},
     kickPartyPlayer() {},
     leaveParty() {},

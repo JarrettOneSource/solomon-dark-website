@@ -46,6 +46,11 @@ const pauseComponent = readFileSync(new URL('./GameplayPauseMenu.tsx', import.me
 const mainMenuComponent = readFileSync(new URL('./MainMenuScene.tsx', import.meta.url), 'utf8')
 const hubComponent = readFileSync(new URL('./HubScene.tsx', import.meta.url), 'utf8')
 const hubInventoryComponent = readFileSync(new URL('./HubInventoryUi.tsx', import.meta.url), 'utf8')
+const clientSessionSource = readFileSync(
+  new URL('./client/game-client-session.ts', import.meta.url),
+  'utf8',
+)
+const hostSource = readFileSync(new URL('./host/game-host.ts', import.meta.url), 'utf8')
 
 test('pause menu keeps the recovered native fixed-step timing and action geometry', () => {
   assert.equal(NATIVE_PAUSE_REVEAL_MS, 290)
@@ -232,7 +237,7 @@ test('pause presentation gives actions only to the authoritative owner', () => {
   })
 })
 
-test('Hub Pause Menu and NPC dialogue are local modals over a live world', () => {
+test('every optional Hub activity is local over an always-live world', () => {
   assert.match(
     mainMenuComponent,
     /const \[hubPauseMenuOpen, setHubPauseMenuOpen\] = useState\(false\)/,
@@ -242,10 +247,23 @@ test('Hub Pause Menu and NPC dialogue are local modals over a live world', () =>
     /runtimeSnapshot\?\.world\.kind === 'hub'[\s\S]*setHubPauseMenuOpen\(true\)[\s\S]*return/,
   )
   assert.match(mainMenuComponent, /const displayedGameplayPause = gameplayPause \?\? localHubPause/)
-  assert.match(mainMenuComponent, /presentationPaused=\{gameplayPause !== null\}/)
+  assert.match(
+    mainMenuComponent,
+    /runtimeSnapshot\?\.world\.kind === 'boneyard'[\s\S]*\? 'skill-book'[\s\S]*\? 'skill-selector'[\s\S]*\? 'inventory'/,
+  )
+  assert.match(
+    mainMenuComponent,
+    /const localHubActivity:[\s\S]*hubPauseMenuOpen[\s\S]*\? 'paused'[\s\S]*chatOpen[\s\S]*skillBookOpen[\s\S]*hudSkillSelector[\s\S]*inventoryScreenOpen[\s\S]*hubSceneOccupied[\s\S]*\? 'occupied'/,
+  )
+  assert.match(mainMenuComponent, /session\?\.setHubActivity\(localHubActivity\)/)
   assert.match(hubComponent, /inputRef\.current\?\.setBlocked\(inputBlocked \|\| modalOpen\)/)
+  assert.match(hubComponent, /onOccupiedChange\(modalOpen\)/)
+  assert.doesNotMatch(hubComponent, /presentationPausedRef/)
   assert.match(hubComponent, /data-hub-ui-surface=\{hubUiSurface\?\.kind \?\? 'none'\}/)
   assert.doesNotMatch(hubInventoryComponent, /requestGameplayPause|client-gameplay-pause/)
+  assert.match(clientSessionSource, /if \(snapshot\.world\.kind === 'hub'\) return/)
+  assert.match(hostSource, /if \(activeState\.world\.kind === 'hub'\) return/)
+  assert.doesNotMatch(hostSource, /sharedHubGameplayPause|stopSharedHubInputs/)
 })
 
 test('Pause Menu and both native skill pickers mute only the non-music audio lane', () => {

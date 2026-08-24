@@ -198,6 +198,15 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
     paused: true,
     source: 'inventory',
   })
+  for (const activity of ['paused', 'occupied', null] as const) {
+    assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
+      type: 'client-hub-activity',
+      activity,
+    })), {
+      type: 'client-hub-activity',
+      activity,
+    })
+  }
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
     type: 'client-select-skill',
     choiceIndex: 2,
@@ -306,9 +315,16 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
     paused: true,
     source: 'dialogue',
   })), /source/)
+  assert.throws(() => decodeClientGameMessage(JSON.stringify({
+    type: 'client-hub-activity',
+    activity: 'inventory',
+  })), /activity/)
+  assert.throws(() => decodeClientGameMessage(JSON.stringify({
+    type: 'client-hub-activity',
+  })), /activity/)
 })
 
-test('protocol 65 retains exact A or B slots for HUD concentration replacement', () => {
+test('protocol 66 retains exact A or B slots for HUD concentration replacement', () => {
   assert.throws(() => decodeClientGameMessage(JSON.stringify({
     type: 'client-select-concentration-slot',
     skillId: 57,
@@ -1241,7 +1257,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v66 carries saves, Hagatha runtime, Imp effects, and gameplay state', () => {
+test('protocol v66 carries Hub activity, saves, Hagatha runtime, Imp effects, and gameplay state', () => {
   assert.equal(GAME_PROTOCOL_VERSION, 66)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
@@ -3642,6 +3658,7 @@ test('protocol validates participant ownership and the recovered Hub room graph'
   if (snapshot.world.kind !== 'hub') throw new Error('expected Hub snapshot')
   const frame = createGameSnapshotFrame(snapshot, 0, undefined, true)
   if (frame.world.kind !== 'hub') throw new Error('expected Hub frame')
+  assert.equal(frame.world.participants['player-1']?.activity, null)
   const message = (world: unknown) => JSON.stringify({
     type: 'server-snapshot',
     acknowledgedInputSequence: 0,
@@ -3654,10 +3671,29 @@ test('protocol validates participant ownership and the recovered Hub room graph'
     participants: {},
   })), /participants must match frame.players exactly/)
 
+  const withPausedActivity = decodeServerGameMessage(message({
+    ...frame.world,
+    participants: {
+      'player-1': { ...frame.world.participants['player-1'], activity: 'paused' },
+    },
+  }))
+  assert.equal(withPausedActivity.type, 'server-snapshot')
+  if (withPausedActivity.type !== 'server-snapshot'
+    || withPausedActivity.frame.world.kind !== 'hub') throw new Error('expected Hub frame')
+  assert.equal(withPausedActivity.frame.world.participants['player-1']?.activity, 'paused')
+
+  const missingActivity = structuredClone(frame.world.participants['player-1']!) as Record<string, unknown>
+  delete missingActivity.activity
+  assert.throws(() => decodeServerGameMessage(message({
+    ...frame.world,
+    participants: { 'player-1': missingActivity },
+  })), /activity/)
+
   assert.throws(() => decodeServerGameMessage(message({
     ...frame.world,
     participants: {
       'player-1': {
+        activity: null,
         region: 'mortuary',
         transition: {
           alpha: 0.5,
@@ -3675,6 +3711,7 @@ test('protocol validates participant ownership and the recovered Hub room graph'
     ...frame.world,
     participants: {
       'player-1': {
+        activity: null,
         region: 'courtyard',
         transition: {
           alpha: 1.1,

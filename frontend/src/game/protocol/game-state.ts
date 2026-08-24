@@ -160,11 +160,23 @@ export interface ProtocolStudentState {
   scale: number
 }
 
+export const HUB_PLAYER_ACTIVITIES = ['paused', 'occupied'] as const
+export type HubPlayerActivity = typeof HUB_PLAYER_ACTIVITIES[number]
+
+/**
+ * Ephemeral Website multiplayer presence projected beside the native Hub
+ * participant state. It is deliberately absent from the simulation and save
+ * shapes owned by HubParticipantState.
+ */
+export interface ProtocolHubParticipantState extends HubParticipantState {
+  activity: HubPlayerActivity | null
+}
+
 export interface HubWorldSnapshot {
   ambient: ProtocolAmbientState
   collisionRngState: number
   kind: 'hub'
-  participants: Readonly<Record<string, HubParticipantState>>
+  participants: Readonly<Record<string, ProtocolHubParticipantState>>
   students: readonly ProtocolStudentState[]
   traderAnimationSeed: number
 }
@@ -686,7 +698,7 @@ export interface HubWorldSnapshotFrame {
   collisionRngState: number
   entities: ReplicatedEntityFrame
   kind: 'hub'
-  participants: Readonly<Record<string, HubParticipantState>>
+  participants: Readonly<Record<string, ProtocolHubParticipantState>>
   traderAnimationSeed: number
 }
 

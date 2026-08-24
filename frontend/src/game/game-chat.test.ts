@@ -78,6 +78,22 @@ test('chat history is ordered, duplicate-safe, and bounded', () => {
   assert.equal(appendGameChatMessage(messages, messages.at(-1)!), messages)
 })
 
+test('chat cue is owned by the deduplicated authoritative delivery, never draft submit', () => {
+  assert.match(
+    mainMenu,
+    /session\.onChatMessage\(presentWorldSpeech\)/,
+  )
+  assert.match(
+    mainMenu,
+    /const request = HUB_SOCIAL_SOUND_REQUESTS\.chat[\s\S]*audio\.playSound\(request\.cue,[\s\S]*appendGameWorldSpeech/,
+  )
+  assert.doesNotMatch(
+    component,
+    /const submit[\s\S]*audio\.playSound/,
+  )
+  assert.doesNotMatch(component, /onMessage\(message\)/)
+})
+
 test('closed chat fades at the exact inactivity boundary and open chat does not', () => {
   assert.equal(isGameChatFaded(false, 10, 10 + GAME_CHAT_INACTIVITY_HOLD_MS - 1), false)
   assert.equal(isGameChatFaded(false, 10, 10 + GAME_CHAT_INACTIVITY_HOLD_MS), true)

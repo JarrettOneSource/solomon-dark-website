@@ -13,6 +13,7 @@ import {
 } from '../core-kernels/hub-math.ts'
 import type { HubRegionId } from '../core-kernels/hub-regions.ts'
 import type { GameWorldSpeech } from '../world-speech-presentation.ts'
+import { deriveHubPlayerActivityItems } from '../hub-player-activity.ts'
 import { hubSouthernCameraTranslation } from '../hub-camera-presentation.ts'
 import type { GameViewportLayout } from './game-viewport.ts'
 import {
@@ -38,6 +39,7 @@ import {
   projectNativeWorldPoint,
 } from './native-world-nameplate.ts'
 import { NativeWorldSpeechLayer } from './native-world-speech.ts'
+import { HubPlayerActivityLayer } from './hub-player-activity-layer.ts'
 
 export interface HubRendererDiagnostics {
   averageFrameMs: number
@@ -177,11 +179,13 @@ export async function createHubWorldRenderer(
   courtyardScene.stage.scale.set(baseCameraScale)
   privateRoomScene.world.scale.set(baseCameraScale)
   const worldNameplates = new NativeWorldNameplateLayer(textures.fontAtlas)
+  const playerActivities = new HubPlayerActivityLayer()
   const worldSpeech = new NativeWorldSpeechLayer(textures.fontAtlas)
   application.stage.addChild(
     courtyardScene.stage,
     privateRoomScene.world,
     worldNameplates.container,
+    playerActivities.container,
     worldSpeech.container,
   )
   const secondaryScreenFlash = new Graphics({ label: 'native-secondary-screen-flash' })
@@ -559,6 +563,21 @@ export async function createHubWorldRenderer(
           renderable: true,
         },
       )
+      const activityDiagnostics = playerActivities.update(
+        deriveHubPlayerActivityItems(
+          snapshot.players,
+          snapshot.world.participants,
+          participant.region,
+        ),
+        (point) => projectNativeWorldPoint(
+          point,
+          worldNameplateTransform,
+          viewport,
+        ),
+      )
+      canvas.dataset.hubActivityCount = `${activityDiagnostics.visibleCount}`
+      canvas.dataset.hubActivityPlayerIds = activityDiagnostics.playerIds.join(',')
+      canvas.dataset.hubActivityStates = activityDiagnostics.activities.join(',')
       const worldSpeechDiagnostics = worldSpeech.update(
         worldSpeeches,
         snapshot.players,
@@ -657,6 +676,7 @@ export async function createHubWorldRenderer(
         courtyardScene.stage,
         privateRoomScene.world,
         worldNameplates.container,
+        playerActivities.container,
         worldSpeech.container,
         secondaryScreenFlash,
         fadeCover,
@@ -664,6 +684,7 @@ export async function createHubWorldRenderer(
       courtyardScene.destroy()
       privateRoomScene.destroy()
       worldNameplates.destroy()
+      playerActivities.destroy()
       worldSpeech.destroy()
       secondaryScreenFeedback.clear()
       secondaryScreenFlash.destroy()

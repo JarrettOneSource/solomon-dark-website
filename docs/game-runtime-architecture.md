@@ -44,6 +44,14 @@ party roster and moves exactly those player entities into a party-scoped
 Boneyard instance while unrelated Hub residents keep ticking in the shared Hub
 instance.
 
+Each live Hub participant may also publish one ephemeral activity value:
+`paused`, `occupied`, or clear. Pause/Settings maps to `paused`; every other
+optional input-owning Hub surface maps to `occupied`. The host authenticates
+and republishes that connection-local presence in Hub participant snapshots,
+but it never enters saves, party-directory rows, Hall state, Lua, or simulation
+rules. Player cards and a post-world same-region badge are presentation
+consumers. Activity clears when the participant leaves the Hub.
+
 The Play submenu and Dark Cloud keep distinct visual wrappers over one headless
 party-directory/join module. Opted-in singleton and grouped shared-Hub parties
 may be public or invite-only; private parties remain unlisted. A rotatable
@@ -82,6 +90,16 @@ client can draw only an event it was already authorized to receive. It holds
 for three seconds, fades linearly for two, and then retires on the monotonic
 presentation clock.
 
+The same presentation boundary owns small social cues. An authoritative chat
+delivery produces one cue for every recipient, including the sender's accepted
+echo; optimistic drafts, rejections, and duplicate sequences are silent. A
+client already resident in the Hub compares consecutive authoritative
+participant-id sets and emits one cue for each join and one for each departure,
+including a party leaving for a Boneyard. Initial connection and return-to-Hub
+snapshots seed a silent baseline. These cues use pitch-distinguished instances
+of the exact resident `click` asset and obey the existing non-music master mute;
+they add no server audio message or replay queue.
+
 ## Shared identities and boundaries
 
 The source tree owns four distinct modules:
@@ -115,13 +133,16 @@ selector are shared by Hub and Boneyard; scenes request the participant-owned
 surface but never clone its state. Protocol 36 introduced strict belt, primary,
 and general concentration intents. Protocol 63 added a distinct addressed A/B
 concentration command for the HUD buttons while retaining the general
-SkillScreen command. Current protocol 65 retains both selection paths, carries
-the authoritative Hagatha one-shot state and six frozen active-Weld component
-ranks, and distinguishes resume from profile-backed New Game. The host applies
-either skill selection only to the authenticated participant before publishing
-a new progression revision. The compact selector
-uses its own `skill-selector` pause source, so the host cannot accept an
-addressed HUD mutation from a full SkillScreen pause (or vice versa).
+SkillScreen command. Protocol 65 added the durable resume versus profile-backed
+New Game intent. Current protocol 66 retains both selection paths, the
+authoritative Hagatha one-shot state and six frozen active-Weld component
+ranks, and adds strict Hub activity intent and participant projection. The host applies either skill
+selection only to the authenticated participant before publishing a new
+progression revision. The compact selector
+uses its own `skill-selector` pause source only in an active Boneyard, so the
+host cannot accept an addressed HUD mutation from a full SkillScreen pause (or
+vice versa). In the Hub both selectors are local activities and mutations stay
+authenticated without acquiring any gameplay-pause owner.
 The session also owns the fixed-step accumulator and tick; neither clock is
 nested inside a Hub ambient actor or another world-specific subsystem.
 
@@ -261,12 +282,15 @@ dependencies without revisiting this release invariant.
 - Active-Boneyard Pause Menu state is world-instance-owned. The Boneyard ESC
   menu, player Inventory, and Skill Book use one source-qualified first-request
   barrier; a party-run hold freezes every party member without pausing the
-  shared Hub or another run. In the continuously live Hub, the ESC menu and NPC
-  dialogue/service surfaces are participant-local presentation owners: they
-  block that participant's input but keep Hub simulation and rendering live,
-  and the client and host both reject a Hub `pause-menu` network request. Hub
-  Inventory and Skill Book retain their separately requested shared-Hub book
-  barrier. An authoritative pause owner closes its matching modal or
+  shared Hub or another run. In the continuously live Hub, every optional
+  participant-owned surface is local: ESC/Settings, Inventory, full
+  SkillScreen, compact primary/A/B selector, NPC dialogue/service, chat,
+  player profile, party settings, and the Boneyard picker block only that
+  participant's input while Hub simulation and rendering remain live. The
+  client suppresses and the host rejects every Hub gameplay-pause source. The
+  host uses the separate many-participant activity projection for
+  `paused`/`occupied` presence; it is not a simulation barrier. An active-
+  Boneyard authoritative pause owner closes its matching modal or
   disconnects to release only that world-instance barrier. Resumption never
   turns elapsed pause time into catch-up simulation.
 - The shared player input record carries normalized movement, a nullable world
@@ -314,11 +338,17 @@ dependencies without revisiting this release invariant.
   saves, Hall eligibility, and Lua state. Opening the HTML composer stops only
   that client's gameplay input; it does not acquire the world pause lane. Its
   five-second readable hold and fade are client-local wall-clock presentation,
-  refreshed by local or authoritative incoming activity.
+  refreshed by local or authoritative incoming activity. Each accepted
+  authoritative delivery also produces one client-local little cue; a draft,
+  rejection, or duplicate sequence produces none.
 - World speech is a second presentation consumer of the same delivered chat
   event. Its latest-per-sender replacement, three-second hold, two-second fade,
   active-region projection, and expiry are client-local monotonic state; they
   cannot delay, reorder, acknowledge, or widen authoritative chat delivery.
+- College join/leave audio is another client-local presentation consumer. It
+  compares consecutive Hub participant-id sets only while the observer remains
+  in Hub, excludes self, and treats initial connection or re-entry as a silent
+  baseline. A removal covers both disconnect and departure to find Solomon.
 
 ## Protocol and transport rails
 
@@ -430,6 +460,15 @@ recipient exactly for Whisper. Self, missing, and disconnected targets receive
 the bounded `target-unavailable` rejection. The existing chat rate limit,
 normalization, local 80-event history, and nonpersistent lifecycle apply to all
 three channels.
+
+Protocol 66 adds `client-hub-activity` with exactly `paused`, `occupied`, or
+`null`, plus the corresponding required field on every Hub participant in full
+and delta snapshots. The value is connection-owned, Hub-only, and discrete in
+the presentation timeline. It clears held/queued input for that participant
+but does not gate the Hub fixed tick, other participants, prediction/rendering,
+or any Boneyard. The core Hub participant and save-document shapes remain
+unchanged. Protocol 66 also removes the shared-Hub optional-pause topology:
+every `client-gameplay-pause` source is rejected while its sender is in Hub.
 
 Protocol 53 adds the mutable native target-replacement policy to welded
 MagicMissile-derived projectile snapshots. Pure Ether already carried the same
@@ -1150,7 +1189,7 @@ This preserves one mutation boundary and prevents Lua callbacks from entering
 the simulation recursively. The host checks dynamic session host identity or
 the account-bound developer entitlement on every console request. `Enable
 Cheats` controls ordinary-host installation of the DevTools API; it is never
-trusted as network authorization. Current protocol 65 retains the
+trusted as network authorization. Current protocol 66 retains the
 server-authored developer boolean from a one-use admission into the welcome.
 An entitled account keeps the setting and ordinary shared-Hub routing off
 while still receiving the DevTools API. No client-authored field can grant the

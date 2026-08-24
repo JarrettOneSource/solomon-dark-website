@@ -39,7 +39,6 @@ export interface GameChatWhisperRequest {
 
 interface GameChatProps {
   disabled: boolean
-  onMessage: (message: GameChatMessage) => void
   onOpenChange: (open: boolean) => void
   onWhisperRequestHandled: () => void
   openKeyCode: string
@@ -57,7 +56,6 @@ const PINNED_SCROLL_SLACK_PX = 48
 
 export default function GameChat({
   disabled,
-  onMessage,
   onOpenChange,
   onWhisperRequestHandled,
   openKeyCode,
@@ -126,7 +124,6 @@ export default function GameChat({
     markActivity()
 
     const removeMessage = session.onChatMessage((message) => {
-      onMessage(message)
       setMessages(session.getChatMessages())
       const partner = whisperPartner(message, session.playerId)
       if (partner) {
@@ -156,7 +153,7 @@ export default function GameChat({
       removeMessage()
       removeRejection()
     }
-  }, [markActivity, onMessage, session])
+  }, [markActivity, session])
 
   useEffect(() => {
     const viewport = window.visualViewport

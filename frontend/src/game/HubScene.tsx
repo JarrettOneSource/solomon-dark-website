@@ -80,6 +80,11 @@ import {
   playerCharacterAtlasCssFrame,
 } from './renderer/player-character-atlas.ts'
 import { nearestHubPlayer, selectHubPlayerAtPoint } from './hub-player-selection.ts'
+import {
+  hubPlayerActivities,
+  hubPlayerActivityLabel,
+  sameHubPlayerActivities,
+} from './hub-player-activity.ts'
 import './hub.css'
 
 interface HubSceneProps {
@@ -105,6 +110,7 @@ interface HubSceneProps {
   onLeaveParty: () => void
   onLoadingError: () => void
   onMessagePlayer: (playerId: string, displayName: string) => void
+  onOccupiedChange: (occupied: boolean) => void
   onOpenSkillSelector: (binding: NativeHudSkillBinding) => void
   onOpenSkills: () => void
   onPauseRequest: () => void
@@ -116,7 +122,6 @@ interface HubSceneProps {
   partyState: LocalPartyState | null
   playerId: string
   progression: ProtocolPlayerProgression
-  presentationPaused: boolean
   samplePresentation: (nowMs?: number) => HubPresentationFrame
   settings: GameSettings
   sessionKind: GameSessionKind
@@ -158,6 +163,7 @@ export default function HubScene({
   onLeaveParty,
   onLoadingError,
   onMessagePlayer,
+  onOccupiedChange,
   onOpenSkillSelector,
   onOpenSkills,
   onPauseRequest,
@@ -169,7 +175,6 @@ export default function HubScene({
   partyState,
   playerId,
   progression,
-  presentationPaused,
   samplePresentation,
   settings,
   sessionKind,
@@ -191,7 +196,6 @@ export default function HubScene({
   const inputRef = useRef<BrowserGameplayInput | null>(null)
   const inputBlockedRef = useRef(inputBlocked)
   const settingsRef = useRef(settings)
-  const presentationPausedRef = useRef(presentationPaused)
   const modalOpenRef = useRef(false)
   const levelUpPresentationIdRef = useRef(levelUpPresentationId)
   const onLoadingErrorRef = useRef(onLoadingError)
@@ -199,7 +203,6 @@ export default function HubScene({
   const controllerActionsRef = useRef({ boneyards, onOpenSkills, onPauseRequest, onStartMatch })
   inputBlockedRef.current = inputBlocked
   settingsRef.current = settings
-  presentationPausedRef.current = presentationPaused
   levelUpPresentationIdRef.current = levelUpPresentationId
   onLoadingErrorRef.current = onLoadingError
   onReadyRef.current = onReady
@@ -221,6 +224,9 @@ export default function HubScene({
   const [selectedGold, setSelectedGold] = useState<number | null>(null)
   const [partySettingsOpen, setPartySettingsOpen] = useState(false)
   const [partyExpanded, setPartyExpanded] = useState(false)
+  const [playerActivities, setPlayerActivities] = useState(() => (
+    hubPlayerActivities(hubInitialSnapshot.world.participants)
+  ))
   const coarsePointer = useCoarsePointer()
   // Touch: every state that extends the party column below the chip (member card,
   // action error, invitation toast) makes the ally roster under the chip yield.
@@ -242,6 +248,12 @@ export default function HubScene({
   const modalOpen = pickerOpen || hubUiSurface !== null || selectedPlayerId !== null
     || partySettingsOpen
   modalOpenRef.current = modalOpen
+
+  useEffect(() => {
+    onOccupiedChange(modalOpen)
+  }, [modalOpen, onOccupiedChange])
+
+  useEffect(() => () => onOccupiedChange(false), [onOccupiedChange])
 
   useEffect(() => {
     onInventoryOpenChange(hubUiSurface?.kind === 'inventory')
@@ -343,6 +355,10 @@ export default function HubScene({
     )
     return subscribe((snapshot) => {
       if (!isHubGameSnapshot(snapshot)) return
+      const nextActivities = hubPlayerActivities(snapshot.world.participants)
+      setPlayerActivities((current) => (
+        sameHubPlayerActivities(current, nextActivities) ? current : nextActivities
+      ))
       const participant = snapshot.world.participants[playerId]
       footstepAudio.update(snapshot)
       if (participant) setCurrentRegion((region) => (
@@ -507,7 +523,6 @@ export default function HubScene({
       onReadyRef.current()
       input.setBlocked(inputBlockedRef.current || modalOpenRef.current)
       stopPresentationLoop = startGamePresentationLoop((now) => {
-        if (presentationPausedRef.current) return
         onInput(input.sample().input)
         const snapshot = samplePresentation(now)
         const teacherSeconds = snapshot.tick / 100
@@ -620,7 +635,7 @@ export default function HubScene({
       data-discipline={localPlayer?.config.discipline ?? 'arcane'}
       data-element={element}
       data-gameplay-input-blocked={inputBlocked || modalOpen || rendererState !== 'ready'}
-      data-presentation-paused={presentationPaused}
+      data-presentation-paused={false}
       data-hub-region={currentRegion}
       data-hub-ui-surface={hubUiSurface?.kind ?? 'none'}
       data-modal-open={modalOpen}
@@ -868,6 +883,7 @@ export default function HubScene({
             ?? false
           const isSelf = selectedPlayerId === playerId
           const cardElement = presented?.config.element ?? 'ether'
+          const activity = playerActivities[selectedPlayerId] ?? null
           const cardClassName =
             HALL_OF_FAME_CLASS_NAMES[cardElement][presented?.config.discipline ?? 'arcane']
           return (
@@ -908,6 +924,14 @@ export default function HubScene({
                           : 'Guest wizard'}
                       </p>
                     )}
+                    {activity ? (
+                      <p
+                        className="hub-player-profile-activity"
+                        data-profile-activity={activity}
+                      >
+                        {hubPlayerActivityLabel(activity)}
+                      </p>
+                    ) : null}
                   </div>
                 </header>
                 <dl className="hub-player-profile-stats">

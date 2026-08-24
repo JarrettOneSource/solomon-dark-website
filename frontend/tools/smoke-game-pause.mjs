@@ -124,13 +124,21 @@ try {
     exact: true,
     name: 'Weapon, Staff',
   }).first().waitFor()
+  assert.equal(
+    await page.locator('.main-menu-page').getAttribute('data-hub-player-activity'),
+    'occupied',
+  )
+  await assertLiveHub(page, 'large Hub Inventory')
   await page.screenshot({ path: screenshots.largeHubInventory })
-  const largeHubInventoryHeldTick = host.state().tick
   await page.keyboard.press('i')
   await largeHubInventory.waitFor({ state: 'detached' })
-  await waitForHost(
-    () => host.state().tick > largeHubInventoryHeldTick,
-    'large Hub inventory pause release',
+  await page.locator(
+    '.main-menu-page[data-hub-player-activity="none"]',
+  ).waitFor()
+  await assertLiveHub(
+    page,
+    'large Hub Inventory close',
+    100,
   )
 
   await pressPause(page, '.hub-scene')
@@ -177,47 +185,97 @@ try {
     if (message.type === 'server-gameplay-pause') modalPauseEdges.push(message.pause?.source ?? null)
   }
   peer.socket.on('message', observeModalPause)
-  const peerSawInventoryPause = nextRawMessage(peer.socket, (message) => (
-    message.type === 'server-gameplay-pause' && message.pause?.source === 'inventory'
+  const peerSawInventoryActivity = nextRawMessage(peer.socket, (message) => (
+    message.type === 'server-snapshot'
+    && message.frame.world.kind === 'hub'
+    && message.frame.world.participants[host.hostPlayerId()]?.activity === 'occupied'
   ))
   await page.getByRole('button', { name: /Open inventory/ }).click()
   const inventory = page.getByRole('dialog', { name: 'Inventory' })
   await inventory.waitFor()
   await assertNonMusicMuted(page, false)
-  const inventoryPause = await peerSawInventoryPause
-  assert.equal(inventoryPause.type, 'server-gameplay-pause')
-  assert.equal(inventoryPause.pause.ownerPlayerId, host.hostPlayerId())
+  await peerSawInventoryActivity
   assert.equal(await page.locator('.gameplay-pause-stage').count(), 0)
-  const heldBookWorld = simulationReceipt()
-  await page.waitForTimeout(350)
-  assert.deepEqual(simulationReceipt(), heldBookWorld)
+  await assertLiveHub(page, 'Hub Inventory', 350)
   await page.screenshot({ path: screenshots.inventoryOwner })
 
-  const peerSawSkillBookPause = nextRawMessage(peer.socket, (message) => (
-    message.type === 'server-gameplay-pause' && message.pause?.source === 'skill-book'
-  ))
   await page.keyboard.press('k')
   const skillBook = page.getByRole('dialog', { name: 'Skills' })
   await skillBook.waitFor()
   await assertNonMusicMuted(page, false)
-  await peerSawSkillBookPause
   await inventory.waitFor({ state: 'detached' })
   assert.equal(await page.locator('.gameplay-pause-stage').count(), 0)
-  await page.waitForTimeout(350)
-  assert.deepEqual(simulationReceipt(), heldBookWorld)
+  assert.equal(
+    await page.locator('.main-menu-page').getAttribute('data-hub-player-activity'),
+    'occupied',
+  )
+  await assertLiveHub(page, 'Hub Skill Book', 350)
   await page.screenshot({ path: screenshots.skillBookOwner })
 
-  const peerSawBookResume = nextRawMessage(peer.socket, (message) => (
-    message.type === 'server-gameplay-pause' && message.pause === null
+  const peerSawBookClear = nextRawMessage(peer.socket, (message) => (
+    message.type === 'server-snapshot'
+    && message.frame.world.kind === 'hub'
+    && message.frame.world.participants[host.hostPlayerId()]?.activity === null
   ))
   await skillBook.getByRole('button', { name: 'Close skills' }).click()
   await Promise.all([
-    peerSawBookResume,
+    peerSawBookClear,
     skillBook.waitFor({ state: 'detached' }),
   ])
+  const peerSawSelectorActivity = nextRawMessage(peer.socket, (message) => (
+    message.type === 'server-snapshot'
+    && message.frame.world.kind === 'hub'
+    && message.frame.world.participants[host.hostPlayerId()]?.activity === 'occupied'
+  ))
+  await page.getByRole('button', {
+    name: 'Select primary attack, current Fireball',
+  }).click()
+  const compactSelector = page.getByRole('dialog', { name: 'Select Primary Attack' })
+  await Promise.all([compactSelector.waitFor(), peerSawSelectorActivity])
+  await assertNonMusicMuted(page, true)
+  await assertLiveHub(page, 'Hub compact skill selector', 350)
+  const peerSawSelectorClear = nextRawMessage(peer.socket, (message) => (
+    message.type === 'server-snapshot'
+    && message.frame.world.kind === 'hub'
+    && message.frame.world.participants[host.hostPlayerId()]?.activity === null
+  ))
+  await page.keyboard.press('Escape')
+  await Promise.all([compactSelector.waitFor({ state: 'detached' }), peerSawSelectorClear])
+  await assertNonMusicMuted(page, false)
+  assert.deepEqual(modalPauseEdges, [])
   peer.socket.off('message', observeModalPause)
-  assert.deepEqual(modalPauseEdges, ['inventory', 'skill-book', null])
-  await assertNormalResumeRate(page)
+
+  peer.socket.send(encodeGameMessage({
+    type: 'client-hub-activity',
+    activity: 'paused',
+  }))
+  await page.waitForFunction((playerId) => {
+    const canvas = document.querySelector('.hub-world-canvas')
+    const ids = (canvas?.getAttribute('data-hub-activity-player-ids') ?? '')
+      .split(',').filter(Boolean)
+    const states = (canvas?.getAttribute('data-hub-activity-states') ?? '')
+      .split(',').filter(Boolean)
+    const index = ids.indexOf(playerId)
+    return index >= 0 && states[index] === 'paused'
+  }, peer.welcome.playerId)
+  await activateHubPlayer(page, peer.welcome.playerId)
+  const pausedPeerCard = page.getByRole('dialog', { name: 'Vibia' })
+  await pausedPeerCard.waitFor()
+  await pausedPeerCard.getByText('Paused', { exact: true }).waitFor()
+  assert.equal(
+    await pausedPeerCard.locator('[data-profile-activity]').getAttribute('data-profile-activity'),
+    'paused',
+  )
+  await pausedPeerCard.getByRole('button', { name: 'Close' }).click()
+  await pausedPeerCard.waitFor({ state: 'detached' })
+  peer.socket.send(encodeGameMessage({
+    type: 'client-hub-activity',
+    activity: null,
+  }))
+  await page.waitForFunction((playerId) => !(
+    document.querySelector('.hub-world-canvas')
+      ?.getAttribute('data-hub-activity-player-ids') ?? ''
+  ).split(',').includes(playerId), peer.welcome.playerId)
 
   const hubPauseEdges = []
   const observeHubPause = (data) => {
@@ -225,17 +283,26 @@ try {
     if (message.type === 'server-gameplay-pause') hubPauseEdges.push(message.pause)
   }
   peer.socket.on('message', observeHubPause)
+  const peerSawOwnerPaused = nextRawMessage(peer.socket, (message) => (
+    message.type === 'server-snapshot'
+    && message.frame.world.kind === 'hub'
+    && message.frame.world.participants[host.hostPlayerId()]?.activity === 'paused'
+  ))
   await pressPause(page, '.hub-scene')
   const ownerPause = page.locator(
     '.gameplay-pause-stage[data-gameplay-pause-view="owner"]',
   )
-  await ownerPause.waitFor()
+  await Promise.all([ownerPause.waitFor(), peerSawOwnerPaused])
   await assertNonMusicMuted(page, true)
   assert.equal(
     await ownerPause.getAttribute('data-gameplay-pause-owner-id'),
     host.hostPlayerId(),
   )
   assert.ok((await ownerPause.getAttribute('data-gameplay-pause-owner-name') || '').length > 0)
+  assert.equal(
+    await page.locator('.main-menu-page').getAttribute('data-hub-player-activity'),
+    'paused',
+  )
   await page.waitForTimeout(350)
 
   assert.equal(
@@ -307,10 +374,20 @@ try {
     element: 'earth',
   })
   assert.equal(latePeer.welcome.gameplayPause, null)
+  assert.equal(latePeer.welcome.snapshot.world.kind, 'hub')
+  assert.equal(
+    latePeer.welcome.snapshot.world.participants[host.hostPlayerId()]?.activity,
+    'paused',
+  )
   assert.ok(latePeer.welcome.snapshot.tick >= liveHubPause.after.tick)
 
+  const peerSawOwnerClear = nextRawMessage(peer.socket, (message) => (
+    message.type === 'server-snapshot'
+    && message.frame.world.kind === 'hub'
+    && message.frame.world.participants[host.hostPlayerId()]?.activity === null
+  ))
   await ownerPause.getByRole('button', { name: 'RESUME GAME' }).click()
-  await ownerPause.waitFor({ state: 'detached' })
+  await Promise.all([ownerPause.waitFor({ state: 'detached' }), peerSawOwnerClear])
   await assertNonMusicMuted(page, false)
   await assertLiveHub(page, 'Hub Pause Menu close', 100)
   assert.deepEqual(hubPauseEdges, [])
@@ -382,9 +459,14 @@ try {
   })
   const talkToFomentius = page.getByRole('button', { name: 'Talk to Fomentius' })
   await talkToFomentius.waitFor()
+  const peerSawDialogueActivity = nextRawMessage(peer.socket, (message) => (
+    message.type === 'server-snapshot'
+    && message.frame.world.kind === 'hub'
+    && message.frame.world.participants[host.hostPlayerId()]?.activity === 'occupied'
+  ))
   await talkToFomentius.click()
   const fomentiusDialogue = page.getByRole('dialog', { name: 'Talking to Fomentius' })
-  await fomentiusDialogue.waitFor()
+  await Promise.all([fomentiusDialogue.waitFor(), peerSawDialogueActivity])
   await fomentiusDialogue.locator(
     '.hub-inventory-native-canvas[data-native-reveal="settled"]',
   ).waitFor()
@@ -392,16 +474,27 @@ try {
   await assertLiveHub(page, 'Fomentius dialogue', 550)
   assert.equal(await page.locator('.hub-scene').getAttribute('data-modal-open'), 'true')
   assert.equal(await page.locator('.hub-scene').getAttribute('data-hub-ui-surface'), 'dialogue')
+  assert.equal(
+    await page.locator('.main-menu-page').getAttribute('data-hub-player-activity'),
+    'occupied',
+  )
   assert.deepEqual(hubPauseEdges, [])
+  const peerSawDialogueClear = nextRawMessage(peer.socket, (message) => (
+    message.type === 'server-snapshot'
+    && message.frame.world.kind === 'hub'
+    && message.frame.world.participants[host.hostPlayerId()]?.activity === null
+  ))
   await page.keyboard.press('Escape')
-  await fomentiusDialogue.waitFor({ state: 'detached' })
+  await Promise.all([fomentiusDialogue.waitFor({ state: 'detached' }), peerSawDialogueClear])
 
   const rawHubPause = simulationReceipt()
-  peer.socket.send(encodeGameMessage({
-    type: 'client-gameplay-pause',
-    paused: true,
-    source: 'pause-menu',
-  }))
+  for (const source of ['pause-menu', 'inventory', 'skill-book', 'skill-selector']) {
+    peer.socket.send(encodeGameMessage({
+      type: 'client-gameplay-pause',
+      paused: true,
+      source,
+    }))
+  }
   await assertLiveHub(page, 'rejected raw Hub Pause Menu request', 550)
   assert.ok(host.state().tick > rawHubPause.tick)
   assert.equal(await page.locator('.gameplay-pause-stage').count(), 0)
@@ -526,6 +619,22 @@ try {
   await browser.close()
   await host.close()
   await vite.close()
+}
+
+async function activateHubPlayer(page, playerId) {
+  const canvas = page.locator('.hub-world-canvas')
+  const target = await canvas.evaluate((node, targetPlayerId) => ({
+    logicalHeight: Number(node.dataset.viewportHeight),
+    logicalWidth: Number(node.dataset.viewportWidth),
+    position: structuredClone(node.__sdrHubFrame.playerScreenPositions[targetPlayerId]),
+  }), playerId)
+  assert.ok(target.position, `missing Hub screen position for ${playerId}`)
+  const bounds = await canvas.boundingBox()
+  assert.ok(bounds)
+  await page.mouse.click(
+    bounds.x + (target.position.x - 48) * bounds.width / target.logicalWidth,
+    bounds.y + target.position.y * bounds.height / target.logicalHeight,
+  )
 }
 
 async function setRange(locator, value) {
@@ -778,13 +887,6 @@ function bypassStartupAudioPreload() {
   Object.defineProperty(window, '__sdrRestoreAudioPreload', {
     value: () => { HTMLMediaElement.prototype.load = nativeLoad },
   })
-}
-
-async function assertNormalResumeRate(page) {
-  const resumedAt = host.state().tick
-  await page.waitForTimeout(100)
-  const delta = host.state().tick - resumedAt
-  assert.ok(delta >= 5 && delta <= 20, `unexpected resumed rate: ${delta} ticks per 100 ms`)
 }
 
 function assertNoCatchUp(heldTick, resumedAtMs, label) {

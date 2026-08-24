@@ -578,174 +578,89 @@ test('chat rejects unavailable channels and bounds floods per authenticated clie
   assert.ok(rejected[0]!.retryAfterMs > 0 && rejected[0]!.retryAfterMs <= 5_000)
 })
 
-test('Hub pause is first-request owned, survives late join, and releases on owner disconnect', async (context) => {
+test('Hub activity projects to every peer, blocks only its owner input, and survives no lifecycle boundary', async (context) => {
   const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
   context.after(() => host.close())
   const first = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
   const second = await join(host.address.url, 'test-secret', SECOND_CHARACTER)
   context.after(() => second.socket.close())
 
-  const firstPaused = nextMessage(first.socket, (message) => (
-    message.type === 'server-gameplay-pause' && message.pause !== null
-  ))
-  const secondPaused = nextMessage(second.socket, (message) => (
-    message.type === 'server-gameplay-pause' && message.pause !== null
-  ))
-  first.socket.send(encodeGameMessage({
-    type: 'client-gameplay-pause',
-    paused: true,
-    source: 'inventory',
-  }))
-  const [pauseA, pauseB] = await Promise.all([firstPaused, secondPaused])
-  assert.equal(pauseA.type, 'server-gameplay-pause')
-  assert.equal(pauseB.type, 'server-gameplay-pause')
-  assert.deepEqual(pauseA.pause, {
-    ownerDisplayName: FIRST_CHARACTER.displayName,
-    ownerPlayerId: first.welcome.playerId,
-    source: 'inventory',
-  })
-  assert.deepEqual(pauseB.pause, pauseA.pause)
-
-  const heldTick = host.state().tick
-  const heldPlayers = JSON.stringify(gameSimulationPlayerRecords(host.state()))
-  await new Promise((resolve) => setTimeout(resolve, 100))
-  assert.equal(host.state().tick, heldTick)
-  assert.equal(JSON.stringify(gameSimulationPlayerRecords(host.state())), heldPlayers)
-
-  const economyBefore = getPlayerEconomy(host.state(), first.welcome.playerId)
-  const potion = economyBefore.backpack.find((item) => (
-    item.nativeTypeId === 7001 && item.nativeSubtype === 0
-  ))
-  assert.ok(potion)
-  const inventoryApplied = nextMessage(first.socket, (message) => (
+  const occupiedForFirst = nextMessage(second.socket, (message) => (
     message.type === 'server-snapshot'
-    && message.snapshot.players[first.welcome.playerId].economy.revision
-      > economyBefore.revision
+    && message.snapshot.world.kind === 'hub'
+    && message.snapshot.world.participants[first.welcome.playerId]?.activity === 'occupied'
   ))
   first.socket.send(encodeGameMessage({
-    type: 'client-hub-action',
-    action: { type: 'consume', itemId: potion.id },
+    type: 'client-hub-activity',
+    activity: 'occupied',
   }))
-  await inventoryApplied
-  assert.equal(host.state().tick, heldTick)
-
-  for (const action of [
-    { type: 'move-inventory-item', destinationSackId: null, itemId: 999_991 },
-    { type: 'dye', dyeItemId: 999_992, layer: 'cloth', swatchRows: [0], targetItemId: 999_993 },
-  ] as const) {
-    const routed = nextMessage(first.socket, (message) => (
-      message.type === 'server-snapshot'
-      && message.snapshot.players[first.welcome.playerId].economy.actionFeedback?.action
-        === action.type
-    ))
-    first.socket.send(encodeGameMessage({ type: 'client-hub-action', action }))
-    const routedSnapshot = await routed
-    assert.equal(routedSnapshot.type, 'server-snapshot')
-    assert.deepEqual(
-      routedSnapshot.snapshot.players[first.welcome.playerId].economy.actionFeedback,
-      {
-        accepted: false,
-        action: action.type,
-        dowsingPitch: null,
-        reason: 'item-not-found',
-        sequence: getPlayerEconomy(host.state(), first.welcome.playerId).actionFeedback?.sequence,
-        transferDirection: null,
-        transferGesture: null,
-        unforgeOutcome: null,
-      },
-    )
-    assert.equal(host.state().tick, heldTick)
-  }
-
-  const staffId = getPlayerEconomy(host.state(), first.welcome.playerId).equipment.weapon?.id
-  assert.ok(staffId)
-  const staffUnequipped = nextMessage(first.socket, (message) => (
-    message.type === 'server-snapshot'
-    && message.snapshot.players[first.welcome.playerId].economy.backpack
-      .some(({ id }) => id === staffId)
-  ))
-  first.socket.send(encodeGameMessage({
-    type: 'client-hub-action',
-    action: { type: 'unequip', slot: 'weapon' },
-  }))
-  await staffUnequipped
-  const staffUnforged = nextMessage(first.socket, (message) => (
-    message.type === 'server-snapshot'
-    && message.snapshot.players[first.welcome.playerId].economy.actionFeedback?.action === 'unforge'
-    && message.snapshot.players[first.welcome.playerId].economy.actionFeedback?.accepted === true
-  ))
-  first.socket.send(encodeGameMessage({
-    type: 'client-hub-action',
-    action: { type: 'unforge', itemId: staffId },
-  }))
-  const unforgeSnapshot = await staffUnforged
-  assert.equal(unforgeSnapshot.type, 'server-snapshot')
+  const occupiedSnapshot = await occupiedForFirst
+  assert.equal(occupiedSnapshot.type, 'server-snapshot')
+  assert.equal(occupiedSnapshot.snapshot.world.kind, 'hub')
+  const authoritativeHub = host.state().world
+  if (authoritativeHub.kind !== 'hub') throw new Error('expected authoritative Hub')
   assert.equal(
-    unforgeSnapshot.snapshot.players[first.welcome.playerId].economy.backpack
-      .some(({ id }) => id === staffId),
+    'activity' in authoritativeHub.participants[first.welcome.playerId]!,
     false,
   )
-  assert.equal(host.state().tick, heldTick)
+  const activityTick = occupiedSnapshot.snapshot.tick
+  await waitFor(() => host.state().tick >= activityTick + 5)
 
-  const firstReplaced = nextMessage(first.socket, (message) => (
-    message.type === 'server-gameplay-pause' && message.pause?.source === 'skill-book'
-  ))
-  const secondReplaced = nextMessage(second.socket, (message) => (
-    message.type === 'server-gameplay-pause' && message.pause?.source === 'skill-book'
-  ))
+  const firstBeforeBlockedInput = gameSimulationPlayerRecords(host.state())[first.welcome.playerId]!
   first.socket.send(encodeGameMessage({
-    type: 'client-gameplay-pause',
-    paused: true,
-    source: 'skill-book',
+    type: 'client-input',
+    input: gameplayInput({ x: 1, y: 0 }),
+    sequence: 1,
+    targetTick: host.state().tick + 1,
   }))
-  const [replacementA, replacementB] = await Promise.all([firstReplaced, secondReplaced])
-  assert.equal(replacementA.type, 'server-gameplay-pause')
-  assert.equal(replacementB.type, 'server-gameplay-pause')
-  assert.deepEqual(replacementB.pause, replacementA.pause)
+  await new Promise(resolve => setTimeout(resolve, 80))
+  const firstAfterBlockedInput = gameSimulationPlayerRecords(host.state())[first.welcome.playerId]!
+  assert.deepEqual(firstAfterBlockedInput.position, firstBeforeBlockedInput.position)
 
-  const pausedLuaResult = nextMessage(first.socket, (message) => (
-    message.type === 'server-lua-result' && message.requestId === 99
-  ))
-  first.socket.send(encodeGameMessage({
-    type: 'client-lua-execute',
-    code: 'return 1',
-    requestId: 99,
-  }))
-  const luaResult = await pausedLuaResult
-  assert.equal(luaResult.type, 'server-lua-result')
-  assert.equal(luaResult.ok, false)
-  assert.match(luaResult.error ?? '', /paused/)
-  assert.equal((await hostHealth(host.address.url)).lua, null)
-
+  const secondBeforeInput = gameSimulationPlayerRecords(host.state())[second.welcome.playerId]!
   second.socket.send(encodeGameMessage({
-    type: 'client-gameplay-pause',
-    paused: true,
-    source: 'skill-book',
+    type: 'client-input',
+    input: gameplayInput({ x: -1, y: 0 }),
+    sequence: 1,
+    targetTick: host.state().tick + 1,
   }))
-  second.socket.send(encodeGameMessage({ type: 'client-gameplay-pause', paused: false }))
-  await new Promise((resolve) => setTimeout(resolve, 60))
-  assert.equal(host.state().tick, heldTick)
+  await waitFor(() => (
+    gameSimulationPlayerRecords(host.state())[second.welcome.playerId]!.position.x
+      < secondBeforeInput.position.x - 1
+  ))
+
+  const pausedForFirst = nextMessage(second.socket, (message) => (
+    message.type === 'server-snapshot'
+    && message.snapshot.world.kind === 'hub'
+    && message.snapshot.world.participants[first.welcome.playerId]?.activity === 'paused'
+  ))
+  first.socket.send(encodeGameMessage({
+    type: 'client-hub-activity',
+    activity: 'paused',
+  }))
+  await pausedForFirst
 
   const late = await join(host.address.url, 'test-secret', SECOND_CHARACTER)
   context.after(() => late.socket.close())
-  assert.deepEqual(late.welcome.gameplayPause, replacementA.pause)
-  assert.equal(late.welcome.snapshot.tick, heldTick)
+  assert.equal(late.welcome.gameplayPause, null)
+  assert.equal(late.welcome.snapshot.world.kind, 'hub')
+  if (late.welcome.snapshot.world.kind !== 'hub') throw new Error('expected Hub welcome')
+  assert.equal(
+    late.welcome.snapshot.world.participants[first.welcome.playerId]?.activity,
+    'paused',
+  )
+  assert.equal(
+    late.welcome.snapshot.world.participants[late.welcome.playerId]?.activity,
+    null,
+  )
 
-  const releasedSecond = nextMessage(second.socket, (message) => (
-    message.type === 'server-gameplay-pause' && message.pause === null
-  ))
-  const releasedLate = nextMessage(late.socket, (message) => (
-    message.type === 'server-gameplay-pause' && message.pause === null
-  ))
+  const beforeDisconnectTick = host.state().tick
   await closeSocket(first.socket)
-  const [releaseB, releaseLate] = await Promise.all([releasedSecond, releasedLate])
-  assert.deepEqual(releaseB, { type: 'server-gameplay-pause', pause: null })
-  assert.deepEqual(releaseLate, releaseB)
-  assert.ok(host.state().tick - heldTick <= 10, 'Hub release must not replay paused wall time')
-  await waitFor(() => host.state().tick > heldTick)
+  await waitFor(() => host.state().tick > beforeDisconnectTick)
+  await waitFor(() => !gameSimulationPlayerRecords(host.state())[first.welcome.playerId])
 })
 
-test('Hub Pause Menu intent stays local and cannot suspend the authoritative world', async (context) => {
+test('every crafted Hub gameplay-pause source is rejected without suspending the world', async (context) => {
   const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
   context.after(() => host.close())
   const first = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
@@ -766,11 +681,18 @@ test('Hub Pause Menu intent stays local and cannot suspend the authoritative wor
   })
 
   const initialTick = host.state().tick
-  first.socket.send(encodeGameMessage({
-    type: 'client-gameplay-pause',
-    paused: true,
-    source: 'pause-menu',
-  }))
+  for (const source of [
+    'pause-menu',
+    'inventory',
+    'skill-book',
+    'skill-selector',
+  ] as const) {
+    first.socket.send(encodeGameMessage({
+      type: 'client-gameplay-pause',
+      paused: true,
+      source,
+    }))
+  }
   await waitFor(() => host.state().tick >= initialTick + 5)
 
   assert.deepEqual(pauseMessages, [])
@@ -837,7 +759,7 @@ test('Boneyard pause holds the complete world and only its owner can resume', as
   await waitFor(() => host.state().tick > heldTick)
 })
 
-test('shared Hub book pause freezes every Hub resident and resumes without catch-up', async (context) => {
+test('shared Hub activity is replicated while every resident and the Hub clock stay live', async (context) => {
   const host = await startGameHost({
     authentication: SHARED_HUB_AUTHENTICATION,
     sharedHub: true,
@@ -849,40 +771,45 @@ test('shared Hub book pause freezes every Hub resident and resumes without catch
   context.after(() => first.socket.close())
   context.after(() => second.socket.close())
 
-  const pausedA = nextMessage(first.socket, (message) => (
-    message.type === 'server-gameplay-pause' && message.pause?.source === 'inventory'
+  const pauseMessages: ServerGameMessage[] = []
+  const observePause = (data: WebSocket.RawData) => {
+    const message = decodeServerGameMessage(data.toString())
+    if (message.type === 'server-gameplay-pause') pauseMessages.push(message)
+  }
+  second.socket.on('message', observePause)
+  context.after(() => second.socket.off('message', observePause))
+
+  const occupied = nextMessage(second.socket, (message) => (
+    message.type === 'server-snapshot'
+    && message.snapshot.world.kind === 'hub'
+    && message.snapshot.world.participants[first.welcome.playerId]?.activity === 'occupied'
   ))
-  const pausedB = nextMessage(second.socket, (message) => (
-    message.type === 'server-gameplay-pause' && message.pause?.source === 'inventory'
-  ))
+  first.socket.send(encodeGameMessage({
+    type: 'client-hub-activity',
+    activity: 'occupied',
+  }))
+  await occupied
+
+  const liveTick = host.state().tick
   first.socket.send(encodeGameMessage({
     type: 'client-gameplay-pause',
     paused: true,
     source: 'inventory',
   }))
-  const [pauseA, pauseB] = await Promise.all([pausedA, pausedB])
-  assert.equal(pauseA.type, 'server-gameplay-pause')
-  assert.equal(pauseB.type, 'server-gameplay-pause')
-  assert.deepEqual(pauseB.pause, pauseA.pause)
-
-  const heldTick = host.state().tick
-  const heldPlayers = JSON.stringify(gameSimulationPlayerRecords(host.state()))
   await new Promise((resolve) => setTimeout(resolve, 100))
-  assert.equal(host.state().tick, heldTick)
-  assert.equal(JSON.stringify(gameSimulationPlayerRecords(host.state())), heldPlayers)
+  assert.ok(host.state().tick > liveTick)
+  assert.deepEqual(pauseMessages, [])
 
-  const resumedA = nextMessage(first.socket, (message) => (
-    message.type === 'server-gameplay-pause' && message.pause === null
+  const cleared = nextMessage(second.socket, (message) => (
+    message.type === 'server-snapshot'
+    && message.snapshot.world.kind === 'hub'
+    && message.snapshot.world.participants[first.welcome.playerId]?.activity === null
   ))
-  const resumedB = nextMessage(second.socket, (message) => (
-    message.type === 'server-gameplay-pause' && message.pause === null
-  ))
-  const resumeStartedAt = performance.now()
-  first.socket.send(encodeGameMessage({ type: 'client-gameplay-pause', paused: false }))
-  await Promise.all([resumedA, resumedB])
-  assert.ok(host.state().tick - heldTick <= 10)
-  assert.ok(performance.now() - resumeStartedAt < 500)
-  await waitFor(() => host.state().tick > heldTick)
+  first.socket.send(encodeGameMessage({
+    type: 'client-hub-activity',
+    activity: null,
+  }))
+  await cleared
 })
 
 test('game host routes inventory commands without disconnecting on a stale or unavailable offer', async (context) => {

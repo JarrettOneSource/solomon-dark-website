@@ -918,6 +918,42 @@
   box-shadow: none;
 }
 
+.hub-player-profile-activity {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-self: start;
+  margin: 1px 0 0;
+  color: #f3d994;
+  font: 700 10px Cinzel, Georgia, serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.hub-player-profile-activity::before {
+  content: '';
+  box-sizing: border-box;
+  width: 14px;
+  height: 14px;
+  border: 1px solid rgb(216 188 114 / 0.85);
+  border-radius: 50%;
+  background-color: rgb(9 11 16 / 0.9);
+}
+
+.hub-player-profile-activity[data-profile-activity='paused']::before {
+  background:
+    linear-gradient(90deg, transparent 3px, #f0d58f 3px 5px, transparent 5px 8px, #f0d58f 8px 10px, transparent 10px),
+    rgb(9 11 16 / 0.9);
+}
+
+.hub-player-profile-activity[data-profile-activity='occupied']::before {
+  background:
+    radial-gradient(circle at 3px 6px, #f0d58f 0 1px, transparent 1.5px),
+    radial-gradient(circle at 6px 6px, #f0d58f 0 1px, transparent 1.5px),
+    radial-gradient(circle at 9px 6px, #f0d58f 0 1px, transparent 1.5px),
+    rgb(9 11 16 / 0.9);
+}
+
 .hub-player-profile-stats {
   display: grid;
   margin: 0;

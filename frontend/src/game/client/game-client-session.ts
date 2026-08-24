@@ -27,6 +27,7 @@ import {
   type GameSessionKind,
   type GameplayPauseSource,
   type GameplayPauseState,
+  type HubPlayerActivity,
   type LoadedBoneyard,
   type PartyAction,
   type PartyActionRejection,
@@ -37,8 +38,10 @@ import {
 } from '../protocol/game-protocol.ts'
 import type { ModConsumableCatalogEntry } from '../core-kernels/hub-economy.ts'
 import type { GameSaveCheckpoint, GameSaveIntent } from '../save/game-save-contract.ts'
-import type { HubParticipantState } from '../core-kernels/hub-regions.ts'
-import type { ProtocolPlayerState } from '../protocol/game-state.ts'
+import type {
+  ProtocolHubParticipantState,
+  ProtocolPlayerState,
+} from '../protocol/game-state.ts'
 import type { HubInventoryAction } from '../core-kernels/hub-economy.ts'
 import type {
   LocalPartyState,
@@ -147,6 +150,7 @@ export interface GameClientSession {
   sendHubAction(action: HubInventoryAction): void
   sendInput(input: PlayerCharacterInput): void
   setCheatsEnabled(enabled: boolean): void
+  setHubActivity(activity: HubPlayerActivity | null): void
   inviteToParty(playerId: string): void
   kickPartyPlayer(playerId: string): void
   leaveParty(): void
@@ -181,7 +185,7 @@ interface LocalHubPresentationState {
   correctionDurationMs: number
   correctionStartedAtMs: number
   lastAdvancedAtMs: number
-  participant: HubParticipantState
+  participant: ProtocolHubParticipantState
   player: ProtocolPlayerState
   predictedTicks: number
   remainderMs: number
@@ -220,6 +224,7 @@ export function connectGameClientSession(
     let boneyardPresentationTimeline: BoneyardPresentationTimeline | undefined
     let loadedBoneyard: LoadedBoneyard | null = null
     let gameplayPause: GameplayPauseState | null = null
+    let requestedHubActivity: HubPlayerActivity | null = null
     let modCatalog: readonly ModConsumableCatalogEntry[] = []
     let lastSnapshotReceivedAtMs = 0
     let lastSnapshotSequence = 0
@@ -283,6 +288,9 @@ export function connectGameClientSession(
         welcome = message
         snapshot = message.snapshot
         gameplayPause = message.gameplayPause
+        requestedHubActivity = snapshot.world.kind === 'hub'
+          ? snapshot.world.participants[message.playerId]?.activity ?? null
+          : null
         modCatalog = message.modCatalog
         enemyEventCursor = initialEnemyEventCursor(snapshot)
         lastSnapshotSequence = message.snapshotSequence
@@ -492,6 +500,11 @@ export function connectGameClientSession(
         localHubPresentation = undefined
       }
       snapshot = reconstructedSnapshot
+      if (previousWorldKind !== snapshot.world.kind) {
+        requestedHubActivity = snapshot.world.kind === 'hub'
+          ? snapshot.world.participants[welcome.playerId]?.activity ?? null
+          : null
+      }
       lastSnapshotReceivedAtMs = receivedAtMs
       if (isHubGameSnapshot(snapshot)) {
         if (!presentationTimeline || previousWorldKind !== 'hub') {
@@ -882,10 +895,24 @@ export function connectGameClientSession(
           enabled,
         }))
       },
+      setHubActivity(activity) {
+        if (
+          !welcome
+          || !snapshot
+          || destroyed
+          || snapshot.world.kind !== 'hub'
+          || requestedHubActivity === activity
+        ) return
+        requestedHubActivity = activity
+        options.transport.send(encodeGameMessage({
+          type: 'client-hub-activity',
+          activity,
+        }))
+      },
       requestGameplayPause(source) {
         if (!welcome || !snapshot || destroyed) return
         if (source !== null) {
-          if (source === 'pause-menu' && snapshot.world.kind === 'hub') return
+          if (snapshot.world.kind === 'hub') return
           if (
             snapshot.levelUpBarrier !== null
             || (snapshot.run.phase !== 'hub' && snapshot.run.phase !== 'active')
@@ -1486,8 +1513,11 @@ function copyPlayer(player: ProtocolPlayerState): ProtocolPlayerState {
   }
 }
 
-function copyParticipant(participant: HubParticipantState): HubParticipantState {
+function copyParticipant(
+  participant: ProtocolHubParticipantState,
+): ProtocolHubParticipantState {
   return {
+    activity: participant.activity,
     region: participant.region,
     transition: participant.transition
       ? {

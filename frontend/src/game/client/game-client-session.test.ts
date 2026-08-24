@@ -365,7 +365,7 @@ test('client carries character config, publishes authority, and tears down', asy
   assert.equal(receivedChat.length, 1)
 })
 
-test('client projects authoritative gameplay pause and blocks input until release', async (context) => {
+test('client publishes Hub activity locally but reserves gameplay pause for Boneyard', async (context) => {
   const transport = new MemoryTransport()
   const connecting = connectGameClientSession({
     character: CHARACTER,
@@ -381,9 +381,42 @@ test('client projects authoritative gameplay pause and blocks input until releas
   context.after(() => session.destroy())
   assert.equal(session.getGameplayPause(), null)
 
-  const messageCountBeforeHubMenu = transport.sent.length
-  session.requestGameplayPause('pause-menu')
-  assert.equal(transport.sent.length, messageCountBeforeHubMenu)
+  const messageCountBeforeHubPause = transport.sent.length
+  for (const source of [
+    'pause-menu',
+    'inventory',
+    'skill-book',
+    'skill-selector',
+  ] as const) session.requestGameplayPause(source)
+  assert.equal(transport.sent.length, messageCountBeforeHubPause)
+
+  session.setHubActivity('paused')
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    activity: 'paused',
+    type: 'client-hub-activity',
+  })
+  const pausedActivityCount = transport.sent.length
+  session.setHubActivity('paused')
+  assert.equal(transport.sent.length, pausedActivityCount)
+  session.setHubActivity('occupied')
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    activity: 'occupied',
+    type: 'client-hub-activity',
+  })
+  session.setHubActivity(null)
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    activity: null,
+    type: 'client-hub-activity',
+  })
+
+  const boneyardSnapshot = createGameSnapshot(
+    enterBoneyardWorld(
+      createGameSimulation({ 'player-1': CHARACTER }),
+      loadedBoneyardFixture('pause-client'),
+    ),
+    'player-1',
+  )
+  receiveSnapshot(transport, boneyardSnapshot, 0)
 
   session.requestGameplayPause('inventory')
   assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
@@ -413,6 +446,10 @@ test('client projects authoritative gameplay pause and blocks input until releas
   session.sendInput(gameplayInput({ x: 1, y: 0 }))
   assert.equal(decodeClientGameMessage(transport.sent.at(-1)!).type, 'client-input')
 
+  const beforeOutsideActivity = transport.sent.length
+  session.setHubActivity('occupied')
+  assert.equal(transport.sent.length, beforeOutsideActivity)
+
   removePause()
 })
 
@@ -429,6 +466,17 @@ test('client replaces only its own modal pause source and emits a strict release
     createGameSnapshot(createGameSimulation({ 'player-1': CHARACTER }), 'player-1'),
   )
   const session = await connecting
+  receiveSnapshot(
+    transport,
+    createGameSnapshot(
+      enterBoneyardWorld(
+        createGameSimulation({ 'player-1': CHARACTER }),
+        loadedBoneyardFixture('pause-replacement'),
+      ),
+      'player-1',
+    ),
+    0,
+  )
   const inventoryPause = {
     ownerDisplayName: CHARACTER.displayName,
     ownerPlayerId: session.playerId,

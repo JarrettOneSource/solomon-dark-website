@@ -50,9 +50,22 @@ try {
     ? { width: 844, height: 390, hasTouch: true, useTouch: true }
     : { width: 1600, height: 900, useTouch: false })
   await waitForPlayers(first.page, 2)
+  assert.equal(await socialSoundCount(first.page, 1.1), 0)
+  assert.equal(await socialSoundCount(first.page, 1.25), 0)
+  assert.equal(await socialSoundCount(first.page, 0.85), 0)
   const chat = first.page.getByLabel('Game chat')
+  const hostSawChatOccupied = host.next((message) => (
+    message.type === 'server-snapshot'
+    && message.frame.world.kind === 'hub'
+    && message.frame.world.participants[first.playerId]?.activity === 'occupied'
+  ), 'browser chat Occupied activity')
   await first.page.keyboard.press('t')
   await chat.locator('xpath=self::*[@data-chat-open="true"]').waitFor()
+  await hostSawChatOccupied
+  assert.equal(
+    await first.page.locator('.main-menu-page').getAttribute('data-hub-player-activity'),
+    'occupied',
+  )
   assert.equal(await chat.getAttribute('data-chat-channel'), 'global')
   assert.equal(await chat.getAttribute('data-chat-channels'), 'global')
   const singletonChatInput = chat.getByRole('textbox', { name: 'Chat message' })
@@ -68,12 +81,25 @@ try {
   if (chatSingletonTabEvidencePath) {
     await first.page.screenshot({ path: chatSingletonTabEvidencePath })
   }
+  const hostSawChatClear = host.next((message) => (
+    message.type === 'server-snapshot'
+    && message.frame.world.kind === 'hub'
+    && message.frame.world.participants[first.playerId]?.activity === null
+  ), 'browser chat activity clear')
   await singletonChatInput.press('Escape')
-  await chat.locator('xpath=self::*[@data-chat-open="false"]').waitFor()
+  await Promise.all([
+    chat.locator('xpath=self::*[@data-chat-open="false"]').waitFor(),
+    hostSawChatClear,
+  ])
 
+  const hostSawSettingsOccupied = host.next((message) => (
+    message.type === 'server-snapshot'
+    && message.frame.world.kind === 'hub'
+    && message.frame.world.participants[first.playerId]?.activity === 'occupied'
+  ), 'party settings Occupied activity')
   await first.page.getByRole('button', { name: 'Party settings' }).click()
   const partySettings = first.page.getByRole('dialog', { name: 'Party settings' })
-  await partySettings.waitFor()
+  await Promise.all([partySettings.waitFor(), hostSawSettingsOccupied])
   const initialPartyId = await partySettings.locator('code').innerText()
   assert.match(initialPartyId, /^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/)
   await partySettings.getByLabel('PUBLIC').click()
@@ -86,8 +112,13 @@ try {
     document.querySelector('.party-settings-code code')?.textContent !== initial
   ), initialPartyId)
   assert.notEqual(await partySettings.locator('code').innerText(), initialPartyId)
+  const hostSawSettingsClear = host.next((message) => (
+    message.type === 'server-snapshot'
+    && message.frame.world.kind === 'hub'
+    && message.frame.world.participants[first.playerId]?.activity === null
+  ), 'party settings activity clear')
   await partySettings.getByRole('button', { name: 'CLOSE' }).click()
-  await partySettings.waitFor({ state: 'detached' })
+  await Promise.all([partySettings.waitFor({ state: 'detached' }), hostSawSettingsClear])
 
   const firstInviteClickCountBefore = await soundCount(first.page, 'click')
   host.invitePlayer(first.playerId)
@@ -111,11 +142,38 @@ try {
   const secondInviteClickCount = await soundCount(first.page, 'click')
   await invitation.getByRole('button', { name: 'Accept' }).click()
   await waitForPartySize(first.page, 2)
+  host.setHubActivity('paused')
+  await first.page.waitForFunction((playerId) => {
+    const canvas = document.querySelector('.hub-world-canvas')
+    const ids = (canvas?.getAttribute('data-hub-activity-player-ids') ?? '')
+      .split(',').filter(Boolean)
+    const states = (canvas?.getAttribute('data-hub-activity-states') ?? '')
+      .split(',').filter(Boolean)
+    const index = ids.indexOf(playerId)
+    return index >= 0 && states[index] === 'paused'
+  }, host.playerId)
   const hubEvidencePath = evidenceRoot ? join(evidenceRoot, 'hub-nameplates.png') : null
   if (hubEvidencePath) await first.page.screenshot({ path: hubEvidencePath })
+  await activatePlayer(first, host.playerId)
+  const hostProfile = first.page.getByRole('dialog', { name: 'Basil' })
+  await hostProfile.waitFor()
+  await hostProfile.getByText('Paused', { exact: true }).waitFor()
+  assert.equal(
+    await hostProfile.locator('[data-profile-activity]').getAttribute('data-profile-activity'),
+    'paused',
+  )
+  await hostProfile.getByRole('button', { name: 'Close' }).click()
+  await hostProfile.waitFor({ state: 'detached' })
+  host.setHubActivity(null)
+  await first.page.waitForFunction((playerId) => !(
+    document.querySelector('.hub-world-canvas')
+      ?.getAttribute('data-hub-activity-player-ids') ?? ''
+  ).split(',').includes(playerId), host.playerId)
 
+  const memberJoinCountBefore = await socialSoundCount(first.page, 1.25)
   const member = await enterRawHub('Cassia', 'water')
   await waitForPlayers(first.page, 3)
+  await waitForSocialSoundCount(first.page, 1.25, memberJoinCountBefore + 1)
   host.invitePlayer(member.playerId)
   const memberInvitation = await member.next((message) => (
     message.type === 'server-party-state' && message.state.invitations.length === 1
@@ -124,13 +182,24 @@ try {
   member.acceptInvitation(memberInvitation.state.invitations[0].id)
   await waitForPartySize(first.page, 3)
 
+  const outsiderJoinCountBefore = await socialSoundCount(first.page, 1.25)
   const outsider = await enterRawHub('Daria', 'air')
   await waitForPlayers(first.page, 4)
+  await waitForSocialSoundCount(first.page, 1.25, outsiderJoinCountBefore + 1)
   const outsiderParty = await outsider.next((message) => (
     message.type === 'server-party-state'
     && message.state.party.memberPlayerIds.length === 1
   ), 'outsider singleton party')
   assert.equal(outsiderParty.state.party.leaderPlayerId, outsider.playerId)
+
+  const visitorJoinCountBefore = await socialSoundCount(first.page, 1.25)
+  const visitor = await enterRawHub('Fausta', 'ether')
+  await waitForPlayers(first.page, 5)
+  await waitForSocialSoundCount(first.page, 1.25, visitorJoinCountBefore + 1)
+  const visitorLeaveCountBefore = await socialSoundCount(first.page, 0.85)
+  await visitor.close()
+  await waitForPlayers(first.page, 4)
+  await waitForSocialSoundCount(first.page, 0.85, visitorLeaveCountBefore + 1)
 
   const hostMessageCountBeforeWhisper = host.chatMessages.length
   const memberMessageCountBeforeWhisper = member.chatMessages.length
@@ -147,6 +216,7 @@ try {
   assert.equal(await chat.getAttribute('data-chat-channels'), 'party,global,whisper')
   assert.equal(await chat.getAttribute('data-whisper-target'), outsider.playerId)
   const whisperInput = chat.getByRole('textbox', { name: 'Chat message' })
+  const ownWhisperSoundBefore = await socialSoundCount(first.page, 1.1)
   await whisperInput.fill('Aurelia private hello')
   await whisperInput.press('Enter')
   const whisperMessage = await outsiderWhisper
@@ -162,14 +232,17 @@ try {
   await chat.locator('[data-message-channel="whisper"]', {
     hasText: 'Aurelia private hello',
   }).waitFor()
+  await waitForSocialSoundCount(first.page, 1.1, ownWhisperSoundBefore + 1)
   await first.page.waitForTimeout(100)
   assert.equal(host.chatMessages.length, hostMessageCountBeforeWhisper)
   assert.equal(member.chatMessages.length, memberMessageCountBeforeWhisper)
 
+  const incomingWhisperSoundBefore = await socialSoundCount(first.page, 1.1)
   outsider.sendChat('whisper', 'Daria private reply', first.playerId)
   await chat.locator('[data-message-channel="whisper"]', {
     hasText: 'Daria private reply',
   }).waitFor()
+  await waitForSocialSoundCount(first.page, 1.1, incomingWhisperSoundBefore + 1)
   assert.equal(await chat.getAttribute('data-whisper-target'), outsider.playerId)
   const chatWhisperEvidencePath = evidenceRoot
     ? join(evidenceRoot, 'chat-hub-whisper.png')
@@ -211,6 +284,7 @@ try {
   const memberPartyChat = member.next((message) => (
     message.type === 'server-chat' && message.text === 'Aurelia party hello'
   ), 'member party chat')
+  const ownPartySoundBefore = await socialSoundCount(first.page, 1.1)
   await chatInput.fill('Aurelia party hello')
   await chatInput.press('Enter')
   const [hostPartyMessage, memberPartyMessage] = await Promise.all([
@@ -222,6 +296,7 @@ try {
   await chat.locator('[data-message-channel="party"]', {
     hasText: 'Aurelia party hello',
   }).waitFor()
+  await waitForSocialSoundCount(first.page, 1.1, ownPartySoundBefore + 1)
   const hubCanvas = first.page.locator('.hub-world-canvas')
   const hubOwnSpeech = await waitForWorldSpeech(
     hubCanvas,
@@ -246,6 +321,7 @@ try {
   const outsiderGlobalChat = outsider.next((message) => (
     message.type === 'server-chat' && message.text === 'Aurelia global hello'
   ), 'outsider global chat')
+  const ownGlobalSoundBefore = await socialSoundCount(first.page, 1.1)
   await chatInput.fill('Aurelia global hello')
   await chatInput.press('Enter')
   const globalChatMessages = await Promise.all([
@@ -255,11 +331,14 @@ try {
   ])
   assert.equal(new Set(globalChatMessages.map(message => message.sequence)).size, 1)
   assert.equal(globalChatMessages.every(message => message.channel === 'global'), true)
+  await waitForSocialSoundCount(first.page, 1.1, ownGlobalSoundBefore + 1)
 
   const hostReply = 'Basil global reply'
+  const incomingGlobalSoundBefore = await socialSoundCount(first.page, 1.1)
   host.sendChat('global', hostReply)
   const hostReplyEntry = chat.locator('[data-message-channel="global"]', { hasText: hostReply })
   await hostReplyEntry.waitFor()
+  await waitForSocialSoundCount(first.page, 1.1, incomingGlobalSoundBefore + 1)
   const hostReplySequence = Number(await hostReplyEntry.getAttribute('data-message-sequence'))
   const hubRemoteSpeech = await waitForWorldSpeech(hubCanvas, host.playerId, hostReplySequence)
   assert.equal(hubRemoteSpeech.alpha, 1)
@@ -292,11 +371,24 @@ try {
     getComputedStyle(node).opacity
   )))
   assert.ok(fadedOpacity <= 0.05, `chat faded opacity remained ${fadedOpacity}`)
+  const wakeChatSoundBefore = await socialSoundCount(first.page, 1.1)
   outsider.sendChat('global', 'Daria wakes the chat')
   await chat.locator('[data-message-channel="global"]', {
     hasText: 'Daria wakes the chat',
   }).waitFor()
+  await waitForSocialSoundCount(first.page, 1.1, wakeChatSoundBefore + 1)
   assert.equal(await chat.getAttribute('data-chat-faded'), 'false')
+
+  const observerJoinSoundBefore = await socialSoundCount(first.page, 1.25)
+  const observer = await enterHub('Octavia', 'Earth', {
+    width: 1280,
+    height: 720,
+    useTouch: false,
+  })
+  await waitForPlayers(first.page, 5)
+  await waitForSocialSoundCount(first.page, 1.25, observerJoinSoundBefore + 1)
+  assert.equal(await socialSoundCount(observer.page, 1.25), 0)
+  assert.equal(await socialSoundCount(observer.page, 0.85), 0)
 
   const outsiderHub = outsider.next((message) => (
     message.type === 'server-snapshot' && message.frame.world.kind === 'hub'
@@ -311,9 +403,16 @@ try {
     (message) => message.type === 'server-boneyard-loaded',
     'member Boneyard materialization',
   )
+  const observerDepartureSoundsBefore = await socialSoundCount(observer.page, 0.85)
   host.startMatch('default-random')
   await firstBoneyard.waitFor({ timeout: 240_000 })
   const [hostRun, memberRun] = await Promise.all([hostLoaded, memberLoaded])
+  await waitForPlayers(observer.page, 2)
+  await waitForSocialSoundCount(
+    observer.page,
+    0.85,
+    observerDepartureSoundsBefore + 3,
+  )
   const firstRunId = await firstBoneyard.getAttribute('data-run-id')
   assert.ok(firstRunId)
   assert.equal(hostRun.boneyard.runId, firstRunId)
@@ -402,6 +501,7 @@ try {
     message.type === 'server-chat' && message.text === 'Party run hello'
   ), 'member run chat')
   const outsiderMessageCountBeforeRunChat = outsider.chatMessages.length
+  const ownRunChatSoundBefore = await socialSoundCount(first.page, 1.1)
   await runChatInput.fill('Party run hello')
   await runChatInput.press('Enter')
   await Promise.all([hostRunChat, memberRunChat])
@@ -409,6 +509,7 @@ try {
     hasText: 'Party run hello',
   })
   await runChatEntry.waitFor()
+  await waitForSocialSoundCount(first.page, 1.1, ownRunChatSoundBefore + 1)
   const runChatSequence = Number(await runChatEntry.getAttribute('data-message-sequence'))
   const boneyardOwnSpeech = await waitForWorldSpeech(
     boneyardCanvas,
@@ -440,14 +541,21 @@ try {
 
   const healthDuringRun = await supervisorHealth()
   if (healthDuringRun) {
-    assert.equal(healthDuringRun.hubPlayers, 1)
-    assert.equal(healthDuringRun.parties, 2)
+    assert.equal(healthDuringRun.hubPlayers, 2)
+    assert.equal(healthDuringRun.parties, 3)
     assert.equal(healthDuringRun.runs, 1)
   }
   assert.deepEqual(consoleErrors, [])
   assert.deepEqual(failedResponses, [])
   assert.deepEqual(pageErrors, [])
   assert.deepEqual(unexpectedRequestFailures, [])
+
+  const socialAudioReceipt = {
+    chatSoundCount: await socialSoundCount(first.page, 1.1),
+    collegeJoinSoundCount: await socialSoundCount(first.page, 1.25),
+    collegeLeaveSoundCount: await socialSoundCount(first.page, 0.85),
+    solomonDepartureSoundCount: await socialSoundCount(observer.page, 0.85),
+  }
 
   await host.close()
   await member.close()
@@ -461,6 +569,7 @@ try {
     browserPartyMemberPlayerId: first.playerId,
     secondPartyMemberPlayerId: member.playerId,
     remainingHubPlayerId: outsider.playerId,
+    observingHubPlayerId: observer.playerId,
     runId: firstRunId,
     hubEvidencePath,
     invitationEvidencePath,
@@ -483,6 +592,7 @@ try {
     chatWhisperSequence: whisperMessage.sequence,
     firstInviteClickCount,
     secondInviteClickCount,
+    ...socialAudioReceipt,
     remainingHubBeforeX: outsiderX,
     remainingHubAfterX: outsiderAfter.frame.players[outsider.playerId].position.x,
     healthDuringRun,
@@ -666,6 +776,12 @@ async function enterRawHub(displayName, element) {
         text,
       }))
     },
+    setHubActivity(activity) {
+      socket.send(JSON.stringify({
+        type: 'client-hub-activity',
+        activity,
+      }))
+    },
     startMatch(boneyardId) {
       socket.send(JSON.stringify({
         type: 'client-start-match',
@@ -778,6 +894,27 @@ async function waitForSoundCount(page, sourceFragment, expected) {
       .filter(({ src, type }) => type === 'buffer-start' && src.includes(fragment))
       .length === count
   ), { count: expected, fragment: sourceFragment }, { timeout: 5_000 })
+}
+
+async function socialSoundCount(page, playbackRate) {
+  return page.evaluate((rate) => (window.__sdrAudioEvents ?? [])
+    .filter((event) => (
+      event.type === 'buffer-start'
+      && event.src.includes('click')
+      && Math.abs(event.playbackRate - rate) < 1e-4
+      && Math.abs(event.volume - 0.65) < 1e-4
+    )).length, playbackRate)
+}
+
+async function waitForSocialSoundCount(page, playbackRate, expected) {
+  await page.waitForFunction(({ count, rate }) => (
+    (window.__sdrAudioEvents ?? []).filter((event) => (
+      event.type === 'buffer-start'
+      && event.src.includes('click')
+      && Math.abs(event.playbackRate - rate) < 1e-4
+      && Math.abs(event.volume - 0.65) < 1e-4
+    )).length === count
+  ), { count: expected, rate: playbackRate }, { timeout: 10_000 })
 }
 
 async function waitForWorldSpeech(canvas, playerId, sequence) {

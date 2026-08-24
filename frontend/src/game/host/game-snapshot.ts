@@ -23,6 +23,7 @@ import type { BoneyardEnemySemanticEvent } from '../core-server/boneyard-enemy-s
 import type {
   BoneyardEnemyEventSnapshot,
   GameSnapshot,
+  HubPlayerActivity,
   ProtocolPlayerState,
   ProtocolStudentState,
 } from '../protocol/game-state.ts'
@@ -39,6 +40,7 @@ import {
 export function createGameSnapshot(
   state: GameSimulationState,
   hostPlayerId: string | null,
+  hubActivities: Readonly<Record<string, HubPlayerActivity | null>> = {},
 ): GameSnapshot {
   const players = Object.fromEntries(Object.entries(gameSimulationPlayerRecords(state)).map(
     ([playerId, player]) => [playerId, protocolPlayerState(state, playerId, player)],
@@ -58,7 +60,13 @@ export function createGameSnapshot(
           ambient: state.world.ambient,
           collisionRngState: state.world.collisionRngState,
           kind: 'hub',
-          participants: state.world.participants,
+          participants: Object.fromEntries(Object.entries(state.world.participants).map(
+            ([playerId, participant]) => [playerId, {
+              activity: hubActivities[playerId] ?? null,
+              region: participant.region,
+              transition: participant.transition,
+            }],
+          )),
           students: hubStudentSnapshotStates(state.world.studentPopulation)
             .map(protocolStudentState),
           traderAnimationSeed: state.world.traderAnimationSeed,

@@ -3,6 +3,7 @@ import type {
   HubWorldSnapshot,
   ProtocolAmbientState,
   ProtocolFountainParticleState,
+  ProtocolHubParticipantState,
   ProtocolPlayerState,
   ProtocolStudentState,
 } from '../protocol/game-state.ts'
@@ -14,9 +15,6 @@ import {
   copyNativeSecondaryState,
   interpolateNativeSecondaryState,
 } from './native-secondary-presentation.ts'
-import type {
-  HubParticipantState,
-} from '../core-kernels/hub-regions.ts'
 import {
   HUB_INCOMING_FADE_RATES,
   HUB_OUTGOING_FADE_RATE,
@@ -143,9 +141,9 @@ function interpolatedFrame(
 }
 
 function projectLocalParticipant(
-  participant: HubParticipantState,
+  participant: ProtocolHubParticipantState,
   elapsedTicks: number,
-): HubParticipantState {
+): ProtocolHubParticipantState {
   const result = copyParticipant(participant)
   if (!result.transition) return result
   const delta = result.transition.phase === 'outgoing'
@@ -228,11 +226,11 @@ function interpolateSnapshot(
 }
 
 function interpolateParticipants(
-  older: Readonly<Record<string, HubParticipantState>>,
-  newer: Readonly<Record<string, HubParticipantState>>,
+  older: Readonly<Record<string, ProtocolHubParticipantState>>,
+  newer: Readonly<Record<string, ProtocolHubParticipantState>>,
   blend: number,
-): Record<string, HubParticipantState> {
-  const result: Record<string, HubParticipantState> = {}
+): Record<string, ProtocolHubParticipantState> {
+  const result: Record<string, ProtocolHubParticipantState> = {}
   for (const [playerId, olderParticipant] of Object.entries(older)) {
     const newerParticipant = newer[playerId]
     result[playerId] = newerParticipant
@@ -251,10 +249,10 @@ function interpolateParticipants(
 }
 
 function interpolateParticipant(
-  older: HubParticipantState,
-  newer: HubParticipantState,
+  older: ProtocolHubParticipantState,
+  newer: ProtocolHubParticipantState,
   blend: number,
-): HubParticipantState {
+): ProtocolHubParticipantState {
   const first = older.transition
   const second = newer.transition
   if (
@@ -265,6 +263,7 @@ function interpolateParticipant(
     && first.sourceRegion === second.sourceRegion
   ) {
     return {
+      activity: blend < 1 ? older.activity : newer.activity,
       region: blend < 1 ? older.region : newer.region,
       transition: {
         ...second,
@@ -476,8 +475,11 @@ function presentationCopy(snapshot: HubGameSnapshot): HubPresentationFrame {
   }
 }
 
-function copyParticipant(participant: HubParticipantState): HubParticipantState {
+function copyParticipant(
+  participant: ProtocolHubParticipantState,
+): ProtocolHubParticipantState {
   return {
+    activity: participant.activity,
     region: participant.region,
     transition: participant.transition
       ? {

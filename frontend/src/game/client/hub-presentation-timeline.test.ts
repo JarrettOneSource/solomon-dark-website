@@ -86,8 +86,8 @@ function snapshotAt(tick: number, localX: number, remoteX: number): HubGameSnaps
     world: {
       ...source.world,
       participants: {
-        local: createHubParticipantState(),
-        remote: createHubParticipantState(),
+        local: { ...createHubParticipantState(), activity: null },
+        remote: { ...createHubParticipantState(), activity: null },
       },
       students: [],
     },
@@ -921,8 +921,8 @@ test('projects the local native fade cadence while interpolating remote particip
     world: {
       ...firstBase.world,
       participants: {
-        local: { region: 'courtyard', transition: { ...transition, alpha: 0.2 } },
-        remote: { region: 'courtyard', transition: { ...transition, alpha: 0.2 } },
+        local: { activity: null, region: 'courtyard', transition: { ...transition, alpha: 0.2 } },
+        remote: { activity: null, region: 'courtyard', transition: { ...transition, alpha: 0.2 } },
       },
     },
   }
@@ -931,8 +931,8 @@ test('projects the local native fade cadence while interpolating remote particip
     world: {
       ...secondBase.world,
       participants: {
-        local: { region: 'courtyard', transition: { ...transition, alpha: 0.25 } },
-        remote: { region: 'courtyard', transition: { ...transition, alpha: 0.25 } },
+        local: { activity: 'occupied', region: 'courtyard', transition: { ...transition, alpha: 0.25 } },
+        remote: { activity: 'paused', region: 'courtyard', transition: { ...transition, alpha: 0.25 } },
       },
     },
   }
@@ -943,6 +943,9 @@ test('projects the local native fade cadence while interpolating remote particip
   assert.equal(halfway.world.participants.local.transition?.alpha, 0.275)
   assert.equal(halfway.world.participants.remote.transition?.alpha, 0.225)
   assert.equal(halfway.world.participants.local.region, 'courtyard')
+  assert.equal(halfway.world.participants.local.activity, 'occupied')
+  assert.equal(halfway.world.participants.remote.activity, null)
+  assert.equal(presentation.sample(100).world.participants.remote.activity, 'paused')
 })
 
 test('uses authoritative ticks rather than packet arrival spacing when receipts jitter', () => {

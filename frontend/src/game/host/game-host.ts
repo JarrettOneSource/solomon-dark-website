@@ -64,6 +64,7 @@ import {
   type GameChatChannel,
   type GameSessionKind,
   type GameplayPauseState,
+  type HubPlayerActivity,
   type PartyAction,
   type PartyActionRejection as ProtocolPartyActionRejection,
   type PartyJoinRequester,
@@ -319,9 +320,7 @@ export interface GameHostPartyJoinRequestStatus {
 
 export type GameHostCloseReason = 'host-ended-session' | 'server-shutdown'
 
-type SharedGameplayPauseScope =
-  | { readonly kind: 'hub' }
-  | { readonly kind: 'party'; readonly partyId: string }
+type SharedGameplayPauseScope = { readonly partyId: string }
 
 interface HostClient {
   acknowledgedSequence: number
@@ -334,6 +333,7 @@ interface HostClient {
   profile: PlayerSocialProfile
   forceReplicationKeyframe: boolean
   globalScoreEligible: boolean
+  hubActivity: HubPlayerActivity | null
   localOnly: boolean
   lastReceivedSequence: number
   lastSentSnapshotSequence: number
@@ -458,7 +458,6 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     : null
   let state = sharedWorlds?.hub ?? createInitialSimulation(options.createSimulation)
   let gameplayPause: GameplayPauseState | null = null
-  let sharedHubGameplayPause: GameplayPauseState | null = null
   const sharedGameplayPauses = new Map<string, GameplayPauseState>()
   let nextPlayerId = 1
   let hostPlayerId: PlayerId | null = null
@@ -931,7 +930,11 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           consumePartyReservation(authenticated.reservationId)
         }
         const playerState = stateForPlayer(playerId)
-        const welcomeSnapshot = createGameSnapshot(playerState, authorityForPlayer(playerId))
+        const welcomeSnapshot = createGameSnapshot(
+          playerState,
+          authorityForPlayer(playerId),
+          hubActivitiesForSnapshot(playerState),
+        )
         const snapshotSequence = nextSnapshotSequence
         nextSnapshotSequence += 1
         const welcomeBaseline = createReplicatedEntityBaseline(welcomeSnapshot)
@@ -950,6 +953,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             && message.save === undefined
             && !clientCheatsEnabled
             && (authenticated.content?.manifest.mods.length ?? content.mods.length) === 0,
+          hubActivity: null,
           localOnly: sessionKind !== 'global-hub'
             || clientCheatsEnabled
             || saveIntegrity === 'local-only'
@@ -1048,11 +1052,24 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         return
       }
 
+      if (message.type === 'client-hub-activity') {
+        const activeState = stateForPlayer(client.playerId)
+        if (
+          activeState.world.kind !== 'hub'
+          || client.hubActivity === message.activity
+        ) return
+        client.hubActivity = message.activity
+        client.activeInput = createIdlePlayerCharacterInput()
+        client.queuedInputs.clear()
+        broadcastSnapshot()
+        return
+      }
+
       if (message.type === 'client-gameplay-pause') {
         const activeState = stateForPlayer(client.playerId)
+        if (activeState.world.kind === 'hub') return
         const activePause = gameplayPauseForPlayer(client.playerId)
         if (message.paused) {
-          if (message.source === 'pause-menu' && activeState.world.kind === 'hub') return
           if (activePause?.ownerPlayerId === client.playerId) {
             if (activePause.source === message.source) return
             setGameplayPauseForPlayer(client.playerId, {
@@ -1101,6 +1118,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         const activeState = stateForPlayer(client.playerId)
         if (
           gameplayPauseForPlayer(client.playerId) !== null
+          || (activeState.world.kind === 'hub' && client.hubActivity !== null)
           || activeState.levelUpBarrier !== null
           || getPlayerProgression(activeState, client.playerId).pendingOffer
         ) {
@@ -1728,6 +1746,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           void beginSharedPartyRun(client.playerId, selected, socket)
           return
         }
+        for (const connected of clients.values()) connected.hubActivity = null
         loadedBoneyard = selected
         const previousState = state
         state = enterBoneyardWorld(state, selected)
@@ -2023,7 +2042,6 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             inputs,
             new Set([...sharedGameplayPauses.keys(), ...startingPartyIds]),
             enemySpawnIntents,
-            sharedHubGameplayPause !== null,
             new Map([...partyModRuntimes].map(([partyId, scope]) => [
               partyId,
               scope.extensions,
@@ -2308,7 +2326,11 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   }
 
   function broadcastSnapshot(): void {
-    const defaultSnapshot = sharedWorlds ? null : createGameSnapshot(state, hostPlayerId)
+    const defaultSnapshot = sharedWorlds ? null : createGameSnapshot(
+      state,
+      hostPlayerId,
+      hubActivitiesForSnapshot(state),
+    )
     const snapshotSequence = nextSnapshotSequence
     nextSnapshotSequence += 1
     const periodicKeyframe = snapshotSequence % Math.max(1, snapshotRate * 5) === 0
@@ -2317,6 +2339,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       const snapshot = defaultSnapshot ?? createGameSnapshot(
         stateForPlayer(client.playerId),
         authorityForPlayer(client.playerId),
+        hubActivitiesForSnapshot(stateForPlayer(client.playerId)),
       )
       const currentBaseline = createReplicatedEntityBaseline(snapshot)
       const acknowledgedBaseline = client.sentReplicationBaselines.get(
@@ -2341,6 +2364,18 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       client.sentReplicationBaselines.set(snapshotSequence, currentBaseline)
       pruneReplicationBaselines(client)
     }
+  }
+
+  function hubActivitiesForSnapshot(
+    activeState: GameSimulationState,
+  ): Readonly<Record<string, HubPlayerActivity | null>> {
+    if (activeState.world.kind !== 'hub') return {}
+    const participantIds = new Set(Object.keys(activeState.world.participants))
+    return Object.fromEntries([...clients.values()].flatMap(client => (
+      participantIds.has(client.playerId)
+        ? [[client.playerId, client.hubActivity] as const]
+        : []
+    )))
   }
 
   function stateForPlayer(playerId: string): GameSimulationState {
@@ -3157,20 +3192,6 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     }
   }
 
-  function stopSharedHubInputs(): void {
-    if (!sharedWorlds) return
-    for (const client of clients.values()) {
-      if (stateForPlayer(client.playerId).world.kind !== 'hub') continue
-      client.activeInput = createIdlePlayerCharacterInput()
-      client.queuedInputs.clear()
-    }
-    for (const bot of bots.values()) {
-      if (stateForPlayer(bot.playerId).world.kind !== 'hub') continue
-      bot.activeInput = createIdlePlayerCharacterInput()
-      bot.queuedIntents.length = 0
-    }
-  }
-
   function resetNextTickDeadline(): void {
     nextTickAt = performance.now() + GAME_FIXED_TICK_SECONDS * 1000
   }
@@ -3178,17 +3199,15 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   function gameplayPauseForPlayer(playerId: string): GameplayPauseState | null {
     if (!sharedWorlds) return gameplayPause
     const scope = sharedGameplayPauseScope(playerId)
-    if (scope?.kind === 'hub') return sharedHubGameplayPause
     return scope ? sharedGameplayPauses.get(scope.partyId) ?? null : null
   }
 
   function sharedGameplayPauseScope(playerId: string): SharedGameplayPauseScope | null {
     if (!sharedWorlds) return null
     const playerState = sharedGameStateForPlayer(sharedWorlds, playerId)
-    if (!playerState) return null
-    if (playerState.world.kind === 'hub') return { kind: 'hub' }
+    if (!playerState || playerState.world.kind === 'hub') return null
     const partyId = partyForPlayer(sharedWorlds.parties, playerId)?.id
-    return partyId ? { kind: 'party', partyId } : null
+    return partyId ? { partyId } : null
   }
 
   function setGameplayPauseForPlayer(
@@ -3200,8 +3219,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       return
     }
     const scope = sharedGameplayPauseScope(playerId)
-    if (scope?.kind === 'hub') sharedHubGameplayPause = pause
-    else if (scope) sharedGameplayPauses.set(scope.partyId, pause)
+    if (scope) sharedGameplayPauses.set(scope.partyId, pause)
   }
 
   function broadcastGameplayPause(
@@ -3214,18 +3232,12 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     }
     const scope = knownScope ?? (playerId ? sharedGameplayPauseScope(playerId) : null)
     if (!scope) return
-    const pause = scope.kind === 'hub'
-      ? sharedHubGameplayPause
-      : sharedGameplayPauses.get(scope.partyId) ?? null
-    const party = scope.kind === 'party'
-      ? sharedWorlds.parties.parties.find(({ id }) => id === scope.partyId)
-      : null
+    const pause = sharedGameplayPauses.get(scope.partyId) ?? null
+    const party = sharedWorlds.parties.parties.find(({ id }) => id === scope.partyId)
     for (const client of clients.values()) {
       if (
         client.socket.readyState === WebSocket.OPEN
-        && (scope.kind === 'hub'
-          ? stateForPlayer(client.playerId).world.kind === 'hub'
-          : party?.memberPlayerIds.includes(client.playerId))
+        && party?.memberPlayerIds.includes(client.playerId)
       ) client.socket.send(encodeGameMessage({ type: 'server-gameplay-pause', pause }))
     }
   }
@@ -3239,17 +3251,12 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       ? knownScope ?? (playerId ? sharedGameplayPauseScope(playerId) : null)
       : null
     const released = sharedWorlds
-      ? scope?.kind === 'hub'
-        ? sharedHubGameplayPause
-        : scope
-          ? sharedGameplayPauses.get(scope.partyId) ?? null
-          : null
+      ? scope
+        ? sharedGameplayPauses.get(scope.partyId) ?? null
+        : null
       : gameplayPause
     if (!released) return
-    if (sharedWorlds && scope?.kind === 'hub') {
-      sharedHubGameplayPause = null
-      stopSharedHubInputs()
-    } else if (sharedWorlds && scope?.kind === 'party') {
+    if (sharedWorlds && scope) {
       sharedGameplayPauses.delete(scope.partyId)
       stopPartyInputs(scope.partyId)
     } else {
@@ -3443,6 +3450,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       const before = sharedPartySaveStateForPlayer(sharedWorlds, leaderPlayerId)
       const started = startSharedPartyRun(sharedWorlds, leaderPlayerId, selected)
       if (!started.accepted || !before) return
+      const departingPlayerIds = new Set(latestParty.memberPlayerIds)
+      for (const connected of clients.values()) {
+        if (departingPlayerIds.has(connected.playerId)) connected.hubActivity = null
+      }
       sharedWorlds = started.state
       state = sharedWorlds.hub
       const run = sharedWorlds.runs.find(candidate => candidate.partyId === party.id)!

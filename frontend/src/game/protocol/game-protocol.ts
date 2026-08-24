@@ -27,7 +27,6 @@ import {
 import {
   isHubRegionId,
   isHubTransitionEdge,
-  type HubParticipantState,
   type HubRegionId,
 } from '../core-kernels/hub-regions.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
@@ -236,7 +235,9 @@ import type {
   BoneyardLootSnapshot,
   BoneyardSolomonSnapshot,
   BoneyardWaveSnapshot,
+  HubPlayerActivity,
   HubWorldSnapshot,
+  ProtocolHubParticipantState,
   ProtocolAmbientState,
   ProtocolPlayerProgression,
   ProtocolPlayerEconomy,
@@ -269,6 +270,7 @@ import {
   BONEYARD_LOOT_KINDS,
   BONEYARD_LOOT_SOUNDS,
   BONEYARD_LOOT_SOURCES,
+  HUB_PLAYER_ACTIVITIES,
 } from './game-state.ts'
 import { REPLICATED_ENTITY_TYPE_REGISTRY } from './entity-replication.ts'
 import type {
@@ -298,7 +300,12 @@ import {
   type GameSaveIntent,
 } from '../save/game-save-contract.ts'
 
-export type { BoneyardEnemyEventSnapshot, GameSnapshot } from './game-state.ts'
+export type {
+  BoneyardEnemyEventSnapshot,
+  GameSnapshot,
+  HubPlayerActivity,
+  ProtocolHubParticipantState,
+} from './game-state.ts'
 export type {
   BoneyardChoice,
   BoneyardScene,
@@ -495,6 +502,11 @@ export interface ClientHubActionMessage {
   action: HubInventoryAction
 }
 
+export interface ClientHubActivityMessage {
+  type: 'client-hub-activity'
+  activity: HubPlayerActivity | null
+}
+
 export interface ClientChatMessage {
   type: 'client-chat'
   channel: GameChatChannel
@@ -612,6 +624,7 @@ export type ClientGameMessage =
   | ClientDeploymentReadyMessage
   | ClientGameplayPauseMessage
   | ClientHelloMessage
+  | ClientHubActivityMessage
   | ClientHubActionMessage
   | ClientInputMessage
   | ClientLevelUpActionMessage
@@ -884,6 +897,15 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
   if (value.type === 'client-hub-action') {
     onlyKeys(value, 'message', ['type', 'action'])
     return { type: 'client-hub-action', action: hubInventoryAction(value.action) }
+  }
+  if (value.type === 'client-hub-activity') {
+    onlyKeys(value, 'message', ['type', 'activity'])
+    return {
+      type: 'client-hub-activity',
+      activity: value.activity === null
+        ? null
+        : hubPlayerActivity(value.activity, 'activity'),
+    }
   }
   if (value.type === 'client-chat') {
     onlyKeys(value, 'message', ['type', 'channel', 'targetPlayerId', 'text'])
@@ -3765,7 +3787,7 @@ function hubWorldSnapshot(value: unknown, field: string): HubWorldSnapshot {
       `${field}.participants may contain at most ${MAX_PLAYERS} entries`,
     )
   }
-  const participants: Record<string, HubParticipantState> = {}
+  const participants: Record<string, ProtocolHubParticipantState> = {}
   for (const [rawPlayerId, state] of Object.entries(rawParticipants)) {
     const playerId = validatedPlayerId(rawPlayerId, `${field} participant id`)
     participants[playerId] = hubParticipantState(
@@ -7772,11 +7794,14 @@ function validatePrimarySpellOwners(
   }
 }
 
-function hubParticipantState(value: unknown, field: string): HubParticipantState {
+function hubParticipantState(value: unknown, field: string): ProtocolHubParticipantState {
   const source = record(value, field)
-  onlyKeys(source, field, ['region', 'transition'])
+  onlyKeys(source, field, ['activity', 'region', 'transition'])
+  const activity = source.activity === null
+    ? null
+    : hubPlayerActivity(source.activity, `${field}.activity`)
   const region = hubRegionId(source.region, `${field}.region`)
-  if (source.transition === null) return { region, transition: null }
+  if (source.transition === null) return { activity, region, transition: null }
   const transition = record(source.transition, `${field}.transition`)
   onlyKeys(transition, `${field}.transition`, [
     'alpha',
@@ -7809,6 +7834,7 @@ function hubParticipantState(value: unknown, field: string): HubParticipantState
     throw new GameProtocolError(`${field}.transition is inconsistent with its region`)
   }
   return {
+    activity,
     region,
     transition: {
       alpha,
@@ -7825,6 +7851,10 @@ function hubParticipantState(value: unknown, field: string): HubParticipantState
       sourceRegion,
     },
   }
+}
+
+function hubPlayerActivity(value: unknown, field: string): HubPlayerActivity {
+  return memberString(value, field, HUB_PLAYER_ACTIVITIES) as HubPlayerActivity
 }
 
 function hubRegionId(value: unknown, field: string): HubRegionId {
@@ -9811,7 +9841,7 @@ function gameWorldSnapshotFrame(
       `${field}.participants may contain at most ${MAX_PLAYERS} entries`,
     )
   }
-  const participants: Record<string, HubParticipantState> = {}
+  const participants: Record<string, ProtocolHubParticipantState> = {}
   for (const [rawPlayerId, state] of Object.entries(rawParticipants)) {
     const playerId = validatedPlayerId(rawPlayerId, `${field} participant id`)
     participants[playerId] = hubParticipantState(
@@ -9914,7 +9944,7 @@ function uniqueEntityEntries(
 }
 
 function validateParticipantOwnership(
-  participants: Readonly<Record<string, HubParticipantState>>,
+  participants: Readonly<Record<string, ProtocolHubParticipantState>>,
   players: Readonly<Record<string, ProtocolPlayerSnapshotFrame>>,
   field: string,
 ): void {
