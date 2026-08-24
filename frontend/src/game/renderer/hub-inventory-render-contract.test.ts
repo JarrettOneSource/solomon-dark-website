@@ -39,6 +39,7 @@ import {
   HUB_INVENTORY_INTERACTION,
   HUB_EQUIPMENT_SINK_RENDER,
   HUB_ITEM_ICON_TRANSFORMS,
+  HUB_NATIVE_LABELED_CONTROL,
   HUB_NATIVE_UI_TIMING,
   HUB_NATIVE_UI_SIZE,
   HUB_NATIVE_UI_SURFACES,
@@ -54,6 +55,8 @@ import {
   HUB_UNFORGE_TARGET,
   hubDowsingSlotPosition,
   hubDowsingFieldTint,
+  hubDowsingFlashAlpha,
+  hubDowsingFlashFeedbackSequence,
   hubDyeItemLayerRects,
   hubDyeModalOpacity,
   hubDyeSelectedPulse,
@@ -64,10 +67,14 @@ import {
   hubHagathaTooltipLines,
   hubItemTooltipLines,
   hubNativeEquipmentEffectText,
+  hubNativeLabeledControlPresentation,
+  hubNativeUiElapsedTicks,
+  hubNativeUiReveal,
   hubOwnedPerkSlotRect,
   hubInventoryEquipmentSlotRects,
   hubInventorySlotPosition,
   hubShopSlotPosition,
+  hubShopSlideOffset,
   hubUnforgeResultLayout,
   hubUnforgeTargetTint,
 } from './hub-inventory-render-contract.ts'
@@ -585,6 +592,28 @@ test('trader Chat owns its stock panel, clip, controls, and timing independently
   assert.equal(HUB_NATIVE_UI_TIMING.chatScrollPerTick, 0.125)
   assert.equal(HUB_NATIVE_UI_TIMING.chatAcceleratedScrollPerTick, 0.8)
   assert.equal(HUB_NATIVE_UI_TIMING.messageBoxRevealPerTick, 0.035)
+  assert.equal(HUB_NATIVE_UI_TIMING.nativeTickMs, 10)
+  assert.deepEqual([
+    hubNativeUiElapsedTicks(0),
+    hubNativeUiElapsedTicks(9.999),
+    hubNativeUiElapsedTicks(10),
+    hubNativeUiElapsedTicks(399.999),
+    hubNativeUiElapsedTicks(400),
+  ], [0, 0, 1, 39, 40])
+  assert.deepEqual([
+    hubNativeUiReveal(0, HUB_NATIVE_UI_TIMING.inventoryRevealPerTick),
+    hubNativeUiReveal(9.999, HUB_NATIVE_UI_TIMING.inventoryRevealPerTick),
+    hubNativeUiReveal(10, HUB_NATIVE_UI_TIMING.inventoryRevealPerTick),
+    hubNativeUiReveal(200, HUB_NATIVE_UI_TIMING.inventoryRevealPerTick),
+    hubNativeUiReveal(400, HUB_NATIVE_UI_TIMING.inventoryRevealPerTick),
+  ], [0, 0, 0.025, 0.5, 1])
+  assert.deepEqual([0, 0.25, 0.5, 0.75, 1].map(hubShopSlideOffset), [
+    -100,
+    -75,
+    -50,
+    -25,
+    0,
+  ])
 })
 
 test('trader Chat preserves ExactText inline italic commands and authored spacing', () => {
@@ -613,8 +642,9 @@ test('dowsing preserves the stock red flash and insufficient-gold message branch
   assert.equal(HUB_DOWSING_INSUFFICIENT_GOLD.title, 'NOT ENOUGH GOLD!')
   assert.match(HUB_DOWSING_INSUFFICIENT_GOLD.body, /endless, swirling, impossible colors/)
   assert.deepEqual(HUB_DOWSING_PREROLL, {
+    buttonActionRect: [675, 265.5, 250, 69],
     buttonCenter: [800, 300],
-    buttonRect: [623.5, 265.5, 353, 69],
+    buttonVisualRect: [623.5, 265.5, 353, 69],
     buttonSideCenters: [[704, 302], [896, 302]],
     feeTextBaselineY: 322.5,
     labelTextBaselineY: 302,
@@ -636,10 +666,11 @@ test('dowsing preserves the stock red flash and insufficient-gold message branch
     innerCornerCenters: [[580.5, 204.5], [1019.5, 204.5], [580.5, 495.5], [1019.5, 495.5]],
     outerCornerCenters: [[564.5, 190], [1035.5, 190], [564.5, 510], [1035.5, 510]],
     primaryButtonCenter: [800, 432],
-    primaryButtonRect: [623.5, 397.5, 353, 69],
+    primaryButtonActionRect: [702, 397.5, 196, 69],
     primaryButtonSideCenters: [[731, 434], [869, 434]],
     primaryButtonTextBaselineY: 440,
     primaryButtonTextTint: 0xd9ba70,
+    primaryButtonVisualRect: [623.5, 397.5, 353, 69],
     skullHeaderCenter: [800, 121],
     titleTextBaselineY: 252,
     verticalEdgeRecord: 79,
@@ -671,6 +702,46 @@ test('dowsing preserves the stock red flash and insufficient-gold message branch
   assert.equal(hubDowsingFieldTint(180), 0xffccff)
   assert.equal(hubDowsingFieldTint(540), 0xff99ff)
   assert.equal(hubDowsingFieldTint(720), 0xffb3ff)
+  assert.deepEqual(HUB_NATIVE_LABELED_CONTROL, {
+    idleBodyRecord: 101,
+    pressedBodyRecord: 102,
+    pressedCopyOffset: 6,
+  })
+  assert.deepEqual(hubNativeLabeledControlPresentation(false), {
+    bodyRecord: 101,
+    copyOffset: 0,
+  })
+  assert.deepEqual(hubNativeLabeledControlPresentation(true), {
+    bodyRecord: 102,
+    copyOffset: 6,
+  })
+  assert.equal(hubDowsingFlashAlpha(0), 1)
+  assert.equal(hubDowsingFlashAlpha(9.999), 1)
+  assert.ok(Math.abs(hubDowsingFlashAlpha(10) - 0.95) < 1e-6)
+  assert.ok(Math.abs(hubDowsingFlashAlpha(190) - 0.05) < 1e-6)
+  assert.equal(hubDowsingFlashAlpha(200), 0)
+  assert.equal(hubDowsingFlashAlpha(2_000), 0)
+  assert.equal(hubDowsingFlashFeedbackSequence(null), null)
+  assert.equal(hubDowsingFlashFeedbackSequence({
+    accepted: true,
+    action: 'dowse',
+    sequence: 7,
+  }), 7)
+  assert.equal(hubDowsingFlashFeedbackSequence({
+    accepted: true,
+    action: 'buy-dowsing',
+    sequence: 8,
+  }), 8)
+  assert.equal(hubDowsingFlashFeedbackSequence({
+    accepted: false,
+    action: 'buy-dowsing',
+    sequence: 9,
+  }), null)
+  assert.equal(hubDowsingFlashFeedbackSequence({
+    accepted: true,
+    action: 'buy-fomentius',
+    sequence: 10,
+  }), null)
 })
 
 test('the port exports the complete stock UI membership', () => {
@@ -683,7 +754,8 @@ test('the port exports the complete stock UI membership', () => {
     'hagatha-perk-shop',
     'luthacus-inventory-shop',
     'shlorio-dowsing-before-roll',
-    'shlorio-dowsing-flash',
+    'shlorio-dowsing-roll-flash',
+    'shlorio-dowsing-purchase-flash',
     'shlorio-dowsing-results',
     'shlorio-insufficient-gold-message',
     'inventory',
@@ -722,10 +794,13 @@ test('visible hub inventory presentation is owned by the native WebGL renderer',
   assert.match(rendererSource, /slot\.alpha = HUB_DOWSING_GRID\.slotAlpha/)
   assert.match(rendererSource, /owner === 'storage'[\s\S]*HUB_STOREGRID_SELECTED_RECORDS\.takeClickAgain/)
   assert.doesNotMatch(source, /Previous page|Next page|Goodbye|Your Prices/)
-  assert.match(rendererSource, /dowsingFlash\.alpha = 1/)
+  assert.match(rendererSource, /hubDowsingFlashFeedbackSequence/)
   assert.match(rendererSource, /dataset\.dowsingFlash = 'active'/)
   assert.match(rendererSource, /dataset\.nativeReveal = clampedReveal >= 1 \? 'settled' : 'revealing'/)
   assert.match(rendererSource, /dataset\.nativeNoticeReveal/)
+  assert.doesNotMatch(rendererSource, /easeOutCubic/)
+  assert.doesNotMatch(rendererSource, /previousDowsingOfferCount/)
+  assert.match(source, /data-native-pressed-control/)
   assert.match(rendererSource, /typeof child\.label === 'string'/)
   assert.doesNotMatch(rendererSource, /Math\.random\(\)/)
   assert.match(

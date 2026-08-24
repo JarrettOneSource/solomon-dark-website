@@ -308,24 +308,21 @@ try {
   const beforeDowsing = await dialogGold(shlorio)
   await hostPage.screenshot({ path: `${screenshotRoot}-shlorio-preroll.png` })
   const flashCanvas = shlorio.locator('.hub-inventory-native-canvas')
-  const [flashDataUrl] = await Promise.all([
-    flashCanvas.evaluate((canvas) => new Promise((resolve, reject) => {
-      const timeout = window.setTimeout(() => {
-        observer.disconnect()
-        reject(new Error('timed out waiting for the dowsing flash'))
-      }, 15_000)
-      const capture = () => {
-        if (canvas.dataset.dowsingFlash !== 'active') return
-        window.clearTimeout(timeout)
-        observer.disconnect()
-        resolve(canvas.toDataURL('image/png'))
-      }
-      const observer = new MutationObserver(capture)
-      observer.observe(canvas, { attributeFilter: ['data-dowsing-flash'], attributes: true })
-      capture()
-    })),
-    dowse.click(),
-  ])
+  const dowseBox = await dowse.boundingBox()
+  assertBoxNear(dowseBox, { height: 69, width: 250, x: 675, y: 265.5 })
+  await hostPage.mouse.click(640, 300)
+  await hostPage.waitForTimeout(50)
+  assert.equal(await dialogGold(shlorio), beforeDowsing)
+  assert.equal(await shlorio.getByRole('button', { name: /DOWSE\s+650 gold/ }).count(), 1)
+
+  const flashDataPromise = waitForDowsingFlashDataUrl(flashCanvas)
+  await hostPage.mouse.move(dowseBox.x + dowseBox.width / 2, dowseBox.y + dowseBox.height / 2)
+  await hostPage.mouse.down()
+  await shlorio.locator('xpath=self::*[@data-native-pressed-control="dowsing"]').waitFor()
+  await flashCanvas.locator('xpath=self::*[@data-native-pressed-body-record="102"]').waitFor()
+  await hostPage.screenshot({ path: `${screenshotRoot}-shlorio-dowse-pressed.png` })
+  await hostPage.mouse.up()
+  const flashDataUrl = await flashDataPromise
   assert.match(flashDataUrl, /^data:image\/png;base64,/)
   await writeFile(
     `${screenshotRoot}-shlorio-flash.png`,
@@ -344,7 +341,15 @@ try {
   await dowsingCell.locator('xpath=self::*[@data-selected="true"]').waitFor()
   assert.equal(await shlorio.getByRole('tooltip').count(), 0)
   await hostPage.screenshot({ path: `${screenshotRoot}-shlorio-selected.png` })
+  const purchaseFlashDataPromise = waitForDowsingFlashDataUrl(flashCanvas)
   await dowsingCell.click()
+  const purchaseFlashDataUrl = await purchaseFlashDataPromise
+  assert.match(purchaseFlashDataUrl, /^data:image\/png;base64,/)
+  await writeFile(
+    `${screenshotRoot}-shlorio-purchase-flash.png`,
+    Buffer.from(purchaseFlashDataUrl.slice(purchaseFlashDataUrl.indexOf(',') + 1), 'base64'),
+  )
+  await shlorio.locator('.hub-inventory-native-canvas[data-dowsing-flash="idle"]').waitFor({ state: 'attached', timeout: 5_000 })
   await waitForDialogGold(shlorio, beforeDowsing - 650 - dowsingItem.price)
   await shlorio.getByRole('button', { name: /DOWSE\s+\d+ gold/ }).waitFor()
   const equipmentSlot = equipmentSlotForDowsingItem(dowsingItem.name)
@@ -395,7 +400,19 @@ try {
       assert.equal(await dialogGold(shlorio), finalHostGold)
       await waitForNativeNoticeSettled(shlorio)
       await hostPage.screenshot({ path: `${screenshotRoot}-shlorio-insufficient-gold.png` })
-      await shlorio.getByRole('button', { name: 'OKAY' }).click()
+      const okay = shlorio.getByRole('button', { name: 'OKAY' })
+      const okayBox = await okay.boundingBox()
+      assertBoxNear(okayBox, { height: 69, width: 196, x: 702, y: 397.5 })
+      await hostPage.mouse.click(650, 432)
+      await hostPage.waitForTimeout(50)
+      assert.equal(await notice.isVisible(), true)
+      assert.equal(await dialogGold(shlorio), finalHostGold)
+      await hostPage.mouse.move(okayBox.x + okayBox.width / 2, okayBox.y + okayBox.height / 2)
+      await hostPage.mouse.down()
+      await shlorio.locator('xpath=self::*[@data-native-pressed-control="message-primary"]').waitFor()
+      await flashCanvas.locator('xpath=self::*[@data-native-pressed-body-record="102"]').waitFor()
+      await hostPage.screenshot({ path: `${screenshotRoot}-shlorio-insufficient-gold-pressed.png` })
+      await hostPage.mouse.up()
       await shlorio.getByRole('button', { name: 'Done' }).click()
       break
     }
@@ -586,7 +603,9 @@ async function assertTooltip(dialog, fragments) {
 
 async function enterHub(page, element) {
   await focusPage(page)
+  await declineTutorialOffer(page)
   await page.getByRole('button', { name: 'Play' }).click()
+  await declineTutorialOffer(page)
   await page.getByRole('button', { name: 'New Game' }).click()
   await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({ timeout: 30_000 })
   await page.getByRole('button', { name: new RegExp(element, 'i') }).click()
@@ -606,6 +625,13 @@ async function enterHub(page, element) {
       url: page.url(),
     })}\n`)
     throw error
+  }
+}
+
+async function declineTutorialOffer(page) {
+  const offer = page.getByRole('dialog', { name: 'Play the Tutorial?' })
+  if (await offer.isVisible()) {
+    await offer.getByRole('button', { exact: true, name: 'NO' }).click()
   }
 }
 
@@ -1064,6 +1090,34 @@ async function syncKeys(page, pressed, requested) {
     if (pressed.has(key)) continue
     await page.keyboard.down(key)
     pressed.add(key)
+  }
+}
+
+function waitForDowsingFlashDataUrl(canvas) {
+  return canvas.evaluate((node) => new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      observer.disconnect()
+      reject(new Error('timed out waiting for the dowsing flash'))
+    }, 15_000)
+    const capture = () => {
+      if (node.dataset.dowsingFlash !== 'active') return
+      window.clearTimeout(timeout)
+      observer.disconnect()
+      resolve(node.toDataURL('image/png'))
+    }
+    const observer = new MutationObserver(capture)
+    observer.observe(node, { attributeFilter: ['data-dowsing-flash'], attributes: true })
+    capture()
+  }))
+}
+
+function assertBoxNear(actual, expected, tolerance = 0.05) {
+  assert.ok(actual, 'native action has no browser geometry')
+  for (const field of ['height', 'width', 'x', 'y']) {
+    assert.ok(
+      Math.abs(actual[field] - expected[field]) <= tolerance,
+      JSON.stringify({ actual, expected, field, tolerance }),
+    )
   }
 }
 

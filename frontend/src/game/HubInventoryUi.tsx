@@ -71,6 +71,7 @@ import {
   createHubInventoryRenderer,
   type HubInventoryDragModel,
   type HubInventoryDyeModalModel,
+  type HubInventoryPressedControl,
   type HubInventoryRenderer,
   type HubInventoryRendererModel,
   type HubInventoryRendererNotice,
@@ -96,6 +97,7 @@ import {
   HUB_UNFORGE_TARGET,
   HUB_SHOP_GRID,
   HUB_SHOP_PANEL,
+  hubNativeUiReveal,
   hubDowsingSlotPosition,
   hubDyeItemLayerRects,
   hubDyeSwatchRect,
@@ -409,6 +411,7 @@ function NativeHubSurface({
   const selectorResponseTimeoutRef = useRef<number | null>(null)
   const [rendererState, setRendererState] = useState<'error' | 'loading' | 'ready'>('loading')
   const [notice, setNotice] = useState<HubInventoryUiNotice | null>(null)
+  const [pressedControl, setPressedControl] = useState<HubInventoryPressedControl>(null)
   const [chat, setChat] = useState<HubNpcChatPresentation>(() => ({
     acceleratedAtMs: null,
     content: surface.kind === 'dialogue'
@@ -637,6 +640,7 @@ function NativeHubSurface({
       economy,
       kind: 'inventory',
       notice,
+      pressedControl,
       progression,
       selection: inventorySelection,
     }
@@ -659,6 +663,7 @@ function NativeHubSurface({
       inventorySelection,
       kind: 'service',
       notice,
+      pressedControl,
       progression,
       selectedItemId: serviceSelection?.id ?? null,
       selectedOwner: serviceSelection?.owner ?? null,
@@ -673,6 +678,7 @@ function NativeHubSurface({
     inventorySelection,
     notice,
     pendingNpcSelection,
+    pressedControl,
     progression,
     serviceFocusInspection,
     serviceHoverInspection,
@@ -708,11 +714,13 @@ function NativeHubSurface({
     const unsubscribe = subscribeGamePresentationFrames((nowMs) => {
       if (!renderer) return
       revealStartedAtRef.current ??= nowMs
-      const ticks = (nowMs - revealStartedAtRef.current) / 10
       const step = surface.kind === 'dialogue'
         ? HUB_NATIVE_UI_TIMING.chatRevealPerTick
         : HUB_NATIVE_UI_TIMING.inventoryRevealPerTick
-      const frame = renderer.render(nowMs, Math.min(1, ticks * step))
+      const frame = renderer.render(
+        nowMs,
+        hubNativeUiReveal(nowMs - revealStartedAtRef.current, step),
+      )
       const current = modelRef.current
       if (frame.chatComplete && current?.kind === 'dialogue'
         && current.content.kind === 'speech' && !chatCompletionHandledRef.current) {
@@ -828,6 +836,7 @@ function NativeHubSurface({
         data-native-ui-schema={nativeAssetsJson.schema}
         data-source-executable={nativeAssetsJson.sourceExecutableSha256}
         data-renderer-state={rendererState}
+        data-native-pressed-control={pressedControl ?? 'none'}
         data-native-chat-phase={surface.kind === 'dialogue' ? chat.content.kind : ''}
         data-native-chat-record={surface.kind === 'dialogue' && chat.content.kind === 'speech'
           ? chat.content.key
@@ -897,14 +906,20 @@ function NativeHubSurface({
                   ? HUB_UNFORGE_CONFIRMATION.primaryButtonRect
                   : notice.variant === 'unforge-result'
                     ? HUB_UNFORGE_RESULT.primaryButtonRect
-                    : HUB_DOWSING_MSGBOX.primaryButtonRect}
-                onClick={() => click(() => {
-                  if (notice.variant === 'unforge-confirmation'
-                    && notice.unforgeItemId !== undefined) {
-                    onAction({ type: 'unforge', itemId: notice.unforgeItemId })
-                  }
-                  setNotice(null)
-                })}
+                    : HUB_DOWSING_MSGBOX.primaryButtonActionRect}
+                onClick={() => {
+                  setPressedControl(null)
+                  click(() => {
+                    if (notice.variant === 'unforge-confirmation'
+                      && notice.unforgeItemId !== undefined) {
+                      onAction({ type: 'unforge', itemId: notice.unforgeItemId })
+                    }
+                    setNotice(null)
+                  })
+                }}
+                onPressedChange={notice.variant === undefined
+                  ? (pressed) => setPressedControl(pressed ? 'message-primary' : null)
+                  : undefined}
               />
               {notice.variant === 'unforge-confirmation' ? (
                 <NativeAction
@@ -991,6 +1006,7 @@ function NativeHubSurface({
               onHoverInspection={setServiceHoverInspection}
               onNotice={setNotice}
               onOpenDye={openDye}
+              onPressedControl={setPressedControl}
               onSelect={setServiceSelection}
             />
           ) : (
@@ -1202,6 +1218,7 @@ function ServiceActions({
   onHoverInspection,
   onNotice,
   onOpenDye,
+  onPressedControl,
   onSelect,
   selection,
   trader,
@@ -1220,6 +1237,7 @@ function ServiceActions({
   onHoverInspection: (inspection: HubServiceInspectionModel | null) => void
   onNotice: (notice: HubInventoryUiNotice) => void
   onOpenDye: (dyeItemId: number) => void
+  onPressedControl: (control: HubInventoryPressedControl) => void
   onSelect: (selection: HubServiceSelection | null) => void
   selection: HubServiceSelection | null
   trader: HubTraderId
@@ -1266,10 +1284,13 @@ function ServiceActions({
       <>
         <NativeAction
           label={`DOWSE ${economy.dowsingFee.toLocaleString()} gold`}
-          rect={HUB_DOWSING_PREROLL.buttonRect}
-          onClick={() => economy.gold < economy.dowsingFee
-            ? onInsufficientGold()
-            : onAction({ type: 'dowse' })}
+          rect={HUB_DOWSING_PREROLL.buttonActionRect}
+          onClick={() => {
+            onPressedControl(null)
+            if (economy.gold < economy.dowsingFee) onInsufficientGold()
+            else onAction({ type: 'dowse' })
+          }}
+          onPressedChange={(pressed) => onPressedControl(pressed ? 'dowsing' : null)}
         />
         <NativeAction gameBack label="Done" rect={HUB_SHOP_PANEL.doneRect} onClick={onClose} />
       </>
@@ -2341,6 +2362,7 @@ function NativeAction({
   onPointerLeave,
   onPointerMove,
   onPointerUp,
+  onPressedChange,
   rect,
   tabIndex,
 }: {
@@ -2359,6 +2381,7 @@ function NativeAction({
   onPointerLeave?: () => void
   onPointerMove?: (event: ReactPointerEvent<HTMLButtonElement>) => void
   onPointerUp?: (event: ReactPointerEvent<HTMLButtonElement>) => void
+  onPressedChange?: (pressed: boolean) => void
   rect: readonly [number, number, number, number]
   tabIndex?: number
 }) {
@@ -2371,16 +2394,37 @@ function NativeAction({
       disabled={disabled}
       style={rectStyle(rect)}
       tabIndex={tabIndex}
-      onBlur={onBlur}
+      onBlur={() => {
+        onPressedChange?.(false)
+        onBlur?.()
+      }}
       onClick={onClick}
       onFocus={onFocus}
-      onKeyDown={onKeyDown}
-      onPointerCancel={onPointerCancel}
-      onPointerDown={onPointerDown}
+      onKeyDown={(event) => {
+        if (!event.repeat && (event.key === 'Enter' || event.key === ' ')) onPressedChange?.(true)
+        onKeyDown?.(event)
+      }}
+      onKeyUp={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') onPressedChange?.(false)
+      }}
+      onPointerCancel={(event) => {
+        onPressedChange?.(false)
+        onPointerCancel?.(event)
+      }}
+      onPointerDown={(event) => {
+        if (event.button === 0) onPressedChange?.(true)
+        onPointerDown?.(event)
+      }}
       onPointerEnter={onPointerEnter}
-      onPointerLeave={onPointerLeave}
+      onPointerLeave={() => {
+        onPressedChange?.(false)
+        onPointerLeave?.()
+      }}
       onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
+      onPointerUp={(event) => {
+        onPressedChange?.(false)
+        onPointerUp?.(event)
+      }}
       {...data}
     >
       <span className="hub-native-ui-semantic">{label}</span>

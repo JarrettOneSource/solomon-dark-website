@@ -10,6 +10,7 @@ import {
   DOWSING_EQUIPMENT_RECIPES,
   HAGATHA_PERKS,
   type EquipmentSlot,
+  type HubActionFeedback,
   type HubInventoryItem,
   type NativeEquipmentEffect,
 } from '../core-kernels/hub-economy.ts'
@@ -237,6 +238,11 @@ export const HUB_SHOP_PANEL = {
   width: 604,
 } as const
 
+export function hubShopSlideOffset(reveal: number): number {
+  const alpha = Math.max(0, Math.min(1, reveal))
+  return alpha === 1 ? 0 : -HUB_SHOP_PANEL.slideDistance * (1 - alpha)
+}
+
 export const HUB_CHAT_PANEL = {
   actionTextTint: 0x8cbf8c,
   contentHeight: 250,
@@ -395,8 +401,9 @@ export interface HagathaTooltipOptions {
 }
 
 export const HUB_DOWSING_PREROLL = {
+  buttonActionRect: [675, 265.5, 250, 69] as const,
   buttonCenter: [800, 300] as const,
-  buttonRect: [623.5, 265.5, 353, 69] as const,
+  buttonVisualRect: [623.5, 265.5, 353, 69] as const,
   buttonSideCenters: [[704, 302], [896, 302]] as const,
   feeTextBaselineY: 322.5,
   labelTextBaselineY: 302,
@@ -419,10 +426,11 @@ export const HUB_DOWSING_MSGBOX = {
   innerCornerCenters: [[580.5, 204.5], [1019.5, 204.5], [580.5, 495.5], [1019.5, 495.5]] as const,
   outerCornerCenters: [[564.5, 190], [1035.5, 190], [564.5, 510], [1035.5, 510]] as const,
   primaryButtonCenter: [800, 432] as const,
-  primaryButtonRect: [623.5, 397.5, 353, 69] as const,
+  primaryButtonActionRect: [702, 397.5, 196, 69] as const,
   primaryButtonSideCenters: [[731, 434], [869, 434]] as const,
   primaryButtonTextBaselineY: 440,
   primaryButtonTextTint: 0xd9ba70,
+  primaryButtonVisualRect: [623.5, 397.5, 353, 69] as const,
   skullHeaderCenter: [800, 121] as const,
   titleTextBaselineY: 252,
   verticalEdgeRecord: 79,
@@ -435,13 +443,61 @@ export const HUB_NATIVE_UI_TIMING = {
   inventoryRevealPerTick: 0.025,
   messageBoxCurtainAlpha: 0.75,
   messageBoxRevealPerTick: 0.035,
+  nativeTickMs: 10,
 } as const
+
+export function hubNativeUiElapsedTicks(elapsedMs: number): number {
+  return Math.max(0, Math.floor(elapsedMs / HUB_NATIVE_UI_TIMING.nativeTickMs))
+}
+
+export function hubNativeUiReveal(elapsedMs: number, incrementPerTick: number): number {
+  return Math.min(1, hubNativeUiElapsedTicks(elapsedMs) * incrementPerTick)
+}
+
+export const HUB_NATIVE_LABELED_CONTROL = {
+  idleBodyRecord: 101,
+  pressedBodyRecord: 102,
+  pressedCopyOffset: 6,
+} as const
+
+export function hubNativeLabeledControlPresentation(pressed: boolean): {
+  readonly bodyRecord: 101 | 102
+  readonly copyOffset: number
+} {
+  return pressed
+    ? {
+        bodyRecord: HUB_NATIVE_LABELED_CONTROL.pressedBodyRecord,
+        copyOffset: HUB_NATIVE_LABELED_CONTROL.pressedCopyOffset,
+      }
+    : {
+        bodyRecord: HUB_NATIVE_LABELED_CONTROL.idleBodyRecord,
+        copyOffset: 0,
+      }
+}
 
 export const HUB_DOWSING_FLASH = {
   decrementPerTick: 0.05,
   durationMs: 200,
   durationTicks: 20,
 } as const
+
+export function hubDowsingFlashAlpha(elapsedMs: number): number {
+  const ticks = Math.min(HUB_DOWSING_FLASH.durationTicks, hubNativeUiElapsedTicks(elapsedMs))
+  let alpha = 1
+  for (let tick = 0; tick < ticks; tick += 1) {
+    alpha = Math.max(0, Math.fround(alpha - HUB_DOWSING_FLASH.decrementPerTick))
+  }
+  return alpha
+}
+
+export function hubDowsingFlashFeedbackSequence(
+  feedback: Pick<HubActionFeedback, 'accepted' | 'action' | 'sequence'> | null,
+): number | null {
+  return feedback?.accepted === true
+    && (feedback.action === 'dowse' || feedback.action === 'buy-dowsing')
+    ? feedback.sequence
+    : null
+}
 
 export const HUB_DOWSING_FIELD = {
   greenAmplitude: 0.1,
@@ -474,7 +530,8 @@ export const HUB_NATIVE_UI_SURFACES = [
   'hagatha-perk-shop',
   'luthacus-inventory-shop',
   'shlorio-dowsing-before-roll',
-  'shlorio-dowsing-flash',
+  'shlorio-dowsing-roll-flash',
+  'shlorio-dowsing-purchase-flash',
   'shlorio-dowsing-results',
   'shlorio-insufficient-gold-message',
   'inventory',

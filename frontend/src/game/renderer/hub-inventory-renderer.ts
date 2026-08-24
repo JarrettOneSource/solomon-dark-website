@@ -62,7 +62,6 @@ import {
   type GameWebGlApplication,
 } from './game-webgl.ts'
 import {
-  HUB_DOWSING_FLASH,
   HUB_DYE_CLOTHING,
   HUB_DOWSING_GRID,
   HUB_DOWSING_MSGBOX,
@@ -89,6 +88,8 @@ import {
   HUB_UNFORGE_TARGET,
   hubChatTextRuns,
   hubDowsingFieldTint,
+  hubDowsingFlashAlpha,
+  hubDowsingFlashFeedbackSequence,
   hubDowsingSlotPosition,
   hubDyeItemLayerRects,
   hubDyeModalOpacity,
@@ -99,7 +100,11 @@ import {
   hubItemTooltipLines,
   hubInventoryPrimarySpellLines,
   hubInventorySlotPosition,
+  hubNativeLabeledControlPresentation,
+  hubNativeUiElapsedTicks,
+  hubNativeUiReveal,
   hubOwnedPerkSlotRect,
+  hubShopSlideOffset,
   hubShopSlotPosition,
   hubUnforgeResultLayout,
   hubUnforgeTargetTint,
@@ -117,6 +122,8 @@ import { createNativeElementVfxTextures, type PlayerWorldTextures } from './worl
 
 type AtlasName = 'Inventory' | 'Skills' | 'UI'
 type FontName = 'body' | 'medium' | 'menu' | 'skill'
+
+export type HubInventoryPressedControl = 'dowsing' | 'message-primary' | null
 
 export interface HubInventoryRendererNotice {
   readonly actionLabel: string
@@ -173,6 +180,7 @@ export type HubInventoryRendererModel =
       readonly economy: ProtocolPlayerEconomy
       readonly kind: 'inventory'
       readonly notice: HubInventoryRendererNotice | null
+      readonly pressedControl: HubInventoryPressedControl
       readonly progression: ProtocolPlayerProgression
       readonly selection: HubInventorySelectionModel | null
     }
@@ -193,6 +201,7 @@ export type HubInventoryRendererModel =
       readonly economy: ProtocolPlayerEconomy
       readonly kind: 'service'
       readonly notice: HubInventoryRendererNotice | null
+      readonly pressedControl: HubInventoryPressedControl
       readonly progression: ProtocolPlayerProgression
       readonly inventorySelection: HubInventorySelectionModel | null
       readonly inspection: HubServiceInspectionModel | null
@@ -257,9 +266,10 @@ export async function createHubInventoryRenderer(
   let curtainAlpha = 1
   let destroyed = false
   let dowsingFlashStartedAt: number | null = null
+  let dowsingFlashTrigger: 'buy-dowsing' | 'dowse' | null = null
   let dowsingFieldTiles: Sprite[] = []
   let noticeRevealStartedAt: number | null = null
-  let previousDowsingOfferCount: number | null = null
+  let previousActionFeedbackSequence: number | null = null
   let serviceOverlay: Container | null = null
   let dyeLayer: Container | null = null
   let dyeSelectedPulse: Graphics | null = null
@@ -309,14 +319,14 @@ export async function createHubInventoryRenderer(
       surface.alpha = clampedReveal
       surface.y = 0
       if (serviceOverlay) serviceOverlay.y = currentKind === 'service'
-        ? -HUB_SHOP_PANEL.slideDistance * (1 - easeOutCubic(clampedReveal))
+        ? hubShopSlideOffset(clampedReveal)
         : 0
       const flashAlpha = dowsingFlashStartedAt === null
         ? 0
-        : Math.max(0, 1 - (nowMs - dowsingFlashStartedAt) / HUB_DOWSING_FLASH.durationMs)
+        : hubDowsingFlashAlpha(nowMs - dowsingFlashStartedAt)
       dowsingFlash.alpha = flashAlpha
       if (dowsingFieldTiles.length > 0) {
-        const tint = hubDowsingFieldTint(nowMs / 10)
+        const tint = hubDowsingFieldTint(hubNativeUiElapsedTicks(nowMs))
         for (const tile of dowsingFieldTiles) tile.tint = tint
       }
       playerPreviewVfx?.update(nowMs / 10, 1.25)
@@ -360,9 +370,18 @@ export async function createHubInventoryRenderer(
         delete gpu.canvas.dataset.nativeDyePulse
       }
       gpu.canvas.dataset.dowsingFlash = flashAlpha > 0 ? 'active' : 'idle'
+      gpu.canvas.dataset.dowsingFlashTrigger = flashAlpha > 0 ? dowsingFlashTrigger ?? '' : ''
+      gpu.canvas.dataset.nativePressedBodyRecord = currentModel !== null
+        && currentModel.kind !== 'dialogue'
+        && currentModel.pressedControl !== null
+        ? '102'
+        : '101'
       const noticeReveal = noticeRevealStartedAt === null
         ? 1
-        : Math.min(1, ((nowMs - noticeRevealStartedAt) / 10) * HUB_NATIVE_UI_TIMING.messageBoxRevealPerTick)
+        : hubNativeUiReveal(
+            nowMs - noticeRevealStartedAt,
+            HUB_NATIVE_UI_TIMING.messageBoxRevealPerTick,
+          )
       gpu.canvas.dataset.nativeNoticeReveal = noticeRevealStartedAt === null
         ? 'idle'
         : noticeReveal >= 1
@@ -386,8 +405,9 @@ export async function createHubInventoryRenderer(
         const acceleratedElapsedMs = acceleratedAtMs === null
           ? 0
           : Math.max(0, nowMs - acceleratedAtMs)
-        const travel = normalElapsedMs / 10 * HUB_NATIVE_UI_TIMING.chatScrollPerTick
-          + acceleratedElapsedMs / 10 * HUB_NATIVE_UI_TIMING.chatAcceleratedScrollPerTick
+        const travel = hubNativeUiElapsedTicks(normalElapsedMs) * HUB_NATIVE_UI_TIMING.chatScrollPerTick
+          + hubNativeUiElapsedTicks(acceleratedElapsedMs)
+            * HUB_NATIVE_UI_TIMING.chatAcceleratedScrollPerTick
         chatRenderState.content.y = HUB_CHAT_PANEL.contentHeight - 36 - travel
         chatComplete = travel > chatRenderState.contentHeight + HUB_CHAT_PANEL.contentHeight - 36
         gpu.canvas.dataset.nativeChatState = chatComplete ? 'complete' : 'scrolling'
@@ -398,15 +418,20 @@ export async function createHubInventoryRenderer(
       return { chatComplete }
     },
     setModel(model) {
-      const nextDowsingOfferCount = model.kind === 'service' && model.trader === 'shlorio'
-        ? model.economy.dowsingOffers.length
-        : null
-      if (previousDowsingOfferCount === 0 && nextDowsingOfferCount !== null && nextDowsingOfferCount > 0) {
+      const feedback = model.kind === 'dialogue' ? null : model.economy.actionFeedback
+      const nextActionFeedbackSequence = feedback?.sequence ?? 0
+      const nextDowsingFlashSequence = hubDowsingFlashFeedbackSequence(feedback)
+      if (
+        previousActionFeedbackSequence !== null
+        && nextActionFeedbackSequence !== previousActionFeedbackSequence
+        && nextDowsingFlashSequence === nextActionFeedbackSequence
+      ) {
         dowsingFlashStartedAt = performance.now()
+        dowsingFlashTrigger = feedback!.action as 'buy-dowsing' | 'dowse'
         dowsingFlash.alpha = 1
         gpu.canvas.dataset.dowsingFlash = 'active'
       }
-      previousDowsingOfferCount = nextDowsingOfferCount
+      previousActionFeedbackSequence = nextActionFeedbackSequence
       const nextNotice = model.kind === 'dialogue' ? null : model.notice
       if (nextNotice && nextNotice.title !== previousNoticeTitle) {
         noticeRevealStartedAt = performance.now()
@@ -449,7 +474,14 @@ export async function createHubInventoryRenderer(
       unforgeTarget = surface.children.find(
         (child): child is Sprite => child instanceof Sprite && child.label === 'native-unforge-target',
       ) ?? null
-      if (nextNotice) buildNotice(context, surface, nextNotice)
+      if (nextNotice) {
+        buildNotice(
+          context,
+          surface,
+          nextNotice,
+          model.kind !== 'dialogue' && model.pressedControl === 'message-primary',
+        )
+      }
       application.renderer.render(application.stage)
     },
   }
@@ -1016,7 +1048,12 @@ function buildService(
     overlay.addChild(new Graphics()
       .rect(...HUB_DOWSING_PREROLL.referenceDropRect)
       .fill({ color: 0x000000 }))
-    addDowsingButton(context, overlay, model.economy.dowsingFee)
+    addDowsingButton(
+      context,
+      overlay,
+      model.economy.dowsingFee,
+      model.pressedControl === 'dowsing',
+    )
     addDoneControl(context, overlay)
     addServiceInspection(context, layer, model)
     if (inventory.dragger) layer.addChild(inventory.dragger)
@@ -1182,6 +1219,7 @@ function buildNotice(
   context: RenderContext,
   layer: Container,
   notice: HubInventoryRendererNotice,
+  primaryPressed: boolean,
 ): void {
   if (notice.variant === 'unforge-confirmation' || notice.variant === 'unforge-result') {
     buildUnforgeNotice(context, layer, notice)
@@ -1242,7 +1280,7 @@ function buildNotice(
     maxWidth: HUB_DOWSING_MSGBOX.bodyMaxWidth,
     tint: 0xffffff,
   })
-  addMessageBoxButton(context, noticeLayer, notice.actionLabel)
+  addMessageBoxButton(context, noticeLayer, notice.actionLabel, primaryPressed)
   layer.addChild(noticeLayer)
 }
 
@@ -1796,25 +1834,63 @@ function addDowsingButton(
   context: RenderContext,
   layer: Container,
   fee: number,
+  pressed: boolean,
 ): void {
-  addCenteredAtlasSprite(context, layer, 'UI', 101, ...HUB_DOWSING_PREROLL.buttonCenter)
+  const presentation = hubNativeLabeledControlPresentation(pressed)
+  addCenteredAtlasSprite(
+    context,
+    layer,
+    'UI',
+    presentation.bodyRecord,
+    ...HUB_DOWSING_PREROLL.buttonCenter,
+  )
   addCenteredAtlasSprite(context, layer, 'UI', 54, ...HUB_DOWSING_PREROLL.buttonSideCenters[0])
   addCenteredAtlasSprite(context, layer, 'UI', 54, ...HUB_DOWSING_PREROLL.buttonSideCenters[1], -1, 1)
-  addBitmapText(context, layer, 'DOWSE', 'menu', 800, HUB_DOWSING_PREROLL.labelTextBaselineY, {
-    tint: HUB_SHOP_TEXT.goldTint,
-  })
-  addBitmapText(context, layer, `${fee} GOLD`, 'medium', 800, HUB_DOWSING_PREROLL.feeTextBaselineY, {
-    tint: HUB_SHOP_TEXT.goldTint,
-  })
+  addBitmapText(
+    context,
+    layer,
+    'DOWSE',
+    'menu',
+    800 + presentation.copyOffset,
+    HUB_DOWSING_PREROLL.labelTextBaselineY + presentation.copyOffset,
+    { tint: HUB_SHOP_TEXT.goldTint },
+  )
+  addBitmapText(
+    context,
+    layer,
+    `${fee} GOLD`,
+    'medium',
+    800 + presentation.copyOffset,
+    HUB_DOWSING_PREROLL.feeTextBaselineY + presentation.copyOffset,
+    { tint: HUB_SHOP_TEXT.goldTint },
+  )
 }
 
-function addMessageBoxButton(context: RenderContext, layer: Container, label: string): void {
-  addCenteredAtlasSprite(context, layer, 'UI', 101, ...HUB_DOWSING_MSGBOX.primaryButtonCenter)
+function addMessageBoxButton(
+  context: RenderContext,
+  layer: Container,
+  label: string,
+  pressed: boolean,
+): void {
+  const presentation = hubNativeLabeledControlPresentation(pressed)
+  addCenteredAtlasSprite(
+    context,
+    layer,
+    'UI',
+    presentation.bodyRecord,
+    ...HUB_DOWSING_MSGBOX.primaryButtonCenter,
+  )
   addCenteredAtlasSprite(context, layer, 'UI', 54, ...HUB_DOWSING_MSGBOX.primaryButtonSideCenters[0])
   addCenteredAtlasSprite(context, layer, 'UI', 54, ...HUB_DOWSING_MSGBOX.primaryButtonSideCenters[1], -1, 1)
-  addBitmapText(context, layer, label, 'menu', 800, HUB_DOWSING_MSGBOX.primaryButtonTextBaselineY, {
-    tint: HUB_DOWSING_MSGBOX.primaryButtonTextTint,
-  })
+  addBitmapText(
+    context,
+    layer,
+    label,
+    'menu',
+    800 + presentation.copyOffset,
+    HUB_DOWSING_MSGBOX.primaryButtonTextBaselineY + presentation.copyOffset,
+    { tint: HUB_DOWSING_MSGBOX.primaryButtonTextTint },
+  )
 }
 
 function addHorizontalChain(context: RenderContext, layer: Container, x: number, y: number, width: number): void {
@@ -2472,8 +2548,4 @@ function measureStyledBitmapText(text: readonly StyledGlyphCharacter[]): number 
 
 function nativeUiFontName(fontName: FontName): NativeUiFontName {
   return fontName === 'skill' ? 'skill-uppercase' : fontName
-}
-
-function easeOutCubic(value: number): number {
-  return 1 - (1 - value) ** 3
 }
