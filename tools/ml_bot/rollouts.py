@@ -756,6 +756,10 @@ def choice_expert_dataset_diagnostics(dataset: ChoiceExpertDataset) -> Mapping[s
     ]
     offered = dataset.option_ids[dataset.option_masks]
     option_counts = np.sum(dataset.option_masks, axis=1)
+    primary_rows: dict[str, int] = {}
+    for observation in dataset.observations:
+        key = equipped_primary_loadout_key(observation)
+        primary_rows[key] = primary_rows.get(key, 0) + 1
     return {
         "optionCountHistogram": {
             str(count): int(np.count_nonzero(option_counts == count))
@@ -771,6 +775,7 @@ def choice_expert_dataset_diagnostics(dataset: ChoiceExpertDataset) -> Mapping[s
         },
         "uniqueOfferedSkills": int(np.unique(offered).size),
         "uniqueSelectedSkills": int(np.unique(selected_skill_ids).size),
+        "primaryLoadoutRows": dict(sorted(primary_rows.items())),
     }
 
 

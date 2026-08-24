@@ -272,10 +272,12 @@ def bootstrap_choice_policy(
         )
         dataset.save(cache)
     diagnostics = choice_expert_dataset_diagnostics(dataset)
+    expected_primary_loadouts = {str(row["key"]) for row in POLICY_SPEC.primary_curriculum}
     if (
         diagnostics["uniqueOfferedSkills"] < 8
         or diagnostics["uniqueSelectedSkills"] < 3
         or sum(count > 0 for count in diagnostics["selectedOptionHistogram"]) < 2
+        or set(diagnostics["primaryLoadoutRows"]) != expected_primary_loadouts
     ):
         raise RuntimeError(f"choice expert dataset diversity gate failed: {diagnostics}")
     training, validation = split_choice_expert_dataset(
