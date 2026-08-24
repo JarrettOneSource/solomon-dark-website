@@ -764,6 +764,34 @@ export async function createBoneyardWorldRenderer(
     value: frameDiagnostics,
     writable: false,
   })
+  if (import.meta.env.DEV) {
+    const weatherSplashRoot = world.children.find(
+      ({ label }) => label === 'native-boneyard-weather-splashes',
+    )
+    if (!(weatherSplashRoot instanceof Container)) {
+      throw new Error('Boneyard weather splash root is unavailable.')
+    }
+    Object.defineProperty(canvas, '__sdrWeatherSplashPixelProbe', {
+      configurable: false,
+      enumerable: false,
+      value: {
+        blendModes: () => [...new Set(
+          weatherSplashRoot.children.map(({ blendMode }) => blendMode),
+        )].sort(),
+        render: (renderable: boolean) => {
+          weatherSplashRoot.renderable = renderable
+          application.render()
+        },
+        renderable: () => weatherSplashRoot.renderable,
+        scaleMode: () => (
+          (weatherSplashRoot.children[0] as Sprite | undefined)?.texture.source.style.scaleMode
+          ?? null
+        ),
+        splashViewCount: () => weatherSplashRoot.children.length,
+      },
+      writable: false,
+    })
+  }
 
   const cameraFocusFor = (
     snapshot: GameSnapshot,

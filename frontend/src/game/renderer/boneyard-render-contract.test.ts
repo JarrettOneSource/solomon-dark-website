@@ -129,6 +129,13 @@ test('world-weather splash pool keeps the native additive FadeScale painter', ()
   assert.match(weatherView, /sprite\.blendMode = 'add'/)
 })
 
+test('world-weather smoke compares the same frame with and without the splash lane', () => {
+  assert.match(boneyardRenderer, /if \(import\.meta\.env\.DEV\)/)
+  assert.match(boneyardRenderer, /__sdrWeatherSplashPixelProbe/)
+  assert.match(boneyardRenderer, /render: \(renderable: boolean\)/)
+  assert.match(boneyardRenderer, /weatherSplashRoot\.renderable = renderable/)
+})
+
 test('wizard variants share compact atlas pages instead of decoded padded sheets', () => {
   assert.match(playerTextures, /PLAYER_CHARACTER_ATLAS_SOURCES/)
   assert.match(playerTextures, /createPlayerCharacterAtlas/)

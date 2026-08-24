@@ -23448,6 +23448,86 @@ RNG, collision, alpha, scale, asset, audio, authority, nor teardown.
   member, approximation, or remaining unknown in this reopened painter
   boundary. Validation processes were task-owned and stopped afterward.
 
+### Same-frame pixel and sampler reopen — 2026-08-24
+
+The published additive correction was reopened after the puddles were again
+reported as black. The prior receipt asserted blend metadata and visually
+compared different simulation frames; it never proved whether enabling a real
+splash subtracts RGB from the same frozen framebuffer. It also attributed the
+black-looking mark to source-over blending, although the retail record is white
+and neither white source-over nor white additive composition can darken its
+destination. That causal claim is withdrawn.
+
+Fresh read-only instruction and asset checks close the nearby alternatives:
+
+- Renderer reset `0x0041D000` uses Direct3D sampler states `6/5` with value `2`
+  (`MINFILTER/MAGFILTER = LINEAR`) when render ratios
+  `0x00818670/0x00818674` are both one. Both retail data values are `1.0`, and
+  `0x00440890` derives them as target/backbuffer ratios. This is the stock
+  1600-by-900 parity branch. `Anim_FadeScale::Draw 0x00455DF0` does not change
+  filtering, so Pixi's inherited linear scale mode is correct for the reported
+  comparison.
+- Renderer byte `+0x239` is texture addressing, not filtering: state one calls
+  `0x00442ED0` and writes sampler states `1/2` (`ADDRESSU/ADDRESSV`) to wrap.
+  Misidentifying those enum slots as min/mag filtering would create an invalid
+  nearest-sampling fix; no such change is permitted.
+- Retail `images/DeadHawg.png` record 24 and web `deadhawg/024.png` decode to
+  identical 20-by-17 RGBA pixels. The record has 110 fully transparent pixels,
+  230 contributing pixels, maximum alpha 95/255, and a fully transparent black
+  centre. A dark centre and a low-luminance rim in dim Region light are authored
+  stock inputs, not evidence that the ring subtracts from the ground.
+- The concrete `Anim_FadeScale` vtable still has exactly ten install references
+  from the eight producers enumerated above. No blend, record, alpha, scale,
+  recurrence, light-order, authority, audio, or teardown fact changed.
+
+The system boundary remains the eight-member `Anim_FadeScale` painter family
+plus Arena's two Complex Lighting branches. Every member retains its disposition
+from the additive census above. Native texture-addressing and non-1x filter
+branches are durable renderer findings but do not alter the 1x weather result.
+
+The decisive validation is a Mac WebGL same-frame differential: synchronously
+render one frozen frame with and without the current linear/additive splash
+lane. Both Complex Lighting orders must show positive splash contribution and
+zero negative RGB channels; absolute changed-pixel luminance must be reported
+so transparent/dim authored pixels are not mislabeled as subtractive black. No
+production rendering change is justified unless that measurement falsifies
+the recovered model.
+
+#### Implementation validation receipt
+
+- No production painter change is required. The current pooled sprite is
+  additive, its source is linear-filtered like the stock 1x branch, and the
+  exact retail crop/alpha, fixed-tick recurrence, and Region order remain in
+  place. The actual defect was the acceptance gap: the prior smoke checked a
+  blend label and visually compared different simulation frames.
+- A development-only `__sdrWeatherSplashPixelProbe` now freezes the current
+  Pixi display state and renders it synchronously with the splash root enabled
+  and suppressed. Production builds tree-shake the probe behind
+  `import.meta.env.DEV`. The weather smoke handles the current Tutorial and
+  local-play prompts, stubs only the development deployment manifest, and
+  fails on page errors, console errors, failed responses, a non-additive
+  runtime blend, non-linear sampling, or any negative RGB contribution.
+- Exact-current Mac base `7a352805dc81d75cea002c892082486eaab6ea32`
+  passed 31 focused Boneyard renderer contracts, all 9 weather tests, and the
+  complete `./scripts/validate.sh` gate including backend, lint/import
+  boundaries, all frontend/desktop suites, production build, bundle budget,
+  and media policy. The matching Mod Loader static RE suite passed 499/499.
+- Mac hardware Chrome mode 2 measured 571 live streaks and 305 splashes with
+  `DeadHawg:24`, additive blend, linear sampling, rainfall gain one, light
+  scalar range `0..1`, and empty page/console/failed-response arrays. With
+  Complex Lighting on, splashes changed and brightened 9,901 pixels, raised
+  their average luminance from `30.494` to `37.491`, and produced zero
+  darkened pixels and zero negative RGB channels. With Complex Lighting off,
+  they changed and brightened 13,676 pixels, raised average luminance from
+  `26.778` to `33.286`, and again produced zero darkened pixels and zero
+  negative channels. Screenshot
+  `/tmp/solomon-rain-puddle-current-main-20260824.png` has SHA-256
+  `973a8427a2a7532da6d86b4d1144d45dd19c24400a7b0a5bdd7a70d7cddbe7e6`.
+- The authored transparent centre and low-alpha pixels can remain visually
+  dark in low Region light, exactly as the retail asset and compositor
+  predict. Brightening or filling that centre would be a stock-parity
+  regression, so no such symptom patch was made.
+
 ### Implementation and validation receipt
 
 - `core-kernels/native-boneyard-weather.ts` owns the fixed-tick plan and

@@ -14,6 +14,7 @@ if (!endpoint || !credential) {
 
 const pageErrors = []
 const consoleErrors = []
+const failedResponses = []
 const browser = await chromium.launch({
   executablePath: process.env.SDR_CHROME_PATH || '/usr/bin/google-chrome',
   headless: true,
@@ -23,7 +24,18 @@ try {
   const page = await browser.newPage({ viewport: { width: 1600, height: 900 } })
   page.on('pageerror', (error) => pageErrors.push(error.message))
   page.on('console', (message) => {
-    if (message.type() === 'error') consoleErrors.push(message.text())
+    if (message.type() === 'error') {
+      consoleErrors.push({ location: message.location(), text: message.text() })
+    }
+  })
+  page.on('response', (response) => {
+    if (response.status() >= 400) {
+      failedResponses.push({ status: response.status(), url: response.url() })
+    }
+  })
+  await page.route('**/deployment.json?*', async (route) => {
+    const revision = new URL(route.request().url()).searchParams.get('current')
+    await route.fulfill({ json: { revision } })
   })
   await page.addInitScript(installGameAudioSmokeProbe)
   await page.addInitScript(() => {
@@ -53,6 +65,10 @@ try {
       url: page.url(),
     })}\n`)
     throw error
+  }
+  const tutorialOffer = page.getByRole('dialog', { name: 'Play the Tutorial?' })
+  if (await tutorialOffer.isVisible()) {
+    await tutorialOffer.getByRole('button', { exact: true, name: 'NO' }).click()
   }
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
@@ -114,21 +130,131 @@ try {
   assert.ok(receipt.splashZIndex < receipt.lightCompositeZIndex)
   assert.ok(receipt.lightCompositeZIndex < receipt.streakZIndex)
   assert.ok(receipt.rainfallSources.length > 0)
+  const pixelProbe = await weatherSplashPixelProbe(page)
+  assert.ok(pixelProbe)
+  assert.deepEqual(pixelProbe.blendModes, ['add'])
+  assert.equal(pixelProbe.scaleMode, 'linear')
+  assert.ok(pixelProbe.contribution.brightenedPixelCount > 0)
+  assert.equal(pixelProbe.contribution.darkenedPixelCount, 0)
+  assert.equal(pixelProbe.contribution.negativeChannelCount, 0)
   await page.screenshot({ path: screenshot })
   const flattenedOrder = await disableComplexLighting(page, boneyard)
   assert.ok(flattenedOrder.splashZIndex < flattenedOrder.streakZIndex)
   assert.ok(flattenedOrder.streakZIndex < flattenedOrder.lightCompositeZIndex)
+  const flattenedPixelProbe = await weatherSplashPixelProbe(page)
+  assert.ok(flattenedPixelProbe)
+  assert.deepEqual(flattenedPixelProbe.blendModes, ['add'])
+  assert.equal(flattenedPixelProbe.scaleMode, 'linear')
+  assert.ok(flattenedPixelProbe.contribution.brightenedPixelCount > 0)
+  assert.equal(flattenedPixelProbe.contribution.darkenedPixelCount, 0)
+  assert.equal(flattenedPixelProbe.contribution.negativeChannelCount, 0)
+  assert.deepEqual(failedResponses, [])
   assert.deepEqual(pageErrors, [])
   assert.deepEqual(consoleErrors, [])
   process.stdout.write(`${JSON.stringify({
+    failedResponses,
     flattenedOrder,
+    flattenedPixelProbe,
     mode,
     pageErrors,
     consoleErrors,
+    pixelProbe,
     receipt,
   })}\n`)
 } finally {
-  await browser.close()
+  await Promise.race([
+    browser.close(),
+    new Promise((resolve) => setTimeout(resolve, 5_000)),
+  ])
+}
+process.exit(0)
+
+async function weatherSplashPixelProbe(page) {
+  return page.evaluate(() => {
+    const canvas = document.querySelector('.boneyard-world-canvas')
+    const probe = canvas?.__sdrWeatherSplashPixelProbe
+    if (!canvas || !probe) return null
+    const scratch = canvas.ownerDocument.createElement('canvas')
+    scratch.height = canvas.height
+    scratch.width = canvas.width
+    const context = scratch.getContext('2d', { willReadFrequently: true })
+    if (!context) throw new Error('Weather pixel probe could not create a 2D context.')
+    const capture = (renderable) => {
+      probe.render(renderable)
+      context.clearRect(0, 0, scratch.width, scratch.height)
+      context.drawImage(canvas, 0, 0)
+      return context.getImageData(0, 0, scratch.width, scratch.height).data.slice()
+    }
+    const compare = (candidate, baseline) => {
+      let baselineLumaTotal = 0
+      let brightenedPixelCount = 0
+      let candidateLumaMaximum = 0
+      let candidateLumaMinimum = 255
+      let candidateLumaTotal = 0
+      let changedPixelCount = 0
+      let darkChangedPixelCount = 0
+      let darkenedPixelCount = 0
+      let maximumLumaDelta = 0
+      let minimumLumaDelta = 0
+      let negativeChannelCount = 0
+      for (let offset = 0; offset < candidate.length; offset += 4) {
+        const redDelta = candidate[offset] - baseline[offset]
+        const greenDelta = candidate[offset + 1] - baseline[offset + 1]
+        const blueDelta = candidate[offset + 2] - baseline[offset + 2]
+        if (redDelta === 0 && greenDelta === 0 && blueDelta === 0) continue
+        changedPixelCount += 1
+        if (redDelta < 0) negativeChannelCount += 1
+        if (greenDelta < 0) negativeChannelCount += 1
+        if (blueDelta < 0) negativeChannelCount += 1
+        const baselineLuma = Math.round(
+          (54 * baseline[offset] + 183 * baseline[offset + 1]
+            + 19 * baseline[offset + 2]) / 256,
+        )
+        const candidateLuma = Math.round(
+          (54 * candidate[offset] + 183 * candidate[offset + 1]
+            + 19 * candidate[offset + 2]) / 256,
+        )
+        const lumaDelta = 54 * redDelta + 183 * greenDelta + 19 * blueDelta
+        baselineLumaTotal += baselineLuma
+        candidateLumaMaximum = Math.max(candidateLumaMaximum, candidateLuma)
+        candidateLumaMinimum = Math.min(candidateLumaMinimum, candidateLuma)
+        candidateLumaTotal += candidateLuma
+        if (candidateLuma <= 16) darkChangedPixelCount += 1
+        if (lumaDelta > 0) brightenedPixelCount += 1
+        if (lumaDelta < 0) darkenedPixelCount += 1
+        maximumLumaDelta = Math.max(maximumLumaDelta, lumaDelta)
+        minimumLumaDelta = Math.min(minimumLumaDelta, lumaDelta)
+      }
+      return {
+        averageBaselineLuma: baselineLumaTotal / changedPixelCount,
+        averageCandidateLuma: candidateLumaTotal / changedPixelCount,
+        brightenedPixelCount,
+        candidateLumaMaximum,
+        candidateLumaMinimum,
+        changedPixelCount,
+        darkChangedPixelCount,
+        darkenedPixelCount,
+        maximumLumaDelta,
+        minimumLumaDelta,
+        negativeChannelCount,
+      }
+    }
+    const originalRenderable = probe.renderable()
+    try {
+      const baseline = capture(false)
+      const candidate = capture(originalRenderable)
+      return {
+        blendModes: probe.blendModes(),
+        canvasHeight: canvas.height,
+        canvasWidth: canvas.width,
+        contribution: compare(candidate, baseline),
+        scaleMode: probe.scaleMode(),
+        splashViewCount: probe.splashViewCount(),
+      }
+    } finally {
+      probe.render(originalRenderable)
+    }
+  })
 }
 
 async function selectStormyBoneyard(page) {
