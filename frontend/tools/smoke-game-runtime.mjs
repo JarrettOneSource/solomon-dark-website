@@ -95,6 +95,7 @@ try {
     }) + '\n')
     throw error
   }
+  await declineTutorialOffer(page)
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
   try {
@@ -163,7 +164,7 @@ try {
     && /^\d+ ms$/.test(document.querySelector('.hub-hud-ping')?.textContent?.trim() || '')
   ))
   const [skullBounds, fpsBounds, pingBounds] = await Promise.all([
-    page.locator('.hub-hud-skull').boundingBox(),
+    page.locator('.game-menu-skull img').boundingBox(),
     fpsCounter.boundingBox(),
     pingCounter.boundingBox(),
   ])
@@ -661,10 +662,21 @@ async function provisionProductionRuntime() {
   return { gameEndpoint: payload }
 }
 
+// A fresh browser profile has no save, so the title offers the stock Tutorial prompt first
+// (MainMenuScene mounts after save detection settles, so it is already there or never).
+async function declineTutorialOffer(page) {
+  const tutorialOffer = page.getByRole('dialog', { name: 'Play the Tutorial?' })
+  if (await tutorialOffer.isVisible()) {
+    await tutorialOffer.getByRole('button', { exact: true, name: 'NO' }).click()
+    await tutorialOffer.waitFor({ state: 'detached' })
+  }
+}
+
 async function enterHub(page, element) {
   await page.bringToFront()
   await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 90_000 })
+  await declineTutorialOffer(page)
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
   try {
@@ -707,7 +719,7 @@ async function allyRosterReceipt(page) {
       }
     }
     const rows = [...roster.querySelectorAll('.hub-hud-ally-row')]
-    const skull = requireElement(document.querySelector('.hub-hud-skull'), 'HUD skull')
+    const skull = requireElement(document.querySelector('.game-menu-skull img'), 'menu skull')
     const scene = requireElement(
       document.querySelector('.hub-scene, .boneyard-scene'),
       'gameplay scene',

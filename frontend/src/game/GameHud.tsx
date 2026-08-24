@@ -1,6 +1,5 @@
 import { useEffect, useState, type CSSProperties } from 'react'
 
-import { useCoarsePointer } from './input/use-coarse-pointer.ts'
 import { hub } from '../lib/assets'
 import AllyHud from './AllyHud.tsx'
 import type { AllyHudRow } from './ally-hud.ts'
@@ -48,7 +47,6 @@ interface GameHudProps {
   onInventoryClick?: () => void
   onHubShortcutClick?: (interaction: HubHudShortcutDefinition['interaction']) => void
   onMapClick?: () => void
-  onMenuClick?: () => void
   onPotionClick?: (itemId: number) => void
   onQuickbarInput?: (slot: number, pressed: boolean) => void
   onSkillBindingClick?: (binding: NativeHudSkillBinding) => void
@@ -143,7 +141,6 @@ export default function GameHud({
   onInventoryClick,
   onHubShortcutClick,
   onMapClick,
-  onMenuClick,
   onPotionClick,
   onQuickbarInput,
   onSkillBindingClick,
@@ -157,7 +154,6 @@ export default function GameHud({
   uiScale,
   viewport,
 }: GameHudProps) {
-  const coarsePointer = useCoarsePointer()
   const [economy, setEconomy] = useState<ProtocolPlayerEconomy>(() => (
     initialSnapshot.players[playerId]!.economy
   ))
@@ -240,17 +236,8 @@ export default function GameHud({
       } as CSSProperties}
     >
       {/* The stock skull is paint only (HUD painter 0x005D2520; OPEN MENU is a keyboard
-          edge in 0x005CB360 / 0x0058F320). A touch player has no keyboard edge, so the
-          skull doubles as the pause button — the same gated path as the keydown handler. */}
-      <button
-        type="button"
-        className="hub-hud-skull-button"
-        aria-label="Menu"
-        disabled={!onMenuClick || !coarsePointer}
-        onClick={onMenuClick}
-      >
-        <img className="hub-hud-skull" src={hub.hud.skull} alt="" />
-      </button>
+          edge in 0x005CB360 / 0x0058F320). The Website's skull is the stage-level
+          GameMenuSkull the host mounts over this HUD at the same (11, 7) / 31 px. */}
       <GameAccountName placement="hud" username={accountUsername} />
       <AllyHud
         additionalRows={additionalAllyRows}

@@ -113,9 +113,11 @@
 
 .main-menu-button-compact { aspect-ratio: 100 / 52; }
 
+/* The fade covers everything on the stage — scene, chat, settings, the menu skull — so no
+   stage-level control floats on the black while a screen changes. */
 .main-menu-screen-fade {
   position: absolute;
-  z-index: 100;
+  z-index: 100003;
   inset: 0;
   opacity: 0;
   background: #000;
@@ -155,6 +157,44 @@
   background: transparent;
   cursor: pointer;
   pointer-events: auto;
+}
+
+/* The one menu skull. Stock paints it in the HUD at (11, 7) / 31 px and OPEN MENU is a
+   keyboard edge; the Website makes the same sprite a stage-level control for the Hub,
+   the Boneyard and the Dark Cloud so it reads and behaves identically everywhere:
+   with a menu open it is that menu's back owner, otherwise it opens the scene menu.
+   `--game-menu-skull-scale` is screen px per HUD px (display scale × UI scale; 1 for
+   the Dark Cloud), so the desktop skull lands exactly where the HUD sprite sat. */
+.game-menu-skull {
+  position: absolute;
+  z-index: 100002;
+  top: calc(7px * var(--game-menu-skull-scale, 1));
+  left: calc(11px * var(--game-menu-skull-scale, 1));
+  display: grid;
+  box-sizing: border-box;
+  width: calc(31px * var(--game-menu-skull-scale, 1));
+  height: calc(33px * var(--game-menu-skull-scale, 1));
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  place-items: center;
+  pointer-events: auto;
+}
+
+.game-menu-skull img {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+}
+
+.game-menu-skull:hover img,
+.game-menu-skull:focus-visible img { filter: brightness(1.28); }
+
+.game-menu-skull:focus-visible {
+  outline: 1px solid #fff0b7;
+  outline-offset: 2px;
 }
 
 .game-fullscreen-control {
@@ -248,15 +288,22 @@
   background: rgb(7 6 14 / 0.94);
 }
 
+/* Dialog fit contract (2026-08-24 ledger entry): every in-stage backdrop centres with
+   flex, never grid. A centred grid item resolves its percentage height against its own
+   content-sized implicit track, so `height: min(760px, 100%)` came out as the content
+   height (650 px) and the DONE row fell below an iPhone's 366 px stage while the body
+   never scrolled. In flex the percentage resolves against the definite absolutely
+   positioned backdrop, the body row clamps, and it scrolls with the finger. */
 .game-settings-backdrop {
   position: absolute;
   z-index: 100000;
   inset: 0;
-  display: grid;
+  display: flex;
   box-sizing: border-box;
+  align-items: center;
+  justify-content: center;
   padding: clamp(8px, 3vmin, 24px);
   background: rgb(0 0 0 / 0.82);
-  place-items: center;
 }
 
 .game-settings-dialog {
@@ -336,6 +383,7 @@
   min-height: 0;
   padding: 12px 24px 20px;
   overflow: auto;
+  overscroll-behavior: contain;
   scrollbar-color: #9f8547 #17130e;
 }
 
@@ -760,6 +808,19 @@
     height: 44px;
     padding: 10px;
   }
+
+  /* Touch: 44 px hit box at (4, 4) with 36 px art, in stage pixels (the stage is already
+     safe-area inset), the same box in every scene regardless of the world frame scale. */
+  .game-menu-skull {
+    top: 4px;
+    left: 4px;
+    width: 44px;
+    height: 44px;
+  }
+
+  .game-menu-skull img { width: 36px; }
+
+  .game-settings-close { min-height: 44px; }
 
   .game-fullscreen-message { top: 52px; }
 

@@ -1,9 +1,14 @@
+/* Flex centring so the dialog's percentage max-height resolves against the backdrop
+   (dialog fit contract, main-menu.css). No vh: Safari measures it without the address
+   bar, which is exactly the band a phone dialog overflows into. */
 .play-routing-backdrop {
   position: absolute;
   z-index: 52000;
   inset: 0;
-  display: grid;
-  place-items: center;
+  display: flex;
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: center;
   padding: 18px;
   background: rgb(0 0 0 / 0.82);
   pointer-events: auto;
@@ -12,8 +17,9 @@
 .play-routing-dialog {
   box-sizing: border-box;
   width: min(680px, 100%);
-  max-height: min(760px, 92vh);
+  max-height: 100%;
   overflow: auto;
+  overscroll-behavior: contain;
   padding: 25px;
   border: 1px solid #9c8249;
   background: radial-gradient(circle at 50% 0, #352a16, #090806 72%);

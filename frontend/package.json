@@ -91,6 +91,7 @@
     "smoke:game:devices": "node tools/smoke-game-devices.mjs",
     "smoke:game:built-joystick": "node tools/smoke-game-built-joystick.mjs",
     "smoke:game:mobile-hud": "node --experimental-strip-types tools/smoke-mobile-hud-compact.mjs",
+    "smoke:game:mobile-menus": "node --experimental-strip-types tools/smoke-mobile-menus.mjs",
     "smoke:desktop": "xvfb-run -a node tools/smoke-desktop-runtime.mjs",
     "smoke:provisioned-game": "node --experimental-strip-types tools/smoke-provisioned-game-runtime.mjs",
     "measure:game": "node tools/measure-hub-performance.mjs",

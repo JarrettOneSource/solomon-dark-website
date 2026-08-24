@@ -34,8 +34,10 @@
   pointer-events: none;
 }
 
+/* The tutorial unlocks the HUD in stages (nativeTutorialHudAccess). The stock skull is
+   part of the combat HUD, so the stage-level skull follows the same `combat` gate through
+   the scene's menu availability ('hidden' until it unlocks) instead of a rule here. */
 .hub-hud[data-tutorial-combat='false'] > :is(
-  .hub-hud-skull-button,
   .game-account-name-hud,
   .hub-hud-allies,
   .hub-hud-diagnostics,
@@ -53,29 +55,10 @@
   display: none;
 }
 
-/* Stock: the skull is paint only (HUD painter 0x005D2520); OPEN MENU is a keyboard edge
-   (0x005CB360 / 0x0058F320). The button is inert here and becomes the touch pause control
-   in the coarse-pointer block below. Same (11, 7) / 31 px box as the stock sprite. */
-.hub-hud-skull-button {
-  position: absolute;
-  top: 7px;
-  left: 11px;
-  display: block;
-  width: 31px;
-  height: auto;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  cursor: default;
-  pointer-events: none;
-}
-
-.hub-hud-skull {
-  display: block;
-  width: 31px;
-  height: auto;
-  object-fit: contain;
-}
+/* Stock paints the skull in the HUD (painter 0x005D2520; OPEN MENU is a keyboard edge,
+   0x005CB360 / 0x0058F320). The Website's skull is the stage-level .game-menu-skull in
+   main-menu.css, shared with the Boneyard and the Dark Cloud, so nothing in the HUD root
+   draws it. */
 
 .hub-hud-allies {
   position: absolute;
@@ -801,8 +784,9 @@
   position: absolute;
   z-index: 31000;
   inset: 0;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: radial-gradient(circle at 50% 42%, rgb(20 16 8 / 0.55), rgb(0 0 0 / 0.8));
   backdrop-filter: blur(2px);
   pointer-events: auto;
@@ -816,8 +800,9 @@
 
 .hub-player-profile {
   position: relative;
-  display: grid;
+  display: flex;
   box-sizing: border-box;
+  flex-direction: column;
   width: 400px;
   max-width: calc(100% - 40px);
   padding: 24px 26px;
@@ -838,6 +823,17 @@
   font: 14px Alegreya, Georgia, serif;
   gap: 14px;
   text-shadow: 0 1px 2px #000;
+}
+
+/* The card's in-flow content. The corner ornaments overhang the border, so the card itself
+   never clips; the body lays the sections out with the card's gap and scrolls when the
+   stage is shorter than the card (touch caps the card at 90cqh below). */
+.hub-player-profile-body {
+  display: grid;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  gap: inherit;
 }
 
 .hub-player-profile-corner {
@@ -1076,8 +1072,9 @@
   position: absolute;
   z-index: 30000;
   inset: 0;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: rgb(0 0 0 / 0.72);
 }
 
@@ -1087,6 +1084,7 @@
   max-height: 720px;
   padding: 28px;
   overflow: auto;
+  overscroll-behavior: contain;
   border: 2px solid #8c774e;
   border-radius: 5px;
   background: radial-gradient(circle at 50% 0, #353126, #11100d 70%);
@@ -1173,23 +1171,8 @@
      inside the scene (chat log, dialogs) keep their own default behaviour. */
   .hub-scene { touch-action: none; }
 
-  /* Touch pause. Screen pixels: 44 px hit box at (4, 4), 36 px art; HUD-root px =
-     screen px / display scale / UI scale. The stage origin is already safe-area inset
-     (main-menu.css), so no member in this block adds env() again. */
-  .hub-hud-skull-button {
-    top: calc(4px / var(--hud-display-scale, 1) / var(--game-ui-scale, 1));
-    left: calc(4px / var(--hud-display-scale, 1) / var(--game-ui-scale, 1));
-    display: grid;
-    width: calc(44px / var(--hud-display-scale, 1) / var(--game-ui-scale, 1));
-    height: calc(44px / var(--hud-display-scale, 1) / var(--game-ui-scale, 1));
-    place-items: center;
-    cursor: pointer;
-    pointer-events: auto;
-  }
-
-  .hub-hud-skull-button:disabled { pointer-events: none; }
-
-  .hub-hud-skull { width: calc(36px / var(--hud-display-scale, 1) / var(--game-ui-scale, 1)); }
+  /* The stage origin is already safe-area inset (main-menu.css), so no member in this
+     block adds env() again. The touch pause control is the stage-level skull. */
 
   /* FPS / ping read at 85 % of their desktop size, right of the chat opener. */
   .hub-hud-diagnostics {
@@ -1467,6 +1450,7 @@
 
   .hub-player-profile {
     width: 300px;
+    max-height: 90cqh;
     padding: 12px 14px;
     border-width: 2px;
     font-size: 12px;
@@ -1533,6 +1517,39 @@
     min-height: 30px;
     padding: 4px 8px;
     font-size: 9px;
+  }
+
+  /* The boneyard picker follows the party-settings recipe on touch: counter-scaled out
+     of the world frame, sized by the stage container, scrolling inside itself with a
+     44 px cancel row. */
+  .hub-boneyard-picker {
+    width: min(520px, 92cqw);
+    max-height: 90cqh;
+    padding: 14px 16px;
+    transform: scale(calc(1 / var(--hud-display-scale, 1)));
+    transform-origin: center;
+  }
+
+  .hub-boneyard-picker h2 {
+    margin: 0 0 10px;
+    font-size: 22px;
+  }
+
+  .hub-boneyard-options { gap: 6px; }
+
+  .hub-boneyard-option {
+    min-height: 52px;
+    padding: 6px 12px;
+  }
+
+  .hub-boneyard-option strong { font-size: 16px; }
+
+  .hub-boneyard-option span { font-size: 10px; }
+
+  .hub-boneyard-cancel {
+    min-height: 44px;
+    margin-top: 10px;
+    font-size: 14px;
   }
 
   /* Touch ally roster: the social column continues under the party chip. The anchor is

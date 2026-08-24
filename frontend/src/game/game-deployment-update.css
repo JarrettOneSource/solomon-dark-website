@@ -2,15 +2,18 @@
   position: fixed;
   z-index: 10000;
   inset: 0;
-  display: grid;
-  place-items: center;
+  display: flex;
+  box-sizing: border-box;
   padding: 24px;
+  overflow: auto;
+  overscroll-behavior: contain;
   color: #ead9a4;
   background: rgb(4 4 6 / 88%);
 }
 
 .game-deployment-update-panel {
   width: min(520px, 100%);
+  margin: auto;
   padding: 30px 34px;
   text-align: center;
   border: 1px solid #806d3f;

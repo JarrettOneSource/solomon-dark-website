@@ -6,7 +6,6 @@ import borderBottomRight from '../assets/game/dark-cloud/border-corner-br.png'
 import borderTopLeft from '../assets/game/dark-cloud/border-corner-tr.png'
 import borderTopRight from '../assets/game/dark-cloud/border-corner-tl.png'
 import searchIcon from '../assets/game/dark-cloud/search.png'
-import skull from '../assets/game/dark-cloud/skull.png'
 import sortIcon from '../assets/game/dark-cloud/sort.png'
 import wizardLeft from '../assets/game/dark-cloud/wizard-left.png'
 import wizardRight from '../assets/game/dark-cloud/wizard-right.png'
@@ -296,9 +295,7 @@ export default function DarkCloudScene({
       <div className="dark-cloud-wall" aria-hidden />
       <img className="dark-cloud-wizard dark-cloud-wizard-left" src={wizardLeft} alt="" />
       <img className="dark-cloud-wizard dark-cloud-wizard-right" src={wizardRight} alt="" />
-      <button type="button" className="dark-cloud-menu" onClick={onMenu} aria-label="Menu">
-        <img src={skull} alt="" />
-      </button>
+      {/* The menu skull is the stage-level GameMenuSkull the host mounts over this scene. */}
 
       <header className="dark-cloud-heading">
         <h1>THE DARK CLOUD</h1>

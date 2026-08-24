@@ -36,6 +36,7 @@ import type { GameRunPhase } from './core-kernels/game-run.ts'
 import type { GameConnectionStage } from './engine.ts'
 import GameAccountName from './GameAccountName.tsx'
 import GameFullscreenButton from './GameFullscreenButton.tsx'
+import GameMenuSkull, { type GameMenuAvailability } from './GameMenuSkull.tsx'
 import GameChat, { type GameChatWhisperRequest } from './GameChat.tsx'
 import GameSaveModMismatchDialog from './GameSaveModMismatchDialog.tsx'
 import GameplayPauseMenu from './GameplayPauseMenu.tsx'
@@ -54,6 +55,7 @@ import { installGameLuaConsole } from './game-lua-console.ts'
 import {
   GAME_SETTINGS_STORAGE_KEY,
   gameCheatsEnabled,
+  gameUiScale,
   gameVolume,
   readGameSettings,
   setGameSettings,
@@ -405,6 +407,8 @@ export default function MainMenuScene({
   const [pressedTitleAction, setPressedTitleAction] = useState<TitleMenuAction | null>(null)
   const [settingsContext, setSettingsContext] = useState<GameSettingsContext | null>(null)
   const [darkCloudMenuOpen, setDarkCloudMenuOpen] = useState(false)
+  /** The gameplay scene's skull state (HUD paint + OPEN MENU gate), mirrored for the stage skull. */
+  const [sceneMenuAvailability, setSceneMenuAvailability] = useState<GameMenuAvailability>('inert')
   const [modMismatch, setModMismatch] = useState<GameSaveModMismatch | null>(null)
   const [newGameMismatchAdmission, setNewGameMismatchAdmission] =
     useState<BrowserGameAdmission | null>(null)
@@ -1522,6 +1526,7 @@ export default function MainMenuScene({
             {darkCloudMenuOpen ? (
               <GameplayPauseMenu
                 audio={audio}
+                backAction="resume"
                 className="dark-cloud-pause-stage"
                 escapeAction={null}
                 onSelect={(action) => {
@@ -1592,6 +1597,7 @@ export default function MainMenuScene({
               onContinueGameOver={session.continueGameOver}
               onHubAction={session.sendHubAction}
               onInventoryOpenChange={setInventoryScreenOpen}
+              onMenuAvailabilityChange={setSceneMenuAvailability}
               onOpenSkillSelector={openHudSkillSelector}
               onOpenSkills={openSkillBook}
               onPauseRequest={requestGameplayPause}
@@ -1635,6 +1641,7 @@ export default function MainMenuScene({
                 ? leaveGameplay
                 : session.leaveParty}
               onLoadingError={cancelHubLoading}
+              onMenuAvailabilityChange={setSceneMenuAvailability}
               onMessagePlayer={(playerId, displayName) => setWhisperRequest({
                 displayName,
                 playerId,
@@ -1896,6 +1903,26 @@ export default function MainMenuScene({
           onAnimationEnd={handleFadeEnd}
           aria-hidden
         />
+
+        {/* One menu skull over every scene with a menu: back out of an open modal first,
+            otherwise open the scene menu behind the scene's own OPEN MENU gate. */}
+        {screen === 'dark-cloud' ? (
+          <GameMenuSkull
+            availability={!darkCloudMenuOpen && settingsContext === null ? 'available' : 'inert'}
+            frameScale={1}
+            onOpenMenu={openDarkCloudMenu}
+            scene="dark-cloud"
+            stage={stageRef}
+          />
+        ) : screen === 'hub' && session && runtimeSnapshot && runtimeRunPhase !== 'game-over' ? (
+          <GameMenuSkull
+            availability={sceneMenuAvailability}
+            frameScale={gameUiScale(gameSettings) * fixedViewport.displayScale}
+            onOpenMenu={requestGameplayPause}
+            scene={gameScene === 'boneyard' ? 'boneyard' : 'hub'}
+            stage={stageRef}
+          />
+        ) : null}
       </section>
       {loading && !tutorialPreludeVisible ? <MatchLoadingScreen loading={loading} /> : null}
       <div className="game-orientation-hint" role="status">

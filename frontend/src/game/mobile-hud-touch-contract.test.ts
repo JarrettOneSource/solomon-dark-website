@@ -6,24 +6,37 @@ import { MOBILE_DOCK_HALF_WIDTH, MOBILE_QUICKBAR_SLOT_MIN_SIZE } from './mobile-
 
 // Touch-HUD contract for the 2026-08-23 ledger entries (docs/game-native-parity-re.md,
 // "Reopened: compact iPhone-landscape touch HUD, second owner report" and "Owner picks
-// and the touch ally-roster column"). Every member that changed behaviour or coordinate
-// policy on a coarse pointer is pinned here so a later edit cannot silently reopen the
-// system: the pause skull is a real gated control, the party card collapses to a 22 px
-// chip whose member card hangs from it as a tab, the gear is vector art, the ally roster
-// continues the social column under the chip and yields while the column is open, no
-// in-stage member adds the safe-area inset a second time, the gameplay scenes refuse
-// page pinch/pan, and the dock half width tracks the stylesheet (owner pick B).
+// and the touch ally-roster column") and the 2026-08-24 entry ("Mobile menu pass: dialog
+// fit, one stage skull, skull backs out"). Every member that changed behaviour or
+// coordinate policy on a coarse pointer is pinned here so a later edit cannot silently
+// reopen the system: the menu skull is one stage-level control that backs out of an open
+// modal before it opens a menu, the party card collapses to a 22 px chip whose member card
+// hangs from it as a tab, the gear is vector art, the ally roster continues the social
+// column under the chip and yields while the column is open, no in-stage member adds the
+// safe-area inset a second time, every dialog backdrop centres with flex so a percentage
+// height resolves against the stage and the body scrolls, the gameplay scenes refuse page
+// pinch/pan, and the dock half width tracks the stylesheet (owner pick B).
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8')
 const hub = read('./HubScene.tsx')
 const boneyard = read('./BoneyardScene.tsx')
 const gameHud = read('./GameHud.tsx')
 const allyHud = read('./AllyHud.tsx')
+const darkCloud = read('./DarkCloudScene.tsx')
+const menu = read('./MainMenuScene.tsx')
+const skull = read('./GameMenuSkull.tsx')
+const navigation = read('./input/gamepad-menu-navigation.ts')
 const hubCss = read('./hub.css')
 const boneyardCss = read('./boneyard.css')
 const chatCss = read('./game-chat.css')
 const joystickCss = read('./input/touch-joystick.css')
 const partyCss = read('./party-settings.css')
+const mainMenuCss = read('./main-menu.css')
+const darkCloudCss = read('./dark-cloud.css')
+const joinPartyCss = read('./join-party.css')
+const playRoutingCss = read('./play-routing-dialog.css')
+const runtimeErrorCss = read('./game-runtime-error.css')
+const deploymentCss = read('./game-deployment-update.css')
 const dialog = read('./PartySettingsDialog.tsx')
 const gear = read('./PartySettingsGearIcon.tsx')
 
@@ -33,16 +46,103 @@ function coarseBlock(css: string): string {
   return css.slice(start)
 }
 
-test('the pause skull is a touch-only button behind the same gates as the keyboard edge', () => {
-  assert.match(gameHud, /<button[^>]*className="hub-hud-skull-button"[\s\S]*?disabled=\{!onMenuClick \|\| !coarsePointer\}[\s\S]*?onClick=\{onMenuClick\}/)
-  assert.match(gameHud, /import \{ useCoarsePointer \} from '\.\/input\/use-coarse-pointer\.ts'/)
-  assert.match(hub, /onMenuClick=\{\(\) => \{\s*if \(inputBlocked \|\| modalOpen \|\| transitionActive\) return\s*onPauseRequest\(\)\s*\}\}/)
-  assert.match(boneyard, /onMenuClick=\{\(\) => \{\s*if \(sceneInputBlocked \|\| run\.phase !== 'active'\) return\s*onPauseRequest\(\)\s*\}\}/)
-  // Desktop keeps the stock paint-only skull at (11, 7) / 31 px.
-  assert.match(hubCss, /\.hub-hud-skull-button \{[^}]*top: 7px;[^}]*left: 11px;[^}]*width: 31px;[^}]*pointer-events: none;/)
+/** Declarations of the first rule whose selector list starts a line with exactly `selector`. */
+function ruleBody(css: string, selector: string): string {
+  const at = css.search(new RegExp(`^\\s*${selector.replace(/[.-]/g, '\\$&')}\\s*(?:,[^{]*)?\\{`, 'm'))
+  assert.ok(at >= 0, `${selector} rule present`)
+  const open = css.indexOf('{', at)
+  return css.slice(open + 1, css.indexOf('}', open))
+}
+
+test('one stage skull: back out of the open modal first, else the scene menu behind its own gate', () => {
+  assert.match(skull, /if \(activateMenuBack\(root\) !== 'no-modal'\) return\s*if \(menuAvailable\) onOpenMenu\(\)/)
+  assert.match(skull, /<button\s+type="button"\s+className="game-menu-skull"\s+aria-label="Menu"/)
+  assert.match(skull, /<img src=\{hub\.hud\.skull\} alt="" \/>/)
+  assert.match(navigation, /export function activateMenuBack\(root: ParentNode\): MenuBackResult \{\s*const scope = activeNavigationRoot\(root, true\)/)
+  // Mounted once on the stage, over every scene with a menu, with that scene's gate.
+  assert.match(menu, /<GameMenuSkull\s+availability=\{!darkCloudMenuOpen && settingsContext === null \? 'available' : 'inert'\}\s+frameScale=\{1\}\s+onOpenMenu=\{openDarkCloudMenu\}\s+scene="dark-cloud"\s+stage=\{stageRef\}/)
+  assert.match(menu, /<GameMenuSkull\s+availability=\{sceneMenuAvailability\}\s+frameScale=\{gameUiScale\(gameSettings\) \* fixedViewport\.displayScale\}\s+onOpenMenu=\{requestGameplayPause\}\s+scene=\{gameScene === 'boneyard' \? 'boneyard' : 'hub'\}\s+stage=\{stageRef\}/)
+  assert.match(hub, /const menuAvailable = !inputBlocked && !modalOpen && !transitionActive/)
+  assert.match(hub, /onMenuAvailabilityChange\?\.\(menuAvailable \? 'available' : 'inert'\)/)
+  assert.match(boneyard, /const menuAvailable = !sceneInputBlocked && run\.phase === 'active'/)
+  // Stock paints no skull until the tutorial unlocks the combat HUD (nativeTutorialHudAccess
+  // `combat`, the gate hub.css applies to the meters); the stage skull follows that gate
+  // through the scene instead of a HUD rule, and the HUD's tutorial list no longer names it.
+  assert.match(boneyard, /tutorialAccess && !tutorialAccess\.combat\s*\? 'hidden'\s*: menuAvailable \? 'available' : 'inert'/)
+  assert.match(skull, /if \(availability === 'hidden'\) return null\s*const menuAvailable = availability === 'available'/)
+  assert.match(hubCss, /\.hub-hud\[data-tutorial-combat='false'\] > :is\(\s*\.game-account-name-hud,/)
+  assert.equal(menu.match(/onMenuAvailabilityChange=\{setSceneMenuAvailability\}/g)?.length, 2)
+  // The Dark Cloud menu keeps Escape consumed but names RESUME as its back owner.
+  assert.match(menu, /backAction="resume"[\s\S]*?escapeAction=\{null\}/)
+  // No scene paints a skull of its own any more.
+  for (const [name, source] of [['GameHud.tsx', gameHud], ['DarkCloudScene.tsx', darkCloud], ['HubScene.tsx', hub], ['BoneyardScene.tsx', boneyard]] as const) {
+    assert.doesNotMatch(source, /hub-hud-skull|className="dark-cloud-menu"|onMenuClick|dark-cloud\/skull\.png/, `${name} keeps a scene skull`)
+  }
+  assert.doesNotMatch(gameHud, /useCoarsePointer/)
+  assert.doesNotMatch(hubCss, /hub-hud-skull/)
+  assert.doesNotMatch(darkCloudCss, /\.dark-cloud-menu\s*[{,]/)
+  // Desktop: the stock HUD placement (11, 7) / 31 px in screen px; touch: 44 at (4, 4), 36 px art.
+  assert.match(mainMenuCss, /\.game-menu-skull \{[^}]*z-index: 100002;\s*top: calc\(7px \* var\(--game-menu-skull-scale, 1\)\);\s*left: calc\(11px \* var\(--game-menu-skull-scale, 1\)\);[^}]*width: calc\(31px \* var\(--game-menu-skull-scale, 1\)\);/)
+  const coarse = coarseBlock(mainMenuCss)
+  assert.match(coarse, /\.game-menu-skull \{\s*top: 4px;\s*left: 4px;\s*width: 44px;\s*height: 44px;\s*\}/)
+  assert.match(coarse, /\.game-menu-skull img \{ width: 36px; \}/)
+  assert.match(coarse, /\.game-settings-close \{ min-height: 44px; \}/)
+  // The screen fade covers the skull (and every other stage overlay) while a screen changes.
+  assert.match(ruleBody(mainMenuCss, '.main-menu-screen-fade'), /z-index: 100003;/)
+})
+
+test('every dialog backdrop centres with flex and the dialog scrolls inside the stage (dialog fit contract)', () => {
+  // A centred grid item resolves a percentage height against its content-sized implicit
+  // track, so `height: min(760px, 100%)` overflowed a 366 px stage and DONE fell off it.
+  const backdrops = [
+    ['main-menu.css', mainMenuCss, '.game-settings-backdrop'],
+    ['dark-cloud.css', darkCloudCss, '.dark-cloud-modal-backdrop'],
+    ['dark-cloud.css', darkCloudCss, '.dark-cloud-detail-backdrop'],
+    ['play-routing-dialog.css', playRoutingCss, '.play-routing-backdrop'],
+    ['hub.css', hubCss, '.hub-player-profile-backdrop'],
+    ['hub.css', hubCss, '.hub-boneyard-picker-backdrop'],
+    ['party-settings.css', partyCss, '.party-settings-backdrop'],
+    ['game-runtime-error.css', runtimeErrorCss, '.game-runtime-error'],
+    ['game-deployment-update.css', deploymentCss, '.game-deployment-update'],
+  ] as const
+  for (const [name, css, selector] of backdrops) {
+    const body = ruleBody(css, selector)
+    assert.match(body, /display: flex;/, `${name} ${selector} centres with flex`)
+    assert.doesNotMatch(body, /place-items|display: grid/, `${name} ${selector} must not centre as a grid`)
+  }
+  // The detail backdrop shares the flex rule and only lifts its z-index over the modal.
+  assert.match(darkCloudCss, /\.dark-cloud-detail-backdrop \{ z-index: 2000; \}/)
+  // Sizes resolve against the stage (percentage of the backdrop or cq units), never the
+  // browser viewport (Safari measures vh without its address bar), and every scrolling
+  // body contains its overscroll.
+  for (const [name, css] of [
+    ['main-menu.css', mainMenuCss],
+    ['play-routing-dialog.css', playRoutingCss],
+    ['party-settings.css', partyCss],
+    ['hub.css', hubCss],
+    ['game-runtime-error.css', runtimeErrorCss],
+    ['game-deployment-update.css', deploymentCss],
+  ] as const) {
+    assert.doesNotMatch(css, /\d(d|s|l)?vh\b/, `${name} sizes by the browser viewport`)
+  }
+  assert.match(ruleBody(mainMenuCss, '.game-settings-dialog'), /height: min\(760px, 100%\);\s*max-height: 100%;/)
+  assert.match(ruleBody(mainMenuCss, '.game-settings-content'), /overflow: auto;\s*overscroll-behavior: contain;/)
+  assert.match(ruleBody(playRoutingCss, '.play-routing-dialog'), /max-height: 100%;\s*overflow: auto;\s*overscroll-behavior: contain;/)
+  assert.match(ruleBody(partyCss, '.party-settings-dialog'), /max-height: 100%;/)
+  assert.match(ruleBody(hubCss, '.hub-boneyard-picker'), /overflow: auto;\s*overscroll-behavior: contain;/)
+  assert.match(ruleBody(hubCss, '.hub-player-profile-body'), /min-height: 0;\s*overflow: auto;\s*overscroll-behavior: contain;/)
+  assert.match(hub, /<div className="hub-player-profile-body">\s*<header className="hub-player-profile-header">/)
+  // Touch: the picker and the player card leave the world frame's scale like the party dialog.
   const coarse = coarseBlock(hubCss)
-  assert.match(coarse, /\.hub-hud-skull-button \{[^}]*width: calc\(44px \/ var\(--hud-display-scale, 1\) \/ var\(--game-ui-scale, 1\)\);[^}]*pointer-events: auto;/)
-  assert.match(coarse, /\.hub-hud-skull-button:disabled \{ pointer-events: none; \}/)
+  assert.match(coarse, /\.hub-boneyard-picker \{\s*width: min\(520px, 92cqw\);\s*max-height: 90cqh;[^}]*transform: scale\(calc\(1 \/ var\(--hud-display-scale, 1\)\)\);/)
+  assert.match(coarse, /\.hub-boneyard-cancel \{\s*min-height: 44px;/)
+  assert.match(coarse, /\.hub-player-profile \{\s*width: 300px;\s*max-height: 90cqh;/)
+  for (const [name, css, selector] of [
+    ['game-runtime-error.css', runtimeErrorCss, '.game-runtime-error-panel'],
+    ['game-deployment-update.css', deploymentCss, '.game-deployment-update-panel'],
+  ] as const) {
+    assert.match(ruleBody(css, selector), /margin: auto;/, `${name} ${selector} keeps its top reachable when it scrolls`)
+  }
 })
 
 test('the party card collapses to a chip on touch and the gear is inline vector art', () => {
@@ -58,11 +158,22 @@ test('the party card collapses to a chip on touch and the gear is inline vector 
 })
 
 test('no in-stage member adds the safe-area inset the page padding already applies', () => {
-  for (const [name, css] of [['hub.css', hubCss], ['game-chat.css', chatCss], ['touch-joystick.css', joystickCss], ['party-settings.css', partyCss]] as const) {
+  for (const [name, css] of [
+    ['hub.css', hubCss],
+    ['boneyard.css', boneyardCss],
+    ['game-chat.css', chatCss],
+    ['touch-joystick.css', joystickCss],
+    ['party-settings.css', partyCss],
+    ['dark-cloud.css', darkCloudCss],
+    ['join-party.css', joinPartyCss],
+    ['play-routing-dialog.css', playRoutingCss],
+  ] as const) {
     assert.doesNotMatch(css, /env\(safe-area-inset/, `${name} re-applies a safe-area inset`)
   }
-  const mainMenu = read('./main-menu.css')
-  assert.match(mainMenu, /\.main-menu-page \{[^}]*padding: env\(safe-area-inset-top\) env\(safe-area-inset-right\)\s*env\(safe-area-inset-bottom\) env\(safe-area-inset-left\);/)
+  assert.match(mainMenuCss, /\.main-menu-page \{[^}]*padding: env\(safe-area-inset-top\) env\(safe-area-inset-right\)\s*env\(safe-area-inset-bottom\) env\(safe-area-inset-left\);/)
+  // The page is the only owner: main-menu.css uses env() for the page padding and the
+  // orientation hint's inset alone (four edges each).
+  assert.equal(mainMenuCss.match(/env\(safe-area-inset/g)?.length, 8)
 })
 
 test('gameplay scenes refuse page pinch and pan on touch while the game surface keeps accessibility zoom', () => {

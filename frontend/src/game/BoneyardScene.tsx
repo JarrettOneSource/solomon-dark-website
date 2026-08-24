@@ -50,6 +50,7 @@ import {
 } from './game-audio-native.ts'
 import { startGamePresentationLoop } from './game-presentation-frame-loop.ts'
 import GameHud from './GameHud.tsx'
+import type { GameMenuAvailability } from './GameMenuSkull.tsx'
 import ContextualInteractButton from './ContextualInteractButton.tsx'
 import {
   nativeHudSkillBindings,
@@ -127,6 +128,8 @@ interface BoneyardSceneProps {
   onHubAction: (action: HubInventoryAction) => void
   onContinueGameOver: (runId: string, eventId: number) => void
   onInventoryOpenChange: (open: boolean) => void
+  /** Reports whether OPEN MENU would be honoured right now; the stage skull follows it. */
+  onMenuAvailabilityChange?: (availability: GameMenuAvailability) => void
   onOpenSkillSelector: (binding: NativeHudSkillBinding) => void
   onOpenSkills: () => void
   onPauseRequest: () => void
@@ -181,6 +184,7 @@ export default function BoneyardScene({
   onHubAction,
   onContinueGameOver,
   onInventoryOpenChange,
+  onMenuAvailabilityChange,
   onOpenSkillSelector,
   onOpenSkills,
   onPauseRequest,
@@ -251,6 +255,19 @@ export default function BoneyardScene({
     tutorialInventoryOpenRef.current = open
     onTutorialAction(open ? 'inventory-opened' : 'inventory-closed')
   }, [inventorySurface?.kind, onTutorialAction, tutorial])
+
+  // The same gate as the OPEN MENU keydown below, published for the stage skull. Stock
+  // paints no skull until the tutorial unlocks the combat HUD (nativeTutorialHudAccess
+  // `combat`, the gate hub.css applies to the meters), so the skull stays hidden until then.
+  const menuAvailable = !sceneInputBlocked && run.phase === 'active'
+  const menuAvailability: GameMenuAvailability = tutorialAccess && !tutorialAccess.combat
+    ? 'hidden'
+    : menuAvailable ? 'available' : 'inert'
+  useEffect(() => {
+    onMenuAvailabilityChange?.(menuAvailability)
+  }, [menuAvailability, onMenuAvailabilityChange])
+
+  useEffect(() => () => onMenuAvailabilityChange?.('inert'), [onMenuAvailabilityChange])
 
   const sceneRef = useRef<HTMLDivElement>(null)
   const hostRef = useRef<HTMLDivElement>(null)
@@ -987,10 +1004,6 @@ export default function BoneyardScene({
               getPingMs={getPingMs}
               initialSnapshot={boneyardInitialSnapshot}
               mode="run"
-              onMenuClick={() => {
-                if (sceneInputBlocked || run.phase !== 'active') return
-                onPauseRequest()
-              }}
               onInventoryClick={() => {
                 if (!inputBlocked && tutorialAccess?.inventory !== false && run.phase === 'active') {
                   setInventorySurface({ kind: 'inventory' })

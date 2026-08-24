@@ -63,7 +63,9 @@ test('Dark Cloud fills the real viewport and has explicit compact/mobile reflow'
   assert.match(menu, /<div className="main-menu-native-stage dark-cloud-stage" inert=\{darkCloudMenuOpen \|\| undefined\}>/)
   assert.doesNotMatch(menu, /className="main-menu-native-stage dark-cloud-stage" style=/)
   assert.match(css, /\.main-menu-native-stage\.dark-cloud-stage \{[\s\S]*?inset: 0;[\s\S]*?width: 100%;[\s\S]*?height: 100%;/)
-  assert.match(css, /env\(safe-area-inset-top\)/)
+  // The stage origin is already safe-area inset by .main-menu-page (main-menu.css); the
+  // scene must not inset again or the phone geometry loses the inset twice.
+  assert.doesNotMatch(css, /env\(safe-area-inset/)
   assert.match(css, /@media \(max-width: 700px\)/)
   assert.match(css, /@media \(max-height: 620px\)/)
   assert.match(css, /min-height: 44px/)
@@ -83,10 +85,16 @@ test('Dark Cloud Esc menu is the native gameplay pause menu', () => {
   assert.match(source, /menuKeyCode: string/)
   assert.match(source, /event\.code !== menuKeyCode/)
   assert.match(source, /if \(menuOpen \|\| searchOpen \|\| sortOpen \|\| detailMod\) return/)
-  assert.match(source, /className="dark-cloud-menu" onClick=\{onMenu\}/)
+  // The skull is the stage-level GameMenuSkull MainMenuScene mounts over the scene; the
+  // scene paints none of its own.
+  assert.doesNotMatch(source, /className="dark-cloud-menu"|dark-cloud\/skull\.png/)
+  assert.doesNotMatch(css, /\.dark-cloud-menu\s*[{,]/)
+  assert.match(menu, /<GameMenuSkull\n\s+availability=\{!darkCloudMenuOpen && settingsContext === null \? 'available' : 'inert'\}\n\s+frameScale=\{1\}\n\s+onOpenMenu=\{openDarkCloudMenu\}\n\s+scene="dark-cloud"/)
   assert.doesNotMatch(source, /dark-cloud-menu-plates|dark-cloud-menu-panel|crest|>RESUME<|>MAIN MENU</)
   assert.doesNotMatch(css, /dark-cloud-menu-plates|dark-cloud-menu-panel|dark-cloud-panel-crest/)
-  assert.match(menu, /<GameplayPauseMenu\n\s+audio=\{audio\}\n\s+className="dark-cloud-pause-stage"/)
+  assert.match(menu, /<GameplayPauseMenu\n\s+audio=\{audio\}\n\s+backAction="resume"\n\s+className="dark-cloud-pause-stage"/)
+  // Escape stays consumed (native 0x005A8950 swallows the second OPEN MENU); the skull and
+  // controller B still back out through RESUME.
   assert.match(menu, /escapeAction=\{null\}/)
   assert.match(menu, /menuKeyCode=\{gameSettings\.controls\.openMenu\}/)
   assert.match(menu, /menuOpen=\{darkCloudMenuOpen \|\| settingsContext !== null\}/)

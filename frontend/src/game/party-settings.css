@@ -6,10 +6,12 @@
   position: absolute;
   z-index: 42000;
   inset: 0;
-  display: grid;
+  display: flex;
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: center;
   padding: 16px;
   background: rgb(0 0 0 / 0.72);
-  place-items: center;
   pointer-events: auto;
 }
 
@@ -18,7 +20,7 @@
   box-sizing: border-box;
   display: flex;
   width: min(560px, 100%);
-  max-height: 90vh;
+  max-height: 100%;
   flex-direction: column;
   padding: 14px 18px 16px;
   border: 1px solid rgb(216 188 114 / 0.55);

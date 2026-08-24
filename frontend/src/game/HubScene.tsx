@@ -35,6 +35,7 @@ import {
 } from './game-audio-native.ts'
 import { startGamePresentationLoop } from './game-presentation-frame-loop.ts'
 import GameHud from './GameHud.tsx'
+import type { GameMenuAvailability } from './GameMenuSkull.tsx'
 import type { NativeHudSkillBinding } from './native-hud-presentation.ts'
 import HubInventoryUi, { type HubUiSurface } from './HubInventoryUi.tsx'
 import {
@@ -111,6 +112,8 @@ interface HubSceneProps {
   onKickPartyPlayer: (playerId: string) => void
   onLeaveParty: () => void
   onLoadingError: () => void
+  /** Reports whether OPEN MENU would be honoured right now; the stage skull follows it. */
+  onMenuAvailabilityChange?: (availability: GameMenuAvailability) => void
   onMessagePlayer: (playerId: string, displayName: string) => void
   onOccupiedChange: (occupied: boolean) => void
   onOpenSkillSelector: (binding: NativeHudSkillBinding) => void
@@ -164,6 +167,7 @@ export default function HubScene({
   onKickPartyPlayer,
   onLeaveParty,
   onLoadingError,
+  onMenuAvailabilityChange,
   onMessagePlayer,
   onOccupiedChange,
   onOpenSkillSelector,
@@ -267,6 +271,14 @@ export default function HubScene({
   }, [modalOpen, onOccupiedChange])
 
   useEffect(() => () => onOccupiedChange(false), [onOccupiedChange])
+
+  // The same gate as the OPEN MENU keydown below, published for the stage skull.
+  const menuAvailable = !inputBlocked && !modalOpen && !transitionActive
+  useEffect(() => {
+    onMenuAvailabilityChange?.(menuAvailable ? 'available' : 'inert')
+  }, [menuAvailable, onMenuAvailabilityChange])
+
+  useEffect(() => () => onMenuAvailabilityChange?.('inert'), [onMenuAvailabilityChange])
 
   useEffect(() => {
     onInventoryOpenChange(hubUiSurface?.kind === 'inventory')
@@ -730,10 +742,6 @@ export default function HubScene({
             }
           }}
           onMapClick={beginMatch}
-          onMenuClick={() => {
-            if (inputBlocked || modalOpen || transitionActive) return
-            onPauseRequest()
-          }}
           onPotionClick={(itemId) => {
             if (!inputBlocked && !pickerOpen && !transitionActive) {
               onHubAction({ type: 'consume', itemId })
@@ -965,86 +973,88 @@ export default function HubScene({
                   alt=""
                   aria-hidden
                 />
-                <header className="hub-player-profile-header">
-                  <WizardPortrait element={cardElement} />
-                  <div className="hub-player-profile-title">
-                    <h2 id="hub-player-profile-name">{displayName}</h2>
-                    <p className="hub-player-profile-class">{cardClassName}</p>
-                    {profile && (
-                      <p
-                        className="hub-player-profile-badge"
-                        data-registered={profile.accountUsername !== null}
+                <div className="hub-player-profile-body">
+                  <header className="hub-player-profile-header">
+                    <WizardPortrait element={cardElement} />
+                    <div className="hub-player-profile-title">
+                      <h2 id="hub-player-profile-name">{displayName}</h2>
+                      <p className="hub-player-profile-class">{cardClassName}</p>
+                      {profile && (
+                        <p
+                          className="hub-player-profile-badge"
+                          data-registered={profile.accountUsername !== null}
+                        >
+                          {profile.accountUsername !== null
+                            ? `Registered · ${profile.accountUsername}`
+                            : 'Guest wizard'}
+                        </p>
+                      )}
+                      {activity ? (
+                        <p
+                          className="hub-player-profile-activity"
+                          data-profile-activity={activity}
+                        >
+                          {hubPlayerActivityLabel(activity)}
+                        </p>
+                      ) : null}
+                    </div>
+                  </header>
+                  <dl className="hub-player-profile-stats">
+                    <div className="hub-player-profile-stat">
+                      <img src={skillIcons.bag} alt="" aria-hidden />
+                      <dt>Gold</dt>
+                      <dd data-profile-gold={selectedGold ?? undefined}>
+                        {selectedGold === null ? '—' : selectedGold.toLocaleString()}
+                      </dd>
+                    </div>
+                    <div className="hub-player-profile-stat">
+                      <img src={skillIcons.wave} alt="" aria-hidden />
+                      <dt>Highest Wave</dt>
+                      <dd>
+                        {profile?.highestWave == null ? '—' : profile.highestWave.toLocaleString()}
+                      </dd>
+                    </div>
+                    <div className="hub-player-profile-stat">
+                      <img src={skillIcons.infinity} alt="" aria-hidden />
+                      <dt>Time in the Dark</dt>
+                      <dd>
+                        {profile?.totalPlaytimeMs == null ? '—' : formatPlaytime(profile.totalPlaytimeMs)}
+                      </dd>
+                    </div>
+                  </dl>
+                  <div className="hub-player-profile-actions">
+                    {!isSelf && (
+                      <button
+                        type="button"
+                        className="hub-player-profile-message"
+                        onClick={() => {
+                          onMessagePlayer(selectedPlayerId, displayName)
+                          setSelectedPlayerId(null)
+                        }}
                       >
-                        {profile.accountUsername !== null
-                          ? `Registered · ${profile.accountUsername}`
-                          : 'Guest wizard'}
-                      </p>
+                        Message
+                      </button>
                     )}
-                    {activity ? (
-                      <p
-                        className="hub-player-profile-activity"
-                        data-profile-activity={activity}
+                    {partyState
+                      && partyState.party.leaderPlayerId === playerId
+                      && !alreadyTogether && (
+                      <button
+                        type="button"
+                        className="hub-player-profile-invite"
+                        onClick={() => onInvitePlayer(selectedPlayerId)}
                       >
-                        {hubPlayerActivityLabel(activity)}
-                      </p>
-                    ) : null}
-                  </div>
-                </header>
-                <dl className="hub-player-profile-stats">
-                  <div className="hub-player-profile-stat">
-                    <img src={skillIcons.bag} alt="" aria-hidden />
-                    <dt>Gold</dt>
-                    <dd data-profile-gold={selectedGold ?? undefined}>
-                      {selectedGold === null ? '—' : selectedGold.toLocaleString()}
-                    </dd>
-                  </div>
-                  <div className="hub-player-profile-stat">
-                    <img src={skillIcons.wave} alt="" aria-hidden />
-                    <dt>Highest Wave</dt>
-                    <dd>
-                      {profile?.highestWave == null ? '—' : profile.highestWave.toLocaleString()}
-                    </dd>
-                  </div>
-                  <div className="hub-player-profile-stat">
-                    <img src={skillIcons.infinity} alt="" aria-hidden />
-                    <dt>Time in the Dark</dt>
-                    <dd>
-                      {profile?.totalPlaytimeMs == null ? '—' : formatPlaytime(profile.totalPlaytimeMs)}
-                    </dd>
-                  </div>
-                </dl>
-                <div className="hub-player-profile-actions">
-                  {!isSelf && (
+                        Invite to Party
+                      </button>
+                    )}
                     <button
                       type="button"
-                      className="hub-player-profile-message"
-                      onClick={() => {
-                        onMessagePlayer(selectedPlayerId, displayName)
-                        setSelectedPlayerId(null)
-                      }}
+                      className="hub-player-profile-close"
+                      data-game-back="true"
+                      onClick={() => setSelectedPlayerId(null)}
                     >
-                      Message
+                      Close
                     </button>
-                  )}
-                  {partyState
-                    && partyState.party.leaderPlayerId === playerId
-                    && !alreadyTogether && (
-                    <button
-                      type="button"
-                      className="hub-player-profile-invite"
-                      onClick={() => onInvitePlayer(selectedPlayerId)}
-                    >
-                      Invite to Party
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    className="hub-player-profile-close"
-                    data-game-back="true"
-                    onClick={() => setSelectedPlayerId(null)}
-                  >
-                    Close
-                  </button>
+                  </div>
                 </div>
               </section>
             </div>

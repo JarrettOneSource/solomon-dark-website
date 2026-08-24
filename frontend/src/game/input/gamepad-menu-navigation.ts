@@ -255,10 +255,28 @@ function confirm(root: ParentNode, ownerDocument: Document): void {
   target?.click()
 }
 
+export type MenuBackResult = 'activated' | 'modal-without-back' | 'no-modal'
+
+/**
+ * The menu skull's back rule, shared with gamepad B: with a modal open in `root`, press
+ * that modal's declared back owner and report it; with a modal that declares none, do
+ * nothing; with no modal open, report `no-modal` so the caller may open its scene menu.
+ */
+export function activateMenuBack(root: ParentNode): MenuBackResult {
+  const scope = activeNavigationRoot(root, true)
+  if (!scope) return 'no-modal'
+  const back = backOwner(scope)
+  if (!back) return 'modal-without-back'
+  back.click()
+  return 'activated'
+}
+
 function activateBack(root: ParentNode): void {
-  const back = matchingElements(root, '[data-game-back="true"]')
-    .find(isVisible)
-  back?.click()
+  backOwner(root)?.click()
+}
+
+function backOwner(root: ParentNode): HTMLElement | null {
+  return matchingElements(root, '[data-game-back="true"]').find(isVisible) ?? null
 }
 
 function focusableElements(root: ParentNode): HTMLElement[] {

@@ -1,19 +1,24 @@
+/* A scrolling flex page with an auto-margin panel: centred when the panel fits, and
+   scrollable from its top edge (never clipped at both ends) when a phone in landscape
+   is shorter than the report. */
 .game-runtime-error {
   position: fixed;
   z-index: 110;
   inset: 0;
-  display: grid;
-  min-height: 100%;
+  display: flex;
+  box-sizing: border-box;
   padding: 1.5rem;
+  overflow: auto;
+  overscroll-behavior: contain;
   color: var(--color-bone);
   background:
     radial-gradient(circle at 50% 15%, rgb(74 44 102 / 0.28), transparent 42%),
     #050409;
-  place-items: center;
 }
 
 .game-runtime-error-panel {
   width: min(42rem, 100%);
+  margin: auto;
   padding: clamp(1.5rem, 5vw, 3rem);
   text-align: center;
   background: linear-gradient(160deg, rgb(25 20 34 / 0.98), rgb(10 8 14 / 0.98));

@@ -77,6 +77,12 @@ try {
   await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 180_000 })
   await page.evaluate(() => window.__sdrRestoreAudioPreload?.())
+  // A fresh browser profile has no save, so the title offers the stock Tutorial prompt first.
+  const tutorialOffer = page.getByRole('dialog', { name: 'Play the Tutorial?' })
+  if (await tutorialOffer.isVisible()) {
+    await tutorialOffer.getByRole('button', { exact: true, name: 'NO' }).click()
+    await tutorialOffer.waitFor({ state: 'detached' })
+  }
 
   await page.getByRole('button', { name: 'Settings' }).click()
   let dialog = page.locator('.game-settings-dialog')

@@ -33,6 +33,11 @@ import './gameplay-pause-menu.css'
 
 interface GameplayPauseMenuProps {
   audio: GameAudioDirector
+  /**
+   * Row that owns controller B and the menu skull's back press; defaults to `escapeAction`.
+   * A host that consumes Escape (`escapeAction={null}`) still names its back row here.
+   */
+  backAction?: NativeSimpleMenuAction | null
   /** Extra full-display owner class for a host whose stage placement differs from gameplay's fixed stage. */
   className?: string
   /** Action selected by an owner Escape; null consumes the edge without closing. */
@@ -48,6 +53,7 @@ interface GameplayPauseMenuProps {
 
 export default function GameplayPauseMenu({
   audio,
+  backAction,
   className,
   escapeAction = 'resume',
   onSelect,
@@ -56,6 +62,7 @@ export default function GameplayPauseMenu({
   rows = NATIVE_PAUSE_MENU_ROWS,
   style,
 }: GameplayPauseMenuProps) {
+  const backOwner = backAction === undefined ? escapeAction : backAction
   const firstRowRef = useRef<HTMLButtonElement>(null)
   const rendererHostRef = useRef<HTMLDivElement>(null)
   const rendererRef = useRef<GameplayPauseRenderer | null>(null)
@@ -171,7 +178,7 @@ export default function GameplayPauseMenu({
             {pressedRow ? <NativePausePressedRow row={pressedRow} /> : null}
             {renderPlan.rows.map((row, index) => (
               <NativePauseButton
-                back={escapeAction === row.action}
+                back={backOwner === row.action}
                 key={row.action}
                 buttonRef={index === 0 ? firstRowRef : undefined}
                 closing={closing}

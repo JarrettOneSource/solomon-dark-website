@@ -13,7 +13,7 @@
   grid-template-rows: auto auto auto minmax(0, 1fr) auto;
   gap: 14px;
   max-height: var(--join-party-viewport-height, 100%);
-  padding: max(24px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
+  padding: 24px 24px 20px;
   background: radial-gradient(circle at 50% 20%, rgb(43 34 18 / 0.97), rgb(4 5 8 / 0.99) 68%);
   color: #ead9aa;
   font-family: 'IM FELL English', Georgia, serif;
@@ -42,7 +42,7 @@
 .join-party-scene footer { display: flex; grid-area: actions; justify-content: center; gap: 10px; }
 
 @media (max-width: 700px), (max-height: 620px) {
-  .join-party-scene { gap: 8px; padding-top: max(10px, env(safe-area-inset-top)); }
+  .join-party-scene { gap: 8px; padding-top: 10px; }
   .join-party-scene h1 { font-size: 20px; }
   .join-party-scene header p { display: none; }
   .join-party-list article {

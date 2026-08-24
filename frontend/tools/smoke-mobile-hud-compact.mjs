@@ -75,8 +75,8 @@ const MEMBER_SELECTORS = Object.freeze({
   partyToggle: '.hub-party-toggle',
   pauseOverlay: '.gameplay-pause-overlay',
   selectedSkills: '.hub-hud-selected-skill',
-  skull: '.hub-hud-skull',
-  skullButton: '.hub-hud-skull-button',
+  skull: '.game-menu-skull img',
+  skullButton: '.game-menu-skull',
   tome: '.hub-hud-tome-button',
   xp: '.hub-hud-xp',
 })
@@ -615,6 +615,12 @@ function assertOverlapFree(entries, label, against = null) {
 async function enterHub(page, displayName, element) {
   await page.goto(`${baseUrl}/game`, { timeout: 240_000, waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 240_000 })
+  // A fresh browser profile has no save, so the title offers the stock Tutorial prompt first.
+  const tutorialOffer = page.getByRole('dialog', { name: 'Play the Tutorial?' })
+  if (await tutorialOffer.isVisible()) {
+    await tutorialOffer.getByRole('button', { exact: true, name: 'NO' }).click()
+    await tutorialOffer.waitFor({ state: 'detached' })
+  }
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
   await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({ timeout: 30_000 })

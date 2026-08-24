@@ -41699,3 +41699,156 @@ There are no browser-platform-blocked members and no extractable unknowns.
   461,214 raw bytes and 129,650 gzip bytes; gate-log SHA-256 is
   `199e29b653dd64ddd69ee439807b38ab270efca6da2f68307d91b3123a460fe4`.
 - Publication and deployment were not authorized and remain separate.
+
+## 2026-08-24 — Mobile menu pass: dialog fit, one stage skull, skull backs out
+
+### Reported smell and parity question
+
+- Reported web behavior (owner, iPhone XR, Safari landscape): opening the
+  Settings menu cuts off the `DONE` button, and the settings body cannot be
+  pulled down with a held finger the way phones scroll. The Hub/Boneyard pause
+  skull and the Dark Cloud crest skull differ in size and behavior between
+  scenes, and pressing the skull while a menu is already open pops the pause
+  (Esc) menu instead of backing out of the open surface.
+- Requested behavior: every message box, prompt, and menu fits the phone
+  viewport with its confirm/back row on screen and scrolls by touch drag when
+  its body overflows; one skull of one size and one behavior over every scene
+  that has a menu, especially on touch; pressing the skull while any menu or
+  dialog is open backs out of that surface and never raises the pause menu on
+  top of it.
+- Reproduction membership: the settings dialog on the title, Dark Cloud, Hub,
+  and Boneyard (root page and the `TWEAK GAME` page); the play-routing,
+  join-party consent, party-settings, Hub player-card, Hub Boneyard-picker,
+  Dark Cloud search/detail, runtime-error, and deployment-update dialogs; the
+  skull over the Dark Cloud, the Hub, and an active Boneyard run; the title,
+  loading, Game Over, and level-up surfaces as non-members.
+- Falsifiers: any dialog's confirm/back control lies outside the stage or
+  below a 44 px touch row on `896 x 366`; a touch drag over an overflowing
+  settings body leaves `scrollTop` at zero; a second safe-area inset is applied
+  inside the stage; two skulls of different geometry exist in the tree; the
+  skull opens the pause menu while a modal is open; the skull opens a scene
+  menu while the scene's own OPEN MENU gate is closed; the skull paints over
+  the loading fade; a desktop pointer geometry changes without a ledger row.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Existing instruction ledger (2026-08-23 touch HUD entry) | HUD painter `FUN_005d2520` (`0x005D2520`); OPEN MENU binding `0x00B3BCCC` with four xrefs (`FUN_0058f320`, `Controls_Render`, `Settings_Render`, `FUN_005cb360`); `GameplayKeyboardEdge_Check(DAT_00b401a8 + 0x750, binding)` | Stock paints the skull only; the menu opens from a keyboard rising edge gated by `DAT_008203f0 == 0 && param_1[0x22] == 0`. No xref reads the binding from a mouse or hit-test path, so a pointer/touch skull is web policy under the platform constraint (no key on touch). | high (instruction-derived) |
+| Existing instruction ledger (pause entries) | Pause action `0x0058EA50` rows `RESUME GAME[1]|GAME SETTINGS[0]|LEAVE GAME[2]`; `SimpleMenu::Tick 0x005A8950`; modal exclusion `0x008203F0` | While a modal owns the active region, retail excludes another OPEN MENU edge until Resume/Settings/Leave returns. A skull that never raises a second menu over an open surface is the stock exclusion, not a new rule. | high |
+| Existing instruction ledger (Dark Cloud entry) | dispatcher `0x005A5530` slot `+0x10` rows `RESUME[0]|GAME SETTINGS[1]|SIGN OUT[2]|MAIN MENU[3]`; the native owner swallows the second OPEN MENU | The Dark Cloud crest and OPEN MENU raise the same `SimpleMenu`; the second edge is consumed, so the Website keeps `escapeAction={null}` there. | high |
+| Existing instruction ledger (Inventory/Pause composition) | retail 0.72.5 SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`; Pause `0x0058EA50 -> 0x005ABF10 -> 0x005C5A00` | Every stock modal is a fixed `1600 x 900` screen-space composition; retail owns no phone viewport, safe-area, or overflow policy. Dialog fit is a Website adaptation of already-ported surfaces. | high |
+| Current Website causal trace | Website `main` `c7902943`; `main-menu.css` `.game-settings-backdrop { display: grid; place-items: center }` with `.game-settings-dialog { height: min(760px, 100%) }` | A centred grid item resolves its percentage height against the content-sized implicit track, so on the `896 x 366` contain-fit stage (`650.7 x 366` CSS px) the dialog took its content height, centred, and the stage's `overflow: hidden` clipped the 74 px `DONE` row. Nothing scrolled because the content row had no overflow owner. | high (reproduced in Mac Chrome at the iPhone XR geometry) |
+| Current Website causal trace | `dark-cloud.css` `env(safe-area-inset-*)` inside the stage; `.main-menu-page` padding `env(safe-area-inset-*)` | Two safe-area owners inset the Dark Cloud chrome twice on a notched phone. The page padding is the single owner. | high |
+| Current Website causal trace | `GameHud.tsx` `.hub-hud-skull-button` (HUD-scaled, `useCoarsePointer`), `DarkCloudScene.tsx` `.dark-cloud-menu` with `dark-cloud/skull.png` | Two skull controls with different art, geometry, and stacking; neither consults the modal stack, so a press over an open dialog re-requested the pause owner. | high |
+| Current Website navigation seam | `gamepad-menu-navigation.ts` `activeNavigationRoot(root, true)` (last visible `[role="dialog"][aria-modal="true"]` / `[data-game-controller-navigation-root="true"]`), `[data-game-back="true"]` owners in every dismissible modal | The controller back convention already names the topmost modal and its back owner; the skull can share it instead of adding a second dismissal policy. | high |
+| Mac Chrome journey | `frontend/tools/smoke-mobile-menus.mjs` at `896 x 366` and `896 x 414`, touch emulation, iPhone user agent | Geometry receipts and screenshots for every member at both Safari heights; see the receipt below. | high |
+| Rebase base (`origin/main` `21c56bcd`, 52 commits after `c7902943`) | `hub.css` `.hub-hud[data-tutorial-combat='false'] > :is(.hub-hud-skull-button, …) { display: none }` from the stock tutorial port (`nativeTutorialHudAccess`: `combat` unlocks at stage 14 / ≥15); `StockPromptDialog` `Play the Tutorial?` (stock MsgBox on a `.main-menu-native-stage`, `data-game-back` on `NO`) offered on the title while `saveDetection === 'missing'` | The tutorial keeps the stock skull unpainted until the combat HUD unlocks, so removing the HUD skull needs the same gate on the stage skull; a fresh browser profile now meets the tutorial offer before `Play`, and the prompt covers the stage until answered. | high (source) |
+
+No new retail address, table, or asset was recovered; the Mod Loader reports
+and the 2026-08-23 touch HUD entry remain the native authority.
+
+### System boundary and membership inventory
+
+Native/web system: the complete stage-level menu surface on a phone — every
+dialog's fit and scroll inside the contain-fit `1600 x 900` stage under one
+safe-area owner, plus the one pointer skull that stands in for the OPEN MENU
+key on touch and owns the stock "no second menu over a modal" exclusion.
+
+| Member | Owner/source | Disposition | Proof contract |
+| --- | --- | --- | --- |
+| settings dialog (title, Dark Cloud, Hub, Boneyard; root and `TWEAK GAME` page) | `GameSettingsDialog`, `.game-settings-*` in `main-menu.css` | `exact-ported` to the dialog-fit contract | backdrop flex-centred; dialog `height: min(760px, 100%)` + `max-height: 100%`, rows `78px minmax(0, 1fr) 74px`; content `overflow: auto; overscroll-behavior: contain`; `DONE`/`BACK` inside the stage and `>= 44` px on touch; touch drag moves `scrollTop` when the body overflows |
+| play-routing dialog | `.play-routing-*` | `exact-ported` to the dialog-fit contract | flex backdrop; `max-height: 100%; overflow: auto; overscroll-behavior: contain` |
+| join-party consent and party-settings dialogs | `join-party.css`, `party-settings.css` | `exact-ported` to the dialog-fit contract | flex backdrops; `.party-settings-dialog` `max-height: 100%`; no `vh` units |
+| Hub player card | `HubScene.tsx` `.hub-player-profile` | `exact-ported` to the dialog-fit contract | flex column; `.hub-player-profile-body { min-height: 0; overflow: auto; overscroll-behavior: contain }` wraps the header and rows so the corner ornaments stay on the frame; touch `width: 300px; max-height: 90cqh`; Close keeps the accepted 30 px 2026-08-23 row |
+| Hub Boneyard picker | `HubScene.tsx` `.hub-boneyard-picker` | `exact-ported` to the dialog-fit contract (party-settings recipe on touch) | `overflow: auto; overscroll-behavior: contain`; touch `width: min(520px, 92cqw); max-height: 90cqh`, counter-scaled by `1 / var(--hud-display-scale)`, 44 px Cancel |
+| Dark Cloud search modal and detail backdrop | `dark-cloud.css` | `exact-ported` to the dialog-fit contract | one combined flex rule; `.dark-cloud-detail-backdrop { z-index: 2000 }` kept; `.dark-cloud-stone-button` `min-height: 46px`; no `env()` inside the stage |
+| runtime-error and deployment-update overlays | `game-runtime-error.css`, `game-deployment-update.css` | `exact-ported` to the dialog-fit contract (fixed overlays) | fixed flex overlay `overflow: auto; overscroll-behavior: contain`; panel `width: min(…, 100%); margin: auto` so a taller-than-viewport panel scrolls instead of clipping its top |
+| safe-area ownership | `.main-menu-page` padding | `verified-already-at-requested-policy`; duplicate owner removed | `main-menu.css` holds exactly eight `env(safe-area-inset` uses (page padding + orientation hint); every other game stylesheet holds none |
+| one stage skull over Dark Cloud, Hub, and Boneyard | new `GameMenuSkull.tsx`, rendered by `MainMenuScene` after the screen fade | web-policy (platform constraint: no OPEN MENU key on touch), now one owner | one `.game-menu-skull` per stage; desktop `31 x 33` at `(11, 7)` scaled by the frame scale (`gameUiScale * displayScale` in game, `1` in the Dark Cloud); touch `44 x 44` at `(4, 4)` with 36 px art; `z-index: 100002` under the fade `100003`; art `hub.hud.skull` everywhere (`dark-cloud/skull.png` removed) |
+| skull press with a modal open | `activateMenuBack(root)` in `gamepad-menu-navigation.ts` | `exact-ported` (stock modal exclusion `0x008203F0`) | presses the `[data-game-back]` owner of `activeNavigationRoot(root, true)`: pause `RESUME`, settings `BACK` then `DONE`, search `DONE`, player card Close, picker Cancel; a modal without a back owner swallows the press (`modal-without-back`); the pause menu is never raised over a modal |
+| skull press with nothing open | scene gate `menuAvailable` published by `HubScene` (`!inputBlocked && !modalOpen && !transitionActive`), `BoneyardScene` (`!sceneInputBlocked && run.phase === 'active'`), Dark Cloud (`!darkCloudMenuOpen && settingsContext === null`) | `exact-ported` (keyboard edge gate `DAT_008203f0 == 0 && param_1[0x22] == 0`) | `data-game-menu-available` mirrors the gate; the press calls the same `requestGameplayPause` / `openDarkCloudMenu` owners as the key |
+| Dark Cloud pause back owner | `GameplayPauseMenu` `backAction="resume"` with `escapeAction={null}` | `exact-ported` (native owner swallows the second OPEN MENU; back is the `RESUME[0]` row) | skull and controller B resume; a second OPEN MENU key is still consumed |
+| Hub/Boneyard settings close | `MainMenuScene` `onClose` | `verified-already-at-parity` (`GAME SETTINGS` handoff, Done releases the pause) | after `DONE` no pause overlay remains; the skull is available again |
+| HUD skull, Dark Cloud crest skull, `useCoarsePointer`, `onMenuClick` | `GameHud.tsx`, `DarkCloudScene.tsx`, `hub.css`, `dark-cloud.css` | removed (superseded members) | contract test forbids `hub-hud-skull`, `className="dark-cloud-menu"`, `onMenuClick`, `dark-cloud/skull.png` |
+| tutorial skull paint gate | `BoneyardScene` publishes `GameMenuAvailability` (`'hidden'` while `tutorialAccess && !tutorialAccess.combat`, else `'available'`/`'inert'`); `GameMenuSkull` returns `null` for `'hidden'`; `hub.css` tutorial list no longer names a skull | `exact-ported` (stock tutorial paints the skull with the combat HUD, `nativeTutorialHudAccess.combat`) | contract test pins the Boneyard mapping and the `hidden → null` branch; the Hub publishes `'available'`/`'inert'` only |
+| title tutorial offer (`Play the Tutorial?`) | `StockPromptDialog` on a `.main-menu-native-stage` (1600 × 900 stage space) | `verified-already-at-parity` (stock MsgBox port; fits by construction inside the contain-fit stage) | every Website smoke that starts from a fresh profile answers `NO` before `Play` (`smoke-mobile-menus`, `smoke-game-settings`, `smoke-mobile-hud-compact`, `smoke-game-runtime`), the same handling as the owner's smokes |
+| title screen | title `SimpleMenu` owner | `out-of-system` | no skull is rendered on the title |
+| loading fade, Game Over, level-up barrier | `.main-menu-screen-fade`, `GameOverOverlay`, `levelUpBarrier` | `out-of-system` | the fade paints above the skull; the skull unmounts at `game-over`; a modal root without a back owner swallows the press |
+| desktop pointer geometry | `.game-menu-skull` fine-pointer rule | explicit deviation from stock paint-only (already recorded 2026-08-23) | `(11, 7, 31 x 33)` unchanged; pointer smokes still find `.game-menu-skull img` |
+
+No member is blocked by the browser platform.
+
+### Ownership thread and recovered/requested contract
+
+- Dialog fit is one contract for the whole backdrop family: a flex-centred
+  backdrop that fills its stage, a dialog bounded by `max-height: 100%` with no
+  viewport (`vh`) units, its scrolling body owning `overflow: auto` and
+  `overscroll-behavior: contain`, and `margin: auto` on fixed overlays so a
+  tall panel scrolls from its top. Grid centring is forbidden because it is the
+  exact mechanism that let the settings dialog outgrow the stage.
+- Safe-area insets have one owner, the page padding; the stage is contain-fit
+  inside that padded page, so no in-stage rule may apply `env()` again.
+- The skull is a stage-level control, not a HUD member: it sits over the fade
+  order of every scene, receives the frame scale so the desktop geometry equals
+  the stock painter's `(11, 7)` placement, and takes the touch geometry the
+  owner picked on 2026-08-23. Its press has exactly two outcomes: back out of
+  the topmost modal through the controller back convention, or open the scene
+  menu through the scene's own OPEN MENU gate. It never toggles.
+- The scenes publish their gate instead of owning a button, so a fresh scene
+  cannot grow a second skull with different rules.
+
+### Confidence and open questions
+
+- Confirmed: stock paint-only skull and keyboard-edge menu; stock second-edge
+  exclusion; grid-centring root cause of the clipped `DONE`; duplicate safe-area
+  owner; the existing controller back convention; every dialog owner listed.
+- Inferred: none used as native fact. Touch geometry (44 px at `(4, 4)`, 36 px
+  art), 44 px touch rows, and the 30 px player-card Close are owner picks.
+- Unknown: real-device Safari was not driven in this pass; the Mac Chrome
+  journeys emulate both Safari heights (`366` with the address bar, `414`
+  without) with touch and the iPhone user agent. A device check remains the
+  owner's follow-up.
+
+### Web implementation consequence
+
+- `main-menu.css`: settings backdrop flex; dialog `max-height: 100%` with the
+  `minmax(0, 1fr)` body row; content scrolls; one `.game-menu-skull` rule pair
+  (fine pointer scaled geometry, coarse 44 px) and the fade at `100003`.
+- `play-routing-dialog.css`, `join-party.css`, `party-settings.css`,
+  `hub.css`, `dark-cloud.css`, `game-runtime-error.css`,
+  `game-deployment-update.css`: the same contract; `dark-cloud.css` loses its
+  `env()` and `.dark-cloud-menu`; `hub.css` loses the HUD skull and gains the
+  player-card body and the touch picker recipe.
+- `GameMenuSkull.tsx` (new) rendered twice by `MainMenuScene` (Dark Cloud; Hub
+  or Boneyard while a live session exists and the run is not over);
+  `HubScene`/`BoneyardScene` publish `onMenuAvailabilityChange`; `GameHud` and
+  `DarkCloudScene` lose their buttons; `GameplayPauseMenu` gains `backAction`.
+- `gamepad-menu-navigation.ts`: `activateMenuBack(root): 'activated' |
+  'modal-without-back' | 'no-modal'` on top of `activeNavigationRoot`.
+- Journeys: `tools/smoke-mobile-menus.mjs` (new, `npm run
+  smoke:game:mobile-menus`); `smoke-game-runtime.mjs` and
+  `smoke-mobile-hud-compact.mjs` locate `.game-menu-skull`.
+
+### Validation contract
+
+- `mobile-hud-touch-contract.test.ts`: the skull owner/gate/back pins, the
+  removed members, the desktop and touch skull geometry, the fade order, the
+  dialog-fit contract for all nine backdrops (flex, no grid, no `vh`, scroll
+  owners, `margin: auto` panels), and the single safe-area owner (eight
+  `env()` uses in `main-menu.css`, none elsewhere).
+- `gamepad-menu-navigation.test.ts`: `activateMenuBack` presses only the
+  topmost modal's back owner and reports `modal-without-back` / `no-modal`.
+- `dark-cloud-presentation.test.ts`: no `env()` in the Dark Cloud stylesheet;
+  skull pins.
+- Mac Chrome `smoke:game:mobile-menus` at `896 x 366` and `896 x 414`: title
+  settings fit; Dark Cloud skull → menu → skull resumes → settings `DONE` fits
+  and scrolls by drag → skull presses `DONE` → search modal fits → skull presses
+  its `DONE`; Hub skull → pause → skull resumes → settings fits/scrolls → skull
+  `DONE` → player card fits → skull closes it; Boneyard skull → pause → settings
+  → `TWEAK GAME` `BACK` → skull `BACK` → skull `DONE` → resumed; every skull
+  receipt is one `44 x 44` button at stage `(4, 4)` with the right scene and
+  gate; empty page/console error arrays.
+- Mac Chrome `smoke:game:mobile-hud` (18 stops), `smoke:game:settings`, and
+  `smoke:game` keep passing with the relocated skull; the exact candidate
+  passes `./scripts/validate.sh` on the Mac mini.
