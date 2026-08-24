@@ -37762,4 +37762,47 @@ noninteractive.
 
 ### Implementation validation receipt
 
-- Pending implementation and Mac-only validation.
+- Functional Website commit `9ef531fa` was rebased over current `origin/main`
+  `a058a90a`; its receipt-only child retained tree
+  `9553e92539aa5bbdb054701cf847379e9a8fbd86`. That tree was byte-identical at
+  `/Users/jarrett/codex-acceptance/potion-hub-interact-20260823-rebased/website`
+  on the Mac mini. The complete canonical `./scripts/validate.sh` gate passed
+  with Node test-file concurrency fixed to one because unrelated ML training
+  occupied seven of eight logical CPUs: backend build zero warnings/errors and
+  `20/20` integration tests; all `1994/1994` frontend/desktop tests; lint and
+  boundaries; production builds; media policy; and bundle budgets. The Game
+  chunk was `448595` bytes raw / `126123` gzip, below `524288` / `131072`.
+  Gate-log SHA-256 is
+  `cccd63ed13947a71e1a7efa9f82494502df1b8d27498c52ed6facab37f0f5062`.
+- Mod Loader commit `d90f9e87` retained tree
+  `e85018eae61ad4f114e819a047904940cbaeaf55`, byte-identical at the matching
+  `mod-loader` acceptance path. Its complete Python 3.12 static RE suite passed
+  `509/509`; log SHA-256 is
+  `234df7df4f518dbb1146e3f46c26feb2296fe94f00e0b58a30156a1493927257`.
+- A headed Windows Chrome journey then ran the exact final Website tree from
+  `C:\Users\User\codex-acceptance\solomon-potion-hub-interact-20260823-rebased\website`.
+  Protocol 67 activated all rail records in native order `0/6/4/5/2`, opened
+  Annalist and all four service owners, consumed the fresh Health/Mana stacks
+  with keys `3`/`4`, opened Annalist through the visible `E` prompt, and
+  reached a real authored Goodie in generated geometry
+  `9b906dde2f28ebe9a6dabd983fddaf1543c462940069022453b125fa35a81f42`.
+  The Goodie prompt resolved target `goodie:1`; clicking it with no Wizard Key
+  retained the prompt/chest and emitted exact feedback `I need a key!`.
+- The Windows receipt has empty page-error, console-error, failed-response, and
+  unexpected-request-failure arrays. The only classified teardown aborts are
+  the polled development revision manifest and the combat/death MP3 streams.
+  Receipt SHA-256 is
+  `e9f91bc81dedc8458cb60274062243030c0865643d694c95a992410862fc4b01`.
+  Hub rail, NPC prompt, Goodie prompt, and no-key capture SHA-256 values are
+  respectively
+  `1d755cf6a80e4fc5a064e13fb646dfe1039a3ffc6b3195b2cbd4545afdaf910e`,
+  `48700df9c2280152095405d810b1a0813f05d7384e7407f780cae4ee513b4982`,
+  `09a6d367fb504fbac835506b4631f936df5d659d7834d3f4f9791e89b2f8bcfc`,
+  and `184cf21dd4aa60d63722ce82d163bc432544e907aee3c3869b415c30f2ff5cd5`.
+  The artifacts are retained under the Windows acceptance directory's
+  `evidence` folder.
+- The visible prompt/explicit Goodie action and useful Annalist rail dialogue
+  remain intentional, user-confirmed web usability deviations. They retain the
+  recovered stock hit/range/facing geometry and authoritative item ownership.
+  The owner authorized normal fast-forward publication after validation.
+  Production deployment and runtime restart remain separately unauthorized.
