@@ -341,8 +341,12 @@ def main() -> int:
         assert np.allclose(
             bridge.state.observations[:, primary_id_index]
             * POLICY_SPEC.scales["skillId"],
-            16,
+            [16, 24],
         )
+        assert [row["primaryLoadoutKey"] for row in bridge.state.metadata] == [
+            "primary:16",
+            "primary:24",
+        ]
         expert = bridge.expert_step(ticks=2)
         assert expert.transition.actions.shape == (2, 4)
         assert expert.transition.observations.shape == (2, POLICY_SPEC.observation_size)

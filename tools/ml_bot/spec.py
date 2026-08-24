@@ -51,6 +51,7 @@ class PolicySpec:
     observation_names: tuple[str, ...]
     observation_version: int
     option_descriptor_names: tuple[str, ...]
+    primary_curriculum: tuple[Mapping[str, Any], ...]
     scales: Mapping[str, float]
 
     @property
@@ -151,6 +152,43 @@ def load_policy_spec(path: Path = SPEC_PATH) -> PolicySpec:
     descriptor_names = string_tuple(
         value.get("optionDescriptorNames"), "option descriptor names"
     )
+    raw_curriculum = value.get("primaryCurriculum")
+    if not isinstance(raw_curriculum, list) or not raw_curriculum:
+        raise ValueError("policy spec primary curriculum must be a nonempty array")
+    primary_curriculum: list[Mapping[str, Any]] = []
+    curriculum_keys: set[str] = set()
+    for row in raw_curriculum:
+        if not isinstance(row, dict):
+            raise ValueError("policy spec primary curriculum rows must be objects")
+        key = row.get("key")
+        name = row.get("name")
+        element = row.get("creationElement")
+        cast_mode = row.get("castMode")
+        primary_skill_id = row.get("primarySkillId")
+        weld_build_id = row.get("weldBuildId")
+        if (
+            not isinstance(key, str)
+            or not key
+            or key in curriculum_keys
+            or not isinstance(name, str)
+            or not name
+            or element not in ("air", "earth", "ether", "fire", "water")
+            or cast_mode not in ("continuous", "one-shot")
+            or not isinstance(primary_skill_id, int)
+            or isinstance(primary_skill_id, bool)
+            or primary_skill_id < 0
+            or (
+                weld_build_id is not None
+                and (
+                    not isinstance(weld_build_id, int)
+                    or isinstance(weld_build_id, bool)
+                    or weld_build_id < 0
+                )
+            )
+        ):
+            raise ValueError("policy spec primary curriculum row is invalid")
+        curriculum_keys.add(key)
+        primary_curriculum.append(dict(row))
     raw_scales = value.get("scales")
     if not isinstance(raw_scales, dict) or not raw_scales:
         raise ValueError("policy spec scales must be a nonempty object")
@@ -195,6 +233,7 @@ def load_policy_spec(path: Path = SPEC_PATH) -> PolicySpec:
         observation_names=observation_names,
         observation_version=int(value["observationVersion"]),
         option_descriptor_names=descriptor_names,
+        primary_curriculum=tuple(primary_curriculum),
         scales=scales,
     )
 

@@ -39212,12 +39212,13 @@ checkpoint selection, and summoned-bot intent dispatch.
 | choice policy and SMDP credit | choice tracker/trainer | `out-of-system` web policy | interval opens at accepted choice, accumulates every later fixed-tick reward, closes at next offer or death, and chains value/advantage by episode |
 | production v5 checkpoint | server-only selected asset | `out-of-system` retained deployment baseline | no v5 runtime shim in v6; production file remains byte-identical until explicit publication authorization |
 
-No member is blocked by the browser platform. The current summoned participant
-is intentionally Arcane/Fire, so the first v6 training distribution covers the
-skills that participant can actually obtain. The descriptor/observer contract
-still enumerates all five primaries, ten welds, and 23 category-2 rows; training
-other class/element distributions is a separate product expansion, not a silent
-claim of this campaign.
+No member is blocked by the browser platform. The first selected v6 campaign
+was intentionally Arcane/Fire. The owner reopened that boundary on 2026-08-23:
+the final bot must train and evaluate all five pure primaries and all ten Weld
+builds, and Air, Water, Earth, Flame Lash, Blizzard Beam, and Steam Jet must
+demonstrate consecutive held-primary decisions rather than isolated cast
+counts. The all-native curriculum is therefore part of completion, not a later
+class/element expansion.
 
 ### Ownership and recovered behavioral contract
 
@@ -39225,16 +39226,21 @@ claim of this campaign.
   acceptance, mana, cooldowns, target legality, effects, damage, waves, death,
   replication, reset, and teardown. The policy emits only ordinary semantic
   intents.
-- One shared descriptor builder owns the 56 ordered fields for both an offered
+- One shared descriptor builder owns the 106 ordered fields for both an offered
   target rank and a currently equipped effective rank. No copied skill table or
   name-based heuristic is allowed.
 - The v6 observation appends one primary descriptor and eight ordered quickbar
   descriptors to the existing world/combat blocks. Exact empty-slot zero rows
   and exact id/build/rank fields make collisions testable.
-- The current Arcane/Fire curriculum is explicit. The network may learn
-  spell-specific behavior from identity/rank, authored mechanics, active
-  effects, enemy/hazard/world state, and later rewards; it is not told a fixed
-  priority at runtime once the checkpoint is marked learned.
+- One curriculum owner derives pure primaries from the authoritative skill
+  catalog/category table and Welds from `NATIVE_WELD_BUILDS`. Consecutive seeds
+  cover every row without a copied selector list. A future primary becomes a
+  curriculum member through those native owners; the policy learns it from
+  identity, mechanics, runtime effects, legal actions, and later rewards.
+- Continuous primary ownership spans policy decisions. Evaluation records
+  primary-action decisions/ticks, cast-run count, and maximum consecutive held
+  ticks per exact pure/Weld loadout; every channel member must reach at least
+  two consecutive ten-tick policy actions.
 - Choice reward is the same authoritative combat reward stream: self-health
   delta, attributed damage/XP, wave advancement, and terminal death, with
   fixed-tick discount. Promotion remains paired waves reached over frozen 30 +
@@ -39270,13 +39276,15 @@ claim of this campaign.
   SMDP PPO, disjoint optimizer ownership, immutable combat trunk during a
   choice-only update, and fail-closed legacy resume.
 - Fresh Mac bootstrap must pass action diversity, potion imitation, choice
-  diversity, train/holdout imitation, behavior probes, and Python/TypeScript
-  main-and-choice inference parity.
+  diversity, complete per-primary action coverage, train/holdout imitation,
+  behavior probes, and Python/TypeScript main-and-choice inference parity.
 - Periodic candidate screens record exact equipped skill ids/ranks, casts by
   skill, chosen ids/families, SMDP events/entropy/loss, authoritative ticks,
   kills, waves reached/completed, deaths, potions, loot, and orbs.
 - Only credible candidates receive paired 30-seed train-distribution and
-  30-seed holdout evaluation. The frozen promotion rule decides packaging.
+  30-seed holdout evaluation. Both sets cover all 15 primary loadouts twice;
+  missing primary actions or a failed continuous-cast member makes a report
+  ineligible before the frozen promotion rule decides packaging.
 - The exact candidate then runs `/opt/homebrew/bin/bash ./scripts/validate.sh`
   and a real Mac Chrome GameHost journey with empty page/console/failed-response
   arrays. Push, main, production replacement, and deployment remain separate

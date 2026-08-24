@@ -9,6 +9,7 @@ import {
   ML_BOT_POLICY_SCALES,
   ML_BOT_POLICY_SPEC,
 } from '../src/game/core-server/ml-bot-policy/spec.ts'
+import { ML_BOT_PRIMARY_CURRICULUM } from '../src/game/core-server/ml-bot-policy/primary-curriculum.ts'
 
 const outputPath = resolve(
   import.meta.dirname,
@@ -20,6 +21,7 @@ const artifact = {
   blocks: ML_BOT_POLICY_BLOCKS,
   observationNames: ML_BOT_POLICY_OBSERVATION_NAMES,
   optionDescriptorNames: ML_BOT_POLICY_OPTION_DESCRIPTOR_NAMES,
+  primaryCurriculum: ML_BOT_PRIMARY_CURRICULUM,
   scales: ML_BOT_POLICY_SCALES,
 }
 const expected = `${JSON.stringify(artifact, null, 2)}\n`

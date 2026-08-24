@@ -3,6 +3,9 @@ import readline from 'node:readline'
 import {
   BoneyardHeadlessWorkerPool,
 } from '../src/game/headless/boneyard-headless-worker-pool.ts'
+import {
+  mlBotPrimaryCurriculumEntryForSeed,
+} from '../src/game/core-server/ml-bot-policy/primary-curriculum.ts'
 
 const PROTOCOL = 'solomon-dark-ml-rollout-v6-choice1'
 let pool = null
@@ -43,11 +46,12 @@ async function dispatch(request) {
     pool = await BoneyardHeadlessWorkerPool.create({
       environments: seeds.map(seed => ({
         choiceMode: request.learnedChoices === true ? 'learned' : 'scripted',
+        primaryLoadoutKey: mlBotPrimaryCurriculumEntryForSeed(seed).key,
         seed,
       })),
       workerCount: optionalPositiveInteger(request.workerCount, seeds.length, 'workerCount'),
     })
-    return stateResult(await pool.reset(seeds.map(seed => ({ seed }))), 'initialized')
+    return stateResult(await pool.reset(seeds.map(primaryReset)), 'initialized')
   }
   if (request.type === 'close') {
     if (pool !== null) {
@@ -60,7 +64,9 @@ async function dispatch(request) {
   if (request.type === 'reset') {
     const seeds = requireSeeds(request.seeds, true)
     if (seeds.length !== pool.worldCount) throw new Error('reset seeds must match world count')
-    return stateResult(await pool.reset(seeds.map(seed => seed === null ? null : { seed })), 'reset')
+    return stateResult(await pool.reset(seeds.map(seed => (
+      seed === null ? null : primaryReset(seed)
+    ))), 'reset')
   }
   if (request.type === 'select-choices') {
     return stateResult(
@@ -77,6 +83,13 @@ async function dispatch(request) {
     return stepResult(await pool.step(Float32Array.from(packed), ticks), 'step')
   }
   throw new Error(`unknown ML rollout request type ${String(request.type)}`)
+}
+
+function primaryReset(seed) {
+  return {
+    primaryLoadoutKey: mlBotPrimaryCurriculumEntryForSeed(seed).key,
+    seed,
+  }
 }
 
 function stateResult(result, type) {

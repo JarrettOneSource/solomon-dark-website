@@ -18,6 +18,10 @@ test('rollout server carries exact plans, expert transitions, and selective rese
     assert.equal(initialized.protocol, 'solomon-dark-ml-rollout-v6-choice1')
     assert.equal(initialized.worldCount, 2)
     assert.deepEqual(initialized.metadata.map(({ seed }) => seed), [101, 102])
+    assert.deepEqual(
+      initialized.metadata.map(({ primaryLoadoutKey }) => primaryLoadoutKey),
+      ['weld:1006', 'weld:1007'],
+    )
     assert.ok(initialized.metadata.every(({ geometrySha256, runId }) => (
       geometrySha256.length > 0 && runId.length > 0
     )))
@@ -41,6 +45,7 @@ test('rollout server carries exact plans, expert transitions, and selective rese
 
     const reset = await bridge.request({ seeds: [101, null], type: 'reset' })
     assert.equal(reset.hashes[0], initialized.hashes[0])
+    assert.equal(reset.metadata[0].primaryLoadoutKey, 'weld:1006')
     assert.equal(reset.hashes[1], expert.hashes[1])
 
     const rejected = await bridge.request({ actions: '', type: 'step' })

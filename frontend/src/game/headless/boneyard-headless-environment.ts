@@ -8,12 +8,19 @@ import {
   type PlayerCharacterInput,
 } from '../core-kernels/player-character.ts'
 import {
+  NATIVE_WELD_BUILDS,
+  SPELL_WELDING_SKILL_ID,
+  type PlayerSkillOfferOption,
+} from '../core-kernels/player-progression.ts'
+import {
   addPlayerCharacter,
   applyGameSimulationHubAction,
   createGameSimulation,
   enterBoneyardWorld,
   gameSimulationPlayerRecords,
   getPlayerProgression,
+  getPlayerSkillBook,
+  selectGameSimulationPlayerPrimarySkill,
   selectGameSimulationPlayerSkill,
   stepGameSimulationTick,
   type GameSimulationState,
@@ -50,6 +57,11 @@ import {
   type MlBotPolicySkillSelection,
 } from '../core-server/ml-bot-policy/skill-chooser.ts'
 import { describeMlBotPolicySkillOffer } from '../core-server/ml-bot-policy/skill-options.ts'
+import {
+  ML_BOT_PRIMARY_CURRICULUM,
+  mlBotPrimaryCurriculumEntry,
+  type MlBotPrimaryCurriculumEntry,
+} from '../core-server/ml-bot-policy/primary-curriculum.ts'
 import { ML_BOT_POLICY_OBSERVATION_NAMES } from '../core-server/ml-bot-policy/spec.ts'
 import type { MlBotPolicyMainTrajectoryRecord } from '../core-server/ml-bot-policy/trajectory.ts'
 import { NATIVE_GENERATED_BONEYARDS } from '../host/native-generated-boneyards.ts'
@@ -66,6 +78,7 @@ const DEFAULT_AGENT: PlayerCharacterConfig = Object.freeze({
 })
 
 export interface BoneyardHeadlessResetOptions {
+  readonly primaryLoadoutKey?: string
   readonly seed: number
 }
 
@@ -133,9 +146,13 @@ export interface BoneyardHeadlessPolicyStep {
 }
 
 export interface BoneyardHeadlessEpisodeMetadata {
+  readonly continuousPrimaryCast: boolean
   readonly geometrySha256: string
+  readonly primaryLoadoutKey: string
+  readonly primarySkillId: number
   readonly runId: string
   readonly seed: number
+  readonly weldBuildId: number | null
 }
 
 export class BoneyardHeadlessEnvironment {
@@ -510,19 +527,29 @@ export class BoneyardHeadlessEnvironment {
 
   episodeMetadata(): BoneyardHeadlessEpisodeMetadata {
     const boneyard = deterministicBoneyard(this.resetOptions.seed)
+    const primary = this.primaryLoadout(this.resetOptions)
     return {
+      continuousPrimaryCast: primary.castMode === 'continuous',
       geometrySha256: boneyard.geometrySha256,
+      primaryLoadoutKey: primary.key,
+      primarySkillId: primary.primarySkillId,
       runId: boneyard.runId,
       seed: this.resetOptions.seed,
+      weldBuildId: primary.weldBuildId,
     }
   }
 
   private createSimulation(options: BoneyardHeadlessResetOptions): GameSimulationState {
+    const primary = this.primaryLoadout(options)
     let simulation = createGameSimulation({}, {
       combatRngSeed: options.seed,
       gameRngSeed: options.seed,
     })
-    simulation = addPlayerCharacter(simulation, HEADLESS_PLAYER_ID, this.agent)
+    simulation = addPlayerCharacter(simulation, HEADLESS_PLAYER_ID, {
+      ...this.agent,
+      element: primary.creationElement,
+    })
+    simulation = applyHeadlessPrimaryLoadout(simulation, primary)
     for (const [index, ally] of this.allies.entries()) {
       simulation = addPlayerCharacter(simulation, `ally-${index + 1}`, ally)
     }
@@ -586,6 +613,17 @@ export class BoneyardHeadlessEnvironment {
       deterministicBoneyard(options.seed).runId,
       HEADLESS_PLAYER_ID,
     )
+  }
+
+  private primaryLoadout(options: BoneyardHeadlessResetOptions): MlBotPrimaryCurriculumEntry {
+    if (options.primaryLoadoutKey !== undefined) {
+      return mlBotPrimaryCurriculumEntry(options.primaryLoadoutKey)
+    }
+    const primary = ML_BOT_PRIMARY_CURRICULUM.find((entry) => (
+      entry.weldBuildId === null && entry.creationElement === this.agent.element
+    ))
+    if (!primary) throw new Error(`ML bot curriculum has no ${this.agent.element} primary`)
+    return primary
   }
 
   private openScriptedChoice(event: MlBotPolicyScriptedChoiceEvent): void {
@@ -674,7 +712,84 @@ function validatedResetOptions(options: BoneyardHeadlessResetOptions): BoneyardH
   if (!Number.isInteger(options.seed) || options.seed < 0 || options.seed > 0xffff_ffff) {
     throw new RangeError('headless seed must be a uint32')
   }
-  return { seed: options.seed }
+  if (options.primaryLoadoutKey !== undefined) {
+    mlBotPrimaryCurriculumEntry(options.primaryLoadoutKey)
+  }
+  return {
+    ...(options.primaryLoadoutKey === undefined
+      ? {}
+      : { primaryLoadoutKey: options.primaryLoadoutKey }),
+    seed: options.seed,
+  }
+}
+
+function applyHeadlessPrimaryLoadout(
+  source: GameSimulationState,
+  primary: MlBotPrimaryCurriculumEntry,
+): GameSimulationState {
+  let state = source
+  if (primary.weldBuildId !== null) {
+    const weld = NATIVE_WELD_BUILDS.find(({ id }) => id === primary.weldBuildId)
+    if (!weld) throw new Error(`ML bot curriculum weld ${primary.weldBuildId} is absent`)
+    for (const skillId of weld.primarySkillIds) {
+      if ((getPlayerSkillBook(state, HEADLESS_PLAYER_ID).permanentRanks[skillId] ?? 0) < 1) {
+        state = grantHeadlessPrimarySkill(state, { skillId, targetRank: 1 })
+      }
+    }
+    return grantHeadlessPrimarySkill(state, {
+      skillId: SPELL_WELDING_SKILL_ID,
+      targetRank: 1,
+      weldBuildId: primary.weldBuildId,
+    })
+  }
+  if ((getPlayerSkillBook(state, HEADLESS_PLAYER_ID).permanentRanks[primary.primarySkillId] ?? 0) < 1) {
+    state = grantHeadlessPrimarySkill(state, {
+      skillId: primary.primarySkillId,
+      targetRank: 1,
+    })
+  }
+  const selected = selectGameSimulationPlayerPrimarySkill(
+    state,
+    HEADLESS_PLAYER_ID,
+    primary.primarySkillId,
+  )
+  if (!selected) throw new Error(`ML bot curriculum primary ${primary.primarySkillId} was rejected`)
+  return selected
+}
+
+function grantHeadlessPrimarySkill(
+  source: GameSimulationState,
+  option: PlayerSkillOfferOption,
+): GameSimulationState {
+  const index = source.playerEntities.identities.findIndex(({ playerId }) => (
+    playerId === HEADLESS_PLAYER_ID
+  ))
+  if (index < 0) throw new Error('ML bot curriculum agent is absent')
+  const sequence = 0x7000_0000 + option.skillId + (option.weldBuildId ?? 0)
+  const progressions = [...source.playerEntities.progressions]
+  progressions[index] = {
+    ...progressions[index]!,
+    pendingLevels: Object.freeze([1]),
+    pendingOffer: Object.freeze({
+      level: 1,
+      options: Object.freeze([Object.freeze({ ...option })]),
+      sequence,
+    }),
+  }
+  const pending: GameSimulationState = {
+    ...source,
+    playerEntities: {
+      ...source.playerEntities,
+      progressions: Object.freeze(progressions),
+    },
+  }
+  const applied = selectGameSimulationPlayerSkill(pending, HEADLESS_PLAYER_ID, {
+    choiceIndex: 0,
+    offerSequence: sequence,
+    skillId: option.skillId,
+  })
+  if (!applied) throw new Error(`ML bot curriculum skill ${option.skillId} was rejected`)
+  return applied
 }
 
 function validateActionSlice(actions: Float32Array, offset: number): void {

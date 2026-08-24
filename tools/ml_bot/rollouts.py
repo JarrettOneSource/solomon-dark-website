@@ -478,9 +478,13 @@ def resolve_policy_choices(
 
 @dataclass
 class EpisodeAccumulator:
+    continuous_primary_cast: bool
     geometry_sha256: str
+    primary_loadout_key: str
+    primary_skill_id: int
     run_id: str
     seed: int
+    weld_build_id: int | None
     steps: int = 0
     simulation_ticks: int = 0
     episode_return: float = 0.0
@@ -499,6 +503,11 @@ class EpisodeAccumulator:
         "aim": [0] * 9,
     })
     spell_actions_by_skill_id: dict[str, int] = field(default_factory=dict)
+    primary_action_decisions: int = 0
+    primary_action_ticks: int = 0
+    primary_cast_runs: int = 0
+    current_primary_cast_run_ticks: int = 0
+    maximum_primary_cast_run_ticks: int = 0
     maximum_equipped_skill_ranks: dict[str, int] = field(default_factory=dict)
     consumables_used: int = 0
     enemy_kills: int = 0
@@ -570,6 +579,20 @@ class EpisodeLedger:
                 accumulator.spell_actions_by_skill_id[key] = (
                     accumulator.spell_actions_by_skill_id.get(key, 0) + 1
                 )
+            if int(actions[world, 2]) == 1:
+                if skill_id != accumulator.primary_skill_id:
+                    raise RuntimeError("primary action identity disagrees with episode curriculum")
+                action_ticks = int(transition.ticks[world])
+                accumulator.primary_action_decisions += 1
+                accumulator.primary_action_ticks += action_ticks
+                accumulator.current_primary_cast_run_ticks += action_ticks
+                accumulator.maximum_primary_cast_run_ticks = max(
+                    accumulator.maximum_primary_cast_run_ticks,
+                    accumulator.current_primary_cast_run_ticks,
+                )
+            elif accumulator.current_primary_cast_run_ticks > 0:
+                accumulator.primary_cast_runs += 1
+                accumulator.current_primary_cast_run_ticks = 0
             for equipped_id, rank in equipped_skill_ranks(observation).items():
                 key = str(equipped_id)
                 accumulator.maximum_equipped_skill_ranks[key] = max(
@@ -772,6 +795,13 @@ def expert_dataset_diagnostics(dataset: ExpertDataset) -> Mapping[str, Any]:
         name: np.bincount(dataset.actions[name], minlength=dataset.masks[name].shape[1]).tolist()
         for name in ACTION_ORDER
     }
+    primary_rows: dict[str, int] = {}
+    primary_actions: dict[str, int] = {}
+    for index, observation in enumerate(dataset.observations):
+        key = equipped_primary_loadout_key(observation)
+        primary_rows[key] = primary_rows.get(key, 0) + 1
+        if int(dataset.actions["ability"][index]) == 1:
+            primary_actions[key] = primary_actions.get(key, 0) + 1
     return {
         "interestingFraction": float(np.mean(interesting)),
         "enemyPresentFraction": float(np.mean(
@@ -781,14 +811,20 @@ def expert_dataset_diagnostics(dataset: ExpertDataset) -> Mapping[str, Any]:
         "uniqueActions": {
             name: int(np.count_nonzero(histogram)) for name, histogram in histograms.items()
         },
+        "primaryLoadoutRows": dict(sorted(primary_rows.items())),
+        "primaryActionsByLoadout": dict(sorted(primary_actions.items())),
     }
 
 
 def new_episode(value: Mapping[str, Any]) -> EpisodeAccumulator:
     return EpisodeAccumulator(
+        continuous_primary_cast=bool(value["continuousPrimaryCast"]),
         geometry_sha256=str(value["geometrySha256"]),
+        primary_loadout_key=str(value["primaryLoadoutKey"]),
+        primary_skill_id=int(value["primarySkillId"]),
         run_id=str(value["runId"]),
         seed=int(value["seed"]),
+        weld_build_id=None if value["weldBuildId"] is None else int(value["weldBuildId"]),
     )
 
 
@@ -812,6 +848,17 @@ def episode_record(
         "reward_clamp_count": accumulator.clamp_count,
         "action_histograms": accumulator.action_histograms,
         "spell_actions_by_skill_id": accumulator.spell_actions_by_skill_id,
+        "primary_loadout_key": accumulator.primary_loadout_key,
+        "primary_skill_id": accumulator.primary_skill_id,
+        "weld_build_id": accumulator.weld_build_id,
+        "continuous_primary_cast": accumulator.continuous_primary_cast,
+        "primary_action_decisions": accumulator.primary_action_decisions,
+        "primary_action_ticks": accumulator.primary_action_ticks,
+        "primary_cast_runs": (
+            accumulator.primary_cast_runs
+            + int(accumulator.current_primary_cast_run_ticks > 0)
+        ),
+        "maximum_primary_cast_run_ticks": accumulator.maximum_primary_cast_run_ticks,
         "maximum_equipped_skill_ranks": accumulator.maximum_equipped_skill_ranks,
         "consumables_used": accumulator.consumables_used,
         "enemy_kills": accumulator.enemy_kills,
@@ -901,3 +948,15 @@ def equipped_skill_id(observation: np.ndarray, prefix: str) -> int | None:
     if not 0 <= skill_id <= POLICY_SPEC.scales["skillId"]:
         raise ValueError("equipped skill identity is outside the policy contract")
     return skill_id
+
+
+def equipped_primary_loadout_key(observation: np.ndarray) -> str:
+    skill_id = equipped_skill_id(observation, "equipped_primary")
+    if skill_id is None:
+        raise ValueError("equipped primary loadout is absent")
+    if skill_id != 52:
+        return f"primary:{skill_id}"
+    build_id = 1_000 + round(
+        float(observation[FEATURE["equipped_primary_weld_build_index_scaled"]]) * 10
+    )
+    return f"weld:{build_id}"

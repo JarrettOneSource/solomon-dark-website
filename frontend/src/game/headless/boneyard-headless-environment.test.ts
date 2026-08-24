@@ -6,7 +6,11 @@ import {
   canPlaceBoneyardBody,
   withBoneyardGateCollision,
 } from '../core-server/boneyard-collision.ts'
-import { gameSimulationPlayerRecords } from '../core-server/game-simulation.ts'
+import {
+  gameSimulationPlayerRecords,
+  getPlayerSkillBook,
+} from '../core-server/game-simulation.ts'
+import { ML_BOT_PRIMARY_CURRICULUM } from '../core-server/ml-bot-policy/primary-curriculum.ts'
 import {
   BONEYARD_HEADLESS_ACTION_STRIDE,
   BoneyardHeadlessEnvironment,
@@ -109,6 +113,56 @@ test('headless wave staging places every participant inside the sealed combat ar
 test('Boneyard headless reset rejects seeds outside uint32', () => {
   assert.throws(() => new BoneyardHeadlessEnvironment({ seed: -1 }), /uint32/)
   assert.throws(() => new BoneyardHeadlessEnvironment({ seed: 0x1_0000_0000 }), /uint32/)
+})
+
+test('Boneyard headless materializes every pure and welded primary curriculum member', () => {
+  for (const [index, primary] of ML_BOT_PRIMARY_CURRICULUM.entries()) {
+    const environment = new BoneyardHeadlessEnvironment({
+      primaryLoadoutKey: primary.key,
+      seed: 0x5000_0000 + index,
+    })
+    const skillBook = getPlayerSkillBook(environment.state(), 'agent')
+    assert.equal(skillBook.primarySkillId, primary.primarySkillId, primary.key)
+    assert.equal(skillBook.weldBuildId, primary.weldBuildId, primary.key)
+    assert.deepEqual(environment.episodeMetadata(), {
+      continuousPrimaryCast: primary.castMode === 'continuous',
+      geometrySha256: environment.episodeMetadata().geometrySha256,
+      primaryLoadoutKey: primary.key,
+      primarySkillId: primary.primarySkillId,
+      runId: `headless-${(0x5000_0000 + index).toString(16)}`,
+      seed: 0x5000_0000 + index,
+      weldBuildId: primary.weldBuildId,
+    })
+  }
+})
+
+test('native expert holds every continuous primary across policy decisions', () => {
+  for (const [index, primary] of ML_BOT_PRIMARY_CURRICULUM.entries()) {
+    if (primary.castMode !== 'continuous') continue
+    const environment = new BoneyardHeadlessEnvironment({
+      primaryLoadoutKey: primary.key,
+      seed: 0x5100_0000 + index,
+    })
+    let consecutivePrimaryDecisions = 0
+    let maximumConsecutivePrimaryDecisions = 0
+    for (let decision = 0; decision < 800 && maximumConsecutivePrimaryDecisions < 2; decision += 1) {
+      const action = environment.expertAction()
+      consecutivePrimaryDecisions = action.ability === 1
+        ? consecutivePrimaryDecisions + 1
+        : 0
+      maximumConsecutivePrimaryDecisions = Math.max(
+        maximumConsecutivePrimaryDecisions,
+        consecutivePrimaryDecisions,
+      )
+      environment.step(Float32Array.from([
+        action.movement,
+        action.target,
+        action.ability,
+        action.aim,
+      ]), 10)
+    }
+    assert.ok(maximumConsecutivePrimaryDecisions >= 2, primary.key)
+  }
 })
 
 test('Boneyard action repeat stops on the first terminal simulation tick', () => {

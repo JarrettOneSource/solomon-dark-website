@@ -29,6 +29,12 @@ const WELD_CAST_KIND: Readonly<Record<NativeWeldBuildId, NativeWeldCastKind>> = 
   1009: 'one-shot',
 }
 
+export function nativeWeldPrimaryCastMode(buildId: number): NativeWeldCastKind {
+  const build = nativeWeldBuild(buildId)
+  if (!build) throw new RangeError(`weld build ${buildId} is not native`)
+  return WELD_CAST_KIND[build.id as NativeWeldBuildId]
+}
+
 const F32_001 = 0.009999999776482582
 const F32_002 = 0.019999999552965164
 const F32_08 = 0.800000011920929

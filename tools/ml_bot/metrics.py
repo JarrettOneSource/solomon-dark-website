@@ -12,6 +12,7 @@ from typing import Any, Iterable, Mapping, Sequence
 import numpy as np
 
 from .checkpoint import load_checkpoint
+from .spec import POLICY_SPEC
 
 
 def append_jsonl(path: Path, value: Mapping[str, Any]) -> None:
@@ -147,6 +148,7 @@ def episode_gameplay_summary(records: Iterable[Mapping[str, Any]]) -> Mapping[st
         "skill_choice_modes": {},
         "spell_actions_by_skill_id": {},
         "maximum_equipped_skill_ranks": {},
+        "primary_loadouts": {},
         "gold_collected": 0.0,
         "items_collected": 0,
         "item_kinds": {},
@@ -197,7 +199,71 @@ def episode_gameplay_summary(records: Iterable[Mapping[str, Any]]) -> Mapping[st
                 totals["skill_choice_modes"][mode] = (
                     totals["skill_choice_modes"].get(mode, 0) + 1
                 )
+        loadout_key = record.get("primary_loadout_key")
+        if isinstance(loadout_key, str) and loadout_key:
+            loadout = totals["primary_loadouts"].setdefault(loadout_key, {
+                "continuousPrimaryCast": bool(record.get("continuous_primary_cast")),
+                "deaths": 0,
+                "enemyKills": 0,
+                "episodes": 0,
+                "maximumPrimaryCastRunTicks": 0,
+                "primaryActionDecisions": 0,
+                "primaryActionTicks": 0,
+                "primaryCastRuns": 0,
+                "primarySkillId": int(record.get("primary_skill_id", -1)),
+                "wavesCompleted": 0,
+                "wavesReached": 0,
+                "weldBuildId": record.get("weld_build_id"),
+            })
+            if (
+                loadout["continuousPrimaryCast"]
+                != bool(record.get("continuous_primary_cast"))
+                or loadout["primarySkillId"] != int(record.get("primary_skill_id", -1))
+                or loadout["weldBuildId"] != record.get("weld_build_id")
+            ):
+                raise ValueError(f"primary loadout metadata changed for {loadout_key}")
+            loadout["episodes"] += 1
+            loadout["deaths"] += int(bool(record.get("death")))
+            loadout["enemyKills"] += int(record.get("enemy_kills", 0))
+            loadout["wavesCompleted"] += int(record.get("waves_completed", 0))
+            loadout["wavesReached"] += int(record.get("waves_reached", 0))
+            loadout["primaryActionDecisions"] += int(record.get("primary_action_decisions", 0))
+            loadout["primaryActionTicks"] += int(record.get("primary_action_ticks", 0))
+            loadout["primaryCastRuns"] += int(record.get("primary_cast_runs", 0))
+            loadout["maximumPrimaryCastRunTicks"] = max(
+                loadout["maximumPrimaryCastRunTicks"],
+                int(record.get("maximum_primary_cast_run_ticks", 0)),
+            )
+    totals["primary_loadouts"] = dict(sorted(totals["primary_loadouts"].items()))
     return totals
+
+
+def primary_curriculum_coverage(records: Sequence[Mapping[str, Any]]) -> Mapping[str, Any]:
+    loadouts = episode_gameplay_summary(records)["primary_loadouts"]
+    expected = {str(row["key"]): row for row in POLICY_SPEC.primary_curriculum}
+    missing = sorted(set(expected) - set(loadouts))
+    without_actions = sorted(
+        key for key, row in loadouts.items() if int(row["primaryActionDecisions"]) < 1
+    )
+    continuous_failures = sorted(
+        key
+        for key, contract in expected.items()
+        if contract["castMode"] == "continuous"
+        and (
+            key not in loadouts
+            or int(loadouts[key]["maximumPrimaryCastRunTicks"]) < 20
+        )
+    )
+    return {
+        "coverageVersion": 1,
+        "expectedLoadouts": sorted(expected),
+        "observedLoadouts": sorted(loadouts),
+        "missingLoadouts": missing,
+        "loadoutsWithoutPrimaryActions": without_actions,
+        "continuousCastFailures": continuous_failures,
+        "minimumContinuousCastTicks": 20,
+        "passed": not missing and not without_actions and not continuous_failures,
+    }
 
 
 def aggregate_reward_terms(records: Iterable[Mapping[str, Any]]) -> dict[str, float]:
@@ -275,6 +341,8 @@ def training_summary(
                 gameplay["maximum_equipped_skill_ranks"].get(skill_id, 0),
             )
     completed = [episode for episode in episodes if episode.get("aborted") is False]
+    episode_gameplay = episode_gameplay_summary(episodes)
+    gameplay["primary_loadouts"] = episode_gameplay["primary_loadouts"]
     digest = hashlib.sha256(checkpoint.read_bytes()).hexdigest()
     return {
         "summary_version": 6,
@@ -291,6 +359,7 @@ def training_summary(
         "best_wave": max((episode["waves_reached"] for episode in completed), default=0),
         "best_return": max((episode["return"] for episode in completed), default=0.0),
         "maximum_kl": max(record.get("kl_divergence_max", 0.0) for record in metrics),
+        "primary_curriculum_coverage": primary_curriculum_coverage(completed),
         "reward_clamp_adjustment": sum(
             record.get("reward_terms", {}).get("clamp_adjustment", 0.0)
             for record in metrics

@@ -486,18 +486,31 @@ function requiredEpisodeMetadata(
   return value.map((entry): BoneyardHeadlessEpisodeMetadata => {
     const source = requiredObject(entry, 'Boneyard headless worker episode metadata')
     if (
-      typeof source.geometrySha256 !== 'string'
+      typeof source.continuousPrimaryCast !== 'boolean'
+      || typeof source.geometrySha256 !== 'string'
       || source.geometrySha256.length === 0
       || typeof source.runId !== 'string'
       || source.runId.length === 0
       || !Number.isInteger(source.seed)
       || Number(source.seed) < 0
       || Number(source.seed) > 0xffff_ffff
+      || typeof source.primaryLoadoutKey !== 'string'
+      || source.primaryLoadoutKey.length === 0
+      || !Number.isInteger(source.primarySkillId)
+      || Number(source.primarySkillId) < 0
+      || (
+        source.weldBuildId !== null
+        && (!Number.isInteger(source.weldBuildId) || Number(source.weldBuildId) < 0)
+      )
     ) throw new Error('Boneyard headless worker returned invalid episode metadata')
     return {
+      continuousPrimaryCast: source.continuousPrimaryCast,
       geometrySha256: source.geometrySha256,
+      primaryLoadoutKey: source.primaryLoadoutKey,
+      primarySkillId: Number(source.primarySkillId),
       runId: source.runId,
       seed: Number(source.seed),
+      weldBuildId: source.weldBuildId === null ? null : Number(source.weldBuildId),
     }
   })
 }

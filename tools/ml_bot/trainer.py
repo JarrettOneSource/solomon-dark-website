@@ -22,7 +22,12 @@ from .advantages import (
 from .bridge import BoneyardRolloutBridge
 from .checkpoint import atomic_write, load_checkpoint, save_checkpoint
 from .diagnostics import write_observation_audit, write_spatial_replay, write_value_calibration
-from .metrics import append_jsonl, bootstrap_mean_interval, episode_gameplay_summary
+from .metrics import (
+    append_jsonl,
+    bootstrap_mean_interval,
+    episode_gameplay_summary,
+    primary_curriculum_coverage,
+)
 from .model import PolicyV6
 from .optimization import (
     ChoiceCoverage,
@@ -134,11 +139,20 @@ def bootstrap_policy(
         rng=np.random.default_rng(configuration.seed + 1),
     )
     dataset_diagnostics = expert_dataset_diagnostics(dataset)
+    expected_primary_loadouts = {str(row["key"]) for row in POLICY_SPEC.primary_curriculum}
+    observed_primary_loadouts = set(dataset_diagnostics["primaryLoadoutRows"])
+    primary_action_loadouts = {
+        key
+        for key, count in dataset_diagnostics["primaryActionsByLoadout"].items()
+        if int(count) > 0
+    }
     if (
         dataset_diagnostics["interestingFraction"] < 0.5
         or dataset_diagnostics["uniqueActions"]["movement"] < 2
         or dataset_diagnostics["uniqueActions"]["target"] < 2
         or dataset_diagnostics["uniqueActions"]["ability"] < 2
+        or observed_primary_loadouts != expected_primary_loadouts
+        or primary_action_loadouts != expected_primary_loadouts
     ):
         raise RuntimeError(f"expert dataset diversity gate failed: {dataset_diagnostics}")
     device = torch.device("cpu")
@@ -667,6 +681,7 @@ def evaluation_report(
 ) -> Mapping[str, Any]:
     completed = [record for record in records if record.get("aborted") is False]
     incomplete = [record for record in records if record.get("aborted") is True]
+    primary_coverage = primary_curriculum_coverage(completed)
     returns = [float(record["return"]) for record in completed]
     waves = [float(record["waves_reached"]) for record in completed]
     return {
@@ -680,8 +695,13 @@ def evaluation_report(
         "maximumSteps": maximum_steps,
         "completeEpisodes": len(completed),
         "incompleteEpisodes": len(incomplete),
-        "validForPromotion": len(completed) == len(seeds) and len(completed) >= 30,
+        "validForPromotion": (
+            len(completed) == len(seeds)
+            and len(completed) >= 30
+            and primary_coverage["passed"] is True
+        ),
         "gameplay": episode_gameplay_summary(records),
+        "primaryCurriculumCoverage": primary_coverage,
         "return": None if not returns else bootstrap_mean_interval(returns, seed=0xE1A1),
         "status": "ok",
         "waveDepth": None if not waves else bootstrap_mean_interval(waves, seed=0xE1A2),

@@ -312,12 +312,43 @@ def decode_episode_metadata(value: Any, worlds: int) -> tuple[Mapping[str, Any],
     for row in rows:
         source = required_mapping(row, "episode metadata row")
         geometry = source.get("geometrySha256")
+        continuous_primary_cast = source.get("continuousPrimaryCast")
+        primary_loadout_key = source.get("primaryLoadoutKey")
+        primary_skill_id = source.get("primarySkillId")
         run_id = source.get("runId")
         seed = source.get("seed")
-        if not isinstance(geometry, str) or not geometry or not isinstance(run_id, str) or not run_id:
+        weld_build_id = source.get("weldBuildId")
+        if (
+            not isinstance(continuous_primary_cast, bool)
+            or not isinstance(geometry, str)
+            or not geometry
+            or not isinstance(primary_loadout_key, str)
+            or not primary_loadout_key
+            or not isinstance(primary_skill_id, int)
+            or isinstance(primary_skill_id, bool)
+            or primary_skill_id < 0
+            or not isinstance(run_id, str)
+            or not run_id
+            or (
+                weld_build_id is not None
+                and (
+                    not isinstance(weld_build_id, int)
+                    or isinstance(weld_build_id, bool)
+                    or weld_build_id < 0
+                )
+            )
+        ):
             raise RolloutProtocolError("episode metadata identity is invalid")
         require_uint32(seed, "episode metadata seed")
-        result.append({"geometrySha256": geometry, "runId": run_id, "seed": seed})
+        result.append({
+            "continuousPrimaryCast": continuous_primary_cast,
+            "geometrySha256": geometry,
+            "primaryLoadoutKey": primary_loadout_key,
+            "primarySkillId": primary_skill_id,
+            "runId": run_id,
+            "seed": seed,
+            "weldBuildId": weld_build_id,
+        })
     return tuple(result)
 
 

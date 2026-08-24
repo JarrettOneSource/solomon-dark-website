@@ -5797,6 +5797,128 @@
       "start": 1784
     }
   ],
+  "primaryCurriculum": [
+    {
+      "castMode": "one-shot",
+      "creationElement": "ether",
+      "key": "primary:8",
+      "name": "Magic Missile",
+      "primarySkillId": 8,
+      "weldBuildId": null
+    },
+    {
+      "castMode": "one-shot",
+      "creationElement": "fire",
+      "key": "primary:16",
+      "name": "Fireball",
+      "primarySkillId": 16,
+      "weldBuildId": null
+    },
+    {
+      "castMode": "continuous",
+      "creationElement": "air",
+      "key": "primary:24",
+      "name": "Lightning",
+      "primarySkillId": 24,
+      "weldBuildId": null
+    },
+    {
+      "castMode": "continuous",
+      "creationElement": "water",
+      "key": "primary:32",
+      "name": "Frost Jet",
+      "primarySkillId": 32,
+      "weldBuildId": null
+    },
+    {
+      "castMode": "continuous",
+      "creationElement": "earth",
+      "key": "primary:40",
+      "name": "Boulder",
+      "primarySkillId": 40,
+      "weldBuildId": null
+    },
+    {
+      "castMode": "one-shot",
+      "creationElement": "ether",
+      "key": "weld:1000",
+      "name": "Burning Bolt",
+      "primarySkillId": 52,
+      "weldBuildId": 1000
+    },
+    {
+      "castMode": "one-shot",
+      "creationElement": "ether",
+      "key": "weld:1001",
+      "name": "Frost Missile",
+      "primarySkillId": 52,
+      "weldBuildId": 1001
+    },
+    {
+      "castMode": "one-shot",
+      "creationElement": "ether",
+      "key": "weld:1002",
+      "name": "Ball Lightning",
+      "primarySkillId": 52,
+      "weldBuildId": 1002
+    },
+    {
+      "castMode": "continuous",
+      "creationElement": "fire",
+      "key": "weld:1003",
+      "name": "Flame Lash",
+      "primarySkillId": 52,
+      "weldBuildId": 1003
+    },
+    {
+      "castMode": "continuous",
+      "creationElement": "water",
+      "key": "weld:1004",
+      "name": "Blizzard Beam",
+      "primarySkillId": 52,
+      "weldBuildId": 1004
+    },
+    {
+      "castMode": "continuous",
+      "creationElement": "fire",
+      "key": "weld:1005",
+      "name": "Steam Jet",
+      "primarySkillId": 52,
+      "weldBuildId": 1005
+    },
+    {
+      "castMode": "one-shot",
+      "creationElement": "ether",
+      "key": "weld:1006",
+      "name": "Ethereal Boulder",
+      "primarySkillId": 52,
+      "weldBuildId": 1006
+    },
+    {
+      "castMode": "one-shot",
+      "creationElement": "fire",
+      "key": "weld:1007",
+      "name": "Meteor Swarm",
+      "primarySkillId": 52,
+      "weldBuildId": 1007
+    },
+    {
+      "castMode": "one-shot",
+      "creationElement": "water",
+      "key": "weld:1008",
+      "name": "Hailstones",
+      "primarySkillId": 52,
+      "weldBuildId": 1008
+    },
+    {
+      "castMode": "one-shot",
+      "creationElement": "air",
+      "key": "weld:1009",
+      "name": "Crawling Shock",
+      "primarySkillId": 52,
+      "weldBuildId": 1009
+    }
+  ],
   "scales": {
     "aimOffsetWorld": 60,
     "allyCount": 50,

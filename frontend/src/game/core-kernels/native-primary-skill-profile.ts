@@ -103,6 +103,22 @@ export type NativePrimarySkillProfile =
   | NativeWeldPrimarySkillProfile
   | NativeWaterPrimarySkillProfile
 
+export type NativePrimaryCastMode = 'continuous' | 'one-shot'
+
+export function nativePrimaryCastMode(
+  skillId: 8 | 16 | 24 | 32 | 40,
+): NativePrimaryCastMode {
+  switch (skillId) {
+    case 8:
+    case 16:
+      return 'one-shot'
+    case 24:
+    case 32:
+    case 40:
+      return 'continuous'
+  }
+}
+
 const PRIMARY_SKILL_IDS = Object.freeze([8, 16, 24, 32, 40] as const)
 
 export function nativePrimarySkillProfile(

@@ -19,7 +19,6 @@ export interface MlBotPolicySkillDescriptorInput {
 
 type DescriptorName = typeof ML_BOT_POLICY_OPTION_DESCRIPTOR_NAMES[number]
 
-const PRIMARY_IDS = new Set([8, 16, 24, 32, 40])
 const ELEMENT_FAMILIES = new Set(['air', 'earth', 'ether', 'fire', 'water'])
 const DISCIPLINE_FAMILIES = new Set(['arcane', 'body', 'mind'])
 
@@ -54,7 +53,7 @@ export function describeMlBotPolicySkill(
   for (const name of [
     'ether', 'fire', 'air', 'water', 'earth', 'arcane', 'mind', 'body', 'advanced', 'runtime_only',
   ] as const) values[`family_${name}`] = Number(family === name)
-  values.is_primary = Number(PRIMARY_IDS.has(skillId))
+  values.is_primary = Number(category === 1 && skillId !== 52)
   values.is_secondary = Number(category === 2)
   values.is_passive = Number(category === 0)
   values.is_utility = Number(category === 3 || skillId === 52)
@@ -64,6 +63,9 @@ export function describeMlBotPolicySkill(
   const weld = weldBuildId === undefined
     ? null
     : NATIVE_WELD_BUILDS.find(({ id }) => id === weldBuildId) ?? null
+  if (weldBuildId !== undefined && weld === null) {
+    throw new RangeError(`ML bot policy weld build ${weldBuildId} is not native`)
+  }
   if (weld) {
     for (const primaryId of weld.primarySkillIds) {
       values[`weld_element_${primaryElement(primaryId)}`] = 1
