@@ -116,6 +116,16 @@ const CONTENT_SCHEMAS: Readonly<Record<WebLuaContentDefinition['contentKind'], C
   ui: schema(['accessible_name', 'actions', 'bindings', 'mount', 'view', 'visible'], ['mount', 'view']),
 }
 
+export const WEB_LUA_CONTENT_SCHEMA_FIELDS = Object.freeze(Object.fromEntries(
+  Object.entries(CONTENT_SCHEMAS).map(([kind, definition]) => [kind, Object.freeze({
+    allowed: Object.freeze([...definition.allowed].sort()),
+    required: Object.freeze([...definition.required].sort()),
+  })]),
+)) as Readonly<Record<WebLuaContentDefinition['contentKind'], Readonly<{
+  allowed: readonly string[]
+  required: readonly string[]
+}>>>
+
 const ASSET_FIELDS: Readonly<Record<WebLuaAssetDefinition['assetKind'], ReadonlySet<string>>> = {
   boneyard: new Set(['path', 'source']),
   music: new Set(['bus', 'file', 'loop', 'path', 'volume']),

@@ -1,0 +1,284 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Solomon Dark Web Lua 1.0 definition inventory",
+  "apiVersion": "1.0.0",
+  "content": {
+    "affix": {
+      "allowed": [
+        "applies_to",
+        "art",
+        "description",
+        "equipment",
+        "modifiers",
+        "name",
+        "outcome",
+        "persistence",
+        "presentation",
+        "tags"
+      ],
+      "required": [
+        "modifiers",
+        "name"
+      ]
+    },
+    "affix-pool": {
+      "allowed": [
+        "applies_to",
+        "art",
+        "description",
+        "entries",
+        "exclude_equipment_types",
+        "include",
+        "name",
+        "presentation",
+        "rng_domain",
+        "rolls",
+        "tags"
+      ],
+      "required": [
+        "entries"
+      ]
+    },
+    "boneyard": {
+      "allowed": [
+        "ambience",
+        "anchors",
+        "art",
+        "description",
+        "environment",
+        "name",
+        "presentation",
+        "roster",
+        "source",
+        "tags",
+        "triggers",
+        "waves"
+      ],
+      "required": [
+        "name",
+        "source"
+      ]
+    },
+    "enemy": {
+      "allowed": [
+        "art",
+        "attacks",
+        "base",
+        "behavior",
+        "brain",
+        "description",
+        "loot",
+        "name",
+        "presentation",
+        "stats",
+        "tags"
+      ],
+      "required": [
+        "base",
+        "name"
+      ]
+    },
+    "item": {
+      "allowed": [
+        "art",
+        "description",
+        "equipment",
+        "name",
+        "presentation",
+        "stack",
+        "tags",
+        "use"
+      ],
+      "required": [
+        "name"
+      ]
+    },
+    "potion": {
+      "allowed": [
+        "art",
+        "description",
+        "duration",
+        "loot",
+        "name",
+        "on_use",
+        "presentation",
+        "stacking",
+        "status",
+        "tags"
+      ],
+      "required": [
+        "duration",
+        "name",
+        "on_use"
+      ]
+    },
+    "powerup": {
+      "allowed": [
+        "art",
+        "description",
+        "duration",
+        "effect",
+        "name",
+        "pickup",
+        "presentation",
+        "scope",
+        "stacking",
+        "tags"
+      ],
+      "required": [
+        "effect",
+        "name"
+      ]
+    },
+    "room": {
+      "allowed": [
+        "ambience",
+        "anchors",
+        "art",
+        "description",
+        "encounter",
+        "geometry",
+        "name",
+        "presentation",
+        "props",
+        "tags"
+      ],
+      "required": [
+        "geometry"
+      ]
+    },
+    "scene": {
+      "allowed": [
+        "art",
+        "description",
+        "entry",
+        "form",
+        "instance",
+        "name",
+        "presentation",
+        "return_policy",
+        "return_to",
+        "rooms",
+        "tags",
+        "world"
+      ],
+      "required": [
+        "instance",
+        "rooms"
+      ]
+    },
+    "scene-extension": {
+      "allowed": [
+        "art",
+        "description",
+        "extend",
+        "features",
+        "name",
+        "presentation",
+        "scene",
+        "tags"
+      ],
+      "required": [
+        "features",
+        "scene"
+      ]
+    },
+    "shop": {
+      "allowed": [
+        "art",
+        "currency",
+        "description",
+        "mount",
+        "name",
+        "npc",
+        "presentation",
+        "restock",
+        "services",
+        "stock",
+        "stock_scope",
+        "tags"
+      ],
+      "required": [
+        "name",
+        "stock"
+      ]
+    },
+    "skill": {
+      "allowed": [
+        "art",
+        "description",
+        "grants",
+        "max_rank",
+        "maximum_rank",
+        "name",
+        "offer",
+        "parent",
+        "prerequisites",
+        "presentation",
+        "ranks",
+        "tags"
+      ],
+      "required": [
+        "name",
+        "ranks"
+      ]
+    },
+    "spell": {
+      "allowed": [
+        "art",
+        "behavior",
+        "cast",
+        "casters",
+        "cooldown",
+        "description",
+        "mana",
+        "name",
+        "presentation",
+        "program",
+        "school",
+        "slot",
+        "subskills",
+        "tags",
+        "targeting"
+      ],
+      "required": [
+        "behavior",
+        "name",
+        "slot"
+      ]
+    },
+    "status": {
+      "allowed": [
+        "art",
+        "description",
+        "duration",
+        "modifiers",
+        "name",
+        "presentation",
+        "scope",
+        "stacking",
+        "tags"
+      ],
+      "required": []
+    },
+    "ui": {
+      "allowed": [
+        "accessible_name",
+        "actions",
+        "art",
+        "bindings",
+        "description",
+        "mount",
+        "name",
+        "presentation",
+        "tags",
+        "view",
+        "visible"
+      ],
+      "required": [
+        "mount",
+        "view"
+      ]
+    }
+  }
+}
