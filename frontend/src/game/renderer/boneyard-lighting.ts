@@ -25,6 +25,7 @@ import type {
   NativeWeldMeteorActorState,
   NativeWeldProjectileState,
 } from '../core-kernels/native-weld-primary-runtime.ts'
+import { nativeSolomonDirtOrigin } from './boneyard-solomon-dirt-presentation.ts'
 
 export {
   NATIVE_LANTERN_LIGHT_FLICKER,
@@ -67,6 +68,7 @@ export type NativeBoneyardLightSamples =
 
 export interface NativeSolomonSetPieceLighting {
   digRootTint: number
+  dirtTint: number
   lanternTint: number
 }
 
@@ -858,6 +860,9 @@ export function nativeSolomonSetPieceLighting(
   return {
     digRootTint: nativeBoneyardLightTint(
       nativeBoneyardLightScalar(digPosition, sources),
+    ),
+    dirtTint: nativeBoneyardLightTint(
+      nativeBoneyardLightScalar(nativeSolomonDirtOrigin(digPosition), sources),
     ),
     lanternTint: nativeBoneyardLightTint(
       nativeBoneyardLightScalar(lanternPosition, sources),

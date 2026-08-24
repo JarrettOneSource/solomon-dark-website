@@ -20,7 +20,8 @@ const DIG: SolomonDigState = {
 
 const ENCOUNTER: BoneyardSolomonSnapshot = {
   acceleration: 0,
-  digAudioEvents: [],
+  digBodyOffsetY: 7.5,
+  digEvents: [],
   digFrame: 17,
   escapeSpeed: 0,
   headingDeg: 0,
@@ -40,7 +41,7 @@ const ENCOUNTER: BoneyardSolomonSnapshot = {
   walkCycle: 0,
 }
 
-test('pins the registration-preserving stock Solomon encounter sheet', () => {
+test('pins the registration-preserving stock Solomon sheets and Flydirt glyph', () => {
   const sheet = readFileSync(new URL(
     '../../assets/game/anim-solomon-encounter.png',
     import.meta.url,
@@ -61,6 +62,26 @@ test('pins the registration-preserving stock Solomon encounter sheet', () => {
     createHash('sha256').update(shadow).digest('hex'),
     'f3542e9d1b3621fdecd6f68baedf2d4f3c80762bd21ca7aa9fbb66e530db309c',
   )
+  const dirt = readFileSync(new URL(
+    '../../assets/game/solomon-flydirt.png',
+    import.meta.url,
+  ))
+  assert.equal(dirt.readUInt32BE(16), 28)
+  assert.equal(dirt.readUInt32BE(20), 46)
+  assert.equal(
+    createHash('sha256').update(dirt).digest('hex'),
+    '1a2631f8022e0bef521aa112e4059c9ab7df5f6bfafbe6235972b92788ee95e7',
+  )
+})
+
+test('keeps Flydirt in Solomon child-manager order after body and mouth', () => {
+  const source = readFileSync(new URL(
+    './boneyard-world-renderer.ts',
+    import.meta.url,
+  ), 'utf8')
+  assert.match(source, /this\.mouth\.zIndex = 1/)
+  assert.match(source, /this\.dirtRoot\.zIndex = 2/)
+  assert.match(source, /this\.dirtRoot\.tint = lighting\.dirtTint/)
 })
 
 test('uses the native 15-way 24-degree direction selector', () => {
@@ -76,6 +97,7 @@ test('selects exact native dig, dialogue body, and mouth records', () => {
   assert.equal(digging.bodyPose, 17)
   assert.equal(digging.nativeBodyRecord, 19)
   assert.equal(digging.nativeMouthRecord, null)
+  assert.equal(digging.offsetY, 7.5)
   assert.equal(digging.shadowVisible, true)
 
   const dialogue = boneyardSolomonVisualState({

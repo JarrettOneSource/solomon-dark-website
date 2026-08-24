@@ -5,10 +5,10 @@ import {
   type PlayerCharacterInput,
 } from '../core-kernels/player-character.ts'
 import {
-  BONEYARD_SOLOMON_DIG_AUDIO_CUES,
+  BONEYARD_SOLOMON_DIG_CUES,
   BONEYARD_SOLOMON_PHASES,
   BONEYARD_SOLOMON_VOICE_CUES,
-  type BoneyardSolomonDigAudioCue,
+  type BoneyardSolomonDigCue,
   type BoneyardSolomonPhase,
   type BoneyardSolomonVoiceCue,
 } from '../core-kernels/boneyard-encounter.ts'
@@ -370,7 +370,7 @@ const MAX_BONEYARD_GOODIES = 256
 const MAX_BONEYARD_LOOT_EVENTS = 512
 const MAX_BONEYARD_ENEMY_FLAGS = 64
 const MAX_BONEYARD_ENEMY_EFFECTS = 1
-const MAX_BONEYARD_DIG_AUDIO_EVENTS = 8
+const MAX_BONEYARD_DIG_EVENTS = 8
 const MAX_BONEYARD_VOICE_EVENTS = 8
 const MAX_FOUNTAIN_PARTICLES = 512
 const MAX_PLAYERS = 64
@@ -8183,7 +8183,11 @@ function gameWorldSnapshot(
       'tutorial',
       'waves',
     ])
-    const encounter = boneyardSolomonSnapshot(source.encounter, `${field}.encounter`)
+    const encounter = boneyardSolomonSnapshot(
+      source.encounter,
+      `${field}.encounter`,
+      snapshotTick,
+    )
     const waves = boneyardWaveSnapshot(source.waves, `${field}.waves`)
     const tutorial = nativeTutorialState(source.tutorial, `${field}.tutorial`)
     const arenaTransition = boneyardArenaTransition(
@@ -8763,12 +8767,14 @@ function boneyardEnemyDeathEffectSnapshot(
 function boneyardSolomonSnapshot(
   value: unknown,
   field: string,
+  snapshotTick: number,
 ): BoneyardSolomonSnapshot | null {
   if (value === null) return null
   const source = record(value, field)
   onlyKeys(source, field, [
     'acceleration',
-    'digAudioEvents',
+    'digBodyOffsetY',
+    'digEvents',
     'digFrame',
     'escapeSpeed',
     'headingDeg',
@@ -8803,25 +8809,32 @@ function boneyardSolomonSnapshot(
   if (digFrame >= 18) {
     throw new GameProtocolError(`${field}.digFrame must be within [0,18)`)
   }
-  let previousDigAudioEventId = 0
-  const digAudioEvents = limitedArray(
-    source.digAudioEvents,
-    `${field}.digAudioEvents`,
-    MAX_BONEYARD_DIG_AUDIO_EVENTS,
+  const digBodyOffsetY = finite(source.digBodyOffsetY, `${field}.digBodyOffsetY`)
+  if (digBodyOffsetY < -0.001 || digBodyOffsetY > 10) {
+    throw new GameProtocolError(`${field}.digBodyOffsetY must be within [-0.001,10]`)
+  }
+  let previousDigEventId = 0
+  let previousDigEventTick = 0
+  const digEvents = limitedArray(
+    source.digEvents,
+    `${field}.digEvents`,
+    MAX_BONEYARD_DIG_EVENTS,
   ).map((event, index) => {
-    const eventField = `${field}.digAudioEvents[${index}]`
+    const eventField = `${field}.digEvents[${index}]`
     const item = record(event, eventField)
-    onlyKeys(item, eventField, ['cue', 'id'])
+    onlyKeys(item, eventField, ['cue', 'id', 'tick'])
     const cue = limitedString(item.cue, `${eventField}.cue`, 64)
-    if (!(BONEYARD_SOLOMON_DIG_AUDIO_CUES as readonly string[]).includes(cue)) {
+    if (!(BONEYARD_SOLOMON_DIG_CUES as readonly string[]).includes(cue)) {
       throw new GameProtocolError(`${eventField}.cue is not supported`)
     }
     const id = positiveInteger(item.id, `${eventField}.id`)
-    if (id <= previousDigAudioEventId) {
-      throw new GameProtocolError(`${field}.digAudioEvents ids must increase`)
+    const tick = nonnegativeInteger(item.tick, `${eventField}.tick`)
+    if (id <= previousDigEventId || tick < previousDigEventTick || tick > snapshotTick) {
+      throw new GameProtocolError(`${field}.digEvents must increase within snapshot tick`)
     }
-    previousDigAudioEventId = id
-    return { cue: cue as BoneyardSolomonDigAudioCue, id }
+    previousDigEventId = id
+    previousDigEventTick = tick
+    return { cue: cue as BoneyardSolomonDigCue, id, tick }
   })
   const transitionOffsetY = nonnegativeFinite(
     source.transitionOffsetY,
@@ -8860,7 +8873,8 @@ function boneyardSolomonSnapshot(
   })
   return {
     acceleration: finite(source.acceleration, `${field}.acceleration`),
-    digAudioEvents,
+    digBodyOffsetY,
+    digEvents,
     digFrame,
     escapeSpeed: nonnegativeFinite(source.escapeSpeed, `${field}.escapeSpeed`),
     headingDeg,
@@ -10125,7 +10139,11 @@ function gameWorldSnapshotFrame(
       'tutorial',
       'waves',
     ])
-    const encounter = boneyardSolomonSnapshot(source.encounter, `${field}.encounter`)
+    const encounter = boneyardSolomonSnapshot(
+      source.encounter,
+      `${field}.encounter`,
+      snapshotTick,
+    )
     const waves = boneyardWaveSnapshot(source.waves, `${field}.waves`)
     const tutorial = nativeTutorialState(source.tutorial, `${field}.tutorial`)
     const arenaTransition = boneyardArenaTransition(

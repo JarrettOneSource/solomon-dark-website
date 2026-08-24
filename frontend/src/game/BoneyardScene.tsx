@@ -146,6 +146,14 @@ interface BoneyardFrameDiagnostics {
   playerScreenX: number
   playerScreenY: number
   playerWalkPose: number
+  solomonDirtAgeTicks: number | null
+  solomonDirtAlpha: number
+  solomonDirtCount: number
+  solomonDirtEventId: number
+  solomonDirtHeadingDegrees: number
+  solomonDirtPassCount: number
+  solomonDirtX: number
+  solomonDirtY: number
   solomonFrame: number
   staticPaintCount: number
 }
@@ -748,7 +756,7 @@ export default function BoneyardScene({
           const digAudio = solomonDigAudioDelta(
             digAudioCursorRef.current,
             snapshot.world.runId,
-            snapshot.world.encounter.digAudioEvents,
+            snapshot.world.encounter.digEvents,
           )
           digAudioCursorRef.current = digAudio.cursor
           for (const digAudioEvent of digAudio.events) {
@@ -1198,6 +1206,15 @@ function publishSceneDiagnostics(
   scene.dataset.solomonVoiceCue = latestVoiceEvent?.cue ?? 'none'
   scene.dataset.solomonVoiceEventId = `${latestVoiceEvent?.id ?? 0}`
   if (encounter) {
+    scene.dataset.solomonDirtAgeTicks = `${diagnostics?.solomonDirtAgeTicks ?? -1}`
+    scene.dataset.solomonDirtAlpha = `${diagnostics?.solomonDirtAlpha ?? 0}`
+    scene.dataset.solomonDirtCount = `${diagnostics?.solomonDirtCount ?? 0}`
+    scene.dataset.solomonDirtEventId = `${diagnostics?.solomonDirtEventId ?? 0}`
+    scene.dataset.solomonDirtHeading = `${diagnostics?.solomonDirtHeadingDegrees ?? 0}`
+    scene.dataset.solomonDirtPassCount = `${diagnostics?.solomonDirtPassCount ?? 0}`
+    scene.dataset.solomonDirtX = `${diagnostics?.solomonDirtX ?? Number.NaN}`
+    scene.dataset.solomonDirtY = `${diagnostics?.solomonDirtY ?? Number.NaN}`
+    scene.dataset.solomonDigBodyOffsetY = `${encounter.digBodyOffsetY}`
     scene.dataset.solomonHeading = `${encounter.headingDeg}`
     scene.dataset.solomonMouthPose = `${encounter.mouthPose}`
     scene.dataset.solomonWalkCycle = `${encounter.walkCycle}`

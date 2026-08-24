@@ -3,8 +3,8 @@ import {
   HUB_TEACHER_CYCLE_SECONDS,
 } from './hub-teacher.ts'
 import type {
-  BoneyardSolomonDigAudioCue,
-  BoneyardSolomonDigAudioEvent,
+  BoneyardSolomonDigCue,
+  BoneyardSolomonDigEvent,
   BoneyardSolomonVoiceCue,
   BoneyardSolomonVoiceEvent,
 } from './core-kernels/boneyard-encounter.ts'
@@ -31,7 +31,7 @@ export type GameMusicCue =
   | 'selection'
   | 'solomondarktheme'
 export type GameSoundCue =
-  | BoneyardSolomonDigAudioCue
+  | BoneyardSolomonDigCue
   | 'backpack-close'
   | 'bad-action'
   | 'acid-sizzle'
@@ -753,13 +753,13 @@ export interface NativeEnemyEventSoundRequest {
 }
 
 export interface NativeSolomonDigSoundRequest {
-  cue: BoneyardSolomonDigAudioCue
+  cue: BoneyardSolomonDigCue
   playbackRate: 1
   volume: 0.5 | 1
 }
 
 export function nativeSolomonDigSoundRequest(
-  event: BoneyardSolomonDigAudioEvent,
+  event: BoneyardSolomonDigEvent,
 ): NativeSolomonDigSoundRequest {
   return {
     cue: event.cue,
@@ -1194,10 +1194,10 @@ export interface SolomonDigAudioCursor {
 export function solomonDigAudioDelta(
   cursor: SolomonDigAudioCursor | null,
   runId: string,
-  current: readonly BoneyardSolomonDigAudioEvent[],
+  current: readonly BoneyardSolomonDigEvent[],
 ): Readonly<{
   cursor: SolomonDigAudioCursor
-  events: readonly BoneyardSolomonDigAudioEvent[]
+  events: readonly BoneyardSolomonDigEvent[]
 }> {
   const latestEventId = current.at(-1)?.id ?? 0
   if (cursor === null || cursor.runId !== runId) {

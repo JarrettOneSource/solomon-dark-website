@@ -664,6 +664,25 @@ function normalizeWorld(
   const encounter = source.encounter === null
     ? null
     : record(source.encounter, 'game save Boneyard Solomon encounter')
+  const normalizedEncounter = encounter === null
+    ? null
+    : (() => {
+        const legacyDigEventId = encounter.digAudioEventId
+        const current = { ...encounter }
+        delete current.digAudioEventId
+        delete current.digAudioEvents
+        return {
+          ...current,
+          digBodyBobAmplitude: encounter.digBodyBobAmplitude
+            ?? defaults.encounter?.digBodyBobAmplitude
+            ?? 5,
+          digBodyOffsetY: encounter.digBodyOffsetY ?? 0,
+          digEventId: encounter.digEventId ?? legacyDigEventId ?? 0,
+          digEvents: encounter.digEvents ?? [],
+          dialogueMode: encounter.dialogueMode ?? 'ordinary',
+          tutorialDialogueTicks: encounter.tutorialDialogueTicks ?? 0,
+        }
+      })()
   const tutorial = 'tutorial' in source ? source.tutorial : defaults.tutorial
   const tutorialProfileEconomy = source.tutorialProfileEconomy == null
     ? null
@@ -682,13 +701,7 @@ function normalizeWorld(
       locomotionRngState: enemies.locomotionRngState ?? defaults.enemies.locomotionRngState,
       steeringRngState: enemies.steeringRngState ?? defaults.enemies.steeringRngState,
     },
-    encounter: encounter === null
-      ? null
-      : {
-          ...encounter,
-          dialogueMode: encounter.dialogueMode ?? 'ordinary',
-          tutorialDialogueTicks: encounter.tutorialDialogueTicks ?? 0,
-        },
+    encounter: normalizedEncounter,
     enemyWorldFeedback: source.enemyWorldFeedback ?? defaults.enemyWorldFeedback,
     hallOfFameRuns: source.hallOfFameRuns ?? {
       [playerId]: createNativeHallOfFameRun(0),

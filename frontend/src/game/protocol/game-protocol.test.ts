@@ -348,7 +348,7 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
   })), /activity/)
 })
 
-test('protocol 70 retains exact A or B slots for HUD concentration replacement', () => {
+test('protocol 71 retains exact A or B slots for HUD concentration replacement', () => {
   assert.throws(() => decodeClientGameMessage(JSON.stringify({
     type: 'client-select-concentration-slot',
     skillId: 57,
@@ -3983,7 +3983,8 @@ test('loaded Boneyard round-trips scene identity, geometry, and Solomon Dig', ()
   if (snapshot.world.kind !== 'boneyard') throw new Error('expected Boneyard')
   assert.equal(snapshot.world.gateLeaves.length, 2)
   assert.equal(snapshot.world.encounter?.acceleration, 0)
-  assert.deepEqual(snapshot.world.encounter?.digAudioEvents, [])
+  assert.equal(snapshot.world.encounter?.digBodyOffsetY, 0)
+  assert.deepEqual(snapshot.world.encounter?.digEvents, [])
   assert.equal(snapshot.world.encounter?.digFrame, 0)
   assert.equal(snapshot.world.encounter?.transitionOffsetY, 0)
   const snapshotMessage = {
@@ -4018,34 +4019,53 @@ test('loaded Boneyard round-trips scene identity, geometry, and Solomon Dig', ()
     /voiceEvents\[0\]\.cue/,
   )
 
-  const invalidDigAudioCue = JSON.parse(encodeGameMessage(snapshotMessage))
-  invalidDigAudioCue.frame.world.encounter.digAudioEvents = [{
+  const invalidDigCue = JSON.parse(encodeGameMessage(snapshotMessage))
+  invalidDigCue.frame.world.encounter.digEvents = [{
     id: 1,
     cue: 'backhoe-1',
+    tick: 0,
   }]
   assert.throws(
-    () => decodeServerGameMessage(JSON.stringify(invalidDigAudioCue)),
-    /digAudioEvents\[0\]\.cue/,
+    () => decodeServerGameMessage(JSON.stringify(invalidDigCue)),
+    /digEvents\[0\]\.cue/,
   )
 
-  const unorderedDigAudio = JSON.parse(encodeGameMessage(snapshotMessage))
-  unorderedDigAudio.frame.world.encounter.digAudioEvents = [
-    { id: 2, cue: 'shovel-1' },
-    { id: 2, cue: 'throw-dirt-1' },
+  const unorderedDigEvents = JSON.parse(encodeGameMessage(snapshotMessage))
+  unorderedDigEvents.frame.world.encounter.digEvents = [
+    { id: 2, cue: 'shovel-1', tick: 0 },
+    { id: 2, cue: 'throw-dirt-1', tick: 0 },
   ]
   assert.throws(
-    () => decodeServerGameMessage(JSON.stringify(unorderedDigAudio)),
-    /digAudioEvents ids must increase/,
+    () => decodeServerGameMessage(JSON.stringify(unorderedDigEvents)),
+    /digEvents must increase/,
   )
 
-  const excessiveDigAudio = JSON.parse(encodeGameMessage(snapshotMessage))
-  excessiveDigAudio.frame.world.encounter.digAudioEvents = Array.from(
+  const excessiveDigEvents = JSON.parse(encodeGameMessage(snapshotMessage))
+  excessiveDigEvents.frame.world.encounter.digEvents = Array.from(
     { length: 9 },
-    (_, index) => ({ id: index + 1, cue: 'shovel-1' }),
+    (_, index) => ({ id: index + 1, cue: 'shovel-1', tick: 0 }),
   )
   assert.throws(
-    () => decodeServerGameMessage(JSON.stringify(excessiveDigAudio)),
-    /digAudioEvents may contain at most 8/,
+    () => decodeServerGameMessage(JSON.stringify(excessiveDigEvents)),
+    /digEvents may contain at most 8/,
+  )
+
+  const futureDigEvent = JSON.parse(encodeGameMessage(snapshotMessage))
+  futureDigEvent.frame.world.encounter.digEvents = [{
+    id: 1,
+    cue: 'throw-dirt-1',
+    tick: snapshot.tick + 1,
+  }]
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(futureDigEvent)),
+    /digEvents must increase within snapshot tick/,
+  )
+
+  const invalidDigBodyOffset = JSON.parse(encodeGameMessage(snapshotMessage))
+  invalidDigBodyOffset.frame.world.encounter.digBodyOffsetY = 10.001
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(invalidDigBodyOffset)),
+    /digBodyOffsetY/,
   )
 
   const exactNativeHeading = JSON.parse(encodeGameMessage(snapshotMessage))

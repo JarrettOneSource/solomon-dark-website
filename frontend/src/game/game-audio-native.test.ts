@@ -797,12 +797,12 @@ test('matches native Solomon Dig hit attenuation and fixed gain-only requests', 
     { x: camera.x + outer, y: camera.y }, camera, width, true,
   ), 0)
 
-  assert.deepEqual(nativeSolomonDigSoundRequest({ cue: 'shovel-2', id: 7 }), {
+  assert.deepEqual(nativeSolomonDigSoundRequest({ cue: 'shovel-2', id: 7, tick: 70 }), {
     cue: 'shovel-2',
     playbackRate: 1,
     volume: 0.5,
   })
-  assert.deepEqual(nativeSolomonDigSoundRequest({ cue: 'throw-dirt-1', id: 8 }), {
+  assert.deepEqual(nativeSolomonDigSoundRequest({ cue: 'throw-dirt-1', id: 8, tick: 80 }), {
     cue: 'throw-dirt-1',
     playbackRate: 1,
     volume: 1,
@@ -865,15 +865,15 @@ test('consumes only the newest unseen Solomon cue after sparse snapshots', () =>
 
 test('consumes ordered Solomon Dig events without replaying hydration or a new run', () => {
   const events = [
-    { cue: 'shovel-1' as const, id: 4 },
-    { cue: 'throw-dirt-2' as const, id: 5 },
-    { cue: 'shovel-2' as const, id: 6 },
+    { cue: 'shovel-1' as const, id: 4, tick: 40 },
+    { cue: 'throw-dirt-2' as const, id: 5, tick: 50 },
+    { cue: 'shovel-2' as const, id: 6, tick: 60 },
   ]
   const hydrated = solomonDigAudioDelta(null, 'run-1', events)
   assert.deepEqual(hydrated.events, [])
   assert.deepEqual(hydrated.cursor, { eventId: 6, runId: 'run-1' })
 
-  const next = { cue: 'throw-dirt-1' as const, id: 7 }
+  const next = { cue: 'throw-dirt-1' as const, id: 7, tick: 70 }
   const advanced = solomonDigAudioDelta(
     hydrated.cursor,
     'run-1',
@@ -885,7 +885,7 @@ test('consumes ordered Solomon Dig events without replaying hydration or a new r
   const newRun = solomonDigAudioDelta(
     advanced.cursor,
     'run-2',
-    [{ cue: 'shovel-2', id: 1 }],
+    [{ cue: 'shovel-2', id: 1, tick: 10 }],
   )
   assert.deepEqual(newRun.events, [])
   assert.deepEqual(newRun.cursor, { eventId: 1, runId: 'run-2' })

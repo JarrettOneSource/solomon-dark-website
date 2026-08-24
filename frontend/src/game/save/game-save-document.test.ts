@@ -301,6 +301,10 @@ test('host save documents retain the active Boneyard and its authoritative run i
   assert.equal(restored.state.world.kind, 'boneyard')
   if (restored.state.world.kind !== 'boneyard') throw new Error('expected restored Boneyard')
   assert.equal(restored.state.world.runId, loadedBoneyard.runId)
+  assert.ok(restored.state.world.encounter?.digBodyBobAmplitude >= 5)
+  assert.ok(restored.state.world.encounter?.digBodyBobAmplitude < 10)
+  assert.equal(restored.state.world.encounter?.digBodyOffsetY, 0)
+  assert.deepEqual(restored.state.world.encounter?.digEvents, [])
   assert.deepEqual(restored.state.world.hallOfFameRuns, state.world.kind === 'boneyard'
     ? state.world.hallOfFameRuns
     : {})
@@ -309,6 +313,40 @@ test('host save documents retain the active Boneyard and its authoritative run i
     : {})
   assert.equal(restored.state.run.runId, loadedBoneyard.runId)
   assert.equal(restored.state.run.phase, 'active')
+})
+
+test('current saves migrate the former audio-only Dig lane without replaying dirt', () => {
+  const loadedBoneyard = materializeBoneyard(
+    createBoneyardCatalog(),
+    'default-random',
+    Buffer.alloc(16, 17),
+  )
+  assert.ok(loadedBoneyard)
+  const document = JSON.parse(createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state: enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loadedBoneyard),
+  }))
+  const encounter = document.continuation.simulation.world.encounter
+  delete encounter.digBodyBobAmplitude
+  delete encounter.digBodyOffsetY
+  delete encounter.digEventId
+  delete encounter.digEvents
+  encounter.digAudioEventId = 12
+  encounter.digAudioEvents = [{ cue: 'throw-dirt-1', id: 12 }]
+
+  const restored = restoreGameSaveDocument(JSON.stringify(document))
+  assert.equal(restored.state.world.kind, 'boneyard')
+  if (restored.state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.equal(restored.state.world.encounter?.digEventId, 12)
+  assert.deepEqual(restored.state.world.encounter?.digEvents, [])
+  assert.equal('digAudioEventId' in restored.state.world.encounter!, false)
+  assert.equal('digAudioEvents' in restored.state.world.encounter!, false)
+  assert.ok(restored.state.world.encounter!.digBodyBobAmplitude >= 5)
+  assert.ok(restored.state.world.encounter!.digBodyBobAmplitude < 10)
 })
 
 test('schema 8 resumes the complete stock Tutorial controller and exact level identity', () => {

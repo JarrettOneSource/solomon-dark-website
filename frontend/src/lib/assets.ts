@@ -231,6 +231,7 @@ import primarySpellHurricaneLane from '../assets/game/boneyard/badguys/0084.png'
 import fxFireball from '../assets/game/fx-fireball.png'
 import animSolomonWalk from '../assets/game/anim-solomon-walk.png'
 import animSolomonDig from '../assets/game/anim-solomon-dig.png'
+import solomonFlydirt from '../assets/game/solomon-flydirt.png'
 import boneyardDarknessRadial from '../assets/game/boneyard/deadhawg/009.png'
 import boneyardDarknessAperture from '../assets/game/boneyard/deadhawg/018.png'
 import boneyardGraveDirt from '../assets/game/boneyard/deadhawg/013.png'
@@ -724,6 +725,7 @@ export const boneyard = {
   lantern: boneyardLantern,
   levelUpSparkle: boneyardLevelUpSparkle,
   solomonDig: animSolomonDig,
+  solomonFlydirt,
 }
 
 export const nativeGameOver = {

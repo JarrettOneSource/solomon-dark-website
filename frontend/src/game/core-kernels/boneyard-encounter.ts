@@ -33,15 +33,15 @@ export const BONEYARD_SOLOMON_VOICE_CUES = [
 
 export type BoneyardSolomonVoiceCue = typeof BONEYARD_SOLOMON_VOICE_CUES[number]
 
-export const BONEYARD_SOLOMON_DIG_AUDIO_CUES = [
+export const BONEYARD_SOLOMON_DIG_CUES = [
   'shovel-1',
   'shovel-2',
   'throw-dirt-1',
   'throw-dirt-2',
 ] as const
 
-export type BoneyardSolomonDigAudioCue =
-  typeof BONEYARD_SOLOMON_DIG_AUDIO_CUES[number]
+export type BoneyardSolomonDigCue =
+  typeof BONEYARD_SOLOMON_DIG_CUES[number]
 
 /** Exact PCM durations rounded up to the authoritative 100 Hz tick. */
 export const SOLOMON_VOICE_DURATION_TICKS: Readonly<
@@ -60,15 +60,18 @@ export interface BoneyardSolomonVoiceEvent {
   id: number
 }
 
-export interface BoneyardSolomonDigAudioEvent {
-  cue: BoneyardSolomonDigAudioCue
+export interface BoneyardSolomonDigEvent {
+  cue: BoneyardSolomonDigCue
   id: number
+  tick: number
 }
 
 export interface BoneyardSolomonEncounterState {
   acceleration: number
-  digAudioEventId: number
-  digAudioEvents: readonly BoneyardSolomonDigAudioEvent[]
+  digBodyBobAmplitude: number
+  digBodyOffsetY: number
+  digEventId: number
+  digEvents: readonly BoneyardSolomonDigEvent[]
   digFrame: number
   digFrameProgram: readonly number[]
   digPhase: number
@@ -126,8 +129,9 @@ const SOLOMON_DIG_CURSOR_JITTER_END = 10
 const SOLOMON_DIG_CURSOR_JITTER_MAXIMUM = Math.fround(0.09)
 const SOLOMON_DIG_TAIL_PROGRAM_SLOTS = 5
 const SOLOMON_DIG_TAIL_SLOWDOWN = Math.fround(0.05)
-const SOLOMON_DIG_DEBRIS_MOTION_MAXIMUM = 5
-const SOLOMON_DIG_AUDIO_HISTORY_LIMIT = 8
+const SOLOMON_DIG_BODY_BOB_AMPLITUDE_MINIMUM = 5
+const SOLOMON_DIG_BODY_BOB_AMPLITUDE_RANGE = 5
+const SOLOMON_DIG_EVENT_HISTORY_LIMIT = 8
 
 export function createSolomonEncounter(
   dig: SolomonDigState,
@@ -140,9 +144,9 @@ export function createSolomonEncounter(
   if (dig.frameProgram.length === 0 || dig.ticksPerFrame <= 0) {
     throw new Error('Solomon Dig requires a non-empty animation program and positive frame timing')
   }
-  const debrisMotion = drawNativeFloat(
+  const bodyBobAmplitude = drawNativeFloat(
     createNativeRng(seedState(`${seed}:solomon-dig`)),
-    SOLOMON_DIG_DEBRIS_MOTION_MAXIMUM,
+    SOLOMON_DIG_BODY_BOB_AMPLITUDE_RANGE,
   )
   const dialogueMode = options.dialogueMode ?? 'ordinary'
   const tutorialDialogueTicks = options.tutorialDialogueTicks ?? 0
@@ -152,8 +156,12 @@ export function createSolomonEncounter(
   ) throw new RangeError('Tutorial Solomon dialogue duration must be a positive tick count')
   return {
     acceleration: 0,
-    digAudioEventId: 0,
-    digAudioEvents: [],
+    digBodyBobAmplitude: Math.fround(
+      bodyBobAmplitude.value + SOLOMON_DIG_BODY_BOB_AMPLITUDE_MINIMUM,
+    ),
+    digBodyOffsetY: 0,
+    digEventId: 0,
+    digEvents: [],
     digFrame: dig.frameProgram[0],
     digFrameProgram: [...dig.frameProgram],
     digPhase: 0,
@@ -171,7 +179,7 @@ export function createSolomonEncounter(
     phaseTicksRemaining: 0,
     position: { ...dig.position },
     queuedGetHimBoys: false,
-    rngState: debrisMotion.state,
+    rngState: bodyBobAmplitude.state,
     runEventId: 0,
     targetPlayerId: null,
     tutorialDialogueTicks,
@@ -211,9 +219,13 @@ export function isBoneyardPlayerCombatEnabled(
 export function stepSolomonEncounter(
   source: BoneyardSolomonEncounterState,
   players: SolomonContactPlayers,
+  tick: number,
 ): BoneyardSolomonEncounterState {
+  if (!Number.isSafeInteger(tick) || tick < 0) {
+    throw new RangeError('Solomon encounter tick must be a nonnegative safe integer')
+  }
   switch (source.phase) {
-    case 'digging': return stepSolomonDigging(source, players)
+    case 'digging': return stepSolomonDigging(source, players, tick)
     case 'turning': return faceSolomonTarget(source, players)
     case 'speaking': return stepSolomonHello(source, players)
     case 'retreat-hold': return stepSolomonRetreatHold(source)
@@ -226,6 +238,7 @@ export function stepSolomonEncounter(
 function stepSolomonDigging(
   source: BoneyardSolomonEncounterState,
   players: SolomonContactPlayers,
+  tick: number,
 ): BoneyardSolomonEncounterState {
   let rngState = source.rngState
   let digPhase = Math.fround(
@@ -235,18 +248,18 @@ function stepSolomonDigging(
   if (digPhase > SOLOMON_DIG_SHOVEL_CURSOR && next.digShovelArmed) {
     const variant = drawNativeInteger(rngState, 2)
     rngState = variant.state
-    next = appendDigAudioEvent({
+    next = appendDigEvent({
       ...next,
       digShovelArmed: false,
-    }, variant.value === 0 ? 'shovel-1' : 'shovel-2')
+    }, variant.value === 0 ? 'shovel-1' : 'shovel-2', tick)
   }
   if (digPhase > SOLOMON_DIG_THROW_DIRT_CURSOR && next.digThrowDirtArmed) {
     const variant = drawNativeInteger(rngState, 2)
     rngState = variant.state
-    next = appendDigAudioEvent({
+    next = appendDigEvent({
       ...next,
       digThrowDirtArmed: false,
-    }, variant.value === 0 ? 'throw-dirt-1' : 'throw-dirt-2')
+    }, variant.value === 0 ? 'throw-dirt-1' : 'throw-dirt-2', tick)
   }
   if (
     digPhase > SOLOMON_DIG_THROW_DIRT_CURSOR
@@ -262,8 +275,13 @@ function stepSolomonDigging(
   if (digPhase > source.digFrameProgram.length - SOLOMON_DIG_TAIL_PROGRAM_SLOTS) {
     digPhase = Math.fround(digPhase - SOLOMON_DIG_TAIL_SLOWDOWN)
   }
+  const digBodyOffsetY = nativeSolomonDigBodyOffsetY(
+    digPhase,
+    source.digBodyBobAmplitude,
+  )
   next = acquireSolomonTarget({
     ...next,
+    digBodyOffsetY,
     digFrame: source.digFrameProgram[Math.floor(digPhase)] ?? 0,
     digPhase,
     rngState,
@@ -274,23 +292,46 @@ function stepSolomonDigging(
     const resume = drawNativeInteger(rngState, 2)
     rngState = resume.state
     if (resume.value === 1) digPhase = SOLOMON_DIG_SHOVEL_CURSOR
-    const debrisMotion = drawNativeFloat(
+    const bodyBobAmplitude = drawNativeFloat(
       rngState,
-      SOLOMON_DIG_DEBRIS_MOTION_MAXIMUM,
+      SOLOMON_DIG_BODY_BOB_AMPLITUDE_RANGE,
     )
-    rngState = debrisMotion.state
+    rngState = bodyBobAmplitude.state
     next = {
       ...next,
+      digBodyBobAmplitude: Math.fround(
+        bodyBobAmplitude.value + SOLOMON_DIG_BODY_BOB_AMPLITUDE_MINIMUM,
+      ),
       digShovelArmed: true,
       digThrowDirtArmed: true,
     }
   }
   return {
     ...next,
+    digBodyOffsetY,
     digFrame: source.digFrameProgram[Math.floor(digPhase)] ?? 0,
     digPhase,
     rngState,
   }
+}
+
+export function nativeSolomonDigBodyOffsetY(
+  cursor: number,
+  amplitude: number,
+): number {
+  if (!Number.isFinite(cursor) || !Number.isFinite(amplitude)) {
+    throw new RangeError('Solomon dig body bob requires finite cursor and amplitude')
+  }
+  if (cursor <= SOLOMON_DIG_SHOVEL_CURSOR - 1 || cursor > SOLOMON_DIG_THROW_DIRT_CURSOR) {
+    return 0
+  }
+  const degrees = Math.fround(
+    Math.fround(cursor - (SOLOMON_DIG_SHOVEL_CURSOR - 1))
+    / (SOLOMON_DIG_THROW_DIRT_CURSOR - SOLOMON_DIG_SHOVEL_CURSOR + 1)
+    * 180,
+  )
+  const radians = Math.fround(degrees * Math.fround(Math.PI) / 180)
+  return Math.fround(Math.fround(Math.sin(radians)) * amplitude)
 }
 
 function acquireSolomonTarget(
@@ -599,18 +640,19 @@ function appendVoiceEvent(
   }
 }
 
-function appendDigAudioEvent(
+function appendDigEvent(
   source: BoneyardSolomonEncounterState,
-  cue: BoneyardSolomonDigAudioCue,
+  cue: BoneyardSolomonDigCue,
+  tick: number,
 ): BoneyardSolomonEncounterState {
-  const id = source.digAudioEventId + 1
+  const id = source.digEventId + 1
   return {
     ...source,
-    digAudioEventId: id,
-    digAudioEvents: [
-      ...source.digAudioEvents,
-      { cue, id },
-    ].slice(-SOLOMON_DIG_AUDIO_HISTORY_LIMIT),
+    digEventId: id,
+    digEvents: [
+      ...source.digEvents,
+      { cue, id, tick },
+    ].slice(-SOLOMON_DIG_EVENT_HISTORY_LIMIT),
   }
 }
 

@@ -9,6 +9,7 @@ import {
 } from 'vite'
 
 import { solomonContactContains } from '../src/game/core-kernels/boneyard-encounter.ts'
+import { nativeSolomonDirtStateAt } from '../src/game/renderer/boneyard-solomon-dirt-presentation.ts'
 import { BONEYARD_GATE_INITIAL_SWAY } from '../src/game/core-kernels/boneyard-gate.ts'
 import { PLAYER_CHARACTER_RADIUS } from '../src/game/core-kernels/player-character.ts'
 import {
@@ -44,6 +45,7 @@ const fireCastDriver = { nextReadyTick: 0 }
 const screenshotPath = process.env.SDR_GAME_WAVES_SMOKE_SCREENSHOT
   || '/tmp/solomon-dark-solomon-waves.png'
 const speakingScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-speaking$1')
+const dirtScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-dirt$1')
 const combatScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-combat$1')
 const archerScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-archer-projectile$1')
 const deathScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-death$1')
@@ -83,10 +85,17 @@ const browser = await chromium.launch({
 })
 const page = await browser.newPage({ viewport: { width: 1600, height: 900 } })
 const errors = []
+const failedResponses = []
 const wire = observeGameWire(page, host.address.url)
 page.on('pageerror', (error) => errors.push(error.message))
 page.on('console', (message) => {
   if (message.type() === 'error') errors.push(message.text())
+})
+page.on('response', (response) => {
+  if (response.status() >= 400) failedResponses.push({
+    status: response.status(),
+    url: response.url(),
+  })
 })
 await page.addInitScript((runtime) => {
   window.solomonDarkRuntime = runtime
@@ -133,6 +142,11 @@ try {
     scene,
     loadedBoneyard.scene,
   )
+  const digDirt = await captureSolomonDirt(
+    page,
+    loadedBoneyard.scene.solomonDig.position,
+    dirtScreenshotPath,
+  )
   const nearDigAudio = await captureNearSolomonDigAudio(
     page,
     digAudio.eventId,
@@ -159,6 +173,7 @@ try {
     Number(await scene.getAttribute('data-solomon-dig-audio-event-id')),
     digAudioEventIdAtContact,
   )
+  assert.equal(Number(await scene.getAttribute('data-solomon-dirt-count')), 0)
   const mouthPoses = [hello.mouthPose, speaking.animated.mouthPose]
   const headings = [hello.heading, speaking.animated.heading]
   assert.ok(
@@ -228,11 +243,15 @@ try {
     await page.screenshot({ path: combatScreenshotPath })
     assert.deepEqual(wire.errors, [])
     assert.deepEqual(errors, [])
+    assert.deepEqual(failedResponses, [])
     process.stdout.write(`${JSON.stringify({
+      digDirt,
+      dirtScreenshotPath,
       entranceRetirement,
       digAudio,
       diggingCombatAdmission,
       errors,
+      failedResponses,
       gateCrossing,
       nearDigAudio,
       nearSolomon,
@@ -359,6 +378,7 @@ try {
   assert.ok(audioPlaySources.some((source) => source.includes('death-guitar')))
   assert.deepEqual(wire.errors, [])
   assert.deepEqual(errors, [])
+  assert.deepEqual(failedResponses, [])
   process.stdout.write(`${JSON.stringify({
     approach,
     archer,
@@ -370,8 +390,11 @@ try {
     deathRender,
     deathScreenshotPath,
     digAudio,
+    digDirt,
+    dirtScreenshotPath,
     diggingCombatAdmission,
     errors,
+    failedResponses,
     entranceRetirement,
     enemyHeadFacingSamples,
     gateCrossing,
@@ -408,6 +431,7 @@ try {
     body: (await page.locator('body').innerText()).slice(0, 2_000),
     encounter: await currentEncounterReceipt(page),
     errors,
+    failedResponses,
     screenshotPath,
     url: page.url(),
     wire: wireSummary(wire),
@@ -1675,6 +1699,10 @@ async function proveRetiredEntry(page, scene, wire, runId, gateCrossing) {
 async function enterBoneyard(page) {
   await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 180_000 })
+  const tutorialOffer = page.getByRole('dialog', { name: 'Play the Tutorial?' })
+  if (await tutorialOffer.isVisible()) {
+    await tutorialOffer.getByRole('button', { exact: true, name: 'NO' }).click()
+  }
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
   await page.locator('.create-menu-scene[data-motion-settled="true"]')
@@ -2348,6 +2376,81 @@ async function captureSolomonDigAudio(page) {
   assert.match(receipt.cue, /^(?:shovel|throw-dirt)-[12]$/)
   assert.equal(receipt.playbackRate, 1)
   assert.ok(receipt.gain >= 0 && receipt.gain <= 1)
+  return receipt
+}
+
+async function captureSolomonDirt(page, solomonPosition, capturePath) {
+  await page.evaluate(() => {
+    const receipt = {
+      live: false,
+      retired: false,
+      samples: [],
+    }
+    window.__sdrSolomonDirtReceipt = receipt
+    const sample = () => {
+      const scene = document.querySelector('.boneyard-scene')
+      if (!scene) return
+      const count = Number(scene.getAttribute('data-solomon-dirt-count'))
+      const passCount = Number(scene.getAttribute('data-solomon-dirt-pass-count'))
+      if (count > 0) {
+        receipt.live = true
+        const current = {
+          ageTicks: Number(scene.getAttribute('data-solomon-dirt-age-ticks')),
+          alpha: Number(scene.getAttribute('data-solomon-dirt-alpha')),
+          audioEventId: Number(scene.getAttribute('data-solomon-dig-audio-event-id')),
+          count,
+          eventId: Number(scene.getAttribute('data-solomon-dirt-event-id')),
+          headingDegrees: Number(scene.getAttribute('data-solomon-dirt-heading')),
+          passCount,
+          x: Number(scene.getAttribute('data-solomon-dirt-x')),
+          y: Number(scene.getAttribute('data-solomon-dirt-y')),
+        }
+        const prior = receipt.samples.at(-1)
+        if (prior?.ageTicks !== current.ageTicks || prior?.eventId !== current.eventId) {
+          receipt.samples.push(current)
+        }
+      } else if (receipt.live) {
+        receipt.retired = true
+        return
+      }
+      requestAnimationFrame(sample)
+    }
+    requestAnimationFrame(sample)
+  })
+  await page.waitForFunction(() => window.__sdrSolomonDirtReceipt?.live, undefined, {
+    timeout: 15_000,
+  })
+  await page.screenshot({ path: capturePath })
+  await page.waitForFunction(() => window.__sdrSolomonDirtReceipt?.retired, undefined, {
+    timeout: 5_000,
+  })
+  const receipt = await page.evaluate(() => window.__sdrSolomonDirtReceipt)
+  await page.waitForFunction(() => {
+    const scene = document.querySelector('.boneyard-scene')
+    const offset = Number(scene?.getAttribute('data-solomon-dig-body-offset-y'))
+    return offset > 0.1 && offset <= 10
+  }, undefined, { timeout: 15_000 })
+  receipt.bodyOffsetY = Number(await page.locator('.boneyard-scene')
+    .getAttribute('data-solomon-dig-body-offset-y'))
+  assert.ok(receipt.samples.length >= 2, 'expected multiple fixed-age Flydirt samples')
+  assert.ok(receipt.bodyOffsetY > 0.1 && receipt.bodyOffsetY <= 10)
+  assert.ok(receipt.samples.every((sample) => sample.count === 1))
+  assert.ok(receipt.samples.every((sample) => sample.passCount === 2))
+  assert.ok(receipt.samples.every((sample) => sample.audioEventId === sample.eventId))
+  for (const sample of receipt.samples) {
+    const expected = nativeSolomonDirtStateAt(solomonPosition, sample.ageTicks)
+    assert.ok(expected, `unexpected retired Flydirt age ${sample.ageTicks}`)
+    assert.equal(sample.alpha, expected.alpha)
+    assert.equal(sample.headingDegrees, expected.headingDegrees)
+    assert.equal(sample.x, expected.position.x)
+    assert.equal(sample.y, expected.position.y)
+  }
+  assert.ok(receipt.samples.at(-1).alpha < receipt.samples[0].alpha)
+  assert.ok(receipt.samples.at(-1).headingDegrees > receipt.samples[0].headingDegrees)
+  assert.notDeepEqual(
+    [receipt.samples.at(-1).x, receipt.samples.at(-1).y],
+    [receipt.samples[0].x, receipt.samples[0].y],
+  )
   return receipt
 }
 

@@ -48,7 +48,7 @@ export function boneyardSolomonVisualState(
       mouthPose: null,
       nativeBodyRecord: DIG_RECORD + bodyPose,
       nativeMouthRecord: null,
-      offsetY: 0,
+      offsetY: encounter.digBodyOffsetY,
       shadowVisible: true,
       visible: true,
     }

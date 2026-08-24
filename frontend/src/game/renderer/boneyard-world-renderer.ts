@@ -76,6 +76,14 @@ import type {
 } from '../protocol/game-state.ts'
 import { PlayerWorldView } from './hub-actors.ts'
 import { boneyardSolomonVisualState } from './boneyard-solomon-render.ts'
+import {
+  NATIVE_SOLOMON_DIRT_DRAW_PASSES,
+  NATIVE_SOLOMON_DIRT_VISIBLE_TICKS,
+  nativeSolomonDirtDrawOperations,
+  nativeSolomonDirtEventDelta,
+  nativeSolomonDirtStateAt,
+  type NativeSolomonDirtState,
+} from './boneyard-solomon-dirt-presentation.ts'
 import type { GameViewportLayout } from './game-viewport.ts'
 import { initialHubResolution } from './hub-render-contract.ts'
 import {
@@ -346,6 +354,14 @@ interface BoneyardRendererFrameDiagnostics {
   playerWeaponScale: number
   playerX: number
   playerY: number
+  solomonDirtAgeTicks: number | null
+  solomonDirtAlpha: number
+  solomonDirtCount: number
+  solomonDirtEventId: number
+  solomonDirtHeadingDegrees: number
+  solomonDirtPassCount: number
+  solomonDirtX: number
+  solomonDirtY: number
   solomonFrame: number
   staticLayerCount: number
   staticPaintCount: number
@@ -723,6 +739,14 @@ export async function createBoneyardWorldRenderer(
     playerWeaponScale: 1,
     playerX: Number.NaN,
     playerY: Number.NaN,
+    solomonDirtAgeTicks: null,
+    solomonDirtAlpha: 0,
+    solomonDirtCount: 0,
+    solomonDirtEventId: 0,
+    solomonDirtHeadingDegrees: 0,
+    solomonDirtPassCount: 0,
+    solomonDirtX: Number.NaN,
+    solomonDirtY: Number.NaN,
     solomonFrame: 0,
     staticLayerCount: mainLayers.length,
     staticPaintCount: staticWorld.staticPaintCount,
@@ -1162,6 +1186,15 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.runId = snapshot.run.runId
       frameDiagnostics.runPhase = snapshot.run.phase
       frameDiagnostics.spectatorTargetPlayerId = spectatorCamera.targetPlayerId
+      const solomonDirt = scene.solomonDirt
+      frameDiagnostics.solomonDirtAgeTicks = solomonDirt?.state.ageTicks ?? null
+      frameDiagnostics.solomonDirtAlpha = solomonDirt?.state.alpha ?? 0
+      frameDiagnostics.solomonDirtCount = scene.solomonDirtCount
+      frameDiagnostics.solomonDirtEventId = solomonDirt?.eventId ?? 0
+      frameDiagnostics.solomonDirtHeadingDegrees = solomonDirt?.state.headingDegrees ?? 0
+      frameDiagnostics.solomonDirtPassCount = scene.solomonDirtPassCount
+      frameDiagnostics.solomonDirtX = solomonDirt?.state.position.x ?? Number.NaN
+      frameDiagnostics.solomonDirtY = solomonDirt?.state.position.y ?? Number.NaN
       frameDiagnostics.solomonFrame = scene.solomonFrame
       frameDiagnostics.tick = snapshot.tick
       frameDiagnostics.treeAlphaMismatchCount = painter.treeAlphaMismatchCount
@@ -2137,7 +2170,7 @@ class BoneyardDynamicScene {
             dig.lanternPosition,
             this.lightIndex,
           )
-        : { digRootTint: 0xffffff, lanternTint: 0xffffff })
+        : { digRootTint: 0xffffff, dirtTint: 0xffffff, lanternTint: 0xffffff })
     }
 
     const gateLeaves = this.gateLeaves
@@ -2623,6 +2656,18 @@ class BoneyardDynamicScene {
     return this.solomon?.frame ?? 0
   }
 
+  get solomonDirtCount(): number {
+    return this.solomon?.dirtCount ?? 0
+  }
+
+  get solomonDirtPassCount(): number {
+    return this.solomon?.dirtPassCount ?? 0
+  }
+
+  get solomonDirt() {
+    return this.solomon?.dirt ?? null
+  }
+
   destroy(): void {
     this.complexShadows.destroy()
     this.primarySpells.destroy()
@@ -2653,6 +2698,8 @@ class BoneyardSolomonView {
   private readonly actorRoot = new Container({ label: 'solomon-actor' })
   private readonly body: Sprite
   private readonly clipMask = new Graphics()
+  private readonly dirtRoot = new Container({ label: 'solomon-flydirt' })
+  private readonly dirtViews = new Map<number, BoneyardSolomonDirtView>()
   private readonly digState: SolomonDigState
   private readonly graveDirt: Sprite
   private readonly lantern: Sprite
@@ -2661,6 +2708,7 @@ class BoneyardSolomonView {
   private readonly shadow: Sprite
   private readonly textures: BoneyardWorldTextures
   private currentFrame = 2
+  private lastDigEventId: number | null = null
 
   constructor(
     boneyard: LoadedBoneyard,
@@ -2687,6 +2735,7 @@ class BoneyardSolomonView {
     this.mouth.anchor.set(0.5)
     this.mouth.zIndex = 1
     this.mouth.visible = false
+    this.dirtRoot.zIndex = 2
     this.shadow = plantedSprite(
       textures.solomonShadow,
       requiredSpriteRef(13),
@@ -2694,12 +2743,20 @@ class BoneyardSolomonView {
     )
     this.actorRoot.position.set(state.position.x, state.position.y)
     this.actorRoot.sortableChildren = true
-    this.actorRoot.addChild(this.shadow, this.body, this.mouth, this.clipMask)
+    this.actorRoot.addChild(
+      this.shadow,
+      this.body,
+      this.mouth,
+      this.clipMask,
+      this.dirtRoot,
+    )
     root.addChild(this.graveDirt, this.actorRoot, this.lantern)
   }
 
   update(encounter: BoneyardSolomonSnapshot | null, tick: number): void {
     if (encounter === null) {
+      this.clearDirt()
+      this.lastDigEventId = null
       const programIndex = Math.floor(tick / this.digState.ticksPerFrame)
         % this.digState.frameProgram.length
       const frame = this.digState.frameProgram[programIndex]
@@ -2707,6 +2764,7 @@ class BoneyardSolomonView {
       this.body.texture = this.textures.solomonDig[frame]
       this.actorRoot.position.set(this.digState.position.x, this.digState.position.y)
       this.actorRoot.visible = true
+      this.body.position.y = 0
       this.body.mask = null
       this.mouth.mask = null
       this.clipMask.clear()
@@ -2714,6 +2772,7 @@ class BoneyardSolomonView {
       this.shadow.visible = true
       return
     }
+    this.updateDirt(encounter, tick)
     const visual = boneyardSolomonVisualState(encounter, this.digState, tick)
     this.currentFrame = visual.nativeBodyRecord
     this.actorRoot.position.set(
@@ -2753,6 +2812,26 @@ class BoneyardSolomonView {
     return this.currentFrame
   }
 
+  get dirtCount(): number {
+    return this.dirtViews.size
+  }
+
+  get dirtPassCount(): number {
+    return this.dirtViews.size * NATIVE_SOLOMON_DIRT_DRAW_PASSES
+  }
+
+  get dirt(): Readonly<{
+    eventId: number
+    state: NativeSolomonDirtState
+  }> | null {
+    let latest: BoneyardSolomonDirtView | null = null
+    for (const view of this.dirtViews.values()) {
+      if (latest === null || view.eventId > latest.eventId) latest = view
+    }
+    if (latest === null || latest.state === null) return null
+    return { eventId: latest.eventId, state: latest.state }
+  }
+
   setActorDepth(depth: number): void {
     this.actorRoot.zIndex = depth
   }
@@ -2771,15 +2850,109 @@ class BoneyardSolomonView {
 
   setLighting(lighting: NativeSolomonSetPieceLighting): void {
     this.body.tint = lighting.digRootTint
+    this.dirtRoot.tint = lighting.dirtTint
     this.mouth.tint = lighting.digRootTint
     this.lantern.tint = lighting.lanternTint
   }
 
   destroy(): void {
+    this.clearDirt()
     this.root.removeChild(this.graveDirt, this.actorRoot, this.lantern)
     this.graveDirt.destroy()
     this.actorRoot.destroy({ children: true })
     this.lantern.destroy()
+  }
+
+  private updateDirt(encounter: BoneyardSolomonSnapshot, tick: number): void {
+    const delta = nativeSolomonDirtEventDelta(
+      this.lastDigEventId,
+      encounter.digEvents,
+    )
+    this.lastDigEventId = delta.eventId
+    for (const event of delta.events) {
+      const ageTicks = Math.floor(tick - event.tick)
+      if (ageTicks >= 0 && ageTicks < NATIVE_SOLOMON_DIRT_VISIBLE_TICKS) {
+        this.dirtViews.set(event.id, new BoneyardSolomonDirtView(
+          this.dirtRoot,
+          this.textures.solomonFlydirt,
+          event.id,
+          event.tick,
+          encounter.position,
+        ))
+      }
+    }
+
+    for (const [eventId, view] of this.dirtViews) {
+      if (view.update(tick, encounter.position)) continue
+      view.destroy()
+      this.dirtViews.delete(eventId)
+    }
+  }
+
+  private clearDirt(): void {
+    for (const view of this.dirtViews.values()) view.destroy()
+    this.dirtViews.clear()
+  }
+}
+
+class BoneyardSolomonDirtView {
+  readonly eventId: number
+  state: NativeSolomonDirtState | null = null
+
+  private readonly birthPosition: Readonly<{ x: number; y: number }>
+  private readonly birthTick: number
+  private readonly root: Container
+  private readonly sprites: readonly Sprite[]
+
+  constructor(
+    root: Container,
+    texture: Texture,
+    eventId: number,
+    birthTick: number,
+    birthPosition: Readonly<{ x: number; y: number }>,
+  ) {
+    this.root = root
+    this.eventId = eventId
+    this.birthTick = birthTick
+    this.birthPosition = { ...birthPosition }
+    this.sprites = Array.from(
+      { length: NATIVE_SOLOMON_DIRT_DRAW_PASSES },
+      () => {
+        const sprite = new Sprite(texture)
+        sprite.anchor.set(0.5)
+        root.addChild(sprite)
+        return sprite
+      },
+    )
+  }
+
+  update(
+    tick: number,
+    actorPosition: Readonly<{ x: number; y: number }>,
+  ): boolean {
+    const ageTicks = Math.floor(tick - this.birthTick)
+    if (ageTicks < 0) return true
+    const state = nativeSolomonDirtStateAt(this.birthPosition, ageTicks)
+    this.state = state
+    if (state === null) return false
+    const operations = nativeSolomonDirtDrawOperations(state)
+    for (let index = 0; index < this.sprites.length; index += 1) {
+      const sprite = this.sprites[index]!
+      const operation = operations[index]!
+      sprite.alpha = operation.alpha
+      sprite.position.set(
+        operation.position.x - actorPosition.x,
+        operation.position.y - actorPosition.y,
+      )
+      sprite.rotation = operation.headingDegrees * Math.PI / 180
+    }
+    return true
+  }
+
+  destroy(): void {
+    this.root.removeChild(...this.sprites)
+    for (const sprite of this.sprites) sprite.destroy()
+    this.state = null
   }
 }
 

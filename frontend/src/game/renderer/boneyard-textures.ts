@@ -30,6 +30,7 @@ export interface BoneyardWorldTextures extends PlayerWorldTextures {
   solomonDialogueBody: readonly Texture[]
   solomonDialogueMouth: readonly (readonly Texture[])[]
   solomonDig: readonly Texture[]
+  solomonFlydirt: Texture
   solomonShadow: Texture
   solomonWalk: readonly (readonly Texture[])[]
   weatherSplash: Texture
@@ -70,6 +71,7 @@ export async function loadBoneyardWorldTextures(): Promise<BoneyardWorldTextures
     boneyard.lantern,
     boneyard.levelUpSparkle,
     boneyard.solomonDig,
+    boneyard.solomonFlydirt,
     solomonEncounterSource,
     solomonShadowSource,
     weatherSplashSource,
@@ -102,6 +104,7 @@ export async function loadBoneyardWorldTextures(): Promise<BoneyardWorldTextures
     solomonDialogueBody: solomonEncounter[0],
     solomonDialogueMouth: solomonEncounter.slice(1, 4),
     solomonDig: stripFrames(texture(boneyard.solomonDig), 18, 200, 200, 'horizontal'),
+    solomonFlydirt: texture(boneyard.solomonFlydirt),
     solomonShadow: texture(solomonShadowSource),
     solomonWalk: solomonEncounter.slice(4, 10),
     weatherSplash: texture(weatherSplashSource),

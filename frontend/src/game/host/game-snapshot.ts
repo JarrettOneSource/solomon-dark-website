@@ -110,7 +110,8 @@ export function createGameSnapshot(
           ],
           encounter: state.world.encounter === null ? null : {
             acceleration: state.world.encounter.acceleration,
-            digAudioEvents: state.world.encounter.digAudioEvents.map((event) => ({
+            digBodyOffsetY: state.world.encounter.digBodyOffsetY,
+            digEvents: state.world.encounter.digEvents.map((event) => ({
               ...event,
             })),
             digFrame: state.world.encounter.digFrame,

@@ -1478,13 +1478,24 @@ test('world-weather lanes straddle the native Region composite in both lighting 
   assert.ok(flattened.streakZIndex < flattened.lightCompositeZIndex)
 })
 
-test('lights Solomon Dig through the shared dirt-and-body Puppet root', () => {
+test('samples Solomon body, Flydirt, and lantern at their native roots', () => {
   assert.deepEqual(nativeSolomonSetPieceLighting(
     { x: 0, y: 0 },
     { x: 300, y: 300 },
     [{ intensity: 1, position: { x: 0, y: 0 }, radius: 1 }],
   ), {
     digRootTint: 0xffffff,
+    dirtTint: 0xfcfcfc,
+    lanternTint: 0x000000,
+  })
+
+  assert.deepEqual(nativeSolomonSetPieceLighting(
+    { x: 100, y: 100 },
+    { x: 400, y: 400 },
+    [{ intensity: 1, position: { x: 78, y: 38 }, radius: 1 }],
+  ), {
+    digRootTint: 0xfcfcfc,
+    dirtTint: 0xffffff,
     lanternTint: 0x000000,
   })
 })

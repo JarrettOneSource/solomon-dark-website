@@ -473,7 +473,7 @@ export function stepBoneyardWorldTick(
   let loot = lootStep.store
   let encounter = world.encounter === null
     ? null
-    : stepSolomonEncounter(world.encounter, livingPlayers)
+    : stepSolomonEncounter(world.encounter, livingPlayers, tick)
   if (world.encounter?.phase === 'escaping' && encounter !== null) {
     encounter = {
       ...encounter,
