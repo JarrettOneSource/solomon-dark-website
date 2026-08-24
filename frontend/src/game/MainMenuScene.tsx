@@ -1266,11 +1266,14 @@ export default function MainMenuScene({
   const levelUpPickerPresentationId = levelUpBarrierId
     ?? levelUpPickerPresentationRef.current
   const levelUpModalActive = Boolean(runtimeSnapshot?.levelUpBarrier) || levelUpPickerClosing
+  const levelUpWaitingForPeers = Boolean(runtimeSnapshot?.levelUpBarrier)
+    && !runtimeProgression?.pendingOffer
+    && !levelUpPickerClosing
   const nonMusicMuted = darkCloudMenuOpen
     || displayedGameplayPause?.source === 'pause-menu'
     || displayedGameplayPause?.source === 'skill-selector'
     || hudSkillSelector !== null
-    || levelUpModalActive
+    || levelUpWaitingForPeers
   useLayoutEffect(() => {
     audio.setSoundMuted(nonMusicMuted)
   }, [audio, nonMusicMuted])

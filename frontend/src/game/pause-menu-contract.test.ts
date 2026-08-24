@@ -277,11 +277,16 @@ test('every optional Hub activity is local over an always-live world', () => {
   assert.doesNotMatch(hostSource, /sharedHubGameplayPause|stopSharedHubInputs/)
 })
 
-test('Pause Menu and both native skill pickers mute only the non-music audio lane', () => {
+test('Pause, the compact picker, and peer-only level-up waits mute the non-music lane', () => {
   assert.match(
     mainMenuComponent,
-    /const nonMusicMuted = darkCloudMenuOpen\s*\|\| displayedGameplayPause\?\.source === 'pause-menu'\s*\|\| displayedGameplayPause\?\.source === 'skill-selector'\s*\|\| hudSkillSelector !== null\s*\|\| levelUpModalActive/,
+    /const levelUpWaitingForPeers = Boolean\(runtimeSnapshot\?\.levelUpBarrier\)\s*&& !runtimeProgression\?\.pendingOffer\s*&& !levelUpPickerClosing/,
   )
+  assert.match(
+    mainMenuComponent,
+    /const nonMusicMuted = darkCloudMenuOpen\s*\|\| displayedGameplayPause\?\.source === 'pause-menu'\s*\|\| displayedGameplayPause\?\.source === 'skill-selector'\s*\|\| hudSkillSelector !== null\s*\|\| levelUpWaitingForPeers/,
+  )
+  assert.doesNotMatch(mainMenuComponent, /nonMusicMuted[\s\S]{0,300}\|\| levelUpModalActive/)
   assert.match(
     mainMenuComponent,
     /useLayoutEffect\(\(\) => \{\s*audio\.setSoundMuted\(nonMusicMuted\)\s*\}, \[audio, nonMusicMuted\]\)/,

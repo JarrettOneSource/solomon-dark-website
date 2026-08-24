@@ -54,6 +54,7 @@ const combatNavigation = {
 const screenshotRoot = process.env.SDR_GAME_MULTIPLAYER_COMBAT_SCREENSHOT_ROOT || '/tmp'
 const deathGameOverOnly = process.argv.includes('--death-game-over-only')
 const featureOnly = process.argv.includes('--feature-only')
+const levelUpOnly = process.argv.includes('--level-up-only')
 const requireAllDeathFrames = process.argv.includes('--require-all-death-frames')
 const deathAnimationScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-death-animation.png`
 const firstDeathScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-first-death.png`
@@ -210,6 +211,7 @@ try {
         host,
         hostPage,
         hostPlayerId: hostHub.localPlayerId,
+        levelUpOnly,
         peerEvasion,
       })
     } finally {
@@ -220,7 +222,7 @@ try {
     }
   }
 
-  if (featureOnly) {
+  if (featureOnly || levelUpOnly) {
     assert.deepEqual(errors, {
       guest: { console: [], page: [] },
       host: { console: [], page: [] },
@@ -241,7 +243,7 @@ try {
         runId: hostInitial.runId,
       },
       progressionAndEffects,
-      scope: 'enemy-hit-death-xp',
+      scope: levelUpOnly ? 'multiplayer-level-up' : 'enemy-hit-death-xp',
       status: 'ok',
     })}\n`)
     break smokeFlow
@@ -435,6 +437,10 @@ async function enterHub(page, element) {
   await page.bringToFront()
   await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 360_000 })
+  const tutorialOffer = page.getByRole('dialog', { name: 'Play the Tutorial?' })
+  if (await tutorialOffer.isVisible()) {
+    await tutorialOffer.getByRole('button', { exact: true, name: 'NO' }).click()
+  }
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
   await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({
@@ -492,6 +498,7 @@ async function proveSharedLevelUpAndEnemyEffects({
   host,
   hostPage,
   hostPlayerId,
+  levelUpOnly,
   peerEvasion,
 }) {
   const initialProgress = {
@@ -507,6 +514,10 @@ async function proveSharedLevelUpAndEnemyEffects({
   assert.ok(Math.abs(initialMeters.host.value - 89 / 90 * 100) < 1e-9)
 
   await peerEvasion.stop()
+  const levelUpPresentationPromise = Promise.all([
+    waitForLevelUpPresentation(hostPage, 120_000),
+    waitForLevelUpPresentation(guestPage, 120_000),
+  ])
   const terminalContact = await castFireUntilEnemyDies(hostPage)
   await casterOpeningEvasion.stop()
   assert.ok(terminalContact, 'ordinary Fire combat did not create a terminal enemy edge')
@@ -516,10 +527,12 @@ async function proveSharedLevelUpAndEnemyEffects({
     hostPicker.waitFor({ timeout: 30_000 }),
     guestPicker.waitFor({ timeout: 30_000 }),
   ])
-  const [hostLevelUpPresentation, guestLevelUpPresentation] = await Promise.all([
-    waitForLevelUpPresentation(hostPage),
-    waitForLevelUpPresentation(guestPage),
-  ])
+  const [hostLevelUpPresentation, guestLevelUpPresentation] = await levelUpPresentationPromise
+  const ownedPickerAudioState = {
+    guest: await nonMusicMuteState(guestPage),
+    host: await nonMusicMuteState(hostPage),
+  }
+  assert.deepEqual(ownedPickerAudioState, { guest: false, host: false })
   const barrier = host.state().levelUpBarrier
   assert.ok(barrier)
   assert.deepEqual(barrier.participantIds, [hostPlayerId, guestPlayerId].toSorted())
@@ -581,6 +594,11 @@ async function proveSharedLevelUpAndEnemyEffects({
     'the shared waiting barrier must retain the frozen Boneyard background',
   )
   assert.equal(await guestPicker.count(), 1)
+  const waitingAudioState = {
+    guest: await nonMusicMuteState(guestPage),
+    host: await nonMusicMuteState(hostPage),
+  }
+  assert.deepEqual(waitingAudioState, { guest: false, host: true })
   assert.deepEqual(host.state().levelUpBarrier?.pendingPlayerIds, [guestPlayerId])
   assert.equal(host.state().tick, frozenTick)
   assert.equal(host.state().world, frozenWorld)
@@ -616,13 +634,48 @@ async function proveSharedLevelUpAndEnemyEffects({
   ), undefined, { timeout: 15_000 })))
   const { firstResumedTick, releaseTick } = await barrierRelease
   assert.equal(releaseTick, frozenTick)
-  assert.equal(firstResumedTick, frozenTick + 1)
+  if (levelUpOnly) assert.ok(firstResumedTick > frozenTick)
+  else assert.equal(firstResumedTick, frozenTick + 1)
+
+  const audio = {
+    guest: await levelUpAudioReceipt(guestPage),
+    host: await levelUpAudioReceipt(hostPage),
+  }
+  assert.deepEqual(audio.guest.levelUpRates, [1])
+  assert.deepEqual(audio.host.levelUpRates, [1])
+  assert.ok(audio.guest.openPanelMasterVolumes.length > 0)
+  assert.ok(audio.host.openPanelMasterVolumes.length > 0)
+  assert.equal(audio.guest.levelUpMasterVolumes.every(volume => volume > 0), true)
+  assert.equal(audio.host.levelUpMasterVolumes.every(volume => volume > 0), true)
+  assert.equal(audio.guest.openPanelMasterVolumes.every(volume => volume > 0), true)
+  assert.equal(audio.host.openPanelMasterVolumes.every(volume => volume > 0), true)
+
+  if (levelUpOnly) {
+    return {
+      audio,
+      audioState: {
+        ownedPicker: ownedPickerAudioState,
+        waiting: waitingAudioState,
+      },
+      barrier,
+      firstResumedTick,
+      frozenTick,
+      initialMeters,
+      levelUpPresentations: {
+        guest: guestLevelUpPresentation,
+        host: hostLevelUpPresentation,
+      },
+      leveledMeters,
+      optionSets,
+      ownerActorId,
+      retainedEffectCount: hostEffects.length,
+    }
+  }
 
   const guestEvasion = startSurvivorEvasion(guestPage, combatNavigation)
   const hostEvasion = startSurvivorEvasion(hostPage, combatNavigation)
   let resumedFrame
   let retirement
-  let audio
   let firstContact
   let hitSamples
   let shieldBreak
@@ -633,10 +686,6 @@ async function proveSharedLevelUpAndEnemyEffects({
       guestPage,
       ownerActorId,
     )
-    audio = {
-      guest: await levelUpAudioReceipt(guestPage),
-      host: await levelUpAudioReceipt(hostPage),
-    }
     await guestEvasion.stop()
     shieldBreak = await proveShieldBreak({
       casterPlayerId: guestPlayerId,
@@ -663,14 +712,16 @@ async function proveSharedLevelUpAndEnemyEffects({
       hostEvasion.stop(),
     ])
   }
-  assert.deepEqual(audio.guest.levelUpRates, [1])
-  assert.deepEqual(audio.host.levelUpRates, [1])
   assert.ok(audio.guest.sources.some((source) => source.includes('skeleton-die')))
   assert.ok(audio.guest.sources.some((source) => source.includes('bone-crack')))
   assert.ok(audio.host.sources.some((source) => source.includes('bone-crack')))
 
   return {
     audio,
+    audioState: {
+      ownedPicker: ownedPickerAudioState,
+      waiting: waitingAudioState,
+    },
     barrier,
     firstContact: {
       acceptedTick: firstContact.acceptedTick,
@@ -1350,25 +1401,36 @@ async function levelUpAudioReceipt(page) {
   const levelUp = receipt.events.filter(({ src, type }) => (
     type === 'buffer-start' && src.includes('level-up')
   ))
+  const openPanel = receipt.events.filter(({ src, type }) => (
+    type === 'buffer-start' && src.includes('openpanel')
+  ))
   return {
+    levelUpMasterVolumes: levelUp.map(({ masterVolume }) => masterVolume),
     levelUpRates: levelUp.map(({ playbackRate }) => playbackRate),
+    openPanelMasterVolumes: openPanel.map(({ masterVolume }) => masterVolume),
     sources: receipt.sources,
   }
 }
 
-async function waitForLevelUpPresentation(page) {
+async function nonMusicMuteState(page) {
+  return page.locator('.main-menu-page').evaluate((root) => (
+    root.getAttribute('data-game-sounds-muted') === 'true'
+  ))
+}
+
+async function waitForLevelUpPresentation(page, timeout = 15_000) {
   await page.waitForFunction(() => {
     const canvas = document.querySelector('.boneyard-world-canvas')
     return canvas?.dataset.levelUpDynamicSuppressed === 'false'
-      && Number(canvas.dataset.levelUpParticleCount) > 0
-  }, undefined, { timeout: 15_000 })
+      && Number(canvas.__sdrBoneyardFrame?.levelUpParticleCount) > 0
+  }, undefined, { polling: 20, timeout })
   return levelUpPresentationReceipt(page)
 }
 
 async function levelUpPresentationReceipt(page) {
   return page.locator('.boneyard-world-canvas').evaluate((canvas) => ({
     dynamicSuppressed: canvas.dataset.levelUpDynamicSuppressed === 'true',
-    particleCount: Number(canvas.dataset.levelUpParticleCount),
+    particleCount: Number(canvas.__sdrBoneyardFrame?.levelUpParticleCount),
     presentationId: Number(canvas.dataset.levelUpPresentationId),
   }))
 }

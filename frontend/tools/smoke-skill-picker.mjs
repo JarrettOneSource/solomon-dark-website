@@ -82,6 +82,10 @@ try {
 
   await page.goto(`${baseUrl}/game`, { timeout: 90_000, waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 180_000 })
+  const tutorialOffer = page.getByRole('dialog', { name: 'Play the Tutorial?' })
+  if (await tutorialOffer.isVisible()) {
+    await tutorialOffer.getByRole('button', { exact: true, name: 'NO' }).click()
+  }
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
   await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({
@@ -173,14 +177,14 @@ try {
     throw error
   }
   assert.equal(await picker.getByRole('button').first().isDisabled(), false)
-  const pickerAudioMuteReceipt = await audioMuteReceipt(page, 'academy')
-  assert.equal(pickerAudioMuteReceipt.attribute, 'true')
-  assert.ok(pickerAudioMuteReceipt.masterVolumes.length > 0)
-  assert.equal(pickerAudioMuteReceipt.masterVolumes.every(volume => volume === 0), true)
-  assert.equal(pickerAudioMuteReceipt.musicStarted, true)
-  assert.equal(pickerAudioMuteReceipt.musicPausedAfterStart, false)
+  const pickerAudioReceipt = await audioLaneReceipt(page, 'academy')
+  assert.equal(pickerAudioReceipt.attribute, 'false')
+  assert.ok(pickerAudioReceipt.masterVolumes.length > 0)
+  assert.equal(pickerAudioReceipt.masterVolumes.every(volume => volume > 0), true)
+  assert.equal(pickerAudioReceipt.musicStarted, true)
+  assert.equal(pickerAudioReceipt.musicPausedAfterStart, false)
   assert.equal(
-    (await soundMasterVolumes(page, ['level-up', 'openpanel'])).every(volume => volume === 0),
+    (await soundMasterVolumes(page, ['level-up', 'openpanel'])).every(volume => volume > 0),
     true,
   )
 
@@ -366,7 +370,7 @@ try {
     document.querySelector('.main-menu-page')?.getAttribute('data-game-sounds-muted') === 'false'
     && window.__sdrAudioMasterVolumes?.('level-up').every(volume => volume > 0)
   ), undefined, { timeout: 5_000 })
-  const releasedAudioMuteReceipt = await audioMuteReceipt(page, 'academy')
+  const releasedAudioReceipt = await audioLaneReceipt(page, 'academy')
   const afterFirstScreen = getPlayerProgression(host.state(), playerId)
   assert.equal(afterFirstScreen.pendingOffer, null)
   assert.equal(afterFirstScreen.deferredSkillChoices, 1)
@@ -418,6 +422,12 @@ try {
   assert.deepEqual(levelUpSoundRates, [1, 1])
   assert.deepEqual(openPanelSoundRates, [1, 0.75, 0.75, 0.75, 1, 0.75, 0.75])
   assert.deepEqual(unlockSkillSoundRates, [1, 1, 1])
+  const pickerLifecycleMasterVolumes = await soundMasterVolumes(
+    page,
+    ['level-up', 'openpanel', 'pickskill', 'summon', 'unlockskill'],
+  )
+  assert.ok(pickerLifecycleMasterVolumes.length > 0)
+  assert.equal(pickerLifecycleMasterVolumes.every(volume => volume > 0), true)
 
   await page.getByRole('button', { name: 'Enter the Boneyard' }).click()
   await page.locator('.boneyard-scene[data-renderer-state="ready"]').waitFor({ timeout: 90_000 })
@@ -462,11 +472,11 @@ try {
     return canvas?.dataset.levelUpDynamicSuppressed === 'false'
       && Number(canvas.dataset.enemyCount) >= 1
   }, undefined, { timeout: 30_000 })
-  const boneyardPickerAudioMuteReceipt = await audioMuteReceipt(page, 'prelude')
-  assert.equal(boneyardPickerAudioMuteReceipt.attribute, 'true')
-  assert.equal(boneyardPickerAudioMuteReceipt.masterVolumes.every(volume => volume === 0), true)
-  assert.equal(boneyardPickerAudioMuteReceipt.musicStarted, true)
-  assert.equal(boneyardPickerAudioMuteReceipt.musicPausedAfterStart, false)
+  const boneyardPickerAudioReceipt = await audioLaneReceipt(page, 'prelude')
+  assert.equal(boneyardPickerAudioReceipt.attribute, 'false')
+  assert.equal(boneyardPickerAudioReceipt.masterVolumes.every(volume => volume > 0), true)
+  assert.equal(boneyardPickerAudioReceipt.musicStarted, true)
+  assert.equal(boneyardPickerAudioReceipt.musicPausedAfterStart, false)
   const boneyardBackgroundReceipt = await boneyardCanvas.evaluate((canvas) => ({
     dynamicSuppressed: canvas.dataset.levelUpDynamicSuppressed,
     enemyCount: Number(canvas.dataset.enemyCount),
@@ -486,7 +496,7 @@ try {
     actionReceipt,
     bookedRank: getPlayerSkillBook(host.state(), playerId).permanentRanks[selectedSkillId],
     boneyardBackgroundReceipt,
-    boneyardPickerAudioMuteReceipt,
+    boneyardPickerAudioReceipt,
     boneyardScreenshotPath,
     earlyRevealObserved,
     frozenHubReceipt,
@@ -494,12 +504,13 @@ try {
     livePresentationObserved: livePresentation !== undefined,
     openPanelSoundRates,
     pickerRenderer,
-    pickerAudioMuteReceipt,
+    pickerAudioReceipt,
+    pickerLifecycleMasterVolumes,
     presentationReceipt,
     revealScreenshotPath,
     screenshotPath,
     selectedSkillId,
-    releasedAudioMuteReceipt,
+    releasedAudioReceipt,
     levelUpSoundRates,
     unlockSkillSoundRates,
   })}\n`)
@@ -538,7 +549,7 @@ async function soundMasterVolumes(page, sourceFragments) {
     .map(({ masterVolume }) => masterVolume), sourceFragments)
 }
 
-async function audioMuteReceipt(page, musicSourceFragment) {
+async function audioLaneReceipt(page, musicSourceFragment) {
   return page.evaluate((fragment) => {
     const events = window.__sdrAudioEvents ?? []
     const musicStart = events.findLast(({ src, type }) => (
