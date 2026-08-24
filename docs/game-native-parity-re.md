@@ -41590,9 +41590,9 @@ There are no browser-platform-blocked members and no extractable unknowns.
   physical lanes/depths, primitive counts, cloud-alpha light/provider/audio
   lifetime, protocol shape, teardown, and ordinary/enhanced drop/splash
   membership. Re-run all Storm sibling assertions unchanged.
-- Mac canonical Website gate only: `/opt/homebrew/bin/bash
-  ./scripts/validate.sh` against a manifest-identical isolated candidate.
-- Mac Chrome built-candidate journey: cast Acid Rain in the Tutorial and an
+- Native Windows Website gate through Git Bash against a manifest-identical
+  isolated candidate, plus the focused Acid Rain contract and production build.
+- Windows Chrome built-candidate journey: cast Acid Rain in the Tutorial and an
   ordinary Boneyard fixture; capture actor kinds/counts, the two cloud sprite
   local Y values, residue container/lane/depth, cloud queue bias, provider
   light, audio events, page/console/failed-response arrays, and inspected
@@ -41601,5 +41601,56 @@ There are no browser-platform-blocked members and no extractable unknowns.
 
 ### Implementation validation receipt
 
-- Pending implementation and Mac/browser proof. Publication and deployment
-  are not authorized by this report and remain separate.
+- The presenter now gives Acid Rain two physical owners. Its world-sorted
+  `PuppetPointer` plan keeps the native `rootY+350` queue key and zero bias while
+  drawing BadGuys-10 at local Y `-175` and `-175-50*s`. Its separate
+  `pre-world-queue` underlay draws the BadGuys-10 ground residue at depth `0.5`.
+  The Boneyard renderer excludes that underlay from the dynamic world queue.
+- The host/view names now distinguish `cloudAlpha` from `residueAlpha`.
+  Provider admission, radius-2 light intensity `0.5*cloudAlpha`, and the shared
+  rainfall-loop gain all follow positive cloud alpha; the residue-only tail is
+  unlit and silent. The existing drop, splash, damage, replication, teardown,
+  and stationary/moving Storm contracts remain unchanged.
+- The new regression was first run against untouched Website base `4a81a616`.
+  It failed on the omitted proxy geometry (`200 !== 550`) and on the former
+  residue-driven light (`0.5 !== 0.4`), establishing both defects before the
+  implementation was applied.
+- On native Windows 11 with Node `22.17.0`, the exact product source at
+  `827e4c09f0eaab3293b5013eea7b7fc6ac19ba86` passed the TypeScript contract and
+  all five touched focused files: `186/186`. Production build
+  `Game-BmiJ7vLt.js` is 461,214 raw bytes and 129,648 gzip bytes, inside both
+  budgets. Focused-test log SHA-256 is
+  `6b3d4a75ef66155883d3fe073b737aff2584a7f315aa592e98404481a5eaaa8a`;
+  build-log SHA-256 is
+  `4884df8987dface2e3c986ad21dde6b1bb87e01cc36a04652029481b195aaa49`.
+- The exact rebased ordinary-Boneyard journey ran in Windows Chrome
+  `151.0.7922.170` with WebGL2. It observed `acid-rain`, `acid-drop`, and
+  `acid-splash`; cloud local Y range `[-225,-175]`; proxy world Y
+  `2044.7932942708335`; residue depth `0.5` with one primitive; maximum 169
+  actors and 216 primitives; the `magic-storm` cue; and empty page, console,
+  and failed-response arrays. Inspected screenshot SHA-256 is
+  `0ffdd7ba5ffdd219cb30cf8190fa97647bb4de7f958a9f7589479b9fa752b14b`;
+  receipt-log SHA-256 is
+  `6f0ebb7036fab359f15a3e2c8f73a264c776345c0b882f9ce85c0f7139ba0a06`.
+- The exact rebased real Tutorial journey accepted the first-run prompt,
+  traversed the live Tutorial owner to stage 5, cast skill 72, and advanced to
+  stage 6. Windows Chrome/WebGL2 observed all Acid members plus the authored
+  fire patch; cloud alpha `1`; local Y `[-175,-225]`; ground
+  `y=1653`; proxy `y=2003`; residue depth `0.5` with one primitive; and empty
+  page, console, failed-response, and wire arrays. Inspected
+  screenshot SHA-256 is
+  `c45363987b5e86e43ce5adf14217a0aefa50cbee18729e7f0fc0d0fae189e1e7`;
+  receipt-log SHA-256 is
+  `61531a87089d685f50fbbc4550a3929135b53b884eccf562200bbcb6277f43f3`.
+- The sibling Mod Loader static RE suite passed `499/499` natively on Windows
+  with explicit worktree Git provenance; log SHA-256 is
+  `cadbf589c5e2365675589c42d5e22b26923d8bd00de8ae6869aaba29922c2218`.
+- The complete native Windows Git-Bash gate was also attempted on the same Acid
+  Rain implementation before the final unrelated-origin rebase. It reached the
+  host suite but could not receive a full-green receipt because unrelated
+  loopback clients intermittently timed out connecting to newly bound
+  `127.0.0.1` ports. A direct exact-candidate rerun of unchanged
+  `game-host.test.ts` reproduced that Windows loopback failure in 16 of 56
+  tests; none is in the Acid Rain ownership, presentation, lighting, audio, or
+  browser paths above.
+- Publication and deployment were not authorized and remain separate.
