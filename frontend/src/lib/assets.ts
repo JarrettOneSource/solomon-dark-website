@@ -131,7 +131,7 @@ import hubHudNpcAnnalist from '../assets/game/hub-hud-npc-annalist.png'
 import hubHudNpcItems from '../assets/game/hub-hud-npc-items.png'
 import hubHudNpcPerkWitch from '../assets/game/hub-hud-npc-perk-witch.png'
 import hubHudNpcPotion from '../assets/game/hub-hud-npc-potion.png'
-import hubHudNpcTeacher from '../assets/game/hub-hud-npc-teacher.png'
+import hubHudNpcShlorio from '../assets/game/hub-hud-npc-teacher.png'
 import hubFountainParticle from '../assets/game/hub-fountain-particle.png'
 import hubMarkerHelpLeft from '../assets/game/hub-marker-help-left.png'
 import hubMarkerHelpRight from '../assets/game/hub-marker-help-right.png'
@@ -691,7 +691,7 @@ export const hub = {
       items: hubHudNpcItems,
       perkWitch: hubHudNpcPerkWitch,
       potion: hubHudNpcPotion,
-      teacher: hubHudNpcTeacher,
+      shlorio: hubHudNpcShlorio,
     },
   },
   trader: {

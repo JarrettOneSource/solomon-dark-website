@@ -763,7 +763,7 @@ async function advanceDialogue(dialog) {
 }
 
 async function openNearbyTrader(page, trader) {
-  const prompt = page.locator(`.hub-trader-interact[data-hub-trader="${trader}"]`)
+  const prompt = page.locator(`.game-interact-prompt[data-interaction-target="hub:${trader}"]`)
   await prompt.waitFor({ timeout: 10_000 })
   await prompt.click()
 }

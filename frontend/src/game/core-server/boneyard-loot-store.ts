@@ -41,8 +41,6 @@ export const NATIVE_SACK_BOUNCE_MULTIPLIER = Math.fround(1.5)
 export const NATIVE_GOLD_SCATTER_INCREMENT = Math.fround(0.5)
 export const NATIVE_GOLD_SCATTER_END = Math.fround(8)
 export const NATIVE_LOOT_EVENT_RETENTION_TICKS = 100
-export const NATIVE_GOODIE_FACING_PROBE_DISTANCE = 25
-export const NATIVE_GOODIE_QUERY_RADIUS = 50
 export const NATIVE_GOODIE_KEY_FEEDBACK_INTERVAL_TICKS = 200
 export const NATIVE_GOODIE_EFFECT_ID_START = 1_000_000
 
@@ -129,20 +127,12 @@ export interface BoneyardLootParticipant {
   readonly advancedUnlocks: readonly boolean[]
   readonly alive: boolean
   readonly connected: boolean
-  readonly hasWizardKey: boolean
   readonly headingIndex: number
   readonly level: number
   readonly modifiers: NativeLootModifiers
   readonly ownedRecipeIndexes: readonly number[]
   readonly playerId: string
   readonly position: Readonly<BoneyardPoint>
-}
-
-export interface BoneyardGoodieUnlock {
-  readonly eid: string
-  readonly goodieId: number
-  readonly playerId: string
-  readonly tick: number
 }
 
 export interface BoneyardLootPickup {
@@ -182,7 +172,11 @@ export interface BoneyardLootStoreStepResult {
   readonly events: readonly BoneyardLootEvent[]
   readonly pickups: readonly BoneyardLootPickup[]
   readonly store: BoneyardLootStore
-  readonly unlocks: readonly BoneyardGoodieUnlock[]
+}
+
+export interface BoneyardGoodieKeyNeededResult {
+  readonly event: BoneyardLootEvent | null
+  readonly store: BoneyardLootStore
 }
 
 export interface SpawnBoneyardLootResult {
@@ -231,7 +225,6 @@ interface WorkingLootStep {
   rejectedCount: number
   sharedRng: NativeRngState
   lastKeyNeededTick: number
-  unlocks: BoneyardGoodieUnlock[]
 }
 
 export function createBoneyardLootStore(
@@ -338,6 +331,37 @@ export function activateBoneyardGoodie(
   return changed ? { ...source, goodies: Object.freeze(goodies) } : source
 }
 
+export function boneyardGoodieKeyNeeded(
+  source: BoneyardLootStore,
+  goodieId: number,
+  playerId: string,
+  tick: number,
+): BoneyardGoodieKeyNeededResult {
+  validateTick(tick)
+  const goodie = source.goodies.find(({ id }) => id === goodieId)
+  if (!goodie || tick <= source.lastKeyNeededTick + NATIVE_GOODIE_KEY_FEEDBACK_INTERVAL_TICKS) {
+    return { event: null, store: source }
+  }
+  const event = Object.freeze({
+    actorId: goodie.id,
+    eventId: source.nextEventId,
+    goodieId: goodie.id,
+    playerId,
+    position: goodie.position,
+    text: 'I need a key!',
+    tick,
+    type: 'goodie-key-needed' as const,
+  })
+  return {
+    event,
+    store: {
+      ...source,
+      lastKeyNeededTick: tick,
+      nextEventId: source.nextEventId + 1,
+    },
+  }
+}
+
 export function spawnBoneyardLootSpecs(
   source: BoneyardLootStore,
   specs: readonly NativeLootDropSpec[],
@@ -433,13 +457,9 @@ export function stepBoneyardLootStore(
   }
   validateParticipants(context.participants)
   const work = working(source)
-  const availableKeys = new Set(context.participants
-    .filter(({ hasWizardKey }) => hasWizardKey)
-    .map(({ playerId }) => playerId))
   const firstTick = source.lastStepTick < 0 ? context.tick : source.lastStepTick + 1
   for (let tick = firstTick; tick <= context.tick; tick += 1) {
     stepLootEffects(work, context.placement, tick)
-    unlockNearestGoodie(work, context.participants, availableKeys, tick)
     stepGoodies(
       work,
       context.participants[0]?.level ?? 1,
@@ -460,7 +480,6 @@ export function stepBoneyardLootStore(
     events: Object.freeze(work.events),
     pickups: Object.freeze(work.pickups),
     store: finishWorking(context.tick, work),
-    unlocks: Object.freeze(work.unlocks),
   }
 }
 
@@ -754,62 +773,6 @@ function createLootFadeEffect(
     verticalVelocity: 0,
     velocity: Object.freeze({ x: 0, y: 0 }),
   })
-}
-
-function unlockNearestGoodie(
-  work: WorkingLootStep,
-  participants: readonly BoneyardLootParticipant[],
-  availableKeys: Set<string>,
-  tick: number,
-): void {
-  const participant = participants.find(({ alive, connected }) => alive && connected)
-  if (participant === undefined) return
-  const heading = participant.headingIndex * Math.PI / 12
-  const queryPoint = {
-    x: Math.fround(
-      participant.position.x + Math.sin(heading) * NATIVE_GOODIE_FACING_PROBE_DISTANCE,
-    ),
-    y: Math.fround(
-      participant.position.y - Math.cos(heading) * NATIVE_GOODIE_FACING_PROBE_DISTANCE,
-    ),
-  }
-  let nearest: BoneyardGoodieState | null = null
-  let nearestDistanceSquared = NATIVE_GOODIE_QUERY_RADIUS * NATIVE_GOODIE_QUERY_RADIUS
-  for (const goodie of work.goodies) {
-    if (goodie.active || goodie.exhausted || goodie.phase !== 0) continue
-    const dx = goodie.position.x - queryPoint.x
-    const dy = goodie.position.y - queryPoint.y
-    const distanceSquared = dx * dx + dy * dy
-    if (!(distanceSquared < nearestDistanceSquared)) continue
-    nearest = goodie
-    nearestDistanceSquared = distanceSquared
-  }
-  if (nearest === null) return
-  if (!availableKeys.has(participant.playerId)) {
-    if (tick > work.lastKeyNeededTick + NATIVE_GOODIE_KEY_FEEDBACK_INTERVAL_TICKS) {
-      work.lastKeyNeededTick = tick
-      emit(work, {
-        actorId: nearest.id,
-        goodieId: nearest.id,
-        playerId: participant.playerId,
-        position: nearest.position,
-        text: 'I need a key!',
-        tick,
-        type: 'goodie-key-needed',
-      })
-    }
-    return
-  }
-  availableKeys.delete(participant.playerId)
-  work.goodies = work.goodies.map((goodie) => goodie.id === nearest!.id
-    ? Object.freeze({ ...goodie, active: true, timer: 0 })
-    : goodie)
-  work.unlocks.push(Object.freeze({
-    eid: nearest.eid,
-    goodieId: nearest.id,
-    playerId: participant.playerId,
-    tick,
-  }))
 }
 
 function spawnGoodieBreakEffects(
@@ -1295,7 +1258,6 @@ function working(source: BoneyardLootStore): WorkingLootStep {
     rejectedCount: 0,
     sharedRng: source.sharedRng,
     lastKeyNeededTick: source.lastKeyNeededTick,
-    unlocks: [],
   }
 }
 

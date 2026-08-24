@@ -379,6 +379,24 @@
   filter: drop-shadow(0 2px 2px rgb(0 0 0 / 0.76));
 }
 
+.hub-hud-slot-button {
+  width: 95px;
+  height: 93px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.hub-hud-slot-button:hover:not(:disabled),
+.hub-hud-slot-button:focus-visible {
+  filter: brightness(1.2);
+  outline: none;
+}
+
+.hub-hud-slot-button:disabled { cursor: default; }
+
 .hub-hud-inventory {
   position: absolute;
   inset: 0;

@@ -418,6 +418,42 @@ test('right mouse and digits one through seven address all native skill quickbar
   input.destroy()
 })
 
+test('heterogeneous belt actions claim potion slots on their stock and rebound press edges', () => {
+  const mouseTarget = new EventTarget()
+  const target = new EventTarget()
+  const claimed: number[] = []
+  const published: PlayerCharacterInput[] = []
+  const input = createBrowserGameplayInput({
+    claimQuickbarPress: (slot) => {
+      if (slot !== 3 && slot !== 4) return false
+      claimed.push(slot)
+      return true
+    },
+    getGamepads: () => [],
+    mouseTarget,
+    onInput: (state) => published.push(state),
+    projectDirection: ({ x, y }) => ({ x, y }),
+    projectPointer: ({ x, y }) => ({ x, y }),
+    target,
+    visibilityTarget: new FakeVisibilityTarget(),
+  })
+
+  target.dispatchEvent(new FakeKeyboardEvent('keydown', 'Digit3'))
+  target.dispatchEvent(new FakeKeyboardEvent('keydown', 'Digit3', true))
+  target.dispatchEvent(new FakeKeyboardEvent('keyup', 'Digit3'))
+  target.dispatchEvent(new FakeKeyboardEvent('keydown', 'Digit4'))
+  assert.deepEqual(claimed, [3, 4])
+  assert.deepEqual(published, [])
+
+  input.setControls(rebindGameControl(DEFAULT_GAME_CONTROL_BINDINGS, 'belt4', 'KeyQ'))
+  target.dispatchEvent(new FakeKeyboardEvent('keydown', 'KeyQ'))
+  assert.deepEqual(claimed, [3, 4, 3])
+
+  target.dispatchEvent(new FakeKeyboardEvent('keydown', 'Digit1'))
+  assert.equal(published.at(-1)?.cast.quickbar, 1)
+  input.destroy()
+})
+
 test('live binding changes reroute quickbar input and pointer-off secondary uses actor heading', () => {
   const mouseTarget = new EventTarget()
   const target = new EventTarget()

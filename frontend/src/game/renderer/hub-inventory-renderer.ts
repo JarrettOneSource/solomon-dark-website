@@ -22,7 +22,12 @@ import {
   type HubTraderId,
 } from '../core-kernels/hub-economy.ts'
 import type { PlayerCharacterConfig, WizardElement } from '../core-kernels/player-character.ts'
-import { HUB_TRADER_DIALOGUES, equipmentSlotsForItem } from '../hub-inventory-presentation.ts'
+import {
+  HUB_INTERACTION_DIALOGUES,
+  HUB_TRADER_DIALOGUES,
+  equipmentSlotsForItem,
+  type HubInteractionId,
+} from '../hub-inventory-presentation.ts'
 import { playerCharacterStaffIsFront, playerCharacterStaffOrbOffset } from '../player-character-presentation.ts'
 import type { ProtocolPlayerEconomy, ProtocolPlayerProgression } from '../protocol/game-state.ts'
 import type { GameModAsset } from '../protocol/game-protocol.ts'
@@ -179,10 +184,10 @@ export type HubInventoryRendererModel =
     }
   | {
       readonly acceleratedAtMs: number | null
+      readonly interaction: HubInteractionId
       readonly kind: 'dialogue'
       readonly phase: HubTraderChatPhase
       readonly phaseStartedAtMs: number
-      readonly trader: HubTraderId
     }
   | {
       readonly config: PlayerCharacterConfig
@@ -881,7 +886,7 @@ function buildDialogue(
   layer: Container,
   model: Extract<HubInventoryRendererModel, { kind: 'dialogue' }>,
 ): ChatRenderState {
-  const dialogue = HUB_TRADER_DIALOGUES[model.trader]
+  const dialogue = HUB_INTERACTION_DIALOGUES[model.interaction]
   addChatPanel(context, layer)
   addBitmapText(
     context,
@@ -906,18 +911,20 @@ function buildDialogue(
   let contentHeight = 0
   if (model.phase === 'choices') {
     const hasPriceQuestion = dialogue.priceLabel !== null
-    addBitmapText(
-      context,
-      content,
-      dialogue.actionLabel,
-      'menu',
-      HUB_CHAT_PANEL.contentWidth / 2,
-      HUB_CHAT_PANEL.primaryChoiceTextBaselineY - HUB_CHAT_PANEL.contentTop,
-      {
-      scale: 1.25,
-      tint: HUB_CHAT_PANEL.actionTextTint,
-      },
-    )
+    if (dialogue.actionLabel !== null && dialogue.service !== null) {
+      addBitmapText(
+        context,
+        content,
+        dialogue.actionLabel,
+        'menu',
+        HUB_CHAT_PANEL.contentWidth / 2,
+        HUB_CHAT_PANEL.primaryChoiceTextBaselineY - HUB_CHAT_PANEL.contentTop,
+        {
+          scale: 1.25,
+          tint: HUB_CHAT_PANEL.actionTextTint,
+        },
+      )
+    }
     if (hasPriceQuestion) {
       addBitmapText(
         context,

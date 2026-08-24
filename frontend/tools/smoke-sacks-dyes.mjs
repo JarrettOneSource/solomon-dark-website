@@ -261,7 +261,7 @@ try {
   await page.locator('.hub-scene[data-gameplay-input-blocked="false"]').waitFor()
   await page.screenshot({ path: `${screenshotRoot}-dyed-robe-character.png` })
 
-  const luthacusPrompt = page.locator('.hub-trader-interact[data-hub-trader="luthacus"]')
+  const luthacusPrompt = page.locator('.game-interact-prompt[data-interaction-target="hub:luthacus"]')
   await luthacusPrompt.waitFor({ timeout: 10_000 })
   await luthacusPrompt.click()
   const dialogue = page.getByRole('dialog', { name: 'Talking to Luthacus' })

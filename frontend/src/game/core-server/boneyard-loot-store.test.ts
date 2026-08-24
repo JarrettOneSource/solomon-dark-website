@@ -36,7 +36,6 @@ const FAR: readonly BoneyardLootParticipant[] = [{
   advancedUnlocks: new Array<boolean>(8).fill(false),
   alive: true,
   connected: true,
-  hasWizardKey: false,
   headingIndex: 0,
   level: 1,
   modifiers: nativeLootModifiers([]),
@@ -455,7 +454,7 @@ test('Goodie activation owns exact phases 100/200 and materializes at 250', () =
   assert.equal(stepped.store.actors[0]?.item?.nativeTypeId, 7008)
 })
 
-test('the local facing probe consumes one recursive key edge and throttles the no-key prompt', () => {
+test('proximity alone never activates a locked Goodie without an explicit interaction action', () => {
   const source = [{
     eid: 'locked-goodie',
     position: { x: 0, y: -25 },
@@ -464,40 +463,16 @@ test('the local facing probe consumes one recursive key edge and throttles the n
   }]
   const participant = {
     ...FAR[0]!,
-    hasWizardKey: true,
     level: 20,
     playerId: 'host',
     position: { x: 0, y: 0 },
   }
-  let store = createBoneyardLootStore('goodie-unlock', source)
+  const store = createBoneyardLootStore('goodie-unlock', source)
   assert.ok(store.nextKeyDropLevel >= 5 && store.nextKeyDropLevel <= 12)
-  let stepped = stepBoneyardLootStore(store, { participants: [participant], tick: 0 })
-  assert.deepEqual(stepped.unlocks, [{
-    eid: 'locked-goodie',
-    goodieId: 1,
-    playerId: 'host',
-    tick: 0,
-  }])
-  assert.equal(stepped.store.goodies[0]?.active, true)
-  assert.equal(stepped.store.goodies[0]?.timer, 1)
-
-  store = createBoneyardLootStore('goodie-no-key', source)
-  stepped = stepBoneyardLootStore(store, {
-    participants: [{ ...participant, hasWizardKey: false }],
-    tick: 0,
-  })
-  assert.equal(stepped.events[0]?.type, 'goodie-key-needed')
-  assert.equal(stepped.events[0]?.text, 'I need a key!')
-  stepped = stepBoneyardLootStore(stepped.store, {
-    participants: [{ ...participant, hasWizardKey: false }],
-    tick: 200,
-  })
-  assert.equal(stepped.events.length, 0)
-  stepped = stepBoneyardLootStore(stepped.store, {
-    participants: [{ ...participant, hasWizardKey: false }],
-    tick: 201,
-  })
-  assert.equal(stepped.events[0]?.type, 'goodie-key-needed')
+  const stepped = stepBoneyardLootStore(store, { participants: [participant], tick: 0 })
+  assert.equal(stepped.store.goodies[0]?.active, false)
+  assert.equal(stepped.store.goodies[0]?.timer, 0)
+  assert.deepEqual(stepped.events, [])
 })
 
 test('the 2047-ID field fails closed without evicting an existing reward', () => {

@@ -134,15 +134,16 @@ surface but never clone its state. Protocol 36 introduced strict belt, primary,
 and general concentration intents. Protocol 63 added a distinct addressed A/B
 concentration command for the HUD buttons while retaining the general
 SkillScreen command. Protocol 65 added the durable resume versus profile-backed
-New Game intent. Current protocol 66 retains both selection paths, the
-authoritative Hagatha one-shot state and six frozen active-Weld component
-ranks, and adds strict Hub activity intent and participant projection. The host applies either skill
-selection only to the authenticated participant before publishing a new
-progression revision. The compact selector
-uses its own `skill-selector` pause source only in an active Boneyard, so the
-host cannot accept an addressed HUD mutation from a full SkillScreen pause (or
-vice versa). In the Hub both selectors are local activities and mutations stay
-authenticated without acquiring any gameplay-pause owner.
+New Game intent. Protocol 66 retained both selection paths, the authoritative
+Hagatha one-shot state and six frozen active-Weld component ranks, and added
+strict Hub activity intent and participant projection. Current protocol 67
+retains those fields and adds the host-resolved locked-Goodie interaction edge.
+The host applies either skill selection only to the authenticated participant
+before publishing a new progression revision. The compact selector uses its
+own `skill-selector` pause source only in an active Boneyard, so the host cannot
+accept an addressed HUD mutation from a full SkillScreen pause (or vice versa).
+In the Hub both selectors are local activities and mutations stay authenticated
+without acquiring any gameplay-pause owner.
 The session also owns the fixed-step accumulator and tick; neither clock is
 nested inside a Hub ambient actor or another world-specific subsystem.
 
@@ -278,7 +279,10 @@ dependencies without revisiting this release invariant.
   collision placement, allocates Gold/Orb/Sack/Bonus actors, advances Goodies,
   resolves strict pickup order, and emits semantic audio/text edges. Currency,
   resources, inventory, and Bonus state are committed at the session-owned
-  player-entity boundary after that one accepted pickup.
+  player-entity boundary after that one accepted pickup. A client interaction
+  action never names a Goodie: the host repeats the exact nearest-facing query,
+  consumes one recursive Wizard Key, and only then arms the Goodie's fixed
+  100/200/250-tick phase lifecycle.
 - Active-Boneyard Pause Menu state is world-instance-owned. The Boneyard ESC
   menu, player Inventory, and Skill Book use one source-qualified first-request
   barrier; a party-run hold freezes every party member without pausing the
@@ -1189,7 +1193,7 @@ This preserves one mutation boundary and prevents Lua callbacks from entering
 the simulation recursively. The host checks dynamic session host identity or
 the account-bound developer entitlement on every console request. `Enable
 Cheats` controls ordinary-host installation of the DevTools API; it is never
-trusted as network authorization. Current protocol 66 retains the
+trusted as network authorization. Current protocol 67 retains the
 server-authored developer boolean from a one-use admission into the welcome.
 An entitled account keeps the setting and ordinary shared-Hub routing off
 while still receiving the DevTools API. No client-authored field can grant the

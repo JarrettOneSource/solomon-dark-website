@@ -72,7 +72,7 @@ import {
   stepBoneyardEnemyStore,
   type BoneyardEnemySemanticEvent,
 } from './boneyard-enemy-store.ts'
-import { spawnBoneyardLootSpecs } from './boneyard-loot-store.ts'
+import { createBoneyardLootStore, spawnBoneyardLootSpecs } from './boneyard-loot-store.ts'
 import { sealPlayerCombatInput } from './player-combat-input.ts'
 import {
   damagePlayerEntity,
@@ -572,7 +572,7 @@ test('the retail Solomon run edge admits primary and secondary combat on its own
   assert.ok(getPlayerProgression(admittedSecondary, 'caster').currentMana < 100)
 })
 
-test('hub trader actions require the authenticated participant to be in native service range', () => {
+test('Hub shortcut services are participant-private, global inside a settled Hub, and blocked in transition', () => {
   const first = {
     discipline: 'arcane',
     displayName: 'First',
@@ -583,24 +583,8 @@ test('hub trader actions require the authenticated participant to be in native s
     displayName: 'Second',
     element: 'water',
   } as const
-  let state = createGameSimulation({ first, second })
+  const state = createGameSimulation({ first, second })
   const firstStock = getPlayerEconomy(state, 'first').fomentiusStock[0]!
-  const outOfRange = applyGameSimulationHubAction(state, 'first', {
-    type: 'buy-fomentius',
-    itemId: firstStock.id,
-  })
-  assert.equal(outOfRange.accepted, false)
-  assert.equal(outOfRange.reason, 'service-unavailable')
-  assert.strictEqual(outOfRange.state, state)
-
-  state = {
-    ...state,
-    playerEntities: replacePlayerCharacter(
-      state.playerEntities,
-      'first',
-      { ...getPlayerCharacter(state, 'first'), position: { x: 1397, y: 664 } },
-    ),
-  }
   const purchased = applyGameSimulationHubAction(state, 'first', {
     type: 'buy-fomentius',
     itemId: firstStock.id,
@@ -661,6 +645,78 @@ test('hub trader actions require the authenticated participant to be in native s
     type: 'buy-fomentius',
     itemId: getPlayerEconomy(fading, 'first').fomentiusStock[0]!.id,
   }).reason, 'service-unavailable')
+})
+
+test('locked Goodies require an explicit nearest-facing interaction and consume one recursive Wizard Key', () => {
+  let state = enterBoneyardWorld(createGameSimulation(), emptyBoneyard())
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+  state = {
+    ...state,
+    playerEntities: replacePlayerCharacter(state.playerEntities, 'local-player', {
+      ...getPlayerCharacter(state),
+      headingIndex: 0,
+      position: { x: 0, y: 0 },
+    }),
+    world: {
+      ...state.world,
+      loot: createBoneyardLootStore('explicit-goodie', [{
+        eid: 'locked-goodie',
+        position: { x: 0, y: -25 },
+        rewardSeed: 0,
+        subtype: 0,
+      }]),
+    },
+  }
+
+  const untouched = stepGameSimulationTick(state, {})
+  assert.equal(untouched.world.kind, 'boneyard')
+  if (untouched.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+  assert.equal(untouched.world.loot.goodies[0]?.active, false)
+
+  const missingKey = applyGameSimulationHubAction(untouched, 'local-player', {
+    type: 'interact-goodie',
+  })
+  assert.equal(missingKey.accepted, false)
+  assert.equal(missingKey.reason, 'item-not-found')
+  assert.equal(
+    missingKey.state.world.kind === 'boneyard'
+      ? missingKey.state.world.lootEvents.at(-1)?.type
+      : null,
+    'goodie-key-needed',
+  )
+
+  const economy = getPlayerEconomy(missingKey.state)
+  const key: HubInventoryItem = {
+    ...economy.backpack[0]!,
+    id: economy.nextItemId,
+    iconRecords: [43],
+    kind: 'key',
+    name: 'Wizard Key',
+    nativeSubtype: 1,
+    nativeTypeId: 7012,
+    quantity: 1,
+  }
+  state = {
+    ...missingKey.state,
+    playerEntities: replacePlayerEconomy(missingKey.state.playerEntities, 'local-player', {
+      ...economy,
+      backpack: [...economy.backpack, key],
+      nextItemId: economy.nextItemId + 1,
+      revision: economy.revision + 1,
+    }),
+  }
+  const unlocked = applyGameSimulationHubAction(state, 'local-player', {
+    type: 'interact-goodie',
+  })
+  assert.equal(unlocked.accepted, true)
+  assert.equal(unlocked.reason, null)
+  assert.equal(
+    unlocked.state.world.kind === 'boneyard'
+      ? unlocked.state.world.loot.goodies[0]?.active
+      : false,
+    true,
+  )
+  assert.equal(findInventoryItem(getPlayerEconomy(unlocked.state).backpack, key.id), null)
 })
 
 test('Hagatha purchase actions arm and consume their authoritative until-hurt effect', () => {

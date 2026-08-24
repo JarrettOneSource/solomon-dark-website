@@ -2,14 +2,21 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  HUB_HUD_SHORTCUTS,
+  HUB_INTERACTION_DIALOGUES,
+  HUB_INTERACTION_IDS,
   HUB_TRADER_DIALOGUES,
   HUB_TRADER_GRID_CAPACITY,
   HUB_TRADER_NATIVE_UI_RECORDS,
   equipmentSlotsForItem,
   hubEquipmentClickAction,
+  hubPotionBeltShortcut,
+  hubInteractionAtPoint,
+  hubInteractionWithinRange,
   hubPotionShortcut,
   hubTraderAtPoint,
   hubTraderWithinServiceRange,
+  nearestHubInteraction,
   nearestHubTrader,
 } from './hub-inventory-presentation.ts'
 
@@ -22,6 +29,9 @@ test('HUD potion shortcuts total the addressed kind and consume the first owned 
   assert.deepEqual(hubPotionShortcut(backpack, 'health-potion'), { count: 5, itemId: 8 })
   assert.deepEqual(hubPotionShortcut(backpack, 'mana-potion'), { count: 4, itemId: 9 })
   assert.deepEqual(hubPotionShortcut([], 'health-potion'), { count: 0, itemId: null })
+  assert.deepEqual(hubPotionBeltShortcut(backpack, 3), { count: 5, itemId: 8 })
+  assert.deepEqual(hubPotionBeltShortcut(backpack, 4), { count: 4, itemId: 9 })
+  assert.equal(hubPotionBeltShortcut(backpack, 2), null)
 })
 
 test('HUD potion shortcuts include recursively owned sack stacks in depth-first order', () => {
@@ -77,6 +87,48 @@ test('merchant proximity uses the exact native radius formula and room ownership
   assert.equal(hubTraderAtPoint('courtyard', { x: 1355.01, y: 280 }), null)
   assert.equal(hubTraderAtPoint('library', { x: 900, y: 642.5 }), 'shlorio')
   assert.equal(hubTraderAtPoint('courtyard', { x: 900, y: 642.5 }), null)
+})
+
+test('the contextual interaction census covers every rendered named NPC and Mortuary portrait', () => {
+  assert.deepEqual(HUB_INTERACTION_IDS, [
+    'hagatha', 'fomentius', 'annalist', 'luthacus', 'teacher',
+    'memorator',
+    'painting-0', 'painting-1', 'painting-100', 'painting-3', 'painting-4',
+    'painting-5', 'painting-6', 'painting-7', 'painting-8', 'painting-9',
+    'librarian', 'shlorio', 'arch-chancellor',
+  ])
+  assert.equal(nearestHubInteraction('courtyard', { x: 895.5, y: 455.5 }), 'annalist')
+  assert.equal(nearestHubInteraction('courtyard', { x: 576.5, y: 710.5 }), 'teacher')
+  assert.equal(nearestHubInteraction('mortuary', { x: 628, y: 770 }), 'memorator')
+  assert.equal(nearestHubInteraction('mortuary', { x: 673, y: 683 }), 'painting-100')
+  assert.equal(nearestHubInteraction('library', { x: 512, y: 595 }), 'librarian')
+  assert.equal(nearestHubInteraction('office', { x: 514, y: 467 }), 'arch-chancellor')
+  assert.equal(nearestHubInteraction('storeroom', { x: 538, y: 324 }), null)
+  assert.equal(hubInteractionAtPoint('mortuary', { x: 688, y: 683 }), 'painting-100')
+  const paintingRange = Math.sqrt(5 * 15 * 15 + 1500)
+  assert.equal(hubInteractionWithinRange('painting-100', 'mortuary', {
+    x: 673 + paintingRange - 1e-9,
+    y: 683,
+  }), true)
+  assert.equal(hubInteractionWithinRange('painting-100', 'mortuary', {
+    x: 673 + paintingRange + 1e-9,
+    y: 683,
+  }), false)
+  assert.equal(hubInteractionWithinRange('painting-100', 'library', { x: 673, y: 683 }), false)
+})
+
+test('the Hub shortcut rail uses all five native records and routes the fifth member to Shlorio', () => {
+  assert.deepEqual(HUB_HUD_SHORTCUTS, [
+    { interaction: 'annalist', levelPickerRecord: 0, mode: 'dialogue', name: 'Provokatus' },
+    { interaction: 'hagatha', levelPickerRecord: 6, mode: 'service', name: 'Hagatha' },
+    { interaction: 'luthacus', levelPickerRecord: 4, mode: 'service', name: 'Luthacus' },
+    { interaction: 'fomentius', levelPickerRecord: 5, mode: 'service', name: 'Fomentius' },
+    { interaction: 'shlorio', levelPickerRecord: 2, mode: 'service', name: 'Shlorio' },
+  ])
+  assert.equal(HUB_INTERACTION_DIALOGUES.annalist.name, 'Provokatus')
+  assert.equal(HUB_INTERACTION_DIALOGUES.teacher.name, 'Machinimbus')
+  assert.equal(HUB_INTERACTION_DIALOGUES['painting-100'].intro.length, 0)
+  assert.equal(HUB_INTERACTION_DIALOGUES.shlorio.service, 'shlorio')
 })
 
 test('native shop membership retains padded grids and exports every atlas row', () => {

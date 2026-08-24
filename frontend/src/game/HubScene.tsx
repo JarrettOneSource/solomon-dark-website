@@ -38,9 +38,11 @@ import GameHud from './GameHud.tsx'
 import type { NativeHudSkillBinding } from './native-hud-presentation.ts'
 import HubInventoryUi, { type HubUiSurface } from './HubInventoryUi.tsx'
 import {
-  hubTraderAtPoint,
-  hubTraderWithinServiceRange,
-  nearestHubTrader,
+  HUB_HUD_SHORTCUTS,
+  hubInteractionAtPoint,
+  hubInteractionWithinRange,
+  hubPotionBeltShortcut,
+  nearestHubInteraction,
 } from './hub-inventory-presentation.ts'
 import TouchJoystick from './input/TouchJoystick.tsx'
 import {
@@ -239,6 +241,8 @@ export default function HubScene({
   const [economy, setEconomy] = useState<ProtocolPlayerEconomy>(() => (
     hubInitialSnapshot.players[playerId]!.economy
   ))
+  const economyRef = useRef(economy)
+  economyRef.current = economy
   const [playerPosition, setPlayerPosition] = useState(() => ({
     ...hubInitialSnapshot.players[playerId]!.position,
   }))
@@ -401,6 +405,12 @@ export default function HubScene({
     let stopPresentationLoop: (() => void) | null = null
     let previousTeacherSeconds = hubInitialSnapshot.tick / 100
     const input = createBrowserGameplayInput({
+      claimQuickbarPress: (slot) => {
+        const potion = hubPotionBeltShortcut(economyRef.current.backpack, slot)
+        if (potion === null) return false
+        if (potion.itemId !== null) onHubAction({ type: 'consume', itemId: potion.itemId })
+        return true
+      },
       controls: settingsRef.current.controls,
       mouseTarget: host,
       onGamepadAction: (action) => {
@@ -428,9 +438,9 @@ export default function HubScene({
           setSelectedPlayerId(nearbyPlayer)
           return
         }
-        const trader = nearestHubTrader(participant.region, player.position)
-        if (trader) {
-          setHubUiSurface({ kind: 'dialogue', trader })
+        const interaction = nearestHubInteraction(participant.region, player.position)
+        if (interaction) {
+          setHubUiSurface({ interaction, kind: 'dialogue', source: 'world' })
           return
         }
         if (snapshot.hostPlayerId !== playerId || participant.region !== 'courtyard') return
@@ -559,7 +569,7 @@ export default function HubScene({
       rendererRef.current?.destroy()
       rendererRef.current = null
     }
-  }, [audio, hubInitialSnapshot, onInput, playerId, samplePresentation])
+  }, [audio, hubInitialSnapshot, onHubAction, onInput, playerId, samplePresentation])
 
   const isHost = hostPlayerId === playerId
   const beginMatch = () => {
@@ -616,15 +626,15 @@ export default function HubScene({
       setSelectedPlayerId(selectedPlayer)
       return
     }
-    const trader = hubTraderAtPoint(participant.region, point)
-    if (!trader || !hubTraderWithinServiceRange(
-      trader,
+    const interaction = hubInteractionAtPoint(participant.region, point)
+    if (!interaction || !hubInteractionWithinRange(
+      interaction,
       participant.region,
       player.position,
     )) return
     event.preventDefault()
     event.stopPropagation()
-    setHubUiSurface({ kind: 'dialogue', trader })
+    setHubUiSurface({ interaction, kind: 'dialogue', source: 'world' })
   }
 
   return (
@@ -674,6 +684,17 @@ export default function HubScene({
           onInventoryClick={() => {
             if (!inputBlocked && !pickerOpen && !transitionActive) {
               setHubUiSurface({ kind: 'inventory' })
+            }
+          }}
+          onHubShortcutClick={(interaction) => {
+            if (inputBlocked || pickerOpen || transitionActive) return
+            const shortcut = HUB_HUD_SHORTCUTS.find((entry) => entry.interaction === interaction)
+            if (!shortcut) return
+            audio.playSound('click')
+            if (shortcut.mode === 'service' && interaction !== 'annalist') {
+              setHubUiSurface({ kind: 'service', source: 'shortcut', trader: interaction })
+            } else {
+              setHubUiSurface({ interaction, kind: 'dialogue', source: 'shortcut' })
             }
           }}
           onMapClick={beginMatch}

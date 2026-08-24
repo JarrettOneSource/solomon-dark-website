@@ -23,6 +23,7 @@ import {
 } from './core-kernels/boneyard-encounter.ts'
 import { actorHeadingVector } from './core-kernels/actor-heading.ts'
 import type { HubInventoryAction } from './core-kernels/hub-economy.ts'
+import { nearestBoneyardGoodie } from './core-kernels/boneyard-goodie-interaction.ts'
 import type { PlayerCharacterInput } from './core-kernels/player-character.ts'
 import {
   isBoneyardGameSnapshot,
@@ -48,8 +49,10 @@ import {
 } from './game-audio-native.ts'
 import { startGamePresentationLoop } from './game-presentation-frame-loop.ts'
 import GameHud from './GameHud.tsx'
+import ContextualInteractButton from './ContextualInteractButton.tsx'
 import type { NativeHudSkillBinding } from './native-hud-presentation.ts'
 import HubInventoryUi, { type HubUiSurface } from './HubInventoryUi.tsx'
+import { hubPotionBeltShortcut } from './hub-inventory-presentation.ts'
 import GameOverOverlay from './GameOverOverlay.tsx'
 import TouchJoystick from './input/TouchJoystick.tsx'
 import NativeLootBitmapText from './NativeLootBitmapText.tsx'
@@ -189,9 +192,19 @@ export default function BoneyardScene({
   const [economy, setEconomy] = useState<ProtocolPlayerEconomy>(
     boneyardInitialSnapshot.players[playerId]!.economy,
   )
+  const economyRef = useRef(economy)
+  economyRef.current = economy
   const [playerPosition, setPlayerPosition] = useState(
     boneyardInitialSnapshot.players[playerId]!.position,
   )
+  const [goodieTargetId, setGoodieTargetId] = useState<number | null>(() => {
+    const player = boneyardInitialSnapshot.players[playerId]
+    return player?.progression.lifeState === 'alive'
+      ? nearestBoneyardGoodie(boneyardInitialSnapshot.world.goodies, player)?.id ?? null
+      : null
+  })
+  const goodieTargetIdRef = useRef(goodieTargetId)
+  goodieTargetIdRef.current = goodieTargetId
   const sceneInputBlocked = inputBlocked || inventorySurface !== null || run.phase !== 'active'
 
   useEffect(() => {
@@ -365,6 +378,12 @@ export default function BoneyardScene({
             ? current
             : player.position
         ))
+        const target = player.progression.lifeState === 'alive'
+          ? nearestBoneyardGoodie(snapshot.world.goodies, player)
+          : null
+        setGoodieTargetId((current) => current === (target?.id ?? null)
+          ? current
+          : target?.id ?? null)
       }
     })
   }, [audio, boneyardInitialSnapshot, loaded.runId, playerId, subscribe])
@@ -408,6 +427,26 @@ export default function BoneyardScene({
     window.addEventListener('keydown', toggleDigIndicator)
     return () => window.removeEventListener('keydown', toggleDigIndicator)
   }, [dig, loaded.runId, sceneInputBlocked])
+
+  useEffect(() => {
+    const interact = (event: KeyboardEvent) => {
+      if (
+        sceneInputBlocked
+        || run.phase !== 'active'
+        || goodieTargetId === null
+        || event.code !== 'KeyE'
+        || event.repeat
+        || event.altKey
+        || event.ctrlKey
+        || event.metaKey
+      ) return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      onHubAction({ type: 'interact-goodie' })
+    }
+    window.addEventListener('keydown', interact, { capture: true })
+    return () => window.removeEventListener('keydown', interact, { capture: true })
+  }, [goodieTargetId, onHubAction, run.phase, sceneInputBlocked])
 
   useEffect(() => {
     const openPause = (event: KeyboardEvent) => {
@@ -481,6 +520,12 @@ export default function BoneyardScene({
     const enemyAmbientAudio = new BoneyardEnemyAmbientAudioSynchronizer(audio)
     const weatherAudio = new BoneyardWeatherAudioSynchronizer(audio)
     const input = createBrowserGameplayInput({
+      claimQuickbarPress: (slot) => {
+        const potion = hubPotionBeltShortcut(economyRef.current.backpack, slot)
+        if (potion === null) return false
+        if (potion.itemId !== null) onHubAction({ type: 'consume', itemId: potion.itemId })
+        return true
+      },
       claimMouseCastStart: () => {
         const renderer = rendererRef.current
         if (!renderer) return false
@@ -504,6 +549,8 @@ export default function BoneyardScene({
           callbacks.onOpenSkills()
         } else if (action === 'pause') {
           callbacks.onPauseRequest()
+        } else if (action === 'interact' && goodieTargetIdRef.current !== null) {
+          onHubAction({ type: 'interact-goodie' })
         }
       },
       onGamepadPresenceChange: (present) => {
@@ -779,6 +826,7 @@ export default function BoneyardScene({
     loaded,
     modAssets,
     modCatalog,
+    onHubAction,
     onInput,
     playerId,
     samplePresentation,
@@ -927,9 +975,16 @@ export default function BoneyardScene({
               progression={progression}
               region="courtyard"
               surface={inventorySurface}
-              tradersEnabled={false}
+              interactionsEnabled={false}
               transitionActive={false}
             />
+            {goodieTargetId !== null && !sceneInputBlocked && run.phase === 'active' ? (
+              <ContextualInteractButton
+                label="Unlock locked chest"
+                target={`goodie:${goodieTargetId}`}
+                onInteract={() => onHubAction({ type: 'interact-goodie' })}
+              />
+            ) : null}
             {spectatorStatus ? (
               <div
                 className="boneyard-spectator-status"

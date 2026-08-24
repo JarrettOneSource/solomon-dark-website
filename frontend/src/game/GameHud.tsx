@@ -14,10 +14,14 @@ import {
 } from './core-kernels/player-progression.ts'
 import { subscribeGamePresentationFrames } from './game-presentation-frame-loop.ts'
 import GameAccountName from './GameAccountName.tsx'
-import { hubPotionShortcut } from './hub-inventory-presentation.ts'
+import {
+  HUB_HUD_SHORTCUTS,
+  hubPotionShortcut,
+  type HubHudShortcutDefinition,
+} from './hub-inventory-presentation.ts'
 import SkillQuickbar, { NativeSkillIcon } from './SkillQuickbar.tsx'
 import type { GameSnapshot } from './protocol/game-protocol.ts'
-import type { GameControlBindings } from './game-settings.ts'
+import { gameBindingLabel, type GameControlBindings } from './game-settings.ts'
 import {
   NATIVE_HUD_SKILL_ACTION_HEIGHT,
   NATIVE_HUD_SKILL_ACTION_TOP,
@@ -41,6 +45,7 @@ interface GameHudProps {
   mapLabel?: string
   mode?: 'hub' | 'run'
   onInventoryClick?: () => void
+  onHubShortcutClick?: (interaction: HubHudShortcutDefinition['interaction']) => void
   onMapClick?: () => void
   onMenuClick?: () => void
   onPotionClick?: (itemId: number) => void
@@ -54,10 +59,6 @@ interface GameHudProps {
   subscribeSnapshot: (listener: (snapshot: GameSnapshot) => void) => () => void
   uiScale: number
   viewport: Readonly<{ height: number; width: number }>
-}
-
-function HudSlot({ src }: { src: string }) {
-  return <img className="hub-hud-slot" src={src} alt="" />
 }
 
 function InventoryCount({ count, variant }: { count: number; variant: 'blue' | 'red' }) {
@@ -138,6 +139,7 @@ export default function GameHud({
   mapLabel = 'Map',
   mode = 'hub',
   onInventoryClick,
+  onHubShortcutClick,
   onMapClick,
   onMenuClick,
   onPotionClick,
@@ -204,6 +206,15 @@ export default function GameHud({
   })
   const healthPotions = hubPotionShortcut(economy.backpack, 'health-potion')
   const manaPotions = hubPotionShortcut(economy.backpack, 'mana-potion')
+  const healthPotionKey = gameBindingLabel(controls.belt4)
+  const manaPotionKey = gameBindingLabel(controls.belt5)
+  const shortcutAssets: Readonly<Record<HubHudShortcutDefinition['interaction'], string>> = {
+    annalist: hub.hud.npcs.annalist,
+    fomentius: hub.hud.npcs.potion,
+    hagatha: hub.hud.npcs.perkWitch,
+    luthacus: hub.hud.npcs.items,
+    shlorio: hub.hud.npcs.shlorio,
+  }
   return (
     <div
       className="hub-hud"
@@ -363,12 +374,21 @@ export default function GameHud({
       />
 
       {mode === 'hub' ? (
-        <div className="hub-hud-loadout" aria-label="Equipped spells">
-          <HudSlot src={hub.hud.npcs.annalist} />
-          <HudSlot src={hub.hud.npcs.perkWitch} />
-          <HudSlot src={hub.hud.npcs.items} />
-          <HudSlot src={hub.hud.npcs.potion} />
-          <HudSlot src={hub.hud.npcs.teacher} />
+        <div className="hub-hud-loadout" aria-label="College interactions">
+          {HUB_HUD_SHORTCUTS.map((shortcut) => (
+            <button
+              type="button"
+              className="hub-hud-slot-button"
+              data-hub-shortcut={shortcut.interaction}
+              data-level-picker-record={shortcut.levelPickerRecord}
+              key={shortcut.interaction}
+              aria-label={`Open ${shortcut.name} interaction`}
+              disabled={!onHubShortcutClick}
+              onClick={() => onHubShortcutClick?.(shortcut.interaction)}
+            >
+              <img className="hub-hud-slot" src={shortcutAssets[shortcut.interaction]} alt="" />
+            </button>
+          ))}
         </div>
       ) : null}
 
@@ -376,11 +396,12 @@ export default function GameHud({
         <button
           type="button"
           className="hub-hud-potion-button hub-hud-potion-button-red"
-          aria-label={`Use health potion, ${healthPotions.count} available`}
+          aria-label={`Use health potion, key ${healthPotionKey}, ${healthPotions.count} available`}
           disabled={healthPotions.itemId === null || !onPotionClick}
           onClick={() => {
             if (healthPotions.itemId !== null) onPotionClick?.(healthPotions.itemId)
           }}
+          title={`Health Potion (${healthPotionKey})`}
         >
           <img className="hub-hud-potion hub-hud-potion-red" src={hub.hud.potionRed} alt="" />
         </button>
@@ -423,11 +444,12 @@ export default function GameHud({
         <button
           type="button"
           className="hub-hud-potion-button hub-hud-potion-button-blue"
-          aria-label={`Use mana potion, ${manaPotions.count} available`}
+          aria-label={`Use mana potion, key ${manaPotionKey}, ${manaPotions.count} available`}
           disabled={manaPotions.itemId === null || !onPotionClick}
           onClick={() => {
             if (manaPotions.itemId !== null) onPotionClick?.(manaPotions.itemId)
           }}
+          title={`Mana Potion (${manaPotionKey})`}
         >
           <img className="hub-hud-potion hub-hud-potion-blue" src={hub.hud.potionBlue} alt="" />
         </button>

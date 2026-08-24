@@ -54,6 +54,7 @@ interface HeldQuickbarInput {
 
 interface BrowserGameplayInputOptions {
   claimMouseCastStart?: (lane: GameplayMouseCastLane) => boolean
+  claimQuickbarPress?: (slot: number) => boolean
   controls?: GameControlBindings
   getGamepads?: () => readonly (GamepadLike | null)[]
   mouseTarget: BrowserInputTarget
@@ -73,6 +74,7 @@ interface BrowserGameplayInputOptions {
 
 export function createBrowserGameplayInput({
   claimMouseCastStart = () => false,
+  claimQuickbarPress = () => false,
   controls: initialControls = DEFAULT_GAME_CONTROL_BINDINGS,
   getGamepads = () => typeof navigator.getGamepads === 'function' ? navigator.getGamepads() : [],
   mouseTarget,
@@ -188,6 +190,13 @@ export function createBrowserGameplayInput({
     const lane = mouse && castLane(mouse.button, controls)
     if (!mouse || !lane) return
     if (lane === 'primary' && !primaryCastingEnabled) return
+    const quickbarSlot = lane === 'secondary'
+      ? quickbarSlotForBinding(controls, `Mouse${mouse.button}`)
+      : null
+    if (quickbarSlot !== null && claimQuickbarPress(quickbarSlot)) {
+      event.preventDefault()
+      return
+    }
     if (claimMouseCastStart(lane)) {
       event.preventDefault()
       return
@@ -201,9 +210,8 @@ export function createBrowserGameplayInput({
     aimOwner = 'mouse'
     if (lane === 'primary') mousePrimary = true
     else {
-      const slot = quickbarSlotForBinding(controls, `Mouse${mouse.button}`)
-      if (slot === null) return
-      holdQuickbarInput(`mouse:${slot}`, slot)
+      if (quickbarSlot === null) return
+      holdQuickbarInput(`mouse:${quickbarSlot}`, quickbarSlot)
     }
     event.preventDefault()
     publish()
@@ -246,6 +254,10 @@ export function createBrowserGameplayInput({
     const keyboard = keyboardEvent(event)
     const slot = keyboard && quickbarSlotForBinding(controls, keyboard.code)
     if (slot === null || keyboard!.repeat || quickbarInputHeld(`keyboard:${slot}`, slot)) return
+    if (claimQuickbarPress(slot)) {
+      event.preventDefault()
+      return
+    }
     holdQuickbarInput(`keyboard:${slot}`, slot)
     event.preventDefault()
     publish()
@@ -335,6 +347,7 @@ export function createBrowserGameplayInput({
       const source = `touch:${slot}` as const
       if (pressed) {
         if (quickbarInputHeld(source, slot)) return
+        if (claimQuickbarPress(slot)) return
         if (aim === null && fallbackDirection) {
           const direction = primaryDirection(fallbackDirection)
           if (direction) {

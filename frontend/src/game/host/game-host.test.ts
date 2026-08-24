@@ -900,7 +900,7 @@ test('shared Hub activity is replicated while every resident and the Hub clock s
   await cleared
 })
 
-test('game host routes inventory commands without disconnecting on a stale or unavailable offer', async (context) => {
+test('game host routes global Hub shortcuts and rejects stale inventory commands without disconnecting', async (context) => {
   const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
   context.after(() => host.close())
   const client = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
@@ -911,7 +911,7 @@ test('game host routes inventory commands without disconnecting on a stale or un
 
   const reconciled = nextMessage(client.socket, (message) => (
     message.type === 'server-snapshot'
-    && message.snapshot.players[playerId].economy.revision === initial.revision
+    && message.snapshot.players[playerId].economy.revision === initial.revision + 1
   ))
   client.socket.send(encodeGameMessage({
     type: 'client-hub-action',
@@ -919,11 +919,11 @@ test('game host routes inventory commands without disconnecting on a stale or un
   }))
   const snapshot = await reconciled
   assert.equal(snapshot.type, 'server-snapshot')
-  assert.equal(snapshot.snapshot.players[playerId].economy.gold, 10_000)
+  assert.equal(snapshot.snapshot.players[playerId].economy.gold, 9_850)
 
   const rejected = nextMessage(client.socket, (message) => (
     message.type === 'server-snapshot'
-    && message.snapshot.players[playerId].economy.revision === initial.revision + 1
+    && message.snapshot.players[playerId].economy.revision === initial.revision + 2
   ))
   client.socket.send(encodeGameMessage({
     type: 'client-hub-action',
@@ -936,7 +936,7 @@ test('game host routes inventory commands without disconnecting on a stale or un
     action: 'consume',
     dowsingPitch: null,
     reason: 'item-not-found',
-    sequence: 1,
+    sequence: 2,
     transferDirection: null,
     transferGesture: null,
     unforgeOutcome: null,

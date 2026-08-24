@@ -119,6 +119,8 @@ test('FOV, UI scale, volume, and light quality preserve their exact boundaries',
 })
 
 test('key rebinding swaps conflicts across fifteen native inputs and browser chat', () => {
+  assert.equal(DEFAULT_GAME_CONTROL_BINDINGS.belt4, 'Digit3')
+  assert.equal(DEFAULT_GAME_CONTROL_BINDINGS.belt5, 'Digit4')
   const rebound = rebindGameControl(DEFAULT_GAME_CONTROL_BINDINGS, 'moveUp', 'KeyI')
   assert.equal(rebound.moveUp, 'KeyI')
   assert.equal(rebound.openInventory, 'KeyW')

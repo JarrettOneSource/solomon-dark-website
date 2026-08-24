@@ -324,7 +324,7 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
   })), /activity/)
 })
 
-test('protocol 66 retains exact A or B slots for HUD concentration replacement', () => {
+test('protocol 67 retains exact A or B slots for HUD concentration replacement', () => {
   assert.throws(() => decodeClientGameMessage(JSON.stringify({
     type: 'client-select-concentration-slot',
     skillId: 57,
@@ -415,7 +415,7 @@ test('protocol v42 bounds Lua requests and structured results by wire bytes and 
   }
 })
 
-test('protocol v62 accepts every authoritative inventory action and rejects malformed variants', () => {
+test('protocol v67 accepts every authoritative inventory and contextual action and rejects malformed variants', () => {
   const actions = [
     { type: 'buy-dowsing', offerId: 1 },
     { type: 'buy-fomentius', itemId: 2 },
@@ -425,6 +425,7 @@ test('protocol v62 accepts every authoritative inventory action and rejects malf
     { type: 'dye', dyeItemId: 7, layer: 'cloth', swatchRows: [1, 9, 5], targetItemId: 8 },
     { type: 'dowse' },
     { type: 'equip', itemId: 3, slot: 'ring-2' },
+    { type: 'interact-goodie' },
     { type: 'move-inventory-item', destinationSackId: 10, itemId: 9 },
     { type: 'move-inventory-item', destinationSackId: null, itemId: 9 },
     { type: 'transfer', direction: 'to-storage', gesture: 'drag', itemId: 4 },
@@ -1257,8 +1258,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v66 carries Hub activity, saves, Hagatha runtime, Imp effects, and gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 66)
+test('protocol v67 carries Hub activity, Goodie actions, saves, Hagatha runtime, Imp effects, and gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 67)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),

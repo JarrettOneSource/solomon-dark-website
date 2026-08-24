@@ -62,7 +62,6 @@ import {
   closeDowsingOffers,
   consumeInventoryItem,
   dyeInventoryClothing,
-  economyHasWizardKey,
   dowse,
   equipInventoryItem,
   findInventoryItem,
@@ -79,6 +78,7 @@ import {
   type ModConsumableContent,
   type HubTraderId,
 } from '../core-kernels/hub-economy.ts'
+import { nearestBoneyardGoodie } from '../core-kernels/boneyard-goodie-interaction.ts'
 import { nativeEquipmentHasFeature } from '../core-kernels/native-equipment-effects.ts'
 import {
   resolveNativeSkillDamageValue,
@@ -244,10 +244,11 @@ import {
   type PlayerEntityStore,
 } from './player-entity-store.ts'
 import {
+  activateBoneyardGoodie,
+  boneyardGoodieKeyNeeded,
   NATIVE_LOOT_EVENT_RETENTION_TICKS,
   nativeHagathaLastWordLoot,
   removeBoneyardLootActors,
-  type BoneyardGoodieUnlock,
   type BoneyardLootEvent,
   type BoneyardLootPickup,
 } from './boneyard-loot-store.ts'
@@ -765,8 +766,11 @@ export function applyGameSimulationHubAction(
   if (!economy || !player || state.levelUpBarrier !== null) {
     return { accepted: false, modConsumption: null, reason: 'service-unavailable', state }
   }
+  if (action.type === 'interact-goodie') {
+    return interactWithBoneyardGoodie(state, playerId, player)
+  }
   const trader = traderForAction(action)
-  if (trader && !traderAvailable(state, playerId, player.position, trader)) {
+  if (trader && !hubServiceAvailable(state, playerId)) {
     return { accepted: false, modConsumption: null, reason: 'service-unavailable', state }
   }
 
@@ -1374,7 +1378,6 @@ export function stepGameSimulationTick(
             collisionEnabled: playerCollisionEnabledAfterCombatTick(progression),
             eligible: state.run.eligiblePlayerIds.includes(playerId),
             inventoryHasHealthPotion: economyContainsHealthPotion(economy),
-            inventoryHasWizardKey: economyHasWizardKey(economy),
             level: progression.level,
             lootModifiers: nativeLootModifiers(economy.ownedPerkSelectors, {
               goldAmount: derived.goldAmountMultiplier,
@@ -1428,7 +1431,6 @@ function finishGameSimulationTick(
   previous: GameSimulationState,
   result: {
     enemyEvents?: readonly BoneyardEnemySemanticEvent[]
-    goodieUnlocks?: readonly BoneyardGoodieUnlock[]
     lootEvents?: readonly BoneyardLootEvent[]
     lootPickups?: readonly BoneyardLootPickup[]
     playerDamage?: readonly Readonly<{
@@ -1760,13 +1762,6 @@ function finishGameSimulationTick(
       world = triggered.world
       for (const actorId of triggered.actorIds) unsteppedSecondaryActorIds.add(actorId)
     }
-  }
-  for (const unlock of result.goodieUnlocks ?? []) {
-    const consumed = consumePlayerEntityWizardKey(playerEntities, unlock.playerId)
-    if (!consumed.accepted) {
-      throw new Error(`Goodie ${unlock.goodieId} activated without its Wizard Key`)
-    }
-    playerEntities = consumed.store
   }
   const bonusSkillChoicePlayerIds: string[] = []
   const lootTextOverrides = new Map<number, string>()
@@ -2999,15 +2994,54 @@ function rankedSkillNumericValue(
   return value
 }
 
-const HUB_TRADER_GEOMETRY: Readonly<Record<HubTraderId, {
-  readonly position: Vector2
-  readonly radius: number
-  readonly region: 'courtyard' | 'library'
-}>> = {
-  fomentius: { position: { x: 1397, y: 664 }, radius: 30, region: 'courtyard' },
-  hagatha: { position: { x: 1340, y: 280 }, radius: 15, region: 'courtyard' },
-  luthacus: { position: { x: 1700.5, y: 449.5 }, radius: 25, region: 'courtyard' },
-  shlorio: { position: { x: 900, y: 642.5 }, radius: 25, region: 'library' },
+function interactWithBoneyardGoodie(
+  state: GameSimulationState,
+  playerId: PlayerId,
+  player: PlayerCharacterState,
+): GameSimulationInventoryActionResult {
+  if (
+    state.run.phase !== 'active'
+    || state.world.kind !== 'boneyard'
+    || getPlayerProgression(state, playerId).lifeState !== 'alive'
+  ) {
+    return { accepted: false, modConsumption: null, reason: 'service-unavailable', state }
+  }
+  const goodie = nearestBoneyardGoodie(state.world.loot.goodies, player)
+  if (!goodie) {
+    return { accepted: false, modConsumption: null, reason: 'invalid-target', state }
+  }
+  const consumed = consumePlayerEntityWizardKey(state.playerEntities, playerId)
+  if (!consumed.accepted) {
+    const feedback = boneyardGoodieKeyNeeded(state.world.loot, goodie.id, playerId, state.tick)
+    const world = feedback.store === state.world.loot && feedback.event === null
+      ? state.world
+      : {
+          ...state.world,
+          loot: feedback.store,
+          lootEvents: feedback.event === null
+            ? state.world.lootEvents
+            : retainBoneyardLootEvents(state.world.lootEvents, [feedback.event], state.tick),
+        }
+    return {
+      accepted: false,
+      modConsumption: null,
+      reason: 'item-not-found',
+      state: world === state.world ? state : { ...state, world },
+    }
+  }
+  return {
+    accepted: true,
+    modConsumption: null,
+    reason: null,
+    state: {
+      ...state,
+      playerEntities: consumed.store,
+      world: {
+        ...state.world,
+        loot: activateBoneyardGoodie(state.world.loot, goodie.eid),
+      },
+    },
+  }
 }
 
 function traderForAction(action: HubInventoryAction): HubTraderId | null {
@@ -3021,6 +3055,7 @@ function traderForAction(action: HubInventoryAction): HubTraderId | null {
     case 'consume':
     case 'dye':
     case 'equip':
+    case 'interact-goodie':
     case 'move-inventory-item':
     case 'read-skill-book':
     case 'unforge':
@@ -3028,21 +3063,13 @@ function traderForAction(action: HubInventoryAction): HubTraderId | null {
   }
 }
 
-function traderAvailable(
+function hubServiceAvailable(
   state: GameSimulationState,
   playerId: string,
-  playerPosition: Vector2,
-  trader: HubTraderId,
 ): boolean {
   if (state.run.phase !== 'hub' || state.world.kind !== 'hub') return false
   const participant = state.world.participants[playerId]
-  const geometry = HUB_TRADER_GEOMETRY[trader]
-  if (!participant || participant.transition !== null || participant.region !== geometry.region) {
-    return false
-  }
-  const dx = playerPosition.x - geometry.position.x
-  const dy = playerPosition.y - geometry.position.y
-  return dx * dx + dy * dy <= 5 * geometry.radius * geometry.radius + 1500
+  return participant !== undefined && participant.transition === null
 }
 
 function retainBoneyardEnemyEvents(

@@ -107,7 +107,6 @@ import {
   spawnBoneyardCustomLootItems,
   rollBoneyardLootSeed,
   stepBoneyardLootStore,
-  type BoneyardGoodieUnlock,
   type BoneyardLootEvent,
   type BoneyardLootPickup,
   type BoneyardLootStore,
@@ -119,7 +118,6 @@ export interface BoneyardPlayerCombatStatus {
   readonly eligible: boolean
   readonly movementScale: number
   readonly inventoryHasHealthPotion?: boolean
-  readonly inventoryHasWizardKey?: boolean
   readonly level?: number
   readonly lootModifiers?: NativeLootModifiers
   readonly ownedRecipeIndexes?: readonly number[]
@@ -158,7 +156,6 @@ export interface BoneyardWorldState {
 
 export interface BoneyardWorldTickResult {
   enemyEvents: readonly BoneyardEnemySemanticEvent[]
-  goodieUnlocks: readonly BoneyardGoodieUnlock[]
   lootEvents: readonly BoneyardLootEvent[]
   lootPickups: readonly BoneyardLootPickup[]
   playerDamage: readonly BoneyardEnemyPlayerDamage[]
@@ -433,7 +430,6 @@ export function stepBoneyardWorldTick(
       advancedUnlocks: combat?.advancedUnlocks ?? new Array<boolean>(8).fill(false),
       alive: combat?.alive ?? false,
       connected: true,
-      hasWizardKey: combat?.inventoryHasWizardKey ?? false,
       headingIndex: player.headingIndex,
       level: combat?.level ?? 1,
       modifiers: combat?.lootModifiers ?? NATIVE_LOOT_DEFAULT_MODIFIERS,
@@ -695,7 +691,6 @@ export function stepBoneyardWorldTick(
   )
   return {
     enemyEvents: enemyStep.events,
-    goodieUnlocks: lootStep.unlocks,
     lootEvents: lootStep.events,
     lootPickups: lootStep.pickups,
     playerDamage: enemyStep.playerDamage,

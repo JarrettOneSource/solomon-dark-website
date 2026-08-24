@@ -90,6 +90,7 @@ export type HubInventoryAction =
     }
   | { readonly type: 'dowse' }
   | { readonly type: 'equip'; readonly itemId: number; readonly slot: EquipmentSlot }
+  | { readonly type: 'interact-goodie' }
   | {
       readonly type: 'move-inventory-item'
       readonly destinationSackId: number | null

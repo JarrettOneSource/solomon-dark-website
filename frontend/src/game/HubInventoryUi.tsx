@@ -36,12 +36,15 @@ import type { PlayerCharacterConfig } from './core-kernels/player-character.ts'
 import type { Vector2 } from './core-kernels/vector.ts'
 import type { GameAudioDirector } from './game-audio-director.ts'
 import { subscribeGamePresentationFrames } from './game-presentation-frame-loop.ts'
+import ContextualInteractButton from './ContextualInteractButton.tsx'
 import {
-  HUB_TRADER_DIALOGUES,
+  HUB_INTERACTION_DIALOGUES,
   equipmentSlotsForItem,
   hubEquipmentClickAction,
-  hubTraderWithinServiceRange,
-  nearestHubTrader,
+  hubInteractionPromptLabel,
+  hubInteractionWithinRange,
+  nearestHubInteraction,
+  type HubInteractionId,
 } from './hub-inventory-presentation.ts'
 import type { ProtocolPlayerEconomy, ProtocolPlayerProgression } from './protocol/game-state.ts'
 import type { GameModAsset } from './protocol/game-protocol.ts'
@@ -135,9 +138,17 @@ function unforgeResultNotice(outcome: NativeUnforgeOutcome): HubInventoryUiNotic
 }
 
 export type HubUiSurface =
-  | { readonly kind: 'dialogue'; readonly trader: HubTraderId }
+  | {
+      readonly interaction: HubInteractionId
+      readonly kind: 'dialogue'
+      readonly source: 'shortcut' | 'world'
+    }
   | { readonly kind: 'inventory' }
-  | { readonly kind: 'service'; readonly trader: HubTraderId }
+  | {
+      readonly kind: 'service'
+      readonly source: 'shortcut' | 'world'
+      readonly trader: HubTraderId
+    }
   | null
 
 interface HubInventoryUiProps {
@@ -157,7 +168,7 @@ interface HubInventoryUiProps {
   region: HubRegionId
   surface: HubUiSurface
   transitionActive: boolean
-  tradersEnabled?: boolean
+  interactionsEnabled?: boolean
 }
 
 export default function HubInventoryUi({
@@ -177,13 +188,13 @@ export default function HubInventoryUi({
   region,
   surface,
   transitionActive,
-  tradersEnabled = true,
+  interactionsEnabled = true,
 }: HubInventoryUiProps) {
-  const nearestTrader = useMemo(
-    () => disabled || transitionActive || !tradersEnabled
+  const nearestInteraction = useMemo(
+    () => disabled || transitionActive || !interactionsEnabled
       ? null
-      : nearestHubTrader(region, playerPosition),
-    [disabled, playerPosition, region, tradersEnabled, transitionActive],
+      : nearestHubInteraction(region, playerPosition),
+    [disabled, interactionsEnabled, playerPosition, region, transitionActive],
   )
 
   const closeSurface = useCallback(() => {
@@ -200,8 +211,8 @@ export default function HubInventoryUi({
       closeSurface()
       return
     }
-    if ('trader' in surface && !hubTraderWithinServiceRange(
-      surface.trader,
+    if (surface.kind !== 'inventory' && surface.source === 'world' && !hubInteractionWithinRange(
+      surface.kind === 'dialogue' ? surface.interaction : surface.trader,
       region,
       playerPosition,
     )) closeSurface()
@@ -215,22 +226,26 @@ export default function HubInventoryUi({
         || (surface.kind === 'inventory' && event.code === inventoryKeyCode)
       )) {
         event.preventDefault()
-        event.stopPropagation()
+        event.stopImmediatePropagation()
         if (surface.kind !== 'dialogue') audio.playSound('open-panel')
         closeSurface()
         return
       }
       if (!surface && !disabled && !transitionActive && event.code === inventoryKeyCode) {
         event.preventDefault()
-        event.stopPropagation()
+        event.stopImmediatePropagation()
         onSurfaceChange({ kind: 'inventory' })
         return
       }
-      if (surface || !nearestTrader || (event.code !== 'KeyE' && event.key !== 'Enter')) return
+      if (surface || !nearestInteraction || (event.code !== 'KeyE' && event.key !== 'Enter')) return
       event.preventDefault()
-      event.stopPropagation()
+      event.stopImmediatePropagation()
       audio.playSound('click')
-      onSurfaceChange({ kind: 'dialogue', trader: nearestTrader })
+      onSurfaceChange({
+        interaction: nearestInteraction,
+        kind: 'dialogue',
+        source: 'world',
+      })
     }
     window.addEventListener('keydown', keyDown, { capture: true })
     return () => window.removeEventListener('keydown', keyDown, { capture: true })
@@ -240,28 +255,32 @@ export default function HubInventoryUi({
     disabled,
     inventoryKeyCode,
     menuKeyCode,
-    nearestTrader,
+    nearestInteraction,
     onSurfaceChange,
     surface,
     transitionActive,
   ])
 
   if (!surface) {
-    return nearestTrader ? (
-      <button
-        type="button"
-        className="hub-trader-interact"
-        data-hub-trader={nearestTrader}
-        aria-label={`Talk to ${HUB_TRADER_DIALOGUES[nearestTrader].name}`}
-        onClick={() => {
+    return nearestInteraction ? (
+      <ContextualInteractButton
+        label={hubInteractionPromptLabel(nearestInteraction)}
+        target={`hub:${nearestInteraction}`}
+        onInteract={() => {
           audio.playSound('click')
-          onSurfaceChange({ kind: 'dialogue', trader: nearestTrader })
+          onSurfaceChange({
+            interaction: nearestInteraction,
+            kind: 'dialogue',
+            source: 'world',
+          })
         }}
       />
     ) : null
   }
 
-  const surfaceKey = `${surface.kind}-${'trader' in surface ? surface.trader : 'player'}`
+  const surfaceKey = surface.kind === 'dialogue'
+    ? `${surface.kind}-${surface.interaction}`
+    : `${surface.kind}-${'trader' in surface ? surface.trader : 'player'}`
   const overlay = (
     <NativeHubSurface
       key={surfaceKey}
@@ -441,10 +460,10 @@ function NativeHubSurface({
     }
     if (surface.kind === 'dialogue') return {
       acceleratedAtMs: chat.acceleratedAtMs,
+      interaction: surface.interaction,
       kind: 'dialogue',
       phase: chat.phase,
       phaseStartedAtMs: chat.phaseStartedAtMs,
-      trader: surface.trader,
     }
     return {
       config,
@@ -598,8 +617,8 @@ function NativeHubSurface({
   const label = surface.kind === 'inventory'
     ? 'Inventory'
     : surface.kind === 'dialogue'
-      ? `Talking to ${HUB_TRADER_DIALOGUES[surface.trader].name}`
-      : HUB_TRADER_DIALOGUES[surface.trader].title
+      ? `Talking to ${HUB_INTERACTION_DIALOGUES[surface.interaction].name}`
+      : HUB_INTERACTION_DIALOGUES[surface.trader].title
   const activeServiceInspection = serviceHoverInspection ?? serviceFocusInspection
   const semanticTooltip = surface.kind === 'service' && activeServiceInspection
     ? serviceInspectionTooltipText(
@@ -709,14 +728,21 @@ function NativeHubSurface({
           ) : surface.kind === 'dialogue' ? (
             <DialogueActions
               chat={chat}
-              trader={surface.trader}
+              interaction={surface.interaction}
               onClose={onClose}
               onAccelerate={() => setChat((current) => current.acceleratedAtMs === null
                 ? { ...current, acceleratedAtMs: performance.now() }
                 : current)}
               onAdvance={() => beginChatPhase('choices')}
               onPrices={() => click(() => beginChatPhase('prices'))}
-              onService={() => click(() => onSurfaceChange({ kind: 'service', trader: surface.trader }))}
+              onService={() => {
+                const trader = HUB_INTERACTION_DIALOGUES[surface.interaction].service
+                if (trader !== null) click(() => onSurfaceChange({
+                  kind: 'service',
+                  source: surface.source,
+                  trader,
+                }))
+              }}
             />
           ) : surface.kind === 'service' ? (
             <ServiceActions
@@ -793,12 +819,12 @@ function NativeHubSurface({
 
 function DialogueActions({
   chat,
+  interaction,
   onAccelerate,
   onAdvance,
   onClose,
   onPrices,
   onService,
-  trader,
 }: {
   chat: {
     acceleratedAtMs: number | null
@@ -810,9 +836,9 @@ function DialogueActions({
   onClose: () => void
   onPrices: () => void
   onService: () => void
-  trader: HubTraderId
+  interaction: HubInteractionId
 }) {
-  const dialogue = HUB_TRADER_DIALOGUES[trader]
+  const dialogue = HUB_INTERACTION_DIALOGUES[interaction]
   const paragraphs = chat.phase === 'prices' ? dialogue.priceExplanation : dialogue.intro
   return (
     <div className="hub-native-dialogue-actions">
@@ -821,12 +847,14 @@ function DialogueActions({
       </div>
       {chat.phase === 'choices' ? (
         <>
-          <NativeAction
-            data={{ 'data-service-trader': trader }}
-            label={dialogue.actionLabel}
-            rect={HUB_CHAT_PANEL.primaryChoiceRect}
-            onClick={onService}
-          />
+          {dialogue.actionLabel !== null && dialogue.service !== null ? (
+            <NativeAction
+              data={{ 'data-service-trader': dialogue.service }}
+              label={dialogue.actionLabel}
+              rect={HUB_CHAT_PANEL.primaryChoiceRect}
+              onClick={onService}
+            />
+          ) : null}
           {dialogue.priceLabel ? (
             <NativeAction label={dialogue.priceLabel} rect={HUB_CHAT_PANEL.secondaryChoiceRect} onClick={onPrices} />
           ) : null}
