@@ -39357,18 +39357,21 @@ class/element expansion.
 - Packaged update 19 is strict SHA-256
   `85edda9d6bd7f7f08eca209fb9790c8d4d5e570e20b8ff8d5bb08284b3dd055c`,
   7,086,446 bytes. Python and TypeScript reproduce it byte-for-byte.
-- Canonical train: 30/30 deaths, mean wave 1.467 (95% 0.833..2.233),
-  1,535 kills, 23 waves, 66 choices, 39 potions. Canonical holdout: 30/30
-  deaths, mean 1.167 (0.800..1.600), 965 kills, 13 waves, 53 choices,
-  38 potions. Both sets observe every primary and pass all continuous casts.
+- Canonical train: 30/30 deaths, mean wave 1.533 (95% 0.867..2.333),
+  1,567 kills, 24 waves, 67 choices, 36 potions. Canonical holdout: 30/30
+  deaths, mean 1.033 (0.700..1.400), 807 kills, 10 waves, 48 choices,
+  34 potions. Both sets observe every primary and pass all continuous casts.
 - The official comparison against the stronger unpublished all-primary v6
-  candidate is `promoted=false`: train `+0.467`, 95% `-0.148..+1.081`;
-  holdout `+0.133`, `-0.239..+0.506`. V7 is packaged only on this local
+  candidate is `promoted=false`: train `+0.533`, 95% `-0.044..+1.111`;
+  holdout `+0.000`, `-0.451..+0.451`. V7 is packaged only on this local
   capability branch; no performance-promotion or production claim is made.
-- Exact Mac commit `9477c332`: canonical gate exit zero, ML 77/77, all other
-  suites/build/lint/desktop/media green, Game 448,703 raw / 125,805 gzip.
-  Real Chrome deployment/save/reload/killed/profile flows passed. Live
-  GameHost smokes passed Ether, Fire, Air, Water, and Earth with ordinary
-  entrance traversal and at least one kill each.
+- Functional Mac cutoff `d8ca5e1d` is rebased on tutorial authority
+  `f7e09723`. The tutorial schema advance exposed and closed two acceptance
+  seams: the browser driver now dismisses the first-run offer, and the backend
+  accepts current schema 7 while retaining schema 6. The focused cloud-save
+  contract and real Chrome deployment/save/reload/killed/profile flows pass.
+  Live GameHost smokes pass Ether, Fire, Air, Water, and Earth with ordinary
+  entrance traversal and at least one kill each. The final committed selection
+  tree passes the complete Mac canonical gate.
 - Remote `main`, public Git, production checkpoint, upload, and deployment are
   unchanged and unauthorized.

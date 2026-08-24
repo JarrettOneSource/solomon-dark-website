@@ -5,7 +5,7 @@
 > exact future-safe identities, and learned choices. No trainer from this
 > handoff is live. Continue from
 > [`ml-bot-policy-v7-selection.md`](ml-bot-policy-v7-selection.md) and validated
-> local commit `9477c332c93b49a8fceb54ccffc73ca01cb95d41`; production remains unchanged.
+> functional cutoff `d8ca5e1d59167482545b25db025e3af43a9848ae`; production remains unchanged.
 
 This is the restart point for the extended schema-v5 bot-training campaign.
 All execution, tests, training, and evaluation must stay on the Mac Mini. Do

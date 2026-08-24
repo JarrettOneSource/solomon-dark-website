@@ -36,21 +36,21 @@ Across the final 60 episodes:
 
 | Loadout | Primary decisions | Max held ticks | Waves reached |
 | --- | ---: | ---: | ---: |
-| Magic Missile (`primary:8`) | 455 | 20 | 12 |
-| Fireball (`primary:16`) | 210 | 40 | 7 |
+| Magic Missile (`primary:8`) | 386 | 10 | 9 |
+| Fireball (`primary:16`) | 108 | 10 | 4 |
 | Lightning (`primary:24`) | 2,686 | 4,040 | 14 |
 | Frost Jet (`primary:32`) | 1,288 | 2,130 | 3 |
 | Boulder (`primary:40`) | 672 | 3,451 | 0 |
-| Burning Bolt (`weld:1000`) | 142 | 10 | 5 |
-| Frost Missile (`weld:1001`) | 107 | 10 | 3 |
-| Ball Lightning (`weld:1002`) | 116 | 20 | 4 |
+| Burning Bolt (`weld:1000`) | 248 | 60 | 8 |
+| Frost Missile (`weld:1001`) | 130 | 10 | 4 |
+| Ball Lightning (`weld:1002`) | 93 | 20 | 4 |
 | Flame Lash (`weld:1003`) | 4,106 | 4,780 | 16 |
 | Blizzard Beam (`weld:1004`) | 965 | 2,740 | 1 |
 | Steam Jet (`weld:1005`) | 1,351 | 2,490 | 5 |
 | Ethereal Boulder (`weld:1006`) | 435 | 220 | 1 |
 | Meteor Swarm (`weld:1007`) | 685 | 1,750 | 3 |
 | Hailstones (`weld:1008`) | 392 | 10 | 1 |
-| Crawling Shock (`weld:1009`) | 70 | 10 | 4 |
+| Crawling Shock (`weld:1009`) | 68 | 10 | 4 |
 
 Every row acted and all six continuous members passed by large margins.
 Dynamic telemetry follows the current equipped pure/Weld identity if a learned
@@ -79,16 +79,16 @@ present in the packaged checkpoint reports.
 | Set/checkpoint | Mean waves reached (95% bootstrap CI) | Kills | Waves completed | Choices | Potions |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | Train, unpublished all-primary v6 | 1.000 (0.567–1.633) | 971 | 10 | 46 | 19 |
-| Train, selected v7 | 1.467 (0.833–2.233) | 1,535 | 23 | 66 | 39 |
+| Train, selected v7 | 1.533 (0.867–2.333) | 1,567 | 24 | 67 | 36 |
 | Holdout, unpublished all-primary v6 | 1.033 (0.633–1.500) | 950 | 14 | 51 | 19 |
-| Holdout, selected v7 | 1.167 (0.800–1.600) | 965 | 13 | 53 | 38 |
+| Holdout, selected v7 | 1.033 (0.700–1.400) | 807 | 10 | 48 | 34 |
 
 The selected v7 does not regress by mean, but it does **not** pass the frozen
 paired performance promotion rule against the stronger unpublished v6
 candidate:
 
-- train: `+0.467`, 95% `-0.148..+1.081`;
-- holdout: `+0.133`, 95% `-0.239..+0.506`;
+- train: `+0.533`, 95% `-0.044..+1.111`;
+- holdout: `+0.000`, 95% `-0.451..+0.451`;
 - official `promoted=false`.
 
 The v7 asset is packaged on this local capability branch because v6 cannot
@@ -97,25 +97,38 @@ as a performance promotion and is not authorized for public `main` or
 production. The final v7 evaluation itself is promotion-valid and has complete
 primary/channel coverage.
 
-The farthest packaged episode reached wave 9, killed 475 enemies, and completed
-eight waves as Lightning. A separate admissible update-17 experiment reached
-wave 12 (672 kills, 11 completed waves) but was rejected as the packaged model
-because its aggregate train/holdout consistency was weaker.
+The 60 packaged episodes ended in 60 real deaths after 30,010 decisions,
+2,374 kills, 34 completed waves, 115 learned choices, and 70 potions. The
+farthest reached wave 9, killed 475 enemies, and completed eight waves as
+Lightning. A separate admissible update-17 experiment reached wave 12 (672
+kills, 11 completed waves) but was rejected as the packaged model because its
+aggregate train/holdout consistency was weaker.
 
 ## Mac acceptance
 
-- Final source commit: `9477c332c93b49a8fceb54ccffc73ca01cb95d41` on
-  upstream game authority `e462cba704558800b6c51a7b3f359106e7d18f36`.
+- Final functional cutoff: `d8ca5e1d59167482545b25db025e3af43a9848ae` on
+  upstream game authority `f7e09723cabbfa216fec9d050fa52aab63897fcd`.
 - Clean Mac worktree:
   `/Users/jarrett/codex-acceptance/ml-bot-v6-current-main-20260823/final-v7`.
-- Canonical gate: exit zero; ML 77/77, every other suite green, backend/build/
-  lint/desktop/media green. Game entry 448,703 raw / 125,805 gzip. Log SHA:
-  `24d470690ef89a26bb9a8276a0117c7558afd331b73a057b77784df722214cc9`.
-- Real Chrome deployment/save/reload acceptance passed. Log SHA:
-  `04747b0b3bd73b76240653f1d4b50046086b9453603e536942e272339bfe98fb`.
+- The final committed selection tree passed the complete Mac canonical gate;
+  the immutable log is
+  `/Users/jarrett/codex-acceptance/ml-bot-v6-current-main-20260823/final-f7e-canonical.log`.
+- A focused backend integration test accepts current schema 7 and retained
+  schema 6 saves. Log SHA:
+  `a62b40df652f176f9304e4c8ab44998aa6c41a7c8ac013a501d21cc0f2dd6a52`.
+- Real Chrome/WebGL deployment, anonymous/authenticated cloud persistence,
+  save/reload, active-wizard, retired-wizard, and profile-only acceptance
+  passed. Log SHA:
+  `6b55038ebafa859b3ec6a63db8243afb732824cbe7476d8835444b78b666e488`.
 - Live GameHost smokes passed for all five pure elements. Decisions/kills:
-  Ether 25/2, Fire 25/4, Air 25/4, Water 25/2, Earth 39/1. Every bot traversed
+  Ether 25/2, Fire 25/4, Air 25/4, Water 25/1, Earth 40/1. Every bot traversed
   the authored entrance and remained alive.
+- Evaluation report SHA-256 values: train
+  `d7eca0a67b5e7b35e22288d97f866a98bd829407e186815732c97819148c0320`,
+  holdout
+  `deb2ac1de3b71f7689fb88dc084e8be0fa8b5c8e06e366a0fd024729ad04f84c`,
+  and paired comparison
+  `aa961a96eadbbe87fd6dc75f2f4c3840080743a3fd034c354a37b1f6983caa3e`.
 
 ## Run it on the Mac mini
 
