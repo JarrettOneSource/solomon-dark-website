@@ -38457,3 +38457,168 @@ the implementation receipt before this entry is closed.
   and `b4db1db0e7871218a1d6c7c96a98342fa5fdb6bc444392248b2b9fa26f69b47c`.
   Publication is authorized below; deployment/restart remains separate and
   was not requested.
+
+## 2026-08-23 — Staff orb phase, one-shot cadence, and retained-view performance reopening
+
+### Reported smell and parity question
+
+- Reported web behavior: the Staff orb VFX is too large again; Ether may also
+  be firing too quickly. A performance pass is required with the correction.
+- Stock behavior to recover: the complete event-writer/decay program for the
+  single PlayerWizard equipped-element/light phase, exact Cast 1 marker and
+  held-repeat timing, every primary/Cast 2 sibling, and the minimum retained
+  renderer work required for the native zero/one/two-copy orb program.
+- Reproduction inputs/scenes: all five primary elements; ordinary, held, low
+  mana, Faster Caster, welded one-shot/Constant, secondary Cast 2, Ether Blast,
+  all Staff headings/poses and copy-count thresholds; Hub idle and active
+  Boneyard; baseline/held/restored frame measurements on Mac hardware.
+- Falsifiers: any active-action boolean repeatedly writes a one-shot pulse; the
+  analytic light and orb consume different phase samples; default Ether emits
+  more often than every 55 ticks; a hidden retained VFX owner still builds and
+  applies a painter plan; or a performance claim lacks controlled before,
+  stress, and restoration samples.
+
+This is a secondary report in the same Staff system. The 2026-08-22 submission
+count correction correctly removed a nonexistent third painter owner, but it
+stopped at downstream call membership. It did not reopen the upstream web
+phase writers even though `player-lighting.ts` refreshed `0.15/0.25` from
+action occupancy, and it did not reconcile that component with the separate
+`primaryCast.weaponPulse` field. The earlier timing pass also copied absolute
+capture indices `19/74` and inferred Ether `15/56`, instead of subtracting the
+action insertion row. Those skipped owner/timing steps let the corrected copy
+count continue drawing an oversized held effect.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Retail image | unmodified Beta `0.72.5` `SolomonDark.exe`, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred base `0x00400000`, re-hashed 2026-08-23 | Exact image behind every address and recurrence below. | high |
+| Fresh instructions | Ghidra 12.0.3 read-only replica; Cast 1 `0x0044B170/0x0044B370`, progress `0x004486E0`, callback `0x00550180`, admission `0x0052DA80`, decay `0x00548FFC..0x00549012`, Constant `0x0044C600/0x0044C810`, Cast 2 `0x0044B7E0/0x0044B770` | Mode 3 writes `0.15` only on marker callback `0x005502F6`; mode 5 conditionally writes `0.25` at `0x00550317`; the actor field then decays by `0.899999976`. Cast 1 progress is float32 rate `0.075`, marker `1`, strict end `4`; Fire alone applies `0.75`. | high |
+| Existing native fixed-tick golden | `Mod Loader/tests/fixtures/webgame/animation-goldens.json`, `idle_cast_idle`, pinned retail hash | Fire insertion `15981`, marker/pose edge `15999`, last occupied row `16053` at progress `4.05000257`, idle `16054`: relative marker `18`, completion `72`, next-ready `73`. | high |
+| Supporting runtime write watch | task-owned staged byte-identical Ether PID `2424`, runtime base `0x00960000`; Air PID `2088`, runtime base `0x00460000`; loader-injected read-only `sd.debug.watch_write` | Ether marker runtime `0x00AB02F6` writes `9A 99 19 3E` once, then runtime `0x00AA9012` only decays. A held burst marker-index gaps resolve to `55/55` ticks. Air runtime `0x005B0317` writes `0.25` once, then runtime `0x005A9012` only decays. | high supporting evidence |
+| Current web causal trace | Website `origin/main` `a058a90a28ee1e7fa67b31f895d92ebebba7eff0`; `primary-spells.ts`, `player-lighting.ts`, `player-character-presentation.ts`, `game-snapshot.ts`, `hub-actors.ts`, `native-element-vfx-view.ts` | One-shot `weaponPulse` is correct at emission, but the second lighting field refreshes `0.15` for every occupied Ether/Fire tick and `0.25` for every held channel tick. Orb uses their max while analytic light sees only the lighting field. Both retained orb views update even while hidden. Default Ether repeats at 56 ticks. | high |
+| User observation | 2026-08-23 report | The remaining pinned phase reads as an oversized orb despite the prior copy-count correction. | authoritative symptom |
+
+No injected-loader observation is treated as clean-stock visual proof. The
+instruction stream and pinned native fixed-tick golden own the conclusions;
+the watches confirm the live write order and Ether interval.
+
+### System boundary and membership inventory
+
+Native system: **PlayerWizard equipped-element phase plus Cast 1 clock and its
+retained renderer consumers**, from action/input admission through event writes,
+float32 decay, Staff painter submission, analytic light, replication,
+interpolation, hidden-view work, interruption, and teardown.
+
+| Member | Native source | Disposition | Proof contract |
+| --- | --- | --- | --- |
+| Ether `8` Cast 1 marker/pulse | `0x0044B170`, `0x005502F6`, `0x0053CFE0` | `exact-ported` | phase stays zero through wind-up, becomes `0.15` exactly on emission, then decays without occupancy refresh |
+| Fire `16` Cast 1 marker/pulse | shared Cast 1, Fire rate scalar, `0x0053DC60` | `exact-ported` | same edge/decay with Fire timing |
+| Welded one-shots `1000,1001,1002,1009` | `0x0052DA80`, Cast 1 modes `3/6/9` | `exact-ported` | table-driven phase/cadence coverage |
+| Ether default cadence | float32 `0.075`, marker `1`, strict end `4`; held re-admission | `exact-ported` | first marker update `14`, completion `54`, repeat/next insertion `55`; browser emission gaps `55` |
+| Fire default cadence | float32 `0.075*0.75` | `exact-ported` | marker `18`, completion `72`, repeat `73` |
+| Faster Caster and class/equipment multipliers | `0x00656580` | `exact-ported` | authored factor matrix agrees with direct float32 recurrence, including neutral through maximum Faster Caster |
+| Air `24`, Water `32`, Earth `40` Constant start | modes `5/8/11`, Staff store `0x00550317` | `exact-ported` | one `0.25` start write, then decay while held; no active-level refresh |
+| Welded Constant/channel/persistent `1003..1008` | sustained dispatcher and same modes | `exact-ported` | all six profiles share the one start edge |
+| ordinary category-2 Cast 2 | modes `4/7/10`; Staff value `0.45` | `exact-ported` | first action update writes once, then decay; all action-owning category-2 rows covered |
+| Dampen mode 21 and actionless/toggle-off secondary branches | callback has no matching `0x00550180` case | `verified-already-at-parity` as non-writers | negative matrix; no fabricated phase |
+| Ether Blast integer crossings | `0x0054B9C8` | `verified-already-at-parity` writer, `exact-ported` shared consumer | each crossing writes `0.25`; orb and light use the same effective phase |
+| fixed-tick decay and zero/reset | `0x00549012`, constructor/reset | `exact-ported` | float32 recurrence and idle/reset tests |
+| five element painters | `0x00539B80` dispatch | `verified-already-at-parity` | Ether/Fire/Air/Water/Earth geometry, assets, blend, RNG ranges unchanged |
+| Staff selectors and headings/poses/copy thresholds | prior complete submission ledger | `verified-already-at-parity` | zero/one/two-copy census remains unchanged; no scale compensation |
+| equipped Wand and empty-hand branches | same phase field, distinct `0.6`/hand geometry | `verified-already-at-parity` phase/light; `out-of-system` for Staff orb raster | writer tests cover modes `6..11`; no Staff node when unarmed/Wand |
+| analytic player light | `0x005299A0` | `exact-ported` | consumes the same effective phase as the orb, `(1+phase)*2.6` |
+| Hub/Boneyard local and remote players | shared player snapshot/timelines/view | `exact-ported` | Hub remains noncombat/idle; Boneyard pulse round-trip and interpolation agree |
+| retained base/overlay VFX views | `PlayerWorldView`, `NativeElementVfxView` | `exact-ported` performance ownership | hidden views allocate/apply no plan; visible native copies retain identical output |
+| death, ineligibility, disconnect, world replacement, view destruction | established player/session/view teardown | `verified-already-at-parity` | no stale pulse/view survives owner teardown |
+
+There is no `blocked-by-platform` member. WebGL/Pixi can express the native
+event recurrence, copies, assets, blend modes, and retained visibility rules.
+
+### Native ownership thread and recovered behavioral contract
+
+- The action object owns progress and marker delivery. `PlayerWizard` owns one
+  `+0x268` phase. Input owns only held level/aim and cannot write visual size.
+- On a fixed tick without an event writer, phase becomes
+  `float32(previous*0.8999999761581421)`. Cast 1 writes `0.15` once at its
+  emission marker; Constant writes `0.25` once at start; Cast 2 writes `0.45`
+  once; Ether Blast writes `0.25` at each integer crossing.
+- The five-element helper and analytic player light consume that same sample.
+  Staff geometry stays scale one. The proven painter transform remains
+  `actorScale*(1+10*phase)`; the fix removes a false writer, not the scale.
+- Neutral Ether crosses its marker on update 14, crosses strict end on update
+  54, remains owned for that completion update, and held input inserts the next
+  action on update 55. Current web `15/56` is not too fast; it is one fixed tick
+  slower at both the first marker and repeat boundary.
+- A retained VFX owner has no update work while invisible. Visibility becoming
+  true reuses a same-tick valid plan or builds the current plan before draw;
+  native-visible painter membership and order do not change.
+
+### Nearby-system findings
+
+- The analytic-light path currently omits primary `weaponPulse`, while the orb
+  merges it with `lighting.overlayEffectPhase`. This disproves the earlier
+  claim that both web consumers already shared one replicated phase.
+- The previous held-pose UX override remains presentation-only. Correcting the
+  action progress thresholds changes marker/repeat timing but does not restore
+  stock per-shot pose replay or move projectile sockets.
+- Reusable instruction/runtime facts are recorded in Mod Loader
+  `native-projectile-and-spell-mechanics.md` and
+  `native-lighting-and-shadow-system.md` before implementation.
+
+### Confidence and open questions
+
+- Confirmed: complete direct phase-writer cases, exact values, decay, Cast 1
+  recurrence, neutral Ether/Fire insertion-relative clocks, held Ether interval,
+  Constant edge behavior, all primary/action siblings, current web causal
+  divergence, and retained hidden-view work.
+- Inferred: the user-perceived diameter comes from the continuously refreshed
+  phase; the browser pixel/time feedback loop must falsify or confirm that
+  before the implementation receipt is closed.
+- Unknown: none material. Clean-stock appearance remains represented by the
+  already pinned painter/assets and captures; timing and writer ownership are
+  instruction/golden facts and are not inferred from pixels.
+
+### Web implementation consequence
+
+- Stop deriving phase writes from action occupancy. Keep event writes and one
+  float32 decay clock; make the orb and analytic light consume the same
+  effective replicated sample.
+- Correct Cast 1 marker/ready thresholds from absolute capture indices to
+  insertion-relative native progress while retaining the explicit held-pose UX
+  override and all projectile/audio/gameplay owners.
+- Keep the exact five painter plans, Staff scale formula, copy census, sockets,
+  and render order unchanged.
+- Make `NativeElementVfxView.update` a no-op while its retained container is
+  invisible, so hidden copies do not build arrays or touch sprites.
+- Repair the existing primary-spell browser wrapper's Lua WASM configuration,
+  then add a controlled baseline/held/restoration measurement rather than
+  calling source inspection a performance result.
+
+### Validation contract
+
+- Focused red/green: one-shot wind-up has phase/scale `0/1`; emission writes
+  `0.15/2.5`; subsequent ticks follow exact float32 decay without refresh.
+  Constant writes `0.25` once; Cast 2 writes `0.45` once; Ether Blast and every
+  direct sibling have explicit assertions; orb/light phase values agree.
+- Cadence: neutral Ether marker/repeat `14/55`, Fire `18/73`; all authored
+  Faster Caster factors compare against a direct float32 recurrence oracle;
+  held emission gaps remain exact after the pose override.
+- Renderer: a hidden view allocates/applies no painter plan, all five visible
+  elements still materialize their exact operation count, zero/one/two-copy
+  diagnostics remain correct, and teardown destroys every retained sprite.
+- Mac Chrome at 1600x900: capture wind-up, emission peak, decay below the
+  `0.10000000149011612` extra-copy threshold, at least three Ether emissions,
+  release/restoration, WebGL identity, phase/scale/light/copy diagnostics, and
+  empty page/console/failed-response arrays.
+- Performance on the same Mac candidate: controlled idle baseline, held-Ether
+  stress, and post-release restoration with p95/p99/max presentation gaps,
+  long tasks, browser task time, visible/updated orb counts, and unchanged
+  scene population. Compare the same journey on the exact pre-fix base.
+- Run the affected focused suites and `/opt/homebrew/bin/bash
+  ./scripts/validate.sh` on the exact rebased Mac tree; run the complete Mod
+  Loader static RE suite for the durable reports.
+
+### Implementation validation receipt
+
+Pending implementation and exact-tree Mac validation.

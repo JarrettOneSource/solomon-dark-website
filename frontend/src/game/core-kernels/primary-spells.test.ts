@@ -27,6 +27,7 @@ import {
   createPrimarySpellSimulation,
   nativePrimaryBirthTerrainExclusionMask,
   nativePrimaryFlightTerrainExclusionMask,
+  PRIMARY_CAST_ACTION_END_TICK,
   PRIMARY_CAST_EMISSION_TICK,
   PRIMARY_CAST_ETHER_ACTION_END_TICK,
   PRIMARY_CAST_ETHER_EMISSION_TICK,
@@ -50,6 +51,7 @@ import {
   type PrimarySpellSimulationState,
   type PrimarySpellTickContext,
 } from './primary-spells.ts'
+import { NATIVE_PLAYER_STAFF_CONSTANT_OVERLAY } from './player-lighting.ts'
 import { earthImpactLifetimeTicks } from './primary-spell-earth.ts'
 import {
   advanceNativeEarthBoulderCharge,
@@ -307,6 +309,44 @@ function stepSpellKernel(
     },
   }
 }
+
+test('one-shot clocks use insertion-relative native marker and repeat ticks', () => {
+  assert.equal(PRIMARY_CAST_ETHER_EMISSION_TICK, 14)
+  assert.equal(PRIMARY_CAST_ETHER_ACTION_END_TICK, 55)
+  assert.equal(PRIMARY_CAST_EMISSION_TICK, 18)
+  assert.equal(PRIMARY_CAST_ACTION_END_TICK, 73)
+})
+
+test('primary element-effect phase is written by cast edges and then decays', () => {
+  let ether = stepSpellKernel(directSpellHarness('ether'), true, 100).state
+  assert.equal(ether.players[PLAYER_ID]!.primaryCast.weaponPulse, 0)
+  for (let update = 1; update <= 14; update += 1) {
+    ether = stepSpellKernel(ether, true, 100).state
+  }
+  assert.equal(ether.players[PLAYER_ID]!.primaryCast.emissionSequence, 1)
+  assert.equal(
+    ether.players[PLAYER_ID]!.primaryCast.weaponPulse,
+    Math.fround(0.15),
+  )
+  ether = stepSpellKernel(ether, true, 100).state
+  assert.equal(
+    ether.players[PLAYER_ID]!.primaryCast.weaponPulse,
+    Math.fround(Math.fround(0.15) * Math.fround(0.899999976)),
+  )
+
+  let air = stepSpellKernel(directSpellHarness('air'), true, 100).state
+  assert.equal(
+    air.players[PLAYER_ID]!.primaryCast.weaponPulse,
+    NATIVE_PLAYER_STAFF_CONSTANT_OVERLAY,
+  )
+  air = stepSpellKernel(air, true, 100).state
+  assert.equal(
+    air.players[PLAYER_ID]!.primaryCast.weaponPulse,
+    Math.fround(
+      NATIVE_PLAYER_STAFF_CONSTANT_OVERLAY * Math.fround(0.899999976),
+    ),
+  )
+})
 
 test('one-shot primaries debit at emission across every low-mana boundary', () => {
   for (const element of ['ether', 'fire'] as const) {

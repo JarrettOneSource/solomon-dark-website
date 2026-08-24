@@ -12,9 +12,6 @@ import {
 import { buyFomentiusItem, projectInventoryItems } from '../core-kernels/hub-economy.ts'
 import { createNativeRng } from '../core-kernels/native-rng.ts'
 import {
-  NATIVE_PLAYER_LIGHT_OVERLAY_DECAY,
-  NATIVE_PLAYER_STAFF_CAST_ONE_OVERLAY,
-  NATIVE_PLAYER_STAFF_CONSTANT_OVERLAY,
   playerLightDriveActive,
 } from '../core-kernels/player-lighting.ts'
 import {
@@ -390,7 +387,7 @@ test('new-run placement resets transient combat while retaining dense identity a
   }), /exactly one light registration/)
 })
 
-test('player lighting owns exact cast overlay recurrence', () => {
+test('action occupancy cannot refresh the event-owned player lighting phase', () => {
   let store = createPlayerEntityStore()
   store = addPlayerEntity(store, 'first', FIRST, createPlayerCharacter(FIRST, { x: 0, y: 0 }), 10)
   store = addPlayerEntity(store, 'second', SECOND, createPlayerCharacter(SECOND, { x: 0, y: 0 }), 20)
@@ -405,14 +402,8 @@ test('player lighting owns exact cast overlay recurrence', () => {
     primaryCast: { ...second.primaryCast, actionTick: 1, channelActive: true },
   })
   store = stepPlayerEntityOverlayLightingTick(store)
-  assert.equal(
-    playerLightingAt(store, 'first')?.overlayEffectPhase,
-    Math.fround(NATIVE_PLAYER_STAFF_CAST_ONE_OVERLAY * NATIVE_PLAYER_LIGHT_OVERLAY_DECAY),
-  )
-  assert.equal(
-    playerLightingAt(store, 'second')?.overlayEffectPhase,
-    Math.fround(NATIVE_PLAYER_STAFF_CONSTANT_OVERLAY * NATIVE_PLAYER_LIGHT_OVERLAY_DECAY),
-  )
+  assert.equal(playerLightingAt(store, 'first')?.overlayEffectPhase, 0)
+  assert.equal(playerLightingAt(store, 'second')?.overlayEffectPhase, 0)
 
   const idle = createIdlePlayerPrimaryCast()
   assert.equal(playerLightDriveActive(idle, 'alive'), false)
