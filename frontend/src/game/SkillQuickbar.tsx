@@ -104,6 +104,7 @@ export default function SkillQuickbar({
             className="hub-hud-quickbar-slot"
             data-slot={slot}
             data-quickbar-bank={mobilePlacement.bank}
+            data-tutorial-anchor={slot === 0 ? 'secondary-slot' : undefined}
             data-binding-code={bindingCode}
             data-active={active}
             data-controller-selected={controllerQuickbarSlot === slot || undefined}

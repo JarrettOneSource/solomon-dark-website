@@ -608,7 +608,11 @@ export function nativeTutorialPresentation(
 
 export function nativeTutorialInstructionBaselines(
   stage: NativeTutorialStage,
+  viewportHeight = 900,
 ): NativeTutorialInstructionBaselines | null {
+  const height = Number.isFinite(viewportHeight) && viewportHeight > 0
+    ? viewportHeight
+    : 900
   switch (stage) {
     case 0:
     case 2:
@@ -617,7 +621,7 @@ export function nativeTutorialInstructionBaselines(
     case 9:
     case 12:
     case 18:
-      return Object.freeze({ heading: 730, subheading: 760 })
+      return Object.freeze({ heading: height - 170, subheading: height - 140 })
     case 11:
       return Object.freeze({ heading: 80, subheading: 110 })
     case 19:

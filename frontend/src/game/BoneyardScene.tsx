@@ -961,6 +961,7 @@ export default function BoneyardScene({
                 controls={settings.controls}
                 selectedHudLayout={tutorialSelectedHudLayout}
                 state={tutorial}
+                viewport={viewport}
                 worldTarget={tutorialWorldTarget}
               />
             ) : null}

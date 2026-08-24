@@ -127,6 +127,18 @@ test('starts the exact two five-skeleton opening groups when Solomon runs', () =
   assert.equal(result.spawnIntents.length, 10)
   assert.deepEqual(result.spawnIntents.map(intent => intent.authoredRecipe?.uid), Array(10).fill(10004))
   assert.ok(result.spawnIntents.every(intent => intent.positionPolicy === 'dark'))
+
+  const transientInstruction = stepNativeTutorial(result.state, {
+    ...BASE_INPUT,
+    enemyCount: 10,
+    solomonPhase: 'escaping',
+    solomonRunEventId: 1,
+    tick: 2,
+  })
+  assert.equal(transientInstruction.state.stage, 3)
+  assert.equal(nativeTutorialPresentation(transientInstruction.state, {
+    inventory: 'I', potion: '1', secondary: 'Right Mouse', skills: 'K',
+  }).heading, null)
 })
 
 test('owns inventory and skills modal milestones as authoritative surface actions', () => {
@@ -259,6 +271,10 @@ test('projects every stock teaching gate from the controller stage', () => {
   })
   assert.deepEqual(nativeTutorialInstructionBaselines(0), { heading: 100, subheading: 170 })
   assert.deepEqual(nativeTutorialInstructionBaselines(5), { heading: 730, subheading: 760 })
+  assert.deepEqual(nativeTutorialInstructionBaselines(5, 1_080), {
+    heading: 910,
+    subheading: 940,
+  })
   assert.deepEqual(nativeTutorialInstructionBaselines(11), { heading: 80, subheading: 110 })
   assert.deepEqual(nativeTutorialInstructionBaselines(19), { heading: 200, subheading: null })
 })

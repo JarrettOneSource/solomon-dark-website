@@ -267,6 +267,7 @@ export default function GameHud({
       <div className="hub-hud-meters">
         <div
           className="hub-hud-meter hub-hud-meter-health"
+          data-tutorial-anchor="health-meter"
           data-core-width={healthHud.coreWidth}
           data-track-width={healthHud.trackWidth}
           style={{
@@ -404,6 +405,7 @@ export default function GameHud({
         <button
           type="button"
           className="hub-hud-potion-button hub-hud-potion-button-red"
+          data-tutorial-anchor="health-potion"
           aria-label={`Use health potion, key ${healthPotionKey}, ${healthPotions.count} available`}
           disabled={healthPotions.itemId === null || !onPotionClick}
           onClick={() => {
@@ -417,6 +419,7 @@ export default function GameHud({
         <button
           type="button"
           className="hub-hud-backpack-button"
+          data-tutorial-anchor="inventory"
           aria-label={`Open inventory, ${economy.gold} gold`}
           disabled={!onInventoryClick}
           onClick={onInventoryClick}
@@ -442,6 +445,7 @@ export default function GameHud({
         <button
           type="button"
           className="hub-hud-tome-button"
+          data-tutorial-anchor="skills"
           aria-label="Open skills"
           disabled={!onSkillsClick}
           onClick={onSkillsClick}

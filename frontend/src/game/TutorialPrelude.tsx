@@ -25,7 +25,7 @@ export default function TutorialPrelude({
         record={68}
         style={{
           opacity: blend * blend,
-          top: 350 - 100 * blend,
+          top: `calc(50% - ${100 * (1 + blend)}px)`,
         }}
       />
       <NativeUiSprite

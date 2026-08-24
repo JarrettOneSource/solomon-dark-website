@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import type { NativeTutorialState } from './core-kernels/native-tutorial.ts'
 import {
@@ -8,6 +8,7 @@ import {
   nativeTutorialPresentation,
 } from './core-kernels/native-tutorial.ts'
 import type { GameAudioDirector } from './game-audio-director.ts'
+import { subscribeGamePresentationFrames } from './game-presentation-frame-loop.ts'
 import { gameBindingLabel, type GameControlBindings } from './game-settings.ts'
 import type { NativeTutorialSelectedHudLayout } from './native-hud-presentation.ts'
 import NativeBitmapText from './native-ui/NativeBitmapText.tsx'
@@ -15,6 +16,15 @@ import NativeUiNineSlice from './native-ui/NativeUiNineSlice.tsx'
 import NativeUiSprite from './native-ui/NativeUiSprite.tsx'
 import { nativeUiFont, type NativeUiFontName } from './native-ui/native-ui-catalog.ts'
 import { layoutNativeUiText } from './native-ui/native-ui-text.ts'
+import {
+  emptyTutorialHudAnchors,
+  nativeTutorialHudAnchorAttributes,
+  nativeTutorialHudPointerPlans,
+  tutorialClientRectAnchor,
+  tutorialHudAnchorsEqual,
+  type TutorialHudAnchorAttribute,
+  type TutorialHudAnchors,
+} from './tutorial-hud-anchors.ts'
 import TutorialPrelude from './TutorialPrelude.tsx'
 import './tutorial.css'
 
@@ -25,6 +35,7 @@ interface TutorialOverlayProps {
   readonly controls: GameControlBindings
   readonly selectedHudLayout: NativeTutorialSelectedHudLayout | null
   readonly state: NativeTutorialState
+  readonly viewport: Readonly<{ height: number; width: number }>
   readonly worldTarget: Readonly<{ x: number; y: number }> | null
 }
 
@@ -33,9 +44,13 @@ export default function TutorialOverlay({
   controls,
   selectedHudLayout,
   state,
+  viewport,
   worldTarget,
 }: TutorialOverlayProps) {
+  const overlayRef = useRef<HTMLDivElement>(null)
   const lastNarrationEventId = useRef(0)
+  const hudAnchors = useTutorialHudAnchors(overlayRef, state.stage, viewport)
+  const hudPointers = nativeTutorialHudPointerPlans(state.stage, hudAnchors)
   const presentation = nativeTutorialPresentation(state, {
     inventory: gameBindingLabel(controls.openInventory),
     potion: gameBindingLabel(controls.belt4),
@@ -43,7 +58,13 @@ export default function TutorialOverlay({
     skills: gameBindingLabel(controls.openSkills),
   })
   const narration = state.narration.current
-  const instructionBaselines = nativeTutorialInstructionBaselines(state.stage)
+  const instructionBaselines = nativeTutorialInstructionBaselines(state.stage, viewport.height)
+  const worldPointerTarget = worldTarget === null
+    ? null
+    : Object.freeze({
+        x: clamp(worldTarget.x, 50, viewport.width - 50),
+        y: clamp(worldTarget.y, 50, viewport.height - 50),
+      })
 
   useEffect(() => {
     if (!narration || narration.eventId <= lastNarrationEventId.current) return
@@ -61,6 +82,7 @@ export default function TutorialOverlay({
 
   return (
     <div
+      ref={overlayRef}
       aria-live="polite"
       className="tutorial-overlay"
       data-active={state.active}
@@ -68,8 +90,12 @@ export default function TutorialOverlay({
       data-intro-blend={state.introBlend}
       data-intro-fade={state.introFade}
       data-intro-movement-ticks={state.introMovementTicksRemaining}
+      data-heading-baseline={instructionBaselines?.heading}
       data-narration-event-id={narration?.eventId ?? 0}
       data-stage={state.stage}
+      data-subheading-baseline={instructionBaselines?.subheading ?? undefined}
+      data-viewport-height={viewport.height}
+      data-viewport-width={viewport.width}
     >
       {state.introActive ? <TutorialPrelude blend={state.introBlend} fade={state.introFade} /> : null}
       {presentation.heading ? (
@@ -103,9 +129,6 @@ export default function TutorialOverlay({
         </span>
       ) : null}
 
-      {state.stage === 5 ? <TutorialPointer x={468} y={790} toX={468} toY={859} /> : null}
-      {state.stage === 9 ? <TutorialPointer x={763} y={790} toX={763} toY={855} /> : null}
-      {state.stage === 12 ? <TutorialPointer x={843} y={790} toX={843} toY={855} /> : null}
       {state.stage === 14
         && !state.selectedSkillHudAcknowledged
         && selectedHudLayout ? (
@@ -127,18 +150,23 @@ export default function TutorialOverlay({
           <TutorialPointer {...selectedHudLayout.pointer} />
         </div>
       ) : null}
-      {state.stage === 18 ? (
-        <>
-          <TutorialPointer x={678} y={790} toX={678} toY={858} />
-          <TutorialPointer x={700} y={70} toX={700} toY={24} />
-        </>
-      ) : null}
-      {(state.stage === 8 || state.stage === 17) && worldTarget ? (
+      {hudPointers.map((pointer) => (
         <TutorialPointer
-          x={clamp(worldTarget.x, 50, 1550) - 20}
-          y={clamp(worldTarget.y, 50, 850) - 60}
-          toX={clamp(worldTarget.x, 50, 1550)}
-          toY={clamp(worldTarget.y, 50, 850)}
+          anchor={pointer.anchor}
+          key={pointer.anchor}
+          x={pointer.x}
+          y={pointer.y}
+          toX={pointer.target.x}
+          toY={pointer.target.y}
+        />
+      ))}
+      {(state.stage === 8 || state.stage === 17) && worldPointerTarget ? (
+        <TutorialPointer
+          anchor="world-sack"
+          x={worldPointerTarget.x - 20}
+          y={worldPointerTarget.y - 60}
+          toX={worldPointerTarget.x}
+          toY={worldPointerTarget.y}
           visible={state.stageTicks % 50 > 19}
         />
       ) : null}
@@ -260,12 +288,14 @@ function TutorialShadowedText({
 }
 
 function TutorialPointer({
+  anchor,
   toX,
   toY,
   visible = true,
   x,
   y,
 }: {
+  readonly anchor?: TutorialHudAnchorAttribute | 'selected-skills' | 'world-sack'
   readonly toX: number
   readonly toY: number
   readonly visible?: boolean
@@ -281,6 +311,9 @@ function TutorialPointer({
       data-to-y={toY}
       data-x={x}
       data-y={y}
+      data-target-x={toX}
+      data-target-y={toY}
+      data-tutorial-pointer={anchor}
       style={{
         left: x,
         opacity: visible ? 1 : 0,
@@ -291,6 +324,63 @@ function TutorialPointer({
       <NativeUiSprite atlas="UI" record={28} />
     </span>
   )
+}
+
+function useTutorialHudAnchors(
+  overlayRef: Readonly<{ current: HTMLDivElement | null }>,
+  stage: NativeTutorialState['stage'],
+  viewport: Readonly<{ height: number; width: number }>,
+): TutorialHudAnchors {
+  const [anchors, setAnchors] = useState<TutorialHudAnchors>(emptyTutorialHudAnchors)
+  const viewportHeight = viewport.height
+  const viewportWidth = viewport.width
+
+  useEffect(() => {
+    const activeAttributes = nativeTutorialHudAnchorAttributes(stage)
+    if (activeAttributes.length === 0) {
+      setAnchors((current) => {
+        const empty = emptyTutorialHudAnchors()
+        return tutorialHudAnchorsEqual(current, empty) ? current : empty
+      })
+      return
+    }
+    const measure = () => {
+      const overlay = overlayRef.current
+      const owner = overlay?.closest<HTMLElement>('.boneyard-native-frame') ?? null
+      if (!overlay || !owner) {
+        setAnchors((current) => {
+          const empty = emptyTutorialHudAnchors()
+          return tutorialHudAnchorsEqual(current, empty) ? current : empty
+        })
+        return
+      }
+      const overlayRect = overlay.getBoundingClientRect()
+      const anchor = (name: TutorialHudAnchorAttribute) => {
+        if (!activeAttributes.includes(name)) return null
+        const target = owner.querySelector<HTMLElement>(`[data-tutorial-anchor="${name}"]`)
+        return target
+          ? tutorialClientRectAnchor(
+              overlayRect,
+              target.getBoundingClientRect(),
+              { height: viewportHeight, width: viewportWidth },
+            )
+          : null
+      }
+      const next = Object.freeze({
+        healthMeter: anchor('health-meter'),
+        healthPotion: anchor('health-potion'),
+        inventory: anchor('inventory'),
+        secondarySlot: anchor('secondary-slot'),
+        skills: anchor('skills'),
+      })
+      setAnchors((current) => tutorialHudAnchorsEqual(current, next) ? current : next)
+    }
+
+    measure()
+    return subscribeGamePresentationFrames(measure)
+  }, [overlayRef, stage, viewportHeight, viewportWidth])
+
+  return anchors
 }
 
 function clamp(value: number, minimum: number, maximum: number): number {
