@@ -3682,7 +3682,9 @@ test('protocol validates participant ownership and the recovered Hub room graph'
     || withPausedActivity.frame.world.kind !== 'hub') throw new Error('expected Hub frame')
   assert.equal(withPausedActivity.frame.world.participants['player-1']?.activity, 'paused')
 
-  const missingActivity = structuredClone(frame.world.participants['player-1']!) as Record<string, unknown>
+  const missingActivity: Record<string, unknown> = {
+    ...structuredClone(frame.world.participants['player-1']!),
+  }
   delete missingActivity.activity
   assert.throws(() => decodeServerGameMessage(message({
     ...frame.world,
