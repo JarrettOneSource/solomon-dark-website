@@ -369,6 +369,7 @@ async function touchDrag(x1, y1, x2, y2, steps = 12) {
 }
 
 async function capture(label, selectors) {
+  await settleAnimations()
   await nextPaint()
   const geometry = await page.evaluate((map) => {
     const round = (value) => Math.round(value * 100) / 100
@@ -403,6 +404,20 @@ async function nextPaint() {
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => (
     requestAnimationFrame(resolve)
   ))))
+}
+
+/**
+ * Evidence frames are settled states: let every finite CSS animation/transition (the
+ * 100 ms menu fade-in, the settings dialog transitions) finish before measuring and
+ * shooting. Endless animations (pulses) are not waited on; a paused one is capped.
+ */
+async function settleAnimations() {
+  await page.evaluate(() => Promise.race([
+    Promise.all(document.getAnimations()
+      .filter((animation) => Number.isFinite(animation.effect?.getComputedTiming().endTime))
+      .map((animation) => animation.finished.catch(() => {}))),
+    new Promise((resolve) => setTimeout(resolve, 2_000)),
+  ]))
 }
 
 function bypassStartupAudioPreload() {
