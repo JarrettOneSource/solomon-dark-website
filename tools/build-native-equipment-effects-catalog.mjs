@@ -27,6 +27,7 @@ const output = {
     sourceIndex: set.source_index,
   })),
   items: source.items.map((item) => ({
+    description: item.description,
     effects: item.fx.map(compactEffect),
     name: item.name,
     sourceIndex: item.source_index,

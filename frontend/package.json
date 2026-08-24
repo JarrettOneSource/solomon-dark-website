@@ -70,6 +70,7 @@
     "smoke:game:skill-picker": "node --experimental-strip-types tools/smoke-skill-picker.mjs",
     "smoke:game:skill-book": "node --experimental-strip-types tools/smoke-skill-book.mjs",
     "smoke:game:inventory-skill-book": "node --experimental-strip-types tools/smoke-inventory-skill-book.mjs",
+    "smoke:game:tutorial-amulet": "node --experimental-strip-types tools/smoke-sorcerors-amulet.mjs",
     "smoke:game:derived-hud": "node --experimental-strip-types tools/smoke-native-derived-hud.mjs",
     "smoke:game:pause": "node --experimental-strip-types tools/smoke-game-pause.mjs",
     "smoke:game:settings": "node --experimental-strip-types tools/smoke-game-settings.mjs",

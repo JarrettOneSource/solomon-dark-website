@@ -168,6 +168,7 @@
   ],
   "items": [
     {
+      "description": "",
       "effects": [
         {
           "kind": 7,
@@ -180,6 +181,7 @@
       "sourceIndex": 0
     },
     {
+      "description": "",
       "effects": [
         {
           "kind": 7,
@@ -198,6 +200,7 @@
       "sourceIndex": 1
     },
     {
+      "description": "",
       "effects": [
         {
           "kind": 7,
@@ -216,6 +219,7 @@
       "sourceIndex": 2
     },
     {
+      "description": "",
       "effects": [
         {
           "kind": 7,
@@ -228,6 +232,7 @@
       "sourceIndex": 3
     },
     {
+      "description": "",
       "effects": [
         {
           "kind": 7,
@@ -240,6 +245,7 @@
       "sourceIndex": 4
     },
     {
+      "description": "",
       "effects": [
         {
           "kind": 7,
@@ -258,6 +264,7 @@
       "sourceIndex": 5
     },
     {
+      "description": "",
       "effects": [
         {
           "kind": 38,
@@ -270,6 +277,7 @@
       "sourceIndex": 6
     },
     {
+      "description": "",
       "effects": [
         {
           "kind": 38,
@@ -282,6 +290,7 @@
       "sourceIndex": 7
     },
     {
+      "description": "",
       "effects": [
         {
           "kind": 39,
@@ -294,6 +303,7 @@
       "sourceIndex": 8
     },
     {
+      "description": "",
       "effects": [
         {
           "kind": 38,
@@ -312,6 +322,7 @@
       "sourceIndex": 9
     },
     {
+      "description": "",
       "effects": [
         {
           "kind": 38,
@@ -330,6 +341,7 @@
       "sourceIndex": 10
     },
     {
+      "description": "",
       "effects": [
         {
           "kind": 25,
@@ -342,6 +354,7 @@
       "sourceIndex": 11
     },
     {
+      "description": "",
       "effects": [
         {
           "kind": 25,
@@ -354,6 +367,7 @@
       "sourceIndex": 12
     },
     {
+      "description": "",
       "effects": [
         {
           "kind": 7,
@@ -366,6 +380,7 @@
       "sourceIndex": 13
     },
     {
+      "description": "",
       "effects": [
         {
           "kind": 25,
@@ -378,6 +393,7 @@
       "sourceIndex": 14
     },
     {
+      "description": "",
       "effects": [
         {
           "kind": 4,
@@ -396,6 +412,7 @@
       "sourceIndex": 15
     },
     {
+      "description": "",
       "effects": [
         {
           "kind": 25,
@@ -408,6 +425,7 @@
       "sourceIndex": 16
     },
     {
+      "description": "",
       "effects": [
         {
           "kind": 5,
@@ -420,6 +438,7 @@
       "sourceIndex": 17
     },
     {
+      "description": "",
       "effects": [
         {
           "kind": 25,
@@ -432,6 +451,7 @@
       "sourceIndex": 18
     },
     {
+      "description": "",
       "effects": [
         {
           "kind": 7,
@@ -444,6 +464,7 @@
       "sourceIndex": 19
     },
     {
+      "description": "",
       "effects": [
         {
           "kind": 25,
@@ -462,6 +483,7 @@
       "sourceIndex": 20
     },
     {
+      "description": "",
       "effects": [
         {
           "kind": 25,
@@ -480,6 +502,7 @@
       "sourceIndex": 21
     },
     {
+      "description": "",
       "effects": [
         {
           "kind": 2,
@@ -492,6 +515,7 @@
       "sourceIndex": 22
     },
     {
+      "description": "",
       "effects": [
         {
           "kind": 2,
@@ -504,6 +528,7 @@
       "sourceIndex": 23
     },
     {
+      "description": "",
       "effects": [
         {
           "kind": 5,
@@ -522,6 +547,7 @@
       "sourceIndex": 24
     },
     {
+      "description": "",
       "effects": [
         {
           "kind": 22,
@@ -534,6 +560,7 @@
       "sourceIndex": 25
     },
     {
+      "description": "",
       "effects": [
         {
           "kind": 7,
@@ -546,6 +573,7 @@
       "sourceIndex": 26
     },
     {
+      "description": "",
       "effects": [
         {
           "kind": 7,
@@ -558,6 +586,7 @@
       "sourceIndex": 27
     },
     {
+      "description": "",
       "effects": [
         {
           "kind": 7,
@@ -570,6 +599,7 @@
       "sourceIndex": 28
     },
     {
+      "description": "An amulet, apparently forged by Conchiphus Obfuscate himself.  The runes read \"Interferenal.\"",
       "effects": [
         {
           "kind": 1,
@@ -582,6 +612,7 @@
       "sourceIndex": 29
     },
     {
+      "description": "An amulet known to be forged by the great wizard Basculus.  Much has been written about the unusual name, with some speculating that Basculus finished work on the amulet immediately after an unhappy love affair.",
       "effects": [
         {
           "kind": 21,
@@ -612,6 +643,7 @@
       "sourceIndex": 30
     },
     {
+      "description": "An amulet clearly forged during the Great Healing Madness.",
       "effects": [
         {
           "kind": 20,
@@ -624,6 +656,7 @@
       "sourceIndex": 31
     },
     {
+      "description": "Designed for those whose passion for Ether Magic surpasses their taste.",
       "effects": [
         {
           "kind": 5,
@@ -654,6 +687,7 @@
       "sourceIndex": 32
     },
     {
+      "description": "Formerly the property of Archmage Garthus Absolox, who was overly enthusiastic about the Meteor spell.",
       "effects": [
         {
           "kind": 7,
@@ -672,6 +706,7 @@
       "sourceIndex": 33
     },
     {
+      "description": "Forged by the wizard Gnoxis to achieve minimal functionality on mornings without coffee.  The imprints of hands have been squeezed into the wood at the gripping spots.",
       "effects": [
         {
           "kind": 6,
@@ -684,6 +719,7 @@
       "sourceIndex": 34
     },
     {
+      "description": "A simple ring, crafted to give unhealthy mages that extra staying power.",
       "effects": [
         {
           "kind": 4,
@@ -696,6 +732,7 @@
       "sourceIndex": 35
     },
     {
+      "description": "Forged to boost dexterity and allow mages to work faster, this ring was stolen immediately by Casanava Lancashire, history's greatest reputed lover.  The ring only resurfaced again recently, but frequently changes owners because of a tendency to fly off the hand in the heat of casting.",
       "effects": [
         {
           "kind": 12,
@@ -708,6 +745,7 @@
       "sourceIndex": 36
     },
     {
+      "description": "Created by Blue Mage Wendrell to prove once and for all that a strong mind is worth more that a strong body.",
       "effects": [
         {
           "kind": 24,
@@ -726,6 +764,7 @@
       "sourceIndex": 37
     },
     {
+      "description": "When presented at the artificer's conclave, this ring garnered much interest because it emits a destructive blast (dealing damage depending on level) when the bearer levels up.  Concern was expressed that the presenter (level 47) was so close to levelling up that even the experience of speaking before a large group might do it, and an early lunch was declared.",
       "effects": [
         {
           "kind": 36,
@@ -738,6 +777,7 @@
       "sourceIndex": 38
     },
     {
+      "description": "The high level requirments of this ring indicate that it was not necessarily forged to assist in learning, but rather to allow those smug in their knowledge to be more smug.",
       "effects": [
         {
           "kind": 8,
@@ -750,6 +790,7 @@
       "sourceIndex": 39
     },
     {
+      "description": "Annoyed at being accused of dueling with opponents below his magical grade, the wizard Yzmar designed this hat to provide a handicap to his challengers and silence accusations of advantage.  Sadly, Yzmar was disintegrated in his next duel.",
       "effects": [
         {
           "kind": 7,
@@ -768,6 +809,7 @@
       "sourceIndex": 40
     },
     {
+      "description": "Part of Qubar's \"Elemental Boost\" collection.",
       "effects": [
         {
           "kind": 2,
@@ -786,6 +828,7 @@
       "sourceIndex": 41
     },
     {
+      "description": "Part of Qubar's \"Elemental Boost\" collection.",
       "effects": [
         {
           "kind": 2,
@@ -804,6 +847,7 @@
       "sourceIndex": 42
     },
     {
+      "description": "Part of Qubar's \"Elemental Boost\" collection.",
       "effects": [
         {
           "kind": 2,
@@ -822,6 +866,7 @@
       "sourceIndex": 43
     },
     {
+      "description": "Part of Qubar's \"Elemental Boost\" collection.",
       "effects": [
         {
           "kind": 2,
@@ -840,6 +885,7 @@
       "sourceIndex": 44
     },
     {
+      "description": "Part of Qubar's \"Elemental Boost\" collection.",
       "effects": [
         {
           "kind": 2,
@@ -858,6 +904,7 @@
       "sourceIndex": 45
     },
     {
+      "description": "Woven as a defensive outfit for working with demons, this robe absorbs almost all magic in the vicinity.  The only known side effect is that your own magic is harmed as well.",
       "effects": [
         {
           "kind": 19,

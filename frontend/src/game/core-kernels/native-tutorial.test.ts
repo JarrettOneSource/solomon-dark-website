@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  NATIVE_TUTORIAL_AMULET_DESCRIPTION,
+  NATIVE_TUTORIAL_AMULET_IDENTITY,
   NATIVE_TUTORIAL_CUES,
   NATIVE_TUTORIAL_FIRES,
   NATIVE_TUTORIAL_MONSTER_RECIPES,
@@ -17,6 +19,7 @@ import {
   nativeTutorialForcedVelocity,
   nativeTutorialHudAccess,
   nativeTutorialInstructionBaselines,
+  nativeTutorialAmuletItem,
   nativeTutorialPresentation,
   stepNativeTutorial,
   type NativeTutorialState,
@@ -99,6 +102,16 @@ test('locks the complete stock Tutorial authored membership', () => {
     { damage: 1, lifetimeTicks: 1_000, position: { x: 1852.1005859375, y: 199.63815307617188 }, radius: 100 },
   ])
   assert.equal(nativeTutorialDialogueTicks(), 3_054)
+  assert.equal(
+    NATIVE_TUTORIAL_AMULET_DESCRIPTION,
+    'A dull trinket, carved with a few beneficial runes',
+  )
+  assert.deepEqual(NATIVE_TUTORIAL_AMULET_IDENTITY.nativeEffects, [
+    { kind: 2, magnitude: 10, operator: 2, target: 0 },
+  ])
+  assert.deepEqual(nativeTutorialAmuletItem().nativeEffects, [
+    { kind: 2, magnitude: 10, operator: 2, target: 0 },
+  ])
 })
 
 test('starts the exact two five-skeleton opening groups when Solomon runs', () => {
@@ -178,9 +191,26 @@ test('projects every stock teaching gate from the controller stage', () => {
     spell: false,
   })
   const ready = afterIntro(initial)
-  assert.equal(nativeTutorialPresentation(ready, {
-    inventory: 'I', potion: '1', secondary: 'Right Mouse', skills: 'K',
-  }).heading, 'USE YOUR KEYBOARD\nTO MOVE THE WIZARD')
+  const bindings = { inventory: 'I', potion: '1', secondary: 'Right Mouse', skills: 'K' }
+  assert.equal(
+    nativeTutorialPresentation(ready, bindings).heading,
+    'USE YOUR KEYBOARD\nTO MOVE THE WIZARD',
+  )
+  assert.deepEqual(nativeTutorialPresentation({ ...ready, stage: 8 }, bindings), {
+    heading: null,
+    hud: { combat: false, inventory: false, quickbar: true, skills: false, spell: true },
+    subheading: null,
+  })
+  assert.deepEqual(nativeTutorialPresentation({ ...ready, stage: 9 }, bindings), {
+    heading: 'ACCESS YOUR INVENTORY',
+    hud: { combat: false, inventory: true, quickbar: true, skills: false, spell: true },
+    subheading: "Click here or press 'I' to open the inventory screen",
+  })
+  assert.deepEqual(nativeTutorialPresentation({ ...ready, stage: 10 }, bindings), {
+    heading: null,
+    hud: { combat: false, inventory: true, quickbar: true, skills: false, spell: true },
+    subheading: null,
+  })
   assert.deepEqual(nativeTutorialHudAccess({ ...ready, stage: 5 }), {
     combat: false,
     inventory: false,

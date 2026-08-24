@@ -7,6 +7,7 @@ import {
   type HubEquipmentState,
   type HubInventoryItem,
 } from './hub-economy.ts'
+import { nativeTutorialAmuletItem } from './native-tutorial.ts'
 import {
   NATIVE_EQUIPMENT_FEATURE,
   NATIVE_EQUIPMENT_RECIPE_COUNT,
@@ -171,4 +172,29 @@ test('generated effects override recipe lookup without acquiring set membership'
   const resolved = resolveEquippedNativeEffects(new Array(83).fill(0), equipment)
   assert.equal(applyNativeEquipmentTransform(resolved.modifiers.maximumMana, 100), 150)
   assert.equal(resolved.modifiers.featureBits, 0)
+})
+
+test("Sorceror's Amulet applies only its authored ten-percent Ether damage effect", () => {
+  const amulet = { ...nativeTutorialAmuletItem(), id: 1 }
+  assert.deepEqual(amulet.nativeEffects, [
+    { kind: 2, magnitude: 10, operator: 2, target: 0 },
+  ])
+  const resolved = resolveEquippedNativeEffects(new Array(83).fill(0), {
+    amulet,
+    hat: null,
+    rings: [null, null, null],
+    robe: null,
+    weapon: null,
+  })
+  assert.equal(resolved.modifiers.classDamageMultiplier[0], 1.100000023841858)
+  assert.deepEqual(resolved.modifiers.classDamageMultiplier.slice(1), new Array(7).fill(1))
+
+  const unequipped = resolveEquippedNativeEffects(new Array(83).fill(0), {
+    amulet: null,
+    hat: null,
+    rings: [null, null, null],
+    robe: null,
+    weapon: null,
+  })
+  assert.deepEqual(unequipped.modifiers, createNativeEquipmentModifiers())
 })

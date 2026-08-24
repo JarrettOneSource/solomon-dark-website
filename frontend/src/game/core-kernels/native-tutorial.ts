@@ -18,11 +18,16 @@ export const NATIVE_TUTORIAL_TICK_RATE = 100
 export const NATIVE_TUTORIAL_ACID_RAIN_SKILL_ID = 72
 export const NATIVE_TUTORIAL_STARTING_PRIMARY_SKILL_ID = 8
 export const NATIVE_TUTORIAL_STARTING_SECONDARY_SKILL_ID = 11
+export const NATIVE_TUTORIAL_AMULET_DESCRIPTION =
+  'A dull trinket, carved with a few beneficial runes'
 export const NATIVE_TUTORIAL_AMULET_IDENTITY = Object.freeze({
   equipmentType: 'amulet' as const,
   iconRecords: Object.freeze([30, 18] as const),
   iconTints: Object.freeze([0xffffff, 0xffffff] as const),
   name: "Sorceror's Amulet",
+  nativeEffects: Object.freeze([
+    Object.freeze({ kind: 2, magnitude: 10, operator: 2 as const, target: 0 }),
+  ]),
   nativeSelector: 0,
   nativeTypeId: 7003 as const,
 })

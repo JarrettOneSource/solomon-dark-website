@@ -18,7 +18,6 @@ import ModdedPlayDialog from './ModdedPlayDialog.tsx'
 import PartyJoinConsentDialog from './PartyJoinConsentDialog.tsx'
 import StockPromptDialog from './StockPromptDialog.tsx'
 import TutorialPrelude from './TutorialPrelude.tsx'
-import { TutorialModalCallouts } from './TutorialOverlay.tsx'
 import type { GameClientSession } from './client/game-client-session.ts'
 import type { GameObserverSession } from './client/game-observer-session.ts'
 import type {
@@ -1682,18 +1681,6 @@ export default function MainMenuScene({
               topMost
             />
           </Suspense>
-        ) : null}
-
-        {runtimeSnapshot?.world.kind === 'boneyard'
-          && runtimeSnapshot.world.tutorial
-          && (runtimeSnapshot.world.tutorial.stage === 10
-            || runtimeSnapshot.world.tutorial.stage === 13) ? (
-          <div className="main-menu-native-stage tutorial-modal-callout-stage" style={nativeStageStyle}>
-            <TutorialModalCallouts
-              controls={gameSettings.controls}
-              stage={runtimeSnapshot.world.tutorial.stage}
-            />
-          </div>
         ) : null}
 
         {session && hudSkillSelector && runtimeProgression ? (

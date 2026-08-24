@@ -69,4 +69,16 @@ test('keeps every recovered modal teaching literal in the Tutorial overlay', () 
     'skill icon for more information',
     'primary attack or concentration',
   ]) assert.match(overlay, new RegExp(literal))
+  assert.match(overlay, /state\.stage === 8 \|\| state\.stage === 17/)
+  assert.doesNotMatch(overlay, /equip (?:the )?Sorceror's Amulet/i)
+})
+
+test('mounts modal callouts from the live Boneyard Tutorial owner', () => {
+  const boneyard = source('./BoneyardScene.tsx')
+  const menu = source('./MainMenuScene.tsx')
+  assert.match(
+    boneyard,
+    /tutorial && \(tutorial\.stage === 10 \|\| tutorial\.stage === 13\)[\s\S]*?<TutorialModalCallouts controls=\{settings\.controls\} stage=\{tutorial\.stage\} \/>/,
+  )
+  assert.doesNotMatch(menu, /TutorialModalCallouts/)
 })

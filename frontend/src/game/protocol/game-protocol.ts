@@ -2566,7 +2566,6 @@ function inventoryItem(
   } else if (recipeIndex === null) {
     const authored = generatedLevel === undefined
       && nativeSelector !== undefined
-      && nativeEffects === undefined
     if (authored) {
       if (
         rarity !== null
@@ -2584,6 +2583,16 @@ function inventoryItem(
         || iconTints.some((tint, index) => (
           tint !== NATIVE_TUTORIAL_AMULET_IDENTITY.iconTints[index]
         ))
+        || nativeEffects === undefined
+        || nativeEffects.length !== NATIVE_TUTORIAL_AMULET_IDENTITY.nativeEffects.length
+        || nativeEffects.some((effect, index) => {
+          const expected = NATIVE_TUTORIAL_AMULET_IDENTITY.nativeEffects[index]
+          return expected === undefined
+            || effect.kind !== expected.kind
+            || effect.magnitude !== expected.magnitude
+            || effect.operator !== expected.operator
+            || effect.target !== expected.target
+        })
       ) throw new GameProtocolError(`${field} authored equipment identity is inconsistent`)
     } else {
       const starter = generatedLevel === undefined

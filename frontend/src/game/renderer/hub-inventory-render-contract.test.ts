@@ -13,9 +13,14 @@ import {
   NATIVE_EQUIPMENT_CATALOG_EFFECT_COUNT,
   NATIVE_EQUIPMENT_RECIPE_COUNT,
   NATIVE_EQUIPMENT_SET_COUNT,
+  nativeEquipmentRecipeDescription,
   nativeEquipmentRecipeEffects,
   nativeEquipmentTooltipSets,
 } from '../core-kernels/native-equipment-effects.ts'
+import {
+  NATIVE_TUTORIAL_AMULET_DESCRIPTION,
+  nativeTutorialAmuletItem,
+} from '../core-kernels/native-tutorial.ts'
 import {
   HAGATHA_NATIVE_TOOLTIP_LINES,
   HUB_CHAT_PANEL,
@@ -72,6 +77,27 @@ const inventoryCss = readFileSync(new URL('../hub-inventory.css', import.meta.ur
 const mainScene = readFileSync(new URL('../MainMenuScene.tsx', import.meta.url), 'utf8')
 const hubScene = readFileSync(new URL('../HubScene.tsx', import.meta.url), 'utf8')
 const boneyardScene = readFileSync(new URL('../BoneyardScene.tsx', import.meta.url), 'utf8')
+
+const AUTHORED_EQUIPMENT_DESCRIPTIONS: Readonly<Record<number, string>> = {
+  29: 'An amulet, apparently forged by Conchiphus Obfuscate himself.  The runes read "Interferenal."',
+  30: 'An amulet known to be forged by the great wizard Basculus.  Much has been written about the unusual name, with some speculating that Basculus finished work on the amulet immediately after an unhappy love affair.',
+  31: 'An amulet clearly forged during the Great Healing Madness.',
+  32: 'Designed for those whose passion for Ether Magic surpasses their taste.',
+  33: 'Formerly the property of Archmage Garthus Absolox, who was overly enthusiastic about the Meteor spell.',
+  34: 'Forged by the wizard Gnoxis to achieve minimal functionality on mornings without coffee.  The imprints of hands have been squeezed into the wood at the gripping spots.',
+  35: 'A simple ring, crafted to give unhealthy mages that extra staying power.',
+  36: "Forged to boost dexterity and allow mages to work faster, this ring was stolen immediately by Casanava Lancashire, history's greatest reputed lover.  The ring only resurfaced again recently, but frequently changes owners because of a tendency to fly off the hand in the heat of casting.",
+  37: 'Created by Blue Mage Wendrell to prove once and for all that a strong mind is worth more that a strong body.',
+  38: "When presented at the artificer's conclave, this ring garnered much interest because it emits a destructive blast (dealing damage depending on level) when the bearer levels up.  Concern was expressed that the presenter (level 47) was so close to levelling up that even the experience of speaking before a large group might do it, and an early lunch was declared.",
+  39: 'The high level requirments of this ring indicate that it was not necessarily forged to assist in learning, but rather to allow those smug in their knowledge to be more smug.',
+  40: 'Annoyed at being accused of dueling with opponents below his magical grade, the wizard Yzmar designed this hat to provide a handicap to his challengers and silence accusations of advantage.  Sadly, Yzmar was disintegrated in his next duel.',
+  41: 'Part of Qubar\'s "Elemental Boost" collection.',
+  42: 'Part of Qubar\'s "Elemental Boost" collection.',
+  43: 'Part of Qubar\'s "Elemental Boost" collection.',
+  44: 'Part of Qubar\'s "Elemental Boost" collection.',
+  45: 'Part of Qubar\'s "Elemental Boost" collection.',
+  46: 'Woven as a defensive outfit for working with demons, this robe absorbs almost all magic in the vicinity.  The only known side effect is that your own magic is harmed as well.',
+}
 
 test('every inventory and trader modal consumes the shell fixed-stage projection', () => {
   assert.equal(mainScene.match(/nativeUiStageStyle=\{nativeStageStyle\}/g)?.length, 3)
@@ -202,6 +228,21 @@ test('stock inventory owns native ItemInfo, drag, double activation, and protect
   assert.match(HUB_ROBE_REMOVAL_MSGBOX.body, /avoidable disintegration/)
 })
 
+test("Sorceror's Amulet ItemInfo carries the exact authored description and effect", () => {
+  assert.equal(
+    NATIVE_TUTORIAL_AMULET_DESCRIPTION,
+    'A dull trinket, carved with a few beneficial runes',
+  )
+  assert.deepEqual(
+    hubItemTooltipLines(nativeTutorialAmuletItem()).map(({ text }) => text),
+    [
+      "Sorceror's Amulet",
+      'A dull trinket, carved with a few beneficial runes',
+      'Ether Damage +10.0%',
+    ],
+  )
+})
+
 test('retail StoreGrid selected state uses only the live Windows CLICK AGAIN records', () => {
   assert.deepEqual(HUB_STOREGRID_SELECTED_RECORDS, {
     buyClickAgain: 84,
@@ -329,6 +370,7 @@ test('every Fomentius class and all 47 recipe rows build complete contextual det
   assert.equal(NATIVE_EQUIPMENT_SET_COUNT, 7)
   assert.equal(nativeEquipmentTooltipSets().length, 7)
   assert.equal(NATIVE_EQUIPMENT_CATALOG_EFFECT_COUNT, 86)
+  assert.equal(Object.keys(AUTHORED_EQUIPMENT_DESCRIPTIONS).length, 18)
   for (const recipe of DOWSING_EQUIPMENT_RECIPES) {
     const item = createEquipmentInventoryItem(recipe, recipe.sourceIndex + 100)
     const lines = hubItemTooltipLines(item, {
@@ -338,6 +380,9 @@ test('every Fomentius class and all 47 recipe rows build complete contextual det
     }).map(({ text }) => text)
     assert.equal(lines[0], recipe.name)
     assert.equal(lines.at(-1), '    Price: 5000')
+    const description = AUTHORED_EQUIPMENT_DESCRIPTIONS[recipe.sourceIndex] ?? ''
+    assert.equal(nativeEquipmentRecipeDescription(recipe.sourceIndex), description)
+    if (description) assert.ok(lines.includes(description))
     for (const effect of nativeEquipmentRecipeEffects(recipe.sourceIndex)) {
       assert.ok(lines.includes(hubNativeEquipmentEffectText(effect)))
     }

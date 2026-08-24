@@ -58,7 +58,7 @@ import GameOverOverlay from './GameOverOverlay.tsx'
 import TouchJoystick from './input/TouchJoystick.tsx'
 import NativeLootBitmapText from './NativeLootBitmapText.tsx'
 import NativeSpectatorStatus from './NativeSpectatorStatus.tsx'
-import TutorialOverlay from './TutorialOverlay.tsx'
+import TutorialOverlay, { TutorialModalCallouts } from './TutorialOverlay.tsx'
 import {
   createBrowserGameplayInput,
   type BrowserGameplayInput,
@@ -1115,6 +1115,14 @@ export default function BoneyardScene({
           </div>
         )}
       </div>
+      {tutorial && (tutorial.stage === 10 || tutorial.stage === 13) ? (
+        <div
+          className="main-menu-native-stage tutorial-modal-callout-stage"
+          style={nativeUiStageStyle}
+        >
+          <TutorialModalCallouts controls={settings.controls} stage={tutorial.stage} />
+        </div>
+      ) : null}
     </div>
   )
 }

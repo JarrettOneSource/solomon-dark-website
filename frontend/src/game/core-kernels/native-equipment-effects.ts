@@ -77,6 +77,7 @@ export interface NativeEquipmentResolution {
 
 interface NativeEquipmentCatalog {
   readonly items: readonly {
+    readonly description: string
     readonly effects: readonly NativeEquipmentEffect[]
     readonly name: string
     readonly sourceIndex: number
@@ -176,6 +177,11 @@ export function nativeEquipmentRecipeEffects(
   const recipe = CATALOG.items[recipeIndex]
   if (recipe === undefined || recipe.sourceIndex !== recipeIndex) return Object.freeze([])
   return cloneEffects(recipe.effects)
+}
+
+export function nativeEquipmentRecipeDescription(recipeIndex: number): string {
+  const recipe = CATALOG.items[recipeIndex]
+  return recipe?.sourceIndex === recipeIndex ? recipe.description : ''
 }
 
 export function nativeEquipmentTooltipSets(): readonly NativeEquipmentTooltipSet[] {

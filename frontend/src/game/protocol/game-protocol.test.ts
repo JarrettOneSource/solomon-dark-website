@@ -572,6 +572,9 @@ test('server welcome round-trips content, kernel, character, and world ownership
       backpack: [...player.economy.backpack, tutorialSack],
     }],
   ] as const
+  assert.deepEqual(tutorialAmulet.nativeEffects, [
+    { kind: 2, magnitude: 10, operator: 2, target: 0 },
+  ])
   for (const [label, economy] of tutorialEconomies) {
     const tutorialSnapshot = {
       ...welcome.snapshot,
@@ -611,7 +614,16 @@ test('server welcome round-trips content, kernel, character, and world ownership
     ['colors', { iconTints: [0xffffff, 0] }],
     ['recipe', { recipeIndex: 0 }],
     ['generated level', { generatedLevel: 0 }],
-    ['generated effects', { nativeEffects: [] }],
+    ['missing effects', { nativeEffects: undefined }],
+    ['empty effects', { nativeEffects: [] }],
+    ['effect kind', { nativeEffects: [{ kind: 1, magnitude: 10, operator: 2, target: 0 }] }],
+    ['effect magnitude', { nativeEffects: [{ kind: 2, magnitude: 11, operator: 2, target: 0 }] }],
+    ['effect operator', { nativeEffects: [{ kind: 2, magnitude: 10, operator: 1, target: 0 }] }],
+    ['effect target', { nativeEffects: [{ kind: 2, magnitude: 10, operator: 2, target: 1 }] }],
+    ['extra effect', { nativeEffects: [
+      { kind: 2, magnitude: 10, operator: 2, target: 0 },
+      { kind: 2, magnitude: 10, operator: 2, target: 0 },
+    ] }],
   ] as const) {
     const malformed = {
       ...welcome,
