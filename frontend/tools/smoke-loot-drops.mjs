@@ -5,7 +5,10 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { chromium } from 'playwright-core'
-import { createServer as createViteServer } from 'vite'
+import {
+  createServer as createViteServer,
+  preview as createVitePreviewServer,
+} from 'vite'
 
 import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
 import {
@@ -37,6 +40,7 @@ const screenshotRoot = process.env.SDR_LOOT_SCREENSHOT_ROOT
 const chromePath = process.env.SDR_CHROME_PATH || (process.platform === 'darwin'
   ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
   : '/usr/bin/google-chrome')
+const useBuiltFrontend = process.env.SDR_LOOT_BUILT === '1'
 const ALL_DISABLED = Object.freeze({
   gold: 4,
   item: 4,
@@ -48,13 +52,21 @@ const ALL_DISABLED = Object.freeze({
 
 await mkdir(screenshotRoot, { recursive: true })
 const credential = 'loot-drop-browser-parity'
-const vite = await createViteServer({
+const viteConfig = {
   configFile: fileURLToPath(new URL('../vite.config.ts', import.meta.url)),
   logLevel: 'error',
   root: frontendRoot,
-  server: { host: '127.0.0.1', port: 0 },
-})
-await vite.listen()
+}
+const vite = useBuiltFrontend
+  ? await createVitePreviewServer({
+      ...viteConfig,
+      preview: { host: '127.0.0.1', port: 0 },
+    })
+  : await createViteServer({
+      ...viteConfig,
+      server: { host: '127.0.0.1', port: 0 },
+    })
+if (!useBuiltFrontend) await vite.listen()
 const viteAddress = vite.httpServer?.address()
 if (!viteAddress || typeof viteAddress === 'string') {
   await vite.close()
@@ -64,7 +76,7 @@ const baseUrl = `http://127.0.0.1:${viteAddress.port}`
 const host = await startGameHost({
   allowedOrigins: [baseUrl],
   authentication: { kind: 'shared', credential },
-  snapshotRate: 20,
+  snapshotRate: 100,
 })
 const browser = await chromium.launch({
   args: ['--autoplay-policy=no-user-gesture-required'],
@@ -261,6 +273,14 @@ try {
   const collectedPath = join(screenshotRoot, 'loot-families-collected.png')
   const collectedScreenshot = await page.screenshot({ path: collectedPath })
   assert.ok(collectedScreenshot.byteLength > 20_000)
+  const terminalFade = await proveTerminalBonusFade({
+    guestPage,
+    guestPlayerId,
+    host,
+    hostPage,
+    hostPlayerId: playerId,
+    position: point(center, 0, 250),
+  })
 
   const after = {
     backpack: getPlayerEconomy(host.state(), playerId).backpack
@@ -336,6 +356,8 @@ try {
       source: actor.source,
     })),
     screenshots: [visualPath, collectedPath],
+    terminalFade,
+    useBuiltFrontend,
   }, null, 2)}\n`)
 } finally {
   await host.close()
@@ -351,6 +373,11 @@ async function enterHub(page, baseUrl, element) {
   await page.bringToFront()
   await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 90_000 })
+  const tutorialPrompt = page.locator('.stock-prompt-dialog[data-prompt-kind="tutorial"]')
+  if (await tutorialPrompt.isVisible()) {
+    await tutorialPrompt.getByRole('button', { name: 'NO' }).click()
+    await tutorialPrompt.waitFor({ state: 'detached' })
+  }
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
   await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({
@@ -676,6 +703,61 @@ async function proveCanonicalPickupContention({
     hostGoldAfter: getPlayerEconomy(host.state(), hostPlayerId).gold,
     hostGoldBefore: before.host,
     winnerPlayerId: hostPlayerId,
+  }
+}
+
+async function proveTerminalBonusFade({
+  guestPage,
+  guestPlayerId,
+  host,
+  hostPage,
+  hostPlayerId,
+  position,
+}) {
+  const state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
+  movePlayer(host, hostPlayerId, point(position, -250, 0))
+  movePlayer(host, guestPlayerId, point(position, 250, 0))
+  const spawnedAtTick = state.tick
+  const spawned = spawnBoneyardLootSpecs(state.world.loot, [{
+    activationDelayTicks: 0,
+    bonusKind: 2,
+    id: 0,
+    kind: 'bonus',
+    nativeTypeId: 2038,
+    phase: 0,
+    position,
+    source: 'script',
+  }], spawnedAtTick)
+  assert.equal(spawned.rejectedCount, 0)
+  const actor = spawned.store.actors.at(-1)
+  assert.ok(actor)
+  Object.assign(state, { world: { ...state.world, loot: spawned.store } })
+  await Promise.all([
+    waitForLootCount(hostPage, 1),
+    waitForLootCount(guestPage, 1),
+  ])
+  await waitUntil(() => {
+    const world = host.state().world
+    return world.kind === 'boneyard'
+      && !world.loot.actors.some(({ id }) => id === actor.id)
+  }, 'terminal Bonus did not retire on its native lifetime', 30_000)
+  await Promise.all([
+    waitForLootCount(hostPage, 0),
+    waitForLootCount(guestPage, 0),
+  ])
+  const retiredAtTick = host.state().tick
+  assert.ok(retiredAtTick - spawnedAtTick >= 1_300)
+  for (const page of [hostPage, guestPage]) {
+    assert.equal(await page.locator('.game-runtime-error').count(), 0)
+    assert.equal(await page.locator('.boneyard-scene[data-renderer-state="ready"]').count(), 1)
+  }
+  return {
+    actorId: actor.id,
+    elapsedTicks: retiredAtTick - spawnedAtTick,
+    expectedTerminalAlpha: 6.705522537231445e-7,
+    guestSceneReady: true,
+    hostSceneReady: true,
   }
 }
 

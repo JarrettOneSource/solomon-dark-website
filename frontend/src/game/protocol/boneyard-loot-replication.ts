@@ -262,5 +262,6 @@ function descriptorMatchesSample(
   if (kind === 'orb') {
     return framePhase === 0 && rotation === 0
   }
-  return alpha > 0 && framePhase <= BONUS_FRAME_MAXIMUM && orbValue === 0
+  // The native penultimate fade update is positive but rounds to zero at this scale.
+  return alpha >= 0 && framePhase <= BONUS_FRAME_MAXIMUM && orbValue === 0
 }

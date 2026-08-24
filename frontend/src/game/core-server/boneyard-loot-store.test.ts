@@ -12,6 +12,12 @@ import {
   createNativeRng,
   drawNativeInteger,
 } from '../core-kernels/native-rng.ts'
+import type { BoneyardLootSnapshot } from '../protocol/game-state.ts'
+import {
+  boneyardLootDescriptor,
+  boneyardLootSample,
+  materializeBoneyardLoot,
+} from '../protocol/boneyard-loot-replication.ts'
 import {
   activateBoneyardGoodie,
   createBoneyardLootStore,
@@ -21,6 +27,7 @@ import {
   rollBoneyardLootSeed,
   spawnBoneyardLootSpecs,
   stepBoneyardLootStore as stepBoneyardLootStoreExact,
+  type BoneyardLootActor,
   type BoneyardLootParticipant,
 } from './boneyard-loot-store.ts'
 
@@ -422,7 +429,19 @@ test('Gold and Sack persist while Bonus retires on exactly actor update 1300 aft
   const fading = stepBoneyardLootStore(before.store, { participants: FAR, tick: 1_199 })
   assert.equal(fading.store.actors.at(-1)?.alpha, Math.fround(1 - Math.fround(0.01)))
   const residue = stepBoneyardLootStore(fading.store, { participants: FAR, tick: 1_298 })
-  assert.ok((residue.store.actors.at(-1)?.alpha ?? 0) > 0)
+  const residueActor = residue.store.actors.at(-1)!
+  assert.equal(residueActor.alpha, 6.705522537231445e-7)
+  for (const bonusKind of [0, 1, 2] as const) {
+    const snapshot = lootSnapshot({ ...residueActor, bonusKind })
+    const sample = boneyardLootSample(snapshot)
+    assert.equal(sample[5], 0)
+    const reconstructed = materializeBoneyardLoot(
+      boneyardLootDescriptor(snapshot),
+      sample,
+    )
+    assert.equal(reconstructed.alpha, 0)
+    assert.equal(reconstructed.bonusKind, bonusKind)
+  }
   const terminal = stepBoneyardLootStore(residue.store, { participants: FAR, tick: 1_299 })
   assert.deepEqual(terminal.store.actors.map(({ kind }) => kind), ['gold', 'sack'])
 })
@@ -526,6 +545,35 @@ function bonus(bonusKind: 0 | 1 | 2): NativeLootDropSpec {
     phase: 0,
     position: { x: 0, y: 0 },
     source: 'script',
+  }
+}
+
+function lootSnapshot(actor: BoneyardLootActor): BoneyardLootSnapshot {
+  return {
+    activationDelayTicks: actor.activationDelayTicks,
+    ageTicks: actor.ageTicks,
+    alpha: actor.alpha,
+    amount: actor.amount,
+    animationPhase: actor.animationPhase,
+    bonusKind: actor.bonusKind,
+    bounceHeight: actor.bounceHeight,
+    framePhase: actor.framePhase,
+    id: actor.id,
+    itemContentId: actor.item?.modContent?.contentId ?? null,
+    itemNativeSubtype: actor.item?.nativeSubtype ?? null,
+    itemNativeTypeId: actor.item?.nativeTypeId ?? null,
+    kind: actor.kind,
+    nativeTypeId: actor.nativeTypeId,
+    orbKind: actor.orbKind,
+    orbValue: actor.orbValue,
+    position: { ...actor.position },
+    rotationDeg: actor.rotationDeg,
+    scatterActive: actor.scatterActive,
+    scatterProgress: actor.scatterProgress,
+    scatterSeed: actor.scatterSeed,
+    source: actor.source,
+    spawnTick: actor.spawnTick,
+    tier: actor.tier,
   }
 }
 
