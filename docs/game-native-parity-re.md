@@ -37950,4 +37950,65 @@ construction, checkpoint-stream persistence, replacement, and teardown.
 
 ### Implementation validation receipt
 
-- Pending implementation, residual sweeps, and exact-tree Windows validation.
+- The final validated source is Website base `a9969ae1` plus save-lifecycle
+  commit `0ae05943` and the independent Windows SQLite-test cleanup
+  `8d996d80`; the Mod Loader candidate is `208a32dc` on base `d90f9e87`.
+  Protocol 68 is the combined strict wire after upstream protocol 67's Goodie
+  action and this pass's required tutorial field. Windows Git `2.51.0`, Node
+  `22.17.0`, npm `10.9.2`, Python `3.13.5`, .NET SDK `10.0.302`, and Chrome
+  `151.0.7922.170` ran every final check outside WSL.
+- The native Windows Mod Loader registry passed `497/497`; log SHA-256 is
+  `a4d6feacc0e82888eae09ced64ee0865c2670c256add41f7a8871df171f75443`.
+  The complete Website gate passed 20 backend contracts, lint with zero errors
+  and the eight existing warnings, frontend suites
+  `9/4/45/259/1452/6/61/9/62/12/7/36/33`, desktop `5/5`, TypeScript,
+  production build, bundle budget, and media policy. `Game-DxOhu34_.js` is
+  `443143` raw / `124554` gzip bytes under `524288` / `131072`; gate-log
+  SHA-256 is
+  `64e1e12c6f040e33546d4153fbc85052717fb4a204b3cc845ad34c5fef4bef78`.
+- An earlier all-suite Windows pass encountered the machine's intermittent
+  loopback `ETIMEDOUT` after its long process-backed backend phase. The exact
+  unchanged host/supervisor suites then passed `65/65` in a clean process
+  (SHA-256
+  `4500edbe7427af886d1aa746527d5b4a9f685e92be179f91941855c7118b5dd2`),
+  and the subsequent unchanged canonical run above passed. No product source
+  changed for that host artifact. The separate SQLite cleanup closes a real
+  Windows file-handle defect in the newly upstreamed runtime-event test.
+- Exact-head Windows Chrome primary acceptance passed for anonymous and
+  authenticated slot zero. Each save advanced `1 -> 2` before restart, Last
+  Game became enabled and visibly undimmed, New Game opened the blocking
+  Resume/Kill prompt, Resume regenerated the Hub at exactly
+  `(950.64,164.04)`, and a second deployment drain from the restarted session
+  saved and acknowledged one player at revision `4` with zero unacknowledged
+  players. Kill Wizard committed profile-only revision `2`, retained all five
+  carried starter items, retained 500 gold, and entered Create; a separate
+  profile-only 12,345-gold save kept Last Game disabled and preserved its gold
+  through New Game. Page, console, failed-response, and application-error
+  arrays were empty. Primary log SHA-256 is
+  `3706893605113837a426e92b55a2a3c42e74d2a5e5d8fed807199af39ca90844`.
+- Exact-head legacy acceptance migrated schema-1/3 Hub saves as resumable
+  games with `activeRun=false` at `(950.64,164.04)` and schema-2/4 Boneyard
+  saves with `activeRun=true` while retaining their Boneyards. Its error arrays
+  were empty; log SHA-256 is
+  `b6c5feb70c22fe3c93046fe7b66c86d9a8b92fddc1e85240b997b31be6868b1c`.
+- Reviewed prompt, post-kill Create, Hub-resume, and Boneyard-resume captures
+  are retained under
+  `C:\Users\user\codex-acceptance\save-menu-sequence-20260823\evidence\browser`.
+  Representative SHA-256 values are
+  `05de30010dda7111f4bafc90ebaecf2b2684f3b6a3ed599347e48b0cac7596ca`
+  (anonymous prompt),
+  `bcc3651b9093f79c2b03819eaf6c8dead493fab672e545e10a0dcd8c77d093ac`
+  (Kill prompt),
+  `ce3ccb24e1f7e0dcee350f6bd6acc50147c71128fee67a52b0f245fd02f0d68c`
+  (post-kill Create),
+  `5b0f22988c5714a413568b56eec38b3483d1fa0c2f5221365b775717f5c7f6d3`
+  (schema-1 Hub), and
+  `c9252ff09345df3205e8a5bdbd0af92d7ba2f2086abe1a42ab3febf9c89e212d`
+  (schema-2 Boneyard).
+- The residual trader journey also observed a real 500-gold start for both
+  participants before granting only its host an explicit Lua test bankroll;
+  every Fomentius, Luthacus, Hagatha, Shlorio, equip, and unforge branch
+  completed. Its already documented dev-server-only missing-media 404s remain
+  outside the green production receipt. No save-system residual, platform
+  block, or material unknown remains. Push is authorized; deployment was not
+  requested and has not been performed.
