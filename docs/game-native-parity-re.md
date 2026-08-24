@@ -41848,7 +41848,136 @@ No member is blocked by the browser platform.
   `DONE` → player card fits → skull closes it; Boneyard skull → pause → settings
   → `TWEAK GAME` `BACK` → skull `BACK` → skull `DONE` → resumed; every skull
   receipt is one `44 x 44` button at stage `(4, 4)` with the right scene and
-  gate; empty page/console error arrays.
+  gate; empty page/console error arrays. Every evidence frame is a settled
+  state: finite CSS animations/transitions finished, and every mounted scene
+  menu at `data-gameplay-pause-reveal="1"` (its reveal is a JS ramp that
+  `document.getAnimations()` cannot see).
 - Mac Chrome `smoke:game:mobile-hud` (18 stops), `smoke:game:settings`, and
-  `smoke:game` keep passing with the relocated skull; the exact candidate
-  passes `./scripts/validate.sh` on the Mac mini.
+  `smoke:game` keep passing with the relocated skull (`smoke:game` answers the
+  `deployment.json` poll on all three pages like the other smokes do; Vite dev
+  serves none); the exact candidate passes `./scripts/validate.sh` on the Mac
+  mini.
+
+### Implementation validation receipt
+
+- Branch `claude/mobile-menus-20260824` on base `21c56bcd` (`origin/main`).
+  Every candidate below is an exact commit accepted on the Mac mini (Apple
+  M2, macOS 26.6.2, Google Chrome 151.0.7922.170, node v22.17.0): shipped as
+  a git bundle, fetched by hash, checked out detached with the tree hash
+  asserted (`base-is-ancestor: yes` every time). Nothing pushed; nothing
+  deployed; landing on `main` is the owner's call.
+- r1 (2026-08-24 19:15:54Z–19:24:54Z) on `874549c4` (tree `fe71af47`):
+  gates green (lint 0 errors, `test:boneyard` 1763/1763, build + bundle budget
+  ok), `smoke:game:mobile-hud` green (18 stops); three journeys red with three
+  root causes, none in the product tree. `smoke:game:mobile-menus` timed out
+  on `.hub-party-toggle` because the smoke's in-process host used a session
+  kind that owns no party system (only `private-college` / `global-hub` do) →
+  `sessionKind: 'private-college'`. `smoke:game:settings` failed on two
+  console `404`s: the deployment-revision poll (`deployment-revision.ts`, run
+  from `Game.tsx` since `9deaf0e7`) asks Vite dev for a `deployment.json` it
+  never serves (the manifest is a build-time `generateBundle` artifact) → a
+  route stub answering the `current` revision, the convention twenty other
+  smokes already use. `smoke:game` asserted the pre-`97e2c9fd` desktop ally
+  roster position on its mobile stop (`351.44` vs `5.999`) → the
+  coarse-pointer contract (roster at `(6, 82)` in the hub, `(6, 54)` in the
+  boneyard, `164 × 0.72 = 118.08` wide). `validate.sh` 1820/1821: the Lua
+  host p99 budget (42.488 ms), a perf flake that did not recur. Two orphans
+  were found after the phase (a Vite on `:4191`, pid 18977, left by a
+  direct-child-only kill; the in-process game host, pid 18963) → the runner
+  disposes whole process trees and the post-run hygiene sweep selects by
+  `cwd` under the checkout (`lsof -a -p PID -d cwd`), so other people's
+  processes on the box are never touched.
+- r2 (19:42:48Z–19:51:08Z) on `504acdf4` (tree `ba96a335`): lint `Found 8
+  warnings and 0 errors` (the eight pre-existing
+  `react(only-export-components)`), `test:boneyard` 1763/1763, build ok
+  (`Game-CQ09pnu7.js` gzip 129098 of 131072), `mobile-menus` 366 + 414 green,
+  `settings` green, `mobile-hud` green (18 stops), `validate.sh` 2114/2114.
+  `smoke:game` red: four console `404`s on the first page — the same
+  deployment poll, exposed once the roster fix let the journey reach its
+  closing console-error asserts → `743e63b9` stubs the route on all three
+  pages.
+- r3 (19:56:28Z–19:59:33Z) on `743e63b9` (tree `962387ae`): `mobile-menus`
+  366 + 414 green, `smoke:game` green (mobile hub roster at `(6, 82)`, 118.08
+  wide; boneyard at `(6, 54)`). Finding: the three open-menu frames
+  (`dark-cloud-menu`, `hub-pause`, `boneyard-pause`) were mid-reveal — the
+  scene menu ramps `reveal` 0→1 on `requestAnimationFrame` (29 × 10 ms) and
+  derives the dim, the panel and the waiting note from it, which
+  `document.getAnimations()` cannot see → `6327581f` waits for every mounted
+  `data-gameplay-pause-reveal="1"` before each capture.
+- r4 (20:07:02Z–20:09:02Z) on `6327581f` (tree `f73a2948`; the product tree
+  is `874549c4` plus the `504acdf4` contract test): `mobile-menus` 366 + 414
+  green, `errors=[]`, 23 receipts each; `DONE` bottom 348.03 / 394.59 in
+  viewports 366 / 414; every settings drag scrolls (207/252/213/188/191 px at
+  366, 179/179/243/243/149 at 414); every skull receipt `44 × 44` at `(4, 4)`;
+  all seven skull-backs-out expectations hold. Settled proof: within a run
+  the four Dark Cloud menu frames (`dark-cloud-menu`, `-open`, `-again`,
+  `-exit`) are byte-identical — one hash per height, equal to r3's
+  already-settled `-open` frame — and the hub and boneyard pause frames carry
+  the full `0.85` dim.
+- Hygiene after every chain: 0 processes with `cwd` under the checkout, 0
+  leftovers, 0 listeners on `5250/5252/4191/4193` (r2 journeys disposed pids
+  28220 28221 28601; r3 smoke disposed 33484). Local on `6327581f`: `npm run
+  lint` exit 0 (same eight warnings).
+- SHA-256, r2 logs: `lint.log`
+  `5ecdd2e03fad763a12688ba96f6f774f5b7dfaf35248f51e4762d72f9704df08`,
+  `test.log`
+  `9bc5e244fec490ce265e62cc97311bd878a3b765ff9fe9b9d1a0545ba786c974`,
+  `build.log`
+  `96abbe9cd94589253f635dfad668295e1beed468487c10e212590198161bd0f2`,
+  `validate.log`
+  `6da8f07e9a822430c5724a87e048647676c4aba7a5fe9427c8d1d6eefe45dc59`,
+  `mobile-hud.log`
+  `c15ab00032979dc2878cf91b8bd0df219c74e8be2f9ba079f36e29e538742b7d`,
+  `mobile-hud/receipt.json`
+  `e77fd36ac53892370cfbc3415792d826f4f9513be6e3ff0cea0fb075b464b445`,
+  `settings.log`
+  `74ba324e712d5fab3fb0138b780668ae60b58c7eaa48d2693cb310e3f006701d`,
+  `smoke-game.log` (red)
+  `d66d56d53df89f2accf2994812ed0f4d0be6c1f69222b126617e31ec7f4315ac`.
+- SHA-256, r3 logs: `mobile-menus-366.log`
+  `c3b66c5d4374062f2478747e7311b7c7f7cec14598552ffdff8a058aa6a1a863`,
+  `mobile-menus-414.log`
+  `7cdb44348702df2f55bc62ada4c70e8564bf69834ad255d84af74ef2078ebaf0`,
+  `smoke-game.log`
+  `a1c380afbbf8b322b8311ec0540fc937f571651457ae28eeb492962610d5585b`,
+  `smoke-game-ally-mobile-hub.png`
+  `347d595bd99b86c37c3c8447d8eeb0de8c1ed43848553d4062bd08681dbd6a7e`.
+- SHA-256, r4: `mobile-menus-366.log`
+  `5c05cdffafbbfb16be66369d74363c17cd7fcca1b7d557b55e96098a6c25063`,
+  `mobile-menus-414.log`
+  `52b1825390d61318e6e2ca050d06299c45f1f1fcfe3f208f7dbe5fa03b65f332`;
+  366: `dark-cloud-menu.png` (all four menu frames)
+  `69b3a158888c248068016305b0a849ca73b01c25fa6f4c9d80c7d2729afe0326`,
+  `hub-pause.png`
+  `2d368597b57e1f6035572d7f88f8ea218427eaf231a8ef79ea98b238e53b750e`,
+  `boneyard-pause.png`
+  `12c7934d586b109743e6f5e48e6a541417f6c4d8c40ee0d4e7c83ab3fd28705d`,
+  `title-settings-after-drag.png`
+  `966698a442963ecc5509afd525b8a3d266d81e0e120cf7f7b298d0101f5a9a5a`,
+  `dark-cloud-settings-after-drag.png`
+  `2ca81f5768d43e110f0b46161cc69edc80983f1f6b8c25de3f5f1315716047f1`,
+  `hub-settings-after-drag.png`
+  `cc3c763933a6b657c158d3965933543e0ec6e7a2e252af6240883a5f069efe5b`,
+  `boneyard-settings-after-drag.png`
+  `a017cc00fa098575291295010774b1ace4a0719ccdfd7c65e5f73a53862f882f`,
+  `boneyard-settings-performance-after-drag.png`
+  `45fadf6b5997f8e9ac9e98d0de61b00d9f0fd4b72ec3cfc0fea3392af191aa53`;
+  414: `dark-cloud-menu.png` (all four menu frames)
+  `4d4f4896aab3bd88c4b21ab3b9f56dfebfa3c211e2d8d9bf56ac4a19c5eac203`,
+  `hub-pause.png`
+  `2f3a0c82e9d08d7b6d4a7b914a854551a30aebc80ec4c27c65fc21e09bc790ea`,
+  `boneyard-pause.png`
+  `df7db0c14746557704633597ae53293d2aa4b1ec00f0e61f1843d0def1ebe74f`,
+  `title-settings-after-drag.png`
+  `64130cb8cd952bd41b810013dbb4769ef6f81982d51c1d83dd1e9dbf10ef991b`,
+  `dark-cloud-settings-after-drag.png`
+  `104d1c0db1289e98fc1375686223d770b0dbb86c40c3df218134117bf98eac3e`,
+  `hub-settings-after-drag.png`
+  `0ed5d0eab9b6e3fea9087d0a55177078cebc946bdd356c714a78158856d02cf4`,
+  `boneyard-settings-after-drag.png`
+  `8732390009eb4369dada39acd71ca82d87768ed1b3ada2757d1d502106663d52`,
+  `boneyard-settings-performance-after-drag.png`
+  `bdf67e8102b428ba9515423f3ea8b2c6fb7a9d1337dfa59d469e8ddd1758c327`.
+- Follow-up outside this branch: a Vite dev middleware serving
+  `deployment.json` would close the `404` class for the 38 smokes that do not
+  stub it, instead of one stub per smoke.
