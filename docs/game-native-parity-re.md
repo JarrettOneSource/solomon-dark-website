@@ -41645,12 +41645,13 @@ There are no browser-platform-blocked members and no extractable unknowns.
 - The sibling Mod Loader static RE suite passed `499/499` natively on Windows
   with explicit worktree Git provenance; log SHA-256 is
   `cadbf589c5e2365675589c42d5e22b26923d8bd00de8ae6869aaba29922c2218`.
-- The complete native Windows Git-Bash gate was also attempted on the same Acid
-  Rain implementation before the final unrelated-origin rebase. It reached the
-  host suite but could not receive a full-green receipt because unrelated
-  loopback clients intermittently timed out connecting to newly bound
-  `127.0.0.1` ports. A direct exact-candidate rerun of unchanged
-  `game-host.test.ts` reproduced that Windows loopback failure in 16 of 56
-  tests; none is in the Acid Rain ownership, presentation, lighting, audio, or
-  browser paths above.
+- An older task-owned validation process and static server were found still
+  running after the first Windows gate attempt. After their exact process trees
+  were stopped, unchanged `game-host.test.ts` passed `56/56`. The complete
+  native Windows Git-Bash `./scripts/validate.sh` gate then passed on final HEAD
+  `3b85d93dc7662926bbb6229a3e48f9d4060f4c7d`: backend build and integration
+  tests, formatting, lint, every frontend group, desktop tests, production
+  build, bundle budget, and media policy. Its final `Game-CwGqmwRT.js` is
+  461,214 raw bytes and 129,650 gzip bytes; gate-log SHA-256 is
+  `18530f70f0a33543128cec7b553d2d7631e561b784fed1de056b44c5bceb170a`.
 - Publication and deployment were not authorized and remain separate.
