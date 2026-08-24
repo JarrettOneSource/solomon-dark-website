@@ -167,6 +167,11 @@ test('the contextual interaction census covers every rendered named NPC and Mort
       skorchaPosition,
       { skorchaPosition },
     ), 'skorcha')
+    assert.equal(hubInteractionWithinRange(
+      'skorcha',
+      'courtyard',
+      skorchaPosition,
+    ), false)
   }
   assert.equal(nearestHubInteraction('mortuary', { x: 628, y: 770 }), 'memorator')
   assert.equal(nearestHubInteraction('mortuary', { x: 673, y: 683 }), 'painting-100')

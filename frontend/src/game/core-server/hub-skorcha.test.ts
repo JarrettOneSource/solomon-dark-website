@@ -3,15 +3,17 @@ import test from 'node:test'
 
 import { HUB_PRIVATE_ROOM_LAYOUTS } from '../core-kernels/hub-private-room-layout.ts'
 import { NATIVE_HUB_NPC_CATALOG } from '../core-kernels/native-hub-npc.ts'
-import { createNativeRng } from '../core-kernels/native-rng.ts'
-import { createPlayerCharacter } from '../core-kernels/player-character.ts'
+import { createNativeRng, type NativeRngState } from '../core-kernels/native-rng.ts'
 import {
+  HUB_SKORCHA_WINDOW_MAX_TICKS,
+  HUB_SKORCHA_WINDOW_MIN_TICKS,
   createHubSkorcha,
   createHubSkorchaAtVariant,
-  createHubSkorchaPopulation,
-  drawHubSkorchaPopulation,
+  createHubSkorchaSchedule,
   hubSkorchaHatFrame,
+  scheduleHubSkorchaPopulation,
   stepHubSkorcha,
+  stepHubSkorchaSchedule,
   type HubSkorchaState,
 } from './hub-skorcha.ts'
 import {
@@ -21,12 +23,6 @@ import {
   removeHubParticipant,
   stepHubWorldTick,
 } from './hub-world.ts'
-
-const CHARACTER = {
-  discipline: 'arcane',
-  displayName: 'Helvidius',
-  element: 'ether',
-} as const
 
 test('Semicus and Machinimbus are unconditional fixed survival-Hub actors', () => {
   assert.deepEqual(HUB_PRIVATE_ROOM_LAYOUTS.library.actors.librarian?.collider, {
@@ -67,84 +63,112 @@ test('the authoritative population generator reaches absence and every exact Sko
   }
 })
 
-test('the authoritative population stream advances from absence to a fresh Courtyard roll', () => {
-  const initial = createHubSkorchaPopulation(0)
-  assert.equal(initial.skorcha, null)
-  const reconstructed = drawHubSkorchaPopulation(initial.rng)
-  assert.equal(reconstructed.skorcha?.variant, 0)
-  assert.deepEqual(reconstructed.skorcha?.position, { x: 1437.5, y: 732.5 })
-  assert.notDeepEqual(reconstructed.rng, initial.rng)
+test('shared-Hub windows independently draw inclusive 20-to-40-minute durations', () => {
+  assert.equal(HUB_SKORCHA_WINDOW_MIN_TICKS, 20 * 60 * 100)
+  assert.equal(HUB_SKORCHA_WINDOW_MAX_TICKS, 40 * 60 * 100)
+  const durations = new Set<number>()
+  for (let seed = 0; seed < 100; seed += 1) {
+    const schedule = createHubSkorchaSchedule(seed)
+    assert.ok(schedule.transitionTicksRemaining >= HUB_SKORCHA_WINDOW_MIN_TICKS)
+    assert.ok(schedule.transitionTicksRemaining <= HUB_SKORCHA_WINDOW_MAX_TICKS)
+    durations.add(schedule.transitionTicksRemaining)
+  }
+  assert.ok(durations.size > 1)
+
+  const durationRng = (durationOffset: number): NativeRngState => {
+    const words = new Array<number>(55).fill(0)
+    words[0] = durationOffset << 6
+    return { indexA: 0, indexB: 31, words }
+  }
+  assert.equal(scheduleHubSkorchaPopulation({
+    rng: durationRng(0),
+    skorcha: null,
+  }, {}).transitionTicksRemaining, HUB_SKORCHA_WINDOW_MIN_TICKS)
+  assert.equal(scheduleHubSkorchaPopulation({
+    rng: durationRng(
+      HUB_SKORCHA_WINDOW_MAX_TICKS - HUB_SKORCHA_WINDOW_MIN_TICKS,
+    ),
+    skorcha: null,
+  }, {}).transitionTicksRemaining, HUB_SKORCHA_WINDOW_MAX_TICKS)
+
+  const initial = createHubSkorchaSchedule(2)
+  const next = stepHubSkorchaSchedule({
+    ...initial,
+    transitionTicksRemaining: 1,
+  })
+  assert.ok(next.transitionTicksRemaining >= HUB_SKORCHA_WINDOW_MIN_TICKS)
+  assert.ok(next.transitionTicksRemaining <= HUB_SKORCHA_WINDOW_MAX_TICKS)
+  assert.notDeepEqual(next.rng, initial.rng)
 })
 
-test('shared Courtyard occupancy retains one population and reconstructs after its last exit', () => {
-  let world = createHubWorld(['first', 'second'], { traderAnimationSeed: 0 })
-  assert.equal(world.courtyardPopulationActive, true)
-  assert.equal(world.skorcha, null)
-
-  world = removeHubParticipant(world, 'first')
-  assert.equal(world.courtyardPopulationActive, true)
-  assert.equal(world.skorcha, null)
-
-  world = removeHubParticipant(world, 'second')
-  assert.equal(world.courtyardPopulationActive, false)
-  assert.equal(world.skorcha, null)
-
-  world = addHubParticipant(world, 'first')
-  assert.equal(world.courtyardPopulationActive, true)
-  assert.equal(world.skorcha?.variant, 0)
-  assert.deepEqual(world.skorcha?.position, { x: 1437.5, y: 732.5 })
+test('timer overrides reject zero, negative, fractional, and unsafe windows', () => {
+  for (const hiddenTicks of [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+    assert.throws(
+      () => createHubSkorchaSchedule(0, { hiddenTicks }),
+      /positive safe integer/,
+    )
+  }
 })
 
-test('a private-room round trip destroys and reconstructs the Courtyard population', () => {
-  const position = { x: 512, y: 900 }
-  const player = createPlayerCharacter(CHARACTER, position)
-  let world = createHubWorld(['owner'], { traderAnimationSeed: 0 })
-  world = {
-    ...world,
-    participants: {
-      owner: {
-        region: 'courtyard',
-        transition: {
-          alpha: 1,
-          destination: 'library',
-          phase: 'outgoing',
-          scriptedSpeed: 1,
-          scriptedTarget: position,
-          sourceRegion: 'courtyard',
-        },
-      },
-    },
-  }
-  const left = stepHubWorldTick(world, { owner: player }, {}, { owner: 1 })
-  assert.equal(left.world.participants.owner?.region, 'library')
-  assert.equal(left.world.courtyardPopulationActive, false)
-  assert.equal(left.world.skorcha, null)
+test('shared-Hub timer alternates instantly between absent and visible windows', () => {
+  let schedule = createHubSkorchaSchedule(0, { hiddenTicks: 2, visibleTicks: 3 })
+  assert.equal(schedule.skorcha, null)
+  assert.equal(schedule.transitionTicksRemaining, 2)
 
-  world = {
-    ...left.world,
-    participants: {
-      owner: {
-        region: 'library',
-        transition: {
-          alpha: 1,
-          destination: 'courtyard',
-          phase: 'outgoing',
-          scriptedSpeed: 1,
-          scriptedTarget: left.players.owner!.position,
-          sourceRegion: 'library',
-        },
-      },
-    },
+  schedule = stepHubSkorchaSchedule(schedule, { hiddenTicks: 2, visibleTicks: 3 })
+  assert.equal(schedule.skorcha, null)
+  assert.equal(schedule.transitionTicksRemaining, 1)
+
+  schedule = stepHubSkorchaSchedule(schedule, { hiddenTicks: 2, visibleTicks: 3 })
+  assert.equal(schedule.skorcha?.variant, 1)
+  assert.equal(schedule.transitionTicksRemaining, 3)
+
+  schedule = stepHubSkorchaSchedule(schedule, { hiddenTicks: 2, visibleTicks: 3 })
+  schedule = stepHubSkorchaSchedule(schedule, { hiddenTicks: 2, visibleTicks: 3 })
+  schedule = stepHubSkorchaSchedule(schedule, { hiddenTicks: 2, visibleTicks: 3 })
+  assert.equal(schedule.skorcha, null)
+  assert.equal(schedule.transitionTicksRemaining, 2)
+})
+
+test('timed appearances reach every placement and do not depend on Courtyard occupancy', () => {
+  const appearances = new Map<number, number>()
+  for (const seed of [4, 0, 1]) {
+    let schedule = createHubSkorchaSchedule(seed, { hiddenTicks: 1, visibleTicks: 10 })
+    assert.equal(schedule.skorcha, null)
+    schedule = stepHubSkorchaSchedule(schedule, { hiddenTicks: 1, visibleTicks: 10 })
+    appearances.set(seed, schedule.skorcha!.variant)
   }
-  const returned = stepHubWorldTick(
-    world,
-    { owner: left.players.owner! },
-    {},
-    { owner: 1 },
-  )
-  assert.equal(returned.world.participants.owner?.region, 'courtyard')
-  assert.equal(returned.world.courtyardPopulationActive, true)
-  assert.equal(returned.world.skorcha?.variant, 0)
+  assert.deepEqual([...appearances.values()].sort(), [0, 1, 2])
+
+  let world = createHubWorld(['first', 'second'], {
+    skorchaHiddenTicks: 5,
+    skorchaVisibleTicks: 10,
+    traderAnimationSeed: 0,
+  })
+  const remaining = world.skorchaTransitionTicksRemaining
+  world = removeHubParticipant(removeHubParticipant(world, 'first'), 'second')
+  world = addHubParticipant(world, 'first', { region: 'library', transition: null })
+  assert.equal(world.skorchaTransitionTicksRemaining, remaining)
+  assert.equal(world.skorcha, null)
+  world = stepHubWorldTick(world, {}, {}, {}).world
+  assert.equal(world.skorchaTransitionTicksRemaining, remaining - 1)
+})
+
+test('phase edges add and remove Skorcha collision on the same authoritative tick', () => {
+  let world = createHubWorld([], {
+    skorchaHiddenTicks: 1,
+    skorchaVisibleTicks: 1,
+    traderAnimationSeed: 0,
+  })
+  assert.equal(world.skorcha, null)
+
+  world = stepHubWorldTick(world, {}, {}, {}).world
+  assert.ok(world.skorcha)
+  assert.equal(world.runtime.bodies.some(({ id }) => id === 'skorcha'), true)
+
+  world = stepHubWorldTick(world, {}, {}, {}).world
+  assert.equal(world.skorcha, null)
+  assert.equal(world.runtime.bodies.some(({ id }) => id === 'skorcha'), false)
 })
 
 test('Skorcha changes to a distinct gesture after an exact Integer(10)+20 interval', () => {
@@ -179,11 +203,14 @@ test('Skorcha common animator reaches the four hat records and native blank apex
 })
 
 test('Hub world preserves forced absence/presence and advances Skorcha on the host tick', () => {
-  const absent = createHubWorld([], { skorcha: null })
+  const absent = createHubWorld([], {
+    skorcha: null,
+    skorchaHiddenTicks: 10,
+  })
   assert.equal(absent.skorcha, null)
 
   const skorcha = createHubSkorchaAtVariant(createNativeRng(73), 2)
-  const present = createHubWorld([], { skorcha })
+  const present = createHubWorld([], { skorcha, skorchaVisibleTicks: 10 })
   const stepped = stepHubWorldTick(present, {}, {}, {})
   assert.equal(stepped.world.skorcha?.variant, 2)
   assert.deepEqual(stepped.world.skorcha?.position, { x: 669, y: 705.5 })

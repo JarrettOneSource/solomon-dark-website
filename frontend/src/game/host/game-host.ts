@@ -590,7 +590,12 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   }
 
   let sharedWorlds: SharedGameWorldsState | null = sharedHub
-    ? createSharedGameWorlds(randomBytes(4).readUInt32LE())
+    ? createSharedGameWorlds(
+        randomBytes(4).readUInt32LE(),
+        options.createSimulation === undefined
+          ? undefined
+          : createInitialSimulation(options.createSimulation),
+      )
     : null
   let privateParties: PartySystemState | null = sessionKind === 'private-college'
     ? createPartySystem()

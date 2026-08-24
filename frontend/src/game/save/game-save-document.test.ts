@@ -88,6 +88,13 @@ test('host save documents round-trip the complete owner state and revive Hub run
   assert.deepEqual(encoded.mods, MODS)
   assert.deepEqual(encoded.modState, MOD_STATE)
   assert.equal(encoded.integrity, 'local-only')
+  const serializedHub = (
+    encoded.continuation as { simulation: { world: Record<string, unknown> } }
+  ).simulation.world
+  assert.equal('skorchaHiddenTicks' in serializedHub, false)
+  assert.equal('skorchaPopulationRng' in serializedHub, false)
+  assert.equal('skorchaTransitionTicksRemaining' in serializedHub, false)
+  assert.equal('skorchaVisibleTicks' in serializedHub, false)
   assert.equal(new TextEncoder().encode(document).byteLength <= MAX_WEB_GAME_SAVE_BYTES, true)
   assert.deepEqual(readGameSaveSummary(document), {
     activeRun: false,
@@ -123,6 +130,10 @@ test('host save documents round-trip the complete owner state and revive Hub run
   assert.equal(restored.state.world.kind, 'hub')
   if (restored.state.world.kind !== 'hub') throw new Error('expected restored Hub')
   assert.deepEqual(restored.state.world.skorcha, reconstructedHub.skorcha)
+  assert.equal(
+    restored.state.world.skorchaTransitionTicksRemaining,
+    reconstructedHub.skorchaTransitionTicksRemaining,
+  )
   assert.deepEqual(restored.state.gameRng, hubSeed.state)
   assert.ok(restored.state.world.runtime instanceof HubWorldRuntime)
   assert.ok(restored.state.world.studentPopulation instanceof HubStudentPopulationState)

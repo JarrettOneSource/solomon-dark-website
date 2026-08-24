@@ -317,6 +317,8 @@ export interface DetachedGameSimulationPlayer {
 
 export interface GameSimulationOptions {
   combatRngSeed?: number
+  hubSkorchaHiddenTicks?: number
+  hubSkorchaVisibleTicks?: number
   hubStudentPopulation?: HubStudentPopulationState
   hubTraderAnimationSeed?: number
   initialPlayerExperience?: number
@@ -400,6 +402,8 @@ export function createGameSimulation(
 ): GameSimulationState {
   const lightProviderOrder = createNativeLightProviderOrder()
   const world = createHubWorld(Object.keys(characters), {
+    skorchaHiddenTicks: options.hubSkorchaHiddenTicks,
+    skorchaVisibleTicks: options.hubSkorchaVisibleTicks,
     studentPopulation: options.hubStudentPopulation,
     traderAnimationSeed: options.hubTraderAnimationSeed,
   })

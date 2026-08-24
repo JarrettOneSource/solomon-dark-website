@@ -18,15 +18,14 @@ import {
 import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
 
 const baseUrl = process.env.SDR_GAME_NPC_SMOKE_URL || 'http://127.0.0.1:4192'
-const screenshotRoot = process.env.SDR_GAME_NPC_SCREENSHOT_ROOT || '/tmp/solomon-dark-hub-npcs'
-const onlySection = process.env.SDR_GAME_NPC_SMOKE_ONLY?.trim() || null
 const endpointUrl = process.env.SDR_GAME_ENDPOINT_URL?.trim() || null
 const endpointCredential = process.env.SDR_GAME_ENDPOINT_CREDENTIAL?.trim() || null
-assert.equal(
-  endpointUrl === null,
-  endpointCredential === null,
-  'SDR_GAME_ENDPOINT_URL and SDR_GAME_ENDPOINT_CREDENTIAL must be provided together',
-)
+const endpointSessionKind = process.env.SDR_GAME_ENDPOINT_SESSION_KIND?.trim() || 'standalone'
+const endpointKind = endpointUrl !== null && /^ws:\/\/(127\.0\.0\.1|\[::1\]|localhost):/.test(endpointUrl)
+  ? 'localhost'
+  : 'remote'
+const screenshotRoot = process.env.SDR_GAME_NPC_SCREENSHOT_ROOT || '/tmp/solomon-dark-hub-npcs'
+const onlySection = process.env.SDR_GAME_NPC_SMOKE_ONLY?.trim() || null
 const expectedSkorchaVariant = process.env.SDR_GAME_NPC_EXPECT_SKORCHA_VARIANT === undefined
   ? null
   : Number(process.env.SDR_GAME_NPC_EXPECT_SKORCHA_VARIANT)
@@ -39,7 +38,8 @@ assert.ok(
       'mortuary',
       'office',
       'skorcha',
-      'skorcha-lifecycle',
+      'skorcha-timer-appear',
+      'skorcha-timer-disappear',
     ].includes(onlySection),
   `unknown NPC smoke section ${JSON.stringify(onlySection)}`,
 )
@@ -47,6 +47,15 @@ assert.ok(
   expectedSkorchaVariant === null
     || [0, 1, 2].includes(expectedSkorchaVariant),
   `invalid expected Skorcha variant ${JSON.stringify(expectedSkorchaVariant)}`,
+)
+assert.equal(
+  endpointUrl === null,
+  endpointCredential === null,
+  'SDR_GAME_ENDPOINT_URL and SDR_GAME_ENDPOINT_CREDENTIAL must be provided together',
+)
+assert.ok(
+  ['global-hub', 'private-college', 'standalone'].includes(endpointSessionKind),
+  `invalid game endpoint session kind ${JSON.stringify(endpointSessionKind)}`,
 )
 const browser = await chromium.launch({
   executablePath: process.env.SDR_CHROME_PATH
@@ -61,17 +70,26 @@ const receipts = []
 
 await page.addInitScript(installGameAudioSmokeProbe)
 await page.addInitScript(bypassStartupAudioPreload)
-if (endpointUrl !== null && endpointCredential !== null) {
-  await page.addInitScript(({ credential, url }) => {
-    window.solomonDarkRuntime = {
-      gameEndpoint: { credential, kind: 'localhost', url },
-    }
-  }, { credential: endpointCredential, url: endpointUrl })
-}
 await page.route('**/deployment.json?*', async (route) => {
   const revision = new URL(route.request().url()).searchParams.get('current')
   await route.fulfill({ json: { revision } })
 })
+await page.route('**/api/mods?**', (route) => route.fulfill({
+  json: { items: [], page: 1, pageSize: 50, total: 0 },
+}))
+await page.route('**/api/game/parties', (route) => route.fulfill({ json: { items: [] } }))
+if (endpointUrl !== null && endpointCredential !== null) {
+  await page.addInitScript(({ credential, kind, sessionKind, url }) => {
+    window.solomonDarkRuntime = {
+      gameEndpoint: { credential, kind, sessionKind, url },
+    }
+  }, {
+    credential: endpointCredential,
+    kind: endpointKind,
+    sessionKind: endpointSessionKind,
+    url: endpointUrl,
+  })
+}
 page.on('console', (message) => {
   if (message.type() === 'error') consoleErrors.push(message.text())
 })
@@ -87,7 +105,7 @@ try {
   await enterHub()
   const canvas = page.locator('.hub-world-canvas[data-game-renderer="pixi-webgl"]')
   if (onlySection === 'fresh-markers') await exerciseFreshMarkers(canvas)
-  else await fundNpcSmoke()
+  else if (onlySection === null || onlySection === 'courtyard') await fundNpcSmoke()
 
   if (onlySection === null || onlySection === 'courtyard') {
     await visitTrader(canvas, 'hagatha', 'Hagatha', 'WITCH_INTRO', 'Charm Prices?', 'hagatha')
@@ -98,19 +116,19 @@ try {
     await exerciseTeacher(canvas)
   }
   if (onlySection === 'skorcha') await exerciseSkorcha(canvas)
-  if (onlySection === 'skorcha-lifecycle') {
+  if (onlySection === 'skorcha-timer-appear') {
     assert.equal(
       await canvas.evaluate((node) => node.__sdrHubFrame.skorcha),
       null,
-      'lifecycle smoke seed must begin with an absent Skorcha population',
+      'appearance smoke seed must begin with an absent Skorcha population',
     )
-    await navigateHubRegion(page, canvas, 'courtyard', { x: 1800, y: 650 }, 40, log)
-    await holdForHubTransition(page, canvas, ['d', 'w'], 'library')
-    await waitForSettledHubRegion(page, canvas, 'library')
-    await navigateHubRegion(page, canvas, 'library', { x: 512, y: 850 }, 25, log)
-    await holdForHubTransition(page, canvas, ['s'], 'courtyard')
-    await waitForSettledHubRegion(page, canvas, 'courtyard')
+    await page.waitForFunction(() => (
+      document.querySelector('.hub-world-canvas')?.__sdrHubFrame.skorcha !== null
+    ), null, { timeout: 90_000 })
     await exerciseSkorcha(canvas)
+  }
+  if (onlySection === 'skorcha-timer-disappear') {
+    await exerciseSkorchaDisappearance(canvas)
   }
 
   if (onlySection === null || onlySection === 'library') {
@@ -155,7 +173,8 @@ try {
     mortuary: ['memorator', ...completeInteractions.filter(id => id.startsWith('painting-'))],
     office: ['arch-chancellor'],
     skorcha: ['skorcha'],
-    'skorcha-lifecycle': ['skorcha'],
+    'skorcha-timer-appear': ['skorcha'],
+    'skorcha-timer-disappear': ['skorcha'],
   }
   assert.deepEqual(
     receipts.map(({ interaction }) => interaction).sort(),
@@ -414,6 +433,26 @@ async function exerciseSkorcha(canvas) {
     interaction: 'skorcha',
     variant: state.variant,
   })
+}
+
+async function exerciseSkorchaDisappearance(canvas) {
+  const state = await canvas.evaluate((node) => node.__sdrHubFrame.skorcha)
+  assert.ok(state, 'disappearance smoke seed did not create Skorcha')
+  if (expectedSkorchaVariant !== null) assert.equal(state.variant, expectedSkorchaVariant)
+  await navigateHubRegion(page, canvas, 'courtyard', { x: state.x, y: state.y }, 35, log)
+  const dialog = await openInteraction('skorcha', 'Skorcha')
+  await assertSpeech(dialog, 'ENFORCER_INTRO')
+  await page.screenshot({ path: `${screenshotRoot}-skorcha-before-disappear.png` })
+  await page.waitForFunction(() => (
+    document.querySelector('.hub-world-canvas')?.__sdrHubFrame.skorcha === null
+  ), null, { timeout: 90_000 })
+  await dialog.waitFor({ state: 'hidden', timeout: 5_000 })
+  assert.equal(await canvas.getAttribute('data-skorcha-present'), 'false')
+  assert.equal(await page.locator(
+    '.game-interact-prompt[data-interaction-target="hub:skorcha"]',
+  ).count(), 0)
+  await page.screenshot({ path: `${screenshotRoot}-skorcha-after-disappear.png` })
+  receipts.push({ disappeared: true, interaction: 'skorcha', variant: state.variant })
 }
 
 async function exerciseTeacher(canvas) {

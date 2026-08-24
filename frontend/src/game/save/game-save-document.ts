@@ -817,10 +817,12 @@ function numericOrNull(value: unknown): number | null {
 
 function serializeHubWorld(world: HubWorldState): Omit<
   HubWorldState,
-  | 'courtyardPopulationActive'
   | 'memorial'
   | 'runtime'
+  | 'skorchaHiddenTicks'
   | 'skorchaPopulationRng'
+  | 'skorchaTransitionTicksRemaining'
+  | 'skorchaVisibleTicks'
   | 'studentPopulation'
 > & {
   studentPopulation: HubStudentPopulationOptions

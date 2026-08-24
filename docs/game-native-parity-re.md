@@ -40840,6 +40840,109 @@ empty page-error, console-error, and failed-response arrays; the Semicus,
 Provokatus, lifecycle variant-0, variant-1, and variant-2 captures were visually
 inspected.
 
+### Timed shared-Hub conditional NPC policy
+
+This user-directed Website policy intentionally supersedes stock Courtyard-
+entry timing without reclassifying it as native parity. Skorcha remains the
+only conditional named survival-Hub actor. Her initial presence still uses the
+stock one-in-three draw, but the long-lived shared Hub then alternates between
+visible and absent phases. Each phase independently draws an inclusive
+`20..40` minute duration from the host's fixed-tick population RNG, giving a
+30-minute midpoint without wall-clock or client ownership.
+
+The timer belongs to the shared Hub world, not Courtyard occupancy or any
+participant. It advances while players are in any Hub room and changes phase
+on the exact authoritative tick even when someone is standing beside or
+talking to Skorcha. A visible-to-absent edge removes render state, collision,
+prompt, and every active local Skorcha Chat immediately. An absent-to-visible
+edge chooses one of the three recovered placements and publishes it in the
+same snapshot. All clients observe the same phase; no client timer or reroll is
+permitted. A new Hub/session creates a fresh schedule; player save documents
+do not own this shared-world timer.
+
+Progression does not gate actor visibility. Semicus, Machinimbus, and every
+other fixed survival-Hub NPC remain visible to all residents. Instead, all
+stateful NPC and trader services remain participant-private:
+
+| Owner | Participant-private state |
+| --- | --- |
+| Hagatha | gold, owned perks, bundle/first-mix flags, one-shot runtime |
+| Fomentius | stock, purchases, backpack contents, gold |
+| Provokatus | selected Boast, one-shot failure, success and score effect |
+| Luthacus | backpack/equipment transfer and Scavenged Goods storage |
+| Machinimbus | gold and advanced spell unlock rows; a new player sees the default eight-row state |
+| Semicus | Lace-read flag and resulting 26/25-row BookReview membership |
+| Shlorio | fee, paid offer list, purchase and gold |
+
+Every action is addressed to the authenticated participant's entity/economy.
+Joining an existing shared Hub constructs fresh default state and may not copy
+another resident's purchases, unlocks, offers, storage, Boast, or Lace flag.
+Dialogue focus remains local presentation state.
+
+Closure requires deterministic minimum/maximum timer tests, both phase edges,
+all three appearance placements, shared snapshot equality, immediate mid-Chat
+teardown, collision/prompt removal and restoration, and a two-player mutation
+matrix covering every stateful service above. Browser acceptance must observe
+both instant phase changes under accelerated test windows plus the complete
+NPC/trader journey with empty page, console, and failed-response arrays.
+The accelerated host fixture must construct `SharedGameWorlds.hub` itself;
+configuring an unused standalone simulation while the global Hub selects a
+separate random world is a false receipt even if readiness echoes the requested
+timer values.
+
+#### Timed-policy implementation validation receipt
+
+- The authoritative Hub now owns an alternating Skorcha schedule. The initial
+  stock one-in-three result is retained, each later phase draws an inclusive
+  `120000..240000` fixed-tick duration, and absent-to-present edges choose one
+  of the three recovered positions without another presence veto. Courtyard
+  occupancy, player admission, and private-room transitions do not reroll or
+  pause the clock. Actor state, fixed collision, snapshot presence, prompt, and
+  active local Chat change on the same edge.
+- Focused coverage pins both duration endpoints, invalid fixture durations,
+  both phase edges, all three placements, animation continuity, zero-player and
+  private-room ticking, same-tick collision membership, player-save exclusion,
+  and identical per-client Skorcha snapshots. A global-Hub host test proves the
+  accelerated fixture constructs `SharedGameWorlds.hub`, closing the false
+  standalone-fixture receipt found during browser acceptance.
+- The authenticated-player mutation matrix purchases Hagatha and Fomentius
+  rows, transfers through Luthacus, selects a Provokatus Boast, reads Semicus's
+  Lace row, buys Machinimbus skill 72, and pays Shlorio for offers. Every step
+  preserves the second resident's economy, progression, and skill-book objects;
+  a later join receives 500 gold, empty purchases/storage/offers/Boast/Lace
+  state, and all eight advanced-unlock flags false. A separate real
+  three-client `global-hub` host test sends Provokatus and Machinimbus actions
+  through the first authenticated socket, observes the first player's mutation
+  in both resident snapshots while the second stays default, then proves the
+  third player's welcome carries fresh defaults.
+- On the manifest-identical candidate rebased over `e35c6369`, the complete Mac
+  gate passed 22 backend/contracts tests, every frontend and desktop group,
+  1,536 Boneyard tests, 77 Hub UI tests, both production builds, media policy,
+  and the `132182`-byte gzip game entry under the `133120`-byte limit.
+- Mac Chrome `151.0.7922.174` on Apple M2 Metal observed real `global-hub`
+  absent-to-present
+  edges for seeds `4`, `0`, and `1`, producing variants `0`, `1`, and `2` at
+  their exact positions after 3,000-tick hidden fixture phases. Seed `3` then
+  removed variant 0 during an open `ENFORCER_INTRO` Chat after a 6,000-tick
+  visible phase; the actor, Chat, and Skorcha prompt were absent in the next
+  observed frame.
+- A separate production-duration journey, with no timer override, opened all
+  20 interaction targets and
+  completed every service/selector family: Provokatus's five Boasts and
+  1,597-ms host automatic choice, Machinimbus skill-72 purchase/row removal,
+  Semicus Lace removal, all traders, Skorcha, Memorator, ten Paintings, and the
+  Archchancellor. Every timer and full-census receipt had empty page-error,
+  console-error, and failed-response arrays; all three placement frames, the
+  before/after disappearance pair, and the stateful selector captures were
+  visually inspected. No member is blocked by the browser platform.
+- The same production build passed the fresh-profile marker lifecycle through
+  interaction, room reconstruction, schema-11 persistence, leave-game, and
+  `Last game` resume with help flags `0111111111`. A separate shared-Hub
+  memorial journey published portrait 100, rendered it in Mac Chrome, and
+  proved a late join received the same portrait at memorial age 1002. Both
+  journeys had empty page-error, console-error, and failed-response arrays, and
+  their captures were visually inspected.
+
 ## 2026-08-24 — Solomon Dig dirt actor and state-0 presentation closure
 
 ### Reported smell and parity question

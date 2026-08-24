@@ -241,6 +241,21 @@ deployment-drain state. A validated release closes admissions, freezes
 authoritative hosts, requests one final owner checkpoint from every connected
 browser player, and only then disconnects occupied sessions for cutover; an
 empty resident Hub is not an occupied session.
+
+The shared Hub also owns the session-global conditional-NPC clock. Skorcha's
+host fixed-tick schedule alternates visible/absent windows independently of
+participant count and room occupancy; snapshots publish only the current
+authoritative actor state. Phase changes are immediate and remove or restore
+collision, prompts, rendering, and local dialogue ownership together. This
+timer is shared-world state, not player-save state.
+
+NPC and trader progression remains at the existing player-entity boundary.
+Gold, shops/offers, inventory/storage, Boast, Lace, Hagatha ownership, and
+Machinimbus unlock rows are read and mutated through the authenticated
+participant's economy/progression components. A newly admitted shared-Hub
+player receives fresh defaults and never inherits another resident's service
+state; actor visibility itself is not progression-gated.
+
 The host also owns the safe public-party projection. A bearer-protected
 supervisor control-plane read exposes that projection to the Website backend;
 public clients receive only the bounded DTO from `GET /api/game/parties`.

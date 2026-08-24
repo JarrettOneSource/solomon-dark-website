@@ -55,6 +55,16 @@ const benchmarkStudentSeed = parseBenchmarkStudentSeed(
   process.env.SDR_HUB_BENCH_SEED,
   benchmarkStudentCount,
 )
+const benchmarkSkorchaHiddenTicks = parseBenchmarkSkorchaTicks(
+  process.env.SDR_HUB_BENCH_SKORCHA_HIDDEN_TICKS,
+  benchmarkStudentCount,
+  'SDR_HUB_BENCH_SKORCHA_HIDDEN_TICKS',
+)
+const benchmarkSkorchaVisibleTicks = parseBenchmarkSkorchaTicks(
+  process.env.SDR_HUB_BENCH_SKORCHA_VISIBLE_TICKS,
+  benchmarkStudentCount,
+  'SDR_HUB_BENCH_SKORCHA_VISIBLE_TICKS',
+)
 const boneyards = createBoneyardCatalog()
 
 const server = await startGameHost({
@@ -88,6 +98,8 @@ const server = await startGameHost({
     : {
         createSimulation: () => createGameSimulation({}, {
           gameRngSeed: benchmarkStudentSeed,
+          hubSkorchaHiddenTicks: benchmarkSkorchaHiddenTicks,
+          hubSkorchaVisibleTicks: benchmarkSkorchaVisibleTicks,
           hubStudentPopulation: createHubStudentFixturePopulation({
             count: benchmarkStudentCount,
             routeEndBehavior: 'reverse',
@@ -107,6 +119,12 @@ process.stdout.write(`${JSON.stringify({
     : {
         benchmarkStudentCount,
         benchmarkStudentSeed,
+        ...(benchmarkSkorchaHiddenTicks === undefined
+          ? {}
+          : { benchmarkSkorchaHiddenTicks }),
+        ...(benchmarkSkorchaVisibleTicks === undefined
+          ? {}
+          : { benchmarkSkorchaVisibleTicks }),
       }),
 })}\n`)
 
@@ -161,4 +179,20 @@ function parseBenchmarkStudentSeed(
     throw new Error('SDR_HUB_BENCH_SEED must be an unsigned 32-bit integer')
   }
   return seed
+}
+
+function parseBenchmarkSkorchaTicks(
+  value: string | undefined,
+  studentCount: number | undefined,
+  field: string,
+): number | undefined {
+  if (!value) return undefined
+  if (studentCount === undefined) {
+    throw new Error(`${field} requires SDR_HUB_BENCH_STUDENTS`)
+  }
+  const ticks = Number(value)
+  if (!Number.isSafeInteger(ticks) || ticks < 1) {
+    throw new Error(`${field} must be a positive safe integer`)
+  }
+  return ticks
 }

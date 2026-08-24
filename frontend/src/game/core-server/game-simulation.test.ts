@@ -674,6 +674,111 @@ test('Hub shortcut services are participant-private, global inside a settled Hub
   }).reason, 'service-unavailable')
 })
 
+test('every stateful NPC and trader keeps authenticated player state isolated in the shared Hub', () => {
+  const first = {
+    discipline: 'arcane',
+    displayName: 'First',
+    element: 'ether',
+  } as const
+  const second = {
+    discipline: 'mind',
+    displayName: 'Second',
+    element: 'water',
+  } as const
+  let state = createGameSimulation({ first, second })
+  const untouchedSecondEconomy = getPlayerEconomy(state, 'second')
+  const untouchedSecondProgression = getPlayerProgression(state, 'second')
+  const untouchedSecondSkillBook = getPlayerSkillBook(state, 'second')
+  const firstEconomy = getPlayerEconomy(state, 'first')
+  state = {
+    ...state,
+    playerEntities: replacePlayerEconomy(state.playerEntities, 'first', {
+      ...firstEconomy,
+      gold: 100_000,
+      revision: firstEconomy.revision + 1,
+    }),
+  }
+
+  const applyFirst = (action: Parameters<typeof applyGameSimulationHubAction>[2]) => {
+    const result = applyGameSimulationHubAction(state, 'first', action)
+    assert.equal(result.accepted, true, `${action.type} was rejected`)
+    state = result.state
+    assert.strictEqual(getPlayerEconomy(state, 'second'), untouchedSecondEconomy)
+    assert.strictEqual(getPlayerProgression(state, 'second'), untouchedSecondProgression)
+    assert.strictEqual(getPlayerSkillBook(state, 'second'), untouchedSecondSkillBook)
+  }
+
+  applyFirst({ selector: 0, type: 'buy-hagatha' })
+  applyFirst({
+    itemId: getPlayerEconomy(state, 'first').fomentiusStock[0]!.id,
+    type: 'buy-fomentius',
+  })
+  const storedItemId = getPlayerEconomy(state, 'first').backpack[0]!.id
+  applyFirst({
+    direction: 'to-storage',
+    gesture: 'double-activation',
+    itemId: storedItemId,
+    type: 'transfer',
+  })
+  applyFirst({ boastId: 0, type: 'select-boast' })
+  applyFirst({ bookId: 25, type: 'read-librarian-book' })
+  applyFirst({ skillId: 72, type: 'buy-teacher-spell' })
+  applyFirst({ type: 'dowse' })
+
+  const mutatedFirst = getPlayerEconomy(state, 'first')
+  assert.ok(mutatedFirst.ownedPerkSelectors.includes(0))
+  assert.ok(mutatedFirst.storage.some(({ id }) => id === storedItemId))
+  assert.equal(mutatedFirst.npc.boast.selected, 0)
+  assert.equal(mutatedFirst.npc.librarianLaceRead, true)
+  assert.ok(mutatedFirst.dowsingOffers.length >= 3)
+  assert.deepEqual(
+    getPlayerSkillBook(state, 'first').advancedUnlocks,
+    [true, false, false, false, false, false, false, false],
+  )
+
+  assert.equal(untouchedSecondEconomy.gold, 500)
+  assert.deepEqual(untouchedSecondEconomy.ownedPerkSelectors, [])
+  assert.deepEqual(untouchedSecondEconomy.storage, [])
+  assert.equal(untouchedSecondEconomy.npc.boast.selected, null)
+  assert.equal(untouchedSecondEconomy.npc.librarianLaceRead, false)
+  assert.deepEqual(untouchedSecondEconomy.dowsingOffers, [])
+  assert.deepEqual(untouchedSecondSkillBook.advancedUnlocks, new Array<boolean>(8).fill(false))
+
+  state = addPlayerCharacter(state, 'late', {
+    discipline: 'body',
+    displayName: 'Late',
+    element: 'fire',
+  })
+  const lateEconomy = getPlayerEconomy(state, 'late')
+  assert.equal(lateEconomy.gold, 500)
+  assert.deepEqual(lateEconomy.ownedPerkSelectors, [])
+  assert.deepEqual(lateEconomy.storage, [])
+  assert.equal(lateEconomy.npc.boast.selected, null)
+  assert.equal(lateEconomy.npc.librarianLaceRead, false)
+  assert.deepEqual(lateEconomy.dowsingOffers, [])
+  assert.deepEqual(
+    getPlayerSkillBook(state, 'late').advancedUnlocks,
+    new Array<boolean>(8).fill(false),
+  )
+
+  const firstSnapshot = createGameSnapshot(state, 'first')
+  const secondSnapshot = createGameSnapshot(state, 'second')
+  assert.equal(firstSnapshot.world.kind, 'hub')
+  assert.equal(secondSnapshot.world.kind, 'hub')
+  if (firstSnapshot.world.kind !== 'hub' || secondSnapshot.world.kind !== 'hub') {
+    throw new Error('expected shared Hub snapshots')
+  }
+  assert.deepEqual(firstSnapshot.world.skorcha, secondSnapshot.world.skorcha)
+  assert.deepEqual(
+    firstSnapshot.players.first!.progression.advancedUnlocks,
+    [true, false, false, false, false, false, false, false],
+  )
+  assert.deepEqual(
+    secondSnapshot.players.second!.progression.advancedUnlocks,
+    new Array<boolean>(8).fill(false),
+  )
+})
+
 test('locked Goodies require an explicit nearest-facing interaction and consume one recursive Wizard Key', () => {
   let state = enterBoneyardWorld(createGameSimulation(), emptyBoneyard())
   if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')

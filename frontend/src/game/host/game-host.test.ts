@@ -1185,6 +1185,82 @@ test('game host replicates and checkpoints native NPC hint acknowledgement', asy
   assert.equal(JSON.parse(checkpointMessage.save).schemaVersion, 11)
 })
 
+test('shared Hub NPC actions and late-join defaults stay bound to the authenticated player', async (context) => {
+  const host = await startGameHost({
+    authentication: SHARED_HUB_AUTHENTICATION,
+    sessionKind: 'global-hub',
+    sharedHub: true,
+    snapshotRate: 100,
+  })
+  context.after(() => host.close())
+  const first = await join(host.address.url, 'ticket-first', FIRST_CHARACTER)
+  const second = await join(host.address.url, 'ticket-second', SECOND_CHARACTER)
+  context.after(() => first.socket.close())
+  context.after(() => second.socket.close())
+  const firstPlayerId = first.welcome.playerId
+  const secondPlayerId = second.welcome.playerId
+  const state = host.state()
+  const firstEconomy = getPlayerEconomy(state, firstPlayerId)
+  state.playerEntities = replacePlayerEconomy(state.playerEntities, firstPlayerId, {
+    ...firstEconomy,
+    gold: 10_000,
+    revision: firstEconomy.revision + 1,
+  })
+
+  const firstBoast = nextMessage(first.socket, message => (
+    message.type === 'server-snapshot'
+    && message.snapshot.players[firstPlayerId].economy.npc.boast.selected === 0
+  ))
+  const secondBoastView = nextMessage(second.socket, message => (
+    message.type === 'server-snapshot'
+    && message.snapshot.players[firstPlayerId].economy.npc.boast.selected === 0
+    && message.snapshot.players[secondPlayerId].economy.npc.boast.selected === null
+  ))
+  first.socket.send(encodeGameMessage({
+    action: { boastId: 0, type: 'select-boast' },
+    type: 'client-hub-action',
+  }))
+  await Promise.all([firstBoast, secondBoastView])
+
+  const firstUnlock = nextMessage(first.socket, message => (
+    message.type === 'server-snapshot'
+    && message.snapshot.players[firstPlayerId].progression.advancedUnlocks[0] === true
+  ))
+  const secondUnlockView = nextMessage(second.socket, message => (
+    message.type === 'server-snapshot'
+    && message.snapshot.players[firstPlayerId].progression.advancedUnlocks[0] === true
+    && message.snapshot.players[secondPlayerId].progression.advancedUnlocks[0] === false
+  ))
+  first.socket.send(encodeGameMessage({
+    action: { skillId: 72, type: 'buy-teacher-spell' },
+    type: 'client-hub-action',
+  }))
+  await Promise.all([firstUnlock, secondUnlockView])
+
+  const late = await join(host.address.url, 'ticket-late', {
+    discipline: 'body',
+    displayName: 'Late',
+    element: 'fire',
+  })
+  context.after(() => late.socket.close())
+  const latePlayer = late.welcome.snapshot.players[late.welcome.playerId]
+  assert.equal(latePlayer.economy.gold, 500)
+  assert.deepEqual(latePlayer.economy.ownedPerkSelectors, [])
+  assert.deepEqual(latePlayer.economy.storage, [])
+  assert.equal(latePlayer.economy.npc.boast.selected, null)
+  assert.equal(latePlayer.economy.npc.librarianLaceRead, false)
+  assert.deepEqual(latePlayer.economy.dowsingOffers, [])
+  assert.deepEqual(latePlayer.progression.advancedUnlocks, new Array<boolean>(8).fill(false))
+  assert.equal(
+    late.welcome.snapshot.players[firstPlayerId].progression.advancedUnlocks[0],
+    true,
+  )
+  assert.equal(
+    late.welcome.snapshot.players[secondPlayerId].progression.advancedUnlocks[0],
+    false,
+  )
+})
+
 test('game host authoritatively binds and replicates a native primary quickbar entry', async (context) => {
   const host = await startGameHost({
     authentication: SHARED_AUTHENTICATION,
@@ -1528,6 +1604,41 @@ test('game host accepts an empty deterministic Hub fixture factory', async (cont
   assert.equal(client.welcome.snapshot.world.kind, 'hub')
   if (client.welcome.snapshot.world.kind !== 'hub') throw new Error('expected Hub snapshot')
   assert.equal(client.welcome.snapshot.world.students.length, 32)
+})
+
+test('global Hub fixture factory owns the actual shared world', async (context) => {
+  let factoryCalls = 0
+  const host = await startGameHost({
+    authentication: SHARED_HUB_AUTHENTICATION,
+    createSimulation: () => {
+      factoryCalls += 1
+      return createGameSimulation({}, {
+        hubSkorchaHiddenTicks: 3_000,
+        hubSkorchaVisibleTicks: 12_000,
+        hubStudentPopulation: createHubStudentFixturePopulation({ count: 0, seed: 4 }),
+        hubTraderAnimationSeed: 4,
+      })
+    },
+    sessionKind: 'global-hub',
+    sharedHub: true,
+    snapshotRate: 100,
+  })
+  context.after(() => host.close())
+  assert.equal(factoryCalls, 1)
+  const sharedState = host.state()
+  assert.equal(sharedState.world.kind, 'hub')
+  if (sharedState.world.kind !== 'hub') throw new Error('expected shared Hub')
+  assert.equal(sharedState.world.skorcha, null)
+  assert.ok(sharedState.world.skorchaTransitionTicksRemaining <= 3_000)
+  assert.ok(sharedState.world.skorchaTransitionTicksRemaining > 2_900)
+
+  const client = await join(host.address.url, 'ticket-fixture', FIRST_CHARACTER)
+  context.after(() => client.socket.close())
+  assert.equal(client.welcome.sessionKind, 'global-hub')
+  assert.equal(client.welcome.snapshot.world.kind, 'hub')
+  if (client.welcome.snapshot.world.kind !== 'hub') throw new Error('expected Hub snapshot')
+  assert.equal(client.welcome.snapshot.world.skorcha, null)
+  assert.deepEqual(client.welcome.snapshot.world.students, [])
 })
 
 test('game host rejects pre-populated initial simulation factories', async () => {

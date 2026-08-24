@@ -29,8 +29,28 @@ export interface HubSkorchaPopulationResult {
   readonly skorcha: HubSkorchaState | null
 }
 
+export interface HubSkorchaWindowOptions {
+  readonly hiddenTicks?: number
+  readonly visibleTicks?: number
+}
+
+export interface HubSkorchaScheduleState extends HubSkorchaPopulationResult {
+  readonly transitionTicksRemaining: number
+}
+
+export const HUB_SKORCHA_WINDOW_MIN_TICKS = 20 * 60 * 100
+export const HUB_SKORCHA_WINDOW_MAX_TICKS = 40 * 60 * 100
+
 export function createHubSkorcha(seed: number): HubSkorchaState | null {
   return createHubSkorchaPopulation(seed).skorcha
+}
+
+export function createHubSkorchaSchedule(
+  seed: number,
+  options: HubSkorchaWindowOptions = {},
+): HubSkorchaScheduleState {
+  const population = createHubSkorchaPopulation(seed)
+  return scheduleHubSkorchaPopulation(population, options)
 }
 
 export function createHubSkorchaPopulation(seed: number): HubSkorchaPopulationResult {
@@ -56,6 +76,69 @@ export function drawHubSkorchaPopulation(
     placement.value as HubSkorchaVariant,
   )
   return Object.freeze({ rng: skorcha.rng, skorcha })
+}
+
+export function stepHubSkorchaSchedule(
+  source: HubSkorchaScheduleState,
+  options: HubSkorchaWindowOptions = {},
+): HubSkorchaScheduleState {
+  if (!Number.isSafeInteger(source.transitionTicksRemaining)
+    || source.transitionTicksRemaining < 1) {
+    throw new RangeError('Skorcha transition ticks must be a positive safe integer')
+  }
+  if (source.transitionTicksRemaining > 1) {
+    return Object.freeze({
+      ...source,
+      skorcha: source.skorcha === null ? null : stepHubSkorcha(source.skorcha),
+      transitionTicksRemaining: source.transitionTicksRemaining - 1,
+    })
+  }
+  if (source.skorcha !== null) {
+    return scheduleHubSkorchaPopulation(
+      { rng: source.rng, skorcha: null },
+      options,
+    )
+  }
+  return scheduleHubSkorchaPopulation(drawHubSkorchaAppearance(source.rng), options)
+}
+
+function drawHubSkorchaAppearance(sourceRng: NativeRngState): HubSkorchaPopulationResult {
+  const placement = drawNativeInteger(
+    sourceRng,
+    NATIVE_HUB_NPC_CATALOG.skorcha.placements.length,
+  )
+  const skorcha = createHubSkorchaAtVariant(
+    placement.state,
+    placement.value as HubSkorchaVariant,
+  )
+  return Object.freeze({ rng: skorcha.rng, skorcha })
+}
+
+export function scheduleHubSkorchaPopulation(
+  population: HubSkorchaPopulationResult,
+  options: HubSkorchaWindowOptions,
+): HubSkorchaScheduleState {
+  const fixedTicks = population.skorcha === null
+    ? options.hiddenTicks
+    : options.visibleTicks
+  if (fixedTicks !== undefined) {
+    if (!Number.isSafeInteger(fixedTicks) || fixedTicks < 1) {
+      throw new RangeError('fixed Skorcha phase ticks must be a positive safe integer')
+    }
+    return Object.freeze({
+      ...population,
+      transitionTicksRemaining: fixedTicks,
+    })
+  }
+  const duration = drawNativeInteger(
+    population.rng,
+    HUB_SKORCHA_WINDOW_MAX_TICKS - HUB_SKORCHA_WINDOW_MIN_TICKS + 1,
+  )
+  return Object.freeze({
+    rng: duration.state,
+    skorcha: population.skorcha,
+    transitionTicksRemaining: HUB_SKORCHA_WINDOW_MIN_TICKS + duration.value,
+  })
 }
 
 export function createHubSkorchaAtVariant(

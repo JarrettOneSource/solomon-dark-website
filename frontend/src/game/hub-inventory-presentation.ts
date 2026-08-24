@@ -183,6 +183,7 @@ export function hubInteractionWithinRange(
   playerPosition: Vector2,
   availability: HubInteractionAvailability = { skorchaPosition: null },
 ): boolean {
+  if (interaction === 'skorcha' && availability.skorchaPosition === null) return false
   const geometry = interactionGeometry(interaction, availability)
   if (region !== geometry.region) return false
   const distanceSquared = squaredDistance(playerPosition, geometry.position)
