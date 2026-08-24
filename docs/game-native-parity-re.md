@@ -8006,7 +8006,7 @@ Good Imp, or multiple-Golem ordering without new native evidence.
 | Preserved retail binary | `SolomonDark.exe` SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3` | The image re-hashes to the same source pinned by G2 projectile and G4 animation goldens. | high |
 | Fresh static pass | read-only headless Ghidra decompilation of primary handlers `0x0053CFE0`, `0x0053DC60`, `0x0053F9C0`, `0x00543860`, `0x00544C60`; render/build paths `0x005E0460`, `0x006099C0`, `0x00536380`, `0x0060AC40` | Reconfirms one-shot versus sustained ownership, native object families, Fire age selector, Lightning procedural ownership, and Boulder live scale. | high |
 | Closed native gameplay corpus | Mod Loader `native-projectile-and-spell-mechanics.md`, `native-skills-and-spells.md`, `projectile-goldens.json` | Pins the dispatcher chain, all rank-1 constants, 24-way emitter geometry, velocities, charge, transient lifetimes, and renderer records. | high |
-| Closed native presentation corpus | Mod Loader `native-animation-state.md`, `animation-goldens.json`, Clothes SHA-256 `69595...` | Pins Staff Cast 1 branch A as insertion `K=0`, then `K=1` at tick 2, `K=8` at tick 19, `K=7` at tick 37, reset at tick 74; marker crossing is tick 19. All 24 emitter facings are observed. | high |
+| Closed native presentation corpus | Mod Loader `native-animation-state.md`, `animation-goldens.json`, Clothes SHA-256 `69595...` | Pins Fire Staff Cast 1 branch A as insertion `K=0`, first-update `K=1`, `K=8` at insertion-relative update 18, `K=7` at update 36, last occupied update 72, and reset/next-ready update 73. The old `19/37/74` labels were capture rows counted from the preceding idle sample. All 24 emitter facings are observed. | high |
 | Closed native audio corpus | Mod Loader `native-audio-events.md`, `native-audio-system.md`, `native-audio-catalog.json`, `audio-event-goldens.json` | Pins one-shot registry IDs/assets and the start/stop ownership of Lightning, Frost, gather-rock, and rolling-rock loops. | high |
 | Existing web input contract | the preceding Native gameplay mouse-button ingress ledger entry; `gameplay-input.ts` and its protocol/host tests | Primary is an independent held level from world-surface button 0, sampled by the 100 Hz authority; aim is already a world point and UI clicks do not leak. | high |
 
@@ -8061,16 +8061,18 @@ world left-button level + world aim
 - A Staff cast uses Clothes record `#3244 + 24*K + facing`, point 1. The point
   is added to player world position without actor-scale multiplication.
 - Ether and Fire use Staff Cast 1 branch A deterministically for this PoC. The
-  fixed schedule is insertion `K=0`, `K=1` at action tick 2, marker plus `K=8`
-  at tick 19, `K=7` at tick 37, and reset to `K=0` at tick 74. Release and
+  corrected insertion-relative schedule is `K=0` on insertion and `K=1` on
+  the first update. Ether reaches marker/`K=8` at update 14, `K=7` at update
+  27, and next-ready at 55; Fire uses updates 18, 36, and 73. The historical
+  `2/19/37/74` labels counted the preceding idle capture row. Release and
   movement do not cancel that queued presentation action.
 - Air, Water, and Earth use the separate sustained dispatcher at `0x00548A00`.
   Its item branch queues mode 5 `Action_PlayerWizard_StaffConstant` at
   `0x00548A54..0x00548A66` on every active tick. The insertion tick retains
   `K=0`; the next and all subsequent active ticks use `K=7`. Earth live rows
   independently resolve to Staff socket bank 0 once and bank 7 thereafter.
-- One-shot Ether and Fire accept a new press only when no Staff Cast 1 action
-  is active. Holding a click does not repeatedly allocate actors. Air and
+- One-shot Ether and Fire admit only when no Staff Cast 1 action is active; a
+  still-held level queues the successor after the prior action ends. Air and
   Water arm on the press edge, tick while held, and stop on the falling edge.
   Earth arms on press but may retain its selected primary after a falling edge
   until its native minimum-charge predicate permits release.
@@ -10302,7 +10304,7 @@ width remain unchanged.
 | Preserved retail binary | `SolomonDarkAbandonware/SolomonDark.exe`, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3` | Same retail image as the primary-spell and animation goldens. | high |
 | Fresh instructions/decompilation | 2026-08-14 read-only Ghidra replica slot 2, `/SolomonDark.exe`, `PlayerActor::Tick` `0x00548B00` | `0x0052C910` supplies separate movement and facing vectors. `0x0042D280` first derives a movement heading and then, when attack-facing exists, derives and writes the facing heading second. Both writes target actor `+0x6C`. The whole lane is gated by animation-drive byte `+0x160 == 0`. | high |
 | Durable native adjacency | `native-input-model.md`, `native-animation-state.md`, `native-projectile-and-spell-mechanics.md`, and `spell-cast-cleanup-chain.md` | Target-facing beats locomotion; Staff Cast 1 stays queued after input release; staff art and cast socket both select their 24-way record from actor heading; Fire reads actor `+0x6C` at projectile allocation. | high |
-| Current web trace | `stepHubWorldTick`/`stepBoneyardWorldTick` -> `finishGameSimulationTick` -> `stepPrimarySpells` | Movement commits heading first. The spell kernel reapplies aim-facing only while `rawHeld` (or the old Earth hold special case) is true, so a released one-shot action loses facing ownership before tick 19. | high |
+| Current web trace | `stepHubWorldTick`/`stepBoneyardWorldTick` -> `finishGameSimulationTick` -> `stepPrimarySpells` | Movement commits heading first. The spell kernel reapplies aim-facing only while `rawHeld` (or the old Earth hold special case) is true, so a released one-shot action loses facing ownership before Ether/Fire marker updates `14/18`. | high |
 
 The native evidence is static retail evidence. Loader-authored remote-cast
 playback is used only as an adjacency check: it independently preserves live
@@ -10339,9 +10341,9 @@ same stock actor field.
 ### Recovered behavioral contract
 
 - Timing/ticks/thresholds: cast-facing changes only on the authoritative 100 Hz
-  tick. Ether/Fire keep their accepted heading through the action emission at
-  tick 19 and until the 74-tick Staff Cast 1 action ends. Air/Water/Earth own
-  facing for their renewed constant-action channel lifetime.
+  tick. Ether keeps its accepted heading through marker update 14 and
+  next-ready update 55; Fire uses marker 18 and next-ready 73. Air/Water/Earth
+  own facing for their renewed constant-action channel lifetime.
 - Geometry/transforms/coordinate spaces: aim remains the normalized vector from
   the world cursor to the player torso anchor `(0,-25/viewScale)`. Heading is
   clockwise from screen-up and the existing wizard 24-way quantizer owns the
@@ -10402,8 +10404,9 @@ same stock actor field.
 ### Validation contract
 
 - Focused automated test: short-click Ether/Fire toward one direction, move in
-  another through tick 19, and prove heading plus emitted velocity stay aligned
-  with the accepted cast; prove locomotion regains heading after action end.
+  another through their insertion-relative marker updates `14/18`, and prove
+  heading plus emitted velocity stay aligned with the accepted cast; prove
+  locomotion regains heading after next-ready updates `55/73`.
 - Existing regression: held Air/Water/Earth with conflicting movement continues
   to face live cast aim and release cleanly.
 - Browser journey: cast at visibly separated cardinal directions in Hub and
@@ -10426,8 +10429,8 @@ same stock actor field.
   owner and clock, all child textures and passes, per-frame randomness,
   world-painter placement, contact-adjacent animations, and teardown.
 - Reproduction inputs/scenes: create an Ether wizard, left-click a world
-  target in the Hub or Boneyard, and inspect the projectile after the Staff
-  Cast 1 marker at action tick 19.
+  target in the Hub or Boneyard, and inspect the projectile after Ether's Staff
+  Cast 1 marker at insertion-relative update 14.
 - Falsifiable questions: whether `BadGuys[53]` is the in-flight body; whether
   the body rotates along travel; whether flight emits independent trail
   actors; whether records `110..112` are Fire-only; and whether the visual
@@ -12259,7 +12262,7 @@ of the 4,723,200-byte retail `SolomonDark.exe`, SHA-256
 
 | Native owner | Instruction-backed contract | Confidence |
 | --- | --- | --- |
-| Staff Cast 1 `0x0044B170` / `0x0044B370`, PlayerWizard marker callback `0x00550180` | Float32 base rate is `0.075`; neutral cast-speed helper `0x00656580` returns one and Fire alone applies double `0.75`, yielding `0.05625` progress/tick, marker tick 19, and action end tick 74. One marker dispatch occurs per occupied action; a still-held primary level queues the next action after the prior ends. Fireball skill 16 has no `mCooldown`, so this action program is the default repeat cadence. | high |
+| Staff Cast 1 `0x0044B170` / `0x0044B370`, PlayerWizard marker callback `0x00550180` | Float32 base rate is `0.075`; neutral cast-speed helper `0x00656580` returns one and Fire alone applies double `0.75`, yielding `0.05625` progress/tick. From action insertion, Fire crosses the marker on update 18, crosses strict end on update 72, and becomes next-ready on update 73. One marker dispatch occurs per occupied action; a still-held primary level queues the next action after the prior ends. Fireball skill 16 has no `mCooldown`, so this action program is the default repeat cadence. | high |
 | Fire handler `0x0053DC60` | Samples actor heading `+0x6C`, creates type `0x7D4` at Staff emitter plus `(0,+10)+20*D`, and stores immutable unit direction. No target lookup, retained target, homing, spread, or range comparison exists. After registration it segment-tests player root to spawned root with mask `0x700`; a blocked birth contacts immediately at the spawned root before any trail child exists. | high |
 | Fireball tick `0x005FDD90` | At `age % 5 == 0`, segment-tests current `P` through `P+5*(4.5*D)` before movement. Terrain failure contacts at current `P` and returns before trail birth. Otherwise common tick moves `4.5*D`, then the current-cell actor query uses radius 20/mask 6. Accepted actor contact falls through to one final cosmetic particle. No hard lifetime exists. | high |
 | Contact `0x005E5160` | Eligible actor contact owns damage/status/upgrade branches; null terrain contact skips those. Both paths call the Fireball removal vslot first, then request registry 30 `sounds\\fireballhit` at point gain with pitch on inclusive `[0.9,1.1]`, and create `Anim_FireBurst` at `(P.x,P.y-10)`. | high |
@@ -12276,7 +12279,7 @@ reaches descriptor count four, giving exactly ages 0 through 15.
 
 ```text
 accepted or held-repeat Fire action
-  -> Staff Cast 1 marker at tick 19
+  -> Staff Cast 1 marker at insertion-relative update 18
   -> Fire handler and initial player-root -> spawn-root segment clip
        blocked: remove Fireball -> fire-impact + fireballhit (no trail)
        clear: Fireball enters world
@@ -12307,7 +12310,7 @@ payloads remain distinct actor/gameplay systems and are not visual substitutes.
 - Add exact 251..254 extraction, a dedicated two-pass impact view, self-lit
   painter root, moving outbound Boneyard light, and point-attenuated stock hit
   cue with deterministic `[0.9,1.1)` pitch projection.
-- Preserve Fire's straight aim, speed 4.5, marker 19, action end 74, held
+- Preserve Fire's straight aim, speed 4.5, marker update 18, next-ready update 73, held
   requeue, no range cap, and no configured cooldown. Shared Staff cadence is
   root-owned; this Fire contact slice must not invent a second timer. Do not add
   targeting, homing, or an arbitrary “blast radius.”
@@ -38621,4 +38624,74 @@ event recurrence, copies, assets, blend modes, and retained visibility rules.
 
 ### Implementation validation receipt
 
-Pending implementation and exact-tree Mac validation.
+- The authoritative primary clock now writes `0.25` once on every pure/welded
+  Constant start, retains the existing `0.15` Cast 1 and `0.25` Ether Blast
+  edges, and decays by the exact float32 factor without any action-occupancy
+  refresh. The complete category-2 matrix reports the first Cast 2 action
+  update and writes `0.45`; Dampen and every actionless branch remain negative
+  members. Snapshot projection gives the orb and analytic light the same
+  effective phase, and both presentation timelines interpolate only that
+  numeric phase while retaining discrete light/action ownership.
+- Cast 1 now uses insertion-relative native progress boundaries. Neutral Ether
+  emits on update `14`, completes on `54`, and re-admits at `55`; Fire uses
+  `18/72/73`. A direct float32 oracle covers every authored Faster Caster
+  factor from `1` through `2`, all four welded one-shots, all six welded
+  Constant profiles, release/re-press, the held-pose product override, and
+  exact projectile sockets. Ether was not too fast: the pre-fix host cadence
+  was `56` ticks, one tick slower than stock.
+- `NativeElementVfxView` now returns before plan creation or sprite mutation
+  while its retained container is hidden. The focused renderer matrix covers
+  Ether, Fire, Air, Water, and Earth; the existing zero/one/two-copy painter
+  census, assets, scales, blend modes, sockets, and teardown are unchanged.
+- The canonical red run on the pre-fix current-main tree failed the new Cast 2
+  pulse seam (`staffCastPulsePlayerIds` absent) while the other `257/259`
+  tests in that first group passed. Log SHA-256 is
+  `d5fcf799b9887cf2533f983506e2f2a303ff086b286412839d2fca41466f607f`.
+- Final Website validation rebased over spectator-current `origin/main`
+  `e462cba704558800b6c51a7b3f359106e7d18f36`. Candidate
+  `ece642d6bc9649dd5f8e336eb33f48196a369d43`, tree
+  `32cf4db428a408bdbf2320853bed811a07fa2ab7`, and its detached Mac worktree
+  had a byte-identical 23-file manifest with aggregate SHA-256
+  `b67214e6e382bfeb5251cd85a6e16511c3067006830b5656576e5cbdc3008374`.
+  `/opt/homebrew/bin/bash ./scripts/validate.sh` passed 21 backend contracts,
+  zero-warning/error backend build, formatting, lint/import boundaries,
+  frontend/desktop groups `9/4/45/260/1472/6/61/9/63/12/7/36/33/5`,
+  production builds, media policy, and bundle budget (`448703` raw / `125817`
+  gzip bytes). Log SHA-256 is
+  `6eebf83b51a8ed5fd579e91b0b8bea5964a3a1727d916aa32fb75304afacb4f0bd`.
+- Final Mac Chrome `151.0.7922.170` used WebGL2 through
+  `ANGLE (Apple, ANGLE Metal Renderer: Apple M2)`, crossed the authored Gate,
+  completed Solomon combat admission, held four Ether emissions, and returned
+  exact observed gaps `55/55/55`. Wind-up scale fell from pre-fix
+  `2.3500001430511475` to `1`; the minimum inter-shot scale fell from the same
+  pinned `2.3500001430511475` to `1.0065745115280151`; final restored scale was
+  `1.0000035762786865`. Orb and analytic-light peaks shared the same phase,
+  release settled to action `-1`/pose `0`, and page/console/HTTP error arrays
+  were empty. Browser-log SHA-256 is
+  `d83d066a09d9339606b910c8d6fdc72d4ada463ef4373be4dfeeea851767d300`.
+- The same-base `e462cba7` A/B used identical 800/1600/800 ms
+  baseline/held/restoration windows and the same deterministic frozen-wave
+  fixture. Both sustained approximately 60 FPS with zero long tasks. Browser
+  main-thread task time changed from `177.41/394.83/178.70 ms` to
+  `163.32/373.43/166.61 ms`, reductions of about `7.9%/5.4%/6.8%` for the
+  three phases. Frame-gap percentiles were load-noisy rather than uniformly
+  better (held p95 `20.2 -> 22.1 ms`, p99 `22.9 -> 23.8 ms`), so this receipt
+  claims reduced hidden-view CPU work and no FPS/long-task regression, not a
+  universal latency improvement. Base/final log SHA-256 values are
+  `40f7c04e32a3f5eafe88801f7a44fc2463a1727d916aa32fb75304afacb4f0bd`
+  and `d83d066a09d9339606b910c8d6fdc72d4ada463ef4373be4dfeeea851767d300`.
+- Reviewed same-base held/base, final held-pulse, and final held-decay captures
+  hash to `63afff05aaf83b933e8b90ee6f0afe8dab4fd2faa7412800f4b2f037dbb540ae`,
+  `f96dbf474e386a1f61502c5bb6382b056866ada6181e01194d543fb17a64d418`,
+  and `1ea73a348187ef43040145511d8a363f4e2a8ab771d879776cdd0e9eacd2097c`.
+  The decay capture visibly restores the compact Staff orb between missiles.
+- Mod Loader base `af637b41a8b1f6e0e3f0e80eea2a93af69b4bcb2`, candidate
+  `5a60f108566e85922886a58a2ce3098c8f7e7108`, tree
+  `a98c447839ca00a302b24500999f9e0740006d03`, and its Mac worktree had a
+  byte-identical four-file manifest with aggregate SHA-256
+  `70aa82b239098a1c63b219b2743d592c43aabc9d8e6468fa86d013e52f43fabf`.
+  The complete CI-safe static RE suite passed `499/499`; log SHA-256 is
+  `6f8a59c6e362a5ba1c58b23959a1396bc6cac03b0685cac2ff9e37535b1d0a9c`.
+  No member is browser-blocked and no material unknown remains. Publication to
+  `main` is authorized; deployment/restart remains separate and was not
+  requested.

@@ -12,7 +12,10 @@ import {
 } from '../core-kernels/hub-economy.ts'
 import { hubStudentSnapshotStates } from '../core-server/hub-students.ts'
 import { boneyardGateSnapshot } from '../core-kernels/boneyard-gate.ts'
-import { playerLightDriveActive } from '../core-kernels/player-lighting.ts'
+import {
+  nativePlayerElementEffectPhase,
+  playerLightDriveActive,
+} from '../core-kernels/player-lighting.ts'
 import {
   playerEntityDisplayHealth,
   playerEntityMovementScale,
@@ -281,7 +284,10 @@ function protocolPlayerState(
     lighting: {
       driveActive: playerLightDriveActive(player.primaryCast, progression.lifeState),
       lightRegistration: lighting.lightRegistration,
-      overlayEffectPhase: lighting.overlayEffectPhase,
+      overlayEffectPhase: nativePlayerElementEffectPhase(
+        player.primaryCast.weaponPulse,
+        lighting.overlayEffectPhase,
+      ),
     },
     movementScale: playerEntityMovementScale(state.playerEntities, playerId),
     progression: {

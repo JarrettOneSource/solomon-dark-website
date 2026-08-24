@@ -51,7 +51,10 @@ import {
   type PrimarySpellSimulationState,
   type PrimarySpellTickContext,
 } from './primary-spells.ts'
-import { NATIVE_PLAYER_STAFF_CONSTANT_OVERLAY } from './player-lighting.ts'
+import {
+  NATIVE_PLAYER_STAFF_CAST_ONE_OVERLAY,
+  NATIVE_PLAYER_STAFF_CONSTANT_OVERLAY,
+} from './player-lighting.ts'
 import { earthImpactLifetimeTicks } from './primary-spell-earth.ts'
 import {
   advanceNativeEarthBoulderCharge,
@@ -262,6 +265,7 @@ function stepSpellKernel(
   canPlaceProjectile: () => boolean = () => true,
   primarySkill: NativePrimarySkillProfile = state.primarySkill,
   canTraverseProjectile: PrimarySpellTickContext['canTraverseProjectile'] = canPlaceProjectile,
+  castProgressFactor = 1,
 ): {
   channelEmissions: readonly PrimarySpellChannelEmission[]
   manaSpent: number
@@ -276,7 +280,7 @@ function stepSpellKernel(
       [PLAYER_ID]: {
         alive: true,
         availableMana,
-        castProgressFactor: 1,
+        castProgressFactor,
         eligible,
         planeActive: false,
         primarySkill,
@@ -316,6 +320,64 @@ test('one-shot clocks use insertion-relative native marker and repeat ticks', ()
   assert.equal(PRIMARY_CAST_EMISSION_TICK, 18)
   assert.equal(PRIMARY_CAST_ACTION_END_TICK, 73)
 })
+
+test('one-shot cadence matches the float32 native recurrence at every Faster Caster factor', () => {
+  const factors = [1, 1.1, 1.2, 1.3, 1.4, 1.5, 1.55, 1.6, 1.65, 1.7, 1.75, 2]
+  for (const element of ['ether', 'fire'] as const) {
+    for (const factor of factors) {
+      const native = nativeOneShotClock(element, factor)
+      let harness = directSpellHarness(element)
+      let sequence = 0
+      const emissionTicks = []
+      while (emissionTicks.length < 3) {
+        const outcome = stepSpellKernel(
+          harness,
+          true,
+          1_000,
+          true,
+          () => true,
+          harness.primarySkill,
+          () => true,
+          factor,
+        )
+        harness = outcome.state
+        const current = harness.players[PLAYER_ID]!.primaryCast.emissionSequence
+        if (current > sequence) {
+          sequence = current
+          emissionTicks.push(harness.tick)
+        }
+        assert.ok(harness.tick < native.repeatTicks * 4)
+      }
+      assert.equal(emissionTicks[0], native.markerUpdates + 1, `${element}:${factor}:marker`)
+      assert.deepEqual(
+        emissionTicks.slice(1).map((tick, index) => tick - emissionTicks[index]),
+        [native.repeatTicks, native.repeatTicks],
+        `${element}:${factor}:repeat`,
+      )
+    }
+  }
+})
+
+function nativeOneShotClock(element: 'ether' | 'fire', factor: number) {
+  const baseRate = element === 'ether'
+    ? Math.fround(0.075)
+    : Math.fround(Math.fround(0.075) * 0.75)
+  const rate = Math.fround(baseRate * factor)
+  let progress = Math.fround(0)
+  let markerUpdates = 0
+  let completionUpdates = 0
+  for (let update = 1; update < 200; update += 1) {
+    const previous = progress
+    progress = Math.fround(progress + rate)
+    if (markerUpdates === 0 && previous < 1 && progress >= 1) markerUpdates = update
+    if (progress > 4) {
+      completionUpdates = update
+      break
+    }
+  }
+  assert.ok(markerUpdates > 0 && completionUpdates > 0)
+  return { markerUpdates, repeatTicks: completionUpdates + 1 }
+}
 
 test('primary element-effect phase is written by cast edges and then decays', () => {
   let ether = stepSpellKernel(directSpellHarness('ether'), true, 100).state
@@ -963,6 +1025,7 @@ test('Fire and every welded one-shot share held release-pose continuity', () => 
     let cast = harness.players[PLAYER_ID]!.primaryCast
     assert.equal(cast.oneShotAttackPoseHeld, true, `${profile.skillId}: first marker`)
     assert.equal(primaryCastPresentationPose(cast, 'fire'), 8, `${profile.skillId}: release`)
+    assert.equal(cast.weaponPulse, NATIVE_PLAYER_STAFF_CAST_ONE_OVERLAY)
 
     while (cast.castSequence < 2) {
       harness = stepSpellKernel(harness, true, 1_000, true, () => true, profile).state
@@ -991,11 +1054,21 @@ test('pure and welded sustained primaries retain Staff Constant instead of the o
   for (const profile of profiles) {
     let harness = { ...directSpellHarness('earth'), primarySkill: profile }
     harness = stepSpellKernel(harness, true, 1_000, true, () => true, profile).state
+    assert.equal(
+      harness.players[PLAYER_ID]!.primaryCast.weaponPulse,
+      NATIVE_PLAYER_STAFF_CONSTANT_OVERLAY,
+      `${profile.skillId}: start pulse`,
+    )
     harness = stepSpellKernel(harness, true, 1_000, true, () => true, profile).state
     const cast = harness.players[PLAYER_ID]!.primaryCast
     assert.equal(cast.channelActive, true, `${profile.skillId}: channel`)
     assert.equal(cast.oneShotAttackPoseHeld, false, `${profile.skillId}: latch`)
     assert.equal(primaryCastPresentationPose(cast, 'fire'), 7, `${profile.skillId}: pose`)
+    assert.equal(
+      cast.weaponPulse,
+      Math.fround(NATIVE_PLAYER_STAFF_CONSTANT_OVERLAY * Math.fround(0.899999976)),
+      `${profile.skillId}: decay`,
+    )
   }
 })
 
@@ -1434,7 +1507,7 @@ test('Ether defers actor contact to combat and owns the terrain-impact lifetime'
 })
 
 test('Fire emits its one 4.5-unit missile from the native pushed socket', () => {
-  let state = step(simulation('fire'), true, 20)
+  let state = step(simulation('fire'), true, PRIMARY_CAST_EMISSION_TICK + 1)
   const player = getPlayerCharacter(state, PLAYER_ID)
   const fireball = state.primarySpells.projectiles[0]
   assert.equal(fireball.kind, 'fire')

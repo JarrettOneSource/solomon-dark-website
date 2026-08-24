@@ -26,6 +26,7 @@ export class NativeElementVfxView {
   }
 
   update(tick: number, scale = 1): void {
+    if (!this.container.visible) return
     const integerTick = Math.floor(tick)
     if (integerTick === this.lastTick && scale === this.lastScale) return
     this.lastTick = integerTick

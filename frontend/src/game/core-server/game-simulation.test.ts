@@ -45,6 +45,7 @@ import {
   createNativeSecondaryPlayerState,
   NATIVE_SECONDARY_CONSTRUCTOR_COOLDOWN_TICKS,
 } from '../core-kernels/native-secondary-abilities.ts'
+import { createGameSnapshot } from '../host/game-snapshot.ts'
 import {
   addPlayerCharacter,
   applyGameSimulationHubAction,
@@ -575,6 +576,17 @@ test('the retail Solomon run edge admits primary and secondary combat on its own
   assert.equal(admittedSecondary.secondaryAbilities.players.caster?.castSequence, 1)
   assert.equal(admittedSecondary.secondaryAbilities.players.caster?.globalCooldownTicks, 150)
   assert.ok(getPlayerProgression(admittedSecondary, 'caster').currentMana < 100)
+  const secondaryPulse = stepGameSimulationTick(admittedSecondary, {
+    caster: gameplayInput(0, 0),
+  })
+  assert.equal(
+    getPlayerCharacter(secondaryPulse, 'caster').primaryCast.weaponPulse,
+    Math.fround(0.45),
+  )
+  assert.equal(
+    createGameSnapshot(secondaryPulse, 'caster').players.caster!.lighting.overlayEffectPhase,
+    Math.fround(0.45),
+  )
 })
 
 test('Hub shortcut services are participant-private, global inside a settled Hub, and blocked in transition', () => {
@@ -1433,7 +1445,7 @@ test('Hub-to-Boneyard entry preserves both selected concentrations and replaceme
   ], [57, 58, 'a'])
 })
 
-test('authoritative player ticks reset and decay StaffConstant lighting before projection', () => {
+test('authoritative primary edges write one shared orb and light phase before decay', () => {
   const water = {
     discipline: 'arcane',
     displayName: 'Water Caster',
@@ -1450,15 +1462,23 @@ test('authoritative player ticks reset and decay StaffConstant lighting before p
     }
   }
   state = stepGameSimulationTick(state, { caster: cast(true) })
-  const activePhase = Math.fround(
-    NATIVE_PLAYER_STAFF_CONSTANT_OVERLAY * NATIVE_PLAYER_LIGHT_OVERLAY_DECAY,
+  const activePhase = NATIVE_PLAYER_STAFF_CONSTANT_OVERLAY
+  assert.equal(getPlayerCharacter(state, 'caster').primaryCast.weaponPulse, activePhase)
+  assert.equal(playerLightingAt(state.playerEntities, 'caster')?.overlayEffectPhase, 0)
+  assert.equal(
+    createGameSnapshot(state, 'caster').players.caster!.lighting.overlayEffectPhase,
+    activePhase,
   )
-  assert.equal(playerLightingAt(state.playerEntities, 'caster')?.overlayEffectPhase, activePhase)
 
   state = stepGameSimulationTick(state, { caster: cast(false) })
+  const decayedPhase = Math.fround(activePhase * NATIVE_PLAYER_LIGHT_OVERLAY_DECAY)
   assert.equal(
-    playerLightingAt(state.playerEntities, 'caster')?.overlayEffectPhase,
-    Math.fround(activePhase * NATIVE_PLAYER_LIGHT_OVERLAY_DECAY),
+    getPlayerCharacter(state, 'caster').primaryCast.weaponPulse,
+    decayedPhase,
+  )
+  assert.equal(
+    createGameSnapshot(state, 'caster').players.caster!.lighting.overlayEffectPhase,
+    decayedPhase,
   )
 })
 

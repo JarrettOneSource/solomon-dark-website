@@ -115,7 +115,7 @@ test('returns an owned presentation copy until a second authoritative snapshot e
   assert.notEqual(presentation.world.ambient, initial.world.ambient)
 })
 
-test('keeps player-lighting ownership discrete across Hub presentation samples', () => {
+test('interpolates the shared player effect phase while keeping light ownership discrete in Hub', () => {
   const older = snapshotAt(100, 10, 20)
   const newer = snapshotAt(105, 20, 30)
   older.players.remote.lighting = {
@@ -131,7 +131,10 @@ test('keeps player-lighting ownership discrete across Hub presentation samples',
   }
   const presentation = timeline(older)
   presentation.push(newer, 50)
-  assert.deepEqual(presentation.sample(75).players.remote.lighting, older.players.remote.lighting)
+  assert.deepEqual(presentation.sample(75).players.remote.lighting, {
+    ...older.players.remote.lighting,
+    overlayEffectPhase: 0.18,
+  })
   assert.deepEqual(presentation.sample(100).players.remote.lighting, newer.players.remote.lighting)
   assert.notEqual(
     presentation.sample(100).players.remote.lighting.lightRegistration,

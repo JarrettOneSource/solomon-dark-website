@@ -62,6 +62,8 @@ const fireGravestoneAcceptance = process.env.SDR_PRIMARY_FIRE_GRAVESTONE === '1'
 const earthContactAcceptance = process.env.SDR_PRIMARY_EARTH_CONTACT === '1'
 const etherFanAcceptance = process.env.SDR_PRIMARY_ETHER_FAN === '1'
 const heldPoseAcceptance = process.env.SDR_PRIMARY_HELD_POSE === '1'
+const performanceAcceptance = process.env.SDR_PRIMARY_PERFORMANCE === '1'
+const nativePhaseExpectation = process.env.SDR_PRIMARY_EXPECT_NATIVE_PHASE === '1'
 const combatAdmissionAcceptance = process.env.SDR_PRIMARY_SPELL_COMBAT_ADMISSION === '1'
 const selectedSpells = requestedSpellKind
   ? SPELLS.filter((spell) => spell.kind === requestedSpellKind)
@@ -91,6 +93,12 @@ if (heldPoseAcceptance && (
   || selectedSpells[0].kind !== 'ether'
 )) {
   throw new Error('Held-pose acceptance requires full-power SDR_PRIMARY_SPELL_KIND=ether')
+}
+if (performanceAcceptance && !heldPoseAcceptance) {
+  throw new Error('Primary performance acceptance requires the held Ether journey')
+}
+if (nativePhaseExpectation && !performanceAcceptance) {
+  throw new Error('Native phase expectations require primary performance acceptance')
 }
 if (boneyardOnlyAcceptance && selectedSpells.length !== 1) {
   throw new Error('Boneyard-only acceptance requires one SDR_PRIMARY_SPELL_KIND')
@@ -135,14 +143,16 @@ try {
     eventsGlobal: '__primarySpellAudioEvents',
     sourceMatcherGlobal: '__primarySpellAudioSourceMatches',
   })
-  await context.addInitScript(() => {
+  await context.addInitScript((measurePerformance) => {
     // This is a visual/state acceptance run, not a frame-rate benchmark. Pace
     // headless SwiftShader so full-resolution Water particles cannot starve I/O.
-    window.requestAnimationFrame = (callback) => window.setTimeout(
-      () => callback(performance.now()),
-      1_000 / 30,
-    )
-    window.cancelAnimationFrame = (handle) => window.clearTimeout(handle)
+    if (!measurePerformance) {
+      window.requestAnimationFrame = (callback) => window.setTimeout(
+        () => callback(performance.now()),
+        1_000 / 30,
+      )
+      window.cancelAnimationFrame = (handle) => window.clearTimeout(handle)
+    }
     const poseEvents = []
     const poseSamples = []
     const wireFrames = []
@@ -181,9 +191,17 @@ try {
       const frame = node?.__sdrHubFrame ?? node?.__sdrBoneyardFrame
       if (frame) {
         if (typeof frame.localPlayerId === 'string') localPlayerId = frame.localPlayerId
+        const cast = localPlayerId
+          ? wireFrames.at(-1)?.players[localPlayerId]?.primaryCast
+          : null
         poseSamples.push({
+          actionTick: cast?.actionTick ?? null,
           at: performance.now(),
+          emissionSequence: cast?.emissionSequence ?? null,
+          orbSpriteCount: frame.orbSpriteCount,
           playerAttachmentPose: frame.playerAttachmentPose,
+          playerElementEffectScale: frame.playerElementEffectScale,
+          playerLightRadius: frame.playerLightRadius,
           tick: frame.tick,
         })
         if (poseSamples.length > 10_000) poseSamples.shift()
@@ -199,7 +217,7 @@ try {
       requestAnimationFrame(observePose)
     }
     requestAnimationFrame(observePose)
-  })
+  }, performanceAcceptance)
 
   const receipts = []
   const errors = []
@@ -1035,6 +1053,9 @@ async function castUntargetedEtherInBoneyard(page, canvas) {
   const gate = heldPoseAcceptance || combatAdmissionAcceptance
     ? await crossEntryGate(page, scene)
     : null
+  const performanceBaseline = performanceAcceptance
+    ? await measurePresentation(page, 800)
+    : null
   const combatAdmission = heldPoseAcceptance || combatAdmissionAcceptance
     ? await enableSolomonCombat(page, scene)
     : null
@@ -1043,20 +1064,51 @@ async function castUntargetedEtherInBoneyard(page, canvas) {
   const heldPoseCheckpoint = heldPoseAcceptance
     ? await oneShotPoseCheckpoint(page)
     : null
-  const target = await castTarget(canvas, 0.5, 0.05)
+  const target = await castTarget(canvas, 0.5, performanceAcceptance ? 0.35 : 0.05)
   await page.mouse.move(target.x, target.y)
+  const performanceStressMeasurement = performanceAcceptance
+    ? await startPresentationMeasurement(page)
+    : null
   await page.mouse.down({ button: 'left' })
-  const launch = await waitForAudio(
-    page,
-    eventStart,
-    '/game/audio/sfx/magic-missile.wav',
-    'play',
-  )
+  let launch
+  try {
+    launch = await waitForAudio(
+      page,
+      eventStart,
+      '/game/audio/sfx/magic-missile.wav',
+      'play',
+    )
+  } catch (error) {
+    const diagnostics = await page.evaluate(() => ({
+      frame: structuredClone(
+        document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame,
+      ),
+      latestWire: window.__primarySpellWireFrames.at(-1),
+    }))
+    throw new Error(`Ether launch did not begin: ${JSON.stringify(diagnostics)}`, { cause: error })
+  }
   let flight = null
   let flightScreenshotPath = null
   let heldPose = null
   if (heldPoseCheckpoint) {
     heldPose = await waitForHeldOneShotPose(page, heldPoseCheckpoint, 3)
+  }
+  let performanceStress = null
+  if (performanceStressMeasurement) {
+    await page.waitForTimeout(Math.max(
+      0,
+      1_600 - (Date.now() - performanceStressMeasurement.startedAt),
+    ))
+    performanceStress = await finishPresentationMeasurement(page, performanceStressMeasurement)
+  }
+  let decayedScreenshotPath = null
+  if (nativePhaseExpectation) {
+    await page.waitForFunction(() => {
+      const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
+      return frame?.playerElementEffectScale <= 1.05
+    }, undefined, { timeout: 1_000 })
+    decayedScreenshotPath = `${screenshotRoot}/solomon-primary-ether-boneyard-decayed-orb.png`
+    await page.screenshot({ path: decayedScreenshotPath })
   }
   if (lowManaAcceptance) {
     const fizzle = await waitForAudio(page, eventStart, '/game/audio/sfx/fizzle.wav', 'play')
@@ -1080,6 +1132,23 @@ async function castUntargetedEtherInBoneyard(page, canvas) {
       release: await waitForOneShotPoseRelease(page),
     }
   }
+  let performance = null
+  if (performanceAcceptance) {
+    await page.waitForFunction(() => {
+      const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
+      return frame?.playerElementEffectScale <= 1.03
+    }, undefined, { timeout: 5_000 })
+    const restoration = await measurePresentation(page, 800)
+    performance = await summarizeEtherPerformance(
+      page,
+      heldPoseCheckpoint,
+      performanceBaseline,
+      performanceStress,
+      restoration,
+    )
+    performance = { ...performance, decayedScreenshotPath }
+    if (nativePhaseExpectation) assertNativeEtherPhase(performance)
+  }
   const impact = await waitForWireSpell(page, 'ether-impact', afterTick, 10_000)
   const screenshotPath = `${screenshotRoot}/solomon-primary-ether-boneyard-impact.png`
   await page.screenshot({ path: screenshotPath })
@@ -1091,8 +1160,171 @@ async function castUntargetedEtherInBoneyard(page, canvas) {
     gate,
     heldPose,
     impact,
+    performance,
     screenshotPath,
   }
+}
+
+async function measurePresentation(page, durationMs) {
+  const measurement = await startPresentationMeasurement(page)
+  await page.waitForTimeout(durationMs)
+  return finishPresentationMeasurement(page, measurement)
+}
+
+async function startPresentationMeasurement(page) {
+  const cdp = await page.context().newCDPSession(page)
+  await cdp.send('Performance.enable')
+  const before = metricMap(await cdp.send('Performance.getMetrics'))
+  await page.evaluate(() => {
+    const presentation = window.__sdrGamePresentation
+    if (!presentation) throw new Error('game presentation controls are unavailable')
+    const timestamps = []
+    const longTasks = []
+    const unsubscribe = presentation.subscribe((now) => timestamps.push(now))
+    const observer = typeof PerformanceObserver === 'function'
+      ? new PerformanceObserver((list) => {
+          for (const entry of list.getEntries()) longTasks.push(entry.duration)
+        })
+      : null
+    observer?.observe({ type: 'longtask' })
+    window.__primarySpellPerformanceMeasurement = {
+      finish() {
+        unsubscribe()
+        observer?.disconnect()
+        const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
+        return {
+          diagnostics: frame ? {
+            enemyCount: frame.enemyCount,
+            playerCount: frame.playerCount,
+            residentCount: frame.residentCount,
+            visibleResidentCount: frame.visibleResidentCount,
+          } : null,
+          longTasks,
+          timestamps,
+        }
+      },
+    }
+  })
+  return { before, cdp, startedAt: Date.now() }
+}
+
+async function finishPresentationMeasurement(page, measurement) {
+  const sample = await page.evaluate(() => {
+    const active = window.__primarySpellPerformanceMeasurement
+    if (!active) throw new Error('primary performance measurement is unavailable')
+    delete window.__primarySpellPerformanceMeasurement
+    return active.finish()
+  })
+  const { before, cdp } = measurement
+  const after = metricMap(await cdp.send('Performance.getMetrics'))
+  await cdp.detach()
+  const gaps = sample.timestamps.slice(1).map(
+    (timestamp, index) => timestamp - sample.timestamps[index],
+  )
+  const sorted = [...gaps].sort((left, right) => left - right)
+  return {
+    averageFps: gaps.length > 0
+      ? round(gaps.length * 1_000 / (sample.timestamps.at(-1) - sample.timestamps[0]))
+      : 0,
+    browserTaskMs: round(((after.TaskDuration ?? 0) - (before.TaskDuration ?? 0)) * 1_000),
+    frameCount: gaps.length,
+    diagnostics: sample.diagnostics,
+    longTaskCount: sample.longTasks.length,
+    longestTaskMs: round(Math.max(0, ...sample.longTasks)),
+    maximumFrameMs: round(Math.max(0, ...gaps)),
+    p95FrameMs: round(percentile(sorted, 0.95)),
+    p99FrameMs: round(percentile(sorted, 0.99)),
+    slowFramesOver20Ms: gaps.filter((gap) => gap > 20).length,
+  }
+}
+
+async function summarizeEtherPerformance(page, checkpoint, baseline, stress, restoration) {
+  const phase = await page.evaluate((start) => {
+    const samples = window.__primarySpellPoseSamples.slice(start.poseSampleIndex)
+    const casts = window.__primarySpellWireFrames.slice(start.wireFrameIndex)
+      .map((wire) => ({ ...wire.players[start.playerId]?.primaryCast, tick: wire.tick }))
+      .filter(({ emissionSequence }) => Number.isInteger(emissionSequence))
+    const emissions = []
+    let sequence = start.emissionSequence
+    for (const cast of casts) {
+      if (cast.emissionSequence <= sequence) continue
+      sequence = cast.emissionSequence
+      emissions.push({ sequence, tick: cast.tick })
+    }
+    const scales = samples
+      .map(({ playerElementEffectScale }) => playerElementEffectScale)
+      .filter(Number.isFinite)
+    const lights = samples.map(({ playerLightRadius }) => playerLightRadius).filter(Number.isFinite)
+    const firstTick = emissions[0]?.tick ?? Number.POSITIVE_INFINITY
+    const secondTick = emissions[1]?.tick ?? Number.POSITIVE_INFINITY
+    const windupScales = samples
+      .filter(({ actionTick, emissionSequence }) => (
+        actionTick !== null && actionTick >= 0 && emissionSequence === start.emissionSequence
+      ))
+      .map(({ playerElementEffectScale }) => playerElementEffectScale)
+      .filter(Number.isFinite)
+    const betweenScales = samples
+      .filter(({ tick }) => tick > firstTick && tick < secondTick)
+      .map(({ playerElementEffectScale }) => playerElementEffectScale)
+      .filter(Number.isFinite)
+    const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
+    return {
+      emissionGaps: emissions.slice(1).map(({ tick }, index) => tick - emissions[index].tick),
+      emissionTicks: emissions.map(({ tick }) => tick),
+      finalElementEffectScale: frame?.playerElementEffectScale ?? null,
+      finalLightRadius: frame?.playerLightRadius ?? null,
+      maximumElementEffectScale: Math.max(0, ...scales),
+      maximumLightRadius: Math.max(0, ...lights),
+      maximumWindupScale: Math.max(0, ...windupScales),
+      minimumBetweenEmissionScale: Math.min(Number.POSITIVE_INFINITY, ...betweenScales),
+      orbSpriteCountRange: [
+        Math.min(...samples.map(({ orbSpriteCount }) => orbSpriteCount).filter(Number.isFinite)),
+        Math.max(...samples.map(({ orbSpriteCount }) => orbSpriteCount).filter(Number.isFinite)),
+      ],
+      sampleCount: samples.length,
+    }
+  }, checkpoint)
+  return { baseline, phase, restoration, stress }
+}
+
+function assertNativeEtherPhase(performance) {
+  assert.ok(performance.baseline.frameCount > 30, JSON.stringify(performance))
+  assert.ok(performance.stress.frameCount > 30, JSON.stringify(performance))
+  assert.ok(performance.restoration.frameCount > 30, JSON.stringify(performance))
+  assert.equal(performance.baseline.diagnostics?.playerCount, 1)
+  assert.equal(performance.stress.diagnostics?.playerCount, 1)
+  assert.equal(performance.restoration.diagnostics?.playerCount, 1)
+  assert.equal(
+    performance.stress.diagnostics?.enemyCount,
+    performance.restoration.diagnostics?.enemyCount,
+  )
+  assert.equal(
+    performance.stress.diagnostics?.residentCount,
+    performance.restoration.diagnostics?.residentCount,
+  )
+  assert.deepEqual(performance.phase.emissionGaps.slice(0, 2), [55, 55])
+  assert.ok(performance.phase.maximumWindupScale <= 1.001, JSON.stringify(performance.phase))
+  assert.ok(
+    performance.phase.maximumElementEffectScale > 1.1
+      && performance.phase.maximumElementEffectScale <= 2.51,
+    JSON.stringify(performance.phase),
+  )
+  assert.ok(performance.phase.minimumBetweenEmissionScale <= 1.05, JSON.stringify(performance.phase))
+  assert.ok(performance.phase.maximumLightRadius > 2.6, JSON.stringify(performance.phase))
+  assert.ok(performance.phase.finalElementEffectScale <= 1.03, JSON.stringify(performance.phase))
+}
+
+function metricMap(result) {
+  return Object.fromEntries(result.metrics.map(({ name, value }) => [name, value]))
+}
+
+function percentile(sorted, fraction) {
+  if (sorted.length === 0) return 0
+  return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * fraction))]
+}
+
+function round(value) {
+  return Math.round(value * 100) / 100
 }
 
 async function castWaterInBoneyard(page) {

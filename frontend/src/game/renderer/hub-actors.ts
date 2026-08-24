@@ -16,7 +16,6 @@ import {
   createPlayerCharacterDrawPlan,
   createPlayerDeathDrawPlan,
   playerEquippedElementEffectScale,
-  playerEquippedElementEffectPhase,
   playerDeathEquipmentAppearance,
   playerLivingEquipmentAppearance,
 } from '../player-character-presentation.ts'
@@ -173,10 +172,7 @@ export class PlayerWorldView {
     staffActionPose: PlayerStaffAttachmentPose | null = null,
   ): void {
     const playerTextures = this.textures.players[player.config.element]
-    const elementEffectPhase = playerEquippedElementEffectPhase(
-      player.primaryCast.weaponPulse,
-      player.lighting.overlayEffectPhase,
-    )
+    const elementEffectPhase = player.lighting.overlayEffectPhase
     const plan = createPlayerCharacterDrawPlan(
       player,
       1,
@@ -313,7 +309,6 @@ export class PlayerWorldView {
       )
     }
     this.currentElementEffectScale = playerEquippedElementEffectScale(
-      player.primaryCast.weaponPulse,
       player.lighting.overlayEffectPhase,
     )
     this.orbFrontBase.update(tick, this.currentElementEffectScale)

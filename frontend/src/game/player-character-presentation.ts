@@ -279,20 +279,9 @@ export function createPlayerCharacterDrawPlan(
 }
 
 export function playerEquippedElementEffectScale(
-  primaryPulse: number,
-  castLightPulse: number,
+  effectPhase: number,
 ): number {
-  return Math.fround(1 + 10 * playerEquippedElementEffectPhase(
-    primaryPulse,
-    castLightPulse,
-  ))
-}
-
-export function playerEquippedElementEffectPhase(
-  primaryPulse: number,
-  castLightPulse: number,
-): number {
-  return Math.max(primaryPulse, castLightPulse)
+  return Math.fround(1 + 10 * effectPhase)
 }
 
 function selectedPrimaryCastElement(

@@ -468,6 +468,27 @@ test('every one of the closed 23 right-click abilities enters its native runtime
   }
 })
 
+test('every Cast 2 owner writes one player phase pulse and actionless siblings write none', () => {
+  for (const skillId of NATIVE_SECONDARY_ABILITY_IDS) {
+    const accepted = cast(skillId)
+    const ownsCastTwo = (accepted.state.players.player?.staffCastTicksRemaining ?? 0) > 0
+    const firstActionUpdate = stepNativeSecondaryAbilities(
+      accepted.state,
+      context(skillId, 2, null),
+    )
+    assert.deepEqual(
+      firstActionUpdate.staffCastPulsePlayerIds,
+      ownsCastTwo ? ['player'] : [],
+      `skill ${skillId}`,
+    )
+    const laterUpdate = stepNativeSecondaryAbilities(
+      firstActionUpdate.state,
+      context(skillId, 3, null),
+    )
+    assert.deepEqual(laterUpdate.staffCastPulsePlayerIds, [], `skill ${skillId}: repeat`)
+  }
+})
+
 test('all 23 category-2 rows retain their constructor and effective cooldown capacities', () => {
   assert.deepEqual(NATIVE_SECONDARY_CONSTRUCTOR_COOLDOWN_TICKS, {
     11: 833,
@@ -756,16 +777,19 @@ test('the shared right-click gate owns StaffCast2 occupancy and Faster Caster ti
   )
   assert.equal(castResult.state.players.player?.staffCastTicksRemaining, 51)
   assert.equal(castResult.state.players.player?.globalCooldownTicks, 150)
+  assert.deepEqual(castResult.staffCastPulsePlayerIds, [])
 
   const released = stepNativeSecondaryAbilities(
     castResult.state,
     context(11, 2, null),
   )
   assert.equal(released.state.players.player?.staffCastTicksRemaining, 50)
+  assert.deepEqual(released.staffCastPulsePlayerIds, ['player'])
   const blocked = stepNativeSecondaryAbilities(
     released.state,
     context(11, 3, 0),
   )
+  assert.deepEqual(blocked.staffCastPulsePlayerIds, [])
   assert.equal(blocked.state.players.player?.castSequence, 1)
   assert.equal(blocked.state.players.player?.fizzleSequence, 0)
   assert.deepEqual(blocked.manaSpent, {})
@@ -888,6 +912,7 @@ test('state-only toggles stay actionless while accepted Planewalker and Dampen r
   const dampen = cast(51)
   assert.equal(dampen.state.players.player?.staffCastTicksRemaining, 0)
   assert.equal(dampen.state.players.player?.castSpinTicksRemaining, 73)
+  assert.deepEqual(dampen.staffCastPulsePlayerIds, [])
   assert.equal(dampen.state.players.player?.globalCooldownTicks, 150)
   assert.deepEqual(createNativeSecondaryPlayerState(), {
     castSequence: 0,

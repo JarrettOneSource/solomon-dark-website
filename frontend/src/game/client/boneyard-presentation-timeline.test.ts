@@ -533,7 +533,7 @@ test('holds enemy-lighting state discretely and returns an owned copy', () => {
   })
 })
 
-test('holds authoritative player-lighting state discretely and returns an owned copy', () => {
+test('interpolates the shared player effect phase while keeping light ownership discrete', () => {
   const older = snapshotAt(100, 10, 100)
   const newer = snapshotAt(105, 20, 120)
   older.players.local.lighting = {
@@ -556,13 +556,16 @@ test('holds authoritative player-lighting state discretely and returns an owned 
   timeline.push(newer, 50)
 
   const midpoint = timeline.sample(75).players.local.lighting
-  assert.deepEqual(midpoint, older.players.local.lighting)
+  assert.deepEqual(midpoint, {
+    ...older.players.local.lighting,
+    overlayEffectPhase: 0.18,
+  })
   assert.notEqual(midpoint, older.players.local.lighting)
   midpoint.overlayEffectPhase = 0
   assert.deepEqual(timeline.sample(75).players.local.lighting, {
     driveActive: false,
     lightRegistration: { managerLane: 'actor', registrationOrdinal: 0 },
-    overlayEffectPhase: 0.135,
+    overlayEffectPhase: 0.18,
   })
   assert.deepEqual(timeline.sample(100).players.local.lighting, newer.players.local.lighting)
   assert.notEqual(

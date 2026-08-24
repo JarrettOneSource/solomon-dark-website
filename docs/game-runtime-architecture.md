@@ -1328,3 +1328,21 @@ developer-entitled server participant path described above; it is not
 available to mod VMs.
 The complete disposition is recorded in `game-native-parity-re.md` and the Mod
 Loader's `web-lua-runtime-parity-contract.md`.
+
+## Player equipped-element phase ownership
+
+The host's `PlayerPrimaryCastState.weaponPulse` is the active fixed-tick clock
+for the native PlayerWizard equipped-element/light phase. Primary Cast 1,
+Constant, and Ether Blast write it only on their recovered event edges;
+ordinary secondary Cast 2 reports its first action update to the simulation,
+which writes the same clock after primary advancement. Every other tick applies
+the native float32 `0.899999976` decay. Action occupancy and held input are not
+phase writers.
+
+`PlayerLightingState.overlayEffectPhase` remains only as the previously saved
+secondary-action component while old in-flight state decays; it has no
+occupancy writer. Snapshot projection takes the single effective maximum, so
+the Staff element painter and analytic player light consume the same protocol
+sample. Hub and Boneyard timelines interpolate that numeric sample while light
+registration, drive ownership, action admission, and the held-pose product
+override remain discrete. This changes no protocol shape or gameplay authority.

@@ -479,6 +479,7 @@ export interface NativeSecondaryTickResult {
   readonly removedProjectileIds: readonly number[]
   readonly overloadedPlayerIds: readonly string[]
   readonly primaryOverridePlayerIds: readonly string[]
+  readonly staffCastPulsePlayerIds: readonly string[]
   readonly state: NativeSecondarySimulationState
   readonly steamedPulses: readonly NativeSecondarySteamedPulse[]
 }
@@ -1367,6 +1368,7 @@ export function stepNativeSecondaryAbilities(
   const dispelledShieldTargetIds = new Set<number>()
   const overloadedPlayerIds = new Set<string>()
   const primaryOverridePlayerIds = new Set<string>()
+  const staffCastPulsePlayerIds = new Set<string>()
   const advancedActors: NativeSecondaryActorState[] = []
   const earthquakeWobblePhases = new Map<number, number>()
   const earthquakeSceneryPhases = new Map<string, number>()
@@ -3536,6 +3538,17 @@ export function stepNativeSecondaryAbilities(
   const playerStates: Record<string, NativeSecondaryPlayerState> = {}
   for (const [playerId, authority] of Object.entries(context.players).sort(([a], [b]) => a.localeCompare(b))) {
     let player = state.players[playerId] ?? createNativeSecondaryPlayerState()
+    if (
+      authority.eligible
+      && player.staffCastTicksRemaining > 0
+      && player.staffCastTicksRemaining === nativeSecondaryStaffCastDurationTicks(
+        authority.skillBook,
+      )
+      && source.events.some((event) => (
+        event.ownerId === playerId
+        && event.tick === context.tick - 1
+      ))
+    ) staffCastPulsePlayerIds.add(playerId)
     const planewalkerWasActive = player.planewalkerTicksRemaining > 0
     const stoneskinWasActive = player.stoneskinTicksRemaining > 0
     player = stepPlayerState(player, authority)
@@ -3716,6 +3729,7 @@ export function stepNativeSecondaryAbilities(
     primaryOverridePlayerIds: Object.freeze([...primaryOverridePlayerIds].sort()),
     relocatedPlayers: Object.freeze(relocatedPlayers),
     removedProjectileIds: Object.freeze([...removedProjectileIds].sort((a, b) => a - b)),
+    staffCastPulsePlayerIds: Object.freeze([...staffCastPulsePlayerIds].sort()),
     state,
     steamedPulses: Object.freeze(steamedPulses),
   }

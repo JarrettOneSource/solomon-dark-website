@@ -1068,12 +1068,8 @@ export function stepPlayerEntityOverlayLightingTick(
   source: PlayerEntityStore,
 ): PlayerEntityStore {
   let changed = false
-  const lightings = source.lightings.map((lighting, index) => {
-    const stepped = stepPlayerOverlayLighting(
-      lighting,
-      source.configs[index]!.element,
-      source.primaryCasts[index]!,
-    )
+  const lightings = source.lightings.map((lighting) => {
+    const stepped = stepPlayerOverlayLighting(lighting)
     changed ||= stepped !== lighting
     return stepped
   })

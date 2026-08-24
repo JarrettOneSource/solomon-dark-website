@@ -143,9 +143,12 @@ import {
   nativeEtherBlastReleaseCharges,
   NATIVE_ETHER_BLAST_PARTICLE_LIFETIME_TICKS,
   NATIVE_ETHER_BLAST_WEAPON_PULSE,
-  NATIVE_PLAYER_CAST_WEAPON_PULSE,
   NATIVE_PLAYER_WEAPON_PULSE_DECAY,
 } from './native-ether-blast.ts'
+import {
+  NATIVE_PLAYER_STAFF_CAST_ONE_OVERLAY,
+  NATIVE_PLAYER_STAFF_CONSTANT_OVERLAY,
+} from './player-lighting.ts'
 
 export type PrimarySpellProjectileKind = 'earth' | 'ether' | 'fire' | 'weld'
 export type PrimarySpellTransientKind =
@@ -578,10 +581,12 @@ export interface PrimarySpellTickResult {
   spells: PrimarySpellSimulationState
 }
 
-export const PRIMARY_CAST_ACTION_END_TICK = 74
-export const PRIMARY_CAST_EMISSION_TICK = 19
-export const PRIMARY_CAST_ETHER_ACTION_END_TICK = 56
-export const PRIMARY_CAST_ETHER_EMISSION_TICK = 15
+export const PRIMARY_CAST_ACTION_END_TICK = 73
+export const PRIMARY_CAST_EMISSION_TICK = 18
+export const PRIMARY_CAST_ETHER_ACTION_END_TICK = 55
+export const PRIMARY_CAST_ETHER_EMISSION_TICK = 14
+const PRIMARY_CAST_ETHER_RATE = Math.fround(0.075)
+const PRIMARY_CAST_FIRE_RATE = Math.fround(PRIMARY_CAST_ETHER_RATE * 0.75)
 export const PRIMARY_SPELL_AIR_REACH = 205
 export const PRIMARY_SPELL_AIR_LIFETIME_TICKS = 5
 export const PRIMARY_SPELL_AIR_UNDERPOWERED_LIFETIME_TICKS = 3
@@ -815,11 +820,11 @@ export function primaryCastPose(
 ): 0 | 1 | 7 | 8 {
   if (channelActive) return actionTick <= 0 ? 0 : 7
   const actionEndTick = primaryCastActionEndTick(element)
-  const emissionTick = primaryCastEmissionTick(element)
-  const recoveryTick = element === 'ether' ? 28 : 37
-  if (actionTick < 2 || actionTick >= actionEndTick) return 0
-  if (actionTick < emissionTick) return 1
-  if (actionTick < recoveryTick) return 8
+  const emissionProgress = primaryCastEmissionProgress(element)
+  const recoveryProgress = 2 / primaryCastRate(element)
+  if (actionTick <= 0 || actionTick >= actionEndTick) return 0
+  if (actionTick < emissionProgress) return 1
+  if (actionTick < recoveryProgress) return 8
   return 7
 }
 
@@ -841,6 +846,21 @@ export function primaryCastEmissionTick(element: WizardElement): number {
   return element === 'ether'
     ? PRIMARY_CAST_ETHER_EMISSION_TICK
     : PRIMARY_CAST_EMISSION_TICK
+}
+
+function primaryCastRate(element: WizardElement): number {
+  return element === 'ether' ? PRIMARY_CAST_ETHER_RATE : PRIMARY_CAST_FIRE_RATE
+}
+
+// actionTick accumulates the live cast-speed factor in neutral-rate units.
+// Dividing the native progress markers by the stored base rate preserves
+// float-action crossings without mistaking capture-row indices for durations.
+function primaryCastEmissionProgress(element: WizardElement): number {
+  return 1 / primaryCastRate(element)
+}
+
+function primaryCastCompletionProgress(element: WizardElement): number {
+  return 4 / primaryCastRate(element)
 }
 
 export function primarySpellEmitter(
@@ -1266,8 +1286,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
     const actionAvailable = previous.primaryCast.actionTick < 0 || (
       oneShotPrimary
       && !previous.primaryCast.channelActive
-      && previous.primaryCast.actionTick + castProgressFactor
-        >= primaryCastActionEndTick(castClockElement)
+      && previous.primaryCast.actionTick > primaryCastCompletionProgress(castClockElement)
     )
     const acceptedCast = rawHeld
       && actionAvailable
@@ -1475,10 +1494,20 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
       }
     }
 
-    const emissionTick = primaryCastEmissionTick(castClockElement)
+    if (acceptedCast && sustainedPrimary) {
+      nextPlayer = {
+        ...nextPlayer,
+        primaryCast: {
+          ...nextPlayer.primaryCast,
+          weaponPulse: NATIVE_PLAYER_STAFF_CONSTANT_OVERLAY,
+        },
+      }
+    }
+
+    const emissionProgress = primaryCastEmissionProgress(castClockElement)
     if (
-      nextPlayer.primaryCast.actionTick >= emissionTick
-      && previous.primaryCast.actionTick < emissionTick
+      nextPlayer.primaryCast.actionTick >= emissionProgress
+      && previous.primaryCast.actionTick < emissionProgress
       && oneShotPrimary
     ) {
       if (
@@ -1685,7 +1714,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             : null,
           oneShotAttackPoseHeld: true,
           underpowered,
-          weaponPulse: NATIVE_PLAYER_CAST_WEAPON_PULSE,
+          weaponPulse: NATIVE_PLAYER_STAFF_CAST_ONE_OVERLAY,
         },
       }
     }
@@ -2517,8 +2546,11 @@ function advancePrimaryCast(
     if (previous.channelActive) {
       actionTick = Math.min(actionTick + progressFactor, 1)
     } else {
-      actionTick += progressFactor
-      if (actionTick >= primaryCastActionEndTick(element)) actionTick = -1
+      // Native retains the action on the update that first exceeds progress
+      // four; the following player tick observes the free slot.
+      actionTick = actionTick > primaryCastCompletionProgress(element)
+        ? -1
+        : actionTick + progressFactor
     }
   }
   if (acceptedCast) actionTick = 0

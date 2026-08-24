@@ -302,15 +302,15 @@ test('player character draw plan preserves native attachment and gait transforms
     walkCyclePrimary: 0,
   })
   assert.equal('weaponScale' in pulsingPlan, false)
-  assert.equal(playerEquippedElementEffectScale(0, 0), 1)
-  assert.equal(playerEquippedElementEffectScale(0.25, 0), 3.5)
-  assert.equal(playerEquippedElementEffectScale(0, 0.225), 3.25)
-  assert.equal(playerEquippedElementEffectScale(0.15, 0.135), 2.5)
+  assert.equal(playerEquippedElementEffectScale(0), 1)
+  assert.equal(playerEquippedElementEffectScale(0.25), 3.5)
+  assert.equal(playerEquippedElementEffectScale(0.225), 3.25)
+  assert.equal(playerEquippedElementEffectScale(0.15), 2.5)
   assert.doesNotMatch(playerWorldView, /staff(?:Back|Front)\.scale\.set/)
   assert.doesNotMatch(playerWorldView, /orbBackBase/)
   assert.match(
     playerWorldView,
-    /playerEquippedElementEffectScale\([\s\S]*player\.primaryCast\.weaponPulse,[\s\S]*player\.lighting\.overlayEffectPhase,[\s\S]*this\.orbFrontBase\.update\(tick, this\.currentElementEffectScale\)[\s\S]*this\.orbFrontOverlay\.update\(tick, this\.currentElementEffectScale\)/,
+    /playerEquippedElementEffectScale\([\s\S]*player\.lighting\.overlayEffectPhase,[\s\S]*this\.orbFrontBase\.update\(tick, this\.currentElementEffectScale\)[\s\S]*this\.orbFrontOverlay\.update\(tick, this\.currentElementEffectScale\)/,
   )
 })
 

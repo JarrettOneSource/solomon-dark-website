@@ -269,6 +269,11 @@ function interpolatePlayer(
     lighting: {
       ...discrete.lighting,
       lightRegistration: { ...discrete.lighting.lightRegistration },
+      overlayEffectPhase: lerp(
+        older.lighting.overlayEffectPhase,
+        newer.lighting.overlayEffectPhase,
+        blend,
+      ),
     },
     movementScale: discrete.movementScale,
     position: {

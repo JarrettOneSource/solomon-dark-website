@@ -103,6 +103,7 @@ import {
 } from '../core-kernels/player-progression.ts'
 import { nativePrimarySkillProfile } from '../core-kernels/native-primary-skill-profile.ts'
 import { playerCollisionEnabledAfterCombatTick } from '../core-kernels/player-combat.ts'
+import { NATIVE_PLAYER_STAFF_CAST_TWO_OVERLAY } from '../core-kernels/player-lighting.ts'
 import {
   applyNativeSecondaryGolemDamage,
   applyNativeSecondaryDazzle,
@@ -1473,6 +1474,7 @@ function finishGameSimulationTick(
   const tick = previous.tick + 1
   let resolvedPlayers = result.players
   let playerEntities = replacePlayerCharacterRecords(previous.playerEntities, resolvedPlayers)
+  playerEntities = stepPlayerEntityOverlayLightingTick(playerEntities)
   let world = result.world
   const combatAdmissionEnabled = world.kind !== 'boneyard'
     || isBoneyardPlayerCombatEnabled(world.encounter)
@@ -2790,8 +2792,18 @@ function finishGameSimulationTick(
         : player
     }
   }
+  for (const playerId of secondaryResult.staffCastPulsePlayerIds) {
+    const player = players[playerId]
+    if (!player) continue
+    players[playerId] = {
+      ...player,
+      primaryCast: {
+        ...player.primaryCast,
+        weaponPulse: NATIVE_PLAYER_STAFF_CAST_TWO_OVERLAY,
+      },
+    }
+  }
   playerEntities = replacePlayerCharacterRecords(playerEntities, players)
-  playerEntities = stepPlayerEntityOverlayLightingTick(playerEntities)
   const combat = stepPlayerEntityCombatTick(
     playerEntities,
     staffActingPlayerIds,
