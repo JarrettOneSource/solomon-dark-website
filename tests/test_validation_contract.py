@@ -155,6 +155,40 @@ class ValidationContractTests(unittest.TestCase):
         self.assertIn('"deployment.json"', program)
         self.assertIn('Headers.CacheControl = "no-store"', program)
 
+    def test_main_deployment_owns_selected_ml_checkpoint_cutover(self) -> None:
+        deploy = (ROOT / "ops/local-ci/deploy-main.sh").read_text()
+        selected = "ml-bot-policy-v7-selected.sdml"
+        self.assertGreaterEqual(deploy.count(selected), 3)
+        self.assertNotIn("ml-bot-policy-v5-selected.sdml", deploy)
+        self.assertIn("install_game_checkpoint_path", deploy)
+        self.assertIn("restore_game_checkpoint_path", deploy)
+
+        release_swap = deploy.rindex('mv -- "$stage" "$live"')
+        checkpoint_cutover = deploy.rindex("\ninstall_game_checkpoint_path\n")
+        services_start = deploy.rindex(
+            "systemctl start solomon-dark-game.service solomon-dark-revived.service"
+        )
+        self.assertLess(release_swap, checkpoint_cutover)
+        self.assertLess(checkpoint_cutover, services_start)
+
+        rollback = deploy[
+            deploy.index("rollback_release() {") : deploy.index("trap cleanup_upload EXIT")
+        ]
+        self.assertLess(
+            rollback.index("restore_game_checkpoint_path"),
+            rollback.index(
+                "systemctl start solomon-dark-game.service solomon-dark-revived.service"
+            ),
+        )
+
+        nfo_readme = (ROOT / "ops/nfo/README.md").read_text()
+        self.assertIn(
+            "SDR_GAME_ML_BOT_CHECKPOINT=/opt/solomon-dark-revived/"
+            "GameHost/ml-bot-policy-v7-selected.sdml",
+            nfo_readme,
+        )
+        self.assertNotIn("ml-bot-policy-v5-selected.sdml", nfo_readme)
+
 
 if __name__ == "__main__":
     unittest.main()

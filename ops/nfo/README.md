@@ -22,10 +22,15 @@ SDR_GAME_MAX_CONNECTIONS_PER_SESSION=16
 SDR_GAME_DEPLOYMENT_SAVE_TIMEOUT_SECONDS=30
 SDR_GAME_UNCLAIMED_TIMEOUT_SECONDS=120
 SDR_GAME_LOG_LEVEL=info
-SDR_GAME_ML_BOT_CHECKPOINT=/opt/solomon-dark-revived/GameHost/ml-bot-policy-v5-selected.sdml
+SDR_GAME_ML_BOT_CHECKPOINT=/opt/solomon-dark-revived/GameHost/ml-bot-policy-v7-selected.sdml
 SDR_RUNTIME_EVENT_ENDPOINT=http://127.0.0.1:5220/api/internal/runtime-events
 SDR_RUNTIME_EVENT_SECRET=<a separate random 32-byte base64url value>
 ```
+
+During a versioned checkpoint cutover, the deployment worker backs up this
+protected environment file, atomically installs the selected checkpoint path
+after swapping in the matching release, and restores the prior file if release
+health rolls back.
 
 The same secret is supplied to the website through its existing protected
 environment file using these keys:

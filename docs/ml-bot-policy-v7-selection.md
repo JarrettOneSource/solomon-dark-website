@@ -168,5 +168,7 @@ PYTHONPATH=tools "$python" tools/train_bot_policy.py train \
   --eval-condition "frozen all-primary train and holdout seeds"
 ```
 
-Remote `main`, public Git, production checkpoint, upload, and deployment remain
-unchanged and unauthorized.
+At this selection cutoff, remote `main`, public Git, the production checkpoint,
+upload, and deployment were unchanged. This receipt records model selection;
+publication and deployment require their own explicit authorization and live
+receipts.

@@ -204,7 +204,7 @@ if [[ -z "$artifact_checksum" ]]; then
         Server.dll \
         GameHost/game-session-supervisor.mjs \
         GameHost/lua54.wasm \
-        GameHost/ml-bot-policy-v5-selected.sdml \
+        GameHost/ml-bot-policy-v7-selected.sdml \
         GameHost/ml-bot-policy-worker.mjs \
         wwwroot/deployment.json \
         wwwroot/index.html \
@@ -267,6 +267,11 @@ caddy_candidate="/etc/caddy/sites/.solomon-dark-revived.$short_sha-$timestamp.ca
 caddy_next="${caddy_site}.next"
 caddy_backup=""
 caddy_changed=0
+game_env=/etc/solomon-dark-game.env
+game_env_next="${game_env}.next"
+game_env_backup=""
+game_env_changed=0
+game_checkpoint=/opt/solomon-dark-revived/GameHost/ml-bot-policy-v7-selected.sdml
 rollback_needed=0
 website_stopped=0
 game_drained=0
@@ -275,7 +280,7 @@ request_game_restart() {
     local result
     local SDR_GAME_SUPERVISOR_SECRET
     # shellcheck disable=SC1091
-    source /etc/solomon-dark-game.env
+    source "$game_env"
     [[ -n "${SDR_GAME_SUPERVISOR_SECRET:-}" ]]
     game_drained=1
     result="$(curl --fail --silent --show-error --max-time 40 \
@@ -300,6 +305,51 @@ if saved + unacknowledged != players:
     raise SystemExit("game supervisor deployment counts do not balance")
 print(f"Game updating drain: players={players} saved={saved} unacknowledged={unacknowledged}")
 PY
+}
+
+install_game_checkpoint_path() {
+    local checkpoint_lines=()
+    mapfile -t checkpoint_lines < <(grep '^SDR_GAME_ML_BOT_CHECKPOINT=' "$game_env")
+    [[ "${#checkpoint_lines[@]}" == 1 ]]
+    if [[ "${checkpoint_lines[0]}" == "SDR_GAME_ML_BOT_CHECKPOINT=$game_checkpoint" ]]; then
+        return
+    fi
+
+    install -d -m 0700 "$backup_dir"
+    game_env_backup="$backup_dir/solomon-dark-game.env"
+    install -o root -g root -m 0600 -- "$game_env" "$game_env_backup"
+    python3 - "$game_env" "$game_env_next" "$game_checkpoint" <<'PY'
+from pathlib import Path
+import sys
+
+source, destination, checkpoint = map(Path, sys.argv[1:])
+lines = source.read_text().splitlines(keepends=True)
+matches = [
+    index
+    for index, line in enumerate(lines)
+    if line.rstrip("\r\n").startswith("SDR_GAME_ML_BOT_CHECKPOINT=")
+]
+if len(matches) != 1:
+    raise SystemExit("game environment must contain one ML bot checkpoint path")
+line = lines[matches[0]]
+newline = "\r\n" if line.endswith("\r\n") else "\n" if line.endswith("\n") else ""
+lines[matches[0]] = f"SDR_GAME_ML_BOT_CHECKPOINT={checkpoint}{newline}"
+destination.write_text("".join(lines))
+PY
+    chown root:root "$game_env_next"
+    chmod 0600 "$game_env_next"
+    game_env_changed=1
+    mv -- "$game_env_next" "$game_env"
+}
+
+restore_game_checkpoint_path() {
+    if (( game_env_changed == 0 )); then
+        return
+    fi
+    [[ -n "$game_env_backup" && -f "$game_env_backup" ]]
+    install -o root -g root -m 0600 -- "$game_env_backup" "$game_env_next"
+    mv -- "$game_env_next" "$game_env"
+    game_env_changed=0
 }
 
 restore_caddy_config() {
@@ -333,6 +383,7 @@ cleanup_upload() {
     [[ ! -f "$artifact" ]] || unlink -- "$artifact"
     [[ ! -f "$caddy_candidate" ]] || unlink -- "$caddy_candidate"
     [[ ! -f "$caddy_next" ]] || unlink -- "$caddy_next"
+    [[ ! -f "$game_env_next" ]] || unlink -- "$game_env_next"
     if (( website_stopped == 1 && rollback_needed == 0 )); then
         systemctl start solomon-dark-revived.service || true
         website_stopped=0
@@ -358,6 +409,7 @@ rollback_release() {
             mv -- "$rollback" "$live"
         fi
     fi
+    restore_game_checkpoint_path || true
     restore_caddy_config || true
     if (( rollback_needed == 1 )); then
         systemctl start solomon-dark-game.service solomon-dark-revived.service || true
@@ -398,7 +450,7 @@ for required_file in \
     Server.dll \
     GameHost/game-session-supervisor.mjs \
     GameHost/lua54.wasm \
-    GameHost/ml-bot-policy-v5-selected.sdml \
+    GameHost/ml-bot-policy-v7-selected.sdml \
     GameHost/ml-bot-policy-worker.mjs \
     wwwroot/deployment.json \
     wwwroot/index.html \
@@ -422,6 +474,7 @@ mv -- "$live" "$rollback"
 rollback_needed=1
 mv -- "$stage" "$live"
 stage=""
+install_game_checkpoint_path
 install_caddy_config
 systemctl start solomon-dark-game.service solomon-dark-revived.service
 website_stopped=0
@@ -443,13 +496,17 @@ done
 [[ "$(systemctl show -p NRestarts --value solomon-dark-game.service)" == 0 ]]
 [[ "$(sqlite3 "$database" 'PRAGMA integrity_check;')" == "ok" ]]
 [[ "$(tr -d '\r\n' <"$live/DEPLOYED_GIT_SHA")" == "$target_sha" ]]
+grep --fixed-strings --line-regexp --quiet \
+    "SDR_GAME_ML_BOT_CHECKPOINT=$game_checkpoint" "$game_env"
 [[ "$(sha256sum "$caddy_site" | awk '{print $1}')" == \
     "$(sha256sum "$caddy_candidate" | awk '{print $1}')" ]]
 
 rollback_needed=0
 caddy_changed=0
-printf 'Deployed %s\nRollback: %s\nDatabase backup: %s/sdr.db\nCaddy backup: %s\n' \
-    "$target_sha" "$rollback" "$backup_dir" "${caddy_backup:-unchanged}"
+game_env_changed=0
+printf 'Deployed %s\nRollback: %s\nDatabase backup: %s/sdr.db\nCaddy backup: %s\nGame env backup: %s\n' \
+    "$target_sha" "$rollback" "$backup_dir" "${caddy_backup:-unchanged}" \
+    "${game_env_backup:-unchanged}"
 REMOTE_DEPLOY
 then
     deploy_exit=0

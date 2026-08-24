@@ -39373,5 +39373,6 @@ class/element expansion.
   Live GameHost smokes pass Ether, Fire, Air, Water, and Earth with ordinary
   entrance traversal and at least one kill each. The final committed selection
   tree passes the complete Mac canonical gate.
-- Remote `main`, public Git, production checkpoint, upload, and deployment are
-  unchanged and unauthorized.
+- At this validation cutoff, remote `main`, public Git, the production
+  checkpoint, upload, and deployment were unchanged. This validation entry did
+  not itself authorize publication or deployment.
