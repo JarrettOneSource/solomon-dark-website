@@ -1265,7 +1265,7 @@ test('Storm and Acid falling drops use the exact native gradient streaks', () =>
   })
 })
 
-test('Acid Rain preserves both parent passes and gates the source-over residue pass', () => {
+test('Acid Rain splits its overhead cloud proxy from the pre-world ground residue', () => {
   const source = {
     ...actor('acid-rain'),
     ageTicks: 80,
@@ -1275,6 +1275,7 @@ test('Acid Rain preserves both parent passes and gates the source-over residue p
     scale: 0.5,
   }
   const plan = nativeSecondaryPresentationPlan(source, 80)
+  assert.equal(plan.sortBias, 350)
   assert.deepEqual(plan.draws.map((draw) => ({
     alpha: draw.alpha,
     blend: draw.blend,
@@ -1290,8 +1291,8 @@ test('Acid Rain preserves both parent passes and gates the source-over residue p
       alpha: 0.6000000238418579,
       blend: 'add',
       entry: 10,
-      offset: { x: 0, y: 0 },
-      role: 'acid-rain-ground',
+      offset: { x: 0, y: -175 },
+      role: 'acid-rain-cloud-additive',
       rotationRadians: Math.PI / 180,
       scaleX: 2.5,
       scaleY: 2,
@@ -1301,26 +1302,40 @@ test('Acid Rain preserves both parent passes and gates the source-over residue p
       alpha: 0.800000011920929,
       blend: 'normal',
       entry: 10,
-      offset: { x: 0, y: -25 },
-      role: 'acid-rain-cloud',
+      offset: { x: 0, y: -200 },
+      role: 'acid-rain-cloud-source-over',
       rotationRadians: -40 * Math.PI / 180,
       scaleX: 1.5,
       scaleY: 3,
       tint: 0x407326,
     },
+  ])
+  assert.deepEqual(plan.underlayDraws.map((draw) => ({
+    alpha: draw.alpha,
+    blend: draw.blend,
+    entry: draw.entry,
+    offset: draw.offset,
+    role: draw.role,
+    rotationRadians: draw.rotationRadians,
+    scaleX: draw.scaleX,
+    scaleY: draw.scaleY,
+    tint: draw.tint,
+  })), [
     {
       alpha: 0.625,
       blend: 'normal',
       entry: 10,
       offset: { x: 0, y: 0 },
-      role: 'acid-rain-residue',
+      role: 'acid-rain-ground-residue',
       rotationRadians: 0,
       scaleX: 4.5,
       scaleY: 4.5,
       tint: 0x0d1a0d,
     },
   ])
-  assert.equal(nativeSecondaryPresentationPlan({ ...source, alpha: 0 }, 80).draws.length, 2)
+  const noResidue = nativeSecondaryPresentationPlan({ ...source, alpha: 0 }, 80)
+  assert.equal(noResidue.draws.length, 2)
+  assert.equal(noResidue.underlayDraws.length, 0)
 })
 
 test('Enhanced moving Storm replays fifteen controls into thirty spline arcs and its cloud core', () => {
