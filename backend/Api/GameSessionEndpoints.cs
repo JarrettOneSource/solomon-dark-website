@@ -11,6 +11,7 @@ public static class GameSessionEndpoints
     public static void Map(IEndpointRouteBuilder app)
     {
         app.MapGet("/api/game/parties", ListPublicPartiesAsync);
+        app.MapGet("/api/game/players", ListConnectedPlayersAsync);
         app.MapPost("/api/game/sessions", ProvisionAsync)
             .RequireRateLimiting("game-sessions");
         app.MapPost("/api/game/hub", EnterHubAsync)
@@ -48,6 +49,39 @@ public static class GameSessionEndpoints
             context.Response.Headers.RetryAfter = "5";
             return Results.Json(
                 new { error = "The public party directory is not available right now." },
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+    }
+
+    private static async Task<IResult> ListConnectedPlayersAsync(
+        HttpContext context,
+        GameSessionProvisioner provisioner,
+        DeveloperAccessPolicy developerAccess,
+        ILogger<GameSessionProvisioner> logger,
+        CancellationToken cancellationToken)
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        // Live presence across every connected player is developer-only
+        // telemetry: anyone else gets the same 404 an unmapped path produces,
+        // and the supervisor is never queried on their behalf.
+        if (!developerAccess.Allows(TokenService.GetUserId(context.User)))
+        {
+            return Results.NotFound();
+        }
+        try
+        {
+            return Results.Ok(new
+            {
+                items = await provisioner.ListConnectedPlayersAsync(cancellationToken)
+            });
+        }
+        catch (Exception exception) when (exception is
+            GameSessionUnavailableException or HttpRequestException or OperationCanceledException)
+        {
+            logger.LogWarning(exception, "The connected player directory could not be read.");
+            context.Response.Headers.RetryAfter = "5";
+            return Results.Json(
+                new { error = "The connected player directory is not available right now." },
                 statusCode: StatusCodes.Status503ServiceUnavailable);
         }
     }

@@ -11,6 +11,7 @@ import {
 } from '../protocol/game-protocol.ts'
 import type { GameServerLogEntry } from './game-server-logger.ts'
 import { startGameSessionSupervisor } from './game-session-supervisor.ts'
+import type { HostPresenceEntry } from './host-presence.ts'
 
 const ADMIN_SECRET = 'supervisor-test-secret-that-is-long-enough'
 const BROWSER_ORIGIN = 'https://solomondarker.com'
@@ -71,6 +72,19 @@ test('game session supervisor provisions isolated authenticated game sessions', 
   assert.equal(first.welcome.playerId, 'player-1')
   assert.equal(second.welcome.playerId, 'player-1')
 
+  assert.deepEqual(await readPresence(supervisor.address.url), [1, 2].map(() => ({
+    accountUsername: null,
+    activity: 'hub',
+    boneyardName: null,
+    bot: false,
+    developer: false,
+    displayName: CHARACTER.displayName,
+    partyLeader: null,
+    partySize: null,
+    session: 'private-college',
+    waveNumber: null,
+  })))
+
   await assert.rejects(
     () => openSocket(websocketUrl(supervisor.address.url, firstEndpoint.path), 'https://evil.example'),
     /403/,
@@ -112,6 +126,7 @@ test('game session supervisor admits independent players to one shared Hub and r
   context.after(() => supervisor.close())
 
   assert.equal((await fetch(`${supervisor.address.url}/admin/hub/parties`)).status, 401)
+  assert.equal((await fetch(`${supervisor.address.url}/admin/presence`)).status, 401)
 
   const endpoints = await Promise.all([
     admitHub(supervisor.address.url, EMPTY_CONTENT, 42),
@@ -139,6 +154,18 @@ test('game session supervisor admits independent players to one shared Hub and r
     })
   }
   assert.deepEqual(await readPublicParties(supervisor.address.url), [])
+  assert.deepEqual(await readPresence(supervisor.address.url), [1, 2, 3].map(() => ({
+    accountUsername: null,
+    activity: 'hub',
+    boneyardName: null,
+    bot: false,
+    developer: false,
+    displayName: CHARACTER.displayName,
+    partyLeader: null,
+    partySize: null,
+    session: 'global-hub',
+    waveNumber: null,
+  })))
 
   const firstParty = await first.next((message) => (
     message.type === 'server-party-state'
@@ -286,6 +313,26 @@ test('game session supervisor admits independent players to one shared Hub and r
       : null,
     status: 'playing',
   }])
+  const runPresence = await readPresence(supervisor.address.url)
+  const presenceInRun = runPresence.filter(player => player.activity === 'boneyard')
+  const presenceInHub = runPresence.filter(player => player.activity === 'hub')
+  assert.equal(presenceInRun.length, 2)
+  assert.equal(presenceInHub.length, 1)
+  for (const player of presenceInRun) {
+    assert.equal(player.session, 'global-hub')
+    assert.equal(player.displayName, CHARACTER.displayName)
+    assert.equal(
+      player.boneyardName,
+      firstRun.type === 'server-boneyard-loaded' ? firstRun.boneyard.choice.name : null,
+    )
+    assert.ok(typeof player.waveNumber === 'number' && player.waveNumber >= 0)
+    assert.equal(player.partyLeader, CHARACTER.displayName)
+    assert.equal(player.partySize, 2)
+  }
+  assert.equal(presenceInHub[0]!.partyLeader, null)
+  assert.equal(presenceInHub[0]!.waveNumber, null)
+  assert.equal(presenceInHub[0]!.boneyardName, null)
+  assert.doesNotMatch(JSON.stringify(runPresence), /player-|credential|joinCode|listing/i)
   const playingJoin = await fetch(`${supervisor.address.url}/admin/join/public`, {
     method: 'POST',
     headers: {
@@ -758,6 +805,21 @@ async function readPublicParties(supervisorUrl: string): Promise<PublicPartyDire
   assert.equal(response.status, 200)
   assert.equal(response.headers.get('cache-control'), 'no-store')
   const value = await response.json() as { items?: PublicPartyDirectoryEntry[] }
+  assert.ok(Array.isArray(value.items))
+  return value.items
+}
+
+type PresenceDirectoryEntry = HostPresenceEntry & {
+  session: 'global-hub' | 'private-college'
+}
+
+async function readPresence(supervisorUrl: string): Promise<PresenceDirectoryEntry[]> {
+  const response = await fetch(`${supervisorUrl}/admin/presence`, {
+    headers: { authorization: `Bearer ${ADMIN_SECRET}` },
+  })
+  assert.equal(response.status, 200)
+  assert.equal(response.headers.get('cache-control'), 'no-store')
+  const value = await response.json() as { items?: PresenceDirectoryEntry[] }
   assert.ok(Array.isArray(value.items))
   return value.items
 }

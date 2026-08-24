@@ -306,6 +306,21 @@ export async function startGameSessionSupervisor(
       sendJson(response, 200, { items: hubHost.publicParties() })
       return
     }
+    if (request.method === 'GET' && path === '/admin/presence') {
+      // Developer-only telemetry: the backend gates who may read this; the
+      // supervisor itself only ever answers admin-secret bearers.
+      sendJson(response, 200, {
+        items: [
+          ...hubHost.presence().map(entry => ({ ...entry, session: 'global-hub' as const })),
+          ...[...sessions.values()].filter(session => !session.closing).flatMap(
+            session => session.host.presence().map(
+              entry => ({ ...entry, session: 'private-college' as const }),
+            ),
+          ),
+        ],
+      })
+      return
+    }
     if (request.method === 'POST' && path === '/admin/sessions') {
       void readJsonObject(request).then((body) => {
         provisionIntoResponse(response, materializeGameAdmission(body))

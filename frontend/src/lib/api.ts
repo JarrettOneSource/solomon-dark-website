@@ -152,6 +152,22 @@ export type PublicGameParty = PublicGamePartyBase & (
   | { status: 'playing'; boneyardName: string }
 )
 
+interface ConnectedGamePlayerBase {
+  displayName: string
+  accountUsername: string | null
+  bot: boolean
+  developer: boolean
+  session: 'global-hub' | 'private-college'
+  partyLeader: string | null
+  partySize: number | null
+}
+
+/** Developer-only presence row; the backend 404s this feed for everyone else. */
+export type ConnectedGamePlayer = ConnectedGamePlayerBase & (
+  | { activity: 'hub'; boneyardName: null; waveNumber: null }
+  | { activity: 'boneyard'; boneyardName: string; waveNumber: number }
+)
+
 export interface GameContentAsset {
   byteLength: number
   modId: string
@@ -394,6 +410,10 @@ export const api = {
   },
 
   stats: () => request<Stats>('/api/stats'),
+
+  gamePlayers: {
+    list: () => request<{ items: ConnectedGamePlayer[] }>('/api/game/players'),
+  },
 
   gameParties: {
     list: () => request<{ items: PublicGameParty[] }>('/api/game/parties'),

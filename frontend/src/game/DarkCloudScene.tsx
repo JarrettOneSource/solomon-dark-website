@@ -13,12 +13,17 @@ import wizardRight from '../assets/game/dark-cloud/wizard-right.png'
 import {
   api,
   type ActiveWebMod,
+  type ConnectedGamePlayer,
   type ModList,
   type ModSubscription,
   type ModSummary,
   type PartyJoinResolution,
   type PublicGameParty,
 } from '../lib/api.ts'
+import {
+  connectedPlayerPresentation,
+  useConnectedPlayers,
+} from './connected-players.ts'
 import DarkCloudMedia from './DarkCloudMedia.tsx'
 import DarkCloudModDetail, {
   type DarkCloudSubscriptionAction,
@@ -45,6 +50,11 @@ type DarkCloudRow =
 
 interface DarkCloudSceneProps {
   accountUsername: string | null
+  /**
+   * True only for signed-in developer accounts. It gates fetching the live
+   * presence feed; the backend independently refuses that feed to anyone else.
+   */
+  developerAccess: boolean
   /** Key code bound to the game's open-menu control (`settings.controls.openMenu`). */
   menuKeyCode: string
   /** True while the Esc menu or its settings own input, so the open-menu key stays quiet. */
@@ -58,6 +68,7 @@ interface DarkCloudSceneProps {
 
 export default function DarkCloudScene({
   accountUsername,
+  developerAccess,
   menuKeyCode,
   menuOpen,
   onMenu,
@@ -87,6 +98,7 @@ export default function DarkCloudScene({
   const partyDirectory = usePartyDirectory(tab === 'parties')
   const parties = partyDirectory.parties
   const partyActions = usePartyJoinActions(requesterDisplayName, onPartyResolved)
+  const connectedPlayers = useConnectedPlayers(developerAccess && tab === 'parties')
 
   const load = useCallback(async () => {
     const generation = ++requestGeneration.current
@@ -266,7 +278,12 @@ export default function DarkCloudScene({
         ? <span className="dark-cloud-status-note">REFRESHING…</span>
         : null}
       {query ? <button type="button" onClick={() => setQuery('')}>CLEAR SEARCH</button> : null}
-      {tab === 'parties' ? <button type="button" onClick={() => { void partyDirectory.refresh() }}>REFRESH</button> : null}
+      {tab === 'parties' ? (
+        <button type="button" onClick={() => {
+          void partyDirectory.refresh()
+          if (developerAccess) void connectedPlayers.refresh()
+        }}>REFRESH</button>
+      ) : null}
     </>
   )
 
@@ -356,6 +373,13 @@ export default function DarkCloudScene({
               selected={selectedKey === row.key}
             />
           ))}
+          {tab === 'parties' && developerAccess ? (
+            <DeveloperPresenceSection
+              error={connectedPlayers.error}
+              loading={connectedPlayers.loading}
+              players={connectedPlayers.players}
+            />
+          ) : null}
         </div>
       </main>
 
@@ -604,6 +628,64 @@ function PartyRow({
         </button>
       </div>
     </article>
+  )
+}
+
+/**
+ * Developer-only roster of every connected player and what they are doing.
+ * The backend answers `/api/game/players` with 404 unless the signed-in user
+ * is a developer, so this section can only ever render for developers.
+ */
+function DeveloperPresenceSection({
+  error,
+  loading,
+  players,
+}: {
+  error: string | null
+  loading: boolean
+  players: readonly ConnectedGamePlayer[]
+}) {
+  return (
+    <section className="dark-cloud-dev-presence" aria-label="All connected players (developer)">
+      <header className="dark-cloud-dev-presence-heading" aria-hidden>
+        <span>DEVELOPER SIGHT</span>
+        <span className="dark-cloud-dev-presence-count">
+          {loading && players.length === 0
+            ? 'SCRYING…'
+            : `${players.length} CONNECTED ${players.length === 1 ? 'WIZARD' : 'WIZARDS'}`}
+        </span>
+      </header>
+      {error !== null ? (
+        <p className="dark-cloud-dev-presence-note" role="alert">{error}</p>
+      ) : null}
+      {!loading && error === null && players.length === 0 ? (
+        <p className="dark-cloud-dev-presence-note">NO WIZARDS ARE CONNECTED RIGHT NOW.</p>
+      ) : null}
+      {players.map((player, index) => {
+        const presentation = connectedPlayerPresentation(player)
+        return (
+          <div className="dark-cloud-dev-presence-row" key={`${player.session}:${player.displayName}:${index}`}>
+            <span className="dark-cloud-dev-presence-wizard">
+              <strong>{player.displayName.toUpperCase()}</strong>
+              <small>
+                {presentation.detail.toUpperCase()}
+                {player.developer ? ' · DEV' : ''}
+              </small>
+            </span>
+            <span className="dark-cloud-dev-presence-session">{presentation.session}</span>
+            <span className={`dark-cloud-dev-presence-status ${player.activity}`}>
+              {presentation.status}
+            </span>
+            <span className="dark-cloud-dev-presence-location" title={presentation.location}>
+              {presentation.location.toUpperCase()}
+            </span>
+            <span className="dark-cloud-dev-presence-party" title={presentation.party ?? undefined}>
+              {presentation.party?.toUpperCase() ?? 'NO PARTY'}
+            </span>
+          </div>
+        )
+      })}
+    </section>
   )
 }
 

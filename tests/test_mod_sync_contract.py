@@ -83,6 +83,9 @@ class WebsiteModSyncContractTests(unittest.TestCase):
                 "GameSessions__AdminSecret": cls.leaderboard_secret,
                 "GameSessions__PublicWebSocketOrigin": "wss://game.example.invalid",
                 "GameSessions__SupervisorUrl": cls.supervisor_origin,
+                # The second registered account (id 2) is the developer seat the
+                # connected-players tests use; account id 1 must stay locked out.
+                "DeveloperAccess__UserIds": "2",
             }
         )
         cls.build_server()
@@ -101,6 +104,19 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             raise RuntimeError(f"test registration failed: {status} {registered}")
         cls.token = registered["token"]
         cls.user_id = registered["user"]["id"]
+
+        status, dev_registered = cls.request(
+            "POST",
+            "/api/auth/register",
+            json_body={
+                "username": "presencedev",
+                "email": "presencedev@example.invalid",
+                "password": "correct-horse-battery-staple",
+            },
+        )
+        if status != 201 or dev_registered["user"]["id"] != 2:
+            raise RuntimeError(f"developer registration failed: {status} {dev_registered}")
+        cls.dev_token = dev_registered["token"]
 
     @classmethod
     def build_server(cls) -> None:
@@ -169,6 +185,33 @@ class WebsiteModSyncContractTests(unittest.TestCase):
                 "boneyardName": "The Survival Grounds",
             }
         ]
+        cls.presence_requests = 0
+        cls.presence_items = [
+            {
+                "displayName": "Hagatha",
+                "accountUsername": "hagatha",
+                "bot": False,
+                "developer": False,
+                "session": "global-hub",
+                "activity": "boneyard",
+                "boneyardName": "The Survival Grounds",
+                "waveNumber": 5,
+                "partyLeader": "Hagatha",
+                "partySize": 2,
+            },
+            {
+                "displayName": "ML Bot 1",
+                "accountUsername": None,
+                "bot": True,
+                "developer": False,
+                "session": "private-college",
+                "activity": "hub",
+                "boneyardName": None,
+                "waveNumber": None,
+                "partyLeader": None,
+                "partySize": None,
+            },
+        ]
 
         class SupervisorHandler(BaseHTTPRequestHandler):
             def reply(self, status: int, body: object) -> None:
@@ -190,6 +233,9 @@ class WebsiteModSyncContractTests(unittest.TestCase):
                     self.reply(200, {"players": 0, "parties": 0, "runs": 0})
                 elif self.path == "/admin/hub/parties":
                     self.reply(200, {"items": cls.party_directory_items})
+                elif self.path == "/admin/presence":
+                    cls.presence_requests += 1
+                    self.reply(200, {"items": cls.presence_items})
                 elif self.path == "/admin/join/requests/request-token-01234567890123456789":
                     self.reply(200, {"status": "pending", "intentId": None, "target": None})
                 else:
@@ -505,6 +551,61 @@ class WebsiteModSyncContractTests(unittest.TestCase):
                     )
         finally:
             test_class.party_directory_items = original
+
+    def test_connected_players_directory_is_served_only_to_developer_accounts(self) -> None:
+        test_class = type(self)
+        baseline_supervisor_reads = test_class.presence_requests
+
+        for label, headers in (
+            ("anonymous", {}),
+            ("non-developer", {"Authorization": f"Bearer {self.token}"}),
+        ):
+            with self.subTest(requester=label):
+                status, response = self.request("GET", "/api/game/players", headers=headers)
+                self.assertEqual(status, 404)
+                serialized = json.dumps(response)
+                for leak in ("Hagatha", "ML Bot", "boneyard", "wave", "items", "party"):
+                    self.assertNotIn(leak, serialized)
+        self.assertEqual(
+            test_class.presence_requests,
+            baseline_supervisor_reads,
+            "the supervisor must never be asked for presence on behalf of a non-developer",
+        )
+
+        status, response = self.request(
+            "GET",
+            "/api/game/players",
+            headers={"Authorization": f"Bearer {self.dev_token}"},
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(response, {"items": test_class.presence_items})
+        self.assertEqual(test_class.presence_requests, baseline_supervisor_reads + 1)
+
+    def test_connected_players_directory_rejects_malformed_supervisor_payloads(self) -> None:
+        test_class = type(self)
+        original = test_class.presence_items
+        try:
+            for mutation in (
+                {"activity": "hub", "boneyardName": "The Survival Grounds"},
+                {"activity": "boneyard", "waveNumber": None},
+                {"partyLeader": None, "partySize": 2},
+                {"session": "lobby"},
+                {"displayName": "   "},
+            ):
+                with self.subTest(mutation=mutation):
+                    test_class.presence_items = [{**original[0], **mutation}]
+                    status, response = self.request(
+                        "GET",
+                        "/api/game/players",
+                        headers={"Authorization": f"Bearer {self.dev_token}"},
+                    )
+                    self.assertEqual(status, 503)
+                    self.assertEqual(
+                        response,
+                        {"error": "The connected player directory is not available right now."},
+                    )
+        finally:
+            test_class.presence_items = original
 
     def test_party_join_control_plane_is_guest_capable_and_keeps_intents_in_memory(self) -> None:
         status, resolved = self.request(

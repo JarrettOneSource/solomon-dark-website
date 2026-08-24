@@ -133,6 +133,10 @@ import {
   type PartySystemState,
 } from './party-system.ts'
 import {
+  projectHostPresence,
+  type HostPresenceEntry,
+} from './host-presence.ts'
+import {
   projectPublicPartyDirectory,
   type PublicPartyDirectoryEntry,
 } from './public-party-directory.ts'
@@ -262,6 +266,7 @@ export interface GameHost {
   partyTargetByCode(joinCode: string): GameHostPartyTarget | null
   partyTargetByListingId(listingId: string): GameHostPartyTarget | null
   playerState(playerId: string): GameSimulationState | null
+  presence(): readonly HostPresenceEntry[]
   publicParties(): readonly PublicPartyDirectoryEntry[]
   restartForDeployment(
     targetRevision: string,
@@ -3744,6 +3749,51 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       : state.playerEntities.identities.some(identity => identity.playerId === playerId)
         ? state
         : null,
+    presence: () => projectHostPresence(
+      [
+        ...[...clients.values()].map(client => ({
+          accountUsername: client.profile.accountUsername,
+          bot: false,
+          developer: client.developerAccess,
+          displayName: client.displayName,
+          playerId: client.playerId,
+        })),
+        ...[...bots.values()].map(bot => ({
+          accountUsername: bot.profile.accountUsername,
+          bot: true,
+          developer: false,
+          displayName: bot.displayName,
+          playerId: bot.playerId,
+        })),
+      ],
+      sharedWorlds
+        ? {
+            hubPlayerIds: sharedWorlds.hub.playerEntities.identities.map(
+              identity => identity.playerId,
+            ),
+            runs: sharedWorlds.runs.map(run => ({
+              boneyardName: run.loadedBoneyard.choice.name,
+              playerIds: run.state.playerEntities.identities.map(identity => identity.playerId),
+              waveNumber: run.state.world.kind === 'boneyard'
+                ? run.state.world.waves?.waveOrdinal ?? 0
+                : 0,
+            })),
+          }
+        : state.world.kind === 'boneyard' && loadedBoneyard !== null
+          ? {
+              hubPlayerIds: [],
+              runs: [{
+                boneyardName: loadedBoneyard.choice.name,
+                playerIds: state.playerEntities.identities.map(identity => identity.playerId),
+                waveNumber: state.world.waves?.waveOrdinal ?? 0,
+              }],
+            }
+          : {
+              hubPlayerIds: state.playerEntities.identities.map(identity => identity.playerId),
+              runs: [],
+            },
+      activePartySystem()?.parties ?? [],
+    ),
     publicParties: () => sharedWorlds
       ? projectPublicPartyDirectory({
           memberships: sharedWorlds.parties.parties,

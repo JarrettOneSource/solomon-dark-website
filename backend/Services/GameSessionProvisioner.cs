@@ -236,6 +236,37 @@ public sealed partial class GameSessionProvisioner
         }
     }
 
+    public async Task<IReadOnlyList<ConnectedGamePlayer>> ListConnectedPlayersAsync(
+        CancellationToken cancellationToken)
+    {
+        EnsurePrivateSessionsConfigured();
+        using var request = CreateAdminRequest(HttpMethod.Get, "/admin/presence");
+        using var response = await httpClient.SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new GameSessionUnavailableException(
+                $"The game session supervisor returned {(int)response.StatusCode}.");
+        }
+        try
+        {
+            var directory = await response.Content.ReadFromJsonAsync<ConnectedGamePlayerDirectory>(
+                    JsonOptions,
+                    cancellationToken)
+                ?? throw new JsonException("The response was empty.");
+            if (!ValidConnectedPlayerDirectory(directory.Items))
+            {
+                throw new JsonException("The connected player directory was invalid.");
+            }
+            return directory.Items;
+        }
+        catch (JsonException exception)
+        {
+            throw new GameSessionUnavailableException(
+                "The game session supervisor returned an invalid connected player directory.",
+                exception);
+        }
+    }
+
     private HttpRequestMessage CreateAdminRequest(HttpMethod method, string path)
     {
         var request = new HttpRequestMessage(method, new Uri(supervisorUrl!, path));
@@ -349,6 +380,26 @@ public sealed partial class GameSessionProvisioner
                     party.BoneyardName.Length <= 256));
     }
 
+    private static bool ValidConnectedPlayerDirectory(ConnectedGamePlayer[]? items) =>
+        items is not null && items.All(player =>
+            !string.IsNullOrWhiteSpace(player.DisplayName) &&
+            player.DisplayName.Length <= 64 &&
+            (player.AccountUsername is null ||
+                (!string.IsNullOrWhiteSpace(player.AccountUsername) &&
+                    player.AccountUsername.Length <= 64)) &&
+            player.Session is "global-hub" or "private-college" &&
+            player.Activity is "hub" or "boneyard" &&
+            (player.Activity == "hub"
+                ? player.BoneyardName is null && player.WaveNumber is null
+                : !string.IsNullOrWhiteSpace(player.BoneyardName) &&
+                    player.BoneyardName.Length <= 256 &&
+                    player.WaveNumber is >= 0 and <= 100_000) &&
+            (player.PartyLeader is null
+                ? player.PartySize is null
+                : !string.IsNullOrWhiteSpace(player.PartyLeader) &&
+                    player.PartyLeader.Length <= 64 &&
+                    player.PartySize is >= 2 and <= 64));
+
     private static bool ValidatePartyJoinResolution(GamePartyJoinResolution value) =>
         ValidToken(value.IntentId) && ValidatePartyJoinTarget(value.Target);
 
@@ -454,6 +505,20 @@ public sealed record PublicGameParty(
     string? BoneyardName);
 
 public sealed record PublicGamePartyDirectory(PublicGameParty[] Items);
+
+public sealed record ConnectedGamePlayer(
+    string DisplayName,
+    string? AccountUsername,
+    bool Bot,
+    bool Developer,
+    string Session,
+    string Activity,
+    string? BoneyardName,
+    int? WaveNumber,
+    string? PartyLeader,
+    int? PartySize);
+
+public sealed record ConnectedGamePlayerDirectory(ConnectedGamePlayer[] Items);
 
 public sealed record GamePartyJoinRequester(
     string? AccountUsername,

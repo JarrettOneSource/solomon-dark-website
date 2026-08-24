@@ -1322,6 +1322,7 @@ export default function MainMenuScene({
             <div className="main-menu-native-stage dark-cloud-stage" inert={darkCloudMenuOpen || undefined}>
               <DarkCloudScene
                 accountUsername={accountUsername}
+                developerAccess={developerAccess}
                 menuKeyCode={gameSettings.controls.openMenu}
                 menuOpen={darkCloudMenuOpen || settingsContext !== null}
                 onMenu={openDarkCloudMenu}
