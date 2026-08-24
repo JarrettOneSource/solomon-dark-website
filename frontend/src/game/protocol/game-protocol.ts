@@ -170,6 +170,7 @@ import {
 } from '../core-kernels/player-lighting.ts'
 import { BONEYARD_ENEMY_FLAGS } from '../core-kernels/boneyard-enemy-config.ts'
 import {
+  NATIVE_TUTORIAL_AMULET_IDENTITY,
   NATIVE_TUTORIAL_CUES,
   NATIVE_TUTORIAL_CUE_DEFINITIONS,
   NATIVE_TUTORIAL_STAGES,
@@ -2563,33 +2564,56 @@ function inventoryItem(
   } else if (equipmentType === null) {
     throw new GameProtocolError(`${field} equipment identity is inconsistent`)
   } else if (recipeIndex === null) {
-    const starter = generatedLevel === undefined
-      && nativeSelector === undefined
+    const authored = generatedLevel === undefined
+      && nativeSelector !== undefined
       && nativeEffects === undefined
-    if (starter && (
-      rarity !== null
-      || nativeSubtype !== null
-      || quantity !== 1
-      || !isStarterEquipmentIdentity(equipmentType as EquipmentType, name, nativeTypeId, iconRecords)
-    )) throw new GameProtocolError(`${field} starter equipment identity is inconsistent`)
-    if (!starter && (
-      rarity !== null
-      || nativeSubtype !== null
-      || quantity !== 1
-      || generatedLevel === undefined
-      || nativeSelector === undefined
-      || nativeEffects === undefined
-      || nativeEffects.length < 1
-      || ((equipmentType === 'hat' || equipmentType === 'robe')
-        ? iconTints === undefined || iconTints.some((tint) => tint === null)
-        : iconTints !== undefined)
-      || !isGeneratedEquipmentIdentity(
-        equipmentType as EquipmentType,
-        nativeTypeId,
-        nativeSelector,
-        iconRecords,
-      )
-    )) throw new GameProtocolError(`${field} generated equipment identity is inconsistent`)
+    if (authored) {
+      if (
+        rarity !== null
+        || nativeSubtype !== null
+        || quantity !== 1
+        || equipmentType !== NATIVE_TUTORIAL_AMULET_IDENTITY.equipmentType
+        || name !== NATIVE_TUTORIAL_AMULET_IDENTITY.name
+        || nativeTypeId !== NATIVE_TUTORIAL_AMULET_IDENTITY.nativeTypeId
+        || nativeSelector !== NATIVE_TUTORIAL_AMULET_IDENTITY.nativeSelector
+        || iconRecords.length !== NATIVE_TUTORIAL_AMULET_IDENTITY.iconRecords.length
+        || iconRecords.some((record, index) => (
+          record !== NATIVE_TUTORIAL_AMULET_IDENTITY.iconRecords[index]
+        ))
+        || iconTints === undefined
+        || iconTints.some((tint, index) => (
+          tint !== NATIVE_TUTORIAL_AMULET_IDENTITY.iconTints[index]
+        ))
+      ) throw new GameProtocolError(`${field} authored equipment identity is inconsistent`)
+    } else {
+      const starter = generatedLevel === undefined
+        && nativeSelector === undefined
+        && nativeEffects === undefined
+      if (starter && (
+        rarity !== null
+        || nativeSubtype !== null
+        || quantity !== 1
+        || !isStarterEquipmentIdentity(equipmentType as EquipmentType, name, nativeTypeId, iconRecords)
+      )) throw new GameProtocolError(`${field} starter equipment identity is inconsistent`)
+      if (!starter && (
+        rarity !== null
+        || nativeSubtype !== null
+        || quantity !== 1
+        || generatedLevel === undefined
+        || nativeSelector === undefined
+        || nativeEffects === undefined
+        || nativeEffects.length < 1
+        || ((equipmentType === 'hat' || equipmentType === 'robe')
+          ? iconTints === undefined || iconTints.some((tint) => tint === null)
+          : iconTints !== undefined)
+        || !isGeneratedEquipmentIdentity(
+          equipmentType as EquipmentType,
+          nativeTypeId,
+          nativeSelector,
+          iconRecords,
+        )
+      )) throw new GameProtocolError(`${field} generated equipment identity is inconsistent`)
+    }
   } else {
     const recipe = DOWSING_EQUIPMENT_RECIPES[recipeIndex]!
     const selector = nativeEquipmentSelector(recipe.type, recipe.iconRecords)

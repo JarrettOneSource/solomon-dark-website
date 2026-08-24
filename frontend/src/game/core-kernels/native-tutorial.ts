@@ -18,6 +18,14 @@ export const NATIVE_TUTORIAL_TICK_RATE = 100
 export const NATIVE_TUTORIAL_ACID_RAIN_SKILL_ID = 72
 export const NATIVE_TUTORIAL_STARTING_PRIMARY_SKILL_ID = 8
 export const NATIVE_TUTORIAL_STARTING_SECONDARY_SKILL_ID = 11
+export const NATIVE_TUTORIAL_AMULET_IDENTITY = Object.freeze({
+  equipmentType: 'amulet' as const,
+  iconRecords: Object.freeze([30, 18] as const),
+  iconTints: Object.freeze([0xffffff, 0xffffff] as const),
+  name: "Sorceror's Amulet",
+  nativeSelector: 0,
+  nativeTypeId: 7003 as const,
+})
 
 export const NATIVE_TUTORIAL_STAGES = [
   0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
@@ -646,15 +654,10 @@ export function nativeTutorialDialogueTicks(): number {
 
 export function nativeTutorialAmuletItem(): HubInventoryItem {
   return Object.freeze({
-    equipmentType: 'amulet',
-    iconRecords: Object.freeze([30, 18]),
-    iconTints: Object.freeze([0xffffff, 0xffffff] as const),
+    ...NATIVE_TUTORIAL_AMULET_IDENTITY,
     id: 0,
     kind: 'equipment',
-    name: "Sorceror's Amulet",
-    nativeSelector: 0,
     nativeSubtype: null,
-    nativeTypeId: 7003,
     quantity: 1,
     rarity: null,
     recipeIndex: null,

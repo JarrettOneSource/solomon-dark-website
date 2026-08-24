@@ -11,9 +11,11 @@ import {
 import { replacePlayerEconomy } from '../core-server/player-entity-store.ts'
 import {
   HUB_SACK_REPLICATION_DEPTH_LIMIT,
+  insertLootInventoryItem,
   type HubInventoryItem,
 } from '../core-kernels/hub-economy.ts'
 import { HUB_SPAWN } from '../core-kernels/hub-math.ts'
+import { nativeTutorialAmuletItem } from '../core-kernels/native-tutorial.ts'
 import { HubStudentPopulationState } from '../core-server/hub-students.ts'
 import { HubWorldRuntime } from '../core-server/hub-world.ts'
 import {
@@ -301,10 +303,21 @@ test('host save documents retain the active Boneyard and its authoritative run i
 
 test('schema 7 resumes the complete stock Tutorial controller and exact level identity', () => {
   const loadedBoneyard = materializeStockTutorial(Buffer.alloc(16, 19))
-  const state = enterBoneyardWorld(
+  let state = enterBoneyardWorld(
     createGameSimulation({ owner: OWNER }),
     loadedBoneyard,
   )
+  const tutorialEconomy = getPlayerEconomy(state, 'owner')
+  const inserted = insertLootInventoryItem(tutorialEconomy, nativeTutorialAmuletItem())
+  assert.equal(inserted.accepted, true)
+  state = {
+    ...state,
+    playerEntities: replacePlayerEconomy(
+      state.playerEntities,
+      'owner',
+      inserted.state,
+    ),
+  }
   const document = createGameSaveDocument({
     integrity: 'global-clean',
     loadedBoneyard,
@@ -320,6 +333,11 @@ test('schema 7 resumes the complete stock Tutorial controller and exact level id
     encoded.profile.economy,
     encoded.continuation.simulation.world.tutorialProfileEconomy,
   )
+  assert.equal(encoded.profile.economy.backpack.length, 2)
+  assert.deepEqual(
+    encoded.continuation.simulation.playerEntities.economies[0].backpack[2],
+    { ...nativeTutorialAmuletItem(), id: tutorialEconomy.nextItemId },
+  )
   const retired = JSON.parse(retireGameSaveWizard(document))
   assert.equal(retired.continuation, null)
   assert.equal(retired.profile.economy.tutorialPending, false)
@@ -332,6 +350,10 @@ test('schema 7 resumes the complete stock Tutorial controller and exact level id
   assert.equal(restored.loadedBoneyard?.choice.id, 'stock-tutorial')
   assert.equal(restored.loadedBoneyard?.sourceSha256, '97802f2ca45d9bc6f90a497e7c12a55926298161e191fa70eee5e666b90106ed')
   assert.equal(restored.state.world.kind, 'boneyard')
+  assert.deepEqual(
+    restored.state.playerEntities.economies[0]?.backpack[2],
+    { ...nativeTutorialAmuletItem(), id: tutorialEconomy.nextItemId },
+  )
   if (restored.state.world.kind !== 'boneyard') throw new Error('expected Tutorial')
   assert.deepEqual(restored.state.world.tutorial, state.world.kind === 'boneyard'
     ? state.world.tutorial

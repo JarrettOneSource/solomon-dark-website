@@ -28,6 +28,7 @@ import {
 } from '../core-kernels/native-secondary-abilities.ts'
 import { createNativeRng } from '../core-kernels/native-rng.ts'
 import { createNativeEnemyPathState } from '../core-kernels/native-enemy-pathfinding.ts'
+import { nativeTutorialAmuletItem } from '../core-kernels/native-tutorial.ts'
 import {
   DOWSING_EQUIPMENT_RECIPES,
   HUB_SACK_REPLICATION_DEPTH_LIMIT,
@@ -539,6 +540,101 @@ test('server welcome round-trips content, kernel, character, and world ownership
   assert.equal(welcome.snapshot.players['player-1'].economy.gold, 500)
   assert.equal(welcome.snapshot.players['player-1'].economy.fomentiusStock.length > 0, true)
   const player = welcome.snapshot.players['player-1']
+  const tutorialAmulet = { ...nativeTutorialAmuletItem(), id: 900_100 }
+  const tutorialSack = {
+    contents: [tutorialAmulet],
+    equipmentType: null,
+    iconRecords: [70],
+    id: 900_101,
+    kind: 'sack' as const,
+    name: 'Sack',
+    nativeSubtype: 0,
+    nativeTypeId: 7008,
+    quantity: 1,
+    rarity: null,
+    recipeIndex: null,
+  }
+  const tutorialEconomies = [
+    ['backpack', {
+      ...player.economy,
+      backpack: [...player.economy.backpack, tutorialAmulet],
+    }],
+    ['storage', {
+      ...player.economy,
+      storage: [...player.economy.storage, tutorialAmulet],
+    }],
+    ['equipped amulet', {
+      ...player.economy,
+      equipment: { ...player.economy.equipment, amulet: tutorialAmulet },
+    }],
+    ['nested Sack', {
+      ...player.economy,
+      backpack: [...player.economy.backpack, tutorialSack],
+    }],
+  ] as const
+  for (const [label, economy] of tutorialEconomies) {
+    const tutorialSnapshot = {
+      ...welcome.snapshot,
+      players: {
+        ...welcome.snapshot.players,
+        'player-1': { ...player, economy },
+      },
+    }
+    const tutorialWelcome = { ...welcome, snapshot: tutorialSnapshot }
+    assert.deepEqual(
+      decodeServerGameMessage(encodeGameMessage(tutorialWelcome)),
+      tutorialWelcome,
+      `${label} full welcome`,
+    )
+    const tutorialFrame = {
+      acknowledgedInputSequence: 0,
+      frame: createGameSnapshotFrame(tutorialSnapshot, 0, undefined, true),
+      sequence: 2,
+      type: 'server-snapshot' as const,
+    }
+    assert.deepEqual(
+      decodeServerGameMessage(encodeGameMessage(tutorialFrame)),
+      tutorialFrame,
+      `${label} snapshot frame`,
+    )
+  }
+  for (const [label, patch] of [
+    ['name', { name: 'Almost Sorceror Amulet' }],
+    ['type', { equipmentType: 'ring' }],
+    ['native type', { nativeTypeId: 7002 }],
+    ['subtype', { nativeSubtype: 0 }],
+    ['quantity', { quantity: 2 }],
+    ['rarity', { rarity: 'Rare' }],
+    ['selector', { nativeSelector: 1 }],
+    ['missing selector', { nativeSelector: undefined }],
+    ['records', { iconRecords: [30, 19] }],
+    ['colors', { iconTints: [0xffffff, 0] }],
+    ['recipe', { recipeIndex: 0 }],
+    ['generated level', { generatedLevel: 0 }],
+    ['generated effects', { nativeEffects: [] }],
+  ] as const) {
+    const malformed = {
+      ...welcome,
+      snapshot: {
+        ...welcome.snapshot,
+        players: {
+          ...welcome.snapshot.players,
+          'player-1': {
+            ...player,
+            economy: {
+              ...player.economy,
+              backpack: [...player.economy.backpack, { ...tutorialAmulet, ...patch }],
+            },
+          },
+        },
+      },
+    }
+    assert.throws(
+      () => decodeServerGameMessage(encodeGameMessage(malformed)),
+      GameProtocolError,
+      label,
+    )
+  }
   const feedbackWelcome = {
     ...welcome,
     snapshot: {
