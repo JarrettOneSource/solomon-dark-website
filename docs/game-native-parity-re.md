@@ -37325,8 +37325,46 @@ record domains, formulas, lifetimes, and ownership are extractable and exact.
 At 2026-08-23 20:12 EDT the owner explicitly authorized fast-forward
 publication to both `main` branches. Deployment was not requested and remains
 a separate operation. The focused changes are rebased onto Website
-`ee7f8d44a1896b21bbdd7ce53cc1dbde5557c6bb` and Mod Loader
-`e104ba4689f284dd8f3e8e06bbfda8943df36fa9`; the upstream Hagatha system owns
-protocol 64, so this enemy presentation schema is protocol 65. The required
-latest-base Mac static, canonical Website, and Chrome/WebGL revalidation is
-pending before commit and push.
+`03af48750e7252725f500b80ab98be543fb62d7f` and Mod Loader
+`b1690ebef380ca1f56424b9ecf29c533cac9866e`. Upstream Hagatha owns protocol
+64 and the durable-save lifecycle owns protocol 65, so the combined enemy
+presentation schema is protocol 66. The focused candidates before this receipt
+are Website `e4c613a30a02745b4e98ea237e9beac9fd2b944c` and Mod Loader
+`d57eadd19c66d0e2dfd5a0f134fdac6e751b62f5`.
+
+The owner explicitly directed that publication revalidation run natively on
+this physical Windows computer outside WSL instead of waiting for the Mac mini.
+Git for Windows and native Git Bash/PowerShell ran Node `22.17.0`, pinned npm
+`10.9.2`, Python `3.13.5`, and task-local .NET SDK `10.0.302` against detached
+LF worktrees of those exact commits.
+
+- The native Windows Mod Loader static RE suite passed `496/496`; log SHA-256
+  `6271b6c00aa655157dbae5a1c5ed3f695f2763e4db012b4bc36e0caff6dcda0a`.
+- The complete native Windows Website gate passed backend build with zero
+  warnings/errors, 17 backend/contracts, lint with zero errors and the eight
+  existing warnings, architecture checks, frontend suites
+  `9/4/45/255/1444/6/61/9/49/12/7/36/26`, desktop `5/5`, production build,
+  bundle budget, and media policy. `Game-93B8BJDO.js` was `443784` raw /
+  `125007` gzip bytes under `524288` / `131072`; gate-log SHA-256
+  `17b771b7d26a52a4693233fa6e07968328b48efe0dc8fa479d197026df848445`.
+  One prior run's desktop fetch hit a same-process Windows loopback
+  `ETIMEDOUT` while another native test workload was active; the unchanged old
+  tree reproduced it, native PowerShell and ten isolated reruns passed, and the
+  final clean canonical run passed. No product source changed for that host
+  artifact.
+- Native Windows Chrome selected Pixi WebGL2 and retained all eight enemy
+  families, eight projectiles, nine projectile effects, and exactly the
+  `[pre-world-queue, world-sorted, post-world-queue]` auxiliary lanes. The
+  controlled Imp edge remained `action=null`, `phase=flight`, dealt one damage,
+  emitted `imp-vocal-4`, `bite-2`, then the attack marker, rerolled speed to
+  `10.022587699466385`, turned to `93.8615826156456`, and rendered its two
+  independent children. The reviewed contact crop changed 6,373 pixels /
+  909,551 channel units. Page, console, and failed-response arrays were empty.
+  Smoke-log SHA-256 is
+  `26684248b2ff5c1c3cf0dd017facf5595c779d21eb822aef3437e49ddde9e14b`;
+  reviewed compositor/contact image SHA-256 values are
+  `d64aec0df5730aa544dd2287ff333d39c0dfce20317e16c1ffc209a147df9baa`
+  and `b6139cd6f8f80700e07a9adaa4fdc4604f36e98a30a00c21fc88cc0ec19cb37d`.
+
+This latest-base receipt supersedes the earlier publication proof. No
+deployment was requested or performed.
