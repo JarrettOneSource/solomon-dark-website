@@ -39570,5 +39570,58 @@ does not claim pixel identity for non-default FOVs.
 
 ### Implementation validation receipt
 
-- Pending implementation, exact-tree Mac validation, browser acceptance,
-  publication, deployment observation, and post-deploy log verification.
+- The Boneyard world now supplies one complete offscreen policy context to the
+  existing placement owner. Its stock 1600x900/1.35 view is clamped per living
+  player; a candidate must be outside every view, with active-bounds center as
+  the no-player fallback. Direct/dark/light behavior, native ring/RNG order,
+  collision mobility, generated combat confinement, and impossible-world
+  errors remain unchanged.
+- The full Boneyard snapshot allowlist now admits its already-declared
+  `itemContentId`; all existing decimal, kind, native type/subtype, compact
+  descriptor, catalog, unknown-key, pickup, and teardown checks remain strict.
+- Shared-Hub welcomes now issue random 256-bit resume tokens. The browser
+  stores the rotated token only in same-tab `sessionStorage` and supplies it
+  with a saved resume. A matching live-owner reconnect replaces only the old
+  socket/client baseline and preserves the newer player/party/run state. A
+  wrong or absent token still rejects, and the superseded close cannot remove
+  the replacement player. Close code 4002 gives the old tab the explicit
+  `This wizard resumed in another browser tab.` explanation.
+- The final behavioral red Mac run compiled against untouched production
+  owners and failed exactly four new cases while the other 1,475 broad game
+  tests passed: strict offscreen view geometry, world-level Tutorial placement,
+  full-snapshot mod Sack parsing, and live Tutorial transport replacement.
+  All four pass after the implementation, alongside the compact loot and
+  invalid-token matrices.
+- Exact code candidate `3b6f30a3e4e738b4bf3b5cd564e893fdf7221395`, tree
+  `16c81a6158973cf3b86f54125df3603fd91a469d`, was byte-identical across the
+  local and Mac 19-file manifests. Apple arm64 macOS 26.6.2 used Node 22.17.0,
+  npm 10.9.2, .NET 10.0.302, and Chrome 151.0.7922.170. The complete supported
+  Mac gate passed: 22 backend/repository contracts; frontend groups
+  `9/4/45/264/1480/6/77/9/63/12/14/7/36/33`; five desktop tests; formatting,
+  lint and architecture fences; production frontend/GameHost builds; media
+  policy; and bundle budget (`458,583` raw / `128,659` gzip). Log SHA-256 is
+  `ee19a86e1f1e3c517f4422bd4c0b2cf462514b72467bac29279491c519bdea2e`.
+- Real Mac Chrome/WebGL acceptance materialized one policy-2 Skeleton at
+  `(1193.74169921875,558.2372436523438)`, radius
+  `17.563040409237146`, outside both participant views, exposed it to both
+  browser snapshot timelines, and retired it cleanly. The same run admitted a
+  third browser while content-identified Sack `8068156596081641415` was live,
+  rendered the registered ground frame from its full welcome, then proved
+  pickup, inventory, consume, mana/damage filters, and owner-only effect on two
+  WebGL2 clients. Page, console, failed-response, and host-error arrays were
+  empty; log SHA-256 is
+  `6bd05ee0a8092e710b4adbeda0493753c8279b836e14d69bfa1a3154045d6c30`.
+  Offscreen and late-join captures hash to
+  `bac80f1a7be3f1fc47c8f8793cf028207619dd57fb329215944f591b27c15cad`
+  and `df65f01637179a5a3e3057c65787b9b221afee056cb328b861c10c0809ffca5a`.
+- A separate built-site global-Hub Chrome journey kept tab A live, copied only
+  its tab-scoped token into tab B, and resumed the same save. Both welcomes had
+  player ID `player-iDeeh-sR5XYTBvdI`; occupancy remained one, the second
+  connection logged `replacedConnection=true`, and tab A received the expected
+  replacement explanation. No unexpected console, page, or network error
+  remained. Log SHA-256 is
+  `be7fe6a58d990be2b7787d5319f2217936470385075877994f98302898f607b4`.
+- No native report changed because this closure discovered no new retail fact;
+  it corrected three Website ownership handoffs against the already complete
+  native records. Publication, automatic deployment observation, and final
+  production log verification remain pending and are reported separately.
