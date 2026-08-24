@@ -41483,9 +41483,11 @@ and narration remain unchanged except for dispositioning stage-2 lifetime.
 | Retail identity | `SolomonDarkAbandonware/SolomonDark.exe`, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred image base `0x00400000` | Identity matches the canonical analyzed 0.72.5 image. No stale PID, runtime address, or injected-loader observation is used. | high |
 | Raw instructions | read-only canonical Ghidra replica through `Invoke-GhidraHeadless.ps1`; `0x005EB290`, especially `0x005EB2A3..0x005EB2C9` and `0x005EB580..0x005EB5AB`; constants `0x007DE840=0.0` and `0x00786C10=175.0` as doubles | The painter adds zero to renderer X and subtracts 175 from renderer Y before both BadGuys-10 cloud glyphs, then restores both globals. The prior web model omitted this enclosing transform. | high |
 | Instructions and queue ownership | `AcidRain +0x0C -> 0x005E3600`; `PuppetPointer 0x0064E910`; delegate `0x0063ED70`; sorted insert `0x0068C0F0`; Arena auxiliary calls around `0x0046F8F9` and shared queue flush `0x0046FDAF`; tick tail `0x00605461..0x006054B3` | Positive cloud alpha creates a proxy at actor root with proxy Y `rootY+350`; its draw delegates to Acid slot `+0x24`. Sorted insertion compares object `+0x1C`. Slot `+0x28 -> 0x005EB1D0` is a direct pre-flush ground pass, not part of that proxy. The tick tail scales the shared rainfall maximum and provider enrollment from cloud alpha `+0x144`, not residue alpha `+0x158`. | high |
+| Combat-query instructions | `0x006052A1..0x006052D6`; float `0x00787110=400.0`; Region wrapper `0x00642280`; double `0x007DE808=0.5`; spatial query `0x00523140` | The pulse supplies width 400 at the aimed ground root with hostile mask 2. The wrapper halves that width; the spatial query accepts strict root-center `dx^2+dy^2 < 200^2` and does not add body radius. Type `0xBB9` Coffin is excluded. | high |
 | Full class/membership sweep | `AcidRain::vftable 0x0079CF9C`; `Anim_AcidRaindrop::vftable 0x0079DCA0`; constructor/tick/draw `0x005E3540/0x00604E90/0x004541A0/0x00459130`; all four vtable xrefs; sibling `RainOfBones::vftable 0x0079D06C` | Acid Rain has no additional vtable installer or hidden authored row. `RainOfBones` calls the Acid constructor only as a base initializer, then replaces type, tick, render registration, painter, and light callbacks. | high |
 | Asset/data | BadGuys records `0` and `10`; compiled floats in `0x005EB1D0/0x005EB290`; existing exact extracted atlas records | Both cloud glyphs and the ground residue use record 10 with separate tint/blend/alpha programs. Drop head/ground use record 0. No browser-generated substitute is required. | high |
 | Current web causal trace | clean `origin/main` `4021fce5bfe65e8d3201b7d33db148a6cf60f56b`; `native-secondary-abilities.ts`, `native-secondary-presentation.ts`, `native-secondary-world-view.ts`, `boneyard-world-renderer.ts`, focused presentation tests | Host state and protocol retain parent/drop/splash members. The presenter places the first parent glyph at local Y `0`, the second at `-50*s`, and residue at `0`; one `NativeSecondaryActorView` gives all three one world-sorted depth. | high |
+| Current web combat trace | `native-secondary-abilities.ts` `candidates(actor,400)`; `game-simulation.ts`; `boneyardNativeSecondaryTargets` | The host treats 400 as a radius and admits root distance `<=400+bodyRadius`, producing an over-wide, body-expanded footprint instead of the native strict radius-200 root query. | high |
 
 ### System boundary and membership inventory
 
@@ -41510,7 +41512,7 @@ exact candidate passes Mac validation and browser acceptance.
 | one-in-four splash and five-draw RNG suffix | `0x00604E90`; generic fade/move perspective child | verified-already-at-parity | existing RNG/state/presenter assertions |
 | provider light | slot `+0x30 -> 0x005EB5C0`; enrollment at tick tail | exact-ported | radius 2, intensity `0.5*cloudAlpha`, no shadow, no residue-only source; stable actor-manager registration remains until teardown |
 | cast, damage-pulse, and ambient audio | `magicstorm`, pitched `acidsizzle`, shared `rainfall__loop` | exact-ported | damage-only sizzle; rain gain equals cloud alpha and stops before residue-only ownership |
-| target query, shuffle, direct-damage subset, and authority | `0x00604E90`; `0x005E41F0`; 400-wide query | verified-already-at-parity | existing host target-count/damage/RNG assertions |
+| target query, shuffle, direct-damage subset, and authority | `0x006052A1..0x006052D6`; `0x00642280`; `0x00523140`; `0x005E41F0` | correction-required | strict radius-200 root-center boundary, exact-edge rejection, no body-radius expansion, stable shuffle, and `floor(n/3)+1` damage assertions |
 | snapshot decode and peer materialization | protocol secondary actor union; parent/drop/splash rows | verified-already-at-parity | round-trip tests and browser actor-kind/count receipt |
 | Tutorial and ordinary Boneyard consumers | shared skill-72 actor family | exact-ported | one renderer path; real Tutorial cast plus ordinary fixture journey |
 | interruption, world reset, owner removal, reconnect, and terminal residue retirement | Region/Website world-owner teardown | verified-already-at-parity | existing reset/remove tests plus zero retained views after browser teardown |
@@ -41529,6 +41531,10 @@ There are no browser-platform-blocked members and no extractable unknowns.
   `+0x24` temporarily changes renderer translation by `(0,-175)` for both cloud
   glyphs. The first remains exactly at that translated root; the second adds
   its own `-50*s` local offset.
+- Damage also stays at that ground aim. The native query's supplied width 400
+  becomes a strict radius-200 circle over actor roots. The overhead cloud proxy
+  does not move combat upward, exact distance 200 is outside, and collision
+  radii do not extend the attack area.
 - Cloud pixels and their painter key are deliberately different. The
   `PuppetPointer` copies the ground root, adds 350 to proxy Y, and delegates
   only slot `+0x24`. The Website needs one world-sorted cloud proxy at
@@ -41563,7 +41569,11 @@ There are no browser-platform-blocked members and no extractable unknowns.
 
 ### Web implementation consequence
 
-- Keep gameplay state, protocol rows, assets, RNG, and audio unchanged.
+- Keep protocol rows, assets, RNG, and audio unchanged.
+- Replace Acid Rain's radius-400/body-overlap candidate set with an Acid-owned
+  strict root-center radius-200 filter at the aimed ground point. Preserve the
+  existing stable candidate order, fixed-bound shuffle, pulse clocks, and
+  `floor(n/3)+1` damage subset.
 - In `native-secondary-presentation.ts`, separate the Acid parent into two
   overhead cloud draws and one ground-underlay draw. Apply exact local Y values
   `-175` and `-175-50*s`; rename roles so tests cannot repeat the ground/cloud
@@ -41590,6 +41600,9 @@ There are no browser-platform-blocked members and no extractable unknowns.
   physical lanes/depths, primitive counts, cloud-alpha light/provider/audio
   lifetime, protocol shape, teardown, and ordinary/enhanced drop/splash
   membership. Re-run all Storm sibling assertions unchanged.
+- Host combat: assert the query requests radius 200 at the aimed ground root;
+  roots immediately inside are eligible, exact radius 200 and immediately
+  outside are rejected, and a large body radius never extends membership.
 - Native Windows Website gate through Git Bash against a manifest-identical
   isolated candidate, plus the focused Acid Rain contract and production build.
 - Windows Chrome built-candidate journey: cast Acid Rain in the Tutorial and an
@@ -41600,6 +41613,9 @@ There are no browser-platform-blocked members and no extractable unknowns.
   ground aim beneath the world queue, and no Storm presentation regression.
 
 ### Implementation validation receipt
+
+- Attack-area correction is pending. The current host still uses a radius-400,
+  body-expanded query and must not be called native-exact for combat geometry.
 
 - The presenter now gives Acid Rain two physical owners. Its world-sorted
   `PuppetPointer` plan keeps the native `rootY+350` queue key and zero bias while
