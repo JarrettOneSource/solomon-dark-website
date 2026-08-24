@@ -168,6 +168,17 @@ export type ConnectedGamePlayer = ConnectedGamePlayerBase & (
   | { activity: 'boneyard'; boneyardName: string; waveNumber: number }
 )
 
+export interface DeveloperGameMatch {
+  readonly boneyardName: string
+  readonly id: string
+  readonly partyLeader: string
+  readonly playerCount: number
+  readonly players: readonly string[]
+  readonly session: 'global-hub' | 'private-college'
+  readonly visibility: 'invite-only' | 'private' | 'public'
+  readonly waveNumber: number
+}
+
 export interface GameContentAsset {
   byteLength: number
   modId: string
@@ -413,6 +424,10 @@ export const api = {
 
   gamePlayers: {
     list: () => request<{ items: ConnectedGamePlayer[] }>('/api/game/players'),
+  },
+
+  gameMatches: {
+    list: () => request<{ items: DeveloperGameMatch[] }>('/api/game/matches'),
   },
 
   gameParties: {

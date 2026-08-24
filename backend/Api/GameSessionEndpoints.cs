@@ -12,6 +12,9 @@ public static class GameSessionEndpoints
     {
         app.MapGet("/api/game/parties", ListPublicPartiesAsync);
         app.MapGet("/api/game/players", ListConnectedPlayersAsync);
+        app.MapGet("/api/game/matches", ListActiveMatchesAsync);
+        app.MapPost("/api/game/observe", ObserveMatchAsync)
+            .RequireRateLimiting("game-observers");
         app.MapPost("/api/game/sessions", ProvisionAsync)
             .RequireRateLimiting("game-sessions");
         app.MapPost("/api/game/hub", EnterHubAsync)
@@ -82,6 +85,84 @@ public static class GameSessionEndpoints
             context.Response.Headers.RetryAfter = "5";
             return Results.Json(
                 new { error = "The connected player directory is not available right now." },
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+    }
+
+    private static async Task<IResult> ListActiveMatchesAsync(
+        HttpContext context,
+        GameSessionProvisioner provisioner,
+        DeveloperAccessPolicy developerAccess,
+        ILogger<GameSessionProvisioner> logger,
+        CancellationToken cancellationToken)
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        if (!developerAccess.Allows(TokenService.GetUserId(context.User)))
+        {
+            return Results.NotFound();
+        }
+        try
+        {
+            return Results.Ok(new
+            {
+                items = await provisioner.ListActiveMatchesAsync(cancellationToken)
+            });
+        }
+        catch (Exception exception) when (exception is
+            GameSessionUnavailableException or HttpRequestException or OperationCanceledException)
+        {
+            logger.LogWarning(exception, "The active match directory could not be read.");
+            context.Response.Headers.RetryAfter = "5";
+            return Results.Json(
+                new { error = "The active match directory is not available right now." },
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+    }
+
+    private static async Task<IResult> ObserveMatchAsync(
+        ObserveMatchRequest request,
+        HttpContext context,
+        GameSessionProvisioner provisioner,
+        DeveloperAccessPolicy developerAccess,
+        CancellationToken cancellationToken)
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        var userId = TokenService.GetUserId(context.User);
+        if (!developerAccess.Allows(userId) || userId is null)
+        {
+            return Results.NotFound();
+        }
+        var matchId = request.MatchId?.Trim() ?? string.Empty;
+        if (matchId.Length is < 8 or > 256 || matchId.Any(character =>
+                !char.IsAsciiLetterOrDigit(character) && character is not ('_' or '-')))
+        {
+            return ApiErrors.BadRequest("Choose a valid active match to observe.");
+        }
+        try
+        {
+            var endpoint = await provisioner.ObserveMatchAsync(
+                matchId,
+                userId.Value,
+                context.User.Identity?.Name ?? $"developer-{userId.Value}",
+                cancellationToken);
+            return Results.Created("/api/game/observe", new
+            {
+                kind = "remote",
+                observer = true,
+                endpoint.Url,
+                endpoint.Credential,
+                endpoint.SessionKind
+            });
+        }
+        catch (GamePartyJoinException exception)
+        {
+            return PartyError(exception);
+        }
+        catch (Exception exception) when (exception is
+            GameSessionUnavailableException or HttpRequestException or OperationCanceledException)
+        {
+            return Results.Json(
+                new { error = "That match is not available to observe right now." },
                 statusCode: StatusCodes.Status503ServiceUnavailable);
         }
     }
@@ -345,4 +426,5 @@ public static class GameSessionEndpoints
         string? DisplayName,
         string? RequesterId);
     public sealed record AdmitPartyJoinRequest(string? IntentId);
+    public sealed record ObserveMatchRequest(string? MatchId);
 }

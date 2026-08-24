@@ -331,7 +331,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 68
+export const GAME_PROTOCOL_VERSION = 69
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -453,6 +453,12 @@ export interface ClientHelloMessage {
   resumeToken?: string
   save?: string
   saveIntent?: GameSaveIntent
+}
+
+export interface ClientObserverHelloMessage {
+  readonly credential: string
+  readonly protocolVersion: number
+  readonly type: 'client-observer-hello'
 }
 
 export interface ClientInputMessage {
@@ -629,6 +635,7 @@ export type ClientGameMessage =
   | ClientInputMessage
   | ClientLevelUpActionMessage
   | ClientLuaExecuteMessage
+  | ClientObserverHelloMessage
   | ClientPartyAcceptMessage
   | ClientPartyDenyMessage
   | ClientPartyInviteMessage
@@ -665,6 +672,7 @@ export interface ServerWelcomeMessage {
   modCatalog: readonly ModConsumableCatalogEntry[]
   boneyards: readonly BoneyardChoice[]
   gameplayPause: GameplayPauseState | null
+  observer?: boolean
   snapshot: GameSnapshot
   snapshotSequence: number
 }
@@ -840,6 +848,14 @@ export function encodeGameMessage(message: ClientGameMessage | ServerGameMessage
 
 export function decodeClientGameMessage(payload: string): ClientGameMessage {
   const value = parseObject(payload)
+  if (value.type === 'client-observer-hello') {
+    onlyKeys(value, 'message', ['type', 'credential', 'protocolVersion'])
+    return {
+      type: 'client-observer-hello',
+      credential: limitedString(value.credential, 'credential', 512),
+      protocolVersion: integer(value.protocolVersion, 'protocolVersion'),
+    }
+  }
   if (value.type === 'client-hello') {
     onlyKeys(value, 'message', [
       'type',
@@ -1154,6 +1170,7 @@ export function decodeServerGameMessage(payload: string): ServerGameMessage {
       'modCatalog',
       'boneyards',
       'gameplayPause',
+      'observer',
       'snapshot',
       'snapshotSequence',
     ])
@@ -1180,6 +1197,9 @@ export function decodeServerGameMessage(payload: string): ServerGameMessage {
       modCatalog: modConsumableCatalog(value.modCatalog, 'modCatalog'),
       boneyards: boneyardChoices(value.boneyards),
       gameplayPause,
+      ...(value.observer === undefined
+        ? {}
+        : { observer: boolean(value.observer, 'observer') }),
       snapshot,
       snapshotSequence: nonnegativeInteger(value.snapshotSequence, 'snapshotSequence'),
     }

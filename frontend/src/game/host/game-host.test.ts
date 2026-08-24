@@ -190,6 +190,144 @@ test('snapshot compression is bounded and skips sub-kilobyte control messages', 
   })
 })
 
+test('developer observer watches one private run without joining or mutating participant state', async (context) => {
+  let observedRunId: string | null = null
+  const runtimeEvents: GameServerLogEntry[] = []
+  const host = await startGameHost({
+    authentication: {
+      kind: 'tickets',
+      claim: credential => credential === 'observer-ticket' && observedRunId
+        ? {
+            content: EMPTY_SHARED_CONTENT,
+            developerAccess: true,
+            leaderboardUserId: null,
+            observer: {
+              runId: observedRunId,
+              userId: 7,
+              username: 'developer',
+            },
+          }
+        : credential.startsWith('ticket-')
+          ? { content: EMPTY_SHARED_CONTENT, leaderboardUserId: null }
+          : null,
+    },
+    runtimeEvents: entry => runtimeEvents.push({
+      ...entry,
+      atUtc: entry.occurredAtUtc ?? new Date().toISOString(),
+      level: 'info',
+      component: 'game-host',
+    }),
+    sessionKind: 'global-hub',
+    sharedHub: true,
+    snapshotRate: 100,
+  })
+  context.after(() => host.close())
+  const leader = await join(host.address.url, 'ticket-leader', FIRST_CHARACTER)
+  const guest = await join(host.address.url, 'ticket-guest', SECOND_CHARACTER)
+  context.after(() => closeSocket(leader.socket))
+  context.after(() => closeSocket(guest.socket))
+
+  const invited = nextMessage(guest.socket, message => (
+    message.type === 'server-party-state' && message.state.invitations.length === 1
+  ))
+  leader.socket.send(encodeGameMessage({
+    type: 'client-party-invite',
+    targetPlayerId: guest.welcome.playerId,
+  }))
+  const invitation = await invited
+  if (invitation.type !== 'server-party-state') throw new Error('expected invitation')
+  const grouped = nextMessage(leader.socket, message => (
+    message.type === 'server-party-state' && message.state.party.memberPlayerIds.length === 2
+  ))
+  guest.socket.send(encodeGameMessage({
+    type: 'client-party-accept',
+    invitationId: invitation.state.invitations[0]!.id,
+  }))
+  await grouped
+  const loaded = nextMessage(leader.socket, message => message.type === 'server-boneyard-loaded')
+  leader.socket.send(encodeGameMessage({
+    type: 'client-start-match',
+    boneyardId: 'default-random',
+  }))
+  const boneyard = await loaded
+  if (boneyard.type !== 'server-boneyard-loaded') throw new Error('expected Boneyard')
+  observedRunId = boneyard.boneyard.runId
+  assert.equal(host.observationTargets().length, 1)
+  assert.equal(host.observationTargets()[0]?.visibility, 'private')
+
+  // Let the match transition finish publishing its own party state before the
+  // observer admission becomes the event under test.
+  await new Promise(resolve => setTimeout(resolve, 30))
+  let playerFacingObserverCueCount = 0
+  const countPlayerFacingCue = (payload: WebSocket.RawData) => {
+    const message = decodeServerGameMessage(payload.toString())
+    if (message.type === 'server-party-state') playerFacingObserverCueCount += 1
+  }
+  leader.socket.on('message', countPlayerFacingCue)
+  guest.socket.on('message', countPlayerFacingCue)
+  const observerSocket = await openSocket(host.address.url)
+  context.after(() => closeSocket(observerSocket))
+  const observerWelcome = nextMessage(observerSocket, message => message.type === 'server-welcome')
+  observerSocket.send(encodeGameMessage({
+    type: 'client-observer-hello',
+    credential: 'observer-ticket',
+    protocolVersion: GAME_PROTOCOL_VERSION,
+  }))
+  const welcome = await observerWelcome
+  assert.equal(welcome.type, 'server-welcome')
+  assert.equal(welcome.observer, true)
+  assert.equal(Object.keys(welcome.snapshot.players).length, 2)
+  assert.equal(welcome.snapshot.levelUpBarrier?.pendingPlayerIds.includes(welcome.resumeToken) ?? false, false)
+  assert.equal(host.playerCount(), 2)
+  assert.equal(host.presence().length, 2)
+  await new Promise(resolve => setTimeout(resolve, 30))
+  assert.equal(playerFacingObserverCueCount, 0)
+
+  const observedChat = nextMessage(observerSocket, message => (
+    message.type === 'server-chat' && message.text === 'Hidden observer copy'
+  ))
+  leader.socket.send(encodeGameMessage({
+    type: 'client-chat',
+    channel: 'party',
+    text: 'Hidden observer copy',
+  }))
+  const chat = await observedChat
+  assert.equal(chat.type, 'server-chat')
+  assert.equal(chat.sender.playerId, leader.welcome.playerId)
+
+  const observedWhisper = nextMessage(observerSocket, message => (
+    message.type === 'server-chat' && message.text === 'Private observer copy'
+  ))
+  leader.socket.send(encodeGameMessage({
+    type: 'client-chat',
+    channel: 'whisper',
+    targetPlayerId: guest.welcome.playerId,
+    text: 'Private observer copy',
+  }))
+  const whisper = await observedWhisper
+  assert.equal(whisper.type, 'server-chat')
+  assert.equal(whisper.channel, 'whisper')
+  assert.equal(whisper.recipient?.playerId, guest.welcome.playerId)
+
+  const rejected = nextMessage(observerSocket, message => message.type === 'server-disconnect')
+  observerSocket.send(encodeGameMessage({
+    type: 'client-input',
+    input: gameplayInput({ x: 1, y: 0 }),
+    sequence: 1,
+    targetTick: welcome.snapshot.tick + 1,
+  }))
+  assert.deepEqual(await rejected, {
+    type: 'server-disconnect',
+    code: 'invalid-message',
+    reason: 'Observer connections are read-only.',
+  })
+  await waitFor(() => runtimeEvents.some(entry => entry.event === 'observer.disconnected'))
+  assert.equal(host.playerCount(), 2)
+  assert.equal(host.presence().length, 2)
+  leader.socket.off('message', countPlayerFacingCue)
+  guest.socket.off('message', countPlayerFacingCue)
+})
+
 function gameplayInput(
   movement: { x: number; y: number },
   aim: { x: number; y: number } | null = null,

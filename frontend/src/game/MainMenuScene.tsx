@@ -18,6 +18,7 @@ import JoinPartyScene from './JoinPartyScene.tsx'
 import ModdedPlayDialog from './ModdedPlayDialog.tsx'
 import PartyJoinConsentDialog from './PartyJoinConsentDialog.tsx'
 import type { GameClientSession } from './client/game-client-session.ts'
+import type { GameObserverSession } from './client/game-observer-session.ts'
 import type {
   PlayerCharacterConfig,
   WizardDiscipline,
@@ -138,6 +139,7 @@ import './main-menu.css'
 
 const BoneyardScene = lazy(() => import('./BoneyardScene.tsx'))
 const HubScene = lazy(() => import('./HubScene.tsx'))
+const DeveloperObserverScene = lazy(() => import('./DeveloperObserverScene.tsx'))
 const loadSkillPicker = () => import('./SkillPicker.tsx')
 const SkillPicker = lazy(loadSkillPicker)
 const loadSkillBook = () => import('./SkillBook.tsx')
@@ -153,7 +155,7 @@ const DARK_CLOUD_PAUSE: GameplayPauseState = {
   source: 'pause-menu',
 }
 
-type MenuScreen = 'root' | 'play' | 'join-party' | 'dark-cloud' | 'hall' | 'create' | 'hub'
+type MenuScreen = 'root' | 'play' | 'join-party' | 'dark-cloud' | 'hall' | 'create' | 'hub' | 'observer'
 type FadeState = 'idle' | 'covering' | 'revealing'
 
 interface MenuButtonProps {
@@ -305,6 +307,10 @@ interface MainMenuSceneProps {
     saveIntent?: GameSaveIntent,
     allowModMismatch?: boolean,
   ) => Promise<GameClientSession>
+  connectObserver: (
+    matchId: string,
+    onEnded: () => void,
+  ) => Promise<GameObserverSession>
   developerAccess: boolean
   initialScreen?: 'create' | 'root'
   loadGlobalHallOfFame: (board: HallOfFameBoard) => Promise<readonly HallOfFameEntry[]>
@@ -324,6 +330,7 @@ export default function MainMenuScene({
   activeMods,
   accountUsername,
   connectSession,
+  connectObserver,
   developerAccess,
   displayName,
   initialScreen = 'root',
@@ -349,6 +356,7 @@ export default function MainMenuScene({
   const [fadeState, setFadeState] = useState<FadeState>('idle')
   const [fadeTarget, setFadeTarget] = useState<MenuScreen | null>(null)
   const [session, setSession] = useState<GameClientSession | null>(null)
+  const [observerSession, setObserverSession] = useState<GameObserverSession | null>(null)
   const [runtimeSnapshot, setRuntimeSnapshot] = useState<GameSnapshot | null>(null)
   const [runtimeProgression, setRuntimeProgression] = useState<ProtocolPlayerProgression | null>(null)
   const [runtimeRunPhase, setRuntimeRunPhase] = useState<GameRunPhase>('hub')
@@ -540,6 +548,7 @@ export default function MainMenuScene({
   }, [])
 
   useEffect(() => () => session?.destroy(), [session])
+  useEffect(() => () => observerSession?.close(), [observerSession])
 
   useEffect(() => {
     const unlock = () => audio.unlock()
@@ -938,6 +947,38 @@ export default function MainMenuScene({
       return
     }
     setPartyConsent(resolution)
+  }
+
+  const observeMatch = async (matchId: string) => {
+    if (observerSession || connecting) return
+    setConnecting(true)
+    setConnectionError(null)
+    let nextObserver: GameObserverSession | null = null
+    let targetEnded = false
+    try {
+      nextObserver = await connectObserver(matchId, () => {
+        targetEnded = true
+        setObserverSession(current => current === nextObserver ? null : current)
+        setScreen('dark-cloud')
+        setConnectionError('The observed match ended.')
+      })
+      await prefetchGameContent(nextObserver.modAssets, setContentProgress)
+      if (targetEnded) throw new Error('The observed match ended.')
+      setObserverSession(nextObserver)
+      setScreen('observer')
+    } catch (error) {
+      nextObserver?.close()
+      throw error instanceof Error ? error : new Error('The match could not be observed.')
+    } finally {
+      setConnecting(false)
+    }
+  }
+
+  const exitObserver = () => {
+    observerSession?.close()
+    setObserverSession(null)
+    setContentProgress(null)
+    setScreen('dark-cloud')
   }
 
   const continueParty = async () => {
@@ -1370,6 +1411,7 @@ export default function MainMenuScene({
                 menuKeyCode={gameSettings.controls.openMenu}
                 menuOpen={darkCloudMenuOpen || settingsContext !== null}
                 onMenu={openDarkCloudMenu}
+                onObserveMatch={observeMatch}
                 onPartyResolved={resolveParty}
                 requesterDisplayName={partyRequesterName}
                 onSubscriptionsChanged={refreshActiveMods}
@@ -1393,6 +1435,17 @@ export default function MainMenuScene({
               />
             ) : null}
           </>
+        ) : screen === 'observer' && observerSession ? (
+          <Suspense fallback={null}>
+            <DeveloperObserverScene
+              accountUsername={accountUsername}
+              audio={audio}
+              nativeUiStageStyle={nativeStageStyle}
+              onExit={exitObserver}
+              session={observerSession}
+              settings={gameSettings}
+            />
+          </Suspense>
         ) : screen === 'join-party' ? (
           <JoinPartyScene
             onBack={() => transitionTo('play')}

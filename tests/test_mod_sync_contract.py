@@ -186,6 +186,20 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             }
         ]
         cls.presence_requests = 0
+        cls.match_requests = 0
+        cls.observer_requests: list[dict[str, object]] = []
+        cls.match_items = [
+            {
+                "id": "match-safe-observer-7",
+                "session": "global-hub",
+                "boneyardName": "The Survival Grounds",
+                "waveNumber": 5,
+                "visibility": "private",
+                "partyLeader": "Hagatha",
+                "playerCount": 2,
+                "players": ["Hagatha", "Luthacus"],
+            }
+        ]
         cls.presence_items = [
             {
                 "displayName": "Hagatha",
@@ -226,6 +240,24 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             def authorized(self) -> bool:
                 return self.headers.get("Authorization") == f"Bearer {secret}"
 
+            def read_json_body(self) -> object:
+                length = int(self.headers.get("Content-Length", "0"))
+                if length > 0:
+                    return json.loads(self.rfile.read(length))
+                if self.headers.get("Transfer-Encoding", "").lower() != "chunked":
+                    raise ValueError("request body is empty")
+                chunks = bytearray()
+                while True:
+                    size_line = self.rfile.readline().strip()
+                    size = int(size_line.split(b";", 1)[0], 16)
+                    if size == 0:
+                        while self.rfile.readline().strip():
+                            pass
+                        break
+                    chunks.extend(self.rfile.read(size))
+                    self.rfile.read(2)
+                return json.loads(chunks)
+
             def do_GET(self) -> None:
                 if not self.authorized():
                     self.reply(401, {"error": "Unauthorized."})
@@ -236,6 +268,9 @@ class WebsiteModSyncContractTests(unittest.TestCase):
                 elif self.path == "/admin/presence":
                     cls.presence_requests += 1
                     self.reply(200, {"items": cls.presence_items})
+                elif self.path == "/admin/matches":
+                    cls.match_requests += 1
+                    self.reply(200, {"items": cls.match_items})
                 elif self.path == "/admin/join/requests/request-token-01234567890123456789":
                     self.reply(200, {"status": "pending", "intentId": None, "target": None})
                 else:
@@ -246,7 +281,15 @@ class WebsiteModSyncContractTests(unittest.TestCase):
                     self.reply(401, {"error": "Unauthorized."})
                     return
                 empty_content = {"manifestSha256": "0" * 64, "mods": []}
-                if self.path == "/admin/join/resolve":
+                if self.path == "/admin/observers":
+                    body = self.read_json_body()
+                    cls.observer_requests.append(body)
+                    self.reply(201, {
+                        "credential": "observer-ticket",
+                        "path": "/game-hub",
+                        "sessionKind": "global-hub",
+                    })
+                elif self.path == "/admin/join/resolve":
                     self.reply(
                         201,
                         {
@@ -606,6 +649,53 @@ class WebsiteModSyncContractTests(unittest.TestCase):
                     )
         finally:
             test_class.presence_items = original
+
+    def test_active_match_observer_is_developer_only_and_includes_private_matches(self) -> None:
+        test_class = type(self)
+        baseline_match_reads = test_class.match_requests
+        baseline_observer_requests = len(test_class.observer_requests)
+        for label, headers in (
+            ("anonymous", {}),
+            ("non-developer", {"Authorization": f"Bearer {self.token}"}),
+        ):
+            with self.subTest(requester=label):
+                status, response = self.request("GET", "/api/game/matches", headers=headers)
+                self.assertEqual(status, 404)
+                self.assertNotIn("items", json.dumps(response))
+                status, response = self.request(
+                    "POST",
+                    "/api/game/observe",
+                    headers=headers,
+                    json_body={"matchId": "match-safe-observer-7"},
+                )
+                self.assertEqual(status, 404)
+                self.assertNotIn("credential", json.dumps(response))
+        self.assertEqual(test_class.match_requests, baseline_match_reads)
+        self.assertEqual(len(test_class.observer_requests), baseline_observer_requests)
+
+        developer_headers = {"Authorization": f"Bearer {self.dev_token}"}
+        status, directory = self.request(
+            "GET",
+            "/api/game/matches",
+            headers=developer_headers,
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(directory, {"items": test_class.match_items})
+        self.assertEqual(directory["items"][0]["visibility"], "private")
+        status, endpoint = self.request(
+            "POST",
+            "/api/game/observe",
+            headers=developer_headers,
+            json_body={"matchId": directory["items"][0]["id"]},
+        )
+        self.assertEqual(status, 201, endpoint)
+        self.assertTrue(endpoint["observer"])
+        self.assertEqual(endpoint["sessionKind"], "global-hub")
+        self.assertEqual(endpoint["credential"], "observer-ticket")
+        self.assertEqual(test_class.observer_requests[-1], {
+            "matchId": "match-safe-observer-7",
+            "observer": {"userId": 2, "username": "presencedev"},
+        })
 
     def test_party_join_control_plane_is_guest_capable_and_keeps_intents_in_memory(self) -> None:
         status, resolved = self.request(

@@ -1,26 +1,36 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { api, type ConnectedGamePlayer } from '../lib/api.ts'
+import {
+  api,
+  type ConnectedGamePlayer,
+  type DeveloperGameMatch,
+} from '../lib/api.ts'
 
 export interface ConnectedPlayersState {
   readonly error: string | null
   readonly loading: boolean
+  readonly matches: readonly DeveloperGameMatch[]
   readonly players: readonly ConnectedGamePlayer[]
   refresh(): Promise<void>
 }
 
-export function useConnectedPlayers(enabled: boolean): ConnectedPlayersState {
+export function useDeveloperPresence(enabled: boolean): ConnectedPlayersState {
   const generationRef = useRef(0)
   const [players, setPlayers] = useState<readonly ConnectedGamePlayer[]>([])
+  const [matches, setMatches] = useState<readonly DeveloperGameMatch[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(enabled)
   const refresh = useCallback(async () => {
     const generation = ++generationRef.current
     setLoading(true)
     try {
-      const result = await api.gamePlayers.list()
+      const [playerResult, matchResult] = await Promise.all([
+        api.gamePlayers.list(),
+        api.gameMatches.list(),
+      ])
       if (generation !== generationRef.current) return
-      setPlayers(result.items)
+      setPlayers(playerResult.items)
+      setMatches(matchResult.items)
       setError(null)
     } catch (error) {
       if (generation !== generationRef.current) return
@@ -43,7 +53,7 @@ export function useConnectedPlayers(enabled: boolean): ConnectedPlayersState {
     }
   }, [enabled, refresh])
 
-  return { error, loading, players, refresh }
+  return { error, loading, matches, players, refresh }
 }
 
 export function connectedPlayerPresentation(player: ConnectedGamePlayer): {

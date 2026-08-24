@@ -1,4 +1,4 @@
-import type { GameEndpoint } from './engine.ts'
+import type { GameEndpoint, GameObserverEndpoint } from './engine.ts'
 
 export type BrowserGameAdmission =
   | { readonly kind: 'global-hub' }
@@ -105,6 +105,37 @@ export async function admitPartyJoin(
   const payload = await readJson(response)
   if (!response.ok) throw new Error(apiError(payload, 'That party is not available right now.'))
   return decodeProvisionedGameEndpoint(payload)
+}
+
+export async function admitGameObserver(
+  matchId: string,
+  token: string | null,
+  request: typeof fetch = fetch,
+): Promise<GameObserverEndpoint> {
+  const headers = new Headers({
+    accept: 'application/json',
+    'content-type': 'application/json',
+  })
+  if (token) headers.set('authorization', `Bearer ${token}`)
+  const response = await request('/api/game/observe', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers,
+    body: JSON.stringify({ matchId }),
+  })
+  const payload = await readJson(response)
+  if (!response.ok) {
+    throw new Error(apiError(payload, 'That match is not available to observe right now.'))
+  }
+  return decodeObserverEndpoint(payload)
+}
+
+export function decodeObserverEndpoint(value: unknown): GameObserverEndpoint {
+  const endpoint = decodeProvisionedGameEndpoint(value)
+  if (!record(value) || value.observer !== true || endpoint.sessionKind === 'standalone') {
+    throw new Error('The game observer provisioner returned an invalid endpoint.')
+  }
+  return { ...endpoint, observer: true }
 }
 
 export function decodeProvisionedGameEndpoint(value: unknown): GameEndpoint {

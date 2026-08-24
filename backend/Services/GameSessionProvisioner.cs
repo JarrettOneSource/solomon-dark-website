@@ -267,6 +267,75 @@ public sealed partial class GameSessionProvisioner
         }
     }
 
+    public async Task<IReadOnlyList<DeveloperGameMatch>> ListActiveMatchesAsync(
+        CancellationToken cancellationToken)
+    {
+        EnsurePrivateSessionsConfigured();
+        using var request = CreateAdminRequest(HttpMethod.Get, "/admin/matches");
+        using var response = await httpClient.SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new GameSessionUnavailableException(
+                $"The game session supervisor returned {(int)response.StatusCode}.");
+        }
+        try
+        {
+            var directory = await response.Content.ReadFromJsonAsync<DeveloperGameMatchDirectory>(
+                    JsonOptions,
+                    cancellationToken)
+                ?? throw new JsonException("The response was empty.");
+            if (!ValidActiveMatchDirectory(directory.Items))
+            {
+                throw new JsonException("The active match directory was invalid.");
+            }
+            return directory.Items;
+        }
+        catch (JsonException exception)
+        {
+            throw new GameSessionUnavailableException(
+                "The game session supervisor returned an invalid active match directory.",
+                exception);
+        }
+    }
+
+    public async Task<ProvisionedGameEndpoint> ObserveMatchAsync(
+        string matchId,
+        int observerUserId,
+        string observerUsername,
+        CancellationToken cancellationToken)
+    {
+        EnsurePrivateSessionsConfigured();
+        using var request = CreateAdminRequest(HttpMethod.Post, "/admin/observers");
+        request.Content = JsonContent.Create(new
+        {
+            matchId,
+            observer = new { userId = observerUserId, username = observerUsername }
+        });
+        using var response = await httpClient.SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new GamePartyJoinException(
+                "That match is no longer available to observe.",
+                (int)response.StatusCode);
+        }
+        var provisioned = await ReadPrivateProvisionResponseAsync(response, cancellationToken);
+        return provisioned.SessionKind switch
+        {
+            "global-hub" => BuildEndpoint(
+                provisioned.Path,
+                provisioned.Credential,
+                "global-hub",
+                GameHubPath()),
+            "private-college" => BuildEndpoint(
+                provisioned.Path,
+                provisioned.Credential,
+                "private-college",
+                GameSessionPath()),
+            _ => throw new GameSessionUnavailableException(
+                "The game session supervisor returned an invalid observer endpoint.")
+        };
+    }
+
     private HttpRequestMessage CreateAdminRequest(HttpMethod method, string path)
     {
         var request = new HttpRequestMessage(method, new Uri(supervisorUrl!, path));
@@ -400,6 +469,24 @@ public sealed partial class GameSessionProvisioner
                     player.PartyLeader.Length <= 64 &&
                     player.PartySize is >= 2 and <= 64));
 
+    private static bool ValidActiveMatchDirectory(DeveloperGameMatch[]? items) =>
+        items is not null &&
+        items.Select(match => match.Id).Distinct(StringComparer.Ordinal).Count() == items.Length &&
+        items.All(match =>
+            ValidToken(match.Id) &&
+            match.Session is "global-hub" or "private-college" &&
+            !string.IsNullOrWhiteSpace(match.BoneyardName) &&
+            match.BoneyardName.Length <= 256 &&
+            match.WaveNumber is >= 0 and <= 100_000 &&
+            match.Visibility is "invite-only" or "private" or "public" &&
+            match.Players is { Length: >= 1 and <= 64 } &&
+            match.PlayerCount == match.Players.Length &&
+            match.Players.All(player =>
+                !string.IsNullOrWhiteSpace(player) && player.Length <= 64) &&
+            !string.IsNullOrWhiteSpace(match.PartyLeader) &&
+            match.PartyLeader.Length <= 64 &&
+            match.Players.Contains(match.PartyLeader, StringComparer.Ordinal));
+
     private static bool ValidatePartyJoinResolution(GamePartyJoinResolution value) =>
         ValidToken(value.IntentId) && ValidatePartyJoinTarget(value.Target);
 
@@ -519,6 +606,18 @@ public sealed record ConnectedGamePlayer(
     int? PartySize);
 
 public sealed record ConnectedGamePlayerDirectory(ConnectedGamePlayer[] Items);
+
+public sealed record DeveloperGameMatch(
+    string Id,
+    string Session,
+    string BoneyardName,
+    int WaveNumber,
+    string Visibility,
+    string PartyLeader,
+    int PlayerCount,
+    string[] Players);
+
+public sealed record DeveloperGameMatchDirectory(DeveloperGameMatch[] Items);
 
 public sealed record GamePartyJoinRequester(
     string? AccountUsername,

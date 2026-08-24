@@ -136,9 +136,10 @@ concentration command for the HUD buttons while retaining the general
 SkillScreen command. Protocol 65 added the durable resume versus profile-backed
 New Game intent. Protocol 66 added strict Hub activity intent and participant
 projection. Protocol 67 added the host-resolved locked-Goodie interaction edge.
-Current protocol 68 retains both selection paths, the authoritative Hagatha
-one-shot state and six frozen active-Weld component ranks, and adds the fresh-
-profile tutorial-pending field. The host applies either skill selection only to
+Protocol 68 added the fresh-profile tutorial-pending field. Current protocol 69
+retains both selection paths, the authoritative Hagatha one-shot state and six
+frozen active-Weld component ranks, and adds the one-use developer observer
+hello/welcome contract. The host applies either skill selection only to
 the authenticated participant before publishing a new progression revision.
 The compact selector
 uses its own `skill-selector` pause source only in an active Boneyard, so the
@@ -1216,8 +1217,9 @@ This preserves one mutation boundary and prevents Lua callbacks from entering
 the simulation recursively. The host checks dynamic session host identity or
 the account-bound developer entitlement on every console request. `Enable
 Cheats` controls ordinary-host installation of the DevTools API; it is never
-trusted as network authorization. Current protocol 68 retains the
-server-authored developer boolean from a one-use admission into the welcome.
+trusted as network authorization. Current protocol 69 retains the
+server-authored developer boolean from a one-use admission into the welcome
+and gives observer admissions a distinct read-only handshake.
 An entitled account keeps the setting and ordinary shared-Hub routing off
 while still receiving the DevTools API. No client-authored field can grant the
 entitlement.

@@ -74,7 +74,7 @@ const hubScene = readFileSync(new URL('../HubScene.tsx', import.meta.url), 'utf8
 const boneyardScene = readFileSync(new URL('../BoneyardScene.tsx', import.meta.url), 'utf8')
 
 test('every inventory and trader modal consumes the shell fixed-stage projection', () => {
-  assert.equal(mainScene.match(/nativeUiStageStyle=\{nativeStageStyle\}/g)?.length, 2)
+  assert.equal(mainScene.match(/nativeUiStageStyle=\{nativeStageStyle\}/g)?.length, 3)
   for (const scene of [hubScene, boneyardScene]) {
     assert.match(scene, /nativeUiStageStyle: CSSProperties/)
     assert.match(scene, /<HubInventoryUi[\s\S]*nativeUiStageStyle=\{nativeUiStageStyle\}/)

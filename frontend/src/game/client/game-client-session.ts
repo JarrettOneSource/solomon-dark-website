@@ -284,7 +284,7 @@ export function connectGameClientSession(
         return
       }
       if (message.type === 'server-welcome') {
-        if (settled || message.protocolVersion !== GAME_PROTOCOL_VERSION) {
+        if (settled || message.observer === true || message.protocolVersion !== GAME_PROTOCOL_VERSION) {
           fail(new Error('The server selected an incompatible protocol.'))
           return
         }

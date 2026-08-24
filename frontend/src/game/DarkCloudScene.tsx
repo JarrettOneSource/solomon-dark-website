@@ -14,6 +14,7 @@ import {
   api,
   type ActiveWebMod,
   type ConnectedGamePlayer,
+  type DeveloperGameMatch,
   type ModList,
   type ModSubscription,
   type ModSummary,
@@ -22,7 +23,7 @@ import {
 } from '../lib/api.ts'
 import {
   connectedPlayerPresentation,
-  useConnectedPlayers,
+  useDeveloperPresence,
 } from './connected-players.ts'
 import DarkCloudMedia from './DarkCloudMedia.tsx'
 import DarkCloudModDetail, {
@@ -62,6 +63,7 @@ interface DarkCloudSceneProps {
   /** Opens the native Esc menu; the host owns its state and mounts the menu. */
   onMenu: () => void
   onPartyResolved: (resolution: PartyJoinResolution) => void
+  onObserveMatch: (matchId: string) => Promise<void>
   onSubscriptionsChanged: () => Promise<readonly ActiveWebMod[]>
   requesterDisplayName: string
 }
@@ -72,6 +74,7 @@ export default function DarkCloudScene({
   menuKeyCode,
   menuOpen,
   onMenu,
+  onObserveMatch,
   onPartyResolved,
   onSubscriptionsChanged,
   requesterDisplayName,
@@ -98,7 +101,8 @@ export default function DarkCloudScene({
   const partyDirectory = usePartyDirectory(tab === 'parties')
   const parties = partyDirectory.parties
   const partyActions = usePartyJoinActions(requesterDisplayName, onPartyResolved)
-  const connectedPlayers = useConnectedPlayers(developerAccess && tab === 'parties')
+  const developerPresence = useDeveloperPresence(developerAccess && tab === 'parties')
+  const [observingMatchId, setObservingMatchId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     const generation = ++requestGeneration.current
@@ -281,7 +285,7 @@ export default function DarkCloudScene({
       {tab === 'parties' ? (
         <button type="button" onClick={() => {
           void partyDirectory.refresh()
-          if (developerAccess) void connectedPlayers.refresh()
+          if (developerAccess) void developerPresence.refresh()
         }}>REFRESH</button>
       ) : null}
     </>
@@ -375,9 +379,22 @@ export default function DarkCloudScene({
           ))}
           {tab === 'parties' && developerAccess ? (
             <DeveloperPresenceSection
-              error={connectedPlayers.error}
-              loading={connectedPlayers.loading}
-              players={connectedPlayers.players}
+              error={developerPresence.error}
+              loading={developerPresence.loading}
+              matches={developerPresence.matches}
+              observingMatchId={observingMatchId}
+              onObserve={async (matchId) => {
+                if (observingMatchId !== null) return
+                setObservingMatchId(matchId)
+                setActionError(null)
+                try {
+                  await onObserveMatch(matchId)
+                } catch (error) {
+                  setActionError(message(error, 'The match could not be observed.'))
+                  setObservingMatchId(null)
+                }
+              }}
+              players={developerPresence.players}
             />
           ) : null}
         </div>
@@ -639,10 +656,16 @@ function PartyRow({
 function DeveloperPresenceSection({
   error,
   loading,
+  matches,
+  observingMatchId,
+  onObserve,
   players,
 }: {
   error: string | null
   loading: boolean
+  matches: readonly DeveloperGameMatch[]
+  observingMatchId: string | null
+  onObserve: (matchId: string) => Promise<void>
   players: readonly ConnectedGamePlayer[]
 }) {
   return (
@@ -661,6 +684,37 @@ function DeveloperPresenceSection({
       {!loading && error === null && players.length === 0 ? (
         <p className="dark-cloud-dev-presence-note">NO WIZARDS ARE CONNECTED RIGHT NOW.</p>
       ) : null}
+      <div className="dark-cloud-dev-matches">
+        <div className="dark-cloud-dev-subheading">
+          <span>ACTIVE MATCHES · ALL VISIBILITIES</span>
+          <span>{matches.length}</span>
+        </div>
+        {!loading && error === null && matches.length === 0 ? (
+          <p className="dark-cloud-dev-presence-note">NO BONEYARD MATCHES ARE ACTIVE.</p>
+        ) : null}
+        {matches.map(match => (
+          <div className="dark-cloud-dev-match-row" key={match.id}>
+            <span>
+              <strong>{match.boneyardName.toUpperCase()}</strong>
+              <small>{match.players.join(' · ').toUpperCase()}</small>
+            </span>
+            <span>{match.waveNumber > 0 ? `WAVE ${match.waveNumber}` : 'STAGING'}</span>
+            <span>{match.visibility.toUpperCase()}</span>
+            <span>{match.session === 'global-hub' ? 'GLOBAL HUB' : 'PRIVATE COLLEGE'}</span>
+            <button
+              type="button"
+              disabled={observingMatchId !== null}
+              onClick={() => { void onObserve(match.id) }}
+            >
+              {observingMatchId === match.id ? 'OPENING…' : 'OBSERVE'}
+            </button>
+          </div>
+        ))}
+      </div>
+      <div className="dark-cloud-dev-subheading">
+        <span>CONNECTED WIZARDS</span>
+        <span>{players.length}</span>
+      </div>
       {players.map((player, index) => {
         const presentation = connectedPlayerPresentation(player)
         return (

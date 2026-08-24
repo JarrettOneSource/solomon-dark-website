@@ -24,6 +24,7 @@ import {
   continueGameSimulationOver,
   createGameSimulation,
   enterBoneyardWorld,
+  getPlayerCharacter,
   getPlayerEconomy,
   getPlayerProgression,
   grantGameSimulationPlayerExperience,
@@ -201,6 +202,13 @@ export interface GameHostAdmission {
   readonly leaderboardUserId: number | null
   readonly partyId?: string
   readonly reservationId?: string
+  readonly observer?: GameHostObserverAdmission
+}
+
+export interface GameHostObserverAdmission {
+  readonly runId: string
+  readonly userId: number
+  readonly username: string
 }
 
 type GameHostRole = 'shared'
@@ -211,6 +219,7 @@ interface AuthenticatedGameHostRole {
   readonly leaderboardUserId: number | null
   readonly partyId: string | null
   readonly reservationId: string | null
+  readonly observer: GameHostObserverAdmission | null
   readonly role: GameHostRole
 }
 
@@ -268,6 +277,7 @@ export interface GameHost {
   hostPlayerId(): string | null
   playerCount(): number
   loadedBoneyard(): LoadedBoneyard | null
+  observationTargets(): readonly GameHostObservationTarget[]
   modCatalog(): readonly ModConsumableCatalogEntry[]
   cancelPartyReservation(reservationId: string): void
   createPartyJoinRequest(input: GameHostPartyJoinRequestInput): GameHostPartyJoinRequestResult
@@ -316,6 +326,16 @@ export interface GameHostPartyTarget {
   readonly visibility: 'invite-only' | 'private' | 'public'
 }
 
+export interface GameHostObservationTarget {
+  readonly boneyardName: string
+  readonly partyLeader: string
+  readonly playerCount: number
+  readonly players: readonly string[]
+  readonly runId: string
+  readonly visibility: 'invite-only' | 'private' | 'public'
+  readonly waveNumber: number
+}
+
 export interface GameHostPartyJoinRequestInput {
   readonly expiresAt: number
   readonly id: string
@@ -358,6 +378,27 @@ interface HostClient {
   pendingLuaRequestIds: Set<number>
   sentReplicationBaselines: Map<number, ReplicatedEntityBaseline>
   socket: WebSocket
+}
+
+interface HostObserver {
+  acknowledgedSnapshotSequence: number
+  connectedAtMs: number
+  forceReplicationKeyframe: boolean
+  lastSentSnapshotSequence: number
+  readonly observerId: string
+  readonly requestedByUserId: number
+  readonly requestedByUsername: string
+  readonly runId: string
+  sentReplicationBaselines: Map<number, ReplicatedEntityBaseline>
+  readonly socket: WebSocket
+  readonly viewPlayerId: string
+}
+
+interface ObservationWorld {
+  readonly authorityPlayerId: string | null
+  readonly loadedBoneyard: LoadedBoneyard
+  readonly state: GameSimulationState
+  readonly viewPlayerId: string
 }
 
 interface HostBot {
@@ -503,6 +544,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   let lastTickLagWarningAt = Number.NEGATIVE_INFINITY
   let nextTickAt = performance.now() + GAME_FIXED_TICK_SECONDS * 1000
   const clients = new Map<WebSocket, HostClient>()
+  const observers = new Map<WebSocket, HostObserver>()
   const bots = new Map<PlayerId, HostBot>()
   const failedBots = new Map<PlayerId, Error>()
   const pendingBotInvitations: PendingBotInvitation[] = []
@@ -669,6 +711,39 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         return
       }
 
+      const observer = observers.get(socket)
+      if (observer) {
+        if (message.type === 'client-ping') {
+          socket.send(encodeGameMessage({ type: 'server-pong', nonce: message.nonce }))
+          return
+        }
+        if (message.type === 'client-snapshot-ack') {
+          if (message.sequence > observer.lastSentSnapshotSequence) {
+            disconnect(socket, 'invalid-message', 'Snapshot acknowledgement is ahead of the server.')
+            return
+          }
+          if (message.requireKeyframe) observer.forceReplicationKeyframe = true
+          if (message.sequence <= observer.acknowledgedSnapshotSequence) return
+          if (!observer.sentReplicationBaselines.has(message.sequence)) {
+            observer.forceReplicationKeyframe = true
+            return
+          }
+          observer.acknowledgedSnapshotSequence = message.sequence
+          pruneReplicationBaselines(observer)
+          return
+        }
+        if (message.type === 'client-disconnect') {
+          disconnectCauses.set(socket, {
+            reason: 'observer requested disconnect',
+            source: 'observer-request',
+          })
+          socket.close(1000, 'observer disconnect')
+          return
+        }
+        disconnect(socket, 'invalid-message', 'Observer connections are read-only.')
+        return
+      }
+
       const client = clients.get(socket)
       if (!client) {
         if (deploymentRestart) {
@@ -677,6 +752,107 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             source: 'deployment-restart',
           })
           socket.close(1012, 'game updating')
+          return
+        }
+        if (message.type === 'client-observer-hello') {
+          if (message.protocolVersion !== GAME_PROTOCOL_VERSION) {
+            disconnect(
+              socket,
+              'protocol-mismatch',
+              `Protocol ${GAME_PROTOCOL_VERSION} is required.`,
+            )
+            return
+          }
+          const authenticated = authenticate(message.credential, options.authentication)
+          const observerAdmission = authenticated?.observer ?? null
+          if (!authenticated?.developerAccess || !observerAdmission) {
+            disconnect(socket, 'authentication-failed', 'The observer credential is invalid.')
+            return
+          }
+          const observed = observationWorld(observerAdmission.runId)
+          if (!observed) {
+            disconnect(socket, 'authentication-failed', 'The observed match has ended.')
+            return
+          }
+          if (observers.size >= 8) {
+            disconnect(socket, 'server-full', 'The observer capacity is full.')
+            return
+          }
+          clearTimeout(helloDeadline)
+          pending.delete(socket)
+          const welcomeSnapshot = createGameSnapshot(
+            observed.state,
+            observed.authorityPlayerId,
+            {},
+          )
+          const snapshotSequence = nextSnapshotSequence
+          nextSnapshotSequence += 1
+          const welcomeBaseline = createReplicatedEntityBaseline(welcomeSnapshot)
+          const joinedObserver: HostObserver = {
+            acknowledgedSnapshotSequence: snapshotSequence,
+            connectedAtMs: Date.now(),
+            forceReplicationKeyframe: false,
+            lastSentSnapshotSequence: snapshotSequence,
+            observerId: `observer-${randomBytes(12).toString('base64url')}`,
+            requestedByUserId: observerAdmission.userId,
+            requestedByUsername: observerAdmission.username,
+            runId: observerAdmission.runId,
+            sentReplicationBaselines: new Map([[snapshotSequence, welcomeBaseline]]),
+            socket,
+            viewPlayerId: observed.viewPlayerId,
+          }
+          observers.set(socket, joinedObserver)
+          socket.send(encodeGameMessage({
+            type: 'server-welcome',
+            developerAccess: false,
+            observer: true,
+            protocolVersion: GAME_PROTOCOL_VERSION,
+            playerId: observed.viewPlayerId,
+            resumeToken: joinedObserver.observerId,
+            serverTickRate: GAME_TICK_RATE,
+            snapshotRate,
+            sessionKind,
+            kernelVersion: PLAYER_CHARACTER_KERNEL_VERSION,
+            kernelParameters: {
+              fixedTickSeconds: GAME_FIXED_TICK_SECONDS,
+              movementAcceleration: PLAYER_CHARACTER_INPUT_ACCELERATION,
+              movementLaneCap: PLAYER_CHARACTER_MOVEMENT_LANE_CAP,
+              movementRetention: PLAYER_CHARACTER_MOVEMENT_RETENTION,
+              movementThresholdSquared: PLAYER_CHARACTER_MOVEMENT_THRESHOLD_SQUARED,
+              playerRadius: PLAYER_CHARACTER_RADIUS,
+            },
+            content: authenticated.content?.manifest ?? content,
+            modAssets: authenticated.content?.assets ?? options.modAssets ?? [],
+            modCatalog: sharedHub ? [] : privateModContentRegistry.catalog(),
+            boneyards: [observed.loadedBoneyard.choice],
+            gameplayPause: gameplayPauseForPlayer(observed.viewPlayerId),
+            snapshot: welcomeSnapshot,
+            snapshotSequence,
+          }))
+          socket.send(encodeGameMessage({
+            type: 'server-boneyard-loaded',
+            boneyard: observed.loadedBoneyard,
+          }))
+          const details = {
+            boneyardName: observed.loadedBoneyard.choice.name,
+            observerId: joinedObserver.observerId,
+            observerUserId: joinedObserver.requestedByUserId,
+            observerUsername: joinedObserver.requestedByUsername,
+            runId: joinedObserver.runId,
+          }
+          logGameServerEvent(
+            options.log,
+            'game-host',
+            'info',
+            'observer.connected',
+            'A developer observer connected to an active match.',
+            logDetails(details),
+          )
+          emitRuntimeEvent(
+            'observer.connected',
+            'A developer observer connected to an active match.',
+            details,
+          )
           return
         }
         if (message.type !== 'client-hello') {
@@ -694,6 +870,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         const authenticated = authenticate(message.credential, options.authentication)
         if (!authenticated) {
           disconnect(socket, 'authentication-failed', 'The session credential is invalid.')
+          return
+        }
+        if (authenticated.observer !== null) {
+          disconnect(socket, 'authentication-failed', 'Observer credentials require observer mode.')
           return
         }
         if (sharedHub && authenticated.content === null) {
@@ -1459,6 +1639,13 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         for (const recipient of recipients) {
           if (recipient.socket.readyState === WebSocket.OPEN) recipient.socket.send(encoded)
         }
+        const senderState = stateForPlayer(client.playerId)
+        for (const observer of observers.values()) {
+          if (
+            observer.socket.readyState === WebSocket.OPEN
+            && observationWorld(observer.runId)?.state === senderState
+          ) observer.socket.send(encoded)
+        }
         return
       }
       if (message.type === 'client-party-invite') {
@@ -2005,6 +2192,36 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       pending.delete(socket)
       const client = clients.get(socket)
       const planned = disconnectCauses.get(socket)
+      const observer = observers.get(socket)
+      if (observer) {
+        observers.delete(socket)
+        const details = {
+          closeCode,
+          closeReason,
+          disconnectReason: planned?.reason || closeReason || 'no reason received',
+          disconnectSource: planned?.source ?? disconnectSource(closeCode),
+          durationMs: Math.max(0, Date.now() - observer.connectedAtMs),
+          observerId: observer.observerId,
+          observerUserId: observer.requestedByUserId,
+          observerUsername: observer.requestedByUsername,
+          runId: observer.runId,
+          ...(socketError ? gameServerErrorDetails(socketError) : {}),
+        }
+        logGameServerEvent(
+          options.log,
+          'game-host',
+          closeCode === 1000 ? 'info' : 'warning',
+          'observer.disconnected',
+          'A developer observer disconnected from an active match.',
+          logDetails(details),
+        )
+        emitRuntimeEvent(
+          'observer.disconnected',
+          'A developer observer disconnected from an active match.',
+          details,
+        )
+        return
+      }
       if (!client) {
         logGameServerEvent(
           options.log,
@@ -2530,6 +2747,41 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       client.sentReplicationBaselines.set(snapshotSequence, currentBaseline)
       pruneReplicationBaselines(client)
     }
+    for (const observer of observers.values()) {
+      if (observer.socket.readyState !== WebSocket.OPEN) continue
+      const observed = observationWorld(observer.runId)
+      if (!observed) {
+        disconnectCauses.set(observer.socket, {
+          reason: 'observed match ended',
+          source: 'observer-target-ended',
+        })
+        observer.socket.close(1000, 'observed match ended')
+        continue
+      }
+      const snapshot = createGameSnapshot(observed.state, observed.authorityPlayerId, {})
+      const currentBaseline = createReplicatedEntityBaseline(snapshot)
+      const acknowledgedBaseline = observer.sentReplicationBaselines.get(
+        observer.acknowledgedSnapshotSequence,
+      )
+      const forceKeyframe = periodicKeyframe
+        || observer.forceReplicationKeyframe
+        || !acknowledgedBaseline
+      observer.socket.send(encodeGameMessage({
+        type: 'server-snapshot',
+        acknowledgedInputSequence: 0,
+        frame: createGameSnapshotFrame(
+          snapshot,
+          observer.acknowledgedSnapshotSequence,
+          acknowledgedBaseline,
+          forceKeyframe,
+        ),
+        sequence: snapshotSequence,
+      }))
+      observer.forceReplicationKeyframe = false
+      observer.lastSentSnapshotSequence = snapshotSequence
+      observer.sentReplicationBaselines.set(snapshotSequence, currentBaseline)
+      pruneReplicationBaselines(observer)
+    }
   }
 
   function hubActivitiesForSnapshot(
@@ -2712,6 +2964,93 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       memberCount: party.memberPlayerIds.length,
       status: playing ? 'playing' : 'hub',
       visibility: party.visibility,
+    }
+  }
+
+  function observationTargets(): readonly GameHostObservationTarget[] {
+    if (sharedWorlds) {
+      return sharedWorlds.runs.flatMap((run) => {
+        if (run.state.world.kind !== 'boneyard') return []
+        const party = sharedWorlds!.parties.parties.find(candidate => (
+          candidate.id === run.partyId
+        ))
+        if (!party) return []
+        return [observationTarget(
+          run.state,
+          run.loadedBoneyard,
+          party.leaderPlayerId,
+          party.visibility,
+        )]
+      })
+    }
+    if (state.world.kind !== 'boneyard' || loadedBoneyard === null) return []
+    const party = privateParties?.parties[0] ?? null
+    const leaderPlayerId = party?.leaderPlayerId ?? hostPlayerId
+    if (!leaderPlayerId) return []
+    return [observationTarget(
+      state,
+      loadedBoneyard,
+      leaderPlayerId,
+      party?.visibility ?? 'private',
+    )]
+  }
+
+  function observationWorld(runId: string): ObservationWorld | null {
+    if (sharedWorlds) {
+      const run = sharedWorlds.runs.find(candidate => candidate.loadedBoneyard.runId === runId)
+      if (!run || run.state.world.kind !== 'boneyard') return null
+      const party = sharedWorlds.parties.parties.find(candidate => candidate.id === run.partyId)
+      const playerIds = run.state.playerEntities.identities.map(identity => identity.playerId)
+      const viewPlayerId = party && playerIds.includes(party.leaderPlayerId)
+        ? party.leaderPlayerId
+        : playerIds[0]
+      if (!viewPlayerId) return null
+      return {
+        authorityPlayerId: party?.leaderPlayerId ?? viewPlayerId,
+        loadedBoneyard: run.loadedBoneyard,
+        state: run.state,
+        viewPlayerId,
+      }
+    }
+    if (
+      state.world.kind !== 'boneyard'
+      || loadedBoneyard?.runId !== runId
+    ) return null
+    const playerIds = state.playerEntities.identities.map(identity => identity.playerId)
+    const viewPlayerId = hostPlayerId && playerIds.includes(hostPlayerId)
+      ? hostPlayerId
+      : playerIds[0]
+    if (!viewPlayerId) return null
+    return {
+      authorityPlayerId: hostPlayerId ?? viewPlayerId,
+      loadedBoneyard,
+      state,
+      viewPlayerId,
+    }
+  }
+
+  function observationTarget(
+    activeState: GameSimulationState,
+    loaded: LoadedBoneyard,
+    leaderPlayerId: string,
+    visibility: GameHostObservationTarget['visibility'],
+  ): GameHostObservationTarget {
+    const playerIds = activeState.playerEntities.identities.map(identity => identity.playerId)
+    const displayName = (playerId: string) => (
+      [...clients.values(), ...bots.values()].find(candidate => candidate.playerId === playerId)
+        ?.displayName
+      ?? getPlayerCharacter(activeState, playerId).config.displayName
+    )
+    return {
+      boneyardName: loaded.choice.name,
+      partyLeader: displayName(leaderPlayerId),
+      playerCount: playerIds.length,
+      players: playerIds.map(displayName),
+      runId: loaded.runId,
+      visibility,
+      waveNumber: activeState.world.kind === 'boneyard'
+        ? activeState.world.waves?.waveOrdinal ?? 0
+        : 0,
     }
   }
 
@@ -3945,7 +4284,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       const closeReason = reason === 'host-ended-session'
         ? 'host ended session'
         : 'server shutdown'
-      for (const socket of [...pending, ...clients.keys()]) {
+      for (const socket of [...pending, ...clients.keys(), ...observers.keys()]) {
         disconnectCauses.set(socket, {
           reason: closeReason,
           source: reason,
@@ -3970,6 +4309,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     playerCount: participantCount,
     loadedBoneyard: () => loadedBoneyard,
     modCatalog: () => privateModContentRegistry.catalog(),
+    observationTargets,
     cancelPartyReservation(reservationId) {
       partyJoinReservations.delete(reservationId)
     },
@@ -4175,7 +4515,7 @@ function createInitialSimulation(
   return state
 }
 
-function pruneReplicationBaselines(client: HostClient): void {
+function pruneReplicationBaselines(client: HostClient | HostObserver): void {
   for (const sequence of client.sentReplicationBaselines.keys()) {
     if (sequence < client.acknowledgedSnapshotSequence) {
       client.sentReplicationBaselines.delete(sequence)
@@ -4202,22 +4542,39 @@ function authenticate(
           leaderboardUserId: authentication.leaderboardUserId ?? null,
           partyId: null,
           reservationId: null,
+          observer: null,
           role: 'shared',
         }
       : null
   }
   if (authentication.kind === 'tickets') {
     const claimed = authentication.claim(credential)
-    return claimed && validLeaderboardUserId(claimed.leaderboardUserId) ? {
+    return claimed
+      && validLeaderboardUserId(claimed.leaderboardUserId)
+      && validObserverAdmission(claimed.observer)
+      ? {
       content: claimed.content,
       developerAccess: claimed.developerAccess === true,
       leaderboardUserId: claimed.leaderboardUserId,
       partyId: claimed.partyId ?? null,
       reservationId: claimed.reservationId ?? null,
+      observer: claimed.observer ?? null,
       role: 'shared',
     } : null
   }
   return null
+}
+
+function validObserverAdmission(value: GameHostObserverAdmission | undefined): boolean {
+  return value === undefined || (
+    value.runId.length >= 1
+    && value.runId.length <= 128
+    && Number.isSafeInteger(value.userId)
+    && value.userId >= 1
+    && value.userId <= 0x7fff_ffff
+    && value.username.length >= 1
+    && value.username.length <= 64
+  )
 }
 
 function validateAuthentication(authentication: GameHostAuthentication): void {

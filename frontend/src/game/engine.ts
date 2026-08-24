@@ -13,6 +13,10 @@ import type { GameSaveIntent } from './save/game-save-contract.ts'
 import type { PlayerSocialProfile } from './protocol/party-state.ts'
 import type { GameConnectionFailure } from './client/game-connection-failure.ts'
 import type { GameClientDiagnostics } from './client/game-diagnostics.ts'
+import {
+  connectGameObserverSession,
+  type GameObserverSession,
+} from './client/game-observer-session.ts'
 
 /**
  * The only public seam between a platform shell and the rebuilt game client.
@@ -52,6 +56,21 @@ export interface SessionOptions {
 }
 
 export interface GameSession extends GameClientSession {}
+
+export interface GameObserverEndpoint {
+  readonly credential: string
+  readonly kind: 'remote'
+  readonly observer: true
+  readonly sessionKind: 'global-hub' | 'private-college'
+  readonly url: string
+}
+
+export interface GameObserverOptions {
+  readonly endpoint: GameObserverEndpoint
+  readonly onEnded?: (reason: string) => void
+  readonly onFatal?: (failure: GameConnectionFailure) => void
+  readonly transportFactory?: (url: string) => Promise<GameTransport>
+}
 
 export type GameConnectionStage =
   | 'authenticating_session'
@@ -105,7 +124,19 @@ export async function bootGame(options: SessionOptions): Promise<GameSession> {
   return session
 }
 
-function validateEndpoint(endpoint: GameEndpoint): void {
+export async function bootGameObserver(options: GameObserverOptions): Promise<GameObserverSession> {
+  validateEndpoint(options.endpoint)
+  const createTransport = options.transportFactory ?? connectWebSocketTransport
+  const transport = await createTransport(options.endpoint.url)
+  return connectGameObserverSession({
+    credential: options.endpoint.credential,
+    transport,
+    ...(options.onEnded ? { onEnded: options.onEnded } : {}),
+    ...(options.onFatal ? { onFatal: options.onFatal } : {}),
+  })
+}
+
+function validateEndpoint(endpoint: GameEndpoint | GameObserverEndpoint): void {
   const url = new URL(endpoint.url)
   if (url.protocol !== 'ws:' && url.protocol !== 'wss:') {
     throw new Error('Game endpoints must use ws or wss.')

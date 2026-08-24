@@ -502,6 +502,102 @@ test('shared Hub refuses a modded admission before it creates party membership',
   assert.equal((await readHealth(supervisor.address.url)).parties, 0)
 })
 
+test('developer observer admission reaches a private active match without changing occupancy', async (context) => {
+  const supervisor = await startGameSessionSupervisor({
+    adminSecret: ADMIN_SECRET,
+    allowedOrigins: [BROWSER_ORIGIN],
+    snapshotRate: 100,
+  })
+  context.after(() => supervisor.close())
+  assert.equal((await fetch(`${supervisor.address.url}/admin/matches`)).status, 401)
+  assert.equal((await fetch(`${supervisor.address.url}/admin/observers`, { method: 'POST' })).status, 401)
+
+  const firstEndpoint = await admitHub(supervisor.address.url, EMPTY_CONTENT, 42)
+  const secondEndpoint = await admitHub(supervisor.address.url, EMPTY_CONTENT, 43)
+  const first = await join(supervisor.address.url, firstEndpoint, BROWSER_ORIGIN)
+  const second = await join(supervisor.address.url, secondEndpoint, BROWSER_ORIGIN)
+  context.after(() => closeSocket(first.socket))
+  context.after(() => closeSocket(second.socket))
+  const invited = second.next(message => (
+    message.type === 'server-party-state' && message.state.invitations.length === 1
+  ))
+  first.socket.send(encodeGameMessage({
+    type: 'client-party-invite',
+    targetPlayerId: second.welcome.playerId,
+  }))
+  const invitation = await invited
+  if (invitation.type !== 'server-party-state') throw new Error('expected invitation')
+  const grouped = first.next(message => (
+    message.type === 'server-party-state' && message.state.party.memberPlayerIds.length === 2
+  ))
+  second.socket.send(encodeGameMessage({
+    type: 'client-party-accept',
+    invitationId: invitation.state.invitations[0]!.id,
+  }))
+  await grouped
+  const loaded = first.next(message => message.type === 'server-boneyard-loaded')
+  first.socket.send(encodeGameMessage({
+    type: 'client-start-match',
+    boneyardId: 'default-random',
+  }))
+  const boneyard = await loaded
+  if (boneyard.type !== 'server-boneyard-loaded') throw new Error('expected Boneyard')
+
+  const matchesResponse = await fetch(`${supervisor.address.url}/admin/matches`, {
+    headers: { authorization: `Bearer ${ADMIN_SECRET}` },
+  })
+  assert.equal(matchesResponse.status, 200)
+  const directory = await matchesResponse.json() as {
+    items: Array<{
+      id: string
+      playerCount: number
+      session: string
+      visibility: string
+    }>
+  }
+  assert.equal(directory.items.length, 1)
+  assert.equal(directory.items[0]?.visibility, 'private')
+  assert.equal(directory.items[0]?.playerCount, 2)
+
+  const observerResponse = await fetch(`${supervisor.address.url}/admin/observers`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${ADMIN_SECRET}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      matchId: directory.items[0]!.id,
+      observer: { userId: 7, username: 'developer' },
+    }),
+  })
+  assert.equal(observerResponse.status, 201)
+  const observerEndpoint = await observerResponse.json() as {
+    credential: string
+    path: string
+    sessionKind: string
+  }
+  assert.equal(observerEndpoint.sessionKind, 'global-hub')
+  const observerSocket = await openSocket(
+    websocketUrl(supervisor.address.url, observerEndpoint.path),
+    BROWSER_ORIGIN,
+  )
+  context.after(() => closeSocket(observerSocket))
+  const observerNext = messageQueue(observerSocket)
+  const welcomed = observerNext(message => message.type === 'server-welcome')
+  observerSocket.send(encodeGameMessage({
+    type: 'client-observer-hello',
+    credential: observerEndpoint.credential,
+    protocolVersion: GAME_PROTOCOL_VERSION,
+  }))
+  const observerWelcome = await welcomed
+  assert.equal(observerWelcome.type, 'server-welcome')
+  assert.equal(observerWelcome.observer, true)
+  assert.equal(Object.keys(observerWelcome.snapshot.players).length, 2)
+  const health = await readHealth(supervisor.address.url)
+  assert.equal(health.players, 2)
+  assert.equal(health.hubHumanPlayers, 2)
+})
+
 test('party admission cannot overbook global Hub capacity across singleton parties', async (context) => {
   const supervisor = await startGameSessionSupervisor({
     adminSecret: ADMIN_SECRET,

@@ -185,6 +185,19 @@ builder.Services.AddRateLimiter(options =>
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
                 AutoReplenishment = true
             }));
+    options.AddPolicy("game-observers", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            TokenService.GetUserId(context.User)?.ToString() ??
+            context.Connection.RemoteIpAddress?.ToString() ??
+            "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 30,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                AutoReplenishment = true
+            }));
     options.AddPolicy("party-join-status", context =>
         RateLimitPartition.GetFixedWindowLimiter(
             context.Connection.RemoteIpAddress?.ToString() ?? "unknown",

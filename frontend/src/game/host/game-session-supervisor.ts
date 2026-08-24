@@ -18,6 +18,7 @@ import {
   startGameHost,
   type GameHost,
   type GameHostAdmission,
+  type GameHostObservationTarget,
   type GameHostPartyTarget,
 } from './game-host.ts'
 import {
@@ -335,6 +336,66 @@ export async function startGameSessionSupervisor(
       })
       return
     }
+    if (request.method === 'GET' && path === '/admin/matches') {
+      sendJson(response, 200, { items: activeMatchDirectory() })
+      return
+    }
+    if (request.method === 'POST' && path === '/admin/observers') {
+      void readJsonObject(request).then((body) => {
+        const observerRequest = materializeObserverRequest(body)
+        const resolved = resolveObservationTarget(observerRequest.matchId)
+        if (!resolved) {
+          sendJson(response, 404, { error: 'That match is no longer active.' })
+          return
+        }
+        const credential = randomBytes(32).toString('base64url')
+        const expiresAt = performance.now() + unclaimedTimeoutMs
+        resolved.session.tickets.set(credential, {
+          admission: {
+            content: resolved.session.content,
+            developerAccess: true,
+            leaderboardUserId: null,
+            observer: {
+              runId: resolved.target.runId,
+              userId: observerRequest.userId,
+              username: observerRequest.username,
+            },
+          },
+          expiresAt,
+        })
+        const details = {
+          boneyardName: resolved.target.boneyardName,
+          matchId: observerRequest.matchId,
+          observerUserId: observerRequest.userId,
+          observerUsername: observerRequest.username,
+          sessionId: resolved.session.id,
+        }
+        logGameServerEvent(
+          options.log,
+          'session-supervisor',
+          'info',
+          'observer.admission_issued',
+          'A developer observer admission was issued for an active match.',
+          logDetails(details),
+        )
+        emitRuntimeEvent(
+          'observer.admission_issued',
+          'A developer observer admission was issued for an active match.',
+          details,
+        )
+        sendJson(response, 201, {
+          credential,
+          path: resolved.session.kind === 'hub'
+            ? GAME_HUB_PATH
+            : `${GAME_SESSION_PATH_PREFIX}${resolved.session.id}`,
+          protocol: GAME_PROTOCOL_NAME,
+          sessionKind: resolved.session.kind === 'hub' ? 'global-hub' : 'private-college',
+        })
+      }).catch(() => {
+        sendJson(response, 400, { error: 'A valid observer request is required.' })
+      })
+      return
+    }
     if (request.method === 'POST' && path === '/admin/sessions') {
       void readJsonObject(request).then((body) => {
         provisionIntoResponse(response, materializeGameAdmission(body))
@@ -347,7 +408,7 @@ export async function startGameSessionSupervisor(
       void readJsonObject(request).then((body) => {
         const admission = materializeGameAdmission(body)
         pruneHubTickets()
-        if (hubHost.playerCount() + hubTickets.size >= maxConnectionsPerSession) {
+        if (hubHost.playerCount() + playerTicketCount(hubTickets) >= maxConnectionsPerSession) {
           sendJson(response, 503, { error: 'The shared Hub is full.' }, { 'retry-after': '5' })
           return
         }
@@ -561,7 +622,7 @@ export async function startGameSessionSupervisor(
       }
       const now = performance.now()
       pruneHostTickets(session, now)
-      if (session.host.playerCount() + session.tickets.size >= maxConnectionsPerSession) {
+      if (session.host.playerCount() + playerTicketCount(session.tickets) >= maxConnectionsPerSession) {
         sendJson(response, 409, { error: 'That College is full.' })
         return
       }
@@ -609,6 +670,36 @@ export async function startGameSessionSupervisor(
       if (target) matches.push({ session, target })
     }
     return matches.length === 1 ? matches[0]! : null
+  }
+
+  function activeMatchDirectory() {
+    return [hubSession, ...sessions.values()].flatMap(session => (
+      session.closing ? [] : session.host.observationTargets().map(target => ({
+        boneyardName: target.boneyardName,
+        id: observationMatchId(session.id, target.runId),
+        partyLeader: target.partyLeader,
+        playerCount: target.playerCount,
+        players: target.players,
+        session: session.kind === 'hub' ? 'global-hub' as const : 'private-college' as const,
+        visibility: target.visibility,
+        waveNumber: target.waveNumber,
+      }))
+    ))
+  }
+
+  function resolveObservationTarget(matchId: string): {
+    session: SessionRecord
+    target: GameHostObservationTarget
+  } | null {
+    for (const session of [hubSession, ...sessions.values()]) {
+      if (session.closing) continue
+      for (const target of session.host.observationTargets()) {
+        if (observationMatchId(session.id, target.runId) === matchId) {
+          return { session, target }
+        }
+      }
+    }
+    return null
   }
 
   function createJoinIntent(
@@ -1127,6 +1218,42 @@ function materializeGameAdmission(body: Record<string, unknown>): GameHostAdmiss
   }
 }
 
+function materializeObserverRequest(body: Record<string, unknown>): {
+  matchId: string
+  userId: number
+  username: string
+} {
+  if (
+    Object.keys(body).sort().join('\0') !== ['matchId', 'observer'].join('\0')
+    || typeof body.matchId !== 'string'
+    || body.matchId.length < 8
+    || body.matchId.length > 256
+    || !/^[A-Za-z0-9_-]+$/.test(body.matchId)
+    || !body.observer
+    || typeof body.observer !== 'object'
+    || Array.isArray(body.observer)
+  ) throw new Error('observer request is invalid')
+  const observer = body.observer as Record<string, unknown>
+  if (
+    Object.keys(observer).sort().join('\0') !== ['userId', 'username'].join('\0')
+    || !Number.isSafeInteger(observer.userId)
+    || Number(observer.userId) < 1
+    || Number(observer.userId) > 0x7fff_ffff
+    || typeof observer.username !== 'string'
+    || observer.username.length < 1
+    || observer.username.length > 64
+  ) throw new Error('observer identity is invalid')
+  return {
+    matchId: body.matchId,
+    userId: Number(observer.userId),
+    username: observer.username,
+  }
+}
+
+function observationMatchId(sessionId: string, runId: string): string {
+  return Buffer.from(`${sessionId}\0${runId}`, 'utf8').toString('base64url')
+}
+
 function deploymentTargetRevision(body: Record<string, unknown>): string {
   if (Object.keys(body).length !== 1 || typeof body.targetRevision !== 'string') {
     throw new Error('deployment restart body is invalid')
@@ -1146,6 +1273,10 @@ function claimHostTicket(
   if (!ticket) return null
   tickets.delete(credential)
   return ticket.expiresAt > performance.now() ? ticket.admission : null
+}
+
+function playerTicketCount(tickets: ReadonlyMap<string, HostTicket>): number {
+  return [...tickets.values()].filter(ticket => ticket.admission.observer === undefined).length
 }
 
 function normalizePartyJoinCode(value: unknown): string {

@@ -7,6 +7,7 @@ import {
 import { assetDisplayName } from '../game/game-asset-readiness.ts'
 import {
   bootGame,
+  bootGameObserver,
   type GameConnectionStage,
   type GameEndpoint,
   type GameSession,
@@ -15,6 +16,7 @@ import {
   GameConnectionFailure,
 } from '../game/client/game-connection-failure.ts'
 import type { GameDeploymentRestartRequest } from '../game/client/game-client-session.ts'
+import type { GameObserverSession } from '../game/client/game-observer-session.ts'
 import { createGameClientDiagnostics } from '../game/client/game-diagnostics.ts'
 import type { PlayerCharacterConfig } from '../game/core-kernels/player-character.ts'
 import type {
@@ -23,6 +25,7 @@ import type {
 } from '../game/core-kernels/hall-of-fame.ts'
 import {
   admitBrowserGame,
+  admitGameObserver,
   configuredGameEndpoint,
   type BrowserGameAdmission,
 } from '../game/game-bootstrap.ts'
@@ -313,6 +316,24 @@ export default function Game() {
     }
   }, [accountUsername, diagnostics, saveForDeployment])
 
+  const connectObserver = useCallback(async (
+    matchId: string,
+    onEnded: () => void,
+  ): Promise<GameObserverSession> => {
+    try {
+      const endpoint = await admitGameObserver(matchId, getToken())
+      return await bootGameObserver({
+        endpoint,
+        onEnded,
+        onFatal: setFatal,
+      })
+    } catch (error) {
+      const failure = GameConnectionFailure.from(error)
+      diagnostics.error('observer.session_failed', failure.message, failure.technicalDetail)
+      throw failure
+    }
+  }, [diagnostics])
+
   const persistCheckpoint = useCallback((checkpoint: GameSaveCheckpoint) => {
     const outcome = saveCoordinator.current?.accept(checkpoint)
     void outcome?.catch(() => {})
@@ -369,6 +390,7 @@ export default function Game() {
               activeMods={activeMods}
               accountUsername={accountUsername}
               connectSession={connectSession}
+              connectObserver={connectObserver}
               developerAccess={user?.developerAccess === true}
               displayName={displayName}
               initialScreen="root"

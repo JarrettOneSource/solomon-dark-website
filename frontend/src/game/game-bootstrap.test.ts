@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  admitGameObserver,
   admitPartyJoin,
   admitSharedHubPlayer,
   decodeProvisionedGameEndpoint,
@@ -98,4 +99,31 @@ test('party admission is authenticated when available and preserves the resolved
     }), { status: 201 })
   })
   assert.equal(endpoint.sessionKind, 'private-college')
+})
+
+test('developer observer admission is explicit, authenticated, and read-only typed', async () => {
+  const endpoint = await admitGameObserver(
+    'match-safe-observer-7',
+    'developer-token',
+    async (input, init) => {
+      assert.equal(input, '/api/game/observe')
+      const headers = new Headers(init?.headers)
+      assert.equal(headers.get('authorization'), 'Bearer developer-token')
+      assert.deepEqual(JSON.parse(String(init?.body)), { matchId: 'match-safe-observer-7' })
+      return new Response(JSON.stringify({
+        credential: 'observer-ticket',
+        kind: 'remote',
+        observer: true,
+        sessionKind: 'global-hub',
+        url: 'wss://solomondarker.com/game-hub',
+      }), { status: 201 })
+    },
+  )
+  assert.deepEqual(endpoint, {
+    credential: 'observer-ticket',
+    kind: 'remote',
+    observer: true,
+    sessionKind: 'global-hub',
+    url: 'wss://solomondarker.com/game-hub',
+  })
 })

@@ -29,6 +29,7 @@ import {
   type LoadedBoneyard,
 } from '../protocol/game-protocol.ts'
 import { connectGameClientSession } from './game-client-session.ts'
+import { connectGameObserverSession } from './game-observer-session.ts'
 import type { GameConnectionFailure } from './game-connection-failure.ts'
 import { createGameClientDiagnostics } from './game-diagnostics.ts'
 import { predictPlayerCharacterInHub } from './hub-prediction.ts'
@@ -1748,6 +1749,81 @@ function receiveSnapshot(
     sequence,
   }))
 }
+
+test('observer session exposes only read-only match state, chat, and replication', async () => {
+  const transport = new MemoryTransport()
+  const connecting = connectGameObserverSession({
+    credential: 'observer-secret',
+    transport,
+  })
+  assert.deepEqual(decodeClientGameMessage(transport.sent[0]!), {
+    type: 'client-observer-hello',
+    credential: 'observer-secret',
+    protocolVersion: GAME_PROTOCOL_VERSION,
+  })
+  const loaded = loadedBoneyardFixture('observer-run')
+  const active = enterBoneyardWorld(
+    createGameSimulation({ 'player-1': CHARACTER }),
+    loaded,
+  )
+  const snapshot = createGameSnapshot(active, 'player-1')
+  transport.receive(encodeGameMessage({
+    type: 'server-welcome',
+    boneyards: [loaded.choice],
+    content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
+    developerAccess: false,
+    gameplayPause: null,
+    kernelParameters: kernelParameters(),
+    kernelVersion: PLAYER_CHARACTER_KERNEL_VERSION,
+    modAssets: [],
+    modCatalog: [],
+    observer: true,
+    playerId: 'player-1',
+    protocolVersion: GAME_PROTOCOL_VERSION,
+    resumeToken: 'observer-1',
+    serverTickRate: 100,
+    sessionKind: 'global-hub',
+    snapshot,
+    snapshotRate: 20,
+    snapshotSequence: 1,
+  }))
+  transport.receive(encodeGameMessage({ type: 'server-boneyard-loaded', boneyard: loaded }))
+  const session = await connecting
+  assert.equal('sendInput' in session, false)
+  assert.equal('sendChatMessage' in session, false)
+  assert.equal('selectSkill' in session, false)
+  assert.equal(session.current().snapshot.world.kind, 'boneyard')
+
+  transport.receive(encodeGameMessage({
+    type: 'server-chat',
+    channel: 'party',
+    sender: { displayName: 'Helvidius', playerId: 'player-1' },
+    sequence: 1,
+    text: 'Observer copy',
+  }))
+  assert.deepEqual(session.current().chatMessages, [{
+    channel: 'party',
+    sender: { displayName: 'Helvidius', playerId: 'player-1' },
+    sequence: 1,
+    text: 'Observer copy',
+  }])
+
+  transport.receive(encodeGameMessage({
+    type: 'server-snapshot',
+    acknowledgedInputSequence: 0,
+    frame: createGameSnapshotFrame(snapshot, 1, createReplicatedEntityBaseline(snapshot), false),
+    sequence: 2,
+  }))
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-snapshot-ack',
+    requireKeyframe: false,
+    sequence: 2,
+  })
+  session.close()
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-disconnect',
+  })
+})
 
 class MemoryTransport implements GameTransport {
   readyState: GameTransport['readyState'] = 'open'

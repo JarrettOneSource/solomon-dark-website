@@ -93,6 +93,15 @@ function loadedBoneyardFixture(runId: string): LoadedBoneyard {
 
 test('client protocol validates character, input, lifecycle, Lua, and ping messages', () => {
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
+    type: 'client-observer-hello',
+    credential: 'observer-secret',
+    protocolVersion: GAME_PROTOCOL_VERSION,
+  })), {
+    type: 'client-observer-hello',
+    credential: 'observer-secret',
+    protocolVersion: GAME_PROTOCOL_VERSION,
+  })
+  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
     type: 'client-cheat-mode',
     enabled: true,
   })), {
@@ -324,7 +333,7 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
   })), /activity/)
 })
 
-test('protocol 68 retains exact A or B slots for HUD concentration replacement', () => {
+test('protocol 69 retains exact A or B slots for HUD concentration replacement', () => {
   assert.throws(() => decodeClientGameMessage(JSON.stringify({
     type: 'client-select-concentration-slot',
     skillId: 57,
@@ -415,7 +424,7 @@ test('protocol v42 bounds Lua requests and structured results by wire bytes and 
   }
 })
 
-test('protocol v68 accepts every authoritative inventory and contextual action and rejects malformed variants', () => {
+test('protocol v69 accepts every authoritative inventory and contextual action and rejects malformed variants', () => {
   const actions = [
     { type: 'buy-dowsing', offerId: 1 },
     { type: 'buy-fomentius', itemId: 2 },
@@ -493,6 +502,11 @@ test('server welcome round-trips content, kernel, character, and world ownership
     snapshotSequence: 1,
   }
   assert.deepEqual(decodeServerGameMessage(encodeGameMessage(welcome)), welcome)
+  const observerWelcome: ServerWelcomeMessage = { ...welcome, observer: true }
+  assert.deepEqual(
+    decodeServerGameMessage(encodeGameMessage(observerWelcome)),
+    observerWelcome,
+  )
   const assetWelcome: ServerWelcomeMessage = {
     ...welcome,
     modAssets: [{
@@ -1258,8 +1272,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v68 carries Hub activity, Goodie actions, tutorial state, Hagatha runtime, Imp effects, save intent, selected skills, sacks, dyes, and gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 68)
+test('protocol v69 carries observer mode, Hub activity, Goodie actions, tutorial state, Hagatha runtime, Imp effects, save intent, selected skills, sacks, dyes, and gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 69)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
