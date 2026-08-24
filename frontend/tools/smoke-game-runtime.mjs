@@ -63,6 +63,16 @@ try {
   thirdPage.on('console', (message) => {
     if (message.type() === 'error') thirdConsoleErrors.push(message.text())
   })
+  // The deployment-revision poll (deployment-revision.ts, at mount and every 15 s from
+  // Game.tsx) asks for deployment.json; Vite dev serves none, and each 404 lands in the
+  // console-error lists, so answer with the current revision like the other smokes do.
+  await Promise.all([page, clientPage, thirdPage].map((target) => target.route(
+    '**/deployment.json?*',
+    async (route) => {
+      const revision = new URL(route.request().url()).searchParams.get('current')
+      await route.fulfill({ json: { revision } })
+    },
+  )))
   if (process.env.SDR_GAME_SMOKE_PROVE_WAVES === '1') {
     await Promise.all([
       page.addInitScript(installGameAudioSmokeProbe),
