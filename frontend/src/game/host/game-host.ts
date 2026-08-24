@@ -369,7 +369,6 @@ interface HostClient {
   developerAccess: boolean
   displayName: string
   profile: PlayerSocialProfile
-  forceReplicationKeyframe: boolean
   globalScoreEligible: boolean
   hubActivity: HubPlayerActivity | null
   localOnly: boolean
@@ -379,6 +378,7 @@ interface HostClient {
   playerId: PlayerId
   queuedInputs: Map<number, QueuedClientInput>
   pendingLuaRequestIds: Set<number>
+  replicationRecovery: ReplicationRecoveryState | null
   resumeToken: string
   sentReplicationBaselines: Map<number, ReplicatedEntityBaseline>
   socket: WebSocket
@@ -387,16 +387,44 @@ interface HostClient {
 interface HostObserver {
   acknowledgedSnapshotSequence: number
   connectedAtMs: number
-  forceReplicationKeyframe: boolean
   lastSentSnapshotSequence: number
   readonly observerId: string
   readonly requestedByUserId: number
   readonly requestedByUsername: string
+  replicationRecovery: ReplicationRecoveryState | null
   readonly runId: string
   sentReplicationBaselines: Map<number, ReplicatedEntityBaseline>
   readonly socket: WebSocket
   readonly viewPlayerId: string
 }
+
+interface ReplicationPeer {
+  acknowledgedSnapshotSequence: number
+  lastSentSnapshotSequence: number
+  replicationRecovery: ReplicationRecoveryState | null
+  sentReplicationBaselines: Map<number, ReplicatedEntityBaseline>
+}
+
+interface ReplicationRecoveryState {
+  readonly cause: 'baseline-missing' | 'client-request'
+  readonly firstAcknowledgedSequence: number
+  keyframeSequence: number | null
+  lastStaleAcknowledgedSequence: number
+  readonly requestedAtMs: number
+  staleAcknowledgementCount: number
+}
+
+type ReplicationAcknowledgementResult =
+  | { readonly kind: 'accepted' | 'ahead' | 'ignored' }
+  | {
+      readonly cause: ReplicationRecoveryState['cause']
+      readonly kind: 'recovery-pending'
+      readonly started: boolean
+    }
+  | {
+      readonly kind: 'recovered'
+      readonly recovery: ReplicationRecoveryState
+    }
 
 interface ObservationWorld {
   readonly authorityPlayerId: string | null
@@ -725,18 +753,39 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           return
         }
         if (message.type === 'client-snapshot-ack') {
-          if (message.sequence > observer.lastSentSnapshotSequence) {
+          const result = acknowledgeReplicationSnapshot(
+            observer,
+            message.sequence,
+            message.requireKeyframe,
+          )
+          if (result.kind === 'ahead') {
             disconnect(socket, 'invalid-message', 'Snapshot acknowledgement is ahead of the server.')
             return
           }
-          if (message.requireKeyframe) observer.forceReplicationKeyframe = true
-          if (message.sequence <= observer.acknowledgedSnapshotSequence) return
-          if (!observer.sentReplicationBaselines.has(message.sequence)) {
-            observer.forceReplicationKeyframe = true
-            return
+          if (
+            result.kind === 'recovery-pending'
+            && result.started
+            && result.cause === 'baseline-missing'
+          ) {
+            logReplicationBaselineMissing(
+              options.log,
+              logDetails,
+              observer,
+              'observer',
+              message.sequence,
+              { observerId: observer.observerId },
+            )
           }
-          observer.acknowledgedSnapshotSequence = message.sequence
-          pruneReplicationBaselines(observer)
+          if (result.kind === 'recovered') {
+            logReplicationBaselineRecovered(
+              options.log,
+              logDetails,
+              observer,
+              'observer',
+              result.recovery,
+              { observerId: observer.observerId },
+            )
+          }
           return
         }
         if (message.type === 'client-disconnect') {
@@ -798,11 +847,11 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           const joinedObserver: HostObserver = {
             acknowledgedSnapshotSequence: snapshotSequence,
             connectedAtMs: Date.now(),
-            forceReplicationKeyframe: false,
             lastSentSnapshotSequence: snapshotSequence,
             observerId: `observer-${randomBytes(12).toString('base64url')}`,
             requestedByUserId: observerAdmission.userId,
             requestedByUsername: observerAdmission.username,
+            replicationRecovery: null,
             runId: observerAdmission.runId,
             sentReplicationBaselines: new Map([[snapshotSequence, welcomeBaseline]]),
             socket,
@@ -1210,7 +1259,6 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           developerAccess: authenticated.developerAccess,
           displayName: message.character.displayName,
           profile: message.profile,
-          forceReplicationKeyframe: false,
           // Browser-held documents are editable, including documents read back
           // from the account cloud slot. Only a save-free admission can begin a
           // globally ranked lineage; the document's own integrity claim is not
@@ -1230,6 +1278,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           playerId,
           pendingLuaRequestIds: new Set(),
           queuedInputs: new Map(),
+          replicationRecovery: null,
           resumeToken,
           sentReplicationBaselines: new Map([[snapshotSequence, welcomeBaseline]]),
           socket,
@@ -2091,30 +2140,39 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         return
       }
       if (message.type === 'client-snapshot-ack') {
-        if (message.sequence > client.lastSentSnapshotSequence) {
+        const result = acknowledgeReplicationSnapshot(
+          client,
+          message.sequence,
+          message.requireKeyframe,
+        )
+        if (result.kind === 'ahead') {
           disconnect(socket, 'invalid-message', 'Snapshot acknowledgement is ahead of the server.')
           return
         }
-        if (message.requireKeyframe) client.forceReplicationKeyframe = true
-        if (message.sequence <= client.acknowledgedSnapshotSequence) return
-        if (!client.sentReplicationBaselines.has(message.sequence)) {
-          client.forceReplicationKeyframe = true
-          logGameServerEvent(
+        if (
+          result.kind === 'recovery-pending'
+          && result.started
+          && result.cause === 'baseline-missing'
+        ) {
+          logReplicationBaselineMissing(
             options.log,
-            'game-host',
-            'warning',
-            'replication.baseline_missing',
-            'A player acknowledged a replication baseline the host no longer has.',
-            logDetails({
-              acknowledgedSequence: message.sequence,
-              playerId: client.playerId,
-              lastSentSequence: client.lastSentSnapshotSequence,
-            }),
+            logDetails,
+            client,
+            'player',
+            message.sequence,
+            { playerId: client.playerId },
           )
-          return
         }
-        client.acknowledgedSnapshotSequence = message.sequence
-        pruneReplicationBaselines(client)
+        if (result.kind === 'recovered') {
+          logReplicationBaselineRecovered(
+            options.log,
+            logDetails,
+            client,
+            'player',
+            result.recovery,
+            { playerId: client.playerId },
+          )
+        }
         return
       }
       if (message.type === 'client-start-match') {
@@ -2859,6 +2917,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     const periodicKeyframe = snapshotSequence % Math.max(1, snapshotRate * 5) === 0
     for (const client of clients.values()) {
       if (client.socket.readyState !== WebSocket.OPEN) continue
+      if (
+        client.replicationRecovery
+        && client.replicationRecovery.keyframeSequence !== null
+      ) continue
       const snapshot = defaultSnapshot ?? createGameSnapshot(
         stateForPlayer(client.playerId),
         authorityForPlayer(client.playerId),
@@ -2868,8 +2930,9 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       const acknowledgedBaseline = client.sentReplicationBaselines.get(
         client.acknowledgedSnapshotSequence,
       )
+      const recoveryKeyframe = client.replicationRecovery !== null
       const forceKeyframe = periodicKeyframe
-        || client.forceReplicationKeyframe
+        || recoveryKeyframe
         || !acknowledgedBaseline
       client.socket.send(encodeGameMessage({
         type: 'server-snapshot',
@@ -2882,13 +2945,19 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         ),
         sequence: snapshotSequence,
       }))
-      client.forceReplicationKeyframe = false
       client.lastSentSnapshotSequence = snapshotSequence
       client.sentReplicationBaselines.set(snapshotSequence, currentBaseline)
+      if (recoveryKeyframe && client.replicationRecovery) {
+        client.replicationRecovery.keyframeSequence = snapshotSequence
+      }
       pruneReplicationBaselines(client)
     }
     for (const observer of observers.values()) {
       if (observer.socket.readyState !== WebSocket.OPEN) continue
+      if (
+        observer.replicationRecovery
+        && observer.replicationRecovery.keyframeSequence !== null
+      ) continue
       const observed = observationWorld(observer.runId)
       if (!observed) {
         disconnectCauses.set(observer.socket, {
@@ -2903,8 +2972,9 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       const acknowledgedBaseline = observer.sentReplicationBaselines.get(
         observer.acknowledgedSnapshotSequence,
       )
+      const recoveryKeyframe = observer.replicationRecovery !== null
       const forceKeyframe = periodicKeyframe
-        || observer.forceReplicationKeyframe
+        || recoveryKeyframe
         || !acknowledgedBaseline
       observer.socket.send(encodeGameMessage({
         type: 'server-snapshot',
@@ -2917,9 +2987,11 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         ),
         sequence: snapshotSequence,
       }))
-      observer.forceReplicationKeyframe = false
       observer.lastSentSnapshotSequence = snapshotSequence
       observer.sentReplicationBaselines.set(snapshotSequence, currentBaseline)
+      if (recoveryKeyframe && observer.replicationRecovery) {
+        observer.replicationRecovery.keyframeSequence = snapshotSequence
+      }
       pruneReplicationBaselines(observer)
     }
   }
@@ -4645,7 +4717,118 @@ function createInitialSimulation(
   return state
 }
 
-function pruneReplicationBaselines(client: HostClient | HostObserver): void {
+function acknowledgeReplicationSnapshot(
+  peer: ReplicationPeer,
+  sequence: number,
+  requireKeyframe: boolean,
+): ReplicationAcknowledgementResult {
+  if (sequence > peer.lastSentSnapshotSequence) return { kind: 'ahead' }
+  const recovery = peer.replicationRecovery
+  if (recovery) {
+    if (
+      recovery.keyframeSequence !== null
+      && sequence === recovery.keyframeSequence
+      && !requireKeyframe
+    ) {
+      if (!peer.sentReplicationBaselines.has(sequence)) {
+        throw new Error('Replication recovery keyframe baseline was not retained')
+      }
+      peer.acknowledgedSnapshotSequence = sequence
+      peer.replicationRecovery = null
+      pruneReplicationBaselines(peer)
+      return { kind: 'recovered', recovery }
+    }
+    recovery.lastStaleAcknowledgedSequence = sequence
+    recovery.staleAcknowledgementCount += 1
+    if (
+      requireKeyframe
+      && recovery.keyframeSequence !== null
+      && sequence >= recovery.keyframeSequence
+    ) {
+      recovery.keyframeSequence = null
+    }
+    return { cause: recovery.cause, kind: 'recovery-pending', started: false }
+  }
+  if (requireKeyframe) {
+    peer.replicationRecovery = createReplicationRecovery('client-request', sequence)
+    return { cause: 'client-request', kind: 'recovery-pending', started: true }
+  }
+  if (sequence <= peer.acknowledgedSnapshotSequence) return { kind: 'ignored' }
+  if (!peer.sentReplicationBaselines.has(sequence)) {
+    peer.replicationRecovery = createReplicationRecovery('baseline-missing', sequence)
+    return { cause: 'baseline-missing', kind: 'recovery-pending', started: true }
+  }
+  peer.acknowledgedSnapshotSequence = sequence
+  pruneReplicationBaselines(peer)
+  return { kind: 'accepted' }
+}
+
+function createReplicationRecovery(
+  cause: ReplicationRecoveryState['cause'],
+  sequence: number,
+): ReplicationRecoveryState {
+  return {
+    cause,
+    firstAcknowledgedSequence: sequence,
+    keyframeSequence: null,
+    lastStaleAcknowledgedSequence: sequence,
+    requestedAtMs: performance.now(),
+    staleAcknowledgementCount: 0,
+  }
+}
+
+function logReplicationBaselineMissing(
+  log: GameServerLogSink | undefined,
+  logDetails: (details?: Readonly<Record<string, unknown>>) => Readonly<Record<string, unknown>>,
+  peer: ReplicationPeer,
+  connectionRole: 'observer' | 'player',
+  acknowledgedSequence: number,
+  identity: Readonly<Record<string, unknown>>,
+): void {
+  logGameServerEvent(
+    log,
+    'game-host',
+    'warning',
+    'replication.baseline_missing',
+    'A replication peer acknowledged a baseline the host no longer has.',
+    logDetails({
+      acknowledgedSequence,
+      connectionRole,
+      ...identity,
+      lastSentSequence: peer.lastSentSnapshotSequence,
+    }),
+  )
+}
+
+function logReplicationBaselineRecovered(
+  log: GameServerLogSink | undefined,
+  logDetails: (details?: Readonly<Record<string, unknown>>) => Readonly<Record<string, unknown>>,
+  peer: ReplicationPeer,
+  connectionRole: 'observer' | 'player',
+  recovery: ReplicationRecoveryState,
+  identity: Readonly<Record<string, unknown>>,
+): void {
+  logGameServerEvent(
+    log,
+    'game-host',
+    'info',
+    'replication.baseline_recovered',
+    'A replication peer acknowledged its recovery keyframe.',
+    logDetails({
+      cause: recovery.cause,
+      connectionRole,
+      firstAcknowledgedSequence: recovery.firstAcknowledgedSequence,
+      ...identity,
+      lastSentSequence: peer.lastSentSnapshotSequence,
+      lastStaleAcknowledgedSequence: recovery.lastStaleAcknowledgedSequence,
+      recoveryDurationMs: Math.max(0, Math.round(performance.now() - recovery.requestedAtMs)),
+      recoveryKeyframeSequence: recovery.keyframeSequence,
+      staleAcknowledgementCount: recovery.staleAcknowledgementCount,
+    }),
+  )
+}
+
+function pruneReplicationBaselines(client: ReplicationPeer): void {
   for (const sequence of client.sentReplicationBaselines.keys()) {
     if (sequence < client.acknowledgedSnapshotSequence) {
       client.sentReplicationBaselines.delete(sequence)
@@ -4653,7 +4836,10 @@ function pruneReplicationBaselines(client: HostClient | HostObserver): void {
   }
   while (client.sentReplicationBaselines.size > 64) {
     const sequence = [...client.sentReplicationBaselines.keys()].find(
-      (candidate) => candidate !== client.acknowledgedSnapshotSequence,
+      (candidate) => (
+        candidate !== client.acknowledgedSnapshotSequence
+        && candidate !== client.replicationRecovery?.keyframeSequence
+      ),
     )
     if (sequence === undefined) break
     client.sentReplicationBaselines.delete(sequence)

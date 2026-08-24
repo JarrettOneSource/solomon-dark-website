@@ -469,7 +469,14 @@ against that acknowledged baseline rather than assuming delivery. It sends a
 complete entity keyframe when the baseline is unavailable, the client requests
 recovery, or the five-second recovery interval expires. A missing descriptor,
 invalid sample, or sequence gap makes the client request a keyframe; it never
-guesses missing entity state.
+guesses missing entity state. Baseline recovery is a per-peer lifecycle rather
+than a one-frame flag: after sending the requested complete keyframe, the host
+stops adding snapshots to that peer's ordered WebSocket queue until the
+keyframe is acknowledged. Pre-keyframe acknowledgements are stale members of
+the same episode, not new warnings or new keyframe requests. Other peers,
+fixed-step authority, sideband messages, and transport heartbeats remain live;
+the keyframe acknowledgement resumes current-state deltas from the repaired
+baseline.
 Authenticated clients also measure application-level transport RTT with a
 nonce ping that the host echoes immediately outside the simulation and snapshot
 clocks. The measurement is client-local diagnostics state and never enters an

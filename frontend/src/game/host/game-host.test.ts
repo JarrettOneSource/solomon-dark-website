@@ -192,6 +192,7 @@ test('snapshot compression is bounded and skips sub-kilobyte control messages', 
 
 test('developer observer watches one private run without joining or mutating participant state', async (context) => {
   let observedRunId: string | null = null
+  const logs: GameServerLogEntry[] = []
   const runtimeEvents: GameServerLogEntry[] = []
   const host = await startGameHost({
     authentication: {
@@ -211,6 +212,7 @@ test('developer observer watches one private run without joining or mutating par
           ? { content: EMPTY_SHARED_CONTENT, leaderboardUserId: null }
           : null,
     },
+    log: entry => logs.push(entry),
     runtimeEvents: entry => runtimeEvents.push({
       ...entry,
       atUtc: entry.occurredAtUtc ?? new Date().toISOString(),
@@ -322,6 +324,60 @@ test('developer observer watches one private run without joining or mutating par
     reason: 'Observer connections are read-only.',
   })
   await waitFor(() => runtimeEvents.some(entry => entry.event === 'observer.disconnected'))
+  assert.equal(host.playerCount(), 2)
+  assert.equal(host.presence().length, 2)
+
+  const stalledObserver = await openSocket(host.address.url)
+  context.after(() => closeSocket(stalledObserver))
+  const stalledWelcome = nextMessage(stalledObserver, message => message.type === 'server-welcome')
+  stalledObserver.send(encodeGameMessage({
+    type: 'client-observer-hello',
+    credential: 'observer-ticket',
+    protocolVersion: GAME_PROTOCOL_VERSION,
+  }))
+  const stalledWelcomeMessage = await stalledWelcome
+  assert.equal(stalledWelcomeMessage.type, 'server-welcome')
+  const stalledObserverId = stalledWelcomeMessage.resumeToken
+  const stalledSnapshots: ServerSnapshotMessage[] = []
+  stalledObserver.on('message', (data) => {
+    const message = decodeServerGameMessage(data.toString())
+    if (message.type === 'server-snapshot') stalledSnapshots.push(message)
+  })
+  await waitFor(() => stalledSnapshots.length >= 80)
+  const observerBacklog = [...stalledSnapshots]
+  const observerRecoveryFloor = observerBacklog.at(-1)!.sequence
+  for (const message of observerBacklog) {
+    stalledObserver.send(encodeGameMessage({
+      type: 'client-snapshot-ack',
+      requireKeyframe: false,
+      sequence: message.sequence,
+    }))
+  }
+  await waitFor(() => stalledSnapshots.some(message => (
+    message.sequence > observerRecoveryFloor
+    && message.frame.world.entities.keyframe
+  )))
+  const observerRecovery = stalledSnapshots.find(message => (
+    message.sequence > observerRecoveryFloor
+    && message.frame.world.entities.keyframe
+  ))!
+  const observerFramesAtRecovery = stalledSnapshots.length
+  await new Promise(resolve => setTimeout(resolve, 100))
+  assert.equal(stalledSnapshots.length, observerFramesAtRecovery)
+  stalledObserver.send(encodeGameMessage({
+    type: 'client-snapshot-ack',
+    requireKeyframe: false,
+    sequence: observerRecovery.sequence,
+  }))
+  await waitFor(() => stalledSnapshots.length > observerFramesAtRecovery)
+  await waitFor(() => logs.some(entry => (
+    entry.event === 'replication.baseline_recovered'
+    && entry.details?.observerId === stalledObserverId
+  )))
+  assert.equal(logs.filter(entry => (
+    entry.event === 'replication.baseline_missing'
+    && entry.details?.observerId === stalledObserverId
+  )).length, 1)
   assert.equal(host.playerCount(), 2)
   assert.equal(host.presence().length, 2)
   leader.socket.off('message', countPlayerFacingCue)
@@ -1568,6 +1624,90 @@ test('game host sends a complete keyframe when a client requests recovery', asyn
     recovered.frame.world.entities.spawned.length,
     recovered.snapshot.world.kind === 'hub' ? recovered.snapshot.world.students.length : -1,
   )
+})
+
+test('game host bounds stale baseline recovery while healthy peers keep receiving', async (context) => {
+  const logs: GameServerLogEntry[] = []
+  const host = await startGameHost({
+    authentication: SHARED_AUTHENTICATION,
+    log: entry => logs.push(entry),
+    snapshotRate: 100,
+  })
+  context.after(() => host.close())
+  const stalled = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
+  const healthy = await join(host.address.url, 'test-secret', SECOND_CHARACTER)
+  context.after(() => closeSocket(stalled.socket))
+  context.after(() => closeSocket(healthy.socket))
+
+  const stalledSnapshots: ServerSnapshotMessage[] = []
+  const healthySnapshots: ServerSnapshotMessage[] = []
+  stalled.socket.on('message', (data) => {
+    const message = decodeServerGameMessage(data.toString())
+    if (message.type === 'server-snapshot') stalledSnapshots.push(message)
+  })
+  healthy.socket.on('message', (data) => {
+    const message = decodeServerGameMessage(data.toString())
+    if (message.type !== 'server-snapshot') return
+    healthySnapshots.push(message)
+    healthy.socket.send(encodeGameMessage({
+      type: 'client-snapshot-ack',
+      requireKeyframe: false,
+      sequence: message.sequence,
+    }))
+  })
+
+  await waitFor(() => stalledSnapshots.length >= 80 && healthySnapshots.length >= 80)
+  const backlog = [...stalledSnapshots]
+  const recoveryFloor = backlog.at(-1)!.sequence
+  for (const message of backlog) {
+    stalled.socket.send(encodeGameMessage({
+      type: 'client-snapshot-ack',
+      requireKeyframe: false,
+      sequence: message.sequence,
+    }))
+  }
+  await waitFor(() => stalledSnapshots.some(message => (
+    message.sequence > recoveryFloor
+    && message.frame.world.entities.keyframe
+  )))
+  const recovery = stalledSnapshots.find(message => (
+    message.sequence > recoveryFloor
+    && message.frame.world.entities.keyframe
+  ))!
+  const stalledFramesAtRecovery = stalledSnapshots.length
+  const healthyFramesAtRecovery = healthySnapshots.length
+  await new Promise(resolve => setTimeout(resolve, 100))
+
+  assert.equal(stalledSnapshots.length, stalledFramesAtRecovery)
+  assert.ok(healthySnapshots.length > healthyFramesAtRecovery)
+  const warnings = logs.filter(entry => (
+    entry.event === 'replication.baseline_missing'
+    && entry.details?.connectionRole === 'player'
+  ))
+  assert.equal(warnings.length, 1)
+  assert.equal(logs.some(entry => entry.event === 'replication.baseline_recovered'), false)
+
+  stalled.socket.send(encodeGameMessage({
+    type: 'client-snapshot-ack',
+    requireKeyframe: false,
+    sequence: recovery.sequence,
+  }))
+  await waitFor(() => stalledSnapshots.length > stalledFramesAtRecovery)
+  const resumed = stalledSnapshots[stalledFramesAtRecovery]!
+  assert.equal(resumed.frame.world.entities.keyframe, false)
+  assert.equal(resumed.frame.world.entities.baselineSequence, recovery.sequence)
+  await waitFor(() => logs.some(entry => (
+    entry.event === 'replication.baseline_recovered'
+    && entry.details?.connectionRole === 'player'
+  )))
+  const recovered = logs.find(entry => (
+    entry.event === 'replication.baseline_recovered'
+    && entry.details?.connectionRole === 'player'
+  ))
+  assert.equal(recovered?.details?.recoveryKeyframeSequence, recovery.sequence)
+  assert.ok(Number(recovered?.details?.staleAcknowledgementCount) > 1)
+  assert.equal(stalled.socket.readyState, WebSocket.OPEN)
+  assert.equal(healthy.socket.readyState, WebSocket.OPEN)
 })
 
 test('game host reconnects a new character at the active world spawn', async (context) => {
