@@ -926,7 +926,14 @@ test('every crafted Hub gameplay-pause source is rejected without suspending the
 })
 
 test('Boneyard pause holds the complete world and only its owner can resume', async (context) => {
-  const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
+  const logs: GameServerLogEntry[] = []
+  const runtimeEvents: string[] = []
+  const host = await startGameHost({
+    authentication: SHARED_AUTHENTICATION,
+    log: entry => logs.push(entry),
+    runtimeEvents: entry => runtimeEvents.push(entry.event),
+    snapshotRate: 100,
+  })
   context.after(() => host.close())
   const first = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
   const second = await join(host.address.url, 'test-secret', SECOND_CHARACTER)
@@ -961,6 +968,7 @@ test('Boneyard pause holds the complete world and only its owner can resume', as
     ownerPlayerId: second.welcome.playerId,
     source: 'skill-book',
   })
+  assert.ok(logs.some(entry => entry.event === 'gameplay.paused'))
 
   const heldTick = host.state().tick
   const heldWorld = JSON.stringify(host.state().world)
@@ -982,6 +990,10 @@ test('Boneyard pause holds the complete world and only its owner can resume', as
   ))
   second.socket.send(encodeGameMessage({ type: 'client-gameplay-pause', paused: false }))
   await Promise.all([releasedA, releasedB])
+  assert.ok(logs.some(entry => entry.event === 'gameplay.resumed'))
+  assert.deepEqual(runtimeEvents.filter(event => (
+    event === 'gameplay.paused' || event === 'gameplay.resumed'
+  )), [])
   assert.ok(host.state().tick - heldTick <= 10, 'Boneyard release must not replay paused wall time')
   await waitFor(() => host.state().tick > heldTick)
 })

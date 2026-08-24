@@ -1384,16 +1384,6 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
               source: message.source,
             }),
           )
-          emitRuntimeEvent(
-            'gameplay.paused',
-            'A player paused the authoritative gameplay world.',
-            {
-              displayName: client.displayName,
-              playerId: client.playerId,
-              serverTick: activeState.tick,
-              source: message.source,
-            },
-          )
           return
         }
         if (activePause?.ownerPlayerId !== client.playerId) return
@@ -4001,16 +3991,6 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         serverTick: state.tick,
         source,
       }),
-    )
-    emitRuntimeEvent(
-      'gameplay.resumed',
-      'The authoritative gameplay world resumed.',
-      {
-        displayName: released.ownerDisplayName,
-        playerId: released.ownerPlayerId,
-        serverTick: state.tick,
-        source,
-      },
     )
   }
 
