@@ -13,6 +13,11 @@ import {
 import { createHubWorld, stepHubWorldTick } from './hub-world.ts'
 
 test('the authoritative population generator reaches absence and every exact Skorcha placement', () => {
+  assert.deepEqual(NATIVE_HUB_NPC_CATALOG.skorcha.placements, [
+    { variant: 0, x: 1437.5, y: 732.5 },
+    { variant: 1, x: 1637, y: 403.5 },
+    { variant: 2, x: 669, y: 705.5 },
+  ])
   let absent = false
   const variants = new Map<number, HubSkorchaState>()
   for (let seed = 0; seed < 10_000 && (!absent || variants.size < 3); seed += 1) {

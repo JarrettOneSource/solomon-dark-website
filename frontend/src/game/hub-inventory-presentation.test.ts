@@ -99,17 +99,23 @@ test('the contextual interaction census covers every rendered named NPC and Mort
   ])
   assert.equal(nearestHubInteraction('courtyard', { x: 895.5, y: 455.5 }), 'annalist')
   assert.equal(nearestHubInteraction('courtyard', { x: 576.5, y: 710.5 }), 'teacher')
-  assert.equal(nearestHubInteraction('courtyard', { x: 669, y: 705.5 }), null)
-  assert.equal(nearestHubInteraction(
-    'courtyard',
+  for (const skorchaPosition of [
+    { x: 1437.5, y: 732.5 },
+    { x: 1637, y: 403.5 },
     { x: 669, y: 705.5 },
-    { skorchaPosition: { x: 669, y: 705.5 } },
-  ), 'skorcha')
-  assert.equal(hubInteractionAtPoint(
-    'courtyard',
-    { x: 403.5, y: 1637 },
-    { skorchaPosition: { x: 403.5, y: 1637 } },
-  ), 'skorcha')
+  ]) {
+    assert.equal(nearestHubInteraction('courtyard', skorchaPosition), null)
+    assert.equal(nearestHubInteraction(
+      'courtyard',
+      skorchaPosition,
+      { skorchaPosition },
+    ), 'skorcha')
+    assert.equal(hubInteractionAtPoint(
+      'courtyard',
+      skorchaPosition,
+      { skorchaPosition },
+    ), 'skorcha')
+  }
   assert.equal(nearestHubInteraction('mortuary', { x: 628, y: 770 }), 'memorator')
   assert.equal(nearestHubInteraction('mortuary', { x: 673, y: 683 }), 'painting-100')
   assert.equal(nearestHubInteraction('library', { x: 512, y: 595 }), 'librarian')

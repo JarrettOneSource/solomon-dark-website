@@ -19,9 +19,18 @@ import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
 const baseUrl = process.env.SDR_GAME_NPC_SMOKE_URL || 'http://127.0.0.1:4192'
 const screenshotRoot = process.env.SDR_GAME_NPC_SCREENSHOT_ROOT || '/tmp/solomon-dark-hub-npcs'
 const onlySection = process.env.SDR_GAME_NPC_SMOKE_ONLY?.trim() || null
+const expectedSkorchaVariant = process.env.SDR_GAME_NPC_EXPECT_SKORCHA_VARIANT === undefined
+  ? null
+  : Number(process.env.SDR_GAME_NPC_EXPECT_SKORCHA_VARIANT)
 assert.ok(
-  onlySection === null || ['courtyard', 'library', 'mortuary', 'office'].includes(onlySection),
+  onlySection === null
+    || ['courtyard', 'library', 'mortuary', 'office', 'skorcha'].includes(onlySection),
   `unknown NPC smoke section ${JSON.stringify(onlySection)}`,
+)
+assert.ok(
+  expectedSkorchaVariant === null
+    || [0, 1, 2].includes(expectedSkorchaVariant),
+  `invalid expected Skorcha variant ${JSON.stringify(expectedSkorchaVariant)}`,
 )
 const browser = await chromium.launch({
   executablePath: process.env.SDR_CHROME_PATH
@@ -64,6 +73,7 @@ try {
     await exerciseSkorcha(canvas)
     await exerciseTeacher(canvas)
   }
+  if (onlySection === 'skorcha') await exerciseSkorcha(canvas)
 
   if (onlySection === null || onlySection === 'library') {
     await navigateHubRegion(page, canvas, 'courtyard', { x: 1800, y: 650 }, 40, log)
@@ -105,6 +115,7 @@ try {
     library: ['librarian', 'shlorio'],
     mortuary: ['memorator', ...completeInteractions.filter(id => id.startsWith('painting-'))],
     office: ['arch-chancellor'],
+    skorcha: ['skorcha'],
   }
   assert.deepEqual(
     receipts.map(({ interaction }) => interaction).sort(),
@@ -266,6 +277,7 @@ async function exerciseProvokatus(canvas) {
 async function exerciseSkorcha(canvas) {
   const state = await canvas.evaluate((node) => node.__sdrHubFrame.skorcha)
   assert.ok(state, 'deterministic NPC smoke seed did not create Skorcha')
+  if (expectedSkorchaVariant !== null) assert.equal(state.variant, expectedSkorchaVariant)
   assert.equal(await canvas.getAttribute('data-skorcha-present'), 'true')
   await navigateHubRegion(page, canvas, 'courtyard', { x: state.x, y: state.y }, 35, log)
   const dialog = await openInteraction('skorcha', 'Skorcha')

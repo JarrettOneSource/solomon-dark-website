@@ -40657,7 +40657,7 @@ No member is browser-blocked.
   acquisition, not a rank/binding. Empty membership reads
   `ALL SPELLS\nALREADY BOUGHT!`.
 - Skorcha is present only on `Integer(3)==1`; the next draw chooses
-  `(732.5,1437.5)`, `(403.5,1637)`, or `(669,705.5)`. A distinct one of three
+  `(1437.5,732.5)`, `(1637,403.5)`, or `(669,705.5)`. A distinct one of three
   gestures is chosen every `Integer(10)+20` ticks. Hub authority generates once.
 
 ### Web implementation consequence
@@ -40696,17 +40696,17 @@ No member is browser-blocked.
 ### Implementation validation receipt
 
 - Generated authority: `native-hub-npc-catalog.json` SHA-256
-  `79df7f5a3b79b5ca776ee89d6d5850f1a96496ae12d987b3d76ba2c13d1cbd3f`;
+  `84a4d018489367bac9e05cafe404a8e42765ed4e3c7a68c24f67fc61010b49f3`;
   extracted `hub-npc-skorcha-frames.png` SHA-256
   `8c1892384b12148013c072a50e31d2ff0a6d16f4ceec6678229ca0862abd52c7`.
 - Implementation owners: generated catalog/extractor; pure NPC dialogue and
   Skorcha kernels; economy/progression/simulation authority; protocol 71 and
   save schema 8; Chat/selectors/Notebox/Pixi presentation; extracted art;
   regression and browser acceptance tools.
-- Focused Mac proof: all 54 NPC/Hub UI tests; strict primary/secondary mana
+- Focused Mac proof: all 55 NPC/Hub UI tests; strict primary/secondary mana
   boundaries; all five Boast mutation families; Wave-30/Hall award; protocol,
   replication, save migration, and present/absent Skorcha tests. The complete
-  Boneyard group passed 1,487 tests and its prerequisite group passed 265.
+  Boneyard group and its prerequisite group passed.
 - Hardware-browser proof: arm64 macOS 26.6.2, Chrome 151, WebGL2
   `ANGLE Metal Renderer: Apple M2`. One continuous journey opened all 20
   interaction targets, all three selectors, every question/dismissal, all ten
@@ -40715,13 +40715,39 @@ No member is browser-blocked.
   2,106 ms. Page-error, console-error, and failed-response arrays were empty.
 - Screenshot family: `/tmp/solomon-dark-hub-npcs-*.png` on the acceptance Mac,
   including Boast, automatic picker, Teacher, Lace, Skorcha, Painting 100, and
-  Archchancellor frames.
+  Archchancellor frames. The coordinate correction added independent
+  `sdr-npc-coordinate-v{0,1,2}-skorcha.png` frames.
 - Canonical gate: the final Mac `./scripts/validate.sh` ran through production
-  media policy with no failures: 22 backend/contracts tests; frontend groups
-  `9,4,45,265,1487,6,77,9,63,12,14,7,36,54,5`; production build and game-host
-  build; and a game-entry bundle below the `131072`-byte gzip budget.
+  media policy with no failures: backend/contracts tests; every supported
+  frontend and desktop group; production frontend and game-host builds; and a
+  game entry below the `131072`-byte gzip budget.
 - Explicitly out of scope: story-campaign actors and recipe-authored Boneyard
   `GameNPC`, dispositioned above.
+
+### Skorcha coordinate-order correction
+
+The post-publication residual sweep falsified the first two placement rows.
+`0x0050B720` writes actor X at `+0x18` and Y at `+0x1C`, but the earlier table
+read each pair in ascending global-address order. Raw float dumps establish:
+
+| Variant | X writer/value | Y writer/value | Correct position |
+| ---: | --- | --- | ---: |
+| 0 | `0x00792F8C = 1437.5` | `0x00792F88 = 732.5` | `(1437.5,732.5)` |
+| 1 | `0x00792F94 = 1637` | `0x00792F90 = 403.5` | `(1637,403.5)` |
+| 2 | `0x00792454 = 669` | `0x00792F98 = 705.5` | `(669,705.5)` |
+
+All three are ordinary resident coordinates in the normal Courtyard camera
+bank. Implementation must regenerate the catalog, thereby moving authoritative
+collision, interaction, snapshot/save state, and Pixi presentation together.
+Closure requires explicit non-circular coordinate assertions plus separate
+Mac Metal browser conversations at variants 0, 1, and 2; the former variant-2
+journey alone is insufficient proof of complete placement membership.
+
+The corrective Mac run used deterministic host seeds `3`, `16`, and `2` for
+variants 0, 1, and 2 respectively. Each journey navigated to the replicated
+position, exposed the `hub:skorcha` prompt, opened Skorcha's authored Chat, and
+captured the matching variant. All three used Pixi WebGL on the Apple M2 Metal
+renderer, with empty page-error, console-error, and failed-response arrays.
 
 ## 2026-08-24 — Solomon Dig dirt actor and state-0 presentation closure
 
