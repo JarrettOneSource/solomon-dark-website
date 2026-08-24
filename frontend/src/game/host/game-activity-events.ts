@@ -19,9 +19,7 @@ export interface GameActivityPlayer {
 }
 
 export interface GameActivityWave {
-  readonly eventId: number
   readonly ordinal: number
-  readonly phase: string
 }
 
 export interface GameActivitySnapshot {
@@ -62,9 +60,7 @@ export function projectGameActivity(state: GameSimulationState): GameActivitySna
     tick: state.tick,
     wave: state.world.kind === 'boneyard' && state.world.waves !== null
       ? {
-          eventId: state.world.waves.waveEventId,
           ordinal: state.world.waves.waveOrdinal,
-          phase: state.world.waves.phase,
         }
       : null,
   }
@@ -88,40 +84,6 @@ export function deriveGameActivityEvents(
     })
   }
 
-  if (
-    current.wave !== null
-    && (previous.wave === null || current.wave.eventId > previous.wave.eventId)
-  ) {
-    events.push({
-      event: 'wave.started',
-      message: 'A Boneyard wave started.',
-      details: {
-        playerCount: current.players.length,
-        runId: current.runId,
-        serverTick: current.tick,
-        wave: current.wave.ordinal,
-        waveEventId: current.wave.eventId,
-      },
-    })
-  }
-
-  if (
-    previous.wave?.phase === 'wave-threshold'
-    && current.wave?.phase === 'wave-lull-delay'
-  ) {
-    events.push({
-      event: 'wave.completed',
-      message: 'A party completed a Boneyard wave.',
-      details: {
-        playerCount: current.players.length,
-        runId: current.runId,
-        serverTick: current.tick,
-        wave: current.wave.ordinal,
-        waveEventId: current.wave.eventId,
-      },
-    })
-  }
-
   const previousPlayers = new Map(previous.players.map(player => [player.playerId, player]))
   for (const player of current.players) {
     const before = previousPlayers.get(player.playerId)
@@ -132,19 +94,6 @@ export function deriveGameActivityEvents(
         message: 'A player died in the Boneyard.',
         details: {
           ...player,
-          runId: current.runId,
-          serverTick: current.tick,
-          wave: current.wave?.ordinal ?? null,
-        },
-      })
-    }
-    if (player.level > before.level) {
-      events.push({
-        event: 'player.leveled_up',
-        message: 'A player gained a level.',
-        details: {
-          ...player,
-          previousLevel: before.level,
           runId: current.runId,
           serverTick: current.tick,
           wave: current.wave?.ordinal ?? null,

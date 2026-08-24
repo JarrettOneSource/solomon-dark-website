@@ -72,9 +72,9 @@ test('runtime event publisher retries and posts bounded activity to the loopback
   )
   publisher.publish({
     component: 'game-host',
-    details: { displayName: 'Helvidius', wave: 3 },
-    event: 'wave.started',
-    message: 'A Boneyard wave started.',
+    details: { playerCount: 1, runId: 'run-1' },
+    event: 'run.started',
+    message: 'A party started a Boneyard run.',
     occurredAtUtc: '2026-08-23T12:00:00.000Z',
   })
   await waitFor(() => requests.length === 2)
@@ -84,10 +84,10 @@ test('runtime event publisher retries and posts bounded activity to the loopback
   assert.deepEqual(requests[1]?.body, {
     schemaVersion: 1,
     component: 'game-host',
-    event: 'wave.started',
-    message: 'A Boneyard wave started.',
+    event: 'run.started',
+    message: 'A party started a Boneyard run.',
     occurredAtUtc: '2026-08-23T12:00:00.000Z',
-    details: { displayName: 'Helvidius', wave: 3 },
+    details: { playerCount: 1, runId: 'run-1' },
   })
   assert.throws(
     () => createRuntimeEventPublisher('https://example.com/events', secret),

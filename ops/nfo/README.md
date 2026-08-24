@@ -45,9 +45,10 @@ RuntimeEvents__Secret=<the same separate runtime-event value>
 
 Runtime activity is retained in the Website SQLite `RuntimeEvents` outbox for
 30 minutes, capped at 2,000 rows, and pruned by the Website every minute. The
-game host submits transient party, run, wave, and player events through the
-authenticated loopback endpoint; external consumers may read the outbox
-directly without receiving any Website or game-session credential.
+game host submits selected transient party, run, session, observer, connection,
+and player-death events through the authenticated loopback endpoint; external
+consumers may read the outbox directly without receiving any Website or
+game-session credential.
 
 The supervisor also uses this secret as the key for domain-separated global
 leaderboard receipts. The website verifies those receipts with the matching

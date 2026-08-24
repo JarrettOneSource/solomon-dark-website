@@ -129,14 +129,13 @@ class RuntimeEventContractTests(unittest.TestCase):
         event = {
             "schemaVersion": 1,
             "component": "game-host",
-            "event": "wave.started",
-            "message": "A Boneyard wave started.",
+            "event": "run.started",
+            "message": "A party started a Boneyard run.",
             "occurredAtUtc": occurred,
             "details": {
                 "boneyardName": "The Survival Grounds",
-                "displayName": "Helvidius",
+                "playerCount": 1,
                 "runId": "run-contract",
-                "wave": 3,
             },
         }
         unauthorized, _ = self.request("POST", "/api/internal/runtime-events", body=event)
@@ -177,10 +176,10 @@ class RuntimeEventContractTests(unittest.TestCase):
             if len(rows) == 1:
                 break
             time.sleep(0.05)
-        self.assertEqual([row[3] for row in rows], ["wave.started"])
+        self.assertEqual([row[3] for row in rows], ["run.started"])
         game_details = json.loads(rows[0][5])
-        self.assertEqual(game_details["displayName"], "Helvidius")
-        self.assertEqual(game_details["wave"], 3)
+        self.assertEqual(game_details["playerCount"], 1)
+        self.assertEqual(game_details["runId"], "run-contract")
         occurred_at = datetime.fromisoformat(rows[0][6]).replace(tzinfo=timezone.utc)
         expires_at = datetime.fromisoformat(rows[0][7]).replace(tzinfo=timezone.utc)
         self.assertAlmostEqual((expires_at - occurred_at).total_seconds(), 30 * 60, delta=1)

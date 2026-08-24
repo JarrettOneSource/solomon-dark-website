@@ -98,7 +98,7 @@ interface TestReplicationState {
 
 const replicationBySocket = new WeakMap<WebSocket, TestReplicationState>()
 
-test('game activity derivation emits detailed run, wave, death, level, and ending edges once', () => {
+test('game activity derivation omits wave and level notifications without hiding run edges', () => {
   const player = (changes: Partial<GameActivityPlayer> = {}): GameActivityPlayer => ({
     currentHealth: 100,
     deathEpoch: 0,
@@ -134,31 +134,29 @@ test('game activity derivation emits detailed run, wave, death, level, and endin
     phase: 'active',
     runId: 'run-1',
     tick: 20,
-    wave: { eventId: 7, ordinal: 1, phase: 'wave-spawning' },
+    wave: { ordinal: 1 },
   })
   assert.deepEqual(
     deriveGameActivityEvents(runStarted, waveStarted).map(({ event }) => event),
-    ['wave.started'],
+    [],
   )
 
-  const threshold = snapshot({
+  const beforeTerminal = snapshot({
     phase: 'active',
     runId: 'run-1',
     tick: 30,
-    wave: { eventId: 7, ordinal: 1, phase: 'wave-threshold' },
+    wave: { ordinal: 1 },
   })
   const diedAndLeveled = snapshot({
     phase: 'game-over',
     players: [player({ currentHealth: 0, deathEpoch: 1, level: 2, lifeState: 'dying' })],
     runId: 'run-1',
     tick: 31,
-    wave: { eventId: 7, ordinal: 1, phase: 'wave-lull-delay' },
+    wave: { ordinal: 1 },
   })
-  const terminalEvents = deriveGameActivityEvents(threshold, diedAndLeveled)
+  const terminalEvents = deriveGameActivityEvents(beforeTerminal, diedAndLeveled)
   assert.deepEqual(terminalEvents.map(({ event }) => event), [
-    'wave.completed',
     'player.died',
-    'player.leveled_up',
     'run.game_over',
   ])
   assert.deepEqual(
