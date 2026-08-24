@@ -4779,3 +4779,56 @@ test('Magic Storm lightning consumes Prismatic susceptibility and Acid Rain uses
   assert.equal(pulseDamage, 3)
   assert.deepEqual(pulseAmounts, Array(3).fill(Math.fround(2 / 6)))
 })
+
+test('Acid Rain uses the strict native radius-200 root attack area', () => {
+  const cases = [
+    { hit: true, name: 'inside horizontal edge', offset: { x: 199.999, y: 0 }, radius: 1 },
+    { hit: false, name: 'exact horizontal edge', offset: { x: 200, y: 0 }, radius: 1 },
+    { hit: false, name: 'body overlap beyond edge', offset: { x: 225, y: 0 }, radius: 100 },
+    { hit: true, name: 'inside diagonal', offset: { x: 141, y: 141 }, radius: 50 },
+    { hit: false, name: 'outside diagonal', offset: { x: 142, y: 142 }, radius: 50 },
+    { hit: false, name: 'overhead cloud proxy', offset: { x: 0, y: 350 }, radius: 100 },
+  ] as const
+
+  for (const expected of cases) {
+    const castState = cast(72).state
+    const field = castState.actors.find(({ kind }) => kind === 'acid-rain')!
+    const source: NativeSecondarySimulationState = {
+      ...castState,
+      actors: [{
+        ...field,
+        ageTicks: 100,
+        alpha: 1,
+        phase: 1,
+        quantity: 1,
+        scale: 1,
+      }],
+    }
+    const target = {
+      family: 'ZOMBIE',
+      id: 1,
+      lightRegistration: TARGET_LIGHT_REGISTRATION,
+      position: {
+        x: field.position.x + expected.offset.x,
+        y: field.position.y + expected.offset.y,
+      },
+      radius: expected.radius,
+      scale: 1,
+      shieldHealth: 0,
+    }
+    let queryCenter: Readonly<{ x: number; y: number }> | null = null
+    let queryRadius: number | null = null
+    const result = stepNativeSecondaryAbilities(source, {
+      ...context(72, 101, null),
+      targets: (_worldKey, center, radius) => {
+        queryCenter = center
+        queryRadius = radius
+        return [target]
+      },
+    })
+
+    assert.deepEqual(queryCenter, field.position, expected.name)
+    assert.equal(queryRadius, 200, expected.name)
+    assert.equal(result.damage.length, expected.hit ? 1 : 0, expected.name)
+  }
+})

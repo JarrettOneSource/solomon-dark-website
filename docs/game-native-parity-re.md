@@ -41487,7 +41487,7 @@ and narration remain unchanged except for dispositioning stage-2 lifetime.
 | Full class/membership sweep | `AcidRain::vftable 0x0079CF9C`; `Anim_AcidRaindrop::vftable 0x0079DCA0`; constructor/tick/draw `0x005E3540/0x00604E90/0x004541A0/0x00459130`; all four vtable xrefs; sibling `RainOfBones::vftable 0x0079D06C` | Acid Rain has no additional vtable installer or hidden authored row. `RainOfBones` calls the Acid constructor only as a base initializer, then replaces type, tick, render registration, painter, and light callbacks. | high |
 | Asset/data | BadGuys records `0` and `10`; compiled floats in `0x005EB1D0/0x005EB290`; existing exact extracted atlas records | Both cloud glyphs and the ground residue use record 10 with separate tint/blend/alpha programs. Drop head/ground use record 0. No browser-generated substitute is required. | high |
 | Current web causal trace | clean `origin/main` `4021fce5bfe65e8d3201b7d33db148a6cf60f56b`; `native-secondary-abilities.ts`, `native-secondary-presentation.ts`, `native-secondary-world-view.ts`, `boneyard-world-renderer.ts`, focused presentation tests | Host state and protocol retain parent/drop/splash members. The presenter places the first parent glyph at local Y `0`, the second at `-50*s`, and residue at `0`; one `NativeSecondaryActorView` gives all three one world-sorted depth. | high |
-| Current web combat trace | `native-secondary-abilities.ts` `candidates(actor,400)`; `game-simulation.ts`; `boneyardNativeSecondaryTargets` | The host treats 400 as a radius and admits root distance `<=400+bodyRadius`, producing an over-wide, body-expanded footprint instead of the native strict radius-200 root query. | high |
+| Pre-fix web combat trace | `native-secondary-abilities.ts` `candidates(actor,400)`; `game-simulation.ts`; `boneyardNativeSecondaryTargets` | The host treated 400 as a radius and admitted root distance `<=400+bodyRadius`, producing an over-wide, body-expanded footprint instead of the native strict radius-200 root query. | high |
 
 ### System boundary and membership inventory
 
@@ -41512,7 +41512,7 @@ exact candidate passes Mac validation and browser acceptance.
 | one-in-four splash and five-draw RNG suffix | `0x00604E90`; generic fade/move perspective child | verified-already-at-parity | existing RNG/state/presenter assertions |
 | provider light | slot `+0x30 -> 0x005EB5C0`; enrollment at tick tail | exact-ported | radius 2, intensity `0.5*cloudAlpha`, no shadow, no residue-only source; stable actor-manager registration remains until teardown |
 | cast, damage-pulse, and ambient audio | `magicstorm`, pitched `acidsizzle`, shared `rainfall__loop` | exact-ported | damage-only sizzle; rain gain equals cloud alpha and stops before residue-only ownership |
-| target query, shuffle, direct-damage subset, and authority | `0x006052A1..0x006052D6`; `0x00642280`; `0x00523140`; `0x005E41F0` | correction-required | strict radius-200 root-center boundary, exact-edge rejection, no body-radius expansion, stable shuffle, and `floor(n/3)+1` damage assertions |
+| target query, shuffle, direct-damage subset, and authority | `0x006052A1..0x006052D6`; `0x00642280`; `0x00523140`; `0x005E41F0` | exact-ported | strict radius-200 root-center boundary, exact-edge rejection, no body-radius expansion, stable shuffle, and `floor(n/3)+1` damage assertions |
 | snapshot decode and peer materialization | protocol secondary actor union; parent/drop/splash rows | verified-already-at-parity | round-trip tests and browser actor-kind/count receipt |
 | Tutorial and ordinary Boneyard consumers | shared skill-72 actor family | exact-ported | one renderer path; real Tutorial cast plus ordinary fixture journey |
 | interruption, world reset, owner removal, reconnect, and terminal residue retirement | Region/Website world-owner teardown | verified-already-at-parity | existing reset/remove tests plus zero retained views after browser teardown |
@@ -41614,8 +41614,14 @@ There are no browser-platform-blocked members and no extractable unknowns.
 
 ### Implementation validation receipt
 
-- Attack-area correction is pending. The current host still uses a radius-400,
-  body-expanded query and must not be called native-exact for combat geometry.
+- The attack-area regression ran red on pre-fix Website commit `fef1fff5`:
+  the host requested radius `400` instead of `200`. The Acid-owned query now
+  asks the existing world adapter for a radius-200 superset, then applies the
+  native strict root-distance-squared boundary before shuffle. Exact distance
+  200, the overhead proxy, and body overlap beyond the edge are all rejected;
+  roots immediately inside and inside-diagonal roots remain eligible.
+- Final gate and browser combat receipts for the attack-area correction remain
+  pending below.
 
 - The presenter now gives Acid Rain two physical owners. Its world-sorted
   `PuppetPointer` plan keeps the native `rootY+350` queue key and zero bias while

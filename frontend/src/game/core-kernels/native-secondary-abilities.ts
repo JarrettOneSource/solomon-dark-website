@@ -594,6 +594,8 @@ const ACID_RAIN_ACTIVE_TICKS = 1_500
 const ACID_RAIN_INITIAL_PULSE_DELAY_TICKS = 50
 const ACID_RAIN_PULSE_INTERVAL_TICKS = 25
 const ACID_RAIN_MAXIMUM_LIFETIME_TICKS = 3_600
+const ACID_RAIN_ATTACK_RADIUS = 200
+const ACID_RAIN_ATTACK_RADIUS_SQUARED = ACID_RAIN_ATTACK_RADIUS * ACID_RAIN_ATTACK_RADIUS
 const ACID_RAIN_DROP_HEIGHT = -175
 const ACID_RAIN_DROP_FALL_PER_TICK = 20
 const ACID_RAIN_DROP_VELOCITY_GAIN = 4
@@ -2992,7 +2994,10 @@ export function stepNativeSecondaryAbilities(
         let pulseCountdown = sourceActor.quantity
         if (scale >= 1) pulseCountdown -= 1
         if (scale >= 1 && pulseCountdown <= 0) {
-          const all = candidates(actor, 400)
+          const all = candidates(actor, ACID_RAIN_ATTACK_RADIUS).filter((target) => (
+            squaredDistance(actor.position, target.position)
+              < ACID_RAIN_ATTACK_RADIUS_SQUARED
+          ))
           const shuffled = shuffleFixedBound(all, rng)
           rng = shuffled.rng
           const count = all.length === 0 ? 0 : Math.floor(all.length / 3) + 1

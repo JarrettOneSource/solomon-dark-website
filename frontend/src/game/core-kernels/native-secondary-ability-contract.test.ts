@@ -28,7 +28,7 @@ const EXPECTED = [
   [50, 'Magic Trap', 'aimed-world-point', 'BadGuys:111,112,15,85', 'set-trap'],
   [51, 'Dampen', 'caster-center-rectangle', 'BadGuys:10,11', 'flash'],
   [54, 'Magic Shield', 'self', 'BadGuys:49', 'magic-shield-up'],
-  [72, 'Acid Rain', 'aimed-world-point', 'BadGuys:0,10', 'magic-storm'],
+  [72, 'Acid Rain', 'aimed-world-point-strict-radius-200', 'BadGuys:0,10', 'magic-storm'],
   [73, 'Fire Wall', 'line-perpendicular-to-aim', 'DeadHawg:46..77', 'ignite'],
   [74, 'Ether Drain', 'aimed-world-point', 'BadGuys:75', 'distort-reality'],
   [76, 'Call Comet', 'aimed-world-point', 'DeadHawg:5', 'comet-loop'],
@@ -289,6 +289,7 @@ test('critical native VFX and lifecycle constants cannot collapse to generic eff
     maximumLifetimeTicks: 3_600,
     residuePass: 'pre-world source-over BadGuys[10] at ground root, tint (0.05,0.1,0.05), residue alpha, uniform scale 4.5',
     splashGate: 'Integer(4)==3 after raindrop allocation',
+    targetArea: 'strict root-center circle at aimed ground point, radius 200; exact edge excluded; no body-radius expansion',
     targetsPerPulse: 'min(n,floor(n/3)+1)',
   })
   assert.deepEqual(nativeSecondaryAbilityContract(73).timing, {

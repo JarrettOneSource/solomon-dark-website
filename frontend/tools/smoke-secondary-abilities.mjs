@@ -82,7 +82,7 @@ const MAXIMUM_SET_RECIPES = new Map([
   [76, [22, 23, 24]],
   [45, [25, 26, 27, 28]],
 ])
-const COMBAT_PROOF_SKILLS = new Set([11, 21, 27, 35, 45, 76])
+const COMBAT_PROOF_SKILLS = new Set([11, 21, 27, 35, 45, 72, 76])
 
 assert.deepEqual(
   Object.keys(PROOFS).map(Number),
@@ -1414,9 +1414,20 @@ async function abilityCastTarget(canvas, host, playerId, skillId, scene) {
   }
   const enemies = {
     ...state.world.enemies,
-    actors: state.world.enemies.actors.map((actor) => actor.id === enemy.id
-      ? { ...actor, nextMovementTick: state.tick + 100_000, position }
-      : actor),
+    actors: state.world.enemies.actors.map((actor) => {
+      if (actor.id === enemy.id) {
+        return { ...actor, nextMovementTick: state.tick + 100_000, position }
+      }
+      if (skillId !== 72 || actor.lifeState !== 'alive') return actor
+      return {
+        ...actor,
+        nextMovementTick: state.tick + 100_000,
+        position: {
+          x: position.x + 1_000 + actor.id,
+          y: position.y + 1_000,
+        },
+      }
+    }),
   }
   Object.assign(state, { world: { ...state.world, enemies } })
   await new Promise((resolve) => setTimeout(resolve, 30))
@@ -1512,6 +1523,48 @@ async function collectCombatProof(host, playerId, skillId, baseline, scene) {
       },
     }, null, 2)}\n`)
     throw error
+  }
+  if (skillId === 72) {
+    const state = host.state()
+    assert.equal(state.world.kind, 'boneyard')
+    const rain = state.secondaryAbilities.actors.find(({ kind, ownerId }) => (
+      kind === 'acid-rain' && ownerId === playerId
+    ))
+    const enemy = state.world.enemies.actors.find(({ id }) => id === baseline.enemyId)
+    assert.ok(rain && enemy && receipt)
+    const edgeHealth = enemy.currentHealth
+    const edgeAge = rain.ageTicks
+    const edgePosition = { x: rain.position.x + 200, y: rain.position.y }
+    const enemies = {
+      ...state.world.enemies,
+      actors: state.world.enemies.actors.map((actor) => actor.id === enemy.id
+        ? {
+            ...actor,
+            nextMovementTick: state.tick + 100_000,
+            position: edgePosition,
+          }
+        : actor),
+    }
+    Object.assign(state, { world: { ...state.world, enemies } })
+    await waitUntil(() => {
+      const current = host.state().secondaryAbilities.actors.find(({ id }) => id === rain.id)
+      return (current?.ageTicks ?? 0) >= edgeAge + 30
+    }, 'Acid Rain did not advance through its next exact-area pulse', 2_000)
+    const edgeEnemy = host.state().world.kind === 'boneyard'
+      ? host.state().world.enemies.actors.find(({ id }) => id === enemy.id)
+      : null
+    assert.equal(edgeEnemy?.currentHealth, edgeHealth)
+    receipt = {
+      ...receipt,
+      attackArea: {
+        bodyRadius: enemy.config.collisionRadius,
+        center: { ...rain.position },
+        exactEdgeDistance: 200,
+        exactEdgeHealthAfter: edgeEnemy?.currentHealth,
+        exactEdgeHealthBefore: edgeHealth,
+        exactEdgePosition,
+      },
+    }
   }
   return receipt
 }
