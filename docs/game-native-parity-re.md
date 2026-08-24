@@ -40658,7 +40658,8 @@ No member is browser-blocked.
   `ALL SPELLS\nALREADY BOUGHT!`.
 - Skorcha is present only on `Integer(3)==1`; the next draw chooses
   `(1437.5,732.5)`, `(1637,403.5)`, or `(669,705.5)`. A distinct one of three
-  gestures is chosen every `Integer(10)+20` ticks. Hub authority generates once.
+  gestures is chosen every `Integer(10)+20` ticks. Courtyard authority rolls
+  once per constructed Courtyard instance.
 
 ### Web implementation consequence
 
@@ -40748,6 +40749,74 @@ variants 0, 1, and 2 respectively. Each journey navigated to the replicated
 position, exposed the `hub:skorcha` prompt, opened Skorcha's authored Chat, and
 captured the matching variant. All three used Pixi WebGL on the Apple M2 Metal
 renderer, with empty page-error, console-error, and failed-response arrays.
+
+### Conditional-NPC and Courtyard-lifetime reopening
+
+The follow-up discoverability audit found that the earlier pass recovered
+Skorcha's presence draw but stopped at actor construction and assigned it the
+whole-Hub/save lifetime. Stock Region ownership disproves that lifetime:
+`Courtyard` constructor `0x00514EE0` calls the survival builder `0x0050B720`
+whenever the Region is reconstructed, and the builder performs the two
+Skorcha draws each time. Region actors are not durable profile state.
+
+Fresh canonical Ghidra evidence closes every apparent normal-Hub actor gate:
+
+| Member | Native gate/lifetime | Required web disposition |
+| --- | --- | --- |
+| Professor Semicus | Unconditional Library case `0xFA4`, center `(512,595)`; all 26 book rows start available in survival | Always present; only one-shot Lace is later removed |
+| Skorcha/Tyrannia | Each Courtyard construction creates her only when `Integer(3)==1`, then draws one of three placements | One host-authoritative Courtyard-instance population, rerolled on reconstruction |
+| Professor Machinimbus | Builder call `0x0050BD0C` reaches `0x004736D0`, exactly `MOV AL,1; RET` | Always present; only the eight spell-offer rows are progression-gated |
+| Second initializer branch | `0x00461F60` is exactly `XOR AL,AL; RET`; guarded `0x005001E0` is not an actor factory | Not an NPC gate |
+| Provokatus/Hagatha/Luthacus flag bytes | `0x0081A3CA..CC` affect action bubbles; wrappers `0x005018A0/B0/C0` clear them and enter common Chat | Presentation hints, not actor or service unlocks |
+| Polisher/alternate Annalist/Arch variants | Separate story builder `0x00513BE0`, selected by `Gameplay+0x1CD8` | Out of the normal survival-Hub census; do not inject as unlocks |
+
+The production host already supplies a random authoritative Hub seed, so the
+initial web Courtyard and every post-run Hub construction perform the correct
+one-in-three draw. The remaining mismatch is lifecycle: `HubWorldState.skorcha`
+survives participant room changes, and Hub save restore explicitly preserves
+it, even though both paths reconstruct the stock Courtyard.
+
+The first lifecycle browser run then exposed the downstream half of the same
+assumption: renderer/controller sampling followed the current replicated
+Skorcha, but `HubInventoryUi` received position and dismissal from
+`hubInitialSnapshot`. A valid null-to-present reconstruction therefore rendered
+and navigated to Skorcha while withholding the semantic interaction prompt.
+The UI projection must follow the latest host snapshot as population changes.
+
+The shared-Hub adaptation treats a Courtyard as live while at least one
+participant occupies it. Its Skorcha result remains stable and shared during
+that occupancy epoch. The last participant leaving destroys the optional
+actor; the next zero-to-one Courtyard occupancy edge performs a fresh
+host-authoritative draw. Hub resume also reconstructs rather than restores the
+serialized optional actor. Snapshots continue to replicate only the current
+authoritative result, and clients never draw locally.
+
+Closure requires focused assertions for unconditional Semicus/Machinimbus,
+initial absent/present and all three Skorcha placements, multiplayer occupancy
+retention, last-exit teardown, return-entry reroll, Hub-resume reconstruction,
+dynamic collision/interaction, and current snapshot validation. Mac Chrome
+must prove Semicus directions plus absent-to-present Courtyard re-entry and all
+three visible Skorcha placements with empty page, console, and network errors.
+
+The closing implementation keeps a private native-RNG population stream on the
+host Hub, tracks whether the shared Courtyard population is constructed, and
+applies the zero-to-one occupancy rule in participant add/remove and Region
+transition paths. Hub resume draws a new Courtyard seed from the saved game RNG
+and advances that RNG instead of restoring the serialized optional actor.
+`HubScene` now projects Skorcha interaction position/dismissal from current
+snapshots, closing the null-to-present prompt defect.
+
+On the manifest-identical Mac candidate, the registered Loader suite passed
+`499/499`; `./scripts/validate.sh` passed 22 backend/contracts tests, all
+frontend/desktop groups including 59 Hub UI tests and 1,491 Boneyard tests,
+production builds, media policy, and bundle budget. Chrome 151 on Apple M2
+Metal completed an initial-absent seed-0 journey through the Library and back
+to visible/talkable variant 0, a continuous all-20 interaction journey through
+Semicus, Machinimbus, Provokatus, every Painting, and the Archchancellor, plus
+independent variant-1 and variant-2 conversations. Every final receipt had
+empty page-error, console-error, and failed-response arrays; the Semicus,
+Provokatus, lifecycle variant-0, variant-1, and variant-2 captures were visually
+inspected.
 
 ## 2026-08-24 — Solomon Dig dirt actor and state-0 presentation closure
 

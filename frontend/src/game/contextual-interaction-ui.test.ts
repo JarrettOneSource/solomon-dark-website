@@ -25,3 +25,14 @@ test('contextual interaction is a visible labelled button in Hub and Boneyard', 
   assert.match(hubScene, /hubInteractionAtPoint/)
   assert.match(boneyardScene, /type: 'interact-goodie'/)
 })
+
+test('Skorcha interaction follows current population snapshots instead of the initial Hub frame', () => {
+  assert.match(hubScene, /const \[skorchaInteraction, setSkorchaInteraction\] = useState/)
+  assert.match(hubScene, /const next = snapshot\.world\.skorcha/)
+  assert.match(hubScene, /skorchaDismissalIndex=\{skorchaInteraction\?\.dismissalIndex \?\? 0\}/)
+  assert.match(hubScene, /skorchaPosition=\{skorchaInteraction\?\.position \?\? null\}/)
+  assert.doesNotMatch(
+    hubScene,
+    /skorchaPosition=\{hubInitialSnapshot\.world\.skorcha\?\.position/,
+  )
+})

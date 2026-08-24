@@ -24,13 +24,38 @@ export interface HubSkorchaState {
   readonly variant: HubSkorchaVariant
 }
 
+export interface HubSkorchaPopulationResult {
+  readonly rng: NativeRngState
+  readonly skorcha: HubSkorchaState | null
+}
+
 export function createHubSkorcha(seed: number): HubSkorchaState | null {
-  let rng = createNativeRng(seed ^ 5007)
-  const presence = drawNativeInteger(rng, NATIVE_HUB_NPC_CATALOG.skorcha.presenceDrawCount)
-  rng = presence.state
-  if (presence.value !== NATIVE_HUB_NPC_CATALOG.skorcha.presenceDrawValue) return null
-  const placement = drawNativeInteger(rng, NATIVE_HUB_NPC_CATALOG.skorcha.placements.length)
-  return createHubSkorchaAtVariant(placement.state, placement.value as HubSkorchaVariant)
+  return createHubSkorchaPopulation(seed).skorcha
+}
+
+export function createHubSkorchaPopulation(seed: number): HubSkorchaPopulationResult {
+  return drawHubSkorchaPopulation(createNativeRng(seed ^ 5007))
+}
+
+export function drawHubSkorchaPopulation(
+  sourceRng: NativeRngState,
+): HubSkorchaPopulationResult {
+  const presence = drawNativeInteger(
+    sourceRng,
+    NATIVE_HUB_NPC_CATALOG.skorcha.presenceDrawCount,
+  )
+  if (presence.value !== NATIVE_HUB_NPC_CATALOG.skorcha.presenceDrawValue) {
+    return Object.freeze({ rng: presence.state, skorcha: null })
+  }
+  const placement = drawNativeInteger(
+    presence.state,
+    NATIVE_HUB_NPC_CATALOG.skorcha.placements.length,
+  )
+  const skorcha = createHubSkorchaAtVariant(
+    placement.state,
+    placement.value as HubSkorchaVariant,
+  )
+  return Object.freeze({ rng: skorcha.rng, skorcha })
 }
 
 export function createHubSkorchaAtVariant(

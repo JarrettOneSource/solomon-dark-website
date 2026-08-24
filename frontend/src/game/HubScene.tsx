@@ -247,6 +247,14 @@ export default function HubScene({
   const [playerPosition, setPlayerPosition] = useState(() => ({
     ...hubInitialSnapshot.players[playerId]!.position,
   }))
+  const [skorchaInteraction, setSkorchaInteraction] = useState(() => (
+    hubInitialSnapshot.world.skorcha === null
+      ? null
+      : {
+          dismissalIndex: hubInitialSnapshot.world.skorcha.dismissalIndex,
+          position: { ...hubInitialSnapshot.world.skorcha.position },
+        }
+  ))
   const [transitionActive, setTransitionActive] = useState(() => (
     hubInitialSnapshot.world.participants[playerId]?.transition !== null
   ))
@@ -365,6 +373,20 @@ export default function HubScene({
         sameHubPlayerActivities(current, nextActivities) ? current : nextActivities
       ))
       const participant = snapshot.world.participants[playerId]
+      setSkorchaInteraction((current) => {
+        const next = snapshot.world.skorcha
+        if (next === null) return current === null ? current : null
+        if (
+          current !== null
+          && current.dismissalIndex === next.dismissalIndex
+          && current.position.x === next.position.x
+          && current.position.y === next.position.y
+        ) return current
+        return {
+          dismissalIndex: next.dismissalIndex,
+          position: { ...next.position },
+        }
+      })
       footstepAudio.update(snapshot)
       if (participant) setCurrentRegion((region) => (
         region === participant.region ? region : participant.region
@@ -768,8 +790,8 @@ export default function HubScene({
           playerPosition={playerPosition}
           progression={progression}
           region={currentRegion}
-          skorchaDismissalIndex={hubInitialSnapshot.world.skorcha?.dismissalIndex ?? 0}
-          skorchaPosition={hubInitialSnapshot.world.skorcha?.position ?? null}
+          skorchaDismissalIndex={skorchaInteraction?.dismissalIndex ?? 0}
+          skorchaPosition={skorchaInteraction?.position ?? null}
           surface={hubUiSurface}
           transitionActive={transitionActive}
         />

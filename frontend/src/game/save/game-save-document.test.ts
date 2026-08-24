@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import { createIdlePlayerCharacterInput } from '../core-kernels/player-character.ts'
 import { createNativeHubNpcState } from '../core-kernels/native-hub-npc.ts'
+import { createNativeRng, drawNativeInteger } from '../core-kernels/native-rng.ts'
 import {
   createGameSimulation,
   enterBoneyardWorld,
@@ -18,7 +19,8 @@ import {
 import { HUB_SPAWN } from '../core-kernels/hub-math.ts'
 import { nativeTutorialAmuletItem } from '../core-kernels/native-tutorial.ts'
 import { HubStudentPopulationState } from '../core-server/hub-students.ts'
-import { HubWorldRuntime } from '../core-server/hub-world.ts'
+import { createHubSkorchaAtVariant } from '../core-server/hub-skorcha.ts'
+import { createHubWorld, HubWorldRuntime } from '../core-server/hub-world.ts'
 import {
   createBoneyardCatalog,
   materializeBoneyard,
@@ -91,6 +93,10 @@ test('host save documents round-trip the complete owner state and revive Hub run
     worldKind: 'hub',
   })
 
+  const hubSeed = drawNativeInteger(state.gameRng, 0x40000000)
+  const reconstructedHub = createHubWorld(['owner'], {
+    traderAnimationSeed: hubSeed.value,
+  })
   const restored = restoreGameSaveDocument(document)
   assert.equal(restored.playerId, 'owner')
   assert.equal(restored.integrity, 'local-only')
@@ -110,11 +116,8 @@ test('host save documents round-trip the complete owner state and revive Hub run
   )
   assert.equal(restored.state.world.kind, 'hub')
   if (restored.state.world.kind !== 'hub') throw new Error('expected restored Hub')
-  assert.ok(state.world.kind === 'hub' && state.world.skorcha !== null)
-  assert.deepEqual(
-    restored.state.world.skorcha,
-    state.world.kind === 'hub' ? state.world.skorcha : null,
-  )
+  assert.deepEqual(restored.state.world.skorcha, reconstructedHub.skorcha)
+  assert.deepEqual(restored.state.gameRng, hubSeed.state)
   assert.ok(restored.state.world.runtime instanceof HubWorldRuntime)
   assert.ok(restored.state.world.studentPopulation instanceof HubStudentPopulationState)
   assert.deepEqual(Object.keys(restored.state.world.participants), ['owner'])
@@ -123,11 +126,20 @@ test('host save documents round-trip the complete owner state and revive Hub run
   assert.equal(restored.state.world.participants.owner?.transition, null)
 })
 
-test('Hub resume regenerates scene-local actors but preserves its authoritative Skorcha population', () => {
+test('Hub resume reconstructs its authoritative Skorcha population with the other Region actors', () => {
   const state = createGameSimulation({ owner: OWNER }, {
-    hubTraderAnimationSeed: 73,
+    hubTraderAnimationSeed: 2,
     gameRngSeed: 91,
   })
+  const hubSeed = drawNativeInteger(state.gameRng, 0x40000000)
+  const reconstructedHub = createHubWorld(['owner'], {
+    traderAnimationSeed: hubSeed.value,
+  })
+  const serializedVariant = reconstructedHub.skorcha?.variant === 0 ? 1 : 0
+  const serializedSkorcha = createHubSkorchaAtVariant(
+    createNativeRng(317),
+    serializedVariant,
+  )
   const document = JSON.parse(createGameSaveDocument({
     integrity: 'global-clean',
     loadedBoneyard: null,
@@ -144,7 +156,8 @@ test('Hub resume regenerates scene-local actors but preserves its authoritative 
     region: 'library',
     transition: null,
   }
-  document.continuation.simulation.world.traderAnimationSeed = 73
+  document.continuation.simulation.world.skorcha = serializedSkorcha
+  document.continuation.simulation.world.traderAnimationSeed = 2
 
   const restored = restoreGameSaveDocument(JSON.stringify(document))
   assert.equal(restored.state.world.kind, 'hub')
@@ -152,11 +165,10 @@ test('Hub resume regenerates scene-local actors but preserves its authoritative 
   if (restored.state.world.kind !== 'hub') throw new Error('expected restored Hub')
   assert.equal(restored.state.world.participants.owner?.region, 'courtyard')
   assert.equal(restored.state.world.participants.owner?.transition, null)
-  assert.notEqual(restored.state.world.traderAnimationSeed, 73)
-  assert.deepEqual(
-    restored.state.world.skorcha,
-    state.world.kind === 'hub' ? state.world.skorcha : null,
-  )
+  assert.equal(restored.state.world.traderAnimationSeed, hubSeed.value)
+  assert.deepEqual(restored.state.world.skorcha, reconstructedHub.skorcha)
+  assert.notDeepEqual(restored.state.world.skorcha, serializedSkorcha)
+  assert.deepEqual(restored.state.gameRng, hubSeed.state)
 })
 
 test('save documents admit the complete Sack wire depth and reject one level beyond it', () => {

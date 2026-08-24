@@ -27,6 +27,7 @@ import {
   type PlayerCharacterMovementPlan,
   type PlayerCharacterState,
 } from '../core-kernels/player-character.ts'
+import type { NativeRngState } from '../core-kernels/native-rng.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
 import {
   createHubAmbientState,
@@ -45,7 +46,8 @@ import {
 } from './hub-students.ts'
 import { HubStudentNeighborGrid } from './hub-student-grid.ts'
 import {
-  createHubSkorcha,
+  createHubSkorchaPopulation,
+  drawHubSkorchaPopulation,
   stepHubSkorcha,
   type HubSkorchaState,
 } from './hub-skorcha.ts'
@@ -53,10 +55,12 @@ import {
 export interface HubWorldState {
   ambient: HubAmbientState
   collisionRngState: number
+  courtyardPopulationActive: boolean
   kind: 'hub'
   participants: Readonly<Record<string, HubParticipantState>>
   runtime: HubWorldRuntime
   skorcha: HubSkorchaState | null
+  skorchaPopulationRng: NativeRngState
   studentPopulation: HubStudentPopulationState
   traderAnimationSeed: number
 }
@@ -140,19 +144,23 @@ export function createHubWorld(
   options: HubWorldOptions = {},
 ): HubWorldState {
   const studentPopulation = options.studentPopulation ?? createHubStudentPopulation()
+  const traderAnimationSeed = options.traderAnimationSeed ?? DEFAULT_HUB_TRADER_ANIMATION_SEED
+  const skorchaPopulation = createHubSkorchaPopulation(traderAnimationSeed)
   return {
     ambient: createHubAmbientState(),
     collisionRngState: 0x51a7c011,
+    courtyardPopulationActive: true,
     kind: 'hub',
     participants: Object.fromEntries(
       playerIds.map((playerId) => [playerId, createHubParticipantState()]),
     ),
     runtime: new HubWorldRuntime(),
     skorcha: options.skorcha === undefined
-      ? createHubSkorcha(options.traderAnimationSeed ?? DEFAULT_HUB_TRADER_ANIMATION_SEED)
+      ? skorchaPopulation.skorcha
       : options.skorcha,
+    skorchaPopulationRng: skorchaPopulation.rng,
     studentPopulation,
-    traderAnimationSeed: options.traderAnimationSeed ?? DEFAULT_HUB_TRADER_ANIMATION_SEED,
+    traderAnimationSeed,
   }
 }
 
@@ -162,7 +170,7 @@ export function addHubParticipant(
   participant: HubParticipantState = createHubParticipantState(),
 ): HubWorldState {
   if (world.participants[playerId]) return world
-  return {
+  const next = {
     ...world,
     participants: {
       ...world.participants,
@@ -177,16 +185,23 @@ export function addHubParticipant(
       },
     },
   }
+  return participant.region === 'courtyard' && !world.courtyardPopulationActive
+    ? constructHubCourtyardPopulation(next)
+    : next
 }
 
 export function removeHubParticipant(
   world: HubWorldState,
   playerId: string,
 ): HubWorldState {
-  if (!world.participants[playerId]) return world
+  const removed = world.participants[playerId]
+  if (!removed) return world
   const participants = { ...world.participants }
   delete participants[playerId]
-  return { ...world, participants }
+  const next = { ...world, participants }
+  return removed.region === 'courtyard' && !hubCourtyardOccupied(participants)
+    ? destroyHubCourtyardPopulation(next)
+    : next
 }
 
 export function hubSpawnPoint(): Vector2 {
@@ -356,18 +371,53 @@ export function stepHubWorldTick(
     world.studentPopulation,
     students,
   )
+  const leftCourtyard = hubCourtyardOccupied(participants)
+    && !hubCourtyardOccupied(nextParticipants)
+  const enteredCourtyard = !world.courtyardPopulationActive
+    && hubCourtyardOccupied(nextParticipants)
+  const population = leftCourtyard
+    ? destroyHubCourtyardPopulation(world)
+    : enteredCourtyard
+      ? constructHubCourtyardPopulation(world)
+      : world
   return {
     players: nextPlayers,
     world: {
       ambient: stepHubAmbient(world.ambient),
       collisionRngState,
+      courtyardPopulationActive: population.courtyardPopulationActive,
       kind: 'hub',
       participants: nextParticipants,
       runtime,
-      skorcha: world.skorcha === null ? null : stepHubSkorcha(world.skorcha),
+      skorcha: population.skorcha === null ? null : stepHubSkorcha(population.skorcha),
+      skorchaPopulationRng: population.skorchaPopulationRng,
       studentPopulation,
       traderAnimationSeed: world.traderAnimationSeed,
     },
+  }
+}
+
+function hubCourtyardOccupied(
+  participants: Readonly<Record<string, HubParticipantState>>,
+): boolean {
+  return Object.values(participants).some(({ region }) => region === 'courtyard')
+}
+
+function constructHubCourtyardPopulation(world: HubWorldState): HubWorldState {
+  const population = drawHubSkorchaPopulation(world.skorchaPopulationRng)
+  return {
+    ...world,
+    courtyardPopulationActive: true,
+    skorcha: population.skorcha,
+    skorchaPopulationRng: population.rng,
+  }
+}
+
+function destroyHubCourtyardPopulation(world: HubWorldState): HubWorldState {
+  return {
+    ...world,
+    courtyardPopulationActive: false,
+    skorcha: null,
   }
 }
 

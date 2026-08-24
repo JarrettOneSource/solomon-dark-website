@@ -24,7 +24,14 @@ const expectedSkorchaVariant = process.env.SDR_GAME_NPC_EXPECT_SKORCHA_VARIANT =
   : Number(process.env.SDR_GAME_NPC_EXPECT_SKORCHA_VARIANT)
 assert.ok(
   onlySection === null
-    || ['courtyard', 'library', 'mortuary', 'office', 'skorcha'].includes(onlySection),
+    || [
+      'courtyard',
+      'library',
+      'mortuary',
+      'office',
+      'skorcha',
+      'skorcha-lifecycle',
+    ].includes(onlySection),
   `unknown NPC smoke section ${JSON.stringify(onlySection)}`,
 )
 assert.ok(
@@ -74,6 +81,20 @@ try {
     await exerciseTeacher(canvas)
   }
   if (onlySection === 'skorcha') await exerciseSkorcha(canvas)
+  if (onlySection === 'skorcha-lifecycle') {
+    assert.equal(
+      await canvas.evaluate((node) => node.__sdrHubFrame.skorcha),
+      null,
+      'lifecycle smoke seed must begin with an absent Skorcha population',
+    )
+    await navigateHubRegion(page, canvas, 'courtyard', { x: 1800, y: 650 }, 40, log)
+    await holdForHubTransition(page, canvas, ['d', 'w'], 'library')
+    await waitForSettledHubRegion(page, canvas, 'library')
+    await navigateHubRegion(page, canvas, 'library', { x: 512, y: 850 }, 25, log)
+    await holdForHubTransition(page, canvas, ['s'], 'courtyard')
+    await waitForSettledHubRegion(page, canvas, 'courtyard')
+    await exerciseSkorcha(canvas)
+  }
 
   if (onlySection === null || onlySection === 'library') {
     await navigateHubRegion(page, canvas, 'courtyard', { x: 1800, y: 650 }, 40, log)
@@ -116,6 +137,7 @@ try {
     mortuary: ['memorator', ...completeInteractions.filter(id => id.startsWith('painting-'))],
     office: ['arch-chancellor'],
     skorcha: ['skorcha'],
+    'skorcha-lifecycle': ['skorcha'],
   }
   assert.deepEqual(
     receipts.map(({ interaction }) => interaction).sort(),
@@ -393,7 +415,7 @@ async function exercisePaintings(canvas) {
     'painting-6': [{ x: 279, y: 610 }],
     'painting-7': [{ x: 380, y: 470 }],
     'painting-8': [{ x: 512, y: 470 }],
-    'painting-9': [{ x: 640, y: 470 }],
+    'painting-9': [{ x: 680, y: 470 }],
   }
   for (const interaction of NATIVE_HUB_NPC_CATALOG.interactionOrder.filter(
     candidate => candidate.startsWith('painting-'),

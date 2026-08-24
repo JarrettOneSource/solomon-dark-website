@@ -17,7 +17,11 @@ import {
   createNativeHagathaRuntimeState,
   type NativeHagathaRuntimeState,
 } from '../core-kernels/native-hagatha-effects.ts'
-import { createNativeRng, type NativeRngState } from '../core-kernels/native-rng.ts'
+import {
+  createNativeRng,
+  drawNativeInteger,
+  type NativeRngState,
+} from '../core-kernels/native-rng.ts'
 import {
   nativeWeldBuild,
   nativeWeldComponentRanksForBuild,
@@ -351,9 +355,12 @@ export function restoreGameSaveDocument(document: string): RestoredGameSaveDocum
       || !(continuation.summary.playerId in participants)
     ) throw new Error('game save owner is not the sole Hub participant')
     parseHubStudentPopulation(rawWorld.studentPopulation)
-    const skorcha = rawWorld.skorcha === undefined
-      ? undefined
-      : parseHubSkorcha(rawWorld.skorcha)
+    if (rawWorld.skorcha !== undefined) parseHubSkorcha(rawWorld.skorcha)
+    const hubSeed = drawNativeInteger(
+      parseNativeRng(rawState.gameRng, 'game save game RNG'),
+      0x40000000,
+    )
+    rawState.gameRng = hubSeed.state
     const config = playerEntities.configs[0]!
     playerEntities = replacePlayerCharacter(
       playerEntities,
@@ -361,7 +368,7 @@ export function restoreGameSaveDocument(document: string): RestoredGameSaveDocum
       createPlayerCharacter(config, hubSpawnPoint()),
     )
     world = createHubWorld([continuation.summary.playerId], {
-      skorcha,
+      traderAnimationSeed: hubSeed.value,
     })
     loadedBoneyard = null
   } else if (rawWorld.kind === 'boneyard') {
@@ -774,7 +781,10 @@ function numericOrNull(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
-function serializeHubWorld(world: HubWorldState): Omit<HubWorldState, 'runtime' | 'studentPopulation'> & {
+function serializeHubWorld(world: HubWorldState): Omit<
+  HubWorldState,
+  'courtyardPopulationActive' | 'runtime' | 'skorchaPopulationRng' | 'studentPopulation'
+> & {
   studentPopulation: HubStudentPopulationOptions
 } {
   return {
