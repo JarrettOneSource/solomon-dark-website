@@ -122,6 +122,10 @@ export interface PlayerSkillRuntimeRefreshResult {
   readonly skillBook: PlayerSkillBookComponent
 }
 
+export interface PlayerSkillSelectionAutofillResult extends PlayerSkillRuntimeRefreshResult {
+  readonly rng: NativeRngState
+}
+
 export interface PlayerSkillRuntimeTickResult {
   readonly manaRecoveryPerTick: number
   readonly runtime: PlayerSkillRuntimeComponent
@@ -264,6 +268,74 @@ export function refreshPlayerSkillRuntime(
       : Math.min(source.meditationIdleElapsedTicks, delay),
   })
   return Object.freeze({ runtime, skillBook: nextSkillBook })
+}
+
+export function autofillPlayerSkillSelections(
+  source: PlayerSkillRuntimeComponent,
+  skillBook: PlayerSkillBookComponent,
+  statBook: PlayerStatBookComponent,
+  economy: HubEconomyState,
+  rng: NativeRngState,
+): PlayerSkillSelectionAutofillResult {
+  const refreshed = refreshPlayerSkillRuntime(
+    source,
+    skillBook,
+    statBook,
+    economy,
+  )
+  let runtime = refreshed.runtime
+  let nextSkillBook = refreshed.skillBook
+  let nextRng = rng
+  if (runtime.concentrationSkillIdA === null) {
+    const candidates = concentrationAutofillCandidates(
+      refreshed.skillBook,
+      runtime.concentrationSkillIdB,
+    )
+    if (candidates.length > 0) {
+      const draw = drawNativeInteger(nextRng, candidates.length)
+      nextRng = draw.state
+      runtime = { ...runtime, concentrationSkillIdA: candidates[draw.value]! }
+    }
+  }
+  if (
+    economy.ownedPerkSelectors.includes(NATIVE_HAGATHA_SELECTORS.splitMind)
+    && runtime.concentrationSkillIdB === null
+  ) {
+    const candidates = concentrationAutofillCandidates(
+      refreshed.skillBook,
+      runtime.concentrationSkillIdA,
+    )
+    if (candidates.length > 0) {
+      const draw = drawNativeInteger(nextRng, candidates.length)
+      nextRng = draw.state
+      runtime = { ...runtime, concentrationSkillIdB: candidates[draw.value]! }
+    }
+  }
+  if (
+    nativeSkillCategory(nextSkillBook.primarySkillId) !== 1
+    || rank(nextSkillBook, nextSkillBook.primarySkillId) < 1
+  ) {
+    const candidates = nextSkillBook.effectiveRanks.flatMap((skillRank, skillId) => (
+      skillRank > 0 && nativeSkillCategory(skillId) === 1 ? [skillId] : []
+    ))
+    if (candidates.length > 0) {
+      const draw = drawNativeInteger(nextRng, candidates.length)
+      nextRng = draw.state
+      nextSkillBook = {
+        ...nextSkillBook,
+        primarySkillId: candidates[draw.value]! as PlayerSkillBookComponent['primarySkillId'],
+      }
+    }
+  }
+  const result = runtime === refreshed.runtime && nextSkillBook === refreshed.skillBook
+    ? refreshed
+    : refreshPlayerSkillRuntime(
+        runtime,
+        nextSkillBook,
+        statBook,
+        economy,
+      )
+  return Object.freeze({ ...result, rng: nextRng })
 }
 
 export function playerSkillDerivedStats(
@@ -885,6 +957,15 @@ function validConcentrationSelection(
       && rank(skillBook, skillId) > 0
     ? skillId
     : null
+}
+
+function concentrationAutofillCandidates(
+  skillBook: PlayerSkillBookComponent,
+  excludedSkillId: number | null,
+): readonly number[] {
+  return CONCENTRATABLE_SKILL_IDS.filter(skillId => (
+    skillId !== excludedSkillId && rank(skillBook, skillId) > 0
+  ))
 }
 
 function meditationIdleDelayTicks(

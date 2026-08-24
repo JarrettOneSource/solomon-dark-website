@@ -209,6 +209,7 @@ import {
   addPlayerEntity,
   applyPlayerEntityHagathaPurchaseEffects,
   applyPlayerEntityPotionEffect,
+  autofillPlayerEntitySkillSelections,
   applyPlayerEntitySkillChoice,
   bindPlayerEntitySkillQuickbar,
   coldSlowPlayerEntity,
@@ -1281,11 +1282,16 @@ export function selectGameSimulationPlayerSkill(
 ): GameSimulationState | null {
   const playerEntities = applyPlayerEntitySkillChoice(state.playerEntities, playerId, selection)
   if (!playerEntities) return null
+  const autofilled = autofillPlayerEntitySkillSelections(
+    playerEntities,
+    playerId,
+    state.secondaryAbilities.rng,
+  )
   const insights = markNewCreativityInsights(
     state.playerEntities,
-    playerEntities,
+    autofilled.store,
     [playerId],
-    state.secondaryAbilities.rng,
+    autofilled.rng,
   )
   const barrier = state.levelUpBarrier
   if (barrier === null || !barrier.participantIds.includes(playerId)) {

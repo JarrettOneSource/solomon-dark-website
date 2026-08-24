@@ -75,16 +75,14 @@
 }
 
 .tutorial-callout-text,
-.tutorial-unframed-callout-shadow,
-.tutorial-unframed-callout-text {
+.tutorial-selected-hud-lesson {
   position: absolute !important;
 }
 
-.tutorial-unframed-callout {
-  position: absolute;
+.tutorial-selected-hud-lesson {
+  inset: 0;
 }
 
-.tutorial-callout-primary { top: 102px; left: 50%; transform: translateX(-50%); }
 .tutorial-callout-resume { top: 105px; right: 42px; }
 .tutorial-callout-quick-use { bottom: 96px; left: 250px; }
 .tutorial-callout-equipment { top: 260px; right: 65px; }

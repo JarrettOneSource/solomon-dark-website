@@ -377,6 +377,10 @@ test('schema 8 resumes the complete stock Tutorial controller and exact level id
   const encoded = JSON.parse(document)
   assert.equal(encoded.schemaVersion, 8)
   assert.equal(encoded.continuation.simulation.world.tutorial.stage, 0)
+  assert.equal(
+    encoded.continuation.simulation.world.tutorial.selectedSkillHudAcknowledged,
+    false,
+  )
   assert.deepEqual(
     encoded.profile.economy,
     encoded.continuation.simulation.world.tutorialProfileEconomy,
@@ -409,6 +413,46 @@ test('schema 8 resumes the complete stock Tutorial controller and exact level id
   assert.equal(restored.state.world.encounter?.dialogueMode, 'tutorial')
   assert.equal(restored.state.world.waves, null)
   assert.equal(restored.state.world.arenaTransition, null)
+
+  if (state.world.kind !== 'boneyard' || !state.world.tutorial) {
+    throw new Error('expected Tutorial state')
+  }
+  const acknowledgedState = {
+    ...state,
+    world: {
+      ...state.world,
+      tutorial: {
+        ...state.world.tutorial!,
+        selectedSkillHudAcknowledged: true,
+      },
+    },
+  }
+  const acknowledged = restoreGameSaveDocument(createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state: acknowledgedState,
+  }))
+  assert.equal(
+    acknowledged.state.world.kind === 'boneyard'
+      ? acknowledged.state.world.tutorial?.selectedSkillHudAcknowledged
+      : null,
+    true,
+  )
+
+  const priorSchemaSeven = structuredClone(encoded)
+  priorSchemaSeven.schemaVersion = 7
+  delete priorSchemaSeven.continuation.simulation.world.tutorial
+    .selectedSkillHudAcknowledged
+  const migrated = restoreGameSaveDocument(JSON.stringify(priorSchemaSeven))
+  assert.equal(
+    migrated.state.world.kind === 'boneyard'
+      ? migrated.state.world.tutorial?.selectedSkillHudAcknowledged
+      : null,
+    false,
+  )
 })
 
 test('schema 7 and 6 current-layout saves default absent NPC state without completed-run archival', () => {

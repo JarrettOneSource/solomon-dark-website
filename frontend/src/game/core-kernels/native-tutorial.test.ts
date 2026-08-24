@@ -157,6 +157,38 @@ test('owns inventory and skills modal milestones as authoritative surface action
   assert.equal(released.damageProtection, false)
 })
 
+test('acknowledges the stock primary and concentration-A selector open edges without advancing stage', () => {
+  const initial = afterIntro(createNativeTutorialState(
+    BASE_INPUT.playerPosition,
+    0,
+    'tutorial-selected-hud',
+  ))
+  assert.equal(initial.selectedSkillHudAcknowledged, false)
+  assert.equal(applyNativeTutorialSurfaceAction(
+    { ...initial, stage: 0 },
+    'primary-selector-opened',
+  ).selectedSkillHudAcknowledged, false)
+
+  for (const action of [
+    'primary-selector-opened',
+    'concentration-a-selector-opened',
+  ] as const) {
+    const acknowledged = applyNativeTutorialSurfaceAction(
+      { ...initial, stage: 14 },
+      action,
+    )
+    assert.equal(acknowledged.selectedSkillHudAcknowledged, true)
+    assert.equal(stepNativeTutorial(acknowledged, {
+      ...BASE_INPUT,
+      enemyCount: 3,
+    }).state.stage, 14)
+    assert.equal(applyNativeTutorialSurfaceAction(
+      acknowledged,
+      action,
+    ), acknowledged)
+  }
+})
+
 test('preserves the recovered round-robin survival clocks and predicates', () => {
   const initial = createNativeTutorialState(BASE_INPUT.playerPosition, 0, 'tutorial-test')
   let state: NativeTutorialState = {

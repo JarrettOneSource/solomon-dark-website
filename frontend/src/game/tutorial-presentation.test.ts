@@ -51,7 +51,7 @@ test('uses the stock MsgBox offer and common-gold teaching family', () => {
   assert.match(renderer, /nativeUi\.render\(planTitleMenuPrompt/)
   assert.match(overlay, /baseline=\{instructionBaselines!\.heading\}[\s\S]*?font="heading"/)
   assert.match(overlay, /const TUTORIAL_GOLD = 0xd9ba70/)
-  assert.match(overlay, /left: 'calc\(50% \+ 2\.25px\)'/)
+  assert.match(overlay, /centerX \+ 2\.25[\s\S]*calc\(\$\{centerX\} \+ 2\.25px\)/)
   assert.match(overlay, /style=\{\{ left: 10, top: 11\.75 \}\}/)
   assert.doesNotMatch(css, /tutorial-instruction[^{]*\{[^}]*drop-shadow/)
 })
@@ -81,4 +81,27 @@ test('mounts modal callouts from the live Boneyard Tutorial owner', () => {
     /tutorial && \(tutorial\.stage === 10 \|\| tutorial\.stage === 13\)[\s\S]*?<TutorialModalCallouts controls=\{settings\.controls\} stage=\{tutorial\.stage\} \/>/,
   )
   assert.doesNotMatch(menu, /TutorialModalCallouts/)
+})
+
+test('owns the stage-14 acknowledgement edge and live selected-HUD geometry', () => {
+  const overlay = source('./TutorialOverlay.tsx')
+  const scene = source('./MainMenuScene.tsx')
+  const css = source('./tutorial.css')
+  assert.match(
+    overlay,
+    /state\.stage === 14[\s\S]*!state\.selectedSkillHudAcknowledged[\s\S]*selectedHudLayout/,
+  )
+  assert.match(overlay, /baseline=\{selectedHudLayout\.firstLine\.y\}/)
+  assert.match(overlay, /baseline=\{selectedHudLayout\.secondLine\.y\}/)
+  assert.match(overlay, /<TutorialPointer \{\.\.\.selectedHudLayout\.pointer\} \/>/)
+  assert.doesNotMatch(overlay, /state\.stage === 14[\s\S]{0,300}<TutorialPointer x=\{800\}/)
+  assert.match(
+    scene,
+    /binding === 12[\s\S]*sendTutorialAction\('primary-selector-opened'\)/,
+  )
+  assert.match(
+    scene,
+    /binding === 16[\s\S]*sendTutorialAction\('concentration-a-selector-opened'\)/,
+  )
+  assert.doesNotMatch(css, /tutorial-callout-primary/)
 })

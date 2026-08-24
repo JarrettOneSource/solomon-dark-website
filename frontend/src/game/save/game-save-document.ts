@@ -44,6 +44,7 @@ import {
   type GameSimulationState,
 } from '../core-server/game-simulation.ts'
 import {
+  autofillPlayerEntitySkillSelections,
   replacePlayerCharacter,
   replacePlayerEconomy,
 } from '../core-server/player-entity-store.ts'
@@ -375,7 +376,7 @@ export function restoreGameSaveDocument(document: string): RestoredGameSaveDocum
     throw new Error('game save world kind is invalid')
   }
 
-  const state = {
+  let state = {
     ...rawState,
     accumulatorSeconds: 0,
     playerEntities,
@@ -383,6 +384,20 @@ export function restoreGameSaveDocument(document: string): RestoredGameSaveDocum
     tick: Number(rawState.tick),
     world,
   } as unknown as GameSimulationState
+  let concentrationRng = state.secondaryAbilities.rng
+  for (const { playerId } of state.playerEntities.identities) {
+    const autofilled = autofillPlayerEntitySkillSelections(
+      state.playerEntities,
+      playerId,
+      concentrationRng,
+    )
+    state = { ...state, playerEntities: autofilled.store }
+    concentrationRng = autofilled.rng
+  }
+  state = {
+    ...state,
+    secondaryAbilities: { ...state.secondaryAbilities, rng: concentrationRng },
+  }
   const config = state.playerEntities.configs[0]
   if (!sameCharacter(config, continuation.summary.character)) {
     throw new Error('game save owner character summary drifted')
@@ -683,7 +698,15 @@ function normalizeWorld(
           tutorialDialogueTicks: encounter.tutorialDialogueTicks ?? 0,
         }
       })()
-  const tutorial = 'tutorial' in source ? source.tutorial : defaults.tutorial
+  const tutorialValue = 'tutorial' in source ? source.tutorial : defaults.tutorial
+  const tutorial = tutorialValue === null
+    ? null
+    : (() => {
+        const state = record(tutorialValue, 'game save Tutorial')
+        return 'selectedSkillHudAcknowledged' in state
+          ? state
+          : { ...state, selectedSkillHudAcknowledged: false }
+      })()
   const tutorialProfileEconomy = source.tutorialProfileEconomy == null
     ? null
     : normalizeEconomy(source.tutorialProfileEconomy)

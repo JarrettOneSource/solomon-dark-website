@@ -1351,10 +1351,24 @@ export default function MainMenuScene({
       || (gameplayPause !== null && !ownsModalPause)
       || (runtimeRunPhase !== 'hub' && runtimeRunPhase !== 'active')
     ) return
+    if (runtimeSnapshot?.world.kind === 'boneyard' && runtimeSnapshot.world.tutorial) {
+      if (binding === 12) session.sendTutorialAction('primary-selector-opened')
+      if (binding === 16) session.sendTutorialAction('concentration-a-selector-opened')
+    }
     audio.playSound('click')
     setSkillBookOpen(false)
     setHudSkillSelector(nativeHudSkillSelectorTarget(binding))
-  }, [audio, gameplayPause, hubPauseMenuOpen, levelUpModalActive, loading, ownsModalPause, runtimeRunPhase, session])
+  }, [
+    audio,
+    gameplayPause,
+    hubPauseMenuOpen,
+    levelUpModalActive,
+    loading,
+    ownsModalPause,
+    runtimeRunPhase,
+    runtimeSnapshot,
+    session,
+  ])
 
   useEffect(() => {
     if (

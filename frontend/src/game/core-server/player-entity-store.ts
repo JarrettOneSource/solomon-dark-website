@@ -78,6 +78,7 @@ import {
   ownsNativeHagathaSelector,
 } from '../core-kernels/native-hagatha-effects.ts'
 import {
+  autofillPlayerSkillSelections,
   createPlayerSkillRuntime,
   markPlayerCreativityInsight,
   refreshPlayerCombatFromSkillStats,
@@ -146,6 +147,11 @@ export interface PlayerEntityHagathaPurchaseResult {
   readonly rng: NativeRngState
   readonly store: PlayerEntityStore
   readonly weirdCasterSkillId: number | null
+}
+
+export interface PlayerEntitySkillSelectionAutofillResult {
+  readonly rng: NativeRngState
+  readonly store: PlayerEntityStore
 }
 
 export interface PlayerEntitySharedExperienceResult {
@@ -455,6 +461,39 @@ export function selectPlayerEntityConcentrationSlot(
   )
 }
 
+export function autofillPlayerEntitySkillSelections(
+  source: PlayerEntityStore,
+  playerId: string,
+  rng: NativeRngState,
+): PlayerEntitySkillSelectionAutofillResult {
+  const index = playerEntityIndex(source, playerId)
+  if (index < 0) return { rng, store: source }
+  const result = autofillPlayerSkillSelections(
+    source.skillRuntimes[index]!,
+    source.skillBooks[index]!,
+    source.statBooks[index]!,
+    source.economies[index]!,
+    rng,
+  )
+  if (
+    result.runtime === source.skillRuntimes[index]
+    && result.skillBook === source.skillBooks[index]
+  ) return { rng: result.rng, store: source }
+  const selected = replacePlayerSkillState(
+    source,
+    index,
+    result.skillBook,
+    result.runtime,
+    source.economies[index]!,
+  )
+  return {
+    rng: result.rng,
+    store: result.skillBook.primarySkillId === source.skillBooks[index]!.primarySkillId
+      ? selected
+      : resetPlayerEntityPrimarySelection(selected, index, result.skillBook),
+  }
+}
+
 export function bindPlayerEntitySkillQuickbar(
   source: PlayerEntityStore,
   playerId: string,
@@ -536,7 +575,15 @@ export function selectPlayerEntityPrimarySkill(
     source.skillRuntimes[index]!,
     source.economies[index]!,
   )
-  const primaryCasts = [...selected.primaryCasts]
+  return resetPlayerEntityPrimarySelection(selected, index, skillBook)
+}
+
+function resetPlayerEntityPrimarySelection(
+  source: PlayerEntityStore,
+  index: number,
+  skillBook: PlayerSkillBookComponent,
+): PlayerEntityStore {
+  const primaryCasts = [...source.primaryCasts]
   primaryCasts[index] = {
     ...primaryCasts[index]!,
     actionTick: -1,
@@ -552,7 +599,7 @@ export function selectPlayerEntityPrimarySkill(
     targetId: null,
     underpowered: false,
   }
-  return { ...selected, primaryCasts }
+  return { ...source, primaryCasts }
 }
 
 export function selectPlayerEntityConcentrationSkill(
@@ -725,15 +772,17 @@ export function applyPlayerEntityHagathaPurchaseEffects(
   }
   const progressions = [...source.progressions]
   progressions[index] = progression
+  const refreshed = replacePlayerSkillState(
+    { ...source, progressions },
+    index,
+    skillBook,
+    source.skillRuntimes[index]!,
+    economy,
+  )
+  const autofilled = autofillPlayerEntitySkillSelections(refreshed, playerId, rng)
   return {
-    rng,
-    store: replacePlayerSkillState(
-      { ...source, progressions },
-      index,
-      skillBook,
-      source.skillRuntimes[index]!,
-      economy,
-    ),
+    rng: autofilled.rng,
+    store: autofilled.store,
     weirdCasterSkillId,
   }
 }
@@ -1308,16 +1357,22 @@ export function increaseRandomPlayerEntitySkill(
   if (index < 0) return { rng, skillId: null, store: source }
   const increased = increaseRandomLearnedSkill(source.skillBooks[index]!, rng)
   if (increased.skillId === null) return { ...increased, store: source }
+  const refreshed = replacePlayerSkillState(
+    source,
+    index,
+    increased.skillBook,
+    source.skillRuntimes[index]!,
+    source.economies[index]!,
+  )
+  const autofilled = autofillPlayerEntitySkillSelections(
+    refreshed,
+    playerId,
+    increased.rng,
+  )
   return {
-    rng: increased.rng,
+    rng: autofilled.rng,
     skillId: increased.skillId,
-    store: replacePlayerSkillState(
-      source,
-      index,
-      increased.skillBook,
-      source.skillRuntimes[index]!,
-      source.economies[index]!,
-    ),
+    store: autofilled.store,
   }
 }
 

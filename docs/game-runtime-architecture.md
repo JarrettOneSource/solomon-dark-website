@@ -152,9 +152,15 @@ projection. Protocol 67 added the host-resolved locked-Goodie interaction edge.
 Protocol 68 retained both selection paths, the authoritative Hagatha one-shot
 state and six frozen active-Weld component ranks, and added the fresh-profile
 tutorial-pending field. Protocol 69 added the one-use developer observer
-hello/welcome contract. Current protocol 70 carries the host-owned stock
-Tutorial controller/narration state plus its bounded start and modal-surface
-facts. The host applies either skill selection only to the authenticated
+hello/welcome contract. Protocol 70 added the host-owned stock Tutorial
+controller/narration state plus its bounded start and modal-surface facts.
+Protocol 71 added the complete survival-Hub NPC interaction state, optional
+Skorcha population, and bounded dialogue/service actions.
+Current protocol 72 adds the Tutorial's selected-HUD acknowledgement byte and
+the two bounded primary/concentration-A selector-open facts. It also carries
+Solomon's authoritative dig-body offset and ticked dirt/audio semantic events.
+The host applies
+either skill selection only to the authenticated
 participant before publishing a new progression revision.
 The compact selector
 uses its own `skill-selector` pause source only in an active Boneyard, so the
@@ -551,18 +557,26 @@ Protocol 70 adds the bounded first-player Tutorial start and modal-surface
 facts plus the complete Tutorial state in Boneyard snapshots/frames. Stage,
 spawns, narration, protection, scripted drops, and clocks remain host-owned;
 clients can report only inventory/skills open or close facts.
+Protocol 72 adds the selected-HUD lesson acknowledgement to that state. A
+client may report only an eligible primary or concentration-A selector open;
+the host persists the idempotent acknowledgement without changing Tutorial
+stage. The same authoritative skill-choice transaction now performs native
+progression refresh's A/B and invalid-primary selection auto-fill, in native
+RNG order, before publishing the next progression revision.
 
 ## Saves, identity, and content
 
 - The authoritative game host is the only producer of browser-save contents.
-  Schema 7 is one atomic envelope with a durable participant profile (economy
-  plus Hagatha one-shot runtime) and a nullable current-wizard continuation.
+  Schema 8 is one atomic envelope with a durable participant profile (economy,
+  Hagatha one-shot runtime, and NPC service state) and a nullable current-wizard
+  continuation.
   The continuation summary explicitly says whether an active Boneyard run
   exists; a Hub save is resumable but is not a saved Boneyard run. The host
   emits the document at semantic progression/world boundaries and bounded
   checkpoints. A Tutorial continuation also carries the resumable controller
-  and pre-Tutorial profile-economy baseline; schema 6 normalizes with no
-  Tutorial owner. Browser code transports the document and may invalidate a
+  and pre-Tutorial profile-economy baseline; schema 7 retains that owner while
+  normalizing absent Hub-NPC state, and schema 6 normalizes with neither owner.
+  Browser code transports the document and may invalidate a
   strictly decoded continuation, but never derives profile state from a
   rendered snapshot.
 - The first browser slot is always zero. An authenticated website account uses
@@ -679,13 +693,13 @@ Global eligibility starts only on a fresh account-bound global-Hub admission. In
 live `Enable Cheats` state permanently revokes it for that connection; an
 accepted authoritative Lua console request revokes it independently. Any
 ineligible member taints the current party run for every participant. Local
-Hall history remains available. Save schema 7 carries durable `global-clean` or
+Hall history remains available. Save schema 8 carries durable `global-clean` or
 `local-only` integrity and explicit active-run state; schemas 1 through 3
 migrate conservatively to `local-only`, schema 4 preserves its authored
-integrity, schema 5 migrates its prior envelope, and schema 6 preserves its
-authored integrity and active-run summary. Every participant receives their
-own authoritative profile/continuation checkpoint, and Game Over removes only
-each participant's current-wizard continuation.
+integrity, schema 5 migrates its prior envelope, and schemas 6 and 7 preserve
+their authored integrity and active-run summary. Each participant receives an
+authoritative profile/continuation checkpoint, and Game Over removes only that
+participant's current-wizard continuation.
 
 ## Rendering boundary
 
@@ -1251,7 +1265,7 @@ This preserves one mutation boundary and prevents Lua callbacks from entering
 the simulation recursively. The host checks dynamic session host identity or
 the account-bound developer entitlement on every console request. `Enable
 Cheats` controls ordinary-host installation of the DevTools API; it is never
-trusted as network authorization. Current protocol 70 retains the
+trusted as network authorization. Current protocol 72 retains the
 server-authored developer boolean from a one-use admission into the welcome
 and gives observer admissions a distinct read-only handshake.
 An entitled account keeps the setting and ordinary shared-Hub routing off

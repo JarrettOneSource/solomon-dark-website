@@ -4,6 +4,7 @@ import test from 'node:test'
 import { createIdlePlayerCharacterInput } from '../core-kernels/player-character.ts'
 import { materializeStockTutorial } from '../host/boneyard-catalog.ts'
 import {
+  applyGameSimulationTutorialAction,
   createGameSimulation,
   enterBoneyardWorld,
   gameSimulationDurableProfileEconomy,
@@ -103,4 +104,49 @@ test('holds the controller for the exact 475-tick intro and gates Acid Rain unti
   state = stepGameSimulationTick(state, { owner: castAcidRain })
   assert.equal(state.secondaryAbilities.players.owner?.castSequence, 1)
   assert.equal(state.secondaryAbilities.players.owner?.lastSkillId, 72)
+})
+
+test('authorizes only the solo Tutorial owner to acknowledge a selected-HUD selector', () => {
+  const loaded = materializeStockTutorial(Buffer.alloc(16, 31))
+  let state = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loaded)
+  assert.equal(state.world.kind, 'boneyard')
+  if (state.world.kind !== 'boneyard' || !state.world.tutorial) {
+    throw new Error('expected Tutorial controller')
+  }
+  state = {
+    ...state,
+    world: {
+      ...state.world,
+      tutorial: {
+        ...state.world.tutorial,
+        introActive: false,
+        introBlend: 1,
+        introDelayTicksRemaining: 0,
+        introFade: 0,
+        stage: 5,
+      },
+    },
+  }
+  assert.equal(applyGameSimulationTutorialAction(
+    state,
+    'absent',
+    'primary-selector-opened',
+  ), null)
+  const acknowledged = applyGameSimulationTutorialAction(
+    state,
+    'owner',
+    'concentration-a-selector-opened',
+  )
+  assert.ok(acknowledged)
+  assert.equal(
+    acknowledged.world.kind === 'boneyard'
+      ? acknowledged.world.tutorial?.selectedSkillHudAcknowledged
+      : null,
+    true,
+  )
+  assert.equal(applyGameSimulationTutorialAction(
+    acknowledged,
+    'owner',
+    'primary-selector-opened',
+  ), acknowledged)
 })

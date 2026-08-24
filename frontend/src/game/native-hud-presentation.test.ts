@@ -8,6 +8,7 @@ import {
   nativeHudLeftOriginClipPath,
   nativeHudSkillBindings,
   nativeManaHudPresentation,
+  nativeTutorialSelectedHudLayout,
 } from './native-hud-presentation.ts'
 
 test('clips local vital fills from the right so health remains left anchored', () => {
@@ -160,4 +161,36 @@ test('aligns the exact 40 by 65 hit targets with every selected-skill center', (
     top: -87,
     width: 40,
   })
+})
+
+test('derives the Tutorial selected-HUD lesson from the live primary and A rectangles', () => {
+  const primaryAndA = nativeHudSkillBindings({
+    concentrationSkillIds: [65, null],
+    planewalkerActive: false,
+    selectedPrimarySkillId: 8,
+    weldBuildId: null,
+  })
+  assert.deepEqual(nativeTutorialSelectedHudLayout(primaryAndA), {
+    firstLine: { x: 560, y: 75.5 },
+    pointer: { toX: 810, toY: 75.5, x: 800, y: 25.5 },
+    secondLine: { x: 560, y: 95.5 },
+  })
+
+  const splitMind = nativeHudSkillBindings({
+    concentrationSkillIds: [65, 57],
+    planewalkerActive: false,
+    selectedPrimarySkillId: 8,
+    weldBuildId: null,
+  })
+  assert.deepEqual(nativeTutorialSelectedHudLayout(splitMind), {
+    firstLine: { x: 540, y: 75.5 },
+    pointer: { toX: 790, toY: 75.5, x: 800, y: 25.5 },
+    secondLine: { x: 540, y: 95.5 },
+  })
+  assert.equal(nativeTutorialSelectedHudLayout(nativeHudSkillBindings({
+    concentrationSkillIds: [null, null],
+    planewalkerActive: false,
+    selectedPrimarySkillId: 8,
+    weldBuildId: null,
+  })), null)
 })

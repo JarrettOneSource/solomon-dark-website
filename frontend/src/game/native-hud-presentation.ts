@@ -50,6 +50,17 @@ export interface NativeHudSkillBindingPresentation {
   readonly skillId: number
 }
 
+export interface NativeTutorialSelectedHudLayout {
+  readonly firstLine: Readonly<{ x: number; y: number }>
+  readonly pointer: Readonly<{
+    toX: number
+    toY: number
+    x: number
+    y: number
+  }>
+  readonly secondLine: Readonly<{ x: number; y: number }>
+}
+
 export function nativeHudSkillActionRect(
   centerOffset: number,
   viewportWidth = 1_600,
@@ -60,6 +71,50 @@ export function nativeHudSkillActionRect(
     left: viewportWidth / 2 + centerOffset - NATIVE_HUD_SKILL_ACTION_WIDTH / 2,
     top: NATIVE_HUD_SKILL_ACTION_TOP + hudVerticalOffset,
     width: NATIVE_HUD_SKILL_ACTION_WIDTH,
+  })
+}
+
+export function nativeTutorialSelectedHudLayout(
+  bindings: readonly NativeHudSkillBindingPresentation[],
+  hudVerticalOffset = 0,
+  viewportWidth = 1_600,
+): NativeTutorialSelectedHudLayout | null {
+  const primary = bindings.find(({ binding }) => binding === 12)
+  const concentrationA = bindings.find(({ binding }) => binding === 16)
+  if (!primary || !concentrationA) return null
+  const primaryRect = nativeHudSkillActionRect(
+    primary.centerOffset,
+    viewportWidth,
+    hudVerticalOffset,
+  )
+  const concentrationRect = nativeHudSkillActionRect(
+    concentrationA.centerOffset,
+    viewportWidth,
+    hudVerticalOffset,
+  )
+  const primaryCenter = Object.freeze({
+    x: primaryRect.left + primaryRect.width / 2,
+    y: primaryRect.top + primaryRect.height / 2,
+  })
+  const concentrationCenter = Object.freeze({
+    x: concentrationRect.left + concentrationRect.width / 2,
+    y: concentrationRect.top + concentrationRect.height / 2,
+  })
+  return Object.freeze({
+    firstLine: Object.freeze({
+      x: primaryCenter.x - 220,
+      y: primaryCenter.y + 50,
+    }),
+    pointer: Object.freeze({
+      toX: primaryCenter.x + 30,
+      toY: primaryCenter.y + 50,
+      x: (primaryCenter.x + concentrationCenter.x) * 0.5,
+      y: (primaryCenter.y + concentrationCenter.y) * 0.5,
+    }),
+    secondLine: Object.freeze({
+      x: primaryCenter.x - 220,
+      y: primaryCenter.y + 70,
+    }),
   })
 }
 

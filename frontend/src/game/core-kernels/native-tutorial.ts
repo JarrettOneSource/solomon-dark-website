@@ -57,6 +57,8 @@ export const NATIVE_TUTORIAL_SURFACE_ACTIONS = [
   'inventory-closed',
   'skills-opened',
   'skills-closed',
+  'primary-selector-opened',
+  'concentration-a-selector-opened',
 ] as const
 export type NativeTutorialSurfaceAction = typeof NATIVE_TUTORIAL_SURFACE_ACTIONS[number]
 
@@ -157,6 +159,7 @@ export interface NativeTutorialState {
   readonly nextSpawnIntentId: number
   readonly primaryCastSequenceAtStart: number
   readonly rngState: NativeRngState
+  readonly selectedSkillHudAcknowledged: boolean
   readonly skillsOpened: boolean
   readonly skillsSeen: boolean
   readonly solomonDialogueQueued: boolean
@@ -336,6 +339,7 @@ export function createNativeTutorialState(
     nextSpawnIntentId: 1,
     primaryCastSequenceAtStart: primaryCastSequence,
     rngState: createNativeRng(seedBoneyardWaveRng(`${seed}:tutorial`)),
+    selectedSkillHudAcknowledged: false,
     skillsOpened: false,
     skillsSeen: false,
     solomonDialogueQueued: false,
@@ -356,6 +360,16 @@ export function applyNativeTutorialSurfaceAction(
   action: NativeTutorialSurfaceAction,
 ): NativeTutorialState {
   switch (action) {
+    case 'primary-selector-opened':
+    case 'concentration-a-selector-opened':
+      if (
+        source.selectedSkillHudAcknowledged
+        || !nativeTutorialHudAccess(source).spell
+      ) return source
+      return Object.freeze({
+        ...source,
+        selectedSkillHudAcknowledged: true,
+      })
     case 'inventory-opened':
       if (source.stage !== 9 && source.stage !== 10) return source
       return Object.freeze({

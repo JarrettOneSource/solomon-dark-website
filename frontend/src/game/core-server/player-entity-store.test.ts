@@ -17,6 +17,7 @@ import {
 import {
   addPlayerEntity,
   applyPlayerEntityHagathaPurchaseEffects,
+  autofillPlayerEntitySkillSelections,
   coldSlowPlayerEntity,
   createPlayerEntityStore,
   creditPlayerEntityLootGold,
@@ -130,6 +131,49 @@ test('learned primary effects follow the selected pure row, not creation element
     skillBooks: [{ ...store.skillBooks[0]!, primarySkillId: 52 }],
   }).store
   assert.equal(weld.skillRuntimes[0]!.hurricaneCharge, 0)
+})
+
+test('automatic primary replacement resets the cast lane to its selected native row', () => {
+  let store = addPlayerEntity(
+    createPlayerEntityStore(),
+    'first',
+    FIRST,
+    createPlayerCharacter(FIRST, { x: 0, y: 0 }),
+    17,
+  )
+  const sourceBook = store.skillBooks[0]!
+  const permanentRanks = [...sourceBook.permanentRanks]
+  const effectiveRanks = [...sourceBook.effectiveRanks]
+  permanentRanks[40] = 1
+  effectiveRanks[40] = 1
+  store = {
+    ...store,
+    primaryCasts: [{
+      ...store.primaryCasts[0]!,
+      channelActive: true,
+      held: true,
+      selectedPrimaryId: 16,
+      targetId: 'enemy-99',
+    }],
+    skillBooks: [{
+      ...sourceBook,
+      effectiveRanks,
+      permanentRanks,
+      primarySkillId: 16,
+    }],
+  }
+  const result = autofillPlayerEntitySkillSelections(
+    store,
+    'first',
+    createNativeRng(97),
+  )
+  const selected = result.store.skillBooks[0]!.primarySkillId
+  assert.ok(selected === 8 || selected === 40)
+  assert.equal(result.store.primaryCasts[0]!.selectedPrimaryId, selected)
+  assert.equal(result.store.primaryCasts[0]!.channelActive, false)
+  assert.equal(result.store.primaryCasts[0]!.held, false)
+  assert.equal(result.store.primaryCasts[0]!.targetId, null)
+  assert.equal(result.rng.indexA, 1)
 })
 
 test('equipped native effects refresh effective ranks, maxima, and dense runtime atomically', () => {

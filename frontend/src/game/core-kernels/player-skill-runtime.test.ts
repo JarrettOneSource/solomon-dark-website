@@ -18,6 +18,7 @@ import {
   CONCENTRATABLE_SKILL_IDS,
   MIND_SKILL_IDS,
   applyPlayerHardenArmor,
+  autofillPlayerSkillSelections,
   createPlayerSkillRuntime,
   isPlayerSkillConcentrated,
   markPlayerCreativityInsight,
@@ -59,6 +60,85 @@ test('pins the complete passive family and concentration membership', () => {
     57, 58, 59, 60, 61, 62, 63,
     65, 66, 67, 68, 69, 70, 71,
   ])
+})
+
+test('native refresh auto-fills every first concentration and consumes one gameplay draw', () => {
+  const statBook = playerStatBook()
+  const economy = createHubEconomy(1)
+  for (const skillId of CONCENTRATABLE_SKILL_IDS) {
+    const book = rankedBook({ [skillId]: 1 })
+    const created = createPlayerSkillRuntime(book, statBook, economy)
+    const result = autofillPlayerSkillSelections(
+      created.runtime,
+      created.skillBook,
+      statBook,
+      economy,
+      createNativeRng(skillId),
+    )
+    assert.deepEqual([
+      result.runtime.concentrationSkillIdA,
+      result.runtime.concentrationSkillIdB,
+    ], [skillId, null])
+    assert.equal(result.rng.indexA, 1)
+  }
+})
+
+test('native refresh fills Split Mind A then B without duplicating the opposite lane', () => {
+  const book = rankedBook({ 57: 1, 58: 1, 59: 1 })
+  const statBook = playerStatBook()
+  const economy = { ...createHubEconomy(1), ownedPerkSelectors: [21] }
+  const created = createPlayerSkillRuntime(book, statBook, economy)
+  const rng = createNativeRng(81)
+  const firstDraw = drawNativeInteger(rng, 3)
+  const expectedA = [57, 58, 59][firstDraw.value]!
+  const secondCandidates = [57, 58, 59].filter(skillId => skillId !== expectedA)
+  const secondDraw = drawNativeInteger(firstDraw.state, secondCandidates.length)
+  const result = autofillPlayerSkillSelections(
+    created.runtime,
+    created.skillBook,
+    statBook,
+    economy,
+    rng,
+  )
+  assert.deepEqual([
+    result.runtime.concentrationSkillIdA,
+    result.runtime.concentrationSkillIdB,
+  ], [expectedA, secondCandidates[secondDraw.value]])
+  assert.equal(result.rng.indexA, 2)
+
+  const emptyBook = rankedBook({})
+  const empty = autofillPlayerSkillSelections(
+    created.runtime,
+    emptyBook,
+    statBook,
+    economy,
+    rng,
+  )
+  assert.deepEqual([
+    empty.runtime.concentrationSkillIdA,
+    empty.runtime.concentrationSkillIdB,
+  ], [null, null])
+  assert.equal(empty.rng, rng)
+})
+
+test('native refresh replaces an invalid selected primary after concentration lanes', () => {
+  const sourceBook = rankedBook({ 40: 1 })
+  const book = { ...sourceBook, primarySkillId: 16 as const }
+  const statBook = playerStatBook()
+  const economy = createHubEconomy(1)
+  const created = createPlayerSkillRuntime(book, statBook, economy)
+  const rng = createNativeRng(93)
+  const candidates = [8, 40]
+  const draw = drawNativeInteger(rng, candidates.length)
+  const result = autofillPlayerSkillSelections(
+    created.runtime,
+    created.skillBook,
+    statBook,
+    economy,
+    rng,
+  )
+  assert.equal(result.skillBook.primarySkillId, candidates[draw.value])
+  assert.equal(result.rng.indexA, 1)
 })
 
 test('unforge bonuses enter the native base stat and offensive consumer lanes', () => {

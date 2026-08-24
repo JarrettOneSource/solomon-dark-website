@@ -184,13 +184,16 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
     type: 'client-start-tutorial',
   })), { type: 'client-start-tutorial' })
-  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
-    type: 'client-tutorial-action',
-    action: 'inventory-opened',
-  })), {
-    type: 'client-tutorial-action',
-    action: 'inventory-opened',
-  })
+  for (const action of [
+    'inventory-opened',
+    'primary-selector-opened',
+    'concentration-a-selector-opened',
+  ] as const) {
+    assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
+      type: 'client-tutorial-action',
+      action,
+    })), { type: 'client-tutorial-action', action })
+  }
   assert.throws(() => decodeClientGameMessage(JSON.stringify({
     type: 'client-tutorial-action',
     action: 'skip-stage',
@@ -348,7 +351,7 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
   })), /activity/)
 })
 
-test('protocol 71 retains exact A or B slots for HUD concentration replacement', () => {
+test('protocol 72 retains exact A or B slots for HUD concentration replacement', () => {
   assert.throws(() => decodeClientGameMessage(JSON.stringify({
     type: 'client-select-concentration-slot',
     skillId: 57,
@@ -439,7 +442,7 @@ test('protocol v42 bounds Lua requests and structured results by wire bytes and 
   }
 })
 
-test('protocol v71 accepts every authoritative inventory and NPC action and rejects malformed variants', () => {
+test('protocol v72 accepts every authoritative inventory and NPC action and rejects malformed variants', () => {
   const actions = [
     { type: 'buy-dowsing', offerId: 1 },
     { type: 'buy-fomentius', itemId: 2 },
@@ -489,7 +492,7 @@ test('protocol v71 accepts every authoritative inventory and NPC action and reje
   }
 })
 
-test('protocol v71 carries authoritative present Skorcha population and animation state', () => {
+test('protocol v72 carries authoritative present Skorcha population and animation state', () => {
   const snapshot = createGameSnapshot(createGameSimulation({
     'player-1': CHARACTER,
   }, { hubTraderAnimationSeed: 2 }), 'player-1')
@@ -1421,8 +1424,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v71 carries observer mode, Hub activity, NPC state, Goodie actions, tutorial fields/state, Hagatha runtime, Imp effects, save intent, selected skills, sacks, dyes, and gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 71)
+test('protocol v72 carries observer mode, Hub activity, NPC state, Goodie actions, tutorial fields/state, Hagatha runtime, Imp effects, save intent, selected skills, sacks, dyes, and gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 72)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),

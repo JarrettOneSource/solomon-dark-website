@@ -9,6 +9,7 @@ import {
 } from './core-kernels/native-tutorial.ts'
 import type { GameAudioDirector } from './game-audio-director.ts'
 import { gameBindingLabel, type GameControlBindings } from './game-settings.ts'
+import type { NativeTutorialSelectedHudLayout } from './native-hud-presentation.ts'
 import NativeBitmapText from './native-ui/NativeBitmapText.tsx'
 import NativeUiNineSlice from './native-ui/NativeUiNineSlice.tsx'
 import NativeUiSprite from './native-ui/NativeUiSprite.tsx'
@@ -22,6 +23,7 @@ const TUTORIAL_GOLD = 0xd9ba70
 interface TutorialOverlayProps {
   readonly audio: GameAudioDirector
   readonly controls: GameControlBindings
+  readonly selectedHudLayout: NativeTutorialSelectedHudLayout | null
   readonly state: NativeTutorialState
   readonly worldTarget: Readonly<{ x: number; y: number }> | null
 }
@@ -29,6 +31,7 @@ interface TutorialOverlayProps {
 export default function TutorialOverlay({
   audio,
   controls,
+  selectedHudLayout,
   state,
   worldTarget,
 }: TutorialOverlayProps) {
@@ -103,11 +106,26 @@ export default function TutorialOverlay({
       {state.stage === 5 ? <TutorialPointer x={468} y={790} toX={468} toY={859} /> : null}
       {state.stage === 9 ? <TutorialPointer x={763} y={790} toX={763} toY={855} /> : null}
       {state.stage === 12 ? <TutorialPointer x={843} y={790} toX={843} toY={855} /> : null}
-      {state.stage === 14 ? (
-        <>
-          <TutorialUnframedCallout className="tutorial-callout-primary" text={'click these icons to change your\nprimary attack or concentration'} />
-          <TutorialPointer x={800} y={70} toX={800} toY={25} />
-        </>
+      {state.stage === 14
+        && !state.selectedSkillHudAcknowledged
+        && selectedHudLayout ? (
+        <div className="tutorial-selected-hud-lesson">
+          <TutorialShadowedText
+            baseline={selectedHudLayout.firstLine.y}
+            centerX={selectedHudLayout.firstLine.x}
+            className="tutorial-selected-hud-first-line"
+            font="menu"
+            text="click these icons to change your"
+          />
+          <TutorialShadowedText
+            baseline={selectedHudLayout.secondLine.y}
+            centerX={selectedHudLayout.secondLine.x}
+            className="tutorial-selected-hud-second-line"
+            font="menu"
+            text="primary attack or concentration"
+          />
+          <TutorialPointer {...selectedHudLayout.pointer} />
+        </div>
       ) : null}
       {state.stage === 18 ? (
         <>
@@ -199,51 +217,15 @@ function TutorialCallout({ className, text }: { className: string; text: string 
   )
 }
 
-function TutorialUnframedCallout({
-  className,
-  text,
-}: {
-  readonly className: string
-  readonly text: string
-}) {
-  const font = nativeUiFont('menu')
-  const layout = layoutNativeUiText({
-    align: 'center',
-    font: 'menu',
-    text,
-    x: 0,
-    y: font.metrics[0] / 2,
-  })
-  return (
-    <div className={`tutorial-unframed-callout ${className}`} style={{ height: layout.height, width: layout.width }}>
-      <NativeBitmapText
-        align="center"
-        className="tutorial-unframed-callout-shadow"
-        font="menu"
-        style={{ left: 2.25, top: 2.25 }}
-        text={text}
-        tint={0x000000}
-        width={layout.width}
-      />
-      <NativeBitmapText
-        align="center"
-        className="tutorial-unframed-callout-text"
-        font="menu"
-        text={text}
-        tint={TUTORIAL_GOLD}
-        width={layout.width}
-      />
-    </div>
-  )
-}
-
 function TutorialShadowedText({
   baseline,
+  centerX = '50%',
   className,
   font,
   text,
 }: {
   readonly baseline: number
+  readonly centerX?: number | string
   readonly className?: string
   readonly font: NativeUiFontName
   readonly text: string
@@ -258,7 +240,10 @@ function TutorialShadowedText({
         align="center"
         className={`${sharedClassName} tutorial-instruction-shadow`}
         font={font}
-        style={{ left: 'calc(50% + 2.25px)', top: top + 2.25 }}
+        style={{
+          left: typeof centerX === 'number' ? centerX + 2.25 : `calc(${centerX} + 2.25px)`,
+          top: top + 2.25,
+        }}
         text={text}
         tint={0x000000}
       />
@@ -266,7 +251,7 @@ function TutorialShadowedText({
         align="center"
         className={sharedClassName}
         font={font}
-        style={{ left: '50%', top }}
+        style={{ left: centerX, top }}
         text={text}
         tint={TUTORIAL_GOLD}
       />
@@ -292,6 +277,10 @@ function TutorialPointer({
     <span
       aria-hidden
       className="tutorial-pointer"
+      data-to-x={toX}
+      data-to-y={toY}
+      data-x={x}
+      data-y={y}
       style={{
         left: x,
         opacity: visible ? 1 : 0,

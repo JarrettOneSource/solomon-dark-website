@@ -342,7 +342,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 71
+export const GAME_PROTOCOL_VERSION = 72
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -8970,6 +8970,7 @@ function nativeTutorialState(value: unknown, field: string): NativeTutorialState
     'nextSpawnIntentId',
     'primaryCastSequenceAtStart',
     'rngState',
+    'selectedSkillHudAcknowledged',
     'skillsOpened',
     'skillsSeen',
     'solomonDialogueQueued',
@@ -9103,6 +9104,10 @@ function nativeTutorialState(value: unknown, field: string): NativeTutorialState
       `${field}.primaryCastSequenceAtStart`,
     ),
     rngState: nativeRngState(source.rngState, `${field}.rngState`),
+    selectedSkillHudAcknowledged: boolean(
+      source.selectedSkillHudAcknowledged,
+      `${field}.selectedSkillHudAcknowledged`,
+    ),
     skillsOpened: boolean(source.skillsOpened, `${field}.skillsOpened`),
     skillsSeen: boolean(source.skillsSeen, `${field}.skillsSeen`),
     solomonDialogueQueued: boolean(
