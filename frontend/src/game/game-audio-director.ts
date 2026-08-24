@@ -23,6 +23,7 @@ export type GameMusicChannel = Pick<
 
 export interface GameAudioPlaybackOptions {
   loop?: boolean
+  offsetSeconds?: number
   playbackRate: number
   volume: number
 }
@@ -46,9 +47,15 @@ export interface GameAudioDirectorOptions {
 }
 
 export interface PlaySoundOptions {
+  offsetSeconds?: number
   playbackRate?: number
   volume?: number
 }
+
+type ActiveLoopOptions = Required<Pick<
+  PlaySoundOptions,
+  'playbackRate' | 'volume'
+>>
 
 const clampUnit = (value: number) => Math.max(0, Math.min(1, value))
 
@@ -59,7 +66,7 @@ export class GameAudioDirector {
   private fadeFrame = 0
   private generation = 0
   private musicScene: GameAudioScene | null = null
-  private loops = new Map<GameLoopCue, Map<string, Required<PlaySoundOptions>>>()
+  private loops = new Map<GameLoopCue, Map<string, ActiveLoopOptions>>()
   private readonly musicEnvelopes = new Map<GameMusicChannel, number>()
   private musicVolume = 1
   private now: () => number
@@ -172,6 +179,9 @@ export class GameAudioDirector {
 
   playStream(cue: GameStreamCue, options: PlaySoundOptions = {}): void {
     this.playback.restart(streamKey(cue), this.sources.streams[cue], {
+      ...(options.offsetSeconds === undefined
+        ? {}
+        : { offsetSeconds: Math.max(0, options.offsetSeconds) }),
       playbackRate: options.playbackRate ?? 1,
       volume: clampUnit(options.volume ?? 1),
     })

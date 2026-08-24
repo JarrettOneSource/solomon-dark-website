@@ -9,8 +9,8 @@ import type {
   LuaConsoleValue,
 } from '../protocol/game-protocol.ts'
 
-export const WEB_GAME_SAVE_SCHEMA_VERSION = 6
-export const LEGACY_WEB_GAME_SAVE_SCHEMA_VERSIONS = [1, 2, 3, 4, 5] as const
+export const WEB_GAME_SAVE_SCHEMA_VERSION = 7
+export const LEGACY_WEB_GAME_SAVE_SCHEMA_VERSIONS = [1, 2, 3, 4, 5, 6] as const
 export const WEB_GAME_SAVE_SLOT = 0
 export const MAX_WEB_GAME_SAVE_BYTES = 8 * 1024 * 1024
 /** Accommodates the 32-level Sack wire bound plus the complete save-document envelope. */
@@ -89,10 +89,12 @@ export function parseGameSaveDocument(document: string): ParsedGameSaveDocument 
     throw new Error('game save schema version is not supported')
   }
   return schemaVersion === WEB_GAME_SAVE_SCHEMA_VERSION
-    ? parseCurrentDocument(root)
-    : schemaVersion === 5
-      ? parseLegacyEnvelope(root)
-      : parseLegacyDocument(root, schemaVersion)
+    ? parseCurrentDocument(root, schemaVersion)
+    : schemaVersion === 6
+      ? parseCurrentDocument(root, schemaVersion)
+      : schemaVersion === 5
+        ? parseLegacyEnvelope(root)
+        : parseLegacyDocument(root, schemaVersion)
 }
 
 function knownGameSaveSchemaVersion(value: unknown): value is number {
@@ -100,7 +102,10 @@ function knownGameSaveSchemaVersion(value: unknown): value is number {
     || (LEGACY_WEB_GAME_SAVE_SCHEMA_VERSIONS as readonly unknown[]).includes(value)
 }
 
-function parseCurrentDocument(root: Record<string, unknown>): ParsedGameSaveDocument {
+function parseCurrentDocument(
+  root: Record<string, unknown>,
+  schemaVersion: number,
+): ParsedGameSaveDocument {
   onlyKeys(root, 'game save', [
     'continuation',
     'integrity',
@@ -118,7 +123,7 @@ function parseCurrentDocument(root: Record<string, unknown>): ParsedGameSaveDocu
     mods: parseMods(root.mods),
     modState: parseModState(root.modState),
     profile,
-    sourceSchemaVersion: WEB_GAME_SAVE_SCHEMA_VERSION,
+    sourceSchemaVersion: schemaVersion,
   }
 }
 

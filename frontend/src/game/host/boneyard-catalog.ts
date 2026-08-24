@@ -8,6 +8,8 @@ import type {
   LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
 import { NATIVE_GENERATED_BONEYARDS } from './native-generated-boneyards.ts'
+import { STOCK_TUTORIAL_BONEYARD } from './stock-tutorial-boneyard.ts'
+import { STOCK_TUTORIAL_BONEYARD_ID } from '../core-kernels/native-tutorial.ts'
 import {
   boneyardGeometrySha256,
   projectBoneyard,
@@ -16,6 +18,12 @@ import {
 export const DEFAULT_BONEYARD_CHOICE: BoneyardChoice = {
   id: 'default-random',
   name: 'Random Boneyard',
+  source: 'default',
+}
+
+export const STOCK_TUTORIAL_CHOICE: BoneyardChoice = {
+  id: STOCK_TUTORIAL_BONEYARD_ID,
+  name: 'Tutorial',
   source: 'default',
 }
 
@@ -107,5 +115,19 @@ export function materializeBoneyard(
     ...entry,
     runId,
     seed,
+  }
+}
+
+export function materializeStockTutorial(
+  seedBytes: Buffer = randomBytes(16),
+): LoadedBoneyard {
+  if (seedBytes.length < 4) throw new Error('Tutorial seed needs at least four bytes')
+  return {
+    choice: STOCK_TUTORIAL_CHOICE,
+    geometrySha256: STOCK_TUTORIAL_BONEYARD.geometrySha256,
+    runId: randomBytes(16).toString('hex'),
+    scene: STOCK_TUTORIAL_BONEYARD.scene,
+    seed: seedBytes.toString('hex'),
+    sourceSha256: STOCK_TUTORIAL_BONEYARD.sourceSha256,
   }
 }

@@ -181,6 +181,20 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
     boneyardId: 'default-random',
   })
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
+    type: 'client-start-tutorial',
+  })), { type: 'client-start-tutorial' })
+  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
+    type: 'client-tutorial-action',
+    action: 'inventory-opened',
+  })), {
+    type: 'client-tutorial-action',
+    action: 'inventory-opened',
+  })
+  assert.throws(() => decodeClientGameMessage(JSON.stringify({
+    type: 'client-tutorial-action',
+    action: 'skip-stage',
+  })), /action/)
+  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
     type: 'client-continue-game-over',
     eventId: 7,
     runId: 'run-7',
@@ -333,7 +347,7 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
   })), /activity/)
 })
 
-test('protocol 69 retains exact A or B slots for HUD concentration replacement', () => {
+test('protocol 70 retains exact A or B slots for HUD concentration replacement', () => {
   assert.throws(() => decodeClientGameMessage(JSON.stringify({
     type: 'client-select-concentration-slot',
     skillId: 57,
@@ -1272,8 +1286,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v69 carries observer mode, Hub activity, Goodie actions, tutorial state, Hagatha runtime, Imp effects, save intent, selected skills, sacks, dyes, and gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 69)
+test('protocol v70 carries observer mode, Hub activity, Goodie actions, tutorial fields/state, Hagatha runtime, Imp effects, save intent, selected skills, sacks, dyes, and gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 70)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),

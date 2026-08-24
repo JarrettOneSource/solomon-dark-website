@@ -22,6 +22,14 @@ import {
   type BoneyardSolomonEncounterState,
 } from '../core-kernels/boneyard-encounter.ts'
 import {
+  STOCK_TUTORIAL_BONEYARD_ID,
+  createNativeTutorialState,
+  nativeTutorialAmuletItem,
+  nativeTutorialDialogueTicks,
+  nativeTutorialHealthPotionItem,
+  type NativeTutorialState,
+} from '../core-kernels/native-tutorial.ts'
+import {
   applyBoneyardGateContact,
   createBoneyardGateLeaves,
   stepBoneyardGateLeaf,
@@ -71,7 +79,7 @@ import {
   type BoneyardWaveDirectorState,
 } from '../core-kernels/boneyard-wave-director.ts'
 import type { NativeHallOfFameRunState } from '../core-kernels/hall-of-fame-score.ts'
-import type { HubInventoryItem } from '../core-kernels/hub-economy.ts'
+import type { HubEconomyState, HubInventoryItem } from '../core-kernels/hub-economy.ts'
 import type { BoneyardWaveEnemyToken } from '../core-kernels/boneyard-wave-schema.ts'
 import {
   applyNativeEnemyWorldFeedback,
@@ -151,6 +159,8 @@ export interface BoneyardWorldState {
   runId: string
   scenerySpellTargets: readonly PrimarySpellTarget[]
   spawn: { x: number; y: number; facingDeg: number }
+  tutorial: NativeTutorialState | null
+  tutorialProfileEconomy: HubEconomyState | null
   waves: BoneyardWaveDirectorState | null
 }
 
@@ -168,7 +178,11 @@ export function createBoneyardWorld(
   loaded: LoadedBoneyard,
   lanternLightRegistration: NativeLightProviderRegistration | null = null,
 ): BoneyardWorldState {
+  const tutorial = loaded.choice.id === STOCK_TUTORIAL_BONEYARD_ID
   const ownsRetailEncounter = loaded.choice.source === 'default'
+    && loaded.scene.solomonDig !== null
+    && !tutorial
+  const ownsSolomonEncounter = loaded.choice.source === 'default'
     && loaded.scene.solomonDig !== null
   return {
     arenaTransition: ownsRetailEncounter
@@ -197,8 +211,10 @@ export function createBoneyardWorld(
         registrationOrder,
       })]
     }),
-    encounter: ownsRetailEncounter
-      ? createSolomonEncounter(loaded.scene.solomonDig!, loaded.seed)
+    encounter: ownsSolomonEncounter
+      ? createSolomonEncounter(loaded.scene.solomonDig!, loaded.seed, tutorial
+          ? { dialogueMode: 'tutorial', tutorialDialogueTicks: nativeTutorialDialogueTicks() }
+          : undefined)
       : null,
     enemies: createBoneyardEnemyStore(loaded.seed, loaded.scene.objects.length),
     enemyWorldFeedback: createNativeEnemyWorldFeedbackState(),
@@ -239,6 +255,10 @@ export function createBoneyardWorld(
       }] : []
     )),
     spawn: { ...loaded.scene.spawn },
+    tutorial: tutorial
+      ? createNativeTutorialState(loaded.scene.spawn, 0, loaded.seed)
+      : null,
+    tutorialProfileEconomy: null,
     waves: ownsRetailEncounter ? createBoneyardWaveDirector(loaded.seed) : null,
   }
 }
@@ -466,6 +486,7 @@ export function stepBoneyardWorldTick(
     }
   }
   let waves = world.waves
+  let tutorial = world.tutorial
   let wavesStarted = false
   let pendingExternalSpawnIntents = externalSpawnIntents
   let enemyWorldFeedback = stepNativeEnemyWorldFeedback(world.enemyWorldFeedback)
@@ -636,7 +657,7 @@ export function stepBoneyardWorldTick(
         disableMask: 0,
         itemLevelMaximum: 100,
         itemLevelMinimum: 0,
-        level: waves?.waveOrdinal ?? 0,
+        level: waves?.waveOrdinal ?? tutorial?.waveOrdinal ?? 0,
         mode: 0,
         specialSuppression: false,
       },
@@ -656,7 +677,8 @@ export function stepBoneyardWorldTick(
         nextPlayers,
         enemyStep.store,
       ),
-      policies: { gold: 0, item: 0, orb: 0, potion: 0, powerup: 0, specificItem: 0 },
+      policies: reward.lootSource.policies
+        ?? { gold: 0, item: 0, orb: 0, potion: 0, powerup: 0, specificItem: 0 },
       position: reward.lootSource.position,
       sceneForcesHealthPotion: false,
       tick,
@@ -668,6 +690,22 @@ export function stepBoneyardWorldTick(
       )),
     })
     loot = materialized.store
+    if (reward.lootSource.recipeUid === 10051 && tutorial?.itemDropArmed) {
+      loot = spawnBoneyardCustomLootItems(
+        loot,
+        [nativeTutorialAmuletItem()],
+        reward.lootSource.position,
+        tick,
+      ).store
+      tutorial = { ...tutorial, itemDropArmed: false }
+    } else if (reward.lootSource.recipeUid === 10065 && tutorial !== null) {
+      loot = spawnBoneyardCustomLootItems(
+        loot,
+        [nativeTutorialHealthPotionItem()],
+        reward.lootSource.position,
+        tick,
+      ).store
+    }
     const customItems = customLoot?.({
       actorSeed: reward.lootSource.actorSeed,
       enemyToken: reward.lootSource.enemyToken,
@@ -704,6 +742,7 @@ export function stepBoneyardWorldTick(
       enemyWorldFeedback,
       gateLeaves,
       loot,
+      tutorial,
       waves,
     },
   }

@@ -866,6 +866,42 @@ export function createNativeSecondarySimulation(seed = 0): NativeSecondarySimula
   }
 }
 
+export function spawnNativeScriptFires(
+  source: NativeSecondarySimulationState,
+  ownerId: string,
+  worldKey: string,
+  fires: readonly Readonly<{
+    damage: number
+    lifetimeTicks: number
+    position: Vector2
+    radius: number
+  }>[],
+  registerLightProvider: RegisterNativeLightProvider,
+): NativeSecondarySimulationState {
+  let state = source
+  for (const fire of fires) {
+    const phase = drawNativeFloat(state.rng, FIRE_FRAME_COUNT)
+    const mirror = drawNativeSign(phase.state, 1)
+    state = spawn({ ...state, rng: mirror.state }, actorSeed({
+      damage: fire.damage,
+      enhanced: true,
+      kind: 'fire-patch',
+      lifetimeTicks: fire.lifetimeTicks,
+      lightRegistration: registerLightProvider('actor'),
+      ownerId,
+      phase: phase.value,
+      position: Object.freeze({ ...fire.position }),
+      quantity: mirror.value,
+      radius: 0,
+      scale: Math.fround(fire.radius / 100),
+      skillId: 73,
+      slowFactor: Math.fround(fire.lifetimeTicks * FIRE_LIFE_PER_TICK),
+      worldKey,
+    }))
+  }
+  return state
+}
+
 export function createNativeSecondaryPlayerState(): NativeSecondaryPlayerState {
   return {
     castSequence: 0,

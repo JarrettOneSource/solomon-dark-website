@@ -40,6 +40,7 @@ import type {
 import type { NativeHagathaRuntimeState } from '../core-kernels/native-hagatha-effects.ts'
 import type { NativeSkeletonHeadFacingOffset } from '../core-kernels/boneyard-skeleton-family-animation.ts'
 import type { ReplicatedEntityFrame } from './replicated-entity-types.ts'
+import type { NativeTutorialState } from '../core-kernels/native-tutorial.ts'
 
 export interface ProtocolFountainParticleState {
   id: number
@@ -201,6 +202,7 @@ export interface BoneyardWorldSnapshot {
   loot: readonly BoneyardLootSnapshot[]
   lootEvents: readonly BoneyardLootEventSnapshot[]
   runId: string
+  tutorial: NativeTutorialState | null
   waves: BoneyardWaveSnapshot | null
 }
 
@@ -716,6 +718,7 @@ export interface BoneyardWorldSnapshotFrame {
   lootEvents: readonly BoneyardLootEventSnapshot[]
   mageLightningPulses: readonly BoneyardMageLightningPulseFrame[]
   runId: string
+  tutorial: NativeTutorialState | null
   waves: BoneyardWaveSnapshot | null
 }
 

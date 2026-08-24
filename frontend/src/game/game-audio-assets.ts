@@ -1,8 +1,8 @@
 import academy from '../assets/game/audio/music/academy.mp3'
+import combat from '../assets/game/audio/music/combat.mp3'
+import prelude from '../assets/game/audio/music/prelude.mp3'
 import selection from '../assets/game/audio/music/selection.mp3'
 import solomonDarkTheme from '../assets/game/audio/music/solomondarktheme.mp3'
-import prelude from '../assets/music/prelude.mp3'
-import combat from '../assets/music/combat.mp3'
 import death from '../assets/music/death.mp3'
 import catchIt from '../assets/game/audio/sfx/catchit.wav'
 import acidSizzle from '../assets/game/audio/sfx/acid-sizzle.wav'
@@ -153,6 +153,28 @@ import solomonHello3 from '../assets/game/audio/voice/solomon-hello-3.wav'
 import solomonHello4 from '../assets/game/audio/voice/solomon-hello-4.wav'
 import solomonLaugh1 from '../assets/game/audio/voice/solomon-laugh-1.wav'
 import solomonLaughBig from '../assets/game/audio/voice/solomon-laugh-big.wav'
+import tutorialAcceptYourFate from '../assets/game/audio/voice/tutorial-accept-your-fate.wav'
+import tutorialAcidRainHuh from '../assets/game/audio/voice/tutorial-acid-rain-huh.wav'
+import tutorialBeenDispatched from '../assets/game/audio/voice/tutorial-been-dispatched.wav'
+import tutorialCamePrepared from '../assets/game/audio/voice/tutorial-came-prepared.wav'
+import tutorialCarelessFool from '../assets/game/audio/voice/tutorial-careless-fool.wav'
+import tutorialCowardComeBack from '../assets/game/audio/voice/tutorial-coward-come-back.wav'
+import tutorialDoTheDispatching from '../assets/game/audio/voice/tutorial-do-the-dispatching.wav'
+import tutorialEasilyVanquished from '../assets/game/audio/voice/tutorial-easily-vanquished.wav'
+import tutorialFaceTheWrath from '../assets/game/audio/voice/tutorial-face-the-wrath.wav'
+import tutorialIAmSirmin from '../assets/game/audio/voice/tutorial-i-am-sirmin.wav'
+import tutorialImBored from '../assets/game/audio/voice/tutorial-im-bored.wav'
+import tutorialLevellingUp from '../assets/game/audio/voice/tutorial-levelling-up.wav'
+import tutorialLookingBeatUp from '../assets/game/audio/voice/tutorial-looking-beat-up.wav'
+import tutorialMakeMeStronger from '../assets/game/audio/voice/tutorial-make-me-stronger.wav'
+import tutorialNeverHeardOfYou from '../assets/game/audio/voice/tutorial-never-heard-of-you.wav'
+import tutorialOhBoyAnotherWizard from '../assets/game/audio/voice/tutorial-oh-boy-another-wizard.wav'
+import tutorialShowYourself from '../assets/game/audio/voice/tutorial-show-yourself.wav'
+import tutorialSoundLikeMother from '../assets/game/audio/voice/tutorial-sound-like-mother.wav'
+import tutorialSurrender from '../assets/game/audio/voice/tutorial-surrender.wav'
+import tutorialToDeathExactly from '../assets/game/audio/voice/tutorial-to-death-exactly.wav'
+import tutorialUnredeemable from '../assets/game/audio/voice/tutorial-unredeemable.wav'
+import tutorialYourPerversions from '../assets/game/audio/voice/tutorial-your-perversions.wav'
 import type { GameAudioSources } from './game-audio-native.ts'
 
 export const GAME_AUDIO_SOURCES = {
@@ -318,5 +340,27 @@ export const GAME_AUDIO_SOURCES = {
     'solomon-hello-4': solomonHello4,
     'solomon-laugh-1': solomonLaugh1,
     'solomon-laugh-big': solomonLaughBig,
+    'tutorial-accept-your-fate': tutorialAcceptYourFate,
+    'tutorial-acid-rain-huh': tutorialAcidRainHuh,
+    'tutorial-been-dispatched': tutorialBeenDispatched,
+    'tutorial-came-prepared': tutorialCamePrepared,
+    'tutorial-careless-fool': tutorialCarelessFool,
+    'tutorial-coward-come-back': tutorialCowardComeBack,
+    'tutorial-do-the-dispatching': tutorialDoTheDispatching,
+    'tutorial-easily-vanquished': tutorialEasilyVanquished,
+    'tutorial-face-the-wrath': tutorialFaceTheWrath,
+    'tutorial-i-am-sirmin': tutorialIAmSirmin,
+    'tutorial-im-bored': tutorialImBored,
+    'tutorial-levelling-up': tutorialLevellingUp,
+    'tutorial-looking-beat-up': tutorialLookingBeatUp,
+    'tutorial-make-me-stronger': tutorialMakeMeStronger,
+    'tutorial-never-heard-of-you': tutorialNeverHeardOfYou,
+    'tutorial-oh-boy-another-wizard': tutorialOhBoyAnotherWizard,
+    'tutorial-show-yourself': tutorialShowYourself,
+    'tutorial-sound-like-mother': tutorialSoundLikeMother,
+    'tutorial-surrender': tutorialSurrender,
+    'tutorial-to-death-exactly': tutorialToDeathExactly,
+    'tutorial-unredeemable': tutorialUnredeemable,
+    'tutorial-your-perversions': tutorialYourPerversions,
   },
 } as const satisfies GameAudioSources

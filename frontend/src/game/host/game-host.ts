@@ -19,6 +19,7 @@ import {
   GAME_TICK_RATE,
   addPlayerCharacter,
   applyGameSimulationHubAction,
+  applyGameSimulationTutorialAction,
   bindGameSimulationPlayerSkillQuickbar,
   confirmGameSimulationLoadout,
   continueGameSimulationOver,
@@ -49,6 +50,7 @@ import type {
 import {
   createBoneyardCatalog,
   materializeBoneyard,
+  materializeStockTutorial,
   type BoneyardCatalog,
 } from './boneyard-catalog.ts'
 import {
@@ -553,7 +555,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   const externalPartyJoinRequests = new Map<string, ExternalPartyJoinRequest>()
   const partyJoinReservations = new Map<string, PartyJoinReservation>()
   const pendingLuaEvents: WebLuaDerivedEvent[] = []
-  const cheatTaintedRunIds = new Set<string>()
+  const leaderboardIneligibleRunIds = new Set<string>()
   const issuedLeaderboardReceipts = new Set<string>()
   const pending = new Set<WebSocket>()
   const disconnectCauses = new WeakMap<WebSocket, { reason: string; source: string }>()
@@ -2109,6 +2111,76 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         publishSaveCheckpoint('boneyard-entry')
         return
       }
+      if (message.type === 'client-start-tutorial') {
+        const activeState = stateForPlayer(client.playerId)
+        if (
+          client.playerId !== authorityForPlayer(client.playerId)
+          || loadedBoneyardForPlayer(client.playerId)
+          || gameplayPauseForPlayer(client.playerId) !== null
+          || activeState.levelUpBarrier !== null
+          || activeState.run.phase !== 'hub'
+        ) return
+        if (!getPlayerEconomy(activeState, client.playerId).tutorialPending) {
+          disconnect(
+            socket,
+            'invalid-message',
+            'The stock Tutorial is available only to a fresh profile.',
+          )
+          return
+        }
+        if (sharedWorlds) {
+          const party = partyForPlayer(sharedWorlds.parties, client.playerId)
+          const content = party ? contentForParty(party.id) : null
+          if (
+            !party
+            || party.memberPlayerIds.length !== 1
+            || content?.manifest.mods.length !== 0
+            || !client.globalScoreEligible
+          ) {
+            disconnect(
+              socket,
+              'invalid-message',
+              'The stock Tutorial requires a solo vanilla party.',
+            )
+            return
+          }
+        } else if (content.mods.length !== 0 || !client.globalScoreEligible) {
+          disconnect(
+            socket,
+            'invalid-message',
+            'The stock Tutorial requires a vanilla session with cheats disabled.',
+          )
+          return
+        }
+        const selected = materializeStockTutorial(consumeBoneyardSeed())
+        leaderboardIneligibleRunIds.add(selected.runId)
+        if (sharedWorlds) {
+          void beginSharedPartyRun(client.playerId, selected, socket)
+          return
+        }
+        loadedBoneyard = selected
+        state = enterBoneyardWorld(state, selected)
+        stopAllClientInputs()
+        broadcast({ type: 'server-boneyard-loaded', boneyard: selected })
+        if (privateParties) broadcastPartyState()
+        broadcastSnapshot()
+        publishSaveCheckpoint('tutorial-entry')
+        return
+      }
+      if (message.type === 'client-tutorial-action') {
+        const activeState = stateForPlayer(client.playerId)
+        const next = applyGameSimulationTutorialAction(
+          activeState,
+          client.playerId,
+          message.action,
+        )
+        if (next === null || next === activeState) return
+        replaceStateForPlayer(client.playerId, next)
+        stopWorldClientInputs(client.playerId)
+        broadcastSnapshot()
+        publishSaveCheckpoint('tutorial-action')
+        return
+      }
       if (message.type === 'client-continue-game-over') {
         if (sharedWorlds) {
           const continued = continueSharedPartyGameOver(
@@ -2470,6 +2542,12 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
               }
             }
             publishLeaderboardReceipts(before.state, run.state)
+            const tutorialBoundary = tutorialSaveBoundaryKey(before.state)
+              !== tutorialSaveBoundaryKey(run.state)
+            if (tutorialBoundary) {
+              publishSharedPartyCheckpoint(run.partyId, 'tutorial-boundary')
+              lifecycleBoundary = true
+            }
             if (enteredGameOver) publishSharedProfileCheckpoint(run.partyId)
             if (enteredGameOver || completedGameOver || previousBarrierId !== barrierId) {
               stopPartyInputs(run.partyId)
@@ -2544,6 +2622,9 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           && state.run.phase === 'game-over'
         const completedGameOver = previousRunPhase === 'game-over'
           && state.run.phase === 'loadout'
+        const tutorialBoundary = tutorialSaveBoundaryKey(stateBeforeLua)
+          !== tutorialSaveBoundaryKey(state)
+        if (tutorialBoundary) publishSaveCheckpoint('tutorial-boundary')
         if (enteredGameOver) publishProfileCheckpoint()
         if (completedGameOver) loadedBoneyard = null
         if (enteredGameOver || completedGameOver) stopAllClientInputs()
@@ -2552,6 +2633,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         steps += 1
         if (
           previousBarrierId !== barrierId
+          || tutorialBoundary
           || enteredGameOver
           || reachedGameOverBlack
           || completedGameOver
@@ -2628,6 +2710,16 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       if (memberIds.has(client.playerId)) {
         publishSaveCheckpointForClient(client, 'game-over', true, true)
       }
+    }
+  }
+
+  function publishSharedPartyCheckpoint(partyId: string, source: string): void {
+    if (!sharedWorlds) return
+    const party = sharedWorlds.parties.parties.find(({ id }) => id === partyId)
+    if (!party) return
+    const memberIds = new Set(party.memberPlayerIds)
+    for (const client of clients.values()) {
+      if (memberIds.has(client.playerId)) publishSaveCheckpointForClient(client, source)
     }
   }
 
@@ -3876,7 +3968,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   function taintActiveRun(client: HostClient): void {
     const activeState = stateForPlayer(client.playerId)
     if (activeState.world.kind === 'boneyard') {
-      cheatTaintedRunIds.add(activeState.world.runId)
+      leaderboardIneligibleRunIds.add(activeState.world.runId)
     }
   }
 
@@ -3890,7 +3982,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       if (
         run.state.world.kind === 'boneyard'
         && party?.memberPlayerIds.some(playerId => bots.has(playerId))
-      ) cheatTaintedRunIds.add(run.state.world.runId)
+      ) leaderboardIneligibleRunIds.add(run.state.world.runId)
     }
   }
 
@@ -3903,7 +3995,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       || previous.world.kind !== 'boneyard'
       || completed.world.kind !== 'boneyard'
       || previous.world.runId !== completed.world.runId
-      || cheatTaintedRunIds.has(completed.world.runId)
+      || leaderboardIneligibleRunIds.has(completed.world.runId)
     ) return
     for (const client of clients.values()) {
       const userId = client.leaderboardUserId
@@ -3945,8 +4037,8 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         ? run.state.world.runId
         : null).filter((runId): runId is string => runId !== null)
       : state.world.kind === 'boneyard' ? [state.world.runId] : [])
-    for (const runId of cheatTaintedRunIds) {
-      if (!activeRunIds.has(runId)) cheatTaintedRunIds.delete(runId)
+    for (const runId of leaderboardIneligibleRunIds) {
+      if (!activeRunIds.has(runId)) leaderboardIneligibleRunIds.delete(runId)
     }
     for (const key of issuedLeaderboardReceipts) {
       if (!activeRunIds.has(key.slice(0, key.indexOf('\0')))) {
@@ -4652,7 +4744,32 @@ function pauseAllowsInventoryAction(
       || action.type === 'read-skill-book'
       || action.type === 'unequip'
       || action.type === 'unforge'
-    )
+  )
+}
+
+function tutorialSaveBoundaryKey(state: GameSimulationState): string | null {
+  if (state.world.kind !== 'boneyard' || state.world.tutorial === null) return null
+  const tutorial = state.world.tutorial
+  return [
+    tutorial.active,
+    tutorial.cameraLockTriggered,
+    tutorial.introActive,
+    tutorial.inventoryOpened,
+    tutorial.inventorySeen,
+    tutorial.itemDropArmed,
+    tutorial.narration.current?.eventId ?? 0,
+    tutorial.narration.pending.join(','),
+    tutorial.skillsOpened,
+    tutorial.skillsSeen,
+    tutorial.stage,
+    tutorial.survivalEnabled,
+    tutorial.waveOrdinal,
+    tutorial.waveSpawnCursor,
+    state.secondaryAbilities.actors
+      .filter(actor => actor.kind === 'fire-patch' && actor.skillId === 73 && actor.id <= 2)
+      .map(actor => actor.id)
+      .join(','),
+  ].join('|')
 }
 
 function sameCharacter(first: PlayerCharacterConfig, second: PlayerCharacterConfig): boolean {

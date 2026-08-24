@@ -1,0 +1,233 @@
+.tutorial-control-picker {
+  position: absolute;
+  inset: 0;
+  width: 1600px;
+  height: 900px;
+  overflow: hidden;
+  background: #000;
+  pointer-events: auto;
+}
+
+.tutorial-control-picker-heading {
+  position: absolute !important;
+  top: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.tutorial-control-choice {
+  position: absolute;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  transition: filter 100ms linear;
+}
+
+.tutorial-control-choice:hover,
+.tutorial-control-choice:focus-visible {
+  filter: brightness(1.45);
+  outline: none;
+}
+
+.tutorial-control-choice:disabled {
+  cursor: wait;
+  filter: brightness(0.65);
+}
+
+.tutorial-control-picker[data-committed="true"] >
+  :is(.tutorial-control-picker-heading, .tutorial-control-choice) {
+  animation: tutorial-control-picker-fade 500ms linear forwards;
+}
+
+.tutorial-control-choice[data-selected="true"] {
+  animation:
+    tutorial-control-picker-fade 500ms linear forwards,
+    tutorial-control-picker-selection 100ms linear forwards;
+}
+
+@keyframes tutorial-control-picker-fade {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes tutorial-control-picker-selection {
+  from { filter: brightness(1.5); }
+  to { filter: brightness(1); }
+}
+
+.tutorial-control-choice > span {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.tutorial-control-choice-arrows {
+  left: 477.5px;
+  top: 290px;
+  width: 245px;
+  height: 320px;
+}
+
+.tutorial-control-choice-wasd {
+  left: 850.5px;
+  top: 324px;
+  width: 299px;
+  height: 252px;
+}
+
+.tutorial-prelude {
+  position: absolute;
+  inset: 0;
+  width: 1600px;
+  height: 900px;
+  overflow: hidden;
+  background: #000;
+}
+
+.tutorial-prelude-record,
+.tutorial-prelude-skull {
+  position: absolute !important;
+  left: 50%;
+  transform-origin: center;
+}
+
+.tutorial-prelude-record {
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.tutorial-prelude-skull {
+  transform: translate(-50%, -50%) scale(4);
+}
+
+.tutorial-offer-backdrop {
+  position: absolute;
+  z-index: 90;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgb(0 0 0 / 72%);
+}
+
+.tutorial-offer-dialog {
+  width: 570px;
+  box-sizing: border-box;
+  padding: 34px 42px 28px;
+  color: #f3e5b0;
+  border: 2px solid #a88b43;
+  outline: 1px solid #322915;
+  background:
+    linear-gradient(rgb(20 18 15 / 96%), rgb(7 7 6 / 98%)),
+    #0b0a08;
+  box-shadow: 0 0 0 8px rgb(0 0 0 / 72%), 0 18px 60px #000;
+  text-align: center;
+}
+
+.tutorial-offer-title {
+  margin: 0 auto 22px;
+  display: flex;
+  justify-content: center;
+  filter: drop-shadow(0 2px 1px #000);
+}
+
+.tutorial-offer-copy {
+  margin: 0 0 26px;
+  color: #d4c58e;
+  font-family: "IM FELL English", serif;
+  font-size: 21px;
+}
+
+.tutorial-offer-actions {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+}
+
+.tutorial-offer-actions button {
+  min-width: 132px;
+  padding: 11px 20px 9px;
+  border: 1px solid #9d8240;
+  color: #efd78a;
+  background: #17130c;
+  font-family: "Cinzel", serif;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.tutorial-offer-actions button:hover,
+.tutorial-offer-actions button:focus-visible {
+  color: #fff3c1;
+  background: #2a2112;
+  outline: 1px solid #d5b866;
+}
+
+.tutorial-overlay,
+.tutorial-modal-callouts {
+  position: absolute;
+  z-index: 31000;
+  inset: 0;
+  width: 1600px;
+  height: 900px;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+}
+
+.tutorial-modal-callouts {
+  z-index: 31001;
+}
+
+.main-menu-native-stage.tutorial-modal-callout-stage {
+  z-index: 31001;
+}
+
+.tutorial-instruction {
+  position: absolute;
+  inset: 0;
+}
+
+.tutorial-instruction-text {
+  position: absolute !important;
+  transform: translateX(-50%);
+}
+
+.tutorial-pointer {
+  position: absolute;
+  display: block;
+  width: 58px;
+  height: 61px;
+  filter: drop-shadow(0 2px 3px #000);
+  transform-origin: center;
+  transition: opacity 40ms linear;
+}
+
+.tutorial-pointer > span {
+  display: block;
+  width: 58px;
+  height: 61px;
+}
+
+.tutorial-callout {
+  position: absolute;
+  overflow: hidden;
+}
+
+.tutorial-callout-text,
+.tutorial-unframed-callout-shadow,
+.tutorial-unframed-callout-text {
+  position: absolute !important;
+}
+
+.tutorial-unframed-callout {
+  position: absolute;
+}
+
+.tutorial-callout-primary { top: 102px; left: 50%; transform: translateX(-50%); }
+.tutorial-callout-resume { top: 105px; right: 42px; }
+.tutorial-callout-quick-use { bottom: 96px; left: 250px; }
+.tutorial-callout-equipment { top: 260px; right: 65px; }
+.tutorial-callout-backpack { bottom: 195px; right: 265px; }
+.tutorial-callout-concentration { top: 205px; left: 50%; transform: translateX(-50%); }
+.tutorial-callout-hover { top: 310px; right: 95px; }

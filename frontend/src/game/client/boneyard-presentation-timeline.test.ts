@@ -266,6 +266,7 @@ function snapshotAt(tick: number, playerX: number, gateTipX: number): BoneyardGa
       mageLightningPulses: [],
       maggots: [maggotAt(gateTipX + 100, tick >= 105 ? 1 : 0)],
       runId: 'run-1',
+      tutorial: null,
       waves: {
         interwaveDelayTicks: 0,
         pendingSpawnBudget: tick >= 105 ? 13 : 14,

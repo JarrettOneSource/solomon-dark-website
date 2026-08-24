@@ -19,6 +19,9 @@ export const BONEYARD_SOLOMON_PHASES = [
 
 export type BoneyardSolomonPhase = typeof BONEYARD_SOLOMON_PHASES[number]
 
+export const BONEYARD_SOLOMON_DIALOGUE_MODES = ['ordinary', 'tutorial'] as const
+export type BoneyardSolomonDialogueMode = typeof BONEYARD_SOLOMON_DIALOGUE_MODES[number]
+
 export const BONEYARD_SOLOMON_VOICE_CUES = [
   'solomon-hello-1',
   'solomon-hello-2',
@@ -72,6 +75,7 @@ export interface BoneyardSolomonEncounterState {
   digShovelArmed: boolean
   digTicksPerFrame: number
   digThrowDirtArmed: boolean
+  dialogueMode: BoneyardSolomonDialogueMode
   escapeSpeed: number
   headingDeg: number
   lifetimeTicksRemaining: number
@@ -85,6 +89,7 @@ export interface BoneyardSolomonEncounterState {
   rngState: NativeRngState
   runEventId: number
   targetPlayerId: string | null
+  tutorialDialogueTicks: number
   transitionOffsetY: number
   turnRate: number
   voiceEvents: readonly BoneyardSolomonVoiceEvent[]
@@ -127,6 +132,10 @@ const SOLOMON_DIG_AUDIO_HISTORY_LIMIT = 8
 export function createSolomonEncounter(
   dig: SolomonDigState,
   seed: string,
+  options: Readonly<{
+    dialogueMode?: BoneyardSolomonDialogueMode
+    tutorialDialogueTicks?: number
+  }> = {},
 ): BoneyardSolomonEncounterState {
   if (dig.frameProgram.length === 0 || dig.ticksPerFrame <= 0) {
     throw new Error('Solomon Dig requires a non-empty animation program and positive frame timing')
@@ -135,6 +144,12 @@ export function createSolomonEncounter(
     createNativeRng(seedState(`${seed}:solomon-dig`)),
     SOLOMON_DIG_DEBRIS_MOTION_MAXIMUM,
   )
+  const dialogueMode = options.dialogueMode ?? 'ordinary'
+  const tutorialDialogueTicks = options.tutorialDialogueTicks ?? 0
+  if (
+    dialogueMode === 'tutorial'
+    && (!Number.isSafeInteger(tutorialDialogueTicks) || tutorialDialogueTicks < 1)
+  ) throw new RangeError('Tutorial Solomon dialogue duration must be a positive tick count')
   return {
     acceleration: 0,
     digAudioEventId: 0,
@@ -145,6 +160,7 @@ export function createSolomonEncounter(
     digShovelArmed: true,
     digTicksPerFrame: dig.ticksPerFrame,
     digThrowDirtArmed: true,
+    dialogueMode,
     escapeSpeed: 0,
     headingDeg: 180,
     lifetimeTicksRemaining: 0,
@@ -158,6 +174,7 @@ export function createSolomonEncounter(
     rngState: debrisMotion.state,
     runEventId: 0,
     targetPlayerId: null,
+    tutorialDialogueTicks,
     transitionOffsetY: 0,
     turnRate: 0,
     voiceEvents: [],
@@ -362,6 +379,13 @@ function faceSolomonTarget(
   if (source.phase !== 'turning' || Math.abs(headingDeg - desiredHeading) > 1) {
     return faced
   }
+  if (source.dialogueMode === 'tutorial') {
+    return {
+      ...faced,
+      phase: 'speaking',
+      voiceTicksRemaining: source.tutorialDialogueTicks,
+    }
+  }
   const sample = drawNativeInteger(faced.rngState, 4)
   const cue = `solomon-hello-${sample.value + 1}` as BoneyardSolomonVoiceCue
   return appendVoiceEvent({
@@ -442,6 +466,17 @@ function stepSolomonRetreatHold(
     return { ...voiced, phaseTicksRemaining: voiced.phaseTicksRemaining - 1 }
   }
   const headingDeg = nativeRetreatHeading(voiced.headingDeg)
+  if (source.dialogueMode === 'tutorial') {
+    return applySolomonRetreatAcceleration({
+      ...voiced,
+      acceleration: SOLOMON_RETREAT_ACCELERATION,
+      headingDeg,
+      motion: 0,
+      phase: 'retreat-accelerating',
+      phaseTicksRemaining: 0,
+      queuedGetHimBoys: false,
+    })
+  }
   const started = appendVoiceEvent({
     ...voiced,
     acceleration: SOLOMON_RETREAT_ACCELERATION,

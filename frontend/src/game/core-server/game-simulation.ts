@@ -120,6 +120,7 @@ import {
   nativeSecondaryTargetEffect,
   removeNativeSecondaryOwner,
   resetNativeSecondaryWorld,
+  spawnNativeScriptFires,
   stepNativeMindblastPresentation,
   stepNativeSecondaryAbilities,
   triggerNativePlayerMindblast,
@@ -221,6 +222,7 @@ import {
   playerSkillRuntimeAt,
   playerStatBookAt,
   increaseRandomPlayerEntitySkill,
+  forcePlayerEntitySkillOfferIds,
   importPlayerEntity,
   insertPlayerEntityLootItem,
   removePlayerEntity,
@@ -243,8 +245,17 @@ import {
   replacePlayerCharacterRecords,
   replacePlayerEconomy,
   respawnPlayerEntityAt,
+  preparePlayerEntityTutorialLoadout,
   type PlayerEntityStore,
 } from './player-entity-store.ts'
+import {
+  applyNativeTutorialSurfaceAction,
+  NATIVE_TUTORIAL_FIRES,
+  nativeTutorialForcedVelocity,
+  nativeTutorialHudAccess,
+  stepNativeTutorial,
+  type NativeTutorialSurfaceAction,
+} from '../core-kernels/native-tutorial.ts'
 import {
   activateBoneyardGoodie,
   boneyardGoodieKeyNeeded,
@@ -571,14 +582,38 @@ export function enterBoneyardWorld(
     lanternLightRegistration: loaded.scene.solomonDig === null
       ? null
       : lightProviderOrder.register('actor'),
+    tutorialProfileEconomy: baseWorld.tutorial === null
+      ? null
+      : playerEconomyAt(
+          state.playerEntities,
+          state.playerEntities.identities[0]?.playerId ?? '',
+        ),
   }
   const placements = placePlayersInBoneyard(playerCharacterRecords(state.playerEntities), world)
-  const playerEntities = clearPlayerEntityMindstars(resetPlayerEntitiesForNewRun(
+  let playerEntities = clearPlayerEntityMindstars(resetPlayerEntitiesForNewRun(
     state.playerEntities,
     placements,
     playerLightRegistrations,
     { preserveConcentrations: true },
   ))
+  if (world.tutorial !== null) {
+    if (playerEntities.identities.length !== 1) {
+      throw new Error('the stock Tutorial requires exactly one authoritative player')
+    }
+    for (const { playerId } of playerEntities.identities) {
+      playerEntities = preparePlayerEntityTutorialLoadout(playerEntities, playerId)
+    }
+  }
+  let secondaryAbilities = resetNativeSecondaryWorld(state.secondaryAbilities)
+  if (world.tutorial !== null) {
+    secondaryAbilities = spawnNativeScriptFires(
+      secondaryAbilities,
+      playerEntities.identities[0]!.playerId,
+      `boneyard:${world.runId}`,
+      NATIVE_TUTORIAL_FIRES,
+      lightProviderOrder.register,
+    )
+  }
   return {
     ...state,
     levelUpBarrier: null,
@@ -586,7 +621,7 @@ export function enterBoneyardWorld(
     modEffects: Object.freeze([]),
     playerEntities,
     primarySpells: createPrimarySpellSimulation(),
-    secondaryAbilities: resetNativeSecondaryWorld(state.secondaryAbilities),
+    secondaryAbilities,
     run: startGameRun(
       state.run,
       loaded.runId,
@@ -676,6 +711,19 @@ export function gameSimulationDurableProfileEconomy(
   const economy = playerEconomyAt(state.playerEntities, playerId)
   const player = playerCharacterAt(state.playerEntities, playerId)
   if (!economy || !player) throw new Error(`game simulation has no profile owner ${playerId}`)
+  if (state.world.kind === 'boneyard' && state.world.tutorial !== null) {
+    if (state.world.tutorialProfileEconomy === null) {
+      throw new Error('Tutorial profile baseline is absent')
+    }
+    const tutorialCompleted = state.run.phase === 'game-over'
+      || state.run.phase === 'loadout'
+    return state.world.tutorialProfileEconomy.tutorialPending === !tutorialCompleted
+      ? state.world.tutorialProfileEconomy
+      : {
+          ...state.world.tutorialProfileEconomy,
+          tutorialPending: !tutorialCompleted,
+        }
+  }
   if (state.run.phase === 'loadout' && state.world.kind === 'hub') return economy
   const completedRun = state.world.kind === 'boneyard'
     && (state.run.phase === 'game-over' || state.run.phase === 'loadout')
@@ -703,6 +751,12 @@ export function gameSimulationRetiredWizardEconomy(
   const economy = playerEconomyAt(state.playerEntities, playerId)
   const player = playerCharacterAt(state.playerEntities, playerId)
   if (!economy || !player) throw new Error(`game simulation has no profile owner ${playerId}`)
+  if (state.world.kind === 'boneyard' && state.world.tutorial !== null) {
+    if (state.world.tutorialProfileEconomy === null) {
+      throw new Error('Tutorial profile baseline is absent')
+    }
+    return state.world.tutorialProfileEconomy
+  }
   return archiveCompletedRunEconomy(economy, {
     displayName: player.config.displayName,
     groundGold: 0,
@@ -743,6 +797,22 @@ export function continueGameSimulationOver(
 ): GameSimulationState | null {
   const run = continueGameOver(state.run, runId, eventId)
   return run ? { ...state, run } : null
+}
+
+export function applyGameSimulationTutorialAction(
+  state: GameSimulationState,
+  playerId: PlayerId,
+  action: NativeTutorialSurfaceAction,
+): GameSimulationState | null {
+  if (state.world.kind !== 'boneyard' || state.world.tutorial === null) return null
+  if (
+    state.playerEntities.identities.length !== 1
+    || state.playerEntities.identities[0]?.playerId !== playerId
+  ) return null
+  const tutorial = applyNativeTutorialSurfaceAction(state.world.tutorial, action)
+  return tutorial === state.world.tutorial
+    ? state
+    : { ...state, world: { ...state.world, tutorial } }
 }
 
 export function getPlayerCharacter(
@@ -1329,6 +1399,23 @@ export function stepGameSimulationTick(
   }
   if (state.levelUpBarrier !== null) return state
   const lightProviderOrder = createNativeLightProviderOrder(state.lightProviderOrder)
+  if (state.world.kind === 'boneyard' && state.world.tutorial !== null) {
+    const tutorialPlayerId = state.playerEntities.identities[0]?.playerId
+    const forcedVelocity = nativeTutorialForcedVelocity(state.world.tutorial)
+    const tutorialPlayer = tutorialPlayerId
+      ? playerCharacterAt(state.playerEntities, tutorialPlayerId)
+      : null
+    if (tutorialPlayerId && tutorialPlayer && forcedVelocity) {
+      state = {
+        ...state,
+        playerEntities: replacePlayerCharacter(
+          state.playerEntities,
+          tutorialPlayerId,
+          { ...tutorialPlayer, velocity: forcedVelocity },
+        ),
+      }
+    }
+  }
   const players = playerCharacterRecords(state.playerEntities)
   const staffActionOwnerIds = new Set(state.primarySpells.transients.flatMap((transient) => (
     transient.kind === 'player-staff-melee' || transient.kind === 'player-staff-spin'
@@ -1347,13 +1434,24 @@ export function stepGameSimulationTick(
           playerSkillBookAt(state.playerEntities, playerId)?.skillQuickbar ?? [],
         )
       : admittedInput
-    return [playerId, staffActionOwnerIds.has(playerId)
+    const tutorial = state.world.kind === 'boneyard' ? state.world.tutorial : null
+    const tutorialAccess = tutorial ? nativeTutorialHudAccess(tutorial) : null
+    const gatedInput = tutorial
       ? {
           ...input,
+          cast: {
+            primary: tutorial.stage >= 2 && input.cast.primary,
+            quickbar: tutorialAccess!.quickbar ? input.cast.quickbar : null,
+          },
+        }
+      : input
+    return [playerId, staffActionOwnerIds.has(playerId)
+      ? {
+          ...gatedInput,
           cast: { primary: false, quickbar: null },
           movement: { x: 0, y: 0 },
         }
-      : input]
+      : gatedInput]
   }))
   switch (state.world.kind) {
     case 'hub': {
@@ -1377,7 +1475,65 @@ export function stepGameSimulationTick(
       )
     }
     case 'boneyard': {
-      const boneyardWorld = state.world
+      let boneyardWorld = state.world
+      let tutorialSpawnIntents: readonly BoneyardEnemySpawnIntent[] = []
+      if (boneyardWorld.tutorial !== null) {
+        const tutorialPlayerId = state.playerEntities.identities[0]?.playerId
+        if (!tutorialPlayerId || state.playerEntities.identities.length !== 1) {
+          throw new Error('the stock Tutorial requires exactly one authoritative player')
+        }
+        const tutorialPlayer = getPlayerCharacter(state, tutorialPlayerId)
+        const tutorialProgression = getPlayerProgression(state, tutorialPlayerId)
+        const tutorialEconomy = getPlayerEconomy(state, tutorialPlayerId)
+        const tutorialSecondary = state.secondaryAbilities.players[tutorialPlayerId]
+        const tutorial = stepNativeTutorial(boneyardWorld.tutorial, {
+          acidRainCastSequence: tutorialSecondary?.castSequence ?? 0,
+          acidRainLastSkillId: tutorialSecondary?.lastSkillId ?? null,
+          currentHealth: tutorialProgression.currentHealth,
+          enemyCount: boneyardWorld.enemies.actors.length + boneyardWorld.enemies.maggots.length,
+          groundSackCount: boneyardWorld.loot.actors.filter(({ nativeTypeId }) => (
+            nativeTypeId === 2013
+          )).length,
+          hasTopLevelNonPotionItem: tutorialEconomy.backpack.some(({ nativeTypeId }) => (
+            nativeTypeId !== 7001
+          )),
+          healthPotionCount: countTutorialHealthPotions(tutorialEconomy.backpack),
+          level: tutorialProgression.level,
+          levelUpPending: state.levelUpBarrier !== null,
+          maximumHealth: tutorialProgression.maximumHealth,
+          playerActionIdle: !tutorialPlayer.primaryCast.held
+            && (tutorialSecondary?.staffCastTicksRemaining ?? 0) === 0,
+          playerPosition: tutorialPlayer.position,
+          primaryCastSequence: tutorialPlayer.primaryCast.castSequence,
+          solomonPhase: boneyardWorld.encounter?.phase ?? null,
+          solomonRunEventId: boneyardWorld.encounter?.runEventId ?? 0,
+          tick: state.tick + 1,
+        })
+        boneyardWorld = { ...boneyardWorld, tutorial: tutorial.state }
+        state = { ...state, world: boneyardWorld }
+        if (tutorial.forceOfferSkillIds !== null) {
+          state = {
+            ...state,
+            playerEntities: forcePlayerEntitySkillOfferIds(
+              state.playerEntities,
+              tutorialPlayerId,
+              tutorial.forceOfferSkillIds,
+            ),
+          }
+        }
+        if (tutorial.grantExperience > 0) {
+          state = grantGameSimulationPlayerExperience(
+            state,
+            tutorialPlayerId,
+            tutorial.grantExperience,
+          )
+          if (state.world.kind !== 'boneyard') {
+            throw new Error('Tutorial experience changed the active world')
+          }
+          boneyardWorld = state.world
+        }
+        tutorialSpawnIntents = tutorial.spawnIntents
+      }
       const deferredEnemyProjectileRegistrations = createDeferredNativeLightProviderRegistrations()
       const result = stepBoneyardWorldTick(
         boneyardWorld,
@@ -1427,7 +1583,7 @@ export function stepGameSimulationTick(
             id: `golem:${actor.id}`,
             position: actor.position,
           })),
-        options.enemySpawnIntents ?? [],
+        [...tutorialSpawnIntents, ...(options.enemySpawnIntents ?? [])],
         options.extensions?.createLootItems,
       )
       return finishGameSimulationTick(
@@ -1554,6 +1710,7 @@ function finishGameSimulationTick(
   }>> = []
   const deflectPitchesByEventId = new Map<number, number>()
   for (const damage of playerDamage) {
+    if (world.kind === 'boneyard' && world.tutorial?.damageProtection) continue
     const golemId = parseNativeSecondaryGolemTargetId(damage.playerId)
     if (golemId !== null && world.kind === 'boneyard') {
       const golem = secondaryAbilities.actors.find(({ id, kind }) => (
@@ -3174,6 +3331,14 @@ function economyContainsHealthPotion(economy: HubEconomyState): boolean {
     && item.nativeSubtype === 0
     || ((item as NativeLootItem).contents ?? []).some(contains)
   return economy.backpack.some(contains)
+}
+
+function countTutorialHealthPotions(items: readonly HubInventoryItem[]): number {
+  return items.reduce((total, item) => (
+    total
+    + (item.nativeTypeId === 7001 && item.nativeSubtype === 0 ? item.quantity : 0)
+    + countTutorialHealthPotions(item.contents ?? [])
+  ), 0)
 }
 
 function triggerHagathaLastWord(

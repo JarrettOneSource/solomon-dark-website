@@ -49,6 +49,7 @@ import type {
   PlayerSocialProfile,
 } from '../protocol/party-state.ts'
 import { nativeSkillCategory } from '../core-kernels/player-progression.ts'
+import type { NativeTutorialSurfaceAction } from '../core-kernels/native-tutorial.ts'
 import type { GameTransport } from './game-transport.ts'
 import {
   GameConnectionFailure,
@@ -149,6 +150,7 @@ export interface GameClientSession {
   sendChatMessage(channel: GameChatChannel, text: string, targetPlayerId?: string): void
   sendHubAction(action: HubInventoryAction): void
   sendInput(input: PlayerCharacterInput): void
+  sendTutorialAction(action: NativeTutorialSurfaceAction): void
   setCheatsEnabled(enabled: boolean): void
   setHubActivity(activity: HubPlayerActivity | null): void
   inviteToParty(playerId: string): void
@@ -157,6 +159,7 @@ export interface GameClientSession {
   rotatePartyCode(): void
   setPartyVisibility(visibility: PartyVisibility): void
   startMatch(boneyardId: string): void
+  startTutorial(): void
 }
 
 export interface GamePartyActionResult {
@@ -1110,6 +1113,17 @@ export function connectGameClientSession(
         options.transport.send(encodeGameMessage({
           type: 'client-start-match',
           boneyardId,
+        }))
+      },
+      startTutorial() {
+        if (!welcome || destroyed) return
+        options.transport.send(encodeGameMessage({ type: 'client-start-tutorial' }))
+      },
+      sendTutorialAction(action) {
+        if (!welcome || destroyed) return
+        options.transport.send(encodeGameMessage({
+          type: 'client-tutorial-action',
+          action,
         }))
       },
     }

@@ -184,6 +184,8 @@ function inertSession() {
     leaveParty() {},
     rotatePartyCode() {},
     setPartyVisibility() {},
+    sendTutorialAction() {},
     startMatch() {},
+    startTutorial() {},
   }
 }

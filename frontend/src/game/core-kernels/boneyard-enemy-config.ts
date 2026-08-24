@@ -4,6 +4,7 @@ import {
 } from './boneyard-wave-schema.ts'
 import { BOUNDED_ARCHER_MAXIMUM_EXTRA_ARROWS } from './boneyard-enemy-modifiers.ts'
 import type { NativeEnemyPathfindingMode } from './native-enemy-pathfinding.ts'
+import type { NativeLootPolicies } from './native-loot.ts'
 
 export const BONEYARD_ENEMY_FLAGS = [
   'FLAG_HPUP',
@@ -83,6 +84,7 @@ export interface BoneyardEnemyConfigRandom {
 
 export interface EvaluateBoneyardEnemyConfigOptions {
   arenaScalars?: Partial<BoneyardEnemyArenaScalars>
+  authoredRecipe?: AuthoredBoneyardEnemyRecipe
   /** Custom-authoring lane; retail wave data leaves this at zero. */
   archerExtraArrows?: number
   flags?: readonly string[]
@@ -94,6 +96,21 @@ export interface EvaluateBoneyardEnemyConfigOptions {
   pathfindingMode?: NativeEnemyPathfindingMode
   random?: Partial<BoneyardEnemyConfigRandom>
   waveOrdinal?: number
+}
+
+export interface AuthoredBoneyardEnemyRecipe {
+  readonly archerAccuracyMode: 0 | 1 | 2 | 3
+  readonly attackSpeed: number
+  readonly chaseSpeed: number
+  readonly extraDamage: number
+  readonly lootPolicies: NativeLootPolicies
+  readonly maximumHealth: number
+  readonly movementScale: number
+  readonly name: string
+  readonly primaryDamage: number
+  readonly secondaryDamage: number
+  readonly tertiaryDamage: number
+  readonly uid: number
 }
 
 export type BoneyardSkeletonWeapon = 'axe' | 'claw' | 'flail' | 'mace' | 'pike' | 'sword'
@@ -116,6 +133,9 @@ interface BoneyardEnemyConfigBase {
   nativeTypeId: number
   pathfindingMode: NativeEnemyPathfindingMode
   primaryDamage: number | null
+  recipeName: string | null
+  recipeUid: number | null
+  lootPolicies: NativeLootPolicies
   scale: number
   secondaryDamage: number
   skeletonPolicy: 'default' | 'more' | 'none'
@@ -320,6 +340,17 @@ export function evaluateBoneyardEnemyConfig(
     tertiaryDamage: 0,
     weapon: 'claw',
   }
+  const authoredRecipe = validatedAuthoredRecipe(enemyToken, options.authoredRecipe)
+  if (authoredRecipe) {
+    config.accuracyMode = authoredRecipe.archerAccuracyMode
+    config.attackSpeed = authoredRecipe.attackSpeed
+    config.chaseSpeed = authoredRecipe.chaseSpeed
+    config.extraDamage = authoredRecipe.extraDamage
+    config.maximumHealth = authoredRecipe.maximumHealth
+    config.primaryDamage = authoredRecipe.primaryDamage
+    config.secondaryDamage = authoredRecipe.secondaryDamage
+    config.tertiaryDamage = authoredRecipe.tertiaryDamage
+  }
   for (const flag of flags) applyFlag(config, flag, random, waveOrdinal)
   applyArenaScalars(config, validatedArenaScalars(options.arenaScalars))
   assertImplementedPayloads(config)
@@ -342,7 +373,10 @@ export function evaluateBoneyardEnemyConfig(
     nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES[enemyToken],
     pathfindingMode: validatedPathfindingMode(options.pathfindingMode),
     primaryDamage: base.primaryDamage === null ? null : config.primaryDamage,
-    scale: 1,
+    recipeName: authoredRecipe?.name ?? null,
+    recipeUid: authoredRecipe?.uid ?? null,
+    lootPolicies: authoredRecipe?.lootPolicies ?? DEFAULT_BONEYARD_ENEMY_LOOT_POLICIES,
+    scale: authoredRecipe?.movementScale ?? 1,
     secondaryDamage: config.secondaryDamage,
     skeletonPolicy: config.skeletonPolicy,
     tertiaryDamage: config.tertiaryDamage,
@@ -405,6 +439,46 @@ export function evaluateBoneyardEnemyConfig(
       },
     })
   }
+}
+
+export const DEFAULT_BONEYARD_ENEMY_LOOT_POLICIES: NativeLootPolicies = Object.freeze({
+  gold: 0,
+  item: 0,
+  orb: 0,
+  potion: 0,
+  powerup: 0,
+  specificItem: 0,
+})
+
+function validatedAuthoredRecipe(
+  enemyToken: BoneyardWaveEnemyToken,
+  recipe: AuthoredBoneyardEnemyRecipe | undefined,
+): AuthoredBoneyardEnemyRecipe | null {
+  if (!recipe) return null
+  if (!Number.isSafeInteger(recipe.uid) || recipe.uid < 1 || recipe.name.length === 0) {
+    throw new RangeError('authored enemy recipe identity is invalid')
+  }
+  for (const [field, value] of Object.entries({
+    attackSpeed: recipe.attackSpeed,
+    chaseSpeed: recipe.chaseSpeed,
+    extraDamage: recipe.extraDamage,
+    maximumHealth: recipe.maximumHealth,
+    movementScale: recipe.movementScale,
+    primaryDamage: recipe.primaryDamage,
+    secondaryDamage: recipe.secondaryDamage,
+    tertiaryDamage: recipe.tertiaryDamage,
+  })) {
+    if (!Number.isFinite(value) || value < 0) {
+      throw new RangeError(`authored enemy recipe ${field} must be finite and non-negative`)
+    }
+  }
+  if (recipe.maximumHealth <= 0 || recipe.movementScale <= 0) {
+    throw new RangeError('authored enemy recipe health and movement scale must be positive')
+  }
+  if (enemyToken !== 'SKELETONARCHER' && recipe.archerAccuracyMode !== 0) {
+    throw new Error('authored Archer accuracy is only valid for SKELETONARCHER')
+  }
+  return recipe
 }
 
 function validatedPathfindingMode(

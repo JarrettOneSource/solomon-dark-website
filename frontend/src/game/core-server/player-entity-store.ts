@@ -439,6 +439,57 @@ export function bindPlayerEntitySkillQuickbar(
   return { ...source, skillBooks }
 }
 
+export function preparePlayerEntityTutorialLoadout(
+  source: PlayerEntityStore,
+  playerId: string,
+): PlayerEntityStore {
+  const index = playerEntityIndex(source, playerId)
+  if (index < 0) return source
+  const current = source.skillBooks[index]!
+  const permanentRanks = [...current.permanentRanks]
+  const effectiveRanks = [...current.effectiveRanks]
+  permanentRanks[11] = 0
+  effectiveRanks[11] = 0
+  permanentRanks[72] = Math.max(1, permanentRanks[72] ?? 0)
+  effectiveRanks[72] = Math.max(1, effectiveRanks[72] ?? 0)
+  const skillBook: PlayerSkillBookComponent = {
+    ...current,
+    effectiveRanks: Object.freeze(effectiveRanks),
+    learnedSkillOrder: Object.freeze([
+      ...current.learnedSkillOrder.filter(skillId => skillId !== 11 && skillId !== 72),
+      72,
+    ]),
+    permanentRanks: Object.freeze(permanentRanks),
+    primarySkillId: 8,
+    skillQuickbar: Object.freeze([72, null, null, null, null, null, null, null]),
+    weldBuildId: null,
+    weldComponentRanks: null,
+  }
+  return replacePlayerSkillState(
+    source,
+    index,
+    skillBook,
+    source.skillRuntimes[index]!,
+    source.economies[index]!,
+  )
+}
+
+export function forcePlayerEntitySkillOfferIds(
+  source: PlayerEntityStore,
+  playerId: string,
+  skillIds: readonly number[],
+): PlayerEntityStore {
+  const index = playerEntityIndex(source, playerId)
+  if (index < 0) return source
+  if (skillIds.some(skillId => !Number.isSafeInteger(skillId) || skillId < 8 || skillId > 79)) {
+    throw new RangeError('forced Tutorial skill offers must be native public skill ids')
+  }
+  return replacePlayerProgression(source, index, {
+    ...source.progressions[index]!,
+    forcedOfferSkillIds: Object.freeze([...skillIds]),
+  })
+}
+
 export function selectPlayerEntityPrimarySkill(
   source: PlayerEntityStore,
   playerId: string,

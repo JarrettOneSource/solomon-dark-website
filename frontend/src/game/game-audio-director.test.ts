@@ -8,6 +8,7 @@ import {
   type GameMusicChannel,
 } from './game-audio-director.ts'
 import type { GameAudioSources } from './game-audio-native.ts'
+import { NATIVE_TUTORIAL_CUES } from './core-kernels/native-tutorial.ts'
 import './game-audio-web-playback.test.ts'
 import './player-footstep-audio.test.ts'
 import './primary-spell-audio.test.ts'
@@ -148,6 +149,10 @@ const SOURCES = {
     'zombie-poison-splat': 'zombie-splat.wav',
   },
   streams: {
+    ...(Object.fromEntries(NATIVE_TUTORIAL_CUES.map(cue => [cue, `${cue}.wav`])) as Record<
+      typeof NATIVE_TUTORIAL_CUES[number],
+      string
+    >),
     'catch-it': 'catch.wav',
     'choose-element': 'choose.wav',
     'death-guitar': 'death-guitar.wav',
@@ -470,6 +475,12 @@ test('overlaps Sound instances and reuses restartable SoundStream channels', asy
       source: 'start.wav',
     },
   ])
+  director.playStream('tutorial-show-yourself', { offsetSeconds: 1.25 })
+  assert.deepEqual(playback.restarts.at(-1), {
+    key: 'stream:tutorial-show-yourself',
+    options: { offsetSeconds: 1.25, playbackRate: 1, volume: 1 },
+    source: 'tutorial-show-yourself.wav',
+  })
   director.pauseStream('start-cast')
   director.stopStream('start-cast')
   assert.deepEqual(playback.stops, ['stream:start-cast', 'stream:start-cast'])

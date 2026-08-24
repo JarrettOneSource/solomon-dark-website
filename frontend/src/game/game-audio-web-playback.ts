@@ -46,6 +46,12 @@ export function createWebAudioPlayback(
     return { gain, source: bufferSource }
   }
 
+  const start = (owned: OwnedBufferSource, options: GameAudioPlaybackOptions) => {
+    const offsetSeconds = options.offsetSeconds ?? 0
+    if (offsetSeconds > 0) owned.source.start(0, offsetSeconds)
+    else owned.source.start()
+  }
+
   return {
     destroy() {
       for (const owned of oneShots) stop(owned)
@@ -62,7 +68,7 @@ export function createWebAudioPlayback(
         oneShots.delete(owned)
         release(owned)
       }
-      owned.source.start()
+      start(owned, options)
     },
     restart(key, source, options) {
       const current = channels.get(key)
@@ -73,7 +79,7 @@ export function createWebAudioPlayback(
         if (channels.get(key) === owned) channels.delete(key)
         release(owned)
       }
-      owned.source.start()
+      start(owned, options)
     },
     setMasterVolume(volume) {
       masterGain.gain.value = volume

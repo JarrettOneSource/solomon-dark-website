@@ -22,6 +22,7 @@ import {
 import SkillQuickbar, { NativeSkillIcon } from './SkillQuickbar.tsx'
 import type { GameSnapshot } from './protocol/game-protocol.ts'
 import { gameBindingLabel, type GameControlBindings } from './game-settings.ts'
+import type { NativeTutorialHudAccess } from './core-kernels/native-tutorial.ts'
 import {
   NATIVE_HUD_SKILL_ACTION_HEIGHT,
   NATIVE_HUD_SKILL_ACTION_TOP,
@@ -57,6 +58,7 @@ interface GameHudProps {
   progression: ProtocolPlayerProgression
   subscribePing: (listener: (pingMs: number) => void) => () => void
   subscribeSnapshot: (listener: (snapshot: GameSnapshot) => void) => () => void
+  tutorialAccess?: NativeTutorialHudAccess | null
   uiScale: number
   viewport: Readonly<{ height: number; width: number }>
 }
@@ -151,6 +153,7 @@ export default function GameHud({
   progression,
   subscribePing,
   subscribeSnapshot,
+  tutorialAccess,
   uiScale,
   viewport,
 }: GameHudProps) {
@@ -219,6 +222,11 @@ export default function GameHud({
     <div
       className="hub-hud"
       aria-label="Player status"
+      data-tutorial-combat={tutorialAccess?.combat}
+      data-tutorial-inventory={tutorialAccess?.inventory}
+      data-tutorial-quickbar={tutorialAccess?.quickbar}
+      data-tutorial-skills={tutorialAccess?.skills}
+      data-tutorial-spell={tutorialAccess?.spell}
       data-ui-scale={uiScale}
       style={{
         '--game-ui-scale': uiScale,

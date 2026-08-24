@@ -87,6 +87,7 @@ export default function DeveloperObserverScene({
         onOpenSkills={ignore}
         onPauseRequest={onExit}
         onReady={ignore}
+        onTutorialAction={ignore}
         playerId={selectedPlayerId}
         presentationPaused={false}
         progression={selectedPlayer.progression}

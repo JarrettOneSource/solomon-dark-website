@@ -29,6 +29,7 @@ class FakeBufferSource {
   loop = false
   onended: (() => void) | null = null
   readonly playbackRate = new FakeAudioParam()
+  readonly startOffsets: Array<readonly [number | undefined, number | undefined]> = []
   startCalls = 0
   stopCalls = 0
 
@@ -41,8 +42,9 @@ class FakeBufferSource {
     this.disconnected = true
   }
 
-  start(): void {
+  start(when?: number, offset?: number): void {
     this.startCalls += 1
+    this.startOffsets.push([when, offset])
   }
 
   stop(): void {
@@ -131,6 +133,7 @@ test('restarts keyed streams and stops keyed loops without touching other channe
   )
 
   playback.restart('stream:voice', 'stream.wav', {
+    offsetSeconds: 1.25,
     playbackRate: 1,
     volume: 0.75,
   })
@@ -147,6 +150,7 @@ test('restarts keyed streams and stops keyed loops without touching other channe
   playback.setVolume('loop:spell', 0.5)
   assert.equal(context.gains[2].gain.value, 0.5)
   assert.equal(loop.stopCalls, 0)
+  assert.deepEqual(firstStream.startOffsets, [[0, 1.25]])
 
   playback.restart('stream:voice', 'stream.wav', {
     playbackRate: 1.1,

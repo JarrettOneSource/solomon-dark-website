@@ -7,6 +7,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 MUSIC_SOURCE="$SOURCE_DIR/music/music.mo3"
 MUSIC_OUT="$ROOT/frontend/src/assets/game/audio/music"
 SFX_OUT="$ROOT/frontend/src/assets/game/audio/sfx"
+VOICE_OUT="$ROOT/frontend/src/assets/game/audio/voice"
 
 readonly MODULE_SHA256=32bf92cc3191e136b6d186d77d75de48ad28f4bd58acae0c278204455fa57c82
 
@@ -57,12 +58,27 @@ copy_sfx() {
   verify_sha256 "$output_path" "$expected_sha256"
 }
 
-verify_sha256 "$MUSIC_SOURCE" "$MODULE_SHA256"
-mkdir -p "$MUSIC_OUT" "$SFX_OUT"
+copy_voice() {
+  local source="$1"
+  local output="$2"
+  local expected_sha256="$3"
+  local source_path="$SOURCE_DIR/voices/$source"
+  local output_path="$VOICE_OUT/$output"
 
-# music.txt start orders 95, 101, and 116 resolve to libopenmpt subsongs 5, 6,
-# and 7. Unlike the public-site jukebox, /game preserves native starts/levels:
+  verify_sha256 "$source_path" "$expected_sha256"
+  mkdir -p "$(dirname "$output_path")"
+  cp -- "$source_path" "$output_path"
+  verify_sha256 "$output_path" "$expected_sha256"
+}
+
+verify_sha256 "$MUSIC_SOURCE" "$MODULE_SHA256"
+mkdir -p "$MUSIC_OUT" "$SFX_OUT" "$VOICE_OUT"
+
+# music.txt start orders 0, 5, 95, 101, and 116 resolve to libopenmpt subsongs
+# 0, 1, 5, 6, and 7. Unlike the public-site jukebox, /game preserves native starts/levels:
 # no silence removal and no loudness normalization.
+render_music prelude 0 55 56
+render_music combat 1 781 783
 render_music solomondarktheme 5 67 69
 render_music academy 6 155 158
 render_music selection 7 19 21
@@ -155,4 +171,27 @@ copy_sfx teleport.wav teleport.wav a91651f4369aa2147729d043e0b29b758ec1481877b93
 copy_sfx thunder__Stream.wav thunder.wav c2bc1376ed9a5bc8de7b96f08c16448253a7cfbe35b35a085a282d0a50d12f0a
 copy_sfx trap__stream.wav trap.wav f575c617afd3da0eb5a65016b9eec178e82da536a9bf410e617dd76dc8c158d8
 
-printf 'Extracted 3 native game tracks and the complete right-click WAV bank.\n'
+copy_voice SAY_SOLOMONDARKSHOWYOURSELF.wav tutorial-show-yourself.wav e1f8c9cea2b009a109354c223d2042d73ec450457a1eedf0130f0d093c9f4f6e
+copy_voice SAY_IAMSIRMIN.wav tutorial-i-am-sirmin.wav 9be6dfcb15158215a11a2a1e00037dc46137c439665026f142835edce0634193
+copy_voice SAY_NEVERHEARDOFYOU.wav tutorial-never-heard-of-you.wav 1c10ee772039eda014d0a081422003531e0486694dc3ab876bd3426935ba7016
+copy_voice SAY_EASILYVANQUISHED.wav tutorial-easily-vanquished.wav 4b7eaede2a8903cdec1c25cc8dcd3e300dad70e21267989bc68b8741eca1c5c7
+copy_voice SAY_ICAMEPREPARED.wav tutorial-came-prepared.wav f9704e8fae16a628f5aa163a9bafd0268f321dbfe4098b64b6b4be6ad3954693
+copy_voice SAY_ACIDRAINHUH.wav tutorial-acid-rain-huh.wav 31100158ed53b65be98e7e9dedd6b5637b209e6aa9052fc32eaba187ee272ba4
+copy_voice SAY_SURRENDER.wav tutorial-surrender.wav 7473e560efdda24c256a7d360aa765ab29cca444626aee642f53c9b657e00ee8
+copy_voice SAY_CARELESSFOOL.wav tutorial-careless-fool.wav 4baa3d3d999f8395ad68f2b2014ef7e38c278503b7fddc541bd8a1071bfb9682
+copy_voice SAY_UNREDEEMABLE.wav tutorial-unredeemable.wav 937325457f6140b67e21276b9c573cabf4bcc254134b0831f56b8d9cb1458e2f
+copy_voice SAY_SOUNDLIKEMYMOTHER.wav tutorial-sound-like-mother.wav efce4a898a667bb758c2df16d3e2d073cdeb1b3782435d57bf08a1cac361c012
+copy_voice SAY_ACCEPTYOURFATE.wav tutorial-accept-your-fate.wav 609528847afb6161d2e3f178d81f80574eb3a5ebed63b2e8b096539d852b38a9
+copy_voice SAY_MAKEMESTRONGER.wav tutorial-make-me-stronger.wav 0d333cf07c0e08d61001d979806c448174d048653cd001147ca0a109d441b04d
+copy_voice SAY_LEVELLINGUP.wav tutorial-levelling-up.wav 7124c578c133671366caf6285b15508b06efe8e174228d6853a24078ca456fb1
+copy_voice SAY_LOOKINGBEATUP.wav tutorial-looking-beat-up.wav 0956e770c3bba32053ece64a932c98559c56b71075c96818d01a6cb8d25a07d5
+copy_voice SAY_FACETHEWRATH.wav tutorial-face-the-wrath.wav c015f7fa573744bd89b4fed535bc54afd8b2bc8ecdc7f2774c2ec2929861d2f1
+copy_voice SAY_IMBORED.wav tutorial-im-bored.wav 7215236be51cc86f319488b7f446e451fb16fa7033e733dc6b89fe383d118535
+copy_voice SAY_OHBOYANOTHERWIZARD.wav tutorial-oh-boy-another-wizard.wav 5d0ce3e49383bade90aa7ffea491be6cb11eb10e9c1c4f417976faa8b631c45f
+copy_voice SAY_IHAVEBEENDISPATCHED.wav tutorial-been-dispatched.wav edaa508a9cf3fc6dc79714d0166934a7985964225d611435600500a61d830587
+copy_voice SAY_ILLDOTHEDISPATCHING.wav tutorial-do-the-dispatching.wav 5925f54d7a924941cabdb97204b332a8c634ff980adaccd0c79b26f063902b36
+copy_voice SAY_YOURPERVERSIONS.wav tutorial-your-perversions.wav 9faf1b8da6df4fbec57beaa6213c724d5b88f9d8db2092dd8eed6082e4c6fa92
+copy_voice SAY_TODEATHEXACTLY.wav tutorial-to-death-exactly.wav d92e6cbbd0aad5d8784da89712e9d0e810a6fd8bfa1278dbaf9a23ac1298ee9c
+copy_voice SAY_COWARDCOMEBACK.wav tutorial-coward-come-back.wav e524548ebad58e35e20cdb87ce3c6c41e58c596807fcb1a799e0630772793605
+
+printf 'Extracted 5 native game tracks, the complete right-click WAV bank, and 22 Tutorial voice lines.\n'

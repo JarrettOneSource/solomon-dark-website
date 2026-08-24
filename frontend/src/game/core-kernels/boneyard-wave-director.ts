@@ -1,4 +1,5 @@
 import type { BoneyardBounds, BoneyardPoint } from './boneyard.ts'
+import type { AuthoredBoneyardEnemyRecipe } from './boneyard-enemy-config.ts'
 import {
   BONEYARD_WAVE_ENEMY_TYPES,
   type BoneyardWaveEnemyToken,
@@ -41,6 +42,7 @@ export const BONEYARD_WAVE_DIRECTOR_PHASES = [
 export type BoneyardWaveDirectorPhase = typeof BONEYARD_WAVE_DIRECTOR_PHASES[number]
 
 export interface BoneyardEnemySpawnIntent {
+  authoredRecipe?: AuthoredBoneyardEnemyRecipe
   enemyToken: BoneyardWaveEnemyToken
   flags: readonly string[]
   /** Custom MonsterRecipe lane; defaults to the native enabled value. */

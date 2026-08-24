@@ -1758,6 +1758,66 @@ test('host starts one exact random Boneyard for every connected client', async (
   assert.equal(loadedA.boneyard.scene.solomonDig?.frameProgram.length, 29)
 })
 
+test('host admits one fresh solo player into the hidden stock Tutorial and checkpoints it', async (context) => {
+  const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
+  context.after(() => host.close())
+  const client = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
+  context.after(() => client.socket.close())
+  assert.deepEqual(client.welcome.boneyards, [
+    { id: 'default-random', name: 'Random Boneyard', source: 'default' },
+  ])
+
+  const loaded = nextMessage(client.socket, message => message.type === 'server-boneyard-loaded')
+  const snapshot = nextMessage(client.socket, message => (
+    message.type === 'server-snapshot'
+    && message.snapshot.world.kind === 'boneyard'
+    && message.snapshot.world.tutorial !== null
+  ))
+  const checkpoint = nextMessage(client.socket, message => (
+    message.type === 'server-save-checkpoint'
+    && JSON.parse(message.save).continuation?.simulation?.world?.tutorial !== undefined
+  ))
+  client.socket.send(encodeGameMessage({ type: 'client-start-tutorial' }))
+
+  const [loadedMessage, snapshotMessage, checkpointMessage] = await Promise.all([
+    loaded,
+    snapshot,
+    checkpoint,
+  ])
+  assert.equal(loadedMessage.type, 'server-boneyard-loaded')
+  assert.equal(loadedMessage.boneyard.choice.id, 'stock-tutorial')
+  assert.equal(snapshotMessage.type, 'server-snapshot')
+  assert.equal(snapshotMessage.snapshot.world.kind, 'boneyard')
+  if (snapshotMessage.snapshot.world.kind !== 'boneyard') throw new Error('expected Tutorial')
+  assert.ok(snapshotMessage.snapshot.world.tutorial)
+  assert.equal(snapshotMessage.snapshot.world.waves, null)
+  assert.equal(checkpointMessage.type, 'server-save-checkpoint')
+  const saved = JSON.parse(checkpointMessage.save)
+  assert.equal(saved.schemaVersion, 7)
+  assert.equal(saved.profile.economy.tutorialPending, true)
+  assert.equal(saved.continuation.simulation.world.tutorial.stage, 0)
+})
+
+test('host rejects a Tutorial start after the fresh-profile pending fact clears', async (context) => {
+  const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
+  context.after(() => host.close())
+  const client = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
+  context.after(() => client.socket.close())
+  const playerId = client.welcome.playerId
+  const state = host.state()
+  state.playerEntities = replacePlayerEconomy(state.playerEntities, playerId, {
+    ...getPlayerEconomy(state, playerId),
+    tutorialPending: false,
+  })
+  const rejected = nextMessage(client.socket, message => message.type === 'server-disconnect')
+  client.socket.send(encodeGameMessage({ type: 'client-start-tutorial' }))
+  assert.deepEqual(await rejected, {
+    code: 'invalid-message',
+    reason: 'The stock Tutorial is available only to a fresh profile.',
+    type: 'server-disconnect',
+  })
+})
+
 test('host accepts constructor-owned Boneyard entropy without reusing it as run identity', async (context) => {
   const seedBytes = Buffer.alloc(16, 0x5a)
   let seedRequests = 0

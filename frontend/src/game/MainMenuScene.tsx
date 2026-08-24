@@ -17,6 +17,10 @@ import DarkCloudScene from './DarkCloudScene.tsx'
 import JoinPartyScene from './JoinPartyScene.tsx'
 import ModdedPlayDialog from './ModdedPlayDialog.tsx'
 import PartyJoinConsentDialog from './PartyJoinConsentDialog.tsx'
+import TutorialControlPicker, { type TutorialControlScheme } from './TutorialControlPicker.tsx'
+import TutorialOfferDialog from './TutorialOfferDialog.tsx'
+import TutorialPrelude from './TutorialPrelude.tsx'
+import { TutorialModalCallouts } from './TutorialOverlay.tsx'
 import type { GameClientSession } from './client/game-client-session.ts'
 import type { GameObserverSession } from './client/game-observer-session.ts'
 import type {
@@ -55,7 +59,9 @@ import {
   gameCheatsEnabled,
   gameVolume,
   readGameSettings,
+  rebindGameControl,
   setGameSettings,
+  type GameBindingAction,
   subscribeGameSettings,
   type GameSettings,
 } from './game-settings.ts'
@@ -155,7 +161,7 @@ const DARK_CLOUD_PAUSE: GameplayPauseState = {
   source: 'pause-menu',
 }
 
-type MenuScreen = 'root' | 'play' | 'join-party' | 'dark-cloud' | 'hall' | 'create' | 'hub' | 'observer'
+type MenuScreen = 'root' | 'play' | 'join-party' | 'dark-cloud' | 'hall' | 'create' | 'tutorial-controls' | 'tutorial-prelude' | 'hub' | 'observer'
 type FadeState = 'idle' | 'covering' | 'revealing'
 
 interface MenuButtonProps {
@@ -324,6 +330,7 @@ interface MainMenuSceneProps {
   refreshActiveMods: () => Promise<readonly ActiveWebMod[]>
   resumeSave: ResumableGameSave | null
   submitGlobalHallOfFame: (receipt: string) => Promise<void>
+  tutorialOfferEligible: boolean
 }
 
 export default function MainMenuScene({
@@ -345,10 +352,16 @@ export default function MainMenuScene({
   refreshActiveMods,
   resumeSave,
   submitGlobalHallOfFame,
+  tutorialOfferEligible,
 }: MainMenuSceneProps) {
   const audio = useMemo(createBrowserGameAudioDirector, [])
   const stageRef = useRef<HTMLElement>(null)
   const [screen, setScreen] = useState<MenuScreen>(initialScreen)
+  const [tutorialOfferOpen, setTutorialOfferOpen] = useState(
+    initialScreen === 'root' && tutorialOfferEligible,
+  )
+  const [tutorialControlSelection, setTutorialControlSelection] =
+    useState<TutorialControlScheme | null>(null)
   const [wizardName, setWizardName] = useState(() => (
     initialScreen === 'create' ? initialCreateWizardNameForSession(displayName) : ''
   ))
@@ -565,6 +578,8 @@ export default function MainMenuScene({
     const audioScene: GameAudioScene = runtimeAudioScene
       ?? (runtimeSnapshot?.world.kind === 'boneyard'
       ? 'boneyard'
+      : screen === 'tutorial-controls' || screen === 'tutorial-prelude'
+        ? 'boneyard'
       : screen === 'create'
         ? 'create'
         : screen === 'hub'
@@ -716,6 +731,7 @@ export default function MainMenuScene({
     }
 
     function recordHallSnapshot(snapshot: GameSnapshot) {
+      if (snapshot.world.kind === 'boneyard' && snapshot.world.tutorial) return
       const entry = hallRecorder.observe(snapshot, session!.playerId, accountUsername)
       if (!entry) return
       setLocalHallOfFame(recordLocalHallOfFame(entry))
@@ -733,6 +749,14 @@ export default function MainMenuScene({
       setHubSceneOccupied(false)
     }
   }, [runtimeSnapshot?.world.kind])
+
+  useEffect(() => {
+    if (
+      screen === 'tutorial-prelude'
+      && runtimeSnapshot?.world.kind === 'boneyard'
+      && runtimeSnapshot.world.tutorial !== null
+    ) setScreen('hub')
+  }, [runtimeSnapshot, screen])
 
   const runtimeConnected = runtimeSnapshot !== null
   useEffect(() => {
@@ -1026,7 +1050,7 @@ export default function MainMenuScene({
     }
   }
 
-  const activateSession = (nextSession: GameClientSession) => {
+  const activateSession = (nextSession: GameClientSession, preserveScreen = false) => {
     const snapshot = nextSession.getSnapshot()
     setWhisperRequest(null)
     setSession(nextSession)
@@ -1038,7 +1062,7 @@ export default function MainMenuScene({
     setGameplayPause(nextSession.getGameplayPause())
     setHubPauseMenuOpen(false)
     if (snapshot.world.kind === 'hub') advanceLoading('materializing_participants')
-    setScreen('hub')
+    if (!preserveScreen) setScreen('hub')
   }
 
   const resumeLastGame = async (allowModMismatch = false) => {
@@ -1137,6 +1161,95 @@ export default function MainMenuScene({
     }
   }
 
+  const startTutorial = async () => {
+    if (connecting) return
+    setConnecting(true)
+    setConnectionError(null)
+    beginLoading('boneyard', 'connecting_transport')
+    try {
+      if (accountUsername && activeMods.length > 0) {
+        await api.mods.subscriptions.disableAll()
+        await refreshActiveMods()
+      }
+      if (cheatsEnabled) updateGameSettings({ ...gameSettings, enableCheats: false })
+      await prepareGame({ kind: 'global-hub' })
+      const nextSession = await connectSession(
+        {
+          discipline: 'arcane',
+          displayName: 'Sirmin',
+          element: 'ether',
+        },
+        advanceLoading,
+        false,
+      )
+      activateSession(nextSession, true)
+      nextSession.startTutorial()
+    } catch (error) {
+      cancelLoading('boneyard')
+      setConnectionError(error instanceof Error ? error.message : 'The Tutorial could not be opened.')
+    } finally {
+      setConnecting(false)
+    }
+  }
+
+  const chooseTutorialControls = (scheme: TutorialControlScheme) => {
+    if (tutorialControlSelection !== null) return
+    const bindings: readonly (readonly [GameBindingAction, string])[] = scheme === 'arrows'
+      ? [
+          ['moveUp', 'ArrowUp'],
+          ['moveDown', 'ArrowDown'],
+          ['moveLeft', 'ArrowLeft'],
+          ['moveRight', 'ArrowRight'],
+          ['openMenu', 'Escape'],
+          ['openInventory', 'KeyI'],
+          ['openSkills', 'KeyT'],
+          ['belt1', 'Mouse2'],
+          ['belt2', 'Delete'],
+          ['belt3', 'End'],
+          ['belt4', 'Backspace'],
+          ['belt5', 'PageUp'],
+          ['belt6', 'PageDown'],
+          ['belt7', 'Insert'],
+          ['belt8', 'Home'],
+        ]
+      : [
+          ['moveUp', 'KeyW'],
+          ['moveDown', 'KeyS'],
+          ['moveLeft', 'KeyA'],
+          ['moveRight', 'KeyD'],
+          ['openMenu', 'Escape'],
+          ['openInventory', 'KeyI'],
+          ['openSkills', 'KeyT'],
+          ['belt1', 'Mouse2'],
+          ['belt2', 'Digit1'],
+          ['belt3', 'Digit2'],
+          ['belt4', 'Digit3'],
+          ['belt5', 'Digit4'],
+          ['belt6', 'Digit5'],
+          ['belt7', 'Digit6'],
+          ['belt8', 'Digit7'],
+        ]
+    let controls = gameSettings.controls
+    for (const [action, code] of bindings) {
+      controls = rebindGameControl(controls, action, code)
+    }
+    updateGameSettings({ ...gameSettings, controls })
+    setTutorialControlSelection(scheme)
+  }
+
+  useEffect(() => {
+    if (screen !== 'tutorial-controls' || tutorialControlSelection === null) return
+    const timeout = window.setTimeout(() => setScreen('tutorial-prelude'), 1_000)
+    return () => window.clearTimeout(timeout)
+  }, [screen, tutorialControlSelection])
+
+  const startTutorialRef = useRef(startTutorial)
+  startTutorialRef.current = startTutorial
+  useEffect(() => {
+    if (screen !== 'tutorial-prelude') return
+    void startTutorialRef.current()
+  }, [screen])
+
   const requestGameplayPause = useCallback(() => {
     if (runtimeSnapshot?.world.kind === 'hub') {
       setHubPauseMenuOpen(true)
@@ -1217,7 +1330,15 @@ export default function MainMenuScene({
   const ownsActiveInventoryPause = ownsModalPause
     && gameplayPause?.source === 'inventory'
     && inventoryScreenOpen
+  const tutorialSession = runtimeSnapshot?.world.kind === 'boneyard'
+    && runtimeSnapshot.world.tutorial !== null
+  const tutorialPreludeVisible = screen === 'tutorial-prelude'
+    || (
+      runtimeSnapshot?.world.kind === 'boneyard'
+      && runtimeSnapshot.world.tutorial?.introActive === true
+    )
   const chatDisabled = loading !== null
+    || tutorialSession
     || levelUpModalActive
     || skillBookOpen
     || hudSkillSelector !== null
@@ -1262,8 +1383,11 @@ export default function MainMenuScene({
       || (gameplayPause !== null && !ownsModalPause)
       || (runtimeRunPhase !== 'hub' && runtimeRunPhase !== 'active')
     ) return
+    if (runtimeSnapshot?.world.kind === 'boneyard' && runtimeSnapshot.world.tutorial) {
+      session.sendTutorialAction('skills-opened')
+    }
     setSkillBookOpen(true)
-  }, [gameplayPause, hubPauseMenuOpen, levelUpModalActive, loading, ownsModalPause, runtimeRunPhase, session])
+  }, [gameplayPause, hubPauseMenuOpen, levelUpModalActive, loading, ownsModalPause, runtimeRunPhase, runtimeSnapshot, session])
 
   const openHudSkillSelector = useCallback((binding: NativeHudSkillBinding) => {
     if (
@@ -1402,6 +1526,18 @@ export default function MainMenuScene({
               </div>
             </div>
           </>
+        ) : screen === 'tutorial-controls' ? (
+          <div className="main-menu-native-stage" style={nativeStageStyle}>
+            <TutorialControlPicker
+              busy={connecting || tutorialControlSelection !== null}
+              onChoose={chooseTutorialControls}
+              selected={tutorialControlSelection}
+            />
+          </div>
+        ) : screen === 'tutorial-prelude' ? (
+          <div className="main-menu-native-stage" style={nativeStageStyle}>
+            <TutorialPrelude />
+          </div>
         ) : screen === 'dark-cloud' ? (
           <>
             <div className="main-menu-native-stage dark-cloud-stage" inert={darkCloudMenuOpen || undefined}>
@@ -1501,6 +1637,7 @@ export default function MainMenuScene({
               subscribePing={session.onPing}
               subscribeEnemyEvent={session.onEnemyEvent}
               subscribe={session.onSnapshot}
+              onTutorialAction={session.sendTutorialAction}
               worldSpeeches={worldSpeeches}
             />
           </Suspense>
@@ -1557,7 +1694,7 @@ export default function MainMenuScene({
           </Suspense>
         ) : null}
 
-        {session && runtimeSnapshot && runtimeRunPhase !== 'game-over' ? (
+        {session && runtimeSnapshot && runtimeRunPhase !== 'game-over' && !tutorialSession ? (
           <GameChat
             disabled={chatDisabled}
             onOpenChange={setChatOpen}
@@ -1576,7 +1713,12 @@ export default function MainMenuScene({
               audio={audio}
               economy={runtimeSnapshot!.players[session.playerId]!.economy}
               onAssignQuickbarSkill={session.bindSkillQuickbar}
-              onClose={() => setSkillBookOpen(false)}
+              onClose={() => {
+                if (runtimeSnapshot?.world.kind === 'boneyard' && runtimeSnapshot.world.tutorial) {
+                  session.sendTutorialAction('skills-closed')
+                }
+                setSkillBookOpen(false)
+              }}
               onOpenInventory={() => {
                 setInventoryScreenOpen(true)
                 setInventoryRequestSequence((sequence) => sequence + 1)
@@ -1590,6 +1732,18 @@ export default function MainMenuScene({
               topMost
             />
           </Suspense>
+        ) : null}
+
+        {runtimeSnapshot?.world.kind === 'boneyard'
+          && runtimeSnapshot.world.tutorial
+          && (runtimeSnapshot.world.tutorial.stage === 10
+            || runtimeSnapshot.world.tutorial.stage === 13) ? (
+          <div className="main-menu-native-stage tutorial-modal-callout-stage" style={nativeStageStyle}>
+            <TutorialModalCallouts
+              controls={gameSettings.controls}
+              stage={runtimeSnapshot.world.tutorial.stage}
+            />
+          </div>
         ) : null}
 
         {session && hudSkillSelector && runtimeProgression ? (
@@ -1767,13 +1921,24 @@ export default function MainMenuScene({
           </div>
         ) : null}
 
+        {tutorialOfferOpen ? (
+          <TutorialOfferDialog
+            onNo={() => setTutorialOfferOpen(false)}
+            onYes={() => {
+              setTutorialOfferOpen(false)
+              setTutorialControlSelection(null)
+              setScreen('tutorial-controls')
+            }}
+          />
+        ) : null}
+
         <div
           className={`main-menu-screen-fade main-menu-screen-fade-${fadeState}${screen === 'hall' ? ' main-menu-screen-fade-hall-close' : ''}`}
           onAnimationEnd={handleFadeEnd}
           aria-hidden
         />
       </section>
-      {loading && <MatchLoadingScreen loading={loading} />}
+      {loading && !tutorialPreludeVisible ? <MatchLoadingScreen loading={loading} /> : null}
       <div className="game-orientation-hint" role="status">
         Rotate your device to landscape to enter the College.
       </div>
@@ -1785,6 +1950,9 @@ export default function MainMenuScene({
 function gameplayAudioScene(snapshot: GameSnapshot): GameAudioScene | null {
   if (snapshot.run.phase === 'game-over') return 'game-over'
   if (snapshot.world.kind !== 'boneyard') return null
+  if (snapshot.world.tutorial) {
+    return snapshot.world.tutorial.waveOrdinal > 0 ? 'boneyard-combat' : 'boneyard'
+  }
   return snapshot.world.waves?.phase && snapshot.world.waves.phase !== 'dormant'
     ? 'boneyard-combat'
     : 'boneyard'

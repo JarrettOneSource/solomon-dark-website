@@ -187,6 +187,7 @@ export function createGameSnapshot(
             runId,
           })),
           runId,
+          tutorial: state.world.tutorial,
           waves: state.world.waves === null ? null : {
             interwaveDelayTicks: state.world.waves.interwaveDelayTicks,
             pendingSpawnBudget: state.world.waves.pendingSpawnBudget,

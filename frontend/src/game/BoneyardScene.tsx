@@ -22,6 +22,7 @@ import {
   isBoneyardPlayerCombatEnabled,
 } from './core-kernels/boneyard-encounter.ts'
 import { actorHeadingVector } from './core-kernels/actor-heading.ts'
+import { nativeTutorialHudAccess, type NativeTutorialState } from './core-kernels/native-tutorial.ts'
 import type { HubInventoryAction } from './core-kernels/hub-economy.ts'
 import { nearestBoneyardGoodie } from './core-kernels/boneyard-goodie-interaction.ts'
 import type { PlayerCharacterInput } from './core-kernels/player-character.ts'
@@ -57,6 +58,7 @@ import GameOverOverlay from './GameOverOverlay.tsx'
 import TouchJoystick from './input/TouchJoystick.tsx'
 import NativeLootBitmapText from './NativeLootBitmapText.tsx'
 import NativeSpectatorStatus from './NativeSpectatorStatus.tsx'
+import TutorialOverlay from './TutorialOverlay.tsx'
 import {
   createBrowserGameplayInput,
   type BrowserGameplayInput,
@@ -125,6 +127,7 @@ interface BoneyardSceneProps {
   onOpenSkills: () => void
   onPauseRequest: () => void
   onReady: () => void
+  onTutorialAction: (action: 'inventory-opened' | 'inventory-closed' | 'skills-opened' | 'skills-closed') => void
   playerId: string
   progression: ProtocolPlayerProgression
   presentationPaused: boolean
@@ -170,6 +173,7 @@ export default function BoneyardScene({
   onOpenSkills,
   onPauseRequest,
   onReady,
+  onTutorialAction,
   playerId,
   progression,
   presentationPaused,
@@ -189,7 +193,16 @@ export default function BoneyardScene({
   const [run, setRun] = useState<GameRunLifecycleState>(boneyardInitialSnapshot.run)
   const [inventorySurface, setInventorySurface] = useState<HubUiSurface>(null)
   const [controllerQuickbarSlot, setControllerQuickbarSlot] = useState<number | undefined>()
+  const [tutorial, setTutorial] = useState<NativeTutorialState | null>(
+    boneyardInitialSnapshot.world.tutorial,
+  )
+  const tutorialAccess = tutorial ? nativeTutorialHudAccess(tutorial) : null
+  const [tutorialWorldTarget, setTutorialWorldTarget] = useState<Readonly<{
+    x: number
+    y: number
+  }> | null>(null)
   const inventoryRequestRef = useRef(inventoryRequestSequence)
+  const tutorialInventoryOpenRef = useRef(false)
   const [economy, setEconomy] = useState<ProtocolPlayerEconomy>(
     boneyardInitialSnapshot.players[playerId]!.economy,
   )
@@ -211,6 +224,17 @@ export default function BoneyardScene({
   useEffect(() => {
     onInventoryOpenChange(inventorySurface?.kind === 'inventory')
   }, [inventorySurface?.kind, onInventoryOpenChange])
+
+  useEffect(() => {
+    if (!tutorial) {
+      tutorialInventoryOpenRef.current = false
+      return
+    }
+    const open = inventorySurface?.kind === 'inventory'
+    if (tutorialInventoryOpenRef.current === open) return
+    tutorialInventoryOpenRef.current = open
+    onTutorialAction(open ? 'inventory-opened' : 'inventory-closed')
+  }, [inventorySurface?.kind, onTutorialAction, tutorial])
 
   const sceneRef = useRef<HTMLDivElement>(null)
   const hostRef = useRef<HTMLDivElement>(null)
@@ -255,10 +279,10 @@ export default function BoneyardScene({
   useEffect(() => {
     if (inventoryRequestRef.current === inventoryRequestSequence) return
     inventoryRequestRef.current = inventoryRequestSequence
-    if (!inputBlocked && run.phase === 'active') {
+    if (!inputBlocked && tutorialAccess?.inventory !== false && run.phase === 'active') {
       setInventorySurface({ kind: 'inventory' })
     }
-  }, [inputBlocked, inventoryRequestSequence, run.phase])
+  }, [inputBlocked, inventoryRequestSequence, run.phase, tutorialAccess?.inventory])
   const previousAudioRunRef = useRef(boneyardInitialSnapshot.run)
   const [viewport, setViewport] = useState<GameViewportLayout>(() => (
     gameViewportLayout(1600, 900)
@@ -309,6 +333,7 @@ export default function BoneyardScene({
         ? current
         : snapshot.run
     ))
+    if (snapshot.world.kind === 'boneyard') setTutorial(snapshot.world.tutorial)
     for (const cue of gameOverAudioEvents(previousAudioRunRef.current, snapshot.run)) {
       if (cue === 'solomon-laugh-big') audio.stopStreams(BONEYARD_SOLOMON_VOICE_CUES)
       audio.playStream(cue)
@@ -393,6 +418,7 @@ export default function BoneyardScene({
     const openSkills = (event: KeyboardEvent) => {
       if (
         inputBlocked
+        || tutorialAccess?.skills === false
         || run.phase !== 'active'
         || event.code !== settings.controls.openSkills
         || event.repeat
@@ -407,7 +433,7 @@ export default function BoneyardScene({
     }
     window.addEventListener('keydown', openSkills, { capture: true })
     return () => window.removeEventListener('keydown', openSkills, { capture: true })
-  }, [inputBlocked, onOpenSkills, run.phase, settings.controls.openSkills])
+  }, [inputBlocked, onOpenSkills, run.phase, settings.controls.openSkills, tutorialAccess?.skills])
 
   useEffect(() => {
     const toggleDigIndicator = (event: KeyboardEvent) => {
@@ -419,6 +445,7 @@ export default function BoneyardScene({
         || event.ctrlKey
         || event.metaKey
         || !dig
+        || tutorial !== null
       ) return
       event.preventDefault()
       setDigIndicatorRunId((activeRunId) => (
@@ -427,7 +454,7 @@ export default function BoneyardScene({
     }
     window.addEventListener('keydown', toggleDigIndicator)
     return () => window.removeEventListener('keydown', toggleDigIndicator)
-  }, [dig, loaded.runId, sceneInputBlocked])
+  }, [dig, loaded.runId, sceneInputBlocked, tutorial])
 
   useEffect(() => {
     const interact = (event: KeyboardEvent) => {
@@ -664,6 +691,18 @@ export default function BoneyardScene({
         if (presentationPausedRef.current) return
         const snapshot = samplePresentation(now)
         const camera = renderer.camera(snapshot)
+        if (snapshot.world.kind === 'boneyard') {
+          const tutorialState = snapshot.world.tutorial
+          const sack = tutorialState && (tutorialState.stage === 8 || tutorialState.stage === 17)
+            ? snapshot.world.loot.find(({ kind }) => kind === 'sack')
+            : undefined
+          const target = sack
+            ? worldToScreen(sack.position, camera, viewportRef.current.width, viewportRef.current.height)
+            : null
+          setTutorialWorldTarget((current) => (
+            current?.x === target?.x && current?.y === target?.y ? current : target
+          ))
+        }
         if (snapshot.run.phase === 'game-over') {
           setRun((current) => (
             current.phase === 'game-over'
@@ -837,7 +876,7 @@ export default function BoneyardScene({
   const element = localPlayer?.config.element ?? 'ether'
   const discipline = localPlayer?.config.discipline ?? 'arcane'
   const gateLeaves = boneyardInitialSnapshot.world.gateLeaves
-  const digIndicatorVisible = Boolean(dig && digIndicatorRunId === loaded.runId)
+  const digIndicatorVisible = Boolean(!tutorial && dig && digIndicatorRunId === loaded.runId)
   const configuredCameraZoom = cameraZoomForFov(
     BONEYARD_CAMERA_ZOOM,
     settings.cameraFovPercent,
@@ -862,11 +901,12 @@ export default function BoneyardScene({
       data-presentation-paused={presentationPaused}
       data-renderer-state={rendererError ? 'error' : rendererState}
       data-run-id={loaded.runId}
+      data-tutorial-stage={tutorial?.stage}
       data-viewport-height={viewport.height}
       data-viewport-scale={viewport.displayScale}
       data-viewport-width={viewport.width}
       data-ui-scale={uiScale}
-      aria-label={`Boneyard: ${loaded.choice.name}. Move with the configured keys, a controller, or the touch joystick.${dig ? ' Press H to toggle the Solomon Dig direction arrow.' : ''}`}
+      aria-label={`Boneyard: ${loaded.choice.name}. Move with the configured keys, a controller, or the touch joystick.${dig && !tutorial ? ' Press H to toggle the Solomon Dig direction arrow.' : ''}`}
       tabIndex={0}
     >
       <div
@@ -891,6 +931,14 @@ export default function BoneyardScene({
 
         {run.phase !== 'game-over' ? (
           <>
+            {tutorial ? (
+              <TutorialOverlay
+                audio={audio}
+                controls={settings.controls}
+                state={tutorial}
+                worldTarget={tutorialWorldTarget}
+              />
+            ) : null}
             <div className="boneyard-loot-messages" aria-live="polite" aria-atomic="false">
               {lootMessages.map((message) => (
                 <span
@@ -918,7 +966,7 @@ export default function BoneyardScene({
                 onPauseRequest()
               }}
               onInventoryClick={() => {
-                if (!inputBlocked && run.phase === 'active') {
+                if (!inputBlocked && tutorialAccess?.inventory !== false && run.phase === 'active') {
                   setInventorySurface({ kind: 'inventory' })
                 }
               }}
@@ -942,13 +990,13 @@ export default function BoneyardScene({
                 )
               }}
               onSkillBindingClick={(binding) => {
-                if (!inputBlocked && run.phase === 'active') {
+                if (!inputBlocked && tutorialAccess?.spell !== false && run.phase === 'active') {
                   setInventorySurface(null)
                   onOpenSkillSelector(binding)
                 }
               }}
               onSkillsClick={() => {
-                if (!inputBlocked && run.phase === 'active') {
+                if (!inputBlocked && tutorialAccess?.skills !== false && run.phase === 'active') {
                   setInventorySurface(null)
                   onOpenSkills()
                 }
@@ -957,13 +1005,14 @@ export default function BoneyardScene({
               progression={progression}
               subscribePing={subscribePing}
               subscribeSnapshot={subscribe}
+              tutorialAccess={tutorialAccess}
               uiScale={uiScale}
               viewport={viewport}
             />
             <HubInventoryUi
               audio={audio}
               config={boneyardInitialSnapshot.players[playerId]!.config}
-              disabled={inputBlocked || run.phase !== 'active'}
+              disabled={inputBlocked || tutorialAccess?.inventory === false || run.phase !== 'active'}
               economy={economy}
               inventoryKeyCode={settings.controls.openInventory}
               menuKeyCode={settings.controls.openMenu}

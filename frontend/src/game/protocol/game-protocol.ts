@@ -170,6 +170,15 @@ import {
 } from '../core-kernels/player-lighting.ts'
 import { BONEYARD_ENEMY_FLAGS } from '../core-kernels/boneyard-enemy-config.ts'
 import {
+  NATIVE_TUTORIAL_CUES,
+  NATIVE_TUTORIAL_CUE_DEFINITIONS,
+  NATIVE_TUTORIAL_STAGES,
+  NATIVE_TUTORIAL_SURFACE_ACTIONS,
+  type NativeTutorialCue,
+  type NativeTutorialState,
+  type NativeTutorialSurfaceAction,
+} from '../core-kernels/native-tutorial.ts'
+import {
   NATIVE_MINDBLAST_BURST_LIFETIME_TICKS,
   NATIVE_MINDBLAST_SHOCKWAVE_GROWTH,
   NATIVE_MINDBLAST_SHOCKWAVE_LIFETIME_TICKS,
@@ -331,7 +340,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 69
+export const GAME_PROTOCOL_VERSION = 70
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -595,6 +604,15 @@ export interface ClientStartMatchMessage {
   boneyardId: string
 }
 
+export interface ClientStartTutorialMessage {
+  type: 'client-start-tutorial'
+}
+
+export interface ClientTutorialActionMessage {
+  action: NativeTutorialSurfaceAction
+  type: 'client-tutorial-action'
+}
+
 export interface ClientContinueGameOverMessage {
   type: 'client-continue-game-over'
   eventId: number
@@ -654,6 +672,8 @@ export type ClientGameMessage =
   | ClientSaveBeforeLeaveMessage
   | ClientSnapshotAckMessage
   | ClientStartMatchMessage
+  | ClientStartTutorialMessage
+  | ClientTutorialActionMessage
   | ClientDisconnectMessage
 
 export interface ServerWelcomeMessage {
@@ -1076,6 +1096,21 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
     return {
       type: 'client-start-match',
       boneyardId: limitedString(value.boneyardId, 'boneyardId', 256),
+    }
+  }
+  if (value.type === 'client-start-tutorial') {
+    onlyKeys(value, 'message', ['type'])
+    return { type: 'client-start-tutorial' }
+  }
+  if (value.type === 'client-tutorial-action') {
+    onlyKeys(value, 'message', ['type', 'action'])
+    return {
+      type: 'client-tutorial-action',
+      action: memberString(
+        value.action,
+        'action',
+        NATIVE_TUTORIAL_SURFACE_ACTIONS,
+      ),
     }
   }
   if (value.type === 'client-continue-game-over') {
@@ -8038,22 +8073,28 @@ function gameWorldSnapshot(
       'mageLightningPulses',
       'maggots',
       'runId',
+      'tutorial',
       'waves',
     ])
     const encounter = boneyardSolomonSnapshot(source.encounter, `${field}.encounter`)
     const waves = boneyardWaveSnapshot(source.waves, `${field}.waves`)
+    const tutorial = nativeTutorialState(source.tutorial, `${field}.tutorial`)
     const arenaTransition = boneyardArenaTransition(
       source.arenaTransition,
       `${field}.arenaTransition`,
     )
-    if (
+    if (tutorial === null && (
       (encounter === null) !== (waves === null)
       || (encounter === null) !== (arenaTransition === null)
-    ) {
+    )) {
       throw new GameProtocolError(
         `${field}.arenaTransition, ${field}.encounter, and ${field}.waves must share ownership`,
       )
     }
+    if (
+      tutorial !== null
+      && (encounter === null || waves !== null || arenaTransition !== null)
+    ) throw new GameProtocolError(`${field}.tutorial owns Solomon without retail waves/entrance`)
     const runId = limitedString(source.runId, `${field}.runId`, 128)
     const hallOfFameRuns = nativeHallOfFameRunSnapshots(
       source.hallOfFameRuns,
@@ -8210,6 +8251,7 @@ function gameWorldSnapshot(
       loot,
       lootEvents,
       runId,
+      tutorial,
       waves,
     }
   }
@@ -8782,6 +8824,194 @@ function boneyardWaveSnapshot(
     waveEventId: nonnegativeInteger(source.waveEventId, `${field}.waveEventId`),
     waveOrdinal: nonnegativeInteger(source.waveOrdinal, `${field}.waveOrdinal`),
   }
+}
+
+function nativeTutorialState(value: unknown, field: string): NativeTutorialState | null {
+  if (value === null) return null
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'active',
+    'cameraLockTriggered',
+    'cameraLockTicksRemaining',
+    'damageProtection',
+    'dialogueArmed',
+    'introActive',
+    'introBlend',
+    'introDelayTicksRemaining',
+    'introFade',
+    'introMovementTicksRemaining',
+    'inventoryOpened',
+    'inventorySeen',
+    'itemDropArmed',
+    'movementAnchor',
+    'narration',
+    'nextSpawnIntentId',
+    'primaryCastSequenceAtStart',
+    'rngState',
+    'skillsOpened',
+    'skillsSeen',
+    'solomonDialogueQueued',
+    'solomonRetreatQueued',
+    'stage',
+    'stageTicks',
+    'survivalEnabled',
+    'survivalIntervalCursor',
+    'survivalLastCheckedTicks',
+    'waveOrdinal',
+    'waveSpawnCursor',
+    'waveTicks',
+  ])
+  const stage = boundedInteger(source.stage, `${field}.stage`, 0, 19)
+  if (!(NATIVE_TUTORIAL_STAGES as readonly number[]).includes(stage)) {
+    throw new GameProtocolError(`${field}.stage is not supported`)
+  }
+  const active = boolean(source.active, `${field}.active`)
+  if (!active && stage !== 19) {
+    throw new GameProtocolError(`${field}.active may clear only at stage 19`)
+  }
+  const narrationSource = record(source.narration, `${field}.narration`)
+  onlyKeys(narrationSource, `${field}.narration`, [
+    'current',
+    'nextEventId',
+    'pending',
+    'ticksRemaining',
+  ])
+  const nextEventId = positiveInteger(
+    narrationSource.nextEventId,
+    `${field}.narration.nextEventId`,
+  )
+  const pending = limitedArray(
+    narrationSource.pending,
+    `${field}.narration.pending`,
+    64,
+  ).map((cue, index) => tutorialCue(cue, `${field}.narration.pending[${index}]`))
+  const current = narrationSource.current === null
+    ? null
+    : (() => {
+        const currentField = `${field}.narration.current`
+        const event = record(narrationSource.current, currentField)
+        onlyKeys(event, currentField, ['cue', 'eventId', 'speaker', 'text'])
+        const cueName = tutorialCue(event.cue, `${currentField}.cue`)
+        const definition = NATIVE_TUTORIAL_CUE_DEFINITIONS[cueName]
+        const eventId = positiveInteger(event.eventId, `${currentField}.eventId`)
+        if (eventId >= nextEventId) {
+          throw new GameProtocolError(`${currentField}.eventId must precede nextEventId`)
+        }
+        const speaker = memberString(
+          event.speaker,
+          `${currentField}.speaker`,
+          ['sirmin', 'solomon'] as const,
+        )
+        const text = limitedString(event.text, `${currentField}.text`, 512)
+        if (speaker !== definition.speaker || text !== definition.text) {
+          throw new GameProtocolError(`${currentField} disagrees with its authored cue`)
+        }
+        return { cue: cueName, eventId, speaker, text }
+      })()
+  const ticksRemaining = boundedInteger(
+    narrationSource.ticksRemaining,
+    `${field}.narration.ticksRemaining`,
+    0,
+    100_000,
+  )
+  if ((current === null) !== (ticksRemaining === 0)) {
+    throw new GameProtocolError(`${field}.narration current/ticks are inconsistent`)
+  }
+  if (
+    current !== null
+    && ticksRemaining > NATIVE_TUTORIAL_CUE_DEFINITIONS[current.cue].durationTicks
+  ) throw new GameProtocolError(`${field}.narration ticks exceed the authored cue`)
+  const intervalTicks = limitedArray(
+    source.survivalLastCheckedTicks,
+    `${field}.survivalLastCheckedTicks`,
+    3,
+  )
+  if (intervalTicks.length !== 3) {
+    throw new GameProtocolError(`${field}.survivalLastCheckedTicks needs three clocks`)
+  }
+  const introActive = boolean(source.introActive, `${field}.introActive`)
+  const introBlend = unitInterval(source.introBlend, `${field}.introBlend`)
+  const introDelayTicksRemaining = boundedInteger(
+    source.introDelayTicksRemaining,
+    `${field}.introDelayTicksRemaining`,
+    0,
+    25,
+  )
+  const introFade = unitInterval(source.introFade, `${field}.introFade`)
+  if (!introActive && (
+    introDelayTicksRemaining !== 0
+    || introBlend !== 1
+    || introFade !== 0
+  )) throw new GameProtocolError(`${field} has an inconsistent completed intro`)
+  if (introDelayTicksRemaining > 0 && (introBlend !== 0 || introFade !== 1)) {
+    throw new GameProtocolError(`${field} has an inconsistent held intro`)
+  }
+  if (introBlend < 1 && introFade !== 1) {
+    throw new GameProtocolError(`${field} fades before the intro blend completes`)
+  }
+  return {
+    active,
+    cameraLockTriggered: boolean(source.cameraLockTriggered, `${field}.cameraLockTriggered`),
+    cameraLockTicksRemaining: boundedInteger(
+      source.cameraLockTicksRemaining,
+      `${field}.cameraLockTicksRemaining`,
+      0,
+      300,
+    ),
+    damageProtection: boolean(source.damageProtection, `${field}.damageProtection`),
+    dialogueArmed: boolean(source.dialogueArmed, `${field}.dialogueArmed`),
+    introActive,
+    introBlend,
+    introDelayTicksRemaining,
+    introFade,
+    introMovementTicksRemaining: boundedInteger(
+      source.introMovementTicksRemaining,
+      `${field}.introMovementTicksRemaining`,
+      0,
+      250,
+    ),
+    inventoryOpened: boolean(source.inventoryOpened, `${field}.inventoryOpened`),
+    inventorySeen: boolean(source.inventorySeen, `${field}.inventorySeen`),
+    itemDropArmed: boolean(source.itemDropArmed, `${field}.itemDropArmed`),
+    movementAnchor: boneyardPoint(source.movementAnchor, `${field}.movementAnchor`),
+    narration: { current, nextEventId, pending, ticksRemaining },
+    nextSpawnIntentId: positiveInteger(source.nextSpawnIntentId, `${field}.nextSpawnIntentId`),
+    primaryCastSequenceAtStart: nonnegativeInteger(
+      source.primaryCastSequenceAtStart,
+      `${field}.primaryCastSequenceAtStart`,
+    ),
+    rngState: nativeRngState(source.rngState, `${field}.rngState`),
+    skillsOpened: boolean(source.skillsOpened, `${field}.skillsOpened`),
+    skillsSeen: boolean(source.skillsSeen, `${field}.skillsSeen`),
+    solomonDialogueQueued: boolean(
+      source.solomonDialogueQueued,
+      `${field}.solomonDialogueQueued`,
+    ),
+    solomonRetreatQueued: boolean(
+      source.solomonRetreatQueued,
+      `${field}.solomonRetreatQueued`,
+    ),
+    stage: stage as NativeTutorialState['stage'],
+    stageTicks: nonnegativeInteger(source.stageTicks, `${field}.stageTicks`),
+    survivalEnabled: boolean(source.survivalEnabled, `${field}.survivalEnabled`),
+    survivalIntervalCursor: boundedInteger(
+      source.survivalIntervalCursor,
+      `${field}.survivalIntervalCursor`,
+      0,
+      2,
+    ) as 0 | 1 | 2,
+    survivalLastCheckedTicks: intervalTicks.map((tick, index) => nonnegativeInteger(
+      tick,
+      `${field}.survivalLastCheckedTicks[${index}]`,
+    )) as [number, number, number],
+    waveOrdinal: boundedInteger(source.waveOrdinal, `${field}.waveOrdinal`, 0, 6),
+    waveSpawnCursor: nonnegativeInteger(source.waveSpawnCursor, `${field}.waveSpawnCursor`),
+    waveTicks: nonnegativeInteger(source.waveTicks, `${field}.waveTicks`),
+  }
+}
+
+function tutorialCue(value: unknown, field: string): NativeTutorialCue {
+  return memberString(value, field, NATIVE_TUTORIAL_CUES)
 }
 
 function boneyardEnemyEvents(
@@ -9784,22 +10014,28 @@ function gameWorldSnapshotFrame(
       'lootEvents',
       'mageLightningPulses',
       'runId',
+      'tutorial',
       'waves',
     ])
     const encounter = boneyardSolomonSnapshot(source.encounter, `${field}.encounter`)
     const waves = boneyardWaveSnapshot(source.waves, `${field}.waves`)
+    const tutorial = nativeTutorialState(source.tutorial, `${field}.tutorial`)
     const arenaTransition = boneyardArenaTransition(
       source.arenaTransition,
       `${field}.arenaTransition`,
     )
-    if (
+    if (tutorial === null && (
       (encounter === null) !== (waves === null)
       || (encounter === null) !== (arenaTransition === null)
-    ) {
+    )) {
       throw new GameProtocolError(
         `${field}.arenaTransition, ${field}.encounter, and ${field}.waves must share ownership`,
       )
     }
+    if (
+      tutorial !== null
+      && (encounter === null || waves !== null || arenaTransition !== null)
+    ) throw new GameProtocolError(`${field}.tutorial owns Solomon without retail waves/entrance`)
     const runId = limitedString(source.runId, `${field}.runId`, 128)
     return {
       arenaTransition,
@@ -9846,6 +10082,7 @@ function gameWorldSnapshotFrame(
         snapshotTick,
       ),
       runId,
+      tutorial,
       waves,
     }
   }

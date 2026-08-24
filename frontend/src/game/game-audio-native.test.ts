@@ -4,6 +4,10 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 import { NATIVE_SECONDARY_ABILITY_CONTRACTS } from './core-kernels/native-secondary-ability-contract.ts'
+import {
+  NATIVE_TUTORIAL_CUES,
+  NATIVE_TUTORIAL_CUE_DEFINITIONS,
+} from './core-kernels/native-tutorial.ts'
 
 import {
   CREATE_DISCIPLINE_FINALIZE_MS,
@@ -106,6 +110,61 @@ test('pins every checked-in Solomon voice to its untouched stock WAV', () => {
         cue as keyof typeof NATIVE_SOLOMON_VOICE_MANIFEST
       ].sourceSha256,
     )
+  }
+})
+
+test('pins the complete 24-cue Tutorial narration membership to stock PCM', () => {
+  const files = {
+    'tutorial-accept-your-fate': ['tutorial-accept-your-fate.wav', '609528847afb6161d2e3f178d81f80574eb3a5ebed63b2e8b096539d852b38a9'],
+    'tutorial-acid-rain-huh': ['tutorial-acid-rain-huh.wav', '31100158ed53b65be98e7e9dedd6b5637b209e6aa9052fc32eaba187ee272ba4'],
+    'tutorial-been-dispatched': ['tutorial-been-dispatched.wav', 'edaa508a9cf3fc6dc79714d0166934a7985964225d611435600500a61d830587'],
+    'tutorial-came-prepared': ['tutorial-came-prepared.wav', 'f9704e8fae16a628f5aa163a9bafd0268f321dbfe4098b64b6b4be6ad3954693'],
+    'tutorial-careless-fool': ['tutorial-careless-fool.wav', '4baa3d3d999f8395ad68f2b2014ef7e38c278503b7fddc541bd8a1071bfb9682'],
+    'tutorial-coward-come-back': ['tutorial-coward-come-back.wav', 'e524548ebad58e35e20cdb87ce3c6c41e58c596807fcb1a799e0630772793605'],
+    'tutorial-do-the-dispatching': ['tutorial-do-the-dispatching.wav', '5925f54d7a924941cabdb97204b332a8c634ff980adaccd0c79b26f063902b36'],
+    'tutorial-easily-vanquished': ['tutorial-easily-vanquished.wav', '4b7eaede2a8903cdec1c25cc8dcd3e300dad70e21267989bc68b8741eca1c5c7'],
+    'tutorial-face-the-wrath': ['tutorial-face-the-wrath.wav', 'c015f7fa573744bd89b4fed535bc54afd8b2bc8ecdc7f2774c2ec2929861d2f1'],
+    'tutorial-i-am-sirmin': ['tutorial-i-am-sirmin.wav', '9be6dfcb15158215a11a2a1e00037dc46137c439665026f142835edce0634193'],
+    'tutorial-im-bored': ['tutorial-im-bored.wav', '7215236be51cc86f319488b7f446e451fb16fa7033e733dc6b89fe383d118535'],
+    'tutorial-levelling-up': ['tutorial-levelling-up.wav', '7124c578c133671366caf6285b15508b06efe8e174228d6853a24078ca456fb1'],
+    'tutorial-looking-beat-up': ['tutorial-looking-beat-up.wav', '0956e770c3bba32053ece64a932c98559c56b71075c96818d01a6cb8d25a07d5'],
+    'tutorial-make-me-stronger': ['tutorial-make-me-stronger.wav', '0d333cf07c0e08d61001d979806c448174d048653cd001147ca0a109d441b04d'],
+    'tutorial-never-heard-of-you': ['tutorial-never-heard-of-you.wav', '1c10ee772039eda014d0a081422003531e0486694dc3ab876bd3426935ba7016'],
+    'tutorial-oh-boy-another-wizard': ['tutorial-oh-boy-another-wizard.wav', '5d0ce3e49383bade90aa7ffea491be6cb11eb10e9c1c4f417976faa8b631c45f'],
+    'tutorial-show-yourself': ['tutorial-show-yourself.wav', 'e1f8c9cea2b009a109354c223d2042d73ec450457a1eedf0130f0d093c9f4f6e'],
+    'tutorial-sound-like-mother': ['tutorial-sound-like-mother.wav', 'efce4a898a667bb758c2df16d3e2d073cdeb1b3782435d57bf08a1cac361c012'],
+    'tutorial-surrender': ['tutorial-surrender.wav', '7473e560efdda24c256a7d360aa765ab29cca444626aee642f53c9b657e00ee8'],
+    'tutorial-to-death-exactly': ['tutorial-to-death-exactly.wav', 'd92e6cbbd0aad5d8784da89712e9d0e810a6fd8bfa1278dbaf9a23ac1298ee9c'],
+    'tutorial-unredeemable': ['tutorial-unredeemable.wav', '937325457f6140b67e21276b9c573cabf4bcc254134b0831f56b8d9cb1458e2f'],
+    'tutorial-your-perversions': ['tutorial-your-perversions.wav', '9faf1b8da6df4fbec57beaa6213c724d5b88f9d8db2092dd8eed6082e4c6fa92'],
+  } as const
+  assert.equal(NATIVE_TUTORIAL_CUES.length, 24)
+  assert.equal(Object.keys(files).length, 22)
+  for (const [cue, [filename, sha256]] of Object.entries(files)) {
+    const source = readFileSync(new URL(
+      `../assets/game/audio/voice/${filename}`,
+      import.meta.url,
+    ))
+    assert.equal(createHash('sha256').update(source).digest('hex'), sha256, cue)
+    assert.ok(NATIVE_TUTORIAL_CUE_DEFINITIONS[
+      cue as keyof typeof NATIVE_TUTORIAL_CUE_DEFINITIONS
+    ].durationTicks > 0)
+  }
+  assert.ok(NATIVE_TUTORIAL_CUES.includes('solomon-laugh-1'))
+  assert.ok(NATIVE_TUTORIAL_CUES.includes('solomon-get-him-boys'))
+})
+
+test('pins the exact unnormalized Tutorial prelude and combat renders', () => {
+  const rows = [
+    ['prelude.mp3', '493b98c2395cdd5dd2a099dc4afecfc06cb35d8258f55c12c36649b0cccd1f45'],
+    ['combat.mp3', '8663d4fa72d4b41ef511a0c6da129064351ac639ebce0c492c037a21b2f34675'],
+  ] as const
+  for (const [filename, sha256] of rows) {
+    const source = readFileSync(new URL(
+      `../assets/game/audio/music/${filename}`,
+      import.meta.url,
+    ))
+    assert.equal(createHash('sha256').update(source).digest('hex'), sha256)
   }
 })
 

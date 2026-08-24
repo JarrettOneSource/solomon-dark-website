@@ -16,7 +16,11 @@ import {
 import { HUB_SPAWN } from '../core-kernels/hub-math.ts'
 import { HubStudentPopulationState } from '../core-server/hub-students.ts'
 import { HubWorldRuntime } from '../core-server/hub-world.ts'
-import { createBoneyardCatalog, materializeBoneyard } from '../host/boneyard-catalog.ts'
+import {
+  createBoneyardCatalog,
+  materializeBoneyard,
+  materializeStockTutorial,
+} from '../host/boneyard-catalog.ts'
 import {
   createGameProfileSaveDocument,
   createGameSaveDocument,
@@ -70,7 +74,7 @@ test('host save documents round-trip the complete owner state and revive Hub run
     state,
   })
   const encoded = JSON.parse(document) as Record<string, unknown>
-  assert.equal(encoded.schemaVersion, 6)
+  assert.equal(encoded.schemaVersion, 7)
   assert.deepEqual(encoded.mods, MODS)
   assert.deepEqual(encoded.modState, MOD_STATE)
   assert.equal(encoded.integrity, 'local-only')
@@ -293,6 +297,67 @@ test('host save documents retain the active Boneyard and its authoritative run i
     : {})
   assert.equal(restored.state.run.runId, loadedBoneyard.runId)
   assert.equal(restored.state.run.phase, 'active')
+})
+
+test('schema 7 resumes the complete stock Tutorial controller and exact level identity', () => {
+  const loadedBoneyard = materializeStockTutorial(Buffer.alloc(16, 19))
+  const state = enterBoneyardWorld(
+    createGameSimulation({ owner: OWNER }),
+    loadedBoneyard,
+  )
+  const document = createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state,
+  })
+  const encoded = JSON.parse(document)
+  assert.equal(encoded.schemaVersion, 7)
+  assert.equal(encoded.continuation.simulation.world.tutorial.stage, 0)
+  assert.deepEqual(
+    encoded.profile.economy,
+    encoded.continuation.simulation.world.tutorialProfileEconomy,
+  )
+  const retired = JSON.parse(retireGameSaveWizard(document))
+  assert.equal(retired.continuation, null)
+  assert.equal(retired.profile.economy.tutorialPending, false)
+  assert.deepEqual(
+    { ...retired.profile.economy, tutorialPending: true },
+    encoded.continuation.simulation.world.tutorialProfileEconomy,
+  )
+
+  const restored = restoreGameSaveDocument(document)
+  assert.equal(restored.loadedBoneyard?.choice.id, 'stock-tutorial')
+  assert.equal(restored.loadedBoneyard?.sourceSha256, '97802f2ca45d9bc6f90a497e7c12a55926298161e191fa70eee5e666b90106ed')
+  assert.equal(restored.state.world.kind, 'boneyard')
+  if (restored.state.world.kind !== 'boneyard') throw new Error('expected Tutorial')
+  assert.deepEqual(restored.state.world.tutorial, state.world.kind === 'boneyard'
+    ? state.world.tutorial
+    : null)
+  assert.equal(restored.state.world.encounter?.dialogueMode, 'tutorial')
+  assert.equal(restored.state.world.waves, null)
+  assert.equal(restored.state.world.arenaTransition, null)
+})
+
+test('schema 6 current-layout saves migrate without completed-run profile archival', () => {
+  const current = createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard: null,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state: createGameSimulation({ owner: OWNER }),
+  })
+  const previous = JSON.parse(current)
+  previous.schemaVersion = 6
+  const document = JSON.stringify(previous)
+  const currentProfile = restoreGameSaveProfile(current)
+  const profile = restoreGameSaveProfile(document)
+  const restored = restoreGameSaveDocument(document)
+  assert.deepEqual(profile.economy, currentProfile.economy)
+  assert.equal(restored.state.world.kind, 'hub')
 })
 
 test('host save documents fail closed for unknown schema, extra fields, owner drift, and size', () => {

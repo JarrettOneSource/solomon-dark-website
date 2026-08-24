@@ -324,6 +324,7 @@ export function createGameSnapshotFrame(
         boneyardMageLightningPulseFrame,
       ),
       runId: snapshot.world.runId,
+      tutorial: snapshot.world.tutorial,
       waves: snapshot.world.waves,
     },
   }
@@ -512,6 +513,7 @@ export class EntityReplicationReconstructor {
         ),
         maggots,
         runId: frame.world.runId,
+        tutorial: frame.world.tutorial,
         waves: frame.world.waves,
       },
     }

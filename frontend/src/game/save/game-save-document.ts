@@ -1,4 +1,5 @@
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
+import { DEFAULT_BONEYARD_ENEMY_LOOT_POLICIES } from '../core-kernels/boneyard-enemy-config.ts'
 import {
   createPlayerCharacter,
   createIdlePlayerPrimaryCast,
@@ -230,13 +231,20 @@ export function retireGameSaveWizard(document: string): string {
     identity => identity.playerId === restored.playerId,
   )
   if (ownerIndex < 0) throw new Error('game save profile owner is absent')
+  const retiredEconomy = gameSimulationRetiredWizardEconomy(
+    restored.state,
+    restored.playerId,
+  )
   return encodeDocument({
     continuation: null,
     integrity: restored.integrity,
     mods: restored.mods,
     modState: restored.modState,
     profile: {
-      economy: gameSimulationRetiredWizardEconomy(restored.state, restored.playerId),
+      economy: restored.state.world.kind === 'boneyard'
+        && restored.state.world.tutorial !== null
+        ? { ...retiredEconomy, tutorialPending: false }
+        : retiredEconomy,
       hagathaRuntime: restored.state.playerEntities.progressions[ownerIndex]!.hagathaRuntime,
     },
   })
@@ -374,7 +382,7 @@ export function restoreGameSaveProfile(document: string): RestoredGameSaveProfil
   const parsed = parseGameSaveDocument(document)
   assertBoundedJsonTree(JSON.parse(document))
   let economy = normalizeEconomy(parsed.profile.economy)
-  if (parsed.sourceSchemaVersion < WEB_GAME_SAVE_SCHEMA_VERSION) {
+  if (parsed.sourceSchemaVersion < 6) {
     economy = archiveCompletedRunEconomy(economy, {
       displayName: parsed.continuation?.summary.character.displayName ?? 'Wizard',
       groundGold: 0,
@@ -611,6 +619,31 @@ function normalizeWorld(
   const loadedBoneyard = parseLoadedBoneyard(loadedBoneyardValue)
   const defaults = createBoneyardWorld(loadedBoneyard)
   const enemies = record(source.enemies, 'game save Boneyard enemies')
+  const enemyActors = array(enemies.actors, 'game save Boneyard enemy actors').map(
+    (value, index) => {
+      const actor = record(value, `game save Boneyard enemy actor ${index}`)
+      const config = record(actor.config, `game save Boneyard enemy config ${index}`)
+      return {
+        ...actor,
+        config: {
+          ...config,
+          lootPolicies: config.lootPolicies ?? DEFAULT_BONEYARD_ENEMY_LOOT_POLICIES,
+          recipeName: config.recipeName ?? null,
+          recipeUid: config.recipeUid ?? null,
+        },
+      }
+    },
+  )
+  const encounter = source.encounter === null
+    ? null
+    : record(source.encounter, 'game save Boneyard Solomon encounter')
+  const tutorial = 'tutorial' in source ? source.tutorial : defaults.tutorial
+  const tutorialProfileEconomy = source.tutorialProfileEconomy == null
+    ? null
+    : normalizeEconomy(source.tutorialProfileEconomy)
+  if ((tutorial === null) !== (tutorialProfileEconomy === null)) {
+    throw new Error('game save Tutorial profile baseline ownership is inconsistent')
+  }
   const waves = source.waves === null
     ? null
     : record(source.waves, 'game save Boneyard waves')
@@ -618,14 +651,24 @@ function normalizeWorld(
     ...source,
     enemies: {
       ...enemies,
+      actors: enemyActors,
       locomotionRngState: enemies.locomotionRngState ?? defaults.enemies.locomotionRngState,
       steeringRngState: enemies.steeringRngState ?? defaults.enemies.steeringRngState,
     },
+    encounter: encounter === null
+      ? null
+      : {
+          ...encounter,
+          dialogueMode: encounter.dialogueMode ?? 'ordinary',
+          tutorialDialogueTicks: encounter.tutorialDialogueTicks ?? 0,
+        },
     enemyWorldFeedback: source.enemyWorldFeedback ?? defaults.enemyWorldFeedback,
     hallOfFameRuns: source.hallOfFameRuns ?? {
       [playerId]: createNativeHallOfFameRun(0),
     },
     lanternPosition: source.lanternPosition ?? defaults.lanternPosition,
+    tutorial,
+    tutorialProfileEconomy,
     waves: waves === null
       ? null
       : {
@@ -633,7 +676,7 @@ function normalizeWorld(
           openingBursts: waves.openingBursts ?? [],
           openingReleaseThreshold: waves.openingReleaseThreshold ?? 0,
         },
-  } as BoneyardWorldState
+  } as unknown as BoneyardWorldState
 }
 
 function rejectUnexpectedKeys(

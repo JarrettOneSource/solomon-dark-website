@@ -699,8 +699,10 @@ export interface BoneyardEnemyReward {
 export interface BoneyardEnemyLootSource {
   readonly actorSeed: number
   readonly enemyToken: EvaluatedBoneyardEnemyConfig['enemyToken']
+  readonly policies?: EvaluatedBoneyardEnemyConfig['lootPolicies']
   readonly participantSlot: 0
   readonly position: Readonly<BoneyardPoint>
+  readonly recipeUid?: number
 }
 
 export interface BoneyardEnemyRetirement {
@@ -1778,6 +1780,7 @@ function materializeSpawnIntents(
     work.rngState = splitMany?.state ?? split.state
     const evaluatedConfig = evaluateBoneyardEnemyConfig(intent.enemyToken, {
       arenaScalars: context.arenaScalars,
+      authoredRecipe: intent.authoredRecipe,
       flags: intent.flags,
       flanking: intent.flanking,
       mageCloak: intent.mageCloak,
@@ -5258,6 +5261,10 @@ function stepDyingActor(
     lootSource: Object.freeze({
       actorSeed: source.lootSeed,
       enemyToken: source.config.enemyToken,
+      ...(source.config.recipeUid === null ? {} : {
+        policies: source.config.lootPolicies,
+        recipeUid: source.config.recipeUid,
+      }),
       participantSlot: 0 as const,
       position: Object.freeze({ ...source.position }),
     }),

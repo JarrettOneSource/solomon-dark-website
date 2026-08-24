@@ -34,6 +34,25 @@
   pointer-events: none;
 }
 
+.hub-hud[data-tutorial-combat='false'] > :is(
+  .hub-hud-skull-button,
+  .game-account-name-hud,
+  .hub-hud-allies,
+  .hub-hud-diagnostics,
+  .hub-hud-meters
+),
+.hub-hud[data-tutorial-combat='false'] :is(
+  .hub-hud-potion-button,
+  .hub-hud-count,
+  .hub-hud-xp
+),
+.hub-hud[data-tutorial-spell='false'] > .hub-hud-selected-skills,
+.hub-hud[data-tutorial-quickbar='false'] > .hub-hud-skill-quickbar,
+.hub-hud[data-tutorial-inventory='false'] .hub-hud-backpack-button,
+.hub-hud[data-tutorial-skills='false'] .hub-hud-tome-button {
+  display: none;
+}
+
 /* Stock: the skull is paint only (HUD painter 0x005D2520); OPEN MENU is a keyboard edge
    (0x005CB360 / 0x0058F320). The button is inert here and becomes the touch pause control
    in the coarse-pointer block below. Same (11, 7) / 31 px box as the stock sprite. */

@@ -223,6 +223,7 @@ function interpolateSnapshot(
       ),
       maggots: interpolateMaggots(older.world.maggots, newer.world.maggots, blend),
       runId: newer.world.runId,
+      tutorial: copyTutorial((blend < 1 ? older : newer).world.tutorial),
       waves: interpolateWaves(older.world.waves, newer.world.waves, blend),
     },
   }
@@ -399,8 +400,27 @@ function presentationCopy(snapshot: BoneyardGameSnapshot): BoneyardPresentationF
       ),
       maggots: snapshot.world.maggots.map(copyMaggot),
       runId: snapshot.world.runId,
+      tutorial: copyTutorial(snapshot.world.tutorial),
       waves: copyWaves(snapshot.world.waves),
     },
+  }
+}
+
+function copyTutorial(
+  source: BoneyardGameSnapshot['world']['tutorial'],
+): BoneyardGameSnapshot['world']['tutorial'] {
+  if (source === null) return null
+  return {
+    ...source,
+    movementAnchor: { ...source.movementAnchor },
+    narration: {
+      ...source.narration,
+      current: source.narration.current === null
+        ? null
+        : { ...source.narration.current },
+      pending: [...source.narration.pending],
+    },
+    survivalLastCheckedTicks: [...source.survivalLastCheckedTicks],
   }
 }
 

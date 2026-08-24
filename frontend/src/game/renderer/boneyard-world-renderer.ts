@@ -55,6 +55,7 @@ import {
   NativeBoneyardWeather,
 } from '../core-kernels/native-boneyard-weather.ts'
 import { nativeSecondaryTargetMaterialTint } from '../core-kernels/native-secondary-abilities.ts'
+import { NATIVE_TUTORIAL_CAMERA_LOCK } from '../core-kernels/native-tutorial.ts'
 import {
   mergeNativeLightProviderOwners,
   type NativeLightProviderRegistration,
@@ -786,9 +787,15 @@ export async function createBoneyardWorldRenderer(
   const cameraFor = (snapshot: GameSnapshot): Camera => {
     requireBoneyardSnapshot(snapshot, options.boneyard.runId)
     const focus = cameraFocusFor(snapshot)
+    const tutorialCameraBounds = snapshot.world.kind === 'boneyard'
+      && snapshot.world.tutorial?.cameraLockTicksRemaining
+      ? NATIVE_TUTORIAL_CAMERA_LOCK
+      : null
     return boneyardCamera(
       focus.position,
-      snapshot.world.arenaTransition?.cameraBounds ?? options.boneyard.scene.bounds,
+      tutorialCameraBounds
+        ?? snapshot.world.arenaTransition?.cameraBounds
+        ?? options.boneyard.scene.bounds,
       viewport,
       cameraZoom,
     )

@@ -112,6 +112,7 @@ function boneyardSnapshot(runId: string): GameSnapshot {
       }],
       maggots: [],
       runId,
+      tutorial: null,
       waves: null,
     },
   }

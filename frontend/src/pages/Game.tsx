@@ -52,6 +52,10 @@ import { readTotalPlaytimeMs, trackPlaytime } from '../game/playtime-store.ts'
 import { TITLE_BUILD_REVISION } from '../game/title-build-revision.ts'
 import { waitForDeploymentRevision } from '../game/deployment-revision.ts'
 import GameDeploymentUpdate from '../game/GameDeploymentUpdate.tsx'
+import {
+  shouldOfferStockTutorial,
+  type BrowserSaveDetection,
+} from '../game/tutorial-entry.ts'
 
 type Readiness = 'loading' | 'ready'
 
@@ -70,6 +74,7 @@ export default function Game() {
   const [loadProgress, setLoadProgress] = useState(initialGameStartupProgress)
   const [fatal, setFatal] = useState<GameConnectionFailure | null>(null)
   const [saveReady, setSaveReady] = useState(false)
+  const [saveDetection, setSaveDetection] = useState<BrowserSaveDetection>('loading')
   const [modsReady, setModsReady] = useState(false)
   const [activeMods, setActiveMods] = useState<readonly ActiveWebMod[]>([])
   const [profileSave, setProfileSave] = useState<GameProfileSave | null>(null)
@@ -111,18 +116,21 @@ export default function Game() {
     if (authLoading) return
     let cancelled = false
     setSaveReady(false)
+    setSaveDetection('loading')
     setProfileSave(null)
     setResumeSave(null)
     const store = user ? createCloudGameSaveStore() : createLocalGameSaveStore()
     const present = (record: StoredGameSave | null) => {
       if (cancelled) return
       if (!record) {
+        setSaveDetection('missing')
         setProfileSave(null)
         setResumeSave(null)
         return
       }
       try {
         const parsed = parseGameSaveDocument(record.document)
+        setSaveDetection('present')
         const profile = {
           document: record.document,
           integrity: parsed.integrity,
@@ -133,6 +141,7 @@ export default function Game() {
           ? null
           : { ...profile, summary: parsed.continuation.summary })
       } catch (error) {
+        setSaveDetection('present')
         setProfileSave(null)
         setResumeSave(null)
         diagnostics.warning(
@@ -153,6 +162,7 @@ export default function Game() {
     )
     saveCoordinator.current = coordinator
     void coordinator.load().catch((error: unknown) => {
+      if (!cancelled) setSaveDetection('unavailable')
       diagnostics.warning(
         'save.load_failed',
         'The game save slot could not be loaded.',
@@ -405,6 +415,7 @@ export default function Game() {
               refreshActiveMods={refreshActiveMods}
               resumeSave={resumeSave}
               submitGlobalHallOfFame={submitGlobalHallOfFame}
+              tutorialOfferEligible={shouldOfferStockTutorial(saveDetection)}
             />
           )
         : (
