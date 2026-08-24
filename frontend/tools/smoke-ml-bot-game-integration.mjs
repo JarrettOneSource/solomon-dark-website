@@ -17,6 +17,8 @@ const require = createRequire(import.meta.url)
 const checkpointPath = process.env.SDR_ML_BOT_CHECKPOINT
   ?? 'server-assets/ml-bot-policy-v7-selected.sdml'
 const durationMs = integerArgument('--duration-ms', 90_000)
+const botDiscipline = enumArgument('--bot-discipline', 'arcane', ['arcane', 'body', 'mind'])
+const botElement = enumArgument('--bot-element', 'fire', ['air', 'earth', 'ether', 'fire', 'water'])
 const policy = await MlBotPolicyInferenceWorker.create(await readFile(checkpointPath))
 const admission = {
   content: {
@@ -53,7 +55,7 @@ try {
   const summon = await executeLua(
     socket,
     1,
-    'sd.rng.set_seed(518852612); return sd.bots.summon()',
+    `sd.rng.set_seed(518852612); return sd.bots.summon({ element = "${botElement}", discipline = "${botDiscipline}" })`,
   )
   assert.equal(summon.ok, true, summon.error ?? 'bot summon failed')
   await waitFor(() => host.botCount() === 1)
@@ -115,6 +117,7 @@ try {
   assert.ok(telemetry.kills >= 1, 'the live bot did not kill an enemy')
   process.stdout.write(`${JSON.stringify({
     checkpointPath,
+    botCharacter: { discipline: botDiscipline, element: botElement },
     maximumTravel,
     status: 'ok',
     telemetry,
@@ -132,6 +135,16 @@ function integerArgument(name, fallback) {
   if (index < 0) return fallback
   const value = Number(process.argv[index + 1])
   if (!Number.isSafeInteger(value) || value < 1) throw new Error(`${name} must be positive`)
+  return value
+}
+
+function enumArgument(name, fallback, values) {
+  const index = process.argv.indexOf(name)
+  if (index < 0) return fallback
+  const value = process.argv[index + 1]
+  if (!values.includes(value)) {
+    throw new Error(`${name} must be one of ${values.join(', ')}`)
+  }
   return value
 }
 
