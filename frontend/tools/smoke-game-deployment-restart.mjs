@@ -188,6 +188,10 @@ async function exercisePlayer({ account, label }) {
         url: page.url(),
       })}`, { cause: error })
     }
+    const tutorialOffer = page.getByRole('dialog', { name: 'Play the Tutorial?' })
+    if (await tutorialOffer.isVisible()) {
+      await tutorialOffer.getByRole('button', { exact: true, name: 'NO' }).click()
+    }
     await page.getByRole('button', { name: 'Play' }).click()
     await page.getByRole('button', { name: 'New game' }).click()
     await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({
