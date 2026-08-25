@@ -1435,6 +1435,7 @@ class BoneyardDynamicScene {
   private readonly maggots: NativeMaggotViews
   private readonly loot: NativeLootViews
   private readonly modEffects: ModConsumableEffectViews
+  private readonly modTextures: ModPresentationTextures
   private readonly mageLightningPulses: NativeMageLightningPulseViews
   private readonly primarySpells: PrimarySpellWorldView
   private readonly secondaryAbilities: NativeSecondaryWorldView
@@ -1475,6 +1476,7 @@ class BoneyardDynamicScene {
     })
     this.root = root
     this.textures = textures
+    this.modTextures = modTextures
     this.mainLayers = mainLayers
     this.mainResidents = mainResidents
     this.foreground = foreground
@@ -1558,7 +1560,7 @@ class BoneyardDynamicScene {
       livePlayerIds.add(playerId)
       let view = this.players.get(playerId)
       if (!view) {
-        view = new PlayerWorldView(player.config.element, this.textures)
+        view = new PlayerWorldView(player.config.element, this.textures, this.modTextures)
         this.players.set(playerId, view)
         this.root.addChild(view.container)
       }

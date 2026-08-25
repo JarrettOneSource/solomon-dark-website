@@ -365,8 +365,7 @@ export function playerSkillDerivedStats(
   const rush = value(67, 'mValue')
   const resistPoison = value(69, 'mValue')
   const fasterCaster = value(70, 'mValue')
-  const staffEquipped = economy.equipment.weapon?.nativeTypeId === 7004
-    && economy.equipment.weapon.equipmentType === 'staff'
+  const staffEquipped = economy.equipment.weapon?.equipmentType === 'staff'
   const hagatha = nativeHagathaDerivedModifiers(
     economy.ownedPerkSelectors,
     progression.hagathaRuntime,

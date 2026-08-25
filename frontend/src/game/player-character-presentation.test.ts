@@ -14,6 +14,7 @@ import {
   playerEquippedElementEffectScale,
   playerDeathEquipmentAppearance,
   playerLivingEquipmentAppearance,
+  playerLivingNativeEquipmentAppearance,
   playerCharacterFixedRobeOffset,
   playerCharacterFrontAttachmentOffset,
   playerCharacterHeadOffset,
@@ -220,6 +221,73 @@ test('living equipment distinguishes required starter clothes from an empty weap
     hat: { primaryTint: 0x19ffff, secondaryTint: 0xffffff, selector: 3 },
     robe: { primaryTint: 0x19ff19, secondaryTint: 0xc8ffc8, selector: 2 },
     weapon: { kind: 'staff', selector: 3 },
+  })
+})
+
+test('mod wearables keep custom living art while death and memorial use declared native shapes', () => {
+  const content = (slot: 'hat' | 'robe' | 'staff', deathShape: number) => ({
+    contentId: `${5000000000000000090n + BigInt(deathShape)}`,
+    description: 'Mod wearable',
+    icon: {
+      atlasId: `example.wearables:${slot}`,
+      frame: {
+        centerOffsetX: 0,
+        centerOffsetY: 0,
+        contentHeight: 50,
+        contentWidth: 50,
+        height: 50,
+        logicalHeight: 50,
+        logicalWidth: 50,
+        width: 50,
+        x: 0,
+        y: 0,
+      },
+      frameIndex: 0,
+      imagePath: `art/${slot}-icon.png`,
+    },
+    key: `${slot}_item`,
+    modId: 'example.wearables',
+    stackMaximum: 1,
+    wearable: {
+      deathShape,
+      dyeable: slot !== 'staff',
+      slot,
+      wornImagePath: `art/${slot}.png`,
+      ...(slot === 'staff' ? {} : { wornTrimImagePath: `art/${slot}-trim.png` }),
+    },
+  })
+  const item = (slot: 'hat' | 'robe' | 'staff', deathShape: number) => ({
+    equipmentType: slot,
+    iconRecords: [],
+    ...(slot === 'staff' ? {} : { iconTints: [0x123456, 0xabcdef] as const }),
+    id: deathShape + 200,
+    kind: 'equipment' as const,
+    modItemContent: content(slot, deathShape),
+    name: `Mod ${slot}`,
+    nativeSubtype: null,
+    nativeTypeId: 7013,
+    quantity: 1,
+    rarity: null,
+    recipeIndex: null,
+  })
+  const equipment = {
+    hat: item('hat', 3),
+    robe: item('robe', 2),
+    weapon: item('staff', 5),
+  }
+  const living = playerLivingEquipmentAppearance('fire', equipment)
+  assert.equal('content' in living.hat!, true)
+  assert.equal('content' in living.robe!, true)
+  assert.equal('content' in living.weapon!, true)
+  assert.deepEqual(playerDeathEquipmentAppearance('fire', equipment), {
+    hat: { primaryTint: 0x123456, secondaryTint: 0xabcdef, selector: 3 },
+    robe: { primaryTint: 0x123456, secondaryTint: 0xabcdef, selector: 2 },
+    weapon: { kind: 'staff', selector: 5 },
+  })
+  assert.deepEqual(playerLivingNativeEquipmentAppearance('fire', equipment), {
+    hat: { primaryTint: 0x123456, secondaryTint: 0xabcdef, selector: 3 },
+    robe: { primaryTint: 0x123456, secondaryTint: 0xabcdef, selector: 2 },
+    weapon: { kind: 'staff', selector: 5 },
   })
 })
 

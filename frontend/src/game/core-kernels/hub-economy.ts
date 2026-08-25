@@ -37,9 +37,11 @@ export const NATIVE_RETAINED_SACK_SUFFIXES = [
 export const NATIVE_UNFORGE_ELIGIBLE_TYPE_IDS = [
   7002, 7003, 7004, 7005, 7006, 7008, 7011,
 ] as const
+export const MOD_ITEM_NATIVE_TYPE_ID = 7013
 
 export type EquipmentType = 'amulet' | 'hat' | 'ring' | 'robe' | 'staff' | 'wand'
 export type EquipmentSlot = 'amulet' | 'hat' | 'ring-0' | 'ring-1' | 'ring-2' | 'robe' | 'weapon'
+export type ModWearableSlot = Extract<EquipmentType, 'hat' | 'robe' | 'staff'>
 export const EQUIPMENT_TYPES = ['amulet', 'hat', 'ring', 'robe', 'staff', 'wand'] as const
 export const EQUIPMENT_SLOTS = ['amulet', 'hat', 'ring-0', 'ring-1', 'ring-2', 'robe', 'weapon'] as const
 export type HubTraderId = 'fomentius' | 'hagatha' | 'luthacus' | 'shlorio'
@@ -192,18 +194,30 @@ export interface ModSpriteFrame {
   readonly y: number
 }
 
+export interface ModItemIcon {
+  readonly atlasId: string
+  readonly frame: ModSpriteFrame
+  readonly frameIndex: number
+  readonly imagePath: string
+}
+
+export interface ModWearableContent {
+  readonly deathShape: number
+  readonly dyeable: boolean
+  readonly slot: ModWearableSlot
+  readonly wornImagePath: string
+  readonly wornTrimImagePath?: string
+}
+
 export interface ModItemContent {
   readonly contentId: string
   readonly description: string
-  readonly icon: Readonly<{
-    readonly atlasId: string
-    readonly frame: ModSpriteFrame
-    readonly frameIndex: number
-    readonly imagePath: string
-  }>
+  readonly icon: Readonly<ModItemIcon>
+  readonly iconTrimImagePath?: string
   readonly key: string
   readonly modId: string
   readonly stackMaximum: number
+  readonly wearable?: Readonly<ModWearableContent>
 }
 
 export interface ModConsumableContent extends Omit<ModItemContent, 'stackMaximum'> {
@@ -222,6 +236,7 @@ export interface ModConsumableCatalogEntry {
 
 export interface ModItemCatalogEntry {
   readonly content: ModItemContent
+  readonly iconTints?: readonly [number, number]
   readonly name: string
 }
 
@@ -922,12 +937,80 @@ export function findInventoryItem(
   return projectInventoryItems(source).find(({ item }) => item.id === itemId)?.item ?? null
 }
 
-export function nativeInventoryClothingItems(
+export function reconcileHubEconomyModPackages(
+  source: HubEconomyState,
+  availableModIds: readonly string[],
+): HubEconomyState {
+  const available = new Set(availableModIds.map(modId => modId.toLowerCase()))
+  const reconcileItem = <T extends HubInventoryItem>(item: T): T | null => {
+    const ownerModId = item.modItemContent?.modId ?? item.modContent?.modId
+    if (ownerModId && !available.has(ownerModId.toLowerCase())) return null
+    const contents = item.contents?.flatMap(child => {
+      const reconciled = reconcileItem(child)
+      return reconciled === null ? [] : [reconciled]
+    })
+    const modAffixes = item.modAffixes?.filter(affix => (
+      available.has(affix.modId.toLowerCase())
+    ))
+    const contentsChanged = contents !== undefined && (
+      contents.length !== item.contents!.length
+      || contents.some((child, index) => child !== item.contents![index])
+    )
+    const affixesChanged = modAffixes !== undefined
+      && modAffixes.length !== item.modAffixes!.length
+    if (!contentsChanged && !affixesChanged) return item
+    const reconciled = { ...item }
+    if (contentsChanged) Object.assign(reconciled, { contents })
+    if (affixesChanged) {
+      if (modAffixes.length === 0) Reflect.deleteProperty(reconciled, 'modAffixes')
+      else Object.assign(reconciled, { modAffixes })
+    }
+    return reconciled
+  }
+  const reconcileItems = <T extends HubInventoryItem>(items: readonly T[]): readonly T[] => (
+    items.flatMap(item => {
+      const reconciled = reconcileItem(item)
+      return reconciled === null ? [] : [reconciled]
+    })
+  )
+  const backpack = reconcileItems(source.backpack)
+  const storage = reconcileItems(source.storage)
+  const fomentiusStock = reconcileItems(source.fomentiusStock)
+  const equipment = {
+    amulet: source.equipment.amulet && reconcileItem(source.equipment.amulet),
+    hat: source.equipment.hat && reconcileItem(source.equipment.hat),
+    rings: [
+      source.equipment.rings[0] && reconcileItem(source.equipment.rings[0]),
+      source.equipment.rings[1] && reconcileItem(source.equipment.rings[1]),
+      source.equipment.rings[2] && reconcileItem(source.equipment.rings[2]),
+    ] as const,
+    robe: source.equipment.robe && reconcileItem(source.equipment.robe),
+    weapon: source.equipment.weapon && reconcileItem(source.equipment.weapon),
+  }
+  const unchanged = backpack.length === source.backpack.length
+    && backpack.every((item, index) => item === source.backpack[index])
+    && storage.length === source.storage.length
+    && storage.every((item, index) => item === source.storage[index])
+    && fomentiusStock.length === source.fomentiusStock.length
+    && fomentiusStock.every((item, index) => item === source.fomentiusStock[index])
+    && equipment.amulet === source.equipment.amulet
+    && equipment.hat === source.equipment.hat
+    && equipment.rings.every((item, index) => item === source.equipment.rings[index])
+    && equipment.robe === source.equipment.robe
+    && equipment.weapon === source.equipment.weapon
+  return unchanged ? source : { ...source, backpack, equipment, fomentiusStock, storage }
+}
+
+export function inventoryDyeableClothingItems(
   source: readonly HubInventoryItem[],
 ): readonly ProjectedInventoryItem[] {
   return projectInventoryItems(source).filter(({ item }) => (
     (item.nativeTypeId === 7005 && item.equipmentType === 'hat')
     || (item.nativeTypeId === 7006 && item.equipmentType === 'robe')
+    || (
+      item.modItemContent?.wearable?.dyeable === true
+      && (item.equipmentType === 'hat' || item.equipmentType === 'robe')
+    )
   ))
 }
 
@@ -1105,10 +1188,10 @@ export function dyeInventoryClothing(
   }
   const target = findInventoryItem(source.backpack, targetItemId)
   if (!target) return rejected(source, 'item-not-found')
-  if (!nativeInventoryClothingItems(source.backpack).some(({ item }) => item.id === targetItemId)) {
+  if (!inventoryDyeableClothingItems(source.backpack).some(({ item }) => item.id === targetItemId)) {
     return rejected(source, 'invalid-target')
   }
-  const currentTints = nativeClothingTints(target)
+  const currentTints = clothingTints(target)
   const committedTint = nativeDyeCommittedTint(swatchRows)
   if (!currentTints || committedTint === null) return rejected(source, 'invalid-target')
   const iconTints: readonly [number, number] = layer === 'cloth'
@@ -1881,9 +1964,16 @@ function nativeDyeRowsAreValid(swatchRows: readonly number[]): boolean {
     ))
 }
 
-function nativeClothingTints(
+function clothingTints(
   item: HubInventoryItem,
 ): readonly [cloth: number, trim: number] | null {
+  if (item.modItemContent?.wearable !== undefined) {
+    const tints = item.iconTints
+    return tints?.[0] === null || tints?.[0] === undefined
+      || tints[1] === null || tints[1] === undefined
+      ? null
+      : [tints[0], tints[1]]
+  }
   const recipeTints = item.recipeIndex === null
     ? undefined
     : DOWSING_EQUIPMENT_RECIPES[item.recipeIndex]?.iconTints
@@ -1916,16 +2006,8 @@ export function hubEconomyInventoryIsValid(source: HubEconomyState): boolean {
       )) return false
       seenIds.add(item.id)
       seenItems.add(item)
-      if (
-        (item.kind === 'mod-item') !== (item.modItemContent !== undefined)
-        || (item.kind === 'mod-potion') !== (item.modContent !== undefined)
-        || (item.kind === 'mod-item' && (
-          item.nativeTypeId !== 7013
-          || item.nativeSubtype !== null
-          || item.iconRecords.length !== 0
-          || item.quantity > item.modItemContent!.stackMaximum
-        ))
-      ) return false
+      if ((item.kind === 'mod-potion') !== (item.modContent !== undefined)) return false
+      if (!modItemInventoryIdentityIsValid(item)) return false
       const sack = item.nativeTypeId === 7008 && item.kind === 'sack'
       if ((item.nativeTypeId === 7008) !== (item.kind === 'sack')) return false
       if (item.contents !== undefined) {
@@ -1946,6 +2028,55 @@ export function hubEconomyInventoryIsValid(source: HubEconomyState): boolean {
     && visit(source.storage)
     && visit(equipment)
     && visit(source.fomentiusStock)
+}
+
+export function modItemInventoryIdentityIsValid(item: HubInventoryItem): boolean {
+  const content = item.modItemContent
+  if (content === undefined) return item.kind !== 'mod-item'
+  const wearable = content.wearable
+  if (wearable === undefined) {
+    return item.kind === 'mod-item'
+      && item.equipmentType === null
+      && item.nativeTypeId === MOD_ITEM_NATIVE_TYPE_ID
+      && item.nativeSubtype === null
+      && item.iconRecords.length === 0
+      && item.quantity <= content.stackMaximum
+  }
+  return item.kind === 'equipment'
+    && item.equipmentType === wearable.slot
+    && item.nativeTypeId === MOD_ITEM_NATIVE_TYPE_ID
+    && item.nativeSubtype === null
+    && item.iconRecords.length === 0
+    && item.quantity === 1
+    && item.rarity === null
+    && item.recipeIndex === null
+    && item.generatedLevel === undefined
+    && item.nativeSelector === undefined
+    && item.nativeEffects === undefined
+    && content.stackMaximum === 1
+    && modWearableContentIsValid(wearable, content.iconTrimImagePath)
+    && (wearable.slot === 'staff'
+      ? item.iconTints === undefined
+      : item.iconTints?.includes(null) === false)
+}
+
+export function modWearableContentIsValid(
+  wearable: ModWearableContent,
+  iconTrimImagePath?: string,
+): boolean {
+  const { deathShape, dyeable, slot, wornImagePath, wornTrimImagePath } = wearable
+  const hasTrim = wornTrimImagePath !== undefined
+  const maximumDeathShape = slot === 'hat' ? 3 : slot === 'robe' ? 2 : 5
+  return /^(?:hat|robe|staff)$/.test(slot)
+    && Number.isInteger(deathShape)
+    && deathShape >= 0
+    && deathShape <= maximumDeathShape
+    && typeof dyeable === 'boolean'
+    && /^(?:art|sprites)\/.+\.png$/.test(wornImagePath)
+    && (!hasTrim || /^(?:art|sprites)\/.+\.png$/.test(wornTrimImagePath))
+    && (iconTrimImagePath !== undefined) === hasTrim
+    && (!dyeable || hasTrim)
+    && (slot !== 'staff' || !hasTrim)
 }
 
 function rgbTint(color: readonly number[]): number {

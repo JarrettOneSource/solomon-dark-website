@@ -46,7 +46,9 @@ test('sdmod creates, checks, tests, packs, and generates one deterministic v1 mo
     'scripts/main.lua',
   ])
   assert.match(await readFile(join(generated, 'sd.lua'), 'utf8'), /---@field potion/)
+  assert.match(await readFile(join(generated, 'sd.lua'), 'utf8'), /wearable fun\(path: string\)/)
   assert.match(await readFile(join(generated, 'REFERENCE.md'), 'utf8'), /scene-extension/)
+  assert.match(await readFile(join(generated, 'REFERENCE.md'), 'utf8'), /sd\.art\.wearable/)
   assert.ok(messages.some(message => message.includes('graphSha256')))
 })
 

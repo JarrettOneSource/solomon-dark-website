@@ -361,7 +361,7 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
   })), /activity/)
 })
 
-test('protocol 78 retains exact A or B slots for HUD concentration replacement', () => {
+test('protocol 79 retains exact A or B slots for HUD concentration replacement', () => {
   assert.throws(() => decodeClientGameMessage(JSON.stringify({
     type: 'client-select-concentration-slot',
     skillId: 57,
@@ -452,7 +452,7 @@ test('protocol v42 bounds Lua requests and structured results by wire bytes and 
   }
 })
 
-test('protocol v78 accepts every authoritative inventory and NPC action and rejects malformed variants', () => {
+test('protocol v79 accepts every authoritative inventory and NPC action and rejects malformed variants', () => {
   const actions = [
     { type: 'acknowledge-npc-hint', interactionId: 'annalist' },
     { type: 'acknowledge-npc-hint', interactionId: 'fomentius' },
@@ -507,7 +507,7 @@ test('protocol v78 accepts every authoritative inventory and NPC action and reje
   }
 })
 
-test('protocol v78 carries authoritative present Skorcha population and animation state', () => {
+test('protocol v79 carries authoritative present Skorcha population and animation state', () => {
   const snapshot = createGameSnapshot(createGameSimulation({
     'player-1': CHARACTER,
   }, { hubTraderAnimationSeed: 2 }), 'player-1')
@@ -1447,8 +1447,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v78 carries College admission, observer mode, Hub activity, NPC state, Goodie actions, tutorial fields/state, Hagatha runtime, Imp effects, save intent, selected skills, sacks, dyes, and gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 78)
+test('protocol v79 carries Web Lua wearables, College admission, observer mode, Hub activity, NPC state, Goodie actions, tutorial fields/state, Hagatha runtime, Imp effects, save intent, selected skills, sacks, dyes, and gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 79)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -1599,7 +1599,7 @@ test('protocol v78 carries College admission, observer mode, Hub activity, NPC s
   )
 })
 
-test('protocol v78 carries consistent persistent Tutorial camera-lock clocks', () => {
+test('protocol v79 carries consistent persistent Tutorial camera-lock clocks', () => {
   const entered = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
     materializeStockTutorial(Buffer.alloc(16, 73)),
@@ -4042,7 +4042,7 @@ test('protocol validates participant ownership and the recovered Hub room graph'
   const memorial = archiveHubMemorialPortrait(frame.world.memorial, {
     capturedAtTick: 300,
     config: CHARACTER,
-    equipment: { hat: null, robe: null, weapon: null },
+    equipment: { hat: null, robe: null, weapon: { kind: 'staff', selector: 5 } },
     headingIndex: 12,
     playerId: 'player-1',
     portraitScale: 0.925,
@@ -4056,6 +4056,10 @@ test('protocol validates participant ownership and the recovered Hub room graph'
   if (withMemorial.type !== 'server-snapshot'
     || withMemorial.frame.world.kind !== 'hub') throw new Error('expected Hub frame')
   assert.equal(withMemorial.frame.world.memorial.slots[2]?.portrait?.config.displayName, 'Helvidius')
+  assert.deepEqual(
+    withMemorial.frame.world.memorial.slots[2]?.portrait?.equipment.weapon,
+    { kind: 'staff', selector: 5 },
+  )
 
   const shortMemorial = JSON.parse(JSON.stringify(memorial))
   shortMemorial.slots.pop()
@@ -4482,6 +4486,20 @@ test('full Boneyard welcome strictly round-trips a content-identified mod Sack',
     modId: 'example.items',
     stackMaximum: 99,
   }
+  const wearableContent = {
+    ...itemContent,
+    contentId: '5000000000000000004',
+    iconTrimImagePath: 'art/starfall-robe-icon-trim.png',
+    key: 'starfall_robe',
+    stackMaximum: 1,
+    wearable: {
+      deathShape: 2,
+      dyeable: true,
+      slot: 'robe' as const,
+      wornImagePath: 'art/starfall-robe.png',
+      wornTrimImagePath: 'art/starfall-robe-trim.png',
+    },
+  }
   const spawned = spawnBoneyardLootSpecs(state.world.loot, [{
     activationDelayTicks: 0,
     id: 0,
@@ -4524,8 +4542,56 @@ test('full Boneyard welcome strictly round-trips a content-identified mod Sack',
     phase: 0,
     position: { x: 850, y: 600 },
     source: 'enemy',
+  }, {
+    activationDelayTicks: 0,
+    id: 0,
+    item: {
+      equipmentType: 'robe',
+      iconRecords: [],
+      iconTints: [0x6688cc, 0xffdd88],
+      id: 79,
+      kind: 'equipment',
+      modItemContent: wearableContent,
+      name: 'Starfall Robe',
+      nativeSubtype: null,
+      nativeTypeId: 7013,
+      quantity: 1,
+      rarity: null,
+      recipeIndex: null,
+    },
+    kind: 'sack',
+    nativeTypeId: 2013,
+    phase: 0,
+    position: { x: 900, y: 600 },
+    source: 'enemy',
   }], 1)
-  state = { ...state, tick: 1, world: { ...state.world, loot: spawned.store } }
+  const playerIndex = state.playerEntities.identities.findIndex(identity => identity.playerId === 'player-1')
+  const economy = state.playerEntities.economies[playerIndex]!
+  const wearableItem = {
+    equipmentType: 'robe' as const,
+    iconRecords: [],
+    iconTints: [0x6688cc, 0xffdd88] as const,
+    id: economy.nextItemId,
+    kind: 'equipment' as const,
+    modItemContent: wearableContent,
+    name: 'Starfall Robe',
+    nativeSubtype: null,
+    nativeTypeId: 7013,
+    quantity: 1,
+    rarity: null,
+    recipeIndex: null,
+  }
+  state = {
+    ...state,
+    playerEntities: {
+      ...state.playerEntities,
+      economies: state.playerEntities.economies.map((entry, index) => index === playerIndex
+        ? { ...entry, backpack: [...entry.backpack, wearableItem], nextItemId: entry.nextItemId + 1 }
+        : entry),
+    },
+    tick: 1,
+    world: { ...state.world, loot: spawned.store },
+  }
   const welcome: ServerWelcomeMessage = {
     type: 'server-welcome',
     boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' }],
@@ -4565,6 +4631,15 @@ test('full Boneyard welcome strictly round-trips a content-identified mod Sack',
   assert.throws(
     () => decodeServerGameMessage(JSON.stringify(undeclaredField)),
     /itemContentHint is not allowed/,
+  )
+  const mismatchedWearable = JSON.parse(encodeGameMessage(welcome))
+  const savedWearable = mismatchedWearable.snapshot.players['player-1'].economy.backpack.find(
+    (item: { name: string }) => item.name === 'Starfall Robe',
+  )
+  savedWearable.equipmentType = 'hat'
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(mismatchedWearable)),
+    /invalid mod item/,
   )
 })
 

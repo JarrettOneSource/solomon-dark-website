@@ -20,7 +20,7 @@ import {
   MAX_NATIVE_DYE_SELECTIONS,
   findInventoryItem,
   nativeDyeMixedTint,
-  nativeInventoryClothingItems,
+  inventoryDyeableClothingItems,
   nativeInventoryItemCanUnforge,
   nativeUnforgeOutcomeText,
   projectInventoryItems,
@@ -589,7 +589,7 @@ function NativeHubSurface({
       return
     }
     if (dyeModal.targetItemId !== null
-      && !nativeInventoryClothingItems(economy.backpack).some(
+      && !inventoryDyeableClothingItems(economy.backpack).some(
         ({ item }) => item.id === dyeModal.targetItemId,
       )) {
       setDyeModal((current) => current ? { ...current, targetItemId: null } : current)
@@ -1748,7 +1748,7 @@ function DyeClothingActions({
   const projected = projectInventoryItems(economy.backpack)
     .slice(0, HUB_INVENTORY_GRID.capacity)
   const eligibleIds = new Set(
-    nativeInventoryClothingItems(economy.backpack).map(({ item }) => item.id),
+    inventoryDyeableClothingItems(economy.backpack).map(({ item }) => item.id),
   )
   const targetIndex = modal.targetItemId === null
     ? -1

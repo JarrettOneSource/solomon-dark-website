@@ -14,11 +14,14 @@ import {
 } from './core-kernels/primary-spells.ts'
 
 export {
+  isPlayerModEquipmentAppearance,
   playerDeathEquipmentAppearance,
   playerLivingEquipmentAppearance,
+  playerLivingNativeEquipmentAppearance,
   type PlayerDeathEquipmentAppearance,
   type PlayerEquipmentTintedSelector,
   type PlayerLivingEquipmentAppearance,
+  type PlayerRenderableEquipmentAppearance,
 } from './core-kernels/player-equipment-appearance.ts'
 
 const STAFF_FRONT: readonly boolean[] = [

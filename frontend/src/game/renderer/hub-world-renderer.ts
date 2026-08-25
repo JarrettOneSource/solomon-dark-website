@@ -50,6 +50,8 @@ import {
 } from './hub-npc-marker-presentation.ts'
 import { NATIVE_HUB_NPC_CATALOG } from '../core-kernels/native-hub-npc.ts'
 import { hub } from '../../lib/assets.ts'
+import type { GameModAsset } from '../protocol/game-protocol.ts'
+import { loadModPresentationTextures } from './mod-presentation-assets.ts'
 
 export interface HubRendererDiagnostics {
   averageFrameMs: number
@@ -134,6 +136,7 @@ export type HubWorldPresentationSettings = Pick<
 interface HubWorldRendererOptions {
   devicePixelRatio?: number
   initialSnapshot: HubPresentationFrame
+  modAssets?: readonly GameModAsset[]
   now?: () => number
   onDiagnostics?: (diagnostics: HubRendererDiagnostics) => void
   playerId: string
@@ -144,7 +147,10 @@ interface HubWorldRendererOptions {
 export async function createHubWorldRenderer(
   options: HubWorldRendererOptions,
 ): Promise<HubWorldRenderer> {
-  const textures = await loadHubWorldTextures()
+  const [textures, modTextures] = await Promise.all([
+    loadHubWorldTextures(),
+    loadModPresentationTextures(options.modAssets ?? []),
+  ])
   const application = new Application()
   const devicePixelRatio = options.devicePixelRatio ?? window.devicePixelRatio
   let viewport = options.viewport
@@ -180,6 +186,7 @@ export async function createHubWorldRenderer(
   } catch (error) {
     if (application.renderer) application.destroy({ removeView: true })
     destroyHubWorldTextureFrames(textures)
+    modTextures.destroy()
     throw error
   }
   application.stop()
@@ -189,11 +196,13 @@ export async function createHubWorldRenderer(
     options.initialSnapshot.tick,
     traderAnimationSeed,
     application.renderer,
+    modTextures,
   )
   const privateRoomScene = new HubPrivateRoomScene(
     textures,
     traderAnimationSeed,
     application.renderer,
+    modTextures,
   )
   courtyardScene.stage.scale.set(baseCameraScale)
   privateRoomScene.world.scale.set(baseCameraScale)
@@ -791,6 +800,7 @@ export async function createHubWorldRenderer(
       secondaryScreenFlash.destroy()
       fadeCover.destroy()
       destroyHubWorldTextureFrames(textures)
+      modTextures.destroy()
       application.destroy({ removeView: true })
       canvas.remove()
     },

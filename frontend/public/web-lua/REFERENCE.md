@@ -2,6 +2,17 @@
 
 API: `1.0.0`
 
+## Art
+
+- `sd.art.sprite(path, options)` declares one PNG sprite.
+- `sd.art.sheet(spec)` declares an explicit PNG frame grid.
+- `sd.art.wearable(path)` declares a 170 px actor sheet for an existing hat, robe, or staff slot.
+- `sd.art.sound(path, options)` and `sd.art.music(path, options)` declare audio.
+- `sd.art.scene(spec)` and `sd.art.boneyard(spec)` declare document assets.
+- `sd.art.ref(key)` references a named asset from content.
+
+## Content
+
 | Kind | Required fields | Allowed fields |
 | --- | --- | --- |
 | `affix` | `modifiers`, `name` | `applies_to`, `art`, `description`, `equipment`, `modifiers`, `name`, `outcome`, `persistence`, `presentation`, `tags` |

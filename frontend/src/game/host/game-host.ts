@@ -33,6 +33,7 @@ import {
   getPlayerProgression,
   grantGameSimulationPlayerExperience,
   projectDetachedGameSimulationPlayer,
+  reconcileGameSimulationPlayerModPackages,
   rejoinGameSimulationPlayer,
   removePlayerCharacter,
   returnGameSimulationToHub,
@@ -1095,6 +1096,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         let stagedPartyRejoin: PartyRejoinSlot | null = null
         let saveIntegrity: GameSaveIntegrity | null = null
         let savedProfile: RestoredGameSaveProfile | null = null
+        let retainedSaveModIds: readonly string[] | null = null
         const playerPartyIdentity = createPartyIdentity()
         if (
           partyRejoinSlot !== null
@@ -1164,6 +1166,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           }
           const activeManifest = authenticated.content?.manifest ?? content
           const modMismatch = !sameContentMods(savedProfile.mods, activeManifest.mods)
+          const savedMods = savedProfile.mods
+          retainedSaveModIds = activeManifest.mods
+            .filter(active => savedMods.some(saved => sameContentMod(saved, active)))
+            .map(mod => mod.id)
           if (modMismatch && (partyRecoveryClaim !== null || !message.allowModMismatch)) {
             disconnect(
               socket,
@@ -1194,7 +1200,11 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
               return
             }
             playerId = restored.playerId
-            let restoredState = restored.state
+            let restoredState = reconcileGameSimulationPlayerModPackages(
+              restored.state,
+              playerId,
+              retainedSaveModIds,
+            )
             let restoredBoneyard = restored.loadedBoneyard
             if (partyRejoinSlot !== null) {
               if (
@@ -1358,7 +1368,16 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
               playerId,
               savedProfile,
             )
-            replaceStateForPlayer(playerId, hydrated)
+            replaceStateForPlayer(
+              playerId,
+              retainedSaveModIds === null
+                ? hydrated
+                : reconcileGameSimulationPlayerModPackages(
+                    hydrated,
+                    playerId,
+                    retainedSaveModIds,
+                  ),
+            )
           }
           if (options.initialPlayerExperience) {
             const activeState = stateForPlayer(playerId)

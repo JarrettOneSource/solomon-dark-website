@@ -80,6 +80,7 @@ import {
   moveInventoryItem,
   readLibrarianBook,
   readInventorySkillBook,
+  reconcileHubEconomyModPackages,
   selectHubBoast,
   transferInventoryItem,
   unforgeInventoryItem,
@@ -1201,6 +1202,22 @@ export function getPlayerEconomy(
   const economy = playerEconomyAt(state.playerEntities, playerId)
   if (!economy) throw new Error(`game simulation has no player economy ${playerId}`)
   return economy
+}
+
+export function reconcileGameSimulationPlayerModPackages(
+  state: GameSimulationState,
+  playerId: PlayerId,
+  availableModIds: readonly string[],
+): GameSimulationState {
+  const economy = playerEconomyAt(state.playerEntities, playerId)
+  if (!economy) return state
+  const reconciled = reconcileHubEconomyModPackages(economy, availableModIds)
+  return reconciled === economy
+    ? state
+    : {
+        ...state,
+        playerEntities: replacePlayerEconomy(state.playerEntities, playerId, reconciled),
+      }
 }
 
 export function applyGameSimulationHubAction(

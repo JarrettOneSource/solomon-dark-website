@@ -176,6 +176,11 @@ export class WebLuaDefinitionRuntime {
         key: text(key, 'asset reference key'),
         kind: 'asset-reference' as const,
       }),
+      wearable: (path: unknown) => this.#asset('sheet', {
+        animations: { wearable: [1] },
+        frame: { height: 170, width: 170 },
+        image: text(path, 'wearable art path'),
+      }),
     })
     const kit = Object.fromEntries(WEB_LUA_CONTENT_KINDS.map(contentKind => [
       luaMember(contentKind),

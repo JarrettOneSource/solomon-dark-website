@@ -250,6 +250,63 @@ test("Sorceror's Amulet ItemInfo carries the exact authored description and effe
   )
 })
 
+test('mod wearable tooltips show the authored description and affix names', () => {
+  const item: HubInventoryItem = {
+    equipmentType: 'robe',
+    iconRecords: [],
+    iconTints: [0xffffff, 0xffffff],
+    id: 90,
+    kind: 'equipment',
+    modAffixes: [{
+      contentId: '5000000000000000002',
+      modId: 'example.wearables',
+      modifiers: [],
+      name: 'Starlit',
+    }],
+    modItemContent: {
+      contentId: '5000000000000000001',
+      description: 'A robe from beyond.',
+      icon: {
+        atlasId: 'example.wearables:starfall_icon',
+        frame: {
+          centerOffsetX: 0,
+          centerOffsetY: 0,
+          contentHeight: 50,
+          contentWidth: 50,
+          height: 50,
+          logicalHeight: 50,
+          logicalWidth: 50,
+          width: 50,
+          x: 0,
+          y: 0,
+        },
+        frameIndex: 0,
+        imagePath: 'art/starfall-icon.png',
+      },
+      key: 'starfall_robe',
+      modId: 'example.wearables',
+      stackMaximum: 1,
+      wearable: {
+        deathShape: 2,
+        dyeable: false,
+        slot: 'robe',
+        wornImagePath: 'art/starfall-robe.png',
+      },
+    },
+    name: 'Starfall Robe',
+    nativeSubtype: null,
+    nativeTypeId: 7013,
+    quantity: 1,
+    rarity: null,
+    recipeIndex: null,
+  }
+  assert.deepEqual(hubItemTooltipLines(item).map(({ text }) => text), [
+    'Starfall Robe',
+    'A robe from beyond.',
+    'Starlit',
+  ])
+})
+
 test('retail StoreGrid selected state uses only the live Windows CLICK AGAIN records', () => {
   assert.deepEqual(HUB_STOREGRID_SELECTED_RECORDS, {
     buyClickAgain: 84,

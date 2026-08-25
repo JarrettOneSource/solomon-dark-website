@@ -254,6 +254,7 @@ The public namespaces are definition-time only:
 ```lua
 sd.art.sprite(path, options)
 sd.art.sheet(spec)
+sd.art.wearable(path)
 sd.art.sound(path, options)
 sd.art.music(path, options)
 

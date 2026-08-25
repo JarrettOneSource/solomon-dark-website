@@ -15,9 +15,11 @@ import type {
 import {
   createPlayerCharacterDrawPlan,
   createPlayerDeathDrawPlan,
+  isPlayerModEquipmentAppearance,
   playerEquippedElementEffectScale,
   playerDeathEquipmentAppearance,
   playerLivingEquipmentAppearance,
+  playerCharacterStaffIsFront,
 } from '../player-character-presentation.ts'
 import { NativeElementVfxView } from './native-element-vfx-view.ts'
 import { hubWorldDepthForActor, spriteFrameIndex } from './hub-render-contract.ts'
@@ -31,6 +33,7 @@ import {
   nativePlayerMagicShieldPlan,
   nativePlayerMaterialTint,
 } from './native-secondary-presentation.ts'
+import type { ModPresentationTextures, ModWearableTextureFrames } from './mod-presentation-assets.ts'
 
 const DEATH_HAT_PRIMARY = 7
 const DEATH_HAT_SECONDARY = 8
@@ -61,6 +64,7 @@ export class PlayerWorldView {
   private readonly deathLayers: readonly Sprite[]
   private readonly deathShadowLayers: readonly Sprite[]
   private readonly magicShield: Sprite
+  private readonly modTextures: ModPresentationTextures
   private readonly textures: PlayerWorldTextures
   private readonly deathBaseTints = Array.from(
     { length: PLAYER_DEATH_LAYER_COUNT },
@@ -80,8 +84,10 @@ export class PlayerWorldView {
   constructor(
     element: WizardElement,
     textures: PlayerWorldTextures,
+    modTextures: ModPresentationTextures,
   ) {
     this.textures = textures
+    this.modTextures = modTextures
     const playerTextures = textures.players[element]
     this.container.sortableChildren = true
     this.container.eventMode = 'none'
@@ -204,18 +210,51 @@ export class PlayerWorldView {
       player.config.element,
       player.economy.equipment,
     )
-    const weaponTextures = livingAppearance.weapon === null
+    const modWeapon = livingAppearance.weapon !== null
+      && isPlayerModEquipmentAppearance(livingAppearance.weapon)
+    const modWeaponTextures = modWeapon
+      ? this.modTextures.wearable(livingAppearance.weapon.content)
+      : null
+    const weaponTextures = livingAppearance.weapon === null || modWeapon
       ? null
       : livingAppearance.weapon.kind === 'staff'
         ? this.textures.equipment.staffs[livingAppearance.weapon.selector]
         : this.textures.equipment.wand
-    if (livingAppearance.weapon !== null && weaponTextures === undefined) {
+    if (
+      livingAppearance.weapon !== null
+      && !isPlayerModEquipmentAppearance(livingAppearance.weapon)
+      && weaponTextures === undefined
+    ) {
       throw new RangeError(
         `Missing native ${livingAppearance.weapon.kind} selector ${livingAppearance.weapon.selector}`,
       )
     }
-    const hasWeapon = weaponTextures !== null
+    if (modWeapon && modWeaponTextures?.slot !== 'staff') {
+      throw new RangeError('Missing mod staff wearable textures')
+    }
+    const modRobeTextures = livingAppearance.robe !== null
+      && isPlayerModEquipmentAppearance(livingAppearance.robe)
+      ? this.modTextures.wearable(livingAppearance.robe.content)
+      : null
+    if (modRobeTextures && modRobeTextures.slot !== 'robe') {
+      throw new RangeError('Missing mod robe wearable textures')
+    }
+    const modHatTextures = livingAppearance.hat !== null
+      && isPlayerModEquipmentAppearance(livingAppearance.hat)
+      ? this.modTextures.wearable(livingAppearance.hat.content)
+      : null
+    if (modHatTextures && modHatTextures.slot !== 'hat') {
+      throw new RangeError('Missing mod hat wearable textures')
+    }
+    const hasWeapon = weaponTextures !== null || modWeaponTextures !== null
     const hasStaff = livingAppearance.weapon?.kind === 'staff'
+    const modStaffFront = modWeaponTextures
+      ? playerCharacterStaffIsFront(heading, attachmentPose)
+      : null
+    const robeHasSecondary = livingAppearance.robe !== null
+      && (modRobeTextures ? modRobeTextures.secondary !== null : true)
+    const hatHasSecondary = livingAppearance.hat !== null
+      && (modHatTextures ? modHatTextures.secondary !== null : true)
     this.currentDeathFrame = death.visible ? death.frame : null
 
     this.container.position.set(player.position.x, player.position.y)
@@ -224,7 +263,7 @@ export class PlayerWorldView {
     // The extracted native item banks already partition each pose into an
     // all-transparent back or front cell from Clothes point-0 depth. Keeping
     // both passes live preserves every melee pose without duplicating pixels.
-    this.staffBack.visible = !death.visible && hasWeapon
+    this.staffBack.visible = !death.visible && hasWeapon && modStaffFront !== true
     this.orbFrontBase.container.visible = !death.visible
       && elementEffectVisible
       && hasStaff
@@ -234,25 +273,31 @@ export class PlayerWorldView {
       && hasStaff
       && plan.orbPasses.frontOverlay
     this.robe.visible = !death.visible
-    this.robeSecondary.visible = !death.visible && livingAppearance.robe !== null
+    this.robeSecondary.visible = !death.visible && robeHasSecondary
     this.fixed.visible = !death.visible
-    this.fixedSecondary.visible = !death.visible && livingAppearance.robe !== null
-    this.staffFront.visible = !death.visible && hasWeapon
+    this.fixedSecondary.visible = !death.visible && robeHasSecondary
+    this.staffFront.visible = !death.visible && hasWeapon && modStaffFront !== false
     this.head.visible = !death.visible
-    this.headSecondary.visible = !death.visible && livingAppearance.hat !== null
+    this.headSecondary.visible = !death.visible && hatHasSecondary
     this.updateDeathLayers(playerTextures, death, deathAppearance)
     const hitAlpha = playerHitOverlayAlpha(player.progression, tick)
     this.hitOverlay.alpha = hitAlpha
     this.hitOverlay.visible = !death.visible && hitAlpha > 0
-    this.hitStaffBack.visible = hasWeapon
+    this.hitStaffBack.visible = hasWeapon && modStaffFront !== true
     this.hitRobe.visible = true
-    this.hitRobeSecondary.visible = livingAppearance.robe !== null
+    this.hitRobeSecondary.visible = robeHasSecondary
     this.hitFixed.visible = true
-    this.hitFixedSecondary.visible = livingAppearance.robe !== null
-    this.hitStaffFront.visible = hasWeapon
+    this.hitFixedSecondary.visible = robeHasSecondary
+    this.hitStaffFront.visible = hasWeapon && modStaffFront !== false
     this.hitHead.visible = true
-    this.hitHeadSecondary.visible = livingAppearance.hat !== null
-    if (weaponTextures !== null) {
+    this.hitHeadSecondary.visible = hatHasSecondary
+    if (modWeaponTextures !== null) {
+      const texture = wearableFrame(modWeaponTextures, 'primary', heading, attachmentPose)
+      this.staffBack.texture = texture
+      this.staffFront.texture = texture
+      this.hitStaffBack.texture = texture
+      this.hitStaffFront.texture = texture
+    } else if (weaponTextures !== null) {
       this.staffBack.texture = weaponTextures.back[heading]![attachmentPose]!
       this.staffFront.texture = weaponTextures.front[heading]![attachmentPose]!
       this.hitStaffBack.texture = weaponTextures.back[heading]![attachmentPose]!
@@ -263,7 +308,19 @@ export class PlayerWorldView {
       this.fixed.texture = playerTextures.fixed[heading]![attachmentPose]!
       this.robePrimaryTint = 0xffffff
       this.robeSecondaryTint = 0xffffff
+    } else if (modRobeTextures !== null && isPlayerModEquipmentAppearance(livingAppearance.robe!)) {
+      this.robe.texture = wearableFrame(modRobeTextures, 'primary', heading, pose)
+      if (modRobeTextures.secondary) {
+        this.robeSecondary.texture = wearableFrame(modRobeTextures, 'secondary', heading, pose)
+      }
+      this.fixed.texture = this.textures.equipment.robeFixed.primary[heading]![attachmentPose]!
+      this.fixedSecondary.texture = this.textures.equipment.robeFixed.secondary[heading]![attachmentPose]!
+      this.robePrimaryTint = livingAppearance.robe.primaryTint
+      this.robeSecondaryTint = livingAppearance.robe.secondaryTint
     } else {
+      if (isPlayerModEquipmentAppearance(livingAppearance.robe!)) {
+        throw new RangeError('Missing mod robe wearable textures')
+      }
       const robeTextures = this.textures.equipment.robes[livingAppearance.robe.selector]
       if (robeTextures === undefined) {
         throw new RangeError(`Missing native robe selector ${livingAppearance.robe.selector}`)
@@ -282,7 +339,17 @@ export class PlayerWorldView {
       this.head.texture = playerTextures.head[heading]!
       this.headPrimaryTint = 0xffffff
       this.headSecondaryTint = 0xffffff
+    } else if (modHatTextures !== null && isPlayerModEquipmentAppearance(livingAppearance.hat!)) {
+      this.head.texture = wearableFrame(modHatTextures, 'primary', heading, 0)
+      if (modHatTextures.secondary) {
+        this.headSecondary.texture = wearableFrame(modHatTextures, 'secondary', heading, 0)
+      }
+      this.headPrimaryTint = livingAppearance.hat.primaryTint
+      this.headSecondaryTint = livingAppearance.hat.secondaryTint
     } else {
+      if (isPlayerModEquipmentAppearance(livingAppearance.hat!)) {
+        throw new RangeError('Missing mod hat wearable textures')
+      }
       const hatTextures = this.textures.equipment.hats[livingAppearance.hat.selector]
       if (hatTextures === undefined) {
         throw new RangeError(`Missing native hat selector ${livingAppearance.hat.selector}`)
@@ -593,6 +660,18 @@ export function actorSprite(texture: Texture, zIndex: number): Sprite {
   sprite.zIndex = zIndex
   sprite.eventMode = 'none'
   return sprite
+}
+
+function wearableFrame(
+  textures: ModWearableTextureFrames,
+  layer: 'primary' | 'secondary',
+  heading: number,
+  pose: number,
+): Texture {
+  const bank = layer === 'primary' ? textures.primary : textures.secondary
+  const poses = bank?.[heading]
+  if (!poses || poses.length === 0) throw new RangeError(`Missing mod wearable ${layer} frame`)
+  return poses[Math.min(pose, poses.length - 1)]!
 }
 
 function createDeathLayers(

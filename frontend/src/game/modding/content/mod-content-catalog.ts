@@ -1,9 +1,11 @@
-import type {
-  HubInventoryItem,
-  ModConsumableCatalogEntry,
-  ModConsumableContent,
-  ModItemCatalogEntry,
-  ModItemContent,
+import {
+  MOD_ITEM_NATIVE_TYPE_ID,
+  type HubInventoryItem,
+  type ModItemIcon,
+  type ModConsumableCatalogEntry,
+  type ModConsumableContent,
+  type ModItemCatalogEntry,
+  type ModItemContent,
 } from '../../core-kernels/hub-economy.ts'
 import type {
   CompiledWebLuaContent,
@@ -16,6 +18,7 @@ import type {
 import {
   PreparedModAssetCatalog,
   type PreparedModAsset,
+  type PreparedModSpriteAsset,
 } from '../assets/index.ts'
 
 const FIRST_CUSTOM_POTION_SUBTYPE = 6
@@ -412,9 +415,11 @@ export function compileModContentCatalog(
   const scenes = sceneCandidates.sort(compareContent).map(common => compileScene(common, roomIds))
   const sceneExtensions = sceneExtensionCandidates.sort(compareContent).map(compileSceneExtension)
   const itemIds = new Set([...items, ...potions].map(item => item.contentId))
+  const wearableItemIds = new Set(items.filter(item => item.catalog.content.wearable).map(item => item.contentId))
   const shops = shopCandidates.sort(compareContent).map(common => compileShop(
     common,
     itemIds,
+    wearableItemIds,
     new Set(affixPools.map(pool => pool.contentId)),
   ))
   const ui = uiCandidates.sort(compareContent).map(compileUi)
@@ -483,18 +488,21 @@ export function modItemInventoryItem(
   catalog: ModItemCatalogEntry,
   quantity = 1,
 ): HubInventoryItem {
+  const wearable = catalog.content.wearable
+  if (wearable && quantity !== 1) throw new Error('mod wearable quantity must be one')
   if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > catalog.content.stackMaximum) {
     throw new Error(`mod item quantity must be within 1..${catalog.content.stackMaximum}`)
   }
   return Object.freeze({
-    equipmentType: null,
+    equipmentType: wearable?.slot ?? null,
     iconRecords: Object.freeze([]),
+    ...(catalog.iconTints === undefined ? {} : { iconTints: catalog.iconTints }),
     id: 0,
-    kind: 'mod-item' as const,
+    kind: wearable ? 'equipment' as const : 'mod-item' as const,
     modItemContent: catalog.content,
     name: catalog.name,
     nativeSubtype: null,
-    nativeTypeId: 7013,
+    nativeTypeId: MOD_ITEM_NATIVE_TYPE_ID,
     quantity,
     rarity: null,
     recipeIndex: null,
@@ -542,28 +550,151 @@ function compileItem(
   const stackMaximum = stack.maximum === undefined
     ? 1
     : integer(stack.maximum, 1, 9_999, `${common.key}.stack.maximum`)
+  const equipment = common.fields.equipment === undefined
+    ? null
+    : object(common.fields.equipment, `${common.key}.equipment`)
+  const wearable = equipment === null
+    ? null
+    : compileWearable(common, equipment, assets)
+  if (wearable && stackMaximum !== 1) {
+    throw new Error(`${common.modId}:${common.key} wearable equipment cannot stack`)
+  }
+  const iconTrim = common.art.icon_trim
+  const iconTrimAsset = iconTrim ? assets.image(common.modId, iconTrim.key) : null
+  if ((iconTrimAsset === null) !== (wearable?.wornTrim === null || wearable === null)) {
+    throw new Error(`${common.modId}:${common.key} wearable icon and worn trim layers must be paired`)
+  }
+  if (iconTrimAsset && !sameIconFrame(sprite.frames[0]!, iconTrimAsset.frames[0]!)) {
+    throw new Error(`${common.modId}:${common.key} wearable icon layers must have identical frames`)
+  }
+  if (!wearable && (common.art.worn || common.art.worn_trim || common.art.icon_trim)) {
+    throw new Error(`${common.modId}:${common.key} wearable art requires equipment`)
+  }
+  const iconContent = (asset: PreparedModSpriteAsset): ModItemIcon => Object.freeze({
+    atlasId: asset.id,
+    frame: asset.frames[0]!,
+    frameIndex: 0,
+    imagePath: asset.path,
+  })
   const itemContent: ModItemContent = Object.freeze({
     contentId: common.contentId,
     description: common.description,
-    icon: Object.freeze({
-      atlasId: sprite.id,
-      frame: sprite.frames[0]!,
-      frameIndex: 0,
-      imagePath: sprite.path,
-    }),
+    icon: iconContent(sprite),
+    ...(iconTrimAsset ? { iconTrimImagePath: iconTrimAsset.path } : {}),
     key: common.key,
     modId: common.modId,
     stackMaximum,
+    ...(wearable ? { wearable: wearable.content } : {}),
   })
   const use = common.fields.use
   if (use !== undefined && !isRule(use)) throw new Error(`${common.modId}:${common.key} item use must be a rule`)
+  if (wearable && use !== undefined) throw new Error(`${common.modId}:${common.key} wearable equipment cannot be consumed`)
   return Object.freeze({
     ...common,
-    catalog: Object.freeze({ content: itemContent, name: common.name }),
+    catalog: Object.freeze({
+      content: itemContent,
+      ...(wearable?.iconTints ? { iconTints: wearable.iconTints } : {}),
+      name: common.name,
+    }),
     contentKind: 'item' as const,
     stackMaximum,
     use: use ?? null,
   })
+}
+
+function compileWearable(
+  common: PreparedModContentEntry,
+  equipment: Record<string, WebLuaDefinitionValue>,
+  assets: PreparedModAssetCatalog,
+): Readonly<{
+  content: NonNullable<ModItemContent['wearable']>
+  iconTints: readonly [number, number] | null
+  wornTrim: PreparedModSpriteAsset | null
+}> {
+  exactObjectKeys(equipment, ['death_shape', 'dyeable', 'slot', 'tints'], `${common.key}.equipment`)
+  const slot = equipment.slot
+  if (slot !== 'hat' && slot !== 'robe' && slot !== 'staff') {
+    throw new Error(`${common.modId}:${common.key} equipment slot must be hat, robe, or staff`)
+  }
+  const wornBinding = common.art.worn
+  if (!wornBinding) throw new Error(`${common.modId}:${common.key} wearable equipment requires art.worn`)
+  const worn = assets.image(common.modId, wornBinding.key)
+  const maximumRows = slot === 'hat' ? 1 : slot === 'robe' ? 5 : 10
+  validateWearableSheet(worn, maximumRows, `${common.modId}:${common.key}.art.worn`)
+  const wornTrimBinding = common.art.worn_trim
+  const wornTrim = wornTrimBinding ? assets.image(common.modId, wornTrimBinding.key) : null
+  if (wornTrim) {
+    validateWearableSheet(wornTrim, maximumRows, `${common.modId}:${common.key}.art.worn_trim`)
+    if (worn.width !== wornTrim.width || worn.height !== wornTrim.height) {
+      throw new Error(`${common.modId}:${common.key} wearable worn layers must have identical dimensions`)
+    }
+  }
+  const dyeable = equipment.dyeable === undefined
+    ? false
+    : boolean(equipment.dyeable, `${common.key}.equipment.dyeable`)
+  if (slot === 'staff' && (dyeable || wornTrim)) {
+    throw new Error(`${common.modId}:${common.key} staff equipment cannot declare dye layers`)
+  }
+  if (dyeable && !wornTrim) {
+    throw new Error(`${common.modId}:${common.key} dyeable equipment requires worn and icon trim layers`)
+  }
+  const maximumDeathShape = slot === 'hat' ? 3 : slot === 'robe' ? 2 : 5
+  const deathShape = equipment.death_shape === undefined
+    ? 0
+    : integer(equipment.death_shape, 0, maximumDeathShape, `${common.key}.equipment.death_shape`)
+  const iconTints = slot === 'staff'
+    ? null
+    : (() => {
+        const tints = equipment.tints === undefined
+          ? {}
+          : object(equipment.tints, `${common.key}.equipment.tints`)
+        exactObjectKeys(tints, ['cloth', 'trim'], `${common.key}.equipment.tints`)
+        return Object.freeze([
+          tints.cloth === undefined
+            ? 0xffffff
+            : integer(tints.cloth, 0, 0xffffff, `${common.key}.equipment.tints.cloth`),
+          tints.trim === undefined
+            ? 0xffffff
+            : integer(tints.trim, 0, 0xffffff, `${common.key}.equipment.tints.trim`),
+        ] as const)
+      })()
+  if (slot === 'staff' && equipment.tints !== undefined) {
+    throw new Error(`${common.modId}:${common.key} staff equipment cannot declare tints`)
+  }
+  return Object.freeze({
+    content: Object.freeze({
+      deathShape,
+      dyeable,
+      slot,
+      wornImagePath: worn.path,
+      ...(wornTrim ? { wornTrimImagePath: wornTrim.path } : {}),
+    }),
+    iconTints,
+    wornTrim,
+  })
+}
+
+function validateWearableSheet(
+  asset: PreparedModSpriteAsset,
+  maximumRows: number,
+  field: string,
+): void {
+  if (asset.assetKind !== 'sheet' || asset.width !== 24 * 170 || asset.height % 170 !== 0) {
+    throw new Error(`${field} must be a 24-column sheet of 170 px frames`)
+  }
+  const rows = asset.height / 170
+  if (rows < 1 || rows > maximumRows || asset.frames.length !== rows * 24) {
+    throw new Error(`${field} must contain 1..${maximumRows} pose rows`)
+  }
+}
+
+function sameIconFrame(left: ModItemIcon['frame'], right: ModItemIcon['frame']): boolean {
+  return left.width === right.width
+    && left.height === right.height
+    && left.logicalWidth === right.logicalWidth
+    && left.logicalHeight === right.logicalHeight
+    && left.centerOffsetX === right.centerOffsetX
+    && left.centerOffsetY === right.centerOffsetY
 }
 
 function compilePowerup(common: PreparedModContentEntry): PreparedModPowerupDefinition {
@@ -787,6 +918,7 @@ function compileSceneExtension(common: PreparedModContentEntry): PreparedModScen
 function compileShop(
   common: PreparedModContentEntry,
   itemIds: ReadonlySet<string>,
+  wearableItemIds: ReadonlySet<string>,
   affixPoolIds: ReadonlySet<string>,
 ): PreparedModShopDefinition {
   if (!Array.isArray(common.fields.stock) || common.fields.stock.length === 0) {
@@ -798,12 +930,16 @@ function compileShop(
     if (!itemIds.has(item.contentId) || (item.targetKind !== 'item' && item.targetKind !== 'potion')) {
       throw new Error(`${common.modId}:${common.key} shop item is unavailable`)
     }
+    const quantity = row.quantity === undefined
+      ? 1
+      : integer(row.quantity, 1, 9_999, `${common.key}.stock[${index}].quantity`)
+    if (wearableItemIds.has(item.contentId) && quantity !== 1) {
+      throw new Error(`${common.modId}:${common.key} wearable shop stock quantity must be one`)
+    }
     return Object.freeze({
       item,
       price: integer(row.price, 0, 10_000_000, `${common.key}.stock[${index}].price`),
-      quantity: row.quantity === undefined
-        ? 1
-        : integer(row.quantity, 1, 9_999, `${common.key}.stock[${index}].quantity`),
+      quantity,
     })
   })
   const services = common.fields.services === undefined
@@ -1045,6 +1181,11 @@ function number(value: unknown, minimum: number, maximum: number, field: string)
   return value
 }
 
+function boolean(value: unknown, field: string): boolean {
+  if (typeof value !== 'boolean') throw new Error(`${field} must be boolean`)
+  return value
+}
+
 function integer(value: unknown, minimum: number, maximum: number, field: string): number {
   if (!Number.isSafeInteger(value) || Number(value) < minimum || Number(value) > maximum) {
     throw new Error(`${field} must be an integer within ${minimum}..${maximum}`)
@@ -1055,6 +1196,16 @@ function integer(value: unknown, minimum: number, maximum: number, field: string
 function object(value: unknown, field: string): Record<string, WebLuaDefinitionValue> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${field} must be an object`)
   return value as Record<string, WebLuaDefinitionValue>
+}
+
+function exactObjectKeys(
+  source: Readonly<Record<string, WebLuaDefinitionValue>>,
+  allowed: readonly string[],
+  field: string,
+): void {
+  const accepted = new Set(allowed)
+  const unknown = Object.keys(source).filter(key => !accepted.has(key))
+  if (unknown.length > 0) throw new Error(`${field} contains unknown fields: ${unknown.join(', ')}`)
 }
 
 function isRule(value: unknown): value is WebLuaRuleDefinition {

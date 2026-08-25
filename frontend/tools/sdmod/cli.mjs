@@ -260,7 +260,7 @@ function invincibilityPotionTemplate() {
 
 function luaLsStub() {
   const kits = WEB_LUA_CONTENT_KINDS.map(kind => `---@field ${kind.replaceAll('-', '_')} fun(spec: table): table`).join('\n')
-  return `---@meta\n\n---@class SdKit\n${kits}\n\n---@class Sd\n---@field kit SdKit\n---@field mod fun(spec: table): table\n---@field ref fun(kind: string, key: string, mod_id?: string): table\n\n---@type Sd\nsd = {}\n`
+  return `---@meta\n\n---@class SdArt\n---@field boneyard fun(spec: table): table\n---@field music fun(path: string, options?: table): table\n---@field ref fun(key: string): table\n---@field scene fun(spec: table): table\n---@field sheet fun(spec: table): table\n---@field sound fun(path: string, options?: table): table\n---@field sprite fun(path: string, options?: table): table\n---@field wearable fun(path: string): table\n\n---@class SdKit\n${kits}\n\n---@class Sd\n---@field art SdArt\n---@field kit SdKit\n---@field mod fun(spec: table): table\n---@field ref fun(kind: string, key: string, mod_id?: string): table\n\n---@type Sd\nsd = {}\n`
 }
 
 function referenceMarkdown() {
@@ -268,7 +268,7 @@ function referenceMarkdown() {
     const value = WEB_LUA_CONTENT_SCHEMA_FIELDS[kind]
     return `| \`${kind}\` | ${value.required.map(field => `\`${field}\``).join(', ') || 'none'} | ${value.allowed.map(field => `\`${field}\``).join(', ')} |`
   }).join('\n')
-  return `# Web Lua 1.0 generated reference\n\nAPI: \`${WEB_LUA_DEFINITION_API_VERSION}\`\n\n| Kind | Required fields | Allowed fields |\n| --- | --- | --- |\n${rows}\n`
+  return `# Web Lua 1.0 generated reference\n\nAPI: \`${WEB_LUA_DEFINITION_API_VERSION}\`\n\n## Art\n\n- \`sd.art.sprite(path, options)\` declares one PNG sprite.\n- \`sd.art.sheet(spec)\` declares an explicit PNG frame grid.\n- \`sd.art.wearable(path)\` declares a 170 px actor sheet for an existing hat, robe, or staff slot.\n- \`sd.art.sound(path, options)\` and \`sd.art.music(path, options)\` declare audio.\n- \`sd.art.scene(spec)\` and \`sd.art.boneyard(spec)\` declare document assets.\n- \`sd.art.ref(key)\` references a named asset from content.\n\n## Content\n\n| Kind | Required fields | Allowed fields |\n| --- | --- | --- |\n${rows}\n`
 }
 
 function usage() {

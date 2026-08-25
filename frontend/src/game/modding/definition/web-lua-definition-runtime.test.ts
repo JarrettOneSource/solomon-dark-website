@@ -29,6 +29,7 @@ test('definition VM builds and compiles the complete family census without runti
     const definition = runtime.run(`
       assert(io == nil and os == nil and package == nil and require == nil)
       local icon = sd.art.sprite("art/icon.png")
+      local worn = sd.art.wearable("art/worn.png")
       local state = sd.schema.object({
         count = sd.schema.integer({default = 0, min = 0, max = 99}),
         phase = sd.schema.enum({"normal", "enraged"}),
@@ -46,7 +47,7 @@ test('definition VM builds and compiles the complete family census without runti
       print("definition loaded")
       return sd.mod({
         api = "1.0.0",
-        assets = {icon = icon},
+        assets = {icon = icon, worn = worn},
         content = {
           sd.kit.status({key = "status"}),
           sd.kit.item({key = "item", name = "Item", art = {icon = sd.art.ref("icon")}}),
@@ -108,6 +109,11 @@ test('definition VM builds and compiles the complete family census without runti
       new Set(WEB_LUA_CONTENT_KINDS),
     )
     assert.equal(compiled.assets[0]?.key, 'icon')
+    assert.deepEqual(compiled.assets[1]?.fields, {
+      animations: { wearable: [1] },
+      frame: { height: 170, width: 170 },
+      image: 'art/worn.png',
+    })
     assert.equal(compiled.reducers[0]?.key, 'counter')
     assert.equal(typeof runtime.reducer('counter')?.callback, 'function')
     assert.deepEqual(runtime.invokeReducer(

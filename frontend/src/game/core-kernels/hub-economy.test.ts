@@ -12,6 +12,7 @@ import {
   HUB_SACK_REPLICATION_DEPTH_LIMIT,
   HUB_STORAGE_SLOT_CAPACITY,
   MAX_NATIVE_DYE_SELECTIONS,
+  MOD_ITEM_NATIVE_TYPE_ID,
   NATIVE_DYE_SWATCH_COLORS,
   NATIVE_DYE_SWATCHES,
   NATIVE_RETAINED_SACK_SUFFIXES,
@@ -45,11 +46,12 @@ import {
   nativeDyeCommittedTint,
   nativeDyeMixedColor,
   nativeDyeMixedTint,
-  nativeInventoryClothingItems,
+  inventoryDyeableClothingItems,
   nativeInventoryItemCanUnforge,
   nativeUnforgeOutcomeText,
   restockFomentius,
   projectInventoryItems,
+  reconcileHubEconomyModPackages,
   reforgeModEquipment,
   transferInventoryItem,
   unforgeInventoryItem,
@@ -117,6 +119,101 @@ test('mod reforge attaches stable affixes to one backpack equipment item', () =>
   assert.equal(result.accepted, true)
   assert.deepEqual(findInventoryItem(result.state.backpack, item.id)?.modAffixes, [affix])
   assert.equal(hubEconomyInventoryIsValid(result.state), true)
+  const reconciled = reconcileHubEconomyModPackages(result.state, [])
+  assert.equal(findInventoryItem(reconciled.backpack, item.id)?.modAffixes, undefined)
+  assert.equal(hubEconomyInventoryIsValid(reconciled), true)
+})
+
+test('mod wearable items use existing slots, native dye transactions, and strict save identity', () => {
+  const source = createHubEconomy(1)
+  const robe: HubInventoryItem = {
+    equipmentType: 'robe',
+    iconRecords: [],
+    iconTints: [0x6688cc, 0xffdd88],
+    id: 0,
+    kind: 'equipment',
+    modItemContent: {
+      contentId: '5000000000000000090',
+      description: 'A robe from beyond the stars.',
+      icon: {
+        atlasId: 'example.wearables:icon',
+        frame: {
+          centerOffsetX: 0,
+          centerOffsetY: 0,
+          contentHeight: 50,
+          contentWidth: 53,
+          height: 50,
+          logicalHeight: 50,
+          logicalWidth: 53,
+          width: 53,
+          x: 0,
+          y: 0,
+        },
+        frameIndex: 0,
+        imagePath: 'art/icon.png',
+      },
+      iconTrimImagePath: 'art/icon-trim.png',
+      key: 'starfall_robe',
+      modId: 'example.wearables',
+      stackMaximum: 1,
+      wearable: {
+        deathShape: 2,
+        dyeable: true,
+        slot: 'robe',
+        wornImagePath: 'art/worn.png',
+        wornTrimImagePath: 'art/worn-trim.png',
+      },
+    },
+    name: 'Starfall Robe',
+    nativeSubtype: null,
+    nativeTypeId: MOD_ITEM_NATIVE_TYPE_ID,
+    quantity: 1,
+    rarity: null,
+    recipeIndex: null,
+  }
+  const inserted = insertLootInventoryItem(source, robe)
+  assert.equal(inserted.accepted, true)
+  const identified = inserted.state.backpack.find(item => item.name === robe.name)!
+  assert.deepEqual(inventoryDyeableClothingItems(inserted.state.backpack).map(({ item }) => item.id), [identified.id])
+
+  const dye: HubInventoryItem = {
+    equipmentType: null,
+    iconRecords: [51],
+    id: inserted.state.nextItemId,
+    kind: 'dye',
+    name: 'Fabric Dye Kit',
+    nativeSubtype: 0,
+    nativeTypeId: 7012,
+    quantity: 1,
+    rarity: null,
+    recipeIndex: null,
+  }
+  const withDye = {
+    ...inserted.state,
+    backpack: [...inserted.state.backpack, dye],
+    nextItemId: inserted.state.nextItemId + 1,
+  }
+  const dyed = dyeInventoryClothing(withDye, dye.id, identified.id, 'cloth', [1])
+  assert.equal(dyed.accepted, true)
+  assert.notEqual(findInventoryItem(dyed.state.backpack, identified.id)?.iconTints?.[0], 0x6688cc)
+  const equipped = equipInventoryItem(dyed.state, identified.id, 'robe')
+  assert.equal(equipped.accepted, true)
+  assert.equal(equipped.state.equipment.robe?.modItemContent?.wearable?.slot, 'robe')
+  assert.equal(hubEconomyInventoryIsValid(equipped.state), true)
+  assert.equal(
+    reconcileHubEconomyModPackages(equipped.state, ['example.wearables']),
+    equipped.state,
+  )
+  const withoutPackage = reconcileHubEconomyModPackages(equipped.state, [])
+  assert.equal(withoutPackage.equipment.robe, null)
+  assert.equal(hubEconomyInventoryIsValid(withoutPackage), true)
+  assert.equal(hubEconomyInventoryIsValid({
+    ...equipped.state,
+    equipment: {
+      ...equipped.state.equipment,
+      robe: { ...equipped.state.equipment.robe!, equipmentType: 'hat' },
+    },
+  }), false)
 })
 
 test('Last Word retains every ground item in one bounded named Luthacus Sack', () => {
@@ -1050,7 +1147,7 @@ test('Fabric Dye commits cloth and trim transactionally against recursive Hat/Ro
   const state = { ...base, backpack: [carrier] }
 
   assert.deepEqual(
-    nativeInventoryClothingItems(state.backpack).map(({ depth, item, parentSackId }) => (
+    inventoryDyeableClothingItems(state.backpack).map(({ depth, item, parentSackId }) => (
       [item.id, depth, parentSackId]
     )),
     [[target.id, 1, carrier.id]],

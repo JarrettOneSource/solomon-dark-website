@@ -9,6 +9,7 @@ import type {
 } from '../definition/index.ts'
 import {
   compileModContentCatalog,
+  modItemInventoryItem,
   ModAffixEngine,
   ModEnemyEngine,
   ModPowerupEngine,
@@ -178,6 +179,66 @@ test('content catalog projects every family and builds deterministic consumables
   assert.equal(catalog.ui('5000000000000000012')?.mount, 'hud.top_right')
   assert.equal(catalog.scene('5000000000000000014')?.rooms[0]?.contentId, '5000000000000000013')
   assert.equal(catalog.createLootItems(7, false)[0]?.modContent?.contentId, potionId)
+})
+
+test('item equipment compiles modder-friendly robe sheets into one existing-slot wearable item', () => {
+  const contentId = '5000000000000000090'
+  const catalog = compileModContentCatalog([compiled([
+    content('item', 'starfall_robe', contentId, {
+      art: {
+        icon: { key: 'icon', kind: 'asset-reference' },
+        icon_trim: { key: 'icon_trim', kind: 'asset-reference' },
+        worn: { key: 'worn', kind: 'asset-reference' },
+        worn_trim: { key: 'worn_trim', kind: 'asset-reference' },
+      },
+      equipment: {
+        death_shape: 2,
+        dyeable: true,
+        slot: 'robe',
+        tints: { cloth: 0x6688cc, trim: 0xffdd88 },
+      },
+      name: 'Starfall Robe',
+    }),
+  ])], wearableAssets(5))
+  const definition = catalog.item(contentId)!
+  assert.deepEqual(definition.catalog.content.wearable, {
+    deathShape: 2,
+    dyeable: true,
+    slot: 'robe',
+    wornImagePath: 'art/worn.png',
+    wornTrimImagePath: 'art/worn-trim.png',
+  })
+  const item = modItemInventoryItem(definition.catalog)
+  assert.equal(item.kind, 'equipment')
+  assert.equal(item.equipmentType, 'robe')
+  assert.deepEqual(item.iconTints, [0x6688cc, 0xffdd88])
+  assert.equal(item.modItemContent?.contentId, contentId)
+  assert.throws(() => modItemInventoryItem(definition.catalog, 2), /quantity must be one/)
+})
+
+test('wearable admission rejects new slots, malformed pose banks, and staff dye layers', () => {
+  const definition = (equipment: Record<string, unknown>, art: Record<string, unknown>) => compiled([
+    content('item', 'bad_wearable', '5000000000000000091', {
+      art,
+      equipment,
+      name: 'Bad Wearable',
+    }),
+  ])
+  const fullArt = {
+    icon: { key: 'icon', kind: 'asset-reference' },
+    icon_trim: { key: 'icon_trim', kind: 'asset-reference' },
+    worn: { key: 'worn', kind: 'asset-reference' },
+    worn_trim: { key: 'worn_trim', kind: 'asset-reference' },
+  }
+  assert.throws(() => compileModContentCatalog([
+    definition({ slot: 'boots' }, fullArt),
+  ], wearableAssets(1)), /slot must be hat, robe, or staff/)
+  assert.throws(() => compileModContentCatalog([
+    definition({ slot: 'hat' }, fullArt),
+  ], wearableAssets(2)), /1\.\.1 pose rows/)
+  assert.throws(() => compileModContentCatalog([
+    definition({ dyeable: true, slot: 'staff' }, fullArt),
+  ], wearableAssets(1)), /staff equipment cannot declare dye layers/)
 })
 
 test('status engine refreshes participant state, filters damage and spend, checkpoints, and expires', () => {
@@ -457,6 +518,43 @@ function assets(): PreparedModAssetCatalog {
     sha256: '1'.repeat(64),
     width: 53,
   }])
+}
+
+function wearableAssets(rows: number): PreparedModAssetCatalog {
+  const icon = assets().image(identity.id, 'icon')
+  return new PreparedModAssetCatalog([
+    icon,
+    { ...icon, id: `${identity.id}:icon_trim`, key: 'icon_trim', path: 'art/icon-trim.png' },
+    wearableAsset('worn', 'art/worn.png', rows),
+    wearableAsset('worn_trim', 'art/worn-trim.png', rows),
+  ])
+}
+
+function wearableAsset(key: string, path: string, rows: number) {
+  return {
+    animations: { wearable: [0] },
+    assetKind: 'sheet' as const,
+    frames: Object.freeze(Array.from({ length: rows * 24 }, (_, index) => ({
+      centerOffsetX: 0,
+      centerOffsetY: 0,
+      contentHeight: 170,
+      contentWidth: 170,
+      height: 170,
+      logicalHeight: 170,
+      logicalWidth: 170,
+      width: 170,
+      x: index % 24 * 170,
+      y: Math.floor(index / 24) * 170,
+    }))),
+    height: rows * 170,
+    id: `${identity.id}:${key}`,
+    key,
+    kind: 'image' as const,
+    modId: identity.id,
+    path,
+    sha256: '2'.repeat(64),
+    width: 24 * 170,
+  }
 }
 
 function sceneCatalog(extra: readonly CompiledWebLuaContent[] = []) {

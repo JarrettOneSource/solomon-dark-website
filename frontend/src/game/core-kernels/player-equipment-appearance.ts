@@ -1,4 +1,4 @@
-import type { HubEquipmentState, HubInventoryItem } from './hub-economy.ts'
+import type { HubEquipmentState, HubInventoryItem, ModItemContent } from './hub-economy.ts'
 import type { WizardElement } from './player-character.ts'
 
 export interface PlayerEquipmentTintedSelector {
@@ -23,6 +23,30 @@ export interface PlayerLivingEquipmentAppearance {
     readonly kind: 'staff' | 'wand'
     readonly selector: number
   } | null
+}
+
+export interface PlayerModTintedEquipmentAppearance {
+  readonly content: ModItemContent
+  readonly primaryTint: number
+  readonly secondaryTint: number
+}
+
+export interface PlayerModStaffEquipmentAppearance {
+  readonly content: ModItemContent
+  readonly kind: 'staff'
+}
+
+export interface PlayerRenderableEquipmentAppearance {
+  readonly hat: PlayerEquipmentTintedSelector | PlayerModTintedEquipmentAppearance | null
+  readonly robe: PlayerEquipmentTintedSelector | PlayerModTintedEquipmentAppearance | null
+  readonly weapon: PlayerLivingEquipmentAppearance['weapon'] | PlayerModStaffEquipmentAppearance
+}
+
+export function isPlayerModEquipmentAppearance(
+  value: PlayerEquipmentTintedSelector | PlayerModTintedEquipmentAppearance
+    | NonNullable<PlayerLivingEquipmentAppearance['weapon']> | PlayerModStaffEquipmentAppearance,
+): value is PlayerModTintedEquipmentAppearance | PlayerModStaffEquipmentAppearance {
+  return 'content' in value
 }
 
 const ELEMENT_DEATH_PALETTES: Readonly<Record<WizardElement, readonly [number, number]>> = {
@@ -95,6 +119,34 @@ export function playerDeathEquipmentAppearance(
 export function playerLivingEquipmentAppearance(
   element: WizardElement,
   equipment: Pick<HubEquipmentState, 'hat' | 'robe' | 'weapon'>,
+): PlayerRenderableEquipmentAppearance {
+  const [primaryTint, secondaryTint] = ELEMENT_DEATH_PALETTES[element]
+  return {
+    hat: equipment.hat === null
+      ? null
+      : livingTintedAppearance(
+          equipment.hat,
+          'hat',
+          HAT_DEATH_APPEARANCES,
+          { primaryTint, secondaryTint, selector: 0 },
+        ),
+    robe: equipment.robe === null
+      ? null
+      : livingTintedAppearance(
+          equipment.robe,
+          'robe',
+          ROBE_DEATH_APPEARANCES,
+          { primaryTint, secondaryTint, selector: 0 },
+        ),
+    weapon: equipment.weapon === null
+      ? null
+      : livingWeaponAppearance(equipment.weapon),
+  }
+}
+
+export function playerLivingNativeEquipmentAppearance(
+  element: WizardElement,
+  equipment: Pick<HubEquipmentState, 'hat' | 'robe' | 'weapon'>,
 ): PlayerLivingEquipmentAppearance {
   const [primaryTint, secondaryTint] = ELEMENT_DEATH_PALETTES[element]
   return {
@@ -114,10 +166,45 @@ export function playerLivingEquipmentAppearance(
           ROBE_DEATH_APPEARANCES,
           { primaryTint, secondaryTint, selector: 0 },
         ),
-    weapon: equipment.weapon === null
-      ? null
-      : deathWeaponAppearance(equipment.weapon),
+    weapon: equipment.weapon === null ? null : deathWeaponAppearance(equipment.weapon),
   }
+}
+
+function livingTintedAppearance(
+  item: HubInventoryItem,
+  expectedType: 'hat' | 'robe',
+  appearances: Readonly<Record<number, PlayerEquipmentTintedSelector>>,
+  fallback: PlayerEquipmentTintedSelector,
+): PlayerEquipmentTintedSelector | PlayerModTintedEquipmentAppearance {
+  const wearable = item.modItemContent?.wearable
+  if (wearable !== undefined) {
+    const tints = item.iconTints
+    if (
+      wearable.slot !== expectedType
+      || tints === undefined
+      || tints[0] === null
+      || tints[1] === null
+    ) throw new Error(`Unsupported mod ${expectedType} appearance`)
+    return {
+      content: item.modItemContent!,
+      primaryTint: tints[0],
+      secondaryTint: tints[1],
+    }
+  }
+  return deathTintedAppearance(item, expectedType, appearances, fallback)
+}
+
+function livingWeaponAppearance(
+  item: HubInventoryItem,
+): NonNullable<PlayerRenderableEquipmentAppearance['weapon']> {
+  const wearable = item.modItemContent?.wearable
+  if (wearable !== undefined) {
+    if (wearable.slot !== 'staff' || item.equipmentType !== 'staff') {
+      throw new Error('Unsupported mod staff appearance')
+    }
+    return { content: item.modItemContent!, kind: 'staff' }
+  }
+  return deathWeaponAppearance(item)
 }
 
 function deathTintedAppearance(
@@ -127,6 +214,21 @@ function deathTintedAppearance(
   fallback: PlayerEquipmentTintedSelector,
 ): PlayerEquipmentTintedSelector {
   if (item === null) return fallback
+  const wearable = item.modItemContent?.wearable
+  if (wearable !== undefined) {
+    const tints = item.iconTints
+    if (
+      wearable.slot !== expectedType
+      || tints === undefined
+      || tints[0] === null
+      || tints[1] === null
+    ) throw new Error(`Unsupported mod ${expectedType} death appearance`)
+    return {
+      primaryTint: tints[0],
+      secondaryTint: tints[1],
+      selector: wearable.deathShape,
+    }
+  }
   if (item.recipeIndex !== null) return requiredDeathAppearance(item, expectedType, appearances)
   if (item.nativeSelector === undefined) return fallback
   const tints = item.iconTints
@@ -143,6 +245,13 @@ function deathWeaponAppearance(
   item: HubInventoryItem | null,
 ): { readonly kind: 'staff' | 'wand'; readonly selector: number } {
   if (item === null) return { kind: 'staff', selector: 0 }
+  const wearable = item.modItemContent?.wearable
+  if (wearable !== undefined) {
+    if (wearable.slot !== 'staff' || item.equipmentType !== 'staff') {
+      throw new Error('Unsupported mod staff death appearance')
+    }
+    return { kind: 'staff', selector: wearable.deathShape }
+  }
   if (item.recipeIndex !== null) return requiredWeaponDeathAppearance(item)
   if (item.nativeSelector === undefined) return { kind: 'staff', selector: 0 }
   if (item.equipmentType !== 'staff' && item.equipmentType !== 'wand') {

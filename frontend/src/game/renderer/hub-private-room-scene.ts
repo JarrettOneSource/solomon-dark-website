@@ -32,6 +32,7 @@ import {
 import { hubWorldDepthForActor } from './hub-render-contract.ts'
 import { HubMemorialPaintingView } from './hub-memorial-painting-view.ts'
 import type { HubWorldTextures } from './hub-textures.ts'
+import type { ModPresentationTextures } from './mod-presentation-assets.ts'
 import { nativeLevelUpPresentationFrame } from './level-up-presentation.ts'
 import { NativeLevelUpWorldView } from './level-up-world-view.ts'
 import { PrimarySpellWorldView } from './primary-spell-world-view.ts'
@@ -85,6 +86,7 @@ export class HubPrivateRoomScene {
   private polisherMarker!: Sprite
   private polisherFrames: readonly Texture[] = []
   private readonly markerSprites = new Map<NativeHubInteractionId, Sprite>()
+  private readonly modTextures: ModPresentationTextures
   private markerEpochInitialized = false
   private markerEpochSeed = 0
   private markerEpochStartedAtTick = 0
@@ -94,8 +96,10 @@ export class HubPrivateRoomScene {
     textures: HubWorldTextures,
     traderAnimationSeed: number,
     renderer: Renderer,
+    modTextures: ModPresentationTextures,
   ) {
     this.textures = textures
+    this.modTextures = modTextures
     this.dowserClock = createHubCommonTraderClock(traderAnimationSeed ^ 5016)
     this.polisherClock = createHubPolisherClock(traderAnimationSeed ^ 5011)
     this.world.sortableChildren = true
@@ -652,7 +656,7 @@ export class HubPrivateRoomScene {
         view = undefined
       }
       if (!view) {
-        view = new HubPlayerView(player.config.element, this.textures)
+        view = new HubPlayerView(player.config.element, this.textures, this.modTextures)
         this.players.set(playerId, view)
         this.playerElements.set(playerId, player.config.element)
         room.addChild(view.container)

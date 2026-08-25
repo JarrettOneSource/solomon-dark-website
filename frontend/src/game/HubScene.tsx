@@ -585,6 +585,7 @@ export default function HubScene({
 
     void createHubWorldRenderer({
       initialSnapshot: hubInitialSnapshot,
+      modAssets,
       playerId,
       settings: settingsRef.current,
       viewport: viewportRef.current,
@@ -638,7 +639,7 @@ export default function HubScene({
       rendererRef.current?.destroy()
       rendererRef.current = null
     }
-  }, [audio, hubInitialSnapshot, onHubAction, onInput, playerId, samplePresentation])
+  }, [audio, hubInitialSnapshot, modAssets, onHubAction, onInput, playerId, samplePresentation])
 
   const isHost = hostPlayerId === playerId
   const beginMatch = () => {

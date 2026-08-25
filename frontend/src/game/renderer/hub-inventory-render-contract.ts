@@ -757,12 +757,14 @@ export function hubItemTooltipLines(
   }
 
   const recipe = recipeIndex === null ? null : DOWSING_EQUIPMENT_RECIPES[recipeIndex] ?? null
-  const description = recipeIndex === null
+  const description = item.modItemContent?.description ?? (recipeIndex === null
     ? nativeTutorialAmuletIdentityMatches(item)
       ? NATIVE_TUTORIAL_AMULET_DESCRIPTION
       : ''
-    : nativeEquipmentRecipeDescription(recipeIndex)
+    : nativeEquipmentRecipeDescription(recipeIndex))
   if (description) lines.push(tooltipBody(description))
+  const affixNames = item.modAffixes?.map(affix => affix.name).join(' · ')
+  if (affixNames) lines.push(tooltipBody(affixNames))
   const requiredLevel = item.generatedLevel ?? recipe?.level ?? 0
   const effectiveRequiredLevel = Math.max(
     0,

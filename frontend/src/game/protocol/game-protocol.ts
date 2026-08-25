@@ -158,6 +158,8 @@ import {
   HUB_SACK_CHILD_REPLICATION_LIMIT,
   HUB_SACK_REPLICATION_DEPTH_LIMIT,
   MAX_NATIVE_DYE_SELECTIONS,
+  modItemInventoryIdentityIsValid,
+  modWearableContentIsValid,
   NATIVE_LOOT_BACKPACK_REPLICATION_LIMIT,
   NATIVE_UNFORGE_OUTCOME_KINDS,
   type DowsingOffer,
@@ -173,6 +175,7 @@ import {
   type ModEquipmentAffix,
   type ModItemContent,
   type ModSpriteFrame,
+  type ModWearableContent,
   type NativeUnforgeOutcome,
 } from '../core-kernels/hub-economy.ts'
 import {
@@ -356,7 +359,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 78
+export const GAME_PROTOCOL_VERSION = 79
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -2885,7 +2888,7 @@ function inventoryItem(
     }
   } else if (equipmentType === null) {
     throw new GameProtocolError(`${field} equipment identity is inconsistent`)
-  } else if (recipeIndex === null) {
+  } else if (recipeIndex === null && modItemContent?.wearable === undefined) {
     const authored = generatedLevel === undefined
       && nativeSelector !== undefined
     if (authored) {
@@ -2945,7 +2948,7 @@ function inventoryItem(
         )
       )) throw new GameProtocolError(`${field} generated equipment identity is inconsistent`)
     }
-  } else {
+  } else if (recipeIndex !== null) {
     const recipe = DOWSING_EQUIPMENT_RECIPES[recipeIndex]!
     const selector = nativeEquipmentSelector(recipe.type, recipe.iconRecords)
     if (
@@ -2977,22 +2980,11 @@ function inventoryItem(
   } else if (modContent !== undefined) {
     throw new GameProtocolError(`${field}.modContent requires kind mod-potion`)
   }
-  if (kind === 'mod-item') {
-    if (
-      modItemContent === undefined
-      || nativeTypeId !== 7013
-      || nativeSubtype !== null
-      || iconRecords.length !== 0
-      || quantity > modItemContent.stackMaximum
-    ) throw new GameProtocolError(`${field} invalid mod item`)
-  } else if (modItemContent !== undefined) {
-    throw new GameProtocolError(`${field} invalid mod item`)
-  }
   if (
     contents !== undefined
     && (kind !== 'sack' || nativeTypeId !== 7008 || nativeSubtype !== 0)
   ) throw new GameProtocolError(`${field}.contents requires an Item_Sack`)
-  return {
+  const item: HubInventoryItem = {
     ...(contents === undefined ? {} : { contents }),
     equipmentType: equipmentType as EquipmentType | null,
     ...(generatedLevel === undefined ? {} : { generatedLevel }),
@@ -3012,6 +3004,10 @@ function inventoryItem(
     rarity,
     recipeIndex,
   }
+  if (!modItemInventoryIdentityIsValid(item)) {
+    throw new GameProtocolError(`${field} invalid mod item`)
+  }
+  return item
 }
 
 function modConsumableContent(value: unknown, field: string): ModConsumableContent {
@@ -3051,11 +3047,25 @@ function modConsumableContent(value: unknown, field: string): ModConsumableConte
 function modItemContentValue(value: unknown, field: string): ModItemContent {
   const source = record(value, field)
   onlyKeys(source, field, [
-    'contentId', 'description', 'icon', 'key', 'modId', 'stackMaximum',
+    'contentId', 'description', 'icon', 'iconTrimImagePath', 'key', 'modId', 'stackMaximum', 'wearable',
   ])
+  const iconTrimImagePath = source.iconTrimImagePath === undefined
+    ? undefined
+    : limitedString(source.iconTrimImagePath, field, 240)
+  const wearable = source.wearable === undefined
+    ? undefined
+    : modWearableContent(source.wearable, field)
+  const stackMaximum = boundedInteger(source.stackMaximum, `${field}.stackMaximum`, 1, 9_999)
+  if ((iconTrimImagePath !== undefined && !wearable) || (wearable && (
+    stackMaximum !== 1 || !modWearableContentIsValid(wearable, iconTrimImagePath)
+  ))) {
+    throw new GameProtocolError(`${field} invalid mod item`)
+  }
   return {
     ...modContentIdentity(source, field),
-    stackMaximum: boundedInteger(source.stackMaximum, `${field}.stackMaximum`, 1, 9_999),
+    ...(iconTrimImagePath === undefined ? {} : { iconTrimImagePath }),
+    stackMaximum,
+    ...(wearable === undefined ? {} : { wearable }),
   }
 }
 
@@ -3082,7 +3092,7 @@ function modContentIdentity(
   }
   return {
     contentId,
-    description: limitedString(source.description, `${field}.description`, 1_024),
+    description: boundedString(source.description, `${field}.description`, 1_024),
     icon: {
       atlasId,
       frame: modSpriteFrame(iconSource.frame, `${field}.icon.frame`),
@@ -3091,6 +3101,26 @@ function modContentIdentity(
     },
     key,
     modId,
+  }
+}
+
+function modWearableContent(
+  value: unknown,
+  field: string,
+): NonNullable<ModItemContent['wearable']> {
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'deathShape', 'dyeable', 'slot', 'wornImagePath', 'wornTrimImagePath',
+  ])
+  const wornTrimImagePath = source.wornTrimImagePath === undefined
+    ? undefined
+    : limitedString(source.wornTrimImagePath, field, 240)
+  return {
+    deathShape: boundedInteger(source.deathShape, field, 0, 5),
+    dyeable: boolean(source.dyeable, field),
+    slot: limitedString(source.slot, field, 8) as ModWearableContent['slot'],
+    wornImagePath: limitedString(source.wornImagePath, field, 240),
+    ...(wornTrimImagePath === undefined ? {} : { wornTrimImagePath }),
   }
 }
 
@@ -4421,7 +4451,7 @@ function hubMemorialEquipmentAppearance(
               weapon.selector,
               `${field}.weapon.selector`,
               0,
-              kind === 'staff' ? 3 : 5,
+              5,
             ),
           }
         })(),

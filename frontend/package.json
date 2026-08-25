@@ -88,6 +88,7 @@
     "smoke:game:sacks-dyes": "node --experimental-strip-types tools/smoke-sacks-dyes.mjs",
     "smoke:game:loot-drops": "node --experimental-strip-types tools/smoke-loot-drops.mjs",
     "smoke:game:invincibility-mod": "node --experimental-strip-types tools/smoke-invincibility-mod.mjs",
+    "smoke:game:wearables": "node --experimental-strip-types tools/smoke-web-lua-wearables.mjs",
     "smoke:game:parties": "node --experimental-strip-types tools/smoke-shared-hub-parties.mjs",
     "smoke:game:party-rejoin": "node --experimental-strip-types tools/smoke-party-rejoin.mjs",
     "smoke:game:dark-cloud": "node tools/smoke-dark-cloud.mjs",

@@ -48,6 +48,35 @@ sd.kit.item({
 })
 ```
 
+Existing-slot wearable art stays inside the Item family. It does not introduce a
+second content identity or a general avatar framework:
+
+```lua
+sd.kit.item({
+  key = "starfall_robe",
+  name = "Starfall Robe",
+  equipment = {
+    slot = "robe",
+    dyeable = true,
+    death_shape = 1,
+    tints = { cloth = 0x6688cc, trim = 0xffdd88 },
+  },
+  art = {
+    icon = sd.art.ref("starfall_icon"),
+    icon_trim = sd.art.ref("starfall_icon_trim"),
+    worn = sd.art.ref("starfall_worn"),
+    worn_trim = sd.art.ref("starfall_worn_trim"),
+  },
+})
+```
+
+`sd.art.wearable(path)` fixes 170-pixel frames and the renderer-owned 24-heading
+order. Hats require one pose row, robes accept one through five, and staffs
+accept one through ten. Missing higher poses clamp to the last authored row.
+The framework owns staff back/front routing and uses `death_shape` for the
+native death and memorial fallback. Only the existing Hat, Robe, and Staff slots
+are public.
+
 Framework ownership:
 
 - deterministic inventory/save identity and stack key;

@@ -11,7 +11,7 @@ import {
   NATIVE_DYE_SWATCHES,
   findInventoryItem,
   nativeDyeMixedTint,
-  nativeInventoryClothingItems,
+  inventoryDyeableClothingItems,
   projectInventoryItems,
   type EquipmentSlot,
   type HubInventoryItem,
@@ -1206,7 +1206,7 @@ function buildDyeClothing(
   })
 
   const projected = projectInventoryItems(economy.backpack).slice(0, HUB_INVENTORY_GRID.capacity)
-  const eligibleIds = new Set(nativeInventoryClothingItems(economy.backpack).map(({ item }) => item.id))
+  const eligibleIds = new Set(inventoryDyeableClothingItems(economy.backpack).map(({ item }) => item.id))
   projected.forEach(({ item }, index) => {
     if (!eligibleIds.has(item.id)) return
     const { x, y } = hubInventorySlotPosition(index)
@@ -2160,13 +2160,25 @@ function addItemIcon(
 ): readonly Sprite[] {
   const modContent = item.modContent ?? item.modItemContent
   if (modContent) {
-    const sprite = new Sprite(context.modTextures.texture(modContent))
-    sprite.anchor.set(0.5)
-    sprite.position.set(centerX, centerY)
-    sprite.alpha = options.alpha ?? 1
-    sprite.tint = options.tintOverride ?? 0xffffff
-    layer.addChild(sprite)
-    return [sprite]
+    const textures = [
+      context.modTextures.texture(modContent),
+      ...(item.modItemContent
+        ? [context.modTextures.iconTrim(item.modItemContent)].filter((value): value is Texture => value !== null)
+        : []),
+    ]
+    const tints = item.modItemContent?.wearable?.slot === 'hat'
+      || item.modItemContent?.wearable?.slot === 'robe'
+      ? item.iconTints ?? [0xffffff, 0xffffff]
+      : [0xffffff, 0xffffff]
+    return textures.map((texture, index) => {
+      const sprite = new Sprite(texture)
+      sprite.anchor.set(0.5)
+      sprite.position.set(centerX, centerY)
+      sprite.alpha = options.alpha ?? 1
+      sprite.tint = options.tintOverride ?? tints[index] ?? 0xffffff
+      layer.addChild(sprite)
+      return sprite
+    })
   }
   const transform = item.equipmentType === null
     ? null

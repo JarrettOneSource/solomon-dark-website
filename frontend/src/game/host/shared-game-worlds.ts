@@ -3,7 +3,7 @@ import type { BoneyardEnemySpawnIntent } from '../core-kernels/boneyard-wave-dir
 import { archiveHubMemorialPortrait } from '../core-kernels/hub-memorial.ts'
 import { drawNativeInteger } from '../core-kernels/native-rng.ts'
 import type { SharedPlayerLevelMilestone } from '../core-kernels/player-progression.ts'
-import { playerLivingEquipmentAppearance } from '../core-kernels/player-equipment-appearance.ts'
+import { playerLivingNativeEquipmentAppearance } from '../core-kernels/player-equipment-appearance.ts'
 import type {
   PlayerCharacterConfig,
   PlayerCharacterInput,
@@ -466,7 +466,7 @@ export function stepSharedGameWorlds(
           memorial = archiveHubMemorialPortrait(memorial, {
             capturedAtTick: next.tick,
             config: player.config,
-            equipment: playerLivingEquipmentAppearance(
+            equipment: playerLivingNativeEquipmentAppearance(
               player.config.element,
               player.economy.equipment,
             ),
