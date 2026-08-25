@@ -170,6 +170,7 @@ import {
   type HubShopItem,
   type ModConsumableContent,
   type ModConsumableCatalogEntry,
+  type ModItemContent,
   type ModSpriteFrame,
   type NativeUnforgeOutcome,
 } from '../core-kernels/hub-economy.ts'
@@ -727,6 +728,57 @@ export interface ServerModCatalogMessage {
   items: readonly ModConsumableCatalogEntry[]
 }
 
+export const MOD_CONTENT_KINDS = [
+  'affix',
+  'affix-pool',
+  'boneyard',
+  'enemy',
+  'item',
+  'potion',
+  'powerup',
+  'room',
+  'scene',
+  'scene-extension',
+  'shop',
+  'skill',
+  'spell',
+  'status',
+  'ui',
+] as const
+export type ModContentKind = typeof MOD_CONTENT_KINDS[number]
+
+export interface ModContentProjectionEntry {
+  readonly art: readonly Readonly<{
+    path: string
+    slot: string
+  }>[]
+  readonly contentId: string
+  readonly contentKind: ModContentKind
+  readonly description: string
+  readonly key: string
+  readonly modId: string
+  readonly name: string
+}
+
+export interface ModStatusProjectionEntry {
+  readonly contentId: string
+  readonly expiresTick: number
+  readonly instanceId: number
+  readonly startedTick: number
+  readonly targetId: string
+}
+
+export interface ModContentProjection {
+  readonly content: readonly ModContentProjectionEntry[]
+  readonly manifestSha256: string
+  readonly revision: number
+  readonly statuses: readonly ModStatusProjectionEntry[]
+}
+
+export interface ServerModContentMessage extends ModContentProjection {
+  readonly type: 'server-mod-content'
+}
+
 export interface ServerSnapshotMessage {
   type: 'server-snapshot'
   acknowledgedInputSequence: number
@@ -873,6 +925,7 @@ export type ServerGameMessage =
   | ServerLeaderboardReceiptMessage
   | ServerLuaResultMessage
   | ServerModCatalogMessage
+  | ServerModContentMessage
   | ServerPartyStateMessage
   | ServerPartyActionMessage
   | ServerPongMessage
@@ -1261,6 +1314,10 @@ export function decodeServerGameMessage(payload: string): ServerGameMessage {
       type: 'server-mod-catalog',
       items: modConsumableCatalog(value.items, 'items'),
     }
+  }
+  if (value.type === 'server-mod-content') {
+    onlyKeys(value, 'message', ['type', 'content', 'manifestSha256', 'revision', 'statuses'])
+    return { type: 'server-mod-content', ...modContentProjection(value) }
   }
   if (value.type === 'server-snapshot') {
     onlyKeys(value, 'message', [
@@ -2515,6 +2572,7 @@ function inventoryItem(
     'itemContentId',
     'kind',
     'modContent',
+    'modItemContent',
     'name',
     'nativeSubtype',
     'nativeSelector',
@@ -2556,6 +2614,9 @@ function inventoryItem(
   const modContent = source.modContent === undefined
     ? undefined
     : modConsumableContent(source.modContent, `${field}.modContent`)
+  const modItemContent = source.modItemContent === undefined
+    ? undefined
+    : modItemContentValue(source.modItemContent, `${field}.modItemContent`)
   const iconRecords = limitedArray(source.iconRecords, `${field}.iconRecords`, 2)
     .map((recordIndex, index) => boundedInteger(
       recordIndex,
@@ -2563,11 +2624,11 @@ function inventoryItem(
       0,
       83,
     ))
-  if (iconRecords.length < 1 && modContent === undefined) {
+  if (iconRecords.length < 1 && modContent === undefined && modItemContent === undefined) {
     throw new GameProtocolError(`${field}.iconRecords is empty`)
   }
   const name = limitedString(source.name, `${field}.name`, 128)
-  const nativeTypeId = boundedInteger(source.nativeTypeId, `${field}.nativeTypeId`, 7001, 7012)
+  const nativeTypeId = boundedInteger(source.nativeTypeId, `${field}.nativeTypeId`, 7001, 7013)
   const quantity = boundedInteger(source.quantity, `${field}.quantity`, 1, 9_999)
   const generatedLevel = source.generatedLevel === undefined
     ? undefined
@@ -2720,6 +2781,17 @@ function inventoryItem(
   } else if (modContent !== undefined) {
     throw new GameProtocolError(`${field}.modContent requires kind mod-potion`)
   }
+  if (kind === 'mod-item') {
+    if (
+      modItemContent === undefined
+      || nativeTypeId !== 7013
+      || nativeSubtype !== null
+      || iconRecords.length !== 0
+      || quantity > modItemContent.stackMaximum
+    ) throw new GameProtocolError(`${field} invalid mod item`)
+  } else if (modItemContent !== undefined) {
+    throw new GameProtocolError(`${field} invalid mod item`)
+  }
   if (
     contents !== undefined
     && (kind !== 'sack' || nativeTypeId !== 7008 || nativeSubtype !== 0)
@@ -2733,6 +2805,7 @@ function inventoryItem(
     id: positiveInteger(source.id, `${field}.id`),
     kind: kind as HubItemKind,
     ...(modContent === undefined ? {} : { modContent }),
+    ...(modItemContent === undefined ? {} : { modItemContent }),
     name,
     nativeSubtype,
     ...(nativeSelector === undefined ? {} : { nativeSelector }),
@@ -2749,23 +2822,7 @@ function modConsumableContent(value: unknown, field: string): ModConsumableConte
   onlyKeys(source, field, [
     'consumeVfx', 'contentId', 'description', 'durationMs', 'icon', 'key', 'modId',
   ])
-  const contentId = limitedString(source.contentId, `${field}.contentId`, 19)
-  if (!/^[1-9][0-9]{0,18}$/.test(contentId)) {
-    throw new GameProtocolError(`${field}.contentId is invalid`)
-  }
-  const modId = limitedString(source.modId, `${field}.modId`, 128)
-  const key = limitedString(source.key, `${field}.key`, 128)
-  if (!/^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$/.test(modId) ||
-      !/^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$/.test(key)) {
-    throw new GameProtocolError(`${field} has a noncanonical content key`)
-  }
-  const iconSource = record(source.icon, `${field}.icon`)
-  onlyKeys(iconSource, `${field}.icon`, ['atlasId', 'frame', 'frameIndex', 'imagePath'])
-  const atlasId = limitedString(iconSource.atlasId, `${field}.icon.atlasId`, 257)
-  const imagePath = limitedString(iconSource.imagePath, `${field}.icon.imagePath`, 240)
-  if (!atlasId.startsWith(`${modId}:`) || !/^sprites\/.+\.png$/.test(imagePath)) {
-    throw new GameProtocolError(`${field}.icon is outside its mod asset ownership`)
-  }
+  const identity = modContentIdentity(source, field)
   const consumeVfx = source.consumeVfx === null
     ? null
     : (() => {
@@ -2789,9 +2846,46 @@ function modConsumableContent(value: unknown, field: string): ModConsumableConte
       })()
   return {
     consumeVfx,
+    ...identity,
+    durationMs: boundedInteger(source.durationMs, `${field}.durationMs`, 0, 86_400_000),
+  }
+}
+
+function modItemContentValue(value: unknown, field: string): ModItemContent {
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'contentId', 'description', 'icon', 'key', 'modId', 'stackMaximum',
+  ])
+  return {
+    ...modContentIdentity(source, field),
+    stackMaximum: boundedInteger(source.stackMaximum, `${field}.stackMaximum`, 1, 9_999),
+  }
+}
+
+function modContentIdentity(
+  source: Record<string, unknown>,
+  field: string,
+): Omit<ModItemContent, 'stackMaximum'> {
+  const contentId = limitedString(source.contentId, `${field}.contentId`, 19)
+  if (!/^[1-9][0-9]{0,18}$/.test(contentId)) {
+    throw new GameProtocolError(`${field}.contentId is invalid`)
+  }
+  const modId = limitedString(source.modId, `${field}.modId`, 128)
+  const key = limitedString(source.key, `${field}.key`, 128)
+  if (!/^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$/.test(modId) ||
+      !/^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$/.test(key)) {
+    throw new GameProtocolError(`${field} has a noncanonical content key`)
+  }
+  const iconSource = record(source.icon, `${field}.icon`)
+  onlyKeys(iconSource, `${field}.icon`, ['atlasId', 'frame', 'frameIndex', 'imagePath'])
+  const atlasId = limitedString(iconSource.atlasId, `${field}.icon.atlasId`, 257)
+  const imagePath = limitedString(iconSource.imagePath, `${field}.icon.imagePath`, 240)
+  if (!atlasId.startsWith(`${modId}:`) || !/^(?:art|sprites)\/.+\.png$/.test(imagePath)) {
+    throw new GameProtocolError(`${field}.icon is outside its mod asset ownership`)
+  }
+  return {
     contentId,
     description: limitedString(source.description, `${field}.description`, 1_024),
-    durationMs: boundedInteger(source.durationMs, `${field}.durationMs`, 0, 86_400_000),
     icon: {
       atlasId,
       frame: modSpriteFrame(iconSource.frame, `${field}.icon.frame`),
@@ -8598,7 +8692,7 @@ function boneyardLootSnapshot(value: unknown, field: string): BoneyardLootSnapsh
   }
   const itemNativeTypeId = source.itemNativeTypeId === null
     ? null
-    : boundedInteger(source.itemNativeTypeId, `${field}.itemNativeTypeId`, 7001, 7012)
+    : boundedInteger(source.itemNativeTypeId, `${field}.itemNativeTypeId`, 7001, 7013)
   const itemNativeSubtype = source.itemNativeSubtype === null
     ? null
     : boundedInteger(source.itemNativeSubtype, `${field}.itemNativeSubtype`, 0, 261)
@@ -8687,6 +8781,7 @@ function validBoneyardSackItemIdentity(
   if (nativeTypeId === 7001) return nativeSubtype !== null && (
     nativeSubtype <= 5 ? contentId === null : contentId !== null
   )
+  if (nativeTypeId === 7013) return nativeSubtype === null && contentId !== null
   if (contentId !== null) return false
   if (nativeTypeId === 7012) return nativeSubtype !== null && nativeSubtype <= 3
   if (nativeTypeId === 7008) return nativeSubtype === 0
@@ -10689,6 +10784,83 @@ function gameModAssets(value: unknown): readonly GameModAsset[] {
       sha256: sha256(source.sha256, `${field}.sha256`),
     }
   })
+}
+
+function modContentProjection(value: Record<string, unknown>): ModContentProjection {
+  const contentIds = new Set<string>()
+  const content = limitedArray(value.content, 'content', 4_096).map((value, index) => {
+    const field = `content[${index}]`
+    const source = record(value, field)
+    onlyKeys(source, field, [
+      'art', 'contentId', 'contentKind', 'description', 'key', 'modId', 'name',
+    ])
+    const contentId = limitedString(source.contentId, `${field}.contentId`, 19)
+    const contentKind = limitedString(source.contentKind, `${field}.contentKind`, 32)
+    const modId = limitedString(source.modId, `${field}.modId`, 128)
+    const key = limitedString(source.key, `${field}.key`, 128)
+    if (
+      !/^[1-9][0-9]{0,18}$/.test(contentId)
+      || !(MOD_CONTENT_KINDS as readonly string[]).includes(contentKind)
+      || !/^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$/.test(modId)
+      || !/^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$/.test(key)
+      || contentIds.has(contentId)
+    ) throw new GameProtocolError(`${field} is invalid`)
+    contentIds.add(contentId)
+    const slots = new Set<string>()
+    const art = limitedArray(source.art, `${field}.art`, 32).map((value, artIndex) => {
+      const artField = `${field}.art[${artIndex}]`
+      const art = record(value, artField)
+      onlyKeys(art, artField, ['path', 'slot'])
+      const slot = limitedString(art.slot, `${artField}.slot`, 64)
+      const path = limitedString(art.path, `${artField}.path`, 240)
+      if (slots.has(slot) || !/^(?:art|audio|levels|scenes|sprites)\/.+/.test(path)) {
+        throw new GameProtocolError(`${artField} is invalid`)
+      }
+      slots.add(slot)
+      return {
+        path,
+        slot,
+      }
+    })
+    return {
+      art,
+      contentId,
+      contentKind: contentKind as ModContentKind,
+      description: boundedString(source.description, `${field}.description`, 1_024),
+      key,
+      modId,
+      name: limitedString(source.name, `${field}.name`, 128),
+    }
+  })
+  const instanceIds = new Set<number>()
+  const statuses = limitedArray(value.statuses, 'statuses', 4_096).map((value, index) => {
+    const field = `statuses[${index}]`
+    const source = record(value, field)
+    onlyKeys(source, field, [
+      'contentId', 'expiresTick', 'instanceId', 'startedTick', 'targetId',
+    ])
+    const contentId = limitedString(source.contentId, `${field}.contentId`, 19)
+    const instanceId = positiveInteger(source.instanceId, `${field}.instanceId`)
+    const startedTick = nonnegativeInteger(source.startedTick, `${field}.startedTick`)
+    const expiresTick = positiveInteger(source.expiresTick, `${field}.expiresTick`)
+    if (!contentIds.has(contentId) || instanceIds.has(instanceId) || expiresTick <= startedTick) {
+      throw new GameProtocolError(`${field} is invalid`)
+    }
+    instanceIds.add(instanceId)
+    return {
+      contentId,
+      expiresTick,
+      instanceId,
+      startedTick,
+      targetId: validatedPlayerId(source.targetId, `${field}.targetId`),
+    }
+  })
+  return {
+    content,
+    manifestSha256: sha256(value.manifestSha256, 'manifestSha256'),
+    revision: nonnegativeInteger(value.revision, 'revision'),
+    statuses,
+  }
 }
 
 function modConsumableCatalog(

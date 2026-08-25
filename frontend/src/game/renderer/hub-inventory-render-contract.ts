@@ -623,6 +623,14 @@ export function hubInventoryItemInfoText(item: HubInventoryItem): HubInventoryIt
       if (!item.modContent) throw new Error('mod potion is missing its content identity')
       return potionInfo(item, item.modContent.description)
     }
+    case 'mod-item': {
+      if (!item.modItemContent) throw new Error('mod item has no content')
+      return {
+        description: item.modItemContent.description,
+        instruction: null,
+        title: item.name,
+      }
+    }
     case 'rejuvenation-potion': return potionInfo(item, 'Restores your health and mana to maximum')
     case 'dye': return {
       description: 'Double click to dye an article of clothing',

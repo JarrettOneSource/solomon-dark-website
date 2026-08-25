@@ -2,6 +2,8 @@ import type {
   HubInventoryItem,
   ModConsumableCatalogEntry,
   ModConsumableContent,
+  ModItemCatalogEntry,
+  ModItemContent,
 } from '../../core-kernels/hub-economy.ts'
 import type {
   CompiledWebLuaContent,
@@ -60,6 +62,13 @@ export interface PreparedModPotionDefinition extends PreparedModContentEntry {
   readonly status: ResolvedWebLuaContentReference | null
 }
 
+export interface PreparedModItemDefinition extends PreparedModContentEntry {
+  readonly catalog: ModItemCatalogEntry
+  readonly contentKind: 'item'
+  readonly stackMaximum: number
+  readonly use: WebLuaRuleDefinition | null
+}
+
 interface PreparedLootRow {
   readonly bossChance: number
   readonly catalog: ModConsumableCatalogEntry
@@ -70,11 +79,13 @@ export class PreparedModContentCatalog {
   readonly #byId: ReadonlyMap<string, PreparedModContentEntry>
   readonly #content: readonly PreparedModContentEntry[]
   readonly #loot: readonly PreparedLootRow[]
+  readonly #items: readonly PreparedModItemDefinition[]
   readonly #potions: readonly PreparedModPotionDefinition[]
   readonly #statuses: ReadonlyMap<string, PreparedModStatusDefinition>
 
   constructor(options: Readonly<{
     content: readonly PreparedModContentEntry[]
+    items: readonly PreparedModItemDefinition[]
     loot: readonly PreparedLootRow[]
     potions: readonly PreparedModPotionDefinition[]
     statuses: readonly PreparedModStatusDefinition[]
@@ -87,6 +98,7 @@ export class PreparedModContentCatalog {
     this.#content = Object.freeze([...options.content].sort(compareContent))
     this.#byId = byId
     this.#loot = Object.freeze([...options.loot])
+    this.#items = Object.freeze([...options.items].sort(compareContent))
     this.#potions = Object.freeze([...options.potions].sort(compareContent))
     this.#statuses = new Map(options.statuses.map(status => [status.contentId, status]))
   }
@@ -101,6 +113,15 @@ export class PreparedModContentCatalog {
 
   content(contentId: string): PreparedModContentEntry | null {
     return this.#byId.get(contentId) ?? null
+  }
+
+  item(contentId: string): PreparedModItemDefinition | null {
+    const content = this.#byId.get(contentId)
+    return content?.contentKind === 'item' ? content as PreparedModItemDefinition : null
+  }
+
+  items(): readonly ModItemCatalogEntry[] {
+    return Object.freeze(this.#items.map(item => item.catalog))
   }
 
   createLootItems(actorSeed: number, boss: boolean): readonly HubInventoryItem[] {
@@ -132,6 +153,7 @@ export function compileModContentCatalog(
   if (count > MAXIMUM_CATALOG_CONTENT) throw new Error(`prepared mod catalog exceeds ${MAXIMUM_CATALOG_CONTENT} content entries`)
   const content: PreparedModContentEntry[] = []
   const statuses: PreparedModStatusDefinition[] = []
+  const itemCandidates: PreparedModContentEntry[] = []
   const potionCandidates: PreparedModContentEntry[] = []
   for (const mod of mods) {
     for (const definition of mod.content) {
@@ -142,6 +164,8 @@ export function compileModContentCatalog(
         statuses.push(status)
       } else if (definition.contentKind === 'potion') {
         potionCandidates.push(common)
+      } else if (definition.contentKind === 'item') {
+        itemCandidates.push(common)
       } else content.push(common)
     }
   }
@@ -153,14 +177,15 @@ export function compileModContentCatalog(
     statusIds,
     assets,
   ))
-  content.push(...potions)
+  const items = itemCandidates.sort(compareContent).map(common => compileItem(common, assets))
+  content.push(...items, ...potions)
   const loot = potions.flatMap((potion): PreparedLootRow[] => potion.loot ? [{
     bossChance: potion.loot.boss,
     catalog: potion.catalog,
     chance: potion.loot.ordinary,
   }] : [])
   if (loot.length > MAXIMUM_LOOT_ROWS) throw new Error(`prepared mod loot exceeds ${MAXIMUM_LOOT_ROWS} rows`)
-  return new PreparedModContentCatalog({ content, loot, potions, statuses })
+  return new PreparedModContentCatalog({ content, items, loot, potions, statuses })
 }
 
 export function modConsumableInventoryItem(
@@ -176,6 +201,28 @@ export function modConsumableInventoryItem(
     nativeSubtype: catalog.nativeSubtype,
     nativeTypeId: 7001,
     quantity: 1,
+    rarity: null,
+    recipeIndex: null,
+  })
+}
+
+export function modItemInventoryItem(
+  catalog: ModItemCatalogEntry,
+  quantity = 1,
+): HubInventoryItem {
+  if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > catalog.content.stackMaximum) {
+    throw new Error(`mod item quantity must be within 1..${catalog.content.stackMaximum}`)
+  }
+  return Object.freeze({
+    equipmentType: null,
+    iconRecords: Object.freeze([]),
+    id: 0,
+    kind: 'mod-item' as const,
+    modItemContent: catalog.content,
+    name: catalog.name,
+    nativeSubtype: null,
+    nativeTypeId: 7013,
+    quantity,
     rarity: null,
     recipeIndex: null,
   })
@@ -206,6 +253,43 @@ function compileStatus(common: PreparedModContentEntry): PreparedModStatusDefini
     modifiers: optionalObject(common.fields.modifiers, `${common.key}.modifiers`),
     scope: optionalText(common.fields.scope, 'participant-run', 64, `${common.key}.scope`),
     stacking: stacking(common.fields.stacking, `${common.key}.stacking`),
+  })
+}
+
+function compileItem(
+  common: PreparedModContentEntry,
+  assets: PreparedModAssetCatalog,
+): PreparedModItemDefinition {
+  const icon = common.art.icon
+  if (!icon) throw new Error(`${common.modId}:${common.key} item requires art.icon`)
+  const sprite = assets.image(common.modId, icon.key)
+  const stack = common.fields.stack === undefined
+    ? {}
+    : object(common.fields.stack, `${common.key}.stack`)
+  const stackMaximum = stack.maximum === undefined
+    ? 1
+    : integer(stack.maximum, 1, 9_999, `${common.key}.stack.maximum`)
+  const itemContent: ModItemContent = Object.freeze({
+    contentId: common.contentId,
+    description: common.description,
+    icon: Object.freeze({
+      atlasId: sprite.id,
+      frame: sprite.frames[0]!,
+      frameIndex: 0,
+      imagePath: sprite.path,
+    }),
+    key: common.key,
+    modId: common.modId,
+    stackMaximum,
+  })
+  const use = common.fields.use
+  if (use !== undefined && !isRule(use)) throw new Error(`${common.modId}:${common.key} item use must be a rule`)
+  return Object.freeze({
+    ...common,
+    catalog: Object.freeze({ content: itemContent, name: common.name }),
+    contentKind: 'item' as const,
+    stackMaximum,
+    use: use ?? null,
   })
 }
 
@@ -373,6 +457,13 @@ function number(value: unknown, minimum: number, maximum: number, field: string)
     throw new Error(`${field} must be finite within ${minimum}..${maximum}`)
   }
   return value
+}
+
+function integer(value: unknown, minimum: number, maximum: number, field: string): number {
+  if (!Number.isSafeInteger(value) || Number(value) < minimum || Number(value) > maximum) {
+    throw new Error(`${field} must be an integer within ${minimum}..${maximum}`)
+  }
+  return Number(value)
 }
 
 function object(value: unknown, field: string): Record<string, WebLuaDefinitionValue> {

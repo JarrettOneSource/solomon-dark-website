@@ -124,6 +124,7 @@ export const ML_BOT_POLICY_ITEM_CLASSES = Object.freeze({
   key: 'key',
   'mana-potion': 'potion',
   'mind-chug': 'potion',
+  'mod-item': 'misc',
   'mod-potion': 'potion',
   'rejuvenation-potion': 'potion',
   sack: 'sack',

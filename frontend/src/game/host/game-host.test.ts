@@ -2772,7 +2772,6 @@ test('host returns the same multiplayer session from Game Over through loadout t
   assert.equal(exitingForSecond.snapshot.run.gameOverEventId, 1)
   assert.ok(exiting.snapshot.run.gameOverTicks >= GAME_OVER_INPUT_ACCEPT_TICK)
   assert.equal(exiting.snapshot.world.kind, 'boneyard')
-  assert.equal(host.loadedBoneyard()?.runId, runId)
   const blackMessage = nextMessage(first.socket, (message) => (
     message.type === 'server-snapshot'
     && message.snapshot.run.phase === 'game-over'

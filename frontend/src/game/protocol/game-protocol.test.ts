@@ -4305,6 +4305,14 @@ test('full Boneyard welcome strictly round-trips a content-identified mod Sack',
     key: 'invincibility-potion',
     modId: 'canary.lua.invincibility_potion',
   }
+  const itemContent = {
+    contentId: '5000000000000000003',
+    description: 'Warm stone from the Boneyard.',
+    icon: { ...content.icon, atlasId: 'example.items:ash-shard' },
+    key: 'ash_shard',
+    modId: 'example.items',
+    stackMaximum: 99,
+  }
   const spawned = spawnBoneyardLootSpecs(state.world.loot, [{
     activationDelayTicks: 0,
     id: 0,
@@ -4325,6 +4333,27 @@ test('full Boneyard welcome strictly round-trips a content-identified mod Sack',
     nativeTypeId: 2013,
     phase: 0,
     position: { x: 800, y: 600 },
+    source: 'enemy',
+  }, {
+    activationDelayTicks: 0,
+    id: 0,
+    item: {
+      equipmentType: null,
+      iconRecords: [],
+      id: 78,
+      kind: 'mod-item',
+      modItemContent: itemContent,
+      name: 'Ash Shard',
+      nativeSubtype: null,
+      nativeTypeId: 7013,
+      quantity: 4,
+      rarity: null,
+      recipeIndex: null,
+    },
+    kind: 'sack',
+    nativeTypeId: 2013,
+    phase: 0,
+    position: { x: 850, y: 600 },
     source: 'enemy',
   }], 1)
   state = { ...state, tick: 1, world: { ...state.world, loot: spawned.store } }
@@ -4368,6 +4397,46 @@ test('full Boneyard welcome strictly round-trips a content-identified mod Sack',
     () => decodeServerGameMessage(JSON.stringify(undeclaredField)),
     /itemContentHint is not allowed/,
   )
+})
+
+test('mod content projection round-trips every stable family field and active status', () => {
+  const message = {
+    type: 'server-mod-content' as const,
+    content: [{
+      art: [{
+        path: 'art/icon.png',
+        slot: 'icon',
+      }],
+      contentId: '5000000000000000001',
+      contentKind: 'item' as const,
+      description: 'A stable custom item.',
+      key: 'stable_item',
+      modId: 'example.mod',
+      name: 'Stable Item',
+    }, {
+      art: [],
+      contentId: '5000000000000000002',
+      contentKind: 'status' as const,
+      description: '',
+      key: 'steady',
+      modId: 'example.mod',
+      name: 'Steady',
+    }],
+    manifestSha256: 'a'.repeat(64),
+    revision: 3,
+    statuses: [{
+      contentId: '5000000000000000002',
+      expiresTick: 30,
+      instanceId: 1,
+      startedTick: 20,
+      targetId: 'player-1',
+    }],
+  }
+  assert.deepEqual(decodeServerGameMessage(encodeGameMessage(message)), message)
+  assert.throws(() => decodeServerGameMessage(JSON.stringify({
+    ...message,
+    content: [...message.content, message.content[0]],
+  })), /content\[2\] is invalid/)
 })
 
 test('party protocol strictly round-trips membership, access settings, requests, and results', () => {

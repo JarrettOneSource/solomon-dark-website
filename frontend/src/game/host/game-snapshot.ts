@@ -176,7 +176,9 @@ export function createGameSnapshot(
             bounceHeight: actor.bounceHeight,
             framePhase: actor.framePhase,
             id: actor.id,
-            itemContentId: actor.item?.modContent?.contentId ?? null,
+            itemContentId: actor.item?.modContent?.contentId
+              ?? actor.item?.modItemContent?.contentId
+              ?? null,
             itemNativeSubtype: actor.item?.nativeSubtype ?? null,
             itemNativeTypeId: actor.item?.nativeTypeId ?? null,
             kind: actor.kind,

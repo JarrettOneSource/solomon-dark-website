@@ -29,6 +29,7 @@ import {
   type GameplayPauseState,
   type HubPlayerActivity,
   type LoadedBoneyard,
+  type ModContentProjection,
   type PartyAction,
   type PartyActionRejection,
   type ServerLuaResultMessage,
@@ -121,6 +122,7 @@ export interface GameClientSession {
   getChatMessages(): readonly GameChatMessage[]
   getGameplayPause(): GameplayPauseState | null
   getModCatalog(): readonly ModConsumableCatalogEntry[]
+  getModContent(): ModContentProjection | null
   getPingMs(): number | null
   getPartyState(): LocalPartyState | null
   getSaveCheckpoint(): GameSaveCheckpoint | null
@@ -131,6 +133,7 @@ export interface GameClientSession {
   onGameplayPause(listener: (pause: GameplayPauseState | null) => void): () => void
   onLeaderboardReceipt(listener: (receipt: string) => void): () => void
   onModCatalog(listener: (catalog: readonly ModConsumableCatalogEntry[]) => void): () => void
+  onModContent(listener: (projection: ModContentProjection) => void): () => void
   onEnemyEvent(listener: (event: BoneyardEnemyEventSnapshot) => void): () => void
   onPing(listener: (pingMs: number) => void): () => void
   onPartyState(listener: (state: LocalPartyState) => void): () => void
@@ -232,6 +235,7 @@ export function connectGameClientSession(
     let gameplayPause: GameplayPauseState | null = null
     let requestedHubActivity: HubPlayerActivity | null = null
     let modCatalog: readonly ModConsumableCatalogEntry[] = []
+    let modContent: ModContentProjection | null = null
     let lastSnapshotReceivedAtMs = 0
     let lastSnapshotSequence = 0
     let latestPingMs: number | null = null
@@ -261,6 +265,7 @@ export function connectGameClientSession(
     const modCatalogListeners = new Set<(
       catalog: readonly ModConsumableCatalogEntry[],
     ) => void>()
+    const modContentListeners = new Set<(projection: ModContentProjection) => void>()
     const enemyEventListeners = new Set<(event: BoneyardEnemyEventSnapshot) => void>()
     const pingListeners = new Set<(pingMs: number) => void>()
     const partyStateListeners = new Set<(state: LocalPartyState) => void>()
@@ -340,6 +345,17 @@ export function connectGameClientSession(
       if (message.type === 'server-mod-catalog') {
         modCatalog = message.items
         for (const listener of modCatalogListeners) listener(modCatalog)
+        return
+      }
+      if (message.type === 'server-mod-content') {
+        if (modContent && message.revision < modContent.revision) return
+        modContent = {
+          content: message.content,
+          manifestSha256: message.manifestSha256,
+          revision: message.revision,
+          statuses: message.statuses,
+        }
+        for (const listener of modContentListeners) listener(modContent)
         return
       }
       if (message.type === 'server-save-checkpoint') {
@@ -657,6 +673,7 @@ export function connectGameClientSession(
         gameplayPauseListeners.clear()
         leaderboardReceiptListeners.clear()
         modCatalogListeners.clear()
+        modContentListeners.clear()
         enemyEventListeners.clear()
         pingListeners.clear()
         partyActionListeners.clear()
@@ -731,6 +748,9 @@ export function connectGameClientSession(
       getModCatalog() {
         return modCatalog
       },
+      getModContent() {
+        return modContent
+      },
       getPingMs() {
         return latestPingMs
       },
@@ -771,6 +791,10 @@ export function connectGameClientSession(
       onModCatalog(listener) {
         modCatalogListeners.add(listener)
         return () => modCatalogListeners.delete(listener)
+      },
+      onModContent(listener) {
+        modContentListeners.add(listener)
+        return () => modContentListeners.delete(listener)
       },
       onEnemyEvent(listener) {
         enemyEventListeners.add(listener)
@@ -1450,6 +1474,7 @@ export function connectGameClientSession(
       gameplayPauseListeners.clear()
       leaderboardReceiptListeners.clear()
       modCatalogListeners.clear()
+      modContentListeners.clear()
       enemyEventListeners.clear()
       pingListeners.clear()
       partyStateListeners.clear()

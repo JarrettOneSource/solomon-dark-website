@@ -931,6 +931,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             snapshot: welcomeSnapshot,
             snapshotSequence,
           }))
+          sendPreparedModProjection(
+            socket,
+            modRuntimeScopeForPlayer(observed.viewPlayerId)?.runtime ?? privateModHost,
+          )
           socket.send(encodeGameMessage({
             type: 'server-boneyard-loaded',
             boneyard: observed.loadedBoneyard,
@@ -1510,6 +1514,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           snapshot: welcomeSnapshot,
           snapshotSequence,
         }))
+        sendPreparedModProjection(
+          socket,
+          modRuntimeScopeForPlayer(playerId)?.runtime ?? privateModHost,
+        )
         const playerBoneyard = loadedBoneyardForPlayer(playerId)
         if (playerBoneyard) {
           socket.send(encodeGameMessage({
@@ -1831,6 +1839,8 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             if (!result.accepted) {
               replaceStateForPlayer(client.playerId, stateBeforeAction)
               accepted = false
+            } else {
+              broadcastPreparedModProjection(client.playerId, modHost)
             }
           } catch (error) {
             replaceStateForPlayer(client.playerId, stateBeforeAction)
@@ -2759,7 +2769,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
               candidate => candidate.partyId === partyId,
             )
             if (!run) continue
-            scope.runtime.tick(run.state.tick + 1)
+            if (scope.runtime.tick(run.state.tick + 1)) {
+              const viewer = run.state.playerEntities.identities[0]?.playerId
+              if (viewer) broadcastPreparedModProjection(viewer, scope.runtime)
+            }
             enemySpawnIntents.set(partyId, [
               ...(enemySpawnIntents.get(partyId) ?? []),
               ...scope.runtime.drainEnemySpawns(),
@@ -2799,6 +2812,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             if (!before) continue
             const scope = partyModRuntimes.get(run.partyId)
             if (scope) {
+              const projectionRevision = scope.runtime.projectionRevision()
               const events = [
                 ...scope.pendingEvents.splice(0),
                 ...deriveWebLuaEvents(
@@ -2812,6 +2826,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
                 run.state.run.runId ?? run.partyId,
               )
               run = sharedWorlds.runs.find(candidate => candidate.partyId === run.partyId) ?? run
+              if (scope.runtime.projectionRevision() !== projectionRevision) {
+                const viewer = run.state.playerEntities.identities[0]?.playerId
+                if (viewer) broadcastPreparedModProjection(viewer, scope.runtime)
+              }
             }
             recordPartyRejoinMilestone(run.partyId, run.state)
             logGameActivity(before.state, run.state, run.loadedBoneyard, run.partyId)
@@ -2865,7 +2883,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         const stateBeforeLua = state
         let enemySpawnIntents = [] as import('../core-kernels/boneyard-wave-director.ts').BoneyardEnemySpawnIntent[]
         const runtimes = activePrivateLuaRuntimes()
-        privateModHost?.tick(nextTick)
+        if (privateModHost?.tick(nextTick)) {
+          const viewer = state.playerEntities.identities[0]?.playerId
+          if (viewer) broadcastPreparedModProjection(viewer, privateModHost)
+        }
         enemySpawnIntents.push(...privateModHost?.drainEnemySpawns() ?? [])
         for (const runtime of runtimes) {
           runtime.beginTick(nextTick)
@@ -2880,10 +2901,15 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         })
         const pendingEvents = pendingLuaEvents.splice(0)
         if (privateModHost) {
+          const projectionRevision = privateModHost.projectionRevision()
           privateModHost.step([
             ...pendingEvents,
             ...deriveWebLuaEvents(stateBeforeLua, state),
           ], state.tick, state.run.runId ?? 'private-session')
+          if (privateModHost.projectionRevision() !== projectionRevision) {
+            const viewer = state.playerEntities.identities[0]?.playerId
+            if (viewer) broadcastPreparedModProjection(viewer, privateModHost)
+          }
         }
         recordPartyRejoinMilestone(privateParties?.parties[0]?.id ?? null, state)
         if (runtimes.length > 0) {
@@ -4643,6 +4669,23 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     return run ? partyModRuntimes.get(run.partyId) ?? null : null
   }
 
+  function sendPreparedModProjection(
+    socket: WebSocket,
+    host: PreparedModHost | null,
+  ): void {
+    if (!host || socket.readyState !== WebSocket.OPEN) return
+    socket.send(encodeGameMessage({ type: 'server-mod-content', ...host.project() }))
+  }
+
+  function broadcastPreparedModProjection(
+    playerId: PlayerId,
+    host: PreparedModHost,
+  ): void {
+    const message = { type: 'server-mod-content' as const, ...host.project() }
+    if (sharedWorlds) broadcastToPlayerWorld(playerId, message)
+    else broadcast(message)
+  }
+
   async function beginSharedPartyRun(
     leaderPlayerId: PlayerId,
     selected: LoadedBoneyard,
@@ -4694,6 +4737,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         type: 'server-mod-catalog',
         items: scope.runtime.content.consumables(),
       })
+      broadcastPreparedModProjection(leaderPlayerId, scope.runtime)
       broadcastToPlayerWorld(leaderPlayerId, {
         type: 'server-boneyard-loaded',
         boneyard: selected,

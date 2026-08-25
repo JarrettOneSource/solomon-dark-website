@@ -2101,7 +2101,10 @@ function addInventoryDragger(
 function addItemIcon(
   context: RenderContext,
   layer: Container,
-  item: Pick<HubInventoryItem, 'equipmentType' | 'iconRecords' | 'iconTints' | 'modContent' | 'recipeIndex'>,
+  item: Pick<
+    HubInventoryItem,
+    'equipmentType' | 'iconRecords' | 'iconTints' | 'modContent' | 'modItemContent' | 'recipeIndex'
+  >,
   centerX: number,
   centerY: number,
   element: WizardElement,
@@ -2110,8 +2113,9 @@ function addItemIcon(
     readonly tintOverride?: number
   } = {},
 ): readonly Sprite[] {
-  if (item.modContent) {
-    const sprite = new Sprite(context.modTextures.texture(item.modContent))
+  const modContent = item.modContent ?? item.modItemContent
+  if (modContent) {
+    const sprite = new Sprite(context.modTextures.texture(modContent))
     sprite.anchor.set(0.5)
     sprite.position.set(centerX, centerY)
     sprite.alpha = options.alpha ?? 1
@@ -2155,7 +2159,7 @@ function addClippedItemIcon(
   layer: Container,
   item: Pick<
     HubInventoryItem,
-    'equipmentType' | 'iconRecords' | 'iconTints' | 'modContent' | 'recipeIndex'
+    'equipmentType' | 'iconRecords' | 'iconTints' | 'modContent' | 'modItemContent' | 'recipeIndex'
   >,
   centerX: number,
   centerY: number,

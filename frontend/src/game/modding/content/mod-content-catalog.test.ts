@@ -45,7 +45,12 @@ test('content catalog projects every family and builds deterministic consumables
         targetKind: 'status',
       },
     }),
-    ...(['item', 'skill', 'powerup', 'affix', 'affix-pool', 'spell', 'enemy', 'boneyard', 'shop', 'ui', 'room', 'scene', 'scene-extension'] as const)
+    content('item', 'ash_shard', '5000000000000000003', {
+      art: { icon: { key: 'icon', kind: 'asset-reference' } },
+      name: 'Ash Shard',
+      stack: { maximum: 99 },
+    }),
+    ...(['skill', 'powerup', 'affix', 'affix-pool', 'spell', 'enemy', 'boneyard', 'shop', 'ui', 'room', 'scene', 'scene-extension'] as const)
       .map((kind, index) => content(kind, `${kind}-${index}`, `${5_100_000_000_000_000_000n + BigInt(index)}`, {})),
   ])], assets())
 
@@ -54,6 +59,7 @@ test('content catalog projects every family and builds deterministic consumables
   assert.equal(catalog.consumables()[0]?.nativeSubtype, 6)
   assert.equal(catalog.consumables()[0]?.content.icon.imagePath, 'art/icon.png')
   assert.equal(catalog.potion(potionId)?.status?.contentId, statusId)
+  assert.equal(catalog.items()[0]?.content.stackMaximum, 99)
   assert.equal(catalog.createLootItems(7, false)[0]?.modContent?.contentId, potionId)
 })
 

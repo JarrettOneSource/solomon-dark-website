@@ -125,6 +125,7 @@ export type HubItemKind =
   | 'key'
   | 'mana-potion'
   | 'mind-chug'
+  | 'mod-item'
   | 'mod-potion'
   | 'rejuvenation-potion'
   | 'sack'
@@ -138,6 +139,7 @@ export const HUB_ITEM_KINDS = [
   'key',
   'mana-potion',
   'mind-chug',
+  'mod-item',
   'mod-potion',
   'rejuvenation-potion',
   'sack',
@@ -154,6 +156,7 @@ export interface HubInventoryItem {
   readonly id: number
   readonly kind: HubItemKind
   readonly modContent?: ModConsumableContent
+  readonly modItemContent?: ModItemContent
   readonly name: string
   readonly nativeSubtype: number | null
   readonly nativeSelector?: number
@@ -183,14 +186,9 @@ export interface ModSpriteFrame {
   readonly y: number
 }
 
-export interface ModConsumableContent {
-  readonly consumeVfx: Readonly<{
-    readonly color: readonly [number, number, number, number]
-    readonly kind: 'spell_glow'
-  }> | null
+export interface ModItemContent {
   readonly contentId: string
   readonly description: string
-  readonly durationMs: number
   readonly icon: Readonly<{
     readonly atlasId: string
     readonly frame: ModSpriteFrame
@@ -199,12 +197,26 @@ export interface ModConsumableContent {
   }>
   readonly key: string
   readonly modId: string
+  readonly stackMaximum: number
+}
+
+export interface ModConsumableContent extends Omit<ModItemContent, 'stackMaximum'> {
+  readonly consumeVfx: Readonly<{
+    readonly color: readonly [number, number, number, number]
+    readonly kind: 'spell_glow'
+  }> | null
+  readonly durationMs: number
 }
 
 export interface ModConsumableCatalogEntry {
   readonly content: ModConsumableContent
   readonly name: string
   readonly nativeSubtype: number
+}
+
+export interface ModItemCatalogEntry {
+  readonly content: ModItemContent
+  readonly name: string
 }
 
 export interface NativeEquipmentEffect {
@@ -1349,14 +1361,20 @@ export function insertLootInventoryItem(
   if (item.quantity < 1 || !Number.isSafeInteger(item.quantity)) {
     throw new RangeError('loot inventory quantity must be a positive safe integer')
   }
-  if (item.nativeTypeId === 7001) {
+  if (item.nativeTypeId === 7001 || item.kind === 'mod-item') {
     const stackIndex = source.backpack.findIndex((entry) => (
       entry.nativeTypeId === item.nativeTypeId
-      && (item.modContent === undefined
-        ? entry.modContent === undefined && entry.nativeSubtype === item.nativeSubtype
-        : entry.modContent?.contentId === item.modContent.contentId)
+      && (item.modItemContent
+        ? entry.modItemContent?.contentId === item.modItemContent.contentId
+        : item.modContent === undefined
+          ? entry.modContent === undefined && entry.nativeSubtype === item.nativeSubtype
+          : entry.modContent?.contentId === item.modContent.contentId)
     ))
     if (stackIndex >= 0) {
+      const maximum = item.modItemContent?.stackMaximum ?? 9_999
+      if (source.backpack[stackIndex]!.quantity + item.quantity > maximum) {
+        return { accepted: false, state: source }
+      }
       return {
         accepted: true,
         state: {
@@ -1849,6 +1867,16 @@ export function hubEconomyInventoryIsValid(source: HubEconomyState): boolean {
       ) return false
       seenIds.add(item.id)
       seenItems.add(item)
+      if (
+        (item.kind === 'mod-item') !== (item.modItemContent !== undefined)
+        || (item.kind === 'mod-potion') !== (item.modContent !== undefined)
+        || (item.kind === 'mod-item' && (
+          item.nativeTypeId !== 7013
+          || item.nativeSubtype !== null
+          || item.iconRecords.length !== 0
+          || item.quantity > item.modItemContent!.stackMaximum
+        ))
+      ) return false
       const sack = item.nativeTypeId === 7008 && item.kind === 'sack'
       if ((item.nativeTypeId === 7008) !== (item.kind === 'sack')) return false
       if (item.contents !== undefined) {
@@ -1885,12 +1913,16 @@ function insertItem(
   item: HubInventoryItem,
   capacity: number,
 ): readonly HubInventoryItem[] | null {
-  if (item.nativeTypeId === 7001) {
+  if (item.nativeTypeId === 7001 || item.kind === 'mod-item') {
     const stackIndex = destination.findIndex((entry) => (
       entry.nativeTypeId === item.nativeTypeId
-      && entry.nativeSubtype === item.nativeSubtype
+      && (item.modItemContent
+        ? entry.modItemContent?.contentId === item.modItemContent.contentId
+        : entry.nativeSubtype === item.nativeSubtype)
     ))
     if (stackIndex >= 0) {
+      const maximum = item.modItemContent?.stackMaximum ?? 9_999
+      if (destination[stackIndex]!.quantity + item.quantity > maximum) return null
       return destination.map((entry, index) => index === stackIndex
         ? { ...entry, quantity: entry.quantity + item.quantity }
         : entry)

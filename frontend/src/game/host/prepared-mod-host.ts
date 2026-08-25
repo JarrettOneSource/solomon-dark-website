@@ -29,6 +29,7 @@ import {
   compileModContentCatalog,
   ModStatusEngine,
   modConsumableInventoryItem,
+  modItemInventoryItem,
   type ModStatusCheckpoint,
   type PreparedModContentCatalog,
 } from '../modding/content/index.ts'
@@ -41,7 +42,11 @@ import {
   type PreparedModCheckpoint,
   type PreparedModStepResult,
 } from '../modding/runtime/index.ts'
-import type { LuaConsoleObject, LuaConsoleValue } from '../protocol/game-protocol.ts'
+import type {
+  LuaConsoleObject,
+  LuaConsoleValue,
+  ModContentProjection,
+} from '../protocol/game-protocol.ts'
 import type { MaterializedWebSessionContent } from './web-mod-content.ts'
 import type { WebLuaDerivedEvent } from './lua/web-lua-game-api.ts'
 
@@ -77,13 +82,15 @@ export interface PreparedModHost {
   consume(consumption: GameSimulationModConsumption): PreparedModStepResult
   drainEnemySpawns(): readonly BoneyardEnemySpawnIntent[]
   drainPresentation(): readonly PreparedModPresentationIntent[]
+  project(): ModContentProjection
+  projectionRevision(): number
   step(
     events: readonly WebLuaDerivedEvent[],
     tick: number,
     scopeId: string,
     context?: LuaConsoleObject,
   ): PreparedModStepResult
-  tick(tick: number): void
+  tick(tick: number): boolean
 }
 
 export async function prepareModHost(options: Readonly<{
@@ -188,6 +195,32 @@ export async function prepareModHost(options: Readonly<{
       requireOpen()
       return Object.freeze(presentation.splice(0))
     },
+    project() {
+      requireOpen()
+      return Object.freeze({
+        content: Object.freeze(content.all().map(entry => Object.freeze({
+          art: Object.freeze(Object.entries(entry.art)
+            .sort(([left], [right]) => left.localeCompare(right))
+            .map(([slot, art]) => Object.freeze({
+              path: art.path,
+              slot,
+            }))),
+          contentId: entry.contentId,
+          contentKind: entry.contentKind,
+          description: entry.description,
+          key: entry.key,
+          modId: entry.modId,
+          name: entry.name,
+        }))),
+        manifestSha256: options.content.manifest.manifestSha256,
+        revision: statuses.revision,
+        statuses: Object.freeze(statuses.project().map(({ modId: _modId, ...status }) => status)),
+      })
+    },
+    projectionRevision() {
+      requireOpen()
+      return statuses.revision
+    },
     step(events, tick, scopeId, context = {}) {
       requireOpen()
       return report(session.step({
@@ -202,7 +235,7 @@ export async function prepareModHost(options: Readonly<{
     },
     tick(tick) {
       requireOpen()
-      statuses.tick(tick)
+      return statuses.tick(tick) > 0
     },
   }
   return Object.freeze(host)
@@ -348,13 +381,19 @@ function applyGrant(
   content: PreparedModContentCatalog,
 ): GameSimulationState {
   const playerId = targetPlayer(source, fields.target, context)
-  const reference = contentReference(fields.item, 'potion', 'grant item')
-  const potion = content.potion(reference.contentId)
-  if (!potion) throw new Error(`grant item is unavailable: ${reference.contentId}`)
+  const reference = resolvedContentReference(fields.item, 'grant item')
   const quantity = fields.quantity === undefined ? 1 : integer(fields.quantity, 1, 99, 'grant quantity')
-  const item = { ...modConsumableInventoryItem(potion.catalog), quantity }
+  const definition = reference.targetKind === 'potion'
+    ? content.potion(reference.contentId)
+    : reference.targetKind === 'item'
+      ? content.item(reference.contentId)
+      : null
+  if (!definition) throw new Error(`grant item is unavailable: ${reference.contentId}`)
+  const item = definition.contentKind === 'potion'
+    ? { ...modConsumableInventoryItem(definition.catalog), quantity }
+    : modItemInventoryItem(definition.catalog, quantity)
   const granted = grantPlayerEntityInventoryItems(source.playerEntities, playerId, [item])
-  if (!granted.accepted) throw new Error(`inventory cannot accept ${potion.modId}:${potion.key}`)
+  if (!granted.accepted) throw new Error(`inventory cannot accept ${definition.modId}:${definition.key}`)
   return { ...source, playerEntities: granted.store }
 }
 
@@ -417,6 +456,19 @@ function contentReference(
       (value as LuaConsoleObject).targetKind !== targetKind ||
       typeof (value as LuaConsoleObject).contentId !== 'string') {
     throw new Error(`${field} must be a resolved ${targetKind} reference`)
+  }
+  return value as unknown as ResolvedWebLuaContentReference
+}
+
+function resolvedContentReference(
+  value: LuaConsoleValue | undefined,
+  field: string,
+): ResolvedWebLuaContentReference {
+  if (!value || typeof value !== 'object' || Array.isArray(value) ||
+      (value as LuaConsoleObject).kind !== 'resolved-content-reference' ||
+      typeof (value as LuaConsoleObject).targetKind !== 'string' ||
+      typeof (value as LuaConsoleObject).contentId !== 'string') {
+    throw new Error(`${field} must be a resolved content reference`)
   }
   return value as unknown as ResolvedWebLuaContentReference
 }

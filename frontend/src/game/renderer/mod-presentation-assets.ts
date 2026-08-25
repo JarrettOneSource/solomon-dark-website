@@ -1,13 +1,16 @@
 import { Rectangle, Texture } from 'pixi.js'
 
-import type { ModConsumableContent } from '../core-kernels/hub-economy.ts'
+import type {
+  ModConsumableContent,
+  ModItemContent,
+} from '../core-kernels/hub-economy.ts'
 import { loadGameImage, releaseGameImages } from '../game-assets.ts'
 import type { GameModAsset } from '../protocol/game-protocol.ts'
 import { gameContentUrl } from '../game-content-cache.ts'
 
 export interface ModPresentationTextures {
   destroy(): void
-  texture(content: ModConsumableContent): Texture
+  texture(content: ModConsumableContent | ModItemContent): Texture
 }
 
 export async function loadModPresentationTextures(

@@ -119,7 +119,7 @@ test('developer grants use complete stock catalogs and survive Hub-to-run transf
   )
   assert.deepEqual(
     [...new Set(WEB_LUA_DEVELOPER_ITEMS.map(({ kind }) => kind))].sort(),
-    HUB_ITEM_KINDS.filter(kind => kind !== 'mod-potion').sort(),
+    HUB_ITEM_KINDS.filter(kind => kind !== 'mod-item' && kind !== 'mod-potion').sort(),
   )
   assert.equal(WEB_LUA_DEVELOPER_SKILLS.length, 72)
   assert.deepEqual(
