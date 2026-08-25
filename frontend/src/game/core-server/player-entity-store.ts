@@ -1499,6 +1499,30 @@ export function grantSharedPlayerEntityExperience(
   return { milestone, store: { ...source, progressions } }
 }
 
+export function synchronizePlayerEntityLevelMilestone(
+  source: PlayerEntityStore,
+  playerId: string,
+  milestone: SharedPlayerLevelMilestone,
+): PlayerEntityStore {
+  const index = playerEntityIndex(source, playerId)
+  if (index < 0) throw new Error(`player entity store has no player ${playerId}`)
+  const previous = source.progressions[index]!
+  let progression = synchronizePlayerLevelMilestone(
+    previous,
+    source.skillBooks[index]!,
+    milestone,
+    ownsSorcerorsCharm(source, index),
+  )
+  if (progression.level > previous.level) {
+    progression = {
+      ...progression,
+      currentHealth: progression.maximumHealth,
+      currentMana: progression.maximumMana,
+    }
+  }
+  return replacePlayerProgression(source, index, progression)
+}
+
 export function applyPlayerEntitySkillChoice(
   source: PlayerEntityStore,
   playerId: string,

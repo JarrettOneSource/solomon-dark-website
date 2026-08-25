@@ -23,6 +23,7 @@ test('browser game owns one global-Hub endpoint plus in-memory party admission a
   const browserGameSource = [gamePage, bootstrap, supervisor].join('\n')
   assert.match(bootstrap, /request\('\/api\/game\/hub'/)
   assert.match(bootstrap, /request\('\/api\/game\/join\/admit'/)
+  assert.match(bootstrap, /request\('\/api\/game\/rejoin'/)
   assert.match(supervisor, /GAME_HUB_PATH = '\/game-hub'/)
   assert.doesNotMatch(browserGameSource, /game\/lobbies|createGameLobby|joinGameLobby/)
   assert.doesNotMatch(gamePage, /searchParams|get\('party'\)|hostedLobby/)

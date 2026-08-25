@@ -39,6 +39,7 @@ import { createBoneyardCatalog, type ModBoneyardEntry } from './boneyard-catalog
 import {
   GAME_SAVE_AUTOSAVE_INTERVAL_TICKS,
   startGameHost,
+  type GameHostAdmission,
 } from './game-host.ts'
 import type { GameServerLogEntry } from './game-server-logger.ts'
 import {
@@ -1945,7 +1946,7 @@ test('host admits one fresh solo player into the hidden stock Tutorial and check
   assert.equal(snapshotMessage.snapshot.world.waves, null)
   assert.equal(checkpointMessage.type, 'server-save-checkpoint')
   const saved = JSON.parse(checkpointMessage.save)
-  assert.equal(saved.schemaVersion, 9)
+  assert.equal(saved.schemaVersion, 10)
   assert.equal(saved.profile.economy.tutorialPending, true)
   assert.equal(saved.continuation.simulation.world.tutorial.stage, 0)
 })
@@ -2376,6 +2377,152 @@ test('thirty-second autosave publishes owner-only saves to a party leader and gu
     JSON.parse(guestCheckpoint.save).continuation.summary.playerId,
     guest.welcome.playerId,
   )
+})
+
+test('saved party member rejoins the same live run and catches up under one level barrier', async (context) => {
+  const tickets = new Map<string, GameHostAdmission>([
+    ['leader-ticket', { content: EMPTY_SHARED_CONTENT, leaderboardUserId: 42 }],
+    ['member-ticket', { content: EMPTY_SHARED_CONTENT, leaderboardUserId: 43 }],
+  ])
+  const host = await startGameHost({
+    authentication: {
+      kind: 'tickets',
+      claim: credential => {
+        const admission = tickets.get(credential) ?? null
+        tickets.delete(credential)
+        return admission
+      },
+    },
+    leaderboardReceiptSecret: LEADERBOARD_RECEIPT_SECRET,
+    sessionKind: 'global-hub',
+    sharedHub: true,
+    snapshotRate: 100,
+  })
+  context.after(() => host.close())
+  const leader = await join(host.address.url, 'leader-ticket', FIRST_CHARACTER)
+  const member = await join(host.address.url, 'member-ticket', SECOND_CHARACTER)
+  context.after(() => leader.socket.close())
+  context.after(() => member.socket.close())
+
+  const invitationMessage = nextMessage(member.socket, message => (
+    message.type === 'server-party-state' && message.state.invitations.length === 1
+  ))
+  leader.socket.send(encodeGameMessage({
+    type: 'client-party-invite',
+    targetPlayerId: member.welcome.playerId,
+  }))
+  const invitation = await invitationMessage
+  if (invitation.type !== 'server-party-state') assert.fail('expected party invitation')
+  const grouped = nextMessage(member.socket, message => (
+    message.type === 'server-party-state' && message.state.party.memberPlayerIds.length === 2
+  ))
+  member.socket.send(encodeGameMessage({
+    type: 'client-party-accept',
+    invitationId: invitation.state.invitations[0]!.id,
+  }))
+  const party = await grouped
+  if (party.type !== 'server-party-state') assert.fail('expected grouped party')
+
+  const memberRunSave = nextMessage(member.socket, message => (
+    message.type === 'server-save-checkpoint'
+    && JSON.parse(message.save).continuation.summary.partyRejoinToken !== null
+  ))
+  const loadedLeader = nextMessage(leader.socket, message => message.type === 'server-boneyard-loaded')
+  const loadedMember = nextMessage(member.socket, message => message.type === 'server-boneyard-loaded')
+  leader.socket.send(encodeGameMessage({
+    type: 'client-start-match',
+    boneyardId: 'default-random',
+  }))
+  const [leaderRun, memberRun, checkpoint] = await Promise.all([
+    loadedLeader,
+    loadedMember,
+    memberRunSave,
+  ])
+  assert.equal(leaderRun.type, 'server-boneyard-loaded')
+  assert.equal(memberRun.type, 'server-boneyard-loaded')
+  assert.equal(checkpoint.type, 'server-save-checkpoint')
+  const saved = JSON.parse(checkpoint.save) as {
+    continuation: { summary: { partyRejoinToken: string; playerId: string } }
+  }
+  const token = saved.continuation.summary.partyRejoinToken
+  assert.match(token, /^[A-Za-z0-9_-]{43}$/)
+  assert.equal(saved.continuation.summary.playerId, member.welcome.playerId)
+
+  await closeSocket(member.socket)
+  await waitFor(() => host.humanPlayerCount() === 1)
+  assert.equal(host.playerCount(), 2, 'the detached wizard keeps one capacity slot')
+  assert.equal(host.partyRejoinTarget(token)?.status, 'detached')
+
+  const active = host.playerState(leader.welcome.playerId)
+  assert.ok(active)
+  Object.assign(
+    active,
+    grantGameSimulationPlayerExperience(active, leader.welcome.playerId, 300),
+  )
+  await waitFor(() => host.playerState(leader.welcome.playerId)?.levelUpBarrier !== null)
+  await resolveEveryHostSkillOffer(host, leader.socket, leader.welcome.playerId)
+  assert.equal(host.playerState(leader.welcome.playerId)?.levelUpBarrier, null)
+
+  const reservationId = 'active-party-rejoin-reservation'
+  const target = host.partyRejoinTarget(token)
+  assert.ok(target)
+  assert.equal(host.reservePartyRejoin(token, reservationId, performance.now() + 5_000), null)
+  assert.equal(host.partyRejoinTarget(token)?.status, 'reserved')
+  tickets.set('rejoin-ticket', {
+    content: target.content,
+    developerAccess: target.developerAccess,
+    leaderboardUserId: target.leaderboardUserId,
+    partyRejoinToken: token,
+    reservationId,
+  })
+
+  const returningSocket = await openSocket(host.address.url)
+  context.after(() => returningSocket.close())
+  const waitingLeader = nextMessage(leader.socket, message => (
+    message.type === 'server-snapshot'
+    && message.snapshot.levelUpBarrier?.pendingPlayerIds.includes(member.welcome.playerId) === true
+  ))
+  const returningWelcome = nextMessage(returningSocket, message => message.type === 'server-welcome')
+  const rotatedCheckpoint = nextMessage(returningSocket, message => (
+    message.type === 'server-save-checkpoint'
+    && JSON.parse(message.save).continuation.summary.partyRejoinToken !== token
+  ))
+  returningSocket.send(encodeGameMessage({
+    type: 'client-hello',
+    profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
+    cheatsEnabled: false,
+    protocolVersion: GAME_PROTOCOL_VERSION,
+    credential: 'rejoin-ticket',
+    character: SECOND_CHARACTER,
+    save: checkpoint.save,
+    saveIntent: 'resume',
+  }))
+  const [welcome, waiting] = await Promise.all([returningWelcome, waitingLeader])
+  if (welcome.type !== 'server-welcome') assert.fail('expected rejoin welcome')
+  assert.equal(waiting.type, 'server-snapshot')
+  assert.equal(welcome.playerId, member.welcome.playerId)
+  assert.equal(welcome.snapshot.world.kind, 'boneyard')
+  if (welcome.snapshot.world.kind !== 'boneyard') assert.fail('expected live Boneyard')
+  assert.equal(welcome.snapshot.world.runId, memberRun.boneyard.runId)
+  assert.deepEqual(welcome.snapshot.players[welcome.playerId].position, {
+    x: memberRun.boneyard.scene.spawn.x,
+    y: memberRun.boneyard.scene.spawn.y,
+  })
+  assert.equal(welcome.snapshot.players[welcome.playerId].progression.level, 4)
+  assert.deepEqual(welcome.snapshot.levelUpBarrier?.pendingPlayerIds, [welcome.playerId])
+  assert.equal(getPlayerProgression(host.playerState(welcome.playerId)!, welcome.playerId).pendingLevels.length, 3)
+
+  const heldTick = host.playerState(leader.welcome.playerId)!.tick
+  await new Promise(resolve => setTimeout(resolve, 60))
+  assert.equal(host.playerState(leader.welcome.playerId)!.tick, heldTick)
+  await resolveEveryHostSkillOffer(host, returningSocket, welcome.playerId)
+  await waitFor(() => host.playerState(leader.welcome.playerId)!.tick > heldTick)
+  const rotated = await rotatedCheckpoint
+  assert.equal(rotated.type, 'server-save-checkpoint')
+  const rotatedToken = JSON.parse(rotated.save).continuation.summary.partyRejoinToken
+  assert.match(rotatedToken, /^[A-Za-z0-9_-]{43}$/)
+  assert.notEqual(rotatedToken, token)
+  assert.equal(host.partyRejoinTarget(token), null)
 })
 
 test('deployment restart checkpoints every connected private-session player before closing', async (context) => {
@@ -3174,6 +3321,30 @@ async function waitFor(predicate: () => boolean): Promise<void> {
   while (!predicate()) {
     if (performance.now() >= deadline) throw new Error('timed out waiting for condition')
     await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+}
+
+async function resolveEveryHostSkillOffer(
+  host: Awaited<ReturnType<typeof startGameHost>>,
+  socket: WebSocket,
+  playerId: string,
+): Promise<void> {
+  while (true) {
+    const active = host.playerState(playerId)
+    if (!active) throw new Error(`host has no player ${playerId}`)
+    const offer = getPlayerProgression(active, playerId).pendingOffer
+    if (!offer) return
+    socket.send(encodeGameMessage({
+      type: 'client-select-skill',
+      choiceIndex: 0,
+      offerSequence: offer.sequence,
+      skillId: offer.options[0]!.skillId,
+    }))
+    await waitFor(() => {
+      const next = host.playerState(playerId)
+      if (!next) return false
+      return getPlayerProgression(next, playerId).pendingOffer?.sequence !== offer.sequence
+    })
   }
 }
 

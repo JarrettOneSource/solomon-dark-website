@@ -24,11 +24,13 @@ import {
   confirmGameSimulationLoadout,
   continueGameSimulationOver,
   createGameSimulation,
+  detachGameSimulationPlayer,
   enterBoneyardWorld,
   getPlayerCharacter,
   getPlayerEconomy,
   getPlayerProgression,
   grantGameSimulationPlayerExperience,
+  rejoinGameSimulationPlayer,
   removePlayerCharacter,
   returnGameSimulationToHub,
   rerollGameSimulationPlayerSkill,
@@ -39,9 +41,11 @@ import {
   selectGameSimulationPlayerSkill,
   stepGameSimulationTick,
   type GameSimulationState,
+  type DetachedGameSimulationPlayer,
   type PlayerId,
 } from '../core-server/game-simulation.ts'
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
+import type { SharedPlayerLevelMilestone } from '../core-kernels/player-progression.ts'
 import { gameOverExitDurationTicks } from '../core-kernels/game-run.ts'
 import { NATIVE_TUTORIAL_CAMERA_LOCK_SETTLE_TICKS } from '../core-kernels/native-tutorial.ts'
 import type {
@@ -166,6 +170,7 @@ import {
   kickSharedPartyPlayer,
   leaveSharedParty,
   removeSharedGamePlayer,
+  rejoinSharedPartyRunPlayer,
   replaceSharedGameStateForPlayer,
   restoreSharedGamePlayer,
   sharedGameStateForPlayer,
@@ -205,6 +210,7 @@ export interface GameHostAdmission {
   readonly developerAccess?: boolean
   readonly leaderboardUserId: number | null
   readonly partyId?: string
+  readonly partyRejoinToken?: string
   readonly reservationId?: string
   readonly observer?: GameHostObserverAdmission
 }
@@ -222,6 +228,7 @@ interface AuthenticatedGameHostRole {
   readonly developerAccess: boolean
   readonly leaderboardUserId: number | null
   readonly partyId: string | null
+  readonly partyRejoinToken: string | null
   readonly reservationId: string | null
   readonly observer: GameHostObserverAdmission | null
   readonly role: GameHostRole
@@ -286,6 +293,7 @@ export interface GameHost {
   cancelPartyReservation(reservationId: string): void
   createPartyJoinRequest(input: GameHostPartyJoinRequestInput): GameHostPartyJoinRequestResult
   partyCount(): number
+  partyRejoinTarget(token: string): GameHostPartyRejoinTarget | null
   partyJoinRequestStatus(token: string): GameHostPartyJoinRequestStatus | null
   partyTargetByCode(joinCode: string): GameHostPartyTarget | null
   partyTargetByListingId(listingId: string): GameHostPartyTarget | null
@@ -297,6 +305,7 @@ export interface GameHost {
     timeoutMs?: number,
   ): Promise<GameHostDeploymentRestartResult>
   reservePartyJoin(partyId: string, reservationId: string, expiresAt: number): ProtocolPartyActionRejection | null
+  reservePartyRejoin(token: string, reservationId: string, expiresAt: number): GameHostPartyRejoinRejection | null
   state(): GameSimulationState
   runCount(): number
 }
@@ -328,6 +337,24 @@ export interface GameHostPartyTarget {
   readonly memberCount: number
   readonly status: 'hub' | 'playing'
   readonly visibility: 'invite-only' | 'private' | 'public'
+}
+
+export type GameHostPartyRejoinRejection =
+  | 'already-reserved'
+  | 'player-connected'
+  | 'run-unavailable'
+
+export interface GameHostPartyRejoinTarget {
+  readonly content: MaterializedWebSessionContent
+  readonly developerAccess: boolean
+  readonly globalScoreEligible: boolean
+  readonly leaderboardUserId: number | null
+  readonly localOnly: boolean
+  readonly partyId: string
+  readonly playerId: string
+  readonly profile: PlayerSocialProfile
+  readonly runId: string
+  readonly status: 'connected' | 'detached' | 'reserved'
 }
 
 export interface GameHostObservationTarget {
@@ -367,6 +394,7 @@ interface HostClient {
   activeInput: PlayerCharacterInput
   chatSentAtMs: number[]
   connectedAtMs: number
+  content: MaterializedWebSessionContent | null
   developerAccess: boolean
   displayName: string
   profile: PlayerSocialProfile
@@ -478,6 +506,28 @@ interface PartyJoinReservation {
   readonly partyId: string
 }
 
+interface PartyRejoinMilestone {
+  readonly experience: number
+  readonly level: number
+}
+
+interface PartyRejoinSlot {
+  connected: boolean
+  readonly content: MaterializedWebSessionContent
+  readonly developerAccess: boolean
+  detachedState: DetachedGameSimulationPlayer | null
+  readonly globalScoreEligible: boolean
+  readonly leaderboardUserId: number | null
+  latestMilestone: PartyRejoinMilestone | null
+  readonly localOnly: boolean
+  readonly partyId: string
+  readonly playerId: string
+  readonly profile: PlayerSocialProfile
+  reservation: Readonly<{ expiresAt: number; id: string }> | null
+  readonly runId: string
+  readonly token: string
+}
+
 interface QueuedClientInput {
   input: PlayerCharacterInput
   sequence: number
@@ -587,10 +637,13 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   let nextBotOrdinal = 1
   const externalPartyJoinRequests = new Map<string, ExternalPartyJoinRequest>()
   const partyJoinReservations = new Map<string, PartyJoinReservation>()
+  const partyRejoinSlots = new Map<string, PartyRejoinSlot>()
+  const partyRejoinTokensByPlayer = new Map<PlayerId, string>()
   const pendingLuaEvents: WebLuaDerivedEvent[] = []
   const leaderboardIneligibleRunIds = new Set<string>()
   const issuedLeaderboardReceipts = new Set<string>()
   const pending = new Set<WebSocket>()
+  const pendingPartyRejoins = new WeakMap<WebSocket, PartyRejoinSlot>()
   const supersededClients = new WeakSet<WebSocket>()
   const disconnectCauses = new WeakMap<WebSocket, { reason: string; source: string }>()
   const logDetails = (details: Readonly<Record<string, unknown>> = {}) => ({
@@ -616,7 +669,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         tick: state.tick,
         bots: bots.size,
         humanPlayers: clients.size,
-        players: participantCount(),
+        players: capacityParticipantCount(),
         lua: luaRuntime?.metrics ?? null,
         scene: state.world.kind,
       }))
@@ -945,6 +998,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           disconnect(socket, 'authentication-failed', 'Cheats require a private College.')
           return
         }
+        if (authenticated.partyId !== null && authenticated.partyRejoinToken !== null) {
+          disconnect(socket, 'authentication-failed', 'The party admission is ambiguous.')
+          return
+        }
         if (
           authenticated.partyId !== null
           && !validPartyReservation(
@@ -955,7 +1012,21 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           disconnect(socket, 'authentication-failed', 'That party admission has expired.')
           return
         }
-        if (participantCount() >= maxPlayers) {
+        const partyRejoinSlot = authenticated.partyRejoinToken === null
+          ? null
+          : validPartyRejoinReservation(
+              authenticated.partyRejoinToken,
+              authenticated.reservationId,
+            )
+        if (authenticated.partyRejoinToken !== null && partyRejoinSlot === null) {
+          disconnect(socket, 'authentication-failed', 'That active-party rejoin has expired.')
+          return
+        }
+        if (partyRejoinSlot !== null) pendingPartyRejoins.set(socket, partyRejoinSlot)
+        if (
+          (partyRejoinSlot === null ? participantCount() + detachedPartyRejoinCount() : participantCount())
+          >= maxPlayers
+        ) {
           disconnect(socket, 'server-full', 'The session is full.')
           return
         }
@@ -963,16 +1034,24 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         pending.delete(socket)
         let playerId: PlayerId | null = null
         let replacedClient: HostClient | null = null
+        let rejoinedParty = false
         let saveIntegrity: GameSaveIntegrity | null = null
         let savedProfile: RestoredGameSaveProfile | null = null
         const playerPartyIdentity = createPartyIdentity()
+        if (
+          partyRejoinSlot !== null
+          && (message.save === undefined || message.saveIntent !== 'resume')
+        ) {
+          disconnect(socket, 'invalid-message', 'Active-party rejoin requires the saved wizard.')
+          return
+        }
         if (message.save !== undefined) {
           if (message.saveIntent === undefined) {
             disconnect(socket, 'invalid-message', 'The game save intent is missing.')
             return
           }
           if (
-            !sharedHub && (
+            !sharedHub && partyRejoinSlot === null && (
               clients.size !== 0
               || state.world.kind !== 'hub'
               || state.playerEntities.identities.length !== 0
@@ -1003,7 +1082,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           }
           const activeManifest = authenticated.content?.manifest ?? content
           const modMismatch = !sameContentMods(savedProfile.mods, activeManifest.mods)
-          if (modMismatch && !message.allowModMismatch) {
+          if (modMismatch && (partyRejoinSlot !== null || !message.allowModMismatch)) {
             disconnect(
               socket,
               'invalid-message',
@@ -1035,7 +1114,103 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             playerId = restored.playerId
             let restoredState = restored.state
             let restoredBoneyard = restored.loadedBoneyard
+            if (partyRejoinSlot !== null) {
+              const detachedCharacter = partyRejoinSlot.detachedState
+                ?.playerEntities.configs[0]
+              if (
+                playerId !== partyRejoinSlot.playerId
+                || !credentialsEqual(
+                  savedProfile.continuation?.summary.partyRejoinToken ?? '',
+                  authenticated.partyRejoinToken ?? '',
+                )
+                || restoredBoneyard?.runId !== partyRejoinSlot.runId
+                || restoredState.world.kind !== 'boneyard'
+                || restoredState.world.runId !== partyRejoinSlot.runId
+                || partyRejoinSlot.detachedState === null
+                || partyRejoinSlot.detachedState.playerEntities.configs.length !== 1
+                || !detachedCharacter
+                || !sameCharacter(detachedCharacter, message.character)
+              ) {
+                disconnect(
+                  socket,
+                  'invalid-message',
+                  'The saved wizard does not match this active-party rejoin.',
+                )
+                return
+              }
+              const milestone = partyRejoinMilestone(partyRejoinSlot)
+              if (sharedWorlds) {
+                const rejoined = rejoinSharedPartyRunPlayer(
+                  sharedWorlds,
+                  partyRejoinSlot.detachedState,
+                  playerId,
+                  partyRejoinSlot.partyId,
+                  playerPartyIdentity,
+                  availablePartyMembers(
+                    partyRejoinSlot.partyId,
+                    authenticated.reservationId,
+                    playerId,
+                  ),
+                  milestone,
+                )
+                if (!rejoined.accepted) {
+                  disconnect(socket, 'invalid-message', partyRejectionMessage(rejoined.reason))
+                  return
+                }
+                sharedWorlds = rejoined.state
+                state = sharedWorlds.hub
+              } else {
+                const destination = privateParties?.parties.find(({ id }) => (
+                  id === partyRejoinSlot.partyId
+                )) ?? null
+                if (!privateParties || !destination) {
+                  disconnect(socket, 'invalid-message', 'The active party no longer exists.')
+                  return
+                }
+                try {
+                  state = rejoinGameSimulationPlayer(
+                    state,
+                    partyRejoinSlot.detachedState,
+                    playerId,
+                    milestone,
+                  )
+                } catch (error) {
+                  disconnect(
+                    socket,
+                    'invalid-message',
+                    error instanceof Error ? error.message : 'The active run cannot be rejoined.',
+                  )
+                  return
+                }
+                const registered = registerPartyPlayer(
+                  privateParties,
+                  playerId,
+                  playerPartyIdentity,
+                )
+                const joined = joinPartyPlayer(
+                  registered,
+                  playerId,
+                  destination.id,
+                  availablePartyMembers(
+                    destination.id,
+                    authenticated.reservationId,
+                    playerId,
+                  ),
+                )
+                if (!joined.accepted) {
+                  state = removePlayerCharacter(state, playerId)
+                  disconnect(socket, 'invalid-message', partyRejectionMessage(joined.reason))
+                  return
+                }
+                privateParties = joined.state
+              }
+              rejoinedParty = true
+              consumePartyRejoinSlot(partyRejoinSlot)
+              pendingPartyRejoins.delete(socket)
+            }
             if (
+              !rejoinedParty
+              &&
               modMismatch
               && restoredBoneyard?.choice.source === 'mod'
               && restoredBoneyard.choice.modId !== undefined
@@ -1047,7 +1222,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
               restoredState = returnGameSimulationToHub(restoredState)
               restoredBoneyard = null
             }
-            if (sharedWorlds) {
+            if (sharedWorlds && !rejoinedParty) {
               const liveState = sharedGameStateForPlayer(sharedWorlds, playerId)
               if (liveState) {
                 const liveClient = [...clients.values()].find(
@@ -1097,7 +1272,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
                   return
                 }
               }
-            } else {
+            } else if (!rejoinedParty) {
               state = restoredState
               loadedBoneyard = restoredBoneyard
               nextPlayerId = Math.max(nextPlayerId, nextPlayerNumber(playerId) + 1)
@@ -1142,7 +1317,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           disconnect(socket, 'invalid-message', 'The game save intent is invalid.')
           return
         }
-        if (savedProfile) {
+        if (savedProfile && !rejoinedParty) {
           if (sharedHub) pendingRestoredModState.set(playerId, savedProfile.modState)
           else restoreMatchingModState(
             privateModLuaRuntimes,
@@ -1204,7 +1379,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         if (!sharedHub) {
           hostPlayerId ??= playerId
         }
-        if (privateParties) {
+        if (privateParties && !rejoinedParty) {
           const destination = privateParties.parties[0] ?? null
           privateParties = registerPartyPlayer(
             privateParties,
@@ -1257,25 +1432,33 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           activeInput: createIdlePlayerCharacterInput(),
           chatSentAtMs: [],
           connectedAtMs: Date.now(),
+          content: authenticated.content,
           developerAccess: authenticated.developerAccess,
           displayName: message.character.displayName,
-          profile: message.profile,
+          profile: partyRejoinSlot?.profile ?? message.profile,
           // Browser-held documents are editable, including documents read back
           // from the account cloud slot. Only a save-free admission can begin a
           // globally ranked lineage; the document's own integrity claim is not
           // evidence of server provenance.
-          globalScoreEligible: sessionKind !== 'private-college'
-            && message.save === undefined
-            && !clientCheatsEnabled
-            && (authenticated.content?.manifest.mods.length ?? content.mods.length) === 0,
+          globalScoreEligible: partyRejoinSlot?.globalScoreEligible
+            ?? (
+              sessionKind !== 'private-college'
+              && message.save === undefined
+              && !clientCheatsEnabled
+              && (authenticated.content?.manifest.mods.length ?? content.mods.length) === 0
+            ),
           hubActivity: null,
-          localOnly: sessionKind !== 'global-hub'
-            || clientCheatsEnabled
-            || saveIntegrity === 'local-only'
-            || (authenticated.content?.manifest.mods.length ?? content.mods.length) > 0,
+          localOnly: partyRejoinSlot?.localOnly
+            ?? (
+              sessionKind !== 'global-hub'
+              || clientCheatsEnabled
+              || saveIntegrity === 'local-only'
+              || (authenticated.content?.manifest.mods.length ?? content.mods.length) > 0
+            ),
           lastReceivedSequence: 0,
           lastSentSnapshotSequence: snapshotSequence,
-          leaderboardUserId: authenticated.leaderboardUserId,
+          leaderboardUserId: partyRejoinSlot?.leaderboardUserId
+            ?? authenticated.leaderboardUserId,
           playerId,
           pendingLuaRequestIds: new Set(),
           queuedInputs: new Map(),
@@ -1289,8 +1472,12 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         const connectedParty = activePartySystem()
           ? partyForPlayer(activePartySystem()!, playerId)
           : null
+        armPartyRejoinSlotsForState(
+          connectedParty?.id ?? null,
+          stateForPlayer(playerId),
+        )
         const connectedDetails = {
-          accountUsername: message.profile.accountUsername,
+          accountUsername: joinedClient.profile.accountUsername,
           discipline: message.character.discipline,
           displayName: message.character.displayName,
           element: message.character.element,
@@ -1298,6 +1485,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           partyMemberCount: connectedParty?.memberPlayerIds.length ?? null,
           playerId,
           playerCount: clients.size,
+          rejoinedParty,
           replacedConnection: replacedClient !== null,
           role: authenticated.role,
         }
@@ -2202,6 +2390,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         loadedBoneyard = selected
         const previousState = state
         state = enterBoneyardWorld(state, selected)
+        armPartyRejoinSlotsForState(privateParties?.parties[0]?.id ?? null, state)
         logGameActivity(previousState, state, selected, null)
         taintIneligibleClientRuns()
         if (activePrivateLuaRuntimes().length > 0) {
@@ -2266,6 +2455,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         }
         loadedBoneyard = selected
         state = enterBoneyardWorld(state, selected)
+        armPartyRejoinSlotsForState(privateParties?.parties[0]?.id ?? null, state)
         stopAllClientInputs()
         broadcast({ type: 'server-boneyard-loaded', boneyard: selected })
         if (privateParties) broadcastPartyState()
@@ -2369,6 +2559,13 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       stopHeartbeat()
       pending.delete(socket)
       const client = clients.get(socket)
+      const pendingPartyRejoin = pendingPartyRejoins.get(socket)
+      if (pendingPartyRejoin) {
+        pendingPartyRejoins.delete(socket)
+        if (partyRejoinSlots.get(pendingPartyRejoin.token) === pendingPartyRejoin) {
+          pendingPartyRejoin.reservation = null
+        }
+      }
       const planned = disconnectCauses.get(socket)
       const observer = observers.get(socket)
       if (supersededClients.delete(socket)) return
@@ -2433,6 +2630,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         : null
       const releasedGameplayPause = gameplayPauseForPlayer(client.playerId)?.ownerPlayerId
         === client.playerId
+      detachPartyRejoinClient(client, disconnectedState, disconnectedPartyId)
       saveDocuments.delete(client.playerId)
       saveSequences.delete(client.playerId)
       if (sharedWorlds) {
@@ -2465,11 +2663,14 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           saveSequences.clear()
           if (privateParties) privateParties = createPartySystem()
           gameplayPause = null
+          partyRejoinSlots.clear()
+          partyRejoinTokensByPlayer.clear()
           resetNextTickDeadline()
         }
       } else if (client.playerId === hostPlayerId) {
         hostPlayerId = clients.values().next().value?.playerId ?? null
       }
+      prunePartyRejoinSlots()
       options.onPlayerCountChanged?.(clients.size)
       const source = planned?.source ?? disconnectSource(closeCode)
       const disconnectedDetails = {
@@ -2627,6 +2828,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           for (const run of sharedWorlds.runs) {
             const before = previous.runs.find(({ partyId }) => partyId === run.partyId)
             if (!before) continue
+            recordPartyRejoinMilestone(run.partyId, run.state)
             logGameActivity(before.state, run.state, run.loadedBoneyard, run.partyId)
             const enteredGameOver = before.state.run.phase === 'active'
               && run.state.run.phase === 'game-over'
@@ -2703,6 +2905,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           enemySpawnIntents,
           extensions: privateModExtensions,
         })
+        recordPartyRejoinMilestone(privateParties?.parties[0]?.id ?? null, state)
         logGameActivity(stateBeforeLua, state, loadedBoneyard, null)
         publishLeaderboardReceipts(stateBeforeLua, state)
         if (runtimes.length > 0) {
@@ -2752,6 +2955,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         ) publishSaveCheckpoint('periodic')
       }
       pruneLeaderboardRunState()
+      prunePartyRejoinSlots()
       if (steps === 25 && now >= nextTickAt) {
         if (now - lastTickLagWarningAt >= 10_000) {
           lastTickLagWarningAt = now
@@ -2867,6 +3071,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           (scope?.runtimes ?? privateModLuaRuntimes)
             .map(runtime => [runtime.mod.id, runtime.snapshotState()]),
         ),
+        partyRejoinToken: partyRejoinTokenForPlayer(client.playerId),
         playerId: client.playerId,
         state: saveState,
       }
@@ -3156,6 +3361,236 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     return `${code.slice(0, 4)}-${code.slice(4)}`
   }
 
+  function armPartyRejoinSlotsForState(
+    partyId: string | null,
+    activeState: GameSimulationState,
+  ): void {
+    if (
+      partyId === null
+      || activeState.world.kind !== 'boneyard'
+      || activeState.run.phase !== 'active'
+      || activeState.run.runId === null
+    ) return
+    const memberIds = new Set(
+      activeState.playerEntities.identities.map(({ playerId }) => playerId),
+    )
+    for (const client of clients.values()) {
+      if (!memberIds.has(client.playerId) || client.content === null) continue
+      const previousToken = partyRejoinTokensByPlayer.get(client.playerId)
+      const previous = previousToken ? partyRejoinSlots.get(previousToken) : null
+      if (
+        previous
+        && previous.partyId === partyId
+        && previous.runId === activeState.run.runId
+      ) {
+        previous.connected = true
+        previous.detachedState = null
+        previous.reservation = null
+        continue
+      }
+      if (previousToken) removePartyRejoinSlot(previousToken)
+      const token = randomBytes(32).toString('base64url')
+      const barrier = activeState.levelUpBarrier
+      partyRejoinSlots.set(token, {
+        connected: true,
+        content: client.content,
+        developerAccess: client.developerAccess,
+        detachedState: null,
+        globalScoreEligible: client.globalScoreEligible,
+        leaderboardUserId: client.leaderboardUserId,
+        latestMilestone: barrier === null ? null : {
+          experience: barrier.milestoneExperience,
+          level: barrier.milestoneLevel,
+        },
+        localOnly: client.localOnly,
+        partyId,
+        playerId: client.playerId,
+        profile: client.profile,
+        reservation: null,
+        runId: activeState.run.runId,
+        token,
+      })
+      partyRejoinTokensByPlayer.set(client.playerId, token)
+    }
+  }
+
+  function detachPartyRejoinClient(
+    client: HostClient,
+    activeState: GameSimulationState,
+    partyId: string | null,
+  ): void {
+    const token = partyRejoinTokensByPlayer.get(client.playerId)
+    const slot = token ? partyRejoinSlots.get(token) : null
+    if (
+      !slot
+      || partyId === null
+      || slot.partyId !== partyId
+      || activeState.world.kind !== 'boneyard'
+      || activeState.run.phase !== 'active'
+      || activeState.run.runId !== slot.runId
+    ) {
+      if (token) removePartyRejoinSlot(token)
+      return
+    }
+    slot.connected = false
+    slot.detachedState = detachGameSimulationPlayer(activeState, client.playerId)
+    slot.reservation = null
+    recordPartyRejoinMilestone(partyId, activeState)
+  }
+
+  function recordPartyRejoinMilestone(
+    partyId: string | null,
+    activeState: GameSimulationState,
+  ): void {
+    const barrier = activeState.levelUpBarrier
+    if (
+      partyId === null
+      || barrier === null
+      || activeState.run.phase !== 'active'
+      || activeState.run.runId === null
+    ) return
+    for (const slot of partyRejoinSlots.values()) {
+      if (slot.partyId !== partyId || slot.runId !== activeState.run.runId) continue
+      if (
+        slot.latestMilestone === null
+        || barrier.milestoneLevel > slot.latestMilestone.level
+        || (
+          barrier.milestoneLevel === slot.latestMilestone.level
+          && barrier.milestoneExperience > slot.latestMilestone.experience
+        )
+      ) {
+        slot.latestMilestone = {
+          experience: barrier.milestoneExperience,
+          level: barrier.milestoneLevel,
+        }
+      }
+    }
+  }
+
+  function partyRejoinMilestone(slot: PartyRejoinSlot): SharedPlayerLevelMilestone | null {
+    if (slot.detachedState === null || slot.latestMilestone === null) return null
+    const current = slot.detachedState.playerEntities.progressions[0]!
+    if (slot.latestMilestone.level <= current.level) return null
+    return Object.freeze({
+      crossedLevels: Object.freeze(Array.from(
+        { length: slot.latestMilestone.level - current.level },
+        (_, index) => current.level + index + 1,
+      )),
+      experience: slot.latestMilestone.experience,
+      level: slot.latestMilestone.level,
+    })
+  }
+
+  function partyRejoinTokenForPlayer(playerId: PlayerId): string | null {
+    prunePartyRejoinSlots()
+    const token = partyRejoinTokensByPlayer.get(playerId)
+    const slot = token ? partyRejoinSlots.get(token) : null
+    return slot?.connected ? slot.token : null
+  }
+
+  function partyRejoinTarget(token: string): GameHostPartyRejoinTarget | null {
+    prunePartyRejoinSlots()
+    const slot = partyRejoinSlots.get(token)
+    if (!slot) return null
+    return {
+      content: slot.content,
+      developerAccess: slot.developerAccess,
+      globalScoreEligible: slot.globalScoreEligible,
+      leaderboardUserId: slot.leaderboardUserId,
+      localOnly: slot.localOnly,
+      partyId: slot.partyId,
+      playerId: slot.playerId,
+      profile: slot.profile,
+      runId: slot.runId,
+      status: slot.connected
+        ? 'connected'
+        : slot.reservation === null ? 'detached' : 'reserved',
+    }
+  }
+
+  function reservePartyRejoin(
+    token: string,
+    reservationId: string,
+    expiresAt: number,
+  ): GameHostPartyRejoinRejection | null {
+    prunePartyRejoinSlots()
+    const slot = partyRejoinSlots.get(token)
+    if (!slot || slot.detachedState === null || activeRunForPartyRejoin(slot) === null) {
+      return 'run-unavailable'
+    }
+    if (slot.connected) return 'player-connected'
+    if (slot.reservation !== null) return 'already-reserved'
+    slot.reservation = { expiresAt, id: reservationId }
+    return null
+  }
+
+  function validPartyRejoinReservation(
+    token: string,
+    reservationId: string | null,
+  ): PartyRejoinSlot | null {
+    prunePartyRejoinSlots()
+    if (reservationId === null) return null
+    const slot = partyRejoinSlots.get(token)
+    return slot?.reservation?.id === reservationId
+      && slot.reservation.expiresAt > performance.now()
+      && !slot.connected
+      && slot.detachedState !== null
+      && activeRunForPartyRejoin(slot) !== null
+      ? slot
+      : null
+  }
+
+  function consumePartyRejoinSlot(slot: PartyRejoinSlot): void {
+    removePartyRejoinSlot(slot.token)
+  }
+
+  function cancelPartyRejoinReservation(reservationId: string): void {
+    for (const slot of partyRejoinSlots.values()) {
+      if (slot.reservation?.id === reservationId) slot.reservation = null
+    }
+  }
+
+  function activeRunForPartyRejoin(slot: PartyRejoinSlot): GameSimulationState | null {
+    if (sharedWorlds) {
+      return sharedWorlds.runs.find(run => (
+        run.partyId === slot.partyId
+        && run.loadedBoneyard.runId === slot.runId
+        && run.state.run.phase === 'active'
+      ))?.state ?? null
+    }
+    return state.world.kind === 'boneyard'
+      && state.run.phase === 'active'
+      && state.run.runId === slot.runId
+      ? state
+      : null
+  }
+
+  function prunePartyRejoinSlots(now = performance.now()): void {
+    for (const slot of [...partyRejoinSlots.values()]) {
+      if (activeRunForPartyRejoin(slot) === null) {
+        removePartyRejoinSlot(slot.token)
+        continue
+      }
+      if (slot.reservation !== null && slot.reservation.expiresAt <= now) {
+        slot.reservation = null
+      }
+    }
+  }
+
+  function removePartyRejoinSlot(token: string): void {
+    const slot = partyRejoinSlots.get(token)
+    if (!slot) return
+    partyRejoinSlots.delete(token)
+    if (partyRejoinTokensByPlayer.get(slot.playerId) === token) {
+      partyRejoinTokensByPlayer.delete(slot.playerId)
+    }
+  }
+
+  function detachedPartyRejoinCount(): number {
+    prunePartyRejoinSlots()
+    return [...partyRejoinSlots.values()].filter(slot => !slot.connected).length
+  }
+
   function partyTarget(partyId: string): GameHostPartyTarget | null {
     prunePartyAccess()
     const parties = activePartySystem()
@@ -3325,7 +3760,11 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     const target = partyTarget(partyId)
     if (!target) return 'party-missing'
     if (target.status !== 'hub') return 'not-in-hub'
-    if (target.memberCount + reservationsForParty(partyId) >= maxPlayers) return 'party-full'
+    if (
+      target.memberCount
+      + reservationsForParty(partyId)
+      + detachedPartyRejoinsForParty(partyId, null) >= maxPlayers
+    ) return 'party-full'
     partyJoinReservations.set(reservationId, { expiresAt, partyId })
     return null
   }
@@ -3337,12 +3776,21 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     return reservation?.partyId === partyId && reservation.expiresAt > performance.now()
   }
 
-  function availablePartyMembers(partyId: string, activeReservationId: string | null): number {
+  function availablePartyMembers(
+    partyId: string,
+    activeReservationId: string | null,
+    activeRejoinPlayerId: string | null = null,
+  ): number {
     prunePartyAccess()
     const otherReservations = [...partyJoinReservations].filter(([id, reservation]) => (
       id !== activeReservationId && reservation.partyId === partyId
     )).length
-    return Math.max(1, maxPlayers - otherReservations)
+    return Math.max(
+      1,
+      maxPlayers
+        - otherReservations
+        - detachedPartyRejoinsForParty(partyId, activeRejoinPlayerId),
+    )
   }
 
   function reservationsForParty(partyId: string): number {
@@ -3351,8 +3799,22 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     )).length
   }
 
+  function detachedPartyRejoinsForParty(
+    partyId: string,
+    excludedPlayerId: string | null,
+  ): number {
+    prunePartyRejoinSlots()
+    return [...partyRejoinSlots.values()].filter(slot => (
+      !slot.connected
+      && slot.partyId === partyId
+      && slot.playerId !== excludedPlayerId
+    )).length
+  }
+
   function consumePartyReservation(reservationId: string | null): void {
-    if (reservationId) partyJoinReservations.delete(reservationId)
+    if (!reservationId) return
+    partyJoinReservations.delete(reservationId)
+    cancelPartyRejoinReservation(reservationId)
   }
 
   function prunePartyAccess(now = performance.now()): boolean {
@@ -3815,6 +4277,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     return clients.size + bots.size
   }
 
+  function capacityParticipantCount(): number {
+    return participantCount() + detachedPartyRejoinCount()
+  }
+
   function stopAllClientInputs(): void {
     for (const client of clients.values()) {
       client.activeInput = createIdlePlayerCharacterInput()
@@ -4241,6 +4707,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       sharedWorlds = started.state
       state = sharedWorlds.hub
       const run = sharedWorlds.runs.find(candidate => candidate.partyId === party.id)!
+      armPartyRejoinSlotsForState(party.id, run.state)
       logGameActivity(before, run.state, selected, party.id)
       scope.pendingEvents.push(...deriveWebLuaEvents(
         before,
@@ -4505,15 +4972,17 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     hubPlayerCount: () => sharedWorlds?.hub.playerEntities.identities.length
       ?? Number(state.world.kind === 'hub') * clients.size,
     humanPlayerCount: () => clients.size,
-    playerCount: participantCount,
+    playerCount: capacityParticipantCount,
     loadedBoneyard: () => loadedBoneyard,
     modCatalog: () => privateModContentRegistry.catalog(),
     observationTargets,
     cancelPartyReservation(reservationId) {
       partyJoinReservations.delete(reservationId)
+      cancelPartyRejoinReservation(reservationId)
     },
     createPartyJoinRequest: createExternalPartyJoinRequest,
     partyCount: () => activePartySystem()?.parties.length ?? 0,
+    partyRejoinTarget,
     partyJoinRequestStatus(token) {
       prunePartyAccess()
       const request = externalPartyJoinRequests.get(token)
@@ -4590,6 +5059,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       : [],
     restartForDeployment,
     reservePartyJoin: reserveExternalPartyJoin,
+    reservePartyRejoin,
     state: () => state,
     runCount: () => sharedWorlds?.runs.length ?? Number(state.world.kind === 'boneyard'),
   }
@@ -4858,6 +5328,7 @@ function authenticate(
           developerAccess: false,
           leaderboardUserId: authentication.leaderboardUserId ?? null,
           partyId: null,
+          partyRejoinToken: null,
           reservationId: null,
           observer: null,
           role: 'shared',
@@ -4869,17 +5340,23 @@ function authenticate(
     return claimed
       && validLeaderboardUserId(claimed.leaderboardUserId)
       && validObserverAdmission(claimed.observer)
+      && validPartyRejoinToken(claimed.partyRejoinToken)
       ? {
       content: claimed.content,
       developerAccess: claimed.developerAccess === true,
       leaderboardUserId: claimed.leaderboardUserId,
       partyId: claimed.partyId ?? null,
+      partyRejoinToken: claimed.partyRejoinToken ?? null,
       reservationId: claimed.reservationId ?? null,
       observer: claimed.observer ?? null,
       role: 'shared',
     } : null
   }
   return null
+}
+
+function validPartyRejoinToken(value: string | undefined): boolean {
+  return value === undefined || /^[A-Za-z0-9_-]{43}$/.test(value)
 }
 
 function validObserverAdmission(value: GameHostObserverAdmission | undefined): boolean {

@@ -53,6 +53,7 @@ import {
   BONEYARD_ENEMY_EVENT_LANE_CAPACITY,
   confirmGameSimulationLoadout,
   createGameSimulation,
+  detachGameSimulationPlayer,
   DEFAULT_PLAYER_CHARACTER_CONFIG,
   enterBoneyardWorld,
   GAME_TICK_RATE,
@@ -63,6 +64,7 @@ import {
   gameSimulationDurableProfileEconomy,
   grantGameSimulationPlayerExperience,
   removePlayerCharacter,
+  rejoinGameSimulationPlayer,
   returnGameSimulationToHub,
   rerollGameSimulationPlayerSkill,
   saveGameSimulationPlayerSkill,
@@ -1355,6 +1357,82 @@ test('shared picker cohort excludes late joiners and releases disconnected waite
   })!
   state = removePlayerCharacter(state, 'second')
   assert.equal(state.levelUpBarrier, null)
+})
+
+test('active-run rejoin imports one durable actor and queues every missed personal choice', () => {
+  const first = {
+    discipline: 'arcane',
+    displayName: 'First',
+    element: 'ether',
+  } as const
+  const second = {
+    discipline: 'mind',
+    displayName: 'Second',
+    element: 'water',
+  } as const
+  const loaded = combatBoneyard('rejoin-run')
+  let together = enterBoneyardWorld(createGameSimulation({ first, second }), loaded)
+  const retainedEconomy = getPlayerEconomy(together, 'second')
+  const retainedBook = getPlayerSkillBook(together, 'second')
+  const retainedHall = together.world.kind === 'boneyard'
+    ? together.world.hallOfFameRuns.second
+    : null
+  const detached = detachGameSimulationPlayer(together, 'second')
+  together = removePlayerCharacter(together, 'second')
+
+  together = grantGameSimulationPlayerExperience(together, 'first', 300)
+  const milestone = together.levelUpBarrier
+  assert.ok(milestone)
+  while (getPlayerProgression(together, 'first').pendingOffer) {
+    const offer = getPlayerProgression(together, 'first').pendingOffer!
+    together = selectGameSimulationPlayerSkill(together, 'first', {
+      choiceIndex: 0,
+      offerSequence: offer.sequence,
+      skillId: offer.options[0]!.skillId,
+    })!
+  }
+  assert.equal(together.levelUpBarrier, null)
+  const worldBefore = together.world
+  const tickBefore = together.tick
+
+  together = rejoinGameSimulationPlayer(together, detached, 'second', {
+    crossedLevels: milestone.participantIds.includes('second')
+      ? []
+      : [2, 3, 4],
+    experience: milestone.milestoneExperience,
+    level: milestone.milestoneLevel,
+  })
+
+  assert.equal(together.world.kind, 'boneyard')
+  if (together.world.kind !== 'boneyard') assert.fail('expected Boneyard')
+  assert.equal(together.world.enemies, worldBefore.kind === 'boneyard' ? worldBefore.enemies : null)
+  assert.deepEqual(together.world.hallOfFameRuns.second, retainedHall)
+  assert.deepEqual(getPlayerEconomy(together, 'second'), retainedEconomy)
+  assert.deepEqual(getPlayerSkillBook(together, 'second'), retainedBook)
+  assert.deepEqual(getPlayerCharacter(together, 'second').position, {
+    x: loaded.scene.spawn.x,
+    y: loaded.scene.spawn.y,
+  })
+  assert.deepEqual(getPlayerCharacter(together, 'second').velocity, { x: 0, y: 0 })
+  assert.equal(getPlayerProgression(together, 'second').level, 4)
+  assert.equal(getPlayerProgression(together, 'second').pendingLevels.length, 3)
+  assert.deepEqual(together.levelUpBarrier?.participantIds, ['first', 'second'])
+  assert.deepEqual(together.levelUpBarrier?.pendingPlayerIds, ['second'])
+  assert.equal(stepGameSimulationTick(together, {}).tick, tickBefore)
+
+  let choices = 0
+  while (getPlayerProgression(together, 'second').pendingOffer) {
+    const offer = getPlayerProgression(together, 'second').pendingOffer!
+    together = selectGameSimulationPlayerSkill(together, 'second', {
+      choiceIndex: 0,
+      offerSequence: offer.sequence,
+      skillId: offer.options[0]!.skillId,
+    })!
+    choices += 1
+  }
+  assert.equal(choices, 3)
+  assert.equal(together.levelUpBarrier, null)
+  assert.equal(stepGameSimulationTick(together, {}).tick, tickBefore + 1)
 })
 
 test('Sorceror actions are authoritative, consume the active offer, and preserve saved choices', () => {

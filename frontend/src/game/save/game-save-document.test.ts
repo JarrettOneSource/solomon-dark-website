@@ -83,7 +83,7 @@ test('host save documents round-trip the complete owner state and revive Hub run
     state,
   })
   const encoded = JSON.parse(document) as Record<string, unknown>
-  assert.equal(encoded.schemaVersion, 9)
+  assert.equal(encoded.schemaVersion, 10)
   assert.deepEqual(encoded.mods, MODS)
   assert.deepEqual(encoded.modState, MOD_STATE)
   assert.equal(encoded.integrity, 'local-only')
@@ -91,6 +91,7 @@ test('host save documents round-trip the complete owner state and revive Hub run
   assert.deepEqual(readGameSaveSummary(document), {
     activeRun: false,
     character: OWNER,
+    partyRejoinToken: null,
     phase: 'hub',
     playerId: 'owner',
     savedAtTick: state.tick,
@@ -337,14 +338,24 @@ test('host save documents retain the active Boneyard and its authoritative run i
     loadedBoneyard,
     mods: MODS,
     modState: MOD_STATE,
+    partyRejoinToken: 'r'.repeat(43),
     playerId: 'owner',
     state,
   })
   const restored = restoreGameSaveDocument(document)
 
-  assert.equal(readGameSaveSummary(document)?.activeRun, true)
+  assert.deepEqual(readGameSaveSummary(document), {
+    activeRun: true,
+    character: OWNER,
+    partyRejoinToken: 'r'.repeat(43),
+    phase: 'active',
+    playerId: 'owner',
+    savedAtTick: state.tick,
+    worldKind: 'boneyard',
+  })
   const schema5 = legacySchema5Document(document)
   assert.equal(readGameSaveSummary(schema5)?.activeRun, true)
+  assert.equal(readGameSaveSummary(schema5)?.partyRejoinToken, null)
   assert.equal(restoreGameSaveDocument(schema5).state.world.kind, 'boneyard')
 
   assert.deepEqual(restored.loadedBoneyard, loadedBoneyard)
@@ -363,6 +374,64 @@ test('host save documents retain the active Boneyard and its authoritative run i
     : {})
   assert.equal(restored.state.run.runId, loadedBoneyard.runId)
   assert.equal(restored.state.run.phase, 'active')
+})
+
+test('active-party capability is strict, active-run-only, and absent from old schemas and profiles', () => {
+  const loadedBoneyard = materializeBoneyard(
+    createBoneyardCatalog(),
+    'default-random',
+    Buffer.alloc(16, 37),
+  )
+  assert.ok(loadedBoneyard)
+  const state = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loadedBoneyard)
+  const current = JSON.parse(createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard,
+    mods: [],
+    modState: {},
+    partyRejoinToken: 'A'.repeat(43),
+    playerId: 'owner',
+    state,
+  }))
+
+  for (const schemaVersion of [9, 8, 7, 6]) {
+    const previous = structuredClone(current)
+    previous.schemaVersion = schemaVersion
+    delete previous.continuation.summary.partyRejoinToken
+    assert.equal(
+      readGameSaveSummary(JSON.stringify(previous))?.partyRejoinToken,
+      null,
+    )
+  }
+
+  const malformed = structuredClone(current)
+  malformed.continuation.summary.partyRejoinToken = 'short'
+  assert.throws(
+    () => restoreGameSaveDocument(JSON.stringify(malformed)),
+    /party rejoin token/i,
+  )
+  assert.throws(() => createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard: null,
+    mods: [],
+    modState: {},
+    partyRejoinToken: 'A'.repeat(43),
+    playerId: 'owner',
+    state: createGameSimulation({ owner: OWNER }),
+  }), /active Boneyard/i)
+
+  const profile = JSON.parse(createGameProfileSaveDocument({
+    integrity: 'global-clean',
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state,
+  }))
+  assert.equal(profile.continuation, null)
+  assert.doesNotMatch(JSON.stringify(profile), /partyRejoinToken/)
+  const retired = JSON.parse(retireGameSaveWizard(JSON.stringify(current)))
+  assert.equal(retired.continuation, null)
+  assert.doesNotMatch(JSON.stringify(retired), /partyRejoinToken/)
 })
 
 test('current saves migrate the former audio-only Dig lane without replaying dirt', () => {
@@ -399,7 +468,7 @@ test('current saves migrate the former audio-only Dig lane without replaying dir
   assert.ok(restored.state.world.encounter!.digBodyBobAmplitude < 10)
 })
 
-test('schema 9 resumes the complete stock Tutorial controller and exact level identity', () => {
+test('schema 10 resumes the complete stock Tutorial controller and exact level identity', () => {
   const loadedBoneyard = materializeStockTutorial(Buffer.alloc(16, 19))
   let state = enterBoneyardWorld(
     createGameSimulation({ owner: OWNER }),
@@ -425,7 +494,7 @@ test('schema 9 resumes the complete stock Tutorial controller and exact level id
     state,
   })
   const encoded = JSON.parse(document)
-  assert.equal(encoded.schemaVersion, 9)
+  assert.equal(encoded.schemaVersion, 10)
   assert.equal(encoded.continuation.simulation.world.tutorial.stage, 0)
   assert.equal(
     encoded.continuation.simulation.world.tutorial.selectedSkillHudAcknowledged,
@@ -467,6 +536,7 @@ test('schema 9 resumes the complete stock Tutorial controller and exact level id
 
   const legacy = structuredClone(encoded)
   legacy.schemaVersion = 8
+  delete legacy.continuation.summary.partyRejoinToken
   delete legacy.continuation.simulation.world.tutorial.cameraLockAgeTicks
   legacy.continuation.simulation.world.tutorial.cameraLockTriggered = true
   legacy.continuation.simulation.world.tutorial.cameraLockTicksRemaining = 0
@@ -509,6 +579,7 @@ test('schema 9 resumes the complete stock Tutorial controller and exact level id
   const priorSchemaSeven = structuredClone(encoded)
   priorSchemaSeven.schemaVersion = 7
   delete priorSchemaSeven.continuation.simulation.world.tutorial.cameraLockAgeTicks
+  delete priorSchemaSeven.continuation.summary.partyRejoinToken
   delete priorSchemaSeven.continuation.simulation.world.tutorial
     .selectedSkillHudAcknowledged
   const migrated = restoreGameSaveDocument(JSON.stringify(priorSchemaSeven))
@@ -533,6 +604,7 @@ test('schema 7 and 6 current-layout saves default absent NPC state without compl
   for (const schemaVersion of [7, 6]) {
     const previous = JSON.parse(current)
     previous.schemaVersion = schemaVersion
+    delete previous.continuation.summary.partyRejoinToken
     delete previous.profile.economy.npc
     delete previous.continuation.simulation.playerEntities.economies[0].npc
     delete previous.continuation.simulation.world.skorcha
@@ -762,6 +834,7 @@ function legacyDocument(document: string, schemaVersion: number): string {
 
   delete simulation.world.skorcha
   delete continuation.summary.activeRun
+  delete continuation.summary.partyRejoinToken
   for (const economy of playerStore.economies) {
     delete economy.npc
     delete economy.tutorialPending
@@ -810,6 +883,7 @@ function legacySchema5Document(document: string): string {
   delete legacy.profile.economy.npc
   delete legacy.continuation.simulation.world.skorcha
   delete legacy.continuation.summary.activeRun
+  delete legacy.continuation.summary.partyRejoinToken
   for (const economy of legacy.continuation.simulation.playerEntities.economies) {
     delete economy.npc
     delete economy.tutorialPending

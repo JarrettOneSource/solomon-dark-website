@@ -2,6 +2,7 @@ import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import type { BoneyardEnemySpawnIntent } from '../core-kernels/boneyard-wave-director.ts'
 import { archiveHubMemorialPortrait } from '../core-kernels/hub-memorial.ts'
 import { drawNativeInteger } from '../core-kernels/native-rng.ts'
+import type { SharedPlayerLevelMilestone } from '../core-kernels/player-progression.ts'
 import { playerLivingEquipmentAppearance } from '../core-kernels/player-equipment-appearance.ts'
 import type {
   PlayerCharacterConfig,
@@ -16,8 +17,10 @@ import {
   mergeGameSimulationPlayersIntoHub,
   partitionGameSimulationPlayers,
   removePlayerCharacter,
+  rejoinGameSimulationPlayer,
   stepGameSimulationTick,
   type GameSimulationState,
+  type DetachedGameSimulationPlayer,
   type GameSimulationExtensions,
   type PlayerId,
 } from '../core-server/game-simulation.ts'
@@ -150,6 +153,48 @@ export function removeSharedGamePlayer(
     parties: removePartyPlayer(state.parties, playerId),
     runs,
   }
+}
+
+export function rejoinSharedPartyRunPlayer(
+  state: SharedGameWorldsState,
+  detachedState: DetachedGameSimulationPlayer,
+  playerId: PlayerId,
+  partyId: string,
+  partyIdentity: PartyIdentity,
+  maximumMembers: number,
+  milestone: SharedPlayerLevelMilestone | null,
+): SharedWorldActionResult {
+  if (sharedGameStateForPlayer(state, playerId) || partyForPlayer(state.parties, playerId)) {
+    return rejected(state, 'already-in-party')
+  }
+  const run = state.runs.find(candidate => (
+    candidate.partyId === partyId
+    && candidate.loadedBoneyard.runId === detachedState.runId
+    && candidate.state.run.phase === 'active'
+  ))
+  if (!run) return rejected(state, 'run-unavailable')
+
+  const registered = registerPartyPlayer(state.parties, playerId, partyIdentity)
+  const joined = joinPartyPlayer(registered, playerId, partyId, maximumMembers)
+  if (!joined.accepted) return rejected(state, joined.reason!)
+  let rejoinedState: GameSimulationState
+  try {
+    rejoinedState = rejoinGameSimulationPlayer(
+      run.state,
+      detachedState,
+      playerId,
+      milestone,
+    )
+  } catch {
+    return rejected(state, 'run-unavailable')
+  }
+  return accepted({
+    ...state,
+    parties: joined.state,
+    runs: state.runs.map(candidate => candidate === run
+      ? { ...candidate, state: rejoinedState }
+      : candidate),
+  })
 }
 
 export function inviteSharedPartyPlayer(

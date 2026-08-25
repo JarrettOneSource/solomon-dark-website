@@ -39,6 +39,7 @@ import {
   recordNativeHallOfFameAwesomestKill,
   recordNativeHallOfFameOrdinaryKill,
   resetNativeHallOfFameKillStreak,
+  type NativeHallOfFameRunState,
 } from '../core-kernels/hall-of-fame-score.ts'
 import {
   createNativeRng,
@@ -111,6 +112,7 @@ import {
   nativeSkillCategory,
   type PlayerLevelUpBarrierState,
   type PlayerProgressionComponent,
+  type SharedPlayerLevelMilestone,
   type PlayerSkillBookComponent,
   type PlayerStatBookComponent,
 } from '../core-kernels/player-progression.ts'
@@ -261,6 +263,7 @@ import {
   respawnPlayerEntityAt,
   preparePlayerEntityTutorialLoadout,
   setPlayerEntityAutomaticSkillChoice,
+  synchronizePlayerEntityLevelMilestone,
   unlockPlayerEntityAdvancedSkill,
   type PlayerEntityStore,
 } from './player-entity-store.ts'
@@ -302,6 +305,13 @@ export interface GameSimulationState {
   run: GameRunLifecycleState
   tick: number
   world: GameWorldState
+}
+
+export interface DetachedGameSimulationPlayer {
+  readonly hallOfFameRun: NativeHallOfFameRunState
+  readonly playerEntities: PlayerEntityStore
+  readonly playerId: PlayerId
+  readonly runId: string
 }
 
 export interface GameSimulationOptions {
@@ -520,6 +530,147 @@ export function removePlayerCharacter(
             state.world.hallOfFameRuns,
           ).filter(([id]) => id !== playerId)),
         },
+  }
+}
+
+export function detachGameSimulationPlayer(
+  state: GameSimulationState,
+  playerId: PlayerId,
+): DetachedGameSimulationPlayer {
+  if (
+    state.world.kind !== 'boneyard'
+    || state.run.phase !== 'active'
+    || state.run.runId === null
+  ) throw new Error('active-run detach requires a live Boneyard')
+  const hallOfFameRun = state.world.hallOfFameRuns[playerId]
+  if (!hallOfFameRun) throw new Error(`active-run detach has no Hall row for ${playerId}`)
+  const selected = partitionGameSimulationPlayers(state, [playerId]).selected
+  return Object.freeze({
+    hallOfFameRun,
+    playerEntities: selected.playerEntities,
+    playerId,
+    runId: state.run.runId,
+  })
+}
+
+export function rejoinGameSimulationPlayer(
+  target: GameSimulationState,
+  detached: DetachedGameSimulationPlayer,
+  playerId: PlayerId,
+  milestone: SharedPlayerLevelMilestone | null,
+): GameSimulationState {
+  if (
+    target.world.kind !== 'boneyard'
+    || target.run.phase !== 'active'
+    || target.run.runId === null
+    || detached.runId !== target.run.runId
+    || detached.runId !== target.world.runId
+  ) throw new Error('active-run rejoin requires one matching live Boneyard')
+  if (
+    playerEntityIndex(target.playerEntities, playerId) >= 0
+    || detached.playerId !== playerId
+    || detached.playerEntities.identities.length !== 1
+    || detached.playerEntities.identities[0]?.playerId !== playerId
+  ) throw new Error('active-run rejoin requires one detached matching player')
+
+  const detachedProgression = playerProgressionAt(detached.playerEntities, playerId)
+  const config = detached.playerEntities.configs[0]
+  if (!detachedProgression || !config) {
+    throw new Error('active-run rejoin detached player state is incomplete')
+  }
+  if (milestone !== null) {
+    const expectedCrossedLevels = Array.from(
+      { length: milestone.level - detachedProgression.level },
+      (_, index) => detachedProgression.level + index + 1,
+    )
+    if (
+      milestone.level < detachedProgression.level
+      || expectedCrossedLevels.length !== milestone.crossedLevels.length
+      || expectedCrossedLevels.some((level, index) => level !== milestone.crossedLevels[index])
+    ) throw new Error('active-run rejoin level milestone is inconsistent')
+  }
+
+  const lightProviderOrder = createNativeLightProviderOrder(target.lightProviderOrder)
+  let playerEntities = importPlayerEntity(
+    target.playerEntities,
+    detached.playerEntities,
+    playerId,
+    playerId,
+    lightProviderOrder.register('actor'),
+    spawnPlayerCharacterInBoneyard(config, target.world),
+  )
+  const importedPlayerEntities = playerEntities
+  if (milestone !== null && milestone.crossedLevels.length > 0) {
+    playerEntities = synchronizePlayerEntityLevelMilestone(
+      playerEntities,
+      playerId,
+      milestone,
+    )
+  }
+  const insights = markNewCreativityInsights(
+    importedPlayerEntities,
+    playerEntities,
+    [playerId],
+    target.secondaryAbilities.rng,
+  )
+  const automatic = assignAutomaticSkillChoices(insights.store, [playerId], target.gameRng)
+  playerEntities = automatic.store
+
+  const participantIds = stableExistingPlayerIds(
+    playerEntities,
+    playerEntities.identities.map(({ playerId: id }) => id),
+  )
+  const pendingPlayerIds = pendingOfferPlayerIds(playerEntities, participantIds)
+  const existingBarrier = target.levelUpBarrier
+  const progression = playerProgressionAt(playerEntities, playerId)!
+  const barrierMilestone = milestone ?? {
+    crossedLevels: Object.freeze([]),
+    experience: progression.experience,
+    level: progression.level,
+  }
+  const levelUpBarrier = pendingPlayerIds.length === 0
+    ? null
+    : existingBarrier === null
+      ? createLevelUpBarrier(
+          target.nextLevelUpBarrierId,
+          playerId,
+          barrierMilestone.experience,
+          barrierMilestone.level,
+          participantIds,
+          pendingPlayerIds,
+          target.run.runId,
+        )
+      : Object.freeze({
+          ...existingBarrier,
+          milestoneExperience: Math.max(
+            existingBarrier.milestoneExperience,
+            barrierMilestone.experience,
+          ),
+          milestoneLevel: Math.max(existingBarrier.milestoneLevel, barrierMilestone.level),
+          participantIds,
+          pendingPlayerIds,
+        })
+  return {
+    ...target,
+    gameRng: automatic.rng,
+    levelUpBarrier,
+    lightProviderOrder: lightProviderOrder.state(),
+    nextLevelUpBarrierId: existingBarrier === null && levelUpBarrier !== null
+      ? target.nextLevelUpBarrierId + 1
+      : target.nextLevelUpBarrierId,
+    playerEntities,
+    run: synchronizeGameRunParticipants(
+      target.run,
+      playerEntities.identities.map(({ playerId: id }) => id),
+    ),
+    secondaryAbilities: { ...target.secondaryAbilities, rng: insights.rng },
+    world: {
+      ...target.world,
+      hallOfFameRuns: {
+        ...target.world.hallOfFameRuns,
+        [playerId]: detached.hallOfFameRun,
+      },
+    },
   }
 }
 

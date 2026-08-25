@@ -2,7 +2,7 @@
 
 Status: accepted; authoritative, GPU-client, shared-Hub party/chat,
 desktop-solo, headless-crowd, and compact-replication slices implemented,
-2026-08-22
+2026-08-24
 
 This document records the load-bearing runtime decisions for the rebuilt game.
 It does not replace `game-native-parity-re.md`: the native game remains the
@@ -64,9 +64,12 @@ Starting a Boneyard does not remove an opted-in party from either directory.
 The host projects the retained membership together with its active run as an
 `IN GAME` listing carrying the authored Boneyard name and current squad
 size/capacity. Both visual wrappers disable admission for that state, and the
-supervisor independently rejects stale or forged joins until the same party
-returns to the College. Visibility remains authoritative throughout the run,
-so private parties stay absent rather than becoming observable in game.
+supervisor independently rejects new public, request, and Party-ID joins until
+the same party returns to the College. A former member may use only its opaque,
+host-issued active-run rejoin capability from the owner save. That capability
+cannot admit a new wizard, reveal a private party, or bypass the run/content
+identity it names. Visibility remains authoritative throughout the run, so
+private parties stay absent rather than becoming observable in game.
 
 The same authenticated gameplay connection carries ephemeral text chat. A
 public-Hub singleton sees Global; a grouped Hub participant defaults to Party
@@ -168,6 +171,9 @@ Current protocol 74 adds the bounded Tutorial camera-lock age. The 300-tick
 cleanup countdown remains separate: the client derives one persistent
 recursive camera bound for both rendering and hit projection, while the host
 uses the exact Tutorial entrance Fence as an enemy-birth admission domain.
+Save schema 10 adds a nullable 256-bit active-party rejoin capability to the
+owner-only continuation summary. It changes no gameplay wire shape. Schemas
+1..9 migrate with no capability and keep their existing ordinary resume path.
 The host applies
 either skill selection only to the authenticated
 participant before publishing a new progression revision.
@@ -189,11 +195,13 @@ connected browser participant belongs to exactly one party. A new participant
 creates a singleton party and is its leader. Accepting an invitation atomically
 moves a singleton participant into the inviter's party; it never derives
 authority from connection order. Leader disconnect promotes the earliest
-remaining member. Invitations are invalidated when either endpoint disappears,
-the target ceases to be a singleton, or the party starts a run. Party identity,
-public listing identity, and Party ID are separate opaque values. Leave and Kick
-move a shared-Hub participant into a fresh private singleton. A private College
-projects all connected clients as one party whose leader follows host transfer.
+remaining member. Rejoining the same active run does not revoke that promotion.
+Invitations are invalidated when either endpoint disappears, the target ceases
+to be a singleton, or the party starts a run. Party identity, public listing
+identity, Party ID, connection-resume token, and active-run rejoin capability
+are separate opaque values. Leave and Kick move a shared-Hub participant into
+a fresh private singleton. A private College projects all connected clients as
+one party whose leader follows host transfer.
 
 Chat identity is never a fifth client-provided identity. A client chat command
 contains only a channel and bounded text. The host derives player ID and
@@ -213,9 +221,18 @@ native marker draw, evicts the smallest persisted slot age, and publishes the
 new portrait atomically. Party partition/merge, disconnect, and a client-held
 save cannot fork or erase that archive; the process-lifetime shared Hub is its
 reset boundary.
-Leaving or a failed heartbeat removes the participant from its world and party;
-an empty run retires independently, and an empty shared Hub remains ready for
-the next ticket. Health reports active players, parties, runs, and
+Leaving or a failed heartbeat removes the participant's materialized actor
+from its world and live party membership. When another member keeps that
+Boneyard active, the host retains one bounded run/player capability plus an
+owner-only durable-state projection; it does not keep ticking a ghost actor.
+`LAST GAME` claims that exact slot before ordinary save restore. The returning
+actor materializes at the authored Boneyard spawn with transient input, casts,
+projectiles, and modifiers cleared. Any authoritative level milestones missed
+while detached become ordered actor-private offers under the existing whole-run
+level barrier. If the run is terminal, empty, or lost with the supervisor, the
+capability is invalid and ordinary owner-save resume remains the fallback. An
+empty run retires independently, and an empty shared Hub remains ready for the
+next ticket. Health reports active players, parties, runs, and
 deployment-drain state. A validated release closes admissions, freezes
 authoritative hosts, requests one final owner checkpoint from every connected
 browser player, and only then disconnects occupied sessions for cutover; an
@@ -374,6 +391,17 @@ dependencies without revisiting this release invariant.
   only their own element/discipline pair, and the final confirmation merges the
   same party and player entities into shared Hub. No private post-run Hub or
   host-selected guest loadout may remain resident.
+- Active-run rejoin is a materialization edge inside `active`, not a second run
+  start and not browser-save authority. The host validates the saved player,
+  character, sealed content, party, run nonce, and one-use reservation; imports
+  the detached actor-owned economy/progression/books/Hall row; allocates fresh
+  world identity/light bindings; and preserves the current live world. Missed
+  shared milestones add exactly one pending choice per crossed level. A new or
+  reconstructed `levelUpBarrier` freezes only that run until every pending
+  participant resolves; a second disconnect removes the waiter and releases
+  peers, while the still-active rejoin slot retains its unresolved choices.
+  No elapsed disconnect time becomes simulation catch-up. New Party-ID/public/
+  invite-only members remain excluded from an active run.
 - Player-character movement uses a two-phase shared kernel: first plan native
   intent/velocity, then let the active world resolve collision, then commit the
   resolved position plus native heading/gait state. Hub and Boneyard geometry
@@ -727,13 +755,18 @@ live ordinary `Enable Cheats` state permanently revokes it for that connection;
 an accepted ordinary-host authoritative Lua console request revokes it
 independently. A server-authenticated developer connection is exempt from both
 cheat-origin taints, including developer-only bot and player-grant commands. Any
-ineligible member taints the current party run for every participant. Local
-Hall history remains available. Save schema 9 carries durable `global-clean` or
-`local-only` integrity and explicit active-run state; schemas 1 through 3
+ineligible member taints the current party run for every participant. A
+host-authenticated active-run rejoin restores the detached connection's
+eligibility record instead of treating its editable checkpoint as a new saved
+lineage; the run's independent taint remains authoritative. Local Hall history
+remains available. Save schema 10 carries durable `global-clean` or
+`local-only` integrity, explicit active-run state, and the nullable active-party
+rejoin capability; schemas 1 through 3
 migrate conservatively to `local-only`, schema 4 preserves its authored
 integrity, schema 5 migrates its prior envelope, and schemas 6 through 8 preserve
 their authored integrity and active-run summary. Schema 9 additionally retains
-Tutorial camera-lock age independently from its cleanup countdown. Each participant receives an
+Tutorial camera-lock age independently from its cleanup countdown. Schemas 1
+through 9 carry no live rejoin capability. Each participant receives an
 authoritative profile/continuation checkpoint, and Game Over removes only that
 participant's current-wizard continuation.
 

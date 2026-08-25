@@ -205,6 +205,39 @@ public sealed partial class GameSessionProvisioner
         };
     }
 
+    public async Task<ProvisionedGameEndpoint> RejoinPartyAsync(
+        string token,
+        CancellationToken cancellationToken)
+    {
+        EnsurePrivateSessionsConfigured();
+        if (!PartyRejoinTokenRegex().IsMatch(token))
+        {
+            throw new GamePartyJoinException("That active-party rejoin is invalid.", 400);
+        }
+        using var request = CreateAdminRequest(HttpMethod.Post, "/admin/rejoin");
+        request.Content = JsonContent.Create(new { token });
+        using var response = await httpClient.SendAsync(request, cancellationToken);
+        var provisioned = await ReadPartyResponseAsync<SupervisorProvisionResponse>(
+            response,
+            value => value.SessionKind is "global-hub" or "private-college",
+            cancellationToken);
+        return provisioned.SessionKind switch
+        {
+            "global-hub" => BuildEndpoint(
+                provisioned.Path,
+                provisioned.Credential,
+                provisioned.SessionKind,
+                GameHubPath()),
+            "private-college" => BuildEndpoint(
+                provisioned.Path,
+                provisioned.Credential,
+                provisioned.SessionKind,
+                GameSessionPath()),
+            _ => throw new GameSessionUnavailableException(
+                "The game session supervisor returned an invalid rejoin endpoint.")
+        };
+    }
+
     public async Task<IReadOnlyList<PublicGameParty>> ListPublicPartiesAsync(
         CancellationToken cancellationToken)
     {
@@ -561,6 +594,9 @@ public sealed partial class GameSessionProvisioner
 
     [GeneratedRegex("^[A-Za-z0-9_-]{8,128}$", RegexOptions.CultureInvariant)]
     private static partial Regex PartyTokenRegex();
+
+    [GeneratedRegex("^[A-Za-z0-9_-]{43}$", RegexOptions.CultureInvariant)]
+    private static partial Regex PartyRejoinTokenRegex();
 
     [GeneratedRegex("^[a-f0-9]{64}$", RegexOptions.CultureInvariant)]
     private static partial Regex Sha256Regex();

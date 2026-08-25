@@ -29,6 +29,8 @@ public static class GameSessionEndpoints
             .RequireRateLimiting("party-join-status");
         app.MapPost("/api/game/join/admit", AdmitPartyJoinAsync)
             .RequireRateLimiting("party-joins");
+        app.MapPost("/api/game/rejoin", RejoinPartyAsync)
+            .RequireRateLimiting("party-joins");
     }
 
     private static async Task<IResult> ListPublicPartiesAsync(
@@ -370,6 +372,39 @@ public static class GameSessionEndpoints
         }
     }
 
+    private static async Task<IResult> RejoinPartyAsync(
+        RejoinPartyRequest request,
+        HttpContext context,
+        GameSessionProvisioner provisioner,
+        CancellationToken cancellationToken)
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        try
+        {
+            var endpoint = await provisioner.RejoinPartyAsync(
+                request.Token ?? string.Empty,
+                cancellationToken);
+            return Results.Created("/api/game/rejoin", new
+            {
+                kind = "remote",
+                endpoint.Url,
+                endpoint.Credential,
+                endpoint.SessionKind
+            });
+        }
+        catch (GamePartyJoinException exception)
+        {
+            return PartyError(exception);
+        }
+        catch (Exception exception) when (exception is
+            GameSessionUnavailableException or HttpRequestException or OperationCanceledException)
+        {
+            return Results.Json(
+                new { error = "That active party run is not available right now." },
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+    }
+
     private static async Task<IResult> PartyOperationAsync<T>(Func<Task<T>> operation)
     {
         try
@@ -426,5 +461,6 @@ public static class GameSessionEndpoints
         string? DisplayName,
         string? RequesterId);
     public sealed record AdmitPartyJoinRequest(string? IntentId);
+    public sealed record RejoinPartyRequest(string? Token);
     public sealed record ObserveMatchRequest(string? MatchId);
 }

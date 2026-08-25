@@ -4,15 +4,33 @@ export type BrowserGameAdmission =
   | { readonly kind: 'global-hub' }
   | { readonly kind: 'party'; readonly intentId: string }
   | { readonly kind: 'private-college' }
+  | {
+      readonly fallback: 'global-hub' | 'private-college'
+      readonly kind: 'resume'
+      readonly partyRejoinToken: string | null
+    }
 
 export async function admitBrowserGame(
   admission: BrowserGameAdmission,
   token: string | null,
+  request: typeof fetch = fetch,
 ): Promise<GameEndpoint> {
-  if (admission.kind === 'global-hub') return admitSharedHubPlayer(token)
-  if (admission.kind === 'private-college') return resolveGameEndpoint(token)
-  return admitPartyJoin(admission.intentId, token)
+  if (admission.kind === 'global-hub') return admitSharedHubPlayer(token, request)
+  if (admission.kind === 'private-college') return resolveGameEndpoint(token, request)
+  if (admission.kind === 'party') return admitPartyJoin(admission.intentId, token, request)
+  if (admission.partyRejoinToken !== null) {
+    try {
+      return await admitPartyRejoin(admission.partyRejoinToken, token, request)
+    } catch (error) {
+      if (!(error instanceof InactivePartyRejoinError)) throw error
+    }
+  }
+  return admission.fallback === 'global-hub'
+    ? admitSharedHubPlayer(token, request)
+    : resolveGameEndpoint(token, request)
 }
+
+class InactivePartyRejoinError extends Error {}
 
 declare global {
   interface Window {
@@ -104,6 +122,31 @@ export async function admitPartyJoin(
   })
   const payload = await readJson(response)
   if (!response.ok) throw new Error(apiError(payload, 'That party is not available right now.'))
+  return decodeProvisionedGameEndpoint(payload)
+}
+
+export async function admitPartyRejoin(
+  token: string,
+  accountToken: string | null,
+  request: typeof fetch = fetch,
+): Promise<GameEndpoint> {
+  const headers = new Headers({
+    accept: 'application/json',
+    'content-type': 'application/json',
+  })
+  if (accountToken) headers.set('authorization', `Bearer ${accountToken}`)
+  const response = await request('/api/game/rejoin', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers,
+    body: JSON.stringify({ token }),
+  })
+  const payload = await readJson(response)
+  if (!response.ok) {
+    const error = apiError(payload, 'That active party run is not available right now.')
+    if (response.status === 404) throw new InactivePartyRejoinError(error)
+    throw new Error(error)
+  }
   return decodeProvisionedGameEndpoint(payload)
 }
 

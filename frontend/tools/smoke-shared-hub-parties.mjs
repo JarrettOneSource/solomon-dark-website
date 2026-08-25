@@ -651,6 +651,11 @@ async function enterHub(displayName, element, viewport, existingContext) {
     waitUntil: 'domcontentloaded',
   })
   await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 240_000 })
+  const tutorialPrompt = page.getByRole('dialog', { name: 'Play the Tutorial?' })
+  if (await tutorialPrompt.isVisible()) {
+    await tutorialPrompt.getByRole('button', { name: 'NO' }).click()
+    await tutorialPrompt.waitFor({ state: 'detached' })
+  }
   await page.getByRole('button', { name: 'Play' }).click()
   const admission = page.waitForResponse((response) => (
     response.request().method() === 'POST'

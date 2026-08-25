@@ -449,6 +449,10 @@ export async function startGameSessionSupervisor(
       void handleJoinAdmission(request, response)
       return
     }
+    if (request.method === 'POST' && path === '/admin/rejoin') {
+      void handlePartyRejoin(request, response)
+      return
+    }
     response.writeHead(404, { 'cache-control': 'no-store' })
     response.end()
   })
@@ -654,6 +658,75 @@ export async function startGameSessionSupervisor(
     } catch {
       if (reservationId && reservedHost) reservedHost.cancelPartyReservation(reservationId)
       sendJson(response, 400, { error: 'A valid party admission is required.' })
+    }
+  }
+
+  async function handlePartyRejoin(
+    request: IncomingMessage,
+    response: ServerResponse,
+  ): Promise<void> {
+    let reservationId: string | null = null
+    let reservedHost: GameHost | null = null
+    try {
+      const body = await readJsonObject(request)
+      const token = normalizePartyRejoinToken(body.token)
+      const resolved = [hubSession, ...sessions.values()].flatMap(session => {
+        if (session.closing) return []
+        const target = session.host.partyRejoinTarget(token)
+        return target ? [{ session, target }] : []
+      })
+      if (resolved.length !== 1) {
+        sendJson(response, 404, { error: 'That active party run has ended.' })
+        return
+      }
+      const { session, target } = resolved[0]!
+      if (target.status !== 'detached') {
+        sendJson(response, 409, { error: 'That active-party rejoin is already being claimed.' })
+        return
+      }
+      const now = performance.now()
+      pruneHostTickets(session, now)
+      if (
+        session.host.playerCount() - 1 + playerTicketCount(session.tickets)
+        >= maxConnectionsPerSession
+      ) {
+        sendJson(response, 409, { error: 'That College is full.' })
+        return
+      }
+      reservationId = randomBytes(24).toString('base64url')
+      const expiresAt = now + unclaimedTimeoutMs
+      const rejection = session.host.reservePartyRejoin(token, reservationId, expiresAt)
+      if (rejection) {
+        sendJson(response, 409, {
+          error: rejection === 'player-connected'
+            ? 'That wizard is still connected.'
+            : rejection === 'already-reserved'
+              ? 'That active-party rejoin is already being claimed.'
+              : 'That active party run has ended.',
+        })
+        return
+      }
+      reservedHost = session.host
+      const credential = randomBytes(32).toString('base64url')
+      session.tickets.set(credential, {
+        admission: {
+          content: target.content,
+          developerAccess: target.developerAccess,
+          leaderboardUserId: target.leaderboardUserId,
+          partyRejoinToken: token,
+          reservationId,
+        },
+        expiresAt,
+      })
+      sendJson(response, 201, {
+        credential,
+        path: session.kind === 'hub' ? GAME_HUB_PATH : `${GAME_SESSION_PATH_PREFIX}${session.id}`,
+        protocol: GAME_PROTOCOL_NAME,
+        sessionKind: session.kind === 'hub' ? 'global-hub' : 'private-college',
+      })
+    } catch {
+      if (reservationId && reservedHost) reservedHost.cancelPartyReservation(reservationId)
+      sendJson(response, 400, { error: 'A valid active-party rejoin is required.' })
     }
   }
 
@@ -1287,6 +1360,13 @@ function normalizePartyJoinCode(value: unknown): string {
     .slice(-8)
   if (normalized.length !== 8) throw new Error('party code is invalid')
   return `${normalized.slice(0, 4)}-${normalized.slice(4)}`
+}
+
+function normalizePartyRejoinToken(value: unknown): string {
+  if (typeof value !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(value)) {
+    throw new Error('party rejoin token is invalid')
+  }
+  return value
 }
 
 function partyLocator(value: unknown, field: string): string {

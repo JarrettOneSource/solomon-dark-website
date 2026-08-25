@@ -196,9 +196,10 @@ test('game session supervisor admits independent players to one shared Hub and r
   assert.deepEqual(new Set(endpoints.map(({ path }) => path)), new Set(['/game-hub']))
   assert.equal(new Set(endpoints.map(({ credential }) => credential)).size, 3)
 
-  const [first, second, third] = await Promise.all(endpoints.map((endpoint) => (
+  const [first, joinedSecond, third] = await Promise.all(endpoints.map((endpoint) => (
     join(supervisor.address.url, endpoint, BROWSER_ORIGIN)
   )))
+  let second = joinedSecond
   context.after(() => closeSocket(first.socket))
   context.after(() => closeSocket(second.socket))
   context.after(() => closeSocket(third.socket))
@@ -350,6 +351,10 @@ test('game session supervisor admits independent players to one shared Hub and r
 
   const firstLoaded = first.next((message) => message.type === 'server-boneyard-loaded')
   const secondLoaded = second.next((message) => message.type === 'server-boneyard-loaded')
+  const secondRunSave = second.next(message => (
+    message.type === 'server-save-checkpoint'
+    && JSON.parse(message.save).continuation.summary.partyRejoinToken !== null
+  ))
   const thirdHub = third.next((message) => (
     message.type === 'server-snapshot' && message.frame.world.kind === 'hub'
   ))
@@ -357,15 +362,49 @@ test('game session supervisor admits independent players to one shared Hub and r
     type: 'client-start-match',
     boneyardId: 'default-random',
   }))
-  const [firstRun, secondRun, thirdFrame] = await Promise.all([
+  const [firstRun, secondRun, thirdFrame, secondCheckpoint] = await Promise.all([
     firstLoaded,
     secondLoaded,
     thirdHub,
+    secondRunSave,
   ])
   assert.equal(firstRun.type, 'server-boneyard-loaded')
   assert.equal(secondRun.type, 'server-boneyard-loaded')
   assert.equal(firstRun.boneyard.runId, secondRun.boneyard.runId)
   assert.equal(thirdFrame.type === 'server-snapshot' && thirdFrame.frame.world.kind, 'hub')
+  assert.equal(secondCheckpoint.type, 'server-save-checkpoint')
+  const rejoinToken = JSON.parse(secondCheckpoint.save)
+    .continuation.summary.partyRejoinToken as string
+  const secondPlayerId = second.welcome.playerId
+  await closeSocket(second.socket)
+  const rejoinResponse = await fetch(`${supervisor.address.url}/admin/rejoin`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${ADMIN_SECRET}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ token: rejoinToken }),
+  })
+  assert.equal(rejoinResponse.status, 201)
+  const rejoinEndpoint = await rejoinResponse.json() as ProvisionedEndpoint
+  second = await joinSaved(
+    supervisor.address.url,
+    rejoinEndpoint,
+    BROWSER_ORIGIN,
+    secondCheckpoint.save,
+  )
+  assert.equal(second.welcome.playerId, secondPlayerId)
+  assert.equal(second.welcome.snapshot.world.kind, 'boneyard')
+  if (second.welcome.snapshot.world.kind !== 'boneyard') assert.fail('expected Boneyard')
+  assert.equal(second.welcome.snapshot.world.runId, firstRun.boneyard.runId)
+  assert.equal((await fetch(`${supervisor.address.url}/admin/rejoin`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${ADMIN_SECRET}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ token: rejoinToken }),
+  })).status, 404)
   assert.deepEqual(await readPublicParties(supervisor.address.url), [{
     ...hubDirectory[0]!,
     boneyardName: firstRun.type === 'server-boneyard-loaded'
@@ -1172,6 +1211,29 @@ async function join(
     character: CHARACTER,
   }))
   const welcome = await next((message) => message.type === 'server-welcome')
+  assert.equal(welcome.type, 'server-welcome')
+  return { next, socket, welcome }
+}
+
+async function joinSaved(
+  supervisorUrl: string,
+  endpoint: ProvisionedEndpoint,
+  origin: string,
+  save: string,
+) {
+  const socket = await openSocket(websocketUrl(supervisorUrl, endpoint.path), origin)
+  const next = messageQueue(socket)
+  socket.send(encodeGameMessage({
+    type: 'client-hello',
+    profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
+    cheatsEnabled: false,
+    protocolVersion: GAME_PROTOCOL_VERSION,
+    credential: endpoint.credential,
+    character: CHARACTER,
+    save,
+    saveIntent: 'resume',
+  }))
+  const welcome = await next(message => message.type === 'server-welcome')
   assert.equal(welcome.type, 'server-welcome')
   return { next, socket, welcome }
 }

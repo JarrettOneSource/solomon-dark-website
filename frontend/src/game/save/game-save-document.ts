@@ -80,6 +80,7 @@ export interface CreateGameSaveDocumentOptions {
   readonly loadedBoneyard: LoadedBoneyard | null
   readonly mods: readonly GameContentIdentity[]
   readonly modState: Readonly<Record<string, Readonly<Record<string, LuaConsoleValue>>>>
+  readonly partyRejoinToken?: string | null
   readonly playerId: string
   readonly state: GameSimulationState
 }
@@ -194,6 +195,15 @@ export function createGameSaveDocument(
   if (ownerState.run.phase === 'game-over' || ownerState.run.phase === 'loadout') {
     throw new Error(`game save cannot checkpoint ${ownerState.run.phase}`)
   }
+  const partyRejoinToken = options.partyRejoinToken ?? null
+  if (
+    partyRejoinToken !== null
+    && (
+      !/^[A-Za-z0-9_-]{43}$/.test(partyRejoinToken)
+      || ownerState.world.kind !== 'boneyard'
+      || ownerState.run.phase !== 'active'
+    )
+  ) throw new Error('game save party rejoin token requires an active Boneyard')
   const character = ownerState.playerEntities.configs[ownerIndex]!
   const simulation = {
     ...ownerState,
@@ -211,6 +221,7 @@ export function createGameSaveDocument(
       summary: {
         activeRun: ownerState.world.kind === 'boneyard' && ownerState.run.phase === 'active',
         character,
+        partyRejoinToken,
         phase: ownerState.run.phase,
         playerId: options.playerId,
         savedAtTick: ownerState.tick,

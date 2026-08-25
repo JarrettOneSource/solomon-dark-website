@@ -1081,13 +1081,15 @@ export default function MainMenuScene({
       if (activeMods.length > 0) {
         await prefetchGameContent(activeMods.flatMap(mod => mod.assets), setContentProgress)
       }
-      await prepareGame(
-        resumeSave.integrity === 'local-only'
+      await prepareGame({
+        fallback: resumeSave.integrity === 'local-only'
           || activeMods.length > 0
           || cheatsEnabled
-          ? { kind: 'private-college' }
-          : { kind: 'global-hub' },
-      )
+          ? 'private-college'
+          : 'global-hub',
+        kind: 'resume',
+        partyRejoinToken: resumeSave.summary.partyRejoinToken,
+      })
       const nextSession = await connectSession(
         resumeSave.summary.character,
         advanceLoading,

@@ -6,7 +6,10 @@ import {
   GAME_OVER_AUTOMATIC_ACCEPT_TICK,
   GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS,
 } from '../core-kernels/game-run.ts'
-import { createGameSimulation } from '../core-server/game-simulation.ts'
+import {
+  createGameSimulation,
+  detachGameSimulationPlayer,
+} from '../core-server/game-simulation.ts'
 import {
   playerCharacterAt,
   replacePlayerCharacter,
@@ -19,6 +22,7 @@ import {
   confirmSharedPartyLoadout,
   inviteSharedPartyPlayer,
   removeSharedGamePlayer,
+  rejoinSharedPartyRunPlayer,
   restoreSharedGamePlayer,
   joinSharedPartyPlayer,
   kickSharedPartyPlayer,
@@ -396,4 +400,43 @@ test('post-run confirmation merges the progressed party back into the shared Hub
     new Set(worlds.hub.playerEntities.identities.map(({ playerId }) => playerId)),
     new Set(['player-a', 'player-c']),
   )
+})
+
+test('departed leader rejoins the same active run without revoking live leader promotion', () => {
+  let worlds = createSharedGameWorlds()
+  worlds = addSharedHubPlayer(worlds, 'leader', character('Aurelia'), partyIdentity('a'))
+  worlds = addSharedHubPlayer(worlds, 'member', character('Basil'), partyIdentity('b'))
+  worlds = inviteSharedPartyPlayer(worlds, 'leader', 'member', 4).state
+  worlds = acceptSharedPartyInvitation(
+    worlds,
+    'member',
+    worlds.parties.invitations[0]!.id,
+    4,
+  ).state
+  const partyId = worlds.parties.parties.find(({ leaderPlayerId }) => (
+    leaderPlayerId === 'leader'
+  ))!.id
+  worlds = startSharedPartyRun(worlds, 'leader', loadedBoneyardFixture('leader-rejoin')).state
+  const detached = detachGameSimulationPlayer(worlds.runs[0]!.state, 'leader')
+  worlds = removeSharedGamePlayer(worlds, 'leader')
+  assert.equal(worlds.parties.parties.find(({ id }) => id === partyId)?.leaderPlayerId, 'member')
+
+  const rejoined = rejoinSharedPartyRunPlayer(
+    worlds,
+    detached,
+    'leader',
+    partyId,
+    partyIdentity('returning-leader'),
+    4,
+    null,
+  )
+  assert.equal(rejoined.accepted, true)
+  worlds = rejoined.state
+  assert.equal(worlds.runs[0]?.loadedBoneyard.runId, 'leader-rejoin')
+  assert.deepEqual(
+    worlds.parties.parties.find(({ id }) => id === partyId)?.memberPlayerIds,
+    ['member', 'leader'],
+  )
+  assert.equal(worlds.parties.parties.find(({ id }) => id === partyId)?.leaderPlayerId, 'member')
+  assert.equal(sharedGameStateForPlayer(worlds, 'leader'), worlds.runs[0]?.state)
 })
