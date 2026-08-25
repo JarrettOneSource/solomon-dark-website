@@ -511,9 +511,9 @@ async function exercisePaintings(canvas) {
     'painting-4': [{ x: 590, y: 610 }],
     'painting-5': [{ x: 434, y: 610 }],
     'painting-6': [{ x: 279, y: 610 }],
-    'painting-7': [{ x: 380, y: 470 }],
-    'painting-8': [{ x: 512, y: 470 }],
-    'painting-9': [{ x: 680, y: 470 }],
+    'painting-7': [{ x: 354, y: 450 }],
+    'painting-8': [{ x: 512, y: 450 }],
+    'painting-9': [{ x: 670, y: 450 }],
   }
   for (const interaction of NATIVE_HUB_NPC_CATALOG.interactionOrder.filter(
     candidate => candidate.startsWith('painting-'),
