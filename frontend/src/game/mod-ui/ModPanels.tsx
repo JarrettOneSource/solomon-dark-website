@@ -24,6 +24,7 @@ export default function ModPanels({ session }: Readonly<{ session: GameClientSes
   const shops = rows(runtime.shops)
   const snapshot = session.getSnapshot()
   const player = snapshot.players[session.playerId]
+  const equipment = player?.economy.backpack.find(item => item.kind === 'equipment')
   const nearMonument = player && session.getBoneyard()?.scene.objects.some(object => {
     const x = object.pos.x - player.position.x
     const y = object.pos.y - player.position.y
@@ -52,6 +53,13 @@ export default function ModPanels({ session }: Readonly<{ session: GameClientSes
           { row },
         )}>{text(shop.name)} · {number(stock.price)} gold</button>
       )))}
+      {equipment ? shops.flatMap(shop => rows(shop.services).map((service, index) => (
+        <button key={`${text(shop.content_id)}:service:${index}`} onClick={() => session.sendModAction(
+          'reforge',
+          text(shop.content_id),
+          { item_id: equipment.id, service: index },
+        )}>{text(shop.name)} · Reforge · {number(service.price)} gold</button>
+      ))) : null}
       {portals.map(portal => (
         <button key={text(portal.id)} onClick={() => session.sendModAction(
           'portal-enter',

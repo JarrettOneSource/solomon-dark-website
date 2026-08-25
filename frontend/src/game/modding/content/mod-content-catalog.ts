@@ -134,6 +134,11 @@ export interface PreparedModShopDefinition extends PreparedModContentEntry {
   readonly contentKind: 'shop'
   readonly currency: string
   readonly mount: Readonly<Record<string, WebLuaDefinitionValue>> | null
+  readonly services: readonly Readonly<{
+    pool: ResolvedWebLuaContentReference
+    price: number
+    type: 'reforge'
+  }>[]
   readonly stock: readonly Readonly<{
     item: ResolvedWebLuaContentReference
     price: number
@@ -407,7 +412,11 @@ export function compileModContentCatalog(
   const scenes = sceneCandidates.sort(compareContent).map(common => compileScene(common, roomIds))
   const sceneExtensions = sceneExtensionCandidates.sort(compareContent).map(compileSceneExtension)
   const itemIds = new Set([...items, ...potions].map(item => item.contentId))
-  const shops = shopCandidates.sort(compareContent).map(common => compileShop(common, itemIds))
+  const shops = shopCandidates.sort(compareContent).map(common => compileShop(
+    common,
+    itemIds,
+    new Set(affixPools.map(pool => pool.contentId)),
+  ))
   const ui = uiCandidates.sort(compareContent).map(compileUi)
   content.push(
     ...items,
@@ -778,6 +787,7 @@ function compileSceneExtension(common: PreparedModContentEntry): PreparedModScen
 function compileShop(
   common: PreparedModContentEntry,
   itemIds: ReadonlySet<string>,
+  affixPoolIds: ReadonlySet<string>,
 ): PreparedModShopDefinition {
   if (!Array.isArray(common.fields.stock) || common.fields.stock.length === 0) {
     throw new Error(`${common.modId}:${common.key} shop requires stock`)
@@ -796,11 +806,32 @@ function compileShop(
         : integer(row.quantity, 1, 9_999, `${common.key}.stock[${index}].quantity`),
     })
   })
+  const services = common.fields.services === undefined
+    ? []
+    : (() => {
+        if (!Array.isArray(common.fields.services) || common.fields.services.length > 32) {
+          throw new Error(`${common.modId}:${common.key} shop services are invalid`)
+        }
+        return common.fields.services.map((value, index) => {
+          const service = object(value, `${common.key}.services[${index}]`)
+          const pool = resolvedReference(service.pool, `${common.key}.services[${index}].pool`)
+          if ((service.type ?? service.kind) !== 'reforge' || pool.targetKind !== 'affix-pool' ||
+              !affixPoolIds.has(pool.contentId)) {
+            throw new Error(`${common.modId}:${common.key} reforge service is invalid`)
+          }
+          return Object.freeze({
+            pool,
+            price: integer(service.price, 0, 10_000_000, `${common.key}.services[${index}].price`),
+            type: 'reforge' as const,
+          })
+        })
+      })()
   return Object.freeze({
     ...common,
     contentKind: 'shop' as const,
     currency: optionalText(common.fields.currency, 'gold', 64, `${common.key}.currency`),
     mount: common.fields.mount === undefined ? null : optionalObject(common.fields.mount, `${common.key}.mount`),
+    services: Object.freeze(services),
     stock: Object.freeze(stock),
   })
 }

@@ -661,7 +661,11 @@ export function hubInventoryItemInfoText(item: HubInventoryItem): HubInventoryIt
       instruction: null,
       title: item.name,
     }
-    case 'equipment': return { description: null, instruction: null, title: item.name }
+    case 'equipment': return {
+      description: item.modAffixes?.map(affix => affix.name).join(' · ') ?? null,
+      instruction: null,
+      title: item.name,
+    }
   }
 }
 

@@ -157,6 +157,7 @@ export interface HubInventoryItem {
   readonly kind: HubItemKind
   readonly modContent?: ModConsumableContent
   readonly modItemContent?: ModItemContent
+  readonly modAffixes?: readonly ModEquipmentAffix[]
   readonly name: string
   readonly nativeSubtype: number | null
   readonly nativeSelector?: number
@@ -216,6 +217,17 @@ export interface ModConsumableCatalogEntry {
 
 export interface ModItemCatalogEntry {
   readonly content: ModItemContent
+  readonly name: string
+}
+
+export interface ModEquipmentAffix {
+  readonly contentId: string
+  readonly modId: string
+  readonly modifiers: readonly Readonly<{
+    key: string
+    operation: 'add' | 'multiply' | 'set'
+    value: number
+  }>[]
   readonly name: string
 }
 
@@ -1116,6 +1128,30 @@ export function nativeInventoryItemCanUnforge(item: HubInventoryItem): boolean {
   return (NATIVE_UNFORGE_ELIGIBLE_TYPE_IDS as readonly number[]).includes(item.nativeTypeId)
 }
 
+export function reforgeModEquipment(
+  source: HubEconomyState,
+  itemId: number,
+  affixes: readonly ModEquipmentAffix[],
+): HubEconomyResult {
+  if (!hubEconomyInventoryIsValid(source) || affixes.length < 1 || affixes.length > 8) {
+    return rejected(source, 'invalid-target')
+  }
+  const item = findInventoryItem(source.backpack, itemId)
+  if (!item || item.kind !== 'equipment' || item.equipmentType === null ||
+      new Set(affixes.map(affix => affix.contentId)).size !== affixes.length) {
+    return rejected(source, 'invalid-target')
+  }
+  const backpack = replaceInventoryTreeItem(source.backpack, itemId, {
+    ...item,
+    modAffixes: Object.freeze(affixes.map(affix => Object.freeze({ ...affix }))),
+  })
+  if (!backpack) return rejected(source, 'invalid-target')
+  return accepted({
+    ...source,
+    backpack,
+  })
+}
+
 export function nativeUnforgeOutcomeText(outcome: NativeUnforgeOutcome): string {
   switch (outcome.kind) {
     case 'experience': return `+${outcome.amount}% faster experience gain`
@@ -1865,6 +1901,12 @@ export function hubEconomyInventoryIsValid(source: HubEconomyState): boolean {
         || seenIds.has(item.id)
         || seenItems.has(item)
       ) return false
+      if (item.modAffixes !== undefined && (
+        item.kind !== 'equipment'
+        || item.modAffixes.length < 1
+        || item.modAffixes.length > 8
+        || new Set(item.modAffixes.map(affix => affix.contentId)).size !== item.modAffixes.length
+      )) return false
       seenIds.add(item.id)
       seenItems.add(item)
       if (

@@ -50,6 +50,7 @@ import {
   nativeUnforgeOutcomeText,
   restockFomentius,
   projectInventoryItems,
+  reforgeModEquipment,
   transferInventoryItem,
   unforgeInventoryItem,
   unequipInventorySlot,
@@ -95,6 +96,26 @@ test('a fresh participant owns the retail 500-gold profile and complete native s
   assert.equal(state.equipment.amulet, null)
   assert.deepEqual(state.equipment.rings, [null, null, null])
   assert.ok(state.fomentiusStock.every(({ id }) => id >= 6))
+})
+
+test('mod reforge attaches stable affixes to one backpack equipment item', () => {
+  const base = createHubEconomy(1)
+  const item = createEquipmentInventoryItem(DOWSING_EQUIPMENT_RECIPES[0]!, base.nextItemId)
+  const economy = {
+    ...base,
+    backpack: [...base.backpack, item],
+    nextItemId: base.nextItemId + 1,
+  }
+  const affix = {
+    contentId: '5000000000000000005',
+    modId: 'example.affixes',
+    modifiers: [{ key: 'incoming_damage', operation: 'multiply' as const, value: 0.8 }],
+    name: 'Gravebound',
+  }
+  const result = reforgeModEquipment(economy, item.id, [affix])
+  assert.equal(result.accepted, true)
+  assert.deepEqual(findInventoryItem(result.state.backpack, item.id)?.modAffixes, [affix])
+  assert.equal(hubEconomyInventoryIsValid(result.state), true)
 })
 
 test('Last Word retains every ground item in one bounded named Luthacus Sack', () => {

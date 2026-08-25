@@ -118,6 +118,17 @@ test('content catalog projects every family and builds deterministic consumables
     content('shop', 'apothecary', '5000000000000000011', {
       mount: { anchor: 'east', scene: 'hub.courtyard' },
       name: 'Field Apothecary',
+      services: [{
+        pool: {
+          contentId: '5000000000000000006',
+          key: 'crypt_affixes',
+          kind: 'resolved-content-reference',
+          modId: identity.id,
+          targetKind: 'affix-pool',
+        },
+        price: 50,
+        type: 'reforge',
+      }],
       stock: [{
         item: {
           contentId: '5000000000000000003',
@@ -163,6 +174,7 @@ test('content catalog projects every family and builds deterministic consumables
   assert.equal(catalog.enemy('5000000000000000009')?.health, 250)
   assert.equal(catalog.boneyard('5000000000000000010')?.source, 'levels/obsidian-depths.boneyard')
   assert.equal(catalog.shop('5000000000000000011')?.stock[0]?.price, 10)
+  assert.equal(catalog.shop('5000000000000000011')?.services[0]?.price, 50)
   assert.equal(catalog.ui('5000000000000000012')?.mount, 'hud.top_right')
   assert.equal(catalog.scene('5000000000000000014')?.rooms[0]?.contentId, '5000000000000000013')
   assert.equal(catalog.createLootItems(7, false)[0]?.modContent?.contentId, potionId)

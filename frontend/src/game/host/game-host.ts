@@ -1853,6 +1853,13 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             const row = message.arguments.row
             if (!Number.isSafeInteger(row) || Number(row) < 0) throw new Error('mod shop row is invalid')
             modHost.purchaseShop(client.playerId, message.target, Number(row))
+          } else if (message.action === 'reforge') {
+            const itemId = message.arguments.item_id
+            const service = message.arguments.service
+            if (!Number.isSafeInteger(itemId) || !Number.isSafeInteger(service)) {
+              throw new Error('mod reforge request is invalid')
+            }
+            modHost.reforgeShop(client.playerId, message.target, Number(service), Number(itemId))
           } else if (message.action === 'portal-enter') {
             const activeState = stateForPlayer(client.playerId)
             const loaded = loadedBoneyardForPlayer(client.playerId)

@@ -170,6 +170,7 @@ import {
   type HubShopItem,
   type ModConsumableContent,
   type ModConsumableCatalogEntry,
+  type ModEquipmentAffix,
   type ModItemContent,
   type ModSpriteFrame,
   type NativeUnforgeOutcome,
@@ -663,7 +664,7 @@ export interface ClientModCastMessage {
   readonly type: 'client-mod-cast'
 }
 
-export const MOD_ACTIONS = ['portal-enter', 'scene-return', 'shop-buy', 'skill-choose'] as const
+export const MOD_ACTIONS = ['portal-enter', 'reforge', 'scene-return', 'shop-buy', 'skill-choose'] as const
 export type ModAction = typeof MOD_ACTIONS[number]
 export interface ClientModActionMessage {
   readonly action: ModAction
@@ -2651,6 +2652,7 @@ function inventoryItem(
     'itemContentId',
     'kind',
     'modContent',
+    'modAffixes',
     'modItemContent',
     'name',
     'nativeSubtype',
@@ -2696,6 +2698,37 @@ function inventoryItem(
   const modItemContent = source.modItemContent === undefined
     ? undefined
     : modItemContentValue(source.modItemContent, `${field}.modItemContent`)
+  const modAffixes = source.modAffixes === undefined
+    ? undefined
+    : limitedArray(source.modAffixes, `${field}.modAffixes`, 8).map((value, index): ModEquipmentAffix => {
+        const affixField = `${field}.modAffixes[${index}]`
+        const affix = record(value, affixField)
+        onlyKeys(affix, affixField, ['contentId', 'modId', 'modifiers', 'name'])
+        const contentId = limitedString(affix.contentId, `${affixField}.contentId`, 19)
+        if (!/^[1-9][0-9]{0,18}$/.test(contentId)) throw new GameProtocolError(`${affixField} is invalid`)
+        return {
+          contentId,
+          modId: limitedString(affix.modId, `${affixField}.modId`, 128),
+          modifiers: limitedArray(affix.modifiers, `${affixField}.modifiers`, 64).map((value, modifierIndex) => {
+            const modifierField = `${affixField}.modifiers[${modifierIndex}]`
+            const modifier = record(value, modifierField)
+            onlyKeys(modifier, modifierField, ['key', 'operation', 'value'])
+            const operation = limitedString(modifier.operation, `${modifierField}.operation`, 16)
+            if (operation !== 'add' && operation !== 'multiply' && operation !== 'set') {
+              throw new GameProtocolError(`${modifierField}.operation is invalid`)
+            }
+            return {
+              key: limitedString(modifier.key, `${modifierField}.key`, 128),
+              operation,
+              value: finite(modifier.value, `${modifierField}.value`),
+            }
+          }),
+          name: limitedString(affix.name, `${affixField}.name`, 128),
+        }
+      })
+  if (modAffixes && new Set(modAffixes.map(affix => affix.contentId)).size !== modAffixes.length) {
+    throw new GameProtocolError(`${field}.modAffixes contains duplicates`)
+  }
   const iconRecords = limitedArray(source.iconRecords, `${field}.iconRecords`, 2)
     .map((recordIndex, index) => boundedInteger(
       recordIndex,
@@ -2762,6 +2795,7 @@ function inventoryItem(
       || generatedLevel !== undefined
       || nativeEffects !== undefined
       || iconTints !== undefined
+      || modAffixes !== undefined
       || (nativeSelector !== undefined && nativeSelector !== nativeSubtype)
     ) {
       throw new GameProtocolError(`${field} equipment identity is inconsistent`)
@@ -2884,6 +2918,7 @@ function inventoryItem(
     id: positiveInteger(source.id, `${field}.id`),
     kind: kind as HubItemKind,
     ...(modContent === undefined ? {} : { modContent }),
+    ...(modAffixes === undefined ? {} : { modAffixes }),
     ...(modItemContent === undefined ? {} : { modItemContent }),
     name,
     nativeSubtype,

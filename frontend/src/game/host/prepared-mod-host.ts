@@ -4,6 +4,10 @@ import {
 } from '../core-kernels/boneyard-wave-director.ts'
 import type { BoneyardWaveEnemyToken } from '../core-kernels/boneyard-wave-schema.ts'
 import {
+  findInventoryItem,
+  reforgeModEquipment,
+} from '../core-kernels/hub-economy.ts'
+import {
   GAME_TICK_RATE,
   getPlayerCharacter,
   getPlayerEconomy,
@@ -27,6 +31,7 @@ import {
 } from '../modding/assets/index.ts'
 import {
   compileModContentCatalog,
+  ModAffixEngine,
   ModEnemyEngine,
   ModPortalEngine,
   ModPowerupEngine,
@@ -118,6 +123,7 @@ export interface PreparedModHost {
   project(): ModContentProjection
   projectionRevision(): number
   purchaseShop(playerId: string, shopContentId: string, row: number): void
+  reforgeShop(playerId: string, shopContentId: string, service: number, itemId: number): void
   restore(checkpoint: PreparedModHostCheckpoint): void
   restoreSaveState(state: PreparedModSaveState): void
   returnScene(ownerId: string): ActiveModScene | null
@@ -161,6 +167,7 @@ export async function prepareModHost(options: Readonly<{
     ))) throw new Error(`${definition.modId}:${definition.key} Boneyard source is not packaged`)
   }
   const powerups = new ModPowerupEngine(content)
+  const affixes = new ModAffixEngine(content)
   const enemies = new ModEnemyEngine(content)
   const scenes = new ModSceneEngine(content)
   const portals = new ModPortalEngine(content, scenes)
@@ -202,8 +209,21 @@ export async function prepareModHost(options: Readonly<{
       actorSeed,
       enemyToken === 'DEMON',
     ),
-    filterDamage: input => statuses.filterDamage(input.targetPlayerId, input.amount, input.tick),
-    filterMana: input => statuses.filterMana(input.playerId, input.delta, input.tick),
+    filterDamage: input => filterEquipmentModifiers(
+      options.state.read(),
+      input.targetPlayerId,
+      'incoming_damage',
+      statuses.filterDamage(input.targetPlayerId, input.amount, input.tick),
+    ),
+    filterMana: input => {
+      const filtered = statuses.filterMana(input.playerId, input.delta, input.tick)
+      return filtered >= 0 ? filtered : -filterEquipmentModifiers(
+        options.state.read(),
+        input.playerId,
+        'mana_spend',
+        -filtered,
+      )
+    },
     hasConsumable: contentId => content.potion(contentId) !== null,
   }
   const host: PreparedModHost = {
@@ -381,6 +401,54 @@ export async function prepareModHost(options: Readonly<{
       }
       options.state.write({ ...source, playerEntities: granted.store })
     },
+    reforgeShop(playerId, shopContentId, serviceIndex, itemId) {
+      requireOpen()
+      const source = options.state.read()
+      const economy = getPlayerEconomy(source, playerId)
+      const service = content.shop(shopContentId)?.services[serviceIndex]
+      const item = findInventoryItem(economy.backpack, itemId)
+      if (!service || !item?.equipmentType || economy.gold < service.price) {
+        throw new Error('mod reforge service is unavailable')
+      }
+      const rolls = affixes.roll(service.pool.contentId, item.equipmentType, (
+        source.tick ^ item.id ^ Number(BigInt(service.pool.contentId) & 0xffff_ffffn)
+      ) >>> 0)
+      const materialized = rolls.map(roll => {
+        const definition = content.affix(roll.contentId)!
+        return Object.freeze({
+          contentId: roll.contentId,
+          modId: definition.modId,
+          modifiers: Object.freeze(Object.entries(roll.modifiers).flatMap(([key, value]) => {
+            if (typeof value === 'number' && Number.isFinite(value)) {
+              return [{ key, operation: 'multiply' as const, value }]
+            }
+            if (!value || typeof value !== 'object' || Array.isArray(value)) return []
+            return Object.entries(value).flatMap(([operation, amount]) => (
+              (operation === 'add' || operation === 'multiply' || operation === 'set')
+              && typeof amount === 'number' && Number.isFinite(amount)
+                ? [{
+                    key,
+                    operation: operation as 'add' | 'multiply' | 'set',
+                    value: amount,
+                  }]
+                : []
+            ))
+          })),
+          name: roll.name,
+        })
+      })
+      if (materialized.length === 0) throw new Error('mod reforge produced no applicable affix')
+      const reforged = reforgeModEquipment(economy, itemId, materialized)
+      if (!reforged.accepted) throw new Error('mod reforge item is invalid')
+      options.state.write({
+        ...source,
+        playerEntities: replacePlayerEconomy(source.playerEntities, playerId, {
+          ...reforged.state,
+          gold: reforged.state.gold - service.price,
+          revision: reforged.state.revision + 1,
+        }),
+      })
+    },
     restore(checkpoint) {
       requireOpen()
       const previous = host.checkpoint()
@@ -440,6 +508,11 @@ export async function prepareModHost(options: Readonly<{
         shops: content.all().filter(entry => entry.contentKind === 'shop').map(entry => ({
           content_id: entry.contentId,
           name: entry.name,
+          services: content.shop(entry.contentId)!.services.map(service => ({
+            pool_content_id: service.pool.contentId,
+            price: service.price,
+            type: service.type,
+          })),
           stock: content.shop(entry.contentId)!.stock.map(stock => ({
             item_content_id: stock.item.contentId,
             price: stock.price,
@@ -865,4 +938,24 @@ function finite(value: unknown, fallback: number, field: string): number {
   if (value === undefined) return fallback
   if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`${field} must be finite`)
   return value
+}
+
+function filterEquipmentModifiers(
+  state: GameSimulationState,
+  playerId: string,
+  key: string,
+  source: number,
+): number {
+  const equipment = getPlayerEconomy(state, playerId).equipment
+  const items = [equipment.amulet, equipment.hat, ...equipment.rings, equipment.robe, equipment.weapon]
+  let value = source
+  for (const item of items) for (const affix of item?.modAffixes ?? []) {
+    for (const modifier of affix.modifiers) {
+      if (modifier.key !== key) continue
+      if (modifier.operation === 'add') value += modifier.value
+      else if (modifier.operation === 'multiply') value *= modifier.value
+      else value = modifier.value
+    }
+  }
+  return Math.max(0, value)
 }
