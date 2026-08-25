@@ -355,7 +355,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 74
+export const GAME_PROTOCOL_VERSION = 75
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -2166,6 +2166,16 @@ function gameplayPauseSource(value: unknown): GameplayPauseSource {
 function hubInventoryAction(value: unknown): HubInventoryAction {
   const source = record(value, 'action')
   const type = limitedString(source.type, 'action.type', 32)
+  if (type === 'acknowledge-npc-hint') {
+    onlyKeys(source, 'action', ['type', 'interactionId'])
+    const interactionId = limitedString(source.interactionId, 'action.interactionId', 32)
+    if (
+      interactionId !== 'annalist'
+      && interactionId !== 'fomentius'
+      && interactionId !== 'luthacus'
+    ) throw new GameProtocolError('action.interactionId has no native profile hint')
+    return { type, interactionId }
+  }
   if (type === 'buy-dowsing') {
     onlyKeys(source, 'action', ['type', 'offerId'])
     return { type, offerId: positiveInteger(source.offerId, 'action.offerId') }
@@ -2436,7 +2446,7 @@ function nativeHubNpcState(
   field: string,
 ): ProtocolPlayerEconomy['npc'] {
   const source = record(value, field)
-  onlyKeys(source, field, ['boast', 'librarianLaceRead'])
+  onlyKeys(source, field, ['boast', 'helpFlags', 'librarianLaceRead'])
   const rawBoast = record(source.boast, `${field}.boast`)
   onlyKeys(rawBoast, `${field}.boast`, [
     'failed',
@@ -2453,14 +2463,18 @@ function nativeHubNpcState(
     rawBoast.failureSequence,
     `${field}.boast.failureSequence`,
   )
+  const helpFlags = limitedArray(source.helpFlags, `${field}.helpFlags`, 10)
+    .map((value, index) => boolean(value, `${field}.helpFlags[${index}]`))
   if (
     failureSequence > 1
     || failed !== (failureSequence === 1)
     || failed && succeeded
     || selected === null && (failed || succeeded)
+    || helpFlags.length !== 10
   ) throw new GameProtocolError(`${field}.boast state is inconsistent`)
   return {
     boast: { failed, failureSequence, selected, succeeded },
+    helpFlags,
     librarianLaceRead: boolean(source.librarianLaceRead, `${field}.librarianLaceRead`),
   }
 }
@@ -4142,7 +4156,6 @@ function ambientState(value: unknown, field: string): ProtocolAmbientState {
         ),
       }
     }),
-    markerPhaseDegrees: finite(source.markerPhaseDegrees, `${field}.markerPhaseDegrees`),
     nextFountainParticleId: nonnegativeInteger(
       source.nextFountainParticleId,
       `${field}.nextFountainParticleId`,

@@ -8,8 +8,8 @@ public sealed record WebGameSaveInspection(int FormatVersion, long Size, string 
 
 public static class WebGameSaveInspector
 {
-    public const int FormatVersion = 10;
-    private static readonly int[] LegacyFormatVersions = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+    public const int FormatVersion = 11;
+    private static readonly int[] LegacyFormatVersions = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
     public const int MaxDocumentBytes = 8 * 1024 * 1024;
     private const int MaxNodes = 250_000;
 
@@ -54,7 +54,7 @@ public static class WebGameSaveInspector
                 throw new InvalidDataException("The browser game save schema version is not supported.");
             }
             inspectedFormatVersion = version;
-            if (version is FormatVersion or 9 or 8 or 7 or 6 or 5)
+            if (version >= 5)
             {
                 RequireExactProperties(
                     root,
@@ -89,8 +89,8 @@ public static class WebGameSaveInspector
                         continuation.GetProperty("summary"),
                         continuation.GetProperty("simulation"),
                         continuation.GetProperty("loadedBoneyard"),
-                        version is FormatVersion or 9 or 8 or 7 or 6,
-                        version is FormatVersion);
+                        version >= 6,
+                        version >= 10);
                 }
                 else if (continuation.ValueKind != JsonValueKind.Null)
                 {

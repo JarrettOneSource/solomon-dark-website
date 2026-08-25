@@ -20,7 +20,7 @@ EXECUTABLE_SHA256 = "03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d622123
 
 
 def sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
 
 
 def sections(path: Path) -> dict[str, dict[str, Any]]:
@@ -142,6 +142,79 @@ def build(source_root: Path) -> dict[str, Any]:
             "name": "Declarius", "questions": [], "serviceTitle": None,
         }
 
+    marker_actors = [
+        ("hagatha", 5001, "help", "right", 61, False, None),
+        ("annalist", 5003, "talk", "right", 59, True, 0),
+        ("fomentius", 5004, "help", "right", 61, True, 1),
+        ("luthacus", 5005, "talk", "left", 60, True, 2),
+        ("skorcha", 5007, "talk", "right", 59, True, None),
+        ("teacher", 5008, "help", "left", 62, False, None),
+        ("memorator", 5017, "help", "left", 27, True, None),
+        ("librarian", 5013, "help", "right", 19, True, None),
+        ("shlorio", 5016, "help", "left", 20, True, None),
+        ("arch-chancellor", 5012, "help", "right", 15, True, None),
+    ]
+    markers = {
+        "actors": [{
+            "interactionId": interaction_id,
+            "phaseAdvances": phase_advances,
+            "profileHintIndex": profile_hint_index,
+            "record": record,
+            "region": interactions[interaction_id]["geometry"]["region"],
+            "side": side,
+            "style": style,
+            "typeId": type_id,
+        } for (
+            interaction_id,
+            type_id,
+            style,
+            side,
+            record,
+            phase_advances,
+            profile_hint_index,
+        ) in marker_actors],
+        "common": {
+            "alphaAmplitude": 0.25,
+            "alphaBase": 0.75,
+            "phaseDrawCount": 5000,
+            "rootOffsetX": 30,
+            "rootOffsetY": -60,
+        },
+        "directionalHints": {
+            "blinkPeriodTicks": 80,
+            "visibleAfterTick": 40,
+            "record": 88,
+            "targets": [
+                {"interactionId": "fomentius", "offset": {"x": 32, "y": -62},
+                 "profileHintIndex": 1},
+                {"interactionId": "luthacus", "offset": {"x": -32, "y": -62},
+                 "profileHintIndex": 2},
+            ],
+        },
+        "profileHelpRowCount": 10,
+        "regionBanks": [
+            {"atlas": "College", "records": [59, 60, 61, 62], "region": "courtyard"},
+            {"atlas": "Memoratorium", "records": [24, 25, 26, 27], "region": "mortuary"},
+            {"atlas": "Library", "records": [17, 18, 19, 20], "region": "library"},
+            {"atlas": "Storage", "records": [7, 8, 9, 10], "region": "storeroom"},
+            {"atlas": "Office", "records": [13, 14, 15, 16], "region": "office"},
+        ],
+        "walkToTalk": {
+            "arrowOffset": {"x": 15, "y": -65},
+            "arrowRecord": 28,
+            "arrowRotationDegrees": 200,
+            "fontGroup": 1,
+            "fontRecords": [93, 184],
+            "outlineRadii": [1, 3],
+            "outlineStepDegrees": 20,
+            "profileHintIndex": 0,
+            "target": "annalist",
+            "text": "WALK INTO WIZARDS\nTO TALK TO THEM",
+            "textColor": [0.85, 0.73, 0.44, 1.0],
+            "textOffset": {"x": 15, "y": -115},
+        },
+    }
+
     boasts = [
         (0, "POTIONS ARE FOR PEASANTS!", '"I can do this entire mission without drinking a single potion of any kind!"', "ANNAL_POTIONBOAST", "potion-use"),
         (1, "I'M TOO MACHO FOR MAGIC!", '"A true magician does not wear magical clothing, rings, or other implements!"', "ANNAL_ITEMBOAST", "magical-equipment"),
@@ -197,7 +270,8 @@ def build(source_root: Path) -> dict[str, Any]:
             "shlorio", "arch-chancellor"],
         "interactions": interactions,
         "interruptEulogies": [speech[f"SAY_EULOGY_INTERRUPT{index}"] for index in range(1, 5)],
-        "schema": "solomon-dark-native-hub-npc-interactions-v1",
+        "markers": markers,
+        "schema": "solomon-dark-native-hub-npc-interactions-v2",
         "skorcha": {"animationDelay": {"drawCount": 10, "offsetTicks": 20},
             "animationStateCount": 3, "artRecords": list(range(510, 517)),
             "placements": [{"variant": 0, "x": 1437.5, "y": 732.5},

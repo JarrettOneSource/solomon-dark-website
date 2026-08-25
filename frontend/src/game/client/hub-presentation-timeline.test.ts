@@ -1009,7 +1009,6 @@ test('takes the shortest path through cyclic headings, gait, walk poses, and amb
       ...firstBase.world,
       ambient: {
         ...firstBase.world.ambient,
-        markerPhaseDegrees: 359,
         sealCorePhase: 2.8,
         sealGlyphPhase: 2.9,
         statuePhaseDegrees: 359,
@@ -1031,7 +1030,6 @@ test('takes the shortest path through cyclic headings, gait, walk poses, and amb
       ...secondBase.world,
       ambient: {
         ...secondBase.world.ambient,
-        markerPhaseDegrees: 1,
         sealCorePhase: 0.2,
         sealGlyphPhase: 0.1,
         statuePhaseDegrees: 1,
@@ -1045,7 +1043,6 @@ test('takes the shortest path through cyclic headings, gait, walk poses, and amb
   assert.equal(frame.players.remote.gaitDegrees, 0)
   assert.equal(frame.players.remote.headingIndex, 0)
   assert.ok(frame.players.remote.walkCyclePrimary < 1e-9)
-  assert.equal(frame.world.ambient.markerPhaseDegrees, 0)
   assert.ok(frame.world.ambient.sealCorePhase < 1e-9)
   assert.ok(frame.world.ambient.sealGlyphPhase < 1e-9)
   assert.equal(frame.world.ambient.statuePhaseDegrees, 0)

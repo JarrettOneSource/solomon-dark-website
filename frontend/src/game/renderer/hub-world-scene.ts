@@ -17,13 +17,16 @@ import {
   type HubAstronomerMainActorFrame,
 } from '../hub-astronomer.ts'
 import {
+  NATIVE_HUB_NPC_CATALOG,
+  type NativeHubInteractionId,
+} from '../core-kernels/native-hub-npc.ts'
+import {
   HUB_FOUNTAIN_ORIGIN,
   HUB_STATUE_ROOT,
   createHubCommonTraderClock,
   createHubHagathaClock,
   createHubPotionTraderClock,
   hubFountainParticleAlpha,
-  hubMarkerAlpha,
   hubSealColors,
   hubStatueOffsets,
   type HubColor,
@@ -54,6 +57,17 @@ import { nativeLevelUpPresentationFrame } from './level-up-presentation.ts'
 import { NativeLevelUpWorldView } from './level-up-world-view.ts'
 import { NativeSecondaryWorldView } from './native-secondary-world-view.ts'
 import type { ProtocolHubSkorchaState } from '../protocol/game-state.ts'
+import {
+  captureHubNpcMarkerSuppression,
+  hubNpcMarkerFrame,
+  hubNpcOnboardingPlan,
+  type HubNpcMarkerSuppression,
+  type HubNpcMarkerSurface,
+} from './hub-npc-marker-presentation.ts'
+import {
+  courtyardMarkerSource,
+  HubWalkToTalkView,
+} from './hub-npc-marker-view.ts'
 
 export class HubWorldScene {
   readonly stage = new Container({ label: 'college-courtyard-camera-banks' })
@@ -64,7 +78,7 @@ export class HubWorldScene {
   })
   private readonly sealGlyphs: Sprite
   private readonly sealCore: Sprite
-  private readonly markerSprites: Sprite[] = []
+  private readonly markerSprites = new Map<NativeHubInteractionId, Sprite>()
   private readonly nonPlayerActors: Container[] = []
   private readonly fountain = new Map<number, Sprite>()
   private readonly liveFountainIds = new Set<number>()
@@ -87,9 +101,15 @@ export class HubWorldScene {
   private readonly liveStudentIds = new Set<number>()
   private readonly southernArchitecture: Sprite[] = []
   private readonly textures: HubWorldTextures
+  private readonly walkToTalk: HubWalkToTalkView
   private readonly layerFrameTextures: Texture[] = []
   private createdStudentViewCount = 0
   private reusedStudentViewCount = 0
+  private markerSuppression: HubNpcMarkerSuppression = [false, false, false]
+  private markerSuppressionInitialized = false
+  private markerEpochSeed = 0
+  private markerEpochStartedAtTick = 0
+  private lastLocalRegion: string | null = null
 
   constructor(
     textures: HubWorldTextures,
@@ -130,22 +150,28 @@ export class HubWorldScene {
     this.statueBody.eventMode = 'none'
     this.world.addChild(this.statueAura, this.statueBody)
 
-    this.addNpc(hub.npcs.annalist, hub.markers.talk.right, 895.5, 455.5)
+    this.addNpc(hub.npcs.annalist, 895.5, 455.5)
 
     this.hagatha = new HubHagathaView(textures, traderAnimationSeed ^ 5001)
     this.luthacus = new HubCommonTraderView(textures, traderAnimationSeed ^ 5005)
-    this.markerSprites.push(this.hagatha.marker, this.luthacus.marker)
     this.world.addChild(this.hagatha.container, this.luthacus.container)
 
     this.potion = new HubPotionTraderView(textures)
-    this.markerSprites.push(this.potion.marker)
-    this.world.addChild(this.potion.actor, this.potion.balloons, this.potion.marker)
+    this.world.addChild(this.potion.actor, this.potion.balloons)
 
     this.teacher = new HubTeacherView(textures, 576.5, 710.5)
     this.world.addChild(this.teacher.container)
 
     this.skorcha = new HubSkorchaView(textures)
     this.world.addChild(this.skorcha.container)
+
+    this.addNpcMarkers()
+    this.walkToTalk = new HubWalkToTalkView(
+      textures.fontAtlas,
+      textures.base[hub.markers.onboarding.walkToTalkArrow],
+    )
+    this.walkToTalk.container.zIndex = hubWorldDepthForActor(455.5) + 0.2
+    this.world.addChild(this.walkToTalk.container)
 
     this.astronomer = new HubAstronomerView(textures, createdAtTick)
 
@@ -174,6 +200,7 @@ export class HubWorldScene {
       presentationId: number
     } | null = null,
     pointGainAt: (position: Readonly<{ x: number, y: number }>) => number = () => 1,
+    markerSurface: HubNpcMarkerSurface = null,
   ): void {
     const ambient = snapshot.world.ambient
     const colors = hubSealColors(ambient)
@@ -181,8 +208,7 @@ export class HubWorldScene {
     this.sealGlyphs.alpha = colors.glyphs.alpha
     this.sealCore.tint = colorTint(colors.core)
     this.sealCore.alpha = colors.core.alpha
-    const markerAlpha = hubMarkerAlpha(ambient)
-    for (const marker of this.markerSprites) marker.alpha = markerAlpha
+    this.updateNpcMarkers(snapshot, localPlayerId, markerSurface)
     this.updateFountain(snapshot)
     const statue = hubStatueOffsets(ambient)
     this.statueAura.position.set(
@@ -317,7 +343,15 @@ export class HubWorldScene {
     return this.secondaryAbilities.diagnosticSamples
   }
 
+  get visibleMarkerIds(): readonly NativeHubInteractionId[] {
+    return [...this.markerSprites]
+      .filter(([, marker]) => marker.visible)
+      .map(([interactionId]) => interactionId)
+  }
+
   destroy(): void {
+    this.world.removeChild(this.walkToTalk.container)
+    this.walkToTalk.destroy()
     this.world.removeChild(this.levelUp.container)
     this.levelUp.destroy()
     this.primarySpells.destroy()
@@ -336,7 +370,7 @@ export class HubWorldScene {
     this.layerFrameTextures.length = 0
   }
 
-  private addNpc(source: string, markerSource: string, x: number, y: number): void {
+  private addNpc(source: string, x: number, y: number): void {
     const actor = new Container({ label: 'courtyard-npc' })
     actor.sortableChildren = true
     actor.position.set(x, y)
@@ -350,15 +384,74 @@ export class HubWorldScene {
     body.position.y = 4
     body.zIndex = 1
     body.eventMode = 'none'
-    const marker = new Sprite(this.textures.base[markerSource])
-    marker.anchor.set(0.5)
-    marker.position.set(48, -60)
-    marker.zIndex = 2
-    marker.eventMode = 'none'
-    this.markerSprites.push(marker)
-    actor.addChild(shadow, body, marker)
+    actor.addChild(shadow, body)
     this.nonPlayerActors.push(actor)
     this.world.addChild(actor)
+  }
+
+  private addNpcMarkers(): void {
+    for (const actor of NATIVE_HUB_NPC_CATALOG.markers.actors) {
+      if (actor.region !== 'courtyard') continue
+      const marker = new Sprite(this.textures.base[courtyardMarkerSource(
+        actor.style,
+        actor.side,
+      )])
+      marker.anchor.set(0.5)
+      marker.eventMode = 'none'
+      this.markerSprites.set(actor.interactionId, marker)
+      this.world.addChild(marker)
+    }
+  }
+
+  private updateNpcMarkers(
+    snapshot: HubPresentationFrame,
+    localPlayerId: string,
+    markerSurface: HubNpcMarkerSurface,
+  ): void {
+    const participant = snapshot.world.participants[localPlayerId]
+    const player = snapshot.players[localPlayerId]
+    const region = participant?.region ?? null
+    if (region === 'courtyard' && this.lastLocalRegion !== 'courtyard' && player) {
+      this.markerSuppression = captureHubNpcMarkerSuppression(player.economy.npc.helpFlags)
+      this.markerSuppressionInitialized = true
+      this.markerEpochSeed = snapshot.world.traderAnimationSeed ^ snapshot.tick
+      this.markerEpochStartedAtTick = snapshot.tick
+    }
+    this.lastLocalRegion = region
+    if (!this.markerSuppressionInitialized && player) {
+      this.markerSuppression = captureHubNpcMarkerSuppression(player.economy.npc.helpFlags)
+      this.markerSuppressionInitialized = true
+    }
+    for (const [interactionId, marker] of this.markerSprites) {
+      const frame = hubNpcMarkerFrame(
+        interactionId,
+        Math.max(0, snapshot.tick - this.markerEpochStartedAtTick),
+        this.markerEpochSeed,
+        this.markerSuppression,
+        {
+          skorchaPosition: snapshot.world.skorcha?.position ?? null,
+          skorchaVariant: snapshot.world.skorcha?.variant ?? null,
+          surface: markerSurface,
+        },
+      )
+      marker.visible = frame.visible
+      marker.alpha = frame.alpha
+      marker.position.copyFrom(frame.position)
+      marker.zIndex = interactionId === 'fomentius'
+        ? HUB_WORLD_DEPTH.usefulThyngsMarker
+        : hubWorldDepthForActor(
+            interactionId === 'skorcha'
+              ? snapshot.world.skorcha?.position.y ?? frame.position.y + 60
+              : NATIVE_HUB_NPC_CATALOG.interactions[interactionId].geometry.position.y,
+          ) + 0.1
+      marker.texture = this.textures.base[courtyardMarkerSource(frame.style, frame.side)]
+    }
+    this.walkToTalk.container.visible = Boolean(
+      player
+      && region === 'courtyard'
+      && hubNpcOnboardingPlan(player.economy.npc.helpFlags, snapshot.tick, markerSurface)
+        .some(plan => plan.kind === 'walk-to-talk'),
+    )
   }
 
   private addCourtyardDepthProps(): void {
@@ -699,7 +792,6 @@ class HubAstronomerView {
 
 class HubHagathaView {
   readonly container = new Container({ label: 'perk-witch' })
-  readonly marker: Sprite
   private readonly body: Sprite
   private readonly clock: HubHagathaClock
   private readonly liveParticleIds = new Set<number>()
@@ -727,12 +819,7 @@ class HubHagathaView {
     accessory.position.set(-25, 15)
     accessory.zIndex = 2
     accessory.eventMode = 'none'
-    this.marker = new Sprite(textures.base[hub.markers.help.right])
-    this.marker.anchor.set(0.5)
-    this.marker.position.set(48, -60)
-    this.marker.zIndex = 4
-    this.marker.eventMode = 'none'
-    this.container.addChild(shadow, this.body, accessory, this.marker)
+    this.container.addChild(shadow, this.body, accessory)
   }
 
   update(tick: number): void {
@@ -770,7 +857,6 @@ class HubHagathaView {
 
 class HubCommonTraderView {
   readonly container = new Container({ label: 'items-trader' })
-  readonly marker: Sprite
   private readonly clock: HubCommonTraderClock
   private readonly sprite: Sprite
   private readonly textures: HubWorldTextures
@@ -789,12 +875,7 @@ class HubCommonTraderView {
     this.sprite.anchor.set(0.5)
     this.sprite.zIndex = 1
     this.sprite.eventMode = 'none'
-    this.marker = new Sprite(textures.base[hub.markers.help.right])
-    this.marker.anchor.set(0.5)
-    this.marker.position.set(48, -60)
-    this.marker.zIndex = 2
-    this.marker.eventMode = 'none'
-    this.container.addChild(shadow, this.sprite, this.marker)
+    this.container.addChild(shadow, this.sprite)
   }
 
   update(tick: number): void {
@@ -836,7 +917,6 @@ class HubSkorchaView {
 class HubPotionTraderView {
   readonly actor = new Container({ label: 'potion-trader' })
   readonly balloons: Sprite
-  readonly marker: Sprite
   private readonly clock = createHubPotionTraderClock()
   private readonly sprite: Sprite
   private readonly textures: HubWorldTextures
@@ -856,11 +936,6 @@ class HubPotionTraderView {
     this.balloons.zIndex = HUB_WORLD_DEPTH.usefulThyngsBalloons
     this.balloons.eventMode = 'none'
 
-    this.marker = new Sprite(textures.base[hub.markers.help.right])
-    this.marker.anchor.set(0.5)
-    this.marker.position.set(1435, 602)
-    this.marker.zIndex = HUB_WORLD_DEPTH.usefulThyngsMarker
-    this.marker.eventMode = 'none'
   }
 
   update(tick: number): void {

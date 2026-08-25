@@ -9,8 +9,8 @@ import type {
   LuaConsoleValue,
 } from '../protocol/game-protocol.ts'
 
-export const WEB_GAME_SAVE_SCHEMA_VERSION = 10
-export const LEGACY_WEB_GAME_SAVE_SCHEMA_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9] as const
+export const WEB_GAME_SAVE_SCHEMA_VERSION = 11
+export const LEGACY_WEB_GAME_SAVE_SCHEMA_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const
 export const WEB_GAME_SAVE_SLOT = 0
 export const MAX_WEB_GAME_SAVE_BYTES = 8 * 1024 * 1024
 /** Accommodates the 32-level Sack wire bound plus the complete save-document envelope. */

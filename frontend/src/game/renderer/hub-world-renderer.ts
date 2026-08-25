@@ -1,6 +1,6 @@
 // Installs Pixi's static CSP-safe sync paths; this module removes the need for eval.
 import 'pixi.js/unsafe-eval'
-import { Application, Graphics, Sprite, Texture } from 'pixi.js'
+import { Application, Container, Graphics, Sprite, Texture } from 'pixi.js'
 import type { HubPresentationFrame } from '../client/hub-presentation-timeline.ts'
 import {
   DEFAULT_GAME_SETTINGS,
@@ -40,6 +40,13 @@ import {
 } from './native-world-nameplate.ts'
 import { NativeWorldSpeechLayer } from './native-world-speech.ts'
 import { HubPlayerActivityLayer } from './hub-player-activity-layer.ts'
+import {
+  hubNpcDirectionalHintFrame,
+  hubNpcOnboardingPlan,
+  type HubNpcMarkerSurface,
+} from './hub-npc-marker-presentation.ts'
+import { NATIVE_HUB_NPC_CATALOG } from '../core-kernels/native-hub-npc.ts'
+import { hub } from '../../lib/assets.ts'
 
 export interface HubRendererDiagnostics {
   averageFrameMs: number
@@ -112,6 +119,7 @@ export interface HubWorldRenderer {
   resize(viewport: GameViewportLayout, devicePixelRatio?: number): void
   setLevelUpPresentation(presentationId: number | null): void
   setSettings(settings: HubWorldPresentationSettings): void
+  setUiSurface(surface: HubNpcMarkerSurface): void
   setWorldSpeeches(speeches: readonly GameWorldSpeech[]): void
 }
 
@@ -189,9 +197,20 @@ export async function createHubWorldRenderer(
   const worldNameplates = new NativeWorldNameplateLayer(textures.fontAtlas)
   const playerActivities = new HubPlayerActivityLayer()
   const worldSpeech = new NativeWorldSpeechLayer(textures.fontAtlas)
+  const npcDirectionalHintLayer = new Container({ label: 'native-npc-directional-hints' })
+  npcDirectionalHintLayer.eventMode = 'none'
+  const npcDirectionalHints = Array.from({ length: 2 }, () => {
+    const sprite = new Sprite(textures.base[hub.markers.onboarding.directional])
+    sprite.anchor.set(0.5)
+    sprite.eventMode = 'none'
+    sprite.visible = false
+    npcDirectionalHintLayer.addChild(sprite)
+    return sprite
+  })
   application.stage.addChild(
     courtyardScene.stage,
     privateRoomScene.world,
+    npcDirectionalHintLayer,
     worldNameplates.container,
     playerActivities.container,
     worldSpeech.container,
@@ -235,6 +254,7 @@ export async function createHubWorldRenderer(
   let resolution = initialResolution
   let sampledStudentCount = -1
   let worldSpeeches: readonly GameWorldSpeech[] = []
+  let markerSurface: HubNpcMarkerSurface = null
   const frameDiagnostics: HubFrameDiagnostics = {
     astronomerRenderable: true,
     astronomerTelescopeFrame: 0,
@@ -442,6 +462,7 @@ export async function createHubWorldRenderer(
         frameCount,
         levelUpPresentation,
         pointGainAt,
+        markerSurface,
       )
       privateRoomScene.update(
         snapshot,
@@ -449,6 +470,7 @@ export async function createHubWorldRenderer(
         frameCount,
         levelUpPresentation,
         pointGainAt,
+        markerSurface,
       )
       const inCourtyard = participant.region === 'courtyard'
       courtyardScene.stage.visible = inCourtyard
@@ -572,6 +594,38 @@ export async function createHubWorldRenderer(
         },
         scale: feedbackCameraScale,
       }
+      const onboarding = participant.region === 'courtyard'
+        ? hubNpcOnboardingPlan(player.economy.npc.helpFlags, snapshot.tick, markerSurface)
+        : []
+      const directional = onboarding.filter(plan => plan.kind === 'directional')
+      for (let index = 0; index < npcDirectionalHints.length; index += 1) {
+        const sprite = npcDirectionalHints[index]!
+        const plan = directional[index]
+        sprite.visible = plan !== undefined
+        if (!plan) continue
+        const actor = NATIVE_HUB_NPC_CATALOG.interactions[plan.target].geometry.position
+        const worldPoint = {
+          x: actor.x + plan.offset.x,
+          y: actor.y + plan.offset.y,
+        }
+        const target = {
+          x: worldNameplateTransform.position.x + worldPoint.x * worldNameplateTransform.scale,
+          y: worldNameplateTransform.position.y + worldPoint.y * worldNameplateTransform.scale,
+        }
+        const frame = hubNpcDirectionalHintFrame(target, viewport)
+        sprite.position.copyFrom(frame.position)
+        sprite.rotation = frame.rotationRadians
+      }
+      canvas.dataset.npcDirectionalHintCount = `${directional.length}`
+      canvas.dataset.npcHelpFlags = player.economy.npc.helpFlags.map(Number).join('')
+      canvas.dataset.npcMarkerIds = (
+        participant.region === 'courtyard'
+          ? courtyardScene.visibleMarkerIds
+          : privateRoomScene.visibleMarkerIds
+      ).join(',')
+      canvas.dataset.npcWalkToTalkVisible = `${onboarding.some(
+        plan => plan.kind === 'walk-to-talk',
+      )}`
       worldNameplates.update(
         snapshot.players,
         options.playerId,
@@ -702,6 +756,11 @@ export async function createHubWorldRenderer(
       canvas.dataset.cameraZoom = `${baseCameraScale}`
       canvas.dataset.zoomEffects = `${zoomEffects}`
     },
+    setUiSurface(surface) {
+      if (destroyed) return
+      markerSurface = surface
+      canvas.dataset.npcMarkerSurface = surface ?? 'none'
+    },
     setWorldSpeeches(speeches) {
       if (destroyed || speeches === worldSpeeches) return
       worldSpeeches = speeches
@@ -712,6 +771,7 @@ export async function createHubWorldRenderer(
       application.stage.removeChild(
         courtyardScene.stage,
         privateRoomScene.world,
+        npcDirectionalHintLayer,
         worldNameplates.container,
         playerActivities.container,
         worldSpeech.container,
@@ -720,6 +780,7 @@ export async function createHubWorldRenderer(
       )
       courtyardScene.destroy()
       privateRoomScene.destroy()
+      npcDirectionalHintLayer.destroy({ children: true })
       worldNameplates.destroy()
       playerActivities.destroy()
       worldSpeech.destroy()

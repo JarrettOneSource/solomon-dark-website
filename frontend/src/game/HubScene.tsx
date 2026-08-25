@@ -42,6 +42,7 @@ import {
   HUB_HUD_SHORTCUTS,
   hubInteractionAtPoint,
   hubInteractionWithinRange,
+  hubNpcHintAcknowledgementAction,
   hubPotionBeltShortcut,
   nearestHubInteraction,
 } from './hub-inventory-presentation.ts'
@@ -368,6 +369,12 @@ export default function HubScene({
     rendererRef.current?.setLevelUpPresentation(levelUpPresentationId)
   }, [levelUpPresentationId])
 
+  useLayoutEffect(() => {
+    rendererRef.current?.setUiSurface(
+      hubUiSurface?.kind ?? (modalOpen || inputBlocked ? 'modal' : null),
+    )
+  }, [hubUiSurface?.kind, inputBlocked, modalOpen, rendererState])
+
   useEffect(() => {
     const footstepAudio = new PlayerFootstepAudioSynchronizer(
       audio,
@@ -682,6 +689,11 @@ export default function HubScene({
     )) return
     event.preventDefault()
     event.stopPropagation()
+    const acknowledgement = hubNpcHintAcknowledgementAction(
+      interaction,
+      player.economy.npc.helpFlags,
+    )
+    if (acknowledgement) onHubAction(acknowledgement)
     setHubUiSurface({ interaction, kind: 'dialogue', source: 'world' })
   }
 

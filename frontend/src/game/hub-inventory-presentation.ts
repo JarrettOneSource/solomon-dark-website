@@ -8,6 +8,7 @@ import type { HubRegionId } from './core-kernels/hub-regions.ts'
 import {
   NATIVE_HUB_INTERACTION_IDS,
   NATIVE_HUB_NPC_CATALOG,
+  nativeHubNpcHintIndex,
   type NativeHubDialogueRecord,
   type NativeHubInteractionId,
   type NativeHubNpcCommand,
@@ -229,6 +230,16 @@ export function hubMemorialEulogyIndex(
 ): number | null {
   const slotIndex = hubMemorialSlotIndexForInteraction(interaction)
   return slotIndex === null ? null : memorial.slots[slotIndex]?.portraitId ?? null
+}
+
+export function hubNpcHintAcknowledgementAction(
+  interactionId: HubInteractionId,
+  helpFlags: readonly boolean[],
+): Extract<HubInventoryAction, { readonly type: 'acknowledge-npc-hint' }> | null {
+  const index = nativeHubNpcHintIndex(interactionId)
+  return index === null || helpFlags[index] !== true
+    ? null
+    : { interactionId, type: 'acknowledge-npc-hint' }
 }
 
 export function hubTraderWithinServiceRange(

@@ -39,6 +39,7 @@ import {
 } from '../core-kernels/player-skill-runtime.ts'
 import { createNativeHallOfFameRun } from '../core-kernels/hall-of-fame-score.ts'
 import {
+  NATIVE_HUB_HELP_ROW_COUNT,
   NATIVE_HUB_NPC_CATALOG,
   createNativeHubNpcState,
   nativeBoastDefinition,
@@ -318,6 +319,7 @@ export function restoreGameSaveDocument(document: string): RestoredGameSaveDocum
     continuation.simulation,
     continuation.loadedBoneyard,
     continuation.summary.playerId,
+    parsed.sourceSchemaVersion,
   )
   const modIds = new Set(parsed.mods.map(mod => mod.id.toLowerCase()))
   if (Object.keys(parsed.modState).some(modId => !modIds.has(modId.toLowerCase()))) {
@@ -438,7 +440,7 @@ export function restoreGameSaveDocument(document: string): RestoredGameSaveDocum
 export function restoreGameSaveProfile(document: string): RestoredGameSaveProfile {
   const parsed = parseGameSaveDocument(document)
   assertBoundedJsonTree(JSON.parse(document))
-  let economy = normalizeEconomy(parsed.profile.economy)
+  let economy = normalizeEconomy(parsed.profile.economy, parsed.sourceSchemaVersion)
   if (parsed.sourceSchemaVersion < 6) {
     economy = archiveCompletedRunEconomy(economy, {
       displayName: parsed.continuation?.summary.character.displayName ?? 'Wizard',
@@ -488,6 +490,7 @@ function normalizeSimulation(
   value: unknown,
   loadedBoneyardValue: unknown,
   playerId: string,
+  sourceSchemaVersion: number,
 ): Record<string, unknown> {
   const source = record(value, 'game save simulation')
   rejectUnexpectedKeys(source, 'game save simulation', [
@@ -506,16 +509,19 @@ function normalizeSimulation(
     modEffects: source.modEffects ?? [],
     nextLevelUpBarrierId: source.nextLevelUpBarrierId,
     nextModConsumableUseId: source.nextModConsumableUseId ?? 1,
-    playerEntities: normalizePlayerStore(source.playerEntities),
+    playerEntities: normalizePlayerStore(source.playerEntities, sourceSchemaVersion),
     primarySpells: source.primarySpells,
     run: normalizeRun(source.run),
     secondaryAbilities: source.secondaryAbilities,
     tick: source.tick,
-    world: normalizeWorld(source.world, loadedBoneyardValue, playerId),
+    world: normalizeWorld(source.world, loadedBoneyardValue, playerId, sourceSchemaVersion),
   }
 }
 
-function normalizePlayerStore(value: unknown): GameSimulationState['playerEntities'] {
+function normalizePlayerStore(
+  value: unknown,
+  sourceSchemaVersion: number,
+): GameSimulationState['playerEntities'] {
   const source = record(value, 'game save players')
   rejectUnexpectedKeys(source, 'game save players', LEGACY_PLAYER_STORE_KEYS)
   if (
@@ -533,7 +539,7 @@ function normalizePlayerStore(value: unknown): GameSimulationState['playerEntiti
     || source.statBooks.length !== count
   ) throw new Error('game save player component cardinality drifted')
 
-  const economies = source.economies.map(normalizeEconomy)
+  const economies = source.economies.map(value => normalizeEconomy(value, sourceSchemaVersion))
   const primaryCasts: PlayerPrimaryCastState[] = []
   const skillBooks: PlayerSkillBookComponent[] = []
   const skillRuntimes: PlayerSkillRuntimeComponent[] = []
@@ -577,7 +583,7 @@ function normalizePlayerStore(value: unknown): GameSimulationState['playerEntiti
   } as unknown as GameSimulationState['playerEntities']
 }
 
-function normalizeEconomy(value: unknown): HubEconomyState {
+function normalizeEconomy(value: unknown, sourceSchemaVersion: number): HubEconomyState {
   const source = record(value, 'game save player economy')
   rejectUnexpectedKeys(source, 'game save player economy', ECONOMY_KEYS)
   const feedback = source.actionFeedback && typeof source.actionFeedback === 'object'
@@ -587,7 +593,7 @@ function normalizeEconomy(value: unknown): HubEconomyState {
   const restored = {
     ...source,
     actionFeedback: feedback,
-    npc: normalizeNativeHubNpcState(source.npc),
+    npc: normalizeNativeHubNpcState(source.npc, sourceSchemaVersion >= 11),
     tutorialPending: source.tutorialPending === true,
     unforgeBonuses: source.unforgeBonuses ?? createNativeUnforgeBonuses(),
   } as unknown as HubEconomyState
@@ -677,6 +683,7 @@ function normalizeWorld(
   value: unknown,
   loadedBoneyardValue: unknown,
   playerId: string,
+  sourceSchemaVersion: number,
 ): unknown {
   const source = record(value, 'game save world')
   if (source.kind !== 'boneyard') return source
@@ -743,7 +750,7 @@ function normalizeWorld(
       })()
   const tutorialProfileEconomy = source.tutorialProfileEconomy == null
     ? null
-    : normalizeEconomy(source.tutorialProfileEconomy)
+    : normalizeEconomy(source.tutorialProfileEconomy, sourceSchemaVersion)
   if ((tutorial === null) !== (tutorialProfileEconomy === null)) {
     throw new Error('game save Tutorial profile baseline ownership is inconsistent')
   }
@@ -951,7 +958,7 @@ function validatePlayerStore(value: unknown, playerId: string): GameSimulationSt
     const restored = {
       ...economy,
       actionFeedback: feedback,
-      npc: normalizeNativeHubNpcState(economy.npc),
+      npc: normalizeNativeHubNpcState(economy.npc, true),
       tutorialPending: economy.tutorialPending === true,
       unforgeBonuses: economy.unforgeBonuses ?? createNativeUnforgeBonuses(),
     } as unknown as HubEconomyState
@@ -1000,10 +1007,28 @@ function validatePlayerStore(value: unknown, playerId: string): GameSimulationSt
   } as unknown as GameSimulationState['playerEntities']
 }
 
-function normalizeNativeHubNpcState(value: unknown): NativeHubNpcState {
-  if (value === undefined) return createNativeHubNpcState()
+function normalizeNativeHubNpcState(
+  value: unknown,
+  requireHelpFlags: boolean,
+): NativeHubNpcState {
+  const acknowledgedHelpFlags = () => (
+    Object.freeze(Array<boolean>(NATIVE_HUB_HELP_ROW_COUNT).fill(false))
+  )
+  if (value === undefined) {
+    if (requireHelpFlags) throw new Error('game save Hub NPC state is missing')
+    return { ...createNativeHubNpcState(), helpFlags: acknowledgedHelpFlags() }
+  }
   const state = record(value, 'game save Hub NPC state')
-  onlyKeys(state, 'game save Hub NPC state', ['boast', 'librarianLaceRead'])
+  if (requireHelpFlags && state.helpFlags === undefined) {
+    throw new Error('game save Hub NPC help flags are missing')
+  }
+  onlyKeys(
+    state,
+    'game save Hub NPC state',
+    state.helpFlags === undefined
+      ? ['boast', 'librarianLaceRead']
+      : ['boast', 'helpFlags', 'librarianLaceRead'],
+  )
   const boast = record(state.boast, 'game save Boast state')
   onlyKeys(boast, 'game save Boast state', [
     'failed',
@@ -1012,6 +1037,9 @@ function normalizeNativeHubNpcState(value: unknown): NativeHubNpcState {
     'succeeded',
   ])
   const selected = boast.selected
+  const helpFlags = state.helpFlags === undefined
+    ? acknowledgedHelpFlags()
+    : array(state.helpFlags, 'game save Hub NPC help flags')
   if (
     (selected !== null && (typeof selected !== 'number' || nativeBoastDefinition(selected) === null))
     || typeof boast.failed !== 'boolean'
@@ -1022,6 +1050,8 @@ function normalizeNativeHubNpcState(value: unknown): NativeHubNpcState {
     || boast.failed !== (boast.failureSequence === 1)
     || (boast.failed === true && boast.succeeded === true)
     || (selected === null && (boast.failed === true || boast.succeeded === true))
+    || helpFlags.length !== NATIVE_HUB_HELP_ROW_COUNT
+    || helpFlags.some(value => typeof value !== 'boolean')
     || typeof state.librarianLaceRead !== 'boolean'
   ) throw new Error('game save Hub NPC state is invalid')
   return {
@@ -1031,6 +1061,7 @@ function normalizeNativeHubNpcState(value: unknown): NativeHubNpcState {
       selected,
       succeeded: boast.succeeded,
     } as NativeHubNpcState['boast'],
+    helpFlags: helpFlags as boolean[],
     librarianLaceRead: state.librarianLaceRead,
   }
 }

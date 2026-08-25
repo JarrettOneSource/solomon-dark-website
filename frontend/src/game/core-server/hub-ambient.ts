@@ -6,7 +6,6 @@ export interface HubFountainParticleState {
 
 export interface HubAmbientState {
   fountainParticles: readonly HubFountainParticleState[]
-  markerPhaseDegrees: number
   nextFountainParticleId: number
   rngState: number
   sealCorePhase: number
@@ -50,7 +49,6 @@ function randomInteger(
 export function createHubAmbientState(): HubAmbientState {
   return {
     fountainParticles: [],
-    markerPhaseDegrees: 0,
     nextFountainParticleId: 0,
     rngState: 0x2f6e2b1d,
     sealCorePhase: 0,
@@ -94,7 +92,6 @@ export function stepHubAmbient(source: HubAmbientState): HubAmbientState {
 
   return {
     fountainParticles,
-    markerPhaseDegrees: (source.markerPhaseDegrees + 1) % 360,
     nextFountainParticleId,
     rngState,
     sealCorePhase: (source.sealCorePhase + (coreIncrement.value + 0.01) * 0.5)

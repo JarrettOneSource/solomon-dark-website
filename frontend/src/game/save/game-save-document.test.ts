@@ -5,6 +5,7 @@ import { createIdlePlayerCharacterInput } from '../core-kernels/player-character
 import { createNativeHubNpcState } from '../core-kernels/native-hub-npc.ts'
 import { createNativeRng, drawNativeInteger } from '../core-kernels/native-rng.ts'
 import {
+  applyGameSimulationHubAction,
   createGameSimulation,
   enterBoneyardWorld,
   getPlayerEconomy,
@@ -83,7 +84,7 @@ test('host save documents round-trip the complete owner state and revive Hub run
     state,
   })
   const encoded = JSON.parse(document) as Record<string, unknown>
-  assert.equal(encoded.schemaVersion, 10)
+  assert.equal(encoded.schemaVersion, 11)
   assert.deepEqual(encoded.mods, MODS)
   assert.deepEqual(encoded.modState, MOD_STATE)
   assert.equal(encoded.integrity, 'local-only')
@@ -208,6 +209,43 @@ test('a client-held save cannot fork the process-owned shared memorial', () => {
   if (restored.state.world.kind !== 'hub') throw new Error('expected restored Hub')
   assert.equal(restored.state.world.memorial.nextAge, 1001)
   assert.equal(restored.state.world.memorial.slots.every(({ portrait }) => portrait === null), true)
+})
+
+test('native NPC help rows persist after acknowledgement and pre-v11 saves migrate as acknowledged', () => {
+  const initial = createGameSimulation({ owner: OWNER })
+  const acknowledged = applyGameSimulationHubAction(initial, 'owner', {
+    interactionId: 'annalist',
+    type: 'acknowledge-npc-hint',
+  })
+  assert.equal(acknowledged.accepted, true)
+  const document = createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard: null,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state: acknowledged.state,
+  })
+  assert.deepEqual(
+    restoreGameSaveDocument(document).state.playerEntities.economies[0]?.npc.helpFlags,
+    [false, true, true, true, true, true, true, true, true, true],
+  )
+
+  const legacy = JSON.parse(document)
+  legacy.schemaVersion = 10
+  delete legacy.profile.economy.npc.helpFlags
+  delete legacy.continuation.simulation.playerEntities.economies[0].npc.helpFlags
+  assert.deepEqual(
+    restoreGameSaveDocument(JSON.stringify(legacy))
+      .state.playerEntities.economies[0]?.npc.helpFlags,
+    Array<boolean>(10).fill(false),
+  )
+
+  legacy.schemaVersion = 11
+  assert.throws(
+    () => restoreGameSaveDocument(JSON.stringify(legacy)),
+    /Hub NPC help flags are missing/,
+  )
 })
 
 test('save documents admit the complete Sack wire depth and reject one level beyond it', () => {
@@ -468,7 +506,7 @@ test('current saves migrate the former audio-only Dig lane without replaying dir
   assert.ok(restored.state.world.encounter!.digBodyBobAmplitude < 10)
 })
 
-test('schema 10 resumes the complete stock Tutorial controller and exact level identity', () => {
+test('current schema resumes the complete stock Tutorial controller and exact level identity', () => {
   const loadedBoneyard = materializeStockTutorial(Buffer.alloc(16, 19))
   let state = enterBoneyardWorld(
     createGameSimulation({ owner: OWNER }),
@@ -494,7 +532,7 @@ test('schema 10 resumes the complete stock Tutorial controller and exact level i
     state,
   })
   const encoded = JSON.parse(document)
-  assert.equal(encoded.schemaVersion, 10)
+  assert.equal(encoded.schemaVersion, 11)
   assert.equal(encoded.continuation.simulation.world.tutorial.stage, 0)
   assert.equal(
     encoded.continuation.simulation.world.tutorial.selectedSkillHudAcknowledged,
@@ -591,7 +629,7 @@ test('schema 10 resumes the complete stock Tutorial controller and exact level i
   )
 })
 
-test('schema 7 and 6 current-layout saves default absent NPC state without completed-run archival', () => {
+test('schema 7 and 6 saves migrate absent NPC state as acknowledged without archival', () => {
   const current = createGameSaveDocument({
     integrity: 'global-clean',
     loadedBoneyard: null,
@@ -601,6 +639,10 @@ test('schema 7 and 6 current-layout saves default absent NPC state without compl
     state: createGameSimulation({ owner: OWNER }),
   })
   const currentProfile = restoreGameSaveProfile(current)
+  const acknowledgedNpc = {
+    ...createNativeHubNpcState(),
+    helpFlags: Array<boolean>(10).fill(false),
+  }
   for (const schemaVersion of [7, 6]) {
     const previous = JSON.parse(current)
     previous.schemaVersion = schemaVersion
@@ -611,9 +653,9 @@ test('schema 7 and 6 current-layout saves default absent NPC state without compl
     const document = JSON.stringify(previous)
     const profile = restoreGameSaveProfile(document)
     const restored = restoreGameSaveDocument(document)
-    assert.deepEqual(profile.economy, currentProfile.economy)
+    assert.deepEqual(profile.economy, { ...currentProfile.economy, npc: acknowledgedNpc })
     assert.equal(restored.state.world.kind, 'hub')
-    assert.deepEqual(getPlayerEconomy(restored.state, 'owner').npc, createNativeHubNpcState())
+    assert.deepEqual(getPlayerEconomy(restored.state, 'owner').npc, acknowledgedNpc)
   }
 })
 

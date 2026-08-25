@@ -407,12 +407,6 @@ function interpolateAmbient(
       newer.fountainParticles,
       blend,
     ),
-    markerPhaseDegrees: lerpCycle(
-      older.markerPhaseDegrees,
-      newer.markerPhaseDegrees,
-      blend,
-      FULL_CIRCLE,
-    ),
     nextFountainParticleId: blend < 1
       ? older.nextFountainParticleId
       : newer.nextFountainParticleId,

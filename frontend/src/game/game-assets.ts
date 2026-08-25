@@ -119,10 +119,7 @@ export function hubGameAssetSources(element: WizardElement): string[] {
     southern: hub.southern,
     fountainParticle: hub.fountainParticle,
     tent: hub.tent,
-    markers: {
-      help: hub.markers.help.right,
-      talk: hub.markers.talk.right,
-    },
+    markers: hub.markers,
     props: hub.props,
     npcs: hub.npcs,
     elementVfx: elementVfxSources(element),

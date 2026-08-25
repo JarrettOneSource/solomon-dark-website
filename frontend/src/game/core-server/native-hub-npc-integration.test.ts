@@ -126,6 +126,33 @@ test('Teacher purchases debit exact gold, unlock only the advanced flag, and rej
   }).reason, 'invalid-offer')
 })
 
+test('world NPC acknowledgement clears only its durable native help row and is idempotent', () => {
+  const initial = createGameSimulation({ [PLAYER_ID]: CHARACTER })
+  assert.deepEqual(
+    getPlayerEconomy(initial, PLAYER_ID).npc.helpFlags,
+    Array<boolean>(10).fill(true),
+  )
+  const acknowledged = applyGameSimulationHubAction(initial, PLAYER_ID, {
+    interactionId: 'fomentius',
+    type: 'acknowledge-npc-hint',
+  })
+  assert.equal(acknowledged.accepted, true)
+  assert.deepEqual(getPlayerEconomy(acknowledged.state, PLAYER_ID).npc.helpFlags, [
+    true, false, true, true, true, true, true, true, true, true,
+  ])
+  assert.equal(
+    getPlayerEconomy(acknowledged.state, PLAYER_ID).revision,
+    getPlayerEconomy(initial, PLAYER_ID).revision + 1,
+  )
+
+  const repeated = applyGameSimulationHubAction(acknowledged.state, PLAYER_ID, {
+    interactionId: 'fomentius',
+    type: 'acknowledge-npc-hint',
+  })
+  assert.equal(repeated.accepted, true)
+  assert.equal(repeated.state, acknowledged.state)
+})
+
 test('Potion and magical-equipment producers fail their selected Boasts once in an active run', () => {
   let potion = enterBoneyardWorld(
     selectBoast(createGameSimulation({ [PLAYER_ID]: CHARACTER }), 0),

@@ -137,6 +137,8 @@ import hubMarkerHelpLeft from '../assets/game/hub-marker-help-left.png'
 import hubMarkerHelpRight from '../assets/game/hub-marker-help-right.png'
 import hubMarkerTalkLeft from '../assets/game/hub-marker-talk-left.png'
 import hubMarkerTalkRight from '../assets/game/hub-marker-talk-right.png'
+import hubNpcDirectionalHint from '../assets/game/hub-npc-directional-hint.png'
+import hubNpcWalkToTalkArrow from '../assets/game/hub-npc-walk-to-talk-arrow.png'
 import hubPropStatue from '../assets/game/hub-prop-statue.png'
 import hubPropStatueAura from '../assets/game/hub-prop-statue-aura.png'
 import hubNpcAnnalist from '../assets/game/hub-npc-annalist.png'
@@ -189,13 +191,16 @@ import hubRoomLibraryFlame from '../assets/game/hub-room-library-flame.png'
 import hubRoomLibraryForeground from '../assets/game/hub-room-library-foreground.png'
 import hubRoomLibrarian from '../assets/game/hub-room-librarian.png'
 import hubRoomLibrarianFrames from '../assets/game/hub-room-librarian-frames.png'
+import hubRoomLibrarianMarker from '../assets/game/hub-room-librarian-marker.png'
 import hubRoomDowser from '../assets/game/hub-room-dowser.png'
+import hubRoomDowserMarker from '../assets/game/hub-room-dowser-marker.png'
 import hubRoomLibraryProps from '../assets/game/hub-room-library-props.png'
 import hubRoomOfficeBackground from '../assets/game/hub-room-office-background.png'
 import hubRoomOfficeFlame from '../assets/game/hub-room-office-flame.png'
 import hubRoomOfficeForeground from '../assets/game/hub-room-office-foreground.png'
 import hubRoomArchDesk from '../assets/game/hub-room-arch-desk.png'
 import hubRoomArchChancellor from '../assets/game/hub-room-arch-chancellor.png'
+import hubRoomArchChancellorMarker from '../assets/game/hub-room-arch-chancellor-marker.png'
 import hubRoomOfficeProp from '../assets/game/hub-room-office-prop.png'
 import elementVfxAir from '../assets/game/element-vfx-air.png'
 import elementVfxCore from '../assets/game/element-vfx-core.png'
@@ -572,7 +577,9 @@ export const hub = {
       foreground: hubRoomLibraryForeground,
       librarian: hubRoomLibrarian,
       librarianFrames: hubRoomLibrarianFrames,
+      librarianMarker: hubRoomLibrarianMarker,
       dowser: hubRoomDowser,
+      dowserMarker: hubRoomDowserMarker,
       props: hubRoomLibraryProps,
     },
     office: {
@@ -581,6 +588,7 @@ export const hub = {
       foreground: hubRoomOfficeForeground,
       desk: hubRoomArchDesk,
       archChancellor: hubRoomArchChancellor,
+      archChancellorMarker: hubRoomArchChancellorMarker,
       prop: hubRoomOfficeProp,
     },
   },
@@ -628,13 +636,19 @@ export const hub = {
     water: hubPrimaryWater,
   },
   markers: {
-    help: {
-      left: hubMarkerHelpLeft,
-      right: hubMarkerHelpRight,
+    courtyard: {
+      help: {
+        left: hubMarkerHelpLeft,
+        right: hubMarkerHelpRight,
+      },
+      talk: {
+        left: hubMarkerTalkLeft,
+        right: hubMarkerTalkRight,
+      },
     },
-    talk: {
-      left: hubMarkerTalkLeft,
-      right: hubMarkerTalkRight,
+    onboarding: {
+      directional: hubNpcDirectionalHint,
+      walkToTalkArrow: hubNpcWalkToTalkArrow,
     },
   },
   props: {

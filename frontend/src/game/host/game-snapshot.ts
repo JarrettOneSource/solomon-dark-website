@@ -290,6 +290,7 @@ function protocolPlayerState(
       })),
       npc: {
         boast: { ...economy.npc.boast },
+        helpFlags: [...economy.npc.helpFlags],
         librarianLaceRead: economy.npc.librarianLaceRead,
       },
       ownedPerkSelectors: [...economy.ownedPerkSelectors],

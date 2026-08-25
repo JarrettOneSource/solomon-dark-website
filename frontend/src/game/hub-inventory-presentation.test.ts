@@ -17,6 +17,7 @@ import {
   hubEquipmentClickAction,
   hubPotionBeltShortcut,
   hubInteractionAtPoint,
+  hubNpcHintAcknowledgementAction,
   hubInteractionWithinRange,
   hubMemorialEulogyIndex,
   hubPotionShortcut,
@@ -50,6 +51,25 @@ test('Painting eulogies follow the current shared memorial portrait id', () => {
   }, 1)
   assert.equal(hubMemorialEulogyIndex('painting-1', second), 101)
   assert.equal(hubMemorialEulogyIndex('memorator', second), null)
+})
+
+test('only native world actor wrappers acknowledge durable NPC hint rows', () => {
+  const fresh = Array<boolean>(10).fill(true)
+  assert.deepEqual(hubNpcHintAcknowledgementAction('annalist', fresh), {
+    interactionId: 'annalist',
+    type: 'acknowledge-npc-hint',
+  })
+  assert.deepEqual(hubNpcHintAcknowledgementAction('fomentius', fresh), {
+    interactionId: 'fomentius',
+    type: 'acknowledge-npc-hint',
+  })
+  assert.deepEqual(hubNpcHintAcknowledgementAction('luthacus', fresh), {
+    interactionId: 'luthacus',
+    type: 'acknowledge-npc-hint',
+  })
+  assert.equal(hubNpcHintAcknowledgementAction('hagatha', fresh), null)
+  assert.equal(hubNpcHintAcknowledgementAction('painting-0', fresh), null)
+  assert.equal(hubNpcHintAcknowledgementAction('annalist', Array(10).fill(false)), null)
 })
 
 test('HUD potion shortcuts total the addressed kind and consume the first owned stack', () => {

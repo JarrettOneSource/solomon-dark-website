@@ -52,7 +52,6 @@ export interface ProtocolFountainParticleState {
 
 export interface ProtocolAmbientState {
   fountainParticles: readonly ProtocolFountainParticleState[]
-  markerPhaseDegrees: number
   nextFountainParticleId: number
   rngState: number
   sealCorePhase: number

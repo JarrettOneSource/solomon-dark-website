@@ -870,7 +870,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
     def test_browser_game_slot_is_account_owned_hashed_and_revision_conditional(self) -> None:
         document = json.dumps(
             {
-                "schemaVersion": 10,
+                "schemaVersion": 11,
                 "integrity": "global-clean",
                 "mods": [],
                 "modState": {},
@@ -933,7 +933,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         )
         self.assertEqual(status, 200, created)
         self.assertEqual(created["slot"], 0)
-        self.assertEqual(created["formatVersion"], 10)
+        self.assertEqual(created["formatVersion"], 11)
         self.assertEqual(created["revision"], 1)
         self.assertEqual(created["document"], document)
         self.assertEqual(created["size"], len(document.encode()))
@@ -964,6 +964,21 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         self.assertEqual(updated["document"], next_document)
 
         current = json.loads(next_document)
+        schema_ten = {**current, "schemaVersion": 10}
+        schema_ten_document = json.dumps(schema_ten, separators=(",", ":"))
+        status, schema_ten_saved = self.request(
+            "PUT",
+            "/api/game/saves/0",
+            headers=auth,
+            json_body={
+                "document": schema_ten_document,
+                "expectedRevision": 2,
+            },
+        )
+        self.assertEqual(status, 200, schema_ten_saved)
+        self.assertEqual(schema_ten_saved["formatVersion"], 10)
+        self.assertEqual(schema_ten_saved["revision"], 3)
+
         schema_nine = json.loads(json.dumps(current))
         schema_nine["schemaVersion"] = 9
         del schema_nine["continuation"]["summary"]["partyRejoinToken"]
@@ -974,12 +989,12 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             headers=auth,
             json_body={
                 "document": schema_nine_document,
-                "expectedRevision": 2,
+                "expectedRevision": 3,
             },
         )
         self.assertEqual(status, 200, schema_nine_saved)
         self.assertEqual(schema_nine_saved["formatVersion"], 9)
-        self.assertEqual(schema_nine_saved["revision"], 3)
+        self.assertEqual(schema_nine_saved["revision"], 4)
 
         schema_eight = json.loads(json.dumps(current))
         schema_eight["schemaVersion"] = 8
@@ -991,12 +1006,12 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             headers=auth,
             json_body={
                 "document": schema_eight_document,
-                "expectedRevision": 3,
+                "expectedRevision": 4,
             },
         )
         self.assertEqual(status, 200, schema_eight_saved)
         self.assertEqual(schema_eight_saved["formatVersion"], 8)
-        self.assertEqual(schema_eight_saved["revision"], 4)
+        self.assertEqual(schema_eight_saved["revision"], 5)
 
         legacy_current = json.loads(json.dumps(current))
         legacy_current["schemaVersion"] = 6
@@ -1008,12 +1023,12 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             headers=auth,
             json_body={
                 "document": legacy_current_document,
-                "expectedRevision": 4,
+                "expectedRevision": 5,
             },
         )
         self.assertEqual(status, 200, legacy_current_saved)
         self.assertEqual(legacy_current_saved["formatVersion"], 6)
-        self.assertEqual(legacy_current_saved["revision"], 5)
+        self.assertEqual(legacy_current_saved["revision"], 6)
 
         legacy = {
             "loadedBoneyard": current["continuation"]["loadedBoneyard"],
@@ -1032,11 +1047,11 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             "PUT",
             "/api/game/saves/0",
             headers=auth,
-            json_body={"document": legacy_document, "expectedRevision": 5},
+            json_body={"document": legacy_document, "expectedRevision": 6},
         )
         self.assertEqual(status, 200, legacy_saved)
         self.assertEqual(legacy_saved["formatVersion"], 3)
-        self.assertEqual(legacy_saved["revision"], 6)
+        self.assertEqual(legacy_saved["revision"], 7)
 
         legacy_envelope = json.loads(next_document)
         legacy_envelope["schemaVersion"] = 5
@@ -1049,12 +1064,12 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             headers=auth,
             json_body={
                 "document": legacy_envelope_document,
-                "expectedRevision": 6,
+                "expectedRevision": 7,
             },
         )
         self.assertEqual(status, 200, legacy_envelope_saved)
         self.assertEqual(legacy_envelope_saved["formatVersion"], 5)
-        self.assertEqual(legacy_envelope_saved["revision"], 7)
+        self.assertEqual(legacy_envelope_saved["revision"], 8)
 
         status, conflict = self.request(
             "DELETE",
@@ -1062,10 +1077,10 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             headers=auth,
         )
         self.assertEqual(status, 409, conflict)
-        self.assertEqual(conflict["currentRevision"], 7)
+        self.assertEqual(conflict["currentRevision"], 8)
         status, empty = self.request(
             "DELETE",
-            "/api/game/saves/0?expectedRevision=7",
+            "/api/game/saves/0?expectedRevision=8",
             headers=auth,
         )
         self.assertEqual(status, 204, empty)

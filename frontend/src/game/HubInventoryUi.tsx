@@ -50,6 +50,7 @@ import {
   hubInteractionPromptLabel,
   hubInteractionWithinRange,
   hubMemorialEulogyIndex,
+  hubNpcHintAcknowledgementAction,
   nearestHubInteraction,
   type HubInteractionId,
 } from './hub-inventory-presentation.ts'
@@ -251,6 +252,13 @@ export default function HubInventoryUi({
     onSurfaceChange(null)
   }, [economy.dowsingOffers.length, onAction, onSurfaceChange, surface])
 
+  const openWorldDialogue = useCallback((interaction: HubInteractionId) => {
+    const acknowledgement = hubNpcHintAcknowledgementAction(interaction, economy.npc.helpFlags)
+    if (acknowledgement) onAction(acknowledgement)
+    audio.playSound('click')
+    onSurfaceChange({ interaction, kind: 'dialogue', source: 'world' })
+  }, [audio, economy.npc.helpFlags, onAction, onSurfaceChange])
+
   useEffect(() => {
     if (!surface) return
     if (transitionActive || disabled) {
@@ -288,12 +296,7 @@ export default function HubInventoryUi({
       if (surface || !nearestInteraction || (event.code !== 'KeyE' && event.key !== 'Enter')) return
       event.preventDefault()
       event.stopImmediatePropagation()
-      audio.playSound('click')
-      onSurfaceChange({
-        interaction: nearestInteraction,
-        kind: 'dialogue',
-        source: 'world',
-      })
+      openWorldDialogue(nearestInteraction)
     }
     window.addEventListener('keydown', keyDown, { capture: true })
     return () => window.removeEventListener('keydown', keyDown, { capture: true })
@@ -304,7 +307,7 @@ export default function HubInventoryUi({
     inventoryKeyCode,
     menuKeyCode,
     nearestInteraction,
-    onSurfaceChange,
+    openWorldDialogue,
     surface,
     transitionActive,
   ])
@@ -325,14 +328,7 @@ export default function HubInventoryUi({
       <ContextualInteractButton
         label={hubInteractionPromptLabel(nearestInteraction)}
         target={`hub:${nearestInteraction}`}
-        onInteract={() => {
-          audio.playSound('click')
-          onSurfaceChange({
-            interaction: nearestInteraction,
-            kind: 'dialogue',
-            source: 'world',
-          })
-        }}
+        onInteract={() => openWorldDialogue(nearestInteraction)}
       />
     ) : null
 

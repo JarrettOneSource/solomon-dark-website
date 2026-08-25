@@ -10,6 +10,7 @@ import {
   readNativeLibrarianBook,
   resetNativeRunNpcState,
   selectNativeBoast,
+  type NativeHubInteractionId,
   type NativeHubNpcState,
 } from './native-hub-npc.ts'
 
@@ -85,6 +86,10 @@ export const NATIVE_DYE_SWATCH_COLORS = [
 ] as const
 export type NativeDyeLayer = 'cloth' | 'trim'
 export type HubInventoryAction =
+  | {
+      readonly type: 'acknowledge-npc-hint'
+      readonly interactionId: NativeHubInteractionId
+    }
   | { readonly type: 'buy-dowsing'; readonly offerId: number }
   | { readonly type: 'buy-fomentius'; readonly itemId: number }
   | { readonly type: 'buy-hagatha'; readonly selector: number }

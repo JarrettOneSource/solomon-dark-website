@@ -391,10 +391,6 @@ export function hubFountainParticleAlpha(particle: ProtocolFountainParticleState
   return Math.min(particle.remaining, FOUNTAIN_ALPHA_LIMIT)
 }
 
-export function hubMarkerAlpha(state: ProtocolAmbientState): number {
-  return Math.sin(state.markerPhaseDegrees * Math.PI / 180) * 0.25 + 0.75
-}
-
 /** PotionGuy's inherited stochastic NPC gesture pulse. */
 export function hubPotionTraderActorFrameAt(tick: number): number {
   const fixedTick = Math.max(0, Math.floor(tick))

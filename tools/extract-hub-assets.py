@@ -1347,6 +1347,11 @@ def main() -> int:
         "hub-room-dowser",
     )
     save(
+        registered_sprite(library, library_records[20]),
+        output_dir,
+        "hub-room-dowser-marker",
+    )
+    save(
         compose_registered_full(library, library_records, tuple(range(29, 33))),
         output_dir,
         "hub-room-librarian",
@@ -1355,6 +1360,11 @@ def main() -> int:
         build_registered_strip(library, library_records, tuple(range(25, 29))),
         output_dir,
         "hub-room-librarian-frames",
+    )
+    save(
+        registered_sprite(library, library_records[19]),
+        output_dir,
+        "hub-room-librarian-marker",
     )
     save(
         registered_sprite(library, library_records[3]),
@@ -1400,6 +1410,11 @@ def main() -> int:
         ),
         output_dir,
         "hub-room-arch-chancellor",
+    )
+    save(
+        registered_sprite(office, office_records[15]),
+        output_dir,
+        "hub-room-arch-chancellor-marker",
     )
     save(
         room_layer(
@@ -1851,10 +1866,32 @@ def main() -> int:
     }
     for name, index in ui_assets.items():
         save(crop(ui, ui_records[index]), output_dir, name)
+    save(
+        registered_sprite(ui, ui_records[28]),
+        output_dir,
+        "hub-npc-walk-to-talk-arrow",
+    )
+    save(
+        registered_sprite(ui, ui_records[88]),
+        output_dir,
+        "hub-npc-directional-hint",
+    )
 
     font_groups = parse_font_groups(images_dir / "Fonts.bundle")
     if len(font_groups) != 9:
         raise ValueError(f"Fonts.bundle has {len(font_groups)} groups; expected 9")
+    onboarding_font = font_groups[1]
+    if len(onboarding_font.glyphs) != 92 or len(onboarding_font.kerning) != 105:
+        raise ValueError(
+            "Fonts group 1 does not match the native 92-glyph/105-kerning contract"
+        )
+    write_hud_font_data(
+        onboarding_font,
+        output_dir,
+        filename="hub-npc-font-group-1.json",
+        group_index=1,
+        scale=1.0,
+    )
     ally_font = font_groups[6]
     if len(ally_font.glyphs) != 67 or len(ally_font.kerning) != 1_043:
         raise ValueError(

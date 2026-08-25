@@ -9,6 +9,7 @@ import {
 import {
   NATIVE_HUB_NPC_CATALOG,
 } from '../src/game/core-kernels/native-hub-npc.ts'
+import { hubMemorialSlotIndexForInteraction } from '../src/game/core-kernels/hub-memorial.ts'
 import {
   holdForHubTransition,
   navigateHubRegion,
@@ -19,6 +20,13 @@ import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
 const baseUrl = process.env.SDR_GAME_NPC_SMOKE_URL || 'http://127.0.0.1:4192'
 const screenshotRoot = process.env.SDR_GAME_NPC_SCREENSHOT_ROOT || '/tmp/solomon-dark-hub-npcs'
 const onlySection = process.env.SDR_GAME_NPC_SMOKE_ONLY?.trim() || null
+const endpointUrl = process.env.SDR_GAME_ENDPOINT_URL?.trim() || null
+const endpointCredential = process.env.SDR_GAME_ENDPOINT_CREDENTIAL?.trim() || null
+assert.equal(
+  endpointUrl === null,
+  endpointCredential === null,
+  'SDR_GAME_ENDPOINT_URL and SDR_GAME_ENDPOINT_CREDENTIAL must be provided together',
+)
 const expectedSkorchaVariant = process.env.SDR_GAME_NPC_EXPECT_SKORCHA_VARIANT === undefined
   ? null
   : Number(process.env.SDR_GAME_NPC_EXPECT_SKORCHA_VARIANT)
@@ -26,6 +34,7 @@ assert.ok(
   onlySection === null
     || [
       'courtyard',
+      'fresh-markers',
       'library',
       'mortuary',
       'office',
@@ -52,6 +61,13 @@ const receipts = []
 
 await page.addInitScript(installGameAudioSmokeProbe)
 await page.addInitScript(bypassStartupAudioPreload)
+if (endpointUrl !== null && endpointCredential !== null) {
+  await page.addInitScript(({ credential, url }) => {
+    window.solomonDarkRuntime = {
+      gameEndpoint: { credential, kind: 'localhost', url },
+    }
+  }, { credential: endpointCredential, url: endpointUrl })
+}
 await page.route('**/deployment.json?*', async (route) => {
   const revision = new URL(route.request().url()).searchParams.get('current')
   await route.fulfill({ json: { revision } })
@@ -70,7 +86,8 @@ page.on('response', (response) => {
 try {
   await enterHub()
   const canvas = page.locator('.hub-world-canvas[data-game-renderer="pixi-webgl"]')
-  await fundNpcSmoke()
+  if (onlySection === 'fresh-markers') await exerciseFreshMarkers(canvas)
+  else await fundNpcSmoke()
 
   if (onlySection === null || onlySection === 'courtyard') {
     await visitTrader(canvas, 'hagatha', 'Hagatha', 'WITCH_INTRO', 'Charm Prices?', 'hagatha')
@@ -133,6 +150,7 @@ try {
   ]
   const sectionInteractions = {
     courtyard: ['annalist', 'fomentius', 'hagatha', 'luthacus', 'skorcha', 'teacher'],
+    'fresh-markers': ['annalist'],
     library: ['librarian', 'shlorio'],
     mortuary: ['memorator', ...completeInteractions.filter(id => id.startsWith('painting-'))],
     office: ['arch-chancellor'],
@@ -247,6 +265,86 @@ async function visitTrader(canvas, interaction, name, introKey, questionLabel, s
   await serviceDialog.getByRole('button', { name: 'Done' }).click()
   await serviceDialog.waitFor({ state: 'hidden' })
   receipts.push({ interaction, service })
+}
+
+async function exerciseFreshMarkers(canvas) {
+  await page.waitForFunction(() => {
+    const node = document.querySelector('.hub-world-canvas')
+    return node?.dataset.npcHelpFlags === '1111111111'
+      && node?.dataset.npcWalkToTalkVisible === 'true'
+  })
+  const initialMarkerIds = (await canvas.getAttribute('data-npc-marker-ids'))?.split(',') ?? []
+  assert.ok(initialMarkerIds.includes('hagatha'))
+  assert.ok(initialMarkerIds.includes('teacher'))
+  assert.equal(initialMarkerIds.includes('annalist'), false)
+  assert.equal(initialMarkerIds.includes('fomentius'), false)
+  assert.equal(initialMarkerIds.includes('luthacus'), false)
+  await page.screenshot({ path: `${screenshotRoot}-fresh-walk-to-talk.png` })
+
+  await navigateHubRegion(
+    page,
+    canvas,
+    'courtyard',
+    HUB_INTERACTION_GEOMETRY.annalist.position,
+    30,
+    log,
+  )
+  const dialog = await openInteraction('annalist', 'Provokatus')
+  await assertSpeech(dialog, 'ANNAL_INTRO')
+  await page.waitForFunction(() => {
+    const node = document.querySelector('.hub-world-canvas')
+    return node?.dataset.npcHelpFlags === '0111111111'
+      && node?.dataset.npcWalkToTalkVisible === 'false'
+  })
+  await skipSpeech(dialog)
+  await finishChoices(dialog)
+  assert.equal(
+    (await canvas.getAttribute('data-npc-marker-ids'))?.split(',').includes('annalist'),
+    false,
+  )
+  await page.waitForFunction(() => (
+    Number(document.querySelector('.hub-world-canvas')?.dataset.npcDirectionalHintCount) > 0
+  ))
+  await page.screenshot({ path: `${screenshotRoot}-fresh-followup-hints.png` })
+
+  const persisted = await waitForLocalSave(save => (
+    JSON.parse(save.document).profile.economy.npc.helpFlags[0] === false
+  ))
+  assert.equal(JSON.parse(persisted.document).schemaVersion, 11)
+
+  await navigateHubRegion(page, canvas, 'courtyard', { x: 1800, y: 650 }, 40, log)
+  await holdForHubTransition(page, canvas, ['d', 'w'], 'library')
+  await waitForSettledHubRegion(page, canvas, 'library')
+  await navigateHubRegion(page, canvas, 'library', { x: 512, y: 850 }, 25, log)
+  await holdForHubTransition(page, canvas, ['s'], 'courtyard')
+  await waitForSettledHubRegion(page, canvas, 'courtyard')
+  await page.waitForFunction(() => (
+    document.querySelector('.hub-world-canvas')?.dataset.npcMarkerIds
+      ?.split(',').includes('annalist') === true
+  ))
+  await page.screenshot({ path: `${screenshotRoot}-fresh-reconstructed-marker.png` })
+
+  await page.locator('.hub-scene').focus()
+  await page.keyboard.press('Escape')
+  const pause = page.locator('.gameplay-pause-stage[data-gameplay-pause-view="owner"]')
+  await pause.waitFor({ timeout: 10_000 })
+  await pause.getByRole('button', { name: 'LEAVE GAME' }).click()
+  await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 30_000 })
+  await page.getByRole('button', { name: 'Play' }).click()
+  await page.getByRole('button', { name: 'Last game' }).click()
+  await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 30_000 })
+  await page.waitForFunction(() => {
+    const node = document.querySelector('.hub-world-canvas')
+    return node?.dataset.npcHelpFlags === '0111111111'
+      && node?.dataset.npcWalkToTalkVisible === 'false'
+  })
+  await page.screenshot({ path: `${screenshotRoot}-fresh-resumed-marker-state.png` })
+  receipts.push({
+    interaction: 'annalist',
+    persistedSchemaVersion: 11,
+    reconstructedMarker: true,
+    resumedHelpFlags: await canvas.getAttribute('data-npc-help-flags'),
+  })
 }
 
 async function exerciseProvokatus(canvas) {
@@ -424,12 +522,21 @@ async function exercisePaintings(canvas) {
       await navigateHubRegion(page, canvas, 'mortuary', waypoint, 10, log)
     }
     const dialog = await openInteraction(interaction, 'Declarius')
-    const eulogyIndex = NATIVE_HUB_NPC_CATALOG.interactions[interaction].eulogyIndex
+    const slotIndex = hubMemorialSlotIndexForInteraction(interaction)
+    assert.notEqual(slotIndex, null)
+    const memorial = JSON.parse(await canvas.getAttribute('data-memorial-portraits') || '[]')
+    const eulogyIndex = memorial[slotIndex].portraitId
     await assertSpeech(dialog, `SAY_EULOGY_${eulogyIndex}`)
     const text = normalizeBrowserText(await dialog.innerText())
     const principal = NATIVE_HUB_NPC_CATALOG.eulogies[`${eulogyIndex}`]
-    if (principal === null) assert.equal(text.includes('This portrait is of'), false)
-    else assert.ok(text.includes(normalizeBrowserText(principal)), `${interaction} omitted its principal eulogy`)
+    if (principal === null || principal === undefined) {
+      assert.equal(text.includes('This portrait is of'), false)
+    } else {
+      assert.ok(
+        text.includes(normalizeBrowserText(principal)),
+        `${interaction} omitted its principal eulogy`,
+      )
+    }
     assert.ok(NATIVE_HUB_NPC_CATALOG.badEulogies.some(
       line => text.includes(normalizeBrowserText(line)),
     ))
@@ -438,7 +545,7 @@ async function exercisePaintings(canvas) {
     }
     await dialog.getByRole('button', { name: 'Skip' }).click()
     await dialog.waitFor({ state: 'hidden' })
-    receipts.push({ interaction })
+    receipts.push({ eulogyIndex, interaction })
   }
   for (const waypoint of [
     { x: 820, y: 480 },
@@ -532,6 +639,24 @@ function log(message) {
 
 function normalizeBrowserText(value) {
   return value.replace(/\s+/g, ' ').trim()
+}
+
+async function waitForLocalSave(predicate, timeoutMs = 10_000) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const save = await page.evaluate(() => new Promise((resolve, reject) => {
+      const open = indexedDB.open('solomon-dark-game-saves', 1)
+      open.onerror = () => reject(open.error)
+      open.onsuccess = () => {
+        const request = open.result.transaction('slots', 'readonly').objectStore('slots').get(0)
+        request.onerror = () => reject(request.error)
+        request.onsuccess = () => resolve(request.result ?? null)
+      }
+    }))
+    if (save && predicate(save)) return save
+    await page.waitForTimeout(100)
+  }
+  throw new Error('timed out waiting for persisted NPC hint state')
 }
 
 function bypassStartupAudioPreload() {

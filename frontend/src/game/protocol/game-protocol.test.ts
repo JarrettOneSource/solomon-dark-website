@@ -354,7 +354,7 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
   })), /activity/)
 })
 
-test('protocol 73 retains exact A or B slots for HUD concentration replacement', () => {
+test('protocol 75 retains exact A or B slots for HUD concentration replacement', () => {
   assert.throws(() => decodeClientGameMessage(JSON.stringify({
     type: 'client-select-concentration-slot',
     skillId: 57,
@@ -445,8 +445,11 @@ test('protocol v42 bounds Lua requests and structured results by wire bytes and 
   }
 })
 
-test('protocol v74 accepts every authoritative inventory and NPC action and rejects malformed variants', () => {
+test('protocol v75 accepts every authoritative inventory and NPC action and rejects malformed variants', () => {
   const actions = [
+    { type: 'acknowledge-npc-hint', interactionId: 'annalist' },
+    { type: 'acknowledge-npc-hint', interactionId: 'fomentius' },
+    { type: 'acknowledge-npc-hint', interactionId: 'luthacus' },
     { type: 'buy-dowsing', offerId: 1 },
     { type: 'buy-fomentius', itemId: 2 },
     { type: 'buy-hagatha', selector: -1 },
@@ -474,6 +477,8 @@ test('protocol v74 accepts every authoritative inventory and NPC action and reje
   }
 
   for (const action of [
+    { type: 'acknowledge-npc-hint', interactionId: 'hagatha' },
+    { type: 'acknowledge-npc-hint', interactionId: 'painting-0' },
     { type: 'buy-hagatha', selector: 8 },
     { type: 'buy-teacher-spell', skillId: 71 },
     { type: 'dye', dyeItemId: 1, layer: 'lining', swatchRows: [1], targetItemId: 2 },
@@ -495,7 +500,7 @@ test('protocol v74 accepts every authoritative inventory and NPC action and reje
   }
 })
 
-test('protocol v74 carries authoritative present Skorcha population and animation state', () => {
+test('protocol v75 carries authoritative present Skorcha population and animation state', () => {
   const snapshot = createGameSnapshot(createGameSimulation({
     'player-1': CHARACTER,
   }, { hubTraderAnimationSeed: 2 }), 'player-1')
@@ -1429,8 +1434,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v74 carries observer mode, Hub activity, NPC state, Goodie actions, tutorial fields/state, Hagatha runtime, Imp effects, save intent, selected skills, sacks, dyes, and gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 74)
+test('protocol v75 carries observer mode, Hub activity, NPC state, Goodie actions, tutorial fields/state, Hagatha runtime, Imp effects, save intent, selected skills, sacks, dyes, and gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 75)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -1580,7 +1585,7 @@ test('protocol v74 carries observer mode, Hub activity, NPC state, Goodie action
   )
 })
 
-test('protocol v74 carries consistent persistent Tutorial camera-lock clocks', () => {
+test('protocol v75 carries consistent persistent Tutorial camera-lock clocks', () => {
   const entered = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
     materializeStockTutorial(Buffer.alloc(16, 73)),

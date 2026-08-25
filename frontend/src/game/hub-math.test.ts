@@ -46,7 +46,6 @@ import {
   hubCommonTraderFrameAt,
   hubFountainParticleAlpha,
   hubHagathaFrameAt,
-  hubMarkerAlpha,
   hubPotionTraderActorFrameAt,
   hubPotionTraderBalloonFrameAt,
   hubPotionTraderBalloonOffsetYAt,
@@ -368,7 +367,6 @@ test('Courtyard ambient painters share the recovered native fixed update', () =>
   let ambient = createHubAmbientState()
   assert.deepEqual(HUB_FOUNTAIN_ORIGIN, { x: 957, y: 333 })
   assert.deepEqual(HUB_STATUE_ROOT, { x: 961, y: 834 })
-  closeTo(hubMarkerAlpha(ambient), 0.75)
   const initialStatue = hubStatueOffsets(ambient)
   closeTo(initialStatue.aura.x, 0)
   closeTo(initialStatue.aura.y, 0)
@@ -383,9 +381,7 @@ test('Courtyard ambient painters share the recovered native fixed update', () =>
   closeTo(initialSeals.glyphs.blue, 0.7705)
 
   for (let tick = 0; tick < 180; tick += 1) ambient = stepHubAmbient(ambient)
-  closeTo(ambient.markerPhaseDegrees, 180)
   closeTo(ambient.statuePhaseDegrees, 90)
-  closeTo(hubMarkerAlpha(ambient), 0.75)
   const statue = hubStatueOffsets(ambient)
   closeTo(statue.body.y, -17)
   closeTo(statue.aura.x, -1)

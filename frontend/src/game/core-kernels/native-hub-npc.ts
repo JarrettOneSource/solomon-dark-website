@@ -67,6 +67,18 @@ export interface NativeTeacherSpellDefinition {
   readonly quickDescription: string
   readonly skillId: number
 }
+export type NativeHubNpcMarkerSide = 'left' | 'right'
+export type NativeHubNpcMarkerStyle = 'help' | 'talk'
+export interface NativeHubNpcMarkerActorDefinition {
+  readonly interactionId: NativeHubInteractionId
+  readonly phaseAdvances: boolean
+  readonly profileHintIndex: number | null
+  readonly record: number
+  readonly region: HubRegionId
+  readonly side: NativeHubNpcMarkerSide
+  readonly style: NativeHubNpcMarkerStyle
+  readonly typeId: number
+}
 interface NativeHubNpcCatalog {
   readonly badEulogies: readonly string[]
   readonly boastInstruction: string
@@ -78,7 +90,47 @@ interface NativeHubNpcCatalog {
   readonly interactionOrder: readonly NativeHubInteractionId[]
   readonly interactions: Readonly<Record<NativeHubInteractionId, NativeHubInteractionDefinition>>
   readonly interruptEulogies: readonly string[]
-  readonly schema: 'solomon-dark-native-hub-npc-interactions-v1'
+  readonly markers: {
+    readonly actors: readonly NativeHubNpcMarkerActorDefinition[]
+    readonly common: {
+      readonly alphaAmplitude: number
+      readonly alphaBase: number
+      readonly phaseDrawCount: number
+      readonly rootOffsetX: number
+      readonly rootOffsetY: number
+    }
+    readonly directionalHints: {
+      readonly blinkPeriodTicks: number
+      readonly record: number
+      readonly targets: readonly {
+        readonly interactionId: NativeHubInteractionId
+        readonly offset: Vector2
+        readonly profileHintIndex: number
+      }[]
+      readonly visibleAfterTick: number
+    }
+    readonly profileHelpRowCount: number
+    readonly regionBanks: readonly {
+      readonly atlas: string
+      readonly records: readonly number[]
+      readonly region: HubRegionId
+    }[]
+    readonly walkToTalk: {
+      readonly arrowOffset: Vector2
+      readonly arrowRecord: number
+      readonly arrowRotationDegrees: number
+      readonly fontGroup: number
+      readonly fontRecords: readonly [number, number]
+      readonly outlineRadii: readonly number[]
+      readonly outlineStepDegrees: number
+      readonly profileHintIndex: number
+      readonly target: NativeHubInteractionId
+      readonly text: string
+      readonly textColor: readonly [number, number, number, number]
+      readonly textOffset: Vector2
+    }
+  }
+  readonly schema: 'solomon-dark-native-hub-npc-interactions-v2'
   readonly skorcha: {
     readonly animationDelay: { readonly drawCount: number; readonly offsetTicks: number }
     readonly animationStateCount: number
@@ -103,6 +155,7 @@ export interface NativeBoastState {
 }
 export interface NativeHubNpcState {
   readonly boast: NativeBoastState
+  readonly helpFlags: readonly boolean[]
   readonly librarianLaceRead: boolean
 }
 
@@ -113,12 +166,34 @@ export const NATIVE_LIBRARIAN_BOOKS = NATIVE_HUB_NPC_CATALOG.books
 export const NATIVE_TEACHER_SPELLS = NATIVE_HUB_NPC_CATALOG.teacherSpells
 export const NATIVE_BOAST_SUCCESS_WAVE = 30
 export const NATIVE_SELECTOR_ACCEPT_TICKS = 100
+export const NATIVE_HUB_HELP_ROW_COUNT = NATIVE_HUB_NPC_CATALOG.markers.profileHelpRowCount
 
 export function createNativeHubNpcState(): NativeHubNpcState {
   return Object.freeze({
     boast: Object.freeze({ failed: false, failureSequence: 0, selected: null, succeeded: false }),
+    helpFlags: Object.freeze(Array<boolean>(NATIVE_HUB_HELP_ROW_COUNT).fill(true)),
     librarianLaceRead: false,
   })
+}
+
+export function nativeHubNpcHintIndex(
+  interactionId: NativeHubInteractionId,
+): 0 | 1 | 2 | null {
+  const index = NATIVE_HUB_NPC_CATALOG.markers.actors.find(
+    actor => actor.interactionId === interactionId,
+  )?.profileHintIndex
+  return index === 0 || index === 1 || index === 2 ? index : null
+}
+
+export function acknowledgeNativeHubNpcHint(
+  source: NativeHubNpcState,
+  interactionId: NativeHubInteractionId,
+): NativeHubNpcState {
+  const index = nativeHubNpcHintIndex(interactionId)
+  if (index === null || source.helpFlags[index] === false) return source
+  const helpFlags = [...source.helpFlags]
+  helpFlags[index] = false
+  return Object.freeze({ ...source, helpFlags: Object.freeze(helpFlags) })
 }
 
 export function nativeBoastDefinition(id: number): NativeBoastDefinition | null {

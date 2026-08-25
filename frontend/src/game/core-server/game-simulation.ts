@@ -48,6 +48,7 @@ import {
   type NativeRngState,
 } from '../core-kernels/native-rng.ts'
 import {
+  acknowledgeNativeHubNpcHint,
   failNativeBoast,
   nativeBoastScore,
   NATIVE_BOAST_SUCCESS_WAVE,
@@ -1040,6 +1041,28 @@ export function applyGameSimulationHubAction(
   }
   if (action.type === 'interact-goodie') {
     return interactWithBoneyardGoodie(state, playerId, player)
+  }
+  if (action.type === 'acknowledge-npc-hint') {
+    if (!hubServiceAvailable(state, playerId)) {
+      return { accepted: false, modConsumption: null, reason: 'service-unavailable', state }
+    }
+    const npc = acknowledgeNativeHubNpcHint(economy.npc, action.interactionId)
+    if (npc === economy.npc) {
+      return { accepted: true, modConsumption: null, reason: null, state }
+    }
+    return {
+      accepted: true,
+      modConsumption: null,
+      reason: null,
+      state: {
+        ...state,
+        playerEntities: replacePlayerEconomy(state.playerEntities, playerId, {
+          ...economy,
+          npc,
+          revision: economy.revision + 1,
+        }),
+      },
+    }
   }
   const trader = traderForAction(action)
   if ((trader || isHubNpcAction(action)) && !hubServiceAvailable(state, playerId)) {
@@ -3533,6 +3556,7 @@ function traderForAction(action: HubInventoryAction): HubTraderId | null {
     case 'transfer': return 'luthacus'
     case 'buy-dowsing':
     case 'dowse': return 'shlorio'
+    case 'acknowledge-npc-hint':
     case 'buy-teacher-spell':
     case 'close-dowsing':
     case 'consume':
@@ -3582,7 +3606,8 @@ function succeedPlayerEntityBoast(
 }
 
 function isHubNpcAction(action: HubInventoryAction): boolean {
-  return action.type === 'buy-teacher-spell'
+  return action.type === 'acknowledge-npc-hint'
+    || action.type === 'buy-teacher-spell'
     || action.type === 'read-librarian-book'
     || action.type === 'select-boast'
 }

@@ -15,10 +15,12 @@ import {
   NATIVE_LIBRARIAN_BOOKS,
   NATIVE_SELECTOR_ACCEPT_TICKS,
   NATIVE_TEACHER_SPELLS,
+  acknowledgeNativeHubNpcHint,
   createNativeHubNpcState,
   failNativeBoast,
   nativeBoastFailureText,
   nativeBoastScore,
+  nativeHubNpcHintIndex,
   nativeLibrarianBooks,
   nativeTeacherSpells,
   readNativeLibrarianBook,
@@ -28,8 +30,29 @@ import {
   type NativeBoastFailureProducer,
 } from './native-hub-npc.ts'
 
+test('fresh profiles own all ten native help rows and only three named actors clear them', () => {
+  const initial = createNativeHubNpcState()
+  assert.deepEqual(initial.helpFlags, Array<boolean>(10).fill(true))
+  assert.equal(nativeHubNpcHintIndex('annalist'), 0)
+  assert.equal(nativeHubNpcHintIndex('fomentius'), 1)
+  assert.equal(nativeHubNpcHintIndex('luthacus'), 2)
+  assert.equal(nativeHubNpcHintIndex('hagatha'), null)
+  assert.equal(nativeHubNpcHintIndex('teacher'), null)
+
+  const annalist = acknowledgeNativeHubNpcHint(initial, 'annalist')
+  assert.equal(annalist.helpFlags[0], false)
+  assert.deepEqual(annalist.helpFlags.slice(1), initial.helpFlags.slice(1))
+  const fomentius = acknowledgeNativeHubNpcHint(annalist, 'fomentius')
+  const luthacus = acknowledgeNativeHubNpcHint(fomentius, 'luthacus')
+  assert.deepEqual(luthacus.helpFlags, [
+    false, false, false, true, true, true, true, true, true, true,
+  ])
+  assert.equal(acknowledgeNativeHubNpcHint(luthacus, 'luthacus'), luthacus)
+  assert.equal(acknowledgeNativeHubNpcHint(luthacus, 'hagatha'), luthacus)
+})
+
 test('the generated catalog owns every compiled survival Hub actor, painting, and source hash', () => {
-  assert.equal(NATIVE_HUB_NPC_CATALOG.schema, 'solomon-dark-native-hub-npc-interactions-v1')
+  assert.equal(NATIVE_HUB_NPC_CATALOG.schema, 'solomon-dark-native-hub-npc-interactions-v2')
   assert.equal(NATIVE_HUB_NPC_CATALOG.source.retailVersion, '0.72.5')
   assert.equal(
     NATIVE_HUB_NPC_CATALOG.source.executableSha256,

@@ -11,9 +11,12 @@ import type { WizardElement } from '../core-kernels/player-character.ts'
 import { playerStaffActionPose } from '../player-character-presentation.ts'
 import {
   createHubCommonTraderClock,
-  hubMarkerAlpha,
   type HubCommonTraderClock,
 } from '../hub-presentation.ts'
+import {
+  NATIVE_HUB_NPC_CATALOG,
+  type NativeHubInteractionId,
+} from '../core-kernels/native-hub-npc.ts'
 import { HubPlayerView } from './hub-actors.ts'
 import {
   HUB_LIBRARY_EXIT_MASKS,
@@ -31,6 +34,10 @@ import { nativeLevelUpPresentationFrame } from './level-up-presentation.ts'
 import { NativeLevelUpWorldView } from './level-up-world-view.ts'
 import { PrimarySpellWorldView } from './primary-spell-world-view.ts'
 import { NativeSecondaryWorldView } from './native-secondary-world-view.ts'
+import {
+  hubNpcMarkerFrame,
+  type HubNpcMarkerSurface,
+} from './hub-npc-marker-presentation.ts'
 
 const MORTUARY_PAINTING_FRAME = { height: 224, width: 74 } as const
 const MEMORATOR_FRAME = { count: 16, height: 170, width: 170 } as const
@@ -67,11 +74,13 @@ export class HubPrivateRoomScene {
   private readonly roomFlames = new Map<PrivateHubRegionId, readonly Sprite[]>()
   private readonly textures: HubWorldTextures
   private memoratorBody!: Sprite
-  private memoratorMarker!: Sprite
   private memoratorFrames: readonly Texture[] = []
   private readonly dowserClock: HubCommonTraderClock
   private dowserBody!: Sprite
-  private dowserMarker!: Sprite
+  private readonly markerSprites = new Map<NativeHubInteractionId, Sprite>()
+  private markerEpochInitialized = false
+  private markerEpochSeed = 0
+  private markerEpochStartedAtTick = 0
   private activeRegion: PrivateHubRegionId = 'mortuary'
 
   constructor(
@@ -121,9 +130,15 @@ export class HubPrivateRoomScene {
       presentationId: number
     } | null = null,
     pointGainAt: (position: Readonly<{ x: number, y: number }>) => number = () => 1,
+    markerSurface: HubNpcMarkerSurface = null,
   ): void {
     const localParticipant = snapshot.world.participants[localPlayerId]
     if (!localParticipant || localParticipant.region === 'courtyard') return
+    if (!this.markerEpochInitialized || this.activeRegion !== localParticipant.region) {
+      this.markerEpochInitialized = true
+      this.markerEpochSeed = snapshot.world.traderAnimationSeed ^ snapshot.tick
+      this.markerEpochStartedAtTick = snapshot.tick
+    }
     this.showRegion(localParticipant.region)
     this.updatePlayers(snapshot, localParticipant.region)
     for (const region of PRIVATE_HUB_REGIONS) {
@@ -144,6 +159,7 @@ export class HubPrivateRoomScene {
       )
     }
     this.updateRoomPresentation(snapshot, localPlayerId, localParticipant.region)
+    this.updateNpcMarkers(snapshot, markerSurface)
     const room = this.rooms[localParticipant.region]
     if (this.levelUp.container.parent !== room) {
       this.levelUp.container.parent?.removeChild(this.levelUp.container)
@@ -201,6 +217,12 @@ export class HubPrivateRoomScene {
     return this.secondaryAbilities[this.activeRegion].diagnosticSamples
   }
 
+  get visibleMarkerIds(): readonly NativeHubInteractionId[] {
+    return [...this.markerSprites]
+      .filter(([, marker]) => marker.visible && marker.parent?.visible !== false)
+      .map(([interactionId]) => interactionId)
+  }
+
   destroy(): void {
     this.levelUp.container.parent?.removeChild(this.levelUp.container)
     this.levelUp.destroy()
@@ -239,14 +261,10 @@ export class HubPrivateRoomScene {
     this.memoratorBody = new Sprite(this.memoratorFrames[0])
     this.memoratorBody.anchor.set(0.5)
     this.memoratorBody.eventMode = 'none'
-    this.memoratorMarker = new Sprite(this.textures.base[hub.rooms.mortuary.memoratorMarker])
-    this.memoratorMarker.anchor.set(0.5)
-    this.memoratorMarker.position.set(-1, -28)
-    this.memoratorMarker.zIndex = 1
-    this.memoratorMarker.eventMode = 'none'
-    memorator.addChild(this.memoratorBody, this.memoratorMarker)
+    memorator.addChild(this.memoratorBody)
     this.nonPlayerActors.mortuary.push(memorator)
     room.addChild(memorator)
+    this.addNpcMarker(room, 'memorator', hub.rooms.mortuary.memoratorMarker)
     this.addRoomProps(room, layout)
     this.addRoomFlames(room, 'mortuary', hub.rooms.mortuary.flame)
     return room
@@ -282,6 +300,7 @@ export class HubPrivateRoomScene {
     librarian.addChild(counter, librarianBody)
     this.nonPlayerActors.library.push(librarian)
     room.addChild(librarian)
+    this.addNpcMarker(room, 'librarian', hub.rooms.library.librarianMarker)
 
     const dowserVisual = layout.actors.dowser.visual
     const dowser = new Container({ label: 'college-library-dowser' })
@@ -292,14 +311,10 @@ export class HubPrivateRoomScene {
     this.dowserBody = new Sprite(this.textures.traders.shlorio[0])
     this.dowserBody.anchor.set(0.5)
     this.dowserBody.eventMode = 'none'
-    this.dowserMarker = new Sprite(this.textures.base[hub.markers.help.right])
-    this.dowserMarker.anchor.set(0.5)
-    this.dowserMarker.position.set(48, -60)
-    this.dowserMarker.zIndex = 1
-    this.dowserMarker.eventMode = 'none'
-    dowser.addChild(this.dowserBody, this.dowserMarker)
+    dowser.addChild(this.dowserBody)
     this.nonPlayerActors.library.push(dowser)
     room.addChild(dowser)
+    this.addNpcMarker(room, 'shlorio', hub.rooms.library.dowserMarker)
     this.addRoomFlames(room, 'library', hub.rooms.library.flame)
     room.addChild(this.layer(
       hub.rooms.library.foreground,
@@ -363,6 +378,7 @@ export class HubPrivateRoomScene {
     archChancellor.addChild(desk, archBody)
     this.nonPlayerActors.office.push(archChancellor)
     room.addChild(archChancellor)
+    this.addNpcMarker(room, 'arch-chancellor', hub.rooms.office.archChancellorMarker)
     this.addRoomFlames(room, 'office', hub.rooms.office.flame)
     room.addChild(this.layer(
       hub.rooms.office.foreground,
@@ -497,6 +513,39 @@ export class HubPrivateRoomScene {
     return sprite
   }
 
+  private addNpcMarker(
+    room: Container,
+    interactionId: NativeHubInteractionId,
+    source: string,
+  ): void {
+    const marker = new Sprite(this.textures.base[source])
+    marker.anchor.set(0.5)
+    marker.eventMode = 'none'
+    this.markerSprites.set(interactionId, marker)
+    room.addChild(marker)
+  }
+
+  private updateNpcMarkers(
+    snapshot: HubPresentationFrame,
+    markerSurface: HubNpcMarkerSurface,
+  ): void {
+    for (const [interactionId, marker] of this.markerSprites) {
+      const frame = hubNpcMarkerFrame(
+        interactionId,
+        Math.max(0, snapshot.tick - this.markerEpochStartedAtTick),
+        this.markerEpochSeed,
+        [false, false, false],
+        { surface: markerSurface },
+      )
+      marker.visible = frame.visible
+      marker.alpha = frame.alpha
+      marker.position.copyFrom(frame.position)
+      marker.zIndex = hubWorldDepthForActor(
+        NATIVE_HUB_NPC_CATALOG.interactions[interactionId].geometry.position.y,
+      ) + 0.1
+    }
+  }
+
   private updateRoomPresentation(
     snapshot: HubPresentationFrame,
     localPlayerId: string,
@@ -514,13 +563,11 @@ export class HubPrivateRoomScene {
           hubMemoratorHeadingIndex(player.position)
         ]
       }
-      this.memoratorMarker.alpha = hubMarkerAlpha(snapshot.world.ambient)
     }
     if (region === 'library') {
       this.dowserBody.texture = this.textures.traders.shlorio[
         this.dowserClock.advanceTo(snapshot.tick)
       ]
-      this.dowserMarker.alpha = hubMarkerAlpha(snapshot.world.ambient)
     }
     const flames = this.roomFlames.get(region) ?? []
     for (let index = 0; index < flames.length; index += 1) {

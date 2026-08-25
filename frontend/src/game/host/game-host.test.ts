@@ -1159,6 +1159,32 @@ test('game host routes global Hub shortcuts and rejects stale inventory commands
   assert.deepEqual(await pong, { type: 'server-pong', nonce: 73 })
 })
 
+test('game host replicates and checkpoints native NPC hint acknowledgement', async (context) => {
+  const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
+  context.after(() => host.close())
+  const client = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
+  context.after(() => client.socket.close())
+  const playerId = client.welcome.playerId
+  const initialRevision = getPlayerEconomy(host.state(), playerId).revision
+  const snapshot = nextMessage(client.socket, message => (
+    message.type === 'server-snapshot'
+    && message.snapshot.players[playerId].economy.revision === initialRevision + 1
+    && message.snapshot.players[playerId].economy.npc.helpFlags[0] === false
+  ))
+  const checkpoint = nextMessage(client.socket, message => (
+    message.type === 'server-save-checkpoint'
+    && JSON.parse(message.save).profile.economy.npc.helpFlags[0] === false
+  ))
+  client.socket.send(encodeGameMessage({
+    type: 'client-hub-action',
+    action: { type: 'acknowledge-npc-hint', interactionId: 'annalist' },
+  }))
+  const [snapshotMessage, checkpointMessage] = await Promise.all([snapshot, checkpoint])
+  assert.equal(snapshotMessage.type, 'server-snapshot')
+  assert.equal(checkpointMessage.type, 'server-save-checkpoint')
+  assert.equal(JSON.parse(checkpointMessage.save).schemaVersion, 11)
+})
+
 test('game host authoritatively binds and replicates a native primary quickbar entry', async (context) => {
   const host = await startGameHost({
     authentication: SHARED_AUTHENTICATION,
@@ -1949,7 +1975,7 @@ test('host admits one fresh solo player into the hidden stock Tutorial and check
   assert.equal(snapshotMessage.snapshot.world.waves, null)
   assert.equal(checkpointMessage.type, 'server-save-checkpoint')
   const saved = JSON.parse(checkpointMessage.save)
-  assert.equal(saved.schemaVersion, 10)
+  assert.equal(saved.schemaVersion, 11)
   assert.equal(saved.profile.economy.tutorialPending, true)
   assert.equal(saved.continuation.simulation.world.tutorial.stage, 0)
 })
