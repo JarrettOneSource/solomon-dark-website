@@ -1,4 +1,5 @@
 import { actorHeadingFromVector } from './actor-heading.ts'
+import { NATIVE_ACTOR_SEPARATION_EPSILON } from './actor-physics.ts'
 import {
   advanceNativeRngWords,
   drawNativeFloat,
@@ -391,7 +392,9 @@ export function nativeStaffAdmissionTarget(
   for (const target of targets) {
     const deltaX = target.position.x - player.position.x
     const deltaY = target.position.y - player.position.y
-    const reach = player.collisionRadius + target.collisionRadius
+    const reach = player.collisionRadius
+      + target.collisionRadius
+      + NATIVE_ACTOR_SEPARATION_EPSILON
     if (deltaX * deltaX + deltaY * deltaY > reach * reach) continue
     const targetHeading = actorHeadingFromVector(deltaX, deltaY)
     if (absoluteHeadingDelta(player.headingDegrees, targetHeading)
@@ -411,7 +414,9 @@ export function nativeStaffPhysicalContactTargets<T extends NativeStaffTarget>(
   return Object.freeze(targets.filter((target) => {
     const deltaX = target.position.x - player.position.x
     const deltaY = target.position.y - player.position.y
-    const reach = player.collisionRadius + target.collisionRadius
+    const reach = player.collisionRadius
+      + target.collisionRadius
+      + NATIVE_ACTOR_SEPARATION_EPSILON
     if (deltaX * deltaX + deltaY * deltaY > reach * reach) return false
     return absoluteHeadingDelta(
       player.headingDegrees,

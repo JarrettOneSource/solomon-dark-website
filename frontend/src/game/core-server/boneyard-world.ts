@@ -172,10 +172,18 @@ export interface BoneyardWorldTickResult {
   enemyEvents: readonly BoneyardEnemySemanticEvent[]
   lootEvents: readonly BoneyardLootEvent[]
   lootPickups: readonly BoneyardLootPickup[]
+  movementContactsByPlayerId: Readonly<
+    Record<string, readonly BoneyardPlayerMovementContact[]>
+  >
   playerDamage: readonly BoneyardEnemyPlayerDamage[]
   players: Readonly<Record<string, PlayerCharacterState>>
   rewards: readonly BoneyardEnemyReward[]
   world: BoneyardWorldState
+}
+
+export interface BoneyardPlayerMovementContact {
+  readonly bodyId: string
+  readonly staffHostile: boolean
 }
 
 export function createBoneyardWorld(
@@ -397,6 +405,23 @@ export function stepBoneyardWorldTick(
   }
   gateLeaves = gateLeaves.map(stepBoneyardGateLeaf)
   const collision = withBoneyardGateCollision(world.collision, gateLeaves)
+  const movementContactPlayerIds = new Map<string, string>(
+    collisionPlans.flatMap(({ plan, playerId }) => (
+      plan.movementActive ? [[`player-${playerId}`, playerId] as const] : []
+    )),
+  )
+  const staffHostileBodyIds = new Set([
+    ...world.enemies.actors.flatMap((actor) => (
+      actor.lifeState === 'alive' && actor.config.enemyToken !== 'COFFIN'
+        ? [`enemy-${actor.id}`]
+        : []
+    )),
+    ...world.enemies.maggots.flatMap((maggot) => (
+      maggot.lifeState === 'alive' ? [`enemy-${maggot.id}`] : []
+    )),
+  ])
+  const movementContactsByPlayerId: Record<string, BoneyardPlayerMovementContact[]> =
+    Object.fromEntries(plans.map(({ playerId }) => [playerId, []]))
   const resolvedBodies = resolveActorMotion(
     [
       ...collisionPlans.map(({ plan, player, playerId }) => ({
@@ -420,6 +445,16 @@ export function stepBoneyardWorldTick(
       ),
     },
     () => true,
+    undefined,
+    (moverId, otherId) => {
+      const playerId = movementContactPlayerIds.get(moverId)
+      if (playerId !== undefined) {
+        movementContactsByPlayerId[playerId]!.push(Object.freeze({
+          bodyId: otherId,
+          staffHostile: staffHostileBodyIds.has(otherId),
+        }))
+      }
+    },
   )
   const resolvedPositions = new Map(
     resolvedBodies.map((body) => [body.id, body.position]),
@@ -756,6 +791,12 @@ export function stepBoneyardWorldTick(
     enemyEvents: enemyStep.events,
     lootEvents: lootStep.events,
     lootPickups: lootStep.pickups,
+    movementContactsByPlayerId: Object.freeze(Object.fromEntries(
+      Object.entries(movementContactsByPlayerId).map(([playerId, contacts]) => [
+        playerId,
+        Object.freeze(contacts),
+      ]),
+    )),
     playerDamage: enemyStep.playerDamage,
     players: knockback.players,
     rewards: enemyStep.rewards,

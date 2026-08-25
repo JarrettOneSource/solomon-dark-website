@@ -9,6 +9,7 @@ import {
 } from 'vite'
 
 import { solomonContactContains } from '../src/game/core-kernels/boneyard-encounter.ts'
+import { NATIVE_ACTOR_SEPARATION_EPSILON } from '../src/game/core-kernels/actor-physics.ts'
 import { nativeSolomonDirtStateAt } from '../src/game/renderer/boneyard-solomon-dirt-presentation.ts'
 import { BONEYARD_GATE_INITIAL_SWAY } from '../src/game/core-kernels/boneyard-gate.ts'
 import { PLAYER_CHARACTER_RADIUS } from '../src/game/core-kernels/player-character.ts'
@@ -24,6 +25,10 @@ import {
 } from '../src/game/core-server/boneyard-collision.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 import {
+  getPlayerCharacter,
+  getPlayerProgression,
+} from '../src/game/core-server/game-simulation.ts'
+import {
   EntityReplicationReconstructor,
   REPLICATED_ENTITY_TYPES,
 } from '../src/game/protocol/entity-replication.ts'
@@ -36,6 +41,7 @@ const deterministicSeedBytes = Buffer.alloc(16)
 const expectedBoneyardSeed = deterministicSeedBytes.toString('hex')
 const entranceOnly = process.argv.includes('--entrance-only')
 const openingOnly = process.argv.includes('--opening-only')
+const staffMeleeOnly = process.argv.includes('--staff-melee-only')
 const productionFrontend = process.env.SDR_GAME_WAVES_SMOKE_PRODUCTION === '1'
 const FIRE_ENGAGEMENT_MIN_DISTANCE = 70
 const FIRE_ENGAGEMENT_MAX_DISTANCE = 135
@@ -47,6 +53,7 @@ const screenshotPath = process.env.SDR_GAME_WAVES_SMOKE_SCREENSHOT
 const speakingScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-speaking$1')
 const dirtScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-dirt$1')
 const combatScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-combat$1')
+const staffMeleeScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-staff-melee$1')
 const archerScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-archer-projectile$1')
 const deathScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-death$1')
 const gameOverScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-game-over$1')
@@ -203,30 +210,39 @@ try {
     assert.ok(runEdge.phase === 'escaping' || runEdge.phase === 'gone')
     assert.equal(runEdge.combatEnabled, true)
     await page.screenshot({ path: screenshotPath })
-    await page.waitForFunction(() => {
+    await page.waitForFunction((requiredLiveEnemies) => {
       const scene = document.querySelector('.boneyard-scene')
-      return Number(scene?.getAttribute('data-wave-live-enemy-count')) >= 8
+      return Number(scene?.getAttribute('data-wave-live-enemy-count')) >= requiredLiveEnemies
         && window.__sdrAudioPlaySources?.some((source) => source.includes('solomon-laugh-1'))
-    }, undefined, { timeout: 10_000 })
-    await page.waitForFunction(() => (
-      document.querySelector('.boneyard-scene')
-        ?.getAttribute('data-wave-phase') === 'opening-threshold'
-    ), undefined, { timeout: 15_000 })
+    }, staffMeleeOnly ? 1 : 8, { timeout: 10_000 })
+    if (!staffMeleeOnly) {
+      await page.waitForFunction(() => (
+        document.querySelector('.boneyard-scene')
+          ?.getAttribute('data-wave-phase') === 'opening-threshold'
+      ), undefined, { timeout: 15_000 })
+    }
     opening = await encounterReceipt(scene)
   } finally {
     for (const key of escapeKeys) await page.keyboard.up(key)
   }
-  assert.equal(opening.wavePhase, 'opening-threshold')
-  assert.ok(opening.liveEnemies >= 11 && opening.liveEnemies <= 17)
-  assert.equal(opening.pendingSpawnBudget, 0)
+  if (staffMeleeOnly) {
+    assert.equal(opening.combatEnabled, true)
+    assert.ok(opening.liveEnemies >= 1)
+  } else {
+    assert.equal(opening.wavePhase, 'opening-threshold')
+    assert.ok(opening.liveEnemies >= 11 && opening.liveEnemies <= 17)
+    assert.equal(opening.pendingSpawnBudget, 0)
+  }
   assert.equal(opening.waveOrdinal, 0)
-  const openingSteering = await captureOpeningSteering(
-    page,
-    wire,
-    loadedBoneyard.runId,
-    opening.liveEnemies,
-  )
-  const entranceRetirement = openingOnly
+  const openingSteering = staffMeleeOnly
+    ? null
+    : await captureOpeningSteering(
+        page,
+        wire,
+        loadedBoneyard.runId,
+        opening.liveEnemies,
+      )
+  const entranceRetirement = openingOnly || staffMeleeOnly
     ? null
     : await proveRetiredEntry(
         page,
@@ -236,11 +252,16 @@ try {
         gateCrossing,
       )
 
-  if (entranceOnly || openingOnly) {
+  if (entranceOnly || openingOnly || staffMeleeOnly) {
     const runCombatAdmission = entranceOnly
       ? await proveRunCombatAdmitted(page, scene)
       : null
-    await page.screenshot({ path: combatScreenshotPath })
+    const staffMelee = staffMeleeOnly
+      ? await proveStaffMeleeContact(page, combatNavigation)
+      : null
+    await page.screenshot({
+      path: staffMeleeOnly ? staffMeleeScreenshotPath : combatScreenshotPath,
+    })
     assert.deepEqual(wire.errors, [])
     assert.deepEqual(errors, [])
     assert.deepEqual(failedResponses, [])
@@ -260,7 +281,8 @@ try {
       productionFrontend,
       runCombatAdmission,
       speakingCombatAdmission,
-      screenshotPath: combatScreenshotPath,
+      screenshotPath: staffMeleeOnly ? staffMeleeScreenshotPath : combatScreenshotPath,
+      staffMelee,
       status: 'ok',
       wire: wireSummary(wire),
     })}\n`)
@@ -337,7 +359,9 @@ try {
   await page.screenshot({ path: loadoutScreenshotPath })
 
   const firstRunId = gameOverFrame.runId
-  await page.locator('.create-menu-discipline-arcane').click()
+  await page.locator(
+    staffMeleeOnly ? '.create-menu-discipline-body' : '.create-menu-discipline-arcane',
+  ).click()
   await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 90_000 })
   await page.getByRole('button', { name: 'Enter the Boneyard' }).click()
   await page.locator('.boneyard-scene[data-renderer-state="ready"]').waitFor({ timeout: 90_000 })
@@ -1043,6 +1067,175 @@ async function kiteUntilSolomonTaunt(page, navigation) {
   throw new Error('Solomon did not finish the laugh and taunt while combat was active')
 }
 
+async function proveStaffMeleeContact(page, navigation) {
+  const initialState = host.state()
+  assert.equal(initialState.world.kind, 'boneyard')
+  const playerId = initialState.playerEntities.identities[0]?.playerId
+  assert.ok(playerId, 'expected the authoritative browser player')
+  const existingActionIds = new Set(initialState.primarySpells.transients
+    .filter((transient) => (
+      transient.ownerId === playerId
+      && (transient.kind === 'player-staff-melee' || transient.kind === 'player-staff-spin')
+    ))
+    .map(({ id }) => id))
+  const actionDeadline = Date.now() + 60_000
+  let action = null
+  let actionState = null
+
+  while (Date.now() < actionDeadline && action === null) {
+    const state = host.state()
+    assert.equal(state.world.kind, 'boneyard')
+    action = state.primarySpells.transients.find((transient) => (
+      transient.ownerId === playerId
+      && !existingActionIds.has(transient.id)
+      && (transient.kind === 'player-staff-melee' || transient.kind === 'player-staff-spin')
+    )) ?? null
+    if (action !== null) {
+      actionState = state
+      break
+    }
+    const frame = await boneyardFrame(page)
+    assert.equal(frame.localPlayerLifeState, 'alive', 'player died before Staff contact')
+    const direction = nearestEnemyApproachDirection(frame, navigation)
+    if (direction === null) {
+      await page.waitForTimeout(50)
+    } else {
+      await pulseMovement(page, movementKeys(direction), 80)
+    }
+  }
+
+  assert.ok(action && actionState, 'walking into the opening wave did not admit a Staff action')
+  assert.equal(actionState.world.kind, 'boneyard')
+  const playerAtAction = getPlayerCharacter(actionState, playerId)
+  const targetAtAction = nearestHostileActor(actionState, playerAtAction.position)
+  assert.ok(targetAtAction, 'Staff admission had no living hostile contact candidate')
+  const actionDistance = Math.hypot(
+    targetAtAction.position.x - playerAtAction.position.x,
+    targetAtAction.position.y - playerAtAction.position.y,
+  )
+  const legalDistance = PLAYER_CHARACTER_RADIUS
+    + targetAtAction.collisionRadius
+    + NATIVE_ACTOR_SEPARATION_EPSILON
+  assert.ok(
+    actionDistance <= legalDistance + 2,
+    `Staff action began outside native contact clearance (${actionDistance} > ${legalDistance})`,
+  )
+
+  const contactIdsAtAction = new Set(actionState.primarySpells.transients
+    .filter(({ kind, ownerId }) => kind === 'player-staff-contact' && ownerId === playerId)
+    .map(({ id }) => id))
+  const healthAtAction = hostileHealthById(actionState)
+  const manaAtAction = getPlayerProgression(actionState, playerId).currentMana
+  const contactDeadline = Date.now() + 10_000
+  let contact = null
+  let damage = []
+  let contactState = actionState
+
+  while (Date.now() < contactDeadline) {
+    contactState = host.state()
+    assert.equal(contactState.world.kind, 'boneyard')
+    contact = contactState.primarySpells.transients.find((transient) => (
+      transient.kind === 'player-staff-contact'
+      && transient.ownerId === playerId
+      && !contactIdsAtAction.has(transient.id)
+    )) ?? null
+    damage = [...hostileHealthById(contactState)].flatMap(([id, currentHealth]) => {
+      const previousHealth = healthAtAction.get(id)
+      return previousHealth !== undefined && currentHealth < previousHealth
+        ? [{ currentHealth, id, previousHealth }]
+        : []
+    })
+    if (contact !== null && damage.length > 0) break
+    await page.waitForTimeout(10)
+  }
+
+  assert.ok(contact && contact.kind === 'player-staff-contact')
+  assert.ok(damage.length > 0, 'Staff contact marker did not damage a hostile')
+  assert.ok(contact.targetIds.some((targetId) => (
+    damage.some(({ id }) => targetId === `enemy:${id}`)
+  )))
+  assert.equal(getPlayerProgression(contactState, playerId).currentMana, manaAtAction)
+  await page.waitForFunction(() => {
+    const sources = window.__sdrAudioPlaySources ?? []
+    return sources.some((source) => source.includes('staff-swoosh'))
+      && sources.some((source) => source.includes('staff-hit-wood'))
+  }, undefined, { timeout: 10_000 })
+
+  const repeatDeadline = Date.now() + 10_000
+  let repeatAction = null
+  while (Date.now() < repeatDeadline && repeatAction === null) {
+    const state = host.state()
+    repeatAction = state.primarySpells.transients.find((transient) => (
+      transient.ownerId === playerId
+      && transient.id !== action.id
+      && (transient.kind === 'player-staff-melee' || transient.kind === 'player-staff-spin')
+    )) ?? null
+    if (repeatAction === null) await page.waitForTimeout(10)
+  }
+  assert.ok(repeatAction, 'settled current contact did not admit the next Staff action')
+
+  const audioSources = await page.evaluate(() => (
+    [...new Set(window.__sdrAudioPlaySources ?? [])].filter((source) => (
+      source.includes('staff-swoosh') || source.includes('staff-hit-wood')
+    ))
+  ))
+  return {
+    actionDistance,
+    actionId: action.id,
+    actionKind: action.kind,
+    audioSources,
+    contactId: contact.id,
+    contactTargetIds: contact.targetIds,
+    damage,
+    legalDistance,
+    manaAtAction,
+    repeatActionId: repeatAction.id,
+    repeatActionKind: repeatAction.kind,
+    targetId: targetAtAction.id,
+    targetToken: targetAtAction.enemyToken,
+  }
+}
+
+function nearestHostileActor(state, position) {
+  assert.equal(state.world.kind, 'boneyard')
+  return [
+    ...state.world.enemies.actors.flatMap((actor) => (
+      actor.lifeState === 'alive' && actor.config.enemyToken !== 'COFFIN'
+        ? [{
+            collisionRadius: actor.config.collisionRadius,
+            enemyToken: actor.config.enemyToken,
+            id: actor.id,
+            position: actor.position,
+          }]
+        : []
+    )),
+    ...state.world.enemies.maggots.flatMap((maggot) => (
+      maggot.lifeState === 'alive'
+        ? [{
+            collisionRadius: maggot.collisionRadius,
+            enemyToken: 'MAGGOT',
+            id: maggot.id,
+            position: maggot.position,
+          }]
+        : []
+    )),
+  ].toSorted((left, right) => (
+    Math.hypot(left.position.x - position.x, left.position.y - position.y)
+    - Math.hypot(right.position.x - position.x, right.position.y - position.y)
+    || left.id - right.id
+  ))[0] ?? null
+}
+
+function hostileHealthById(state) {
+  assert.equal(state.world.kind, 'boneyard')
+  return new Map([
+    ...state.world.enemies.actors.flatMap((actor) => (
+      actor.config.enemyToken === 'COFFIN' ? [] : [[actor.id, actor.currentHealth]]
+    )),
+    ...state.world.enemies.maggots.map((maggot) => [maggot.id, maggot.currentHealth]),
+  ])
+}
+
 async function castUntilEnemyDies(page, {
   deadline = Date.now() + 240_000,
   navigation,
@@ -1705,8 +1898,7 @@ async function enterBoneyard(page) {
   }
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
-  await page.locator('.create-menu-scene[data-motion-settled="true"]')
-    .waitFor({ timeout: 90_000 })
+  await enterCreateAfterCollegeOffice(page)
   await page.getByRole('button', { name: /fire/i }).click()
   await page.locator('.create-menu-disciplines[data-visible="true"]')
     .waitFor({ timeout: 30_000 })
@@ -1716,9 +1908,58 @@ async function enterBoneyard(page) {
     state: 'detached',
     timeout: 90_000,
   })
+  await page.waitForFunction(() => {
+    const canvas = document.querySelector('.hub-world-canvas')
+    return canvas?.getAttribute('data-hub-region') === 'courtyard'
+      && canvas?.getAttribute('data-transition-phase') === 'none'
+  }, undefined, { timeout: 30_000 })
   await page.getByRole('button', { name: 'Enter the Boneyard' }).click()
   await page.locator('.boneyard-scene[data-renderer-state="ready"]')
     .waitFor({ timeout: 90_000 })
+}
+
+async function enterCreateAfterCollegeOffice(page) {
+  const create = page.locator('.create-menu-scene[data-motion-settled="true"]')
+  const office = page.locator('.hub-scene[data-hub-region="office"][data-story-office="true"]')
+  const first = await Promise.race([
+    create.waitFor({ timeout: 90_000 }).then(() => 'create'),
+    office.waitFor({ timeout: 90_000 }).then(() => 'office'),
+  ])
+  if (first === 'create') return
+
+  await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 90_000 })
+  await page.waitForFunction(() => {
+    const canvas = document.querySelector('.hub-world-canvas')
+    return canvas?.getAttribute('data-hub-region') === 'office'
+      && canvas?.getAttribute('data-transition-phase') === 'none'
+  }, undefined, { timeout: 30_000 })
+  await page.locator('.main-menu-page[data-hub-player-activity="none"]')
+    .waitFor({ timeout: 30_000 })
+  await moveHubAxis(page, 'a', 'playerX', 300, 'at-most')
+  await moveHubAxis(page, 's', 'playerY', 800, 'at-least')
+  await moveHubAxis(page, 'd', 'playerX', 540, 'at-least')
+  await page.keyboard.down('s')
+  try {
+    await create.waitFor({ timeout: 30_000 })
+  } finally {
+    await page.keyboard.up('s')
+  }
+}
+
+async function moveHubAxis(page, key, axis, target, direction) {
+  await page.locator('.main-menu-page[data-hub-player-activity="none"]')
+    .waitFor({ timeout: 30_000 })
+  await page.keyboard.down(key)
+  try {
+    await page.waitForFunction(({ axis, direction, target }) => {
+      const value = document.querySelector('.hub-world-canvas')?.__sdrHubFrame?.[axis]
+      return typeof value === 'number'
+        && (direction === 'at-least' ? value >= target : value <= target)
+    }, { axis, direction, target }, { timeout: 15_000 })
+  } finally {
+    await page.keyboard.up(key)
+    await page.waitForTimeout(150)
+  }
 }
 
 async function crossNearestEntryGate(page, scene, boneyardScene) {

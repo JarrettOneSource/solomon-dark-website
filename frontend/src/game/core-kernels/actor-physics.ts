@@ -27,6 +27,11 @@ export type ActorBodyPairFilter = (
   other: Readonly<ActorPhysicsBody>,
 ) => boolean
 
+export type ActorRootContactObserver = (
+  moverId: string,
+  otherId: string,
+) => void
+
 export const NATIVE_ACTOR_SEPARATION_EPSILON = 0.1
 const NATIVE_WEIGHT_MINIMUM = 0.01
 const NATIVE_WEIGHT_RANGE = 0.99
@@ -70,15 +75,16 @@ function applyCorrection(
   world: ActorPhysicsWorld,
   bodies: readonly WorkingBody[],
   broadphase?: ActorMotionBroadphase,
-): void {
-  if (correction.x === 0 && correction.y === 0) return
+): boolean {
+  if (correction.x === 0 && correction.y === 0) return false
   const candidate = {
     x: body.position.x + correction.x,
     y: body.position.y + correction.y,
   }
-  if (!world.canPlace(body.id, candidate, body.radius)) return
+  if (!world.canPlace(body.id, candidate, body.radius)) return false
   body.position = candidate
   broadphase?.update(bodyIndex, bodies)
+  return true
 }
 
 /**
@@ -91,6 +97,7 @@ export function resolveActorMotion(
   world: ActorPhysicsWorld,
   shouldCollide: ActorBodyPairFilter,
   broadphase?: ActorMotionBroadphase,
+  observeRootContact?: ActorRootContactObserver,
 ): ActorPhysicsBody[] {
   const bodies: WorkingBody[] = sourceBodies.map((body) => ({
     ...body,
@@ -126,12 +133,21 @@ export function resolveActorMotion(
         (!recursive && mover.pushEnabled === false)
         || mover.currentPushStrength < other.pushResistance
       ) {
-        applyCorrection(bodyIndex, mover, separation(mover, other, false), world, bodies, broadphase)
+        const contacted = applyCorrection(
+          bodyIndex,
+          mover,
+          separation(mover, other, false),
+          world,
+          bodies,
+          broadphase,
+        )
+        if (!recursive && contacted) observeRootContact?.(mover.id, other.id)
         return
       }
 
       const otherCorrection = separation(other, mover, true)
       if (otherCorrection.x !== 0 || otherCorrection.y !== 0) {
+        if (!recursive) observeRootContact?.(mover.id, other.id)
         const pushFactor = Math.min(
           NATIVE_PUSH_FACTOR_MAXIMUM,
           Math.max(

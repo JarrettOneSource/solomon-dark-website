@@ -55,6 +55,30 @@ test('the Solomon prelude gate suppresses only new automatic staff actions', () 
   assert.deepEqual([...admitted.actingPlayerIds], [PLAYER_ID])
 })
 
+test('movement-result hostile contact admits without facing while nonhostile contact suppresses fallback', () => {
+  const context = staffFixture()
+  const facingAway = {
+    ...context,
+    movementContactsByPlayerId: {
+      [PLAYER_ID]: [{ bodyId: 'enemy-1', staffHostile: true }],
+    },
+    players: {
+      [PLAYER_ID]: { ...context.players[PLAYER_ID]!, headingIndex: 12 },
+    },
+  }
+  const admitted = stepPlayerStaffCombatSystem(facingAway)
+  assert.equal(admitted.spells.transients[0]?.kind, 'player-staff-melee')
+
+  const suppressed = stepPlayerStaffCombatSystem({
+    ...context,
+    movementContactsByPlayerId: {
+      [PLAYER_ID]: [{ bodyId: 'player-other', staffHostile: false }],
+    },
+  })
+  assert.deepEqual(suppressed.spells.transients, [])
+  assert.deepEqual(suppressed.rng, context.rng)
+})
+
 test('automatic staff admission requires the exact equipped Staff and emits one retained contact', () => {
   const equipped = staffFixture()
   const economy = playerEconomyAt(equipped.playerEntities, PLAYER_ID)!
@@ -240,6 +264,7 @@ function staffFixture(
     enemies,
     inputs: { [PLAYER_ID]: createIdlePlayerCharacterInput() },
     knockbackTargetVisible: () => true,
+    movementContactsByPlayerId: {},
     playerEntities,
     players: { [PLAYER_ID]: player },
     rng: createNativeRng(0),

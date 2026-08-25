@@ -170,6 +170,7 @@ import {
   placePlayersInBoneyard,
   spawnPlayerCharacterInBoneyard,
   stepBoneyardWorldTick,
+  type BoneyardPlayerMovementContact,
   type BoneyardWorldState,
 } from './boneyard-world.ts'
 import {
@@ -2071,6 +2072,9 @@ function finishGameSimulationTick(
     enemyEvents?: readonly BoneyardEnemySemanticEvent[]
     lootEvents?: readonly BoneyardLootEvent[]
     lootPickups?: readonly BoneyardLootPickup[]
+    movementContactsByPlayerId?: Readonly<
+      Record<string, readonly BoneyardPlayerMovementContact[]>
+    >
     playerDamage?: readonly Readonly<{
       actorId: number
       amount: number
@@ -2579,6 +2583,7 @@ function finishGameSimulationTick(
       enemies: world.enemies,
       inputs: combatInputs,
       lethalObserver,
+      movementContactsByPlayerId: result.movementContactsByPlayerId ?? {},
       knockbackTargetVisible: (origin, target) => {
         const blocked = firstBoneyardPathBlockProgress(
           origin,

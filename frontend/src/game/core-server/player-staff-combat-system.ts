@@ -47,6 +47,7 @@ import {
   type BoneyardEnemySemanticEvent,
   type BoneyardEnemyStore,
 } from './boneyard-enemy-store.ts'
+import type { BoneyardPlayerMovementContact } from './boneyard-world.ts'
 import {
   playerProgressionAt,
   playerEconomyAt,
@@ -61,6 +62,9 @@ export interface PlayerStaffCombatSystemContext {
   readonly combatAdmissionEnabled: boolean
   readonly enemies: BoneyardEnemyStore
   readonly inputs: Readonly<Record<string, PlayerCharacterInput>>
+  readonly movementContactsByPlayerId: Readonly<
+    Record<string, readonly BoneyardPlayerMovementContact[]>
+  >
   readonly knockbackTargetVisible: (
     origin: Readonly<Vector2>,
     target: Readonly<Vector2>,
@@ -352,12 +356,14 @@ export function stepPlayerStaffCombatSystem(
       || input?.cast.primary === true
       || input?.cast.quickbar != null
     ) continue
-    const admitted = nativeStaffAdmissionTarget({
+    const movementContacts = context.movementContactsByPlayerId[playerId] ?? []
+    if (movementContacts.length > 0) {
+      if (!movementContacts.some(({ staffHostile }) => staffHostile)) continue
+    } else if (nativeStaffAdmissionTarget({
       collisionRadius: PLAYER_CHARACTER_RADIUS,
       headingDegrees: player.headingIndex * 15,
       position: player.position,
-    }, staffCombatTargets(enemies))
-    if (admitted === null) continue
+    }, staffCombatTargets(enemies)) === null) continue
     const action = createNativePlayerStaffAction({
       derived,
       headingDegrees: player.headingIndex * 15,

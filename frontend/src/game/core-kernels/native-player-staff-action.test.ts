@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import { NATIVE_ACTOR_SEPARATION_EPSILON } from './actor-physics.ts'
 import { createHubEconomy } from './hub-economy.ts'
 import {
   createNativePlayerStaffAction,
@@ -136,13 +137,28 @@ test('rank-zero Flailing retains the native inclusive-zero proc defect', () => {
 })
 
 test('automatic admission preserves list order and excludes the exact fifty-degree boundary', () => {
-  const first = { collisionRadius: 5, id: 'first', position: { x: 0, y: -30 } }
+  const legalContactDistance = 25 + 5 + NATIVE_ACTOR_SEPARATION_EPSILON
+  const first = {
+    collisionRadius: 5,
+    id: 'first',
+    position: { x: 0, y: -legalContactDistance },
+  }
   const second = { collisionRadius: 5, id: 'second', position: { x: 10, y: -20 } }
   assert.equal(nativeStaffAdmissionTarget({
     collisionRadius: 25,
     headingDegrees: 0,
     position: { x: 0, y: 0 },
   }, [first, second])?.id, 'first')
+
+  assert.equal(nativeStaffAdmissionTarget({
+    collisionRadius: 25,
+    headingDegrees: 0,
+    position: { x: 0, y: 0 },
+  }, [{
+    ...first,
+    id: 'beyond-clearance',
+    position: { x: 0, y: -(legalContactDistance + 0.0001) },
+  }]), null)
 
   const atBoundary = {
     collisionRadius: 5,
@@ -204,6 +220,29 @@ test('Staff physical contacts preserve list order, per-target RNG, and Ether Pik
   assert.deepEqual(air.rng, advanceNativeRngWords(rng, 6))
   assert.ok(air.impacts.every(({ contactKnockbackDelta }) => contactKnockbackDelta === null))
   assert.ok(air.impacts.every(({ pikeBreakPresentationRng }) => pikeBreakPresentationRng === null))
+})
+
+test('Staff physical contact retains the shared settled clearance and rejects the next point', () => {
+  const legalContactDistance = 25 + 5 + NATIVE_ACTOR_SEPARATION_EPSILON
+  const player = {
+    collisionRadius: 25,
+    headingDegrees: 0,
+    position: { x: 0, y: 0 },
+  }
+  const legal = {
+    collisionRadius: 5,
+    id: 'legal',
+    position: { x: 0, y: -legalContactDistance },
+  }
+  const beyond = {
+    ...legal,
+    id: 'beyond',
+    position: { x: 0, y: -(legalContactDistance + 0.0001) },
+  }
+  assert.deepEqual(
+    nativeStaffPhysicalContactTargets(player, [legal, beyond]).map(({ id }) => id),
+    ['legal'],
+  )
 })
 
 test('Ether contact Knockback moves for five ticks and Pike-break presentation owns one hundred frames', () => {

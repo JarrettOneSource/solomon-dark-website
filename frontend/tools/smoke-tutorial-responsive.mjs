@@ -11,10 +11,17 @@ import {
   enterBoneyardWorld,
   getPlayerCharacter,
   getPlayerEconomy,
+  getPlayerProgression,
 } from '../src/game/core-server/game-simulation.ts'
 import { replacePlayerCharacter } from '../src/game/core-server/player-entity-store.ts'
 import { createBoneyardEnemyStore } from '../src/game/core-server/boneyard-enemy-store.ts'
+import {
+  canPlaceBoneyardBody,
+  resolveBoneyardMovement,
+} from '../src/game/core-server/boneyard-collision.ts'
+import { NATIVE_ACTOR_SEPARATION_EPSILON } from '../src/game/core-kernels/actor-physics.ts'
 import { GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS } from '../src/game/core-kernels/game-run.ts'
+import { PLAYER_CHARACTER_RADIUS } from '../src/game/core-kernels/player-character.ts'
 import {
   NATIVE_TUTORIAL_CAMERA_LOCK_SETTLE_TICKS,
   NATIVE_TUTORIAL_ENTRANCE_FENCE_CHAIN,
@@ -31,6 +38,7 @@ import {
 } from '../src/game/save/game-save-contract.ts'
 import { createGameSaveDocument } from '../src/game/save/game-save-document.ts'
 import { boneyardCamera } from '../src/game/renderer/boneyard-render-contract.ts'
+import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
 
 const screenshotRoot = process.env.SDR_TUTORIAL_RESPONSIVE_SCREENSHOT_ROOT
   || '/tmp/solomon-dark-tutorial-responsive'
@@ -136,6 +144,7 @@ async function runScenario(scenario) {
     gameEndpoint: { credential, kind: 'localhost', url: host.address.url },
   })
   await page.addInitScript(bypassStartupAudioPreload)
+  await page.addInitScript(installGameAudioSmokeProbe)
   const fixture = tutorialIntroSave()
   await seedLocalSave(page, fixture.record)
 
@@ -199,6 +208,9 @@ async function runScenario(scenario) {
     const spawnDomain = scenario.name === 'stock'
       ? await exerciseTutorialSpawnDomain(host, page, screenshotRoot)
       : null
+    const staffMelee = scenario.name === 'stock'
+      ? await exerciseTutorialStaffMelee(host, page, screenshotRoot)
+      : null
     const collegeAdmission = scenario.name === 'stock'
       ? await exerciseTutorialCollegeAdmission(host, page, screenshotRoot)
       : null
@@ -219,6 +231,7 @@ async function runScenario(scenario) {
       scenario: scenario.name,
       screenshot: scenario.screenshot,
       spawnDomain,
+      staffMelee,
       fixtureSha256: fixture.record.sha256,
     }
   } finally {
@@ -272,6 +285,206 @@ async function waitForRestoredTutorial(host) {
     tutorial: state.world.kind === 'boneyard' ? state.world.tutorial : null,
     world: state.world.kind,
   })}`)
+}
+
+async function exerciseTutorialStaffMelee(host, page, screenshotPath) {
+  const configuredTick = configureTutorialFixture(host, {
+    combatEnabled: true,
+    position: { x: 1025, y: 1350 },
+    tutorial: {
+      active: true,
+      damageProtection: true,
+      stage: 11,
+      stageTicks: 0,
+      waveOrdinal: 3,
+      waveSpawnCursor: 0,
+      waveTicks: 0,
+    },
+  })
+  const actors = await waitForTutorialActors(host, 8, configuredTick)
+  let state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
+  const playerId = state.playerEntities.identities[0]?.playerId
+  assert.ok(playerId)
+  assert.equal(getPlayerEconomy(state, playerId).equipment.weapon?.equipmentType, 'staff')
+
+  const staged = staffApproachPlacement(state, actors)
+  const character = getPlayerCharacter(state, playerId)
+  Object.assign(state, {
+    ...state,
+    playerEntities: replacePlayerCharacter(state.playerEntities, playerId, {
+      ...character,
+      position: staged.playerPosition,
+      velocity: { x: 0, y: 0 },
+    }),
+    world: {
+      ...state.world,
+      enemies: {
+        ...state.world.enemies,
+        actors: state.world.enemies.actors.flatMap((actor) => (
+          actor.id === staged.target.id
+            ? [{ ...actor, nextMovementTick: Number.MAX_SAFE_INTEGER }]
+            : []
+        )),
+      },
+      tutorial: { ...state.world.tutorial, waveSpawnCursor: 5 },
+    },
+  })
+  const stagedTick = state.tick
+  await page.waitForFunction((minimumTick) => {
+    const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
+    return frame?.tick > minimumTick
+  }, stagedTick, { timeout: 10_000 })
+  const lesson = page.locator('.tutorial-overlay[data-stage="11"] .tutorial-instruction')
+  await lesson.waitFor({ timeout: 10_000 })
+  assert.match(
+    await lesson.locator('.sr-only').textContent() ?? '',
+    /WALK INTO ENEMIES TO CLUB THEM/,
+  )
+
+  state = host.state()
+  const initialHealth = state.world.kind === 'boneyard'
+    ? state.world.enemies.actors.find(({ id }) => id === staged.target.id)?.currentHealth
+    : null
+  assert.equal(typeof initialHealth, 'number')
+  const manaBefore = getPlayerProgression(state, playerId).currentMana
+  const actionIdsBefore = new Set(state.primarySpells.transients.map(({ id }) => id))
+  const contactIdsBefore = new Set(state.primarySpells.transients
+    .filter(({ kind }) => kind === 'player-staff-contact')
+    .map(({ id }) => id))
+  const keys = tutorialMovementKeys(staged.playerPosition, staged.target.position)
+  for (const key of keys) await page.keyboard.down(key)
+  let action = null
+  try {
+    const deadline = Date.now() + 10_000
+    while (Date.now() < deadline && action === null) {
+      state = host.state()
+      action = state.primarySpells.transients.find((transient) => (
+        transient.ownerId === playerId
+        && !actionIdsBefore.has(transient.id)
+        && (transient.kind === 'player-staff-melee' || transient.kind === 'player-staff-spin')
+      )) ?? null
+      if (action === null) await page.waitForTimeout(10)
+    }
+  } finally {
+    for (const key of keys) await page.keyboard.up(key)
+  }
+  assert.ok(action, 'Tutorial lesson 11 walk-in did not create a Staff action')
+
+  const actionState = host.state()
+  const playerAtAction = getPlayerCharacter(actionState, playerId)
+  assert.equal(actionState.world.kind, 'boneyard')
+  const targetAtAction = actionState.world.enemies.actors.find(({ id }) => (
+    id === staged.target.id
+  ))
+  assert.ok(targetAtAction)
+  const distance = Math.hypot(
+    targetAtAction.position.x - playerAtAction.position.x,
+    targetAtAction.position.y - playerAtAction.position.y,
+  )
+  const legalDistance = PLAYER_CHARACTER_RADIUS
+    + targetAtAction.config.collisionRadius
+    + NATIVE_ACTOR_SEPARATION_EPSILON
+  assert.ok(distance <= legalDistance + 0.001)
+
+  let contact = null
+  let healthAfter = initialHealth
+  const contactDeadline = Date.now() + 10_000
+  while (Date.now() < contactDeadline) {
+    state = host.state()
+    assert.equal(state.world.kind, 'boneyard')
+    contact = state.primarySpells.transients.find((transient) => (
+      transient.kind === 'player-staff-contact'
+      && transient.ownerId === playerId
+      && !contactIdsBefore.has(transient.id)
+    )) ?? null
+    healthAfter = state.world.enemies.actors.find(({ id }) => (
+      id === staged.target.id
+    ))?.currentHealth ?? healthAfter
+    if (contact !== null && healthAfter < initialHealth) break
+    await page.waitForTimeout(10)
+  }
+  assert.ok(contact && contact.kind === 'player-staff-contact')
+  assert.ok(contact.targetIds.includes(`enemy:${staged.target.id}`))
+  assert.ok(healthAfter < initialHealth)
+  assert.equal(getPlayerProgression(state, playerId).currentMana, manaBefore)
+  await page.waitForFunction(() => {
+    const sources = window.__sdrAudioPlaySources ?? []
+    return sources.some((source) => source.includes('staff-swoosh'))
+      && sources.some((source) => source.includes('staff-hit-wood'))
+  }, undefined, { timeout: 10_000 })
+  await page.screenshot({ path: `${screenshotPath}-tutorial-staff-melee.png` })
+
+  return {
+    actionId: action.id,
+    actionKind: action.kind,
+    contactId: contact.id,
+    distance,
+    healthAfter,
+    healthBefore: initialHealth,
+    legalDistance,
+    mana: manaBefore,
+    stage: 11,
+    targetId: staged.target.id,
+  }
+}
+
+function staffApproachPlacement(state, actors) {
+  assert.equal(state.world.kind, 'boneyard')
+  const directions = [
+    { x: 0, y: 1 },
+    { x: 1, y: 0 },
+    { x: 0, y: -1 },
+    { x: -1, y: 0 },
+  ]
+  for (const target of actors) {
+    for (const direction of directions) {
+      const distance = PLAYER_CHARACTER_RADIUS + target.config.collisionRadius + 12
+      const playerPosition = {
+        x: target.position.x + direction.x * distance,
+        y: target.position.y + direction.y * distance,
+      }
+      if (!nativeTutorialEnemySpawnPositionIsAllowed(
+        playerPosition,
+        PLAYER_CHARACTER_RADIUS,
+      )) continue
+      if (!canPlaceBoneyardBody(
+        playerPosition,
+        state.world.bounds,
+        state.world.collision,
+        PLAYER_CHARACTER_RADIUS,
+      )) continue
+      const resolved = resolveBoneyardMovement(
+        playerPosition,
+        target.position,
+        state.world.bounds,
+        state.world.collision,
+        PLAYER_CHARACTER_RADIUS,
+      )
+      if (Math.hypot(resolved.x - target.position.x, resolved.y - target.position.y) > 0.01) {
+        continue
+      }
+      if (actors.some((actor) => (
+        actor.id !== target.id
+        && Math.hypot(
+          actor.position.x - playerPosition.x,
+          actor.position.y - playerPosition.y,
+        ) < PLAYER_CHARACTER_RADIUS + actor.config.collisionRadius + 5
+      ))) continue
+      return { playerPosition, target }
+    }
+  }
+  throw new Error('could not stage a collision-safe Tutorial Staff approach')
+}
+
+function tutorialMovementKeys(start, target) {
+  const keys = []
+  if (target.x < start.x - 0.01) keys.push('a')
+  if (target.x > start.x + 0.01) keys.push('d')
+  if (target.y < start.y - 0.01) keys.push('w')
+  if (target.y > start.y + 0.01) keys.push('s')
+  assert.ok(keys.length > 0)
+  return keys
 }
 
 function forceTutorialState(host, patch) {
@@ -479,6 +692,9 @@ function configureTutorialFixture(host, fixture) {
     playerEntities,
     world: {
       ...state.world,
+      encounter: fixture.combatEnabled && state.world.encounter !== null
+        ? { ...state.world.encounter, phase: 'gone', runEventId: 1 }
+        : state.world.encounter,
       enemies: {
         ...freshEnemies,
         lastStepTick: state.tick,

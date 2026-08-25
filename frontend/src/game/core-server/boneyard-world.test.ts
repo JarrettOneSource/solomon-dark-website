@@ -568,6 +568,82 @@ test('player movement separates from live enemy circles and commits the displace
   assert.ok(player.position.x < enemy.position.x, 'the player must not pass through the enemy')
 })
 
+test('movement contact classifies every hostile actor family and excludes Coffin', () => {
+  const tokens = [
+    'SKELETON',
+    'SKELETONARCHER',
+    'SKELETONMAGE',
+    'IMP',
+    'ZOMBIE',
+    'WRAITH',
+    'DEMON',
+    'COFFIN',
+  ] as const
+
+  for (const token of tokens) {
+    const loaded = gatedBoneyard()
+    loaded.scene.fences = []
+    let world = createBoneyardWorld(loaded)
+    let player = {
+      ...spawnPlayerCharacterInBoneyard({
+        discipline: 'body',
+        displayName: `${token} Contact`,
+        element: 'air',
+      }, world),
+      position: { x: 100, y: 350 },
+    }
+    const seeded = stepBoneyardEnemyStore(world.enemies, {
+      firstProjectileWorldContact: () => null,
+      players: {},
+      resolveMovement: ({ requestedPosition }) => requestedPosition,
+      resolveSpawnIntents: () => [{
+        enemyToken: token,
+        flags: [],
+        id: 1,
+        locationPolicy: 'anywhere',
+        nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES[token],
+        position: { x: 200, y: 350 },
+        spawnTick: 0,
+        waveOrdinal: 1,
+      }],
+      tick: 0,
+    })
+    const actor = seeded.store.actors[0]!
+    world = {
+      ...world,
+      enemies: {
+        ...seeded.store,
+        actors: [{
+          ...actor,
+          nextMovementTick: Number.MAX_SAFE_INTEGER,
+          position: {
+            x: player.position.x + PLAYER_CHARACTER_RADIUS + actor.config.collisionRadius + 4,
+            y: player.position.y,
+          },
+        }],
+      },
+    }
+
+    let contacts: readonly { bodyId: string; staffHostile: boolean }[] = []
+    for (let tick = 1; tick <= 30 && contacts.length === 0; tick += 1) {
+      const result = stepWorld(
+        world,
+        { player },
+        { player: movementInput(1, 0) },
+        tick,
+      )
+      world = result.world
+      player = result.players.player
+      contacts = result.movementContactsByPlayerId.player ?? []
+    }
+
+    assert.deepEqual(contacts, [{
+      bodyId: `enemy-${actor.id}`,
+      staffHostile: token !== 'COFFIN',
+    }], token)
+  }
+})
+
 test('player movement separates from a live owned Maggot and commits the displaced child', () => {
   const loaded = gatedBoneyard()
   loaded.scene.fences = []
@@ -629,6 +705,7 @@ test('player movement separates from a live owned Maggot and commits the displac
     },
   }
   const initialMaggotX = world.enemies.maggots[0]!.position.x
+  let observedContact = false
 
   for (let tick = 2; tick <= 50; tick += 1) {
     const result = stepWorld(
@@ -637,11 +714,15 @@ test('player movement separates from a live owned Maggot and commits the displac
       { player: movementInput(1, 0) },
       tick,
     )
+    observedContact ||= result.movementContactsByPlayerId.player?.some(({ bodyId, staffHostile }) => (
+      bodyId === `enemy-${maggot.id}` && staffHostile
+    )) ?? false
     world = result.world
     player = result.players.player
   }
 
   const retained = world.enemies.maggots[0]!
+  assert.equal(observedContact, true)
   assert.ok(retained.position.x > initialMaggotX, 'the authoritative Maggot position must retain player push')
   assert.ok(
     Math.hypot(

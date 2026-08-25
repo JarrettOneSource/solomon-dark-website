@@ -41,6 +41,25 @@ test('actor strength thresholds produce yielding, pushing, and player dominance'
   assert.ok(bodies[1].position.x < afterStudentPush)
 })
 
+test('actor response reports ordered root contacts without leaking recursive recipients', () => {
+  const contacts: Array<readonly [string, string]> = []
+  const bodies: ActorPhysicsBody[] = [
+    { id: 'root', position: { x: 0, y: 0 }, delta: { x: 15, y: 0 }, radius: 10, pushStrength: 20, pushResistance: 5 },
+    { id: 'first', position: { x: 25, y: 0 }, delta: { x: 0, y: 0 }, driven: false, radius: 10, pushStrength: 10, pushResistance: 5 },
+    { id: 'recursive', position: { x: 43, y: 0 }, delta: { x: 0, y: 0 }, driven: false, radius: 10, pushStrength: 10, pushResistance: 5 },
+  ]
+
+  resolveActorMotion(
+    bodies,
+    freePhysicsWorld,
+    allBodiesCollide,
+    undefined,
+    (moverId, otherId) => contacts.push([moverId, otherId]),
+  )
+
+  assert.deepEqual(contacts, [['root', 'first']])
+})
+
 test('dynamic grid reproduces all-pairs ordering across cell edges and chained pushes', () => {
   const bodies: ActorPhysicsBody[] = [
     { id: 'negative', position: { x: -65, y: 0 }, delta: { x: 40, y: 0 }, radius: 18, pushStrength: 15, pushResistance: 5 },

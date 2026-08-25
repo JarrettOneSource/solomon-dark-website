@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { actorHeadingFromVector, actorHeadingIndex } from '../core-kernels/actor-heading.ts'
+import { NATIVE_ACTOR_SEPARATION_EPSILON } from '../core-kernels/actor-physics.ts'
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import {
   GAME_OVER_AUTOMATIC_ACCEPT_TICK,
@@ -2222,7 +2223,7 @@ test('Boneyard simulation owns automatic Staff action, contact damage, and retai
           nextMovementTick: Number.MAX_SAFE_INTEGER,
           position: {
             x: player.position.x,
-            y: player.position.y - (25 + enemy.config.collisionRadius),
+            y: player.position.y - (25 + enemy.config.collisionRadius + 12),
           },
         }],
       },
@@ -2231,11 +2232,30 @@ test('Boneyard simulation owns automatic Staff action, contact damage, and retai
   const initialMana = getPlayerProgression(state, 'caster').currentMana
   if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
   const initialHealth = state.world.enemies.actors[0]!.currentHealth
-  state = stepGameSimulationTick(state, { caster: gameplayInput(0, 0) })
-  assert.ok(state.primarySpells.transients.some(({ kind }) => kind === 'player-staff-melee'))
+  for (let tick = 0; tick < 100; tick += 1) {
+    state = stepGameSimulationTick(state, { caster: gameplayInput(0, -1) })
+    if (state.primarySpells.transients.some(({ kind }) => kind === 'player-staff-melee')) break
+  }
+  const firstAction = state.primarySpells.transients.find(({ kind }) => (
+    kind === 'player-staff-melee'
+  ))
+  assert.ok(firstAction && firstAction.kind === 'player-staff-melee')
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
   const actionPosition = getPlayerCharacter(state, 'caster').position
+  const settledEnemy = state.world.enemies.actors[0]!
+  const actionDistance = Math.hypot(
+    settledEnemy.position.x - actionPosition.x,
+    settledEnemy.position.y - actionPosition.y,
+  )
+  const legalContactDistance = 25
+    + settledEnemy.config.collisionRadius
+    + NATIVE_ACTOR_SEPARATION_EPSILON
+  assert.ok(
+    actionDistance <= legalContactDistance + 0.0001,
+    `Staff action began outside contact clearance (${actionDistance} > ${legalContactDistance})`,
+  )
   for (let tick = 1; tick < 100; tick += 1) {
-    state = stepGameSimulationTick(state, { caster: gameplayInput(1, 0) })
+    state = stepGameSimulationTick(state, { caster: gameplayInput(0, -1) })
     if (state.primarySpells.transients.some(({ kind }) => kind === 'player-staff-contact')) {
       break
     }
@@ -2247,9 +2267,17 @@ test('Boneyard simulation owns automatic Staff action, contact damage, and retai
   assert.ok(contact && contact.kind === 'player-staff-contact')
   assert.equal(state.world.enemies.actors[0]!.currentHealth, initialHealth - 1)
   assert.equal(getPlayerProgression(state, 'caster').currentMana, initialMana)
-  assert.deepEqual(getPlayerCharacter(state, 'caster').position, actionPosition)
   assert.ok(state.world.enemyEvents.some((event) => (
     event.type === 'enemy-damage-sound' && event.sound === 'bone-crack'
+  )))
+
+  for (let tick = 0; tick < 100; tick += 1) {
+    state = stepGameSimulationTick(state, { caster: gameplayInput(0, 0) })
+    if (!state.primarySpells.transients.some(({ id }) => id === firstAction.id)) break
+  }
+  state = stepGameSimulationTick(state, { caster: gameplayInput(0, 0) })
+  assert.ok(state.primarySpells.transients.some((transient) => (
+    transient.kind === 'player-staff-melee' && transient.id !== firstAction.id
   )))
 })
 
