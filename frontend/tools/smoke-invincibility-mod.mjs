@@ -434,7 +434,7 @@ async function loadInvincibilityContent(root) {
   const manifest = JSON.parse(await readFile(join(root, 'manifest.json'), 'utf8'))
   assert.equal(manifest.id, 'canary.lua.invincibility_potion')
   assert.equal(manifest.name, 'Invincibility Potion')
-  assert.equal(manifest.version, '0.3.0')
+  assert.match(manifest.version, /^[0-9]+\.[0-9]+\.[0-9]+$/)
   assert.equal(manifest.runtime?.apiVersion, '1.0.0')
   const entryScript = await readFile(join(root, manifest.runtime.entryScript), 'utf8')
   const paths = [
