@@ -39,18 +39,21 @@ test('builds every movable in-world Tutorial pointer from its live semantic anch
   assert.deepEqual(nativeTutorialHudAnchorAttributes(3), [])
   assert.deepEqual(nativeTutorialHudPointerPlans(5, ANCHORS), [{
     anchor: 'secondary-slot',
+    blink: true,
     target: ANCHORS.secondarySlot,
     x: 424.5,
     y: 809,
   }])
   assert.deepEqual(nativeTutorialHudPointerPlans(9, ANCHORS), [{
     anchor: 'inventory',
+    blink: true,
     target: ANCHORS.inventory,
     x: 723,
     y: 815,
   }])
   assert.deepEqual(nativeTutorialHudPointerPlans(12, ANCHORS), [{
     anchor: 'skills',
+    blink: true,
     target: ANCHORS.skills,
     x: 883,
     y: 815,
@@ -58,12 +61,14 @@ test('builds every movable in-world Tutorial pointer from its live semantic anch
   assert.deepEqual(nativeTutorialHudPointerPlans(18, ANCHORS), [
     {
       anchor: 'health-potion',
+      blink: true,
       target: ANCHORS.healthPotion,
       x: 627.5,
       y: 828,
     },
     {
       anchor: 'health-meter',
+      blink: true,
       target: ANCHORS.healthMeter,
       x: 595,
       y: 94.5,
@@ -81,6 +86,7 @@ test('omits only the pointer whose live owner is absent', () => {
     healthPotion: null,
   }), [{
     anchor: 'health-meter',
+    blink: true,
     target: ANCHORS.healthMeter,
     x: 595,
     y: 94.5,

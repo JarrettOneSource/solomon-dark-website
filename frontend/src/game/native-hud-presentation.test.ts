@@ -172,7 +172,7 @@ test('derives the Tutorial selected-HUD lesson from the live primary and A recta
   })
   assert.deepEqual(nativeTutorialSelectedHudLayout(primaryAndA), {
     firstLine: { x: 560, y: 75.5 },
-    pointer: { toX: 810, toY: 75.5, x: 800, y: 25.5 },
+    pointer: { toX: 800, toY: 25.5, x: 810, y: 75.5 },
     secondLine: { x: 560, y: 95.5 },
   })
 
@@ -184,7 +184,7 @@ test('derives the Tutorial selected-HUD lesson from the live primary and A recta
   })
   assert.deepEqual(nativeTutorialSelectedHudLayout(splitMind), {
     firstLine: { x: 540, y: 75.5 },
-    pointer: { toX: 790, toY: 75.5, x: 800, y: 25.5 },
+    pointer: { toX: 800, toY: 25.5, x: 790, y: 75.5 },
     secondLine: { x: 540, y: 95.5 },
   })
   assert.equal(nativeTutorialSelectedHudLayout(nativeHudSkillBindings({

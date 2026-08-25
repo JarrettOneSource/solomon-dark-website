@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 
+import type { HubInventoryItem } from './core-kernels/hub-economy.ts'
 import type { NativeTutorialState } from './core-kernels/native-tutorial.ts'
 import {
   NATIVE_TUTORIAL_CUES,
@@ -9,13 +10,19 @@ import {
 } from './core-kernels/native-tutorial.ts'
 import type { GameAudioDirector } from './game-audio-director.ts'
 import { subscribeGamePresentationFrames } from './game-presentation-frame-loop.ts'
+import { nativeApplicationTick } from './native-application-tick.ts'
+import {
+  initialNativeModalSlideProgressSnapshot,
+  nativeModalSlideProgressSnapshot,
+  subscribeNativeModalSlideProgress,
+} from './native-modal-slide-progress.ts'
 import { gameBindingLabel, type GameControlBindings } from './game-settings.ts'
 import type { NativeTutorialSelectedHudLayout } from './native-hud-presentation.ts'
 import NativeBitmapText from './native-ui/NativeBitmapText.tsx'
 import NativeUiNineSlice from './native-ui/NativeUiNineSlice.tsx'
 import NativeUiSprite from './native-ui/NativeUiSprite.tsx'
 import { nativeUiFont, type NativeUiFontName } from './native-ui/native-ui-catalog.ts'
-import { layoutNativeUiText } from './native-ui/native-ui-text.ts'
+import type { ProtocolPlayerProgression } from './protocol/game-state.ts'
 import {
   emptyTutorialHudAnchors,
   nativeTutorialHudAnchorAttributes,
@@ -25,6 +32,14 @@ import {
   type TutorialHudAnchorAttribute,
   type TutorialHudAnchors,
 } from './tutorial-hud-anchors.ts'
+import {
+  TUTORIAL_CALLOUT_FONT,
+  tutorialModalTeachingPlans,
+  tutorialPointerVisible,
+  type TutorialCalloutGeometry,
+  type TutorialModalCalloutId,
+  type TutorialModalPointerId,
+} from './tutorial-modal-callouts.ts'
 import TutorialPrelude from './TutorialPrelude.tsx'
 import './tutorial.css'
 
@@ -49,6 +64,7 @@ export default function TutorialOverlay({
 }: TutorialOverlayProps) {
   const overlayRef = useRef<HTMLDivElement>(null)
   const lastNarrationEventId = useRef(0)
+  const pointerBlink = useTutorialPointerBlink()
   const hudAnchors = useTutorialHudAnchors(overlayRef, state.stage, viewport)
   const hudPointers = nativeTutorialHudPointerPlans(state.stage, hudAnchors)
   const presentation = nativeTutorialPresentation(state, {
@@ -147,7 +163,7 @@ export default function TutorialOverlay({
             font="menu"
             text="primary attack or concentration"
           />
-          <TutorialPointer {...selectedHudLayout.pointer} />
+          <TutorialPointer anchor="selected-skills" {...selectedHudLayout.pointer} visible={pointerBlink} />
         </div>
       ) : null}
       {hudPointers.map((pointer) => (
@@ -158,6 +174,7 @@ export default function TutorialOverlay({
           y={pointer.y}
           toX={pointer.target.x}
           toY={pointer.target.y}
+          visible={pointer.blink ? pointerBlink : true}
         />
       ))}
       {(state.stage === 8 || state.stage === 17) && worldPointerTarget ? (
@@ -167,7 +184,7 @@ export default function TutorialOverlay({
           y={worldPointerTarget.y - 60}
           toX={worldPointerTarget.x}
           toY={worldPointerTarget.y}
-          visible={state.stageTicks % 50 > 19}
+          visible={pointerBlink}
         />
       ) : null}
     </div>
@@ -175,72 +192,88 @@ export default function TutorialOverlay({
 }
 
 export function TutorialModalCallouts({
+  backpack,
   controls,
+  progression,
   stage,
 }: {
+  readonly backpack: readonly HubInventoryItem[]
   readonly controls: GameControlBindings
+  readonly progression: ProtocolPlayerProgression
   readonly stage: NativeTutorialState['stage']
 }) {
+  const pointerBlink = useTutorialPointerBlink()
+  const modalSlides = useSyncExternalStore(
+    subscribeNativeModalSlideProgress,
+    nativeModalSlideProgressSnapshot,
+    initialNativeModalSlideProgressSnapshot,
+  )
   if (stage !== 10 && stage !== 13) return null
-  const resume = `Click here or press '${gameBindingLabel(
-    stage === 10 ? controls.openInventory : controls.openSkills,
-  )}'\nagain to resume playing`
+  const modalProgress = modalSlides[stage === 10 ? 'inventory' : 'skills']
+  const plans = tutorialModalTeachingPlans({
+    backpack,
+    modalProgress,
+    progression,
+    resumeBindingLabel: gameBindingLabel(stage === 10 ? controls.openInventory : controls.openSkills),
+    stage,
+  })
   return (
-    <div className="tutorial-modal-callouts" data-stage={stage}>
-      <TutorialCallout className="tutorial-callout-resume" text={resume} />
-      <TutorialPointer x={1490} y={105} toX={1550} toY={45} />
-      {stage === 10 ? (
-        <>
-          <TutorialCallout className="tutorial-callout-quick-use" text={'Put items here\nfor quick use'} />
-          <TutorialCallout className="tutorial-callout-equipment" text={'Put equippable items\nhere to wear them.'} />
-          <TutorialCallout className="tutorial-callout-backpack" text={'Found items go in your backpack.  Click and\ndrag to move items, double-click to use them.'} />
-          <TutorialPointer x={480} y={800} toX={480} toY={860} />
-          <TutorialPointer x={1320} y={340} toX={1380} toY={340} />
-          <TutorialPointer x={1020} y={630} toX={1060} toY={670} />
-        </>
+    <div
+      className="tutorial-modal-callouts"
+      data-modal-progress={modalProgress}
+      data-stage={stage}
+    >
+      {plans.map((plan) => (plan.kind === 'callout' ? (
+        <TutorialCallout geometry={plan.geometry} id={plan.id} key={`callout:${plan.id}`} />
       ) : (
-        <>
-          <TutorialCallout className="tutorial-callout-quick-use" text={'Drag skills here\nfor quick use'} />
-          <TutorialCallout className="tutorial-callout-concentration" text={'You are CONCENTRATING on\nyour new skill automatically\n\nThis confers a bonus, but is\nlimited to one skill at a time.'} />
-          <TutorialCallout className="tutorial-callout-hover" text={'Hover your mouse over a\nskill icon for more information.'} />
-          <TutorialPointer x={480} y={800} toX={480} toY={860} />
-          <TutorialPointer x={800} y={145} toX={800} toY={85} />
-          <TutorialPointer x={1160} y={360} toX={1220} toY={360} />
-        </>
-      )}
+        <TutorialPointer
+          anchor={`modal-${plan.id}`}
+          key={`pointer:${plan.id}`}
+          toX={plan.toX}
+          toY={plan.toY}
+          visible={plan.blink ? pointerBlink : true}
+          x={plan.x}
+          y={plan.y}
+        />
+      )))}
     </div>
   )
 }
 
-function TutorialCallout({ className, text }: { className: string; text: string }) {
-  const layout = layoutNativeUiText({
-    align: 'center',
-    font: 'menu',
-    text,
-    tint: TUTORIAL_GOLD,
-    x: 0,
-    y: nativeUiFont('menu').metrics[0] / 2,
-  })
-  const width = layout.width + 20
-  const height = layout.height + 28
+function TutorialCallout({
+  geometry,
+  id,
+}: {
+  readonly geometry: TutorialCalloutGeometry
+  readonly id: TutorialModalCalloutId
+}) {
+  const { frame, lines } = geometry
+  const glyphHalfHeight = nativeUiFont(TUTORIAL_CALLOUT_FONT).metrics[0] / 2
   return (
-    <div className={`tutorial-callout ${className}`} style={{ height, width }}>
+    <div
+      className="tutorial-callout"
+      data-center-x={geometry.centerX}
+      data-center-y={geometry.centerY}
+      data-tutorial-callout={id}
+      style={{ height: frame.height, left: frame.x, top: frame.y, width: frame.width }}
+    >
       <NativeUiNineSlice
         atlas="UI"
-        height={height}
+        height={frame.height}
         record={4}
         style={{ left: 0, top: 0 }}
-        width={width}
+        width={frame.width}
       />
-      <NativeBitmapText
-        align="center"
-        className="tutorial-callout-text"
-        font="menu"
-        style={{ left: 10, top: 11.75 }}
-        text={text}
-        tint={TUTORIAL_GOLD}
-        width={layout.width}
-      />
+      {lines.map((line, index) => (
+        <NativeBitmapText
+          className="tutorial-callout-text"
+          font={TUTORIAL_CALLOUT_FONT}
+          key={`${index}:${line.text}`}
+          style={{ left: line.x - frame.x, top: line.y - frame.y - glyphHalfHeight }}
+          text={line.text}
+          tint={TUTORIAL_GOLD}
+        />
+      ))}
     </div>
   )
 }
@@ -295,7 +328,11 @@ function TutorialPointer({
   x,
   y,
 }: {
-  readonly anchor?: TutorialHudAnchorAttribute | 'selected-skills' | 'world-sack'
+  readonly anchor?:
+    | TutorialHudAnchorAttribute
+    | 'selected-skills'
+    | 'world-sack'
+    | `modal-${TutorialModalPointerId}`
   readonly toX: number
   readonly toY: number
   readonly visible?: boolean
@@ -324,6 +361,29 @@ function TutorialPointer({
       <NativeUiSprite atlas="UI" record={28} />
     </span>
   )
+}
+
+/**
+ * `0x005C9BB0` blink state: the pointer is drawn iff `App+0x28 % 50 > 19`,
+ * where `App+0x28` is the never-paused 100 Hz application tick. The web
+ * derives that tick from the presentation clock (never from `stageTicks`,
+ * which the single-player modal pause freezes) and re-renders only on the
+ * hidden/visible edges.
+ */
+function useTutorialPointerBlink(): boolean {
+  const [visible, setVisible] = useState(
+    () => tutorialPointerVisible(true, nativeApplicationTick(performance.now())),
+  )
+  const visibleRef = useRef(visible)
+
+  useEffect(() => subscribeGamePresentationFrames((now) => {
+    const next = tutorialPointerVisible(true, nativeApplicationTick(now))
+    if (next === visibleRef.current) return
+    visibleRef.current = next
+    setVisible(next)
+  }), [])
+
+  return visible
 }
 
 function useTutorialHudAnchors(

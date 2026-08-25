@@ -36,6 +36,8 @@ export type TutorialPointerAnchor = TutorialHudAnchorAttribute
 
 export interface TutorialPointerPlan {
   readonly anchor: TutorialPointerAnchor
+  /** `0x005C9BB0` blink argument; every stock HUD pointer pushes 1. */
+  readonly blink: boolean
   readonly target: TutorialPoint
   readonly x: number
   readonly y: number
@@ -90,6 +92,12 @@ export function tutorialClientRectAnchor(
   })
 }
 
+/**
+ * `Tutorial::Render 0x005D08C0` HUD pointers. Every call site pushes
+ * `blink = 1`: stage 5 `0x005D0EFA`, stage 9 `0x005D11F8` (shared by stage 12
+ * through the `0x005D188D` push and `jmp 0x005D11E2`), stage 18 `0x005D21BE`
+ * and `0x005D2274`.
+ */
 export function nativeTutorialHudPointerPlans(
   stage: NativeTutorialStage,
   anchors: TutorialHudAnchors,
@@ -97,23 +105,23 @@ export function nativeTutorialHudPointerPlans(
   switch (stage) {
     case 5:
       return anchors.secondarySlot
-        ? Object.freeze([pointer('secondary-slot', anchors.secondarySlot, -70, -50)])
+        ? Object.freeze([pointer('secondary-slot', anchors.secondarySlot, -70, -50, true)])
         : Object.freeze([])
     case 9:
       return anchors.inventory
-        ? Object.freeze([pointer('inventory', anchors.inventory, -40, -40)])
+        ? Object.freeze([pointer('inventory', anchors.inventory, -40, -40, true)])
         : Object.freeze([])
     case 12:
       return anchors.skills
-        ? Object.freeze([pointer('skills', anchors.skills, 40, -40)])
+        ? Object.freeze([pointer('skills', anchors.skills, 40, -40, true)])
         : Object.freeze([])
     case 18: {
       const plans: TutorialPointerPlan[] = []
       if (anchors.healthPotion) {
-        plans.push(pointer('health-potion', anchors.healthPotion, -50, -30))
+        plans.push(pointer('health-potion', anchors.healthPotion, -50, -30, true))
       }
       if (anchors.healthMeter) {
-        plans.push(pointer('health-meter', anchors.healthMeter, -100, 70))
+        plans.push(pointer('health-meter', anchors.healthMeter, -100, 70, true))
       }
       return Object.freeze(plans)
     }
@@ -136,9 +144,11 @@ function pointer(
   target: TutorialPoint,
   offsetX: number,
   offsetY: number,
+  blink: boolean,
 ): TutorialPointerPlan {
   return Object.freeze({
     anchor,
+    blink,
     target,
     x: target.x + offsetX,
     y: target.y + offsetY,

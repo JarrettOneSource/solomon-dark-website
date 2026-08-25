@@ -28,7 +28,6 @@ export const NATIVE_SKILL_SCREEN_ROOT = Object.freeze({
   leatherHeight: 760,
   leatherRecord: 49,
   leatherTop: 50,
-  liveHudArtOffsetY: 16.5,
   titleBacking: Object.freeze({ height: 34, width: 114, x: 743, y: 34 }),
   titleTint: 0x808080,
   titleY: 60,

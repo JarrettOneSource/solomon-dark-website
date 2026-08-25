@@ -77,7 +77,6 @@
 
 .tutorial-callout {
   position: absolute;
-  overflow: hidden;
 }
 
 .tutorial-callout-text,
@@ -88,10 +87,3 @@
 .tutorial-selected-hud-lesson {
   inset: 0;
 }
-
-.tutorial-callout-resume { top: 105px; right: 42px; }
-.tutorial-callout-quick-use { bottom: 96px; left: 250px; }
-.tutorial-callout-equipment { top: 260px; right: 65px; }
-.tutorial-callout-backpack { bottom: 195px; right: 265px; }
-.tutorial-callout-concentration { top: 205px; left: 50%; transform: translateX(-50%); }
-.tutorial-callout-hover { top: 310px; right: 95px; }

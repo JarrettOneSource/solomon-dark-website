@@ -36,7 +36,11 @@ test('renders exact stock UI records for the prelude and blinking lesson pointer
   assert.deepEqual(nativeUi.atlases.UI.records['4'], {
     frame: [241, 720, 20, 20], logicalSize: [20, 20], points: [], rotated: false, trimOrigin: [0, 0],
   })
-  assert.match(overlay, /state\.stageTicks % 50 > 19/)
+  assert.match(overlay, /const pointerBlink = useTutorialPointerBlink\(\)/)
+  assert.match(overlay, /tutorialPointerVisible\(true, nativeApplicationTick\(now\)\)/)
+  assert.match(overlay, /anchor="world-sack"[\s\S]*?visible=\{pointerBlink\}/)
+  assert.match(overlay, /visible=\{pointer\.blink \? pointerBlink : true\}/)
+  assert.doesNotMatch(overlay, /stageTicks % 50/)
   assert.match(overlay, /nativeTutorialHudPointerPlans\(state\.stage, hudAnchors\)/)
   assert.match(overlay, /data-heading-baseline=\{instructionBaselines\?\.heading\}/)
   assert.match(overlay, /viewport\.height - 50/)
@@ -56,7 +60,9 @@ test('uses the stock MsgBox offer and common-gold teaching family', () => {
   assert.match(overlay, /baseline=\{instructionBaselines!\.heading\}[\s\S]*?font="heading"/)
   assert.match(overlay, /const TUTORIAL_GOLD = 0xd9ba70/)
   assert.match(overlay, /centerX \+ 2\.25[\s\S]*calc\(\$\{centerX\} \+ 2\.25px\)/)
-  assert.match(overlay, /style=\{\{ left: 10, top: 11\.75 \}\}/)
+  assert.match(overlay, /tutorialModalTeachingPlans\(\{/)
+  assert.match(overlay, /top: line\.y - frame\.y - glyphHalfHeight/)
+  assert.doesNotMatch(overlay, /top: 11\.75|layoutNativeUiText/)
   assert.doesNotMatch(css, /tutorial-instruction[^{]*\{[^}]*drop-shadow/)
   assert.match(css, /\.tutorial-overlay\s*\{[^}]*width:\s*100%;[^}]*height:\s*100%;/s)
   assert.match(css, /\.tutorial-prelude\s*\{[^}]*width:\s*100%;[^}]*height:\s*100%;/s)
@@ -75,7 +81,8 @@ test('owns responsive Tutorial targets at the HUD controls instead of fixed coor
   assert.doesNotMatch(overlay, /state\.stage === 12 \? <TutorialPointer x=\{843\}/)
 })
 
-test('keeps every recovered modal teaching literal in the Tutorial overlay', () => {
+test('keeps every recovered modal teaching literal in the modal callout model', () => {
+  const model = source('./tutorial-modal-callouts.ts')
   const overlay = source('./TutorialOverlay.tsx')
   for (const literal of [
     'again to resume playing',
@@ -86,10 +93,12 @@ test('keeps every recovered modal teaching literal in the Tutorial overlay', () 
     'You are CONCENTRATING on',
     'limited to one skill at a time',
     'skill icon for more information',
-    'primary attack or concentration',
-  ]) assert.match(overlay, new RegExp(literal))
+  ]) assert.match(model, new RegExp(literal))
+  assert.match(overlay, /primary attack or concentration/)
   assert.match(overlay, /state\.stage === 8 \|\| state\.stage === 17/)
+  assert.doesNotMatch(overlay, /Put items here|Drag skills here|again to resume playing/)
   assert.doesNotMatch(overlay, /equip (?:the )?Sorceror's Amulet/i)
+  assert.doesNotMatch(model, /equip (?:the )?Sorceror's Amulet/i)
 })
 
 test('mounts modal callouts from the live Boneyard Tutorial owner', () => {
@@ -97,9 +106,25 @@ test('mounts modal callouts from the live Boneyard Tutorial owner', () => {
   const menu = source('./MainMenuScene.tsx')
   assert.match(
     boneyard,
-    /tutorial && \(tutorial\.stage === 10 \|\| tutorial\.stage === 13\)[\s\S]*?<TutorialModalCallouts controls=\{settings\.controls\} stage=\{tutorial\.stage\} \/>/,
+    /tutorial && \(tutorial\.stage === 10 \|\| tutorial\.stage === 13\)[\s\S]*?<TutorialModalCallouts[\s\S]*?backpack=\{economy\.backpack\}[\s\S]*?controls=\{settings\.controls\}[\s\S]*?progression=\{progression\}[\s\S]*?stage=\{tutorial\.stage\}[\s\S]*?\/>/,
   )
+  assert.doesNotMatch(boneyard, /stageTicks=\{tutorial\.stageTicks\}/)
   assert.doesNotMatch(menu, /TutorialModalCallouts/)
+})
+
+test('shares each native modal slide with its Tutorial anchors and leaves at close start', () => {
+  const inventory = source('./HubInventoryUi.tsx')
+  const menu = source('./MainMenuScene.tsx')
+  const overlay = source('./TutorialOverlay.tsx')
+  const skillBook = source('./SkillBook.tsx')
+  assert.match(inventory, /setNativeModalSlideProgress\('inventory', reveal\)/)
+  assert.match(skillBook, /setNativeModalSlideProgress\('skills', progress\)/)
+  assert.match(overlay, /useSyncExternalStore\([\s\S]*?nativeModalSlideProgressSnapshot/)
+  assert.match(overlay, /modalProgress: modalProgress|modalProgress,/)
+  assert.match(
+    menu,
+    /onCloseStart=\{\(\) => \{[\s\S]*?sendTutorialAction\('skills-closed'\)/,
+  )
 })
 
 test('owns the stage-14 acknowledgement edge and live selected-HUD geometry', () => {
@@ -112,7 +137,10 @@ test('owns the stage-14 acknowledgement edge and live selected-HUD geometry', ()
   )
   assert.match(overlay, /baseline=\{selectedHudLayout\.firstLine\.y\}/)
   assert.match(overlay, /baseline=\{selectedHudLayout\.secondLine\.y\}/)
-  assert.match(overlay, /<TutorialPointer \{\.\.\.selectedHudLayout\.pointer\} \/>/)
+  assert.match(
+    overlay,
+    /<TutorialPointer anchor="selected-skills" \{\.\.\.selectedHudLayout\.pointer\} visible=\{pointerBlink\} \/>/,
+  )
   assert.doesNotMatch(overlay, /state\.stage === 14[\s\S]{0,300}<TutorialPointer x=\{800\}/)
   assert.match(
     scene,
@@ -123,4 +151,6 @@ test('owns the stage-14 acknowledgement edge and live selected-HUD geometry', ()
     /binding === 16[\s\S]*sendTutorialAction\('concentration-a-selector-opened'\)/,
   )
   assert.doesNotMatch(css, /tutorial-callout-primary/)
+  assert.doesNotMatch(css, /tutorial-callout-(?:resume|quick-use|equipment|backpack|concentration|hover)/)
+  assert.doesNotMatch(css, /\.tutorial-callout \{[^}]*overflow/)
 })

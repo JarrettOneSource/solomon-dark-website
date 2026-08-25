@@ -1783,10 +1783,12 @@ export default function MainMenuScene({
               economy={runtimeSnapshot!.players[session.playerId]!.economy}
               onAssignQuickbarSkill={session.bindSkillQuickbar}
               onClose={() => {
+                setSkillBookOpen(false)
+              }}
+              onCloseStart={() => {
                 if (runtimeSnapshot?.world.kind === 'boneyard' && runtimeSnapshot.world.tutorial) {
                   session.sendTutorialAction('skills-closed')
                 }
-                setSkillBookOpen(false)
               }}
               onOpenInventory={() => {
                 setInventoryScreenOpen(true)

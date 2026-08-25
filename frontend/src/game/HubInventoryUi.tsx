@@ -42,6 +42,7 @@ import type { HubMemorialState } from './core-kernels/hub-memorial.ts'
 import type { Vector2 } from './core-kernels/vector.ts'
 import type { GameAudioDirector } from './game-audio-director.ts'
 import { subscribeGamePresentationFrames } from './game-presentation-frame-loop.ts'
+import { setNativeModalSlideProgress } from './native-modal-slide-progress.ts'
 import ContextualInteractButton from './ContextualInteractButton.tsx'
 import {
   HUB_INTERACTION_DIALOGUES,
@@ -464,6 +465,11 @@ function NativeHubSurface({
   const [dyeModal, setDyeModal] = useState<HubInventoryDyeModalModel | null>(null)
   const feedbackSequenceRef = useRef(economy.actionFeedback?.sequence ?? 0)
 
+  useLayoutEffect(() => {
+    if (surface.kind !== 'inventory') return
+    setNativeModalSlideProgress('inventory', 0)
+  }, [surface.kind])
+
   useEffect(() => {
     if (chat.content.kind !== 'speech' || chat.content.key !== 'ARCH_INTRO_0') return
     audio.playStream('arch-intro-0')
@@ -768,10 +774,9 @@ function NativeHubSurface({
       const step = surface.kind === 'dialogue'
         ? HUB_NATIVE_UI_TIMING.chatRevealPerTick
         : HUB_NATIVE_UI_TIMING.inventoryRevealPerTick
-      const frame = renderer.render(
-        nowMs,
-        hubNativeUiReveal(nowMs - revealStartedAtRef.current, step),
-      )
+      const reveal = hubNativeUiReveal(nowMs - revealStartedAtRef.current, step)
+      if (surface.kind === 'inventory') setNativeModalSlideProgress('inventory', reveal)
+      const frame = renderer.render(nowMs, reveal)
       const current = modelRef.current
       if (frame.chatComplete && current?.kind === 'dialogue'
         && current.content.kind === 'speech' && !chatCompletionHandledRef.current) {

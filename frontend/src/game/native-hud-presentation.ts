@@ -105,11 +105,15 @@ export function nativeTutorialSelectedHudLayout(
       x: primaryCenter.x - 220,
       y: primaryCenter.y + 50,
     }),
+    // Tutorial::Render stage 14 (0x005D1D36..0x005D1DE9): 0x005C9BB0 draws
+    // the sprite at the first pair, primary centre + (30, 50), rotated toward
+    // the second pair, the midpoint of the primary and concentration-A
+    // centres; blink = 1.
     pointer: Object.freeze({
-      toX: primaryCenter.x + 30,
-      toY: primaryCenter.y + 50,
-      x: (primaryCenter.x + concentrationCenter.x) * 0.5,
-      y: (primaryCenter.y + concentrationCenter.y) * 0.5,
+      toX: (primaryCenter.x + concentrationCenter.x) * 0.5,
+      toY: (primaryCenter.y + concentrationCenter.y) * 0.5,
+      x: primaryCenter.x + 30,
+      y: primaryCenter.y + 50,
     }),
     secondLine: Object.freeze({
       x: primaryCenter.x - 220,

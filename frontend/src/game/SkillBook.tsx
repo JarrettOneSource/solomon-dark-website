@@ -12,6 +12,7 @@ import {
 import { NATIVE_SKILL_CATALOG } from './core-kernels/player-progression.ts'
 import type { GameAudioDirector } from './game-audio-director.ts'
 import { subscribeGamePresentationFrames } from './game-presentation-frame-loop.ts'
+import { setNativeModalSlideProgress } from './native-modal-slide-progress.ts'
 import type {
   ProtocolPlayerEconomy,
   ProtocolPlayerProgression,
@@ -34,6 +35,7 @@ interface SkillBookProps {
   economy: ProtocolPlayerEconomy
   onAssignQuickbarSkill: (skillId: number, slot: number) => void
   onClose: () => void
+  onCloseStart?: () => void
   onOpenInventory: () => void
   onSelectConcentration: (skillId: number) => void
   onSelectPrimarySkill: (skillId: number) => void
@@ -49,6 +51,7 @@ export default function SkillBook({
   economy: initialEconomy,
   onAssignQuickbarSkill,
   onClose,
+  onCloseStart,
   onOpenInventory,
   onSelectConcentration,
   onSelectPrimarySkill,
@@ -76,6 +79,7 @@ export default function SkillBook({
   const transitionStartedAtRef = useRef(performance.now())
   const transitionStartProgressRef = useRef(0)
   const closeCompletedRef = useRef(false)
+  const closeStartedRef = useRef(false)
   const closeTargetRef = useRef<'closed' | 'inventory'>('closed')
   const presentationRef = useRef<SkillBookRendererPresentation>({
     draggedSkillId,
@@ -95,6 +99,10 @@ export default function SkillBook({
     progression,
     targetQuickbarSlot,
   }
+
+  useLayoutEffect(() => {
+    setNativeModalSlideProgress('skills', 0)
+  }, [])
 
   useEffect(() => subscribeSnapshot((snapshot) => {
     const player = snapshot.players[playerId]
@@ -117,6 +125,7 @@ export default function SkillBook({
     const progress = phase === 'opening'
       ? Math.min(1, transitionStartProgressRef.current + ticks * 0.025)
       : Math.max(0, transitionStartProgressRef.current - ticks * 0.025)
+    setNativeModalSlideProgress('skills', progress)
     setOpenProgress(progress)
     if (phase === 'opening' && progress === 1) setPhase('settled')
     if (phase === 'closing' && progress === 0 && !closeCompletedRef.current) {
@@ -192,7 +201,9 @@ export default function SkillBook({
   }
 
   const beginClose = (target: 'closed' | 'inventory' = 'closed') => {
-    if (phase === 'closing') return
+    if (closeStartedRef.current) return
+    closeStartedRef.current = true
+    onCloseStart?.()
     closeTargetRef.current = target
     transitionStartProgressRef.current = openProgress
     transitionStartedAtRef.current = performance.now()
@@ -230,6 +241,7 @@ export default function SkillBook({
       aria-label="Skills"
       tabIndex={-1}
       data-transition-phase={phase}
+      data-open-progress={openProgress}
       data-renderer-state={rendererState}
       onKeyDown={handleKeyDown}
     >

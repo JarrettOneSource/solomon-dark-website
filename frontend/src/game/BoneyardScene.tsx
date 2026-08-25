@@ -1166,7 +1166,12 @@ export default function BoneyardScene({
           className="main-menu-native-stage tutorial-modal-callout-stage"
           style={nativeUiStageStyle}
         >
-          <TutorialModalCallouts controls={settings.controls} stage={tutorial.stage} />
+          <TutorialModalCallouts
+            backpack={economy.backpack}
+            controls={settings.controls}
+            progression={progression}
+            stage={tutorial.stage}
+          />
         </div>
       ) : null}
     </div>

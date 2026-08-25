@@ -149,6 +149,10 @@ test('renderer owns the complete stock root, page-wide panels, row frames, and H
   assert.match(renderer, /drawNativeHoverBox/)
   assert.match(renderer, /selection === 'primary' \? 'casting' : 'concentrate'/)
   assert.match(renderer, /\? 'primary cast'/)
+  assert.match(renderer, /nativeHudModalSlideLayout\([\s\S]*?progress[\s\S]*?\)/)
+  assert.doesNotMatch(renderer, /QUICKBAR_SLOT_[XY]|liveHudArtOffsetY/)
+  assert.match(component, /setNativeModalSlideProgress\('skills', progress\)/)
+  assert.match(component, /data-open-progress=\{openProgress\}/)
   assert.doesNotMatch(renderer, /roundRect/)
   assert.doesNotMatch(renderer, /nativeTooltipStatLines/)
   assert.match(
@@ -214,7 +218,6 @@ test('pins the omitted native root and page-wide render contract', () => {
   assert.equal(NATIVE_SKILL_ROW_PRESENTATION.selectedFrameTint, 0x97c797)
   assert.equal(NATIVE_SKILL_ROW_PRESENTATION.textShadowOffset, 1)
   assert.equal(NATIVE_SKILL_ROW_PRESENTATION.textWrapWidth, 140)
-  assert.equal(NATIVE_SKILL_SCREEN_ROOT.liveHudArtOffsetY, 16.5)
   assert.equal(nativeSkillPageTint(0), 0x886688)
   assert.equal(nativeSkillPageTint(1), 0x998077)
   assert.deepEqual(NATIVE_SKILL_HOVER_BOX, {

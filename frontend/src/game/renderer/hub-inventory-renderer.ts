@@ -31,6 +31,12 @@ import {
   type HubNpcChatContent,
   type HubNpcSelectorRow,
 } from '../hub-npc-dialogue.ts'
+import {
+  NATIVE_HUD_BACKBUFFER,
+  nativeHudModalSlideLayout,
+  nativeHudModalSlideOffset,
+  nativeHudRectCenter,
+} from '../native-hud-layout.ts'
 import { playerCharacterStaffIsFront, playerCharacterStaffOrbOffset } from '../player-character-presentation.ts'
 import type { ProtocolPlayerEconomy, ProtocolPlayerProgression } from '../protocol/game-state.ts'
 import type { GameModAsset } from '../protocol/game-protocol.ts'
@@ -278,6 +284,7 @@ export async function createHubInventoryRenderer(
   let playerPreviewVfx: NativeElementVfxView | null = null
   let inventoryDragger: Container | null = null
   let inventoryItemInfo: Container | null = null
+  let modalHud: Container | null = null
   let unforgeTarget: Sprite | null = null
   let previousNoticeTitle: string | null = null
   let currentModel: HubInventoryRendererModel | null = null
@@ -316,9 +323,11 @@ export async function createHubInventoryRenderer(
       if (destroyed) return { chatComplete: false }
       const clampedReveal = Math.max(0, Math.min(1, reveal))
       gpu.canvas.dataset.nativeReveal = clampedReveal >= 1 ? 'settled' : 'revealing'
+      gpu.canvas.dataset.nativeRevealProgress = `${clampedReveal}`
       dimmer.alpha = curtainAlpha * clampedReveal
       surface.alpha = clampedReveal
       surface.y = 0
+      if (modalHud) modalHud.position.y = nativeHudModalSlideOffset(clampedReveal)
       if (serviceOverlay) serviceOverlay.y = currentKind === 'service'
         ? hubShopSlideOffset(clampedReveal)
         : 0
@@ -449,6 +458,7 @@ export async function createHubInventoryRenderer(
       playerPreviewVfx = null
       inventoryDragger = null
       inventoryItemInfo = null
+      modalHud = null
       unforgeTarget = null
       surface.removeChildren().forEach((child) => child.destroy({ children: true }))
       if (model.kind === 'inventory') {
@@ -456,6 +466,7 @@ export async function createHubInventoryRenderer(
         playerPreviewVfx = inventory.playerPreview
         inventoryDragger = inventory.dragger
         inventoryItemInfo = inventory.itemInfo
+        modalHud = inventory.modalHud
       }
       else if (model.kind === 'dialogue') chatRenderState = buildDialogue(context, surface, model)
       else {
@@ -463,6 +474,7 @@ export async function createHubInventoryRenderer(
         serviceOverlay = service.overlay
         inventoryDragger = service.dragger
         inventoryItemInfo = service.itemInfo
+        modalHud = service.modalHud
         dowsingFieldTiles = serviceOverlay.children.filter(
           (child): child is Sprite => child instanceof Sprite && child.label === 'native-dowsing-field',
         )
@@ -503,6 +515,7 @@ interface ChatRenderState {
 interface InventoryBuildState {
   readonly dragger: Container | null
   readonly itemInfo: Container | null
+  readonly modalHud: Container
   readonly playerPreview: NativeElementVfxView | null
 }
 
@@ -570,7 +583,12 @@ function buildInventory(
   }
 
   addGold(context, layer, economy.gold)
-  addBelt(context, layer, projectedBackpack.map(({ item }) => item), model.config.element)
+  const modalHud = addBelt(
+    context,
+    layer,
+    projectedBackpack.map(({ item }) => item),
+    model.config.element,
+  )
   const unforgeTarget = addCenteredAtlasSprite(
     context,
     layer,
@@ -633,7 +651,7 @@ function buildInventory(
   const dragger = dragging
     ? addInventoryDragger(context, layer, inventoryItemForDrag(economy, dragging), dragging, model.config.element)
     : null
-  return { dragger, itemInfo, playerPreview }
+  return { dragger, itemInfo, modalHud, playerPreview }
 }
 
 function addInventorySidePanel(
@@ -883,18 +901,34 @@ function addBelt(
   layer: Container,
   backpack: readonly HubInventoryItem[],
   element: WizardElement,
-): void {
+): Container {
   const potions = backpack.filter((item) => item.kind.includes('potion')).slice(0, 2)
-  const centers = [494.5, 554.5, 614.5, 674.5, 924.5, 984.5, 1044.5, 1104.5]
-  centers.forEach((x, index) => {
-    addCenteredAtlasSprite(context, layer, 'UI', 2, x, 874)
+  const hudLayer = new Container()
+  hudLayer.label = 'native-modal-hud'
+  layer.addChild(hudLayer)
+  const hud = nativeHudModalSlideLayout(
+    NATIVE_HUD_BACKBUFFER.width,
+    NATIVE_HUD_BACKBUFFER.height,
+    0,
+  )
+  hud.belt.forEach((slot, index) => {
+    const { x, y } = nativeHudRectCenter(slot)
+    addCenteredAtlasSprite(context, hudLayer, 'UI', 2, x, y)
     const item = index === 3 ? potions[0] : index === 4 ? potions[1] : null
-    if (item) addItemIcon(context, layer, item, x, 874, element)
+    if (item) addItemIcon(context, hudLayer, item, x, y, element)
   })
   addCenteredAtlasSprite(context, layer, 'UI', 82, 800.5, 872)
-  for (const [record, x, y] of [[47, 764.5, 876], [47, 759.5, 871], [48, 844.5, 876], [48, 839.5, 871]] as const) {
-    addCenteredAtlasSprite(context, layer, 'UI', record, x, y)
+  const backpackCenter = nativeHudRectCenter(hud.backpack)
+  const tomeCenter = nativeHudRectCenter(hud.tome)
+  for (const [record, x, y] of [
+    [47, backpackCenter.x + 5, backpackCenter.y + 5],
+    [47, backpackCenter.x, backpackCenter.y],
+    [48, tomeCenter.x + 5, tomeCenter.y + 5],
+    [48, tomeCenter.x, tomeCenter.y],
+  ] as const) {
+    addCenteredAtlasSprite(context, hudLayer, 'UI', record, x, y)
   }
+  return hudLayer
 }
 
 function buildDialogue(
@@ -1021,7 +1055,12 @@ function buildService(
   context: RenderContext,
   layer: Container,
   model: Extract<HubInventoryRendererModel, { kind: 'service' }>,
-): { readonly dragger: Container | null; readonly itemInfo: Container | null; readonly overlay: Container } {
+): {
+  readonly dragger: Container | null
+  readonly itemInfo: Container | null
+  readonly modalHud: Container
+  readonly overlay: Container
+} {
   const inventory = buildInventory(context, layer, {
     companion: true,
     config: model.config,
@@ -1058,7 +1097,12 @@ function buildService(
     addDoneControl(context, overlay)
     addServiceInspection(context, layer, model)
     if (inventory.dragger) layer.addChild(inventory.dragger)
-    return { dragger: inventory.dragger, itemInfo: inventory.itemInfo, overlay }
+    return {
+      dragger: inventory.dragger,
+      itemInfo: inventory.itemInfo,
+      modalHud: inventory.modalHud,
+      overlay,
+    }
   }
 
   if (model.trader === 'luthacus') {
@@ -1077,7 +1121,12 @@ function buildService(
   addDoneControl(context, overlay)
   addServiceInspection(context, layer, model)
   if (inventory.dragger) layer.addChild(inventory.dragger)
-  return { dragger: inventory.dragger, itemInfo: inventory.itemInfo, overlay }
+  return {
+    dragger: inventory.dragger,
+    itemInfo: inventory.itemInfo,
+    modalHud: inventory.modalHud,
+    overlay,
+  }
 }
 
 function buildDyeClothing(

@@ -16,6 +16,11 @@ import {
   nativeWeldBuild,
   playerExperienceProgress,
 } from '../core-kernels/player-progression.ts'
+import {
+  NATIVE_HUD_BACKBUFFER,
+  nativeHudModalSlideLayout,
+  type NativeHudControlLayout,
+} from '../native-hud-layout.ts'
 import { nativeUiFont } from '../native-ui/native-ui-catalog.ts'
 import {
   destroyNativeUiPixiFor,
@@ -78,9 +83,6 @@ export interface SkillBookRenderer {
   setPresentation(presentation: SkillBookRendererPresentation): void
 }
 
-const QUICKBAR_SLOT_X = [468, 528, 588, 648, 898, 958, 1018, 1078] as const
-const QUICKBAR_SLOT_Y = 832.5
-
 export async function createSkillBookRenderer(): Promise<SkillBookRenderer> {
   let gpu: Awaited<ReturnType<typeof createGameWebGlApplication>> | undefined
   let textures: GameTextureMap | undefined
@@ -124,7 +126,6 @@ export async function createSkillBookRenderer(): Promise<SkillBookRenderer> {
   const overlay = new Container()
   const pages = new Container()
   const hud = new Container()
-  hud.position.y = NATIVE_SKILL_SCREEN_ROOT.liveHudArtOffsetY
   const hover = new Container()
   root.addChild(curtain, ambient, fixtures, field, overlay, pages, hud, hover)
   application.stage.addChild(root)
@@ -173,8 +174,19 @@ export async function createSkillBookRenderer(): Promise<SkillBookRenderer> {
       for (const placement of presentation.placements) {
         drawSkillPage(pages, resources, placement, presentation)
       }
-      drawSkillQuickbar(hud, resources, presentation)
-      drawInventoryHud(hud, resources, presentation.economy, presentation.progression)
+      const hudLayout = nativeHudModalSlideLayout(
+        NATIVE_HUD_BACKBUFFER.width,
+        NATIVE_HUD_BACKBUFFER.height,
+        progress,
+      )
+      drawSkillQuickbar(hud, resources, presentation, hudLayout)
+      drawInventoryHud(
+        hud,
+        resources,
+        presentation.economy,
+        presentation.progression,
+        hudLayout,
+      )
       drawNativeHoverBox(hover, resources, presentation)
       renderer.render(performance.now())
     },
@@ -678,12 +690,14 @@ function drawSkillQuickbar(
   layer: Container,
   textures: GameTextureMap,
   presentation: SkillBookRendererPresentation,
+  hudLayout: NativeHudControlLayout,
 ): void {
   presentation.progression.skillQuickbar.forEach((skillId, slot) => {
-    const x = QUICKBAR_SLOT_X[slot]!
+    const rect = hudLayout.belt[slot]!
+    const { height, width, x, y } = rect
     const selectedPrimary = skillId === presentation.progression.selectedPrimarySkillId
     layer.addChild(new Graphics()
-      .rect(x, QUICKBAR_SLOT_Y, 53, 53)
+      .rect(x, y, width, height)
       .fill({ alpha: 0.78, color: 0x050505 })
       .stroke({
         alpha: 0.72,
@@ -701,14 +715,14 @@ function drawSkillQuickbar(
           : null
         const icon = spriteFor(textures, 'Skills', weld?.skillsAtlasIconRecord ?? record)
         icon.anchor.set(0.5)
-        icon.position.set(x + 26.5, QUICKBAR_SLOT_Y + 26.5)
+        icon.position.set(x + width / 2, y + height / 2)
         icon.alpha = 0.375
         layer.addChild(icon)
       }
     }
     if (presentation.draggedSkillId !== null && slot === presentation.targetQuickbarSlot) {
       layer.addChild(new Graphics()
-        .rect(x - 3, QUICKBAR_SLOT_Y - 3, 59, 59)
+        .rect(x - 3, y - 3, width + 6, height + 6)
         .stroke({ color: 0x40ffff, width: 1 }))
     }
   })
@@ -719,6 +733,7 @@ function drawInventoryHud(
   textures: GameTextureMap,
   economy: ProtocolPlayerEconomy,
   progression: ProtocolPlayerProgression,
+  hudLayout: NativeHudControlLayout,
 ): void {
   const image = (source: string, x: number, y: number, width: number, height: number) => {
     const sprite = new Sprite(textureFrom(textures.textures, source))
@@ -728,27 +743,32 @@ function drawInventoryHud(
     layer.addChild(sprite)
     return sprite
   }
-  image(hub.hud.potionRed, 651, 833, 53, 50)
-  image(hub.hud.backpack, 734, 824, 58, 62)
-  const xpFill = image(hub.hud.xpFill, 801.5, 832, 4, 48)
+  const { backpack, belt, tome } = hudLayout
+  const redSlot = belt[3]!
+  const blueSlot = belt[4]!
+  image(hub.hud.potionRed, redSlot.x + 3, redSlot.y + 0.5, 53, 50)
+  image(hub.hud.backpack, backpack.x, backpack.y, backpack.width, backpack.height)
+  const xpFillX = backpack.x + 67.5
+  const xpFillY = backpack.y + 8
+  const xpFill = image(hub.hud.xpFill, xpFillX, xpFillY, 4, 48)
   const xpProgress = playerExperienceProgress(progression)
   const xpMask = new Graphics()
-    .rect(801.5, 832 + (1 - xpProgress) * 48, 4, xpProgress * 48)
+    .rect(xpFillX, xpFillY + (1 - xpProgress) * 48, 4, xpProgress * 48)
     .fill(0xffffff)
   layer.addChild(xpMask)
   xpFill.mask = xpMask
-  image(hub.hud.xpFrame, 798, 828, 12, 56)
-  image(hub.hud.tome, 814, 824, 58, 62)
-  image(hub.hud.potionBlue, 903, 833, 50, 49)
+  image(hub.hud.xpFrame, backpack.x + 64, backpack.y + 4, 12, 56)
+  image(hub.hud.tome, tome.x, tome.y, tome.width, tome.height)
+  image(hub.hud.potionBlue, blueSlot.x + 5, blueSlot.y + 0.5, 50, 49)
   const counts = [
-    { count: inventoryQuantity(economy, 'health-potion'), x: 672 },
-    { count: inventoryQuantity(economy, 'mana-potion'), x: 923 },
+    { count: inventoryQuantity(economy, 'health-potion'), x: redSlot.x + 24, y: redSlot.y + 52.5 },
+    { count: inventoryQuantity(economy, 'mana-potion'), x: blueSlot.x + 25, y: blueSlot.y + 52.5 },
   ]
   const digitTexture = textureFrom(textures.textures, hub.hud.inventoryDigits)
-  for (const { count, x } of counts) {
+  for (const { count, x, y } of counts) {
     const frame = new Rectangle(Math.min(9, Math.max(0, count)) * 8, 0, 8, 14)
     const digit = new Sprite(new Texture({ source: digitTexture.source, frame }))
-    digit.position.set(x, 885)
+    digit.position.set(x, y)
     layer.addChild(digit)
   }
 }
