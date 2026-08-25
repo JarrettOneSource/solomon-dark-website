@@ -56,6 +56,7 @@ class ValidationContractTests(unittest.TestCase):
             '"$dotnet_command" format backend/Server.csproj',
             "--verify-no-changes",
             "npm --prefix frontend run lint",
+            "npm --prefix frontend run test:web-lua",
             "npm --prefix frontend run test:boneyard",
             "npm --prefix frontend run test:desktop",
             "npm --prefix frontend run build",

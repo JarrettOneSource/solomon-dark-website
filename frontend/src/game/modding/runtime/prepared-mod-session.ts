@@ -132,7 +132,7 @@ export async function prepareModSession(options: Readonly<{
         invocations,
       })
     }
-    return Object.freeze({
+    const session: PreparedModSession = {
       act(input) {
         return step({
           events: [{
@@ -169,7 +169,8 @@ export async function prepareModSession(options: Readonly<{
         })
       },
       step,
-    })
+    }
+    return Object.freeze(session)
   } catch (error) {
     rules.close()
     for (const runtime of runtimes) runtime.close()

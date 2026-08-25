@@ -1,5 +1,6 @@
 import type { LuaConsoleValue } from '../../protocol/game-protocol.ts'
 import type {
+  WebLuaDefinitionValue,
   WebLuaSchemaDefinition,
   WebLuaScopeKind,
 } from '../definition/index.ts'
@@ -294,7 +295,9 @@ export function validateSchemaValue(
       if (typeof value !== 'boolean') throw new Error(`${field} must be a boolean`)
       return value
     case 'integer': {
-      if (!Number.isSafeInteger(value)) throw new Error(`${field} must be a safe integer`)
+      if (typeof value !== 'number' || !Number.isSafeInteger(value)) {
+        throw new Error(`${field} must be a safe integer`)
+      }
       const minimum = schemaNumber(schema, 'min', Number.MIN_SAFE_INTEGER)
       const maximum = schemaNumber(schema, 'max', Number.MAX_SAFE_INTEGER)
       if (value < minimum || value > maximum) throw new Error(`${field} is outside ${minimum}..${maximum}`)
@@ -336,13 +339,15 @@ export function validateSchemaValue(
       if (!fields || typeof fields !== 'object' || Array.isArray(fields)) {
         throw new Error(`${field} object schema has no fields`)
       }
-      const accepted = Object.keys(fields)
-      const unknown = Object.keys(value).filter(key => !accepted.includes(key))
+      const fieldSchemas = fields as Readonly<Record<string, WebLuaDefinitionValue>>
+      const objectValue = value as Readonly<Record<string, LuaConsoleValue>>
+      const accepted = Object.keys(fieldSchemas)
+      const unknown = Object.keys(objectValue).filter(key => !accepted.includes(key))
       if (unknown.length > 0) throw new Error(`${field} has unknown fields: ${unknown.join(', ')}`)
       return Object.fromEntries(accepted.map((key) => {
-        const child = fields[key]
+        const child = fieldSchemas[key]
         if (!isSchema(child)) throw new Error(`${field}.${key} has an invalid schema`)
-        const candidate = value[key] ?? schemaDefault(child, `${field}.${key}`)
+        const candidate = objectValue[key] ?? schemaDefault(child, `${field}.${key}`)
         return [key, validateSchemaValue(child, candidate, `${field}.${key}`, depth + 1)]
       }))
     }

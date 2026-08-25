@@ -181,6 +181,8 @@ export interface DeveloperGameMatch {
 
 export interface GameContentAsset {
   byteLength: number
+  contentType: string
+  kind: string
   modId: string
   path: string
   sha256: string
