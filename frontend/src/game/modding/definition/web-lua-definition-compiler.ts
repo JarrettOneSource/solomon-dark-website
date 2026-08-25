@@ -17,6 +17,7 @@ import {
   type WebLuaDefinitionValue,
   type WebLuaModDefinition,
   type WebLuaModIdentity,
+  type WebLuaRuleDefinition,
 } from './web-lua-definition-types.ts'
 import {
   WebLuaDefinitionError,
@@ -129,6 +130,10 @@ export function compileWebLuaDefinition(
     scope: reducer.scope,
     state: reducer.state,
   })).sort((left, right) => left.key.localeCompare(right.key))
+  const compiledRules: WebLuaRuleDefinition[] = definition.rules.map((rule, index) => Object.freeze({
+    ...rule,
+    fields: resolveRecord(rule.fields, `rules[${index}].fields`, rule.source, context),
+  }))
   if (issues.length > 0) throw new WebLuaDefinitionError(issues)
 
   const canonical = canonicalGraph({
@@ -137,7 +142,7 @@ export function compileWebLuaDefinition(
     content: compiledContent,
     identity,
     reducers: compiledReducers,
-    rules: definition.rules,
+    rules: compiledRules,
   })
   const canonicalJson = JSON.stringify(canonical)
   return Object.freeze({
@@ -149,7 +154,7 @@ export function compileWebLuaDefinition(
     graphSha256: createHash('sha256').update(canonicalJson).digest('hex'),
     identity: Object.freeze({ ...identity }),
     reducers: Object.freeze(compiledReducers),
-    rules: Object.freeze([...definition.rules]),
+    rules: Object.freeze(compiledRules),
   })
 }
 

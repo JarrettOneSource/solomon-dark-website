@@ -184,7 +184,9 @@ function contentActionEvent(
   payload: LuaConsoleValue,
   mods: readonly CompiledWebLuaMod[],
 ): string {
-  if (action !== 'content.use' && action !== 'content.pickup') return `action.${action}`
+  if (action !== 'content.use' && action !== 'content.pickup' && action !== 'content.cast') {
+    return `action.${action}`
+  }
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     throw new Error(`${action} requires a content payload`)
   }
@@ -193,7 +195,11 @@ function contentActionEvent(
     throw new Error(`${action} content identity is invalid`)
   }
   const content = mods.flatMap(mod => mod.content).find(candidate => candidate.contentId === contentId)
-  const kinds = action === 'content.use' ? new Set(['item', 'potion']) : new Set(['powerup'])
+  const kinds = action === 'content.use'
+    ? new Set(['item', 'potion'])
+    : action === 'content.pickup'
+      ? new Set(['powerup'])
+      : new Set(['spell'])
   if (!content || !kinds.has(content.contentKind)) {
     throw new Error(`${action} content is unavailable: ${contentId}`)
   }

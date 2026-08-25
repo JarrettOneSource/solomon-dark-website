@@ -27,9 +27,13 @@ import {
 } from '../modding/assets/index.ts'
 import {
   compileModContentCatalog,
+  ModPowerupEngine,
+  ModSpellEngine,
   ModStatusEngine,
   modConsumableInventoryItem,
   modItemInventoryItem,
+  type ModPowerupCheckpoint,
+  type ModSpellCheckpoint,
   type ModStatusCheckpoint,
   type PreparedModContentCatalog,
 } from '../modding/content/index.ts'
@@ -61,6 +65,8 @@ export interface PreparedModHostStateAccess {
 }
 
 export interface PreparedModHostCheckpoint {
+  readonly powerups: ModPowerupCheckpoint
+  readonly spells: ModSpellCheckpoint
   readonly session: PreparedModCheckpoint
   readonly statuses: ModStatusCheckpoint
 }
@@ -78,6 +84,12 @@ export interface PreparedModHost {
   readonly content: PreparedModContentCatalog
   readonly extensions: GameSimulationExtensions
   checkpoint(): PreparedModHostCheckpoint
+  cast(input: Readonly<{
+    contentId: string
+    context?: LuaConsoleObject
+    playerId: string
+    requestId: number
+  }>): PreparedModStepResult
   close(): void
   consume(consumption: GameSimulationModConsumption): PreparedModStepResult
   drainEnemySpawns(): readonly BoneyardEnemySpawnIntent[]
@@ -108,6 +120,14 @@ export async function prepareModHost(options: Readonly<{
     sources: options.content.modSources,
   })
   const content = compileModContentCatalog(options.content.compiledMods, assets)
+  for (const definition of content.all().filter(entry => entry.contentKind === 'boneyard')) {
+    const source = definition.fields.source
+    if (typeof source !== 'string' || !options.content.assets.some(asset => (
+      asset.modId === definition.modId && asset.path === source && asset.kind === 'boneyard'
+    ))) throw new Error(`${definition.modId}:${definition.key} Boneyard source is not packaged`)
+  }
+  const powerups = new ModPowerupEngine(content)
+  const spells = new ModSpellEngine(content, GAME_TICK_RATE)
   const statuses = new ModStatusEngine(content, GAME_TICK_RATE)
   const enemySpawns: BoneyardEnemySpawnIntent[] = []
   const presentation: PreparedModPresentationIntent[] = []
@@ -115,6 +135,7 @@ export async function prepareModHost(options: Readonly<{
   const adapter = createHostIntentAdapter({
     content,
     enemySpawns,
+    powerups,
     presentation,
     state: options.state,
     statuses,
@@ -151,7 +172,59 @@ export async function prepareModHost(options: Readonly<{
     extensions: Object.freeze(extensions),
     checkpoint() {
       requireOpen()
-      return Object.freeze({ session: session.checkpoint(), statuses: statuses.checkpoint() })
+      return Object.freeze({
+        powerups: powerups.checkpoint(),
+        session: session.checkpoint(),
+        spells: spells.checkpoint(),
+        statuses: statuses.checkpoint(),
+      })
+    },
+    cast(input) {
+      requireOpen()
+      const source = options.state.read()
+      const spellCheckpoint = spells.checkpoint()
+      const progression = getPlayerProgression(source, input.playerId)
+      const admission = spells.admit(
+        input.playerId,
+        input.contentId,
+        source.tick,
+        progression.currentMana,
+      )
+      options.state.write({
+        ...source,
+        playerEntities: setPlayerEntityMana(
+          source.playerEntities,
+          input.playerId,
+          progression.currentMana + statuses.filterMana(
+            input.playerId,
+            -admission.manaCost,
+            source.tick,
+          ),
+        ),
+      })
+      try {
+        const result = report(session.act({
+          action: 'content.cast',
+          context: { ...input.context, participant_id: input.playerId },
+          event: 'spell.cast',
+          payload: { content_id: input.contentId, participant_id: input.playerId },
+          requestId: input.requestId,
+          scope: {
+            id: `${input.playerId}:${source.run.runId ?? 'profile'}`,
+            kind: 'participant-run',
+          },
+          tick: source.tick,
+        }))
+        if (!result.accepted) {
+          options.state.write(source)
+          spells.restore(spellCheckpoint)
+        }
+        return result
+      } catch (error) {
+        options.state.write(source)
+        spells.restore(spellCheckpoint)
+        throw error
+      }
     },
     close() {
       if (closed) return
@@ -211,15 +284,24 @@ export async function prepareModHost(options: Readonly<{
           key: entry.key,
           modId: entry.modId,
           name: entry.name,
+          presentation: entry.contentKind === 'ui'
+            && entry.fields.view
+            && typeof entry.fields.view === 'object'
+            && !Array.isArray(entry.fields.view)
+            && 'operation' in entry.fields.view
+            && typeof entry.fields.view.operation === 'string'
+            ? entry.fields.view.operation
+            : null,
         }))),
         manifestSha256: options.content.manifest.manifestSha256,
-        revision: statuses.revision,
+        powerups: Object.freeze(powerups.project().map(({ modId: _modId, ...powerup }) => powerup)),
+        revision: statuses.revision + powerups.revision,
         statuses: Object.freeze(statuses.project().map(({ modId: _modId, ...status }) => status)),
       })
     },
     projectionRevision() {
       requireOpen()
-      return statuses.revision
+      return statuses.revision + powerups.revision
     },
     step(events, tick, scopeId, context = {}) {
       requireOpen()
@@ -235,7 +317,34 @@ export async function prepareModHost(options: Readonly<{
     },
     tick(tick) {
       requireOpen()
-      return statuses.tick(tick) > 0
+      const revision = statuses.revision + powerups.revision
+      statuses.tick(tick)
+      const state = options.state.read()
+      const players = state.playerEntities.identities.map(({ playerId }, index) => ({
+        id: playerId,
+        x: state.playerEntities.locomotions[index]!.position.x,
+        y: state.playerEntities.locomotions[index]!.position.y,
+      }))
+      for (const candidate of powerups.candidates(players)) {
+        const result = session.act({
+          action: 'content.pickup',
+          context: { participant_id: candidate.playerId, powerup_id: candidate.instance.id },
+          event: 'powerup.collected',
+          payload: {
+            content_id: candidate.instance.contentId,
+            participant_id: candidate.playerId,
+            powerup_id: candidate.instance.id,
+          },
+          requestId: candidate.instance.id,
+          scope: {
+            id: `${candidate.playerId}:${state.run.runId ?? 'profile'}`,
+            kind: 'participant-run',
+          },
+          tick,
+        })
+        if (result.accepted) powerups.collect(candidate.instance.id, candidate.playerId)
+      }
+      return statuses.revision + powerups.revision !== revision
     },
   }
   return Object.freeze(host)
@@ -244,6 +353,7 @@ export async function prepareModHost(options: Readonly<{
 function createHostIntentAdapter(options: Readonly<{
   content: PreparedModContentCatalog
   enemySpawns: BoneyardEnemySpawnIntent[]
+  powerups: ModPowerupEngine
   presentation: PreparedModPresentationIntent[]
   state: PreparedModHostStateAccess
   statuses: ModStatusEngine
@@ -252,18 +362,27 @@ function createHostIntentAdapter(options: Readonly<{
     prepare(intents, context) {
       const source = options.state.read()
       const statusCheckpoint = options.statuses.checkpoint()
+      const powerupCheckpoint = options.powerups.checkpoint()
       let candidate = source
       const spawns: BoneyardEnemySpawnIntent[] = []
       const projected: PreparedModPresentationIntent[] = []
       try {
         for (const intent of intents) {
-          const result = applyIntent(candidate, intent, context, options.content, options.statuses)
+          const result = applyIntent(
+            candidate,
+            intent,
+            context,
+            options.content,
+            options.statuses,
+            options.powerups,
+          )
           candidate = result.state
           if (result.spawn) spawns.push(result.spawn)
           if (result.presentation) projected.push(result.presentation)
         }
       } catch (error) {
         options.statuses.restore(statusCheckpoint)
+        options.powerups.restore(powerupCheckpoint)
         throw error
       }
       let committed = false
@@ -280,6 +399,7 @@ function createHostIntentAdapter(options: Readonly<{
         },
         rollback() {
           options.statuses.restore(statusCheckpoint)
+          options.powerups.restore(powerupCheckpoint)
           if (!committed) return
           options.state.write(source)
           options.enemySpawns.splice(Math.max(0, options.enemySpawns.length - spawns.length), spawns.length)
@@ -296,6 +416,7 @@ function applyIntent(
   context: ModIntentExecutionContext,
   content: PreparedModContentCatalog,
   statuses: ModStatusEngine,
+  powerups: ModPowerupEngine,
 ): Readonly<{
   presentation: PreparedModPresentationIntent | null
   spawn: BoneyardEnemySpawnIntent | null
@@ -313,7 +434,7 @@ function applyIntent(
       return outcome(source)
     }
     case 'spawn':
-      return outcome(source, spawnIntent(source, intent, context))
+      return spawnOutcome(source, intent, context, powerups)
     case 'emit':
     case 'present':
       return outcome(source, null, Object.freeze({
@@ -397,6 +518,25 @@ function applyGrant(
   return { ...source, playerEntities: granted.store }
 }
 
+function spawnOutcome(
+  source: GameSimulationState,
+  intent: ModIntent,
+  context: ModIntentExecutionContext,
+  powerups: ModPowerupEngine,
+) {
+  const content = intent.fields.content ?? intent.fields.powerup
+  if (content !== undefined) {
+    const reference = resolvedContentReference(content, 'spawn content')
+    if (reference.targetKind !== 'powerup') {
+      throw new Error('spawn content must reference a powerup')
+    }
+    const position = intentPosition(source, intent.fields, context)
+    powerups.spawn(reference.contentId, position.x, position.y, context.tick)
+    return outcome(source)
+  }
+  return outcome(source, spawnIntent(source, intent, context))
+}
+
 function spawnIntent(
   source: GameSimulationState,
   intent: ModIntent,
@@ -408,22 +548,31 @@ function spawnIntent(
     throw new Error('enemy spawn currently requires a stock enemy token')
   }
   const token = tokenValue as BoneyardWaveEnemyToken
-  const authority = context.context.participant_id
-  const player = typeof authority === 'string' && playerEntityIndex(source.playerEntities, authority) >= 0
-    ? getPlayerCharacter(source, authority)
-    : null
+  const position = intentPosition(source, intent.fields, context)
   return Object.freeze({
     enemyToken: token,
     flags: Object.freeze([]),
     id: SPAWN_ID_BASE + intent.sequence % SPAWN_ID_RANGE,
     locationPolicy: 'anywhere' as const,
     nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES[token],
-    position: Object.freeze({
-      x: finite(intent.fields.x, player?.position.x ?? 0, 'spawn x'),
-      y: finite(intent.fields.y, player?.position.y ?? 0, 'spawn y'),
-    }),
+    position,
     spawnTick: source.tick + 1,
     waveOrdinal: source.world.waves?.waveOrdinal ?? 0,
+  })
+}
+
+function intentPosition(
+  source: GameSimulationState,
+  fields: LuaConsoleObject,
+  context: ModIntentExecutionContext,
+): Readonly<{ x: number; y: number }> {
+  const authority = context.context.participant_id
+  const player = typeof authority === 'string' && playerEntityIndex(source.playerEntities, authority) >= 0
+    ? getPlayerCharacter(source, authority)
+    : null
+  return Object.freeze({
+    x: finite(fields.x, player?.position.x ?? 0, 'spawn x'),
+    y: finite(fields.y, player?.position.y ?? 0, 'spawn y'),
   })
 }
 

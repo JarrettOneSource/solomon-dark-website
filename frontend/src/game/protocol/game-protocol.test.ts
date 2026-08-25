@@ -4413,6 +4413,7 @@ test('mod content projection round-trips every stable family field and active st
       key: 'stable_item',
       modId: 'example.mod',
       name: 'Stable Item',
+      presentation: null,
     }, {
       art: [],
       contentId: '5000000000000000002',
@@ -4421,8 +4422,25 @@ test('mod content projection round-trips every stable family field and active st
       key: 'steady',
       modId: 'example.mod',
       name: 'Steady',
+      presentation: null,
+    }, {
+      art: [{ path: 'art/orb.png', slot: 'world' }],
+      contentId: '5000000000000000004',
+      contentKind: 'powerup' as const,
+      description: '',
+      key: 'survey_orb',
+      modId: 'example.mod',
+      name: 'Survey Orb',
+      presentation: null,
     }],
     manifestSha256: 'a'.repeat(64),
+    powerups: [{
+      contentId: '5000000000000000004',
+      id: 1,
+      spawnedTick: 12,
+      x: 100,
+      y: 120,
+    }],
     revision: 3,
     statuses: [{
       contentId: '5000000000000000002',
@@ -4436,7 +4454,7 @@ test('mod content projection round-trips every stable family field and active st
   assert.throws(() => decodeServerGameMessage(JSON.stringify({
     ...message,
     content: [...message.content, message.content[0]],
-  })), /content\[2\] is invalid/)
+  })), /content\[3\] is invalid/)
 })
 
 test('party protocol strictly round-trips membership, access settings, requests, and results', () => {

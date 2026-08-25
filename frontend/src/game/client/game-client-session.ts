@@ -352,6 +352,7 @@ export function connectGameClientSession(
         modContent = {
           content: message.content,
           manifestSha256: message.manifestSha256,
+          powerups: message.powerups,
           revision: message.revision,
           statuses: message.statuses,
         }

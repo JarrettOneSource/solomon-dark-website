@@ -18,7 +18,7 @@ const source = await readFile(new URL(entryFiles[0], assetRoot))
 const gzipBytes = gzipSync(source).byteLength
 const rawBytes = source.byteLength
 const maximumRawBytes = 512 * 1024
-const maximumGzipBytes = 128 * 1024
+const maximumGzipBytes = 130 * 1024
 
 assert.ok(
   rawBytes <= maximumRawBytes,

@@ -758,6 +758,7 @@ export interface ModContentProjectionEntry {
   readonly key: string
   readonly modId: string
   readonly name: string
+  readonly presentation: string | null
 }
 
 export interface ModStatusProjectionEntry {
@@ -768,9 +769,18 @@ export interface ModStatusProjectionEntry {
   readonly targetId: string
 }
 
+export interface ModPowerupProjectionEntry {
+  readonly contentId: string
+  readonly id: number
+  readonly spawnedTick: number
+  readonly x: number
+  readonly y: number
+}
+
 export interface ModContentProjection {
   readonly content: readonly ModContentProjectionEntry[]
   readonly manifestSha256: string
+  readonly powerups: readonly ModPowerupProjectionEntry[]
   readonly revision: number
   readonly statuses: readonly ModStatusProjectionEntry[]
 }
@@ -1316,7 +1326,9 @@ export function decodeServerGameMessage(payload: string): ServerGameMessage {
     }
   }
   if (value.type === 'server-mod-content') {
-    onlyKeys(value, 'message', ['type', 'content', 'manifestSha256', 'revision', 'statuses'])
+    onlyKeys(value, 'message', [
+      'type', 'content', 'manifestSha256', 'powerups', 'revision', 'statuses',
+    ])
     return { type: 'server-mod-content', ...modContentProjection(value) }
   }
   if (value.type === 'server-snapshot') {
@@ -10788,11 +10800,12 @@ function gameModAssets(value: unknown): readonly GameModAsset[] {
 
 function modContentProjection(value: Record<string, unknown>): ModContentProjection {
   const contentIds = new Set<string>()
+  const contentKinds = new Map<string, ModContentKind>()
   const content = limitedArray(value.content, 'content', 4_096).map((value, index) => {
     const field = `content[${index}]`
     const source = record(value, field)
     onlyKeys(source, field, [
-      'art', 'contentId', 'contentKind', 'description', 'key', 'modId', 'name',
+      'art', 'contentId', 'contentKind', 'description', 'key', 'modId', 'name', 'presentation',
     ])
     const contentId = limitedString(source.contentId, `${field}.contentId`, 19)
     const contentKind = limitedString(source.contentKind, `${field}.contentKind`, 32)
@@ -10806,6 +10819,7 @@ function modContentProjection(value: Record<string, unknown>): ModContentProject
       || contentIds.has(contentId)
     ) throw new GameProtocolError(`${field} is invalid`)
     contentIds.add(contentId)
+    contentKinds.set(contentId, contentKind as ModContentKind)
     const slots = new Set<string>()
     const art = limitedArray(source.art, `${field}.art`, 32).map((value, artIndex) => {
       const artField = `${field}.art[${artIndex}]`
@@ -10830,9 +10844,31 @@ function modContentProjection(value: Record<string, unknown>): ModContentProject
       key,
       modId,
       name: limitedString(source.name, `${field}.name`, 128),
+      presentation: source.presentation === null
+        ? null
+        : limitedString(source.presentation, `${field}.presentation`, 64),
     }
   })
   const instanceIds = new Set<number>()
+  const powerups = limitedArray(value.powerups, 'powerups', 1_024).map((value, index) => {
+    const field = `powerups[${index}]`
+    const source = record(value, field)
+    onlyKeys(source, field, ['contentId', 'id', 'spawnedTick', 'x', 'y'])
+    const contentId = limitedString(source.contentId, `${field}.contentId`, 19)
+    const id = positiveInteger(source.id, `${field}.id`)
+    if (contentKinds.get(contentId) !== 'powerup' || instanceIds.has(id)) {
+      throw new GameProtocolError(`${field} is invalid`)
+    }
+    instanceIds.add(id)
+    return {
+      contentId,
+      id,
+      spawnedTick: nonnegativeInteger(source.spawnedTick, `${field}.spawnedTick`),
+      x: finite(source.x, `${field}.x`),
+      y: finite(source.y, `${field}.y`),
+    }
+  })
+  instanceIds.clear()
   const statuses = limitedArray(value.statuses, 'statuses', 4_096).map((value, index) => {
     const field = `statuses[${index}]`
     const source = record(value, field)
@@ -10858,6 +10894,7 @@ function modContentProjection(value: Record<string, unknown>): ModContentProject
   return {
     content,
     manifestSha256: sha256(value.manifestSha256, 'manifestSha256'),
+    powerups,
     revision: nonnegativeInteger(value.revision, 'revision'),
     statuses,
   }

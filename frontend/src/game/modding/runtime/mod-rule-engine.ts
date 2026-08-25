@@ -238,14 +238,18 @@ function contentRules(compiled: CompiledWebLuaMod): readonly WebLuaRuleDefinitio
         ? 'use'
         : content.contentKind === 'powerup'
           ? 'pickup'
+          : content.contentKind === 'spell'
+            ? 'cast'
           : null
     const node = content.contentKind === 'potion'
       ? content.fields.on_use
       : content.contentKind === 'item'
         ? content.fields.use
-        : content.contentKind === 'powerup'
-          ? content.fields.effect
-          : null
+          : content.contentKind === 'powerup'
+            ? content.fields.effect
+            : content.contentKind === 'spell'
+              ? content.fields.behavior
+            : null
     if (!trigger || !isRule(node)) return []
     return [Object.freeze({
       fields: Object.freeze({
@@ -297,6 +301,12 @@ function evaluateRule(
     case 'rules.after':
     case 'rules.every':
       return [intent(modId, rule.operation, rule.fields, 'rule', input.scope, sequence())]
+    case 'prefab.area': {
+      const effects = Array.isArray(rule.fields.effects)
+        ? rule.fields.effects.filter(isRule).flatMap(effect => evaluateRule(modId, effect, input, sequence))
+        : []
+      return [intent(modId, 'present', { prefab: 'area', ...rule.fields }, 'rule', input.scope, sequence()), ...effects]
+    }
     default:
       return rule.operation.startsWith('effect.')
         ? [intent(modId, rule.operation.slice('effect.'.length), rule.fields, 'rule', input.scope, sequence())]

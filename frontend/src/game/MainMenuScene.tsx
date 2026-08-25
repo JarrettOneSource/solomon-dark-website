@@ -154,6 +154,7 @@ const loadSkillBook = () => import('./SkillBook.tsx')
 const SkillBook = lazy(loadSkillBook)
 const loadHudSkillSelector = () => import('./HudSkillSelector.tsx')
 const HudSkillSelector = lazy(loadHudSkillSelector)
+const ModMinimap = lazy(() => import('./mod-ui/ModMinimap.tsx'))
 
 /** The Dark Cloud's Esc menu is the native simple menu with the local viewer as its owner. */
 const DARK_CLOUD_PAUSE_OWNER_ID = 'dark-cloud'
@@ -1667,6 +1668,10 @@ export default function MainMenuScene({
               worldSpeeches={worldSpeeches}
             />
           </Suspense>
+        ) : null}
+
+        {session && runtimeSnapshot ? (
+          <Suspense fallback={null}><ModMinimap session={session} /></Suspense>
         ) : null}
 
         {session && runtimeSnapshot && runtimeRunPhase !== 'game-over' && !tutorialSession ? (

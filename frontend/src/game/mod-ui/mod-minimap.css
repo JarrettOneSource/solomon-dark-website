@@ -1,0 +1,28 @@
+.mod-minimap {
+  position: fixed;
+  z-index: 36;
+  top: max(1rem, env(safe-area-inset-top));
+  right: max(1rem, env(safe-area-inset-right));
+  width: clamp(8rem, 16vw, 13.75rem);
+  aspect-ratio: 1;
+  overflow: hidden;
+  border: 1px solid rgb(210 190 139 / 70%);
+  border-radius: 50%;
+  background: rgb(10 12 17 / 78%);
+  box-shadow: 0 0 1rem rgb(0 0 0 / 55%);
+  pointer-events: none;
+}
+
+.mod-minimap__marker {
+  position: absolute;
+  width: .45rem;
+  height: .45rem;
+  border-radius: 50%;
+  translate: -50% -50%;
+  background: #d2be8b;
+}
+
+.mod-minimap__marker--self { background: #fff; }
+.mod-minimap__marker--party { background: #57c8ff; }
+.mod-minimap__marker--enemy { background: #e44; }
+.mod-minimap__marker--powerup { background: #79f06b; }

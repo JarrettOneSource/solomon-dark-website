@@ -38,7 +38,33 @@ local potion = sd.kit.potion({
   loot = {ordinary = 1, boss = 1},
   art = {icon = sd.art.ref("icon")},
 })
-return sd.mod({api = "1.0.0", assets = {icon = icon}, content = {status, potion}})
+local powerup = sd.kit.powerup({
+  key = "survey_orb",
+  name = "Survey Orb",
+  effect = sd.effect.resource({target = "collector", mana = "full"}),
+  pickup = {radius = 40},
+  art = {world = sd.art.ref("icon")},
+})
+local spell = sd.kit.spell({
+  key = "gravity_well",
+  name = "Gravity Well",
+  slot = "secondary",
+  mana = 30,
+  cooldown = "1s",
+  behavior = sd.prefab.area({radius = 180}),
+  art = {icon = sd.art.ref("icon")},
+})
+local spawn_powerup = sd.rules.on("run.started", sd.effect.spawn({
+  content = sd.ref("powerup", "survey_orb"),
+  x = 10000,
+  y = 10000,
+}))
+return sd.mod({
+  api = "1.0.0",
+  assets = {icon = icon},
+  content = {status, potion, powerup, spell},
+  rules = {spawn_powerup},
+})
 `
 
 test('prepared host consumes a 1.0 potion atomically and owns status filters and expiry', async () => {
@@ -72,6 +98,14 @@ test('prepared host consumes a 1.0 potion atomically and owns status filters and
     })
     assert.equal(result.accepted, true)
     assert.equal(getPlayerProgression(state, 'player-1').currentMana, 100)
+    const spell = host.content.all().find(entry => entry.contentKind === 'spell')!
+    assert.equal(host.cast({
+      contentId: spell.contentId,
+      playerId: 'player-1',
+      requestId: 2,
+    }).accepted, true)
+    assert.equal(getPlayerProgression(state, 'player-1').currentMana, 100)
+    assert.equal(host.drainPresentation()[0]?.fields.prefab, 'area')
     assert.equal(host.extensions.filterDamage({
       amount: 20,
       damageKind: 'physical',
@@ -81,6 +115,15 @@ test('prepared host consumes a 1.0 potion atomically and owns status filters and
     }), 0)
     assert.equal(host.extensions.createLootItems({ actorSeed: 1, enemyToken: 'SKELETON' }).length, 1)
     assert.equal(host.checkpoint().statuses.instances.length, 1)
+    const started = host.step([{
+      name: 'run.started',
+      payload: { run_id: 'run-1' },
+    }], 12, 'run-1')
+    assert.equal(started.accepted, true, started.errors.join('; '))
+    assert.equal(
+      host.project().powerups[0]?.contentId,
+      host.content.all().find(entry => entry.contentKind === 'powerup')?.contentId,
+    )
     host.tick(20)
     assert.equal(host.extensions.filterDamage({
       amount: 20,
