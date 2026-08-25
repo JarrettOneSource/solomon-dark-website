@@ -1629,11 +1629,6 @@ function addServiceInspection(
     )
     return
   }
-  if (
-    model.selectedItemId === inspection.id
-    && model.selectedOwner === inspection.owner
-  ) return
-
   if (model.trader === 'hagatha') {
     const index = model.economy.hagathaOffers.findIndex(
       ({ selector }) => selector === inspection.id,

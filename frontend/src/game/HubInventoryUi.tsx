@@ -871,7 +871,6 @@ function NativeHubSurface({
         activeServiceInspection,
         economy,
         progression,
-        serviceSelection,
         surface.trader,
       )
     : null
@@ -2355,6 +2354,9 @@ function ShopAction({
       onFocus={onFocus}
       onPointerEnter={onPointerEnter}
       onPointerLeave={onPointerLeave}
+      onPointerDown={(event) => {
+        if (event.pointerType === 'mouse') event.preventDefault()
+      }}
     >
       <span className="hub-native-ui-semantic hub-trader-price">{price.toLocaleString()}</span>
     </NativeAction>
@@ -2530,7 +2532,6 @@ function serviceInspectionTooltipText(
   inspection: HubServiceInspectionModel,
   economy: ProtocolPlayerEconomy,
   progression: ProtocolPlayerProgression,
-  selection: HubServiceSelection | null,
   trader: HubTraderId,
 ): string | null {
   if (inspection.kind === 'owned-perk') {
@@ -2545,7 +2546,6 @@ function serviceInspectionTooltipText(
       selector: inspection.selector,
     }))
   }
-  if (selection?.id === inspection.id && selection.owner === inspection.owner) return null
   if (trader === 'hagatha') {
     const offer = economy.hagathaOffers.find(({ selector }) => selector === inspection.id)
     if (!offer || inspection.owner !== null) return null

@@ -29,7 +29,10 @@ const browser = await chromium.launch({
 })
 const hostPage = await browser.newPage({ viewport: { width: 1600, height: 900 } })
 const guestPage = await browser.newPage({ viewport: { width: 960, height: 540 } })
+const abortedRequests = []
 const browserErrors = []
+const failedRequests = []
+const failedResponses = []
 for (const page of [hostPage, guestPage]) {
   await page.addInitScript(installGameAudioSmokeProbe)
   await page.addInitScript(bypassStartupAudioPreload)
@@ -76,6 +79,16 @@ for (const page of [hostPage, guestPage]) {
     })
   })
   page.on('pageerror', (error) => browserErrors.push(error.message))
+  page.on('requestfailed', (request) => {
+    const failure = `${request.method()} ${request.url()}: ${request.failure()?.errorText || 'failed'}`
+    if (request.failure()?.errorText === 'net::ERR_ABORTED') abortedRequests.push(failure)
+    else failedRequests.push(failure)
+  })
+  page.on('response', (response) => {
+    if (response.status() >= 400) {
+      failedResponses.push(`${response.status()} ${response.request().method()} ${response.url()}`)
+    }
+  })
   page.on('console', (message) => {
     if (message.type() === 'error') {
       browserErrors.push(`${message.text()} @ ${message.location().url}`)
@@ -129,9 +142,17 @@ try {
   await hostPage.screenshot({ path: `${screenshotRoot}-fomentius-hover-tooltip.png` })
   await stockCell.click()
   await stockCell.locator('xpath=self::*[@data-selected="true"]').waitFor()
-  assert.equal(await fomentius.getByRole('tooltip').count(), 0)
+  await assertTooltip(fomentius, [stock.name, 'Double-click to drink', `Price: ${stock.price}`])
   await hostPage.screenshot({ path: `${screenshotRoot}-fomentius-selected.png` })
-  await fomentius.locator('[data-store-empty-slot]').first().click()
+  const fomentiusEmptyCell = fomentius.locator('[data-store-empty-slot]').first()
+  await fomentiusEmptyCell.hover()
+  assert.equal(await fomentius.getByRole('tooltip').count(), 0)
+  await stockCell.hover()
+  await assertTooltip(fomentius, [stock.name, 'Double-click to drink', `Price: ${stock.price}`])
+  await fomentiusEmptyCell.hover()
+  await stockCell.focus()
+  await assertTooltip(fomentius, [stock.name, 'Double-click to drink', `Price: ${stock.price}`])
+  await fomentiusEmptyCell.click()
   assert.equal(await fomentius.locator('[data-selected="true"]').count(), 0)
   await stockCell.click()
   await stockCell.locator('xpath=self::*[@data-selected="true"]').waitFor()
@@ -205,6 +226,11 @@ try {
   assert.doesNotMatch(luthacusTooltip, /Price:/)
   await hostPage.screenshot({ path: `${screenshotRoot}-luthacus-hover-tooltip.png` })
   assert.equal(await dialogGold(luthacus), goldBeforeStorage)
+  await activateInventoryPointer(hostPage, storedItem)
+  await storedItem.locator('xpath=self::*[@data-selected="true"]').waitFor()
+  const selectedLuthacusTooltip = await assertTooltip(luthacus, [stock.name, 'Double-click to drink'])
+  assert.doesNotMatch(selectedLuthacusTooltip, /Price:/)
+  await hostPage.screenshot({ path: `${screenshotRoot}-luthacus-selected-tooltip.png` })
   await doubleActivateInventoryPointer(hostPage, storedItem)
   await remainingBackpackItem.waitFor()
   assert.equal(await luthacus.getByLabel('Scavenged Goods').getByRole('button', {
@@ -259,7 +285,12 @@ try {
   await hostPage.screenshot({ path: `${screenshotRoot}-hagatha-offer-hover-tooltip.png` })
   await lifeCharm.click()
   await lifeCharm.locator('xpath=self::*[@data-selected="true"]').waitFor()
-  assert.equal(await hagatha.getByRole('tooltip').count(), 0)
+  await assertTooltip(hagatha, [
+    'LIFE CHARM',
+    'Maximum life is always increased by 25%.',
+    `Price: ${lifeCharmPrice}`,
+    'High price due to first mixing.',
+  ])
   await hostPage.screenshot({ path: `${screenshotRoot}-hagatha-selected.png` })
   await lifeCharm.click()
   await waitForDialogGold(hagatha, beforeHagatha - lifeCharmPrice)
@@ -339,7 +370,7 @@ try {
   await hostPage.screenshot({ path: `${screenshotRoot}-shlorio-hover-tooltip.png` })
   await dowsingCell.click()
   await dowsingCell.locator('xpath=self::*[@data-selected="true"]').waitFor()
-  assert.equal(await shlorio.getByRole('tooltip').count(), 0)
+  await assertTooltip(shlorio, [dowsingItem.name, `Price: ${dowsingItem.price}`])
   await hostPage.screenshot({ path: `${screenshotRoot}-shlorio-selected.png` })
   const purchaseFlashDataPromise = waitForDowsingFlashDataUrl(flashCanvas)
   await dowsingCell.click()
@@ -546,11 +577,16 @@ try {
   }
 
   assert.deepEqual(browserErrors, [])
+  assert.deepEqual(failedRequests, [])
+  assert.deepEqual(failedResponses, [])
   process.stdout.write(`${JSON.stringify({
+    abortedRequests,
     browserErrors,
     dowsingItem,
     equipmentSlot,
     finalHostGold,
+    failedRequests,
+    failedResponses,
     guestGold: singleClient ? null : 500,
     singleClient,
     status: 'ok',
@@ -558,7 +594,10 @@ try {
   })}\n`)
 } catch (error) {
   process.stderr.write(`${JSON.stringify({
+    abortedRequests,
     browserErrors,
+    failedRequests,
+    failedResponses,
     guest: await pageReceipt(guestPage),
     host: await pageReceipt(hostPage),
   })}\n`)
@@ -607,12 +646,51 @@ async function enterHub(page, element) {
   await page.getByRole('button', { name: 'Play' }).click()
   await declineTutorialOffer(page)
   await page.getByRole('button', { name: 'New Game' }).click()
-  await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({ timeout: 30_000 })
+  const create = page.locator('.create-menu-scene[data-motion-settled="true"]')
+  const office = page.locator('.hub-scene[data-hub-region="office"]')
+  try {
+    await office.waitFor({ timeout: 30_000 })
+    await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 30_000 })
+    await page.waitForFunction(() => (
+      document.querySelector('.hub-world-canvas')?.getAttribute('data-transition-phase')
+        === 'none'
+    ))
+    await moveHubAxis(page, 'a', 'playerX', 300, 'at-most')
+    await moveHubAxis(page, 's', 'playerY', 800, 'at-least')
+    await moveHubAxis(page, 'd', 'playerX', 512, 'at-least')
+    await page.keyboard.down('s')
+    try {
+      await create.waitFor({ timeout: 30_000 })
+    } finally {
+      await page.keyboard.up('s')
+    }
+  } catch (error) {
+    process.stderr.write(`${JSON.stringify({
+      body: (await page.locator('body').innerText()).slice(0, 2_000),
+      create: await page.locator('.create-menu-scene').evaluateAll((nodes) => nodes.map((node) => ({
+        finalizing: node.dataset.finalizing,
+        handsReady: node.dataset.handsReady,
+        motionSettled: node.dataset.motionSettled,
+        phase: node.dataset.phase,
+      }))),
+      hub: await page.locator('.hub-scene').evaluateAll((nodes) => nodes.map((node) => ({
+        region: node.dataset.hubRegion,
+        renderer: node.dataset.rendererState,
+      }))),
+      url: page.url(),
+    })}\n`)
+    throw error
+  }
   await page.getByRole('button', { name: new RegExp(element, 'i') }).click()
   await page.locator('.create-menu-disciplines[data-visible="true"]').waitFor({ timeout: 15_000 })
   await page.locator('.create-menu-discipline-arcane').click()
   try {
-    await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 90_000 })
+    await page.getByLabel(/College courtyard/).waitFor({ timeout: 90_000 })
+    await page.waitForFunction(() => {
+      const canvas = document.querySelector('.hub-world-canvas')
+      return canvas?.getAttribute('data-hub-region') === 'courtyard'
+        && canvas?.getAttribute('data-transition-phase') === 'none'
+    }, null, { timeout: 90_000 })
   } catch (error) {
     process.stderr.write(`${JSON.stringify({
       body: (await page.locator('body').innerText()).slice(0, 2_000),
@@ -625,6 +703,32 @@ async function enterHub(page, element) {
       url: page.url(),
     })}\n`)
     throw error
+  }
+}
+
+async function moveHubAxis(page, key, axis, target, direction) {
+  await page.locator('.main-menu-page[data-hub-player-activity="none"]').waitFor()
+  await page.keyboard.down(key)
+  try {
+    await page.waitForFunction(({ axis, direction, target }) => {
+      const frame = document.querySelector('.hub-world-canvas')?.__sdrHubFrame
+      const value = frame?.[axis]
+      return typeof value === 'number'
+        && (direction === 'at-least' ? value >= target : value <= target)
+    }, { axis, direction, target }, { timeout: 15_000 })
+  } catch (error) {
+    const receipt = await page.evaluate(() => ({
+      frame: document.querySelector('.hub-world-canvas')?.__sdrHubFrame ?? null,
+      surface: document.querySelector('.hub-native-ui-stage')
+        ?.getAttribute('aria-label') ?? null,
+    }))
+    throw new Error(
+      `Hub movement ${key}/${axis}/${direction}/${target} failed: ${JSON.stringify(receipt)}`,
+      { cause: error },
+    )
+  } finally {
+    await page.keyboard.up(key)
+    await page.waitForTimeout(150)
   }
 }
 

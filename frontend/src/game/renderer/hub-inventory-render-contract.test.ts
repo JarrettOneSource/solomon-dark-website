@@ -264,6 +264,23 @@ test('retail StoreGrid selected state uses only the live Windows CLICK AGAIN rec
   assert.deepEqual(nativeAssetsJson.atlases.UI.records['112']?.frame, [933, 426, 66, 45])
 })
 
+test('StoreGrid selection keeps the independently current HoverBox visible', () => {
+  const rendererSource = readFileSync(new URL('./hub-inventory-renderer.ts', import.meta.url), 'utf8')
+  assert.match(inventoryComponent, /inspection: serviceHoverInspection \?\? serviceFocusInspection/)
+  assert.doesNotMatch(
+    inventoryComponent,
+    /selection\?\.id === inspection\.id[\s\S]{0,100}return null/,
+  )
+  assert.doesNotMatch(
+    rendererSource,
+    /model\.selectedItemId === inspection\.id[\s\S]{0,140}return/,
+  )
+  assert.match(
+    inventoryComponent,
+    /function ShopAction\([\s\S]*?onPointerDown=\{\(event\) => \{[\s\S]*?event\.pointerType === 'mouse'[\s\S]*?event\.preventDefault\(\)/,
+  )
+})
+
 test('semantic inventory actions expose blank deselection and explicit compatible sinks', () => {
   const source = readFileSync(new URL('../HubInventoryUi.tsx', import.meta.url), 'utf8')
   assert.match(source, /data-inventory-empty-space/)
