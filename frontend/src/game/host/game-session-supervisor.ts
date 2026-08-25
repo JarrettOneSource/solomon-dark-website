@@ -227,7 +227,7 @@ export async function startGameSessionSupervisor(
         status: 'ok',
         protocol: GAME_PROTOCOL_NAME,
         draining,
-        sessions: sessions.size + Number(hubHost.playerCount() > 0),
+        sessions: sessions.size + Number(hubHost.capacityParticipantCount() > 0),
         privateSessions: sessions.size,
         privatePlayers: [...sessions.values()].reduce(
           (total, session) => total + session.host.humanPlayerCount(),
@@ -238,7 +238,7 @@ export async function startGameSessionSupervisor(
         bots: hubHost.botCount(),
         parties: hubHost.partyCount(),
         runs: hubHost.runCount(),
-        players: hubHost.playerCount(),
+        players: hubHost.capacityParticipantCount(),
       })
       return
     }
@@ -424,7 +424,7 @@ export async function startGameSessionSupervisor(
       void readJsonObject(request).then(async (body) => {
         const admission = await materializeGameAdmission(body, options.luaWasmPath)
         pruneHubTickets()
-        if (hubHost.playerCount() + playerTicketCount(hubTickets) >= maxConnectionsPerSession) {
+        if (hubHost.capacityParticipantCount() + playerTicketCount(hubTickets) >= maxConnectionsPerSession) {
           sendJson(response, 503, { error: 'The shared Hub is full.' }, { 'retry-after': '5' })
           return
         }
@@ -642,7 +642,7 @@ export async function startGameSessionSupervisor(
       }
       const now = performance.now()
       pruneHostTickets(session, now)
-      if (session.host.playerCount() + playerTicketCount(session.tickets) >= maxConnectionsPerSession) {
+      if (session.host.capacityParticipantCount() + playerTicketCount(session.tickets) >= maxConnectionsPerSession) {
         sendJson(response, 409, { error: 'That College is full.' })
         return
       }
@@ -791,7 +791,7 @@ export async function startGameSessionSupervisor(
       const now = performance.now()
       pruneHostTickets(session, now)
       if (
-        session.host.playerCount() - 1 + playerTicketCount(session.tickets)
+        session.host.capacityParticipantCount() - 1 + playerTicketCount(session.tickets)
         >= maxConnectionsPerSession
       ) {
         sendJson(response, 409, { error: 'That College is full.' })
@@ -1259,7 +1259,7 @@ export async function startGameSessionSupervisor(
       session.closing
       || !session.claimed
       || session.activeProxies > 0
-      || session.host.playerCount() > 0
+      || session.host.humanPlayerCount() > 0
     ) return
     closeSessionInBackground(session, 'empty-after-use')
   }
@@ -1386,7 +1386,7 @@ export async function startGameSessionSupervisor(
         logDetails(),
       )
     },
-    sessionCount: () => sessions.size + Number(hubHost.playerCount() > 0),
+    sessionCount: () => sessions.size + Number(hubHost.capacityParticipantCount() > 0),
   }
 }
 

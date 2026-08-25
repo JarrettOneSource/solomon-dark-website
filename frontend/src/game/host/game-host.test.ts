@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
-import test from 'node:test'
+import test, { type TestContext } from 'node:test'
 
 import { WebSocket } from 'ws'
 
@@ -39,7 +39,7 @@ import {
 import type { GameSnapshot } from '../protocol/game-state.ts'
 import type { PlayerSocialProfile } from '../protocol/party-state.ts'
 import { EntityReplicationReconstructor } from '../protocol/entity-replication.ts'
-import type { BoneyardScene } from '../core-kernels/boneyard.ts'
+import type { BoneyardScene, LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import {
   createBoneyardCatalog,
   materializeBoneyard,
@@ -401,7 +401,7 @@ test('developer observer watches one private run without joining or mutating par
   assert.equal(welcome.observer, true)
   assert.equal(Object.keys(welcome.snapshot.players).length, 2)
   assert.equal(welcome.snapshot.levelUpBarrier?.pendingPlayerIds.includes(welcome.resumeToken) ?? false, false)
-  assert.equal(host.playerCount(), 2)
+  assert.equal(host.capacityParticipantCount(), 2)
   assert.equal(host.presence().length, 2)
   playerFacingObserverCueCount = 0
   await new Promise(resolve => setTimeout(resolve, 30))
@@ -446,7 +446,7 @@ test('developer observer watches one private run without joining or mutating par
     reason: 'Observer connections are read-only.',
   })
   await waitFor(() => runtimeEvents.some(entry => entry.event === 'observer.disconnected'))
-  assert.equal(host.playerCount(), 2)
+  assert.equal(host.capacityParticipantCount(), 2)
   assert.equal(host.presence().length, 2)
 
   const stalledObserver = await openSocket(host.address.url)
@@ -500,7 +500,7 @@ test('developer observer watches one private run without joining or mutating par
     entry.event === 'replication.baseline_missing'
     && entry.details?.observerId === stalledObserverId
   )).length, 1)
-  assert.equal(host.playerCount(), 2)
+  assert.equal(host.capacityParticipantCount(), 2)
   assert.equal(host.presence().length, 2)
   leader.socket.off('message', countPlayerFacingCue)
   guest.socket.off('message', countPlayerFacingCue)
@@ -532,7 +532,7 @@ test('authoritative game host owns two configured player characters and movement
   assert.equal(second.socket.extensions, 'permessage-deflate')
 
   assert.notEqual(first.welcome.playerId, second.welcome.playerId)
-  assert.equal(host.playerCount(), 2)
+  assert.equal(host.capacityParticipantCount(), 2)
   const firstState = first.welcome.snapshot.players[first.welcome.playerId]
   const secondState = second.welcome.snapshot.players[second.welcome.playerId]
   assert.deepEqual(firstState.config, FIRST_CHARACTER)
@@ -615,7 +615,7 @@ test('global Hub rejects modded and cheats-on admissions before player ownership
     assert.match(message.reason, reason)
     await closeSocket(socket)
   }
-  assert.equal(host.playerCount(), 0)
+  assert.equal(host.capacityParticipantCount(), 0)
 })
 
 test('a requested fresh College admission is authoritative through Office and checkpoints once settled', async (context) => {
@@ -748,7 +748,7 @@ test('private College projects one party, supports Party-ID reservation, and che
   const third = await join(host.address.url, 'ticket-c', FIRST_CHARACTER)
   context.after(() => closeSocket(third.socket))
   assert.equal((await firstCheckpoint).type, 'server-save-checkpoint')
-  assert.equal(host.playerCount(), 3)
+  assert.equal(host.capacityParticipantCount(), 3)
 })
 
 test('expired external join requests disappear from the leader projection', async (context) => {
@@ -1896,8 +1896,8 @@ test('game host drops an authenticated player that misses its transport heartbea
     }))
   })
 
-  assert.equal(host.playerCount(), 1)
-  await waitFor(() => host.playerCount() === 0)
+  assert.equal(host.capacityParticipantCount(), 1)
+  await waitFor(() => host.capacityParticipantCount() === 0)
   assert.deepEqual(await closed, { code: 4000, reason: 'connection timed out' })
   assert.equal(client.socket.readyState, WebSocket.CLOSED)
   const disconnect = logs.find((entry) => entry.event === 'player.disconnected')
@@ -1917,7 +1917,7 @@ test('game host records an abnormal player disconnect without inventing a cause'
   const client = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
 
   client.socket.terminate()
-  await waitFor(() => host.playerCount() === 0)
+  await waitFor(() => host.capacityParticipantCount() === 0)
 
   const disconnect = logs.find((entry) => entry.event === 'player.disconnected')
   assert.equal(disconnect?.level, 'warning')
@@ -1942,7 +1942,7 @@ test('game host tolerates one delayed transport pong before declaring the client
   })
 
   await new Promise((resolve) => setTimeout(resolve, 170))
-  assert.equal(host.playerCount(), 1)
+  assert.equal(host.capacityParticipantCount(), 1)
   assert.equal(client.socket.readyState, WebSocket.OPEN)
 })
 
@@ -2064,7 +2064,7 @@ test('game host reconnects a new character at the active world spawn', async (co
   const first = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
   assert.deepEqual(first.welcome.snapshot.players[first.welcome.playerId].position, HUB_SPAWN)
   await closeSocket(first.socket)
-  await waitFor(() => host.playerCount() === 0)
+  await waitFor(() => host.capacityParticipantCount() === 0)
 
   const reconnected = await join(host.address.url, 'test-secret', SECOND_CHARACTER)
   context.after(() => reconnected.socket.close())
@@ -2294,85 +2294,105 @@ test('host admits one fresh solo player into the hidden stock Tutorial and check
   const saved = JSON.parse(checkpointMessage.save)
   assert.equal(saved.schemaVersion, 14)
   assert.equal(saved.profile.economy.tutorialPending, true)
+  assert.equal(saved.continuation.summary.partyRejoinToken, null)
   assert.equal(saved.continuation.simulation.world.tutorial.stage, 0)
 })
 
-test('Tutorial host stops ticking after the last player disconnects', async (context) => {
+test('private College retires a restored Tutorial when its final actor disconnects', async (context) => {
   const logs: GameServerLogEntry[] = []
-  const host = await startGameHost({
-    authentication: SHARED_AUTHENTICATION,
-    log: entry => logs.push(entry),
-    snapshotRate: 100,
-  })
-  context.after(() => host.close())
-  const client = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
-
-  const loaded = nextMessage(client.socket, message => message.type === 'server-boneyard-loaded')
-  client.socket.send(encodeGameMessage({ type: 'client-start-tutorial' }))
-  await loaded
-  await waitFor(() => host.state().world.kind === 'boneyard')
-
-  await closeSocket(client.socket)
-  await waitFor(() => host.humanPlayerCount() === 0)
-  const heldTick = host.state().tick
-  await new Promise(resolve => setTimeout(resolve, 100))
-
-  assert.equal(host.state().tick, heldTick)
-  assert.equal(logs.some(entry => entry.event === 'simulation.tick_failed'), false)
-})
-
-test('private Tutorial resume releases its final capacity slot on disconnect', async (context) => {
-  const playerId = 'tutorial-owner'
-  const loadedBoneyard = materializeStockTutorial(Buffer.alloc(16, 91))
-  const save = createGameSaveDocument({
-    integrity: 'local-only',
-    loadedBoneyard,
-    mods: [],
-    modState: {},
-    partyRejoinToken: null,
-    playerId,
-    state: enterBoneyardWorld(
-      createGameSimulation({ [playerId]: FIRST_CHARACTER }),
-      loadedBoneyard,
-    ),
-  })
-  const tickets = new Map<string, GameHostAdmission>([
-    ['tutorial-ticket', { content: EMPTY_SHARED_CONTENT, leaderboardUserId: null }],
-  ])
+  const loadedBoneyard = materializeStockTutorial(Buffer.alloc(16, 31))
   const host = await startGameHost({
     authentication: {
       kind: 'tickets',
-      claim: credential => {
-        const admission = tickets.get(credential) ?? null
-        tickets.delete(credential)
-        return admission
-      },
+      claim: credential => credential === 'tutorial-ticket'
+        ? { content: EMPTY_SHARED_CONTENT, leaderboardUserId: 42 }
+        : null,
     },
+    log: entry => logs.push(entry),
     sessionKind: 'private-college',
     snapshotRate: 100,
   })
   context.after(() => host.close())
-  const socket = await openSocket(host.address.url)
-  const welcomeMessage = nextMessage(socket, message => message.type === 'server-welcome')
-  socket.send(encodeGameMessage({
-    type: 'client-hello',
-    profile: EMPTY_PLAYER_PROFILE,
-    cheatsEnabled: false,
-    protocolVersion: GAME_PROTOCOL_VERSION,
-    credential: 'tutorial-ticket',
-    character: FIRST_CHARACTER,
-    save,
-    saveIntent: 'resume',
-  }))
-  const welcome = await welcomeMessage
-  assert.equal(welcome.type, 'server-welcome')
-  assert.equal(welcome.snapshot.world.kind, 'boneyard')
-  if (welcome.snapshot.world.kind !== 'boneyard') throw new Error('expected Tutorial')
-  assert.ok(welcome.snapshot.world.tutorial)
+  const socket = await openSavedRunSocket(
+    host.address.url,
+    'tutorial-ticket',
+    savedRunDocument(loadedBoneyard),
+  )
 
   await closeSocket(socket)
   await waitFor(() => host.humanPlayerCount() === 0)
-  assert.equal(host.playerCount(), 0)
+  await new Promise(resolve => setTimeout(resolve, 50))
+
+  assert.equal(host.capacityParticipantCount(), 0)
+  assert.equal(host.runCount(), 0)
+  assert.equal(host.loadedBoneyard(), null)
+  assert.equal(host.state().world.kind, 'hub')
+  assert.equal(logs.some(entry => entry.level === 'error'), false)
+})
+
+test('private College retires an ordinary Boneyard instead of ticking it without actors', async (context) => {
+  const logs: GameServerLogEntry[] = []
+  const loadedBoneyard = materializeBoneyard(
+    createBoneyardCatalog(),
+    'default-random',
+    Buffer.alloc(16, 32),
+  )
+  assert.ok(loadedBoneyard)
+  const host = await startGameHost({
+    authentication: {
+      kind: 'tickets',
+      claim: credential => credential === 'ordinary-ticket'
+        ? { content: EMPTY_SHARED_CONTENT, leaderboardUserId: 42 }
+        : null,
+    },
+    log: entry => logs.push(entry),
+    sessionKind: 'private-college',
+    snapshotRate: 100,
+  })
+  context.after(() => host.close())
+  const socket = await openSavedRunSocket(
+    host.address.url,
+    'ordinary-ticket',
+    savedRunDocument(loadedBoneyard),
+  )
+
+  await closeSocket(socket)
+  await waitFor(() => host.humanPlayerCount() === 0)
+  await new Promise(resolve => setTimeout(resolve, 50))
+
+  assert.equal(host.capacityParticipantCount(), 0)
+  assert.equal(host.runCount(), 0)
+  assert.equal(host.loadedBoneyard(), null)
+  assert.equal(host.state().world.kind, 'hub')
+  assert.equal(logs.some(entry => entry.level === 'error'), false)
+})
+
+test('shared Hub retires the stock Tutorial when its final actor disconnects', async (context) => {
+  const logs: GameServerLogEntry[] = []
+  const host = await startGameHost({
+    authentication: SHARED_HUB_AUTHENTICATION,
+    log: entry => logs.push(entry),
+    sessionKind: 'global-hub',
+    sharedHub: true,
+    snapshotRate: 100,
+  })
+  context.after(() => host.close())
+  const client = await join(host.address.url, 'ticket-tutorial-final-actor', FIRST_CHARACTER)
+  const loaded = nextMessage(client.socket, message => message.type === 'server-boneyard-loaded')
+  client.socket.send(encodeGameMessage({ type: 'client-start-tutorial' }))
+  const loadedMessage = await loaded
+  assert.equal(loadedMessage.type, 'server-boneyard-loaded')
+  assert.equal(loadedMessage.boneyard.choice.id, 'stock-tutorial')
+
+  await closeSocket(client.socket)
+  await waitFor(() => host.humanPlayerCount() === 0)
+  await new Promise(resolve => setTimeout(resolve, 50))
+
+  assert.equal(host.capacityParticipantCount(), 0)
+  assert.equal(host.runCount(), 0)
+  assert.equal(host.partyCount(), 0)
+  assert.deepEqual(host.observationTargets(), [])
+  assert.equal(logs.some(entry => entry.level === 'error'), false)
 })
 
 test('host rejects a Tutorial start after the fresh-profile pending fact clears', async (context) => {
@@ -2483,7 +2503,7 @@ test('persistent host retains its loaded run across an empty interval', async (c
   const firstRun = await loaded
   assert.equal(firstRun.type, 'server-boneyard-loaded')
   await closeSocket(first.socket)
-  await waitFor(() => host.playerCount() === 0)
+  await waitFor(() => host.capacityParticipantCount() === 0)
   const emptyTick = host.state().tick
   await new Promise((resolve) => setTimeout(resolve, 50))
   assert.ok(host.state().tick > emptyTick)
@@ -2599,7 +2619,7 @@ test('a valid same-tab resume replaces only the live Tutorial transport and rota
   assert.equal(rejected.type, 'server-disconnect')
   assert.match(rejected.reason, /already active in another browser/i)
   assert.equal(first.socket.readyState, WebSocket.OPEN)
-  assert.equal(host.playerCount(), 1)
+  assert.equal(host.capacityParticipantCount(), 1)
 
   const firstClosed = socketClose(first.socket)
   const replacementSocket = await openSocket(host.address.url)
@@ -2632,7 +2652,7 @@ test('a valid same-tab resume replaces only the live Tutorial transport and rota
     reason: 'wizard resumed in another browser',
   })
   await new Promise(resolve => setTimeout(resolve, 20))
-  assert.equal(host.playerCount(), 1)
+  assert.equal(host.capacityParticipantCount(), 1)
   assert.equal(host.playerState(replacement.playerId)?.world.kind, 'boneyard')
 })
 
@@ -2804,73 +2824,8 @@ test('thirty-second autosave publishes owner-only saves to a party leader and gu
 })
 
 test('saved party member catches up detached while the live party run continues', async (context) => {
-  const tickets = new Map<string, GameHostAdmission>([
-    ['leader-ticket', { content: EMPTY_SHARED_CONTENT, leaderboardUserId: 42 }],
-    ['member-ticket', { content: EMPTY_SHARED_CONTENT, leaderboardUserId: 43 }],
-  ])
-  const host = await startGameHost({
-    authentication: {
-      kind: 'tickets',
-      claim: credential => {
-        const admission = tickets.get(credential) ?? null
-        tickets.delete(credential)
-        return admission
-      },
-    },
-    leaderboardReceiptSecret: LEADERBOARD_RECEIPT_SECRET,
-    sessionKind: 'global-hub',
-    sharedHub: true,
-    snapshotRate: 100,
-  })
-  context.after(() => host.close())
-  const leader = await join(host.address.url, 'leader-ticket', FIRST_CHARACTER)
-  const member = await join(host.address.url, 'member-ticket', SECOND_CHARACTER)
-  context.after(() => leader.socket.close())
-  context.after(() => member.socket.close())
-
-  const invitationMessage = nextMessage(member.socket, message => (
-    message.type === 'server-party-state' && message.state.invitations.length === 1
-  ))
-  leader.socket.send(encodeGameMessage({
-    type: 'client-party-invite',
-    targetPlayerId: member.welcome.playerId,
-  }))
-  const invitation = await invitationMessage
-  if (invitation.type !== 'server-party-state') assert.fail('expected party invitation')
-  const grouped = nextMessage(member.socket, message => (
-    message.type === 'server-party-state' && message.state.party.memberPlayerIds.length === 2
-  ))
-  member.socket.send(encodeGameMessage({
-    type: 'client-party-accept',
-    invitationId: invitation.state.invitations[0]!.id,
-  }))
-  const party = await grouped
-  if (party.type !== 'server-party-state') assert.fail('expected grouped party')
-
-  const memberRunSave = nextMessage(member.socket, message => (
-    message.type === 'server-save-checkpoint'
-    && JSON.parse(message.save).continuation.summary.partyRejoinToken !== null
-  ))
-  const loadedLeader = nextMessage(leader.socket, message => message.type === 'server-boneyard-loaded')
-  const loadedMember = nextMessage(member.socket, message => message.type === 'server-boneyard-loaded')
-  leader.socket.send(encodeGameMessage({
-    type: 'client-start-match',
-    boneyardId: 'default-random',
-  }))
-  const [leaderRun, memberRun, checkpoint] = await Promise.all([
-    loadedLeader,
-    loadedMember,
-    memberRunSave,
-  ])
-  assert.equal(leaderRun.type, 'server-boneyard-loaded')
-  assert.equal(memberRun.type, 'server-boneyard-loaded')
-  assert.equal(checkpoint.type, 'server-save-checkpoint')
-  const saved = JSON.parse(checkpoint.save) as {
-    continuation: { summary: { partyRejoinToken: string; playerId: string } }
-  }
-  const token = saved.continuation.summary.partyRejoinToken
-  assert.match(token, /^sdrpr2\./)
-  assert.equal(saved.continuation.summary.playerId, member.welcome.playerId)
+  const { checkpoint, host, leader, member, memberRun, tickets, token } =
+    await startDetachedPartyRun(context)
 
   const retainedPartyState = nextMessage(leader.socket, message => (
     message.type === 'server-party-state'
@@ -2892,7 +2847,7 @@ test('saved party member catches up detached while the live party run continues'
       ?.displayName,
     SECOND_CHARACTER.displayName,
   )
-  assert.equal(host.playerCount(), 2, 'the detached wizard keeps one capacity slot')
+  assert.equal(host.capacityParticipantCount(), 2, 'the detached wizard keeps one capacity slot')
   assert.equal(host.partyRejoinTarget(token)?.status, 'detached')
 
   const active = host.playerState(leader.welcome.playerId)
@@ -3009,6 +2964,74 @@ test('saved party member catches up detached while the live party run continues'
   assert.match(rotatedToken, /^sdrpr2\./)
   assert.notEqual(rotatedToken, token)
   assert.equal(host.partyRejoinTarget(token)?.status, 'connected')
+
+  await closeSocket(leader.socket)
+  await waitFor(() => host.humanPlayerCount() === 1)
+  assert.equal(host.runCount(), 1)
+  await closeSocket(returningSocket)
+  await waitFor(() => host.humanPlayerCount() === 0 && host.runCount() === 0)
+  assert.equal(host.capacityParticipantCount(), 0)
+  assert.equal(host.partyCount(), 0)
+  assert.equal(host.partyRejoinTarget(token), null)
+  assert.equal(host.partyRejoinTarget(rotatedToken), null)
+})
+
+test('staged catch-up loses its capability when the final live peer disconnects', async (context) => {
+  const { checkpoint, host, leader, logs, member, tickets, token } =
+    await startDetachedPartyRun(context)
+  await closeSocket(member.socket)
+  await waitFor(() => host.humanPlayerCount() === 1)
+
+  const active = host.playerState(leader.welcome.playerId)
+  assert.ok(active)
+  Object.assign(
+    active,
+    grantGameSimulationPlayerExperience(active, leader.welcome.playerId, 300),
+  )
+  await waitFor(() => host.playerState(leader.welcome.playerId)?.levelUpBarrier !== null)
+  await resolveEveryHostSkillOffer(host, leader.socket, leader.welcome.playerId)
+
+  const target = host.partyRejoinTarget(token)
+  assert.ok(target)
+  const reservationId = 'staged-final-peer-reservation'
+  assert.equal(host.reservePartyRejoin(token, reservationId, performance.now() + 5_000), null)
+  tickets.set('staged-rejoin-ticket', {
+    content: target.content,
+    developerAccess: target.developerAccess,
+    leaderboardUserId: target.leaderboardUserId,
+    partyRejoinToken: token,
+    reservationId,
+  })
+
+  const returningSocket = await openSocket(host.address.url)
+  context.after(() => returningSocket.close())
+  const returningWelcome = nextMessage(returningSocket, message => message.type === 'server-welcome')
+  returningSocket.send(encodeGameMessage({
+    type: 'client-hello',
+    profile: EMPTY_PLAYER_PROFILE,
+    cheatsEnabled: false,
+    protocolVersion: GAME_PROTOCOL_VERSION,
+    credential: 'staged-rejoin-ticket',
+    character: SECOND_CHARACTER,
+    save: checkpoint.save,
+    saveIntent: 'resume',
+  }))
+  const welcome = await returningWelcome
+  if (welcome.type !== 'server-welcome') assert.fail('expected staged rejoin welcome')
+  assert.deepEqual(welcome.snapshot.materializingPlayerIds, [member.welcome.playerId])
+  assert.equal(host.partyRejoinTarget(token)?.status, 'staging')
+
+  const returningClosed = socketClose(returningSocket)
+  await closeSocket(leader.socket)
+  assert.deepEqual(await returningClosed, {
+    code: 1000,
+    reason: 'active party run ended',
+  })
+  await waitFor(() => host.humanPlayerCount() === 0 && host.runCount() === 0)
+  assert.equal(host.capacityParticipantCount(), 0)
+  assert.equal(host.partyCount(), 0)
+  assert.equal(host.partyRejoinTarget(token), null)
+  assert.equal(logs.some(entry => entry.level === 'error'), false)
 })
 
 test('deployment restart checkpoints every connected private-session player before closing', async (context) => {
@@ -3344,7 +3367,7 @@ test('host returns the same multiplayer session from Game Over through loadout t
   assert.notEqual(secondLoaded.boneyard.runId, runId)
   assert.equal(secondActive.snapshot.run.lastCompletedRunId, runId)
   assert.equal(secondActive.snapshot.run.nextGameOverEventId, 2)
-  assert.equal(host.playerCount(), 2)
+  assert.equal(host.capacityParticipantCount(), 2)
 })
 
 test('host signs an account-bound global score only for a fresh cheats-off run', async () => {
@@ -3614,7 +3637,7 @@ test('Lua authority migrates and reset-when-empty retires the VM', async (contex
   assert.deepEqual(result.values, [99])
   assert.notEqual((await hostHealth(host.address.url)).lua, null)
   await closeSocket(second.socket)
-  await waitFor(() => host.playerCount() === 0)
+  await waitFor(() => host.capacityParticipantCount() === 0)
   assert.equal((await hostHealth(host.address.url)).lua, null)
 })
 
@@ -3644,6 +3667,79 @@ test('host authority transfers to the earliest remaining client', async (context
   assert.equal(result.boneyard.choice.id, 'default-random')
 })
 
+async function startDetachedPartyRun(context: TestContext) {
+  const logs: GameServerLogEntry[] = []
+  const tickets = new Map<string, GameHostAdmission>([
+    ['leader-ticket', { content: EMPTY_SHARED_CONTENT, leaderboardUserId: 42 }],
+    ['member-ticket', { content: EMPTY_SHARED_CONTENT, leaderboardUserId: 43 }],
+  ])
+  const host = await startGameHost({
+    authentication: {
+      kind: 'tickets',
+      claim: credential => {
+        const admission = tickets.get(credential) ?? null
+        tickets.delete(credential)
+        return admission
+      },
+    },
+    leaderboardReceiptSecret: LEADERBOARD_RECEIPT_SECRET,
+    log: entry => logs.push(entry),
+    sessionKind: 'global-hub',
+    sharedHub: true,
+    snapshotRate: 100,
+  })
+  context.after(() => host.close())
+  const leader = await join(host.address.url, 'leader-ticket', FIRST_CHARACTER)
+  const member = await join(host.address.url, 'member-ticket', SECOND_CHARACTER)
+  context.after(() => leader.socket.close())
+  context.after(() => member.socket.close())
+
+  const invitationMessage = nextMessage(member.socket, message => (
+    message.type === 'server-party-state' && message.state.invitations.length === 1
+  ))
+  leader.socket.send(encodeGameMessage({
+    type: 'client-party-invite',
+    targetPlayerId: member.welcome.playerId,
+  }))
+  const invitation = await invitationMessage
+  if (invitation.type !== 'server-party-state') assert.fail('expected party invitation')
+  const grouped = nextMessage(member.socket, message => (
+    message.type === 'server-party-state' && message.state.party.memberPlayerIds.length === 2
+  ))
+  member.socket.send(encodeGameMessage({
+    type: 'client-party-accept',
+    invitationId: invitation.state.invitations[0]!.id,
+  }))
+  const party = await grouped
+  if (party.type !== 'server-party-state') assert.fail('expected grouped party')
+
+  const memberRunSave = nextMessage(member.socket, message => (
+    message.type === 'server-save-checkpoint'
+    && JSON.parse(message.save).continuation.summary.partyRejoinToken !== null
+  ))
+  const loadedLeader = nextMessage(leader.socket, message => message.type === 'server-boneyard-loaded')
+  const loadedMember = nextMessage(member.socket, message => message.type === 'server-boneyard-loaded')
+  leader.socket.send(encodeGameMessage({
+    type: 'client-start-match',
+    boneyardId: 'default-random',
+  }))
+  const [leaderRun, memberRun, checkpoint] = await Promise.all([
+    loadedLeader,
+    loadedMember,
+    memberRunSave,
+  ])
+  if (leaderRun.type !== 'server-boneyard-loaded') assert.fail('expected leader Boneyard')
+  if (memberRun.type !== 'server-boneyard-loaded') assert.fail('expected member Boneyard')
+  if (checkpoint.type !== 'server-save-checkpoint') assert.fail('expected member checkpoint')
+  const saved = JSON.parse(checkpoint.save) as {
+    continuation: { summary: { partyRejoinToken: string; playerId: string } }
+  }
+  const token = saved.continuation.summary.partyRejoinToken
+  assert.match(token, /^sdrpr2\./)
+  assert.equal(saved.continuation.summary.playerId, member.welcome.playerId)
+  return { checkpoint, host, leader, logs, member, memberRun, tickets, token }
+}
+
 async function join(
   url: string,
   credential: string,
@@ -3665,6 +3761,42 @@ async function join(
   const welcome = await nextMessage(socket, (message) => message.type === 'server-welcome')
   assert.equal(welcome.type, 'server-welcome')
   return { socket, welcome }
+}
+
+async function openSavedRunSocket(
+  url: string,
+  credential: string,
+  save: string,
+): Promise<WebSocket> {
+  const socket = await openSocket(url)
+  socket.send(encodeGameMessage({
+    type: 'client-hello',
+    profile: EMPTY_PLAYER_PROFILE,
+    cheatsEnabled: false,
+    protocolVersion: GAME_PROTOCOL_VERSION,
+    credential,
+    character: FIRST_CHARACTER,
+    save,
+    saveIntent: 'resume',
+  }))
+  const welcome = await nextMessage(socket, message => message.type === 'server-welcome')
+  assert.equal(welcome.type, 'server-welcome')
+  return socket
+}
+
+function savedRunDocument(loadedBoneyard: LoadedBoneyard): string {
+  return createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard,
+    mods: [],
+    modState: {},
+    partyRejoinToken: null,
+    playerId: 'owner',
+    state: enterBoneyardWorld(
+      createGameSimulation({ owner: FIRST_CHARACTER }),
+      loadedBoneyard,
+    ),
+  })
 }
 
 interface LeaderboardScenario {

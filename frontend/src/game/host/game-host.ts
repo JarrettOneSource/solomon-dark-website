@@ -299,11 +299,11 @@ export interface GameHost {
   botCount(): number
   botPlayerIds(): readonly string[]
   botTelemetry(): readonly GameHostMlBotTelemetry[]
+  capacityParticipantCount(): number
   close(reason?: GameHostCloseReason): Promise<void>
   hubPlayerCount(): number
   humanPlayerCount(): number
   hostPlayerId(): string | null
-  playerCount(): number
   loadedBoneyard(): LoadedBoneyard | null
   observationTargets(): readonly GameHostObservationTarget[]
   modCatalog(): readonly ModConsumableCatalogEntry[]
@@ -2973,6 +2973,9 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         }
       }
       const disconnectedState = stateForClient(client)
+      const disconnectedRunId = disconnectedState.world.kind === 'boneyard'
+        ? disconnectedState.run.runId
+        : null
       const disconnectedPartyId = client.partyRejoinSlot?.partyId ?? (
         activePartySystem()
           ? partyForPlayer(activePartySystem()!, client.playerId)?.id ?? null
@@ -2997,10 +3000,6 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         state = sharedWorlds.hub
         playerContents.delete(client.playerId)
         pendingRestoredModState.delete(client.playerId)
-        if (
-          disconnectedPartyId
-          && !sharedWorlds.parties.parties.some(party => party.id === disconnectedPartyId)
-        ) closePartyModRuntimes(disconnectedPartyId)
       } else {
         state = removePlayerCharacter(state, client.playerId)
         if (privateParties && !retainedPartyMembership) {
@@ -3009,6 +3008,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       }
       if (client.playerId === luaRuntimeOwnerPlayerId) resetLuaRuntime()
       if (clients.size === 0) removeAllBots('last human player disconnected')
+      const retiredPrivateRunId = retireEmptyPrivateCollegeRun()
       if (clients.size === 0) {
         hostPlayerId = null
         resetLuaRuntime()
@@ -3030,6 +3030,18 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         hostPlayerId = clients.values().next().value?.playerId ?? null
       }
       prunePartyRejoinSlots()
+      pruneLeaderboardRunState()
+      const retiredSharedRun = sharedWorlds !== null
+        && disconnectedPartyId !== null
+        && disconnectedRunId !== null
+        && !sharedWorlds.runs.some(run => run.loadedBoneyard.runId === disconnectedRunId)
+      if (retiredSharedRun) {
+        startingPartyIds.delete(disconnectedPartyId)
+        closePartyModRuntimes(disconnectedPartyId)
+        recordEmptyRunRetirement(disconnectedRunId, disconnectedPartyId)
+      } else if (retiredPrivateRunId !== null) {
+        recordEmptyRunRetirement(retiredPrivateRunId, disconnectedPartyId)
+      }
       options.onPlayerCountChanged?.(clients.size)
       const source = planned?.source ?? disconnectSource(closeCode)
       const disconnectedDetails = {
@@ -3079,13 +3091,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       resetNextTickDeadline()
       return
     }
-    if (
-      clients.size === 0
-      && (
-        resetWhenEmpty
-        || (!sharedWorlds && state.world.kind === 'boneyard' && state.world.tutorial !== null)
-      )
-    ) {
+    if (resetWhenEmpty && clients.size === 0) {
       resetNextTickDeadline()
       return
     }
@@ -4404,6 +4410,38 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     return active?.run.runId === lineage.runId ? active : null
   }
 
+  function retireEmptyPrivateCollegeRun(): string | null {
+    if (
+      sessionKind !== 'private-college'
+      || state.world.kind !== 'boneyard'
+      || state.playerEntities.identities.length !== 0
+    ) return null
+    const runId = state.world.runId
+    state = returnGameSimulationToHub(state)
+    loadedBoneyard = null
+    privateModHost?.close()
+    privateModHost = null
+    pendingLuaEvents.length = 0
+    return runId
+  }
+
+  function recordEmptyRunRetirement(runId: string, partyId: string | null): void {
+    const details = { partyId, runId }
+    logGameServerEvent(
+      options.log,
+      'game-host',
+      'info',
+      'run.retired_empty',
+      'An active Boneyard retired after its final authoritative actor left.',
+      logDetails(details),
+    )
+    emitRuntimeEvent(
+      'run.retired_empty',
+      'An active Boneyard retired after its final authoritative actor left.',
+      details,
+    )
+  }
+
   function prunePartyRejoinSlots(now = performance.now()): void {
     for (const [recoveryId, lineage] of [...partyRecoveryLineages]) {
       const claimProbe: PartyRecoveryClaim = {
@@ -4443,7 +4481,9 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     let parties = activePartySystem()
     if (!parties) return
     const connected = new Set([
-      ...[...clients.values()].map(client => client.playerId),
+      ...[...clients.values()].flatMap(client => (
+        client.partyRejoinSlot === null ? [client.playerId] : []
+      )),
       ...bots.keys(),
     ])
     for (const member of lineage.partyRoster) {
@@ -5889,7 +5929,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     hubPlayerCount: () => sharedWorlds?.hub.playerEntities.identities.length
       ?? Number(state.world.kind === 'hub') * clients.size,
     humanPlayerCount: () => clients.size,
-    playerCount: capacityParticipantCount,
+    capacityParticipantCount,
     loadedBoneyard: () => loadedBoneyard,
     modCatalog: () => privateModHost?.content.consumables() ?? [],
     observationTargets,

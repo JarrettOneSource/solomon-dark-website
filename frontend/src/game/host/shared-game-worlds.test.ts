@@ -445,3 +445,23 @@ test('disconnected leader rejoins the same active run without losing leadership'
   assert.equal(worlds.parties.parties.find(({ id }) => id === partyId)?.leaderPlayerId, 'leader')
   assert.equal(sharedGameStateForPlayer(worlds, 'leader'), worlds.runs[0]?.state)
 })
+
+test('detaching the final actor retires its shared run without treating transport loss as party leave', () => {
+  let worlds = createSharedGameWorlds()
+  worlds = addSharedHubPlayer(worlds, 'owner', character('Aurelia'), partyIdentity('owner'))
+  const partyId = worlds.parties.parties[0]!.id
+  worlds = startSharedPartyRun(
+    worlds,
+    'owner',
+    loadedBoneyardFixture('final-actor-detach'),
+  ).state
+
+  worlds = detachSharedGamePlayer(worlds, 'owner')
+
+  assert.equal(worlds.runs.length, 0)
+  assert.equal(sharedGameStateForPlayer(worlds, 'owner'), null)
+  assert.deepEqual(
+    worlds.parties.parties.find(({ id }) => id === partyId)?.memberPlayerIds,
+    ['owner'],
+  )
+})

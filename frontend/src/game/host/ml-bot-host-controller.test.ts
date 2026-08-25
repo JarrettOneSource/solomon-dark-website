@@ -184,7 +184,7 @@ test('developer Lua summons repeatable inert participants that accept a real par
   assert.equal(second.ok, true)
   await waitFor(() => host.botCount() === 2)
   assert.equal(host.humanPlayerCount(), 1)
-  assert.equal(host.playerCount(), 3)
+  assert.equal(host.capacityParticipantCount(), 3)
   assert.equal(host.hubPlayerCount(), 3)
   const botPlayerIds = host.botPlayerIds()
   assert.equal(new Set(botPlayerIds).size, 2)
@@ -299,7 +299,8 @@ test('developer Lua summons repeatable inert participants that accept a real par
 
   await closeSocket(socket)
   await waitFor(() => host.humanPlayerCount() === 0 && host.botCount() === 0)
-  assert.equal(host.playerCount(), 0)
+  assert.equal(host.capacityParticipantCount(), 0)
+  assert.equal(host.runCount(), 0)
 })
 
 test('ordinary shared-Hub admissions cannot invoke developer Lua or summon bots', async (context) => {

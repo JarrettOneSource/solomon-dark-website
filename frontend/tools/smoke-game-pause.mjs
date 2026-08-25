@@ -177,7 +177,7 @@ try {
     displayName: 'Vibia',
     element: 'water',
   })
-  assert.equal(host.playerCount(), 2)
+  assert.equal(host.capacityParticipantCount(), 2)
 
   const modalPauseEdges = []
   const observeModalPause = (data) => {
@@ -598,7 +598,7 @@ try {
   peer.socket.close(1000, 'pause owner left')
   await boneyardWaiting.waitFor({ state: 'detached' })
   await assertNonMusicMuted(page, false)
-  await waitForHost(() => host.playerCount() === 2, 'pause-owner departure')
+  await waitForHost(() => host.capacityParticipantCount() === 2, 'pause-owner departure')
   await waitForHost(() => host.state().tick > heldBoneyardPeer.tick, 'Boneyard disconnect resume')
 
   assert.deepEqual(errors, [])

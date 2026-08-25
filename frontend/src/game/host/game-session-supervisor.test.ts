@@ -10,6 +10,12 @@ import {
   encodeGameMessage,
   type ServerGameMessage,
 } from '../protocol/game-protocol.ts'
+import {
+  createGameSimulation,
+  enterBoneyardWorld,
+} from '../core-server/game-simulation.ts'
+import { createGameSaveDocument } from '../save/game-save-document.ts'
+import { materializeStockTutorial } from './boneyard-catalog.ts'
 import type { GameServerLogEntry } from './game-server-logger.ts'
 import {
   createRuntimeEventPublisher,
@@ -1112,6 +1118,37 @@ test('game session supervisor closes a used session after the final player and p
   )
 })
 
+test('game session supervisor closes a restored Tutorial after its final player leaves', async (context) => {
+  const logs: GameServerLogEntry[] = []
+  const supervisor = await startGameSessionSupervisor({
+    adminSecret: ADMIN_SECRET,
+    allowedOrigins: [BROWSER_ORIGIN],
+    log: entry => logs.push(entry),
+    snapshotRate: 100,
+  })
+  context.after(() => supervisor.close())
+
+  const endpoint = await provision(supervisor.address.url)
+  const client = await joinSaved(
+    supervisor.address.url,
+    endpoint,
+    BROWSER_ORIGIN,
+    tutorialSaveDocument(),
+  )
+  assert.equal(client.welcome.snapshot.world.kind, 'boneyard')
+  if (client.welcome.snapshot.world.kind !== 'boneyard') assert.fail('expected Tutorial')
+  assert.ok(client.welcome.snapshot.world.tutorial)
+
+  await closeSocket(client.socket)
+  await waitFor(() => supervisor.sessionCount() === 0)
+
+  const health = await readHealth(supervisor.address.url)
+  assert.equal(health.privateSessions, 0)
+  assert.equal(health.runs, 0)
+  assert.equal(health.players, 0)
+  assert.equal(logs.some(entry => entry.level === 'error'), false)
+})
+
 test('shared Hub drops only the player that misses its transport heartbeat', async (context) => {
   const logs: GameServerLogEntry[] = []
   const supervisor = await startGameSessionSupervisor({
@@ -1410,6 +1447,22 @@ async function joinSaved(
   const welcome = await next(message => message.type === 'server-welcome')
   assert.equal(welcome.type, 'server-welcome')
   return { next, socket, welcome }
+}
+
+function tutorialSaveDocument(): string {
+  const loadedBoneyard = materializeStockTutorial(Buffer.alloc(16, 31))
+  return createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard,
+    mods: [],
+    modState: {},
+    partyRejoinToken: null,
+    playerId: 'owner',
+    state: enterBoneyardWorld(
+      createGameSimulation({ owner: CHARACTER }),
+      loadedBoneyard,
+    ),
+  })
 }
 
 function websocketUrl(supervisorUrl: string, path: string): string {

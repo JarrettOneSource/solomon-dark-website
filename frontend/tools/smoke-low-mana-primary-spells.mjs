@@ -119,7 +119,7 @@ async function waitForHostReset(host, kind) {
   const deadline = Date.now() + 10_000
   while (Date.now() < deadline) {
     if (
-      host.playerCount() === 0
+      host.capacityParticipantCount() === 0
       && host.state().world.kind === 'hub'
       && host.state().playerEntities.entityIds.length === 0
     ) {

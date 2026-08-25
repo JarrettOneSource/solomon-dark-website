@@ -90,6 +90,14 @@ const INTRO_CLEARED = {
   introFade: 0,
   introMovementTicksRemaining: 0,
 }
+const EMPTY_CONTENT = {
+  assets: [],
+  boneyards: [],
+  compiledMods: [],
+  manifest: { manifestSha256: '0'.repeat(64), mods: [] },
+  modSources: [],
+  summary: { manifestSha256: '0'.repeat(64), mods: [] },
+}
 
 const staticServer = await startStaticClientServer({
   root: fileURLToPath(new URL('../../backend/wwwroot/', import.meta.url)),
@@ -124,10 +132,22 @@ try {
 
 async function runScenario(scenario) {
   const credential = randomBytes(32).toString('base64url')
+  let ticketAvailable = true
+  const hostErrors = []
   const host = await startGameHost({
     allowedOrigins: [baseUrl],
-    authentication: { kind: 'shared', credential },
-    resetWhenEmpty: true,
+    authentication: {
+      kind: 'tickets',
+      claim: candidate => {
+        if (!ticketAvailable || candidate !== credential) return null
+        ticketAvailable = false
+        return { content: EMPTY_CONTENT, leaderboardUserId: 42 }
+      },
+    },
+    log: entry => {
+      if (entry.level === 'error') hostErrors.push(entry)
+    },
+    sessionKind: 'private-college',
     snapshotRate: 100,
   })
   const context = await browser.newContext({
@@ -169,7 +189,7 @@ async function runScenario(scenario) {
   await page.addInitScript(bypassStartupAudioPreload)
   const fixture = tutorialIntroSave()
   await seedLocalSave(page, fixture.record)
-  const errors = { consoleErrors, failedResponses, pageErrors }
+  const errors = { consoleErrors, failedResponses, hostErrors, pageErrors }
   const screenshots = {
     inventory: `${screenshotRoot}-${scenario.name}-inventory.png`,
     inventoryEmptyBackpack: `${screenshotRoot}-${scenario.name}-inventory-empty-backpack.png`,
@@ -334,7 +354,16 @@ async function runScenario(scenario) {
     assertBlink(selectedHudBlink, `${scenario.name} stage-14 selected-HUD pointer`)
     await screenshotInBlinkWindow(page, screenshots.selectedHud, SELECTED_HUD_POINTER)
 
-    assert.deepEqual(errors, { consoleErrors: [], failedResponses: [], pageErrors: [] })
+    await context.close()
+    await waitForHostRetirement(host)
+    assert.equal(host.loadedBoneyard(), null)
+    assert.equal(host.state().world.kind, 'hub')
+    assert.deepEqual(errors, {
+      consoleErrors: [],
+      failedResponses: [],
+      hostErrors: [],
+      pageErrors: [],
+    })
     return {
       ...errors,
       blink,
@@ -729,6 +758,23 @@ async function waitForRestoredTutorial(host) {
     tick: state.tick,
     tutorial: state.world.kind === 'boneyard' ? state.world.tutorial : null,
     world: state.world.kind,
+  })}`)
+}
+
+async function waitForHostRetirement(host) {
+  const deadline = Date.now() + 10_000
+  while (Date.now() < deadline) {
+    if (
+      host.humanPlayerCount() === 0
+      && host.capacityParticipantCount() === 0
+      && host.runCount() === 0
+    ) return
+    await new Promise(resolve => setTimeout(resolve, 25))
+  }
+  throw new Error(`Tutorial host did not retire its final actor: ${JSON.stringify({
+    capacity: host.capacityParticipantCount(),
+    humans: host.humanPlayerCount(),
+    runs: host.runCount(),
   })}`)
 }
 

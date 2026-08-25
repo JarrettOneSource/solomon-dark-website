@@ -2,9 +2,12 @@ import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 import { chromium } from 'playwright-core'
 import { WebSocket } from 'ws'
+
+import { startStaticClientServer } from '../desktop/static-client-server.mjs'
 
 import {
   getPlayerProgression,
@@ -13,7 +16,12 @@ import {
 import { GAME_PROTOCOL_VERSION } from '../src/game/protocol/game-protocol.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 
-const baseUrl = process.env.SDR_PARTY_REJOIN_URL || 'http://127.0.0.1:5310'
+const staticServer = process.env.SDR_PARTY_REJOIN_URL
+  ? null
+  : await startStaticClientServer({
+      root: fileURLToPath(new URL('../../backend/wwwroot/', import.meta.url)),
+    })
+const baseUrl = process.env.SDR_PARTY_REJOIN_URL || staticServer.origin
 const browserOrigin = new URL(baseUrl).origin
 const evidenceRoot = process.env.SDR_PARTY_REJOIN_EVIDENCE_DIR?.trim()
 const sessionKind = process.env.SDR_PARTY_REJOIN_SESSION_KIND?.trim() || 'global-hub'
@@ -30,6 +38,7 @@ const emptyContent = {
   summary: { manifestSha256: '0'.repeat(64), mods: [] },
 }
 const tickets = new Map()
+const hostErrors = []
 const host = await startGameHost({
   allowedOrigins: [browserOrigin],
   authentication: {
@@ -43,6 +52,7 @@ const host = await startGameHost({
   leaderboardReceiptSecret: 'party-rejoin-browser-receipt-secret-20260824',
   log: entry => {
     if (entry.level === 'error') {
+      hostErrors.push(entry)
       process.stderr.write(`party-rejoin host error: ${JSON.stringify(entry)}\n`)
     }
   },
@@ -156,15 +166,33 @@ try {
   }
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
-  await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({
-    timeout: 30_000,
-  })
+  await page.locator('.hub-scene[data-hub-region="office"]').waitFor({ timeout: 60_000 })
+  await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 60_000 })
+  await page.waitForFunction(() => (
+    document.querySelector('.hub-world-canvas')?.getAttribute('data-transition-phase') === 'none'
+  ))
+  await moveHubAxis(page, 'a', 'playerX', 300, 'at-most')
+  await moveHubAxis(page, 's', 'playerY', 800, 'at-least')
+  await moveHubAxis(page, 'd', 'playerX', 512, 'at-least')
+  await page.keyboard.down('s')
+  try {
+    await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({
+      timeout: 30_000,
+    })
+  } finally {
+    await page.keyboard.up('s')
+  }
   await page.getByRole('textbox', { name: 'Wizard name' }).fill('Aurelia')
   await page.getByRole('button', { name: /fire/i }).click()
   await page.locator('.create-menu-disciplines[data-visible="true"]').waitFor()
   await page.locator('.create-menu-discipline-arcane').click()
   const hub = page.locator('.hub-scene[data-renderer-state="ready"]')
   await hub.waitFor({ timeout: 240_000 })
+  await page.waitForFunction(() => {
+    const canvas = document.querySelector('.hub-world-canvas')
+    return canvas?.getAttribute('data-hub-region') === 'courtyard'
+      && canvas?.getAttribute('data-transition-phase') === 'none'
+  }, null, { timeout: 60_000 })
   const hubCanvas = page.locator('.hub-world-canvas')
   const browserPlayerId = await hubCanvas.evaluate(canvas => (
     canvas.__sdrHubFrame.localPlayerId
@@ -212,7 +240,7 @@ try {
   await pause.getByRole('button', { name: 'LEAVE GAME' }).click()
   await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 30_000 })
   await waitForHost(() => host.humanPlayerCount() === 2, 'browser departure')
-  assert.equal(host.playerCount(), 3)
+  assert.equal(host.capacityParticipantCount(), 3)
   assert.equal(host.partyRejoinTarget(oldToken)?.status, 'detached')
 
   const active = host.playerState(leader.playerId)
@@ -373,6 +401,7 @@ try {
       ?.partyRejoinToken
     return typeof token === 'string' && token !== oldToken
   })
+  const rotatedToken = JSON.parse(rotatedSave.document).continuation.summary.partyRejoinToken
   assert.ok(rotatedSave.revision > savedRun.revision)
   assert.equal(host.partyRejoinTarget(oldToken)?.status, 'connected')
 
@@ -380,15 +409,34 @@ try {
     ? join(evidenceRoot, `party-rejoin-catch-up-${sessionKind}.png`)
     : null
   if (screenshotPath) await page.screenshot({ path: screenshotPath })
+
+  await member.close()
+  await waitForHost(() => host.humanPlayerCount() === 1 && host.runCount() === 1, 'final peer')
+  await boneyard.focus()
+  await page.keyboard.press('Escape')
+  const finalPause = page.locator('.gameplay-pause-stage[data-gameplay-pause-view="owner"]')
+  await finalPause.waitFor()
+  await finalPause.getByRole('button', { name: 'LEAVE GAME' }).click()
+  await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 30_000 })
+  await waitForHost(() => (
+    host.humanPlayerCount() === 0
+    && host.capacityParticipantCount() === 0
+    && host.runCount() === 0
+  ), 'final actor retirement')
+  assert.equal(host.partyCount(), 0)
+  assert.equal(host.partyRejoinTarget(oldToken), null)
+  assert.equal(host.partyRejoinTarget(rotatedToken), null)
   assert.deepEqual({
     consoleErrors,
     failedRequests,
     failedResponses,
+    hostErrors,
     pageErrors,
   }, {
     consoleErrors: [],
     failedRequests: [],
     failedResponses: [],
+    hostErrors: [],
     pageErrors: [],
   })
   process.stdout.write(`${JSON.stringify({
@@ -410,12 +458,14 @@ try {
     consoleErrors,
     failedResponses,
     failedRequests,
+    hostErrors,
   })}\n`)
   await context.close()
 } finally {
   for (const client of rawClients.splice(0)) await client.close()
   await browser.close()
   await host.close()
+  await staticServer?.close()
 }
 
 function endpoint(credential) {
@@ -535,6 +585,21 @@ async function waitForHost(predicate, label) {
   while (!predicate()) {
     if (Date.now() >= deadline) throw new Error(`timed out waiting for ${label}`)
     await new Promise(resolve => setTimeout(resolve, 10))
+  }
+}
+
+async function moveHubAxis(page, key, axis, target, direction) {
+  await page.locator('.main-menu-page[data-hub-player-activity="none"]').waitFor()
+  await page.keyboard.down(key)
+  try {
+    await page.waitForFunction(({ axis: coordinate, direction: comparison, target: limit }) => {
+      const value = document.querySelector('.hub-world-canvas')?.__sdrHubFrame?.[coordinate]
+      return typeof value === 'number'
+        && (comparison === 'at-least' ? value >= limit : value <= limit)
+    }, { axis, direction, target }, { timeout: 15_000 })
+  } finally {
+    await page.keyboard.up(key)
+    await page.waitForTimeout(150)
   }
 }
 

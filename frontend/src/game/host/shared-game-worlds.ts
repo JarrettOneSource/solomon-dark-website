@@ -160,9 +160,6 @@ function releaseSharedGamePlayer(
     }
     const nextState = removePlayerCharacter(run.state, playerId)
     if (nextState.playerEntities.identities.length === 0) {
-      if (!removeMembership && nextState.run.phase === 'active') {
-        runs.push({ ...run, state: nextState })
-      }
       continue
     }
     if (nextState.run.phase === 'hub') {

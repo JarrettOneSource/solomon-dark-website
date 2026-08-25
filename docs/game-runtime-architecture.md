@@ -268,6 +268,18 @@ for the announced target revision. After replacement, the first valid former
 member reconstructs the exact run and becomes current leader; later former
 members converge on the same recovery identity regardless of old leadership.
 
+Run liveness and admission capacity are separate counts. A connected browser
+is a transport owner, a materialized participant is an actor currently present
+in a world, and a detached recovery member is capacity reserved beside a live
+run. Recovery capacity never makes a run runnable by itself. Disconnecting an
+actor is one atomic run-owned transition: if another materialized actor remains,
+the run and detached capability survive; if none remains, the run, every
+run-scoped capability/reservation, gameplay pause, and prepared mod scene retire
+together. A private College then becomes empty and closes; the process-lifetime
+shared Hub remains available without retaining the party Boneyard. The fixed
+step scheduler therefore receives either a nonempty active run or no run—never
+an active `GameSimulationState` with zero player entities.
+
 The shared Hub also owns the session-global conditional-NPC clock. Skorcha's
 host fixed-tick schedule alternates visible/absent windows independently of
 participant count and room occupancy; snapshots publish only the current

@@ -221,14 +221,14 @@ try {
   })
   await joinLiveBoneyard(lateJoinPage, baseUrl, 'Water', 3)
   await waitForLootCount(lateJoinPage, 1)
-  await waitUntil(() => host.playerCount() === 3, 'late join did not add one player')
+  await waitUntil(() => host.capacityParticipantCount() === 3, 'late join did not add one player')
   const lateJoinGroundPath = join(screenshotRoot, 'invincibility-potion-late-join-ground.png')
   const lateJoinGroundScreenshot = await lateJoinPage.screenshot({ path: lateJoinGroundPath })
   assert.ok(lateJoinGroundScreenshot.byteLength > 20_000)
   await lateJoinContext.close()
   lateJoinContext = null
   lateJoinPage = null
-  await waitUntil(() => host.playerCount() === 2, 'late join did not tear down')
+  await waitUntil(() => host.capacityParticipantCount() === 2, 'late join did not tear down')
 
   movePlayer(host, guestPlayerId, dropPosition)
   await waitForPickup(host, actor.id)
