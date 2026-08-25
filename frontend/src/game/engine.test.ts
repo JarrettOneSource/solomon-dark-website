@@ -133,6 +133,7 @@ function inertSession() {
     acceptPartyJoinRequest() {},
     acceptPartyInvitation() {},
     bindSkillQuickbar() {},
+    castModSpell() {},
     boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' as const }],
     developerAccess: false,
     isHost: true,

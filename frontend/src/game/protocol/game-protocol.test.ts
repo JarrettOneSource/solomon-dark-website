@@ -4457,6 +4457,17 @@ test('mod content projection round-trips every stable family field and active st
   })), /content\[3\] is invalid/)
 })
 
+test('mod spell cast protocol carries only stable content, request, and target values', () => {
+  const message = {
+    type: 'client-mod-cast' as const,
+    contentId: '5000000000000000008',
+    requestId: 4,
+    targetX: 120,
+    targetY: 140,
+  }
+  assert.deepEqual(decodeClientGameMessage(encodeGameMessage(message)), message)
+})
+
 test('party protocol strictly round-trips membership, access settings, requests, and results', () => {
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
     type: 'client-party-invite',

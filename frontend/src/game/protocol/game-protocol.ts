@@ -655,6 +655,14 @@ export interface ClientLuaExecuteMessage {
   requestId: number
 }
 
+export interface ClientModCastMessage {
+  readonly contentId: string
+  readonly requestId: number
+  readonly targetX: number
+  readonly targetY: number
+  readonly type: 'client-mod-cast'
+}
+
 export type ClientGameMessage =
   | ClientChatMessage
   | ClientCheatModeMessage
@@ -668,6 +676,7 @@ export type ClientGameMessage =
   | ClientInputMessage
   | ClientLevelUpActionMessage
   | ClientLuaExecuteMessage
+  | ClientModCastMessage
   | ClientObserverHelloMessage
   | ClientPartyAcceptMessage
   | ClientPartyDenyMessage
@@ -1238,6 +1247,18 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
       type: 'client-lua-execute',
       code,
       requestId: luaRequestId(value.requestId),
+    }
+  }
+  if (value.type === 'client-mod-cast') {
+    onlyKeys(value, 'message', ['type', 'contentId', 'requestId', 'targetX', 'targetY'])
+    const contentId = limitedString(value.contentId, 'contentId', 19)
+    if (!/^[1-9][0-9]{0,18}$/.test(contentId)) throw new GameProtocolError('contentId is invalid')
+    return {
+      type: 'client-mod-cast',
+      contentId,
+      requestId: luaRequestId(value.requestId),
+      targetX: finite(value.targetX, 'targetX'),
+      targetY: finite(value.targetY, 'targetY'),
     }
   }
   if (value.type === 'client-disconnect') {

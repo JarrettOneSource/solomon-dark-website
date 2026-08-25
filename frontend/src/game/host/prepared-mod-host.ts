@@ -96,6 +96,7 @@ export interface PreparedModHost {
   drainPresentation(): readonly PreparedModPresentationIntent[]
   project(): ModContentProjection
   projectionRevision(): number
+  restore(checkpoint: PreparedModHostCheckpoint): void
   step(
     events: readonly WebLuaDerivedEvent[],
     tick: number,
@@ -302,6 +303,22 @@ export async function prepareModHost(options: Readonly<{
     projectionRevision() {
       requireOpen()
       return statuses.revision + powerups.revision
+    },
+    restore(checkpoint) {
+      requireOpen()
+      const previous = host.checkpoint()
+      try {
+        powerups.restore(checkpoint.powerups)
+        spells.restore(checkpoint.spells)
+        statuses.restore(checkpoint.statuses)
+        session.restore(checkpoint.session)
+      } catch (error) {
+        powerups.restore(previous.powerups)
+        spells.restore(previous.spells)
+        statuses.restore(previous.statuses)
+        session.restore(previous.session)
+        throw error
+      }
     },
     step(events, tick, scopeId, context = {}) {
       requireOpen()

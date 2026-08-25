@@ -1796,6 +1796,32 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         publishSaveCheckpoint('concentration-selected')
         return
       }
+      if (message.type === 'client-mod-cast') {
+        const modHost = modRuntimeScopeForPlayer(client.playerId)?.runtime ?? privateModHost
+        if (!modHost) return
+        try {
+          const result = modHost.cast({
+            contentId: message.contentId,
+            context: { target_x: message.targetX, target_y: message.targetY },
+            playerId: client.playerId,
+            requestId: message.requestId,
+          })
+          if (result.accepted) {
+            broadcastPreparedModProjection(client.playerId, modHost)
+            broadcastSnapshot()
+          }
+        } catch (error) {
+          logGameServerEvent(
+            options.log,
+            'game-host',
+            'warning',
+            'mods.cast_rejected',
+            error instanceof Error ? error.message : 'The mod spell cast was rejected.',
+            logDetails({ contentId: message.contentId, playerId: client.playerId }),
+          )
+        }
+        return
+      }
       if (message.type === 'client-level-up-action') {
         const activeState = stateForPlayer(client.playerId)
         const barrierBefore = activeState.levelUpBarrier

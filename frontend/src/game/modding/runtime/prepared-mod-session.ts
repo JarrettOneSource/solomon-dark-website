@@ -65,6 +65,7 @@ export interface PreparedModSession {
   checkpoint(): PreparedModCheckpoint
   close(): void
   project(viewerId: string): PreparedModProjection
+  restore(checkpoint: PreparedModCheckpoint): void
   step(input: PreparedModStepInput): PreparedModStepResult
 }
 
@@ -168,6 +169,13 @@ export async function prepareModSession(options: Readonly<{
           state: rules.state.snapshot(),
           viewerId,
         })
+      },
+      restore(checkpoint) {
+        requireOpen()
+        if (checkpoint.graphSha256.length !== verified.length || checkpoint.graphSha256.some((hash, index) => (
+          hash !== verified[index]!.graphSha256
+        ))) throw new Error('mod checkpoint graph does not match the prepared session')
+        rules.restore(checkpoint.state)
       },
       step,
     }

@@ -108,6 +108,7 @@ export interface GameClientSession {
   readonly sessionKind: GameSessionKind
   acceptPartyJoinRequest(requestId: string): void
   bindSkillQuickbar(skillId: number, slot: number): void
+  castModSpell(contentId: string, target: Readonly<{ x: number; y: number }>): void
   confirmLoadout(
     element: PlayerCharacterConfig['element'],
     discipline: PlayerCharacterConfig['discipline'],
@@ -244,6 +245,7 @@ export function connectGameClientSession(
     let lastHighPingLoggedAtMs = Number.NEGATIVE_INFINITY
     let nextPingNonce = 1
     let nextLuaRequestId = 1
+    let nextModRequestId = 1
     let nextLeaveSaveRequestId = 1
     let pingTimer: ReturnType<typeof globalThis.setInterval> | undefined
     let sequence = 0
@@ -597,6 +599,18 @@ export function connectGameClientSession(
           type: 'client-skill-quickbar-bind',
           skillId,
           slot,
+        }))
+      },
+      castModSpell(contentId, target) {
+        if (!welcome || destroyed) return
+        const requestId = nextModRequestId
+        nextModRequestId += 1
+        options.transport.send(encodeGameMessage({
+          type: 'client-mod-cast',
+          contentId,
+          requestId,
+          targetX: target.x,
+          targetY: target.y,
         }))
       },
       confirmLoadout(element, discipline) {

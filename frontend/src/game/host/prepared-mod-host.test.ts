@@ -114,7 +114,8 @@ test('prepared host consumes a 1.0 potion atomically and owns status filters and
       tick: 11,
     }), 0)
     assert.equal(host.extensions.createLootItems({ actorSeed: 1, enemyToken: 'SKELETON' }).length, 1)
-    assert.equal(host.checkpoint().statuses.instances.length, 1)
+    const checkpoint = host.checkpoint()
+    assert.equal(checkpoint.statuses.instances.length, 1)
     const started = host.step([{
       name: 'run.started',
       payload: { run_id: 'run-1' },
@@ -132,6 +133,14 @@ test('prepared host consumes a 1.0 potion atomically and owns status filters and
       targetPlayerId: 'player-1',
       tick: 20,
     }), 20)
+    host.restore(checkpoint)
+    assert.equal(host.extensions.filterDamage({
+      amount: 20,
+      damageKind: 'physical',
+      sourceActorId: null,
+      targetPlayerId: 'player-1',
+      tick: 11,
+    }), 0)
   } finally {
     host.close()
   }

@@ -12,6 +12,7 @@ import {
 import {
   ModStateStore,
   validateSchemaValue,
+  type ModStateCheckpoint,
   type ModStateScope,
 } from './mod-state-store.ts'
 
@@ -109,6 +110,20 @@ export class ModRuleEngine {
       rules: Object.freeze([...compiled.rules, ...contentRules(compiled)]),
       runtime,
     })
+  }
+
+  restore(checkpoint: ModStateCheckpoint): void {
+    const definitions = [...this.#mods.values()].flatMap(mod => mod.reducers.map((reducer) => {
+      const registration = mod.runtime.reducer(reducer.key)!
+      return {
+        key: reducer.key,
+        modId: mod.compiled.identity.id,
+        schema: registration.state,
+        schemaVersion: registration.schemaVersion,
+        scope: registration.scope,
+      }
+    }))
+    this.#state.restore(checkpoint, definitions)
   }
 
   dispatch(input: ModRuleDispatchInput): ModRuleDispatchResult {
