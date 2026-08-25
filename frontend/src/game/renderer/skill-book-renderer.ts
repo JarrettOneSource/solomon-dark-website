@@ -14,16 +14,26 @@ import {
   NATIVE_SKILL_CATALOG,
   nativeSkillRoot,
   nativeWeldBuild,
+  playerExperienceProgress,
 } from '../core-kernels/player-progression.ts'
 import { nativeUiFont } from '../native-ui/native-ui-catalog.ts'
-import { destroyNativeUiPixiFor } from '../native-ui/native-ui-pixi.ts'
+import {
+  destroyNativeUiPixiFor,
+  nativeUiPixiFor,
+} from '../native-ui/native-ui-pixi.ts'
+import {
+  measureNativeUiText,
+  wrapNativeUiText,
+} from '../native-ui/native-ui-text.ts'
 import type {
   ProtocolPlayerEconomy,
   ProtocolPlayerProgression,
 } from '../protocol/game-state.ts'
-import type {
-  NativeSkillBookPagePlacement,
-  NativeSkillBookRow,
+import {
+  nativeSkillBookTooltipLines,
+  type NativeSkillBookPagePlacement,
+  type NativeSkillBookRow,
+  type NativeSkillBookTooltipLineKind,
 } from '../skill-book-model.ts'
 import {
   createGameWebGlApplication,
@@ -32,11 +42,24 @@ import {
   type GameTextureMap,
 } from './game-webgl.ts'
 import {
+  NATIVE_SKILL_HOVER_BOX,
+  NATIVE_SKILL_PAGE_PANEL,
+  NATIVE_SKILL_ROW_PRESENTATION,
+  NATIVE_SKILL_SCREEN_ROOT,
+  NATIVE_SKILL_SCREEN_SIZE,
+  measureNativeSkillExactText,
+  nativeSkillExactTextRuns,
+  nativeSkillPageDisplayName,
+  nativeSkillPageTextHeight,
+  nativeSkillPageTint,
+  nativeSkillPageWrappedLines,
+  nativeSkillScreenSealJitter,
+} from './skill-book-render-contract.ts'
+import {
   addBitmapText,
   spriteFor,
   textureFor,
 } from './skill-picker-renderer.ts'
-import { skillPickerRootTint } from './skill-picker-render-contract.ts'
 
 export interface SkillBookRendererPresentation {
   readonly draggedSkillId: number | null
@@ -51,6 +74,7 @@ export interface SkillBookRendererPresentation {
 export interface SkillBookRenderer {
   readonly canvas: HTMLCanvasElement
   destroy(): void
+  render(nowMs: number): void
   setPresentation(presentation: SkillBookRendererPresentation): void
 }
 
@@ -65,12 +89,11 @@ export async function createSkillBookRenderer(): Promise<SkillBookRenderer> {
       createGameWebGlApplication({
         backgroundAlpha: 0,
         className: 'skill-book-canvas',
-        height: 900,
+        height: NATIVE_SKILL_SCREEN_SIZE.height,
         resolution: 1,
-        width: 1600,
+        width: NATIVE_SKILL_SCREEN_SIZE.width,
       }),
       loadGameTextureMap([
-        hub.hud.mouseRight,
         hub.hud.backpack,
         hub.hud.inventoryDigits,
         hub.hud.potionBlue,
@@ -92,13 +115,27 @@ export async function createSkillBookRenderer(): Promise<SkillBookRenderer> {
   const application = gpu.application
   const resources = textures
   const root = new Container()
-  const content = new Container()
-  const usesTouchHelp = window.matchMedia('(pointer: coarse)').matches
-  root.addChild(content)
+  const curtain = new Graphics()
+    .rect(0, 0, NATIVE_SKILL_SCREEN_SIZE.width, NATIVE_SKILL_SCREEN_SIZE.height)
+    .fill(0x000000)
+  const field = new Container()
+  const ambient = new Container()
+  const fixtures = new Container()
+  const overlay = new Container()
+  const pages = new Container()
+  const hud = new Container()
+  hud.position.y = NATIVE_SKILL_SCREEN_ROOT.liveHudArtOffsetY
+  const hover = new Container()
+  root.addChild(curtain, ambient, fixtures, field, overlay, pages, hud, hover)
   application.stage.addChild(root)
 
+  drawSkillScreenField(field, resources)
+  const sealSprites = drawSkillScreenAmbient(ambient, resources)
+  drawSkillScreenFixtures(fixtures, resources)
+  drawSkillScreenOverlay(overlay, resources)
+
   let destroyed = false
-  return {
+  const renderer: SkillBookRenderer = {
     canvas: gpu.canvas,
     destroy() {
       if (destroyed) return
@@ -107,83 +144,197 @@ export async function createSkillBookRenderer(): Promise<SkillBookRenderer> {
       destroyNativeUiPixiFor(resources)
       resources.destroy()
     },
-    setPresentation(presentation) {
+    render(nowMs) {
       if (destroyed) return
-      content.removeChildren().forEach((child) => child.destroy({ children: true }))
-      root.alpha = presentation.openProgress ** 3
-      drawSkillScreenChrome(content, resources)
-      addShadowedText(content, resources, 'SKILLS', 'medium', 800, 53, 0xb6b2b4)
-      for (const placement of presentation.placements) {
-        drawSkillPage(content, resources, placement, presentation)
-      }
-      addShadowedText(
-        content,
-        resources,
-        usesTouchHelp
-          ? 'touch and hold a skill icon for more\ninformation about a skill.'
-          : 'hover over a skill icon for more\ninformation about a skill.',
-        'body',
-        800,
-        160,
-        0xffffff,
-      )
-      addShadowedText(
-        content,
-        resources,
-        'skills with a gold or green border\ncan be dragged into your belt',
-        'body',
-        800,
-        690,
-        0xffffff,
-      )
-      drawSkillQuickbar(content, resources, presentation)
-      drawInventoryHud(content, resources, presentation.economy)
-      drawHoveredTooltip(content, resources, presentation)
+      sealSprites.forEach((seal, index) => {
+        seal.position.x = NATIVE_SKILL_SCREEN_SIZE.width / 2
+          + nativeSkillScreenSealJitter(nowMs, index)
+        seal.rotation = (
+          index * NATIVE_SKILL_SCREEN_ROOT.ambientRotationStepDegrees
+          - nowMs / 1_000
+        ) * Math.PI / 180
+      })
       application.renderer.render(application.stage)
     },
+    setPresentation(presentation) {
+      if (destroyed) return
+      const progress = presentation.openProgress
+      curtain.alpha = progress
+      field.alpha = progress ** 3
+      ambient.alpha = progress ** 9
+      fixtures.alpha = progress ** 9
+      overlay.alpha = progress ** 3
+      pages.alpha = progress ** 2
+      hud.alpha = progress
+      hover.alpha = progress ** 2
+      destroyChildren(pages)
+      destroyChildren(hud)
+      destroyChildren(hover)
+      for (const placement of presentation.placements) {
+        drawSkillPage(pages, resources, placement, presentation)
+      }
+      drawSkillQuickbar(hud, resources, presentation)
+      drawInventoryHud(hud, resources, presentation.economy, presentation.progression)
+      drawNativeHoverBox(hover, resources, presentation)
+      renderer.render(performance.now())
+    },
   }
+  return renderer
 }
 
-function drawSkillScreenChrome(layer: Container, textures: GameTextureMap): void {
-  layer.addChild(new Graphics().rect(0, 0, 1600, 900).fill(0x000000))
+function drawSkillScreenField(layer: Container, textures: GameTextureMap): void {
+  layer.addChild(new Graphics()
+    .rect(
+      0,
+      NATIVE_SKILL_SCREEN_ROOT.leatherTop,
+      NATIVE_SKILL_SCREEN_SIZE.width,
+      NATIVE_SKILL_SCREEN_ROOT.leatherHeight,
+    )
+    .fill(0x000000))
   const leather = new TilingSprite({
-    height: 760,
-    texture: textureFor(textures, 'UI', 49),
-    width: 1600,
+    height: NATIVE_SKILL_SCREEN_ROOT.leatherHeight,
+    texture: textureFor(textures, 'UI', NATIVE_SKILL_SCREEN_ROOT.leatherRecord),
+    width: NATIVE_SKILL_SCREEN_SIZE.width,
   })
-  leather.position.set(0, 50)
+  leather.position.set(0, NATIVE_SKILL_SCREEN_ROOT.leatherTop)
   layer.addChild(leather)
-  for (const [y, rotation] of [[-300, 0], [700, Math.PI]] as const) {
-    const seal = spriteFor(textures, 'UI', 3)
+}
+
+function drawSkillScreenAmbient(layer: Container, textures: GameTextureMap): Sprite[] {
+  const seals: Sprite[] = []
+  for (let index = 0; index < 8; index += 1) {
+    const seal = spriteFor(textures, 'UI', NATIVE_SKILL_SCREEN_ROOT.ambientRecord)
     seal.anchor.set(0.5)
-    seal.alpha = 0.16
-    seal.position.set(800, y)
-    seal.rotation = rotation
+    seal.alpha = NATIVE_SKILL_SCREEN_ROOT.ambientAlpha
+    seal.blendMode = 'add'
+    seal.position.set(NATIVE_SKILL_SCREEN_SIZE.width / 2, NATIVE_SKILL_SCREEN_ROOT.ambientCenterY)
+    seal.rotation = index * Math.PI / 4
+    seal.scale.set(NATIVE_SKILL_SCREEN_ROOT.ambientScale)
     layer.addChild(seal)
+    seals.push(seal)
   }
-  for (const y of [44, 807]) {
+  return seals
+}
+
+function drawSkillScreenFixtures(layer: Container, textures: GameTextureMap): void {
+  for (const placement of NATIVE_SKILL_SCREEN_ROOT.topFlourishes) {
+    const sprite = spriteFor(textures, 'UI', placement.record)
+    sprite.anchor.set(0.5)
+    sprite.position.set(placement.x, placement.y)
+    sprite.rotation = placement.rotationDegrees * Math.PI / 180
+    layer.addChild(sprite)
+  }
+  for (const placement of NATIVE_SKILL_SCREEN_ROOT.topWizards) {
+    const sprite = spriteFor(textures, 'UI', placement.record)
+    sprite.anchor.set(0.5)
+    sprite.position.set(placement.x, placement.y)
+    sprite.scale.x = placement.mirrorX ? -1 : 1
+    layer.addChild(sprite)
+  }
+  for (const placement of NATIVE_SKILL_SCREEN_ROOT.bottomMasonry) {
+    const sprite = spriteFor(textures, 'UI', placement.record)
+    sprite.anchor.set(0.5)
+    sprite.position.set(placement.x, placement.y)
+    layer.addChild(sprite)
+  }
+  const clippedWarriors = new Container()
+  const clip = NATIVE_SKILL_SCREEN_ROOT.bottomWarriorClip
+  const mask = new Graphics().rect(clip.x, clip.y, clip.width, clip.height).fill(0xffffff)
+  clippedWarriors.addChild(mask)
+  clippedWarriors.mask = mask
+  for (const placement of NATIVE_SKILL_SCREEN_ROOT.bottomWarriors) {
+    const sprite = spriteFor(textures, 'UI', placement.record)
+    sprite.anchor.set(0.5)
+    sprite.position.set(placement.x, placement.y)
+    sprite.scale.x = placement.mirrorX ? -1 : 1
+    clippedWarriors.addChild(sprite)
+  }
+  layer.addChild(clippedWarriors)
+}
+
+function drawSkillScreenOverlay(layer: Container, textures: GameTextureMap): void {
+  for (const y of [NATIVE_SKILL_SCREEN_ROOT.topChainY, NATIVE_SKILL_SCREEN_ROOT.bottomChainY]) {
     const chain = new TilingSprite({
       height: 19,
       texture: textureFor(textures, 'UI', 10),
-      width: 1600,
+      width: NATIVE_SKILL_SCREEN_SIZE.width,
     })
     chain.position.set(0, y)
     layer.addChild(chain)
   }
-  for (const right of [false, true]) {
-    for (const bottom of [false, true]) {
-      const bricks = spriteFor(textures, 'UI', 30)
-      bricks.anchor.set(0.5)
-      bricks.scale.set(right ? -1 : 1, bottom ? -1 : 1)
-      bricks.position.set(right ? 1495 : 105, bottom ? 846 : 54)
-      layer.addChild(bricks)
-      const statue = spriteFor(textures, 'UI', bottom ? 32 : 31)
-      statue.anchor.set(0.5)
-      statue.scale.x = right ? -1 : 1
-      statue.position.set(right ? 1530 : 70, bottom ? 814 : 86)
-      layer.addChild(statue)
-    }
+  for (const [x, y] of [[-30, 37], [1_560, 37], [-30, 827], [1_560, 827]] as const) {
+    const endcap = spriteFor(textures, 'UI', 71)
+    endcap.position.set(x, y)
+    layer.addChild(endcap)
   }
+  const titleBackingPlacement = NATIVE_SKILL_SCREEN_ROOT.titleBacking
+  const titleBacking = new NineSliceSprite({
+    bottomHeight: 5,
+    height: titleBackingPlacement.height,
+    leftWidth: 5,
+    rightWidth: 5,
+    texture: textureFor(textures, 'UI', 4),
+    topHeight: 5,
+    width: titleBackingPlacement.width,
+  })
+  titleBacking.position.set(titleBackingPlacement.x, titleBackingPlacement.y)
+  layer.addChild(titleBacking)
+  addShadowedText(
+    layer,
+    textures,
+    'SKILLS',
+    'menu',
+    800,
+    NATIVE_SKILL_SCREEN_ROOT.titleY,
+    NATIVE_SKILL_SCREEN_ROOT.titleTint,
+  )
+  const usesTouchHelp = window.matchMedia('(pointer: coarse)').matches
+  addShadowedText(
+    layer,
+    textures,
+    usesTouchHelp
+      ? 'touch and hold a skill icon for more'
+      : 'hover over a skill icon for more',
+    'menu',
+    800,
+    NATIVE_SKILL_SCREEN_ROOT.helpTopY,
+    NATIVE_SKILL_SCREEN_ROOT.helpTint,
+    Number.POSITIVE_INFINITY,
+    NATIVE_SKILL_SCREEN_ROOT.helpAlpha,
+  )
+  addShadowedText(
+    layer,
+    textures,
+    'information about a skill.',
+    'menu',
+    800,
+    NATIVE_SKILL_SCREEN_ROOT.helpTopY + NATIVE_SKILL_SCREEN_ROOT.helpLineGap,
+    NATIVE_SKILL_SCREEN_ROOT.helpTint,
+    Number.POSITIVE_INFINITY,
+    NATIVE_SKILL_SCREEN_ROOT.helpAlpha,
+  )
+  addShadowedText(
+    layer,
+    textures,
+    'skills with a gold or green border',
+    'menu',
+    800,
+    NATIVE_SKILL_SCREEN_ROOT.helpBottomY,
+    NATIVE_SKILL_SCREEN_ROOT.helpTint,
+    Number.POSITIVE_INFINITY,
+    NATIVE_SKILL_SCREEN_ROOT.helpAlpha,
+  )
+  addShadowedText(
+    layer,
+    textures,
+    'can be dragged into your belt',
+    'menu',
+    800,
+    NATIVE_SKILL_SCREEN_ROOT.helpBottomY + NATIVE_SKILL_SCREEN_ROOT.helpLineGap,
+    NATIVE_SKILL_SCREEN_ROOT.helpTint,
+    Number.POSITIVE_INFINITY,
+    NATIVE_SKILL_SCREEN_ROOT.helpAlpha,
+  )
 }
 
 function drawSkillPage(
@@ -192,18 +343,83 @@ function drawSkillPage(
   placement: NativeSkillBookPagePlacement,
   presentation: SkillBookRendererPresentation,
 ): void {
+  const selection = firstPageSelection(placement, presentation.progression)
+  const tint = nativeSkillPageTint(nativeSkillRoot(placement.page.rootSkillId))
+  const panelAlpha = selection === null
+    ? NATIVE_SKILL_PAGE_PANEL.unselectedAlpha
+    : NATIVE_SKILL_PAGE_PANEL.selectedAlpha
+  layer.addChild(new Graphics()
+    .rect(
+      placement.x + NATIVE_SKILL_PAGE_PANEL.inset,
+      placement.y + NATIVE_SKILL_PAGE_PANEL.inset,
+      placement.page.width - NATIVE_SKILL_PAGE_PANEL.inset * 2,
+      NATIVE_SKILL_PAGE_PANEL.height - NATIVE_SKILL_PAGE_PANEL.inset * 2,
+    )
+    .fill({ alpha: panelAlpha, color: tint }))
+  const panel = nativePagePanel(textures, placement)
+  panel.alpha = panelAlpha
+  panel.tint = tint
+  layer.addChild(panel)
+  const edgePassCount = selection === null ? 1 : 2
+  for (let index = 0; index < edgePassCount; index += 1) {
+    const edge = nativePagePanel(textures, placement)
+    edge.alpha = NATIVE_SKILL_PAGE_PANEL.additiveAlpha
+    edge.blendMode = 'add'
+    layer.addChild(edge)
+  }
   placement.page.rows.forEach((row, index) => {
-    const centerX = placement.x + (index === 0 ? 100 : 280 + 160 * (index - 1))
-    const centerY = placement.y + 80
+    const centerX = placement.x + rowCenterX(index)
+    const centerY = placement.y + NATIVE_SKILL_ROW_PRESENTATION.rowCenterY
     if (index > 0) {
-      const previousCenterX = placement.x + (index === 1 ? 100 : 280 + 160 * (index - 2))
       const arrow = spriteFor(textures, 'Skills', 6)
       arrow.anchor.set(0.5)
-      arrow.position.set((previousCenterX + centerX) / 2, centerY)
+      arrow.position.set(placement.x + (rowCenterX(index - 1) + rowCenterX(index)) / 2, centerY)
       layer.addChild(arrow)
     }
-    drawSkillEntry(layer, textures, row, centerX, centerY, presentation)
+    drawSkillEntry(
+      layer,
+      textures,
+      row,
+      centerX,
+      centerY,
+      selection?.row.id === row.id ? selection.kind : null,
+    )
   })
+}
+
+function nativePagePanel(
+  textures: GameTextureMap,
+  placement: NativeSkillBookPagePlacement,
+): NineSliceSprite {
+  const panel = new NineSliceSprite({
+    bottomHeight: NATIVE_SKILL_PAGE_PANEL.slice,
+    height: NATIVE_SKILL_PAGE_PANEL.height,
+    leftWidth: NATIVE_SKILL_PAGE_PANEL.slice,
+    rightWidth: NATIVE_SKILL_PAGE_PANEL.slice,
+    texture: textureFor(textures, 'Skills', 0),
+    topHeight: NATIVE_SKILL_PAGE_PANEL.slice,
+    width: placement.page.width,
+  })
+  panel.position.set(placement.x, placement.y)
+  return panel
+}
+
+function firstPageSelection(
+  placement: NativeSkillBookPagePlacement,
+  progression: ProtocolPlayerProgression,
+): { kind: 'concentration' | 'primary'; row: NativeSkillBookRow } | null {
+  for (const row of placement.page.rows) {
+    if (row.id === progression.selectedPrimarySkillId) return { kind: 'primary', row }
+    if (progression.concentrationSkillIds.includes(row.id)) return { kind: 'concentration', row }
+  }
+  return null
+}
+
+function rowCenterX(index: number): number {
+  return index === 0
+    ? NATIVE_SKILL_ROW_PRESENTATION.rootCenterX
+    : NATIVE_SKILL_ROW_PRESENTATION.dependentFirstCenterX
+      + NATIVE_SKILL_ROW_PRESENTATION.dependentPitchX * (index - 1)
 }
 
 function drawSkillEntry(
@@ -212,106 +428,112 @@ function drawSkillEntry(
   row: NativeSkillBookRow,
   centerX: number,
   centerY: number,
-  presentation: SkillBookRendererPresentation,
+  selection: 'concentration' | 'primary' | null,
 ): void {
   const weldBuild = row.weldBuildId === null ? null : nativeWeldBuild(row.weldBuildId)
   if (row.id === 52 && !weldBuild) throw new Error('learned Spell Welding has no native build')
-  const card = new NineSliceSprite({
-    bottomHeight: 20,
-    height: 280,
-    leftWidth: 20,
-    rightWidth: 20,
-    texture: textureFor(textures, 'Skills', 5),
-    topHeight: 20,
-    width: 180,
-  })
-  layer.addChild(new Graphics()
-    .roundRect(centerX - 90, centerY - 45, 180, 280, 8)
-    .fill({
-      color: row.id === presentation.progression.selectedPrimarySkillId ? 0x6d526f : 0x3b333d,
-      alpha: row.id === presentation.progression.selectedPrimarySkillId ? 0.58 : 0.42,
-    }))
-  card.position.set(centerX - 90, centerY - 45)
-  card.tint = row.id === presentation.progression.selectedPrimarySkillId ? 0x8b708c : 0x5e565f
-  card.alpha = 0.72
-  layer.addChild(card)
-
-  if (weldBuild) addWeldGlow(
-    layer,
-    textures,
-    weldBuild.colorRoots,
-    centerX,
-    centerY,
-  )
+  const aura = spriteFor(textures, 'Skills', 13)
+  aura.anchor.set(0.5)
+  aura.position.set(centerX, centerY)
+  aura.scale.set(NATIVE_SKILL_ROW_PRESENTATION.auraScale)
+  layer.addChild(aura)
+  if (weldBuild) addWeldGlow(layer, textures, weldBuild.colorRoots, centerX, centerY)
   else {
     const rootGlow = spriteFor(textures, 'Skills', 164)
     rootGlow.anchor.set(0.5)
     rootGlow.position.set(centerX, centerY)
-    rootGlow.tint = skillPickerRootTint(nativeSkillRoot(row.id))
-    rootGlow.alpha = 0.45
+    rootGlow.scale.set(NATIVE_SKILL_ROW_PRESENTATION.auraScale)
+    rootGlow.tint = nativeSkillPageTint(nativeSkillRoot(row.id))
     layer.addChild(rootGlow)
   }
 
-  const selectedPrimary = row.id === presentation.progression.selectedPrimarySkillId
-  const selectedConcentration = presentation.progression.concentrationSkillIds.includes(row.id)
-  const draggable = row.category === 1 || row.category === 2
-  const frame = spriteFor(textures, 'Skills', draggable && !selectedPrimary ? 14 : 5)
+  const actionable = row.category === 1 || row.category === 2 || row.category === 3
+  const frame = spriteFor(
+    textures,
+    'Skills',
+    selection === null && actionable
+      ? NATIVE_SKILL_ROW_PRESENTATION.actionableFrameRecord
+      : NATIVE_SKILL_ROW_PRESENTATION.ordinaryFrameRecord,
+  )
   frame.anchor.set(0.5)
   frame.position.set(centerX, centerY)
-  if (selectedPrimary) frame.tint = 0x75cf79
-  else if (!draggable) frame.tint = 0x8f8790
+  if (selection !== null) {
+    frame.alpha = NATIVE_SKILL_ROW_PRESENTATION.selectedFrameAlpha
+    frame.tint = NATIVE_SKILL_ROW_PRESENTATION.selectedFrameTint
+  }
   layer.addChild(frame)
 
   const iconRecord = weldBuild?.skillScreenIconRecord ?? row.iconRecord
   const iconShadow = spriteFor(textures, 'Skills', iconRecord)
   iconShadow.anchor.set(0.5)
-  iconShadow.position.set(centerX + 2, centerY + 2)
+  iconShadow.position.set(
+    centerX + NATIVE_SKILL_ROW_PRESENTATION.iconShadowOffset,
+    centerY + NATIVE_SKILL_ROW_PRESENTATION.iconShadowOffset,
+  )
   iconShadow.tint = 0x000000
-  iconShadow.alpha = 0.75
   layer.addChild(iconShadow)
   const icon = spriteFor(textures, 'Skills', iconRecord)
   icon.anchor.set(0.5)
   icon.position.set(centerX, centerY)
   layer.addChild(icon)
 
-  const name = weldBuild?.syntheticName ?? row.name
-  const description = weldBuild?.pairDescription ?? row.description
-  if (selectedPrimary) {
-    addShadowedText(layer, textures, 'CASTING', 'skill', centerX, centerY - 48, 0x9ad89e)
-  } else if (selectedConcentration) {
-    addShadowedText(layer, textures, 'CONCENTRATING', 'skill', centerX, centerY - 48, 0x9ad89e)
+  if (selection !== null) {
+    addShadowedText(
+      layer,
+      textures,
+      selection === 'primary' ? 'casting' : 'concentrate',
+      'body',
+      centerX,
+      centerY - 45,
+      NATIVE_SKILL_ROW_PRESENTATION.selectedFrameTint,
+    )
   }
-  addShadowedText(layer, textures, name.toUpperCase(), 'skill', centerX, centerY + 67, 0xffffff)
+  const name = nativeSkillPageDisplayName(
+    weldBuild?.syntheticName ?? row.name,
+    row.effectiveRank,
+  )
+  const nameLines = nativeSkillPageWrappedLines(name)
+  const pageTop = centerY - NATIVE_SKILL_ROW_PRESENTATION.rowCenterY
+  const nameY = pageTop + NATIVE_SKILL_ROW_PRESENTATION.nameBaselineY
+  addShadowedText(layer, textures, nameLines.join('\n'), 'medium', centerX, nameY, 0xffffff)
   addShadowedText(
     layer,
     textures,
     NATIVE_SKILL_CATALOG[row.id]?.family.toUpperCase() ?? '',
     'skill',
     centerX,
-    centerY + 87,
+    nameY + nativeSkillPageTextHeight(nameLines),
     0xffffff,
   )
-  addShadowedText(
-    layer,
-    textures,
-    description.toUpperCase(),
-    'body',
-    centerX,
-    centerY + 123,
-    0xdedede,
-    145,
+  const descriptionLines = nativeSkillPageWrappedLines(
+    weldBuild?.pairDescription ?? row.description,
   )
+  const descriptionY = pageTop
+    + NATIVE_SKILL_ROW_PRESENTATION.descriptionCenterY
+    - nativeSkillPageTextHeight(descriptionLines) / 2
+  addBitmapText(layer, textures, descriptionLines.join('\n'), 'medium', centerX, descriptionY, {
+    lineHeight: nativeUiFont('medium').metrics[0],
+    tint: 0xffffff,
+  })
   const footer = row.category === 1
-    ? 'PRIMARY CAST'
+    ? 'primary cast'
     : row.category === 2
-      ? 'SECONDARY CAST'
-      : row.category === 3
-        ? 'CONCENTRATION'
-        : ''
-  if (footer) addShadowedText(layer, textures, footer, 'skill', centerX, centerY + 205, 0xffffff)
+      ? 'secondary cast'
+      : ''
+  if (footer) {
+    addShadowedText(
+      layer,
+      textures,
+      footer,
+      'body',
+      centerX,
+      pageTop + NATIVE_SKILL_ROW_PRESENTATION.footerBaselineY,
+      0xffffff,
+    )
+  }
 }
 
-function drawHoveredTooltip(
+function drawNativeHoverBox(
   layer: Container,
   textures: GameTextureMap,
   presentation: SkillBookRendererPresentation,
@@ -319,102 +541,109 @@ function drawHoveredTooltip(
   const hovered = presentation.hoveredSkillId
   if (hovered === null) return
   let row: NativeSkillBookRow | undefined
-  let centerX = 800
-  let centerY = 400
+  let sourceX = 0
+  let sourceY = 0
   for (const placement of presentation.placements) {
     const index = placement.page.rows.findIndex(({ id }) => id === hovered)
     if (index < 0) continue
     row = placement.page.rows[index]
-    centerX = placement.x + (index === 0 ? 100 : 280 + 160 * (index - 1))
-    centerY = placement.y + 80
+    sourceX = placement.x + rowCenterX(index)
+    sourceY = placement.y + NATIVE_SKILL_ROW_PRESENTATION.rowCenterY
     break
   }
   if (!row) return
-  const skill = NATIVE_SKILL_CATALOG[row.id]
-  if (!skill) return
-  const title = row.name
-  const description = skill.config?.mDescription ?? row.description
-  const x = Math.min(1_225, Math.max(15, centerX - 180))
-  const y = Math.min(540, Math.max(105, centerY - 250))
-  const statLines = nativeTooltipStatLines(row)
-  const height = 132 + statLines.length * 16
-  layer.addChild(new Graphics()
-    .rect(x, y, 360, height)
-    .fill({ color: 0x000000, alpha: 0.94 }))
-  addBitmapText(layer, textures, `${title} ${row.effectiveRank}/${maximumRank(row)}`.toUpperCase(), 'medium', x + 16, y + 15, {
-    align: 'left',
-    tint: 0xe2b4e5,
+  const semanticLines = nativeSkillBookTooltipLines(row)
+  if (semanticLines.length === 0) return
+  const rendered = semanticLines.map((line) => {
+    const sources = line.kind === 'description'
+      ? wrapNativeUiText(line.text, 'body', NATIVE_SKILL_HOVER_BOX.contentMaxWidth)
+      : line.text.split('\n')
+    return { kind: line.kind, sources }
   })
-  addBitmapText(layer, textures, categoryName(row.category), 'skill', x + 16, y + 40, {
-    align: 'left',
-    tint: 0xe2b4e5,
-  })
-  addBitmapText(layer, textures, description.toUpperCase(), 'body', x + 16, y + 60, {
-    align: 'left',
-    lineHeight: 14,
-    maxWidth: 328,
-    tint: 0xd7d4d7,
-  })
-  const statsY = y + 100
-  statLines.forEach((line, index) => addBitmapText(
-    layer,
-    textures,
-    line,
-    'body',
-    x + 24,
-    statsY + index * 16,
-    { align: 'left', tint: 0xd7d4d7 },
-  ))
-}
+  const contentWidth = Math.min(
+    NATIVE_SKILL_HOVER_BOX.contentMaxWidth,
+    Math.max(0, ...rendered.flatMap(({ sources }) => sources.map(measureNativeSkillExactText))),
+  )
+  const lineHeight = nativeUiFont('body').metrics[0]
+  const contentHeight = rendered.reduce((height, { sources }, index) => (
+    height
+    + sources.length * lineHeight
+    + (index === rendered.length - 1 ? 0 : NATIVE_SKILL_HOVER_BOX.lineGap)
+  ), 0)
+  const width = contentWidth + NATIVE_SKILL_HOVER_BOX.contentMargin * 2
+  const height = contentHeight + NATIVE_SKILL_HOVER_BOX.contentMargin * 2
+  const margin = NATIVE_SKILL_HOVER_BOX.viewportMargin
+  const x = Math.max(
+    margin,
+    Math.min(NATIVE_SKILL_SCREEN_SIZE.width - margin - width, sourceX - width / 2),
+  )
+  let y = sourceY - NATIVE_SKILL_HOVER_BOX.sourceGap - height
+  if (y < margin) y = sourceY + NATIVE_SKILL_HOVER_BOX.sourceGap
+  y = Math.max(margin, Math.min(NATIVE_SKILL_SCREEN_SIZE.height - margin - height, y))
 
-function nativeTooltipStatLines(row: NativeSkillBookRow): readonly string[] {
-  const config = NATIVE_SKILL_CATALOG[row.id]?.config
-  if (!config) return [`CURRENT LEVEL: ${row.effectiveRank}`]
-  const lines = [`CURRENT LEVEL: ${row.effectiveRank}`]
-  const labels: Readonly<Record<string, string>> = {
-    mAbsorb: 'ABSORB',
-    mChance: 'CHANCE',
-    mCooldown: 'COOLDOWN',
-    mDamage: 'DAMAGE',
-    mDamage1: 'DAMAGE MINIMUM',
-    mDamage2: 'DAMAGE MAXIMUM',
-    mDuration: 'DURATION',
-    mFreeze: 'FREEZE',
-    mHP: 'HIT POINTS',
-    mHoard: 'HOARD',
-    mManaCost: 'MANA COST',
-    mQuantity: row.id === 11 ? 'APPENDAGES: UP TO' : 'QUANTITY',
-    mRadius: 'RADIUS',
-    mSlow: 'SLOW',
+  const info = new Container()
+  info.label = 'native-skill-hover-box'
+  info.position.set(x, y)
+  info.addChild(new Graphics()
+    .rect(0, 0, width, height)
+    .fill(0x000000)
+    .stroke({ color: 0xffffff, width: 1 }))
+  let cursorY = NATIVE_SKILL_HOVER_BOX.contentMargin
+  for (const { kind, sources } of rendered) {
+    for (const source of sources) {
+      addNativeExactTextLine(
+        info,
+        textures,
+        source,
+        NATIVE_SKILL_HOVER_BOX.contentMargin,
+        cursorY,
+        nativeHoverLineTint(kind, row),
+      )
+      cursorY += lineHeight
+    }
+    cursorY += NATIVE_SKILL_HOVER_BOX.lineGap
   }
-  for (const [property, label] of Object.entries(labels)) {
-    const configured = config[property]
-    if (typeof configured !== 'number' && !Array.isArray(configured)) continue
-    const value = typeof configured === 'number'
-      ? configured
-      : configured[Math.min(row.effectiveRank, configured.length - 1)]
-    if (typeof value === 'number') lines.push(`${label}: ${formatNativeNumber(value)}`)
-    if (lines.length === 6) break
+  layer.addChild(info)
+}
+
+function nativeHoverLineTint(kind: NativeSkillBookTooltipLineKind, row: NativeSkillBookRow): number {
+  if (kind === 'boost') return 0xff80ff
+  if (kind === 'bonus') return 0xd9ba70
+  if (kind === 'title') return nativeSkillPageTint(nativeSkillRoot(row.id))
+  if (kind === 'category') return dimTint(nativeSkillPageTint(nativeSkillRoot(row.id)), 0.75)
+  return 0xbfbfbf
+}
+
+function dimTint(tint: number, amount: number): number {
+  const red = Math.round(((tint >> 16) & 0xff) * amount)
+  const green = Math.round(((tint >> 8) & 0xff) * amount)
+  const blue = Math.round((tint & 0xff) * amount)
+  return (red << 16) | (green << 8) | blue
+}
+
+function addNativeExactTextLine(
+  layer: Container,
+  textures: GameTextureMap,
+  source: string,
+  x: number,
+  y: number,
+  tint: number,
+): void {
+  let cursor = x
+  for (const run of nativeSkillExactTextRuns(source)) {
+    const text = nativeUiPixiFor(textures).text({
+      align: 'left',
+      font: 'body',
+      scale: run.scale,
+      text: run.text,
+      tint,
+      x: cursor + run.offsetX,
+      y: y + run.offsetY,
+    })
+    if (run.italic) text.skew.x = -Math.atan(0.125)
+    layer.addChild(text)
+    cursor += measureNativeUiText(run.text, 'body', run.scale)
   }
-  return lines
-}
-
-function maximumRank(row: NativeSkillBookRow): number {
-  const config = NATIVE_SKILL_CATALOG[row.id]?.config
-  return config?.mCapLevel && config.mCapLevel > 0
-    ? config.mCapLevel
-    : config?.mMaxLevel ?? row.effectiveRank
-}
-
-function categoryName(category: number): string {
-  if (category === 1) return 'PRIMARY CAST'
-  if (category === 2) return 'SECONDARY CAST'
-  if (category === 3) return 'CONCENTRATION'
-  return 'PASSIVE SKILL'
-}
-
-function formatNativeNumber(value: number): string {
-  return Number.isInteger(value) ? `${value}` : `${Math.round(value * 100) / 100}`
 }
 
 function addWeldGlow(
@@ -424,7 +653,7 @@ function addWeldGlow(
   centerX: number,
   centerY: number,
 ): void {
-  const half = 57 / 2
+  const half = 57 * NATIVE_SKILL_ROW_PRESENTATION.auraScale / 2
   const triangles = [
     { root: colorRoots[0], uvs: [0, 0, 1, 0, 0, 1], vertices: [-half, -half, half, -half, -half, half] },
     { root: colorRoots[1], uvs: [1, 0, 0, 1, 1, 1], vertices: [half, -half, -half, half, half, half] },
@@ -440,8 +669,7 @@ function addWeldGlow(
     mesh.autoUpdate = false
     mesh.eventMode = 'none'
     mesh.position.set(centerX, centerY)
-    mesh.tint = skillPickerRootTint(triangle.root)
-    mesh.alpha = 0.45
+    mesh.tint = nativeSkillPageTint(triangle.root)
     layer.addChild(mesh)
   }
 }
@@ -453,19 +681,25 @@ function drawSkillQuickbar(
 ): void {
   presentation.progression.skillQuickbar.forEach((skillId, slot) => {
     const x = QUICKBAR_SLOT_X[slot]!
-    const occupied = skillId !== null
     const selectedPrimary = skillId === presentation.progression.selectedPrimarySkillId
     layer.addChild(new Graphics()
       .rect(x, QUICKBAR_SLOT_Y, 53, 53)
-      .fill({ color: 0x050505, alpha: 0.78 })
-      .stroke({ color: selectedPrimary ? 0x75cf79 : 0x8a7440, width: occupied ? 2 : 1 }))
+      .fill({ alpha: 0.78, color: 0x050505 })
+      .stroke({
+        alpha: 0.72,
+        color: selectedPrimary ? 0x40ffff : 0x6d6035,
+        width: 2,
+      }))
     if (skillId !== null) {
       const row = presentation.placements
         .flatMap(({ page }) => page.rows)
         .find(({ id }) => id === skillId)
-      if (row) {
-        const weld = row.weldBuildId === null ? null : nativeWeldBuild(row.weldBuildId)
-        const icon = spriteFor(textures, 'Skills', weld?.skillsAtlasIconRecord ?? row.iconRecord)
+      const record = row?.iconRecord ?? NATIVE_SKILL_CATALOG[skillId]?.skills_atlas_icon_record
+      if (record !== undefined) {
+        const weld = skillId === 52
+          ? nativeWeldBuild(presentation.progression.weldBuildId ?? Number.NaN)
+          : null
+        const icon = spriteFor(textures, 'Skills', weld?.skillsAtlasIconRecord ?? record)
         icon.anchor.set(0.5)
         icon.position.set(x + 26.5, QUICKBAR_SLOT_Y + 26.5)
         icon.alpha = 0.375
@@ -475,16 +709,7 @@ function drawSkillQuickbar(
     if (presentation.draggedSkillId !== null && slot === presentation.targetQuickbarSlot) {
       layer.addChild(new Graphics()
         .rect(x - 3, QUICKBAR_SLOT_Y - 3, 59, 59)
-        .stroke({ color: 0x75cf79, width: 1 }))
-    }
-    if (slot === 0) {
-      const mouse = new Sprite(textureFrom(textures.textures, hub.hud.mouseRight))
-      mouse.position.set(x + 15.5, QUICKBAR_SLOT_Y + 44.5)
-      mouse.width = 22
-      mouse.height = 31
-      layer.addChild(mouse)
-    } else {
-      addShadowedText(layer, textures, `${slot}`, 'body', x + 48, QUICKBAR_SLOT_Y + 49, 0xffffff)
+        .stroke({ color: 0x40ffff, width: 1 }))
     }
   })
 }
@@ -493,6 +718,7 @@ function drawInventoryHud(
   layer: Container,
   textures: GameTextureMap,
   economy: ProtocolPlayerEconomy,
+  progression: ProtocolPlayerProgression,
 ): void {
   const image = (source: string, x: number, y: number, width: number, height: number) => {
     const sprite = new Sprite(textureFrom(textures.textures, source))
@@ -500,10 +726,17 @@ function drawInventoryHud(
     sprite.width = width
     sprite.height = height
     layer.addChild(sprite)
+    return sprite
   }
   image(hub.hud.potionRed, 651, 833, 53, 50)
   image(hub.hud.backpack, 734, 824, 58, 62)
-  image(hub.hud.xpFill, 801.5, 832, 4, 48)
+  const xpFill = image(hub.hud.xpFill, 801.5, 832, 4, 48)
+  const xpProgress = playerExperienceProgress(progression)
+  const xpMask = new Graphics()
+    .rect(801.5, 832 + (1 - xpProgress) * 48, 4, xpProgress * 48)
+    .fill(0xffffff)
+  layer.addChild(xpMask)
+  xpFill.mask = xpMask
   image(hub.hud.xpFrame, 798, 828, 12, 56)
   image(hub.hud.tome, 814, 824, 58, 62)
   image(hub.hud.potionBlue, 903, 833, 50, 49)
@@ -538,12 +771,21 @@ function addShadowedText(
   y: number,
   tint: number,
   maxWidth = Number.POSITIVE_INFINITY,
+  alpha = 1,
 ): void {
+  const textLayer = new Container()
+  textLayer.alpha = alpha
   const lineHeight = nativeUiFont(font === 'skill' ? 'skill-uppercase' : font).metrics[0]
-  addBitmapText(layer, textures, text, font, x + 2, y + 2, {
+  const shadowOffset = NATIVE_SKILL_ROW_PRESENTATION.textShadowOffset
+  addBitmapText(textLayer, textures, text, font, x + shadowOffset, y + shadowOffset, {
     lineHeight,
     maxWidth,
     tint: 0x000000,
   })
-  addBitmapText(layer, textures, text, font, x, y, { lineHeight, maxWidth, tint })
+  addBitmapText(textLayer, textures, text, font, x, y, { lineHeight, maxWidth, tint })
+  layer.addChild(textLayer)
+}
+
+function destroyChildren(layer: Container): void {
+  layer.removeChildren().forEach((child) => child.destroy({ children: true }))
 }

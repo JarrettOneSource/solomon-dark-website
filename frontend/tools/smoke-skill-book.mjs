@@ -82,6 +82,11 @@ try {
   })
   await page.goto(`${baseUrl}/game`, { timeout: 90_000, waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 180_000 })
+  const tutorialPrompt = page.locator('.stock-prompt-dialog[data-prompt-kind="tutorial"]')
+  if (await tutorialPrompt.isVisible()) {
+    await tutorialPrompt.getByRole('button', { name: 'NO' }).click()
+    await tutorialPrompt.waitFor({ state: 'detached' })
+  }
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
   await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({ timeout: 30_000 })
@@ -123,11 +128,13 @@ try {
   await book.locator('.skill-book-canvas').waitFor({ timeout: 15_000 })
   await book.locator('xpath=self::*[@data-transition-phase="settled"]').waitFor({ timeout: 5_000 })
   assert.equal(await hubScene.getAttribute('data-gameplay-input-blocked'), 'true')
+  assert.equal(await page.locator('.game-menu-skull').isHidden(), true)
   assert.deepEqual(await book.locator('.skill-book-canvas').evaluate((canvas) => ({
     height: canvas.height,
     webgl2: canvas.getContext('webgl2') instanceof WebGL2RenderingContext,
     width: canvas.width,
   })), { height: 900, webgl2: true, width: 1600 })
+  await page.screenshot({ path: `${screenshotRoot}-settled.png` })
 
   const leviathan = book.getByRole('button', { name: /Call Leviathan, rank 1/ })
   await leviathan.hover()
@@ -403,6 +410,7 @@ try {
     },
     primarySelection: 'Fireball after Boneyard selector',
     screenshots: [
+      `${screenshotRoot}-settled.png`,
       `${screenshotRoot}-tooltip.png`,
       `${screenshotRoot}-mixed-quickbar.png`,
       `${screenshotRoot}-hud-primary-selector.png`,

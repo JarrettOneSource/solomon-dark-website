@@ -236,6 +236,10 @@
   display: none;
 }
 
+.main-menu-page[data-skill-book-open='true'] .game-menu-skull {
+  display: none;
+}
+
 .game-fullscreen-button {
   display: grid;
   box-sizing: border-box;

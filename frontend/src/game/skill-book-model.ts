@@ -39,6 +39,21 @@ export interface NativeSkillBookPagePlacement {
   readonly y: number
 }
 
+export type NativeSkillBookTooltipLineKind =
+  | 'bonus'
+  | 'boost'
+  | 'category'
+  | 'description'
+  | 'level'
+  | 'spacer'
+  | 'stat'
+  | 'title'
+
+export interface NativeSkillBookTooltipLine {
+  readonly kind: NativeSkillBookTooltipLineKind
+  readonly text: string
+}
+
 /**
  * Mirrors SkillScreen_BuildPages: each learned row with no dependency owns a
  * page and every learned transitive dependent is appended to that page.
@@ -156,4 +171,118 @@ export function selectablePrimarySkillRows(
   progression: ProtocolPlayerProgression,
 ): readonly NativeSkillBookRow[] {
   return nativeSkillBookRows(progression).filter(({ category }) => category === 1)
+}
+
+export function nativeSkillBookMaximumRank(row: NativeSkillBookRow): number {
+  const config = NATIVE_SKILL_CATALOG[row.id]?.config
+  return typeof config?.mCapLevel === 'number' && config.mCapLevel > 0
+    ? config.mCapLevel
+    : typeof config?.mMaxLevel === 'number' && config.mMaxLevel > 0
+      ? config.mMaxLevel
+      : row.effectiveRank
+}
+
+export function nativeSkillBookTooltipLines(
+  row: NativeSkillBookRow,
+): readonly NativeSkillBookTooltipLine[] {
+  const config = NATIVE_SKILL_CATALOG[row.id]?.config
+  if (!config) return Object.freeze([])
+  const lines: NativeSkillBookTooltipLine[] = []
+  if (row.effectiveRank > row.permanentRank) {
+    lines.push(Object.freeze({
+      kind: 'boost',
+      text: row.permanentRank === 0 ? 'GRANTED BY ITEM' : 'BOOSTED',
+    }))
+  }
+  const rankSuffix = nativeSkillBookMaximumRank(row) > 1
+    ? ` _s(.7)_o(0,1)${row.effectiveRank}/${nativeSkillBookMaximumRank(row)}`
+    : ''
+  lines.push(
+    Object.freeze({ kind: 'title', text: `${row.name.toUpperCase()}${rankSuffix}` }),
+    Object.freeze({ kind: 'category', text: nativeSkillBookCategoryName(row.category) }),
+    Object.freeze({ kind: 'description', text: config.mDescription ?? row.description }),
+    Object.freeze({ kind: 'spacer', text: '' }),
+    Object.freeze({ kind: 'level', text: `   Current Level: ${row.effectiveRank}` }),
+  )
+  for (const source of nativeSkillBookConfigLines(config.mStats)) {
+    lines.push(Object.freeze({
+      kind: 'stat',
+      text: `   ${formatNativeSkillBookTooltipLine(source, config, row.effectiveRank)}`,
+    }))
+  }
+  if (row.category === 3) {
+    for (const source of nativeSkillBookConfigLines(config.mBonus)) {
+      lines.push(Object.freeze({
+        kind: 'bonus',
+        text: `   ${formatNativeSkillBookTooltipLine(source, config, row.effectiveRank)}`,
+      }))
+    }
+  }
+  return Object.freeze(lines)
+}
+
+export function formatNativeSkillBookTooltipLine(
+  source: string,
+  config: Readonly<Record<string, unknown>>,
+  rank: number,
+): string {
+  let result = ''
+  for (let index = 0; index < source.length;) {
+    if (source.startsWith('%%', index)) {
+      result += '%'
+      index += 2
+      continue
+    }
+    if (source[index] !== '%' || index + 2 >= source.length || source[index + 2] !== ':') {
+      result += source[index]
+      index += 1
+      continue
+    }
+    const format = source[index + 1]!.toUpperCase()
+    if (!['D', 'F', 'N', 'X'].includes(format)) {
+      result += source[index]
+      index += 1
+      continue
+    }
+    let propertyEnd = index + 3
+    while (propertyEnd < source.length && /[A-Za-z0-9_]/.test(source[propertyEnd]!)) {
+      propertyEnd += 1
+    }
+    const property = source.slice(index + 3, propertyEnd)
+    const configured = config[property]
+    const configuredValue = typeof configured === 'number'
+      ? configured
+      : Array.isArray(configured)
+        ? configured[Math.min(rank, configured.length - 1)]
+        : undefined
+    const value = typeof configuredValue === 'number' && Number.isFinite(configuredValue)
+      ? configuredValue
+      : 0
+    result += nativeSkillBookFormattedNumber(value, format)
+    index = propertyEnd + (source[propertyEnd] === '%' ? 1 : 0)
+  }
+  return result
+    .replaceAll('[CR]', '\n')
+    .replaceAll('"\r\n\t"', '\n')
+    .replaceAll('"', '')
+}
+
+function nativeSkillBookConfigLines(value: unknown): readonly string[] {
+  return Array.isArray(value)
+    ? value.filter((line): line is string => typeof line === 'string')
+    : Object.freeze([])
+}
+
+function nativeSkillBookFormattedNumber(value: number, format: string): string {
+  if (format === 'D') return value.toFixed(0)
+  if (format === 'F') return value.toFixed(1)
+  if (format === 'X') return value.toFixed(2)
+  return Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1)
+}
+
+function nativeSkillBookCategoryName(category: number): string {
+  if (category === 1) return 'PRIMARY CAST'
+  if (category === 2) return 'SECONDARY CAST'
+  if (category === 3) return 'CONCENTRATION'
+  return 'PASSIVE SKILL'
 }

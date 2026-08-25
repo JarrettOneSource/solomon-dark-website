@@ -2,20 +2,38 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
+import {
+  NATIVE_SKILL_CATALOG,
+  nativeSkillCategory,
+} from './core-kernels/player-progression.ts'
 import { createGameSimulation } from './core-server/game-simulation.ts'
 import { createGameSnapshot } from './host/game-snapshot.ts'
 import {
   NATIVE_SKILL_PAGE_BASE_WIDTH,
   NATIVE_SKILL_PAGE_DEPENDENT_WIDTH,
   NATIVE_SKILL_PAGE_HEIGHT,
+  formatNativeSkillBookTooltipLine,
   nativeSkillBookPagePlacements,
   nativeSkillBookPages,
   nativeSkillBookRows,
+  nativeSkillBookTooltipLines,
   selectableConcentrationSkillRows,
   selectablePrimarySkillRows,
   selectableSecondarySkillRows,
   type NativeSkillBookPage,
+  type NativeSkillBookRow,
 } from './skill-book-model.ts'
+import {
+  NATIVE_SKILL_HOVER_BOX,
+  NATIVE_SKILL_PAGE_PANEL,
+  NATIVE_SKILL_ROW_PRESENTATION,
+  NATIVE_SKILL_SCREEN_ROOT,
+  nativeSkillPageDisplayName,
+  nativeSkillPageTextHeight,
+  nativeSkillPageTint,
+  nativeSkillPageWrappedLines,
+  nativeSkillExactTextRuns,
+} from './renderer/skill-book-render-contract.ts'
 
 const component = readFileSync(new URL('./SkillBook.tsx', import.meta.url), 'utf8')
 const hudSelector = readFileSync(new URL('./HudSkillSelector.tsx', import.meta.url), 'utf8')
@@ -25,6 +43,7 @@ const hudSelectorRenderer = readFileSync(
   'utf8',
 )
 const css = readFileSync(new URL('./skill-book.css', import.meta.url), 'utf8')
+const mainMenuCss = readFileSync(new URL('./main-menu.css', import.meta.url), 'utf8')
 const renderer = readFileSync(new URL('./renderer/skill-book-renderer.ts', import.meta.url), 'utf8')
 const hud = readFileSync(new URL('./GameHud.tsx', import.meta.url), 'utf8')
 const scene = readFileSync(new URL('./MainMenuScene.tsx', import.meta.url), 'utf8')
@@ -113,12 +132,29 @@ test('uses the recovered page dimensions, wrapping, and common centering', () =>
   ])
 })
 
-test('renderer owns the stock screen chrome, draggable primary/secondary frames, and tooltip', () => {
-  for (const record of [30, 31, 32]) assert.ok(nativeAssets.atlases.UI.records[record])
-  for (const record of [6, 14, 165]) assert.ok(nativeAssets.atlases.Skills.records[record])
-  assert.match(renderer, /textureFor\(textures, 'UI', 49\)/)
+test('renderer owns the complete stock root, page-wide panels, row frames, and HoverBox', () => {
+  for (const record of [3, 4, 10, 30, 31, 32, 33, 49, 71]) {
+    assert.ok(nativeAssets.atlases.UI.records[record])
+  }
+  for (const record of [0, 5, 6, 13, 14, 164, 165]) {
+    assert.ok(nativeAssets.atlases.Skills.records[record])
+  }
+  assert.match(renderer, /NATIVE_SKILL_SCREEN_ROOT\.leatherRecord/)
+  assert.match(renderer, /NATIVE_SKILL_SCREEN_ROOT\.leatherHeight[\s\S]*\.fill\(0x000000\)/)
+  assert.match(renderer, /root\.addChild\(curtain, ambient, fixtures, field, overlay, pages, hud, hover\)/)
+  assert.match(renderer, /textureFor\(textures, 'Skills', 0\)/)
+  assert.match(renderer, /NATIVE_SKILL_SCREEN_ROOT\.topFlourishes/)
+  assert.match(renderer, /spriteFor\(textures, 'Skills', 13\)/)
   assert.match(renderer, /row\.category === 1 \|\| row\.category === 2/)
-  assert.match(renderer, /drawHoveredTooltip/)
+  assert.match(renderer, /drawNativeHoverBox/)
+  assert.match(renderer, /selection === 'primary' \? 'casting' : 'concentrate'/)
+  assert.match(renderer, /\? 'primary cast'/)
+  assert.doesNotMatch(renderer, /roundRect/)
+  assert.doesNotMatch(renderer, /nativeTooltipStatLines/)
+  assert.match(
+    mainMenuCss,
+    /\.main-menu-page\[data-skill-book-open='true'\] \.game-menu-skull\s*\{\s*display: none;/,
+  )
   assert.match(component, /setPointerCapture/)
   assert.match(component, /quickbarSlotAt/)
   assert.match(component, /progression\.skillQuickbar/)
@@ -137,6 +173,117 @@ test('renderer owns the stock screen chrome, draggable primary/secondary frames,
   assert.match(boneyardScene, /event\.code !== settings\.controls\.openSkills/)
 })
 
+test('pins the omitted native root and page-wide render contract', () => {
+  assert.equal(NATIVE_SKILL_SCREEN_ROOT.ambientAlpha, 0.15)
+  assert.equal(NATIVE_SKILL_SCREEN_ROOT.titleY, 60)
+  assert.equal(NATIVE_SKILL_SCREEN_ROOT.helpLineGap, 18)
+  assert.deepEqual(NATIVE_SKILL_SCREEN_ROOT.titleBacking, {
+    height: 34,
+    width: 114,
+    x: 743,
+    y: 34,
+  })
+  assert.deepEqual(NATIVE_SKILL_SCREEN_ROOT.topFlourishes, [
+    { record: 33, rotationDegrees: -90, x: 80, y: 30 },
+    { record: 33, rotationDegrees: 90, x: 1520, y: 30 },
+  ])
+  assert.deepEqual(NATIVE_SKILL_SCREEN_ROOT.topWizards, [
+    { mirrorX: true, record: 31, x: 200, y: 20 },
+    { mirrorX: false, record: 31, x: 1400, y: 20 },
+  ])
+  assert.deepEqual(NATIVE_SKILL_SCREEN_ROOT.bottomWarriorClip, {
+    height: 80,
+    width: 1600,
+    x: 0,
+    y: 820,
+  })
+  assert.deepEqual(NATIVE_SKILL_PAGE_PANEL, {
+    additiveAlpha: 0.5,
+    height: 300,
+    inset: 12,
+    record: 0,
+    selectedAlpha: 0.5,
+    slice: 30,
+    unselectedAlpha: 0.1,
+  })
+  assert.equal(NATIVE_SKILL_ROW_PRESENTATION.ordinaryFrameRecord, 5)
+  assert.equal(NATIVE_SKILL_ROW_PRESENTATION.actionableFrameRecord, 14)
+  assert.equal(NATIVE_SKILL_ROW_PRESENTATION.auraRecord, 13)
+  assert.equal(NATIVE_SKILL_ROW_PRESENTATION.iconShadowOffset, 4)
+  assert.equal(NATIVE_SKILL_ROW_PRESENTATION.selectedFrameAlpha, 1)
+  assert.equal(NATIVE_SKILL_ROW_PRESENTATION.selectedFrameTint, 0x97c797)
+  assert.equal(NATIVE_SKILL_ROW_PRESENTATION.textShadowOffset, 1)
+  assert.equal(NATIVE_SKILL_ROW_PRESENTATION.textWrapWidth, 140)
+  assert.equal(NATIVE_SKILL_SCREEN_ROOT.liveHudArtOffsetY, 16.5)
+  assert.equal(nativeSkillPageTint(0), 0x886688)
+  assert.equal(nativeSkillPageTint(1), 0x998077)
+  assert.deepEqual(NATIVE_SKILL_HOVER_BOX, {
+    contentMargin: 25,
+    contentMaxWidth: 380,
+    lineGap: 10,
+    sourceGap: 50,
+    viewportMargin: 25,
+  })
+})
+
+test('reproduces the stock SkillPage wrapper and vertically centred description block', () => {
+  const magicMissile = nativeSkillPageWrappedLines('a magic bolt that follows enemies')
+  const callLeviathan = nativeSkillPageWrappedLines('call leviathan from the ether')
+  assert.deepEqual(magicMissile, ['a magic bolt', 'that follows', 'enemies'])
+  assert.deepEqual(callLeviathan, ['call leviathan', 'from the', 'ether'])
+  assert.equal(nativeSkillPageTextHeight(magicMissile), 50)
+  assert.equal(nativeSkillPageDisplayName('Magic Missile', 1), 'MAGIC MISSILE')
+  assert.equal(nativeSkillPageDisplayName('Magic Missile', 3), 'MAGIC MISSILE 3')
+})
+
+test('builds HoverBox lines from authored stats and concentration bonuses in native order', () => {
+  const magicMissile = baselineRow(8)
+  assert.deepEqual(
+    nativeSkillBookTooltipLines(magicMissile)
+      .filter(({ kind }) => kind === 'stat')
+      .map(({ text }) => text),
+    ['   Damage: 1-2', '   Mana Cost: 6'],
+  )
+  const leviathan = baselineRow(11)
+  assert.deepEqual(
+    nativeSkillBookTooltipLines(leviathan)
+      .filter(({ kind }) => kind === 'stat')
+      .map(({ text }) => text),
+    ['   Damage: 2', '   Appendages: up to 1', '   Mana Cost: 75'],
+  )
+  const channelMana = catalogRow(57)
+  assert.deepEqual(
+    nativeSkillBookTooltipLines(channelMana)
+      .filter(({ kind }) => kind === 'stat' || kind === 'bonus')
+      .map(({ text }) => text),
+    ['   Recovery: +25%', '   Concentrate: +15% Recovery'],
+  )
+})
+
+test('formats native D/F/X/N values, percent escapes, and ExactText commands', () => {
+  assert.equal(formatNativeSkillBookTooltipLine(
+    '%d:d% | %f:f% | %x:x% | %n:n% | %n:i% | 50%%',
+    { d: 4.6, f: 1.25, i: 3, n: 2.25, x: 1.234 },
+    1,
+  ), '5 | 1.3 | 1.23 | 2.3 | 3 | 50%')
+  assert.deepEqual(nativeSkillExactTextRuns('A_s(.7)_o(0,1)_i / SEC'), [
+    { italic: false, offsetX: 0, offsetY: 0, scale: 1, text: 'A' },
+    { italic: true, offsetX: 0, offsetY: 1, scale: 0.7, text: ' / SEC' },
+  ])
+})
+
+test('drains every public SkillScreen tooltip row without unresolved stat tokens', () => {
+  for (let skillId = 8; skillId <= 79; skillId += 1) {
+    const lines = nativeSkillBookTooltipLines(catalogRow(skillId))
+    assert.ok(lines.length >= 5, `skill ${skillId} lost its HoverBox body`)
+    assert.equal(
+      lines.some(({ text }) => /%[DFNXdfnx]:/.test(text)),
+      false,
+      `skill ${skillId} retained an unresolved native stat token`,
+    )
+  }
+})
+
 test('selected HUD bindings open the compact native selector in both gameplay scenes', () => {
   assert.match(hud, /hub-hud-selected-skill-action/)
   assert.match(hud, /NATIVE_HUD_SKILL_ACTION_WIDTH/)
@@ -151,3 +298,27 @@ test('selected HUD bindings open the compact native selector in both gameplay sc
   assert.match(hudSelector, /top: layout\.optionTop/)
   assert.match(hudSelectorCss, /\.hud-skill-selector-action[\s\S]*pointer-events: auto/)
 })
+
+function baselineRow(skillId: number): NativeSkillBookRow {
+  const row = nativeSkillBookRows(baseline).find(({ id }) => id === skillId)
+  assert.ok(row)
+  return row
+}
+
+function catalogRow(skillId: number): NativeSkillBookRow {
+  const skill = NATIVE_SKILL_CATALOG[skillId]
+  const category = nativeSkillCategory(skillId)
+  assert.ok(skill)
+  assert.notEqual(category, null)
+  return {
+    category: category!,
+    dependencyIds: [],
+    description: skill.config?.mQDescription ?? skill.config?.mDescription ?? '',
+    effectiveRank: 1,
+    iconRecord: skill.skills_atlas_icon_record,
+    id: skillId,
+    name: skill.name,
+    permanentRank: 1,
+    weldBuildId: skillId === 52 ? 1000 : null,
+  }
+}

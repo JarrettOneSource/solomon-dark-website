@@ -111,6 +111,7 @@ export default function SkillBook({
   }), [playerId, subscribeSnapshot])
 
   useEffect(() => subscribeGamePresentationFrames((nowMs) => {
+    rendererRef.current?.render(nowMs)
     if (phase === 'settled') return
     const ticks = Math.floor((nowMs - transitionStartedAtRef.current) / 10)
     const progress = phase === 'opening'
