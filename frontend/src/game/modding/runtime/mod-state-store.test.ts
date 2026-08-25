@@ -91,6 +91,27 @@ test('checkpoint restoration runs every pure migration transactionally', () => {
   assert.equal(invalid.snapshot().cells.length, 0)
 })
 
+test('rollback removes new cells and restores prior values and revision', () => {
+  const store = new ModStateStore()
+  const definition = {
+    key: 'progress',
+    modId: 'example.mod',
+    schema: STATE,
+    schemaVersion: 1,
+    scope: 'party-run',
+  } as const
+  const first = store.cell(definition, { id: 'run-1', kind: 'party-run' })
+  first.set({ count: 3, phase: 'normal' })
+  const checkpoint = store.snapshot()
+  first.set({ count: 4, phase: 'enraged' })
+  store.cell(definition, { id: 'run-2', kind: 'party-run' }).set({ count: 8, phase: 'normal' })
+
+  store.rollback(checkpoint)
+  assert.equal(store.revision, checkpoint.revision)
+  assert.deepEqual(first.get(), { count: 3, phase: 'normal' })
+  assert.equal(store.snapshot().cells.length, 1)
+})
+
 function schema(
   schemaKind: string,
   fields: WebLuaSchemaDefinition['fields'],

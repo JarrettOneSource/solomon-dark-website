@@ -166,6 +166,29 @@ export class ModStateStore {
     this.#revision = Math.max(this.#revision, checkpoint.revision)
   }
 
+  rollback(checkpoint: ModStateCheckpoint): void {
+    this.#requireOpen()
+    const snapshots = new Map(checkpoint.cells.map(cell => [
+      cellId(cell.modId, cell.key, cell.scope),
+      cell,
+    ]))
+    for (const id of [...this.#cells.keys()]) {
+      if (!snapshots.has(id)) this.#cells.delete(id)
+    }
+    for (const [id, snapshot] of snapshots) {
+      const cell = this.#cells.get(id)
+      if (!cell || cell.definition.schemaVersion !== snapshot.schemaVersion) {
+        throw new Error(`cannot roll back missing mod state cell ${snapshot.modId}:${snapshot.key}`)
+      }
+      cell.value = validateSchemaValue(
+        cell.definition.schema,
+        snapshot.value,
+        `rollback ${snapshot.modId}:${snapshot.key}`,
+      )
+    }
+    this.#revision = checkpoint.revision
+  }
+
   closeScope(scope: ModStateScope): number {
     this.#requireOpen()
     const target = scopeKey(scope)
