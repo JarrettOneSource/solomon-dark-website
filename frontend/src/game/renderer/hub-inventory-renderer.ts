@@ -20,9 +20,9 @@ import {
 } from '../core-kernels/hub-economy.ts'
 import type { PlayerCharacterConfig, WizardElement } from '../core-kernels/player-character.ts'
 import {
-  HUB_INTERACTION_DIALOGUES,
   HUB_TRADER_DIALOGUES,
   equipmentSlotsForItem,
+  hubInteractionDialogue,
   type HubInteractionId,
 } from '../hub-inventory-presentation.ts'
 import {
@@ -193,6 +193,7 @@ export type HubInventoryRendererModel =
       readonly selectedSelectorId: number | null
       readonly selectorOffset: number
       readonly selectorRows: readonly HubNpcSelectorRow[]
+      readonly storyOffice: boolean
     }
   | {
       readonly config: PlayerCharacterConfig
@@ -901,7 +902,7 @@ function buildDialogue(
   layer: Container,
   model: Extract<HubInventoryRendererModel, { kind: 'dialogue' }>,
 ): ChatRenderState {
-      const dialogue = HUB_INTERACTION_DIALOGUES[model.interaction]
+  const dialogue = hubInteractionDialogue(model.interaction, model.storyOffice)
   addChatPanel(context, layer)
   addBitmapText(
     context,
@@ -927,7 +928,7 @@ function buildDialogue(
 
   let contentHeight = 0
   if (model.content.kind === 'choices') {
-    const choices = hubNpcChatChoices(model.interaction)
+    const choices = hubNpcChatChoices(model.interaction, model.storyOffice)
     const rowHeight = Math.min(52, HUB_CHAT_PANEL.contentHeight / Math.max(1, choices.length))
     choices.forEach((choice, index) => addBitmapText(
       context,

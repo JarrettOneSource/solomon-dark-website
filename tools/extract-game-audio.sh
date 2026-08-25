@@ -58,6 +58,19 @@ copy_sfx() {
   verify_sha256 "$output_path" "$expected_sha256"
 }
 
+copy_dynamic_sfx() {
+  local source="$1"
+  local output="$2"
+  local expected_sha256="$3"
+  local source_path="$SOURCE_DIR/dynamic_sounds/$source"
+  local output_path="$SFX_OUT/$output"
+
+  verify_sha256 "$source_path" "$expected_sha256"
+  mkdir -p "$(dirname "$output_path")"
+  cp -- "$source_path" "$output_path"
+  verify_sha256 "$output_path" "$expected_sha256"
+}
+
 copy_voice() {
   local source="$1"
   local output="$2"
@@ -124,6 +137,7 @@ copy_sfx dropbag/dropbag2.wav drop-bag-2.wav 1ec0a6ecf46d8d7ca0b92bb4ed62f78ca45
 copy_sfx Wizard_Ouch/SAY_OUCH1.wav wizard-ouch-1.wav 3e851ee873c9798923624d2b117c6fc91d656f66d7961a00935cfb182393b638
 copy_sfx Wizard_Ouch/SAY_OUCH2.wav wizard-ouch-2.wav 509ce875de5322ebc4ee883cf2f1db9ba172b1cf22a6a6da6e31a0e2c91d12b7
 copy_sfx Wizard_Ouch/SAY_OUCH3.wav wizard-ouch-3.wav 26cd8bea5d55a47b6476f130481bad26887f7af1cf12ec43b2989e495323e5ea
+copy_dynamic_sfx wipeglass.wav polisher-wipe-loop.wav ad5043df28f0ee18e881ffe709fc819218533b080d6d1ec4093603d8447e4d57
 
 # Complete stock right-click ability lifecycle bank. These remain separate
 # cues because native ownership distinguishes one-shots, streams, and loops.
@@ -193,5 +207,6 @@ copy_voice SAY_ILLDOTHEDISPATCHING.wav tutorial-do-the-dispatching.wav 5925f54d7
 copy_voice SAY_YOURPERVERSIONS.wav tutorial-your-perversions.wav 9faf1b8da6df4fbec57beaa6213c724d5b88f9d8db2092dd8eed6082e4c6fa92
 copy_voice SAY_TODEATHEXACTLY.wav tutorial-to-death-exactly.wav d92e6cbbd0aad5d8784da89712e9d0e810a6fd8bfa1278dbaf9a23ac1298ee9c
 copy_voice SAY_COWARDCOMEBACK.wav tutorial-coward-come-back.wav e524548ebad58e35e20cdb87ce3c6c41e58c596807fcb1a799e0630772793605
+copy_voice ARCH_INTRO_0.wav arch-intro-0.wav b819a5aa7397df964ec9f9e03149941450d65d10fe207f71c3643419fd071255
 
-printf 'Extracted 5 native game tracks, the complete right-click WAV bank, and 22 Tutorial voice lines.\n'
+printf 'Extracted 5 native game tracks, the complete right-click WAV bank, the College Office loop, and 23 voice lines.\n'

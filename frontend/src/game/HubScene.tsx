@@ -79,6 +79,7 @@ import {
   gameViewportLayout,
   type GameViewportLayout,
 } from './renderer/game-viewport.ts'
+import { hubPolisherWipeGain } from './renderer/hub-private-room-presentation.ts'
 import {
   PLAYER_CHARACTER_SHEETS,
   playerCharacterAtlasCssFrame,
@@ -264,6 +265,20 @@ export default function HubScene({
   const [transitionActive, setTransitionActive] = useState(() => (
     hubInitialSnapshot.world.participants[playerId]?.transition !== null
   ))
+  const storyOffice = currentRegion === 'office' && economy.collegeIntroPending
+  const polisherWipeGain = storyOffice ? hubPolisherWipeGain(playerPosition) : 0
+  useEffect(() => {
+    if (!storyOffice) {
+      audio.stopLoop('polisher-wipe', 'story-office-polisher')
+      return
+    }
+    audio.startLoop('polisher-wipe', 'story-office-polisher', {
+      volume: polisherWipeGain,
+    })
+  }, [audio, polisherWipeGain, storyOffice])
+  useEffect(() => () => {
+    audio.stopLoop('polisher-wipe', 'story-office-polisher')
+  }, [audio])
   const modalOpen = pickerOpen || hubUiSurface !== null || npcNoteboxOpen || selectedPlayerId !== null
     || partySettingsOpen
   modalOpenRef.current = modalOpen
@@ -487,7 +502,11 @@ export default function HubScene({
         const interaction = nearestHubInteraction(
           participant.region,
           player.position,
-          { skorchaPosition: snapshot.world.skorcha?.position ?? null },
+          {
+            skorchaPosition: snapshot.world.skorcha?.position ?? null,
+            storyOffice: participant.region === 'office'
+              && player.economy.collegeIntroPending,
+          },
         )
         if (interaction) {
           setHubUiSurface({ interaction, kind: 'dialogue', source: 'world' })
@@ -679,13 +698,21 @@ export default function HubScene({
     const interaction = hubInteractionAtPoint(
       participant.region,
       point,
-      { skorchaPosition: snapshot.world.skorcha?.position ?? null },
+      {
+        skorchaPosition: snapshot.world.skorcha?.position ?? null,
+        storyOffice: participant.region === 'office'
+          && player.economy.collegeIntroPending,
+      },
     )
     if (!interaction || !hubInteractionWithinRange(
       interaction,
       participant.region,
       player.position,
-      { skorchaPosition: snapshot.world.skorcha?.position ?? null },
+      {
+        skorchaPosition: snapshot.world.skorcha?.position ?? null,
+        storyOffice: participant.region === 'office'
+          && player.economy.collegeIntroPending,
+      },
     )) return
     event.preventDefault()
     event.stopPropagation()
@@ -715,6 +742,7 @@ export default function HubScene({
       data-viewport-width={viewport.width}
       data-ui-scale={uiScale}
       data-renderer-state={rendererError ? 'error' : rendererState}
+      data-story-office={storyOffice || undefined}
       aria-label={`${HUB_REGION_ACCESSIBILITY[currentRegion]} Configured movement keys are ${settings.controls.moveUp}, ${settings.controls.moveLeft}, ${settings.controls.moveDown}, and ${settings.controls.moveRight}.`}
       tabIndex={0}
     >
@@ -818,6 +846,7 @@ export default function HubScene({
           skorchaDismissalIndex={skorchaInteraction?.dismissalIndex ?? 0}
           skorchaPosition={skorchaInteraction?.position ?? null}
           surface={hubUiSurface}
+          storyOffice={storyOffice}
           transitionActive={transitionActive}
         />
 

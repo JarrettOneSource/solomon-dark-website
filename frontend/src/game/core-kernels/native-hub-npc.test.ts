@@ -52,7 +52,7 @@ test('fresh profiles own all ten native help rows and only three named actors cl
 })
 
 test('the generated catalog owns every compiled survival Hub actor, painting, and source hash', () => {
-  assert.equal(NATIVE_HUB_NPC_CATALOG.schema, 'solomon-dark-native-hub-npc-interactions-v2')
+  assert.equal(NATIVE_HUB_NPC_CATALOG.schema, 'solomon-dark-native-hub-npc-interactions-v3')
   assert.equal(NATIVE_HUB_NPC_CATALOG.source.retailVersion, '0.72.5')
   assert.equal(
     NATIVE_HUB_NPC_CATALOG.source.executableSha256,
@@ -62,6 +62,7 @@ test('the generated catalog owns every compiled survival Hub actor, painting, an
     'books.txt': 'd7ca0a36c2fe6af90a4a950d5ff3dab7638f43640de97684eb6a7583a02b24a1',
     'narration.txt': '5a80f605f8fcac7fc634f8234d5b0a0173d3d4aa563dc076cc6d1b4dbc649174',
     'spellfacts.txt': '1d78d408664ea830465e7e5a8b56df2c6373cb4f6685dc025a1a6d0f90ab0e17',
+    'story.txt': 'ce1580bdce93a617c6045617d4c42f9c1b9019a5d5664efadf36c8b80f40071d',
     'survival.txt': '5e792f4dc692667d0ecaa4e7304202f11d2d1cdc664820b97be83145fa3b2d67',
   })
   assert.equal(NATIVE_HUB_INTERACTION_IDS.length, 20)
@@ -88,6 +89,34 @@ test('the generated catalog owns every compiled survival Hub actor, painting, an
     const geometry = NATIVE_HUB_NPC_CATALOG.interactions[id].geometry
     return geometry.radius === 15 && geometry.rangeRadius === 40
   }))
+  assert.deepEqual(
+    Object.keys(NATIVE_HUB_NPC_CATALOG.storyOffice.dialogue),
+    [
+      'ARCH_DISMISS_0',
+      'ARCH_INTRO_0',
+      'ARCH_Q1_0',
+      'ARCH_Q2_0',
+      'ARCH_Q3_0',
+      'POLISHER_DISMISS_0',
+      'POLISHER_INTRO_0',
+      'POLISHER_Q1_0',
+      'POLISHER_Q2_0',
+    ],
+  )
+  assert.deepEqual(
+    NATIVE_HUB_NPC_CATALOG.storyOffice.interactions.polisher.geometry,
+    { position: { x: 566, y: 735 }, radius: 15, region: 'office' },
+  )
+  assert.deepEqual(NATIVE_HUB_NPC_CATALOG.storyOffice.polisher, {
+    artRecords: [23, 24, 25, 26],
+    loopFullDistance: 50,
+    loopSha256: 'ad5043df28f0ee18e881ffe709fc819218533b080d6d1ec4093603d8447e4d57',
+    loopSilentDistance: 200,
+    phaseFloatRange: 0.25,
+    phaseSpeed: 0.05,
+    reverseDrawCount: 1500,
+    reverseDrawValue: 3,
+  })
 })
 
 test('Provokatus owns all five Boasts and each producer fails exactly its own challenge once', () => {

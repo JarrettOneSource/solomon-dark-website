@@ -158,6 +158,7 @@ export type GameStreamCue =
   | NativeTutorialCue
   | 'death-guitar'
   | 'dye'
+  | 'arch-intro-0'
 export type GameLoopCue =
   | 'comet-loop'
   | 'electric-loop'
@@ -172,6 +173,7 @@ export type GameLoopCue =
   | 'maggots-loop'
   | 'meteor-loop'
   | 'plane-cross-loop'
+  | 'polisher-wipe'
   | 'rainfall-loop'
   | 'rolling-stone-loop'
   | 'soul-loop'
@@ -194,7 +196,7 @@ interface NativeMusicEntry {
 }
 
 interface NativeSoundEntry {
-  registryOffset: number
+  registryOffset: number | null
   sourceName: string
   sourceSha256: string
 }
@@ -911,6 +913,11 @@ export const NATIVE_LOOP_MANIFEST = {
     sourceName: 'sounds\\PlaneCross__Loop',
     sourceSha256: '04d3bc7b433ef47b758933456e9feecb83924fa9b0ec31e0aeedb0946cd14a24',
   },
+  'polisher-wipe': {
+    registryOffset: null,
+    sourceName: 'dynamic_sounds\\wipeglass.wav',
+    sourceSha256: 'ad5043df28f0ee18e881ffe709fc819218533b080d6d1ec4093603d8447e4d57',
+  },
   'rainfall-loop': {
     registryOffset: 0x1a6c,
     sourceName: 'sounds\\rainfall__loop',
@@ -1082,6 +1089,18 @@ export const NATIVE_SOLOMON_VOICE_MANIFEST = {
 } as const satisfies Readonly<
   Record<BoneyardSolomonVoiceCue | GameOverSolomonVoiceCue, NativeVoiceEntry>
 >
+
+export const NATIVE_COLLEGE_OFFICE_AUDIO_MANIFEST = {
+  archIntro: {
+    durationTicks: 698,
+    sourceName: 'voices\\ARCH_INTRO_0.wav',
+    sourceSha256: 'b819a5aa7397df964ec9f9e03149941450d65d10fe207f71c3643419fd071255',
+  },
+  polisherWipe: {
+    sourceName: 'dynamic_sounds\\wipeglass.wav',
+    sourceSha256: 'ad5043df28f0ee18e881ffe709fc819218533b080d6d1ec4093603d8447e4d57',
+  },
+} as const
 
 export const GAME_SCENE_MUSIC = {
   boneyard: { cue: 'prelude', transitionTicks: 100 },

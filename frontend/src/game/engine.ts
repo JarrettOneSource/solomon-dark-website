@@ -41,6 +41,7 @@ export type GameEndpoint =
 
 export interface SessionOptions {
   allowModMismatch?: boolean
+  beginCollegeIntro?: boolean
   character: PlayerCharacterConfig
   cheatsEnabled?: boolean
   diagnostics?: GameClientDiagnostics
@@ -102,6 +103,7 @@ export async function bootGame(options: SessionOptions): Promise<GameSession> {
   )
   const session = await connectSession({
     ...(options.allowModMismatch ? { allowModMismatch: true } : {}),
+    ...(options.beginCollegeIntro ? { beginCollegeIntro: true } : {}),
     character: options.character,
     cheatsEnabled: options.cheatsEnabled === true,
     profile: options.profile,

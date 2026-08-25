@@ -4,13 +4,34 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 import { HUB_PRIVATE_ROOM_LAYOUTS } from '../core-kernels/hub-private-room-layout.ts'
+import { createHubPolisherClock } from '../hub-presentation.ts'
 import {
   HUB_LIBRARY_EXIT_MASKS,
   HUB_MORTUARY_MEMORIAL_GLOW,
   HUB_PRIVATE_ROOM_FLAME_ANCHORS,
   hubMemoratorHeadingIndex,
+  hubPolisherWipeGain,
   hubRoomFlameTransform,
 } from './hub-private-room-presentation.ts'
+
+test('pins the first story Office Polisher art, animation, and wipe attenuation', () => {
+  for (const [filename, digest] of [
+    ['hub-room-polisher.png', 'bfa498a819136d1075989e9f3235eb96da790a51f19768b8fac98864cbdf5f24'],
+    ['hub-room-polisher-marker.png', '596881d493d62cbb6695877411081c77fa8ef5bf22374ef4738ce02960dc931f'],
+  ] as const) {
+    assert.equal(createHash('sha256').update(readFileSync(
+      new URL(`../../assets/game/${filename}`, import.meta.url),
+    )).digest('hex'), digest)
+  }
+  const clock = createHubPolisherClock(0x5011)
+  const frames = Array.from({ length: 500 }, (_, tick) => clock.advanceTo(tick))
+  assert.ok(frames.every(frame => frame >= 0 && frame < 4))
+  assert.deepEqual([...new Set(frames)].sort(), [0, 1, 2, 3])
+  assert.equal(hubPolisherWipeGain({ x: 566, y: 735 }), 1)
+  assert.equal(hubPolisherWipeGain({ x: 616, y: 735 }), 1)
+  assert.equal(hubPolisherWipeGain({ x: 766, y: 735 }), 0)
+  assert.ok(Math.abs(hubPolisherWipeGain({ x: 641, y: 735 }) - 5 / 6) < 1e-12)
+})
 
 test('locks the native late Library exit masks around the return corridor', () => {
   assert.deepEqual(HUB_LIBRARY_EXIT_MASKS, [

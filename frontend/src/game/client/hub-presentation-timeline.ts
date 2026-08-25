@@ -16,6 +16,7 @@ import {
   interpolateNativeSecondaryState,
 } from './native-secondary-presentation.ts'
 import {
+  HUB_COLLEGE_INTRO_FADE_RATE,
   HUB_INCOMING_FADE_RATES,
   HUB_OUTGOING_FADE_RATE,
 } from '../core-kernels/hub-regions.ts'
@@ -147,9 +148,13 @@ function projectLocalParticipant(
 ): ProtocolHubParticipantState {
   const result = copyParticipant(participant)
   if (!result.transition) return result
-  const delta = result.transition.phase === 'outgoing'
-    ? HUB_OUTGOING_FADE_RATE * elapsedTicks
-    : -HUB_INCOMING_FADE_RATES[result.region] * elapsedTicks
+  const delta = result.transition.phase === 'college-loadout'
+    ? 0
+    : result.transition.phase === 'college-intro'
+      ? -HUB_COLLEGE_INTRO_FADE_RATE * elapsedTicks
+      : result.transition.phase === 'outgoing'
+        ? HUB_OUTGOING_FADE_RATE * elapsedTicks
+        : -HUB_INCOMING_FADE_RATES[result.region] * elapsedTicks
   result.transition.alpha = clamp(result.transition.alpha + delta, 0, 1)
   return result
 }

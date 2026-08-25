@@ -85,7 +85,7 @@ test('host save documents round-trip the complete owner state and revive Hub run
     state,
   })
   const encoded = JSON.parse(document) as Record<string, unknown>
-  assert.equal(encoded.schemaVersion, 12)
+  assert.equal(encoded.schemaVersion, 13)
   assert.deepEqual(encoded.mods, MODS)
   assert.deepEqual(encoded.modState, MOD_STATE)
   assert.equal(encoded.integrity, 'local-only')
@@ -123,6 +123,24 @@ test('host save documents round-trip the complete owner state and revive Hub run
   assert.deepEqual(
     restored.state.playerEntities.economies[0],
     state.playerEntities.economies[0],
+  )
+
+  const schemaTwelve = JSON.parse(document)
+  schemaTwelve.schemaVersion = 12
+  delete schemaTwelve.profile.economy.collegeIntroPending
+  delete schemaTwelve.continuation.simulation.playerEntities.economies[0]
+    .collegeIntroPending
+  const migratedProfile = restoreGameSaveProfile(JSON.stringify(schemaTwelve))
+  const migratedContinuation = restoreGameSaveDocument(JSON.stringify(schemaTwelve))
+  assert.equal(migratedProfile.economy.collegeIntroPending, false)
+  assert.equal(
+    migratedContinuation.state.playerEntities.economies[0]?.collegeIntroPending,
+    false,
+  )
+  schemaTwelve.schemaVersion = 13
+  assert.throws(
+    () => restoreGameSaveProfile(JSON.stringify(schemaTwelve)),
+    /College intro state is invalid/,
   )
   assert.deepEqual(
     restored.state.playerEntities.progressions[0],
@@ -554,7 +572,7 @@ test('current schema resumes the complete stock Tutorial controller and exact le
     state,
   })
   const encoded = JSON.parse(document)
-  assert.equal(encoded.schemaVersion, 12)
+  assert.equal(encoded.schemaVersion, 13)
   assert.equal(encoded.continuation.simulation.world.tutorial.stage, 0)
   assert.equal(
     encoded.continuation.simulation.world.tutorial.selectedSkillHudAcknowledged,
@@ -675,7 +693,11 @@ test('schema 7 and 6 saves migrate absent NPC state as acknowledged without arch
     const document = JSON.stringify(previous)
     const profile = restoreGameSaveProfile(document)
     const restored = restoreGameSaveDocument(document)
-    assert.deepEqual(profile.economy, { ...currentProfile.economy, npc: acknowledgedNpc })
+    assert.deepEqual(profile.economy, {
+      ...currentProfile.economy,
+      collegeIntroPending: false,
+      npc: acknowledgedNpc,
+    })
     assert.equal(restored.state.world.kind, 'hub')
     assert.deepEqual(getPlayerEconomy(restored.state, 'owner').npc, acknowledgedNpc)
   }

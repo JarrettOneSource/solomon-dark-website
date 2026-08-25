@@ -32,8 +32,9 @@ the Website no longer owns a DLL loader, custom-protocol launcher hand-off,
 native-lobby directory, or native-save ZIP service.
 
 Browser play has no launcher lobby namespace or URL join. New Game first
-chooses global-Hub versus private-College intent, then enters Create without
-requesting a transport credential. The accepted discipline starts the loading
+chooses global-Hub versus private-College intent. A participant whose durable
+first-story admission is pending enters the interactive Office before Create;
+all later generations enter Create directly. The accepted discipline starts the loading
 barrier; only behind it does the page request one single-use ticket. Mods,
 cheats, and local-only saves choose a private College. The global Hub rejects
 modded, cheats-on, and local-only handshakes at authoritative seams.
@@ -174,7 +175,7 @@ uses the exact Tutorial entrance Fence as an enemy-birth admission domain.
 Save schema 10 adds a nullable 256-bit active-party rejoin capability to the
 owner-only continuation summary. It changes no gameplay wire shape. Schemas
 1..9 migrate with no capability and keep their existing ordinary resume path.
-Current protocol 75 adds the participant-private ten-row native Hub help state
+Protocol 75 adds the participant-private ten-row native Hub help state
 and the bounded Provokatus/Fomentius/Luthacus acknowledgement action. Save
 schema 11 persists those rows; schemas 1..10 migrate them as already
 acknowledged, while a genuinely fresh profile starts with all ten rows set.
@@ -182,6 +183,16 @@ Protocol 76 adds the client-private `materializingPlayerIds` projection used by
 detached party-rejoin catch-up. Save schema 12 expands the nullable rejoin value
 to a bounded HMAC-signed recovery claim; schemas 1..11 retain their strict
 legacy parsing and are not restart-seedable.
+Protocol 77 adds the participant-local durable party-roster projection used by
+the Website's retained-membership extension.
+Protocol 78 adds the participant-local first-College-admission state,
+the bounded client request that may start it only while the host-owned durable
+profile still marks it pending, and a renderer-ready acknowledgement that can
+release—but never advance—the initial Office cover clock. The state then owns
+normal Office input/dialogue, the covered exit-to-Create boundary, and the
+post-selection Courtyard handoff.
+Save schema 13 persists the one-shot admission bit; schemas 1..12 normalize it
+completed.
 The host applies
 either skill selection only to the authenticated
 participant before publishing a new progression revision.
@@ -435,6 +446,21 @@ dependencies without revisiting this release invariant.
   world. A second disconnect retains the unresolved detached sequence without
   holding peers. No elapsed disconnect time becomes simulation catch-up. New
   Party-ID/public/invite-only members remain excluded from an active run.
+- A fresh normal wizard has one participant-local College admission before
+  Create and ordinary Courtyard control. The host holds the unselected player
+  at Office `(512,562)` and alpha one until that client's real Hub renderer
+  acknowledges readiness; only then does the 100-tick incoming reveal begin.
+  Ordinary Office movement and the conditional story Archchancellor/Polisher
+  dialogue are then live. Physical contact with the normal south exit starts
+  the existing outgoing transition; exact black opens Create and freezes the
+  covered Courtyard handoff. Element/Discipline confirmation resumes the
+  existing Courtyard incoming kernel. Tutorial entry does not consume this
+  owner; Tutorial completion enters it before any retained loadout. Other Hub
+  participants and rooms keep ticking, while run-start and non-Office service
+  mutations from the admitting participant remain sealed. Exact Courtyard
+  settlement clears the durable pending bit and
+  emits an owner checkpoint; an interrupted intro restarts from Office rather
+  than reviving its serialized partial room transition.
 - Player-character movement uses a two-phase shared kernel: first plan native
   intent/velocity, then let the active world resolve collision, then commit the
   resolved position plus native heading/gait state. Hub and Boneyard geometry
@@ -658,7 +684,7 @@ RNG order, before publishing the next progression revision.
 ## Saves, identity, and content
 
 - The authoritative game host is the only producer of browser-save contents.
-  Schema 12 is one atomic envelope with a durable participant profile (economy,
+  Schema 13 is one atomic envelope with a durable participant profile (economy,
   Hagatha one-shot runtime, and NPC service state) and a nullable current-wizard
   continuation.
   The continuation summary explicitly says whether an active Boneyard run
@@ -676,6 +702,8 @@ RNG order, before publishing the next progression revision.
   normalized owner-document digest, run/player/content/provenance, and optional
   deployment target are verified by supervisor and host; schemas 1 through 11
   cannot seed a replacement process.
+  Schema 13 adds the College-admission bit; schemas 1 through 12 normalize it
+  completed.
   Browser code transports the document and may invalidate a
   strictly decoded continuation, but never derives profile state from a
   rendered snapshot.
@@ -801,16 +829,17 @@ lineage. A replacement-process recovery may do the same only after the stable
 secret verifies the exact normalized document and target deployment revision;
 the original run ID keeps Hall submission idempotent. The run's independent
 taint remains authoritative. Local Hall history remains available. Save schema
-12 carries durable `global-clean` or
+13 carries durable `global-clean` or
 `local-only` integrity, explicit active-run state, and the nullable active-party
-rejoin capability; schemas 1 through 3
+rejoin capability plus the one-shot College-admission pending bit; schemas 1 through 3
 migrate conservatively to `local-only`, schema 4 preserves its authored
 integrity, schema 5 migrates its prior envelope, and schemas 6 through 9 preserve
 their authored integrity and active-run summary. Schema 9 additionally retains
 Tutorial camera-lock age independently from its cleanup countdown. Schemas 1
 through 9 carry no live rejoin capability. Schema 10 adds that capability;
 schema 11 adds the native NPC help rows; schema 12 upgrades the capability to a
-revision-bound signed claim. Each participant receives an
+revision-bound signed claim, and schema 13 adds the College-admission bit. Each
+participant receives an
 authoritative profile/continuation checkpoint, and Game Over removes only that
 participant's current-wizard continuation.
 
@@ -1395,6 +1424,13 @@ Protocol 73 retains that authorization contract unchanged while adding the
 bounded shared memorial to Hub snapshots and frames.
 Protocol 74 retains both contracts while adding only the Tutorial camera age.
 Protocol 75 retains them again while adding participant-private NPC help rows.
+Protocol 76 adds the client-private detached-party materialization projection.
+Protocol 77 adds the bounded retained-party roster projection.
+Protocol 78 retains those contracts while adding only the first-College
+admission discriminant and its false-by-default client start request; the host
+still requires its own pending profile fact before entering Office. The
+renderer-ready message releases only the initial cover; neither message may
+open Create or complete the Courtyard transition.
 An entitled account keeps the setting and ordinary shared-Hub routing off
 while still receiving the DevTools API. No client-authored field can grant the
 entitlement.

@@ -10,7 +10,7 @@ import {
 } from './core-kernels/native-hub-npc.ts'
 import type { ProtocolPlayerProgression } from './protocol/game-state.ts'
 import {
-  HUB_INTERACTION_DIALOGUES,
+  hubInteractionDialogue,
   type HubInteractionId,
 } from './hub-inventory-presentation.ts'
 
@@ -55,8 +55,9 @@ export function createHubNpcChatContent(
   npc: NativeHubNpcState,
   randomIndex: number,
   eulogyIndexOverride: number | null = null,
+  storyOffice = false,
 ): HubNpcChatContent {
-  const interaction = HUB_INTERACTION_DIALOGUES[interactionId]
+  const interaction = hubInteractionDialogue(interactionId, storyOffice)
   const eulogyIndex = eulogyIndexOverride ?? interaction.eulogyIndex
   if (eulogyIndex !== null) {
     const eulogyLine = NATIVE_HUB_NPC_CATALOG.eulogies[`${eulogyIndex}`] ?? null
@@ -71,18 +72,25 @@ export function createHubNpcChatContent(
   }
   if (interaction.introRecord === null) {
     return interaction.dismissals.length > 0
-      ? hubNpcDismissal(interactionId, randomIndex) ?? { kind: 'choices' }
+      ? hubNpcDismissal(interactionId, randomIndex, storyOffice) ?? { kind: 'choices' }
       : { kind: 'choices' }
   }
   return speech(
     interaction.introRecord.key,
     interaction.introRecord.lines,
-    hasChoices(interactionId) ? 'choices' : interaction.dismissals.length > 0 ? 'dismissal' : 'close',
+    hasChoices(interactionId, storyOffice)
+      ? 'choices'
+      : interaction.dismissals.length > 0
+        ? 'dismissal'
+        : 'close',
   )
 }
 
-export function hubNpcChatChoices(interactionId: HubInteractionId): readonly HubNpcChatChoice[] {
-  const interaction = HUB_INTERACTION_DIALOGUES[interactionId]
+export function hubNpcChatChoices(
+  interactionId: HubInteractionId,
+  storyOffice = false,
+): readonly HubNpcChatChoice[] {
+  const interaction = hubInteractionDialogue(interactionId, storyOffice)
   return [
     ...interaction.commands.map(({ label, selector }) => ({
       kind: 'command' as const,
@@ -100,8 +108,9 @@ export function hubNpcChatChoices(interactionId: HubInteractionId): readonly Hub
 export function hubNpcQuestion(
   interactionId: HubInteractionId,
   questionKey: string,
+  storyOffice = false,
 ): HubNpcChatContent | null {
-  const question = HUB_INTERACTION_DIALOGUES[interactionId].questions.find(
+  const question = hubInteractionDialogue(interactionId, storyOffice).questions.find(
     ({ key }) => key === questionKey,
   )
   return question ? recordSpeech(question, 'choices') : null
@@ -110,8 +119,9 @@ export function hubNpcQuestion(
 export function hubNpcDismissal(
   interactionId: HubInteractionId,
   randomIndex: number,
+  storyOffice = false,
 ): HubNpcChatContent | null {
-  const dismissals = HUB_INTERACTION_DIALOGUES[interactionId].dismissals
+  const dismissals = hubInteractionDialogue(interactionId, storyOffice).dismissals
   if (dismissals.length === 0) return null
   return recordSpeech(pick(dismissals, randomIndex), 'close')
 }
@@ -197,8 +207,8 @@ export function hubNpcSelectorAction(
   }
 }
 
-function hasChoices(interactionId: HubInteractionId): boolean {
-  const interaction = HUB_INTERACTION_DIALOGUES[interactionId]
+function hasChoices(interactionId: HubInteractionId, storyOffice: boolean): boolean {
+  const interaction = hubInteractionDialogue(interactionId, storyOffice)
   return interaction.commands.length > 0 || interaction.questions.length > 0
 }
 

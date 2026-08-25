@@ -11,7 +11,9 @@ import type { WizardElement } from '../core-kernels/player-character.ts'
 import { playerStaffActionPose } from '../player-character-presentation.ts'
 import {
   createHubCommonTraderClock,
+  createHubPolisherClock,
   type HubCommonTraderClock,
+  type HubPolisherClock,
 } from '../hub-presentation.ts'
 import {
   NATIVE_HUB_NPC_CATALOG,
@@ -36,6 +38,7 @@ import { PrimarySpellWorldView } from './primary-spell-world-view.ts'
 import { NativeSecondaryWorldView } from './native-secondary-world-view.ts'
 import {
   hubNpcMarkerFrame,
+  hubStoryOfficePolisherMarkerFrame,
   type HubNpcMarkerSurface,
 } from './hub-npc-marker-presentation.ts'
 
@@ -77,6 +80,10 @@ export class HubPrivateRoomScene {
   private memoratorFrames: readonly Texture[] = []
   private readonly dowserClock: HubCommonTraderClock
   private dowserBody!: Sprite
+  private readonly polisherClock: HubPolisherClock
+  private polisherBody!: Sprite
+  private polisherMarker!: Sprite
+  private polisherFrames: readonly Texture[] = []
   private readonly markerSprites = new Map<NativeHubInteractionId, Sprite>()
   private markerEpochInitialized = false
   private markerEpochSeed = 0
@@ -90,6 +97,7 @@ export class HubPrivateRoomScene {
   ) {
     this.textures = textures
     this.dowserClock = createHubCommonTraderClock(traderAnimationSeed ^ 5016)
+    this.polisherClock = createHubPolisherClock(traderAnimationSeed ^ 5011)
     this.world.sortableChildren = true
     this.world.eventMode = 'none'
     this.rooms = {
@@ -140,6 +148,8 @@ export class HubPrivateRoomScene {
       this.markerEpochStartedAtTick = snapshot.tick
     }
     this.showRegion(localParticipant.region)
+    const storyOffice = localParticipant.region === 'office'
+      && snapshot.players[localPlayerId]?.economy.collegeIntroPending === true
     this.updatePlayers(snapshot, localParticipant.region)
     for (const region of PRIVATE_HUB_REGIONS) {
       this.primarySpells[region].update(
@@ -158,8 +168,13 @@ export class HubPrivateRoomScene {
         pointGainAt,
       )
     }
-    this.updateRoomPresentation(snapshot, localPlayerId, localParticipant.region)
-    this.updateNpcMarkers(snapshot, markerSurface)
+    this.updateRoomPresentation(
+      snapshot,
+      localPlayerId,
+      localParticipant.region,
+      storyOffice,
+    )
+    this.updateNpcMarkers(snapshot, markerSurface, storyOffice)
     const room = this.rooms[localParticipant.region]
     if (this.levelUp.container.parent !== room) {
       this.levelUp.container.parent?.removeChild(this.levelUp.container)
@@ -379,6 +394,27 @@ export class HubPrivateRoomScene {
     this.nonPlayerActors.office.push(archChancellor)
     room.addChild(archChancellor)
     this.addNpcMarker(room, 'arch-chancellor', hub.rooms.office.archChancellorMarker)
+    const polisherDefinition = NATIVE_HUB_NPC_CATALOG.storyOffice.interactions.polisher
+    const polisherSource = this.textures.base[hub.rooms.office.polisher]
+    this.polisherFrames = Array.from({ length: 4 }, (_, index) => {
+      const texture = new Texture({
+        source: polisherSource.source,
+        frame: new Rectangle(index * 150, 0, 150, 150),
+      })
+      this.derivedTextures.push(texture)
+      return texture
+    })
+    this.polisherBody = this.actorTexture(
+      this.polisherFrames[0]!,
+      polisherDefinition.geometry.position.x,
+      polisherDefinition.geometry.position.y,
+    )
+    this.polisherBody.visible = false
+    this.polisherMarker = new Sprite(this.textures.base[hub.rooms.office.polisherMarker])
+    this.polisherMarker.anchor.set(0.5)
+    this.polisherMarker.eventMode = 'none'
+    this.polisherMarker.visible = false
+    room.addChild(this.polisherBody, this.polisherMarker)
     this.addRoomFlames(room, 'office', hub.rooms.office.flame)
     room.addChild(this.layer(
       hub.rooms.office.foreground,
@@ -528,6 +564,7 @@ export class HubPrivateRoomScene {
   private updateNpcMarkers(
     snapshot: HubPresentationFrame,
     markerSurface: HubNpcMarkerSurface,
+    storyOffice: boolean,
   ): void {
     for (const [interactionId, marker] of this.markerSprites) {
       const frame = hubNpcMarkerFrame(
@@ -544,12 +581,24 @@ export class HubPrivateRoomScene {
         NATIVE_HUB_NPC_CATALOG.interactions[interactionId].geometry.position.y,
       ) + 0.1
     }
+    const polisher = hubStoryOfficePolisherMarkerFrame(
+      Math.max(0, snapshot.tick - this.markerEpochStartedAtTick),
+      this.markerEpochSeed,
+      markerSurface,
+    )
+    this.polisherMarker.visible = storyOffice && polisher.visible
+    this.polisherMarker.alpha = polisher.alpha
+    this.polisherMarker.position.copyFrom(polisher.position)
+    this.polisherMarker.zIndex = hubWorldDepthForActor(
+      NATIVE_HUB_NPC_CATALOG.storyOffice.interactions.polisher.geometry.position.y,
+    ) + 0.1
   }
 
   private updateRoomPresentation(
     snapshot: HubPresentationFrame,
     localPlayerId: string,
     region: PrivateHubRegionId,
+    storyOffice: boolean,
   ): void {
     if (region === 'mortuary') {
       for (let index = 0; index < snapshot.world.memorial.slots.length; index += 1) {
@@ -568,6 +617,14 @@ export class HubPrivateRoomScene {
       this.dowserBody.texture = this.textures.traders.shlorio[
         this.dowserClock.advanceTo(snapshot.tick)
       ]
+    }
+    if (region === 'office') {
+      this.polisherBody.visible = storyOffice
+      if (storyOffice) {
+        this.polisherBody.texture = this.polisherFrames[
+          this.polisherClock.advanceTo(snapshot.tick)
+        ]!
+      }
     }
     const flames = this.roomFlames.get(region) ?? []
     for (let index = 0; index < flames.length; index += 1) {
@@ -612,6 +669,7 @@ export class HubPrivateRoomScene {
           playerId,
           `hub:${region}`,
         ),
+        !(region === 'office' && player.economy.collegeIntroPending),
       )
     }
     for (const [playerId, view] of this.players) {

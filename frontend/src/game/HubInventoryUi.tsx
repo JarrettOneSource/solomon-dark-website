@@ -48,6 +48,7 @@ import {
   equipmentSlotsForItem,
   hubEquipmentClickAction,
   hubInteractionPromptLabel,
+  hubInteractionDialogue,
   hubInteractionWithinRange,
   hubMemorialEulogyIndex,
   hubNpcHintAcknowledgementAction,
@@ -210,6 +211,7 @@ interface HubInventoryUiProps {
   skorchaPosition?: Vector2 | null
   transitionActive: boolean
   interactionsEnabled?: boolean
+  storyOffice?: boolean
 }
 
 export default function HubInventoryUi({
@@ -234,14 +236,23 @@ export default function HubInventoryUi({
   skorchaPosition = null,
   transitionActive,
   interactionsEnabled = true,
+  storyOffice = false,
 }: HubInventoryUiProps) {
   const failureSequenceRef = useRef(economy.npc.boast.failureSequence)
   const [npcNotebox, setNpcNotebox] = useState<string | null>(null)
   const nearestInteraction = useMemo(
     () => disabled || transitionActive || !interactionsEnabled
       ? null
-      : nearestHubInteraction(region, playerPosition, { skorchaPosition }),
-    [disabled, interactionsEnabled, playerPosition, region, skorchaPosition, transitionActive],
+      : nearestHubInteraction(region, playerPosition, { skorchaPosition, storyOffice }),
+    [
+      disabled,
+      interactionsEnabled,
+      playerPosition,
+      region,
+      skorchaPosition,
+      storyOffice,
+      transitionActive,
+    ],
   )
 
   const closeSurface = useCallback(() => {
@@ -269,9 +280,18 @@ export default function HubInventoryUi({
       surface.kind === 'dialogue' ? surface.interaction : surface.trader,
       region,
       playerPosition,
-      { skorchaPosition },
+      { skorchaPosition, storyOffice },
     )) closeSurface()
-  }, [closeSurface, disabled, playerPosition, region, skorchaPosition, surface, transitionActive])
+  }, [
+    closeSurface,
+    disabled,
+    playerPosition,
+    region,
+    skorchaPosition,
+    storyOffice,
+    surface,
+    transitionActive,
+  ])
 
   useEffect(() => {
     const keyDown = (event: KeyboardEvent) => {
@@ -351,6 +371,7 @@ export default function HubInventoryUi({
       skorchaDismissalIndex={skorchaDismissalIndex}
       style={nativeUiStageStyle}
       surface={surface}
+      storyOffice={storyOffice}
     />
   ) : null
   return (
@@ -384,6 +405,7 @@ function NativeHubSurface({
   skorchaDismissalIndex,
   style,
   surface,
+  storyOffice,
 }: {
   audio: GameAudioDirector
   config: PlayerCharacterConfig
@@ -399,6 +421,7 @@ function NativeHubSurface({
   skorchaDismissalIndex: number
   style: CSSProperties
   surface: Exclude<HubUiSurface, null>
+  storyOffice: boolean
 }) {
   const hostRef = useRef<HTMLDivElement>(null)
   const rendererRef = useRef<HubInventoryRenderer | null>(null)
@@ -425,6 +448,7 @@ function NativeHubSurface({
           memorial === null
             ? null
             : hubMemorialEulogyIndex(surface.interaction, memorial),
+          storyOffice,
         )
       : { kind: 'choices' },
     phaseStartedAtMs: performance.now(),
@@ -439,6 +463,12 @@ function NativeHubSurface({
   const [inventoryDrag, setInventoryDrag] = useState<HubInventoryDragModel | null>(null)
   const [dyeModal, setDyeModal] = useState<HubInventoryDyeModalModel | null>(null)
   const feedbackSequenceRef = useRef(economy.actionFeedback?.sequence ?? 0)
+
+  useEffect(() => {
+    if (chat.content.kind !== 'speech' || chat.content.key !== 'ARCH_INTRO_0') return
+    audio.playStream('arch-intro-0')
+    return () => audio.stopStream('arch-intro-0')
+  }, [audio, chat.content])
 
   useEffect(() => {
     const feedback = economy.actionFeedback
@@ -597,7 +627,11 @@ function NativeHubSurface({
     }
     if (chat.content.next === 'dismissal') {
       chatRandomIndexRef.current += 1
-      const dismissal = hubNpcDismissal(surface.interaction, chatRandomIndexRef.current)
+      const dismissal = hubNpcDismissal(
+        surface.interaction,
+        chatRandomIndexRef.current,
+        storyOffice,
+      )
       if (dismissal) beginChatContent(dismissal)
       else onClose()
       return
@@ -606,7 +640,15 @@ function NativeHubSurface({
       onNotebox(NATIVE_HUB_NPC_CATALOG.boastInstruction)
     }
     onClose()
-  }, [beginChatContent, chat.content, economy.npc.boast.selected, onClose, onNotebox, surface])
+  }, [
+    beginChatContent,
+    chat.content,
+    economy.npc.boast.selected,
+    onClose,
+    onNotebox,
+    storyOffice,
+    surface,
+  ])
   advanceChatRef.current = advanceChat
 
   const dismissOrCloseChat = useCallback(() => {
@@ -614,10 +656,11 @@ function NativeHubSurface({
     const dismissal = hubNpcDismissal(
       surface.interaction,
       ++chatRandomIndexRef.current,
+      storyOffice,
     )
     if (dismissal) beginChatContent(dismissal)
     else onClose()
-  }, [beginChatContent, onClose, surface])
+  }, [beginChatContent, onClose, storyOffice, surface])
 
   useEffect(() => {
     if (surface.kind !== 'dialogue') return
@@ -659,6 +702,7 @@ function NativeHubSurface({
       selectedSelectorId: pendingNpcSelection?.id ?? null,
       selectorOffset: chat.selectorOffset,
       selectorRows,
+      storyOffice,
     }
     return {
       config,
@@ -690,6 +734,7 @@ function NativeHubSurface({
     serviceHoverInspection,
     serviceSelection,
     selectorRows,
+    storyOffice,
     surface,
   ])
 
@@ -818,7 +863,7 @@ function NativeHubSurface({
   const label = surface.kind === 'inventory'
     ? 'Inventory'
     : surface.kind === 'dialogue'
-      ? `Talking to ${HUB_INTERACTION_DIALOGUES[surface.interaction].name}`
+      ? `Talking to ${hubInteractionDialogue(surface.interaction, storyOffice).name}`
       : HUB_INTERACTION_DIALOGUES[surface.trader].title
   const activeServiceInspection = serviceHoverInspection ?? serviceFocusInspection
   const semanticTooltip = surface.kind === 'service' && activeServiceInspection
@@ -942,13 +987,18 @@ function NativeHubSurface({
               interaction={surface.interaction}
               pendingSelection={pendingNpcSelection !== null}
               selectorRows={selectorRows}
+              storyOffice={storyOffice}
               onAccelerate={() => setChat((current) => current.acceleratedAtMs === null
                 ? { ...current, acceleratedAtMs: performance.now() }
                 : current)}
               onAdvance={advanceChat}
               onChoice={(choice) => click(() => {
                 if (choice.kind === 'question') {
-                  const answer = hubNpcQuestion(surface.interaction, choice.key)
+                  const answer = hubNpcQuestion(
+                    surface.interaction,
+                    choice.key,
+                    storyOffice,
+                  )
                   if (answer) beginChatContent(answer)
                   return
                 }
@@ -1089,6 +1139,7 @@ function DialogueActions({
   onSelectorOffset,
   pendingSelection,
   selectorRows,
+  storyOffice,
 }: {
   chat: HubNpcChatPresentation
   onAccelerate: () => void
@@ -1103,6 +1154,7 @@ function DialogueActions({
   onSelectorOffset: (offset: number) => void
   pendingSelection: boolean
   selectorRows: readonly HubNpcSelectorRow[]
+  storyOffice: boolean
   interaction: HubInteractionId
 }) {
   if (chat.content.kind === 'speech') {
@@ -1185,7 +1237,7 @@ function DialogueActions({
     )
   }
 
-  const choices = hubNpcChatChoices(interaction)
+  const choices = hubNpcChatChoices(interaction, storyOffice)
   return (
     <div className="hub-native-dialogue-actions">
       {choices.map((choice, index) => (

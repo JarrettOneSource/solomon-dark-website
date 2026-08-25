@@ -2,13 +2,16 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { createIdlePlayerCharacterInput } from '../core-kernels/player-character.ts'
+import { GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS } from '../core-kernels/game-run.ts'
 import { materializeStockTutorial } from '../host/boneyard-catalog.ts'
 import {
   applyGameSimulationTutorialAction,
+  confirmGameSimulationLoadout,
   createGameSimulation,
   enterBoneyardWorld,
   gameSimulationDurableProfileEconomy,
   getPlayerCharacter,
+  getPlayerEconomy,
   getPlayerSkillBook,
   stepGameSimulationTick,
 } from './game-simulation.ts'
@@ -29,6 +32,7 @@ test('enters the stock Tutorial as a solo authored encounter with its native loa
   assert.equal(state.world.arenaTransition, null)
   assert.equal(state.world.encounter?.dialogueMode, 'tutorial')
   assert.equal(state.world.encounter?.tutorialDialogueTicks, 3_054)
+  assert.equal(state.world.tutorialProfileEconomy?.collegeIntroPending, true)
   assert.equal(state.world.tutorialProfileEconomy?.tutorialPending, true)
   assert.deepEqual(state.secondaryAbilities.actors.map((actor) => ({
     damage: actor.damage,
@@ -57,10 +61,50 @@ test('enters the stock Tutorial as a solo authored encounter with its native loa
   assert.deepEqual(skills.skillQuickbar, [72, null, null, null, null, null, null, null])
   assert.equal(skills.permanentRanks[11], 0)
   assert.equal(skills.permanentRanks[72], 1)
-  assert.equal(gameSimulationDurableProfileEconomy({
+  const completedProfile = gameSimulationDurableProfileEconomy({
     ...state,
     run: { ...state.run, phase: 'game-over' },
-  }, 'owner').tutorialPending, false)
+  }, 'owner')
+  assert.equal(completedProfile.collegeIntroPending, true)
+  assert.equal(completedProfile.tutorialPending, false)
+})
+
+test('Tutorial Game Over enters the interactive College Office before Create', () => {
+  const loaded = materializeStockTutorial(Buffer.alloc(16, 31))
+  let state = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loaded)
+  state = {
+    ...state,
+    run: {
+      ...state.run,
+      gameOverEventId: 1,
+      gameOverExitKind: 'automatic',
+      gameOverExitTicks: GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS,
+      gameOverTicks: 1_200,
+      nextGameOverEventId: 2,
+      phase: 'game-over',
+    },
+  }
+  state = stepGameSimulationTick(state, {})
+  assert.equal(state.run.phase, 'hub')
+  assert.equal(state.world.kind, 'hub')
+  if (state.world.kind !== 'hub') throw new Error('expected post-Tutorial Hub')
+  assert.equal(state.world.participants.owner?.region, 'office')
+  assert.equal(state.world.participants.owner?.transition?.phase, 'college-intro')
+  assert.equal(state.world.participants.owner?.transition?.alpha, 1)
+  assert.deepEqual(getPlayerCharacter(state, 'owner').position, { x: 512, y: 562 })
+  assert.equal(getPlayerEconomy(state, 'owner').tutorialPending, false)
+  assert.equal(getPlayerEconomy(state, 'owner').collegeIntroPending, true)
+
+  for (let tick = 0; tick < 100; tick += 1) state = stepGameSimulationTick(state, {})
+  assert.equal(state.world.participants.owner?.transition, null)
+  assert.equal(state.world.participants.owner?.region, 'office')
+
+  const confirmed = confirmGameSimulationLoadout(state, 'owner', {
+    discipline: 'arcane',
+    displayName: 'Too Soon',
+    element: 'ether',
+  })
+  assert.equal(confirmed, null)
 })
 
 test('holds the controller for the exact 475-tick intro and gates Acid Rain until stage 5', () => {

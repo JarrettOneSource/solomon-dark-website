@@ -10,6 +10,7 @@ import {
   hubNpcDirectionalHintFrame,
   hubNpcMarkerFrame,
   hubNpcOnboardingPlan,
+  hubStoryOfficePolisherMarkerFrame,
 } from './hub-npc-marker-presentation.ts'
 
 const ACTORS = [
@@ -43,6 +44,22 @@ test('the generated marker catalog drains every Region bank and named survival a
       actor.phaseAdvances,
     ]),
     ACTORS,
+  )
+})
+
+test('the first story Office adds only the Polisher talk-left marker', () => {
+  const marker = hubStoryOfficePolisherMarkerFrame(25, 91, null)
+  assert.equal(marker.record, 14)
+  assert.deepEqual(marker.position, { x: 536, y: 675 })
+  assert.equal(marker.visible, true)
+  assert.ok(marker.alpha >= 0.5 && marker.alpha <= 1)
+  assert.equal(
+    hubStoryOfficePolisherMarkerFrame(25, 91, 'inventory').visible,
+    false,
+  )
+  assert.equal(
+    hubStoryOfficePolisherMarkerFrame(25, 91, 'dialogue').visible,
+    true,
   )
 })
 

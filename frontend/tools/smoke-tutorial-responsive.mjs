@@ -10,9 +10,11 @@ import {
   createGameSimulation,
   enterBoneyardWorld,
   getPlayerCharacter,
+  getPlayerEconomy,
 } from '../src/game/core-server/game-simulation.ts'
 import { replacePlayerCharacter } from '../src/game/core-server/player-entity-store.ts'
 import { createBoneyardEnemyStore } from '../src/game/core-server/boneyard-enemy-store.ts'
+import { GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS } from '../src/game/core-kernels/game-run.ts'
 import {
   NATIVE_TUTORIAL_CAMERA_LOCK_SETTLE_TICKS,
   NATIVE_TUTORIAL_ENTRANCE_FENCE_CHAIN,
@@ -197,6 +199,9 @@ async function runScenario(scenario) {
     const spawnDomain = scenario.name === 'stock'
       ? await exerciseTutorialSpawnDomain(host, page, screenshotRoot)
       : null
+    const collegeAdmission = scenario.name === 'stock'
+      ? await exerciseTutorialCollegeAdmission(host, page, screenshotRoot)
+      : null
     assert.deepEqual({ consoleErrors, failedResponses, pageErrors }, {
       consoleErrors: [],
       failedResponses: [],
@@ -204,6 +209,7 @@ async function runScenario(scenario) {
     })
     return {
       consoleErrors,
+      collegeAdmission,
       failedResponses,
       initial,
       moved,
@@ -279,6 +285,59 @@ function forceTutorialState(host, patch) {
       tutorial: { ...state.world.tutorial, ...patch },
     },
   })
+}
+
+async function exerciseTutorialCollegeAdmission(host, page, screenshotPath) {
+  const tutorial = host.state()
+  assert.equal(tutorial.world.kind, 'boneyard')
+  assert.ok(tutorial.world.tutorial)
+  Object.assign(tutorial.run, {
+    gameOverEventId: 1,
+    gameOverExitKind: 'automatic',
+    gameOverExitTicks: GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS,
+    gameOverTicks: 1_200,
+    nextGameOverEventId: 2,
+    phase: 'game-over',
+  })
+
+  const office = page.locator('.hub-scene[data-hub-region="office"]')
+  await office.waitFor({ timeout: 30_000 })
+  await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({
+    timeout: 30_000,
+  })
+  assert.equal(await page.locator('.create-menu-scene').count(), 0)
+  const intermediate = await page.waitForFunction(() => {
+    const canvas = document.querySelector('.hub-world-canvas')
+    const alpha = Number(canvas?.getAttribute('data-transition-alpha'))
+    return canvas?.getAttribute('data-hub-region') === 'office'
+      && canvas?.getAttribute('data-transition-phase') === 'college-intro'
+      && alpha > 0
+      && alpha < 1
+      ? { alpha }
+      : null
+  })
+  const fade = await intermediate.jsonValue()
+  await intermediate.dispose()
+  await page.waitForFunction(() => {
+    const canvas = document.querySelector('.hub-world-canvas')
+    return canvas?.getAttribute('data-hub-region') === 'office'
+      && canvas?.getAttribute('data-transition-phase') === 'none'
+  })
+  assert.equal(await office.getAttribute('data-story-office'), 'true')
+  await page.screenshot({ path: `${screenshotPath}-tutorial-college-office.png` })
+
+  const state = host.state()
+  assert.equal(state.world.kind, 'hub')
+  const playerId = host.hostPlayerId()
+  assert.ok(playerId)
+  assert.equal(getPlayerEconomy(state, playerId).tutorialPending, false)
+  assert.equal(getPlayerEconomy(state, playerId).collegeIntroPending, true)
+  return {
+    fadeAlpha: fade.alpha,
+    playerPosition: getPlayerCharacter(state, playerId).position,
+    region: 'office',
+    storyOffice: true,
+  }
 }
 
 async function exerciseTutorialSpawnDomain(host, page, screenshotPath) {

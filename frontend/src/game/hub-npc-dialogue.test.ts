@@ -83,6 +83,47 @@ test('the complete Chat graph exposes only compiled questions and command replac
   })
 })
 
+test('the first story Office selects every Archchancellor and Polisher row before Create', () => {
+  const npc = createNativeHubNpcState()
+  const arch = createHubNpcChatContent('arch-chancellor', npc, 0, null, true)
+  assert.equal(arch.kind, 'speech')
+  if (arch.kind === 'speech') {
+    assert.equal(arch.key, 'ARCH_INTRO_0')
+    assert.deepEqual(
+      arch.lines,
+      NATIVE_HUB_NPC_CATALOG.storyOffice.dialogue.ARCH_INTRO_0?.lines,
+    )
+  }
+  assert.deepEqual(
+    hubNpcChatChoices('arch-chancellor', true).map(({ label }) => label),
+    ['Solomon Dark?', 'Collateral Damage?', 'Assistance?'],
+  )
+  assert.equal(
+    hubNpcQuestion('arch-chancellor', 'ARCH_Q3_0', true)?.kind,
+    'speech',
+  )
+  assert.equal(
+    hubNpcDismissal('arch-chancellor', 0, true)?.kind === 'speech'
+      ? hubNpcDismissal('arch-chancellor', 0, true)?.key
+      : null,
+    'ARCH_DISMISS_0',
+  )
+
+  const polisher = createHubNpcChatContent('polisher', npc, 0, null, true)
+  assert.equal(polisher.kind, 'speech')
+  if (polisher.kind === 'speech') assert.equal(polisher.key, 'POLISHER_INTRO_0')
+  assert.deepEqual(
+    hubNpcChatChoices('polisher', true).map(({ label }) => label),
+    ['Your task?', 'The Plaque'],
+  )
+  assert.equal(
+    hubNpcDismissal('polisher', 0, true)?.kind === 'speech'
+      ? hubNpcDismissal('polisher', 0, true)?.key
+      : null,
+    'POLISHER_DISMISS_0',
+  )
+})
+
 test('Skorcha, Declarius, and the Archchancellor expose every compiled dismissal', () => {
   for (const [interactionId, keys] of [
     ['skorcha', ['ENFORCER_DISMISS1', 'ENFORCER_DISMISS2', 'ENFORCER_DISMISS3']],

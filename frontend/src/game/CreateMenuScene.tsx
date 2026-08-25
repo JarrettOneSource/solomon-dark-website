@@ -43,6 +43,7 @@ import {
 
 interface CreateMenuSceneProps {
   audio: GameAudioDirector
+  backDisabled?: boolean
   displayName: string
   onBack: () => void
   onDisplayNameChange: (displayName: string) => void
@@ -71,6 +72,7 @@ function playCreateAudioEvents(audio: GameAudioDirector, events: readonly Create
 
 export default function CreateMenuScene({
   audio,
+  backDisabled = false,
   displayName,
   onBack,
   onDisplayNameChange,
@@ -343,7 +345,7 @@ export default function CreateMenuScene({
           className="create-menu-back"
           aria-label="Back"
           data-game-back="true"
-          disabled={pendingDiscipline !== null || Boolean(retainedLoadout)}
+          disabled={backDisabled || pendingDiscipline !== null || Boolean(retainedLoadout)}
           onBlur={() => highlight(null)}
           onClick={onBack}
           onFocus={() => highlight('back')}

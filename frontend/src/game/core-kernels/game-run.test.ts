@@ -8,6 +8,7 @@ import {
   GAME_OVER_INPUT_EXIT_FADE_TICKS,
   confirmPostRunLoadout,
   continueGameOver,
+  continuePostRunToCollegeIntro,
   createGameRunLifecycle,
   startGameRun,
   stepGameRunLifecycle,
@@ -113,6 +114,12 @@ test('post-run loadout readiness is participant-owned and completes only when al
 
   const departed = synchronizeGameRunParticipants(first, ['a'])
   assert.equal(departed.phase, 'hub')
+
+  const college = continuePostRunToCollegeIntro(loadout)
+  assert.ok(college)
+  assert.equal(college.phase, 'hub')
+  assert.deepEqual(college.eligiblePlayerIds, [])
+  assert.equal(continuePostRunToCollegeIntro(college), null)
 })
 
 test('participant synchronization follows active, Game Over, and loadout membership', () => {

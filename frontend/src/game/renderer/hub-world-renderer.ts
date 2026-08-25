@@ -11,7 +11,10 @@ import {
   HUB_CAMERA_SCALE,
   hubRegionCameraOrigin,
 } from '../core-kernels/hub-math.ts'
-import type { HubRegionId } from '../core-kernels/hub-regions.ts'
+import type {
+  HubRegionId,
+  HubTransitionPhase,
+} from '../core-kernels/hub-regions.ts'
 import type { GameWorldSpeech } from '../world-speech-presentation.ts'
 import { deriveHubPlayerActivityItems } from '../hub-player-activity.ts'
 import { hubSouthernCameraTranslation } from '../hub-camera-presentation.ts'
@@ -109,7 +112,7 @@ interface HubFrameDiagnostics {
   studentVisibleCandidateCount: number
   teacherFrame: number
   tick: number
-  transitionPhase: 'incoming' | 'outgoing' | null
+  transitionPhase: HubTransitionPhase | null
 }
 
 export interface HubWorldRenderer {

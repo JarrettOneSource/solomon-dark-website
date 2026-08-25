@@ -180,6 +180,8 @@ test('keeps recovered Hub parity art at its native registrations', () => {
     'hub-room-office-flame.png': [10, 26],
     'hub-room-office-foreground.png': [1024, 1024],
     'hub-room-office-prop.png': [1024, 1024],
+    'hub-room-polisher-marker.png': [58, 64],
+    'hub-room-polisher.png': [600, 150],
     'hub-room-storeroom-background.png': [1075, 800],
     'hub-room-storeroom-flame.png': [10, 26],
     'hub-room-storeroom-foreground.png': [1075, 800],

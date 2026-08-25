@@ -1417,6 +1417,16 @@ def main() -> int:
         "hub-room-arch-chancellor-marker",
     )
     save(
+        build_registered_strip(office, office_records, tuple(range(23, 27))),
+        output_dir,
+        "hub-room-polisher",
+    )
+    save(
+        registered_sprite(office, office_records[14]),
+        output_dir,
+        "hub-room-polisher-marker",
+    )
+    save(
         room_layer(
             office,
             office_records,

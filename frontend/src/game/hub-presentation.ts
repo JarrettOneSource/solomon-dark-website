@@ -33,6 +33,10 @@ export interface HubCommonTraderClock {
   advanceTo(tick: number): number
 }
 
+export interface HubPolisherClock {
+  advanceTo(tick: number): number
+}
+
 export interface HubHagathaFrame {
   bodyFrame: number
   particles: readonly HubHagathaParticle[]
@@ -73,6 +77,11 @@ const HAGATHA_PARTICLE_SCALE_BASE = 0.15
 const HAGATHA_PARTICLE_SCALE_RANGE = 0.1
 const HAGATHA_PARTICLE_JITTER_RADIUS = 2
 const HAGATHA_PARTICLE_Y_BIAS = 14
+const POLISHER_FRAME_COUNT = 4
+const POLISHER_PHASE_SPEED = Math.fround(0.05)
+const POLISHER_PHASE_FLOAT_RANGE = 0.25
+const POLISHER_DIRECTION_REVERSE_RANGE = 1500
+const POLISHER_DIRECTION_REVERSE_VALUE = 3
 const HAGATHA_BODY_HALF_EXTENT = 75
 const HAGATHA_PARTICLE_ANCHORS: readonly Vector2[] = [
   { x: 79.5, y: 80.5 },
@@ -120,6 +129,12 @@ interface HagathaState {
   velocity: number
 }
 
+interface PolisherState {
+  phase: number
+  rng: NativeRngState
+  velocity: number
+}
+
 interface HagathaParticleState {
   frame: number
   id: number
@@ -144,6 +159,7 @@ const POTION_TRADER_BALLOON_CHECKPOINTS: PotionTraderBalloonState[] = [{
 }]
 const COMMON_TRADER_CHECKPOINTS = new Map<number, PotionTraderActorState[]>()
 const HAGATHA_CHECKPOINTS = new Map<number, HagathaState[]>()
+const POLISHER_CHECKPOINTS = new Map<number, PolisherState[]>()
 
 function stepPotionTraderActor(state: PotionTraderActorState): PotionTraderActorState {
   if (!state.active) {
@@ -296,6 +312,55 @@ function hagathaStateAt(tick: number, seed: number): HagathaState {
   return state
 }
 
+function initialPolisherState(seed: number): PolisherState {
+  return {
+    phase: 0,
+    rng: createNativeRng(seed >>> 0),
+    velocity: POLISHER_PHASE_SPEED,
+  }
+}
+
+function stepPolisher(state: PolisherState): PolisherState {
+  const phaseDraw = drawNativeFloat(state.rng, POLISHER_PHASE_FLOAT_RANGE)
+  let phase = Math.fround(
+    state.phase + Math.fround((phaseDraw.value + 1) * state.velocity),
+  )
+  if (phase >= POLISHER_FRAME_COUNT) phase = Math.fround(phase - POLISHER_FRAME_COUNT)
+  if (phase < 0) phase = Math.fround(phase + POLISHER_FRAME_COUNT)
+  const reverseDraw = drawNativeInteger(
+    phaseDraw.state,
+    POLISHER_DIRECTION_REVERSE_RANGE,
+  )
+  return {
+    phase,
+    rng: reverseDraw.state,
+    velocity: reverseDraw.value === POLISHER_DIRECTION_REVERSE_VALUE
+      ? Math.fround(-state.velocity)
+      : state.velocity,
+  }
+}
+
+function polisherStateAt(tick: number, seed: number): PolisherState {
+  const normalized = seed >>> 0
+  let checkpoints = POLISHER_CHECKPOINTS.get(normalized)
+  if (!checkpoints) {
+    checkpoints = [initialPolisherState(normalized)]
+    POLISHER_CHECKPOINTS.set(normalized, checkpoints)
+  }
+  const checkpointIndex = Math.floor(tick / POTION_TRADER_ACTOR_CHECKPOINT_TICKS)
+  while (checkpoints.length <= checkpointIndex) {
+    let state = checkpoints.at(-1)!
+    for (let update = 0; update < POTION_TRADER_ACTOR_CHECKPOINT_TICKS; update += 1) {
+      state = stepPolisher(state)
+    }
+    checkpoints.push(state)
+  }
+  let state = checkpoints[checkpointIndex]!
+  const remainder = tick % POTION_TRADER_ACTOR_CHECKPOINT_TICKS
+  for (let update = 0; update < remainder; update += 1) state = stepPolisher(state)
+  return state
+}
+
 function potionTraderActorCheckpoint(index: number): PotionTraderActorState {
   while (POTION_TRADER_ACTOR_CHECKPOINTS.length <= index) {
     let state = POTION_TRADER_ACTOR_CHECKPOINTS.at(-1)!
@@ -420,6 +485,31 @@ export function createHubCommonTraderClock(seed: number): HubCommonTraderClock {
         }
       }
       frame = potionTraderActorFrame(state)
+      return frame
+    },
+  }
+}
+
+export function createHubPolisherClock(seed: number): HubPolisherClock {
+  let currentTick = 0
+  let state = initialPolisherState(seed)
+  let frame = 0
+  return {
+    advanceTo(tick) {
+      const fixedTick = Math.max(0, Math.floor(tick))
+      if (
+        fixedTick < currentTick
+        || fixedTick - currentTick >= POTION_TRADER_ACTOR_CHECKPOINT_TICKS
+      ) {
+        state = polisherStateAt(fixedTick, seed)
+        currentTick = fixedTick
+      } else {
+        while (currentTick < fixedTick) {
+          state = stepPolisher(state)
+          currentTick += 1
+        }
+      }
+      frame = Math.floor(state.phase) % POLISHER_FRAME_COUNT
       return frame
     },
   }

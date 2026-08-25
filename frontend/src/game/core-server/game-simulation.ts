@@ -25,6 +25,7 @@ import {
 } from '../core-kernels/hub-regions.ts'
 import {
   confirmPostRunLoadout,
+  continuePostRunToCollegeIntro,
   continueGameOver,
   createGameRunLifecycle,
   startGameRun,
@@ -200,7 +201,12 @@ import {
 import { stepPlayerStaffCombatSystem } from './player-staff-combat-system.ts'
 import { sealPlayerCombatInput } from './player-combat-input.ts'
 import {
+  HUB_COLLEGE_INTRO_OFFICE_POSITION,
+} from '../core-kernels/hub-regions.ts'
+import {
   addHubParticipant,
+  beginHubCollegeIntro,
+  confirmHubCollegeIntroLoadout,
   createHubWorld,
   hubSpawnPoint,
   removeHubParticipant,
@@ -341,6 +347,7 @@ export type PlayerCharacterInputs = Readonly<Record<PlayerId, PlayerCharacterInp
 
 export interface GameSimulationTickOptions {
   readonly attributionObserver?: BoneyardEnemyAttributionObserver
+  readonly collegeIntroReadyPlayerIds?: ReadonlySet<PlayerId>
   readonly enemySpawnIntents?: readonly BoneyardEnemySpawnIntent[]
   readonly extensions?: GameSimulationExtensions
 }
@@ -513,6 +520,39 @@ export function addPlayerCharacter(
     ),
     world,
   }
+}
+
+export function armGameSimulationCollegeIntro(
+  state: GameSimulationState,
+  playerId: PlayerId,
+): GameSimulationState {
+  if (state.world.kind !== 'hub' || state.run.phase !== 'hub') return state
+  const economy = playerEconomyAt(state.playerEntities, playerId)
+  const player = playerCharacterAt(state.playerEntities, playerId)
+  if (!economy?.collegeIntroPending || !player) return state
+  const world = beginHubCollegeIntro(state.world, playerId)
+  if (world === state.world) return state
+  return {
+    ...state,
+    playerEntities: replacePlayerCharacter(
+      state.playerEntities,
+      playerId,
+      createPlayerCharacter(player.config, HUB_COLLEGE_INTRO_OFFICE_POSITION),
+    ),
+    world,
+  }
+}
+
+export function completedGameSimulationCollegeIntroPlayerIds(
+  previous: GameSimulationState,
+  current: GameSimulationState,
+): readonly PlayerId[] {
+  return previous.playerEntities.identities.flatMap(({ playerId }) => (
+    playerEconomyAt(previous.playerEntities, playerId)?.collegeIntroPending === true
+    && playerEconomyAt(current.playerEntities, playerId)?.collegeIntroPending === false
+      ? [playerId]
+      : []
+  ))
 }
 
 export function removePlayerCharacter(
@@ -845,6 +885,12 @@ export function enterBoneyardWorld(
     ]),
   )
   const baseWorld = createBoneyardWorld(loaded)
+  const tutorialProfileEconomy = baseWorld.tutorial === null
+    ? null
+    : playerEconomyAt(
+        state.playerEntities,
+        state.playerEntities.identities[0]?.playerId ?? '',
+      )
   const world: BoneyardWorldState = {
     ...baseWorld,
     hallOfFameRuns: Object.fromEntries(state.playerEntities.identities.map(({ playerId }) => [
@@ -854,12 +900,15 @@ export function enterBoneyardWorld(
     lanternLightRegistration: loaded.scene.solomonDig === null
       ? null
       : lightProviderOrder.register('actor'),
-    tutorialProfileEconomy: baseWorld.tutorial === null
+    tutorialProfileEconomy: tutorialProfileEconomy === null
       ? null
-      : playerEconomyAt(
-          state.playerEntities,
-          state.playerEntities.identities[0]?.playerId ?? '',
-        ),
+      : tutorialProfileEconomy.collegeIntroPending
+        ? tutorialProfileEconomy
+        : {
+            ...tutorialProfileEconomy,
+            collegeIntroPending: true,
+            revision: tutorialProfileEconomy.revision + 1,
+          },
   }
   const placements = placePlayersInBoneyard(playerCharacterRecords(state.playerEntities), world)
   let playerEntities = clearPlayerEntityMindstars(resetPlayerEntitiesForNewRun(
@@ -971,7 +1020,7 @@ function enterPostRunLoadout(
     const economy = gameSimulationDurableProfileEconomy(state, playerId)
     playerEntities = replacePlayerEconomy(playerEntities, playerId, economy)
   }
-  return {
+  let next: GameSimulationState = {
     ...state,
     gameRng: hubSeed.state,
     hallOfFameClockStartedAtTick: state.tick,
@@ -984,6 +1033,21 @@ function enterPostRunLoadout(
     run,
     world,
   }
+  const tutorialCollegeIntro = state.world.kind === 'boneyard'
+    && state.world.tutorial !== null
+    && playerEntities.identities.some(({ playerId }) => (
+      playerEconomyAt(playerEntities, playerId)?.collegeIntroPending === true
+    ))
+  if (tutorialCollegeIntro) {
+    next = {
+      ...next,
+      run: continuePostRunToCollegeIntro(run)!,
+    }
+    for (const { playerId } of playerEntities.identities) {
+      next = armGameSimulationCollegeIntro(next, playerId)
+    }
+  }
+  return next
 }
 
 export function gameSimulationDurableProfileEconomy(
@@ -1050,17 +1114,32 @@ export function gameSimulationRetiredWizardEconomy(
 export function confirmGameSimulationLoadout(
   state: GameSimulationState,
   playerId: PlayerId,
-  selection: Pick<PlayerCharacterConfig, 'discipline' | 'element'>,
+  selection: Pick<PlayerCharacterConfig, 'discipline' | 'displayName' | 'element'>,
 ): GameSimulationState | null {
   const player = playerCharacterAt(state.playerEntities, playerId)
   if (!player) return null
-  const run = confirmPostRunLoadout(state.run, playerId)
-  if (!run) return null
   const config = {
     ...player.config,
     discipline: selection.discipline,
+    displayName: selection.displayName,
     element: selection.element,
   }
+  if (state.world.kind === 'hub') {
+    const world = confirmHubCollegeIntroLoadout(state.world, playerId)
+    if (world !== state.world) {
+      return {
+        ...state,
+        playerEntities: replacePlayerLoadout(
+          state.playerEntities,
+          playerId,
+          createPlayerCharacter(config, player.position),
+        ),
+        world,
+      }
+    }
+  }
+  const run = confirmPostRunLoadout(state.run, playerId)
+  if (!run) return null
   return {
     ...state,
     playerEntities: replacePlayerLoadout(
@@ -1133,7 +1212,14 @@ export function applyGameSimulationHubAction(
   const economy = playerEconomyAt(state.playerEntities, playerId)
   const player = playerCharacterAt(state.playerEntities, playerId)
   const skillBook = playerSkillBookAt(state.playerEntities, playerId)
-  if (!economy || !player || !skillBook || state.levelUpBarrier !== null) {
+  if (
+    !economy
+    || !player
+    || !skillBook
+    || state.levelUpBarrier !== null
+    || (state.world.kind === 'hub'
+      && state.world.participants[playerId]?.transition !== null)
+  ) {
     return { accepted: false, modConsumption: null, reason: 'service-unavailable', state }
   }
   if (action.type === 'interact-goodie') {
@@ -1820,6 +1906,12 @@ export function stepGameSimulationTick(
           playerId,
           playerEntityMovementScale(state.playerEntities, playerId),
         ])),
+        options.collegeIntroReadyPlayerIds ?? null,
+        new Set(state.playerEntities.identities.flatMap(({ playerId }) => (
+          playerEconomyAt(state.playerEntities, playerId)?.collegeIntroPending
+            ? [playerId]
+            : []
+        ))),
       )
       return finishGameSimulationTick(
         state,
@@ -1987,6 +2079,27 @@ function finishGameSimulationTick(
   const tick = previous.tick + 1
   let resolvedPlayers = result.players
   let playerEntities = replacePlayerCharacterRecords(previous.playerEntities, resolvedPlayers)
+  if (previous.world.kind === 'hub' && result.world.kind === 'hub') {
+    for (const { playerId } of playerEntities.identities) {
+      const before = previous.world.participants[playerId]
+      const after = result.world.participants[playerId]
+      const economy = playerEconomyAt(playerEntities, playerId)
+      if (
+        economy?.collegeIntroPending
+        && before?.transition?.phase === 'incoming'
+        && before.transition.sourceRegion === 'office'
+        && before.transition.destination === 'courtyard'
+        && after?.region === 'courtyard'
+        && after.transition === null
+      ) {
+        playerEntities = replacePlayerEconomy(playerEntities, playerId, {
+          ...economy,
+          collegeIntroPending: false,
+          revision: economy.revision + 1,
+        })
+      }
+    }
+  }
   playerEntities = stepPlayerEntityOverlayLightingTick(playerEntities)
   let world = result.world
   const combatAdmissionEnabled = world.kind !== 'boneyard'

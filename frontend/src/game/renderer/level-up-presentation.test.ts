@@ -189,7 +189,7 @@ test('retains picker presentation without any Hub, private-room, or Boneyard sup
   ]) assert.ok(hub.includes(member), `missing live Hub member: ${member}`)
   for (const member of [
     'this.updatePlayers(snapshot, localParticipant.region)',
-    'this.updateRoomPresentation(snapshot, localPlayerId, localParticipant.region)',
+    'this.updateRoomPresentation(',
     'this.primarySpells[region].update(',
     'this.secondaryAbilities[region].update(',
   ]) assert.ok(privateRooms.includes(member), `missing live private-room member: ${member}`)

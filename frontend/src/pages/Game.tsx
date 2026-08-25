@@ -295,12 +295,14 @@ export default function Game() {
     saveIntent?: GameSaveIntent,
     allowModMismatch?: boolean,
     resumeToken?: string,
+    beginCollegeIntro?: boolean,
   ): Promise<GameSession> => {
     try {
       const endpoint = preparedEndpoint.current
       if (!endpoint) throw new Error('The shared Hub admission was not prepared.')
       const session = await bootGame({
         ...(allowModMismatch ? { allowModMismatch: true } : {}),
+        ...(beginCollegeIntro ? { beginCollegeIntro: true } : {}),
         character,
         cheatsEnabled,
         diagnostics,

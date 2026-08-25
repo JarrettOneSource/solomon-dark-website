@@ -130,6 +130,7 @@ import type {
   GameSaveIntent,
   ResumableGameSave,
 } from './save/game-save-contract.ts'
+import { restoreGameSaveProfile } from './save/game-save-document.ts'
 import { gameSaveModMismatch, type GameSaveModMismatch } from './save/game-save-mods.ts'
 import {
   GAME_VIEWPORT_MIN_HEIGHT,
@@ -318,6 +319,7 @@ interface MainMenuSceneProps {
     saveIntent?: GameSaveIntent,
     allowModMismatch?: boolean,
     resumeToken?: string,
+    beginCollegeIntro?: boolean,
   ) => Promise<GameClientSession>
   connectObserver: (
     matchId: string,
@@ -428,6 +430,11 @@ export default function MainMenuScene({
   const [cheatCollegePrompt, setCheatCollegePrompt] = useState(false)
   const [gameSettings, setLocalGameSettings] = useState(readGameSettings)
   const cheatsEnabled = gameSettings.enableCheats && !developerAccess
+  const collegeIntroPending = useMemo(
+    () => profileSave === null
+      || restoreGameSaveProfile(profileSave.document).economy.collegeIntroPending,
+    [profileSave],
+  )
   const [localHallOfFame, setLocalHallOfFame] = useState(readLocalHallOfFame)
   const [currentHallRunId, setCurrentHallRunId] = useState<string | null>(null)
   const [fixedViewport, setFixedViewport] = useState(() => (
@@ -678,7 +685,7 @@ export default function MainMenuScene({
       setRuntimeProgression((current) => (
         sameRuntimeProgression(current, progression) ? current : progression
       ))
-      setRuntimeSnapshot((current) => sameRuntimeScene(current, snapshot)
+      setRuntimeSnapshot((current) => sameRuntimeScene(current, snapshot, session.playerId)
         ? current
         : snapshot)
     })
@@ -772,8 +779,23 @@ export default function MainMenuScene({
     }
   }, [runtimeConnected])
 
+  const collegeLoadoutActive = Boolean(
+    session
+    && runtimeSnapshot?.world.kind === 'hub'
+    && runtimeSnapshot.world.participants[session.playerId]?.transition?.phase
+      === 'college-loadout',
+  )
   useEffect(() => {
     if (!session || !runtimeSnapshot) return
+    if (collegeLoadoutActive) {
+      setWizardName(current => current.length === 0
+        ? initialCreateWizardNameForSession(displayName)
+        : current)
+      setFadeState('idle')
+      setFadeTarget(null)
+      setScreen('create')
+      return
+    }
     if (runtimeRunPhase === 'hub' && screen === 'create') {
       setFadeState('idle')
       setFadeTarget(null)
@@ -784,7 +806,7 @@ export default function MainMenuScene({
     setFadeState('idle')
     setFadeTarget(null)
     setScreen('create')
-  }, [runtimeRunPhase, runtimeSnapshot, screen, session])
+  }, [collegeLoadoutActive, displayName, runtimeRunPhase, runtimeSnapshot, screen, session])
 
   useEffect(() => {
     if (!session) return
@@ -889,7 +911,11 @@ export default function MainMenuScene({
       return
     }
     setNewGameMismatchAdmission(null)
-    beginCreate(admission)
+    if (collegeIntroPending) {
+      void startCollegeIntro(admission)
+    } else {
+      beginCreate(admission)
+    }
   }
 
   const continueNewGame = () => {
@@ -973,7 +999,9 @@ export default function MainMenuScene({
       && activeMods.length === 0
       && !cheatsEnabled
     ) {
-      beginCreate({ kind: 'party', intentId: resolution.intentId })
+      const admission = { kind: 'party', intentId: resolution.intentId } as const
+      if (collegeIntroPending) void startCollegeIntro(admission)
+      else beginCreate(admission)
       return
     }
     setPartyConsent(resolution)
@@ -1034,7 +1062,9 @@ export default function MainMenuScene({
           setContentProgress,
         )
       }
-      beginCreate({ kind: 'party', intentId: partyConsent.intentId })
+      const admission = { kind: 'party', intentId: partyConsent.intentId } as const
+      if (collegeIntroPending) await startCollegeIntro(admission)
+      else beginCreate(admission)
     } catch (error) {
       setConnectionError(error instanceof Error ? error.message : 'The party content could not be prepared.')
     } finally {
@@ -1129,8 +1159,8 @@ export default function MainMenuScene({
     selectedDiscipline: WizardDiscipline,
   ): Promise<boolean> => {
     if (connecting) return false
-    if (session && runtimeRunPhase === 'loadout') {
-      session.confirmLoadout(selectedElement, selectedDiscipline)
+    if (session && (runtimeRunPhase === 'loadout' || collegeLoadoutActive)) {
+      session.confirmLoadout(selectedElement, selectedDiscipline, selectedDisplayName)
       return true
     }
     setConnecting(true)
@@ -1156,6 +1186,50 @@ export default function MainMenuScene({
       cancelLoading('hub')
       setConnectionError(error instanceof Error ? error.message : 'Game server connection failed.')
       return false
+    } finally {
+      setConnecting(false)
+    }
+  }
+
+  async function startCollegeIntro(
+    admission: BrowserGameAdmission,
+    allowModMismatch = false,
+  ): Promise<void> {
+    if (connecting) return
+    const pendingName = admission.kind === 'party'
+      ? partyRequesterName
+      : initialCreateWizardNameForSession(displayName)
+    setPendingAdmission(admission)
+    setNewGameModMismatchAllowed(allowModMismatch)
+    setWizardName(pendingName)
+    setPartyConsent(null)
+    setModdedPlayPrompt(false)
+    setConnecting(true)
+    setConnectionError(null)
+    beginLoading('hub', 'connecting_transport')
+    try {
+      await prepareGame(admission)
+      const nextSession = await connectSession(
+        {
+          discipline: 'arcane',
+          displayName: pendingName,
+          element: 'ether',
+        },
+        advanceLoading,
+        cheatsEnabled,
+        profileSave?.document,
+        profileSave ? 'new-game' : undefined,
+        allowModMismatch,
+        undefined,
+        true,
+      )
+      activateSession(nextSession)
+      setNewGameModMismatchAllowed(false)
+    } catch (error) {
+      cancelLoading('hub')
+      setConnectionError(error instanceof Error
+        ? error.message
+        : 'The College introduction could not start.')
     } finally {
       setConnecting(false)
     }
@@ -1423,6 +1497,7 @@ export default function MainMenuScene({
     <div
       className="main-menu-page"
       data-chat-open={chatOpen}
+      data-college-loadout-active={collegeLoadoutActive || undefined}
       data-game-scene={gameScene}
       data-game-sounds-muted={nonMusicMuted}
       data-hub-player-activity={localHubActivity ?? 'none'}
@@ -1568,16 +1643,19 @@ export default function MainMenuScene({
         ) : screen === 'create' ? (
           <CreateMenuScene
             audio={audio}
+            backDisabled={collegeLoadoutActive}
             displayName={wizardName}
             onBack={() => { void leaveCreate() }}
             onDisplayNameChange={setWizardName}
             onDisciplineCommit={beginHubLoading}
             onStart={startHub}
-            retainedLoadoutCanConfirm={Boolean(
+            retainedLoadoutCanConfirm={runtimeRunPhase === 'loadout' && Boolean(
               session
               && !runtimeSnapshot?.run.loadoutReadyPlayerIds.includes(session.playerId)
             )}
-            retainedLoadout={runtimeRunPhase === 'loadout' && session && runtimeSnapshot
+            retainedLoadout={runtimeRunPhase === 'loadout'
+              && !runtimeSnapshot?.players[session?.playerId ?? '']?.economy.collegeIntroPending
+              && session && runtimeSnapshot
               ? runtimeSnapshot.players[session.playerId]?.config
               : undefined}
             viewport={fixedViewport}
@@ -1658,7 +1736,10 @@ export default function MainMenuScene({
               onOpenSkills={openSkillBook}
               onOccupiedChange={setHubSceneOccupied}
               onPauseRequest={requestGameplayPause}
-              onReady={finishHubLoading}
+              onReady={() => {
+                session.readyCollegeIntro()
+                finishHubLoading()
+              }}
               onStartMatch={startBoneyard}
               onPartyRotateCode={session.rotatePartyCode}
               onPartyVisibility={session.setPartyVisibility}
@@ -1864,7 +1945,9 @@ export default function MainMenuScene({
               const admission = newGameMismatchAdmission
               setModMismatch(null)
               setNewGameMismatchAdmission(null)
-              if (admission) beginCreate(admission, true)
+              if (admission && collegeIntroPending) {
+                void startCollegeIntro(admission, true)
+              } else if (admission) beginCreate(admission, true)
               else void resumeLastGame(true)
             }}
             style={nativeStageStyle}
@@ -2014,6 +2097,7 @@ function partyActionErrorMessage(reason: PartyActionRejection | null): string {
 function sameRuntimeScene(
   current: GameSnapshot | null,
   next: GameSnapshot,
+  playerId: string,
 ): boolean {
   if (
     !current
@@ -2025,7 +2109,12 @@ function sameRuntimeScene(
   if (current.world.kind === 'boneyard' && next.world.kind === 'boneyard') {
     return current.world.runId === next.world.runId
   }
-  return current.world.kind === 'hub'
+  if (current.world.kind !== 'hub' || next.world.kind !== 'hub') return false
+  const currentCollegeLoadout = current.world.participants[playerId]?.transition?.phase
+    === 'college-loadout'
+  const nextCollegeLoadout = next.world.participants[playerId]?.transition?.phase
+    === 'college-loadout'
+  return currentCollegeLoadout === nextCollegeLoadout
 }
 
 function sameLevelUpBarrier(

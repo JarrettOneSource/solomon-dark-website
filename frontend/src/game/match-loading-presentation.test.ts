@@ -39,7 +39,7 @@ test('owns both requested transitions through destination renderer readiness', (
   assert.match(mainScene, /beginLoading\('hub', 'connecting_transport'\)/)
   assert.equal(
     mainScene.match(/beginLoading\('hub', 'connecting_transport'\)/g)?.length,
-    1,
+    2,
   )
   assert.match(mainScene, /onDisciplineCommit=\{beginHubLoading\}/)
   assert.match(mainScene, /beginLoading\('boneyard', 'preparing_boneyard'\)/)
@@ -60,7 +60,10 @@ test('owns both requested transitions through destination renderer readiness', (
     mainScene,
     /const sceneInputBlocked = chatOpen[\s\S]*\|\| loading !== null[\s\S]*\|\| levelUpModalActive[\s\S]*\|\| skillBookOpen[\s\S]*\|\| \(gameplayPause !== null && !ownsActiveInventoryPause\)/,
   )
-  assert.match(mainScene, /onReady=\{finishHubLoading\}/)
+  assert.match(
+    mainScene,
+    /onReady=\{\(\) => \{\s*session\.readyCollegeIntro\(\)\s*finishHubLoading\(\)\s*\}\}/,
+  )
   assert.match(mainScene, /onReady=\{finishBoneyardLoading\}/)
   assert.doesNotMatch(mainScene, /Opening the Boneyard/)
   assert.doesNotMatch(mainScene, /transitionTo\('hub'\)/)

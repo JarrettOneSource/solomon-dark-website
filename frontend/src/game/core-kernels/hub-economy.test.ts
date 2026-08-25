@@ -78,6 +78,7 @@ test('a fresh participant owns the retail 500-gold profile and complete native s
     [['health-potion', 1], ['mana-potion', 1]],
   )
   assert.deepEqual(state.storage, [])
+  assert.equal(state.collegeIntroPending, true)
   assert.equal(state.tutorialPending, true)
   assert.deepEqual(
     [state.equipment.hat, state.equipment.robe, state.equipment.weapon].map((item) => ({

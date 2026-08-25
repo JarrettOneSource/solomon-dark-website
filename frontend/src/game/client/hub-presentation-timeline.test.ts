@@ -976,6 +976,55 @@ test('projects the local native fade cadence while interpolating remote particip
   assert.equal(presentation.sample(100).world.participants.remote.activity, 'paused')
 })
 
+test('projects the one-shot Office reveal at the native 0.01 cadence', () => {
+  const first = snapshotAt(100, 10, 20)
+  const second = snapshotAt(105, 15, 30)
+  const transition = {
+    destination: 'courtyard',
+    phase: 'college-intro',
+    scriptedSpeed: 1,
+    scriptedTarget: { x: 512, y: 562 },
+    sourceRegion: 'office',
+  } as const
+  first.world.participants = {
+    local: { activity: null, region: 'office', transition: { ...transition, alpha: 1 } },
+    remote: { activity: null, region: 'office', transition: { ...transition, alpha: 1 } },
+  }
+  second.world.participants = {
+    local: { activity: null, region: 'office', transition: { ...transition, alpha: 0.95 } },
+    remote: { activity: null, region: 'office', transition: { ...transition, alpha: 0.95 } },
+  }
+  const presentation = timeline(first)
+  presentation.push(second, INTERVAL_MS)
+
+  const halfway = presentation.sample(75)
+  assert.ok(Math.abs(
+    (halfway.world.participants.local.transition?.alpha ?? 0) - 0.925,
+  ) < 1e-12)
+  assert.equal(halfway.world.participants.remote.transition?.alpha, 0.975)
+})
+
+test('holds the covered College loadout boundary without client-side fade drift', () => {
+  const first = snapshotAt(100, 10, 20)
+  const second = snapshotAt(105, 15, 30)
+  const transition = {
+    alpha: 1,
+    destination: 'courtyard',
+    phase: 'college-loadout',
+    scriptedSpeed: 1,
+    scriptedTarget: { x: 952.5, y: 157.5 },
+    sourceRegion: 'office',
+  } as const
+  first.world.participants = {
+    local: { activity: null, region: 'courtyard', transition },
+    remote: { activity: null, region: 'courtyard', transition },
+  }
+  second.world.participants = structuredClone(first.world.participants)
+  const presentation = timeline(first)
+  presentation.push(second, INTERVAL_MS)
+  assert.equal(presentation.sample(75).world.participants.local.transition?.alpha, 1)
+})
+
 test('uses authoritative ticks rather than packet arrival spacing when receipts jitter', () => {
   const presentation = timeline(snapshotAt(200, 0, 0), 100)
   presentation.push(snapshotAt(205, 5, 50), 167)

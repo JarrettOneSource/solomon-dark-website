@@ -13,6 +13,7 @@ import {
   CREATE_DISCIPLINE_FINALIZE_MS,
   GAME_SCENE_MUSIC,
   HUB_AUDIO_ATTENUATION_RADIUS,
+  NATIVE_COLLEGE_OFFICE_AUDIO_MANIFEST,
   NATIVE_LEVEL_UP_SOUND_REQUEST,
   NATIVE_MUSIC_MODULE_SHA256,
   NATIVE_LOOP_MANIFEST,
@@ -241,11 +242,32 @@ test('keeps native registry offsets on the browser cue manifest', () => {
   assert.equal(NATIVE_LOOP_MANIFEST['rolling-stone-loop'].registryOffset, 0x1acc)
   assert.equal(NATIVE_LOOP_MANIFEST['meteor-loop'].registryOffset, 0x19ac)
   assert.equal(NATIVE_LOOP_MANIFEST['steam-loop'].registryOffset, 0x1c4c)
+  assert.equal(NATIVE_LOOP_MANIFEST['polisher-wipe'].registryOffset, null)
   assert.equal(NATIVE_STREAM_MANIFEST['catch-it'].registryOffset, 0x1344)
   assert.equal(NATIVE_STREAM_MANIFEST['choose-element'].registryOffset, 0x134c)
   assert.equal(NATIVE_STREAM_MANIFEST.dye.registryOffset, 0x1374)
   assert.equal(NATIVE_STREAM_MANIFEST['pike-break'].registryOffset, 0x13e4)
   assert.equal(NATIVE_STREAM_MANIFEST['start-cast'].registryOffset, 0x141c)
+})
+
+test('pins the first story Office voice and Polisher loop to stock PCM', () => {
+  const voice = readFileSync(new URL(
+    '../assets/game/audio/voice/arch-intro-0.wav',
+    import.meta.url,
+  ))
+  const wipe = readFileSync(new URL(
+    '../assets/game/audio/sfx/polisher-wipe-loop.wav',
+    import.meta.url,
+  ))
+  assert.equal(
+    createHash('sha256').update(voice).digest('hex'),
+    NATIVE_COLLEGE_OFFICE_AUDIO_MANIFEST.archIntro.sourceSha256,
+  )
+  assert.equal(
+    createHash('sha256').update(wipe).digest('hex'),
+    NATIVE_COLLEGE_OFFICE_AUDIO_MANIFEST.polisherWipe.sourceSha256,
+  )
+  assert.equal(NATIVE_COLLEGE_OFFICE_AUDIO_MANIFEST.archIntro.durationTicks, 698)
 })
 
 test('pins every welded-primary cue to its untouched stock WAV', () => {

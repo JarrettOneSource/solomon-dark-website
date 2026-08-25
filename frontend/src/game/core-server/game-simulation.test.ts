@@ -49,6 +49,7 @@ import { createGameSnapshot } from '../host/game-snapshot.ts'
 import {
   addPlayerCharacter,
   applyGameSimulationHubAction,
+  armGameSimulationCollegeIntro,
   bindGameSimulationPlayerSkillQuickbar,
   BONEYARD_ENEMY_EVENT_LANE_CAPACITY,
   confirmGameSimulationLoadout,
@@ -175,6 +176,66 @@ test('native provider registration is lane-local and stable across grouped colle
     'transient-a',
     'transient-b',
   ])
+})
+
+test('a pending first wizard consumes the College intro only after the Courtyard settles', () => {
+  let state = createGameSimulation({ owner: DEFAULT_PLAYER_CHARACTER_CONFIG })
+  const ownerParticipant = () => {
+    if (state.world.kind !== 'hub') throw new Error('expected Hub world')
+    return state.world.participants.owner
+  }
+  const initialRevision = getPlayerEconomy(state, 'owner').revision
+
+  state = armGameSimulationCollegeIntro(state, 'owner')
+  assert.equal(ownerParticipant()?.region, 'office')
+  assert.equal(ownerParticipant()?.transition?.phase, 'college-intro')
+  assert.deepEqual(getPlayerCharacter(state, 'owner').position, { x: 512, y: 562 })
+
+  for (let tick = 0; tick < 100; tick += 1) state = stepGameSimulationTick(state, {})
+
+  assert.equal(ownerParticipant()?.transition, null)
+  assert.equal(ownerParticipant()?.region, 'office')
+  assert.equal(getPlayerEconomy(state, 'owner').collegeIntroPending, true)
+  assert.equal(getPlayerEconomy(state, 'owner').revision, initialRevision)
+
+  state = {
+    ...state,
+    playerEntities: replacePlayerCharacter(
+      state.playerEntities,
+      'owner',
+      {
+        ...getPlayerCharacter(state, 'owner'),
+        position: { x: 512, y: 924 },
+        velocity: { x: 0, y: 0 },
+      },
+    ),
+  }
+  state = stepGameSimulationTick(state, {})
+  assert.equal(ownerParticipant()?.transition?.phase, 'outgoing')
+  for (let tick = 0; tick < 101; tick += 1) state = stepGameSimulationTick(state, {})
+  assert.equal(ownerParticipant()?.region, 'courtyard')
+  assert.equal(ownerParticipant()?.transition?.phase, 'college-loadout')
+  assert.deepEqual(getPlayerCharacter(state, 'owner').position, { x: 952.5, y: 67.5 })
+  assert.equal(getPlayerEconomy(state, 'owner').collegeIntroPending, true)
+
+  const confirmed = confirmGameSimulationLoadout(state, 'owner', {
+    discipline: 'body',
+    displayName: 'Reborn',
+    element: 'air',
+  })
+  assert.ok(confirmed)
+  state = confirmed
+  assert.equal(ownerParticipant()?.transition?.phase, 'incoming')
+  assert.equal(getPlayerCharacter(state, 'owner').config.displayName, 'Reborn')
+
+  for (let ticks = 0; ownerParticipant()?.transition && ticks < 200; ticks += 1) {
+    state = stepGameSimulationTick(state, {})
+  }
+  assert.equal(ownerParticipant()?.transition, null)
+  assert.deepEqual(getPlayerCharacter(state, 'owner').position, { x: 952.5, y: 157.5 })
+  assert.equal(getPlayerEconomy(state, 'owner').collegeIntroPending, false)
+  assert.equal(getPlayerEconomy(state, 'owner').revision, initialRevision + 1)
+  assert.strictEqual(armGameSimulationCollegeIntro(state, 'owner'), state)
 })
 
 test('Boneyard entry registers players before Lantern and reconnect appends a fresh actor ordinal', () => {
@@ -3279,12 +3340,14 @@ test('one dead player spectates until all-dead Game Over returns the session thr
 
   const firstReady = confirmGameSimulationLoadout(loadout, 'first', {
     discipline: 'body',
+    displayName: 'First Reborn',
     element: 'air',
   })
   assert.ok(firstReady)
   assert.equal(firstReady.run.phase, 'loadout')
   const hub = confirmGameSimulationLoadout(firstReady, 'second', {
     discipline: 'mind',
+    displayName: 'Second Reborn',
     element: 'water',
   })
   assert.ok(hub)

@@ -8,9 +8,10 @@ import type { GameSessionKind } from '../protocol/game-protocol.ts'
 import { isWizardElement, type WizardElement } from '../core-kernels/player-character.ts'
 import { PLAYER_LIFE_STATES, type PlayerLifeState } from '../core-kernels/player-combat.ts'
 import type { PartyVisibility } from '../protocol/party-state.ts'
-import type { GameSaveIntegrity } from '../save/game-save-contract.ts'
 import {
+  WEB_GAME_SAVE_SCHEMA_VERSION,
   parseGameSaveDocument,
+  type GameSaveIntegrity,
 } from '../save/game-save-contract.ts'
 import { restoreGameSaveDocument } from '../save/game-save-document.ts'
 
@@ -273,7 +274,8 @@ function validateDocumentBindings(
 ): void {
   const parsed = parseGameSaveDocument(document)
   if (
-    parsed.sourceSchemaVersion !== 12
+    (parsed.sourceSchemaVersion < 12
+      || parsed.sourceSchemaVersion > WEB_GAME_SAVE_SCHEMA_VERSION)
     || parsed.continuation === null
     || parsed.continuation.summary.partyRejoinToken !== token
     || parsed.continuation.summary.playerId !== claim.playerId

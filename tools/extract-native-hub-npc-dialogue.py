@@ -12,6 +12,7 @@ from typing import Any
 
 EXPECTED_HASHES = {
     "survival.txt": "5e792f4dc692667d0ecaa4e7304202f11d2d1cdc664820b97be83145fa3b2d67",
+    "story.txt": "ce1580bdce93a617c6045617d4c42f9c1b9019a5d5664efadf36c8b80f40071d",
     "books.txt": "d7ca0a36c2fe6af90a4a950d5ff3dab7638f43640de97684eb6a7583a02b24a1",
     "spellfacts.txt": "1d78d408664ea830465e7e5a8b56df2c6373cb4f6685dc025a1a6d0f90ab0e17",
     "narration.txt": "5a80f605f8fcac7fc634f8234d5b0a0173d3d4aa563dc076cc6d1b4dbc649174",
@@ -97,6 +98,7 @@ def build(source_root: Path) -> dict[str, Any]:
         if actual != EXPECTED_HASHES[name]:
             raise ValueError(f"{path} SHA-256 {actual} is not retail {EXPECTED_HASHES[name]}")
     dialogue = sections(paths["survival.txt"])
+    story_dialogue = sections(paths["story.txt"])
     book_source = sections(paths["books.txt"])
     spell_source = sections(paths["spellfacts.txt"])
     speech = narration(paths["narration.txt"])
@@ -141,6 +143,37 @@ def build(source_root: Path) -> dict[str, Any]:
             "geometry": painting_geometry, "intro": None,
             "name": "Declarius", "questions": [], "serviceTitle": None,
         }
+
+    story_office_interactions = {
+        "arch-chancellor": interaction(
+            "The Archchancellor",
+            "ARCH_INTRO_0",
+            "office",
+            514,
+            467,
+            55,
+            questions=["ARCH_Q1_0", "ARCH_Q2_0", "ARCH_Q3_0"],
+            dismissals=["ARCH_DISMISS_0"],
+        ),
+        "polisher": interaction(
+            "Polisher",
+            "POLISHER_INTRO_0",
+            "office",
+            566,
+            735,
+            15,
+            questions=["POLISHER_Q1_0", "POLISHER_Q2_0"],
+            dismissals=["POLISHER_DISMISS_0"],
+        ),
+    }
+    story_office_required = {
+        key
+        for row in story_office_interactions.values()
+        for key in [row["intro"], *row["questions"], *row["dismissals"]]
+    }
+    missing_story = sorted(story_office_required.difference(story_dialogue))
+    if missing_story:
+        raise ValueError(f"story aggregate is missing {missing_story}")
 
     marker_actors = [
         ("hagatha", 5001, "help", "right", 61, False, None),
@@ -271,7 +304,7 @@ def build(source_root: Path) -> dict[str, Any]:
         "interactions": interactions,
         "interruptEulogies": [speech[f"SAY_EULOGY_INTERRUPT{index}"] for index in range(1, 5)],
         "markers": markers,
-        "schema": "solomon-dark-native-hub-npc-interactions-v2",
+        "schema": "solomon-dark-native-hub-npc-interactions-v3",
         "skorcha": {"animationDelay": {"drawCount": 10, "offsetTicks": 20},
             "animationStateCount": 3, "artRecords": list(range(510, 517)),
             "placements": [{"variant": 0, "x": 1437.5, "y": 732.5},
@@ -279,6 +312,27 @@ def build(source_root: Path) -> dict[str, Any]:
             "presenceDrawCount": 3, "presenceDrawValue": 1},
         "source": {"dialogueHashes": EXPECTED_HASHES, "executableSha256": EXECUTABLE_SHA256,
             "preferredImageBase": "0x00400000", "retailVersion": "0.72.5"},
+        "storyOffice": {
+            "archIntroVoice": {
+                "bytes": 1231088,
+                "sha256": "b819a5aa7397df964ec9f9e03149941450d65d10fe207f71c3643419fd071255",
+            },
+            "dialogue": {
+                key: story_dialogue[key]
+                for key in sorted(story_office_required)
+            },
+            "interactions": story_office_interactions,
+            "polisher": {
+                "artRecords": [23, 24, 25, 26],
+                "loopFullDistance": 50,
+                "loopSha256": "ad5043df28f0ee18e881ffe709fc819218533b080d6d1ec4093603d8447e4d57",
+                "loopSilentDistance": 200,
+                "phaseFloatRange": 0.25,
+                "phaseSpeed": 0.05,
+                "reverseDrawCount": 1500,
+                "reverseDrawValue": 3,
+            },
+        },
         "teacherSpells": teacher_spells,
     }
 

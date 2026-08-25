@@ -14,11 +14,15 @@ import {
   createGameSimulation,
   enterBoneyardWorld,
   gameSimulationPlayerRecords,
+  getPlayerCharacter,
   getPlayerEconomy,
   getPlayerProgression,
   grantGameSimulationPlayerExperience,
 } from '../core-server/game-simulation.ts'
-import { replacePlayerEconomy } from '../core-server/player-entity-store.ts'
+import {
+  replacePlayerCharacter,
+  replacePlayerEconomy,
+} from '../core-server/player-entity-store.ts'
 import { createHubStudentFixturePopulation } from '../core-server/hub-student-fixtures.ts'
 import type {
   PlayerCharacterConfig,
@@ -76,6 +80,11 @@ const SECOND_CHARACTER = {
   element: 'water',
 } as const
 const SHARED_AUTHENTICATION = { kind: 'shared', credential: 'test-secret' } as const
+const EMPTY_PLAYER_PROFILE = {
+  accountUsername: null,
+  highestWave: null,
+  totalPlaytimeMs: null,
+} as const
 const LEADERBOARD_RECEIPT_SECRET = 'leaderboard-receipt-test-secret-that-is-long-enough'
 const EMPTY_SHARED_CONTENT = {
   assets: [],
@@ -172,6 +181,28 @@ test('party recovery claim seals the exact owner checkpoint and deployment targe
   assert.match(token, /^sdrpr2\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/)
   assert.deepEqual(
     verifyPartyRecoveryClaim(LEADERBOARD_RECEIPT_SECRET, token, finalDocument),
+    claimInput,
+  )
+
+  const legacyUnsigned = structuredClone(final)
+  legacyUnsigned.schemaVersion = 12
+  legacyUnsigned.continuation.summary.partyRejoinToken = null
+  delete legacyUnsigned.profile.economy.collegeIntroPending
+  delete legacyUnsigned.continuation.simulation.playerEntities.economies[0]
+    .collegeIntroPending
+  const legacyUnsignedDocument = JSON.stringify(legacyUnsigned)
+  const legacyToken = createPartyRecoveryClaim(
+    LEADERBOARD_RECEIPT_SECRET,
+    claimInput,
+    legacyUnsignedDocument,
+  )
+  legacyUnsigned.continuation.summary.partyRejoinToken = legacyToken
+  assert.deepEqual(
+    verifyPartyRecoveryClaim(
+      LEADERBOARD_RECEIPT_SECRET,
+      legacyToken,
+      JSON.stringify(legacyUnsigned),
+    ),
     claimInput,
   )
 
@@ -584,6 +615,93 @@ test('global Hub rejects modded and cheats-on admissions before player ownership
     await closeSocket(socket)
   }
   assert.equal(host.playerCount(), 0)
+})
+
+test('a requested fresh College admission is authoritative through Office and checkpoints once settled', async (context) => {
+  const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
+  context.after(() => host.close())
+  const client = await join(
+    host.address.url,
+    'test-secret',
+    FIRST_CHARACTER,
+    true,
+    EMPTY_PLAYER_PROFILE,
+    true,
+  )
+  context.after(() => client.socket.close())
+
+  const participant = client.welcome.snapshot.world.kind === 'hub'
+    ? client.welcome.snapshot.world.participants[client.welcome.playerId]
+    : null
+  assert.equal(participant?.region, 'office')
+  assert.equal(participant?.transition?.phase, 'college-intro')
+  assert.deepEqual(
+    client.welcome.snapshot.players[client.welcome.playerId].position,
+    { x: 512, y: 562 },
+  )
+  await new Promise((resolve) => setTimeout(resolve, 75))
+  const waitingState = host.state()
+  assert.equal(
+    waitingState.world.kind === 'hub'
+      ? waitingState.world.participants[client.welcome.playerId]?.transition?.alpha
+      : null,
+    1,
+  )
+  client.socket.send(encodeGameMessage({ type: 'client-ready-college-intro' }))
+
+  const officeReady = await nextMessage(client.socket, (message) => (
+    message.type === 'server-snapshot'
+    && message.snapshot.world.kind === 'hub'
+    && message.snapshot.world.participants[client.welcome.playerId]?.region === 'office'
+    && message.snapshot.world.participants[client.welcome.playerId]?.transition === null
+  ))
+  assert.equal(officeReady.type, 'server-snapshot')
+  assert.equal(
+    officeReady.snapshot.players[client.welcome.playerId].economy.collegeIntroPending,
+    true,
+  )
+  placeCollegeAdmissionAtOfficeExit(host, client.welcome.playerId)
+  const loadout = await nextMessage(client.socket, (message) => (
+    message.type === 'server-snapshot'
+    && message.snapshot.world.kind === 'hub'
+    && message.snapshot.world.participants[client.welcome.playerId]?.transition?.phase
+      === 'college-loadout'
+  ))
+  assert.equal(loadout.type, 'server-snapshot')
+  assert.deepEqual(
+    loadout.snapshot.players[client.welcome.playerId].position,
+    { x: 952.5, y: 67.5 },
+  )
+  client.socket.send(encodeGameMessage({
+    type: 'client-confirm-loadout',
+    discipline: 'body',
+    displayName: 'Reborn',
+    element: 'air',
+  }))
+
+  const settledMessage = nextMessage(client.socket, (message) => (
+    message.type === 'server-snapshot'
+    && message.snapshot.world.kind === 'hub'
+    && message.snapshot.world.participants[client.welcome.playerId]?.region === 'courtyard'
+    && message.snapshot.world.participants[client.welcome.playerId]?.transition === null
+  ))
+  const checkpointMessage = nextMessage(client.socket, (message) => (
+    message.type === 'server-save-checkpoint'
+    && restoreGameSaveProfile(message.save).economy.collegeIntroPending === false
+  ))
+  const [settled, checkpoint] = await Promise.all([settledMessage, checkpointMessage])
+  assert.equal(settled.type, 'server-snapshot')
+  assert.deepEqual(
+    settled.snapshot.players[client.welcome.playerId].position,
+    { x: 952.5, y: 157.5 },
+  )
+  assert.equal(
+    settled.snapshot.players[client.welcome.playerId].config.displayName,
+    'Reborn',
+  )
+  assert.equal(host.presence()[0]?.displayName, 'Reborn')
+  assert.equal(checkpoint.type, 'server-save-checkpoint')
+  assert.equal(getPlayerEconomy(host.state(), client.welcome.playerId).collegeIntroPending, false)
 })
 
 test('private College projects one party, supports Party-ID reservation, and checkpoints each wizard', async (context) => {
@@ -1269,7 +1387,7 @@ test('game host replicates and checkpoints native NPC hint acknowledgement', asy
   const [snapshotMessage, checkpointMessage] = await Promise.all([snapshot, checkpoint])
   assert.equal(snapshotMessage.type, 'server-snapshot')
   assert.equal(checkpointMessage.type, 'server-save-checkpoint')
-  assert.equal(JSON.parse(checkpointMessage.save).schemaVersion, 12)
+  assert.equal(JSON.parse(checkpointMessage.save).schemaVersion, 13)
 })
 
 test('shared Hub NPC actions and late-join defaults stay bound to the authenticated player', async (context) => {
@@ -2173,7 +2291,7 @@ test('host admits one fresh solo player into the hidden stock Tutorial and check
   assert.equal(snapshotMessage.snapshot.world.waves, null)
   assert.equal(checkpointMessage.type, 'server-save-checkpoint')
   const saved = JSON.parse(checkpointMessage.save)
-  assert.equal(saved.schemaVersion, 12)
+  assert.equal(saved.schemaVersion, 13)
   assert.equal(saved.profile.economy.tutorialPending, true)
   assert.equal(saved.continuation.simulation.world.tutorial.stage, 0)
 })
@@ -3090,6 +3208,7 @@ test('host returns the same multiplayer session from Game Over through loadout t
   second.socket.send(encodeGameMessage({
     type: 'client-confirm-loadout',
     discipline: 'mind',
+    displayName: 'Second Reborn',
     element: 'water',
   }))
   await new Promise((resolve) => setImmediate(resolve))
@@ -3102,6 +3221,7 @@ test('host returns the same multiplayer session from Game Over through loadout t
   first.socket.send(encodeGameMessage({
     type: 'client-confirm-loadout',
     discipline: 'body',
+    displayName: 'First Reborn',
     element: 'air',
   }))
   const hub = await hubMessage
@@ -3113,11 +3233,13 @@ test('host returns the same multiplayer session from Game Over through loadout t
   assert.deepEqual(hub.snapshot.players[first.welcome.playerId]?.config, {
     ...FIRST_CHARACTER,
     discipline: 'body',
+    displayName: 'First Reborn',
     element: 'air',
   })
   assert.deepEqual(hub.snapshot.players[second.welcome.playerId]?.config, {
     ...SECOND_CHARACTER,
     discipline: 'mind',
+    displayName: 'Second Reborn',
     element: 'water',
   })
 
@@ -3448,15 +3570,13 @@ async function join(
   credential: string,
   character: PlayerCharacterConfig,
   autoPong = true,
-  profile: PlayerSocialProfile = {
-    accountUsername: null,
-    highestWave: null,
-    totalPlaytimeMs: null,
-  },
+  profile: PlayerSocialProfile = EMPTY_PLAYER_PROFILE,
+  beginCollegeIntro = false,
 ) {
   const socket = await openSocket(url, undefined, autoPong)
   socket.send(encodeGameMessage({
     type: 'client-hello',
+    ...(beginCollegeIntro ? { beginCollegeIntro: true } : {}),
     profile,
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
@@ -3535,6 +3655,42 @@ async function completeLeaderboardScenario(
     const welcome = await welcomeMessage
     assert.equal(welcome.type, 'server-welcome')
     assert.equal(welcome.developerAccess, scenario.developerAccess === true)
+    const collegeIntro = welcome.snapshot.world.kind === 'hub'
+      && welcome.snapshot.world.participants[welcome.playerId]?.transition?.phase
+        === 'college-intro'
+    const officeReady = collegeIntro
+      ? nextMessage(socket, message => (
+          message.type === 'server-snapshot'
+          && message.snapshot.world.kind === 'hub'
+          && message.snapshot.world.participants[welcome.playerId]?.region === 'office'
+          && message.snapshot.world.participants[welcome.playerId]?.transition === null
+        ))
+      : null
+    socket.send(encodeGameMessage({ type: 'client-ready-college-intro' }))
+    if (officeReady) {
+      const ready = await officeReady
+      assert.equal(ready.type, 'server-snapshot')
+      placeCollegeAdmissionAtOfficeExit(host, welcome.playerId)
+      const loadout = await nextMessage(socket, message => (
+        message.type === 'server-snapshot'
+        && message.snapshot.world.kind === 'hub'
+        && message.snapshot.world.participants[welcome.playerId]?.transition?.phase
+          === 'college-loadout'
+      ))
+      assert.equal(loadout.type, 'server-snapshot')
+      socket.send(encodeGameMessage({
+        type: 'client-confirm-loadout',
+        discipline: FIRST_CHARACTER.discipline,
+        displayName: FIRST_CHARACTER.displayName,
+        element: FIRST_CHARACTER.element,
+      }))
+      await nextMessage(socket, message => (
+        message.type === 'server-snapshot'
+        && message.snapshot.world.kind === 'hub'
+        && message.snapshot.world.participants[welcome.playerId]?.region === 'courtyard'
+        && message.snapshot.world.participants[welcome.playerId]?.transition === null
+      ))
+    }
     const loaded = nextMessage(socket, message => message.type === 'server-boneyard-loaded')
     socket.send(encodeGameMessage({
       type: 'client-start-match',
@@ -3634,6 +3790,24 @@ async function resolveEveryHostSkillOffer(
       return getPlayerProgression(next, playerId).pendingOffer?.sequence !== offer.sequence
     })
   }
+}
+
+function placeCollegeAdmissionAtOfficeExit(
+  host: Awaited<ReturnType<typeof startGameHost>>,
+  playerId: string,
+): void {
+  const state = host.playerState(playerId)
+  if (!state || state.world.kind !== 'hub') throw new Error('expected College Office state')
+  const player = getPlayerCharacter(state, playerId)
+  state.playerEntities = replacePlayerCharacter(
+    state.playerEntities,
+    playerId,
+    {
+      ...player,
+      position: { x: 512, y: 924 },
+      velocity: { x: 0, y: 0 },
+    },
+  )
 }
 
 async function hostHealth(url: string): Promise<{ lua: unknown }> {

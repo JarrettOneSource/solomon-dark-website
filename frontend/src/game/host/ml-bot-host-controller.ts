@@ -51,7 +51,7 @@ export type MlBotHostIntent =
       skillId: number
     }>
   | Readonly<{
-      character: Pick<PlayerCharacterConfig, 'discipline' | 'element'>
+      character: Pick<PlayerCharacterConfig, 'discipline' | 'displayName' | 'element'>
       kind: 'confirm-loadout'
     }>
 
@@ -265,6 +265,7 @@ export class MlBotHostController {
         this.adapter.dispatch({
           character: {
             discipline: this.character.discipline,
+            displayName: this.character.displayName,
             element: this.character.element,
           },
           kind: 'confirm-loadout',

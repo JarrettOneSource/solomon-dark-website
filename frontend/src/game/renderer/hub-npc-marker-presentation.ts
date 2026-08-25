@@ -102,6 +102,29 @@ export function hubNpcMarkerFrame(
   }
 }
 
+export function hubStoryOfficePolisherMarkerFrame(
+  tick: number,
+  seed: number,
+  surface: HubNpcMarkerSurface,
+): Pick<HubNpcMarkerFrame, 'alpha' | 'phaseDegrees' | 'position' | 'record' | 'visible'> {
+  const common = NATIVE_HUB_NPC_CATALOG.markers.common
+  const actor = NATIVE_HUB_NPC_CATALOG.storyOffice.interactions.polisher
+  const phaseDegrees = markerInitialPhase(seed, 5011, common.phaseDrawCount)
+    + Math.max(0, Math.floor(tick))
+  return {
+    alpha: Math.sin(phaseDegrees * Math.PI / 180)
+      * common.alphaAmplitude
+      + common.alphaBase,
+    phaseDegrees,
+    position: {
+      x: actor.geometry.position.x - common.rootOffsetX,
+      y: actor.geometry.position.y + common.rootOffsetY,
+    },
+    record: 14,
+    visible: surface === null || surface === 'dialogue',
+  }
+}
+
 export function hubNpcOnboardingPlan(
   helpFlags: readonly boolean[],
   tick: number,

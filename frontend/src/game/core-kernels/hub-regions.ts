@@ -33,7 +33,15 @@ export const HUB_REGION_IDS = [
 ] as const
 
 export type HubRegionId = typeof HUB_REGION_IDS[number]
-export type HubTransitionPhase = 'outgoing' | 'incoming'
+export type HubTransitionPhase =
+  | 'college-intro'
+  | 'college-loadout'
+  | 'outgoing'
+  | 'incoming'
+
+export const HUB_COLLEGE_INTRO_FADE_RATE = 0.01
+export const HUB_COLLEGE_INTRO_FADE_TICKS = 100
+export const HUB_COLLEGE_INTRO_OFFICE_POSITION = Object.freeze({ x: 512, y: 562 })
 
 export interface HubParticipantTransition {
   alpha: number
@@ -187,6 +195,20 @@ export const HUB_INCOMING_FADE_RATES: Readonly<Record<HubRegionId, number>> = {
 
 export function createHubParticipantState(): HubParticipantState {
   return { region: 'courtyard', transition: null }
+}
+
+export function createHubCollegeIntroParticipantState(): HubParticipantState {
+  return {
+    region: 'office',
+    transition: {
+      alpha: 1,
+      destination: 'courtyard',
+      phase: 'college-intro',
+      scriptedSpeed: 1,
+      scriptedTarget: { ...HUB_COLLEGE_INTRO_OFFICE_POSITION },
+      sourceRegion: 'office',
+    },
+  }
 }
 
 export function hubPortalAt(

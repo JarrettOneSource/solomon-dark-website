@@ -150,6 +150,7 @@ const ECONOMY_KEYS = [
   'actionFeedback',
   'backpack',
   'charmCapacity',
+  'collegeIntroPending',
   'dowsingFee',
   'dowsingOffers',
   'equipment',
@@ -587,6 +588,9 @@ function normalizePlayerStore(
 function normalizeEconomy(value: unknown, sourceSchemaVersion: number): HubEconomyState {
   const source = record(value, 'game save player economy')
   rejectUnexpectedKeys(source, 'game save player economy', ECONOMY_KEYS)
+  if (sourceSchemaVersion >= 13 && typeof source.collegeIntroPending !== 'boolean') {
+    throw new Error('game save player economy College intro state is invalid')
+  }
   const feedback = source.actionFeedback && typeof source.actionFeedback === 'object'
     && !('unforgeOutcome' in source.actionFeedback)
     ? { ...source.actionFeedback, unforgeOutcome: null }
@@ -594,6 +598,7 @@ function normalizeEconomy(value: unknown, sourceSchemaVersion: number): HubEcono
   const restored = {
     ...source,
     actionFeedback: feedback,
+    collegeIntroPending: sourceSchemaVersion >= 13 && source.collegeIntroPending === true,
     npc: normalizeNativeHubNpcState(source.npc, sourceSchemaVersion >= 11),
     tutorialPending: source.tutorialPending === true,
     unforgeBonuses: source.unforgeBonuses ?? createNativeUnforgeBonuses(),
@@ -961,6 +966,7 @@ function validatePlayerStore(value: unknown, playerId: string): GameSimulationSt
     const restored = {
       ...economy,
       actionFeedback: feedback,
+      collegeIntroPending: economy.collegeIntroPending === true,
       npc: normalizeNativeHubNpcState(economy.npc, true),
       tutorialPending: economy.tutorialPending === true,
       unforgeBonuses: economy.unforgeBonuses ?? createNativeUnforgeBonuses(),

@@ -180,6 +180,12 @@ export function confirmPostRunLoadout(
     : { ...source, loadoutReadyPlayerIds }
 }
 
+export function continuePostRunToCollegeIntro(
+  source: GameRunLifecycleState,
+): GameRunLifecycleState | null {
+  return source.phase === 'loadout' ? completePostRunLoadout(source) : null
+}
+
 export function gameOverExitDurationTicks(kind: GameOverExitKind | null): number {
   if (kind === 'input') return GAME_OVER_INPUT_EXIT_FADE_TICKS
   if (kind === 'automatic') return GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS

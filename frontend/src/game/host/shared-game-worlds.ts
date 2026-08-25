@@ -360,8 +360,10 @@ export function startSharedPartyRun(
 export function confirmSharedPartyLoadout(
   state: SharedGameWorldsState,
   playerId: PlayerId,
-  selection: Pick<PlayerCharacterConfig, 'discipline' | 'element'>,
+  selection: Pick<PlayerCharacterConfig, 'discipline' | 'displayName' | 'element'>,
 ): SharedWorldActionResult {
+  const hubConfirmed = confirmGameSimulationLoadout(state.hub, playerId, selection)
+  if (hubConfirmed) return accepted({ ...state, hub: hubConfirmed })
   const party = partyForPlayer(state.parties, playerId)
   if (!party) return rejected(state, 'run-unavailable')
   const run = state.runs.find(({ partyId }) => partyId === party.id)
@@ -412,11 +414,14 @@ export function stepSharedGameWorlds(
   pausedPartyIds: ReadonlySet<string> = new Set(),
   enemySpawnIntents: ReadonlyMap<string, readonly BoneyardEnemySpawnIntent[]> = new Map(),
   extensions: ReadonlyMap<string, GameSimulationExtensions> = new Map(),
+  collegeIntroReadyPlayerIds: ReadonlySet<PlayerId> | null = null,
 ): SharedGameWorldsState {
   if (state.hub.world.kind !== 'hub') {
     throw new Error('shared-game Hub owner is not a Hub world')
   }
-  const hub = stepGameSimulationTick(state.hub, inputsForState(state.hub, inputs))
+  const hub = stepGameSimulationTick(state.hub, inputsForState(state.hub, inputs), {
+    ...(collegeIntroReadyPlayerIds === null ? {} : { collegeIntroReadyPlayerIds }),
+  })
   if (hub.world.kind !== 'hub') throw new Error('shared-game Hub stepped out of its world')
   let memorial = hub.world.memorial
   const runs = state.runs.map((run): SharedPartyRun => {
@@ -426,6 +431,7 @@ export function stepSharedGameWorlds(
       previous,
       inputsForState(previous, inputs),
       {
+        ...(collegeIntroReadyPlayerIds === null ? {} : { collegeIntroReadyPlayerIds }),
         enemySpawnIntents: enemySpawnIntents.get(run.partyId) ?? [],
         extensions: extensions.get(run.partyId),
       },

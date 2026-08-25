@@ -20,8 +20,10 @@ import {
   addPlayerCharacter,
   applyGameSimulationHubAction,
   applyGameSimulationTutorialAction,
+  armGameSimulationCollegeIntro,
   bindGameSimulationPlayerSkillQuickbar,
   confirmGameSimulationLoadout,
+  completedGameSimulationCollegeIntroPlayerIds,
   continueGameSimulationOver,
   createGameSimulation,
   detachGameSimulationPlayer,
@@ -657,6 +659,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   let lastTickLagWarningAt = Number.NEGATIVE_INFINITY
   let nextTickAt = performance.now() + GAME_FIXED_TICK_SECONDS * 1000
   const clients = new Map<WebSocket, HostClient>()
+  const collegeIntroReadyPlayerIds = new Set<PlayerId>()
   const observers = new Map<WebSocket, HostObserver>()
   const bots = new Map<PlayerId, HostBot>()
   const failedBots = new Map<PlayerId, Error>()
@@ -1370,6 +1373,16 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         if (playerId === null) {
           disconnect(socket, 'invalid-message', 'The game save intent is invalid.')
           return
+        }
+        if (
+          !rejoinedParty
+          && (message.beginCollegeIntro || savedProfile?.economy.collegeIntroPending)
+        ) {
+          collegeIntroReadyPlayerIds.delete(playerId)
+          replaceStateForPlayer(
+            playerId,
+            armGameSimulationCollegeIntro(stateForPlayer(playerId), playerId),
+          )
         }
         if (savedProfile && !rejoinedParty && Object.keys(savedProfile.modState).length > 0) {
           const activeMods = authenticated.content?.manifest.mods ?? content.mods
@@ -2669,6 +2682,9 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           || gameplayPauseForPlayer(client.playerId) !== null
           || activeState.levelUpBarrier !== null
           || activeState.run.phase !== 'hub'
+          || activeState.world.kind !== 'hub'
+          || activeState.world.participants[client.playerId]?.region !== 'courtyard'
+          || activeState.world.participants[client.playerId]?.transition !== null
         ) return
         const selected = materializeBoneyard(
           boneyardCatalogForPlayer(client.playerId),
@@ -2702,6 +2718,18 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         if (privateParties) broadcastPartyState()
         broadcastSnapshot()
         publishSaveCheckpoint('boneyard-entry')
+        return
+      }
+      if (message.type === 'client-ready-college-intro') {
+        const activeState = stateForPlayer(client.playerId)
+        if (
+          activeState.world.kind === 'hub'
+          && activeState.world.participants[client.playerId]?.transition?.phase
+            === 'college-intro'
+          && getPlayerEconomy(activeState, client.playerId).collegeIntroPending
+        ) {
+          collegeIntroReadyPlayerIds.add(client.playerId)
+        }
         return
       }
       if (message.type === 'client-start-tutorial') {
@@ -2801,6 +2829,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         if (sharedWorlds) {
           const confirmed = confirmSharedPartyLoadout(sharedWorlds, client.playerId, message)
           if (!confirmed.accepted) return
+          client.displayName = message.displayName
           sharedGameplayPauses.delete(partyForPlayer(sharedWorlds.parties, client.playerId)?.id ?? '')
           sharedWorlds = confirmed.state
           state = sharedWorlds.hub
@@ -2814,6 +2843,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         }
         const confirmed = confirmGameSimulationLoadout(state, client.playerId, message)
         if (!confirmed) return
+        client.displayName = message.displayName
         state = confirmed
         if (privateParties) broadcastPartyState()
         broadcastSnapshot()
@@ -2916,6 +2946,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         return
       }
       clients.delete(socket)
+      collegeIntroReadyPlayerIds.delete(client.playerId)
       const activeDeploymentRestart = deploymentRestart
       if (activeDeploymentRestart?.pending.delete(socket)) {
         if (activeDeploymentRestart.pending.size === 0) {
@@ -3115,6 +3146,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
               partyId,
               scope.runtime.extensions,
             ])),
+            collegeIntroReadyPlayerIds,
           )
           state = sharedWorlds.hub
           sampleMlBotTelemetry()
@@ -3133,6 +3165,18 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             }
           }
           let lifecycleBoundary = false
+          const completedCollegeIntros = completedGameSimulationCollegeIntroPlayerIds(
+            previous.hub,
+            sharedWorlds.hub,
+          )
+          for (const playerId of completedCollegeIntros) {
+            collegeIntroReadyPlayerIds.delete(playerId)
+            const client = [...clients.values()].find((candidate) => (
+              candidate.playerId === playerId
+            ))
+            if (client) publishSaveCheckpointForClient(client, 'college-intro-complete')
+          }
+          if (completedCollegeIntros.length > 0) lifecycleBoundary = true
           for (const steppedRun of [...sharedWorlds.runs]) {
             let run = steppedRun
             const before = previous.runs.find(({ partyId }) => partyId === run.partyId)
@@ -3218,6 +3262,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         }
         for (const bot of bots.values()) inputs[bot.playerId] = bot.activeInput
         const previousTick = state.tick
+        const previousState = state
         const previousBarrierId = state.levelUpBarrier?.barrierId ?? null
         const previousRunPhase = state.run.phase
         const previousGameOverExitTicks = state.run.gameOverExitTicks
@@ -3237,6 +3282,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           if (applied.nextRunSeed !== null) nextLuaRunSeed = applied.nextRunSeed
         }
         state = stepGameSimulationTick(state, inputs, {
+          collegeIntroReadyPlayerIds,
           enemySpawnIntents,
           extensions: privateModHost?.extensions,
         })
@@ -3256,6 +3302,17 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           privateParties?.parties[0]?.id ?? null,
           state,
         )
+        const completedCollegeIntros = completedGameSimulationCollegeIntroPlayerIds(
+          previousState,
+          state,
+        )
+        for (const playerId of completedCollegeIntros) {
+          collegeIntroReadyPlayerIds.delete(playerId)
+          const client = [...clients.values()].find((candidate) => (
+            candidate.playerId === playerId
+          ))
+          if (client) publishSaveCheckpointForClient(client, 'college-intro-complete')
+        }
         if (runtimes.length > 0) {
           const events = [
             ...pendingEvents,
@@ -3293,6 +3350,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         steps += 1
         if (
           previousBarrierId !== barrierId
+          || completedCollegeIntros.length > 0
           || tutorialBoundary
           || enteredGameOver
           || reachedGameOverBlack

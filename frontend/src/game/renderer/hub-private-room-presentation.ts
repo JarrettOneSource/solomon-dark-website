@@ -3,6 +3,7 @@ import {
   type PrivateHubRegionId,
 } from '../core-kernels/hub-private-room-layout.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
+import { NATIVE_HUB_NPC_CATALOG } from '../core-kernels/native-hub-npc.ts'
 
 export const HUB_PRIVATE_ROOM_EFFECT_DEPTH = 1_000_000
 export const HUB_PRIVATE_ROOM_LATE_FOREGROUND_DEPTH = 2_000_000
@@ -73,6 +74,19 @@ const REGION_SEEDS: Readonly<Record<PrivateHubRegionId, number>> = {
   storeroom: 0x4af41d3,
   library: 0x6c8e9cf,
   office: 0x8dbca55,
+}
+
+export function hubPolisherWipeGain(playerPosition: Vector2): number {
+  const polisher = NATIVE_HUB_NPC_CATALOG.storyOffice
+  const position = polisher.interactions.polisher.geometry.position
+  const distance = Math.hypot(
+    playerPosition.x - position.x,
+    playerPosition.y - position.y,
+  )
+  const { loopFullDistance, loopSilentDistance } = polisher.polisher
+  if (distance <= loopFullDistance) return 1
+  if (distance >= loopSilentDistance) return 0
+  return 1 - (distance - loopFullDistance) / (loopSilentDistance - loopFullDistance)
 }
 
 export function hubMemoratorHeadingIndex(playerPosition: Vector2): number {

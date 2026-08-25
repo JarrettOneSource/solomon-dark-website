@@ -82,6 +82,7 @@ import nuke from '../assets/game/audio/sfx/nuke.wav'
 import phase from '../assets/game/audio/sfx/phase.wav'
 import pikeBreak from '../assets/game/audio/sfx/pike-break.wav'
 import planeCrossLoop from '../assets/game/audio/sfx/plane-cross-loop.wav'
+import polisherWipeLoop from '../assets/game/audio/sfx/polisher-wipe-loop.wav'
 import planewalkerOff from '../assets/game/audio/sfx/planewalker-off.wav'
 import planewalkerOn from '../assets/game/audio/sfx/planewalker-on.wav'
 import prismaticShock from '../assets/game/audio/sfx/prismatic-shock.wav'
@@ -146,6 +147,7 @@ import rollingStoneLoop from '../assets/game/audio/sfx/rolling-stone-loop.wav'
 import startBoulder from '../assets/game/audio/sfx/start-boulder.wav'
 import steamLoop from '../assets/game/audio/sfx/steam-loop.wav'
 import deathGuitar from '../assets/game/audio/sfx/death-guitar.wav'
+import archIntro0 from '../assets/game/audio/voice/arch-intro-0.wav'
 import solomonGetHimBoys from '../assets/game/audio/voice/solomon-get-him-boys.wav'
 import solomonHello1 from '../assets/game/audio/voice/solomon-hello-1.wav'
 import solomonHello2 from '../assets/game/audio/voice/solomon-hello-2.wav'
@@ -192,6 +194,7 @@ export const GAME_AUDIO_SOURCES = {
     'maggots-loop': maggotsLoop,
     'meteor-loop': meteorLoop,
     'plane-cross-loop': planeCrossLoop,
+    'polisher-wipe': polisherWipeLoop,
     'rainfall-loop': rainfallLoop,
     'rolling-stone-loop': rollingStoneLoop,
     'soul-loop': soulLoop,
@@ -313,6 +316,7 @@ export const GAME_AUDIO_SOURCES = {
     'zombie-poison-splat': zombiePoisonSplat,
   },
   streams: {
+    'arch-intro-0': archIntro0,
     'catch-it': catchIt,
     'choose-element': chooseElement,
     'death-guitar': deathGuitar,

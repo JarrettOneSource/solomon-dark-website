@@ -170,6 +170,7 @@ export class PlayerWorldView {
     player: ProtocolPlayerState,
     tick: number,
     staffActionPose: PlayerStaffAttachmentPose | null = null,
+    elementEffectVisible = true,
   ): void {
     const playerTextures = this.textures.players[player.config.element]
     const elementEffectPhase = player.lighting.overlayEffectPhase
@@ -225,9 +226,11 @@ export class PlayerWorldView {
     // both passes live preserves every melee pose without duplicating pixels.
     this.staffBack.visible = !death.visible && hasWeapon
     this.orbFrontBase.container.visible = !death.visible
+      && elementEffectVisible
       && hasStaff
       && plan.orbPasses.frontBase
     this.orbFrontOverlay.container.visible = !death.visible
+      && elementEffectVisible
       && hasStaff
       && plan.orbPasses.frontOverlay
     this.robe.visible = !death.visible

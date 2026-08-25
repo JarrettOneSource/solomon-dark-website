@@ -172,6 +172,7 @@ function inertSession() {
     onPartyAction: () => () => {},
     onSaveCheckpoint: () => () => {},
     onSnapshot: () => () => {},
+    readyCollegeIntro() {},
     rerollSkill() {},
     requestGameplayPause() {},
     saveBeforeLeave: async () => { throw new Error('inert session') },

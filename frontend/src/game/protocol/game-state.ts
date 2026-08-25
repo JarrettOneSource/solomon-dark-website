@@ -75,6 +75,7 @@ export interface ProtocolPlayerEconomy {
   actionFeedback: HubActionFeedback | null
   backpack: readonly HubInventoryItem[]
   charmCapacity: number
+  collegeIntroPending: boolean
   dowsingFee: number
   dowsingOffers: readonly DowsingOffer[]
   equipment: HubEquipmentState

@@ -10,6 +10,7 @@ import {
   HUB_HUD_SHORTCUTS,
   HUB_INTERACTION_DIALOGUES,
   HUB_INTERACTION_IDS,
+  HUB_STORY_OFFICE_DIALOGUES,
   HUB_TRADER_DIALOGUES,
   HUB_TRADER_GRID_CAPACITY,
   HUB_TRADER_NATIVE_UI_RECORDS,
@@ -69,6 +70,7 @@ test('only native world actor wrappers acknowledge durable NPC hint rows', () =>
   })
   assert.equal(hubNpcHintAcknowledgementAction('hagatha', fresh), null)
   assert.equal(hubNpcHintAcknowledgementAction('painting-0', fresh), null)
+  assert.equal(hubNpcHintAcknowledgementAction('polisher', fresh), null)
   assert.equal(hubNpcHintAcknowledgementAction('annalist', Array(10).fill(false)), null)
 })
 
@@ -148,6 +150,7 @@ test('the contextual interaction census covers every rendered named NPC and Mort
     'painting-0', 'painting-1', 'painting-100', 'painting-3', 'painting-4',
     'painting-5', 'painting-6', 'painting-7', 'painting-8', 'painting-9',
     'librarian', 'shlorio', 'arch-chancellor',
+    'polisher',
   ])
   assert.equal(nearestHubInteraction('courtyard', { x: 895.5, y: 455.5 }), 'annalist')
   assert.equal(nearestHubInteraction('courtyard', { x: 576.5, y: 710.5 }), 'teacher')
@@ -177,6 +180,17 @@ test('the contextual interaction census covers every rendered named NPC and Mort
   assert.equal(nearestHubInteraction('mortuary', { x: 673, y: 683 }), 'painting-100')
   assert.equal(nearestHubInteraction('library', { x: 512, y: 595 }), 'librarian')
   assert.equal(nearestHubInteraction('office', { x: 514, y: 467 }), 'arch-chancellor')
+  assert.equal(nearestHubInteraction('office', { x: 566, y: 735 }), null)
+  assert.equal(nearestHubInteraction(
+    'office',
+    { x: 566, y: 735 },
+    { skorchaPosition: null, storyOffice: true },
+  ), 'polisher')
+  assert.equal(hubInteractionAtPoint(
+    'office',
+    { x: 566, y: 735 },
+    { skorchaPosition: null, storyOffice: true },
+  ), 'polisher')
   assert.equal(nearestHubInteraction('storeroom', { x: 538, y: 324 }), null)
   assert.equal(hubInteractionAtPoint('mortuary', { x: 688, y: 683 }), 'painting-100')
   const paintingRange = Math.sqrt(5 * 40 * 40 + 1500)
@@ -203,6 +217,11 @@ test('the Hub shortcut rail uses all five native records and routes the fifth me
   assert.equal(HUB_INTERACTION_DIALOGUES.teacher.name, 'Professor Machinimbus')
   assert.equal(HUB_INTERACTION_DIALOGUES['painting-100'].intro.length, 0)
   assert.equal(HUB_INTERACTION_DIALOGUES.shlorio.service, 'shlorio')
+  assert.deepEqual(
+    HUB_STORY_OFFICE_DIALOGUES['arch-chancellor'].questions.map(({ key }) => key),
+    ['ARCH_Q1_0', 'ARCH_Q2_0', 'ARCH_Q3_0'],
+  )
+  assert.equal(HUB_STORY_OFFICE_DIALOGUES.polisher.introRecord?.key, 'POLISHER_INTRO_0')
 })
 
 test('native shop membership retains padded grids and exports every atlas row', () => {

@@ -10,9 +10,11 @@ import {
   type HubMemorialState,
 } from '../core-kernels/hub-memorial.ts'
 import {
+  HUB_COLLEGE_INTRO_FADE_RATE,
   HUB_INCOMING_FADE_RATES,
   HUB_OUTGOING_FADE_RATE,
   beginHubTransition,
+  createHubCollegeIntroParticipantState,
   createHubParticipantState,
   hubIncomingPlacement,
   hubPortalAt,
@@ -205,6 +207,23 @@ export function addHubParticipant(
   }
 }
 
+export function beginHubCollegeIntro(
+  world: HubWorldState,
+  playerId: string,
+): HubWorldState {
+  const participant = world.participants[playerId]
+  if (!participant) return world
+  if (participant.transition?.phase === 'college-intro') return world
+  const next = {
+    ...world,
+    participants: {
+      ...world.participants,
+      [playerId]: createHubCollegeIntroParticipantState(),
+    },
+  }
+  return next
+}
+
 export function removeHubParticipant(
   world: HubWorldState,
   playerId: string,
@@ -213,6 +232,24 @@ export function removeHubParticipant(
   const participants = { ...world.participants }
   delete participants[playerId]
   return { ...world, participants }
+}
+
+export function confirmHubCollegeIntroLoadout(
+  world: HubWorldState,
+  playerId: string,
+): HubWorldState {
+  const participant = world.participants[playerId]
+  if (participant?.transition?.phase !== 'college-loadout') return world
+  return {
+    ...world,
+    participants: {
+      ...world.participants,
+      [playerId]: {
+        ...participant,
+        transition: { ...participant.transition, phase: 'incoming' },
+      },
+    },
+  }
 }
 
 export function hubSpawnPoint(): Vector2 {
@@ -224,6 +261,8 @@ export function stepHubWorldTick(
   players: Readonly<Record<string, PlayerCharacterState>>,
   inputs: Readonly<Record<string, PlayerCharacterInput>>,
   movementScales: Readonly<Record<string, number>>,
+  collegeIntroReadyPlayerIds: ReadonlySet<string> | null = null,
+  collegeIntroPendingPlayerIds: ReadonlySet<string> | null = null,
 ): HubWorldTickResult {
   const participants = reconcileParticipants(world.participants, players)
   const skorchaSchedule = stepHubSkorchaSchedule({
@@ -240,9 +279,15 @@ export function stepHubWorldTick(
   const playerEntries = Object.entries(players)
   for (const [playerId, player] of playerEntries) {
     const transition = participants[playerId].transition
+    const collegeIntroWaiting = transition?.phase === 'college-intro'
+      && collegeIntroReadyPlayerIds !== null
+      && !collegeIntroReadyPlayerIds.has(playerId)
+    const collegeLoadoutWaiting = transition?.phase === 'college-loadout'
     playerPlans.set(
       playerId,
-      transition
+      collegeIntroWaiting || collegeLoadoutWaiting
+        ? planHubScriptedMovement(player, player.position, 1)
+        : transition
         ? planHubScriptedMovement(
             player,
             transition.scriptedTarget,
@@ -307,6 +352,11 @@ export function stepHubWorldTick(
     })
   }
   bodies.push(...HUB_FIXED_ACTOR_COLLISION_LAYOUT)
+  if (collegeIntroPendingPlayerIds && [...collegeIntroPendingPlayerIds].some((playerId) => (
+    participants[playerId]?.region === 'office'
+  ))) {
+    bodies.push(fixedActor('story-office-polisher', 'office', 566, 735, 15))
+  }
   if (skorchaSchedule.skorcha !== null) {
     bodies.push(fixedActor(
       'skorcha',
@@ -354,7 +404,15 @@ export function stepHubWorldTick(
         return moveStatic(region, position, delta, radius)
       },
     },
-    (mover, other) => bodyRegions.get(mover.id) === bodyRegions.get(other.id),
+    (mover, other) => {
+      if (mover.id === 'story-office-polisher' || other.id === 'story-office-polisher') {
+        const playerBody = mover.id.startsWith('player-') ? mover : other
+        if (!playerBody.id.startsWith('player-')) return false
+        return collegeIntroPendingPlayerIds?.has(playerBody.id.slice('player-'.length))
+          === true
+      }
+      return bodyRegions.get(mover.id) === bodyRegions.get(other.id)
+    },
     runtime.actorGrid,
   )
   const positions = runtime.positions
@@ -376,7 +434,16 @@ export function stepHubWorldTick(
   for (const [playerId, participant] of Object.entries(participants)) {
     const player = nextPlayers[playerId]
     if (!player) continue
-    const stepped = stepParticipantTransition(participant, player)
+    const collegeIntroWaiting = participant.transition?.phase === 'college-intro'
+      && collegeIntroReadyPlayerIds !== null
+      && !collegeIntroReadyPlayerIds.has(playerId)
+    const stepped = collegeIntroWaiting
+      ? { participant, player }
+      : stepParticipantTransition(
+          participant,
+          player,
+          collegeIntroPendingPlayerIds?.has(playerId) === true,
+        )
     nextParticipants[playerId] = stepped.participant
     nextPlayers[playerId] = stepped.player
   }
@@ -413,6 +480,7 @@ export function stepHubWorldTick(
 function stepParticipantTransition(
   participant: HubParticipantState,
   player: PlayerCharacterState,
+  collegeIntroPending: boolean,
 ): { participant: HubParticipantState; player: PlayerCharacterState } {
   if (!participant.transition) {
     const portal = hubPortalAt(participant.region, player.position)
@@ -425,6 +493,25 @@ function stepParticipantTransition(
   }
 
   const transition = participant.transition
+  if (transition.phase === 'college-intro') {
+    const alpha = transition.alpha <= HUB_COLLEGE_INTRO_FADE_RATE
+      ? 0
+      : transition.alpha - HUB_COLLEGE_INTRO_FADE_RATE
+    if (alpha > 0) {
+      return {
+        participant: {
+          ...participant,
+          transition: { ...transition, alpha },
+        },
+        player,
+      }
+    }
+    return {
+      participant: { ...participant, transition: null },
+      player,
+    }
+  }
+  if (transition.phase === 'college-loadout') return { participant, player }
   if (transition.phase === 'outgoing') {
     if (transition.alpha < 1) {
       const alpha = Math.min(1, transition.alpha + HUB_OUTGOING_FADE_RATE)
@@ -446,7 +533,11 @@ function stepParticipantTransition(
         transition: {
           alpha: 1,
           destination: transition.destination,
-          phase: 'incoming',
+          phase: collegeIntroPending
+            && transition.sourceRegion === 'office'
+            && transition.destination === 'courtyard'
+            ? 'college-loadout'
+            : 'incoming',
           scriptedSpeed: incoming.scriptedSpeed,
           scriptedTarget: incoming.scriptedTarget,
           sourceRegion: transition.sourceRegion,

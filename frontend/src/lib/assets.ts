@@ -201,6 +201,8 @@ import hubRoomOfficeForeground from '../assets/game/hub-room-office-foreground.p
 import hubRoomArchDesk from '../assets/game/hub-room-arch-desk.png'
 import hubRoomArchChancellor from '../assets/game/hub-room-arch-chancellor.png'
 import hubRoomArchChancellorMarker from '../assets/game/hub-room-arch-chancellor-marker.png'
+import hubRoomPolisher from '../assets/game/hub-room-polisher.png'
+import hubRoomPolisherMarker from '../assets/game/hub-room-polisher-marker.png'
 import hubRoomOfficeProp from '../assets/game/hub-room-office-prop.png'
 import elementVfxAir from '../assets/game/element-vfx-air.png'
 import elementVfxCore from '../assets/game/element-vfx-core.png'
@@ -589,6 +591,8 @@ export const hub = {
       desk: hubRoomArchDesk,
       archChancellor: hubRoomArchChancellor,
       archChancellorMarker: hubRoomArchChancellorMarker,
+      polisher: hubRoomPolisher,
+      polisherMarker: hubRoomPolisherMarker,
       prop: hubRoomOfficeProp,
     },
   },

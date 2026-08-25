@@ -28,6 +28,7 @@ const SOURCES = {
     'maggots-loop': 'maggots-loop.wav',
     'meteor-loop': 'meteor-loop.wav',
     'plane-cross-loop': 'plane-cross-loop.wav',
+    'polisher-wipe': 'polisher-wipe-loop.wav',
     'rainfall-loop': 'rainfall-loop.wav',
     'rolling-stone-loop': 'rolling.wav',
     'soul-loop': 'soul-loop.wav',
@@ -153,6 +154,7 @@ const SOURCES = {
       typeof NATIVE_TUTORIAL_CUES[number],
       string
     >),
+    'arch-intro-0': 'arch-intro-0.wav',
     'catch-it': 'catch.wav',
     'choose-element': 'choose.wav',
     'death-guitar': 'death-guitar.wav',

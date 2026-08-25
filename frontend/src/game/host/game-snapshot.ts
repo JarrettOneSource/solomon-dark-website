@@ -268,6 +268,7 @@ function protocolPlayerState(
       actionFeedback: economy.actionFeedback && { ...economy.actionFeedback },
       backpack: economy.backpack.map(protocolInventoryItem),
       charmCapacity: economy.charmCapacity,
+      collegeIntroPending: economy.collegeIntroPending,
       dowsingFee: economy.dowsingFee,
       dowsingOffers: economy.dowsingOffers.map((offer) => ({ ...offer })),
       equipment: {

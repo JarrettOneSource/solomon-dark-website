@@ -81,6 +81,7 @@ import { appendGameChatMessage } from '../game-chat.ts'
 
 export interface GameClientSessionOptions {
   allowModMismatch?: boolean
+  beginCollegeIntro?: boolean
   character: PlayerCharacterConfig
   cheatsEnabled?: boolean
   credential: string
@@ -115,6 +116,7 @@ export interface GameClientSession {
   confirmLoadout(
     element: PlayerCharacterConfig['element'],
     discipline: PlayerCharacterConfig['discipline'],
+    displayName: string,
   ): void
   continueGameOver(runId: string, eventId: number): void
   destroy(): void
@@ -150,6 +152,7 @@ export interface GameClientSession {
   samplePresentation(nowMs?: number): HubPresentationFrame
   rerollSkill(offerSequence: number): void
   requestGameplayPause(source: GameplayPauseSource | null): void
+  readyCollegeIntro(): void
   saveBeforeLeave(): Promise<GameSaveCheckpoint>
   saveSkill(offerSequence: number): void
   selectConcentration(skillId: number): void
@@ -637,13 +640,20 @@ export function connectGameClientSession(
           target,
         }))
       },
-      confirmLoadout(element, discipline) {
+      confirmLoadout(element, discipline, displayName) {
         if (!welcome || !snapshot || destroyed) return
-        if (snapshot.run.phase !== 'loadout') return
-        if (snapshot.run.loadoutReadyPlayerIds.includes(welcome.playerId)) return
+        const collegeLoadout = isHubGameSnapshot(snapshot)
+          && snapshot.world.participants[welcome.playerId]?.transition?.phase
+            === 'college-loadout'
+        if (!collegeLoadout && snapshot.run.phase !== 'loadout') return
+        if (
+          !collegeLoadout
+          && snapshot.run.loadoutReadyPlayerIds.includes(welcome.playerId)
+        ) return
         options.transport.send(encodeGameMessage({
           type: 'client-confirm-loadout',
           discipline,
+          displayName,
           element,
         }))
       },
@@ -1190,6 +1200,10 @@ export function connectGameClientSession(
         if (!welcome || destroyed) return
         options.transport.send(encodeGameMessage({ type: 'client-start-tutorial' }))
       },
+      readyCollegeIntro() {
+        if (!welcome || destroyed) return
+        options.transport.send(encodeGameMessage({ type: 'client-ready-college-intro' }))
+      },
       sendTutorialAction(action) {
         if (!welcome || destroyed) return
         options.transport.send(encodeGameMessage({
@@ -1202,6 +1216,7 @@ export function connectGameClientSession(
     options.transport.send(encodeGameMessage({
       type: 'client-hello',
       ...(options.allowModMismatch ? { allowModMismatch: true } : {}),
+      beginCollegeIntro: options.beginCollegeIntro === true,
       cheatsEnabled: options.cheatsEnabled === true,
       protocolVersion: GAME_PROTOCOL_VERSION,
       credential: options.credential,

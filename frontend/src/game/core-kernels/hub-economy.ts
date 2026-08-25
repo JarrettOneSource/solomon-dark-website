@@ -330,6 +330,7 @@ export interface HubEconomyState {
   readonly actionFeedback: HubActionFeedback | null
   readonly backpack: readonly HubInventoryItem[]
   readonly charmCapacity: number
+  readonly collegeIntroPending: boolean
   readonly dowsingFee: number
   readonly dowsingOffers: readonly DowsingOffer[]
   readonly equipment: HubEquipmentState
@@ -632,6 +633,7 @@ export function createHubEconomy(
     actionFeedback: null,
     backpack: starters.backpack,
     charmCapacity: 3,
+    collegeIntroPending: true,
     dowsingFee: SHLORIO_INITIAL_DOWSING_FEE,
     dowsingOffers: [],
     equipment: starters.equipment,

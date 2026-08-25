@@ -12,6 +12,8 @@ const HUB_SCENE_TIMEOUT_MS = 30_000
 const expectedModBoneyard = process.env.SDR_GAME_EXPECT_MOD_BONEYARD?.trim()
 const screenshotPath = process.env.SDR_GAME_SMOKE_SCREENSHOT
   || '/tmp/solomon-dark-boneyard-smoke.png'
+const collegeIntroScreenshotPath = process.env.SDR_GAME_SMOKE_COLLEGE_INTRO_SCREENSHOT
+  || screenshotPath.replace(/(\.[^.]+)?$/, '-college-intro$1')
 const allyScreenshotPath = process.env.SDR_GAME_SMOKE_ALLY_SCREENSHOT
   || screenshotPath.replace(/(\.[^.]+)?$/, '-ally-hub$1')
 const mobileAllyScreenshotPath = process.env.SDR_GAME_SMOKE_MOBILE_ALLY_SCREENSHOT
@@ -63,6 +65,56 @@ try {
   thirdPage.on('console', (message) => {
     if (message.type() === 'error') thirdConsoleErrors.push(message.text())
   })
+  let collegeIntroCaptured = false
+  let resolveCollegeIntroReceipt
+  const collegeIntroCapture = new Promise((resolve) => {
+    resolveCollegeIntroReceipt = resolve
+  })
+  await page.exposeFunction('__sdrCaptureCollegeIntro', async (receipt) => {
+    if (collegeIntroCaptured) return
+    collegeIntroCaptured = true
+    await page.screenshot({ path: collegeIntroScreenshotPath })
+    resolveCollegeIntroReceipt(receipt)
+  })
+  await page.addInitScript(() => {
+    const begin = () => {
+      window.__sdrCollegeIntroTransitionHistory = []
+      const sample = () => {
+        const canvas = document.querySelector('.hub-world-canvas')
+        if (!(canvas instanceof HTMLCanvasElement)) return
+        const phase = canvas.dataset.transitionPhase ?? 'none'
+        const region = canvas.dataset.hubRegion ?? ''
+        const key = `${region}:${phase}`
+        const history = window.__sdrCollegeIntroTransitionHistory
+        if (history.at(-1) !== key) history.push(key)
+        const alpha = Number(canvas.dataset.transitionAlpha)
+        if (
+          phase === 'college-intro'
+          && region === 'office'
+          && alpha > 0
+          && alpha < 1
+        ) {
+          void window.__sdrCaptureCollegeIntro({ alpha, phase, region })
+        }
+      }
+      new MutationObserver(sample).observe(document.documentElement, {
+        attributeFilter: [
+          'data-hub-region',
+          'data-transition-alpha',
+          'data-transition-phase',
+        ],
+        attributes: true,
+        childList: true,
+        subtree: true,
+      })
+      sample()
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', begin, { once: true })
+    } else {
+      begin()
+    }
+  })
   // The deployment-revision poll (deployment-revision.ts, at mount and every 15 s from
   // Game.tsx) asks for deployment.json; Vite dev serves none, and each 404 lands in the
   // console-error lists, so answer with the current revision like the other smokes do.
@@ -73,11 +125,9 @@ try {
       await route.fulfill({ json: { revision } })
     },
   )))
+  await page.addInitScript(installGameAudioSmokeProbe)
   if (process.env.SDR_GAME_SMOKE_PROVE_WAVES === '1') {
-    await Promise.all([
-      page.addInitScript(installGameAudioSmokeProbe),
-      clientPage.addInitScript(installGameAudioSmokeProbe),
-    ])
+    await clientPage.addInitScript(installGameAudioSmokeProbe)
   }
   if (runtime) {
     await Promise.all([
@@ -108,32 +158,119 @@ try {
   await declineTutorialOffer(page)
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
-  try {
-    await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({
-      timeout: CREATE_MENU_TIMEOUT_MS,
-    })
-  } catch (error) {
-    process.stderr.write(`${JSON.stringify({
-      body: (await page.locator('body').innerText()).slice(0, 2_000),
-      create: await page.locator('.create-menu-scene').evaluateAll((nodes) => nodes.map((node) => ({
-        finalizing: node.dataset.finalizing,
-        handsReady: node.dataset.handsReady,
-        motionSettled: node.dataset.motionSettled,
-        phase: node.dataset.phase,
-      }))),
-      url: page.url(),
-    })}\n`)
-    throw error
-  }
-  const wizardName = page.getByRole('textbox', { name: 'Wizard name' })
-  await wizardName.fill('ReviewName')
-  await page.getByRole('button', { name: 'Back' }).click()
-  await page.getByRole('button', { name: 'New Game' }).waitFor()
-  await page.getByRole('button', { name: 'New Game' }).click()
-  await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({
-    timeout: CREATE_MENU_TIMEOUT_MS,
+
+  const collegeIntroScene = page.locator('.hub-scene[data-hub-region="office"]')
+  await collegeIntroScene.waitFor({ timeout: HUB_SCENE_TIMEOUT_MS })
+  await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({
+    timeout: HUB_SCENE_TIMEOUT_MS,
   })
-  assert.notEqual(await wizardName.inputValue(), 'ReviewName')
+  const collegeIntroReceipt = await Promise.race([
+    collegeIntroCapture,
+    new Promise((_, reject) => setTimeout(
+      () => reject(new Error('College intro never painted an intermediate Office frame')),
+      HUB_SCENE_TIMEOUT_MS,
+    )),
+  ])
+  assert.equal(collegeIntroReceipt.phase, 'college-intro')
+  assert.equal(collegeIntroReceipt.region, 'office')
+  assert.ok(collegeIntroReceipt.alpha > 0 && collegeIntroReceipt.alpha < 1)
+  await page.waitForFunction(() => {
+    const canvas = document.querySelector('.hub-world-canvas')
+    return canvas?.getAttribute('data-hub-region') === 'office'
+      && canvas?.getAttribute('data-transition-phase') === 'none'
+  })
+  assert.equal(await collegeIntroScene.getAttribute('data-story-office'), 'true')
+  assert.equal(await page.locator('.create-menu-scene').count(), 0)
+  await page.waitForFunction(() => window.__sdrAudioEvents.some((event) => (
+    event.type === 'buffer-start'
+      && event.loop === true
+      && event.src.includes('polisher-wipe-loop')
+  )))
+  const polisherStart = await page.evaluate(() => window.__sdrAudioEvents.find((event) => (
+    event.type === 'buffer-start'
+      && event.loop === true
+      && event.src.includes('polisher-wipe-loop')
+  )))
+  assert.ok(polisherStart.volume > 0.1 && polisherStart.volume < 0.15)
+
+  await page.keyboard.press('e')
+  await page.getByText(/Oh, good morning, do help yourself to a glass of brandy/).waitFor()
+  await page.waitForFunction(() => window.__sdrAudioEvents.some((event) => (
+    event.type === 'buffer-start' && event.src.includes('arch-intro-0')
+  )))
+  const archIntroStart = await page.evaluate(() => window.__sdrAudioEvents.find((event) => (
+    event.type === 'buffer-start' && event.src.includes('arch-intro-0')
+  )))
+  assert.equal(archIntroStart.loop, false)
+  await page.getByRole('button', { name: 'Skip' }).click()
+  for (const label of ['Solomon Dark?', 'Collateral Damage?', 'Assistance?']) {
+    await page.getByRole('button', { name: label, exact: true }).click()
+    await page.getByRole('button', { name: 'Skip' }).click()
+  }
+  await page.getByRole('button', { name: 'Done', exact: true }).click()
+  await page.getByRole('button', { name: 'Skip' }).click()
+  await page.locator('.hub-native-ui-stage').waitFor({ state: 'detached' })
+
+  await moveHubAxis(page, 'a', 'playerX', 300, 'at-most')
+  await moveHubAxis(page, 's', 'playerY', 800, 'at-least')
+  await moveHubAxis(page, 'd', 'playerX', 540, 'at-least')
+  await moveHubAxis(page, 'w', 'playerY', 775, 'at-most')
+  await page.keyboard.press('e')
+  await page.getByText(/step away from the manticore/).waitFor()
+  await page.getByRole('button', { name: 'Skip' }).click()
+  for (const label of ['Your task?', 'The Plaque']) {
+    await page.getByRole('button', { name: label, exact: true }).click()
+    await page.getByRole('button', { name: 'Skip' }).click()
+  }
+  await page.getByRole('button', { name: 'Done', exact: true }).click()
+  await page.getByRole('button', { name: 'Skip' }).click()
+  await page.locator('.hub-native-ui-stage').waitFor({ state: 'detached' })
+
+  const collegeCreate = page.locator('.create-menu-scene[data-motion-settled="true"]')
+  await page.locator('.main-menu-page[data-hub-player-activity="none"]').waitFor()
+  await page.keyboard.down('s')
+  try {
+    await collegeCreate.waitFor({ timeout: CREATE_MENU_TIMEOUT_MS })
+  } catch (error) {
+    const receipt = await page.evaluate(() => ({
+      createCount: document.querySelectorAll('.create-menu-scene').length,
+      frame: document.querySelector('.hub-world-canvas')?.__sdrHubFrame ?? null,
+      scene: document.querySelector('.hub-scene') instanceof HTMLElement
+        ? { ...document.querySelector('.hub-scene').dataset }
+        : null,
+    }))
+    throw new Error(`Office exit did not open Create: ${JSON.stringify(receipt)}`, {
+      cause: error,
+    })
+  } finally {
+    await page.keyboard.up('s')
+  }
+  assert.equal(await page.getByRole('button', { name: 'Back' }).isDisabled(), true)
+  assert.equal(
+    await page.locator('.main-menu-page').getAttribute('data-college-loadout-active'),
+    'true',
+  )
+  const collegeLoadoutReceipt = {
+    backDisabled: true,
+    phase: 'college-loadout',
+    region: 'courtyard',
+  }
+  await page.waitForFunction(() => window.__sdrAudioEvents.some((event) => (
+    event.type === 'buffer-stop'
+      && event.channelId === window.__sdrAudioEvents.find((candidate) => (
+        candidate.type === 'buffer-start'
+          && candidate.src.includes('polisher-wipe-loop')
+      ))?.channelId
+  )))
+  const polisherStop = await page.evaluate(() => window.__sdrAudioEvents.find((event) => (
+    event.type === 'buffer-stop'
+      && event.channelId === window.__sdrAudioEvents.find((candidate) => (
+        candidate.type === 'buffer-start'
+          && candidate.src.includes('polisher-wipe-loop')
+      ))?.channelId
+  )))
+  const collegeOfficeAudioReceipt = { archIntroStart, polisherStart, polisherStop }
+  const wizardName = page.getByRole('textbox', { name: 'Wizard name' })
   await page.getByRole('button', { name: 'Clear wizard name' }).click()
   assert.equal(await wizardName.inputValue(), '')
   await page.getByRole('button', { name: 'Randomize wizard name' }).click()
@@ -147,6 +284,10 @@ try {
   await page.locator('.create-menu-disciplines[data-visible="true"]').waitFor({ timeout: 15_000 })
   await page.locator('.create-menu-discipline-arcane').click()
 
+  await page.waitForFunction(() => (
+    window.__sdrCollegeIntroTransitionHistory?.includes('office:outgoing') === true
+  ))
+
   const scene = page.getByLabel(/College courtyard/)
   const canvas = page.locator('.hub-world-canvas[data-game-renderer="pixi-webgl"]')
   try {
@@ -155,6 +296,15 @@ try {
     await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({
       timeout: HUB_SCENE_TIMEOUT_MS,
     })
+    await page.waitForFunction(() => {
+      const canvas = document.querySelector('.hub-world-canvas')
+      return canvas?.getAttribute('data-hub-region') === 'courtyard'
+        && canvas?.getAttribute('data-transition-phase') === 'none'
+    })
+    const transitionHistory = await page.evaluate(() => (
+      window.__sdrCollegeIntroTransitionHistory ?? []
+    ))
+    assert.ok(transitionHistory.includes('courtyard:incoming'))
   } catch (error) {
     process.stderr.write(JSON.stringify({
       body: (await page.locator('body').innerText()).slice(0, 2000),
@@ -192,14 +342,22 @@ try {
   const renderer = await canvas.evaluate((node) => {
     const canvas = node
     const context = canvas.getContext('webgl2') || canvas.getContext('webgl')
+    const debugRenderer = context?.getExtension('WEBGL_debug_renderer_info')
     return {
       staticCulling: canvas.dataset.staticCulling,
       context: context ? context.constructor.name : null,
+      gpu: context && debugRenderer
+        ? context.getParameter(debugRenderer.UNMASKED_RENDERER_WEBGL)
+        : null,
       rendererName: canvas.dataset.rendererName,
       resolution: Number(canvas.dataset.resolution),
+      vendor: context && debugRenderer
+        ? context.getParameter(debugRenderer.UNMASKED_VENDOR_WEBGL)
+        : null,
     }
   })
   assert.ok(renderer.context?.includes('WebGL'), `expected a real WebGL context, got ${renderer.context}`)
+  assert.match(`${renderer.vendor} ${renderer.gpu}`, /Apple|Metal/i)
   assert.match(renderer.rendererName || '', /webgl/i)
   assert.ok(renderer.resolution >= 0.5 && renderer.resolution <= 1.5)
   assert.equal(renderer.staticCulling, 'none')
@@ -625,6 +783,10 @@ try {
     pageErrors,
     clientConsoleErrors,
     clientPageErrors,
+    collegeIntroReceipt,
+    collegeLoadoutReceipt,
+    collegeOfficeAudioReceipt,
+    collegeIntroScreenshotPath,
     clientDigFrames: [...new Set(clientDigFrames)],
     digIndicatorReceipt,
     hostDigFrames: [...new Set(hostDigFrames)],
@@ -700,10 +862,26 @@ async function enterHub(page, element) {
   await declineTutorialOffer(page)
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
+  const create = page.locator('.create-menu-scene[data-motion-settled="true"]')
+  const office = page.locator('.hub-scene[data-hub-region="office"]')
   try {
-    await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({
-      timeout: CREATE_MENU_TIMEOUT_MS,
+    await office.waitFor({ timeout: HUB_SCENE_TIMEOUT_MS })
+    await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({
+      timeout: HUB_SCENE_TIMEOUT_MS,
     })
+    await page.waitForFunction(() => (
+      document.querySelector('.hub-world-canvas')?.getAttribute('data-transition-phase')
+        === 'none'
+    ))
+    await moveHubAxis(page, 'a', 'playerX', 300, 'at-most')
+    await moveHubAxis(page, 's', 'playerY', 800, 'at-least')
+    await moveHubAxis(page, 'd', 'playerX', 512, 'at-least')
+    await page.keyboard.down('s')
+    try {
+      await create.waitFor({ timeout: CREATE_MENU_TIMEOUT_MS })
+    } finally {
+      await page.keyboard.up('s')
+    }
   } catch (error) {
     process.stderr.write(`${JSON.stringify({
       body: (await page.locator('body').innerText()).slice(0, 2_000),
@@ -722,6 +900,32 @@ async function enterHub(page, element) {
   await page.locator('.create-menu-disciplines[data-visible="true"]').waitFor({ timeout: 15_000 })
   await page.locator('.create-menu-discipline-arcane').click()
   await page.getByLabel(/College courtyard/).waitFor({ timeout: HUB_SCENE_TIMEOUT_MS })
+}
+
+async function moveHubAxis(page, key, axis, target, direction) {
+  await page.locator('.main-menu-page[data-hub-player-activity="none"]').waitFor()
+  await page.keyboard.down(key)
+  try {
+    await page.waitForFunction(({ axis, direction, target }) => {
+      const frame = document.querySelector('.hub-world-canvas')?.__sdrHubFrame
+      const value = frame?.[axis]
+      return typeof value === 'number'
+        && (direction === 'at-least' ? value >= target : value <= target)
+    }, { axis, direction, target }, { timeout: 15_000 })
+  } catch (error) {
+    const receipt = await page.evaluate(() => ({
+      frame: document.querySelector('.hub-world-canvas')?.__sdrHubFrame ?? null,
+      surface: document.querySelector('.hub-native-ui-stage')
+        ?.getAttribute('aria-label') ?? null,
+    }))
+    throw new Error(
+      `Hub movement ${key}/${axis}/${direction}/${target} failed: ${JSON.stringify(receipt)}`,
+      { cause: error },
+    )
+  } finally {
+    await page.keyboard.up(key)
+    await page.waitForTimeout(150)
+  }
 }
 
 async function allyRosterReceipt(page) {

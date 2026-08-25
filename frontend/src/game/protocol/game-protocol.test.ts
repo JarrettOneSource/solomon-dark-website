@@ -141,6 +141,7 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
   })
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
     type: 'client-hello',
+    beginCollegeIntro: true,
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
@@ -149,6 +150,7 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
     resumeToken: 'reserved-token',
   })), {
     type: 'client-hello',
+    beginCollegeIntro: true,
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
@@ -156,6 +158,9 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
     character: CHARACTER,
     resumeToken: 'reserved-token',
   })
+  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
+    type: 'client-ready-college-intro',
+  })), { type: 'client-ready-college-intro' })
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
     type: 'client-input',
     input: {
@@ -213,10 +218,12 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
     type: 'client-confirm-loadout',
     discipline: 'mind',
+    displayName: 'Floodus',
     element: 'water',
   })), {
     type: 'client-confirm-loadout',
     discipline: 'mind',
+    displayName: 'Floodus',
     element: 'water',
   })
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
@@ -354,7 +361,7 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
   })), /activity/)
 })
 
-test('protocol 75 retains exact A or B slots for HUD concentration replacement', () => {
+test('protocol 78 retains exact A or B slots for HUD concentration replacement', () => {
   assert.throws(() => decodeClientGameMessage(JSON.stringify({
     type: 'client-select-concentration-slot',
     skillId: 57,
@@ -445,7 +452,7 @@ test('protocol v42 bounds Lua requests and structured results by wire bytes and 
   }
 })
 
-test('protocol v75 accepts every authoritative inventory and NPC action and rejects malformed variants', () => {
+test('protocol v78 accepts every authoritative inventory and NPC action and rejects malformed variants', () => {
   const actions = [
     { type: 'acknowledge-npc-hint', interactionId: 'annalist' },
     { type: 'acknowledge-npc-hint', interactionId: 'fomentius' },
@@ -500,7 +507,7 @@ test('protocol v75 accepts every authoritative inventory and NPC action and reje
   }
 })
 
-test('protocol v75 carries authoritative present Skorcha population and animation state', () => {
+test('protocol v78 carries authoritative present Skorcha population and animation state', () => {
   const snapshot = createGameSnapshot(createGameSimulation({
     'player-1': CHARACTER,
   }, { hubTraderAnimationSeed: 2 }), 'player-1')
@@ -1440,8 +1447,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v75 carries observer mode, Hub activity, NPC state, Goodie actions, tutorial fields/state, Hagatha runtime, Imp effects, save intent, selected skills, sacks, dyes, and gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 77)
+test('protocol v78 carries College admission, observer mode, Hub activity, NPC state, Goodie actions, tutorial fields/state, Hagatha runtime, Imp effects, save intent, selected skills, sacks, dyes, and gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 78)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -1561,6 +1568,7 @@ test('protocol v75 carries observer mode, Hub activity, NPC state, Goodie action
 
   const hubState = confirmGameSimulationLoadout(loadoutState, 'player-1', {
     discipline: 'body',
+    displayName: 'Aerion',
     element: 'air',
   })
   assert.ok(hubState)
@@ -1591,7 +1599,7 @@ test('protocol v75 carries observer mode, Hub activity, NPC state, Goodie action
   )
 })
 
-test('protocol v75 carries consistent persistent Tutorial camera-lock clocks', () => {
+test('protocol v78 carries consistent persistent Tutorial camera-lock clocks', () => {
   const entered = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
     materializeStockTutorial(Buffer.alloc(16, 73)),
@@ -4078,6 +4086,44 @@ test('protocol validates participant ownership and the recovered Hub room graph'
     ...frame.world,
     participants: { 'player-1': missingActivity },
   })), /activity/)
+
+  const collegeIntro = decodeServerGameMessage(message({
+    ...frame.world,
+    participants: {
+      'player-1': {
+        activity: null,
+        region: 'office',
+        transition: {
+          alpha: 0.5,
+          destination: 'courtyard',
+          phase: 'college-intro',
+          scriptedSpeed: 1,
+          scriptedTarget: { x: 512, y: 562 },
+          sourceRegion: 'office',
+        },
+      },
+    },
+  }))
+  assert.equal(collegeIntro.type, 'server-snapshot')
+
+  const collegeLoadout = decodeServerGameMessage(message({
+    ...frame.world,
+    participants: {
+      'player-1': {
+        activity: null,
+        region: 'courtyard',
+        transition: {
+          alpha: 1,
+          destination: 'courtyard',
+          phase: 'college-loadout',
+          scriptedSpeed: 1,
+          scriptedTarget: { x: 952.5, y: 157.5 },
+          sourceRegion: 'office',
+        },
+      },
+    },
+  }))
+  assert.equal(collegeLoadout.type, 'server-snapshot')
 
   assert.throws(() => decodeServerGameMessage(message({
     ...frame.world,

@@ -356,7 +356,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 77
+export const GAME_PROTOCOL_VERSION = 78
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -470,6 +470,7 @@ export interface GameplayPauseState {
 
 export interface ClientHelloMessage {
   allowModMismatch?: boolean
+  beginCollegeIntro?: boolean
   cheatsEnabled: boolean
   type: 'client-hello'
   protocolVersion: number
@@ -625,6 +626,10 @@ export interface ClientStartTutorialMessage {
   type: 'client-start-tutorial'
 }
 
+export interface ClientReadyCollegeIntroMessage {
+  type: 'client-ready-college-intro'
+}
+
 export interface ClientTutorialActionMessage {
   action: NativeTutorialSurfaceAction
   type: 'client-tutorial-action'
@@ -639,6 +644,7 @@ export interface ClientContinueGameOverMessage {
 export interface ClientConfirmLoadoutMessage {
   type: 'client-confirm-loadout'
   discipline: PlayerCharacterConfig['discipline']
+  displayName: string
   element: PlayerCharacterConfig['element']
 }
 
@@ -706,6 +712,7 @@ export type ClientGameMessage =
   | ClientSelectSkillMessage
   | ClientSkillQuickbarBindMessage
   | ClientPingMessage
+  | ClientReadyCollegeIntroMessage
   | ClientSaveBeforeLeaveMessage
   | ClientSnapshotAckMessage
   | ClientStartMatchMessage
@@ -988,6 +995,7 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
     onlyKeys(value, 'message', [
       'type',
       'allowModMismatch',
+      'beginCollegeIntro',
       'cheatsEnabled',
       'protocolVersion',
       'credential',
@@ -1007,6 +1015,9 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
       credential: limitedString(value.credential, 'credential', 512),
       character: playerCharacterConfig(value.character, 'character'),
       profile: playerSocialProfile(value.profile, 'profile'),
+      ...(value.beginCollegeIntro === undefined
+        ? {}
+        : { beginCollegeIntro: boolean(value.beginCollegeIntro, 'beginCollegeIntro') }),
       ...(value.allowModMismatch === undefined
         ? {}
         : { allowModMismatch: boolean(value.allowModMismatch, 'allowModMismatch') }),
@@ -1210,6 +1221,10 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
     onlyKeys(value, 'message', ['type'])
     return { type: 'client-start-tutorial' }
   }
+  if (value.type === 'client-ready-college-intro') {
+    onlyKeys(value, 'message', ['type'])
+    return { type: 'client-ready-college-intro' }
+  }
   if (value.type === 'client-tutorial-action') {
     onlyKeys(value, 'message', ['type', 'action'])
     return {
@@ -1230,7 +1245,7 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
     }
   }
   if (value.type === 'client-confirm-loadout') {
-    onlyKeys(value, 'message', ['type', 'discipline', 'element'])
+    onlyKeys(value, 'message', ['type', 'discipline', 'displayName', 'element'])
     const discipline = limitedString(value.discipline, 'discipline', 32)
     const element = limitedString(value.element, 'element', 32)
     if (!isWizardDiscipline(discipline)) {
@@ -1239,7 +1254,12 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
     if (!isWizardElement(element)) {
       throw new GameProtocolError('element is not supported')
     }
-    return { type: 'client-confirm-loadout', discipline, element }
+    return {
+      type: 'client-confirm-loadout',
+      discipline,
+      displayName: limitedString(value.displayName, 'displayName', 64),
+      element,
+    }
   }
   if (value.type === 'client-gameplay-pause') {
     const paused = boolean(value.paused, 'paused')
@@ -2395,6 +2415,7 @@ function playerEconomy(value: unknown, field: string): ProtocolPlayerEconomy {
     'actionFeedback',
     'backpack',
     'charmCapacity',
+    'collegeIntroPending',
     'dowsingFee',
     'dowsingOffers',
     'equipment',
@@ -2469,6 +2490,10 @@ function playerEconomy(value: unknown, field: string): ProtocolPlayerEconomy {
       : hubActionFeedback(source.actionFeedback, `${field}.actionFeedback`),
     backpack,
     charmCapacity,
+    collegeIntroPending: boolean(
+      source.collegeIntroPending,
+      `${field}.collegeIntroPending`,
+    ),
     dowsingFee: boundedInteger(source.dowsingFee, `${field}.dowsingFee`, 500, 950),
     dowsingOffers,
     equipment,
@@ -8441,7 +8466,12 @@ function hubParticipantState(value: unknown, field: string): ProtocolHubParticip
   if (alpha < 0 || alpha > 1) {
     throw new GameProtocolError(`${field}.transition.alpha must be within [0,1]`)
   }
-  if (transition.phase !== 'outgoing' && transition.phase !== 'incoming') {
+  if (
+    transition.phase !== 'college-intro'
+    && transition.phase !== 'college-loadout'
+    && transition.phase !== 'outgoing'
+    && transition.phase !== 'incoming'
+  ) {
     throw new GameProtocolError(`${field}.transition.phase is not supported`)
   }
   const destination = hubRegionId(
@@ -8453,8 +8483,10 @@ function hubParticipantState(value: unknown, field: string): ProtocolHubParticip
     `${field}.transition.sourceRegion`,
   )
   if (
-    (transition.phase === 'outgoing' && region !== sourceRegion)
-    || (transition.phase === 'incoming' && region !== destination)
+    ((transition.phase === 'college-intro' || transition.phase === 'outgoing')
+      && region !== sourceRegion)
+    || ((transition.phase === 'college-loadout' || transition.phase === 'incoming')
+      && region !== destination)
     || !isHubTransitionEdge(sourceRegion, destination)
   ) {
     throw new GameProtocolError(`${field}.transition is inconsistent with its region`)

@@ -95,6 +95,7 @@ test('client carries character config, publishes authority, and tears down', asy
   })
   assert.deepEqual(decodeClientGameMessage(transport.sent[0]), {
     type: 'client-hello',
+    beginCollegeIntro: false,
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
@@ -126,6 +127,10 @@ test('client carries character config, publishes authority, and tears down', asy
   const session = await connecting
   assert.equal(session.isHost, true)
   assert.equal(session.sessionKind, 'standalone')
+  session.readyCollegeIntro()
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-ready-college-intro',
+  })
   session.setCheatsEnabled(true)
   assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
     type: 'client-cheat-mode',
@@ -731,15 +736,17 @@ test('host client keeps one session through Game Over, loadout, and Hub confirma
   assert.equal(session.getSnapshot().run.phase, 'loadout')
   assert.equal(session.getSnapshot().world.kind, 'hub')
 
-  session.confirmLoadout('air', 'body')
+  session.confirmLoadout('air', 'body', 'Reborn')
   assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
     type: 'client-confirm-loadout',
     discipline: 'body',
+    displayName: 'Reborn',
     element: 'air',
   })
 
   const confirmedState = confirmGameSimulationLoadout(loadoutState, playerId, {
     discipline: 'body',
+    displayName: 'Reborn',
     element: 'air',
   })
   assert.ok(confirmedState)
@@ -749,7 +756,7 @@ test('host client keeps one session through Game Over, loadout, and Hub confirma
   assert.equal(session.getSnapshot().run.lastCompletedRunId, runId)
 
   const beforeInvalidConfirmation = transport.sent.length
-  session.confirmLoadout('air', 'body')
+  session.confirmLoadout('air', 'body', 'Reborn')
   assert.equal(transport.sent.length, beforeInvalidConfirmation)
   session.startMatch('default-random')
   assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {

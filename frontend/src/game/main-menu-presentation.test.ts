@@ -96,3 +96,12 @@ test('runtime progression invalidates the Hub scene when Teacher unlock flags ch
     /current\.pendingOffer\?\.automaticChoiceIndex === next\.pendingOffer\?\.automaticChoiceIndex/,
   )
 })
+
+test('the participant College loadout boundary invalidates the resident Hub shell', () => {
+  assert.match(scene, /sameRuntimeScene\(current, snapshot, session\.playerId\)/)
+  assert.match(scene, /data-college-loadout-active=\{collegeLoadoutActive \|\| undefined\}/)
+  assert.match(
+    scene,
+    /currentCollegeLoadout[\s\S]*nextCollegeLoadout[\s\S]*return currentCollegeLoadout === nextCollegeLoadout/,
+  )
+})

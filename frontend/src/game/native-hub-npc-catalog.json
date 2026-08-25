@@ -1260,7 +1260,7 @@
       }
     }
   },
-  "schema": "solomon-dark-native-hub-npc-interactions-v2",
+  "schema": "solomon-dark-native-hub-npc-interactions-v3",
   "skorcha": {
     "animationDelay": {
       "drawCount": 10,
@@ -1299,6 +1299,7 @@
   "source": {
     "dialogueHashes": {
       "survival.txt": "5e792f4dc692667d0ecaa4e7304202f11d2d1cdc664820b97be83145fa3b2d67",
+      "story.txt": "ce1580bdce93a617c6045617d4c42f9c1b9019a5d5664efadf36c8b80f40071d",
       "books.txt": "d7ca0a36c2fe6af90a4a950d5ff3dab7638f43640de97684eb6a7583a02b24a1",
       "spellfacts.txt": "1d78d408664ea830465e7e5a8b56df2c6373cb4f6685dc025a1a6d0f90ab0e17",
       "narration.txt": "5a80f605f8fcac7fc634f8234d5b0a0173d3d4aa563dc076cc6d1b4dbc649174"
@@ -1306,6 +1307,158 @@
     "executableSha256": "03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3",
     "preferredImageBase": "0x00400000",
     "retailVersion": "0.72.5"
+  },
+  "storyOffice": {
+    "archIntroVoice": {
+      "bytes": 1231088,
+      "sha256": "b819a5aa7397df964ec9f9e03149941450d65d10fe207f71c3643419fd071255"
+    },
+    "dialogue": {
+      "ARCH_DISMISS_0": {
+        "key": "ARCH_DISMISS_0",
+        "label": "Dismiss?",
+        "lines": [
+          "Yes, hello again.  We of course have the utmost confidence in you.",
+          "Specifically, we have confidence you'll finish up here at the university and carry on finding Solomon Dark, yes?"
+        ]
+      },
+      "ARCH_INTRO_0": {
+        "key": "ARCH_INTRO_0",
+        "label": "Greetings?",
+        "lines": [
+          "Oh, good morning, do help yourself to a glass of brandy.  While you're at it, help me to one as well.",
+          "Now listen carefully.  Ten.  Dead.  Mages.  Have I got your attention?",
+          "All right then.  We have a wizard problem, and it's getting worse.  One of our recent graduates has, let us say, succumbed to the temptations of power.",
+          "Have you heard the name Solomon Dark?  Yes?  Well, our Solomon Dark is beginning to make a bit of a mess.  Despite the official line, the disturbances at the edge of Dratmoor are *not* a natural phenomenon.",
+          "There are reports of Solomon Dark desecrating graves and barrows all over the place.  We've sent several junior mages out to bring things under control, but none have returned-- at least, not in any useful form.",
+          "The entire situation is eroding, and I want you to settle it.  Find Solomon Dark, and deal with him."
+        ]
+      },
+      "ARCH_Q1_0": {
+        "key": "ARCH_Q1_0",
+        "label": "Solomon Dark?",
+        "lines": [
+          "Well.  I know more about Dark than some, for I was not yet Archchcancellor when he was here.  I was a mere Advanced Senior Supervisory Professor With Additional Honours.",
+          "I happened to teach a Demonoscopy class with Dark in attendance.",
+          "On the days he bothered coming in, he seemed friendless and malicious.  Oh, and he dressed entirely in black, with black eye liner, studded black gauntlets, and a robe covered in blazing pentagrams.",
+          "In retrospect those were probably bad signs, but this *is* a Wizarding College.  And he did switch over to purple eventually.",
+          "We're trying to arrange a more complete dossier on him, but there have been complications.  A great number of people who knew him died shortly after he graduated.",
+          "In further retrospect, this could also have raised some alarm bells.",
+          "All we know now is that he's out prowling graveyards and building a Dread Tower up on Mount Awful.  Fairly typical Dark Lord pattern, no surprises yet.",
+          "Though his academic certifications are mundane, we are considering him dangerous.  Take precautions."
+        ]
+      },
+      "ARCH_Q2_0": {
+        "key": "ARCH_Q2_0",
+        "label": "Collateral Damage?",
+        "lines": [
+          "I'm glad you asked.",
+          "Normally, we don't mind if wizards out on errands blow up the odd house, village, town, tectonic plate... but in this case, we're already dealing with some bad press because of the university's role in training a, er, potential force of evil.",
+          "When you find Solomon Dark, please try to keep any property damage down to an absolute minimum."
+        ]
+      },
+      "ARCH_Q3_0": {
+        "key": "ARCH_Q3_0",
+        "label": "Assistance?",
+        "lines": [
+          "Of course.",
+          "You'll have full access to the inventory of the Official Unreal Crime Scene Investigator.  I believe Luthacus has recovered a few artifacts from earlier encounters with Mr. Dark.  They may prove useful!",
+          "Professor Semicus is tending the library, and can provide you with access to some books.",
+          "Oh, and see that you speak with the Annalist so your victory can be chronicled."
+        ]
+      },
+      "POLISHER_DISMISS_0": {
+        "key": "POLISHER_DISMISS_0",
+        "label": "Dismiss?",
+        "lines": [
+          "Look, I have work to do."
+        ]
+      },
+      "POLISHER_INTRO_0": {
+        "key": "POLISHER_INTRO_0",
+        "label": "Greetings?",
+        "lines": [
+          "Hey, whoa, whoa, whoa, step away from the manticore.  It's still a little bit poisonous."
+        ]
+      },
+      "POLISHER_Q1_0": {
+        "key": "POLISHER_Q1_0",
+        "label": "Your task?",
+        "lines": [
+          "That slob Glanthicus was in here eating like an animal and managed to get some magic honey on the plaque.",
+          "The stuff resists all housekeeping spells, so it has to be removed by hand.  You can't even disintegrate it.",
+          "Worse, it's level 9 honey.  I'll probably be here all day."
+        ]
+      },
+      "POLISHER_Q2_0": {
+        "key": "POLISHER_Q2_0",
+        "label": "The Plaque",
+        "lines": [
+          "It's written in Obtuse, and I don't read it.  I just clean it.",
+          "The librarian probably has it written down in Normal somewhere.  Ask him.  Only if you have all day, of course."
+        ]
+      }
+    },
+    "interactions": {
+      "arch-chancellor": {
+        "commands": [],
+        "dismissals": [
+          "ARCH_DISMISS_0"
+        ],
+        "geometry": {
+          "position": {
+            "x": 514,
+            "y": 467
+          },
+          "radius": 55,
+          "region": "office"
+        },
+        "intro": "ARCH_INTRO_0",
+        "name": "The Archchancellor",
+        "questions": [
+          "ARCH_Q1_0",
+          "ARCH_Q2_0",
+          "ARCH_Q3_0"
+        ],
+        "serviceTitle": null
+      },
+      "polisher": {
+        "commands": [],
+        "dismissals": [
+          "POLISHER_DISMISS_0"
+        ],
+        "geometry": {
+          "position": {
+            "x": 566,
+            "y": 735
+          },
+          "radius": 15,
+          "region": "office"
+        },
+        "intro": "POLISHER_INTRO_0",
+        "name": "Polisher",
+        "questions": [
+          "POLISHER_Q1_0",
+          "POLISHER_Q2_0"
+        ],
+        "serviceTitle": null
+      }
+    },
+    "polisher": {
+      "artRecords": [
+        23,
+        24,
+        25,
+        26
+      ],
+      "loopFullDistance": 50,
+      "loopSha256": "ad5043df28f0ee18e881ffe709fc819218533b080d6d1ec4093603d8447e4d57",
+      "loopSilentDistance": 200,
+      "phaseFloatRange": 0.25,
+      "phaseSpeed": 0.05,
+      "reverseDrawCount": 1500,
+      "reverseDrawValue": 3
+    }
   },
   "teacherSpells": [
     {

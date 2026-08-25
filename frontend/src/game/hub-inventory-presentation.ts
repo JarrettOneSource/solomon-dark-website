@@ -10,6 +10,7 @@ import {
   NATIVE_HUB_NPC_CATALOG,
   nativeHubNpcHintIndex,
   type NativeHubDialogueRecord,
+  type NativeHubInteractionDefinition,
   type NativeHubInteractionId,
   type NativeHubNpcCommand,
 } from './core-kernels/native-hub-npc.ts'
@@ -23,7 +24,7 @@ type HubPotionShortcutItem = Pick<HubInventoryItem, 'id' | 'kind' | 'quantity'> 
   readonly contents?: readonly HubPotionShortcutItem[]
 }
 
-export type HubInteractionId = NativeHubInteractionId
+export type HubInteractionId = NativeHubInteractionId | 'polisher'
 
 export interface HubInteractionDialogueDefinition {
   readonly actionLabel: string | null
@@ -55,6 +56,7 @@ export interface HubPotionShortcut {
 
 export interface HubInteractionAvailability {
   readonly skorchaPosition: Vector2 | null
+  readonly storyOffice?: boolean
 }
 
 export const NATIVE_HEALTH_POTION_BELT_SLOT = 3
@@ -88,12 +90,45 @@ export function hubPotionBeltShortcut(
 }
 
 export const HUB_INTERACTION_IDS: readonly HubInteractionId[] =
-  Object.freeze([...NATIVE_HUB_INTERACTION_IDS])
+  Object.freeze([...NATIVE_HUB_INTERACTION_IDS, 'polisher'])
 const HUB_TRADER_IDS: readonly HubTraderId[] = ['hagatha', 'fomentius', 'luthacus', 'shlorio']
+
+function interactionDialogue(
+  interaction: NativeHubInteractionDefinition,
+  dialogue: Readonly<Record<string, NativeHubDialogueRecord>>,
+): HubInteractionDialogueDefinition {
+  const introRecord = interaction.intro === null ? null : dialogue[interaction.intro]!
+  const questions = interaction.questions.map(question => dialogue[question]!)
+  const dismissals = interaction.dismissals.map(dismissal => dialogue[dismissal]!)
+  const service = interaction.commands
+    .map(({ selector }) => selector)
+    .find(isHubTraderId) ?? null
+  return Object.freeze({
+    actionLabel: interaction.commands[0]?.label ?? null,
+    commands: interaction.commands,
+    dismissals,
+    eulogyIndex: null,
+    eulogyLine: null,
+    intro: introRecord?.lines ?? [],
+    introRecord,
+    name: interaction.name,
+    priceExplanation: [],
+    priceLabel: null,
+    questions,
+    service,
+    title: interaction.serviceTitle ?? interaction.name.toUpperCase(),
+  })
+}
 
 export const HUB_INTERACTION_DIALOGUES: Readonly<
   Record<HubInteractionId, HubInteractionDialogueDefinition>
 > = Object.freeze(Object.fromEntries(HUB_INTERACTION_IDS.map((interactionId) => {
+  if (interactionId === 'polisher') {
+    return [interactionId, interactionDialogue(
+      NATIVE_HUB_NPC_CATALOG.storyOffice.interactions.polisher,
+      NATIVE_HUB_NPC_CATALOG.storyOffice.dialogue,
+    )]
+  }
   const interaction = NATIVE_HUB_NPC_CATALOG.interactions[interactionId]
   const introRecord = interaction.intro === null
     ? null
@@ -131,6 +166,25 @@ export const HUB_INTERACTION_DIALOGUES: Readonly<
   })]
 })) as unknown as Record<HubInteractionId, HubInteractionDialogueDefinition>)
 
+export const HUB_STORY_OFFICE_DIALOGUES: Readonly<
+  Record<'arch-chancellor' | 'polisher', HubInteractionDialogueDefinition>
+> = Object.freeze({
+  'arch-chancellor': interactionDialogue(
+    NATIVE_HUB_NPC_CATALOG.storyOffice.interactions['arch-chancellor'],
+    NATIVE_HUB_NPC_CATALOG.storyOffice.dialogue,
+  ),
+  polisher: HUB_INTERACTION_DIALOGUES.polisher,
+})
+
+export function hubInteractionDialogue(
+  interactionId: HubInteractionId,
+  storyOffice = false,
+): HubInteractionDialogueDefinition {
+  return storyOffice && (interactionId === 'arch-chancellor' || interactionId === 'polisher')
+    ? HUB_STORY_OFFICE_DIALOGUES[interactionId]
+    : HUB_INTERACTION_DIALOGUES[interactionId]
+}
+
 export const HUB_TRADER_DIALOGUES: Readonly<Record<HubTraderId, HubInteractionDialogueDefinition>> = {
   hagatha: HUB_INTERACTION_DIALOGUES.hagatha,
   fomentius: HUB_INTERACTION_DIALOGUES.fomentius,
@@ -167,7 +221,9 @@ interface HubInteractionGeometry {
 export const HUB_INTERACTION_GEOMETRY: Readonly<Record<HubInteractionId, HubInteractionGeometry>> =
   Object.freeze(Object.fromEntries(HUB_INTERACTION_IDS.map((interactionId) => [
     interactionId,
-    NATIVE_HUB_NPC_CATALOG.interactions[interactionId].geometry,
+    interactionId === 'polisher'
+      ? NATIVE_HUB_NPC_CATALOG.storyOffice.interactions.polisher.geometry
+      : NATIVE_HUB_NPC_CATALOG.interactions[interactionId].geometry,
   ])) as Record<HubInteractionId, HubInteractionGeometry>)
 
 export const HUB_TRADER_GEOMETRY: Readonly<Record<HubTraderId, HubInteractionGeometry>> = {
@@ -237,6 +293,7 @@ export function hubNpcHintAcknowledgementAction(
   interactionId: HubInteractionId,
   helpFlags: readonly boolean[],
 ): Extract<HubInventoryAction, { readonly type: 'acknowledge-npc-hint' }> | null {
+  if (interactionId === 'polisher') return null
   const index = nativeHubNpcHintIndex(interactionId)
   return index === null || helpFlags[index] !== true
     ? null
@@ -268,9 +325,10 @@ export function hubTraderAtPoint(
 function availableInteractionIds(
   availability: HubInteractionAvailability,
 ): readonly HubInteractionId[] {
-  return availability.skorchaPosition !== null
-    ? HUB_INTERACTION_IDS
-    : HUB_INTERACTION_IDS.filter(interaction => interaction !== 'skorcha')
+  return HUB_INTERACTION_IDS.filter(interaction => (
+    (interaction !== 'skorcha' || availability.skorchaPosition !== null)
+    && (interaction !== 'polisher' || availability.storyOffice === true)
+  ))
 }
 
 function nearestInteraction<T extends HubInteractionId>(
