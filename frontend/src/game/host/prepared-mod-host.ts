@@ -44,6 +44,7 @@ import {
   type ModSkillCheckpoint,
   type ModSpellCheckpoint,
   type ModStatusCheckpoint,
+  type ActiveModScene,
   type PreparedModContentCatalog,
 } from '../modding/content/index.ts'
 import type { ResolvedWebLuaContentReference } from '../modding/definition/index.ts'
@@ -101,6 +102,7 @@ export interface PreparedModHost {
   readonly assets: PreparedModAssetCatalog
   readonly content: PreparedModContentCatalog
   readonly extensions: GameSimulationExtensions
+  activeScene(ownerId: string): ActiveModScene | null
   checkpoint(): PreparedModHostCheckpoint
   cast(input: Readonly<{
     contentId: string
@@ -118,6 +120,7 @@ export interface PreparedModHost {
   purchaseShop(playerId: string, shopContentId: string, row: number): void
   restore(checkpoint: PreparedModHostCheckpoint): void
   restoreSaveState(state: PreparedModSaveState): void
+  returnScene(ownerId: string): ActiveModScene | null
   runtimeProjection(viewerId?: string): Readonly<{ projection: LuaConsoleObject; revision: number }>
   saveState(): PreparedModSaveState
   enterPortal(input: Readonly<{
@@ -207,6 +210,10 @@ export async function prepareModHost(options: Readonly<{
     assets,
     content,
     extensions: Object.freeze(extensions),
+    activeScene(ownerId) {
+      requireOpen()
+      return scenes.project().find(scene => scene.ownerId === ownerId) ?? null
+    },
     checkpoint() {
       requireOpen()
       return Object.freeze({
@@ -400,6 +407,10 @@ export async function prepareModHost(options: Readonly<{
     },
     restoreSaveState(state) {
       host.restore(decodePreparedModSaveState(options.content.compiledMods, state))
+    },
+    returnScene(ownerId) {
+      requireOpen()
+      return scenes.return(ownerId)
     },
     runtimeProjection(viewerId) {
       requireOpen()
@@ -751,7 +762,7 @@ function spawnIntent(
   if (source.world.kind !== 'boneyard') throw new Error('enemy spawn requires an active Boneyard')
   const tokenValue = intent.fields.token ?? intent.fields.enemy
   if (typeof tokenValue !== 'string' || !enemyTokens.has(tokenValue)) {
-    throw new Error('enemy spawn currently requires a stock enemy token')
+    throw new Error('enemy spawn requires a stock token or resolved enemy reference')
   }
   const token = tokenValue as BoneyardWaveEnemyToken
   const position = intentPosition(source, intent.fields, context)

@@ -156,6 +156,7 @@ const loadHudSkillSelector = () => import('./HudSkillSelector.tsx')
 const HudSkillSelector = lazy(loadHudSkillSelector)
 const ModMinimap = lazy(() => import('./mod-ui/ModMinimap.tsx'))
 const ModPanels = lazy(() => import('./mod-ui/ModPanels.tsx'))
+const ModSceneOverlay = lazy(() => import('./mod-ui/ModSceneOverlay.tsx'))
 
 /** The Dark Cloud's Esc menu is the native simple menu with the local viewer as its owner. */
 const DARK_CLOUD_PAUSE_OWNER_ID = 'dark-cloud'
@@ -1675,6 +1676,7 @@ export default function MainMenuScene({
           <Suspense fallback={null}>
             <ModMinimap session={session} />
             <ModPanels session={session} />
+            <ModSceneOverlay session={session} />
           </Suspense>
         ) : null}
 

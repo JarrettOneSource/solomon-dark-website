@@ -1853,7 +1853,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             const row = message.arguments.row
             if (!Number.isSafeInteger(row) || Number(row) < 0) throw new Error('mod shop row is invalid')
             modHost.purchaseShop(client.playerId, message.target, Number(row))
-          } else {
+          } else if (message.action === 'portal-enter') {
             const activeState = stateForPlayer(client.playerId)
             const loaded = loadedBoneyardForPlayer(client.playerId)
             const player = getPlayerCharacter(activeState, client.playerId)
@@ -1872,6 +1872,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
               portalId: message.target,
               scene: 'stock.boneyard',
             })
+            stopWorldClientInputs(client.playerId)
+          } else {
+            const activeState = stateForPlayer(client.playerId)
+            modHost.returnScene(activeState.run.runId ?? client.playerId)
           }
           broadcastPreparedModProjection(client.playerId, modHost)
           broadcastSnapshot()
@@ -2812,6 +2816,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       resetNextTickDeadline()
       return
     }
+    if (!sharedWorlds && state.run.runId && privateModHost?.activeScene(state.run.runId)) {
+      resetNextTickDeadline()
+      return
+    }
     ticking = true
     try {
       const now = performance.now()
@@ -2872,10 +2880,14 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             ])
           }
           const previous = sharedWorlds
+          const modScenePartyIds = [...partyModRuntimes].filter(([partyId, scope]) => {
+            const run = sharedWorlds?.runs.find(candidate => candidate.partyId === partyId)
+            return Boolean(run?.state.run.runId && scope.runtime.activeScene(run.state.run.runId))
+          }).map(([partyId]) => partyId)
           sharedWorlds = stepSharedGameWorlds(
             sharedWorlds,
             inputs,
-            new Set([...sharedGameplayPauses.keys(), ...startingPartyIds]),
+            new Set([...sharedGameplayPauses.keys(), ...startingPartyIds, ...modScenePartyIds]),
             enemySpawnIntents,
             new Map([...partyModRuntimes].map(([partyId, scope]) => [
               partyId,

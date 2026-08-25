@@ -663,7 +663,7 @@ export interface ClientModCastMessage {
   readonly type: 'client-mod-cast'
 }
 
-export const MOD_ACTIONS = ['portal-enter', 'shop-buy', 'skill-choose'] as const
+export const MOD_ACTIONS = ['portal-enter', 'scene-return', 'shop-buy', 'skill-choose'] as const
 export type ModAction = typeof MOD_ACTIONS[number]
 export interface ClientModActionMessage {
   readonly action: ModAction

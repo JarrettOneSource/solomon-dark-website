@@ -1,0 +1,28 @@
+.mod-scene-overlay {
+  position: fixed;
+  z-index: 80;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle at center, rgb(46 38 58 / 80%), rgb(3 4 7 / 98%) 70%),
+    #030407;
+  pointer-events: auto;
+}
+
+.mod-scene-overlay__room {
+  width: min(38rem, 84vw);
+  padding: 2rem;
+  border: 1px solid #aa9561;
+  background: rgb(13 12 17 / 92%);
+  color: #e6d9b2;
+  text-align: center;
+}
+
+.mod-scene-overlay__room button {
+  padding: .7rem 1rem;
+  border: 1px solid #d2be8b;
+  background: #191722;
+  color: #f2e7c8;
+  font: 600 .85rem Cinzel, serif;
+}
