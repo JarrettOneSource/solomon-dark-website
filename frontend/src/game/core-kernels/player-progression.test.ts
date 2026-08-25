@@ -29,8 +29,12 @@ import {
   evaluateBoneyardEnemyExperience,
   grantPlayerExperience,
   grantPlayerBonusSkillChoice,
+  grantPlayerSkillRanks,
   increaseRandomLearnedSkill,
   nativeSkillCategory,
+  nativeSkillDependencies,
+  nativeSkillMinimumLevel,
+  nativeSkillPassesOfferEligibility,
   playerExperienceProgress,
   nativeWeldBuild,
   playerStatBook,
@@ -592,6 +596,99 @@ test('every offered row applies only its addressed player-book entry', () => {
   }
 })
 
+test('ordinary offers retire every authored row at mCapLevel, not mMaxLevel', () => {
+  const statBook = playerStatBook()
+  const distinctCapRows: number[] = []
+  for (let skillId = 8; skillId <= 79; skillId += 1) {
+    const entry = statBook.entries[skillId]!
+    assert.ok(entry.capLevel >= 1, `skill ${skillId} has no native offer cap`)
+    assert.ok(entry.maximumLevel >= entry.capLevel, `skill ${skillId} cap exceeds max`)
+    if (entry.capLevel !== entry.maximumLevel) distinctCapRows.push(skillId)
+
+    const source = createPlayerSkillBook(ETHER_ARCANE)
+    const permanentRanks = [...source.permanentRanks]
+    const effectiveRanks = [...source.effectiveRanks]
+    permanentRanks[skillId] = entry.capLevel
+    effectiveRanks[skillId] = entry.capLevel
+    const atOfferCap = {
+      ...source,
+      advancedUnlocks: Object.freeze(new Array<boolean>(8).fill(true)),
+      effectiveRanks: Object.freeze(effectiveRanks),
+      permanentRanks: Object.freeze(permanentRanks),
+    }
+    assert.equal(
+      nativeSkillPassesOfferEligibility(skillId, 75, atOfferCap),
+      false,
+      `skill ${skillId} remained offerable at cap ${entry.capLevel}`,
+    )
+  }
+  assert.equal(distinctCapRows.length, 62)
+  assert.deepEqual(
+    statBook.entries.slice(8, 80)
+      .filter(({ capLevel, maximumLevel }) => capLevel === maximumLevel)
+      .map(({ id }) => id),
+    [15, 39, 51, 52, 53, 55, 60, 63, 66, 68],
+  )
+})
+
+test('direct grants retain the separate mMaxLevel ceiling after ordinary offers retire', () => {
+  const source = createPlayerSkillBook(ETHER_ARCANE)
+  const entry = playerStatBook().entries[9]!
+  assert.deepEqual([entry.capLevel, entry.maximumLevel], [5, 10])
+  const permanentRanks = [...source.permanentRanks]
+  const effectiveRanks = [...source.effectiveRanks]
+  permanentRanks[9] = entry.capLevel
+  effectiveRanks[9] = entry.capLevel
+  const atOfferCap = {
+    ...source,
+    effectiveRanks: Object.freeze(effectiveRanks),
+    permanentRanks: Object.freeze(permanentRanks),
+  }
+  assert.equal(nativeSkillPassesOfferEligibility(9, 75, atOfferCap), false)
+  const granted = grantPlayerSkillRanks(atOfferCap, 9, entry.maximumLevel)
+  assert.equal(granted.permanentRanks[9], entry.maximumLevel)
+  assert.equal(granted.effectiveRanks[9], entry.maximumLevel)
+})
+
+test('all category-zero subskills pass the common picker scan at their exact dependency edge', () => {
+  const subskillIds = Array.from({ length: 72 }, (_, index) => index + 8)
+    .filter((skillId) => nativeSkillCategory(skillId) === 0)
+  assert.deepEqual(subskillIds, [
+    9, 10, 17, 18, 22, 25, 26, 28, 33, 34, 38, 39, 42, 43, 53, 55, 56, 64, 75,
+  ])
+
+  for (const skillId of subskillIds) {
+    const source = createPlayerSkillBook(ETHER_ARCANE)
+    const permanentRanks = [...source.permanentRanks]
+    const effectiveRanks = [...source.effectiveRanks]
+    permanentRanks[skillId] = 0
+    effectiveRanks[skillId] = 0
+    for (const dependencyId of nativeSkillDependencies(skillId)) {
+      permanentRanks[dependencyId] = 1
+      effectiveRanks[dependencyId] = 1
+    }
+    const dependencyReady = {
+      ...source,
+      advancedUnlocks: Object.freeze(new Array<boolean>(8).fill(true)),
+      effectiveRanks: Object.freeze(effectiveRanks),
+      permanentRanks: Object.freeze(permanentRanks),
+    }
+    const minimumLevel = nativeSkillMinimumLevel(skillId)
+    assert.equal(
+      nativeSkillPassesOfferEligibility(skillId, minimumLevel, dependencyReady),
+      true,
+      `subskill ${skillId} missed its dependency/minimum-level boundary`,
+    )
+    if (minimumLevel > 0) {
+      assert.equal(
+        nativeSkillPassesOfferEligibility(skillId, minimumLevel - 1, dependencyReady),
+        false,
+        `subskill ${skillId} entered before level ${minimumLevel}`,
+      )
+    }
+  }
+})
+
 test('Creativity Insight applies the selected skill twice without duplicating loadout identity', () => {
   const skillBook = withLearnedSkills(createPlayerSkillBook(ETHER_ARCANE), [57])
   const progression: PlayerProgressionComponent = {
@@ -648,8 +745,8 @@ test('offer fill preserves the native category collision guards', () => {
   }
 
   const cappedRanks = fresh.permanentRanks.map((rank, skillId) => {
-    const maximum = playerStatBook().entries[skillId]?.maximumLevel ?? 0
-    return skillId === 8 ? rank : maximum
+    const offerCap = playerStatBook().entries[skillId]?.capLevel ?? 0
+    return skillId === 8 ? rank : offerCap
   })
   const onlyCategoryOne = {
     ...fresh,

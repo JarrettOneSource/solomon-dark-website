@@ -182,6 +182,7 @@ export default function SkillPicker({
     }
 
     const unsubscribe = subscribeGamePresentationFrames((nowMs) => {
+      if (!renderer) return
       const currentPhase = phaseRef.current
       let reveal
       if (currentPhase === 'opening') {
@@ -198,7 +199,7 @@ export default function SkillPicker({
       } else {
         reveal = nativeSkillPickerReveal(400)
       }
-      renderer?.render(nowMs, selectedIndexRef.current, reveal)
+      renderer.render(nowMs, selectedIndexRef.current, reveal)
       const stage = stageRef.current
       if (stage) {
         const startedAt = currentPhase === 'opening'

@@ -146,6 +146,11 @@ test('retains picker presentation without any Hub, private-room, or Boneyard sup
   assert.match(picker, /audio\.playSound\('unlock-skill', \{ playbackRate: 1 \}\)/)
   assert.equal((picker.match(/playbackRate: 0\.75/g) ?? []).length, 2)
   assert.match(picker, /const NATIVE_QUEUED_REBUILD_DELAY_MS = 100/)
+  assert.match(
+    picker,
+    /subscribeGamePresentationFrames\(\(nowMs\) => \{\s+if \(!renderer\) return\s+const currentPhase/,
+    'the cold picker consumed reveal time before its renderer existed',
+  )
   assert.ok(picker.includes("phaseRef.current = 'queued-wait'"))
   assert.ok(picker.includes('setContentVisible(false)'))
   assert.match(picker, /const offerContentVisible = phase !== 'queued-wait'/)

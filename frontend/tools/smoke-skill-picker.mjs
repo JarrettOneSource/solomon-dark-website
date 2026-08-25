@@ -126,6 +126,7 @@ try {
     () => getPlayerCharacter(host.state(), playerId).position.x > playerXBeforeLevelUp,
     'authoritative Hub movement before level-up',
   )
+  const hubRevealReceiptPromise = observeNextPickerReveal(page, 'Hub')
   const leveled = grantGameSimulationPlayerExperience(host.state(), playerId, 300)
   Object.assign(host.state(), leveled)
   await page.keyboard.down('w')
@@ -133,7 +134,6 @@ try {
   await picker.waitFor({ timeout: 30_000 })
   await page.keyboard.up('w')
   await page.keyboard.up('d')
-  const earlyRevealObserved = await picker.getAttribute('data-reveal-interactive') === 'false'
   await page.screenshot({ path: revealScreenshotPath })
   const presentationSamples = []
   const presentationDeadline = Date.now() + 5_000
@@ -150,19 +150,17 @@ try {
   const livePresentation = presentationSamples.find((sample) => (
     sample.dynamicSuppressed === 'false' && sample.particleCount > 0
   ))
+  assert.ok(livePresentation, 'Hub level-up did not render its actor-owned sparkle lane')
+  assert.equal(livePresentation.presentationId, '1')
+  const hubRevealReceipt = await hubRevealReceiptPromise
+  const earlyRevealObserved = hubRevealReceipt.earlyRevealObserved
+  const hubRevealAlphas = hubRevealReceipt.alphas
   try {
-    await Promise.all([
-      page.locator('.skill-picker-stage[data-renderer-state="ready"]').waitFor({ timeout: 30_000 }),
-      page.waitForFunction(() => (
-        document.querySelector('.skill-picker-stage')?.getAttribute('data-reveal-interactive')
-          === 'true'
-      ), undefined, { timeout: 30_000 }),
-      page.waitForFunction(() => window.__sdrAudioEvents?.some(({ playbackRate, src, type }) => (
-        type === 'buffer-start'
-          && src.includes('level-up')
-          && playbackRate === 1
-      )), undefined, { timeout: 30_000 }),
-    ])
+    await page.waitForFunction(() => window.__sdrAudioEvents?.some(({ playbackRate, src, type }) => (
+      type === 'buffer-start'
+        && src.includes('level-up')
+        && playbackRate === 1
+    )), undefined, { timeout: 30_000 })
   } catch (error) {
     process.stderr.write(`${JSON.stringify(await page.evaluate(() => {
       const canvas = document.querySelector('.hub-world-canvas')
@@ -199,7 +197,6 @@ try {
     particleCount: Math.max(...presentationSamples.map(({ particleCount }) => particleCount)),
   }
   assert.equal(presentationReceipt.dynamicSuppressed, 'false')
-  if (livePresentation) assert.equal(livePresentation.presentationId, '1')
   const pickerCanvas = page.locator('.skill-picker-canvas[data-game-renderer="pixi-webgl"]')
   const pickerRenderer = await pickerCanvas.evaluate((canvas) => ({
     context: (canvas.getContext('webgl2') || canvas.getContext('webgl'))?.constructor.name,
@@ -459,14 +456,24 @@ try {
     getPlayerProgression(boneyardLevelUp, playerId).pendingOffer,
     'expected a Boneyard skill offer',
   )
+  const boneyardRevealReceiptPromise = observeNextPickerReveal(page, 'Boneyard')
   Object.assign(host.state(), boneyardLevelUp)
   const boneyardPicker = page.getByRole('dialog', { name: /Select a skill/ })
   await page.getByRole('button', { name: /Use health potion/ }).click()
   await boneyardPicker.waitFor({ timeout: 30_000 })
-  await page.waitForFunction(() => (
-    document.querySelector('.skill-picker-stage')?.getAttribute('data-reveal-interactive')
-      === 'true'
-  ), undefined, { timeout: 30_000 })
+  const boneyardRevealReceipt = await boneyardRevealReceiptPromise
+  const boneyardEarlyRevealObserved = boneyardRevealReceipt.earlyRevealObserved
+  const boneyardRevealAlphas = boneyardRevealReceipt.alphas
+  const boneyardPresentationReceiptHandle = await page.waitForFunction(() => {
+    const canvas = document.querySelector('.boneyard-world-canvas')
+    const frame = canvas?.__sdrBoneyardFrame
+    if (!canvas || !frame || frame.levelUpParticleCount <= 0) return false
+    return {
+      particleCount: frame.levelUpParticleCount,
+      presentationId: canvas.dataset.levelUpPresentationId,
+    }
+  }, undefined, { timeout: 5_000 })
+  const boneyardPresentationReceipt = await boneyardPresentationReceiptHandle.jsonValue()
   await page.waitForFunction(() => {
     const canvas = document.querySelector('.boneyard-world-canvas')
     return canvas?.dataset.levelUpDynamicSuppressed === 'false'
@@ -496,11 +503,15 @@ try {
     actionReceipt,
     bookedRank: getPlayerSkillBook(host.state(), playerId).permanentRanks[selectedSkillId],
     boneyardBackgroundReceipt,
+    boneyardEarlyRevealObserved,
     boneyardPickerAudioReceipt,
+    boneyardPresentationReceipt,
+    boneyardRevealAlphas,
     boneyardScreenshotPath,
     earlyRevealObserved,
     frozenHubReceipt,
     failedResponses,
+    hubRevealAlphas,
     livePresentationObserved: livePresentation !== undefined,
     openPanelSoundRates,
     pickerRenderer,
@@ -610,6 +621,46 @@ async function observeQueuedWait(page) {
     }
   }, undefined, { timeout: 10_000 })
   return receipt.jsonValue()
+}
+
+async function observeNextPickerReveal(page, scene) {
+  const receipt = await page.evaluate(() => new Promise((resolve, reject) => {
+    const startedAt = performance.now()
+    const alphas = []
+    let earlyRevealObserved = false
+    const sample = () => {
+      const stage = document.querySelector('.skill-picker-stage')
+      if (stage) {
+        const interactive = stage.getAttribute('data-reveal-interactive') === 'true'
+        if (!interactive) earlyRevealObserved = true
+        const rawAlpha = stage.getAttribute('data-reveal-alpha')
+        if (rawAlpha !== null) {
+          const value = Number(rawAlpha)
+          if (Number.isFinite(value)) alphas.push(value)
+        }
+        if (interactive) {
+          resolve({ alphas, earlyRevealObserved })
+          return
+        }
+      }
+      if (performance.now() - startedAt >= 5_000) {
+        reject(new Error('timed out observing the picker reveal'))
+        return
+      }
+      requestAnimationFrame(sample)
+    }
+    requestAnimationFrame(sample)
+  }))
+  const { alphas, earlyRevealObserved } = receipt
+  assert.equal(earlyRevealObserved, true, `${scene} picker skipped its native reveal`)
+  assert.ok(alphas.length > 1, `${scene} picker did not expose a reveal envelope`)
+  assert.ok(alphas[0] < 1, `${scene} picker first visible reveal was already settled`)
+  assert.ok(
+    alphas.some((alpha) => alpha > 0 && alpha < 1),
+    `${scene} picker skipped every intermediate reveal alpha`,
+  )
+  assert.equal(alphas.at(-1), 1, `${scene} picker did not settle at reveal alpha one`)
+  return { alphas, earlyRevealObserved }
 }
 
 async function waitForHost(predicate, label, timeoutMs = 10_000) {

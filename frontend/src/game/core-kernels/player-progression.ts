@@ -1273,7 +1273,7 @@ export function buildPlayerSkillOffer(
   for (let skillId = 8; skillId <= 79; skillId += 1) {
     if (
       skillId === SPELL_WELDING_SKILL_ID
-      || !isEligible(skillId, progression.level, skillBook)
+      || !nativeSkillPassesOfferEligibility(skillId, progression.level, skillBook)
     ) continue
     const rule = RULES[skillId]!
     const rank = skillBook.effectiveRanks[skillId] ?? 0
@@ -1363,7 +1363,7 @@ export function buildPlayerSkillOffer(
       for (let skillId = 8; skillId <= 79; skillId += 1) {
         if (
           skillId !== SPELL_WELDING_SKILL_ID
-          && isEligible(skillId, progression.level, skillBook)
+          && nativeSkillPassesOfferEligibility(skillId, progression.level, skillBook)
         ) general.push(skillId)
       }
     }
@@ -1448,7 +1448,7 @@ function weldingRelatedSkillPool(
       if (learned(skillBook, primarySkillId) !== shouldBeLearned) continue
       related.push(primarySkillId)
       for (const skillId of WELDING_RELATED_SKILLS[primarySkillId]!) {
-        if (isEligible(skillId, level, skillBook)) related.push(skillId)
+        if (nativeSkillPassesOfferEligibility(skillId, level, skillBook)) related.push(skillId)
       }
     }
     if (related.length >= 6) break
@@ -1497,12 +1497,17 @@ function countOwnedCategory(book: PlayerSkillBookComponent, category: number): n
   return count
 }
 
-function isEligible(id: number, level: number, book: PlayerSkillBookComponent): boolean {
+/** Native common offer gates (`0x0065EBA0` / `0x0065ED00`), before pool focus/root/cost. */
+export function nativeSkillPassesOfferEligibility(
+  id: number,
+  level: number,
+  book: PlayerSkillBookComponent,
+): boolean {
   const rule = RULES[id]
   const entry = SHARED_STAT_BOOK.entries[id]
-  if (!rule || !entry || entry.maximumLevel < 1) return false
+  if (!rule || !entry || entry.capLevel < 1) return false
   if (!hasDependenciesAndUnlock(id, book)) return false
-  if ((book.permanentRanks[id] ?? 0) >= entry.maximumLevel) return false
+  if ((book.permanentRanks[id] ?? 0) >= entry.capLevel) return false
   const requirementReduction = learned(book, 63) ? 2 : 0
   if (!learned(book, id) && level < Math.max(0, rule.minimumLevel - requirementReduction)) return false
   return true
@@ -1543,7 +1548,7 @@ function freezeSkillQuickbar(
 
 function isSpellWeldingEligible(level: number, book: PlayerSkillBookComponent): boolean {
   return (book.permanentRanks[SPELL_WELDING_SKILL_ID] ?? 0) < 1
-    && isEligible(SPELL_WELDING_SKILL_ID, level, book)
+    && nativeSkillPassesOfferEligibility(SPELL_WELDING_SKILL_ID, level, book)
     && ELEMENTAL_PRIMARY_SKILL_IDS.filter((skillId) => learned(book, skillId)).length > 1
 }
 
