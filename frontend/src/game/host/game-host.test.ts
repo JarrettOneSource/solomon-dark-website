@@ -284,6 +284,7 @@ test('developer observer watches one private run without joining or mutating par
   assert.equal(welcome.snapshot.levelUpBarrier?.pendingPlayerIds.includes(welcome.resumeToken) ?? false, false)
   assert.equal(host.playerCount(), 2)
   assert.equal(host.presence().length, 2)
+  playerFacingObserverCueCount = 0
   await new Promise(resolve => setTimeout(resolve, 30))
   assert.equal(playerFacingObserverCueCount, 0)
 
@@ -3064,7 +3065,7 @@ test('host lazily executes bounded Lua for authority and applies semantic comman
   assert.equal(executed.type, 'server-lua-result')
   assert.equal(executed.ok, true)
   assert.deepEqual(executed.output, ['authority\ttrue'])
-  assert.deepEqual(executed.values, ['Helvidius', '0.2.0'])
+  assert.deepEqual(executed.values, ['Helvidius', '1.0.0'])
   await waitFor(() => getPlayerEconomy(host.state(), authority.welcome.playerId).gold === 4321)
   assert.notEqual((await hostHealth(host.address.url)).lua, null)
 

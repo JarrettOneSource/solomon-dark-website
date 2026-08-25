@@ -32,13 +32,8 @@ import {
   type WebLuaRuntimeBindings,
   type WebLuaRuntimeLog,
   type WebLuaModIdentity,
-  type WebLuaModSource,
 } from './web-lua-contract.ts'
 import { WebLuaApi } from './web-lua-api.ts'
-import {
-  WebLuaContentRegistry,
-  type WebLuaContentModBinding,
-} from './web-lua-content-registry.ts'
 import { applyWebLuaFilterResult, type WebLuaFilterOutcome } from './web-lua-filters.ts'
 import {
   boundedError,
@@ -56,11 +51,9 @@ const maximumTimerDelayMs = 24 * 60 * 60 * 1_000
 
 interface WebLuaRuntimeOptions {
   readonly bindings: WebLuaRuntimeBindings
-  readonly contentRegistry?: WebLuaContentRegistry
   readonly developer?: WebLuaDeveloperBindings
   readonly log?: WebLuaRuntimeLog
   readonly mod?: WebLuaModIdentity
-  readonly modSource?: WebLuaModSource
   readonly now?: () => number
   readonly wasmPath: string
 }
@@ -100,7 +93,6 @@ export class WebLuaRuntime {
   readonly #api: WebLuaApi
   readonly #bindings: WebLuaRuntimeBindings
   readonly #callbacks = new Map<WebLuaEventName, Map<number, LuaCallback>>()
-  readonly #content: WebLuaContentModBinding | null
   readonly #engine: LuaEngine
   readonly #filters = new Map<WebLuaFilterName, Map<number, LuaCallback>>()
   readonly #log: WebLuaRuntimeLog
@@ -115,7 +107,6 @@ export class WebLuaRuntime {
   #callbackLimitWarningTick = -1
   #closed = false
   #currentTick = 0
-  #entrypointRan = false
   #filterResult: unknown = null
   #filterResultSubmitted = false
   #filterRunning = false
@@ -162,19 +153,6 @@ export class WebLuaRuntime {
     this.mod = Object.freeze(options.mod ?? WEB_LUA_DEV_CONSOLE_MOD)
     for (const name of WEB_LUA_EVENT_NAMES) this.#callbacks.set(name, new Map())
     for (const name of WEB_LUA_FILTER_NAMES) this.#filters.set(name, new Map())
-    if (Boolean(options.contentRegistry) !== Boolean(options.modSource)) {
-      throw new Error('Lua content registry and mod source must be configured together')
-    }
-    this.#content = options.contentRegistry && options.modSource
-      ? options.contentRegistry.attach(options.modSource, {
-          invoke: (callback, owner, payload, activePlayerId) => this.#callStoredFunctionForPlayer(
-            callback,
-            owner,
-            activePlayerId,
-            payload,
-          ),
-        })
-      : null
     this.#api = new WebLuaApi({
       addCallback: (name, callback) => this.#addCallback(name, callback),
       addFilter: (name, callback) => this.#addFilter(name, callback),
@@ -205,17 +183,7 @@ export class WebLuaRuntime {
         this.#filterResult = value
         this.#filterResultSubmitted = true
       },
-    }, this.mod, this.#content)
-  }
-
-  runEntrypoint(code: string): void {
-    if (this.#closed) throw new Error('Lua runtime is closed')
-    if (this.#entrypointRan) throw new Error('Lua mod entrypoint already ran')
-    this.#entrypointRan = true
-    this.#content?.openRegistration()
-    const result = this.#execute(code, null)
-    this.#content?.finishRegistration(result.ok)
-    if (!result.ok) throw new Error(result.error ?? `${this.mod.id} entry script failed`)
+    }, this.mod)
   }
 
   snapshotState(): Readonly<Record<string, LuaConsoleValue>> {
@@ -350,7 +318,6 @@ export class WebLuaRuntime {
     this.#callbacks.clear()
     this.#filters.clear()
     this.#timers.clear()
-    this.#content?.close()
     this.#api.close()
     this.#commandQueue.length = 0
     this.#engine.global.close()

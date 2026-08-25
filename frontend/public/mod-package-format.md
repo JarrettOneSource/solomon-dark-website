@@ -27,6 +27,10 @@ Use the [Boneyard example](/examples/boneyard-only-manifest.json).
 manifest.json
 scripts/
   main.lua
+art/
+  icon.png
+audio/
+  cast.ogg
 ```
 
 Use the [Lua example](/examples/lua-only-manifest.json).
@@ -55,16 +59,17 @@ Use the [combined example](/examples/combined-manifest.json).
   `sandbox/DarkCloud/mylevels/*.boneyard`. Every source must be an existing
   `.boneyard` under `files/`.
 - `runtime.entryScript` names an existing `.lua` file under `scripts/`.
-- `runtime.apiVersion` declares the web Lua API used by that script.
-- `runtime.requiredCapabilities` declares every host/content seam the entry
-  script needs. Session materialization fails before VM creation when any
-  requested capability is unavailable.
-- `minimumLoaderVersion` is retained for packages which also run through the
-  native Mod Loader. It is descriptive on the rebuilt web authority.
+- `runtime.apiVersion` must be `1.0.0`. The Website is the only runtime target.
+  Native Loader metadata and manually declared capability lists are rejected.
 - `requiredMods` lists package IDs which must also be subscribed and enabled.
 
 Paths use `/`, are relative, and must match archive case. Do not wrap the
 package in another top-level directory.
+
+Typed files may live under `art/`, `audio/`, `levels/`, `scenes/`, or the
+retained `sprites/` import directory. The 1.0 definition graph must claim every
+asset it uses; admission verifies bytes, type, dimensions, frames, ownership,
+references, graph budgets, and the canonical graph digest before play.
 
 Every Boneyard is parsed during upload with the native SyncBuffer grammar and
 again when a session is provisioned. Empty, malformed, trailing, oversized, or
@@ -80,13 +85,15 @@ disable each subscribed mod. Starting a game freezes the account's enabled set,
 reopens and hash-verifies every exact latest package, validates the complete
 dependency graph, and provisions only that immutable set.
 
-Each Lua mod receives an isolated bounded VM. Boneyards enter only that
-party run's catalog. Each shared-Hub admission carries that account's immutable
+Each Lua entry script runs once in an isolated bounded definition VM. Advanced
+reducers remain server-only inside the prepared session; browsers receive only
+trusted catalogs and presentation models. Boneyards enter only that party run's
+catalog. Each shared-Hub admission carries that account's immutable
 ordered `id`/`version`/content-hash manifest. A party may launch only when every
 member has the same exact manifest; there is no browser lobby directory or
 join-by-lobby URL.
 
-Browser save schema 2 stores the exact manifest and bounded `sd.state` for each
-Lua mod. A changed save manifest requires explicit Continue or Cancel. On
-Continue, exact-match state is restored, added mods start empty, and missing or
-changed mod state is discarded.
+Browser save schema 9 stores the exact manifest plus graph-bound reducer cells,
+statuses, powerups, spell cooldowns, skills, shops, enemies, and scene epochs.
+A changed save manifest requires explicit Continue or Cancel. State restores
+only for an exact active package and graph match; mismatched state is retired.

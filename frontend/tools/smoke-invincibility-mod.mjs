@@ -30,8 +30,11 @@ import {
 import { startGameHost } from '../src/game/host/game-host.ts'
 import {
   modConsumableInventoryItem,
-} from '../src/game/host/lua/web-lua-content-registry.ts'
-import { materializeWebSessionContent } from '../src/game/host/web-mod-content.ts'
+} from '../src/game/modding/content/mod-content-catalog.ts'
+import {
+  compileWebSessionContentDefinitions,
+  materializeWebSessionContent,
+} from '../src/game/host/web-mod-content.ts'
 
 const require = createRequire(import.meta.url)
 const webRoot = fileURLToPath(new URL('../../backend/wwwroot/', import.meta.url))
@@ -42,16 +45,6 @@ const screenshotRoot = process.env.SDR_INVINCIBILITY_SCREENSHOT_ROOT
 const chromePath = process.env.SDR_CHROME_PATH || (process.platform === 'darwin'
   ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
   : '/usr/bin/google-chrome')
-const expectedCapabilities = [
-  'events.filters.damage',
-  'events.filters.resources',
-  'items.consumables.register',
-  'loot.register',
-  'player.resources.owner',
-  'sprites.local.read',
-  'sprites.local.register',
-  'timer.local.scheduler',
-]
 const expectedContentId = '8068156596081641415'
 
 await mkdir(screenshotRoot, { recursive: true })
@@ -71,8 +64,8 @@ const host = await startGameHost({
   content: content.manifest,
   log: entry => hostLogs.push(entry),
   luaWasmPath: require.resolve('wasmoon/dist/glue.wasm'),
+  modContent: content,
   modAssets: content.assets,
-  mods: content.modSources,
   snapshotRate: 20,
 })
 const catalog = host.modCatalog()
@@ -442,18 +435,21 @@ async function loadInvincibilityContent(root) {
   assert.equal(manifest.id, 'canary.lua.invincibility_potion')
   assert.equal(manifest.name, 'Invincibility Potion')
   assert.equal(manifest.version, '0.3.0')
-  assert.equal(manifest.runtime?.apiVersion, '0.2.0')
-  assert.deepEqual(manifest.runtime.requiredCapabilities, expectedCapabilities)
+  assert.equal(manifest.runtime?.apiVersion, '1.0.0')
   const entryScript = await readFile(join(root, manifest.runtime.entryScript), 'utf8')
   const paths = [
-    'sprites/invincibility_potion.bundle',
-    'sprites/invincibility_potion.png',
+    'art/invincibility_potion.bundle',
+    'art/invincibility_potion.png',
   ]
   const files = await Promise.all(paths.map(async path => {
     const bytes = await readFile(join(root, path))
     return {
       byteLength: bytes.length,
       bytesBase64: bytes.toString('base64'),
+      contentType: path.endsWith('.png')
+        ? 'image/png'
+        : 'application/vnd.solomon-dark.sprite-bundle',
+      kind: path.endsWith('.png') ? 'image' : 'sprite-bundle',
       path,
       sha256: createHash('sha256').update(bytes).digest('hex'),
     }
@@ -470,7 +466,7 @@ async function loadInvincibilityContent(root) {
   const manifestSha256 = createHash('sha256')
     .update(`${manifest.id}\0${manifest.version}\0${contentSha256}`)
     .digest('hex')
-  return materializeWebSessionContent({
+  const content = materializeWebSessionContent({
     manifestSha256,
     mods: [{
       boneyards: [],
@@ -480,11 +476,11 @@ async function loadInvincibilityContent(root) {
       id: manifest.id,
       name: manifest.name,
       priority: 0,
-      requiredCapabilities: manifest.runtime.requiredCapabilities,
       slug: basename(root),
       version: manifest.version,
     }],
   })
+  return compileWebSessionContentDefinitions(content, require.resolve('wasmoon/dist/glue.wasm'))
 }
 
 async function enterHub(page, baseUrl, element) {

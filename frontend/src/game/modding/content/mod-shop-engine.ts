@@ -13,12 +13,27 @@ export interface ModShopPurchase {
   readonly shopContentId: string
 }
 
+export interface ModShopStockState {
+  readonly playerId: string
+  readonly remaining: number
+  readonly row: number
+  readonly shopContentId: string
+}
+
+export interface ModShopCheckpoint {
+  readonly stock: readonly ModShopStockState[]
+}
+
 export class ModShopEngine {
   readonly #catalog: PreparedModContentCatalog
   readonly #remaining = new Map<string, number>()
 
   constructor(catalog: PreparedModContentCatalog) {
     this.#catalog = catalog
+  }
+
+  checkpoint(): ModShopCheckpoint {
+    return Object.freeze({ stock: this.project() })
   }
 
   purchase(
@@ -53,6 +68,35 @@ export class ModShopEngine {
     const shop = this.#catalog.shop(shopContentId)
     if (!shop || !shop.stock[row]) return 0
     return this.#remaining.get(cellKey(playerId, shop, row)) ?? shop.stock[row]!.quantity
+  }
+
+  project(playerId?: string): readonly ModShopStockState[] {
+    return Object.freeze([...this.#remaining.entries()].flatMap(([key, remaining]) => {
+      const [owner, shopContentId, row] = key.split('\0')
+      return playerId !== undefined && owner !== playerId ? [] : [Object.freeze({
+        playerId: owner!,
+        remaining,
+        row: Number(row),
+        shopContentId: shopContentId!,
+      })]
+    }))
+  }
+
+  restore(checkpoint: ModShopCheckpoint): void {
+    if (checkpoint.stock.length > MAXIMUM_SHOP_CELLS) throw new Error('mod shop checkpoint is invalid')
+    const candidate = new Map<string, number>()
+    for (const row of checkpoint.stock) {
+      const shop = this.#catalog.shop(row.shopContentId)
+      const stock = shop?.stock[row.row]
+      const key = shop ? cellKey(row.playerId, shop, row.row) : ''
+      if (!stock || candidate.has(key) || !Number.isSafeInteger(row.remaining) ||
+          row.remaining < 0 || row.remaining > stock.quantity) {
+        throw new Error('mod shop checkpoint contains invalid stock')
+      }
+      candidate.set(key, row.remaining)
+    }
+    this.#remaining.clear()
+    for (const [key, remaining] of candidate) this.#remaining.set(key, remaining)
   }
 }
 

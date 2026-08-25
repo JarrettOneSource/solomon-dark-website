@@ -54,16 +54,30 @@ local spell = sd.kit.spell({
   behavior = sd.prefab.area({radius = 180}),
   art = {icon = sd.art.ref("icon")},
 })
-local spawn_powerup = sd.rules.on("run.started", sd.effect.spawn({
-  content = sd.ref("powerup", "survey_orb"),
-  x = 10000,
-  y = 10000,
+local enemy = sd.kit.enemy({
+  key = "grave_tyrant",
+  name = "Grave Tyrant",
+  base = "stock.skeleton_mage",
+  stats = {health = 250, speed = 2.5},
+  art = {atlas = sd.art.ref("icon")},
+})
+local spawn_content = sd.rules.on("run.started", sd.rules.all({
+  sd.effect.spawn({
+    content = sd.ref("powerup", "survey_orb"),
+    x = 10000,
+    y = 10000,
+  }),
+  sd.effect.spawn({
+    enemy = sd.ref("enemy", "grave_tyrant"),
+    x = 9000,
+    y = 9000,
+  }),
 }))
 return sd.mod({
   api = "1.0.0",
   assets = {icon = icon},
-  content = {status, potion, powerup, spell},
-  rules = {spawn_powerup},
+  content = {status, potion, powerup, spell, enemy},
+  rules = {spawn_content},
 })
 `
 
@@ -126,6 +140,7 @@ test('prepared host consumes a 1.0 potion atomically and owns status filters and
       host.project().powerups[0]?.contentId,
       host.content.all().find(entry => entry.contentKind === 'powerup')?.contentId,
     )
+    assert.equal(host.checkpoint().enemies.enemies[0]?.maximumHealth, 250)
     host.tick(20)
     assert.equal(host.extensions.filterDamage({
       amount: 20,
@@ -186,7 +201,6 @@ async function materialized(): Promise<MaterializedWebSessionContent> {
       entryScript: SCRIPT,
       files: { 'art/icon.png': bytes },
       identity,
-      requiredCapabilities: [],
     }],
     summary: {
       manifestSha256: '1'.repeat(64),

@@ -182,13 +182,13 @@ test('web Lua runtime is Lua 5.4, persistent, bounded, and stripped of unsafe li
     assert.equal(first.ok, true)
     assert.deepEqual(first.output, ['lua\tLua 5.4'])
     assert.equal(first.values[0], 'Lua 5.4')
-    assert.equal(first.values[1], '0.2.0')
+    assert.equal(first.values[1], '1.0.0')
     assert.deepEqual(first.values[2], [...WEB_LUA_CAPABILITIES])
     assert.deepEqual(first.values[3], {
-      api_version: '0.2.0',
+      api_version: '1.0.0',
       id: 'web.dev-console',
       name: 'Browser Dev Console',
-      version: '0.2.0',
+      version: '1.0.0',
     })
     assert.deepEqual(first.values[4], {})
     assert.deepEqual(harness.execute('persistent = persistent + 1; return persistent').values, [42])
@@ -384,7 +384,7 @@ test('web Lua trivial execution stays below the fixed-tick budget', async () => 
   }
 })
 
-test('mod entry scripts and state remain isolated and restore by VM', async () => {
+test('developer console state remains isolated and restores by VM', async () => {
   const create = async (id: string, value: number) => {
     const runtime = await WebLuaRuntime.create({
       bindings: {
@@ -394,7 +394,7 @@ test('mod entry scripts and state remain isolated and restore by VM', async () =
       mod: { id, name: id, version: '1.0.0' },
       wasmPath,
     })
-    runtime.runEntrypoint(`sd.state.set('value', ${value})`)
+    runtime.restoreState({ value })
     return runtime
   }
   const first = await create('tests.first', 1)

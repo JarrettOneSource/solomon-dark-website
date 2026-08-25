@@ -5,12 +5,12 @@ import {
   compileWebLuaDefinition,
   WebLuaDefinitionRuntime,
   type CompiledWebLuaMod,
+  type WebLuaModIdentity,
 } from '../modding/definition/index.ts'
 import {
   projectModBoneyard,
   type ModBoneyardEntry,
 } from './boneyard-catalog.ts'
-import type { WebLuaModSource } from './lua/web-lua-contract.ts'
 
 const SHA256 = /^[a-f0-9]{64}$/
 const PACKAGE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
@@ -72,6 +72,12 @@ export interface MaterializedWebSessionContent {
   readonly summary: WebSessionContentSummary
 }
 
+export interface WebLuaModSource {
+  readonly entryScript: string
+  readonly files: Readonly<Record<string, Uint8Array>>
+  readonly identity: WebLuaModIdentity
+}
+
 export interface WebSessionContentSummary {
   readonly manifestSha256: string
   readonly mods: readonly {
@@ -110,7 +116,6 @@ export function materializeWebSessionContent(value: unknown): MaterializedWebSes
         entryScript: mod.entryScript,
         files: Object.fromEntries(mod.files.map(file => [file.path, file.bytes])),
         identity: { id: mod.id, name: mod.name, version: mod.version },
-        requiredCapabilities: [],
       })
     }
     for (const file of mod.files) {

@@ -55,8 +55,43 @@ export function encodePreparedModSaveState(
           target_id: status.targetId,
         })),
       ...(index === 0 ? { runtime: {
+        enemies: checkpoint.enemies.enemies.map(enemy => ({
+          content_id: enemy.contentId,
+          current_health: enemy.currentHealth,
+          id: enemy.id,
+          maximum_health: enemy.maximumHealth,
+          spawned_tick: enemy.spawnedTick,
+          target_player_id: enemy.targetPlayerId,
+          x: enemy.x,
+          y: enemy.y,
+        })),
+        enemy_next_id: checkpoint.enemies.nextId,
+        enemy_revision: checkpoint.enemies.revision,
         powerup_next_id: checkpoint.powerups.nextId,
         powerup_revision: checkpoint.powerups.revision,
+        scene_next_epoch: checkpoint.scenes.nextEpoch,
+        scenes: checkpoint.scenes.scenes.map(scene => ({
+          epoch: scene.epoch,
+          owner_id: scene.ownerId,
+          parent_content_id: scene.parentContentId,
+          scene_content_id: scene.sceneContentId,
+        })),
+        scene_stacks: checkpoint.scenes.stacks.map(stack => ({
+          owner_id: stack.ownerId,
+          scene_content_ids: stack.sceneContentIds,
+        })),
+        shop_stock: checkpoint.shops.stock.map(stock => ({
+          player_id: stock.playerId,
+          remaining: stock.remaining,
+          row: stock.row,
+          shop_content_id: stock.shopContentId,
+        })),
+        skill_ranks: checkpoint.skills.ranks.map(rank => ({
+          content_id: rank.contentId,
+          player_id: rank.playerId,
+          rank: rank.rank,
+        })),
+        skill_revision: checkpoint.skills.revision,
         spell_revision: checkpoint.spells.revision,
         state_revision: checkpoint.session.state.revision,
         status_next_id: checkpoint.statuses.nextInstanceId,
@@ -133,7 +168,60 @@ export function decodePreparedModSaveState(
     }
     if (index > 0 && entry.runtime !== undefined) throw new Error('mod runtime metadata is duplicated')
   }
+  const enemies = array(runtime.enemies, 'mod enemies').map((value) => {
+    const row = object(value, 'mod enemy')
+    return Object.freeze({
+      contentId: text(row.content_id, 'mod enemy content'),
+      currentHealth: finite(row.current_health, 'mod enemy health'),
+      id: positiveInteger(row.id, 'mod enemy id'),
+      maximumHealth: finite(row.maximum_health, 'mod enemy maximum health'),
+      spawnedTick: nonnegativeInteger(row.spawned_tick, 'mod enemy spawn'),
+      targetPlayerId: row.target_player_id === null ? null : text(row.target_player_id, 'mod enemy target'),
+      x: finite(row.x, 'mod enemy x'),
+      y: finite(row.y, 'mod enemy y'),
+    })
+  })
+  const scenes = array(runtime.scenes, 'mod scenes').map((value) => {
+    const row = object(value, 'mod scene')
+    return Object.freeze({
+      epoch: positiveInteger(row.epoch, 'mod scene epoch'),
+      ownerId: text(row.owner_id, 'mod scene owner'),
+      parentContentId: row.parent_content_id === null ? null : text(row.parent_content_id, 'mod scene parent'),
+      sceneContentId: text(row.scene_content_id, 'mod scene content'),
+    })
+  })
+  const stacks = array(runtime.scene_stacks, 'mod scene stacks').map((value) => {
+    const row = object(value, 'mod scene stack')
+    return Object.freeze({
+      ownerId: text(row.owner_id, 'mod scene stack owner'),
+      sceneContentIds: Object.freeze(array(row.scene_content_ids, 'mod scene stack ids').map(value => (
+        text(value, 'mod scene stack id')
+      ))),
+    })
+  })
+  const stock = array(runtime.shop_stock, 'mod shop stock').map((value) => {
+    const row = object(value, 'mod shop stock row')
+    return Object.freeze({
+      playerId: text(row.player_id, 'mod shop player'),
+      remaining: nonnegativeInteger(row.remaining, 'mod shop remaining'),
+      row: nonnegativeInteger(row.row, 'mod shop row'),
+      shopContentId: text(row.shop_content_id, 'mod shop content'),
+    })
+  })
+  const ranks = array(runtime.skill_ranks, 'mod skill ranks').map((value) => {
+    const row = object(value, 'mod skill rank')
+    return Object.freeze({
+      contentId: text(row.content_id, 'mod skill content'),
+      playerId: text(row.player_id, 'mod skill player'),
+      rank: positiveInteger(row.rank, 'mod skill rank'),
+    })
+  })
   return Object.freeze({
+    enemies: Object.freeze({
+      enemies: Object.freeze(enemies),
+      nextId: positiveInteger(runtime.enemy_next_id, 'mod enemy next id'),
+      revision: nonnegativeInteger(runtime.enemy_revision, 'mod enemy revision'),
+    }),
     powerups: Object.freeze({
       instances: Object.freeze(powerups),
       nextId: positiveInteger(runtime.powerup_next_id, 'mod powerup next id'),
@@ -145,6 +233,16 @@ export function decodePreparedModSaveState(
         cells: Object.freeze(cells),
         revision: nonnegativeInteger(runtime.state_revision, 'mod state revision'),
       }),
+    }),
+    scenes: Object.freeze({
+      nextEpoch: positiveInteger(runtime.scene_next_epoch, 'mod scene next epoch'),
+      scenes: Object.freeze(scenes),
+      stacks: Object.freeze(stacks),
+    }),
+    shops: Object.freeze({ stock: Object.freeze(stock) }),
+    skills: Object.freeze({
+      ranks: Object.freeze(ranks),
+      revision: nonnegativeInteger(runtime.skill_revision, 'mod skill revision'),
     }),
     spells: Object.freeze({
       cooldowns: Object.freeze(cooldowns),
