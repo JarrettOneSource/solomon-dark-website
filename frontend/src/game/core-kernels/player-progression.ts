@@ -133,6 +133,20 @@ export interface PlayerSkillOffer {
   readonly sequence: number
 }
 
+export interface PlayerSkillOfferBuildResult {
+  readonly offer: PlayerSkillOffer
+  readonly rng: NativeRngState
+}
+
+export interface PlayerProgressionRngResult {
+  readonly progression: PlayerProgressionComponent
+  readonly rng: NativeRngState
+}
+
+export interface PlayerSkillChoiceApplyResult extends PlayerProgressionRngResult {
+  readonly skillBook: PlayerSkillBookComponent
+}
+
 export function setAutomaticPlayerSkillChoice(
   source: PlayerProgressionComponent,
   choiceIndex: number,
@@ -783,17 +797,21 @@ export function grantPlayerExperience(
   progression: PlayerProgressionComponent,
   skillBook: PlayerSkillBookComponent,
   amount: number,
+  sourceGameplayRng: NativeRngState,
   sorcerorsCharmOwned = false,
-): PlayerProgressionComponent {
+): PlayerProgressionRngResult {
   if (!Number.isFinite(amount) || amount < 0) {
     throw new RangeError('experience award must be finite and non-negative')
   }
   if (amount === 0 || progression.level >= MAX_PLAYER_LEVEL) {
     const experience = Math.min(MAX_PLAYER_EXPERIENCE, progression.experience + amount)
-    return experience === progression.experience ? progression : {
-      ...progression,
-      experience,
-      revision: progression.revision + 1,
+    return {
+      progression: experience === progression.experience ? progression : {
+        ...progression,
+        experience,
+        revision: progression.revision + 1,
+      },
+      rng: sourceGameplayRng,
     }
   }
 
@@ -840,9 +858,9 @@ export function grantPlayerExperience(
       : false,
   }
   if (!next.pendingOffer && next.pendingLevels.length > 0) {
-    next = withNextSkillOffer(next, skillBook, sorcerorsCharmOwned)
+    return withNextSkillOffer(next, skillBook, sourceGameplayRng, sorcerorsCharmOwned)
   }
-  return next
+  return { progression: next, rng: sourceGameplayRng }
 }
 
 export function boneyardEnemyExperienceAward(
@@ -912,8 +930,9 @@ export function synchronizePlayerLevelMilestone(
   progression: PlayerProgressionComponent,
   skillBook: PlayerSkillBookComponent,
   milestone: SharedPlayerLevelMilestone,
+  sourceGameplayRng: NativeRngState,
   sorcerorsCharmOwned = false,
-): PlayerProgressionComponent {
+): PlayerProgressionRngResult {
   if (!Number.isFinite(milestone.experience) || milestone.experience < 0) {
     throw new RangeError('shared milestone experience must be finite and non-negative')
   }
@@ -956,18 +975,19 @@ export function synchronizePlayerLevelMilestone(
       : false,
   }
   if (!next.pendingOffer && next.pendingLevels.length > 0) {
-    next = withNextSkillOffer(next, skillBook, sorcerorsCharmOwned)
+    return withNextSkillOffer(next, skillBook, sourceGameplayRng, sorcerorsCharmOwned)
   }
-  return next
+  return { progression: next, rng: sourceGameplayRng }
 }
 
 export function applyPlayerSkillChoice(
   progression: PlayerProgressionComponent,
   skillBook: PlayerSkillBookComponent,
   selection: { choiceIndex: number; offerSequence: number; skillId: number },
+  sourceGameplayRng: NativeRngState,
   sorcerorsCharmOwned = false,
   ownedHagathaSelectors: readonly number[] = [],
-): { progression: PlayerProgressionComponent; skillBook: PlayerSkillBookComponent } | null {
+): PlayerSkillChoiceApplyResult | null {
   const offer = progression.pendingOffer
   if (!offer || offer.sequence !== selection.offerSequence) return null
   const chosen = offer.options[selection.choiceIndex]
@@ -1026,14 +1046,18 @@ export function applyPlayerSkillChoice(
     sorcerorsCharmAvailable: false,
   }
   nextProgression = refreshWeldOfferMarker(nextProgression, nextBook)
+  let gameplayRng = sourceGameplayRng
   if (nextProgression.pendingLevels.length > 0) {
-    nextProgression = withNextSkillOffer(
+    const built = withNextSkillOffer(
       nextProgression,
       nextBook,
+      gameplayRng,
       sorcerorsCharmOwned,
     )
+    nextProgression = built.progression
+    gameplayRng = built.rng
   }
-  return { progression: nextProgression, skillBook: nextBook }
+  return { progression: nextProgression, rng: gameplayRng, skillBook: nextBook }
 }
 
 export function rerollPlayerSkillOffer(
@@ -1041,7 +1065,8 @@ export function rerollPlayerSkillOffer(
   skillBook: PlayerSkillBookComponent,
   offerSequence: number,
   nextOfferSeed: number,
-): PlayerProgressionComponent | null {
+  sourceGameplayRng: NativeRngState,
+): PlayerProgressionRngResult | null {
   if (
     !progression.sorcerorsCharmAvailable
     || progression.pendingOffer?.sequence !== offerSequence
@@ -1054,15 +1079,16 @@ export function rerollPlayerSkillOffer(
     offerSeed: nextOfferSeed,
     pendingOffer: null,
     sorcerorsCharmAvailable: false,
-  }, skillBook, false)
+  }, skillBook, sourceGameplayRng, false)
 }
 
 export function deferPlayerSkillChoice(
   progression: PlayerProgressionComponent,
   skillBook: PlayerSkillBookComponent,
   offerSequence: number,
+  sourceGameplayRng: NativeRngState,
   sorcerorsCharmOwned: boolean,
-): PlayerProgressionComponent | null {
+): PlayerProgressionRngResult | null {
   if (
     !sorcerorsCharmOwned
     || !progression.sorcerorsCharmAvailable
@@ -1077,16 +1103,17 @@ export function deferPlayerSkillChoice(
     sorcerorsCharmAvailable: false,
   }
   if (next.pendingLevels.length > 0) {
-    next = withNextSkillOffer(next, skillBook, true)
+    return withNextSkillOffer(next, skillBook, sourceGameplayRng, true)
   }
-  return next
+  return { progression: next, rng: sourceGameplayRng }
 }
 
 export function grantPlayerBonusSkillChoice(
   progression: PlayerProgressionComponent,
   skillBook: PlayerSkillBookComponent,
+  sourceGameplayRng: NativeRngState,
   sorcerorsCharmOwned = false,
-): PlayerProgressionComponent {
+): PlayerProgressionRngResult {
   const pendingLevels = Object.freeze([...progression.pendingLevels, progression.level])
   const queued: PlayerProgressionComponent = {
     ...progression,
@@ -1096,8 +1123,8 @@ export function grantPlayerBonusSkillChoice(
       : progression.revision + 1,
   }
   return progression.pendingOffer === null
-    ? withNextSkillOffer(queued, skillBook, sorcerorsCharmOwned)
-    : queued
+    ? withNextSkillOffer(queued, skillBook, sourceGameplayRng, sorcerorsCharmOwned)
+    : { progression: queued, rng: sourceGameplayRng }
 }
 
 export function increaseRandomLearnedSkill(
@@ -1213,8 +1240,10 @@ export function buildPlayerSkillOffer(
   >,
   skillBook: PlayerSkillBookComponent,
   sequence: number,
-): PlayerSkillOffer {
+  sourceGameplayRng: NativeRngState,
+): PlayerSkillOfferBuildResult {
   let rng = createNativeRng(progression.offerSeed)
+  let gameplayRng = sourceGameplayRng
   const desired = learned(skillBook, 63) ? 4 : 3
   const categoryOneOwned = countOwnedCategory(skillBook, 1)
   const categoryTwoOwned = countOwnedCategory(skillBook, 2)
@@ -1307,7 +1336,7 @@ export function buildPlayerSkillOffer(
       && skillId <= 79
       && skillId !== SPELL_WELDING_SKILL_ID
       && hasDependenciesAndUnlock(skillId, skillBook)
-    ) selected.push(offerOption(skillId, skillBook))
+    ) insertUniqueOfferOption(selected, offerOption(skillId, skillBook))
   }
   if (rootPriority.length > 0 && selected.length < desired) {
     let priorityPool = rootPriority
@@ -1320,13 +1349,13 @@ export function buildPlayerSkillOffer(
     }
     const draw = drawNativeInteger(rng, priorityPool.length)
     rng = draw.state
-    selected.push(offerOption(priorityPool[draw.value]!, skillBook))
+    insertUniqueOfferOption(selected, offerOption(priorityPool[draw.value]!, skillBook))
   }
 
   if (selected.length < desired) {
-    const welding = drawSpellWeldingOption(progression, skillBook, rng)
-    rng = welding.rng
-    if (welding.option) selected.push(welding.option)
+    const welding = drawSpellWeldingOption(progression, skillBook, gameplayRng)
+    gameplayRng = welding.rng
+    if (welding.option) insertUniqueOfferOption(selected, welding.option)
   }
 
   const ownedCount = skillBook.permanentRanks.slice(8, 82).filter((rank) => rank > 0).length
@@ -1383,13 +1412,24 @@ export function buildPlayerSkillOffer(
       categoryOneCollisions += 1
       continue
     }
-    selected.push(offerOption(skillId, skillBook))
+    insertUniqueOfferOption(selected, offerOption(skillId, skillBook))
   }
 
   let options: PlayerSkillOfferOption[]
-  ;({ values: options, rng } = fullRangeShuffle(selected, rng))
-  void rng
-  return { level: progression.level, options: Object.freeze(options), sequence }
+  ;({ values: options, rng: gameplayRng } = fullRangeShuffle(selected, gameplayRng))
+  return {
+    offer: { level: progression.level, options: Object.freeze(options), sequence },
+    rng: gameplayRng,
+  }
+}
+
+function insertUniqueOfferOption(
+  selected: PlayerSkillOfferOption[],
+  option: PlayerSkillOfferOption,
+): boolean {
+  if (selected.some(({ skillId }) => skillId === option.skillId)) return false
+  selected.push(option)
+  return true
 }
 
 function offerOption(skillId: number, skillBook: PlayerSkillBookComponent): PlayerSkillOfferOption {
@@ -1470,18 +1510,30 @@ function refreshWeldOfferMarker(
 function withNextSkillOffer(
   progression: PlayerProgressionComponent,
   skillBook: PlayerSkillBookComponent,
+  sourceGameplayRng: NativeRngState,
   sorcerorsCharmAvailable: boolean,
-): PlayerProgressionComponent {
-  if (progression.pendingLevels.length === 0) return progression
+): PlayerProgressionRngResult {
+  if (progression.pendingLevels.length === 0) {
+    return { progression, rng: sourceGameplayRng }
+  }
   const sequence = progression.revision + 1
   const offerCycle = (progression.offerCycle + 1) >>> 0
   const offerProgression = { ...progression, offerCycle }
+  const built = buildPlayerSkillOffer(
+    offerProgression,
+    skillBook,
+    sequence,
+    sourceGameplayRng,
+  )
   return {
-    ...progression,
-    offerCycle,
-    pendingOffer: buildPlayerSkillOffer(offerProgression, skillBook, sequence),
-    revision: sequence,
-    sorcerorsCharmAvailable,
+    progression: {
+      ...progression,
+      offerCycle,
+      pendingOffer: built.offer,
+      revision: sequence,
+      sorcerorsCharmAvailable,
+    },
+    rng: built.rng,
   }
 }
 

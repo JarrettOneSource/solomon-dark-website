@@ -16,6 +16,7 @@ import {
 } from '../src/game/core-server/game-simulation.ts'
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../src/game/core-kernels/boneyard-wave-schema.ts'
 import { replacePlayerEconomy } from '../src/game/core-server/player-entity-store.ts'
+import { advanceNativeRngWords } from '../src/game/core-kernels/native-rng.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 
 const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
@@ -228,12 +229,14 @@ try {
   }
   assert.deepEqual(actionReceipt.map(({ centerX }) => centerX), [600, 800, 1000])
   assert.ok(actionReceipt.every(({ label, skillId }) => label && skillId >= 8 && skillId <= 79))
+  assert.equal(new Set(actionReceipt.map(({ skillId }) => skillId)).size, 3)
 
   const beforeChoice = getPlayerProgression(host.state(), playerId)
   assert.equal(beforeChoice.level, 4)
   assert.equal(beforeChoice.experience, 300)
   assert.deepEqual(beforeChoice.pendingLevels, [4, 4, 4])
   assert.equal(beforeChoice.pendingOffer?.options.length, 3)
+  assertUniquePendingOffer(beforeChoice, 'initial Hub offer')
   assert.equal(beforeChoice.sorcerorsCharmAvailable, true)
   const playerXBeforeBlockedInput = getPlayerCharacter(host.state(), playerId).position.x
   await page.keyboard.press('Escape')
@@ -276,7 +279,7 @@ try {
   await page.screenshot({ path: screenshotPath })
 
   const rerollSequence = beforeChoice.pendingOffer.sequence
-  const rerollRngBefore = { ...host.state().playerOfferRng }
+  const rerollRngBefore = host.state().gameRng
   const summonRatesBeforeReroll = await soundRates(page, 'summon')
   const frozenHubFramesPromise = sampleHubWorldFrames(hubCanvas)
   await picker.getByRole('button', { name: 'Roll Again' }).click()
@@ -289,7 +292,8 @@ try {
       && Number(stage.dataset.offerSequence) !== previousSequence
   }, rerollSequence, { timeout: 10_000 })
   const rerolled = getPlayerProgression(host.state(), playerId)
-  assert.notDeepEqual(host.state().playerOfferRng, rerollRngBefore)
+  assert.deepEqual(host.state().gameRng, advanceNativeRngWords(rerollRngBefore, 4))
+  assertUniquePendingOffer(rerolled, 'rerolled Hub offer')
   assert.equal(rerolled.sorcerorsCharmAvailable, false)
   assert.equal(await picker.getByRole('button', { name: 'Roll Again' }).count(), 0)
   assert.deepEqual(
@@ -355,6 +359,7 @@ try {
   }, saveSequence, { timeout: 10_000 })
   assert.ok(Date.now() - saveCloseStartedAt >= 480)
   const saved = getPlayerProgression(host.state(), playerId)
+  assertUniquePendingOffer(saved, 'saved-choice successor offer')
   assert.equal(saved.deferredSkillChoices, 1)
   assert.deepEqual(saved.pendingLevels, [4])
   assert.equal(saved.sorcerorsCharmAvailable, true)
@@ -400,6 +405,7 @@ try {
       === 'true'
   ), undefined, { timeout: 15_000 })
   const recovered = getPlayerProgression(host.state(), playerId)
+  assertUniquePendingOffer(recovered, 'recovered deferred offer')
   assert.equal(recovered.deferredSkillChoices, 0)
   assert.deepEqual(recovered.pendingLevels, [5, 5])
   assert.equal(recovered.pendingOffer.level, 5)
@@ -458,6 +464,10 @@ try {
   assert.ok(
     getPlayerProgression(boneyardLevelUp, playerId).pendingOffer,
     'expected a Boneyard skill offer',
+  )
+  assertUniquePendingOffer(
+    getPlayerProgression(boneyardLevelUp, playerId),
+    'Boneyard offer',
   )
   const boneyardRevealReceiptPromise = observeNextPickerReveal(page, 'Boneyard')
   Object.assign(host.state(), boneyardLevelUp)
@@ -541,6 +551,12 @@ try {
   await browser.close()
   await host.close()
   await vite.close()
+}
+
+function assertUniquePendingOffer(progression, label) {
+  assert.ok(progression.pendingOffer, `${label} is missing`)
+  const ids = progression.pendingOffer.options.map(({ skillId }) => skillId)
+  assert.equal(new Set(ids).size, ids.length, `${label} repeated ${ids.join(',')}`)
 }
 
 async function soundCount(page, sourceFragment) {

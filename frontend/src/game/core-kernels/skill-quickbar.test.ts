@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import type { PlayerCharacterConfig } from './player-character.ts'
+import { createNativeRng } from './native-rng.ts'
 import {
   applyPlayerSkillChoice,
   bindPlayerSkillQuickbar,
@@ -160,7 +161,7 @@ function choose(
     choiceIndex: 0,
     offerSequence: skillId * 100 + targetRank,
     skillId,
-  })
+  }, createNativeRng(skillId))
   assert.ok(applied)
   return applied.skillBook
 }

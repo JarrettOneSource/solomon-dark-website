@@ -154,13 +154,16 @@ export interface PlayerEntityHagathaPurchaseResult {
   readonly weirdCasterSkillId: number | null
 }
 
-export interface PlayerEntitySkillSelectionAutofillResult {
+export interface PlayerEntityRngResult {
   readonly rng: NativeRngState
   readonly store: PlayerEntityStore
 }
 
+export interface PlayerEntitySkillSelectionAutofillResult extends PlayerEntityRngResult {}
+
 export interface PlayerEntitySharedExperienceResult {
   readonly milestone: SharedPlayerLevelMilestone | null
+  readonly rng: NativeRngState
   readonly store: PlayerEntityStore
 }
 
@@ -1283,18 +1286,21 @@ export function grantPlayerEntityExperience(
   source: PlayerEntityStore,
   playerId: string,
   amount: number,
-): PlayerEntityStore {
+  sourceGameplayRng: NativeRngState,
+): PlayerEntityRngResult {
   const index = playerEntityIndex(source, playerId)
   if (index < 0) throw new Error(`player entity store has no player ${playerId}`)
   const previous = source.progressions[index]!
   const progressions = [...source.progressions]
-  progressions[index] = grantPlayerExperience(
+  const granted = grantPlayerExperience(
     previous,
     source.skillBooks[index]!,
     amount,
+    sourceGameplayRng,
     ownsSorcerorsCharm(source, index),
   )
-  return { ...source, progressions }
+  progressions[index] = granted.progression
+  return { rng: granted.rng, store: { ...source, progressions } }
 }
 
 export function creditPlayerEntityLootGold(
@@ -1352,12 +1358,13 @@ export function grantPlayerEntitySkillRanks(
   playerId: string,
   skillId: number,
   ranks: number,
-): PlayerEntityStore {
+  sourceGameplayRng: NativeRngState,
+): PlayerEntityRngResult {
   const index = playerEntityIndex(source, playerId)
-  if (index < 0) return source
+  if (index < 0) return { rng: sourceGameplayRng, store: source }
   const skillBook = grantPlayerSkillRanks(source.skillBooks[index]!, skillId, ranks)
   return skillBook === source.skillBooks[index]
-    ? source
+    ? { rng: sourceGameplayRng, store: source }
     : refreshPendingPlayerSkillOffer(
         replacePlayerSkillState(
           source,
@@ -1367,6 +1374,7 @@ export function grantPlayerEntitySkillRanks(
           source.economies[index]!,
         ),
         index,
+        sourceGameplayRng,
       )
 }
 
@@ -1374,9 +1382,10 @@ export function grantPlayerEntityWeldBuild(
   source: PlayerEntityStore,
   playerId: string,
   buildId: number,
-): PlayerEntityStore {
+  sourceGameplayRng: NativeRngState,
+): PlayerEntityRngResult {
   const index = playerEntityIndex(source, playerId)
-  if (index < 0) return source
+  if (index < 0) return { rng: sourceGameplayRng, store: source }
   return refreshPendingPlayerSkillOffer(
     replacePlayerSkillState(
       source,
@@ -1386,6 +1395,7 @@ export function grantPlayerEntityWeldBuild(
       source.economies[index]!,
     ),
     index,
+    sourceGameplayRng,
   )
 }
 
@@ -1405,18 +1415,20 @@ export function consumePlayerEntityWizardKey(
 export function grantPlayerEntityBonusSkillChoice(
   source: PlayerEntityStore,
   playerId: string,
-): PlayerEntityStore {
+  sourceGameplayRng: NativeRngState,
+): PlayerEntityRngResult {
   const index = playerEntityIndex(source, playerId)
-  if (index < 0) return source
-  return replacePlayerProgression(
-    source,
-    index,
-    grantPlayerBonusSkillChoice(
-      source.progressions[index]!,
-      source.skillBooks[index]!,
-      ownsSorcerorsCharm(source, index),
-    ),
+  if (index < 0) return { rng: sourceGameplayRng, store: source }
+  const granted = grantPlayerBonusSkillChoice(
+    source.progressions[index]!,
+    source.skillBooks[index]!,
+    sourceGameplayRng,
+    ownsSorcerorsCharm(source, index),
   )
+  return {
+    rng: granted.rng,
+    store: replacePlayerProgression(source, index, granted.progression),
+  }
 }
 
 export function increaseRandomPlayerEntitySkill(
@@ -1452,6 +1464,7 @@ export function grantSharedPlayerEntityExperience(
   playerId: string,
   amount: number,
   participantIds: readonly string[],
+  sourceGameplayRng: NativeRngState,
 ): PlayerEntitySharedExperienceResult {
   const sourceIndex = playerEntityIndex(source, playerId)
   if (sourceIndex < 0) throw new Error(`player entity store has no player ${playerId}`)
@@ -1465,54 +1478,63 @@ export function grantSharedPlayerEntityExperience(
     }
   }
   const previous = source.progressions[sourceIndex]!
+  let gameplayRng = sourceGameplayRng
   const awarded = grantPlayerExperience(
     previous,
     source.skillBooks[sourceIndex]!,
     amount,
+    gameplayRng,
     ownsSorcerorsCharm(source, sourceIndex),
   )
+  gameplayRng = awarded.rng
   const progressions = [...source.progressions]
-  progressions[sourceIndex] = awarded
-  if (awarded.level === previous.level) {
-    return { milestone: null, store: { ...source, progressions } }
+  progressions[sourceIndex] = awarded.progression
+  if (awarded.progression.level === previous.level) {
+    return { milestone: null, rng: gameplayRng, store: { ...source, progressions } }
   }
   const crossedLevels = Object.freeze(Array.from(
-    { length: awarded.level - previous.level },
+    { length: awarded.progression.level - previous.level },
     (_, index) => previous.level + index + 1,
   ))
   const milestone: SharedPlayerLevelMilestone = Object.freeze({
     crossedLevels,
-    experience: awarded.experience,
-    level: awarded.level,
+    experience: awarded.progression.experience,
+    level: awarded.progression.level,
   })
   for (const participantId of stableParticipantIds) {
     const index = playerEntityIndex(source, participantId)
     if (index === sourceIndex) continue
     const previousProgression = source.progressions[index]!
-    progressions[index] = synchronizePlayerLevelMilestone(
+    const synchronized = synchronizePlayerLevelMilestone(
       previousProgression,
       source.skillBooks[index]!,
       milestone,
+      gameplayRng,
       ownsSorcerorsCharm(source, index),
     )
+    progressions[index] = synchronized.progression
+    gameplayRng = synchronized.rng
   }
-  return { milestone, store: { ...source, progressions } }
+  return { milestone, rng: gameplayRng, store: { ...source, progressions } }
 }
 
 export function synchronizePlayerEntityLevelMilestone(
   source: PlayerEntityStore,
   playerId: string,
   milestone: SharedPlayerLevelMilestone,
-): PlayerEntityStore {
+  sourceGameplayRng: NativeRngState,
+): PlayerEntityRngResult {
   const index = playerEntityIndex(source, playerId)
   if (index < 0) throw new Error(`player entity store has no player ${playerId}`)
   const previous = source.progressions[index]!
-  let progression = synchronizePlayerLevelMilestone(
+  const synchronized = synchronizePlayerLevelMilestone(
     previous,
     source.skillBooks[index]!,
     milestone,
+    sourceGameplayRng,
     ownsSorcerorsCharm(source, index),
   )
+  let progression = synchronized.progression
   if (progression.level > previous.level) {
     progression = {
       ...progression,
@@ -1520,33 +1542,41 @@ export function synchronizePlayerEntityLevelMilestone(
       currentMana: progression.maximumMana,
     }
   }
-  return replacePlayerProgression(source, index, progression)
+  return {
+    rng: synchronized.rng,
+    store: replacePlayerProgression(source, index, progression),
+  }
 }
 
 export function applyPlayerEntitySkillChoice(
   source: PlayerEntityStore,
   playerId: string,
   selection: { choiceIndex: number; offerSequence: number; skillId: number },
-): PlayerEntityStore | null {
+  sourceGameplayRng: NativeRngState,
+): PlayerEntityRngResult | null {
   const index = playerEntityIndex(source, playerId)
   if (index < 0) return null
   const applied = applyPlayerSkillChoice(
     source.progressions[index]!,
     source.skillBooks[index]!,
     selection,
+    sourceGameplayRng,
     ownsSorcerorsCharm(source, index),
     source.economies[index]!.ownedPerkSelectors,
   )
   if (!applied) return null
   const progressions = [...source.progressions]
   progressions[index] = applied.progression
-  return replacePlayerSkillState(
-    { ...source, progressions },
-    index,
-    applied.skillBook,
-    source.skillRuntimes[index]!,
-    source.economies[index]!,
-  )
+  return {
+    rng: applied.rng,
+    store: replacePlayerSkillState(
+      { ...source, progressions },
+      index,
+      applied.skillBook,
+      source.skillRuntimes[index]!,
+      source.economies[index]!,
+    ),
+  }
 }
 
 export function rerollPlayerEntitySkillOffer(
@@ -1554,7 +1584,8 @@ export function rerollPlayerEntitySkillOffer(
   playerId: string,
   offerSequence: number,
   nextOfferSeed: number,
-): PlayerEntityStore | null {
+  sourceGameplayRng: NativeRngState,
+): PlayerEntityRngResult | null {
   const index = playerEntityIndex(source, playerId)
   if (index < 0 || !ownsSorcerorsCharm(source, index)) return null
   const progression = rerollPlayerSkillOffer(
@@ -1562,24 +1593,33 @@ export function rerollPlayerEntitySkillOffer(
     source.skillBooks[index]!,
     offerSequence,
     nextOfferSeed,
+    sourceGameplayRng,
   )
-  return progression === null ? null : replacePlayerProgression(source, index, progression)
+  return progression === null ? null : {
+    rng: progression.rng,
+    store: replacePlayerProgression(source, index, progression.progression),
+  }
 }
 
 export function deferPlayerEntitySkillChoice(
   source: PlayerEntityStore,
   playerId: string,
   offerSequence: number,
-): PlayerEntityStore | null {
+  sourceGameplayRng: NativeRngState,
+): PlayerEntityRngResult | null {
   const index = playerEntityIndex(source, playerId)
   if (index < 0) return null
   const progression = deferPlayerSkillChoice(
     source.progressions[index]!,
     source.skillBooks[index]!,
     offerSequence,
+    sourceGameplayRng,
     ownsSorcerorsCharm(source, index),
   )
-  return progression === null ? null : replacePlayerProgression(source, index, progression)
+  return progression === null ? null : {
+    rng: progression.rng,
+    store: replacePlayerProgression(source, index, progression.progression),
+  }
 }
 
 function resolveNativeHagathaDamage(
@@ -1683,20 +1723,23 @@ function replacePlayerProgression(
 function refreshPendingPlayerSkillOffer(
   source: PlayerEntityStore,
   index: number,
-): PlayerEntityStore {
+  sourceGameplayRng: NativeRngState,
+): PlayerEntityRngResult {
   const progression = source.progressions[index]!
-  if (progression.pendingOffer === null) return source
+  if (progression.pendingOffer === null) return { rng: sourceGameplayRng, store: source }
+  const built = buildPlayerSkillOffer(
+    progression,
+    source.skillBooks[index]!,
+    progression.pendingOffer.sequence,
+    sourceGameplayRng,
+  )
   const progressions = [...source.progressions]
   progressions[index] = {
     ...progression,
-    pendingOffer: buildPlayerSkillOffer(
-      progression,
-      source.skillBooks[index]!,
-      progression.pendingOffer.sequence,
-    ),
+    pendingOffer: built.offer,
     revision: progression.revision + 1,
   }
-  return { ...source, progressions }
+  return { rng: built.rng, store: { ...source, progressions } }
 }
 
 function replacePlayerSkillState(

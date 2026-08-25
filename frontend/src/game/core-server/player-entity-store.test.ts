@@ -274,7 +274,7 @@ test('each player owns private progression and ranks while sharing immutable sta
   store = addPlayerEntity(store, 'first', FIRST, createPlayerCharacter(FIRST, { x: 0, y: 0 }), 10)
   store = addPlayerEntity(store, 'second', SECOND, createPlayerCharacter(SECOND, { x: 0, y: 0 }), 20)
   const secondProgression = playerProgressionAt(store, 'second')
-  store = grantPlayerEntityExperience(store, 'first', 100)
+  store = grantPlayerEntityExperience(store, 'first', 100, createNativeRng(101)).store
   assert.equal(playerProgressionAt(store, 'first')?.level, 2)
   assert.equal(playerProgressionAt(store, 'second'), secondProgression)
   assert.notEqual(
@@ -318,7 +318,7 @@ test('wave respawn restores only a non-positive player on the same durable entit
   let store = createPlayerEntityStore()
   store = addPlayerEntity(store, 'first', FIRST, createPlayerCharacter(FIRST, { x: 10, y: 20 }), 10)
   store = addPlayerEntity(store, 'second', SECOND, createPlayerCharacter(SECOND, { x: 30, y: 40 }), 20)
-  store = grantPlayerEntityExperience(store, 'first', 100)
+  store = grantPlayerEntityExperience(store, 'first', 100, createNativeRng(102)).store
   store = replacePlayerCharacter(store, 'first', {
     ...playerCharacterAt(store, 'first')!,
     headingIndex: 7,
@@ -380,7 +380,7 @@ test('new-run placement resets transient combat while retaining dense identity a
   let store = createPlayerEntityStore()
   store = addPlayerEntity(store, 'first', FIRST, createPlayerCharacter(FIRST, { x: 0, y: 0 }), 10)
   store = addPlayerEntity(store, 'second', SECOND, createPlayerCharacter(SECOND, { x: 0, y: 0 }), 20)
-  store = grantPlayerEntityExperience(store, 'first', 100)
+  store = grantPlayerEntityExperience(store, 'first', 100, createNativeRng(103)).store
   store = poisonPlayerEntity(store, 'first', 5, 10)
   store = coldSlowPlayerEntity(store, 'first', 200)
   store = dazzlePlayerEntity(store, 'first', 50)
@@ -476,7 +476,7 @@ test('loot credits exactly one dense participant economy or skill row', () => {
   store = inserted.store
   assert.equal(playerEconomyAt(store, 'first')?.backpack[0]?.quantity, 2)
 
-  store = grantPlayerEntityBonusSkillChoice(store, 'first')
+  store = grantPlayerEntityBonusSkillChoice(store, 'first', createNativeRng(104)).store
   assert.ok(playerProgressionAt(store, 'first')?.pendingOffer)
   const increased = increaseRandomPlayerEntitySkill(store, 'first', createNativeRng(123))
   assert.notEqual(increased.skillId, null)

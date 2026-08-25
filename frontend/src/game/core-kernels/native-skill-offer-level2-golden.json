@@ -1,0 +1,1151 @@
+{
+  "schema": "solomon-dark-skill-offer-level2-golden-v1",
+  "retail_binary_sha256": "03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3",
+  "source_capture_sha256": "d9716cf2fde89c8f29b822bf5d6e8f42f2e736d7868ce0f4b679b8e83ec0b81a",
+  "loadout": {
+    "advancedUnlocks": [
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "disciplineOfferBias": 0,
+    "disciplineRoot": 7,
+    "effectiveRanks": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "elementRoot": 0,
+    "featureFlags": 0,
+    "forcedOfferSkillIds": [],
+    "level": 2,
+    "maximumMana": 100.0,
+    "offerCycle": 0,
+    "permanentRanks": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "primarySkillId": 8,
+    "secondarySkillId": 11,
+    "weldOfferMarker": 9999
+  },
+  "gameplayWordsConsumedPerRoll": 3,
+  "nativeFrequency": [
+    {
+      "count": 39,
+      "skillId": 8
+    },
+    {
+      "count": 26,
+      "skillId": 9
+    },
+    {
+      "count": 21,
+      "skillId": 10
+    },
+    {
+      "count": 21,
+      "skillId": 11
+    },
+    {
+      "count": 24,
+      "skillId": 48
+    },
+    {
+      "count": 26,
+      "skillId": 49
+    },
+    {
+      "count": 19,
+      "skillId": 50
+    },
+    {
+      "count": 22,
+      "skillId": 56
+    },
+    {
+      "count": 18,
+      "skillId": 57
+    },
+    {
+      "count": 31,
+      "skillId": 64
+    },
+    {
+      "count": 30,
+      "skillId": 65
+    },
+    {
+      "count": 23,
+      "skillId": 67
+    }
+  ],
+  "rolls": [
+    {
+      "gameplaySeed": 509502,
+      "offerSeed": 929799,
+      "options": [
+        9,
+        65,
+        10
+      ]
+    },
+    {
+      "gameplaySeed": 578570,
+      "offerSeed": 510067,
+      "options": [
+        11,
+        50,
+        67
+      ]
+    },
+    {
+      "gameplaySeed": 39496,
+      "offerSeed": 391290,
+      "options": [
+        11,
+        9,
+        64
+      ]
+    },
+    {
+      "gameplaySeed": 618066,
+      "offerSeed": 901358,
+      "options": [
+        56,
+        11,
+        67
+      ]
+    },
+    {
+      "gameplaySeed": 657563,
+      "offerSeed": 244073,
+      "options": [
+        67,
+        50,
+        10
+      ]
+    },
+    {
+      "gameplaySeed": 227053,
+      "offerSeed": 96855,
+      "options": [
+        48,
+        56,
+        64
+      ]
+    },
+    {
+      "gameplaySeed": 884616,
+      "offerSeed": 340928,
+      "options": [
+        49,
+        64,
+        65
+      ]
+    },
+    {
+      "gameplaySeed": 63094,
+      "offerSeed": 437784,
+      "options": [
+        48,
+        49,
+        67
+      ]
+    },
+    {
+      "gameplaySeed": 947711,
+      "offerSeed": 778712,
+      "options": [
+        8,
+        48,
+        11
+      ]
+    },
+    {
+      "gameplaySeed": 10805,
+      "offerSeed": 167920,
+      "options": [
+        57,
+        65,
+        48
+      ]
+    },
+    {
+      "gameplaySeed": 909940,
+      "offerSeed": 946633,
+      "options": [
+        10,
+        56,
+        57
+      ]
+    },
+    {
+      "gameplaySeed": 872169,
+      "offerSeed": 65978,
+      "options": [
+        50,
+        67,
+        48
+      ]
+    },
+    {
+      "gameplaySeed": 733534,
+      "offerSeed": 12611,
+      "options": [
+        50,
+        8,
+        65
+      ]
+    },
+    {
+      "gameplaySeed": 557127,
+      "offerSeed": 30013,
+      "options": [
+        50,
+        10,
+        9
+      ]
+    },
+    {
+      "gameplaySeed": 242085,
+      "offerSeed": 42625,
+      "options": [
+        65,
+        10,
+        64
+      ]
+    },
+    {
+      "gameplaySeed": 799213,
+      "offerSeed": 24062,
+      "options": [
+        48,
+        56,
+        64
+      ]
+    },
+    {
+      "gameplaySeed": 41299,
+      "offerSeed": 18112,
+      "options": [
+        50,
+        65,
+        9
+      ]
+    },
+    {
+      "gameplaySeed": 791937,
+      "offerSeed": 42175,
+      "options": [
+        10,
+        48,
+        56
+      ]
+    },
+    {
+      "gameplaySeed": 784660,
+      "offerSeed": 60287,
+      "options": [
+        9,
+        64,
+        57
+      ]
+    },
+    {
+      "gameplaySeed": 528021,
+      "offerSeed": 102462,
+      "options": [
+        67,
+        64,
+        9
+      ]
+    },
+    {
+      "gameplaySeed": 264105,
+      "offerSeed": 162749,
+      "options": [
+        65,
+        8,
+        56
+      ]
+    },
+    {
+      "gameplaySeed": 792127,
+      "offerSeed": 265211,
+      "options": [
+        8,
+        9,
+        64
+      ]
+    },
+    {
+      "gameplaySeed": 7657,
+      "offerSeed": 427961,
+      "options": [
+        48,
+        65,
+        49
+      ]
+    },
+    {
+      "gameplaySeed": 799784,
+      "offerSeed": 693173,
+      "options": [
+        9,
+        50,
+        67
+      ]
+    },
+    {
+      "gameplaySeed": 1738,
+      "offerSeed": 561875,
+      "options": [
+        10,
+        49,
+        67
+      ]
+    },
+    {
+      "gameplaySeed": 620857,
+      "offerSeed": 762118,
+      "options": [
+        10,
+        50,
+        65
+      ]
+    },
+    {
+      "gameplaySeed": 622596,
+      "offerSeed": 275418,
+      "options": [
+        50,
+        57,
+        49
+      ]
+    },
+    {
+      "gameplaySeed": 194878,
+      "offerSeed": 37537,
+      "options": [
+        49,
+        8,
+        57
+      ]
+    },
+    {
+      "gameplaySeed": 817474,
+      "offerSeed": 264379,
+      "options": [
+        50,
+        11,
+        64
+      ]
+    },
+    {
+      "gameplaySeed": 12353,
+      "offerSeed": 253340,
+      "options": [
+        8,
+        9,
+        64
+      ]
+    },
+    {
+      "gameplaySeed": 781251,
+      "offerSeed": 517719,
+      "options": [
+        48,
+        64,
+        56
+      ]
+    },
+    {
+      "gameplaySeed": 745029,
+      "offerSeed": 771060,
+      "options": [
+        8,
+        67,
+        11
+      ]
+    },
+    {
+      "gameplaySeed": 477705,
+      "offerSeed": 240204,
+      "options": [
+        49,
+        65,
+        8
+      ]
+    },
+    {
+      "gameplaySeed": 174158,
+      "offerSeed": 11264,
+      "options": [
+        67,
+        10,
+        49
+      ]
+    },
+    {
+      "gameplaySeed": 651863,
+      "offerSeed": 202892,
+      "options": [
+        56,
+        49,
+        50
+      ]
+    },
+    {
+      "gameplaySeed": 826021,
+      "offerSeed": 165580,
+      "options": [
+        9,
+        10,
+        65
+      ]
+    },
+    {
+      "gameplaySeed": 429309,
+      "offerSeed": 368473,
+      "options": [
+        56,
+        49,
+        11
+      ]
+    },
+    {
+      "gameplaySeed": 206754,
+      "offerSeed": 534054,
+      "options": [
+        8,
+        49,
+        57
+      ]
+    },
+    {
+      "gameplaySeed": 636064,
+      "offerSeed": 902527,
+      "options": [
+        9,
+        65,
+        64
+      ]
+    },
+    {
+      "gameplaySeed": 842818,
+      "offerSeed": 388005,
+      "options": [
+        48,
+        56,
+        65
+      ]
+    },
+    {
+      "gameplaySeed": 430307,
+      "offerSeed": 241956,
+      "options": [
+        65,
+        11,
+        56
+      ]
+    },
+    {
+      "gameplaySeed": 224550,
+      "offerSeed": 629962,
+      "options": [
+        8,
+        49,
+        11
+      ]
+    },
+    {
+      "gameplaySeed": 654857,
+      "offerSeed": 871918,
+      "options": [
+        50,
+        57,
+        8
+      ]
+    },
+    {
+      "gameplaySeed": 879407,
+      "offerSeed": 453305,
+      "options": [
+        9,
+        64,
+        8
+      ]
+    },
+    {
+      "gameplaySeed": 485688,
+      "offerSeed": 276648,
+      "options": [
+        11,
+        64,
+        49
+      ]
+    },
+    {
+      "gameplaySeed": 316519,
+      "offerSeed": 729953,
+      "options": [
+        48,
+        57,
+        11
+      ]
+    },
+    {
+      "gameplaySeed": 802207,
+      "offerSeed": 6601,
+      "options": [
+        56,
+        10,
+        57
+      ]
+    },
+    {
+      "gameplaySeed": 70151,
+      "offerSeed": 687978,
+      "options": [
+        67,
+        9,
+        64
+      ]
+    },
+    {
+      "gameplaySeed": 66655,
+      "offerSeed": 86744,
+      "options": [
+        64,
+        48,
+        57
+      ]
+    },
+    {
+      "gameplaySeed": 4717,
+      "offerSeed": 281793,
+      "options": [
+        8,
+        50,
+        64
+      ]
+    },
+    {
+      "gameplaySeed": 22796,
+      "offerSeed": 368538,
+      "options": [
+        64,
+        65,
+        9
+      ]
+    },
+    {
+      "gameplaySeed": 27514,
+      "offerSeed": 650331,
+      "options": [
+        56,
+        8,
+        10
+      ]
+    },
+    {
+      "gameplaySeed": 1735,
+      "offerSeed": 18869,
+      "options": [
+        48,
+        50,
+        9
+      ]
+    },
+    {
+      "gameplaySeed": 29249,
+      "offerSeed": 620624,
+      "options": [
+        48,
+        67,
+        57
+      ]
+    },
+    {
+      "gameplaySeed": 30985,
+      "offerSeed": 590918,
+      "options": [
+        65,
+        57,
+        8
+      ]
+    },
+    {
+      "gameplaySeed": 205955,
+      "offerSeed": 652283,
+      "options": [
+        9,
+        8,
+        64
+      ]
+    },
+    {
+      "gameplaySeed": 7699,
+      "offerSeed": 750271,
+      "options": [
+        10,
+        56,
+        64
+      ]
+    },
+    {
+      "gameplaySeed": 213654,
+      "offerSeed": 353979,
+      "options": [
+        50,
+        48,
+        11
+      ]
+    },
+    {
+      "gameplaySeed": 221354,
+      "offerSeed": 55674,
+      "options": [
+        48,
+        8,
+        49
+      ]
+    },
+    {
+      "gameplaySeed": 435008,
+      "offerSeed": 409653,
+      "options": [
+        11,
+        10,
+        67
+      ]
+    },
+    {
+      "gameplaySeed": 656362,
+      "offerSeed": 465328,
+      "options": [
+        8,
+        67,
+        10
+      ]
+    },
+    {
+      "gameplaySeed": 42795,
+      "offerSeed": 874982,
+      "options": [
+        48,
+        8,
+        67
+      ]
+    },
+    {
+      "gameplaySeed": 699158,
+      "offerSeed": 291735,
+      "options": [
+        49,
+        65,
+        8
+      ]
+    },
+    {
+      "gameplaySeed": 741954,
+      "offerSeed": 118142,
+      "options": [
+        10,
+        57,
+        56
+      ]
+    },
+    {
+      "gameplaySeed": 392536,
+      "offerSeed": 409877,
+      "options": [
+        64,
+        49,
+        10
+      ]
+    },
+    {
+      "gameplaySeed": 85914,
+      "offerSeed": 528019,
+      "options": [
+        48,
+        49,
+        9
+      ]
+    },
+    {
+      "gameplaySeed": 478450,
+      "offerSeed": 937897,
+      "options": [
+        48,
+        67,
+        8
+      ]
+    },
+    {
+      "gameplaySeed": 564365,
+      "offerSeed": 417340,
+      "options": [
+        11,
+        64,
+        67
+      ]
+    },
+    {
+      "gameplaySeed": 42816,
+      "offerSeed": 306661,
+      "options": [
+        9,
+        65,
+        49
+      ]
+    },
+    {
+      "gameplaySeed": 558605,
+      "offerSeed": 724002,
+      "options": [
+        57,
+        10,
+        8
+      ]
+    },
+    {
+      "gameplaySeed": 552845,
+      "offerSeed": 30664,
+      "options": [
+        11,
+        50,
+        64
+      ]
+    },
+    {
+      "gameplaySeed": 62874,
+      "offerSeed": 706090,
+      "options": [
+        65,
+        8,
+        56
+      ]
+    },
+    {
+      "gameplaySeed": 858592,
+      "offerSeed": 128919,
+      "options": [
+        49,
+        8,
+        65
+      ]
+    },
+    {
+      "gameplaySeed": 740801,
+      "offerSeed": 342080,
+      "options": [
+        8,
+        64,
+        56
+      ]
+    },
+    {
+      "gameplaySeed": 550818,
+      "offerSeed": 471000,
+      "options": [
+        64,
+        8,
+        48
+      ]
+    },
+    {
+      "gameplaySeed": 243044,
+      "offerSeed": 813080,
+      "options": [
+        67,
+        56,
+        49
+      ]
+    },
+    {
+      "gameplaySeed": 793862,
+      "offerSeed": 235505,
+      "options": [
+        65,
+        11,
+        49
+      ]
+    },
+    {
+      "gameplaySeed": 36906,
+      "offerSeed": 10,
+      "options": [
+        50,
+        8,
+        64
+      ]
+    },
+    {
+      "gameplaySeed": 782193,
+      "offerSeed": 235515,
+      "options": [
+        8,
+        9,
+        64
+      ]
+    },
+    {
+      "gameplaySeed": 207694,
+      "offerSeed": 165583,
+      "options": [
+        65,
+        8,
+        48
+      ]
+    },
+    {
+      "gameplaySeed": 628557,
+      "offerSeed": 463814,
+      "options": [
+        49,
+        50,
+        48
+      ]
+    },
+    {
+      "gameplaySeed": 836251,
+      "offerSeed": 629397,
+      "options": [
+        67,
+        8,
+        11
+      ]
+    },
+    {
+      "gameplaySeed": 416232,
+      "offerSeed": 44635,
+      "options": [
+        8,
+        10,
+        11
+      ]
+    },
+    {
+      "gameplaySeed": 203907,
+      "offerSeed": 674033,
+      "options": [
+        9,
+        8,
+        56
+      ]
+    },
+    {
+      "gameplaySeed": 620139,
+      "offerSeed": 718669,
+      "options": [
+        11,
+        67,
+        57
+      ]
+    },
+    {
+      "gameplaySeed": 824047,
+      "offerSeed": 344126,
+      "options": [
+        9,
+        67,
+        64
+      ]
+    },
+    {
+      "gameplaySeed": 395611,
+      "offerSeed": 14219,
+      "options": [
+        11,
+        8,
+        67
+      ]
+    },
+    {
+      "gameplaySeed": 171083,
+      "offerSeed": 358346,
+      "options": [
+        67,
+        9,
+        65
+      ]
+    },
+    {
+      "gameplaySeed": 566694,
+      "offerSeed": 372565,
+      "options": [
+        49,
+        10,
+        57
+      ]
+    },
+    {
+      "gameplaySeed": 737777,
+      "offerSeed": 730912,
+      "options": [
+        8,
+        56,
+        50
+      ]
+    },
+    {
+      "gameplaySeed": 255896,
+      "offerSeed": 54901,
+      "options": [
+        65,
+        64,
+        8
+      ]
+    },
+    {
+      "gameplaySeed": 993674,
+      "offerSeed": 785813,
+      "options": [
+        65,
+        8,
+        48
+      ]
+    },
+    {
+      "gameplaySeed": 200994,
+      "offerSeed": 840715,
+      "options": [
+        65,
+        49,
+        56
+      ]
+    },
+    {
+      "gameplaySeed": 146093,
+      "offerSeed": 577953,
+      "options": [
+        9,
+        65,
+        49
+      ]
+    },
+    {
+      "gameplaySeed": 347088,
+      "offerSeed": 370093,
+      "options": [
+        48,
+        64,
+        11
+      ]
+    },
+    {
+      "gameplaySeed": 493181,
+      "offerSeed": 948047,
+      "options": [
+        8,
+        9,
+        65
+      ]
+    },
+    {
+      "gameplaySeed": 34566,
+      "offerSeed": 758882,
+      "options": [
+        57,
+        8,
+        9
+      ]
+    },
+    {
+      "gameplaySeed": 347082,
+      "offerSeed": 165423,
+      "options": [
+        10,
+        56,
+        64
+      ]
+    },
+    {
+      "gameplaySeed": 381649,
+      "offerSeed": 924305,
+      "options": [
+        65,
+        8,
+        49
+      ]
+    },
+    {
+      "gameplaySeed": 728732,
+      "offerSeed": 41152,
+      "options": [
+        9,
+        65,
+        57
+      ]
+    }
+  ]
+}

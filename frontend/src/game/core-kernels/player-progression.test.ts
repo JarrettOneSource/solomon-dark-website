@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import nativeLevelTwoOffers from './native-skill-offer-level2-golden.json' with { type: 'json' }
+
 import './native-secondary-ability-contract.test.ts'
 import './native-secondary-abilities.test.ts'
 import '../skill-book.test.ts'
@@ -18,17 +20,17 @@ import {
   NATIVE_MIND_CHUG_TICKS,
   NATIVE_WELD_BUILDS,
   SPELL_WELDING_SKILL_ID,
-  applyPlayerSkillChoice,
+  applyPlayerSkillChoice as applyPlayerSkillChoiceWithGameplayRng,
   applyPlayerPotionEffect,
   boneyardEnemyExperienceAward,
-  buildPlayerSkillOffer,
+  buildPlayerSkillOffer as buildPlayerSkillOfferWithGameplayRng,
   createPlayerProgression,
   createPlayerSkillBook,
-  deferPlayerSkillChoice,
+  deferPlayerSkillChoice as deferPlayerSkillChoiceWithGameplayRng,
   effectivePrimarySkillRankStats,
   evaluateBoneyardEnemyExperience,
-  grantPlayerExperience,
-  grantPlayerBonusSkillChoice,
+  grantPlayerExperience as grantPlayerExperienceWithGameplayRng,
+  grantPlayerBonusSkillChoice as grantPlayerBonusSkillChoiceWithGameplayRng,
   grantPlayerSkillRanks,
   increaseRandomLearnedSkill,
   nativeSkillCategory,
@@ -38,7 +40,7 @@ import {
   playerExperienceProgress,
   nativeWeldBuild,
   playerStatBook,
-  rerollPlayerSkillOffer,
+  rerollPlayerSkillOffer as rerollPlayerSkillOfferWithGameplayRng,
   resetPlayerPotionEffects,
   stepPlayerPotionEffects,
   type PlayerProgressionComponent,
@@ -56,13 +58,105 @@ import {
   stepPlayerCombatTick,
   tryDebitPlayerMana,
 } from './player-combat.ts'
-import { createNativeRng, drawNativeInteger } from './native-rng.ts'
+import { advanceNativeRngWords, createNativeRng, drawNativeInteger } from './native-rng.ts'
 
 const ETHER_ARCANE = {
   discipline: 'arcane',
   displayName: 'Helvidius',
   element: 'ether',
 } as const
+
+function offerGameplayRng(progression: Pick<PlayerProgressionComponent, 'offerSeed'>) {
+  return createNativeRng(progression.offerSeed)
+}
+
+function buildPlayerSkillOffer(
+  progression: Parameters<typeof buildPlayerSkillOfferWithGameplayRng>[0],
+  skillBook: PlayerSkillBookComponent,
+  sequence: number,
+) {
+  return buildPlayerSkillOfferWithGameplayRng(
+    progression,
+    skillBook,
+    sequence,
+    createNativeRng(progression.offerSeed),
+  ).offer
+}
+
+function grantPlayerExperience(
+  progression: PlayerProgressionComponent,
+  skillBook: PlayerSkillBookComponent,
+  amount: number,
+  sorcerorsCharmOwned = false,
+) {
+  return grantPlayerExperienceWithGameplayRng(
+    progression,
+    skillBook,
+    amount,
+    offerGameplayRng(progression),
+    sorcerorsCharmOwned,
+  ).progression
+}
+
+function applyPlayerSkillChoice(
+  progression: PlayerProgressionComponent,
+  skillBook: PlayerSkillBookComponent,
+  selection: Parameters<typeof applyPlayerSkillChoiceWithGameplayRng>[2],
+  sorcerorsCharmOwned = false,
+  ownedHagathaSelectors: readonly number[] = [],
+) {
+  return applyPlayerSkillChoiceWithGameplayRng(
+    progression,
+    skillBook,
+    selection,
+    offerGameplayRng(progression),
+    sorcerorsCharmOwned,
+    ownedHagathaSelectors,
+  )
+}
+
+function rerollPlayerSkillOffer(
+  progression: PlayerProgressionComponent,
+  skillBook: PlayerSkillBookComponent,
+  offerSequence: number,
+  nextOfferSeed: number,
+) {
+  return rerollPlayerSkillOfferWithGameplayRng(
+    progression,
+    skillBook,
+    offerSequence,
+    nextOfferSeed,
+    offerGameplayRng(progression),
+  )?.progression ?? null
+}
+
+function deferPlayerSkillChoice(
+  progression: PlayerProgressionComponent,
+  skillBook: PlayerSkillBookComponent,
+  offerSequence: number,
+  sorcerorsCharmOwned: boolean,
+) {
+  return deferPlayerSkillChoiceWithGameplayRng(
+    progression,
+    skillBook,
+    offerSequence,
+    offerGameplayRng(progression),
+    sorcerorsCharmOwned,
+  )?.progression ?? null
+}
+
+function grantPlayerBonusSkillChoice(
+  progression: PlayerProgressionComponent,
+  skillBook: PlayerSkillBookComponent,
+  sorcerorsCharmOwned = false,
+) {
+  return grantPlayerBonusSkillChoiceWithGameplayRng(
+    progression,
+    skillBook,
+    offerGameplayRng(progression),
+    sorcerorsCharmOwned,
+  ).progression
+}
 
 test('all six native potion subtypes mutate and expire their authoritative progression fields', () => {
   const damaged = {
@@ -396,7 +490,7 @@ test('native XP thresholds queue a mandatory deterministic offer and selection o
   assert.equal(leveled.nextThreshold, 160)
   assert.deepEqual(leveled.pendingLevels, [2])
   assert.equal(leveled.pendingOffer?.options.length, 3)
-  assert.deepEqual(leveled.pendingOffer?.options.map((option) => option.skillId), [8, 11, 67])
+  assert.deepEqual(leveled.pendingOffer?.options.map((option) => option.skillId), [8, 67, 11])
   assert.deepEqual(
     leveled.pendingOffer,
     buildPlayerSkillOffer(offerProgression(79225, 2, { offerCycle: 1 }), skillBook, 2),
@@ -714,10 +808,10 @@ test('Creativity Insight applies the selected skill twice without duplicating lo
   assert.equal(applied.skillBook.skillQuickbar, skillBook.skillQuickbar)
 })
 
-test('offer fill preserves the native category collision guards', () => {
+test('offer fill preserves native exact-ID and category collision guards', () => {
   const fresh = createPlayerSkillBook(ETHER_ARCANE)
   const levelTen = buildPlayerSkillOffer(offerProgression(18, 10), fresh, 1)
-  assert.deepEqual(levelTen.options.map((option) => option.skillId), [40, 69, 53])
+  assert.deepEqual(levelTen.options.map((option) => option.skillId), [69, 40, 53])
   assert.equal(
     levelTen.options.filter((option) => [8, 16, 24, 32, 40, 52].includes(option.skillId)).length,
     1,
@@ -756,12 +850,92 @@ test('offer fill preserves the native category collision guards', () => {
   const duplicateEscape = buildPlayerSkillOffer(offerProgression(7, 75, {
     forcedOfferSkillIds: Object.freeze([8]),
   }), onlyCategoryOne, 1)
-  assert.deepEqual(duplicateEscape.options, [
-    { skillId: 8, targetRank: 2 },
-    { skillId: 8, targetRank: 2 },
-    { skillId: 8, targetRank: 2 },
-    { skillId: 8, targetRank: 2 },
-  ])
+  assert.deepEqual(duplicateEscape.options, [{ skillId: 8, targetRank: 2 }])
+})
+
+test('stock seed 929799 retries an exact-ID collision and advances only gameplay final shuffle', () => {
+  const skillBook = createPlayerSkillBook(ETHER_ARCANE)
+  const gameplayRng = createNativeRng(0x1357_9bdf)
+  const built = buildPlayerSkillOfferWithGameplayRng(
+    offerProgression(929799, 2),
+    skillBook,
+    1,
+    gameplayRng,
+  )
+  assert.deepEqual(
+    new Set(built.offer.options.map(({ skillId }) => skillId)),
+    new Set([9, 10, 65]),
+  )
+  assert.equal(new Set(built.offer.options.map(({ skillId }) => skillId)).size, 3)
+  assert.deepEqual(built.rng, advanceNativeRngWords(gameplayRng, 3))
+})
+
+test('100 paired stock level-two rolls match ordered membership and gameplay RNG advance', () => {
+  const fixture = nativeLevelTwoOffers
+  assert.equal(fixture.schema, 'solomon-dark-skill-offer-level2-golden-v1')
+  assert.equal(fixture.rolls.length, 100)
+  const base = createPlayerSkillBook(ETHER_ARCANE)
+  assert.equal(base.primarySkillId, fixture.loadout.primarySkillId)
+  assert.equal(base.skillQuickbar[0], fixture.loadout.secondarySkillId)
+  const skillBook: PlayerSkillBookComponent = {
+    ...base,
+    advancedUnlocks: Object.freeze([...fixture.loadout.advancedUnlocks]),
+    disciplineRoot: fixture.loadout.disciplineRoot,
+    effectiveRanks: Object.freeze([...fixture.loadout.effectiveRanks]),
+    elementRoot: fixture.loadout.elementRoot,
+    learnedSkillOrder: Object.freeze(fixture.loadout.permanentRanks.flatMap(
+      (rank, skillId) => skillId >= 8 && skillId <= 79 && rank > 0 ? [skillId] : [],
+    )),
+    permanentRanks: Object.freeze([...fixture.loadout.permanentRanks]),
+  }
+  const frequency = new Map<number, number>()
+  for (const [index, roll] of fixture.rolls.entries()) {
+    const gameplayRng = createNativeRng(roll.gameplaySeed)
+    const built = buildPlayerSkillOfferWithGameplayRng(
+      offerProgression(roll.offerSeed, fixture.loadout.level, {
+        disciplineOfferBias: fixture.loadout.disciplineOfferBias !== 0,
+        forcedOfferSkillIds: Object.freeze([...fixture.loadout.forcedOfferSkillIds]),
+        maximumMana: fixture.loadout.maximumMana,
+        offerCycle: fixture.loadout.offerCycle,
+        weldOfferMarker: fixture.loadout.weldOfferMarker,
+        weldingOfferBias: (fixture.loadout.featureFlags & 0x1000) !== 0,
+      }),
+      skillBook,
+      index + 1,
+      gameplayRng,
+    )
+    const ids = built.offer.options.map(({ skillId }) => skillId)
+    assert.deepEqual(ids, roll.options, `native roll ${index + 1}`)
+    assert.equal(new Set(ids).size, ids.length, `native roll ${index + 1} repeated an ID`)
+    assert.deepEqual(
+      built.rng,
+      advanceNativeRngWords(gameplayRng, fixture.gameplayWordsConsumedPerRoll),
+      `native roll ${index + 1} gameplay RNG`,
+    )
+    for (const skillId of ids) frequency.set(skillId, (frequency.get(skillId) ?? 0) + 1)
+  }
+  assert.deepEqual(
+    [...frequency.entries()]
+      .sort(([left], [right]) => left - right)
+      .map(([skillId, count]) => ({ count, skillId })),
+    fixture.nativeFrequency,
+  )
+})
+
+test('forced, root, and fill insertions share the native unique result owner', () => {
+  const skillBook = createPlayerSkillBook(ETHER_ARCANE)
+  for (let seed = 0; seed < 256; seed += 1) {
+    const built = buildPlayerSkillOfferWithGameplayRng(
+      offerProgression(seed, 2, {
+        forcedOfferSkillIds: Object.freeze([9, 9]),
+      }),
+      skillBook,
+      seed + 1,
+      createNativeRng(seed ^ 0x1357_9bdf),
+    )
+    const ids = built.offer.options.map(({ skillId }) => skillId)
+    assert.equal(new Set(ids).size, ids.length, `seed ${seed} repeated ${ids.join(',')}`)
+  }
 })
 
 test('the stock forced prefix is bookkeeping and consumes all three ordinary slots', () => {
@@ -809,6 +983,29 @@ test('Spell Welding is scheduled on the next offer and every fifth cycle from it
     weldOfferMarker: 0,
   }), skillBook, 5)
   assert.ok(fifthOffer.options.some(({ skillId }) => skillId === SPELL_WELDING_SKILL_ID))
+})
+
+test('Spell Welding pair selection precedes final shuffle on the active gameplay RNG', () => {
+  const skillBook = withLearnedSkills(createPlayerSkillBook(ETHER_ARCANE), [16, 24])
+  const expectedBuildIds = [1000, 1002, 1003]
+  for (const [targetIndex, expectedBuildId] of expectedBuildIds.entries()) {
+    let gameplaySeed = 0
+    while (drawNativeInteger(createNativeRng(gameplaySeed), 3).value !== targetIndex) {
+      gameplaySeed += 1
+    }
+    const gameplayRng = createNativeRng(gameplaySeed)
+    const built = buildPlayerSkillOfferWithGameplayRng(
+      offerProgression(31, 8, { offerCycle: 1, weldOfferMarker: 0 }),
+      skillBook,
+      targetIndex + 1,
+      gameplayRng,
+    )
+    assert.equal(
+      built.offer.options.find(({ skillId }) => skillId === SPELL_WELDING_SKILL_ID)?.weldBuildId,
+      expectedBuildId,
+    )
+    assert.deepEqual(built.rng, advanceNativeRngWords(gameplayRng, 4))
+  }
 })
 
 test('a second primary arms Spell Welding and choosing a synthetic build only books row 52', () => {

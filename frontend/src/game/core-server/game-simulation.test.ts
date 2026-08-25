@@ -1057,6 +1057,7 @@ test('a shared level milestone freezes every gameplay clock until the fixed coho
     ...state,
     playerEntities: { ...state.playerEntities, progressions: Object.freeze(progressions) },
   }
+  const beforeMilestoneRng = state.gameRng
   state = grantGameSimulationPlayerExperience(state, 'first', 2)
 
   assert.deepEqual(state.levelUpBarrier, {
@@ -1076,6 +1077,7 @@ test('a shared level milestone freezes every gameplay clock until the fixed coho
   assert.equal(getPlayerProgression(state, 'second').level, 2)
   assert.ok(getPlayerProgression(state, 'first').pendingOffer)
   assert.ok(getPlayerProgression(state, 'second').pendingOffer)
+  assert.deepEqual(state.gameRng, advanceNativeRngWords(beforeMilestoneRng, 6))
 
   const frozenPlayer = getPlayerCharacter(state, 'first')
   const frozenWorld = state.world
@@ -1394,6 +1396,7 @@ test('active-run rejoin imports one durable actor and queues every missed person
   assert.equal(together.levelUpBarrier, null)
   const worldBefore = together.world
   const tickBefore = together.tick
+  const rngBeforeRejoin = together.gameRng
 
   together = rejoinGameSimulationPlayer(together, detached, 'second', {
     crossedLevels: milestone.participantIds.includes('second')
@@ -1416,6 +1419,7 @@ test('active-run rejoin imports one durable actor and queues every missed person
   assert.deepEqual(getPlayerCharacter(together, 'second').velocity, { x: 0, y: 0 })
   assert.equal(getPlayerProgression(together, 'second').level, 4)
   assert.equal(getPlayerProgression(together, 'second').pendingLevels.length, 3)
+  assert.deepEqual(together.gameRng, advanceNativeRngWords(rngBeforeRejoin, 3))
   assert.deepEqual(together.levelUpBarrier?.participantIds, ['first', 'second'])
   assert.deepEqual(together.levelUpBarrier?.pendingPlayerIds, ['second'])
   assert.equal(stepGameSimulationTick(together, {}).tick, tickBefore)
@@ -1457,7 +1461,7 @@ test('Sorceror actions are authoritative, consume the active offer, and preserve
   const rerolled = getPlayerProgression(state, 'first')
   assert.notEqual(rerolled.pendingOffer?.sequence, firstOffer.sequence)
   assert.equal(rerolled.sorcerorsCharmAvailable, false)
-  assert.notDeepEqual(state.gameRng, initial.gameRng)
+  assert.deepEqual(state.gameRng, advanceNativeRngWords(initial.gameRng, 4))
   assert.equal(
     rerollGameSimulationPlayerSkill(state, 'first', rerolled.pendingOffer!.sequence),
     null,
@@ -1465,6 +1469,7 @@ test('Sorceror actions are authoritative, consume the active offer, and preserve
 
   const saved = saveGameSimulationPlayerSkill(initial, 'first', firstOffer.sequence)!
   const savedProgression = getPlayerProgression(saved, 'first')
+  assert.deepEqual(saved.gameRng, advanceNativeRngWords(initial.gameRng, 3))
   assert.equal(savedProgression.deferredSkillChoices, 1)
   assert.deepEqual(savedProgression.pendingLevels, [4, 4])
   assert.equal(savedProgression.sorcerorsCharmAvailable, true)

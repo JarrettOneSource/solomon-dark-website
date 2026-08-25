@@ -160,28 +160,27 @@ export function applyWebLuaCommands(
           || !Number.isSafeInteger(command.ranks)
           || command.ranks < 1
         ) break
-        state = {
-          ...state,
-          playerEntities: grantPlayerEntitySkillRanks(
-            state.playerEntities,
-            command.playerId,
-            command.skillId,
-            command.ranks,
-          ),
-        }
+        const granted = grantPlayerEntitySkillRanks(
+          state.playerEntities,
+          command.playerId,
+          command.skillId,
+          command.ranks,
+          state.gameRng,
+        )
+        state = { ...state, gameRng: granted.rng, playerEntities: granted.store }
         break
       }
-      case 'grant-weld':
+      case 'grant-weld': {
         if (!webLuaDeveloperWeld(command.buildId)) break
-        state = {
-          ...state,
-          playerEntities: grantPlayerEntityWeldBuild(
-            state.playerEntities,
-            command.playerId,
-            command.buildId,
-          ),
-        }
+        const granted = grantPlayerEntityWeldBuild(
+          state.playerEntities,
+          command.playerId,
+          command.buildId,
+          state.gameRng,
+        )
+        state = { ...state, gameRng: granted.rng, playerEntities: granted.store }
         break
+      }
       case 'restore-health':
         state = {
           ...state,

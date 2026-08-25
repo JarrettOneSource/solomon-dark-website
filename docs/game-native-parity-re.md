@@ -12512,7 +12512,7 @@ The exact object-local Tree polygons are:
 
 | Clean stock | `Mod Loader/tests/fixtures/webgame/menu-reference-captures/skill-picker.png`; captured `2026-08-09T13:54:14.9453312Z` from pristine profile state | Settled 1600x900 picker over a dim live Hub, with three ordered cards, mandatory `SELECT A SKILL`, native HUD beneath, and animated cyan circle/corner families | high-live |
 | Capture contract | `Mod Loader/tests/fixtures/webgame/menu-layouts/skill-picker.json`, schema `solomon-dark-native-menu-layout-v3` | Exact structural draw order, card rectangles, icon anchors, repeated-icon offset, ambient membership, and capture provenance | high-live |
-| Instructions | preferred-base VAs `0x006594E0`, `0x00658620`, `0x0065F480`, `0x0066F920`, `0x00671470`, `0x0067C250`, `0x0067CB70`; retail image base `0x00400000` | Per-actor progression construction, screen creation/build, choice apply, level-up, and deterministic offer construction | high |
+| Instructions | preferred-base VAs `0x006594E0`, `0x00658620`, `0x0065F480`, `0x0066F920`, `0x00671470`, `0x0067C250`, `0x0067CB70`; retail image base `0x00400000` | Per-actor progression construction, screen creation/build, choice apply, level-up, and two-stream offer construction | high |
 | Picker renderer | `LevelupScreen` render `0x0067DF80`; shared `UiPanel_Render` `0x005C3F40`; read-only Ghidra project for the same retail executable | Settled panel rectangle, stock background/card nine-slices, border/corner records, ambient transforms, heading positions, and exact level-line font wrapper | high |
 | Runtime/data | `Mod Loader/tests/fixtures/webgame/progression-goldens.json`; `Mod Loader/docs/reverse-engineering/native-skill-catalog.json` | Independent player/bot books and seeds; exact three-level seed-79225 offers; 82 public skill entries and their exact CFG-backed caps/descriptions/properties | high-live |
 | Asset | retail `images/UI.png/.bundle`, `Skills.png/.bundle`, `Fonts.png/.bundle`; executable SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3` | Picker uses shipped atlases and compiled bitmap-font wrappers, not substitute CSS art or an operating-system face | high |
@@ -12581,8 +12581,9 @@ sealed to base commit `405bb0f697fcdf484f304f0d5f38224d39a6ae70`, source tree
 
 - Construction stores one actor-private seed at progression `+0x834`. Every
   offer call creates a fresh 55-word lagged-additive RNG from that seed and
-  does not mutate the stored seed. The same player book, level, and seed must
-  reproduce the same ordered offer.
+  does not mutate the stored seed. The same player book, level, and private
+  seed reproduce ordinary membership; Welding build identity and final order
+  additionally require the same incoming active-gameplay-RNG state.
 - Construction sets the Spell Welding schedule marker `+0x840` to `9999` and
   offer cycle `+0x848` to zero. The level-up screen increments the cycle before
   every builder call. Refresh changes the sentinel marker to the current cycle
@@ -12600,8 +12601,9 @@ sealed to base commit `405bb0f697fcdf484f304f0d5f38224d39a6ae70`, source tree
   identifies category 4 and never permits a second category-4 row. A separate
   category-byte comparison retries a second category-1 row for the first 50
   such collisions, then permits it so the outer 200-attempt loop can finish.
-  There is no general ID-deduplication; category-0/2/3 duplicates remain stock
-  behavior.
+  The selected-result container independently suppresses every repeated skill
+  ID. Category-0/2/3 rows may repeat as candidate-pool weights but never as
+  displayed cards.
 - Choice count is three, or four when Creativity `63` is learned. Creativity's
   concentrated Insight roll is a later gameplay-RNG branch; concentration is
   not part of this bookkeeping slice and therefore must not be synthesized.
@@ -12702,7 +12704,7 @@ byte-for-byte into the Website runtime slice with its source hash.
 ### Web implementation consequence
 
 - `core-kernels` owns the immutable native stat catalog, level curve, rank-book
-  operations, deterministic offer builder, and inert apply rule.
+  operations, explicit private/shared-RNG offer builder, and inert apply rule.
 - The same kernel owns actor-private forced-prefix IDs, offer cycle, welding
   marker/current build, discipline weighting, and welding-bias flags. Their
   fresh defaults preserve the ordinary offer golden; their non-default paths
@@ -12726,7 +12728,7 @@ byte-for-byte into the Website runtime slice with its source hash.
 ### Validation contract
 
 - Kernel tests lock the 83-row allocation, exact root/loadout grants, catalog
-  caps, independent books, level-75 clamp, deterministic offer reproduction,
+  caps, independent books, level-75 clamp, paired-RNG offer reproduction,
   native RNG fixture values, category-1/category-4 collision behavior, cap
   rejection, forced-prefix order, welding cadence/build art, and one-row inert
   apply.
@@ -23803,7 +23805,7 @@ pass `0x00470EE0`; no brightness constant is inferred from a screenshot.
 | --- | --- | --- | --- |
 | Fireball scenery collision | actor combat queries mask `0x2`; terrain lookahead reuses the complete player movement world | query mask is `6`; stock hits five flag-`0x4` scenery actors, including Gravestone, while mask-`0x700` terrain ignores grave/fence polygons | high |
 | secondary cooldown | Phasing/Teleport capacities and radial HUD exist, but timers always drain by one, omit the fixed common gate, and no shared cast action blocks immediate zero-cooldown repeats | accepted ordinary casts own StaffCast2 no-interrupt occupancy and a 150-tick common timer; longer row timers drain independently by max of Focus and category recharge factors | high |
-| skill offers | implementation has the complete nine-phase builder; the Loader prose incorrectly assigned the 50-collision escape to category 4 | category 4 remains unique; category 1 alone escapes its duplicate retry after 50 collisions | high |
+| skill offers | the nine-phase shape was present, but a later controlled 100-roll pass found missing exact-ID insertion uniqueness and wrong RNG ownership for Welding/final shuffle | category 4 remains unique; category 1 alone escapes its cross-ID family retry after 50 collisions; exact IDs never repeat | superseded by the 2026-08-25 differential |
 | player lighting | the recent mode-1/2 direct record-18 pass visibly brightens the composed player and nearby ground | stock draws the same record after the main actor queue with `SRCALPHA,ONE` and alpha `.2375..25`; current browser center alpha is 61/255 and matches the native branch | high; verified already at parity |
 | title identity | save work changed fixed-stage anchoring and CSS to top-right | established title account placement is logical `(11,12)`, top-left | high |
 
@@ -23862,10 +23864,11 @@ Concentrated Focus can skip arming on RNG values `75..99`, but the current web
 book has no concentration-lane producer, so that branch is explicitly deferred
 instead of approximated.
 
-The skill-picker audit followed all phases from private seed construction to
-the final full-range shuffle. The implementation already mirrors the native
-control flow. The only mismatch found was documentary: category-4 exclusion is
-permanent, while category-1 duplicates alone become legal after 50 collisions.
+This audit followed all visible phases from private seed construction to the
+final full-range shuffle, but its parity conclusion was later falsified by the
+2026-08-25 controlled differential. Category-4 exclusion remains permanent and
+category-1 cross-ID collisions alone escape after 50; exact-ID uniqueness and
+the active-gameplay-RNG phases were missing here.
 
 The lighting audit found no parity defect to tune. Native main-queue flush
 `0x0046FDAA` precedes the mode-1/2 branch, and `0x00471338` multiplies the
@@ -31964,14 +31967,14 @@ Native systems:
 | Member / branch | Native source | Disposition | Proof |
 | --- | --- | --- | --- |
 | offer RNG construction and replay | `0x006594E0`, `0x0067CB70`, progression `+0x834` | `verified-already-at-parity` | private seed is rebuilt per offer; reroll alone replaces it |
-| ordinary authored rows `8..51`, `53..79` | complete rule matrix and helpers `0x0065E830/0x0065EBA0/0x0065ED00` | `verified-already-at-parity` | catalog eligibility/dependency/unlock tests and deterministic offer goldens |
+| ordinary authored rows `8..51`, `53..79` | complete rule matrix and helpers `0x0065E830/0x0065EBA0/0x0065ED00` | `verified-already-at-parity` | catalog eligibility/dependency/unlock tests and paired-RNG offer goldens |
 | Spell Welding row `52` and ten synthetic builds | dedicated injection branch in `0x0067CB70` | `verified-already-at-parity` | cadence, learned-pair, prior-build, icon, and apply tests |
 | runtime-only Plane Orb `80` and Reserved `81` | scanned then rejected by native material visibility | `out-of-system` (no ordinary selectable material) | neither enters any web pool or consumes an offer draw |
 | desired three / Creativity four | screen desired count plus learned row `63` | `verified-already-at-parity` | three/four-card tests |
 | category-1/category-2 focus draws | `0x0067CB70` actor-private RNG | `verified-already-at-parity` | exact draw order and threshold fixtures |
 | root-priority and weighted general pools | `0x0067CB70` phases 2/3 | `verified-already-at-parity` | root, discipline bias, mana oddity, and full-range shuffle tests |
 | forced prefix and learned-skill pruning | `+0x860/+0x864`, `0x0066F840` | `verified-already-at-parity` | forced-three and started/dependent fixtures |
-| category-4 uniqueness and category-1 50-collision escape | fill loop in `0x0067CB70` | `verified-already-at-parity` | 256-seed uniqueness sweep and exact four-duplicate category-1 fixture |
+| category-4 uniqueness, category-1 50-collision escape, and exact-ID container uniqueness | fill loop plus selected `Array<int>` in `0x0067CB70` | superseded and exact-ported on 2026-08-25 | 256-seed family sweep plus paired 100-roll duplicate-free fixture |
 | attempt-100 append, attempt-200 stop, final full-range shuffle | terminal phases in `0x0067CB70` | `verified-already-at-parity` | source-order contract and deterministic golden offers |
 | Sorceror's Charm reroll/save and concentrated Creativity Insight | screen `0x0066F920/0x00671470` | `verified-already-at-parity` | authoritative reroll/save/Insight tests and browser journey |
 | all category-2 rows `11,12,15,21,23,27,30,35,41,45,46,48,49,50,51,54,72,73,74,76,77,78,79` | dispatcher `0x0054CC50` | `verified-already-at-parity` except shared Focus bypass below | every member enters its recovered runtime family and semantic edge |
@@ -43286,7 +43289,7 @@ visible time.
   common scan after their exact any/all predicate, level, root/general, focus,
   and cap gates. Fixing the shared predicate retires stale repeat weights for
   every affected family at once.
-- RNG order, duplicate-with-replacement behavior, native general-pool
+- RNG order, with-replacement candidate weighting plus unique result insertion, native general-pool
   `mana_cost(skill, playerLevel+1)` oddity, root-priority
   `mana_cost(skill,effectiveRank+1)`, and all authority/lifecycle branches stay
   unchanged.
@@ -43637,3 +43640,144 @@ asynchronous local/cloud write.
   execute that asynchronous write after process death. No native fact remains
   unextracted for this boundary. A normal fast-forward push is authorized;
   deployment and production restart remain unauthorized.
+
+## 2026-08-25 — Stock/web 100-roll skill-offer differential supersession
+
+### Reported smell and controlled reproduction
+
+The reported smell was that low-level offers omit many subskills. One exact
+Ether/Arcane loadout was held at stock level 2 / XP 100 with starting skills
+Magic Missile 8 and Call Leviathan 11. The retail harness generated 100
+actor-private seeds with the sealed native RNG, invoked the untouched retail
+`Skills_Wizard vtable +0x74 -> 0x0067CB70` builder 100 times, applied no
+choice, and proved that ranks, roots, level, mana, forced list, feature flags,
+and offer cycle did not change. The oracle remains the 4,723,200-byte retail
+executable SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`.
+
+The same frozen state and 100 private seeds were replayed in the current web
+kernel. All 72 public rows matched stock metadata for cap, maximum, category,
+root, minimum level, and dependency IDs. Exhaustive ready/minimum/any/
+forbidden/cap/advanced-unlock predicate mutations also produced zero
+failures. Stock exposed 12 distinct eligible rows at this boundary:
+`8,9,10,11,48,49,50,56,57,64,65,67`. The low-level membership table is not
+missing a sibling family after the prior cap correction.
+
+The draw result was nevertheless not native. Eighty-five web rolls matched
+the stock unordered three-card set, while 15 had only two cards in common.
+Those same 15 web rolls contained a repeated skill ID; stock contained zero
+repeated-ID rolls across all 100. Seed `929799` is the minimal witness: the
+private stream consumes focus `1`, general swaps `4,4,0,4,0`, root index `1`,
+then fill indices `6,0,7`. Stock displays the unique membership
+`{9,65,10}`; the old web kernel accepted the first repeated 9 and stopped at
+`{9,9,65}`.
+
+Ordered equality is not a valid private-seed-only comparison. Live call-site
+tracing shows that final card order belongs to the active gameplay RNG, whose
+incoming state was intentionally not reset in the first capture. A paired
+global-state capture is required for exact ordered regression.
+
+### Corrected native ownership and full membership
+
+| Member / branch | Native owner | Current web disposition before this fix | Required regression |
+| --- | --- | --- | --- |
+| Focus and category counts | private RNG in `0x0067CB70` | exact | exact draw sequence |
+| Root-priority scan and Welding bias pool | private RNG | exact | root/related membership and order |
+| General scan, weighting, and pre-shuffle | private RNG | exact | all 72 rows plus full-range swaps |
+| Forced-prefix insertion | unique result container | incomplete; repeated IDs can enter | repeated forced IDs collapse without consuming another RNG word |
+| Root-priority insertion | unique result container | incomplete; can duplicate forced ID | duplicate insertion leaves count unchanged |
+| Spell Welding build choice | active gameplay RNG at `0x0067DA4B` | wrong stream; private RNG | ten builds and exact shared-stream advance |
+| Learned-skill pruning | private RNG | exact | thresholds 8/12/20 and overwrite order |
+| Fill candidate draw | private RNG, with-replacement candidate list | exact weighting | exact candidate index stream |
+| Exact-ID insertion | unique result container | missing | no displayed duplicate in any category |
+| Category-4 collision | `0x0067BFA0` predicate | exact | at most one category-4 row |
+| Category-1 collision | raw category byte and 50 counter | exact | first 50 cross-ID collisions retry |
+| Attempt-100 pool growth / attempt-200 exit | builder loop | structurally exact | weights grow; undersized escape remains bounded |
+| Final full-range shuffle | active gameplay RNG from `0x00818B08` | wrong stream; private RNG | one shared word per card and exact order under paired state |
+| Three cards / Creativity four | desired-count branch | exact count | both counts use uniqueness and shared final shuffle |
+| Initial/shared level, active-run catch-up, reroll, queued choice, save/defer, automatic choice, bonus book, and pending-offer rebuild | authoritative progression + gameplay RNG | stream state not propagated through offer build | every issuing path returns and stores advanced host RNG |
+| Host/client replication and apply | host offer identity | exact authority | clients never reroll or reorder locally |
+
+The key native owner is the selected-result container initialized at
+`0x0067D1F8..0x0067D21F` with vtable `0x007846CC` and uniqueness byte
+`+0x04 = 1`. Insert dispatch `0x00402720` reaches
+`0x004013C0/0x004013E0`; its `vtable +0x24 -> 0x00401510` lookup suppresses
+an already-present skill pointer without increasing result count. Candidate
+lists still retain repeated pointers as probability weights and fill still
+draws with replacement. The selected result is unique. This supersedes every
+earlier ledger statement that non-category-4 duplicates are displayable or
+that the single eligible category-1 row can fill all four slots.
+
+Raw instruction enumeration and live return tracing also supersede the old
+single-stream claim. Private RNG owns focus, general pre-shuffle, root/bias,
+pruning, and fill. The active gameplay RNG owns the optional Welding build
+draw and final display shuffle. Thus equal book/private seed fixes ordinary
+membership but not Welding build identity or card order unless the gameplay
+state also matches.
+
+### Web implementation and validation contract
+
+- Make offer construction return both the authoritative offer and the advanced
+  gameplay RNG. Thread it through every path that can issue or rebuild an
+  offer; do not hide a second RNG in presentation or protocol state.
+- Preserve candidate-pool weighting and private draw counts. Insert each
+  forced, root, Welding, and fill option through one exact-ID uniqueness seam.
+  A suppressed duplicate consumes the candidate draw but not a result slot.
+- Select a Welding build and perform the final full-range swap with the shared
+  gameplay stream, in that order. Creativity Insight remains its later,
+  separately owned gameplay/concentration draw.
+- Replace the old four-duplicate category-1 fixture with duplicate-suppression
+  coverage across forced/root/fill and three/four-card offers. Keep category-1
+  and category-4 cross-ID collision tests.
+- Gate a paired 100-roll stock/web replay on zero metadata failures, zero
+  predicate failures, zero duplicate offers, exact unordered membership for
+  every private seed, exact order for every paired gameplay state, and exact
+  final gameplay RNG state.
+- Run the canonical Website validation only on the Mac mini, then perform a
+  real WebGL picker acceptance covering initial, queued, rerolled, deferred,
+  automatic, Welding, three-card, and Creativity-four-card issuance with
+  empty page/console/network errors.
+
+### Implementation validation receipt
+
+- `buildPlayerSkillOffer` now keeps actor-private candidate construction and
+  active-gameplay presentation draws separate, inserts every option through
+  one exact-ID uniqueness seam, and returns the advanced gameplay state. That
+  state is threaded through initial/shared XP, active-party catch-up, queued
+  apply, reroll, Save Skill, bonus books, automatic selection, and explicit
+  pending-offer rebuilds. Welding pair selection precedes the shared final
+  shuffle exactly as stock does.
+- The controlled stock capture is SHA-256
+  `d9716cf2fde89c8f29b822bf5d6e8f42f2e736d7868ce0f4b679b8e83ec0b81a`.
+  Its untouched retail builder produced 100 three-card offers, zero repeated
+  IDs, 12 distinct eligible skill IDs, and no progression mutation. The
+  rebased Mac replay report is SHA-256
+  `ba6029a79c4ebd3be87de7431ce0afd1d25258deddfe62061ea6947a2aa992cc`:
+  ordered matches `100/100`; unordered, metadata, predicate, duplicate, and
+  final-gameplay-RNG mismatches are all zero.
+- The exact Website candidate is based on current-main active-party commit
+  `6c52d7589e3c172b0b11ab51cb902e8a503319cd`. The canonical Mac gate passed
+  backend build/contracts, strict format/lint/import boundaries, the complete
+  frontend/game/UI/diagnostic/desktop suite, production builds, media policy,
+  and bundle budget. `Game-BWf4uLs4.js` is 465,199 raw / 130,468 gzip bytes
+  against 524,288 / 131,072.
+- The exact Mod Loader candidate is based on
+  `7607716943a13dd9e456f43b85d32f634e40b342`; its complete registered Mac
+  static-RE suite passed `500/500`. Live RNG tracing separately records the
+  seed-`929799` private results `1; 4,4,0,4,0; 1; 6,0,7` followed by three
+  active-gameplay final-shuffle calls; trace SHA-256 is
+  `8952124149b5d32c9880075ec10c4ac5a17ce6d996dfda1d4ce67f133047e9ef`.
+- Chrome 151/WebGL2 at 1600 by 900 completed the rebased Hub/Boneyard journey.
+  The Hub displayed distinct `48,67,57` cards, reroll advanced the exact four
+  expected gameplay words, queued and deferred offers remained duplicate-free,
+  and the authoritative player stayed on one frozen tick. Hub/Boneyard reveal
+  alpha included zero and intermediate samples before one; actor particles
+  reached 48/44. Audio retained the stock level/open/unlock rates, and page,
+  console, failed-request, and failed-response arrays were empty.
+- Reviewed rebased reveal/settled/Boneyard frames have SHA-256 values
+  `76d55f9612f1ac0a9904be83aee969b802eb11536263196befaa6ced5178c94f`,
+  `279ccf1d253cc15484c20c118112b54c77d812eef44897a0ca749e86d627cb34`,
+  and `6a22c008d45596135a2e87a31269ec9b467f0fcc5ec5df25f6c10b888ad9b074`.
+  No member is browser-blocked and no material native unknown remains.
+  Publication is authorized separately from deployment; this receipt does not
+  claim a production restart.
