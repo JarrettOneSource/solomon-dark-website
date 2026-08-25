@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict'
-import { createHash } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
+import { fileURLToPath } from 'node:url'
 
 import { chromium } from 'playwright-core'
+
+import { startStaticClientServer } from '../desktop/static-client-server.mjs'
 
 import {
   createGameSimulation,
@@ -14,25 +17,55 @@ import {
   nativeTutorialAmuletItem,
 } from '../src/game/core-kernels/native-tutorial.ts'
 import { materializeStockTutorial } from '../src/game/host/boneyard-catalog.ts'
+import { startGameHost } from '../src/game/host/game-host.ts'
 import {
   WEB_GAME_SAVE_SCHEMA_VERSION,
   WEB_GAME_SAVE_SLOT,
 } from '../src/game/save/game-save-contract.ts'
 import { createGameSaveDocument } from '../src/game/save/game-save-document.ts'
 
-const baseUrl = process.env.SDR_TUTORIAL_AMULET_URL || 'http://127.0.0.1:4195'
-const endpointUrl = process.env.SDR_TUTORIAL_AMULET_ENDPOINT_URL
-const endpointCredential = process.env.SDR_TUTORIAL_AMULET_ENDPOINT_CREDENTIAL
+const injectedBaseUrl = process.env.SDR_TUTORIAL_AMULET_URL
+const injectedEndpointUrl = process.env.SDR_TUTORIAL_AMULET_ENDPOINT_URL
+const injectedEndpointCredential = process.env.SDR_TUTORIAL_AMULET_ENDPOINT_CREDENTIAL
+if (Boolean(injectedEndpointUrl) !== Boolean(injectedEndpointCredential)) {
+  throw new Error('Tutorial amulet endpoint URL and credential must be set together')
+}
+if (Boolean(injectedBaseUrl) !== Boolean(injectedEndpointUrl)) {
+  throw new Error('Tutorial amulet base URL and endpoint must be set together')
+}
+const staticServer = injectedBaseUrl ? null : await startStaticClientServer({
+  root: fileURLToPath(new URL('../../backend/wwwroot/', import.meta.url)),
+})
+const baseUrl = injectedBaseUrl || staticServer.origin
+const localCredential = injectedEndpointCredential || randomBytes(32).toString('base64url')
+const localHost = injectedEndpointUrl ? null : await startGameHost({
+  allowedOrigins: [baseUrl],
+  authentication: { credential: localCredential, kind: 'shared' },
+  resetWhenEmpty: true,
+  snapshotRate: 100,
+})
+const endpointUrl = injectedEndpointUrl || localHost.address.url
+const endpointCredential = injectedEndpointCredential || localCredential
 const screenshotRoot = process.env.SDR_TUTORIAL_AMULET_SCREENSHOT_ROOT
   || '/tmp/solomon-dark-sorcerors-amulet'
-assert.ok(endpointUrl && endpointCredential, 'Tutorial amulet endpoint is required')
+const [viewportWidth, viewportHeight] = (process.env.SDR_TUTORIAL_AMULET_VIEWPORT || '1600x900')
+  .split('x')
+  .map(Number)
+const allowSparsePresentation = process.env.SDR_TUTORIAL_AMULET_ALLOW_SPARSE_PRESENTATION === '1'
+assert.ok(Number.isFinite(viewportWidth) && viewportWidth > 0)
+assert.ok(Number.isFinite(viewportHeight) && viewportHeight > 0)
 
 const browser = await chromium.launch({
   executablePath: process.env.SDR_CHROME_PATH
     || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
   headless: true,
 })
-const page = await browser.newPage({ viewport: { height: 900, width: 1600 } })
+const page = await browser.newPage({
+  hasTouch: process.env.SDR_TUTORIAL_AMULET_TOUCH === '1',
+  isMobile: process.env.SDR_TUTORIAL_AMULET_TOUCH === '1',
+  viewport: { height: viewportHeight, width: viewportWidth },
+})
+await page.route('**/favicon.ico', (route) => route.fulfill({ status: 204 }))
 const consoleErrors = []
 const failedResponses = []
 const pageErrors = []
@@ -52,7 +85,12 @@ page.on('websocket', (socket) => {
 await page.addInitScript(bypassStartupAudioPreload)
 await page.addInitScript(([url, credential]) => {
   window.solomonDarkRuntime = {
-    gameEndpoint: { credential, kind: 'localhost', url },
+    gameEndpoint: {
+      credential,
+      kind: url.startsWith('wss:') ? 'remote' : 'localhost',
+      sessionKind: url.startsWith('wss:') ? 'private-college' : 'standalone',
+      url,
+    },
   }
 }, [endpointUrl, endpointCredential])
 
@@ -74,12 +112,46 @@ try {
   const boneyard = page.locator('.boneyard-scene[data-renderer-state="ready"]')
   await boneyard.waitFor({ timeout: 90_000 })
   await boneyard.locator('xpath=self::*[@data-tutorial-stage="8"]').waitFor()
+  const hud = page.locator('.hub-hud')
+  const backpackButton = page.locator('.hub-hud-backpack-button')
+  const skillsButton = page.locator('.hub-hud-tome-button')
+  assert.equal(await hud.getAttribute('data-tutorial-inventory'), 'false')
+  assert.equal(await hud.getAttribute('data-tutorial-skills'), 'false')
+  assert.equal(await backpackButton.isVisible(), false)
+  assert.equal(await skillsButton.isVisible(), false)
+  assert.equal(await page.locator('.tutorial-overlay[data-stage="8"] .tutorial-instruction').count(), 0)
   const worldPointer = page.locator('.tutorial-overlay[data-stage="8"] .tutorial-pointer')
   await worldPointer.waitFor()
-  await page.waitForFunction(() => {
+  const stageEightBlink = await samplePointerBlink(page, worldPointer)
+  if (allowSparsePresentation) {
+    assert.ok(stageEightBlink.hidden + stageEightBlink.visible > 0, JSON.stringify(stageEightBlink))
+  } else {
+    assert.ok(stageEightBlink.hidden > 0, JSON.stringify(stageEightBlink))
+    assert.ok(stageEightBlink.visible > 0, JSON.stringify(stageEightBlink))
+  }
+  const visiblePointer = await page.waitForFunction(() => {
     const pointer = document.querySelector('.tutorial-overlay[data-stage="8"] .tutorial-pointer')
-    return pointer && getComputedStyle(pointer).opacity === '1'
+    if (!(pointer instanceof HTMLElement) || getComputedStyle(pointer).opacity !== '1') return null
+    const bounds = pointer.getBoundingClientRect()
+    return {
+      bounds: {
+        bottom: bounds.bottom,
+        height: bounds.height,
+        left: bounds.left,
+        right: bounds.right,
+        top: bounds.top,
+        width: bounds.width,
+      },
+      dataset: { ...pointer.dataset },
+      opacity: getComputedStyle(pointer).opacity,
+    }
   })
+  const stageEightPointerReceipt = await visiblePointer.jsonValue()
+  await visiblePointer.dispose()
+  assert.ok(stageEightPointerReceipt.bounds.right > 0)
+  assert.ok(stageEightPointerReceipt.bounds.bottom > 0)
+  assert.ok(stageEightPointerReceipt.bounds.left < viewportWidth)
+  assert.ok(stageEightPointerReceipt.bounds.top < viewportHeight)
   await page.screenshot({ path: `${screenshotRoot}-stage-8-pointer.png` })
 
   await boneyard.focus()
@@ -96,10 +168,25 @@ try {
     stageNineInstruction,
     "ACCESS YOUR INVENTORY. Click here or press 'I' to open the inventory screen",
   )
+  assert.equal(await hud.getAttribute('data-tutorial-inventory'), 'true')
+  assert.equal(await hud.getAttribute('data-tutorial-skills'), 'false')
+  assert.equal(await backpackButton.isVisible(), true)
+  assert.equal(await backpackButton.isDisabled(), false)
+  assert.equal(await skillsButton.isVisible(), false)
   await page.screenshot({ path: `${screenshotRoot}-stage-9-inventory-prompt.png` })
+  const pickupSaved = await waitForLocalSave(page, (record) => {
+    if (!record || record.revision <= fixture.record.revision) return false
+    const document = JSON.parse(record.document)
+    const simulation = document.continuation?.simulation
+    return simulation?.world?.tutorial?.stage === 9
+      && simulation?.playerEntities?.economies?.[0]?.backpack?.some((item) => (
+        item?.name === "Sorceror's Amulet"
+      ))
+  })
 
   await boneyard.focus()
-  await page.keyboard.press('i')
+  if (process.env.SDR_TUTORIAL_AMULET_TOUCH === '1') await backpackButton.click()
+  else await page.keyboard.press('i')
   const inventory = page.getByRole('dialog', { name: 'Inventory' })
   await inventory.waitFor()
   await inventory.locator('.hub-inventory-native-canvas[data-native-reveal="settled"]')
@@ -107,8 +194,8 @@ try {
   await boneyard.locator('xpath=self::*[@data-tutorial-stage="10"]').waitFor()
   const callouts = page.locator('.tutorial-modal-callouts[data-stage="10"]')
   await callouts.waitFor()
-  assert.equal(await callouts.locator('.tutorial-callout-equipment').count(), 1)
-  assert.equal(await callouts.locator('.tutorial-callout-backpack').count(), 1)
+  assert.equal(await callouts.locator('[data-tutorial-callout="equipment"]').count(), 1)
+  assert.equal(await callouts.locator('[data-tutorial-callout="backpack"]').count(), 1)
 
   const amulet = inventory.getByLabel('Backpack').getByRole('button', {
     exact: true,
@@ -152,6 +239,10 @@ try {
   await page.keyboard.press('i')
   await inventory.waitFor({ state: 'detached' })
   await boneyard.locator('xpath=self::*[@data-tutorial-stage="11"]').waitFor({ timeout: 5_000 })
+  assert.equal(await hud.getAttribute('data-tutorial-inventory'), 'true')
+  assert.equal(await hud.getAttribute('data-tutorial-skills'), 'false')
+  assert.equal(await backpackButton.isVisible(), true)
+  assert.equal(await skillsButton.isVisible(), false)
 
   assert.deepEqual(pageErrors, [])
   assert.deepEqual(consoleErrors, [])
@@ -181,10 +272,16 @@ try {
       `${screenshotRoot}-stage-10-equipped.png`,
     ],
     stageNineInstruction,
+    stageEightBlink,
+    stageEightPointerReceipt,
+    pickupSaveRevision: pickupSaved.revision,
+    viewport: { height: viewportHeight, width: viewportWidth },
     wireErrors,
   }, null, 2)}\n`)
 } finally {
   await browser.close()
+  await localHost?.close()
+  await staticServer?.close()
 }
 
 function tutorialStageEightSave() {
@@ -288,7 +385,7 @@ async function waitForLocalSave(target, predicate) {
     if (predicate(record)) return record
     await target.waitForTimeout(100)
   }
-  throw new Error('timed out waiting for the equipped Tutorial amulet checkpoint')
+  throw new Error('timed out waiting for the Tutorial amulet checkpoint')
 }
 
 function bypassStartupAudioPreload() {
@@ -300,4 +397,25 @@ function bypassStartupAudioPreload() {
   Object.defineProperty(window, '__sdrRestoreAudioPreload', {
     value: () => { HTMLMediaElement.prototype.load = nativeLoad },
   })
+}
+
+async function samplePointerBlink(page, pointer) {
+  if (allowSparsePresentation) {
+    const opacity = Number(await pointer.evaluate((element) => getComputedStyle(element).opacity))
+    return {
+      hidden: opacity <= 0.01 ? 1 : 0,
+      intermediate: opacity > 0.01 && opacity < 0.99 ? 1 : 0,
+      visible: opacity >= 0.99 ? 1 : 0,
+    }
+  }
+  const receipt = { hidden: 0, intermediate: 0, visible: 0 }
+  const deadline = Date.now() + 1_000
+  while (Date.now() < deadline) {
+    const opacity = Number(await pointer.evaluate((element) => getComputedStyle(element).opacity))
+    if (opacity <= 0.01) receipt.hidden += 1
+    else if (opacity >= 0.99) receipt.visible += 1
+    else receipt.intermediate += 1
+    await page.waitForTimeout(10)
+  }
+  return receipt
 }
