@@ -270,6 +270,9 @@ try {
     pressed: ['false', 'true', 'false'],
   })
   assert.equal(await soundCount(page, 'pickskill'), pickSkillCountBeforeFocus)
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => (
+    requestAnimationFrame(resolve)
+  ))))
   await page.screenshot({ path: screenshotPath })
 
   const rerollSequence = beforeChoice.pendingOffer.sequence
