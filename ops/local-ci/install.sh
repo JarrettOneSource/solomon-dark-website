@@ -4,8 +4,10 @@ set -euo pipefail
 source_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 libexec_dir="$HOME/.local/libexec"
 unit_dir="$HOME/.config/systemd/user"
+state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/solomon-dark-main-deploy"
+failed_target="$state_dir/failed-target"
 
-for command_name in git install systemctl; do
+for command_name in git install systemctl unlink; do
     command -v "$command_name" >/dev/null 2>&1 || {
         printf '%s is required\n' "$command_name" >&2
         exit 1
@@ -17,6 +19,7 @@ if systemctl --user is-active --quiet solomon-dark-main-deploy.service; then
     exit 1
 fi
 systemctl --user stop solomon-dark-main-deploy.timer >/dev/null 2>&1 || true
+[[ ! -f "$failed_target" ]] || unlink -- "$failed_target"
 
 install -d -m 0755 "$libexec_dir" "$unit_dir"
 install -m 0700 "$source_dir/deploy-main.sh" \

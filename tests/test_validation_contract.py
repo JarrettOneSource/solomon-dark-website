@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -188,9 +190,36 @@ class ValidationContractTests(unittest.TestCase):
             "GameHost/ml-bot-policy-v7-selected.sdml",
             nfo_readme,
         )
-        self.assertIn("SDR_GAME_REVISION=<deployed 40-character Git revision>", nfo_readme)
-        self.assertIn('"SDR_GAME_REVISION=$target_sha"', deploy)
+        self.assertNotIn("SDR_GAME_REVISION", nfo_readme)
+        self.assertNotIn("SDR_GAME_REVISION", deploy)
         self.assertNotIn("ml-bot-policy-v5-selected.sdml", nfo_readme)
+
+    def test_main_deployment_self_updates_and_suppresses_failed_candidates(self) -> None:
+        deploy = (ROOT / "ops/local-ci/deploy-main.sh").read_text()
+        install = (ROOT / "ops/local-ci/install.sh").read_text()
+        supervisor = (
+            ROOT / "frontend/src/game/host/run-game-session-supervisor.ts"
+        ).read_text()
+
+        self.assertIn("Deploy/solomon-dark-main-deploy", deploy)
+        self.assertIn("install_validated_worker", deploy)
+        self.assertIn("Automatic deployment is suppressed", deploy)
+        self.assertIn("record_failed_target", deploy)
+        self.assertIn("report_candidate_failure", deploy)
+        self.assertIn("journalctl -u solomon-dark-game.service", deploy)
+        self.assertIn("failed-target", install)
+        self.assertIn("readDeployedRevision", supervisor)
+        self.assertNotIn("SDR_GAME_REVISION", supervisor)
+
+        bash = shutil.which("bash")
+        if bash is None:
+            self.fail("bash is required to validate deployment scripts")
+        for script in (
+            ROOT / "ops/local-ci/deploy-main.sh",
+            ROOT / "ops/local-ci/install.sh",
+        ):
+            with self.subTest(script=script.name):
+                subprocess.run([bash, "-n", script], check=True)
 
 
 if __name__ == "__main__":

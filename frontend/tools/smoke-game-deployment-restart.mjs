@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFileSync, spawn } from 'node:child_process'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import { basename, resolve } from 'node:path'
 
@@ -271,7 +271,7 @@ async function exercisePlayer({ account, label }) {
       .playerEntities.locomotions[0].position.x
     assert.ok(finalTick >= initialTick)
 
-    replacementSupervisor = await startSupervisor()
+    replacementSupervisor = await startSupervisor(targetRevision)
     children.push(replacementSupervisor.child)
     const replacementTicket = await issueHubTicket(replacementSupervisor.url)
     const replacementEndpoint = new URL('/game-hub', replacementSupervisor.url)
@@ -641,18 +641,24 @@ async function seedLocalSave(page, document) {
   }, document)
 }
 
-async function startSupervisor() {
+async function startSupervisor(revision = currentRevision) {
+  await writeFile(resolve(storageRoot, 'DEPLOYED_GIT_SHA'), `${revision}\n`)
   const child = spawn(
     process.execPath,
-    ['--experimental-strip-types', 'src/game/host/run-game-session-supervisor.ts'],
+    [
+      '--experimental-strip-types',
+      resolve(frontendRoot, 'src/game/host/run-game-session-supervisor.ts'),
+    ],
     {
-      cwd: frontendRoot,
+      cwd: storageRoot,
       env: {
         ...process.env,
         SDR_GAME_ALLOWED_ORIGINS: baseUrl,
         SDR_GAME_LOG_LEVEL: 'warning',
-        SDR_GAME_ML_BOT_CHECKPOINT: 'server-assets/ml-bot-policy-v7-selected.sdml',
-        SDR_GAME_REVISION: currentRevision,
+        SDR_GAME_ML_BOT_CHECKPOINT: resolve(
+          frontendRoot,
+          'server-assets/ml-bot-policy-v7-selected.sdml',
+        ),
         SDR_GAME_SUPERVISOR_HOST: '127.0.0.1',
         SDR_GAME_SUPERVISOR_PORT: '0',
         SDR_GAME_SUPERVISOR_SECRET: adminSecret,

@@ -9,6 +9,7 @@ import {
   logGameServerEvent,
   parseGameServerLogLevel,
 } from './game-server-logger.ts'
+import { readDeployedRevision } from './deployed-revision.ts'
 import { MlBotPolicyInferenceWorker } from './ml-bot-host-controller.ts'
 import { createRuntimeEventPublisher } from './runtime-event-publisher.ts'
 
@@ -38,10 +39,7 @@ process.on('warning', (warning) => {
 })
 
 const adminSecret = requiredEnvironment('SDR_GAME_SUPERVISOR_SECRET')
-const revision = requiredEnvironment('SDR_GAME_REVISION').toLowerCase()
-if (!/^[a-f0-9]{40}$/.test(revision)) {
-  throw new Error('SDR_GAME_REVISION must be a full Git commit ID')
-}
+const revision = await readDeployedRevision()
 const runtimeEventEndpoint = process.env.SDR_RUNTIME_EVENT_ENDPOINT?.trim() || ''
 const runtimeEventSecret = process.env.SDR_RUNTIME_EVENT_SECRET?.trim() || ''
 if (Boolean(runtimeEventEndpoint) !== Boolean(runtimeEventSecret)) {

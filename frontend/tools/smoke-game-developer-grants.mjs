@@ -2,7 +2,8 @@ import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
 import { spawn } from 'node:child_process'
 import { createServer } from 'node:http'
-import { readFile, stat } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { extname, resolve, sep } from 'node:path'
 
 import { chromium } from 'playwright-core'
@@ -21,6 +22,7 @@ const webRoot = resolve(frontendRoot, '../backend/wwwroot')
 const supervisorEntry = resolve(frontendRoot, 'dist-game-host/game-session-supervisor.mjs')
 const wasmPath = resolve(frontendRoot, 'dist-game-host/lua54.wasm')
 const checkpointPath = resolve(frontendRoot, 'server-assets/ml-bot-policy-v7-selected.sdml')
+const releaseRoot = await mkdtemp(resolve(tmpdir(), 'solomon-developer-grants-release-'))
 const chromePath = process.env.SDR_CHROME_PATH || (process.platform === 'darwin'
   ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
   : '/usr/bin/google-chrome')
@@ -32,6 +34,7 @@ await Promise.all([
   stat(checkpointPath),
   stat(chromePath),
 ])
+await writeFile(resolve(releaseRoot, 'DEPLOYED_GIT_SHA'), `${'d'.repeat(40)}\n`)
 const staticServer = await startStaticServer(webRoot)
 const staticAddress = staticServer.address()
 if (!staticAddress || typeof staticAddress === 'string') {
@@ -39,13 +42,12 @@ if (!staticAddress || typeof staticAddress === 'string') {
 }
 const baseUrl = `http://127.0.0.1:${staticAddress.port}`
 const supervisor = spawn(process.execPath, [supervisorEntry], {
-  cwd: frontendRoot,
+  cwd: releaseRoot,
   env: {
     ...process.env,
     SDR_GAME_ALLOWED_ORIGINS: baseUrl,
     SDR_GAME_LOG_LEVEL: 'warning',
     SDR_GAME_ML_BOT_CHECKPOINT: checkpointPath,
-    SDR_GAME_REVISION: 'd'.repeat(40),
     SDR_GAME_SUPERVISOR_HOST: '127.0.0.1',
     SDR_GAME_SUPERVISOR_PORT: '0',
     SDR_GAME_SUPERVISOR_SECRET: adminSecret,
@@ -172,6 +174,7 @@ try {
   await ordinary?.close().catch(() => {})
   await stopChild(supervisor)
   await new Promise(resolveClose => staticServer.close(resolveClose))
+  await rm(releaseRoot, { force: true, recursive: true })
   if (supervisor.exitCode !== 0 && supervisor.exitCode !== null) {
     process.stderr.write(hostDiagnostics.join(''))
   }

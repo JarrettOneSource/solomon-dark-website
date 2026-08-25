@@ -364,6 +364,21 @@ distribution carries the pinned platform-specific Node runtime. The game host
 does not run inside Electron's Node runtime and must not acquire native npm
 dependencies without revisiting this release invariant.
 
+Production generation identity has one owner: the immutable
+`DEPLOYED_GIT_SHA` beside the deployed server bundle. The supervisor reads and
+validates that file at process start. A protected environment variable must not
+duplicate the revision because doing so couples an application release to the
+version of the machine-local deployment worker.
+
+The machine-local worker is itself a validated release member. When its packaged
+copy changes, the current worker installs that copy only after the complete gate
+has passed, discards the artifact built under the older worker, and exits before
+remote cutover. The replacement worker then validates and packages the commit
+again. A failed remote candidate is terminal for automatic attempts at that SHA:
+the worker captures candidate unit status and bounded journal tails, rolls back,
+records the failed target, and does not drain players again until an explicit
+operator reinstall or a different `main` commit.
+
 ## Authority and time
 
 - All gameplay mutations happen in `core-server` through deterministic fixed

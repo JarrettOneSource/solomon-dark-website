@@ -11,6 +11,7 @@ scp_command="${SDR_DEPLOY_SCP_COMMAND:-/usr/bin/scp}"
 ssh_identity="${SDR_DEPLOY_SSH_IDENTITY:-$HOME/.ssh/id_ed25519_nfoservers_root}"
 public_url="${SDR_DEPLOY_PUBLIC_URL:-https://solomondarker.com}"
 caddy_source_path="ops/nfo/solomon-dark-revived.caddy"
+worker_artifact_path="Deploy/solomon-dark-main-deploy"
 remote_caddy_site="/etc/caddy/sites/solomon-dark-revived.caddy"
 ssh_options=(
     -o BatchMode=yes
@@ -26,13 +27,18 @@ mirror="$data_root/repository.git"
 run_parent="$data_root/runs"
 artifact_root="$state_root/artifacts"
 lock_file="$state_root/deploy.lock"
+failed_target_file="$state_root/failed-target"
+worker_path="$HOME/.local/libexec/solomon-dark-main-deploy"
+worker_next="${worker_path}.next"
 
 run_root=""
 source_checkout=""
 worktree_registered=0
 artifact_temp=""
 checksum_temp=""
+failed_target_temp=""
 remote_upload=""
+worker_temp=""
 
 log() {
     printf '%s %s\n' "$(date --iso-8601=seconds)" "$*"
@@ -58,6 +64,13 @@ cleanup() {
     if [[ -n "$checksum_temp" && -f "$checksum_temp" ]]; then
         unlink -- "$checksum_temp"
     fi
+    if [[ -n "$failed_target_temp" && -f "$failed_target_temp" ]]; then
+        unlink -- "$failed_target_temp"
+    fi
+    if [[ -n "$worker_temp" && -f "$worker_temp" ]]; then
+        unlink -- "$worker_temp"
+    fi
+    [[ ! -f "$worker_next" ]] || unlink -- "$worker_next"
 
     if (( worktree_registered == 1 )); then
         git --git-dir="$mirror" worktree remove --force "$source_checkout" \
@@ -93,7 +106,31 @@ remote_caddy_checksum() {
         "if test -r '$remote_caddy_site'; then sha256sum '$remote_caddy_site' | awk '{print \$1}'; else printf 'missing\n'; fi"
 }
 
-for command_name in curl date flock git install mktemp python3 sha256sum tar; do
+record_failed_target() {
+    failed_target_temp="$state_root/.failed-target.$$"
+    printf '%s %s\n' "$target_sha" "$(date --iso-8601=seconds)" >"$failed_target_temp"
+    mv -- "$failed_target_temp" "$failed_target_file"
+    failed_target_temp=""
+}
+
+install_validated_worker() {
+    worker_temp="$(mktemp "$state_root/worker.XXXXXXXX")"
+    tar --extract --gzip --file "$artifact" --to-stdout \
+        "./$worker_artifact_path" >"$worker_temp"
+    chmod 0700 "$worker_temp"
+    if [[ -f "$worker_path" ]] && cmp --silent "$worker_temp" "$worker_path"; then
+        unlink -- "$worker_temp"
+        worker_temp=""
+        return 1
+    fi
+    install -D -m 0700 -- "$worker_temp" "$worker_next"
+    mv -- "$worker_next" "$worker_path"
+    unlink -- "$worker_temp"
+    worker_temp=""
+    return 0
+}
+
+for command_name in cmp curl date flock git install mktemp python3 sha256sum tar; do
     require_command "$command_name"
 done
 [[ -x "$ssh_command" ]] || fail "SSH client is not executable: $ssh_command"
@@ -142,11 +179,21 @@ if [[ "$deployed_sha" == "$target_sha" &&
     "$live_caddy_checksum" == "$target_caddy_checksum" ]]; then
     [[ ! -f "$artifact" ]] || unlink -- "$artifact"
     [[ ! -f "$checksum_file" ]] || unlink -- "$checksum_file"
+    [[ ! -f "$failed_target_file" ]] || unlink -- "$failed_target_file"
     log "Production is already at origin/main $target_sha"
     exit 0
 fi
 if [[ "$deployed_sha" == "$target_sha" ]]; then
     log "Production runtime is current but its Caddy site configuration drifted"
+fi
+if [[ -f "$failed_target_file" ]]; then
+    read -r failed_target_sha _ <"$failed_target_file"
+    [[ "$failed_target_sha" =~ ^[0-9a-f]{40}$ ]] ||
+        fail "failed deployment target state is invalid"
+    if [[ "$failed_target_sha" == "$target_sha" ]]; then
+        log "Automatic deployment is suppressed for failed target $target_sha; run ops/local-ci/install.sh from a corrected checkout to retry"
+        exit 0
+    fi
 fi
 
 artifact_checksum=""
@@ -198,8 +245,12 @@ if [[ -z "$artifact_checksum" ]]; then
     install -D -m 0644 \
         "$source_checkout/$caddy_source_path" \
         "$publish_dir/Deploy/solomon-dark-revived.caddy"
+    install -D -m 0700 \
+        "$source_checkout/ops/local-ci/deploy-main.sh" \
+        "$publish_dir/$worker_artifact_path"
 
     for required_file in \
+        Deploy/solomon-dark-main-deploy \
         Deploy/solomon-dark-revived.caddy \
         Server.dll \
         GameHost/game-session-supervisor.mjs \
@@ -230,6 +281,12 @@ newest_sha="$(fetch_main)"
 if [[ "$newest_sha" != "$target_sha" ]]; then
     log "Artifact $target_sha was superseded by $newest_sha; deferring to the next run"
     unlink -- "$artifact" "$checksum_file"
+    exit 0
+fi
+
+if install_validated_worker; then
+    unlink -- "$artifact" "$checksum_file"
+    log "Installed the validated deployment worker from $target_sha; deferring production cutover to the next run"
     exit 0
 fi
 
@@ -309,27 +366,20 @@ PY
 
 install_game_checkpoint_path() {
     local checkpoint_lines=()
-    local revision_lines=()
     mapfile -t checkpoint_lines < <(grep '^SDR_GAME_ML_BOT_CHECKPOINT=' "$game_env")
-    mapfile -t revision_lines < <(grep '^SDR_GAME_REVISION=' "$game_env" || true)
     [[ "${#checkpoint_lines[@]}" == 1 ]]
-    [[ "${#revision_lines[@]}" -le 1 ]]
-    if [[ "${checkpoint_lines[0]}" == "SDR_GAME_ML_BOT_CHECKPOINT=$game_checkpoint" ]] &&
-        [[ "${revision_lines[0]:-}" == "SDR_GAME_REVISION=$target_sha" ]]; then
+    if [[ "${checkpoint_lines[0]}" == "SDR_GAME_ML_BOT_CHECKPOINT=$game_checkpoint" ]]; then
         return
     fi
 
     install -d -m 0700 "$backup_dir"
     game_env_backup="$backup_dir/solomon-dark-game.env"
     install -o root -g root -m 0600 -- "$game_env" "$game_env_backup"
-    python3 - "$game_env" "$game_env_next" "$game_checkpoint" "$target_sha" <<'PY'
+    python3 - "$game_env" "$game_env_next" "$game_checkpoint" <<'PY'
 from pathlib import Path
 import sys
 
-source = Path(sys.argv[1])
-destination = Path(sys.argv[2])
-checkpoint = Path(sys.argv[3])
-revision = sys.argv[4]
+source, destination, checkpoint = map(Path, sys.argv[1:])
 lines = source.read_text().splitlines(keepends=True)
 checkpoint_matches = [
     index
@@ -341,21 +391,6 @@ if len(checkpoint_matches) != 1:
 line = lines[checkpoint_matches[0]]
 newline = "\r\n" if line.endswith("\r\n") else "\n" if line.endswith("\n") else ""
 lines[checkpoint_matches[0]] = f"SDR_GAME_ML_BOT_CHECKPOINT={checkpoint}{newline}"
-revision_matches = [
-    index
-    for index, line in enumerate(lines)
-    if line.rstrip("\r\n").startswith("SDR_GAME_REVISION=")
-]
-if len(revision_matches) > 1:
-    raise SystemExit("game environment may contain at most one deployed revision")
-if revision_matches:
-    line = lines[revision_matches[0]]
-    newline = "\r\n" if line.endswith("\r\n") else "\n" if line.endswith("\n") else ""
-    lines[revision_matches[0]] = f"SDR_GAME_REVISION={revision}{newline}"
-else:
-    if lines and not lines[-1].endswith(("\n", "\r\n")):
-        lines[-1] += "\n"
-    lines.append(f"SDR_GAME_REVISION={revision}\n")
 destination.write_text("".join(lines))
 PY
     chown root:root "$game_env_next"
@@ -401,6 +436,16 @@ install_caddy_config() {
     systemctl is-active --quiet caddy.service
 }
 
+report_candidate_failure() {
+    printf 'Candidate %s failed; service state before rollback:\n' "$target_sha" >&2
+    systemctl status solomon-dark-game.service solomon-dark-revived.service \
+        --no-pager --full >&2 || true
+    printf 'Candidate game journal before rollback:\n' >&2
+    journalctl -u solomon-dark-game.service -n 80 --no-pager -o short-iso >&2 || true
+    printf 'Candidate Website journal before rollback:\n' >&2
+    journalctl -u solomon-dark-revived.service -n 80 --no-pager -o short-iso >&2 || true
+}
+
 cleanup_upload() {
     [[ ! -f "$artifact" ]] || unlink -- "$artifact"
     [[ ! -f "$caddy_candidate" ]] || unlink -- "$caddy_candidate"
@@ -423,6 +468,7 @@ rollback_release() {
     local exit_code=$?
     trap - ERR EXIT
     if (( rollback_needed == 1 )); then
+        report_candidate_failure
         systemctl stop solomon-dark-revived.service solomon-dark-game.service || true
         if [[ -d "$live" ]]; then
             mv -- "$live" "$failed_release" || true
@@ -511,17 +557,22 @@ for _attempt in {1..30}; do
         healthy=1
         break
     fi
+    if [[ "$(systemctl show -p Result --value solomon-dark-revived.service)" != success ||
+        "$(systemctl show -p Result --value solomon-dark-game.service)" != success ]]; then
+        break
+    fi
     sleep 1
 done
-[[ "$healthy" == 1 ]]
+if [[ "$healthy" != 1 ]]; then
+    printf 'Candidate %s did not become healthy.\n' "$target_sha" >&2
+    false
+fi
 [[ "$(systemctl show -p NRestarts --value solomon-dark-revived.service)" == 0 ]]
 [[ "$(systemctl show -p NRestarts --value solomon-dark-game.service)" == 0 ]]
 [[ "$(sqlite3 "$database" 'PRAGMA integrity_check;')" == "ok" ]]
 [[ "$(tr -d '\r\n' <"$live/DEPLOYED_GIT_SHA")" == "$target_sha" ]]
 grep --fixed-strings --line-regexp --quiet \
     "SDR_GAME_ML_BOT_CHECKPOINT=$game_checkpoint" "$game_env"
-grep --fixed-strings --line-regexp --quiet \
-    "SDR_GAME_REVISION=$target_sha" "$game_env"
 [[ "$(sha256sum "$caddy_site" | awk '{print $1}')" == \
     "$(sha256sum "$caddy_candidate" | awk '{print $1}')" ]]
 
@@ -538,7 +589,12 @@ else
     deploy_exit=$?
 fi
 
-(( deploy_exit == 0 )) || fail "remote deployment exited with status $deploy_exit"
+if (( deploy_exit != 0 )); then
+    if (( deploy_exit != 255 )); then
+        record_failed_target
+    fi
+    fail "remote deployment exited with status $deploy_exit"
+fi
 remote_upload=""
 
 live_sha="$(remote_deployed_sha)"
@@ -560,6 +616,7 @@ if payload != {"revision": sys.argv[2]}:
 PY
 
 printf '%s %s\n' "$target_sha" "$(date --iso-8601=seconds)" >"$state_root/last-success"
+[[ ! -f "$failed_target_file" ]] || unlink -- "$failed_target_file"
 [[ ! -f "$artifact" ]] || unlink -- "$artifact"
 [[ ! -f "$checksum_file" ]] || unlink -- "$checksum_file"
 log "Production deployment of origin/main $target_sha passed live health checks"

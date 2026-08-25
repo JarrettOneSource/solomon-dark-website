@@ -23,7 +23,6 @@ SDR_GAME_DEPLOYMENT_SAVE_TIMEOUT_SECONDS=30
 SDR_GAME_UNCLAIMED_TIMEOUT_SECONDS=120
 SDR_GAME_LOG_LEVEL=info
 SDR_GAME_ML_BOT_CHECKPOINT=/opt/solomon-dark-revived/GameHost/ml-bot-policy-v7-selected.sdml
-SDR_GAME_REVISION=<deployed 40-character Git revision>
 SDR_RUNTIME_EVENT_ENDPOINT=http://127.0.0.1:5220/api/internal/runtime-events
 SDR_RUNTIME_EVENT_SECRET=<a separate random 32-byte base64url value>
 ```
@@ -32,6 +31,9 @@ During a versioned checkpoint cutover, the deployment worker backs up this
 protected environment file, atomically installs the selected checkpoint path
 after swapping in the matching release, and restores the prior file if release
 health rolls back.
+The supervisor reads its immutable generation directly from the release-owned
+`/opt/solomon-dark-revived/DEPLOYED_GIT_SHA`; release identity is not duplicated
+in the protected environment file.
 
 The same secret is supplied to the website through its existing protected
 environment file using these keys:
@@ -107,6 +109,10 @@ storage acknowledgements, and closes the clients with code `1012` and reason
 not disconnect games. The Website stays live until the save grace completes so
 authenticated cloud-slot writes can finish. The release manifest at
 `/deployment.json` is `no-store` and owns the automatic browser reload edge.
+Before rollback, candidate unit status and bounded journal tails are streamed to
+the machine-local deployment receipt. That worker records the failed target and
+will not drain players for the same SHA again until an operator explicitly
+reinstalls the worker or a different commit reaches `main`.
 
 Restart the game supervisor together with the website whenever the bundled game
 protocol changes. A release is healthy only when all of these pass:

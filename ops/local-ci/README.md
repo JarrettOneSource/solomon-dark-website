@@ -28,16 +28,28 @@ runner would allow untrusted workflow code to target the deployment machine.
 The worker fetches the public repository without GitHub credentials and only
 executes commits that have reached `main`.
 
+Every validated release contains the exact deployment worker that built it. If
+that worker differs from the installed copy, the current run atomically installs
+it, discards the old-format artifact, and exits before contacting production.
+The next timer run validates and packages the commit again under the new worker.
+This keeps machine-local deployment changes synchronized without executing an
+unvalidated script from the public repository.
+
+A remote cutover failure records its target SHA and suppresses further automatic
+attempts for that same commit. The failed candidate's service status and recent
+Website/game journals are included in the local deployment receipt before the
+remote rollback. After correcting the cause, run `./ops/local-ci/install.sh`
+from the exact intended checkout; explicit installation clears the failed-target
+record and starts one fresh deployment attempt.
+
 Install or refresh it on the deployment machine:
 
 ```bash
 ./ops/local-ci/install.sh
 ```
 
-Bootstrap a worker change in two phases: first deploy a release whose
-supervisor/client implements the authenticated restart handshake using the old
-zero-session worker, then run `install.sh`. The worker is machine-local and is
-not replaced by the application archive itself.
+The first installation remains explicit because no validated worker exists yet.
+After that bootstrap, validated releases own worker refreshes as described above.
 
 On WSL, keep the user manager enabled with linger and launch the distribution
 at Windows logon. This workstation uses a per-user Startup entry for Ubuntu, so
