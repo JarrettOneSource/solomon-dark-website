@@ -1,0 +1,11 @@
+{
+  "$schema": "/mod-manifest.schema.json",
+  "id": "canary.lua.invincibility_potion",
+  "name": "Invincibility Potion",
+  "version": "0.1.0",
+  "runtime": {
+    "apiVersion": "1.0.0",
+    "entryScript": "scripts/main.lua"
+  },
+  "requiredMods": []
+}

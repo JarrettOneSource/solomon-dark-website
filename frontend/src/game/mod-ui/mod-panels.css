@@ -1,0 +1,21 @@
+.mod-panels {
+  position: fixed;
+  z-index: 37;
+  right: max(1rem, env(safe-area-inset-right));
+  bottom: max(5rem, env(safe-area-inset-bottom));
+  display: grid;
+  gap: .35rem;
+  width: min(16rem, 42vw);
+  max-height: 40vh;
+  overflow: auto;
+  pointer-events: auto;
+}
+
+.mod-panels button {
+  padding: .45rem .65rem;
+  border: 1px solid rgb(210 190 139 / 75%);
+  background: rgb(10 12 17 / 88%);
+  color: #e6d9b2;
+  font: 600 .75rem/1.2 Cinzel, serif;
+  text-align: left;
+}

@@ -91,6 +91,11 @@ export function encodePreparedModSaveState(
           player_id: rank.playerId,
           rank: rank.rank,
         })),
+        skill_offers: checkpoint.skills.offers.map(offer => ({
+          content_ids: offer.contentIds,
+          player_id: offer.playerId,
+          sequence: offer.sequence,
+        })),
         skill_revision: checkpoint.skills.revision,
         spell_revision: checkpoint.spells.revision,
         state_revision: checkpoint.session.state.revision,
@@ -216,6 +221,16 @@ export function decodePreparedModSaveState(
       rank: positiveInteger(row.rank, 'mod skill rank'),
     })
   })
+  const offers = array(runtime.skill_offers, 'mod skill offers').map((value) => {
+    const row = object(value, 'mod skill offer')
+    return Object.freeze({
+      contentIds: Object.freeze(array(row.content_ids, 'mod skill offer ids').map(value => (
+        text(value, 'mod skill offer id')
+      ))),
+      playerId: text(row.player_id, 'mod skill offer player'),
+      sequence: positiveInteger(row.sequence, 'mod skill offer sequence'),
+    })
+  })
   return Object.freeze({
     enemies: Object.freeze({
       enemies: Object.freeze(enemies),
@@ -241,6 +256,7 @@ export function decodePreparedModSaveState(
     }),
     shops: Object.freeze({ stock: Object.freeze(stock) }),
     skills: Object.freeze({
+      offers: Object.freeze(offers),
       ranks: Object.freeze(ranks),
       revision: nonnegativeInteger(runtime.skill_revision, 'mod skill revision'),
     }),

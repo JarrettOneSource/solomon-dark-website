@@ -2,7 +2,9 @@
 
 Status: **design stress tests; not implementations**
 
-These examples test whether the proposed framework stays simple while carrying
+Status: **implemented acceptance examples for API 1.0.0**
+
+These examples test whether the framework stays simple while carrying
 real authority, multiplayer, presentation, save, and teardown requirements. A
 design fails if the author has to rebuild those systems manually.
 

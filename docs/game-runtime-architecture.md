@@ -1419,29 +1419,24 @@ Channel-active primary remains a legal held action on the next policy decision,
 and episode metrics attribute decisions, ticks, runs, kills, and wave depth to
 the exact current loadout even if a learned choice changes primary mid-run.
 
-API `0.2.0` adds one host-owned content registry beneath the VMs. Admission
-provides each mod only its validated immutable package files. During its sole
-entrypoint, a mod may register bounded local sprite atlases, consumables, and
-additive loot rows; a failed entrypoint rolls back the whole registration.
-The registry publishes only validated PNG bytes, frame geometry, and immutable
-content metadata. Stable native `sd.content.v1` identities cross Lua and JSON
-as decimal strings so JavaScript never rounds a 63-bit item ID.
+API `1.0.0` replaces the package callback runtime with one atomic definition
+graph. A stripped admission VM evaluates `sd.mod`, kits, prefabs, finite rules,
+and typed references; the compiler resolves stable `sd.content.v1` identities,
+assets, dependencies, cycles, mounts, budgets, capabilities, and a canonical
+graph digest before a ticket exists. Prepared sessions reverify that digest,
+run bounded server-only reducers, and commit reducer cells plus validated
+intents transactionally. The removed 0.2 content registry, entrypoint
+registration, manual capability arrays, and native Loader metadata have no
+runtime aliases.
 
-The simulation sees that registry through a narrow extension interface rather
-than importing Lua. Custom loot enters the existing authoritative ground-actor
-and pickup lanes. A consume action allocates one use ID, invokes the owning
-callback for the actual participant, dispatches `item.consumed` to every mod
-VM, and snapshots the bounded actor-attached effect. Synchronous
-`damage.taken` and `mana.changing` filters run at the existing direct/poison
-health and primary/secondary/overload/recovery/orb/potion mana writers. Filter
-errors fail open for that handler; cancellation remains monotonic. Protocol 48
-introduced package presentation, catalog entries, content-identified
-inventory/ground items, and active effects. Protocol 54 replaces embedded PNG
-bytes with immutable `{sha256, byteLength}` references. The Website persists
-those bytes under `/api/game/content/{sha256}`; the browser streams, verifies,
-and caches them before Create or party connection. A Dark Cloud Subscribe or
-Enable action warms the same cache without blocking navigation and publishes
-bounded footer progress.
+Typed family engines own items, statuses, powerups, affixes, skills, spells,
+enemies, Boneyards, shops, UI, rooms, scenes, and portals behind the same host
+adapter. The browser receives immutable catalogs and bounded runtime
+projections; trusted lazy-loaded components own presentation, including the
+Minimap. Protocol content references remain decimal strings so JavaScript never
+rounds a 63-bit ID. Typed package bytes remain immutable
+`{sha256, byteLength, contentType, kind}` resources served from
+`/api/game/content/{sha256}` and verified before play.
 
 The browser must carry the current account token into the optional-auth
 `/api/game/hub` admission request. Loading `/api/mods/active` is only a UI
@@ -1451,10 +1446,11 @@ empty content manifest. Party launch compares those sealed content identities,
 so a signed-in request that silently becomes anonymous must fail the admission
 regression before it can strand a mixed-content party in the Hub.
 
-`sd.state` remains the only durable mod-owned value domain. Schema-three
-checkpoints snapshot it as bounded JSON and restore it only for an exact mod
-identity match; live Lua callbacks, timers, and active consumable effects are
-run-scoped and deliberately not checkpointed. Client-authored Lua,
+The schema-nine 1.0 checkpoint codec persists reducer cells, statuses,
+powerups, spell cooldowns, skills, shops, custom enemies, scene stacks,
+allocator cursors, and revisions. It restores only when every package and graph
+digest matches, and rolls the complete prepared host back if any family rejects
+the checkpoint. Client-authored Lua,
 cross-mod buses, raw Lua networking, general-purpose input synthesis, time
 scaling, recipe-backed dynamic items, and every native-memory/debug path remain
 absent until their web owners exist. The only bot and navigation surface is the

@@ -118,6 +118,7 @@ export interface PreparedModHost {
   purchaseShop(playerId: string, shopContentId: string, row: number): void
   restore(checkpoint: PreparedModHostCheckpoint): void
   restoreSaveState(state: PreparedModSaveState): void
+  runtimeProjection(viewerId?: string): Readonly<{ projection: LuaConsoleObject; revision: number }>
   saveState(): PreparedModSaveState
   enterPortal(input: Readonly<{
     actorKind: string
@@ -400,6 +401,83 @@ export async function prepareModHost(options: Readonly<{
     restoreSaveState(state) {
       host.restore(decodePreparedModSaveState(options.content.compiledMods, state))
     },
+    runtimeProjection(viewerId) {
+      requireOpen()
+      const checkpoint = host.checkpoint()
+      const projection: LuaConsoleObject = {
+        enemies: checkpoint.enemies.enemies.map(enemy => ({
+          content_id: enemy.contentId,
+          current_health: enemy.currentHealth,
+          id: enemy.id,
+          maximum_health: enemy.maximumHealth,
+          target_player_id: enemy.targetPlayerId,
+          x: enemy.x,
+          y: enemy.y,
+        })),
+        portals: portals.portals().map(portal => ({
+          id: portal.id,
+          policy: portal.policy,
+          prompt: portal.prompt,
+          scene: portal.scene,
+        })),
+        scenes: checkpoint.scenes.scenes.map(scene => ({
+          epoch: scene.epoch,
+          owner_id: scene.ownerId,
+          parent_content_id: scene.parentContentId,
+          scene_content_id: scene.sceneContentId,
+        })),
+        shops: content.all().filter(entry => entry.contentKind === 'shop').map(entry => ({
+          content_id: entry.contentId,
+          name: entry.name,
+          stock: content.shop(entry.contentId)!.stock.map(stock => ({
+            item_content_id: stock.item.contentId,
+            price: stock.price,
+            quantity: stock.quantity,
+          })),
+        })),
+        shop_stock: (viewerId ? shops.project(viewerId) : checkpoint.shops.stock).map(stock => ({
+          player_id: stock.playerId,
+          remaining: stock.remaining,
+          row: stock.row,
+          shop_content_id: stock.shopContentId,
+        })),
+        skills: content.skills().map(skill => ({
+          content_id: skill.contentId,
+          maximum_rank: skill.maximumRank,
+          minimum_level: skill.minimumLevel,
+          name: skill.name,
+        })),
+        skill_ranks: (viewerId ? skills.project(viewerId) : checkpoint.skills.ranks).map(rank => ({
+          content_id: rank.contentId,
+          player_id: rank.playerId,
+          rank: rank.rank,
+        })),
+        skill_offers: (viewerId ? skills.offers(viewerId) : checkpoint.skills.offers).map(offer => ({
+          content_ids: offer.contentIds,
+          player_id: offer.playerId,
+          sequence: offer.sequence,
+        })),
+        spells: content.spells().map(spell => ({
+          content_id: spell.contentId,
+          mana: spell.mana,
+          name: spell.name,
+          slot: spell.slot,
+        })),
+        spell_cooldowns: (viewerId ? spells.project(viewerId) : checkpoint.spells.cooldowns).map(row => ({
+          content_id: row.contentId,
+          player_id: row.playerId,
+          ready_tick: row.readyTick,
+        })),
+      }
+      return Object.freeze({
+        projection: Object.freeze(projection),
+        revision: checkpoint.enemies.revision
+          + checkpoint.scenes.nextEpoch
+          + checkpoint.skills.revision
+          + checkpoint.spells.revision
+          + checkpoint.shops.stock.reduce((sum, row) => sum + row.remaining, 0),
+      })
+    },
     saveState() {
       return encodePreparedModSaveState(options.content.compiledMods, host.checkpoint())
     },
@@ -409,6 +487,15 @@ export async function prepareModHost(options: Readonly<{
     },
     step(events, tick, scopeId, context = {}) {
       requireOpen()
+      for (const event of events) {
+        if (event.name !== 'level.up' || !event.payload || typeof event.payload !== 'object' ||
+            Array.isArray(event.payload)) continue
+        const payload = event.payload as LuaConsoleObject
+        if (typeof payload.player_id === 'string' && typeof payload.level === 'number' &&
+            Number.isSafeInteger(payload.level) && payload.level > 0) {
+          skills.offer(payload.player_id, payload.level, tick)
+        }
+      }
       return report(session.step({
         events: events.map(event => ({
           context: Object.freeze({ ...context, event: event.name }),

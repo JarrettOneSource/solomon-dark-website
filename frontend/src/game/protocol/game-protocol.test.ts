@@ -4468,6 +4468,32 @@ test('mod spell cast protocol carries only stable content, request, and target v
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage(message)), message)
 })
 
+test('mod runtime projection carries bounded late-join family instances', () => {
+  const message = {
+    type: 'server-mod-runtime' as const,
+    projection: {
+      enemies: [{ contentId: '5000000000000000009', id: 1, x: 20, y: 30 }],
+      scenes: [{ epoch: 1, ownerId: 'party-1', sceneContentId: '5000000000000000014' }],
+      shop_stock: [],
+      skill_ranks: [],
+      spell_cooldowns: [],
+    },
+    revision: 2,
+  }
+  assert.deepEqual(decodeServerGameMessage(encodeGameMessage(message)), message)
+})
+
+test('mod family action protocol carries one bounded typed target and argument object', () => {
+  const message = {
+    type: 'client-mod-action' as const,
+    action: 'shop-buy' as const,
+    arguments: { row: 2 },
+    requestId: 9,
+    target: '5000000000000000011',
+  }
+  assert.deepEqual(decodeClientGameMessage(encodeGameMessage(message)), message)
+})
+
 test('party protocol strictly round-trips membership, access settings, requests, and results', () => {
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
     type: 'client-party-invite',

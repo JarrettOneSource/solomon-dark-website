@@ -1,8 +1,8 @@
 # Web Lua framework 1.0
 
-Status: **proposed; not implemented**
+Status: **implemented in the Website; API 1.0.0**
 
-This document recommends the settled shape of Lua modding for the Solomon Dark
+This document records the implemented shape of Lua modding for the Solomon Dark
 web port. The Website is the only target. Native Mod Loader documents are useful
 evidence about semantic game seams, but the Loader is being retired and does not
 constrain the public contract.
@@ -17,7 +17,7 @@ Related documents:
 
 ## Outcome
 
-Web Lua 1.0 should be a declarative content compiler with progressive disclosure:
+Web Lua 1.0 is a declarative content compiler with progressive disclosure:
 
 1. A mod returns one atomic definition graph.
 2. Beginner kits and prefabs expand into ordinary graph nodes with safe defaults.

@@ -1,4 +1,4 @@
-import type { ModContentProjection } from '../protocol/game-protocol.ts'
+import type { LuaConsoleObject, ModContentProjection } from '../protocol/game-protocol.ts'
 
 export interface ModMinimapSnapshot {
   readonly players: Readonly<Record<string, Readonly<{
@@ -31,6 +31,7 @@ export function projectModMinimap(
   snapshot: ModMinimapSnapshot,
   mods: ModContentProjection,
   viewerId: string,
+  runtime: LuaConsoleObject | null = null,
 ): ModMinimapModel | null {
   const definition = mods.content.find(content => (
     content.contentKind === 'ui' && content.presentation === 'prefab.minimap'
@@ -50,6 +51,7 @@ export function projectModMinimap(
       x: enemy.position.x,
       y: enemy.position.y,
     })))
+    markers.push(...runtimeEnemies(runtime))
   }
   markers.push(...mods.powerups.map(powerup => ({
     id: `powerup-${powerup.id}`,
@@ -62,5 +64,17 @@ export function projectModMinimap(
     center: Object.freeze({ ...viewer.position }),
     contentId: definition.contentId,
     markers: Object.freeze(markers),
+  })
+}
+
+function runtimeEnemies(runtime: LuaConsoleObject | null): ModMinimapMarker[] {
+  const values = runtime?.enemies
+  if (!Array.isArray(values)) return []
+  return values.flatMap((value) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return []
+    const enemy = value as LuaConsoleObject
+    return typeof enemy.id === 'number' && typeof enemy.x === 'number' && typeof enemy.y === 'number'
+      ? [{ id: `mod-enemy-${enemy.id}`, kind: 'enemy' as const, x: enemy.x, y: enemy.y }]
+      : []
   })
 }

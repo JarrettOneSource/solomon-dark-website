@@ -663,6 +663,16 @@ export interface ClientModCastMessage {
   readonly type: 'client-mod-cast'
 }
 
+export const MOD_ACTIONS = ['portal-enter', 'shop-buy', 'skill-choose'] as const
+export type ModAction = typeof MOD_ACTIONS[number]
+export interface ClientModActionMessage {
+  readonly action: ModAction
+  readonly arguments: LuaConsoleObject
+  readonly requestId: number
+  readonly target: string
+  readonly type: 'client-mod-action'
+}
+
 export type ClientGameMessage =
   | ClientChatMessage
   | ClientCheatModeMessage
@@ -677,6 +687,7 @@ export type ClientGameMessage =
   | ClientLevelUpActionMessage
   | ClientLuaExecuteMessage
   | ClientModCastMessage
+  | ClientModActionMessage
   | ClientObserverHelloMessage
   | ClientPartyAcceptMessage
   | ClientPartyDenyMessage
@@ -796,6 +807,12 @@ export interface ModContentProjection {
 
 export interface ServerModContentMessage extends ModContentProjection {
   readonly type: 'server-mod-content'
+}
+
+export interface ServerModRuntimeMessage {
+  readonly projection: LuaConsoleObject
+  readonly revision: number
+  readonly type: 'server-mod-runtime'
 }
 
 export interface ServerSnapshotMessage {
@@ -945,6 +962,7 @@ export type ServerGameMessage =
   | ServerLuaResultMessage
   | ServerModCatalogMessage
   | ServerModContentMessage
+  | ServerModRuntimeMessage
   | ServerPartyStateMessage
   | ServerPartyActionMessage
   | ServerPongMessage
@@ -1261,6 +1279,22 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
       targetY: finite(value.targetY, 'targetY'),
     }
   }
+  if (value.type === 'client-mod-action') {
+    onlyKeys(value, 'message', ['type', 'action', 'arguments', 'requestId', 'target'])
+    const action = limitedString(value.action, 'action', 32)
+    const args = luaConsoleValue(value.arguments, 'arguments', { nodes: 0 }, 0)
+    if (!(MOD_ACTIONS as readonly string[]).includes(action) || !args ||
+        typeof args !== 'object' || Array.isArray(args)) {
+      throw new GameProtocolError('mod action is invalid')
+    }
+    return {
+      type: 'client-mod-action',
+      action: action as ModAction,
+      arguments: args as LuaConsoleObject,
+      requestId: luaRequestId(value.requestId),
+      target: limitedString(value.target, 'target', 256),
+    }
+  }
   if (value.type === 'client-disconnect') {
     onlyKeys(value, 'message', ['type'])
     return { type: 'client-disconnect' }
@@ -1351,6 +1385,18 @@ export function decodeServerGameMessage(payload: string): ServerGameMessage {
       'type', 'content', 'manifestSha256', 'powerups', 'revision', 'statuses',
     ])
     return { type: 'server-mod-content', ...modContentProjection(value) }
+  }
+  if (value.type === 'server-mod-runtime') {
+    onlyKeys(value, 'message', ['type', 'projection', 'revision'])
+    const projection = luaConsoleValue(value.projection, 'projection', { nodes: 0 }, 0)
+    if (!projection || typeof projection !== 'object' || Array.isArray(projection)) {
+      throw new GameProtocolError('mod runtime projection is invalid')
+    }
+    return {
+      type: 'server-mod-runtime',
+      projection: projection as LuaConsoleObject,
+      revision: nonnegativeInteger(value.revision, 'revision'),
+    }
   }
   if (value.type === 'server-snapshot') {
     onlyKeys(value, 'message', [

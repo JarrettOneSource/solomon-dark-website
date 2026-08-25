@@ -29,6 +29,8 @@ import {
   type GameplayPauseState,
   type HubPlayerActivity,
   type LoadedBoneyard,
+  type LuaConsoleObject,
+  type ModAction,
   type ModContentProjection,
   type PartyAction,
   type PartyActionRejection,
@@ -109,6 +111,7 @@ export interface GameClientSession {
   acceptPartyJoinRequest(requestId: string): void
   bindSkillQuickbar(skillId: number, slot: number): void
   castModSpell(contentId: string, target: Readonly<{ x: number; y: number }>): void
+  sendModAction(action: ModAction, target: string, args?: LuaConsoleObject): void
   confirmLoadout(
     element: PlayerCharacterConfig['element'],
     discipline: PlayerCharacterConfig['discipline'],
@@ -124,6 +127,7 @@ export interface GameClientSession {
   getGameplayPause(): GameplayPauseState | null
   getModCatalog(): readonly ModConsumableCatalogEntry[]
   getModContent(): ModContentProjection | null
+  getModRuntime(): LuaConsoleObject | null
   getPingMs(): number | null
   getPartyState(): LocalPartyState | null
   getSaveCheckpoint(): GameSaveCheckpoint | null
@@ -135,6 +139,7 @@ export interface GameClientSession {
   onLeaderboardReceipt(listener: (receipt: string) => void): () => void
   onModCatalog(listener: (catalog: readonly ModConsumableCatalogEntry[]) => void): () => void
   onModContent(listener: (projection: ModContentProjection) => void): () => void
+  onModRuntime(listener: (projection: LuaConsoleObject) => void): () => void
   onEnemyEvent(listener: (event: BoneyardEnemyEventSnapshot) => void): () => void
   onPing(listener: (pingMs: number) => void): () => void
   onPartyState(listener: (state: LocalPartyState) => void): () => void
@@ -237,6 +242,7 @@ export function connectGameClientSession(
     let requestedHubActivity: HubPlayerActivity | null = null
     let modCatalog: readonly ModConsumableCatalogEntry[] = []
     let modContent: ModContentProjection | null = null
+    let modRuntime: LuaConsoleObject | null = null
     let lastSnapshotReceivedAtMs = 0
     let lastSnapshotSequence = 0
     let latestPingMs: number | null = null
@@ -268,6 +274,7 @@ export function connectGameClientSession(
       catalog: readonly ModConsumableCatalogEntry[],
     ) => void>()
     const modContentListeners = new Set<(projection: ModContentProjection) => void>()
+    const modRuntimeListeners = new Set<(projection: LuaConsoleObject) => void>()
     const enemyEventListeners = new Set<(event: BoneyardEnemyEventSnapshot) => void>()
     const pingListeners = new Set<(pingMs: number) => void>()
     const partyStateListeners = new Set<(state: LocalPartyState) => void>()
@@ -359,6 +366,11 @@ export function connectGameClientSession(
           statuses: message.statuses,
         }
         for (const listener of modContentListeners) listener(modContent)
+        return
+      }
+      if (message.type === 'server-mod-runtime') {
+        modRuntime = message.projection
+        for (const listener of modRuntimeListeners) listener(modRuntime)
         return
       }
       if (message.type === 'server-save-checkpoint') {
@@ -613,6 +625,18 @@ export function connectGameClientSession(
           targetY: target.y,
         }))
       },
+      sendModAction(action, target, args = {}) {
+        if (!welcome || destroyed) return
+        const requestId = nextModRequestId
+        nextModRequestId += 1
+        options.transport.send(encodeGameMessage({
+          type: 'client-mod-action',
+          action,
+          arguments: args,
+          requestId,
+          target,
+        }))
+      },
       confirmLoadout(element, discipline) {
         if (!welcome || !snapshot || destroyed) return
         if (snapshot.run.phase !== 'loadout') return
@@ -689,6 +713,7 @@ export function connectGameClientSession(
         leaderboardReceiptListeners.clear()
         modCatalogListeners.clear()
         modContentListeners.clear()
+        modRuntimeListeners.clear()
         enemyEventListeners.clear()
         pingListeners.clear()
         partyActionListeners.clear()
@@ -766,6 +791,9 @@ export function connectGameClientSession(
       getModContent() {
         return modContent
       },
+      getModRuntime() {
+        return modRuntime
+      },
       getPingMs() {
         return latestPingMs
       },
@@ -810,6 +838,10 @@ export function connectGameClientSession(
       onModContent(listener) {
         modContentListeners.add(listener)
         return () => modContentListeners.delete(listener)
+      },
+      onModRuntime(listener) {
+        modRuntimeListeners.add(listener)
+        return () => modRuntimeListeners.delete(listener)
       },
       onEnemyEvent(listener) {
         enemyEventListeners.add(listener)
@@ -1490,6 +1522,7 @@ export function connectGameClientSession(
       leaderboardReceiptListeners.clear()
       modCatalogListeners.clear()
       modContentListeners.clear()
+      modRuntimeListeners.clear()
       enemyEventListeners.clear()
       pingListeners.clear()
       partyStateListeners.clear()

@@ -12,13 +12,21 @@ export interface ModSkillRank {
 }
 
 export interface ModSkillCheckpoint {
+  readonly offers: readonly ModSkillOffer[]
   readonly ranks: readonly ModSkillRank[]
   readonly revision: number
+}
+
+export interface ModSkillOffer {
+  readonly contentIds: readonly string[]
+  readonly playerId: string
+  readonly sequence: number
 }
 
 export class ModSkillEngine {
   readonly #catalog: PreparedModContentCatalog
   readonly #ranks = new Map<string, number>()
+  readonly #offers = new Map<string, ModSkillOffer>()
   #revision = 0
 
   constructor(catalog: PreparedModContentCatalog) {
@@ -30,12 +38,19 @@ export class ModSkillEngine {
   }
 
   checkpoint(): ModSkillCheckpoint {
-    return Object.freeze({ ranks: this.project(), revision: this.#revision })
+    return Object.freeze({
+      offers: Object.freeze([...this.#offers.values()]),
+      ranks: this.project(),
+      revision: this.#revision,
+    })
   }
 
   choose(playerId: string, contentId: string): ModSkillRank {
     const definition = this.#catalog.skill(contentId)
     if (!definition) throw new Error(`mod skill is unavailable: ${contentId}`)
+    if (!this.#offers.get(playerId)?.contentIds.includes(contentId)) {
+      throw new Error(`mod skill was not offered: ${contentId}`)
+    }
     if (!this.#eligible(playerId, definition)) throw new Error(`mod skill is not eligible: ${contentId}`)
     const key = cellKey(playerId, contentId)
     const rank = (this.#ranks.get(key) ?? 0) + 1
@@ -43,6 +58,7 @@ export class ModSkillEngine {
       throw new Error('mod skill rank limit reached')
     }
     this.#ranks.set(key, rank)
+    this.#offers.delete(playerId)
     this.#revision += 1
     return Object.freeze({ contentId, playerId, rank })
   }
@@ -70,7 +86,14 @@ export class ModSkillEngine {
       })
       selected.push(...pool.splice(index < 0 ? pool.length - 1 : index, 1))
     }
-    return Object.freeze(selected)
+    const result = Object.freeze(selected)
+    this.#offers.set(playerId, Object.freeze({
+      contentIds: Object.freeze(result.map(skill => skill.contentId)),
+      playerId,
+      sequence: (this.#offers.get(playerId)?.sequence ?? 0) + 1,
+    }))
+    this.#revision += 1
+    return result
   }
 
   project(playerId?: string): readonly ModSkillRank[] {
@@ -84,6 +107,12 @@ export class ModSkillEngine {
       })]
     }).sort((left, right) => left.playerId.localeCompare(right.playerId) || (
       BigInt(left.contentId) < BigInt(right.contentId) ? -1 : 1
+    )))
+  }
+
+  offers(playerId?: string): readonly ModSkillOffer[] {
+    return Object.freeze([...this.#offers.values()].filter(offer => (
+      playerId === undefined || offer.playerId === playerId
     )))
   }
 
@@ -105,7 +134,19 @@ export class ModSkillEngine {
       candidate.set(key, row.rank)
     }
     this.#ranks.clear()
+    this.#offers.clear()
     for (const [key, rank] of candidate) this.#ranks.set(key, rank)
+    for (const offer of checkpoint.offers) {
+      if (this.#offers.has(offer.playerId) || !Number.isSafeInteger(offer.sequence) || offer.sequence < 1 ||
+          offer.contentIds.length > 8 || offer.contentIds.some(id => !this.#catalog.skill(id))) {
+        throw new Error('mod skill checkpoint contains an invalid offer')
+      }
+      this.#offers.set(offer.playerId, Object.freeze({
+        contentIds: Object.freeze([...offer.contentIds]),
+        playerId: offer.playerId,
+        sequence: offer.sequence,
+      }))
+    }
     this.#revision = checkpoint.revision
   }
 

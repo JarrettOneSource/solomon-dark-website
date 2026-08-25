@@ -1,6 +1,6 @@
 # Web Lua 1.0 content-family contracts
 
-Status: **proposed; not implemented**
+Status: **implemented in the Website; API 1.0.0**
 
 This inventory closes the requested framework membership as one design problem.
 Every family compiles into the same definition graph, uses `sd.content.v1`

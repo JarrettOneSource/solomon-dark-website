@@ -936,6 +936,11 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             socket,
             modRuntimeScopeForPlayer(observed.viewPlayerId)?.runtime ?? privateModHost,
           )
+          sendPreparedModRuntime(
+            socket,
+            modRuntimeScopeForPlayer(observed.viewPlayerId)?.runtime ?? privateModHost,
+            observed.viewPlayerId,
+          )
           socket.send(encodeGameMessage({
             type: 'server-boneyard-loaded',
             boneyard: observed.loadedBoneyard,
@@ -1526,6 +1531,11 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           socket,
           modRuntimeScopeForPlayer(playerId)?.runtime ?? privateModHost,
         )
+        sendPreparedModRuntime(
+          socket,
+          modRuntimeScopeForPlayer(playerId)?.runtime ?? privateModHost,
+          playerId,
+        )
         const playerBoneyard = loadedBoneyardForPlayer(playerId)
         if (playerBoneyard) {
           socket.send(encodeGameMessage({
@@ -1826,6 +1836,54 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             'mods.cast_rejected',
             error instanceof Error ? error.message : 'The mod spell cast was rejected.',
             logDetails({ contentId: message.contentId, playerId: client.playerId }),
+          )
+        }
+        return
+      }
+      if (message.type === 'client-mod-action') {
+        const modHost = modRuntimeScopeForPlayer(client.playerId)?.runtime ?? privateModHost
+        if (!modHost) return
+        try {
+          if (message.action === 'skill-choose') {
+            const definition = modHost.content.skill(message.target)
+            const level = getPlayerProgression(stateForPlayer(client.playerId), client.playerId).level
+            if (!definition || level < definition.minimumLevel) throw new Error('mod skill is not eligible')
+            modHost.chooseSkill(client.playerId, message.target)
+          } else if (message.action === 'shop-buy') {
+            const row = message.arguments.row
+            if (!Number.isSafeInteger(row) || Number(row) < 0) throw new Error('mod shop row is invalid')
+            modHost.purchaseShop(client.playerId, message.target, Number(row))
+          } else {
+            const activeState = stateForPlayer(client.playerId)
+            const loaded = loadedBoneyardForPlayer(client.playerId)
+            const player = getPlayerCharacter(activeState, client.playerId)
+            const monument = loaded?.scene.objects.find(object => {
+              const x = object.pos.x - player.position.x
+              const y = object.pos.y - player.position.y
+              return object.typeId === 2009 && x * x + y * y < 100 * 100
+            })
+            if (!monument || activeState.world.kind !== 'boneyard') {
+              throw new Error('no Boneyard monument is in interaction range')
+            }
+            modHost.enterPortal({
+              actorKind: 'monument',
+              confirmedByLeader: authorityForPlayer(client.playerId) === client.playerId,
+              ownerId: activeState.run.runId ?? client.playerId,
+              portalId: message.target,
+              scene: 'stock.boneyard',
+            })
+          }
+          broadcastPreparedModProjection(client.playerId, modHost)
+          broadcastSnapshot()
+          publishSaveCheckpoint('mod-action')
+        } catch (error) {
+          logGameServerEvent(
+            options.log,
+            'game-host',
+            'warning',
+            'mods.action_rejected',
+            error instanceof Error ? error.message : 'The mod action was rejected.',
+            logDetails({ action: message.action, playerId: client.playerId }),
           )
         }
         return
@@ -3189,6 +3247,11 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         ),
         sequence: snapshotSequence,
       }))
+      sendPreparedModRuntime(
+        client.socket,
+        modRuntimeScopeForPlayer(client.playerId)?.runtime ?? privateModHost,
+        client.playerId,
+      )
       client.lastSentSnapshotSequence = snapshotSequence
       client.sentReplicationBaselines.set(snapshotSequence, currentBaseline)
       if (recoveryKeyframe && client.replicationRecovery) {
@@ -3231,6 +3294,11 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         ),
         sequence: snapshotSequence,
       }))
+      sendPreparedModRuntime(
+        observer.socket,
+        modRuntimeScopeForPlayer(observer.viewPlayerId)?.runtime ?? privateModHost,
+        observer.viewPlayerId,
+      )
       observer.lastSentSnapshotSequence = snapshotSequence
       observer.sentReplicationBaselines.set(snapshotSequence, currentBaseline)
       if (recoveryKeyframe && observer.replicationRecovery) {
@@ -4710,6 +4778,15 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   ): void {
     if (!host || socket.readyState !== WebSocket.OPEN) return
     socket.send(encodeGameMessage({ type: 'server-mod-content', ...host.project() }))
+  }
+
+  function sendPreparedModRuntime(
+    socket: WebSocket,
+    host: PreparedModHost | null,
+    viewerId: PlayerId,
+  ): void {
+    if (!host || socket.readyState !== WebSocket.OPEN) return
+    socket.send(encodeGameMessage({ type: 'server-mod-runtime', ...host.runtimeProjection(viewerId) }))
   }
 
   function broadcastPreparedModProjection(

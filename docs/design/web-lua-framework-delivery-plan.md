@@ -1,6 +1,9 @@
 # Web Lua 1.0 delivery plan
 
-Status: **proposed execution plan; no framework code is implemented by these documents**
+Status: **executed; retained as the delivery and acceptance ledger**
+
+Phase descriptions below preserve the sequence and pre-cutover conditions; all
+exit gates now refer to the implemented 1.0 runtime.
 
 The work should proceed as vertical slices, each ending in a usable mod. Building
 eleven registries horizontally would create a large unproven interface and leave
@@ -56,7 +59,8 @@ Deliverables:
 - in-memory adapters for package files, clock, state, simulation, protocol, and
   presentation tests.
 
-The production host continues running `0.2.0`; no 1.0 gameplay is advertised yet.
+At this historical phase boundary the production host still ran `0.2.0`; the
+completed cutover removed that runtime before 1.0 publication.
 
 Exit evidence:
 

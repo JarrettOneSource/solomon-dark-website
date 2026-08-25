@@ -34,6 +34,8 @@ audio/
 ```
 
 Use the [Lua example](/examples/lua-only-manifest.json).
+The repository also ships the complete canonical
+`frontend/examples/web-lua/invincibility-potion` package.
 
 ### Combined
 

@@ -28,10 +28,10 @@ test('mod Minimap projects self, party, enemies, and powerups around the viewer'
     powerups: [{ contentId: '5000000000000000004', id: 2, spawnedTick: 1, x: 70, y: 80 }],
     revision: 1,
     statuses: [],
-  }, 'self')
+  }, 'self', { enemies: [{ id: 9, x: 90, y: 100 }] })
   assert.deepEqual(model?.center, { x: 10, y: 20 })
   assert.deepEqual(model?.markers.map(marker => marker.kind), [
-    'self', 'party', 'enemy', 'powerup',
+    'self', 'party', 'enemy', 'enemy', 'powerup',
   ])
 })
 

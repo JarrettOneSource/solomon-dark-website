@@ -16,9 +16,11 @@ export default function ModMinimap({ session }: Readonly<{ session: GameClientSe
     const update = (snapshot: GameSnapshot) => setModel(project(session, snapshot))
     const removeSnapshot = session.onSnapshot(update)
     const removeMods = session.onModContent(() => update(session.getSnapshot()))
+    const removeRuntime = session.onModRuntime(() => update(session.getSnapshot()))
     update(session.getSnapshot())
     return () => {
       removeMods()
+      removeRuntime()
       removeSnapshot()
     }
   }, [session])
@@ -41,7 +43,12 @@ export default function ModMinimap({ session }: Readonly<{ session: GameClientSe
 
 function project(session: GameClientSession, snapshot: GameSnapshot): ModMinimapModel | null {
   const mods = session.getModContent()
-  return mods ? projectModMinimap(snapshot, mods, session.playerId) : null
+  return mods ? projectModMinimap(
+    snapshot,
+    mods,
+    session.playerId,
+    session.getModRuntime(),
+  ) : null
 }
 
 function clamp(value: number): number {
