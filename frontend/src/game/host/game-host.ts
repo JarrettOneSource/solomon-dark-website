@@ -4097,6 +4097,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     if (
       partyId === null
       || activeState.world.kind !== 'boneyard'
+      || activeState.world.tutorial !== null
       || activeState.run.phase !== 'active'
       || activeState.run.runId === null
     ) return

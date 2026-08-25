@@ -43,6 +43,7 @@ import type { BoneyardScene } from '../core-kernels/boneyard.ts'
 import {
   createBoneyardCatalog,
   materializeBoneyard,
+  materializeStockTutorial,
   type ModBoneyardEntry,
 } from './boneyard-catalog.ts'
 import {
@@ -2318,6 +2319,60 @@ test('Tutorial host stops ticking after the last player disconnects', async (con
 
   assert.equal(host.state().tick, heldTick)
   assert.equal(logs.some(entry => entry.event === 'simulation.tick_failed'), false)
+})
+
+test('private Tutorial resume releases its final capacity slot on disconnect', async (context) => {
+  const playerId = 'tutorial-owner'
+  const loadedBoneyard = materializeStockTutorial(Buffer.alloc(16, 91))
+  const save = createGameSaveDocument({
+    integrity: 'local-only',
+    loadedBoneyard,
+    mods: [],
+    modState: {},
+    partyRejoinToken: null,
+    playerId,
+    state: enterBoneyardWorld(
+      createGameSimulation({ [playerId]: FIRST_CHARACTER }),
+      loadedBoneyard,
+    ),
+  })
+  const tickets = new Map<string, GameHostAdmission>([
+    ['tutorial-ticket', { content: EMPTY_SHARED_CONTENT, leaderboardUserId: null }],
+  ])
+  const host = await startGameHost({
+    authentication: {
+      kind: 'tickets',
+      claim: credential => {
+        const admission = tickets.get(credential) ?? null
+        tickets.delete(credential)
+        return admission
+      },
+    },
+    sessionKind: 'private-college',
+    snapshotRate: 100,
+  })
+  context.after(() => host.close())
+  const socket = await openSocket(host.address.url)
+  const welcomeMessage = nextMessage(socket, message => message.type === 'server-welcome')
+  socket.send(encodeGameMessage({
+    type: 'client-hello',
+    profile: EMPTY_PLAYER_PROFILE,
+    cheatsEnabled: false,
+    protocolVersion: GAME_PROTOCOL_VERSION,
+    credential: 'tutorial-ticket',
+    character: FIRST_CHARACTER,
+    save,
+    saveIntent: 'resume',
+  }))
+  const welcome = await welcomeMessage
+  assert.equal(welcome.type, 'server-welcome')
+  assert.equal(welcome.snapshot.world.kind, 'boneyard')
+  if (welcome.snapshot.world.kind !== 'boneyard') throw new Error('expected Tutorial')
+  assert.ok(welcome.snapshot.world.tutorial)
+
+  await closeSocket(socket)
+  await waitFor(() => host.humanPlayerCount() === 0)
+  assert.equal(host.playerCount(), 0)
 })
 
 test('host rejects a Tutorial start after the fresh-profile pending fact clears', async (context) => {

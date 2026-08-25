@@ -46061,7 +46061,7 @@ surface actions, save/resume, and teardown.
 | stage-13 SkillScreen modal members and close edge | `0x005D18C5..0x005D1D29` | `verified-already-at-parity` after `4a6c25f3` | complete stock/wide/tall/touch modal geometry suite |
 | desktop/wide/tall/touch viewport projection | fixed stage plus live world/HUD anchors | `verified-already-at-parity` | natural desktop/touch pickup plus four-viewport modal matrix |
 | stage-8/9 save, reconnect and delta/keyframe | save schema 14 / protocol 79 | `verified-already-at-parity` | stage-9 pickup checkpoint revision 4 plus retained protocol/save round trips |
-| last-player disconnect and recoverable Tutorial hold | web-only private-session/rejoin lifecycle around the stock singleton Tutorial | `implemented-web-hosting-gap` | production teardown exception plus red/green host lifecycle regression |
+| last-player disconnect, persisted resume and private-session teardown | web-only private-session/rejoin lifecycle around the stock singleton Tutorial | `implemented-web-hosting-gap` | production teardown exception plus red/green host and private-resume regressions |
 | later death, run replacement and Tutorial teardown | existing run/save owners | `verified-already-at-parity` | no Tutorial overlay survives world retirement |
 
 ### Native ownership and recovered contract
@@ -46145,12 +46145,16 @@ surface actions, save/resume, and teardown.
   singleton invariant threw `the stock Tutorial requires exactly one
   authoritative player`, and the uncaught tick failure restarted the production
   game supervisor. This falsified the earlier teardown disposition above.
-- The host now holds only a playerless stock Tutorial until a player transport
-  returns or the surrounding session closes. Reset-on-empty hosts retain their
-  reset behavior, ordinary persistent Boneyards continue ticking through empty
-  intervals, and the shared Hub is unchanged. The focused regression reproduced
-  the exact uncaught exception before the guard and passed with no
-  `simulation.tick_failed` afterward; both adjacent lifecycle tests pass.
+- The host now holds a playerless stock Tutorial only across the bounded
+  disconnect/close race, so it cannot take an invalid singleton tick. Tutorial
+  never arms the live-party rejoin slot: its existing owner checkpoint remains
+  the resume path, the final private capacity slot releases, and the supervisor
+  closes the empty session. Reset-on-empty hosts retain their reset behavior,
+  ordinary persistent Boneyards continue ticking through empty intervals,
+  ordinary party members still detach/catch up/rejoin, and the shared Hub is
+  unchanged. The focused regressions reproduced both the uncaught tick exception
+  and the retained-capacity leak before the guards, then passed with neither.
+
 ## 2026-08-25 — SkillScreen ambient seal motion correction (reopens corrective renderer closure)
 
 ### Reported smell and parity question
