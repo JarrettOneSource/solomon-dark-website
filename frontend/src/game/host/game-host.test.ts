@@ -2296,6 +2296,30 @@ test('host admits one fresh solo player into the hidden stock Tutorial and check
   assert.equal(saved.continuation.simulation.world.tutorial.stage, 0)
 })
 
+test('Tutorial host stops ticking after the last player disconnects', async (context) => {
+  const logs: GameServerLogEntry[] = []
+  const host = await startGameHost({
+    authentication: SHARED_AUTHENTICATION,
+    log: entry => logs.push(entry),
+    snapshotRate: 100,
+  })
+  context.after(() => host.close())
+  const client = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
+
+  const loaded = nextMessage(client.socket, message => message.type === 'server-boneyard-loaded')
+  client.socket.send(encodeGameMessage({ type: 'client-start-tutorial' }))
+  await loaded
+  await waitFor(() => host.state().world.kind === 'boneyard')
+
+  await closeSocket(client.socket)
+  await waitFor(() => host.humanPlayerCount() === 0)
+  const heldTick = host.state().tick
+  await new Promise(resolve => setTimeout(resolve, 100))
+
+  assert.equal(host.state().tick, heldTick)
+  assert.equal(logs.some(entry => entry.event === 'simulation.tick_failed'), false)
+})
+
 test('host rejects a Tutorial start after the fresh-profile pending fact clears', async (context) => {
   const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
   context.after(() => host.close())

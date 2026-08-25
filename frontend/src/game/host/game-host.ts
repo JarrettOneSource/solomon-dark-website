@@ -3079,7 +3079,13 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       resetNextTickDeadline()
       return
     }
-    if (resetWhenEmpty && clients.size === 0) {
+    if (
+      clients.size === 0
+      && (
+        resetWhenEmpty
+        || (!sharedWorlds && state.world.kind === 'boneyard' && state.world.tutorial !== null)
+      )
+    ) {
       resetNextTickDeadline()
       return
     }

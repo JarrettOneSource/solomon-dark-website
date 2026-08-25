@@ -46060,8 +46060,9 @@ surface actions, save/resume, and teardown.
 | stage-12 Skills instruction/control/pointer | `0x005D179D..0x005D18C5`; SkillScreen enable byte | `verified-already-at-parity` | exact copy, pointer/access unit tests and touch button-open receipt |
 | stage-13 SkillScreen modal members and close edge | `0x005D18C5..0x005D1D29` | `verified-already-at-parity` after `4a6c25f3` | complete stock/wide/tall/touch modal geometry suite |
 | desktop/wide/tall/touch viewport projection | fixed stage plus live world/HUD anchors | `verified-already-at-parity` | natural desktop/touch pickup plus four-viewport modal matrix |
-| stage-8/9 save, reconnect and delta/keyframe | save schema 13 / protocol 78 | `verified-already-at-parity` | stage-9 pickup checkpoint revision 4 plus retained protocol/save round trips |
-| later death, run replacement and Tutorial teardown | existing run/save owners | `out-of-system` (downstream lifecycle already closed independently) | no Tutorial overlay survives world retirement |
+| stage-8/9 save, reconnect and delta/keyframe | save schema 14 / protocol 79 | `verified-already-at-parity` | stage-9 pickup checkpoint revision 4 plus retained protocol/save round trips |
+| last-player disconnect and recoverable Tutorial hold | web-only private-session/rejoin lifecycle around the stock singleton Tutorial | `implemented-web-hosting-gap` | production teardown exception plus red/green host lifecycle regression |
+| later death, run replacement and Tutorial teardown | existing run/save owners | `verified-already-at-parity` | no Tutorial overlay survives world retirement |
 
 ### Native ownership and recovered contract
 
@@ -46137,3 +46138,16 @@ surface actions, save/resume, and teardown.
   requested text belongs to stage 9 (`ACCESS YOUR INVENTORY`), and Skills is
   intentionally unavailable until stage 12. No guessed `GRAB THIS ITEM` copy or
   premature Skills unlock was added.
+- Post-deployment acceptance against Website `840692ec` passed the exact touch
+  pickup/equip journey, but its ordinary browser `1001` close exposed a separate
+  lifecycle failure: after detaching the only Tutorial player for recovery, the
+  private host took one more tick with zero authoritative players. The stock
+  singleton invariant threw `the stock Tutorial requires exactly one
+  authoritative player`, and the uncaught tick failure restarted the production
+  game supervisor. This falsified the earlier teardown disposition above.
+- The host now holds only a playerless stock Tutorial until a player transport
+  returns or the surrounding session closes. Reset-on-empty hosts retain their
+  reset behavior, ordinary persistent Boneyards continue ticking through empty
+  intervals, and the shared Hub is unchanged. The focused regression reproduced
+  the exact uncaught exception before the guard and passed with no
+  `simulation.tick_failed` afterward; both adjacent lifecycle tests pass.
