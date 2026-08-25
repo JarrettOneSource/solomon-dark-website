@@ -15,7 +15,7 @@ const identity = Object.freeze({ id: 'example.rules', name: 'Rules', version: '1
 test('finite rules and reducers commit validated intents and state atomically', async () => {
   const runtime = await createRuntime()
   const compiled = compileWebLuaDefinition(identity, runtime.run(SCRIPT))
-  const engine = new ModRuleEngine()
+  const engine = new ModRuleEngine({ tickBudgetMs: 1_000 })
   engine.register(compiled, runtime)
   const scope = { id: 'run-1', kind: 'party-run' } as const
 

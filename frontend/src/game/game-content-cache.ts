@@ -62,7 +62,7 @@ export async function prefetchGameContent(
     await cache?.put(url, new Response(bytes, {
       headers: {
         'cache-control': 'public, max-age=31536000, immutable',
-        'content-type': 'image/png',
+        'content-type': asset.contentType,
       },
     }))
     completedBytes += bytes.length

@@ -48,6 +48,7 @@ interface RegisteredMod {
   readonly compiled: CompiledWebLuaMod
   readonly reducers: readonly RegisteredReducer[]
   readonly root: ModLifecycleScope
+  readonly rules: readonly WebLuaRuleDefinition[]
   readonly runtime: WebLuaDefinitionRuntime
 }
 
@@ -101,7 +102,13 @@ export class ModRuleEngine {
       key: reducer.key,
       scope: root.child('subscription', `reducer.${reducer.key}`),
     }))
-    this.#mods.set(modId, { compiled, reducers, root, runtime })
+    this.#mods.set(modId, {
+      compiled,
+      reducers,
+      root,
+      rules: Object.freeze([...compiled.rules, ...contentRules(compiled)]),
+      runtime,
+    })
   }
 
   dispatch(input: ModRuleDispatchInput): ModRuleDispatchResult {
@@ -123,7 +130,7 @@ export class ModRuleEngine {
       try {
         append(evaluateRules(
           mod.compiled.identity.id,
-          mod.compiled.rules,
+          mod.rules,
           input,
           () => this.#nextIntentSequence++,
         ))
@@ -221,6 +228,35 @@ export class ModRuleEngine {
     for (const modId of [...this.#mods.keys()]) this.closeMod(modId, 'rule-engine-closed')
     this.#state.close()
   }
+}
+
+function contentRules(compiled: CompiledWebLuaMod): readonly WebLuaRuleDefinition[] {
+  return compiled.content.flatMap((content): WebLuaRuleDefinition[] => {
+    const trigger = content.contentKind === 'potion'
+      ? 'use'
+      : content.contentKind === 'item'
+        ? 'use'
+        : content.contentKind === 'powerup'
+          ? 'pickup'
+          : null
+    const node = content.contentKind === 'potion'
+      ? content.fields.on_use
+      : content.contentKind === 'item'
+        ? content.fields.use
+        : content.contentKind === 'powerup'
+          ? content.fields.effect
+          : null
+    if (!trigger || !isRule(node)) return []
+    return [Object.freeze({
+      fields: Object.freeze({
+        event: `action.content.${trigger}.${content.contentId}`,
+        node,
+      }),
+      kind: 'rule-definition' as const,
+      operation: 'rules.on',
+      source: node.source,
+    })]
+  })
 }
 
 function evaluateRules(

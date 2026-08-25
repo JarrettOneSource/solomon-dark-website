@@ -919,8 +919,8 @@ export async function startGameSessionSupervisor(
       luaWasmPath: options.luaWasmPath,
       content: admission.content.manifest,
       contentSummary: admission.content.summary,
+      modContent: admission.content,
       modAssets: admission.content.assets,
-      mods: admission.content.modSources,
       maxPlayers: maxConnectionsPerSession,
       onPlayerCountChanged: (playerCount) => {
         const session = sessions.get(id)

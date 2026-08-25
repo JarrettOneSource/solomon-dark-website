@@ -114,6 +114,50 @@ test('prepared session rejects a source whose compiled graph was tampered', asyn
   }), /compiled Web Lua graph changed/)
 })
 
+test('prepared session expands potion on_use into validated content action intents', async () => {
+  const prepared = await definitionSource(`
+local status = sd.kit.status({
+  key = "shielded",
+  duration = "1s",
+  modifiers = {incoming_damage = 0},
+})
+local potion = sd.kit.potion({
+  key = "shield_potion",
+  name = "Shield Potion",
+  duration = "1s",
+  status = sd.ref("status", "shielded"),
+  on_use = sd.rules.all({
+    sd.effect.resource({target = "user", mana = "full"}),
+    sd.effect.status({target = "user", status = sd.ref("status", "shielded")}),
+  }),
+})
+return sd.mod({api = "1.0.0", content = {status, potion}})
+`)
+  const committed: ModIntent[][] = []
+  const session = await prepareModSession({
+    adapter: adapter({ commit: intents => committed.push([...intents]) }),
+    mods: [prepared],
+    wasmPath,
+  })
+  const potion = prepared.compiled.content.find(content => content.contentKind === 'potion')!
+  try {
+    const result = session.act({
+      action: 'content.use',
+      context: { participant_id: 'player-1' },
+      event: 'ignored',
+      payload: { content_id: potion.contentId },
+      requestId: 8,
+      scope: { id: 'player-1:run-1', kind: 'participant-run' },
+      tick: 4,
+    })
+    assert.equal(result.accepted, true)
+    assert.deepEqual(result.intents.map(intent => intent.kind), ['resource', 'status'])
+    assert.equal(committed.length, 1)
+  } finally {
+    session.close()
+  }
+})
+
 function adapter(options: Readonly<{
   commit?: (intents: readonly ModIntent[], context: ModIntentExecutionContext) => void
   rollback?: (reason: string) => void
@@ -129,6 +173,10 @@ function adapter(options: Readonly<{
 }
 
 async function source() {
+  return definitionSource(SCRIPT)
+}
+
+async function definitionSource(script: string) {
   const runtime = await WebLuaDefinitionRuntime.create({
     entryScript: 'scripts/main.lua',
     identity,
@@ -136,8 +184,8 @@ async function source() {
   })
   try {
     return {
-      compiled: compileWebLuaDefinition(identity, runtime.run(SCRIPT)),
-      entryScript: SCRIPT,
+      compiled: compileWebLuaDefinition(identity, runtime.run(script)),
+      entryScript: script,
       entryScriptPath: 'scripts/main.lua',
       identity,
     }

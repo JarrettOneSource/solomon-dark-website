@@ -134,10 +134,11 @@ export async function prepareModSession(options: Readonly<{
     }
     const session: PreparedModSession = {
       act(input) {
+        const event = contentActionEvent(input.action, input.payload, verified)
         return step({
           events: [{
             context: { ...input.context, action: input.action, request_id: input.requestId },
-            event: `action.${input.action}`,
+            event,
             payload: input.payload,
             scope: input.scope,
           }],
@@ -176,6 +177,27 @@ export async function prepareModSession(options: Readonly<{
     for (const runtime of runtimes) runtime.close()
     throw error
   }
+}
+
+function contentActionEvent(
+  action: string,
+  payload: LuaConsoleValue,
+  mods: readonly CompiledWebLuaMod[],
+): string {
+  if (action !== 'content.use' && action !== 'content.pickup') return `action.${action}`
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    throw new Error(`${action} requires a content payload`)
+  }
+  const contentId = (payload as LuaConsoleObject).content_id
+  if (typeof contentId !== 'string' || !/^[1-9][0-9]{0,18}$/.test(contentId)) {
+    throw new Error(`${action} content identity is invalid`)
+  }
+  const content = mods.flatMap(mod => mod.content).find(candidate => candidate.contentId === contentId)
+  const kinds = action === 'content.use' ? new Set(['item', 'potion']) : new Set(['powerup'])
+  if (!content || !kinds.has(content.contentKind)) {
+    throw new Error(`${action} content is unavailable: ${contentId}`)
+  }
+  return `action.${action}.${contentId}`
 }
 
 function commonScope(events: readonly PreparedModEvent[]): ModStateScope {

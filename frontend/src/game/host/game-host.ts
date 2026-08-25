@@ -74,6 +74,7 @@ import {
   type GameSessionKind,
   type GameplayPauseState,
   type HubPlayerActivity,
+  type LuaConsoleValue,
   type PartyAction,
   type PartyActionRejection as ProtocolPartyActionRejection,
   type PartyJoinRequester,
@@ -111,7 +112,6 @@ import {
 import { WebLuaRuntime } from './lua/web-lua-runtime.ts'
 import {
   WEB_LUA_MAX_PENDING_EXECUTIONS,
-  type WebLuaModSource,
 } from './lua/web-lua-contract.ts'
 import {
   ML_BOT_CHARACTER,
@@ -185,11 +185,10 @@ import type {
   MaterializedWebSessionContent,
   WebSessionContentSummary,
 } from './web-mod-content.ts'
-import { WebLuaContentRegistry } from './lua/web-lua-content-registry.ts'
 import {
-  createWebLuaGameExtensions,
-  dispatchWebLuaConsumption,
-} from './lua/web-lua-game-extensions.ts'
+  prepareModHost,
+  type PreparedModHost,
+} from './prepared-mod-host.ts'
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost'])
 export const GAME_SAVE_AUTOSAVE_INTERVAL_TICKS = GAME_TICK_RATE * 30
@@ -236,10 +235,8 @@ interface AuthenticatedGameHostRole {
 
 interface PartyModRuntimeScope {
   readonly content: MaterializedWebSessionContent
-  readonly contentRegistry: WebLuaContentRegistry
-  readonly extensions: import('../core-server/game-simulation.ts').GameSimulationExtensions
   readonly pendingEvents: WebLuaDerivedEvent[]
-  readonly runtimes: WebLuaRuntime[]
+  readonly runtime: PreparedModHost
 }
 
 export interface GameHostOptions {
@@ -260,7 +257,7 @@ export interface GameHostOptions {
   maxPlayers?: number
   mlBotPolicy?: MlBotPolicyInference
   modAssets?: readonly import('../protocol/game-protocol.ts').GameModAsset[]
-  mods?: readonly WebLuaModSource[]
+  modContent?: MaterializedWebSessionContent
   onPlayerCountChanged?: (playerCount: number) => void
   port?: number
   resetWhenEmpty?: boolean
@@ -613,14 +610,8 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   let luaRuntimeInitialization: Promise<WebLuaRuntime> | null = null
   let luaRuntimeGeneration = 0
   let luaRuntimeOwnerPlayerId: PlayerId | null = null
-  const privateModLuaRuntimes: WebLuaRuntime[] = []
-  const privateModContentRegistry = new WebLuaContentRegistry()
-  let privateModExtensions: import('../core-server/game-simulation.ts').GameSimulationExtensions | undefined
+  let privateModHost: PreparedModHost | null = null
   const playerContents = new Map<PlayerId, MaterializedWebSessionContent>()
-  const pendingRestoredModState = new Map<
-    PlayerId,
-    Readonly<Record<string, Readonly<Record<string, import('../protocol/game-protocol.ts').LuaConsoleValue>>>>
-  >()
   const partyModRuntimeInitializations = new Map<string, Promise<PartyModRuntimeScope>>()
   const partyModRuntimes = new Map<string, PartyModRuntimeScope>()
   const startingPartyIds = new Set<string>()
@@ -934,7 +925,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             },
             content: authenticated.content?.manifest ?? content,
             modAssets: authenticated.content?.assets ?? options.modAssets ?? [],
-            modCatalog: sharedHub ? [] : privateModContentRegistry.catalog(),
+            modCatalog: sharedHub ? [] : privateModHost?.content.consumables() ?? [],
             boneyards: [observed.loadedBoneyard.choice],
             gameplayPause: gameplayPauseForPlayer(observed.viewPlayerId),
             snapshot: welcomeSnapshot,
@@ -1318,15 +1309,6 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           disconnect(socket, 'invalid-message', 'The game save intent is invalid.')
           return
         }
-        if (savedProfile && !rejoinedParty) {
-          if (sharedHub) pendingRestoredModState.set(playerId, savedProfile.modState)
-          else restoreMatchingModState(
-            privateModLuaRuntimes,
-            savedProfile.mods,
-            savedProfile.modState,
-            content.mods,
-          )
-        }
         if (sharedHub) {
           if (!authenticated.content) throw new Error('validated shared Hub content is absent')
           playerContents.set(playerId, authenticated.content)
@@ -1356,10 +1338,8 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             startingPartyIds.add(restoredParty.id)
             void ensurePartyModRuntimes(
               restoredParty.id,
-              restoredParty.leaderPlayerId,
               authenticated.content,
               stateForPlayer(playerId),
-              restoredBoneyard,
             ).catch((error) => {
               logGameServerEvent(
                 options.log,
@@ -1524,7 +1504,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           },
           content: authenticated.content?.manifest ?? content,
           modAssets: authenticated.content?.assets ?? options.modAssets ?? [],
-          modCatalog: sharedHub ? [] : privateModContentRegistry.catalog(),
+          modCatalog: sharedHub ? [] : privateModHost?.content.consumables() ?? [],
           boneyards: boneyardCatalogForPlayer(playerId).choices,
           gameplayPause: gameplayPauseForPlayer(playerId),
           snapshot: welcomeSnapshot,
@@ -1835,32 +1815,32 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           && !pauseAllowsInventoryAction(activePause, client.playerId, message.action)
         ) return
         const modScope = modRuntimeScopeForPlayer(client.playerId)
+        const modHost = modScope?.runtime ?? privateModHost
+        const stateBeforeAction = stateForPlayer(client.playerId)
         const applied = applyGameSimulationHubAction(
-          stateForPlayer(client.playerId),
+          stateBeforeAction,
           client.playerId,
           message.action,
-          modScope?.extensions ?? privateModExtensions,
+          modHost?.extensions,
         )
         replaceStateForPlayer(client.playerId, applied.state)
-        if (applied.modConsumption) {
-          if (modScope) {
-            dispatchWebLuaConsumption(
-              modScope.contentRegistry,
-              modScope.runtimes,
-              applied.modConsumption,
-            )
-          } else if (privateModExtensions) {
-            dispatchWebLuaConsumption(
-              privateModContentRegistry,
-              privateModLuaRuntimes,
-              applied.modConsumption,
-            )
+        let accepted = applied.accepted
+        if (applied.modConsumption && modHost) {
+          try {
+            const result = modHost.consume(applied.modConsumption)
+            if (!result.accepted) {
+              replaceStateForPlayer(client.playerId, stateBeforeAction)
+              accepted = false
+            }
+          } catch (error) {
+            replaceStateForPlayer(client.playerId, stateBeforeAction)
+            throw error
           }
         }
         client.activeInput = createIdlePlayerCharacterInput()
         client.queuedInputs.clear()
         broadcastSnapshot()
-        if (applied.accepted) publishSaveCheckpoint('hub-action')
+        if (accepted) publishSaveCheckpoint('hub-action')
         return
       }
       if (message.type === 'client-chat') {
@@ -2394,11 +2374,12 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         armPartyRejoinSlotsForState(privateParties?.parties[0]?.id ?? null, state)
         logGameActivity(previousState, state, selected, null)
         taintIneligibleClientRuns()
-        if (activePrivateLuaRuntimes().length > 0) {
+        if (privateModHost || activePrivateLuaRuntimes().length > 0) {
           pendingLuaEvents.push(...deriveWebLuaEvents(
             previousState,
             state,
-            name => activePrivateLuaRuntimes().some(runtime => runtime.wantsEvent(name)),
+            name => privateModHost !== null
+              || activePrivateLuaRuntimes().some(runtime => runtime.wantsEvent(name)),
           ))
         }
         broadcast({ type: 'server-boneyard-loaded', boneyard: selected })
@@ -2638,7 +2619,6 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         sharedWorlds = removeSharedGamePlayer(sharedWorlds, client.playerId)
         state = sharedWorlds.hub
         playerContents.delete(client.playerId)
-        pendingRestoredModState.delete(client.playerId)
         if (
           disconnectedPartyId
           && !sharedWorlds.parties.parties.some(party => party.id === disconnectedPartyId)
@@ -2771,7 +2751,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
               }
             }
           }
-          const statesBeforeLua = new Map(
+          const statesBeforeMods = new Map(
             sharedWorlds.runs.map(run => [run.partyId, run.state]),
           )
           for (const [partyId, scope] of partyModRuntimes) {
@@ -2779,23 +2759,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
               candidate => candidate.partyId === partyId,
             )
             if (!run) continue
-            let runState: GameSimulationState = run.state
-            const intents: import('../core-kernels/boneyard-wave-director.ts').BoneyardEnemySpawnIntent[] = []
-            for (const runtime of scope.runtimes) {
-              runtime.beginTick(runState.tick + 1)
-              const applied = applyWebLuaCommands(runState, runtime.drainCommands())
-              runState = applied.state
-              intents.push(...applied.enemySpawnIntents)
-            }
-            sharedWorlds = {
-              ...sharedWorlds,
-              runs: sharedWorlds.runs.map((candidate): SharedPartyRun => (
-                candidate.partyId === partyId ? { ...candidate, state: runState } : candidate
-              )),
-            }
+            scope.runtime.tick(run.state.tick + 1)
             enemySpawnIntents.set(partyId, [
               ...(enemySpawnIntents.get(partyId) ?? []),
-              ...intents,
+              ...scope.runtime.drainEnemySpawns(),
             ])
           }
           const previous = sharedWorlds
@@ -2806,7 +2773,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             enemySpawnIntents,
             new Map([...partyModRuntimes].map(([partyId, scope]) => [
               partyId,
-              scope.extensions,
+              scope.runtime.extensions,
             ])),
           )
           state = sharedWorlds.hub
@@ -2826,9 +2793,26 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             }
           }
           let lifecycleBoundary = false
-          for (const run of sharedWorlds.runs) {
+          for (const steppedRun of [...sharedWorlds.runs]) {
+            let run = steppedRun
             const before = previous.runs.find(({ partyId }) => partyId === run.partyId)
             if (!before) continue
+            const scope = partyModRuntimes.get(run.partyId)
+            if (scope) {
+              const events = [
+                ...scope.pendingEvents.splice(0),
+                ...deriveWebLuaEvents(
+                  statesBeforeMods.get(run.partyId) ?? before.state,
+                  run.state,
+                ),
+              ]
+              scope.runtime.step(
+                events,
+                run.state.tick,
+                run.state.run.runId ?? run.partyId,
+              )
+              run = sharedWorlds.runs.find(candidate => candidate.partyId === run.partyId) ?? run
+            }
             recordPartyRejoinMilestone(run.partyId, run.state)
             logGameActivity(before.state, run.state, run.loadedBoneyard, run.partyId)
             const enteredGameOver = before.state.run.phase === 'active'
@@ -2837,20 +2821,6 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
               && run.state.run.phase === 'loadout'
             const previousBarrierId = before.state.levelUpBarrier?.barrierId ?? null
             const barrierId = run.state.levelUpBarrier?.barrierId ?? null
-            const scope = partyModRuntimes.get(run.partyId)
-            if (scope) {
-              const events = [
-                ...scope.pendingEvents.splice(0),
-                ...deriveWebLuaEvents(
-                  statesBeforeLua.get(run.partyId) ?? before.state,
-                  run.state,
-                  name => scope.runtimes.some(runtime => runtime.wantsEvent(name)),
-                ),
-              ]
-              for (const event of events) {
-                for (const runtime of scope.runtimes) runtime.dispatch(event.name, event.payload)
-              }
-            }
             publishLeaderboardReceipts(before.state, run.state)
             const tutorialBoundary = tutorialSaveBoundaryKey(before.state)
               !== tutorialSaveBoundaryKey(run.state)
@@ -2895,6 +2865,8 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         const stateBeforeLua = state
         let enemySpawnIntents = [] as import('../core-kernels/boneyard-wave-director.ts').BoneyardEnemySpawnIntent[]
         const runtimes = activePrivateLuaRuntimes()
+        privateModHost?.tick(nextTick)
+        enemySpawnIntents.push(...privateModHost?.drainEnemySpawns() ?? [])
         for (const runtime of runtimes) {
           runtime.beginTick(nextTick)
           const applied = applyWebLuaCommands(state, runtime.drainCommands())
@@ -2904,24 +2876,31 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         }
         state = stepGameSimulationTick(state, inputs, {
           enemySpawnIntents,
-          extensions: privateModExtensions,
+          extensions: privateModHost?.extensions,
         })
+        const pendingEvents = pendingLuaEvents.splice(0)
+        if (privateModHost) {
+          privateModHost.step([
+            ...pendingEvents,
+            ...deriveWebLuaEvents(stateBeforeLua, state),
+          ], state.tick, state.run.runId ?? 'private-session')
+        }
         recordPartyRejoinMilestone(privateParties?.parties[0]?.id ?? null, state)
-        logGameActivity(stateBeforeLua, state, loadedBoneyard, null)
-        publishLeaderboardReceipts(stateBeforeLua, state)
         if (runtimes.length > 0) {
           const events = [
-            ...pendingLuaEvents.splice(0),
+            ...pendingEvents,
             ...deriveWebLuaEvents(
               stateBeforeLua,
               state,
               name => runtimes.some(runtime => runtime.wantsEvent(name)),
             ),
           ]
-          for (const event of events) {
-            for (const runtime of runtimes) runtime.dispatch(event.name, event.payload)
+          for (const event of events) for (const runtime of runtimes) {
+            runtime.dispatch(event.name, event.payload)
           }
         }
+        logGameActivity(stateBeforeLua, state, loadedBoneyard, null)
+        publishLeaderboardReceipts(stateBeforeLua, state)
         const barrierId = state.levelUpBarrier?.barrierId ?? null
         const reachedGameOverBlack = state.run.phase === 'game-over'
           && state.run.gameOverExitTicks !== null
@@ -3068,10 +3047,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       const documentOptions = {
         integrity,
         mods: sharedContent?.manifest.mods ?? content.mods,
-        modState: Object.fromEntries(
-          (scope?.runtimes ?? privateModLuaRuntimes)
-            .map(runtime => [runtime.mod.id, runtime.snapshotState()]),
-        ),
+        modState: preparedModSaveState(scope?.runtime ?? privateModHost),
         partyRejoinToken: partyRejoinTokenForPlayer(client.playerId),
         playerId: client.playerId,
         state: saveState,
@@ -4690,10 +4666,8 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     try {
       const scope = await ensurePartyModRuntimes(
         party.id,
-        leaderPlayerId,
         partyContent,
         initialState,
-        selected,
       )
       if (!sharedWorlds || closed || !clients.has(socket)) return
       const latestParty = partyForPlayer(sharedWorlds.parties, leaderPlayerId)
@@ -4713,13 +4687,12 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       scope.pendingEvents.push(...deriveWebLuaEvents(
         before,
         run.state,
-        name => scope.runtimes.some(runtime => runtime.wantsEvent(name)),
       ))
       taintIneligibleClientRuns()
       stopWorldClientInputs(leaderPlayerId)
       broadcastToPlayerWorld(leaderPlayerId, {
         type: 'server-mod-catalog',
-        items: scope.contentRegistry.catalog(),
+        items: scope.runtime.content.consumables(),
       })
       broadcastToPlayerWorld(leaderPlayerId, {
         type: 'server-boneyard-loaded',
@@ -4749,10 +4722,8 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
 
   async function ensurePartyModRuntimes(
     partyId: string,
-    leaderPlayerId: PlayerId,
     partyContent: MaterializedWebSessionContent,
     initialState: GameSimulationState,
-    loaded: LoadedBoneyard | null,
   ): Promise<PartyModRuntimeScope> {
     const existing = partyModRuntimes.get(partyId)
     if (
@@ -4763,44 +4734,50 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     const initializing = partyModRuntimeInitializations.get(partyId)
     if (initializing) return initializing
     const promise = (async () => {
-      const runtimes: WebLuaRuntime[] = []
-      const contentRegistry = new WebLuaContentRegistry()
+      if (partyContent.modSources.length > 0 && !options.luaWasmPath) {
+        throw new Error('Lua runtime is not configured for this game host.')
+      }
+      let stagedState = initialState
+      let runtime: PreparedModHost | null = null
       try {
-        for (const source of partyContent.modSources) {
-          const runtime = await createModLuaRuntime(source, () => {
-            const run = sharedWorlds?.runs.find(candidate => candidate.partyId === partyId)
-            const activeParty = sharedWorlds?.parties.parties.find(candidate => candidate.id === partyId)
-            return {
-              authorityPlayerId: activeParty?.leaderPlayerId ?? leaderPlayerId,
-              loadedBoneyard: run?.loadedBoneyard ?? loaded,
-              state: run?.state ?? initialState,
-            }
-          }, contentRegistry)
-          runtimes.push(runtime)
-          runtime.runEntrypoint(source.entryScript)
-        }
+        runtime = await prepareModHost({
+          content: partyContent,
+          log: message => logGameServerEvent(
+            options.log,
+            'game-host',
+            'warning',
+            'mods.rule_failed',
+            message,
+            logDetails({ partyId }),
+          ),
+          state: {
+            read: () => sharedWorlds?.runs.find(candidate => candidate.partyId === partyId)?.state
+              ?? stagedState,
+            write: candidate => {
+              const run = sharedWorlds?.runs.find(entry => entry.partyId === partyId)
+              if (!sharedWorlds || !run) {
+                stagedState = candidate
+                return
+              }
+              sharedWorlds = {
+                ...sharedWorlds,
+                runs: sharedWorlds.runs.map(entry => entry.partyId === partyId
+                  ? { ...entry, state: candidate }
+                  : entry),
+              }
+            },
+          },
+          wasmPath: options.luaWasmPath ?? '',
+        })
         const scope: PartyModRuntimeScope = {
           content: partyContent,
-          contentRegistry,
-          extensions: createWebLuaGameExtensions(contentRegistry, runtimes),
           pendingEvents: [],
-          runtimes,
-        }
-        const savedState = pendingRestoredModState.get(leaderPlayerId)
-        if (savedState) {
-          restoreMatchingModState(
-            runtimes,
-            partyContent.manifest.mods,
-            savedState,
-            partyContent.manifest.mods,
-          )
-          pendingRestoredModState.delete(leaderPlayerId)
+          runtime,
         }
         partyModRuntimes.set(partyId, scope)
         return scope
       } catch (error) {
-        for (const runtime of runtimes) runtime.close()
-        contentRegistry.close()
+        runtime?.close()
         throw error
       } finally {
         partyModRuntimeInitializations.delete(partyId)
@@ -4810,101 +4787,73 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     return promise
   }
 
-  async function createModLuaRuntime(
-    source: WebLuaModSource,
-    resolveState: () => {
-      authorityPlayerId: PlayerId | null
-      loadedBoneyard: LoadedBoneyard | null
-      state: GameSimulationState
-    },
-    contentRegistry: WebLuaContentRegistry,
-  ): Promise<WebLuaRuntime> {
+  async function initializePrivateModHost(): Promise<void> {
+    if (!options.modContent?.modSources.length) return
     if (!options.luaWasmPath) throw new Error('Lua runtime is not configured for this game host.')
-    return WebLuaRuntime.create({
-      bindings: {
-        getAuthorityPlayerId: () => resolveState().authorityPlayerId,
-        getFrame: () => {
-          const active = resolveState()
-          return createWebLuaFrameState(active.state, active.authorityPlayerId, active.loadedBoneyard)
-        },
-      },
-      contentRegistry,
-      log: (level, event, detail) => logGameServerEvent(
+    privateModHost = await prepareModHost({
+      content: options.modContent,
+      log: message => logGameServerEvent(
         options.log,
         'game-host',
-        level,
-        event,
-        detail,
-        logDetails({ modId: source.identity.id }),
+        'warning',
+        'mods.rule_failed',
+        message,
+        logDetails(),
       ),
-      mod: source.identity,
-      modSource: source,
+      state: {
+        read: () => state,
+        write: candidate => { state = candidate },
+      },
       wasmPath: options.luaWasmPath,
     })
-  }
-
-  async function initializePrivateModLuaRuntimes(): Promise<void> {
-    if (!options.mods?.length) return
-    try {
-      for (const source of options.mods) {
-        const runtime = await createModLuaRuntime(source, () => ({
-          authorityPlayerId: hostPlayerId,
-          loadedBoneyard,
-          state,
-        }), privateModContentRegistry)
-        privateModLuaRuntimes.push(runtime)
-        runtime.runEntrypoint(source.entryScript)
-      }
-      privateModExtensions = createWebLuaGameExtensions(
-        privateModContentRegistry,
-        privateModLuaRuntimes,
-      )
-    } catch (error) {
-      for (const runtime of privateModLuaRuntimes.splice(0)) runtime.close()
-      privateModContentRegistry.close()
-      privateModExtensions = undefined
-      throw error
-    }
   }
 
   function closePartyModRuntimes(partyId: string): void {
     const scope = partyModRuntimes.get(partyId)
     partyModRuntimes.delete(partyId)
-    if (scope) {
-      for (const runtime of scope.runtimes) runtime.close()
-      scope.contentRegistry.close()
-    }
+    scope?.runtime.close()
     const initialization = partyModRuntimeInitializations.get(partyId)
     partyModRuntimeInitializations.delete(partyId)
     if (initialization) void initialization.then((created) => {
       if (partyModRuntimes.get(partyId) === created) partyModRuntimes.delete(partyId)
-      for (const runtime of created.runtimes) runtime.close()
-      created.contentRegistry.close()
+      created.runtime.close()
     }, () => {})
   }
 
-  function restoreMatchingModState(
-    runtimes: readonly WebLuaRuntime[],
-    savedMods: readonly import('../protocol/game-protocol.ts').GameContentIdentity[],
-    savedState: Readonly<Record<string, Readonly<Record<string, import('../protocol/game-protocol.ts').LuaConsoleValue>>>>,
-    activeMods: readonly import('../protocol/game-protocol.ts').GameContentIdentity[],
-  ): void {
-    for (const runtime of runtimes) {
-      const active = activeMods.find(mod => mod.id.toLowerCase() === runtime.mod.id.toLowerCase())
-      const saved = savedMods.find(mod => mod.id.toLowerCase() === runtime.mod.id.toLowerCase())
-      if (!active || !saved || !sameContentMod(saved, active)) continue
-      const stateEntry = Object.entries(savedState).find(
-        ([id]) => id.toLowerCase() === runtime.mod.id.toLowerCase(),
-      )?.[1]
-      if (stateEntry) runtime.restoreState(stateEntry)
-    }
-  }
-
   function activePrivateLuaRuntimes(): readonly WebLuaRuntime[] {
-    return luaRuntime === null ? privateModLuaRuntimes : [...privateModLuaRuntimes, luaRuntime]
+    return luaRuntime === null ? [] : [luaRuntime]
   }
 
-  await initializePrivateModLuaRuntimes()
+  function preparedModSaveState(
+    host: PreparedModHost | null,
+  ): Readonly<Record<string, Readonly<Record<string, LuaConsoleValue>>>> {
+    if (!host) return Object.freeze({})
+    const checkpoint = host.checkpoint()
+    const modIds = new Set(host.content.all().map(entry => entry.modId))
+    return Object.freeze(Object.fromEntries([...modIds].sort().map(modId => [modId, Object.freeze({
+      api: '1.0.0',
+      state_cells: checkpoint.session.state.cells
+        .filter(cell => cell.modId === modId)
+        .map(cell => ({
+          key: cell.key,
+          schema_version: cell.schemaVersion,
+          scope: { id: cell.scope.id, kind: cell.scope.kind },
+          value: cell.value,
+        })),
+      state_revision: checkpoint.session.state.revision,
+      statuses: checkpoint.statuses.instances
+        .filter(status => status.modId === modId)
+        .map(status => ({
+          content_id: status.contentId,
+          expires_tick: status.expiresTick,
+          instance_id: status.instanceId,
+          started_tick: status.startedTick,
+          target_id: status.targetId,
+        })),
+    })])))
+  }
+
+  await initializePrivateModHost()
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject)
     server.listen(port, host, () => {
@@ -4942,8 +4891,8 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       clearInterval(partyAccessTimer)
       removeAllBots('game host closed')
       resetLuaRuntime()
-      for (const runtime of privateModLuaRuntimes.splice(0)) runtime.close()
-      privateModContentRegistry.close()
+      privateModHost?.close()
+      privateModHost = null
       for (const partyId of [...partyModRuntimes.keys()]) closePartyModRuntimes(partyId)
       const closeCode = reason === 'host-ended-session'
         ? GAME_HOST_ENDED_SESSION_CLOSE_CODE
@@ -4975,7 +4924,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     humanPlayerCount: () => clients.size,
     playerCount: capacityParticipantCount,
     loadedBoneyard: () => loadedBoneyard,
-    modCatalog: () => privateModContentRegistry.catalog(),
+    modCatalog: () => privateModHost?.content.consumables() ?? [],
     observationTargets,
     cancelPartyReservation(reservationId) {
       partyJoinReservations.delete(reservationId)
