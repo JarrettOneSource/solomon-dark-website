@@ -1319,7 +1319,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           disconnect(socket, 'invalid-message', 'The game save intent is invalid.')
           return
         }
-        if (savedProfile && Object.keys(savedProfile.modState).length > 0) {
+        if (savedProfile && !rejoinedParty && Object.keys(savedProfile.modState).length > 0) {
           const activeMods = authenticated.content?.manifest.mods ?? content.mods
           if (sameContentMods(savedProfile.mods, activeMods)) {
             if (sharedHub) pendingRestoredModState.set(playerId, savedProfile.modState)
