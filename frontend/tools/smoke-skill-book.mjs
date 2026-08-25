@@ -89,7 +89,22 @@ try {
   }
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
-  await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({ timeout: 30_000 })
+  const create = page.locator('.create-menu-scene[data-motion-settled="true"]')
+  const office = page.locator('.hub-scene[data-hub-region="office"]')
+  await office.waitFor({ timeout: 30_000 })
+  await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 30_000 })
+  await page.waitForFunction(() => (
+    document.querySelector('.hub-world-canvas')?.getAttribute('data-transition-phase') === 'none'
+  ))
+  await moveHubAxis(page, 'a', 'playerX', 300, 'at-most')
+  await moveHubAxis(page, 's', 'playerY', 800, 'at-least')
+  await moveHubAxis(page, 'd', 'playerX', 512, 'at-least')
+  await page.keyboard.down('s')
+  try {
+    await create.waitFor({ timeout: 30_000 })
+  } finally {
+    await page.keyboard.up('s')
+  }
   await page.getByRole('button', { name: /Ether/i }).click()
   await page.locator('.create-menu-disciplines[data-visible="true"]').waitFor({ timeout: 15_000 })
   await page.locator('.create-menu-discipline-arcane').click()
@@ -108,6 +123,9 @@ try {
   await hubScene.locator('xpath=self::*[@data-gameplay-input-blocked="false"]').waitFor({
     timeout: 10_000,
   })
+  await page.waitForFunction(() => (
+    document.querySelector('.hub-world-canvas')?.getAttribute('data-transition-phase') === 'none'
+  ))
 
   await page.getByRole('button', { name: 'Open skills' }).click()
   const book = page.getByRole('dialog', { name: 'Skills' })
@@ -134,6 +152,7 @@ try {
     webgl2: canvas.getContext('webgl2') instanceof WebGL2RenderingContext,
     width: canvas.width,
   })), { height: 900, webgl2: true, width: 1600 })
+  const hubSealMotion = await sampleSkillBookSealMotion(page, book)
   await page.screenshot({ path: `${screenshotRoot}-settled.png` })
 
   const leviathan = book.getByRole('button', { name: /Call Leviathan, rank 1/ })
@@ -211,6 +230,11 @@ try {
   await book.locator('xpath=self::*[@data-transition-phase="settled"]').waitFor({
     timeout: 5_000,
   })
+  const [reopenedSealTick] = await skillBookSealMotion(book.locator('.skill-book-canvas'))
+  assert.ok(reopenedSealTick < hubSealMotion.last.tick, JSON.stringify({
+    firstScreenLastTick: hubSealMotion.last.tick,
+    reopenedSealTick,
+  }))
   const fireball = book.getByRole('button', { name: /Fireball, rank 1/ })
   await fireball.waitFor({ timeout: 10_000 })
   await fireball.click()
@@ -335,6 +359,16 @@ try {
   if (await picker.count()) await picker.getByRole('button').first().click()
   const boneyardScene = page.locator('.boneyard-scene[data-renderer-state="ready"]')
   await boneyardScene.waitFor({ timeout: 90_000 })
+  await page.getByRole('button', { name: 'Open skills' }).click()
+  await book.waitFor({ timeout: 10_000 })
+  await book.locator('.skill-book-canvas').waitFor({ timeout: 15_000 })
+  await book.locator('xpath=self::*[@data-transition-phase="settled"]').waitFor({
+    timeout: 5_000,
+  })
+  const boneyardSealMotion = await sampleSkillBookSealMotion(page, book, 3)
+  await page.keyboard.press('Escape')
+  await book.waitFor({ state: 'detached', timeout: 5_000 })
+  await boneyardScene.locator('xpath=self::*[@data-gameplay-input-blocked="false"]').waitFor()
   await page.getByRole('button', {
     name: 'Select primary attack, current Magic Missile',
   }).click()
@@ -403,6 +437,11 @@ try {
     mixedQuickbar: true,
     networkErrors,
     pageErrors,
+    sealMotion: {
+      boneyard: boneyardSealMotion,
+      hub: hubSealMotion,
+      reopenedTick: reopenedSealTick,
+    },
     selectorAudio: {
       concentrationSelectionAudio,
       primaryOpenAudio,
@@ -422,6 +461,63 @@ try {
   await browser.close()
   await host.close()
   await vite.close()
+}
+
+async function sampleSkillBookSealMotion(page, book, sampleCount = 5) {
+  const canvas = book.locator('.skill-book-canvas')
+  const samples = []
+  for (let index = 0; index < sampleCount; index += 1) {
+    if (index > 0) await page.waitForTimeout(150)
+    const [tick, phaseDegrees, y, ...x] = await skillBookSealMotion(canvas)
+    samples.push({ centers: x.map((centerX) => [centerX, y]), phaseDegrees, tick })
+  }
+  const expectedCenters = [
+    [800, 490],
+    [840, 490],
+    [800, 490],
+    [760, 490],
+    [800, 490],
+    [840, 490],
+    [800, 490],
+    [760, 490],
+  ]
+  for (const sample of samples) {
+    assert.deepEqual(sample.centers, expectedCenters)
+    assert.ok(Number.isInteger(sample.tick) && sample.tick >= 0, JSON.stringify(sample))
+    assert.ok(
+      Math.abs(sample.phaseDegrees + sample.tick / 60) < 1e-9,
+      JSON.stringify(sample),
+    )
+  }
+  for (let index = 1; index < samples.length; index += 1) {
+    assert.ok(samples[index].tick > samples[index - 1].tick, JSON.stringify(samples))
+    assert.ok(
+      samples[index].phaseDegrees < samples[index - 1].phaseDegrees,
+      JSON.stringify(samples),
+    )
+  }
+  return { first: samples[0], last: samples.at(-1) }
+}
+
+function skillBookSealMotion(canvas) {
+  return canvas.evaluate((element) => (
+    (element.dataset.nativeSealMotion ?? '').split(',').map(Number)
+  ))
+}
+
+async function moveHubAxis(page, key, axis, target, direction) {
+  await page.locator('.main-menu-page[data-hub-player-activity="none"]').waitFor()
+  await page.keyboard.down(key)
+  try {
+    await page.waitForFunction(({ axis, direction, target }) => {
+      const value = document.querySelector('.hub-world-canvas')?.__sdrHubFrame?.[axis]
+      return typeof value === 'number'
+        && (direction === 'at-least' ? value >= target : value <= target)
+    }, { axis, direction, target }, { timeout: 15_000 })
+  } finally {
+    await page.keyboard.up(key)
+    await page.waitForTimeout(150)
+  }
 }
 
 async function audioEventCount(target) {

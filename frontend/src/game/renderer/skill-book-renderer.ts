@@ -58,7 +58,8 @@ import {
   nativeSkillPageTextHeight,
   nativeSkillPageTint,
   nativeSkillPageWrappedLines,
-  nativeSkillScreenSealJitter,
+  nativeSkillScreenSealTransform,
+  nativeSkillScreenTick,
 } from './skill-book-render-contract.ts'
 import {
   addBitmapText,
@@ -84,6 +85,7 @@ export interface SkillBookRenderer {
 }
 
 export async function createSkillBookRenderer(): Promise<SkillBookRenderer> {
+  const constructedAtMs = performance.now()
   let gpu: Awaited<ReturnType<typeof createGameWebGlApplication>> | undefined
   let textures: GameTextureMap | undefined
   try {
@@ -136,6 +138,7 @@ export async function createSkillBookRenderer(): Promise<SkillBookRenderer> {
   drawSkillScreenOverlay(overlay, resources)
 
   let destroyed = false
+  let lastSealTick = -1
   const renderer: SkillBookRenderer = {
     canvas: gpu.canvas,
     destroy() {
@@ -147,14 +150,24 @@ export async function createSkillBookRenderer(): Promise<SkillBookRenderer> {
     },
     render(nowMs) {
       if (destroyed) return
-      sealSprites.forEach((seal, index) => {
-        seal.position.x = NATIVE_SKILL_SCREEN_SIZE.width / 2
-          + nativeSkillScreenSealJitter(nowMs, index)
-        seal.rotation = (
-          index * NATIVE_SKILL_SCREEN_ROOT.ambientRotationStepDegrees
-          - nowMs / 1_000
-        ) * Math.PI / 180
-      })
+      const screenTick = nativeSkillScreenTick(nowMs - constructedAtMs)
+      if (screenTick !== lastSealTick) {
+        const transforms = sealSprites.map((seal, index) => {
+          const transform = nativeSkillScreenSealTransform(index, screenTick)
+          seal.position.set(transform.x, transform.y)
+          seal.rotation = transform.rotationDegrees * Math.PI / 180
+          return transform
+        })
+        if (import.meta.env.DEV) {
+          gpu.canvas.dataset.nativeSealMotion = [
+            screenTick,
+            transforms[0]!.rotationDegrees,
+            transforms[0]!.y,
+            ...transforms.map(({ x }) => x),
+          ].join(',')
+        }
+        lastSealTick = screenTick
+      }
       application.renderer.render(application.stage)
     },
     setPresentation(presentation) {
@@ -214,13 +227,14 @@ function drawSkillScreenField(layer: Container, textures: GameTextureMap): void 
 
 function drawSkillScreenAmbient(layer: Container, textures: GameTextureMap): Sprite[] {
   const seals: Sprite[] = []
-  for (let index = 0; index < 8; index += 1) {
+  for (let index = 0; index < NATIVE_SKILL_SCREEN_ROOT.ambientCount; index += 1) {
     const seal = spriteFor(textures, 'UI', NATIVE_SKILL_SCREEN_ROOT.ambientRecord)
+    const transform = nativeSkillScreenSealTransform(index, 0)
     seal.anchor.set(0.5)
     seal.alpha = NATIVE_SKILL_SCREEN_ROOT.ambientAlpha
     seal.blendMode = 'add'
-    seal.position.set(NATIVE_SKILL_SCREEN_SIZE.width / 2, NATIVE_SKILL_SCREEN_ROOT.ambientCenterY)
-    seal.rotation = index * Math.PI / 4
+    seal.position.set(transform.x, transform.y)
+    seal.rotation = transform.rotationDegrees * Math.PI / 180
     seal.scale.set(NATIVE_SKILL_SCREEN_ROOT.ambientScale)
     layer.addChild(seal)
     seals.push(seal)

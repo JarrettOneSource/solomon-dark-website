@@ -6,7 +6,9 @@ export const NATIVE_SKILL_SCREEN_SIZE = Object.freeze({ height: 900, width: 1_60
 export const NATIVE_SKILL_SCREEN_ROOT = Object.freeze({
   ambientAlpha: 0.15,
   ambientCenterY: 490,
-  ambientJitterWidth: 40,
+  ambientCount: 8,
+  ambientHorizontalAmplitude: 40,
+  ambientPhaseDivisor: 60,
   ambientRecord: 3,
   ambientRotationStepDegrees: 45,
   ambientScale: 1.9,
@@ -207,11 +209,43 @@ export function measureNativeSkillExactText(source: string): number {
   return maximumWidth
 }
 
-export function nativeSkillScreenSealJitter(nowMs: number, index: number): number {
-  const frame = Math.floor(nowMs * 0.06)
-  let value = Math.imul(frame ^ Math.imul(index + 1, 0x45d9f3b), 0x27d4eb2d)
-  value ^= value >>> 15
-  return (value >>> 0) / 0x1_0000_0000 * NATIVE_SKILL_SCREEN_ROOT.ambientJitterWidth
+export interface NativeSkillScreenSealTransform {
+  readonly rotationDegrees: number
+  readonly x: number
+  readonly y: number
+}
+
+export function nativeSkillScreenTick(elapsedMs: number): number {
+  if (!Number.isFinite(elapsedMs) || elapsedMs < 0) {
+    throw new RangeError('native SkillScreen elapsed time must be finite and nonnegative')
+  }
+  return Math.floor(elapsedMs / 10)
+}
+
+/**
+ * `SkillScreen::Render 0x0065B550`, loop `0x0065B6DB..0x0065B7B0`.
+ * `_CIsin 0x007470D0` supplies a deterministic member offset; no RNG or
+ * time value participates in placement. Screen-local `+0x28` supplies the
+ * 100 Hz rotation phase and resets to zero with every screen construction.
+ */
+export function nativeSkillScreenSealTransform(
+  index: number,
+  screenTick: number,
+): NativeSkillScreenSealTransform {
+  if (!Number.isInteger(index) || index < 0 || index >= NATIVE_SKILL_SCREEN_ROOT.ambientCount) {
+    throw new RangeError('native SkillScreen seal index is outside the eight-member loop')
+  }
+  if (!Number.isInteger(screenTick) || screenTick < 0) {
+    throw new RangeError('native SkillScreen tick must be a nonnegative integer')
+  }
+  const angleDegrees = index * NATIVE_SKILL_SCREEN_ROOT.ambientRotationStepDegrees
+  const offsetRadians = angleDegrees * 2 * Math.PI / 180
+  return Object.freeze({
+    rotationDegrees: angleDegrees - screenTick / NATIVE_SKILL_SCREEN_ROOT.ambientPhaseDivisor,
+    x: NATIVE_SKILL_SCREEN_SIZE.width / 2
+      + Math.sin(offsetRadians) * NATIVE_SKILL_SCREEN_ROOT.ambientHorizontalAmplitude,
+    y: NATIVE_SKILL_SCREEN_ROOT.ambientCenterY,
+  })
 }
 
 export function nativeSkillPageTint(root: number | null): number {

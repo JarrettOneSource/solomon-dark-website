@@ -33,6 +33,9 @@ import {
   nativeSkillPageTint,
   nativeSkillPageWrappedLines,
   nativeSkillExactTextRuns,
+  nativeSkillScreenSealTransform,
+  nativeSkillScreenTick,
+  type NativeSkillScreenSealTransform,
 } from './renderer/skill-book-render-contract.ts'
 
 const component = readFileSync(new URL('./SkillBook.tsx', import.meta.url), 'utf8')
@@ -227,6 +230,48 @@ test('pins the omitted native root and page-wide render contract', () => {
     sourceGap: 50,
     viewportMargin: 25,
   })
+})
+
+test('keeps all eight ambient seals on deterministic sine lanes with one local 100 Hz phase', () => {
+  const atBirth: readonly NativeSkillScreenSealTransform[] = Array.from(
+    { length: NATIVE_SKILL_SCREEN_ROOT.ambientCount },
+    (_, index) => nativeSkillScreenSealTransform(index, 0),
+  )
+  assert.deepEqual(atBirth, [
+    { rotationDegrees: 0, x: 800, y: 490 },
+    { rotationDegrees: 45, x: 840, y: 490 },
+    { rotationDegrees: 90, x: 800, y: 490 },
+    { rotationDegrees: 135, x: 760, y: 490 },
+    { rotationDegrees: 180, x: 800, y: 490 },
+    { rotationDegrees: 225, x: 840, y: 490 },
+    { rotationDegrees: 270, x: 800, y: 490 },
+    { rotationDegrees: 315, x: 760, y: 490 },
+  ])
+  for (const tick of [60, 100, 21_600]) {
+    const transformsAtTick: readonly NativeSkillScreenSealTransform[] = atBirth.map(
+      (_, index) => nativeSkillScreenSealTransform(index, tick),
+    )
+    assert.deepEqual(
+      transformsAtTick.map(({ x, y }) => ({ x, y })),
+      atBirth.map(({ x, y }) => ({ x, y })),
+    )
+    transformsAtTick.forEach(({ rotationDegrees }, index) => {
+      assert.equal(rotationDegrees, atBirth[index]!.rotationDegrees - tick / 60)
+    })
+  }
+  assert.equal(nativeSkillScreenTick(0), 0)
+  assert.equal(nativeSkillScreenTick(9.999), 0)
+  assert.equal(nativeSkillScreenTick(10), 1)
+  assert.equal(nativeSkillScreenTick(1_000), 100)
+  assert.throws(() => nativeSkillScreenTick(-1), RangeError)
+  assert.throws(() => nativeSkillScreenTick(Number.NaN), RangeError)
+  assert.throws(() => nativeSkillScreenSealTransform(-1, 0), RangeError)
+  assert.throws(() => nativeSkillScreenSealTransform(8, 0), RangeError)
+  assert.throws(() => nativeSkillScreenSealTransform(0, 0.5), RangeError)
+  assert.match(renderer, /constructedAtMs = performance\.now\(\)/)
+  assert.match(renderer, /nativeSkillScreenTick\(nowMs - constructedAtMs\)/)
+  assert.match(renderer, /screenTick !== lastSealTick/)
+  assert.doesNotMatch(renderer, /nativeSkillScreenSealJitter|ambientJitterWidth|nowMs \/ 1_000/)
 })
 
 test('reproduces the stock SkillPage wrapper and vertically centred description block', () => {
