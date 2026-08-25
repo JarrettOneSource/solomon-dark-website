@@ -16,6 +16,7 @@ import {
 } from '../core-kernels/player-lighting.ts'
 import {
   addPlayerEntity,
+  applyPlayerEntitySkillChoice,
   applyPlayerEntityHagathaPurchaseEffects,
   autofillPlayerEntitySkillSelections,
   coldSlowPlayerEntity,
@@ -26,6 +27,7 @@ import {
   dazzlePlayerEntity,
   grantPlayerEntityExperience,
   grantPlayerEntityBonusSkillChoice,
+  grantPlayerEntityWeldBuild,
   increaseRandomPlayerEntitySkill,
   insertPlayerEntityLootItem,
   playerEntityCanAcceptInput,
@@ -174,6 +176,78 @@ test('automatic primary replacement resets the cast lane to its selected native 
   assert.equal(result.store.primaryCasts[0]!.held, false)
   assert.equal(result.store.primaryCasts[0]!.targetId, null)
   assert.equal(result.rng.indexA, 1)
+})
+
+test('Weld acquisition resets the selected primary cast in the same player-store mutation', () => {
+  const base = addPlayerEntity(
+    createPlayerEntityStore(),
+    'first',
+    FIRST,
+    createPlayerCharacter(FIRST, { x: 0, y: 0 }),
+    17,
+  )
+  const activePrimaryCast = {
+    ...base.primaryCasts[0]!,
+    actionTick: 1,
+    channelActive: true,
+    held: true,
+    lastWeldPlaybackRate: 1,
+    lastWeldSoundVariant: 0,
+    oneShotAttackPoseHeld: true,
+    selectedPrimaryAgeTicks: 19,
+    targetId: 'enemy-99',
+    underpowered: true,
+  }
+  const assertSelectedWeld = (
+    store: typeof base,
+    buildId: number,
+  ): void => {
+    const cast = store.primaryCasts[0]!
+    assert.equal(store.skillBooks[0]!.primarySkillId, 52)
+    assert.equal(store.skillBooks[0]!.weldBuildId, buildId)
+    assert.equal(cast.selectedPrimaryId, buildId)
+    assert.equal(cast.actionTick, -1)
+    assert.equal(cast.channelActive, false)
+    assert.equal(cast.held, false)
+    assert.equal(cast.lastWeldPlaybackRate, null)
+    assert.equal(cast.lastWeldSoundVariant, null)
+    assert.equal(cast.oneShotAttackPoseHeld, false)
+    assert.equal(cast.selectedPrimaryAgeTicks, 0)
+    assert.equal(cast.targetId, null)
+    assert.equal(cast.underpowered, false)
+  }
+
+  for (let buildId = 1000; buildId <= 1009; buildId += 1) {
+    const granted = grantPlayerEntityWeldBuild(
+      { ...base, primaryCasts: [activePrimaryCast] },
+      'first',
+      buildId,
+      createNativeRng(buildId),
+    )
+    assertSelectedWeld(granted.store, buildId)
+  }
+
+  const offered = {
+    ...base,
+    primaryCasts: [activePrimaryCast],
+    progressions: [{
+      ...base.progressions[0]!,
+      level: 2,
+      pendingLevels: [2],
+      pendingOffer: {
+        level: 2,
+        options: [{ skillId: 52, targetRank: 1, weldBuildId: 1000 }],
+        sequence: 1,
+      },
+    }],
+  }
+  const selected = applyPlayerEntitySkillChoice(offered, 'first', {
+    choiceIndex: 0,
+    offerSequence: 1,
+    skillId: 52,
+  }, createNativeRng(1000))
+  assert.ok(selected)
+  assertSelectedWeld(selected.store, 1000)
 })
 
 test('equipped native effects refresh effective ranks, maxima, and dense runtime atomically', () => {

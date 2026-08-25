@@ -3564,7 +3564,7 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
     const skillId = nonnegativeInteger(entry, `${field}.concentrationSkillIds[${index}]`)
     if (
       nativeSkillCategory(skillId) !== 3
-      || (learnedSkills.find(([id]) => id === skillId)?.[1] ?? 0) < 1
+      || (learnedSkills.find(([id]) => id === skillId)?.[2] ?? 0) < 1
     ) throw new GameProtocolError(`${field}.concentrationSkillIds[${index}] is not eligible`)
     return skillId
   })
@@ -3625,7 +3625,7 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
   )
   if (
     nativeSkillCategory(selectedPrimarySkillId) !== 1
-    || (learnedSkills.find(([id]) => id === selectedPrimarySkillId)?.[1] ?? 0) < 1
+    || (learnedSkills.find(([id]) => id === selectedPrimarySkillId)?.[2] ?? 0) < 1
     || (selectedPrimarySkillId === 52 && weldBuildId === null)
   ) {
     throw new GameProtocolError(`${field}.selectedPrimarySkillId is not a learned primary`)
@@ -4902,7 +4902,7 @@ function nativeSecondaryActor(
         kind === 'ether-burn' || kind === 'ether-burn-flare'
       )
       ? 14
-    : source.skillId === 22 && kind === 'fire-burn'
+    : source.skillId === 22 && (kind === 'fire-burn' || kind === 'fire-burn-flame')
       ? 22
       : source.skillId === 53 && (
           kind === 'flash-response-fade' || kind === 'flash-response-grow'

@@ -1417,6 +1417,10 @@ test('active-run rejoin imports one durable actor and queues every missed person
     y: loaded.scene.spawn.y,
   })
   assert.deepEqual(getPlayerCharacter(together, 'second').velocity, { x: 0, y: 0 })
+  assert.equal(
+    getPlayerCharacter(together, 'second').primaryCast.selectedPrimaryId,
+    retainedBook.primarySkillId,
+  )
   assert.equal(getPlayerProgression(together, 'second').level, 4)
   assert.equal(getPlayerProgression(together, 'second').pendingLevels.length, 3)
   assert.deepEqual(together.gameRng, advanceNativeRngWords(rngBeforeRejoin, 3))

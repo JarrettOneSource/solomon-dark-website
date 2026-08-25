@@ -158,6 +158,12 @@ test('developer grants use complete stock catalogs and survive Hub-to-run transf
   assert.equal(skillBook.advancedUnlocks[0], true)
   assert.equal(skillBook.primarySkillId, 52)
   assert.equal(skillBook.weldBuildId, 1000)
+  assert.equal(
+    granted.playerEntities.primaryCasts[
+      granted.playerEntities.identities.findIndex(({ playerId }) => playerId === 'target')
+    ]?.selectedPrimaryId,
+    1000,
+  )
   assert.ok(hubEconomyInventoryIsValid(economy))
 
   const active = enterBoneyardWorld(granted, loaded)
@@ -172,6 +178,12 @@ test('developer grants use complete stock catalogs and survive Hub-to-run transf
   assert.equal(activeSkillBook.permanentRanks[72], 2)
   assert.equal(activeSkillBook.primarySkillId, 52)
   assert.equal(activeSkillBook.weldBuildId, 1000)
+  assert.equal(
+    active.playerEntities.primaryCasts[
+      active.playerEntities.identities.findIndex(({ playerId }) => playerId === 'target')
+    ]?.selectedPrimaryId,
+    1000,
+  )
 })
 
 test('every developer item, skill, and Weld member applies through valid player state', () => {
@@ -209,6 +221,7 @@ test('every developer item, skill, and Weld member applies through valid player 
     const weldedBook = playerSkillBookAt(welded.playerEntities, 'target')!
     assert.equal(weldedBook.primarySkillId, 52, weld.name)
     assert.equal(weldedBook.weldBuildId, weld.id, weld.name)
+    assert.equal(welded.playerEntities.primaryCasts[0]?.selectedPrimaryId, weld.id, weld.name)
     assert.ok(weld.component_skill_ids.every((skillId) => (
       (weldedBook.permanentRanks[skillId] ?? 0) >= 1
     )), weld.name)

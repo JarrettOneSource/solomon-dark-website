@@ -2073,6 +2073,83 @@ test('progression snapshots carry the next rank needed by the stock picker label
   })), /requires Spell Welding/)
 })
 
+test('protocol validates active primary and concentration selections against effective rank', () => {
+  const snapshot = createGameSnapshot(
+    createGameSimulation({ 'player-1': CHARACTER }),
+    'player-1',
+  )
+  const baseFrame = createGameSnapshotFrame(snapshot, 0, undefined, true)
+  const message = (frame: typeof baseFrame) => ({
+    type: 'server-snapshot',
+    acknowledgedInputSequence: 0,
+    frame,
+    sequence: 2,
+  })
+
+  const concentrationSkillIds = [
+    57, 58, 59, 60, 61, 62, 63,
+    65, 66, 67, 68, 69, 70, 71,
+  ]
+  for (const skillId of concentrationSkillIds) {
+    const concentrated = JSON.parse(JSON.stringify(baseFrame))
+    concentrated.players['player-1'].progression.learnedSkills.push([skillId, 0, 1])
+    concentrated.players['player-1'].progression.concentrationSkillIds = [skillId, null]
+    const decoded = decodeServerGameMessage(JSON.stringify(message(concentrated)))
+    assert.equal(decoded.type, 'server-snapshot')
+    assert.deepEqual(
+      decoded.frame.players['player-1']!.progression.concentrationSkillIds,
+      [skillId, null],
+    )
+  }
+
+  for (const skillId of [8, 16, 24, 32, 40]) {
+    const selectedPrimary = JSON.parse(JSON.stringify(baseFrame))
+    const learned = selectedPrimary.players['player-1'].progression.learnedSkills
+    if (skillId === 8) {
+      const startingPrimary = learned.find((entry: number[]) => entry[0] === 8)
+      assert.ok(startingPrimary)
+      startingPrimary[1] = 0
+      startingPrimary[2] = 1
+      selectedPrimary.players['player-1'].progression.learnedSkillOrder = [11]
+    } else {
+      learned.push([skillId, 0, 1])
+    }
+    selectedPrimary.players['player-1'].progression.selectedPrimarySkillId = skillId
+    selectedPrimary.players['player-1'].primaryCast.selectedPrimaryId = skillId
+    const decoded = decodeServerGameMessage(JSON.stringify(message(selectedPrimary)))
+    assert.equal(decoded.type, 'server-snapshot')
+    assert.equal(
+      decoded.frame.players['player-1']!.progression.selectedPrimarySkillId,
+      skillId,
+    )
+  }
+
+  const inactiveConcentration = JSON.parse(JSON.stringify(baseFrame))
+  inactiveConcentration.players['player-1'].progression.learnedSkills.push([57, 0, 0])
+  inactiveConcentration.players['player-1'].progression.concentrationSkillIds = [57, null]
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(message(inactiveConcentration))),
+    /concentrationSkillIds\[0\] is not eligible/,
+  )
+
+  const inactivePrimary = JSON.parse(JSON.stringify(baseFrame))
+  inactivePrimary.players['player-1'].progression.learnedSkills.push([16, 0, 0])
+  inactivePrimary.players['player-1'].progression.selectedPrimarySkillId = 16
+  inactivePrimary.players['player-1'].primaryCast.selectedPrimaryId = 16
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(message(inactivePrimary))),
+    /selectedPrimarySkillId is not a learned primary/,
+  )
+
+  const effectiveOnlyQuickbar = JSON.parse(JSON.stringify(baseFrame))
+  effectiveOnlyQuickbar.players['player-1'].progression.learnedSkills.push([15, 0, 1])
+  effectiveOnlyQuickbar.players['player-1'].progression.skillQuickbar[0] = 15
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(message(effectiveOnlyQuickbar))),
+    /skillQuickbar\[0\] is not learned/,
+  )
+})
+
 test('protocol rejects legacy, malformed, and unsupported discriminated payloads', () => {
   assert.throws(() => decodeClientGameMessage('{'), GameProtocolError)
   assert.throws(() => decodeClientGameMessage(JSON.stringify({
@@ -3661,6 +3738,12 @@ test('protocol preserves Earthquake pointer-list order while retaining unique-ta
   assert.equal(flashDecoded.type, 'server-snapshot')
   assert.equal(flashDecoded.frame.secondaryAbilities.actors[0]!.skillId, 53)
 
+  const flashFadeFrame = JSON.parse(JSON.stringify(flashFrame))
+  flashFadeFrame.frame.secondaryAbilities.actors[0]!.kind = 'flash-response-fade'
+  const flashFadeDecoded = decodeServerGameMessage(JSON.stringify(flashFadeFrame))
+  assert.equal(flashFadeDecoded.type, 'server-snapshot')
+  assert.equal(flashFadeDecoded.frame.secondaryAbilities.actors[0]!.skillId, 53)
+
   const wrongFlashActor = JSON.parse(JSON.stringify(flashFrame))
   wrongFlashActor.frame.secondaryAbilities.actors[0]!.kind = 'earthquake'
   assert.throws(
@@ -3739,6 +3822,35 @@ test('protocol preserves Earthquake pointer-list order while retaining unique-ta
   const etherFlareDecoded = decodeServerGameMessage(JSON.stringify(etherFlareFrame))
   assert.equal(etherFlareDecoded.type, 'server-snapshot')
   assert.equal(etherFlareDecoded.frame.secondaryAbilities.actors[0]!.kind, 'ether-burn-flare')
+
+  let exceptionalFireFlameFrame: object | null = null
+  for (const skillId of [21, 23, 50, 73, 22]) {
+    const fireBurnFrame = JSON.parse(JSON.stringify(etherBurnFrame))
+    const fireBurn = fireBurnFrame.frame.secondaryAbilities.actors[0]!
+    fireBurn.kind = 'fire-burn'
+    fireBurn.skillId = skillId
+    const fireBurnDecoded = decodeServerGameMessage(JSON.stringify(fireBurnFrame))
+    assert.equal(fireBurnDecoded.type, 'server-snapshot')
+    assert.equal(fireBurnDecoded.frame.secondaryAbilities.actors[0]!.skillId, skillId)
+
+    const fireFlameFrame = JSON.parse(JSON.stringify(fireBurnFrame))
+    const fireFlame = fireFlameFrame.frame.secondaryAbilities.actors[0]!
+    fireFlame.kind = 'fire-burn-flame'
+    fireFlame.lightRegistration = null
+    fireFlame.miscLightAppendOrdinal = null
+    const fireFlameDecoded = decodeServerGameMessage(JSON.stringify(fireFlameFrame))
+    assert.equal(fireFlameDecoded.type, 'server-snapshot')
+    assert.equal(fireFlameDecoded.frame.secondaryAbilities.actors[0]!.kind, 'fire-burn-flame')
+    if (skillId === 22) exceptionalFireFlameFrame = fireFlameFrame
+  }
+  assert.ok(exceptionalFireFlameFrame)
+
+  const wrongFireActor = JSON.parse(JSON.stringify(exceptionalFireFlameFrame))
+  wrongFireActor.frame.secondaryAbilities.actors[0]!.kind = 'earthquake'
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(wrongFireActor)),
+    /not a native secondary ability/,
+  )
 
   const wrongMiscLane = JSON.parse(JSON.stringify(miscFrame))
   wrongMiscLane.frame.secondaryAbilities.actors[0]!.lightRegistration!.managerLane = 'transient'

@@ -269,6 +269,7 @@ export function importPlayerEntity(
   const index = playerEntityIndex(source, sourcePlayerId)
   if (index < 0) throw new Error(`source player entity ${sourcePlayerId} is missing`)
   const importedCharacter = character ?? playerCharacterProjection(source, index)
+  const importedSkillBook = source.skillBooks[index]!
   return {
     configs: [...target.configs, source.configs[index]!],
     economies: [...target.economies, source.economies[index]!],
@@ -277,9 +278,12 @@ export function importPlayerEntity(
     lightings: [...target.lightings, createPlayerLighting(lightRegistration)],
     locomotions: [...target.locomotions, locomotionComponent(importedCharacter)],
     nextEntityId: target.nextEntityId + 1,
-    primaryCasts: [...target.primaryCasts, importedCharacter.primaryCast],
+    primaryCasts: [
+      ...target.primaryCasts,
+      resetSelectedPlayerPrimaryCast(importedCharacter.primaryCast, importedSkillBook),
+    ],
     progressions: [...target.progressions, source.progressions[index]!],
-    skillBooks: [...target.skillBooks, source.skillBooks[index]!],
+    skillBooks: [...target.skillBooks, importedSkillBook],
     skillRuntimes: [...target.skillRuntimes, source.skillRuntimes[index]!],
     statBooks: [...target.statBooks, source.statBooks[index]!],
   }
@@ -496,9 +500,7 @@ export function autofillPlayerEntitySkillSelections(
   )
   return {
     rng: result.rng,
-    store: result.skillBook.primarySkillId === source.skillBooks[index]!.primarySkillId
-      ? selected
-      : resetPlayerEntityPrimarySelection(selected, index, result.skillBook),
+    store: selected,
   }
 }
 
@@ -583,7 +585,7 @@ export function selectPlayerEntityPrimarySkill(
     source.skillRuntimes[index]!,
     source.economies[index]!,
   )
-  return resetPlayerEntityPrimarySelection(selected, index, skillBook)
+  return selected
 }
 
 function resetPlayerEntityPrimarySelection(
@@ -592,8 +594,16 @@ function resetPlayerEntityPrimarySelection(
   skillBook: PlayerSkillBookComponent,
 ): PlayerEntityStore {
   const primaryCasts = [...source.primaryCasts]
-  primaryCasts[index] = {
-    ...primaryCasts[index]!,
+  primaryCasts[index] = resetSelectedPlayerPrimaryCast(primaryCasts[index]!, skillBook)
+  return { ...source, primaryCasts }
+}
+
+function resetSelectedPlayerPrimaryCast(
+  source: PlayerPrimaryCastState,
+  skillBook: PlayerSkillBookComponent,
+): PlayerPrimaryCastState {
+  return {
+    ...source,
     actionTick: -1,
     channelActive: false,
     held: false,
@@ -607,7 +617,6 @@ function resetPlayerEntityPrimarySelection(
     targetId: null,
     underpowered: false,
   }
-  return { ...source, primaryCasts }
 }
 
 export function selectPlayerEntityConcentrationSkill(
@@ -1273,7 +1282,12 @@ export function resetPlayerEntitiesForNewRun(
     locomotions: source.identities.map(({ playerId }) => (
       locomotionComponent(placements[playerId]!)
     )),
-    primaryCasts: source.identities.map(({ playerId }) => placements[playerId]!.primaryCast),
+    primaryCasts: source.identities.map(({ playerId }, index) => (
+      resetSelectedPlayerPrimaryCast(
+        placements[playerId]!.primaryCast,
+        resetSkillBooks[index]!,
+      )
+    )),
     progressions,
     skillBooks: resetSkillBooks.every((skillBook, index) => (
       skillBook === source.skillBooks[index]
@@ -1749,6 +1763,7 @@ function replacePlayerSkillState(
   runtime: PlayerSkillRuntimeComponent,
   economy: HubEconomyState,
 ): PlayerEntityStore {
+  const previousSkillBook = source.skillBooks[index]!
   const refreshed = refreshPlayerSkillRuntime(
     runtime,
     skillBook,
@@ -1786,7 +1801,16 @@ function replacePlayerSkillState(
   )
   skillBooks[index] = refreshed.skillBook
   skillRuntimes[index] = refreshed.runtime
-  return { ...source, economies, progressions, skillBooks, skillRuntimes }
+  const replaced = { ...source, economies, progressions, skillBooks, skillRuntimes }
+  const primarySelectionChanged = refreshed.skillBook.primarySkillId
+      !== previousSkillBook.primarySkillId
+    || (
+      refreshed.skillBook.primarySkillId === 52
+      && refreshed.skillBook.weldBuildId !== previousSkillBook.weldBuildId
+    )
+  return primarySelectionChanged
+    ? resetPlayerEntityPrimarySelection(replaced, index, refreshed.skillBook)
+    : replaced
 }
 
 function ownsSorcerorsCharm(source: PlayerEntityStore, index: number): boolean {

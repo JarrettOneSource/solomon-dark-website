@@ -3448,11 +3448,13 @@ test('Burn owns two RNG words per tick, target-scaled flame and light, max merge
     frame: flame.frame,
     position: flame.position,
     scale: flame.scale,
+    skillId: flame.skillId,
   }, {
     alpha: Math.fround(0.125),
     frame: 334,
     position: { x: target.position.x, y: Math.fround(target.position.y - 15) },
     scale: Math.fround((1 + scaleDraw.value) * target.scale),
+    skillId: 73,
   })
 
   const strongerContext = context(73, 6, null)
