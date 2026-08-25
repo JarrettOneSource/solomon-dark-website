@@ -74,7 +74,6 @@ import {
   type GameSessionKind,
   type GameplayPauseState,
   type HubPlayerActivity,
-  type LuaConsoleValue,
   type PartyAction,
   type PartyActionRejection as ProtocolPartyActionRejection,
   type PartyJoinRequester,
@@ -189,6 +188,7 @@ import {
   prepareModHost,
   type PreparedModHost,
 } from './prepared-mod-host.ts'
+import type { PreparedModSaveState } from './prepared-mod-save.ts'
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost'])
 export const GAME_SAVE_AUTOSAVE_INTERVAL_TICKS = GAME_TICK_RATE * 30
@@ -612,6 +612,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   let luaRuntimeOwnerPlayerId: PlayerId | null = null
   let privateModHost: PreparedModHost | null = null
   const playerContents = new Map<PlayerId, MaterializedWebSessionContent>()
+  const pendingRestoredModState = new Map<PlayerId, PreparedModSaveState>()
   const partyModRuntimeInitializations = new Map<string, Promise<PartyModRuntimeScope>>()
   const partyModRuntimes = new Map<string, PartyModRuntimeScope>()
   const startingPartyIds = new Set<string>()
@@ -1312,6 +1313,13 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         if (playerId === null) {
           disconnect(socket, 'invalid-message', 'The game save intent is invalid.')
           return
+        }
+        if (savedProfile && Object.keys(savedProfile.modState).length > 0) {
+          const activeMods = authenticated.content?.manifest.mods ?? content.mods
+          if (sameContentMods(savedProfile.mods, activeMods)) {
+            if (sharedHub) pendingRestoredModState.set(playerId, savedProfile.modState)
+            else privateModHost?.restoreSaveState(savedProfile.modState)
+          }
         }
         if (sharedHub) {
           if (!authenticated.content) throw new Error('validated shared Hub content is absent')
@@ -2655,6 +2663,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         sharedWorlds = removeSharedGamePlayer(sharedWorlds, client.playerId)
         state = sharedWorlds.hub
         playerContents.delete(client.playerId)
+        pendingRestoredModState.delete(client.playerId)
         if (
           disconnectedPartyId
           && !sharedWorlds.parties.parties.some(party => party.id === disconnectedPartyId)
@@ -4839,6 +4848,14 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           },
           wasmPath: options.luaWasmPath ?? '',
         })
+        const activeParty = sharedWorlds?.parties.parties.find(party => party.id === partyId)
+        const saved = activeParty?.memberPlayerIds
+          .map(playerId => pendingRestoredModState.get(playerId))
+          .find((state): state is PreparedModSaveState => state !== undefined)
+        if (saved) {
+          runtime.restoreSaveState(saved)
+          for (const playerId of activeParty!.memberPlayerIds) pendingRestoredModState.delete(playerId)
+        }
         const scope: PartyModRuntimeScope = {
           content: partyContent,
           pendingEvents: [],
@@ -4896,31 +4913,8 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
 
   function preparedModSaveState(
     host: PreparedModHost | null,
-  ): Readonly<Record<string, Readonly<Record<string, LuaConsoleValue>>>> {
-    if (!host) return Object.freeze({})
-    const checkpoint = host.checkpoint()
-    const modIds = new Set(host.content.all().map(entry => entry.modId))
-    return Object.freeze(Object.fromEntries([...modIds].sort().map(modId => [modId, Object.freeze({
-      api: '1.0.0',
-      state_cells: checkpoint.session.state.cells
-        .filter(cell => cell.modId === modId)
-        .map(cell => ({
-          key: cell.key,
-          schema_version: cell.schemaVersion,
-          scope: { id: cell.scope.id, kind: cell.scope.kind },
-          value: cell.value,
-        })),
-      state_revision: checkpoint.session.state.revision,
-      statuses: checkpoint.statuses.instances
-        .filter(status => status.modId === modId)
-        .map(status => ({
-          content_id: status.contentId,
-          expires_tick: status.expiresTick,
-          instance_id: status.instanceId,
-          started_tick: status.startedTick,
-          target_id: status.targetId,
-        })),
-    })])))
+  ): import('./prepared-mod-save.ts').PreparedModSaveState {
+    return host?.saveState() ?? Object.freeze({})
   }
 
   await initializePrivateModHost()

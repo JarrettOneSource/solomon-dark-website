@@ -115,6 +115,7 @@ test('prepared host consumes a 1.0 potion atomically and owns status filters and
     }), 0)
     assert.equal(host.extensions.createLootItems({ actorSeed: 1, enemyToken: 'SKELETON' }).length, 1)
     const checkpoint = host.checkpoint()
+    const saveState = host.saveState()
     assert.equal(checkpoint.statuses.instances.length, 1)
     const started = host.step([{
       name: 'run.started',
@@ -133,7 +134,7 @@ test('prepared host consumes a 1.0 potion atomically and owns status filters and
       targetPlayerId: 'player-1',
       tick: 20,
     }), 20)
-    host.restore(checkpoint)
+    host.restoreSaveState(saveState)
     assert.equal(host.extensions.filterDamage({
       amount: 20,
       damageKind: 'physical',
@@ -141,6 +142,11 @@ test('prepared host consumes a 1.0 potion atomically and owns status filters and
       targetPlayerId: 'player-1',
       tick: 11,
     }), 0)
+    const modId = Object.keys(saveState)[0]!
+    assert.throws(() => host.restoreSaveState({
+      ...saveState,
+      [modId]: { ...saveState[modId], graph_sha256: '0'.repeat(64) },
+    }), /graph does not match/)
   } finally {
     host.close()
   }

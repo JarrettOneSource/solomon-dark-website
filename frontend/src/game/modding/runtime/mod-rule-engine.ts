@@ -124,6 +124,7 @@ export class ModRuleEngine {
       }
     }))
     this.#state.restore(checkpoint, definitions)
+    this.#state.rollback(checkpoint)
   }
 
   dispatch(input: ModRuleDispatchInput): ModRuleDispatchResult {

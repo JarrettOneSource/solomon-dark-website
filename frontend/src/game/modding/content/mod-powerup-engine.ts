@@ -77,8 +77,9 @@ export class ModPowerupEngine {
     }
     const ids = new Set<number>()
     this.#instances = checkpoint.instances.map((instance) => {
+      const definition = this.#catalog.powerup(instance.contentId)
       if (!Number.isSafeInteger(instance.id) || instance.id < 1 || ids.has(instance.id) ||
-          !this.#catalog.powerup(instance.contentId) || !Number.isFinite(instance.x) ||
+          !definition || instance.modId !== definition.modId || !Number.isFinite(instance.x) ||
           !Number.isFinite(instance.y) || !Number.isSafeInteger(instance.spawnedTick) ||
           instance.spawnedTick < 0) throw new Error('mod powerup checkpoint contains an invalid instance')
       ids.add(instance.id)

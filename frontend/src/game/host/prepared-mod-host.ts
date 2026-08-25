@@ -53,6 +53,11 @@ import type {
 } from '../protocol/game-protocol.ts'
 import type { MaterializedWebSessionContent } from './web-mod-content.ts'
 import type { WebLuaDerivedEvent } from './lua/web-lua-game-api.ts'
+import {
+  decodePreparedModSaveState,
+  encodePreparedModSaveState,
+  type PreparedModSaveState,
+} from './prepared-mod-save.ts'
 
 const MAXIMUM_PRESENTATION_INTENTS = 1_024
 const SPAWN_ID_BASE = 0x5000_0000
@@ -97,6 +102,8 @@ export interface PreparedModHost {
   project(): ModContentProjection
   projectionRevision(): number
   restore(checkpoint: PreparedModHostCheckpoint): void
+  restoreSaveState(state: PreparedModSaveState): void
+  saveState(): PreparedModSaveState
   step(
     events: readonly WebLuaDerivedEvent[],
     tick: number,
@@ -319,6 +326,12 @@ export async function prepareModHost(options: Readonly<{
         session.restore(previous.session)
         throw error
       }
+    },
+    restoreSaveState(state) {
+      host.restore(decodePreparedModSaveState(options.content.compiledMods, state))
+    },
+    saveState() {
+      return encodePreparedModSaveState(options.content.compiledMods, host.checkpoint())
     },
     step(events, tick, scopeId, context = {}) {
       requireOpen()
