@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { Buffer } from 'node:buffer'
 import test from 'node:test'
 
 import {
@@ -42,6 +43,7 @@ import {
   dazzlePlayerEntity,
 } from '../core-server/player-entity-store.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
+import { materializeStockTutorial } from '../host/boneyard-catalog.ts'
 import {
   EMPTY_CONTENT_MANIFEST_SHA256,
   GAME_CHAT_MAX_TEXT_CODE_UNITS,
@@ -352,7 +354,7 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
   })), /activity/)
 })
 
-test('protocol 72 retains exact A or B slots for HUD concentration replacement', () => {
+test('protocol 73 retains exact A or B slots for HUD concentration replacement', () => {
   assert.throws(() => decodeClientGameMessage(JSON.stringify({
     type: 'client-select-concentration-slot',
     skillId: 57,
@@ -443,7 +445,7 @@ test('protocol v42 bounds Lua requests and structured results by wire bytes and 
   }
 })
 
-test('protocol v72 accepts every authoritative inventory and NPC action and rejects malformed variants', () => {
+test('protocol v74 accepts every authoritative inventory and NPC action and rejects malformed variants', () => {
   const actions = [
     { type: 'buy-dowsing', offerId: 1 },
     { type: 'buy-fomentius', itemId: 2 },
@@ -493,7 +495,7 @@ test('protocol v72 accepts every authoritative inventory and NPC action and reje
   }
 })
 
-test('protocol v72 carries authoritative present Skorcha population and animation state', () => {
+test('protocol v74 carries authoritative present Skorcha population and animation state', () => {
   const snapshot = createGameSnapshot(createGameSimulation({
     'player-1': CHARACTER,
   }, { hubTraderAnimationSeed: 2 }), 'player-1')
@@ -1425,8 +1427,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v72 carries observer mode, Hub activity, NPC state, Goodie actions, tutorial fields/state, Hagatha runtime, Imp effects, save intent, selected skills, sacks, dyes, and gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 73)
+test('protocol v74 carries observer mode, Hub activity, NPC state, Goodie actions, tutorial fields/state, Hagatha runtime, Imp effects, save intent, selected skills, sacks, dyes, and gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 74)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -1573,6 +1575,60 @@ test('protocol v72 carries observer mode, Hub activity, NPC state, Goodie action
   assert.throws(
     () => decodeServerGameMessage(JSON.stringify(unsupportedLifeState)),
     /lifeState is not supported/,
+  )
+})
+
+test('protocol v74 carries consistent persistent Tutorial camera-lock clocks', () => {
+  const entered = enterBoneyardWorld(
+    createGameSimulation({ 'player-1': CHARACTER }),
+    materializeStockTutorial(Buffer.alloc(16, 73)),
+  )
+  if (entered.world.kind !== 'boneyard' || entered.world.tutorial === null) {
+    throw new Error('expected Tutorial world')
+  }
+  const state = {
+    ...entered,
+    world: {
+      ...entered.world,
+      tutorial: {
+        ...entered.world.tutorial,
+        cameraLockAgeTicks: 50,
+        cameraLockTriggered: true,
+        cameraLockTicksRemaining: 250,
+      },
+    },
+  }
+  const message = {
+    acknowledgedInputSequence: 0,
+    frame: createGameSnapshotFrame(
+      createGameSnapshot(state, 'player-1'),
+      0,
+      undefined,
+      true,
+    ),
+    sequence: 1,
+    type: 'server-snapshot' as const,
+  }
+  assert.deepEqual(decodeServerGameMessage(encodeGameMessage(message)), message)
+
+  const missingAge = JSON.parse(encodeGameMessage(message))
+  delete missingAge.frame.world.tutorial.cameraLockAgeTicks
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(missingAge)),
+    /cameraLockAgeTicks must be finite/,
+  )
+  const untriggeredAge = JSON.parse(encodeGameMessage(message))
+  untriggeredAge.frame.world.tutorial.cameraLockTriggered = false
+  untriggeredAge.frame.world.tutorial.cameraLockTicksRemaining = 0
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(untriggeredAge)),
+    /camera-lock state before its trigger/,
+  )
+  const inconsistentCleanup = JSON.parse(encodeGameMessage(message))
+  inconsistentCleanup.frame.world.tutorial.cameraLockTicksRemaining = 249
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(inconsistentCleanup)),
+    /inconsistent camera-lock clocks/,
   )
 })
 

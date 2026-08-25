@@ -4,7 +4,11 @@ import test from 'node:test'
 import {
   NATIVE_TUTORIAL_AMULET_DESCRIPTION,
   NATIVE_TUTORIAL_AMULET_IDENTITY,
+  NATIVE_TUTORIAL_CAMERA_CLEANUP_TICKS,
+  NATIVE_TUTORIAL_CAMERA_LOCK_SETTLE_TICKS,
+  NATIVE_TUTORIAL_CAMERA_TARGET,
   NATIVE_TUTORIAL_CUES,
+  NATIVE_TUTORIAL_ENTRANCE_FENCE_CHAIN,
   NATIVE_TUTORIAL_FIRES,
   NATIVE_TUTORIAL_MONSTER_RECIPES,
   NATIVE_TUTORIAL_SCRIPT_COMMAND_IDS,
@@ -15,7 +19,9 @@ import {
   NATIVE_TUTORIAL_WAVE_BATCHES,
   applyNativeTutorialSurfaceAction,
   createNativeTutorialState,
+  nativeTutorialCameraBounds,
   nativeTutorialDialogueTicks,
+  nativeTutorialEnemySpawnPositionIsAllowed,
   nativeTutorialForcedVelocity,
   nativeTutorialHudAccess,
   nativeTutorialInstructionBaselines,
@@ -79,8 +85,38 @@ test('locks the complete stock Tutorial authored membership', () => {
   assert.deepEqual(Object.keys(NATIVE_TUTORIAL_UID_GROUPS).map(Number), [
     10010, 10052, 10060, 10061, 10078, 10086,
   ])
-  assert.deepEqual(NATIVE_TUTORIAL_UID_GROUPS[10010], [10004, 10004, 10004, 10004, 10004])
-  assert.deepEqual(NATIVE_TUTORIAL_UID_GROUPS[10060], [10059, 10059, 10004, 10004, 10004])
+  assert.deepEqual(NATIVE_TUTORIAL_UID_GROUPS, {
+    10010: {
+      memberUids: [10004, 10004, 10004, 10004, 10004],
+      positionCacheDword: 0,
+      shareFinalRoot: false,
+    },
+    10052: {
+      memberUids: [10051, 10051, 10051, 10051, 10051],
+      positionCacheDword: 0,
+      shareFinalRoot: false,
+    },
+    10060: {
+      memberUids: [10059, 10059, 10004, 10004, 10004],
+      positionCacheDword: 0,
+      shareFinalRoot: false,
+    },
+    10061: {
+      memberUids: [10059, 10059, 10059],
+      positionCacheDword: 0xcdcdcdcd,
+      shareFinalRoot: true,
+    },
+    10078: {
+      memberUids: [10076, 10077, 10076],
+      positionCacheDword: 0,
+      shareFinalRoot: false,
+    },
+    10086: {
+      memberUids: [10085, 10076],
+      positionCacheDword: 0,
+      shareFinalRoot: false,
+    },
+  })
   assert.deepEqual(Object.fromEntries(Object.entries(NATIVE_TUTORIAL_WAVE_BATCHES).map(
     ([wave, batches]) => [wave, batches.map(batch => [
       batch.tick,
@@ -127,6 +163,10 @@ test('starts the exact two five-skeleton opening groups when Solomon runs', () =
   assert.equal(result.spawnIntents.length, 10)
   assert.deepEqual(result.spawnIntents.map(intent => intent.authoredRecipe?.uid), Array(10).fill(10004))
   assert.ok(result.spawnIntents.every(intent => intent.positionPolicy === 'dark'))
+  assert.ok(result.spawnIntents.every(intent => intent.placementGroupId === undefined))
+  assert.equal(new Set(result.spawnIntents.map(({ position }) => (
+    `${position.x},${position.y}`
+  ))).size, 10)
 
   const transientInstruction = stepNativeTutorial(result.state, {
     ...BASE_INPUT,
@@ -139,6 +179,91 @@ test('starts the exact two five-skeleton opening groups when Solomon runs', () =
   assert.equal(nativeTutorialPresentation(transientInstruction.state, {
     inventory: 'I', potion: '1', secondary: 'Right Mouse', skills: 'K',
   }).heading, null)
+})
+
+test('shares only the Three Archers final placement while retaining fresh raw draws', () => {
+  const initial = afterIntro(createNativeTutorialState(
+    BASE_INPUT.playerPosition,
+    0,
+    'tutorial-three-archers',
+  ))
+  const result = stepNativeTutorial({
+    ...initial,
+    active: false,
+    stage: 19,
+    waveOrdinal: 4,
+    waveSpawnCursor: 2,
+    waveTicks: 500,
+  }, BASE_INPUT)
+  assert.equal(result.spawnIntents.length, 3)
+  assert.deepEqual(result.spawnIntents.map(({ authoredRecipe }) => authoredRecipe?.uid), [
+    10059, 10059, 10059,
+  ])
+  assert.deepEqual(result.spawnIntents.map(({ placementGroupId }) => placementGroupId), [1, 1, 1])
+  assert.equal(new Set(result.spawnIntents.map(({ position }) => (
+    `${position.x},${position.y}`
+  ))).size, 3)
+})
+
+test('keeps enemy circles north of every authored entrance-Fence segment and Gate gap', () => {
+  assert.equal(NATIVE_TUTORIAL_ENTRANCE_FENCE_CHAIN.length, 17)
+  for (let index = 1; index < NATIVE_TUTORIAL_ENTRANCE_FENCE_CHAIN.length; index += 1) {
+    const start = NATIVE_TUTORIAL_ENTRANCE_FENCE_CHAIN[index - 1]
+    const end = NATIVE_TUTORIAL_ENTRANCE_FENCE_CHAIN[index]
+    const midpoint = {
+      x: (start.x + end.x) / 2,
+      y: (start.y + end.y) / 2,
+    }
+    assert.equal(nativeTutorialEnemySpawnPositionIsAllowed({
+      x: midpoint.x,
+      y: midpoint.y - 26,
+    }, 25), true, `segment ${index - 1}`)
+    assert.equal(nativeTutorialEnemySpawnPositionIsAllowed({
+      x: midpoint.x,
+      y: midpoint.y - 24,
+    }, 25), false, `segment ${index - 1}`)
+  }
+  assert.equal(nativeTutorialEnemySpawnPositionIsAllowed({ x: 1025, y: 1700 }, 25), false)
+})
+
+test('keeps the Tutorial camera target after its independent cleanup countdown', () => {
+  const initial = afterIntro(createNativeTutorialState(
+    BASE_INPUT.playerPosition,
+    0,
+    'tutorial-camera-lock',
+  ))
+  const triggered = stepNativeTutorial(initial, {
+    ...BASE_INPUT,
+    playerPosition: { x: 1025, y: 800 },
+  }).state
+  assert.equal(triggered.cameraLockTriggered, true)
+  assert.equal(triggered.cameraLockAgeTicks, 0)
+  assert.equal(triggered.cameraLockTicksRemaining, NATIVE_TUTORIAL_CAMERA_CLEANUP_TICKS)
+  assert.deepEqual(nativeTutorialCameraBounds(triggered), { x: 0, y: 0, w: 2043, h: 2053 })
+
+  let state = triggered
+  for (let tick = 1; tick <= NATIVE_TUTORIAL_CAMERA_LOCK_SETTLE_TICKS; tick += 1) {
+    state = stepNativeTutorial(state, {
+      ...BASE_INPUT,
+      playerPosition: { x: 1025, y: 800 },
+      tick: tick + 1,
+    }).state
+    if (tick === 1) {
+      assert.deepEqual(nativeTutorialCameraBounds(state), {
+        x: 0,
+        y: 0,
+        w: 2043,
+        h: Math.fround(2053 + (849.91796875 - 2053) * Math.fround(0.01)),
+      })
+    }
+    if (tick === NATIVE_TUTORIAL_CAMERA_CLEANUP_TICKS) {
+      assert.equal(state.cameraLockTicksRemaining, 0)
+      assert.notDeepEqual(nativeTutorialCameraBounds(state), NATIVE_TUTORIAL_CAMERA_TARGET)
+    }
+  }
+  assert.equal(state.cameraLockAgeTicks, NATIVE_TUTORIAL_CAMERA_LOCK_SETTLE_TICKS)
+  assert.equal(state.cameraLockTicksRemaining, 0)
+  assert.deepEqual(nativeTutorialCameraBounds(state), NATIVE_TUTORIAL_CAMERA_TARGET)
 })
 
 test('owns inventory and skills modal milestones as authoritative surface actions', () => {

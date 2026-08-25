@@ -159,11 +159,15 @@ Skorcha population, and bounded dialogue/service actions.
 Protocol 72 added the Tutorial's selected-HUD acknowledgement byte and
 the two bounded primary/concentration-A selector-open facts. It also carries
 Solomon's authoritative dig-body offset and ticked dirt/audio semantic events.
-Current protocol 73 adds the shared-Hub Memoratorium's ten-slot portrait
+Protocol 73 adds the shared-Hub Memoratorium's ten-slot portrait
 archive: fixed slot ages/markers, the `100..109` portrait-id ring, and frozen
 semantic portrait recipes. The host publishes the complete bounded state so a
 live update and a late join consume one authority value rather than browser
 history.
+Current protocol 74 adds the bounded Tutorial camera-lock age. The 300-tick
+cleanup countdown remains separate: the client derives one persistent
+recursive camera bound for both rendering and hit projection, while the host
+uses the exact Tutorial entrance Fence as an enemy-birth admission domain.
 The host applies
 either skill selection only to the authenticated
 participant before publishing a new progression revision.
@@ -593,15 +597,18 @@ RNG order, before publishing the next progression revision.
 ## Saves, identity, and content
 
 - The authoritative game host is the only producer of browser-save contents.
-  Schema 8 is one atomic envelope with a durable participant profile (economy,
+  Schema 9 is one atomic envelope with a durable participant profile (economy,
   Hagatha one-shot runtime, and NPC service state) and a nullable current-wizard
   continuation.
   The continuation summary explicitly says whether an active Boneyard run
   exists; a Hub save is resumable but is not a saved Boneyard run. The host
   emits the document at semantic progression/world boundaries and bounded
   checkpoints. A Tutorial continuation also carries the resumable controller
-  and pre-Tutorial profile-economy baseline; schema 7 retains that owner while
-  normalizing absent Hub-NPC state, and schema 6 normalizes with neither owner.
+  and pre-Tutorial profile-economy baseline. Schema 9 also persists the
+  camera-lock age separately from the cleanup countdown; schema 8 retains the
+  preceding Tutorial owner and normalizes the missing age, schema 7 retains
+  that owner while normalizing absent Hub-NPC state, and schema 6 normalizes
+  with neither owner.
   Browser code transports the document and may invalidate a
   strictly decoded continuation, but never derives profile state from a
   rendered snapshot.
@@ -721,11 +728,12 @@ an accepted ordinary-host authoritative Lua console request revokes it
 independently. A server-authenticated developer connection is exempt from both
 cheat-origin taints, including developer-only bot and player-grant commands. Any
 ineligible member taints the current party run for every participant. Local
-Hall history remains available. Save schema 8 carries durable `global-clean` or
+Hall history remains available. Save schema 9 carries durable `global-clean` or
 `local-only` integrity and explicit active-run state; schemas 1 through 3
 migrate conservatively to `local-only`, schema 4 preserves its authored
-integrity, schema 5 migrates its prior envelope, and schemas 6 and 7 preserve
-their authored integrity and active-run summary. Each participant receives an
+integrity, schema 5 migrates its prior envelope, and schemas 6 through 8 preserve
+their authored integrity and active-run summary. Schema 9 additionally retains
+Tutorial camera-lock age independently from its cleanup countdown. Each participant receives an
 authoritative profile/continuation checkpoint, and Game Over removes only that
 participant's current-wizard continuation.
 
@@ -1308,6 +1316,7 @@ server-authored developer boolean from a one-use admission into the welcome
 and gives observer admissions a distinct read-only handshake.
 Protocol 73 retains that authorization contract unchanged while adding the
 bounded shared memorial to Hub snapshots and frames.
+Protocol 74 retains both contracts while adding only the Tutorial camera age.
 An entitled account keeps the setting and ordinary shared-Hub routing off
 while still receiving the DevTools API. No client-authored field can grant the
 entitlement.

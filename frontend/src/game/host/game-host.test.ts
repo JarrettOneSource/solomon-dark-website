@@ -1945,7 +1945,7 @@ test('host admits one fresh solo player into the hidden stock Tutorial and check
   assert.equal(snapshotMessage.snapshot.world.waves, null)
   assert.equal(checkpointMessage.type, 'server-save-checkpoint')
   const saved = JSON.parse(checkpointMessage.save)
-  assert.equal(saved.schemaVersion, 8)
+  assert.equal(saved.schemaVersion, 9)
   assert.equal(saved.profile.economy.tutorialPending, true)
   assert.equal(saved.continuation.simulation.world.tutorial.stage, 0)
 })

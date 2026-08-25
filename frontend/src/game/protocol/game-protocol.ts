@@ -180,6 +180,8 @@ import {
 import { BONEYARD_ENEMY_FLAGS } from '../core-kernels/boneyard-enemy-config.ts'
 import {
   NATIVE_TUTORIAL_AMULET_IDENTITY,
+  NATIVE_TUTORIAL_CAMERA_CLEANUP_TICKS,
+  NATIVE_TUTORIAL_CAMERA_LOCK_SETTLE_TICKS,
   NATIVE_TUTORIAL_CUES,
   NATIVE_TUTORIAL_CUE_DEFINITIONS,
   NATIVE_TUTORIAL_STAGES,
@@ -351,7 +353,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 73
+export const GAME_PROTOCOL_VERSION = 74
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -9123,6 +9125,7 @@ function nativeTutorialState(value: unknown, field: string): NativeTutorialState
   const source = record(value, field)
   onlyKeys(source, field, [
     'active',
+    'cameraLockAgeTicks',
     'cameraLockTriggered',
     'cameraLockTicksRemaining',
     'damageProtection',
@@ -9242,15 +9245,37 @@ function nativeTutorialState(value: unknown, field: string): NativeTutorialState
   if (introBlend < 1 && introFade !== 1) {
     throw new GameProtocolError(`${field} fades before the intro blend completes`)
   }
+  const cameraLockAgeTicks = boundedInteger(
+    source.cameraLockAgeTicks,
+    `${field}.cameraLockAgeTicks`,
+    0,
+    NATIVE_TUTORIAL_CAMERA_LOCK_SETTLE_TICKS,
+  )
+  const cameraLockTriggered = boolean(
+    source.cameraLockTriggered,
+    `${field}.cameraLockTriggered`,
+  )
+  const cameraLockTicksRemaining = boundedInteger(
+    source.cameraLockTicksRemaining,
+    `${field}.cameraLockTicksRemaining`,
+    0,
+    NATIVE_TUTORIAL_CAMERA_CLEANUP_TICKS,
+  )
+  if (!cameraLockTriggered && (cameraLockAgeTicks !== 0 || cameraLockTicksRemaining !== 0)) {
+    throw new GameProtocolError(`${field} has camera-lock state before its trigger`)
+  }
+  if (
+    cameraLockTriggered
+    && cameraLockTicksRemaining !== Math.max(
+      0,
+      NATIVE_TUTORIAL_CAMERA_CLEANUP_TICKS - cameraLockAgeTicks,
+    )
+  ) throw new GameProtocolError(`${field} has inconsistent camera-lock clocks`)
   return {
     active,
-    cameraLockTriggered: boolean(source.cameraLockTriggered, `${field}.cameraLockTriggered`),
-    cameraLockTicksRemaining: boundedInteger(
-      source.cameraLockTicksRemaining,
-      `${field}.cameraLockTicksRemaining`,
-      0,
-      300,
-    ),
+    cameraLockAgeTicks,
+    cameraLockTriggered,
+    cameraLockTicksRemaining,
     damageProtection: boolean(source.damageProtection, `${field}.damageProtection`),
     dialogueArmed: boolean(source.dialogueArmed, `${field}.dialogueArmed`),
     introActive,

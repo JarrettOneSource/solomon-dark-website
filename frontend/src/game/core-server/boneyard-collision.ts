@@ -111,9 +111,14 @@ export const NATIVE_BONEYARD_SPAWN_PLACEMENT = Object.freeze({
 })
 
 export interface NativeBoneyardSpawnPolicyContext {
+  readonly acceptsDomain?: (
+    position: Readonly<BoneyardPoint>,
+    radius: number,
+  ) => boolean
   readonly isOffscreen?: (position: Readonly<BoneyardPoint>) => boolean
   readonly isOutsidePolicyBounds?: (position: Readonly<BoneyardPoint>) => boolean
   readonly lightAt: (position: Readonly<BoneyardPoint>) => number
+  readonly retryBounds?: Readonly<BoneyardBounds>
 }
 
 export interface NativeBoneyardSpawnPlacementResult {
@@ -276,7 +281,7 @@ export function resolveNativeBoneyardSpawnPosition(
   context: NativeBoneyardSpawnPolicyContext,
 ): NativeBoneyardSpawnPlacementResult {
   validateSpawnRadius(radius)
-  if (nativeSpawnPolicyAccepts(position, bounds, world, radius, policy, context)) {
+  if (nativeSpawnPolicyAccepts(position, bounds, world, radius, policy, context, false)) {
     return { position: { ...position }, rngState: sourceRngState }
   }
 
@@ -305,6 +310,7 @@ export function resolveNativeBoneyardSpawnPosition(
         radius,
         activePolicy,
         context,
+        true,
       )) return { position: candidate, rngState }
     }
     ringRadius += radius
@@ -522,8 +528,16 @@ function nativeSpawnPolicyAccepts(
   radius: number,
   policy: BoneyardSpawnPositionPolicy,
   context: NativeBoneyardSpawnPolicyContext,
+  retry: boolean,
 ): boolean {
   if (!isMobileBoneyardPlacement(position, bounds, world, radius)) return false
+  if (context.acceptsDomain && !context.acceptsDomain(position, radius)) return false
+  if (
+    retry
+    && policy !== 'dark'
+    && context.retryBounds
+    && !circleInsideBounds(position, context.retryBounds, radius)
+  ) return false
   switch (policy) {
     case 'dark': return context.lightAt(position) <= 0
     case 'light': return context.lightAt(position) > 0
@@ -531,6 +545,17 @@ function nativeSpawnPolicyAccepts(
     case 'edge': return context.isOutsidePolicyBounds?.(position) ?? false
     case 'direct': return true
   }
+}
+
+function circleInsideBounds(
+  position: Readonly<BoneyardPoint>,
+  bounds: Readonly<BoneyardBounds>,
+  radius: number,
+): boolean {
+  return position.x >= bounds.x + radius
+    && position.x <= bounds.x + bounds.w - radius
+    && position.y >= bounds.y + radius
+    && position.y <= bounds.y + bounds.h - radius
 }
 
 function validateSpawnRadius(radius: number): void {

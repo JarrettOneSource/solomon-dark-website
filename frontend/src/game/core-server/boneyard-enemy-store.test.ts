@@ -134,6 +134,35 @@ test('native cell binding preserves same-cell order and appends cross-cell rebin
   assert.equal(returned.nextNativeRegistrationOrder, 12)
 })
 
+test('a UIDGroup placement cache reuses only its first final root', () => {
+  let placementCalls = 0
+  const result = stepBoneyardEnemyStore(createBoneyardEnemyStore('placement-group'), {
+    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    players: FAR_PLAYERS,
+    resolveMovement: DIRECT_MOVEMENT,
+    resolveSpawnIntents: () => [
+      { ...intent('SKELETONARCHER', 1, { x: 10, y: 20 }), placementGroupId: 9 },
+      { ...intent('SKELETONARCHER', 2, { x: 30, y: 40 }), placementGroupId: 9 },
+      intent('SKELETONARCHER', 3, { x: 50, y: 60 }),
+    ],
+    resolveSpawnPlacement: ({ position, rngState }) => {
+      placementCalls += 1
+      return {
+        position: { x: position.x + placementCalls * 100, y: position.y },
+        rngState,
+      }
+    },
+    tick: 0,
+  })
+
+  assert.equal(placementCalls, 2)
+  assert.deepEqual(result.store.actors.map(({ position }) => position), [
+    { x: 110, y: 20 },
+    { x: 110, y: 20 },
+    { x: 250, y: 60 },
+  ])
+})
+
 test('Badguy Hurricane cooldown is constructor-randomized, target-owned, and drops ten per tick', () => {
   const spawned = spawnOne('hurricane-cooldown', 'SKELETON', { x: 0, y: 0 }, FAR_PLAYERS)
   const initial = spawned.store.actors[0]!.hurricaneContactCooldown

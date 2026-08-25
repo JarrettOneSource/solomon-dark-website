@@ -43,6 +43,7 @@ import {
 } from '../core-server/game-simulation.ts'
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import { gameOverExitDurationTicks } from '../core-kernels/game-run.ts'
+import { NATIVE_TUTORIAL_CAMERA_LOCK_SETTLE_TICKS } from '../core-kernels/native-tutorial.ts'
 import type {
   HubInventoryAction,
   ModConsumableCatalogEntry,
@@ -4977,6 +4978,8 @@ function tutorialSaveBoundaryKey(state: GameSimulationState): string | null {
   return [
     tutorial.active,
     tutorial.cameraLockTriggered,
+    tutorial.cameraLockTicksRemaining === 0,
+    tutorial.cameraLockAgeTicks === NATIVE_TUTORIAL_CAMERA_LOCK_SETTLE_TICKS,
     tutorial.introActive,
     tutorial.inventoryOpened,
     tutorial.inventorySeen,

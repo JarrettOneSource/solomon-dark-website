@@ -23,6 +23,10 @@ import {
   type NativeRngState,
 } from '../core-kernels/native-rng.ts'
 import {
+  NATIVE_TUTORIAL_CAMERA_CLEANUP_TICKS,
+  NATIVE_TUTORIAL_CAMERA_LOCK_SETTLE_TICKS,
+} from '../core-kernels/native-tutorial.ts'
+import {
   nativeWeldBuild,
   nativeWeldComponentRanksForBuild,
   type PlayerSkillBookComponent,
@@ -710,9 +714,21 @@ function normalizeWorld(
     ? null
     : (() => {
         const state = record(tutorialValue, 'game save Tutorial')
-        return 'selectedSkillHudAcknowledged' in state
-          ? state
-          : { ...state, selectedSkillHudAcknowledged: false }
+        const legacyCameraAge = state.cameraLockTriggered === true
+          && typeof state.cameraLockTicksRemaining === 'number'
+          && Number.isSafeInteger(state.cameraLockTicksRemaining)
+          && state.cameraLockTicksRemaining > 0
+          ? NATIVE_TUTORIAL_CAMERA_CLEANUP_TICKS - state.cameraLockTicksRemaining
+          : state.cameraLockTriggered === true
+            ? NATIVE_TUTORIAL_CAMERA_LOCK_SETTLE_TICKS
+            : 0
+        return {
+          ...state,
+          cameraLockAgeTicks: 'cameraLockAgeTicks' in state
+            ? state.cameraLockAgeTicks
+            : legacyCameraAge,
+          selectedSkillHudAcknowledged: state.selectedSkillHudAcknowledged === true,
+        }
       })()
   const tutorialProfileEconomy = source.tutorialProfileEconomy == null
     ? null

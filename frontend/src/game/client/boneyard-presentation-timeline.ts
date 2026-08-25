@@ -223,7 +223,11 @@ function interpolateSnapshot(
       ),
       maggots: interpolateMaggots(older.world.maggots, newer.world.maggots, blend),
       runId: newer.world.runId,
-      tutorial: copyTutorial((blend < 1 ? older : newer).world.tutorial),
+      tutorial: interpolateTutorial(
+        older.world.tutorial,
+        newer.world.tutorial,
+        blend,
+      ),
       waves: interpolateWaves(older.world.waves, newer.world.waves, blend),
     },
   }
@@ -421,6 +425,26 @@ function copyTutorial(
       pending: [...source.narration.pending],
     },
     survivalLastCheckedTicks: [...source.survivalLastCheckedTicks],
+  }
+}
+
+function interpolateTutorial(
+  older: BoneyardGameSnapshot['world']['tutorial'],
+  newer: BoneyardGameSnapshot['world']['tutorial'],
+  blend: number,
+): BoneyardGameSnapshot['world']['tutorial'] {
+  if (older === null || newer === null) {
+    return copyTutorial(blend < 1 ? older : newer)
+  }
+  const discrete = copyTutorial(blend < 1 ? older : newer)!
+  if (!older.cameraLockTriggered || !newer.cameraLockTriggered) return discrete
+  return {
+    ...discrete,
+    cameraLockAgeTicks: lerp(
+      older.cameraLockAgeTicks,
+      newer.cameraLockAgeTicks,
+      blend,
+    ),
   }
 }
 

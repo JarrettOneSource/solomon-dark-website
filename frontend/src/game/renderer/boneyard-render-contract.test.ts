@@ -264,6 +264,12 @@ test('Boneyard camera keeps the native zoom and clamps to the arena bounds', () 
   })
 })
 
+test('Tutorial camera projection and actual rendering share one persistent lock resolver', () => {
+  assert.equal([...boneyardRenderer.matchAll(/nativeTutorialCameraBounds\(/g)].length, 2)
+  assert.doesNotMatch(boneyardRenderer, /cameraLockTicksRemaining/)
+  assert.doesNotMatch(boneyardRenderer, /NATIVE_TUTORIAL_CAMERA_LOCK/)
+})
+
 test('Boneyard camera clamp and centering follow the logical browser viewport', () => {
   const bounds = { x: -200, y: 100, w: 3200, h: 2400 }
   const viewport = { width: 1947.6923076923076, height: 900 }

@@ -17,8 +17,11 @@ import {
   type HubInventoryItem,
 } from '../core-kernels/hub-economy.ts'
 import { HUB_SPAWN } from '../core-kernels/hub-math.ts'
-import { nativeTutorialAmuletItem } from '../core-kernels/native-tutorial.ts'
 import { archiveHubMemorialPortrait } from '../core-kernels/hub-memorial.ts'
+import {
+  NATIVE_TUTORIAL_CAMERA_LOCK_SETTLE_TICKS,
+  nativeTutorialAmuletItem,
+} from '../core-kernels/native-tutorial.ts'
 import { HubStudentPopulationState } from '../core-server/hub-students.ts'
 import { createHubSkorchaAtVariant } from '../core-server/hub-skorcha.ts'
 import { createHubWorld, HubWorldRuntime } from '../core-server/hub-world.ts'
@@ -80,7 +83,7 @@ test('host save documents round-trip the complete owner state and revive Hub run
     state,
   })
   const encoded = JSON.parse(document) as Record<string, unknown>
-  assert.equal(encoded.schemaVersion, 8)
+  assert.equal(encoded.schemaVersion, 9)
   assert.deepEqual(encoded.mods, MODS)
   assert.deepEqual(encoded.modState, MOD_STATE)
   assert.equal(encoded.integrity, 'local-only')
@@ -396,7 +399,7 @@ test('current saves migrate the former audio-only Dig lane without replaying dir
   assert.ok(restored.state.world.encounter!.digBodyBobAmplitude < 10)
 })
 
-test('schema 8 resumes the complete stock Tutorial controller and exact level identity', () => {
+test('schema 9 resumes the complete stock Tutorial controller and exact level identity', () => {
   const loadedBoneyard = materializeStockTutorial(Buffer.alloc(16, 19))
   let state = enterBoneyardWorld(
     createGameSimulation({ owner: OWNER }),
@@ -422,12 +425,13 @@ test('schema 8 resumes the complete stock Tutorial controller and exact level id
     state,
   })
   const encoded = JSON.parse(document)
-  assert.equal(encoded.schemaVersion, 8)
+  assert.equal(encoded.schemaVersion, 9)
   assert.equal(encoded.continuation.simulation.world.tutorial.stage, 0)
   assert.equal(
     encoded.continuation.simulation.world.tutorial.selectedSkillHudAcknowledged,
     false,
   )
+  assert.equal(encoded.continuation.simulation.world.tutorial.cameraLockAgeTicks, 0)
   assert.deepEqual(
     encoded.profile.economy,
     encoded.continuation.simulation.world.tutorialProfileEconomy,
@@ -461,6 +465,19 @@ test('schema 8 resumes the complete stock Tutorial controller and exact level id
   assert.equal(restored.state.world.waves, null)
   assert.equal(restored.state.world.arenaTransition, null)
 
+  const legacy = structuredClone(encoded)
+  legacy.schemaVersion = 8
+  delete legacy.continuation.simulation.world.tutorial.cameraLockAgeTicks
+  legacy.continuation.simulation.world.tutorial.cameraLockTriggered = true
+  legacy.continuation.simulation.world.tutorial.cameraLockTicksRemaining = 0
+  const migratedCamera = restoreGameSaveDocument(JSON.stringify(legacy))
+  assert.equal(migratedCamera.state.world.kind, 'boneyard')
+  if (migratedCamera.state.world.kind !== 'boneyard') throw new Error('expected Tutorial')
+  assert.equal(
+    migratedCamera.state.world.tutorial?.cameraLockAgeTicks,
+    NATIVE_TUTORIAL_CAMERA_LOCK_SETTLE_TICKS,
+  )
+
   if (state.world.kind !== 'boneyard' || !state.world.tutorial) {
     throw new Error('expected Tutorial state')
   }
@@ -491,6 +508,7 @@ test('schema 8 resumes the complete stock Tutorial controller and exact level id
 
   const priorSchemaSeven = structuredClone(encoded)
   priorSchemaSeven.schemaVersion = 7
+  delete priorSchemaSeven.continuation.simulation.world.tutorial.cameraLockAgeTicks
   delete priorSchemaSeven.continuation.simulation.world.tutorial
     .selectedSkillHudAcknowledged
   const migrated = restoreGameSaveDocument(JSON.stringify(priorSchemaSeven))

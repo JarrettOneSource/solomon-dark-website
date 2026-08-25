@@ -301,6 +301,51 @@ test('native spawn policies preserve direct points and retry dark/light/offscree
   }
 })
 
+test('non-dark retry rings use the locked camera target without rejecting a legal raw root', () => {
+  const bounds = { x: 0, y: 0, w: 500, h: 500 }
+  const retryBounds = { x: 100, y: 100, w: 300, h: 300 }
+  const origin = { x: 50, y: 250 }
+  const source = createNativeRng(73)
+  const empty = { circles: [], polygons: [], segments: [] }
+  assert.deepEqual(resolveNativeBoneyardSpawnPosition(
+    origin,
+    bounds,
+    empty,
+    25,
+    'direct',
+    source,
+    { lightAt: () => 0, retryBounds },
+  ).position, origin)
+
+  const blocked = {
+    circles: [{ center: origin, radius: 1 }],
+    polygons: [],
+    segments: [],
+  }
+  const direct = resolveNativeBoneyardSpawnPosition(
+    origin,
+    bounds,
+    blocked,
+    25,
+    'direct',
+    source,
+    { lightAt: () => 0, retryBounds },
+  ).position
+  assert.ok(direct.x >= 125 && direct.x <= 375)
+  assert.ok(direct.y >= 125 && direct.y <= 375)
+
+  const dark = resolveNativeBoneyardSpawnPosition(
+    origin,
+    bounds,
+    blocked,
+    25,
+    'dark',
+    source,
+    { lightAt: () => 0, retryBounds },
+  ).position
+  assert.ok(dark.x < 125, 'dark retry bypasses the camera-target rectangle')
+})
+
 test('native spawn placement draws a fresh retry angle for every radius ring', () => {
   const source = createNativeRng(59)
   const firstAngle = drawNativeFloat(source, 360)

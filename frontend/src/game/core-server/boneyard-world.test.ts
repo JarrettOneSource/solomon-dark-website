@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { Buffer } from 'node:buffer'
 import test from 'node:test'
 
 import { actorHeadingFromVector } from '../core-kernels/actor-heading.ts'
@@ -11,9 +12,15 @@ import {
   type BoneyardEnemySpawnIntent,
 } from '../core-kernels/boneyard-wave-director.ts'
 import {
+  NATIVE_TUTORIAL_MONSTER_RECIPES,
+  createNativeTutorialState,
+  stepNativeTutorial,
+} from '../core-kernels/native-tutorial.ts'
+import {
   PLAYER_CHARACTER_RADIUS,
   type PlayerCharacterState,
 } from '../core-kernels/player-character.ts'
+import { materializeStockTutorial } from '../host/boneyard-catalog.ts'
 import {
   boneyardPrimarySpellTargets,
   createBoneyardWorld,
@@ -950,6 +957,110 @@ test('authoritative offscreen placement materializes the logged Tutorial policy 
   ), true)
 })
 
+test('every Tutorial opening enemy materializes on the combat side of the entrance Fence', () => {
+  const playerPosition = { x: 1025, y: 1350 }
+  for (let seed = 0; seed < 64; seed += 1) {
+    const tutorial = {
+      ...createNativeTutorialState(playerPosition, 0, `tutorial-fence-${seed}`),
+      introActive: false,
+      introBlend: 1,
+      introDelayTicksRemaining: 0,
+      introFade: 0,
+      introMovementTicksRemaining: 0,
+      stage: 1 as const,
+    }
+    const spawned = stepNativeTutorial(tutorial, {
+      acidRainCastSequence: 0,
+      acidRainLastSkillId: null,
+      currentHealth: 100,
+      enemyCount: 0,
+      groundSackCount: 0,
+      hasTopLevelNonPotionItem: false,
+      healthPotionCount: 0,
+      level: 1,
+      levelUpPending: false,
+      maximumHealth: 100,
+      playerActionIdle: true,
+      playerPosition,
+      primaryCastSequence: 0,
+      solomonPhase: 'escaping',
+      solomonRunEventId: 1,
+      tick: 1,
+    })
+    assert.equal(spawned.spawnIntents.length, 10)
+
+    const created = createBoneyardWorld(materializeStockTutorial(
+      Buffer.alloc(16, seed),
+    ))
+    const world = { ...created, encounter: null, waves: null }
+    const player = {
+      ...spawnPlayerCharacterInBoneyard({
+        discipline: 'arcane',
+        displayName: 'Fence Domain Tester',
+        element: 'ether',
+      }, world),
+      position: playerPosition,
+    }
+    const result = stepWorld(world, { player }, {}, 1, spawned.spawnIntents)
+    const violations = result.world.enemies.actors.filter((actor) => (
+      actor.position.y + actor.config.collisionRadius
+      > tutorialEntranceFenceY(actor.position.x)
+    ))
+    assert.deepEqual(violations.map(({ id, position }) => ({ id, position })), [], `seed ${seed}`)
+  }
+})
+
+test('every Tutorial MonsterRecipe and authored placement policy excludes the spawn strip', () => {
+  const loaded = materializeStockTutorial(Buffer.alloc(16, 47))
+  const created = createBoneyardWorld(loaded)
+  const world = { ...created, encounter: null, waves: null }
+  const player = {
+    ...spawnPlayerCharacterInBoneyard({
+      discipline: 'arcane',
+      displayName: 'Tutorial Recipe Tester',
+      element: 'ether',
+    }, world),
+    position: { x: 1025, y: 1350 },
+  }
+  const policyByRecipe = new Map<number, readonly ('dark' | 'light' | 'offscreen')[]>([
+    [10004, ['dark', 'offscreen']],
+    [10051, ['offscreen', 'light']],
+    [10059, ['dark']],
+    [10065, ['light']],
+    [10076, ['light']],
+    [10077, ['light']],
+    [10085, ['light']],
+  ])
+
+  let intentId = 1
+  for (const [uidText, definition] of Object.entries(NATIVE_TUTORIAL_MONSTER_RECIPES)) {
+    const uid = Number(uidText)
+    for (const positionPolicy of policyByRecipe.get(uid)!) {
+      const result = stepWorld(world, { player }, {}, intentId, [{
+        authoredRecipe: definition,
+        enemyToken: definition.enemyToken,
+        flags: [],
+        flanking: definition.flanking,
+        id: intentId++,
+        locationPolicy: 'near-player',
+        nativeTypeId: definition.enemyToken === 'SKELETON' ? 1001 : 1002,
+        pathfindingMode: definition.pathfindingMode,
+        position: { x: 700, y: 1750 },
+        positionPolicy,
+        spawnTick: 0,
+        waveOrdinal: 1,
+      }])
+      const actor = result.world.enemies.actors[0]
+      assert.ok(actor, `recipe ${uid} ${positionPolicy}`)
+      assert.ok(
+        actor.position.y + actor.config.collisionRadius
+          <= tutorialEntranceFenceY(actor.position.x),
+        `recipe ${uid} ${positionPolicy}`,
+      )
+    }
+  }
+})
+
 test('Solomon ignores dead and ineligible proximity targets', () => {
   let world = createBoneyardWorld(encounterBoneyard('default'))
   const player = spawnPlayerCharacterInBoneyard({
@@ -1284,6 +1395,40 @@ function capturedGraveBoneyard(): LoadedBoneyard {
       }],
     },
   }
+}
+
+const TUTORIAL_ENTRANCE_FENCE_CHAIN = [
+  { x: 4.150634765625, y: 1627.25146484375 },
+  { x: 149.150634765625, y: 1623.25146484375 },
+  { x: 311.150634765625, y: 1620.25146484375 },
+  { x: 451.150634765625, y: 1620.25146484375 },
+  { x: 604.150634765625, y: 1618.25146484375 },
+  { x: 746.150634765625, y: 1616.25146484375 },
+  { x: 874.206787109375, y: 1614.6953125 },
+  { x: 933.454345703125, y: 1616 },
+  { x: 1118.454345703125, y: 1609 },
+  { x: 1171.994140625, y: 1609 },
+  { x: 1248.994140625, y: 1609 },
+  { x: 1325.994140625, y: 1610 },
+  { x: 1473.150634765625, y: 1611.25146484375 },
+  { x: 1610.150634765625, y: 1609.25146484375 },
+  { x: 1747.150634765625, y: 1608.25146484375 },
+  { x: 1901.150634765625, y: 1606.25146484375 },
+  { x: 2044.150634765625, y: 1605.25146484375 },
+] as const
+
+function tutorialEntranceFenceY(x: number): number {
+  if (x <= TUTORIAL_ENTRANCE_FENCE_CHAIN[0].x) {
+    return TUTORIAL_ENTRANCE_FENCE_CHAIN[0].y
+  }
+  for (let index = 1; index < TUTORIAL_ENTRANCE_FENCE_CHAIN.length; index += 1) {
+    const end = TUTORIAL_ENTRANCE_FENCE_CHAIN[index]
+    if (x > end.x) continue
+    const start = TUTORIAL_ENTRANCE_FENCE_CHAIN[index - 1]
+    const progress = (x - start.x) / (end.x - start.x)
+    return start.y + (end.y - start.y) * progress
+  }
+  return TUTORIAL_ENTRANCE_FENCE_CHAIN.at(-1)!.y
 }
 
 function spawnIsOutsideNativePolicyView(

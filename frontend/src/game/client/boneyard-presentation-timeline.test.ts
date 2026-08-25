@@ -8,6 +8,10 @@ import {
   startBoneyardArenaTransition,
   stepBoneyardArenaTransition,
 } from '../core-kernels/boneyard-arena-transition.ts'
+import {
+  createNativeTutorialState,
+  nativeTutorialCameraBounds,
+} from '../core-kernels/native-tutorial.ts'
 
 import { createGameSimulation } from '../core-server/game-simulation.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
@@ -430,6 +434,50 @@ test('interpolates the native camera lock while retaining owned combat bounds', 
   assert.deepEqual(halfway.combatBounds, newer.world.arenaTransition.combatBounds)
   assert.notEqual(halfway.cameraBounds, newer.world.arenaTransition.cameraBounds)
   assert.notEqual(halfway.combatBounds, newer.world.arenaTransition.combatBounds)
+})
+
+test('interpolates the persistent Tutorial camera age between authority snapshots', () => {
+  const older = snapshotAt(100, 10, 100)
+  const newer = snapshotAt(105, 20, 120)
+  const tutorial = createNativeTutorialState({ x: 1025, y: 2070 }, 0, 'camera-timeline')
+  older.world.tutorial = {
+    ...tutorial,
+    cameraLockAgeTicks: 100,
+    cameraLockTriggered: true,
+    cameraLockTicksRemaining: 200,
+  }
+  newer.world.tutorial = {
+    ...tutorial,
+    cameraLockAgeTicks: 105,
+    cameraLockTriggered: true,
+    cameraLockTicksRemaining: 195,
+  }
+  const timeline = createBoneyardPresentationTimeline({
+    initialReceivedAtMs: 0,
+    initialSnapshot: older,
+    serverTickRate: 100,
+    snapshotRate: 20,
+  })
+  timeline.push(newer, 50)
+
+  const halfway = timeline.sample(75).world.tutorial
+  assert.equal(halfway?.cameraLockAgeTicks, 102.5)
+  const lower = nativeTutorialCameraBounds({
+    ...tutorial,
+    cameraLockAgeTicks: 102,
+    cameraLockTriggered: true,
+  })!
+  const upper = nativeTutorialCameraBounds({
+    ...tutorial,
+    cameraLockAgeTicks: 103,
+    cameraLockTriggered: true,
+  })!
+  assert.deepEqual(nativeTutorialCameraBounds(halfway!), {
+    h: (lower.h + upper.h) / 2,
+    w: 2043,
+    x: 0,
+    y: 0,
+  })
 })
 
 test('merges every 100 Hz Mage pulse discretely across 20 Hz snapshot boundaries', () => {

@@ -23,9 +23,12 @@ import {
 } from '../core-kernels/boneyard-encounter.ts'
 import {
   STOCK_TUTORIAL_BONEYARD_ID,
+  NATIVE_TUTORIAL_CAMERA_TARGET,
   createNativeTutorialState,
   nativeTutorialAmuletItem,
+  nativeTutorialCameraBounds,
   nativeTutorialDialogueTicks,
+  nativeTutorialEnemySpawnPositionIsAllowed,
   nativeTutorialHealthPotionItem,
   type NativeTutorialState,
 } from '../core-kernels/native-tutorial.ts'
@@ -518,6 +521,9 @@ export function stepBoneyardWorldTick(
       y: activeBounds.y + activeBounds.h / 2,
     })
   }
+  const spawnCameraBounds = tutorial === null
+    ? activeBounds
+    : nativeTutorialCameraBounds(tutorial) ?? activeBounds
   const enemyStep = stepBoneyardEnemyStore(collisionResolvedEnemies, {
     abilityEffects,
     arenaScalars: { experience: RETAIL_BONEYARD_EXPERIENCE_RECIPE_SCALAR },
@@ -612,15 +618,21 @@ export function stepBoneyardWorldTick(
         positionPolicy ?? 'direct',
         rngState,
         {
+          ...(tutorial === null
+            ? {}
+            : { acceptsDomain: nativeTutorialEnemySpawnPositionIsAllowed }),
           isOffscreen: (candidate) => boneyardSpawnPositionIsOffscreen(
             candidate,
-            activeBounds,
+            spawnCameraBounds,
             spawnPolicyFocuses,
           ),
           lightAt: (candidate) => nativeBoneyardRadialLightScalar(
             candidate,
             spawnLightSources,
           ),
+          ...(tutorial?.cameraLockTriggered === true
+            ? { retryBounds: NATIVE_TUTORIAL_CAMERA_TARGET }
+            : {}),
         },
       )
     ),

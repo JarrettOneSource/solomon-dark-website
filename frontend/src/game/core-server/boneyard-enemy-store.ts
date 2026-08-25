@@ -1769,6 +1769,7 @@ function materializeSpawnIntents(
   impSplitDepthOverride: number | null = null,
 ): BoneyardEnemyActor[] {
   const actors: BoneyardEnemyActor[] = []
+  const placementGroups = new Map<number, Readonly<BoneyardPoint>>()
   for (const intent of spawnIntents) {
     const baseSpeed = nextBoneyardWaveRandom(work.rngState)
     const radius = nextBoneyardWaveRandom(baseSpeed.state)
@@ -1802,22 +1803,38 @@ function materializeSpawnIntents(
       config.enemyToken === 'IMP'
       && work.impActorCount >= NATIVE_IMP_CONSTRUCTION_MAXIMUM
     ) continue
-    const placement = context.resolveSpawnPlacement?.({
-      actorId: work.nextActorId,
-      position: intent.position,
-      positionPolicy: intent.positionPolicy ?? 'direct',
-      radius: config.collisionRadius,
-      rngState: work.steeringRngState,
-    })
-    if (placement) work.steeringRngState = placement.rngState
-    const position = placement?.position ?? context.resolveMovement({
-      actorId: work.nextActorId,
-      delta: { x: 0, y: 0 },
-      position: intent.position,
-      purpose: 'spawn-placement',
-      radius: config.collisionRadius,
-      requestedPosition: intent.position,
-    })
+    const placementGroupId = intent.placementGroupId
+    if (
+      placementGroupId !== undefined
+      && (!Number.isSafeInteger(placementGroupId) || placementGroupId < 1)
+    ) throw new RangeError('enemy placement group id must be a positive safe integer')
+    const cachedPosition = placementGroupId === undefined
+      ? undefined
+      : placementGroups.get(placementGroupId)
+    let position: Readonly<BoneyardPoint>
+    if (cachedPosition) {
+      position = cachedPosition
+    } else {
+      const placement = context.resolveSpawnPlacement?.({
+        actorId: work.nextActorId,
+        position: intent.position,
+        positionPolicy: intent.positionPolicy ?? 'direct',
+        radius: config.collisionRadius,
+        rngState: work.steeringRngState,
+      })
+      if (placement) work.steeringRngState = placement.rngState
+      position = placement?.position ?? context.resolveMovement({
+        actorId: work.nextActorId,
+        delta: { x: 0, y: 0 },
+        position: intent.position,
+        purpose: 'spawn-placement',
+        radius: config.collisionRadius,
+        requestedPosition: intent.position,
+      })
+      if (placementGroupId !== undefined) {
+        placementGroups.set(placementGroupId, Object.freeze({ ...position }))
+      }
+    }
     validatePoint(position, 'resolved enemy spawn position')
     const targetPlayerId = nearestEligibleTarget(position, context.players)
     const gaitPose = drawLocomotionPhase(work)

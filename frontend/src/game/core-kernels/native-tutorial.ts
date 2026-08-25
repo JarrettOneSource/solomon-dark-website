@@ -8,7 +8,7 @@ import {
   type NativeRngState,
 } from './native-rng.ts'
 import { seedBoneyardWaveRng } from './boneyard-wave-timeline.ts'
-import type { BoneyardPoint } from './boneyard.ts'
+import type { BoneyardBounds, BoneyardPoint } from './boneyard.ts'
 import type { BoneyardSolomonPhase } from './boneyard-encounter.ts'
 import type { HubInventoryItem } from './hub-economy.ts'
 import { PLAYER_CHARACTER_STEADY_SPEED } from './player-character.ts'
@@ -142,6 +142,7 @@ export interface NativeTutorialNarrationState {
 
 export interface NativeTutorialState {
   readonly active: boolean
+  readonly cameraLockAgeTicks: number
   readonly cameraLockTriggered: boolean
   readonly cameraLockTicksRemaining: number
   readonly damageProtection: boolean
@@ -246,14 +247,20 @@ export const NATIVE_TUTORIAL_MONSTER_RECIPES: Readonly<Record<number, TutorialRe
     }),
   })
 
-export const NATIVE_TUTORIAL_UID_GROUPS: Readonly<Record<number, readonly number[]>> =
+export interface NativeTutorialUidGroup {
+  readonly memberUids: readonly number[]
+  readonly positionCacheDword: number
+  readonly shareFinalRoot: boolean
+}
+
+export const NATIVE_TUTORIAL_UID_GROUPS: Readonly<Record<number, NativeTutorialUidGroup>> =
   Object.freeze({
-    10010: Object.freeze([10004, 10004, 10004, 10004, 10004]),
-    10052: Object.freeze([10051, 10051, 10051, 10051, 10051]),
-    10060: Object.freeze([10059, 10059, 10004, 10004, 10004]),
-    10061: Object.freeze([10059, 10059, 10059]),
-    10078: Object.freeze([10076, 10077, 10076]),
-    10086: Object.freeze([10085, 10076]),
+    10010: uidGroup([10004, 10004, 10004, 10004, 10004], 0),
+    10052: uidGroup([10051, 10051, 10051, 10051, 10051], 0),
+    10060: uidGroup([10059, 10059, 10004, 10004, 10004], 0),
+    10061: uidGroup([10059, 10059, 10059], 0xcdcdcdcd),
+    10078: uidGroup([10076, 10077, 10076], 0),
+    10086: uidGroup([10085, 10076], 0),
   })
 
 export const NATIVE_TUTORIAL_FIRES = Object.freeze([
@@ -274,6 +281,47 @@ export const NATIVE_TUTORIAL_CAMERA_LOCK = Object.freeze({
   x: -35.53448486328125,
   y: -37.4495849609375,
 })
+
+export const NATIVE_TUTORIAL_LEVEL_BOUNDS = Object.freeze({
+  h: 2053,
+  w: 2043,
+  x: 0,
+  y: 0,
+})
+
+export const NATIVE_TUTORIAL_CAMERA_TARGET = Object.freeze({
+  h: 849.91796875,
+  w: 2043,
+  x: 0,
+  y: 0,
+})
+
+export const NATIVE_TUTORIAL_CAMERA_CLEANUP_TICKS = 300
+export const NATIVE_TUTORIAL_CAMERA_LOCK_INITIAL_BLEND = Math.fround(0.01)
+export const NATIVE_TUTORIAL_CAMERA_LOCK_BLEND_GROWTH = 1.01
+export const NATIVE_TUTORIAL_CAMERA_LOCK_SETTLE_TICKS = 464
+
+const NATIVE_TUTORIAL_CAMERA_BOUNDS_BY_AGE = buildNativeTutorialCameraBounds()
+
+export const NATIVE_TUTORIAL_ENTRANCE_FENCE_CHAIN = Object.freeze([
+  Object.freeze({ x: 4.150634765625, y: 1627.25146484375 }),
+  Object.freeze({ x: 149.150634765625, y: 1623.25146484375 }),
+  Object.freeze({ x: 311.150634765625, y: 1620.25146484375 }),
+  Object.freeze({ x: 451.150634765625, y: 1620.25146484375 }),
+  Object.freeze({ x: 604.150634765625, y: 1618.25146484375 }),
+  Object.freeze({ x: 746.150634765625, y: 1616.25146484375 }),
+  Object.freeze({ x: 874.206787109375, y: 1614.6953125 }),
+  Object.freeze({ x: 933.454345703125, y: 1616 }),
+  Object.freeze({ x: 1118.454345703125, y: 1609 }),
+  Object.freeze({ x: 1171.994140625, y: 1609 }),
+  Object.freeze({ x: 1248.994140625, y: 1609 }),
+  Object.freeze({ x: 1325.994140625, y: 1610 }),
+  Object.freeze({ x: 1473.150634765625, y: 1611.25146484375 }),
+  Object.freeze({ x: 1610.150634765625, y: 1609.25146484375 }),
+  Object.freeze({ x: 1747.150634765625, y: 1608.25146484375 }),
+  Object.freeze({ x: 1901.150634765625, y: 1606.25146484375 }),
+  Object.freeze({ x: 2044.150634765625, y: 1605.25146484375 }),
+])
 
 export const NATIVE_TUTORIAL_WAVE_BATCHES: Readonly<
   Record<number, readonly NativeTutorialSpawnBatch[]>
@@ -319,6 +367,7 @@ export function createNativeTutorialState(
 ): NativeTutorialState {
   return Object.freeze({
     active: true,
+    cameraLockAgeTicks: 0,
     cameraLockTriggered: false,
     cameraLockTicksRemaining: 0,
     damageProtection: true,
@@ -353,6 +402,45 @@ export function createNativeTutorialState(
     waveSpawnCursor: 0,
     waveTicks: 0,
   })
+}
+
+export function nativeTutorialCameraBounds(
+  state: NativeTutorialState,
+): BoneyardBounds | null {
+  if (!state.cameraLockTriggered) return null
+  const boundedAge = Math.max(0, Math.min(
+    NATIVE_TUTORIAL_CAMERA_LOCK_SETTLE_TICKS,
+    state.cameraLockAgeTicks,
+  ))
+  const wholeAge = Math.floor(boundedAge)
+  const current = NATIVE_TUTORIAL_CAMERA_BOUNDS_BY_AGE[wholeAge]!
+  const fraction = boundedAge - wholeAge
+  const next = NATIVE_TUTORIAL_CAMERA_BOUNDS_BY_AGE[wholeAge + 1]
+  if (fraction === 0 || !next) return { ...current }
+  return {
+    h: current.h + (next.h - current.h) * fraction,
+    w: current.w + (next.w - current.w) * fraction,
+    x: current.x + (next.x - current.x) * fraction,
+    y: current.y + (next.y - current.y) * fraction,
+  }
+}
+
+export function nativeTutorialEnemySpawnPositionIsAllowed(
+  position: Readonly<BoneyardPoint>,
+  radius: number,
+): boolean {
+  if (!Number.isFinite(radius) || radius <= 0) return false
+  const boundaryY = tutorialEntranceFenceY(position.x)
+  if (position.y >= boundaryY) return false
+  let distanceSquared = Number.POSITIVE_INFINITY
+  for (let index = 1; index < NATIVE_TUTORIAL_ENTRANCE_FENCE_CHAIN.length; index += 1) {
+    distanceSquared = Math.min(distanceSquared, pointSegmentDistanceSquared(
+      position,
+      NATIVE_TUTORIAL_ENTRANCE_FENCE_CHAIN[index - 1],
+      NATIVE_TUTORIAL_ENTRANCE_FENCE_CHAIN[index],
+    ))
+  }
+  return distanceSquared >= radius * radius
 }
 
 export function applyNativeTutorialSurfaceAction(
@@ -707,13 +795,20 @@ function tickBaseState(
   input: NativeTutorialTickInput,
 ): NativeTutorialState {
   let cameraLockTriggered = source.cameraLockTriggered
-  let cameraLockTicksRemaining = Math.max(0, source.cameraLockTicksRemaining - 1)
+  let cameraLockAgeTicks = cameraLockTriggered
+    ? Math.min(NATIVE_TUTORIAL_CAMERA_LOCK_SETTLE_TICKS, source.cameraLockAgeTicks + 1)
+    : 0
+  let cameraLockTicksRemaining = cameraLockTriggered
+    ? Math.max(0, source.cameraLockTicksRemaining - 1)
+    : 0
   if (!cameraLockTriggered && pointInside(input.playerPosition, NATIVE_TUTORIAL_CAMERA_TRIGGER)) {
     cameraLockTriggered = true
-    cameraLockTicksRemaining = 300
+    cameraLockAgeTicks = 0
+    cameraLockTicksRemaining = NATIVE_TUTORIAL_CAMERA_CLEANUP_TICKS
   }
   return {
     ...source,
+    cameraLockAgeTicks,
     cameraLockTriggered,
     cameraLockTicksRemaining,
     introMovementTicksRemaining: Math.max(0, source.introMovementTicksRemaining - 1),
@@ -818,36 +913,44 @@ function materializeBatch(
   spawnTick: number,
 ): { state: NativeTutorialState; intents: readonly BoneyardEnemySpawnIntent[] } {
   let rngState = source.rngState
-  let recipeUids: readonly number[]
-  if (batch.recipeUid !== null) {
-    recipeUids = [batch.recipeUid]
-  } else {
-    const group = NATIVE_TUTORIAL_UID_GROUPS[batch.groupUid!]
-    if (!group) throw new Error(`unknown Tutorial UID group ${batch.groupUid}`)
-    if (batch.count === null || batch.count >= group.length) {
-      recipeUids = group
-    } else {
-      const selected: number[] = []
-      for (let index = 0; index < batch.count; index += 1) {
-        const draw = drawNativeInteger(rngState, group.length)
-        rngState = draw.state
-        selected.push(group[draw.value]!)
-      }
-      recipeUids = selected
-    }
+  const group = batch.groupUid === null
+    ? null
+    : NATIVE_TUTORIAL_UID_GROUPS[batch.groupUid]
+  if (batch.groupUid !== null && !group) {
+    throw new Error(`unknown Tutorial UID group ${batch.groupUid}`)
   }
-  const angle = drawNativeFloat(rngState, 360)
-  rngState = angle.state
-  const radians = angle.value * Math.PI / 180
-  const position = Object.freeze({
-    x: Math.fround(playerPosition.x + Math.cos(radians) * 100),
-    y: Math.fround(playerPosition.y + Math.sin(radians) * 100),
-  })
+  const spawnCount = batch.recipeUid !== null
+    ? 1
+    : batch.count === null || batch.count >= group!.memberUids.length
+      ? group!.memberUids.length
+      : batch.count
+  const shareFinalRoot = group?.shareFinalRoot === true
+  const placementGroupId = shareFinalRoot ? source.nextSpawnIntentId : null
   let nextSpawnIntentId = source.nextSpawnIntentId
-  const intents = recipeUids.map((recipeUid): BoneyardEnemySpawnIntent => {
+  const intents: BoneyardEnemySpawnIntent[] = []
+  for (let index = 0; index < spawnCount; index += 1) {
+    let recipeUid: number
+    if (batch.recipeUid !== null) {
+      recipeUid = batch.recipeUid
+    } else if (batch.count === null || batch.count >= group!.memberUids.length) {
+      recipeUid = group!.memberUids[index]!
+    } else {
+      const selected = drawNativeInteger(rngState, group!.memberUids.length)
+      rngState = selected.state
+      recipeUid = group!.memberUids[selected.value]!
+    }
+    const selectedPlayer = drawNativeInteger(rngState, 1)
+    rngState = selectedPlayer.state
+    const angle = drawNativeFloat(rngState, 360)
+    rngState = angle.state
+    const radians = angle.value * Math.PI / 180
+    const position = Object.freeze({
+      x: Math.fround(playerPosition.x + Math.cos(radians) * 100),
+      y: Math.fround(playerPosition.y + Math.sin(radians) * 100),
+    })
     const definition = NATIVE_TUTORIAL_MONSTER_RECIPES[recipeUid]
     if (!definition) throw new Error(`unknown Tutorial MonsterRecipe ${recipeUid}`)
-    const intent = Object.freeze({
+    intents.push(Object.freeze({
       authoredRecipe: definition,
       enemyToken: definition.enemyToken,
       flags: Object.freeze([]),
@@ -856,13 +959,13 @@ function materializeBatch(
       locationPolicy: 'near-player' as const,
       nativeTypeId: definition.enemyToken === 'SKELETON' ? 1001 : 1002,
       pathfindingMode: definition.pathfindingMode,
+      ...(placementGroupId === null ? {} : { placementGroupId }),
       position,
       positionPolicy: batch.positionPolicy,
       spawnTick,
       waveOrdinal: source.waveOrdinal,
-    })
-    return intent
-  })
+    }))
+  }
   return {
     intents: Object.freeze(intents),
     state: { ...source, nextSpawnIntentId, rngState },
@@ -984,6 +1087,80 @@ function recipe(
     tertiaryDamage: 0,
     uid,
   })
+}
+
+function uidGroup(
+  memberUids: readonly number[],
+  positionCacheDword: number,
+): NativeTutorialUidGroup {
+  return Object.freeze({
+    memberUids: Object.freeze([...memberUids]),
+    positionCacheDword,
+    shareFinalRoot: (positionCacheDword & 0xff) !== 0,
+  })
+}
+
+function interpolateCameraBounds(
+  source: Readonly<BoneyardBounds>,
+  target: Readonly<BoneyardBounds>,
+  blend: number,
+): BoneyardBounds {
+  return {
+    h: interpolateCameraFloat(source.h, target.h, blend),
+    w: interpolateCameraFloat(source.w, target.w, blend),
+    x: interpolateCameraFloat(source.x, target.x, blend),
+    y: interpolateCameraFloat(source.y, target.y, blend),
+  }
+}
+
+function interpolateCameraFloat(source: number, target: number, blend: number): number {
+  return Math.fround(source + (target - source) * blend)
+}
+
+function buildNativeTutorialCameraBounds(): readonly Readonly<BoneyardBounds>[] {
+  const bounds: BoneyardBounds[] = [{ ...NATIVE_TUTORIAL_LEVEL_BOUNDS }]
+  let current: BoneyardBounds = { ...NATIVE_TUTORIAL_LEVEL_BOUNDS }
+  let blend = NATIVE_TUTORIAL_CAMERA_LOCK_INITIAL_BLEND
+  for (let age = 1; age <= NATIVE_TUTORIAL_CAMERA_LOCK_SETTLE_TICKS; age += 1) {
+    current = interpolateCameraBounds(current, NATIVE_TUTORIAL_CAMERA_TARGET, blend)
+    bounds.push(Object.freeze(current))
+    blend = Math.fround(Math.min(
+      1,
+      blend * NATIVE_TUTORIAL_CAMERA_LOCK_BLEND_GROWTH,
+    ))
+  }
+  return Object.freeze(bounds)
+}
+
+function tutorialEntranceFenceY(x: number): number {
+  if (x <= NATIVE_TUTORIAL_ENTRANCE_FENCE_CHAIN[0].x) {
+    return NATIVE_TUTORIAL_ENTRANCE_FENCE_CHAIN[0].y
+  }
+  for (let index = 1; index < NATIVE_TUTORIAL_ENTRANCE_FENCE_CHAIN.length; index += 1) {
+    const end = NATIVE_TUTORIAL_ENTRANCE_FENCE_CHAIN[index]
+    if (x > end.x) continue
+    const start = NATIVE_TUTORIAL_ENTRANCE_FENCE_CHAIN[index - 1]
+    const progress = (x - start.x) / (end.x - start.x)
+    return start.y + (end.y - start.y) * progress
+  }
+  return NATIVE_TUTORIAL_ENTRANCE_FENCE_CHAIN.at(-1)!.y
+}
+
+function pointSegmentDistanceSquared(
+  point: Readonly<BoneyardPoint>,
+  start: Readonly<BoneyardPoint>,
+  end: Readonly<BoneyardPoint>,
+): number {
+  const segmentX = end.x - start.x
+  const segmentY = end.y - start.y
+  const lengthSquared = segmentX * segmentX + segmentY * segmentY
+  const progress = Math.max(0, Math.min(
+    1,
+    ((point.x - start.x) * segmentX + (point.y - start.y) * segmentY) / lengthSquared,
+  ))
+  const dx = point.x - (start.x + segmentX * progress)
+  const dy = point.y - (start.y + segmentY * progress)
+  return dx * dx + dy * dy
 }
 
 function groupBatch(

@@ -54,6 +54,8 @@ export interface BoneyardEnemySpawnIntent {
   nativeTypeId: number
   /** Custom MonsterRecipe lane; defaults to native mode 1. */
   pathfindingMode?: 0 | 1 | 2 | 3
+  /** One native UIDGroup call may reuse its first final placement. */
+  placementGroupId?: number
   position: BoneyardPoint
   /** Non-TimeLine callers use direct placement when omitted. */
   positionPolicy?: BoneyardSpawnPositionPolicy
