@@ -291,6 +291,16 @@ async function exerciseTutorialCollegeAdmission(host, page, screenshotPath) {
   const tutorial = host.state()
   assert.equal(tutorial.world.kind, 'boneyard')
   assert.ok(tutorial.world.tutorial)
+  const intermediatePromise = page.waitForFunction(() => {
+    const canvas = document.querySelector('.hub-world-canvas')
+    const alpha = Number(canvas?.getAttribute('data-transition-alpha'))
+    return canvas?.getAttribute('data-hub-region') === 'office'
+      && canvas?.getAttribute('data-transition-phase') === 'college-intro'
+      && alpha > 0
+      && alpha < 1
+      ? { alpha }
+      : null
+  })
   Object.assign(tutorial.run, {
     gameOverEventId: 1,
     gameOverExitKind: 'automatic',
@@ -306,16 +316,7 @@ async function exerciseTutorialCollegeAdmission(host, page, screenshotPath) {
     timeout: 30_000,
   })
   assert.equal(await page.locator('.create-menu-scene').count(), 0)
-  const intermediate = await page.waitForFunction(() => {
-    const canvas = document.querySelector('.hub-world-canvas')
-    const alpha = Number(canvas?.getAttribute('data-transition-alpha'))
-    return canvas?.getAttribute('data-hub-region') === 'office'
-      && canvas?.getAttribute('data-transition-phase') === 'college-intro'
-      && alpha > 0
-      && alpha < 1
-      ? { alpha }
-      : null
-  })
+  const intermediate = await intermediatePromise
   const fade = await intermediate.jsonValue()
   await intermediate.dispose()
   await page.waitForFunction(() => {
