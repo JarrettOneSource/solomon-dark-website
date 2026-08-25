@@ -24,6 +24,7 @@ const fakeWebSocketOrigin = 'wss://party-rejoin-direct.invalid'
 const emptyContent = {
   assets: [],
   boneyards: [],
+  compiledMods: [],
   manifest: { manifestSha256: '0'.repeat(64), mods: [] },
   modSources: [],
   summary: { manifestSha256: '0'.repeat(64), mods: [] },
@@ -40,6 +41,11 @@ const host = await startGameHost({
     },
   },
   leaderboardReceiptSecret: 'party-rejoin-browser-receipt-secret-20260824',
+  log: entry => {
+    if (entry.level === 'error') {
+      process.stderr.write(`party-rejoin host error: ${JSON.stringify(entry)}\n`)
+    }
+  },
   sessionKind,
   sharedHub: sessionKind === 'global-hub',
   snapshotRate: 20,
@@ -174,10 +180,15 @@ try {
   await page.waitForFunction(() => (
     document.querySelectorAll('[data-party-member]').length === 3
   ))
+  const leaderParty = await leader.next(message => (
+    message.type === 'server-party-state' && message.state.party.memberPlayerIds.length === 3
+  ))
+  assert.equal(leaderParty.state.party.leaderPlayerId, leader.playerId)
 
   const leaderLoaded = leader.next(message => message.type === 'server-boneyard-loaded')
   const memberLoaded = member.next(message => message.type === 'server-boneyard-loaded')
   leader.startMatch('default-random')
+  await waitForHost(() => host.runCount() === 1, 'shared run start')
   const boneyard = page.locator('.boneyard-scene[data-renderer-state="ready"]')
   await boneyard.waitFor({ timeout: 240_000 })
   const [leaderRun, memberRun] = await Promise.all([leaderLoaded, memberLoaded])
@@ -221,29 +232,39 @@ try {
   assert.equal((await rejoinResponse).status(), 201)
   await boneyard.waitFor({ timeout: 240_000 })
   assert.equal(await boneyard.getAttribute('data-run-id'), runId)
-  assert.equal(host.playerState(browserPlayerId)?.run.runId, runId)
+  assert.equal(host.playerState(browserPlayerId), null)
+  assert.equal(host.partyRejoinTarget(oldToken)?.status, 'staging')
 
-  await waitForHost(() => (
-    host.playerState(browserPlayerId)?.levelUpBarrier?.pendingPlayerIds
-      .includes(browserPlayerId) === true
-  ), 'rejoin catch-up barrier')
-  const held = host.playerState(browserPlayerId)
-  assert.ok(held)
-  const heldTick = held.tick
-  const heldEnemies = held.world.kind === 'boneyard'
-    ? JSON.stringify(held.world.enemies)
-    : null
+  const liveBeforeCatchUp = host.playerState(leader.playerId)
+  assert.ok(liveBeforeCatchUp)
+  const heldTick = liveBeforeCatchUp.tick
   await new Promise(resolve => setTimeout(resolve, 300))
-  const stillHeld = host.playerState(browserPlayerId)
-  assert.equal(stillHeld?.tick, heldTick)
-  assert.equal(
-    stillHeld?.world.kind === 'boneyard' ? JSON.stringify(stillHeld.world.enemies) : null,
-    heldEnemies,
-  )
+  const liveDuringCatchUp = host.playerState(leader.playerId)
+  assert.ok((liveDuringCatchUp?.tick ?? 0) > heldTick)
+  const renderedPlayers = await page.locator('.boneyard-world-canvas').evaluate(canvas => (
+    canvas.__sdrBoneyardFrame.playerCount
+  ))
+  assert.equal(renderedPlayers, 2)
+  const stagedScreenshotPath = evidenceRoot
+    ? join(evidenceRoot, `party-rejoin-detached-catch-up-${sessionKind}.png`)
+    : null
+  if (stagedScreenshotPath) await page.screenshot({ path: stagedScreenshotPath })
+
+  const stacked = host.playerState(leader.playerId)
+  assert.ok(stacked)
+  Object.assign(stacked, grantGameSimulationPlayerExperience(stacked, leader.playerId, 1_000))
+  await waitForHost(() => host.playerState(leader.playerId)?.levelUpBarrier !== null, 'stacked peers')
+  await resolveAllOffers(leader)
+  await resolveAllOffers(member)
+  await waitForHost(() => host.playerState(leader.playerId)?.levelUpBarrier === null, 'stacked peers done')
+  const tickAfterPeers = host.playerState(leader.playerId).tick
+  await new Promise(resolve => setTimeout(resolve, 150))
+  assert.ok(host.playerState(leader.playerId).tick > tickAfterPeers)
 
   const picker = page.locator('.skill-picker-stage')
+  await picker.waitFor({ state: 'visible', timeout: 30_000 })
   const offerSequences = []
-  for (let index = 0; index < 3; index += 1) {
+  while (await picker.isVisible()) {
     await picker.locator('xpath=self::*[@data-picker-phase="settled"]').waitFor({
       timeout: 30_000,
     })
@@ -251,28 +272,29 @@ try {
     offerSequences.push(sequence)
     assert.equal(await picker.locator('.skill-picker-action').count(), 3)
     await picker.locator('.skill-picker-action').first().click()
-    if (index < 2) {
-      await page.waitForFunction(previous => {
-        const stage = document.querySelector('.skill-picker-stage')
-        return stage?.dataset.pickerPhase === 'settled'
-          && Number(stage.dataset.offerSequence) !== previous
-      }, sequence, { timeout: 20_000 })
-    }
+    await page.waitForFunction(previous => {
+      const stage = document.querySelector('.skill-picker-stage')
+      return !stage || (
+        stage.dataset.pickerPhase === 'settled'
+        && Number(stage.dataset.offerSequence) !== previous
+      )
+    }, sequence, { timeout: 20_000 })
   }
+  assert.ok(offerSequences.length > 3)
   await picker.waitFor({ state: 'detached', timeout: 20_000 })
   await waitForHost(() => (
     host.playerState(browserPlayerId)?.levelUpBarrier === null
     && (host.playerState(browserPlayerId)?.tick ?? 0) > heldTick
   ), 'run release after catch-up')
   const resumed = host.playerState(browserPlayerId)
-  assert.equal(getPlayerProgression(resumed, browserPlayerId).level, 4)
+  assert.ok(getPlayerProgression(resumed, browserPlayerId).level > 4)
   const rotatedSave = await waitForLocalSave(page, record => {
     const token = JSON.parse(record?.document ?? 'null')?.continuation?.summary
       ?.partyRejoinToken
     return typeof token === 'string' && token !== oldToken
   })
   assert.ok(rotatedSave.revision > savedRun.revision)
-  assert.equal(host.partyRejoinTarget(oldToken), null)
+  assert.equal(host.partyRejoinTarget(oldToken)?.status, 'connected')
 
   const screenshotPath = evidenceRoot
     ? join(evidenceRoot, `party-rejoin-catch-up-${sessionKind}.png`)
@@ -293,6 +315,7 @@ try {
     saveRevisionBefore: savedRun.revision,
     saveRevisionAfter: rotatedSave.revision,
     screenshotPath,
+    stagedScreenshotPath,
     pageErrors,
     consoleErrors,
     failedResponses,
@@ -327,7 +350,7 @@ async function enterRawPlayer(displayName, element) {
     connecting.once('open', () => resolve(connecting))
     connecting.once('error', reject)
   })
-  const next = messageQueue(socket)
+  const next = messageQueue(socket, displayName)
   socket.send(JSON.stringify({
     type: 'client-hello',
     profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
@@ -378,7 +401,7 @@ async function resolveAllOffers(client) {
   }
 }
 
-function messageQueue(socket) {
+function messageQueue(socket, label) {
   const buffered = []
   const waiters = []
   socket.on('message', data => {
@@ -407,7 +430,7 @@ function messageQueue(socket) {
       waiter.timeout = setTimeout(() => {
         const index = waiters.indexOf(waiter)
         if (index >= 0) waiters.splice(index, 1)
-        reject(new Error('timed out waiting for raw host message'))
+        reject(new Error(`timed out waiting for raw host message from ${label}`))
       }, 30_000)
       waiters.push(waiter)
     })

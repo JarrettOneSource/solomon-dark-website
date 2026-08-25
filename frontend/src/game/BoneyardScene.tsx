@@ -844,7 +844,9 @@ export default function BoneyardScene({
         if (environmentLight && initialEnvironmentLight) {
           paintBoneyardEnvironmentLight(
             environmentLight,
-            snapshot.players,
+            Object.fromEntries(Object.entries(snapshot.players).filter(([id]) => (
+              !snapshot.materializingPlayerIds.includes(id)
+            ))),
             camera,
             viewportRef.current,
             now,

@@ -37,6 +37,9 @@ import {
 } from './game-server-logger.ts'
 import type { MlBotPolicyInference } from './ml-bot-host-controller.ts'
 import type { RuntimeEventSink } from './runtime-event-publisher.ts'
+import {
+  verifyPartyRecoveryClaim,
+} from './party-recovery-claim.ts'
 
 export const GAME_SESSION_PATH_PREFIX = '/game-sessions/'
 export const GAME_HUB_PATH = '/game-hub'
@@ -61,6 +64,7 @@ export interface GameSessionSupervisorOptions {
   maxSessions?: number
   mlBotPolicy?: MlBotPolicyInference
   port?: number
+  revision?: string
   runtimeEvents?: RuntimeEventSink
   snapshotRate?: number
   unclaimedTimeoutMs?: number
@@ -122,6 +126,10 @@ export async function startGameSessionSupervisor(
   if (options.allowedOrigins.length === 0) {
     throw new Error('The game session supervisor requires at least one browser origin')
   }
+  const revision = (options.revision ?? '0'.repeat(40)).trim().toLowerCase()
+  if (!/^[a-f0-9]{40}$/.test(revision)) {
+    throw new Error('The game session supervisor revision must be a full Git commit ID')
+  }
   const unclaimedTimeoutMs = positiveDuration(
     options.unclaimedTimeoutMs ?? DEFAULT_UNCLAIMED_TIMEOUT_MS,
     'unclaimedTimeoutMs',
@@ -140,6 +148,12 @@ export async function startGameSessionSupervisor(
   const hubTickets = new Map<string, HostTicket>()
   const joinIntents = new Map<string, JoinIntent>()
   const joinRequests = new Map<string, SupervisorJoinRequest>()
+  const partyRecoverySessions = new Map<
+    string,
+    Readonly<{ seedExpiresAt: number; session: SessionRecord }>
+  >()
+  const partyRecoveryStarts = new Map<string, Promise<SessionRecord>>()
+  const retiredPartyRecoveries = new Set<string>()
   const downstreamSockets = new Set<WebSocket>()
   let closed = false
   let draining = false
@@ -171,6 +185,7 @@ export async function startGameSessionSupervisor(
     leaderboardReceiptSecret: options.adminSecret,
     maxPlayers: maxConnectionsPerSession,
     mlBotPolicy: options.mlBotPolicy,
+    partyRecoverySecret: options.adminSecret,
     runtimeEvents: options.runtimeEvents,
     sharedHub: true,
     sessionKind: 'global-hub',
@@ -671,18 +686,106 @@ export async function startGameSessionSupervisor(
     try {
       const body = await readJsonObject(request)
       const token = normalizePartyRejoinToken(body.token)
-      const resolved = [hubSession, ...sessions.values()].flatMap(session => {
+      if (typeof body.save !== 'string' || Buffer.byteLength(body.save, 'utf8') > 8 * 1024 * 1024) {
+        throw new Error('party recovery save is invalid')
+      }
+      const requestedAdmission = await materializeGameAdmission(body, options.luaWasmPath)
+      const claim = verifyPartyRecoveryClaim(options.adminSecret, token, body.save)
+      if (!claim && /^[A-Za-z0-9_-]{43}$/.test(token)) {
+        sendJson(response, 404, { error: 'That active party run has ended.' })
+        return
+      }
+      if (
+        !claim
+        || claim.sessionKind === 'standalone'
+        || claim.contentManifestSha256 !== requestedAdmission.content.manifest.manifestSha256
+        || claim.leaderboardUserId !== requestedAdmission.leaderboardUserId
+      ) {
+        sendJson(response, 400, { error: 'A valid active-party rejoin is required.' })
+        return
+      }
+      let resolved = [hubSession, ...sessions.values()].flatMap(session => {
         if (session.closing) return []
         const target = session.host.partyRejoinTarget(token)
         return target ? [{ session, target }] : []
       })
-      if (resolved.length !== 1) {
-        sendJson(response, 404, { error: 'That active party run has ended.' })
+      if (resolved.length === 0) {
+        const recovery = partyRecoverySessions.get(claim.recoveryId)
+        const starting = partyRecoveryStarts.get(claim.recoveryId)
+        if (recovery || starting) {
+          const now = performance.now()
+          if (
+            recovery?.seedExpiresAt === Number.POSITIVE_INFINITY
+            || (recovery !== undefined && recovery.seedExpiresAt <= now)
+          ) {
+            partyRecoverySessions.delete(claim.recoveryId)
+            retiredPartyRecoveries.add(claim.recoveryId)
+          } else {
+            const session = recovery?.session ?? await starting!
+            const waitMs = recovery
+              ? Math.max(1, recovery.seedExpiresAt - now)
+              : unclaimedTimeoutMs
+            const target = await waitForPartyRecoveryTarget(session, token, waitMs)
+            if (target) resolved = [{ session, target }]
+            else if ((recovery?.seedExpiresAt ?? performance.now()) <= performance.now()) {
+              partyRecoverySessions.delete(claim.recoveryId)
+              retiredPartyRecoveries.add(claim.recoveryId)
+            } else {
+              sendJson(response, 409, { error: 'That party recovery is still starting.' })
+              return
+            }
+          }
+        }
+      }
+      if (resolved.length === 0) {
+        if (claim.targetRevision !== revision || retiredPartyRecoveries.has(claim.recoveryId)) {
+          sendJson(response, 404, { error: 'That active party run has ended.' })
+          return
+        }
+        const seedAdmission: GameHostAdmission = {
+          content: requestedAdmission.content,
+          developerAccess: requestedAdmission.developerAccess,
+          leaderboardUserId: requestedAdmission.leaderboardUserId,
+          partyRecoverySeed: true,
+          partyRejoinToken: token,
+        }
+        if (claim.sessionKind === 'global-hub') {
+          const credential = randomBytes(32).toString('base64url')
+          const expiresAt = performance.now() + unclaimedTimeoutMs
+          hubSession.tickets.set(credential, { admission: seedAdmission, expiresAt })
+          partyRecoverySessions.set(claim.recoveryId, {
+            seedExpiresAt: expiresAt,
+            session: hubSession,
+          })
+          sendPartyRejoinEndpoint(response, hubSession, credential)
+          return
+        }
+        const start = provisionSession(seedAdmission)
+        partyRecoveryStarts.set(claim.recoveryId, start.then(({ session }) => session))
+        try {
+          const provisioned = await start
+          partyRecoverySessions.set(claim.recoveryId, {
+            seedExpiresAt: performance.now() + unclaimedTimeoutMs,
+            session: provisioned.session,
+          })
+          sendPartyRejoinEndpoint(response, provisioned.session, provisioned.credential)
+        } finally {
+          partyRecoveryStarts.delete(claim.recoveryId)
+        }
         return
       }
+      if (resolved.length !== 1) throw new Error('party recovery resolved to multiple hosts')
       const { session, target } = resolved[0]!
+      partyRecoverySessions.set(claim.recoveryId, {
+        seedExpiresAt: Number.POSITIVE_INFINITY,
+        session,
+      })
       if (target.status !== 'detached') {
         sendJson(response, 409, { error: 'That active-party rejoin is already being claimed.' })
+        return
+      }
+      if (target.content.manifest.manifestSha256 !== claim.contentManifestSha256) {
+        sendJson(response, 409, { error: 'The saved content no longer matches that party run.' })
         return
       }
       const now = performance.now()
@@ -711,24 +814,46 @@ export async function startGameSessionSupervisor(
       const credential = randomBytes(32).toString('base64url')
       session.tickets.set(credential, {
         admission: {
-          content: target.content,
-          developerAccess: target.developerAccess,
-          leaderboardUserId: target.leaderboardUserId,
+          content: requestedAdmission.content,
+          developerAccess: requestedAdmission.developerAccess,
+          leaderboardUserId: requestedAdmission.leaderboardUserId,
           partyRejoinToken: token,
           reservationId,
         },
         expiresAt,
       })
-      sendJson(response, 201, {
-        credential,
-        path: session.kind === 'hub' ? GAME_HUB_PATH : `${GAME_SESSION_PATH_PREFIX}${session.id}`,
-        protocol: GAME_PROTOCOL_NAME,
-        sessionKind: session.kind === 'hub' ? 'global-hub' : 'private-college',
-      })
+      sendPartyRejoinEndpoint(response, session, credential)
     } catch {
       if (reservationId && reservedHost) reservedHost.cancelPartyReservation(reservationId)
       sendJson(response, 400, { error: 'A valid active-party rejoin is required.' })
     }
+  }
+
+  function sendPartyRejoinEndpoint(
+    response: ServerResponse,
+    session: SessionRecord,
+    credential: string,
+  ): void {
+    sendJson(response, 201, {
+      credential,
+      path: session.kind === 'hub' ? GAME_HUB_PATH : `${GAME_SESSION_PATH_PREFIX}${session.id}`,
+      protocol: GAME_PROTOCOL_NAME,
+      sessionKind: session.kind === 'hub' ? 'global-hub' : 'private-college',
+    })
+  }
+
+  async function waitForPartyRecoveryTarget(
+    session: SessionRecord,
+    token: string,
+    timeoutMs: number,
+  ): Promise<ReturnType<GameHost['partyRejoinTarget']>> {
+    const deadline = performance.now() + timeoutMs
+    while (!session.closing && performance.now() < deadline) {
+      const target = session.host.partyRejoinTarget(token)
+      if (target) return target
+      await new Promise(resolve => setTimeout(resolve, 10))
+    }
+    return null
   }
 
   function resolvePartyTarget(
@@ -932,6 +1057,7 @@ export async function startGameSessionSupervisor(
         closeClaimedSessionIfEmpty(session)
       },
       runtimeEvents: options.runtimeEvents,
+      partyRecoverySecret: options.adminSecret,
       boneyards: createBoneyardCatalog([
         ...(options.boneyards?.modEntries.values() ?? []),
         ...admission.content.boneyards,
@@ -1190,6 +1316,11 @@ export async function startGameSessionSupervisor(
         throw error
       } finally {
         sessions.delete(session.id)
+        for (const [recoveryId, recovery] of partyRecoverySessions) {
+          if (recovery.session !== session) continue
+          partyRecoverySessions.delete(recoveryId)
+          retiredPartyRecoveries.add(recoveryId)
+        }
       }
       logGameServerEvent(
         options.log,
@@ -1373,7 +1504,14 @@ function normalizePartyJoinCode(value: unknown): string {
 }
 
 function normalizePartyRejoinToken(value: unknown): string {
-  if (typeof value !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(value)) {
+  if (
+    typeof value !== 'string'
+    || value.length > 2_048
+    || (
+      !/^[A-Za-z0-9_-]{43}$/.test(value)
+      && !/^sdrpr1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/.test(value)
+    )
+  ) {
     throw new Error('party rejoin token is invalid')
   }
   return value

@@ -309,31 +309,53 @@ PY
 
 install_game_checkpoint_path() {
     local checkpoint_lines=()
+    local revision_lines=()
     mapfile -t checkpoint_lines < <(grep '^SDR_GAME_ML_BOT_CHECKPOINT=' "$game_env")
+    mapfile -t revision_lines < <(grep '^SDR_GAME_REVISION=' "$game_env" || true)
     [[ "${#checkpoint_lines[@]}" == 1 ]]
-    if [[ "${checkpoint_lines[0]}" == "SDR_GAME_ML_BOT_CHECKPOINT=$game_checkpoint" ]]; then
+    [[ "${#revision_lines[@]}" -le 1 ]]
+    if [[ "${checkpoint_lines[0]}" == "SDR_GAME_ML_BOT_CHECKPOINT=$game_checkpoint" ]] &&
+        [[ "${revision_lines[0]:-}" == "SDR_GAME_REVISION=$target_sha" ]]; then
         return
     fi
 
     install -d -m 0700 "$backup_dir"
     game_env_backup="$backup_dir/solomon-dark-game.env"
     install -o root -g root -m 0600 -- "$game_env" "$game_env_backup"
-    python3 - "$game_env" "$game_env_next" "$game_checkpoint" <<'PY'
+    python3 - "$game_env" "$game_env_next" "$game_checkpoint" "$target_sha" <<'PY'
 from pathlib import Path
 import sys
 
-source, destination, checkpoint = map(Path, sys.argv[1:])
+source = Path(sys.argv[1])
+destination = Path(sys.argv[2])
+checkpoint = Path(sys.argv[3])
+revision = sys.argv[4]
 lines = source.read_text().splitlines(keepends=True)
-matches = [
+checkpoint_matches = [
     index
     for index, line in enumerate(lines)
     if line.rstrip("\r\n").startswith("SDR_GAME_ML_BOT_CHECKPOINT=")
 ]
-if len(matches) != 1:
+if len(checkpoint_matches) != 1:
     raise SystemExit("game environment must contain one ML bot checkpoint path")
-line = lines[matches[0]]
+line = lines[checkpoint_matches[0]]
 newline = "\r\n" if line.endswith("\r\n") else "\n" if line.endswith("\n") else ""
-lines[matches[0]] = f"SDR_GAME_ML_BOT_CHECKPOINT={checkpoint}{newline}"
+lines[checkpoint_matches[0]] = f"SDR_GAME_ML_BOT_CHECKPOINT={checkpoint}{newline}"
+revision_matches = [
+    index
+    for index, line in enumerate(lines)
+    if line.rstrip("\r\n").startswith("SDR_GAME_REVISION=")
+]
+if len(revision_matches) > 1:
+    raise SystemExit("game environment may contain at most one deployed revision")
+if revision_matches:
+    line = lines[revision_matches[0]]
+    newline = "\r\n" if line.endswith("\r\n") else "\n" if line.endswith("\n") else ""
+    lines[revision_matches[0]] = f"SDR_GAME_REVISION={revision}{newline}"
+else:
+    if lines and not lines[-1].endswith(("\n", "\r\n")):
+        lines[-1] += "\n"
+    lines.append(f"SDR_GAME_REVISION={revision}\n")
 destination.write_text("".join(lines))
 PY
     chown root:root "$game_env_next"
@@ -498,6 +520,8 @@ done
 [[ "$(tr -d '\r\n' <"$live/DEPLOYED_GIT_SHA")" == "$target_sha" ]]
 grep --fixed-strings --line-regexp --quiet \
     "SDR_GAME_ML_BOT_CHECKPOINT=$game_checkpoint" "$game_env"
+grep --fixed-strings --line-regexp --quiet \
+    "SDR_GAME_REVISION=$target_sha" "$game_env"
 [[ "$(sha256sum "$caddy_site" | awk '{print $1}')" == \
     "$(sha256sum "$caddy_candidate" | awk '{print $1}')" ]]
 

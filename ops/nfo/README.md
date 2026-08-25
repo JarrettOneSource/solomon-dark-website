@@ -23,6 +23,7 @@ SDR_GAME_DEPLOYMENT_SAVE_TIMEOUT_SECONDS=30
 SDR_GAME_UNCLAIMED_TIMEOUT_SECONDS=120
 SDR_GAME_LOG_LEVEL=info
 SDR_GAME_ML_BOT_CHECKPOINT=/opt/solomon-dark-revived/GameHost/ml-bot-policy-v7-selected.sdml
+SDR_GAME_REVISION=<deployed 40-character Git revision>
 SDR_RUNTIME_EVENT_ENDPOINT=http://127.0.0.1:5220/api/internal/runtime-events
 SDR_RUNTIME_EVENT_SECRET=<a separate random 32-byte base64url value>
 ```

@@ -355,7 +355,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 75
+export const GAME_PROTOCOL_VERSION = 76
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -4462,11 +4462,27 @@ function validatedBarrierPlayerIds(
   return playerIds
 }
 
+function validatedMaterializingPlayerIds(
+  value: unknown,
+  field: string,
+  players: Readonly<Record<string, unknown>>,
+): readonly string[] {
+  const playerIds = limitedArray(value, field, MAX_PLAYERS).map((entry, index) => (
+    validatedPlayerId(entry, `${field}[${index}]`)
+  ))
+  if (playerIds.some((playerId, index) => (
+    !players[playerId] || (index > 0 && playerId <= playerIds[index - 1]!)
+  ))) {
+    throw new GameProtocolError(`${field} must be sorted, unique, and present in players`)
+  }
+  return playerIds
+}
+
 function gameSnapshot(value: unknown): GameSnapshot {
   const source = record(value, 'snapshot')
   onlyKeys(source, 'snapshot', [
-    'hostPlayerId', 'levelUpBarrier', 'modEffects', 'players', 'primarySpells', 'run',
-    'secondaryAbilities', 'tick', 'world',
+    'hostPlayerId', 'levelUpBarrier', 'materializingPlayerIds', 'modEffects', 'players',
+    'primarySpells', 'run', 'secondaryAbilities', 'tick', 'world',
   ])
   const rawPlayers = record(source.players, 'snapshot.players')
   if (Object.keys(rawPlayers).length > MAX_PLAYERS) {
@@ -4493,6 +4509,11 @@ function gameSnapshot(value: unknown): GameSnapshot {
   const levelUpBarrier = source.levelUpBarrier === null
     ? null
     : playerLevelUpBarrier(source.levelUpBarrier, 'snapshot.levelUpBarrier', players, run)
+  const materializingPlayerIds = validatedMaterializingPlayerIds(
+    source.materializingPlayerIds,
+    'snapshot.materializingPlayerIds',
+    players,
+  )
   validateGameRunWorld(run, world, 'snapshot')
   validateHallOfFameArchivePhase(run, world, 'snapshot')
   const primarySpells = primarySpellState(source.primarySpells, 'snapshot.primarySpells')
@@ -4519,6 +4540,7 @@ function gameSnapshot(value: unknown): GameSnapshot {
   return {
     hostPlayerId,
     levelUpBarrier,
+    materializingPlayerIds,
     modEffects,
     players,
     primarySpells,
@@ -4532,8 +4554,8 @@ function gameSnapshot(value: unknown): GameSnapshot {
 function gameSnapshotFrame(value: unknown): GameSnapshotFrame {
   const source = record(value, 'frame')
   onlyKeys(source, 'frame', [
-    'hostPlayerId', 'levelUpBarrier', 'modEffects', 'players', 'primarySpells', 'run',
-    'secondaryAbilities', 'tick', 'world',
+    'hostPlayerId', 'levelUpBarrier', 'materializingPlayerIds', 'modEffects', 'players',
+    'primarySpells', 'run', 'secondaryAbilities', 'tick', 'world',
   ])
   const rawPlayers = record(source.players, 'frame.players')
   if (Object.keys(rawPlayers).length > MAX_PLAYERS) {
@@ -4557,6 +4579,11 @@ function gameSnapshotFrame(value: unknown): GameSnapshotFrame {
   const levelUpBarrier = source.levelUpBarrier === null
     ? null
     : playerLevelUpBarrier(source.levelUpBarrier, 'frame.levelUpBarrier', players, run)
+  const materializingPlayerIds = validatedMaterializingPlayerIds(
+    source.materializingPlayerIds,
+    'frame.materializingPlayerIds',
+    players,
+  )
   validateGameRunWorld(run, world, 'frame')
   validateHallOfFameArchivePhase(run, world, 'frame')
   const primarySpells = primarySpellState(source.primarySpells, 'frame.primarySpells')
@@ -4574,6 +4601,7 @@ function gameSnapshotFrame(value: unknown): GameSnapshotFrame {
   return {
     hostPlayerId,
     levelUpBarrier,
+    materializingPlayerIds,
     modEffects,
     players,
     primarySpells,

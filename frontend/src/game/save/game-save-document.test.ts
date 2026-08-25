@@ -62,6 +62,7 @@ const MODS = [{
 const MOD_STATE = {
   'tests.save-mod': { enabled_encounters: 7, greeting: 'hello' },
 } as const
+const SIGNED_PARTY_RECOVERY_CLAIM = `sdrpr1.${'A'.repeat(96)}.${'B'.repeat(43)}`
 
 test('host save documents round-trip the complete owner state and revive Hub runtimes', () => {
   let state = createGameSimulation({ owner: OWNER, guest: GUEST }, {
@@ -84,7 +85,7 @@ test('host save documents round-trip the complete owner state and revive Hub run
     state,
   })
   const encoded = JSON.parse(document) as Record<string, unknown>
-  assert.equal(encoded.schemaVersion, 11)
+  assert.equal(encoded.schemaVersion, 12)
   assert.deepEqual(encoded.mods, MODS)
   assert.deepEqual(encoded.modState, MOD_STATE)
   assert.equal(encoded.integrity, 'local-only')
@@ -252,7 +253,7 @@ test('native NPC help rows persist after acknowledgement and pre-v11 saves migra
     Array<boolean>(10).fill(false),
   )
 
-  legacy.schemaVersion = 11
+  legacy.schemaVersion = 12
   assert.throws(
     () => restoreGameSaveDocument(JSON.stringify(legacy)),
     /Hub NPC help flags are missing/,
@@ -387,7 +388,7 @@ test('host save documents retain the active Boneyard and its authoritative run i
     loadedBoneyard,
     mods: MODS,
     modState: MOD_STATE,
-    partyRejoinToken: 'r'.repeat(43),
+    partyRejoinToken: SIGNED_PARTY_RECOVERY_CLAIM,
     playerId: 'owner',
     state,
   })
@@ -396,7 +397,7 @@ test('host save documents retain the active Boneyard and its authoritative run i
   assert.deepEqual(readGameSaveSummary(document), {
     activeRun: true,
     character: OWNER,
-    partyRejoinToken: 'r'.repeat(43),
+    partyRejoinToken: SIGNED_PARTY_RECOVERY_CLAIM,
     phase: 'active',
     playerId: 'owner',
     savedAtTick: state.tick,
@@ -438,10 +439,20 @@ test('active-party capability is strict, active-run-only, and absent from old sc
     loadedBoneyard,
     mods: [],
     modState: {},
-    partyRejoinToken: 'A'.repeat(43),
+    partyRejoinToken: SIGNED_PARTY_RECOVERY_CLAIM,
     playerId: 'owner',
     state,
   }))
+
+  for (const schemaVersion of [11, 10]) {
+    const previous = structuredClone(current)
+    previous.schemaVersion = schemaVersion
+    previous.continuation.summary.partyRejoinToken = 'A'.repeat(43)
+    assert.equal(
+      readGameSaveSummary(JSON.stringify(previous))?.partyRejoinToken,
+      'A'.repeat(43),
+    )
+  }
 
   for (const schemaVersion of [9, 8, 7, 6]) {
     const previous = structuredClone(current)
@@ -464,7 +475,7 @@ test('active-party capability is strict, active-run-only, and absent from old sc
     loadedBoneyard: null,
     mods: [],
     modState: {},
-    partyRejoinToken: 'A'.repeat(43),
+    partyRejoinToken: SIGNED_PARTY_RECOVERY_CLAIM,
     playerId: 'owner',
     state: createGameSimulation({ owner: OWNER }),
   }), /active Boneyard/i)
@@ -543,7 +554,7 @@ test('current schema resumes the complete stock Tutorial controller and exact le
     state,
   })
   const encoded = JSON.parse(document)
-  assert.equal(encoded.schemaVersion, 11)
+  assert.equal(encoded.schemaVersion, 12)
   assert.equal(encoded.continuation.simulation.world.tutorial.stage, 0)
   assert.equal(
     encoded.continuation.simulation.world.tutorial.selectedSkillHudAcknowledged,

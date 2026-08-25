@@ -315,6 +315,11 @@ export interface DetachedGameSimulationPlayer {
   readonly runId: string
 }
 
+export interface DetachedGameSimulationPlayerTransaction {
+  readonly detached: DetachedGameSimulationPlayer
+  readonly state: GameSimulationState
+}
+
 export interface GameSimulationOptions {
   combatRngSeed?: number
   hubSkorchaHiddenTicks?: number
@@ -681,6 +686,94 @@ export function rejoinGameSimulationPlayer(
       hallOfFameRuns: {
         ...target.world.hallOfFameRuns,
         [playerId]: detached.hallOfFameRun,
+      },
+    },
+  }
+}
+
+export function synchronizeDetachedGameSimulationPlayer(
+  target: GameSimulationState,
+  detached: DetachedGameSimulationPlayer,
+  milestone: SharedPlayerLevelMilestone,
+): DetachedGameSimulationPlayerTransaction {
+  return commitDetachedGameSimulationPlayerTransaction(
+    target,
+    rejoinGameSimulationPlayer(target, detached, detached.playerId, milestone),
+    detached.playerId,
+  )
+}
+
+export function selectDetachedGameSimulationPlayerSkill(
+  target: GameSimulationState,
+  detached: DetachedGameSimulationPlayer,
+  selection: { choiceIndex: number; offerSequence: number; skillId: number },
+): DetachedGameSimulationPlayerTransaction | null {
+  const staged = rejoinGameSimulationPlayer(
+    target,
+    detached,
+    detached.playerId,
+    null,
+  )
+  const selected = selectGameSimulationPlayerSkill(staged, detached.playerId, selection)
+  return selected === null
+    ? null
+    : commitDetachedGameSimulationPlayerTransaction(target, selected, detached.playerId)
+}
+
+export function rerollDetachedGameSimulationPlayerSkill(
+  target: GameSimulationState,
+  detached: DetachedGameSimulationPlayer,
+  offerSequence: number,
+): DetachedGameSimulationPlayerTransaction | null {
+  const staged = rejoinGameSimulationPlayer(
+    target,
+    detached,
+    detached.playerId,
+    null,
+  )
+  const rerolled = rerollGameSimulationPlayerSkill(staged, detached.playerId, offerSequence)
+  return rerolled === null
+    ? null
+    : commitDetachedGameSimulationPlayerTransaction(target, rerolled, detached.playerId)
+}
+
+export function saveDetachedGameSimulationPlayerSkill(
+  target: GameSimulationState,
+  detached: DetachedGameSimulationPlayer,
+  offerSequence: number,
+): DetachedGameSimulationPlayerTransaction | null {
+  const staged = rejoinGameSimulationPlayer(
+    target,
+    detached,
+    detached.playerId,
+    null,
+  )
+  const saved = saveGameSimulationPlayerSkill(staged, detached.playerId, offerSequence)
+  return saved === null
+    ? null
+    : commitDetachedGameSimulationPlayerTransaction(target, saved, detached.playerId)
+}
+
+export function projectDetachedGameSimulationPlayer(
+  target: GameSimulationState,
+  detached: DetachedGameSimulationPlayer,
+): GameSimulationState {
+  return rejoinGameSimulationPlayer(target, detached, detached.playerId, null)
+}
+
+function commitDetachedGameSimulationPlayerTransaction(
+  target: GameSimulationState,
+  staged: GameSimulationState,
+  playerId: PlayerId,
+): DetachedGameSimulationPlayerTransaction {
+  return {
+    detached: detachGameSimulationPlayer(staged, playerId),
+    state: {
+      ...target,
+      gameRng: staged.gameRng,
+      secondaryAbilities: {
+        ...target.secondaryAbilities,
+        rng: staged.secondaryAbilities.rng,
       },
     },
   }

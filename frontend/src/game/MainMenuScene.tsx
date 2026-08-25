@@ -1092,6 +1092,7 @@ export default function MainMenuScene({
           : 'global-hub',
         kind: 'resume',
         partyRejoinToken: resumeSave.summary.partyRejoinToken,
+        saveDocument: resumeSave.document,
       })
       const nextSession = await connectSession(
         resumeSave.summary.character,

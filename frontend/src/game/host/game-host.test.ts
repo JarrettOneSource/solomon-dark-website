@@ -12,6 +12,7 @@ import {
 import { NATIVE_HALL_OF_FAME_SCORE } from '../core-kernels/hall-of-fame-score.ts'
 import {
   createGameSimulation,
+  enterBoneyardWorld,
   gameSimulationPlayerRecords,
   getPlayerEconomy,
   getPlayerProgression,
@@ -35,7 +36,11 @@ import type { GameSnapshot } from '../protocol/game-state.ts'
 import type { PlayerSocialProfile } from '../protocol/party-state.ts'
 import { EntityReplicationReconstructor } from '../protocol/entity-replication.ts'
 import type { BoneyardScene } from '../core-kernels/boneyard.ts'
-import { createBoneyardCatalog, type ModBoneyardEntry } from './boneyard-catalog.ts'
+import {
+  createBoneyardCatalog,
+  materializeBoneyard,
+  type ModBoneyardEntry,
+} from './boneyard-catalog.ts'
 import {
   GAME_SAVE_AUTOSAVE_INTERVAL_TICKS,
   startGameHost,
@@ -55,6 +60,10 @@ import {
   restoreGameSaveProfile,
 } from '../save/game-save-document.ts'
 import type { GameSaveIntent } from '../save/game-save-contract.ts'
+import {
+  createPartyRecoveryClaim,
+  verifyPartyRecoveryClaim,
+} from './party-recovery-claim.ts'
 
 const FIRST_CHARACTER = {
   discipline: 'arcane',
@@ -100,6 +109,64 @@ interface TestReplicationState {
 }
 
 const replicationBySocket = new WeakMap<WebSocket, TestReplicationState>()
+
+test('party recovery claim seals the exact owner checkpoint and deployment target', () => {
+  const loaded = materializeBoneyard(
+    createBoneyardCatalog(),
+    'default-random',
+    Buffer.alloc(16, 17),
+  )
+  assert.ok(loaded)
+  const playerId = 'member-player'
+  const unsignedDocument = createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard: loaded,
+    mods: [],
+    modState: {},
+    partyRejoinToken: null,
+    playerId,
+    state: enterBoneyardWorld(createGameSimulation({ [playerId]: SECOND_CHARACTER }), loaded),
+  })
+  const targetRevision = 'a'.repeat(40)
+  const claimInput = {
+    contentManifestSha256: '0'.repeat(64),
+    globalScoreEligible: true,
+    integrity: 'global-clean' as const,
+    leaderboardUserId: 42,
+    partyMemberCount: 2,
+    playerId,
+    recoveryId: 'R'.repeat(43),
+    runId: loaded.runId,
+    sessionKind: 'global-hub' as const,
+    targetRevision,
+  }
+  const token = createPartyRecoveryClaim(
+    LEADERBOARD_RECEIPT_SECRET,
+    claimInput,
+    unsignedDocument,
+  )
+  const final = JSON.parse(unsignedDocument)
+  final.continuation.summary.partyRejoinToken = token
+  const finalDocument = JSON.stringify(final)
+
+  assert.match(token, /^sdrpr1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/)
+  assert.deepEqual(
+    verifyPartyRecoveryClaim(LEADERBOARD_RECEIPT_SECRET, token, finalDocument),
+    claimInput,
+  )
+
+  const tampered = structuredClone(final)
+  tampered.continuation.simulation.playerEntities.progressions[0].experience += 1
+  assert.equal(
+    verifyPartyRecoveryClaim(
+      LEADERBOARD_RECEIPT_SECRET,
+      token,
+      JSON.stringify(tampered),
+    ),
+    null,
+  )
+  assert.equal(verifyPartyRecoveryClaim('x'.repeat(40), token, finalDocument), null)
+})
 
 test('game activity derivation omits wave and level notifications without hiding run edges', () => {
   const player = (changes: Partial<GameActivityPlayer> = {}): GameActivityPlayer => ({
@@ -1182,7 +1249,7 @@ test('game host replicates and checkpoints native NPC hint acknowledgement', asy
   const [snapshotMessage, checkpointMessage] = await Promise.all([snapshot, checkpoint])
   assert.equal(snapshotMessage.type, 'server-snapshot')
   assert.equal(checkpointMessage.type, 'server-save-checkpoint')
-  assert.equal(JSON.parse(checkpointMessage.save).schemaVersion, 11)
+  assert.equal(JSON.parse(checkpointMessage.save).schemaVersion, 12)
 })
 
 test('shared Hub NPC actions and late-join defaults stay bound to the authenticated player', async (context) => {
@@ -2086,7 +2153,7 @@ test('host admits one fresh solo player into the hidden stock Tutorial and check
   assert.equal(snapshotMessage.snapshot.world.waves, null)
   assert.equal(checkpointMessage.type, 'server-save-checkpoint')
   const saved = JSON.parse(checkpointMessage.save)
-  assert.equal(saved.schemaVersion, 11)
+  assert.equal(saved.schemaVersion, 12)
   assert.equal(saved.profile.economy.tutorialPending, true)
   assert.equal(saved.continuation.simulation.world.tutorial.stage, 0)
 })
@@ -2519,7 +2586,7 @@ test('thirty-second autosave publishes owner-only saves to a party leader and gu
   )
 })
 
-test('saved party member rejoins the same live run and catches up under one level barrier', async (context) => {
+test('saved party member catches up detached while the live party run continues', async (context) => {
   const tickets = new Map<string, GameHostAdmission>([
     ['leader-ticket', { content: EMPTY_SHARED_CONTENT, leaderboardUserId: 42 }],
     ['member-ticket', { content: EMPTY_SHARED_CONTENT, leaderboardUserId: 43 }],
@@ -2585,7 +2652,7 @@ test('saved party member rejoins the same live run and catches up under one leve
     continuation: { summary: { partyRejoinToken: string; playerId: string } }
   }
   const token = saved.continuation.summary.partyRejoinToken
-  assert.match(token, /^[A-Za-z0-9_-]{43}$/)
+  assert.match(token, /^sdrpr1\./)
   assert.equal(saved.continuation.summary.playerId, member.welcome.playerId)
 
   await closeSocket(member.socket)
@@ -2618,9 +2685,10 @@ test('saved party member rejoins the same live run and catches up under one leve
 
   const returningSocket = await openSocket(host.address.url)
   context.after(() => returningSocket.close())
-  const waitingLeader = nextMessage(leader.socket, message => (
+  const detachedLeader = nextMessage(leader.socket, message => (
     message.type === 'server-snapshot'
-    && message.snapshot.levelUpBarrier?.pendingPlayerIds.includes(member.welcome.playerId) === true
+    && message.snapshot.world.kind === 'boneyard'
+    && message.snapshot.players[member.welcome.playerId] === undefined
   ))
   const returningWelcome = nextMessage(returningSocket, message => message.type === 'server-welcome')
   const rotatedCheckpoint = nextMessage(returningSocket, message => (
@@ -2637,9 +2705,9 @@ test('saved party member rejoins the same live run and catches up under one leve
     save: checkpoint.save,
     saveIntent: 'resume',
   }))
-  const [welcome, waiting] = await Promise.all([returningWelcome, waitingLeader])
+  const [welcome, leaderView] = await Promise.all([returningWelcome, detachedLeader])
   if (welcome.type !== 'server-welcome') assert.fail('expected rejoin welcome')
-  assert.equal(waiting.type, 'server-snapshot')
+  assert.equal(leaderView.type, 'server-snapshot')
   assert.equal(welcome.playerId, member.welcome.playerId)
   assert.equal(welcome.snapshot.world.kind, 'boneyard')
   if (welcome.snapshot.world.kind !== 'boneyard') assert.fail('expected live Boneyard')
@@ -2649,20 +2717,63 @@ test('saved party member rejoins the same live run and catches up under one leve
     y: memberRun.boneyard.scene.spawn.y,
   })
   assert.equal(welcome.snapshot.players[welcome.playerId].progression.level, 4)
-  assert.deepEqual(welcome.snapshot.levelUpBarrier?.pendingPlayerIds, [welcome.playerId])
-  assert.equal(getPlayerProgression(host.playerState(welcome.playerId)!, welcome.playerId).pendingLevels.length, 3)
+  assert.deepEqual(welcome.snapshot.materializingPlayerIds, [welcome.playerId])
+  assert.ok(welcome.snapshot.players[welcome.playerId].progression.pendingOffer)
+  assert.equal(host.playerState(welcome.playerId), null)
+  assert.equal(host.partyRejoinTarget(token)?.status, 'staging')
 
   const heldTick = host.playerState(leader.welcome.playerId)!.tick
   await new Promise(resolve => setTimeout(resolve, 60))
-  assert.equal(host.playerState(leader.welcome.playerId)!.tick, heldTick)
-  await resolveEveryHostSkillOffer(host, returningSocket, welcome.playerId)
-  await waitFor(() => host.playerState(leader.welcome.playerId)!.tick > heldTick)
+  assert.ok(host.playerState(leader.welcome.playerId)!.tick > heldTick)
+  const stackedCatchUp = nextMessage(returningSocket, message => (
+    message.type === 'server-snapshot'
+    && (message.snapshot.players[welcome.playerId]?.progression.level ?? 0) > 4
+  ))
+  const liveBeforeStack = host.playerState(leader.welcome.playerId)
+  assert.ok(liveBeforeStack)
+  Object.assign(
+    liveBeforeStack,
+    grantGameSimulationPlayerExperience(liveBeforeStack, leader.welcome.playerId, 1_000),
+  )
+  await waitFor(() => host.playerState(leader.welcome.playerId)?.levelUpBarrier !== null)
+  await resolveEveryHostSkillOffer(host, leader.socket, leader.welcome.playerId)
+  const stackedUpdate = await stackedCatchUp
+  if (stackedUpdate.type !== 'server-snapshot') assert.fail('expected stacked catch-up snapshot')
+  assert.equal(host.playerState(leader.welcome.playerId)?.levelUpBarrier, null)
+  const tickAfterPeerChoices = host.playerState(leader.welcome.playerId)!.tick
+  await new Promise(resolve => setTimeout(resolve, 40))
+  assert.ok(host.playerState(leader.welcome.playerId)!.tick > tickAfterPeerChoices)
+
+  let catchUpSnapshot = stackedUpdate.snapshot
+  let catchUpChoices = 0
+  while (catchUpSnapshot.players[welcome.playerId]?.progression.pendingOffer) {
+    const offer = catchUpSnapshot.players[welcome.playerId]!.progression.pendingOffer!
+    const next = nextMessage(returningSocket, message => (
+      message.type === 'server-snapshot'
+      && message.snapshot.players[welcome.playerId]?.progression.pendingOffer?.sequence
+        !== offer.sequence
+    ))
+    returningSocket.send(encodeGameMessage({
+      type: 'client-select-skill',
+      choiceIndex: 0,
+      offerSequence: offer.sequence,
+      skillId: offer.options[0]!.skillId,
+    }))
+    const update = await next
+    if (update.type !== 'server-snapshot') assert.fail('expected catch-up snapshot')
+    catchUpSnapshot = update.snapshot
+    catchUpChoices += 1
+  }
+  assert.ok(catchUpChoices > 3)
+  await waitFor(() => host.playerState(welcome.playerId) !== null)
+  assert.deepEqual(catchUpSnapshot.materializingPlayerIds, [])
+  assert.equal(host.playerState(welcome.playerId)?.levelUpBarrier, null)
   const rotated = await rotatedCheckpoint
   assert.equal(rotated.type, 'server-save-checkpoint')
   const rotatedToken = JSON.parse(rotated.save).continuation.summary.partyRejoinToken
-  assert.match(rotatedToken, /^[A-Za-z0-9_-]{43}$/)
+  assert.match(rotatedToken, /^sdrpr1\./)
   assert.notEqual(rotatedToken, token)
-  assert.equal(host.partyRejoinTarget(token), null)
+  assert.equal(host.partyRejoinTarget(token)?.status, 'connected')
 })
 
 test('deployment restart checkpoints every connected private-session player before closing', async (context) => {

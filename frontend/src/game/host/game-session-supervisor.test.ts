@@ -382,7 +382,13 @@ test('game session supervisor admits independent players to one shared Hub and r
       authorization: `Bearer ${ADMIN_SECRET}`,
       'content-type': 'application/json',
     },
-    body: JSON.stringify({ token: rejoinToken }),
+    body: JSON.stringify({
+      content: EMPTY_CONTENT,
+      developerAccess: false,
+      leaderboardUserId: 43,
+      save: secondCheckpoint.save,
+      token: rejoinToken,
+    }),
   })
   assert.equal(rejoinResponse.status, 201)
   const rejoinEndpoint = await rejoinResponse.json() as ProvisionedEndpoint
@@ -402,8 +408,14 @@ test('game session supervisor admits independent players to one shared Hub and r
       authorization: `Bearer ${ADMIN_SECRET}`,
       'content-type': 'application/json',
     },
-    body: JSON.stringify({ token: rejoinToken }),
-  })).status, 404)
+    body: JSON.stringify({
+      content: EMPTY_CONTENT,
+      developerAccess: false,
+      leaderboardUserId: 43,
+      save: secondCheckpoint.save,
+      token: rejoinToken,
+    }),
+  })).status, 409)
   assert.deepEqual(await readPublicParties(supervisor.address.url), [{
     ...hubDirectory[0]!,
     boneyardName: firstRun.type === 'server-boneyard-loaded'
@@ -860,6 +872,153 @@ test('deployment restart drains admissions, waits for the final save, and closes
     unacknowledgedPlayers: 0,
   })
   assert.deepEqual(await closed, { code: 1012, reason: 'game updating' })
+})
+
+test('first returning nonleader recovers the updated party run before the old leader', async (context) => {
+  const oldRevision = '1'.repeat(40)
+  const targetRevision = '2'.repeat(40)
+  const oldSupervisor = await startGameSessionSupervisor({
+    adminSecret: ADMIN_SECRET,
+    allowedOrigins: [BROWSER_ORIGIN],
+    revision: oldRevision,
+    snapshotRate: 100,
+  })
+  context.after(() => oldSupervisor.close())
+  const leader = await join(
+    oldSupervisor.address.url,
+    await admitHub(oldSupervisor.address.url, EMPTY_CONTENT, 41),
+    BROWSER_ORIGIN,
+  )
+  const member = await join(
+    oldSupervisor.address.url,
+    await admitHub(oldSupervisor.address.url, EMPTY_CONTENT, 42),
+    BROWSER_ORIGIN,
+  )
+  const invited = member.next(message => (
+    message.type === 'server-party-state' && message.state.invitations.length === 1
+  ))
+  leader.socket.send(encodeGameMessage({
+    type: 'client-party-invite',
+    targetPlayerId: member.welcome.playerId,
+  }))
+  const invitation = await invited
+  if (invitation.type !== 'server-party-state') assert.fail('expected invitation')
+  const grouped = member.next(message => (
+    message.type === 'server-party-state' && message.state.party.memberPlayerIds.length === 2
+  ))
+  member.socket.send(encodeGameMessage({
+    type: 'client-party-accept',
+    invitationId: invitation.state.invitations[0]!.id,
+  }))
+  await grouped
+  const leaderLoaded = leader.next(message => message.type === 'server-boneyard-loaded')
+  const memberLoaded = member.next(message => message.type === 'server-boneyard-loaded')
+  leader.socket.send(encodeGameMessage({
+    type: 'client-start-match',
+    boneyardId: 'default-random',
+  }))
+  const [leaderRun, memberRun] = await Promise.all([leaderLoaded, memberLoaded])
+  assert.equal(leaderRun.type, 'server-boneyard-loaded')
+  assert.equal(memberRun.type, 'server-boneyard-loaded')
+  assert.equal(leaderRun.boneyard.runId, memberRun.boneyard.runId)
+
+  const restartResponse = fetch(`${oldSupervisor.address.url}/admin/deployments/restart`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${ADMIN_SECRET}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ targetRevision }),
+  })
+  const leaderRestart = await leader.next(message => message.type === 'server-deployment-restart')
+  const memberRestart = await member.next(message => message.type === 'server-deployment-restart')
+  assert.equal(leaderRestart.type, 'server-deployment-restart')
+  assert.equal(memberRestart.type, 'server-deployment-restart')
+  const leaderFinal = await leader.next(message => (
+    message.type === 'server-save-checkpoint'
+    && message.sequence === leaderRestart.checkpointSequence
+  ))
+  const memberFinal = await member.next(message => (
+    message.type === 'server-save-checkpoint'
+    && message.sequence === memberRestart.checkpointSequence
+  ))
+  assert.equal(leaderFinal.type, 'server-save-checkpoint')
+  assert.equal(memberFinal.type, 'server-save-checkpoint')
+  leader.socket.send(encodeGameMessage({
+    type: 'client-deployment-ready',
+    checkpointSequence: leaderRestart.checkpointSequence,
+    targetRevision,
+  }))
+  member.socket.send(encodeGameMessage({
+    type: 'client-deployment-ready',
+    checkpointSequence: memberRestart.checkpointSequence,
+    targetRevision,
+  }))
+  assert.equal((await restartResponse).status, 200)
+  await oldSupervisor.close()
+
+  const replacement = await startGameSessionSupervisor({
+    adminSecret: ADMIN_SECRET,
+    allowedOrigins: [BROWSER_ORIGIN],
+    revision: targetRevision,
+    snapshotRate: 100,
+  })
+  context.after(() => replacement.close())
+  const recover = async (save: string, leaderboardUserId: number) => {
+    const token = JSON.parse(save).continuation.summary.partyRejoinToken as string
+    const response = await fetch(`${replacement.address.url}/admin/rejoin`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${ADMIN_SECRET}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        content: EMPTY_CONTENT,
+        developerAccess: false,
+        leaderboardUserId,
+        save,
+        token,
+      }),
+    })
+    assert.equal(response.status, 201)
+    return await response.json() as ProvisionedEndpoint
+  }
+
+  const recoveredMember = await joinSaved(
+    replacement.address.url,
+    await recover(memberFinal.save, 42),
+    BROWSER_ORIGIN,
+    memberFinal.save,
+  )
+  assert.equal(recoveredMember.welcome.playerId, member.welcome.playerId)
+  assert.equal(recoveredMember.welcome.snapshot.world.kind, 'boneyard')
+  if (recoveredMember.welcome.snapshot.world.kind !== 'boneyard') {
+    assert.fail('expected recovered Boneyard')
+  }
+  assert.equal(recoveredMember.welcome.snapshot.world.runId, memberRun.boneyard.runId)
+
+  const recoveredLeader = await joinSaved(
+    replacement.address.url,
+    await recover(leaderFinal.save, 41),
+    BROWSER_ORIGIN,
+    leaderFinal.save,
+  )
+  assert.equal(recoveredLeader.welcome.playerId, leader.welcome.playerId)
+  assert.equal(recoveredLeader.welcome.snapshot.world.kind, 'boneyard')
+  if (recoveredLeader.welcome.snapshot.world.kind !== 'boneyard') {
+    assert.fail('expected recovered Boneyard')
+  }
+  assert.equal(recoveredLeader.welcome.snapshot.world.runId, memberRun.boneyard.runId)
+  const recoveredParty = await recoveredLeader.next(message => (
+    message.type === 'server-party-state'
+    && message.state.party.memberPlayerIds.length === 2
+  ))
+  assert.equal(recoveredParty.type, 'server-party-state')
+  assert.equal(recoveredParty.state.party.leaderPlayerId, member.welcome.playerId)
+  assert.deepEqual(new Set(recoveredParty.state.party.memberPlayerIds), new Set([
+    member.welcome.playerId,
+    leader.welcome.playerId,
+  ]))
 })
 
 test('deployment restart cannot be deferred by an unresponsive browser', async (context) => {

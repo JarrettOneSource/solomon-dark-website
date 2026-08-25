@@ -9,8 +9,10 @@ import type {
   LuaConsoleValue,
 } from '../protocol/game-protocol.ts'
 
-export const WEB_GAME_SAVE_SCHEMA_VERSION = 11
-export const LEGACY_WEB_GAME_SAVE_SCHEMA_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const
+export const WEB_GAME_SAVE_SCHEMA_VERSION = 12
+export const LEGACY_WEB_GAME_SAVE_SCHEMA_VERSIONS = [
+  1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
+] as const
 export const WEB_GAME_SAVE_SLOT = 0
 export const MAX_WEB_GAME_SAVE_BYTES = 8 * 1024 * 1024
 /** Accommodates the 32-level Sack wire bound plus the complete save-document envelope. */
@@ -117,7 +119,12 @@ function parseCurrentDocument(
   return {
     continuation: root.continuation === null
       ? null
-      : parseContinuation(root.continuation, false, schemaVersion < 10),
+      : parseContinuation(
+          root.continuation,
+          false,
+          schemaVersion < 10,
+          schemaVersion >= 12,
+        ),
     integrity: parseIntegrity(root.integrity),
     mods: parseMods(root.mods),
     modState: parseModState(root.modState),
@@ -138,7 +145,7 @@ function parseLegacyEnvelope(root: Record<string, unknown>): ParsedGameSaveDocum
   return {
     continuation: root.continuation === null
       ? null
-      : parseContinuation(root.continuation, true, true),
+      : parseContinuation(root.continuation, true, true, false),
     integrity: parseIntegrity(root.integrity),
     mods: parseMods(root.mods),
     modState: parseModState(root.modState),
@@ -159,7 +166,7 @@ function parseLegacyDocument(
     'simulation',
     'summary',
   ])
-  const summary = parseSummary(root.summary, true, true)
+  const summary = parseSummary(root.summary, true, true, false)
   if (!('simulation' in root) || !('loadedBoneyard' in root)) {
     throw new Error('game save is missing authoritative state')
   }
@@ -192,6 +199,7 @@ function parseContinuation(
   value: unknown,
   legacySummary: boolean,
   legacyPartyRejoin: boolean,
+  signedPartyRejoin: boolean,
 ): ParsedGameSaveContinuation {
   const continuation = record(value, 'game save continuation')
   onlyKeys(continuation, 'game save continuation', [
@@ -205,7 +213,12 @@ function parseContinuation(
   return {
     loadedBoneyard: continuation.loadedBoneyard,
     simulation: continuation.simulation,
-    summary: parseSummary(continuation.summary, legacySummary, legacyPartyRejoin),
+    summary: parseSummary(
+      continuation.summary,
+      legacySummary,
+      legacyPartyRejoin,
+      signedPartyRejoin,
+    ),
   }
 }
 
@@ -320,6 +333,7 @@ function parseSummary(
   value: unknown,
   legacy = true,
   legacyPartyRejoin = true,
+  signedPartyRejoin = false,
 ): GameSaveSummary {
   const summary = record(value, 'game save summary')
   onlyKeys(summary, 'game save summary', [
@@ -373,7 +387,7 @@ function parseSummary(
     },
     partyRejoinToken: legacyPartyRejoin
       ? null
-      : parsePartyRejoinToken(summary.partyRejoinToken),
+      : parsePartyRejoinToken(summary.partyRejoinToken, signedPartyRejoin),
     phase: summary.phase as GameRunPhase,
     playerId: summary.playerId,
     savedAtTick: Number(summary.savedAtTick),
@@ -381,9 +395,15 @@ function parseSummary(
   }
 }
 
-function parsePartyRejoinToken(value: unknown): string | null {
+function parsePartyRejoinToken(value: unknown, signed: boolean): string | null {
   if (value === null) return null
-  if (typeof value !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(value)) {
+  if (
+    typeof value !== 'string'
+    || (signed
+      ? value.length > 2_048
+        || !/^sdrpr1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/.test(value)
+      : !/^[A-Za-z0-9_-]{43}$/.test(value))
+  ) {
     throw new Error('game save party rejoin token is invalid')
   }
   return value

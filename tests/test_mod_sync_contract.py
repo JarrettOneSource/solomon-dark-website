@@ -338,7 +338,16 @@ class WebsiteModSyncContractTests(unittest.TestCase):
                     )
                 elif self.path == "/admin/rejoin":
                     body = self.read_json_body()
-                    if body != {"token": "R" * 43}:
+                    if (
+                        body.get("token") != "R" * 43
+                        or body.get("save") != "rejoin-save"
+                        or body.get("content") != {
+                            "manifestSha256": "0" * 64,
+                            "mods": [],
+                        }
+                        or body.get("developerAccess") is not False
+                        or body.get("leaderboardUserId") is not None
+                    ):
                         self.reply(400, {"error": "Invalid rejoin."})
                         return
                     self.reply(
@@ -750,7 +759,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         status, rejoined = self.request(
             "POST",
             "/api/game/rejoin",
-            json_body={"token": "R" * 43},
+            json_body={"save": "rejoin-save", "token": "R" * 43},
         )
         self.assertEqual(status, 201, rejoined)
         self.assertEqual(rejoined["sessionKind"], "global-hub")
@@ -870,7 +879,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
     def test_browser_game_slot_is_account_owned_hashed_and_revision_conditional(self) -> None:
         document = json.dumps(
             {
-                "schemaVersion": 11,
+                "schemaVersion": 12,
                 "integrity": "global-clean",
                 "mods": [],
                 "modState": {},
@@ -933,7 +942,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         )
         self.assertEqual(status, 200, created)
         self.assertEqual(created["slot"], 0)
-        self.assertEqual(created["formatVersion"], 11)
+        self.assertEqual(created["formatVersion"], 12)
         self.assertEqual(created["revision"], 1)
         self.assertEqual(created["document"], document)
         self.assertEqual(created["size"], len(document.encode()))

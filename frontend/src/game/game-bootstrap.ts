@@ -8,6 +8,7 @@ export type BrowserGameAdmission =
       readonly fallback: 'global-hub' | 'private-college'
       readonly kind: 'resume'
       readonly partyRejoinToken: string | null
+      readonly saveDocument: string
     }
 
 export async function admitBrowserGame(
@@ -20,7 +21,12 @@ export async function admitBrowserGame(
   if (admission.kind === 'party') return admitPartyJoin(admission.intentId, token, request)
   if (admission.partyRejoinToken !== null) {
     try {
-      return await admitPartyRejoin(admission.partyRejoinToken, token, request)
+      return await admitPartyRejoin(
+        admission.partyRejoinToken,
+        admission.saveDocument,
+        token,
+        request,
+      )
     } catch (error) {
       if (!(error instanceof InactivePartyRejoinError)) throw error
     }
@@ -127,6 +133,7 @@ export async function admitPartyJoin(
 
 export async function admitPartyRejoin(
   token: string,
+  save: string,
   accountToken: string | null,
   request: typeof fetch = fetch,
 ): Promise<GameEndpoint> {
@@ -139,7 +146,7 @@ export async function admitPartyRejoin(
     method: 'POST',
     credentials: 'same-origin',
     headers,
-    body: JSON.stringify({ token }),
+    body: JSON.stringify({ save, token }),
   })
   const payload = await readJson(response)
   if (!response.ok) {

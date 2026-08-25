@@ -1,5 +1,6 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -207,15 +208,30 @@ public sealed partial class GameSessionProvisioner
 
     public async Task<ProvisionedGameEndpoint> RejoinPartyAsync(
         string token,
+        string save,
+        WebSessionContent content,
+        int? leaderboardUserId,
+        bool developerAccess,
         CancellationToken cancellationToken)
     {
         EnsurePrivateSessionsConfigured();
-        if (!PartyRejoinTokenRegex().IsMatch(token))
+        if (token.Length > 2_048 || !PartyRejoinTokenRegex().IsMatch(token))
         {
             throw new GamePartyJoinException("That active-party rejoin is invalid.", 400);
         }
+        if (string.IsNullOrEmpty(save) || Encoding.UTF8.GetByteCount(save) > WebGameSaveInspector.MaxDocumentBytes)
+        {
+            throw new GamePartyJoinException("That active-party save is invalid.", 400);
+        }
         using var request = CreateAdminRequest(HttpMethod.Post, "/admin/rejoin");
-        request.Content = JsonContent.Create(new { token });
+        request.Content = JsonContent.Create(new
+        {
+            content,
+            developerAccess,
+            leaderboardUserId,
+            save,
+            token
+        });
         using var response = await httpClient.SendAsync(request, cancellationToken);
         var provisioned = await ReadPartyResponseAsync<SupervisorProvisionResponse>(
             response,
@@ -595,7 +611,7 @@ public sealed partial class GameSessionProvisioner
     [GeneratedRegex("^[A-Za-z0-9_-]{8,128}$", RegexOptions.CultureInvariant)]
     private static partial Regex PartyTokenRegex();
 
-    [GeneratedRegex("^[A-Za-z0-9_-]{43}$", RegexOptions.CultureInvariant)]
+    [GeneratedRegex("^(?:[A-Za-z0-9_-]{43}|sdrpr1\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]{43})$", RegexOptions.CultureInvariant)]
     private static partial Regex PartyRejoinTokenRegex();
 
     [GeneratedRegex("^[a-f0-9]{64}$", RegexOptions.CultureInvariant)]

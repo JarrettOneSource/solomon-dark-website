@@ -38,6 +38,10 @@ process.on('warning', (warning) => {
 })
 
 const adminSecret = requiredEnvironment('SDR_GAME_SUPERVISOR_SECRET')
+const revision = requiredEnvironment('SDR_GAME_REVISION').toLowerCase()
+if (!/^[a-f0-9]{40}$/.test(revision)) {
+  throw new Error('SDR_GAME_REVISION must be a full Git commit ID')
+}
 const runtimeEventEndpoint = process.env.SDR_RUNTIME_EVENT_ENDPOINT?.trim() || ''
 const runtimeEventSecret = process.env.SDR_RUNTIME_EVENT_SECRET?.trim() || ''
 if (Boolean(runtimeEventEndpoint) !== Boolean(runtimeEventSecret)) {
@@ -74,6 +78,7 @@ const supervisor = await startGameSessionSupervisor({
   maxSessions: parseInteger(process.env.SDR_GAME_MAX_SESSIONS, 64, 1, 10_000),
   mlBotPolicy,
   port: parseInteger(process.env.SDR_GAME_SUPERVISOR_PORT, 5222, 0, 65535),
+  revision,
   ...(runtimeEvents ? { runtimeEvents: runtimeEvents.publish } : {}),
   unclaimedTimeoutMs: parseInteger(
     process.env.SDR_GAME_UNCLAIMED_TIMEOUT_SECONDS,

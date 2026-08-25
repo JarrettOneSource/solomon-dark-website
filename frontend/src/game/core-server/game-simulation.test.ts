@@ -65,10 +65,12 @@ import {
   grantGameSimulationPlayerExperience,
   removePlayerCharacter,
   rejoinGameSimulationPlayer,
+  selectDetachedGameSimulationPlayerSkill,
   returnGameSimulationToHub,
   rerollGameSimulationPlayerSkill,
   saveGameSimulationPlayerSkill,
   selectGameSimulationPlayerSkill,
+  synchronizeDetachedGameSimulationPlayer,
   stepGameSimulation,
   stepGameSimulationTick,
   type GameSimulationExtensions,
@@ -1546,6 +1548,109 @@ test('active-run rejoin imports one durable actor and queues every missed person
   assert.equal(choices, 3)
   assert.equal(together.levelUpBarrier, null)
   assert.equal(stepGameSimulationTick(together, {}).tick, tickBefore + 1)
+})
+
+test('detached catch-up stacks live milestones without joining or pausing the run', () => {
+  const first = {
+    discipline: 'arcane',
+    displayName: 'First',
+    element: 'ether',
+  } as const
+  const second = {
+    discipline: 'mind',
+    displayName: 'Second',
+    element: 'water',
+  } as const
+  let live = enterBoneyardWorld(
+    createGameSimulation({ first, second }, { gameRngSeed: 73 }),
+    combatBoneyard('detached-catch-up'),
+  )
+  let detached = detachGameSimulationPlayer(live, 'second')
+  live = removePlayerCharacter(live, 'second')
+
+  live = grantGameSimulationPlayerExperience(live, 'first', 300)
+  const firstMilestone = live.levelUpBarrier
+  assert.ok(firstMilestone)
+  while (getPlayerProgression(live, 'first').pendingOffer) {
+    const offer = getPlayerProgression(live, 'first').pendingOffer!
+    live = selectGameSimulationPlayerSkill(live, 'first', {
+      choiceIndex: 0,
+      offerSequence: offer.sequence,
+      skillId: offer.options[0]!.skillId,
+    })!
+  }
+  assert.equal(live.levelUpBarrier, null)
+
+  const staged = synchronizeDetachedGameSimulationPlayer(live, detached, {
+    crossedLevels: [2, 3, 4],
+    experience: firstMilestone.milestoneExperience,
+    level: firstMilestone.milestoneLevel,
+  })
+  live = staged.state
+  detached = staged.detached
+  assert.equal(live.playerEntities.identities.some(({ playerId }) => playerId === 'second'), false)
+  assert.equal(live.levelUpBarrier, null)
+  assert.equal(detached.playerEntities.progressions[0]?.pendingLevels.length, 3)
+  const tickBefore = live.tick
+  live = stepGameSimulationTick(live, {})
+  assert.equal(live.tick, tickBefore + 1)
+
+  const firstOffer = detached.playerEntities.progressions[0]?.pendingOffer
+  assert.ok(firstOffer)
+  const selected = selectDetachedGameSimulationPlayerSkill(live, detached, {
+    choiceIndex: 0,
+    offerSequence: firstOffer.sequence,
+    skillId: firstOffer.options[0]!.skillId,
+  })
+  assert.ok(selected)
+  live = selected.state
+  detached = selected.detached
+  assert.equal(detached.playerEntities.progressions[0]?.pendingLevels.length, 2)
+  assert.equal(live.levelUpBarrier, null)
+
+  live = grantGameSimulationPlayerExperience(live, 'first', 1_000)
+  const stackedMilestone = live.levelUpBarrier
+  assert.ok(stackedMilestone)
+  while (getPlayerProgression(live, 'first').pendingOffer) {
+    const offer = getPlayerProgression(live, 'first').pendingOffer!
+    live = selectGameSimulationPlayerSkill(live, 'first', {
+      choiceIndex: 0,
+      offerSequence: offer.sequence,
+      skillId: offer.options[0]!.skillId,
+    })!
+  }
+  const pendingBeforeStack = detached.playerEntities.progressions[0]!.pendingLevels.length
+  const stacked = synchronizeDetachedGameSimulationPlayer(live, detached, {
+    crossedLevels: Array.from(
+      { length: stackedMilestone.milestoneLevel - 4 },
+      (_, index) => index + 5,
+    ),
+    experience: stackedMilestone.milestoneExperience,
+    level: stackedMilestone.milestoneLevel,
+  })
+  live = stacked.state
+  detached = stacked.detached
+  assert.equal(
+    detached.playerEntities.progressions[0]!.pendingLevels.length,
+    pendingBeforeStack + stackedMilestone.milestoneLevel - 4,
+  )
+  assert.equal(live.levelUpBarrier, null)
+  assert.equal(stepGameSimulationTick(live, {}).tick, live.tick + 1)
+
+  while (detached.playerEntities.progressions[0]?.pendingOffer) {
+    const offer = detached.playerEntities.progressions[0]!.pendingOffer!
+    const choice = selectDetachedGameSimulationPlayerSkill(live, detached, {
+      choiceIndex: 0,
+      offerSequence: offer.sequence,
+      skillId: offer.options[0]!.skillId,
+    })
+    assert.ok(choice)
+    live = choice.state
+    detached = choice.detached
+  }
+  live = rejoinGameSimulationPlayer(live, detached, 'second', null)
+  assert.equal(live.levelUpBarrier, null)
+  assert.equal(live.playerEntities.identities.some(({ playerId }) => playerId === 'second'), true)
 })
 
 test('Sorceror actions are authoritative, consume the active offer, and preserve saved choices', () => {

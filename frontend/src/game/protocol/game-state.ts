@@ -745,6 +745,7 @@ export type GameWorldSnapshotFrame = HubWorldSnapshotFrame | BoneyardWorldSnapsh
 export interface GameSnapshot {
   hostPlayerId: string | null
   levelUpBarrier: PlayerLevelUpBarrierState | null
+  materializingPlayerIds: readonly string[]
   modEffects: readonly ProtocolModEffect[]
   players: Readonly<Record<string, ProtocolPlayerState>>
   primarySpells: PrimarySpellSimulationState
@@ -757,6 +758,7 @@ export interface GameSnapshot {
 export interface GameSnapshotFrame {
   hostPlayerId: string | null
   levelUpBarrier: PlayerLevelUpBarrierState | null
+  materializingPlayerIds: readonly string[]
   modEffects: readonly ProtocolModEffect[]
   players: Readonly<Record<string, ProtocolPlayerSnapshotFrame>>
   primarySpells: PrimarySpellSimulationState

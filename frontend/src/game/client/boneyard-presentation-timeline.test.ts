@@ -194,6 +194,7 @@ function snapshotAt(tick: number, playerX: number, gateTipX: number): BoneyardGa
   return {
     hostPlayerId: 'local',
     levelUpBarrier: null,
+    materializingPlayerIds: [],
     modEffects: [],
     players: { local: playerAt(playerX) },
     primarySpells: createPrimarySpellSimulation(),

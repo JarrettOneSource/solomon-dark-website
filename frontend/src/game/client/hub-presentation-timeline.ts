@@ -192,6 +192,9 @@ function interpolateSnapshot(
   return {
     hostPlayerId: blend < 1 ? older.hostPlayerId : newer.hostPlayerId,
     levelUpBarrier: blend < 1 ? older.levelUpBarrier : newer.levelUpBarrier,
+    materializingPlayerIds: blend < 1
+      ? older.materializingPlayerIds
+      : newer.materializingPlayerIds,
     modEffects: blend < 1 ? older.modEffects : newer.modEffects,
     players,
     primarySpells: interpolatePrimarySpellState(
@@ -462,6 +465,7 @@ function presentationCopy(snapshot: HubGameSnapshot): HubPresentationFrame {
   return {
     hostPlayerId: snapshot.hostPlayerId,
     levelUpBarrier: snapshot.levelUpBarrier,
+    materializingPlayerIds: snapshot.materializingPlayerIds,
     modEffects: snapshot.modEffects,
     players: Object.fromEntries(
       Object.entries(snapshot.players).map(([id, player]) => [id, copyPlayer(player)]),

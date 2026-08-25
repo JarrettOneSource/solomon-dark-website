@@ -30,22 +30,26 @@ import {
   getPlayerEconomy,
   getPlayerProgression,
   grantGameSimulationPlayerExperience,
+  projectDetachedGameSimulationPlayer,
   rejoinGameSimulationPlayer,
   removePlayerCharacter,
   returnGameSimulationToHub,
+  rerollDetachedGameSimulationPlayerSkill,
   rerollGameSimulationPlayerSkill,
+  saveDetachedGameSimulationPlayerSkill,
   saveGameSimulationPlayerSkill,
   selectGameSimulationPlayerConcentration,
   selectGameSimulationPlayerConcentrationSlot,
   selectGameSimulationPlayerPrimarySkill,
+  selectDetachedGameSimulationPlayerSkill,
   selectGameSimulationPlayerSkill,
   stepGameSimulationTick,
+  synchronizeDetachedGameSimulationPlayer,
   type GameSimulationState,
   type DetachedGameSimulationPlayer,
   type PlayerId,
 } from '../core-server/game-simulation.ts'
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
-import type { SharedPlayerLevelMilestone } from '../core-kernels/player-progression.ts'
 import { gameOverExitDurationTicks } from '../core-kernels/game-run.ts'
 import { NATIVE_TUTORIAL_CAMERA_LOCK_SETTLE_TICKS } from '../core-kernels/native-tutorial.ts'
 import type {
@@ -189,6 +193,12 @@ import {
   type PreparedModHost,
 } from './prepared-mod-host.ts'
 import type { PreparedModSaveState } from './prepared-mod-save.ts'
+import {
+  createPartyRecoveryClaim,
+  decodePartyRecoveryClaim,
+  verifyPartyRecoveryClaim,
+  type PartyRecoveryClaim,
+} from './party-recovery-claim.ts'
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost'])
 export const GAME_SAVE_AUTOSAVE_INTERVAL_TICKS = GAME_TICK_RATE * 30
@@ -209,6 +219,7 @@ export interface GameHostAdmission {
   readonly developerAccess?: boolean
   readonly leaderboardUserId: number | null
   readonly partyId?: string
+  readonly partyRecoverySeed?: boolean
   readonly partyRejoinToken?: string
   readonly reservationId?: string
   readonly observer?: GameHostObserverAdmission
@@ -227,6 +238,7 @@ interface AuthenticatedGameHostRole {
   readonly developerAccess: boolean
   readonly leaderboardUserId: number | null
   readonly partyId: string | null
+  readonly partyRecoverySeed: boolean
   readonly partyRejoinToken: string | null
   readonly reservationId: string | null
   readonly observer: GameHostObserverAdmission | null
@@ -259,6 +271,7 @@ export interface GameHostOptions {
   modAssets?: readonly import('../protocol/game-protocol.ts').GameModAsset[]
   modContent?: MaterializedWebSessionContent
   onPlayerCountChanged?: (playerCount: number) => void
+  partyRecoverySecret?: string
   port?: number
   resetWhenEmpty?: boolean
   runtimeEvents?: RuntimeEventSink
@@ -351,7 +364,7 @@ export interface GameHostPartyRejoinTarget {
   readonly playerId: string
   readonly profile: PlayerSocialProfile
   readonly runId: string
-  readonly status: 'connected' | 'detached' | 'reserved'
+  readonly status: 'connected' | 'detached' | 'reserved' | 'staging'
 }
 
 export interface GameHostObservationTarget {
@@ -401,6 +414,7 @@ interface HostClient {
   lastReceivedSequence: number
   lastSentSnapshotSequence: number
   leaderboardUserId: number | null
+  partyRejoinSlot: PartyRejoinSlot | null
   playerId: PlayerId
   queuedInputs: Map<number, QueuedClientInput>
   pendingLuaRequestIds: Set<number>
@@ -503,11 +517,6 @@ interface PartyJoinReservation {
   readonly partyId: string
 }
 
-interface PartyRejoinMilestone {
-  readonly experience: number
-  readonly level: number
-}
-
 interface PartyRejoinSlot {
   connected: boolean
   readonly content: MaterializedWebSessionContent
@@ -515,14 +524,23 @@ interface PartyRejoinSlot {
   detachedState: DetachedGameSimulationPlayer | null
   readonly globalScoreEligible: boolean
   readonly leaderboardUserId: number | null
-  latestMilestone: PartyRejoinMilestone | null
   readonly localOnly: boolean
   readonly partyId: string
+  partyIdentity: PartyIdentity | null
   readonly playerId: string
-  readonly profile: PlayerSocialProfile
+  profile: PlayerSocialProfile
+  readonly recoveryId: string
   reservation: Readonly<{ expiresAt: number; id: string }> | null
   readonly runId: string
-  readonly token: string
+  token: string | null
+}
+
+interface PartyRecoveryLineage {
+  readonly content: MaterializedWebSessionContent
+  readonly partyId: string
+  readonly partyMemberCount: number
+  readonly recoveryId: string
+  readonly runId: string
 }
 
 interface QueuedClientInput {
@@ -545,6 +563,11 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   if (options.leaderboardReceiptSecret !== undefined
     && Buffer.byteLength(options.leaderboardReceiptSecret, 'utf8') < 32) {
     throw new Error('Game host leaderboard receipt secret must contain at least 32 bytes')
+  }
+  const partyRecoverySecret = options.partyRecoverySecret
+    ?? randomBytes(32).toString('base64url')
+  if (Buffer.byteLength(partyRecoverySecret, 'utf8') < 32) {
+    throw new Error('Game host party recovery secret must contain at least 32 bytes')
   }
   const host = options.host ?? '127.0.0.1'
   const port = options.port ?? 0
@@ -636,7 +659,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   const externalPartyJoinRequests = new Map<string, ExternalPartyJoinRequest>()
   const partyJoinReservations = new Map<string, PartyJoinReservation>()
   const partyRejoinSlots = new Map<string, PartyRejoinSlot>()
-  const partyRejoinTokensByPlayer = new Map<PlayerId, string>()
+  const partyRecoveryLineages = new Map<string, PartyRecoveryLineage>()
   const pendingLuaEvents: WebLuaDerivedEvent[] = []
   const leaderboardIneligibleRunIds = new Set<string>()
   const issuedLeaderboardReceipts = new Set<string>()
@@ -1009,6 +1032,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           disconnect(socket, 'authentication-failed', 'The party admission is ambiguous.')
           return
         }
+        if (authenticated.partyRecoverySeed && authenticated.partyRejoinToken === null) {
+          disconnect(socket, 'authentication-failed', 'The party recovery seed is missing.')
+          return
+        }
         if (
           authenticated.partyId !== null
           && !validPartyReservation(
@@ -1019,13 +1046,26 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           disconnect(socket, 'authentication-failed', 'That party admission has expired.')
           return
         }
-        const partyRejoinSlot = authenticated.partyRejoinToken === null
+        let partyRecoveryClaim = authenticated.partyRejoinToken === null
+          ? null
+          : decodePartyRecoveryClaim(partyRecoverySecret, authenticated.partyRejoinToken)
+        if (authenticated.partyRejoinToken !== null && partyRecoveryClaim === null) {
+          disconnect(socket, 'authentication-failed', 'That party recovery claim is invalid.')
+          return
+        }
+        const partyRejoinSlot = authenticated.partyRecoverySeed
+          ? null
+          : authenticated.partyRejoinToken === null
           ? null
           : validPartyRejoinReservation(
               authenticated.partyRejoinToken,
               authenticated.reservationId,
             )
-        if (authenticated.partyRejoinToken !== null && partyRejoinSlot === null) {
+        if (
+          authenticated.partyRejoinToken !== null
+          && !authenticated.partyRecoverySeed
+          && partyRejoinSlot === null
+        ) {
           disconnect(socket, 'authentication-failed', 'That active-party rejoin has expired.')
           return
         }
@@ -1042,6 +1082,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         let playerId: PlayerId | null = null
         let replacedClient: HostClient | null = null
         let rejoinedParty = false
+        let stagedPartyRejoin: PartyRejoinSlot | null = null
         let saveIntegrity: GameSaveIntegrity | null = null
         let savedProfile: RestoredGameSaveProfile | null = null
         const playerPartyIdentity = createPartyIdentity()
@@ -1083,13 +1124,37 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             return
           }
           saveIntegrity = savedProfile.integrity
+          if (partyRecoveryClaim !== null) {
+            const verified = verifyPartyRecoveryClaim(
+              partyRecoverySecret,
+              authenticated.partyRejoinToken!,
+              message.save,
+            )
+            const activeManifestSha256 = authenticated.content?.manifest.manifestSha256
+              ?? content.manifestSha256
+            if (
+              verified === null
+              || verified.playerId !== partyRecoveryClaim.playerId
+              || verified.recoveryId !== partyRecoveryClaim.recoveryId
+              || verified.runId !== partyRecoveryClaim.runId
+              || verified.contentManifestSha256 !== activeManifestSha256
+              || verified.leaderboardUserId !== authenticated.leaderboardUserId
+              || verified.sessionKind !== sessionKind
+              || verified.integrity !== savedProfile.integrity
+              || (authenticated.partyRecoverySeed && verified.targetRevision === null)
+            ) {
+              disconnect(socket, 'invalid-message', 'The saved party recovery claim is invalid.')
+              return
+            }
+            partyRecoveryClaim = verified
+          }
           if (sharedHub && savedProfile.integrity === 'local-only') {
             disconnect(socket, 'invalid-message', 'Local-only saves require a private College.')
             return
           }
           const activeManifest = authenticated.content?.manifest ?? content
           const modMismatch = !sameContentMods(savedProfile.mods, activeManifest.mods)
-          if (modMismatch && (partyRejoinSlot !== null || !message.allowModMismatch)) {
+          if (modMismatch && (partyRecoveryClaim !== null || !message.allowModMismatch)) {
             disconnect(
               socket,
               'invalid-message',
@@ -1122,8 +1187,6 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             let restoredState = restored.state
             let restoredBoneyard = restored.loadedBoneyard
             if (partyRejoinSlot !== null) {
-              const detachedCharacter = partyRejoinSlot.detachedState
-                ?.playerEntities.configs[0]
               if (
                 playerId !== partyRejoinSlot.playerId
                 || !credentialsEqual(
@@ -1133,8 +1196,24 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
                 || restoredBoneyard?.runId !== partyRejoinSlot.runId
                 || restoredState.world.kind !== 'boneyard'
                 || restoredState.world.runId !== partyRejoinSlot.runId
-                || partyRejoinSlot.detachedState === null
-                || partyRejoinSlot.detachedState.playerEntities.configs.length !== 1
+              ) {
+                disconnect(
+                  socket,
+                  'invalid-message',
+                  'The saved wizard does not match this active-party rejoin.',
+                )
+                return
+              }
+              if (partyRejoinSlot.detachedState === null) {
+                partyRejoinSlot.detachedState = detachGameSimulationPlayer(
+                  restoredState,
+                  playerId,
+                )
+                partyRejoinSlot.profile = message.profile
+              }
+              const detachedCharacter = partyRejoinSlot.detachedState.playerEntities.configs[0]
+              if (
+                partyRejoinSlot.detachedState.playerEntities.configs.length !== 1
                 || !detachedCharacter
                 || !sameCharacter(detachedCharacter, message.character)
               ) {
@@ -1145,74 +1224,35 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
                 )
                 return
               }
-              const milestone = partyRejoinMilestone(partyRejoinSlot)
-              if (sharedWorlds) {
-                const rejoined = rejoinSharedPartyRunPlayer(
-                  sharedWorlds,
-                  partyRejoinSlot.detachedState,
-                  playerId,
+              partyRejoinSlot.partyIdentity = playerPartyIdentity
+              const activeRejoinState = activeRunForPartyRejoin(partyRejoinSlot)
+              if (!activeRejoinState) {
+                disconnect(socket, 'invalid-message', 'The active party no longer exists.')
+                return
+              }
+              replacePartyRejoinRunState(
+                partyRejoinSlot,
+                synchronizePartyRejoinMilestones(
                   partyRejoinSlot.partyId,
-                  playerPartyIdentity,
-                  availablePartyMembers(
-                    partyRejoinSlot.partyId,
-                    authenticated.reservationId,
-                    playerId,
-                  ),
-                  milestone,
-                )
-                if (!rejoined.accepted) {
-                  disconnect(socket, 'invalid-message', partyRejectionMessage(rejoined.reason))
-                  return
-                }
-                sharedWorlds = rejoined.state
-                state = sharedWorlds.hub
+                  activeRejoinState,
+                ),
+              )
+              if (partyRejoinSlot.detachedState.playerEntities.progressions[0]?.pendingOffer) {
+                partyRejoinSlot.connected = true
+                partyRejoinSlot.reservation = null
+                stagedPartyRejoin = partyRejoinSlot
               } else {
-                const destination = privateParties?.parties.find(({ id }) => (
-                  id === partyRejoinSlot.partyId
-                )) ?? null
-                if (!privateParties || !destination) {
-                  disconnect(socket, 'invalid-message', 'The active party no longer exists.')
-                  return
-                }
-                try {
-                  state = rejoinGameSimulationPlayer(
-                    state,
-                    partyRejoinSlot.detachedState,
-                    playerId,
-                    milestone,
-                  )
-                } catch (error) {
-                  disconnect(
-                    socket,
-                    'invalid-message',
-                    error instanceof Error ? error.message : 'The active run cannot be rejoined.',
-                  )
-                  return
-                }
-                const registered = registerPartyPlayer(
-                  privateParties,
-                  playerId,
-                  playerPartyIdentity,
+                const rejection = materializePartyRejoinSlot(
+                  partyRejoinSlot,
+                  authenticated.reservationId,
                 )
-                const joined = joinPartyPlayer(
-                  registered,
-                  playerId,
-                  destination.id,
-                  availablePartyMembers(
-                    destination.id,
-                    authenticated.reservationId,
-                    playerId,
-                  ),
-                )
-                if (!joined.accepted) {
-                  state = removePlayerCharacter(state, playerId)
-                  disconnect(socket, 'invalid-message', partyRejectionMessage(joined.reason))
+                if (rejection !== null) {
+                  disconnect(socket, 'invalid-message', rejection)
                   return
                 }
-                privateParties = joined.state
+                consumePartyRejoinSlot(partyRejoinSlot)
               }
               rejoinedParty = true
-              consumePartyRejoinSlot(partyRejoinSlot)
               pendingPartyRejoins.delete(socket)
             }
             if (
@@ -1406,12 +1446,55 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           }
           consumePartyReservation(authenticated.reservationId)
         }
-        const playerState = stateForPlayer(playerId)
-        const welcomeSnapshot = createGameSnapshot(
+        if (authenticated.partyRecoverySeed) {
+          const recoveredParty = activePartySystem()
+            ? partyForPlayer(activePartySystem()!, playerId)
+            : null
+          const recoveredState = sharedWorlds
+            ? sharedGameStateForPlayer(sharedWorlds, playerId)
+            : state
+          if (
+            partyRecoveryClaim === null
+            || authenticated.content === null
+            || recoveredParty === null
+            || recoveredState === null
+            || recoveredState.world.kind !== 'boneyard'
+            || recoveredState.world.runId !== partyRecoveryClaim.runId
+          ) {
+            if (sharedWorlds) {
+              sharedWorlds = removeSharedGamePlayer(sharedWorlds, playerId)
+              state = sharedWorlds.hub
+              playerContents.delete(playerId)
+            } else {
+              state = removePlayerCharacter(state, playerId)
+              if (privateParties) {
+                privateParties = removePrivatePartyPlayer(privateParties, playerId)
+              }
+            }
+            disconnect(socket, 'invalid-message', 'The party recovery seed could not restore its run.')
+            return
+          }
+          registerPartyRecoveryLineage(
+            partyRecoveryClaim,
+            recoveredParty.id,
+            authenticated.content,
+          )
+        }
+        const playerState = stagedPartyRejoin
+          ? partyRejoinStagingState(stagedPartyRejoin)
+          : stateForPlayer(playerId)
+        const ordinaryWelcomeSnapshot = createGameSnapshot(
           playerState,
-          authorityForPlayer(playerId),
+          stagedPartyRejoin
+            ? activePartySystem()?.parties.find(({ id }) => (
+                id === stagedPartyRejoin.partyId
+              ))?.leaderPlayerId ?? null
+            : authorityForPlayer(playerId),
           hubActivitiesForSnapshot(playerState),
         )
+        const welcomeSnapshot = stagedPartyRejoin
+          ? { ...ordinaryWelcomeSnapshot, materializingPlayerIds: [playerId] }
+          : ordinaryWelcomeSnapshot
         const snapshotSequence = nextSnapshotSequence
         nextSnapshotSequence += 1
         const welcomeBaseline = createReplicatedEntityBaseline(welcomeSnapshot)
@@ -1444,6 +1527,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           // globally ranked lineage; the document's own integrity claim is not
           // evidence of server provenance.
           globalScoreEligible: partyRejoinSlot?.globalScoreEligible
+            ?? partyRecoveryClaim?.globalScoreEligible
             ?? (
               sessionKind !== 'private-college'
               && message.save === undefined
@@ -1452,6 +1536,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             ),
           hubActivity: null,
           localOnly: partyRejoinSlot?.localOnly
+            ?? (partyRecoveryClaim ? partyRecoveryClaim.integrity === 'local-only' : undefined)
             ?? (
               sessionKind !== 'global-hub'
               || clientCheatsEnabled
@@ -1461,7 +1546,9 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           lastReceivedSequence: 0,
           lastSentSnapshotSequence: snapshotSequence,
           leaderboardUserId: partyRejoinSlot?.leaderboardUserId
+            ?? partyRecoveryClaim?.leaderboardUserId
             ?? authenticated.leaderboardUserId,
+          partyRejoinSlot: stagedPartyRejoin,
           playerId,
           pendingLuaRequestIds: new Set(),
           queuedInputs: new Map(),
@@ -1471,14 +1558,16 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           socket,
         }
         clients.set(socket, joinedClient)
-        if (!joinedClient.globalScoreEligible) taintActiveRun(joinedClient)
+        if (!joinedClient.globalScoreEligible && !stagedPartyRejoin) taintActiveRun(joinedClient)
         const connectedParty = activePartySystem()
           ? partyForPlayer(activePartySystem()!, playerId)
           : null
-        armPartyRejoinSlotsForState(
-          connectedParty?.id ?? null,
-          stateForPlayer(playerId),
-        )
+        if (!stagedPartyRejoin) {
+          armPartyRejoinSlotsForState(
+            connectedParty?.id ?? null,
+            stateForPlayer(playerId),
+          )
+        }
         const connectedDetails = {
           accountUsername: joinedClient.profile.accountUsername,
           discipline: message.character.discipline,
@@ -1528,20 +1617,28 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           modAssets: authenticated.content?.assets ?? options.modAssets ?? [],
           modCatalog: sharedHub ? [] : privateModHost?.content.consumables() ?? [],
           boneyards: boneyardCatalogForPlayer(playerId).choices,
-          gameplayPause: gameplayPauseForPlayer(playerId),
+          gameplayPause: stagedPartyRejoin
+            ? gameplayPauseForPartyRejoin(stagedPartyRejoin)
+            : gameplayPauseForPlayer(playerId),
           snapshot: welcomeSnapshot,
           snapshotSequence,
         }))
         sendPreparedModProjection(
           socket,
-          modRuntimeScopeForPlayer(playerId)?.runtime ?? privateModHost,
+          (stagedPartyRejoin
+            ? partyModRuntimes.get(stagedPartyRejoin.partyId)
+            : modRuntimeScopeForPlayer(playerId))?.runtime ?? privateModHost,
         )
         sendPreparedModRuntime(
           socket,
-          modRuntimeScopeForPlayer(playerId)?.runtime ?? privateModHost,
+          (stagedPartyRejoin
+            ? partyModRuntimes.get(stagedPartyRejoin.partyId)
+            : modRuntimeScopeForPlayer(playerId))?.runtime ?? privateModHost,
           playerId,
         )
-        const playerBoneyard = loadedBoneyardForPlayer(playerId)
+        const playerBoneyard = stagedPartyRejoin
+          ? loadedBoneyardForPartyRejoin(stagedPartyRejoin)
+          : loadedBoneyardForPlayer(playerId)
         if (playerBoneyard) {
           socket.send(encodeGameMessage({
             type: 'server-boneyard-loaded',
@@ -1550,7 +1647,9 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         }
         if (sharedWorlds || privateParties) broadcastPartyState()
         publishSaveCheckpoint('connected')
-        if (gameplayPauseForPlayer(playerId)) broadcastSnapshot()
+        if (stagedPartyRejoin
+          ? gameplayPauseForPartyRejoin(stagedPartyRejoin)
+          : gameplayPauseForPlayer(playerId)) broadcastSnapshot()
         return
       }
 
@@ -1583,6 +1682,16 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         }
         return
       }
+
+      if (
+        client.partyRejoinSlot
+        && message.type !== 'client-select-skill'
+        && message.type !== 'client-level-up-action'
+        && message.type !== 'client-snapshot-ack'
+        && message.type !== 'client-ping'
+        && message.type !== 'client-save-before-leave'
+        && message.type !== 'client-disconnect'
+      ) return
 
       if (message.type === 'client-hub-activity') {
         const activeState = stateForPlayer(client.playerId)
@@ -1693,6 +1802,35 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         return
       }
       if (message.type === 'client-select-skill') {
+        if (client.partyRejoinSlot) {
+          const slot = client.partyRejoinSlot
+          const activeState = activeRunForPartyRejoin(slot)
+          const selected = activeState && slot.detachedState
+            ? selectDetachedGameSimulationPlayerSkill(activeState, slot.detachedState, message)
+            : null
+          if (!selected) {
+            disconnect(socket, 'invalid-message', 'The skill choice is stale or not in this offer.')
+            return
+          }
+          replacePartyRejoinRunState(slot, selected.state)
+          slot.detachedState = selected.detached
+          if (!slot.detachedState.playerEntities.progressions[0]?.pendingOffer) {
+            const rejection = materializePartyRejoinSlot(slot, null)
+            if (rejection !== null) {
+              disconnect(socket, 'invalid-message', rejection)
+              return
+            }
+            consumePartyRejoinSlot(slot)
+            client.partyRejoinSlot = null
+            armPartyRejoinSlotsForState(slot.partyId, stateForPlayer(client.playerId))
+            if (sharedWorlds || privateParties) broadcastPartyState()
+          }
+          client.activeInput = createIdlePlayerCharacterInput()
+          client.queuedInputs.clear()
+          broadcastSnapshot()
+          publishSaveCheckpoint('skill-selected')
+          return
+        }
         const activeState = stateForPlayer(client.playerId)
         const barrierBefore = activeState.levelUpBarrier
         const selected = selectGameSimulationPlayerSkill(activeState, client.playerId, message)
@@ -1905,6 +2043,45 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         return
       }
       if (message.type === 'client-level-up-action') {
+        if (client.partyRejoinSlot) {
+          const slot = client.partyRejoinSlot
+          const activeState = activeRunForPartyRejoin(slot)
+          const applied = activeState && slot.detachedState
+            ? message.action === 'reroll'
+              ? rerollDetachedGameSimulationPlayerSkill(
+                  activeState,
+                  slot.detachedState,
+                  message.offerSequence,
+                )
+              : saveDetachedGameSimulationPlayerSkill(
+                  activeState,
+                  slot.detachedState,
+                  message.offerSequence,
+                )
+            : null
+          if (!applied) {
+            disconnect(socket, 'invalid-message', 'The level-up action is stale or unavailable.')
+            return
+          }
+          replacePartyRejoinRunState(slot, applied.state)
+          slot.detachedState = applied.detached
+          if (!slot.detachedState.playerEntities.progressions[0]?.pendingOffer) {
+            const rejection = materializePartyRejoinSlot(slot, null)
+            if (rejection !== null) {
+              disconnect(socket, 'invalid-message', rejection)
+              return
+            }
+            consumePartyRejoinSlot(slot)
+            client.partyRejoinSlot = null
+            armPartyRejoinSlotsForState(slot.partyId, stateForPlayer(client.playerId))
+            if (sharedWorlds || privateParties) broadcastPartyState()
+          }
+          client.activeInput = createIdlePlayerCharacterInput()
+          client.queuedInputs.clear()
+          broadcastSnapshot()
+          publishSaveCheckpoint('level-up-action')
+          return
+        }
         const activeState = stateForPlayer(client.playerId)
         const barrierBefore = activeState.levelUpBarrier
         const applied = message.action === 'reroll'
@@ -2662,7 +2839,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       const pendingPartyRejoin = pendingPartyRejoins.get(socket)
       if (pendingPartyRejoin) {
         pendingPartyRejoins.delete(socket)
-        if (partyRejoinSlots.get(pendingPartyRejoin.token) === pendingPartyRejoin) {
+        if (partyRejoinSlots.get(partyRecoverySlotKey(
+          pendingPartyRejoin.recoveryId,
+          pendingPartyRejoin.playerId,
+        )) === pendingPartyRejoin) {
           pendingPartyRejoin.reservation = null
         }
       }
@@ -2721,13 +2901,15 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           activeDeploymentRestart.resolveReady()
         }
       }
-      const disconnectedState = stateForPlayer(client.playerId)
-      const disconnectedPartyId = activePartySystem()
-        ? partyForPlayer(activePartySystem()!, client.playerId)?.id ?? null
-        : null
-      const disconnectedPauseScope = sharedWorlds
-        ? sharedGameplayPauseScope(client.playerId)
-        : null
+      const disconnectedState = stateForClient(client)
+      const disconnectedPartyId = client.partyRejoinSlot?.partyId ?? (
+        activePartySystem()
+          ? partyForPlayer(activePartySystem()!, client.playerId)?.id ?? null
+          : null
+      )
+      const disconnectedPauseScope = client.partyRejoinSlot
+        ? sharedGameplayPauseScopeForParty(client.partyRejoinSlot.partyId)
+        : sharedWorlds ? sharedGameplayPauseScope(client.playerId) : null
       const releasedGameplayPause = gameplayPauseForPlayer(client.playerId)?.ownerPlayerId
         === client.playerId
       detachPartyRejoinClient(client, disconnectedState, disconnectedPartyId)
@@ -2764,7 +2946,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           if (privateParties) privateParties = createPartySystem()
           gameplayPause = null
           partyRejoinSlots.clear()
-          partyRejoinTokensByPlayer.clear()
+          partyRecoveryLineages.clear()
           resetNextTickDeadline()
         }
       } else if (client.playerId === hostPlayerId) {
@@ -2846,6 +3028,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         if (sharedWorlds) {
           const inputs: Record<PlayerId, PlayerCharacterInput> = {}
           for (const client of clients.values()) {
+            if (client.partyRejoinSlot) continue
             const activeState = stateForPlayer(client.playerId)
             applyQueuedInput(client, activeState.tick + 1)
             inputs[client.playerId] = client.activeInput
@@ -2948,7 +3131,20 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
                 if (viewer) broadcastPreparedModProjection(viewer, scope.runtime)
               }
             }
-            recordPartyRejoinMilestone(run.partyId, run.state)
+            const synchronizedRejoins = synchronizePartyRejoinMilestones(
+              run.partyId,
+              run.state,
+            )
+            if (synchronizedRejoins !== run.state) {
+              run = { ...run, state: synchronizedRejoins }
+              sharedWorlds = {
+                ...sharedWorlds,
+                runs: sharedWorlds.runs.map(candidate => (
+                  candidate.partyId === run.partyId ? run : candidate
+                )),
+              }
+              lifecycleBoundary = true
+            }
             logGameActivity(before.state, run.state, run.loadedBoneyard, run.partyId)
             const enteredGameOver = before.state.run.phase === 'active'
               && run.state.run.phase === 'game-over'
@@ -2989,6 +3185,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         const inputs: Record<PlayerId, PlayerCharacterInput> = {}
         const nextTick = state.tick + 1
         for (const client of clients.values()) {
+          if (client.partyRejoinSlot) continue
           applyQueuedInput(client, nextTick)
           inputs[client.playerId] = client.activeInput
         }
@@ -3028,7 +3225,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             if (viewer) broadcastPreparedModProjection(viewer, privateModHost)
           }
         }
-        recordPartyRejoinMilestone(privateParties?.parties[0]?.id ?? null, state)
+        state = synchronizePartyRejoinMilestones(
+          privateParties?.parties[0]?.id ?? null,
+          state,
+        )
         if (runtimes.length > 0) {
           const events = [
             ...pendingEvents,
@@ -3162,19 +3362,26 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     source: string,
     force = false,
     includeTerminalProfile = false,
+    targetRevision: string | null = null,
   ): number {
     if (client.socket.readyState !== WebSocket.OPEN) return 0
-    const saveState = sharedWorlds
-      ? sharedPartySaveStateForPlayer(sharedWorlds, client.playerId)
-      : state
+    if (client.partyRejoinSlot && activeRunForPartyRejoin(client.partyRejoinSlot) === null) {
+      return 0
+    }
+    const saveState = client.partyRejoinSlot
+      ? partyRejoinStagingState(client.partyRejoinSlot)
+      : sharedWorlds
+        ? sharedPartySaveStateForPlayer(sharedWorlds, client.playerId)
+        : state
     if (!saveState) return 0
     const terminal = saveState.run.phase === 'game-over' || saveState.run.phase === 'loadout'
     if (terminal && !includeTerminalProfile) return 0
     let document: string
     try {
-      const party = sharedWorlds
-        ? partyForPlayer(sharedWorlds.parties, client.playerId)
-        : null
+      const party = client.partyRejoinSlot
+        ? activePartySystem()?.parties.find(({ id }) => id === client.partyRejoinSlot!.partyId)
+          ?? null
+        : sharedWorlds ? partyForPlayer(sharedWorlds.parties, client.playerId) : null
       const sharedContent = sharedWorlds
         ? saveState.world.kind === 'boneyard' && party
           ? contentForParty(party.id)
@@ -3191,16 +3398,44 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         integrity,
         mods: sharedContent?.manifest.mods ?? content.mods,
         modState: preparedModSaveState(scope?.runtime ?? privateModHost),
-        partyRejoinToken: partyRejoinTokenForPlayer(client.playerId),
+        partyRejoinToken: null,
         playerId: client.playerId,
         state: saveState,
       }
-      document = terminal
+      const unsignedDocument = terminal
         ? createGameProfileSaveDocument(documentOptions)
         : createGameSaveDocument({
             ...documentOptions,
-            loadedBoneyard: loadedBoneyardForPlayer(client.playerId),
+            loadedBoneyard: client.partyRejoinSlot
+              ? loadedBoneyardForPartyRejoin(client.partyRejoinSlot)
+              : loadedBoneyardForPlayer(client.playerId),
           })
+      const slot = terminal ? null : partyRejoinSlotForClient(client)
+      const lineage = slot ? partyRecoveryLineages.get(slot.recoveryId) ?? null : null
+      if (slot && lineage) {
+        const token = createPartyRecoveryClaim(partyRecoverySecret, {
+          contentManifestSha256: lineage.content.manifest.manifestSha256,
+          globalScoreEligible: client.globalScoreEligible,
+          integrity,
+          leaderboardUserId: client.leaderboardUserId,
+          partyMemberCount: lineage.partyMemberCount,
+          playerId: client.playerId,
+          recoveryId: lineage.recoveryId,
+          runId: lineage.runId,
+          sessionKind,
+          targetRevision,
+        }, unsignedDocument)
+        slot.token = token
+        document = createGameSaveDocument({
+          ...documentOptions,
+          loadedBoneyard: client.partyRejoinSlot
+            ? loadedBoneyardForPartyRejoin(client.partyRejoinSlot)
+            : loadedBoneyardForPlayer(client.playerId),
+          partyRejoinToken: token,
+        })
+      } else {
+        document = unsignedDocument
+      }
     } catch (error) {
       logGameServerEvent(
         options.log,
@@ -3243,15 +3478,33 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     const periodicKeyframe = snapshotSequence % Math.max(1, snapshotRate * 5) === 0
     for (const client of clients.values()) {
       if (client.socket.readyState !== WebSocket.OPEN) continue
+      if (client.partyRejoinSlot && activeRunForPartyRejoin(client.partyRejoinSlot) === null) {
+        disconnectCauses.set(client.socket, {
+          reason: 'active party run ended during catch-up',
+          source: 'party-rejoin-ended',
+        })
+        client.socket.close(1000, 'active party run ended')
+        continue
+      }
       if (
         client.replicationRecovery
         && client.replicationRecovery.keyframeSequence !== null
       ) continue
-      const snapshot = defaultSnapshot ?? createGameSnapshot(
-        stateForPlayer(client.playerId),
-        authorityForPlayer(client.playerId),
-        hubActivitiesForSnapshot(stateForPlayer(client.playerId)),
-      )
+      const snapshot = client.partyRejoinSlot
+        ? {
+            ...createGameSnapshot(
+              partyRejoinStagingState(client.partyRejoinSlot),
+              activePartySystem()?.parties.find(({ id }) => (
+                id === client.partyRejoinSlot!.partyId
+              ))?.leaderPlayerId ?? null,
+            ),
+            materializingPlayerIds: [client.playerId],
+          }
+        : defaultSnapshot ?? createGameSnapshot(
+            stateForPlayer(client.playerId),
+            authorityForPlayer(client.playerId),
+            hubActivitiesForSnapshot(stateForPlayer(client.playerId)),
+          )
       const currentBaseline = createReplicatedEntityBaseline(snapshot)
       const acknowledgedBaseline = client.sentReplicationBaselines.get(
         client.acknowledgedSnapshotSequence,
@@ -3372,6 +3625,121 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       : loadedBoneyard
   }
 
+  function stateForClient(client: HostClient): GameSimulationState {
+    if (!client.partyRejoinSlot) return stateForPlayer(client.playerId)
+    return activeRunForPartyRejoin(client.partyRejoinSlot) && client.partyRejoinSlot.detachedState
+      ? partyRejoinStagingState(client.partyRejoinSlot)
+      : sharedWorlds?.hub ?? state
+  }
+
+  function partyRejoinStagingState(slot: PartyRejoinSlot): GameSimulationState {
+    const active = activeRunForPartyRejoin(slot)
+    if (!active || !slot.detachedState) {
+      throw new Error('party rejoin staging lost its active run or detached actor')
+    }
+    return projectDetachedGameSimulationPlayer(active, slot.detachedState)
+  }
+
+  function replacePartyRejoinRunState(
+    slot: PartyRejoinSlot,
+    nextState: GameSimulationState,
+  ): void {
+    if (!sharedWorlds) {
+      state = nextState
+      return
+    }
+    sharedWorlds = {
+      ...sharedWorlds,
+      runs: sharedWorlds.runs.map(run => run.partyId === slot.partyId
+        ? { ...run, state: nextState }
+        : run),
+    }
+    state = sharedWorlds.hub
+  }
+
+  function loadedBoneyardForPartyRejoin(slot: PartyRejoinSlot): LoadedBoneyard | null {
+    return sharedWorlds
+      ? sharedWorlds.runs.find(run => (
+          run.partyId === slot.partyId && run.loadedBoneyard.runId === slot.runId
+        ))?.loadedBoneyard ?? null
+      : loadedBoneyard?.runId === slot.runId ? loadedBoneyard : null
+  }
+
+  function gameplayPauseForPartyRejoin(slot: PartyRejoinSlot): GameplayPauseState | null {
+    return sharedWorlds
+      ? sharedGameplayPauses.get(slot.partyId) ?? null
+      : gameplayPause
+  }
+
+  function partyRejoinSlotForClient(client: HostClient): PartyRejoinSlot | null {
+    if (client.partyRejoinSlot) return client.partyRejoinSlot
+    const activeState = sharedWorlds
+      ? sharedGameStateForPlayer(sharedWorlds, client.playerId)
+      : state.playerEntities.identities.some(({ playerId }) => playerId === client.playerId)
+        ? state
+        : null
+    if (!activeState || activeState.world.kind !== 'boneyard' || !activeState.run.runId) return null
+    const partyId = activePartySystem()
+      ? partyForPlayer(activePartySystem()!, client.playerId)?.id ?? null
+      : null
+    if (!partyId) return null
+    const lineage = [...partyRecoveryLineages.values()].find(candidate => (
+      candidate.partyId === partyId && candidate.runId === activeState.run.runId
+    ))
+    return lineage
+      ? partyRejoinSlots.get(partyRecoverySlotKey(lineage.recoveryId, client.playerId)) ?? null
+      : null
+  }
+
+  function materializePartyRejoinSlot(
+    slot: PartyRejoinSlot,
+    reservationId: string | null,
+  ): string | null {
+    if (!slot.detachedState || !slot.partyIdentity) {
+      return 'The active-party rejoin is missing its detached wizard.'
+    }
+    if (sharedWorlds) {
+      const rejoined = rejoinSharedPartyRunPlayer(
+        sharedWorlds,
+        slot.detachedState,
+        slot.playerId,
+        slot.partyId,
+        slot.partyIdentity,
+        availablePartyMembers(slot.partyId, reservationId, slot.playerId),
+        null,
+      )
+      if (!rejoined.accepted) return partyRejectionMessage(rejoined.reason)
+      sharedWorlds = rejoined.state
+      state = sharedWorlds.hub
+      return null
+    }
+    const destination = privateParties?.parties.find(({ id }) => id === slot.partyId) ?? null
+    if (!privateParties || !destination) return 'The active party no longer exists.'
+    try {
+      state = rejoinGameSimulationPlayer(
+        state,
+        slot.detachedState,
+        slot.playerId,
+        null,
+      )
+    } catch (error) {
+      return error instanceof Error ? error.message : 'The active run cannot be rejoined.'
+    }
+    const registered = registerPartyPlayer(privateParties, slot.playerId, slot.partyIdentity)
+    const joined = joinPartyPlayer(
+      registered,
+      slot.playerId,
+      destination.id,
+      availablePartyMembers(destination.id, reservationId, slot.playerId),
+    )
+    if (!joined.accepted) {
+      state = removePlayerCharacter(state, slot.playerId)
+      return partyRejectionMessage(joined.reason)
+    }
+    privateParties = joined.state
+    return null
+  }
+
   function logGameActivity(
     previous: GameSimulationState,
     current: GameSimulationState,
@@ -3445,9 +3813,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     )
     const hubPlayerIds = new Set(sharedWorlds
       ? sharedWorlds.hub.playerEntities.identities.map(({ playerId }) => playerId)
-      : [...clients.values()].map(({ playerId }) => playerId))
+      : [...clients.values()].filter(client => !client.partyRejoinSlot)
+          .map(({ playerId }) => playerId))
     for (const client of clients.values()) {
-      if (client.socket.readyState !== WebSocket.OPEN) continue
+      if (client.socket.readyState !== WebSocket.OPEN || client.partyRejoinSlot) continue
       client.socket.send(encodeGameMessage({
         type: 'server-party-state',
         state: projectPartyState(
@@ -3501,47 +3870,66 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       || activeState.run.phase !== 'active'
       || activeState.run.runId === null
     ) return
-    const memberIds = new Set(
-      activeState.playerEntities.identities.map(({ playerId }) => playerId),
-    )
+    const party = activePartySystem()?.parties.find(candidate => candidate.id === partyId)
+    if (!party) return
+    const memberIds = new Set(activeState.playerEntities.identities.map(({ playerId }) => playerId))
+    let lineage = [...partyRecoveryLineages.values()].find(candidate => (
+      candidate.partyId === partyId && candidate.runId === activeState.run.runId
+    ))
+    if (!lineage) {
+      const content = [...clients.values()].find(client => memberIds.has(client.playerId))?.content
+      if (!content) return
+      lineage = {
+        content,
+        partyId,
+        partyMemberCount: party.memberPlayerIds.length,
+        recoveryId: randomBytes(32).toString('base64url'),
+        runId: activeState.run.runId,
+      }
+      partyRecoveryLineages.set(lineage.recoveryId, lineage)
+    }
     for (const client of clients.values()) {
       if (!memberIds.has(client.playerId) || client.content === null) continue
-      const previousToken = partyRejoinTokensByPlayer.get(client.playerId)
-      const previous = previousToken ? partyRejoinSlots.get(previousToken) : null
-      if (
-        previous
-        && previous.partyId === partyId
-        && previous.runId === activeState.run.runId
-      ) {
+      const key = partyRecoverySlotKey(lineage.recoveryId, client.playerId)
+      const previous = partyRejoinSlots.get(key)
+      if (previous) {
         previous.connected = true
         previous.detachedState = null
         previous.reservation = null
         continue
       }
-      if (previousToken) removePartyRejoinSlot(previousToken)
-      const token = randomBytes(32).toString('base64url')
-      const barrier = activeState.levelUpBarrier
-      partyRejoinSlots.set(token, {
+      partyRejoinSlots.set(key, {
         connected: true,
         content: client.content,
         developerAccess: client.developerAccess,
         detachedState: null,
         globalScoreEligible: client.globalScoreEligible,
         leaderboardUserId: client.leaderboardUserId,
-        latestMilestone: barrier === null ? null : {
-          experience: barrier.milestoneExperience,
-          level: barrier.milestoneLevel,
-        },
         localOnly: client.localOnly,
         partyId,
+        partyIdentity: null,
         playerId: client.playerId,
         profile: client.profile,
+        recoveryId: lineage.recoveryId,
         reservation: null,
         runId: activeState.run.runId,
-        token,
+        token: null,
       })
-      partyRejoinTokensByPlayer.set(client.playerId, token)
     }
+  }
+
+  function registerPartyRecoveryLineage(
+    claim: PartyRecoveryClaim,
+    partyId: string,
+    content: MaterializedWebSessionContent,
+  ): void {
+    partyRecoveryLineages.set(claim.recoveryId, {
+      content,
+      partyId,
+      partyMemberCount: claim.partyMemberCount,
+      recoveryId: claim.recoveryId,
+      runId: claim.runId,
+    })
   }
 
   function detachPartyRejoinClient(
@@ -3549,8 +3937,18 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     activeState: GameSimulationState,
     partyId: string | null,
   ): void {
-    const token = partyRejoinTokensByPlayer.get(client.playerId)
-    const slot = token ? partyRejoinSlots.get(token) : null
+    const staged = client.partyRejoinSlot
+    if (staged) {
+      staged.connected = false
+      staged.reservation = null
+      return
+    }
+    const lineage = [...partyRecoveryLineages.values()].find(candidate => (
+      candidate.partyId === partyId && candidate.runId === activeState.run.runId
+    ))
+    const slot = lineage
+      ? partyRejoinSlots.get(partyRecoverySlotKey(lineage.recoveryId, client.playerId))
+      : null
     if (
       !slot
       || partyId === null
@@ -3559,82 +3957,80 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       || activeState.run.phase !== 'active'
       || activeState.run.runId !== slot.runId
     ) {
-      if (token) removePartyRejoinSlot(token)
       return
     }
     slot.connected = false
     slot.detachedState = detachGameSimulationPlayer(activeState, client.playerId)
     slot.reservation = null
-    recordPartyRejoinMilestone(partyId, activeState)
   }
 
-  function recordPartyRejoinMilestone(
+  function synchronizePartyRejoinMilestones(
     partyId: string | null,
     activeState: GameSimulationState,
-  ): void {
-    const barrier = activeState.levelUpBarrier
+  ): GameSimulationState {
     if (
       partyId === null
-      || barrier === null
       || activeState.run.phase !== 'active'
       || activeState.run.runId === null
-    ) return
-    for (const slot of partyRejoinSlots.values()) {
-      if (slot.partyId !== partyId || slot.runId !== activeState.run.runId) continue
-      if (
-        slot.latestMilestone === null
-        || barrier.milestoneLevel > slot.latestMilestone.level
-        || (
-          barrier.milestoneLevel === slot.latestMilestone.level
-          && barrier.milestoneExperience > slot.latestMilestone.experience
-        )
-      ) {
-        slot.latestMilestone = {
-          experience: barrier.milestoneExperience,
-          level: barrier.milestoneLevel,
-        }
-      }
+    ) return activeState
+    const sourcePlayerId = activeState.playerEntities.identities[0]?.playerId
+    if (!sourcePlayerId) return activeState
+    const milestoneProgression = getPlayerProgression(activeState, sourcePlayerId)
+    let synchronizedState = activeState
+    const slots = [...partyRejoinSlots.values()].filter(slot => (
+      slot.partyId === partyId
+      && slot.runId === activeState.run.runId
+      && slot.detachedState !== null
+    )).sort((first, second) => first.playerId.localeCompare(second.playerId))
+    for (const slot of slots) {
+      const detachedProgression = slot.detachedState!.playerEntities.progressions[0]!
+      if (milestoneProgression.level <= detachedProgression.level) continue
+      const synchronized = synchronizeDetachedGameSimulationPlayer(
+        synchronizedState,
+        slot.detachedState!,
+        {
+          crossedLevels: Object.freeze(Array.from(
+            { length: milestoneProgression.level - detachedProgression.level },
+            (_, index) => detachedProgression.level + index + 1,
+          )),
+          experience: milestoneProgression.experience,
+          level: milestoneProgression.level,
+        },
+      )
+      synchronizedState = synchronized.state
+      slot.detachedState = synchronized.detached
     }
-  }
-
-  function partyRejoinMilestone(slot: PartyRejoinSlot): SharedPlayerLevelMilestone | null {
-    if (slot.detachedState === null || slot.latestMilestone === null) return null
-    const current = slot.detachedState.playerEntities.progressions[0]!
-    if (slot.latestMilestone.level <= current.level) return null
-    return Object.freeze({
-      crossedLevels: Object.freeze(Array.from(
-        { length: slot.latestMilestone.level - current.level },
-        (_, index) => current.level + index + 1,
-      )),
-      experience: slot.latestMilestone.experience,
-      level: slot.latestMilestone.level,
-    })
-  }
-
-  function partyRejoinTokenForPlayer(playerId: PlayerId): string | null {
-    prunePartyRejoinSlots()
-    const token = partyRejoinTokensByPlayer.get(playerId)
-    const slot = token ? partyRejoinSlots.get(token) : null
-    return slot?.connected ? slot.token : null
+    return synchronizedState
   }
 
   function partyRejoinTarget(token: string): GameHostPartyRejoinTarget | null {
     prunePartyRejoinSlots()
-    const slot = partyRejoinSlots.get(token)
-    if (!slot) return null
+    const claim = decodePartyRecoveryClaim(partyRecoverySecret, token)
+    if (!claim) return null
+    const lineage = activePartyRecoveryLineage(claim)
+    if (!lineage) return null
+    const slot = partyRejoinSlots.get(partyRecoverySlotKey(claim.recoveryId, claim.playerId))
+    const staged = slot && [...clients.values()].some(client => client.partyRejoinSlot === slot)
+    const connected = sharedGameStateForRecoveryPlayer(claim.playerId, lineage) !== null
     return {
-      content: slot.content,
-      developerAccess: slot.developerAccess,
-      globalScoreEligible: slot.globalScoreEligible,
-      leaderboardUserId: slot.leaderboardUserId,
-      localOnly: slot.localOnly,
-      partyId: slot.partyId,
-      playerId: slot.playerId,
-      profile: slot.profile,
-      runId: slot.runId,
-      status: slot.connected
-        ? 'connected'
-        : slot.reservation === null ? 'detached' : 'reserved',
+      content: lineage.content,
+      developerAccess: slot?.developerAccess ?? false,
+      globalScoreEligible: slot?.globalScoreEligible ?? claim.globalScoreEligible,
+      leaderboardUserId: slot?.leaderboardUserId ?? claim.leaderboardUserId,
+      localOnly: slot?.localOnly ?? claim.integrity === 'local-only',
+      partyId: lineage.partyId,
+      playerId: claim.playerId,
+      profile: slot?.profile ?? {
+        accountUsername: null,
+        highestWave: null,
+        totalPlaytimeMs: null,
+      },
+      runId: lineage.runId,
+      status: staged
+        ? 'staging'
+        : connected || slot?.connected
+          ? 'connected'
+          : slot?.reservation === null || slot === undefined ? 'detached' : 'reserved',
     }
   }
 
@@ -3644,13 +4040,44 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     expiresAt: number,
   ): GameHostPartyRejoinRejection | null {
     prunePartyRejoinSlots()
-    const slot = partyRejoinSlots.get(token)
-    if (!slot || slot.detachedState === null || activeRunForPartyRejoin(slot) === null) {
-      return 'run-unavailable'
+    const claim = decodePartyRecoveryClaim(partyRecoverySecret, token)
+    if (!claim) return 'run-unavailable'
+    const lineage = activePartyRecoveryLineage(claim)
+    if (!lineage) return 'run-unavailable'
+    const key = partyRecoverySlotKey(claim.recoveryId, claim.playerId)
+    let slot = partyRejoinSlots.get(key)
+    if (sharedGameStateForRecoveryPlayer(claim.playerId, lineage) !== null || slot?.connected) {
+      return 'player-connected'
     }
-    if (slot.connected) return 'player-connected'
-    if (slot.reservation !== null) return 'already-reserved'
-    slot.reservation = { expiresAt, id: reservationId }
+    if (!slot) {
+      slot = {
+        connected: false,
+        content: lineage.content,
+        developerAccess: false,
+        detachedState: null,
+        globalScoreEligible: claim.globalScoreEligible,
+        leaderboardUserId: claim.leaderboardUserId,
+        localOnly: claim.integrity === 'local-only',
+        partyId: lineage.partyId,
+        partyIdentity: null,
+        playerId: claim.playerId,
+        profile: {
+          accountUsername: null,
+          highestWave: null,
+          totalPlaytimeMs: null,
+        },
+        recoveryId: claim.recoveryId,
+        reservation: null,
+        runId: claim.runId,
+        token,
+      }
+      partyRejoinSlots.set(key, slot)
+    }
+    if (!slot) return 'run-unavailable'
+    const reservedSlot = slot
+    if (reservedSlot.reservation !== null) return 'already-reserved'
+    reservedSlot.token = token
+    reservedSlot.reservation = { expiresAt, id: reservationId }
     return null
   }
 
@@ -3660,18 +4087,21 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   ): PartyRejoinSlot | null {
     prunePartyRejoinSlots()
     if (reservationId === null) return null
-    const slot = partyRejoinSlots.get(token)
+    const claim = decodePartyRecoveryClaim(partyRecoverySecret, token)
+    if (!claim) return null
+    const slot = partyRejoinSlots.get(partyRecoverySlotKey(claim.recoveryId, claim.playerId))
     return slot?.reservation?.id === reservationId
       && slot.reservation.expiresAt > performance.now()
       && !slot.connected
-      && slot.detachedState !== null
       && activeRunForPartyRejoin(slot) !== null
       ? slot
       : null
   }
 
   function consumePartyRejoinSlot(slot: PartyRejoinSlot): void {
-    removePartyRejoinSlot(slot.token)
+    slot.connected = true
+    slot.detachedState = null
+    slot.reservation = null
   }
 
   function cancelPartyRejoinReservation(reservationId: string): void {
@@ -3695,10 +4125,67 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       : null
   }
 
+  function activePartyRecoveryLineage(
+    claim: PartyRecoveryClaim,
+  ): PartyRecoveryLineage | null {
+    const lineage = partyRecoveryLineages.get(claim.recoveryId)
+    if (
+      !lineage
+      || lineage.runId !== claim.runId
+      || lineage.partyMemberCount !== claim.partyMemberCount
+      || lineage.content.manifest.manifestSha256 !== claim.contentManifestSha256
+      || sessionKind !== claim.sessionKind
+    ) return null
+    const probe = partyRejoinSlots.get(partyRecoverySlotKey(claim.recoveryId, claim.playerId))
+    const active = probe
+      ? activeRunForPartyRejoin(probe)
+      : sharedWorlds
+        ? sharedWorlds.runs.find(run => (
+            run.partyId === lineage.partyId
+            && run.loadedBoneyard.runId === lineage.runId
+            && run.state.run.phase === 'active'
+          ))?.state ?? null
+        : state.world.kind === 'boneyard'
+          && state.run.phase === 'active'
+          && state.run.runId === lineage.runId
+          ? state
+          : null
+    return active ? lineage : null
+  }
+
+  function sharedGameStateForRecoveryPlayer(
+    playerId: PlayerId,
+    lineage: PartyRecoveryLineage,
+  ): GameSimulationState | null {
+    const active = sharedWorlds
+      ? sharedGameStateForPlayer(sharedWorlds, playerId)
+      : state.playerEntities.identities.some(({ playerId: id }) => id === playerId) ? state : null
+    return active?.run.runId === lineage.runId ? active : null
+  }
+
   function prunePartyRejoinSlots(now = performance.now()): void {
-    for (const slot of [...partyRejoinSlots.values()]) {
+    for (const [recoveryId, lineage] of [...partyRecoveryLineages]) {
+      const claimProbe: PartyRecoveryClaim = {
+        contentManifestSha256: lineage.content.manifest.manifestSha256,
+        globalScoreEligible: false,
+        integrity: sessionKind === 'global-hub' ? 'global-clean' : 'local-only',
+        leaderboardUserId: null,
+        partyMemberCount: lineage.partyMemberCount,
+        playerId: '__probe__',
+        recoveryId,
+        runId: lineage.runId,
+        sessionKind,
+        targetRevision: null,
+      }
+      if (activePartyRecoveryLineage(claimProbe)) continue
+      partyRecoveryLineages.delete(recoveryId)
+      for (const [key, slot] of [...partyRejoinSlots]) {
+        if (slot.recoveryId === recoveryId) partyRejoinSlots.delete(key)
+      }
+    }
+    for (const [key, slot] of [...partyRejoinSlots]) {
       if (activeRunForPartyRejoin(slot) === null) {
-        removePartyRejoinSlot(slot.token)
+        partyRejoinSlots.delete(key)
         continue
       }
       if (slot.reservation !== null && slot.reservation.expiresAt <= now) {
@@ -3707,18 +4194,24 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     }
   }
 
-  function removePartyRejoinSlot(token: string): void {
-    const slot = partyRejoinSlots.get(token)
-    if (!slot) return
-    partyRejoinSlots.delete(token)
-    if (partyRejoinTokensByPlayer.get(slot.playerId) === token) {
-      partyRejoinTokensByPlayer.delete(slot.playerId)
-    }
-  }
-
   function detachedPartyRejoinCount(): number {
     prunePartyRejoinSlots()
-    return [...partyRejoinSlots.values()].filter(slot => !slot.connected).length
+    let count = [...partyRejoinSlots.values()].filter(slot => !slot.connected).length
+    for (const lineage of partyRecoveryLineages.values()) {
+      const known = new Set([
+        ...(activePartySystem()?.parties.find(({ id }) => id === lineage.partyId)
+          ?.memberPlayerIds ?? []),
+        ...[...partyRejoinSlots.values()].filter(slot => (
+          slot.recoveryId === lineage.recoveryId
+        )).map(slot => slot.playerId),
+      ])
+      count += Math.max(0, lineage.partyMemberCount - known.size)
+    }
+    return count
+  }
+
+  function partyRecoverySlotKey(recoveryId: string, playerId: PlayerId): string {
+    return `${recoveryId}\0${playerId}`
   }
 
   function partyTarget(partyId: string): GameHostPartyTarget | null {
@@ -3934,11 +4427,20 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     excludedPlayerId: string | null,
   ): number {
     prunePartyRejoinSlots()
-    return [...partyRejoinSlots.values()].filter(slot => (
+    const slots = [...partyRejoinSlots.values()].filter(slot => slot.partyId === partyId)
+    const detached = slots.filter(slot => (
       !slot.connected
-      && slot.partyId === partyId
       && slot.playerId !== excludedPlayerId
     )).length
+    const lineage = [...partyRecoveryLineages.values()].find(candidate => (
+      candidate.partyId === partyId
+    ))
+    if (!lineage) return detached
+    const known = new Set([
+      ...(activePartySystem()?.parties.find(({ id }) => id === partyId)?.memberPlayerIds ?? []),
+      ...slots.map(slot => slot.playerId),
+    ])
+    return detached + Math.max(0, lineage.partyMemberCount - known.size)
   }
 
   function consumePartyReservation(reservationId: string | null): void {
@@ -4021,6 +4523,8 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     const playerState = stateForPlayer(playerId)
     for (const client of clients.values()) {
       if (
+        !client.partyRejoinSlot
+        &&
         client.socket.readyState === WebSocket.OPEN
         && stateForPlayer(client.playerId) === playerState
       ) client.socket.send(encodeGameMessage(message))
@@ -4034,13 +4538,13 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     if (channel === 'global') {
       if (!sharedWorlds || stateForPlayer(sender.playerId).world.kind !== 'hub') return null
       return [...clients.values()].filter(client => (
-        stateForPlayer(client.playerId).world.kind === 'hub'
+        !client.partyRejoinSlot && stateForPlayer(client.playerId).world.kind === 'hub'
       ))
     }
     if (!sharedWorlds) {
       const senderState = stateForPlayer(sender.playerId)
       return [...clients.values()].filter(client => (
-        stateForPlayer(client.playerId) === senderState
+        !client.partyRejoinSlot && stateForPlayer(client.playerId) === senderState
       ))
     }
     const party = partyForPlayer(sharedWorlds.parties, sender.playerId)
@@ -4463,6 +4967,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         'deployment-restart',
         true,
         true,
+        targetRevision,
       )
       restart.checkpointSequences.set(socket, checkpointSequence)
       socket.send(encodeGameMessage({
@@ -4553,6 +5058,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     }
     const playerState = stateForPlayer(playerId)
     for (const client of clients.values()) {
+      if (client.partyRejoinSlot) continue
       if (stateForPlayer(client.playerId) !== playerState) continue
       client.activeInput = createIdlePlayerCharacterInput()
       client.queuedInputs.clear()
@@ -4596,6 +5102,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     if (!playerState || playerState.world.kind === 'hub') return null
     const partyId = partyForPlayer(sharedWorlds.parties, playerId)?.id
     return partyId ? { partyId } : null
+  }
+
+  function sharedGameplayPauseScopeForParty(partyId: string): SharedGameplayPauseScope | null {
+    return sharedWorlds?.runs.some(run => run.partyId === partyId) ? { partyId } : null
   }
 
   function setGameplayPauseForPlayer(
@@ -4677,6 +5187,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   }
 
   function taintActiveRun(client: HostClient): void {
+    if (client.partyRejoinSlot) return
     const activeState = stateForPlayer(client.playerId)
     if (activeState.world.kind === 'boneyard') {
       leaderboardIneligibleRunIds.add(activeState.world.runId)
@@ -5116,7 +5627,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         : null,
     presence: () => projectHostPresence(
       [
-        ...[...clients.values()].map(client => ({
+        ...[...clients.values()].filter(client => !client.partyRejoinSlot).map(client => ({
           accountUsername: client.profile.accountUsername,
           bot: false,
           developer: client.developerAccess,
@@ -5443,6 +5954,7 @@ function authenticate(
           developerAccess: false,
           leaderboardUserId: authentication.leaderboardUserId ?? null,
           partyId: null,
+          partyRecoverySeed: false,
           partyRejoinToken: null,
           reservationId: null,
           observer: null,
@@ -5455,12 +5967,14 @@ function authenticate(
     return claimed
       && validLeaderboardUserId(claimed.leaderboardUserId)
       && validObserverAdmission(claimed.observer)
+      && (claimed.partyRecoverySeed === undefined || typeof claimed.partyRecoverySeed === 'boolean')
       && validPartyRejoinToken(claimed.partyRejoinToken)
       ? {
       content: claimed.content,
       developerAccess: claimed.developerAccess === true,
       leaderboardUserId: claimed.leaderboardUserId,
       partyId: claimed.partyId ?? null,
+      partyRecoverySeed: claimed.partyRecoverySeed === true,
       partyRejoinToken: claimed.partyRejoinToken ?? null,
       reservationId: claimed.reservationId ?? null,
       observer: claimed.observer ?? null,
@@ -5471,7 +5985,12 @@ function authenticate(
 }
 
 function validPartyRejoinToken(value: string | undefined): boolean {
-  return value === undefined || /^[A-Za-z0-9_-]{43}$/.test(value)
+  return value === undefined
+    || /^[A-Za-z0-9_-]{43}$/.test(value)
+    || (
+      value.length <= 2_048
+      && /^sdrpr1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/.test(value)
+    )
 }
 
 function validObserverAdmission(value: GameHostObserverAdmission | undefined): boolean {

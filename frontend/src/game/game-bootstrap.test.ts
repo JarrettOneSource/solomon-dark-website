@@ -109,6 +109,7 @@ test('Last Game claims an active-party slot before ordinary admission and falls 
     fallback: 'global-hub',
     kind: 'resume',
     partyRejoinToken: 'R'.repeat(43),
+    saveDocument: '{"saved":"owner"}',
   }, 'account-token', async (input) => {
     requests.push(String(input))
     if (input === '/api/game/rejoin') {
@@ -131,6 +132,7 @@ test('Last Game claims an active-party slot before ordinary admission and falls 
       fallback: 'private-college',
       kind: 'resume',
       partyRejoinToken: 'S'.repeat(43),
+      saveDocument: '{"saved":"owner"}',
     }, null, async (input) => {
       assert.equal(input, '/api/game/rejoin')
       return new Response(JSON.stringify({ error: 'That rejoin is already being claimed.' }), {
@@ -143,10 +145,11 @@ test('Last Game claims an active-party slot before ordinary admission and falls 
 
 test('active-party admission is authenticated and carries only the opaque saved capability', async () => {
   const token = 'T'.repeat(43)
-  const endpoint = await admitPartyRejoin(token, 'account-token', async (input, init) => {
+  const save = '{"saved":"owner"}'
+  const endpoint = await admitPartyRejoin(token, save, 'account-token', async (input, init) => {
     assert.equal(input, '/api/game/rejoin')
     assert.equal(new Headers(init?.headers).get('authorization'), 'Bearer account-token')
-    assert.deepEqual(JSON.parse(String(init?.body)), { token })
+    assert.deepEqual(JSON.parse(String(init?.body)), { save, token })
     return new Response(JSON.stringify({
       credential: 'active-party-ticket',
       kind: 'remote',

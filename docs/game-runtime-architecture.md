@@ -178,6 +178,10 @@ Current protocol 75 adds the participant-private ten-row native Hub help state
 and the bounded Provokatus/Fomentius/Luthacus acknowledgement action. Save
 schema 11 persists those rows; schemas 1..10 migrate them as already
 acknowledged, while a genuinely fresh profile starts with all ten rows set.
+Protocol 76 adds the client-private `materializingPlayerIds` projection used by
+detached party-rejoin catch-up. Save schema 12 expands the nullable rejoin value
+to a bounded HMAC-signed recovery claim; schemas 1..11 retain their strict
+legacy parsing and are not restart-seedable.
 The host applies
 either skill selection only to the authenticated
 participant before publishing a new progression revision.
@@ -230,17 +234,24 @@ from its world and live party membership. When another member keeps that
 Boneyard active, the host retains one bounded run/player capability plus an
 owner-only durable-state projection; it does not keep ticking a ghost actor.
 `LAST GAME` claims that exact slot before ordinary save restore. The returning
-actor materializes at the authored Boneyard spawn with transient input, casts,
-projectiles, and modifiers cleared. Any authoritative level milestones missed
-while detached become ordered actor-private offers under the existing whole-run
-level barrier. If the run is terminal, empty, or lost with the supervisor, the
-capability is invalid and ordinary owner-save resume remains the fallback. An
+actor remains detached while any pending or missed actor-private offers are
+resolved. Its staging client receives the current live world plus private
+progression and a materializing marker, but no live actor, party member,
+collision, input, target, or effect exists. The existing run continues unless
+its materialized participants own an independent barrier/pause; further shared
+levels append to the detached sequence. The final choice atomically imports at
+the authored Boneyard spawn with transient input, casts, projectiles, and
+modifiers cleared. If the run is terminal or empty, the capability is invalid
+and ordinary owner-save resume remains the fallback. An
 empty run retires independently, and an empty shared Hub remains ready for the
 next ticket. Health reports active players, parties, runs, and
 deployment-drain state. A validated release closes admissions, freezes
 authoritative hosts, requests one final owner checkpoint from every connected
 browser player, and only then disconnects occupied sessions for cutover; an
-empty resident Hub is not an occupied session.
+empty resident Hub is not an occupied session. That final checkpoint is sealed
+for the announced target revision. After replacement, the first valid former
+member reconstructs the exact run and becomes current leader; later former
+members converge on the same recovery identity regardless of old leadership.
 
 The shared Hub also owns the session-global conditional-NPC clock. Skorcha's
 host fixed-tick schedule alternates visible/absent windows independently of
@@ -410,17 +421,20 @@ dependencies without revisiting this release invariant.
   only their own element/discipline pair, and the final confirmation merges the
   same party and player entities into shared Hub. No private post-run Hub or
   host-selected guest loadout may remain resident.
-- Active-run rejoin is a materialization edge inside `active`, not a second run
-  start and not browser-save authority. The host validates the saved player,
-  character, sealed content, party, run nonce, and one-use reservation; imports
-  the detached actor-owned economy/progression/books/Hall row; allocates fresh
-  world identity/light bindings; and preserves the current live world. Missed
-  shared milestones add exactly one pending choice per crossed level. A new or
-  reconstructed `levelUpBarrier` freezes only that run until every pending
-  participant resolves; a second disconnect removes the waiter and releases
-  peers, while the still-active rejoin slot retains its unresolved choices.
-  No elapsed disconnect time becomes simulation catch-up. New Party-ID/public/
-  invite-only members remain excluded from an active run.
+- Active-run rejoin is a delayed materialization edge inside `active`, not a
+  second run start and not browser-save authority. The host validates the saved
+  player, character, sealed content, recovery/run identity, and one-use
+  reservation. A live host uses its retained detached actor; only a replacement
+  supervisor may use the old host's revision-bound, exact-document-sealed owner
+  actor/world checkpoint to seed the lost authority. Missed shared milestones
+  add exactly one pending choice per crossed level to the detached actor and
+  consume the live RNG at their ordinary event/action edges without mutating
+  the live barrier. Further milestones stack while the picker is open. When no
+  pending choice remains, one cold import adds economy/progression/books/Hall
+  row, allocates fresh world identity/light bindings, and preserves the current
+  world. A second disconnect retains the unresolved detached sequence without
+  holding peers. No elapsed disconnect time becomes simulation catch-up. New
+  Party-ID/public/invite-only members remain excluded from an active run.
 - Player-character movement uses a two-phase shared kernel: first plan native
   intent/velocity, then let the active world resolve collision, then commit the
   resolved position plus native heading/gait state. Hub and Boneyard geometry
@@ -644,7 +658,7 @@ RNG order, before publishing the next progression revision.
 ## Saves, identity, and content
 
 - The authoritative game host is the only producer of browser-save contents.
-  Schema 11 is one atomic envelope with a durable participant profile (economy,
+  Schema 12 is one atomic envelope with a durable participant profile (economy,
   Hagatha one-shot runtime, and NPC service state) and a nullable current-wizard
   continuation.
   The continuation summary explicitly says whether an active Boneyard run
@@ -658,7 +672,10 @@ RNG order, before publishing the next progression revision.
   with neither owner. Schema 10 adds the active-party rejoin capability;
   schemas 1 through 9 migrate it as absent. Schema 11 additionally persists
   the ten native NPC help rows; schemas 1 through 10 migrate an absent table as
-  already acknowledged.
+  already acknowledged. Schema 12 permits a signed recovery claim whose
+  normalized owner-document digest, run/player/content/provenance, and optional
+  deployment target are verified by supervisor and host; schemas 1 through 11
+  cannot seed a replacement process.
   Browser code transports the document and may invalidate a
   strictly decoded continuation, but never derives profile state from a
   rendered snapshot.
@@ -778,10 +795,13 @@ an accepted ordinary-host authoritative Lua console request revokes it
 independently. A server-authenticated developer connection is exempt from both
 cheat-origin taints, including developer-only bot and player-grant commands. Any
 ineligible member taints the current party run for every participant. A
-host-authenticated active-run rejoin restores the detached connection's
+  host-authenticated active-run rejoin restores the detached connection's
 eligibility record instead of treating its editable checkpoint as a new saved
-lineage; the run's independent taint remains authoritative. Local Hall history
-remains available. Save schema 11 carries durable `global-clean` or
+lineage. A replacement-process recovery may do the same only after the stable
+secret verifies the exact normalized document and target deployment revision;
+the original run ID keeps Hall submission idempotent. The run's independent
+taint remains authoritative. Local Hall history remains available. Save schema
+12 carries durable `global-clean` or
 `local-only` integrity, explicit active-run state, and the nullable active-party
 rejoin capability; schemas 1 through 3
 migrate conservatively to `local-only`, schema 4 preserves its authored
@@ -789,7 +809,8 @@ integrity, schema 5 migrates its prior envelope, and schemas 6 through 9 preserv
 their authored integrity and active-run summary. Schema 9 additionally retains
 Tutorial camera-lock age independently from its cleanup countdown. Schemas 1
 through 9 carry no live rejoin capability. Schema 10 adds that capability;
-schema 11 adds the native NPC help rows. Each participant receives an
+schema 11 adds the native NPC help rows; schema 12 upgrades the capability to a
+revision-bound signed claim. Each participant receives an
 authoritative profile/continuation checkpoint, and Game Over removes only that
 participant's current-wizard continuation.
 

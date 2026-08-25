@@ -652,6 +652,7 @@ async function startSupervisor() {
         SDR_GAME_ALLOWED_ORIGINS: baseUrl,
         SDR_GAME_LOG_LEVEL: 'warning',
         SDR_GAME_ML_BOT_CHECKPOINT: 'server-assets/ml-bot-policy-v7-selected.sdml',
+        SDR_GAME_REVISION: currentRevision,
         SDR_GAME_SUPERVISOR_HOST: '127.0.0.1',
         SDR_GAME_SUPERVISOR_PORT: '0',
         SDR_GAME_SUPERVISOR_SECRET: adminSecret,

@@ -54,6 +54,7 @@ export function createGameSnapshot(
       return {
         hostPlayerId,
         levelUpBarrier: state.levelUpBarrier,
+        materializingPlayerIds: [],
         modEffects: state.modEffects,
         players,
         primarySpells: state.primarySpells,
@@ -90,6 +91,7 @@ export function createGameSnapshot(
       return {
         hostPlayerId,
         levelUpBarrier: state.levelUpBarrier,
+        materializingPlayerIds: [],
         modEffects: state.modEffects,
         players,
         primarySpells: state.primarySpells,

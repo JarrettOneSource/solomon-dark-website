@@ -376,13 +376,24 @@ public static class GameSessionEndpoints
         RejoinPartyRequest request,
         HttpContext context,
         GameSessionProvisioner provisioner,
+        DeveloperAccessPolicy developerAccess,
+        WebModContentService contentService,
         CancellationToken cancellationToken)
     {
         context.Response.Headers.CacheControl = "no-store";
         try
         {
+            var userId = TokenService.GetUserId(context.User);
+            var content = await contentService.ResolveAsync(
+                userId,
+                recordDownloads: false,
+                cancellationToken: cancellationToken);
             var endpoint = await provisioner.RejoinPartyAsync(
                 request.Token ?? string.Empty,
+                request.Save ?? string.Empty,
+                content,
+                userId,
+                developerAccess.Allows(userId),
                 cancellationToken);
             return Results.Created("/api/game/rejoin", new
             {
@@ -395,6 +406,10 @@ public static class GameSessionEndpoints
         catch (GamePartyJoinException exception)
         {
             return PartyError(exception);
+        }
+        catch (WebModContentException exception)
+        {
+            return Results.Conflict(new { error = exception.Message });
         }
         catch (Exception exception) when (exception is
             GameSessionUnavailableException or HttpRequestException or OperationCanceledException)
@@ -461,6 +476,6 @@ public static class GameSessionEndpoints
         string? DisplayName,
         string? RequesterId);
     public sealed record AdmitPartyJoinRequest(string? IntentId);
-    public sealed record RejoinPartyRequest(string? Token);
+    public sealed record RejoinPartyRequest(string? Token, string? Save);
     public sealed record ObserveMatchRequest(string? MatchId);
 }

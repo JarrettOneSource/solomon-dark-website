@@ -73,6 +73,7 @@ import type {
   BoneyardEnemySnapshot,
   BoneyardEnemyEventSnapshot,
   BoneyardSolomonSnapshot,
+  ProtocolPlayerState,
 } from '../protocol/game-state.ts'
 import { PlayerWorldView } from './hub-actors.ts'
 import { boneyardSolomonVisualState } from './boneyard-solomon-render.ts'
@@ -1007,8 +1008,9 @@ export async function createBoneyardWorldRenderer(
         position: { x: world.position.x, y: world.position.y },
         scale: worldTransform.scale,
       }
+      const visiblePlayers = visibleBoneyardPlayers(snapshot)
       worldNameplates.update(
-        snapshot.players,
+        visiblePlayers,
         options.playerId,
         (point) => projectNativeWorldPoint(
           point,
@@ -1019,7 +1021,7 @@ export async function createBoneyardWorldRenderer(
       )
       const worldSpeechDiagnostics = worldSpeech.update(
         worldSpeeches,
-        snapshot.players,
+        visiblePlayers,
         frameAt,
         (point) => projectNativeWorldPoint(point, worldScreenTransform, viewport),
         { renderable: true },
@@ -1549,7 +1551,9 @@ class BoneyardDynamicScene {
     const enemySnapshots = nativeEnemySnapshots(snapshot)
     const livePlayerIds = this.livePlayerIds
     livePlayerIds.clear()
+    const materializingPlayerIds = new Set(snapshot.materializingPlayerIds)
     for (const playerId in snapshot.players) {
+      if (materializingPlayerIds.has(playerId)) continue
       const player = snapshot.players[playerId]
       livePlayerIds.add(playerId)
       let view = this.players.get(playerId)
@@ -1656,6 +1660,7 @@ class BoneyardDynamicScene {
     lightSourceCandidates.length = 0
     let localPlayerLight: NativeBoneyardLightSource | null = null
     for (const playerId in snapshot.players) {
+      if (materializingPlayerIds.has(playerId)) continue
       const player = snapshot.players[playerId]
       const playerLight = nativePlayerLightSource({
         ...player,
@@ -2187,6 +2192,7 @@ class BoneyardDynamicScene {
     dynamicLayers.length = 0
     const enemyAuxiliaryPainterLayers = this.enemies.painterLayers()
     for (const playerId in snapshot.players) {
+      if (materializingPlayerIds.has(playerId)) continue
       const player = snapshot.players[playerId]
       dynamicLayers.push({
         id: `player:${playerId}`,
@@ -3569,6 +3575,16 @@ function requiredTexture(textures: BoneyardWorldTextures, ref: SpriteRef): Textu
 
 function nativeEnemySnapshots(snapshot: GameSnapshot): readonly BoneyardEnemySnapshot[] {
   return snapshot.world.kind === 'boneyard' ? snapshot.world.enemies : []
+}
+
+function visibleBoneyardPlayers(
+  snapshot: GameSnapshot,
+): Readonly<Record<string, ProtocolPlayerState>> {
+  if (snapshot.materializingPlayerIds.length === 0) return snapshot.players
+  const materializing = new Set(snapshot.materializingPlayerIds)
+  return Object.fromEntries(Object.entries(snapshot.players).filter(([playerId]) => (
+    !materializing.has(playerId)
+  )))
 }
 
 function requiredLightRegistration(

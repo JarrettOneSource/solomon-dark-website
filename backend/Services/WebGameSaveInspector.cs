@@ -8,8 +8,8 @@ public sealed record WebGameSaveInspection(int FormatVersion, long Size, string 
 
 public static class WebGameSaveInspector
 {
-    public const int FormatVersion = 11;
-    private static readonly int[] LegacyFormatVersions = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    public const int FormatVersion = 12;
+    private static readonly int[] LegacyFormatVersions = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
     public const int MaxDocumentBytes = 8 * 1024 * 1024;
     private const int MaxNodes = 250_000;
 
@@ -90,7 +90,8 @@ public static class WebGameSaveInspector
                         continuation.GetProperty("simulation"),
                         continuation.GetProperty("loadedBoneyard"),
                         version >= 6,
-                        version >= 10);
+                        version >= 10,
+                        version >= 12);
                 }
                 else if (continuation.ValueKind != JsonValueKind.Null)
                 {
@@ -117,6 +118,7 @@ public static class WebGameSaveInspector
                     root.GetProperty("simulation"),
                     root.GetProperty("loadedBoneyard"),
                     false,
+                    false,
                     false);
             }
             if (CountNodes(root, 0) > MaxNodes)
@@ -136,7 +138,8 @@ public static class WebGameSaveInspector
         JsonElement simulation,
         JsonElement loadedBoneyard,
         bool includesActiveRun,
-        bool includesPartyRejoin)
+        bool includesPartyRejoin,
+        bool signedPartyRejoin)
     {
         var summary = RequireObject(summaryValue, "browser game save summary");
         RequireExactProperties(
@@ -157,7 +160,7 @@ public static class WebGameSaveInspector
             var token = summary.GetProperty("partyRejoinToken");
             if (token.ValueKind != JsonValueKind.Null &&
                 (token.ValueKind != JsonValueKind.String ||
-                 !IsPartyRejoinToken(token.GetString())))
+                 !IsPartyRejoinToken(token.GetString(), signedPartyRejoin)))
             {
                 throw new InvalidDataException("The browser game save party rejoin token is invalid.");
             }
@@ -194,12 +197,28 @@ public static class WebGameSaveInspector
         }
     }
 
-    private static bool IsPartyRejoinToken(string? value) =>
-        value is { Length: 43 } && value.All(character =>
-            character is >= 'A' and <= 'Z' or
-            >= 'a' and <= 'z' or
-            >= '0' and <= '9' or
-            '_' or '-');
+    private static bool IsPartyRejoinToken(string? value, bool signed)
+    {
+        if (value is null) return false;
+        if (!signed)
+        {
+            return value is { Length: 43 } && value.All(IsBase64UrlCharacter);
+        }
+        var parts = value.Split('.');
+        return value.Length <= 2_048 &&
+            parts.Length == 3 &&
+            parts[0] == "sdrpr1" &&
+            parts[1].Length > 0 &&
+            parts[2].Length == 43 &&
+            parts[1].All(IsBase64UrlCharacter) &&
+            parts[2].All(IsBase64UrlCharacter);
+    }
+
+    private static bool IsBase64UrlCharacter(char character) =>
+        character is >= 'A' and <= 'Z' or
+        >= 'a' and <= 'z' or
+        >= '0' and <= '9' or
+        '_' or '-';
 
     private static JsonElement RequireObject(JsonElement value, string field)
     {

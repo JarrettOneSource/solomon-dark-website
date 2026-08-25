@@ -188,6 +188,8 @@ class ValidationContractTests(unittest.TestCase):
             "GameHost/ml-bot-policy-v7-selected.sdml",
             nfo_readme,
         )
+        self.assertIn("SDR_GAME_REVISION=<deployed 40-character Git revision>", nfo_readme)
+        self.assertIn('"SDR_GAME_REVISION=$target_sha"', deploy)
         self.assertNotIn("ml-bot-policy-v5-selected.sdml", nfo_readme)
 
 

@@ -45,6 +45,7 @@ const supervisor = spawn(process.execPath, [supervisorEntry], {
     SDR_GAME_ALLOWED_ORIGINS: baseUrl,
     SDR_GAME_LOG_LEVEL: 'warning',
     SDR_GAME_ML_BOT_CHECKPOINT: checkpointPath,
+    SDR_GAME_REVISION: 'd'.repeat(40),
     SDR_GAME_SUPERVISOR_HOST: '127.0.0.1',
     SDR_GAME_SUPERVISOR_PORT: '0',
     SDR_GAME_SUPERVISOR_SECRET: adminSecret,
