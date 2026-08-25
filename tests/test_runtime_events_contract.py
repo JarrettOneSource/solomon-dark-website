@@ -17,6 +17,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
+def parse_sqlite_datetime(value: str) -> datetime:
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return datetime.strptime(value, "%Y-%m-%d %H:%M:%S.%f")
+
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -180,8 +187,8 @@ class RuntimeEventContractTests(unittest.TestCase):
         game_details = json.loads(rows[0][5])
         self.assertEqual(game_details["playerCount"], 1)
         self.assertEqual(game_details["runId"], "run-contract")
-        occurred_at = datetime.fromisoformat(rows[0][6]).replace(tzinfo=timezone.utc)
-        expires_at = datetime.fromisoformat(rows[0][7]).replace(tzinfo=timezone.utc)
+        occurred_at = parse_sqlite_datetime(rows[0][6]).replace(tzinfo=timezone.utc)
+        expires_at = parse_sqlite_datetime(rows[0][7]).replace(tzinfo=timezone.utc)
         self.assertAlmostEqual((expires_at - occurred_at).total_seconds(), 30 * 60, delta=1)
 
         self.stop_server()
