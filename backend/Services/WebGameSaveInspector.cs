@@ -205,9 +205,9 @@ public static class WebGameSaveInspector
             return value is { Length: 43 } && value.All(IsBase64UrlCharacter);
         }
         var parts = value.Split('.');
-        return value.Length <= 2_048 &&
+        return value.Length <= 8_192 &&
             parts.Length == 3 &&
-            parts[0] == "sdrpr1" &&
+            parts[0] is "sdrpr1" or "sdrpr2" &&
             parts[1].Length > 0 &&
             parts[2].Length == 43 &&
             parts[1].All(IsBase64UrlCharacter) &&

@@ -134,6 +134,26 @@ test('party recovery claim seals the exact owner checkpoint and deployment targe
     integrity: 'global-clean' as const,
     leaderboardUserId: 42,
     partyMemberCount: 2,
+    partyLeaderPlayerId: 'leader-player',
+    partyRoster: [
+      {
+        currentHealth: 50,
+        displayName: 'Leader',
+        element: 'ether' as const,
+        lifeState: 'alive' as const,
+        maximumHealth: 50,
+        playerId: 'leader-player',
+      },
+      {
+        currentHealth: 37,
+        displayName: SECOND_CHARACTER.displayName,
+        element: SECOND_CHARACTER.element,
+        lifeState: 'alive' as const,
+        maximumHealth: 50,
+        playerId,
+      },
+    ],
+    partyVisibility: 'invite-only' as const,
     playerId,
     recoveryId: 'R'.repeat(43),
     runId: loaded.runId,
@@ -149,7 +169,7 @@ test('party recovery claim seals the exact owner checkpoint and deployment targe
   final.continuation.summary.partyRejoinToken = token
   const finalDocument = JSON.stringify(final)
 
-  assert.match(token, /^sdrpr1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/)
+  assert.match(token, /^sdrpr2\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/)
   assert.deepEqual(
     verifyPartyRecoveryClaim(LEADERBOARD_RECEIPT_SECRET, token, finalDocument),
     claimInput,
@@ -2652,11 +2672,29 @@ test('saved party member catches up detached while the live party run continues'
     continuation: { summary: { partyRejoinToken: string; playerId: string } }
   }
   const token = saved.continuation.summary.partyRejoinToken
-  assert.match(token, /^sdrpr1\./)
+  assert.match(token, /^sdrpr2\./)
   assert.equal(saved.continuation.summary.playerId, member.welcome.playerId)
 
+  const retainedPartyState = nextMessage(leader.socket, message => (
+    message.type === 'server-party-state'
+    && message.state.partyRoster.some(row => (
+      row.playerId === member.welcome.playerId && !row.connected
+    ))
+  ))
   await closeSocket(member.socket)
   await waitFor(() => host.humanPlayerCount() === 1)
+  const retainedParty = await retainedPartyState
+  assert.equal(retainedParty.type, 'server-party-state')
+  assert.equal(retainedParty.state.party.leaderPlayerId, leader.welcome.playerId)
+  assert.deepEqual(retainedParty.state.party.memberPlayerIds, [
+    leader.welcome.playerId,
+    member.welcome.playerId,
+  ])
+  assert.equal(
+    retainedParty.state.partyRoster.find(row => row.playerId === member.welcome.playerId)
+      ?.displayName,
+    SECOND_CHARACTER.displayName,
+  )
   assert.equal(host.playerCount(), 2, 'the detached wizard keeps one capacity slot')
   assert.equal(host.partyRejoinTarget(token)?.status, 'detached')
 
@@ -2771,7 +2809,7 @@ test('saved party member catches up detached while the live party run continues'
   const rotated = await rotatedCheckpoint
   assert.equal(rotated.type, 'server-save-checkpoint')
   const rotatedToken = JSON.parse(rotated.save).continuation.summary.partyRejoinToken
-  assert.match(rotatedToken, /^sdrpr1\./)
+  assert.match(rotatedToken, /^sdrpr2\./)
   assert.notEqual(rotatedToken, token)
   assert.equal(host.partyRejoinTarget(token)?.status, 'connected')
 })

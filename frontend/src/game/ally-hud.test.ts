@@ -7,6 +7,7 @@ import { createGameSnapshot } from './host/game-snapshot.ts'
 import type { ProtocolPlayerState } from './protocol/game-state.ts'
 import {
   allyHudAccessibleName,
+  allyHudAccessibleStatus,
   allyHudRowsEqual,
   clampAllyHudHealthRatio,
   combineAllyHudRows,
@@ -58,7 +59,7 @@ test('ally HUD derives remote health from authoritative player progression', () 
   assert.equal(rows[0]?.healthRatio, 0.25)
 })
 
-test('ally HUD removes nonlocal participants once native alive-only eligibility ends', () => {
+test('ally HUD retains dead party players with a red-tint state', () => {
   const remote = player('Remote')
   remote.progression = {
     ...remote.progression,
@@ -66,7 +67,54 @@ test('ally HUD removes nonlocal participants once native alive-only eligibility 
     lifeState: 'dying',
   }
 
-  assert.deepEqual(derivePlayerAllyHudRows({ local: player('Local'), remote }, 'local'), [])
+  assert.deepEqual(derivePlayerAllyHudRows({ local: player('Local'), remote }, 'local'), [{
+    connected: true,
+    dead: true,
+    healthRatio: 0,
+    id: 'remote',
+    identity: { kind: 'player', displayName: 'Remote', element: 'ether' },
+  }])
+})
+
+test('ally HUD retains disconnected members and composes disconnect with death', () => {
+  const local = player('Local')
+  const rows = derivePlayerAllyHudRows({ local }, 'local', [
+    {
+      connected: false,
+      currentHealth: 25,
+      displayName: 'Disconnected',
+      element: 'water',
+      lifeState: 'alive',
+      maximumHealth: 50,
+      playerId: 'offline-alive',
+    },
+    {
+      connected: false,
+      currentHealth: 0,
+      displayName: 'Fallen',
+      element: 'fire',
+      lifeState: 'spectating',
+      maximumHealth: 75,
+      playerId: 'offline-dead',
+    },
+  ])
+
+  assert.deepEqual(rows, [
+    {
+      connected: false,
+      dead: false,
+      healthRatio: 0.5,
+      id: 'offline-alive',
+      identity: { kind: 'player', displayName: 'Disconnected', element: 'water' },
+    },
+    {
+      connected: false,
+      dead: true,
+      healthRatio: 0,
+      id: 'offline-dead',
+      identity: { kind: 'player', displayName: 'Fallen', element: 'fire' },
+    },
+  ])
 })
 
 test('ally HUD derives exact nonlocal party identities in stable player order', () => {
@@ -78,11 +126,15 @@ test('ally HUD derives exact nonlocal party identities in stable player order', 
 
   assert.deepEqual(rows, [
     {
+      connected: true,
+      dead: false,
       healthRatio: 1,
       id: 'player-1',
       identity: { kind: 'player', displayName: 'Helvidius', element: 'ether' },
     },
     {
+      connected: true,
+      dead: false,
       healthRatio: 1,
       id: 'player-3',
       identity: { kind: 'player', displayName: 'Vibia', element: 'ether' },
@@ -91,11 +143,32 @@ test('ally HUD derives exact nonlocal party identities in stable player order', 
 })
 
 test('ally HUD excludes visible shared-Hub residents outside the local party', () => {
+  const local = player('Local')
+  const party = player('Party Member')
   const rows = derivePlayerAllyHudRows({
-    local: player('Local'),
-    party: player('Party Member'),
+    local,
+    party,
     stranger: player('Hub Stranger'),
-  }, 'local', ['local', 'party'])
+  }, 'local', [
+    {
+      connected: true,
+      currentHealth: local.progression.currentHealth,
+      displayName: local.config.displayName,
+      element: local.config.element,
+      lifeState: local.progression.lifeState,
+      maximumHealth: local.progression.maximumHealth,
+      playerId: 'local',
+    },
+    {
+      connected: true,
+      currentHealth: party.progression.currentHealth,
+      displayName: party.config.displayName,
+      element: party.config.element,
+      lifeState: party.progression.lifeState,
+      maximumHealth: party.progression.maximumHealth,
+      playerId: 'party',
+    },
+  ])
 
   assert.deepEqual(rows.map(({ id }) => id), ['party'])
 })
@@ -106,6 +179,8 @@ test('ally HUD appends the explicit stock Golem presentation through the shared 
     remote: player('Remote'),
   }, 'local')
   const golem: AllyHudRow = {
+    connected: true,
+    dead: false,
     healthRatio: 0.375,
     id: 'golem-7',
     identity: { kind: 'golem' },
@@ -117,6 +192,13 @@ test('ally HUD appends the explicit stock Golem presentation through the shared 
     allyHudAccessibleName({ kind: 'player', displayName: 'Remote', element: 'fire' }),
     'Remote',
   )
+  assert.equal(allyHudAccessibleStatus({
+    connected: false,
+    dead: true,
+    healthRatio: 0,
+    id: 'remote',
+    identity: { kind: 'player', displayName: 'Remote', element: 'fire' },
+  }), 'Remote, dead and disconnected')
 })
 
 test('ally HUD derives every live in-world Golem row in stable actor order', () => {
@@ -132,8 +214,8 @@ test('ally HUD derives every live in-world Golem row in stable actor order', () 
   ], 'boneyard:run')
 
   assert.deepEqual(rows, [
-    { healthRatio: 0.6, id: 'golem:2', identity: { kind: 'golem' } },
-    { healthRatio: 0.25, id: 'golem:9', identity: { kind: 'golem' } },
+    { connected: true, dead: false, healthRatio: 0.6, id: 'golem:2', identity: { kind: 'golem' } },
+    { connected: true, dead: false, healthRatio: 0.25, id: 'golem:9', identity: { kind: 'golem' } },
   ])
 })
 
@@ -143,6 +225,8 @@ test('ally HUD clamps ratios without smoothing and compares semantic rows', () =
   assert.equal(clampAllyHudHealthRatio(2), 1)
 
   const first: AllyHudRow[] = [{
+    connected: true,
+    dead: false,
     healthRatio: 0.5,
     id: 'remote',
     identity: { kind: 'player', displayName: 'Remote', element: 'ether' },
@@ -152,6 +236,8 @@ test('ally HUD clamps ratios without smoothing and compares semantic rows', () =
     identity: { ...row.identity },
   }))), true)
   assert.equal(allyHudRowsEqual(first, [{ ...first[0], healthRatio: 0.6 }]), false)
+  assert.equal(allyHudRowsEqual(first, [{ ...first[0], connected: false }]), false)
+  assert.equal(allyHudRowsEqual(first, [{ ...first[0], dead: true }]), false)
   assert.equal(allyHudRowsEqual(first, [{
     ...first[0],
     identity: { kind: 'player', displayName: 'Remote', element: 'fire' },

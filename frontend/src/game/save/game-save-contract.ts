@@ -400,8 +400,8 @@ function parsePartyRejoinToken(value: unknown, signed: boolean): string | null {
   if (
     typeof value !== 'string'
     || (signed
-      ? value.length > 2_048
-        || !/^sdrpr1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/.test(value)
+      ? value.length > 8_192
+        || !/^sdrpr[12]\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/.test(value)
       : !/^[A-Za-z0-9_-]{43}$/.test(value))
   ) {
     throw new Error('game save party rejoin token is invalid')

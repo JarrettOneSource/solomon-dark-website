@@ -1,3 +1,6 @@
+import type { WizardElement } from '../core-kernels/player-character.ts'
+import type { PlayerLifeState } from '../core-kernels/player-combat.ts'
+
 /**
  * Self-reported social identity a client presents in its hello. The host
  * attaches it verbatim to the player's projected profile; it never gates
@@ -21,6 +24,20 @@ export interface PartyMembership {
   readonly listingId: string
   readonly memberPlayerIds: readonly string[]
   readonly visibility: PartyVisibility
+}
+
+/**
+ * Host-authored presentation state for one durable party member. A missing
+ * actor does not erase this row; `connected` and `lifeState` are independent.
+ */
+export interface PartyRosterPlayer {
+  readonly connected: boolean
+  readonly currentHealth: number
+  readonly displayName: string
+  readonly element: WizardElement
+  readonly lifeState: PlayerLifeState
+  readonly maximumHealth: number
+  readonly playerId: string
 }
 
 export const PARTY_VISIBILITIES = ['public', 'invite-only', 'private'] as const
@@ -48,5 +65,6 @@ export interface LocalPartyState {
   readonly invitations: readonly PartyInvitationView[]
   readonly joinRequests: readonly PartyJoinRequestView[]
   readonly party: PartyMembership
+  readonly partyRoster: readonly PartyRosterPlayer[]
   readonly revision: number
 }

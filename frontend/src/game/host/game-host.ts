@@ -150,6 +150,7 @@ import {
   requestPartyJoin,
   rotatePartyJoinCode,
   setPartyVisibility,
+  restorePartyMembership,
   type PartyIdentity,
   type PartySystemState,
 } from './party-system.ts'
@@ -168,6 +169,7 @@ import {
   continueSharedPartyGameOver,
   createSharedGameWorlds,
   denySharedPartyInvitation,
+  detachSharedGamePlayer,
   inviteSharedPartyPlayer,
   joinSharedPartyPlayer,
   kickSharedPartyPlayer,
@@ -198,7 +200,9 @@ import {
   decodePartyRecoveryClaim,
   verifyPartyRecoveryClaim,
   type PartyRecoveryClaim,
+  type PartyRecoveryRosterMember,
 } from './party-recovery-claim.ts'
+import type { PartyRosterPlayer } from '../protocol/party-state.ts'
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost'])
 export const GAME_SAVE_AUTOSAVE_INTERVAL_TICKS = GAME_TICK_RATE * 30
@@ -537,8 +541,11 @@ interface PartyRejoinSlot {
 
 interface PartyRecoveryLineage {
   readonly content: MaterializedWebSessionContent
+  readonly partyLeaderPlayerId: string
   readonly partyId: string
   readonly partyMemberCount: number
+  readonly partyRoster: readonly PartyRecoveryRosterMember[]
+  readonly partyVisibility: PartyRecoveryClaim['partyVisibility']
   readonly recoveryId: string
   readonly runId: string
 }
@@ -1447,7 +1454,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           consumePartyReservation(authenticated.reservationId)
         }
         if (authenticated.partyRecoverySeed) {
-          const recoveredParty = activePartySystem()
+          const claimantParty = activePartySystem()
             ? partyForPlayer(activePartySystem()!, playerId)
             : null
           const recoveredState = sharedWorlds
@@ -1456,7 +1463,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           if (
             partyRecoveryClaim === null
             || authenticated.content === null
-            || recoveredParty === null
+            || claimantParty === null
             || recoveredState === null
             || recoveredState.world.kind !== 'boneyard'
             || recoveredState.world.runId !== partyRecoveryClaim.runId
@@ -1474,9 +1481,23 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             disconnect(socket, 'invalid-message', 'The party recovery seed could not restore its run.')
             return
           }
+          const recoveredParties = restorePartyMembership(
+            activePartySystem()!,
+            playerId,
+            partyRecoveryClaim.partyRoster.map(({ playerId: memberPlayerId }) => memberPlayerId),
+            partyRecoveryClaim.partyLeaderPlayerId,
+            partyRecoveryClaim.partyVisibility,
+          )
+          if (sharedWorlds) {
+            sharedWorlds = { ...sharedWorlds, parties: recoveredParties }
+            state = sharedWorlds.hub
+          } else {
+            privateParties = recoveredParties
+            hostPlayerId = partyRecoveryClaim.partyLeaderPlayerId
+          }
           registerPartyRecoveryLineage(
             partyRecoveryClaim,
-            recoveredParty.id,
+            claimantParty.id,
             authenticated.content,
           )
         }
@@ -2912,11 +2933,17 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         : sharedWorlds ? sharedGameplayPauseScope(client.playerId) : null
       const releasedGameplayPause = gameplayPauseForPlayer(client.playerId)?.ownerPlayerId
         === client.playerId
-      detachPartyRejoinClient(client, disconnectedState, disconnectedPartyId)
+      const retainedPartyMembership = detachPartyRejoinClient(
+        client,
+        disconnectedState,
+        disconnectedPartyId,
+      )
       saveDocuments.delete(client.playerId)
       saveSequences.delete(client.playerId)
       if (sharedWorlds) {
-        sharedWorlds = removeSharedGamePlayer(sharedWorlds, client.playerId)
+        sharedWorlds = retainedPartyMembership
+          ? detachSharedGamePlayer(sharedWorlds, client.playerId)
+          : removeSharedGamePlayer(sharedWorlds, client.playerId)
         state = sharedWorlds.hub
         playerContents.delete(client.playerId)
         pendingRestoredModState.delete(client.playerId)
@@ -2926,7 +2953,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         ) closePartyModRuntimes(disconnectedPartyId)
       } else {
         state = removePlayerCharacter(state, client.playerId)
-        if (privateParties) {
+        if (privateParties && !retainedPartyMembership) {
           privateParties = removePrivatePartyPlayer(privateParties, client.playerId)
         }
       }
@@ -2949,7 +2976,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           partyRecoveryLineages.clear()
           resetNextTickDeadline()
         }
-      } else if (client.playerId === hostPlayerId) {
+      } else if (client.playerId === hostPlayerId && !retainedPartyMembership) {
         hostPlayerId = clients.values().next().value?.playerId ?? null
       }
       prunePartyRejoinSlots()
@@ -3413,12 +3440,17 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       const slot = terminal ? null : partyRejoinSlotForClient(client)
       const lineage = slot ? partyRecoveryLineages.get(slot.recoveryId) ?? null : null
       if (slot && lineage) {
+        const party = activePartySystem()?.parties.find(({ id }) => id === lineage.partyId)
+        if (!party) throw new Error('party recovery lineage lost its membership')
         const token = createPartyRecoveryClaim(partyRecoverySecret, {
           contentManifestSha256: lineage.content.manifest.manifestSha256,
           globalScoreEligible: client.globalScoreEligible,
           integrity,
           leaderboardUserId: client.leaderboardUserId,
           partyMemberCount: lineage.partyMemberCount,
+          partyLeaderPlayerId: party.leaderPlayerId,
+          partyRoster: recoveryRosterForParty(party.id),
+          partyVisibility: party.visibility,
           playerId: client.playerId,
           recoveryId: lineage.recoveryId,
           runId: lineage.runId,
@@ -3715,6 +3747,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     }
     const destination = privateParties?.parties.find(({ id }) => id === slot.partyId) ?? null
     if (!privateParties || !destination) return 'The active party no longer exists.'
+    const existingParty = partyForPlayer(privateParties, slot.playerId)
+    if (existingParty && existingParty.id !== destination.id) {
+      return 'The returning wizard belongs to another party.'
+    }
     try {
       state = rejoinGameSimulationPlayer(
         state,
@@ -3725,18 +3761,20 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     } catch (error) {
       return error instanceof Error ? error.message : 'The active run cannot be rejoined.'
     }
-    const registered = registerPartyPlayer(privateParties, slot.playerId, slot.partyIdentity)
-    const joined = joinPartyPlayer(
-      registered,
-      slot.playerId,
-      destination.id,
-      availablePartyMembers(destination.id, reservationId, slot.playerId),
-    )
-    if (!joined.accepted) {
-      state = removePlayerCharacter(state, slot.playerId)
-      return partyRejectionMessage(joined.reason)
+    if (!existingParty) {
+      const registered = registerPartyPlayer(privateParties, slot.playerId, slot.partyIdentity)
+      const joined = joinPartyPlayer(
+        registered,
+        slot.playerId,
+        destination.id,
+        availablePartyMembers(destination.id, reservationId, slot.playerId),
+      )
+      if (!joined.accepted) {
+        state = removePlayerCharacter(state, slot.playerId)
+        return partyRejectionMessage(joined.reason)
+      }
+      privateParties = joined.state
     }
-    privateParties = joined.state
     return null
   }
 
@@ -3801,6 +3839,91 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     )
   }
 
+  function partyRosterStateForPlayer(
+    partyId: string,
+    playerId: string,
+  ): PartyRosterPlayer {
+    const connected = [...clients.values()].some(client => client.playerId === playerId)
+      || bots.has(playerId)
+    const liveState = sharedWorlds
+      ? sharedGameStateForPlayer(sharedWorlds, playerId)
+      : state.playerEntities.identities.some(identity => identity.playerId === playerId)
+        ? state
+        : null
+    if (liveState) {
+      const character = getPlayerCharacter(liveState, playerId)
+      const progression = getPlayerProgression(liveState, playerId)
+      return {
+        connected,
+        currentHealth: progression.currentHealth,
+        displayName: character.config.displayName,
+        element: character.config.element,
+        lifeState: progression.lifeState,
+        maximumHealth: progression.maximumHealth,
+        playerId,
+      }
+    }
+    const slot = [...partyRejoinSlots.values()].find(candidate => (
+      candidate.partyId === partyId
+      && candidate.playerId === playerId
+      && candidate.detachedState !== null
+    ))
+    const detachedConfig = slot?.detachedState?.playerEntities.configs[0]
+    const detachedProgression = slot?.detachedState?.playerEntities.progressions[0]
+    if (detachedConfig && detachedProgression) {
+      return {
+        connected,
+        currentHealth: detachedProgression.currentHealth,
+        displayName: detachedConfig.displayName,
+        element: detachedConfig.element,
+        lifeState: detachedProgression.lifeState,
+        maximumHealth: detachedProgression.maximumHealth,
+        playerId,
+      }
+    }
+    const retained = [...partyRecoveryLineages.values()]
+      .find(lineage => lineage.partyId === partyId)
+      ?.partyRoster.find(member => member.playerId === playerId)
+    if (!retained) throw new Error(`party roster has no authoritative state for ${playerId}`)
+    return { ...retained, connected }
+  }
+
+  function partyRosterForParty(partyId: string): readonly PartyRosterPlayer[] {
+    const party = activePartySystem()?.parties.find(candidate => candidate.id === partyId)
+    if (!party) throw new Error(`party roster has no membership ${partyId}`)
+    return party.memberPlayerIds.map(playerId => partyRosterStateForPlayer(partyId, playerId))
+  }
+
+  function recoveryRosterForParty(partyId: string): readonly PartyRecoveryRosterMember[] {
+    return partyRosterForParty(partyId).map(({
+      currentHealth,
+      displayName,
+      element,
+      lifeState,
+      maximumHealth,
+      playerId,
+    }) => ({
+      currentHealth,
+      displayName,
+      element,
+      lifeState,
+      maximumHealth,
+      playerId,
+    }))
+  }
+
+  function sameRecoveryRosterMembership(
+    first: readonly PartyRecoveryRosterMember[],
+    second: readonly PartyRecoveryRosterMember[],
+  ): boolean {
+    return first.length === second.length && first.every((member, index) => {
+      const candidate = second[index]
+      return candidate?.playerId === member.playerId
+        && candidate.displayName === member.displayName
+        && candidate.element === member.element
+    })
+  }
+
   function broadcastPartyState(): void {
     prunePartyAccess()
     const parties = activePartySystem()
@@ -3811,12 +3934,35 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         { ...profile, displayName, playerId },
       ]),
     )
+    const roster = new Map<string, PartyRosterPlayer>()
+    for (const party of parties.parties) {
+      for (const row of partyRosterForParty(party.id)) {
+        roster.set(row.playerId, row)
+        if (!profiles.has(row.playerId)) {
+          const slot = [...partyRejoinSlots.values()].find(candidate => (
+            candidate.partyId === party.id && candidate.playerId === row.playerId
+          ))
+          profiles.set(row.playerId, {
+            ...(slot?.profile ?? {
+              accountUsername: null,
+              highestWave: null,
+              totalPlaytimeMs: null,
+            }),
+            displayName: row.displayName,
+            playerId: row.playerId,
+          })
+        }
+      }
+    }
     const hubPlayerIds = new Set(sharedWorlds
       ? sharedWorlds.hub.playerEntities.identities.map(({ playerId }) => playerId)
       : [...clients.values()].filter(client => !client.partyRejoinSlot)
           .map(({ playerId }) => playerId))
     for (const client of clients.values()) {
-      if (client.socket.readyState !== WebSocket.OPEN || client.partyRejoinSlot) continue
+      if (
+        client.socket.readyState !== WebSocket.OPEN
+        || partyForPlayer(parties, client.playerId) === null
+      ) continue
       client.socket.send(encodeGameMessage({
         type: 'server-party-state',
         state: projectPartyState(
@@ -3824,6 +3970,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           client.playerId,
           profiles,
           hubPlayerIds,
+          roster,
         ),
       }))
     }
@@ -3881,8 +4028,11 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       if (!content) return
       lineage = {
         content,
+        partyLeaderPlayerId: party.leaderPlayerId,
         partyId,
         partyMemberCount: party.memberPlayerIds.length,
+        partyRoster: recoveryRosterForParty(partyId),
+        partyVisibility: party.visibility,
         recoveryId: randomBytes(32).toString('base64url'),
         runId: activeState.run.runId,
       }
@@ -3925,8 +4075,11 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   ): void {
     partyRecoveryLineages.set(claim.recoveryId, {
       content,
+      partyLeaderPlayerId: claim.partyLeaderPlayerId,
       partyId,
       partyMemberCount: claim.partyMemberCount,
+      partyRoster: claim.partyRoster,
+      partyVisibility: claim.partyVisibility,
       recoveryId: claim.recoveryId,
       runId: claim.runId,
     })
@@ -3936,12 +4089,12 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     client: HostClient,
     activeState: GameSimulationState,
     partyId: string | null,
-  ): void {
+  ): boolean {
     const staged = client.partyRejoinSlot
     if (staged) {
       staged.connected = false
       staged.reservation = null
-      return
+      return activeRunForPartyRejoin(staged) !== null
     }
     const lineage = [...partyRecoveryLineages.values()].find(candidate => (
       candidate.partyId === partyId && candidate.runId === activeState.run.runId
@@ -3957,11 +4110,12 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       || activeState.run.phase !== 'active'
       || activeState.run.runId !== slot.runId
     ) {
-      return
+      return false
     }
     slot.connected = false
     slot.detachedState = detachGameSimulationPlayer(activeState, client.playerId)
     slot.reservation = null
+    return true
   }
 
   function synchronizePartyRejoinMilestones(
@@ -4133,6 +4287,9 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       !lineage
       || lineage.runId !== claim.runId
       || lineage.partyMemberCount !== claim.partyMemberCount
+      || lineage.partyLeaderPlayerId !== claim.partyLeaderPlayerId
+      || lineage.partyVisibility !== claim.partyVisibility
+      || !sameRecoveryRosterMembership(lineage.partyRoster, claim.partyRoster)
       || lineage.content.manifest.manifestSha256 !== claim.contentManifestSha256
       || sessionKind !== claim.sessionKind
     ) return null
@@ -4170,7 +4327,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         globalScoreEligible: false,
         integrity: sessionKind === 'global-hub' ? 'global-clean' : 'local-only',
         leaderboardUserId: null,
+        partyLeaderPlayerId: lineage.partyLeaderPlayerId,
         partyMemberCount: lineage.partyMemberCount,
+        partyRoster: lineage.partyRoster,
+        partyVisibility: lineage.partyVisibility,
         playerId: '__probe__',
         recoveryId,
         runId: lineage.runId,
@@ -4178,6 +4338,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         targetRevision: null,
       }
       if (activePartyRecoveryLineage(claimProbe)) continue
+      retireDisconnectedRecoveryMembers(lineage)
       partyRecoveryLineages.delete(recoveryId)
       for (const [key, slot] of [...partyRejoinSlots]) {
         if (slot.recoveryId === recoveryId) partyRejoinSlots.delete(key)
@@ -4194,20 +4355,42 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     }
   }
 
+  function retireDisconnectedRecoveryMembers(lineage: PartyRecoveryLineage): void {
+    let parties = activePartySystem()
+    if (!parties) return
+    const connected = new Set([
+      ...[...clients.values()].map(client => client.playerId),
+      ...bots.keys(),
+    ])
+    for (const member of lineage.partyRoster) {
+      if (!connected.has(member.playerId)) {
+        parties = removePrivatePartyPlayer(parties, member.playerId)
+      }
+    }
+    if (sharedWorlds) {
+      sharedWorlds = { ...sharedWorlds, parties }
+      state = sharedWorlds.hub
+    } else if (privateParties) {
+      privateParties = parties
+    }
+  }
+
   function detachedPartyRejoinCount(): number {
     prunePartyRejoinSlots()
-    let count = [...partyRejoinSlots.values()].filter(slot => !slot.connected).length
+    const detached = new Set<string>()
+    const connected = new Set([
+      ...[...clients.values()].map(client => client.playerId),
+      ...bots.keys(),
+    ])
     for (const lineage of partyRecoveryLineages.values()) {
-      const known = new Set([
-        ...(activePartySystem()?.parties.find(({ id }) => id === lineage.partyId)
-          ?.memberPlayerIds ?? []),
-        ...[...partyRejoinSlots.values()].filter(slot => (
-          slot.recoveryId === lineage.recoveryId
-        )).map(slot => slot.playerId),
-      ])
-      count += Math.max(0, lineage.partyMemberCount - known.size)
+      for (const member of lineage.partyRoster) {
+        if (!connected.has(member.playerId)) detached.add(member.playerId)
+      }
     }
-    return count
+    for (const slot of partyRejoinSlots.values()) {
+      if (!connected.has(slot.playerId)) detached.add(slot.playerId)
+    }
+    return detached.size
   }
 
   function partyRecoverySlotKey(recoveryId: string, playerId: PlayerId): string {
@@ -4310,7 +4493,12 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     const displayName = (playerId: string) => (
       [...clients.values(), ...bots.values()].find(candidate => candidate.playerId === playerId)
         ?.displayName
-      ?? getPlayerCharacter(activeState, playerId).config.displayName
+      ?? [...partyRecoveryLineages.values()]
+        .flatMap(lineage => lineage.partyRoster)
+        .find(member => member.playerId === playerId)?.displayName
+      ?? (playerIds.includes(playerId)
+        ? getPlayerCharacter(activeState, playerId).config.displayName
+        : playerId)
     )
     return {
       boneyardName: loaded.choice.name,
@@ -4427,20 +4615,30 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     excludedPlayerId: string | null,
   ): number {
     prunePartyRejoinSlots()
-    const slots = [...partyRejoinSlots.values()].filter(slot => slot.partyId === partyId)
-    const detached = slots.filter(slot => (
-      !slot.connected
-      && slot.playerId !== excludedPlayerId
-    )).length
+    const connected = new Set([
+      ...[...clients.values()].map(client => client.playerId),
+      ...bots.keys(),
+    ])
+    const detached = new Set<string>()
+    for (const slot of partyRejoinSlots.values()) {
+      if (
+        slot.partyId === partyId
+        && slot.playerId !== excludedPlayerId
+        && !connected.has(slot.playerId)
+      ) detached.add(slot.playerId)
+    }
     const lineage = [...partyRecoveryLineages.values()].find(candidate => (
       candidate.partyId === partyId
     ))
-    if (!lineage) return detached
-    const known = new Set([
-      ...(activePartySystem()?.parties.find(({ id }) => id === partyId)?.memberPlayerIds ?? []),
-      ...slots.map(slot => slot.playerId),
-    ])
-    return detached + Math.max(0, lineage.partyMemberCount - known.size)
+    if (lineage) {
+      for (const member of lineage.partyRoster) {
+        if (
+          member.playerId !== excludedPlayerId
+          && !connected.has(member.playerId)
+        ) detached.add(member.playerId)
+      }
+    }
+    return detached.size
   }
 
   function consumePartyReservation(reservationId: string | null): void {
@@ -5289,11 +5487,20 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     if (!sharedWorlds) return null
     const party = sharedWorlds.parties.parties.find(candidate => candidate.id === partyId)
     if (!party) return null
-    const leaderContent = playerContents.get(party.leaderPlayerId)
+    const lineage = [...partyRecoveryLineages.values()].find(candidate => (
+      candidate.partyId === partyId
+    ))
+    const leaderContent = lineage?.content ?? playerContents.get(party.leaderPlayerId)
     if (!leaderContent) return null
     return party.memberPlayerIds.every(playerId => {
       if (bots.has(playerId)) return leaderContent.manifest.mods.length === 0
       const memberContent = playerContents.get(playerId)
+        ?? [...partyRejoinSlots.values()].find(slot => (
+          slot.partyId === partyId && slot.playerId === playerId
+        ))?.content
+        ?? (lineage?.partyRoster.some(member => member.playerId === playerId)
+          ? lineage.content
+          : undefined)
       return memberContent !== undefined
         && sameContentMods(memberContent.manifest.mods, leaderContent.manifest.mods)
     }) ? leaderContent : null
@@ -5988,8 +6195,8 @@ function validPartyRejoinToken(value: string | undefined): boolean {
   return value === undefined
     || /^[A-Za-z0-9_-]{43}$/.test(value)
     || (
-      value.length <= 2_048
-      && /^sdrpr1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/.test(value)
+      value.length <= 8_192
+      && /^sdrpr[12]\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/.test(value)
     )
 }
 

@@ -3,6 +3,7 @@ import type {
   PartyJoinRequester,
   PartyMembership,
   PartyPlayerProfile,
+  PartyRosterPlayer,
   PartyVisibility,
 } from '../protocol/party-state.ts'
 
@@ -74,6 +75,46 @@ export function registerPartyPlayer(
 ): PartySystemState {
   if (partyForPlayer(state, playerId)) return state
   return changed(state, { parties: [...state.parties, membership(identity, playerId)] })
+}
+
+/** Restore one signed recovery membership around the already registered claimant. */
+export function restorePartyMembership(
+  state: PartySystemState,
+  claimantPlayerId: string,
+  memberPlayerIds: readonly string[],
+  leaderPlayerId: string,
+  visibility: PartyVisibility,
+): PartySystemState {
+  const claimantParty = partyForPlayer(state, claimantPlayerId)
+  if (!claimantParty) throw new Error('party recovery claimant is not registered')
+  if (
+    memberPlayerIds.length < 1
+    || new Set(memberPlayerIds).size !== memberPlayerIds.length
+    || !memberPlayerIds.includes(claimantPlayerId)
+    || !memberPlayerIds.includes(leaderPlayerId)
+  ) throw new Error('party recovery membership is invalid')
+  for (const playerId of memberPlayerIds) {
+    const existing = partyForPlayer(state, playerId)
+    if (existing && existing.id !== claimantParty.id) {
+      throw new Error(`party recovery player ${playerId} already belongs to another party`)
+    }
+  }
+  return changed(state, {
+    invitations: state.invitations.filter(invitation => (
+      invitation.partyId !== claimantParty.id
+      && !memberPlayerIds.includes(invitation.invitedPlayerId)
+      && !memberPlayerIds.includes(invitation.inviterPlayerId)
+    )),
+    joinRequests: state.joinRequests.filter(request => request.partyId !== claimantParty.id),
+    parties: state.parties.map(party => party.id === claimantParty.id
+      ? {
+          ...party,
+          leaderPlayerId,
+          memberPlayerIds: [...memberPlayerIds],
+          visibility,
+        }
+      : party),
+  })
 }
 
 export function removePartyPlayer(
@@ -335,6 +376,7 @@ export function projectPartyState(
   playerId: string,
   profiles: ReadonlyMap<string, PartyPlayerProfile>,
   hubPlayerIds: ReadonlySet<string>,
+  roster: ReadonlyMap<string, PartyRosterPlayer>,
 ): LocalPartyState {
   const party = partyForPlayer(state, playerId)
   if (!party) throw new Error(`party system has no membership for ${playerId}`)
@@ -346,6 +388,11 @@ export function projectPartyState(
     totalPlaytimeMs: null,
   }
   const hubPlayers = [...hubPlayerIds].sort(compareIds).map(profile)
+  const partyRoster = party.memberPlayerIds.map(memberPlayerId => {
+    const row = roster.get(memberPlayerId)
+    if (!row) throw new Error(`party roster has no state for ${memberPlayerId}`)
+    return row
+  })
   return {
     hubPlayers,
     invitations: state.invitations
@@ -361,6 +408,7 @@ export function projectPartyState(
           .map(({ id, requester }) => ({ id, requester }))
       : [],
     party,
+    partyRoster,
     revision: state.revision,
   }
 }

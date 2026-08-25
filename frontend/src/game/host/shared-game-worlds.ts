@@ -134,6 +134,22 @@ export function removeSharedGamePlayer(
   state: SharedGameWorldsState,
   playerId: PlayerId,
 ): SharedGameWorldsState {
+  return releaseSharedGamePlayer(state, playerId, true)
+}
+
+/** Detach one actor while retaining its durable party membership and leader role. */
+export function detachSharedGamePlayer(
+  state: SharedGameWorldsState,
+  playerId: PlayerId,
+): SharedGameWorldsState {
+  return releaseSharedGamePlayer(state, playerId, false)
+}
+
+function releaseSharedGamePlayer(
+  state: SharedGameWorldsState,
+  playerId: PlayerId,
+  removeMembership: boolean,
+): SharedGameWorldsState {
   const inHub = state.hub.playerEntities.identities.some(({ playerId: id }) => id === playerId)
   let hub = inHub ? removePlayerCharacter(state.hub, playerId) : state.hub
   const runs: SharedPartyRun[] = []
@@ -143,7 +159,12 @@ export function removeSharedGamePlayer(
       continue
     }
     const nextState = removePlayerCharacter(run.state, playerId)
-    if (nextState.playerEntities.identities.length === 0) continue
+    if (nextState.playerEntities.identities.length === 0) {
+      if (!removeMembership && nextState.run.phase === 'active') {
+        runs.push({ ...run, state: nextState })
+      }
+      continue
+    }
     if (nextState.run.phase === 'hub') {
       hub = mergeGameSimulationPlayersIntoHub(hub, nextState)
       continue
@@ -153,7 +174,7 @@ export function removeSharedGamePlayer(
   return {
     ...state,
     hub,
-    parties: removePartyPlayer(state.parties, playerId),
+    parties: removeMembership ? removePartyPlayer(state.parties, playerId) : state.parties,
     runs,
   }
 }
@@ -167,7 +188,11 @@ export function rejoinSharedPartyRunPlayer(
   maximumMembers: number,
   milestone: SharedPlayerLevelMilestone | null,
 ): SharedWorldActionResult {
-  if (sharedGameStateForPlayer(state, playerId) || partyForPlayer(state.parties, playerId)) {
+  const existingParty = partyForPlayer(state.parties, playerId)
+  if (
+    sharedGameStateForPlayer(state, playerId)
+    || (existingParty !== null && existingParty.id !== partyId)
+  ) {
     return rejected(state, 'already-in-party')
   }
   const run = state.runs.find(candidate => (
@@ -177,9 +202,13 @@ export function rejoinSharedPartyRunPlayer(
   ))
   if (!run) return rejected(state, 'run-unavailable')
 
-  const registered = registerPartyPlayer(state.parties, playerId, partyIdentity)
-  const joined = joinPartyPlayer(registered, playerId, partyId, maximumMembers)
-  if (!joined.accepted) return rejected(state, joined.reason!)
+  let parties = state.parties
+  if (existingParty === null) {
+    const registered = registerPartyPlayer(parties, playerId, partyIdentity)
+    const joined = joinPartyPlayer(registered, playerId, partyId, maximumMembers)
+    if (!joined.accepted) return rejected(state, joined.reason!)
+    parties = joined.state
+  }
   let rejoinedState: GameSimulationState
   try {
     rejoinedState = rejoinGameSimulationPlayer(
@@ -193,7 +222,7 @@ export function rejoinSharedPartyRunPlayer(
   }
   return accepted({
     ...state,
-    parties: joined.state,
+    parties,
     runs: state.runs.map(candidate => candidate === run
       ? { ...candidate, state: rejoinedState }
       : candidate),

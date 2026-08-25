@@ -874,7 +874,7 @@ test('deployment restart drains admissions, waits for the final save, and closes
   assert.deepEqual(await closed, { code: 1012, reason: 'game updating' })
 })
 
-test('first returning nonleader recovers the updated party run before the old leader', async (context) => {
+test('first returning nonleader recovers the updated party run under the original leader', async (context) => {
   const oldRevision = '1'.repeat(40)
   const targetRevision = '2'.repeat(40)
   const oldSupervisor = await startGameSessionSupervisor({
@@ -996,6 +996,22 @@ test('first returning nonleader recovers the updated party run before the old le
     assert.fail('expected recovered Boneyard')
   }
   assert.equal(recoveredMember.welcome.snapshot.world.runId, memberRun.boneyard.runId)
+  const memberRecoveredParty = await recoveredMember.next(message => (
+    message.type === 'server-party-state'
+    && message.state.party.memberPlayerIds.length === 2
+  ))
+  assert.equal(memberRecoveredParty.type, 'server-party-state')
+  assert.equal(memberRecoveredParty.state.party.leaderPlayerId, leader.welcome.playerId)
+  assert.deepEqual(
+    memberRecoveredParty.state.partyRoster.map(row => ({
+      connected: row.connected,
+      playerId: row.playerId,
+    })),
+    [
+      { connected: false, playerId: leader.welcome.playerId },
+      { connected: true, playerId: member.welcome.playerId },
+    ],
+  )
 
   const recoveredLeader = await joinSaved(
     replacement.address.url,
@@ -1014,7 +1030,7 @@ test('first returning nonleader recovers the updated party run before the old le
     && message.state.party.memberPlayerIds.length === 2
   ))
   assert.equal(recoveredParty.type, 'server-party-state')
-  assert.equal(recoveredParty.state.party.leaderPlayerId, member.welcome.playerId)
+  assert.equal(recoveredParty.state.party.leaderPlayerId, leader.welcome.playerId)
   assert.deepEqual(new Set(recoveredParty.state.party.memberPlayerIds), new Set([
     member.welcome.playerId,
     leader.welcome.playerId,

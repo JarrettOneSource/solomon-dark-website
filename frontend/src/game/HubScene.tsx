@@ -783,7 +783,7 @@ export default function HubScene({
               onOpenSkillSelector(binding)
             }
           }}
-          partyMemberIds={partyState?.party.memberPlayerIds}
+          partyRoster={partyState?.partyRoster}
           onSkillsClick={() => {
             if (!inputBlocked && !pickerOpen && !transitionActive) {
               setHubUiSurface(null)
@@ -873,6 +873,9 @@ export default function HubScene({
                 const profile = partyState.hubPlayers.find(({ playerId: id }) => (
                   id === memberPlayerId
                 ))
+                const rosterPlayer = partyState.partyRoster.find(({ playerId: id }) => (
+                  id === memberPlayerId
+                ))
                 const isLeader = memberPlayerId === partyState.party.leaderPlayerId
                 return (
                   <div
@@ -881,6 +884,7 @@ export default function HubScene({
                     className="hub-party-member"
                     data-party-member={memberPlayerId}
                     data-party-leader={isLeader}
+                    data-party-connected={rosterPlayer?.connected ?? false}
                   >
                     <button
                       type="button"
@@ -894,7 +898,7 @@ export default function HubScene({
                         aria-hidden
                       />
                       <span className="hub-party-member-name">
-                        {profile?.displayName ?? memberPlayerId}
+                        {profile?.displayName ?? rosterPlayer?.displayName ?? memberPlayerId}
                       </span>
                       {memberPlayerId === playerId && (
                         <span className="hub-party-member-tag hub-party-member-you">You</span>

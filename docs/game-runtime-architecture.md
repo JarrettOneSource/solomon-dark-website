@@ -1504,6 +1504,48 @@ available to mod VMs.
 The complete disposition is recorded in `game-native-parity-re.md` and the Mod
 Loader's `web-lua-runtime-parity-contract.md`.
 
+## Durable party roster and absent leader
+
+Party membership is durable social state; a WebSocket and a materialized
+player actor are not. During an active recoverable Boneyard, socket loss
+detaches the actor and marks the member disconnected while retaining the
+membership's ordered member IDs and original `leaderPlayerId`. Only the
+explicit Leave Party and Kick transactions remove membership. Because the
+server process owns simulation ticks, it needs no replacement player leader to
+continue the active world. Leader-only requests remain unavailable until the
+leader reconnects or intentionally leaves.
+
+Protocol 77 adds the local bounded party-roster projection. The active recovery
+lineage owns that ally projection for every retained
+member: player ID, display name, element, last authoritative current/maximum
+health, life state, and connection state. A live actor supersedes the retained
+vitals on each projection; a detached actor supplies its host-held projection;
+and, after a coordinated process replacement, the signed recovery roster
+supplies members that have not returned yet. This projection is delivered in
+local party state and never becomes simulation authority. Hub and Boneyard HUD
+code use it only when a member has no live snapshot actor.
+
+Connection and life are orthogonal. Dead players remain rows with a red health-
+bar overlay. Disconnected players retain the last authoritative ratio and gain
+a distinct signal-loss treatment. A staged catch-up player is connected but
+not materialized, so peers retain the row without the disconnect treatment and
+the world has no targetable ghost actor. Golems keep their stock live-only row
+lifecycle.
+
+The replacement-safe recovery claim is versioned and binds the full ordered
+roster, original leader, visibility, and retained ally projections alongside
+the existing owner document, run, content, integrity, account lineage, and
+target revision. The first valid former member reconstructs the authority run
+and that exact party; return order cannot elect a new leader. Later claims may
+attach only their sealed actor to that lineage. Recovery capacity counts every
+connected or retained member once. Game Over, loadout, returned Hub, a replaced
+run, or teardown retires the active recovery projection and capability.
+
+`GameSnapshot.hostPlayerId` remains the leader/leader-only-action identity and
+may therefore name a retained party member absent from `snapshot.players`.
+Consumers may compare it with the local ID but must not use it as proof of a
+live actor or index `players` without a presence check.
+
 ## Player equipped-element phase ownership
 
 The host's `PlayerPrimaryCastState.weaponPulse` is the active fixed-tick clock

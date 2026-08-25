@@ -3,12 +3,14 @@ import { useEffect, useState } from 'react'
 import { art } from '../lib/assets.ts'
 import type { WizardElement } from './core-kernels/player-character.ts'
 import type { GameSnapshot } from './protocol/game-protocol.ts'
+import type { PartyRosterPlayer } from './protocol/party-state.ts'
 import {
   PLAYER_CHARACTER_SHEETS,
   playerCharacterAtlasCssFrame,
 } from './renderer/player-character-atlas.ts'
 import {
   allyHudAccessibleName,
+  allyHudAccessibleStatus,
   allyHudRowsEqual,
   clampAllyHudHealthRatio,
   combineAllyHudRows,
@@ -25,7 +27,7 @@ interface AllyHudProps {
   /** Touch: the roster yields to an open party column (HubScene owns the condition). */
   hidden?: boolean
   initialSnapshot: GameSnapshot
-  partyMemberIds?: readonly string[]
+  partyRoster?: readonly PartyRosterPlayer[]
   playerId: string
   subscribeSnapshot: (listener: (snapshot: GameSnapshot) => void) => () => void
 }
@@ -44,10 +46,10 @@ function snapshotWorldKey(snapshot: GameSnapshot, playerId: string): string {
 function deriveSnapshotAllyHudRows(
   snapshot: GameSnapshot,
   playerId: string,
-  partyMemberIds?: readonly string[],
+  partyRoster?: readonly PartyRosterPlayer[],
 ): AllyHudRow[] {
   return combineAllyHudRows(
-    derivePlayerAllyHudRows(snapshot.players, playerId, partyMemberIds),
+    derivePlayerAllyHudRows(snapshot.players, playerId, partyRoster),
     deriveGolemAllyHudRows(
       snapshot.secondaryAbilities.actors,
       snapshotWorldKey(snapshot, playerId),
@@ -106,9 +108,11 @@ export function AllyHudRoster({ hidden, rows }: AllyHudRosterProps) {
             data-ally-id={row.id}
             data-ally-kind={row.identity.kind}
             data-ally-element={row.identity.kind === 'player' ? row.identity.element : undefined}
+            data-ally-connected={row.connected}
+            data-ally-dead={row.dead}
             data-health-ratio={ratio}
             role="listitem"
-            aria-label={accessibleName}
+            aria-label={allyHudAccessibleStatus(row)}
           >
             {row.identity.kind === 'player'
               ? <AllyChip element={row.identity.element} />
@@ -141,24 +145,24 @@ export default function AllyHud({
   additionalRows = EMPTY_ADDITIONAL_ROWS,
   hidden,
   initialSnapshot,
-  partyMemberIds,
+  partyRoster,
   playerId,
   subscribeSnapshot,
 }: AllyHudProps) {
   const [snapshotRows, setSnapshotRows] = useState<readonly AllyHudRow[]>(() => (
-    deriveSnapshotAllyHudRows(initialSnapshot, playerId, partyMemberIds)
+    deriveSnapshotAllyHudRows(initialSnapshot, playerId, partyRoster)
   ))
 
   useEffect(() => {
     const publish = (snapshot: GameSnapshot) => {
-      const nextRows = deriveSnapshotAllyHudRows(snapshot, playerId, partyMemberIds)
+      const nextRows = deriveSnapshotAllyHudRows(snapshot, playerId, partyRoster)
       setSnapshotRows((currentRows) => allyHudRowsEqual(currentRows, nextRows)
         ? currentRows
         : nextRows)
     }
     publish(initialSnapshot)
     return subscribeSnapshot(publish)
-  }, [initialSnapshot, partyMemberIds, playerId, subscribeSnapshot])
+  }, [initialSnapshot, partyRoster, playerId, subscribeSnapshot])
 
   return <AllyHudRoster hidden={hidden} rows={combineAllyHudRows(snapshotRows, additionalRows)} />
 }

@@ -554,6 +554,12 @@ test('server welcome round-trips content, kernel, character, and world ownership
     snapshotSequence: 1,
   }
   assert.deepEqual(decodeServerGameMessage(encodeGameMessage(welcome)), welcome)
+  const absentLeaderWelcome = structuredClone(welcome)
+  absentLeaderWelcome.snapshot.hostPlayerId = 'disconnected-party-leader'
+  assert.deepEqual(
+    decodeServerGameMessage(encodeGameMessage(absentLeaderWelcome)),
+    absentLeaderWelcome,
+  )
   const observerWelcome: ServerWelcomeMessage = { ...welcome, observer: true }
   assert.deepEqual(
     decodeServerGameMessage(encodeGameMessage(observerWelcome)),
@@ -1435,7 +1441,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
 })
 
 test('protocol v75 carries observer mode, Hub activity, NPC state, Goodie actions, tutorial fields/state, Hagatha runtime, Imp effects, save intent, selected skills, sacks, dyes, and gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 76)
+  assert.equal(GAME_PROTOCOL_VERSION, 77)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -4688,6 +4694,15 @@ test('party protocol strictly round-trips membership, access settings, requests,
         memberPlayerIds: ['player-2'],
         visibility: 'invite-only' as const,
       },
+      partyRoster: [{
+        connected: false,
+        currentHealth: 0,
+        displayName: 'Basil',
+        element: 'water' as const,
+        lifeState: 'spectating' as const,
+        maximumHealth: 75,
+        playerId: 'player-2',
+      }],
       revision: 4,
     },
   }
@@ -4715,6 +4730,14 @@ test('party protocol strictly round-trips membership, access settings, requests,
   assert.throws(
     () => decodeServerGameMessage(encodeGameMessage(missingInviter)),
     /inviter.*Hub player/,
+  )
+  const duplicateRosterMember = structuredClone(message)
+  duplicateRosterMember.state.partyRoster.push({
+    ...duplicateRosterMember.state.partyRoster[0]!,
+  })
+  assert.throws(
+    () => decodeServerGameMessage(encodeGameMessage(duplicateRosterMember)),
+    /partyRoster.*duplicate/,
   )
 })
 

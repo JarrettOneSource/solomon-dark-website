@@ -62,7 +62,7 @@ const MODS = [{
 const MOD_STATE = {
   'tests.save-mod': { enabled_encounters: 7, greeting: 'hello' },
 } as const
-const SIGNED_PARTY_RECOVERY_CLAIM = `sdrpr1.${'A'.repeat(96)}.${'B'.repeat(43)}`
+const SIGNED_PARTY_RECOVERY_CLAIM = `sdrpr2.${'A'.repeat(96)}.${'B'.repeat(43)}`
 
 test('host save documents round-trip the complete owner state and revive Hub runtimes', () => {
   let state = createGameSimulation({ owner: OWNER, guest: GUEST }, {

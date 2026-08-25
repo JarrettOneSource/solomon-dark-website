@@ -691,7 +691,7 @@ export async function startGameSessionSupervisor(
       }
       const requestedAdmission = await materializeGameAdmission(body, options.luaWasmPath)
       const claim = verifyPartyRecoveryClaim(options.adminSecret, token, body.save)
-      if (!claim && /^[A-Za-z0-9_-]{43}$/.test(token)) {
+      if (!claim && (/^[A-Za-z0-9_-]{43}$/.test(token) || token.startsWith('sdrpr1.'))) {
         sendJson(response, 404, { error: 'That active party run has ended.' })
         return
       }
@@ -1506,10 +1506,10 @@ function normalizePartyJoinCode(value: unknown): string {
 function normalizePartyRejoinToken(value: unknown): string {
   if (
     typeof value !== 'string'
-    || value.length > 2_048
+    || value.length > 8_192
     || (
       !/^[A-Za-z0-9_-]{43}$/.test(value)
-      && !/^sdrpr1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/.test(value)
+      && !/^sdrpr[12]\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/.test(value)
     )
   ) {
     throw new Error('party rejoin token is invalid')

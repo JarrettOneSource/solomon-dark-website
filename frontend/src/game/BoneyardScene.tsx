@@ -82,6 +82,7 @@ import type {
   ProtocolPlayerEconomy,
   ProtocolPlayerProgression,
 } from './protocol/game-state.ts'
+import type { PartyRosterPlayer } from './protocol/party-state.ts'
 import type { GameRunLifecycleState } from './core-kernels/game-run.ts'
 import type { ModConsumableCatalogEntry } from './core-kernels/hub-economy.ts'
 import { PlayerFootstepAudioSynchronizer } from './player-footstep-audio.ts'
@@ -135,6 +136,7 @@ interface BoneyardSceneProps {
   onPauseRequest: () => void
   onReady: () => void
   onTutorialAction: (action: 'inventory-opened' | 'inventory-closed' | 'skills-opened' | 'skills-closed') => void
+  partyRoster?: readonly PartyRosterPlayer[]
   playerId: string
   progression: ProtocolPlayerProgression
   presentationPaused: boolean
@@ -190,6 +192,7 @@ export default function BoneyardScene({
   onPauseRequest,
   onReady,
   onTutorialAction,
+  partyRoster,
   playerId,
   progression,
   presentationPaused,
@@ -1042,6 +1045,7 @@ export default function BoneyardScene({
                   onOpenSkills()
                 }
               }}
+              partyRoster={partyRoster}
               playerId={playerId}
               progression={progression}
               subscribePing={subscribePing}

@@ -231,6 +231,15 @@ test('the ally roster continues the social column under the chip and yields whil
   assert.match(coarseBlock(boneyardCss), /\.boneyard-native-frame \.hub-hud-allies \{\s*top: calc\(54px \/ var\(--hud-display-scale, 1\) \/ var\(--game-ui-scale, 1\)\);\s*\}/)
 })
 
+test('party ally rows expose distinct dead and disconnected presentation states', () => {
+  assert.match(allyHud, /data-ally-connected=\{row\.connected\}/)
+  assert.match(allyHud, /data-ally-dead=\{row\.dead\}/)
+  assert.match(allyHud, /allyHudAccessibleStatus\(row\)/)
+  assert.match(hubCss, /\.hub-hud-ally-row\[data-ally-dead='true'\] \.hub-hud-ally-bar::after/)
+  assert.match(hubCss, /\.hub-hud-ally-row\[data-ally-connected='false'\] \.hub-hud-ally-bar::before/)
+  assert.match(hubCss, /@media \(prefers-reduced-motion: reduce\)/)
+})
+
 test('the owner pick sheet stylesheet is gone with its imports', () => {
   assert.ok(!existsSync(new URL('./mobile-hud-options.css', import.meta.url)))
   assert.doesNotMatch(hub, /mobile-hud-options/)

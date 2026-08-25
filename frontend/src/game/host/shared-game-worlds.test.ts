@@ -22,6 +22,7 @@ import {
   confirmSharedPartyLoadout,
   inviteSharedPartyPlayer,
   removeSharedGamePlayer,
+  detachSharedGamePlayer,
   rejoinSharedPartyRunPlayer,
   restoreSharedGamePlayer,
   joinSharedPartyPlayer,
@@ -402,7 +403,7 @@ test('post-run confirmation merges the progressed party back into the shared Hub
   )
 })
 
-test('departed leader rejoins the same active run without revoking live leader promotion', () => {
+test('disconnected leader rejoins the same active run without losing leadership', () => {
   let worlds = createSharedGameWorlds()
   worlds = addSharedHubPlayer(worlds, 'leader', character('Aurelia'), partyIdentity('a'))
   worlds = addSharedHubPlayer(worlds, 'member', character('Basil'), partyIdentity('b'))
@@ -418,8 +419,12 @@ test('departed leader rejoins the same active run without revoking live leader p
   ))!.id
   worlds = startSharedPartyRun(worlds, 'leader', loadedBoneyardFixture('leader-rejoin')).state
   const detached = detachGameSimulationPlayer(worlds.runs[0]!.state, 'leader')
-  worlds = removeSharedGamePlayer(worlds, 'leader')
-  assert.equal(worlds.parties.parties.find(({ id }) => id === partyId)?.leaderPlayerId, 'member')
+  worlds = detachSharedGamePlayer(worlds, 'leader')
+  assert.equal(worlds.parties.parties.find(({ id }) => id === partyId)?.leaderPlayerId, 'leader')
+  assert.deepEqual(
+    worlds.parties.parties.find(({ id }) => id === partyId)?.memberPlayerIds,
+    ['leader', 'member'],
+  )
 
   const rejoined = rejoinSharedPartyRunPlayer(
     worlds,
@@ -435,8 +440,8 @@ test('departed leader rejoins the same active run without revoking live leader p
   assert.equal(worlds.runs[0]?.loadedBoneyard.runId, 'leader-rejoin')
   assert.deepEqual(
     worlds.parties.parties.find(({ id }) => id === partyId)?.memberPlayerIds,
-    ['member', 'leader'],
+    ['leader', 'member'],
   )
-  assert.equal(worlds.parties.parties.find(({ id }) => id === partyId)?.leaderPlayerId, 'member')
+  assert.equal(worlds.parties.parties.find(({ id }) => id === partyId)?.leaderPlayerId, 'leader')
   assert.equal(sharedGameStateForPlayer(worlds, 'leader'), worlds.runs[0]?.state)
 })

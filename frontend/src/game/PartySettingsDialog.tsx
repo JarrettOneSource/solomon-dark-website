@@ -49,7 +49,9 @@ export default function PartySettingsDialog({
     }, () => setCopied(false))
   }
   const displayName = (id: string) => (
-    state.hubPlayers.find(player => player.playerId === id)?.displayName ?? id
+    state.hubPlayers.find(player => player.playerId === id)?.displayName
+      ?? state.partyRoster.find(player => player.playerId === id)?.displayName
+      ?? id
   )
   return (
     <div className="party-settings-backdrop" role="presentation" onPointerDown={event => {

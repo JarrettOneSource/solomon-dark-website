@@ -164,6 +164,15 @@ test('client carries character config, publishes authority, and tears down', asy
         memberPlayerIds: ['player-1'],
         visibility: 'private',
       },
+      partyRoster: [{
+        connected: true,
+        currentHealth: 50,
+        displayName: 'Helvidius',
+        element: 'ether',
+        lifeState: 'alive',
+        maximumHealth: 50,
+        playerId: 'player-1',
+      }],
       revision: 3,
     },
   }))

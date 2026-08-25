@@ -17,6 +17,7 @@ import {
   registerPartyPlayer,
   removePartyPlayer,
   requestPartyJoin,
+  restorePartyMembership,
   rotatePartyJoinCode,
   setPartyVisibility,
   type PartyIdentity,
@@ -70,7 +71,7 @@ test('direct joins, leave, and leader kick create fresh private singletons', () 
   assert.equal(kickPartyPlayer(state, 'player-a', 'player-a', identity('nope')).reason, 'self-kick')
 })
 
-test('disconnect retires access state and deterministically promotes the earliest member', () => {
+test('explicit removal retires access state and deterministically promotes the earliest member', () => {
   let state = players('player-a', 'player-b', 'player-c')
   state = joinPartyPlayer(state, 'player-b', identity('player-a').id, 4).state
   state = setPartyVisibility(state, 'player-a', 'invite-only').state
@@ -83,6 +84,35 @@ test('disconnect retires access state and deterministically promotes the earlies
   assert.equal(state.joinRequests.length, 1)
   state = removePartyPlayer(state, 'player-b')
   assert.equal(state.joinRequests.length, 0)
+})
+
+test('recovery restores the original ordered membership and leader independently of claimant order', () => {
+  let state = players('returning-member')
+  state = restorePartyMembership(
+    state,
+    'returning-member',
+    ['original-leader', 'returning-member', 'later-member'],
+    'original-leader',
+    'invite-only',
+  )
+
+  assert.deepEqual(partyForPlayer(state, 'returning-member'), {
+    ...identity('returning-member'),
+    leaderPlayerId: 'original-leader',
+    memberPlayerIds: ['original-leader', 'returning-member', 'later-member'],
+    visibility: 'invite-only',
+  })
+  assert.equal(partyForPlayer(state, 'original-leader')?.leaderPlayerId, 'original-leader')
+  assert.throws(
+    () => restorePartyMembership(
+      players('claimant', 'conflict'),
+      'claimant',
+      ['claimant', 'conflict'],
+      'claimant',
+      'private',
+    ),
+    /already belongs to another party/,
+  )
 })
 
 test('visibility, join-code rotation, and requests are leader-owned and bounded', () => {
@@ -169,8 +199,28 @@ test('party projection exposes member access and only leader join requests', () 
     'player-a',
     new Map([['player-a', aurelia]]),
     new Set(['player-a', 'player-b']),
+    new Map([
+      ['player-a', {
+        connected: true,
+        currentHealth: 37,
+        displayName: 'Aurelia',
+        element: 'fire' as const,
+        lifeState: 'alive' as const,
+        maximumHealth: 50,
+        playerId: 'player-a',
+      }],
+    ]),
   )
   assert.equal(projected.party.joinCode, identity('player-a').joinCode)
+  assert.deepEqual(projected.partyRoster, [{
+    connected: true,
+    currentHealth: 37,
+    displayName: 'Aurelia',
+    element: 'fire',
+    lifeState: 'alive',
+    maximumHealth: 50,
+    playerId: 'player-a',
+  }])
   assert.deepEqual(projected.joinRequests, [{
     id: 'request-1',
     requester: requester('guest'),
@@ -180,6 +230,15 @@ test('party projection exposes member access and only leader join requests', () 
     'player-b',
     new Map([['player-a', aurelia]]),
     new Set(['player-a', 'player-b']),
+    new Map([['player-b', {
+      connected: true,
+      currentHealth: 50,
+      displayName: 'player-b',
+      element: 'ether',
+      lifeState: 'alive',
+      maximumHealth: 50,
+      playerId: 'player-b',
+    }]]),
   ).joinRequests.length, 0)
 })
 

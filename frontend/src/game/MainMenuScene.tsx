@@ -1608,6 +1608,7 @@ export default function MainMenuScene({
               onOpenSkills={openSkillBook}
               onPauseRequest={requestGameplayPause}
               onReady={finishBoneyardLoading}
+              partyRoster={partyState?.partyRoster}
               progression={runtimeProgression ?? runtimeSnapshot.players[session.playerId]!.progression}
               presentationPaused={gameplayPause !== null}
               samplePresentation={session.sampleBoneyardPresentation}

@@ -128,6 +128,10 @@ try {
       }))),
     })
   })
+  await context.route('**/deployment.json*', async route => {
+    const revision = new URL(route.request().url()).searchParams.get('current')
+    await route.fulfill({ json: { revision } })
+  })
 
   const page = await context.newPage()
   page.on('pageerror', error => pageErrors.push(error.message))
@@ -257,9 +261,85 @@ try {
   await resolveAllOffers(leader)
   await resolveAllOffers(member)
   await waitForHost(() => host.playerState(leader.playerId)?.levelUpBarrier === null, 'stacked peers done')
-  const tickAfterPeers = host.playerState(leader.playerId).tick
+
+  const leaderState = host.playerState(leader.playerId)
+  const leaderIndex = leaderState.playerEntities.identities.findIndex(({ playerId }) => (
+    playerId === leader.playerId
+  ))
+  assert.ok(leaderIndex >= 0)
+  Object.assign(leaderState, {
+    playerEntities: {
+      ...leaderState.playerEntities,
+      progressions: leaderState.playerEntities.progressions.map((progression, index) => (
+        index === leaderIndex
+          ? { ...progression, currentHealth: 0, lifeState: 'spectating' }
+          : progression
+      )),
+    },
+  })
+  leader.setVisibility('private')
+  const deadVisualHandle = await page.waitForFunction(playerId => {
+    const row = document.querySelector(`[data-ally-id="${playerId}"]`)
+    const bar = row?.querySelector('.hub-hud-ally-bar')
+    const backgroundImage = bar === null
+      ? 'none'
+      : getComputedStyle(bar, '::after').backgroundImage
+    return row?.getAttribute('data-ally-dead') === 'true'
+      && bar !== null
+      && backgroundImage !== 'none'
+      ? {
+          connected: row.getAttribute('data-ally-connected'),
+          dead: row.getAttribute('data-ally-dead'),
+          backgroundImage,
+        }
+      : false
+  }, leader.playerId)
+  const deadVisual = await deadVisualHandle.jsonValue()
+  assert.deepEqual({ connected: deadVisual.connected, dead: deadVisual.dead }, {
+    connected: 'true',
+    dead: 'true',
+  })
+
+  const retainedLeaderState = member.next(message => (
+    message.type === 'server-party-state'
+    && message.state.partyRoster.some(row => (
+      row.playerId === leader.playerId && !row.connected
+    ))
+  ))
+  await leader.close()
+  const retainedLeader = await retainedLeaderState
+  assert.equal(retainedLeader.state.party.leaderPlayerId, leader.playerId)
+  assert.deepEqual(new Set(retainedLeader.state.party.memberPlayerIds), new Set([
+    leader.playerId,
+    browserPlayerId,
+    member.playerId,
+  ]))
+  const disconnectedVisualHandle = await page.waitForFunction(playerId => {
+    const row = document.querySelector(`[data-ally-id="${playerId}"]`)
+    const bar = row?.querySelector('.hub-hud-ally-bar')
+    const signal = bar === null ? null : getComputedStyle(bar, '::before')
+    return row?.getAttribute('data-ally-connected') === 'false'
+      && bar !== null
+      && signal?.backgroundImage !== 'none'
+      ? {
+          animationName: signal.animationName,
+          backgroundImage: signal.backgroundImage,
+          dead: row.getAttribute('data-ally-dead'),
+        }
+      : false
+  }, leader.playerId)
+  const disconnectedSignal = await disconnectedVisualHandle.jsonValue()
+  assert.equal(disconnectedSignal.dead, 'true')
+  assert.notEqual(disconnectedSignal.backgroundImage, 'none')
+  assert.equal(disconnectedSignal.animationName, 'ally-signal-loss')
+  const rosterScreenshotPath = evidenceRoot
+    ? join(evidenceRoot, `party-roster-dead-disconnected-${sessionKind}.png`)
+    : null
+  if (rosterScreenshotPath) await page.screenshot({ path: rosterScreenshotPath })
+
+  const tickAfterPeers = host.playerState(member.playerId).tick
   await new Promise(resolve => setTimeout(resolve, 150))
-  assert.ok(host.playerState(leader.playerId).tick > tickAfterPeers)
+  assert.ok(host.playerState(member.playerId).tick > tickAfterPeers)
 
   const picker = page.locator('.skill-picker-stage')
   await picker.waitFor({ state: 'visible', timeout: 30_000 })
@@ -300,10 +380,17 @@ try {
     ? join(evidenceRoot, `party-rejoin-catch-up-${sessionKind}.png`)
     : null
   if (screenshotPath) await page.screenshot({ path: screenshotPath })
-  assert.deepEqual(pageErrors, [])
-  assert.deepEqual(consoleErrors, [])
-  assert.deepEqual(failedResponses, [])
-  assert.deepEqual(failedRequests, [])
+  assert.deepEqual({
+    consoleErrors,
+    failedRequests,
+    failedResponses,
+    pageErrors,
+  }, {
+    consoleErrors: [],
+    failedRequests: [],
+    failedResponses: [],
+    pageErrors: [],
+  })
   process.stdout.write(`${JSON.stringify({
     status: 'ok',
     sessionKind,
@@ -316,6 +403,9 @@ try {
     saveRevisionAfter: rotatedSave.revision,
     screenshotPath,
     stagedScreenshotPath,
+    rosterScreenshotPath,
+    deadOverlay: deadVisual.backgroundImage,
+    disconnectedSignal,
     pageErrors,
     consoleErrors,
     failedResponses,
@@ -377,6 +467,9 @@ async function enterRawPlayer(displayName, element) {
         offerSequence: offer.sequence,
         skillId: offer.options[choiceIndex].skillId,
       }))
+    },
+    setVisibility(visibility) {
+      socket.send(JSON.stringify({ type: 'client-party-settings', visibility }))
     },
     startMatch(boneyardId) {
       socket.send(JSON.stringify({ type: 'client-start-match', boneyardId }))

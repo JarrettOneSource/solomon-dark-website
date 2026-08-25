@@ -157,11 +157,24 @@ function partyState(memberPlayerIds: readonly string[]): LocalPartyState {
       totalPlaytimeMs: null,
     })),
     invitations: [],
+    joinRequests: [],
     party: {
       id: 'party-1',
+      joinCode: 'TEST-2345',
       leaderPlayerId: memberPlayerIds[0]!,
+      listingId: 'listing-1',
       memberPlayerIds,
+      visibility: 'private',
     },
+    partyRoster: memberPlayerIds.map((playerId, index) => ({
+      connected: true,
+      currentHealth: 50,
+      displayName: `Player ${index + 1}`,
+      element: 'ether',
+      lifeState: 'alive',
+      maximumHealth: 50,
+      playerId,
+    })),
     revision: 1,
   }
 }

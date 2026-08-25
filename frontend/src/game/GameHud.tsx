@@ -20,6 +20,7 @@ import {
 } from './hub-inventory-presentation.ts'
 import SkillQuickbar, { NativeSkillIcon } from './SkillQuickbar.tsx'
 import type { GameSnapshot } from './protocol/game-protocol.ts'
+import type { PartyRosterPlayer } from './protocol/party-state.ts'
 import { gameBindingLabel, type GameControlBindings } from './game-settings.ts'
 import type { NativeTutorialHudAccess } from './core-kernels/native-tutorial.ts'
 import {
@@ -50,7 +51,7 @@ interface GameHudProps {
   onPotionClick?: (itemId: number) => void
   onQuickbarInput?: (slot: number, pressed: boolean) => void
   onSkillBindingClick?: (binding: NativeHudSkillBinding) => void
-  partyMemberIds?: readonly string[]
+  partyRoster?: readonly PartyRosterPlayer[]
   onSkillsClick?: () => void
   playerId: string
   progression: ProtocolPlayerProgression
@@ -144,7 +145,7 @@ export default function GameHud({
   onPotionClick,
   onQuickbarInput,
   onSkillBindingClick,
-  partyMemberIds,
+  partyRoster,
   onSkillsClick,
   playerId,
   progression,
@@ -243,7 +244,7 @@ export default function GameHud({
         additionalRows={additionalAllyRows}
         hidden={allyRosterHidden}
         initialSnapshot={initialSnapshot}
-        partyMemberIds={partyMemberIds}
+        partyRoster={partyRoster}
         playerId={playerId}
         subscribeSnapshot={subscribeSnapshot}
       />

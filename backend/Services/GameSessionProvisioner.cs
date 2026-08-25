@@ -215,7 +215,7 @@ public sealed partial class GameSessionProvisioner
         CancellationToken cancellationToken)
     {
         EnsurePrivateSessionsConfigured();
-        if (token.Length > 2_048 || !PartyRejoinTokenRegex().IsMatch(token))
+        if (token.Length > 8_192 || !PartyRejoinTokenRegex().IsMatch(token))
         {
             throw new GamePartyJoinException("That active-party rejoin is invalid.", 400);
         }
@@ -611,7 +611,7 @@ public sealed partial class GameSessionProvisioner
     [GeneratedRegex("^[A-Za-z0-9_-]{8,128}$", RegexOptions.CultureInvariant)]
     private static partial Regex PartyTokenRegex();
 
-    [GeneratedRegex("^(?:[A-Za-z0-9_-]{43}|sdrpr1\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]{43})$", RegexOptions.CultureInvariant)]
+    [GeneratedRegex("^(?:[A-Za-z0-9_-]{43}|sdrpr[12]\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]{43})$", RegexOptions.CultureInvariant)]
     private static partial Regex PartyRejoinTokenRegex();
 
     [GeneratedRegex("^[a-f0-9]{64}$", RegexOptions.CultureInvariant)]

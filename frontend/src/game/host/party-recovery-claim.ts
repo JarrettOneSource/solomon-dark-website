@@ -5,15 +5,18 @@ import {
 } from 'node:crypto'
 
 import type { GameSessionKind } from '../protocol/game-protocol.ts'
+import { isWizardElement, type WizardElement } from '../core-kernels/player-character.ts'
+import { PLAYER_LIFE_STATES, type PlayerLifeState } from '../core-kernels/player-combat.ts'
+import type { PartyVisibility } from '../protocol/party-state.ts'
 import type { GameSaveIntegrity } from '../save/game-save-contract.ts'
 import {
   parseGameSaveDocument,
 } from '../save/game-save-contract.ts'
 import { restoreGameSaveDocument } from '../save/game-save-document.ts'
 
-const CLAIM_PREFIX = 'sdrpr1'
-const CLAIM_VERSION = 1
-export const MAX_PARTY_RECOVERY_CLAIM_LENGTH = 2_048
+const CLAIM_PREFIX = 'sdrpr2'
+const CLAIM_VERSION = 2
+export const MAX_PARTY_RECOVERY_CLAIM_LENGTH = 8_192
 const BASE64URL_256 = /^[A-Za-z0-9_-]{43}$/
 const SHA256 = /^[a-f0-9]{64}$/
 const GIT_REVISION = /^[a-f0-9]{40}$/
@@ -24,6 +27,9 @@ export interface PartyRecoveryClaim {
   readonly integrity: GameSaveIntegrity
   readonly leaderboardUserId: number | null
   readonly partyMemberCount: number
+  readonly partyLeaderPlayerId: string
+  readonly partyRoster: readonly PartyRecoveryRosterMember[]
+  readonly partyVisibility: PartyVisibility
   readonly playerId: string
   readonly recoveryId: string
   readonly runId: string
@@ -34,9 +40,18 @@ export interface PartyRecoveryClaim {
   readonly targetRevision: string | null
 }
 
+export interface PartyRecoveryRosterMember {
+  readonly currentHealth: number
+  readonly displayName: string
+  readonly element: WizardElement
+  readonly lifeState: PlayerLifeState
+  readonly maximumHealth: number
+  readonly playerId: string
+}
+
 interface SignedPartyRecoveryClaim extends PartyRecoveryClaim {
   readonly documentSha256: string
-  readonly version: 1
+  readonly version: 2
 }
 
 export function createPartyRecoveryClaim(
@@ -92,7 +107,7 @@ export function verifyPartyRecoveryClaim(
 export function partyRecoveryClaimToken(value: unknown): value is string {
   return typeof value === 'string'
     && value.length <= MAX_PARTY_RECOVERY_CLAIM_LENGTH
-    && /^sdrpr1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/.test(value)
+    && /^sdrpr2\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/.test(value)
 }
 
 function decodeSignedPartyRecoveryClaim(
@@ -115,7 +130,10 @@ function decodeSignedPartyRecoveryClaim(
       'globalScoreEligible',
       'integrity',
       'leaderboardUserId',
+      'partyLeaderPlayerId',
       'partyMemberCount',
+      'partyRoster',
+      'partyVisibility',
       'playerId',
       'recoveryId',
       'runId',
@@ -135,7 +153,10 @@ function decodeSignedPartyRecoveryClaim(
       globalScoreEligible: value.globalScoreEligible,
       integrity: value.integrity,
       leaderboardUserId: value.leaderboardUserId,
+      partyLeaderPlayerId: value.partyLeaderPlayerId,
       partyMemberCount: value.partyMemberCount,
+      partyRoster: value.partyRoster,
+      partyVisibility: value.partyVisibility,
       playerId: value.playerId,
       recoveryId: value.recoveryId,
       runId: value.runId,
@@ -171,6 +192,26 @@ function validateClaim(claim: PartyRecoveryClaim): void {
   if (!Number.isInteger(claim.partyMemberCount) || claim.partyMemberCount < 1 || claim.partyMemberCount > 16) {
     throw new Error('party recovery member count is invalid')
   }
+  if (!boundedIdentity(claim.partyLeaderPlayerId)) {
+    throw new Error('party recovery leader is invalid')
+  }
+  if (!Array.isArray(claim.partyRoster) || claim.partyRoster.length !== claim.partyMemberCount) {
+    throw new Error('party recovery roster size is invalid')
+  }
+  const rosterIds = new Set<string>()
+  for (const member of claim.partyRoster) {
+    validateRosterMember(member)
+    if (rosterIds.has(member.playerId)) throw new Error('party recovery roster contains a duplicate')
+    rosterIds.add(member.playerId)
+  }
+  if (!rosterIds.has(claim.partyLeaderPlayerId) || !rosterIds.has(claim.playerId)) {
+    throw new Error('party recovery roster is missing its leader or claimant')
+  }
+  if (
+    claim.partyVisibility !== 'public'
+    && claim.partyVisibility !== 'invite-only'
+    && claim.partyVisibility !== 'private'
+  ) throw new Error('party recovery visibility is invalid')
   if (!boundedIdentity(claim.playerId)) throw new Error('party recovery player id is invalid')
   if (!BASE64URL_256.test(claim.recoveryId)) {
     throw new Error('party recovery recovery id is invalid')
@@ -188,6 +229,41 @@ function validateClaim(claim: PartyRecoveryClaim): void {
   if (claim.sessionKind === 'global-hub' && claim.integrity !== 'global-clean') {
     throw new Error('party recovery global session integrity is invalid')
   }
+}
+
+function validateRosterMember(member: unknown): asserts member is PartyRecoveryRosterMember {
+  if (!record(member)) throw new Error('party recovery roster member is invalid')
+  const keys = [
+    'currentHealth',
+    'displayName',
+    'element',
+    'lifeState',
+    'maximumHealth',
+    'playerId',
+  ]
+  if (Object.keys(member).sort().join('\0') !== keys.join('\0')) {
+    throw new Error('party recovery roster member fields are invalid')
+  }
+  if (!boundedIdentity(member.playerId)) throw new Error('party recovery roster player is invalid')
+  if (
+    typeof member.displayName !== 'string'
+    || member.displayName.length < 1
+    || member.displayName.length > 64
+  ) throw new Error('party recovery roster name is invalid')
+  if (typeof member.element !== 'string' || !isWizardElement(member.element)) {
+    throw new Error('party recovery roster element is invalid')
+  }
+  if (
+    typeof member.lifeState !== 'string'
+    || !(PLAYER_LIFE_STATES as readonly string[]).includes(member.lifeState)
+  ) throw new Error('party recovery roster life state is invalid')
+  if (
+    typeof member.maximumHealth !== 'number'
+    || !Number.isFinite(member.maximumHealth)
+    || member.maximumHealth <= 0
+    || typeof member.currentHealth !== 'number'
+    || !Number.isFinite(member.currentHealth)
+  ) throw new Error('party recovery roster health is invalid')
 }
 
 function validateDocumentBindings(
@@ -236,7 +312,10 @@ function publicClaim(payload: SignedPartyRecoveryClaim): PartyRecoveryClaim {
     globalScoreEligible: payload.globalScoreEligible,
     integrity: payload.integrity,
     leaderboardUserId: payload.leaderboardUserId,
+    partyLeaderPlayerId: payload.partyLeaderPlayerId,
     partyMemberCount: payload.partyMemberCount,
+    partyRoster: payload.partyRoster,
+    partyVisibility: payload.partyVisibility,
     playerId: payload.playerId,
     recoveryId: payload.recoveryId,
     runId: payload.runId,

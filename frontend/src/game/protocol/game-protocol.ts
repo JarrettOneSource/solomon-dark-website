@@ -308,6 +308,7 @@ import {
   type PartyJoinRequester,
   type LocalPartyState,
   type PartyPlayerProfile,
+  type PartyRosterPlayer,
   type PartyVisibility,
   type PlayerSocialProfile,
 } from './party-state.ts'
@@ -355,7 +356,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 76
+export const GAME_PROTOCOL_VERSION = 77
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -1873,6 +1874,36 @@ function partyPlayerProfile(value: unknown, field: string): PartyPlayerProfile {
   }
 }
 
+function partyRosterPlayer(value: unknown, field: string): PartyRosterPlayer {
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'connected',
+    'currentHealth',
+    'displayName',
+    'element',
+    'lifeState',
+    'maximumHealth',
+    'playerId',
+  ])
+  const element = limitedString(source.element, `${field}.element`, 32)
+  if (!isWizardElement(element)) {
+    throw new GameProtocolError(`${field}.element is not supported`)
+  }
+  const lifeState = limitedString(source.lifeState, `${field}.lifeState`, 32)
+  if (!(PLAYER_LIFE_STATES as readonly string[]).includes(lifeState)) {
+    throw new GameProtocolError(`${field}.lifeState is not supported`)
+  }
+  return {
+    connected: boolean(source.connected, `${field}.connected`),
+    currentHealth: finite(source.currentHealth, `${field}.currentHealth`),
+    displayName: limitedString(source.displayName, `${field}.displayName`, 64),
+    element,
+    lifeState: lifeState as PlayerLifeState,
+    maximumHealth: positiveFinite(source.maximumHealth, `${field}.maximumHealth`),
+    playerId: validatedPlayerId(source.playerId, `${field}.playerId`),
+  }
+}
+
 function playerSocialProfile(value: unknown, field: string): PlayerSocialProfile {
   const source = record(value, field)
   onlyKeys(source, field, ['accountUsername', 'highestWave', 'totalPlaytimeMs'])
@@ -1926,7 +1957,9 @@ function gameChatRejectionReason(value: unknown): GameChatRejectionReason {
 
 function localPartyState(value: unknown): LocalPartyState {
   const source = record(value, 'state')
-  onlyKeys(source, 'state', ['hubPlayers', 'invitations', 'joinRequests', 'party', 'revision'])
+  onlyKeys(source, 'state', [
+    'hubPlayers', 'invitations', 'joinRequests', 'party', 'partyRoster', 'revision',
+  ])
   const hubPlayers = limitedArray(source.hubPlayers, 'state.hubPlayers', 64)
     .map((entry, index) => partyPlayerProfile(entry, `state.hubPlayers[${index}]`))
   const hubPlayerIds = new Set(hubPlayers.map(({ playerId }) => playerId))
@@ -1963,6 +1996,16 @@ function localPartyState(value: unknown): LocalPartyState {
   if (!memberPlayerIds.includes(leaderPlayerId)) {
     throw new GameProtocolError('state.party leader is not a party member')
   }
+  const partyRoster = limitedArray(source.partyRoster, 'state.partyRoster', 64)
+    .map((entry, index) => partyRosterPlayer(entry, `state.partyRoster[${index}]`))
+  const partyRosterIds = partyRoster.map(({ playerId }) => playerId)
+  if (new Set(partyRosterIds).size !== partyRosterIds.length) {
+    throw new GameProtocolError('state.partyRoster contains a duplicate player id')
+  }
+  if (
+    partyRosterIds.length !== memberPlayerIds.length
+    || partyRosterIds.some((id, index) => id !== memberPlayerIds[index])
+  ) throw new GameProtocolError('state.partyRoster must match party member order')
   const invitations = limitedArray(source.invitations, 'state.invitations', 64)
     .map((entry, index) => {
       const field = `state.invitations[${index}]`
@@ -2030,6 +2073,7 @@ function localPartyState(value: unknown): LocalPartyState {
       memberPlayerIds,
       visibility: partyVisibility(party.visibility, 'state.party.visibility'),
     },
+    partyRoster,
     revision: nonnegativeInteger(source.revision, 'state.revision'),
   }
 }
@@ -4499,9 +4543,6 @@ function gameSnapshot(value: unknown): GameSnapshot {
   const hostPlayerId = source.hostPlayerId === null
     ? null
     : validatedPlayerId(source.hostPlayerId, 'snapshot.hostPlayerId')
-  if (hostPlayerId !== null && !players[hostPlayerId]) {
-    throw new GameProtocolError('snapshot.hostPlayerId is not present in snapshot.players')
-  }
   const tick = nonnegativeInteger(source.tick, 'snapshot.tick')
   const modEffects = protocolModEffects(source.modEffects, 'snapshot.modEffects', players, tick)
   const world = gameWorldSnapshot(source.world, 'snapshot.world', tick)
@@ -4569,9 +4610,6 @@ function gameSnapshotFrame(value: unknown): GameSnapshotFrame {
   const hostPlayerId = source.hostPlayerId === null
     ? null
     : validatedPlayerId(source.hostPlayerId, 'frame.hostPlayerId')
-  if (hostPlayerId !== null && !players[hostPlayerId]) {
-    throw new GameProtocolError('frame.hostPlayerId is not present in frame.players')
-  }
   const tick = nonnegativeInteger(source.tick, 'frame.tick')
   const modEffects = protocolModEffects(source.modEffects, 'frame.modEffects', players, tick)
   const world = gameWorldSnapshotFrame(source.world, 'frame.world', tick)

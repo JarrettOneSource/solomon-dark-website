@@ -200,8 +200,8 @@ export function createGameSaveDocument(
   if (
     partyRejoinToken !== null
     && (
-      partyRejoinToken.length > 2_048
-      || !/^sdrpr1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/.test(partyRejoinToken)
+      partyRejoinToken.length > 8_192
+      || !/^sdrpr2\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/.test(partyRejoinToken)
       || ownerState.world.kind !== 'boneyard'
       || ownerState.run.phase !== 'active'
     )
