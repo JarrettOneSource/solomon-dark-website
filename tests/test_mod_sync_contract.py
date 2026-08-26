@@ -879,7 +879,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
     def test_browser_game_slot_is_account_owned_hashed_and_revision_conditional(self) -> None:
         document = json.dumps(
             {
-                "schemaVersion": 14,
+                "schemaVersion": 15,
                 "integrity": "global-clean",
                 "mods": [],
                 "modState": {},
@@ -942,7 +942,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         )
         self.assertEqual(status, 200, created)
         self.assertEqual(created["slot"], 0)
-        self.assertEqual(created["formatVersion"], 14)
+        self.assertEqual(created["formatVersion"], 15)
         self.assertEqual(created["revision"], 1)
         self.assertEqual(created["document"], document)
         self.assertEqual(created["size"], len(document.encode()))

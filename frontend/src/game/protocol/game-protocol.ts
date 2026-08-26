@@ -292,6 +292,7 @@ import {
   BONEYARD_ENEMY_DEATH_SOUNDS,
   BONEYARD_ENEMY_EVENT_TYPES,
   BONEYARD_ENEMY_PROJECTILE_PAYLOADS,
+  BONEYARD_ENEMY_PROJECTILE_EFFECT_ALPHA_MAXIMUMS,
   BONEYARD_ENEMY_PROJECTILE_EFFECT_KINDS,
   BONEYARD_ENEMY_TERMINAL_OUTPUTS,
   BONEYARD_PLAYER_DAMAGE_SOUNDS,
@@ -10341,8 +10342,11 @@ function boneyardEnemyProjectileEffectSnapshot(
     throw new GameProtocolError(`${field}.ageTicks must precede lifetimeTicks`)
   }
   const alpha = finite(source.alpha, `${field}.alpha`)
-  if (alpha < 0 || alpha > 2) {
-    throw new GameProtocolError(`${field}.alpha must be within [0,2]`)
+  const maximumAlpha = BONEYARD_ENEMY_PROJECTILE_EFFECT_ALPHA_MAXIMUMS[
+    kind as BoneyardEnemyProjectileEffectSnapshot['kind']
+  ]
+  if (alpha < 0 || alpha > maximumAlpha) {
+    throw new GameProtocolError(`${field}.alpha must be within [0,${maximumAlpha}]`)
   }
   return {
     ageTicks,

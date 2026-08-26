@@ -535,6 +535,24 @@ export const BONEYARD_ENEMY_PROJECTILE_EFFECT_KINDS = [
   'poison-pool-fade-outer',
 ] as const
 
+export type BoneyardEnemyProjectileEffectKind =
+  typeof BONEYARD_ENEMY_PROJECTILE_EFFECT_KINDS[number]
+
+export const BONEYARD_ENEMY_PROJECTILE_EFFECT_ALPHA_MAXIMUMS: Readonly<
+  Record<BoneyardEnemyProjectileEffectKind, number>
+> = Object.freeze({
+  'arrow-tumble': 6,
+  'demon-fire': 1,
+  'fire-burst-frame': 1,
+  'fire-burst-glow': 0.5,
+  'firebolt-trail': 1,
+  'guided-impact-aura-one': 2,
+  'guided-impact-aura-two': 2,
+  'guided-impact-main': 2,
+  'poison-pool-fade-inner': 1,
+  'poison-pool-fade-outer': 0.5,
+})
+
 export interface BoneyardEnemyProjectileEffectSnapshot {
   ageTicks: number
   alpha: number
@@ -542,7 +560,7 @@ export interface BoneyardEnemyProjectileEffectSnapshot {
   blendMode: 'add' | 'normal'
   entry: number
   id: number
-  kind: typeof BONEYARD_ENEMY_PROJECTILE_EFFECT_KINDS[number]
+  kind: BoneyardEnemyProjectileEffectKind
   lightRegistration: NativeLightProviderRegistration | null
   lifetimeTicks: number
   ownerActorId: number

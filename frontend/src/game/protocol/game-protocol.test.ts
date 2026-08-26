@@ -1460,6 +1460,41 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
     /enemyProjectileEffects\[0\]\.blendMode/,
   )
 
+  const arrowTumble = JSON.parse(encodeGameMessage(welcome))
+  Object.assign(arrowTumble.snapshot.world.enemyProjectileEffects[0], {
+    ageTicks: 0,
+    alpha: 6,
+    atlas: 'BadGuys',
+    blendMode: 'normal',
+    entry: 2,
+    kind: 'arrow-tumble',
+    lightRegistration: null,
+    lifetimeTicks: 60,
+    scale: 1,
+  })
+  assert.deepEqual(
+    decodeServerGameMessage(JSON.stringify(arrowTumble)),
+    arrowTumble,
+  )
+  const excessiveArrowTumble = JSON.parse(JSON.stringify(arrowTumble))
+  excessiveArrowTumble.snapshot.world.enemyProjectileEffects[0].alpha = 6.001
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(excessiveArrowTumble)),
+    /enemyProjectileEffects\[0\]\.alpha/,
+  )
+  const excessiveFireBurst = JSON.parse(JSON.stringify(arrowTumble))
+  Object.assign(excessiveFireBurst.snapshot.world.enemyProjectileEffects[0], {
+    alpha: 1.001,
+    blendMode: 'add',
+    entry: 251,
+    kind: 'fire-burst-frame',
+    lifetimeTicks: 16,
+  })
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(excessiveFireBurst)),
+    /enemyProjectileEffects\[0\]\.alpha/,
+  )
+
   const duplicateProjectileEffect = JSON.parse(encodeGameMessage(welcome))
   duplicateProjectileEffect.snapshot.world.enemyProjectileEffects.push(
     duplicateProjectileEffect.snapshot.world.enemyProjectileEffects[0],

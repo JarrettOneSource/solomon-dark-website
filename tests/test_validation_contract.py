@@ -20,6 +20,40 @@ DIRECT_LINT = re.compile(
 
 
 class ValidationContractTests(unittest.TestCase):
+    def test_browser_save_versions_match_across_frontend_and_backend(self) -> None:
+        frontend = (ROOT / "frontend/src/game/save/game-save-contract.ts").read_text()
+        backend = (ROOT / "backend/Services/WebGameSaveInspector.cs").read_text()
+
+        frontend_current = int(
+            re.search(r"WEB_GAME_SAVE_SCHEMA_VERSION = (\d+)", frontend).group(1)
+        )
+        backend_current = int(
+            re.search(r"FormatVersion = (\d+)", backend).group(1)
+        )
+        frontend_legacy = [
+            int(value)
+            for value in re.findall(
+                r"\d+",
+                re.search(
+                    r"LEGACY_WEB_GAME_SAVE_SCHEMA_VERSIONS = \[([^]]+)\]",
+                    frontend,
+                ).group(1),
+            )
+        ]
+        backend_legacy = [
+            int(value)
+            for value in re.findall(
+                r"\d+",
+                re.search(
+                    r"LegacyFormatVersions = \[([^]]+)\]",
+                    backend,
+                ).group(1),
+            )
+        ]
+
+        self.assertEqual(backend_current, frontend_current)
+        self.assertEqual(backend_legacy, frontend_legacy)
+
     def test_validation_toolchain_is_pinned(self) -> None:
         global_json = json.loads((ROOT / "global.json").read_text())
         self.assertEqual(

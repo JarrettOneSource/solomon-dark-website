@@ -15,6 +15,10 @@ import type {
   GameSnapshot,
   ProtocolStudentState,
 } from './game-state.ts'
+import {
+  BONEYARD_ENEMY_PROJECTILE_EFFECT_ALPHA_MAXIMUMS,
+  BONEYARD_ENEMY_PROJECTILE_EFFECT_KINDS,
+} from './game-state.ts'
 import type {
   ReplicatedEntityDescriptor,
   ReplicatedEntitySample,
@@ -677,11 +681,105 @@ test('enemy projectile effects replicate after their owner projectile retires', 
   ]])
 })
 
+test('enemy projectile-effect codecs cover every native alpha domain', () => {
+  const rows = {
+    'arrow-tumble': {
+      atlas: 'BadGuys', blendMode: 'normal', entry: 2, lifetimeTicks: 60,
+    },
+    'demon-fire': {
+      atlas: 'DeadHawg', blendMode: 'add', entry: 46, lifetimeTicks: 500,
+    },
+    'fire-burst-frame': {
+      atlas: 'BadGuys', blendMode: 'add', entry: 251, lifetimeTicks: 16,
+    },
+    'fire-burst-glow': {
+      atlas: 'BadGuys', blendMode: 'normal', entry: 110, lifetimeTicks: 16,
+    },
+    'firebolt-trail': {
+      atlas: 'BadGuys', blendMode: 'normal', entry: 255, lifetimeTicks: 8,
+    },
+    'guided-impact-aura-one': {
+      atlas: 'BadGuys', blendMode: 'add', entry: 111, lifetimeTicks: 20,
+    },
+    'guided-impact-aura-two': {
+      atlas: 'BadGuys', blendMode: 'add', entry: 112, lifetimeTicks: 20,
+    },
+    'guided-impact-main': {
+      atlas: 'BadGuys', blendMode: 'add', entry: 110, lifetimeTicks: 20,
+    },
+    'poison-pool-fade-inner': {
+      atlas: 'DeadHawg', blendMode: 'normal', entry: 0, lifetimeTicks: 200,
+    },
+    'poison-pool-fade-outer': {
+      atlas: 'DeadHawg', blendMode: 'normal', entry: 0, lifetimeTicks: 200,
+    },
+  } as const satisfies Record<
+    BoneyardEnemyProjectileEffectSnapshot['kind'],
+    Readonly<Pick<
+      BoneyardEnemyProjectileEffectSnapshot,
+      'atlas' | 'blendMode' | 'entry' | 'lifetimeTicks'
+    >>
+  >
+  assert.deepEqual(Object.keys(rows), [...BONEYARD_ENEMY_PROJECTILE_EFFECT_KINDS])
+
+  for (const [index, kind] of BONEYARD_ENEMY_PROJECTILE_EFFECT_KINDS.entries()) {
+    const initial = boneyardSnapshot(`projectile-effect-${kind}`)
+    if (initial.world.kind !== 'boneyard') throw new Error('expected Boneyard snapshot')
+    const effect: BoneyardEnemyProjectileEffectSnapshot = {
+      ...enemyProjectileEffectSnapshot(),
+      ...rows[kind],
+      ageTicks: 0,
+      alpha: BONEYARD_ENEMY_PROJECTILE_EFFECT_ALPHA_MAXIMUMS[kind],
+      id: 100 + index,
+      kind,
+      lightRegistration: kind === 'fire-burst-glow'
+        ? { managerLane: 'transient', registrationOrdinal: 12 }
+        : null,
+      phaseOriginTicks: 0,
+      spawnTick: 20,
+    }
+    initial.world.enemyProjectileEffects = [effect]
+    const keyframe = createGameSnapshotFrame(initial, 0, undefined, true)
+    if (keyframe.world.kind !== 'boneyard') throw new Error('expected Boneyard frame')
+    const sample = keyframe.world.entities.samples.find((entry) => (
+      entry[0] === REPLICATED_ENTITY_TYPES.boneyardEnemyProjectileEffect
+    ))!
+    const registration = REPLICATED_ENTITY_TYPE_REGISTRY.get(
+      REPLICATED_ENTITY_TYPES.boneyardEnemyProjectileEffect,
+    )!
+    assert.equal(registration.sampleIsValid(sample), true, kind)
+    const reconstructed = new EntityReplicationReconstructor().apply(keyframe, 1)
+    if (reconstructed.world.kind !== 'boneyard') throw new Error('expected Boneyard snapshot')
+    assert.equal(reconstructed.world.enemyProjectileEffects[0]?.kind, kind)
+    assert.equal(
+      reconstructed.world.enemyProjectileEffects[0]?.alpha,
+      BONEYARD_ENEMY_PROJECTILE_EFFECT_ALPHA_MAXIMUMS[kind],
+    )
+
+    const overMaximum = cloneSnapshotFrame(keyframe)
+    if (overMaximum.world.kind !== 'boneyard') throw new Error('expected Boneyard frame')
+    const overMaximumSample = overMaximum.world.entities.samples.find((entry) => (
+      entry[0] === REPLICATED_ENTITY_TYPES.boneyardEnemyProjectileEffect
+    ))!
+    Reflect.set(
+      overMaximumSample,
+      5,
+      Math.round(BONEYARD_ENEMY_PROJECTILE_EFFECT_ALPHA_MAXIMUMS[kind] * 1024) + 1,
+    )
+    assert.throws(
+      () => new EntityReplicationReconstructor().apply(overMaximum, 1),
+      /entity sample|alpha exceeds its native shape/,
+      kind,
+    )
+  }
+})
+
 test('enemy FireBurst glow alone carries the transient ZAnimLit registration', () => {
   const initial = boneyardSnapshot('projectile-effect-light-run')
   if (initial.world.kind !== 'boneyard') throw new Error('expected Boneyard snapshot')
   const glow = {
     ...enemyProjectileEffectSnapshot(),
+    alpha: 0.5,
     kind: 'fire-burst-glow' as const,
     lightRegistration: { managerLane: 'transient' as const, registrationOrdinal: 12 },
   }

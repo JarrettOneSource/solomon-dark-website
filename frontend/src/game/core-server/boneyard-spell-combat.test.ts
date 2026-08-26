@@ -38,6 +38,11 @@ import type {
   NativeWeldBuildId,
   NativeWeldCastKind,
 } from '../core-kernels/native-weld-primary-profile.ts'
+import { projectBoneyardEnemyProjectileEffects } from '../host/project-boneyard-enemies.ts'
+import {
+  BONEYARD_ENEMY_PROJECTILE_EFFECT_ENTITY_REGISTRATION,
+  boneyardEnemyProjectileEffectSample,
+} from '../protocol/boneyard-enemy-projectile-effect-replication.ts'
 import {
   createBoneyardEnemyStore,
   stepBoneyardEnemyStore,
@@ -1280,18 +1285,48 @@ test('Chill Wind tumbles hostile Arrows through the native vslot and SpinAway pr
     velocity: { x: 1, y: 0 },
   }])
 
-  const advanced = stepBoneyardEnemyStore(result.enemies, {
+  const initialEffect = projectBoneyardEnemyProjectileEffects(result.enemies)[0]!
+  assert.equal(initialEffect.kind, 'arrow-tumble')
+  assert.equal(initialEffect.alpha, 6)
+  assert.equal(
+    BONEYARD_ENEMY_PROJECTILE_EFFECT_ENTITY_REGISTRATION.sampleIsValid(
+      boneyardEnemyProjectileEffectSample(initialEffect),
+    ),
+    true,
+  )
+
+  let advancedStore = stepBoneyardEnemyStore(result.enemies, {
     firstProjectileWorldContact: () => null,
     players: {},
     resolveMovement: (request) => request.requestedPosition,
     resolveSpawnIntents: () => [],
     tick: 2,
-  }).store.projectileEffects[0]!
+  }).store
+  const advanced = advancedStore.projectileEffects[0]!
   assert.equal(advanced.ageTicks, 1)
   assert.equal(advanced.alpha, Math.fround(6 - Math.fround(0.1)))
   assert.deepEqual(advanced.position, { x: 51, y: 0 })
   assert.equal(advanced.rotationDeg, Math.fround(rotation.value + angularVelocity.value))
   assert.deepEqual(advanced.velocity, { x: Math.fround(0.98), y: 0 })
+
+  for (let tick = 3; tick <= 61; tick += 1) {
+    advancedStore = stepBoneyardEnemyStore(advancedStore, {
+      firstProjectileWorldContact: () => null,
+      players: {},
+      resolveMovement: (request) => request.requestedPosition,
+      resolveSpawnIntents: () => [],
+      tick,
+    }).store
+    for (const effect of projectBoneyardEnemyProjectileEffects(advancedStore)) {
+      assert.equal(
+        BONEYARD_ENEMY_PROJECTILE_EFFECT_ENTITY_REGISTRATION.sampleIsValid(
+          boneyardEnemyProjectileEffectSample(effect),
+        ),
+        true,
+      )
+    }
+  }
+  assert.deepEqual(advancedStore.projectileEffects, [])
 })
 
 test('underpowered Water carries half damage through the narrow actor-mask lane', () => {

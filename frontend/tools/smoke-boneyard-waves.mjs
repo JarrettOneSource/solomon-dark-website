@@ -25,9 +25,11 @@ import {
 } from '../src/game/core-server/boneyard-collision.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 import {
+  getPlayerEconomy,
   getPlayerCharacter,
   getPlayerProgression,
 } from '../src/game/core-server/game-simulation.ts'
+import { replacePlayerEconomy } from '../src/game/core-server/player-entity-store.ts'
 import {
   EntityReplicationReconstructor,
   REPLICATED_ENTITY_TYPES,
@@ -39,6 +41,7 @@ const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
 const credential = randomBytes(32).toString('base64url')
 const deterministicSeedBytes = Buffer.alloc(16)
 const expectedBoneyardSeed = deterministicSeedBytes.toString('hex')
+const chillArrowOnly = process.argv.includes('--chill-arrow-only')
 const cleanupOnly = process.argv.includes('--cleanup-only')
 const entranceOnly = process.argv.includes('--entrance-only')
 const openingOnly = process.argv.includes('--opening-only')
@@ -57,6 +60,7 @@ const combatScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-combat$1')
 const retiredEntryScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-retired-entry$1')
 const staffMeleeScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-staff-melee$1')
 const archerScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-archer-projectile$1')
+const chillArrowScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-chill-arrow$1')
 const deathScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-death$1')
 const gameOverScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-game-over$1')
 const loadoutScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-loadout$1')
@@ -243,7 +247,7 @@ try {
     assert.equal(opening.pendingSpawnBudget, 0)
   }
   assert.equal(opening.waveOrdinal, 0)
-  const openingSteering = staffMeleeOnly || cleanupOnly
+  const openingSteering = staffMeleeOnly || cleanupOnly || chillArrowOnly
     ? null
     : await captureOpeningSteering(
         page,
@@ -251,7 +255,7 @@ try {
         loadedBoneyard.runId,
         opening.liveEnemies,
       )
-  const entranceRetirement = openingOnly || staffMeleeOnly
+  const entranceRetirement = openingOnly || staffMeleeOnly || chillArrowOnly
     ? null
     : await proveRetiredEntry(
         page,
@@ -263,15 +267,20 @@ try {
         retiredEntryScreenshotPath,
       )
 
-  if (cleanupOnly || entranceOnly || openingOnly || staffMeleeOnly) {
+  if (cleanupOnly || entranceOnly || openingOnly || staffMeleeOnly || chillArrowOnly) {
     const runCombatAdmission = entranceOnly
       ? await proveRunCombatAdmitted(page, scene)
       : null
     const staffMelee = staffMeleeOnly
       ? await proveStaffMeleeContact(page, combatNavigation)
       : null
+    const chillArrow = chillArrowOnly
+      ? await proveChillWindArrowTumble(page, wire, chillArrowScreenshotPath)
+      : null
     await page.screenshot({
-      path: staffMeleeOnly ? staffMeleeScreenshotPath : combatScreenshotPath,
+      path: staffMeleeOnly
+        ? staffMeleeScreenshotPath
+        : chillArrowOnly ? chillArrowScreenshotPath : combatScreenshotPath,
     })
     assert.deepEqual(wire.errors, [])
     assert.deepEqual(errors, [])
@@ -291,10 +300,15 @@ try {
       openingSteering,
       productionFrontend,
       cleanupOnly,
+      chillArrow,
+      chillArrowOnly,
+      chillArrowScreenshotPath,
       retiredEntryScreenshotPath,
       runCombatAdmission,
       speakingCombatAdmission,
-      screenshotPath: staffMeleeOnly ? staffMeleeScreenshotPath : combatScreenshotPath,
+      screenshotPath: staffMeleeOnly
+        ? staffMeleeScreenshotPath
+        : chillArrowOnly ? chillArrowScreenshotPath : combatScreenshotPath,
       staffMelee,
       status: 'ok',
       wire: wireSummary(wire),
@@ -1079,6 +1093,177 @@ async function kiteUntilSolomonTaunt(page, navigation) {
     pulseIndex += 1
   }
   throw new Error('Solomon did not finish the laugh and taunt while combat was active')
+}
+
+async function proveChillWindArrowTumble(page, wire, screenshotPath) {
+  const state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
+  assert.equal(state.levelUpBarrier, null)
+  const playerId = host.hostPlayerId()
+  assert.ok(playerId)
+  learnChillWind(state, playerId)
+  const player = getPlayerCharacter(state, playerId)
+  const arrowId = state.world.enemies.nextProjectileId
+  const effectId = state.world.enemies.nextProjectileEffectId
+  assert.ok(arrowId > 0)
+  assert.ok(effectId > 0)
+  const tick = state.tick
+  const nativeCellBindingOrder = state.world.enemies.nextNativeCellBindingOrder
+  const nativeRegistrationOrder = state.world.enemies.nextNativeRegistrationOrder
+  const arrow = Object.freeze({
+    ageTicks: 8,
+    bounceVelocity: 0,
+    coldSlowTicks: 0,
+    contactRadius: 8,
+    damage: 1,
+    headingDeg: 90,
+    hitPlayerIds: Object.freeze([]),
+    homing: false,
+    id: arrowId,
+    kind: 'arrow',
+    lastStepTick: tick,
+    lightRegistration: null,
+    lifetimeTicks: 300,
+    minimumSpeed: 0,
+    nativeTypeId: 0x7da,
+    nativeCellBindingOrder,
+    nativeRegistrationOrder,
+    ownerActorId: 1,
+    payload: 'normal',
+    poisonDamage: 0,
+    poisonDuration: 0,
+    position: Object.freeze({ x: player.position.x + 80, y: player.position.y }),
+    speed: 5,
+    settledTicksRemaining: 0,
+    spawnTick: Math.max(0, tick - 8),
+    targetPlayerId: null,
+    verticalOffset: -25,
+    verticalVelocity: 0,
+    visualPhaseDeg: 0,
+    visualScale: 1,
+  })
+  Object.assign(state, {
+    world: {
+      ...state.world,
+      enemies: {
+        ...state.world.enemies,
+        actors: Object.freeze([]),
+        deathEffects: Object.freeze([]),
+        mageLightningPulses: Object.freeze([]),
+        maggots: Object.freeze([]),
+        nextNativeCellBindingOrder: nativeCellBindingOrder + 1,
+        nextNativeRegistrationOrder: nativeRegistrationOrder + 1,
+        nextProjectileId: arrowId + 1,
+        projectileEffects: Object.freeze([]),
+        projectiles: Object.freeze([arrow]),
+      },
+      waves: state.world.waves === null
+        ? null
+        : { ...state.world.waves, phase: 'dormant' },
+    },
+  })
+
+  const canvas = page.locator('.boneyard-world-canvas[data-game-renderer="pixi-webgl"]')
+  const bounds = await canvas.boundingBox()
+  assert.ok(bounds)
+  await page.mouse.move(bounds.x + bounds.width * 0.75, bounds.y + bounds.height * 0.5)
+  await page.mouse.down({ button: 'left' })
+  let hostEffect = null
+  try {
+    const deadline = Date.now() + 10_000
+    while (Date.now() < deadline && hostEffect === null) {
+      const current = host.state()
+      if (current.world.kind === 'boneyard') {
+        hostEffect = current.world.enemies.projectileEffects.find((effect) => (
+          effect.id === effectId && effect.kind === 'arrow-tumble'
+        )) ?? null
+      }
+      if (hostEffect === null) await page.waitForTimeout(10)
+    }
+  } finally {
+    await page.mouse.up({ button: 'left' })
+  }
+  assert.ok(hostEffect, 'learned Chill Wind did not tumble the hostile Arrow')
+  assert.ok(hostEffect.alpha > 2 && hostEffect.alpha <= 6)
+  assert.equal(hostEffect.entry, 2)
+  assert.equal(hostEffect.ownerProjectileId, arrowId)
+
+  const wireEffect = await waitForWireValue(
+    page,
+    wire,
+    ({ latestSnapshot }) => latestSnapshot?.world.kind === 'boneyard'
+      ? latestSnapshot.world.enemyProjectileEffects.find((effect) => (
+          effect.id === effectId && effect.kind === 'arrow-tumble' && effect.alpha > 2
+        )) ?? null
+      : null,
+    5_000,
+    'the replicated alpha-six Arrow SpinAway',
+  )
+  await page.waitForFunction((id) => (
+    document.querySelector('.boneyard-world-canvas')
+      ?.__sdrBoneyardFrame?.enemyProjectileEffectIds?.includes(id)
+  ), effectId, { timeout: 5_000 })
+  const renderedFrame = await boneyardFrame(page)
+  await page.screenshot({ path: screenshotPath })
+
+  const retirementDeadline = Date.now() + 5_000
+  while (Date.now() < retirementDeadline) {
+    const current = host.state()
+    const hostRetired = current.world.kind === 'boneyard'
+      && !current.world.enemies.projectileEffects.some(({ id }) => id === effectId)
+    const wireRetired = wire.latestSnapshot?.world.kind === 'boneyard'
+      && !wire.latestSnapshot.world.enemyProjectileEffects.some(({ id }) => id === effectId)
+    if (hostRetired && wireRetired) break
+    await page.waitForTimeout(20)
+  }
+  const finalState = host.state()
+  assert.equal(finalState.world.kind, 'boneyard')
+  assert.equal(finalState.world.enemies.projectileEffects.some(({ id }) => id === effectId), false)
+  assert.equal(wire.latestSnapshot?.world.kind, 'boneyard')
+  assert.equal(
+    wire.latestSnapshot.world.enemyProjectileEffects.some(({ id }) => id === effectId),
+    false,
+  )
+  assert.ok(host.hostPlayerId(), 'the browser player disconnected during SpinAway')
+  return {
+    arrowId,
+    effectId,
+    entry: wireEffect.entry,
+    initialAlpha: wireEffect.alpha,
+    renderedEffectIds: renderedFrame.enemyProjectileEffectIds,
+    retirementTick: finalState.tick,
+  }
+}
+
+function learnChillWind(state, playerId) {
+  const index = state.playerEntities.identities.findIndex(({ playerId: id }) => id === playerId)
+  assert.notEqual(index, -1)
+  const sourceBook = state.playerEntities.skillBooks[index]
+  const permanentRanks = [...sourceBook.permanentRanks]
+  const effectiveRanks = [...sourceBook.effectiveRanks]
+  permanentRanks[33] = 1
+  effectiveRanks[33] = 1
+  const skillBooks = [...state.playerEntities.skillBooks]
+  const progressions = [...state.playerEntities.progressions]
+  skillBooks[index] = {
+    ...sourceBook,
+    effectiveRanks,
+    learnedSkillOrder: sourceBook.learnedSkillOrder.includes(33)
+      ? sourceBook.learnedSkillOrder
+      : [...sourceBook.learnedSkillOrder, 33],
+    permanentRanks,
+  }
+  progressions[index] = {
+    ...progressions[index],
+    revision: progressions[index].revision + 1,
+  }
+  Object.assign(state, {
+    playerEntities: replacePlayerEconomy({
+      ...state.playerEntities,
+      progressions,
+      skillBooks,
+    }, playerId, getPlayerEconomy(state, playerId)),
+  })
 }
 
 async function proveStaffMeleeContact(page, navigation) {
@@ -1948,7 +2133,7 @@ async function enterBoneyard(page) {
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
   await enterCreateAfterCollegeOffice(page)
-  await page.getByRole('button', { name: /fire/i }).click()
+  await page.getByRole('button', { name: chillArrowOnly ? /water/i : /fire/i }).click()
   await page.locator('.create-menu-disciplines[data-visible="true"]')
     .waitFor({ timeout: 30_000 })
   await page.locator('.create-menu-discipline-arcane').click()
@@ -1984,6 +2169,7 @@ async function enterCreateAfterCollegeOffice(page) {
   }, undefined, { timeout: 30_000 })
   await page.locator('.main-menu-page[data-hub-player-activity="none"]')
     .waitFor({ timeout: 30_000 })
+  await completeCollegeIntroDialogue(page)
   await moveHubAxis(page, 'a', 'playerX', 300, 'at-most')
   await moveHubAxis(page, 's', 'playerY', 800, 'at-least')
   await moveHubAxis(page, 'd', 'playerX', 540, 'at-least')
@@ -1993,6 +2179,22 @@ async function enterCreateAfterCollegeOffice(page) {
   } finally {
     await page.keyboard.up('s')
   }
+}
+
+async function completeCollegeIntroDialogue(page) {
+  const dialog = page.getByRole('dialog', { name: 'Talking to The Archchancellor' })
+  if (!await dialog.isVisible()) {
+    await page.keyboard.press('e')
+    await dialog.waitFor({ timeout: 15_000 })
+  }
+  await dialog.getByRole('button', { name: 'Skip' }).click()
+  for (const label of ['Solomon Dark?', 'Collateral Damage?', 'Assistance?']) {
+    await dialog.getByRole('button', { exact: true, name: label }).click()
+    await dialog.getByRole('button', { name: 'Skip' }).click()
+  }
+  await dialog.getByRole('button', { exact: true, name: 'Done' }).click()
+  await dialog.getByRole('button', { name: 'Skip' }).click()
+  await dialog.waitFor({ state: 'hidden', timeout: 15_000 })
 }
 
 async function moveHubAxis(page, key, axis, target, direction) {
