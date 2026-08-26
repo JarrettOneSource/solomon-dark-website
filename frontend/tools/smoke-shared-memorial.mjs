@@ -221,7 +221,11 @@ function moveBrowserPlayerToMortuary() {
       ...state.world,
       participants: {
         ...state.world.participants,
-        [playerId]: { region: 'mortuary', transition: null },
+        [playerId]: {
+          ...state.world.participants[playerId],
+          region: 'mortuary',
+          transition: null,
+        },
       },
     },
   })
