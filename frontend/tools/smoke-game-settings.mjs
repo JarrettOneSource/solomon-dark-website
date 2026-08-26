@@ -7,6 +7,8 @@ import { createServer as createViteServer } from 'vite'
 
 import { startGameHost } from '../src/game/host/game-host.ts'
 import { GAME_SETTINGS_STORAGE_KEY } from '../src/game/game-settings.ts'
+import { getPlayerCharacter } from '../src/game/core-server/game-simulation.ts'
+import { replacePlayerCharacter } from '../src/game/core-server/player-entity-store.ts'
 
 const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
 const credential = randomBytes(32).toString('base64url')
@@ -126,12 +128,22 @@ try {
   assert.match(await moveRight.innerText(), /Z/)
   const openSkills = dialog.locator('[data-binding-action="openSkills"]')
   const openChat = dialog.locator('[data-binding-action="openChat"]')
+  const healthPotion = dialog.locator('[data-binding-action="belt4"]')
+  const manaPotion = dialog.locator('[data-binding-action="belt5"]')
   assert.equal(await openSkills.getAttribute('data-binding-code'), 'KeyK')
   assert.equal(await openChat.getAttribute('data-binding-code'), 'KeyT')
+  assert.equal(await healthPotion.getAttribute('data-binding-code'), 'Digit3')
+  assert.equal(await manaPotion.getAttribute('data-binding-code'), 'Digit4')
   await openSkills.click()
   await page.keyboard.press('KeyT')
   assert.equal(await openSkills.getAttribute('data-binding-code'), 'KeyT')
   assert.equal(await openChat.getAttribute('data-binding-code'), 'KeyK')
+  await healthPotion.click()
+  await page.keyboard.press('KeyH')
+  await manaPotion.click()
+  await page.keyboard.press('KeyJ')
+  assert.equal(await healthPotion.getAttribute('data-binding-code'), 'KeyH')
+  assert.equal(await manaPotion.getAttribute('data-binding-code'), 'KeyJ')
   await dialog.getByRole('button', { name: 'BACK' }).click()
   await dialog.locator('[data-game-default-focus="true"]').waitFor()
   await nextPaint(page)
@@ -142,6 +154,8 @@ try {
   const persistedTitle = await storedSettings(page)
   assert.deepEqual({
     cameraFovPercent: persistedTitle.cameraFovPercent,
+    healthPotion: persistedTitle.controls.belt4,
+    manaPotion: persistedTitle.controls.belt5,
     openChat: persistedTitle.controls.openChat,
     openSkills: persistedTitle.controls.openSkills,
     moveRight: persistedTitle.controls.moveRight,
@@ -150,6 +164,8 @@ try {
     uiScalePercent: persistedTitle.uiScalePercent,
   }, {
     cameraFovPercent: 125,
+    healthPotion: 'KeyH',
+    manaPotion: 'KeyJ',
     openChat: 'KeyK',
     openSkills: 'KeyT',
     moveRight: 'KeyZ',
@@ -196,8 +212,7 @@ try {
 
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
-  await page.locator('.create-menu-scene[data-motion-settled="true"]')
-    .waitFor({ timeout: 30_000 })
+  await enterCreateAfterCollegeAdmission(page, host)
   await page.getByRole('button', { name: /water/i }).click()
   await page.locator('.create-menu-disciplines[data-visible="true"]')
     .waitFor({ timeout: 15_000 })
@@ -209,6 +224,8 @@ try {
   assert.equal(await hubScene.getAttribute('data-camera-zoom'), '0.96')
   assert.equal(await hubScene.getAttribute('data-ui-scale'), '1.5')
   assert.equal(await page.locator('.hub-hud').getAttribute('data-ui-scale'), '1.5')
+  await page.locator('.hub-hud-potion-button-red[data-binding-label="H"]').waitFor()
+  await page.locator('.hub-hud-potion-button-blue[data-binding-label="J"]').waitFor()
 
   const hubCanvas = page.locator('.hub-world-canvas')
   const beforeMove = await hubCanvas.evaluate((canvas) => canvas.__sdrHubFrame.playerX)
@@ -228,6 +245,7 @@ try {
     cameraZoom: Number(await hubScene.getAttribute('data-camera-zoom')),
     chatBinding: persistedTitle.controls.openChat,
     movementDelta: afterMove - beforeMove,
+    potionBindings: ['H', 'J'],
     uiScale: Number(await hubScene.getAttribute('data-ui-scale')),
   }
 
@@ -324,6 +342,69 @@ try {
 
 async function setRange(locator, value) {
   await locator.fill(`${value}`)
+}
+
+async function enterCreateAfterCollegeAdmission(page, host) {
+  const create = page.locator('.create-menu-scene[data-motion-settled="true"]')
+  const first = await Promise.race([
+    create.waitFor({ timeout: 90_000 }).then(() => 'create'),
+    page.locator('.hub-scene[data-renderer-state="ready"]')
+      .waitFor({ timeout: 90_000 })
+      .then(() => 'hub'),
+  ])
+  if (first === 'create') return
+  const playerId = host.hostPlayerId()
+  assert.ok(playerId)
+  const state = host.state()
+  assert.equal(state.world.kind, 'hub')
+  const participant = state.world.participants[playerId]
+  if (participant?.collegeIntro) {
+    state.world = {
+      ...state.world,
+      participants: {
+        ...state.world.participants,
+        [playerId]: {
+          collegeIntro: {
+            ...participant.collegeIntro,
+            contactCounter: 0,
+            coverAlpha: 0,
+            dialogueSequence: participant.collegeIntro.dialogueSequence + 1,
+            officeSpeed: 0.5,
+            pathCursor: 6,
+            phase: 'arch-dialogue',
+            titleCursor: 5,
+          },
+          region: 'office',
+          transition: null,
+        },
+      },
+    }
+    state.playerEntities = replacePlayerCharacter(state.playerEntities, playerId, {
+      ...getPlayerCharacter(state, playerId),
+      position: { x: 522.5, y: 530 },
+      velocity: { x: 0, y: 0 },
+    })
+    const arch = page.getByRole('dialog', { name: 'Talking to The Archchancellor' })
+    await arch.waitFor({ timeout: 15_000 })
+    await arch.getByRole('button', { name: 'Skip' }).click()
+    await arch.getByRole('button', { name: 'Solomon Dark?' }).click()
+    await arch.getByRole('button', { name: 'Skip' }).click()
+    await arch.getByRole('button', { name: 'Done' }).click()
+    await arch.getByRole('button', { name: 'Skip' }).click()
+    await arch.waitFor({ state: 'hidden', timeout: 15_000 })
+  }
+  const office = host.state()
+  office.playerEntities = replacePlayerCharacter(office.playerEntities, playerId, {
+    ...getPlayerCharacter(office, playerId),
+    position: { x: 512, y: 900 },
+    velocity: { x: 0, y: 0 },
+  })
+  await page.keyboard.down('s')
+  try {
+    await create.waitFor({ timeout: 30_000 })
+  } finally {
+    await page.keyboard.up('s')
+  }
 }
 
 async function storedSettings(page) {

@@ -10,9 +10,17 @@ import {
   NATIVE_HUD_BACKBUFFER,
   nativeHudModalSlideLayout,
 } from '../src/game/native-hud-layout.ts'
-import { getPlayerEconomy } from '../src/game/core-server/game-simulation.ts'
-import { replacePlayerEconomy } from '../src/game/core-server/player-entity-store.ts'
+import {
+  getPlayerCharacter,
+  getPlayerEconomy,
+} from '../src/game/core-server/game-simulation.ts'
+import {
+  replacePlayerCharacter,
+  replacePlayerEconomy,
+} from '../src/game/core-server/player-entity-store.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
+import { WEB_GAME_SAVE_SLOT } from '../src/game/save/game-save-contract.ts'
+import { restoreGameSaveDocument } from '../src/game/save/game-save-document.ts'
 
 const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
 const screenshotRoot = process.env.SDR_SKILL_BOOK_SMOKE_SCREENSHOT_ROOT
@@ -93,22 +101,7 @@ try {
   }
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
-  const create = page.locator('.create-menu-scene[data-motion-settled="true"]')
-  const office = page.locator('.hub-scene[data-hub-region="office"]')
-  await office.waitFor({ timeout: 30_000 })
-  await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 30_000 })
-  await page.waitForFunction(() => (
-    document.querySelector('.hub-world-canvas')?.getAttribute('data-transition-phase') === 'none'
-  ))
-  await moveHubAxis(page, 'a', 'playerX', 300, 'at-most')
-  await moveHubAxis(page, 's', 'playerY', 800, 'at-least')
-  await moveHubAxis(page, 'd', 'playerX', 512, 'at-least')
-  await page.keyboard.down('s')
-  try {
-    await create.waitFor({ timeout: 30_000 })
-  } finally {
-    await page.keyboard.up('s')
-  }
+  await enterCreateAfterCollegeAdmission(page, host)
   await page.getByRole('button', { name: /Ether/i }).click()
   await page.locator('.create-menu-disciplines[data-visible="true"]').waitFor({ timeout: 15_000 })
   await page.locator('.create-menu-discipline-arcane').click()
@@ -161,6 +154,8 @@ try {
 
   const leviathan = book.getByRole('button', { name: /Call Leviathan, rank 1/ })
   await leviathan.hover()
+  await book.locator('xpath=self::*[@data-hovered-skill-id="11"]').waitFor()
+  assert.equal(await book.locator('.skill-book-canvas').getAttribute('data-native-hover-skill-id'), '11')
   await page.screenshot({ path: `${screenshotRoot}-tooltip.png` })
   const quickbarTwo = book.getByRole('button', { name: /Quickbar 2, empty/ })
   await leviathan.dragTo(quickbarTwo)
@@ -182,6 +177,13 @@ try {
     throw error
   }
   assert.equal(await book.getByRole('button', { name: /Quickbar [12], Call Leviathan/ }).count(), 2)
+  const pullOffAudioStart = await audioEventCount(page)
+  const pullOff = await pullSkillOffBelt(page, book, book.getByRole('button', {
+    name: /Quickbar 2, Call Leviathan/,
+  }))
+  await book.getByRole('button', { name: /Quickbar 2, empty/ }).waitFor({ timeout: 5_000 })
+  const pullOffAudio = await waitForSelectorAudio(page, pullOffAudioStart, ['poof'], 1)
+  await waitForSavedQuickbar(page, host.hostPlayerId(), 1, null)
 
   const missile = book.getByRole('button', { name: /Magic Missile, rank 1/ })
   const dragAudioStart = await audioEventCount(page)
@@ -447,7 +449,8 @@ try {
     hudSelectorCancel: true,
     hudSelectorWebGl2: true,
     mixedQuickbar: true,
-    paintedDrag,
+      paintedDrag,
+      pullOff,
     networkErrors,
     pageErrors,
     sealMotion: {
@@ -455,11 +458,12 @@ try {
       hub: hubSealMotion,
       reopenedTick: reopenedSealTick,
     },
-    selectorAudio: {
-      dragAudio,
+      selectorAudio: {
+        dragAudio,
       concentrationSelectionAudio,
       primaryOpenAudio,
-      primarySelectionAudio,
+        primarySelectionAudio,
+        pullOffAudio,
     },
     primarySelection: 'Fireball after Boneyard selector',
     screenshots: [
@@ -475,6 +479,93 @@ try {
   await browser.close()
   await host.close()
   await vite.close()
+}
+
+async function enterCreateAfterCollegeAdmission(page, host) {
+  const create = page.locator('.create-menu-scene[data-motion-settled="true"]')
+  const first = await Promise.race([
+    create.waitFor({ timeout: 90_000 }).then(() => 'create'),
+    page.locator('.hub-scene[data-renderer-state="ready"]')
+      .waitFor({ timeout: 90_000 })
+      .then(() => 'hub'),
+  ])
+  if (first === 'create') return
+
+  const playerId = host.hostPlayerId()
+  assert.ok(playerId)
+  const state = host.state()
+  assert.equal(state.world.kind, 'hub')
+  const participant = state.world.participants[playerId]
+  if (participant?.collegeIntro) {
+    state.world = {
+      ...state.world,
+      participants: {
+        ...state.world.participants,
+        [playerId]: {
+          collegeIntro: {
+            ...participant.collegeIntro,
+            contactCounter: 0,
+            coverAlpha: 0,
+            dialogueSequence: participant.collegeIntro.dialogueSequence + 1,
+            officeSpeed: 0.5,
+            pathCursor: 6,
+            phase: 'arch-dialogue',
+            titleCursor: 5,
+          },
+          region: 'office',
+          transition: null,
+        },
+      },
+    }
+    state.playerEntities = replacePlayerCharacter(
+      state.playerEntities,
+      playerId,
+      {
+        ...getPlayerCharacter(state, playerId),
+        position: { x: 522.5, y: 530 },
+        velocity: { x: 0, y: 0 },
+      },
+    )
+    const dialog = page.getByRole('dialog', { name: 'Talking to The Archchancellor' })
+    await dialog.waitFor({ timeout: 15_000 })
+    await dialog.getByRole('button', { name: 'Skip' }).click()
+    await dialog.getByRole('button', { name: 'Solomon Dark?' }).click()
+    await waitForHostCollegeAcknowledgement(host, playerId)
+    await dialog.getByRole('button', { name: 'Skip' }).click()
+    await dialog.getByRole('button', { name: 'Done' }).click()
+    await dialog.getByRole('button', { name: 'Skip' }).click()
+    await dialog.waitFor({ state: 'hidden', timeout: 15_000 })
+  }
+
+  const officeState = host.state()
+  assert.equal(officeState.world.kind, 'hub')
+  officeState.playerEntities = replacePlayerCharacter(
+    officeState.playerEntities,
+    playerId,
+    {
+      ...getPlayerCharacter(officeState, playerId),
+      position: { x: 512, y: 900 },
+      velocity: { x: 0, y: 0 },
+    },
+  )
+  await page.keyboard.down('s')
+  try {
+    await create.waitFor({ timeout: 30_000 })
+  } finally {
+    await page.keyboard.up('s')
+  }
+}
+
+async function waitForHostCollegeAcknowledgement(host, playerId) {
+  const deadline = performance.now() + 10_000
+  while (performance.now() < deadline) {
+    const state = host.state()
+    if (state.world.kind === 'hub' && state.world.participants[playerId]?.collegeIntro === null) {
+      return
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25))
+  }
+  throw new Error('timed out waiting for College dialogue acknowledgement')
 }
 
 async function sampleSkillBookSealMotion(page, book, sampleCount = 5) {
@@ -513,25 +604,69 @@ async function sampleSkillBookSealMotion(page, book, sampleCount = 5) {
   return { first: samples[0], last: samples.at(-1) }
 }
 
+async function pullSkillOffBelt(page, book, slot) {
+  const bounds = await slot.boundingBox()
+  assert.ok(bounds)
+  const origin = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }
+  await page.mouse.move(origin.x, origin.y)
+  await page.mouse.down()
+  try {
+    await page.mouse.move(origin.x + 80, origin.y, { steps: 16 })
+    await page.waitForFunction(() => (
+      document.querySelector('.skill-book-pull-off-burst[data-smoke-count="24"]')
+    ), undefined, { polling: 'raf', timeout: 2_000 })
+    const burst = book.locator('.skill-book-pull-off-burst')
+    const receipt = {
+      moveFadeCount: Number(await burst.getAttribute('data-move-fade-count')),
+      smokeCount: Number(await burst.getAttribute('data-smoke-count')),
+    }
+    assert.equal(receipt.smokeCount, 24)
+    assert.ok(receipt.moveFadeCount === 3 || receipt.moveFadeCount === 4)
+    await page.screenshot({ path: `${screenshotRoot}-pull-off.png` })
+    return receipt
+  } finally {
+    await page.mouse.up()
+  }
+}
+
+async function waitForSavedQuickbar(page, playerId, slot, expectedSkillId) {
+  assert.ok(playerId)
+  const deadline = performance.now() + 15_000
+  while (performance.now() < deadline) {
+    const document = await readLocalSaveDocument(page)
+    if (document) {
+      try {
+        const restored = restoreGameSaveDocument(document)
+        const index = restored.state.playerEntities.identities.findIndex(
+          ({ playerId: id }) => id === playerId,
+        )
+        if (restored.state.playerEntities.skillBooks[index]?.skillQuickbar[slot]
+          === expectedSkillId) return
+      } catch {
+        // Wait for the addressed quickbar checkpoint to replace an earlier save.
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  }
+  throw new Error(`timed out waiting for saved quickbar slot ${slot}`)
+}
+
+function readLocalSaveDocument(page) {
+  return page.evaluate((slot) => new Promise((resolve, reject) => {
+    const open = indexedDB.open('solomon-dark-game-saves', 1)
+    open.onerror = () => reject(open.error)
+    open.onsuccess = () => {
+      const request = open.result.transaction('slots', 'readonly').objectStore('slots').get(slot)
+      request.onerror = () => reject(request.error)
+      request.onsuccess = () => resolve(request.result?.document ?? null)
+    }
+  }), WEB_GAME_SAVE_SLOT)
+}
+
 function skillBookSealMotion(canvas) {
   return canvas.evaluate((element) => (
     (element.dataset.nativeSealMotion ?? '').split(',').map(Number)
   ))
-}
-
-async function moveHubAxis(page, key, axis, target, direction) {
-  await page.locator('.main-menu-page[data-hub-player-activity="none"]').waitFor()
-  await page.keyboard.down(key)
-  try {
-    await page.waitForFunction(({ axis, direction, target }) => {
-      const value = document.querySelector('.hub-world-canvas')?.__sdrHubFrame?.[axis]
-      return typeof value === 'number'
-        && (direction === 'at-least' ? value >= target : value <= target)
-    }, { axis, direction, target }, { timeout: 15_000 })
-  } finally {
-    await page.keyboard.up(key)
-    await page.waitForTimeout(150)
-  }
 }
 
 async function dragSkillToPaintedBeltEdge(page, book, source, slot, screenshotPath) {

@@ -177,6 +177,7 @@ export async function createSkillBookRenderer(): Promise<SkillBookRenderer> {
     },
     setPresentation(presentation) {
       if (destroyed) return
+      gpu.canvas.dataset.nativeHoverSkillId = `${presentation.hoveredSkillId ?? ''}`
       const progress = presentation.openProgress
       curtain.alpha = progress
       field.alpha = progress ** 3

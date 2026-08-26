@@ -47941,7 +47941,7 @@ representable by a viewport-local Pixi solid behind the native prompt content.
 | Evidence class | Exact source | Material result | Confidence |
 | --- | --- | --- | --- |
 | Retail identity | `SolomonDark.exe` 0.72.5, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred base `0x00400000` | Same canonical image as every current Tutorial/Hub/SkillScreen report; hash reverified before the fresh queries. | high |
-| Belt static path | canonical Ghidra replica via `Invoke-GhidraHeadless.ps1`; `BeltButton::vftable +0x68 -> 0x005C7DF0`, clear `0x005C79C0`, sound registry `+0xCA4` | Any held nonempty belt entry clears immediately on strict pointer displacement `>50`; sound is `sounds\\poof`; burst is 24 UI-65 plus three/four UI-69 members. | high |
+| Belt static path | canonical Ghidra replica via `Invoke-GhidraHeadless.ps1`; `BeltButton::vftable +0x68 -> 0x005C7DF0`, common Button ctor/press/release `0x00430430/0x00430890/0x00430A40`, clear `0x005C79C0`, sound registry `+0xCA4` | Any held nonempty belt entry clears immediately on strict pointer displacement `>50`; `+0x7B=1/+0x7C=0` makes ordinary activation release-only, so pull-off cannot cast; sound is `sounds\\poof`; burst is 24 UI-65 plus three/four UI-69 members. | high |
 | Tutorial terminal/front-end path | `GameOver::Tick 0x005CF4F0`, MainMenu tick `0x005A51B0`, special bootstrap `0x005BBBB0`, startup `0x005CFA80` | Tutorial completion writes adjacent flags `0x0101`; after a strict ten-tick black handoff, the new story Game starts in special Courtyard, not Office. | high |
 | College/Office path | Courtyard ctor/attach/tick/render `0x00506490/0x00503F20/0x0050C970/0x0051EB60`; Office ctor/tick `0x00509C70/0x00509F10`; Office path helper `0x00504670`; shared spline evaluator | Complete ten-point Courtyard and seven-point Office natural splines; the Office raw table is transformed by `roomCenter - 409.5`, exactly `+102.5,+102.5` in the 1024-square room; Title 7/9 alpha program, forced movement, and slowdown are instruction-derived. | high |
 | Automatic Chat path | `PlayerWizard::Tick 0x00548B00`, NPC actions `+0x64/+0x68`, common action `0x00501800`, first question `0x004FD6A0` | Forward actor contact increments by two; strict counter `>10` opens Chat on the sixth eligible tick. Story path therefore auto-opens `ARCH_INTRO_0`; the Office exit remains manual. | high |
@@ -48005,7 +48005,8 @@ other mechanism directly.
   cell top. A target at the center does not authorize covering the icon.
 - Card-to-belt assignment and belt pull-off are different native gestures.
   Pull-off is strict Euclidean displacement over 50, clears immediately, and
-  never moves the binding to another slot.
+  never moves the binding to another slot. Ordinary BeltButton action is a
+  release callback, so an accepted pull-off does not fire the removed skill.
 - SkillScreen owns the detailed HoverBox. Desktop hover/focus and mobile tap
   select the same `hoveredSkillId`; level-up SkillPicker quick descriptions are
   not a substitute for this lesson.

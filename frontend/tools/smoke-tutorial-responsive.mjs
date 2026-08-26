@@ -42,7 +42,10 @@ import {
   WEB_GAME_SAVE_SCHEMA_VERSION,
   WEB_GAME_SAVE_SLOT,
 } from '../src/game/save/game-save-contract.ts'
-import { createGameSaveDocument } from '../src/game/save/game-save-document.ts'
+import {
+  createGameSaveDocument,
+  restoreGameSaveDocument,
+} from '../src/game/save/game-save-document.ts'
 import { boneyardCamera } from '../src/game/renderer/boneyard-render-contract.ts'
 import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
 
@@ -211,6 +214,9 @@ async function runScenario(scenario) {
     close(moved.targetY - initial.targetY, -25 * uiScale, 0.1, `${scenario.name} moved y`)
 
     await page.screenshot({ path: scenario.screenshot })
+    const groundDrop = scenario.name === 'stock'
+      ? await exerciseTutorialGroundDrop(host, page, screenshotRoot)
+      : null
     forceTutorialState(host, {
       introActive: false,
       introBlend: 1,
@@ -221,6 +227,27 @@ async function runScenario(scenario) {
       stageTicks: 0,
     })
     await page.locator('.tutorial-overlay[data-stage="18"]').waitFor({ timeout: 15_000 })
+    const potionBindings = await page.locator('.hub-hud').evaluate((hud) => ({
+      health: hud.querySelector('.hub-hud-potion-button-red')?.getAttribute('data-binding-label'),
+      healthPlaque: hud.querySelectorAll(
+        '.hub-hud-potion-button-red .hub-hud-quickbar-key-backing',
+      ).length,
+      mana: hud.querySelector('.hub-hud-potion-button-blue')?.getAttribute('data-binding-label'),
+      manaPlaque: hud.querySelectorAll(
+        '.hub-hud-potion-button-blue .hub-hud-quickbar-key-backing',
+      ).length,
+    }))
+    assert.deepEqual(potionBindings, {
+      health: '3',
+      healthPlaque: 1,
+      mana: '4',
+      manaPlaque: 1,
+    })
+    assert.match(
+      await page.locator('.tutorial-overlay[data-stage="18"] .tutorial-instruction .sr-only')
+        .innerText(),
+      /3/,
+    )
     const vitals = {
       healthMeter: await measureHudPointer(page, 'health-meter', 20),
       healthPotion: await measureHudPointer(page, 'health-potion', 50),
@@ -251,9 +278,11 @@ async function runScenario(scenario) {
       consoleErrors,
       collegeAdmission,
       failedResponses,
+      groundDrop,
       initial,
       moved,
       pageErrors,
+      potionBindings,
       prelude,
       preludeScreenshot: scenario.preludeScreenshot,
       scenario: scenario.name,
@@ -530,20 +559,77 @@ function forceTutorialState(host, patch) {
   })
 }
 
+async function exerciseTutorialGroundDrop(host, page, screenshotPath) {
+  const state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
+  assert.ok(state.world.tutorial)
+  const playerId = host.hostPlayerId()
+  assert.ok(playerId)
+  const player = getPlayerCharacter(state, playerId)
+  const healthPotion = getPlayerEconomy(state, playerId).backpack.find(
+    ({ kind }) => kind === 'health-potion',
+  )
+  assert.ok(healthPotion)
+  const spawned = spawnBoneyardCustomLootItems(
+    state.world.loot,
+    [healthPotion],
+    { x: player.position.x + 90, y: player.position.y },
+    state.tick,
+  )
+  const actor = spawned.store.actors.at(-1)
+  assert.ok(actor)
+  Object.assign(state, {
+    ...state,
+    world: {
+      ...state.world,
+      loot: spawned.store,
+      tutorial: {
+        ...state.world.tutorial,
+        introActive: false,
+        introBlend: 1,
+        introFade: 0,
+        introMovementTicksRemaining: 0,
+        stage: 17,
+        stageTicks: 0,
+      },
+    },
+  })
+
+  await page.locator('.tutorial-overlay[data-stage="17"]').waitFor({ timeout: 15_000 })
+  await page.locator('[data-tutorial-pointer="world-sack"]').waitFor({ timeout: 15_000 })
+  assert.equal(await page.locator('.boneyard-loot-messages > *').count(), 0)
+  assert.equal(
+    await page.locator('.boneyard-scene').getByText('Health Potion', { exact: true }).count(),
+    0,
+  )
+  await page.screenshot({ path: `${screenshotPath}-ground-health-potion-pointer-only.png` })
+
+  const current = host.state()
+  assert.equal(current.world.kind, 'boneyard')
+  const currentActor = current.world.loot.actors.find(({ id }) => id === actor.id)
+  assert.ok(currentActor)
+  current.playerEntities = replacePlayerCharacter(
+    current.playerEntities,
+    playerId,
+    {
+      ...getPlayerCharacter(current, playerId),
+      position: { ...currentActor.position },
+      velocity: { x: 0, y: 0 },
+    },
+  )
+  const notification = page.locator('.boneyard-loot-messages [aria-label="Health Potion"]')
+  await notification.waitFor({ timeout: 15_000 })
+  return {
+    groundTextCount: 0,
+    notification: await notification.getAttribute('aria-label'),
+    pointerOnlyScreenshot: `${screenshotPath}-ground-health-potion-pointer-only.png`,
+  }
+}
+
 async function exerciseTutorialCollegeAdmission(host, page, screenshotPath) {
   const tutorial = host.state()
   assert.equal(tutorial.world.kind, 'boneyard')
   assert.ok(tutorial.world.tutorial)
-  const intermediatePromise = page.waitForFunction(() => {
-    const canvas = document.querySelector('.hub-world-canvas')
-    const alpha = Number(canvas?.getAttribute('data-transition-alpha'))
-    return canvas?.getAttribute('data-hub-region') === 'office'
-      && canvas?.getAttribute('data-transition-phase') === 'college-intro'
-      && alpha > 0
-      && alpha < 1
-      ? { alpha }
-      : null
-  })
   Object.assign(tutorial.run, {
     gameOverEventId: 1,
     gameOverExitKind: 'automatic',
@@ -553,34 +639,149 @@ async function exerciseTutorialCollegeAdmission(host, page, screenshotPath) {
     phase: 'game-over',
   })
 
-  const office = page.locator('.hub-scene[data-hub-region="office"]')
-  await office.waitFor({ timeout: 30_000 })
-  await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({
-    timeout: 30_000,
-  })
+  const courtyard = page.locator(
+    '.hub-scene[data-hub-region="courtyard"][data-college-intro="courtyard-walk"]',
+  )
+  await courtyard.waitFor({ timeout: 90_000 })
+  await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 90_000 })
   assert.equal(await page.locator('.create-menu-scene').count(), 0)
-  const intermediate = await intermediatePromise
-  const fade = await intermediate.jsonValue()
-  await intermediate.dispose()
-  await page.waitForFunction(() => {
-    const canvas = document.querySelector('.hub-world-canvas')
-    return canvas?.getAttribute('data-hub-region') === 'office'
-      && canvas?.getAttribute('data-transition-phase') === 'none'
-  })
+  await waitForVisibleCollegeTitle(page, 7)
+  const title7 = await collegeTitleReceipt(page)
+  await page.screenshot({ path: `${screenshotPath}-raptisoft-presents.png` })
+  await waitForVisibleCollegeTitle(page, 9)
+  const title9 = await collegeTitleReceipt(page)
+  await page.screenshot({ path: `${screenshotPath}-solomon-dark-title.png` })
+
+  const office = page.locator('.hub-scene[data-hub-region="office"]')
+  await office.waitFor({ timeout: 90_000 })
+  const dialog = page.getByRole('dialog', { name: 'Talking to The Archchancellor' })
+  await dialog.waitFor({ timeout: 90_000 })
   assert.equal(await office.getAttribute('data-story-office'), 'true')
+  assert.equal(await office.getAttribute('data-hub-ui-surface'), 'dialogue')
+  assert.equal(await office.getAttribute('data-college-intro'), 'arch-dialogue')
   await page.screenshot({ path: `${screenshotPath}-tutorial-college-office.png` })
 
-  const state = host.state()
-  assert.equal(state.world.kind, 'hub')
   const playerId = host.hostPlayerId()
   assert.ok(playerId)
+  const state = host.state()
+  assert.equal(state.world.kind, 'hub')
   assert.equal(getPlayerEconomy(state, playerId).tutorialPending, false)
   assert.equal(getPlayerEconomy(state, playerId).collegeIntroPending, true)
+  assert.equal(state.world.participants[playerId]?.collegeIntro?.phase, 'arch-dialogue')
+
+  await dialog.getByRole('button', { name: 'Skip' }).click()
+  await dialog.getByRole('button', { name: 'Solomon Dark?' }).click()
+  await waitForHostCollegeState(host, playerId, null)
+  const acknowledgedSave = await waitForLocalCollegeSave(page, playerId, null)
+  await dialog.getByRole('button', { name: 'Skip' }).click()
+  await dialog.getByRole('button', { name: 'Done' }).click()
+  await dialog.getByRole('button', { name: 'Skip' }).click()
+  await dialog.waitFor({ state: 'hidden', timeout: 15_000 })
+
+  const create = page.locator('.create-menu-scene[data-motion-settled="true"]')
+  await moveHubAxis(page, 'a', 'playerX', 300, 'at-most')
+  await moveHubAxis(page, 's', 'playerY', 800, 'at-least')
+  await moveHubAxis(page, 'd', 'playerX', 540, 'at-least')
+  await page.keyboard.down('s')
+  try {
+    await create.waitFor({ timeout: 30_000 })
+  } finally {
+    await page.keyboard.up('s')
+  }
+  await page.screenshot({ path: `${screenshotPath}-tutorial-college-create.png` })
   return {
-    fadeAlpha: fade.alpha,
-    playerPosition: getPlayerCharacter(state, playerId).position,
-    region: 'office',
+    acknowledgedSaveSchema: acknowledgedSave.schemaVersion,
+    autoDialogue: true,
+    createAfterManualExit: true,
+    officePlayerPosition: getPlayerCharacter(state, playerId).position,
+    regionSequence: ['courtyard', 'office', 'create'],
     storyOffice: true,
+    title7,
+    title9,
+  }
+}
+
+async function waitForVisibleCollegeTitle(page, record) {
+  await page.waitForFunction((expectedRecord) => {
+    const overlay = document.querySelector('.college-intro-overlay')
+    const title = document.querySelector(`[data-native-ui-record="Title.${expectedRecord}"]`)
+    return overlay?.getAttribute('data-college-intro-title-record') === `${expectedRecord}`
+      && title instanceof HTMLElement
+      && Number(getComputedStyle(title).opacity) > 0.05
+  }, record, { timeout: 90_000 })
+}
+
+function collegeTitleReceipt(page) {
+  return page.locator('.college-intro-overlay').evaluate((overlay) => {
+    const record = Number(overlay.getAttribute('data-college-intro-title-record'))
+    const title = overlay.querySelector(`[data-native-ui-record="Title.${record}"]`)
+    if (!(title instanceof HTMLElement)) throw new Error(`missing Title.${record}`)
+    return {
+      alpha: Number(getComputedStyle(title).opacity),
+      cursor: Number(overlay.getAttribute('data-college-intro-title-cursor')),
+      record,
+    }
+  })
+}
+
+async function waitForHostCollegeState(host, playerId, phase) {
+  const deadline = performance.now() + 15_000
+  while (performance.now() < deadline) {
+    const state = host.state()
+    if (
+      state.world.kind === 'hub'
+      && (state.world.participants[playerId]?.collegeIntro?.phase ?? null) === phase
+    ) return
+    await new Promise((resolve) => setTimeout(resolve, 25))
+  }
+  throw new Error(`timed out waiting for College state ${phase}`)
+}
+
+async function waitForLocalCollegeSave(page, playerId, phase) {
+  const deadline = performance.now() + 20_000
+  while (performance.now() < deadline) {
+    const document = await readLocalSaveDocument(page)
+    if (document) {
+      try {
+        const restored = restoreGameSaveDocument(document)
+        if (
+          restored.state.world.kind === 'hub'
+          && (restored.state.world.participants[playerId]?.collegeIntro?.phase ?? null) === phase
+        ) return { schemaVersion: WEB_GAME_SAVE_SCHEMA_VERSION }
+      } catch {
+        // The previous Tutorial checkpoint remains readable until the Hub action save lands.
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  }
+  throw new Error(`timed out waiting for saved College state ${phase}`)
+}
+
+function readLocalSaveDocument(page) {
+  return page.evaluate((slot) => new Promise((resolve, reject) => {
+    const open = indexedDB.open('solomon-dark-game-saves', 1)
+    open.onerror = () => reject(open.error)
+    open.onsuccess = () => {
+      const request = open.result.transaction('slots', 'readonly').objectStore('slots').get(slot)
+      request.onerror = () => reject(request.error)
+      request.onsuccess = () => resolve(request.result?.document ?? null)
+    }
+  }), WEB_GAME_SAVE_SLOT)
+}
+
+async function moveHubAxis(page, key, axis, target, direction) {
+  await page.locator('.main-menu-page[data-hub-player-activity="none"]')
+    .waitFor({ timeout: 30_000 })
+  await page.keyboard.down(key)
+  try {
+    await page.waitForFunction(({ frameAxis, frameDirection, value }) => {
+      const frameValue = document.querySelector('.hub-world-canvas')?.__sdrHubFrame?.[frameAxis]
+      return typeof frameValue === 'number'
+        && (frameDirection === 'at-least' ? frameValue >= value : frameValue <= value)
+    }, { frameAxis: axis, frameDirection: direction, value: target }, { timeout: 15_000 })
+  } finally {
+    await page.keyboard.up(key)
+    await page.waitForTimeout(150)
   }
 }
 

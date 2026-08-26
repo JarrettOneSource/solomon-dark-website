@@ -392,6 +392,7 @@ export default function GameHud({
         <button
           type="button"
           className="hub-hud-potion-button hub-hud-potion-button-red"
+          data-binding-label={healthPotionKey}
           aria-label={`Use health potion, key ${healthPotionKey}, ${healthPotions.count} available`}
           disabled={healthPotions.itemId === null || !onPotionClick}
           onClick={() => {
@@ -455,6 +456,7 @@ export default function GameHud({
         <button
           type="button"
           className="hub-hud-potion-button hub-hud-potion-button-blue"
+          data-binding-label={manaPotionKey}
           aria-label={`Use mana potion, key ${manaPotionKey}, ${manaPotions.count} available`}
           disabled={manaPotions.itemId === null || !onPotionClick}
           onClick={() => {

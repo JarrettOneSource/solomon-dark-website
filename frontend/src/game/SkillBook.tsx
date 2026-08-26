@@ -281,6 +281,7 @@ export default function SkillBook({
       data-dragged-skill-id={drag?.skillId ?? ''}
       data-drag-position-x={drag?.position.x ?? ''}
       data-drag-position-y={drag?.position.y ?? ''}
+      data-hovered-skill-id={hoveredSkillId ?? ''}
       data-renderer-state={rendererState}
       onKeyDown={handleKeyDown}
     >

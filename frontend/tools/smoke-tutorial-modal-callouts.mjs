@@ -250,10 +250,26 @@ async function runScenario(scenario) {
       '[data-inventory-owner="backpack"][aria-label^="Sorceror\'s Amulet,"]',
     )
     assert.ok(backpackPointerLanding.insideX, `${scenario.name} backpack arrow x ${JSON.stringify(backpackPointerLanding)}`)
+    close(
+      backpackPointerLanding.aimX,
+      backpackPointerLanding.targetCenterX,
+      Math.max(1, backpackPointerLanding.targetWidth * 0.02),
+      `${scenario.name} backpack arrow aims at cell centre x`,
+    )
+    close(
+      backpackPointerLanding.aimY,
+      backpackPointerLanding.targetCenterY,
+      Math.max(1, backpackPointerLanding.targetHeight * 0.02),
+      `${scenario.name} backpack arrow aims at cell centre y`,
+    )
     assert.ok(
-      Math.abs(backpackPointerLanding.tipY - backpackPointerLanding.targetTop)
-        <= Math.max(2, backpackPointerLanding.targetHeight * 0.12),
-      `${scenario.name} backpack arrow top edge ${JSON.stringify(backpackPointerLanding)}`,
+      backpackPointerLanding.tipY < backpackPointerLanding.targetTop,
+      `${scenario.name} backpack arrowhead stays outside amulet cell ${JSON.stringify(backpackPointerLanding)}`,
+    )
+    assert.ok(
+      backpackPointerLanding.targetTop - backpackPointerLanding.tipY
+        <= Math.max(8, backpackPointerLanding.targetHeight * 0.18),
+      `${scenario.name} backpack arrowhead remains close to cell ${JSON.stringify(backpackPointerLanding)}`,
     )
     const equipmentPointerLanding = await measurePaintedPointerLanding(
       page,
@@ -326,6 +342,18 @@ async function runScenario(scenario) {
       ['callout:resume', 'pointer:resume', 'callout:quick-use', 'pointer:quick-use', 'pointer:hover', 'callout:hover'],
       `${scenario.name} skill members`,
     )
+    const firstSkill = page.locator('.skill-book-entry-action').first()
+    if (scenario.hasTouch) await firstSkill.tap()
+    else await firstSkill.hover()
+    await page.waitForFunction(() => {
+      const book = document.querySelector('.skill-book-stage')
+      const canvas = document.querySelector('.skill-book-canvas')
+      return book?.getAttribute('data-hovered-skill-id') !== ''
+        && canvas?.getAttribute('data-native-hover-skill-id')
+          === book?.getAttribute('data-hovered-skill-id')
+    })
+    const hoveredSkillId = await page.locator('.skill-book-stage').getAttribute('data-hovered-skill-id')
+    assert.ok(hoveredSkillId, `${scenario.name} skill details did not open`)
 
     // A third root page appears: the concentration lesson must join at the third placement.
     // The open book holds a gameplay pause (`client-gameplay-pause`, source `skill-book`) and the
@@ -482,7 +510,11 @@ function measureResponsiveHudPointer(page, anchor, nativeTargetHeight) {
       paintedTipX: markerRect.left + markerRect.width / 2,
       paintedTipY: markerRect.top + markerRect.height / 2,
       pointerScale: Number(pointer.dataset.pointerScale),
+      aimX: pointerRectCoordinate(Number(pointer.dataset.toX), 'x'),
+      aimY: pointerRectCoordinate(Number(pointer.dataset.toY), 'y'),
       targetBottom: targetRect.bottom,
+      targetCenterX: targetRect.left + targetRect.width / 2,
+      targetCenterY: targetRect.top + targetRect.height / 2,
       targetHeight: targetRect.height,
       targetLeft: targetRect.left,
       targetRight: targetRect.right,
@@ -546,8 +578,18 @@ function measurePaintedPointerLanding(page, pointerSelector, targetSelector) {
       targetLeft: targetRect.left,
       targetRight: targetRect.right,
       targetTop: targetRect.top,
+      targetWidth: targetRect.width,
       tipX,
       tipY,
+    }
+
+    function pointerRectCoordinate(value, axis) {
+      const root = pointer.closest('.main-menu-native-stage')
+      if (!(root instanceof HTMLElement)) throw new Error('missing fixed native stage')
+      const rootRect = root.getBoundingClientRect()
+      return axis === 'x'
+        ? rootRect.left + value * rootRect.width / 1_600
+        : rootRect.top + value * rootRect.height / 900
     }
   }, { expectedPointer: pointerSelector, expectedTarget: targetSelector })
 }

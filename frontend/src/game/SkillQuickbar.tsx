@@ -131,7 +131,7 @@ function SkillQuickbarSlot({
   slot: number
 }) {
   const pressRef = useRef<{
-    inputActive: boolean
+    castEligible: boolean
     originX: number
     originY: number
     pointerId: number
@@ -160,11 +160,14 @@ function SkillQuickbarSlot({
     : `${skill.name}, ${input}${remaining > 0
       ? `, ${formatCooldown(remaining)} seconds cooldown remaining`
       : ''}${active ? ', active' : ''}${combatDisabled ? ', unavailable in the Hub' : ''}`
-  const finishPointer = (event: ReactPointerEvent<HTMLButtonElement>) => {
+  const finishPointer = (event: ReactPointerEvent<HTMLButtonElement>, activate: boolean) => {
     const press = pressRef.current
     if (!press || press.pointerId !== event.pointerId) return
     pressRef.current = null
-    if (press.inputActive) onInput?.(slot, false)
+    if (activate && press.castEligible) {
+      onInput?.(slot, true)
+      onInput?.(slot, false)
+    }
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId)
     }
@@ -195,13 +198,12 @@ function SkillQuickbarSlot({
         if (unsupportedMouseButton || skill === undefined || (!canCast && !onUnassign)) return
         event.preventDefault()
         pressRef.current = {
-          inputActive: canCast,
+          castEligible: canCast,
           originX: event.clientX,
           originY: event.clientY,
           pointerId: event.pointerId,
         }
         event.currentTarget.setPointerCapture(event.pointerId)
-        if (canCast) onInput?.(slot, true)
       }}
       onPointerMove={(event) => {
         const press = pressRef.current
@@ -215,16 +217,15 @@ function SkillQuickbarSlot({
           },
         )) return
         pressRef.current = null
-        if (press.inputActive) onInput?.(slot, false)
         setBurstSequence((current) => (current ?? 0) + 1)
         onUnassign(slot)
         if (event.currentTarget.hasPointerCapture(event.pointerId)) {
           event.currentTarget.releasePointerCapture(event.pointerId)
         }
       }}
-      onPointerUp={finishPointer}
-      onPointerCancel={finishPointer}
-      onLostPointerCapture={finishPointer}
+      onPointerUp={(event) => finishPointer(event, true)}
+      onPointerCancel={(event) => finishPointer(event, false)}
+      onLostPointerCapture={(event) => finishPointer(event, false)}
     >
       {remaining > 0 && capacity > 0 ? (
         <CooldownSector remaining={remaining} capacity={capacity} />
