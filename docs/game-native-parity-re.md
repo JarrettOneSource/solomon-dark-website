@@ -50513,3 +50513,14 @@ SkillPicker's full-browser curtain projection and frozen-world cosmetic clock.
   rerun remain required. Mac memory/FPS and source contracts do not substitute
   for bounded iPhone footprint, temperature, installed-web-app behavior and a
   no-new-Jetsam receipt.
+- Exact final candidate `da61a74613589438048ae061eefebee05bf796e3`, rebased
+  onto current `origin/main` `5e1c9acddac8616c8a74f8b95d12f387f237c056`, is
+  clean and passes the complete supported gate on Linux/WSL and in the detached
+  Apple-arm64 worktree at
+  `/Users/jarrett/codex-acceptance/iphone-performance-20260826-final-lifted/website`.
+  Canonical log SHA-256 values are
+  `afa3e2cbd8dad0c393911903c1535c69afd99f8c05c0470d9e5dde6cc5811066`
+  and `9fb5d773f9b119c3bbf544a96a77446e181bb3882b0025fe5e13da897002ec85`.
+  The production entry is `477,708` raw / `133,898` gzip against the unchanged
+  `524,288` / `134,144` limits. Physical and installed-web-app acceptance remain
+  unpublished requirements; no push or production deployment is claimed.
