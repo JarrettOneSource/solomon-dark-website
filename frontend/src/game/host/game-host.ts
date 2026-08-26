@@ -4435,11 +4435,6 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       'An active Boneyard retired after its final authoritative actor left.',
       logDetails(details),
     )
-    emitRuntimeEvent(
-      'run.retired_empty',
-      'An active Boneyard retired after its final authoritative actor left.',
-      details,
-    )
   }
 
   function prunePartyRejoinSlots(now = performance.now()): void {

@@ -2300,6 +2300,7 @@ test('host admits one fresh solo player into the hidden stock Tutorial and check
 
 test('private College retires a restored Tutorial when its final actor disconnects', async (context) => {
   const logs: GameServerLogEntry[] = []
+  const runtimeEvents: string[] = []
   const loadedBoneyard = materializeStockTutorial(Buffer.alloc(16, 31))
   const host = await startGameHost({
     authentication: {
@@ -2309,6 +2310,7 @@ test('private College retires a restored Tutorial when its final actor disconnec
         : null,
     },
     log: entry => logs.push(entry),
+    runtimeEvents: entry => runtimeEvents.push(entry.event),
     sessionKind: 'private-college',
     snapshotRate: 100,
   })
@@ -2328,10 +2330,13 @@ test('private College retires a restored Tutorial when its final actor disconnec
   assert.equal(host.loadedBoneyard(), null)
   assert.equal(host.state().world.kind, 'hub')
   assert.equal(logs.some(entry => entry.level === 'error'), false)
+  assert.equal(logs.filter(entry => entry.event === 'run.retired_empty').length, 1)
+  assert.equal(runtimeEvents.includes('run.retired_empty'), false)
 })
 
 test('private College retires an ordinary Boneyard instead of ticking it without actors', async (context) => {
   const logs: GameServerLogEntry[] = []
+  const runtimeEvents: string[] = []
   const loadedBoneyard = materializeBoneyard(
     createBoneyardCatalog(),
     'default-random',
@@ -2346,6 +2351,7 @@ test('private College retires an ordinary Boneyard instead of ticking it without
         : null,
     },
     log: entry => logs.push(entry),
+    runtimeEvents: entry => runtimeEvents.push(entry.event),
     sessionKind: 'private-college',
     snapshotRate: 100,
   })
@@ -2365,13 +2371,17 @@ test('private College retires an ordinary Boneyard instead of ticking it without
   assert.equal(host.loadedBoneyard(), null)
   assert.equal(host.state().world.kind, 'hub')
   assert.equal(logs.some(entry => entry.level === 'error'), false)
+  assert.equal(logs.filter(entry => entry.event === 'run.retired_empty').length, 1)
+  assert.equal(runtimeEvents.includes('run.retired_empty'), false)
 })
 
 test('shared Hub retires the stock Tutorial when its final actor disconnects', async (context) => {
   const logs: GameServerLogEntry[] = []
+  const runtimeEvents: string[] = []
   const host = await startGameHost({
     authentication: SHARED_HUB_AUTHENTICATION,
     log: entry => logs.push(entry),
+    runtimeEvents: entry => runtimeEvents.push(entry.event),
     sessionKind: 'global-hub',
     sharedHub: true,
     snapshotRate: 100,
@@ -2393,6 +2403,8 @@ test('shared Hub retires the stock Tutorial when its final actor disconnects', a
   assert.equal(host.partyCount(), 0)
   assert.deepEqual(host.observationTargets(), [])
   assert.equal(logs.some(entry => entry.level === 'error'), false)
+  assert.equal(logs.filter(entry => entry.event === 'run.retired_empty').length, 1)
+  assert.equal(runtimeEvents.includes('run.retired_empty'), false)
 })
 
 test('host rejects a Tutorial start after the fresh-profile pending fact clears', async (context) => {
