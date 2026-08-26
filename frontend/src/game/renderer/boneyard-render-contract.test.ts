@@ -105,7 +105,10 @@ test('Gate record 7 uses the recovered four-corner consumer in game and editor',
   assert.match(boneyardRenderer, /private readonly gateLeaf: MeshSimple/)
   assert.match(boneyardRenderer, /nativeGateArtVertices\(leaf, this\.gateVertices\)/)
   assert.doesNotMatch(boneyardRenderer, /this\.gateLeaf\.position\.set\(leaf\.p0/)
-  assert.match(editorRenderer, /drawGateLeafArt\(ctx, FENCE_ART\.gateLeaf, leaf, cam, w, h\)/)
+  assert.match(
+    editorRenderer,
+    /drawGateLeafArt\(ctx, FENCE_ART\.gateLeaf, leaf, cam, w, h, filterLift\)/,
+  )
   assert.doesNotMatch(editorRenderer, /plantArt\(ctx, FENCE_ART\.gateLeaf, leaf\.p0/)
 })
 
