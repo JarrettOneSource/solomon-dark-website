@@ -160,15 +160,63 @@ async function enterHub(page) {
   }
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
-  await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({
-    timeout: 30_000,
-  })
+  const office = page.locator('.hub-scene[data-hub-region="office"]')
+  await office.waitFor({ timeout: 90_000 })
+  await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 90_000 })
+  const dialog = page.getByRole('dialog', { name: 'Talking to The Archchancellor' })
+  await dialog.waitFor({ timeout: 90_000 })
+  await dialog.getByRole('button', { name: 'Skip' }).click()
+  await dialog.getByRole('button', { name: 'Done' }).click()
+  await dialog.getByRole('button', { name: 'Skip' }).click()
+  const playerId = host.hostPlayerId()
+  assert.ok(playerId)
+  await waitForHostCollegeState(playerId, null)
+  await dialog.waitFor({ state: 'hidden', timeout: 15_000 })
+  await moveHubAxis(page, 'a', 'playerX', 300, 'at-most')
+  await moveHubAxis(page, 's', 'playerY', 800, 'at-least')
+  await moveHubAxis(page, 'd', 'playerX', 540, 'at-least')
+  await page.keyboard.down('s')
+  try {
+    await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({
+      timeout: 30_000,
+    })
+  } finally {
+    await page.keyboard.up('s')
+  }
   await page.getByRole('button', { name: /fire/i }).click()
   await page.locator('.create-menu-disciplines[data-visible="true"]').waitFor({
     timeout: 15_000,
   })
   await page.locator('.create-menu-discipline-arcane').click()
   await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 90_000 })
+}
+
+async function moveHubAxis(page, key, axis, target, direction) {
+  await page.locator('.main-menu-page[data-hub-player-activity="none"]').waitFor()
+  await page.keyboard.down(key)
+  try {
+    await page.waitForFunction(({ axis: coordinate, direction: comparison, target: limit }) => {
+      const value = document.querySelector('.hub-world-canvas')?.__sdrHubFrame?.[coordinate]
+      return typeof value === 'number'
+        && (comparison === 'at-least' ? value >= limit : value <= limit)
+    }, { axis, direction, target }, { timeout: 15_000 })
+  } finally {
+    await page.keyboard.up(key)
+    await page.waitForTimeout(150)
+  }
+}
+
+async function waitForHostCollegeState(playerId, phase) {
+  const deadline = performance.now() + 15_000
+  while (performance.now() < deadline) {
+    const state = host.state()
+    if (
+      state.world.kind === 'hub'
+      && (state.world.participants[playerId]?.collegeIntro?.phase ?? null) === phase
+    ) return
+    await new Promise((resolve) => setTimeout(resolve, 25))
+  }
+  throw new Error(`timed out waiting for College state ${phase}`)
 }
 
 function moveBrowserPlayerToMortuary() {
