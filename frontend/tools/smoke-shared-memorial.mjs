@@ -167,25 +167,30 @@ async function enterHub(page) {
   }
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
+  const create = page.locator('.create-menu-scene[data-motion-settled="true"]')
   const office = page.locator('.hub-scene[data-hub-region="office"]')
-  await office.waitFor({ timeout: 90_000 })
-  await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 90_000 })
-  const dialog = page.getByRole('dialog', { name: 'Talking to The Archchancellor' })
-  await dialog.waitFor({ timeout: 90_000 })
-  await dialog.getByRole('button', { name: 'Skip' }).click()
-  await dialog.getByRole('button', { name: 'Done' }).click()
-  await dialog.getByRole('button', { name: 'Skip' }).click()
-  await dialog.waitFor({ state: 'hidden', timeout: 15_000 })
-  await moveHubAxis(page, 'a', 'playerX', 300, 'at-most')
-  await moveHubAxis(page, 's', 'playerY', 800, 'at-least')
-  await moveHubAxis(page, 'd', 'playerX', 540, 'at-least')
-  await page.keyboard.down('s')
-  try {
-    await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({
-      timeout: 30_000,
-    })
-  } finally {
-    await page.keyboard.up('s')
+  await page.waitForFunction(() => (
+    document.querySelector('.create-menu-scene[data-motion-settled="true"]') !== null
+    || document.querySelector('.hub-scene[data-hub-region="office"]') !== null
+  ), null, { timeout: 90_000 })
+  if (!(await create.isVisible())) {
+    await office.waitFor()
+    await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 90_000 })
+    const dialog = page.getByRole('dialog', { name: 'Talking to The Archchancellor' })
+    await dialog.waitFor({ timeout: 90_000 })
+    await dialog.getByRole('button', { name: 'Skip' }).click()
+    await dialog.getByRole('button', { name: 'Done' }).click()
+    await dialog.getByRole('button', { name: 'Skip' }).click()
+    await dialog.waitFor({ state: 'hidden', timeout: 15_000 })
+    await moveHubAxis(page, 'a', 'playerX', 300, 'at-most')
+    await moveHubAxis(page, 's', 'playerY', 800, 'at-least')
+    await moveHubAxis(page, 'd', 'playerX', 540, 'at-least')
+    await page.keyboard.down('s')
+    try {
+      await create.waitFor({ timeout: 30_000 })
+    } finally {
+      await page.keyboard.up('s')
+    }
   }
   await page.getByRole('button', { name: /fire/i }).click()
   await page.locator('.create-menu-disciplines[data-visible="true"]').waitFor({
