@@ -47,6 +47,7 @@ import {
   removePlayerEntity,
   replacePlayerEconomy,
   replacePlayerCharacter,
+  replacePlayerLoadout,
   respawnPlayerEntityAt,
   restorePlayerEntityHealth,
   resetPlayerEntitiesForNewRun,
@@ -92,6 +93,72 @@ test('players occupy aligned dense ECS columns with stable entity IDs', () => {
   assert.equal(playerCharacterAt(store, 'second')?.config.displayName, 'Second')
   assert.equal(playerProgressionAt(store, 'second')?.lifeState, 'lethal-pending')
   assert.equal(store.nextEntityId, 3)
+})
+
+test('post-Game-Over loadout replacement creates fresh skills while preserving durable profile state', () => {
+  let store = addPlayerEntity(
+    createPlayerEntityStore(),
+    'first',
+    FIRST,
+    createPlayerCharacter(FIRST, { x: 10, y: 20 }),
+    10,
+  )
+  const sourceBook = store.skillBooks[0]!
+  const permanentRanks = [...sourceBook.permanentRanks]
+  const effectiveRanks = [...sourceBook.effectiveRanks]
+  permanentRanks[51] = 2
+  effectiveRanks[51] = 2
+  const hagathaRuntime = {
+    cheatDeathCharges: 2,
+    reverieActive: true,
+    serendipityActive: true,
+  } as const
+  store = {
+    ...store,
+    progressions: [{
+      ...store.progressions[0]!,
+      experience: 450,
+      hagathaRuntime,
+      level: 4,
+      revision: 19,
+    }],
+    skillBooks: [{
+      ...sourceBook,
+      effectiveRanks,
+      learnedSkillOrder: [...sourceBook.learnedSkillOrder, 51],
+      permanentRanks,
+      skillQuickbar: [51, null, null, null, null, null, null, null],
+    }],
+  }
+  const economy = store.economies[0]!
+  const nextConfig = {
+    discipline: 'body',
+    displayName: 'Reborn',
+    element: 'air',
+  } as const
+  const replaced = replacePlayerLoadout(
+    store,
+    'first',
+    createPlayerCharacter(nextConfig, { x: 30, y: 40 }),
+    123_456,
+  )
+  assert.deepEqual(replaced.configs[0], nextConfig)
+  assert.strictEqual(replaced.economies[0], economy)
+  assert.equal(replaced.progressions[0]!.level, 1)
+  assert.equal(replaced.progressions[0]!.experience, 0)
+  assert.equal(replaced.progressions[0]!.offerSeed, 123_456)
+  assert.equal(replaced.progressions[0]!.revision, 20)
+  assert.deepEqual(replaced.progressions[0]!.hagathaRuntime, hagathaRuntime)
+  assert.equal(replaced.skillBooks[0]!.permanentRanks[51], 0)
+  assert.equal(replaced.skillBooks[0]!.permanentRanks[24], 1)
+  assert.equal(replaced.skillBooks[0]!.permanentRanks[27], 1)
+  assert.deepEqual(
+    replaced.skillBooks[0]!.skillQuickbar,
+    [27, null, null, null, null, null, null, null],
+  )
+  assert.equal(replaced.skillRuntimes[0]!.concentrationSkillIdA, null)
+  assert.equal(replaced.skillRuntimes[0]!.concentrationSkillIdB, null)
+  assert.deepEqual(playerCharacterAt(replaced, 'first')?.position, { x: 30, y: 40 })
 })
 
 test('learned primary effects follow the selected pure row, not creation element or Weld', () => {

@@ -129,8 +129,16 @@ and commit locomotion components, but it neither owns nor clones player
 progression. Hub-to-Boneyard placement resets the location-facing locomotion
 slice while retaining the same player entity, progression books, selected
 concentrations, and A/B replacement cursor. Post-run loadout reconstruction
-remains the separate boundary that clears those per-run selections.
-Connected-run death likewise stays on that player entity. The progression
+is a stronger, separate generation boundary: after Game Over, each validated
+Create confirmation replaces level/XP, skill/stat books, runtime, offers,
+selected skills, advanced unlocks, and quickbar with the selected native fresh
+loadout while preserving only durable profile/Hagatha state. It also advances
+component revisions so a client cannot reuse the completed Game Over
+generation's inventory or skill projection.
+Connected-run death likewise stays on that player entity. Dying and spectating
+do not reset that participant's progression, skill book, or economy; only the
+completed all-dead Game Over route and later Create confirmation establish the
+next player generation. The progression
 column owns an internal 100 Hz death age and derives the multiplayer mod's
 60 Hz logical corpse clock from it; tick 159 owns only the corpse burst and
 collision retirement, while five-second expiry owns `dying -> spectating`.
@@ -204,7 +212,7 @@ bounded admission phase/cursors/cover/speed/contact state; the 35-character
 dialogue-acknowledgement discriminator is admitted in full. The same protocol
 also permits an addressed nullable skill-quickbar binding so a populated stock
 `BeltButton` can be pulled off without inventing a replacement skill.
-Current protocol 81 adds the browser-only, fresh-admission
+Protocol 81 adds the browser-only, fresh-admission
 `declineTutorial` intent. It is mutually exclusive with save/resume and College
 admission. Before welcome, the host atomically clears the existing
 `tutorialPending` and `collegeIntroPending` profile fields; the ordinary
@@ -490,8 +498,10 @@ operator reinstall or a different `main` commit.
   rendering nor continuation can destroy the image beneath an active fade.
   Loadout readiness is participant-owned: every current party member submits
   only their own element/discipline pair, and the final confirmation merges the
-  same party and player entities into shared Hub. No private post-run Hub or
-  host-selected guest loadout may remain resident.
+  same party and freshly rebuilt player generations into shared Hub. Ordinary
+  carried equipment/backpack is discarded by Website product policy; existing
+  durable storage and the explicit Last Word ground-recovery result remain.
+  No private post-run Hub or host-selected guest loadout may remain resident.
 - Active-run rejoin is a delayed materialization edge inside `active`, not a
   second run start and not browser-save authority. The host validates the saved
   player, character, sealed content, recovery/run identity, and one-use

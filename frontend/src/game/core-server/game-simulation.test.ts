@@ -3203,27 +3203,42 @@ test('Last Word adds ground Gold and Sack contents to the durable terminal profi
       source: 'script',
     },
   ], state.tick)
+  const preexistingStorageItem = {
+    ...economy.backpack[1]!,
+    id: economy.nextItemId,
+    name: 'Previously Stored Mana Potion',
+  }
+  const persistentEconomy = {
+    ...economy,
+    nextItemId: economy.nextItemId + 1,
+    ownedPerkSelectors: [12],
+    revision: economy.revision + 1,
+    storage: [preexistingStorageItem],
+  }
   state = {
     ...state,
-    playerEntities: replacePlayerEconomy(state.playerEntities, 'owner', {
-      ...economy,
-      ownedPerkSelectors: [12],
-    }),
+    playerEntities: replacePlayerEconomy(state.playerEntities, 'owner', persistentEconomy),
     run: { ...state.run, phase: 'game-over' },
     world: { ...state.world, loot: spawned.store },
   }
 
   const profile = gameSimulationDurableProfileEconomy(state, 'owner')
   assert.equal(profile.gold, economy.gold + 9)
+  assert.equal(profile.storage[0]?.name, 'Previously Stored Mana Potion')
   assert.equal(profile.storage.at(-1)?.kind, 'sack')
-  assert.equal(profile.storage.at(-1)?.contents?.length, 6)
+  assert.deepEqual(profile.storage.at(-1)?.contents?.map(item => item.name), [
+    'Health Potion',
+  ])
 
   const withoutLastWord = gameSimulationDurableProfileEconomy({
     ...state,
-    playerEntities: replacePlayerEconomy(state.playerEntities, 'owner', economy),
+    playerEntities: replacePlayerEconomy(state.playerEntities, 'owner', {
+      ...persistentEconomy,
+      ownedPerkSelectors: [],
+    }),
   }, 'owner')
   assert.equal(withoutLastWord.gold, economy.gold)
-  assert.equal(withoutLastWord.storage.at(-1)?.contents?.length, 5)
+  assert.deepEqual(withoutLastWord.storage, [preexistingStorageItem])
 })
 
 test('one dead player spectates until all-dead Game Over returns the session through loadout', () => {
@@ -3238,11 +3253,16 @@ test('one dead player spectates until all-dead Game Over returns the session thr
     element: 'water',
   } as const
   let state = createGameSimulation({ first, second })
+  state = withPlayerSkillRank(state, 'first', 51, 1)
+  state = withPlayerSkillRank(state, 'second', 63, 1)
+  state = grantGameSimulationPlayerExperience(state, 'first', 89)
   const initialStockIds = Object.fromEntries(['first', 'second'].map((playerId) => [
     playerId,
     getPlayerEconomy(state, playerId).fomentiusStock.map(({ id }) => id),
   ]))
   state = enterBoneyardWorld(state, combatBoneyard('multiplayer-death-run'))
+  const firstActiveEconomy = getPlayerEconomy(state, 'first')
+  const firstActiveProgression = getPlayerProgression(state, 'first')
   state = {
     ...state,
     playerEntities: damagePlayerEntity(state.playerEntities, 'first', 60, state.tick),
@@ -3287,6 +3307,17 @@ test('one dead player spectates until all-dead Game Over returns the session thr
     getPlayerProgression(state, 'first').deathTick,
     PLAYER_DEATH_PRESENTATION_MAXIMUM_HELD_TICK,
   )
+  assert.equal(
+    getPlayerProgression(state, 'first').level,
+    firstActiveProgression.level,
+  )
+  assert.equal(
+    getPlayerProgression(state, 'first').experience,
+    firstActiveProgression.experience,
+  )
+  assert.equal(getPlayerSkillBook(state, 'first').permanentRanks[51], 1)
+  assert.deepEqual(getPlayerEconomy(state, 'first'), firstActiveEconomy)
+  assert.equal(state.run.phase, 'active')
 
   state = {
     ...state,
@@ -3402,10 +3433,7 @@ test('one dead player spectates until all-dead Game Over returns the session thr
       'health-potion',
       'mana-potion',
     ])
-    const retained = economy.storage.at(-1)!
-    assert.equal(retained.kind, 'sack')
-    assert.match(retained.name, new RegExp(`^${playerId === 'first' ? 'First' : 'Second'}'s `))
-    assert.equal(retained.contents?.length, 5)
+    assert.deepEqual(economy.storage, [])
   }
 
   const firstReady = confirmGameSimulationLoadout(loadout, 'first', {
@@ -3428,8 +3456,14 @@ test('one dead player spectates until all-dead Game Over returns the session thr
   assert.equal(getPlayerCharacter(hub, 'second').config.discipline, 'mind')
   assert.equal(getPlayerSkillBook(hub, 'first').primarySkillId, 24)
   assert.equal(getPlayerSkillBook(hub, 'first').skillQuickbar[0], 27)
+  assert.equal(getPlayerSkillBook(hub, 'first').permanentRanks[51], 0)
   assert.equal(getPlayerSkillBook(hub, 'second').primarySkillId, 32)
   assert.equal(getPlayerSkillBook(hub, 'second').skillQuickbar[0], 35)
+  assert.equal(getPlayerSkillBook(hub, 'second').permanentRanks[63], 0)
+  assert.equal(getPlayerProgression(hub, 'first').level, 1)
+  assert.equal(getPlayerProgression(hub, 'first').experience, 0)
+  assert.equal(getPlayerProgression(hub, 'second').level, 1)
+  assert.equal(getPlayerProgression(hub, 'second').experience, 0)
   const secondRun = enterBoneyardWorld(hub, combatBoneyard('clean-second-run'))
   assert.equal(secondRun.run.phase, 'active')
   assert.equal(secondRun.run.nextGameOverEventId, 2)

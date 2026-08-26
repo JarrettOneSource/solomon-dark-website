@@ -47,7 +47,6 @@ import {
   increaseRandomLearnedSkill,
   playerStatBook,
   rerollPlayerSkillOffer,
-  reselectPlayerLoadout,
   resetPlayerPotionEffects,
   setAutomaticPlayerSkillChoice,
   stepPlayerPotionEffects,
@@ -733,22 +732,61 @@ export function replacePlayerLoadout(
   source: PlayerEntityStore,
   playerId: string,
   character: PlayerCharacterState,
+  offerSeed: number,
 ): PlayerEntityStore {
   const index = playerEntityIndex(source, playerId)
   if (index < 0) return source
+  const economy = source.economies[index]!
+  const statBook = playerStatBook()
+  const skillState = createPlayerSkillRuntime(
+    createPlayerSkillBook(character.config),
+    statBook,
+    economy,
+  )
+  const previousProgression = source.progressions[index]!
+  const weldingOfferBias = nativeEquipmentHasFeature(
+    skillState.runtime.equipmentModifiers,
+    'weldCalling',
+  )
+  const disciplineOfferBias = ownsNativeHagathaSelector(
+    economy.ownedPerkSelectors,
+    NATIVE_HAGATHA_SELECTORS.weirdCaster,
+  )
+  const freshProgression = {
+    ...createPlayerProgression(offerSeed),
+    disciplineOfferBias,
+    hagathaRuntime: previousProgression.hagathaRuntime,
+    revision: previousProgression.revision + 1,
+    weldingOfferBias,
+  }
+  const progression = refreshPlayerCombatFromSkillStats(
+    freshProgression,
+    playerSkillDerivedStats(
+      skillState.runtime,
+      skillState.skillBook,
+      statBook,
+      freshProgression,
+      economy,
+    ),
+  )
   const configs = [...source.configs]
+  const progressions = [...source.progressions]
+  const skillBooks = [...source.skillBooks]
+  const skillRuntimes = [...source.skillRuntimes]
+  const statBooks = [...source.statBooks]
   configs[index] = Object.freeze({ ...character.config })
-  const replaced = {
+  progressions[index] = progression
+  skillBooks[index] = skillState.skillBook
+  skillRuntimes[index] = skillState.runtime
+  statBooks[index] = statBook
+  return {
     ...replacePlayerCharacter(source, playerId, character),
     configs,
+    progressions,
+    skillBooks,
+    skillRuntimes,
+    statBooks,
   }
-  return replacePlayerSkillState(
-    replaced,
-    index,
-    reselectPlayerLoadout(source.skillBooks[index]!, character.config),
-    source.skillRuntimes[index]!,
-    source.economies[index]!,
-  )
 }
 
 export function applyPlayerEntityHagathaPurchaseEffects(

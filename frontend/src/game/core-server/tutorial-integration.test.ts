@@ -3,16 +3,24 @@ import test from 'node:test'
 
 import { createIdlePlayerCharacterInput } from '../core-kernels/player-character.ts'
 import { GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS } from '../core-kernels/game-run.ts'
+import { nativeTutorialAmuletItem } from '../core-kernels/native-tutorial.ts'
 import { materializeStockTutorial } from '../host/boneyard-catalog.ts'
 import {
+  insertPlayerEntityLootItem,
+  replacePlayerCharacter,
+} from './player-entity-store.ts'
+import {
   applyGameSimulationTutorialAction,
+  applyGameSimulationHubAction,
   confirmGameSimulationLoadout,
   createGameSimulation,
   enterBoneyardWorld,
   gameSimulationDurableProfileEconomy,
   getPlayerCharacter,
   getPlayerEconomy,
+  getPlayerProgression,
   getPlayerSkillBook,
+  grantGameSimulationPlayerExperience,
   stepGameSimulationTick,
 } from './game-simulation.ts'
 
@@ -113,6 +121,98 @@ test('Tutorial Game Over starts the title walk and auto-opens the story Office d
     element: 'ether',
   })
   assert.equal(confirmed, null)
+})
+
+test('Tutorial death discards its items and skills when Create confirms the new wizard', () => {
+  const loaded = materializeStockTutorial(Buffer.alloc(16, 37))
+  let state = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loaded)
+  state = {
+    ...state,
+    playerEntities: insertPlayerEntityLootItem(
+      state.playerEntities,
+      'owner',
+      nativeTutorialAmuletItem(),
+    ).store,
+  }
+  const amulet = getPlayerEconomy(state, 'owner').backpack.find(
+    item => item.name === "Sorceror's Amulet",
+  )
+  assert.ok(amulet)
+  const equipped = applyGameSimulationHubAction(state, 'owner', {
+    type: 'equip',
+    itemId: amulet.id,
+    slot: 'amulet',
+  })
+  assert.equal(equipped.accepted, true)
+  state = grantGameSimulationPlayerExperience(equipped.state, 'owner', 100)
+  assert.equal(getPlayerProgression(state, 'owner').level, 2)
+  assert.equal(getPlayerSkillBook(state, 'owner').permanentRanks[72], 1)
+
+  state = {
+    ...state,
+    run: {
+      ...state.run,
+      gameOverEventId: 1,
+      gameOverExitKind: 'automatic',
+      gameOverExitTicks: GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS,
+      gameOverTicks: 1_200,
+      nextGameOverEventId: 2,
+      phase: 'game-over',
+    },
+  }
+  state = stepGameSimulationTick(state, {})
+  for (let tick = 0; tick < 5_000; tick += 1) {
+    if (state.world.kind === 'hub'
+      && state.world.participants.owner?.collegeIntro?.phase === 'arch-dialogue') break
+    state = stepGameSimulationTick(state, {}, {
+      collegeIntroReadyPlayerIds: new Set(['owner']),
+    })
+  }
+  const acknowledged = applyGameSimulationHubAction(state, 'owner', {
+    type: 'acknowledge-college-intro-dialogue',
+  })
+  assert.equal(acknowledged.accepted, true)
+  state = {
+    ...acknowledged.state,
+    playerEntities: replacePlayerCharacter(
+      acknowledged.state.playerEntities,
+      'owner',
+      {
+        ...getPlayerCharacter(acknowledged.state, 'owner'),
+        position: { x: 512, y: 924 },
+        velocity: { x: 0, y: 0 },
+      },
+    ),
+  }
+  for (let tick = 0; tick < 102; tick += 1) state = stepGameSimulationTick(state, {})
+  assert.equal(
+    state.world.kind === 'hub'
+      ? state.world.participants.owner?.transition?.phase
+      : null,
+    'college-loadout',
+  )
+  const confirmed = confirmGameSimulationLoadout(state, 'owner', {
+    discipline: 'body',
+    displayName: 'Reborn',
+    element: 'air',
+  })
+  assert.ok(confirmed)
+  const progression = getPlayerProgression(confirmed, 'owner')
+  const skills = getPlayerSkillBook(confirmed, 'owner')
+  const economy = getPlayerEconomy(confirmed, 'owner')
+  assert.equal(progression.level, 1)
+  assert.equal(progression.experience, 0)
+  assert.equal(progression.pendingOffer, null)
+  assert.equal(skills.permanentRanks[72], 0)
+  assert.equal(skills.permanentRanks[24], 1)
+  assert.equal(skills.permanentRanks[27], 1)
+  assert.deepEqual(skills.skillQuickbar, [27, null, null, null, null, null, null, null])
+  assert.equal(economy.equipment.amulet, null)
+  assert.deepEqual(economy.backpack.map(item => item.name), [
+    'Health Potion',
+    'Mana Potion',
+  ])
+  assert.deepEqual(economy.storage, [])
 })
 
 test('holds the controller for the exact 475-tick intro and gates Acid Rain until stage 5', () => {

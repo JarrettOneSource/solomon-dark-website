@@ -1130,12 +1130,15 @@ export function gameSimulationDurableProfileEconomy(
     }
     const tutorialCompleted = state.run.phase === 'game-over'
       || state.run.phase === 'loadout'
-    return state.world.tutorialProfileEconomy.tutorialPending === !tutorialCompleted
-      ? state.world.tutorialProfileEconomy
-      : {
-          ...state.world.tutorialProfileEconomy,
-          tutorialPending: !tutorialCompleted,
-        }
+    if (!tutorialCompleted) return state.world.tutorialProfileEconomy
+    return {
+      ...state.world.tutorialProfileEconomy,
+      revision: Math.max(
+        state.world.tutorialProfileEconomy.revision,
+        economy.revision,
+      ) + 1,
+      tutorialPending: false,
+    }
   }
   if (state.run.phase === 'loadout' && state.world.kind === 'hub') return economy
   const completedRun = state.world.kind === 'boneyard'
@@ -1154,7 +1157,7 @@ export function gameSimulationDurableProfileEconomy(
         ))
       : [],
     starterElement: player.config.element,
-    transferCarriedItems: completedRun,
+    transferCarriedItems: false,
   })
 }
 
@@ -1196,12 +1199,15 @@ export function confirmGameSimulationLoadout(
   if (state.world.kind === 'hub') {
     const world = confirmHubCollegeIntroLoadout(state.world, playerId)
     if (world !== state.world) {
+      const offerSeed = drawNativeInteger(state.gameRng, 1_000_000)
       return {
         ...state,
+        gameRng: offerSeed.state,
         playerEntities: replacePlayerLoadout(
           state.playerEntities,
           playerId,
           createPlayerCharacter(config, player.position),
+          offerSeed.value,
         ),
         world,
       }
@@ -1209,12 +1215,15 @@ export function confirmGameSimulationLoadout(
   }
   const run = confirmPostRunLoadout(state.run, playerId)
   if (!run) return null
+  const offerSeed = drawNativeInteger(state.gameRng, 1_000_000)
   return {
     ...state,
+    gameRng: offerSeed.state,
     playerEntities: replacePlayerLoadout(
       state.playerEntities,
       playerId,
       createPlayerCharacter(config, player.position),
+      offerSeed.value,
     ),
     run,
   }

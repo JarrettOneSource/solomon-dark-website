@@ -22,7 +22,9 @@ import {
 import { damagePlayerEntity } from '../src/game/core-server/player-entity-store.ts'
 import {
   getPlayerCharacter,
+  getPlayerEconomy,
   getPlayerProgression,
+  getPlayerSkillBook,
 } from '../src/game/core-server/game-simulation.ts'
 import {
   createBoneyardCatalog,
@@ -338,6 +340,27 @@ try {
   assert.equal(await firstDeath.survivor.page.locator('.boneyard-spectator-status').count(), 0)
   await firstDeath.survivor.page.screenshot({ path: gameOverScreenshotPath })
   const returnToHub = await returnBothPlayersToHub(hostPage, guestPage)
+  const returnedState = host.state()
+  const returnedResets = {
+    guest: postGameOverResetReceipt(returnedState, guestHub.localPlayerId),
+    host: postGameOverResetReceipt(returnedState, hostHub.localPlayerId),
+  }
+  assert.deepEqual(returnedResets.host, {
+    backpack: ['Health Potion', 'Mana Potion'],
+    experience: 0,
+    level: 1,
+    primarySkillId: 32,
+    secondarySkillId: 35,
+    storageCount: 0,
+  })
+  assert.deepEqual(returnedResets.guest, {
+    backpack: ['Health Potion', 'Mana Potion'],
+    experience: 0,
+    level: 1,
+    primarySkillId: 40,
+    secondarySkillId: 45,
+    storageCount: 0,
+  })
 
   assert.deepEqual(errors, {
     guest: { console: [], page: [] },
@@ -379,6 +402,7 @@ try {
     spectatorHud,
     waveRespawn,
     returnToHub,
+    returnedResets,
     returnedHubScreenshotPath,
     scope: deathGameOverOnly ? 'player-death-game-over' : 'multiplayer-combat-lifecycle',
     status: 'ok',
@@ -412,6 +436,20 @@ try {
     vite.close(),
   ])
   await browser.close()
+}
+
+function postGameOverResetReceipt(state, playerId) {
+  const economy = getPlayerEconomy(state, playerId)
+  const progression = getPlayerProgression(state, playerId)
+  const skillBook = getPlayerSkillBook(state, playerId)
+  return {
+    backpack: economy.backpack.map(item => item.name),
+    experience: progression.experience,
+    level: progression.level,
+    primarySkillId: skillBook.primarySkillId,
+    secondarySkillId: skillBook.skillQuickbar[0],
+    storageCount: economy.storage.length,
+  }
 }
 
 function captureErrors(page) {

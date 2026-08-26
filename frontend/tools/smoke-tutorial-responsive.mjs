@@ -12,6 +12,7 @@ import {
   getPlayerCharacter,
   getPlayerEconomy,
   getPlayerProgression,
+  getPlayerSkillBook,
 } from '../src/game/core-server/game-simulation.ts'
 import { replacePlayerCharacter } from '../src/game/core-server/player-entity-store.ts'
 import { createBoneyardEnemyStore } from '../src/game/core-server/boneyard-enemy-store.ts'
@@ -715,6 +716,58 @@ async function exerciseTutorialCollegeAdmission(host, page, screenshotPath) {
     await page.keyboard.up('s')
   }
   await page.screenshot({ path: `${screenshotPath}-tutorial-college-create.png` })
+  await page.getByRole('button', { name: /air/i }).click()
+  await page.locator('.create-menu-disciplines[data-visible="true"]').waitFor({
+    timeout: 15_000,
+  })
+  await page.locator('.create-menu-discipline-body').click()
+  const returnedHub = page.locator('.hub-scene[data-renderer-state="ready"]')
+  await returnedHub.waitFor({ timeout: 90_000 })
+  await page.waitForFunction(() => {
+    const canvas = document.querySelector('.hub-world-canvas')
+    return canvas?.getAttribute('data-hub-region') === 'courtyard'
+      && canvas?.getAttribute('data-transition-phase') === 'none'
+  }, undefined, { timeout: 30_000 })
+  const resetState = host.state()
+  const resetEconomy = getPlayerEconomy(resetState, playerId)
+  const resetProgression = getPlayerProgression(resetState, playerId)
+  const resetSkills = getPlayerSkillBook(resetState, playerId)
+  assert.equal(resetProgression.level, 1)
+  assert.equal(resetProgression.experience, 0)
+  assert.equal(resetSkills.permanentRanks[72], 0)
+  assert.equal(resetSkills.permanentRanks[24], 1)
+  assert.equal(resetSkills.permanentRanks[27], 1)
+  assert.deepEqual(resetSkills.skillQuickbar, [27, null, null, null, null, null, null, null])
+  assert.equal(resetEconomy.equipment.amulet, null)
+  assert.deepEqual(resetEconomy.backpack.map(item => item.name), [
+    'Health Potion',
+    'Mana Potion',
+  ])
+  assert.deepEqual(resetEconomy.storage, [])
+
+  await page.getByRole('button', { name: /Open inventory/ }).click()
+  const inventory = page.getByRole('dialog', { name: 'Inventory' })
+  await inventory.waitFor({ timeout: 15_000 })
+  assert.equal(await inventory.getByText("Sorceror's Amulet", { exact: false }).count(), 0)
+  await inventory.getByRole('button', { name: 'Close inventory' }).click()
+  await page.getByRole('button', { name: 'Open skills' }).click()
+  const skillsDialog = page.getByRole('dialog', { name: 'Skills' })
+  await skillsDialog.waitFor({ timeout: 15_000 })
+  await skillsDialog.locator('xpath=self::*[@data-transition-phase="settled"]').waitFor({
+    timeout: 10_000,
+  })
+  assert.equal(await skillsDialog.locator('[data-skill-id="72"]').count(), 0)
+  assert.equal(await skillsDialog.locator('[data-skill-id="24"]').count(), 1)
+  assert.equal(await skillsDialog.locator('[data-skill-id="27"]').count(), 1)
+  await page.screenshot({ path: `${screenshotPath}-tutorial-reset-skills.png` })
+  await skillsDialog.getByRole('button', { name: 'Close skills' }).click()
+  const resetReceipt = {
+    backpack: resetEconomy.backpack.map(item => item.name),
+    level: resetProgression.level,
+    learnedTutorialAcidRainRank: resetSkills.permanentRanks[72],
+    selectedPrimary: resetSkills.primarySkillId,
+    storageCount: resetEconomy.storage.length,
+  }
   return {
     acknowledgedSaveSchema: acknowledgedSave.schemaVersion,
     academyMusic,
@@ -722,7 +775,8 @@ async function exerciseTutorialCollegeAdmission(host, page, screenshotPath) {
     automaticVoices,
     createAfterManualExit: true,
     officePlayerPosition: getPlayerCharacter(state, playerId).position,
-    regionSequence: ['courtyard', 'office', 'create'],
+    regionSequence: ['courtyard', 'office', 'create', 'courtyard'],
+    resetReceipt,
     storyOffice: true,
     title7,
     title7Wizard,
