@@ -54,7 +54,7 @@ const screenshotRoot = process.env.SDR_TUTORIAL_RESPONSIVE_SCREENSHOT_ROOT
 const chromePath = process.env.SDR_CHROME_PATH || (process.platform === 'darwin'
   ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
   : '/usr/bin/google-chrome')
-const scenarios = [
+const allScenarios = [
   {
     coarse: false,
     name: 'stock',
@@ -88,6 +88,11 @@ const scenarios = [
     viewport: { height: 414, width: 896 },
   },
 ]
+const requestedScenario = process.env.SDR_TUTORIAL_RESPONSIVE_SCENARIO?.trim()
+const scenarios = requestedScenario
+  ? allScenarios.filter(({ name }) => name === requestedScenario)
+  : allScenarios
+assert.ok(scenarios.length > 0, `unknown Tutorial responsive scenario: ${requestedScenario}`)
 
 const staticServer = await startStaticClientServer({
   root: fileURLToPath(new URL('../../backend/wwwroot/', import.meta.url)),
@@ -739,32 +744,47 @@ async function waitForHostCollegeState(host, playerId, phase) {
 
 async function waitForLocalCollegeSave(page, playerId, phase) {
   const deadline = performance.now() + 20_000
+  let lastReceipt = null
   while (performance.now() < deadline) {
-    const document = await readLocalSaveDocument(page)
-    if (document) {
+    const record = await readLocalSaveRecord(page)
+    if (record?.document) {
       try {
-        const restored = restoreGameSaveDocument(document)
+        const restored = restoreGameSaveDocument(record.document)
+        lastReceipt = {
+          collegeIntro: restored.state.world.kind === 'hub'
+            ? restored.state.world.participants[playerId]?.collegeIntro ?? null
+            : undefined,
+          revision: record.revision,
+          schemaVersion: record.formatVersion,
+          world: restored.state.world.kind,
+        }
         if (
           restored.state.world.kind === 'hub'
           && (restored.state.world.participants[playerId]?.collegeIntro?.phase ?? null) === phase
         ) return { schemaVersion: WEB_GAME_SAVE_SCHEMA_VERSION }
-      } catch {
-        // The previous Tutorial checkpoint remains readable until the Hub action save lands.
+      } catch (error) {
+        lastReceipt = {
+          error: error instanceof Error ? error.message : String(error),
+          revision: record.revision,
+          schemaVersion: record.formatVersion,
+        }
       }
     }
     await new Promise((resolve) => setTimeout(resolve, 50))
   }
-  throw new Error(`timed out waiting for saved College state ${phase}`)
+  throw new Error(
+    `timed out waiting for saved College state ${phase}: ${JSON.stringify(lastReceipt)}`,
+  )
 }
 
-function readLocalSaveDocument(page) {
+function readLocalSaveRecord(page) {
   return page.evaluate((slot) => new Promise((resolve, reject) => {
     const open = indexedDB.open('solomon-dark-game-saves', 1)
     open.onerror = () => reject(open.error)
     open.onsuccess = () => {
       const request = open.result.transaction('slots', 'readonly').objectStore('slots').get(slot)
       request.onerror = () => reject(request.error)
-      request.onsuccess = () => resolve(request.result?.document ?? null)
+      request.onsuccess = () => resolve(request.result ?? null)
     }
   }), WEB_GAME_SAVE_SLOT)
 }
