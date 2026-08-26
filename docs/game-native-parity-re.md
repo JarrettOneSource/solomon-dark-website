@@ -48381,3 +48381,51 @@ current version and preserve every prior accepted version.
   `save.sync_failed` event.
 - Run `/opt/homebrew/bin/bash ./scripts/validate.sh` on the exact rebased Mac
   candidate. No Windows/WSL test or build is a completion receipt.
+
+### Implementation validation receipt
+
+- Implementation: `game-state.ts` now owns one complete ten-kind alpha table.
+  Full snapshot validation consumes the descriptor's exact row; compact sample
+  admission uses the true family maximum six, and reconstruction reapplies the
+  descriptor-specific maximum before materialization. The native SpinAway
+  producer, motion, renderer, and 60-state lifetime are unchanged. No protocol
+  version, compatibility decoder, skipped entity, or normalization path was
+  added.
+- Save closure: the backend inspector now accepts current schema 15 and legacy
+  schemas 1..14, matching the frontend exactly. The authenticated slot-0 API
+  stores and returns schema 15 with its existing revision, byte count, SHA-256,
+  ownership, conflict, and deletion contracts. A cross-stack canonical test
+  now fails if either current or legacy version set drifts.
+- Mac red/green: on the exact deployed parent, the real Chill Wind regression
+  failed because the alpha-six type-6 sample returned false, the full snapshot
+  decoder failed with `alpha must be within [0,2]`, and the save contract
+  reported backend 14 versus frontend 15. On the rebased candidate, the focused
+  projectile/protocol set passes `91/91`, including every one of the ten kind
+  rows, descriptor-specific excess rejection, all 60 SpinAway states, full
+  snapshot, delta, parent-independent lifetime, and teardown. The focused
+  current-schema/version API set passes `2/2`.
+- Exact-tree canonical gate: fresh detached Mac worktree at base
+  `ec9c16c0f629d8fcb7fa61bb8fba81e9e023dbf3`, byte-identical to focused commit
+  `384f9778`, exits zero through all backend integration, lint/boundary,
+  frontend, Boneyard/game, ML, weather, party/Hub, desktop, type/build, bundle,
+  and media-policy gates. Named counts include 24 backend/contract tests, 282
+  prerequisite tests, and 1,580 Boneyard/game tests. Production entry
+  `Game-DBfx4DFG.js` is `477160` raw / `133709` gzip bytes against `524288` /
+  `134144`.
+- Built Mac Chrome: the production-bundle Water journey completes the current
+  automatic College dialogue, Create, generated Boneyard entry, and Solomon
+  handoff before applying learned Chill Wind to one exact hostile Arrow. The
+  wire receives type-6 effect ID 1 at alpha exactly `6`, the WebGL renderer
+  reports that same effect ID, the host and reconstructed client retire it
+  independently at tick 8722, and the player remains connected. Page errors,
+  failed responses, wire decode errors, and outside-combat violations are all
+  empty. Visual inspection confirms a coherent bright record-2 SpinAway at the
+  Arrow root over the intact rainy Boneyard; the inspected PNG SHA-256 is
+  `8bb92d497a12957b7ea4dad1b145e77377345ad6db980565c96ec323cf8fb770`.
+- Acceptance-driver correction: the Boneyard smoke now completes the current
+  authoritative Archchancellor dialogue before walking to Create and keeps the
+  unrelated off-camera cleanup proof in its own existing mode. This changes no
+  gameplay state or native contract.
+- No browser-platform exception, material unknown, or new native fact remains.
+  The existing Mod Loader native report already owns the complete SpinAway
+  evidence, so the Website ledger is the only RE document changed here.
