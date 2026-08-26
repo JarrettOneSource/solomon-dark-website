@@ -29,6 +29,10 @@ import {
   isHubTransitionEdge,
   type HubRegionId,
 } from '../core-kernels/hub-regions.ts'
+import type {
+  NativeCollegeIntroState,
+  NativeCollegeIntroPhase,
+} from '../core-kernels/native-college-intro.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
 import {
   NATIVE_LIGHT_MANAGER_LANES,
@@ -8555,7 +8559,7 @@ function hubCollegeIntroState(
   value: unknown,
   field: string,
   region: HubRegionId,
-) {
+): NativeCollegeIntroState {
   const source = record(value, field)
   onlyKeys(source, field, [
     'contactCounter',
@@ -8601,7 +8605,7 @@ function hubCollegeIntroState(
     ),
     officeSpeed,
     pathCursor,
-    phase: source.phase,
+    phase: source.phase as NativeCollegeIntroPhase,
     titleCursor,
   }
 }

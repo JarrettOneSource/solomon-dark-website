@@ -1470,6 +1470,7 @@ test('client visually absorbs an unpredicted push over one snapshot interval', a
 test('client predicts the authoritative scripted transition walk without accepting input', () => {
   const player = createPlayerCharacter(CHARACTER, { x: 100, y: 100 })
   const participant = {
+    collegeIntro: null,
     region: 'courtyard' as const,
     transition: {
       alpha: 0.4,

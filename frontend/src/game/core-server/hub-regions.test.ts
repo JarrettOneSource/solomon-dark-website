@@ -9,8 +9,6 @@ import {
   pathCapsuleOverlapsHubSegment,
 } from '../core-kernels/hub-collision.ts'
 import {
-  HUB_COLLEGE_INTRO_FADE_TICKS,
-  HUB_COLLEGE_INTRO_OFFICE_POSITION,
   HUB_PORTALS,
   HUB_REGION_DEFINITIONS,
   clipHubRegionSegment,
@@ -24,6 +22,10 @@ import {
   type HubParticipantState,
   type HubRegionId,
 } from '../core-kernels/hub-regions.ts'
+import {
+  NATIVE_COLLEGE_COURTYARD_PATH,
+  NATIVE_COLLEGE_TITLE_CURSOR_STEP,
+} from '../core-kernels/native-college-intro.ts'
 import {
   HUB_PRIVATE_ROOM_IDS,
   HUB_PRIVATE_ROOM_LAYOUTS,
@@ -382,40 +384,33 @@ test('each Courtyard door performs the recovered covered swap and private fade-i
   }
 })
 
-test('the first College admission reveals a controllable Office before exit-owned loadout', () => {
+test('the first College admission walks through both authored splines before exit-owned loadout', () => {
   let world: HubWorldState = {
     ...createHubWorld(['local']),
     participants: { local: createHubCollegeIntroParticipantState() },
   }
   let players = {
-    local: createPlayerCharacter(CHARACTER, HUB_COLLEGE_INTRO_OFFICE_POSITION),
+    local: createPlayerCharacter(CHARACTER, NATIVE_COLLEGE_COURTYARD_PATH[0]),
   }
 
-  ;({ world, players } = step(world, players, HUB_COLLEGE_INTRO_FADE_TICKS - 1))
-  assert.equal(world.participants.local.transition?.phase, 'college-intro')
-  assert.ok(Math.abs((world.participants.local.transition?.alpha ?? 0) - 0.01) < 1e-6)
-  assert.deepEqual(players.local.position, HUB_COLLEGE_INTRO_OFFICE_POSITION)
-
-  ;({ world, players } = step(world, players))
-  assert.equal(world.participants.local.transition, null)
-  assert.deepEqual(players.local.position, HUB_COLLEGE_INTRO_OFFICE_POSITION)
-
-  const moved = stepHubWorldTick(
-    world,
-    players,
-    { local: { movement: { x: 0, y: -1 } } },
-    { local: 1 },
-    null,
-    new Set(['local']),
-  )
-  assert.equal(moved.world.participants.local.transition, null)
-  assert.ok(moved.players.local.position.y < HUB_COLLEGE_INTRO_OFFICE_POSITION.y)
+  for (let ticks = 0; ticks < 5_000; ticks += 1) {
+    if (world.participants.local.collegeIntro?.phase === 'arch-dialogue') break
+    ;({ world, players } = step(world, players, 1, new Set(['local']), new Set(['local'])))
+  }
+  assert.equal(world.participants.local.region, 'office')
+  assert.equal(world.participants.local.collegeIntro?.phase, 'arch-dialogue')
+  assert.equal(world.participants.local.collegeIntro?.dialogueSequence, 1)
+  world = {
+    ...world,
+    participants: {
+      local: { ...world.participants.local, collegeIntro: null },
+    },
+  }
 
   const officeExit = HUB_PORTALS.find((portal) => portal.source === 'office')!
-  world = moved.world
   players = {
     local: {
-      ...moved.players.local,
+      ...players.local,
       position: midpoint(officeExit.trigger),
       velocity: { x: 0, y: 0 },
     },
@@ -437,7 +432,7 @@ test('the first College reveal stays at alpha one until its renderer is ready', 
     participants: { local: createHubCollegeIntroParticipantState() },
   }
   const players = {
-    local: createPlayerCharacter(CHARACTER, HUB_COLLEGE_INTRO_OFFICE_POSITION),
+    local: createPlayerCharacter(CHARACTER, NATIVE_COLLEGE_COURTYARD_PATH[0]),
   }
   const waiting = stepHubWorldTick(
     world,
@@ -446,8 +441,8 @@ test('the first College reveal stays at alpha one until its renderer is ready', 
     { local: 1 },
     new Set(),
   )
-  assert.equal(waiting.world.participants.local.transition?.alpha, 1)
-  assert.deepEqual(waiting.players.local.position, HUB_COLLEGE_INTRO_OFFICE_POSITION)
+  assert.equal(waiting.world.participants.local.collegeIntro?.titleCursor, 0)
+  assert.deepEqual(waiting.players.local.position, NATIVE_COLLEGE_COURTYARD_PATH[0])
 
   const started = stepHubWorldTick(
     waiting.world,
@@ -456,7 +451,11 @@ test('the first College reveal stays at alpha one until its renderer is ready', 
     { local: 1 },
     new Set(['local']),
   )
-  assert.ok(Math.abs((started.world.participants.local.transition?.alpha ?? 0) - 0.99) < 1e-6)
+  assert.equal(
+    started.world.participants.local.collegeIntro?.titleCursor,
+    NATIVE_COLLEGE_TITLE_CURSOR_STEP,
+  )
+  assert.notDeepEqual(started.players.local.position, NATIVE_COLLEGE_COURTYARD_PATH[0])
 })
 
 test('each private doorway returns to its own recovered Courtyard placement', () => {
@@ -472,7 +471,7 @@ test('each private doorway returns to its own recovered Courtyard placement', ()
     let world = {
       ...createHubWorld(['local']),
       participants: {
-        local: { region: source, transition: null } satisfies HubParticipantState,
+        local: { collegeIntro: null, region: source, transition: null } satisfies HubParticipantState,
       },
     }
     let players = {
@@ -496,7 +495,7 @@ test('Mortuary return preserves contact X and does not retrigger after incoming 
   let world: HubWorldState = {
     ...createHubWorld(['local']),
     participants: {
-      local: { region: 'mortuary', transition: null },
+      local: { collegeIntro: null, region: 'mortuary', transition: null },
     },
   }
   let players = {
@@ -513,6 +512,7 @@ test('Mortuary return preserves contact X and does not retrigger after incoming 
     ...createHubWorld(['local']),
     participants: {
       local: {
+        collegeIntro: null,
         region: 'mortuary',
         transition: {
           alpha: 0,
@@ -540,8 +540,8 @@ test('room ownership is per participant while the shared Courtyard simulation ke
   const world: HubWorldState = {
     ...initialWorld,
     participants: {
-      private: { region: 'library', transition: null },
-      courtyard: { region: 'courtyard', transition: null },
+      private: { collegeIntro: null, region: 'library', transition: null },
+      courtyard: { collegeIntro: null, region: 'courtyard', transition: null },
     },
   }
   const sharedPosition = { x: 500, y: 700 }

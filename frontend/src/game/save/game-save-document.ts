@@ -43,7 +43,9 @@ import {
   isHubRegionId,
   isHubTransitionEdge,
   type HubParticipantState,
+  type HubParticipantTransition,
   type HubRegionId,
+  type HubTransitionPhase,
 } from '../core-kernels/hub-regions.ts'
 import {
   NATIVE_HUB_HELP_ROW_COUNT,
@@ -976,7 +978,10 @@ function parseHubCollegeIntro(
   }
 }
 
-function parseHubTransition(value: unknown, region: HubRegionId) {
+function parseHubTransition(
+  value: unknown,
+  region: HubRegionId,
+): HubParticipantTransition {
   const source = record(value, 'game save Hub transition')
   onlyKeys(source, 'game save Hub transition', [
     'alpha',
@@ -1011,7 +1016,7 @@ function parseHubTransition(value: unknown, region: HubRegionId) {
   return {
     alpha,
     destination,
-    phase: source.phase,
+    phase: source.phase as HubTransitionPhase,
     scriptedSpeed,
     scriptedTarget: {
       x: finiteNumber(target.x, 'game save Hub transition x'),

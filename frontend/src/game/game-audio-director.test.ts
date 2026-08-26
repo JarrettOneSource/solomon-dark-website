@@ -109,6 +109,7 @@ const SOURCES = {
     'maggot-squish-3': 'maggot-squish-3.wav',
     'open-panel': 'openpanel.wav',
     'pick-skill': 'pick.wav',
+    poof: 'poof.wav',
     nuke: 'nuke.wav',
     phase: 'phase.wav',
     'pop-shield': 'pop-shield.wav',

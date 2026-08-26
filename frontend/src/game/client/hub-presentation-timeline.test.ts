@@ -949,8 +949,8 @@ test('projects the local native fade cadence while interpolating remote particip
     world: {
       ...firstBase.world,
       participants: {
-        local: { activity: null, region: 'courtyard', transition: { ...transition, alpha: 0.2 } },
-        remote: { activity: null, region: 'courtyard', transition: { ...transition, alpha: 0.2 } },
+        local: { activity: null, collegeIntro: null, region: 'courtyard', transition: { ...transition, alpha: 0.2 } },
+        remote: { activity: null, collegeIntro: null, region: 'courtyard', transition: { ...transition, alpha: 0.2 } },
       },
     },
   }
@@ -959,8 +959,8 @@ test('projects the local native fade cadence while interpolating remote particip
     world: {
       ...secondBase.world,
       participants: {
-        local: { activity: 'occupied', region: 'courtyard', transition: { ...transition, alpha: 0.25 } },
-        remote: { activity: 'paused', region: 'courtyard', transition: { ...transition, alpha: 0.25 } },
+        local: { activity: 'occupied', collegeIntro: null, region: 'courtyard', transition: { ...transition, alpha: 0.25 } },
+        remote: { activity: 'paused', collegeIntro: null, region: 'courtyard', transition: { ...transition, alpha: 0.25 } },
       },
     },
   }
@@ -987,12 +987,12 @@ test('projects the one-shot Office reveal at the native 0.01 cadence', () => {
     sourceRegion: 'office',
   } as const
   first.world.participants = {
-    local: { activity: null, region: 'office', transition: { ...transition, alpha: 1 } },
-    remote: { activity: null, region: 'office', transition: { ...transition, alpha: 1 } },
+    local: { activity: null, collegeIntro: null, region: 'office', transition: { ...transition, alpha: 1 } },
+    remote: { activity: null, collegeIntro: null, region: 'office', transition: { ...transition, alpha: 1 } },
   }
   second.world.participants = {
-    local: { activity: null, region: 'office', transition: { ...transition, alpha: 0.95 } },
-    remote: { activity: null, region: 'office', transition: { ...transition, alpha: 0.95 } },
+    local: { activity: null, collegeIntro: null, region: 'office', transition: { ...transition, alpha: 0.95 } },
+    remote: { activity: null, collegeIntro: null, region: 'office', transition: { ...transition, alpha: 0.95 } },
   }
   const presentation = timeline(first)
   presentation.push(second, INTERVAL_MS)
@@ -1016,8 +1016,8 @@ test('holds the covered College loadout boundary without client-side fade drift'
     sourceRegion: 'office',
   } as const
   first.world.participants = {
-    local: { activity: null, region: 'courtyard', transition },
-    remote: { activity: null, region: 'courtyard', transition },
+    local: { activity: null, collegeIntro: null, region: 'courtyard', transition },
+    remote: { activity: null, collegeIntro: null, region: 'courtyard', transition },
   }
   second.world.participants = structuredClone(first.world.participants)
   const presentation = timeline(first)

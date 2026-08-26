@@ -189,6 +189,7 @@ test('Hub resume reconstructs its authoritative Skorcha population with the othe
     y: 700,
   }
   document.continuation.simulation.world.participants.owner = {
+    collegeIntro: null,
     region: 'library',
     transition: null,
   }
@@ -197,9 +198,9 @@ test('Hub resume reconstructs its authoritative Skorcha population with the othe
 
   const restored = restoreGameSaveDocument(JSON.stringify(document))
   assert.equal(restored.state.world.kind, 'hub')
-  assert.deepEqual(restored.state.playerEntities.locomotions[0]?.position, HUB_SPAWN)
+  assert.deepEqual(restored.state.playerEntities.locomotions[0]?.position, { x: 1_700, y: 700 })
   if (restored.state.world.kind !== 'hub') throw new Error('expected restored Hub')
-  assert.equal(restored.state.world.participants.owner?.region, 'courtyard')
+  assert.equal(restored.state.world.participants.owner?.region, 'library')
   assert.equal(restored.state.world.participants.owner?.transition, null)
   assert.equal(restored.state.world.traderAnimationSeed, hubSeed.value)
   assert.deepEqual(restored.state.world.skorcha, reconstructedHub.skorcha)

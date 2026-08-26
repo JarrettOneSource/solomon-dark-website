@@ -314,7 +314,7 @@ export function stepHubWorldTick(
         ? planHubScriptedMovement(
             player,
             collegeTarget.target,
-            collegeIntro!.phase === 'office-walk' ? collegeIntro.officeSpeed : 1,
+            collegeIntro?.phase === 'office-walk' ? collegeIntro.officeSpeed : 1,
           )
         : transition
         ? planHubScriptedMovement(

@@ -1625,6 +1625,7 @@ function copyParticipant(
 ): ProtocolHubParticipantState {
   return {
     activity: participant.activity,
+    collegeIntro: participant.collegeIntro ? { ...participant.collegeIntro } : null,
     region: participant.region,
     transition: participant.transition
       ? {

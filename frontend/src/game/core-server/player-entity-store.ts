@@ -371,7 +371,7 @@ export function setPlayerEntityAutomaticSkillChoice(
 export function unlockPlayerEntityAdvancedSkill(
   source: PlayerEntityStore,
   playerId: string,
-  skillId: number | null,
+  skillId: number,
 ): PlayerEntityStore | null {
   const index = playerEntityIndex(source, playerId)
   if (index < 0) return null
@@ -507,7 +507,7 @@ export function autofillPlayerEntitySkillSelections(
 export function bindPlayerEntitySkillQuickbar(
   source: PlayerEntityStore,
   playerId: string,
-  skillId: number,
+  skillId: number | null,
   slot: number,
 ): PlayerEntityStore {
   const index = playerEntityIndex(source, playerId)

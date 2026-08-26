@@ -3831,6 +3831,7 @@ function traderForAction(action: HubInventoryAction): HubTraderId | null {
     case 'transfer': return 'luthacus'
     case 'buy-dowsing':
     case 'dowse': return 'shlorio'
+    case 'acknowledge-college-intro-dialogue':
     case 'acknowledge-npc-hint':
     case 'buy-teacher-spell':
     case 'close-dowsing':

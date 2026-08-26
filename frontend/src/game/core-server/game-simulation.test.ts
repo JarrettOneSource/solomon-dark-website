@@ -188,16 +188,28 @@ test('a pending first wizard consumes the College intro only after the Courtyard
   const initialRevision = getPlayerEconomy(state, 'owner').revision
 
   state = armGameSimulationCollegeIntro(state, 'owner')
-  assert.equal(ownerParticipant()?.region, 'office')
-  assert.equal(ownerParticipant()?.transition?.phase, 'college-intro')
-  assert.deepEqual(getPlayerCharacter(state, 'owner').position, { x: 512, y: 562 })
+  assert.equal(ownerParticipant()?.region, 'courtyard')
+  assert.equal(ownerParticipant()?.collegeIntro?.phase, 'courtyard-walk')
+  assert.deepEqual(getPlayerCharacter(state, 'owner').position, { x: 972, y: 1_044 })
 
-  for (let tick = 0; tick < 100; tick += 1) state = stepGameSimulationTick(state, {})
+  for (let tick = 0; tick < 5_000; tick += 1) {
+    if (ownerParticipant()?.collegeIntro?.phase === 'arch-dialogue') break
+    state = stepGameSimulationTick(state, {}, {
+      collegeIntroReadyPlayerIds: new Set(['owner']),
+    })
+  }
 
-  assert.equal(ownerParticipant()?.transition, null)
   assert.equal(ownerParticipant()?.region, 'office')
+  assert.equal(ownerParticipant()?.collegeIntro?.phase, 'arch-dialogue')
   assert.equal(getPlayerEconomy(state, 'owner').collegeIntroPending, true)
   assert.equal(getPlayerEconomy(state, 'owner').revision, initialRevision)
+
+  const acknowledged = applyGameSimulationHubAction(state, 'owner', {
+    type: 'acknowledge-college-intro-dialogue',
+  })
+  assert.equal(acknowledged.accepted, true)
+  state = acknowledged.state
+  assert.equal(ownerParticipant()?.collegeIntro, null)
 
   state = {
     ...state,
@@ -728,7 +740,7 @@ test('Hub shortcut services are participant-private, global inside a settled Hub
       ...purchased.state.world,
       participants: {
         ...purchased.state.world.participants,
-        first: { region: 'courtyard', transition },
+        first: { collegeIntro: null, region: 'courtyard', transition },
       },
     },
   }

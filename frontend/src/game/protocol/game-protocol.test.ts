@@ -4101,15 +4101,17 @@ test('protocol validates participant ownership and the recovered Hub room graph'
     participants: {
       'player-1': {
         activity: null,
-        region: 'office',
-        transition: {
-          alpha: 0.5,
-          destination: 'courtyard',
-          phase: 'college-intro',
-          scriptedSpeed: 1,
-          scriptedTarget: { x: 512, y: 562 },
-          sourceRegion: 'office',
+        collegeIntro: {
+          contactCounter: 0,
+          coverAlpha: 0.5,
+          dialogueSequence: 0,
+          officeSpeed: 1,
+          pathCursor: 3,
+          phase: 'courtyard-walk',
+          titleCursor: 2,
         },
+        region: 'courtyard',
+        transition: null,
       },
     },
   }))
@@ -4120,6 +4122,7 @@ test('protocol validates participant ownership and the recovered Hub room graph'
     participants: {
       'player-1': {
         activity: null,
+        collegeIntro: null,
         region: 'courtyard',
         transition: {
           alpha: 1,
@@ -4139,6 +4142,7 @@ test('protocol validates participant ownership and the recovered Hub room graph'
     participants: {
       'player-1': {
         activity: null,
+        collegeIntro: null,
         region: 'mortuary',
         transition: {
           alpha: 0.5,
@@ -4157,6 +4161,7 @@ test('protocol validates participant ownership and the recovered Hub room graph'
     participants: {
       'player-1': {
         activity: null,
+        collegeIntro: null,
         region: 'courtyard',
         transition: {
           alpha: 1.1,

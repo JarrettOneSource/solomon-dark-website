@@ -69,7 +69,7 @@ test('enters the stock Tutorial as a solo authored encounter with its native loa
   assert.equal(completedProfile.tutorialPending, false)
 })
 
-test('Tutorial Game Over enters the interactive College Office before Create', () => {
+test('Tutorial Game Over starts the title walk and auto-opens the story Office dialogue before Create', () => {
   const loaded = materializeStockTutorial(Buffer.alloc(16, 31))
   let state = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loaded)
   state = {
@@ -88,16 +88,24 @@ test('Tutorial Game Over enters the interactive College Office before Create', (
   assert.equal(state.run.phase, 'hub')
   assert.equal(state.world.kind, 'hub')
   if (state.world.kind !== 'hub') throw new Error('expected post-Tutorial Hub')
-  assert.equal(state.world.participants.owner?.region, 'office')
-  assert.equal(state.world.participants.owner?.transition?.phase, 'college-intro')
-  assert.equal(state.world.participants.owner?.transition?.alpha, 1)
-  assert.deepEqual(getPlayerCharacter(state, 'owner').position, { x: 512, y: 562 })
+  assert.equal(state.world.participants.owner?.region, 'courtyard')
+  assert.equal(state.world.participants.owner?.collegeIntro?.phase, 'courtyard-walk')
+  assert.equal(state.world.participants.owner?.collegeIntro?.titleCursor, 0)
+  assert.deepEqual(getPlayerCharacter(state, 'owner').position, { x: 972, y: 1_044 })
   assert.equal(getPlayerEconomy(state, 'owner').tutorialPending, false)
   assert.equal(getPlayerEconomy(state, 'owner').collegeIntroPending, true)
 
-  for (let tick = 0; tick < 100; tick += 1) state = stepGameSimulationTick(state, {})
-  assert.equal(state.world.participants.owner?.transition, null)
+  for (let tick = 0; tick < 5_000; tick += 1) {
+    if (state.world.kind === 'hub'
+      && state.world.participants.owner?.collegeIntro?.phase === 'arch-dialogue') break
+    state = stepGameSimulationTick(state, {}, {
+      collegeIntroReadyPlayerIds: new Set(['owner']),
+    })
+  }
+  assert.equal(state.world.kind, 'hub')
+  if (state.world.kind !== 'hub') throw new Error('expected story Office')
   assert.equal(state.world.participants.owner?.region, 'office')
+  assert.equal(state.world.participants.owner?.collegeIntro?.phase, 'arch-dialogue')
 
   const confirmed = confirmGameSimulationLoadout(state, 'owner', {
     discipline: 'arcane',
