@@ -47993,6 +47993,7 @@ separate established owners.
 | first question acknowledgement | `0x004FD6A0` clears admission flag | exact browser lifecycle projection | stops forced walk, saves acknowledged phase, does not exit Office |
 | manual Office exit -> Create | `Office::AfterSwitch 0x00504AD0` | verified-already-at-parity | Create still cannot precede Office/dialogue |
 | disconnect/reload during any intro phase | browser continuation save | exact-ported portable projection | resumes phase/cursors/contact/dialogue delivery without replay/skip |
+| Tutorial Boneyard descriptor retirement | host Game Over boundary before first Hub checkpoint | exact-ported portable projection | every Courtyard/Office save carries `loadedBoneyard: null`; restore never sees a Hub simulation paired with the retired Tutorial |
 
 No requested member is browser-blocked. The one explicit browser adaptation is
 tap-for-hover; Pointer Events and the native bitmap/atlas stack represent every

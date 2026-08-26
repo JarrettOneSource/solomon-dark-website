@@ -6,6 +6,7 @@ import { WebSocket } from 'ws'
 
 import { HUB_SPAWN } from '../core-kernels/hub-math.ts'
 import {
+  GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS,
   GAME_OVER_INPUT_ACCEPT_TICK,
   GAME_OVER_INPUT_EXIT_FADE_TICKS,
 } from '../core-kernels/game-run.ts'
@@ -2337,6 +2338,42 @@ test('host admits one fresh solo player into the hidden stock Tutorial and check
   assert.equal(saved.profile.economy.tutorialPending, true)
   assert.equal(saved.continuation.summary.partyRejoinToken, null)
   assert.equal(saved.continuation.simulation.world.tutorial.stage, 0)
+})
+
+test('Tutorial Game Over clears its Boneyard before the first College checkpoint', async (context) => {
+  const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
+  context.after(() => host.close())
+  const client = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
+  context.after(() => client.socket.close())
+  const loaded = nextMessage(client.socket, message => message.type === 'server-boneyard-loaded')
+  client.socket.send(encodeGameMessage({ type: 'client-start-tutorial' }))
+  await loaded
+
+  const checkpoint = nextMessage(client.socket, message => (
+    message.type === 'server-save-checkpoint'
+    && JSON.parse(message.save).continuation?.simulation?.world?.kind === 'hub'
+  ))
+  Object.assign(host.state().run, {
+    gameOverEventId: 1,
+    gameOverExitKind: 'automatic',
+    gameOverExitTicks: GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS,
+    gameOverTicks: 1_200,
+    nextGameOverEventId: 2,
+    phase: 'game-over',
+  })
+
+  const message = await checkpoint
+  assert.equal(message.type, 'server-save-checkpoint')
+  const raw = JSON.parse(message.save)
+  assert.equal(raw.continuation.loadedBoneyard, null)
+  const restored = restoreGameSaveDocument(message.save)
+  assert.equal(restored.loadedBoneyard, null)
+  assert.equal(restored.state.world.kind, 'hub')
+  if (restored.state.world.kind !== 'hub') throw new Error('expected College continuation')
+  assert.equal(
+    restored.state.world.participants[client.welcome.playerId]?.collegeIntro?.phase,
+    'courtyard-walk',
+  )
 })
 
 test('private College retires a restored Tutorial when its final actor disconnects', async (context) => {

@@ -3368,12 +3368,13 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         const enteredGameOver = previousRunPhase === 'active'
           && state.run.phase === 'game-over'
         const completedGameOver = previousRunPhase === 'game-over'
-          && state.run.phase === 'loadout'
+          && state.world.kind === 'hub'
+          && (state.run.phase === 'loadout' || state.run.phase === 'hub')
         const tutorialBoundary = tutorialSaveBoundaryKey(stateBeforeLua)
           !== tutorialSaveBoundaryKey(state)
+        if (completedGameOver) loadedBoneyard = null
         if (tutorialBoundary) publishSaveCheckpoint('tutorial-boundary')
         if (enteredGameOver) publishProfileCheckpoint()
-        if (completedGameOver) loadedBoneyard = null
         if (enteredGameOver || completedGameOver) stopAllClientInputs()
         if (previousBarrierId === null && barrierId !== null) stopAllClientInputs()
         nextTickAt += GAME_FIXED_TICK_SECONDS * 1000
