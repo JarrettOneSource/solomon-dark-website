@@ -264,7 +264,9 @@ try {
   ])
   await page.screenshot({ path: `${screenshotRoot}-stage-10-equipped.png` })
 
-  await page.keyboard.press('i')
+  if (process.env.SDR_TUTORIAL_AMULET_TOUCH === '1') {
+    await page.locator('[data-inventory-resume="true"]').click()
+  } else await page.keyboard.press('i')
   await inventory.waitFor({ state: 'detached' })
   await boneyard.locator('xpath=self::*[@data-tutorial-stage="11"]').waitFor({ timeout: 5_000 })
   assert.equal(await hud.getAttribute('data-tutorial-inventory'), 'true')

@@ -156,6 +156,12 @@ test('renderer owns the complete stock root, page-wide panels, row frames, and H
   assert.doesNotMatch(renderer, /QUICKBAR_SLOT_[XY]|liveHudArtOffsetY/)
   assert.match(component, /setNativeModalSlideProgress\('skills', progress\)/)
   assert.match(component, /data-open-progress=\{openProgress\}/)
+  assert.match(component, /nativeHudModalSlideLayout\([\s\S]*?openProgress[\s\S]*?\.tome/)
+  assert.match(component, /data-skill-book-resume="true"/)
+  assert.doesNotMatch(
+    css,
+    /\.skill-book-close-action\s*\{[^}]*(?:top:\s*25px|right:\s*0|width:\s*48px|height:\s*58px)/s,
+  )
   assert.doesNotMatch(renderer, /roundRect/)
   assert.doesNotMatch(renderer, /nativeTooltipStatLines/)
   assert.match(

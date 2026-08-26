@@ -12,6 +12,10 @@ import {
 import { NATIVE_SKILL_CATALOG } from './core-kernels/player-progression.ts'
 import type { GameAudioDirector } from './game-audio-director.ts'
 import { subscribeGamePresentationFrames } from './game-presentation-frame-loop.ts'
+import {
+  NATIVE_HUD_BACKBUFFER,
+  nativeHudModalSlideLayout,
+} from './native-hud-layout.ts'
 import { setNativeModalSlideProgress } from './native-modal-slide-progress.ts'
 import type {
   ProtocolPlayerEconomy,
@@ -230,6 +234,11 @@ export default function SkillBook({
       setTargetQuickbarSlot(slot)
     }
   }
+  const tome = nativeHudModalSlideLayout(
+    NATIVE_HUD_BACKBUFFER.width,
+    NATIVE_HUD_BACKBUFFER.height,
+    openProgress,
+  ).tome
 
   return (
     <div
@@ -251,7 +260,9 @@ export default function SkillBook({
         type="button"
         className="skill-book-close-action"
         aria-label="Close skills"
+        data-skill-book-resume="true"
         data-game-back="true"
+        style={{ height: tome.height, left: tome.x, top: tome.y, width: tome.width }}
         onClick={() => beginClose()}
       />
       <div className="skill-book-pages" aria-label="Learned skill dependency pages">

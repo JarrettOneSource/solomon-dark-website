@@ -267,7 +267,8 @@ async function runScenario(scenario) {
     const blink = await sampleBlink(page, MODAL_RESUME_POINTER, MODAL_STEADY_POINTERS)
     assertBlink(blink, `${scenario.name} stage-10 resume pointer`)
     assert.equal(blink.steadyHidden, 0, `${scenario.name} steady pointers ${JSON.stringify(blink)}`)
-    await page.keyboard.press(INVENTORY_KEY)
+    if (scenario.hasTouch) await page.locator('[data-inventory-resume="true"]').click()
+    else await page.keyboard.press(INVENTORY_KEY)
     await waitForTutorialStage(host, page, 11)
     await page.locator('.tutorial-modal-callouts').waitFor({ state: 'detached', timeout: 15_000 })
 
@@ -288,7 +289,8 @@ async function runScenario(scenario) {
       `${scenario.name} inventory (empty backpack)`,
     )
     assert.equal(inventoryEmptyBackpack.members.length, 6, `${scenario.name} empty backpack members`)
-    await page.keyboard.press(INVENTORY_KEY)
+    if (scenario.hasTouch) await page.locator('[data-inventory-resume="true"]').click()
+    else await page.keyboard.press(INVENTORY_KEY)
     await waitForTutorialStage(host, page, 11)
     await page.locator('.tutorial-modal-callouts').waitFor({ state: 'detached', timeout: 15_000 })
 
@@ -329,7 +331,8 @@ async function runScenario(scenario) {
     // The open book holds a gameplay pause (`client-gameplay-pause`, source `skill-book`) and the
     // host only broadcasts on tick advance, so the page is granted while the world runs and the
     // book is re-opened from a forced stage 12 -- the way a client meets a three-page book.
-    await page.keyboard.press(SKILLS_KEY)
+    if (scenario.hasTouch) await page.locator('[data-skill-book-resume="true"]').click()
+    else await page.keyboard.press(SKILLS_KEY)
     // Earlier forced stages leave their wave enemies alive, so `enemyCount > 2` can move 15 -> 14 on
     // the tick after the close; either stage proves the book closed into the wave.
     await waitForTutorialStage(host, page, [15, 14])
@@ -358,7 +361,8 @@ async function runScenario(scenario) {
     // Closing re-enters stage 15 and starts wave 4 again; with the first wave's enemies still
     // alive the 15 -> 14 transition (`enemyCount > 2`) can land on the next tick, so wait for the
     // modal to detach rather than for a stage-15 sample.
-    await page.keyboard.press(SKILLS_KEY)
+    if (scenario.hasTouch) await page.locator('[data-skill-book-resume="true"]').click()
+    else await page.keyboard.press(SKILLS_KEY)
     await page.locator('.tutorial-modal-callouts').waitFor({ state: 'detached', timeout: 15_000 })
 
     // Stage 14: the selected-HUD lesson needs concentration A (the stock forced level-up

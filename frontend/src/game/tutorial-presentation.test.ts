@@ -127,7 +127,25 @@ test('shares each native modal slide with its Tutorial anchors and leaves at clo
   const overlay = source('./TutorialOverlay.tsx')
   const skillBook = source('./SkillBook.tsx')
   assert.match(inventory, /setNativeModalSlideProgress\('inventory', reveal\)/)
+  assert.match(inventory, /useSyncExternalStore\([\s\S]*?nativeModalSlideProgressSnapshot/)
+  assert.match(
+    inventory,
+    /nativeHudModalSlideLayout\([\s\S]*?modalSlides\.inventory[\s\S]*?\.backpack/,
+  )
+  assert.match(
+    inventory,
+    /<NativeAction[\s\S]*?data-inventory-resume[\s\S]*?gameBack[\s\S]*?audio\.playSound\('open-panel'\)[\s\S]*?onClose\(\)/,
+  )
+  assert.match(inventory, /surface\.kind !== 'inventory'[\s\S]*?Close \{label\}/)
   assert.match(skillBook, /setNativeModalSlideProgress\('skills', progress\)/)
+  assert.match(
+    skillBook,
+    /nativeHudModalSlideLayout\([\s\S]*?openProgress[\s\S]*?\.tome/,
+  )
+  assert.match(
+    skillBook,
+    /className="skill-book-close-action"[\s\S]*?data-skill-book-resume="true"[\s\S]*?data-game-back="true"[\s\S]*?style=/,
+  )
   assert.match(overlay, /useSyncExternalStore\([\s\S]*?nativeModalSlideProgressSnapshot/)
   assert.match(overlay, /modalProgress: modalProgress|modalProgress,/)
   assert.match(

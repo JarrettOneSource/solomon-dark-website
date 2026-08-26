@@ -5,6 +5,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
@@ -42,7 +43,16 @@ import type { HubMemorialState } from './core-kernels/hub-memorial.ts'
 import type { Vector2 } from './core-kernels/vector.ts'
 import type { GameAudioDirector } from './game-audio-director.ts'
 import { subscribeGamePresentationFrames } from './game-presentation-frame-loop.ts'
-import { setNativeModalSlideProgress } from './native-modal-slide-progress.ts'
+import {
+  NATIVE_HUD_BACKBUFFER,
+  nativeHudModalSlideLayout,
+} from './native-hud-layout.ts'
+import {
+  initialNativeModalSlideProgressSnapshot,
+  nativeModalSlideProgressSnapshot,
+  setNativeModalSlideProgress,
+  subscribeNativeModalSlideProgress,
+} from './native-modal-slide-progress.ts'
 import ContextualInteractButton from './ContextualInteractButton.tsx'
 import {
   HUB_INTERACTION_DIALOGUES,
@@ -464,6 +474,22 @@ function NativeHubSurface({
   const [inventoryDrag, setInventoryDrag] = useState<HubInventoryDragModel | null>(null)
   const [dyeModal, setDyeModal] = useState<HubInventoryDyeModalModel | null>(null)
   const feedbackSequenceRef = useRef(economy.actionFeedback?.sequence ?? 0)
+  const modalSlides = useSyncExternalStore(
+    subscribeNativeModalSlideProgress,
+    nativeModalSlideProgressSnapshot,
+    initialNativeModalSlideProgressSnapshot,
+  )
+  const inventoryResumeControl = nativeHudModalSlideLayout(
+    NATIVE_HUD_BACKBUFFER.width,
+    NATIVE_HUD_BACKBUFFER.height,
+    modalSlides.inventory,
+  ).backpack
+  const inventoryResumeRect = [
+    inventoryResumeControl.x,
+    inventoryResumeControl.y,
+    inventoryResumeControl.width,
+    inventoryResumeControl.height,
+  ] as const
 
   useLayoutEffect(() => {
     if (surface.kind !== 'inventory') return
@@ -1090,14 +1116,27 @@ function NativeHubSurface({
           {semanticTooltip ? (
             <span className="hub-native-ui-semantic" role="tooltip">{semanticTooltip}</span>
           ) : null}
-          <button
-            className="hub-native-ui-semantic"
-            data-game-back="true"
-            onClick={onClose}
-            type="button"
-          >
-            Close {label}
-          </button>
+          {surface.kind === 'inventory' && !notice && !dyeModal ? (
+            <NativeAction
+              data={{ 'data-inventory-resume': 'true' }}
+              gameBack
+              label="Close inventory"
+              rect={inventoryResumeRect}
+              onClick={() => {
+                audio.playSound('open-panel')
+                onClose()
+              }}
+            />
+          ) : surface.kind !== 'inventory' ? (
+            <button
+              className="hub-native-ui-semantic"
+              data-game-back="true"
+              onClick={onClose}
+              type="button"
+            >
+              Close {label}
+            </button>
+          ) : null}
         </div>
         {rendererState === 'error' ? (
           <p className="hub-native-ui-error" role="alert">Native inventory renderer unavailable.</p>

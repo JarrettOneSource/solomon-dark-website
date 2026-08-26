@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { chromium } from 'playwright-core'
 
 import { GAME_SETTINGS_STORAGE_KEY } from '../src/game/game-settings.ts'
+import { WEB_GAME_SAVE_SCHEMA_VERSION } from '../src/game/save/game-save-contract.ts'
 import {
   HUB_INTERACTION_GEOMETRY,
 } from '../src/game/hub-inventory-presentation.ts'
@@ -233,12 +234,54 @@ async function enterHub() {
   await page.getByRole('button', { name: 'Play' }).click()
   await declineTutorialOffer()
   await page.getByRole('button', { name: 'New Game' }).click()
-  await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({ timeout: 30_000 })
+  await enterCreateAfterCollegeOffice()
   await page.getByRole('button', { name: /ether/i }).click()
   await page.locator('.create-menu-disciplines[data-visible="true"]').waitFor({ timeout: 15_000 })
   await page.locator('.create-menu-discipline-arcane').click()
   await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 90_000 })
   await page.locator('.hub-world-canvas[data-hub-region="courtyard"]').waitFor({ timeout: 30_000 })
+}
+
+async function enterCreateAfterCollegeOffice() {
+  const create = page.locator('.create-menu-scene[data-motion-settled="true"]')
+  const office = page.locator('.hub-scene[data-hub-region="office"][data-story-office="true"]')
+  const first = await Promise.race([
+    create.waitFor({ timeout: 90_000 }).then(() => 'create'),
+    office.waitFor({ timeout: 90_000 }).then(() => 'office'),
+  ])
+  if (first === 'create') return
+
+  await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 90_000 })
+  await page.waitForFunction(() => {
+    const canvas = document.querySelector('.hub-world-canvas')
+    return canvas?.getAttribute('data-hub-region') === 'office'
+      && canvas?.getAttribute('data-transition-phase') === 'none'
+  }, undefined, { timeout: 30_000 })
+  await moveHubAxis('a', 'playerX', 300, 'at-most')
+  await moveHubAxis('s', 'playerY', 800, 'at-least')
+  await moveHubAxis('d', 'playerX', 540, 'at-least')
+  await page.keyboard.down('s')
+  try {
+    await create.waitFor({ timeout: 30_000 })
+  } finally {
+    await page.keyboard.up('s')
+  }
+}
+
+async function moveHubAxis(key, axis, target, direction) {
+  await page.locator('.main-menu-page[data-hub-player-activity="none"]')
+    .waitFor({ timeout: 30_000 })
+  await page.keyboard.down(key)
+  try {
+    await page.waitForFunction(({ axis: frameAxis, direction: frameDirection, target: value }) => {
+      const frameValue = document.querySelector('.hub-world-canvas')?.__sdrHubFrame?.[frameAxis]
+      return typeof frameValue === 'number'
+        && (frameDirection === 'at-least' ? frameValue >= value : frameValue <= value)
+    }, { axis, direction, target }, { timeout: 15_000 })
+  } finally {
+    await page.keyboard.up(key)
+    await page.waitForTimeout(150)
+  }
 }
 
 async function declineTutorialOffer() {
@@ -317,6 +360,11 @@ async function exerciseFreshMarkers(canvas) {
   })
   await skipSpeech(dialog)
   await finishChoices(dialog)
+  const restoredPrompt = page.locator(
+    '.game-interact-prompt[data-interaction-target="hub:annalist"]',
+  )
+  await restoredPrompt.waitFor({ timeout: 15_000 })
+  assert.equal(await restoredPrompt.getAttribute('aria-label'), 'Talk to Provokatus')
   assert.equal(
     (await canvas.getAttribute('data-npc-marker-ids'))?.split(',').includes('annalist'),
     false,
@@ -329,7 +377,8 @@ async function exerciseFreshMarkers(canvas) {
   const persisted = await waitForLocalSave(save => (
     JSON.parse(save.document).profile.economy.npc.helpFlags[0] === false
   ))
-  assert.equal(JSON.parse(persisted.document).schemaVersion, 11)
+  const persistedDocument = JSON.parse(persisted.document)
+  assert.equal(persistedDocument.schemaVersion, WEB_GAME_SAVE_SCHEMA_VERSION)
 
   await navigateHubRegion(page, canvas, 'courtyard', { x: 1800, y: 650 }, 40, log)
   await holdForHubTransition(page, canvas, ['d', 'w'], 'library')
@@ -360,7 +409,9 @@ async function exerciseFreshMarkers(canvas) {
   await page.screenshot({ path: `${screenshotRoot}-fresh-resumed-marker-state.png` })
   receipts.push({
     interaction: 'annalist',
-    persistedSchemaVersion: 11,
+    persistedSchemaVersion: persistedDocument.schemaVersion,
+    promptHiddenDuringDialogue: true,
+    promptRestoredAfterDialogue: true,
     reconstructedMarker: true,
     resumedHelpFlags: await canvas.getAttribute('data-npc-help-flags'),
   })
@@ -617,6 +668,7 @@ async function openInteraction(interaction, name) {
   await prompt.click()
   const dialog = page.getByRole('dialog', { name: `Talking to ${name}` })
   await dialog.waitFor()
+  await prompt.waitFor({ state: 'detached', timeout: 15_000 })
   await dialog.locator('.hub-inventory-native-canvas[data-native-reveal="settled"]').waitFor({
     timeout: 10_000,
   })
