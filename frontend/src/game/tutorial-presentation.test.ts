@@ -90,6 +90,25 @@ test('owns responsive Tutorial targets at the HUD controls instead of fixed coor
   assert.doesNotMatch(overlay, /state\.stage === 12 \? <TutorialPointer x=\{843\}/)
 })
 
+test('uses the same live potion bindings in the HUD and Tutorial without painting stack counts as keys', () => {
+  const hud = source('./GameHud.tsx')
+  const overlay = source('./TutorialOverlay.tsx')
+  assert.match(hud, /healthPotionKey = gameBindingLabel\(controls\.belt4\)/)
+  assert.match(hud, /manaPotionKey = gameBindingLabel\(controls\.belt5\)/)
+  assert.match(hud, /NativeQuickbarBinding[^]*healthPotionKey/)
+  assert.match(hud, /NativeQuickbarBinding[^]*manaPotionKey/)
+  assert.doesNotMatch(hud, /function InventoryCount/)
+  assert.match(overlay, /potion: gameBindingLabel\(controls\.belt4\)/)
+})
+
+test('keeps the stage-17 Health Potion drop pointer-only until pickup notification', () => {
+  const overlay = source('./TutorialOverlay.tsx')
+  const stage17 = /\{\(state\.stage === 8 \|\| state\.stage === 17\)[^]*?\) : null\}/.exec(overlay)?.[0]
+  assert.ok(stage17)
+  assert.match(stage17, /anchor="world-sack"/)
+  assert.doesNotMatch(stage17, /NativeBitmapText|Health Potion/)
+})
+
 test('keeps every recovered modal teaching literal in the modal callout model', () => {
   const model = source('./tutorial-modal-callouts.ts')
   const overlay = source('./TutorialOverlay.tsx')

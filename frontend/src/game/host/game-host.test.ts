@@ -1490,6 +1490,18 @@ test('game host authoritatively binds and replicates a native primary quickbar e
   assert.deepEqual(snapshot.snapshot.players[playerId].progression.skillQuickbar, [
     11, null, null, null, null, null, null, 8,
   ])
+
+  const unbound = nextMessage(client.socket, (message) => (
+    message.type === 'server-snapshot'
+    && message.snapshot.players[playerId].progression.skillQuickbar[7] === null
+  ))
+  client.socket.send(encodeGameMessage({
+    type: 'client-skill-quickbar-bind',
+    skillId: null,
+    slot: 7,
+  }))
+  const cleared = await unbound
+  assert.equal(cleared.type, 'server-snapshot')
 })
 
 test('game host pauses a leveling player and authoritatively books the offered skill', async (context) => {

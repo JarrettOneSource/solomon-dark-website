@@ -54,6 +54,8 @@ test('binding overwrites only the destination and preserves native duplicates', 
   assert.deepEqual(duplicated.skillQuickbar, [11, 48, 49, null, null, null, null, 48])
   const overwritten = bindPlayerSkillQuickbar(duplicated, 49, 0)
   assert.deepEqual(overwritten.skillQuickbar, [49, 48, 49, null, null, null, null, 48])
+  const cleared = bindPlayerSkillQuickbar(overwritten, null, 2)
+  assert.deepEqual(cleared.skillQuickbar, [49, 48, null, null, null, null, null, 48])
 
   assert.throws(() => bindPlayerSkillQuickbar(learned, 50, 4), /not learned/)
   assert.throws(() => bindPlayerSkillQuickbar(learned, 48, 8), /slot/)

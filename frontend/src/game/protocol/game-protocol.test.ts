@@ -118,6 +118,11 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
     slot: 7,
   })), { type: 'client-skill-quickbar-bind', skillId: 8, slot: 7 })
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
+    type: 'client-skill-quickbar-bind',
+    skillId: null,
+    slot: 7,
+  })), { type: 'client-skill-quickbar-bind', skillId: null, slot: 7 })
+  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
     type: 'client-select-primary-skill',
     skillId: 8,
   })), { type: 'client-select-primary-skill', skillId: 8 })

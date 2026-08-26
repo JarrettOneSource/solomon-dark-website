@@ -20,6 +20,7 @@ import {
   nativeSkillBookPages,
   nativeSkillBookRows,
   nativeSkillBookTooltipLines,
+  nativeBeltPullOffStarted,
   nativeSkillDragStarted,
   nativeSkillQuickbarDropSlot,
   selectableConcentrationSkillRows,
@@ -160,6 +161,13 @@ test('uses the native SkillDragger threshold and maximum-overlap belt hit model'
   assert.equal(nativeSkillQuickbarDropSlot({ x: 120, y: 100 }, belt), null)
 })
 
+test('pulls a populated native BeltButton off only beyond fifty pointer units', () => {
+  assert.equal(nativeBeltPullOffStarted({ x: 10, y: 10 }, { x: 60, y: 10 }), false)
+  assert.equal(nativeBeltPullOffStarted({ x: 10, y: 10 }, { x: 60.001, y: 10 }), true)
+  assert.equal(nativeBeltPullOffStarted({ x: 10, y: 10 }, { x: 40, y: 50 }), false)
+  assert.equal(nativeBeltPullOffStarted({ x: 10, y: 10 }, { x: 40.001, y: 50 }), true)
+})
+
 test('renderer owns the complete stock root, page-wide panels, row frames, and HoverBox', () => {
   for (const record of [3, 4, 10, 30, 31, 32, 33, 49, 71]) {
     assert.ok(nativeAssets.atlases.UI.records[record])
@@ -184,6 +192,8 @@ test('renderer owns the complete stock root, page-wide panels, row frames, and H
   assert.match(component, /nativeHudModalSlideLayout\([\s\S]*?openProgress[\s\S]*?\.tome/)
   assert.match(component, /data-skill-book-resume="true"/)
   assert.match(component, /nativeSkillQuickbarDropSlot/)
+  assert.match(component, /nativeBeltPullOffStarted/)
+  assert.match(component, /onUnassignQuickbarSkill/)
   assert.equal((component.match(/audio\.playSound\('pick-skill'\)/g) ?? []).length, 1)
   assert.match(component, /dragPosition/)
   assert.match(renderer, /drawSkillDragger/)
@@ -201,6 +211,8 @@ test('renderer owns the complete stock root, page-wide panels, row frames, and H
     /\.main-menu-page\[data-skill-book-open='true'\] \.game-menu-skull\s*\{\s*display: none;/,
   )
   assert.match(component, /setPointerCapture/)
+  assert.match(component, /event\.pointerType === 'mouse'/)
+  assert.match(component, /onHover\(row\.id\)/)
   assert.match(component, /progression\.skillQuickbar/)
   assert.match(component, /onSelectConcentration/)
   assert.match(component, /style=\{\{[\s\S]*?left: belt\[slot\]!\.x[\s\S]*?top: belt\[slot\]!\.y/)

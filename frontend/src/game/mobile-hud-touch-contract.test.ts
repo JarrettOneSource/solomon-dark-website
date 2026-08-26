@@ -192,8 +192,8 @@ test('the touch dock (owner pick B) and the quickbar half width describe the sam
   assert.match(coarse, /\.hub-hud-tome-button \{[^}]*left: 50%;/)
   assert.match(coarse, /\.hub-hud-backpack-button,\s*\.hub-hud-tome-button \{\s*width: 130px;\s*height: 130px;/)
   assert.match(coarse, /\.hub-hud-backpack,\s*\.hub-hud-tome \{[^}]*bottom: 3px;\s*left: 7px;\s*width: 116px;\s*height: 124px;/)
-  assert.match(coarse, /\.hub-hud-count-red \{ left: calc\(50% - 185\.5px\); \}/)
-  assert.match(coarse, /\.hub-hud-count-blue \{ left: calc\(50% \+ 175px\); \}/)
+  assert.doesNotMatch(gameHud, /function InventoryCount/)
+  assert.match(gameHud, /NativeQuickbarBinding/)
   assert.equal(MOBILE_DOCK_HALF_WIDTH, 230)
   // The slot floor is bounded by the 230 dock at 1600 logical / 125 % (layout test).
   assert.equal(MOBILE_QUICKBAR_SLOT_MIN_SIZE, 52)

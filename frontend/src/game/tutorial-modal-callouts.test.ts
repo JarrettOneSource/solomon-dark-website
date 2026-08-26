@@ -164,7 +164,7 @@ test('paints the stage-10 inventory members in native draw order at the slid HUD
     'Found items go in your backpack.  Click and\ndrag to move items, double-click to use them.',
   )
   assert.deepEqual(center(backpack), [434, 639])
-  assert.deepEqual(arrow(pointer(stage[7])), [84, 641, 24, 646])
+  assert.deepEqual(arrow(pointer(stage[7])), [60, 612.5, 60, 682])
   assert.equal(pointer(stage[7]).blink, false)
 })
 
@@ -176,7 +176,7 @@ test('tracks the live 40-tick modal slide instead of jumping to the settled anch
   assert.deepEqual(center(callout(inventoryHalf[0])), [709.5, 743.5])
   assert.deepEqual(arrow(pointer(inventoryHalf[3])), [1084.5, 817, 1044.5, 867])
   assert.deepEqual(center(callout(inventoryClosed[4])), [1073, 242])
-  assert.deepEqual(arrow(pointer(inventoryClosed[7])), [84, 641, 24, 646])
+  assert.deepEqual(arrow(pointer(inventoryClosed[7])), [60, 612.5, 60, 682])
 
   const skillsClosed = plans(13, { modalProgress: 0 })
   const skillsHalf = plans(13, { modalProgress: 0.5 })
@@ -206,7 +206,7 @@ test('follows the exact authored amulet cell and drops only that backpack lesson
   const moved = plans(10, { backpack: [...fillers, { ...amulet, id: 200 }] })
   assert.deepEqual(hubInventorySlotPosition(7), { x: 99, y: 721 })
   assert.deepEqual(center(callout(moved[6])), [509, 714])
-  assert.deepEqual(arrow(pointer(moved[7])), [159, 716, 99, 721])
+  assert.deepEqual(arrow(pointer(moved[7])), [135, 687.5, 135, 757])
 
   const sack: HubInventoryItem = {
     ...potion,
@@ -220,7 +220,7 @@ test('follows the exact authored amulet cell and drops only that backpack lesson
   }
   const nested = plans(10, { backpack: [sack] })
   assert.deepEqual(hubInventorySlotPosition(1), { x: 24, y: 571 })
-  assert.deepEqual(arrow(pointer(nested[7])), [84, 566, 24, 571])
+  assert.deepEqual(arrow(pointer(nested[7])), [60, 537.5, 60, 607])
 })
 
 test('uses the resume binding label for the resume lesson', () => {

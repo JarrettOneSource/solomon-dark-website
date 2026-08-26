@@ -293,6 +293,12 @@ test('client carries character config, publishes authority, and tears down', asy
     skillId: 11,
     slot: 7,
   })
+  session.bindSkillQuickbar(null, 7)
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-skill-quickbar-bind',
+    skillId: null,
+    slot: 7,
+  })
   session.selectPrimarySkill(8)
   assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
     type: 'client-select-primary-skill',
