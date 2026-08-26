@@ -74,6 +74,7 @@ export default function SkillPicker({
     throw new Error('skill picker requires an initial authoritative offer')
   }
   const stageRef = useRef<HTMLDivElement>(null)
+  const curtainRef = useRef<HTMLDivElement>(null)
   const hostRef = useRef<HTMLDivElement>(null)
   const buttonRefs = useRef<Array<HTMLButtonElement | null>>([])
   const closeDirectionRef = useRef<NativeSkillPickerCloseDirection>(-0.75)
@@ -200,6 +201,9 @@ export default function SkillPicker({
         reveal = nativeSkillPickerReveal(400)
       }
       renderer.render(nowMs, selectedIndexRef.current, reveal)
+      if (curtainRef.current) {
+        curtainRef.current.style.opacity = `${reveal.curtainAlpha}`
+      }
       const stage = stageRef.current
       if (stage) {
         const startedAt = currentPhase === 'opening'
@@ -386,82 +390,87 @@ export default function SkillPicker({
   const offerContentVisible = phase !== 'queued-wait'
   return (
     <div
-      ref={stageRef}
-      className="main-menu-native-stage skill-picker-stage"
-      style={style}
+      className="skill-picker-overlay"
       role="dialog"
       aria-modal="true"
       aria-label={`Level ${displayedOffer.level}. Select a skill.`}
-      data-offer-sequence={displayedOffer.sequence}
-      data-automatic-choice-index={displayedOffer.automaticChoiceIndex ?? ''}
-      data-picker-phase={phase}
-      data-presentation-id={presentationId}
-      data-renderer-state={rendererState}
-      data-reveal-interactive={revealReady}
       onKeyDown={handleKeyDown}
     >
-      <div ref={hostRef} className="skill-picker-renderer" aria-hidden />
-      <div className="skill-picker-actions">
-        {offerContentVisible ? displayedOffer.options.map((option, index) => {
-          const skill = NATIVE_SKILL_CATALOG[option.skillId]!
-          const weldBuild = option.skillId === SPELL_WELDING_SKILL_ID
-            ? nativeWeldBuild(option.weldBuildId ?? Number.NaN)
-            : null
-          const description = weldBuild
-            ? `${SPELL_WELDING_QUICK_DESCRIPTION}. ${weldBuild.primarySkillIds
-                .map((skillId) => NATIVE_SKILL_CATALOG[skillId]!.name)
-                .join(' and ')}.`
-            : skill.config?.mQDescription ?? skill.config?.mDescription ?? ''
-          return (
-            <button
-              key={`${index}-${option.skillId}-${option.weldBuildId ?? 0}`}
-              ref={(button) => { buttonRefs.current[index] = button }}
-              type="button"
-              className="skill-picker-action"
-              style={{ left: centers[index] }}
-              aria-label={`${skill.name}${option.targetRank > 1 ? ` ${option.targetRank}` : ''}, ${skill.family}. ${description}`}
-              aria-pressed={selectedIndex === index}
-              data-choice-index={index}
-              data-skill-id={option.skillId}
-              disabled={disabled}
-              onClick={() => choose(index)}
-              onFocus={() => {
-                if (!revealReadyRef.current || selectedIndexRef.current === index) return
-                setSelection(index)
-              }}
-              onPointerEnter={() => {
-                if (!revealReadyRef.current || selectedIndexRef.current === index) return
-                setSelection(index)
-              }}
-            />
-          )
-        }) : null}
-        {offerContentVisible && specialActionsAvailable ? (
-          <>
-            <button
-              type="button"
-              className="skill-picker-special-action"
-              style={specialBounds.save}
-              aria-label="Save Skill"
-              data-level-up-action="save"
-              disabled={disabled}
-              onClick={save}
-            />
-            <button
-              type="button"
-              className="skill-picker-special-action"
-              style={specialBounds.reroll}
-              aria-label="Roll Again"
-              data-level-up-action="reroll"
-              disabled={disabled}
-              onClick={reroll}
-            />
-          </>
+      <div ref={curtainRef} className="skill-picker-curtain" aria-hidden />
+      <div
+        ref={stageRef}
+        className="main-menu-native-stage skill-picker-stage"
+        style={style}
+        data-offer-sequence={displayedOffer.sequence}
+        data-automatic-choice-index={displayedOffer.automaticChoiceIndex ?? ''}
+        data-picker-phase={phase}
+        data-presentation-id={presentationId}
+        data-renderer-state={rendererState}
+        data-reveal-interactive={revealReady}
+      >
+        <div ref={hostRef} className="skill-picker-renderer" aria-hidden />
+        <div className="skill-picker-actions">
+          {offerContentVisible ? displayedOffer.options.map((option, index) => {
+            const skill = NATIVE_SKILL_CATALOG[option.skillId]!
+            const weldBuild = option.skillId === SPELL_WELDING_SKILL_ID
+              ? nativeWeldBuild(option.weldBuildId ?? Number.NaN)
+              : null
+            const description = weldBuild
+              ? `${SPELL_WELDING_QUICK_DESCRIPTION}. ${weldBuild.primarySkillIds
+                  .map((skillId) => NATIVE_SKILL_CATALOG[skillId]!.name)
+                  .join(' and ')}.`
+              : skill.config?.mQDescription ?? skill.config?.mDescription ?? ''
+            return (
+              <button
+                key={`${index}-${option.skillId}-${option.weldBuildId ?? 0}`}
+                ref={(button) => { buttonRefs.current[index] = button }}
+                type="button"
+                className="skill-picker-action"
+                style={{ left: centers[index] }}
+                aria-label={`${skill.name}${option.targetRank > 1 ? ` ${option.targetRank}` : ''}, ${skill.family}. ${description}`}
+                aria-pressed={selectedIndex === index}
+                data-choice-index={index}
+                data-skill-id={option.skillId}
+                disabled={disabled}
+                onClick={() => choose(index)}
+                onFocus={() => {
+                  if (!revealReadyRef.current || selectedIndexRef.current === index) return
+                  setSelection(index)
+                }}
+                onPointerEnter={() => {
+                  if (!revealReadyRef.current || selectedIndexRef.current === index) return
+                  setSelection(index)
+                }}
+              />
+            )
+          }) : null}
+          {offerContentVisible && specialActionsAvailable ? (
+            <>
+              <button
+                type="button"
+                className="skill-picker-special-action"
+                style={specialBounds.save}
+                aria-label="Save Skill"
+                data-level-up-action="save"
+                disabled={disabled}
+                onClick={save}
+              />
+              <button
+                type="button"
+                className="skill-picker-special-action"
+                style={specialBounds.reroll}
+                aria-label="Roll Again"
+                data-level-up-action="reroll"
+                disabled={disabled}
+                onClick={reroll}
+              />
+            </>
+          ) : null}
+        </div>
+        {rendererState === 'error' ? (
+          <p className="skill-picker-error" role="alert">Skill picker renderer unavailable.</p>
         ) : null}
       </div>
-      {rendererState === 'error' ? (
-        <p className="skill-picker-error" role="alert">Skill picker renderer unavailable.</p>
-      ) : null}
     </div>
   )
 }

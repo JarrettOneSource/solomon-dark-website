@@ -2,6 +2,7 @@
 import 'pixi.js/unsafe-eval'
 import {
   Application,
+  BufferImageSource,
   Container,
   Graphics,
   MeshSimple,
@@ -214,6 +215,7 @@ import { PlayerDeathWeaponViews } from './player-death-weapon-view.ts'
 import {
   NATIVE_LEVEL_UP_PRESENTATION_DURATION_MS,
   nativeLevelUpPresentationFrame,
+  skillPickerWorldPresentationFrame,
 } from './level-up-presentation.ts'
 import { NativeLevelUpWorldView } from './level-up-world-view.ts'
 import {
@@ -227,6 +229,10 @@ import {
   type NativeBuildingSurfaceMesh,
 } from './boneyard-building-surface-view.ts'
 import { nativeBuildingLightGrid } from './boneyard-static-surface-lighting.ts'
+import {
+  cropBoneyardStaticPixels,
+  type BoneyardStaticPixelRegion,
+} from './boneyard-static-pixels.ts'
 import {
   boneyardOffCameraCleanupPlan,
   boneyardTransformedArtBounds,
@@ -450,10 +456,10 @@ interface BoneyardWorldRendererOptions {
 interface ResidentTexture extends BoneyardBounds {
   cleanupSourceKey: string | null
   mainLayerIndex: number | null
+  pixels: Uint8ClampedArray
   shadowCaster: NativeBoneyardComplexShadowCaster | null
   sprite: Container
   surfaceMesh: NativeBuildingSurfaceMesh | null
-  sourceCanvas: HTMLCanvasElement
   texture: Texture
 }
 
@@ -953,10 +959,15 @@ export async function createBoneyardWorldRenderer(
         levelUpPresentationStartedAt = null
         canvas.dataset.levelUpPresentationId = 'none'
       }
+      const worldPresentationFrame = skillPickerWorldPresentationFrame(
+        snapshot.tick,
+        frameCount,
+        snapshot.levelUpBarrier !== null,
+      )
       const painter = scene.update(
         snapshot,
         options.playerId,
-        frameCount,
+        worldPresentationFrame,
         visibility.visibleMainResidents,
         armedLevelUpPresentationId === null
           ? null
@@ -3357,23 +3368,29 @@ function repaintCleanedBase(
   retiredSourceKeys: ReadonlySet<string>,
 ): void {
   for (const resident of residents) {
-    const context = resident.sourceCanvas.getContext('2d', { alpha: false })
+    const canvas = documentNodeCanvas(resident.w, resident.h)
+    const context = canvas.getContext('2d', { alpha: false })
     if (context === null) {
       throw new Error('Boneyard cleanup base could not reacquire Canvas2D.')
     }
-    drawNativeBoneyardBase(
-      context,
-      resident.sourceCanvas.width,
-      resident.sourceCanvas.height,
-      {
-        x: resident.x + resident.w / 2,
-        y: resident.y + resident.h / 2,
-        zoom: 1,
-      },
-      document,
-      [],
-      retiredSourceKeys,
-    )
+    try {
+      drawNativeBoneyardBase(
+        context,
+        resident.w,
+        resident.h,
+        {
+          x: resident.x + resident.w / 2,
+          y: resident.y + resident.h / 2,
+          zoom: 1,
+        },
+        document,
+        [],
+        retiredSourceKeys,
+      )
+      resident.pixels.set(context.getImageData(0, 0, resident.w, resident.h).data)
+    } finally {
+      releaseCanvas(canvas)
+    }
     resident.texture.source.update()
   }
 }
@@ -3420,7 +3437,7 @@ async function buildTiledStaticLayer(
     const width = Math.ceil(tile.w)
     const height = Math.ceil(tile.h)
     const canvas = documentNodeCanvas(width, height)
-    const context = canvas.getContext('2d', { alpha, willReadFrequently: alpha })
+    const context = canvas.getContext('2d', { alpha, willReadFrequently: true })
     if (!context) throw new Error('Boneyard static tile could not acquire Canvas2D.')
     paint(
       context,
@@ -3428,9 +3445,9 @@ async function buildTiledStaticLayer(
       height,
       { x: tile.x + width / 2, y: tile.y + height / 2, zoom: 1 },
     )
-    const crop = alpha ? cropTransparentCanvas(canvas) : { canvas, x: 0, y: 0 }
-    if (crop) {
-      const resident = residentTexture(crop.canvas, tile.x + crop.x, tile.y + crop.y)
+    const pixels = consumePaintedCanvas(canvas, alpha)
+    if (pixels) {
+      const resident = residentTexture(pixels, tile.x + pixels.x, tile.y + pixels.y)
       target.addChild(resident.sprite)
       residents.push(resident)
     }
@@ -3460,13 +3477,13 @@ function buildMainLayerResident(
     document,
     [layerIndex],
   )
-  const crop = cropTransparentCanvas(canvas)
-  if (!crop) return null
-  const x = bounds.x + crop.x
-  const y = bounds.y + crop.y
+  const pixels = consumePaintedCanvas(canvas, true)
+  if (!pixels) return null
+  const x = bounds.x + pixels.x
+  const y = bounds.y + pixels.y
   const resident = isBuildingLayer(layer)
-    ? buildingSurfaceResidentTexture(crop.canvas, x, y, layerIndex)
-    : residentTexture(crop.canvas, x, y, layerIndex)
+    ? buildingSurfaceResidentTexture(pixels, x, y, layerIndex)
+    : residentTexture(pixels, x, y, layerIndex)
   resident.shadowCaster = nativeBoneyardMainLayerShadowCaster(
     document,
     layer,
@@ -3496,15 +3513,15 @@ function buildForegroundLayerResident(
     document,
     [layerIndex],
   )
-  const crop = cropTransparentCanvas(canvas)
-  if (!crop) return null
+  const pixels = consumePaintedCanvas(canvas, true)
+  if (!pixels) return null
   return layer.object.typeId === NATIVE.building
     ? buildingSurfaceResidentTexture(
-        crop.canvas,
-        bounds.x + crop.x,
-        bounds.y + crop.y,
+        pixels,
+        bounds.x + pixels.x,
+        bounds.y + pixels.y,
       )
-    : residentTexture(crop.canvas, bounds.x + crop.x, bounds.y + crop.y)
+    : residentTexture(pixels, bounds.x + pixels.x, bounds.y + pixels.y)
 }
 
 function objectLayerCaptureBounds(
@@ -3553,85 +3570,58 @@ function mainLayerCaptureBounds(layer: MainLayer): { h: number; w: number; x: nu
   }
 }
 
-function cropTransparentCanvas(
+function consumePaintedCanvas(
   canvas: HTMLCanvasElement,
-): { canvas: HTMLCanvasElement; x: number; y: number } | null {
-  const context = canvas.getContext('2d', { alpha: true, willReadFrequently: true })
-  if (!context) throw new Error('Boneyard texture crop could not acquire Canvas2D.')
-  const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data
-  let minX = canvas.width
-  let minY = canvas.height
-  let maxX = -1
-  let maxY = -1
-  for (let y = 0; y < canvas.height; y += 1) {
-    for (let x = 0; x < canvas.width; x += 1) {
-      if (pixels[(y * canvas.width + x) * 4 + 3] === 0) continue
-      minX = Math.min(minX, x)
-      minY = Math.min(minY, y)
-      maxX = Math.max(maxX, x)
-      maxY = Math.max(maxY, y)
-    }
-  }
-  if (maxX < minX || maxY < minY) return null
-  const cropped = documentNodeCanvas(maxX - minX + 1, maxY - minY + 1)
-  const croppedContext = cropped.getContext('2d', { alpha: true })
-  if (!croppedContext) throw new Error('Boneyard cropped texture could not acquire Canvas2D.')
-  croppedContext.drawImage(
-    canvas,
-    minX,
-    minY,
-    cropped.width,
-    cropped.height,
-    0,
-    0,
-    cropped.width,
-    cropped.height,
-  )
-  return {
-    canvas: cropped,
-    x: minX,
-    y: minY,
+  crop: boolean,
+): BoneyardStaticPixelRegion | null {
+  try {
+    const context = canvas.getContext('2d', { alpha: true, willReadFrequently: true })
+    if (!context) throw new Error('Boneyard texture pixels could not reacquire Canvas2D.')
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data
+    return crop
+      ? cropBoneyardStaticPixels(pixels, canvas.width, canvas.height)
+      : { height: canvas.height, pixels, width: canvas.width, x: 0, y: 0 }
+  } finally {
+    releaseCanvas(canvas)
   }
 }
 
 function residentTexture(
-  canvas: HTMLCanvasElement,
+  source: BoneyardStaticPixelRegion,
   x: number,
   y: number,
   mainLayerIndex: number | null = null,
 ): ResidentTexture {
-  const texture = Texture.from(canvas, true)
-  texture.source.style.scaleMode = 'nearest'
+  const texture = residentPixelTexture(source)
   const sprite = new Sprite(texture)
   sprite.position.set(x, y)
   sprite.eventMode = 'none'
   return {
     cleanupSourceKey: null,
-    h: canvas.height,
+    h: source.height,
     mainLayerIndex,
+    pixels: source.pixels,
     shadowCaster: null,
     sprite,
     surfaceMesh: null,
-    sourceCanvas: canvas,
     texture,
-    w: canvas.width,
+    w: source.width,
     x,
     y,
   }
 }
 
 function buildingSurfaceResidentTexture(
-  canvas: HTMLCanvasElement,
+  source: BoneyardStaticPixelRegion,
   x: number,
   y: number,
   mainLayerIndex: number | null = null,
 ): ResidentTexture {
-  const texture = Texture.from(canvas, true)
-  texture.source.style.scaleMode = 'nearest'
+  const texture = residentPixelTexture(source)
   const surfaceMesh = createNativeBuildingSurfaceMesh(
     texture,
-    canvas.width,
-    canvas.height,
+    source.width,
+    source.height,
     NATIVE_BROWSER_ENHANCED_EFFECTS,
   )
   surfaceMesh.mesh.position.set(x, y)
@@ -3640,23 +3630,39 @@ function buildingSurfaceResidentTexture(
     : 'native-building-base'
   return {
     cleanupSourceKey: null,
-    h: canvas.height,
+    h: source.height,
     mainLayerIndex,
+    pixels: source.pixels,
     shadowCaster: null,
     sprite: surfaceMesh.mesh,
     surfaceMesh,
-    sourceCanvas: canvas,
     texture,
-    w: canvas.width,
+    w: source.width,
     x,
     y,
   }
 }
 
+function residentPixelTexture(source: BoneyardStaticPixelRegion): Texture {
+  return new Texture({
+    source: new BufferImageSource({
+      alphaMode: 'premultiply-alpha-on-upload',
+      format: 'rgba8unorm',
+      height: source.height,
+      resource: source.pixels,
+      scaleMode: 'nearest',
+      width: source.width,
+    }),
+  })
+}
+
 function destroyResidentTexture(resident: ResidentTexture): void {
   resident.surfaceMesh?.destroy()
   resident.texture.destroy(true)
+  resident.pixels = EMPTY_RESIDENT_PIXELS
 }
+
+const EMPTY_RESIDENT_PIXELS = new Uint8ClampedArray(0)
 
 function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
   if (left.length !== right.length) return false
@@ -3796,6 +3802,11 @@ function documentNodeCanvas(width: number, height: number): HTMLCanvasElement {
   canvas.width = width
   canvas.height = height
   return canvas
+}
+
+function releaseCanvas(canvas: HTMLCanvasElement): void {
+  canvas.width = 0
+  canvas.height = 0
 }
 
 function nextFrame(): Promise<void> {

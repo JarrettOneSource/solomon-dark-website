@@ -11,6 +11,7 @@ import {
   nativeLevelUpPresentationFrame,
   nativeSkillPickerClose,
   nativeSkillPickerReveal,
+  skillPickerWorldPresentationFrame,
 } from './level-up-presentation.ts'
 
 test('replays the stock 40-tick picker reveal and its three alpha lanes', () => {
@@ -47,6 +48,11 @@ test('replays the distinct stock card and Save Skill close rates', () => {
   assert.equal(nativeSkillPickerClose(390, -1).revealAlpha, 0.02499999999999991)
   assert.equal(nativeSkillPickerClose(400, -1).revealAlpha, 0)
   assert.equal(nativeSkillPickerClose(100, -0.75).interactive, false)
+})
+
+test('holds the world cosmetic frame while the level-up barrier owns its tick', () => {
+  assert.equal(skillPickerWorldPresentationFrame(275, 900, true), 275)
+  assert.equal(skillPickerWorldPresentationFrame(275, 900, false), 900)
 })
 
 test('replays the exact BadGuys-73 birth geometry, decay, and sine envelopes', () => {
@@ -133,6 +139,7 @@ test('retains picker presentation without any Hub, private-room, or Boneyard sup
   const picker = source('../SkillPicker.tsx')
   const boneyard = source('./boneyard-world-renderer.ts')
   const hub = source('./hub-world-scene.ts')
+  const hubRenderer = source('./hub-world-renderer.ts')
   const privateRooms = source('./hub-private-room-scene.ts')
   const pickerRenderer = source('./skill-picker-renderer.ts')
 
@@ -159,6 +166,14 @@ test('retains picker presentation without any Hub, private-room, or Boneyard sup
   assert.equal(boneyard.includes('levelUpEffectTicksRemaining'), false)
   assert.ok(boneyard.includes('camera.y - viewport.height / (2 * camera.zoom)'))
   assert.ok(hub.includes('levelUpPresentation.playerScreenY'))
+  assert.match(
+    boneyard,
+    /skillPickerWorldPresentationFrame\(\s*snapshot\.tick,\s*frameCount,\s*snapshot\.levelUpBarrier !== null,/s,
+  )
+  assert.match(
+    hubRenderer,
+    /skillPickerWorldPresentationFrame\(\s*snapshot\.tick,\s*frameCount,\s*snapshot\.levelUpBarrier !== null,/s,
+  )
   for (const [label, implementation] of [
     ['Boneyard', boneyard],
     ['Hub', hub],

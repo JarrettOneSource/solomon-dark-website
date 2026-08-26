@@ -73,6 +73,14 @@ export function nativeSkillPickerClose(
   return nativeSkillPickerFrame(revealAlpha, false)
 }
 
+export function skillPickerWorldPresentationFrame(
+  worldTick: number,
+  presentationFrame: number,
+  levelUpBarrierActive: boolean,
+): number {
+  return levelUpBarrierActive ? worldTick : presentationFrame
+}
+
 function nativeSkillPickerFrame(
   revealAlpha: number,
   interactive: boolean,

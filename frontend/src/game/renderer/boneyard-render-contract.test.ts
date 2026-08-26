@@ -118,6 +118,15 @@ test('world-weather streaks share one particle batch and alpha-ramp texture', ()
   assert.doesNotMatch(weatherView, /sprite\.texture\s*=/)
 })
 
+test('static Boneyard residents retain RGBA buffers instead of Canvas2D backing stores', () => {
+  assert.match(boneyardRenderer, /new BufferImageSource\(\{[\s\S]*?format: 'rgba8unorm'/)
+  assert.match(boneyardRenderer, /resource: source\.pixels/)
+  assert.match(boneyardRenderer, /resident\.pixels = EMPTY_RESIDENT_PIXELS/)
+  assert.match(boneyardRenderer, /releaseCanvas\(canvas\)/)
+  assert.doesNotMatch(boneyardRenderer, /sourceCanvas:/)
+  assert.doesNotMatch(boneyardRenderer, /Texture\.from\(canvas/)
+})
+
 test('secondary rain streaks share exactly two world-owned immutable gradients', () => {
   assert.equal(secondaryWorldView.match(/new FillGradient\(/g)?.length, 1)
   assert.match(

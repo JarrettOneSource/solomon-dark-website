@@ -1,6 +1,5 @@
 import {
   Container,
-  Graphics,
   NineSliceSprite,
   Sprite,
   TilingSprite,
@@ -95,13 +94,11 @@ export async function createSkillPickerRenderer(): Promise<SkillPickerRenderer> 
   const panelLayer = new Container()
   const chromeLayer = new Container()
   const offerLayer = new Container()
-  const dimmer = new Graphics().rect(0, 0, 1600, 900).fill({ color: 0x000000 })
-  dimmer.alpha = 0
   ambient.alpha = 0
   panelLayer.alpha = 0
   chromeLayer.alpha = 0
   offerLayer.alpha = 0
-  root.addChild(dimmer, ambient, panelLayer, chromeLayer, offerLayer)
+  root.addChild(ambient, panelLayer, chromeLayer, offerLayer)
   application.stage.addChild(root)
 
   const arcSprites: Sprite[] = []
@@ -148,7 +145,6 @@ export async function createSkillPickerRenderer(): Promise<SkillPickerRenderer> 
     },
     render(nowMs, selectedIndex, reveal) {
       if (destroyed) return
-      dimmer.alpha = reveal.curtainAlpha
       ambient.alpha = reveal.ambientAlpha
       panelLayer.alpha = reveal.panelAlpha
       chromeLayer.alpha = reveal.panelAlpha

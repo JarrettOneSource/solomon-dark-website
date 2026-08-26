@@ -1,5 +1,20 @@
-.main-menu-native-stage.skill-picker-stage {
+.skill-picker-overlay {
+  position: absolute;
   z-index: 80;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: auto;
+}
+
+.skill-picker-curtain {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  background: #000;
+  pointer-events: none;
+}
+
+.main-menu-native-stage.skill-picker-stage {
   overflow: hidden;
   pointer-events: auto;
 }

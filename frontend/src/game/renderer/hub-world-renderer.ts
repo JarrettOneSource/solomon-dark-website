@@ -32,7 +32,10 @@ import {
 } from './hub-textures.ts'
 import { HubPrivateRoomScene } from './hub-private-room-scene.ts'
 import { HubWorldScene } from './hub-world-scene.ts'
-import { NATIVE_LEVEL_UP_PRESENTATION_DURATION_MS } from './level-up-presentation.ts'
+import {
+  NATIVE_LEVEL_UP_PRESENTATION_DURATION_MS,
+  skillPickerWorldPresentationFrame,
+} from './level-up-presentation.ts'
 import {
   NativeSecondaryScreenFeedbackPresentation,
   nativeRegionPointGain,
@@ -474,6 +477,11 @@ export async function createHubWorldRenderer(
             playerScreenY: player.position.y - camera.y,
             presentationId: armedLevelUpPresentationId,
           }
+      const worldPresentationFrame = skillPickerWorldPresentationFrame(
+        snapshot.tick,
+        frameCount,
+        snapshot.levelUpBarrier !== null,
+      )
       const visibleWorldWidth = viewport.width / baseCameraScale
       const pointGainAt = (position: Readonly<{ x: number, y: number }>): number => (
         nativeRegionPointGain(
@@ -489,7 +497,7 @@ export async function createHubWorldRenderer(
       courtyardScene.update(
         snapshot,
         options.playerId,
-        frameCount,
+        worldPresentationFrame,
         levelUpPresentation,
         pointGainAt,
         markerSurface,
@@ -497,7 +505,7 @@ export async function createHubWorldRenderer(
       privateRoomScene.update(
         snapshot,
         options.playerId,
-        frameCount,
+        worldPresentationFrame,
         levelUpPresentation,
         pointGainAt,
         markerSurface,
