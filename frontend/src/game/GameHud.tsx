@@ -18,7 +18,10 @@ import {
   hubPotionShortcut,
   type HubHudShortcutDefinition,
 } from './hub-inventory-presentation.ts'
-import SkillQuickbar, { NativeSkillIcon } from './SkillQuickbar.tsx'
+import SkillQuickbar, {
+  NativeQuickbarBinding,
+  NativeSkillIcon,
+} from './SkillQuickbar.tsx'
 import type { GameSnapshot } from './protocol/game-protocol.ts'
 import type { PartyRosterPlayer } from './protocol/party-state.ts'
 import { gameBindingLabel, type GameControlBindings } from './game-settings.ts'
@@ -60,20 +63,6 @@ interface GameHudProps {
   tutorialAccess?: NativeTutorialHudAccess | null
   uiScale: number
   viewport: Readonly<{ height: number; width: number }>
-}
-
-function InventoryCount({ count, variant }: { count: number; variant: 'blue' | 'red' }) {
-  const atlasDigit = Math.min(9, Math.max(0, count))
-  return (
-    <span
-      className={`hub-hud-count hub-hud-count-${variant}`}
-      style={{
-        backgroundImage: `url("${hub.hud.inventoryDigits}")`,
-        backgroundPosition: `${-atlasDigit * 8}px 0`,
-      }}
-      aria-label={`${count}`}
-    />
-  )
 }
 
 function FpsCounter() {
@@ -411,8 +400,8 @@ export default function GameHud({
             src={hub.hud.potionRed}
             alt=""
           />
+          <NativeQuickbarBinding text={healthPotionKey.toUpperCase()} />
         </button>
-        <InventoryCount count={healthPotions.count} variant="red" />
         <button
           type="button"
           className="hub-hud-backpack-button"
@@ -469,8 +458,8 @@ export default function GameHud({
           title={`Mana Potion (${manaPotionKey})`}
         >
           <img className="hub-hud-potion hub-hud-potion-blue" src={hub.hud.potionBlue} alt="" />
+          <NativeQuickbarBinding text={manaPotionKey.toUpperCase()} />
         </button>
-        <InventoryCount count={manaPotions.count} variant="blue" />
       </div>
 
       {mode === 'hub' ? (

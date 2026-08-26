@@ -401,20 +401,20 @@ export function effectiveSecondaryAbilityRankStats(
 
 export function bindPlayerSkillQuickbar(
   skillBook: PlayerSkillBookComponent,
-  skillId: number,
+  skillId: number | null,
   slot: number,
 ): PlayerSkillBookComponent {
   if (!Number.isInteger(slot) || slot < 0 || slot >= 8) {
     throw new RangeError(`skill quickbar slot ${slot} is outside 0..7`)
   }
-  if (nativeSkillCategory(skillId) !== 1 && nativeSkillCategory(skillId) !== 2) {
+  if (skillId !== null && nativeSkillCategory(skillId) !== 1 && nativeSkillCategory(skillId) !== 2) {
     throw new RangeError(`skill ${skillId} is not a native quickbar skill`)
   }
-  if ((skillBook.permanentRanks[skillId] ?? 0) < 1) {
+  if (skillId !== null && (skillBook.permanentRanks[skillId] ?? 0) < 1) {
     throw new Error(`quickbar skill ${skillId} is not learned`)
   }
   const quickbar = [...skillBook.skillQuickbar]
-  quickbar[slot] = skillId as NativeSkillQuickbarId
+  quickbar[slot] = skillId as NativeSkillQuickbarId | null
   return {
     ...skillBook,
     skillQuickbar: freezeSkillQuickbar(quickbar),

@@ -45,7 +45,6 @@
 ),
 .hub-hud[data-tutorial-combat='false'] :is(
   .hub-hud-potion-button,
-  .hub-hud-count,
   .hub-hud-xp
 ),
 .hub-hud[data-tutorial-spell='false'] > .hub-hud-selected-skills,
@@ -527,17 +526,6 @@
   width: 50px;
   height: 49px;
 }
-
-.hub-hud-count {
-  position: absolute;
-  bottom: 1px;
-  width: 8px;
-  height: 14px;
-  background-repeat: no-repeat;
-}
-
-.hub-hud-count-red { left: calc(50% - 128px); }
-.hub-hud-count-blue { left: calc(50% + 123px); }
 
 .hub-hud-xp {
   position: absolute;
@@ -1321,9 +1309,6 @@
     width: 116px;
     height: 124px;
   }
-
-  .hub-hud-count-red { left: calc(50% - 185.5px); }
-  .hub-hud-count-blue { left: calc(50% + 175px); }
 
   /* Social column in true screen pixels: the panel sits outside the HUD root but inside
      the display-scaled frame, hence the 1 / display-scale counter-scale and the divided

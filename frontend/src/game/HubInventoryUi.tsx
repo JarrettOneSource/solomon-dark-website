@@ -190,7 +190,7 @@ export type HubUiSurface =
   | {
       readonly interaction: HubInteractionId
       readonly kind: 'dialogue'
-      readonly source: 'shortcut' | 'world'
+      readonly source: 'college-intro' | 'shortcut' | 'world'
     }
   | { readonly kind: 'inventory' }
   | {
@@ -434,6 +434,7 @@ function NativeHubSurface({
   surface: Exclude<HubUiSurface, null>
   storyOffice: boolean
 }) {
+  const collegeIntroAcknowledgedRef = useRef(false)
   const hostRef = useRef<HTMLDivElement>(null)
   const rendererRef = useRef<HubInventoryRenderer | null>(null)
   const modelRef = useRef<HubInventoryRendererModel | null>(null)
@@ -1023,6 +1024,10 @@ function NativeHubSurface({
                 : current)}
               onAdvance={advanceChat}
               onChoice={(choice) => click(() => {
+                if (surface.source === 'college-intro' && !collegeIntroAcknowledgedRef.current) {
+                  collegeIntroAcknowledgedRef.current = true
+                  onAction({ type: 'acknowledge-college-intro-dialogue' })
+                }
                 if (choice.kind === 'question') {
                   const answer = hubNpcQuestion(
                     surface.interaction,

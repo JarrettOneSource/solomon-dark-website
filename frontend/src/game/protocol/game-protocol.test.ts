@@ -366,7 +366,7 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
   })), /activity/)
 })
 
-test('protocol 79 retains exact A or B slots for HUD concentration replacement', () => {
+test('protocol 80 retains exact A or B slots for HUD concentration replacement', () => {
   assert.throws(() => decodeClientGameMessage(JSON.stringify({
     type: 'client-select-concentration-slot',
     skillId: 57,
@@ -1453,7 +1453,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
 })
 
 test('protocol v79 carries Web Lua wearables, College admission, observer mode, Hub activity, NPC state, Goodie actions, tutorial fields/state, Hagatha runtime, Imp effects, save intent, selected skills, sacks, dyes, and gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 79)
+  assert.equal(GAME_PROTOCOL_VERSION, 80)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),

@@ -26,6 +26,7 @@ import { nativeUiFont } from './native-ui/native-ui-catalog.ts'
 import { measureNativeUiText } from './native-ui/native-ui-text.ts'
 import type { ProtocolPlayerProgression } from './protocol/game-state.ts'
 import {
+  HUB_INVENTORY_GRID,
   hubInventoryEquipmentSlotRects,
   hubInventorySlotPosition,
 } from './renderer/hub-inventory-render-contract.ts'
@@ -87,6 +88,7 @@ export type TutorialModalTeachingPlan = TutorialModalCalloutPlan | TutorialModal
 
 export interface TutorialModalTeachingInput {
   readonly backpack: readonly HubInventoryItem[]
+  readonly coarsePointer?: boolean
   /** Live `0x005C7200` InventoryScreen / SkillScreen slide progress. */
   readonly modalProgress: number
   readonly progression: ProtocolPlayerProgression
@@ -110,6 +112,8 @@ const CALLOUT_FRAME_Y_OFFSET = 4
  */
 const POINTER_BLINK_PERIOD = 50
 const POINTER_BLINK_HIDDEN_TICKS = 19
+const POINTER_PAINTED_TIP_RADIUS = 28.5
+const BACKPACK_POINTER_TIP_GAP = 5
 
 export const TUTORIAL_MODAL_TEXT = Object.freeze({
   backpack: 'Found items go in your backpack.  Click and\ndrag to move items, double-click to use them.',
@@ -117,6 +121,7 @@ export const TUTORIAL_MODAL_TEXT = Object.freeze({
   concentrationLimit: 'This confers a bonus, but is\nlimited to one skill at a time.',
   equipment: 'Put equippable items\nhere to wear them.',
   hover: 'Hover your mouse over a\nskill icon for more information.',
+  tap: 'Tap a skill icon for\nmore information.',
   quickUseItems: 'Put items here\nfor quick use',
   quickUseSkills: 'Drag skills here\nfor quick use',
   resume: (binding: string) => `Click here or press '${binding}'\nagain to resume playing`,
@@ -221,9 +226,16 @@ function inventoryModalPlans(input: TutorialModalTeachingInput): readonly Tutori
   ]
   if (amuletIndex >= 0) {
     const cell = hubInventorySlotPosition(amuletIndex)
+    const cellCenter = {
+      x: cell.x + HUB_INVENTORY_GRID.cellSize / 2,
+      y: cell.y + HUB_INVENTORY_GRID.cellSize / 2,
+    }
     plans.push(
       callout('backpack', TUTORIAL_MODAL_TEXT.backpack, cell.x + 410, cell.y - 7),
-      pointer('backpack', { x: cell.x + 60, y: cell.y - 5 }, cell, false),
+      pointer('backpack', {
+        x: cellCenter.x,
+        y: cell.y - BACKPACK_POINTER_TIP_GAP - POINTER_PAINTED_TIP_RADIUS,
+      }, cellCenter, false),
     )
   }
   return Object.freeze(plans)
@@ -253,7 +265,12 @@ function skillModalPlans(input: TutorialModalTeachingInput): readonly TutorialMo
     const target = Object.freeze({ x: placements[0]!.x + 100, y: placements[0]!.y + 70 })
     plans.push(
       pointer('hover', { x: target.x - 100, y: target.y - 30 }, target, false),
-      callout('hover', TUTORIAL_MODAL_TEXT.hover, target.x - 115, target.y - 30),
+      callout(
+        'hover',
+        input.coarsePointer ? TUTORIAL_MODAL_TEXT.tap : TUTORIAL_MODAL_TEXT.hover,
+        target.x - 115,
+        target.y - 30,
+      ),
     )
   }
   return Object.freeze(plans)

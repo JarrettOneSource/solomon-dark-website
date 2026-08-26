@@ -43,6 +43,7 @@ import {
   type TutorialModalPointerId,
 } from './tutorial-modal-callouts.ts'
 import TutorialPrelude from './TutorialPrelude.tsx'
+import { useCoarsePointer } from './input/use-coarse-pointer.ts'
 import './tutorial.css'
 
 const TUTORIAL_GOLD = 0xd9ba70
@@ -214,6 +215,7 @@ export function TutorialModalCallouts({
   readonly progression: ProtocolPlayerProgression
   readonly stage: NativeTutorialState['stage']
 }) {
+  const coarsePointer = useCoarsePointer()
   const pointerBlink = useTutorialPointerBlink()
   const modalSlides = useSyncExternalStore(
     subscribeNativeModalSlideProgress,
@@ -224,6 +226,7 @@ export function TutorialModalCallouts({
   const modalProgress = modalSlides[stage === 10 ? 'inventory' : 'skills']
   const plans = tutorialModalTeachingPlans({
     backpack,
+    coarsePointer,
     modalProgress,
     progression,
     resumeBindingLabel: gameBindingLabel(stage === 10 ? controls.openInventory : controls.openSkills),

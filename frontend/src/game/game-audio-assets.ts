@@ -107,6 +107,7 @@ import maggotSquish2 from '../assets/game/audio/sfx/maggot-squish-2.wav'
 import maggotSquish3 from '../assets/game/audio/sfx/maggot-squish-3.wav'
 import openPanel from '../assets/game/audio/sfx/openpanel.wav'
 import pickSkill from '../assets/game/audio/sfx/pickskill.wav'
+import poof from '../assets/game/audio/sfx/poof.wav'
 import popShield from '../assets/game/audio/sfx/pop-shield.wav'
 import rockHit from '../assets/game/audio/sfx/rock-hit.wav'
 import shovel1 from '../assets/game/audio/sfx/shovel-1.wav'
@@ -275,6 +276,7 @@ export const GAME_AUDIO_SOURCES = {
     'maggot-squish-3': maggotSquish3,
     'open-panel': openPanel,
     'pick-skill': pickSkill,
+    poof,
     nuke,
     phase,
     'pop-shield': popShield,

@@ -97,6 +97,7 @@ export type GameSoundCue =
   | 'maggot-squish-3'
   | 'open-panel'
   | 'pick-skill'
+  | 'poof'
   | 'nuke'
   | 'phase'
   | 'pop-shield'
@@ -544,6 +545,11 @@ export const NATIVE_SOUND_MANIFEST = {
     registryOffset: 0x44,
     sourceName: 'sounds\\pickskill',
     sourceSha256: '494d1b973bd3f319199199ec9cf851491caee10c3d72dbe61acda69d28daabe4',
+  },
+  poof: {
+    registryOffset: 0xca4,
+    sourceName: 'sounds\\poof',
+    sourceSha256: '170d816eaedfddd973ee12505fc2a1f823a3f8b4e286f16743b469276016e005',
   },
   nuke: {
     registryOffset: 0xaec,

@@ -39,6 +39,13 @@ import {
 } from '../core-kernels/player-skill-runtime.ts'
 import { createNativeHallOfFameRun } from '../core-kernels/hall-of-fame-score.ts'
 import {
+  createHubCollegeIntroParticipantState,
+  isHubRegionId,
+  isHubTransitionEdge,
+  type HubParticipantState,
+  type HubRegionId,
+} from '../core-kernels/hub-regions.ts'
+import {
   NATIVE_HUB_HELP_ROW_COUNT,
   NATIVE_HUB_NPC_CATALOG,
   createNativeHubNpcState,
@@ -58,10 +65,11 @@ import {
   replacePlayerEconomy,
 } from '../core-server/player-entity-store.ts'
 import {
+  HubStudentPopulationState,
   type HubStudentPopulationOptions,
 } from '../core-server/hub-students.ts'
 import type { HubSkorchaState } from '../core-server/hub-skorcha.ts'
-import { createHubWorld, hubSpawnPoint, type HubWorldState } from '../core-server/hub-world.ts'
+import { createHubWorld, type HubWorldState } from '../core-server/hub-world.ts'
 import { createBoneyardWorld, type BoneyardWorldState } from '../core-server/boneyard-world.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
 import {
@@ -373,22 +381,39 @@ export function restoreGameSaveDocument(document: string): RestoredGameSaveDocum
       Object.keys(participants).length !== 1
       || !(continuation.summary.playerId in participants)
     ) throw new Error('game save owner is not the sole Hub participant')
-    parseHubStudentPopulation(rawWorld.studentPopulation)
-    if (rawWorld.skorcha !== undefined) parseHubSkorcha(rawWorld.skorcha)
+    let participant = parseHubParticipant(
+      participants[continuation.summary.playerId],
+      parsed.sourceSchemaVersion,
+    )
+    const legacyCollegeIntro = parsed.sourceSchemaVersion < 15
+      && participant.transition?.phase === 'college-intro'
+    if (legacyCollegeIntro) participant = createHubCollegeIntroParticipantState()
+    const studentPopulation = new HubStudentPopulationState(
+      parseHubStudentPopulation(rawWorld.studentPopulation),
+    )
+    const skorcha = rawWorld.skorcha === undefined ? null : parseHubSkorcha(rawWorld.skorcha)
     const hubSeed = drawNativeInteger(
       parseNativeRng(rawState.gameRng, 'game save game RNG'),
       0x40000000,
     )
     rawState.gameRng = hubSeed.state
-    const config = playerEntities.configs[0]!
-    playerEntities = replacePlayerCharacter(
-      playerEntities,
-      continuation.summary.playerId,
-      createPlayerCharacter(config, hubSpawnPoint()),
-    )
     world = createHubWorld([continuation.summary.playerId], {
+      skorcha,
+      studentPopulation,
       traderAnimationSeed: hubSeed.value,
     })
+    world = {
+      ...world,
+      participants: { [continuation.summary.playerId]: participant },
+    }
+    if (legacyCollegeIntro) {
+      const config = playerEntities.configs[0]!
+      playerEntities = replacePlayerCharacter(
+        playerEntities,
+        continuation.summary.playerId,
+        createPlayerCharacter(config, { x: 972, y: 1_044 }),
+      )
+    }
     loadedBoneyard = null
   } else if (rawWorld.kind === 'boneyard') {
     loadedBoneyard = parseLoadedBoneyard(continuation.loadedBoneyard)
@@ -862,6 +887,143 @@ function parseHubStudentPopulation(value: unknown): HubStudentPopulationOptions 
   onlyKeys(population, 'game save Hub students', HUB_STUDENT_POPULATION_KEYS)
   if (!Array.isArray(population.students)) throw new Error('game save Hub students are invalid')
   return population as unknown as HubStudentPopulationOptions
+}
+
+function parseHubParticipant(
+  value: unknown,
+  sourceSchemaVersion: number,
+): HubParticipantState {
+  const source = record(value, 'game save Hub participant')
+  onlyKeys(
+    source,
+    'game save Hub participant',
+    sourceSchemaVersion >= 15
+      ? ['collegeIntro', 'region', 'transition']
+      : ['region', 'transition'],
+  )
+  const region = parseHubRegion(source.region, 'game save Hub participant region')
+  const transition = source.transition === null
+    ? null
+    : parseHubTransition(source.transition, region)
+  return {
+    collegeIntro: sourceSchemaVersion >= 15
+      ? parseHubCollegeIntro(source.collegeIntro, region)
+      : null,
+    region,
+    transition,
+  }
+}
+
+function parseHubCollegeIntro(
+  value: unknown,
+  region: HubRegionId,
+): HubParticipantState['collegeIntro'] {
+  if (value === null) return null
+  const source = record(value, 'game save College intro')
+  onlyKeys(source, 'game save College intro', [
+    'contactCounter',
+    'coverAlpha',
+    'dialogueSequence',
+    'officeSpeed',
+    'pathCursor',
+    'phase',
+    'titleCursor',
+  ])
+  if (
+    source.phase !== 'courtyard-walk'
+    && source.phase !== 'office-walk'
+    && source.phase !== 'arch-dialogue'
+  ) throw new Error('game save College intro phase is invalid')
+  if (
+    (source.phase === 'courtyard-walk' && region !== 'courtyard')
+    || (source.phase !== 'courtyard-walk' && region !== 'office')
+  ) throw new Error('game save College intro region is invalid')
+  const pathCursor = finiteNumber(source.pathCursor, 'game save College path cursor')
+  if (pathCursor < 0 || pathCursor > (source.phase === 'courtyard-walk' ? 9 : 6)) {
+    throw new Error('game save College path cursor is invalid')
+  }
+  const titleCursor = finiteNumber(source.titleCursor, 'game save College title cursor')
+  const coverAlpha = finiteNumber(source.coverAlpha, 'game save College cover alpha')
+  const officeSpeed = finiteNumber(source.officeSpeed, 'game save College Office speed')
+  const contactCounter = integerWithin(
+    source.contactCounter,
+    'game save College contact counter',
+    0,
+    10,
+  )
+  if (
+    titleCursor < 0
+    || titleCursor > 5
+    || coverAlpha < 0
+    || coverAlpha > 1
+    || officeSpeed < 0.5
+    || officeSpeed > 1
+    || contactCounter % 2 !== 0
+  ) throw new Error('game save College intro state is invalid')
+  return {
+    contactCounter,
+    coverAlpha,
+    dialogueSequence: integerWithin(
+      source.dialogueSequence,
+      'game save College dialogue sequence',
+      0,
+      Number.MAX_SAFE_INTEGER,
+    ),
+    officeSpeed,
+    pathCursor,
+    phase: source.phase,
+    titleCursor,
+  }
+}
+
+function parseHubTransition(value: unknown, region: HubRegionId) {
+  const source = record(value, 'game save Hub transition')
+  onlyKeys(source, 'game save Hub transition', [
+    'alpha',
+    'destination',
+    'phase',
+    'scriptedSpeed',
+    'scriptedTarget',
+    'sourceRegion',
+  ])
+  if (
+    source.phase !== 'college-intro'
+    && source.phase !== 'college-loadout'
+    && source.phase !== 'outgoing'
+    && source.phase !== 'incoming'
+  ) throw new Error('game save Hub transition phase is invalid')
+  const destination = parseHubRegion(source.destination, 'game save Hub destination')
+  const sourceRegion = parseHubRegion(source.sourceRegion, 'game save Hub source')
+  const alpha = finiteNumber(source.alpha, 'game save Hub transition alpha')
+  const scriptedSpeed = finiteNumber(source.scriptedSpeed, 'game save Hub transition speed')
+  const target = record(source.scriptedTarget, 'game save Hub transition target')
+  onlyKeys(target, 'game save Hub transition target', ['x', 'y'])
+  if (
+    alpha < 0
+    || alpha > 1
+    || scriptedSpeed <= 0
+    || !isHubTransitionEdge(sourceRegion, destination)
+    || ((source.phase === 'college-intro' || source.phase === 'outgoing')
+      && region !== sourceRegion)
+    || ((source.phase === 'college-loadout' || source.phase === 'incoming')
+      && region !== destination)
+  ) throw new Error('game save Hub transition is invalid')
+  return {
+    alpha,
+    destination,
+    phase: source.phase,
+    scriptedSpeed,
+    scriptedTarget: {
+      x: finiteNumber(target.x, 'game save Hub transition x'),
+      y: finiteNumber(target.y, 'game save Hub transition y'),
+    },
+    sourceRegion,
+  }
+}
+
+function parseHubRegion(value: unknown, field: string): HubRegionId {
+  if (typeof value !== 'string' || !isHubRegionId(value)) throw new Error(`${field} is invalid`)
+  return value
 }
 
 function parseHubSkorcha(value: unknown): HubSkorchaState | null {

@@ -359,7 +359,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 79
+export const GAME_PROTOCOL_VERSION = 80
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -507,7 +507,7 @@ export interface ClientSelectSkillMessage {
 
 export interface ClientSkillQuickbarBindMessage {
   type: 'client-skill-quickbar-bind'
-  skillId: number
+  skillId: number | null
   slot: number
 }
 
@@ -1154,10 +1154,12 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
   }
   if (value.type === 'client-skill-quickbar-bind') {
     onlyKeys(value, 'message', ['type', 'skillId', 'slot'])
-    const skillId = nonnegativeInteger(value.skillId, 'skillId')
+    const skillId = value.skillId === null
+      ? null
+      : nonnegativeInteger(value.skillId, 'skillId')
     const slot = nonnegativeInteger(value.slot, 'slot')
-    const category = nativeSkillCategory(skillId)
-    if (category !== 1 && category !== 2) {
+    const category = skillId === null ? null : nativeSkillCategory(skillId)
+    if (skillId !== null && category !== 1 && category !== 2) {
       throw new GameProtocolError('skillId is not a native quickbar skill')
     }
     if (slot > 7) throw new GameProtocolError('slot is out of range')
@@ -2233,6 +2235,10 @@ function gameplayPauseSource(value: unknown): GameplayPauseSource {
 function hubInventoryAction(value: unknown): HubInventoryAction {
   const source = record(value, 'action')
   const type = limitedString(source.type, 'action.type', 32)
+  if (type === 'acknowledge-college-intro-dialogue') {
+    onlyKeys(source, 'action', ['type'])
+    return { type }
+  }
   if (type === 'acknowledge-npc-hint') {
     onlyKeys(source, 'action', ['type', 'interactionId'])
     const interactionId = limitedString(source.interactionId, 'action.interactionId', 32)
@@ -8477,12 +8483,15 @@ function validatePrimarySpellOwners(
 
 function hubParticipantState(value: unknown, field: string): ProtocolHubParticipantState {
   const source = record(value, field)
-  onlyKeys(source, field, ['activity', 'region', 'transition'])
+  onlyKeys(source, field, ['activity', 'collegeIntro', 'region', 'transition'])
   const activity = source.activity === null
     ? null
     : hubPlayerActivity(source.activity, `${field}.activity`)
   const region = hubRegionId(source.region, `${field}.region`)
-  if (source.transition === null) return { activity, region, transition: null }
+  const collegeIntro = source.collegeIntro === null
+    ? null
+    : hubCollegeIntroState(source.collegeIntro, `${field}.collegeIntro`, region)
+  if (source.transition === null) return { activity, collegeIntro, region, transition: null }
   const transition = record(source.transition, `${field}.transition`)
   onlyKeys(transition, `${field}.transition`, [
     'alpha',
@@ -8523,6 +8532,7 @@ function hubParticipantState(value: unknown, field: string): ProtocolHubParticip
   }
   return {
     activity,
+    collegeIntro,
     region,
     transition: {
       alpha,
@@ -8538,6 +8548,61 @@ function hubParticipantState(value: unknown, field: string): ProtocolHubParticip
       ),
       sourceRegion,
     },
+  }
+}
+
+function hubCollegeIntroState(
+  value: unknown,
+  field: string,
+  region: HubRegionId,
+) {
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'contactCounter',
+    'coverAlpha',
+    'dialogueSequence',
+    'officeSpeed',
+    'pathCursor',
+    'phase',
+    'titleCursor',
+  ])
+  if (
+    source.phase !== 'courtyard-walk'
+    && source.phase !== 'office-walk'
+    && source.phase !== 'arch-dialogue'
+  ) throw new GameProtocolError(`${field}.phase is not supported`)
+  if (
+    (source.phase === 'courtyard-walk' && region !== 'courtyard')
+    || (source.phase !== 'courtyard-walk' && region !== 'office')
+  ) throw new GameProtocolError(`${field}.phase is inconsistent with its region`)
+  const pathCursor = nonnegativeFinite(source.pathCursor, `${field}.pathCursor`)
+  const maximumPathCursor = source.phase === 'courtyard-walk' ? 9 : 6
+  if (pathCursor > maximumPathCursor) {
+    throw new GameProtocolError(`${field}.pathCursor exceeds its authored spline`)
+  }
+  const titleCursor = nonnegativeFinite(source.titleCursor, `${field}.titleCursor`)
+  if (titleCursor > 5) throw new GameProtocolError(`${field}.titleCursor exceeds its spline`)
+  const coverAlpha = nonnegativeFinite(source.coverAlpha, `${field}.coverAlpha`)
+  if (coverAlpha > 1) throw new GameProtocolError(`${field}.coverAlpha exceeds one`)
+  const officeSpeed = positiveFinite(source.officeSpeed, `${field}.officeSpeed`)
+  if (officeSpeed < 0.5 || officeSpeed > 1) {
+    throw new GameProtocolError(`${field}.officeSpeed is outside the native lane`)
+  }
+  const contactCounter = nonnegativeInteger(source.contactCounter, `${field}.contactCounter`)
+  if (contactCounter > 10 || contactCounter % 2 !== 0) {
+    throw new GameProtocolError(`${field}.contactCounter is outside the native lane`)
+  }
+  return {
+    contactCounter,
+    coverAlpha,
+    dialogueSequence: nonnegativeInteger(
+      source.dialogueSequence,
+      `${field}.dialogueSequence`,
+    ),
+    officeSpeed,
+    pathCursor,
+    phase: source.phase,
+    titleCursor,
   }
 }
 

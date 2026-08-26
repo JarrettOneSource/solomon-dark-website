@@ -354,7 +354,7 @@ function drawSkillScreenOverlay(layer: Container, textures: GameTextureMap): voi
     layer,
     textures,
     usesTouchHelp
-      ? 'touch and hold a skill icon for more'
+      ? 'tap a skill icon for more'
       : 'hover over a skill icon for more',
     'menu',
     800,

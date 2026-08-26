@@ -110,7 +110,7 @@ export interface GameClientSession {
   readonly resumeToken: string
   readonly sessionKind: GameSessionKind
   acceptPartyJoinRequest(requestId: string): void
-  bindSkillQuickbar(skillId: number, slot: number): void
+  bindSkillQuickbar(skillId: number | null, slot: number): void
   castModSpell(contentId: string, target: Readonly<{ x: number; y: number }>): void
   sendModAction(action: ModAction, target: string, args?: LuaConsoleObject): void
   confirmLoadout(
@@ -601,13 +601,14 @@ export function connectGameClientSession(
       bindSkillQuickbar(skillId, slot) {
         if (!welcome || !snapshot || destroyed) return
         const progression = snapshot.players[welcome.playerId]?.progression
-        const category = nativeSkillCategory(skillId)
+        const category = skillId === null ? null : nativeSkillCategory(skillId)
         if (
           !Number.isInteger(slot)
           || slot < 0
           || slot > 7
-          || (category !== 1 && category !== 2)
-          || (progression?.learnedSkills.find(([id]) => id === skillId)?.[1] ?? 0) < 1
+          || (skillId !== null && category !== 1 && category !== 2)
+          || (skillId !== null
+            && (progression?.learnedSkills.find(([id]) => id === skillId)?.[1] ?? 0) < 1)
         ) throw new Error('The quickbar skill is unavailable.')
         session.sendInput(STOPPED_INPUT)
         options.transport.send(encodeGameMessage({

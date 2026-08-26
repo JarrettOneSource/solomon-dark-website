@@ -2743,8 +2743,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         const activeState = stateForPlayer(client.playerId)
         if (
           activeState.world.kind === 'hub'
-          && activeState.world.participants[client.playerId]?.transition?.phase
-            === 'college-intro'
+          && activeState.world.participants[client.playerId]?.collegeIntro !== null
           && getPlayerEconomy(activeState, client.playerId).collegeIntroPending
         ) {
           collegeIntroReadyPlayerIds.add(client.playerId)

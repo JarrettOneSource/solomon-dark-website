@@ -9,6 +9,7 @@ import type { ProtocolPlayerProgression } from './protocol/game-state.ts'
 export const NATIVE_SKILL_DRAG_THRESHOLD_SQUARED = 9
 export const NATIVE_SKILL_DRAGGER_SIZE = 40
 export const NATIVE_SKILL_DRAGGER_SCALE = 1.25
+export const NATIVE_BELT_PULL_OFF_DISTANCE = 50
 export const NATIVE_SKILL_PAGE_BASE_WIDTH = 200
 export const NATIVE_SKILL_PAGE_DEPENDENT_WIDTH = 160
 export const NATIVE_SKILL_PAGE_HEIGHT = 300
@@ -65,6 +66,15 @@ export function nativeSkillDragStarted(
   const dx = current.x - origin.x
   const dy = current.y - origin.y
   return dx * dx + dy * dy > NATIVE_SKILL_DRAG_THRESHOLD_SQUARED
+}
+
+export function nativeBeltPullOffStarted(
+  origin: Readonly<NativeHudPoint>,
+  current: Readonly<NativeHudPoint>,
+): boolean {
+  const dx = current.x - origin.x
+  const dy = current.y - origin.y
+  return dx * dx + dy * dy > NATIVE_BELT_PULL_OFF_DISTANCE ** 2
 }
 
 export function nativeSkillQuickbarDropSlot(

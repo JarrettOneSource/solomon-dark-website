@@ -12,6 +12,7 @@ import type {
 } from './client/hub-presentation-timeline.ts'
 import { isHubGameSnapshot } from './client/hub-presentation-timeline.ts'
 import type { HubRegionId } from './core-kernels/hub-regions.ts'
+import type { NativeCollegeIntroState } from './core-kernels/native-college-intro.ts'
 import { actorHeadingVector } from './core-kernels/actor-heading.ts'
 import { HALL_OF_FAME_CLASS_NAMES } from './core-kernels/hall-of-fame.ts'
 import type { WizardElement } from './core-kernels/player-character.ts'
@@ -35,6 +36,7 @@ import {
 } from './game-audio-native.ts'
 import { startGamePresentationLoop } from './game-presentation-frame-loop.ts'
 import GameHud from './GameHud.tsx'
+import CollegeIntroOverlay from './CollegeIntroOverlay.tsx'
 import type { GameMenuAvailability } from './GameMenuSkull.tsx'
 import type { NativeHudSkillBinding } from './native-hud-presentation.ts'
 import HubInventoryUi, { type HubUiSurface } from './HubInventoryUi.tsx'
@@ -263,9 +265,31 @@ export default function HubScene({
         }
   ))
   const [transitionActive, setTransitionActive] = useState(() => (
-    hubInitialSnapshot.world.participants[playerId]?.transition !== null
+    Boolean(hubInitialSnapshot.world.participants[playerId]?.transition)
+      || Boolean(
+        hubInitialSnapshot.world.participants[playerId]?.collegeIntro
+        && hubInitialSnapshot.world.participants[playerId]?.collegeIntro?.phase
+          !== 'arch-dialogue',
+      )
+  ))
+  const [collegeIntro, setCollegeIntro] = useState<NativeCollegeIntroState | null>(() => (
+    hubInitialSnapshot.world.participants[playerId]?.collegeIntro ?? null
   ))
   const storyOffice = currentRegion === 'office' && economy.collegeIntroPending
+  const collegeDialogueSequenceRef = useRef(0)
+  useEffect(() => {
+    if (
+      collegeIntro?.phase !== 'arch-dialogue'
+      || collegeIntro.dialogueSequence <= collegeDialogueSequenceRef.current
+      || hubUiSurface !== null
+    ) return
+    collegeDialogueSequenceRef.current = collegeIntro.dialogueSequence
+    setHubUiSurface({
+      interaction: 'arch-chancellor',
+      kind: 'dialogue',
+      source: 'college-intro',
+    })
+  }, [collegeIntro, hubUiSurface])
   const polisherWipeGain = storyOffice ? hubPolisherWipeGain(playerPosition) : 0
   useEffect(() => {
     if (!storyOffice) {
@@ -292,8 +316,10 @@ export default function HubScene({
   // The same gate as the OPEN MENU keydown below, published for the stage skull.
   const menuAvailable = !inputBlocked && !modalOpen && !transitionActive
   useEffect(() => {
-    onMenuAvailabilityChange?.(menuAvailable ? 'available' : 'inert')
-  }, [menuAvailable, onMenuAvailabilityChange])
+    onMenuAvailabilityChange?.(collegeIntro
+      ? 'hidden'
+      : menuAvailable ? 'available' : 'inert')
+  }, [collegeIntro, menuAvailable, onMenuAvailabilityChange])
 
   useEffect(() => () => onMenuAvailabilityChange?.('inert'), [onMenuAvailabilityChange])
 
@@ -429,7 +455,12 @@ export default function HubScene({
       if (participant) setCurrentRegion((region) => (
         region === participant.region ? region : participant.region
       ))
-      if (participant) setTransitionActive(participant.transition !== null)
+      if (participant) {
+        setTransitionActive(participant.transition !== null
+          || (participant.collegeIntro !== null
+            && participant.collegeIntro.phase !== 'arch-dialogue'))
+        setCollegeIntro(participant.collegeIntro)
+      }
       const player = snapshot.players[playerId]
       if (player) {
         setPlayerPosition((position) => (
@@ -730,6 +761,7 @@ export default function HubScene({
       ref={sceneRef}
       className="hub-scene"
       data-camera-zoom={configuredCameraScale}
+      data-college-intro={collegeIntro?.phase}
       data-discipline={localPlayer?.config.discipline ?? 'arcane'}
       data-element={element}
       data-gameplay-input-blocked={inputBlocked || modalOpen || rendererState !== 'ready'}
@@ -761,6 +793,8 @@ export default function HubScene({
           className="hub-world-renderer"
           onPointerDownCapture={activatePointerTarget}
         />
+
+        {collegeIntro ? <CollegeIntroOverlay state={collegeIntro} /> : null}
 
         <GameHud
           accountUsername={accountUsername}

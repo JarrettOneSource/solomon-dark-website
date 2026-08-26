@@ -1,0 +1,26 @@
+.college-intro-overlay {
+  position: absolute;
+  z-index: 20;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.college-intro-cover {
+  position: absolute;
+  inset: 0;
+  display: block;
+  background: #000;
+}
+
+.college-intro-title {
+  position: absolute !important;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.hub-scene[data-college-intro] .hub-hud,
+.hub-scene[data-college-intro] .hub-party-panel,
+.hub-scene[data-college-intro] .touch-joystick {
+  display: none;
+}

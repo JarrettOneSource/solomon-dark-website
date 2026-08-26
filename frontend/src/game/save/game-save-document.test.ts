@@ -85,7 +85,7 @@ test('host save documents round-trip the complete owner state and revive Hub run
     state,
   })
   const encoded = JSON.parse(document) as Record<string, unknown>
-  assert.equal(encoded.schemaVersion, 14)
+  assert.equal(encoded.schemaVersion, 15)
   assert.deepEqual(encoded.mods, MODS)
   assert.deepEqual(encoded.modState, MOD_STATE)
   assert.equal(encoded.integrity, 'local-only')
@@ -572,7 +572,7 @@ test('current schema resumes the complete stock Tutorial controller and exact le
     state,
   })
   const encoded = JSON.parse(document)
-  assert.equal(encoded.schemaVersion, 14)
+  assert.equal(encoded.schemaVersion, 15)
   assert.equal(encoded.continuation.simulation.world.tutorial.stage, 0)
   assert.equal(
     encoded.continuation.simulation.world.tutorial.selectedSkillHudAcknowledged,

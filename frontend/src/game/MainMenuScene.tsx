@@ -1796,6 +1796,7 @@ export default function MainMenuScene({
               }}
               onSelectConcentration={session.selectConcentration}
               onSelectPrimarySkill={session.selectPrimarySkill}
+              onUnassignQuickbarSkill={(slot) => session.bindSkillQuickbar(null, slot)}
               playerId={session.playerId}
               progression={runtimeProgression}
               style={nativeStageStyle}

@@ -69,6 +69,7 @@ export function createGameSnapshot(
           participants: Object.fromEntries(Object.entries(state.world.participants).map(
             ([playerId, participant]) => [playerId, {
               activity: hubActivities[playerId] ?? null,
+              collegeIntro: participant.collegeIntro,
               region: participant.region,
               transition: participant.transition,
             }],

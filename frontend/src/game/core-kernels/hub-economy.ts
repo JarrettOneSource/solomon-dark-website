@@ -88,6 +88,7 @@ export const NATIVE_DYE_SWATCH_COLORS = [
 ] as const
 export type NativeDyeLayer = 'cloth' | 'trim'
 export type HubInventoryAction =
+  | { readonly type: 'acknowledge-college-intro-dialogue' }
   | {
       readonly type: 'acknowledge-npc-hint'
       readonly interactionId: NativeHubInteractionId

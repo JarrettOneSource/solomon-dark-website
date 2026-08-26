@@ -145,7 +145,7 @@ export default function SkillQuickbar({
               />
             ) : null}
             {bindingCode !== 'Mouse2' && skill !== undefined ? (
-              <NativeKeyboardBinding text={bindingLabel.toUpperCase()} />
+              <NativeQuickbarBinding text={bindingLabel.toUpperCase()} />
             ) : null}
           </button>
         )
@@ -205,7 +205,7 @@ function CooldownSector({ capacity, remaining }: { capacity: number; remaining: 
   )
 }
 
-function NativeKeyboardBinding({ text }: { text: string }) {
+export function NativeQuickbarBinding({ text }: { text: string }) {
   const layout = layoutNativeQuickbarBinding(text)
   const maskImage = `url("${hub.hud.fontAtlas}")`
   const backingImage = `url("${hub.hud.keyBacking}")`

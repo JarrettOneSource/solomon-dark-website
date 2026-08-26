@@ -20,6 +20,10 @@ import {
   HUB_INCOMING_FADE_RATES,
   HUB_OUTGOING_FADE_RATE,
 } from '../core-kernels/hub-regions.ts'
+import {
+  NATIVE_COLLEGE_COVER_FADE_RATE,
+  NATIVE_COLLEGE_TITLE_CURSOR_STEP,
+} from '../core-kernels/native-college-intro.ts'
 import { copyHubMemorialState } from '../core-kernels/hub-memorial.ts'
 
 export type HubGameSnapshot = Omit<GameSnapshot, 'world'> & {
@@ -147,6 +151,21 @@ function projectLocalParticipant(
   elapsedTicks: number,
 ): ProtocolHubParticipantState {
   const result = copyParticipant(participant)
+  if (result.collegeIntro?.phase === 'courtyard-walk') {
+    result.collegeIntro = {
+      ...result.collegeIntro,
+      coverAlpha: clamp(
+        result.collegeIntro.coverAlpha - NATIVE_COLLEGE_COVER_FADE_RATE * elapsedTicks,
+        0,
+        1,
+      ),
+      titleCursor: clamp(
+        result.collegeIntro.titleCursor + NATIVE_COLLEGE_TITLE_CURSOR_STEP * elapsedTicks,
+        0,
+        5,
+      ),
+    }
+  }
   if (!result.transition) return result
   const delta = result.transition.phase === 'college-loadout'
     ? 0
@@ -284,6 +303,7 @@ function interpolateParticipant(
   ) {
     return {
       activity: blend < 1 ? older.activity : newer.activity,
+      collegeIntro: interpolateCollegeIntro(older, newer, blend),
       region: blend < 1 ? older.region : newer.region,
       transition: {
         ...second,
@@ -297,6 +317,27 @@ function interpolateParticipant(
     }
   }
   return copyParticipant(blend < 1 ? older : newer)
+}
+
+function interpolateCollegeIntro(
+  older: ProtocolHubParticipantState,
+  newer: ProtocolHubParticipantState,
+  blend: number,
+): ProtocolHubParticipantState['collegeIntro'] {
+  const first = older.collegeIntro
+  const second = newer.collegeIntro
+  if (!first || !second || first.phase !== second.phase) {
+    return copyParticipant(blend < 1 ? older : newer).collegeIntro
+  }
+  return {
+    ...second,
+    contactCounter: blend < 1 ? first.contactCounter : second.contactCounter,
+    coverAlpha: lerp(first.coverAlpha, second.coverAlpha, blend),
+    dialogueSequence: blend < 1 ? first.dialogueSequence : second.dialogueSequence,
+    officeSpeed: lerp(first.officeSpeed, second.officeSpeed, blend),
+    pathCursor: lerp(first.pathCursor, second.pathCursor, blend),
+    titleCursor: lerp(first.titleCursor, second.titleCursor, blend),
+  }
 }
 
 function interpolatePlayer(
@@ -505,6 +546,7 @@ function copyParticipant(
 ): ProtocolHubParticipantState {
   return {
     activity: participant.activity,
+    collegeIntro: participant.collegeIntro ? { ...participant.collegeIntro } : null,
     region: participant.region,
     transition: participant.transition
       ? {

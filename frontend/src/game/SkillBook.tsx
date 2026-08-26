@@ -30,6 +30,7 @@ import {
   type SkillBookRendererPresentation,
 } from './renderer/skill-book-renderer.ts'
 import {
+  nativeBeltPullOffStarted,
   nativeSkillDragStarted,
   nativeSkillBookPagePlacements,
   nativeSkillBookPages,
@@ -42,6 +43,7 @@ interface SkillBookProps {
   audio: GameAudioDirector
   economy: ProtocolPlayerEconomy
   onAssignQuickbarSkill: (skillId: number, slot: number) => void
+  onUnassignQuickbarSkill: (slot: number) => void
   onClose: () => void
   onCloseStart?: () => void
   onOpenInventory: () => void
@@ -68,6 +70,7 @@ export default function SkillBook({
   onOpenInventory,
   onSelectConcentration,
   onSelectPrimarySkill,
+  onUnassignQuickbarSkill,
   playerId,
   progression: initialProgression,
   style,
@@ -341,6 +344,12 @@ export default function SkillBook({
       <SkillQuickbarEditor
         belt={belt}
         draggedSkillId={drag?.skillId ?? null}
+        nativePointForClient={nativePointForClient}
+        onPullOff={(slot) => {
+          onUnassignQuickbarSkill(slot)
+          audio.playSound('poof')
+          setTargetQuickbarSlot(null)
+        }}
         onTarget={setTargetQuickbarSlot}
         progression={progression}
         targetSlot={targetQuickbarSlot}
@@ -411,7 +420,13 @@ function SkillBookEntry({
     if (!press || press.pointerId !== event.pointerId) return
     const position = nativePointForClient(event.clientX, event.clientY)
     if (press.dragging && !cancelled && position) onPointerDrop(row.id, position)
-    else onDragEnd()
+    else {
+      onDragEnd()
+      if (!cancelled) {
+        onHover(row.id)
+        event.currentTarget.focus({ preventScroll: true })
+      }
+    }
     if (cancelled) suppressClickRef.current = false
     pressRef.current = null
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
@@ -443,7 +458,9 @@ function SkillBookEntry({
       }}
       onFocus={() => onHover(row.id)}
       onPointerEnter={() => onHover(row.id)}
-      onPointerLeave={() => onHover(null)}
+      onPointerLeave={(event) => {
+        if (event.pointerType === 'mouse') onHover(null)
+      }}
       onPointerCancel={(event) => finishPointer(event, true)}
       onPointerDown={(event) => {
         if (!draggable || event.button !== 0) return
@@ -476,12 +493,16 @@ function SkillBookEntry({
 function SkillQuickbarEditor({
   belt,
   draggedSkillId,
+  nativePointForClient,
+  onPullOff,
   onTarget,
   progression,
   targetSlot,
 }: {
   belt: readonly NativeHudRect[]
   draggedSkillId: number | null
+  nativePointForClient: (clientX: number, clientY: number) => NativeHudPoint | null
+  onPullOff: (slot: number) => void
   onTarget: (slot: number) => void
   progression: ProtocolPlayerProgression
   targetSlot: number | null
@@ -491,29 +512,103 @@ function SkillQuickbarEditor({
       {progression.skillQuickbar.map((skillId, slot) => {
         const skill = skillId === null ? null : NATIVE_SKILL_CATALOG[skillId]
         return (
-          <button
+          <SkillQuickbarSlot
             key={slot}
-            type="button"
-            className="skill-book-quickbar-action"
-            aria-label={skill
+            ariaLabel={skill
               ? `Quickbar ${slot + 1}, ${skill.name}${slot === 0 ? ', right mouse button' : `, key ${slot}`}`
               : `Quickbar ${slot + 1}, empty${slot === 0 ? ', right mouse button' : `, key ${slot}`}`}
-            aria-pressed={slot === targetSlot}
-            data-target={slot === targetSlot || undefined}
-            style={{
-              height: belt[slot]!.height,
-              left: belt[slot]!.x,
-              top: belt[slot]!.y,
-              width: belt[slot]!.width,
-            }}
-            onClick={() => onTarget(slot)}
-          >
-            {draggedSkillId !== null && slot === targetSlot ? (
-              <span className="skill-book-drop-target">Drop skill</span>
-            ) : null}
-          </button>
+            belt={belt[slot]!}
+            nativePointForClient={nativePointForClient}
+            onPullOff={onPullOff}
+            onTarget={onTarget}
+            populated={skillId !== null}
+            showDropTarget={draggedSkillId !== null && slot === targetSlot}
+            slot={slot}
+            target={slot === targetSlot}
+          />
         )
       })}
     </div>
+  )
+}
+
+function SkillQuickbarSlot({
+  ariaLabel,
+  belt,
+  nativePointForClient,
+  onPullOff,
+  onTarget,
+  populated,
+  showDropTarget,
+  slot,
+  target,
+}: {
+  ariaLabel: string
+  belt: NativeHudRect
+  nativePointForClient: (clientX: number, clientY: number) => NativeHudPoint | null
+  onPullOff: (slot: number) => void
+  onTarget: (slot: number) => void
+  populated: boolean
+  showDropTarget: boolean
+  slot: number
+  target: boolean
+}) {
+  const pressRef = useRef<{
+    pointerId: number
+    origin: NativeHudPoint
+  } | null>(null)
+  const suppressClickRef = useRef(false)
+  const finish = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (pressRef.current?.pointerId !== event.pointerId) return
+    pressRef.current = null
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+  }
+  return (
+    <button
+      type="button"
+      className="skill-book-quickbar-action"
+      aria-label={ariaLabel}
+      aria-pressed={target}
+      data-target={target || undefined}
+      style={{
+        height: belt.height,
+        left: belt.x,
+        top: belt.y,
+        width: belt.width,
+      }}
+      onClick={(event) => {
+        if (suppressClickRef.current) {
+          suppressClickRef.current = false
+          event.preventDefault()
+          return
+        }
+        onTarget(slot)
+      }}
+      onPointerCancel={finish}
+      onPointerDown={(event) => {
+        if (!populated || event.button !== 0) return
+        const origin = nativePointForClient(event.clientX, event.clientY)
+        if (!origin) return
+        pressRef.current = { origin, pointerId: event.pointerId }
+        event.currentTarget.setPointerCapture(event.pointerId)
+      }}
+      onPointerMove={(event) => {
+        const press = pressRef.current
+        if (!press || press.pointerId !== event.pointerId) return
+        const position = nativePointForClient(event.clientX, event.clientY)
+        if (!position || !nativeBeltPullOffStarted(press.origin, position)) return
+        suppressClickRef.current = true
+        pressRef.current = null
+        onPullOff(slot)
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+          event.currentTarget.releasePointerCapture(event.pointerId)
+        }
+      }}
+      onPointerUp={finish}
+    >
+      {showDropTarget ? <span className="skill-book-drop-target">Drop skill</span> : null}
+    </button>
   )
 }

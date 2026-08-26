@@ -207,8 +207,8 @@ import {
 import { stepPlayerStaffCombatSystem } from './player-staff-combat-system.ts'
 import { sealPlayerCombatInput } from './player-combat-input.ts'
 import {
-  HUB_COLLEGE_INTRO_OFFICE_POSITION,
-} from '../core-kernels/hub-regions.ts'
+  NATIVE_COLLEGE_COURTYARD_PATH,
+} from '../core-kernels/native-college-intro.ts'
 import {
   addHubParticipant,
   beginHubCollegeIntro,
@@ -544,7 +544,7 @@ export function armGameSimulationCollegeIntro(
     playerEntities: replacePlayerCharacter(
       state.playerEntities,
       playerId,
-      createPlayerCharacter(player.config, HUB_COLLEGE_INTRO_OFFICE_POSITION),
+      createPlayerCharacter(player.config, NATIVE_COLLEGE_COURTYARD_PATH[0]),
     ),
     world,
   }
@@ -1248,6 +1248,30 @@ export function applyGameSimulationHubAction(
   if (action.type === 'interact-goodie') {
     return interactWithBoneyardGoodie(state, playerId, player)
   }
+  if (action.type === 'acknowledge-college-intro-dialogue') {
+    if (state.world.kind !== 'hub') {
+      return { accepted: false, modConsumption: null, reason: 'service-unavailable', state }
+    }
+    const participant = state.world.participants[playerId]
+    if (participant?.collegeIntro?.phase !== 'arch-dialogue') {
+      return { accepted: false, modConsumption: null, reason: 'service-unavailable', state }
+    }
+    return {
+      accepted: true,
+      modConsumption: null,
+      reason: null,
+      state: {
+        ...state,
+        world: {
+          ...state.world,
+          participants: {
+            ...state.world.participants,
+            [playerId]: { ...participant, collegeIntro: null },
+          },
+        },
+      },
+    }
+  }
   if (action.type === 'acknowledge-npc-hint') {
     if (!hubServiceAvailable(state, playerId)) {
       return { accepted: false, modConsumption: null, reason: 'service-unavailable', state }
@@ -1535,7 +1559,7 @@ export function getPlayerSkillBook(
 export function bindGameSimulationPlayerSkillQuickbar(
   state: GameSimulationState,
   playerId: PlayerId,
-  skillId: number,
+  skillId: number | null,
   slot: number,
 ): GameSimulationState | null {
   if (!gameSimulationPlayerCanEditBooks(state, playerId)) return null

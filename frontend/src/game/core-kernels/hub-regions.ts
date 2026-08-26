@@ -20,6 +20,10 @@ import {
 } from './player-character.ts'
 import type { Vector2 } from './vector.ts'
 import {
+  createNativeCollegeIntroState,
+  type NativeCollegeIntroState,
+} from './native-college-intro.ts'
+import {
   lineSegmentObstruction,
   nearerLineObstruction,
 } from './line-obstruction.ts'
@@ -53,6 +57,7 @@ export interface HubParticipantTransition {
 }
 
 export interface HubParticipantState {
+  collegeIntro: NativeCollegeIntroState | null
   region: HubRegionId
   transition: HubParticipantTransition | null
 }
@@ -194,20 +199,14 @@ export const HUB_INCOMING_FADE_RATES: Readonly<Record<HubRegionId, number>> = {
 }
 
 export function createHubParticipantState(): HubParticipantState {
-  return { region: 'courtyard', transition: null }
+  return { collegeIntro: null, region: 'courtyard', transition: null }
 }
 
 export function createHubCollegeIntroParticipantState(): HubParticipantState {
   return {
-    region: 'office',
-    transition: {
-      alpha: 1,
-      destination: 'courtyard',
-      phase: 'college-intro',
-      scriptedSpeed: 1,
-      scriptedTarget: { ...HUB_COLLEGE_INTRO_OFFICE_POSITION },
-      sourceRegion: 'office',
-    },
+    collegeIntro: createNativeCollegeIntroState(),
+    region: 'courtyard',
+    transition: null,
   }
 }
 
