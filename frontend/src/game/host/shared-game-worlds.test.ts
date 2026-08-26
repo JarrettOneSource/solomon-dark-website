@@ -48,6 +48,7 @@ test('shared Hub restore preserves the saved character and participant state', (
   }
   if (saved.world.kind !== 'hub') assert.fail('expected saved Hub world')
   const savedParticipant = {
+    collegeIntro: null,
     region: 'library' as const,
     transition: {
       alpha: 0.4,
