@@ -50524,3 +50524,55 @@ SkillPicker's full-browser curtain projection and frozen-world cosmetic clock.
   The production entry is `477,708` raw / `133,898` gzip against the unchanged
   `524,288` / `134,144` limits. Physical and installed-web-app acceptance remain
   unpublished requirements; no push or production deployment is claimed.
+
+### Physical compact-page falsification and remaining combat-asset owner
+
+- The first physical rerun of exact candidate
+  `da61a74613589438048ae061eefebee05bf796e3` falsifies the Mac footprint as a
+  sufficient completion receipt. The iPhone XR settled SkillPicker row holds
+  `59.37` FPS with p95/p99 `20/24 ms`, but its frontmost WebContent process is
+  still `1,160,743,768` bytes while the GPU process is `63,800,440` bytes.
+  Battery and virtual temperatures are `37.69 C` and `37.39 C`. No crash or
+  Jetsam report newer than the existing `2026-08-26 17:37` CPU-resource report
+  appears, but this footprint remains too close to the already proven
+  `1.50 GiB` high-water kill to run repeated level-ups safely.
+- The live page still contains only the Boneyard WebGL surface, its environment
+  light surface, and the SkillPicker WebGL surface. Three one-second device
+  captures have SHA-256 values
+  `12898a6bdb926ca7978bb619501e57915e8e11691c3c0b70f741eed48996a23b`,
+  `8be66fb6fe8cafa78e7751ac83260ccf57036ed824b1e34c5669bfbd737a6738`,
+  and `545bf15dfec30c18300741209a55539fbc1a4b33ac514c8126d302c8b00695e4`.
+  The curtain keeps the authoritative world lighting stable, but the middle
+  Safari capture again observes an incomplete SkillPicker WebGL presentation.
+  This keeps the responsive compositor row open independently of simulation
+  lighting.
+- The remaining startup fan-out is now bounded statically. One Boneyard load
+  requests `2,267` independently decoded native enemy sources: `2,087`
+  BadGuys, `65` DeadHawg, and `115` Demon records. The complete BadGuys and
+  Demon source directories contain `2,625` small PNGs whose combined decoded
+  RGBA payload is only `15,013,700` bytes. The physical cost is therefore not
+  explained by pixels; it is thousands of image, texture-source, upload, and
+  decoded-cache owners created by `loadGameTextureEntries`. Removing the
+  earlier Canvas2D cache did not remove this downstream fan-out.
+
+Native/web system extension: exact BadGuys and Demon record pixels from the
+extracted manifests through bounded shared atlas pages, per-record logical
+origin/trim reconstruction, the existing `brightness(1.12)` browser filter,
+nearest/native sampling, every enemy/loot/player-spell consumer, context loss,
+and teardown.
+
+| Member | Required invariant |
+| --- | --- |
+| BadGuys and Demon records | every non-empty extracted source reconstructs byte-for-byte at its original logical dimensions; record number and native anchor remain unchanged |
+| Runtime brightness | the current Canvas2D `brightness(1.12)` result is applied once per shared page, not approximated with tint or a device-specific shader |
+| Dynamic consumers | enemy bodies, deaths, projectiles, loot, player Fire/Weld actors and secondary/primary VFX keep complete existing membership and frame selection |
+| DeadHawg/editor painter | remains on its current source path because the static painter requires the independently decoded source images; no duplicate atlas page is introduced for that family |
+| Loading and teardown | original BadGuys/Demon URLs remain logical lookup keys but are not decoded individually; derived frames die before their shared page sources |
+| Responsive SkillPicker | full-viewport curtain and frozen-world clock remain; incomplete device captures must be retested after memory pressure is bounded rather than hidden by removing world/UI members |
+
+Implementation contract: build deterministic, checked BadGuys/Demon pages from
+the extracted PNG oracle; preserve transparent logical padding through Pixi
+`orig`/`trim`; deduplicate identical crops; load and brightness-lift only the
+bounded page sources; map every requested original URL to a derived shared-page
+texture; and prove reconstruction, source exclusion, destruction order,
+browser errors, physical memory, repeated level-ups, and all stress rows.
