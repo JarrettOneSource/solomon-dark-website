@@ -160,7 +160,7 @@ test('title Kill Character prompt preserves the settled stock lines and action g
     hoveredAction: 'prompt-secondary',
     kind: 'kill-wizard',
     pressedAction: null,
-  })
+  }, 0.75)
   assert.equal(NATIVE_KILL_CHARACTER_TITLE, 'Kill character?')
   assert.equal(
     NATIVE_KILL_CHARACTER_BODY,
@@ -200,7 +200,7 @@ test('tutorial offer reuses the same exact stock MsgBox composition', () => {
     hoveredAction: null,
     kind: 'tutorial',
     pressedAction: null,
-  })
+  }, 0.75)
   const body = plan.nodes.find(({ label }) => label === 'message:body')
   assert.ok(body?.kind === 'text')
   assert.deepEqual(layoutNativeUiText(body.text).lines.map(({ text }) => text), [
@@ -209,6 +209,29 @@ test('tutorial offer reuses the same exact stock MsgBox composition', () => {
     'first game.',
   ])
   assert.deepEqual(plan.actions.map(({ id }) => id), ['prompt-primary', 'prompt-secondary'])
+})
+
+test('title prompt separates its stock content from a full responsive render-target curtain', () => {
+  const frame = {
+    busy: false,
+    hoveredAction: null,
+    kind: 'tutorial' as const,
+    pressedAction: null,
+  }
+  const stock = planTitleMenuPrompt(frame, 0.75)
+  const stockCurtain = stock.nodes.find(({ label }) => label === 'message:curtain')
+  assert.ok(stockCurtain?.kind === 'solid')
+  assert.deepEqual(stockCurtain.bounds, nativeUiRect(0, 0, 1_600, 900))
+  assert.equal(stockCurtain.alpha, 0.75)
+
+  const content = planTitleMenuPrompt(frame, 0)
+  assert.equal(content.nodes.some(({ label }) => label === 'message:curtain'), false)
+  assert.deepEqual(
+    content.nodes.find(({ label }) => label === 'message:background'),
+    stock.nodes.find(({ label }) => label === 'message:background'),
+  )
+  assert.deepEqual(content.actions, stock.actions)
+
 })
 
 test('SimpleMenu is a reusable composition over the same stock primitives', () => {

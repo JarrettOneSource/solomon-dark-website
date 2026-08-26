@@ -61,7 +61,10 @@ export const TITLE_MENU_PROMPT_COPY: Readonly<Record<TitleMenuPromptKind, TitleM
   },
 }
 
-export function planTitleMenuPrompt(frame: TitleMenuPromptFrame): NativeUiPlan {
+export function planTitleMenuPrompt(
+  frame: TitleMenuPromptFrame,
+  dimAlpha: number,
+): NativeUiPlan {
   const copy = TITLE_MENU_PROMPT_COPY[frame.kind]
   return planNativeUiMessage({
     actions: [
@@ -80,7 +83,7 @@ export function planTitleMenuPrompt(frame: TitleMenuPromptFrame): NativeUiPlan {
     ],
     body: copy.body,
     bounds: STOCK_PROMPT_BOUNDS,
-    dimAlpha: 0.75,
+    dimAlpha,
     height: 900,
     title: copy.title,
     width: 1_600,

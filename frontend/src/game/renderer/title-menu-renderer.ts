@@ -135,8 +135,19 @@ export async function createTitleMenuRenderer(
   const centerStage = titleStage('title-menu-center-stage', 21)
   const versionStage = titleStage('title-menu-version-stage', 22)
   const quitStage = titleStage('title-menu-quit-stage', 24)
+  const promptCurtain = new Graphics()
+  promptCurtain.alpha = 0.75
+  promptCurtain.zIndex = 29
   const promptStage = titleStage('title-menu-prompt-stage', 30)
-  root.addChild(backdrop, solomonStage, centerStage, versionStage, quitStage, promptStage)
+  root.addChild(
+    backdrop,
+    solomonStage,
+    centerStage,
+    versionStage,
+    quitStage,
+    promptCurtain,
+    promptStage,
+  )
 
   const gradients: FillGradient[] = []
   const background = new Graphics().rect(
@@ -327,14 +338,14 @@ export async function createTitleMenuRenderer(
         || presentedPromptHoveredAction !== promptHoveredAction
         || presentedPromptPressedAction !== promptPressedAction) {
         for (const child of promptStage.removeChildren()) child.destroy({ children: true })
-        promptStage.visible = frame.prompt !== null
+        promptCurtain.visible = frame.prompt !== null
         if (frame.prompt) {
           promptStage.addChild(nativeUi.render(planTitleMenuPrompt({
             busy: frame.promptBusy,
             hoveredAction: promptHoveredAction,
             kind: frame.prompt,
             pressedAction: promptPressedAction,
-          }), `title-menu-${frame.prompt}-prompt`))
+          }, 0), `title-menu-${frame.prompt}-prompt`))
         }
         presentedPrompt = frame.prompt
         presentedPromptBusy = frame.promptBusy
@@ -371,6 +382,7 @@ export async function createTitleMenuRenderer(
         centerStage,
         versionStage,
         quitStage,
+        promptCurtain,
         promptStage,
         viewport,
         currentResolution,
@@ -399,6 +411,7 @@ export async function createTitleMenuRenderer(
     centerStage,
     versionStage,
     quitStage,
+    promptCurtain,
     promptStage,
     options.viewport,
     resolution,
@@ -423,6 +436,7 @@ function applyTitleViewport(
   centerStage: Container,
   versionStage: Container,
   quitStage: Container,
+  promptCurtain: Graphics,
   promptStage: Container,
   viewport: FixedGameViewportLayout,
   resolution: number,
@@ -446,6 +460,9 @@ function applyTitleViewport(
   versionStage.position.set(versionBounds.x, versionBounds.y)
   quitStage.position.set(quitBounds.x, quitBounds.y)
   promptStage.position.set(centerBounds.x, centerBounds.y)
+  promptCurtain.clear()
+    .rect(0, 0, viewport.width, viewport.height)
+    .fill(0x000000)
   const canvas = application.canvas as HTMLCanvasElement
   canvas.dataset.centerStage = `${centerBounds.x},${centerBounds.y}`
   canvas.dataset.quitStage = `${quitBounds.x},${quitBounds.y}`

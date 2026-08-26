@@ -70,6 +70,7 @@
     "smoke:game:tutorial-modal-callouts": "node --experimental-strip-types tools/smoke-tutorial-modal-callouts.mjs",
     "smoke:game:boneyard-entrance": "node --experimental-strip-types tools/smoke-boneyard-waves.mjs --entrance-only",
     "smoke:game:boneyard-cleanup": "node --experimental-strip-types tools/smoke-boneyard-waves.mjs --cleanup-only",
+    "smoke:game:title-prompts": "node --experimental-strip-types tools/smoke-title-prompt-responsive.mjs",
     "smoke:game:combat": "node --experimental-strip-types tools/smoke-boneyard-waves.mjs",
     "smoke:game:staff-melee": "node --experimental-strip-types tools/smoke-boneyard-waves.mjs --staff-melee-only",
     "smoke:game:multiplayer-combat": "node --experimental-strip-types tools/smoke-multiplayer-combat-lifecycle.mjs",

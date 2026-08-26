@@ -35,7 +35,7 @@ export default function StockPromptDialog({
     hoveredAction: null,
     kind,
     pressedAction: null,
-  }).actions
+  }, 0).actions
   const activate = (action: TitleMenuPromptAction) => {
     if (busy) return
     if (action === 'prompt-primary') onPrimary()

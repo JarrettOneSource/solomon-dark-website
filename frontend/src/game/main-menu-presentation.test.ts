@@ -68,6 +68,15 @@ test('New Game uses the stock current-wizard YES or NO decision before Create', 
   assert.match(stockPromptStyles, /background:\s*transparent/)
 })
 
+test('title prompt curtain owns the full responsive renderer while content stays native-stage anchored', () => {
+  assert.match(renderer, /promptCurtain/)
+  assert.match(renderer, /promptCurtain\.clear\(\)[\s\S]*\.rect\(0, 0, viewport\.width, viewport\.height\)/)
+  assert.match(renderer, /planTitleMenuPrompt\([\s\S]*\}, 0\)/)
+  assert.match(renderer, /promptCurtain\.alpha = 0\.75/)
+  assert.match(renderer, /promptStage\.position\.set\(centerBounds\.x, centerBounds\.y\)/)
+  assert.doesNotMatch(stockPromptStyles, /background:\s*(?:rgba?|hsla?)\(/)
+})
+
 test('Hall of Fame is actionable and owns local plus four global boards', () => {
   assert.match(scene, /action="hall" accessibleLabel="Hall of Fame" onClick=\{onHall\}/)
   assert.match(scene, /screen === 'hall'/)
