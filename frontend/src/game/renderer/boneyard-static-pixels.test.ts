@@ -7,18 +7,20 @@ test('returns no resident for an entirely transparent painter surface', () => {
   assert.equal(cropBoneyardStaticPixels(new Uint8ClampedArray(3 * 2 * 4), 3, 2), null)
 })
 
-test('retains an already-tight painter surface without copying its bytes', () => {
+test('detaches an already-tight painter surface from its ImageData owner', () => {
   const pixels = new Uint8ClampedArray([
     1, 2, 3, 4,
     5, 6, 7, 8,
   ])
-  assert.deepEqual(cropBoneyardStaticPixels(pixels, 2, 1), {
+  const cropped = cropBoneyardStaticPixels(pixels, 2, 1)
+  assert.deepEqual(cropped, {
     height: 1,
-    pixels,
+    pixels: new Uint8ClampedArray(pixels),
     width: 2,
     x: 0,
     y: 0,
   })
+  assert.notEqual(cropped?.pixels, pixels)
 })
 
 test('copies exact RGBA rows inside the nontransparent crop bounds', () => {

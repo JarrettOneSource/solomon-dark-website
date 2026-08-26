@@ -3580,7 +3580,13 @@ function consumePaintedCanvas(
     const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data
     return crop
       ? cropBoneyardStaticPixels(pixels, canvas.width, canvas.height)
-      : { height: canvas.height, pixels, width: canvas.width, x: 0, y: 0 }
+      : {
+          height: canvas.height,
+          pixels: new Uint8ClampedArray(pixels),
+          width: canvas.width,
+          x: 0,
+          y: 0,
+        }
   } finally {
     releaseCanvas(canvas)
   }

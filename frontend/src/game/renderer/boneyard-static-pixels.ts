@@ -29,7 +29,13 @@ export function cropBoneyardStaticPixels(
   const croppedWidth = maxX - minX + 1
   const croppedHeight = maxY - minY + 1
   if (croppedWidth === width && croppedHeight === height) {
-    return { height, pixels, width, x: 0, y: 0 }
+    return {
+      height,
+      pixels: new Uint8ClampedArray(pixels),
+      width,
+      x: 0,
+      y: 0,
+    }
   }
 
   const cropped = new Uint8ClampedArray(croppedWidth * croppedHeight * 4)
