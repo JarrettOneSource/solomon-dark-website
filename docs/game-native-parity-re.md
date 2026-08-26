@@ -50405,6 +50405,18 @@ pixel count as the sole owner and identifies retained Canvas2D backing-store
 fan-out as the multiplicative cost. Mac result SHA-256 is
 `c1f00af8277953abdc8f87177dd1de30ec76e93bdae0f9949d880350337477f7`.
 
+The first buffer-source candidate then exposed the upstream half of that same
+owner. A genuinely fresh settled Mac process still contained 2,415
+`HTMLCanvasElement` objects, 2,412 Canvas2D contexts and 2,412 remote image
+buffers. The static builder created one scratch surface per painter row, while
+the editor brightness-lift cache retained a separate filtered Canvas2D copy of
+each decoded Boneyard source. Copying only the 562 final residents could not
+release either producer family. The closed candidate reuses one alpha and one
+opaque painter scratch surface, draws the exact `brightness(1.12)` filter
+directly during one-time static painting, and converts the smaller dynamic
+lifted-texture membership through one reusable scratch into detached RGBA
+buffers.
+
 Native/web system: Boneyard static painting from the exact editor document,
 through alpha cropping, immutable resident texture upload, base cleanup,
 building/tree/main/foreground consumers, and final renderer teardown; plus the
@@ -50416,6 +50428,7 @@ SkillPicker's full-browser curtain projection and frozen-world cosmetic clock.
 | Main and foreground residents | exact crop bounds, RGBA bytes, positions, painter rows, nearest sampling, culling and teardown |
 | Buildings | unchanged shared base/roof source pixels, 3x3/2x2 surface grids, vertex colors, shadow caster and painter ownership |
 | Trees, fences, props and monuments | unchanged paired roots, tint/alpha/wobble, source keys and cleanup membership |
+| Static painter inputs | unchanged decoded source art and 1.12 brightness result; no per-source lifted Canvas2D cache in the game runtime |
 | Dynamic actors/VFX/weather/lights | no count, quality, renderer-resolution or device-specific reduction; their existing owners remain unchanged |
 | SkillPicker curtain | one complete browser-viewport black surface driven by the existing reveal/close alpha lane; fixed 1600x900 cards remain centered above it |
 | Frozen world behind picker | complete membership remains visible; authoritative state stays frozen; render-only world lighting/cosmetic sampling must not invent changing background frames while the barrier owns the tick |
@@ -50428,6 +50441,10 @@ SkillPicker's full-browser curtain projection and frozen-world cosmetic clock.
   and retain one byte buffer plus the WebGL texture. Base cleanup repaints into
   a scratch canvas, copies into the existing buffer, releases the scratch
   surface, and updates the same texture source.
+- Reuse one alpha scratch and one opaque scratch across all static rows; do not
+  create thousands of collect-later Canvas2D owners during construction. The
+  native runtime painter applies the same `brightness(1.12)` filter directly;
+  dynamic lifted sources use one reusable scratch and detached RGBA buffers.
 - Preserve exact alpha-crop output, including empty/full/cropped rows, explicit
   `rgba8unorm`, premultiply-on-upload and nearest sampling. Destroying a
   resident must release both the Pixi source and the retained byte reference.
@@ -50438,8 +50455,9 @@ SkillPicker's full-browser curtain projection and frozen-world cosmetic clock.
   members or stop the separately owned level-up/picker clocks.
 - Regression coverage must pin byte-exact crop rows, transparent/full cases,
   buffer-source format/lifecycle, zero retained resident Canvas2D sources,
-  cleanup updates, responsive curtain bounds/alpha, and stable barrier-owned
-  cosmetic frames in Hub and Boneyard.
+  shared scratch ownership, absence of the lifted-source cache from game
+  texture loading, cleanup updates, responsive curtain bounds/alpha, and
+  stable barrier-owned cosmetic frames in Hub and Boneyard.
 - Re-run the complete supported gate and Mac acceptance, then repeat fresh
   physical Hub/Boneyard/picker/Inventory, Acid, secondary overlap, dense
   enemies, moving/shooting, all elements, repeated level-ups, Acid/UI,
@@ -50449,4 +50467,49 @@ SkillPicker's full-browser curtain projection and frozen-world cosmetic clock.
 
 ### Implementation validation receipt
 
-- Pending implementation, canonical validation, and physical rerun.
+- `BoneyardStaticPixelRegion` copies every tight/full/cropped ImageData result
+  into detached RGBA storage. Each resident is a nearest-sampled
+  `rgba8unorm` `BufferImageSource`; base cleanup repaints through one scratch,
+  updates the same buffer/source, and teardown clears the retained byte
+  reference after destroying the Pixi source. Empty and exact multi-row crop
+  regressions cover the transfer boundary.
+- Static construction now owns one alpha and one opaque scratch canvas instead
+  of one Canvas2D context per row. The runtime base/main/foreground painter
+  applies the existing 1.12 brightness result directly, while dynamic lifted
+  texture sources use one reusable scratch and detached buffer upload. A fresh
+  settled Mac heap drops from 2,412 live Canvas2D contexts/remote buffers to
+  three contexts and six canvas elements.
+- The responsive SkillPicker owns one full-browser DOM curtain driven directly
+  by the unchanged `0..0.5` reveal/close alpha. Its fixed 1600x900 ambient,
+  panels and actions remain in the independent WebGL stage. Hub and Boneyard
+  keep complete world membership but sample render-only world cosmetics from
+  the frozen authoritative tick while the level-up barrier is active, so
+  lighting cannot invent changing background frames.
+- Fresh settled Mac SkillPicker memory falls from about `1.26 GiB` WebContent
+  RSS and `227 MiB` GPU RSS to a `611 MiB` construction sample followed by
+  `518..523 MiB` WebContent and `65..66 MiB` GPU. The row holds `60.00` FPS,
+  p95/p99 `18/19 ms`; result SHA-256 is
+  `3f228fa1bc40219c6df0545ed60e24eb4651a861700646cee823ceac3187136a`.
+- The complete seven-session Mac Safari matrix passes 21/21 rows with no
+  browser errors. Minimum average FPS is `59.576`; maximum p95/p99 is `19/34`
+  ms. Hub/Boneyard/picker/Inventory and restorations hold about 60 FPS; Acid
+  with 175 actors is `59.59`; five-secondary overlap with 443 primitives is
+  `60.02`; 90 enemies are `59.98`; 88 enemies while moving/shooting are
+  `60.01`; all five max-rank primary rows are `59.58..59.74`. Result/log
+  SHA-256 values are
+  `23a4e8e6acbc326a1a4bb8fd30c1b530faeaaed85105f031ad60fffae227a955`
+  and `f9c65801a1b3118ae7d9a606ac140d44566ead06fc55e14e68d6fbec1a3a47a2`.
+- Eight consecutive SkillPickers hold `59.88..60.08` FPS and tear down to the
+  two ordinary Boneyard canvases after every choice. Acid remains live through
+  Inventory and four pickers at `59.60..60.08`, then fully retires and restores
+  at `59.99`. The stage-9 Tutorial fixture opens Inventory, advances to stage
+  10, closes into stage 11, resumes simulation and completes three reopens;
+  final state is unblocked with no Inventory/error at tick 568. Result SHA-256
+  values are
+  `1f61cca7db4241a349c1b9900bb55173d6e90cdd6604a3edb8b23e0838689f79`,
+  `74be390127f767cb310b3c66610ec33a213220e9629b695a0b730beaaa7ca46e`,
+  and `cba5cf6123e32c1fe481a7c4b9dfc136347c09dc3ea0e70e7f8a73a5551be067`.
+- Exact current-main canonical validation and the complete physical iPhone
+  rerun remain required. Mac memory/FPS and source contracts do not substitute
+  for bounded iPhone footprint, temperature, installed-web-app behavior and a
+  no-new-Jetsam receipt.
