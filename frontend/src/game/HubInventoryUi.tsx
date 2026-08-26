@@ -1044,7 +1044,7 @@ function NativeHubSurface({
                 }
                 onSurfaceChange({
                   kind: 'service',
-                  source: surface.source,
+                  source: surface.source === 'college-intro' ? 'world' : surface.source,
                   trader: choice.selector as HubTraderId,
                 })
               })}
