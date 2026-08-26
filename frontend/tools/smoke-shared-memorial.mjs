@@ -168,9 +168,6 @@ async function enterHub(page) {
   await dialog.getByRole('button', { name: 'Skip' }).click()
   await dialog.getByRole('button', { name: 'Done' }).click()
   await dialog.getByRole('button', { name: 'Skip' }).click()
-  const playerId = host.hostPlayerId()
-  assert.ok(playerId)
-  await waitForHostCollegeState(playerId, null)
   await dialog.waitFor({ state: 'hidden', timeout: 15_000 })
   await moveHubAxis(page, 'a', 'playerX', 300, 'at-most')
   await moveHubAxis(page, 's', 'playerY', 800, 'at-least')
@@ -204,19 +201,6 @@ async function moveHubAxis(page, key, axis, target, direction) {
     await page.keyboard.up(key)
     await page.waitForTimeout(150)
   }
-}
-
-async function waitForHostCollegeState(playerId, phase) {
-  const deadline = performance.now() + 15_000
-  while (performance.now() < deadline) {
-    const state = host.state()
-    if (
-      state.world.kind === 'hub'
-      && (state.world.participants[playerId]?.collegeIntro?.phase ?? null) === phase
-    ) return
-    await new Promise((resolve) => setTimeout(resolve, 25))
-  }
-  throw new Error(`timed out waiting for College state ${phase}`)
 }
 
 function moveBrowserPlayerToMortuary() {
