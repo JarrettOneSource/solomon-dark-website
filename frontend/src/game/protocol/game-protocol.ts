@@ -363,7 +363,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 80
+export const GAME_PROTOCOL_VERSION = 81
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -479,6 +479,7 @@ export interface ClientHelloMessage {
   allowModMismatch?: boolean
   beginCollegeIntro?: boolean
   cheatsEnabled: boolean
+  declineTutorial?: boolean
   type: 'client-hello'
   protocolVersion: number
   credential: string
@@ -1004,6 +1005,7 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
       'allowModMismatch',
       'beginCollegeIntro',
       'cheatsEnabled',
+      'declineTutorial',
       'protocolVersion',
       'credential',
       'character',
@@ -1025,6 +1027,9 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
       ...(value.beginCollegeIntro === undefined
         ? {}
         : { beginCollegeIntro: boolean(value.beginCollegeIntro, 'beginCollegeIntro') }),
+      ...(value.declineTutorial === undefined
+        ? {}
+        : { declineTutorial: boolean(value.declineTutorial, 'declineTutorial') }),
       ...(value.allowModMismatch === undefined
         ? {}
         : { allowModMismatch: boolean(value.allowModMismatch, 'allowModMismatch') }),

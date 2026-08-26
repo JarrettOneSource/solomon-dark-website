@@ -393,6 +393,49 @@ test('client carries character config, publishes authority, and tears down', asy
   assert.equal(receivedChat.length, 1)
 })
 
+test('client carries the fresh Tutorial-decline admission intent', async () => {
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    credential: 'fresh-secret',
+    declineTutorial: true,
+    profile: NULL_PROFILE,
+    transport,
+  })
+  assert.deepEqual(decodeClientGameMessage(transport.sent[0]), {
+    type: 'client-hello',
+    beginCollegeIntro: false,
+    character: CHARACTER,
+    cheatsEnabled: false,
+    credential: 'fresh-secret',
+    declineTutorial: true,
+    profile: NULL_PROFILE,
+    protocolVersion: GAME_PROTOCOL_VERSION,
+  })
+  const serverState = createGameSimulation({ 'player-1': CHARACTER })
+  transport.receive(encodeGameMessage({
+    type: 'server-welcome',
+    boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' }],
+    content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
+    developerAccess: false,
+    gameplayPause: null,
+    kernelParameters: kernelParameters(),
+    kernelVersion: PLAYER_CHARACTER_KERNEL_VERSION,
+    modAssets: [],
+    modCatalog: [],
+    playerId: 'player-1',
+    protocolVersion: GAME_PROTOCOL_VERSION,
+    resumeToken: 'reserved-player-1',
+    serverTickRate: 100,
+    sessionKind: 'standalone',
+    snapshot: createGameSnapshot(serverState, 'player-1'),
+    snapshotRate: 20,
+    snapshotSequence: 1,
+  }))
+  const session = await connecting
+  session.destroy()
+})
+
 test('client publishes Hub activity locally but reserves gameplay pause for Boneyard', async (context) => {
   const transport = new MemoryTransport()
   const connecting = connectGameClientSession({

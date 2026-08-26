@@ -105,6 +105,15 @@ try {
     await tutorial.getByRole('button', { exact: true, name: 'NO' }).click()
     await tutorial.waitFor({ state: 'detached' })
     await assertCurtainHidden(page)
+    assert.equal(await page.locator('.create-menu-scene').count(), 0)
+    await page.getByRole('button', { exact: true, name: 'Play' }).click()
+    await page.getByRole('button', { exact: true, name: 'New game' }).click()
+    await page.locator('.create-menu-scene').waitFor({ state: 'visible', timeout: 10_000 })
+    const declineFlow = {
+      createVisible: await page.locator('.create-menu-scene').isVisible(),
+      collegeVisible: await page.locator('.hub-scene[data-region="courtyard"]').count(),
+    }
+    assert.deepEqual(declineFlow, { collegeVisible: 0, createVisible: true })
 
     await seedLocalSave(page, save)
     await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
@@ -126,6 +135,7 @@ try {
     assert.deepEqual(failedResponses, [])
     receipts.push({
       consoleErrors,
+      declineFlow,
       failedResponses,
       kill: killReceipt,
       killScreenshot,

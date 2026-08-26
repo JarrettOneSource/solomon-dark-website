@@ -584,6 +584,32 @@ export function armGameSimulationCollegeIntro(
   }
 }
 
+export function declineGameSimulationTutorial(
+  state: GameSimulationState,
+  playerId: PlayerId,
+): GameSimulationState {
+  if (state.world.kind !== 'hub' || state.run.phase !== 'hub') return state
+  const economy = playerEconomyAt(state.playerEntities, playerId)
+  const participant = state.world.participants[playerId]
+  if (
+    !economy?.tutorialPending
+    || !economy.collegeIntroPending
+    || !participant
+    || participant.region !== 'courtyard'
+    || participant.transition !== null
+    || participant.collegeIntro !== null
+  ) return state
+  return {
+    ...state,
+    playerEntities: replacePlayerEconomy(state.playerEntities, playerId, {
+      ...economy,
+      collegeIntroPending: false,
+      revision: economy.revision + 1,
+      tutorialPending: false,
+    }),
+  }
+}
+
 export function completedGameSimulationCollegeIntroPlayerIds(
   previous: GameSimulationState,
   current: GameSimulationState,

@@ -45,6 +45,7 @@ export interface SessionOptions {
   character: PlayerCharacterConfig
   cheatsEnabled?: boolean
   diagnostics?: GameClientDiagnostics
+  declineTutorial?: boolean
   endpoint: GameEndpoint
   onFatal?: (failure: GameConnectionFailure) => void
   onDeploymentRestart?: (request: GameDeploymentRestartRequest) => Promise<void>
@@ -106,6 +107,7 @@ export async function bootGame(options: SessionOptions): Promise<GameSession> {
     ...(options.beginCollegeIntro ? { beginCollegeIntro: true } : {}),
     character: options.character,
     cheatsEnabled: options.cheatsEnabled === true,
+    ...(options.declineTutorial ? { declineTutorial: true } : {}),
     profile: options.profile,
     ...(options.resumeToken ? { resumeToken: options.resumeToken } : {}),
     transport,

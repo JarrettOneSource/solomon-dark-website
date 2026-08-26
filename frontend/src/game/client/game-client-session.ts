@@ -86,6 +86,7 @@ export interface GameClientSessionOptions {
   cheatsEnabled?: boolean
   credential: string
   diagnostics?: GameClientDiagnostics
+  declineTutorial?: boolean
   now?: () => number
   onFatal?: (failure: GameConnectionFailure) => void
   onDeploymentRestart?: (request: GameDeploymentRestartRequest) => Promise<void>
@@ -1219,6 +1220,7 @@ export function connectGameClientSession(
       ...(options.allowModMismatch ? { allowModMismatch: true } : {}),
       beginCollegeIntro: options.beginCollegeIntro === true,
       cheatsEnabled: options.cheatsEnabled === true,
+      ...(options.declineTutorial ? { declineTutorial: true } : {}),
       protocolVersion: GAME_PROTOCOL_VERSION,
       credential: options.credential,
       character: options.character,

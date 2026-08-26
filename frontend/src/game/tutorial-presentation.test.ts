@@ -14,6 +14,21 @@ test('accepting the offer enters the tutorial prelude without a control picker',
   assert.equal(existsSync(new URL('./TutorialControlPicker.tsx', import.meta.url)), false)
 })
 
+test('declining the offer stays at title and routes the next new wizard through Create to Hub', () => {
+  const menu = source('./MainMenuScene.tsx')
+  const declineHandler = /onSecondary=\{\(\) => \{[\s\S]*?if \(titlePrompt === 'kill-wizard'\)[\s\S]*?else \{[\s\S]*?\n\s*\}\n\s*\}\}/.exec(menu)?.[0]
+  assert.ok(declineHandler)
+  assert.match(declineHandler, /setTutorialOfferOpen\(false\)/)
+  assert.match(declineHandler, /setTutorialDeclined\(true\)/)
+  assert.doesNotMatch(declineHandler, /continueNewGame|beginCreate|startCollegeIntro/)
+  assert.match(
+    menu,
+    /collegeIntroPending = useMemo\([\s\S]*?!tutorialDeclined[\s\S]*?\[profileSave, tutorialDeclined\]/,
+  )
+  const startHub = menu.slice(menu.indexOf('const startHub ='), menu.indexOf('async function startCollegeIntro'))
+  assert.match(startHub, /connectSession\([\s\S]*?tutorialDeclined/)
+})
+
 test('renders exact stock UI records for the prelude and blinking lesson pointer', () => {
   const prelude = source('./TutorialPrelude.tsx')
   const overlay = source('./TutorialOverlay.tsx')

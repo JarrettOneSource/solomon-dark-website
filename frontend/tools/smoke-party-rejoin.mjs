@@ -166,22 +166,9 @@ try {
   }
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
-  await page.locator('.hub-scene[data-hub-region="office"]').waitFor({ timeout: 60_000 })
-  await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 60_000 })
-  await page.waitForFunction(() => (
-    document.querySelector('.hub-world-canvas')?.getAttribute('data-transition-phase') === 'none'
-  ))
-  await moveHubAxis(page, 'a', 'playerX', 300, 'at-most')
-  await moveHubAxis(page, 's', 'playerY', 800, 'at-least')
-  await moveHubAxis(page, 'd', 'playerX', 512, 'at-least')
-  await page.keyboard.down('s')
-  try {
-    await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({
-      timeout: 30_000,
-    })
-  } finally {
-    await page.keyboard.up('s')
-  }
+  await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({
+    timeout: 30_000,
+  })
   await page.getByRole('textbox', { name: 'Wizard name' }).fill('Aurelia')
   await page.getByRole('button', { name: /fire/i }).click()
   await page.locator('.create-menu-disciplines[data-visible="true"]').waitFor()

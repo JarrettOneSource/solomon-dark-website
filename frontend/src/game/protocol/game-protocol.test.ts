@@ -164,6 +164,23 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
     resumeToken: 'reserved-token',
   })
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
+    type: 'client-hello',
+    character: CHARACTER,
+    cheatsEnabled: false,
+    credential: 'fresh-secret',
+    declineTutorial: true,
+    profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
+    protocolVersion: GAME_PROTOCOL_VERSION,
+  })), {
+    type: 'client-hello',
+    character: CHARACTER,
+    cheatsEnabled: false,
+    credential: 'fresh-secret',
+    declineTutorial: true,
+    profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
+    protocolVersion: GAME_PROTOCOL_VERSION,
+  })
+  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
     type: 'client-ready-college-intro',
   })), { type: 'client-ready-college-intro' })
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
@@ -1453,8 +1470,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v80 carries Web Lua wearables, College admission, observer mode, Hub activity, NPC state, Goodie actions, tutorial fields/state, Hagatha runtime, Imp effects, save intent, selected skills, sacks, dyes, and gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 80)
+test('protocol v81 carries Web Lua wearables, onboarding admission, observer mode, Hub activity, NPC state, Goodie actions, tutorial fields/state, Hagatha runtime, Imp effects, save intent, selected skills, sacks, dyes, and gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 81)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),

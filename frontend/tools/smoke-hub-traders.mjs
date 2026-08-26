@@ -647,23 +647,8 @@ async function enterHub(page, element) {
   await declineTutorialOffer(page)
   await page.getByRole('button', { name: 'New Game' }).click()
   const create = page.locator('.create-menu-scene[data-motion-settled="true"]')
-  const office = page.locator('.hub-scene[data-hub-region="office"]')
   try {
-    await office.waitFor({ timeout: 30_000 })
-    await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 30_000 })
-    await page.waitForFunction(() => (
-      document.querySelector('.hub-world-canvas')?.getAttribute('data-transition-phase')
-        === 'none'
-    ))
-    await moveHubAxis(page, 'a', 'playerX', 300, 'at-most')
-    await moveHubAxis(page, 's', 'playerY', 800, 'at-least')
-    await moveHubAxis(page, 'd', 'playerX', 512, 'at-least')
-    await page.keyboard.down('s')
-    try {
-      await create.waitFor({ timeout: 30_000 })
-    } finally {
-      await page.keyboard.up('s')
-    }
+    await create.waitFor({ timeout: 30_000 })
   } catch (error) {
     process.stderr.write(`${JSON.stringify({
       body: (await page.locator('body').innerText()).slice(0, 2_000),

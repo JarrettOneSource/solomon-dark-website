@@ -55,6 +55,7 @@ import {
   BONEYARD_ENEMY_EVENT_LANE_CAPACITY,
   confirmGameSimulationLoadout,
   createGameSimulation,
+  declineGameSimulationTutorial,
   detachGameSimulationPlayer,
   DEFAULT_PLAYER_CHARACTER_CONFIG,
   enterBoneyardWorld,
@@ -260,6 +261,24 @@ test('a pending first wizard consumes the College intro only after the Courtyard
   assert.equal(getPlayerEconomy(state, 'owner').collegeIntroPending, false)
   assert.equal(getPlayerEconomy(state, 'owner').revision, initialRevision + 1)
   assert.strictEqual(armGameSimulationCollegeIntro(state, 'owner'), state)
+})
+
+test('declining the Tutorial atomically consumes both fresh onboarding obligations', () => {
+  const initial = createGameSimulation({ owner: DEFAULT_PLAYER_CHARACTER_CONFIG })
+  const initialEconomy = getPlayerEconomy(initial, 'owner')
+  assert.equal(initialEconomy.tutorialPending, true)
+  assert.equal(initialEconomy.collegeIntroPending, true)
+
+  const declined = declineGameSimulationTutorial(initial, 'owner')
+  const economy = getPlayerEconomy(declined, 'owner')
+  assert.equal(economy.tutorialPending, false)
+  assert.equal(economy.collegeIntroPending, false)
+  assert.equal(economy.revision, initialEconomy.revision + 1)
+  assert.strictEqual(armGameSimulationCollegeIntro(declined, 'owner'), declined)
+  assert.strictEqual(declineGameSimulationTutorial(declined, 'owner'), declined)
+
+  const armed = armGameSimulationCollegeIntro(initial, 'owner')
+  assert.strictEqual(declineGameSimulationTutorial(armed, 'owner'), armed)
 })
 
 test('Boneyard entry registers players before Lantern and reconnect appends a fresh actor ordinal', () => {

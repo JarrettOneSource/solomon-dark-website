@@ -320,6 +320,7 @@ interface MainMenuSceneProps {
     allowModMismatch?: boolean,
     resumeToken?: string,
     beginCollegeIntro?: boolean,
+    declineTutorial?: boolean,
   ) => Promise<GameClientSession>
   connectObserver: (
     matchId: string,
@@ -368,6 +369,7 @@ export default function MainMenuScene({
   const [tutorialOfferOpen, setTutorialOfferOpen] = useState(
     initialScreen === 'root' && tutorialOfferEligible,
   )
+  const [tutorialDeclined, setTutorialDeclined] = useState(false)
   const [wizardName, setWizardName] = useState(() => (
     initialScreen === 'create' ? initialCreateWizardNameForSession(displayName) : ''
   ))
@@ -431,9 +433,10 @@ export default function MainMenuScene({
   const [gameSettings, setLocalGameSettings] = useState(readGameSettings)
   const cheatsEnabled = gameSettings.enableCheats && !developerAccess
   const collegeIntroPending = useMemo(
-    () => profileSave === null
-      || restoreGameSaveProfile(profileSave.document).economy.collegeIntroPending,
-    [profileSave],
+    () => !tutorialDeclined && (profileSave === null
+      || restoreGameSaveProfile(profileSave.document).economy.collegeIntroPending
+    ),
+    [profileSave, tutorialDeclined],
   )
   const [localHallOfFame, setLocalHallOfFame] = useState(readLocalHallOfFame)
   const [currentHallRunId, setCurrentHallRunId] = useState<string | null>(null)
@@ -1178,6 +1181,9 @@ export default function MainMenuScene({
         profileSave?.document,
         profileSave ? 'new-game' : undefined,
         newGameModMismatchAllowed,
+        undefined,
+        undefined,
+        tutorialDeclined,
       )
       activateSession(nextSession)
       setNewGameModMismatchAllowed(false)
@@ -1933,7 +1939,10 @@ export default function MainMenuScene({
               setHoveredTitleAction(null)
               setPressedTitleAction(null)
               if (titlePrompt === 'kill-wizard') setActiveWizardPrompt(false)
-              else setTutorialOfferOpen(false)
+              else {
+                setTutorialOfferOpen(false)
+                setTutorialDeclined(true)
+              }
             }}
             style={nativeStageStyle}
           />

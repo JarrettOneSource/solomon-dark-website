@@ -296,6 +296,7 @@ export default function Game() {
     allowModMismatch?: boolean,
     resumeToken?: string,
     beginCollegeIntro?: boolean,
+    declineTutorial?: boolean,
   ): Promise<GameSession> => {
     try {
       const endpoint = preparedEndpoint.current
@@ -306,6 +307,7 @@ export default function Game() {
         character,
         cheatsEnabled,
         diagnostics,
+        ...(declineTutorial ? { declineTutorial: true } : {}),
         endpoint,
         onFatal: setFatal,
         onDeploymentRestart: saveForDeployment,

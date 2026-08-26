@@ -197,13 +197,20 @@ Protocol 79 adds Web Lua existing-slot wearable item identity. Save
 schema 14 admits the bounded wearable identity, package-owned art paths, dyes,
 and native death shape inside ordinary inventory items; schema 13 remains
 readable.
-Current protocol 80 corrects the first-College admission projection to the
+Protocol 80 corrects the first-College admission projection to the
 stock Courtyard title walk, covered Office transition, transformed Office walk,
 and automatic Archchancellor dialogue. Each Hub participant carries its
 bounded admission phase/cursors/cover/speed/contact state; the 35-character
 dialogue-acknowledgement discriminator is admitted in full. The same protocol
 also permits an addressed nullable skill-quickbar binding so a populated stock
 `BeltButton` can be pulled off without inventing a replacement skill.
+Current protocol 81 adds the browser-only, fresh-admission
+`declineTutorial` intent. It is mutually exclusive with save/resume and College
+admission. Before welcome, the host atomically clears the existing
+`tutorialPending` and `collegeIntroPending` profile fields; the ordinary
+`connected` checkpoint therefore persists Create-to-Hub routing without a
+College replay. Completing the actual Tutorial still follows protocol 80's
+stock College sequence.
 Save schema 15 persists that College state and the participant's exact Hub
 region, transition, and position. Schemas 1..14 retain their versioned shapes;
 a schema-13/14 legacy direct-Office admission migrates to the complete

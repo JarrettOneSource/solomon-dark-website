@@ -57,6 +57,7 @@ test('bootGame reports concrete transport and welcome milestones in order', asyn
   const session = inertSession()
   const result = await bootGame({
     character: CHARACTER,
+    declineTutorial: true,
     profile: NULL_PROFILE,
     endpoint: {
       kind: 'localhost',
@@ -69,7 +70,8 @@ test('bootGame reports concrete transport and welcome milestones in order', asyn
       trace.push('transport-open')
       return inertTransport
     },
-    sessionConnector: async () => {
+    sessionConnector: async (options) => {
+      assert.equal(options.declineTutorial, true)
       trace.push('welcome-received')
       return session
     },

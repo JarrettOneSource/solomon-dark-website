@@ -26,6 +26,7 @@ import {
   completedGameSimulationCollegeIntroPlayerIds,
   continueGameSimulationOver,
   createGameSimulation,
+  declineGameSimulationTutorial,
   detachGameSimulationPlayer,
   enterBoneyardWorld,
   getPlayerCharacter,
@@ -1039,6 +1040,17 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           disconnect(socket, 'authentication-failed', 'Cheats require a private College.')
           return
         }
+        if (
+          message.declineTutorial
+          && (message.beginCollegeIntro || message.save !== undefined || message.resumeToken !== undefined)
+        ) {
+          disconnect(
+            socket,
+            'invalid-message',
+            'Tutorial decline requires a fresh admission without the College introduction.',
+          )
+          return
+        }
         if (authenticated.partyId !== null && authenticated.partyRejoinToken !== null) {
           disconnect(socket, 'authentication-failed', 'The party admission is ambiguous.')
           return
@@ -1392,6 +1404,12 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         if (playerId === null) {
           disconnect(socket, 'invalid-message', 'The game save intent is invalid.')
           return
+        }
+        if (!rejoinedParty && message.declineTutorial) {
+          replaceStateForPlayer(
+            playerId,
+            declineGameSimulationTutorial(stateForPlayer(playerId), playerId),
+          )
         }
         if (
           !rejoinedParty

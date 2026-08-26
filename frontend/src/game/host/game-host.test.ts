@@ -735,6 +735,67 @@ test('a requested fresh College admission is authoritative through Office and ch
   assert.equal(getPlayerEconomy(host.state(), client.welcome.playerId).collegeIntroPending, false)
 })
 
+test('a fresh Tutorial decline enters the ordinary Hub and persists both consumed obligations', async (context) => {
+  const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
+  context.after(() => host.close())
+  const socket = await openSocket(host.address.url)
+  context.after(() => socket.close())
+  const welcomeMessage = nextMessage(socket, message => message.type === 'server-welcome')
+  const checkpointMessage = nextMessage(socket, (message) => (
+    message.type === 'server-save-checkpoint'
+    && restoreGameSaveProfile(message.save).economy.tutorialPending === false
+    && restoreGameSaveProfile(message.save).economy.collegeIntroPending === false
+  ))
+  socket.send(encodeGameMessage({
+    type: 'client-hello',
+    character: FIRST_CHARACTER,
+    cheatsEnabled: false,
+    credential: 'test-secret',
+    declineTutorial: true,
+    profile: EMPTY_PLAYER_PROFILE,
+    protocolVersion: GAME_PROTOCOL_VERSION,
+  }))
+  const [welcome, checkpoint] = await Promise.all([welcomeMessage, checkpointMessage])
+  assert.equal(welcome.type, 'server-welcome')
+  assert.equal(checkpoint.type, 'server-save-checkpoint')
+  const player = welcome.snapshot.players[welcome.playerId]
+  assert.equal(player.economy.tutorialPending, false)
+  assert.equal(player.economy.collegeIntroPending, false)
+  assert.equal(
+    welcome.snapshot.world.kind === 'hub'
+      ? welcome.snapshot.world.participants[welcome.playerId]?.collegeIntro
+      : undefined,
+    null,
+  )
+  const persisted = restoreGameSaveProfile(checkpoint.save).economy
+  assert.equal(persisted.tutorialPending, false)
+  assert.equal(persisted.collegeIntroPending, false)
+  assert.equal(getPlayerEconomy(host.state(), welcome.playerId).tutorialPending, false)
+  assert.equal(getPlayerEconomy(host.state(), welcome.playerId).collegeIntroPending, false)
+
+  const restoredHost = await startGameHost({
+    authentication: { kind: 'shared', credential: 'restore-secret' },
+    snapshotRate: 100,
+  })
+  context.after(() => restoredHost.close())
+  const restoredSocket = await openSavedRunSocket(
+    restoredHost.address.url,
+    'restore-secret',
+    checkpoint.save,
+  )
+  context.after(() => restoredSocket.close())
+  const restoredPlayerId = restoreGameSaveDocument(checkpoint.save).playerId
+  const restoredState = restoredHost.state()
+  assert.equal(getPlayerEconomy(restoredState, restoredPlayerId).tutorialPending, false)
+  assert.equal(getPlayerEconomy(restoredState, restoredPlayerId).collegeIntroPending, false)
+  assert.equal(
+    restoredState.world.kind === 'hub'
+      ? restoredState.world.participants[restoredPlayerId]?.collegeIntro
+      : undefined,
+    null,
+  )
+})
+
 test('private College projects one party, supports Party-ID reservation, and checkpoints each wizard', async (context) => {
   let thirdPartyId: string | null = null
   const host = await startGameHost({
@@ -3837,11 +3898,13 @@ async function join(
   autoPong = true,
   profile: PlayerSocialProfile = EMPTY_PLAYER_PROFILE,
   beginCollegeIntro = false,
+  declineTutorial = false,
 ) {
   const socket = await openSocket(url, undefined, autoPong)
   socket.send(encodeGameMessage({
     type: 'client-hello',
     ...(beginCollegeIntro ? { beginCollegeIntro: true } : {}),
+    ...(declineTutorial ? { declineTutorial: true } : {}),
     profile,
     cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
