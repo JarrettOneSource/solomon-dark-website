@@ -50350,3 +50350,103 @@ must retain the same local origin, anchor, transform, tint, alpha and sampling.
   Inventory, installed-web-app and teardown/re-entry rows remain required. The
   iPhone USB service became unavailable before the first compact-page physical
   sample; Mac and canonical receipts do not substitute for those rows.
+
+## 2026-08-26 — Boneyard resident backing-store high water and responsive SkillPicker stability
+
+### Physical reproduction and falsifiers
+
+- Exact candidate `36606a2287fd54de91d2577f622d44636ef13087` on an iPhone XR
+  running iOS 18.7.6 holds the optimized Hub at `60.00` FPS with p95/p99
+  `18/19 ms`, zero frames over `34 ms`, and a `507,053,936`-byte WebContent
+  footprint. The result SHA-256 is
+  `a4a39c75d91610cca3c3d5f1f451692ff85b1e58016043bc9dd2098ebe3e2ca6`.
+- The first complete physical stress path then measured empty Boneyard
+  `57.46` FPS, SkillPicker `59.39`, Inventory `60.01`, Acid Rain `47.46`, the
+  five-secondary overlap `54.07`, 87 active enemies `32.66`, and 83 enemies
+  while moving/shooting `26.68`. A later fresh isolated control held 77 active
+  enemies at `59.19` FPS. Enemy count alone is therefore falsified as the owner
+  of the collapse; the slow rows require the preceding allocation-pressure
+  path.
+- During the next-session transition, iOS wrote
+  `JetsamEvent-2026-08-26-155956.ips`. It names frontmost
+  `com.apple.WebKit.WebContent` as the largest and killed process, reason
+  `highwater`, at `98,529` 16-KiB pages (`1,614,299,136` bytes / about
+  `1.50 GiB`) with zero purgeable pages. Report SHA-256 is
+  `cb1b76379be4b557b0e4b64c9613e1710943e5de11485369e8b8be41d0fdd6ed`.
+- A fresh Boneyard SkillPicker reproduction has exactly three page canvases:
+  one `1574x675` Boneyard WebGL canvas, one `1574x675` environment-light
+  Canvas2D surface, and one `1600x900` SkillPicker WebGL canvas. The scene
+  explicitly reports `presentationPaused=false` while the settled picker owns
+  gameplay input. WebContent reaches `1,054,820,768` bytes, then samples
+  `1,180,928,656 -> 1,223,199,376 -> 1,256,704,656` over ten seconds while
+  WebContent consumes about `38..48%` CPU and the GPU process `60..69%`.
+  Inspector `Heap.gc` does not release the footprint. The picker and owner
+  result SHA-256 values are
+  `cdaf309f6e73dceab76d7993d7f592f47589f6bf87d415d2b4064075a87736b1`
+  and `5fae9424cf1115c50307d13fa089f3b610e35a5675a27d8741f780047a4d576e`.
+- Three one-second physical captures reproduce the reported background/picker
+  instability. The middle frame is taken while Safari changes its visible
+  viewport and loses most card/chrome pixels before the next frame restores
+  them. Capture SHA-256 values are
+  `1591b298999fb1b8083837c011873e6c7922040176e66d46479e1a7b582d0f9d`,
+  `7d5b63efe088e58c6a9c3d07f8e31806259cda021bf533f6b6d3fe61e35d595b`,
+  and `a97128833b51fffc0873561ce2ecf3b790ede145dd3a29c18b0e3c42e660cece`.
+
+### Minimized owner and complete system boundary
+
+The previously measured `100.29 MiB` Boneyard resident census understated its
+browser cost. All 562 residents retain an independent `HTMLCanvasElement` plus
+Canvas2D context as their Pixi texture resource. On macOS the same settled
+Boneyard/picker path grows a previously idle WebContent process to about
+`1.26 GiB` RSS. `vmmap -summary` attributes `928.0 MiB` of address space and
+`773.8 MiB` resident memory to WebKit Malloc, with 712,561 allocations; the
+resident RGBA payload is only `105,161,540` bytes. This disproves the remaining
+pixel count as the sole owner and identifies retained Canvas2D backing-store
+fan-out as the multiplicative cost. Mac result SHA-256 is
+`c1f00af8277953abdc8f87177dd1de30ec76e93bdae0f9949d880350337477f7`.
+
+Native/web system: Boneyard static painting from the exact editor document,
+through alpha cropping, immutable resident texture upload, base cleanup,
+building/tree/main/foreground consumers, and final renderer teardown; plus the
+SkillPicker's full-browser curtain projection and frozen-world cosmetic clock.
+
+| Member | Required invariant |
+| --- | --- |
+| Opaque base tiles | exact current Canvas2D paint pixels and world bounds; one-time off-camera cleanup still repaints the same source bytes |
+| Main and foreground residents | exact crop bounds, RGBA bytes, positions, painter rows, nearest sampling, culling and teardown |
+| Buildings | unchanged shared base/roof source pixels, 3x3/2x2 surface grids, vertex colors, shadow caster and painter ownership |
+| Trees, fences, props and monuments | unchanged paired roots, tint/alpha/wobble, source keys and cleanup membership |
+| Dynamic actors/VFX/weather/lights | no count, quality, renderer-resolution or device-specific reduction; their existing owners remain unchanged |
+| SkillPicker curtain | one complete browser-viewport black surface driven by the existing reveal/close alpha lane; fixed 1600x900 cards remain centered above it |
+| Frozen world behind picker | complete membership remains visible; authoritative state stays frozen; render-only world lighting/cosmetic sampling must not invent changing background frames while the barrier owns the tick |
+
+### Implementation consequence and validation contract
+
+- Replace every retained Boneyard resident Canvas2D texture resource with an
+  immutable RGBA `BufferImageSource`. Canvas2D remains the exact painter but is
+  scratch ownership only: extract/crop its bytes, release its backing store,
+  and retain one byte buffer plus the WebGL texture. Base cleanup repaints into
+  a scratch canvas, copies into the existing buffer, releases the scratch
+  surface, and updates the same texture source.
+- Preserve exact alpha-crop output, including empty/full/cropped rows, explicit
+  `rgba8unorm`, premultiply-on-upload and nearest sampling. Destroying a
+  resident must release both the Pixi source and the retained byte reference.
+- Move the existing SkillPicker curtain out of the fixed native WebGL canvas
+  into one viewport-sized DOM layer. Keep the exact native reveal/close clock
+  and fixed card/ambient geometry. Stabilize the frozen world's presentation
+  frame while `levelUpBarrier` owns the authoritative tick; do not hide world
+  members or stop the separately owned level-up/picker clocks.
+- Regression coverage must pin byte-exact crop rows, transparent/full cases,
+  buffer-source format/lifecycle, zero retained resident Canvas2D sources,
+  cleanup updates, responsive curtain bounds/alpha, and stable barrier-owned
+  cosmetic frames in Hub and Boneyard.
+- Re-run the complete supported gate and Mac acceptance, then repeat fresh
+  physical Hub/Boneyard/picker/Inventory, Acid, secondary overlap, dense
+  enemies, moving/shooting, all elements, repeated level-ups, Acid/UI,
+  Tutorial Inventory, installed-web-app, teardown and re-entry. Final physical
+  acceptance requires a bounded footprint, no new Jetsam/resource report, and
+  stable thermal/frame-time behavior.
+
+### Implementation validation receipt
+
+- Pending implementation, canonical validation, and physical rerun.
