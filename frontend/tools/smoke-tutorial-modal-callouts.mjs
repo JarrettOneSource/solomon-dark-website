@@ -232,14 +232,14 @@ async function runScenario(scenario) {
     const inventoryOpeningMeasurement = await measureOpeningModal(page, 10, allowSettledOpening)
     const inventoryOpening = compareModal(
       inventoryOpeningMeasurement,
-      expectedPlans(host.state(), playerId, 10, inventoryOpeningMeasurement.progress),
+      expectedPlans(host.state(), playerId, 10, scenario.hasTouch, inventoryOpeningMeasurement.progress),
       `${scenario.name} inventory opening`,
     )
     await page.locator('canvas[data-native-reveal="settled"]').waitFor({ timeout: 30_000 })
     await screenshotInBlinkWindow(page, screenshots.inventory)
     const inventory = compareModal(
       await measureModal(page, 10),
-      expectedPlans(host.state(), playerId, 10),
+      expectedPlans(host.state(), playerId, 10, scenario.hasTouch),
       `${scenario.name} inventory`,
     )
     assert.ok(inventory.members.includes('callout:backpack'), `${scenario.name} backpack lesson`)
@@ -301,7 +301,7 @@ async function runScenario(scenario) {
     await screenshotInBlinkWindow(page, screenshots.inventoryEmptyBackpack)
     const inventoryEmptyBackpack = compareModal(
       await measureModal(page, 10),
-      expectedPlans(host.state(), playerId, 10),
+      expectedPlans(host.state(), playerId, 10, scenario.hasTouch),
       `${scenario.name} inventory (empty backpack)`,
     )
     assert.equal(inventoryEmptyBackpack.members.length, 6, `${scenario.name} empty backpack members`)
@@ -326,7 +326,7 @@ async function runScenario(scenario) {
     const skillsOpeningMeasurement = await measureOpeningModal(page, 13, allowSettledOpening)
     const skillsOpening = compareModal(
       skillsOpeningMeasurement,
-      expectedPlans(host.state(), playerId, 13, skillsOpeningMeasurement.progress),
+      expectedPlans(host.state(), playerId, 13, scenario.hasTouch, skillsOpeningMeasurement.progress),
       `${scenario.name} skills opening`,
     )
     await page.locator('.skill-book-renderer canvas').waitFor({ timeout: 30_000 })
@@ -334,7 +334,7 @@ async function runScenario(scenario) {
     await screenshotInBlinkWindow(page, screenshots.skills)
     const skills = compareModal(
       await measureModal(page, 13),
-      expectedPlans(host.state(), playerId, 13),
+      expectedPlans(host.state(), playerId, 13, scenario.hasTouch),
       `${scenario.name} skills`,
     )
     assert.deepEqual(
@@ -379,7 +379,7 @@ async function runScenario(scenario) {
     await screenshotInBlinkWindow(page, screenshots.skillsThreePages)
     const skillsThreePages = compareModal(
       await measureModal(page, 13),
-      expectedPlans(host.state(), playerId, 13),
+      expectedPlans(host.state(), playerId, 13, scenario.hasTouch),
       `${scenario.name} skills (three pages)`,
     )
     assert.equal(skillsThreePages.members.length, 9, `${scenario.name} three-page members`)
@@ -466,10 +466,11 @@ function snapshotPlayer(state, playerId) {
   return player
 }
 
-function expectedPlans(state, playerId, stage, modalProgress = 1) {
+function expectedPlans(state, playerId, stage, coarsePointer, modalProgress = 1) {
   const player = snapshotPlayer(state, playerId)
   return tutorialModalTeachingPlans({
     backpack: player.economy.backpack,
+    coarsePointer,
     modalProgress,
     progression: player.progression,
     resumeBindingLabel: gameBindingLabel(stage === 10 ? INVENTORY_KEY : SKILLS_KEY),
@@ -510,17 +511,12 @@ function measureResponsiveHudPointer(page, anchor, nativeTargetHeight) {
       paintedTipX: markerRect.left + markerRect.width / 2,
       paintedTipY: markerRect.top + markerRect.height / 2,
       pointerScale: Number(pointer.dataset.pointerScale),
-      aimX: pointerRectCoordinate(Number(pointer.dataset.toX), 'x'),
-      aimY: pointerRectCoordinate(Number(pointer.dataset.toY), 'y'),
       targetBottom: targetRect.bottom,
-      targetCenterX: targetRect.left + targetRect.width / 2,
-      targetCenterY: targetRect.top + targetRect.height / 2,
       targetHeight: targetRect.height,
       targetLeft: targetRect.left,
       targetRight: targetRect.right,
       targetScale: targetRect.height * logicalHeight / overlayRect.height / expectedNativeHeight,
       targetTop: targetRect.top,
-      targetWidth: targetRect.width,
       targetX: Number(pointer.dataset.targetX),
       targetY: Number(pointer.dataset.targetY),
       subheadingBaseline: Number(overlay.dataset.subheadingBaseline),
@@ -571,9 +567,13 @@ function measurePaintedPointerLanding(page, pointerSelector, targetSelector) {
     const distanceX = Math.max(targetRect.left - tipX, 0, tipX - targetRect.right)
     const distanceY = Math.max(targetRect.top - tipY, 0, tipY - targetRect.bottom)
     return {
+      aimX: pointerRectCoordinate(Number(pointer.dataset.toX), 'x'),
+      aimY: pointerRectCoordinate(Number(pointer.dataset.toY), 'y'),
       distanceToTarget: Math.hypot(distanceX, distanceY),
       insideX: tipX >= targetRect.left && tipX <= targetRect.right,
       targetBottom: targetRect.bottom,
+      targetCenterX: targetRect.left + targetRect.width / 2,
+      targetCenterY: targetRect.top + targetRect.height / 2,
       targetHeight: targetRect.height,
       targetLeft: targetRect.left,
       targetRight: targetRect.right,
@@ -801,7 +801,7 @@ async function measureOpeningModal(page, stage, allowSettled) {
     const modal = document.querySelector(`.tutorial-modal-callouts[data-stage="${expectedStage}"]`)
     if (!(modal instanceof HTMLElement)) return false
     const progress = Number(modal.dataset.modalProgress)
-    return progress > 0.05 && (progress < 0.95 || (allowSettled && progress === 1))
+    return allowSettled ? progress === 1 : progress > 0.05 && progress < 0.95
   }, { allowSettled, expectedStage: stage }, { timeout: 15_000 })
   return measureModal(page, stage)
 }
