@@ -193,10 +193,21 @@ normal Office input/dialogue, the covered exit-to-Create boundary, and the
 post-selection Courtyard handoff.
 Save schema 13 persists the one-shot admission bit; schemas 1..12 normalize it
 completed.
-Current protocol 79 adds Web Lua existing-slot wearable item identity. Save
+Protocol 79 adds Web Lua existing-slot wearable item identity. Save
 schema 14 admits the bounded wearable identity, package-owned art paths, dyes,
 and native death shape inside ordinary inventory items; schema 13 remains
 readable.
+Current protocol 80 corrects the first-College admission projection to the
+stock Courtyard title walk, covered Office transition, transformed Office walk,
+and automatic Archchancellor dialogue. Each Hub participant carries its
+bounded admission phase/cursors/cover/speed/contact state; the 35-character
+dialogue-acknowledgement discriminator is admitted in full. The same protocol
+also permits an addressed nullable skill-quickbar binding so a populated stock
+`BeltButton` can be pulled off without inventing a replacement skill.
+Save schema 15 persists that College state and the participant's exact Hub
+region, transition, and position. Schemas 1..14 retain their versioned shapes;
+a schema-13/14 legacy direct-Office admission migrates to the complete
+Courtyard sequence, while ordinary legacy Hub continuations remain settled.
 The host applies
 either skill selection only to the authenticated
 participant before publishing a new progression revision.
@@ -859,10 +870,10 @@ eligibility record instead of treating its editable checkpoint as a new saved
 lineage. A replacement-process recovery may do the same only after the stable
 secret verifies the exact normalized document and target deployment revision;
 the original run ID keeps Hall submission idempotent. The run's independent
-taint remains authoritative. Local Hall history remains available. Save schemas
-12 through 14 carry durable `global-clean` or `local-only` integrity, explicit
+  taint remains authoritative. Local Hall history remains available. Save schemas
+12 through 15 carry durable `global-clean` or `local-only` integrity, explicit
 active-run state, and the nullable active-party rejoin capability. Schemas 13
-and 14 also carry the one-shot College-admission pending bit; schemas 1 through 3
+through 15 also carry the one-shot College-admission pending bit; schemas 1 through 3
 migrate conservatively to `local-only`, schema 4 preserves its authored
 integrity, schema 5 migrates its prior envelope, and schemas 6 through 9 preserve
 their authored integrity and active-run summary. Schema 9 additionally retains
@@ -870,7 +881,8 @@ Tutorial camera-lock age independently from its cleanup countdown. Schemas 1
 through 9 carry no live rejoin capability. Schema 10 adds that capability;
 schema 11 adds the native NPC help rows; schema 12 upgrades the capability to a
 revision-bound signed claim; schema 13 adds the College-admission bit; schema 14
-adds Web Lua wearable identity. Each
+adds Web Lua wearable identity; schema 15 adds resumable College participant
+state and exact Hub continuation geometry. Each
 participant receives an
 authoritative profile/continuation checkpoint, and Game Over removes only that
 participant's current-wizard continuation.

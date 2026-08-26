@@ -513,7 +513,7 @@ test('protocol v80 accepts every authoritative inventory and NPC action and reje
   }
 })
 
-test('protocol v79 carries authoritative present Skorcha population and animation state', () => {
+test('protocol v80 carries authoritative present Skorcha population and animation state', () => {
   const snapshot = createGameSnapshot(createGameSimulation({
     'player-1': CHARACTER,
   }, { hubTraderAnimationSeed: 2 }), 'player-1')
@@ -1453,7 +1453,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v79 carries Web Lua wearables, College admission, observer mode, Hub activity, NPC state, Goodie actions, tutorial fields/state, Hagatha runtime, Imp effects, save intent, selected skills, sacks, dyes, and gameplay state', () => {
+test('protocol v80 carries Web Lua wearables, College admission, observer mode, Hub activity, NPC state, Goodie actions, tutorial fields/state, Hagatha runtime, Imp effects, save intent, selected skills, sacks, dyes, and gameplay state', () => {
   assert.equal(GAME_PROTOCOL_VERSION, 80)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
@@ -1605,7 +1605,7 @@ test('protocol v79 carries Web Lua wearables, College admission, observer mode, 
   )
 })
 
-test('protocol v79 carries consistent persistent Tutorial camera-lock clocks', () => {
+test('protocol v80 carries consistent persistent Tutorial camera-lock clocks', () => {
   const entered = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
     materializeStockTutorial(Buffer.alloc(16, 73)),

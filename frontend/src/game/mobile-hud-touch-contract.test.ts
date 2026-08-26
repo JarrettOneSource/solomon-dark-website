@@ -63,7 +63,10 @@ test('one stage skull: back out of the open modal first, else the scene menu beh
   assert.match(menu, /<GameMenuSkull\s+availability=\{!darkCloudMenuOpen && settingsContext === null \? 'available' : 'inert'\}\s+frameScale=\{1\}\s+onOpenMenu=\{openDarkCloudMenu\}\s+scene="dark-cloud"\s+stage=\{stageRef\}/)
   assert.match(menu, /<GameMenuSkull\s+availability=\{sceneMenuAvailability\}\s+frameScale=\{gameUiScale\(gameSettings\) \* fixedViewport\.displayScale\}\s+onOpenMenu=\{requestGameplayPause\}\s+scene=\{gameScene === 'boneyard' \? 'boneyard' : 'hub'\}\s+stage=\{stageRef\}/)
   assert.match(hub, /const menuAvailable = !inputBlocked && !modalOpen && !transitionActive/)
-  assert.match(hub, /onMenuAvailabilityChange\?\.\(menuAvailable \? 'available' : 'inert'\)/)
+  assert.match(
+    hub,
+    /onMenuAvailabilityChange\?\.\(collegeIntro\s*\? 'hidden'\s*: menuAvailable \? 'available' : 'inert'\)/,
+  )
   assert.match(boneyard, /const menuAvailable = !sceneInputBlocked && run\.phase === 'active'/)
   // Stock paints no skull until the tutorial unlocks the combat HUD (nativeTutorialHudAccess
   // `combat`, the gate hub.css applies to the meters); the stage skull follows that gate

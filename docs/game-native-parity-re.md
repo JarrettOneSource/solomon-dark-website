@@ -47943,7 +47943,7 @@ representable by a viewport-local Pixi solid behind the native prompt content.
 | Retail identity | `SolomonDark.exe` 0.72.5, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred base `0x00400000` | Same canonical image as every current Tutorial/Hub/SkillScreen report; hash reverified before the fresh queries. | high |
 | Belt static path | canonical Ghidra replica via `Invoke-GhidraHeadless.ps1`; `BeltButton::vftable +0x68 -> 0x005C7DF0`, clear `0x005C79C0`, sound registry `+0xCA4` | Any held nonempty belt entry clears immediately on strict pointer displacement `>50`; sound is `sounds\\poof`; burst is 24 UI-65 plus three/four UI-69 members. | high |
 | Tutorial terminal/front-end path | `GameOver::Tick 0x005CF4F0`, MainMenu tick `0x005A51B0`, special bootstrap `0x005BBBB0`, startup `0x005CFA80` | Tutorial completion writes adjacent flags `0x0101`; after a strict ten-tick black handoff, the new story Game starts in special Courtyard, not Office. | high |
-| College/Office path | Courtyard ctor/attach/tick/render `0x00506490/0x00503F20/0x0050C970/0x0051EB60`; Office ctor/tick `0x00509C70/0x00509F10`; shared spline evaluator | Complete ten-point Courtyard and seven-point Office natural splines; Title 7/9 alpha program; forced movement and slowdown are instruction-derived. | high |
+| College/Office path | Courtyard ctor/attach/tick/render `0x00506490/0x00503F20/0x0050C970/0x0051EB60`; Office ctor/tick `0x00509C70/0x00509F10`; Office path helper `0x00504670`; shared spline evaluator | Complete ten-point Courtyard and seven-point Office natural splines; the Office raw table is transformed by `roomCenter - 409.5`, exactly `+102.5,+102.5` in the 1024-square room; Title 7/9 alpha program, forced movement, and slowdown are instruction-derived. | high |
 | Automatic Chat path | `PlayerWizard::Tick 0x00548B00`, NPC actions `+0x64/+0x68`, common action `0x00501800`, first question `0x004FD6A0` | Forward actor contact increments by two; strict counter `>10` opens Chat on the sixth eligible tick. Story path therefore auto-opens `ARCH_INTRO_0`; the Office exit remains manual. | high |
 | Tutorial render/drop path | `Tutorial::Render 0x005D08C0`, stages 8/17; loot notification `0x005CA7C0/0x005D7EF0/0x005CF000` | Both ground Sack lessons render only UI-28 pointer. Item name is inserted only after accepted pickup, at the screen-top notification owner. | high |
 | Potion HUD/input | `0x005CFA80`, `0x005CB360`, `0x005D3E10`, `0x005D8120`, binding name `0x004299F0` | Health/Mana are zero-based slots 3/4, defaults `3`/`4`; the plaque below each populated slot is the rebound input hint, not stack quantity. | high |
@@ -47986,7 +47986,7 @@ separate established owners.
 | Title 9 `SOLOMON DARK` | title-alpha spline after cursor 4 | exact-ported | exact atlas record, Y 450, uncovered-alpha product |
 | special Courtyard cover | `-0.0005f` | exact-ported | fixed-tick recurrence and transition continuity |
 | Courtyard Office portal | ordinary inclusive portal owner | verified-already-at-parity | scripted doorway/fade/swap remains shared |
-| Office natural spline | seven complete authored points | exact-ported | cursor, speed-one then `*0.99000001` to `<=0.5` |
+| Office natural spline | seven complete authored raw points plus room-center transform | exact-ported | raw `(400,773)..(420,415)` becomes world `(502.5,875.5)..(522.5,517.5)` via `+102.5,+102.5`; cursor, speed-one then `*0.99000001` to `<=0.5` |
 | Archchancellor collision admission | shared named-NPC contact owner | exact-ported for story auto-handoff | sixth eligible tick opens exact `_0` dialogue |
 | ordinary named-NPC collision admission | same shared caller | exact-ported alongside existing click/touch/key extension | auto interaction and contextual affordance resolve the same declaration; no duplicate Chat |
 | story Arch/Polisher graph/audio/markers | existing phase-zero Office closure | verified-already-at-parity | `ARCH_INTRO_0`, Polisher wipe, exact markers |
@@ -48018,6 +48018,9 @@ other mechanism directly.
   title menu. It is a black ten-tick handoff into the first story Game, whose
   Courtyard painter owns Title records 7/9 while authority forces the wizard
   along the authored College spline.
+- Office spline rows are room-local, not world-local. `0x00504670` adds
+  `roomCenter - 409.5` to both axes, so the retail room applies
+  `+102.5,+102.5` before movement/contact ownership consumes the target.
 - The second authored spline carries the wizard inside the Office. Named-NPC
   interaction is collision-driven; the Archchancellor dialogue auto-starts on
   the sixth continuous eligible contact tick. The player then controls the
@@ -48041,6 +48044,10 @@ other mechanism directly.
   acknowledgement. Reuse `native-natural-spline.ts`, shared player movement,
   ordinary portal transitions, story NPC declarations, and existing dialogue
   renderer/audio.
+- Admit the full `acknowledge-college-intro-dialogue` protocol discriminator;
+  its 35-character stock-lifecycle projection exceeds the former generic
+  32-character Hub-action bound and must not disconnect the client before the
+  acknowledgement checkpoint.
 - Bump wire/save schemas because nullable unbind and resumable College state
   change accepted authoritative shapes. Publish checkpoints at pull-off,
   Tutorial terminal handoff, Courtyard-to-Office, automatic dialogue, first
