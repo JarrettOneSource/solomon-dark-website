@@ -98,7 +98,14 @@ try {
     return portraits[2]?.portraitId === 100 && portraits[2]?.name === 'Memoria'
   }, null, { timeout: 10_000 })
   moveBrowserPlayerToPortrait()
-  await page.getByRole('button', { name: 'Hear memorial eulogy' }).click()
+  await page.waitForFunction(() => {
+    const canvas = document.querySelector('.hub-world-canvas')
+    const frame = canvas?.__sdrHubFrame
+    return canvas?.getAttribute('data-hub-region') === 'mortuary'
+      && Math.abs((frame?.playerX ?? 0) - 673) < 1
+      && Math.abs((frame?.playerY ?? 0) - 683) < 1
+  })
+  await page.keyboard.press('e')
   await page.getByText('Memoria (@Archivist), Level 7 Earth Mage.').waitFor()
   await page.getByText(
     'Wave 12 in 0:02:03. 321 monsters slain. 4,567 awesomeness.',
