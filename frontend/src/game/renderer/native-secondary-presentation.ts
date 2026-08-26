@@ -80,6 +80,23 @@ export interface NativeSecondaryGradientDraw {
   readonly width: number
 }
 
+export const NATIVE_SECONDARY_RAINDROP_GRADIENTS = {
+  acid: {
+    bottomAlpha: 0.5,
+    bottomColor: 0xb3f2bf,
+    topAlpha: 0,
+    topColor: 0x66f280,
+    width: 3,
+  },
+  storm: {
+    bottomAlpha: 0.5,
+    bottomColor: 0xccf2ff,
+    topAlpha: 0,
+    topColor: 0x66f2ff,
+    width: 2,
+  },
+} as const
+
 export interface NativeSecondaryPresentationPlan {
   readonly draws: readonly NativeSecondarySpriteDraw[]
   readonly gradients: readonly NativeSecondaryGradientDraw[]
@@ -1649,15 +1666,14 @@ function raindropGradient(
   actor: NativeSecondaryActorState,
   acid: boolean,
 ): NativeSecondaryGradientDraw {
+  const gradient = acid
+    ? NATIVE_SECONDARY_RAINDROP_GRADIENTS.acid
+    : NATIVE_SECONDARY_RAINDROP_GRADIENTS.storm
   return {
-    bottomAlpha: 0.5,
-    bottomColor: acid ? 0xb3f2bf : 0xccf2ff,
+    ...gradient,
     height: actor.quantity,
     role: acid ? 'acid-raindrop-streak' : 'storm-raindrop-streak',
-    topAlpha: 0,
-    topColor: acid ? 0x66f280 : 0x66f2ff,
     topLeft: { x: acid ? -1 : 0, y: actor.phase },
-    width: acid ? 3 : 2,
   }
 }
 

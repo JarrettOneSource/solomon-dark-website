@@ -24,6 +24,7 @@ import {
   nativeSecondarySpriteRecord,
 } from './native-secondary-assets.ts'
 import {
+  NATIVE_SECONDARY_RAINDROP_GRADIENTS,
   nativeSecondaryPresentationPlan,
   nativeSecondaryCompositeOwnerEntries,
   type NativeSecondaryGradientDraw,
@@ -47,6 +48,7 @@ const DIAGNOSTIC_ACTOR_KINDS = new Set<NativeSecondaryActorState['kind']>([
   'leviathan-appendage',
   'storm-cloud',
 ])
+
 const WHITE_ALPHA_MASK_FILTER = new ColorMatrixFilter()
 WHITE_ALPHA_MASK_FILTER.matrix = [
   0, 0, 0, 0, 1,
@@ -81,6 +83,42 @@ export interface NativeSecondaryDiagnosticSample {
   readonly worldY: number
 }
 
+interface NativeSecondaryGradientFills {
+  readonly acid: FillGradient
+  readonly storm: FillGradient
+}
+
+function nativeSecondaryGradientFill(
+  program: typeof NATIVE_SECONDARY_RAINDROP_GRADIENTS.acid
+    | typeof NATIVE_SECONDARY_RAINDROP_GRADIENTS.storm,
+): FillGradient {
+  return new FillGradient({
+    colorStops: [
+      { color: colorWithAlpha(program.topColor, program.topAlpha), offset: 0 },
+      { color: colorWithAlpha(program.bottomColor, program.bottomAlpha), offset: 1 },
+    ],
+    end: { x: 0, y: 1 },
+    start: { x: 0, y: 0 },
+    textureSpace: 'local',
+  })
+}
+
+function nativeSecondaryGradientFills(): NativeSecondaryGradientFills {
+  return {
+    acid: nativeSecondaryGradientFill(NATIVE_SECONDARY_RAINDROP_GRADIENTS.acid),
+    storm: nativeSecondaryGradientFill(NATIVE_SECONDARY_RAINDROP_GRADIENTS.storm),
+  }
+}
+
+function gradientFillFor(
+  draw: NativeSecondaryGradientDraw,
+  fills: NativeSecondaryGradientFills,
+): FillGradient {
+  if (draw.role === 'acid-raindrop-streak') return fills.acid
+  if (draw.role === 'storm-raindrop-streak') return fills.storm
+  throw new Error(`Unknown native secondary gradient role: ${draw.role}`)
+}
+
 class NativeSecondaryActorView {
   readonly container = new Container({ label: 'native-secondary-actor' })
   readonly underlayContainer: Container | null
@@ -88,7 +126,7 @@ class NativeSecondaryActorView {
   private currentKind: NativeSecondaryActorState['kind']
   private plan: NativeSecondaryPresentationPlan
   private regionLightPoint: Readonly<{ x: number; y: number }> | null = null
-  private readonly gradientFills: FillGradient[] = []
+  private readonly gradientFills: NativeSecondaryGradientFills
   private readonly gradients: Graphics[] = []
   private readonly meshIndices: Uint32Array[] = []
   private readonly meshMeshes: MeshSimple[] = []
@@ -108,6 +146,7 @@ class NativeSecondaryActorView {
     state: NativeSecondarySimulationState['actors'][number],
     textures: PlayerWorldTextures,
     renderer: Renderer,
+    gradientFills: NativeSecondaryGradientFills,
     pointGain = 1,
   ) {
     this.birthPointGain = pointGain
@@ -115,6 +154,7 @@ class NativeSecondaryActorView {
     this.textures = textures.secondary
     this.specialTextures = textures.secondarySpecial
     this.renderer = renderer
+    this.gradientFills = gradientFills
     this.container.eventMode = 'none'
     this.container.sortableChildren = true
     this.plan = nativeSecondaryPresentationPlan(state, state.ageTicks, pointGain)
@@ -187,13 +227,13 @@ class NativeSecondaryActorView {
       )
     }
     while (this.gradients.length < this.plan.gradients.length) {
-      this.addGradient(this.plan.gradients[this.gradients.length]!)
+      this.addGradient()
     }
     while (this.gradients.length > this.plan.gradients.length) this.removeGradient()
     for (let index = 0; index < this.plan.gradients.length; index += 1) {
       applyGradient(
         this.gradients[index]!,
-        this.gradientFills[index]!,
+        gradientFillFor(this.plan.gradients[index]!, this.gradientFills),
         this.plan.gradients[index]!,
       )
     }
@@ -334,8 +374,6 @@ class NativeSecondaryActorView {
     }
     this.container.destroy({ children: true })
     this.underlayContainer?.destroy({ children: true })
-    for (const gradient of this.gradientFills) gradient.destroy()
-    this.gradientFills.length = 0
     this.gradients.length = 0
     this.meshIndices.length = 0
     this.meshMeshes.length = 0
@@ -383,29 +421,17 @@ class NativeSecondaryActorView {
     this.container.addChild(mesh)
   }
 
-  private addGradient(draw: NativeSecondaryGradientDraw): void {
-    const fill = new FillGradient({
-      colorStops: [
-        { color: colorWithAlpha(draw.topColor, draw.topAlpha), offset: 0 },
-        { color: colorWithAlpha(draw.bottomColor, draw.bottomAlpha), offset: 1 },
-      ],
-      end: { x: 0, y: 1 },
-      start: { x: 0, y: 0 },
-      textureSpace: 'local',
-    })
+  private addGradient(): void {
     const graphic = new Graphics()
     graphic.eventMode = 'none'
-    this.gradientFills.push(fill)
     this.gradients.push(graphic)
     this.container.addChild(graphic)
   }
 
   private removeGradient(): void {
     const graphic = this.gradients.pop()!
-    const fill = this.gradientFills.pop()!
     this.container.removeChild(graphic)
     graphic.destroy()
-    fill.destroy()
   }
 
   private removeMesh(): void {
@@ -583,6 +609,7 @@ function colorWithAlpha(color: number, alpha: number): string {
 
 export class NativeSecondaryWorldView {
   private readonly compositeOwnerByActorId = new Map<number, number>()
+  private readonly gradientFills: NativeSecondaryGradientFills = nativeSecondaryGradientFills()
   private readonly liveIds = new Set<number>()
   private readonly leviathanComposites = new Map<number, NativeLeviathanCompositeView>()
   private readonly root: Container
@@ -613,6 +640,7 @@ export class NativeSecondaryWorldView {
           actor,
           this.textures,
           this.renderer,
+          this.gradientFills,
           pointGainAt(actor.position),
         )
         this.views.set(actor.id, view)
@@ -735,6 +763,8 @@ export class NativeSecondaryWorldView {
       view.destroy()
     }
     this.views.clear()
+    this.gradientFills.acid.destroy()
+    this.gradientFills.storm.destroy()
     this.compositeOwnerByActorId.clear()
     this.liveIds.clear()
   }

@@ -118,6 +118,31 @@ test('world-weather streaks share one particle batch and alpha-ramp texture', ()
   assert.doesNotMatch(weatherView, /sprite\.texture\s*=/)
 })
 
+test('secondary rain streaks share exactly two world-owned immutable gradients', () => {
+  assert.equal(secondaryWorldView.match(/new FillGradient\(/g)?.length, 1)
+  assert.match(
+    secondaryWorldView,
+    /acid: nativeSecondaryGradientFill\(NATIVE_SECONDARY_RAINDROP_GRADIENTS\.acid\)/,
+  )
+  assert.match(
+    secondaryWorldView,
+    /storm: nativeSecondaryGradientFill\(NATIVE_SECONDARY_RAINDROP_GRADIENTS\.storm\)/,
+  )
+  assert.match(
+    secondaryWorldView,
+    /private readonly gradientFills: NativeSecondaryGradientFills/,
+  )
+  assert.match(
+    secondaryWorldView,
+    /gradientFills: NativeSecondaryGradientFills,/,
+  )
+  assert.match(secondaryWorldView, /this\.gradientFills = gradientFills/)
+  assert.match(secondaryWorldView, /this\.gradientFills\.acid\.destroy\(\)/)
+  assert.match(secondaryWorldView, /this\.gradientFills\.storm\.destroy\(\)/)
+  assert.doesNotMatch(secondaryWorldView, /gradientFills: FillGradient\[\]/)
+  assert.doesNotMatch(secondaryWorldView, /fill\.destroy\(\)/)
+})
+
 test('Acid Rain keeps ground residue outside its world-sorted cloud proxy', () => {
   assert.match(secondaryWorldView, /id: `secondary-underlay:\$\{id\}`/)
   assert.match(secondaryWorldView, /lane: 'pre-world-queue'/)
