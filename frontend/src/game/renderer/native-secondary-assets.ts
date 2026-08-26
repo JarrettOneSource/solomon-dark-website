@@ -3,6 +3,9 @@ import deadhawg from '../../editor/manifest/deadhawg.json'
 import golem from '../../editor/manifest/golem.json'
 import type { AtlasManifest } from '../../editor/manifest/index.ts'
 import { nativeSpriteAnchor } from '../../editor/sprite-registration.ts'
+import { boneyardCombatAtlasSource } from '../../lib/boneyard-combat-atlas-key.ts'
+import { NATIVE_ENEMY_ASSET_SOURCES } from './native-enemy-assets.ts'
+import { NATIVE_LOOT_ASSET_SOURCES } from './native-loot-assets.ts'
 
 export const NATIVE_SECONDARY_ATLASES = ['BadGuys', 'Clothes', 'DeadHawg', 'Golem'] as const
 export type NativeSecondaryAtlas = typeof NATIVE_SECONDARY_ATLASES[number]
@@ -112,6 +115,10 @@ const manifests: Readonly<Record<Exclude<NativeSecondaryAtlas, 'Clothes'>, Atlas
   DeadHawg: deadhawg as AtlasManifest,
   Golem: golem as AtlasManifest,
 }
+const LIFTED_COMBAT_SOURCES = new Set([
+  ...NATIVE_ENEMY_ASSET_SOURCES,
+  ...NATIVE_LOOT_ASSET_SOURCES,
+])
 
 export interface NativeSecondarySpriteRecord {
   readonly anchorX: number
@@ -170,7 +177,12 @@ function record(atlas: NativeSecondaryAtlas, entry: number): NativeSecondarySpri
   if (!sourceRecord || sourceRecord.empty || !sourceRecord.file) {
     throw new Error(`Native secondary atlas record is missing: ${atlas}:${entry}`)
   }
-  const source = files[`../../assets/game/boneyard/${sourceRecord.file}`]
+  const combatSource = atlas === 'BadGuys'
+    ? boneyardCombatAtlasSource('BadGuys', entry)
+    : null
+  const source = combatSource !== null && LIFTED_COMBAT_SOURCES.has(combatSource)
+    ? combatSource
+    : files[`../../assets/game/boneyard/${sourceRecord.file}`]
   if (!source) throw new Error(`Native secondary atlas record was not bundled: ${atlas}:${entry}`)
   const anchor = nativeSpriteAnchor(
     sourceRecord.rect.w,

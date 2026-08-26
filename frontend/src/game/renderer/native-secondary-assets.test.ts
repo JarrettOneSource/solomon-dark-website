@@ -77,7 +77,12 @@ test('the stock right-click atlas membership is complete and every row is regist
       assert.equal(hubSources.has(source), false, `Hub still requests padded visual ${source}`)
     }
     for (const source of module.NATIVE_SECONDARY_ASSET_SOURCES) {
-      assert.equal(hubSources.has(source), true, `Hub omitted native secondary texture ${source}`)
+      const physicallyLoaded = !source.startsWith('boneyard-combat:')
+      assert.equal(
+        hubSources.has(source),
+        physicallyLoaded,
+        `Hub physical-source ownership drifted for ${source}`,
+      )
     }
     const etherPlane = await readFile(new URL(
       '../../assets/game/boneyard/textures/etherplane.png',

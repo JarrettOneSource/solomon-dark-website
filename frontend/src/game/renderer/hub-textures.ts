@@ -14,6 +14,12 @@ import {
   type HubVisualAtlas,
 } from './hub-visual-atlas.ts'
 import { loadGameTextureEntries } from './game-webgl.ts'
+import {
+  BONEYARD_COMBAT_ATLAS_SOURCES,
+  boneyardCombatAtlasSourceIsPacked,
+  createBoneyardCombatAtlas,
+  type BoneyardCombatAtlas,
+} from './boneyard-combat-atlas.ts'
 
 const ACTOR_FRAME_SIZE = 170
 const ACTOR_HEADINGS = 24
@@ -69,6 +75,7 @@ export interface HubWorldTextures extends PlayerWorldTextures {
   assetSources: readonly string[]
   astronomer: HubAstronomerTextureFrames
   base: Readonly<Record<string, Texture>>
+  combatAtlas: BoneyardCombatAtlas
   levelUpSparkle: Texture
   potion: HubPotionTextureFrames
   skorcha: readonly Texture[]
@@ -79,14 +86,17 @@ export interface HubWorldTextures extends PlayerWorldTextures {
 }
 
 export function hubWorldAssetSources(): readonly string[] {
+  const playerSources = playerWorldAssetSources()
   return [...new Set([
     ...HUB_VISUAL_ATLAS_SOURCES,
-    ...playerWorldAssetSources(),
+    ...playerSources.filter((source) => !boneyardCombatAtlasSourceIsPacked(source)),
+    ...BONEYARD_COMBAT_ATLAS_SOURCES,
     boneyard.levelUpSparkle,
   ])]
 }
 
 export async function loadHubWorldTextures(): Promise<HubWorldTextures> {
+  const packedSources = playerWorldAssetSources().filter(boneyardCombatAtlasSourceIsPacked)
   const sources = hubWorldAssetSources()
   const loaded = await loadGameTextureEntries(sources)
   const base = Object.fromEntries(loaded) as Record<string, Texture>
@@ -95,6 +105,8 @@ export async function loadHubWorldTextures(): Promise<HubWorldTextures> {
     if (!result) throw new Error(`Hub texture was not loaded: ${source}`)
     return result
   }
+  const combatAtlas = createBoneyardCombatAtlas(texture)
+  for (const source of packedSources) base[source] = combatAtlas.single(source)
   const visualAtlas = createHubVisualAtlas(texture)
   for (const source of HUB_VISUAL_ATLAS_ORIGINAL_SOURCES) {
     if (hubVisualAtlasSourceIsSingle(source)) base[source] = visualAtlas.single(source)
@@ -132,6 +144,7 @@ export async function loadHubWorldTextures(): Promise<HubWorldTextures> {
       telescope: visualAtlas.strip(hub.astronomer.telescope, 5, 374, 292, 'horizontal'),
     },
     base,
+    combatAtlas,
     levelUpSparkle: texture(boneyard.levelUpSparkle),
     potion: {
       actor: visualAtlas.strip(hub.npcs.potion, 5, 35, 49, 'horizontal'),
@@ -188,5 +201,6 @@ export function hubDeferredAnimationTextures(
 export function destroyHubWorldTextureFrames(textures: HubWorldTextures): void {
   textures.visualAtlas.destroy()
   destroyPlayerWorldTextureFrames(textures)
+  textures.combatAtlas.destroy()
   for (const source of textures.assetSources) textures.base[source].destroy(true)
 }

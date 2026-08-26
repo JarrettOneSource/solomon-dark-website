@@ -75,6 +75,18 @@ const boneyardTextures = readFileSync(
   new URL('./boneyard-textures.ts', import.meta.url),
   'utf8',
 )
+const boneyardCombatAtlas = readFileSync(
+  new URL('./boneyard-combat-atlas.ts', import.meta.url),
+  'utf8',
+)
+const boneyardCombatAtlasGenerated = readFileSync(
+  new URL('./boneyard-combat-atlas.generated.ts', import.meta.url),
+  'utf8',
+)
+const boneyardCombatAtlasPacker = readFileSync(
+  new URL('../../../../tools/pack-boneyard-combat-atlas.py', import.meta.url),
+  'utf8',
+)
 const playerTextures = readFileSync(
   new URL('./world-player-textures.ts', import.meta.url),
   'utf8',
@@ -148,6 +160,74 @@ test('static Boneyard residents retain RGBA buffers instead of Canvas2D backing 
   assert.match(boneyardTextures, /new Uint8ClampedArray\(\s*context\.getImageData/s)
   assert.match(boneyardTextures, /new BufferImageSource\(\{[\s\S]*?format: 'rgba8unorm'/)
   assert.doesNotMatch(boneyardTextures, /liftedSpriteSource/)
+})
+
+test('BadGuys and Demon records share two exact brightness-lifted pages', () => {
+  assert.match(
+    boneyardCombatAtlasGenerated,
+    /BONEYARD_COMBAT_ATLAS_DECODED_BYTES = 17776640/,
+  )
+  assert.match(
+    boneyardCombatAtlasGenerated,
+    /BONEYARD_COMBAT_ATLAS_SOURCE_COUNT = 2625/,
+  )
+  assert.match(
+    boneyardCombatAtlasGenerated,
+    /BONEYARD_COMBAT_ATLAS_EMPTY_SOURCE_COUNT = 0/,
+  )
+  assert.match(
+    boneyardCombatAtlasGenerated,
+    /BONEYARD_COMBAT_ATLAS_PACKED_RECTANGLE_COUNT = 2624/,
+  )
+  assert.match(
+    boneyardCombatAtlasGenerated,
+    /BONEYARD_COMBAT_ATLAS_PACKED_RGBA_BYTES = 14958156/,
+  )
+  assert.match(
+    boneyardCombatAtlasGenerated,
+    /BONEYARD_COMBAT_ATLAS_PAGE_DIMENSIONS = \[\[2048,2048\],\[2048,122\]\]/,
+  )
+  assert.match(
+    boneyardCombatAtlasGenerated,
+    /BONEYARD_COMBAT_ATLAS_SOURCES = \[page0, page1\]/,
+  )
+  for (const [page, width, height] of [[0, 2048, 2048], [1, 2048, 122]]) {
+    const png = readFileSync(new URL(
+      `../../assets/game/boneyard-combat-atlas-${page}.png`,
+      import.meta.url,
+    ))
+    assert.equal(png.readUInt32BE(16), width)
+    assert.equal(png.readUInt32BE(20), height)
+  }
+  assert.match(boneyardCombatAtlasPacker, /EXPECTED_SOURCE_COUNT = 2625/)
+  assert.match(boneyardCombatAtlasPacker, /EXPECTED_PAGE_COUNT = 2/)
+  assert.match(boneyardCombatAtlasPacker, /verify_reconstruction\(/)
+  assert.match(
+    boneyardCombatAtlasPacker,
+    /actual\.tobytes\(\) != expected\.tobytes\(\)/,
+  )
+})
+
+test('Boneyard maps logical combat URLs to shared pages and tears frames down first', () => {
+  assert.match(boneyardTextures, /requestedSources\.filter\(boneyardCombatAtlasSourceIsPacked\)/)
+  assert.match(boneyardTextures, /\.\.\.BONEYARD_COMBAT_ATLAS_SOURCES/)
+  assert.match(
+    boneyardTextures,
+    /liftedSourceSet\.has\(source\) \|\| combatPageSources\.has\(source\)/,
+  )
+  assert.match(boneyardTextures, /createBoneyardCombatAtlas\(texture\)/)
+  assert.match(
+    boneyardTextures,
+    /for \(const source of packedSources\) base\[source\] = combatAtlas\.single\(source\)/,
+  )
+  assert.ok(
+    boneyardTextures.indexOf('textures.combatAtlas.destroy()')
+      < boneyardTextures.indexOf('for (const source of textures.assetSources)'),
+  )
+  assert.doesNotMatch(boneyardTextures, /Object\.values\(textures\.base\)/)
+  assert.match(boneyardCombatAtlas, /orig: new Rectangle\(0, 0, logicalWidth, logicalHeight\)/)
+  assert.match(boneyardCombatAtlas, /trim: new Rectangle\(trimX, trimY, width, height\)/)
+  assert.match(boneyardCombatAtlas, /for \(const frame of frames\.values\(\)\) frame\.destroy\(false\)/)
 })
 
 test('secondary rain streaks share exactly two world-owned immutable gradients', () => {

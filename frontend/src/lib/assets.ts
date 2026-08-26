@@ -1,5 +1,7 @@
 // Central manifest of extracted game art (see tools/extract-assets.sh + design.md §5).
 
+import { boneyardCombatAtlasSource } from './boneyard-combat-atlas-key.ts'
+
 import logoSolomonDark from '../assets/game/logo-solomon-dark.png'
 import fxBone113 from '../assets/game/fx-bone-113.png'
 import fxBone115 from '../assets/game/fx-bone-115.png'
@@ -217,7 +219,6 @@ import elementVfxSteam2 from '../assets/game/boneyard/badguys/2004.png'
 import elementVfxSteam3 from '../assets/game/boneyard/badguys/2005.png'
 import elementVfxSteam4 from '../assets/game/boneyard/badguys/2006.png'
 import elementVfxSteam5 from '../assets/game/boneyard/badguys/2007.png'
-import primarySpellEarthAura from '../assets/game/boneyard/badguys/0015.png'
 import primarySpellEarthOpeningFlash from '../assets/game/primary-spell-earth-glimmer.png'
 import primarySpellEarthLitRock0 from '../assets/game/primary-spell-earth-lit-rock-0.png'
 import primarySpellEarthLitRock1 from '../assets/game/primary-spell-earth-lit-rock-1.png'
@@ -233,18 +234,9 @@ import primarySpellFrostSpark from '../assets/game/primary-spell-frost-spark.png
 import primarySpellFireParticles from '../assets/game/primary-spell-fire-particles.png'
 import primarySpellFireImpact from '../assets/game/primary-spell-fire-impact.png'
 import primarySpellMagicMissile from '../assets/game/primary-spell-magic-missile.png'
-import primarySpellAirRibbon from '../assets/game/boneyard/badguys/0044.png'
-import primarySpellAirBranch375 from '../assets/game/boneyard/badguys/0375.png'
-import primarySpellAirBranch376 from '../assets/game/boneyard/badguys/0376.png'
-import primarySpellAirCircle from '../assets/game/boneyard/badguys/0110.png'
-import primarySpellAirFork1836 from '../assets/game/boneyard/badguys/1836.png'
-import primarySpellAirFork1837 from '../assets/game/boneyard/badguys/1837.png'
-import primarySpellAirFork1838 from '../assets/game/boneyard/badguys/1838.png'
-import primarySpellAirFork1839 from '../assets/game/boneyard/badguys/1839.png'
 import primarySpellColdAura from '../assets/game/boneyard/badguys/0014.png'
-import primarySpellHail from '../assets/game/boneyard/badguys/0032.png'
-import primarySpellHurricaneCore from '../assets/game/boneyard/deadhawg/015.png'
 import primarySpellHurricaneLane from '../assets/game/boneyard/badguys/0084.png'
+import primarySpellHurricaneCore from '../assets/game/boneyard/deadhawg/015.png'
 import fxFireball from '../assets/game/fx-fireball.png'
 import animSolomonWalk from '../assets/game/anim-solomon-walk.png'
 import animSolomonDig from '../assets/game/anim-solomon-dig.png'
@@ -253,7 +245,6 @@ import boneyardDarknessRadial from '../assets/game/boneyard/deadhawg/009.png'
 import boneyardDarknessAperture from '../assets/game/boneyard/deadhawg/018.png'
 import boneyardGraveDirt from '../assets/game/boneyard/deadhawg/013.png'
 import boneyardLantern from '../assets/game/boneyard/badguys/0034.png'
-import boneyardLevelUpSparkle from '../assets/game/boneyard/badguys/0073.png'
 import solomonStand from '../assets/game/solomon-stand.png'
 import animFireball from '../assets/game/anim-fireball.png'
 import animSpellEtherWisp from '../assets/game/anim-spell-ether-wisp.png'
@@ -336,6 +327,18 @@ import iconPotion from '../assets/game/icon-potion.png'
 import iconHand from '../assets/game/icon-hand.png'
 import iconChart from '../assets/game/icon-chart.png'
 import iconWave from '../assets/game/icon-wave.png'
+
+const primarySpellEarthAura = boneyardCombatAtlasSource('BadGuys', 15)
+const primarySpellAirRibbon = boneyardCombatAtlasSource('BadGuys', 44)
+const primarySpellAirBranch375 = boneyardCombatAtlasSource('BadGuys', 375)
+const primarySpellAirBranch376 = boneyardCombatAtlasSource('BadGuys', 376)
+const primarySpellAirCircle = boneyardCombatAtlasSource('BadGuys', 110)
+const primarySpellAirFork1836 = boneyardCombatAtlasSource('BadGuys', 1836)
+const primarySpellAirFork1837 = boneyardCombatAtlasSource('BadGuys', 1837)
+const primarySpellAirFork1838 = boneyardCombatAtlasSource('BadGuys', 1838)
+const primarySpellAirFork1839 = boneyardCombatAtlasSource('BadGuys', 1839)
+const primarySpellHail = boneyardCombatAtlasSource('BadGuys', 32)
+const boneyardLevelUpSparkle = boneyardCombatAtlasSource('BadGuys', 73)
 
 export const art = {
   logoSolomonDark,

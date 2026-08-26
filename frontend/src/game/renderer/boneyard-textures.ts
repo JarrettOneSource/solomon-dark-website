@@ -18,10 +18,17 @@ import {
 } from './world-player-textures.ts'
 import { NATIVE_ENEMY_ASSET_SOURCES } from './native-enemy-assets.ts'
 import { NATIVE_LOOT_ASSET_SOURCES } from './native-loot-assets.ts'
+import {
+  BONEYARD_COMBAT_ATLAS_SOURCES,
+  boneyardCombatAtlasSourceIsPacked,
+  createBoneyardCombatAtlas,
+  type BoneyardCombatAtlas,
+} from './boneyard-combat-atlas.ts'
 
 export interface BoneyardWorldTextures extends PlayerWorldTextures {
   assetSources: readonly string[]
   base: Readonly<Record<string, Texture>>
+  combatAtlas: BoneyardCombatAtlas
   graveDirt: Texture
   lantern: Texture
   levelUpSparkle: Texture
@@ -61,7 +68,7 @@ export async function loadBoneyardWorldTextures(): Promise<BoneyardWorldTextures
     solomonShadowSource,
     weatherSplashSource,
   ])
-  const sources = [...new Set([
+  const requestedSources = [...new Set([
     ...playerWorldAssetSources(),
     ...fenceSources,
     ...NATIVE_ENEMY_ASSET_SOURCES,
@@ -75,11 +82,17 @@ export async function loadBoneyardWorldTextures(): Promise<BoneyardWorldTextures
     solomonShadowSource,
     weatherSplashSource,
   ])]
+  const packedSources = requestedSources.filter(boneyardCombatAtlasSourceIsPacked)
+  const sources = [
+    ...requestedSources.filter((source) => !boneyardCombatAtlasSourceIsPacked(source)),
+    ...BONEYARD_COMBAT_ATLAS_SOURCES,
+  ]
+  const combatPageSources = new Set<string>(BONEYARD_COMBAT_ATLAS_SOURCES)
   const liftedScratch = document.createElement('canvas')
   let loaded: Awaited<ReturnType<typeof loadGameTextureEntries>>
   try {
     loaded = await loadGameTextureEntries(sources, (source, image) => (
-      liftedSourceSet.has(source)
+      liftedSourceSet.has(source) || combatPageSources.has(source)
         ? liftedBufferTexture(image, liftedScratch)
         : Texture.from(image, true)
     ))
@@ -93,6 +106,14 @@ export async function loadBoneyardWorldTextures(): Promise<BoneyardWorldTextures
     if (!result) throw new Error(`Boneyard texture was not loaded: ${source}`)
     return result
   }
+  let combatAtlas: BoneyardCombatAtlas
+  try {
+    combatAtlas = createBoneyardCombatAtlas(texture)
+    for (const source of packedSources) base[source] = combatAtlas.single(source)
+  } catch (error) {
+    for (const [, loadedTexture] of loaded) loadedTexture.destroy(true)
+    throw error
+  }
   const solomonEncounter = gridFrames(
     texture(solomonEncounterSource),
     15,
@@ -105,6 +126,7 @@ export async function loadBoneyardWorldTextures(): Promise<BoneyardWorldTextures
     ...createPlayerWorldTextures(texture),
     assetSources: sources,
     base,
+    combatAtlas,
     graveDirt: texture(boneyard.graveDirt),
     lantern: texture(boneyard.lantern),
     levelUpSparkle: texture(boneyard.levelUpSparkle),
@@ -130,7 +152,8 @@ export function destroyBoneyardWorldTextures(textures: BoneyardWorldTextures): v
     row.forEach((frame) => derived.add(frame))
   ))
   for (const frame of derived) frame.destroy(false)
-  for (const texture of Object.values(textures.base)) texture.destroy(true)
+  textures.combatAtlas.destroy()
+  for (const source of textures.assetSources) textures.base[source].destroy(true)
 }
 
 function liftedBufferTexture(
