@@ -52,11 +52,7 @@ import { startGamePresentationLoop } from './game-presentation-frame-loop.ts'
 import GameHud from './GameHud.tsx'
 import type { GameMenuAvailability } from './GameMenuSkull.tsx'
 import ContextualInteractButton from './ContextualInteractButton.tsx'
-import {
-  nativeHudSkillBindings,
-  nativeTutorialSelectedHudLayout,
-  type NativeHudSkillBinding,
-} from './native-hud-presentation.ts'
+import type { NativeHudSkillBinding } from './native-hud-presentation.ts'
 import HubInventoryUi, { type HubUiSurface } from './HubInventoryUi.tsx'
 import { hubPotionBeltShortcut } from './hub-inventory-presentation.ts'
 import GameOverOverlay from './GameOverOverlay.tsx'
@@ -920,15 +916,6 @@ export default function BoneyardScene({
     settings.cameraFovPercent,
   )
   const uiScale = gameUiScale(settings)
-  const tutorialSelectedHudLayout = tutorial === null
-    ? null
-    : nativeTutorialSelectedHudLayout(nativeHudSkillBindings({
-        concentrationSkillIds: progression.concentrationSkillIds,
-        planewalkerActive: false,
-        selectedPrimarySkillId: progression.selectedPrimarySkillId,
-        weldBuildId: progression.weldBuildId,
-      }))
-
   return (
     <div
       ref={sceneRef}
@@ -981,7 +968,6 @@ export default function BoneyardScene({
               <TutorialOverlay
                 audio={audio}
                 controls={settings.controls}
-                selectedHudLayout={tutorialSelectedHudLayout}
                 state={tutorial}
                 viewport={viewport}
                 worldTarget={tutorialWorldTarget}

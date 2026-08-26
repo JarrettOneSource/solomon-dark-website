@@ -763,6 +763,36 @@ export function nativeTutorialDialogueTicks(): number {
   ), 0)
 }
 
+export function nativeTutorialAmuletIdentityMatches(item: HubInventoryItem): boolean {
+  return item.kind === 'equipment'
+    && item.equipmentType === NATIVE_TUTORIAL_AMULET_IDENTITY.equipmentType
+    && item.name === NATIVE_TUTORIAL_AMULET_IDENTITY.name
+    && item.nativeTypeId === NATIVE_TUTORIAL_AMULET_IDENTITY.nativeTypeId
+    && item.nativeSelector === NATIVE_TUTORIAL_AMULET_IDENTITY.nativeSelector
+    && item.nativeSubtype === null
+    && item.quantity === 1
+    && item.rarity === null
+    && item.recipeIndex === null
+    && item.generatedLevel === undefined
+    && item.iconRecords.length === NATIVE_TUTORIAL_AMULET_IDENTITY.iconRecords.length
+    && item.iconRecords.every((record, index) => (
+      record === NATIVE_TUTORIAL_AMULET_IDENTITY.iconRecords[index]
+    ))
+    && item.iconTints?.length === NATIVE_TUTORIAL_AMULET_IDENTITY.iconTints.length
+    && item.iconTints?.every((tint, index) => (
+      tint === NATIVE_TUTORIAL_AMULET_IDENTITY.iconTints[index]
+    )) === true
+    && item.nativeEffects?.length === NATIVE_TUTORIAL_AMULET_IDENTITY.nativeEffects.length
+    && item.nativeEffects.every((effect, index) => {
+      const expected = NATIVE_TUTORIAL_AMULET_IDENTITY.nativeEffects[index]
+      return expected !== undefined
+        && effect.kind === expected.kind
+        && effect.magnitude === expected.magnitude
+        && effect.operator === expected.operator
+        && effect.target === expected.target
+    })
+}
+
 export function nativeTutorialAmuletItem(): HubInventoryItem {
   return Object.freeze({
     ...NATIVE_TUTORIAL_AMULET_IDENTITY,

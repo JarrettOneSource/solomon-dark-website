@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import type { HubInventoryItem } from './core-kernels/hub-economy.ts'
+import { nativeTutorialAmuletItem } from './core-kernels/native-tutorial.ts'
 import { createGameSimulation } from './core-server/game-simulation.ts'
 import { createGameSnapshot } from './host/game-snapshot.ts'
 import { measureNativeUiText } from './native-ui/native-ui-text.ts'
@@ -38,6 +39,17 @@ const potion: HubInventoryItem = {
   recipeIndex: null,
 }
 
+const manaPotion: HubInventoryItem = {
+  ...potion,
+  iconRecords: [47],
+  id: 2,
+  kind: 'mana-potion',
+  name: 'Mana Potion',
+  nativeSubtype: 1,
+}
+
+const amulet: HubInventoryItem = { ...nativeTutorialAmuletItem(), id: 3 }
+
 const threePages: ProtocolPlayerProgression = {
   ...baseline,
   learnedSkillOrder: [...baseline.learnedSkillOrder, 16],
@@ -49,7 +61,7 @@ function plans(
   overrides: Partial<Parameters<typeof tutorialModalTeachingPlans>[0]> = {},
 ): readonly TutorialModalTeachingPlan[] {
   return tutorialModalTeachingPlans({
-    backpack: [potion],
+    backpack: [potion, manaPotion, amulet],
     modalProgress: 1,
     progression: baseline,
     resumeBindingLabel: 'I',
@@ -137,22 +149,22 @@ test('paints the stage-10 inventory members in native draw order at the slid HUD
   assert.deepEqual(arrow(pointer(stage[3])), [1084.5, 824.5, 1044.5, 874.5])
   assert.equal(pointer(stage[3]).blink, false)
 
-  const weapon = hubInventoryEquipmentSlotRects('weapon', false)[0]!
-  assert.deepEqual(weapon, [1274, 223, 72, 72])
+  const amuletSlot = hubInventoryEquipmentSlotRects('amulet', false)[0]!
+  assert.deepEqual(amuletSlot, [1300, 169, 46, 46])
   const equipment = callout(stage[4])
   assert.equal(equipment.text, 'Put equippable items\nhere to wear them.')
-  assert.deepEqual(center(equipment), [1060, 309])
-  assert.deepEqual(arrow(pointer(stage[5])), [1250, 299, 1310, 259])
+  assert.deepEqual(center(equipment), [1073, 242])
+  assert.deepEqual(arrow(pointer(stage[5])), [1263, 232, 1323, 192])
   assert.equal(pointer(stage[5]).blink, false)
 
-  assert.deepEqual(hubInventorySlotPosition(0), { x: 24, y: 496 })
+  assert.deepEqual(hubInventorySlotPosition(2), { x: 24, y: 646 })
   const backpack = callout(stage[6])
   assert.equal(
     backpack.text,
     'Found items go in your backpack.  Click and\ndrag to move items, double-click to use them.',
   )
-  assert.deepEqual(center(backpack), [434, 489])
-  assert.deepEqual(arrow(pointer(stage[7])), [84, 491, 24, 496])
+  assert.deepEqual(center(backpack), [434, 639])
+  assert.deepEqual(arrow(pointer(stage[7])), [84, 641, 24, 646])
   assert.equal(pointer(stage[7]).blink, false)
 })
 
@@ -163,8 +175,8 @@ test('tracks the live 40-tick modal slide instead of jumping to the settled anch
   assert.deepEqual(arrow(pointer(inventoryClosed[1])), [709.5, 806, 759.5, 856])
   assert.deepEqual(center(callout(inventoryHalf[0])), [709.5, 743.5])
   assert.deepEqual(arrow(pointer(inventoryHalf[3])), [1084.5, 817, 1044.5, 867])
-  assert.deepEqual(center(callout(inventoryClosed[4])), [1060, 309])
-  assert.deepEqual(arrow(pointer(inventoryClosed[7])), [84, 491, 24, 496])
+  assert.deepEqual(center(callout(inventoryClosed[4])), [1073, 242])
+  assert.deepEqual(arrow(pointer(inventoryClosed[7])), [84, 641, 24, 646])
 
   const skillsClosed = plans(13, { modalProgress: 0 })
   const skillsHalf = plans(13, { modalProgress: 0.5 })
@@ -174,7 +186,7 @@ test('tracks the live 40-tick modal slide instead of jumping to the settled anch
   assert.deepEqual(arrow(pointer(skillsHalf[3])), [534.5, 817, 554.5, 867])
 })
 
-test('drops the backpack lesson when the first backpack cell is empty', () => {
+test('follows the exact authored amulet cell and drops only that backpack lesson when absent', () => {
   const empty = plans(10, { backpack: [] })
   assert.deepEqual(order(empty), [
     'callout:resume',
@@ -184,8 +196,31 @@ test('drops the backpack lesson when the first backpack cell is empty', () => {
     'callout:equipment',
     'pointer:equipment',
   ])
-  const potionInCellOne: HubInventoryItem = { ...potion, id: 2 }
-  assert.equal(order(plans(10, { backpack: [potion, potionInCellOne] })).length, 8)
+  assert.equal(order(plans(10, { backpack: [potion, manaPotion] })).length, 6)
+
+  const fillers = Array.from({ length: 7 }, (_, index): HubInventoryItem => ({
+    ...potion,
+    id: 100 + index,
+    name: `Filler ${index}`,
+  }))
+  const moved = plans(10, { backpack: [...fillers, { ...amulet, id: 200 }] })
+  assert.deepEqual(hubInventorySlotPosition(7), { x: 99, y: 721 })
+  assert.deepEqual(center(callout(moved[6])), [509, 714])
+  assert.deepEqual(arrow(pointer(moved[7])), [159, 716, 99, 721])
+
+  const sack: HubInventoryItem = {
+    ...potion,
+    contents: [{ ...amulet, id: 301 }],
+    iconRecords: [70],
+    id: 300,
+    kind: 'sack',
+    name: 'Sack',
+    nativeSubtype: 0,
+    nativeTypeId: 7008,
+  }
+  const nested = plans(10, { backpack: [sack] })
+  assert.deepEqual(hubInventorySlotPosition(1), { x: 24, y: 571 })
+  assert.deepEqual(arrow(pointer(nested[7])), [84, 566, 24, 571])
 })
 
 test('uses the resume binding label for the resume lesson', () => {

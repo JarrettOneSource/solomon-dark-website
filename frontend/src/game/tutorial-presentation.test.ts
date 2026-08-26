@@ -42,6 +42,8 @@ test('renders exact stock UI records for the prelude and blinking lesson pointer
   assert.match(overlay, /visible=\{pointer\.blink \? pointerBlink : true\}/)
   assert.doesNotMatch(overlay, /stageTicks % 50/)
   assert.match(overlay, /nativeTutorialHudPointerPlans\(state\.stage, hudAnchors\)/)
+  assert.match(overlay, /scale=\{pointer\.scale\}/)
+  assert.match(overlay, /data-pointer-scale=\{scale\}/)
   assert.match(overlay, /data-heading-baseline=\{instructionBaselines\?\.heading\}/)
   assert.match(overlay, /viewport\.height - 50/)
   assert.match(overlay, /durationTicks[\s\S]*?- state\.narration\.ticksRemaining[\s\S]*?\/ 100/)
@@ -75,6 +77,13 @@ test('owns responsive Tutorial targets at the HUD controls instead of fixed coor
   for (const anchor of ['health-meter', 'health-potion', 'inventory', 'skills']) {
     assert.match(hud, new RegExp(`data-tutorial-anchor=[^\\n]*['"]${anchor}['"]`))
   }
+  assert.match(
+    hud,
+    /data-tutorial-anchor=\{binding === 12[\s\S]*?'primary-skill'[\s\S]*?binding === 16[\s\S]*?'concentration-a'/,
+  )
+  assert.match(hud, /className="hub-hud-backpack"[\s\S]*?data-tutorial-anchor="inventory"/)
+  assert.match(hud, /className="hub-hud-tome"[\s\S]*?data-tutorial-anchor="skills"/)
+  assert.doesNotMatch(hud, /className="hub-hud-backpack-button"[\s\S]{0,120}data-tutorial-anchor/)
   assert.match(quickbar, /data-tutorial-anchor=\{slot === 0 \? 'secondary-slot' : undefined\}/)
   assert.doesNotMatch(overlay, /state\.stage === 5 \? <TutorialPointer x=\{468\}/)
   assert.doesNotMatch(overlay, /state\.stage === 9 \? <TutorialPointer x=\{763\}/)
@@ -135,6 +144,8 @@ test('owns the stage-14 acknowledgement edge and live selected-HUD geometry', ()
     overlay,
     /state\.stage === 14[\s\S]*!state\.selectedSkillHudAcknowledged[\s\S]*selectedHudLayout/,
   )
+  assert.match(overlay, /nativeTutorialSelectedHudLayoutFromCenters/)
+  assert.doesNotMatch(overlay, /readonly selectedHudLayout: NativeTutorialSelectedHudLayout/)
   assert.match(overlay, /baseline=\{selectedHudLayout\.firstLine\.y\}/)
   assert.match(overlay, /baseline=\{selectedHudLayout\.secondLine\.y\}/)
   assert.match(

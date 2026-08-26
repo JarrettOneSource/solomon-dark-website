@@ -5,13 +5,16 @@
  * and the Mod Loader's `docs/reverse-engineering/native-hud.md`.
  *
  * Every callout and pointer is anchored to a live native rectangle: the slid
- * HUD controls (`0x005C7200`), the equipment pane's weapon sink, backpack cell
- * 0, or the skill-book page placements. Coordinates are native back-buffer
- * pixels of the 1600x900 stage; the scene's fixed native stage scales them to
- * the viewport, so the geometry holds at every resolution.
+ * HUD controls (`0x005C7200`) and skill-book page placements retain stock
+ * ownership. The user-authorized Website improvement targets the exact
+ * authored Tutorial amulet's live backpack cell and amulet body sink instead
+ * of retail's fixed cell 0 / STAFF-WAND sink. Coordinates remain native
+ * back-buffer pixels of the 1600x900 stage; the scene's fixed native stage
+ * scales them to the viewport.
  */
 
 import { projectInventoryItems, type HubInventoryItem } from './core-kernels/hub-economy.ts'
+import { nativeTutorialAmuletIdentityMatches } from './core-kernels/native-tutorial.ts'
 import {
   NATIVE_HUD_BACKBUFFER,
   nativeHudModalSlideLayout,
@@ -198,18 +201,26 @@ function inventoryModalPlans(input: TutorialModalTeachingInput): readonly Tutori
   const backpack = nativeHudRectCenter(hud.backpack)
   const belt7 = nativeHudRectCenter(hud.belt[7]!)
   const belt6 = nativeHudRectCenter(hud.belt[6]!)
-  const [weaponX, weaponY, weaponWidth, weaponHeight] = hubInventoryEquipmentSlotRects('weapon', false)[0]!
-  const weapon = Object.freeze({ x: weaponX + weaponWidth / 2, y: weaponY + weaponHeight / 2 })
+  const projected = projectInventoryItems(input.backpack)
+  const amuletIndex = projected.findIndex(({ item }) => nativeTutorialAmuletIdentityMatches(item))
+  const [amuletX, amuletY, amuletWidth, amuletHeight] = hubInventoryEquipmentSlotRects(
+    'amulet',
+    false,
+  )[0]!
+  const amulet = Object.freeze({
+    x: amuletX + amuletWidth / 2,
+    y: amuletY + amuletHeight / 2,
+  })
   const plans: TutorialModalTeachingPlan[] = [
     callout('resume', TUTORIAL_MODAL_TEXT.resume(input.resumeBindingLabel), backpack.x - 50, backpack.y - 120),
     pointer('resume', { x: backpack.x - 50, y: backpack.y - 50 }, backpack, true),
     callout('quick-use', TUTORIAL_MODAL_TEXT.quickUseItems, belt7.x, belt7.y - 115),
     pointer('quick-use', { x: belt7.x - 20, y: belt7.y - 50 }, belt6, false),
-    callout('equipment', TUTORIAL_MODAL_TEXT.equipment, weapon.x - 250, weapon.y + 50),
-    pointer('equipment', { x: weapon.x - 60, y: weapon.y + 40 }, weapon, false),
+    callout('equipment', TUTORIAL_MODAL_TEXT.equipment, amulet.x - 250, amulet.y + 50),
+    pointer('equipment', { x: amulet.x - 60, y: amulet.y + 40 }, amulet, false),
   ]
-  if (projectInventoryItems(input.backpack)[0]) {
-    const cell = hubInventorySlotPosition(0)
+  if (amuletIndex >= 0) {
+    const cell = hubInventorySlotPosition(amuletIndex)
     plans.push(
       callout('backpack', TUTORIAL_MODAL_TEXT.backpack, cell.x + 410, cell.y - 7),
       pointer('backpack', { x: cell.x + 60, y: cell.y - 5 }, cell, false),

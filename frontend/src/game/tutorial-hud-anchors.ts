@@ -1,8 +1,16 @@
-import type { NativeTutorialStage } from './core-kernels/native-tutorial.ts'
+import type {
+  NativeTutorialInstructionBaselines,
+  NativeTutorialStage,
+} from './core-kernels/native-tutorial.ts'
 
 export interface TutorialPoint {
   readonly x: number
   readonly y: number
+}
+
+export interface TutorialHudAnchor extends TutorialPoint {
+  /** Uniform browser HUD transform relative to the native target control. */
+  readonly scale: number
 }
 
 export interface TutorialRect {
@@ -18,17 +26,21 @@ export interface TutorialViewportSize {
 }
 
 export interface TutorialHudAnchors {
-  readonly healthMeter: TutorialPoint | null
-  readonly healthPotion: TutorialPoint | null
-  readonly inventory: TutorialPoint | null
-  readonly secondarySlot: TutorialPoint | null
-  readonly skills: TutorialPoint | null
+  readonly concentrationA: TutorialHudAnchor | null
+  readonly healthMeter: TutorialHudAnchor | null
+  readonly healthPotion: TutorialHudAnchor | null
+  readonly inventory: TutorialHudAnchor | null
+  readonly primarySkill: TutorialHudAnchor | null
+  readonly secondarySlot: TutorialHudAnchor | null
+  readonly skills: TutorialHudAnchor | null
 }
 
 export type TutorialHudAnchorAttribute =
+  | 'concentration-a'
   | 'health-meter'
   | 'health-potion'
   | 'inventory'
+  | 'primary-skill'
   | 'secondary-slot'
   | 'skills'
 
@@ -38,18 +50,35 @@ export interface TutorialPointerPlan {
   readonly anchor: TutorialPointerAnchor
   /** `0x005C9BB0` blink argument; every stock HUD pointer pushes 1. */
   readonly blink: boolean
-  readonly target: TutorialPoint
+  readonly scale: number
+  readonly target: TutorialHudAnchor
   readonly x: number
   readonly y: number
 }
 
 export const TUTORIAL_HUD_ANCHOR_MEMBERS = Object.freeze([
+  ['concentrationA', 'concentration-a'],
   ['healthMeter', 'health-meter'],
   ['healthPotion', 'health-potion'],
   ['inventory', 'inventory'],
+  ['primarySkill', 'primary-skill'],
   ['secondarySlot', 'secondary-slot'],
   ['skills', 'skills'],
 ] as const satisfies readonly (readonly [keyof TutorialHudAnchors, TutorialHudAnchorAttribute])[])
+
+const NATIVE_TUTORIAL_HUD_TARGET_HEIGHTS = Object.freeze({
+  'concentration-a': 65,
+  'health-meter': 20,
+  'health-potion': 50,
+  inventory: 62,
+  'primary-skill': 65,
+  'secondary-slot': 53,
+  skills: 62,
+} satisfies Readonly<Record<TutorialHudAnchorAttribute, number>>)
+
+export function nativeTutorialHudTargetHeight(anchor: TutorialHudAnchorAttribute): number {
+  return NATIVE_TUTORIAL_HUD_TARGET_HEIGHTS[anchor]
+}
 
 export function nativeTutorialHudAnchorAttributes(
   stage: NativeTutorialStage,
@@ -58,6 +87,7 @@ export function nativeTutorialHudAnchorAttributes(
     case 5: return Object.freeze(['secondary-slot'])
     case 9: return Object.freeze(['inventory'])
     case 12: return Object.freeze(['skills'])
+    case 14: return Object.freeze(['primary-skill', 'concentration-a'])
     case 18: return Object.freeze(['health-potion', 'health-meter'])
     default: return Object.freeze([])
   }
@@ -65,9 +95,11 @@ export function nativeTutorialHudAnchorAttributes(
 
 export function emptyTutorialHudAnchors(): TutorialHudAnchors {
   return Object.freeze({
+    concentrationA: null,
     healthMeter: null,
     healthPotion: null,
     inventory: null,
+    primarySkill: null,
     secondarySlot: null,
     skills: null,
   })
@@ -77,7 +109,8 @@ export function tutorialClientRectAnchor(
   overlay: TutorialRect,
   target: TutorialRect,
   logical: TutorialViewportSize,
-): TutorialPoint | null {
+  nativeTargetHeight: number,
+): TutorialHudAnchor | null {
   if (
     !positiveFinite(overlay.width)
     || !positiveFinite(overlay.height)
@@ -85,8 +118,11 @@ export function tutorialClientRectAnchor(
     || !positiveFinite(target.height)
     || !positiveFinite(logical.width)
     || !positiveFinite(logical.height)
+    || !positiveFinite(nativeTargetHeight)
   ) return null
+  const logicalTargetHeight = target.height * logical.height / overlay.height
   return Object.freeze({
+    scale: logicalTargetHeight / nativeTargetHeight,
     x: (target.left + target.width / 2 - overlay.left) * logical.width / overlay.width,
     y: (target.top + target.height / 2 - overlay.top) * logical.height / overlay.height,
   })
@@ -130,6 +166,23 @@ export function nativeTutorialHudPointerPlans(
   }
 }
 
+/**
+ * Stages 9/12 share target y 855, subheading 760, and heading 730 at native
+ * scale 1. Preserve those 95/125 target clearances as the centred control is
+ * enlarged by the browser's responsive HUD transform.
+ */
+export function tutorialHudInstructionBaselines(
+  stage: NativeTutorialStage,
+  native: NativeTutorialInstructionBaselines | null,
+  anchors: TutorialHudAnchors,
+): NativeTutorialInstructionBaselines | null {
+  if (!native) return null
+  const target = stage === 9 ? anchors.inventory : stage === 12 ? anchors.skills : null
+  if (!target) return native
+  const subheading = target.y - 95 * target.scale
+  return Object.freeze({ heading: subheading - 30, subheading })
+}
+
 export function tutorialHudAnchorsEqual(
   left: TutorialHudAnchors,
   right: TutorialHudAnchors,
@@ -141,7 +194,7 @@ export function tutorialHudAnchorsEqual(
 
 function pointer(
   anchor: TutorialHudAnchorAttribute,
-  target: TutorialPoint,
+  target: TutorialHudAnchor,
   offsetX: number,
   offsetY: number,
   blink: boolean,
@@ -149,16 +202,17 @@ function pointer(
   return Object.freeze({
     anchor,
     blink,
+    scale: target.scale,
     target,
-    x: target.x + offsetX,
-    y: target.y + offsetY,
+    x: target.x + offsetX * target.scale,
+    y: target.y + offsetY * target.scale,
   })
 }
 
-function pointsEqual(left: TutorialPoint | null, right: TutorialPoint | null): boolean {
+function pointsEqual(left: TutorialHudAnchor | null, right: TutorialHudAnchor | null): boolean {
   return left === null || right === null
     ? left === right
-    : left.x === right.x && left.y === right.y
+    : left.scale === right.scale && left.x === right.x && left.y === right.y
 }
 
 function positiveFinite(value: number): boolean {

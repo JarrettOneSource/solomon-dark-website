@@ -23,6 +23,8 @@ import {
   enterBoneyardWorld,
   getPlayerEconomy,
 } from '../src/game/core-server/game-simulation.ts'
+import { insertLootInventoryItem } from '../src/game/core-kernels/hub-economy.ts'
+import { nativeTutorialAmuletItem } from '../src/game/core-kernels/native-tutorial.ts'
 import {
   grantPlayerEntitySkillRanks,
   replacePlayerEconomy,
@@ -193,7 +195,9 @@ async function runScenario(scenario) {
   const screenshots = {
     inventory: `${screenshotRoot}-${scenario.name}-inventory.png`,
     inventoryEmptyBackpack: `${screenshotRoot}-${scenario.name}-inventory-empty-backpack.png`,
+    inventoryPrompt: `${screenshotRoot}-${scenario.name}-inventory-prompt.png`,
     skills: `${screenshotRoot}-${scenario.name}-skills.png`,
+    skillsPrompt: `${screenshotRoot}-${scenario.name}-skills-prompt.png`,
     skillsThreePages: `${screenshotRoot}-${scenario.name}-skills-three-pages.png`,
     selectedHud: `${screenshotRoot}-${scenario.name}-selected-hud.png`,
   }
@@ -210,6 +214,7 @@ async function runScenario(scenario) {
     await waitForRestoredTutorial(host)
     await waitForBoneyardRenderer(page, errors)
     const playerId = host.state().playerEntities.identities[0].playerId
+    grantTutorialAmulet(host, playerId)
 
     // Stage 10: the inventory modal with the starter potions in the first backpack cells.
     forceTutorialState(host, { ...INTRO_CLEARED, inventoryOpened: false, stage: 9, stageTicks: 0 })
@@ -217,6 +222,9 @@ async function runScenario(scenario) {
     await page.locator('[data-tutorial-pointer="inventory"]').waitFor({ timeout: 15_000 })
     const inventoryPointerBlink = await sampleBlink(page, '[data-tutorial-pointer="inventory"]')
     assertBlink(inventoryPointerBlink, `${scenario.name} stage-9 inventory pointer`)
+    const inventoryPrompt = await measureResponsiveHudPointer(page, 'inventory', 62)
+    assertResponsiveHudPointer(inventoryPrompt, -40, -40, `${scenario.name} stage-9 inventory pointer`)
+    await screenshotInBlinkWindow(page, screenshots.inventoryPrompt, '[data-tutorial-pointer="inventory"]')
     if (scenario.hasTouch) await page.locator('.hub-hud-backpack-button').click()
     else await page.keyboard.press(INVENTORY_KEY)
     await waitForTutorialStage(host, page, 10)
@@ -236,6 +244,26 @@ async function runScenario(scenario) {
     )
     assert.ok(inventory.members.includes('callout:backpack'), `${scenario.name} backpack lesson`)
     assert.ok(inventory.canvas, `${scenario.name} inventory canvas`)
+    const backpackPointerLanding = await measurePaintedPointerLanding(
+      page,
+      '[data-tutorial-pointer="modal-backpack"]',
+      '[data-inventory-owner="backpack"][aria-label^="Sorceror\'s Amulet,"]',
+    )
+    assert.ok(backpackPointerLanding.insideX, `${scenario.name} backpack arrow x ${JSON.stringify(backpackPointerLanding)}`)
+    assert.ok(
+      Math.abs(backpackPointerLanding.tipY - backpackPointerLanding.targetTop)
+        <= Math.max(2, backpackPointerLanding.targetHeight * 0.12),
+      `${scenario.name} backpack arrow top edge ${JSON.stringify(backpackPointerLanding)}`,
+    )
+    const equipmentPointerLanding = await measurePaintedPointerLanding(
+      page,
+      '[data-tutorial-pointer="modal-equipment"]',
+      '[data-equipment-slot="amulet"]',
+    )
+    assert.ok(
+      equipmentPointerLanding.distanceToTarget <= equipmentPointerLanding.targetHeight * 0.4,
+      `${scenario.name} amulet body arrow ${JSON.stringify(equipmentPointerLanding)}`,
+    )
     const blink = await sampleBlink(page, MODAL_RESUME_POINTER, MODAL_STEADY_POINTERS)
     assertBlink(blink, `${scenario.name} stage-10 resume pointer`)
     assert.equal(blink.steadyHidden, 0, `${scenario.name} steady pointers ${JSON.stringify(blink)}`)
@@ -270,6 +298,9 @@ async function runScenario(scenario) {
     await page.locator('[data-tutorial-pointer="skills"]').waitFor({ timeout: 15_000 })
     const skillsPointerBlink = await sampleBlink(page, '[data-tutorial-pointer="skills"]')
     assertBlink(skillsPointerBlink, `${scenario.name} stage-12 skills pointer`)
+    const skillsPrompt = await measureResponsiveHudPointer(page, 'skills', 62)
+    assertResponsiveHudPointer(skillsPrompt, 40, -40, `${scenario.name} stage-12 skills pointer`)
+    await screenshotInBlinkWindow(page, screenshots.skillsPrompt, '[data-tutorial-pointer="skills"]')
     if (scenario.hasTouch) await page.locator('.hub-hud-tome-button').click()
     else await page.keyboard.press(SKILLS_KEY)
     await waitForTutorialStage(host, page, 13)
@@ -339,17 +370,8 @@ async function runScenario(scenario) {
     await waitForTutorialStage(host, page, 14)
     const selectedHudPointer = page.locator(SELECTED_HUD_POINTER)
     await selectedHudPointer.waitFor({ timeout: 15_000 })
-    const selectedHudGeometry = await selectedHudPointer.evaluate((element) => ({
-      toX: Number(element.dataset.toX),
-      toY: Number(element.dataset.toY),
-      x: Number(element.dataset.x),
-      y: Number(element.dataset.y),
-    }))
-    assert.deepEqual(
-      selectedHudGeometry,
-      { toX: 800, toY: 25.5, x: 810, y: 75.5 },
-      `${scenario.name} stage-14 selected-HUD pointer geometry`,
-    )
+    const selectedHudGeometry = await measureSelectedHudLesson(page)
+    assertSelectedHudLesson(selectedHudGeometry, `${scenario.name} stage-14 selected-HUD lesson`)
     const selectedHudBlink = await sampleBlink(page, SELECTED_HUD_POINTER)
     assertBlink(selectedHudBlink, `${scenario.name} stage-14 selected-HUD pointer`)
     await screenshotInBlinkWindow(page, screenshots.selectedHud, SELECTED_HUD_POINTER)
@@ -368,10 +390,14 @@ async function runScenario(scenario) {
       ...errors,
       blink,
       inventoryPointerBlink,
+      inventoryPrompt,
+      backpackPointerLanding,
+      equipmentPointerLanding,
       selectedHudBlink,
       selectedHudGeometry,
       skillsBlink,
       skillsPointerBlink,
+      skillsPrompt,
       fixtureSha256: fixture.record.sha256,
       inventory,
       inventoryEmptyBackpack,
@@ -419,6 +445,171 @@ function expectedPlans(state, playerId, stage, modalProgress = 1) {
   })
 }
 
+function measureResponsiveHudPointer(page, anchor, nativeTargetHeight) {
+  return page.evaluate(({ expectedAnchor, expectedNativeHeight }) => {
+    const requiredElement = (selector) => {
+      const element = document.querySelector(selector)
+      if (!(element instanceof HTMLElement)) throw new Error(`missing ${selector}`)
+      return element
+    }
+    const overlay = requiredElement('.tutorial-overlay')
+    const pointer = requiredElement(`[data-tutorial-pointer="${expectedAnchor}"]`)
+    const target = requiredElement(`[data-tutorial-anchor="${expectedAnchor}"]`)
+    const overlayRect = overlay.getBoundingClientRect()
+    const targetRect = target.getBoundingClientRect()
+    const logicalWidth = Number(overlay.dataset.viewportWidth)
+    const logicalHeight = Number(overlay.dataset.viewportHeight)
+    const marker = document.createElement('b')
+    Object.assign(marker.style, {
+      height: '1px',
+      left: '29px',
+      pointerEvents: 'none',
+      position: 'absolute',
+      top: '2px',
+      width: '1px',
+    })
+    pointer.append(marker)
+    const markerRect = marker.getBoundingClientRect()
+    marker.remove()
+    return {
+      headingBaseline: Number(overlay.dataset.headingBaseline),
+      originX: Number(pointer.dataset.x),
+      originY: Number(pointer.dataset.y),
+      paintedTipX: markerRect.left + markerRect.width / 2,
+      paintedTipY: markerRect.top + markerRect.height / 2,
+      pointerScale: Number(pointer.dataset.pointerScale),
+      targetBottom: targetRect.bottom,
+      targetHeight: targetRect.height,
+      targetLeft: targetRect.left,
+      targetRight: targetRect.right,
+      targetScale: targetRect.height * logicalHeight / overlayRect.height / expectedNativeHeight,
+      targetTop: targetRect.top,
+      targetWidth: targetRect.width,
+      targetX: Number(pointer.dataset.targetX),
+      targetY: Number(pointer.dataset.targetY),
+      subheadingBaseline: Number(overlay.dataset.subheadingBaseline),
+      targetFromElementX: (targetRect.left + targetRect.width / 2 - overlayRect.left)
+        * logicalWidth / overlayRect.width,
+      targetFromElementY: (targetRect.top + targetRect.height / 2 - overlayRect.top)
+        * logicalHeight / overlayRect.height,
+    }
+  }, { expectedAnchor: anchor, expectedNativeHeight: nativeTargetHeight })
+}
+
+function assertResponsiveHudPointer(receipt, nativeOffsetX, nativeOffsetY, label) {
+  close(receipt.targetX, receipt.targetFromElementX, 0.05, `${label} target x`)
+  close(receipt.targetY, receipt.targetFromElementY, 0.05, `${label} target y`)
+  close(receipt.pointerScale, receipt.targetScale, 0.001, `${label} scale`)
+  close(receipt.originX, receipt.targetX + nativeOffsetX * receipt.targetScale, 0.05, `${label} origin x`)
+  close(receipt.originY, receipt.targetY + nativeOffsetY * receipt.targetScale, 0.05, `${label} origin y`)
+  close(receipt.subheadingBaseline, receipt.targetY - 95 * receipt.targetScale, 0.05, `${label} subheading y`)
+  close(receipt.headingBaseline, receipt.subheadingBaseline - 30, 0.05, `${label} heading y`)
+  assert.ok(
+    receipt.paintedTipX >= receipt.targetLeft && receipt.paintedTipX <= receipt.targetRight
+      && receipt.paintedTipY >= receipt.targetTop && receipt.paintedTipY <= receipt.targetBottom,
+    `${label} painted tip ${JSON.stringify(receipt)}`,
+  )
+}
+
+function measurePaintedPointerLanding(page, pointerSelector, targetSelector) {
+  return page.evaluate(({ expectedPointer, expectedTarget }) => {
+    const pointer = document.querySelector(expectedPointer)
+    const target = document.querySelector(expectedTarget)
+    if (!(pointer instanceof HTMLElement)) throw new Error(`missing ${expectedPointer}`)
+    if (!(target instanceof HTMLElement)) throw new Error(`missing ${expectedTarget}`)
+    const marker = document.createElement('b')
+    Object.assign(marker.style, {
+      height: '1px',
+      left: '29px',
+      pointerEvents: 'none',
+      position: 'absolute',
+      top: '2px',
+      width: '1px',
+    })
+    pointer.append(marker)
+    const markerRect = marker.getBoundingClientRect()
+    const targetRect = target.getBoundingClientRect()
+    marker.remove()
+    const tipX = markerRect.left + markerRect.width / 2
+    const tipY = markerRect.top + markerRect.height / 2
+    const distanceX = Math.max(targetRect.left - tipX, 0, tipX - targetRect.right)
+    const distanceY = Math.max(targetRect.top - tipY, 0, tipY - targetRect.bottom)
+    return {
+      distanceToTarget: Math.hypot(distanceX, distanceY),
+      insideX: tipX >= targetRect.left && tipX <= targetRect.right,
+      targetBottom: targetRect.bottom,
+      targetHeight: targetRect.height,
+      targetLeft: targetRect.left,
+      targetRight: targetRect.right,
+      targetTop: targetRect.top,
+      tipX,
+      tipY,
+    }
+  }, { expectedPointer: pointerSelector, expectedTarget: targetSelector })
+}
+
+function measureSelectedHudLesson(page) {
+  return page.evaluate(() => {
+    const requiredElement = (selector) => {
+      const element = document.querySelector(selector)
+      if (!(element instanceof HTMLElement)) throw new Error(`missing ${selector}`)
+      return element
+    }
+    const overlay = requiredElement('.tutorial-overlay')
+    const pointer = requiredElement('[data-tutorial-pointer="selected-skills"]')
+    const primary = requiredElement('[data-tutorial-anchor="primary-skill"]')
+    const concentration = requiredElement('[data-tutorial-anchor="concentration-a"]')
+    const firstLine = requiredElement('.tutorial-selected-hud-first-line:not(.tutorial-instruction-shadow)')
+    const secondLine = requiredElement('.tutorial-selected-hud-second-line:not(.tutorial-instruction-shadow)')
+    const overlayRect = overlay.getBoundingClientRect()
+    const logicalWidth = Number(overlay.dataset.viewportWidth)
+    const logicalHeight = Number(overlay.dataset.viewportHeight)
+    const logicalCenter = (element) => {
+      const rect = element.getBoundingClientRect()
+      return {
+        x: (rect.left + rect.width / 2 - overlayRect.left) * logicalWidth / overlayRect.width,
+        y: (rect.top + rect.height / 2 - overlayRect.top) * logicalHeight / overlayRect.height,
+      }
+    }
+    const logicalText = (element) => {
+      const rect = element.getBoundingClientRect()
+      return {
+        baseline: (rect.top - overlayRect.top) * logicalHeight / overlayRect.height + 12,
+        x: (rect.left + rect.width / 2 - overlayRect.left) * logicalWidth / overlayRect.width,
+      }
+    }
+    const primaryRect = primary.getBoundingClientRect()
+    return {
+      concentration: logicalCenter(concentration),
+      firstLine: logicalText(firstLine),
+      pointer: {
+        scale: Number(pointer.dataset.pointerScale),
+        toX: Number(pointer.dataset.toX),
+        toY: Number(pointer.dataset.toY),
+        x: Number(pointer.dataset.x),
+        y: Number(pointer.dataset.y),
+      },
+      primary: logicalCenter(primary),
+      scale: primaryRect.height * logicalHeight / overlayRect.height / 65,
+      secondLine: logicalText(secondLine),
+    }
+  })
+}
+
+function assertSelectedHudLesson(receipt, label) {
+  const expectedTargetX = (receipt.primary.x + receipt.concentration.x) * 0.5
+  const expectedTargetY = (receipt.primary.y + receipt.concentration.y) * 0.5
+  close(receipt.pointer.scale, receipt.scale, 0.001, `${label} scale`)
+  close(receipt.pointer.toX, expectedTargetX, 0.05, `${label} target x`)
+  close(receipt.pointer.toY, expectedTargetY, 0.05, `${label} target y`)
+  close(receipt.pointer.x, receipt.primary.x + 30 * receipt.scale, 0.05, `${label} origin x`)
+  close(receipt.pointer.y, receipt.primary.y + 50 * receipt.scale, 0.05, `${label} origin y`)
+  close(receipt.firstLine.x, receipt.primary.x - 220 * receipt.scale, 0.6, `${label} first line x`)
+  close(receipt.firstLine.baseline, receipt.primary.y + 50 * receipt.scale, 0.6, `${label} first line y`)
+  close(receipt.secondLine.x, receipt.primary.x - 220 * receipt.scale, 0.6, `${label} second line x`)
+  close(receipt.secondLine.baseline, receipt.primary.y + 70 * receipt.scale, 0.6, `${label} second line y`)
+}
+
 function measureModal(page, stage) {
   return page.evaluate((expectedStage) => {
     const requiredElement = (selector) => {
@@ -462,6 +653,7 @@ function measureModal(page, stage) {
         centerX: rect.left + rect.width / 2,
         centerY: rect.top + rect.height / 2,
         id: element.dataset.tutorialPointer.slice('modal-'.length),
+        scale: Number(element.dataset.pointerScale),
         toX: Number(element.dataset.toX),
         toY: Number(element.dataset.toY),
         visible: visible(element),
@@ -530,6 +722,7 @@ function compareModal(measured, plans, label) {
         [plan.x, plan.y, plan.toX, plan.toY],
         `${label} pointer ${plan.id} origin/tip`,
       )
+      assert.equal(pointer.scale, 1, `${label} pointer ${plan.id} fixed-stage scale`)
       const origin = toClient(plan.x, plan.y)
       check(pointer.centerX, origin.x, `${plan.id} pointer centre x`)
       check(pointer.centerY, origin.y, `${plan.id} pointer centre y`)
@@ -642,6 +835,16 @@ function clearBackpack(host, playerId) {
     revision: economy.revision + 1,
   })
   assert.notEqual(playerEntities, state.playerEntities, 'backpack cleared')
+  Object.assign(state, { ...state, playerEntities })
+}
+
+function grantTutorialAmulet(host, playerId) {
+  const state = host.state()
+  const economy = getPlayerEconomy(state, playerId)
+  const inserted = insertLootInventoryItem(economy, nativeTutorialAmuletItem())
+  assert.equal(inserted.accepted, true, 'Tutorial amulet inserted')
+  const playerEntities = replacePlayerEconomy(state.playerEntities, playerId, inserted.state)
+  assert.notEqual(playerEntities, state.playerEntities, 'Tutorial amulet replicated')
   Object.assign(state, { ...state, playerEntities })
 }
 

@@ -53,6 +53,7 @@ export interface NativeHudSkillBindingPresentation {
 export interface NativeTutorialSelectedHudLayout {
   readonly firstLine: Readonly<{ x: number; y: number }>
   readonly pointer: Readonly<{
+    scale: number
     toX: number
     toY: number
     x: number
@@ -100,26 +101,45 @@ export function nativeTutorialSelectedHudLayout(
     x: concentrationRect.left + concentrationRect.width / 2,
     y: concentrationRect.top + concentrationRect.height / 2,
   })
+  return nativeTutorialSelectedHudLayoutFromCenters(primaryCenter, concentrationCenter)
+}
+
+export function nativeTutorialSelectedHudLayoutFromCenters(
+  primaryCenter: Readonly<{ x: number; y: number }>,
+  concentrationCenter: Readonly<{ x: number; y: number }>,
+  scale = 1,
+): NativeTutorialSelectedHudLayout {
+  if (!finitePoint(primaryCenter)
+    || !finitePoint(concentrationCenter)
+    || !Number.isFinite(scale)
+    || scale <= 0) {
+    throw new RangeError('Tutorial selected-HUD centres must be finite and scale must be positive')
+  }
   return Object.freeze({
     firstLine: Object.freeze({
-      x: primaryCenter.x - 220,
-      y: primaryCenter.y + 50,
+      x: primaryCenter.x - 220 * scale,
+      y: primaryCenter.y + 50 * scale,
     }),
     // Tutorial::Render stage 14 (0x005D1D36..0x005D1DE9): 0x005C9BB0 draws
     // the sprite at the first pair, primary centre + (30, 50), rotated toward
     // the second pair, the midpoint of the primary and concentration-A
     // centres; blink = 1.
     pointer: Object.freeze({
+      scale,
       toX: (primaryCenter.x + concentrationCenter.x) * 0.5,
       toY: (primaryCenter.y + concentrationCenter.y) * 0.5,
-      x: primaryCenter.x + 30,
-      y: primaryCenter.y + 50,
+      x: primaryCenter.x + 30 * scale,
+      y: primaryCenter.y + 50 * scale,
     }),
     secondLine: Object.freeze({
-      x: primaryCenter.x - 220,
-      y: primaryCenter.y + 70,
+      x: primaryCenter.x - 220 * scale,
+      y: primaryCenter.y + 70 * scale,
     }),
   })
+}
+
+function finitePoint(point: Readonly<{ x: number; y: number }>): boolean {
+  return Number.isFinite(point.x) && Number.isFinite(point.y)
 }
 
 export function nativeHealthHudPresentation(

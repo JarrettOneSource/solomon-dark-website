@@ -17,7 +17,7 @@ import {
   subscribeNativeModalSlideProgress,
 } from './native-modal-slide-progress.ts'
 import { gameBindingLabel, type GameControlBindings } from './game-settings.ts'
-import type { NativeTutorialSelectedHudLayout } from './native-hud-presentation.ts'
+import { nativeTutorialSelectedHudLayoutFromCenters } from './native-hud-presentation.ts'
 import NativeBitmapText from './native-ui/NativeBitmapText.tsx'
 import NativeUiNineSlice from './native-ui/NativeUiNineSlice.tsx'
 import NativeUiSprite from './native-ui/NativeUiSprite.tsx'
@@ -27,6 +27,8 @@ import {
   emptyTutorialHudAnchors,
   nativeTutorialHudAnchorAttributes,
   nativeTutorialHudPointerPlans,
+  nativeTutorialHudTargetHeight,
+  tutorialHudInstructionBaselines,
   tutorialClientRectAnchor,
   tutorialHudAnchorsEqual,
   type TutorialHudAnchorAttribute,
@@ -48,7 +50,6 @@ const TUTORIAL_GOLD = 0xd9ba70
 interface TutorialOverlayProps {
   readonly audio: GameAudioDirector
   readonly controls: GameControlBindings
-  readonly selectedHudLayout: NativeTutorialSelectedHudLayout | null
   readonly state: NativeTutorialState
   readonly viewport: Readonly<{ height: number; width: number }>
   readonly worldTarget: Readonly<{ x: number; y: number }> | null
@@ -57,7 +58,6 @@ interface TutorialOverlayProps {
 export default function TutorialOverlay({
   audio,
   controls,
-  selectedHudLayout,
   state,
   viewport,
   worldTarget,
@@ -67,6 +67,13 @@ export default function TutorialOverlay({
   const pointerBlink = useTutorialPointerBlink()
   const hudAnchors = useTutorialHudAnchors(overlayRef, state.stage, viewport)
   const hudPointers = nativeTutorialHudPointerPlans(state.stage, hudAnchors)
+  const selectedHudLayout = hudAnchors.primarySkill && hudAnchors.concentrationA
+    ? nativeTutorialSelectedHudLayoutFromCenters(
+        hudAnchors.primarySkill,
+        hudAnchors.concentrationA,
+        hudAnchors.primarySkill.scale,
+      )
+    : null
   const presentation = nativeTutorialPresentation(state, {
     inventory: gameBindingLabel(controls.openInventory),
     potion: gameBindingLabel(controls.belt4),
@@ -74,7 +81,11 @@ export default function TutorialOverlay({
     skills: gameBindingLabel(controls.openSkills),
   })
   const narration = state.narration.current
-  const instructionBaselines = nativeTutorialInstructionBaselines(state.stage, viewport.height)
+  const instructionBaselines = tutorialHudInstructionBaselines(
+    state.stage,
+    nativeTutorialInstructionBaselines(state.stage, viewport.height),
+    hudAnchors,
+  )
   const worldPointerTarget = worldTarget === null
     ? null
     : Object.freeze({
@@ -170,6 +181,7 @@ export default function TutorialOverlay({
         <TutorialPointer
           anchor={pointer.anchor}
           key={pointer.anchor}
+          scale={pointer.scale}
           x={pointer.x}
           y={pointer.y}
           toX={pointer.target.x}
@@ -322,6 +334,7 @@ function TutorialShadowedText({
 
 function TutorialPointer({
   anchor,
+  scale = 1,
   toX,
   toY,
   visible = true,
@@ -333,6 +346,7 @@ function TutorialPointer({
     | 'selected-skills'
     | 'world-sack'
     | `modal-${TutorialModalPointerId}`
+  readonly scale?: number
   readonly toX: number
   readonly toY: number
   readonly visible?: boolean
@@ -344,6 +358,7 @@ function TutorialPointer({
     <span
       aria-hidden
       className="tutorial-pointer"
+      data-pointer-scale={scale}
       data-to-x={toX}
       data-to-y={toY}
       data-x={x}
@@ -355,7 +370,7 @@ function TutorialPointer({
         left: x,
         opacity: visible ? 1 : 0,
         top: y,
-        transform: `translate(-50%, -50%) rotate(${rotation}deg)`,
+        transform: `translate(-50%, -50%) rotate(${rotation}deg) scale(${scale})`,
       }}
     >
       <NativeUiSprite atlas="UI" record={28} />
@@ -423,13 +438,16 @@ function useTutorialHudAnchors(
               overlayRect,
               target.getBoundingClientRect(),
               { height: viewportHeight, width: viewportWidth },
+              nativeTutorialHudTargetHeight(name),
             )
           : null
       }
       const next = Object.freeze({
+        concentrationA: anchor('concentration-a'),
         healthMeter: anchor('health-meter'),
         healthPotion: anchor('health-potion'),
         inventory: anchor('inventory'),
+        primarySkill: anchor('primary-skill'),
         secondarySlot: anchor('secondary-slot'),
         skills: anchor('skills'),
       })

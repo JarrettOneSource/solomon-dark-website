@@ -205,6 +205,28 @@ async function runScenario(scenario) {
     close(moved.targetY - initial.targetY, -25 * uiScale, 0.1, `${scenario.name} moved y`)
 
     await page.screenshot({ path: scenario.screenshot })
+    forceTutorialState(host, {
+      introActive: false,
+      introBlend: 1,
+      introDelayTicksRemaining: 0,
+      introFade: 0,
+      introMovementTicksRemaining: 0,
+      stage: 18,
+      stageTicks: 0,
+    })
+    await page.locator('.tutorial-overlay[data-stage="18"]').waitFor({ timeout: 15_000 })
+    const vitals = {
+      healthMeter: await measureHudPointer(page, 'health-meter', 20),
+      healthPotion: await measureHudPointer(page, 'health-potion', 50),
+    }
+    assertHudPointer(vitals.healthPotion, -50, -30, `${scenario.name} health-potion pointer`)
+    assertHudPointer(vitals.healthMeter, -100, 70, `${scenario.name} health-meter pointer`)
+    const vitalsScreenshot = `${screenshotRoot}-${scenario.name}-vitals.png`
+    await page.waitForFunction(() => {
+      const pointer = document.querySelector('[data-tutorial-pointer="health-potion"]')
+      return pointer instanceof HTMLElement && getComputedStyle(pointer).opacity === '1'
+    }, undefined, { timeout: 10_000 })
+    await page.screenshot({ path: vitalsScreenshot })
     const spawnDomain = scenario.name === 'stock'
       ? await exerciseTutorialSpawnDomain(host, page, screenshotRoot)
       : null
@@ -232,6 +254,8 @@ async function runScenario(scenario) {
       screenshot: scenario.screenshot,
       spawnDomain,
       staffMelee,
+      vitals,
+      vitalsScreenshot,
       fixtureSha256: fixture.record.sha256,
     }
   } finally {
@@ -886,12 +910,14 @@ function measureStageFive(page) {
       originX: Number.parseFloat(pointer.style.left),
       originY: Number.parseFloat(pointer.style.top),
       overlayCenterX: overlayRect.left + overlayRect.width / 2,
+      pointerScale: Number(pointer.dataset.pointerScale),
       targetX: Number(pointer.dataset.targetX),
       targetY: Number(pointer.dataset.targetY),
       targetFromSlotX: (slotRect.left + slotRect.width / 2 - overlayRect.left)
         * logicalWidth / overlayRect.width,
       targetFromSlotY: (slotRect.top + slotRect.height / 2 - overlayRect.top)
         * logicalHeight / overlayRect.height,
+      targetScale: slotRect.height * logicalHeight / overlayRect.height / 53,
       uiScale: Number(requiredElement('.hub-hud').dataset.uiScale),
       viewportHeight: logicalHeight,
       viewportWidth: logicalWidth,
@@ -899,11 +925,49 @@ function measureStageFive(page) {
   })
 }
 
+function measureHudPointer(page, anchor, nativeTargetHeight) {
+  return page.evaluate(({ expectedAnchor, expectedNativeHeight }) => {
+    const requiredElement = (selector) => {
+      const element = document.querySelector(selector)
+      if (!(element instanceof HTMLElement)) throw new Error(`missing ${selector}`)
+      return element
+    }
+    const overlay = requiredElement('.tutorial-overlay')
+    const pointer = requiredElement(`[data-tutorial-pointer="${expectedAnchor}"]`)
+    const target = requiredElement(`[data-tutorial-anchor="${expectedAnchor}"]`)
+    const overlayRect = overlay.getBoundingClientRect()
+    const targetRect = target.getBoundingClientRect()
+    const logicalWidth = Number(overlay.dataset.viewportWidth)
+    const logicalHeight = Number(overlay.dataset.viewportHeight)
+    return {
+      originX: Number(pointer.dataset.x),
+      originY: Number(pointer.dataset.y),
+      pointerScale: Number(pointer.dataset.pointerScale),
+      targetFromElementX: (targetRect.left + targetRect.width / 2 - overlayRect.left)
+        * logicalWidth / overlayRect.width,
+      targetFromElementY: (targetRect.top + targetRect.height / 2 - overlayRect.top)
+        * logicalHeight / overlayRect.height,
+      targetScale: targetRect.height * logicalHeight / overlayRect.height / expectedNativeHeight,
+      targetX: Number(pointer.dataset.targetX),
+      targetY: Number(pointer.dataset.targetY),
+    }
+  }, { expectedAnchor: anchor, expectedNativeHeight: nativeTargetHeight })
+}
+
+function assertHudPointer(receipt, nativeOffsetX, nativeOffsetY, label) {
+  close(receipt.targetX, receipt.targetFromElementX, 0.05, `${label} target x`)
+  close(receipt.targetY, receipt.targetFromElementY, 0.05, `${label} target y`)
+  close(receipt.pointerScale, receipt.targetScale, 0.001, `${label} scale`)
+  close(receipt.originX, receipt.targetX + nativeOffsetX * receipt.targetScale, 0.05, `${label} origin x`)
+  close(receipt.originY, receipt.targetY + nativeOffsetY * receipt.targetScale, 0.05, `${label} origin y`)
+}
+
 function assertStageFiveReceipt(receipt, scenario) {
   close(receipt.targetX, receipt.targetFromSlotX, 0.05, `${scenario.name} target x`)
   close(receipt.targetY, receipt.targetFromSlotY, 0.05, `${scenario.name} target y`)
-  close(receipt.originX, receipt.targetX - 70, 0.05, `${scenario.name} origin x`)
-  close(receipt.originY, receipt.targetY - 50, 0.05, `${scenario.name} origin y`)
+  close(receipt.pointerScale, receipt.targetScale, 0.001, `${scenario.name} pointer scale`)
+  close(receipt.originX, receipt.targetX - 70 * receipt.targetScale, 0.05, `${scenario.name} origin x`)
+  close(receipt.originY, receipt.targetY - 50 * receipt.targetScale, 0.05, `${scenario.name} origin y`)
   close(receipt.headingCenterX, receipt.overlayCenterX, 0.6, `${scenario.name} heading x`)
   close(receipt.headingBaseline, receipt.viewportHeight - 170, 0.001, `${scenario.name} heading y`)
   assert.equal(receipt.coarse, scenario.coarse)

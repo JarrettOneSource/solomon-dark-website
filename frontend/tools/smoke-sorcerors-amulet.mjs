@@ -173,6 +173,10 @@ try {
   assert.equal(await backpackButton.isVisible(), true)
   assert.equal(await backpackButton.isDisabled(), false)
   assert.equal(await skillsButton.isVisible(), false)
+  await page.waitForFunction(() => {
+    const pointer = document.querySelector('[data-tutorial-pointer="inventory"]')
+    return pointer instanceof HTMLElement && getComputedStyle(pointer).opacity === '1'
+  }, undefined, { timeout: 10_000 })
   await page.screenshot({ path: `${screenshotRoot}-stage-9-inventory-prompt.png` })
   const pickupSaved = await waitForLocalSave(page, (record) => {
     if (!record || record.revision <= fixture.record.revision) return false
@@ -196,6 +200,30 @@ try {
   await callouts.waitFor()
   assert.equal(await callouts.locator('[data-tutorial-callout="equipment"]').count(), 1)
   assert.equal(await callouts.locator('[data-tutorial-callout="backpack"]').count(), 1)
+
+  const guidance = {
+    amuletCell: await measurePaintedPointerLanding(
+      page,
+      '[data-tutorial-pointer="modal-backpack"]',
+      '[data-inventory-owner="backpack"][aria-label^="Sorceror\'s Amulet,"]',
+    ),
+    amuletSink: await measurePaintedPointerLanding(
+      page,
+      '[data-tutorial-pointer="modal-equipment"]',
+      '[data-equipment-slot="amulet"]',
+    ),
+  }
+  assert.ok(guidance.amuletCell.insideX, JSON.stringify(guidance))
+  assert.ok(
+    Math.abs(guidance.amuletCell.tipY - guidance.amuletCell.targetTop)
+      <= Math.max(2, guidance.amuletCell.targetHeight * 0.12),
+    JSON.stringify(guidance),
+  )
+  assert.ok(
+    guidance.amuletSink.distanceToTarget <= guidance.amuletSink.targetHeight * 0.4,
+    JSON.stringify(guidance),
+  )
+  await page.screenshot({ path: `${screenshotRoot}-stage-10-amulet-guidance.png` })
 
   const amulet = inventory.getByLabel('Backpack').getByRole('button', {
     exact: true,
@@ -258,6 +286,7 @@ try {
     consoleErrors,
     failedResponses,
     fixtureSha256: fixture.record.sha256,
+    guidance,
     itemInfoLines: [
       "Sorceror's Amulet",
       NATIVE_TUTORIAL_AMULET_DESCRIPTION,
@@ -268,6 +297,7 @@ try {
     screenshotPaths: [
       `${screenshotRoot}-stage-8-pointer.png`,
       `${screenshotRoot}-stage-9-inventory-prompt.png`,
+      `${screenshotRoot}-stage-10-amulet-guidance.png`,
       `${screenshotRoot}-stage-10-item-info.png`,
       `${screenshotRoot}-stage-10-equipped.png`,
     ],
@@ -418,4 +448,42 @@ async function samplePointerBlink(page, pointer) {
     await page.waitForTimeout(10)
   }
   return receipt
+}
+
+function measurePaintedPointerLanding(page, pointerSelector, targetSelector) {
+  return page.evaluate(({ expectedPointer, expectedTarget }) => {
+    const pointer = document.querySelector(expectedPointer)
+    const target = document.querySelector(expectedTarget)
+    if (!(pointer instanceof HTMLElement)) throw new Error(`missing ${expectedPointer}`)
+    if (!(target instanceof HTMLElement)) throw new Error(`missing ${expectedTarget}`)
+    const marker = document.createElement('b')
+    Object.assign(marker.style, {
+      height: '1px',
+      left: '29px',
+      pointerEvents: 'none',
+      position: 'absolute',
+      top: '2px',
+      width: '1px',
+    })
+    pointer.append(marker)
+    const markerRect = marker.getBoundingClientRect()
+    const targetRect = target.getBoundingClientRect()
+    marker.remove()
+    const tipX = markerRect.left + markerRect.width / 2
+    const tipY = markerRect.top + markerRect.height / 2
+    const distanceX = Math.max(targetRect.left - tipX, 0, tipX - targetRect.right)
+    const distanceY = Math.max(targetRect.top - tipY, 0, tipY - targetRect.bottom)
+    return {
+      distanceToTarget: Math.hypot(distanceX, distanceY),
+      insideX: tipX >= targetRect.left && tipX <= targetRect.right,
+      targetBottom: targetRect.bottom,
+      targetHeight: targetRect.height,
+      targetLeft: targetRect.left,
+      targetRight: targetRect.right,
+      targetTop: targetRect.top,
+      targetWidth: targetRect.width,
+      tipX,
+      tipY,
+    }
+  }, { expectedPointer: pointerSelector, expectedTarget: targetSelector })
 }

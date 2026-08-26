@@ -25,6 +25,7 @@ import {
   nativeTutorialForcedVelocity,
   nativeTutorialHudAccess,
   nativeTutorialInstructionBaselines,
+  nativeTutorialAmuletIdentityMatches,
   nativeTutorialAmuletItem,
   nativeTutorialPresentation,
   stepNativeTutorial,
@@ -148,6 +149,16 @@ test('locks the complete stock Tutorial authored membership', () => {
   assert.deepEqual(nativeTutorialAmuletItem().nativeEffects, [
     { kind: 2, magnitude: 10, operator: 2, target: 0 },
   ])
+  const amulet = { ...nativeTutorialAmuletItem(), id: 100 }
+  assert.equal(nativeTutorialAmuletIdentityMatches(amulet), true)
+  assert.equal(nativeTutorialAmuletIdentityMatches({ ...amulet, name: 'Amulet' }), false)
+  assert.equal(nativeTutorialAmuletIdentityMatches({ ...amulet, nativeSelector: 1 }), false)
+  assert.equal(nativeTutorialAmuletIdentityMatches({ ...amulet, iconRecords: [30] }), false)
+  assert.equal(nativeTutorialAmuletIdentityMatches({ ...amulet, iconTints: [] }), false)
+  assert.equal(nativeTutorialAmuletIdentityMatches({
+    ...amulet,
+    nativeEffects: [{ kind: 2, magnitude: 9, operator: 2, target: 0 }],
+  }), false)
 })
 
 test('starts the exact two five-skeleton opening groups when Solomon runs', () => {

@@ -339,6 +339,11 @@ export default function GameHud({
                 : `Select concentration ${binding === 16 ? 'A' : 'B'}, current ${name}`}
               className="hub-hud-selected-skill-action"
               data-binding={binding}
+              data-tutorial-anchor={binding === 12
+                ? 'primary-skill'
+                : binding === 16
+                  ? 'concentration-a'
+                  : undefined}
               key={`action-${binding}`}
               onClick={() => {
                 if (!planeOrbOverride) onSkillBindingClick?.(binding)
@@ -393,7 +398,6 @@ export default function GameHud({
         <button
           type="button"
           className="hub-hud-potion-button hub-hud-potion-button-red"
-          data-tutorial-anchor="health-potion"
           aria-label={`Use health potion, key ${healthPotionKey}, ${healthPotions.count} available`}
           disabled={healthPotions.itemId === null || !onPotionClick}
           onClick={() => {
@@ -401,18 +405,27 @@ export default function GameHud({
           }}
           title={`Health Potion (${healthPotionKey})`}
         >
-          <img className="hub-hud-potion hub-hud-potion-red" src={hub.hud.potionRed} alt="" />
+          <img
+            className="hub-hud-potion hub-hud-potion-red"
+            data-tutorial-anchor="health-potion"
+            src={hub.hud.potionRed}
+            alt=""
+          />
         </button>
         <InventoryCount count={healthPotions.count} variant="red" />
         <button
           type="button"
           className="hub-hud-backpack-button"
-          data-tutorial-anchor="inventory"
           aria-label={`Open inventory, ${economy.gold} gold`}
           disabled={!onInventoryClick}
           onClick={onInventoryClick}
         >
-          <img className="hub-hud-backpack" src={hub.hud.backpack} alt="" />
+          <img
+            className="hub-hud-backpack"
+            data-tutorial-anchor="inventory"
+            src={hub.hud.backpack}
+            alt=""
+          />
         </button>
         <div
           className="hub-hud-xp"
@@ -433,13 +446,17 @@ export default function GameHud({
         <button
           type="button"
           className="hub-hud-tome-button"
-          data-tutorial-anchor="skills"
           aria-label="Open skills"
           disabled={!onSkillsClick}
           onClick={onSkillsClick}
           title="Skills (K)"
         >
-          <img className="hub-hud-tome" src={hub.hud.tome} alt="" />
+          <img
+            className="hub-hud-tome"
+            data-tutorial-anchor="skills"
+            src={hub.hud.tome}
+            alt=""
+          />
         </button>
         <button
           type="button"

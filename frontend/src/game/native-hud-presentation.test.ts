@@ -9,6 +9,7 @@ import {
   nativeHudSkillBindings,
   nativeManaHudPresentation,
   nativeTutorialSelectedHudLayout,
+  nativeTutorialSelectedHudLayoutFromCenters,
 } from './native-hud-presentation.ts'
 
 test('clips local vital fills from the right so health remains left anchored', () => {
@@ -172,7 +173,7 @@ test('derives the Tutorial selected-HUD lesson from the live primary and A recta
   })
   assert.deepEqual(nativeTutorialSelectedHudLayout(primaryAndA), {
     firstLine: { x: 560, y: 75.5 },
-    pointer: { toX: 800, toY: 25.5, x: 810, y: 75.5 },
+    pointer: { scale: 1, toX: 800, toY: 25.5, x: 810, y: 75.5 },
     secondLine: { x: 560, y: 95.5 },
   })
 
@@ -184,7 +185,7 @@ test('derives the Tutorial selected-HUD lesson from the live primary and A recta
   })
   assert.deepEqual(nativeTutorialSelectedHudLayout(splitMind), {
     firstLine: { x: 540, y: 75.5 },
-    pointer: { toX: 800, toY: 25.5, x: 790, y: 75.5 },
+    pointer: { scale: 1, toX: 800, toY: 25.5, x: 790, y: 75.5 },
     secondLine: { x: 540, y: 95.5 },
   })
   assert.equal(nativeTutorialSelectedHudLayout(nativeHudSkillBindings({
@@ -193,4 +194,16 @@ test('derives the Tutorial selected-HUD lesson from the live primary and A recta
     selectedPrimarySkillId: 8,
     weldBuildId: null,
   })), null)
+})
+
+test('projects the complete selected-HUD lesson from live responsive centres', () => {
+  assert.deepEqual(nativeTutorialSelectedHudLayoutFromCenters(
+    { x: 950, y: 40 },
+    { x: 1_050, y: 40 },
+    2,
+  ), {
+    firstLine: { x: 510, y: 140 },
+    pointer: { scale: 2, toX: 1_000, toY: 40, x: 1_010, y: 140 },
+    secondLine: { x: 510, y: 180 },
+  })
 })
