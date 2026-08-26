@@ -14,6 +14,46 @@ const freePhysicsWorld = {
 }
 const allBodiesCollide = () => true
 
+test('actor solver returns detached closed records without epoch scratch', () => {
+  const source: ActorPhysicsBody[] = [
+    {
+      delta: { x: 0, y: 0 },
+      driven: false,
+      id: 'fixed',
+      position: { x: 10, y: 20 },
+      pushEnabled: false,
+      pushResistance: 90,
+      pushStrength: 0,
+      radius: 15,
+    },
+    {
+      delta: { x: 0, y: 0 },
+      id: 'ordinary',
+      position: { x: 100, y: 200 },
+      pushResistance: 5,
+      pushStrength: 10,
+      radius: 20,
+    },
+  ]
+  const before = structuredClone(source)
+
+  const resolved = resolveActorMotion(source, freePhysicsWorld, allBodiesCollide)
+
+  assert.deepEqual(source, before)
+  assert.deepEqual(resolved, before)
+  assert.notEqual(resolved[0], source[0])
+  assert.notEqual(resolved[0].delta, source[0].delta)
+  assert.notEqual(resolved[0].position, source[0].position)
+  assert.deepEqual(Object.keys(resolved[0]).sort(), [
+    'delta', 'driven', 'id', 'position', 'pushEnabled', 'pushResistance',
+    'pushStrength', 'radius',
+  ])
+  assert.deepEqual(Object.keys(resolved[1]).sort(), [
+    'delta', 'id', 'position', 'pushResistance', 'pushStrength', 'radius',
+  ])
+  assert.equal('currentPushStrength' in resolved[0], false)
+})
+
 test('actor strength thresholds produce yielding, pushing, and player dominance', () => {
   const heavyObstacle: ActorPhysicsBody[] = [
     { id: 'mover', position: { x: 0, y: 0 }, delta: { x: 20, y: 0 }, radius: 15, pushStrength: 5, pushResistance: 5 },

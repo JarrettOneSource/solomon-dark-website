@@ -38,13 +38,9 @@ const NATIVE_WEIGHT_RANGE = 0.99
 const NATIVE_PUSH_FACTOR_MINIMUM = 0
 const NATIVE_PUSH_FACTOR_MAXIMUM = 1
 
-interface WorkingBody extends ActorPhysicsBody {
-  currentPushStrength: number
-}
-
 function separation(
-  mover: Readonly<WorkingBody>,
-  other: Readonly<WorkingBody>,
+  mover: Readonly<ActorPhysicsBody>,
+  other: Readonly<ActorPhysicsBody>,
   weighted: boolean,
 ): Vector2 {
   const dx = mover.position.x - other.position.x
@@ -70,10 +66,10 @@ function separation(
 
 function applyCorrection(
   bodyIndex: number,
-  body: WorkingBody,
+  body: ActorPhysicsBody,
   correction: Vector2,
   world: ActorPhysicsWorld,
-  bodies: readonly WorkingBody[],
+  bodies: readonly ActorPhysicsBody[],
   broadphase?: ActorMotionBroadphase,
 ): boolean {
   if (correction.x === 0 && correction.y === 0) return false
@@ -99,12 +95,8 @@ export function resolveActorMotion(
   broadphase?: ActorMotionBroadphase,
   observeRootContact?: ActorRootContactObserver,
 ): ActorPhysicsBody[] {
-  const bodies: WorkingBody[] = sourceBodies.map((body) => ({
-    ...body,
-    currentPushStrength: body.pushStrength,
-    delta: { ...body.delta },
-    position: { ...body.position },
-  }))
+  const bodies = sourceBodies.map(cloneActorPhysicsBody)
+  const currentPushStrengths = bodies.map((body) => body.pushStrength)
   broadphase?.rebuild(bodies)
 
   const moveBody = (
@@ -118,7 +110,7 @@ export function resolveActorMotion(
       if (epochRecipients.has(bodyIndex)) return
       epochRecipients.add(bodyIndex)
     } else {
-      mover.currentPushStrength = mover.pushStrength
+      currentPushStrengths[bodyIndex] = mover.pushStrength
     }
 
     mover.position = world.move(mover.id, mover.position, delta, mover.radius)
@@ -131,7 +123,7 @@ export function resolveActorMotion(
 
       if (
         (!recursive && mover.pushEnabled === false)
-        || mover.currentPushStrength < other.pushResistance
+        || currentPushStrengths[bodyIndex]! < other.pushResistance
       ) {
         const contacted = applyCorrection(
           bodyIndex,
@@ -153,11 +145,11 @@ export function resolveActorMotion(
           Math.max(
             NATIVE_PUSH_FACTOR_MINIMUM,
             other.pushResistance > 0
-              ? mover.currentPushStrength / (other.pushResistance * 2)
+              ? currentPushStrengths[bodyIndex]! / (other.pushResistance * 2)
               : NATIVE_PUSH_FACTOR_MAXIMUM,
           ),
         )
-        other.currentPushStrength = mover.currentPushStrength * pushFactor
+        currentPushStrengths[otherIndex] = currentPushStrengths[bodyIndex]! * pushFactor
         moveBody(otherIndex, {
           x: otherCorrection.x * pushFactor,
           y: otherCorrection.y * pushFactor,
@@ -198,5 +190,19 @@ export function resolveActorMotion(
     if (bodies[bodyIndex].driven === false) continue
     moveBody(bodyIndex, bodies[bodyIndex].delta, new Set(), false)
   }
-  return bodies.map(({ currentPushStrength: _, ...body }) => body)
+  return bodies
+}
+
+function cloneActorPhysicsBody(source: Readonly<ActorPhysicsBody>): ActorPhysicsBody {
+  const body: ActorPhysicsBody = {
+    delta: { x: source.delta.x, y: source.delta.y },
+    id: source.id,
+    position: { x: source.position.x, y: source.position.y },
+    pushResistance: source.pushResistance,
+    pushStrength: source.pushStrength,
+    radius: source.radius,
+  }
+  if (source.driven !== undefined) body.driven = source.driven
+  if (source.pushEnabled !== undefined) body.pushEnabled = source.pushEnabled
+  return body
 }
