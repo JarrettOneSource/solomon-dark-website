@@ -102,7 +102,7 @@ try {
     const canvas = document.querySelector('.hub-world-canvas')
     const frame = canvas?.__sdrHubFrame
     return canvas?.getAttribute('data-hub-region') === 'mortuary'
-      && Math.abs((frame?.playerX ?? 0) - 673) < 1
+      && Math.abs((frame?.playerX ?? 0) - 743) < 1
       && Math.abs((frame?.playerY ?? 0) - 683) < 1
   })
   await page.keyboard.press('e')
@@ -281,7 +281,7 @@ function moveBrowserPlayerToPortrait() {
   Object.assign(state, {
     playerEntities: replacePlayerCharacter(state.playerEntities, playerId, {
       ...player,
-      position: { x: 673, y: 683 },
+      position: { x: 743, y: 683 },
       velocity: { x: 0, y: 0 },
     }),
   })
