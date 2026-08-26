@@ -3182,6 +3182,7 @@ async function buildStaticWorld(
   const treeMainResidents = new Map<string, ResidentTexture>()
   const treeInputs: NativeTreeOcclusionInput[] = []
   const treeResidents = new Map<string, TreeResidents>()
+  const residentScratch = documentNodeCanvas(0, 0)
   let staticPaintCount = 0
   let fullBaseResidents: ResidentTexture[] = []
   let cleanupPlan: ReturnType<typeof boneyardOffCameraCleanupPlan> | null = null
@@ -3202,7 +3203,7 @@ async function buildStaticWorld(
     for (let layerIndex = 0; layerIndex < mainLayers.length; layerIndex += 1) {
       const layer = mainLayers[layerIndex]
       if (isMovingGateBody(layer)) continue
-      const resident = buildMainLayerResident(document, layer, layerIndex)
+      const resident = buildMainLayerResident(document, layer, layerIndex, residentScratch)
       staticPaintCount += 1
       if (resident) {
         resident.cleanupSourceKey = layer.kind === 'object'
@@ -3245,7 +3246,12 @@ async function buildStaticWorld(
     const foregroundLayers = nativeBoneyardForegroundLayers(document)
     for (let layerIndex = 0; layerIndex < foregroundLayers.length; layerIndex += 1) {
       const layer = foregroundLayers[layerIndex]
-      const resident = buildForegroundLayerResident(document, layer, layerIndex)
+      const resident = buildForegroundLayerResident(
+        document,
+        layer,
+        layerIndex,
+        residentScratch,
+      )
       staticPaintCount += 1
       if (resident) {
         resident.cleanupSourceKey = `object:${layer.object.eid}`
@@ -3367,8 +3373,9 @@ function repaintCleanedBase(
   residents: readonly ResidentTexture[],
   retiredSourceKeys: ReadonlySet<string>,
 ): void {
+  const canvas = documentNodeCanvas(0, 0)
   for (const resident of residents) {
-    const canvas = documentNodeCanvas(resident.w, resident.h)
+    resizeCanvas(canvas, resident.w, resident.h)
     const context = canvas.getContext('2d', { alpha: false })
     if (context === null) {
       throw new Error('Boneyard cleanup base could not reacquire Canvas2D.')
@@ -3433,10 +3440,11 @@ async function buildTiledStaticLayer(
   ) => void,
 ): Promise<ResidentTexture[]> {
   const residents: ResidentTexture[] = []
+  const canvas = documentNodeCanvas(0, 0)
   for (const tile of boneyardStaticTiles(document.meta.bounds)) {
     const width = Math.ceil(tile.w)
     const height = Math.ceil(tile.h)
-    const canvas = documentNodeCanvas(width, height)
+    resizeCanvas(canvas, width, height)
     const context = canvas.getContext('2d', { alpha, willReadFrequently: true })
     if (!context) throw new Error('Boneyard static tile could not acquire Canvas2D.')
     paint(
@@ -3460,9 +3468,10 @@ function buildMainLayerResident(
   document: EditorDoc,
   layer: MainLayer,
   layerIndex: number,
+  canvas: HTMLCanvasElement,
 ): ResidentTexture | null {
   const bounds = mainLayerCaptureBounds(layer)
-  const canvas = documentNodeCanvas(bounds.w, bounds.h)
+  resizeCanvas(canvas, bounds.w, bounds.h)
   const context = canvas.getContext('2d', { alpha: true, willReadFrequently: true })
   if (!context) throw new Error('Boneyard painter layer could not acquire Canvas2D.')
   drawNativeBoneyardMainBand(
@@ -3496,9 +3505,10 @@ function buildForegroundLayerResident(
   document: EditorDoc,
   layer: ObjectSpriteLayer,
   layerIndex: number,
+  canvas: HTMLCanvasElement,
 ): ResidentTexture | null {
   const bounds = objectLayerCaptureBounds(layer)
-  const canvas = documentNodeCanvas(bounds.w, bounds.h)
+  resizeCanvas(canvas, bounds.w, bounds.h)
   const context = canvas.getContext('2d', { alpha: true, willReadFrequently: true })
   if (!context) throw new Error('Boneyard foreground layer could not acquire Canvas2D.')
   drawNativeBoneyardForegroundBand(
@@ -3813,6 +3823,11 @@ function documentNodeCanvas(width: number, height: number): HTMLCanvasElement {
 function releaseCanvas(canvas: HTMLCanvasElement): void {
   canvas.width = 0
   canvas.height = 0
+}
+
+function resizeCanvas(canvas: HTMLCanvasElement, width: number, height: number): void {
+  canvas.width = width
+  canvas.height = height
 }
 
 function nextFrame(): Promise<void> {

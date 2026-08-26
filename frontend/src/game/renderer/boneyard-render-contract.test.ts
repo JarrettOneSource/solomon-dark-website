@@ -123,8 +123,18 @@ test('static Boneyard residents retain RGBA buffers instead of Canvas2D backing 
   assert.match(boneyardRenderer, /resource: source\.pixels/)
   assert.match(boneyardRenderer, /resident\.pixels = EMPTY_RESIDENT_PIXELS/)
   assert.match(boneyardRenderer, /releaseCanvas\(canvas\)/)
+  assert.match(boneyardRenderer, /const residentScratch = documentNodeCanvas\(0, 0\)/)
+  assert.match(
+    boneyardRenderer,
+    /buildMainLayerResident\(document, layer, layerIndex, residentScratch\)/,
+  )
+  assert.match(
+    boneyardRenderer,
+    /buildForegroundLayerResident\([\s\S]*?residentScratch,[\s\S]*?\)/,
+  )
   assert.doesNotMatch(boneyardRenderer, /sourceCanvas:/)
   assert.doesNotMatch(boneyardRenderer, /Texture\.from\(canvas/)
+  assert.doesNotMatch(boneyardRenderer, /documentNodeCanvas\(bounds\.w, bounds\.h\)/)
 })
 
 test('secondary rain streaks share exactly two world-owned immutable gradients', () => {
