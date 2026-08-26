@@ -618,7 +618,8 @@ function stepParticipantTransition(
 
   const fadeRate = HUB_INCOMING_FADE_RATES[participant.region]
   const targetReached = distanceSquared(player.position, transition.scriptedTarget) < 0.01
-  if (transition.alpha === 0 && targetReached) {
+  const collegeOfficeWalk = participant.collegeIntro?.phase === 'office-walk'
+  if (transition.alpha === 0 && (targetReached || collegeOfficeWalk)) {
     return {
       participant: { ...participant, transition: null },
       player,

@@ -215,7 +215,7 @@ test('renderer owns the complete stock root, page-wide panels, row frames, and H
   assert.match(component, /onHover\(row\.id\)/)
   assert.match(component, /progression\.skillQuickbar/)
   assert.match(component, /onSelectConcentration/)
-  assert.match(component, /style=\{\{[\s\S]*?left: belt\[slot\]!\.x[\s\S]*?top: belt\[slot\]!\.y/)
+  assert.match(component, /style=\{\{[\s\S]*?left: belt\.x[\s\S]*?top: belt\.y/)
   assert.match(hud, /SkillQuickbar/)
   assert.match(hud, /nativeHealthHudPresentation/)
   assert.match(hud, /nativeManaHudPresentation/)

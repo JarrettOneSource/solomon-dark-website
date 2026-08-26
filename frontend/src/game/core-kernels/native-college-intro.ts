@@ -43,6 +43,7 @@ export const NATIVE_COLLEGE_TITLE_SWITCH_CURSOR = 4
 export const NATIVE_COLLEGE_COVER_FADE_RATE = Math.fround(0.0005)
 export const NATIVE_COLLEGE_OFFICE_SPEED_DECAY = Math.fround(0.99000001)
 export const NATIVE_COLLEGE_OFFICE_MIN_SPEED = Math.fround(0.5)
+export const NATIVE_COLLEGE_OFFICE_PATH_OFFSET = 102.5
 export const NATIVE_COLLEGE_CONTACT_INCREMENT = 2
 export const NATIVE_COLLEGE_CONTACT_THRESHOLD = 10
 
@@ -93,15 +94,29 @@ export function nativeCollegePathTarget(
     ? Math.max(1, sourceCursor)
     : Math.max(0, sourceCursor)
   pathCursor = Math.min(spline.extent, pathCursor)
-  let target = evaluateNativeNaturalSpline(spline, pathCursor)
+  let target = nativeCollegeSplineTarget(phase, spline, pathCursor)
   while (
     pathCursor < spline.extent
     && squaredDistance(position, target) < NATIVE_COLLEGE_PATH_TARGET_DISTANCE_SQUARED
   ) {
     pathCursor = Math.min(spline.extent, pathCursor + NATIVE_COLLEGE_PATH_CURSOR_STEP)
-    target = evaluateNativeNaturalSpline(spline, pathCursor)
+    target = nativeCollegeSplineTarget(phase, spline, pathCursor)
   }
   return Object.freeze({ pathCursor, target })
+}
+
+function nativeCollegeSplineTarget(
+  phase: Extract<NativeCollegeIntroPhase, 'courtyard-walk' | 'office-walk'>,
+  spline: typeof COURTYARD_SPLINE,
+  cursor: number,
+): Vector2 {
+  const target = evaluateNativeNaturalSpline(spline, cursor)
+  return phase === 'office-walk'
+    ? {
+        x: target.x + NATIVE_COLLEGE_OFFICE_PATH_OFFSET,
+        y: target.y + NATIVE_COLLEGE_OFFICE_PATH_OFFSET,
+      }
+    : target
 }
 
 export function stepNativeCollegeTitle(
