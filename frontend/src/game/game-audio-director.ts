@@ -66,11 +66,14 @@ export class GameAudioDirector {
   private fadeFrame = 0
   private generation = 0
   private musicScene: GameAudioScene | null = null
+  private readonly musicChannels = new Map<string, GameMusicChannel>()
   private loops = new Map<GameLoopCue, Map<string, ActiveLoopOptions>>()
   private readonly musicEnvelopes = new Map<GameMusicChannel, number>()
   private musicVolume = 1
   private now: () => number
   private outgoingMusic: GameMusicChannel | null = null
+  private readonly primedMusic = new Set<GameMusicChannel>()
+  private readonly primingMusic = new Set<GameMusicChannel>()
   private playback: GameAudioPlayback
   private requestFrame: (callback: FrameRequestCallback) => number
   private soundVolume = 1
@@ -110,7 +113,7 @@ export class GameAudioDirector {
     this.cancelMusicFade()
     this.stopAndReset(this.outgoingMusic)
     this.outgoingMusic = this.currentMusic
-    this.currentMusic = this.makeMusicChannel(
+    this.currentMusic = this.musicChannel(
       this.sources.music[GAME_SCENE_MUSIC[scene].cue],
     )
     this.currentMusic.currentTime = 0
@@ -128,6 +131,7 @@ export class GameAudioDirector {
       this.currentMusic.currentTime = 0
       void this.startCurrentMusic(this.generation)
     }
+    this.primeMusicChannels()
   }
 
   startLoop(
@@ -202,13 +206,15 @@ export class GameAudioDirector {
   destroy(): void {
     this.generation += 1
     this.cancelMusicFade()
-    this.stopAndReset(this.currentMusic)
-    this.stopAndReset(this.outgoingMusic)
+    for (const channel of this.musicChannels.values()) this.stopAndReset(channel)
     this.currentMusic = null
     this.outgoingMusic = null
     this.musicScene = null
+    this.musicChannels.clear()
     this.loops.clear()
     this.musicEnvelopes.clear()
+    this.primedMusic.clear()
+    this.primingMusic.clear()
     this.playback.destroy()
   }
 
@@ -216,6 +222,46 @@ export class GameAudioDirector {
     const channel = this.createMusicChannel(source)
     channel.preload = 'auto'
     return channel
+  }
+
+  private musicChannel(source: string): GameMusicChannel {
+    const existing = this.musicChannels.get(source)
+    if (existing) return existing
+    const channel = this.makeMusicChannel(source)
+    this.musicChannels.set(source, channel)
+    return channel
+  }
+
+  private primeMusicChannels(): void {
+    for (const source of new Set(Object.values(this.sources.music))) {
+      const channel = this.musicChannel(source)
+      if (
+        channel === this.currentMusic
+        || channel === this.outgoingMusic
+        || this.primedMusic.has(channel)
+        || this.primingMusic.has(channel)
+      ) continue
+      this.primeMusicChannel(channel)
+    }
+  }
+
+  private primeMusicChannel(channel: GameMusicChannel): void {
+    channel.currentTime = 0
+    channel.loop = true
+    channel.muted = false
+    channel.volume = 0
+    this.primingMusic.add(channel)
+    void channel.play().then(
+      () => this.finishMusicPrime(channel, true),
+      () => this.finishMusicPrime(channel, false),
+    )
+  }
+
+  private finishMusicPrime(channel: GameMusicChannel, usable: boolean): void {
+    if (!this.primingMusic.delete(channel)) return
+    if (usable) this.primedMusic.add(channel)
+    if (channel === this.currentMusic || channel === this.outgoingMusic) return
+    this.stopAndReset(channel)
   }
 
   private async startCurrentMusic(generation: number): Promise<void> {
@@ -235,6 +281,7 @@ export class GameAudioDirector {
       incoming.pause()
       return
     }
+    this.primedMusic.add(incoming)
     this.beginMusicFade(incoming, this.outgoingMusic, GAME_SCENE_MUSIC[scene].transitionTicks)
   }
 

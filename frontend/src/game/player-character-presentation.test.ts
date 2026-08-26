@@ -119,13 +119,13 @@ test('death equipment uses element defaults and every native recipe selector/col
   }).weapon, { kind: 'wand', selector: 4 })
 })
 
-test('native starter equipment uses the element death appearance', () => {
+test('native starter equipment uses its persisted randomized element appearance', () => {
   assert.deepEqual(playerDeathEquipmentAppearance(
     'air',
-    createHubEconomy(1).equipment,
+    createHubEconomy(1, { starterElement: 'air' }).equipment,
   ), {
-    hat: { primaryTint: 0xa0c3c3, secondaryTint: 0xffffff, selector: 0 },
-    robe: { primaryTint: 0xa0c3c3, secondaryTint: 0xffffff, selector: 0 },
+    hat: { primaryTint: 0x9cc8c8, secondaryTint: 0xffffff, selector: 0 },
+    robe: { primaryTint: 0x9cc8c8, secondaryTint: 0xffffff, selector: 0 },
     weapon: { kind: 'staff', selector: 0 },
   })
 })
@@ -198,10 +198,10 @@ test('dyed named clothing keeps its recipe selector and mutable colors while liv
 test('living equipment distinguishes required starter clothes from an empty weapon slot', () => {
   assert.deepEqual(playerLivingEquipmentAppearance(
     'water',
-    createHubEconomy(1).equipment,
+    createHubEconomy(1, { starterElement: 'water' }).equipment,
   ), {
-    hat: { primaryTint: 0x5e6e81, secondaryTint: 0xffffff, selector: 0 },
-    robe: { primaryTint: 0x5e6e81, secondaryTint: 0xffffff, selector: 0 },
+    hat: { primaryTint: 0x657a91, secondaryTint: 0xffffff, selector: 0 },
+    robe: { primaryTint: 0x657a91, secondaryTint: 0xffffff, selector: 0 },
     weapon: { kind: 'staff', selector: 0 },
   })
   assert.deepEqual(playerLivingEquipmentAppearance('water', {

@@ -2,11 +2,14 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  armGameSimulationCollegeIntro,
   confirmGameSimulationLoadout,
   createGameSimulation,
   enterBoneyardWorld,
   getPlayerEconomy,
+  getPlayerCharacter,
   grantGameSimulationPlayerExperience,
+  stepGameSimulationTick,
 } from '../core-server/game-simulation.ts'
 import {
   createPlayerCharacter,
@@ -1261,6 +1264,39 @@ test('client applies direction changes only to future presentation ticks', async
     atTurn.players['player-1'].headingIndex,
     beforeTurn.players['player-1'].headingIndex,
   )
+  session.destroy()
+})
+
+test('client follows the authority-owned College spline heading instead of preserving idle input facing', async () => {
+  let nowMs = 1_000
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    profile: NULL_PROFILE,
+    credential: 'spawn-secret',
+    now: () => nowMs,
+    transport,
+  })
+  let serverState = armGameSimulationCollegeIntro(
+    createGameSimulation({ 'player-1': CHARACTER }),
+    'player-1',
+  )
+  receiveWelcome(transport, createGameSnapshot(serverState, 'player-1'))
+  const session = await connecting
+  assert.equal(session.samplePresentation().players['player-1'].headingIndex, 2)
+
+  for (let tick = 0; tick < 2_000; tick += 1) {
+    serverState = stepGameSimulationTick(serverState, {}, {
+      collegeIntroReadyPlayerIds: new Set(['player-1']),
+    })
+    if (getPlayerCharacter(serverState, 'player-1').headingIndex === 18) break
+  }
+  const authoritative = getPlayerCharacter(serverState, 'player-1')
+  assert.equal(authoritative.headingIndex, 18)
+  nowMs += 50
+  receiveSnapshot(transport, createGameSnapshot(serverState, 'player-1'), 0)
+
+  assert.equal(session.samplePresentation().players['player-1'].headingIndex, 18)
   session.destroy()
 })
 

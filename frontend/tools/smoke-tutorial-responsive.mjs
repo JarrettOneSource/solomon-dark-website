@@ -26,6 +26,7 @@ import {
 import { NATIVE_ACTOR_SEPARATION_EPSILON } from '../src/game/core-kernels/actor-physics.ts'
 import { GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS } from '../src/game/core-kernels/game-run.ts'
 import { PLAYER_CHARACTER_RADIUS } from '../src/game/core-kernels/player-character.ts'
+import { nativeCollegePathHeadingIndex } from '../src/game/core-kernels/native-college-intro.ts'
 import {
   NATIVE_TUTORIAL_CAMERA_LOCK_SETTLE_TICKS,
   NATIVE_TUTORIAL_CAMERA_TARGET,
@@ -99,7 +100,7 @@ const staticServer = await startStaticClientServer({
 })
 const baseUrl = staticServer.origin
 const browser = await chromium.launch({
-  args: ['--autoplay-policy=no-user-gesture-required', '--disable-audio-output'],
+  args: ['--disable-audio-output'],
   executablePath: chromePath,
   headless: true,
 })
@@ -271,8 +272,12 @@ async function runScenario(scenario) {
     const staffMelee = scenario.name === 'stock'
       ? await exerciseTutorialStaffMelee(host, page, screenshotRoot)
       : null
-    const collegeAdmission = scenario.name === 'stock'
-      ? await exerciseTutorialCollegeAdmission(host, page, screenshotRoot)
+    const collegeAdmission = scenario.name === 'stock' || scenario.name === 'mobile'
+      ? await exerciseTutorialCollegeAdmission(
+          host,
+          page,
+          scenario.name === 'stock' ? screenshotRoot : `${screenshotRoot}-mobile`,
+        )
       : null
     assert.deepEqual({ consoleErrors, failedResponses, pageErrors }, {
       consoleErrors: [],
@@ -632,6 +637,7 @@ async function exerciseTutorialGroundDrop(host, page, screenshotPath) {
 }
 
 async function exerciseTutorialCollegeAdmission(host, page, screenshotPath) {
+  const collegeAudioEventIndex = await page.evaluate(() => window.__sdrAudioEvents.length)
   const tutorial = host.state()
   assert.equal(tutorial.world.kind, 'boneyard')
   assert.ok(tutorial.world.tutorial)
@@ -650,11 +656,16 @@ async function exerciseTutorialCollegeAdmission(host, page, screenshotPath) {
   await courtyard.waitFor({ timeout: 90_000 })
   await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 90_000 })
   assert.equal(await page.locator('.create-menu-scene').count(), 0)
+  const academyMusic = await waitForCollegeAcademyMusic(page, collegeAudioEventIndex)
   await waitForVisibleCollegeTitle(page, 7)
   const title7 = await collegeTitleReceipt(page)
+  const title7Wizard = await collegeWizardReceipt(host, page)
+  assertCollegeWizardReceipt(title7Wizard, 'Title 7')
   await page.screenshot({ path: `${screenshotPath}-raptisoft-presents.png` })
   await waitForVisibleCollegeTitle(page, 9)
   const title9 = await collegeTitleReceipt(page)
+  const title9Wizard = await collegeWizardReceipt(host, page)
+  assertCollegeWizardReceipt(title9Wizard, 'Title 9')
   await page.screenshot({ path: `${screenshotPath}-solomon-dark-title.png` })
 
   const office = page.locator('.hub-scene[data-hub-region="office"]')
@@ -664,6 +675,17 @@ async function exerciseTutorialCollegeAdmission(host, page, screenshotPath) {
   assert.equal(await office.getAttribute('data-story-office'), 'true')
   assert.equal(await office.getAttribute('data-hub-ui-surface'), 'dialogue')
   assert.equal(await office.getAttribute('data-college-intro'), 'arch-dialogue')
+  assert.equal(await page.getByRole('dialog', { name: 'Talking to The Polisher' }).count(), 0)
+  const automaticVoices = await page.evaluate((fromIndex) => window.__sdrAudioEvents
+    .slice(fromIndex)
+    .filter(({ src, type }) => type === 'buffer-start'
+      && window.__sdrAudioSourceMatches(src, 'arch-intro-0.wav'))
+    .map(({ src }) => new URL(src, location.href).pathname.split('/').pop()), collegeAudioEventIndex)
+  assert.equal(automaticVoices.length, 1)
+  assert.ok(await page.evaluate((source) => window.__sdrAudioSourceMatches(
+    source,
+    'arch-intro-0.wav',
+  ), automaticVoices[0]))
   await page.screenshot({ path: `${screenshotPath}-tutorial-college-office.png` })
 
   const playerId = host.hostPlayerId()
@@ -675,12 +697,11 @@ async function exerciseTutorialCollegeAdmission(host, page, screenshotPath) {
   assert.equal(state.world.participants[playerId]?.collegeIntro?.phase, 'arch-dialogue')
 
   await dialog.getByRole('button', { name: 'Skip' }).click()
-  await dialog.getByRole('button', { name: 'Solomon Dark?' }).click()
-  await waitForHostCollegeState(host, playerId, null)
-  const acknowledgedSave = await waitForLocalCollegeSave(page, playerId, null)
-  await dialog.getByRole('button', { name: 'Skip' }).click()
   await dialog.getByRole('button', { name: 'Done' }).click()
   await dialog.getByRole('button', { name: 'Skip' }).click()
+  await waitForHostCollegeState(host, playerId, null)
+  const acknowledgedSave = await waitForLocalCollegeSave(page, playerId, null)
+  assert.equal(acknowledgedSave.starterTint, title9Wizard.primaryTint)
   await dialog.waitFor({ state: 'hidden', timeout: 15_000 })
 
   const create = page.locator('.create-menu-scene[data-motion-settled="true"]')
@@ -696,14 +717,118 @@ async function exerciseTutorialCollegeAdmission(host, page, screenshotPath) {
   await page.screenshot({ path: `${screenshotPath}-tutorial-college-create.png` })
   return {
     acknowledgedSaveSchema: acknowledgedSave.schemaVersion,
+    academyMusic,
     autoDialogue: true,
+    automaticVoices,
     createAfterManualExit: true,
     officePlayerPosition: getPlayerCharacter(state, playerId).position,
     regionSequence: ['courtyard', 'office', 'create'],
     storyOffice: true,
     title7,
+    title7Wizard,
     title9,
+    title9Wizard,
   }
+}
+
+async function waitForCollegeAcademyMusic(page, fromEventIndex) {
+  await page.waitForFunction(() => window.__sdrAudioMediaChannels().some((channel) => (
+    window.__sdrAudioSourceMatches(channel.src, 'academy.mp3')
+      && channel.currentTime > 0
+      && channel.loop
+      && !channel.muted
+      && !channel.paused
+      && channel.volume > 0
+  )), null, { timeout: 15_000 })
+  const before = await academyMusicChannel(page)
+  await page.waitForTimeout(250)
+  const after = await academyMusicChannel(page)
+  assert.ok(after.currentTime > before.currentTime)
+  const startedCount = await page.evaluate(({ from }) => window.__sdrAudioEvents
+    .slice(from)
+    .filter(({ src, type }) => type === 'started'
+      && window.__sdrAudioSourceMatches(src, 'academy.mp3')).length, { from: fromEventIndex })
+  assert.equal(startedCount, 1)
+  const reusedUnlockedChannel = await page.evaluate(({ channelId, from }) => window.__sdrAudioEvents
+    .slice(0, from)
+    .some((event) => event.channelId === channelId && event.type === 'started'), {
+    channelId: after.channelId,
+    from: fromEventIndex,
+  })
+  assert.equal(reusedUnlockedChannel, true)
+  return {
+    currentTimeAdvance: after.currentTime - before.currentTime,
+    loop: after.loop,
+    reusedUnlockedChannel,
+    startedCount,
+    volume: after.volume,
+  }
+}
+
+function academyMusicChannel(page) {
+  return page.evaluate(() => {
+    const channel = window.__sdrAudioMediaChannels().find(({ src }) => (
+      window.__sdrAudioSourceMatches(src, 'academy.mp3')
+    ))
+    if (!channel) throw new Error('Academy music channel is absent')
+    return channel
+  })
+}
+
+async function collegeWizardReceipt(host, page) {
+  const playerId = host.hostPlayerId()
+  assert.ok(playerId)
+  const state = host.state()
+  assert.equal(state.world.kind, 'hub')
+  const participant = state.world.participants[playerId]
+  const player = getPlayerCharacter(state, playerId)
+  assert.ok(participant?.collegeIntro?.phase === 'courtyard-walk')
+  const expectedHeadingIndex = nativeCollegePathHeadingIndex(
+    'courtyard-walk',
+    participant.collegeIntro.pathCursor,
+    player.position,
+  )
+  const frame = await page.locator('.hub-world-canvas').evaluate((node) => ({
+    collegePathCursor: node.__sdrHubFrame.collegePathCursor,
+    headingIndex: node.__sdrHubFrame.playerHeadingIndex,
+    materialTint: node.__sdrHubFrame.playerMaterialTint,
+    orbSpriteCount: node.__sdrHubFrame.orbSpriteCount,
+    x: node.__sdrHubFrame.playerX,
+    y: node.__sdrHubFrame.playerY,
+  }))
+  assert.equal(typeof frame.collegePathCursor, 'number')
+  const expectedFrameHeadingIndex = nativeCollegePathHeadingIndex(
+    'courtyard-walk',
+    frame.collegePathCursor,
+    { x: frame.x, y: frame.y },
+  )
+  return {
+    expectedHeadingIndex,
+    expectedFrameHeadingIndex,
+    frameHeadingIndex: frame.headingIndex,
+    headingIndex: player.headingIndex,
+    materialTint: frame.materialTint,
+    orbSpriteCount: frame.orbSpriteCount,
+    primaryTint: getPlayerEconomy(state, playerId).equipment.hat?.iconTints?.[0] ?? null,
+    robeTint: getPlayerEconomy(state, playerId).equipment.robe?.iconTints?.[0] ?? null,
+  }
+}
+
+function assertCollegeWizardReceipt(receipt, label) {
+  assert.equal(receipt.headingIndex, receipt.expectedHeadingIndex, `${label} authority heading`)
+  assert.equal(
+    receipt.frameHeadingIndex,
+    receipt.expectedFrameHeadingIndex,
+    `${label} presentation heading: ${JSON.stringify(receipt)}`,
+  )
+  assert.equal(receipt.orbSpriteCount, 0, `${label} selected-element effect`)
+  assert.ok(receipt.primaryTint !== null, `${label} starter tint`)
+  assert.equal(receipt.robeTint, receipt.primaryTint, `${label} shared garment tint`)
+  assert.equal(receipt.materialTint, receipt.primaryTint, `${label} rendered garment tint`)
+  const red = receipt.primaryTint >> 16
+  const green = (receipt.primaryTint >> 8) & 0xff
+  const blue = receipt.primaryTint & 0xff
+  assert.ok(green > red && green > blue, `${label} College green tint`)
 }
 
 async function waitForVisibleCollegeTitle(page, record) {
@@ -761,7 +886,11 @@ async function waitForLocalCollegeSave(page, playerId, phase) {
         if (
           restored.state.world.kind === 'hub'
           && (restored.state.world.participants[playerId]?.collegeIntro?.phase ?? null) === phase
-        ) return { schemaVersion: WEB_GAME_SAVE_SCHEMA_VERSION }
+        ) return {
+          schemaVersion: WEB_GAME_SAVE_SCHEMA_VERSION,
+          starterTint: getPlayerEconomy(restored.state, playerId)
+            .equipment.hat?.iconTints?.[0] ?? null,
+        }
       } catch (error) {
         lastReceipt = {
           error: error instanceof Error ? error.message : String(error),

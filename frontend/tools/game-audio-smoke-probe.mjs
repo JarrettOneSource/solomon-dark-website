@@ -1,6 +1,7 @@
 export function installGameAudioSmokeProbe({
   eventsGlobal = '__sdrAudioEvents',
   masterVolumesGlobal = '__sdrAudioMasterVolumes',
+  mediaChannelsGlobal = '__sdrAudioMediaChannels',
   sourceMatcherGlobal = '__sdrAudioSourceMatches',
   sourcesGlobal = '__sdrAudioPlaySources',
 } = {}) {
@@ -9,6 +10,7 @@ export function installGameAudioSmokeProbe({
   const encodedSources = new WeakMap()
   const decodedSources = new WeakMap()
   const bufferMasters = []
+  const mediaElements = []
   const gainDestinations = new WeakMap()
   const mediaChannels = new WeakMap()
   const nativeFetch = window.fetch
@@ -37,6 +39,7 @@ export function installGameAudioSmokeProbe({
     const channelId = nextChannelId
     nextChannelId += 1
     mediaChannels.set(media, channelId)
+    mediaElements.push(media)
     return channelId
   }
   const semanticFootstepTick = () => document.querySelector('.boneyard-scene, .hub-scene')
@@ -130,6 +133,7 @@ export function installGameAudioSmokeProbe({
     nativeMediaPause.call(this)
   }
   HTMLMediaElement.prototype.play = function () {
+    const media = this
     const event = {
       at: performance.now(),
       channelId: mediaChannel(this),
@@ -146,7 +150,12 @@ export function installGameAudioSmokeProbe({
     const playback = nativeMediaPlay.call(this)
     if (playback && typeof playback.then === 'function') {
       void playback.then(
-        () => events.push({ ...event, at: performance.now(), type: 'started' }),
+        () => events.push({
+          ...event,
+          at: performance.now(),
+          src: media.currentSrc || media.src,
+          type: 'started',
+        }),
         () => {},
       )
     }
@@ -160,6 +169,17 @@ export function installGameAudioSmokeProbe({
         .filter(({ src }) => src.includes(sourceFragment))
         .map(({ gain }) => gain))]
         .map(({ gain }) => gain.value),
+    },
+    [mediaChannelsGlobal]: {
+      value: () => mediaElements.map((media) => ({
+        channelId: mediaChannel(media),
+        currentTime: media.currentTime,
+        loop: media.loop,
+        muted: media.muted,
+        paused: media.paused,
+        src: media.currentSrc || media.src,
+        volume: media.volume,
+      })),
     },
     [sourceMatcherGlobal]: { value: sourceMatches },
     [sourcesGlobal]: { value: sources },

@@ -69,6 +69,7 @@ import {
 } from '../core-kernels/native-hagatha-effects.ts'
 import {
   archiveHagathaLastWordItems,
+  applyNativeStarterEquipmentAppearance,
   archiveCompletedRunEconomy,
   buyDowsingOffer,
   buyFomentiusItem,
@@ -208,7 +209,9 @@ import { stepPlayerStaffCombatSystem } from './player-staff-combat-system.ts'
 import { sealPlayerCombatInput } from './player-combat-input.ts'
 import {
   NATIVE_COLLEGE_COURTYARD_PATH,
+  nativeCollegePathHeadingIndex,
 } from '../core-kernels/native-college-intro.ts'
+import { rollNativeStarterEquipmentAppearance } from '../core-kernels/native-starter-equipment.ts'
 import {
   addHubParticipant,
   beginHubCollegeIntro,
@@ -536,15 +539,46 @@ export function armGameSimulationCollegeIntro(
   if (state.world.kind !== 'hub' || state.run.phase !== 'hub') return state
   const economy = playerEconomyAt(state.playerEntities, playerId)
   const player = playerCharacterAt(state.playerEntities, playerId)
-  if (!economy?.collegeIntroPending || !player) return state
-  const world = beginHubCollegeIntro(state.world, playerId)
-  if (world === state.world) return state
+  const participant = state.world.participants[playerId]
+  if (!economy?.collegeIntroPending || !player || !participant) return state
+  const progression = playerProgressionAt(state.playerEntities, playerId)
+  if (!progression) return state
+  const appearance = rollNativeStarterEquipmentAppearance(
+    createNativeRng(progression.offerSeed),
+    'college',
+  )
+  const economyWithAppearance = applyNativeStarterEquipmentAppearance(economy, appearance)
+  const collegeIntroAlreadyPassed = participant.collegeIntro === null
+    && (participant.region !== 'courtyard' || participant.transition !== null)
+  const world = collegeIntroAlreadyPassed
+    ? state.world
+    : beginHubCollegeIntro(state.world, playerId)
+  if (world === state.world) {
+    return economyWithAppearance === economy
+      ? state
+      : {
+          ...state,
+          playerEntities: replacePlayerEconomy(
+            state.playerEntities,
+            playerId,
+            economyWithAppearance,
+          ),
+        }
+  }
+  const character = {
+    ...createPlayerCharacter(player.config, NATIVE_COLLEGE_COURTYARD_PATH[0]),
+    headingIndex: nativeCollegePathHeadingIndex(
+      'courtyard-walk',
+      0,
+      NATIVE_COLLEGE_COURTYARD_PATH[0],
+    ),
+  }
   return {
     ...state,
-    playerEntities: replacePlayerCharacter(
-      state.playerEntities,
+    playerEntities: replacePlayerEconomy(
+      replacePlayerCharacter(state.playerEntities, playerId, character),
       playerId,
-      createPlayerCharacter(player.config, NATIVE_COLLEGE_COURTYARD_PATH[0]),
+      economyWithAppearance,
     ),
     world,
   }
@@ -1093,6 +1127,7 @@ export function gameSimulationDurableProfileEconomy(
           actor.kind === 'sack' && actor.item ? [actor.item] : []
         ))
       : [],
+    starterElement: player.config.element,
     transferCarriedItems: completedRun,
   })
 }
@@ -1114,6 +1149,7 @@ export function gameSimulationRetiredWizardEconomy(
     displayName: player.config.displayName,
     groundGold: 0,
     groundItems: [],
+    starterElement: player.config.element,
     transferCarriedItems: true,
   })
 }

@@ -4,6 +4,7 @@ import {
   planHubScriptedMovement,
   type HubParticipantState,
 } from '../core-kernels/hub-regions.ts'
+import { nativeCollegePathTarget } from '../core-kernels/native-college-intro.ts'
 import {
   PLAYER_CHARACTER_RADIUS,
   commitPlayerCharacterTick,
@@ -30,6 +31,27 @@ export function predictPlayerCharacterInHub(
       previous,
       participant.transition.scriptedTarget,
       participant.transition.scriptedSpeed,
+    )
+    return {
+      collisionRngState,
+      player: commitPlayerCharacterTick(previous, plan, {
+        x: previous.position.x + plan.delta.x,
+        y: previous.position.y + plan.delta.y,
+      }),
+    }
+  }
+  if (participant.collegeIntro && participant.collegeIntro.phase !== 'arch-dialogue') {
+    const target = nativeCollegePathTarget(
+      participant.collegeIntro.phase,
+      participant.collegeIntro.pathCursor,
+      previous.position,
+    )
+    const plan = planHubScriptedMovement(
+      previous,
+      target.target,
+      participant.collegeIntro.phase === 'office-walk'
+        ? participant.collegeIntro.officeSpeed
+        : 1,
     )
     return {
       collisionRngState,

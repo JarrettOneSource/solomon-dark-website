@@ -7,9 +7,44 @@ import {
   NATIVE_COLLEGE_TITLE_CURSOR_STEP,
   nativeCollegeContactStep,
   nativeCollegeOfficeSpeed,
+  nativeCollegePathHeadingIndex,
   nativeCollegePathTarget,
   nativeCollegeTitlePresentation,
 } from './native-college-intro.ts'
+import { createNativeRng } from './native-rng.ts'
+import {
+  NATIVE_STARTER_EQUIPMENT_BASE_COLORS,
+  rollNativeStarterEquipmentAppearance,
+} from './native-starter-equipment.ts'
+
+test('rolls every native starter garment base and the pre-Create College override', () => {
+  assert.deepEqual(NATIVE_STARTER_EQUIPMENT_BASE_COLORS, {
+    air: [0.1, 1, 1],
+    college: [0.25, 0.5, 0.25],
+    earth: [0, 0.75, 0],
+    ether: [1, 0.1, 1],
+    fire: [1, 0.1, 0.1],
+    water: [0.1, 0.5, 1],
+  })
+
+  const appearances = Object.keys(NATIVE_STARTER_EQUIPMENT_BASE_COLORS).map((kind) => (
+    rollNativeStarterEquipmentAppearance(
+      createNativeRng(0x1357_9bdf),
+      kind as keyof typeof NATIVE_STARTER_EQUIPMENT_BASE_COLORS,
+    )
+  ))
+  assert.equal(new Set(appearances.map(({ primaryTint }) => primaryTint)).size, 6)
+  for (const appearance of appearances) {
+    assert.equal(appearance.secondaryTint, 0xffffff)
+    assert.equal(appearance.rng.indexA, 3)
+    assert.equal(appearance.rng.indexB, 34)
+  }
+
+  const college = rollNativeStarterEquipmentAppearance(createNativeRng(0x1357_9bdf), 'college')
+  assert.equal(college.primaryTint, 0x687769)
+  assert.ok((college.primaryTint >> 16) < ((college.primaryTint >> 8) & 0xff))
+  assert.ok((college.primaryTint & 0xff) < ((college.primaryTint >> 8) & 0xff))
+})
 
 test('drains the complete authored Courtyard and Office admission splines', () => {
   assert.deepEqual(NATIVE_COLLEGE_COURTYARD_PATH, [
@@ -40,6 +75,11 @@ test('targets at least Courtyard segment one and advances only inside the strict
   const first = nativeCollegePathTarget('courtyard-walk', 0, { x: 972, y: 1_044 })
   assert.equal(first.pathCursor, 1)
   assert.deepEqual(first.target, { x: 1_074, y: 839 })
+  assert.equal(nativeCollegePathHeadingIndex(
+    'courtyard-walk',
+    0,
+    NATIVE_COLLEGE_COURTYARD_PATH[0],
+  ), 2)
 
   const exactTen = nativeCollegePathTarget(
     'courtyard-walk',

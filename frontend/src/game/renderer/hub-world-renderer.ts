@@ -67,6 +67,7 @@ interface HubFrameDiagnostics {
   astronomerRenderable: boolean
   astronomerTelescopeFrame: number
   cameraRenderGroupCount: number
+  collegePathCursor: number | null
   frameCount: number
   fadeAlpha: number
   hostPlayerId: string | null
@@ -272,6 +273,8 @@ export async function createHubWorldRenderer(
     astronomerTelescopeFrame: 0,
     cameraRenderGroupCount: courtyardScene.cameraRenderGroupCount
       + Number(privateRoomScene.world.isRenderGroup),
+    collegePathCursor: options.initialSnapshot.world.participants[options.playerId]
+      ?.collegeIntro?.pathCursor ?? null,
     frameCount: 0,
     fadeAlpha: 0,
     hostPlayerId: options.initialSnapshot.hostPlayerId,
@@ -349,6 +352,7 @@ export async function createHubWorldRenderer(
     frameDiagnostics.astronomerTelescopeFrame = courtyardScene.astronomerTelescopeFrame
     frameDiagnostics.frameCount = frameCount
     frameDiagnostics.fadeAlpha = participant?.transition?.alpha ?? 0
+    frameDiagnostics.collegePathCursor = participant?.collegeIntro?.pathCursor ?? null
     frameDiagnostics.hostPlayerId = snapshot.hostPlayerId
     frameDiagnostics.playerCount = Object.keys(snapshot.players).length
     const currentScene = participant?.region === 'courtyard'

@@ -264,6 +264,10 @@ test('schema 15 resumes every College admission phase and its exact player posit
   const restoredAcknowledged = assertResumed(acknowledged.state)
   assert.equal(participant(restoredAcknowledged)?.collegeIntro, null)
   assert.equal(participant(restoredAcknowledged)?.region, 'office')
+  assert.strictEqual(
+    armGameSimulationCollegeIntro(restoredAcknowledged, 'owner'),
+    restoredAcknowledged,
+  )
 })
 
 test('a client-held save cannot fork the process-owned shared memorial', () => {

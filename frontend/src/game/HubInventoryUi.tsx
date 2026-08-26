@@ -267,6 +267,9 @@ export default function HubInventoryUi({
   )
 
   const closeSurface = useCallback(() => {
+    if (surface?.kind === 'dialogue' && surface.source === 'college-intro') {
+      onAction({ type: 'acknowledge-college-intro-dialogue' })
+    }
     if (surface?.kind === 'service' && surface.trader === 'shlorio'
       && economy.dowsingOffers.length > 0) {
       onAction({ type: 'close-dowsing' })
@@ -1027,6 +1030,7 @@ function NativeHubSurface({
                 if (surface.source === 'college-intro' && !collegeIntroAcknowledgedRef.current) {
                   collegeIntroAcknowledgedRef.current = true
                   onAction({ type: 'acknowledge-college-intro-dialogue' })
+                  onSurfaceChange({ ...surface, source: 'world' })
                 }
                 if (choice.kind === 'question') {
                   const answer = hubNpcQuestion(

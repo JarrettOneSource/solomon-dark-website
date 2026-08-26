@@ -212,7 +212,7 @@ export function addPlayerEntity(
   },
 ): PlayerEntityStore {
   if (playerEntityIndex(source, playerId) >= 0) return source
-  const economy = createHubEconomy(offerSeed)
+  const economy = createHubEconomy(offerSeed, { starterElement: config.element })
   const statBook = playerStatBook()
   const skillState = createPlayerSkillRuntime(
     createPlayerSkillBook(config),

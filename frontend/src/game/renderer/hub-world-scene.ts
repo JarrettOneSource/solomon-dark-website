@@ -614,6 +614,7 @@ export class HubWorldScene {
           playerId,
           'hub:courtyard',
         ),
+        snapshot.world.participants[playerId]?.collegeIntro === null,
       )
     }
     for (const [playerId, view] of this.players) {

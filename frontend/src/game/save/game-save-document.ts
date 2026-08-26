@@ -468,6 +468,7 @@ export function restoreGameSaveProfile(document: string): RestoredGameSaveProfil
       displayName: parsed.continuation?.summary.character.displayName ?? 'Wizard',
       groundGold: 0,
       groundItems: [],
+      starterElement: parsed.continuation?.summary.character.element ?? 'ether',
       transferCarriedItems: false,
     })
   }

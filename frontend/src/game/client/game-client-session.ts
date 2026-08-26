@@ -1378,7 +1378,10 @@ export function connectGameClientSession(
         player: {
           ...copyPlayer(authoritative),
           gaitDegrees: previous.player.gaitDegrees,
-          headingIndex: playerPrimaryCastOwnsFacing(authoritative.primaryCast)
+          headingIndex: (
+            participant.collegeIntro !== null
+            && participant.collegeIntro.phase !== 'arch-dialogue'
+          ) || playerPrimaryCastOwnsFacing(authoritative.primaryCast)
             ? authoritative.headingIndex
             : previous.player.headingIndex,
           velocity: { ...previous.player.velocity },

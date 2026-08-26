@@ -186,11 +186,20 @@ test('a pending first wizard consumes the College intro only after the Courtyard
     return state.world.participants.owner
   }
   const initialRevision = getPlayerEconomy(state, 'owner').revision
+  const initialStarterTint = getPlayerEconomy(state, 'owner').equipment.hat?.iconTints
+  assert.ok(initialStarterTint)
+  assert.deepEqual(getPlayerEconomy(state, 'owner').equipment.robe?.iconTints, initialStarterTint)
 
   state = armGameSimulationCollegeIntro(state, 'owner')
   assert.equal(ownerParticipant()?.region, 'courtyard')
   assert.equal(ownerParticipant()?.collegeIntro?.phase, 'courtyard-walk')
   assert.deepEqual(getPlayerCharacter(state, 'owner').position, { x: 972, y: 1_044 })
+  assert.equal(getPlayerCharacter(state, 'owner').headingIndex, 2)
+  const collegeStarterTint = getPlayerEconomy(state, 'owner').equipment.hat?.iconTints
+  assert.ok(collegeStarterTint)
+  assert.notDeepEqual(collegeStarterTint, initialStarterTint)
+  assert.deepEqual(getPlayerEconomy(state, 'owner').equipment.robe?.iconTints, collegeStarterTint)
+  assert.equal(collegeStarterTint[1], 0xffffff)
 
   for (let tick = 0; tick < 5_000; tick += 1) {
     if (ownerParticipant()?.collegeIntro?.phase === 'arch-dialogue') break
@@ -210,6 +219,7 @@ test('a pending first wizard consumes the College intro only after the Courtyard
   assert.equal(acknowledged.accepted, true)
   state = acknowledged.state
   assert.equal(ownerParticipant()?.collegeIntro, null)
+  assert.strictEqual(armGameSimulationCollegeIntro(state, 'owner'), state)
 
   state = {
     ...state,
@@ -240,6 +250,7 @@ test('a pending first wizard consumes the College intro only after the Courtyard
   state = confirmed
   assert.equal(ownerParticipant()?.transition?.phase, 'incoming')
   assert.equal(getPlayerCharacter(state, 'owner').config.displayName, 'Reborn')
+  assert.deepEqual(getPlayerEconomy(state, 'owner').equipment.hat?.iconTints, collegeStarterTint)
 
   for (let ticks = 0; ownerParticipant()?.transition && ticks < 200; ticks += 1) {
     state = stepGameSimulationTick(state, {})

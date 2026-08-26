@@ -230,7 +230,16 @@ function deathTintedAppearance(
     }
   }
   if (item.recipeIndex !== null) return requiredDeathAppearance(item, expectedType, appearances)
-  if (item.nativeSelector === undefined) return fallback
+  if (item.nativeSelector === undefined) {
+    const tints = item.iconTints
+    if (tints === undefined) return fallback
+    if (
+      item.equipmentType !== expectedType
+      || tints[0] === null
+      || tints[1] === null
+    ) throw new Error(`Unsupported starter native ${expectedType} appearance`)
+    return { primaryTint: tints[0], secondaryTint: tints[1], selector: 0 }
+  }
   const tints = item.iconTints
   if (
     item.equipmentType !== expectedType

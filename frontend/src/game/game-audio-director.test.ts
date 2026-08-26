@@ -448,6 +448,30 @@ test('holds a blocked scene at its beginning and retries on unlock', async () =>
   assert.equal(created[0].volume, 1)
 })
 
+test('primes every loaded song during input unlock for automatic College music', async () => {
+  const { created, director, frames } = fixture()
+  director.setScene('game-over')
+  await flushPromises()
+  assert.equal(created.length, 1)
+
+  director.unlock()
+  await flushPromises()
+  assert.equal(created.length, Object.keys(SOURCES.music).length)
+  const academy = created.find(({ src }) => src === 'academy.mp3')!
+  assert.equal(academy.playCalls, 1)
+  assert.equal(academy.paused, true)
+  assert.equal(academy.volume, 0)
+
+  director.setScene('hub')
+  await flushPromises()
+  assert.equal(created.length, Object.keys(SOURCES.music).length)
+  assert.equal(academy.playCalls, 2)
+  frames.runAt(10)
+  assert.equal(academy.volume, 0.5)
+  frames.runAt(20)
+  assert.equal(academy.volume, 1)
+})
+
 test('overlaps Sound instances and reuses restartable SoundStream channels', async () => {
   const { created, director, playback } = fixture()
   director.playSound('click', { playbackRate: 1.05, volume: 0.5 })

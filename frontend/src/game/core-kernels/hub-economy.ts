@@ -4,6 +4,11 @@ import {
   drawNativeInteger,
   type NativeRngState,
 } from './native-rng.ts'
+import type { WizardElement } from './player-character.ts'
+import {
+  rollNativeStarterEquipmentAppearance,
+  type NativeStarterEquipmentAppearance,
+} from './native-starter-equipment.ts'
 import {
   createNativeHubNpcState,
   nativeTeacherSpellDefinition,
@@ -398,6 +403,7 @@ export interface CompletedRunEconomyArchive {
   readonly displayName: string
   readonly groundGold: number
   readonly groundItems: readonly HubInventoryItem[]
+  readonly starterElement?: WizardElement
   readonly transferCarriedItems: boolean
 }
 
@@ -640,9 +646,16 @@ export function createNativeUnforgeBonuses(): NativeUnforgeBonuses {
 
 export function createHubEconomy(
   seed: number,
-  options: { readonly hagathaBundleSelectors?: readonly number[] } = {},
+  options: {
+    readonly hagathaBundleSelectors?: readonly number[]
+    readonly starterElement?: WizardElement
+  } = {},
 ): HubEconomyState {
-  const starters = starterLoadout(1)
+  const starterAppearance = rollNativeStarterEquipmentAppearance(
+    createNativeRng(seed),
+    options.starterElement ?? 'ether',
+  )
+  const starters = starterLoadout(1, starterAppearance)
   const stock = rollFomentiusStock(createNativeRng(seed), starters.nextItemId)
   const bundleSelectors = stableSelectors(options.hagathaBundleSelectors ?? [])
   return {
@@ -667,6 +680,19 @@ export function createHubEconomy(
     tonicPurchases: 0,
     tutorialPending: true,
     unforgeBonuses: createNativeUnforgeBonuses(),
+  }
+}
+
+export function applyNativeStarterEquipmentAppearance(
+  source: HubEconomyState,
+  appearance: Pick<NativeStarterEquipmentAppearance, 'primaryTint' | 'secondaryTint'>,
+): HubEconomyState {
+  const hat = starterWearableWithAppearance(source.equipment.hat, 'hat', appearance)
+  const robe = starterWearableWithAppearance(source.equipment.robe, 'robe', appearance)
+  if (hat === source.equipment.hat && robe === source.equipment.robe) return source
+  return {
+    ...source,
+    equipment: { ...source.equipment, hat, robe },
   }
 }
 
@@ -710,7 +736,11 @@ export function archiveCompletedRunEconomy(
       nextItemId += 1
     }
   }
-  const starters = starterLoadout(nextItemId)
+  const starterAppearance = rollNativeStarterEquipmentAppearance(
+    rng,
+    archive.starterElement ?? 'ether',
+  )
+  const starters = starterLoadout(nextItemId, starterAppearance)
   nextItemId = starters.nextItemId
   const stock = rollFomentiusStock(rng, nextItemId)
   const result = {
@@ -1810,10 +1840,14 @@ function starterEquipmentItem(
   name: string,
   nativeTypeId: 7004 | 7005 | 7006,
   iconRecords: readonly number[],
+  appearance?: Pick<NativeStarterEquipmentAppearance, 'primaryTint' | 'secondaryTint'>,
 ): HubInventoryItem {
   return {
     equipmentType,
     iconRecords,
+    ...(appearance && equipmentType !== 'staff'
+      ? { iconTints: [appearance.primaryTint, appearance.secondaryTint] as const }
+      : {}),
     id,
     kind: 'equipment',
     name,
@@ -1825,17 +1859,23 @@ function starterEquipmentItem(
   }
 }
 
-function starterEquipment(firstItemId = 3): HubEquipmentState {
+function starterEquipment(
+  firstItemId = 3,
+  appearance?: Pick<NativeStarterEquipmentAppearance, 'primaryTint' | 'secondaryTint'>,
+): HubEquipmentState {
   return {
     amulet: null,
-    hat: starterEquipmentItem(firstItemId, 'hat', 'Hat', 7005, [34, 38]),
+    hat: starterEquipmentItem(firstItemId, 'hat', 'Hat', 7005, [34, 38], appearance),
     rings: [null, null, null],
-    robe: starterEquipmentItem(firstItemId + 1, 'robe', 'Robe', 7006, [64, 67]),
+    robe: starterEquipmentItem(firstItemId + 1, 'robe', 'Robe', 7006, [64, 67], appearance),
     weapon: starterEquipmentItem(firstItemId + 2, 'staff', 'Staff', 7004, [72]),
   }
 }
 
-function starterLoadout(firstItemId: number): {
+function starterLoadout(
+  firstItemId: number,
+  appearance?: Pick<NativeStarterEquipmentAppearance, 'primaryTint' | 'secondaryTint'>,
+): {
   readonly backpack: readonly HubInventoryItem[]
   readonly equipment: HubEquipmentState
   readonly nextItemId: number
@@ -1845,9 +1885,28 @@ function starterLoadout(firstItemId: number): {
       starterPotion(firstItemId, 'health-potion', 'Health Potion', 0, 46),
       starterPotion(firstItemId + 1, 'mana-potion', 'Mana Potion', 1, 47),
     ],
-    equipment: starterEquipment(firstItemId + 2),
+    equipment: starterEquipment(firstItemId + 2, appearance),
     nextItemId: firstItemId + 5,
   }
+}
+
+function starterWearableWithAppearance(
+  item: HubInventoryItem | null,
+  equipmentType: 'hat' | 'robe',
+  appearance: Pick<NativeStarterEquipmentAppearance, 'primaryTint' | 'secondaryTint'>,
+): HubInventoryItem | null {
+  if (
+    item === null
+    || item.equipmentType !== equipmentType
+    || item.generatedLevel !== undefined
+    || item.kind !== 'equipment'
+    || item.nativeEffects !== undefined
+    || item.nativeSelector !== undefined
+    || item.recipeIndex !== null
+  ) return item
+  const iconTints = [appearance.primaryTint, appearance.secondaryTint] as const
+  if (item.iconTints?.[0] === iconTints[0] && item.iconTints[1] === iconTints[1]) return item
+  return { ...item, iconTints }
 }
 
 function equippedItems(equipment: HubEquipmentState): readonly HubInventoryItem[] {

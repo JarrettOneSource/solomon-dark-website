@@ -2,6 +2,7 @@ import {
   compileNativeNaturalSpline,
   evaluateNativeNaturalSpline,
 } from '../native-natural-spline.ts'
+import { actorHeadingFromVector, actorHeadingIndex } from './actor-heading.ts'
 import type { Vector2 } from './vector.ts'
 
 export const NATIVE_COLLEGE_COURTYARD_PATH = Object.freeze([
@@ -103,6 +104,18 @@ export function nativeCollegePathTarget(
     target = nativeCollegeSplineTarget(phase, spline, pathCursor)
   }
   return Object.freeze({ pathCursor, target })
+}
+
+export function nativeCollegePathHeadingIndex(
+  phase: Extract<NativeCollegeIntroPhase, 'courtyard-walk' | 'office-walk'>,
+  sourceCursor: number,
+  position: Readonly<Vector2>,
+): number {
+  const { target } = nativeCollegePathTarget(phase, sourceCursor, position)
+  return actorHeadingIndex(actorHeadingFromVector(
+    target.x - position.x,
+    target.y - position.y,
+  ))
 }
 
 function nativeCollegeSplineTarget(

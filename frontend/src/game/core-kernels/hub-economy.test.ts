@@ -259,6 +259,8 @@ test('completed-run archival retains carried and Last Word goods in one named Sa
     archived.backpack.map(({ kind }) => kind),
     ['health-potion', 'mana-potion'],
   )
+  assert.ok(archived.equipment.hat?.iconTints)
+  assert.deepEqual(archived.equipment.robe?.iconTints, archived.equipment.hat?.iconTints)
   const retained = archived.storage.at(-1)!
   assert.equal(retained.kind, 'sack')
   assert.ok(NATIVE_RETAINED_SACK_SUFFIXES.some(suffix => (
