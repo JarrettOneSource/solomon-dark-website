@@ -62,6 +62,7 @@ import { GAME_WEBSOCKET_COMPRESSION } from './websocket-compression.ts'
 import {
   createGameProfileSaveDocument,
   createGameSaveDocument,
+  restoreGameSaveDocument,
   restoreGameSaveProfile,
 } from '../save/game-save-document.ts'
 import type { GameSaveIntent } from '../save/game-save-contract.ts'
@@ -634,40 +635,68 @@ test('a requested fresh College admission is authoritative through Office and ch
   const participant = client.welcome.snapshot.world.kind === 'hub'
     ? client.welcome.snapshot.world.participants[client.welcome.playerId]
     : null
-  assert.equal(participant?.region, 'office')
-  assert.equal(participant?.transition?.phase, 'college-intro')
+  assert.equal(participant?.region, 'courtyard')
+  assert.equal(participant?.transition, null)
+  assert.equal(participant?.collegeIntro?.phase, 'courtyard-walk')
   assert.deepEqual(
     client.welcome.snapshot.players[client.welcome.playerId].position,
-    { x: 512, y: 562 },
+    { x: 972, y: 1_044 },
   )
   await new Promise((resolve) => setTimeout(resolve, 75))
   const waitingState = host.state()
   assert.equal(
     waitingState.world.kind === 'hub'
-      ? waitingState.world.participants[client.welcome.playerId]?.transition?.alpha
+      ? waitingState.world.participants[client.welcome.playerId]?.collegeIntro?.pathCursor
       : null,
-    1,
+    0,
   )
+  const walking = nextMessage(client.socket, (message) => (
+    message.type === 'server-snapshot'
+    && message.snapshot.world.kind === 'hub'
+    && (message.snapshot.world.participants[client.welcome.playerId]?.collegeIntro?.titleCursor
+      ?? 0) > 0
+  ))
   client.socket.send(encodeGameMessage({ type: 'client-ready-college-intro' }))
-
-  const officeReady = await nextMessage(client.socket, (message) => (
+  await walking
+  const officeReadyMessage = nextMessage(client.socket, (message) => (
     message.type === 'server-snapshot'
     && message.snapshot.world.kind === 'hub'
     && message.snapshot.world.participants[client.welcome.playerId]?.region === 'office'
-    && message.snapshot.world.participants[client.welcome.playerId]?.transition === null
+    && message.snapshot.world.participants[client.welcome.playerId]?.collegeIntro?.phase
+      === 'arch-dialogue'
   ))
+  placeCollegeAdmissionAtArch(host, client.welcome.playerId)
+
+  const officeReady = await officeReadyMessage
   assert.equal(officeReady.type, 'server-snapshot')
   assert.equal(
     officeReady.snapshot.players[client.welcome.playerId].economy.collegeIntroPending,
     true,
   )
-  placeCollegeAdmissionAtOfficeExit(host, client.welcome.playerId)
-  const loadout = await nextMessage(client.socket, (message) => (
+  const dialogueAcknowledged = nextMessage(client.socket, (message) => (
+    message.type === 'server-snapshot'
+    && message.snapshot.world.kind === 'hub'
+    && message.snapshot.world.participants[client.welcome.playerId]?.collegeIntro === null
+  ))
+  const dialogueCheckpoint = nextMessage(client.socket, (message) => {
+    if (message.type !== 'server-save-checkpoint') return false
+    const restored = restoreGameSaveDocument(message.save)
+    return restored.state.world.kind === 'hub'
+      && restored.state.world.participants[client.welcome.playerId]?.collegeIntro === null
+  })
+  client.socket.send(encodeGameMessage({
+    type: 'client-hub-action',
+    action: { type: 'acknowledge-college-intro-dialogue' },
+  }))
+  await Promise.all([dialogueAcknowledged, dialogueCheckpoint])
+  const loadoutMessage = nextMessage(client.socket, (message) => (
     message.type === 'server-snapshot'
     && message.snapshot.world.kind === 'hub'
     && message.snapshot.world.participants[client.welcome.playerId]?.transition?.phase
       === 'college-loadout'
   ))
+  placeCollegeAdmissionAtOfficeExit(host, client.welcome.playerId)
+  const loadout = await loadoutMessage
   assert.equal(loadout.type, 'server-snapshot')
   assert.deepEqual(
     loadout.snapshot.players[client.welcome.playerId].position,
@@ -3891,27 +3920,43 @@ async function completeLeaderboardScenario(
     assert.equal(welcome.type, 'server-welcome')
     assert.equal(welcome.developerAccess, scenario.developerAccess === true)
     const collegeIntro = welcome.snapshot.world.kind === 'hub'
-      && welcome.snapshot.world.participants[welcome.playerId]?.transition?.phase
-        === 'college-intro'
-    const officeReady = collegeIntro
-      ? nextMessage(socket, message => (
-          message.type === 'server-snapshot'
-          && message.snapshot.world.kind === 'hub'
-          && message.snapshot.world.participants[welcome.playerId]?.region === 'office'
-          && message.snapshot.world.participants[welcome.playerId]?.transition === null
-        ))
-      : null
-    socket.send(encodeGameMessage({ type: 'client-ready-college-intro' }))
-    if (officeReady) {
-      const ready = await officeReady
+      && welcome.snapshot.world.participants[welcome.playerId]?.collegeIntro !== null
+    if (collegeIntro) {
+      const walking = nextMessage(socket, message => (
+        message.type === 'server-snapshot'
+        && message.snapshot.world.kind === 'hub'
+        && (message.snapshot.world.participants[welcome.playerId]?.collegeIntro?.titleCursor
+          ?? 0) > 0
+      ))
+      socket.send(encodeGameMessage({ type: 'client-ready-college-intro' }))
+      await walking
+      const readyMessage = nextMessage(socket, message => (
+        message.type === 'server-snapshot'
+        && message.snapshot.world.kind === 'hub'
+        && message.snapshot.world.participants[welcome.playerId]?.collegeIntro?.phase
+          === 'arch-dialogue'
+      ))
+      placeCollegeAdmissionAtArch(host, welcome.playerId)
+      const ready = await readyMessage
       assert.equal(ready.type, 'server-snapshot')
-      placeCollegeAdmissionAtOfficeExit(host, welcome.playerId)
-      const loadout = await nextMessage(socket, message => (
+      const acknowledged = nextMessage(socket, message => (
+        message.type === 'server-snapshot'
+        && message.snapshot.world.kind === 'hub'
+        && message.snapshot.world.participants[welcome.playerId]?.collegeIntro === null
+      ))
+      socket.send(encodeGameMessage({
+        type: 'client-hub-action',
+        action: { type: 'acknowledge-college-intro-dialogue' },
+      }))
+      await acknowledged
+      const loadoutMessage = nextMessage(socket, message => (
         message.type === 'server-snapshot'
         && message.snapshot.world.kind === 'hub'
         && message.snapshot.world.participants[welcome.playerId]?.transition?.phase
           === 'college-loadout'
       ))
+      placeCollegeAdmissionAtOfficeExit(host, welcome.playerId)
+      const loadout = await loadoutMessage
       assert.equal(loadout.type, 'server-snapshot')
       socket.send(encodeGameMessage({
         type: 'client-confirm-loadout',
@@ -3925,6 +3970,8 @@ async function completeLeaderboardScenario(
         && message.snapshot.world.participants[welcome.playerId]?.region === 'courtyard'
         && message.snapshot.world.participants[welcome.playerId]?.transition === null
       ))
+    } else {
+      socket.send(encodeGameMessage({ type: 'client-ready-college-intro' }))
     }
     const loaded = nextMessage(socket, message => message.type === 'server-boneyard-loaded')
     socket.send(encodeGameMessage({
@@ -4040,6 +4087,46 @@ function placeCollegeAdmissionAtOfficeExit(
     {
       ...player,
       position: { x: 512, y: 924 },
+      velocity: { x: 0, y: 0 },
+    },
+  )
+}
+
+function placeCollegeAdmissionAtArch(
+  host: Awaited<ReturnType<typeof startGameHost>>,
+  playerId: string,
+): void {
+  const state = host.playerState(playerId)
+  if (!state || state.world.kind !== 'hub') throw new Error('expected College state')
+  const participant = state.world.participants[playerId]
+  if (!participant?.collegeIntro) throw new Error('expected active College intro')
+  state.world = {
+    ...state.world,
+    participants: {
+      ...state.world.participants,
+      [playerId]: {
+        collegeIntro: {
+          ...participant.collegeIntro,
+          contactCounter: 0,
+          coverAlpha: 0,
+          dialogueSequence: participant.collegeIntro.dialogueSequence + 1,
+          officeSpeed: 0.5,
+          pathCursor: 6,
+          phase: 'arch-dialogue',
+          titleCursor: 5,
+        },
+        region: 'office',
+        transition: null,
+      },
+    },
+  }
+  const player = getPlayerCharacter(state, playerId)
+  state.playerEntities = replacePlayerCharacter(
+    state.playerEntities,
+    playerId,
+    {
+      ...player,
+      position: { x: 522.5, y: 530 },
       velocity: { x: 0, y: 0 },
     },
   )

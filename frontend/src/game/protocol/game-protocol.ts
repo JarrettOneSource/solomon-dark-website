@@ -2238,7 +2238,7 @@ function gameplayPauseSource(value: unknown): GameplayPauseSource {
 
 function hubInventoryAction(value: unknown): HubInventoryAction {
   const source = record(value, 'action')
-  const type = limitedString(source.type, 'action.type', 32)
+  const type = limitedString(source.type, 'action.type', 64)
   if (type === 'acknowledge-college-intro-dialogue') {
     onlyKeys(source, 'action', ['type'])
     return { type }

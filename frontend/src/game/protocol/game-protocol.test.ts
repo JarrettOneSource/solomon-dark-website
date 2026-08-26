@@ -457,8 +457,9 @@ test('protocol v42 bounds Lua requests and structured results by wire bytes and 
   }
 })
 
-test('protocol v79 accepts every authoritative inventory and NPC action and rejects malformed variants', () => {
+test('protocol v80 accepts every authoritative inventory and NPC action and rejects malformed variants', () => {
   const actions = [
+    { type: 'acknowledge-college-intro-dialogue' },
     { type: 'acknowledge-npc-hint', interactionId: 'annalist' },
     { type: 'acknowledge-npc-hint', interactionId: 'fomentius' },
     { type: 'acknowledge-npc-hint', interactionId: 'luthacus' },

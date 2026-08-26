@@ -6,6 +6,7 @@ import { createNativeHubNpcState } from '../core-kernels/native-hub-npc.ts'
 import { createNativeRng, drawNativeInteger } from '../core-kernels/native-rng.ts'
 import {
   applyGameSimulationHubAction,
+  armGameSimulationCollegeIntro,
   createGameSimulation,
   enterBoneyardWorld,
   getPlayerEconomy,
@@ -130,6 +131,7 @@ test('host save documents round-trip the complete owner state and revive Hub run
   delete schemaTwelve.profile.economy.collegeIntroPending
   delete schemaTwelve.continuation.simulation.playerEntities.economies[0]
     .collegeIntroPending
+  delete schemaTwelve.continuation.simulation.world.participants.owner.collegeIntro
   const migratedProfile = restoreGameSaveProfile(JSON.stringify(schemaTwelve))
   const migratedContinuation = restoreGameSaveDocument(JSON.stringify(schemaTwelve))
   assert.equal(migratedProfile.economy.collegeIntroPending, false)
@@ -208,6 +210,62 @@ test('Hub resume reconstructs its authoritative Skorcha population with the othe
   assert.deepEqual(restored.state.gameRng, hubSeed.state)
 })
 
+test('schema 15 resumes every College admission phase and its exact player position', () => {
+  const resume = (state: ReturnType<typeof createGameSimulation>) => restoreGameSaveDocument(
+    createGameSaveDocument({
+      integrity: 'global-clean',
+      loadedBoneyard: null,
+      mods: [],
+      modState: {},
+      playerId: 'owner',
+      state,
+    }),
+  ).state
+  const participant = (state: ReturnType<typeof createGameSimulation>) => (
+    state.world.kind === 'hub' ? state.world.participants.owner : null
+  )
+  const assertResumed = (source: ReturnType<typeof createGameSimulation>) => {
+    const restored = resume(source)
+    assert.deepEqual(participant(restored), participant(source))
+    assert.deepEqual(
+      restored.playerEntities.locomotions[0]?.position,
+      source.playerEntities.locomotions[0]?.position,
+    )
+    return restored
+  }
+  const step = (source: ReturnType<typeof createGameSimulation>) => stepGameSimulationTick(
+    source,
+    { owner: createIdlePlayerCharacterInput() },
+    { collegeIntroReadyPlayerIds: new Set(['owner']) },
+  )
+  const advanceUntil = (
+    source: ReturnType<typeof createGameSimulation>,
+    phase: 'office-walk' | 'arch-dialogue',
+  ) => {
+    let current = source
+    for (let ticks = 0; ticks < 4_000 && participant(current)?.collegeIntro?.phase !== phase; ticks += 1) {
+      current = step(current)
+    }
+    assert.equal(participant(current)?.collegeIntro?.phase, phase)
+    return current
+  }
+
+  let state = armGameSimulationCollegeIntro(createGameSimulation({ owner: OWNER }), 'owner')
+  for (let ticks = 0; ticks < 50; ticks += 1) state = step(state)
+  assert.equal(participant(state)?.collegeIntro?.phase, 'courtyard-walk')
+  state = assertResumed(state)
+  state = assertResumed(advanceUntil(state, 'office-walk'))
+  state = assertResumed(advanceUntil(state, 'arch-dialogue'))
+
+  const acknowledged = applyGameSimulationHubAction(state, 'owner', {
+    type: 'acknowledge-college-intro-dialogue',
+  })
+  assert.equal(acknowledged.accepted, true)
+  const restoredAcknowledged = assertResumed(acknowledged.state)
+  assert.equal(participant(restoredAcknowledged)?.collegeIntro, null)
+  assert.equal(participant(restoredAcknowledged)?.region, 'office')
+})
+
 test('a client-held save cannot fork the process-owned shared memorial', () => {
   let state = createGameSimulation({ owner: OWNER })
   if (state.world.kind !== 'hub') throw new Error('expected Hub')
@@ -264,6 +322,9 @@ test('native NPC help rows persist after acknowledgement and pre-v11 saves migra
 
   const legacy = JSON.parse(document)
   legacy.schemaVersion = 10
+  delete legacy.profile.economy.collegeIntroPending
+  delete legacy.continuation.simulation.playerEntities.economies[0].collegeIntroPending
+  delete legacy.continuation.simulation.world.participants.owner.collegeIntro
   delete legacy.profile.economy.npc.helpFlags
   delete legacy.continuation.simulation.playerEntities.economies[0].npc.helpFlags
   assert.deepEqual(
@@ -689,7 +750,10 @@ test('schema 7 and 6 saves migrate absent NPC state as acknowledged without arch
     previous.schemaVersion = schemaVersion
     delete previous.continuation.summary.partyRejoinToken
     delete previous.profile.economy.npc
+    delete previous.profile.economy.collegeIntroPending
     delete previous.continuation.simulation.playerEntities.economies[0].npc
+    delete previous.continuation.simulation.playerEntities.economies[0].collegeIntroPending
+    delete previous.continuation.simulation.world.participants.owner.collegeIntro
     delete previous.continuation.simulation.world.skorcha
     const document = JSON.stringify(previous)
     const profile = restoreGameSaveProfile(document)
@@ -797,7 +861,7 @@ test('known schema 1 through 5 continuations migrate through current authority',
     assert.equal(restored.state.playerEntities.primaryCasts[0]?.oneShotAttackPoseHeld, false)
     assert.equal(
       restored.state.playerEntities.primaryCasts[0]?.selectedPrimaryId,
-      -1,
+      schemaVersion < 4 ? 8 : -1,
     )
     assert.ok(restored.state.playerEntities.skillRuntimes[0])
     assert.deepEqual(restored.state.playerEntities.skillBooks[0]?.learnedSkillOrder, [8, 11])
@@ -923,8 +987,12 @@ function legacyDocument(document: string, schemaVersion: number): string {
   delete continuation.summary.activeRun
   delete continuation.summary.partyRejoinToken
   for (const economy of playerStore.economies) {
+    delete economy.collegeIntroPending
     delete economy.npc
     delete economy.tutorialPending
+  }
+  for (const participant of Object.values(simulation.world.participants ?? {}) as Record<string, unknown>[]) {
+    delete participant.collegeIntro
   }
 
   delete run.gameOverExitKind
@@ -967,13 +1035,18 @@ function legacyDocument(document: string, schemaVersion: number): string {
 function legacySchema5Document(document: string): string {
   const legacy = JSON.parse(document)
   legacy.schemaVersion = 5
+  delete legacy.profile.economy.collegeIntroPending
   delete legacy.profile.economy.npc
   delete legacy.continuation.simulation.world.skorcha
   delete legacy.continuation.summary.activeRun
   delete legacy.continuation.summary.partyRejoinToken
   for (const economy of legacy.continuation.simulation.playerEntities.economies) {
+    delete economy.collegeIntroPending
     delete economy.npc
     delete economy.tutorialPending
   }
+  for (const participant of Object.values(
+    legacy.continuation.simulation.world.participants ?? {},
+  ) as Record<string, unknown>[]) delete participant.collegeIntro
   return JSON.stringify(legacy)
 }

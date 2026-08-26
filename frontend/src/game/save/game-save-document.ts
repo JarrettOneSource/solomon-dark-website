@@ -66,10 +66,7 @@ import {
   replacePlayerCharacter,
   replacePlayerEconomy,
 } from '../core-server/player-entity-store.ts'
-import {
-  HubStudentPopulationState,
-  type HubStudentPopulationOptions,
-} from '../core-server/hub-students.ts'
+import type { HubStudentPopulationOptions } from '../core-server/hub-students.ts'
 import type { HubSkorchaState } from '../core-server/hub-skorcha.ts'
 import { createHubWorld, type HubWorldState } from '../core-server/hub-world.ts'
 import { createBoneyardWorld, type BoneyardWorldState } from '../core-server/boneyard-world.ts'
@@ -390,18 +387,14 @@ export function restoreGameSaveDocument(document: string): RestoredGameSaveDocum
     const legacyCollegeIntro = parsed.sourceSchemaVersion < 15
       && participant.transition?.phase === 'college-intro'
     if (legacyCollegeIntro) participant = createHubCollegeIntroParticipantState()
-    const studentPopulation = new HubStudentPopulationState(
-      parseHubStudentPopulation(rawWorld.studentPopulation),
-    )
-    const skorcha = rawWorld.skorcha === undefined ? null : parseHubSkorcha(rawWorld.skorcha)
+    parseHubStudentPopulation(rawWorld.studentPopulation)
+    if (rawWorld.skorcha !== undefined) parseHubSkorcha(rawWorld.skorcha)
     const hubSeed = drawNativeInteger(
       parseNativeRng(rawState.gameRng, 'game save game RNG'),
       0x40000000,
     )
     rawState.gameRng = hubSeed.state
     world = createHubWorld([continuation.summary.playerId], {
-      skorcha,
-      studentPopulation,
       traderAnimationSeed: hubSeed.value,
     })
     world = {
