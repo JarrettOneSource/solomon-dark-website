@@ -160,13 +160,20 @@ test('a Hub delta carries one atomic memorial update to the reconstructor', () =
   if (updated.world.kind !== 'hub') throw new Error('expected Hub snapshot')
   updated.tick += 1
   updated.world.memorial = archiveHubMemorialPortrait(updated.world.memorial, {
+    accountUsername: 'memoria',
+    awesomeness: 4_567,
+    awesomestKill: 'Horned Skeleton',
     capturedAtTick: 300,
     config: { discipline: 'arcane', displayName: 'Memoria', element: 'earth' },
+    elapsedTicks: 12_345,
     equipment: { hat: null, robe: null, weapon: null },
     headingIndex: 12,
+    level: 7,
+    monstersKilled: 321,
     playerId: 'completed-player',
     portraitScale: 0.925,
     runId: 'completed-run',
+    wave: 12,
   }, 0)
   const frame = createGameSnapshotFrame(
     updated,

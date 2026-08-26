@@ -151,13 +151,32 @@ test('successful Boast suppresses the bad-eulogy tail without inventing Painting
   if (empty.kind === 'speech') assert.deepEqual(empty.lines, [])
 })
 
-test('a replaced Painting formats its live external portrait id', () => {
+test('a replaced Painting reports its authoritative wizard identity and run summary', () => {
   const npc = createNativeHubNpcState()
-  const external = createHubNpcChatContent('painting-1', npc, 0, 101)
+  const external = createHubNpcChatContent('painting-1', npc, 0, 101, false, {
+    accountUsername: 'AureliaAccount',
+    awesomeness: 4_567,
+    awesomestKill: 'Horned Skeleton Fire Archer',
+    capturedAtTick: 30_000,
+    config: { discipline: 'arcane', displayName: 'Aurelia', element: 'earth' },
+    elapsedTicks: 12_345,
+    equipment: { hat: null, robe: null, weapon: null },
+    headingIndex: 12,
+    level: 7,
+    monstersKilled: 321,
+    playerId: 'player-a',
+    portraitScale: 0.925,
+    runId: 'run-a',
+    wave: 12,
+  })
   assert.equal(external.kind, 'speech')
   if (external.kind !== 'speech') return
-  assert.equal(external.key, 'SAY_EULOGY_101')
-  assert.deepEqual(external.lines, [NATIVE_HUB_NPC_CATALOG.badEulogies[0]])
+  assert.equal(external.key, 'INSPECT_MEMORIAL_run-a_player-a')
+  assert.deepEqual(external.lines, [
+    'Aurelia (@AureliaAccount), Level 7 Earth Mage.',
+    'Wave 12 in 0:02:03. 321 monsters slain. 4,567 awesomeness.',
+    'Awesomest kill: Horned Skeleton Fire Archer.',
+  ])
 })
 
 test('all three selector families expose exact rows, actions, titles, and response ownership', () => {

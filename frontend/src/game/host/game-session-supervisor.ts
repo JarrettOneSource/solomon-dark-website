@@ -13,6 +13,7 @@ import {
   GAME_PROTOCOL_NAME,
   GAME_WEBSOCKET_MAX_PAYLOAD_BYTES,
 } from '../protocol/game-protocol.ts'
+import type { HubMemorialState } from '../core-kernels/hub-memorial.ts'
 import { createBoneyardCatalog, type BoneyardCatalog } from './boneyard-catalog.ts'
 import {
   startGameHost,
@@ -58,11 +59,13 @@ export interface GameSessionSupervisorOptions {
   deploymentSaveTimeoutMs?: number
   heartbeatIntervalMs?: number
   host?: string
+  initialMemorial?: HubMemorialState
   log?: GameServerLogSink
   luaWasmPath?: string
   maxConnectionsPerSession?: number
   maxSessions?: number
   mlBotPolicy?: MlBotPolicyInference
+  onMemorialStateChanged?: (state: HubMemorialState) => void
   port?: number
   revision?: string
   runtimeEvents?: RuntimeEventSink
@@ -183,8 +186,10 @@ export async function startGameSessionSupervisor(
     logContext: { sessionId: 'shared-hub', sessionKind: 'hub' },
     luaWasmPath: options.luaWasmPath,
     leaderboardReceiptSecret: options.adminSecret,
+    initialMemorial: options.initialMemorial,
     maxPlayers: maxConnectionsPerSession,
     mlBotPolicy: options.mlBotPolicy,
+    onMemorialStateChanged: options.onMemorialStateChanged,
     partyRecoverySecret: options.adminSecret,
     runtimeEvents: options.runtimeEvents,
     sharedHub: true,

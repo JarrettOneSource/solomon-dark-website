@@ -218,6 +218,11 @@ Courtyard sequence, while ordinary legacy Hub continuations remain settled.
 The host applies
 either skill selection only to the authenticated
 participant before publishing a new progression revision.
+Protocol 82 enriches each retained shared-Hub Memoratorium portrait with its
+nullable host-authenticated account username and final Hall-owned run summary:
+elapsed ticks, wave, level, kills, awesomeness, and optional awesomest kill.
+Those are bounded authority facts for Painting inspection, not a second
+leaderboard or presentation-side score calculation.
 The compact selector
 uses its own `skill-selector` pause source only in an active Boneyard, so the
 host cannot accept an addressed HUD mutation from a full SkillScreen pause (or
@@ -259,9 +264,12 @@ The shared Hub world also owns one ten-slot Memoratorium archive. When any
 party run crosses the authoritative Hall archive edge, the world coordinator
 adds every completed participant in deterministic writer order, consumes the
 native marker draw, evicts the smallest persisted slot age, and publishes the
-new portrait atomically. Party partition/merge, disconnect, and a client-held
-save cannot fork or erase that archive; the process-lifetime shared Hub is its
-reset boundary.
+  new portrait atomically. Party partition/merge, disconnect, and a client-held
+  save cannot fork or erase that archive. Before the completed state is
+  published, the global supervisor atomically replaces its protected state file
+  and fsyncs the containing state directory. Supervisor restart hydrates that
+  exact bounded state; a missing file alone creates stock defaults, while an
+  invalid file fails startup instead of silently erasing the archive.
 Leaving or a failed heartbeat removes the participant's materialized actor
 from its world and live party membership. When another member keeps that
 Boneyard active, the host retains one bounded run/player capability plus an
@@ -462,10 +470,13 @@ operator reinstall or a different `main` commit.
 - The shared-Hub Memoratorium is world-owned presentation history, not an
   account leaderboard. Its ten physical Painting slots start with the stock
   residents and persisted age permutation. A completed run participant freezes
-  identity, equipment appearance, heading, scale, and capture tick; strict-min
-  age eviction supplies FIFO behavior and the portrait id wraps through
-  `100..109`. Hub frames carry that bounded state discretely, so every resident
-  and late joiner renders and interacts with the same current portrait ids.
+  identity, nullable authenticated account username, equipment appearance,
+  heading, scale, capture tick, and the final Hall-owned runtime, wave, level,
+  kills, awesomeness, and awesomest-kill facts. Strict-min age eviction supplies
+  FIFO behavior and the portrait id wraps through `100..109`. Hub frames carry
+  that bounded state discretely, so every resident and late joiner renders and
+  inspects the same current record. Bundled ids `0..9` retain stock eulogies;
+  dynamic ids format only the carried authority facts.
 - The client predicts only explicitly shared kernels needed for the local
   player. Remote actors and server-only systems are presented from buffered
   authoritative snapshots.

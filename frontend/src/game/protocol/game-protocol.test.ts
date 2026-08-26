@@ -1505,8 +1505,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v81 carries Web Lua wearables, onboarding admission, observer mode, Hub activity, NPC state, Goodie actions, tutorial fields/state, Hagatha runtime, Imp effects, save intent, selected skills, sacks, dyes, and gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 81)
+test('protocol v82 carries Web Lua wearables, onboarding admission, observer mode, Hub activity, NPC state, Goodie actions, tutorial fields/state, Hagatha runtime, Imp effects, save intent, selected skills, sacks, dyes, and gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 82)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -4098,13 +4098,20 @@ test('protocol validates participant ownership and the recovered Hub room graph'
   assert.equal(withPausedActivity.frame.world.participants['player-1']?.activity, 'paused')
 
   const memorial = archiveHubMemorialPortrait(frame.world.memorial, {
+    accountUsername: 'HelvidiusAccount',
+    awesomeness: 4_567,
+    awesomestKill: 'Horned Skeleton',
     capturedAtTick: 300,
     config: CHARACTER,
+    elapsedTicks: 12_345,
     equipment: { hat: null, robe: null, weapon: { kind: 'staff', selector: 5 } },
     headingIndex: 12,
+    level: 7,
+    monstersKilled: 321,
     playerId: 'player-1',
     portraitScale: 0.925,
     runId: 'completed-run',
+    wave: 12,
   }, 0)
   const withMemorial = decodeServerGameMessage(message({
     ...frame.world,
@@ -4114,6 +4121,10 @@ test('protocol validates participant ownership and the recovered Hub room graph'
   if (withMemorial.type !== 'server-snapshot'
     || withMemorial.frame.world.kind !== 'hub') throw new Error('expected Hub frame')
   assert.equal(withMemorial.frame.world.memorial.slots[2]?.portrait?.config.displayName, 'Helvidius')
+  assert.equal(
+    withMemorial.frame.world.memorial.slots[2]?.portrait?.accountUsername,
+    'HelvidiusAccount',
+  )
   assert.deepEqual(
     withMemorial.frame.world.memorial.slots[2]?.portrait?.equipment.weapon,
     { kind: 'staff', selector: 5 },

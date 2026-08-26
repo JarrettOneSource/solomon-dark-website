@@ -14,6 +14,10 @@ import {
   type PlayerCharacterConfig,
   type PlayerCharacterInput,
 } from '../core-kernels/player-character.ts'
+import type {
+  HubMemorialPlayerProfile,
+  HubMemorialState,
+} from '../core-kernels/hub-memorial.ts'
 import {
   GAME_FIXED_TICK_SECONDS,
   GAME_TICK_RATE,
@@ -269,6 +273,7 @@ export interface GameHostOptions {
   createSimulation?: () => GameSimulationState
   host?: string
   heartbeatIntervalMs?: number
+  initialMemorial?: HubMemorialState
   initialPlayerExperience?: number
   leaderboardReceiptSecret?: string
   log?: GameServerLogSink
@@ -279,6 +284,7 @@ export interface GameHostOptions {
   modAssets?: readonly import('../protocol/game-protocol.ts').GameModAsset[]
   modContent?: MaterializedWebSessionContent
   onPlayerCountChanged?: (playerCount: number) => void
+  onMemorialStateChanged?: (state: HubMemorialState) => void
   partyRecoverySecret?: string
   port?: number
   resetWhenEmpty?: boolean
@@ -610,6 +616,12 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   if (sharedHub !== (sessionKind === 'global-hub')) {
     throw new Error('shared Hub ownership and session kind disagree')
   }
+  if (!sharedHub && (
+    options.initialMemorial !== undefined
+    || options.onMemorialStateChanged !== undefined
+  )) {
+    throw new Error('Memorial persistence belongs only to the shared Hub')
+  }
   if (!LOOPBACK_HOSTS.has(host) && !options.trustedProxy) {
     throw new Error('Non-loopback game hosts may only run behind an explicitly trusted secure proxy')
   }
@@ -629,6 +641,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         options.createSimulation === undefined
           ? undefined
           : createInitialSimulation(options.createSimulation),
+        options.initialMemorial,
       )
     : null
   let privateParties: PartySystemState | null = sessionKind === 'private-college'
@@ -3195,6 +3208,8 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
               scope.runtime.extensions,
             ])),
             collegeIntroReadyPlayerIds,
+            memorialPlayerProfiles(),
+            options.onMemorialStateChanged,
           )
           state = sharedWorlds.hub
           sampleMlBotTelemetry()
@@ -3918,6 +3933,23 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       displayName: participant?.displayName ?? playerId,
       playerId,
     }
+  }
+
+  function memorialPlayerProfiles(): ReadonlyMap<PlayerId, HubMemorialPlayerProfile> {
+    return new Map([
+      ...[...partyRejoinSlots.values()].map(({ playerId, profile }) => [
+        playerId,
+        { accountUsername: profile.accountUsername },
+      ] as const),
+      ...[...clients.values()].map(({ playerId, profile }) => [
+        playerId,
+        { accountUsername: profile.accountUsername },
+      ] as const),
+      ...[...bots.values()].map(({ playerId, profile }) => [
+        playerId,
+        { accountUsername: profile.accountUsername },
+      ] as const),
+    ])
   }
 
   function activityParty(partyId: string | null): Readonly<Record<string, unknown>> {

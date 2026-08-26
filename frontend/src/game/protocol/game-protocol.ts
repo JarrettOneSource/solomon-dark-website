@@ -364,7 +364,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 81
+export const GAME_PROTOCOL_VERSION = 82
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -4316,7 +4316,7 @@ function hubWorldSnapshot(value: unknown, field: string): HubWorldSnapshot {
       `${field}.collisionRngState`,
     ),
     kind: 'hub',
-    memorial: hubMemorialState(source.memorial, `${field}.memorial`),
+    memorial: decodeHubMemorialState(source.memorial, `${field}.memorial`),
     participants,
     skorcha: hubSkorchaState(source.skorcha, `${field}.skorcha`),
     students: limitedArray(source.students, `${field}.students`, MAX_STUDENTS).map(
@@ -4329,7 +4329,10 @@ function hubWorldSnapshot(value: unknown, field: string): HubWorldSnapshot {
   }
 }
 
-function hubMemorialState(value: unknown, field: string): HubMemorialState {
+export function decodeHubMemorialState(
+  value: unknown,
+  field = 'memorial',
+): HubMemorialState {
   const source = record(value, field)
   onlyKeys(source, field, ['nextAge', 'nextPortraitId', 'slots'])
   const nextAge = positiveInteger(source.nextAge, `${field}.nextAge`)
@@ -4372,13 +4375,20 @@ function hubMemorialState(value: unknown, field: string): HubMemorialState {
     const portraitField = `${slotField}.portrait`
     const portrait = record(slot.portrait, portraitField)
     onlyKeys(portrait, portraitField, [
+      'accountUsername',
+      'awesomeness',
+      'awesomestKill',
       'capturedAtTick',
       'config',
+      'elapsedTicks',
       'equipment',
       'headingIndex',
+      'level',
+      'monstersKilled',
       'playerId',
       'portraitScale',
       'runId',
+      'wave',
     ])
     const playerId = validatedPlayerId(portrait.playerId, `${portraitField}.playerId`)
     const runId = limitedString(portrait.runId, `${portraitField}.runId`, 128)
@@ -4399,11 +4409,29 @@ function hubMemorialState(value: unknown, field: string): HubMemorialState {
       age,
       marker,
       portrait: {
+        accountUsername: portrait.accountUsername === null
+          ? null
+          : limitedString(portrait.accountUsername, `${portraitField}.accountUsername`, 64),
+        awesomeness: integerWithin(
+          portrait.awesomeness,
+          `${portraitField}.awesomeness`,
+          0,
+          2_000_000_000,
+        ),
+        awesomestKill: portrait.awesomestKill === null
+          ? null
+          : limitedString(portrait.awesomestKill, `${portraitField}.awesomestKill`, 64),
         capturedAtTick: nonnegativeInteger(
           portrait.capturedAtTick,
           `${portraitField}.capturedAtTick`,
         ),
         config: playerCharacterConfig(portrait.config, `${portraitField}.config`),
+        elapsedTicks: integerWithin(
+          portrait.elapsedTicks,
+          `${portraitField}.elapsedTicks`,
+          0,
+          60_480_000,
+        ),
         equipment: hubMemorialEquipmentAppearance(
           portrait.equipment,
           `${portraitField}.equipment`,
@@ -4414,9 +4442,17 @@ function hubMemorialState(value: unknown, field: string): HubMemorialState {
           0,
           23,
         ),
+        level: integerWithin(portrait.level, `${portraitField}.level`, 1, 10_000),
+        monstersKilled: integerWithin(
+          portrait.monstersKilled,
+          `${portraitField}.monstersKilled`,
+          0,
+          2_000_000_000,
+        ),
         playerId,
         portraitScale,
         runId,
+        wave: integerWithin(portrait.wave, `${portraitField}.wave`, 0, 1_000_000),
       },
       portraitId,
     }
@@ -10875,7 +10911,7 @@ function gameWorldSnapshotFrame(
     ),
     entities: replicatedEntityFrame(source.entities, `${field}.entities`),
     kind: 'hub',
-    memorial: hubMemorialState(source.memorial, `${field}.memorial`),
+    memorial: decodeHubMemorialState(source.memorial, `${field}.memorial`),
     participants,
     skorcha: hubSkorchaState(source.skorcha, `${field}.skorcha`),
     traderAnimationSeed: nonnegativeInteger(

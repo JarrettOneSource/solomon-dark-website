@@ -278,13 +278,20 @@ test('a client-held save cannot fork the process-owned shared memorial', () => {
     world: {
       ...state.world,
       memorial: archiveHubMemorialPortrait(state.world.memorial, {
+        accountUsername: 'owner',
+        awesomeness: 4_567,
+        awesomestKill: 'Horned Skeleton',
         capturedAtTick: 300,
         config: OWNER,
+        elapsedTicks: 12_345,
         equipment: { hat: null, robe: null, weapon: null },
         headingIndex: 12,
+        level: 7,
+        monstersKilled: 321,
         playerId: 'owner',
         portraitScale: 0.925,
         runId: 'completed-run',
+        wave: 12,
       }, 0),
     },
   }

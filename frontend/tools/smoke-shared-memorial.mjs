@@ -97,6 +97,13 @@ try {
     const portraits = JSON.parse(node.getAttribute('data-memorial-portraits') || '[]')
     return portraits[2]?.portraitId === 100 && portraits[2]?.name === 'Memoria'
   }, null, { timeout: 10_000 })
+  moveBrowserPlayerToPortrait()
+  await page.getByRole('button', { name: 'Hear memorial eulogy' }).click()
+  await page.getByText('Memoria (@Archivist), Level 7 Earth Mage.').waitFor()
+  await page.getByText(
+    'Wave 12 in 0:02:03. 321 monsters slain. 4,567 awesomeness.',
+  ).waitFor()
+  await page.getByText('Awesomest kill: Horned Skeleton Fire Archer.').waitFor()
   await page.screenshot({ path: screenshotPath })
 
   lateSocket = await openSocket(host.address.url)
@@ -196,23 +203,44 @@ function publishCompletedPortrait() {
     world: {
       ...state.world,
       memorial: archiveHubMemorialPortrait(state.world.memorial, {
+        accountUsername: 'Archivist',
+        awesomeness: 4_567,
+        awesomestKill: 'Horned Skeleton Fire Archer',
         capturedAtTick: state.tick,
         config: {
           discipline: 'arcane',
           displayName: 'Memoria',
           element: 'earth',
         },
+        elapsedTicks: 12_345,
         equipment: {
           hat: { primaryTint: 0xffffff, secondaryTint: 0xffffff, selector: 2 },
           robe: { primaryTint: 0x90b390, secondaryTint: 0xffffff, selector: 2 },
           weapon: { kind: 'staff', selector: 1 },
         },
         headingIndex: 12,
+        level: 7,
+        monstersKilled: 321,
         playerId: 'completed-player',
         portraitScale: 0.925,
         runId: 'completed-run',
+        wave: 12,
       }, 0),
     },
+  })
+}
+
+function moveBrowserPlayerToPortrait() {
+  const state = host.state()
+  const playerId = state.playerEntities.identities[0].playerId
+  const player = playerCharacterAt(state.playerEntities, playerId)
+  assert.ok(player)
+  Object.assign(state, {
+    playerEntities: replacePlayerCharacter(state.playerEntities, playerId, {
+      ...player,
+      position: { x: 673, y: 683 },
+      velocity: { x: 0, y: 0 },
+    }),
   })
 }
 

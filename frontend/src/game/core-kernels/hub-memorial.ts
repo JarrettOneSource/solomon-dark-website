@@ -24,13 +24,24 @@ export const HUB_MEMORIAL_INTERACTION_IDS = Object.freeze([
 ])
 
 export interface HubMemorialPortrait {
+  readonly accountUsername: string | null
+  readonly awesomeness: number
+  readonly awesomestKill: string | null
   readonly capturedAtTick: number
   readonly config: PlayerCharacterConfig
+  readonly elapsedTicks: number
   readonly equipment: PlayerLivingEquipmentAppearance
   readonly headingIndex: number
+  readonly level: number
+  readonly monstersKilled: number
   readonly playerId: string
   readonly portraitScale: number
   readonly runId: string
+  readonly wave: number
+}
+
+export interface HubMemorialPlayerProfile {
+  readonly accountUsername: string | null
 }
 
 export interface HubMemorialSlot {

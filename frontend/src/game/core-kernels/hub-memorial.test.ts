@@ -16,17 +16,24 @@ const EQUIPMENT = {
 
 function portrait(index: number) {
   return {
+    accountUsername: index % 2 === 0 ? `account-${index}` : null,
+    awesomeness: 10_000 + index,
+    awesomestKill: index % 2 === 0 ? 'Horned Skeleton' : null,
     capturedAtTick: 30_000 + index,
     config: {
       discipline: 'arcane' as const,
       displayName: `Wizard ${index}`,
       element: 'ether' as const,
     },
+    elapsedTicks: 20_000 + index,
     equipment: EQUIPMENT,
     headingIndex: index % 24,
+    level: 10 + index,
+    monstersKilled: 200 + index,
     playerId: `player-${index}`,
     portraitScale: 0.85 + index % 10 / 100,
     runId: `run-${index}`,
+    wave: 20 + index,
   }
 }
 

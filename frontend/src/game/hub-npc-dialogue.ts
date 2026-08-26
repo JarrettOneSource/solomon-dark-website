@@ -10,6 +10,11 @@ import {
 } from './core-kernels/native-hub-npc.ts'
 import type { ProtocolPlayerProgression } from './protocol/game-state.ts'
 import {
+  formatHallOfFameTime,
+  hallOfFameClassName,
+} from './core-kernels/hall-of-fame.ts'
+import type { HubMemorialPortrait } from './core-kernels/hub-memorial.ts'
+import {
   hubInteractionDialogue,
   type HubInteractionId,
 } from './hub-inventory-presentation.ts'
@@ -56,8 +61,16 @@ export function createHubNpcChatContent(
   randomIndex: number,
   eulogyIndexOverride: number | null = null,
   storyOffice = false,
+  memorialPortrait: HubMemorialPortrait | null = null,
 ): HubNpcChatContent {
   const interaction = hubInteractionDialogue(interactionId, storyOffice)
+  if (memorialPortrait !== null) {
+    return speech(
+      `INSPECT_MEMORIAL_${memorialPortrait.runId}_${memorialPortrait.playerId}`,
+      hubMemorialInspectionLines(memorialPortrait),
+      'close',
+    )
+  }
   const eulogyIndex = eulogyIndexOverride ?? interaction.eulogyIndex
   if (eulogyIndex !== null) {
     const eulogyLine = NATIVE_HUB_NPC_CATALOG.eulogies[`${eulogyIndex}`] ?? null
@@ -84,6 +97,27 @@ export function createHubNpcChatContent(
         ? 'dismissal'
         : 'close',
   )
+}
+
+export function hubMemorialInspectionLines(
+  portrait: HubMemorialPortrait,
+): readonly string[] {
+  const identity = portrait.accountUsername === null
+    ? `${portrait.config.displayName} (Guest Wizard)`
+    : `${portrait.config.displayName} (@${portrait.accountUsername})`
+  const monsterLabel = portrait.monstersKilled === 1 ? 'monster' : 'monsters'
+  return [
+    `${identity}, Level ${portrait.level} ${hallOfFameClassName(
+      portrait.config.element,
+      portrait.config.discipline,
+    )}.`,
+    `Wave ${portrait.wave} in ${formatHallOfFameTime(portrait.elapsedTicks)}. `
+      + `${portrait.monstersKilled.toLocaleString('en-US')} ${monsterLabel} slain. `
+      + `${portrait.awesomeness.toLocaleString('en-US')} awesomeness.`,
+    ...(portrait.awesomestKill === null
+      ? []
+      : [`Awesomest kill: ${portrait.awesomestKill}.`]),
+  ]
 }
 
 export function hubNpcChatChoices(

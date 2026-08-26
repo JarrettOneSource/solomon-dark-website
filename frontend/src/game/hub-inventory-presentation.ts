@@ -17,6 +17,7 @@ import {
 import type { Vector2 } from './core-kernels/vector.ts'
 import {
   hubMemorialSlotIndexForInteraction,
+  type HubMemorialPortrait,
   type HubMemorialState,
 } from './core-kernels/hub-memorial.ts'
 
@@ -287,6 +288,14 @@ export function hubMemorialEulogyIndex(
 ): number | null {
   const slotIndex = hubMemorialSlotIndexForInteraction(interaction)
   return slotIndex === null ? null : memorial.slots[slotIndex]?.portraitId ?? null
+}
+
+export function hubMemorialPortraitForInteraction(
+  interaction: HubInteractionId,
+  memorial: HubMemorialState,
+): HubMemorialPortrait | null {
+  const slotIndex = hubMemorialSlotIndexForInteraction(interaction)
+  return slotIndex === null ? null : memorial.slots[slotIndex]?.portrait ?? null
 }
 
 export function hubNpcHintAcknowledgementAction(

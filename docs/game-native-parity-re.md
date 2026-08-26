@@ -43079,6 +43079,56 @@ No member is blocked by the browser platform.
   per the request, the shared portrait commits immediately on the next Hub
   snapshot. No push, deployment, or production verification was performed.
 
+#### 2026-08-26 - durable run records and dynamic Painting inspection
+
+The published shared-Hub pass closed the stock ten-slot compositor and live
+replication path, but its product boundary was too narrow. It retained only the
+wizard recipe in process memory and routed external portrait ids `100..109`
+through the stock eulogy table, where those ids have no authored row. A dynamic
+Painting consequently showed a generic bad-eulogy tail (or no line after a
+successful Boast), omitted the account and run facts already present at the
+authoritative Hall archive edge, and reset to bundled portraits whenever the
+global supervisor restarted.
+
+The reopened system boundary begins at the same per-participant Hall archive
+edge and ends after durable supervisor recovery, protocol replication, dynamic
+Painting inspection, and FIFO eviction. Its complete membership is:
+
+| Member | Disposition | Contract |
+| --- | --- | --- |
+| stock ten-slot age permutation, strict-min replacement, marker draw, and `100..109` ring | verified-already-at-parity | no ordering, capacity, randomness, or physical-slot change |
+| every completed party participant, including guests and bots | exact-ported | one retained portrait per run/player archive edge |
+| account username | exact-ported Website extension | copy the host-authenticated profile; nullable for guests and bots |
+| runtime, wave, level, kills, awesomeness, and awesomest kill | exact-ported Website extension | copy the already-final authoritative Hall/player/wave state; never recompute in presentation |
+| dynamic Painting inspection | exact-ported Website extension | show `Wizard (@Account)` when registered, class/level, runtime, wave, kills, awesomeness, and optional awesomest kill |
+| bundled portrait inspection | verified-already-at-parity | retain stock eulogy rows `0..9` and Boast behavior |
+| restart survival | exact-ported Website extension | atomically replace one protected global-supervisor state document before publishing the completed portrait |
+| browser saves and local Hall storage | out-of-system | neither may fork, seed, or restore the shared archive |
+| unbounded visible history | out-of-system | the native room has exactly ten physical Paintings; FIFO means every completion enters and the oldest retained completion leaves |
+
+No member is blocked by the browser platform. The protected state document is
+the durable authority for the latest ten physical slots and their total age/id
+cursors. A missing document starts from stock defaults. A malformed document is
+a startup failure, never a silent reset. Completion persistence is synchronous
+at the rare Hall edge: the host writes and fsyncs a same-directory temporary
+document, renames it atomically, fsyncs the directory, and only then publishes
+the stepped Hub state. If persistence fails, the pre-completion state remains
+authoritative and the edge is retried rather than acknowledged in memory only.
+
+Protocol 82 extends the bounded portrait recipe with the nullable authenticated
+account username and final run summary. It does not add an HTTP poller, client
+clock, browser persistence fallback, second score calculator, or leaderboard
+sort. Inspection formats the carried facts only. The persistence file contains
+no credentials, bearer tokens, email addresses, or session capabilities.
+
+Validation must cover the complete reopened boundary: enriched multi-player
+archive records (registered, guest, and bot), strict protocol validation,
+unchanged first-ten and 11th-entry FIFO order, atomic file round-trip and
+malformed-file rejection, stock-versus-dynamic inspection selection, exact
+runtime formatting, live Mortuary replacement, inspection text, supervisor
+restart hydration, late join, empty page/console/failed-response arrays, and the
+canonical Mac Website gate.
+
 ## 2026-08-24 — Bounded replication-baseline recovery
 
 ### Reported smell and parity question

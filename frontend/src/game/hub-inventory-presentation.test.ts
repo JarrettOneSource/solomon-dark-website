@@ -21,6 +21,7 @@ import {
   hubNpcHintAcknowledgementAction,
   hubInteractionWithinRange,
   hubMemorialEulogyIndex,
+  hubMemorialPortraitForInteraction,
   hubPotionShortcut,
   hubTraderAtPoint,
   hubTraderWithinServiceRange,
@@ -32,26 +33,45 @@ test('Painting eulogies follow the current shared memorial portrait id', () => {
   const initial = createHubMemorialState()
   assert.equal(hubMemorialEulogyIndex('painting-100', initial), 2)
   const first = archiveHubMemorialPortrait(initial, {
+    accountUsername: 'aurelia',
+    awesomeness: 4_567,
+    awesomestKill: 'Horned Skeleton',
     capturedAtTick: 300,
     config: { discipline: 'arcane', displayName: 'Aurelia', element: 'ether' },
+    elapsedTicks: 12_345,
     equipment: { hat: null, robe: null, weapon: null },
     headingIndex: 12,
+    level: 7,
+    monstersKilled: 321,
     playerId: 'player-a',
     portraitScale: 0.925,
     runId: 'run-a',
+    wave: 12,
   }, 0)
   assert.equal(hubMemorialEulogyIndex('painting-100', first), 100)
   const second = archiveHubMemorialPortrait(first, {
+    accountUsername: null,
+    awesomeness: 8_765,
+    awesomestKill: null,
     capturedAtTick: 600,
     config: { discipline: 'mind', displayName: 'Basil', element: 'water' },
+    elapsedTicks: 54_321,
     equipment: { hat: null, robe: null, weapon: null },
     headingIndex: 4,
+    level: 9,
+    monstersKilled: 654,
     playerId: 'player-b',
     portraitScale: 0.9,
     runId: 'run-b',
+    wave: 18,
   }, 1)
   assert.equal(hubMemorialEulogyIndex('painting-1', second), 101)
   assert.equal(hubMemorialEulogyIndex('memorator', second), null)
+  assert.equal(
+    hubMemorialPortraitForInteraction('painting-100', second)?.config.displayName,
+    'Aurelia',
+  )
+  assert.equal(hubMemorialPortraitForInteraction('painting-0', second), null)
 })
 
 test('only native world actor wrappers acknowledge durable NPC hint rows', () => {

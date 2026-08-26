@@ -62,6 +62,7 @@ import {
   hubInteractionDialogue,
   hubInteractionWithinRange,
   hubMemorialEulogyIndex,
+  hubMemorialPortraitForInteraction,
   hubNpcHintAcknowledgementAction,
   nearestHubInteraction,
   type HubInteractionId,
@@ -464,6 +465,9 @@ function NativeHubSurface({
             ? null
             : hubMemorialEulogyIndex(surface.interaction, memorial),
           storyOffice,
+          memorial === null
+            ? null
+            : hubMemorialPortraitForInteraction(surface.interaction, memorial),
         )
       : { kind: 'choices' },
     phaseStartedAtMs: performance.now(),

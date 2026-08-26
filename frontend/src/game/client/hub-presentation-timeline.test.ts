@@ -121,13 +121,20 @@ test('publishes a memorial replacement atomically at the newer snapshot edge', (
   const older = snapshotAt(100, 10, 20)
   const newer = snapshotAt(105, 15, 25)
   newer.world.memorial = archiveHubMemorialPortrait(newer.world.memorial, {
+    accountUsername: 'memoria',
+    awesomeness: 4_567,
+    awesomestKill: 'Horned Skeleton',
     capturedAtTick: 300,
     config: { discipline: 'arcane', displayName: 'Memoria', element: 'earth' },
+    elapsedTicks: 12_345,
     equipment: { hat: null, robe: null, weapon: null },
     headingIndex: 12,
+    level: 7,
+    monstersKilled: 321,
     playerId: 'completed-player',
     portraitScale: 0.925,
     runId: 'completed-run',
+    wave: 12,
   }, 0)
   const presentation = timeline(older)
   presentation.push(newer, INTERVAL_MS)

@@ -1,6 +1,11 @@
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import type { BoneyardEnemySpawnIntent } from '../core-kernels/boneyard-wave-director.ts'
-import { archiveHubMemorialPortrait } from '../core-kernels/hub-memorial.ts'
+import {
+  archiveHubMemorialPortrait,
+  copyHubMemorialState,
+  type HubMemorialPlayerProfile,
+  type HubMemorialState,
+} from '../core-kernels/hub-memorial.ts'
 import { drawNativeInteger } from '../core-kernels/native-rng.ts'
 import type { SharedPlayerLevelMilestone } from '../core-kernels/player-progression.ts'
 import { playerLivingNativeEquipmentAppearance } from '../core-kernels/player-equipment-appearance.ts'
@@ -70,12 +75,25 @@ export interface SharedWorldActionResult {
 export function createSharedGameWorlds(
   hubSeed = 0,
   hub?: GameSimulationState,
+  memorial?: HubMemorialState,
 ): SharedGameWorldsState {
+  const initialHub = hub ?? createGameSimulation({}, {
+    gameRngSeed: hubSeed,
+    hubTraderAnimationSeed: hubSeed,
+  })
+  if (initialHub.world.kind !== 'hub') {
+    throw new Error('shared-game initial state is not a Hub world')
+  }
   return {
-    hub: hub ?? createGameSimulation({}, {
-      gameRngSeed: hubSeed,
-      hubTraderAnimationSeed: hubSeed,
-    }),
+    hub: memorial === undefined
+      ? initialHub
+      : {
+          ...initialHub,
+          world: {
+            ...initialHub.world,
+            memorial: copyHubMemorialState(memorial),
+          },
+        },
     parties: createPartySystem(),
     runs: [],
   }
@@ -412,6 +430,8 @@ export function stepSharedGameWorlds(
   enemySpawnIntents: ReadonlyMap<string, readonly BoneyardEnemySpawnIntent[]> = new Map(),
   extensions: ReadonlyMap<string, GameSimulationExtensions> = new Map(),
   collegeIntroReadyPlayerIds: ReadonlySet<PlayerId> | null = null,
+  memorialProfiles: ReadonlyMap<PlayerId, HubMemorialPlayerProfile> = new Map(),
+  onMemorialStateChanged?: (state: HubMemorialState) => void,
 ): SharedGameWorldsState {
   if (state.hub.world.kind !== 'hub') {
     throw new Error('shared-game Hub owner is not a Hub world')
@@ -461,27 +481,36 @@ export function stepSharedGameWorlds(
           const marker = drawNativeInteger(next.gameRng, 5)
           next = { ...next, gameRng: marker.state }
           memorial = archiveHubMemorialPortrait(memorial, {
+            accountUsername: memorialProfiles.get(playerId)?.accountUsername ?? null,
+            awesomeness: completed.awesomeness,
+            awesomestKill: completed.awesomestKill,
             capturedAtTick: next.tick,
             config: player.config,
+            elapsedTicks: completed.elapsedTicks,
             equipment: playerLivingNativeEquipmentAppearance(
               player.config.element,
               player.economy.equipment,
             ),
             headingIndex: completed.portraitHeadingIndex,
+            level: player.progression.level,
+            monstersKilled: completed.monstersKilled,
             playerId,
             portraitScale: completed.portraitScale,
             runId: nextWorld.runId,
+            wave: nextWorld.waves?.waveOrdinal ?? 0,
           }, marker.value)
         }
       }
     }
     return { ...run, state: next }
   })
-  return {
+  const nextState = {
     ...state,
     hub: { ...hub, world: { ...hub.world, memorial } },
     runs,
   }
+  if (memorial !== hub.world.memorial) onMemorialStateChanged?.(memorial)
+  return nextState
 }
 
 export function sharedGameStateForPlayer(

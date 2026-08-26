@@ -12,6 +12,7 @@ import {
 import { readDeployedRevision } from './deployed-revision.ts'
 import { MlBotPolicyInferenceWorker } from './ml-bot-host-controller.ts'
 import { createRuntimeEventPublisher } from './runtime-event-publisher.ts'
+import { openGameMemorialPersistence } from './game-memorial-persistence.ts'
 
 const log = createJsonGameServerLogSink(
   parseGameServerLogLevel(process.env.SDR_GAME_LOG_LEVEL),
@@ -40,6 +41,7 @@ process.on('warning', (warning) => {
 
 const adminSecret = requiredEnvironment('SDR_GAME_SUPERVISOR_SECRET')
 const revision = await readDeployedRevision()
+const memorial = openGameMemorialPersistence(requiredEnvironment('SDR_GAME_MEMORIAL_PATH'))
 const runtimeEventEndpoint = process.env.SDR_RUNTIME_EVENT_ENDPOINT?.trim() || ''
 const runtimeEventSecret = process.env.SDR_RUNTIME_EVENT_SECRET?.trim() || ''
 if (Boolean(runtimeEventEndpoint) !== Boolean(runtimeEventSecret)) {
@@ -65,6 +67,7 @@ const supervisor = await startGameSessionSupervisor({
     300,
   ) * 1000,
   host: process.env.SDR_GAME_SUPERVISOR_HOST?.trim() || '127.0.0.1',
+  initialMemorial: memorial.initialState,
   log,
   luaWasmPath: resolveWebLuaWasmPath(import.meta.url),
   maxConnectionsPerSession: parseInteger(
@@ -75,6 +78,7 @@ const supervisor = await startGameSessionSupervisor({
   ),
   maxSessions: parseInteger(process.env.SDR_GAME_MAX_SESSIONS, 64, 1, 10_000),
   mlBotPolicy,
+  onMemorialStateChanged: memorial.persist,
   port: parseInteger(process.env.SDR_GAME_SUPERVISOR_PORT, 5222, 0, 65535),
   revision,
   ...(runtimeEvents ? { runtimeEvents: runtimeEvents.publish } : {}),
