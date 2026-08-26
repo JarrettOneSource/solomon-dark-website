@@ -55,7 +55,10 @@ import {
   NativeBoneyardWeather,
 } from '../core-kernels/native-boneyard-weather.ts'
 import { nativeSecondaryTargetMaterialTint } from '../core-kernels/native-secondary-abilities.ts'
-import { nativeTutorialCameraBounds } from '../core-kernels/native-tutorial.ts'
+import {
+  NATIVE_TUTORIAL_CAMERA_TARGET,
+  nativeTutorialCameraBounds,
+} from '../core-kernels/native-tutorial.ts'
 import {
   mergeNativeLightProviderOwners,
   type NativeLightProviderRegistration,
@@ -224,6 +227,10 @@ import {
   type NativeBuildingSurfaceMesh,
 } from './boneyard-building-surface-view.ts'
 import { nativeBuildingLightGrid } from './boneyard-static-surface-lighting.ts'
+import {
+  boneyardOffCameraCleanupPlan,
+  boneyardTransformedArtBounds,
+} from './boneyard-off-camera-cleanup.ts'
 
 interface BoneyardRendererFrameDiagnostics {
   activeStaticPainterLayerCount: number
@@ -318,6 +325,7 @@ interface BoneyardRendererFrameDiagnostics {
   minTreeLightScalar: number
   monumentVisibleCount: number
   orbSpriteCount: number
+  offCameraCleanupApplied: boolean
   painterBandCount: number
   playerAttachmentPose: number
   playerCount: number
@@ -372,6 +380,8 @@ interface BoneyardRendererFrameDiagnostics {
   treeForegroundResidentCount: number
   treeTintMismatchCount: number
   residentCount: number
+  retiredStaticResidentCount: number
+  retiredStaticSourceCount: number
   regionLightCompositeZIndex: number
   regionLightLogicalSide: number
   regionLightPhysicalSide: number
@@ -436,10 +446,12 @@ interface BoneyardWorldRendererOptions {
 }
 
 interface ResidentTexture extends BoneyardBounds {
+  cleanupSourceKey: string | null
   mainLayerIndex: number | null
   shadowCaster: NativeBoneyardComplexShadowCaster | null
   sprite: Container
   surfaceMesh: NativeBuildingSurfaceMesh | null
+  sourceCanvas: HTMLCanvasElement
   texture: Texture
 }
 
@@ -456,10 +468,15 @@ interface TreeResidents {
 }
 
 interface StaticWorldBuild {
+  activeResidents: ResidentTexture[]
+  applyOffCameraCleanup(): void
   buildingResidents: ReadonlyMap<string, BuildingResidents>
   foreground: Container
   mainResidents: ReadonlyMap<number, ResidentTexture>
   residents: ResidentTexture[]
+  offCameraCleanupApplied: boolean
+  retiredStaticResidentCount: number
+  retiredStaticSourceCount: number
   shadowCasters: readonly BoneyardComplexShadowStaticCaster[]
   staticPaintCount: number
   treeInputs: readonly NativeTreeOcclusionInput[]
@@ -562,7 +579,16 @@ export async function createBoneyardWorldRenderer(
 
   let staticWorld: StaticWorldBuild | null = null
   try {
-    staticWorld = await buildStaticWorld(document, world)
+    staticWorld = await buildStaticWorld(
+      document,
+      world,
+      options.initialSnapshot.world.kind === 'boneyard'
+        ? options.initialSnapshot.world.arenaTransition?.combatBounds
+          ?? (options.initialSnapshot.world.tutorial === null
+            ? null
+            : NATIVE_TUTORIAL_CAMERA_TARGET)
+        : null,
+    )
   } catch (error) {
     application.stage.removeChild(world, worldNameplates.container, worldSpeech.container)
     worldNameplates.destroy()
@@ -603,7 +629,7 @@ export async function createBoneyardWorldRenderer(
   secondaryScreenFlash.visible = false
   drawSecondaryScreenFlash(secondaryScreenFlash, viewport)
   application.stage.addChild(secondaryScreenFlash)
-  const visibility = new BoneyardResidentVisibility(staticWorld.residents)
+  const visibility = new BoneyardResidentVisibility(staticWorld.activeResidents)
   const worldFeedback = new NativeEnemyWorldFeedbackPresentation(
     options.initialSnapshot.tick,
     options.initialSnapshot.world.enemyWorldFeedback,
@@ -628,6 +654,7 @@ export async function createBoneyardWorldRenderer(
   canvas.dataset.regionLightEntry = 'DeadHawg:18'
   canvas.dataset.regionLighting = 'native-region-field+object-scalar'
   canvas.dataset.staticCulling = 'exact-world-bounds'
+  canvas.dataset.staticOffCameraCleanup = 'pending'
   canvas.dataset.staticPaintCount = `${staticWorld.staticPaintCount}`
   canvas.dataset.weatherSplashAsset = 'DeadHawg:24'
   canvas.dataset.weatherSplashBlend = 'add'
@@ -714,6 +741,7 @@ export async function createBoneyardWorldRenderer(
     minTreeLightScalar: 0,
     monumentVisibleCount: 0,
     orbSpriteCount: 0,
+    offCameraCleanupApplied: false,
     painterBandCount: 0,
     playerAttachmentPose: 0,
     playerCount: 0,
@@ -756,7 +784,9 @@ export async function createBoneyardWorldRenderer(
     treeCount: staticWorld.treeInputs.length,
     treeForegroundResidentCount: staticWorld.treeResidents.size,
     treeTintMismatchCount: 0,
-    residentCount: staticWorld.residents.length,
+    residentCount: staticWorld.activeResidents.length,
+    retiredStaticResidentCount: 0,
+    retiredStaticSourceCount: 0,
     regionLightCompositeZIndex: NATIVE_REGION_LIGHT_COMPOSITE_Z_INDEX,
     regionLightLogicalSide: regionLightField.targetLogicalSide,
     regionLightPhysicalSide: regionLightField.targetPhysicalSide,
@@ -874,6 +904,8 @@ export async function createBoneyardWorldRenderer(
     },
     render(snapshot) {
       if (destroyed) return
+      const currentStaticWorld = staticWorld
+      if (currentStaticWorld === null) return
       requireBoneyardSnapshot(snapshot, options.boneyard.runId)
       const player = snapshot.players[options.playerId]
       if (!player) return
@@ -890,6 +922,15 @@ export async function createBoneyardWorldRenderer(
         viewport,
         cameraZoom,
       )
+      if (
+        snapshot.world.arenaTransition?.phase === 'sealed'
+        || (
+          snapshot.world.tutorial?.cameraLockTriggered === true
+          && snapshot.world.tutorial.cameraLockTicksRemaining === 0
+        )
+      ) {
+        currentStaticWorld.applyOffCameraCleanup()
+      }
       const visibleWorld = boneyardVisibleWorldBounds(camera, viewport, 0)
       visibility.update(camera, viewport)
       const frameAt = now()
@@ -1164,6 +1205,7 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.playerElementEffectScale = playerView?.elementEffectScale ?? 1
       frameDiagnostics.seekerSegmentCount = scene.seekerSegmentCount
       frameDiagnostics.orbSpriteCount = playerView?.orbSpriteCount ?? 0
+      frameDiagnostics.offCameraCleanupApplied = currentStaticWorld.offCameraCleanupApplied
       frameDiagnostics.playerWeaponScale = playerView?.weaponScale ?? 1
       const deathFrame = playerView?.deathFrame ?? null
       frameDiagnostics.playerDeathColorLayerCount = playerView?.deathColorLayerCount ?? 0
@@ -1188,6 +1230,9 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.playerMaterialTint = playerView?.materialTint ?? 0xffffff
       frameDiagnostics.playerX = player.position.x
       frameDiagnostics.playerY = player.position.y
+      frameDiagnostics.residentCount = currentStaticWorld.activeResidents.length
+      frameDiagnostics.retiredStaticResidentCount = currentStaticWorld.retiredStaticResidentCount
+      frameDiagnostics.retiredStaticSourceCount = currentStaticWorld.retiredStaticSourceCount
       frameDiagnostics.runGameOverExitTicks = snapshot.run.gameOverExitTicks
       frameDiagnostics.runGameOverTicks = snapshot.run.gameOverTicks
       frameDiagnostics.runId = snapshot.run.runId
@@ -1211,6 +1256,9 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.visibleMainLayerCount = visibility.visibleMainResidents.length
       frameDiagnostics.visibleOversizedResidentCount = visibility.visibleOversizedResidentCount
       frameDiagnostics.visibleResidentCount = visibility.visibleResidentCount
+      canvas.dataset.staticOffCameraCleanup = currentStaticWorld.offCameraCleanupApplied
+        ? 'applied'
+        : 'pending'
       frameDiagnostics.weatherDropCount = scene.weatherDropCount
       frameDiagnostics.weatherMode = scene.weatherMode
       frameDiagnostics.weatherSplashCount = scene.weatherSplashCount
@@ -3093,12 +3141,15 @@ function drawGateLines(graphics: Graphics, leaf: NativeGateLeaf): void {
 async function buildStaticWorld(
   document: EditorDoc,
   root: Container,
+  cleanupBounds: Readonly<BoneyardBounds> | null,
 ): Promise<StaticWorldBuild> {
   const base = new Container({ label: 'boneyard-base' })
   const foreground = new Container({ label: 'boneyard-foreground' })
   base.zIndex = 0
   root.addChild(base, foreground)
   const residents: ResidentTexture[] = []
+  const activeResidents: ResidentTexture[] = []
+  const visualBoundsBySource = new Map<string, BoneyardBounds>()
   const buildingMainResidents = new Map<string, {
     resident: BuildingResidents['main']
     samplePoints: readonly Vec2[]
@@ -3110,8 +3161,10 @@ async function buildStaticWorld(
   const treeInputs: NativeTreeOcclusionInput[] = []
   const treeResidents = new Map<string, TreeResidents>()
   let staticPaintCount = 0
+  let fullBaseResidents: ResidentTexture[] = []
+  let cleanupPlan: ReturnType<typeof boneyardOffCameraCleanupPlan> | null = null
   try {
-    residents.push(...await buildTiledStaticLayer(
+    fullBaseResidents = await buildTiledStaticLayer(
       document,
       base,
       false,
@@ -3119,7 +3172,9 @@ async function buildStaticWorld(
         drawNativeBoneyardBase(context, width, height, camera, document)
         staticPaintCount += 1
       },
-    ))
+    )
+    residents.push(...fullBaseResidents)
+    activeResidents.push(...fullBaseResidents)
 
     const mainLayers = nativeBoneyardMainLayers(document)
     for (let layerIndex = 0; layerIndex < mainLayers.length; layerIndex += 1) {
@@ -3128,11 +3183,16 @@ async function buildStaticWorld(
       const resident = buildMainLayerResident(document, layer, layerIndex)
       staticPaintCount += 1
       if (resident) {
+        resident.cleanupSourceKey = layer.kind === 'object'
+          ? `object:${layer.object.eid}`
+          : null
+        mergeCleanupSourceBounds(visualBoundsBySource, resident)
         if (layer.kind === 'object' && layer.object.typeId === NATIVE.goodie) {
           resident.sprite.alpha = 0
         }
         root.addChild(resident.sprite)
         residents.push(resident)
+        activeResidents.push(resident)
         mainResidents.set(layerIndex, resident)
         if (resident.shadowCaster) {
           shadowCasters.push({ caster: resident.shadowCaster, depthOwner: resident.sprite })
@@ -3166,8 +3226,11 @@ async function buildStaticWorld(
       const resident = buildForegroundLayerResident(document, layer, layerIndex)
       staticPaintCount += 1
       if (resident) {
+        resident.cleanupSourceKey = `object:${layer.object.eid}`
+        mergeCleanupSourceBounds(visualBoundsBySource, resident)
         foreground.addChild(resident.sprite)
         residents.push(resident)
+        activeResidents.push(resident)
         if (layer.object.typeId === NATIVE.tree) {
           const main = treeMainResidents.get(layer.object.eid)
           if (!main) {
@@ -3204,6 +3267,30 @@ async function buildStaticWorld(
       }
       if (layerIndex % 12 === 11) await nextFrame()
     }
+
+    if (cleanupBounds !== null) {
+      for (const source of document.sprites) {
+        const sprite = source as typeof source & { deadHawgEntry?: number }
+        const ref = spriteRefFor('DeadHawg', sprite.deadHawgEntry ?? 114 + sprite.atlasEntry)
+        if (ref === null) continue
+        const scale = Number.isFinite(sprite.s1) ? Math.max(0, sprite.s1) : 1
+        visualBoundsBySource.set(
+          `sprite:${sprite.eid}`,
+          boneyardTransformedArtBounds(
+            sprite.pos,
+            ref,
+            Number.isFinite(sprite.s0) ? sprite.s0 : 0,
+            scale * ((sprite.flags & 1) !== 0 ? 0.8 : 1),
+            scale,
+          ),
+        )
+      }
+      cleanupPlan = boneyardOffCameraCleanupPlan(
+        document,
+        cleanupBounds,
+        visualBoundsBySource,
+      )
+    }
   } catch (error) {
     for (const resident of residents) destroyResidentTexture(resident)
     throw error
@@ -3212,16 +3299,98 @@ async function buildStaticWorld(
     for (const resident of residents) destroyResidentTexture(resident)
     throw new Error('A native Building main resident has no roof resident.')
   }
-  return {
+  const build: StaticWorldBuild = {
+    activeResidents,
+    applyOffCameraCleanup: () => {
+      if (
+        build.offCameraCleanupApplied
+        || cleanupPlan === null
+      ) return
+      repaintCleanedBase(document, fullBaseResidents, cleanupPlan.retiredSourceKeys)
+      let retiredStaticResidentCount = 0
+      const retainedResidents = activeResidents.filter((resident) => {
+        const retired = resident.cleanupSourceKey !== null
+          && cleanupPlan!.retiredSourceKeys.has(resident.cleanupSourceKey)
+        if (!retired) return true
+        resident.sprite.renderable = false
+        retiredStaticResidentCount += 1
+        return false
+      })
+      activeResidents.splice(
+        0,
+        activeResidents.length,
+        ...retainedResidents,
+      )
+      build.offCameraCleanupApplied = true
+      build.retiredStaticResidentCount = retiredStaticResidentCount
+      build.retiredStaticSourceCount = cleanupPlan.retiredSourceKeys.size
+    },
     buildingResidents,
     foreground,
     mainResidents,
+    offCameraCleanupApplied: false,
     residents,
+    retiredStaticResidentCount: 0,
+    retiredStaticSourceCount: 0,
     shadowCasters,
     staticPaintCount,
     treeInputs,
     treeResidents,
   }
+  return build
+}
+
+function repaintCleanedBase(
+  document: EditorDoc,
+  residents: readonly ResidentTexture[],
+  retiredSourceKeys: ReadonlySet<string>,
+): void {
+  for (const resident of residents) {
+    const context = resident.sourceCanvas.getContext('2d', { alpha: false })
+    if (context === null) {
+      throw new Error('Boneyard cleanup base could not reacquire Canvas2D.')
+    }
+    drawNativeBoneyardBase(
+      context,
+      resident.sourceCanvas.width,
+      resident.sourceCanvas.height,
+      {
+        x: resident.x + resident.w / 2,
+        y: resident.y + resident.h / 2,
+        zoom: 1,
+      },
+      document,
+      [],
+      retiredSourceKeys,
+    )
+    resident.texture.source.update()
+  }
+}
+
+function mergeCleanupSourceBounds(
+  boundsBySource: Map<string, BoneyardBounds>,
+  resident: ResidentTexture,
+): void {
+  const key = resident.cleanupSourceKey
+  if (key === null) return
+  const current = boundsBySource.get(key)
+  if (current === undefined) {
+    boundsBySource.set(key, {
+      h: resident.h,
+      w: resident.w,
+      x: resident.x,
+      y: resident.y,
+    })
+    return
+  }
+  const x = Math.min(current.x, resident.x)
+  const y = Math.min(current.y, resident.y)
+  boundsBySource.set(key, {
+    x,
+    y,
+    w: Math.max(current.x + current.w, resident.x + resident.w) - x,
+    h: Math.max(current.y + current.h, resident.y + resident.h) - y,
+  })
 }
 
 async function buildTiledStaticLayer(
@@ -3426,11 +3595,13 @@ function residentTexture(
   sprite.position.set(x, y)
   sprite.eventMode = 'none'
   return {
+    cleanupSourceKey: null,
     h: canvas.height,
     mainLayerIndex,
     shadowCaster: null,
     sprite,
     surfaceMesh: null,
+    sourceCanvas: canvas,
     texture,
     w: canvas.width,
     x,
@@ -3457,11 +3628,13 @@ function buildingSurfaceResidentTexture(
     ? 'native-building-roof'
     : 'native-building-base'
   return {
+    cleanupSourceKey: null,
     h: canvas.height,
     mainLayerIndex,
     shadowCaster: null,
     sprite: surfaceMesh.mesh,
     surfaceMesh,
+    sourceCanvas: canvas,
     texture,
     w: canvas.width,
     x,

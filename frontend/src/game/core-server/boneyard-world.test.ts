@@ -5,16 +5,22 @@ import test from 'node:test'
 import { actorHeadingFromVector } from '../core-kernels/actor-heading.ts'
 import { NATIVE_ACTOR_SEPARATION_EPSILON } from '../core-kernels/actor-physics.ts'
 import { NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM } from '../core-kernels/boneyard-zombie-beat.ts'
-import { startBoneyardArenaTransition } from '../core-kernels/boneyard-arena-transition.ts'
+import {
+  BONEYARD_ARENA_SEAL_TICKS,
+  startBoneyardArenaTransition,
+} from '../core-kernels/boneyard-arena-transition.ts'
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-schema.ts'
 import {
   type BoneyardEnemySpawnIntent,
+  startBoneyardWaveDirector,
 } from '../core-kernels/boneyard-wave-director.ts'
 import {
   NATIVE_TUTORIAL_CAMERA_LOCK_SETTLE_TICKS,
+  NATIVE_TUTORIAL_CAMERA_TARGET,
   NATIVE_TUTORIAL_MONSTER_RECIPES,
   createNativeTutorialState,
+  nativeTutorialAmuletItem,
   nativeTutorialEnemyCameraPositionIsAllowed,
   stepNativeTutorial,
 } from '../core-kernels/native-tutorial.ts'
@@ -36,6 +42,7 @@ import {
   stepBoneyardEnemyStore,
 } from './boneyard-enemy-store.ts'
 import { canPlaceBoneyardBody, resolveBoneyardMovement } from './boneyard-collision.ts'
+import { spawnBoneyardCustomLootItems } from './boneyard-loot-store.ts'
 
 function movementInput(x: number, y: number) {
   return {
@@ -890,6 +897,112 @@ test('the retired entrance is a one-way authoritative movement boundary', () => 
   assert.equal(world.gateLeaves.length, 2, 'the Gate actor remains outside the active arena')
 })
 
+test('a generated lock waits for existing enemies and ground Sacks without admitting new entrance births', () => {
+  let world = createBoneyardWorld(encounterBoneyard('default'))
+  assert.ok(world.arenaTransition)
+  assert.ok(world.waves)
+  world = { ...world, encounter: null }
+  let player = spawnPlayerCharacterInBoneyard({
+    discipline: 'arcane',
+    displayName: 'Arena safety tester',
+    element: 'ether',
+  }, world)
+  const outsideIntent = (id: number): BoneyardEnemySpawnIntent => ({
+    enemyToken: 'SKELETON',
+    flags: [],
+    id,
+    locationPolicy: 'anywhere',
+    nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.SKELETON,
+    position: { x: 1000, y: 1500 },
+    positionPolicy: 'direct',
+    spawnTick: 0,
+    waveOrdinal: 1,
+  })
+
+  let result = stepWorld(world, { player }, {}, 1, [outsideIntent(9001)])
+  world = {
+    ...result.world,
+    waves: startBoneyardWaveDirector(result.world.waves!),
+  }
+  player = result.players.player
+  assert.ok(world.enemies.actors.some(({ position }) => position.y > 1200))
+
+  result = stepWorld(world, { player }, {}, 2, [outsideIntent(9002)])
+  world = result.world
+  player = result.players.player
+  assert.equal(world.arenaTransition?.phase, 'open')
+  const confinedBirth = world.enemies.actors.find(({ sourceSpawnIntentId }) => (
+    sourceSpawnIntentId === 9002
+  ))
+  assert.ok(confinedBirth)
+  assert.ok(
+    confinedBirth.position.y + confinedBirth.config.collisionRadius <= 1200,
+    'a birth after the run request must fit the future combat rectangle',
+  )
+
+  world = {
+    ...world,
+    enemies: { ...world.enemies, actors: [], maggots: [] },
+    loot: spawnBoneyardCustomLootItems(
+      world.loot,
+      [nativeTutorialAmuletItem()],
+      { x: 1000, y: 1500 },
+      2,
+    ).store,
+  }
+  result = stepWorld(world, { player }, {}, 3)
+  world = result.world
+  player = result.players.player
+  assert.equal(world.arenaTransition?.phase, 'open', 'required Sack keeps the entry reachable')
+
+  world = { ...world, loot: { ...world.loot, actors: [] } }
+  result = stepWorld(world, { player }, {}, 4)
+  assert.equal(result.world.arenaTransition?.phase, 'locking')
+})
+
+test('the tick-400 generated cleanup retires outside authored scenery targets and Goodies but keeps Fence', () => {
+  const loaded = encounterBoneyard('default')
+  loaded.scene.objects = [
+    { eid: 'inside-grave', pos: { x: 800, y: 1000 }, typeId: 2029, variant: 0 },
+    { eid: 'outside-grave', pos: { x: 800, y: 1400 }, typeId: 2029, variant: 0 },
+    { eid: 'inside-goodie', pos: { x: 1200, y: 1000 }, typeId: 2061, variant: 0 },
+    { eid: 'outside-goodie', pos: { x: 1200, y: 1400 }, typeId: 2061, variant: 0 },
+  ]
+  let world = createBoneyardWorld(loaded)
+  assert.ok(world.arenaTransition)
+  const started = startBoneyardArenaTransition(world.arenaTransition)
+  assert.equal(started.sealTicksRemaining, BONEYARD_ARENA_SEAL_TICKS)
+  world = {
+    ...world,
+    arenaTransition: { ...started, sealTicksRemaining: 1 },
+    encounter: null,
+    waves: null,
+  }
+  const player = spawnPlayerCharacterInBoneyard({
+    discipline: 'arcane',
+    displayName: 'Cleanup tester',
+    element: 'fire',
+  }, world)
+
+  const result = stepWorld(world, { player }, {}, 1)
+
+  assert.equal(result.world.arenaTransition?.phase, 'sealed')
+  assert.deepEqual(
+    result.world.earthquakeSceneryTargets.map(({ id }) => id),
+    [0, 2],
+  )
+  assert.deepEqual(
+    result.world.primarySceneryTargets.map(({ id }) => id),
+    ['scenery:inside-grave', 'scenery:inside-goodie'],
+  )
+  assert.deepEqual(
+    result.world.scenerySpellTargets.map(({ id }) => id),
+    ['scenery:inside-grave'],
+  )
+  assert.deepEqual(result.world.loot.goodies.map(({ eid }) => eid), ['inside-goodie'])
+  assert.equal(result.world.gateLeaves.length, 2)
+})
+
 test('direct spawn materialization escapes the captured object-213 grave with a mobile body', () => {
   const capturedPosition = { x: 1723.75, y: 2189.125 }
   const loaded = capturedGraveBoneyard()
@@ -1193,6 +1306,56 @@ test('a locked Tutorial admits every new enemy circle inside the visible camera 
     actor.position,
     actor.config.collisionRadius,
   ), true)
+})
+
+test('the Tutorial tick-300 cleanup retires outside authored scene ownership but keeps Fence', () => {
+  const loaded = materializeStockTutorial(Buffer.alloc(16, 59))
+  const created = createBoneyardWorld(loaded)
+  assert.ok(created.tutorial)
+  const outsideTargetCount = created.earthquakeSceneryTargets.filter(({ position }) => (
+    position.x < NATIVE_TUTORIAL_CAMERA_TARGET.x
+    || position.y < NATIVE_TUTORIAL_CAMERA_TARGET.y
+    || position.x > NATIVE_TUTORIAL_CAMERA_TARGET.x + NATIVE_TUTORIAL_CAMERA_TARGET.w
+    || position.y > NATIVE_TUTORIAL_CAMERA_TARGET.y + NATIVE_TUTORIAL_CAMERA_TARGET.h
+  )).length
+  assert.ok(outsideTargetCount > 0)
+  const world = {
+    ...created,
+    encounter: null,
+    tutorial: {
+      ...created.tutorial,
+      active: false,
+      cameraLockAgeTicks: NATIVE_TUTORIAL_CAMERA_LOCK_SETTLE_TICKS,
+      cameraLockTriggered: true,
+      cameraLockTicksRemaining: 0,
+      introActive: false,
+      introBlend: 1,
+      introDelayTicksRemaining: 0,
+      introFade: 0,
+      introMovementTicksRemaining: 0,
+      stage: 19 as const,
+    },
+    waves: null,
+  }
+  const player = {
+    ...spawnPlayerCharacterInBoneyard({
+      discipline: 'arcane',
+      displayName: 'Tutorial cleanup tester',
+      element: 'ether',
+    }, world),
+    position: { x: 1025, y: 700 },
+  }
+
+  const result = stepWorld(world, { player }, {}, 1)
+
+  assert.ok(result.world.earthquakeSceneryTargets.every(({ position }) => (
+    position.x >= NATIVE_TUTORIAL_CAMERA_TARGET.x
+    && position.y >= NATIVE_TUTORIAL_CAMERA_TARGET.y
+    && position.x <= NATIVE_TUTORIAL_CAMERA_TARGET.x + NATIVE_TUTORIAL_CAMERA_TARGET.w
+    && position.y <= NATIVE_TUTORIAL_CAMERA_TARGET.y + NATIVE_TUTORIAL_CAMERA_TARGET.h
+  )))
+  assert.ok(result.world.earthquakeSceneryTargets.length < created.earthquakeSceneryTargets.length)
+  assert.equal(result.world.gateLeaves.length, created.gateLeaves.length)
 })
 
 test('Solomon ignores dead and ineligible proximity targets', () => {

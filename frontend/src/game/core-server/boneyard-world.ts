@@ -9,6 +9,7 @@ import type {
   LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
 import {
+  boneyardArenaTransitionSafetyClear,
   boneyardActiveBounds,
   createBoneyardArenaTransition,
   startBoneyardArenaTransition,
@@ -71,6 +72,7 @@ import type {
 } from '../core-kernels/native-secondary-abilities.ts'
 import { RETAIL_BONEYARD_EXPERIENCE_RECIPE_SCALAR } from '../core-kernels/player-progression.ts'
 import {
+  NATIVE_LOOT_CARRIER_PLACEMENT_RADIUS,
   NATIVE_LOOT_DEFAULT_MODIFIERS,
   type NativeLootModifiers,
   type NativeLootPlacement,
@@ -117,6 +119,7 @@ import {
 import {
   createBoneyardLootStore,
   materializeBoneyardEnemyLoot,
+  retireBoneyardGoodiesOutsideBounds,
   spawnBoneyardCustomLootItems,
   rollBoneyardLootSeed,
   stepBoneyardLootStore,
@@ -534,12 +537,41 @@ export function stepBoneyardWorldTick(
     if (encounter.runEventId > (world.encounter?.runEventId ?? 0)) {
       waves = startBoneyardWaveDirector(waves)
       wavesStarted = true
-      if (arenaTransition !== null) {
-        arenaTransition = startBoneyardArenaTransition(arenaTransition)
-        activeBounds = boneyardActiveBounds(arenaTransition)
-      }
     }
   }
+  if (
+    arenaTransition?.phase === 'open'
+    && waves !== null
+    && waves.phase !== 'dormant'
+    && boneyardArenaTransitionSafetyClear(arenaTransition.combatBounds, [
+      ...Object.entries(nextPlayers).flatMap(([playerId, player]) => {
+        const combat = playerCombat[playerId]
+        return combat?.alive === true && combat.eligible
+          ? [{ position: player.position, radius: PLAYER_CHARACTER_RADIUS }]
+          : []
+      }),
+      ...collisionResolvedEnemies.actors.map((actor) => ({
+        position: actor.position,
+        radius: actor.config.collisionRadius,
+      })),
+      ...collisionResolvedEnemies.maggots.map((maggot) => ({
+        position: maggot.position,
+        radius: maggot.collisionRadius,
+      })),
+      ...loot.actors.filter(({ kind }) => kind === 'sack').map((actor) => ({
+        position: actor.position,
+        radius: NATIVE_LOOT_CARRIER_PLACEMENT_RADIUS,
+      })),
+    ])
+  ) {
+    arenaTransition = startBoneyardArenaTransition(arenaTransition)
+    activeBounds = boneyardActiveBounds(arenaTransition)
+  }
+  const spawnBounds = arenaTransition !== null
+    && waves !== null
+    && waves.phase !== 'dormant'
+    ? arenaTransition.combatBounds
+    : activeBounds
   const dynamicBodies = boneyardCombatBodies(
     nextPlayers,
     collisionResolvedEnemies,
@@ -618,7 +650,7 @@ export function stepBoneyardWorldTick(
       if (purpose === 'spawn-placement') {
         return resolveBoneyardSpawnPosition(
           position,
-          activeBounds,
+          spawnBounds,
           collision,
           radius,
         )
@@ -658,7 +690,7 @@ export function stepBoneyardWorldTick(
     resolveSpawnPlacement: ({ actorId: _actorId, position, positionPolicy, radius, rngState }) => (
       resolveNativeBoneyardSpawnPosition(
         { ...position },
-        activeBounds,
+        spawnBounds,
         collision,
         radius,
         positionPolicy ?? 'direct',
@@ -690,7 +722,7 @@ export function stepBoneyardWorldTick(
         || waves.phase === 'dormant'
       ) return external
       const result = stepBoneyardWaveDirector(waves, {
-        bounds: activeBounds,
+        bounds: spawnBounds,
         liveEnemyCount,
         players: livingPlayers,
         tick,
@@ -796,6 +828,30 @@ export function stepBoneyardWorldTick(
     activeBounds,
     collision,
   )
+  const cleanupBounds = arenaTransition?.phase === 'sealed'
+    ? arenaTransition.combatBounds
+    : tutorial?.cameraLockTriggered === true
+      && tutorial.cameraLockTicksRemaining === 0
+      ? NATIVE_TUTORIAL_CAMERA_TARGET
+      : null
+  if (cleanupBounds !== null) {
+    loot = retireBoneyardGoodiesOutsideBounds(loot, cleanupBounds)
+  }
+  const earthquakeSceneryTargets = cleanupBounds === null
+    ? world.earthquakeSceneryTargets
+    : world.earthquakeSceneryTargets.filter(({ position }) => (
+        pointInsideBounds(position, cleanupBounds)
+      ))
+  const primarySceneryTargets = cleanupBounds === null
+    ? world.primarySceneryTargets
+    : world.primarySceneryTargets.filter(({ position }) => (
+        pointInsideBounds(position, cleanupBounds)
+      ))
+  const scenerySpellTargets = cleanupBounds === null
+    ? world.scenerySpellTargets
+    : world.scenerySpellTargets.filter(({ position }) => (
+        pointInsideBounds(position, cleanupBounds)
+      ))
   return {
     enemyEvents: enemyStep.events,
     lootEvents: lootStep.events,
@@ -812,15 +868,28 @@ export function stepBoneyardWorldTick(
     world: {
       ...world,
       arenaTransition,
+      earthquakeSceneryTargets,
       encounter,
       enemies: knockback.enemies,
       enemyWorldFeedback,
       gateLeaves,
       loot,
+      primarySceneryTargets,
+      scenerySpellTargets,
       tutorial,
       waves,
     },
   }
+}
+
+function pointInsideBounds(
+  point: Readonly<BoneyardPoint>,
+  bounds: Readonly<BoneyardBounds>,
+): boolean {
+  return point.x >= bounds.x
+    && point.y >= bounds.y
+    && point.x <= bounds.x + bounds.w
+    && point.y <= bounds.y + bounds.h
 }
 
 function boneyardSpawnLightSources(

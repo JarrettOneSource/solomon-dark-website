@@ -1,4 +1,4 @@
-import type { BoneyardPoint } from '../core-kernels/boneyard.ts'
+import type { BoneyardBounds, BoneyardPoint } from '../core-kernels/boneyard.ts'
 import type { HubInventoryItem } from '../core-kernels/hub-economy.ts'
 import { seedBoneyardWaveRng } from '../core-kernels/boneyard-wave-timeline.ts'
 import {
@@ -316,6 +316,21 @@ export function removeBoneyardLootActors(
   return actors.length === source.actors.length && effects.length === source.effects.length
     ? source
     : { ...source, actors: Object.freeze(actors), effects: Object.freeze(effects) }
+}
+
+export function retireBoneyardGoodiesOutsideBounds(
+  source: BoneyardLootStore,
+  bounds: Readonly<BoneyardBounds>,
+): BoneyardLootStore {
+  const goodies = source.goodies.filter(({ position }) => (
+    position.x >= bounds.x
+    && position.y >= bounds.y
+    && position.x <= bounds.x + bounds.w
+    && position.y <= bounds.y + bounds.h
+  ))
+  return goodies.length === source.goodies.length
+    ? source
+    : { ...source, goodies: Object.freeze(goodies) }
 }
 
 export function activateBoneyardGoodie(

@@ -694,14 +694,23 @@ async function exerciseTutorialSpawnDomain(host, page, screenshotPath) {
       && frame.tick >= minimumTick
       && Math.abs(frame.cameraX - expectedCamera.x) < 0.01
       && Math.abs(frame.cameraY - expectedCamera.y) < 0.01
+      && frame.offCameraCleanupApplied === true
   }, { expectedCamera, minimumTick: cameraConfiguredTick }, { timeout: 15_000 })
   const cameraFrame = await renderedEnemyFrame(page)
+  assert.ok(cameraFrame.retiredStaticSourceCount > 0)
+  assert.ok(cameraFrame.retiredStaticResidentCount > 0)
+  assert.ok(cameraFrame.residentCount < unsafeFrame.residentCount)
+  assert.equal(await page.locator('.boneyard-world-canvas').getAttribute(
+    'data-static-off-camera-cleanup',
+  ), 'applied')
   await page.screenshot({ path: `${screenshotPath}-stock-camera-locked.png` })
   return {
     camera: {
       ageTicks: state.world.tutorial.cameraLockAgeTicks,
       bounds: cameraBounds,
       cleanupTicksRemaining: state.world.tutorial.cameraLockTicksRemaining,
+      retiredStaticResidentCount: cameraFrame.retiredStaticResidentCount,
+      retiredStaticSourceCount: cameraFrame.retiredStaticSourceCount,
       rendered: { x: cameraFrame.cameraX, y: cameraFrame.cameraY },
     },
     cameraSafety: {

@@ -618,6 +618,7 @@ export function drawNativeBoneyardBase(
   cam: Camera,
   doc: EditorDoc,
   gateLeaves: readonly NativeGateLeafOverride[] = [],
+  skip: ReadonlySet<string> = EMPTY_SET,
 ) {
   paintWorld(
     ctx,
@@ -626,7 +627,7 @@ export function drawNativeBoneyardBase(
     cam,
     doc,
     { selected: EMPTY_SET, hover: null, showGrid: false },
-    undefined,
+    skip.size > 0 ? skip : undefined,
     true,
     gateOverrideMap(gateLeaves),
     'runtime-base',

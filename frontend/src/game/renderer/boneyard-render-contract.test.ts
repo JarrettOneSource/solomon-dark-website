@@ -34,6 +34,10 @@ import {
   NATIVE_SPECTATOR_HUD_CONTRACT,
   nativeSpectatorHudLayout,
 } from '../native-spectator-hud.ts'
+import {
+  boneyardCleanupBoundsOverlap,
+  boneyardOffCameraCleanupPlan,
+} from './boneyard-off-camera-cleanup.ts'
 
 const boneyardRenderer = readFileSync(new URL('./boneyard-world-renderer.ts', import.meta.url), 'utf8')
 const boneyardScene = readFileSync(
@@ -266,7 +270,10 @@ test('Boneyard camera keeps the native zoom and clamps to the arena bounds', () 
 
 test('Tutorial camera projection and actual rendering share one persistent lock resolver', () => {
   assert.equal([...boneyardRenderer.matchAll(/nativeTutorialCameraBounds\(/g)].length, 2)
-  assert.doesNotMatch(boneyardRenderer, /cameraLockTicksRemaining/)
+  assert.doesNotMatch(
+    boneyardRenderer,
+    /cameraLockTicksRemaining[^\n]*\?[^\n]*NATIVE_TUTORIAL_CAMERA_TARGET/,
+  )
   assert.doesNotMatch(boneyardRenderer, /NATIVE_TUTORIAL_CAMERA_LOCK/)
 })
 
@@ -662,6 +669,93 @@ test('resident visibility keeps exact camera-edge contact renderable', () => {
   assert.equal(boneyardResidentIsVisible({ x: 300, y: 120, w: 80, h: 80 }, view), true)
   assert.equal(boneyardResidentIsVisible({ x: 300, y: 650, w: 80, h: 80 }, view), true)
   assert.equal(boneyardResidentIsVisible({ x: -100.001, y: 300, w: 200, h: 80 }, view), false)
+})
+
+test('off-camera cleanup uses strict visual overlap and never retires Fence records', () => {
+  const target = { x: 0, y: 0, w: 100, h: 100 }
+  assert.equal(boneyardCleanupBoundsOverlap(
+    { x: 10, y: 100, w: 20, h: 30 },
+    target,
+  ), false, 'edge-only contact is outside in native action 1066')
+  assert.equal(boneyardCleanupBoundsOverlap(
+    { x: 10, y: 99.999, w: 20, h: 30 },
+    target,
+  ), true)
+
+  const plan = boneyardOffCameraCleanupPlan({
+    bounds: { x: 0, y: 0, w: 500, h: 500 },
+    environmentMode: 0,
+    fences: [{
+      eid: 'outside-gate',
+      points: [{ x: 20, y: 300 }, { x: 80, y: 300 }],
+      segmentCode: 2,
+      typeId: 3005,
+    }],
+    name: 'Cleanup membership fixture',
+    objects: [
+      { eid: 'overlap-tree', pos: { x: 50, y: 120 }, typeId: 2001, variant: 0 },
+      { eid: 'far-tree', pos: { x: 50, y: 500 }, typeId: 2001, variant: 0 },
+    ],
+    roads: [
+      {
+        eid: 'crossing-road',
+        points: [{ x: -10, y: 110 }, { x: 110, y: 110 }],
+        quad: [
+          { x: -10, y: 90 }, { x: 110, y: 90 },
+          { x: -10, y: 130 }, { x: 110, y: 130 },
+        ],
+        typeId: 3004,
+      },
+      {
+        eid: 'edge-road',
+        points: [{ x: 10, y: 110 }, { x: 90, y: 110 }],
+        quad: [
+          { x: 10, y: 100 }, { x: 90, y: 100 },
+          { x: 10, y: 120 }, { x: 90, y: 120 },
+        ],
+        typeId: 3004,
+      },
+    ],
+    solomonDig: null,
+    spawn: { facingDeg: 0, x: 50, y: 450 },
+    sprites: [
+      { atlasEntry: 7, eid: 'overlap-decor', flags: 0, pos: { x: 50, y: 120 }, s0: 0, s1: 1, s2: 1 },
+      { atlasEntry: 7, eid: 'far-decor', flags: 0, pos: { x: 50, y: 400 }, s0: 0, s1: 1, s2: 1 },
+    ],
+    terrain: [
+      { eid: 'crossing-river', points: [{ x: 30, y: 90 }, { x: 30, y: 130 }], pos: { x: 30, y: 110 }, style: 0 },
+      { eid: 'far-river', points: [{ x: 30, y: 200 }, { x: 30, y: 240 }], pos: { x: 30, y: 220 }, style: 0 },
+    ],
+  }, target, new Map([
+    ['object:overlap-tree', { x: -40, y: -130, w: 180, h: 270 }],
+    ['object:far-tree', { x: -40, y: 250, w: 180, h: 270 }],
+    ['sprite:overlap-decor', { x: 5, y: 75, w: 90, h: 90 }],
+    ['sprite:far-decor', { x: 5, y: 355, w: 90, h: 90 }],
+  ]))
+
+  assert.deepEqual([...plan.retiredSourceKeys].sort(), [
+    'object:far-tree',
+    'road:edge-road',
+    'sprite:far-decor',
+    'terrain:far-river',
+  ])
+  assert.equal(plan.retiredSourceKeys.has('fence:outside-gate'), false)
+  assert.deepEqual(plan.retainedCounts, {
+    objects: 1,
+    roads: 1,
+    sprites: 1,
+    terrain: 1,
+  })
+})
+
+test('generated renderer repaints the filtered base and prunes active scene residents only after seal', () => {
+  assert.match(boneyardRenderer, /applyOffCameraCleanup/)
+  assert.match(boneyardRenderer, /arenaTransition\?\.phase === 'sealed'/)
+  assert.match(boneyardRenderer, /tutorial\?\.cameraLockTriggered === true/)
+  assert.match(boneyardRenderer, /tutorial\.cameraLockTicksRemaining === 0/)
+  assert.match(boneyardRenderer, /retiredStaticResidentCount/)
+  assert.match(boneyardRenderer, /retiredStaticSourceCount/)
+  assert.match(boneyardRenderer, /repaintCleanedBase/)
 })
 
 test('visible world bounds include a conservative guard band at responsive sizes', () => {

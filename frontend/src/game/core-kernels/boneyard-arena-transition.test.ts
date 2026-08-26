@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import {
   BONEYARD_ARENA_SEAL_TICKS,
+  boneyardArenaTransitionSafetyClear,
   boneyardActiveBounds,
   createBoneyardArenaTransition,
   startBoneyardArenaTransition,
@@ -73,4 +74,20 @@ test('the open phase preserves full movement while a repeated start is idempoten
   assert.deepEqual(boneyardActiveBounds(created), created.fullBounds)
   const started = startBoneyardArenaTransition(created)
   assert.equal(startBoneyardArenaTransition(started), started)
+})
+
+test('generated lock safety requires every complete live circle inside combat bounds', () => {
+  const bounds = { x: 0, y: 0, w: 200, h: 120 }
+
+  assert.equal(boneyardArenaTransitionSafetyClear(bounds, [
+    { position: { x: 20, y: 20 }, radius: 20 },
+    { position: { x: 180, y: 100 }, radius: 20 },
+  ]), true, 'circle contact with the inside edge remains safe')
+  assert.equal(boneyardArenaTransitionSafetyClear(bounds, [
+    { position: { x: 20, y: 20 }, radius: 20.001 },
+  ]), false, 'a fractional radius beyond the edge must hold the lock open')
+  assert.equal(boneyardArenaTransitionSafetyClear(bounds, [
+    { position: { x: 100, y: 121 }, radius: 1 },
+  ]), false)
+  assert.equal(boneyardArenaTransitionSafetyClear(bounds, []), true)
 })

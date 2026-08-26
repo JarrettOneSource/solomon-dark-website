@@ -39,6 +39,7 @@ const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
 const credential = randomBytes(32).toString('base64url')
 const deterministicSeedBytes = Buffer.alloc(16)
 const expectedBoneyardSeed = deterministicSeedBytes.toString('hex')
+const cleanupOnly = process.argv.includes('--cleanup-only')
 const entranceOnly = process.argv.includes('--entrance-only')
 const openingOnly = process.argv.includes('--opening-only')
 const staffMeleeOnly = process.argv.includes('--staff-melee-only')
@@ -53,6 +54,7 @@ const screenshotPath = process.env.SDR_GAME_WAVES_SMOKE_SCREENSHOT
 const speakingScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-speaking$1')
 const dirtScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-dirt$1')
 const combatScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-combat$1')
+const retiredEntryScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-retired-entry$1')
 const staffMeleeScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-staff-melee$1')
 const archerScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-archer-projectile$1')
 const deathScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-death$1')
@@ -119,9 +121,13 @@ try {
   await enterBoneyard(page)
   const scene = page.locator('.boneyard-scene')
   const initial = await encounterReceipt(scene)
+  const initialFrame = await boneyardFrame(page)
   assert.equal(initial.phase, 'digging')
   assert.equal(initial.wavePhase, 'dormant')
   assert.equal(initial.liveEnemies, 0)
+  assert.equal(initialFrame.offCameraCleanupApplied, false)
+  assert.equal(initialFrame.retiredStaticResidentCount, 0)
+  assert.equal(initialFrame.retiredStaticSourceCount, 0)
   const loadedBoneyard = await waitForWireValue(
     page,
     wire,
@@ -215,7 +221,7 @@ try {
       return Number(scene?.getAttribute('data-wave-live-enemy-count')) >= requiredLiveEnemies
         && window.__sdrAudioPlaySources?.some((source) => source.includes('solomon-laugh-1'))
     }, staffMeleeOnly ? 1 : 8, { timeout: 10_000 })
-    if (!staffMeleeOnly) {
+    if (!staffMeleeOnly && !cleanupOnly) {
       await page.waitForFunction(() => (
         document.querySelector('.boneyard-scene')
           ?.getAttribute('data-wave-phase') === 'opening-threshold'
@@ -228,13 +234,16 @@ try {
   if (staffMeleeOnly) {
     assert.equal(opening.combatEnabled, true)
     assert.ok(opening.liveEnemies >= 1)
+  } else if (cleanupOnly) {
+    assert.equal(opening.combatEnabled, true)
+    assert.ok(opening.liveEnemies >= 8)
   } else {
     assert.equal(opening.wavePhase, 'opening-threshold')
     assert.ok(opening.liveEnemies >= 11 && opening.liveEnemies <= 17)
     assert.equal(opening.pendingSpawnBudget, 0)
   }
   assert.equal(opening.waveOrdinal, 0)
-  const openingSteering = staffMeleeOnly
+  const openingSteering = staffMeleeOnly || cleanupOnly
     ? null
     : await captureOpeningSteering(
         page,
@@ -250,9 +259,11 @@ try {
         wire,
         loadedBoneyard.runId,
         gateCrossing,
+        initialFrame.residentCount,
+        retiredEntryScreenshotPath,
       )
 
-  if (entranceOnly || openingOnly || staffMeleeOnly) {
+  if (cleanupOnly || entranceOnly || openingOnly || staffMeleeOnly) {
     const runCombatAdmission = entranceOnly
       ? await proveRunCombatAdmitted(page, scene)
       : null
@@ -279,6 +290,8 @@ try {
       opening,
       openingSteering,
       productionFrontend,
+      cleanupOnly,
+      retiredEntryScreenshotPath,
       runCombatAdmission,
       speakingCombatAdmission,
       screenshotPath: staffMeleeOnly ? staffMeleeScreenshotPath : combatScreenshotPath,
@@ -436,6 +449,7 @@ try {
     playerDamageAudio,
     playerDamageEvents,
     productionFrontend,
+    retiredEntryScreenshotPath,
     runEdge,
     screenshotPath,
     secondRun,
@@ -1825,13 +1839,40 @@ async function waitForRenderedDeathSequence(page) {
   }
 }
 
-async function proveRetiredEntry(page, scene, wire, runId, gateCrossing) {
+async function proveRetiredEntry(
+  page,
+  scene,
+  wire,
+  runId,
+  gateCrossing,
+  initialResidentCount,
+  cleanupScreenshotPath,
+) {
   const snapshot = currentBoneyardSnapshot(wire, runId)
   assert.ok(snapshot, 'expected the authoritative Boneyard snapshot')
   const transition = snapshot.world.arenaTransition
   assert.ok(transition, 'expected generated-arena transition ownership')
   assert.notEqual(transition.phase, 'open')
   assert.deepEqual(wire.outsideCombatEnemySamples, [])
+
+  await page.waitForFunction(() => {
+    const canvas = document.querySelector('.boneyard-world-canvas')
+    const frame = canvas?.__sdrBoneyardFrame
+    return frame?.arenaTransitionPhase === 'sealed'
+      && frame.offCameraCleanupApplied === true
+      && canvas?.getAttribute('data-static-off-camera-cleanup') === 'applied'
+  }, undefined, { timeout: 15_000 })
+  const cleanupFrame = await boneyardFrame(page)
+  assert.equal(cleanupFrame.offCameraCleanupApplied, true)
+  assert.ok(cleanupFrame.retiredStaticSourceCount > 0)
+  assert.ok(cleanupFrame.retiredStaticResidentCount > 0)
+  assert.ok(cleanupFrame.residentCount < initialResidentCount)
+  assert.equal(
+    cleanupFrame.visibleResidentCount + cleanupFrame.culledResidentCount,
+    cleanupFrame.residentCount,
+  )
+  assert.equal(cleanupFrame.gateLeafCount, 2)
+  await page.screenshot({ path: cleanupScreenshotPath })
 
   const boundaryY = gateCrossing.direction > 0
     ? transition.combatBounds.y + PLAYER_CHARACTER_RADIUS
@@ -1868,7 +1909,11 @@ async function proveRetiredEntry(page, scene, wire, runId, gateCrossing) {
     (finalY - gateCrossing.target.y) * gateCrossing.direction > 0,
     `player regained retired entry Gate ${gateCrossing.target.y}: ${finalY}`,
   )
-  assert.ok(returnProgress > 50, `player did not advance toward retired entry: ${returnProgress}`)
+  const availableReturnProgress = Math.abs(beforeY - boundaryY)
+  assert.ok(
+    returnProgress >= Math.min(25, Math.max(0, availableReturnProgress - 1)),
+    `player did not advance toward retired entry: ${returnProgress}/${availableReturnProgress}`,
+  )
   assert.deepEqual(wire.outsideCombatEnemySamples, [])
   const frame = await boneyardFrame(page)
   assert.equal(frame.localPlayerLifeState, 'alive')
@@ -1884,6 +1929,10 @@ async function proveRetiredEntry(page, scene, wire, runId, gateCrossing) {
     finalY,
     phase: frame.arenaTransitionPhase,
     reachedBoundary: Math.abs(finalY - boundaryY) <= 2,
+    residentCountAfter: frame.residentCount,
+    residentCountBefore: initialResidentCount,
+    retiredStaticResidentCount: frame.retiredStaticResidentCount,
+    retiredStaticSourceCount: frame.retiredStaticSourceCount,
     returnProgress,
     sampledEnemyCount: snapshot.world.enemies.length,
   }

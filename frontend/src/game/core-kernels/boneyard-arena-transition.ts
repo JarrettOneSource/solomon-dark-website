@@ -26,6 +26,25 @@ export interface BoneyardArenaTransitionState {
   sealTicksRemaining: number
 }
 
+export interface BoneyardArenaTransitionSafetyBody {
+  readonly position: Readonly<BoneyardPoint>
+  readonly radius: number
+}
+
+export function boneyardArenaTransitionSafetyClear(
+  combatBounds: Readonly<BoneyardBounds>,
+  bodies: readonly BoneyardArenaTransitionSafetyBody[],
+): boolean {
+  return bodies.every(({ position, radius }) => (
+    Number.isFinite(radius)
+    && radius > 0
+    && position.x - radius >= combatBounds.x
+    && position.y - radius >= combatBounds.y
+    && position.x + radius <= combatBounds.x + combatBounds.w
+    && position.y + radius <= combatBounds.y + combatBounds.h
+  ))
+}
+
 export function createBoneyardArenaTransition(
   bounds: Readonly<BoneyardBounds>,
   spawn: Readonly<BoneyardPoint>,
