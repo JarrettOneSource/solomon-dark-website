@@ -16,6 +16,81 @@ import {
 } from './hub-render-contract.ts'
 
 const hubWorldScene = readFileSync(new URL('./hub-world-scene.ts', import.meta.url), 'utf8')
+const hubPrivateRoomScene = readFileSync(
+  new URL('./hub-private-room-scene.ts', import.meta.url),
+  'utf8',
+)
+const hubTextures = readFileSync(new URL('./hub-textures.ts', import.meta.url), 'utf8')
+const hubVisualAtlas = readFileSync(new URL('./hub-visual-atlas.ts', import.meta.url), 'utf8')
+const hubVisualAtlasGenerated = readFileSync(
+  new URL('./hub-visual-atlas.generated.ts', import.meta.url),
+  'utf8',
+)
+const hubVisualAtlasPacker = readFileSync(
+  new URL('../../../../tools/pack-hub-visual-atlas.py', import.meta.url),
+  'utf8',
+)
+const gameAssets = readFileSync(new URL('../game-assets.ts', import.meta.url), 'utf8')
+
+test('Hub-world visuals share three bounded exact-pixel pages', () => {
+  assert.match(hubVisualAtlasGenerated, /HUB_VISUAL_ATLAS_DECODED_BYTES = 42229760/)
+  assert.match(hubVisualAtlasGenerated, /HUB_VISUAL_ATLAS_SOURCE_COUNT = 87/)
+  assert.match(hubVisualAtlasGenerated, /HUB_VISUAL_ATLAS_FRAME_COUNT = 578/)
+  assert.match(hubVisualAtlasGenerated, /HUB_VISUAL_ATLAS_EMPTY_FRAME_COUNT = 0/)
+  assert.match(hubVisualAtlasGenerated, /HUB_VISUAL_ATLAS_PACKED_RECTANGLE_COUNT = 572/)
+  assert.match(
+    hubVisualAtlasGenerated,
+    /HUB_VISUAL_ATLAS_PAGE_DIMENSIONS = \[\[2048,2041\],\[2048,2046\],\[2048,1068\]\]/,
+  )
+  assert.match(
+    hubVisualAtlasGenerated,
+    /HUB_VISUAL_ATLAS_SOURCES = \[page0, page1, page2\]/,
+  )
+  for (const [page, width, height] of [
+    [0, 2048, 2041],
+    [1, 2048, 2046],
+    [2, 2048, 1068],
+  ] as const) {
+    const png = readFileSync(new URL(
+      `../../assets/game/hub-visual-atlas-${page}.png`,
+      import.meta.url,
+    ))
+    assert.equal(png.readUInt32BE(16), width)
+    assert.equal(png.readUInt32BE(20), height)
+  }
+  assert.match(hubVisualAtlasPacker, /EXPECTED_SOURCE_COUNT = 87/)
+  assert.match(hubVisualAtlasPacker, /exact_pixel_bounds\(cell\)/)
+  assert.match(hubVisualAtlasPacker, /actual\.paste\(crop, \(frame\.trim_x, frame\.trim_y\)\)/)
+  assert.match(hubVisualAtlasPacker, /if actual\.tobytes\(\) != expected\.tobytes\(\):/)
+  assert.match(hubVisualAtlasPacker, /if len\(pages\) != 3:/)
+})
+
+test('Hub renderer loads compact pages and releases derived frames before page owners', () => {
+  assert.match(hubTextures, /\.\.\.HUB_VISUAL_ATLAS_SOURCES/)
+  assert.match(hubTextures, /createHubVisualAtlas\(texture\)/)
+  assert.match(hubTextures, /hubVisualAtlasSourceIsSingle\(source\)/)
+  assert.doesNotMatch(hubTextures, /hubGameAssetSources/)
+  assert.doesNotMatch(gameAssets, /function hubGameAssetSources/)
+  assert.ok(
+    hubTextures.indexOf('textures.visualAtlas.destroy()')
+      < hubTextures.indexOf('for (const source of textures.assetSources)'),
+  )
+  assert.doesNotMatch(hubTextures, /Object\.values\(textures\.base\)/)
+  assert.match(hubVisualAtlas, /orig: origin/)
+  assert.match(hubVisualAtlas, /trim: new Rectangle\(trimX, trimY, width, height\)/)
+  assert.match(hubVisualAtlas, /function packedSubframeTexture/)
+  assert.match(hubVisualAtlas, /packedX \+ left - trimX/)
+})
+
+test('every Hub sheet and logical crop is owned by the compact atlas', () => {
+  assert.match(hubPrivateRoomScene, /this\.textures\.visualAtlas\.strip\(/)
+  assert.match(hubPrivateRoomScene, /this\.textures\.visualAtlas\.frame\(/)
+  assert.doesNotMatch(hubPrivateRoomScene, /new Texture\(/)
+  assert.match(hubWorldScene, /this\.textures\.visualAtlas\.frame\(/)
+  assert.match(hubWorldScene, /this\.textures\.visualAtlas\.subframe\(/)
+  assert.doesNotMatch(hubWorldScene, /new Texture\(/)
+  assert.doesNotMatch(hubWorldScene, /layerFrameTextures/)
+})
 
 test('native painter boundaries sort actors around Courtyard props and tent faces', () => {
   assert.deepEqual(HUB_COURTYARD_DEPTH_PROP_FRAME, {

@@ -1,15 +1,18 @@
 import { Texture } from 'pixi.js'
 import { boneyard, hub } from '../../lib/assets.ts'
-import { WIZARD_ELEMENTS } from '../core-kernels/player-character.ts'
-import { hubGameAssetSources } from '../game-assets.ts'
 import {
   createPlayerWorldTextures,
   destroyPlayerWorldTextureFrames,
-  gridFrames,
   playerWorldAssetSources,
-  stripFrames,
   type PlayerWorldTextures,
 } from './world-player-textures.ts'
+import {
+  HUB_VISUAL_ATLAS_ORIGINAL_SOURCES,
+  HUB_VISUAL_ATLAS_SOURCES,
+  createHubVisualAtlas,
+  hubVisualAtlasSourceIsSingle,
+  type HubVisualAtlas,
+} from './hub-visual-atlas.ts'
 import { loadGameTextureEntries } from './game-webgl.ts'
 
 const ACTOR_FRAME_SIZE = 170
@@ -72,11 +75,12 @@ export interface HubWorldTextures extends PlayerWorldTextures {
   students: HubStudentTextureFrames
   teacher: HubTeacherTextureFrames
   traders: HubTraderTextureFrames
+  visualAtlas: HubVisualAtlas
 }
 
 export function hubWorldAssetSources(): readonly string[] {
   return [...new Set([
-    ...WIZARD_ELEMENTS.flatMap(hubGameAssetSources),
+    ...HUB_VISUAL_ATLAS_SOURCES,
     ...playerWorldAssetSources(),
     boneyard.levelUpSparkle,
   ])]
@@ -91,10 +95,14 @@ export async function loadHubWorldTextures(): Promise<HubWorldTextures> {
     if (!result) throw new Error(`Hub texture was not loaded: ${source}`)
     return result
   }
+  const visualAtlas = createHubVisualAtlas(texture)
+  for (const source of HUB_VISUAL_ATLAS_ORIGINAL_SOURCES) {
+    if (hubVisualAtlasSourceIsSingle(source)) base[source] = visualAtlas.single(source)
+  }
 
   const playerWorld = createPlayerWorldTextures(texture)
-  const assistantFrames = stripFrames(
-    texture(hub.astronomer.assistants),
+  const assistantFrames = visualAtlas.strip(
+    hub.astronomer.assistants,
     12,
     150,
     150,
@@ -112,42 +120,43 @@ export async function loadHubWorldTextures(): Promise<HubWorldTextures> {
         purple: assistantFrames.slice(9, 12),
       },
       green: {
-        gesture: stripFrames(texture(hub.astronomer.green.gesture), 5, 450, 450, 'horizontal'),
-        idle: stripFrames(texture(hub.astronomer.green.idle), 4, 450, 450, 'horizontal'),
-        transition: stripFrames(texture(hub.astronomer.green.transition), 3, 450, 450, 'horizontal'),
+        gesture: visualAtlas.strip(hub.astronomer.green.gesture, 5, 450, 450, 'horizontal'),
+        idle: visualAtlas.strip(hub.astronomer.green.idle, 4, 450, 450, 'horizontal'),
+        transition: visualAtlas.strip(hub.astronomer.green.transition, 3, 450, 450, 'horizontal'),
       },
       red: {
-        gesture: stripFrames(texture(hub.astronomer.red.gesture), 5, 450, 450, 'horizontal'),
-        idle: stripFrames(texture(hub.astronomer.red.idle), 4, 450, 450, 'horizontal'),
-        transition: stripFrames(texture(hub.astronomer.red.transition), 3, 450, 450, 'horizontal'),
+        gesture: visualAtlas.strip(hub.astronomer.red.gesture, 5, 450, 450, 'horizontal'),
+        idle: visualAtlas.strip(hub.astronomer.red.idle, 4, 450, 450, 'horizontal'),
+        transition: visualAtlas.strip(hub.astronomer.red.transition, 3, 450, 450, 'horizontal'),
       },
-      telescope: stripFrames(texture(hub.astronomer.telescope), 5, 374, 292, 'horizontal'),
+      telescope: visualAtlas.strip(hub.astronomer.telescope, 5, 374, 292, 'horizontal'),
     },
     base,
     levelUpSparkle: texture(boneyard.levelUpSparkle),
     potion: {
-      actor: stripFrames(texture(hub.npcs.potion), 5, 35, 49, 'horizontal'),
-      balloons: stripFrames(texture(hub.tent.balloons), 5, 54, 72, 'horizontal'),
+      actor: visualAtlas.strip(hub.npcs.potion, 5, 35, 49, 'horizontal'),
+      balloons: visualAtlas.strip(hub.tent.balloons, 5, 54, 72, 'horizontal'),
     },
-    skorcha: stripFrames(texture(hub.npcs.skorchaFrames), 7, 350, 350, 'horizontal'),
+    skorcha: visualAtlas.strip(hub.npcs.skorchaFrames, 7, 350, 350, 'horizontal'),
     students: {
-      head: stripFrames(texture(hub.npcs.studentHead), ACTOR_HEADINGS, ACTOR_FRAME_SIZE, ACTOR_FRAME_SIZE, 'vertical'),
-      props: hub.npcs.studentProps.map((source) => stripFrames(texture(source), ACTOR_HEADINGS, ACTOR_FRAME_SIZE, ACTOR_FRAME_SIZE, 'vertical')),
-      read: gridFrames(texture(hub.npcs.studentRead), ACTOR_WALK_FRAMES, ACTOR_HEADINGS, ACTOR_FRAME_SIZE, ACTOR_FRAME_SIZE),
-      walk: gridFrames(texture(hub.npcs.studentWalk), ACTOR_WALK_FRAMES, ACTOR_HEADINGS, ACTOR_FRAME_SIZE, ACTOR_FRAME_SIZE),
+      head: visualAtlas.strip(hub.npcs.studentHead, ACTOR_HEADINGS, ACTOR_FRAME_SIZE, ACTOR_FRAME_SIZE, 'vertical'),
+      props: hub.npcs.studentProps.map((source) => visualAtlas.strip(source, ACTOR_HEADINGS, ACTOR_FRAME_SIZE, ACTOR_FRAME_SIZE, 'vertical')),
+      read: visualAtlas.grid(hub.npcs.studentRead, ACTOR_WALK_FRAMES, ACTOR_HEADINGS, ACTOR_FRAME_SIZE, ACTOR_FRAME_SIZE),
+      walk: visualAtlas.grid(hub.npcs.studentWalk, ACTOR_WALK_FRAMES, ACTOR_HEADINGS, ACTOR_FRAME_SIZE, ACTOR_FRAME_SIZE),
     },
     teacher: {
-      actor: stripFrames(texture(hub.npcs.teacher.frames), 4, 150, 150, 'horizontal'),
-      burst: stripFrames(texture(hub.npcs.teacher.burst.frames), 11, 31, 140, 'horizontal'),
+      actor: visualAtlas.strip(hub.npcs.teacher.frames, 4, 150, 150, 'horizontal'),
+      burst: visualAtlas.strip(hub.npcs.teacher.burst.frames, 11, 31, 140, 'horizontal'),
     },
     traders: {
       hagatha: {
-        body: stripFrames(texture(hub.npcs.perkWitchFrames), 8, 150, 150, 'horizontal'),
-        crossfades: stripFrames(texture(hub.npcs.perkWitchCrossfades), 4, 25, 25, 'horizontal'),
+        body: visualAtlas.strip(hub.npcs.perkWitchFrames, 8, 150, 150, 'horizontal'),
+        crossfades: visualAtlas.strip(hub.npcs.perkWitchCrossfades, 4, 25, 25, 'horizontal'),
       },
-      luthacus: stripFrames(texture(hub.npcs.itemsFrames), 4, 200, 200, 'horizontal'),
-      shlorio: stripFrames(texture(hub.rooms.library.dowser), 4, 150, 150, 'horizontal'),
+      luthacus: visualAtlas.strip(hub.npcs.itemsFrames, 4, 200, 200, 'horizontal'),
+      shlorio: visualAtlas.strip(hub.rooms.library.dowser, 4, 150, 150, 'horizontal'),
     },
+    visualAtlas,
   }
 }
 
@@ -177,33 +186,7 @@ export function hubDeferredAnimationTextures(
 }
 
 export function destroyHubWorldTextureFrames(textures: HubWorldTextures): void {
-  const derived = new Set<Texture>()
-  const add = (frames: readonly Texture[]) => frames.forEach((frame) => derived.add(frame))
-  add(textures.astronomer.assistants.blue)
-  add(textures.astronomer.assistants.brown)
-  add(textures.astronomer.assistants.gray)
-  add(textures.astronomer.assistants.purple)
-  add(textures.astronomer.green.gesture)
-  add(textures.astronomer.green.idle)
-  add(textures.astronomer.green.transition)
-  add(textures.astronomer.red.gesture)
-  add(textures.astronomer.red.idle)
-  add(textures.astronomer.red.transition)
-  add(textures.astronomer.telescope)
+  textures.visualAtlas.destroy()
   destroyPlayerWorldTextureFrames(textures)
-  add(textures.potion.actor)
-  add(textures.potion.balloons)
-  add(textures.skorcha)
-  add(textures.students.head)
-  textures.students.props.forEach(add)
-  textures.students.read.forEach(add)
-  textures.students.walk.forEach(add)
-  add(textures.teacher.actor)
-  add(textures.teacher.burst)
-  add(textures.traders.hagatha.body)
-  add(textures.traders.hagatha.crossfades)
-  add(textures.traders.luthacus)
-  add(textures.traders.shlorio)
-  for (const texture of derived) texture.destroy(false)
-  for (const texture of Object.values(textures.base)) texture.destroy(true)
+  for (const source of textures.assetSources) textures.base[source].destroy(true)
 }

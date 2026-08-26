@@ -1,4 +1,4 @@
-import { Container, Rectangle, Sprite, Texture, type Renderer } from 'pixi.js'
+import { Container, Sprite, type Renderer, type Texture } from 'pixi.js'
 import { hub } from '../../lib/assets.ts'
 import type { HubPresentationFrame } from '../client/hub-presentation-timeline.ts'
 import type { WizardElement } from '../core-kernels/player-character.ts'
@@ -104,7 +104,6 @@ export class HubWorldScene {
   private readonly southernArchitecture: Sprite[] = []
   private readonly textures: HubWorldTextures
   private readonly walkToTalk: HubWalkToTalkView
-  private readonly layerFrameTextures: Texture[] = []
   private createdStudentViewCount = 0
   private reusedStudentViewCount = 0
   private markerSuppression: HubNpcMarkerSuppression = [false, false, false]
@@ -134,14 +133,14 @@ export class HubWorldScene {
     this.levelUp = new NativeLevelUpWorldView(textures.levelUpSparkle)
     this.world.addChild(this.levelUp.container)
     this.secondaryAbilities = new NativeSecondaryWorldView(this.world, textures, renderer)
-    this.world.addChild(this.worldLayer(textures.base[hub.courtyard], HUB_WORLD_DEPTH.courtyard))
-    this.sealGlyphs = this.worldLayer(textures.base[hub.seals.glyphs], HUB_WORLD_DEPTH.sealGlyphs, HUB_WORLD_LAYER_BOUNDS.sealGlyphs)
+    this.world.addChild(this.worldLayer(hub.courtyard, HUB_WORLD_DEPTH.courtyard))
+    this.sealGlyphs = this.worldLayer(hub.seals.glyphs, HUB_WORLD_DEPTH.sealGlyphs, HUB_WORLD_LAYER_BOUNDS.sealGlyphs)
     this.sealGlyphs.blendMode = 'add'
-    this.sealCore = this.worldLayer(textures.base[hub.seals.core], HUB_WORLD_DEPTH.sealCore, HUB_WORLD_LAYER_BOUNDS.sealCore)
+    this.sealCore = this.worldLayer(hub.seals.core, HUB_WORLD_DEPTH.sealCore, HUB_WORLD_LAYER_BOUNDS.sealCore)
     this.sealCore.blendMode = 'add'
     this.world.addChild(this.sealGlyphs, this.sealCore)
-    this.world.addChild(this.worldLayer(textures.base[hub.tent.shadow], HUB_WORLD_DEPTH.usefulThyngsShadow, HUB_WORLD_LAYER_BOUNDS.usefulThyngsShadow))
-    this.world.addChild(this.worldLayer(textures.base[hub.tent.back], HUB_WORLD_DEPTH.usefulThyngsBack, HUB_WORLD_LAYER_BOUNDS.usefulThyngsBack))
+    this.world.addChild(this.worldLayer(hub.tent.shadow, HUB_WORLD_DEPTH.usefulThyngsShadow, HUB_WORLD_LAYER_BOUNDS.usefulThyngsShadow))
+    this.world.addChild(this.worldLayer(hub.tent.back, HUB_WORLD_DEPTH.usefulThyngsBack, HUB_WORLD_LAYER_BOUNDS.usefulThyngsBack))
 
     this.statueAura = new Sprite(textures.base[hub.props.statue.aura])
     this.statueAura.position.set(HUB_STATUE_ROOT.x - 24, HUB_STATUE_ROOT.y - 166)
@@ -180,9 +179,9 @@ export class HubWorldScene {
     this.astronomer = new HubAstronomerView(textures, createdAtTick)
 
     this.addCourtyardDepthProps()
-    this.world.addChild(this.worldLayer(textures.base[hub.tent.front], HUB_WORLD_DEPTH.usefulThyngsFront, HUB_WORLD_LAYER_BOUNDS.usefulThyngsFront))
+    this.world.addChild(this.worldLayer(hub.tent.front, HUB_WORLD_DEPTH.usefulThyngsFront, HUB_WORLD_LAYER_BOUNDS.usefulThyngsFront))
     this.world.addChild(this.worldLayer(
-      textures.base[hub.foreground.courtyard],
+      hub.foreground.courtyard,
       HUB_WORLD_DEPTH.courtyardForeground,
       HUB_WORLD_LAYER_BOUNDS.courtyardForeground,
     ))
@@ -370,8 +369,6 @@ export class HubWorldScene {
     this.fountain.clear()
     this.liveFountainIds.clear()
     this.stage.destroy({ children: true })
-    for (const texture of this.layerFrameTextures) texture.destroy(false)
-    this.layerFrameTextures.length = 0
   }
 
   private addNpc(source: string, x: number, y: number): void {
@@ -459,18 +456,12 @@ export class HubWorldScene {
   }
 
   private addCourtyardDepthProps(): void {
-    const source = this.textures.base[hub.foreground.depthProps]
     for (let index = 0; index < HUB_COURTYARD_DEPTH_PROPS.length; index += 1) {
-      const texture = new Texture({
-        source: source.source,
-        frame: new Rectangle(
-          index * HUB_COURTYARD_DEPTH_PROP_FRAME.width,
-          0,
-          HUB_COURTYARD_DEPTH_PROP_FRAME.width,
-          HUB_COURTYARD_DEPTH_PROP_FRAME.height,
-        ),
-      })
-      this.layerFrameTextures.push(texture)
+      const texture = this.textures.visualAtlas.frame(
+        hub.foreground.depthProps,
+        index,
+        0,
+      )
       const sprite = new Sprite(texture)
       sprite.position.set(
         HUB_COURTYARD_DEPTH_PROP_FRAME.x,
@@ -483,17 +474,19 @@ export class HubWorldScene {
   }
 
   private worldLayer(
-    source: Texture,
+    source: string,
     zIndex: number,
     bounds?: { x: number; y: number; width: number; height: number },
   ): Sprite {
     const texture = bounds
-      ? new Texture({
-          source: source.source,
-          frame: new Rectangle(bounds.x, bounds.y, bounds.width, bounds.height),
-        })
-      : source
-    if (bounds) this.layerFrameTextures.push(texture)
+      ? this.textures.visualAtlas.subframe(
+          source,
+          bounds.x,
+          bounds.y,
+          bounds.width,
+          bounds.height,
+        )
+      : this.textures.base[source]
     const sprite = new Sprite(texture)
     sprite.position.set(bounds?.x ?? 0, bounds?.y ?? 0)
     sprite.zIndex = zIndex

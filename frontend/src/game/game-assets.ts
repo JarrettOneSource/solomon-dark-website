@@ -6,7 +6,6 @@ import {
   mainMenu,
   menuSolomon,
 } from '../lib/assets.ts'
-import type { WizardElement } from './core-kernels/player-character.ts'
 import { NATIVE_UI_ATLAS_SOURCES } from './native-ui/native-ui-assets.ts'
 import {
   GAME_RESIDENT_AUDIO_SOURCES,
@@ -109,33 +108,6 @@ export function gameStartupStageLabel(progress: GameStartupProgress): string {
   return 'Loading game audio'
 }
 
-export function hubGameAssetSources(element: WizardElement): string[] {
-  return collectAssetSources({
-    astronomer: hub.astronomer,
-    courtyard: hub.courtyard,
-    rooms: hub.rooms,
-    seals: hub.seals,
-    foreground: hub.foreground,
-    southern: hub.southern,
-    fountainParticle: hub.fountainParticle,
-    tent: hub.tent,
-    markers: hub.markers,
-    props: hub.props,
-    npcs: hub.npcs,
-    elementVfx: elementVfxSources(element),
-  })
-}
-
 export function releaseGameImages(sources: readonly string[]): void {
   for (const source of sources) imagePromises.delete(source)
-}
-
-function elementVfxSources(element: WizardElement): readonly string[] {
-  switch (element) {
-    case 'air': return [elementVfx.common.core, elementVfx.frames.air]
-    case 'earth': return [elementVfx.common.core, elementVfx.frames.earth]
-    case 'ether': return [elementVfx.common.core, elementVfx.common.ray, elementVfx.common.spark]
-    case 'fire': return [elementVfx.common.core, elementVfx.frames.fire]
-    case 'water': return [elementVfx.common.core, elementVfx.common.ray, elementVfx.frames.water]
-  }
 }

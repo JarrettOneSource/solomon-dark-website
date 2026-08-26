@@ -1,4 +1,4 @@
-import { Container, Rectangle, Sprite, Texture, type Renderer } from 'pixi.js'
+import { Container, Sprite, Texture, type Renderer } from 'pixi.js'
 import { hub } from '../../lib/assets.ts'
 import type { HubPresentationFrame } from '../client/hub-presentation-timeline.ts'
 import {
@@ -43,7 +43,6 @@ import {
   type HubNpcMarkerSurface,
 } from './hub-npc-marker-presentation.ts'
 
-const MORTUARY_PAINTING_FRAME = { height: 224, width: 74 } as const
 const MEMORATOR_FRAME = { count: 16, height: 170, width: 170 } as const
 const HUB_PRIVATE_ROOM_ASSETS: Readonly<Record<HubPrivateRoomAsset, string>> = {
   'library-background': hub.rooms.library.background,
@@ -72,7 +71,6 @@ export class HubPrivateRoomScene {
   private readonly levelUp: NativeLevelUpWorldView
   private readonly secondaryAbilities: Record<PrivateHubRegionId, NativeSecondaryWorldView>
   private readonly livePlayerIds = new Set<string>()
-  private readonly derivedTextures: Texture[] = []
   private readonly mortuaryDynamicPaintings: HubMemorialPaintingView[] = []
   private readonly mortuaryStaticPaintings: Sprite[] = []
   private readonly roomFlames = new Map<PrivateHubRegionId, readonly Sprite[]>()
@@ -254,8 +252,6 @@ export class HubPrivateRoomScene {
     this.playerElements.clear()
     this.livePlayerIds.clear()
     this.world.destroy({ children: true })
-    for (const texture of this.derivedTextures) texture.destroy(false)
-    this.derivedTextures.length = 0
   }
 
   private createMortuary(): Container {
@@ -304,12 +300,11 @@ export class HubPrivateRoomScene {
     librarian.eventMode = 'none'
     librarian.zIndex = hubWorldDepthForActor(librarianVisual.painterY)
     const counter = this.layer(hub.rooms.library.librarian, 0, 16, 102.5)
-    const librarianSource = this.textures.base[hub.rooms.library.librarianFrames]
-    const librarianFrame = new Texture({
-      source: librarianSource.source,
-      frame: new Rectangle(0, 0, 150, 150),
-    })
-    this.derivedTextures.push(librarianFrame)
+    const librarianFrame = this.textures.visualAtlas.frame(
+      hub.rooms.library.librarianFrames,
+      0,
+      0,
+    )
     const librarianBody = this.actorTexture(
       librarianFrame,
       librarianVisual.position.x,
@@ -382,12 +377,11 @@ export class HubPrivateRoomScene {
     archChancellor.eventMode = 'none'
     archChancellor.zIndex = hubWorldDepthForActor(archVisual.painterY)
     const desk = this.layer(hub.rooms.office.desk, 0, 102.5, 102.5)
-    const archSource = this.textures.base[hub.rooms.office.archChancellor]
-    const archFrame = new Texture({
-      source: archSource.source,
-      frame: new Rectangle(0, 0, 150, 150),
-    })
-    this.derivedTextures.push(archFrame)
+    const archFrame = this.textures.visualAtlas.frame(
+      hub.rooms.office.archChancellor,
+      0,
+      0,
+    )
     const archBody = this.actorTexture(
       archFrame,
       archVisual.position.x,
@@ -399,15 +393,13 @@ export class HubPrivateRoomScene {
     room.addChild(archChancellor)
     this.addNpcMarker(room, 'arch-chancellor', hub.rooms.office.archChancellorMarker)
     const polisherDefinition = NATIVE_HUB_NPC_CATALOG.storyOffice.interactions.polisher
-    const polisherSource = this.textures.base[hub.rooms.office.polisher]
-    this.polisherFrames = Array.from({ length: 4 }, (_, index) => {
-      const texture = new Texture({
-        source: polisherSource.source,
-        frame: new Rectangle(index * 150, 0, 150, 150),
-      })
-      this.derivedTextures.push(texture)
-      return texture
-    })
+    this.polisherFrames = this.textures.visualAtlas.strip(
+      hub.rooms.office.polisher,
+      4,
+      150,
+      150,
+      'horizontal',
+    )
     this.polisherBody = this.actorTexture(
       this.polisherFrames[0]!,
       polisherDefinition.geometry.position.x,
@@ -463,13 +455,13 @@ export class HubPrivateRoomScene {
     width: number,
     height: number,
   ): readonly Texture[] {
-    const sourceTexture = this.textures.base[source]
-    const frames = Array.from({ length: count }, (_, index) => new Texture({
-      source: sourceTexture.source,
-      frame: new Rectangle(index * width, 0, width, height),
-    }))
-    this.derivedTextures.push(...frames)
-    return frames
+    return this.textures.visualAtlas.strip(
+      source,
+      count,
+      width,
+      height,
+      'horizontal',
+    )
   }
 
   private addRoomProps(
@@ -485,18 +477,7 @@ export class HubPrivateRoomScene {
         continue
       }
 
-      const frameWidth = visual.kind === 'portrait'
-        ? MORTUARY_PAINTING_FRAME.width
-        : layout.width
-      const frameHeight = visual.kind === 'portrait'
-        ? MORTUARY_PAINTING_FRAME.height
-        : layout.height
-      const sourceTexture = this.textures.base[source]
-      const texture = new Texture({
-        source: sourceTexture.source,
-        frame: new Rectangle(visual.frameIndex * frameWidth, 0, frameWidth, frameHeight),
-      })
-      this.derivedTextures.push(texture)
+      const texture = this.textures.visualAtlas.frame(source, visual.frameIndex, 0)
       if (visual.kind === 'portrait') {
         const sprite = this.actorTexture(texture, visual.position.x, visual.position.y)
         sprite.zIndex = hubWorldDepthForActor(visual.painterY)
