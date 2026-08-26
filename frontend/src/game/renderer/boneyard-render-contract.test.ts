@@ -71,6 +71,10 @@ const buildingSurfaceView = readFileSync(
   new URL('./boneyard-building-surface-view.ts', import.meta.url),
   'utf8',
 )
+const boneyardTextures = readFileSync(
+  new URL('./boneyard-textures.ts', import.meta.url),
+  'utf8',
+)
 const playerTextures = readFileSync(
   new URL('./world-player-textures.ts', import.meta.url),
   'utf8',
@@ -135,6 +139,12 @@ test('static Boneyard residents retain RGBA buffers instead of Canvas2D backing 
   assert.doesNotMatch(boneyardRenderer, /sourceCanvas:/)
   assert.doesNotMatch(boneyardRenderer, /Texture\.from\(canvas/)
   assert.doesNotMatch(boneyardRenderer, /documentNodeCanvas\(bounds\.w, bounds\.h\)/)
+  assert.match(editorRenderer, /const filterLift = mode === 'runtime-base'/)
+  assert.match(editorRenderer, /drawSprite\(ctx, item\.drawable, cam, cssW, cssH, true, true\)/)
+  assert.match(boneyardTextures, /const liftedScratch = document\.createElement\('canvas'\)/)
+  assert.match(boneyardTextures, /new Uint8ClampedArray\(\s*context\.getImageData/s)
+  assert.match(boneyardTextures, /new BufferImageSource\(\{[\s\S]*?format: 'rgba8unorm'/)
+  assert.doesNotMatch(boneyardTextures, /liftedSpriteSource/)
 })
 
 test('secondary rain streaks share exactly two world-owned immutable gradients', () => {

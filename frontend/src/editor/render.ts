@@ -650,8 +650,8 @@ export function drawNativeBoneyardMainBand(
   for (const layerIndex of layerIndexes) {
     const item = items[layerIndex]
     if (!item) continue
-    if (item.kind === 'object') drawSprite(ctx, item.drawable, cam, cssW, cssH, true)
-    else drawFencePart(ctx, item.layer, cam, cssW, cssH, gateOverrides)
+    if (item.kind === 'object') drawSprite(ctx, item.drawable, cam, cssW, cssH, true, true)
+    else drawFencePart(ctx, item.layer, cam, cssW, cssH, gateOverrides, true)
   }
 }
 
@@ -686,7 +686,7 @@ export function drawNativeBoneyardForegroundBand(
   for (const layerIndex of layerIndexes) {
     const drawable = foreground[layerIndex]
     if (!drawable) continue
-    drawSprite(ctx, drawable, cam, cssW, cssH, false)
+    drawSprite(ctx, drawable, cam, cssW, cssH, false, true)
   }
 }
 
@@ -961,12 +961,17 @@ function paintPlacementPasses(
 ) {
   const scene = renderSceneFor(doc)
   ctx.imageSmoothingEnabled = cam.zoom < 1
+  const filterLift = mode === 'runtime-base'
 
   for (const drawable of scene.underlays) {
-    if (included(drawable.sel, filter)) drawSprite(ctx, drawable, cam, cssW, cssH, false)
+    if (included(drawable.sel, filter)) {
+      drawSprite(ctx, drawable, cam, cssW, cssH, false, filterLift)
+    }
   }
   for (const drawable of scene.compact) {
-    if (included(drawable.sel, filter)) drawSprite(ctx, drawable, cam, cssW, cssH, false)
+    if (included(drawable.sel, filter)) {
+      drawSprite(ctx, drawable, cam, cssW, cssH, false, filterLift)
+    }
   }
   for (const item of scene.shadows) {
     if (!included(item.layer.sel, filter)) continue
@@ -976,12 +981,17 @@ function paintPlacementPasses(
   for (const item of scene.main) {
     if (mode === 'runtime-base' && isActorOccludingMainItem(item)) continue
     if (!included(item.layer.sel, filter)) continue
-    if (item.kind === 'object') drawSprite(ctx, item.drawable, cam, cssW, cssH, true)
-    else drawFencePart(ctx, item.layer, cam, cssW, cssH, gateOverrides)
+    if (item.kind === 'object') {
+      drawSprite(ctx, item.drawable, cam, cssW, cssH, true, filterLift)
+    } else {
+      drawFencePart(ctx, item.layer, cam, cssW, cssH, gateOverrides, filterLift)
+    }
   }
   if (mode === 'runtime-base') return
   for (const drawable of scene.foreground) {
-    if (included(drawable.sel, filter)) drawSprite(ctx, drawable, cam, cssW, cssH, false)
+    if (included(drawable.sel, filter)) {
+      drawSprite(ctx, drawable, cam, cssW, cssH, false, filterLift)
+    }
   }
 }
 
@@ -992,6 +1002,7 @@ function drawSprite(
   cssW: number,
   cssH: number,
   placeholder: boolean,
+  filterLift = false,
 ) {
   if (d.alpha <= 0 || d.scaleX <= 0 || d.scaleY <= 0) return
   const r = anchoredRect(d)
@@ -1004,9 +1015,7 @@ function drawSprite(
     || s.x > cssW + cullMargin || s.y > cssH + cullMargin
   ) return
 
-  const image = d.img && d.img.complete && d.img.naturalWidth > 0
-    ? liftedSpriteSource(d.img)
-    : null
+  const image = d.img && d.img.complete && d.img.naturalWidth > 0 ? d.img : null
   if (image) {
     if (d.rot !== 0 && d.ref) {
       const foot = worldToScreen(d.pos, cam, cssW, cssH)
@@ -1014,26 +1023,47 @@ function drawSprite(
       ctx.globalAlpha = d.alpha
       ctx.translate(foot.x, foot.y)
       ctx.rotate((d.rot * Math.PI) / 180)
-      ctx.drawImage(
+      drawLiftedImage(
+        ctx,
         image,
         -d.ref.anchorX * d.scaleX * cam.zoom,
         -d.ref.anchorY * d.scaleY * cam.zoom,
         drawW,
         drawH,
+        filterLift,
       )
       ctx.restore()
     } else if (d.alpha !== 1) {
       ctx.save()
       ctx.globalAlpha = d.alpha
-      ctx.drawImage(image, s.x, s.y, drawW, drawH)
+      drawLiftedImage(ctx, image, s.x, s.y, drawW, drawH, filterLift)
       ctx.restore()
     } else {
-      ctx.drawImage(image, s.x, s.y, drawW, drawH)
+      drawLiftedImage(ctx, image, s.x, s.y, drawW, drawH, filterLift)
     }
   } else if (placeholder) {
     ctx.fillStyle = 'rgba(200,168,98,0.2)'
     ctx.fillRect(s.x, s.y, drawW, drawH)
   }
+}
+
+function drawLiftedImage(
+  ctx: CanvasRenderingContext2D,
+  image: HTMLImageElement,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  filterLift: boolean,
+): void {
+  if (!filterLift) {
+    ctx.drawImage(liftedSpriteSource(image), x, y, width, height)
+    return
+  }
+  ctx.save()
+  ctx.filter = 'brightness(1.12)'
+  ctx.drawImage(image, x, y, width, height)
+  ctx.restore()
 }
 
 function drawShadowAt(
@@ -1316,6 +1346,7 @@ function plantArt(
   w: number,
   h: number,
   mirror = false,
+  filterLift = false,
 ) {
   if (!ref) return false
   const img = spriteImage(ref.src)
@@ -1324,7 +1355,15 @@ function plantArt(
   ctx.save()
   ctx.translate(s.x, s.y)
   if (mirror) ctx.scale(-1, 1)
-  ctx.drawImage(liftedSpriteSource(img), -ref.anchorX * cam.zoom, -ref.anchorY * cam.zoom, ref.w * cam.zoom, ref.h * cam.zoom)
+  drawLiftedImage(
+    ctx,
+    img,
+    -ref.anchorX * cam.zoom,
+    -ref.anchorY * cam.zoom,
+    ref.w * cam.zoom,
+    ref.h * cam.zoom,
+    filterLift,
+  )
   ctx.restore()
   return true
 }
@@ -1336,6 +1375,7 @@ function drawGateLeafArt(
   cam: Camera,
   w: number,
   h: number,
+  filterLift = false,
 ) {
   if (!ref) return false
   const img = spriteImage(ref.src)
@@ -1351,7 +1391,7 @@ function drawGateLeafArt(
     origin.x,
     origin.y,
   )
-  ctx.drawImage(liftedSpriteSource(img), 0, 0, ref.w, ref.h)
+  drawLiftedImage(ctx, img, 0, 0, ref.w, ref.h, filterLift)
   ctx.restore()
   return true
 }
@@ -1363,9 +1403,10 @@ function drawFencePart(
   w: number,
   h: number,
   gateOverrides?: ReadonlyMap<string, NativeGateLeafOverride>,
+  filterLift = false,
 ) {
   if (layer.part === 'post') {
-    plantArt(ctx, fencePostArt(layer.postVariant ?? 0), layer.pos, cam, w, h)
+    plantArt(ctx, fencePostArt(layer.postVariant ?? 0), layer.pos, cam, w, h, false, filterLift)
     return
   }
   const { fence, pieceIndex } = layer
@@ -1399,7 +1440,7 @@ function drawFencePart(
     const count = Math.max(1, Math.round(len / railW))
     let drew = false
     for (let i = 0; i < count; i++) {
-      drew = plantArt(ctx, rail, at((i + 0.5) / count), cam, w, h) || drew
+      drew = plantArt(ctx, rail, at((i + 0.5) / count), cam, w, h, false, filterLift)
     }
     if (!drew) {
       ctx.strokeStyle = '#2c2620'
@@ -1408,14 +1449,17 @@ function drawFencePart(
     }
   } else if (code === 1) {
     // Broken grate: two fallen halves, one leaning from each end.
-    if (pieceIndex === 0) plantArt(ctx, FENCE_ART.broken, at(0.28), cam, w, h)
-    else plantArt(ctx, FENCE_ART.broken, at(0.72), cam, w, h, true)
+    if (pieceIndex === 0) {
+      plantArt(ctx, FENCE_ART.broken, at(0.28), cam, w, h, false, filterLift)
+    } else {
+      plantArt(ctx, FENCE_ART.broken, at(0.72), cam, w, h, true, filterLift)
+    }
   } else if (code === 2) {
     const override = gateOverrides?.get(`${fence.eid}:${pieceIndex}`)
     const leaf = override
       ? nativeGateLeaf(override.hinge, override.tip)
       : nativeGateLeaves(fence.points)[pieceIndex]
-    if (leaf) drawGateLeaf(ctx, leaf, cam, w, h)
+    if (leaf) drawGateLeaf(ctx, leaf, cam, w, h, filterLift)
   } else {
     drawIntactFenceGrate(ctx, fence, cam, w, h)
   }
@@ -1429,9 +1473,19 @@ function drawGateLeaf(
   cam: Camera,
   w: number,
   h: number,
+  filterLift = false,
 ) {
-  drawGateLeafArt(ctx, FENCE_ART.gateLeaf, leaf, cam, w, h)
-  plantArt(ctx, FENCE_ART.gateHinge, nativeGateHingeArtPosition(leaf), cam, w, h)
+  drawGateLeafArt(ctx, FENCE_ART.gateLeaf, leaf, cam, w, h, filterLift)
+  plantArt(
+    ctx,
+    FENCE_ART.gateHinge,
+    nativeGateHingeArtPosition(leaf),
+    cam,
+    w,
+    h,
+    false,
+    filterLift,
+  )
   ctx.save()
   ctx.strokeStyle = '#000'
   ctx.lineWidth = 3 * cam.zoom

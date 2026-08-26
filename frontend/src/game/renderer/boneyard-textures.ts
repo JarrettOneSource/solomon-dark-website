@@ -1,8 +1,7 @@
-import { Texture } from 'pixi.js'
+import { BufferImageSource, Texture } from 'pixi.js'
 
 import solomonEncounterSource from '../../assets/game/anim-solomon-encounter.png'
 import { spriteRefFor } from '../../editor/assets.ts'
-import { liftedSpriteSource } from '../../editor/lifted-sprite.ts'
 import { boneyard } from '../../lib/assets.ts'
 import { loadGameTextureEntries } from './game-webgl.ts'
 import {
@@ -76,9 +75,18 @@ export async function loadBoneyardWorldTextures(): Promise<BoneyardWorldTextures
     solomonShadowSource,
     weatherSplashSource,
   ])]
-  const loaded = await loadGameTextureEntries(sources, (source, image) => (
-    Texture.from(liftedSourceSet.has(source) ? liftedSpriteSource(image) : image, true)
-  ))
+  const liftedScratch = document.createElement('canvas')
+  let loaded: Awaited<ReturnType<typeof loadGameTextureEntries>>
+  try {
+    loaded = await loadGameTextureEntries(sources, (source, image) => (
+      liftedSourceSet.has(source)
+        ? liftedBufferTexture(image, liftedScratch)
+        : Texture.from(image, true)
+    ))
+  } finally {
+    liftedScratch.width = 0
+    liftedScratch.height = 0
+  }
   const base = Object.fromEntries(loaded) as Record<string, Texture>
   const texture = (source: string): Texture => {
     const result = base[source]
@@ -123,4 +131,30 @@ export function destroyBoneyardWorldTextures(textures: BoneyardWorldTextures): v
   ))
   for (const frame of derived) frame.destroy(false)
   for (const texture of Object.values(textures.base)) texture.destroy(true)
+}
+
+function liftedBufferTexture(
+  image: HTMLImageElement,
+  canvas: HTMLCanvasElement,
+): Texture {
+  canvas.width = image.naturalWidth
+  canvas.height = image.naturalHeight
+  const context = canvas.getContext('2d', { willReadFrequently: true })
+  if (!context) throw new Error('Boneyard lifted texture could not acquire Canvas2D.')
+  context.filter = 'brightness(1.12)'
+  context.drawImage(image, 0, 0)
+  const pixels = new Uint8ClampedArray(
+    context.getImageData(0, 0, canvas.width, canvas.height).data,
+  )
+  canvas.width = 0
+  canvas.height = 0
+  return new Texture({
+    source: new BufferImageSource({
+      alphaMode: 'premultiply-alpha-on-upload',
+      format: 'rgba8unorm',
+      height: image.naturalHeight,
+      resource: pixels,
+      width: image.naturalWidth,
+    }),
+  })
 }
