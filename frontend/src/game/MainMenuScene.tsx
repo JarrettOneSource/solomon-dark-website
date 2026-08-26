@@ -1684,6 +1684,7 @@ export default function MainMenuScene({
               onMenuAvailabilityChange={setSceneMenuAvailability}
               onOpenSkillSelector={openHudSkillSelector}
               onOpenSkills={openSkillBook}
+              onUnassignQuickbarSkill={(slot) => session.bindSkillQuickbar(null, slot)}
               onPauseRequest={requestGameplayPause}
               onReady={finishBoneyardLoading}
               partyRoster={partyState?.partyRoster}
@@ -1734,6 +1735,7 @@ export default function MainMenuScene({
               })}
               onOpenSkillSelector={openHudSkillSelector}
               onOpenSkills={openSkillBook}
+              onUnassignQuickbarSkill={(slot) => session.bindSkillQuickbar(null, slot)}
               onOccupiedChange={setHubSceneOccupied}
               onPauseRequest={requestGameplayPause}
               onReady={() => {

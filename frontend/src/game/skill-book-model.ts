@@ -10,6 +10,9 @@ export const NATIVE_SKILL_DRAG_THRESHOLD_SQUARED = 9
 export const NATIVE_SKILL_DRAGGER_SIZE = 40
 export const NATIVE_SKILL_DRAGGER_SCALE = 1.25
 export const NATIVE_BELT_PULL_OFF_DISTANCE = 50
+export const NATIVE_BELT_PULL_OFF_TICK_MS = 10
+export const NATIVE_BELT_PULL_OFF_SMOKE_RECORD = 65
+export const NATIVE_BELT_PULL_OFF_MOVE_FADE_RECORD = 69
 export const NATIVE_SKILL_PAGE_BASE_WIDTH = 200
 export const NATIVE_SKILL_PAGE_DEPENDENT_WIDTH = 160
 export const NATIVE_SKILL_PAGE_HEIGHT = 300
@@ -44,6 +47,20 @@ export interface NativeSkillBookPagePlacement {
   readonly y: number
 }
 
+export interface NativeBeltPullOffBurstMember {
+  readonly brightness: number
+  readonly durationMs: number
+  readonly endX: number
+  readonly endY: number
+  readonly record: typeof NATIVE_BELT_PULL_OFF_SMOKE_RECORD
+    | typeof NATIVE_BELT_PULL_OFF_MOVE_FADE_RECORD
+  readonly rotationDegrees: number
+  readonly scaleX: number
+  readonly scaleY: number
+  readonly startX: number
+  readonly startY: number
+}
+
 export type NativeSkillBookTooltipLineKind =
   | 'bonus'
   | 'boost'
@@ -75,6 +92,92 @@ export function nativeBeltPullOffStarted(
   const dx = current.x - origin.x
   const dy = current.y - origin.y
   return dx * dx + dy * dy > NATIVE_BELT_PULL_OFF_DISTANCE ** 2
+}
+
+/**
+ * Mirrors the local BeltButton pull-off burst created by 0x005C7DF0. The
+ * caller supplies the stock random 90/120-degree branch and a unit random
+ * source so tests can pin every recovered range without freezing live VFX.
+ */
+export function nativeBeltPullOffBurstMembers(
+  moveFadeStepDegrees: 90 | 120,
+  random: () => number = Math.random,
+): readonly NativeBeltPullOffBurstMember[] {
+  const members: NativeBeltPullOffBurstMember[] = []
+  for (let lane = 0; lane < 360; lane += 30) {
+    members.push(
+      nativeSmokePuff(lane, false, random),
+      nativeSmokePuff(lane, true, random),
+    )
+  }
+  for (let lane = 0; lane < 360; lane += moveFadeStepDegrees) {
+    const angle = lane + randomSigned(random, moveFadeStepDegrees / 3)
+    const direction = nativeScreenDirection(angle)
+    const radius = 20 + randomUnit(random) * 2
+    const fadePerTick = 0.05 + randomUnit(random) * 0.05
+    const ticks = Math.ceil(1 / fadePerTick)
+    const velocityX = direction.x * 3.25 + randomUnit(random) * 0.5
+    const velocityY = direction.y * 3.25 + randomUnit(random) * 0.5
+    const travel = geometricTravel(0.94, ticks)
+    members.push(Object.freeze({
+      brightness: 1,
+      durationMs: ticks * NATIVE_BELT_PULL_OFF_TICK_MS,
+      endX: direction.x * radius + velocityX * travel,
+      endY: direction.y * radius + velocityY * travel,
+      record: NATIVE_BELT_PULL_OFF_MOVE_FADE_RECORD,
+      rotationDegrees: 0,
+      scaleX: 1 - randomUnit(random) * 0.1,
+      scaleY: 1 - randomUnit(random) * 0.1,
+      startX: direction.x * radius,
+      startY: direction.y * radius,
+    }))
+  }
+  return Object.freeze(members)
+}
+
+function nativeSmokePuff(
+  lane: number,
+  inner: boolean,
+  random: () => number,
+): NativeBeltPullOffBurstMember {
+  const angle = lane + randomUnit(random) * 10
+  const direction = nativeScreenDirection(angle)
+  const radius = (inner ? 8 : 15) - randomUnit(random) * 2
+  const speed = (2.5 + randomUnit(random) * 0.1) * (inner ? 0.5 : 1)
+  const fadePerTick = (0.05 + randomUnit(random) * 0.05) * (inner ? 2 : 1)
+  const ticks = Math.ceil(1 / fadePerTick)
+  const travel = geometricTravel(0.910000026, ticks)
+  const scale = 1.25 - randomUnit(random) * 0.4
+  const rotationPerTick = (2 + randomUnit(random) * 2) / 3
+  return Object.freeze({
+    brightness: inner ? 0.75 : 0.5,
+    durationMs: ticks * NATIVE_BELT_PULL_OFF_TICK_MS,
+    endX: direction.x * (radius + speed * travel),
+    endY: direction.y * (radius + speed * travel),
+    record: NATIVE_BELT_PULL_OFF_SMOKE_RECORD,
+    rotationDegrees: rotationPerTick * ticks * 180 / Math.PI,
+    scaleX: scale,
+    scaleY: scale,
+    startX: direction.x * radius,
+    startY: direction.y * radius,
+  })
+}
+
+function nativeScreenDirection(angleDegrees: number): Readonly<{ x: number; y: number }> {
+  const radians = angleDegrees * Math.PI / 180
+  return { x: Math.cos(radians), y: -Math.sin(radians) }
+}
+
+function geometricTravel(decay: number, ticks: number): number {
+  return (1 - decay ** ticks) / (1 - decay)
+}
+
+function randomSigned(random: () => number, extent: number): number {
+  return (randomUnit(random) * 2 - 1) * extent
+}
+
+function randomUnit(random: () => number): number {
+  return Math.min(1, Math.max(0, random()))
 }
 
 export function nativeSkillQuickbarDropSlot(

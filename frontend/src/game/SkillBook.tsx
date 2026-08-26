@@ -24,6 +24,7 @@ import type {
   ProtocolPlayerProgression,
 } from './protocol/game-state.ts'
 import type { GameSnapshot } from './protocol/game-protocol.ts'
+import NativeBeltPullOffBurst from './NativeBeltPullOffBurst.tsx'
 import {
   createSkillBookRenderer,
   type SkillBookRenderer,
@@ -61,6 +62,11 @@ interface SkillBookDragState {
   readonly skillId: number
 }
 
+interface SkillBookPullOffBurstState {
+  readonly sequence: number
+  readonly slot: number
+}
+
 export default function SkillBook({
   audio,
   economy: initialEconomy,
@@ -86,6 +92,7 @@ export default function SkillBook({
   const [targetQuickbarSlot, setTargetQuickbarSlot] = useState<number | null>(null)
   const [drag, setDrag] = useState<SkillBookDragState | null>(null)
   const [hoveredSkillId, setHoveredSkillId] = useState<number | null>(null)
+  const [pullOffBurst, setPullOffBurst] = useState<SkillBookPullOffBurstState | null>(null)
   const [openProgress, setOpenProgress] = useState(0)
   const [phase, setPhase] = useState<'opening' | 'settled' | 'closing'>('opening')
   const [rendererState, setRendererState] = useState<'loading' | 'ready' | 'error'>('loading')
@@ -348,12 +355,26 @@ export default function SkillBook({
         onPullOff={(slot) => {
           onUnassignQuickbarSkill(slot)
           audio.playSound('poof')
+          setPullOffBurst((current) => ({ sequence: (current?.sequence ?? 0) + 1, slot }))
           setTargetQuickbarSlot(null)
         }}
         onTarget={setTargetQuickbarSlot}
         progression={progression}
         targetSlot={targetQuickbarSlot}
       />
+      {pullOffBurst ? (
+        <NativeBeltPullOffBurst
+          key={pullOffBurst.sequence}
+          className="skill-book-pull-off-burst"
+          onComplete={() => setPullOffBurst((current) => (
+            current?.sequence === pullOffBurst.sequence ? null : current
+          ))}
+          style={{
+            left: belt[pullOffBurst.slot]!.x + belt[pullOffBurst.slot]!.width / 2,
+            top: belt[pullOffBurst.slot]!.y + belt[pullOffBurst.slot]!.height / 2,
+          }}
+        />
+      ) : null}
       {rendererState === 'error' ? (
         <p className="skill-book-error" role="alert">Skills renderer unavailable.</p>
       ) : null}

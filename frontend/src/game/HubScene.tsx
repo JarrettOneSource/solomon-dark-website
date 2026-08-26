@@ -122,6 +122,7 @@ interface HubSceneProps {
   onOccupiedChange: (occupied: boolean) => void
   onOpenSkillSelector: (binding: NativeHudSkillBinding) => void
   onOpenSkills: () => void
+  onUnassignQuickbarSkill?: (slot: number) => void
   onPauseRequest: () => void
   onReady: () => void
   onStartMatch: (boneyardId: string) => void
@@ -176,6 +177,7 @@ export default function HubScene({
   onOccupiedChange,
   onOpenSkillSelector,
   onOpenSkills,
+  onUnassignQuickbarSkill,
   onPauseRequest,
   onReady,
   onStartMatch,
@@ -840,6 +842,10 @@ export default function HubScene({
               player ? actorHeadingVector(player.headingIndex) : undefined,
             )
           }}
+          onQuickbarUnassign={onUnassignQuickbarSkill ? (slot) => {
+            onUnassignQuickbarSkill(slot)
+            audio.playSound('poof')
+          } : undefined}
           onSkillBindingClick={(binding) => {
             if (!inputBlocked && !pickerOpen && !transitionActive) {
               setHubUiSurface(null)

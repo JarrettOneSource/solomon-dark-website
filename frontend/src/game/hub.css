@@ -335,6 +335,11 @@
   pointer-events: none;
 }
 
+.hub-hud-quickbar-slot[data-populated='true'] {
+  pointer-events: auto;
+  touch-action: none;
+}
+
 .hub-hud-quickbar-slot[data-controller-selected='true']::after {
   position: absolute;
   inset: -4px;

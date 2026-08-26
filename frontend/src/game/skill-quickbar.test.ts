@@ -26,7 +26,15 @@ test('skill quickbar keeps the exact eight 53 px slots and 60 px pitch', () => {
 
 test('Hub pointer quickbar disables category-2 actions while retaining primary selection', () => {
   assert.match(component, /const combatDisabled = mode === 'hub' && secondary/)
-  assert.match(component, /disabled=\{skill === undefined \|\| !onInput \|\| combatDisabled\}/)
+  assert.match(component, /aria-disabled=\{combatDisabled \|\| undefined\}/)
+})
+
+test('live populated BeltButtons use the same scaled strict pull-off owner', () => {
+  assert.match(component, /inputScale=\{displayScale \* uiScale\}/)
+  assert.match(component, /nativeBeltPullOffStarted\(/)
+  assert.match(component, /onUnassign\(slot\)/)
+  assert.match(component, /onInput\?\.\(slot, false\)[\s\S]*?<NativeBeltPullOffBurst/)
+  assert.match(component, /data-populated=\{skill !== undefined\}/)
 })
 
 test('cooldown presentation selects the stock common or longer row timer', () => {

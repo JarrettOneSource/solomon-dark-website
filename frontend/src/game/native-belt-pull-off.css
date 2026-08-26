@@ -1,0 +1,54 @@
+.native-belt-pull-off-burst {
+  position: absolute;
+  z-index: 4;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.native-belt-pull-off-member {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  animation: native-belt-pull-off-member var(--native-belt-burst-duration) linear forwards;
+  filter: brightness(var(--native-belt-burst-brightness));
+}
+
+.native-belt-pull-off-member > [data-native-ui-record] {
+  position: absolute !important;
+  top: 0;
+  left: 0;
+  transform: translate(-50%, -50%);
+}
+
+@keyframes native-belt-pull-off-member {
+  from {
+    opacity: 1;
+    transform: translate(
+      var(--native-belt-burst-start-x),
+      var(--native-belt-burst-start-y)
+    ) rotate(0deg) scale(
+      var(--native-belt-burst-scale-x),
+      var(--native-belt-burst-scale-y)
+    );
+  }
+
+  to {
+    opacity: 0;
+    transform: translate(
+      var(--native-belt-burst-end-x),
+      var(--native-belt-burst-end-y)
+    ) rotate(var(--native-belt-burst-rotation)) scale(
+      var(--native-belt-burst-scale-x),
+      var(--native-belt-burst-scale-y)
+    );
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .native-belt-pull-off-member {
+    animation-duration: 1ms;
+  }
+}

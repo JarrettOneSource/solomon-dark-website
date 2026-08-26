@@ -129,6 +129,7 @@ interface BoneyardSceneProps {
   onMenuAvailabilityChange?: (availability: GameMenuAvailability) => void
   onOpenSkillSelector: (binding: NativeHudSkillBinding) => void
   onOpenSkills: () => void
+  onUnassignQuickbarSkill?: (slot: number) => void
   onPauseRequest: () => void
   onReady: () => void
   onTutorialAction: (action: 'inventory-opened' | 'inventory-closed' | 'skills-opened' | 'skills-closed') => void
@@ -185,6 +186,7 @@ export default function BoneyardScene({
   onMenuAvailabilityChange,
   onOpenSkillSelector,
   onOpenSkills,
+  onUnassignQuickbarSkill,
   onPauseRequest,
   onReady,
   onTutorialAction,
@@ -1019,6 +1021,10 @@ export default function BoneyardScene({
                   player ? actorHeadingVector(player.headingIndex) : undefined,
                 )
               }}
+              onQuickbarUnassign={onUnassignQuickbarSkill ? (slot) => {
+                onUnassignQuickbarSkill(slot)
+                audio.playSound('poof')
+              } : undefined}
               onSkillBindingClick={(binding) => {
                 if (!inputBlocked && tutorialAccess?.spell !== false && run.phase === 'active') {
                   setInventorySurface(null)

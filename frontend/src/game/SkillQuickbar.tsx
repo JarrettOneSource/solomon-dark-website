@@ -1,4 +1,9 @@
-import type { CSSProperties } from 'react'
+import {
+  useRef,
+  useState,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+} from 'react'
 
 import nativeAssetsJson from '../assets/game/native-ui-assets.json' with { type: 'json' }
 import { hub } from '../lib/assets.ts'
@@ -20,6 +25,8 @@ import {
   NATIVE_SKILL_QUICKBAR_SLOT_OFFSETS,
 } from './skill-quickbar.ts'
 import { mobileQuickbarBankLayout, mobileQuickbarSlotPlacement } from './mobile-quickbar-layout.ts'
+import NativeBeltPullOffBurst from './NativeBeltPullOffBurst.tsx'
+import { nativeBeltPullOffStarted } from './skill-book-model.ts'
 
 interface AtlasRecord {
   frame: readonly [number, number, number, number]
@@ -42,8 +49,10 @@ const ATLAS_HEIGHT = 512
 interface SkillQuickbarProps {
   controls: GameControlBindings
   controllerQuickbarSlot?: number
+  displayScale: number
   mode: 'hub' | 'run'
   onInput?: (slot: number, pressed: boolean) => void
+  onUnassign?: (slot: number) => void
   playerState: NativeSecondaryPlayerState | undefined
   quickbar: readonly (number | null)[]
   selectedPrimarySkillId: number
@@ -56,8 +65,10 @@ interface SkillQuickbarProps {
 export default function SkillQuickbar({
   controls,
   controllerQuickbarSlot,
+  displayScale,
   mode,
   onInput,
+  onUnassign,
   playerState,
   quickbar,
   selectedPrimarySkillId,
@@ -71,86 +82,180 @@ export default function SkillQuickbar({
       data-mode={mode}
       aria-label="Skill quickbar"
     >
-      {NATIVE_SKILL_QUICKBAR_SLOT_OFFSETS.map((offset, slot) => {
-        const skillId = quickbar[slot] ?? null
-        const mobilePlacement = mobileQuickbarSlotPlacement(slot, mobileBank)
-        const skill = skillId === null ? undefined : NATIVE_SKILL_CATALOG[skillId]
-        const secondary = skillId !== null && nativeSkillCategory(skillId) === 2
-        const combatDisabled = mode === 'hub' && secondary
-        const { capacity, remaining } = !secondary
-          ? { capacity: 0, remaining: 0 }
-          : nativeSkillQuickbarCooldownPresentation(
-              playerState?.cooldownTicksBySkill[skillId] ?? 0,
-              playerState?.cooldownMaximumTicksBySkill[skillId] ?? 0,
-              playerState?.globalCooldownTicks ?? 0,
-            )
-        const bindingCode = controls[`belt${slot + 1}` as GameBindingAction]
-        const bindingLabel = gameBindingLabel(bindingCode)
-        const input = bindingCode.startsWith('Mouse')
-          ? `${bindingLabel.toLowerCase()} button`
-          : `key ${bindingLabel}`
-        const active = skillId !== null && (
-          skillId === selectedPrimarySkillId
-          || secondaryAbilityActive(skillId, playerState)
-        )
-        const label = skill === undefined
-          ? `Empty quickbar slot ${slot + 1}, ${input}`
-          : `${skill.name}, ${input}${remaining > 0
-            ? `, ${formatCooldown(remaining)} seconds cooldown remaining`
-            : ''}${active ? ', active' : ''}${combatDisabled ? ', unavailable in the Hub' : ''}`
-        return (
-          <button
-            type="button"
-            className="hub-hud-quickbar-slot"
-            data-slot={slot}
-            data-quickbar-bank={mobilePlacement.bank}
-            data-tutorial-anchor={slot === 0 ? 'secondary-slot' : undefined}
-            data-binding-code={bindingCode}
-            data-active={active}
-            data-controller-selected={controllerQuickbarSlot === slot || undefined}
-            disabled={skill === undefined || !onInput || combatDisabled}
-            key={slot}
-            style={{
-              '--mobile-quickbar-slot-bottom': `${mobilePlacement.bottom}px`,
-              '--mobile-quickbar-slot-inset': `${mobilePlacement.inset}px`,
-              '--mobile-quickbar-slot-size': `${mobilePlacement.size}px`,
-              '--quickbar-slot-offset': `${offset}px`,
-            } as CSSProperties}
-            aria-label={`${label}${controllerQuickbarSlot === slot ? ', controller selected' : ''}`}
-            onPointerDown={(event) => {
-              const unsupportedMouseButton = event.pointerType === 'mouse' && event.button !== 0
-              if (unsupportedMouseButton || skill === undefined || !onInput || combatDisabled) return
-              event.preventDefault()
-              event.currentTarget.setPointerCapture(event.pointerId)
-              onInput(slot, true)
-            }}
-            onPointerUp={() => onInput?.(slot, false)}
-            onPointerCancel={() => onInput?.(slot, false)}
-            onLostPointerCapture={() => onInput?.(slot, false)}
-          >
-            {remaining > 0 && capacity > 0 ? (
-              <CooldownSector remaining={remaining} capacity={capacity} />
-            ) : null}
-            {skill === undefined ? null : (
-              <NativeSkillIcon
-                cooldown={remaining > 0}
-                record={skill.skills_atlas_icon_record}
-              />
-            )}
-            {bindingCode === 'Mouse2' && skill !== undefined ? (
-              <img
-                className="hub-hud-quickbar-input-mouse"
-                src={hub.hud.mouseRight}
-                alt=""
-              />
-            ) : null}
-            {bindingCode !== 'Mouse2' && skill !== undefined ? (
-              <NativeQuickbarBinding text={bindingLabel.toUpperCase()} />
-            ) : null}
-          </button>
-        )
-      })}
+      {NATIVE_SKILL_QUICKBAR_SLOT_OFFSETS.map((offset, slot) => (
+        <SkillQuickbarSlot
+          bindingCode={controls[`belt${slot + 1}` as GameBindingAction]}
+          controllerSelected={controllerQuickbarSlot === slot}
+          inputScale={displayScale * uiScale}
+          key={slot}
+          mobilePlacement={mobileQuickbarSlotPlacement(slot, mobileBank)}
+          mode={mode}
+          offset={offset}
+          onInput={onInput}
+          onUnassign={onUnassign}
+          playerState={playerState}
+          selectedPrimarySkillId={selectedPrimarySkillId}
+          skillId={quickbar[slot] ?? null}
+          slot={slot}
+        />
+      ))}
     </div>
+  )
+}
+
+function SkillQuickbarSlot({
+  bindingCode,
+  controllerSelected,
+  inputScale,
+  mobilePlacement,
+  mode,
+  offset,
+  onInput,
+  onUnassign,
+  playerState,
+  selectedPrimarySkillId,
+  skillId,
+  slot,
+}: {
+  bindingCode: string
+  controllerSelected: boolean
+  inputScale: number
+  mobilePlacement: ReturnType<typeof mobileQuickbarSlotPlacement>
+  mode: SkillQuickbarProps['mode']
+  offset: number
+  onInput: SkillQuickbarProps['onInput']
+  onUnassign: SkillQuickbarProps['onUnassign']
+  playerState: SkillQuickbarProps['playerState']
+  selectedPrimarySkillId: number
+  skillId: number | null
+  slot: number
+}) {
+  const pressRef = useRef<{
+    inputActive: boolean
+    originX: number
+    originY: number
+    pointerId: number
+  } | null>(null)
+  const [burstSequence, setBurstSequence] = useState<number | null>(null)
+  const skill = skillId === null ? undefined : NATIVE_SKILL_CATALOG[skillId]
+  const secondary = skillId !== null && nativeSkillCategory(skillId) === 2
+  const combatDisabled = mode === 'hub' && secondary
+  const { capacity, remaining } = !secondary
+    ? { capacity: 0, remaining: 0 }
+    : nativeSkillQuickbarCooldownPresentation(
+        playerState?.cooldownTicksBySkill[skillId] ?? 0,
+        playerState?.cooldownMaximumTicksBySkill[skillId] ?? 0,
+        playerState?.globalCooldownTicks ?? 0,
+      )
+  const bindingLabel = gameBindingLabel(bindingCode)
+  const input = bindingCode.startsWith('Mouse')
+    ? `${bindingLabel.toLowerCase()} button`
+    : `key ${bindingLabel}`
+  const active = skillId !== null && (
+    skillId === selectedPrimarySkillId
+    || secondaryAbilityActive(skillId, playerState)
+  )
+  const label = skill === undefined
+    ? `Empty quickbar slot ${slot + 1}, ${input}`
+    : `${skill.name}, ${input}${remaining > 0
+      ? `, ${formatCooldown(remaining)} seconds cooldown remaining`
+      : ''}${active ? ', active' : ''}${combatDisabled ? ', unavailable in the Hub' : ''}`
+  const finishPointer = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const press = pressRef.current
+    if (!press || press.pointerId !== event.pointerId) return
+    pressRef.current = null
+    if (press.inputActive) onInput?.(slot, false)
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+  }
+  return (
+    <button
+      type="button"
+      className="hub-hud-quickbar-slot"
+      data-slot={slot}
+      data-populated={skill !== undefined}
+      data-quickbar-bank={mobilePlacement.bank}
+      data-tutorial-anchor={slot === 0 ? 'secondary-slot' : undefined}
+      data-binding-code={bindingCode}
+      data-active={active}
+      data-controller-selected={controllerSelected || undefined}
+      disabled={skill === undefined || ((!onInput || combatDisabled) && !onUnassign)}
+      style={{
+        '--mobile-quickbar-slot-bottom': `${mobilePlacement.bottom}px`,
+        '--mobile-quickbar-slot-inset': `${mobilePlacement.inset}px`,
+        '--mobile-quickbar-slot-size': `${mobilePlacement.size}px`,
+        '--quickbar-slot-offset': `${offset}px`,
+      } as CSSProperties}
+      aria-disabled={combatDisabled || undefined}
+      aria-label={`${label}${controllerSelected ? ', controller selected' : ''}`}
+      onPointerDown={(event) => {
+        const unsupportedMouseButton = event.pointerType === 'mouse' && event.button !== 0
+        const canCast = Boolean(onInput) && !combatDisabled
+        if (unsupportedMouseButton || skill === undefined || (!canCast && !onUnassign)) return
+        event.preventDefault()
+        pressRef.current = {
+          inputActive: canCast,
+          originX: event.clientX,
+          originY: event.clientY,
+          pointerId: event.pointerId,
+        }
+        event.currentTarget.setPointerCapture(event.pointerId)
+        if (canCast) onInput?.(slot, true)
+      }}
+      onPointerMove={(event) => {
+        const press = pressRef.current
+        if (!press || press.pointerId !== event.pointerId || !onUnassign) return
+        const scale = Number.isFinite(inputScale) && inputScale > 0 ? inputScale : 1
+        if (!nativeBeltPullOffStarted(
+          { x: 0, y: 0 },
+          {
+            x: (event.clientX - press.originX) / scale,
+            y: (event.clientY - press.originY) / scale,
+          },
+        )) return
+        pressRef.current = null
+        if (press.inputActive) onInput?.(slot, false)
+        setBurstSequence((current) => (current ?? 0) + 1)
+        onUnassign(slot)
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+          event.currentTarget.releasePointerCapture(event.pointerId)
+        }
+      }}
+      onPointerUp={finishPointer}
+      onPointerCancel={finishPointer}
+      onLostPointerCapture={finishPointer}
+    >
+      {remaining > 0 && capacity > 0 ? (
+        <CooldownSector remaining={remaining} capacity={capacity} />
+      ) : null}
+      {skill === undefined ? null : (
+        <NativeSkillIcon
+          cooldown={remaining > 0}
+          record={skill.skills_atlas_icon_record}
+        />
+      )}
+      {bindingCode === 'Mouse2' && skill !== undefined ? (
+        <img
+          className="hub-hud-quickbar-input-mouse"
+          src={hub.hud.mouseRight}
+          alt=""
+        />
+      ) : null}
+      {bindingCode !== 'Mouse2' && skill !== undefined ? (
+        <NativeQuickbarBinding text={bindingLabel.toUpperCase()} />
+      ) : null}
+      {burstSequence !== null ? (
+        <NativeBeltPullOffBurst
+          key={burstSequence}
+          className="hub-hud-quickbar-pull-off-burst"
+          onComplete={() => setBurstSequence((current) => (
+            current === burstSequence ? null : current
+          ))}
+          style={{ left: '50%', top: '50%' }}
+        />
+      ) : null}
+    </button>
   )
 }
 

@@ -21,6 +21,7 @@ import {
   nativeSkillBookRows,
   nativeSkillBookTooltipLines,
   nativeBeltPullOffStarted,
+  nativeBeltPullOffBurstMembers,
   nativeSkillDragStarted,
   nativeSkillQuickbarDropSlot,
   selectableConcentrationSkillRows,
@@ -45,6 +46,7 @@ import {
 } from './renderer/skill-book-render-contract.ts'
 
 const component = readFileSync(new URL('./SkillBook.tsx', import.meta.url), 'utf8')
+const beltBurst = readFileSync(new URL('./NativeBeltPullOffBurst.tsx', import.meta.url), 'utf8')
 const hudSelector = readFileSync(new URL('./HudSkillSelector.tsx', import.meta.url), 'utf8')
 const hudSelectorCss = readFileSync(new URL('./hud-skill-selector.css', import.meta.url), 'utf8')
 const hudSelectorRenderer = readFileSync(
@@ -168,6 +170,22 @@ test('pulls a populated native BeltButton off only beyond fifty pointer units', 
   assert.equal(nativeBeltPullOffStarted({ x: 10, y: 10 }, { x: 40.001, y: 50 }), true)
 })
 
+test('builds the complete stock BeltButton pull-off burst for both random branches', () => {
+  for (const step of [90, 120] as const) {
+    const members = nativeBeltPullOffBurstMembers(step, () => 0.5)
+    assert.equal(members.filter(({ record }) => record === 65).length, 24)
+    assert.equal(members.filter(({ record }) => record === 69).length, 360 / step)
+    assert.deepEqual(
+      members.filter(({ record }) => record === 65).map(({ brightness }) => brightness),
+      Array.from({ length: 12 }, () => [0.5, 0.75]).flat(),
+    )
+    assert.ok(members.every(({ durationMs }) => durationMs >= 50 && durationMs <= 200))
+  }
+  assert.match(beltBurst, /<NativeUiSprite atlas="UI" record=\{member\.record\}/)
+  assert.match(beltBurst, /data-smoke-count=/)
+  assert.match(beltBurst, /data-move-fade-count=/)
+})
+
 test('renderer owns the complete stock root, page-wide panels, row frames, and HoverBox', () => {
   for (const record of [3, 4, 10, 30, 31, 32, 33, 49, 71]) {
     assert.ok(nativeAssets.atlases.UI.records[record])
@@ -194,6 +212,7 @@ test('renderer owns the complete stock root, page-wide panels, row frames, and H
   assert.match(component, /nativeSkillQuickbarDropSlot/)
   assert.match(component, /nativeBeltPullOffStarted/)
   assert.match(component, /onUnassignQuickbarSkill/)
+  assert.match(component, /<NativeBeltPullOffBurst/)
   assert.equal((component.match(/audio\.playSound\('pick-skill'\)/g) ?? []).length, 1)
   assert.match(component, /dragPosition/)
   assert.match(renderer, /drawSkillDragger/)

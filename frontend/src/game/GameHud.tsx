@@ -26,6 +26,7 @@ import type { GameSnapshot } from './protocol/game-protocol.ts'
 import type { PartyRosterPlayer } from './protocol/party-state.ts'
 import { gameBindingLabel, type GameControlBindings } from './game-settings.ts'
 import type { NativeTutorialHudAccess } from './core-kernels/native-tutorial.ts'
+import type { GameViewportLayout } from './renderer/game-viewport.ts'
 import {
   NATIVE_HUD_SKILL_ACTION_HEIGHT,
   NATIVE_HUD_SKILL_ACTION_TOP,
@@ -53,6 +54,7 @@ interface GameHudProps {
   onMapClick?: () => void
   onPotionClick?: (itemId: number) => void
   onQuickbarInput?: (slot: number, pressed: boolean) => void
+  onQuickbarUnassign?: (slot: number) => void
   onSkillBindingClick?: (binding: NativeHudSkillBinding) => void
   partyRoster?: readonly PartyRosterPlayer[]
   onSkillsClick?: () => void
@@ -62,7 +64,7 @@ interface GameHudProps {
   subscribeSnapshot: (listener: (snapshot: GameSnapshot) => void) => () => void
   tutorialAccess?: NativeTutorialHudAccess | null
   uiScale: number
-  viewport: Readonly<{ height: number; width: number }>
+  viewport: Readonly<GameViewportLayout>
 }
 
 function FpsCounter() {
@@ -133,6 +135,7 @@ export default function GameHud({
   onMapClick,
   onPotionClick,
   onQuickbarInput,
+  onQuickbarUnassign,
   onSkillBindingClick,
   partyRoster,
   onSkillsClick,
@@ -355,8 +358,10 @@ export default function GameHud({
       <SkillQuickbar
         controls={controls}
         controllerQuickbarSlot={controllerQuickbarSlot}
+        displayScale={viewport.displayScale}
         mode={mode}
         onInput={onQuickbarInput}
+        onUnassign={onQuickbarUnassign}
         playerState={quickbarHud.playerState}
         quickbar={quickbarHud.quickbar}
         selectedPrimarySkillId={quickbarHud.selectedPrimarySkillId}
