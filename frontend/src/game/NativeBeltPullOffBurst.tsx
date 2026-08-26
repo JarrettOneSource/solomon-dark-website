@@ -4,8 +4,13 @@ import {
   nativeBeltPullOffBurstMembers,
   type NativeBeltPullOffBurstMember,
 } from './skill-book-model.ts'
-import NativeUiSprite from './native-ui/NativeUiSprite.tsx'
+import { hub } from '../lib/assets.ts'
 import './native-belt-pull-off.css'
+
+const RECORD_GEOMETRY = {
+  65: { height: 33, x: 976, y: 0, width: 34 },
+  69: { height: 23, x: 242, y: 391, width: 23 },
+} as const
 
 interface NativeBeltPullOffBurstProps {
   readonly className?: string
@@ -35,19 +40,18 @@ export default function NativeBeltPullOffBurst({
       {members.map((member, index) => (
         <span
           className="native-belt-pull-off-member"
-          data-record={member.record}
+          data-native-ui-record={`UI.${member.record}`}
           key={`${member.record}:${index}`}
           onAnimationEnd={index === terminalIndex ? onComplete : undefined}
           style={memberStyle(member)}
-        >
-          <NativeUiSprite atlas="UI" record={member.record} />
-        </span>
+        />
       ))}
     </span>
   )
 }
 
 function memberStyle(member: NativeBeltPullOffBurstMember): CSSProperties {
+  const record = RECORD_GEOMETRY[member.record]
   return {
     '--native-belt-burst-brightness': member.brightness,
     '--native-belt-burst-duration': `${member.durationMs}ms`,
@@ -58,5 +62,11 @@ function memberStyle(member: NativeBeltPullOffBurstMember): CSSProperties {
     '--native-belt-burst-scale-y': member.scaleY,
     '--native-belt-burst-start-x': `${member.startX}px`,
     '--native-belt-burst-start-y': `${member.startY}px`,
+    backgroundImage: `url("${hub.trader.uiAtlas}")`,
+    backgroundPosition: `${-record.x}px ${-record.y}px`,
+    height: record.height,
+    marginLeft: -record.width / 2,
+    marginTop: -record.height / 2,
+    width: record.width,
   } as CSSProperties
 }

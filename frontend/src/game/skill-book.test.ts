@@ -181,7 +181,8 @@ test('builds the complete stock BeltButton pull-off burst for both random branch
     )
     assert.ok(members.every(({ durationMs }) => durationMs >= 50 && durationMs <= 200))
   }
-  assert.match(beltBurst, /<NativeUiSprite atlas="UI" record=\{member\.record\}/)
+  assert.match(beltBurst, /data-native-ui-record=\{`UI\.\$\{member\.record\}`\}/)
+  assert.match(beltBurst, /backgroundImage: `url\(\"\$\{hub\.trader\.uiAtlas\}\"\)`/)
   assert.match(beltBurst, /data-smoke-count=/)
   assert.match(beltBurst, /data-move-fade-count=/)
 })

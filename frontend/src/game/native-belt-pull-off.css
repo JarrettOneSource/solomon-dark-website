@@ -10,17 +10,9 @@
   position: absolute;
   top: 0;
   left: 0;
-  width: 0;
-  height: 0;
   animation: native-belt-pull-off-member var(--native-belt-burst-duration) linear forwards;
+  background-repeat: no-repeat;
   filter: brightness(var(--native-belt-burst-brightness));
-}
-
-.native-belt-pull-off-member > [data-native-ui-record] {
-  position: absolute !important;
-  top: 0;
-  left: 0;
-  transform: translate(-50%, -50%);
 }
 
 @keyframes native-belt-pull-off-member {
