@@ -56,7 +56,11 @@ import {
   succeedNativeBoast,
   type NativeBoastFailureProducer,
 } from '../core-kernels/native-hub-npc.ts'
-import { nativeLootModifiers, type NativeLootItem } from '../core-kernels/native-loot.ts'
+import {
+  NATIVE_LOOT_CARRIER_PLACEMENT_RADIUS,
+  nativeLootModifiers,
+  type NativeLootItem,
+} from '../core-kernels/native-loot.ts'
 import {
   NATIVE_HAGATHA_LAST_WORD_DAMAGE,
   NATIVE_HAGATHA_LAST_WORD_PRESENTATION_SCALE,
@@ -279,6 +283,7 @@ import {
 import {
   applyNativeTutorialSurfaceAction,
   NATIVE_TUTORIAL_FIRES,
+  nativeTutorialCameraLockSafetyClear,
   nativeTutorialForcedVelocity,
   nativeTutorialHudAccess,
   stepNativeTutorial,
@@ -1956,6 +1961,20 @@ export function stepGameSimulationTick(
         const tutorial = stepNativeTutorial(boneyardWorld.tutorial, {
           acidRainCastSequence: tutorialSecondary?.castSequence ?? 0,
           acidRainLastSkillId: tutorialSecondary?.lastSkillId ?? null,
+          cameraLockSafetyClear: nativeTutorialCameraLockSafetyClear([
+            ...boneyardWorld.enemies.actors.map((actor) => ({
+              position: actor.position,
+              radius: actor.config.collisionRadius,
+            })),
+            ...boneyardWorld.enemies.maggots.map((maggot) => ({
+              position: maggot.position,
+              radius: maggot.collisionRadius,
+            })),
+            ...boneyardWorld.loot.actors.filter(({ kind }) => kind === 'sack').map((actor) => ({
+              position: actor.position,
+              radius: NATIVE_LOOT_CARRIER_PLACEMENT_RADIUS,
+            })),
+          ]),
           currentHealth: tutorialProgression.currentHealth,
           enemyCount: boneyardWorld.enemies.actors.length + boneyardWorld.enemies.maggots.length,
           groundSackCount: boneyardWorld.loot.actors.filter(({ nativeTypeId }) => (

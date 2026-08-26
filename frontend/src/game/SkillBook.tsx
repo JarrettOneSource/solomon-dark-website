@@ -15,6 +15,8 @@ import { subscribeGamePresentationFrames } from './game-presentation-frame-loop.
 import {
   NATIVE_HUD_BACKBUFFER,
   nativeHudModalSlideLayout,
+  type NativeHudPoint,
+  type NativeHudRect,
 } from './native-hud-layout.ts'
 import { setNativeModalSlideProgress } from './native-modal-slide-progress.ts'
 import type {
@@ -28,8 +30,10 @@ import {
   type SkillBookRendererPresentation,
 } from './renderer/skill-book-renderer.ts'
 import {
+  nativeSkillDragStarted,
   nativeSkillBookPagePlacements,
   nativeSkillBookPages,
+  nativeSkillQuickbarDropSlot,
   type NativeSkillBookRow,
 } from './skill-book-model.ts'
 import './skill-book.css'
@@ -48,6 +52,11 @@ interface SkillBookProps {
   style: CSSProperties
   subscribeSnapshot: (listener: (snapshot: GameSnapshot) => void) => () => void
   topMost: boolean
+}
+
+interface SkillBookDragState {
+  readonly position: NativeHudPoint
+  readonly skillId: number
 }
 
 export default function SkillBook({
@@ -71,8 +80,8 @@ export default function SkillBook({
   }))
   const pages = useMemo(() => nativeSkillBookPages(progression), [progression])
   const placements = useMemo(() => nativeSkillBookPagePlacements(pages), [pages])
-  const [targetQuickbarSlot, setTargetQuickbarSlot] = useState(0)
-  const [draggedSkillId, setDraggedSkillId] = useState<number | null>(null)
+  const [targetQuickbarSlot, setTargetQuickbarSlot] = useState<number | null>(null)
+  const [drag, setDrag] = useState<SkillBookDragState | null>(null)
   const [hoveredSkillId, setHoveredSkillId] = useState<number | null>(null)
   const [openProgress, setOpenProgress] = useState(0)
   const [phase, setPhase] = useState<'opening' | 'settled' | 'closing'>('opening')
@@ -86,7 +95,8 @@ export default function SkillBook({
   const closeStartedRef = useRef(false)
   const closeTargetRef = useRef<'closed' | 'inventory'>('closed')
   const presentationRef = useRef<SkillBookRendererPresentation>({
-    draggedSkillId,
+    dragPosition: drag?.position ?? null,
+    draggedSkillId: drag?.skillId ?? null,
     economy,
     hoveredSkillId,
     openProgress,
@@ -95,7 +105,8 @@ export default function SkillBook({
     targetQuickbarSlot,
   })
   presentationRef.current = {
-    draggedSkillId,
+    dragPosition: drag?.position ?? null,
+    draggedSkillId: drag?.skillId ?? null,
     economy,
     hoveredSkillId,
     openProgress,
@@ -178,7 +189,7 @@ export default function SkillBook({
   useEffect(() => {
     rendererRef.current?.setPresentation(presentationRef.current)
   }, [
-    draggedSkillId,
+    drag,
     economy,
     hoveredSkillId,
     openProgress,
@@ -190,23 +201,24 @@ export default function SkillBook({
 
   const assign = (skillId: number, slot: number) => {
     onAssignQuickbarSkill(skillId, slot)
-    setTargetQuickbarSlot(slot)
-    setDraggedSkillId(null)
+    audio.playSound('pick-skill')
+    setTargetQuickbarSlot(null)
+    setDrag(null)
   }
-  const quickbarSlotAt = (clientX: number, clientY: number): number | null => {
-    const actions = rootRef.current?.querySelectorAll<HTMLElement>('.skill-book-quickbar-action')
-    if (!actions) return null
-    for (let slot = 0; slot < actions.length; slot += 1) {
-      const rect = actions[slot]!.getBoundingClientRect()
-      if (clientX >= rect.left && clientX <= rect.right
-        && clientY >= rect.top && clientY <= rect.bottom) return slot
+  const nativePointForClient = (clientX: number, clientY: number): NativeHudPoint | null => {
+    const bounds = rootRef.current?.getBoundingClientRect()
+    if (!bounds || bounds.width === 0 || bounds.height === 0) return null
+    return {
+      x: (clientX - bounds.left) * NATIVE_HUD_BACKBUFFER.width / bounds.width,
+      y: (clientY - bounds.top) * NATIVE_HUD_BACKBUFFER.height / bounds.height,
     }
-    return null
   }
 
   const beginClose = (target: 'closed' | 'inventory' = 'closed') => {
     if (closeStartedRef.current) return
     closeStartedRef.current = true
+    setDrag(null)
+    setTargetQuickbarSlot(null)
     onCloseStart?.()
     closeTargetRef.current = target
     transitionStartProgressRef.current = openProgress
@@ -239,6 +251,11 @@ export default function SkillBook({
     NATIVE_HUD_BACKBUFFER.height,
     openProgress,
   ).tome
+  const belt = nativeHudModalSlideLayout(
+    NATIVE_HUD_BACKBUFFER.width,
+    NATIVE_HUD_BACKBUFFER.height,
+    openProgress,
+  ).belt
 
   return (
     <div
@@ -251,6 +268,9 @@ export default function SkillBook({
       tabIndex={-1}
       data-transition-phase={phase}
       data-open-progress={openProgress}
+      data-dragged-skill-id={drag?.skillId ?? ''}
+      data-drag-position-x={drag?.position.x ?? ''}
+      data-drag-position-y={drag?.position.y ?? ''}
       data-renderer-state={rendererState}
       onKeyDown={handleKeyDown}
     >
@@ -280,15 +300,24 @@ export default function SkillBook({
                 row={row}
                 selected={row.id === progression.selectedPrimarySkillId
                   || progression.concentrationSkillIds.includes(row.id)}
-                onDragChange={setDraggedSkillId}
-                onHover={setHoveredSkillId}
-                onPointerDrop={(skillId, clientX, clientY) => {
-                  const slot = quickbarSlotAt(clientX, clientY)
-                  if (slot !== null) assign(skillId, slot)
+                nativePointForClient={nativePointForClient}
+                onDragEnd={() => {
+                  setDrag(null)
+                  setTargetQuickbarSlot(null)
                 }}
-                onPointerTarget={(clientX, clientY) => {
-                  const slot = quickbarSlotAt(clientX, clientY)
-                  if (slot !== null) setTargetQuickbarSlot(slot)
+                onDragMove={(skillId, position) => {
+                  setHoveredSkillId(null)
+                  setDrag({ position, skillId })
+                  setTargetQuickbarSlot(nativeSkillQuickbarDropSlot(position, belt))
+                }}
+                onHover={setHoveredSkillId}
+                onPointerDrop={(skillId, position) => {
+                  const slot = nativeSkillQuickbarDropSlot(position, belt)
+                  if (slot !== null) assign(skillId, slot)
+                  else {
+                    setDrag(null)
+                    setTargetQuickbarSlot(null)
+                  }
                 }}
                 onSelectConcentration={() => {
                   onSelectConcentration(row.id)
@@ -310,7 +339,8 @@ export default function SkillBook({
         Skills with a gold or green border can be dragged into your belt.
       </span>
       <SkillQuickbarEditor
-        draggedSkillId={draggedSkillId}
+        belt={belt}
+        draggedSkillId={drag?.skillId ?? null}
         onTarget={setTargetQuickbarSlot}
         progression={progression}
         targetSlot={targetQuickbarSlot}
@@ -345,10 +375,11 @@ function sameSkillBookModel(
 function SkillBookEntry({
   concentrationLocked,
   index,
-  onDragChange,
+  nativePointForClient,
+  onDragEnd,
+  onDragMove,
   onHover,
   onPointerDrop,
-  onPointerTarget,
   onSelectConcentration,
   onSelectPrimary,
   row,
@@ -356,10 +387,11 @@ function SkillBookEntry({
 }: {
   concentrationLocked: boolean
   index: number
-  onDragChange: (skillId: number | null) => void
+  nativePointForClient: (clientX: number, clientY: number) => NativeHudPoint | null
+  onDragEnd: () => void
+  onDragMove: (skillId: number, position: NativeHudPoint) => void
   onHover: (skillId: number | null) => void
-  onPointerDrop: (skillId: number, clientX: number, clientY: number) => void
-  onPointerTarget: (clientX: number, clientY: number) => void
+  onPointerDrop: (skillId: number, position: NativeHudPoint) => void
   onSelectConcentration: () => void
   onSelectPrimary: () => void
   row: NativeSkillBookRow
@@ -371,15 +403,16 @@ function SkillBookEntry({
   const pressRef = useRef<{
     dragging: boolean
     pointerId: number
-    x: number
-    y: number
+    origin: NativeHudPoint
   } | null>(null)
   const suppressClickRef = useRef(false)
   const finishPointer = (event: ReactPointerEvent<HTMLButtonElement>, cancelled: boolean) => {
     const press = pressRef.current
     if (!press || press.pointerId !== event.pointerId) return
-    if (press.dragging && !cancelled) onPointerDrop(row.id, event.clientX, event.clientY)
-    onDragChange(null)
+    const position = nativePointForClient(event.clientX, event.clientY)
+    if (press.dragging && !cancelled && position) onPointerDrop(row.id, position)
+    else onDragEnd()
+    if (cancelled) suppressClickRef.current = false
     pressRef.current = null
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId)
@@ -414,26 +447,26 @@ function SkillBookEntry({
       onPointerCancel={(event) => finishPointer(event, true)}
       onPointerDown={(event) => {
         if (!draggable || event.button !== 0) return
+        const origin = nativePointForClient(event.clientX, event.clientY)
+        if (!origin) return
         pressRef.current = {
           dragging: false,
+          origin,
           pointerId: event.pointerId,
-          x: event.clientX,
-          y: event.clientY,
         }
         event.currentTarget.setPointerCapture(event.pointerId)
       }}
       onPointerMove={(event) => {
         const press = pressRef.current
         if (!press || press.pointerId !== event.pointerId) return
+        const position = nativePointForClient(event.clientX, event.clientY)
+        if (!position) return
         if (!press.dragging) {
-          const dx = event.clientX - press.x
-          const dy = event.clientY - press.y
-          if (dx * dx + dy * dy <= 16) return
+          if (!nativeSkillDragStarted(press.origin, position)) return
           press.dragging = true
           suppressClickRef.current = true
-          onDragChange(row.id)
         }
-        onPointerTarget(event.clientX, event.clientY)
+        onDragMove(row.id, position)
       }}
       onPointerUp={(event) => finishPointer(event, false)}
     />
@@ -441,15 +474,17 @@ function SkillBookEntry({
 }
 
 function SkillQuickbarEditor({
+  belt,
   draggedSkillId,
   onTarget,
   progression,
   targetSlot,
 }: {
+  belt: readonly NativeHudRect[]
   draggedSkillId: number | null
   onTarget: (slot: number) => void
   progression: ProtocolPlayerProgression
-  targetSlot: number
+  targetSlot: number | null
 }) {
   return (
     <div className="skill-book-quickbar-actions" aria-label="Eight slot skill quickbar">
@@ -465,6 +500,12 @@ function SkillQuickbarEditor({
               : `Quickbar ${slot + 1}, empty${slot === 0 ? ', right mouse button' : `, key ${slot}`}`}
             aria-pressed={slot === targetSlot}
             data-target={slot === targetSlot || undefined}
+            style={{
+              height: belt[slot]!.height,
+              left: belt[slot]!.x,
+              top: belt[slot]!.y,
+              width: belt[slot]!.width,
+            }}
             onClick={() => onTarget(slot)}
           >
             {draggedSkillId !== null && slot === targetSlot ? (

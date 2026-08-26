@@ -28,6 +28,7 @@ import {
   nativeTutorialAmuletItem,
   nativeTutorialCameraBounds,
   nativeTutorialDialogueTicks,
+  nativeTutorialEnemyCameraPositionIsAllowed,
   nativeTutorialEnemySpawnPositionIsAllowed,
   nativeTutorialHealthPotionItem,
   type NativeTutorialState,
@@ -559,6 +560,16 @@ export function stepBoneyardWorldTick(
   const spawnCameraBounds = tutorial === null
     ? activeBounds
     : nativeTutorialCameraBounds(tutorial) ?? activeBounds
+  const tutorialAtEnemyStep = tutorial
+  const tutorialSpawnDomain = tutorialAtEnemyStep === null
+    ? null
+    : (candidate: Readonly<BoneyardPoint>, radius: number) => (
+        nativeTutorialEnemySpawnPositionIsAllowed(candidate, radius)
+        && (
+          !tutorialAtEnemyStep.cameraLockTriggered
+          || nativeTutorialEnemyCameraPositionIsAllowed(candidate, radius)
+        )
+      )
   const enemyStep = stepBoneyardEnemyStore(collisionResolvedEnemies, {
     abilityEffects,
     arenaScalars: { experience: RETAIL_BONEYARD_EXPERIENCE_RECIPE_SCALAR },
@@ -653,9 +664,7 @@ export function stepBoneyardWorldTick(
         positionPolicy ?? 'direct',
         rngState,
         {
-          ...(tutorial === null
-            ? {}
-            : { acceptsDomain: nativeTutorialEnemySpawnPositionIsAllowed }),
+          ...(tutorialSpawnDomain === null ? {} : { acceptsDomain: tutorialSpawnDomain }),
           isOffscreen: (candidate) => boneyardSpawnPositionIsOffscreen(
             candidate,
             spawnCameraBounds,

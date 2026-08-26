@@ -9,6 +9,9 @@ import {
 import { createGameSimulation } from './core-server/game-simulation.ts'
 import { createGameSnapshot } from './host/game-snapshot.ts'
 import {
+  NATIVE_SKILL_DRAGGER_SCALE,
+  NATIVE_SKILL_DRAGGER_SIZE,
+  NATIVE_SKILL_DRAG_THRESHOLD_SQUARED,
   NATIVE_SKILL_PAGE_BASE_WIDTH,
   NATIVE_SKILL_PAGE_DEPENDENT_WIDTH,
   NATIVE_SKILL_PAGE_HEIGHT,
@@ -17,6 +20,8 @@ import {
   nativeSkillBookPages,
   nativeSkillBookRows,
   nativeSkillBookTooltipLines,
+  nativeSkillDragStarted,
+  nativeSkillQuickbarDropSlot,
   selectableConcentrationSkillRows,
   selectablePrimarySkillRows,
   selectableSecondarySkillRows,
@@ -135,6 +140,26 @@ test('uses the recovered page dimensions, wrapping, and common centering', () =>
   ])
 })
 
+test('uses the native SkillDragger threshold and maximum-overlap belt hit model', () => {
+  assert.equal(NATIVE_SKILL_DRAG_THRESHOLD_SQUARED, 9)
+  assert.equal(NATIVE_SKILL_DRAGGER_SIZE, 40)
+  assert.equal(NATIVE_SKILL_DRAGGER_SCALE, 1.25)
+  assert.equal(nativeSkillDragStarted({ x: 10, y: 10 }, { x: 13, y: 10 }), false)
+  assert.equal(nativeSkillDragStarted({ x: 10, y: 10 }, { x: 13.01, y: 10 }), true)
+
+  const belt = [
+    { height: 53, width: 53, x: 0, y: 0 },
+    { height: 53, width: 53, x: 60, y: 0 },
+  ]
+  assert.equal(
+    nativeSkillQuickbarDropSlot({ x: 59, y: 26.5 }, belt),
+    1,
+    'pointer is outside slot 1, but its centered 40px drag rectangle overlaps slot 1 most',
+  )
+  assert.equal(nativeSkillQuickbarDropSlot({ x: 56.5, y: 26.5 }, belt), 0, 'ties retain earlier slot')
+  assert.equal(nativeSkillQuickbarDropSlot({ x: 120, y: 100 }, belt), null)
+})
+
 test('renderer owns the complete stock root, page-wide panels, row frames, and HoverBox', () => {
   for (const record of [3, 4, 10, 30, 31, 32, 33, 49, 71]) {
     assert.ok(nativeAssets.atlases.UI.records[record])
@@ -144,7 +169,7 @@ test('renderer owns the complete stock root, page-wide panels, row frames, and H
   }
   assert.match(renderer, /NATIVE_SKILL_SCREEN_ROOT\.leatherRecord/)
   assert.match(renderer, /NATIVE_SKILL_SCREEN_ROOT\.leatherHeight[\s\S]*\.fill\(0x000000\)/)
-  assert.match(renderer, /root\.addChild\(curtain, ambient, fixtures, field, overlay, pages, hud, hover\)/)
+  assert.match(renderer, /root\.addChild\(curtain, ambient, fixtures, field, overlay, pages, hud, hover, dragger\)/)
   assert.match(renderer, /textureFor\(textures, 'Skills', 0\)/)
   assert.match(renderer, /NATIVE_SKILL_SCREEN_ROOT\.topFlourishes/)
   assert.match(renderer, /spriteFor\(textures, 'Skills', 13\)/)
@@ -158,6 +183,13 @@ test('renderer owns the complete stock root, page-wide panels, row frames, and H
   assert.match(component, /data-open-progress=\{openProgress\}/)
   assert.match(component, /nativeHudModalSlideLayout\([\s\S]*?openProgress[\s\S]*?\.tome/)
   assert.match(component, /data-skill-book-resume="true"/)
+  assert.match(component, /nativeSkillQuickbarDropSlot/)
+  assert.equal((component.match(/audio\.playSound\('pick-skill'\)/g) ?? []).length, 1)
+  assert.match(component, /dragPosition/)
+  assert.match(renderer, /drawSkillDragger/)
+  assert.match(renderer, /NATIVE_SKILL_DRAGGER_SCALE/)
+  assert.doesNotMatch(css, /\.skill-book-quickbar-action:nth-child/)
+  assert.doesNotMatch(css, /\.skill-book-quickbar-action\s*\{[^}]*bottom:/s)
   assert.doesNotMatch(
     css,
     /\.skill-book-close-action\s*\{[^}]*(?:top:\s*25px|right:\s*0|width:\s*48px|height:\s*58px)/s,
@@ -169,10 +201,9 @@ test('renderer owns the complete stock root, page-wide panels, row frames, and H
     /\.main-menu-page\[data-skill-book-open='true'\] \.game-menu-skull\s*\{\s*display: none;/,
   )
   assert.match(component, /setPointerCapture/)
-  assert.match(component, /quickbarSlotAt/)
   assert.match(component, /progression\.skillQuickbar/)
   assert.match(component, /onSelectConcentration/)
-  assert.match(css, /\.skill-book-quickbar-action:nth-child\(8\)/)
+  assert.match(component, /style=\{\{[\s\S]*?left: belt\[slot\]!\.x[\s\S]*?top: belt\[slot\]!\.y/)
   assert.match(hud, /SkillQuickbar/)
   assert.match(hud, /nativeHealthHudPresentation/)
   assert.match(hud, /nativeManaHudPresentation/)

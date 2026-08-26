@@ -47325,3 +47325,239 @@ No member is blocked by the browser platform.
   made, so the already-authoritative Mod Loader reports remain unchanged.
   Fast-forward publication to `main` is user-authorized and remains pending the
   final fetch, exact-tree identity proof, and remote verification.
+
+## 2026-08-26 — Corrective SkillScreen pointer-drag closure
+
+### Reported smell and parity question
+
+- Reported behavior: dragging a spell from SkillBook does not assign it to the
+  belt even though the screen says gold/green skills can be dragged there.
+- The 2026-08-20/25 entries called drag/drop exact, but their browser journey
+  used Playwright `dragTo` against the invisible DOM quickbar target. It did
+  not exercise release over the painted, modal-slid belt and omitted the
+  native transient dragger, hit rectangle, threshold, and audio. This is a
+  secondary-report process failure; those claims are reopened here.
+- Stock question: recover the complete HoverButton -> SkillDragger -> live
+  BeltButton path for every category, accepted/rejected release, both scenes,
+  and mouse/touch projection.
+- Falsifiers: point-only hit testing, a stationary source icon, a four-pixel
+  threshold, unslid belt targets, sound on rejection, silence on acceptance,
+  category-3 drag, or a test that targets invisible geometry.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Retail identity | `SolomonDark.exe` 0.72.5, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred base `0x00400000` | Canonical current read-only replica target. | high |
+| Fresh instructions | `0x00656980`, `0x0065E4D0`, `0x006564A0`, `0x005C7090`; vtable `0x0079F564`; raw call at `0x00656529..46` | Strict threshold, transient art, pointer-centered overlap, slot winner, accepted sound, and unconditional teardown. | high |
+| Static values/assets | `0x0078473C=9`, `0x007849B0=40`, `0x00784D58=1.25`; Skills record 164 and icon rows 27..122 | Exact threshold squared, drag rectangle, scale, glow, and icon membership. | high |
+| Current Website | `SkillBook.tsx`, `skill-book.css`, `skill-book-renderer.ts` at `b4a75dc8` | Uses `>16`, point containment against fixed closed-position DOM actions, no pointer icon/glow, and no accepted-drop sound. | high |
+| Mac baseline | exact detached current main; canonical gate and `smoke:game:skill-book` | Full gate passes and hidden-target `dragTo` reports success, proving the prior acceptance cannot falsify the painted-target report. | high-live |
+
+### System boundary and membership inventory
+
+Native system: the complete transient SkillScreen drag owner from authored
+card admission through pointer threshold/capture, SkillDragger presentation,
+live BeltButton overlap, authoritative slot mutation, audio, and teardown.
+
+| Member | Native source | Disposition | Proof contract |
+| --- | --- | --- | --- |
+| category-1 primary rows, including Welding 52 | category predicate `0x0067BEB0` | exact-ported | every learned primary can drag; selection click remains independent |
+| category-2 secondary rows | predicate `0x0067BF10` | exact-ported | natural pointer drop and duplicate/occupied slots |
+| category-3 concentration | `0x0067BEE0`, common category router | verified-already-at-parity; out-of-drag by design | click selects; pointer movement creates no dragger |
+| passive categories 0/4 | authored category | verified-already-at-parity; out-of-drag by design | no dragger or assignment |
+| strict movement threshold | `0x00656980`, value 9 | exact-ported | squared displacement 9 rejected, greater than 9 starts once |
+| HoverBox interruption | `HoverButton +0xB8` | exact-ported | drag start destroys hover and no stale tooltip remains |
+| pointer-owned SkillDragger | vtable `0x0079F564` | exact-ported | one transient follows live pointer and always tears down |
+| glow/icon/Welding presentation | `0x0065E4D0`; Skills 164, 27..122 | exact-ported | root color plus exact live icon at scale 1.25 |
+| eight live modal-slid BeltButtons | `Game+0x5EC`, stride `0xEC`; `0x005C7200` | exact-ported | semantic targets and hit model share current HUD rectangles |
+| centered 40x40 maximum-overlap selection | `0x006564A0 -> 0x005C7090` | exact-ported | point-outside overlap, greatest-area winner, earlier tie |
+| empty and occupied destination | BeltButton slot writer | verified-already-at-parity | one addressed replacement only |
+| duplicate skill ids | no source scan | verified-already-at-parity | duplicate Call Leviathan remains legal |
+| accepted/rejected audio | registry 1 `pickskill`, gain 1 | exact-ported | exactly one accepted cue; rejected/cancelled silent |
+| Hub and Boneyard consumers | shared `Gameplay+0x1664` screen | exact-ported | same mouse and touch journeys in both scenes |
+| close/handoff/cancel/teardown | `0x006564A0`, `0x0066B200` | exact-ported | pointer cancel, release outside, close during no drag leak |
+
+No member is blocked by the browser platform.
+
+### Native ownership and behavioral contract
+
+- Movement squared must exceed 9 before one SkillDragger is constructed. Its
+  live position is the pointer center in native stage coordinates.
+- Render order is root-colored Skills 164 glow then the exact authored/live
+  build icon, both centered and scaled 1.25 above the screen.
+- Release forms `[pointer.x-20,pointer.y-20,40,40]`, intersects every current
+  belt rectangle in order, and accepts only the strictly greatest positive
+  area. A point outside a slot can therefore still be a valid stock drop.
+- Success sends the existing actor-authoritative assignment, plays
+  `pick-skill` once, and destroys the dragger. Rejection/cancel destroys it
+  without mutation or sound. Duplicate IDs and one-slot replacement remain.
+
+### Web implementation consequence and validation contract
+
+- Put constants/overlap selection in the SkillScreen model/render contract;
+  convert Pointer Events from client to the fixed native stage once.
+- Drive both hit actions and overlap selection from
+  `nativeHudModalSlideLayout(...,openProgress).belt`; remove fixed nth-child
+  geometry. Add the pointer glow/icon above hover/HUD content.
+- Red contracts must reject threshold 16, point-only selection, fixed belt
+  actions, missing dragger, and missing sound.
+- Mac Chrome must start at a painted card, show the moving dragger, release at
+  the painted lower slot edge where the pointer is outside the old DOM target
+  but its 40x40 native rectangle overlaps, then prove authoritative mutation and
+  one `pickskill`. Also prove outside release and category-3 movement reject.
+
+### Implementation validation receipt
+
+- Implementation: `skill-book-model.ts` now owns strict displacement-squared
+  threshold 9 and the centered 40x40 greatest-overlap selector. `SkillBook`
+  converts client Pointer Events into native 1600x900 stage coordinates,
+  drives the selector from the live modal-slid belt, clears hover on drag,
+  handles cancel/reject teardown, sends the existing authoritative slot action,
+  and plays `pick-skill` only on a positive hit. The eight semantic buttons use
+  those same live rectangles; the fixed CSS/nth-child geometry is removed.
+- Presentation: `skill-book-renderer.ts` owns a top transient layer that paints
+  Skills 164 in the row's native root color and the exact skill/live Weld icon
+  at scale 1.25 under the pointer. The layer is destroyed on every release,
+  cancel, close, or screen teardown.
+- Red receipts: the tests-only canonical Mac gate stopped on the five missing
+  native drag exports. The painted-coordinate browser journey then timed out
+  before Quickbar 3 mutation/current-main had no transient dragger marker;
+  `red-website-validate.log` and `red-skillbook.log` retain those failures.
+- Mac Chrome: the green journey starts Magic Missile at `(700,359.5)`, moves
+  the visible 1.25x dragger, and releases at painted slot-3 point
+  `(614.5,899)`. That point lies below the old fixed DOM action but its native
+  40x40 rectangle overlaps the live slot; the host assigns skill 8 and exactly
+  one gain-one `pickskill` event plays. Duplicate Call Leviathan, occupied /
+  empty slots, Hub/Boneyard consumers, selectors, and empty page/console/
+  network error arrays remain green. Log: `evidence/green-skillbook.log`.
+- Visual inspection: `green-skillbook-painted-drag.png` shows the authored
+  purple glow/icon following the pointer over the outlined live belt target;
+  no stale HoverBox remains.
+- Automated acceptance: Website canonical Mac gate passes Boneyard/game
+  `1573/1573`, Tutorial `50/50`, every backend/frontend/desktop/lint/type/build/
+  media contract, and game bundle `474613` raw / `133080` gzip against
+  `524288` / `133120`. Mod Loader static RE passes `507/507`. Logs:
+  `evidence/final-website-validate.log` and `evidence/final-loader-static-re.log`.
+- No browser-platform member or material unknown remains. Changes are local;
+  no commit, push, deployment, or production mutation was requested.
+
+## 2026-08-26 — Tutorial camera-lock live-enemy safety correction
+
+### Reported smell and parity question
+
+- Reported behavior: walking far enough north makes the previous Tutorial area
+  visually off-limits; enemies left there are not forced out and can become
+  unreachable, preventing the enemy-count stage from advancing.
+- Stock question: determine whether trigger 642218 changes map/collision
+  bounds or relocates live enemies, then close every existing/spawned/moving /
+  resumed hostile branch around the camera transition.
+- The 2026-08-24 entrance-fence pass explicitly made spawn admission safe but
+  did not disposition an enemy already outside the future camera target or an
+  enemy crossing it after lock. It also never closed hostile Gate contact.
+- Falsifiers: a hidden native combat-wall write, enemy cleanup/teleport, a
+  Badguy that can push the Gate, post-lock births guaranteed inside the target,
+  or a web camera that stays full while a required enemy is outside.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Retail camera/cleanup | trigger 642218/script 642219; `0x00464B20`, `0x0046E570`, `0x004728B0` | Camera target becomes `(0,0,2043,849.91796875)` and remains. Cleanup omits Fence, player, and BadGuys; no movement-bound or relocation write exists. | high |
+| Fresh Gate xrefs | `0x00646D00 -> 0x005E39B0`; Gate vtable `0x00799D9C`; Region collider vtable `0x0079F078` | Gate motion requires current actor flags bit 1. | high |
+| Actor construction/collision | Player `0x0052B4C0` flags `0x801`; Badguy `0x00473390` flags `0x2`, exclusion mask `0x80`; Gate mask `0x100`; resolver `0x00522CE0` | Players push Gate. Badguys collide because `0x80 & 0x100 == 0`, but cannot push it and can be trapped behind a closing leaf. | high |
+| Current Website | Tutorial camera depends only on trigger/state; world enemy movement remains full-bounds; locked spawn only target-bounds retry candidates while dark raw fast paths bypass | A live or newly accepted enemy can remain outside the camera indefinitely; current state has no safety release. | high |
+| Existing stock observation | clean 1600x900 opening capture from the 2026-08-24 pass | Normal authored flow kept opening enemies on the combat side; it does not prove recovery from adversarial kiting. | high for observed flow |
+
+### Direct answer and recovered contract
+
+Stock does make the lower region leave the usable **camera**, but it does not
+turn it into a new collision/map boundary. It removes off-target static scene
+families after 300 ticks, keeps the Fence/Gate and every live enemy, and never
+forces an enemy north. Because Badguys collide with but cannot push the Gate,
+the reported rare soft lock is reachable as a stock edge case even though the
+ordinary encounter avoids it.
+
+### System boundary and membership inventory
+
+Native system: Tutorial trigger-to-camera/cleanup plus all progression-relevant
+hostiles and ground Sack carriers whose live circles can lie outside the
+future camera target. Website safety extension: never hide a required enemy or
+pickup.
+
+| Member | Source | Disposition | Proof contract |
+| --- | --- | --- | --- |
+| authored trigger and persistent interpolation | 642218/642219, `0x00464B20/0x0046E570` | verified-already-at-parity | ordinary empty/clear transition unchanged |
+| static/spatial cleanup membership | `0x004728B0` | verified-already-at-parity | no enemy/Fence deletion claim |
+| PlayerWizard movement | full Arena; flags `0x801` | verified-already-at-parity | no invented target collision wall |
+| Skeleton/Archer Tutorial actors | Badguy family flags/masks | exact safety projection | every registered circle, including dying rows, must fit target before retirement |
+| Maggot/Coffin child family | no authored Tutorial producer | out-of-system for ordinary authored waves; generic safety member for loaded/extended state | current/save coverage |
+| Tutorial and ordinary ground Sack carriers | death reward / linked Tutorial drop; radius 15 | exact safety projection | amulet, potion/equipment, key, nested, and mod-content Sacks remain reachable until pickup/retirement |
+| Gate leaves/Fence | persistent manager; Gate contact rule | verified-already-at-parity | remain physical, player-pushable, enemy-nonpushable |
+| pre-lock existing enemy outside target | browser safety extension | exact requested fix | camera remains/reopens full; no teleport/delete |
+| pre-lock all enemy/loot bodies inside target | authored trigger plus Website safety | verified-already-at-parity for clear ordinary flow | lock starts normally |
+| post-lock dark/offscreen/light births | all Tutorial batch policies | exact requested fix | full circle admitted inside target, including dark fast path |
+| post-lock enemy movement/knockback outside target | native full movement | browser safety extension | immediately suspend camera lock so actor stays visible/reachable |
+| save/resume or late snapshot with unsafe locked state | browser persistence boundary | exact requested fix | first authoritative tick restores full camera without schema change |
+| ordinary generated/custom Boneyards | separate arena-transition/custom owner | out-of-system | unchanged |
+| scene teardown/new Tutorial | existing world replacement | verified-already-at-parity | no safety state leaks |
+
+No member is blocked by the browser platform.
+
+### Web implementation consequence and validation contract
+
+- Add one pure full-circle predicate against
+  `NATIVE_TUTORIAL_CAMERA_TARGET`. The authoritative Tutorial tick may retain /
+  start its camera lock only while every registered actor/maggot and ground
+  Sack carrier is safe.
+- If a locked live/save state becomes unsafe, clear the lock/age/cleanup edge
+  immediately; when clear again, the authored player trigger can restart it.
+  Do not teleport, delete, damage, or retarget the hostile.
+- While locked, combine the exact entrance-Fence birth domain with the camera
+  target for every policy, including dark raw fast paths.
+- Red tests: player inside trigger plus one living outside actor currently
+  locks; an already locked unsafe state stays locked; a dark direct post-lock
+  root outside target is accepted. Green tests invert all three, cover boundary
+  equality/radius, dying and ground-Sack retention, re-lock, save-shaped state,
+  and ordinary/custom negatives.
+- Mac Chrome journey must show the full camera and reachable enemy while one
+  living root remains outside, then remove/move that enemy, observe the normal
+  lock, and prove representative post-lock births remain visible. Capture
+  empty page/console/response/host error arrays.
+
+### Implementation validation receipt
+
+- Implementation: `nativeTutorialCameraLockSafetyClear` requires every current
+  enemy actor, Maggot, and radius-15 ground Sack carrier to fit wholly inside
+  `NATIVE_TUTORIAL_CAMERA_TARGET`. `GameSimulation` computes that participant-
+  private authoritative predicate before the Tutorial tick. An unsafe pending
+  or saved lock clears trigger/age/cleanup immediately without changing enemy,
+  loot, Gate, player, RNG, damage, or stage state; the authored trigger starts
+  it again once the world is safe.
+- Post-lock births: `boneyard-world.ts` composes the exact entrance-Fence
+  domain with the target-circle predicate for every Tutorial policy, including
+  dark raw fast paths. Ordinary generated/custom Boneyards remain unchanged.
+- Red receipts: the current browser locked while enemy 20 remained outside;
+  `red-tutorial.log` records `true !== false` at the explicit safety assertion.
+  The red canonical gate also rejected the absent safety exports/host owner.
+- Mac Chrome: the final responsive stock journey holds the full camera at
+  `(1025,800)` while enemy 20 remains reachable at
+  `(1056.7906494140625,1444.8121337890625)`, then continues holding it for an
+  authored amulet Sack at `(1100,1300)` after the enemy store clears. After the
+  Sack retires, the ordinary 464-tick lock settles at target
+  `(0,0,2043,849.91796875)` with
+  rendered camera `(1025,516.5846354166667)`. All four Tutorial spawn families,
+  stage/HUD geometry, Staff melee, College admission, and four responsive
+  viewports retain empty page/console/response arrays. Log:
+  `evidence/green-tutorial.log`.
+- Visual inspection: `green-tutorial-unsafe-enemy-camera-full.png` retains the
+  lower approach while the unsafe enemy exists; the later
+  `green-tutorial-stock-camera-locked.png` shows the normal upper target only
+  after safety clears.
+- Stock answer remains explicit: this safety release is a Website extension.
+  Retail locks only the camera/cleanup target, does not create a new collision
+  boundary, does not relocate enemies, and lets Badguys collide with but not
+  push the Gate.
+- Automated and native-document acceptance is shared with the SkillDragger
+  receipt above. No protocol/save schema change or browser-platform block was
+  introduced. Changes are local; nothing was pushed or deployed.

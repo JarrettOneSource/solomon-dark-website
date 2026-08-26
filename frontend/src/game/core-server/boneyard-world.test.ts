@@ -12,8 +12,10 @@ import {
   type BoneyardEnemySpawnIntent,
 } from '../core-kernels/boneyard-wave-director.ts'
 import {
+  NATIVE_TUTORIAL_CAMERA_LOCK_SETTLE_TICKS,
   NATIVE_TUTORIAL_MONSTER_RECIPES,
   createNativeTutorialState,
+  nativeTutorialEnemyCameraPositionIsAllowed,
   stepNativeTutorial,
 } from '../core-kernels/native-tutorial.ts'
 import {
@@ -1053,6 +1055,7 @@ test('every Tutorial opening enemy materializes on the combat side of the entran
     const spawned = stepNativeTutorial(tutorial, {
       acidRainCastSequence: 0,
       acidRainLastSkillId: null,
+      cameraLockSafetyClear: true,
       currentHealth: 100,
       enemyCount: 0,
       groundSackCount: 0,
@@ -1140,6 +1143,56 @@ test('every Tutorial MonsterRecipe and authored placement policy excludes the sp
       )
     }
   }
+})
+
+test('a locked Tutorial admits every new enemy circle inside the visible camera target', () => {
+  const loaded = materializeStockTutorial(Buffer.alloc(16, 53))
+  const created = createBoneyardWorld(loaded)
+  assert.ok(created.tutorial)
+  const world = {
+    ...created,
+    encounter: null,
+    tutorial: {
+      ...created.tutorial,
+      active: false,
+      cameraLockAgeTicks: NATIVE_TUTORIAL_CAMERA_LOCK_SETTLE_TICKS,
+      cameraLockTriggered: true,
+      cameraLockTicksRemaining: 0,
+      introActive: false,
+      introBlend: 1,
+      introDelayTicksRemaining: 0,
+      introFade: 0,
+      introMovementTicksRemaining: 0,
+      stage: 19 as const,
+      waveOrdinal: 0,
+    },
+    waves: null,
+  }
+  const player = {
+    ...spawnPlayerCharacterInBoneyard({
+      discipline: 'arcane',
+      displayName: 'Tutorial Camera Spawn Tester',
+      element: 'ether',
+    }, world),
+    position: { x: 1025, y: 800 },
+  }
+  const result = stepWorld(world, { player }, {}, 1, [{
+    enemyToken: 'SKELETON',
+    flags: [],
+    id: 1,
+    locationPolicy: 'near-player',
+    nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.SKELETON,
+    position: { x: 1025, y: 1200 },
+    positionPolicy: 'dark',
+    spawnTick: 0,
+    waveOrdinal: 1,
+  }])
+  const actor = result.world.enemies.actors[0]
+  assert.ok(actor)
+  assert.equal(nativeTutorialEnemyCameraPositionIsAllowed(
+    actor.position,
+    actor.config.collisionRadius,
+  ), true)
 })
 
 test('Solomon ignores dead and ineligible proximity targets', () => {

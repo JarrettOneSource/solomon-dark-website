@@ -54,9 +54,6 @@
 
 .skill-book-quickbar-action {
   position: absolute;
-  bottom: 14.5px;
-  width: 53px;
-  height: 53px;
   padding: 0;
   border: 0;
   opacity: 0;
@@ -64,15 +61,6 @@
   cursor: pointer;
   pointer-events: auto;
 }
-
-.skill-book-quickbar-action:nth-child(1) { left: calc(50% - 332px); }
-.skill-book-quickbar-action:nth-child(2) { left: calc(50% - 272px); }
-.skill-book-quickbar-action:nth-child(3) { left: calc(50% - 212px); }
-.skill-book-quickbar-action:nth-child(4) { left: calc(50% - 152px); }
-.skill-book-quickbar-action:nth-child(5) { left: calc(50% + 98px); }
-.skill-book-quickbar-action:nth-child(6) { left: calc(50% + 158px); }
-.skill-book-quickbar-action:nth-child(7) { left: calc(50% + 218px); }
-.skill-book-quickbar-action:nth-child(8) { left: calc(50% + 278px); }
 
 .skill-book-semantic-title,
 .skill-book-semantic-help,

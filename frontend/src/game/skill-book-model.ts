@@ -3,8 +3,12 @@ import {
   nativeSkillCategory,
   nativeSkillDependencies,
 } from './core-kernels/player-progression.ts'
+import type { NativeHudPoint, NativeHudRect } from './native-hud-layout.ts'
 import type { ProtocolPlayerProgression } from './protocol/game-state.ts'
 
+export const NATIVE_SKILL_DRAG_THRESHOLD_SQUARED = 9
+export const NATIVE_SKILL_DRAGGER_SIZE = 40
+export const NATIVE_SKILL_DRAGGER_SCALE = 1.25
 export const NATIVE_SKILL_PAGE_BASE_WIDTH = 200
 export const NATIVE_SKILL_PAGE_DEPENDENT_WIDTH = 160
 export const NATIVE_SKILL_PAGE_HEIGHT = 300
@@ -52,6 +56,37 @@ export type NativeSkillBookTooltipLineKind =
 export interface NativeSkillBookTooltipLine {
   readonly kind: NativeSkillBookTooltipLineKind
   readonly text: string
+}
+
+export function nativeSkillDragStarted(
+  origin: Readonly<NativeHudPoint>,
+  current: Readonly<NativeHudPoint>,
+): boolean {
+  const dx = current.x - origin.x
+  const dy = current.y - origin.y
+  return dx * dx + dy * dy > NATIVE_SKILL_DRAG_THRESHOLD_SQUARED
+}
+
+export function nativeSkillQuickbarDropSlot(
+  pointer: Readonly<NativeHudPoint>,
+  slots: readonly NativeHudRect[],
+): number | null {
+  const half = NATIVE_SKILL_DRAGGER_SIZE / 2
+  const dragLeft = pointer.x - half
+  const dragTop = pointer.y - half
+  const dragRight = dragLeft + NATIVE_SKILL_DRAGGER_SIZE
+  const dragBottom = dragTop + NATIVE_SKILL_DRAGGER_SIZE
+  let greatestArea = 0
+  let winner: number | null = null
+  slots.forEach((slot, index) => {
+    const width = Math.max(0, Math.min(dragRight, slot.x + slot.width) - Math.max(dragLeft, slot.x))
+    const height = Math.max(0, Math.min(dragBottom, slot.y + slot.height) - Math.max(dragTop, slot.y))
+    const area = width * height
+    if (area <= greatestArea) return
+    greatestArea = area
+    winner = index
+  })
+  return winner
 }
 
 /**

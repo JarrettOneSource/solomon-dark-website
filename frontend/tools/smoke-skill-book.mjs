@@ -6,6 +6,10 @@ import { chromium } from 'playwright-core'
 import { createServer as createViteServer } from 'vite'
 
 import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
+import {
+  NATIVE_HUD_BACKBUFFER,
+  nativeHudModalSlideLayout,
+} from '../src/game/native-hud-layout.ts'
 import { getPlayerEconomy } from '../src/game/core-server/game-simulation.ts'
 import { replacePlayerEconomy } from '../src/game/core-server/player-entity-store.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
@@ -180,9 +184,17 @@ try {
   assert.equal(await book.getByRole('button', { name: /Quickbar [12], Call Leviathan/ }).count(), 2)
 
   const missile = book.getByRole('button', { name: /Magic Missile, rank 1/ })
-  const quickbarThree = book.getByRole('button', { name: /Quickbar 3, empty/ })
-  await missile.dragTo(quickbarThree)
+  const dragAudioStart = await audioEventCount(page)
+  const paintedDrag = await dragSkillToPaintedBeltEdge(
+    page,
+    book,
+    missile,
+    2,
+    `${screenshotRoot}-painted-drag.png`,
+  )
   await book.getByRole('button', { name: /Quickbar 3, Magic Missile/ }).waitFor()
+  assert.equal(paintedDrag.draggedSkillId, '8')
+  const dragAudio = await waitForSelectorAudio(page, dragAudioStart, ['pickskill'], 1)
 
   await page.keyboard.press('Escape')
   await book.waitFor({ state: 'detached', timeout: 5_000 })
@@ -435,6 +447,7 @@ try {
     hudSelectorCancel: true,
     hudSelectorWebGl2: true,
     mixedQuickbar: true,
+    paintedDrag,
     networkErrors,
     pageErrors,
     sealMotion: {
@@ -443,6 +456,7 @@ try {
       reopenedTick: reopenedSealTick,
     },
     selectorAudio: {
+      dragAudio,
       concentrationSelectionAudio,
       primaryOpenAudio,
       primarySelectionAudio,
@@ -518,6 +532,41 @@ async function moveHubAxis(page, key, axis, target, direction) {
     await page.keyboard.up(key)
     await page.waitForTimeout(150)
   }
+}
+
+async function dragSkillToPaintedBeltEdge(page, book, source, slot, screenshotPath) {
+  const sourceBounds = await source.boundingBox()
+  const stageBounds = await book.boundingBox()
+  assert.ok(sourceBounds)
+  assert.ok(stageBounds)
+  const belt = nativeHudModalSlideLayout(
+    NATIVE_HUD_BACKBUFFER.width,
+    NATIVE_HUD_BACKBUFFER.height,
+    1,
+  ).belt[slot]
+  assert.ok(belt)
+  const scaleX = stageBounds.width / NATIVE_HUD_BACKBUFFER.width
+  const scaleY = stageBounds.height / NATIVE_HUD_BACKBUFFER.height
+  const sourcePoint = {
+    x: sourceBounds.x + sourceBounds.width / 2,
+    y: sourceBounds.y + sourceBounds.height / 2,
+  }
+  const release = {
+    x: stageBounds.x + (belt.x + belt.width / 2) * scaleX,
+    y: stageBounds.y + (belt.y + belt.height - 2) * scaleY,
+  }
+  await page.mouse.move(sourcePoint.x, sourcePoint.y)
+  await page.mouse.down()
+  let draggedSkillId = null
+  try {
+    await page.mouse.move(release.x, release.y, { steps: 24 })
+    await page.waitForTimeout(100)
+    draggedSkillId = await book.getAttribute('data-dragged-skill-id')
+    await page.screenshot({ path: screenshotPath })
+  } finally {
+    await page.mouse.up()
+  }
+  return { draggedSkillId, release, slot, source: sourcePoint }
 }
 
 async function audioEventCount(target) {

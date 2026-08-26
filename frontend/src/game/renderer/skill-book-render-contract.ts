@@ -255,3 +255,11 @@ export function nativeSkillPageTint(root: number | null): number {
   const channel = (value: number) => Math.round((luminance * 0.85 + value * 0.15) * 255)
   return (channel(source[0]) << 16) | (channel(source[1]) << 8) | channel(source[2])
 }
+
+export function nativeSkillRootTint(root: number | null): number {
+  const source = root === null ? undefined : NATIVE_SKILL_PAGE_ROOT_COLORS[root]
+  if (!source) throw new RangeError(`unknown native skill root ${String(root)}`)
+  return (Math.round(source[0] * 255) << 16)
+    | (Math.round(source[1] * 255) << 8)
+    | Math.round(source[2] * 255)
+}

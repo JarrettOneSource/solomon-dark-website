@@ -154,6 +154,22 @@ test('shares each native modal slide with its Tutorial anchors and leaves at clo
   )
 })
 
+test('keeps the Tutorial camera full while any living enemy is outside the future target', () => {
+  const simulation = source('./core-server/game-simulation.ts')
+  const tutorial = source('./core-kernels/native-tutorial.ts')
+  const world = source('./core-server/boneyard-world.ts')
+  assert.match(
+    simulation,
+    /nativeTutorialCameraLockSafetyClear\([\s\S]*?enemies\.actors[\s\S]*?enemies\.maggots[\s\S]*?loot\.actors/,
+  )
+  assert.match(simulation, /loot\.actors\.filter\(\(\{ kind \}\) => kind === 'sack'\)/)
+  assert.match(tutorial, /cameraLockSafetyClear[\s\S]*?cameraLockTriggered: false/)
+  assert.match(
+    world,
+    /cameraLockTriggered[\s\S]*?nativeTutorialEnemyCameraPositionIsAllowed/,
+  )
+})
+
 test('owns the stage-14 acknowledgement edge and live selected-HUD geometry', () => {
   const overlay = source('./TutorialOverlay.tsx')
   const scene = source('./MainMenuScene.tsx')

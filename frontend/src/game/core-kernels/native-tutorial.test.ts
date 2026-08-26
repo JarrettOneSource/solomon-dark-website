@@ -20,7 +20,9 @@ import {
   applyNativeTutorialSurfaceAction,
   createNativeTutorialState,
   nativeTutorialCameraBounds,
+  nativeTutorialCameraLockSafetyClear,
   nativeTutorialDialogueTicks,
+  nativeTutorialEnemyCameraPositionIsAllowed,
   nativeTutorialEnemySpawnPositionIsAllowed,
   nativeTutorialForcedVelocity,
   nativeTutorialHudAccess,
@@ -36,6 +38,7 @@ import {
 const BASE_INPUT: NativeTutorialTickInput = {
   acidRainCastSequence: 0,
   acidRainLastSkillId: null,
+  cameraLockSafetyClear: true,
   currentHealth: 100,
   enemyCount: 0,
   groundSackCount: 0,
@@ -275,6 +278,51 @@ test('keeps the Tutorial camera target after its independent cleanup countdown',
   assert.equal(state.cameraLockAgeTicks, NATIVE_TUTORIAL_CAMERA_LOCK_SETTLE_TICKS)
   assert.equal(state.cameraLockTicksRemaining, 0)
   assert.deepEqual(nativeTutorialCameraBounds(state), NATIVE_TUTORIAL_CAMERA_TARGET)
+})
+
+test('suspends the Tutorial camera lock while a living enemy circle is outside its target', () => {
+  const boundary = {
+    x: NATIVE_TUTORIAL_CAMERA_TARGET.w / 2,
+    y: NATIVE_TUTORIAL_CAMERA_TARGET.h - 25,
+  }
+  assert.equal(nativeTutorialEnemyCameraPositionIsAllowed(boundary, 25), true)
+  assert.equal(nativeTutorialEnemyCameraPositionIsAllowed({
+    ...boundary,
+    y: boundary.y + 0.001,
+  }, 25), false)
+  assert.equal(nativeTutorialEnemyCameraPositionIsAllowed({ x: 24.999, y: 400 }, 25), false)
+  assert.equal(nativeTutorialCameraLockSafetyClear([
+    { position: boundary, radius: 25 },
+  ]), true)
+  assert.equal(nativeTutorialCameraLockSafetyClear([
+    { position: { x: 1025, y: 1400 }, radius: 25 },
+  ]), false)
+
+  const initial = afterIntro(createNativeTutorialState(
+    BASE_INPUT.playerPosition,
+    0,
+    'tutorial-camera-safety',
+  ))
+  const blocked = stepNativeTutorial(initial, {
+    ...BASE_INPUT,
+    cameraLockSafetyClear: false,
+    playerPosition: { x: 1025, y: 800 },
+  }).state
+  assert.equal(blocked.cameraLockTriggered, false)
+
+  const triggered = stepNativeTutorial(blocked, {
+    ...BASE_INPUT,
+    playerPosition: { x: 1025, y: 800 },
+  }).state
+  assert.equal(triggered.cameraLockTriggered, true)
+  const suspended = stepNativeTutorial(triggered, {
+    ...BASE_INPUT,
+    cameraLockSafetyClear: false,
+    playerPosition: { x: 1025, y: 800 },
+  }).state
+  assert.equal(suspended.cameraLockTriggered, false)
+  assert.equal(suspended.cameraLockAgeTicks, 0)
+  assert.equal(suspended.cameraLockTicksRemaining, 0)
 })
 
 test('owns inventory and skills modal milestones as authoritative surface actions', () => {

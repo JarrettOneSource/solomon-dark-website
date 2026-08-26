@@ -20,6 +20,7 @@ import {
   NATIVE_HUD_BACKBUFFER,
   nativeHudModalSlideLayout,
   type NativeHudControlLayout,
+  type NativeHudPoint,
 } from '../native-hud-layout.ts'
 import { nativeUiFont } from '../native-ui/native-ui-catalog.ts'
 import {
@@ -35,6 +36,7 @@ import type {
   ProtocolPlayerProgression,
 } from '../protocol/game-state.ts'
 import {
+  NATIVE_SKILL_DRAGGER_SCALE,
   nativeSkillBookTooltipLines,
   type NativeSkillBookPagePlacement,
   type NativeSkillBookRow,
@@ -58,6 +60,7 @@ import {
   nativeSkillPageTextHeight,
   nativeSkillPageTint,
   nativeSkillPageWrappedLines,
+  nativeSkillRootTint,
   nativeSkillScreenSealTransform,
   nativeSkillScreenTick,
 } from './skill-book-render-contract.ts'
@@ -68,13 +71,14 @@ import {
 } from './skill-picker-renderer.ts'
 
 export interface SkillBookRendererPresentation {
+  readonly dragPosition: Readonly<NativeHudPoint> | null
   readonly draggedSkillId: number | null
   readonly economy: ProtocolPlayerEconomy
   readonly hoveredSkillId: number | null
   readonly openProgress: number
   readonly placements: readonly NativeSkillBookPagePlacement[]
   readonly progression: ProtocolPlayerProgression
-  readonly targetQuickbarSlot: number
+  readonly targetQuickbarSlot: number | null
 }
 
 export interface SkillBookRenderer {
@@ -129,7 +133,8 @@ export async function createSkillBookRenderer(): Promise<SkillBookRenderer> {
   const pages = new Container()
   const hud = new Container()
   const hover = new Container()
-  root.addChild(curtain, ambient, fixtures, field, overlay, pages, hud, hover)
+  const dragger = new Container()
+  root.addChild(curtain, ambient, fixtures, field, overlay, pages, hud, hover, dragger)
   application.stage.addChild(root)
 
   drawSkillScreenField(field, resources)
@@ -184,6 +189,7 @@ export async function createSkillBookRenderer(): Promise<SkillBookRenderer> {
       destroyChildren(pages)
       destroyChildren(hud)
       destroyChildren(hover)
+      destroyChildren(dragger)
       for (const placement of presentation.placements) {
         drawSkillPage(pages, resources, placement, presentation)
       }
@@ -201,10 +207,39 @@ export async function createSkillBookRenderer(): Promise<SkillBookRenderer> {
         hudLayout,
       )
       drawNativeHoverBox(hover, resources, presentation)
+      drawSkillDragger(dragger, resources, presentation)
       renderer.render(performance.now())
     },
   }
   return renderer
+}
+
+function drawSkillDragger(
+  layer: Container,
+  textures: GameTextureMap,
+  presentation: SkillBookRendererPresentation,
+): void {
+  if (presentation.draggedSkillId === null || presentation.dragPosition === null) return
+  const row = presentation.placements
+    .flatMap(({ page }) => page.rows)
+    .find(({ id }) => id === presentation.draggedSkillId)
+  if (!row) return
+  const weld = row.weldBuildId === null ? null : nativeWeldBuild(row.weldBuildId)
+  const glow = spriteFor(textures, 'Skills', 164)
+  glow.anchor.set(0.5)
+  glow.position.copyFrom(presentation.dragPosition)
+  glow.scale.set(NATIVE_SKILL_DRAGGER_SCALE)
+  glow.tint = nativeSkillRootTint(nativeSkillRoot(row.id))
+  layer.addChild(glow)
+  const icon = spriteFor(
+    textures,
+    'Skills',
+    weld?.skillsAtlasIconRecord ?? row.iconRecord,
+  )
+  icon.anchor.set(0.5)
+  icon.position.copyFrom(presentation.dragPosition)
+  icon.scale.set(NATIVE_SKILL_DRAGGER_SCALE)
+  layer.addChild(icon)
 }
 
 function drawSkillScreenField(layer: Container, textures: GameTextureMap): void {

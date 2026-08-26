@@ -178,6 +178,7 @@ export interface NativeTutorialState {
 export interface NativeTutorialTickInput {
   readonly acidRainCastSequence: number
   readonly acidRainLastSkillId: number | null
+  readonly cameraLockSafetyClear: boolean
   readonly currentHealth: number
   readonly enemyCount: number
   readonly groundSackCount: number
@@ -425,6 +426,31 @@ export function nativeTutorialCameraBounds(
   }
 }
 
+export interface NativeTutorialCameraSafetyBody {
+  readonly position: Readonly<BoneyardPoint>
+  readonly radius: number
+}
+
+export function nativeTutorialEnemyCameraPositionIsAllowed(
+  position: Readonly<BoneyardPoint>,
+  radius: number,
+): boolean {
+  if (!Number.isFinite(radius) || radius <= 0) return false
+  return position.x - radius >= NATIVE_TUTORIAL_CAMERA_TARGET.x
+    && position.y - radius >= NATIVE_TUTORIAL_CAMERA_TARGET.y
+    && position.x + radius <= NATIVE_TUTORIAL_CAMERA_TARGET.x + NATIVE_TUTORIAL_CAMERA_TARGET.w
+    && position.y + radius <= NATIVE_TUTORIAL_CAMERA_TARGET.y + NATIVE_TUTORIAL_CAMERA_TARGET.h
+}
+
+export function nativeTutorialCameraLockSafetyClear(
+  bodies: readonly NativeTutorialCameraSafetyBody[],
+): boolean {
+  return bodies.every((body) => nativeTutorialEnemyCameraPositionIsAllowed(
+    body.position,
+    body.radius,
+  ))
+}
+
 export function nativeTutorialEnemySpawnPositionIsAllowed(
   position: Readonly<BoneyardPoint>,
   radius: number,
@@ -499,15 +525,23 @@ export function stepNativeTutorial(
   source: NativeTutorialState,
   input: NativeTutorialTickInput,
 ): NativeTutorialTickResult {
-  if (source.introActive) {
+  const safeSource = source.cameraLockTriggered && !input.cameraLockSafetyClear
+    ? Object.freeze({
+        ...source,
+        cameraLockAgeTicks: 0,
+        cameraLockTriggered: false,
+        cameraLockTicksRemaining: 0,
+      })
+    : source
+  if (safeSource.introActive) {
     return Object.freeze({
       forceOfferSkillIds: null,
       grantExperience: 0,
       spawnIntents: Object.freeze([]),
-      state: Object.freeze(stepNativeTutorialIntro(source)),
+      state: Object.freeze(stepNativeTutorialIntro(safeSource)),
     })
   }
-  let state = tickBaseState(source, input)
+  let state = tickBaseState(safeSource, input)
   let grantExperience = 0
   let forceOfferSkillIds: readonly number[] | null = null
 
@@ -824,14 +858,18 @@ function tickBaseState(
   source: NativeTutorialState,
   input: NativeTutorialTickInput,
 ): NativeTutorialState {
-  let cameraLockTriggered = source.cameraLockTriggered
+  let cameraLockTriggered = source.cameraLockTriggered && input.cameraLockSafetyClear
   let cameraLockAgeTicks = cameraLockTriggered
     ? Math.min(NATIVE_TUTORIAL_CAMERA_LOCK_SETTLE_TICKS, source.cameraLockAgeTicks + 1)
     : 0
   let cameraLockTicksRemaining = cameraLockTriggered
     ? Math.max(0, source.cameraLockTicksRemaining - 1)
     : 0
-  if (!cameraLockTriggered && pointInside(input.playerPosition, NATIVE_TUTORIAL_CAMERA_TRIGGER)) {
+  if (
+    !cameraLockTriggered
+    && input.cameraLockSafetyClear
+    && pointInside(input.playerPosition, NATIVE_TUTORIAL_CAMERA_TRIGGER)
+  ) {
     cameraLockTriggered = true
     cameraLockAgeTicks = 0
     cameraLockTicksRemaining = NATIVE_TUTORIAL_CAMERA_CLEANUP_TICKS

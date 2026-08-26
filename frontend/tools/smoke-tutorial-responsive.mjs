@@ -16,6 +16,10 @@ import {
 import { replacePlayerCharacter } from '../src/game/core-server/player-entity-store.ts'
 import { createBoneyardEnemyStore } from '../src/game/core-server/boneyard-enemy-store.ts'
 import {
+  removeBoneyardLootActors,
+  spawnBoneyardCustomLootItems,
+} from '../src/game/core-server/boneyard-loot-store.ts'
+import {
   canPlaceBoneyardBody,
   resolveBoneyardMovement,
 } from '../src/game/core-server/boneyard-collision.ts'
@@ -24,9 +28,11 @@ import { GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS } from '../src/game/core-kernels/ga
 import { PLAYER_CHARACTER_RADIUS } from '../src/game/core-kernels/player-character.ts'
 import {
   NATIVE_TUTORIAL_CAMERA_LOCK_SETTLE_TICKS,
+  NATIVE_TUTORIAL_CAMERA_TARGET,
   NATIVE_TUTORIAL_ENTRANCE_FENCE_CHAIN,
   createNativeTutorialState,
   nativeTutorialCameraBounds,
+  nativeTutorialAmuletItem,
   nativeTutorialEnemySpawnPositionIsAllowed,
 } from '../src/game/core-kernels/native-tutorial.ts'
 import { DEFAULT_GAME_SETTINGS, GAME_SETTINGS_STORAGE_KEY } from '../src/game/game-settings.ts'
@@ -623,7 +629,43 @@ async function exerciseTutorialSpawnDomain(host, page, screenshotPath) {
     }
   }
 
-  const cameraConfiguredTick = configureTutorialCamera(host)
+  const unsafeConfiguredTick = configureTutorialWave(host, {
+    expectedCount: 1,
+    label: 'camera-safety-light',
+    ordinal: 5,
+    spawnCursor: 0,
+    waveTicks: 0,
+  })
+  const [unsafeEnemy] = await waitForTutorialActors(host, 1, unsafeConfiguredTick)
+  assert.ok(unsafeEnemy)
+  assert.equal(tutorialCameraContainsEnemy(
+    unsafeEnemy.position,
+    unsafeEnemy.config.collisionRadius,
+  ), false)
+  const cameraConfiguredTick = configureTutorialCameraWithExistingEnemies(host)
+  await waitForHostTick(host, cameraConfiguredTick + 30)
+  let unsafeState = host.state()
+  assert.equal(unsafeState.world.kind, 'boneyard')
+  assert.ok(unsafeState.world.tutorial)
+  assert.equal(unsafeState.world.tutorial.cameraLockTriggered, false)
+  assert.equal(unsafeState.world.tutorial.cameraLockAgeTicks, 0)
+  const unsafeFrame = await renderedEnemyFrame(page)
+  const unsafePlayerId = unsafeState.playerEntities.identities[0].playerId
+  const unsafeExpectedCamera = boneyardCamera(
+    getPlayerCharacter(unsafeState, unsafePlayerId).position,
+    unsafeState.world.bounds,
+  )
+  close(unsafeFrame.cameraX, unsafeExpectedCamera.x, 0.01, 'unsafe enemy full camera x')
+  close(unsafeFrame.cameraY, unsafeExpectedCamera.y, 0.01, 'unsafe enemy full camera y')
+  await page.screenshot({ path: `${screenshotPath}-unsafe-enemy-camera-full.png` })
+  const unsafeSack = stageTutorialCameraSack(host)
+  clearTutorialEnemies(host)
+  await waitForHostTick(host, host.state().tick + 30)
+  let sackState = host.state()
+  assert.equal(sackState.world.kind, 'boneyard')
+  assert.ok(sackState.world.tutorial)
+  assert.equal(sackState.world.tutorial.cameraLockTriggered, false)
+  clearTutorialCameraSack(host, unsafeSack.id)
   const deadline = Date.now() + 15_000
   while (Date.now() < deadline) {
     const state = host.state()
@@ -662,6 +704,13 @@ async function exerciseTutorialSpawnDomain(host, page, screenshotPath) {
       cleanupTicksRemaining: state.world.tutorial.cameraLockTicksRemaining,
       rendered: { x: cameraFrame.cameraX, y: cameraFrame.cameraY },
     },
+    cameraSafety: {
+      deferredForEnemyId: unsafeEnemy.id,
+      target: NATIVE_TUTORIAL_CAMERA_TARGET,
+      unsafeCamera: { x: unsafeFrame.cameraX, y: unsafeFrame.cameraY },
+      unsafePosition: unsafeEnemy.position,
+      unsafeSack,
+    },
     waveReceipts,
   }
 }
@@ -679,10 +728,96 @@ function configureTutorialWave(host, wave) {
   })
 }
 
-function configureTutorialCamera(host) {
-  return configureTutorialFixture(host, {
-    position: { x: 1025, y: 800 },
-    tutorial: { active: false, stage: 19, waveOrdinal: 0 },
+function configureTutorialCameraWithExistingEnemies(host) {
+  const state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
+  assert.ok(state.world.tutorial)
+  const playerId = state.playerEntities.identities[0].playerId
+  const character = getPlayerCharacter(state, playerId)
+  Object.assign(state, {
+    ...state,
+    playerEntities: replacePlayerCharacter(state.playerEntities, playerId, {
+      ...character,
+      position: { x: 1025, y: 800 },
+      velocity: { x: 0, y: 0 },
+    }),
+    world: {
+      ...state.world,
+      tutorial: {
+        ...state.world.tutorial,
+        active: false,
+        cameraLockAgeTicks: 0,
+        cameraLockTriggered: false,
+        cameraLockTicksRemaining: 0,
+        stage: 19,
+        waveOrdinal: 0,
+        waveSpawnCursor: 0,
+        waveTicks: 0,
+      },
+    },
+  })
+  return state.tick
+}
+
+function clearTutorialEnemies(host) {
+  const state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
+  const source = state.world.enemies
+  const fresh = createBoneyardEnemyStore(
+    `tutorial-camera-clear-${state.tick}`,
+    state.world.earthquakeSceneryTargets.length,
+  )
+  Object.assign(state, {
+    ...state,
+    world: {
+      ...state.world,
+      enemies: {
+        ...fresh,
+        lastStepTick: state.tick,
+        nextActorId: source.nextActorId,
+        nextDeathEpoch: source.nextDeathEpoch,
+        nextDeathEffectId: source.nextDeathEffectId,
+        nextEventId: source.nextEventId,
+        nextMageLightningPulseId: source.nextMageLightningPulseId,
+        nextNativeCellBindingOrder: source.nextNativeCellBindingOrder,
+        nextNativeRegistrationOrder: source.nextNativeRegistrationOrder,
+        nextProjectileEffectId: source.nextProjectileEffectId,
+        nextProjectileId: source.nextProjectileId,
+        nextSyntheticSpawnIntentId: source.nextSyntheticSpawnIntentId,
+      },
+      enemyEvents: [],
+    },
+  })
+}
+
+function stageTutorialCameraSack(host) {
+  const state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
+  const position = { x: 1100, y: 1300 }
+  const spawned = spawnBoneyardCustomLootItems(
+    state.world.loot,
+    [nativeTutorialAmuletItem()],
+    position,
+    state.tick,
+  )
+  const actor = spawned.store.actors.at(-1)
+  assert.ok(actor)
+  Object.assign(state, {
+    ...state,
+    world: { ...state.world, loot: spawned.store },
+  })
+  return { id: actor.id, position }
+}
+
+function clearTutorialCameraSack(host, actorId) {
+  const state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
+  Object.assign(state, {
+    ...state,
+    world: {
+      ...state.world,
+      loot: removeBoneyardLootActors(state.world.loot, [actorId]),
+    },
   })
 }
 
@@ -754,6 +889,15 @@ async function waitForTutorialActors(host, expectedCount, minimumTick) {
   throw new Error(`Tutorial host did not materialize ${expectedCount} enemies`)
 }
 
+async function waitForHostTick(host, minimumTick) {
+  const deadline = Date.now() + 10_000
+  while (Date.now() < deadline) {
+    if (host.state().tick >= minimumTick) return
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+  throw new Error(`Tutorial host did not reach tick ${minimumTick}`)
+}
+
 async function waitForRenderedTutorialActors(page, actors, minimumTick) {
   const expectedIds = actors.map(({ id }) => id).sort((left, right) => left - right)
   await page.waitForFunction(({ expectedIds, minimumTick }) => {
@@ -783,6 +927,13 @@ function tutorialEntranceFenceY(x) {
     return start.y + (end.y - start.y) * progress
   }
   return NATIVE_TUTORIAL_ENTRANCE_FENCE_CHAIN.at(-1).y
+}
+
+function tutorialCameraContainsEnemy(position, radius) {
+  return position.x - radius >= NATIVE_TUTORIAL_CAMERA_TARGET.x
+    && position.y - radius >= NATIVE_TUTORIAL_CAMERA_TARGET.y
+    && position.x + radius <= NATIVE_TUTORIAL_CAMERA_TARGET.x + NATIVE_TUTORIAL_CAMERA_TARGET.w
+    && position.y + radius <= NATIVE_TUTORIAL_CAMERA_TARGET.y + NATIVE_TUTORIAL_CAMERA_TARGET.h
 }
 
 function tutorialIntroSave() {
