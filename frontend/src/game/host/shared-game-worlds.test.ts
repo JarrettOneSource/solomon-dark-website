@@ -217,20 +217,7 @@ test('party launch partitions exactly its members while the shared Hub keeps tic
 
   const hubTick = worlds.hub.tick
   const runTick = worlds.runs[0]!.state.tick
-  let persistedNextAge: number | null = null
-  worlds = stepSharedGameWorlds(
-    worlds,
-    {},
-    new Set(),
-    new Map(),
-    new Map(),
-    null,
-    new Map([
-      ['player-a', { accountUsername: 'AureliaAccount' }],
-      ['player-b', { accountUsername: null }],
-    ]),
-    memorial => { persistedNextAge = memorial.nextAge },
-  )
+  worlds = stepSharedGameWorlds(worlds, {})
   assert.equal(worlds.hub.tick, hubTick + 1)
   assert.equal(worlds.runs[0]!.state.tick, runTick + 1)
 })
@@ -287,7 +274,20 @@ test('every completed party member enters the one live shared-Hub memorial', () 
     phase: 'game-over',
   })
 
-  worlds = stepSharedGameWorlds(worlds, {})
+  let persistedNextAge: number | null = null
+  worlds = stepSharedGameWorlds(
+    worlds,
+    {},
+    new Set(),
+    new Map(),
+    new Map(),
+    null,
+    new Map([
+      ['player-a', { accountUsername: 'AureliaAccount' }],
+      ['player-b', { accountUsername: null }],
+    ]),
+    memorial => { persistedNextAge = memorial.nextAge },
+  )
   if (worlds.hub.world.kind !== 'hub') assert.fail('expected shared Hub world')
   const completed = worlds.hub.world.memorial.slots
     .filter(({ portrait }) => portrait !== null)

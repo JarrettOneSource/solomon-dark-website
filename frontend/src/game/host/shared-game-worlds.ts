@@ -475,6 +475,7 @@ export function stepSharedGameWorlds(
           if (
             !player
             || !completed
+            || completed.elapsedTicks === null
             || completed.portraitHeadingIndex === null
             || completed.portraitScale === null
           ) continue
