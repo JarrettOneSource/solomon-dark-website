@@ -39,6 +39,10 @@ const screenshots = {
     || '/tmp/solomon-dark-pause-leave-pressed.png',
   resumePressed: process.env.SDR_GAME_PAUSE_RESUME_PRESSED_SCREENSHOT
     || '/tmp/solomon-dark-pause-resume-pressed.png',
+  resumeCountdown: process.env.SDR_GAME_RESUME_COUNTDOWN_SCREENSHOT
+    || '/tmp/solomon-dark-resume-countdown.png',
+  restartCountdown: process.env.SDR_GAME_RESTART_COUNTDOWN_SCREENSHOT
+    || '/tmp/solomon-dark-restart-countdown.png',
   settingsPressed: process.env.SDR_GAME_PAUSE_SETTINGS_PRESSED_SCREENSHOT
     || '/tmp/solomon-dark-pause-settings-pressed.png',
   skillBookOwner: process.env.SDR_GAME_PAUSE_SKILL_BOOK_SCREENSHOT
@@ -62,6 +66,7 @@ const baseUrl = `http://127.0.0.1:${viteAddress.port}`
 const host = await startGameHost({
   allowedOrigins: [baseUrl],
   authentication: { kind: 'shared', credential },
+  resetWhenEmpty: true,
   snapshotRate: 20,
 })
 const runtime = {
@@ -526,9 +531,39 @@ try {
   const largeBoneyardInventoryHeldTick = host.state().tick
   await page.keyboard.press('i')
   await largeBoneyardInventory.waitFor({ state: 'detached' })
-  await waitForHost(
-    () => host.state().tick > largeBoneyardInventoryHeldTick,
-    'large Boneyard inventory pause release',
+  await assertResumeCountdown(
+    page,
+    largeBoneyardInventoryHeldTick,
+    'inventory-closed',
+    screenshots.resumeCountdown,
+  )
+
+  await page.keyboard.press('k')
+  const boneyardSkillBook = page.getByRole('dialog', { name: 'Skills' })
+  await boneyardSkillBook.waitFor()
+  await page.locator('.skill-book-stage[data-transition-phase="settled"]').waitFor()
+  const boneyardSkillBookHeldTick = host.state().tick
+  await boneyardSkillBook.getByRole('button', { name: 'Close skills' }).click()
+  await boneyardSkillBook.waitFor({ state: 'detached' })
+  await assertResumeCountdown(
+    page,
+    boneyardSkillBookHeldTick,
+    'skill-book-closed',
+  )
+
+  await largeBoneyard.getByRole('button', {
+    name: 'Select primary attack, current Fireball',
+  }).click()
+  const boneyardSelector = page.getByRole('dialog', { name: 'Select Primary Attack' })
+  await boneyardSelector.waitFor()
+  await page.locator('.hud-skill-selector-stage[data-renderer-state="ready"]').waitFor()
+  const boneyardSelectorHeldTick = host.state().tick
+  await page.keyboard.press('Escape')
+  await boneyardSelector.waitFor({ state: 'detached' })
+  await assertResumeCountdown(
+    page,
+    boneyardSelectorHeldTick,
+    'skill-selector-closed',
   )
 
   const peerSawBoneyardPause = nextRawMessage(peer.socket, (message) => (
@@ -568,6 +603,11 @@ try {
   )
   await boneyardOwner.waitFor({ state: 'detached' })
   await assertNonMusicMuted(page, false)
+  await assertResumeCountdown(
+    page,
+    heldBoneyardOwner.tick,
+    'pause-menu-closed',
+  )
 
   const peerBoneyardPause = nextRawMessage(peer.socket, (message) => (
     message.type === 'server-gameplay-pause' && message.pause?.ownerPlayerId === peer.welcome.playerId
@@ -601,11 +641,37 @@ try {
   await waitForHost(() => host.capacityParticipantCount() === 2, 'pause-owner departure')
   await waitForHost(() => host.state().tick > heldBoneyardPeer.tick, 'Boneyard disconnect resume')
 
+  latePeer.socket.close(1000, 'solo restart setup')
+  latePeer = null
+  await waitForHost(() => host.humanPlayerCount() === 1, 'solo restart owner')
+  await pressPause(page, '.boneyard-scene')
+  const restartLeave = page.locator(
+    '.gameplay-pause-stage[data-gameplay-pause-view="owner"]',
+  )
+  await restartLeave.waitFor()
+  await restartLeave.getByRole('button', { name: 'LEAVE GAME' }).click()
+  await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 30_000 })
+  await waitForHost(() => host.humanPlayerCount() === 0, 'empty restart host')
+  await page.getByRole('button', { name: 'Play' }).click()
+  await page.getByRole('button', { name: 'Last Game' }).click()
+  const restartedCountdown = page.locator(
+    '.gameplay-resume-countdown-overlay[data-gameplay-resume-grace-reason="game-restarted"]',
+  )
+  await restartedCountdown.waitFor({ timeout: 90_000 })
+  const heldRestartTick = host.state().tick
+  await assertResumeCountdown(
+    page,
+    heldRestartTick,
+    'game-restarted',
+    screenshots.restartCountdown,
+  )
+
   assert.deepEqual(errors, [])
   process.stdout.write(`${JSON.stringify({
     boneyardResumeTick: host.state().tick,
     heldBoneyardOwnerTick: heldBoneyardOwner.tick,
     heldBoneyardPeerTick: heldBoneyardPeer.tick,
+    heldRestartTick,
     liveHubPauseEndTick: liveHubPause.after.tick,
     liveHubPauseStartTick: liveHubPause.before.tick,
     screenshots,
@@ -653,6 +719,11 @@ async function enterHub(page, element) {
   await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 180_000 })
   await page.evaluate(() => window.__sdrRestoreAudioPreload?.())
+  const tutorialOffer = page.getByRole('dialog', { name: 'Play the Tutorial?' })
+  if (await tutorialOffer.isVisible()) {
+    await tutorialOffer.getByRole('button', { exact: true, name: 'NO' }).click()
+    await tutorialOffer.waitFor({ state: 'detached' })
+  }
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
   await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({ timeout: 30_000 })
@@ -897,6 +968,31 @@ function assertNoCatchUp(heldTick, resumedAtMs, label) {
     tickDelta <= maxNormalTicks,
     `${label} advanced ${tickDelta} ticks in ${elapsedMs.toFixed(1)} ms`,
   )
+}
+
+async function assertResumeCountdown(page, heldTick, reason, screenshotPath = null) {
+  const countdown = page.locator(
+    `.gameplay-resume-countdown-overlay[data-gameplay-resume-grace-reason="${reason}"]`,
+  )
+  await countdown.waitFor()
+  for (const seconds of [3, 2, 1]) {
+    await page.locator(
+      `.gameplay-resume-countdown-overlay[data-gameplay-resume-grace-reason="${reason}"]`
+      + `[data-gameplay-resume-grace-seconds="${seconds}"]`,
+    ).waitFor()
+    assert.equal(host.state().tick, heldTick)
+    if (seconds === 3 && screenshotPath) {
+      await page.waitForTimeout(100)
+      assert.equal(await countdown.getAttribute('data-gameplay-resume-grace-seconds'), '3')
+      await page.screenshot({ path: screenshotPath })
+    }
+  }
+  await countdown.waitFor({ state: 'detached' })
+  const resumedTick = host.state().tick
+  const resumedAtMs = performance.now()
+  await waitForHost(() => host.state().tick > resumedTick, `${reason} grace expiry`)
+  await new Promise(resolve => setTimeout(resolve, 60))
+  assertNoCatchUp(resumedTick, resumedAtMs, `${reason} post-grace tick rate`)
 }
 
 async function waitForHost(predicate, label, timeoutMs = 10_000) {

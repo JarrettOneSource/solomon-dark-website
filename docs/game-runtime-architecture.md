@@ -1671,3 +1671,39 @@ the Staff element painter and analytic player light consume the same protocol
 sample. Hub and Boneyard timelines interpolate that numeric sample while light
 registration, drive ownership, action admission, and the held-pose product
 override remain discrete. This changes no protocol shape or gameplay authority.
+
+## Authoritative resume grace
+
+An active run has a second suspension owner beside player-owned gameplay
+pause: ephemeral resume grace. A standalone host stores one record; a shared
+host stores one per active party run. Each record has a monotonic sequence, an
+enumerated admission reason, a set of returning players whose Boneyard
+renderers must become ready, and either a pending marker or a host-monotonic
+expiry deadline. It is never serialized into a save.
+
+Multiplayer Pause Menu, Inventory, full Skill Book, compact skill-selector,
+and final mandatory SkillPicker release atomically enter a 3,000-ms grace only
+when that active run contains more than one connected materialized human.
+Solo modal release stays immediate. Active-party rejoin, same-player takeover,
+and active saved-run restart install grace even for one player. A restarted or
+returning client acknowledges its exact sequence from the Boneyard renderer's
+ready edge; the clock waits for every addressed returner and for older gameplay
+pause/level-up owners to clear. This prevents the grace from expiring beneath
+loading or another modal.
+
+Protocol 83 projects `gameplayResumeGrace` in welcome and live messages as
+`{ sequence, reason, remainingMs }`. `remainingMs=null` means the run is held
+while readiness or an older owner remains pending. Positive remaining time is
+sampled when the message is encoded; clients derive the visible whole-second
+`3,2,1` countdown from their monotonic receipt clock. The authenticated
+`client-resume-grace-ready` message carries the sequence and cannot release or
+shorten authority.
+
+Grace joins gameplay pause and level-up in the complete input/prediction/
+presentation hold predicate. Shared-world stepping excludes the union of
+pause-held and grace-held party IDs while Hub and unrelated runs continue.
+Standalone stepping stops while either hold exists. Expiry clears queued and
+held input again; standalone resets its next-tick wall-clock deadline, while a
+shared run rejoins the already-live scheduler on its next ordinary edge. No
+elapsed wall time becomes catch-up simulation. The visible countdown overlay
+exists only after readiness and is presentation-only; it never owns expiry.

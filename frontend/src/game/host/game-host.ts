@@ -73,6 +73,7 @@ import {
 import {
   EMPTY_CONTENT_MANIFEST_SHA256,
   GAME_HOST_ENDED_SESSION_CLOSE_CODE,
+  GAMEPLAY_RESUME_GRACE_DURATION_MS,
   GAME_SESSION_REPLACED_CLOSE_CODE,
   GAME_WEBSOCKET_MAX_PAYLOAD_BYTES,
   PARTY_ACTION_REJECTIONS,
@@ -85,6 +86,8 @@ import {
   type GameChatChannel,
   type GameSessionKind,
   type GameplayPauseState,
+  type GameplayResumeGraceReason,
+  type GameplayResumeGraceState,
   type HubPlayerActivity,
   type PartyAction,
   type PartyActionRejection as ProtocolPartyActionRejection,
@@ -211,6 +214,7 @@ import {
   type PartyRecoveryRosterMember,
 } from './party-recovery-claim.ts'
 import type { PartyRosterPlayer } from '../protocol/party-state.ts'
+import { gameplayResumeGraceReasonForPauseSource } from '../gameplay-resume-grace.ts'
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost'])
 export const GAME_SAVE_AUTOSAVE_INTERVAL_TICKS = GAME_TICK_RATE * 30
@@ -411,6 +415,14 @@ export interface GameHostPartyJoinRequestStatus {
 export type GameHostCloseReason = 'host-ended-session' | 'server-shutdown'
 
 type SharedGameplayPauseScope = { readonly partyId: string }
+
+interface HostGameplayResumeGrace {
+  readonly readyPlayerIds: Set<PlayerId>
+  readonly reason: GameplayResumeGraceReason
+  readonly sequence: number
+  readonly waitingPlayerIds: Set<PlayerId>
+  deadlineMs: number | null
+}
 
 interface HostClient {
   acknowledgedSequence: number
@@ -650,6 +662,9 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   let state = sharedWorlds?.hub ?? createInitialSimulation(options.createSimulation)
   let gameplayPause: GameplayPauseState | null = null
   const sharedGameplayPauses = new Map<string, GameplayPauseState>()
+  let gameplayResumeGrace: HostGameplayResumeGrace | null = null
+  const sharedGameplayResumeGraces = new Map<string, HostGameplayResumeGrace>()
+  let nextGameplayResumeGraceSequence = 1
   let nextPlayerId = 1
   let hostPlayerId: PlayerId | null = null
   let loadedBoneyard: LoadedBoneyard | null = null
@@ -982,6 +997,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             modCatalog: sharedHub ? [] : privateModHost?.content.consumables() ?? [],
             boneyards: [observed.loadedBoneyard.choice],
             gameplayPause: gameplayPauseForPlayer(observed.viewPlayerId),
+            gameplayResumeGrace: gameplayResumeGraceForPlayer(observed.viewPlayerId),
             snapshot: welcomeSnapshot,
             snapshotSequence,
           }))
@@ -1646,6 +1662,25 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         const connectedParty = activePartySystem()
           ? partyForPlayer(activePartySystem()!, playerId)
           : null
+        const connectedState = stateForClient(joinedClient)
+        const resumeGraceReason: Extract<
+          GameplayResumeGraceReason,
+          'game-rejoined' | 'game-restarted'
+        > | null =
+          connectedState.world.kind === 'boneyard'
+          && connectedState.run.phase === 'active'
+          && message.saveIntent === 'resume'
+            ? rejoinedParty || replacedClient !== null
+              ? 'game-rejoined'
+              : 'game-restarted'
+            : null
+        const beganResumeGrace = resumeGraceReason !== null
+          && beginRejoinResumeGrace(
+            playerId,
+            resumeGraceReason,
+            stagedPartyRejoin?.partyId ?? connectedParty?.id ?? null,
+            false,
+          )
         if (!stagedPartyRejoin) {
           armPartyRejoinSlotsForState(
             connectedParty?.id ?? null,
@@ -1704,6 +1739,9 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           gameplayPause: stagedPartyRejoin
             ? gameplayPauseForPartyRejoin(stagedPartyRejoin)
             : gameplayPauseForPlayer(playerId),
+          gameplayResumeGrace: stagedPartyRejoin
+            ? gameplayResumeGraceForPartyRejoin(stagedPartyRejoin)
+            : gameplayResumeGraceForPlayer(playerId),
           snapshot: welcomeSnapshot,
           snapshotSequence,
         }))
@@ -1730,10 +1768,22 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           }))
         }
         if (sharedWorlds || privateParties) broadcastPartyState()
+        if (beganResumeGrace) {
+          broadcastGameplayResumeGrace(
+            playerId,
+            stagedPartyRejoin
+              ? sharedGameplayPauseScopeForParty(stagedPartyRejoin.partyId)
+              : undefined,
+          )
+        }
         publishSaveCheckpoint('connected')
-        if (stagedPartyRejoin
+        const connectedPause = stagedPartyRejoin
           ? gameplayPauseForPartyRejoin(stagedPartyRejoin)
-          : gameplayPauseForPlayer(playerId)) broadcastSnapshot()
+          : gameplayPauseForPlayer(playerId)
+        const connectedGrace = stagedPartyRejoin
+          ? gameplayResumeGraceForPartyRejoin(stagedPartyRejoin)
+          : gameplayResumeGraceForPlayer(playerId)
+        if (connectedPause || connectedGrace) broadcastSnapshot()
         return
       }
 
@@ -1773,6 +1823,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         && message.type !== 'client-level-up-action'
         && message.type !== 'client-snapshot-ack'
         && message.type !== 'client-ping'
+        && message.type !== 'client-resume-grace-ready'
         && message.type !== 'client-save-before-leave'
         && message.type !== 'client-disconnect'
       ) return
@@ -1790,9 +1841,27 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         return
       }
 
+      if (message.type === 'client-resume-grace-ready') {
+        acknowledgeResumeGraceReady(client, message.sequence)
+        return
+      }
+
+      if (
+        gameplayResumeGraceForClient(client) !== null
+        && message.type !== 'client-chat'
+        && message.type !== 'client-disconnect'
+        && message.type !== 'client-input'
+        && message.type !== 'client-level-up-action'
+        && message.type !== 'client-ping'
+        && message.type !== 'client-save-before-leave'
+        && message.type !== 'client-select-skill'
+        && message.type !== 'client-snapshot-ack'
+      ) return
+
       if (message.type === 'client-gameplay-pause') {
         const activeState = stateForPlayer(client.playerId)
         if (activeState.world.kind === 'hub') return
+        if (gameplayResumeGraceForPlayer(client.playerId) !== null) return
         const activePause = gameplayPauseForPlayer(client.playerId)
         if (message.paused) {
           if (activePause?.ownerPlayerId === client.playerId) {
@@ -1843,6 +1912,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         const activeState = stateForPlayer(client.playerId)
         if (
           gameplayPauseForPlayer(client.playerId) !== null
+          || gameplayResumeGraceForClient(client) !== null
           || (activeState.world.kind === 'hub' && client.hubActivity !== null)
           || activeState.levelUpBarrier !== null
           || getPlayerProgression(activeState, client.playerId).pendingOffer
@@ -1908,6 +1978,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             client.partyRejoinSlot = null
             armPartyRejoinSlotsForState(slot.partyId, stateForPlayer(client.playerId))
             if (sharedWorlds || privateParties) broadcastPartyState()
+            maybeStartGameplayResumeGrace(client.playerId)
           }
           client.activeInput = createIdlePlayerCharacterInput()
           client.queuedInputs.clear()
@@ -1927,6 +1998,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         client.queuedInputs.clear()
         if (barrierBefore !== null && selected.levelUpBarrier === null) {
           stopWorldClientInputs(client.playerId)
+          beginMultiplayerResumeGrace(client.playerId, 'skill-picker-closed')
         }
         broadcastSnapshot()
         publishSaveCheckpoint('skill-selected')
@@ -2159,6 +2231,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             client.partyRejoinSlot = null
             armPartyRejoinSlotsForState(slot.partyId, stateForPlayer(client.playerId))
             if (sharedWorlds || privateParties) broadcastPartyState()
+            maybeStartGameplayResumeGrace(client.playerId)
           }
           client.activeInput = createIdlePlayerCharacterInput()
           client.queuedInputs.clear()
@@ -2180,6 +2253,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         client.queuedInputs.clear()
         if (barrierBefore !== null && applied.levelUpBarrier === null) {
           stopWorldClientInputs(client.playerId)
+          beginMultiplayerResumeGrace(client.playerId, 'skill-picker-closed')
         }
         broadcastSnapshot()
         publishSaveCheckpoint('level-up-action')
@@ -3052,6 +3126,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           saveSequences.clear()
           if (privateParties) privateParties = createPartySystem()
           gameplayPause = null
+          gameplayResumeGrace = null
           partyRejoinSlots.clear()
           partyRecoveryLineages.clear()
           resetNextTickDeadline()
@@ -3059,6 +3134,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       } else if (client.playerId === hostPlayerId && !retainedPartyMembership) {
         hostPlayerId = clients.values().next().value?.playerId ?? null
       }
+      removeGameplayResumeGraceParticipant(
+        client.playerId,
+        disconnectedPauseScope,
+      )
       prunePartyRejoinSlots()
       pruneLeaderboardRunState()
       const retiredSharedRun = sharedWorlds !== null
@@ -3117,6 +3196,8 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   const ticksPerSnapshot = Math.max(1, Math.round(GAME_TICK_RATE / snapshotRate))
   const timer = setInterval(() => {
     if (closed || ticking) return
+    const now = performance.now()
+    expireGameplayResumeGraces(now)
     if (deploymentRestart) {
       resetNextTickDeadline()
       return
@@ -3125,7 +3206,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       resetNextTickDeadline()
       return
     }
-    if (!sharedWorlds && gameplayPause !== null) {
+    if (
+      !sharedWorlds
+      && (gameplayPause !== null || gameplayResumeGrace !== null)
+    ) {
       resetNextTickDeadline()
       return
     }
@@ -3135,7 +3219,6 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     }
     ticking = true
     try {
-      const now = performance.now()
       let steps = 0
       while (now >= nextTickAt && steps < 25) {
         processFailedBots()
@@ -3201,7 +3284,12 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           sharedWorlds = stepSharedGameWorlds(
             sharedWorlds,
             inputs,
-            new Set([...sharedGameplayPauses.keys(), ...startingPartyIds, ...modScenePartyIds]),
+            new Set([
+              ...sharedGameplayPauses.keys(),
+              ...sharedGameplayResumeGraces.keys(),
+              ...startingPartyIds,
+              ...modScenePartyIds,
+            ]),
             enemySpawnIntents,
             new Map([...partyModRuntimes].map(([partyId, scope]) => [
               partyId,
@@ -5107,10 +5195,15 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           continue
         }
         if (intent.kind === 'select-skill') {
+          const barrierBefore = active.levelUpBarrier
           const selected = selectGameSimulationPlayerSkill(active, bot.playerId, intent)
           if (selected) {
             bot.skillPicks += 1
             replaceStateForPlayer(bot.playerId, selected)
+            if (barrierBefore !== null && selected.levelUpBarrier === null) {
+              stopWorldClientInputs(bot.playerId)
+              beginMultiplayerResumeGrace(bot.playerId, 'skill-picker-closed')
+            }
             lifecycleChanged = true
           }
           continue
@@ -5475,6 +5568,359 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     return sharedWorlds?.runs.some(run => run.partyId === partyId) ? { partyId } : null
   }
 
+  function gameplayResumeGraceForClient(
+    client: HostClient,
+  ): GameplayResumeGraceState | null {
+    return client.partyRejoinSlot
+      ? gameplayResumeGraceForPartyRejoin(client.partyRejoinSlot)
+      : gameplayResumeGraceForPlayer(client.playerId)
+  }
+
+  function gameplayResumeGraceForPartyRejoin(
+    slot: PartyRejoinSlot,
+  ): GameplayResumeGraceState | null {
+    const grace = sharedWorlds
+      ? sharedGameplayResumeGraces.get(slot.partyId) ?? null
+      : gameplayResumeGrace
+    return projectGameplayResumeGrace(grace)
+  }
+
+  function gameplayResumeGraceForPlayer(
+    playerId: string,
+  ): GameplayResumeGraceState | null {
+    const scope = sharedWorlds ? sharedGameplayPauseScope(playerId) : null
+    const grace = sharedWorlds && scope
+      ? sharedGameplayResumeGraces.get(scope.partyId) ?? null
+      : sharedWorlds ? null : gameplayResumeGrace
+    return projectGameplayResumeGrace(grace)
+  }
+
+  function projectGameplayResumeGrace(
+    grace: HostGameplayResumeGrace | null,
+    now = performance.now(),
+  ): GameplayResumeGraceState | null {
+    if (!grace) return null
+    return {
+      reason: grace.reason,
+      remainingMs: grace.deadlineMs === null
+        ? null
+        : Math.min(
+            GAMEPLAY_RESUME_GRACE_DURATION_MS,
+            Math.max(1, Math.ceil(grace.deadlineMs - now)),
+          ),
+      sequence: grace.sequence,
+    }
+  }
+
+  function nextResumeGraceSequence(): number {
+    const sequence = nextGameplayResumeGraceSequence
+    nextGameplayResumeGraceSequence = sequence === 0x7fff_ffff ? 1 : sequence + 1
+    return sequence
+  }
+
+  function beginRejoinResumeGrace(
+    playerId: PlayerId,
+    reason: Extract<GameplayResumeGraceReason, 'game-rejoined' | 'game-restarted'>,
+    partyId: string | null,
+    announce = true,
+  ): boolean {
+    const scope = sharedWorlds
+      ? partyId
+        ? sharedGameplayPauseScopeForParty(partyId)
+        : sharedGameplayPauseScope(playerId)
+      : null
+    const activeState = sharedWorlds
+      ? scope
+        ? sharedWorlds.runs.find(run => run.partyId === scope.partyId)?.state ?? null
+        : null
+      : state
+    if (
+      !activeState
+      || activeState.world.kind !== 'boneyard'
+      || activeState.run.phase !== 'active'
+    ) return false
+
+    const existing = sharedWorlds
+      ? sharedGameplayResumeGraces.get(scope!.partyId) ?? null
+      : gameplayResumeGrace
+    const pendingExisting = existing?.deadlineMs === null ? existing : null
+    const grace: HostGameplayResumeGrace = {
+      deadlineMs: null,
+      readyPlayerIds: pendingExisting
+        ? new Set(pendingExisting.readyPlayerIds)
+        : new Set(),
+      reason,
+      sequence: nextResumeGraceSequence(),
+      waitingPlayerIds: pendingExisting
+        ? new Set(pendingExisting.waitingPlayerIds)
+        : new Set(),
+    }
+    grace.waitingPlayerIds.add(playerId)
+    grace.readyPlayerIds.delete(playerId)
+    setGameplayResumeGrace(scope, grace)
+    stopResumeGraceInputs(scope)
+    if (!sharedWorlds) resetNextTickDeadline()
+    if (announce) broadcastGameplayResumeGrace(playerId, scope)
+    return true
+  }
+
+  function beginMultiplayerResumeGrace(
+    playerId: PlayerId,
+    reason: GameplayResumeGraceReason,
+  ): boolean {
+    const activeState = stateForPlayer(playerId)
+    const scope = sharedWorlds ? sharedGameplayPauseScope(playerId) : null
+    const existing = gameplayResumeGraceRecord(scope)
+    if (existing) {
+      maybeStartGameplayResumeGrace(playerId, scope)
+      return false
+    }
+    if (
+      activeState.world.kind !== 'boneyard'
+      || activeState.run.phase !== 'active'
+      || connectedMaterializedHumanCount(activeState) < 2
+    ) return false
+    const waitsForPickerClose = reason === 'skill-picker-closed'
+      && [...clients.values()].some(client => (
+        client.playerId === playerId && client.partyRejoinSlot === null
+      ))
+    const grace: HostGameplayResumeGrace = {
+      deadlineMs: waitsForPickerClose
+        ? null
+        : performance.now() + GAMEPLAY_RESUME_GRACE_DURATION_MS,
+      readyPlayerIds: new Set(),
+      reason,
+      sequence: nextResumeGraceSequence(),
+      waitingPlayerIds: new Set(waitsForPickerClose ? [playerId] : []),
+    }
+    setGameplayResumeGrace(scope, grace)
+    stopResumeGraceInputs(scope)
+    if (!sharedWorlds) resetNextTickDeadline()
+    broadcastGameplayResumeGrace(playerId, scope)
+    if (!waitsForPickerClose) logGameplayResumeGrace('started', grace, scope)
+    return true
+  }
+
+  function connectedMaterializedHumanCount(activeState: GameSimulationState): number {
+    if (activeState.world.kind !== 'boneyard') return 0
+    const activeRunId = activeState.world.runId
+    return [...clients.values()].filter(client => {
+      if (client.partyRejoinSlot) return false
+      const candidate = stateForPlayer(client.playerId)
+      return candidate.world.kind === 'boneyard'
+        && candidate.world.runId === activeRunId
+        && candidate.playerEntities.identities.some(
+          identity => identity.playerId === client.playerId,
+        )
+    }).length
+  }
+
+  function acknowledgeResumeGraceReady(client: HostClient, sequence: number): void {
+    const scope = sharedWorlds
+      ? client.partyRejoinSlot
+        ? sharedGameplayPauseScopeForParty(client.partyRejoinSlot.partyId)
+        : sharedGameplayPauseScope(client.playerId)
+      : null
+    const grace = gameplayResumeGraceRecord(scope)
+    if (
+      !grace
+      || grace.sequence !== sequence
+      || !grace.waitingPlayerIds.has(client.playerId)
+    ) return
+    grace.readyPlayerIds.add(client.playerId)
+    maybeStartGameplayResumeGrace(client.playerId, scope)
+  }
+
+  function maybeStartGameplayResumeGrace(
+    playerId: PlayerId,
+    knownScope?: SharedGameplayPauseScope | null,
+  ): boolean {
+    const scope = sharedWorlds
+      ? knownScope ?? sharedGameplayPauseScope(playerId)
+      : null
+    const grace = gameplayResumeGraceRecord(scope)
+    if (!grace || grace.deadlineMs !== null) return false
+    const activeState = sharedWorlds
+      ? scope
+        ? sharedWorlds.runs.find(run => run.partyId === scope.partyId)?.state ?? null
+        : null
+      : state
+    if (
+      !activeState
+      || activeState.world.kind !== 'boneyard'
+      || activeState.run.phase !== 'active'
+      || activeState.levelUpBarrier !== null
+      || gameplayPauseRecord(scope) !== null
+      || [...grace.waitingPlayerIds].some(waitingPlayerId => (
+        !grace.readyPlayerIds.has(waitingPlayerId)
+        || !activeState.playerEntities.identities.some(
+          identity => identity.playerId === waitingPlayerId,
+        )
+      ))
+    ) return false
+    grace.deadlineMs = performance.now() + GAMEPLAY_RESUME_GRACE_DURATION_MS
+    stopResumeGraceInputs(scope)
+    if (!sharedWorlds) resetNextTickDeadline()
+    broadcastGameplayResumeGrace(playerId, scope)
+    logGameplayResumeGrace('started', grace, scope)
+    return true
+  }
+
+  function removeGameplayResumeGraceParticipant(
+    playerId: PlayerId,
+    knownScope: SharedGameplayPauseScope | null,
+  ): void {
+    const scope = sharedWorlds ? knownScope : null
+    const grace = gameplayResumeGraceRecord(scope)
+    if (!grace || grace.deadlineMs !== null) return
+    const removed = grace.waitingPlayerIds.delete(playerId)
+    grace.readyPlayerIds.delete(playerId)
+    if (!removed) return
+    if (grace.waitingPlayerIds.size === 0) {
+      setGameplayResumeGrace(scope, null)
+      broadcastGameplayResumeGrace(playerId, scope)
+      if (!sharedWorlds) resetNextTickDeadline()
+      return
+    }
+    const remainingPlayerId = grace.waitingPlayerIds.values().next().value
+    if (remainingPlayerId) maybeStartGameplayResumeGrace(remainingPlayerId, scope)
+  }
+
+  function expireGameplayResumeGraces(now: number): void {
+    let changed = false
+    if (!sharedWorlds) {
+      if (
+        gameplayResumeGrace !== null
+        && gameplayResumeGrace.deadlineMs !== null
+        && now >= gameplayResumeGrace.deadlineMs
+      ) {
+        const expired = gameplayResumeGrace
+        gameplayResumeGrace = null
+        stopAllClientInputs()
+        resetNextTickDeadline()
+        broadcastGameplayResumeGrace()
+        logGameplayResumeGrace('completed', expired, null)
+        changed = true
+      }
+    } else {
+      for (const [partyId, grace] of sharedGameplayResumeGraces) {
+        const run = sharedWorlds.runs.find(candidate => candidate.partyId === partyId)
+        const expired = grace.deadlineMs !== null && now >= grace.deadlineMs
+        const retired = !run
+          || run.state.world.kind !== 'boneyard'
+          || run.state.run.phase !== 'active'
+        if (!expired && !retired) continue
+        sharedGameplayResumeGraces.delete(partyId)
+        stopPartyInputs(partyId)
+        broadcastGameplayResumeGrace(undefined, { partyId })
+        if (expired) logGameplayResumeGrace('completed', grace, { partyId })
+        changed = true
+      }
+    }
+    if (changed) broadcastSnapshot()
+  }
+
+  function gameplayPauseRecord(
+    scope: SharedGameplayPauseScope | null,
+  ): GameplayPauseState | null {
+    return sharedWorlds
+      ? scope
+        ? sharedGameplayPauses.get(scope.partyId) ?? null
+        : null
+      : gameplayPause
+  }
+
+  function gameplayResumeGraceRecord(
+    scope: SharedGameplayPauseScope | null,
+  ): HostGameplayResumeGrace | null {
+    return sharedWorlds
+      ? scope
+        ? sharedGameplayResumeGraces.get(scope.partyId) ?? null
+        : null
+      : gameplayResumeGrace
+  }
+
+  function setGameplayResumeGrace(
+    scope: SharedGameplayPauseScope | null,
+    grace: HostGameplayResumeGrace | null,
+  ): void {
+    if (!sharedWorlds) {
+      gameplayResumeGrace = grace
+      return
+    }
+    if (!scope) return
+    if (grace) sharedGameplayResumeGraces.set(scope.partyId, grace)
+    else sharedGameplayResumeGraces.delete(scope.partyId)
+  }
+
+  function stopResumeGraceInputs(scope: SharedGameplayPauseScope | null): void {
+    if (sharedWorlds && scope) stopPartyInputs(scope.partyId)
+    else if (!sharedWorlds) stopAllClientInputs()
+  }
+
+  function broadcastGameplayResumeGrace(
+    playerId?: string,
+    knownScope?: SharedGameplayPauseScope | null,
+  ): void {
+    if (!sharedWorlds) {
+      broadcast({
+        type: 'server-gameplay-resume-grace',
+        grace: projectGameplayResumeGrace(gameplayResumeGrace),
+      })
+      return
+    }
+    const scope = knownScope ?? (playerId ? sharedGameplayPauseScope(playerId) : null)
+    if (!scope) return
+    const grace = projectGameplayResumeGrace(
+      sharedGameplayResumeGraces.get(scope.partyId) ?? null,
+    )
+    const party = sharedWorlds.parties.parties.find(({ id }) => id === scope.partyId)
+    for (const client of clients.values()) {
+      if (
+        client.socket.readyState === WebSocket.OPEN
+        && party?.memberPlayerIds.includes(client.playerId)
+      ) client.socket.send(encodeGameMessage({
+        type: 'server-gameplay-resume-grace',
+        grace,
+      }))
+    }
+  }
+
+  function logGameplayResumeGrace(
+    phase: 'completed' | 'started',
+    grace: HostGameplayResumeGrace,
+    scope: SharedGameplayPauseScope | null,
+  ): void {
+    logGameServerEvent(
+      options.log,
+      'game-host',
+      'info',
+      `gameplay.resume_grace_${phase}`,
+      phase === 'started'
+        ? 'The authoritative resume grace countdown started.'
+        : 'The authoritative resume grace countdown completed.',
+      logDetails({
+        partyId: scope?.partyId ?? null,
+        reason: grace.reason,
+        sequence: grace.sequence,
+      }),
+    )
+    if (phase === 'completed') {
+      logGameServerEvent(
+        options.log,
+        'game-host',
+        'info',
+        'gameplay.resumed',
+        'The authoritative gameplay world resumed after its grace countdown.',
+        logDetails({
+          partyId: scope?.partyId ?? null,
+          reason: grace.reason,
+          sequence: grace.sequence,
+        }),
+      )
+    }
+  }
+
   function setGameplayPauseForPlayer(
     playerId: string,
     pause: GameplayPauseState,
@@ -5530,13 +5976,24 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       resetNextTickDeadline()
     }
     broadcastGameplayPause(playerId, scope)
+    if (source === 'owner-resumed') {
+      beginMultiplayerResumeGrace(
+        released.ownerPlayerId,
+        gameplayResumeGraceReasonForPauseSource(released.source),
+      )
+    } else {
+      maybeStartGameplayResumeGrace(released.ownerPlayerId, scope)
+    }
     broadcastSnapshot()
+    const heldByGrace = gameplayResumeGraceRecord(scope) !== null
     logGameServerEvent(
       options.log,
       'game-host',
       'info',
-      'gameplay.resumed',
-      'The authoritative gameplay world resumed.',
+      heldByGrace ? 'gameplay.pause_released' : 'gameplay.resumed',
+      heldByGrace
+        ? 'The gameplay pause owner released into authoritative resume grace.'
+        : 'The authoritative gameplay world resumed.',
       logDetails({
         displayName: released.ownerDisplayName,
         playerId: released.ownerPlayerId,

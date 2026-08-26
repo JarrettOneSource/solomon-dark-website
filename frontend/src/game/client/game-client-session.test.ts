@@ -124,6 +124,7 @@ test('client carries character config, publishes authority, and tears down', asy
     modCatalog: [],
     boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' }],
     gameplayPause: null,
+    gameplayResumeGrace: null,
     snapshot: createGameSnapshot(serverState, 'player-1'),
     snapshotSequence: 1,
   }))
@@ -419,6 +420,7 @@ test('client carries the fresh Tutorial-decline admission intent', async () => {
     content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
     developerAccess: false,
     gameplayPause: null,
+    gameplayResumeGrace: null,
     kernelParameters: kernelParameters(),
     kernelVersion: PLAYER_CHARACTER_KERNEL_VERSION,
     modAssets: [],
@@ -514,6 +516,40 @@ test('client publishes Hub activity locally but reserves gameplay pause for Bone
   transport.receive(encodeGameMessage({ type: 'server-gameplay-pause', pause: null }))
   assert.equal(session.getGameplayPause(), null)
   assert.deepEqual(received, [pause, null])
+
+  const receivedGrace: Array<ReturnType<typeof session.getGameplayResumeGrace>> = []
+  const removeGrace = session.onGameplayResumeGrace(grace => receivedGrace.push(grace))
+  const pendingGrace = {
+    reason: 'game-rejoined' as const,
+    remainingMs: null,
+    sequence: 7,
+  }
+  transport.receive(encodeGameMessage({
+    type: 'server-gameplay-resume-grace',
+    grace: pendingGrace,
+  }))
+  assert.deepEqual(session.getGameplayResumeGrace(), pendingGrace)
+  session.readyResumeGrace()
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-resume-grace-ready',
+    sequence: 7,
+  })
+  const heldMessageCount = transport.sent.length
+  session.sendInput(gameplayInput({ x: 1, y: 0 }))
+  assert.equal(transport.sent.length, heldMessageCount)
+
+  const countingGrace = { ...pendingGrace, remainingMs: 3_000 }
+  transport.receive(encodeGameMessage({
+    type: 'server-gameplay-resume-grace',
+    grace: countingGrace,
+  }))
+  session.readyResumeGrace()
+  assert.equal(transport.sent.length, heldMessageCount)
+  transport.receive(encodeGameMessage({
+    type: 'server-gameplay-resume-grace',
+    grace: null,
+  }))
+  assert.deepEqual(receivedGrace, [pendingGrace, countingGrace, null])
   session.sendInput(gameplayInput({ x: 1, y: 0 }))
   assert.equal(decodeClientGameMessage(transport.sent.at(-1)!).type, 'client-input')
 
@@ -522,6 +558,7 @@ test('client publishes Hub activity locally but reserves gameplay pause for Bone
   assert.equal(transport.sent.length, beforeOutsideActivity)
 
   removePause()
+  removeGrace()
 })
 
 test('client replaces only its own modal pause source and emits a strict release', async () => {
@@ -647,6 +684,7 @@ test('client correlates bounded host Lua results and rejects guest or retired ex
     modCatalog: [],
     boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' }],
     gameplayPause: null,
+    gameplayResumeGrace: null,
     snapshot: createGameSnapshot(guestState, 'player-2'),
     snapshotSequence: 1,
   }))
@@ -1121,6 +1159,7 @@ test('client schedules every cast-level transition on a distinct fixed tick', as
     modCatalog: [],
     boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' }],
     gameplayPause: null,
+    gameplayResumeGrace: null,
     snapshot: createGameSnapshot(serverState, 'player-1'),
     snapshotSequence: 1,
   }))
@@ -1213,6 +1252,7 @@ test('client disables prediction when the shared character kernel does not match
     modCatalog: [],
     boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' }],
     gameplayPause: null,
+    gameplayResumeGrace: null,
     snapshot: createGameSnapshot(serverState, 'player-1'),
     snapshotSequence: 1,
   }))
@@ -1253,6 +1293,7 @@ test('client presents bounded display-rate movement without resending unchanged 
     modCatalog: [],
     boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' }],
     gameplayPause: null,
+    gameplayResumeGrace: null,
     snapshot: createGameSnapshot(serverState, 'player-1'),
     snapshotSequence: 1,
   }))
@@ -1625,6 +1666,7 @@ test('client rejects a welcome that omits its assigned player', async () => {
     modCatalog: [],
     boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' }],
     gameplayPause: null,
+    gameplayResumeGrace: null,
     snapshot: createGameSnapshot(createGameSimulation({}), null),
     snapshotSequence: 1,
   }))
@@ -1830,6 +1872,7 @@ function receiveWelcome(
     modCatalog: [],
     boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' }],
     gameplayPause: null,
+    gameplayResumeGrace: null,
     snapshot,
     snapshotSequence: 1,
   }))
@@ -1875,6 +1918,7 @@ test('observer session exposes only read-only match state, chat, and replication
     content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
     developerAccess: false,
     gameplayPause: null,
+    gameplayResumeGrace: null,
     kernelParameters: kernelParameters(),
     kernelVersion: PLAYER_CHARACTER_KERNEL_VERSION,
     modAssets: [],

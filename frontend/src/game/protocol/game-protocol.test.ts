@@ -257,6 +257,13 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
     paused: true,
     source: 'inventory',
   })
+  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
+    type: 'client-resume-grace-ready',
+    sequence: 7,
+  })), {
+    type: 'client-resume-grace-ready',
+    sequence: 7,
+  })
   for (const activity of ['paused', 'occupied', null] as const) {
     assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
       type: 'client-hub-activity',
@@ -361,6 +368,31 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
     type: 'server-gameplay-pause',
     pause: null,
   })
+  for (const remainingMs of [3_000, 1, null] as const) {
+    assert.deepEqual(decodeServerGameMessage(encodeGameMessage({
+      type: 'server-gameplay-resume-grace',
+      grace: {
+        reason: 'skill-picker-closed',
+        remainingMs,
+        sequence: 7,
+      },
+    })), {
+      type: 'server-gameplay-resume-grace',
+      grace: {
+        reason: 'skill-picker-closed',
+        remainingMs,
+        sequence: 7,
+      },
+    })
+  }
+  assert.throws(() => decodeServerGameMessage(JSON.stringify({
+    type: 'server-gameplay-resume-grace',
+    grace: { reason: 'skill-picker-closed', remainingMs: 3_001, sequence: 7 },
+  })), /duration/)
+  assert.throws(() => decodeServerGameMessage(JSON.stringify({
+    type: 'server-gameplay-resume-grace',
+    grace: { reason: 'unknown', remainingMs: 3_000, sequence: 7 },
+  })), /reason/)
   assert.throws(() => decodeServerGameMessage(JSON.stringify({
     type: 'server-gameplay-pause',
     pause: { ownerDisplayName: '', ownerPlayerId: 'player-1', source: 'pause-menu' },
@@ -577,6 +609,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
     modCatalog: [],
     boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' }],
     gameplayPause: null,
+    gameplayResumeGrace: null,
     snapshot: createGameSnapshot(
       createGameSimulation({ 'player-1': CHARACTER }),
       'player-1',
@@ -1213,6 +1246,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
     modCatalog: [],
     boneyards: [loaded.choice],
     gameplayPause: null,
+    gameplayResumeGrace: null,
     snapshot,
     snapshotSequence: 1,
   }
@@ -1505,8 +1539,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v82 carries Web Lua wearables, onboarding admission, observer mode, Hub activity, NPC state, Goodie actions, tutorial fields/state, Hagatha runtime, Imp effects, save intent, selected skills, sacks, dyes, and gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 82)
+test('protocol v83 carries Web Lua wearables, onboarding admission, observer mode, Hub activity, NPC state, Goodie actions, tutorial fields/state, Hagatha runtime, Imp effects, save intent, selected skills, sacks, dyes, and gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 83)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -1954,6 +1988,7 @@ test('protocol v42 preserves the bounded run-scoped enemy semantic-event lane', 
     modCatalog: [],
     boneyards: [loadedBoneyardFixture(runId).choice],
     gameplayPause: null,
+    gameplayResumeGrace: null,
     snapshot,
     snapshotSequence: 1,
   }
@@ -4271,6 +4306,7 @@ test('protocol bounds server-controlled world collections', () => {
     modCatalog: [],
     boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' }],
     gameplayPause: null,
+    gameplayResumeGrace: null,
     snapshot: {
       ...snapshot,
       world: {
@@ -4672,6 +4708,7 @@ test('full Boneyard welcome strictly round-trips a content-identified mod Sack',
     content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
     developerAccess: false,
     gameplayPause: null,
+    gameplayResumeGrace: null,
     kernelParameters: {
       fixedTickSeconds: 0.01,
       movementAcceleration: 10,

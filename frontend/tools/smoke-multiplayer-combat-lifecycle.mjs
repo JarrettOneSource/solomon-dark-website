@@ -622,7 +622,6 @@ async function proveSharedLevelUpAndEnemyEffects({
 
   const frozenTick = host.state().tick
   const frozenWorld = host.state().world
-  const frozenReceipt = authoritativeGameplayReceipt(host.state())
   await hostPicker.locator('button[data-skill-id]').first().click()
   const waiting = hostPage.locator('.skill-picker-waiting')
   await waiting.waitFor({ timeout: 15_000 })
@@ -640,6 +639,7 @@ async function proveSharedLevelUpAndEnemyEffects({
   assert.deepEqual(host.state().levelUpBarrier?.pendingPlayerIds, [guestPlayerId])
   assert.equal(host.state().tick, frozenTick)
   assert.equal(host.state().world, frozenWorld)
+  const frozenReceipt = authoritativeGameplayReceipt(host.state())
 
   await hostPage.bringToFront()
   await hostPage.keyboard.down('d')
@@ -666,6 +666,16 @@ async function proveSharedLevelUpAndEnemyEffects({
     guestPicker.waitFor({ state: 'detached', timeout: 15_000 }),
   ])
   assert.equal(host.state().levelUpBarrier, null)
+  for (const seconds of [3, 2, 1]) {
+    await Promise.all([hostPage, guestPage].map(page => page.locator(
+      '.gameplay-resume-countdown-overlay[data-gameplay-resume-grace-reason="skill-picker-closed"]'
+      + `[data-gameplay-resume-grace-seconds="${seconds}"]`,
+    ).waitFor({ timeout: 15_000 })))
+    assert.equal(host.state().tick, frozenTick)
+  }
+  await Promise.all([hostPage, guestPage].map(page => page.locator(
+    '.gameplay-resume-countdown-overlay[data-gameplay-resume-grace-reason="skill-picker-closed"]',
+  ).waitFor({ state: 'detached', timeout: 15_000 })))
   await Promise.all([hostPage, guestPage].map((page) => page.waitForFunction(() => (
     document.querySelector('.boneyard-world-canvas')?.dataset.levelUpDynamicSuppressed
       === 'false'

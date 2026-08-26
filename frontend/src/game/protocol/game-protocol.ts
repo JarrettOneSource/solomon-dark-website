@@ -364,7 +364,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 82
+export const GAME_PROTOCOL_VERSION = 83
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -474,6 +474,24 @@ export interface GameplayPauseState {
   ownerDisplayName: string
   ownerPlayerId: string
   source: GameplayPauseSource
+}
+
+export const GAMEPLAY_RESUME_GRACE_DURATION_MS = 3_000
+export const GAMEPLAY_RESUME_GRACE_REASONS = [
+  'game-rejoined',
+  'game-restarted',
+  'inventory-closed',
+  'pause-menu-closed',
+  'skill-book-closed',
+  'skill-picker-closed',
+  'skill-selector-closed',
+] as const
+export type GameplayResumeGraceReason = typeof GAMEPLAY_RESUME_GRACE_REASONS[number]
+
+export interface GameplayResumeGraceState {
+  readonly reason: GameplayResumeGraceReason
+  readonly remainingMs: number | null
+  readonly sequence: number
 }
 
 export interface ClientHelloMessage {
@@ -661,6 +679,11 @@ export type ClientGameplayPauseMessage =
   | { type: 'client-gameplay-pause'; paused: false }
   | { type: 'client-gameplay-pause'; paused: true; source: GameplayPauseSource }
 
+export interface ClientResumeGraceReadyMessage {
+  readonly sequence: number
+  readonly type: 'client-resume-grace-ready'
+}
+
 export interface ClientCheatModeMessage {
   type: 'client-cheat-mode'
   enabled: boolean
@@ -722,6 +745,7 @@ export type ClientGameMessage =
   | ClientSkillQuickbarBindMessage
   | ClientPingMessage
   | ClientReadyCollegeIntroMessage
+  | ClientResumeGraceReadyMessage
   | ClientSaveBeforeLeaveMessage
   | ClientSnapshotAckMessage
   | ClientStartMatchMessage
@@ -745,6 +769,7 @@ export interface ServerWelcomeMessage {
   modCatalog: readonly ModConsumableCatalogEntry[]
   boneyards: readonly BoneyardChoice[]
   gameplayPause: GameplayPauseState | null
+  gameplayResumeGrace: GameplayResumeGraceState | null
   observer?: boolean
   snapshot: GameSnapshot
   snapshotSequence: number
@@ -879,6 +904,11 @@ export interface ServerGameplayPauseMessage {
   pause: GameplayPauseState | null
 }
 
+export interface ServerGameplayResumeGraceMessage {
+  readonly grace: GameplayResumeGraceState | null
+  readonly type: 'server-gameplay-resume-grace'
+}
+
 export interface ServerPartyStateMessage {
   type: 'server-party-state'
   state: LocalPartyState
@@ -971,6 +1001,7 @@ export type ServerGameMessage =
   | ServerChatRejectedMessage
   | ServerDeploymentRestartMessage
   | ServerGameplayPauseMessage
+  | ServerGameplayResumeGraceMessage
   | ServerWelcomeMessage
   | ServerSnapshotMessage
   | ServerBoneyardLoadedMessage
@@ -1240,6 +1271,13 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
     onlyKeys(value, 'message', ['type'])
     return { type: 'client-ready-college-intro' }
   }
+  if (value.type === 'client-resume-grace-ready') {
+    onlyKeys(value, 'message', ['type', 'sequence'])
+    return {
+      type: 'client-resume-grace-ready',
+      sequence: positiveInteger(value.sequence, 'sequence'),
+    }
+  }
   if (value.type === 'client-tutorial-action') {
     onlyKeys(value, 'message', ['type', 'action'])
     return {
@@ -1376,6 +1414,7 @@ export function decodeServerGameMessage(payload: string): ServerGameMessage {
       'modCatalog',
       'boneyards',
       'gameplayPause',
+      'gameplayResumeGrace',
       'observer',
       'snapshot',
       'snapshotSequence',
@@ -1384,6 +1423,9 @@ export function decodeServerGameMessage(payload: string): ServerGameMessage {
     const gameplayPause = value.gameplayPause === null
       ? null
       : gameplayPauseState(value.gameplayPause, 'gameplayPause')
+    const gameplayResumeGrace = value.gameplayResumeGrace === null
+      ? null
+      : gameplayResumeGraceState(value.gameplayResumeGrace, 'gameplayResumeGrace')
     if (gameplayPause && !snapshot.players[gameplayPause.ownerPlayerId]) {
       throw new GameProtocolError('gameplayPause owner is absent from the welcome snapshot')
     }
@@ -1403,6 +1445,7 @@ export function decodeServerGameMessage(payload: string): ServerGameMessage {
       modCatalog: modConsumableCatalog(value.modCatalog, 'modCatalog'),
       boneyards: boneyardChoices(value.boneyards),
       gameplayPause,
+      gameplayResumeGrace,
       ...(value.observer === undefined
         ? {}
         : { observer: boolean(value.observer, 'observer') }),
@@ -1516,6 +1559,15 @@ export function decodeServerGameMessage(payload: string): ServerGameMessage {
     return {
       type: 'server-gameplay-pause',
       pause: value.pause === null ? null : gameplayPauseState(value.pause, 'pause'),
+    }
+  }
+  if (value.type === 'server-gameplay-resume-grace') {
+    onlyKeys(value, 'message', ['type', 'grace'])
+    return {
+      type: 'server-gameplay-resume-grace',
+      grace: value.grace === null
+        ? null
+        : gameplayResumeGraceState(value.grace, 'grace'),
     }
   }
   if (value.type === 'server-party-state') {
@@ -2229,6 +2281,31 @@ function gameplayPauseState(value: unknown, field: string): GameplayPauseState {
     ownerDisplayName: limitedString(source.ownerDisplayName, `${field}.ownerDisplayName`, 64),
     ownerPlayerId: validatedPlayerId(source.ownerPlayerId, `${field}.ownerPlayerId`),
     source: gameplayPauseSource(source.source),
+  }
+}
+
+function gameplayResumeGraceState(
+  value: unknown,
+  field: string,
+): GameplayResumeGraceState {
+  const source = record(value, field)
+  onlyKeys(source, field, ['reason', 'remainingMs', 'sequence'])
+  const remainingMs = source.remainingMs === null
+    ? null
+    : positiveInteger(source.remainingMs, `${field}.remainingMs`)
+  if (remainingMs !== null && remainingMs > GAMEPLAY_RESUME_GRACE_DURATION_MS) {
+    throw new GameProtocolError(
+      `${field}.remainingMs exceeds the resume grace duration`,
+    )
+  }
+  return {
+    reason: memberString(
+      source.reason,
+      `${field}.reason`,
+      GAMEPLAY_RESUME_GRACE_REASONS,
+    ),
+    remainingMs,
+    sequence: positiveInteger(source.sequence, `${field}.sequence`),
   }
 }
 

@@ -27,6 +27,7 @@ import {
   type GameSessionKind,
   type GameplayPauseSource,
   type GameplayPauseState,
+  type GameplayResumeGraceState,
   type HubPlayerActivity,
   type LoadedBoneyard,
   type LuaConsoleObject,
@@ -128,6 +129,7 @@ export interface GameClientSession {
   getBoneyard(): LoadedBoneyard | null
   getChatMessages(): readonly GameChatMessage[]
   getGameplayPause(): GameplayPauseState | null
+  getGameplayResumeGrace(): GameplayResumeGraceState | null
   getModCatalog(): readonly ModConsumableCatalogEntry[]
   getModContent(): ModContentProjection | null
   getModRuntime(): LuaConsoleObject | null
@@ -139,6 +141,9 @@ export interface GameClientSession {
   onChatMessage(listener: (message: GameChatMessage) => void): () => void
   onChatRejected(listener: (rejection: GameChatRejection) => void): () => void
   onGameplayPause(listener: (pause: GameplayPauseState | null) => void): () => void
+  onGameplayResumeGrace(
+    listener: (grace: GameplayResumeGraceState | null) => void,
+  ): () => void
   onLeaderboardReceipt(listener: (receipt: string) => void): () => void
   onModCatalog(listener: (catalog: readonly ModConsumableCatalogEntry[]) => void): () => void
   onModContent(listener: (projection: ModContentProjection) => void): () => void
@@ -154,6 +159,7 @@ export interface GameClientSession {
   rerollSkill(offerSequence: number): void
   requestGameplayPause(source: GameplayPauseSource | null): void
   readyCollegeIntro(): void
+  readyResumeGrace(): void
   saveBeforeLeave(): Promise<GameSaveCheckpoint>
   saveSkill(offerSequence: number): void
   selectConcentration(skillId: number): void
@@ -243,6 +249,7 @@ export function connectGameClientSession(
     let boneyardPresentationTimeline: BoneyardPresentationTimeline | undefined
     let loadedBoneyard: LoadedBoneyard | null = null
     let gameplayPause: GameplayPauseState | null = null
+    let gameplayResumeGrace: GameplayResumeGraceState | null = null
     let requestedHubActivity: HubPlayerActivity | null = null
     let modCatalog: readonly ModConsumableCatalogEntry[] = []
     let modContent: ModContentProjection | null = null
@@ -273,6 +280,9 @@ export function connectGameClientSession(
     const chatMessageListeners = new Set<(message: GameChatMessage) => void>()
     const chatRejectionListeners = new Set<(rejection: GameChatRejection) => void>()
     const gameplayPauseListeners = new Set<(pause: GameplayPauseState | null) => void>()
+    const gameplayResumeGraceListeners = new Set<(
+      grace: GameplayResumeGraceState | null,
+    ) => void>()
     const leaderboardReceiptListeners = new Set<(receipt: string) => void>()
     const modCatalogListeners = new Set<(
       catalog: readonly ModConsumableCatalogEntry[],
@@ -312,6 +322,7 @@ export function connectGameClientSession(
         welcome = message
         snapshot = message.snapshot
         gameplayPause = message.gameplayPause
+        gameplayResumeGrace = message.gameplayResumeGrace
         requestedHubActivity = snapshot.world.kind === 'hub'
           ? snapshot.world.participants[message.playerId]?.activity ?? null
           : null
@@ -424,6 +435,17 @@ export function connectGameClientSession(
         for (const listener of gameplayPauseListeners) listener(gameplayPause)
         return
       }
+      if (message.type === 'server-gameplay-resume-grace') {
+        gameplayResumeGrace = message.grace
+        currentInput = copyInput(STOPPED_INPUT)
+        sentInput = copyInput(STOPPED_INPUT)
+        pendingInputs = []
+        if (isHubGameSnapshot(snapshot)) resetLocalHubPresentation(snapshot, now())
+        for (const listener of gameplayResumeGraceListeners) {
+          listener(gameplayResumeGrace)
+        }
+        return
+      }
       if (message.type === 'server-party-state') {
         partyState = message.state
         for (const listener of partyStateListeners) listener(partyState)
@@ -519,13 +541,17 @@ export function connectGameClientSession(
       pendingInputs = pendingInputs.filter(
         (entry) => entry.sequence > message.acknowledgedInputSequence,
       )
-      if (reconstructedSnapshot.levelUpBarrier !== null) {
+      if (
+        reconstructedSnapshot.levelUpBarrier !== null
+        || gameplayResumeGrace !== null
+      ) {
         currentInput = copyInput(STOPPED_INPUT)
         sentInput = copyInput(STOPPED_INPUT)
         pendingInputs = []
       }
       const previousWorldKind = snapshot.world.kind
       const presentationWasHeld = gameplayPause !== null
+        || gameplayResumeGrace !== null
         || snapshot.levelUpBarrier !== null
       const receivedAtMs = now()
       if (isHubGameSnapshot(reconstructedSnapshot)) {
@@ -722,6 +748,7 @@ export function connectGameClientSession(
         chatRejectionListeners.clear()
         chatMessages = []
         gameplayPauseListeners.clear()
+        gameplayResumeGraceListeners.clear()
         leaderboardReceiptListeners.clear()
         modCatalogListeners.clear()
         modContentListeners.clear()
@@ -753,7 +780,7 @@ export function connectGameClientSession(
         if (!session.developerAccess && !session.isHost) {
           return Promise.reject(new Error('Only the session host may execute Lua.'))
         }
-        if (gameplayPause !== null) {
+        if (gameplayPause !== null || gameplayResumeGrace !== null) {
           return Promise.reject(new Error('Lua execution is unavailable while gameplay is paused.'))
         }
         if (typeof code !== 'string' || code.length === 0) {
@@ -797,6 +824,9 @@ export function connectGameClientSession(
       getGameplayPause() {
         return gameplayPause
       },
+      getGameplayResumeGrace() {
+        return gameplayResumeGrace
+      },
       getModCatalog() {
         return modCatalog
       },
@@ -838,6 +868,10 @@ export function connectGameClientSession(
       onGameplayPause(listener) {
         gameplayPauseListeners.add(listener)
         return () => gameplayPauseListeners.delete(listener)
+      },
+      onGameplayResumeGrace(listener) {
+        gameplayResumeGraceListeners.add(listener)
+        return () => gameplayResumeGraceListeners.delete(listener)
       },
       onLeaderboardReceipt(listener) {
         leaderboardReceiptListeners.add(listener)
@@ -891,6 +925,7 @@ export function connectGameClientSession(
           || !isHubGameSnapshot(snapshot)
           || snapshot.levelUpBarrier !== null
           || gameplayPause !== null
+          || gameplayResumeGrace !== null
         ) return frame
         advanceLocalHubPresentation(requestedNow)
         if (!localHubPresentation) return frame
@@ -909,6 +944,7 @@ export function connectGameClientSession(
         const offered = snapshot.players[welcome.playerId]?.progression.pendingOffer
         const lifeState = snapshot.players[welcome.playerId]?.progression.lifeState
         const requestedInput = gameplayPause !== null
+          || gameplayResumeGrace !== null
           || snapshot.levelUpBarrier !== null
           || offered
           || lifeState !== 'alive'
@@ -1001,6 +1037,7 @@ export function connectGameClientSession(
       },
       requestGameplayPause(source) {
         if (!welcome || !snapshot || destroyed) return
+        if (gameplayResumeGrace !== null) return
         if (source !== null) {
           if (snapshot.world.kind === 'hub') return
           if (
@@ -1205,6 +1242,14 @@ export function connectGameClientSession(
       readyCollegeIntro() {
         if (!welcome || destroyed) return
         options.transport.send(encodeGameMessage({ type: 'client-ready-college-intro' }))
+      },
+      readyResumeGrace() {
+        const grace = gameplayResumeGrace
+        if (!welcome || destroyed || !grace || grace.remainingMs !== null) return
+        options.transport.send(encodeGameMessage({
+          type: 'client-resume-grace-ready',
+          sequence: grace.sequence,
+        }))
       },
       sendTutorialAction(action) {
         if (!welcome || destroyed) return
@@ -1469,6 +1514,7 @@ export function connectGameClientSession(
       snapshotListeners.clear()
       boneyardListeners.clear()
       gameplayPauseListeners.clear()
+      gameplayResumeGraceListeners.clear()
       enemyEventListeners.clear()
       pingListeners.clear()
       options.onFatal?.(failure)
@@ -1540,6 +1586,7 @@ export function connectGameClientSession(
       chatRejectionListeners.clear()
       chatMessages = []
       gameplayPauseListeners.clear()
+      gameplayResumeGraceListeners.clear()
       leaderboardReceiptListeners.clear()
       modCatalogListeners.clear()
       modContentListeners.clear()

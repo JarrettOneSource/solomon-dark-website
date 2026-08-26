@@ -259,7 +259,7 @@ try {
   const heldTick = liveBeforeCatchUp.tick
   await new Promise(resolve => setTimeout(resolve, 300))
   const liveDuringCatchUp = host.playerState(leader.playerId)
-  assert.ok((liveDuringCatchUp?.tick ?? 0) > heldTick)
+  assert.equal(liveDuringCatchUp?.tick, heldTick)
   const renderedPlayers = await page.locator('.boneyard-world-canvas').evaluate(canvas => (
     canvas.__sdrBoneyardFrame.playerCount
   ))
@@ -292,6 +292,7 @@ try {
       )),
     },
   })
+  leader.flushSnapshot()
   leader.setVisibility('private')
   const deadVisualHandle = await page.waitForFunction(playerId => {
     const row = document.querySelector(`[data-ally-id="${playerId}"]`)
@@ -354,7 +355,7 @@ try {
 
   const tickAfterPeers = host.playerState(member.playerId).tick
   await new Promise(resolve => setTimeout(resolve, 150))
-  assert.ok(host.playerState(member.playerId).tick > tickAfterPeers)
+  assert.equal(host.playerState(member.playerId).tick, tickAfterPeers)
 
   const picker = page.locator('.skill-picker-stage')
   await picker.waitFor({ state: 'visible', timeout: 30_000 })
@@ -377,6 +378,23 @@ try {
   }
   assert.ok(offerSequences.length > 3)
   await picker.waitFor({ state: 'detached', timeout: 20_000 })
+  assert.equal(
+    await page.locator('.main-menu-page').getAttribute('data-gameplay-resume-grace'),
+    'game-rejoined',
+  )
+  const countdown = page.locator('.gameplay-resume-countdown-overlay')
+  await countdown.waitFor({ timeout: 20_000 })
+  assert.equal(
+    await countdown.getAttribute('data-gameplay-resume-grace-reason'),
+    'game-rejoined',
+  )
+  for (const seconds of [3, 2, 1]) {
+    await page.locator(
+      `.gameplay-resume-countdown-overlay[data-gameplay-resume-grace-seconds="${seconds}"]`,
+    ).waitFor({ timeout: 20_000 })
+    assert.equal(host.playerState(browserPlayerId)?.tick, heldTick)
+  }
+  await countdown.waitFor({ state: 'detached', timeout: 20_000 })
   await waitForHost(() => (
     host.playerState(browserPlayerId)?.levelUpBarrier === null
     && (host.playerState(browserPlayerId)?.tick ?? 0) > heldTick
@@ -487,16 +505,34 @@ async function enterRawPlayer(displayName, element) {
     character: { discipline: 'arcane', displayName, element },
   }))
   const welcome = await next(message => message.type === 'server-welcome')
+  let inputSequence = 0
   const client = {
     accept(invitationId) {
       socket.send(JSON.stringify({ type: 'client-party-accept', invitationId }))
     },
     close: () => closeSocket(socket),
+    flushSnapshot() {
+      inputSequence += 1
+      socket.send(JSON.stringify({
+        type: 'client-input',
+        input: {
+          aim: null,
+          cast: { primary: false, quickbar: null },
+          movement: { x: 0, y: 0 },
+          viewportWidth: 1600,
+        },
+        sequence: inputSequence,
+        targetTick: host.playerState(welcome.playerId).tick + 1,
+      }))
+    },
     invite(targetPlayerId) {
       socket.send(JSON.stringify({ type: 'client-party-invite', targetPlayerId }))
     },
     next,
     playerId: welcome.playerId,
+    readyResumeGrace(sequence) {
+      socket.send(JSON.stringify({ type: 'client-resume-grace-ready', sequence }))
+    },
     select(choiceIndex, offer) {
       socket.send(JSON.stringify({
         type: 'client-select-skill',
@@ -520,14 +556,30 @@ async function resolveAllOffers(client) {
   while (true) {
     const active = host.playerState(client.playerId)
     if (!active) throw new Error(`host lost ${client.playerId}`)
-    const offer = getPlayerProgression(active, client.playerId).pendingOffer
+    const progression = getPlayerProgression(active, client.playerId)
+    const offer = progression.pendingOffer
     if (!offer) return
+    const finalCohortChoice = progression.pendingLevels.length === 1
+      && active.levelUpBarrier?.pendingPlayerIds.length === 1
+      && active.levelUpBarrier.pendingPlayerIds[0] === client.playerId
+    const pendingGrace = finalCohortChoice
+      ? client.next(message => (
+          message.type === 'server-gameplay-resume-grace'
+          && message.grace?.remainingMs === null
+        ))
+      : null
     client.select(0, offer)
     await waitForHost(() => {
       const next = host.playerState(client.playerId)
       return next !== null
         && getPlayerProgression(next, client.playerId).pendingOffer?.sequence !== offer.sequence
     }, `${client.playerId} offer ${offer.sequence}`)
+    if (pendingGrace) {
+      const grace = await pendingGrace
+      await new Promise(resolve => setTimeout(resolve, 550))
+      client.readyResumeGrace(grace.grace.sequence)
+      await new Promise(resolve => setTimeout(resolve, 20))
+    }
   }
 }
 
