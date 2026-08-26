@@ -50243,7 +50243,7 @@ browser set contains all 87 current owner sources and all 578 logical visuals.
 
 | Member family | Required compact membership and invariant |
 | --- | --- |
-| Courtyard field | complete `2000x1024` courtyard, foreground, eight depth-prop frames, fountain, statue body/aura |
+| Courtyard field | complete `2000x1024` courtyard, foreground, four depth-prop frames, fountain, statue body/aura |
 | Southern extension | battlement, tower, seam, east/west platforms at unchanged repeated placement and painter depth |
 | Seal and Useful Thyngs | both pulse programs, back/front/shadow, five balloon frames and all existing logical bounds |
 | Astronomer | 12 assistants; green/red gesture, idle and transition strips; five telescope frames |
@@ -50312,15 +50312,41 @@ must retain the same local origin, anchor, transform, tint, alpha and sampling.
   texture membership. Exact pack/static/runtime-loader focused coverage passes
   `11/11`; Hub UI passes `81/81`; the broad Boneyard/runtime group passes
   `1,579/1,579`; TypeScript, lint/boundaries/generated checks, production media
-  policy, and the production build all pass. The game entry is `474,703` raw /
-  `133,103` gzip against unchanged `524,288` / `133,120` limits.
-- Apple-arm64 Mac Safari completes the current first-College introduction,
-  Create, exact compact Hub, and transition to mode-2 Boneyard. Hub is `60.00`
-  FPS with p95/p99/maximum `18/19/28` ms; Boneyard is `59.99` with
-  `18/19/19` ms. Both have empty error arrays. Result SHA-256 is
-  `28fbdd4e8d1c397ca6cb83b22e0985d5739574b1d6c3bf6f3cd152345da64dab`.
-- This is preliminary rather than final: a clean committed Apple-arm64
-  canonical gate, complete exact scenario matrix, physical WebContent/thermal
-  rerun, repeated level-up, Tutorial Inventory, and installed-web-app rows are
-  still required. The iPhone USB service became unavailable before the first
-  compact-page physical sample.
+  policy, and the production build all pass. After rebase onto current
+  `origin/main`, the game entry is `476,216` raw / `133,481` gzip against the
+  current protocol-80 limits `524,288` / `134,144`.
+- The four performance commits were rebased without a product-code conflict
+  onto current main `d43fb6a3534e7bc052ba60d0c31ab47525ced8d7`; the sole
+  append-only RE-document conflict preserves both complete systems. Exact code
+  candidate `36606a2287fd54de91d2577f622d44636ef13087` is detached and clean
+  in the Apple-arm64 worktree and passes the complete canonical
+  `./scripts/validate.sh` gate. Canonical log SHA-256 is
+  `e67ffaecac0cc8ab51aae62a1e4ea71366b58a65b90c6db9882270a755fec1b2`.
+- Exact Apple-arm64 Mac Safari covers 46 independently sampled rows across the
+  current automatic College intro, Hub, Boneyard, SkillPicker, Inventory,
+  Acid, 416-actor / 670-primitive five-secondary overlap, 90 active enemies,
+  89 enemies while moving/shooting, all five primary families, teardown and
+  restoration. Minimum average FPS is `58.02` on the initial Tutorial Inventory
+  opening transition; maximum p95/p99 is `33/34` ms there. All other principal
+  stress rows hold `58.63..60.08` FPS and every browser error array is empty.
+  Composed result SHA-256 is
+  `49a67caffcf2c5d0789a2f1b64c9e76749236f4911453b4ac9a917800d82242c`.
+- Eight independent level-up pickers hold `59.90..60.02` FPS and each tears
+  back down to two canvases with advancing world frames. Live Acid remains at
+  `59.90..60.04` FPS through Inventory and four additional pickers, then fully
+  retires and restores at `59.90` FPS. Result SHA-256 values are
+  `b307b2827d59e15236455adda182c8214708d517e6a14e81c9ab80760bcc790e`
+  and `f0a2955c5e009de6dc3b84ee852ad7de825610cf150ed9caeee2098f8616c688`.
+- A freshly generated current-schema Tutorial stage-9 fixture (file SHA-256
+  `5ff0a9595bb4f9782aef3b2c0553a32aa082093b0c833e47326e4be8b2239654`,
+  document SHA-256
+  `835d1fe2a43a2c42f9011fb0e7d4ca62f23b5601e59e258c0aebb81bf7589fd2`)
+  opens Inventory into stage 10, closes into stage 11, resumes the fixed tick,
+  and completes three more open/close cycles. Final state is stage 11,
+  `inputBlocked=false`, no Inventory, advancing tick `490.2`, and no error.
+  Result SHA-256 is
+  `e961ce01c544ce4befd2364caf43b1b665dcab4124a2cadb903027017d7539a5`.
+- Physical compact-page WebContent/thermal, repeated level-up, Tutorial
+  Inventory, installed-web-app and teardown/re-entry rows remain required. The
+  iPhone USB service became unavailable before the first compact-page physical
+  sample; Mac and canonical receipts do not substitute for those rows.
