@@ -45,6 +45,7 @@
     "smoke:game:startup": "node tools/smoke-game-startup-memory.mjs",
     "smoke:game:weather": "node --experimental-strip-types tools/smoke-boneyard-weather.mjs",
     "smoke:game:saves": "node tools/smoke-game-saves.mjs",
+    "smoke:game:native-saves": "node --experimental-strip-types tools/smoke-native-save-portability.mjs",
     "smoke:game:deployment-restart": "node tools/smoke-game-deployment-restart.mjs",
     "smoke:game:match-loading": "node tools/smoke-match-loading.mjs",
     "smoke:game:hub-combat-entry": "node tools/smoke-hub-combat-entry.mjs",

@@ -201,6 +201,17 @@ test('all native Boast IDs and terminal states round-trip through the Game paylo
       decodeNativeGamestateWizard(patched).randomBoastActive,
       boast.selected === 3,
     )
+    const portable = await createPortableGameProfileFromNative(
+      darkdata,
+      patched,
+      fixture.expected.runName,
+    )
+    const imported = createWebGameSaveFromPortableProfile(portable)
+    const exported = await exportWebGameSaveToNativeArchive(imported.document)
+    assert.deepEqual(
+      decodeNativeGamestateBoast((await readNativeSaveArchive(exported.archive)).gamestate),
+      boast,
+    )
   }
 
   const randomBoast = { failed: false, selected: 3 as const, succeeded: false }
@@ -215,12 +226,6 @@ test('all native Boast IDs and terminal states round-trip through the Game paylo
     restoreGameSaveDocument(imported.document).state.playerEntities.economies[0]?.npc.boast,
     { failed: false, failureSequence: 0, selected: 3, succeeded: false },
   )
-  const exported = await exportWebGameSaveToNativeArchive(imported.document)
-  assert.deepEqual(
-    decodeNativeGamestateBoast((await readNativeSaveArchive(exported.archive)).gamestate),
-    randomBoast,
-  )
-
   const malformedBoast = JSON.parse(encodePortableGameProfile(portable))
   malformedBoast.profile.boast = { failed: true, selected: null, succeeded: false }
   await assert.rejects(

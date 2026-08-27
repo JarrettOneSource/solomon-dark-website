@@ -393,7 +393,8 @@ export async function createPortableGameProfileFromWebSave(
   const progression = restored.state.playerEntities.progressions[index]
   const skillBook = restored.state.playerEntities.skillBooks[index]
   const skillRuntime = restored.state.playerEntities.skillRuntimes[index]
-  if (!character || !progression || !skillBook || !skillRuntime) {
+  const wizardEconomy = restored.state.playerEntities.economies[index]
+  if (!character || !progression || !skillBook || !skillRuntime || !wizardEconomy) {
     throw new NativeSaveFormatError('web save portable wizard components are incomplete')
   }
   const [startingPrimary, startingSecondary] = STARTING_SKILLS[character.element]
@@ -447,9 +448,9 @@ export async function createPortableGameProfileFromWebSave(
     profile: Object.freeze({
       ...base.profile,
       boast: Object.freeze({
-        failed: profile.economy.npc.boast.failed,
-        selected: profile.economy.npc.boast.selected,
-        succeeded: profile.economy.npc.boast.succeeded,
+        failed: wizardEconomy.npc.boast.failed,
+        selected: wizardEconomy.npc.boast.selected,
+        succeeded: wizardEconomy.npc.boast.succeeded,
       }),
       dowsingFee: profile.economy.dowsingFee,
       firstMixed: Object.freeze(firstMixed),

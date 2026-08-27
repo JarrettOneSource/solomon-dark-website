@@ -321,7 +321,16 @@ export function decodeNativeDarkdataProfile(bytes: Uint8Array): NativeDarkdataPr
 
 interface DecodedProgression {
   readonly node: NativeChunkNode
-  readonly progression: Omit<NativeWizardProgression, 'firewalkerActive' | 'meditationIdleDelay' | 'name' | 'weldEffect'>
+  readonly progression: Omit<NativeWizardProgression,
+    | 'concentrationSkillIds'
+    | 'firewalkerActive'
+    | 'meditationIdleDelay'
+    | 'name'
+    | 'nextConcentrationSlot'
+    | 'selectedPrimarySkillId'
+    | 'skillQuickbar'
+    | 'weldEffect'
+  >
 }
 
 function decodeProgressionCollections(node: NativeChunkNode) {

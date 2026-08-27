@@ -679,7 +679,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
   })
   assert.throws(
     () => decodeServerGameMessage(encodeGameMessage(failedRandomBoast)),
-    /Boast state/,
+    /boast state/i,
   )
   const player = welcome.snapshot.players['player-1']
   const tutorialAmulet = { ...nativeTutorialAmuletItem(), id: 900_100 }
@@ -1007,7 +1007,18 @@ test('server welcome round-trips content, kernel, character, and world ownership
       reverieActive: false,
       serendipityActive: false,
     },
-    learnedSkills: [[0, 1, 1], [7, 1, 1], [8, 1, 1], [11, 1, 1]],
+    learnedSkills: [
+      [0, 1, 1],
+      [1, 1, 1],
+      [2, 1, 1],
+      [3, 1, 1],
+      [4, 1, 1],
+      [5, 1, 1],
+      [6, 1, 1],
+      [7, 1, 1],
+      [8, 1, 1],
+      [11, 1, 1],
+    ],
     learnedSkillOrder: [8, 11],
     level: 1,
     lifeState: 'alive',

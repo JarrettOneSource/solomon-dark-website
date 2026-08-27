@@ -86,7 +86,7 @@ test('host save documents round-trip the complete owner state and revive Hub run
     state,
   })
   const encoded = JSON.parse(document) as Record<string, unknown>
-  assert.equal(encoded.schemaVersion, 16)
+  assert.equal(encoded.schemaVersion, 17)
   assert.deepEqual(encoded.mods, MODS)
   assert.deepEqual(encoded.modState, MOD_STATE)
   assert.equal(encoded.integrity, 'local-only')
@@ -649,7 +649,7 @@ test('current schema resumes the complete stock Tutorial controller and exact le
     state,
   })
   const encoded = JSON.parse(document)
-  assert.equal(encoded.schemaVersion, 16)
+  assert.equal(encoded.schemaVersion, 17)
   assert.equal(encoded.continuation.simulation.world.tutorial.stage, 0)
   assert.equal(
     encoded.continuation.simulation.world.tutorial.movementInstructionAcknowledged,
@@ -760,6 +760,7 @@ test('current schema resumes the complete stock Tutorial controller and exact le
 
   const priorSchemaFifteen = structuredClone(encoded)
   priorSchemaFifteen.schemaVersion = 15
+  delete priorSchemaFifteen.nativeSource
   delete priorSchemaFifteen.continuation.simulation.world.tutorial
     .movementInstructionAcknowledged
   const migratedMovement = restoreGameSaveDocument(JSON.stringify(priorSchemaFifteen))
