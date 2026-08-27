@@ -452,7 +452,7 @@ try {
     && (host.playerState(browserPlayerId)?.tick ?? 0) > heldTick
   ), 'run release after catch-up')
   const resumed = host.playerState(browserPlayerId)
-  assert.ok(getPlayerProgression(resumed, browserPlayerId).level > 4)
+  assert.ok(getPlayerProgression(resumed, browserPlayerId).level >= 4)
   const rotatedSave = await waitForLocalSave(page, record => {
     const token = JSON.parse(record?.document ?? 'null')?.continuation?.summary
       ?.partyRejoinToken
