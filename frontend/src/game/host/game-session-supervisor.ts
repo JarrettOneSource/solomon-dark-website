@@ -158,6 +158,14 @@ export async function startGameSessionSupervisor(
   >()
   const partyRecoveryStarts = new Map<string, Promise<SessionRecord>>()
   const retiredPartyRecoveries = new Set<string>()
+  const endPartyRecovery = (
+    recoveryId: string,
+    disposition: 'suspended' | 'terminal',
+  ): void => {
+    partyRecoverySessions.delete(recoveryId)
+    if (disposition === 'terminal') retiredPartyRecoveries.add(recoveryId)
+    else retiredPartyRecoveries.delete(recoveryId)
+  }
   const downstreamSockets = new Set<WebSocket>()
   let closed = false
   let draining = false
@@ -191,6 +199,8 @@ export async function startGameSessionSupervisor(
     maxPlayers: maxConnectionsPerSession,
     mlBotPolicy: options.mlBotPolicy,
     onMemorialStateChanged: options.onMemorialStateChanged,
+    onPartyRecoveryEnded: endPartyRecovery,
+    partyRecoveryRevision: revision,
     partyRecoverySecret: options.adminSecret,
     runtimeEvents: options.runtimeEvents,
     sharedHub: true,
@@ -1063,6 +1073,8 @@ export async function startGameSessionSupervisor(
         }
         closeClaimedSessionIfEmpty(session)
       },
+      onPartyRecoveryEnded: endPartyRecovery,
+      partyRecoveryRevision: revision,
       runtimeEvents: options.runtimeEvents,
       partyRecoverySecret: options.adminSecret,
       boneyards: createBoneyardCatalog([

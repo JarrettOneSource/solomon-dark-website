@@ -326,17 +326,18 @@ try {
   leader.setVisibility('private')
   const deadVisualHandle = await page.waitForFunction(playerId => {
     const row = document.querySelector(`[data-ally-id="${playerId}"]`)
-    const bar = row?.querySelector('.hub-hud-ally-bar')
-    const backgroundImage = bar === null
+    const status = row?.querySelector('.hub-hud-ally-status')
+    const backgroundImage = row === null
       ? 'none'
-      : getComputedStyle(bar, '::after').backgroundImage
+      : getComputedStyle(row, '::after').backgroundImage
     return row?.getAttribute('data-ally-dead') === 'true'
-      && bar !== null
+      && status?.textContent === 'DEAD'
       && backgroundImage !== 'none'
       ? {
           connected: row.getAttribute('data-ally-connected'),
           dead: row.getAttribute('data-ally-dead'),
           backgroundImage,
+          status: status.textContent,
         }
       : false
   }, leader.playerId)
@@ -345,6 +346,9 @@ try {
     connected: 'true',
     dead: 'true',
   })
+  assert.equal(deadVisual.status, 'DEAD')
+
+  const deadLeaderCheckpoint = await leader.checkpointBeforeLeave(701)
 
   const retainedLeaderState = member.next(message => (
     message.type === 'server-party-state'
@@ -362,21 +366,27 @@ try {
   ]))
   const disconnectedVisualHandle = await page.waitForFunction(playerId => {
     const row = document.querySelector(`[data-ally-id="${playerId}"]`)
-    const bar = row?.querySelector('.hub-hud-ally-bar')
-    const signal = bar === null ? null : getComputedStyle(bar, '::before')
+    const signal = row === null ? null : getComputedStyle(row, '::before')
+    const dead = row === null ? null : getComputedStyle(row, '::after')
+    const status = row?.querySelector('.hub-hud-ally-status')
     return row?.getAttribute('data-ally-connected') === 'false'
-      && bar !== null
+      && status?.textContent === 'DISCONNECTED'
       && signal?.backgroundImage !== 'none'
+      && dead?.backgroundImage !== 'none'
       ? {
           animationName: signal.animationName,
           backgroundImage: signal.backgroundImage,
+          deadBackgroundImage: dead.backgroundImage,
           dead: row.getAttribute('data-ally-dead'),
+          status: status.textContent,
         }
       : false
   }, leader.playerId)
   const disconnectedSignal = await disconnectedVisualHandle.jsonValue()
   assert.equal(disconnectedSignal.dead, 'true')
+  assert.equal(disconnectedSignal.status, 'DISCONNECTED')
   assert.notEqual(disconnectedSignal.backgroundImage, 'none')
+  assert.notEqual(disconnectedSignal.deadBackgroundImage, 'none')
   assert.equal(disconnectedSignal.animationName, 'ally-signal-loss')
   const rosterScreenshotPath = evidenceRoot
     ? join(evidenceRoot, `party-roster-dead-disconnected-${sessionKind}.png`)
@@ -452,19 +462,108 @@ try {
   assert.ok(rotatedSave.revision > savedRun.revision)
   assert.equal(host.partyRejoinTarget(oldToken)?.status, 'connected')
 
+  const browserState = host.playerState(browserPlayerId)
+  const browserIndex = browserState.playerEntities.identities.findIndex(({ playerId }) => (
+    playerId === browserPlayerId
+  ))
+  assert.ok(browserIndex >= 0)
+  Object.assign(browserState, {
+    playerEntities: {
+      ...browserState.playerEntities,
+      progressions: browserState.playerEntities.progressions.map((progression, index) => (
+        index === browserIndex
+          ? { ...progression, currentHealth: 0, lifeState: 'spectating' }
+          : progression
+      )),
+    },
+  })
+  const memberCheckpoint = await member.checkpointBeforeLeave(702)
+  const rejoinWait = page.locator(
+    '.gameplay-resume-countdown-overlay'
+    + '[data-gameplay-resume-grace-reason="party-rejoin-wait"]'
+    + '[data-gameplay-resume-grace-phase="waiting"]',
+  )
+  await member.close()
+  await rejoinWait.waitFor({ timeout: 20_000 })
+  assert.match(await rejoinWait.textContent() ?? '', /Waiting for players to rejoin/)
+  const disconnectedMember = page.locator(
+    `[data-ally-id="${member.playerId}"]`
+    + '[data-ally-connected="false"]'
+    + '[data-ally-status="disconnected"]',
+  )
+  await disconnectedMember.waitFor()
+  assert.equal(
+    await disconnectedMember.locator('.hub-hud-ally-status').textContent(),
+    'DISCONNECTED',
+  )
+  const noLivingHeldTick = host.playerState(browserPlayerId).tick
+  await new Promise(resolve => setTimeout(resolve, 200))
+  assert.equal(host.playerState(browserPlayerId).tick, noLivingHeldTick)
+  assert.equal(host.playerState(browserPlayerId).run.phase, 'active')
+  const waitingScreenshotPath = evidenceRoot
+    ? join(evidenceRoot, `party-rejoin-waiting-and-status-${sessionKind}.png`)
+    : null
+  if (waitingScreenshotPath) await page.screenshot({ path: waitingScreenshotPath })
+
+  const returnedMember = await reenterRawPlayer(memberCheckpoint, 'Cassia', 'water')
+  assert.equal(returnedMember.welcome.gameplayResumeGrace?.reason, 'party-rejoin-wait')
+  assert.equal(returnedMember.welcome.gameplayResumeGrace?.remainingMs, null)
+  await page.waitForFunction(playerId => {
+    const row = document.querySelector(`[data-ally-id="${playerId}"]`)
+    return row?.getAttribute('data-ally-connected') === 'true'
+      && row.getAttribute('data-ally-dead') === 'false'
+      && row.getAttribute('data-ally-status') === 'none'
+  }, member.playerId)
+  returnedMember.readyResumeGrace(returnedMember.welcome.gameplayResumeGrace.sequence)
+  await page.locator(
+    '.gameplay-resume-countdown-overlay'
+    + '[data-gameplay-resume-grace-reason="party-rejoin-wait"]'
+    + '[data-gameplay-resume-grace-phase="countdown"]',
+  ).waitFor({ timeout: 20_000 })
+  await rejoinWait.waitFor({ state: 'detached', timeout: 20_000 })
+  await waitForHost(
+    () => host.playerState(browserPlayerId).tick > noLivingHeldTick,
+    'party rejoin wait release',
+  )
+
+  const returnedLeader = await reenterRawPlayer(deadLeaderCheckpoint, 'Basil', 'earth')
+  assert.equal(returnedLeader.welcome.gameplayResumeGrace?.reason, 'game-rejoined')
+  const reconnectedDeadLeader = page.locator(
+    `[data-ally-id="${leader.playerId}"]`
+    + '[data-ally-connected="true"]'
+    + '[data-ally-dead="true"]'
+    + '[data-ally-status="dead"]',
+  )
+  await reconnectedDeadLeader.waitFor()
+  assert.equal(
+    await reconnectedDeadLeader.locator('.hub-hud-ally-status').textContent(),
+    'DEAD',
+  )
+  const leaderRejoinSequence = returnedLeader.welcome.gameplayResumeGrace.sequence
+  returnedMember.readyResumeGrace(leaderRejoinSequence)
+  returnedLeader.readyResumeGrace(leaderRejoinSequence)
+  const leaderCountdown = page.locator(
+    '.gameplay-resume-countdown-overlay'
+    + '[data-gameplay-resume-grace-reason="game-rejoined"]',
+  )
+  await leaderCountdown.waitFor({ timeout: 20_000 })
+  await leaderCountdown.waitFor({ state: 'detached', timeout: 20_000 })
+
   const screenshotPath = evidenceRoot
     ? join(evidenceRoot, `party-rejoin-catch-up-${sessionKind}.png`)
     : null
   if (screenshotPath) await page.screenshot({ path: screenshotPath })
 
-  await member.close()
-  await waitForHost(() => host.humanPlayerCount() === 1 && host.runCount() === 1, 'final peer')
+  await returnedLeader.close()
+  await waitForHost(() => host.humanPlayerCount() === 2 && host.runCount() === 1, 'final pair')
   await boneyard.focus()
   await page.keyboard.press('Escape')
   const finalPause = page.locator('.gameplay-pause-stage[data-gameplay-pause-view="owner"]')
   await finalPause.waitFor()
   await finalPause.getByRole('button', { name: 'LEAVE GAME' }).click()
   await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 30_000 })
+  await waitForHost(() => host.humanPlayerCount() === 1 && host.runCount() === 1, 'final peer')
+  await returnedMember.close()
   await waitForHost(() => (
     host.humanPlayerCount() === 0
     && host.capacityParticipantCount() === 0
@@ -499,6 +598,7 @@ try {
     screenshotPath,
     stagedScreenshotPath,
     rosterScreenshotPath,
+    waitingScreenshotPath,
     deadOverlay: deadVisual.backgroundImage,
     disconnectedSignal,
     pageErrors,
@@ -547,10 +647,64 @@ async function enterRawPlayer(displayName, element) {
     character: { discipline: 'arcane', displayName, element },
   }))
   const welcome = await next(message => message.type === 'server-welcome')
+  const client = createRawClient(socket, next, welcome)
+  rawClients.push(client)
+  return client
+}
+
+async function reenterRawPlayer(checkpoint, displayName, element) {
+  const token = JSON.parse(checkpoint.save).continuation.summary.partyRejoinToken
+  const target = host.partyRejoinTarget(token)
+  assert.equal(target?.status, 'detached')
+  const reservationId = randomBytes(24).toString('base64url')
+  assert.equal(
+    host.reservePartyRejoin(token, reservationId, performance.now() + 30_000),
+    null,
+  )
+  const credential = issueTicket({
+    content: target.content,
+    developerAccess: target.developerAccess,
+    leaderboardUserId: target.leaderboardUserId,
+    partyRejoinToken: token,
+    reservationId,
+  })
+  const socket = await new Promise((resolve, reject) => {
+    const connecting = new WebSocket(host.address.url, { origin: browserOrigin })
+    connecting.once('open', () => resolve(connecting))
+    connecting.once('error', reject)
+  })
+  const next = messageQueue(socket, `${displayName} rejoin`)
+  socket.send(JSON.stringify({
+    type: 'client-hello',
+    profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
+    cheatsEnabled: false,
+    protocolVersion: GAME_PROTOCOL_VERSION,
+    credential,
+    character: { discipline: 'arcane', displayName, element },
+    save: checkpoint.save,
+    saveIntent: 'resume',
+  }))
+  const welcome = await next(message => message.type === 'server-welcome')
+  const client = createRawClient(socket, next, welcome)
+  rawClients.push(client)
+  return client
+}
+
+function createRawClient(socket, next, welcome) {
   let inputSequence = 0
-  const client = {
+  return {
     accept(invitationId) {
       socket.send(JSON.stringify({ type: 'client-party-accept', invitationId }))
+    },
+    async checkpointBeforeLeave(requestId) {
+      socket.send(JSON.stringify({ type: 'client-save-before-leave', requestId }))
+      const response = await next(message => (
+        message.type === 'server-save-before-leave' && message.requestId === requestId
+      ))
+      return next(message => (
+        message.type === 'server-save-checkpoint'
+        && message.sequence === response.checkpointSequence
+      ))
     },
     close: () => closeSocket(socket),
     flushSnapshot() {
@@ -589,9 +743,8 @@ async function enterRawPlayer(displayName, element) {
     startMatch(boneyardId) {
       socket.send(JSON.stringify({ type: 'client-start-match', boneyardId }))
     },
+    welcome,
   }
-  rawClients.push(client)
-  return client
 }
 
 async function resolveAllOffers(client, acknowledgeSkillPickerGrace = true) {

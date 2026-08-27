@@ -497,6 +497,7 @@ export const GAMEPLAY_RESUME_GRACE_REASONS = [
   'skill-book-closed',
   'skill-picker-closed',
   'skill-selector-closed',
+  'party-rejoin-wait',
 ] as const
 export type GameplayResumeGraceReason = typeof GAMEPLAY_RESUME_GRACE_REASONS[number]
 

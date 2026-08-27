@@ -3696,6 +3696,10 @@ test('last living disconnect holds a dead connected party before Game Over', asy
     currentHealth: 0,
     lifeState: 'spectating',
   })
+  assert.equal(
+    host.playerState(member.welcome.playerId)?.playerEntities.progressions[memberIndex]?.lifeState,
+    'spectating',
+  )
 
   const waiting = nextMessage(member.socket, message => (
     message.type === 'server-gameplay-resume-grace'

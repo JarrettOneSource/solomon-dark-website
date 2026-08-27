@@ -290,6 +290,11 @@ export interface GameHostOptions {
   modContent?: MaterializedWebSessionContent
   onPlayerCountChanged?: (playerCount: number) => void
   onMemorialStateChanged?: (state: HubMemorialState) => void
+  onPartyRecoveryEnded?: (
+    recoveryId: string,
+    disposition: 'suspended' | 'terminal',
+  ) => void
+  partyRecoveryRevision?: string
   partyRecoverySecret?: string
   port?: number
   resetWhenEmpty?: boolean
@@ -600,6 +605,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     ?? randomBytes(32).toString('base64url')
   if (Buffer.byteLength(partyRecoverySecret, 'utf8') < 32) {
     throw new Error('Game host party recovery secret must contain at least 32 bytes')
+  }
+  const partyRecoveryRevision = options.partyRecoveryRevision?.trim().toLowerCase() ?? null
+  if (partyRecoveryRevision !== null && !/^[0-9a-f]{40}$/.test(partyRecoveryRevision)) {
+    throw new Error('Game host party recovery revision must be a full Git commit ID')
   }
   const host = options.host ?? '127.0.0.1'
   const port = options.port ?? 0
@@ -1687,9 +1696,6 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             resumeGraceReason,
             stagedPartyRejoin?.partyId ?? connectedParty?.id ?? null,
             false,
-            authenticated.partyRecoverySeed && partyRecoveryClaim
-              ? partyRecoveryClaim.partyRoster.map(({ playerId }) => playerId)
-              : [],
           )
         if (!stagedPartyRejoin) {
           armPartyRejoinSlotsForState(
@@ -1863,6 +1869,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         && message.type !== 'client-input'
         && message.type !== 'client-level-up-action'
         && message.type !== 'client-ping'
+        && message.type !== 'client-gameplay-pause'
         && message.type !== 'client-save-before-leave'
         && message.type !== 'client-select-skill'
         && message.type !== 'client-snapshot-ack'
@@ -1871,9 +1878,9 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       if (message.type === 'client-gameplay-pause') {
         const activeState = stateForPlayer(client.playerId)
         if (activeState.world.kind === 'hub') return
-        if (gameplayResumeGraceForPlayer(client.playerId) !== null) return
         const activePause = gameplayPauseForPlayer(client.playerId)
         if (message.paused) {
+          if (gameplayResumeGraceForPlayer(client.playerId) !== null) return
           if (activePause?.ownerPlayerId === client.playerId) {
             if (activePause.source === message.source) return
             setGameplayPauseForPlayer(client.playerId, {
@@ -3121,6 +3128,13 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         disconnectedState,
         disconnectedPartyId,
       )
+      if (retainedPartyMembership) {
+        beginPartyRejoinWaitIfNeeded(
+          client.playerId,
+          disconnectedState,
+          disconnectedPartyId,
+        )
+      }
       saveDocuments.delete(client.playerId)
       saveSequences.delete(client.playerId)
       if (sharedWorlds) {
@@ -3164,12 +3178,16 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         client.playerId,
         disconnectedPauseScope,
       )
-      prunePartyRejoinSlots()
-      pruneLeaderboardRunState()
       const retiredSharedRun = sharedWorlds !== null
         && disconnectedPartyId !== null
         && disconnectedRunId !== null
         && !sharedWorlds.runs.some(run => run.loadedBoneyard.runId === disconnectedRunId)
+      const suspendedRunId = retiredSharedRun ? disconnectedRunId : retiredPrivateRunId
+      if (suspendedRunId !== null) {
+        retirePartyRecoveryLineagesForRun(suspendedRunId, 'suspended')
+      }
+      prunePartyRejoinSlots()
+      pruneLeaderboardRunState()
       if (retiredSharedRun) {
         startingPartyIds.delete(disconnectedPartyId)
         closePartyModRuntimes(disconnectedPartyId)
@@ -3625,7 +3643,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     source: string,
     force = false,
     includeTerminalProfile = false,
-    targetRevision: string | null = null,
+    targetRevision: string | null = partyRecoveryRevision,
   ): number {
     if (client.socket.readyState !== WebSocket.OPEN) return 0
     if (client.partyRejoinSlot && activeRunForPartyRejoin(client.partyRejoinSlot) === null) {
@@ -4620,11 +4638,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         targetRevision: null,
       }
       if (activePartyRecoveryLineage(claimProbe)) continue
-      retireDisconnectedRecoveryMembers(lineage)
-      partyRecoveryLineages.delete(recoveryId)
-      for (const [key, slot] of [...partyRejoinSlots]) {
-        if (slot.recoveryId === recoveryId) partyRejoinSlots.delete(key)
-      }
+      retirePartyRecoveryLineage(lineage, 'terminal')
     }
     for (const [key, slot] of [...partyRejoinSlots]) {
       if (activeRunForPartyRejoin(slot) === null) {
@@ -4635,6 +4649,27 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         slot.reservation = null
       }
     }
+  }
+
+  function retirePartyRecoveryLineagesForRun(
+    runId: string,
+    disposition: 'suspended' | 'terminal',
+  ): void {
+    for (const lineage of [...partyRecoveryLineages.values()]) {
+      if (lineage.runId === runId) retirePartyRecoveryLineage(lineage, disposition)
+    }
+  }
+
+  function retirePartyRecoveryLineage(
+    lineage: PartyRecoveryLineage,
+    disposition: 'suspended' | 'terminal',
+  ): void {
+    retireDisconnectedRecoveryMembers(lineage)
+    partyRecoveryLineages.delete(lineage.recoveryId)
+    for (const [key, slot] of [...partyRejoinSlots]) {
+      if (slot.recoveryId === lineage.recoveryId) partyRejoinSlots.delete(key)
+    }
+    options.onPartyRecoveryEnded?.(lineage.recoveryId, disposition)
   }
 
   function retireDisconnectedRecoveryMembers(lineage: PartyRecoveryLineage): void {
@@ -5649,7 +5684,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     playerId: PlayerId,
     reason: Extract<
       GameplayResumeGraceReason,
-      'game-rejoined' | 'game-restarted' | 'game-started'
+      'game-rejoined' | 'game-restarted' | 'game-started' | 'party-rejoin-wait'
     >,
     partyId: string | null,
     announce = true,
@@ -5688,7 +5723,9 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     const grace: HostGameplayResumeGrace = {
       deadlineMs: null,
       readyPlayerIds: new Set(),
-      reason,
+      reason: pendingExisting?.reason === 'party-rejoin-wait'
+        ? pendingExisting.reason
+        : reason,
       requiredPlayerIds: required,
       sequence: nextResumeGraceSequence(),
       waitingPlayerIds,
@@ -5740,6 +5777,47 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
 
   function connectedMaterializedHumanCount(activeState: GameSimulationState): number {
     return connectedMaterializedHumanPlayerIds(activeState).length
+  }
+
+  function beginPartyRejoinWaitIfNeeded(
+    disconnectedPlayerId: PlayerId,
+    activeState: GameSimulationState,
+    partyId: string | null,
+  ): boolean {
+    if (
+      partyId === null
+      || activeState.world.kind !== 'boneyard'
+      || activeState.run.phase !== 'active'
+    ) return false
+    const disconnectedLifeState = getPlayerProgression(
+      activeState,
+      disconnectedPlayerId,
+    ).lifeState
+    const disconnectedWasLiving = disconnectedLifeState === 'alive'
+      || disconnectedLifeState === 'lethal-pending'
+    const remainingPlayerIds = activeState.playerEntities.identities
+      .map(({ playerId }) => playerId)
+      .filter(playerId => playerId !== disconnectedPlayerId)
+    const remainingPlayerLifeStates = remainingPlayerIds.map(playerId => (
+      getPlayerProgression(activeState, playerId).lifeState
+    ))
+    const hasRemainingLivingActor = remainingPlayerLifeStates.some(lifeState => {
+      return lifeState === 'alive' || lifeState === 'lethal-pending'
+    })
+    const connectedHumanIds = new Set(connectedMaterializedHumanPlayerIds(activeState))
+    const hasConnectedRemainingHuman = remainingPlayerIds.some(playerId => (
+      connectedHumanIds.has(playerId)
+    ))
+    return disconnectedWasLiving
+      && !hasRemainingLivingActor
+      && hasConnectedRemainingHuman
+      && beginRunLoadingResumeGrace(
+        disconnectedPlayerId,
+        'party-rejoin-wait',
+        partyId,
+        true,
+        [disconnectedPlayerId],
+      )
   }
 
   function connectedMaterializedHumanPlayerIds(

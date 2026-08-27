@@ -101,6 +101,11 @@ export function AllyHudRoster({ hidden, rows }: AllyHudRosterProps) {
       {rows.map((row) => {
         const ratio = clampAllyHudHealthRatio(row.healthRatio)
         const accessibleName = allyHudAccessibleName(row.identity)
+        const status = row.identity.kind === 'player'
+          ? !row.connected
+            ? 'DISCONNECTED'
+            : row.dead ? 'DEAD' : null
+          : null
         return (
           <div
             key={row.id}
@@ -110,6 +115,7 @@ export function AllyHudRoster({ hidden, rows }: AllyHudRosterProps) {
             data-ally-element={row.identity.kind === 'player' ? row.identity.element : undefined}
             data-ally-connected={row.connected}
             data-ally-dead={row.dead}
+            data-ally-status={status?.toLowerCase() ?? 'none'}
             data-health-ratio={ratio}
             role="listitem"
             aria-label={allyHudAccessibleStatus(row)}
@@ -134,6 +140,9 @@ export function AllyHudRoster({ hidden, rows }: AllyHudRosterProps) {
                 />
               </span>
             </span>
+            {status === null ? null : (
+              <span className="hub-hud-ally-status" aria-hidden>{status}</span>
+            )}
           </div>
         )
       })}

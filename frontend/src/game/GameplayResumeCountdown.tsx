@@ -44,7 +44,11 @@ export default function GameplayResumeCountdown({
       <div className="main-menu-native-stage gameplay-resume-countdown-stage" style={style}>
         <div className="gameplay-resume-countdown-panel">
           <span className="gameplay-resume-countdown-label">
-            {seconds === null ? 'Waiting on players ...' : 'RESUMING IN'}
+            {seconds === null
+              ? grace.reason === 'party-rejoin-wait'
+                ? 'Waiting for players to rejoin'
+                : 'Waiting on players ...'
+              : 'RESUMING IN'}
           </span>
           {seconds === null ? null : (
             <strong className="gameplay-resume-countdown-value">{seconds}</strong>
