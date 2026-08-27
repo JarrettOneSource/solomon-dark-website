@@ -268,9 +268,9 @@ public static class WebGameSaveInspector
             throw new InvalidDataException("The browser game save retained files are invalid.");
         }
         var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var value in retainedFiles.EnumerateArray())
+        foreach (var retainedValue in retainedFiles.EnumerateArray())
         {
-            var file = RequireObject(value, "browser game save retained file");
+            var file = RequireObject(retainedValue, "browser game save retained file");
             RequireExactProperties(
                 file,
                 "browser game save retained file",
