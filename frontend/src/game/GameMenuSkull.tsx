@@ -2,6 +2,8 @@ import type { CSSProperties, RefObject } from 'react'
 
 import { hub } from '../lib/assets'
 import { activateMenuBack } from './input/gamepad-menu-navigation.ts'
+import { mobileUiElementStyle } from './mobile-ui-layout.ts'
+import { useMobileUiLayout } from './use-mobile-ui-layout.ts'
 
 export type GameMenuSkullScene = 'boneyard' | 'dark-cloud' | 'hub'
 
@@ -38,6 +40,7 @@ export default function GameMenuSkull({
   scene,
   stage,
 }: GameMenuSkullProps) {
+  const mobileUi = useMobileUiLayout()
   if (availability === 'hidden') return null
   const menuAvailable = availability === 'available'
   const activate = () => {
@@ -53,8 +56,13 @@ export default function GameMenuSkull({
       aria-label="Menu"
       data-game-menu-available={menuAvailable}
       data-game-menu-scene={scene}
+      data-mobile-ui-custom={mobileUi.customized || undefined}
+      data-mobile-ui-element="pause"
       onClick={activate}
-      style={{ '--game-menu-skull-scale': frameScale } as CSSProperties}
+      style={{
+        ...(mobileUiElementStyle(mobileUi, 'pause') ?? {}),
+        '--game-menu-skull-scale': frameScale,
+      } as CSSProperties}
     >
       <img src={hub.hud.skull} alt="" />
     </button>

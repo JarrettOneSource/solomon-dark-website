@@ -25,6 +25,11 @@ import {
   NATIVE_SKILL_QUICKBAR_SLOT_OFFSETS,
 } from './skill-quickbar.ts'
 import { mobileQuickbarBankLayout, mobileQuickbarSlotPlacement } from './mobile-quickbar-layout.ts'
+import {
+  mobileUiElementStyle,
+  type MobileUiElementId,
+  type MobileUiLayoutState,
+} from './mobile-ui-layout.ts'
 import NativeBeltPullOffBurst from './NativeBeltPullOffBurst.tsx'
 import { nativeBeltPullOffStarted } from './skill-book-model.ts'
 
@@ -52,6 +57,7 @@ interface SkillQuickbarProps {
   controllerQuickbarSlot?: number
   displayScale: number
   mode: 'hub' | 'run'
+  mobileUi: MobileUiLayoutState
   onInput?: (slot: number, pressed: boolean) => void
   onUnassign?: (slot: number) => void
   playerState: NativeSecondaryPlayerState | undefined
@@ -69,6 +75,7 @@ export default function SkillQuickbar({
   controllerQuickbarSlot,
   displayScale,
   mode,
+  mobileUi,
   onInput,
   onUnassign,
   playerState,
@@ -92,6 +99,7 @@ export default function SkillQuickbar({
           inputScale={displayScale * uiScale}
           key={slot}
           mobilePlacement={mobileQuickbarSlotPlacement(slot, mobileBank)}
+          mobileUi={mobileUi}
           mode={mode}
           offset={offset}
           onInput={onInput}
@@ -113,6 +121,7 @@ function SkillQuickbarSlot({
   inputScale,
   mobilePlacement,
   mode,
+  mobileUi,
   offset,
   onInput,
   onUnassign,
@@ -127,6 +136,7 @@ function SkillQuickbarSlot({
   inputScale: number
   mobilePlacement: ReturnType<typeof mobileQuickbarSlotPlacement>
   mode: SkillQuickbarProps['mode']
+  mobileUi: MobileUiLayoutState
   offset: number
   onInput: SkillQuickbarProps['onInput']
   onUnassign: SkillQuickbarProps['onUnassign']
@@ -135,6 +145,7 @@ function SkillQuickbarSlot({
   skillId: number | null
   slot: number
 }) {
+  const mobileUiId = `slot${slot + 1}` as MobileUiElementId
   const pressRef = useRef<{
     castEligible: boolean
     originX: number
@@ -190,8 +201,11 @@ function SkillQuickbarSlot({
       data-binding-code={bindingCode}
       data-active={active}
       data-controller-selected={controllerSelected || undefined}
+      data-mobile-ui-custom={mobileUi.customized || undefined}
+      data-mobile-ui-element={mobileUiId}
       disabled={skill === undefined || ((!onInput || combatDisabled) && !onUnassign)}
       style={{
+        ...(mobileUiElementStyle(mobileUi, mobileUiId) ?? {}),
         '--mobile-quickbar-slot-bottom': `${mobilePlacement.bottom}px`,
         '--mobile-quickbar-slot-inset': `${mobilePlacement.inset}px`,
         '--mobile-quickbar-slot-size': `${mobilePlacement.size}px`,
@@ -215,7 +229,11 @@ function SkillQuickbarSlot({
       onPointerMove={(event) => {
         const press = pressRef.current
         if (!press || press.pointerId !== event.pointerId || !onUnassign) return
-        const scale = Number.isFinite(inputScale) && inputScale > 0 ? inputScale : 1
+        const customScale = mobileUi.customized ? mobileUi.layout[mobileUiId].scale : 1
+        const transformedInputScale = inputScale * customScale
+        const scale = Number.isFinite(transformedInputScale) && transformedInputScale > 0
+          ? transformedInputScale
+          : 1
         if (!nativeBeltPullOffStarted(
           { x: 0, y: 0 },
           {

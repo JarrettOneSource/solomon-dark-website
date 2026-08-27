@@ -7,6 +7,8 @@ import {
 } from 'react'
 
 import type { Vector2 } from '../core-kernels/vector.ts'
+import { mobileUiElementStyle, type MobileUiElementId } from '../mobile-ui-layout.ts'
+import { useMobileUiLayout } from '../use-mobile-ui-layout.ts'
 import { joystickVector } from './movement-input.ts'
 
 import './touch-joystick.css'
@@ -20,6 +22,8 @@ interface TouchJoystickProps {
 }
 
 export default function TouchJoystick({ lane, onInput, uiScale }: TouchJoystickProps) {
+  const mobileUi = useMobileUiLayout()
+  const mobileUiId: MobileUiElementId = lane === 'movement' ? 'leftJoystick' : 'rightJoystick'
   const baseRef = useRef<HTMLDivElement>(null)
   const activePointerRef = useRef<number | null>(null)
   const inputSinkRef = useRef(onInput)
@@ -40,16 +44,24 @@ export default function TouchJoystick({ lane, onInput, uiScale }: TouchJoystickP
     const base = baseRef.current
     if (!base) return
     const bounds = base.getBoundingClientRect()
-    const inputRadius = Math.min(bounds.width, bounds.height) * 0.34
+    const rotation = mobileUi.customized ? mobileUi.layout[mobileUiId].rotation : 0
+    const radians = rotation * Math.PI / 180
+    const rotatedSquareExpansion = Math.abs(Math.cos(radians)) + Math.abs(Math.sin(radians))
+    const inputRadius = Math.min(bounds.width, bounds.height) / rotatedSquareExpansion * 0.34
     const renderRadius = Math.min(base.offsetWidth, base.offsetHeight) * 0.34
     const movement = joystickVector(
       { x: clientX, y: clientY },
       { x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 },
       inputRadius,
     )
-    setKnobOffset({ x: movement.x * renderRadius, y: movement.y * renderRadius })
+    const cosine = Math.cos(-radians)
+    const sine = Math.sin(-radians)
+    setKnobOffset({
+      x: (movement.x * cosine - movement.y * sine) * renderRadius,
+      y: (movement.x * sine + movement.y * cosine) * renderRadius,
+    })
     inputSinkRef.current(movement)
-  }, [])
+  }, [mobileUi, mobileUiId])
 
   useEffect(() => {
     const pointerMove = (event: PointerEvent) => {
@@ -83,11 +95,16 @@ export default function TouchJoystick({ lane, onInput, uiScale }: TouchJoystickP
       ref={baseRef}
       className={`game-touch-joystick game-touch-joystick-${lane}`}
       data-joystick={lane}
+      data-mobile-ui-custom={mobileUi.customized || undefined}
+      data-mobile-ui-element={mobileUiId}
       data-ui-scale={uiScale}
       role="region"
       aria-label={lane === 'movement' ? 'Movement joystick' : 'Primary attack joystick'}
       tabIndex={-1}
-      style={{ '--game-ui-scale': uiScale } as CSSProperties}
+      style={{
+        ...(mobileUiElementStyle(mobileUi, mobileUiId) ?? {}),
+        '--game-ui-scale': uiScale,
+      } as CSSProperties}
       onPointerDown={(event) => {
         event.preventDefault()
         if (activePointerRef.current !== null) return

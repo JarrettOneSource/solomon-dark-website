@@ -11,6 +11,10 @@ import {
   mobileQuickbarBankLayout,
   mobileQuickbarSlotPlacement,
 } from '../src/game/mobile-quickbar-layout.ts'
+import {
+  MOBILE_UI_ELEMENT_IDS,
+  MOBILE_UI_LAYOUT_STORAGE_KEY,
+} from '../src/game/mobile-ui-layout.ts'
 import { GAME_PROTOCOL_VERSION } from '../src/game/protocol/game-protocol.ts'
 
 // Mobile compact-HUD journey. Boots one iPhone XR-class landscape touch page
@@ -81,9 +85,13 @@ const MEMBER_SELECTORS = Object.freeze({
   xp: '.hub-hud-xp',
 })
 
-// Dimensions that are intrinsic text, not layout: the FPS readout is left-anchored and its width
-// follows the digit count ("9 FPS" vs "58 FPS"), so only its anchor and height prove the round trip.
-const CONTENT_SIZED = { diagnostics: ['width'] }
+// Values that are intentionally time/content owned rather than orientation owned. The FPS
+// width follows its live digit count. The closed chat panel becomes invisible after five seconds
+// and its fade translates it down eight pixels; the open sheet gets a separate fit assertion.
+const ROUND_TRIP_DYNAMIC_RECT_KEYS = {
+  chatPanel: ['x', 'y'],
+  diagnostics: ['width'],
+}
 
 const browser = await chromium.launch({
   executablePath: process.env.SDR_CHROME_PATH || '/usr/bin/google-chrome',
@@ -91,6 +99,8 @@ const browser = await chromium.launch({
 })
 const pageErrors = []
 const consoleErrors = []
+const failedRequests = []
+const failedResponses = []
 const rawClients = []
 const receipts = {}
 let page = null
@@ -108,6 +118,12 @@ try {
   page.on('pageerror', (error) => pageErrors.push(error.message))
   page.on('console', (message) => {
     if (message.type() === 'error') consoleErrors.push(message.text())
+  })
+  page.on('requestfailed', (request) => {
+    failedRequests.push(`${request.method()} ${request.url()} ${request.failure()?.errorText ?? ''}`)
+  })
+  page.on('response', (response) => {
+    if (response.status() >= 400) failedResponses.push(`${response.status()} ${response.url()}`)
   })
   if (gatewayUrl && publicWebSocketOrigin) {
     await page.addInitScript(({ gateway, publicOrigin }) => {
@@ -137,7 +153,11 @@ try {
     })
   }
 
-  const playerId = await enterHub(page, 'Aurelia', 'Water')
+  const { mobileUiProfile, playerId } = await enterHub(page, context, 'Aurelia', 'Water')
+  const customized = await capture(page, 'hub-custom-mobile-ui')
+  await assertCustomMobileUi(page, customized, mobileUiProfile)
+  await assertFinePointerMobileUiIsolation(mobileUiProfile)
+  await resetCustomMobileUi(page)
   const solo = await capture(page, 'hub-solo')
   assertHubLayout(solo, 'hub-solo', { primaryJoystick: false })
   assertCluster(solo, 'hub-solo', { expanded: false })
@@ -300,7 +320,19 @@ try {
   assertHubLayout(runReleased, 'run-released', { primaryJoystick: true })
   assertAllyColumn(runReleased, 'run-released', { hidden: false, rows: 1, top: 54 })
 
-  receipts.errors = { consoleErrors, pageErrors }
+  const expectedAbortedAudioRequests = failedRequests.filter((request) => (
+    /\.mp3 net::ERR_ABORTED$/.test(request)
+  ))
+  const unexpectedFailedRequests = failedRequests.filter((request) => (
+    !/\.mp3 net::ERR_ABORTED$/.test(request)
+  ))
+  receipts.errors = {
+    consoleErrors,
+    expectedAbortedAudioRequests,
+    failedResponses,
+    pageErrors,
+    unexpectedFailedRequests,
+  }
   receipts.layoutContract = layoutContract()
   receipts.viewport = { deviceScaleFactor, height, width }
   await writeFile(join(evidenceRoot, 'receipt.json'), `${JSON.stringify(receipts, null, 2)}\n`)
@@ -308,12 +340,16 @@ try {
   if (process.env.SDR_MOBILE_HUD_ALLOW_ERRORS !== '1') {
     assert.deepEqual(pageErrors, [], 'page errors')
     assert.deepEqual(consoleErrors, [], 'console errors')
+    assert.deepEqual(unexpectedFailedRequests, [], 'unexpected failed requests')
+    assert.deepEqual(failedResponses, [], 'failed responses')
   }
 } catch (error) {
   if (page) await page.screenshot({ path: join(evidenceRoot, 'failure.png') }).catch(() => {})
   await writeFile(join(evidenceRoot, 'failure.json'), `${JSON.stringify({
     consoleErrors,
     error: error instanceof Error ? error.message : String(error),
+    failedRequests,
+    failedResponses,
     pageErrors,
     stops: Object.keys(receipts),
   }, null, 2)}\n`).catch(() => {})
@@ -339,6 +375,9 @@ async function pauseRoundTrip(page, label) {
   assert.ok(paused.members.pauseOverlay[0]?.visible, `${label}: pause menu visible after the skull tap`)
   await page.locator('[data-pause-action="resume"]').tap()
   await overlay.waitFor({ state: 'detached', timeout: 10_000 })
+  await page.waitForTimeout(100)
+  await page.locator('.main-menu-page[data-gameplay-resume-grace="none"]')
+    .waitFor({ timeout: 10_000 })
   const resumed = await settledGeometry(page)
   assert.equal(resumed.members.pauseOverlay.length, 0, `${label}: pause menu closed by RESUME`)
 }
@@ -397,6 +436,12 @@ function readGeometry(page) {
 function rectCenter(rect) {
   assert.ok(rect, 'expected element bounds')
   return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
+}
+
+function editorScale(status) {
+  const match = status.match(/SIZE\s+(\d+)%/)
+  assert.ok(match, `missing editor scale in ${JSON.stringify(status)}`)
+  return Number(match[1])
 }
 
 // Expected screen-pixel layout for this viewport, derived from the same module the
@@ -569,7 +614,7 @@ function nearRect(rect, expected, label) {
 function assertSameMembers(before, after, label) {
   for (const [name, rects] of Object.entries(before.members)) {
     const next = after.members[name]
-    const intrinsic = CONTENT_SIZED[name] ?? []
+    const intrinsic = ROUND_TRIP_DYNAMIC_RECT_KEYS[name] ?? []
     assert.equal(next.length, rects.length, `${label}: ${name} count ${rects.length} -> ${next.length}`)
     rects.forEach((rect, index) => {
       for (const key of ['x', 'y', 'width', 'height']) {
@@ -612,15 +657,339 @@ function assertOverlapFree(entries, label, against = null) {
   }
 }
 
-async function enterHub(page, displayName, element) {
-  await page.goto(`${baseUrl}/game`, { timeout: 240_000, waitUntil: 'domcontentloaded' })
-  await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 240_000 })
-  // A fresh browser profile has no save, so the title offers the stock Tutorial prompt first.
+async function dismissTutorialOffer(page) {
   const tutorialOffer = page.getByRole('dialog', { name: 'Play the Tutorial?' })
   if (await tutorialOffer.isVisible()) {
     await tutorialOffer.getByRole('button', { exact: true, name: 'NO' }).click()
     await tutorialOffer.waitFor({ state: 'detached' })
   }
+}
+
+async function exerciseMobileUiEditor(page, context) {
+  await page.getByRole('button', { name: 'Settings' }).tap()
+  const dialog = page.locator('.game-settings-dialog')
+  await dialog.waitFor({ timeout: 15_000 })
+  await dialog.getByRole('button', { name: 'CUSTOMIZE MOBILE UI' }).tap()
+  const editor = dialog.locator('.mobile-ui-editor')
+  await editor.waitFor({ timeout: 15_000 })
+  assert.equal(await dialog.getAttribute('data-settings-page'), 'mobile-ui')
+  assert.deepEqual(
+    await editor.locator('[data-mobile-ui-editor-element]').evaluateAll((nodes) => (
+      nodes.map((node) => node.getAttribute('data-mobile-ui-editor-element'))
+    )),
+    [...MOBILE_UI_ELEMENT_IDS],
+    'editor exposes the complete requested membership in catalog order',
+  )
+  const silver = await editor.locator('.mobile-ui-editor-page').evaluate((node) => ({
+    backgroundColor: getComputedStyle(node).backgroundColor,
+    backgroundImage: getComputedStyle(node).backgroundImage,
+  }))
+  assert.equal(silver.backgroundColor, 'rgb(184, 189, 193)')
+  assert.notEqual(silver.backgroundImage, 'none')
+
+  await editor.getByLabel('Selected mobile UI element').selectOption('inventory')
+  const inventory = editor.locator('[data-mobile-ui-editor-element="inventory"]')
+  const initialInventory = await inventory.boundingBox()
+  assert.ok(initialInventory, 'editor inventory has bounds')
+  await page.mouse.move(
+    initialInventory.x + initialInventory.width / 2,
+    initialInventory.y + initialInventory.height / 2,
+  )
+  await page.mouse.down()
+  await page.mouse.move(
+    initialInventory.x + initialInventory.width / 2 + 70,
+    initialInventory.y + initialInventory.height / 2 - 30,
+    { steps: 8 },
+  )
+  await page.mouse.up()
+
+  const resize = inventory.locator('[data-resize-handle="south-east"]')
+  const resizeBounds = await resize.boundingBox()
+  assert.ok(resizeBounds, 'selected inventory exposes resize nodes')
+  await page.mouse.move(
+    resizeBounds.x + resizeBounds.width / 2,
+    resizeBounds.y + resizeBounds.height / 2,
+  )
+  await page.mouse.down()
+  await page.mouse.move(
+    resizeBounds.x + resizeBounds.width / 2 + 6,
+    resizeBounds.y + resizeBounds.height / 2 + 6,
+    { steps: 6 },
+  )
+  await page.mouse.up()
+
+  const rotate = inventory.locator('.mobile-ui-editor-rotate-handle')
+  const rotateBounds = await rotate.boundingBox()
+  const resizedInventory = await inventory.boundingBox()
+  assert.ok(rotateBounds && resizedInventory, 'selected inventory exposes a rotate handle')
+  const inventoryCenter = rectCenter(resizedInventory)
+  await page.mouse.move(
+    rotateBounds.x + rotateBounds.width / 2,
+    rotateBounds.y + rotateBounds.height / 2,
+  )
+  await page.mouse.down()
+  await page.mouse.move(inventoryCenter.x + 70, inventoryCenter.y, { steps: 8 })
+  await page.mouse.up()
+
+  const beforeElementPinch = editorScale(await editor.locator('.mobile-ui-editor-status').innerText())
+  const cdp = await context.newCDPSession(page)
+  const rotatedInventory = await inventory.boundingBox()
+  assert.ok(rotatedInventory, 'rotated inventory keeps bounds')
+  const rotatedCenter = rectCenter(rotatedInventory)
+  await cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [
+      { id: 101, x: rotatedCenter.x - 8, y: rotatedCenter.y },
+      { id: 102, x: rotatedCenter.x + 8, y: rotatedCenter.y },
+    ],
+  })
+  await cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchMove',
+    touchPoints: [
+      { id: 101, x: rotatedCenter.x - 34, y: rotatedCenter.y },
+      { id: 102, x: rotatedCenter.x + 34, y: rotatedCenter.y },
+    ],
+  })
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+  const afterElementPinch = editorScale(await editor.locator('.mobile-ui-editor-status').innerText())
+  assert.ok(afterElementPinch > beforeElementPinch,
+    `selection pinch grows the element (${beforeElementPinch}% -> ${afterElementPinch}%)`)
+
+  const zoomOutput = editor.locator('.mobile-ui-editor-zoom-controls output')
+  const initialZoom = Number.parseInt(await zoomOutput.textContent(), 10)
+  const pageCenter = await editor.locator('.mobile-ui-editor-page').evaluate((node) => {
+    const bounds = node.getBoundingClientRect()
+    const x = bounds.left + bounds.width / 2
+    for (const fraction of [0.3, 0.4, 0.5, 0.6]) {
+      const y = bounds.top + bounds.height * fraction
+      const empty = [x - 25, x, x + 25].every((candidateX) => (
+        document.elementFromPoint(candidateX, y)?.closest('.mobile-ui-editor-element') === null
+      ))
+      if (empty) return { x, y }
+    }
+    throw new Error('No empty silver pinch row remained')
+  })
+  await cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [
+      { id: 201, x: pageCenter.x - 25, y: pageCenter.y },
+      { id: 202, x: pageCenter.x + 25, y: pageCenter.y },
+    ],
+  })
+  await cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchMove',
+    touchPoints: [
+      { id: 201, x: pageCenter.x - 150, y: pageCenter.y },
+      { id: 202, x: pageCenter.x + 150, y: pageCenter.y },
+    ],
+  })
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+  await page.waitForFunction(({ before }) => {
+    const output = document.querySelector('.mobile-ui-editor-zoom-controls output')
+    return output && Number.parseInt(output.textContent ?? '', 10) > before
+  }, { before: initialZoom })
+  const finalZoom = Number.parseInt(await zoomOutput.textContent(), 10)
+  assert.ok(finalZoom >= 150, `editor supports deep page zoom (${finalZoom}%)`)
+  const viewport = editor.locator('.mobile-ui-editor-viewport')
+  await page.evaluate(() => new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(resolve))
+  }))
+  const panStart = await viewport.evaluate((node) => {
+    const bounds = node.getBoundingClientRect()
+    const elements = [...node.querySelectorAll('.mobile-ui-editor-element')]
+      .map((element) => element.getBoundingClientRect())
+    for (let y = bounds.top + 35; y < bounds.bottom - 35; y += 24) {
+      for (let x = bounds.left + 35; x < bounds.right - 35; x += 24) {
+        const target = document.elementFromPoint(x, y)
+        const clearance = Math.min(...elements.map((element) => {
+          const dx = Math.max(element.left - x, 0, x - element.right)
+          const dy = Math.max(element.top - y, 0, y - element.bottom)
+          return Math.hypot(dx, dy)
+        }))
+        if (clearance >= 50
+          && target?.closest('.mobile-ui-editor-page')
+          && !target.closest('.mobile-ui-editor-element')) return { x, y }
+      }
+    }
+    throw new Error('No visible silver pan point remained clear of the HUD elements')
+  })
+  const scrollBeforePan = await viewport.evaluate((node) => ({
+    left: node.scrollLeft,
+    top: node.scrollTop,
+  }))
+  await cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [{ id: 301, x: panStart.x, y: panStart.y }],
+  })
+  await cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchMove',
+    touchPoints: [{ id: 301, x: panStart.x - 80, y: panStart.y - 40 }],
+  })
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+  const scrollAfterPan = await viewport.evaluate((node) => ({
+    left: node.scrollLeft,
+    top: node.scrollTop,
+  }))
+  assert.ok(
+    scrollAfterPan.left > scrollBeforePan.left + 20
+      || scrollAfterPan.top > scrollBeforePan.top + 20,
+    `empty-page drag pans the zoomed canvas (${JSON.stringify(scrollBeforePan)} -> ${JSON.stringify(scrollAfterPan)})`,
+  )
+  await page.screenshot({ path: join(evidenceRoot, 'mobile-ui-editor.png') })
+
+  await dialog.getByRole('button', { name: 'SAVE' }).tap()
+  assert.equal(await dialog.getAttribute('data-settings-page'), 'root')
+  const serialized = await page.evaluate((key) => localStorage.getItem(key), MOBILE_UI_LAYOUT_STORAGE_KEY)
+  assert.ok(serialized, 'SAVE writes the mobile UI profile')
+  const profile = JSON.parse(serialized)
+  assert.equal(profile.version, 1)
+  assert.deepEqual(Object.keys(profile.elements), [...MOBILE_UI_ELEMENT_IDS])
+  assert.ok(profile.elements.inventory.x > 50, `inventory drag persisted x=${profile.elements.inventory.x}`)
+  assert.ok(profile.elements.inventory.y < 90, `inventory drag persisted y=${profile.elements.inventory.y}`)
+  assert.ok(profile.elements.inventory.scale > 1.2, `inventory pinch persisted scale=${profile.elements.inventory.scale}`)
+  assert.ok(Math.abs(profile.elements.inventory.rotation) >= 45,
+    `inventory rotate handle persisted rotation=${profile.elements.inventory.rotation}`)
+  await dialog.getByRole('button', { name: 'DONE' }).tap()
+  await dialog.waitFor({ state: 'detached', timeout: 10_000 })
+  receipts['mobile-ui-editor'] = {
+    finalZoom,
+    inventory: profile.elements.inventory,
+    memberCount: Object.keys(profile.elements).length,
+    pan: { after: scrollAfterPan, before: scrollBeforePan },
+    silver,
+  }
+  return profile
+}
+
+async function assertCustomMobileUi(page, geometry, profile) {
+  const actualIds = await page.locator('[data-mobile-ui-custom="true"]')
+    .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-mobile-ui-element')).sort())
+  const expectedIds = MOBILE_UI_ELEMENT_IDS.filter((id) => id !== 'rightJoystick').sort()
+  assert.deepEqual(actualIds, expectedIds, 'Hub applies every mounted member and keeps the right stick absent')
+  const inventory = geometry.members.backpack[0]
+  const center = rectCenter(inventory)
+  assert.ok(Math.abs(center.x - profile.elements.inventory.x / 100 * width) < 2,
+    `custom inventory x center ${center.x}`)
+  assert.ok(Math.abs(center.y - profile.elements.inventory.y / 100 * height) < 2,
+    `custom inventory y center ${center.y}`)
+  await page.locator('[data-mobile-ui-element="inventory"]').tap()
+  const inventoryDialog = page.getByRole('dialog', { name: 'Inventory' })
+  await inventoryDialog.waitFor({ timeout: 10_000 })
+  await inventoryDialog.getByRole('button', { name: 'Close inventory' }).tap()
+  await inventoryDialog.waitFor({ state: 'detached', timeout: 10_000 })
+}
+
+async function assertFinePointerMobileUiIsolation(profile) {
+  const context = await browser.newContext({ viewport: { height: 900, width: 1600 } })
+  const desktop = await context.newPage()
+  desktop.on('pageerror', (error) => pageErrors.push(`desktop mobile-profile isolation: ${error.message}`))
+  desktop.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(`desktop mobile-profile isolation: ${message.text()}`)
+  })
+  desktop.on('requestfailed', (request) => {
+    failedRequests.push(`${request.method()} ${request.url()} ${request.failure()?.errorText ?? ''}`)
+  })
+  desktop.on('response', (response) => {
+    if (response.status() >= 400) failedResponses.push(`${response.status()} ${response.url()}`)
+  })
+  if (gatewayUrl && publicWebSocketOrigin) {
+    await desktop.addInitScript(({ gateway, publicOrigin }) => {
+      const NativeWebSocket = window.WebSocket
+      window.WebSocket = class GatewayWebSocket extends NativeWebSocket {
+        constructor(url, protocols) {
+          const requested = new URL(String(url))
+          const mapped = requested.origin === publicOrigin
+            ? new URL(`${requested.pathname}${requested.search}`, gateway).toString()
+            : requested.toString()
+          if (protocols === undefined) super(mapped)
+          else super(mapped, protocols)
+        }
+      }
+    }, { gateway: gatewayUrl, publicOrigin: publicWebSocketOrigin })
+  }
+  await desktop.addInitScript(({ key, value }) => {
+    try {
+      localStorage.setItem(key, JSON.stringify(value))
+    } catch {
+      // The initial opaque document has no storage; the same script runs again on /game.
+    }
+  }, { key: MOBILE_UI_LAYOUT_STORAGE_KEY, value: profile })
+  try {
+    await desktop.goto(`${baseUrl}/game`, { timeout: 240_000, waitUntil: 'domcontentloaded' })
+    await desktop.getByRole('button', { name: 'Play' }).waitFor({ timeout: 240_000 })
+    await dismissTutorialOffer(desktop)
+    await desktop.getByRole('button', { name: 'Play' }).click()
+    await desktop.getByRole('button', { name: 'New Game' }).click()
+    await desktop.locator('.create-menu-scene[data-motion-settled="true"]')
+      .waitFor({ timeout: 30_000 })
+    await desktop.getByRole('textbox', { name: 'Wizard name' }).fill('Desktop UI')
+    await desktop.getByRole('button', { name: /air/i }).click()
+    await desktop.locator('.create-menu-disciplines[data-visible="true"]')
+      .waitFor({ timeout: 15_000 })
+    await desktop.locator('.create-menu-discipline-arcane').click()
+    await desktop.locator('.hub-scene[data-renderer-state="ready"]')
+      .waitFor({ timeout: 240_000 })
+    const inventory = await desktop.locator('[data-mobile-ui-element="inventory"]')
+      .evaluate((node) => {
+        const bounds = node.getBoundingClientRect()
+        return {
+          center: { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 },
+          coarse: matchMedia('(hover: none) and (pointer: coarse)').matches,
+          custom: node.getAttribute('data-mobile-ui-custom'),
+          transform: getComputedStyle(node).transform,
+        }
+      })
+    assert.equal(inventory.coarse, false)
+    assert.equal(inventory.custom, 'true')
+    assert.equal(inventory.transform, 'none')
+    assert.ok(inventory.center.x > 700 && inventory.center.x < 850,
+      `desktop inventory keeps native x (${inventory.center.x})`)
+    assert.ok(inventory.center.y > 800,
+      `desktop inventory keeps native bottom anchor (${inventory.center.y})`)
+    await desktop.screenshot({ path: join(evidenceRoot, 'desktop-mobile-ui-profile-isolation.png') })
+    receipts['desktop-mobile-ui-profile-isolation'] = inventory
+  } finally {
+    await context.close()
+  }
+}
+
+async function resetCustomMobileUi(page) {
+  await page.locator(MEMBER_SELECTORS.skullButton).tap()
+  const pause = page.locator(MEMBER_SELECTORS.pauseOverlay)
+  await pause.waitFor({ timeout: 10_000 })
+  await page.locator('[data-pause-action="settings"]').tap()
+  const dialog = page.locator('.game-settings-dialog')
+  await dialog.waitFor({ timeout: 10_000 })
+  await dialog.getByRole('button', { name: 'CUSTOMIZE MOBILE UI' }).tap()
+  const editor = dialog.locator('.mobile-ui-editor')
+  await editor.waitFor({ timeout: 15_000 })
+  await editor.locator('[data-mobile-ui-reset]').tap()
+  await dialog.getByRole('button', { name: 'SAVE' }).tap()
+  assert.equal(await dialog.getAttribute('data-settings-page'), 'root')
+  await dialog.getByRole('button', { name: 'DONE' }).tap()
+  await dialog.waitFor({ state: 'detached', timeout: 10_000 })
+  await pause.waitFor({ state: 'detached', timeout: 10_000 })
+  await page.waitForFunction(() => document.querySelectorAll('[data-mobile-ui-custom="true"]').length === 0)
+  assert.equal(
+    await page.evaluate((key) => localStorage.getItem(key), MOBILE_UI_LAYOUT_STORAGE_KEY),
+    null,
+    'RESET DEFAULT removes the profile instead of serializing one phone layout',
+  )
+}
+
+async function enterHub(page, context, displayName, element) {
+  await page.goto(`${baseUrl}/game`, { timeout: 240_000, waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 240_000 })
+  await dismissTutorialOffer(page)
+  const mobileUiProfile = await exerciseMobileUiEditor(page, context)
+  await page.reload({ timeout: 240_000, waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 240_000 })
+  await dismissTutorialOffer(page)
+  assert.equal(
+    await page.evaluate((key) => localStorage.getItem(key), MOBILE_UI_LAYOUT_STORAGE_KEY),
+    JSON.stringify(mobileUiProfile),
+    'mobile UI profile survives a full page reload',
+  )
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
   await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({ timeout: 30_000 })
@@ -630,7 +999,9 @@ async function enterHub(page, displayName, element) {
   await page.locator('.create-menu-discipline-arcane').click()
   await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 240_000 })
   await page.locator(MEMBER_SELECTORS.joystickMovement).waitFor({ timeout: 15_000 })
-  return page.locator('.hub-world-canvas').evaluate((node) => node.__sdrHubFrame.localPlayerId)
+  const playerId = await page.locator('.hub-world-canvas')
+    .evaluate((node) => node.__sdrHubFrame.localPlayerId)
+  return { mobileUiProfile, playerId }
 }
 
 async function enterRawHub(displayName, element) {

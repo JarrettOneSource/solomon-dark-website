@@ -57,3 +57,17 @@
     right: calc(54px * var(--game-ui-scale, 1));
   }
 }
+
+@media (hover: none) and (pointer: coarse) {
+  .game-touch-joystick[data-mobile-ui-custom='true'] {
+    top: var(--mobile-ui-y);
+    right: auto;
+    bottom: auto;
+    left: var(--mobile-ui-x);
+    transform:
+      translate(-50%, -50%)
+      rotate(var(--mobile-ui-rotation))
+      scale(calc(var(--game-ui-scale, 1) * var(--mobile-ui-scale)));
+    transform-origin: center;
+  }
+}

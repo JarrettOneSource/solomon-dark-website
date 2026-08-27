@@ -27,7 +27,9 @@ import type { GameSnapshot } from './protocol/game-protocol.ts'
 import type { PartyRosterPlayer } from './protocol/party-state.ts'
 import { gameBindingLabel, type GameControlBindings } from './game-settings.ts'
 import type { NativeTutorialHudAccess } from './core-kernels/native-tutorial.ts'
+import { mobileUiElementStyle } from './mobile-ui-layout.ts'
 import type { GameViewportLayout } from './renderer/game-viewport.ts'
+import { useMobileUiLayout } from './use-mobile-ui-layout.ts'
 import {
   NATIVE_HUD_SKILL_ACTION_HEIGHT,
   NATIVE_HUD_SKILL_ACTION_TOP,
@@ -150,6 +152,7 @@ export default function GameHud({
   uiScale,
   viewport,
 }: GameHudProps) {
+  const mobileUi = useMobileUiLayout()
   const [economy, setEconomy] = useState<ProtocolPlayerEconomy>(() => (
     initialSnapshot.players[playerId]!.economy
   ))
@@ -246,7 +249,13 @@ export default function GameHud({
         playerId={playerId}
         subscribeSnapshot={subscribeSnapshot}
       />
-      <div className="hub-hud-diagnostics" aria-label="Performance">
+      <div
+        className="hub-hud-diagnostics"
+        aria-label="Performance"
+        data-mobile-ui-custom={mobileUi.customized || undefined}
+        data-mobile-ui-element="diagnostics"
+        style={mobileUiElementStyle(mobileUi, 'diagnostics')}
+      >
         <FpsCounter />
         <PingCounter getPingMs={getPingMs} subscribePing={subscribePing} />
       </div>
@@ -367,6 +376,7 @@ export default function GameHud({
         controllerQuickbarSlot={controllerQuickbarSlot}
         displayScale={viewport.displayScale}
         mode={mode}
+        mobileUi={mobileUi}
         onInput={onQuickbarInput}
         onUnassign={onQuickbarUnassign}
         playerState={quickbarHud.playerState}
@@ -399,12 +409,15 @@ export default function GameHud({
         <button
           type="button"
           className="hub-hud-potion-button hub-hud-potion-button-red"
+          data-mobile-ui-custom={mobileUi.customized || undefined}
+          data-mobile-ui-element="healthPotion"
           data-binding-label={healthPotionKey}
           aria-label={`Use health potion, key ${healthPotionKey}, ${healthPotions.count} available`}
           disabled={healthPotions.itemId === null || !onPotionClick}
           onClick={() => {
             if (healthPotions.itemId !== null) onPotionClick?.(healthPotions.itemId)
           }}
+          style={mobileUiElementStyle(mobileUi, 'healthPotion')}
           title={`Health Potion (${healthPotionKey})`}
         >
           <img
@@ -418,9 +431,12 @@ export default function GameHud({
         <button
           type="button"
           className="hub-hud-backpack-button"
+          data-mobile-ui-custom={mobileUi.customized || undefined}
+          data-mobile-ui-element="inventory"
           aria-label={`Open inventory, ${economy.gold} gold`}
           disabled={!onInventoryClick}
           onClick={onInventoryClick}
+          style={mobileUiElementStyle(mobileUi, 'inventory')}
         >
           <img
             className="hub-hud-backpack"
@@ -431,11 +447,14 @@ export default function GameHud({
         </button>
         <div
           className="hub-hud-xp"
+          data-mobile-ui-custom={mobileUi.customized || undefined}
+          data-mobile-ui-element="xp"
           role="progressbar"
           aria-label="Experience"
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={xpProgress * 100}
+          style={mobileUiElementStyle(mobileUi, 'xp')}
         >
           <img
             className="hub-hud-xp-fill"
@@ -448,9 +467,12 @@ export default function GameHud({
         <button
           type="button"
           className="hub-hud-tome-button"
+          data-mobile-ui-custom={mobileUi.customized || undefined}
+          data-mobile-ui-element="skillbook"
           aria-label="Open skills"
           disabled={!onSkillsClick}
           onClick={onSkillsClick}
+          style={mobileUiElementStyle(mobileUi, 'skillbook')}
           title="Skills (K)"
         >
           <img
@@ -463,12 +485,15 @@ export default function GameHud({
         <button
           type="button"
           className="hub-hud-potion-button hub-hud-potion-button-blue"
+          data-mobile-ui-custom={mobileUi.customized || undefined}
+          data-mobile-ui-element="manaPotion"
           data-binding-label={manaPotionKey}
           aria-label={`Use mana potion, key ${manaPotionKey}, ${manaPotions.count} available`}
           disabled={manaPotions.itemId === null || !onPotionClick}
           onClick={() => {
             if (manaPotions.itemId !== null) onPotionClick?.(manaPotions.itemId)
           }}
+          style={mobileUiElementStyle(mobileUi, 'manaPotion')}
           title={`Mana Potion (${manaPotionKey})`}
         >
           <img className="hub-hud-potion hub-hud-potion-blue" src={hub.hud.potionBlue} alt="" />

@@ -1602,3 +1602,37 @@
     transform-origin: top right;
   }
 }
+
+/* A saved Mobile UI profile is a touch-only presentation transform. With no valid
+   profile these selectors do not match, so the accepted adaptive layout above remains
+   the sole owner. Centres are safe-stage percentages; scale/rotation never cross into
+   the controls' existing semantic handlers or tutorial visibility gates. */
+@media (hover: none) and (pointer: coarse) {
+  .hub-hud-diagnostics[data-mobile-ui-custom='true'] {
+    top: var(--mobile-ui-y);
+    right: auto;
+    bottom: auto;
+    left: var(--mobile-ui-x);
+    transform:
+      translate(-50%, -50%)
+      rotate(var(--mobile-ui-rotation))
+      scale(calc(0.85 / var(--hud-display-scale, 1) / var(--game-ui-scale, 1) * var(--mobile-ui-scale)));
+    transform-origin: center;
+  }
+
+  .hub-hud-quickbar-slot[data-mobile-ui-custom='true'],
+  .hub-hud-potion-button[data-mobile-ui-custom='true'],
+  .hub-hud-backpack-button[data-mobile-ui-custom='true'],
+  .hub-hud-tome-button[data-mobile-ui-custom='true'],
+  .hub-hud-xp[data-mobile-ui-custom='true'] {
+    top: var(--mobile-ui-y);
+    right: auto;
+    bottom: auto;
+    left: var(--mobile-ui-x);
+    transform:
+      translate(-50%, -50%)
+      rotate(var(--mobile-ui-rotation))
+      scale(var(--mobile-ui-scale));
+    transform-origin: center;
+  }
+}

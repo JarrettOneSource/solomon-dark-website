@@ -974,6 +974,15 @@ There is one composed client, not one DOM client and one canvas client.
   teardown clear every controller lane and require neutral before rearming.
   Raw pads without the W3C `standard` mapping are not guessed; Steam Input or
   the browser must provide the canonical layout.
+- The optional Mobile UI profile is browser-local presentation state. An
+  absent profile leaves the adaptive coarse-pointer HUD rules authoritative;
+  a valid complete profile projects normalized centre, uniform scale, and
+  rotation variables onto the existing skull, diagnostics, two joysticks,
+  eight semantic quickbar slots, inventory/tome/XP, and potion owners only
+  under a coarse pointer. The Settings editor drafts transforms on a zoomable
+  silver page and commits one versioned local record. It does not create new
+  controls, cross the protocol, change tutorial/scene gates, or own input
+  intent. Reset removes the record and restores the adaptive default.
 - The Courtyard and Boneyard worlds and cameras now render through PixiJS
   WebGL canvases.
   Native draw plans, blend operations, frame selectors, render offsets, and

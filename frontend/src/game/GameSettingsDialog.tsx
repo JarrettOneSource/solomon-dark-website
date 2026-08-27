@@ -1,5 +1,8 @@
 import {
+  useCallback,
   useEffect,
+  lazy,
+  Suspense,
   useLayoutEffect,
   useRef,
   useState,
@@ -29,8 +32,20 @@ import {
   type GameBindingAction,
   type GameSettings,
 } from './game-settings.ts'
+import {
+  DEFAULT_MOBILE_UI_LAYOUT,
+  defaultMobileUiGeometry,
+  mobileUiEditorPageSize,
+  readMobileUiLayoutState,
+  resetMobileUiLayout,
+  setMobileUiLayout,
+  type MobileUiLayout,
+  type MobileUiSize,
+} from './mobile-ui-layout.ts'
 export type GameSettingsContext = 'dark-cloud' | 'gameplay' | 'title'
-type SettingsPage = 'controls' | 'performance' | 'root'
+type SettingsPage = 'controls' | 'mobile-ui' | 'performance' | 'root'
+
+const MobileUiEditor = lazy(() => import('./MobileUiEditor.tsx'))
 
 interface GameSettingsDialogProps {
   context: GameSettingsContext
@@ -74,7 +89,41 @@ export default function GameSettingsDialog({
 }: GameSettingsDialogProps) {
   const [page, setPage] = useState<SettingsPage>('root')
   const [listening, setListening] = useState<GameBindingAction | null>(null)
+  const [mobileUiDraft, setMobileUiDraft] = useState<MobileUiLayout>(DEFAULT_MOBILE_UI_LAYOUT)
+  const [mobileUiPage, setMobileUiPage] = useState<MobileUiSize>({ height: 414, width: 896 })
+  const [mobileUiRestoringDefault, setMobileUiRestoringDefault] = useState(true)
   const contentRef = useRef<HTMLDivElement>(null)
+
+  const commitMobileUi = useCallback(() => {
+    if (mobileUiRestoringDefault) resetMobileUiLayout()
+    else setMobileUiLayout(mobileUiDraft)
+  }, [mobileUiDraft, mobileUiRestoringDefault])
+
+  const openMobileUi = () => {
+    const coarsePointer = window.matchMedia('(hover: none) and (pointer: coarse)').matches
+    const stage = document.querySelector<HTMLElement>('.main-menu-stage')?.getBoundingClientRect()
+    const editorPage = mobileUiEditorPageSize(
+      stage?.width ?? window.innerWidth,
+      stage?.height ?? window.innerHeight,
+      coarsePointer,
+    )
+    const stored = readMobileUiLayoutState()
+    setMobileUiPage(editorPage)
+    setMobileUiDraft(stored.customized
+      ? stored.layout
+      : defaultMobileUiGeometry(
+          editorPage.width,
+          editorPage.height,
+          settings.uiScalePercent / 100,
+        ).layout)
+    setMobileUiRestoringDefault(!stored.customized)
+    setPage('mobile-ui')
+  }
+
+  const leaveSubpage = useCallback(() => {
+    if (page === 'mobile-ui') commitMobileUi()
+    setPage('root')
+  }, [commitMobileUi, page])
 
   useLayoutEffect(() => {
     if (contentRef.current) contentRef.current.scrollTop = 0
@@ -88,7 +137,7 @@ export default function GameSettingsDialog({
         event.preventDefault()
         event.stopImmediatePropagation()
         if (page === 'root') onClose()
-        else setPage('root')
+        else leaveSubpage()
         return
       }
       event.preventDefault()
@@ -101,7 +150,7 @@ export default function GameSettingsDialog({
     }
     window.addEventListener('keydown', keyDown, { capture: true })
     return () => window.removeEventListener('keydown', keyDown, { capture: true })
-  }, [listening, onChange, onClose, page, settings])
+  }, [leaveSubpage, listening, onChange, onClose, page, settings])
 
   const back = () => {
     if (listening) {
@@ -109,7 +158,7 @@ export default function GameSettingsDialog({
       return
     }
     if (page !== 'root') {
-      setPage('root')
+      leaveSubpage()
       return
     }
     onClose()
@@ -148,7 +197,10 @@ export default function GameSettingsDialog({
             <RootSettings
               context={context}
               onChange={onChange}
-              onOpen={setPage}
+              onOpen={(nextPage) => {
+                if (nextPage === 'mobile-ui') openMobileUi()
+                else setPage(nextPage)
+              }}
               settings={settings}
             />
           ) : page === 'controls' ? (
@@ -157,6 +209,27 @@ export default function GameSettingsDialog({
               onListen={setListening}
               settings={settings}
             />
+          ) : page === 'mobile-ui' ? (
+            <Suspense fallback={<p className="game-settings-context-note" role="status">Opening editor…</p>}>
+              <MobileUiEditor
+                layout={mobileUiDraft}
+                onChange={(layout) => {
+                  setMobileUiDraft(layout)
+                  setMobileUiRestoringDefault(false)
+                }}
+                onReset={() => {
+                  setMobileUiDraft(defaultMobileUiGeometry(
+                    mobileUiPage.width,
+                    mobileUiPage.height,
+                    settings.uiScalePercent / 100,
+                  ).layout)
+                  setMobileUiRestoringDefault(true)
+                }}
+                page={mobileUiPage}
+                restoringDefault={mobileUiRestoringDefault}
+                uiScale={settings.uiScalePercent / 100}
+              />
+            </Suspense>
           ) : (
             <PerformanceSettings onChange={onChange} settings={settings} />
           )}
@@ -167,7 +240,7 @@ export default function GameSettingsDialog({
           onClick={page === 'root' ? onClose : back}
           type="button"
         >
-          {page === 'root' ? 'DONE' : 'BACK'}
+          {page === 'root' ? 'DONE' : page === 'mobile-ui' ? 'SAVE' : 'BACK'}
         </button>
       </section>
     </div>
@@ -225,6 +298,7 @@ function RootSettings({
 
       <SettingsGroup title="CONTROLS">
         <SettingsAction label="CUSTOMIZE KEYBOARD" onClick={() => onOpen('controls')} />
+        <SettingsAction label="CUSTOMIZE MOBILE UI" onClick={() => onOpen('mobile-ui')} />
       </SettingsGroup>
 
       <SettingsGroup title="PERFORMANCE">
@@ -511,6 +585,7 @@ function captureMouseBinding(
 
 function pageTitle(page: SettingsPage): string {
   if (page === 'controls') return 'CUSTOMIZE KEYBOARD'
+  if (page === 'mobile-ui') return 'MOBILE UI EDITOR'
   if (page === 'performance') return 'TWEAK PERFORMANCE'
   return 'GAME SETTINGS'
 }

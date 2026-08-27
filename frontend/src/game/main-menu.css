@@ -867,3 +867,26 @@
     text-align: center;
   }
 }
+
+@media (hover: none) and (pointer: coarse) {
+  .game-menu-skull[data-mobile-ui-custom='true'] {
+    top: var(--mobile-ui-y);
+    right: auto;
+    bottom: auto;
+    left: var(--mobile-ui-x);
+    transform:
+      translate(-50%, -50%)
+      rotate(var(--mobile-ui-rotation))
+      scale(var(--mobile-ui-scale));
+    transform-origin: center;
+  }
+
+  /* Keep the modal-back owner at its standard corner while Settings covers gameplay.
+     The editor previews the authored pause position without letting the live skull float
+     over its canvas or SAVE row. */
+  .main-menu-stage:has(.game-settings-backdrop) .game-menu-skull[data-mobile-ui-custom='true'] {
+    top: 4px;
+    left: 4px;
+    transform: none;
+  }
+}
