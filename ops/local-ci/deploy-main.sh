@@ -113,6 +113,11 @@ remote_game_unit_checksum() {
         "if test -r '$remote_game_unit'; then sha256sum '$remote_game_unit' | awk '{print \$1}'; else printf 'missing\n'; fi"
 }
 
+discard_artifact() {
+    [[ ! -f "$artifact" ]] || unlink -- "$artifact"
+    [[ ! -f "$checksum_file" ]] || unlink -- "$checksum_file"
+}
+
 record_failed_target() {
     failed_target_temp="$state_root/.failed-target.$$"
     printf '%s %s\n' "$target_sha" "$(date --iso-8601=seconds)" >"$failed_target_temp"
@@ -193,8 +198,7 @@ live_game_unit_checksum="$(remote_game_unit_checksum)"
 if [[ "$deployed_sha" == "$target_sha" &&
     "$live_caddy_checksum" == "$target_caddy_checksum" &&
     "$live_game_unit_checksum" == "$target_game_unit_checksum" ]]; then
-    [[ ! -f "$artifact" ]] || unlink -- "$artifact"
-    [[ ! -f "$checksum_file" ]] || unlink -- "$checksum_file"
+    discard_artifact
     [[ ! -f "$failed_target_file" ]] || unlink -- "$failed_target_file"
     log "Production is already at origin/main $target_sha"
     exit 0
@@ -218,7 +222,7 @@ if [[ -f "$artifact" && -f "$checksum_file" ]]; then
     if [[ ! "$artifact_checksum" =~ ^[0-9a-f]{64}$ ]] ||
         ! printf '%s  %s\n' "$artifact_checksum" "$artifact" | sha256sum --check --status; then
         log "Discarding an invalid cached artifact for $target_sha"
-        unlink -- "$artifact" "$checksum_file"
+        discard_artifact
         artifact_checksum=""
     fi
 fi
@@ -300,12 +304,12 @@ fi
 newest_sha="$(fetch_main)"
 if [[ "$newest_sha" != "$target_sha" ]]; then
     log "Artifact $target_sha was superseded by $newest_sha; deferring to the next run"
-    unlink -- "$artifact" "$checksum_file"
+    discard_artifact
     exit 0
 fi
 
 if install_validated_worker; then
-    unlink -- "$artifact" "$checksum_file"
+    discard_artifact
     log "Installed the validated deployment worker from $target_sha; deferring production cutover to the next run"
     exit 0
 fi
@@ -316,7 +320,7 @@ live_game_unit_checksum="$(remote_game_unit_checksum)"
 if [[ "$deployed_sha" == "$target_sha" &&
     "$live_caddy_checksum" == "$target_caddy_checksum" &&
     "$live_game_unit_checksum" == "$target_game_unit_checksum" ]]; then
-    unlink -- "$artifact" "$checksum_file"
+    discard_artifact
     log "Production reached $target_sha while this run was building"
     exit 0
 fi
@@ -688,6 +692,5 @@ PY
 
 printf '%s %s\n' "$target_sha" "$(date --iso-8601=seconds)" >"$state_root/last-success"
 [[ ! -f "$failed_target_file" ]] || unlink -- "$failed_target_file"
-[[ ! -f "$artifact" ]] || unlink -- "$artifact"
-[[ ! -f "$checksum_file" ]] || unlink -- "$checksum_file"
+discard_artifact
 log "Production deployment of origin/main $target_sha passed live health checks"

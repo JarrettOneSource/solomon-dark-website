@@ -33,7 +33,8 @@ executes commits that have reached `main`.
 
 Every validated release contains the exact deployment worker that built it. If
 that worker differs from the installed copy, the current run atomically installs
-it, discards the old-format artifact, and exits before contacting production.
+it, independently discards the old-format artifact and checksum, and exits
+before contacting production.
 The next timer run validates and packages the commit again under the new worker.
 This keeps machine-local deployment changes synchronized without executing an
 unvalidated script from the public repository.

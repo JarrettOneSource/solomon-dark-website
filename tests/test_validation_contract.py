@@ -273,6 +273,11 @@ class ValidationContractTests(unittest.TestCase):
 
         self.assertIn("Deploy/solomon-dark-main-deploy", deploy)
         self.assertIn("install_validated_worker", deploy)
+        self.assertIn("discard_artifact", deploy)
+        self.assertNotRegex(
+            deploy,
+            r'unlink -- "\$artifact"\s+"\$checksum_file"',
+        )
         self.assertIn("Automatic deployment is suppressed", deploy)
         self.assertIn("record_failed_target", deploy)
         self.assertIn("report_candidate_failure", deploy)
