@@ -32,3 +32,33 @@ test('hidden retained element views do not build or apply painter plans', () => 
     view.destroy()
   }
 })
+
+test('retained Staff orb views invalidate on selected-primary changes at one tick', () => {
+  const textures = {
+    air: [Texture.EMPTY, Texture.EMPTY, Texture.EMPTY, Texture.EMPTY],
+    core: [Texture.EMPTY],
+    earth: new Array(8).fill(Texture.EMPTY),
+    fire: new Array(12).fill(Texture.EMPTY),
+    ray: [Texture.EMPTY],
+    spark: [Texture.EMPTY],
+    water: new Array(12).fill(Texture.EMPTY),
+  }
+  const view = new NativeElementVfxView(null, textures)
+
+  view.updateSelectedPrimary(8, 12, 1)
+  const etherCount = view.sprites.filter(({ visible }) => visible).length
+  assert.ok(etherCount > 4)
+  assert.equal(view.selectedPrimaryId, 8)
+
+  view.updateSelectedPrimary(16, 12, 1)
+  assert.equal(view.sprites.filter(({ visible }) => visible).length, 3)
+  assert.equal(view.selectedPrimaryId, 16)
+
+  view.updateSelectedPrimary(80, 12, 1)
+  assert.equal(view.sprites.filter(({ visible }) => visible).length, 0)
+  assert.equal(view.selectedPrimaryId, 80)
+
+  view.updateSelectedPrimary(16, 12, 1)
+  assert.equal(view.sprites.filter(({ visible }) => visible).length, 3)
+  view.destroy()
+})

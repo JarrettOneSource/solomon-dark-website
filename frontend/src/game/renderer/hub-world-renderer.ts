@@ -76,6 +76,8 @@ interface HubFrameDiagnostics {
   orbSpriteCount: number
   playerCount: number
   playerAttachmentPose: number
+  playerElementEffectPrimaryId: number | null
+  playerElementEffectPrimaryIds: Record<string, number | null>
   playerElementEffectScale: number
   playerHeadingIndex: number
   playerMagicShieldScale: number
@@ -283,6 +285,8 @@ export async function createHubWorldRenderer(
     orbSpriteCount: 0,
     playerCount: Object.keys(options.initialSnapshot.players).length,
     playerAttachmentPose: 0,
+    playerElementEffectPrimaryId: null,
+    playerElementEffectPrimaryIds: {},
     playerElementEffectScale: 1,
     playerHeadingIndex: 0,
     playerMagicShieldScale: 1.5,
@@ -391,6 +395,15 @@ export async function createHubWorldRenderer(
       position.x = state.position.x
       position.y = state.position.y
     }
+    frameDiagnostics.playerElementEffectPrimaryIds = Object.fromEntries(
+      Object.keys(snapshot.players).map((playerId) => {
+        const region = snapshot.world.participants[playerId]?.region
+        const view = region === 'courtyard'
+          ? courtyardScene.player(playerId)
+          : privateRoomScene.player(playerId)
+        return [playerId, view?.elementEffectPrimaryId ?? null]
+      }),
+    )
     if (!player) return
     frameDiagnostics.playerX = player.position.x
     frameDiagnostics.playerY = player.position.y
@@ -401,6 +414,7 @@ export async function createHubWorldRenderer(
       : privateRoomScene.player(options.playerId)
     if (!playerView) return
     frameDiagnostics.playerAttachmentPose = playerView.attachmentPose
+    frameDiagnostics.playerElementEffectPrimaryId = playerView.elementEffectPrimaryId
     frameDiagnostics.playerElementEffectScale = playerView.elementEffectScale
     frameDiagnostics.playerMagicShieldScale = playerView.magicShieldScale
     frameDiagnostics.playerMagicShieldVisible = playerView.magicShieldVisible

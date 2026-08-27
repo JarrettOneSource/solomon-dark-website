@@ -5,6 +5,7 @@ import {
   NATIVE_ELEMENT_VFX_SCALE,
   nativeElementVfxPlan,
   nativeElementVfxPlanAtPhase,
+  nativeSelectedPrimaryElementVfxPlan,
 } from './element-vfx-native.ts'
 
 test('uses the native Create and equipped-staff scale inputs', () => {
@@ -79,4 +80,111 @@ test('each stock element keeps its distinct recovered painter stack', () => {
   const ether = nativeElementVfxPlan('ether', 0, 1)
   assert.equal(ether.filter(({ sprite }) => sprite === 'ray').length, 2)
   assert.ok(ether.filter(({ sprite }) => sprite === 'spark').length >= 6)
+})
+
+test('selected primary, not creation element, owns the equipped Staff orb program', () => {
+  const rows = [
+    [8, 'ether'],
+    [16, 'fire'],
+    [24, 'air'],
+    [32, 'water'],
+    [40, 'earth'],
+  ] as const
+  for (const [skillId, element] of rows) {
+    assert.deepEqual(
+      nativeSelectedPrimaryElementVfxPlan(skillId, 37, 1),
+      nativeElementVfxPlan(element, 37, 1),
+      String(skillId),
+    )
+  }
+
+  assert.deepEqual(nativeSelectedPrimaryElementVfxPlan(-1, 37, 1), [])
+  assert.deepEqual(nativeSelectedPrimaryElementVfxPlan(80, 37, 1), [])
+  assert.deepEqual(nativeSelectedPrimaryElementVfxPlan(999, 37, 1), [])
+})
+
+test('all fifteen native Weld orb rows retain their distinct painter programs', () => {
+  const tick = 37
+  const ether = nativeElementVfxPlan('ether', tick, 1)
+  const rows = new Map([
+    [1003, ['earth', 'earth', 'core', 'core', 'core', 'air', 'air']],
+    [1004, ['water', 'core', 'ray', 'ray', 'air', 'air']],
+    [1005, ['steam', 'core']],
+    [1006, ['earth', 'earth', 'core', 'core', 'earth', 'earth', 'core', 'core']],
+    [1007, ['earth', 'earth', 'core', 'core', 'core', 'fire', 'fire']],
+    [1008, ['earth', 'earth', 'core', 'core', 'water', 'core', 'ray', 'ray']],
+    [1009, ['aura', 'core', 'core', 'core', 'core', 'air', 'air']],
+    [1011, ['core', 'fire', 'fire', 'core', 'fire', 'fire']],
+    [1012, ['water', 'core', 'ray', 'ray', 'water', 'core', 'ray', 'ray']],
+    [1013, [
+      'core', 'core', 'core', 'core', 'air', 'air',
+      'core', 'core', 'core', 'core', 'air', 'air',
+    ]],
+    [1014, ['earth', 'earth', 'core', 'core', 'earth', 'earth', 'core', 'core']],
+  ] as const)
+  for (const [buildId, sprites] of rows) {
+    assert.deepEqual(
+      nativeSelectedPrimaryElementVfxPlan(buildId, tick, 1).map(({ sprite }) => sprite),
+      sprites,
+      String(buildId),
+    )
+  }
+  assert.deepEqual(
+    nativeSelectedPrimaryElementVfxPlan(1010, tick, 1),
+    [...ether, ...ether],
+  )
+
+  const burningBolt = nativeSelectedPrimaryElementVfxPlan(1000, tick, 1)
+  assert.deepEqual(
+    burningBolt.slice(0, 3),
+    nativeElementVfxPlan('fire', tick, 1),
+  )
+  assert.deepEqual(burningBolt.slice(3), ether.map((operation) => ({
+    ...operation,
+    alpha: operation.alpha * 0.25,
+  })))
+  const frostMissile = nativeSelectedPrimaryElementVfxPlan(1001, tick, 1)
+  assert.deepEqual(
+    frostMissile.slice(0, 4),
+    nativeElementVfxPlan('water', tick, 1),
+  )
+  assert.deepEqual(
+    frostMissile.slice(4).map(({ alpha }) => alpha),
+    ether.map(({ alpha }) => alpha * 0.25),
+  )
+  const ballLightning = nativeSelectedPrimaryElementVfxPlan(1002, tick, 1)
+  assert.deepEqual(
+    ballLightning.slice(0, 6),
+    nativeElementVfxPlan('air', tick, 1),
+  )
+  assert.deepEqual(
+    ballLightning.slice(6).map(({ alpha }) => alpha),
+    ether.map(({ alpha }) => alpha * 0.25),
+  )
+  const etherealBoulder = nativeSelectedPrimaryElementVfxPlan(1006, tick, 1)
+  assert.ok(etherealBoulder.slice(4).every(({ blend }) => blend === 'lighter'))
+  const crawlingShock = nativeSelectedPrimaryElementVfxPlan(1009, tick, 1)
+  assert.equal(crawlingShock[0]?.rotation, tick * 8)
+  assert.ok(crawlingShock.slice(1).every(({ alpha }) => alpha <= 0.5))
+
+  const steamAnchors = Array.from({ length: 6 }, (_, frame) => (
+    nativeSelectedPrimaryElementVfxPlan(1005, frame * 8, 1)[0]?.anchor
+  ))
+  assert.deepEqual(steamAnchors, [
+    [16 / 34, 17 / 33],
+    [18 / 37, 17 / 34],
+    [17 / 35, 16 / 34],
+    [16 / 34, 16 / 34],
+    [16 / 35, 17 / 35],
+    [16 / 34, 18 / 35],
+  ])
+  const steam = nativeSelectedPrimaryElementVfxPlan(1005, tick, 1)
+  assert.equal(steam[0]?.alpha, steam[1]?.alpha)
+  assert.ok(steam[0]!.alpha >= 0.2 && steam[0]!.alpha < 0.45)
+  assert.ok(steam[0]!.color[1] >= 0.25 && steam[0]!.color[1] <= 1)
+
+  const pulsingFlameLash = nativeSelectedPrimaryElementVfxPlan(1003, tick, 2.5)
+  assert.equal(pulsingFlameLash.filter(({ sprite }) => sprite === 'core').length, 4)
+  assert.equal(pulsingFlameLash[5]?.blend, 'lighter')
+  assert.equal(pulsingFlameLash[5]?.alpha, 1)
 })

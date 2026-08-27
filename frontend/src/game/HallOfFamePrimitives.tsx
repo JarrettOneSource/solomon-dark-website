@@ -4,6 +4,7 @@ import { elementVfx, hub, skillPicker } from '../lib/assets.ts'
 import type { HallOfFameEntry } from './core-kernels/hall-of-fame.ts'
 import {
   NATIVE_ELEMENT_VFX_SPRITES,
+  isNativeElementVfxStripSprite,
   nativeElementVfxPlan,
   type NativeElement,
   type NativeElementVfxDraw,
@@ -243,13 +244,16 @@ interface HallElementOrbProps {
   readonly y: number
 }
 
-function vfxSource(sprite: NativeElementVfxSprite): string {
+function vfxSource(sprite: Exclude<NativeElementVfxSprite, 'aura' | 'steam'>): string {
   return sprite === 'core' || sprite === 'ray' || sprite === 'spark'
     ? elementVfx.common[sprite]
     : elementVfx.frames[sprite]
 }
 
 function applyDraw(node: HTMLElement, draw: NativeElementVfxDraw, scale: number): void {
+  if (!isNativeElementVfxStripSprite(draw.sprite)) {
+    throw new RangeError(`Hall element orb cannot draw ${draw.sprite}`)
+  }
   const metrics = NATIVE_ELEMENT_VFX_SPRITES[draw.sprite]
   const frame = ((draw.frame % metrics.count) + metrics.count) % metrics.count
   const art = node.firstElementChild as HTMLElement

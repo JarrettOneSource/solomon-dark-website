@@ -340,6 +340,8 @@ interface BoneyardRendererFrameDiagnostics {
   playerDeathShadowLayerCount: number
   playerDeathBurstCount: number
   playerDeathWeaponCount: number
+  playerElementEffectPrimaryId: number | null
+  playerElementEffectPrimaryIds: Record<string, number | null>
   playerElementEffectScale: number
   seekerSegmentCount: number
   playerHeadingIndex: number
@@ -751,6 +753,8 @@ export async function createBoneyardWorldRenderer(
     playerDeathShadowLayerCount: 0,
     playerDeathBurstCount: 0,
     playerDeathWeaponCount: 0,
+    playerElementEffectPrimaryId: null,
+    playerElementEffectPrimaryIds: {},
     playerElementEffectScale: 1,
     seekerSegmentCount: 0,
     playerHeadingIndex: 0,
@@ -1200,8 +1204,15 @@ export async function createBoneyardWorldRenderer(
         + viewport.height / 2
       frameDiagnostics.playerHeadingIndex = player.headingIndex
       frameDiagnostics.playerWalkPose = scene.playerWalkPose(options.playerId)
+      frameDiagnostics.playerElementEffectPrimaryIds = Object.fromEntries(
+        Object.keys(snapshot.players).map((playerId) => [
+          playerId,
+          scene.player(playerId)?.elementEffectPrimaryId ?? null,
+        ]),
+      )
       const playerView = scene.player(options.playerId)
       frameDiagnostics.playerAttachmentPose = playerView?.attachmentPose ?? 0
+      frameDiagnostics.playerElementEffectPrimaryId = playerView?.elementEffectPrimaryId ?? null
       frameDiagnostics.playerElementEffectScale = playerView?.elementEffectScale ?? 1
       frameDiagnostics.seekerSegmentCount = scene.seekerSegmentCount
       frameDiagnostics.orbSpriteCount = playerView?.orbSpriteCount ?? 0

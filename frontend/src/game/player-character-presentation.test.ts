@@ -378,7 +378,11 @@ test('player character draw plan preserves native attachment and gait transforms
   assert.doesNotMatch(playerWorldView, /orbBackBase/)
   assert.match(
     playerWorldView,
-    /playerEquippedElementEffectScale\([\s\S]*player\.lighting\.overlayEffectPhase,[\s\S]*this\.orbFrontBase\.update\(tick, this\.currentElementEffectScale\)[\s\S]*this\.orbFrontOverlay\.update\(tick, this\.currentElementEffectScale\)/,
+    /playerEquippedElementEffectScale\([\s\S]*player\.lighting\.overlayEffectPhase,[\s\S]*player\.primaryCast\.selectedPrimaryId[\s\S]*this\.orbFrontBase\.updateSelectedPrimary\([\s\S]*this\.orbFrontOverlay\.updateSelectedPrimary\(/,
+  )
+  assert.match(
+    playerWorldView,
+    /planewalkerTicksRemaining[\s\S]*\? 80[\s\S]*: player\.primaryCast\.selectedPrimaryId/,
   )
 })
 

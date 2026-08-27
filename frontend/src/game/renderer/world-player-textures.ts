@@ -405,6 +405,8 @@ export function createNativeElementVfxTextures(
   texture: (source: string) => Texture,
 ): Readonly<Record<NativeElementVfxSprite, readonly Texture[]>> {
   const frames = (sprite: NativeElementVfxSprite): readonly Texture[] => {
+    if (sprite === 'aura') return [texture(elementVfx.special.aura)]
+    if (sprite === 'steam') return elementVfx.special.steam.map(texture)
     const metrics = NATIVE_ELEMENT_VFX_SPRITES[sprite]
     const source = sprite === 'core' || sprite === 'ray' || sprite === 'spark'
       ? elementVfx.common[sprite]
@@ -419,11 +421,13 @@ export function createNativeElementVfxTextures(
   }
   return {
     air: frames('air'),
+    aura: frames('aura'),
     core: frames('core'),
     earth: frames('earth'),
     fire: frames('fire'),
     ray: frames('ray'),
     spark: frames('spark'),
+    steam: frames('steam'),
     water: frames('water'),
   }
 }

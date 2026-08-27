@@ -204,6 +204,12 @@ try {
 
   const playerId = host.hostPlayerId()
   assert.ok(playerId)
+  const hubEtherOrb = await waitForOrbProgram(
+    page,
+    '.hub-world-canvas',
+    playerId,
+    8,
+  )
   const state = host.state()
   const index = state.playerEntities.identities.findIndex(({ playerId: id }) => id === playerId)
   assert.notEqual(index, -1)
@@ -253,6 +259,12 @@ try {
   await fireball.waitFor({ timeout: 10_000 })
   await fireball.click()
   await page.getByRole('img', { name: 'Fireball primary spell' }).waitFor({ timeout: 10_000 })
+  const hubFireOrb = await waitForOrbProgram(
+    page,
+    '.hub-world-canvas',
+    playerId,
+    16,
+  )
   await book.getByRole('button', { name: /Channel Mana, rank 1/ }).click()
   await book.locator(
     '.skill-book-entry-action[data-skill-id="57"][aria-pressed="true"]',
@@ -314,8 +326,15 @@ try {
     0,
   )
   await page.getByRole('img', { name: 'Magic Missile primary spell' }).waitFor({ timeout: 10_000 })
+  const hubRestoredEtherOrb = await waitForOrbProgram(
+    page,
+    '.hub-world-canvas',
+    playerId,
+    8,
+  )
   await hubScene.locator('xpath=self::*[@data-gameplay-input-blocked="false"]').waitFor()
   await assertGameSoundMuted(page, false)
+  await page.screenshot({ path: `${screenshotRoot}-hub-ether-orb.png` })
 
   await page.getByRole('button', {
     name: 'Select concentration A, current Channel Mana',
@@ -373,6 +392,12 @@ try {
   if (await picker.count()) await picker.getByRole('button').first().click()
   const boneyardScene = page.locator('.boneyard-scene[data-renderer-state="ready"]')
   await boneyardScene.waitFor({ timeout: 90_000 })
+  const boneyardEtherOrb = await waitForOrbProgram(
+    page,
+    '.boneyard-world-canvas',
+    playerId,
+    8,
+  )
   await page.getByRole('button', { name: 'Open skills' }).click()
   await book.waitFor({ timeout: 10_000 })
   await book.locator('.skill-book-canvas').waitFor({ timeout: 15_000 })
@@ -425,8 +450,15 @@ try {
   await page.screenshot({ path: `${screenshotRoot}-boneyard-selector.png` })
   await primarySelector.getByRole('button', { name: /Fireball/ }).click()
   await page.getByRole('img', { name: 'Fireball primary spell' }).waitFor({ timeout: 10_000 })
+  const boneyardFireOrb = await waitForOrbProgram(
+    page,
+    '.boneyard-world-canvas',
+    playerId,
+    16,
+  )
   await boneyardScene.locator('xpath=self::*[@data-gameplay-input-blocked="false"]').waitFor()
   await assertGameSoundMuted(page, false)
+  await page.screenshot({ path: `${screenshotRoot}-boneyard-fire-orb.png` })
 
   const selectedState = host.state()
   const selectedIndex = selectedState.playerEntities.identities.findIndex(
@@ -437,6 +469,7 @@ try {
     selectedState.playerEntities.skillRuntimes[selectedIndex].concentrationSkillIdA,
     selectedState.playerEntities.skillRuntimes[selectedIndex].concentrationSkillIdB,
   ], [59, 57])
+  assert.equal(getPlayerCharacter(selectedState, playerId).config.element, 'ether')
   assert.deepEqual(pageErrors, [])
   assert.deepEqual(networkErrors, [])
   assert.deepEqual(consoleErrors, [])
@@ -449,6 +482,13 @@ try {
     hudSelectorCancel: true,
     hudSelectorWebGl2: true,
     mixedQuickbar: true,
+    orbSelection: {
+      boneyardEther: boneyardEtherOrb,
+      boneyardFire: boneyardFireOrb,
+      hubEther: hubEtherOrb,
+      hubFire: hubFireOrb,
+      hubRestoredEther: hubRestoredEtherOrb,
+    },
       paintedDrag,
       pullOff,
     networkErrors,
@@ -473,6 +513,8 @@ try {
       `${screenshotRoot}-hud-primary-selector.png`,
       `${screenshotRoot}-hud-selectors.png`,
       `${screenshotRoot}-boneyard-selector.png`,
+      `${screenshotRoot}-hub-ether-orb.png`,
+      `${screenshotRoot}-boneyard-fire-orb.png`,
     ],
   })}\n`)
 } finally {
@@ -753,4 +795,31 @@ async function assertGameSoundMuted(target, expected) {
       && masterVolumes.length > 0
       && masterVolumes.every(volume => muted ? volume === 0 : volume > 0)
   }, expected, { timeout: 5_000 })
+}
+
+async function waitForOrbProgram(page, canvasSelector, playerId, selectedPrimaryId) {
+  await page.waitForFunction(({ expected, id, selector }) => {
+    const canvas = document.querySelector(selector)
+    const frame = canvas?.__sdrHubFrame ?? canvas?.__sdrBoneyardFrame
+    return frame?.playerElementEffectPrimaryId === expected
+      && frame.playerElementEffectPrimaryIds?.[id] === expected
+      && frame.orbSpriteCount > 0
+  }, {
+    expected: selectedPrimaryId,
+    id: playerId,
+    selector: canvasSelector,
+  }, { timeout: 10_000 })
+  const receipt = await page.locator(canvasSelector).evaluate((canvas, id) => {
+    const frame = canvas.__sdrHubFrame ?? canvas.__sdrBoneyardFrame
+    return {
+      localPrimaryId: frame.playerElementEffectPrimaryId,
+      orbSpriteCount: frame.orbSpriteCount,
+      replicatedPrimaryId: frame.playerElementEffectPrimaryIds[id],
+      tick: frame.tick,
+    }
+  }, playerId)
+  assert.equal(receipt.localPrimaryId, selectedPrimaryId)
+  assert.equal(receipt.replicatedPrimaryId, selectedPrimaryId)
+  assert.ok(receipt.orbSpriteCount > 0)
+  return receipt
 }

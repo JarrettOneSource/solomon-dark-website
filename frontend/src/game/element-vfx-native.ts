@@ -1,10 +1,20 @@
-export type NativeElementVfxSprite = 'air' | 'core' | 'earth' | 'fire' | 'ray' | 'spark' | 'water'
+export type NativeElementVfxSprite =
+  | 'air'
+  | 'aura'
+  | 'core'
+  | 'earth'
+  | 'fire'
+  | 'ray'
+  | 'spark'
+  | 'steam'
+  | 'water'
 export type NativeElement = 'air' | 'earth' | 'ether' | 'fire' | 'water'
 export type NativeElementVfxBlend = 'lighter' | 'source-over'
 export type NativeElementVfxColor = readonly [red: number, green: number, blue: number]
 
 export interface NativeElementVfxDraw {
   alpha: number
+  anchor?: readonly [x: number, y: number]
   blend: NativeElementVfxBlend
   color: NativeElementVfxColor
   frame: number
@@ -21,7 +31,15 @@ export interface NativeElementVfxSpriteMetrics {
   width: number
 }
 
-export const NATIVE_ELEMENT_VFX_SPRITES: Readonly<Record<NativeElementVfxSprite, NativeElementVfxSpriteMetrics>> = {
+export type NativeElementVfxStripSprite = Exclude<NativeElementVfxSprite, 'aura' | 'steam'>
+
+export function isNativeElementVfxStripSprite(
+  sprite: NativeElementVfxSprite,
+): sprite is NativeElementVfxStripSprite {
+  return sprite !== 'aura' && sprite !== 'steam'
+}
+
+export const NATIVE_ELEMENT_VFX_SPRITES: Readonly<Record<NativeElementVfxStripSprite, NativeElementVfxSpriteMetrics>> = {
   air: { count: 4, height: 59, width: 55 },
   core: { count: 1, height: 26, width: 27 },
   earth: { count: 8, height: 50, width: 50 },
@@ -30,6 +48,13 @@ export const NATIVE_ELEMENT_VFX_SPRITES: Readonly<Record<NativeElementVfxSprite,
   spark: { count: 1, height: 40, width: 40 },
   water: { count: 12, height: 36, width: 38 },
 }
+
+export const NATIVE_SELECTED_PRIMARY_VFX_RECORDS = Object.freeze({
+  airCompanion: Object.freeze([1836, 1837, 1838, 1839]),
+  aura: 15,
+  core: 110,
+  steam: Object.freeze([2002, 2003, 2004, 2005, 2006, 2007]),
+})
 
 export const NATIVE_ELEMENT_VFX_SCALE = {
   held: 6,
@@ -46,6 +71,14 @@ const EARTH_LIGHT = [0.75, 0.95, 0.75] as const
 const ETHER = [1, 0.5, 1] as const
 const FIRE = [1, 0.5, 0] as const
 const WATER = [1, 0.75, 1] as const
+const STEAM_ANCHORS = Object.freeze([
+  [16 / 34, 17 / 33],
+  [18 / 37, 17 / 34],
+  [17 / 35, 16 / 34],
+  [16 / 34, 16 / 34],
+  [16 / 35, 17 / 35],
+  [16 / 34, 18 / 35],
+] as const)
 
 function normalizedFrame(tick: number, frameCount: number, divisor = 1): number {
   const frame = Math.floor(tick / divisor) % frameCount
@@ -75,6 +108,7 @@ function draw(
   options: Partial<Omit<NativeElementVfxDraw, 'scale' | 'sprite'>> = {},
 ): NativeElementVfxDraw {
   return {
+    ...(options.anchor === undefined ? {} : { anchor: options.anchor }),
     alpha: options.alpha ?? 1,
     blend: options.blend ?? 'source-over',
     color: options.color ?? WHITE,
@@ -232,6 +266,121 @@ function earthPlan(tick: number, scale: number): NativeElementVfxDraw[] {
   ]
 }
 
+function multiplyPlan(
+  plan: readonly NativeElementVfxDraw[],
+  color: NativeElementVfxColor,
+  alpha = 1,
+  blend: NativeElementVfxBlend | null = null,
+): NativeElementVfxDraw[] {
+  return plan.map((operation) => ({
+    ...operation,
+    alpha: operation.alpha * alpha,
+    blend: blend ?? operation.blend,
+    color: [
+      operation.color[0] * color[0],
+      operation.color[1] * color[1],
+      operation.color[2] * color[2],
+    ] as NativeElementVfxColor,
+  }))
+}
+
+function airCompanionPlan(tick: number, scale: number): NativeElementVfxDraw[] {
+  return airPlan(tick, scale).slice(-2)
+}
+
+function steamPlan(tick: number, scale: number): NativeElementVfxDraw[] {
+  const outerGreen = 0.5 + visualRandom(tick, 0) * 0.5
+  const innerGreen = 0.5 + visualRandom(tick, 1) * 0.5
+  const alpha = 0.2 + visualRandom(tick, 2) * 0.25
+  const green = outerGreen * innerGreen
+  const frame = normalizedFrame(tick, 6, 8)
+  return [
+    draw('steam', 1.8 * scale, {
+      alpha,
+      anchor: STEAM_ANCHORS[frame],
+      color: [1, green, 0],
+      frame,
+    }),
+    draw('core', pulse(tick, 15, 3.5) * scale, {
+      alpha,
+      color: [1, green, 0],
+    }),
+  ]
+}
+
+function selectedWeldPlan(
+  buildId: number,
+  tick: number,
+  scale: number,
+): NativeElementVfxDraw[] {
+  switch (buildId) {
+    case 1000:
+      return [
+        ...firePlan(tick, scale),
+        ...multiplyPlan(etherPlan(tick, scale), WHITE, 0.25),
+      ]
+    case 1001:
+      return [
+        ...waterPlan(tick, scale),
+        ...multiplyPlan(etherPlan(tick, scale), WHITE, 0.25),
+      ]
+    case 1002:
+      return [
+        ...airPlan(tick, scale),
+        ...multiplyPlan(etherPlan(tick, scale), WHITE, 0.25),
+      ]
+    case 1003:
+      return [
+        ...multiplyPlan(earthPlan(tick, scale), FIRE),
+        draw('core', scale * 2, { color: [1, 0.75, 0] }),
+        ...(scale > 1
+          ? [draw('core', scale * 2, {
+              alpha: Math.min(scale - 1, 1),
+              blend: 'lighter',
+              color: [1, 0.75, 0],
+            })]
+          : []),
+        ...airCompanionPlan(tick, scale),
+      ]
+    case 1004:
+      return [
+        ...waterPlan(tick, scale),
+        ...airCompanionPlan(tick, scale),
+      ]
+    case 1005:
+      return steamPlan(tick, scale)
+    case 1006:
+      return [
+        ...multiplyPlan(earthPlan(tick, scale * 0.75), ETHER),
+        ...multiplyPlan(earthPlan(tick, scale), ETHER, 1, 'lighter'),
+      ]
+    case 1007:
+      return [...earthPlan(tick, scale), ...firePlan(tick, scale)]
+    case 1008:
+      return [...earthPlan(tick, scale), ...waterPlan(tick, scale)]
+    case 1009:
+      return [
+        draw('aura', (1.5 + Math.abs(Math.sin(tick * Math.PI / 180)) * 0.5) * scale, {
+          color: [0.5, 0.75, 0.5],
+          rotation: tick * 8,
+        }),
+        ...multiplyPlan(airPlan(tick, scale * 1.25), WHITE, 0.5),
+      ]
+    case 1010:
+      return [...etherPlan(tick, scale), ...etherPlan(tick, scale)]
+    case 1011:
+      return [...firePlan(tick, scale), ...firePlan(tick, scale)]
+    case 1012:
+      return [...waterPlan(tick, scale), ...waterPlan(tick, scale)]
+    case 1013:
+      return [...airPlan(tick, scale), ...airPlan(tick, scale)]
+    case 1014:
+      return [...earthPlan(tick, scale), ...earthPlan(tick, scale)]
+    default:
+      return []
+  }
+}
+
 export function nativeElementVfxPlan(
   element: NativeElement,
   tick: number,
@@ -251,5 +400,21 @@ export function nativeElementVfxPlanAtPhase(
     case 'air': return airPlan(phase, scale)
     case 'water': return waterPlan(phase, scale)
     case 'earth': return earthPlan(phase, scale)
+  }
+}
+
+export function nativeSelectedPrimaryElementVfxPlan(
+  selectedPrimaryId: number,
+  tick: number,
+  scale: number,
+): NativeElementVfxDraw[] {
+  const phase = Math.floor(tick)
+  switch (selectedPrimaryId) {
+    case 8: return etherPlan(phase, scale)
+    case 16: return firePlan(phase, scale)
+    case 24: return airPlan(phase, scale)
+    case 32: return waterPlan(phase, scale)
+    case 40: return earthPlan(phase, scale)
+    default: return selectedWeldPlan(selectedPrimaryId, phase, scale)
   }
 }

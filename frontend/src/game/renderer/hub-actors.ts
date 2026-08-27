@@ -100,10 +100,10 @@ export class PlayerWorldView {
     this.fixed = actorSprite(playerTextures.fixed[0][0], 4)
     this.fixedSecondary = actorSprite(playerTextures.fixed[0][0], 4)
     this.staffFront = actorSprite(playerTextures.staffFront[0][0], 5)
-    this.orbFrontBase = new NativeElementVfxView(element, textures.elementVfx)
+    this.orbFrontBase = new NativeElementVfxView(null, textures.elementVfx)
     this.orbFrontBase.container.label = 'native-element-vfx-front-base'
     this.orbFrontBase.container.zIndex = 6
-    this.orbFrontOverlay = new NativeElementVfxView(element, textures.elementVfx)
+    this.orbFrontOverlay = new NativeElementVfxView(null, textures.elementVfx)
     this.orbFrontOverlay.container.label = 'native-element-vfx-front-overlay'
     this.orbFrontOverlay.container.zIndex = 6
     this.head = actorSprite(playerTextures.head[0], 7)
@@ -381,8 +381,19 @@ export class PlayerWorldView {
     this.currentElementEffectScale = playerEquippedElementEffectScale(
       player.lighting.overlayEffectPhase,
     )
-    this.orbFrontBase.update(tick, this.currentElementEffectScale)
-    this.orbFrontOverlay.update(tick, this.currentElementEffectScale)
+    const selectedPrimaryId = (this.secondaryState?.planewalkerTicksRemaining ?? 0) > 0
+      ? 80
+      : player.primaryCast.selectedPrimaryId
+    this.orbFrontBase.updateSelectedPrimary(
+      selectedPrimaryId,
+      tick,
+      this.currentElementEffectScale,
+    )
+    this.orbFrontOverlay.updateSelectedPrimary(
+      selectedPrimaryId,
+      tick,
+      this.currentElementEffectScale,
+    )
     this.applyMaterialTint()
   }
 
@@ -396,6 +407,10 @@ export class PlayerWorldView {
 
   get elementEffectScale(): number {
     return this.currentElementEffectScale
+  }
+
+  get elementEffectPrimaryId(): number | null {
+    return this.orbFrontBase.selectedPrimaryId
   }
 
   get deathColorLayerCount(): number {

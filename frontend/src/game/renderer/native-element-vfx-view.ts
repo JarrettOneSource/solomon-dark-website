@@ -3,7 +3,9 @@ import { Container, Sprite } from 'pixi.js'
 import type { WizardElement } from '../core-kernels/player-character.ts'
 import {
   nativeElementVfxPlan,
+  nativeSelectedPrimaryElementVfxPlan,
   type NativeElementVfxColor,
+  type NativeElementVfxDraw,
   type NativeElementVfxSprite,
 } from '../element-vfx-native.ts'
 
@@ -14,24 +16,68 @@ export type NativeElementVfxTextures = Readonly<
 export class NativeElementVfxView {
   readonly container = new Container({ label: 'native-element-vfx' })
   readonly sprites: Sprite[] = []
-  private readonly element: WizardElement
+  private readonly element: WizardElement | null
   private readonly textures: NativeElementVfxTextures
+  private currentSelectedPrimaryId: number | null = null
+  private lastProgram = ''
   private lastScale = Number.NaN
   private lastTick = Number.NaN
 
-  constructor(element: WizardElement, textures: NativeElementVfxTextures) {
+  constructor(element: WizardElement | null, textures: NativeElementVfxTextures) {
     this.element = element
     this.textures = textures
     this.container.eventMode = 'none'
   }
 
   update(tick: number, scale = 1): void {
+    const element = this.element
+    if (element === null) {
+      throw new Error('Selected-primary element VFX requires updateSelectedPrimary()')
+    }
+    this.currentSelectedPrimaryId = null
+    this.updatePlan(
+      `element:${element}`,
+      tick,
+      scale,
+      () => nativeElementVfxPlan(element, Math.floor(tick), scale),
+    )
+  }
+
+  updateSelectedPrimary(
+    selectedPrimaryId: number,
+    tick: number,
+    scale = 1,
+  ): void {
+    this.currentSelectedPrimaryId = selectedPrimaryId
+    this.updatePlan(
+      `primary:${selectedPrimaryId}`,
+      tick,
+      scale,
+      () => nativeSelectedPrimaryElementVfxPlan(selectedPrimaryId, tick, scale),
+    )
+  }
+
+  get selectedPrimaryId(): number | null {
+    return this.currentSelectedPrimaryId
+  }
+
+  private updatePlan(
+    program: string,
+    tick: number,
+    scale: number,
+    createPlan: () => readonly NativeElementVfxDraw[],
+  ): void {
     if (!this.container.visible) return
     const integerTick = Math.floor(tick)
-    if (integerTick === this.lastTick && scale === this.lastScale) return
+    if (
+      program === this.lastProgram
+      && integerTick === this.lastTick
+      && scale === this.lastScale
+    ) return
+    this.lastProgram = program
     this.lastTick = integerTick
     this.lastScale = scale
-    const plan = nativeElementVfxPlan(this.element, integerTick, scale)
+    const plan = createPlan()
     while (this.sprites.length < plan.length) {
       const sprite = new Sprite()
       sprite.anchor.set(0.5)
@@ -48,6 +94,7 @@ export class NativeElementVfxView {
       if (!frames) throw new Error(`Missing ${operation.sprite} element VFX texture`)
       const frame = ((operation.frame % frames.length) + frames.length) % frames.length
       sprite.texture = frames[frame]
+      sprite.anchor.set(operation.anchor?.[0] ?? 0.5, operation.anchor?.[1] ?? 0.5)
       sprite.alpha = Math.max(0, Math.min(1, operation.alpha))
       sprite.blendMode = operation.blend === 'lighter' ? 'add' : 'normal'
       sprite.position.set(operation.x, operation.y)

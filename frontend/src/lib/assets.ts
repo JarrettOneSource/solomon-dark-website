@@ -211,6 +211,12 @@ import elementVfxFire from '../assets/game/element-vfx-fire.png'
 import elementVfxRay from '../assets/game/element-vfx-ray.png'
 import elementVfxSpark from '../assets/game/element-vfx-spark.png'
 import elementVfxWater from '../assets/game/element-vfx-water.png'
+import elementVfxSteam0 from '../assets/game/boneyard/badguys/2002.png'
+import elementVfxSteam1 from '../assets/game/boneyard/badguys/2003.png'
+import elementVfxSteam2 from '../assets/game/boneyard/badguys/2004.png'
+import elementVfxSteam3 from '../assets/game/boneyard/badguys/2005.png'
+import elementVfxSteam4 from '../assets/game/boneyard/badguys/2006.png'
+import elementVfxSteam5 from '../assets/game/boneyard/badguys/2007.png'
 import primarySpellEarthAura from '../assets/game/boneyard/badguys/0015.png'
 import primarySpellEarthOpeningFlash from '../assets/game/primary-spell-earth-glimmer.png'
 import primarySpellEarthLitRock0 from '../assets/game/primary-spell-earth-lit-rock-0.png'
@@ -499,6 +505,17 @@ export const elementVfx = {
     earth: elementVfxEarth,
     fire: elementVfxFire,
     water: elementVfxWater,
+  },
+  special: {
+    aura: primarySpellEarthAura,
+    steam: [
+      elementVfxSteam0,
+      elementVfxSteam1,
+      elementVfxSteam2,
+      elementVfxSteam3,
+      elementVfxSteam4,
+      elementVfxSteam5,
+    ],
   },
 }
 
