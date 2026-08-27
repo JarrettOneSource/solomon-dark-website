@@ -185,7 +185,6 @@ interface MenuButtonProps {
   compact?: boolean
   defaultFocus?: boolean
   disabled?: boolean
-  href?: string
   isBack?: boolean
   onClick?: () => void
   onHighlight: (action: TitleMenuAction | null) => void
@@ -200,7 +199,6 @@ function MenuButton({
   compact = false,
   defaultFocus = false,
   disabled = false,
-  href,
   isBack = false,
   onClick,
   onHighlight,
@@ -212,17 +210,13 @@ function MenuButton({
     compact && 'main-menu-button-compact',
     className,
   ].filter(Boolean).join(' ')
-  const Element = href ? 'a' : 'button'
 
   return (
-    <Element
-      type={href ? undefined : 'button'}
+    <button
+      type="button"
       className={classes}
       aria-label={accessibleLabel}
-      disabled={href ? undefined : disabled}
-      href={href}
-      rel={href ? 'noreferrer' : undefined}
-      target={href ? '_blank' : undefined}
+      disabled={disabled}
       data-game-back={isBack || undefined}
       data-game-action={action}
       data-game-default-focus={defaultFocus || undefined}
@@ -252,20 +246,14 @@ function MenuButton({
         onPressState(null)
       }}
       onPointerUp={() => onPressState(null)}
-      onKeyDown={(event: ReactKeyboardEvent<HTMLButtonElement | HTMLAnchorElement>) => {
+      onKeyDown={(event: ReactKeyboardEvent<HTMLButtonElement>) => {
         if (!disabled && !event.repeat && (event.key === 'Enter' || event.key === ' ')) {
-          if (href && event.key === ' ') event.preventDefault()
           onPressState(action)
           onPress?.()
         }
       }}
       onKeyUp={(event) => {
-        if (event.key !== 'Enter' && event.key !== ' ') return
-        onPressState(null)
-        if (href && event.key === ' ') {
-          event.preventDefault()
-          event.currentTarget.click()
-        }
+        if (event.key === 'Enter' || event.key === ' ') onPressState(null)
       }}
     />
   )
@@ -297,7 +285,6 @@ function RootActions({
       <MenuButton action="explore" accessibleLabel="Explore the Dark Cloud" onClick={onExplore} onHighlight={onHighlight} onPress={onPress} onPressState={onPressState} />
       <MenuButton action="settings" accessibleLabel="Settings" onClick={onSettings} onHighlight={onHighlight} onPress={onPress} onPressState={onPressState} />
       <MenuButton action="hall" accessibleLabel="Hall of Fame" onClick={onHall} onHighlight={onHighlight} onPress={onPress} onPressState={onPressState} />
-      <MenuButton action="discord" accessibleLabel="Discord" href={DISCORD_INVITE_URL} onHighlight={onHighlight} onPress={onPress} onPressState={onPressState} />
     </>
   )
 }
@@ -1628,6 +1615,22 @@ export default function MainMenuScene({
               screen={screen === 'play' ? 'play' : 'root'}
               viewport={fixedViewport}
             />
+
+            {screen === 'root' && titlePrompt === null ? (
+              <a
+                className="main-menu-discord-link"
+                aria-label="Join the Solomon Darker Discord server"
+                href={DISCORD_INVITE_URL}
+                onClick={() => audio.playSound('click')}
+                rel="noreferrer"
+                target="_blank"
+                title="Join Discord"
+              >
+                <svg viewBox="0 0 20 19" aria-hidden focusable="false">
+                  <use href="/icons.svg#discord-icon" />
+                </svg>
+              </a>
+            ) : null}
 
             <div
               className="main-menu-native-stage main-menu-account-stage"

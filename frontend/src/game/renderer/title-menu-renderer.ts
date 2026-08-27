@@ -47,7 +47,6 @@ import {
 export type TitleMenuScreen = 'root' | 'play'
 export type TitleMenuAction =
   | 'back'
-  | 'discord'
   | 'explore'
   | 'hall'
   | 'last-game'
@@ -222,7 +221,6 @@ export async function createTitleMenuRenderer(
     ]),
     createMainButton(texture, 'settings', 2, [['settings', mainMenu.text.settings]]),
     createMainButton(texture, 'hall', 3, [['hall', mainMenu.text.hall]]),
-    createMainButton(texture, 'discord', 4, []),
   ]
   const playButtonViews = [
     createMainButton(texture, 'last-game', 0, [

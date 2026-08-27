@@ -17,6 +17,7 @@ const stockPrompt = readFileSync(new URL('./StockPromptDialog.tsx', import.meta.
 const stockPromptContract = readFileSync(new URL('./title-menu-prompt.ts', import.meta.url), 'utf8')
 const stockPromptStyles = readFileSync(new URL('./stock-prompt-dialog.css', import.meta.url), 'utf8')
 const menuStyles = readFileSync(new URL('./main-menu.css', import.meta.url), 'utf8')
+const publicIcons = readFileSync(new URL('../../public/icons.svg', import.meta.url), 'utf8')
 
 test('contains the Solomon Darker artwork inside the native GPU title slot', () => {
   const mainMenuManifest = assetManifest.match(/export const mainMenu = \{([\s\S]*?)\n\}/)
@@ -96,16 +97,26 @@ test('Hall of Fame is actionable and owns local plus four global boards', () => 
   assert.doesNotMatch(scene, /submitGlobalHallOfFame\(entry\)/)
 })
 
-test('the root menu links to the existing Discord channel in a new tab', () => {
+test('Discord is a root-screen corner icon, not a native menu row', () => {
+  const rootButtonViews = renderer.match(/const rootButtonViews = \[([\s\S]*?)\n  \]/)
+  assert.ok(rootButtonViews, 'missing root title-button collection')
+  assert.equal(rootButtonViews[1].match(/createMainButton/g)?.length, 4)
   assert.match(scene, /const DISCORD_INVITE_URL = 'https:\/\/discord\.gg\/HGHxZgyM2p'/)
-  assert.match(scene, /action="discord" accessibleLabel="Discord" href=\{DISCORD_INVITE_URL\}/)
-  assert.match(scene, /rel=\{href \? 'noreferrer' : undefined\}/)
-  assert.match(scene, /target=\{href \? '_blank' : undefined\}/)
-  assert.match(renderer, /createMainButton\(texture, 'discord', 4, \[\]\)/)
+  assert.match(scene, /screen === 'root' && titlePrompt === null \? \([\s\S]*className="main-menu-discord-link"/)
+  assert.match(scene, /aria-label="Join the Solomon Darker Discord server"/)
+  assert.match(scene, /href=\{DISCORD_INVITE_URL\}/)
+  assert.match(scene, /rel="noreferrer"/)
+  assert.match(scene, /target="_blank"/)
+  assert.match(scene, /<use href="\/icons\.svg#discord-icon" \/>/)
+  assert.doesNotMatch(scene, /action="discord"/)
+  assert.doesNotMatch(renderer, /\| 'discord'|createMainButton\(texture, 'discord'/)
   assert.match(
     menuStyles,
-    /\.main-menu-button\[data-game-action='discord'\]::after[\s\S]*content: 'DISCORD'/,
+    /\.main-menu-discord-link \{[\s\S]*bottom:\s*10px;[\s\S]*left:\s*10px;/,
   )
+  assert.doesNotMatch(menuStyles, /data-game-action='discord'|content:\s*'DISCORD'/)
+  assert.match(menuStyles, /@media \(hover: none\) and \(pointer: coarse\) \{[\s\S]*\.main-menu-discord-link \{[\s\S]*width:\s*44px;[\s\S]*height:\s*44px;/)
+  assert.match(publicIcons, /<symbol id="discord-icon"[\s\S]*<path fill="currentColor"/)
 })
 
 test('runtime progression invalidates the Hub scene when Teacher unlock flags change', () => {

@@ -69,8 +69,7 @@
   animation: main-menu-actions-in 100ms linear both;
 }
 
-.main-menu-actions[inert] .main-menu-button[data-game-action='join-party']::after,
-.main-menu-actions[inert] .main-menu-button[data-game-action='discord']::after {
+.main-menu-actions[inert] .main-menu-button[data-game-action='join-party']::after {
   visibility: hidden;
 }
 
@@ -87,8 +86,7 @@
 
 .main-menu-button:disabled { cursor: default; }
 
-.main-menu-button[data-game-action='join-party']::after,
-.main-menu-button[data-game-action='discord']::after {
+.main-menu-button[data-game-action='join-party']::after {
   position: absolute;
   inset: 0;
   display: grid;
@@ -101,15 +99,46 @@
 
 .main-menu-button[data-game-action='join-party']::after { content: 'JOIN PARTY'; }
 
-.main-menu-button[data-game-action='discord']::after {
-  color: #ddc58b;
-  content: 'DISCORD';
-}
-
 .main-menu-button:focus-visible {
   outline: 0.125cqw solid rgb(221 197 139 / 0.9);
   outline-offset: -0.1875cqw;
 }
+
+.main-menu-discord-link {
+  position: absolute;
+  z-index: 1000;
+  bottom: 10px;
+  left: 10px;
+  display: grid;
+  box-sizing: border-box;
+  width: 38px;
+  height: 38px;
+  padding: 8px;
+  border: 1px solid rgb(195 200 255 / 0.9);
+  border-radius: 8px;
+  color: #fff;
+  background: #5865f2;
+  box-shadow: 0 1px 4px #000, inset 0 0 5px rgb(255 255 255 / 0.14);
+  cursor: pointer;
+  place-items: center;
+  pointer-events: auto;
+}
+
+.main-menu-discord-link svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.main-menu-discord-link:hover,
+.main-menu-discord-link:focus-visible {
+  border-color: #fff;
+  outline: 2px solid #fff0b7;
+  outline-offset: 2px;
+  background: #6875f5;
+}
+
+.main-menu-discord-link:active { background: #4752c4; }
 
 .main-menu-quit {
   position: absolute;
@@ -878,6 +907,12 @@
 }
 
 @media (hover: none) and (pointer: coarse) {
+  .main-menu-discord-link {
+    width: 44px;
+    height: 44px;
+    padding: 10px;
+  }
+
   .game-fullscreen-button {
     width: 44px;
     height: 44px;

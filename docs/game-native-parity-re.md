@@ -52988,3 +52988,59 @@ without a stock approximation or protocol fork.
   `0b00fb4f2f931ec48cd38c7ccadf621a47b263c334ff5f5d09fe8699afd71c6f`,
   and `7efd632d66c9b761701e419877262fb6e76852651ade043d747b7f7dedaaacb6`.
   No member is browser-blocked and no deployment was performed.
+
+## 2026-08-27 — Title Discord navigation ownership
+
+### Requested behavior and system boundary
+
+- Requested Website behavior: remove Discord from the centered Main Menu
+  button stack and expose it as a small icon at a screen edge; activating the
+  icon opens the existing Solomon Darker Discord invite.
+- Current web behavior at `abd744d5`: `RootActions` owns a fifth `discord`
+  `MenuButton`; `title-menu-renderer.ts` paints a fifth stock-style plaque;
+  `main-menu.css` writes `DISCORD` over it; and the shared `MenuButton` was
+  widened into an anchor/button polymorph solely for that row.
+- Boundary: the native Title action system remains the four recovered root
+  rows and their semantic hit targets. Discord navigation is Website chrome,
+  outside that native system, and owns only one root-screen anchor, one icon,
+  its invite target, and its accessibility/focus presentation.
+
+### Evidence and membership sweep
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Explicit product direction | user request, 2026-08-27 | Discord must no longer look or behave like a Main Menu row; it should be an edge/corner icon that opens the server | high |
+| Existing native evidence | Title-button ledger entry; `0x0059A9D0` | the native root constructs four plaque buttons with the shared click-only sound lane | high |
+| Current web causal trace | `MainMenuScene.tsx`, `main-menu.css`, `renderer/title-menu-renderer.ts`, `main-menu-presentation.test.ts` at `abd744d5` | the added fifth row crosses semantic input, Pixi painter state, CSS label paint, and tests; removing only its text would leave false title-menu membership | high |
+| Existing Website asset | `frontend/public/icons.svg#discord-icon` | the exact Discord glyph already exists; no generated or approximate icon is needed | high |
+| Existing edge ownership | account identity at top-left; revision at top-right; Quit and Fullscreen at bottom-right | the bottom-left is the unowned interactive title corner and avoids all existing controls | high |
+
+| Member / branch | Owner/source | Disposition | Proof contract |
+| --- | --- | --- | --- |
+| Play, Explore, Settings, Hall plaques | native Title root, `0x0059A9D0` | `verified-already-at-parity` | renderer and semantic navigation each retain exactly four root rows |
+| `discord` title action and fifth Pixi plaque | prior Website extension | `out-of-system`, remove completely | no `discord` action union member, renderer button, CSS plaque label, hover state, or semantic row remains |
+| shared `MenuButton` anchor polymorphism | prior fifth-row implementation | `out-of-system`, remove completely | the stock semantic overlay returns to a button-only contract |
+| bottom-left Discord icon | Website navigation chrome | `out-of-system`, exact requested adaptation | root-only icon is visually separate from the native stack and uses the existing glyph |
+| invite activation | existing `https://discord.gg/HGHxZgyM2p` Website destination | `out-of-system`, exact requested adaptation | native anchor opens a new tab with `noreferrer`; pointer and keyboard activation both work |
+| prompt and screen lifecycle | `MainMenuScene` root/play/prompt owner | `verified-already-at-parity`, strengthened | icon exists only on the unobstructed root and cannot pierce a title prompt, fade, submenu, or later scene |
+| safe area and touch target | `.main-menu-page` safe-area padding and title-stage viewport | `out-of-system`, exact Website platform contract | bottom-left placement follows the safe-area inset and coarse-pointer target is at least 44 by 44 CSS pixels |
+| account, revision, Quit, Fullscreen controls | existing independent edge owners | `verified-already-at-parity` | their geometry and lifecycle are unchanged |
+
+No member is browser-blocked. This pass recovers no new native fact, so no Mod
+Loader report or catalog update is required.
+
+### Implementation consequence and validation contract
+
+- Remove Discord from `TitleMenuAction`, the Pixi root-button collection, the
+  native semantic row group, and the plaque-label CSS. Restore `MenuButton` to
+  a button-only element.
+- Add one root-only semantic anchor directly under the title-stage owner. Use
+  the existing Discord symbol, a compact brand-colored icon treatment, a
+  bottom-left screen-pixel anchor, and the existing click cue on activation.
+- Focused contracts must prove the four-row renderer, absence of Discord menu
+  membership, exact invite/new-tab attributes, icon-only accessible label,
+  bottom-left placement, and 44-pixel coarse-pointer target.
+- Mac validation requires the canonical `./scripts/validate.sh` gate and a
+  real Chrome root-menu journey that checks the icon geometry and visible
+  glyph, opens the exact invite in a popup/new tab, and records empty page,
+  console, and failed-response arrays for the game page.
