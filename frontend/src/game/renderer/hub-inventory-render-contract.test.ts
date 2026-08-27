@@ -126,7 +126,10 @@ test('every inventory and trader modal consumes the shell fixed-stage projection
     inventoryCss,
     /\.hub-native-ui-overlay\s*\{[^}]*position:\s*absolute;[^}]*z-index:\s*30000;[^}]*inset:\s*0;[^}]*background:\s*#000;/s,
   )
-  assert.match(inventoryComponent, /className="hub-native-ui-overlay" data-surface-kind=\{surface\.kind\}/)
+  assert.match(
+    inventoryComponent,
+    /className="hub-native-ui-overlay"[\s\S]*data-input-suspended=\{inputSuspended\}[\s\S]*data-surface-kind=\{surface\.kind\}[\s\S]*inert=\{inputSuspended \|\| undefined\}/,
+  )
   assert.match(
     inventoryCss,
     /\.hub-native-ui-overlay\[data-surface-kind='dialogue'\]\s*\{[^}]*background:\s*transparent;/s,

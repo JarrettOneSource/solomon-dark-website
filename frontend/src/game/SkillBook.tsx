@@ -51,6 +51,7 @@ interface SkillBookProps {
   belt: PlayerBeltComponent
   economy: ProtocolPlayerEconomy
   element: WizardElement
+  inputSuspended: boolean
   onAssignQuickbarSkill: (skillId: number, slot: number) => void
   onUnassignQuickbarSkill: (slot: number) => void
   onClose: () => void
@@ -80,6 +81,7 @@ export default function SkillBook({
   belt: initialBelt,
   economy: initialEconomy,
   element,
+  inputSuspended,
   onAssignQuickbarSkill,
   onClose,
   onCloseStart,
@@ -179,8 +181,8 @@ export default function SkillBook({
   }), [onClose, onOpenInventory, phase])
 
   useEffect(() => {
-    if (topMost) rootRef.current?.focus()
-  }, [topMost])
+    if (topMost && !inputSuspended) rootRef.current?.focus()
+  }, [inputSuspended, topMost])
 
   useEffect(() => {
     let disposed = false
@@ -293,6 +295,7 @@ export default function SkillBook({
       role="dialog"
       aria-modal="true"
       aria-label="Skills"
+      inert={inputSuspended || undefined}
       tabIndex={-1}
       data-transition-phase={phase}
       data-open-progress={openProgress}
@@ -300,6 +303,7 @@ export default function SkillBook({
       data-drag-position-x={drag?.position.x ?? ''}
       data-drag-position-y={drag?.position.y ?? ''}
       data-hovered-skill-id={hoveredSkillId ?? ''}
+      data-input-suspended={inputSuspended}
       data-renderer-state={rendererState}
       onKeyDown={handleKeyDown}
     >

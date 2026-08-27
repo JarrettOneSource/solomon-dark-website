@@ -28,6 +28,7 @@ import './hud-skill-selector.css'
 
 interface HudSkillSelectorProps {
   audio: GameAudioDirector
+  inputSuspended: boolean
   onClose: () => void
   onSelectConcentrationSlot: (skillId: number, slot: 0 | 1) => void
   onSelectPrimarySkill: (skillId: number) => void
@@ -38,6 +39,7 @@ interface HudSkillSelectorProps {
 
 export default function HudSkillSelector({
   audio,
+  inputSuspended,
   onClose,
   onSelectConcentrationSlot,
   onSelectPrimarySkill,
@@ -63,8 +65,8 @@ export default function HudSkillSelector({
   presentationRef.current = { options, title }
 
   useEffect(() => {
-    rootRef.current?.focus()
-  }, [])
+    if (!inputSuspended) rootRef.current?.focus()
+  }, [inputSuspended])
 
   useEffect(() => {
     let disposed = false
@@ -130,7 +132,9 @@ export default function HudSkillSelector({
       aria-label={title}
       aria-modal="true"
       className="main-menu-native-stage hud-skill-selector-stage"
+      inert={inputSuspended || undefined}
       data-binding={target.binding}
+      data-input-suspended={inputSuspended}
       data-option-count={options.length}
       data-renderer-state={rendererState}
       data-selector-kind={target.kind}

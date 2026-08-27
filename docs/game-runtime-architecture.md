@@ -530,6 +530,15 @@ again until an explicit operator reinstall or a different `main` commit.
   Boneyard authoritative pause owner closes its matching modal or
   disconnects to release only that world-instance barrier. Resumption never
   turns elapsed pause time into catch-up simulation.
+- Session chat is a temporary input layer, not another gameplay modal or pause
+  source. In either world it may open over retained player Inventory, full
+  SkillScreen, compact primary/concentration selector, mandatory level-up
+  Skill Picker, and the Pause Menu. `chatOpen` continues to idle/block world
+  input, while a distinct modal-suspension input makes the retained menu inert
+  without closing it or releasing its existing pause/barrier. Closing chat
+  restores that menu's focus owner. Pause-owned Game Settings/control rebinding,
+  loading, Tutorial policy, resume grace, and Game Over remain exclusive
+  application surfaces where chat is disabled.
 - The shared player input record carries normalized movement, a nullable world
   aim point, and independent primary/secondary held levels. Browser mouse edges
   publish immediately; the authoritative queue preserves each level transition

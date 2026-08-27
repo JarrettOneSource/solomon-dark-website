@@ -221,6 +221,7 @@ interface HubInventoryUiProps {
   config: PlayerCharacterConfig
   disabled: boolean
   economy: ProtocolPlayerEconomy
+  inputSuspended: boolean
   inventoryKeyCode: string
   menuKeyCode: string
   memorial?: HubMemorialState | null
@@ -248,6 +249,7 @@ export default function HubInventoryUi({
   config,
   disabled,
   economy,
+  inputSuspended,
   inventoryKeyCode,
   menuKeyCode,
   memorial = null,
@@ -274,11 +276,12 @@ export default function HubInventoryUi({
   const [inventorySackTransition, setInventorySackTransition] =
     useState<HubInventorySackTransitionModel | null>(null)
   const nearestInteraction = useMemo(
-    () => disabled || transitionActive || !interactionsEnabled
+    () => disabled || inputSuspended || transitionActive || !interactionsEnabled
       ? null
       : nearestHubInteraction(region, playerPosition, { skorchaPosition, storyOffice }),
     [
       disabled,
+      inputSuspended,
       interactionsEnabled,
       playerPosition,
       region,
@@ -401,6 +404,7 @@ export default function HubInventoryUi({
 
   useEffect(() => {
     const keyDown = (event: KeyboardEvent) => {
+      if (inputSuspended) return
       if (event.repeat) return
       if (surface && (
         event.code === menuKeyCode
@@ -432,6 +436,7 @@ export default function HubInventoryUi({
     disabled,
     inventoryBackOrClose,
     inventoryKeyCode,
+    inputSuspended,
     menuKeyCode,
     nearestInteraction,
     openWorldDialogue,
@@ -468,6 +473,7 @@ export default function HubInventoryUi({
       belt={belt}
       config={config}
       economy={economy}
+      inputSuspended={inputSuspended}
       modAssets={modAssets}
       menuKeyCode={menuKeyCode}
       memorial={memorial}
@@ -493,6 +499,7 @@ export default function HubInventoryUi({
       {overlay && overlayRoot.current ? createPortal(overlay, overlayRoot.current) : null}
       {npcNotebox && overlayRoot.current ? createPortal(
         <NativeNpcNotebox
+          inputSuspended={inputSuspended}
           style={nativeUiStageStyle}
           text={npcNotebox}
           onClose={() => setNpcNotebox(null)}
@@ -508,6 +515,7 @@ function NativeHubSurface({
   belt,
   config,
   economy,
+  inputSuspended,
   modAssets,
   menuKeyCode,
   memorial,
@@ -530,6 +538,7 @@ function NativeHubSurface({
   belt: PlayerBeltComponent
   config: PlayerCharacterConfig
   economy: ProtocolPlayerEconomy
+  inputSuspended: boolean
   modAssets: readonly GameModAsset[]
   menuKeyCode: string
   memorial: HubMemorialState | null
@@ -825,6 +834,7 @@ function NativeHubSurface({
   useEffect(() => {
     if (surface.kind !== 'dialogue') return
     const back = (event: KeyboardEvent) => {
+      if (inputSuspended) return
       if (event.repeat || event.code !== menuKeyCode) return
       event.preventDefault()
       event.stopImmediatePropagation()
@@ -839,7 +849,7 @@ function NativeHubSurface({
     }
     window.addEventListener('keydown', back, { capture: true })
     return () => window.removeEventListener('keydown', back, { capture: true })
-  }, [audio, beginChatContent, chat.content, dismissOrCloseChat, menuKeyCode, surface.kind])
+  }, [audio, beginChatContent, chat.content, dismissOrCloseChat, inputSuspended, menuKeyCode, surface.kind])
 
   const model = useMemo((): HubInventoryRendererModel => {
     if (surface.kind === 'inventory') return {
@@ -1047,7 +1057,12 @@ function NativeHubSurface({
     : null
 
   return (
-    <div className="hub-native-ui-overlay" data-surface-kind={surface.kind}>
+    <div
+      className="hub-native-ui-overlay"
+      data-input-suspended={inputSuspended}
+      data-surface-kind={surface.kind}
+      inert={inputSuspended || undefined}
+    >
       <section
         className="hub-native-ui-stage"
         style={style}
@@ -1322,16 +1337,23 @@ function NativeHubSurface({
 }
 
 function NativeNpcNotebox({
+  inputSuspended,
   onClose,
   style,
   text,
 }: {
+  inputSuspended: boolean
   onClose: () => void
   style: CSSProperties
   text: string
 }) {
   return (
-    <div className="hub-native-notebox-overlay" data-native-notebox-text={text}>
+    <div
+      className="hub-native-notebox-overlay"
+      data-input-suspended={inputSuspended}
+      data-native-notebox-text={text}
+      inert={inputSuspended || undefined}
+    >
       <section
         className="hub-native-notebox"
         role="alertdialog"

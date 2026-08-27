@@ -44,6 +44,7 @@ type SkillPickerPhase =
 
 interface SkillPickerProps {
   audio: GameAudioDirector
+  inputSuspended: boolean
   offer: ProtocolPlayerSkillOffer | null
   onClosingChange: (closing: boolean) => void
   onReroll: (offerSequence: number) => void
@@ -60,6 +61,7 @@ const NATIVE_TICK_MS = 10
 
 export default function SkillPicker({
   audio,
+  inputSuspended,
   offer,
   onClosingChange,
   onReroll,
@@ -115,8 +117,8 @@ export default function SkillPicker({
   }, [audio, presentationId])
 
   useEffect(() => {
-    if (revealReady) buttonRefs.current[0]?.focus()
-  }, [displayedOffer.sequence, revealReady])
+    if (revealReady && !inputSuspended) buttonRefs.current[0]?.focus()
+  }, [displayedOffer.sequence, inputSuspended, revealReady])
 
   useEffect(() => {
     const host = hostRef.current
@@ -391,9 +393,11 @@ export default function SkillPicker({
   return (
     <div
       className="skill-picker-overlay"
+      data-input-suspended={inputSuspended}
       role="dialog"
       aria-modal="true"
       aria-label={`Level ${displayedOffer.level}. Select a skill.`}
+      inert={inputSuspended || undefined}
       onKeyDown={handleKeyDown}
     >
       <div ref={curtainRef} className="skill-picker-curtain" aria-hidden />

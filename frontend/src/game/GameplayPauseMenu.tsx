@@ -42,6 +42,7 @@ interface GameplayPauseMenuProps {
   className?: string
   /** Action selected by an owner Escape; null consumes the edge without closing. */
   escapeAction?: NativeSimpleMenuAction | null
+  inputSuspended: boolean
   /** Receives the chosen row's action once the native close tick has run out. */
   onSelect: (action: NativeSimpleMenuAction) => void
   pause: GameplayPauseState
@@ -56,6 +57,7 @@ export default function GameplayPauseMenu({
   backAction,
   className,
   escapeAction = 'resume',
+  inputSuspended,
   onSelect,
   pause,
   playerId,
@@ -79,8 +81,8 @@ export default function GameplayPauseMenu({
   revealRef.current = reveal
 
   useEffect(() => {
-    if (presentation.kind === 'owner') firstRowRef.current?.focus()
-  }, [presentation.kind])
+    if (presentation.kind === 'owner' && !inputSuspended) firstRowRef.current?.focus()
+  }, [inputSuspended, presentation.kind])
 
   useEffect(() => {
     const host = rendererHostRef.current
@@ -157,9 +159,11 @@ export default function GameplayPauseMenu({
       data-gameplay-pause-owner-id={pause.ownerPlayerId}
       data-gameplay-pause-owner-name={pause.ownerDisplayName}
       data-gameplay-pause-source={pause.source}
+      data-input-suspended={inputSuspended}
       data-gameplay-pause-pressed={pressedAction ?? 'none'}
       data-gameplay-pause-reveal={reveal}
       data-gameplay-pause-view={presentation.kind}
+      inert={inputSuspended || undefined}
       onKeyDown={consumeEscape}
       role={presentation.kind === 'owner' ? 'dialog' : 'status'}
       aria-live={presentation.kind === 'waiting' ? 'polite' : undefined}

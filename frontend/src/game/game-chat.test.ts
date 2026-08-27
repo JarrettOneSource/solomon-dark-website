@@ -23,6 +23,12 @@ const css = readFileSync(new URL('./game-chat.css', import.meta.url), 'utf8')
 const mainMenu = readFileSync(new URL('./MainMenuScene.tsx', import.meta.url), 'utf8')
 const hubScene = readFileSync(new URL('./HubScene.tsx', import.meta.url), 'utf8')
 const boneyardScene = readFileSync(new URL('./BoneyardScene.tsx', import.meta.url), 'utf8')
+const inventory = readFileSync(new URL('./HubInventoryUi.tsx', import.meta.url), 'utf8')
+const skillBook = readFileSync(new URL('./SkillBook.tsx', import.meta.url), 'utf8')
+const skillPicker = readFileSync(new URL('./SkillPicker.tsx', import.meta.url), 'utf8')
+const hudSkillSelector = readFileSync(new URL('./HudSkillSelector.tsx', import.meta.url), 'utf8')
+const pauseMenu = readFileSync(new URL('./GameplayPauseMenu.tsx', import.meta.url), 'utf8')
+const mainMenuCss = readFileSync(new URL('./main-menu.css', import.meta.url), 'utf8')
 
 test('chat channels follow public Hub party membership and Boneyard scope', () => {
   assert.deepEqual(availableGameChatChannels('hub', singleton), ['global'])
@@ -170,6 +176,64 @@ test('the open chat window owns Escape independent of focus and closes on accept
   assert.match(
     component,
     /onChatRejected[\s\S]*setOpen\(true\)/,
+  )
+})
+
+test('chat remains admitted over every gameplay modal while exclusive application surfaces still disable it', () => {
+  const disabled = mainMenu.slice(
+    mainMenu.indexOf('const chatDisabled ='),
+    mainMenu.indexOf('const sceneInputBlocked ='),
+  )
+  for (const retainedModal of [
+    'levelUpModalActive',
+    'skillBookOpen',
+    'hudSkillSelector',
+    'inventoryScreenOpen',
+    'hubPauseMenuOpen',
+    'gameplayPause',
+  ]) assert.doesNotMatch(disabled, new RegExp(retainedModal))
+  for (const exclusiveSurface of [
+    'loading !== null',
+    'tutorialSession',
+    'gameplaySettingsOpen',
+    'gameplayResumeGrace !== null',
+  ]) assert.match(disabled, new RegExp(exclusiveSurface.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+
+  assert.equal(mainMenu.match(/chatInputActive=\{chatOpen\}/g)?.length, 2)
+  assert.equal(mainMenu.match(/inputSuspended=\{chatOpen\}/g)?.length, 4)
+  assert.match(
+    mainMenuCss,
+    /\.main-menu-page\[data-chat-open='true'\] \.game-menu-skull,[\s\S]*\.main-menu-page\[data-chat-open='true'\] \.game-fullscreen-control\s*\{[\s\S]*pointer-events:\s*none/,
+  )
+})
+
+test('chat suspends retained modal input without destroying state and restores each focus owner', () => {
+  for (const scene of [hubScene, boneyardScene]) {
+    assert.match(scene, /chatInputActive: boolean/)
+    assert.match(scene, /inputSuspended=\{chatInputActive\}/)
+  }
+  assert.match(inventory, /inputSuspended: boolean/)
+  assert.match(inventory, /if \(inputSuspended\) return/)
+  assert.match(inventory, /<NativeHubSurface[\s\S]*inputSuspended=\{inputSuspended\}/)
+  assert.match(inventory, /className="hub-native-ui-overlay"[\s\S]*inert=\{inputSuspended \|\| undefined\}/)
+  assert.doesNotMatch(
+    inventory.slice(
+      inventory.indexOf('if (!surface) return'),
+      inventory.indexOf('const openWorldDialogue'),
+    ),
+    /inputSuspended[\s\S]*closeSurface\(\)/,
+  )
+
+  for (const modal of [skillBook, skillPicker, hudSkillSelector, pauseMenu]) {
+    assert.match(modal, /inputSuspended: boolean/)
+    assert.match(modal, /inert=\{inputSuspended \|\| undefined\}/)
+  }
+  assert.match(skillBook, /if \(topMost && !inputSuspended\) rootRef\.current\?\.focus\(\)/)
+  assert.match(skillPicker, /if \(revealReady && !inputSuspended\) buttonRefs\.current\[0\]\?\.focus\(\)/)
+  assert.match(hudSkillSelector, /if \(!inputSuspended\) rootRef\.current\?\.focus\(\)/)
+  assert.match(
+    pauseMenu,
+    /presentation\.kind === 'owner' && !inputSuspended[\s\S]*firstRowRef\.current\?\.focus\(\)/,
   )
 })
 

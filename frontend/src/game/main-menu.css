@@ -212,6 +212,12 @@
   right: 49px;
 }
 
+.main-menu-page[data-chat-open='true'] .game-menu-skull,
+.main-menu-page[data-chat-open='true'] .game-fullscreen-control {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .main-menu-page[data-game-scene='root'] .game-fullscreen-control,
 .main-menu-page[data-game-scene='play'] .game-fullscreen-control {
   top: auto;

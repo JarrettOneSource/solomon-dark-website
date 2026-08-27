@@ -1424,15 +1424,17 @@ export default function MainMenuScene({
     )
   const chatDisabled = loading !== null
     || tutorialSession
-    || levelUpModalActive
-    || skillBookOpen
-    || hudSkillSelector !== null
-    || inventoryScreenOpen
-    || hubPauseMenuOpen
-    || gameplayPause !== null
+    || gameplaySettingsOpen
     || gameplayResumeGrace !== null
   const sceneInputBlocked = chatOpen
     || loading !== null
+    || levelUpModalActive
+    || skillBookOpen
+    || hudSkillSelector !== null
+    || hubPauseMenuOpen
+    || (gameplayPause !== null && !ownsActiveInventoryPause)
+    || gameplayResumeGrace !== null
+  const sceneModalDisabled = loading !== null
     || levelUpModalActive
     || skillBookOpen
     || hudSkillSelector !== null
@@ -1682,6 +1684,7 @@ export default function MainMenuScene({
                   backAction="resume"
                   className="dark-cloud-pause-stage"
                   escapeAction={null}
+                  inputSuspended={false}
                   onSelect={(action) => {
                     setDarkCloudMenuOpen(false)
                     if (action === 'settings') setSettingsContext('dark-cloud')
@@ -1741,9 +1744,11 @@ export default function MainMenuScene({
               audio={audio}
               belt={runtimeSnapshot.players[session.playerId]!.belt}
               boneyard={loadedBoneyard}
+              chatInputActive={chatOpen}
               getPingMs={session.getPingMs}
               inputBlocked={sceneInputBlocked}
               inventoryRequestSequence={inventoryRequestSequence}
+              modalDisabled={sceneModalDisabled}
               modAssets={session.modAssets}
               modCatalog={session.getModCatalog()}
               levelUpPresentationId={levelUpPresentationId}
@@ -1780,9 +1785,11 @@ export default function MainMenuScene({
               audio={audio}
               belt={runtimeSnapshot.players[session.playerId]!.belt}
               boneyards={session.boneyards}
+              chatInputActive={chatOpen}
               getPingMs={session.getPingMs}
               inputBlocked={sceneInputBlocked}
               inventoryRequestSequence={inventoryRequestSequence}
+              modalDisabled={sceneModalDisabled}
               modAssets={session.modAssets}
               levelUpPresentationId={levelUpPresentationId}
               nativeUiStageStyle={nativeStageStyle}
@@ -1860,6 +1867,7 @@ export default function MainMenuScene({
               belt={runtimeSnapshot!.players[session.playerId]!.belt}
               economy={runtimeSnapshot!.players[session.playerId]!.economy}
               element={runtimeSnapshot!.players[session.playerId]!.config.element}
+              inputSuspended={chatOpen}
               onAssignQuickbarSkill={session.bindSkillQuickbar}
               onClose={() => {
                 setSkillBookOpen(false)
@@ -1889,6 +1897,7 @@ export default function MainMenuScene({
           <Suspense fallback={null}>
             <HudSkillSelector
               audio={audio}
+              inputSuspended={chatOpen}
               onClose={() => setHudSkillSelector(null)}
               onSelectConcentrationSlot={session.selectConcentrationSlot}
               onSelectPrimarySkill={session.selectPrimarySkill}
@@ -1906,6 +1915,7 @@ export default function MainMenuScene({
             <SkillPicker
               audio={audio}
               offer={runtimeProgression?.pendingOffer ?? null}
+              inputSuspended={chatOpen}
               onClosingChange={(closing) => {
                 setLevelUpPickerClosing(closing)
                 if (!closing) session.readyResumeGrace()
@@ -1958,6 +1968,7 @@ export default function MainMenuScene({
             <GameplayPauseMenu
               key={gameplayPauseMenuGeneration}
               audio={audio}
+              inputSuspended={chatOpen}
               onSelect={(action) => {
                 if (leaving) return
                 if (action === 'leave') void leaveGameplay()

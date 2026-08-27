@@ -71,11 +71,13 @@ export default function DeveloperObserverScene({
         audio={audio}
         belt={selectedPlayer.belt}
         boneyard={observerState.boneyard}
+        chatInputActive={false}
         getPingMs={() => observerState.pingMs}
         initialSnapshot={observerState.snapshot}
         inputBlocked
         inventoryRequestSequence={0}
         levelUpPresentationId={null}
+        modalDisabled
         modAssets={session.modAssets}
         modCatalog={session.modCatalog}
         nativeUiStageStyle={nativeUiStageStyle}

@@ -27,6 +27,10 @@ const screenshots = {
     || '/tmp/solomon-dark-loading-waiting.png',
   boneyardWaiting: process.env.SDR_GAME_PAUSE_BONEYARD_SCREENSHOT
     || '/tmp/solomon-dark-pause-boneyard-waiting.png',
+  chatBoneyardPause: process.env.SDR_GAME_CHAT_BONEYARD_PAUSE_SCREENSHOT
+    || '/tmp/solomon-dark-chat-boneyard-pause.png',
+  chatHubInventory: process.env.SDR_GAME_CHAT_HUB_INVENTORY_SCREENSHOT
+    || '/tmp/solomon-dark-chat-hub-inventory.png',
   hubOwner: process.env.SDR_GAME_PAUSE_OWNER_SCREENSHOT
     || '/tmp/solomon-dark-pause-hub-owner.png',
   inventoryOwner: process.env.SDR_GAME_PAUSE_INVENTORY_SCREENSHOT
@@ -51,6 +55,7 @@ const screenshots = {
     || '/tmp/solomon-dark-pause-skill-book-owner.png',
 }
 const errors = []
+const failedResponses = []
 
 const vite = await createViteServer({
   configFile: fileURLToPath(new URL('../vite.config.ts', import.meta.url)),
@@ -92,6 +97,9 @@ try {
   page.on('console', (message) => {
     if (message.type() === 'error') errors.push(`console: ${message.text()}`)
   })
+  page.on('response', (response) => {
+    if (response.status() >= 400) failedResponses.push(`${response.status()} ${response.url()}`)
+  })
   await page.addInitScript(bypassStartupAudioPreload)
   await page.addInitScript((configuration) => {
     window.solomonDarkRuntime = configuration
@@ -101,6 +109,7 @@ try {
     await route.fulfill({ json: { revision } })
   })
   await enterHub(page, 'Fire')
+  const chatModalReceipts = []
 
   await page.setViewportSize({ height: 1200, width: 1920 })
   const largeHubScene = page.locator('.hub-scene')
@@ -205,6 +214,15 @@ try {
   assert.equal(await page.locator('.gameplay-pause-stage').count(), 0)
   await assertLiveHub(page, 'Hub Inventory', 350)
   await page.screenshot({ path: screenshots.inventoryOwner })
+  chatModalReceipts.push(await assertChatOverModal({
+    focusRestored: false,
+    label: 'Hub Inventory',
+    modal: inventory,
+    page,
+    peer,
+    screenshotPath: screenshots.chatHubInventory,
+    send: true,
+  }))
 
   await page.keyboard.press('k')
   const skillBook = page.getByRole('dialog', { name: 'Skills' })
@@ -218,6 +236,14 @@ try {
   )
   await assertLiveHub(page, 'Hub Skill Book', 350)
   await page.screenshot({ path: screenshots.skillBookOwner })
+  chatModalReceipts.push(await assertChatOverModal({
+    focusRestored: true,
+    label: 'Hub Skill Book',
+    modal: skillBook,
+    page,
+    peer,
+    send: false,
+  }))
 
   const peerSawBookClear = nextRawMessage(peer.socket, (message) => (
     message.type === 'server-snapshot'
@@ -241,6 +267,14 @@ try {
   await Promise.all([compactSelector.waitFor(), peerSawSelectorActivity])
   await assertNonMusicMuted(page, true)
   await assertLiveHub(page, 'Hub compact skill selector', 350)
+  chatModalReceipts.push(await assertChatOverModal({
+    focusRestored: true,
+    label: 'Hub compact skill selector',
+    modal: compactSelector,
+    page,
+    peer,
+    send: false,
+  }))
   const peerSawSelectorClear = nextRawMessage(peer.socket, (message) => (
     message.type === 'server-snapshot'
     && message.frame.world.kind === 'hub'
@@ -374,6 +408,14 @@ try {
 
   const liveHubPause = await assertLiveHub(page, 'Hub Pause Menu', 550)
   assert.deepEqual(hubPauseEdges, [])
+  chatModalReceipts.push(await assertChatOverModal({
+    focusRestored: true,
+    label: 'Hub Pause Menu',
+    modal: ownerPause,
+    page,
+    peer,
+    send: true,
+  }))
 
   latePeer = await joinRaw({
     discipline: 'body',
@@ -418,6 +460,10 @@ try {
 
   await settingsPause.getByRole('button', { name: 'GAME SETTINGS' }).click()
   await page.getByRole('dialog', { name: 'Settings' }).waitFor()
+  const settingsChat = page.getByLabel('Game chat')
+  assert.equal(await settingsChat.isHidden(), true)
+  await page.keyboard.press('t')
+  assert.equal(await settingsChat.getAttribute('data-chat-open'), 'false')
   await assertNonMusicMuted(page, true)
   const settingsDialog = page.locator('.game-settings-dialog')
   await settingsPause.waitFor({ state: 'detached' })
@@ -568,6 +614,14 @@ try {
     largeBoneyardInventory,
     largeBoneyardInventory.locator('.hub-inventory-native-canvas'),
   )
+  chatModalReceipts.push(await assertChatOverModal({
+    focusRestored: false,
+    label: 'Boneyard Inventory',
+    modal: largeBoneyardInventory,
+    page,
+    peer,
+    send: true,
+  }))
   const largeBoneyardInventoryHeldTick = host.state().tick
   await page.keyboard.press('i')
   await largeBoneyardInventory.waitFor({ state: 'detached' })
@@ -582,6 +636,14 @@ try {
   const boneyardSkillBook = page.getByRole('dialog', { name: 'Skills' })
   await boneyardSkillBook.waitFor()
   await page.locator('.skill-book-stage[data-transition-phase="settled"]').waitFor()
+  chatModalReceipts.push(await assertChatOverModal({
+    focusRestored: true,
+    label: 'Boneyard Skill Book',
+    modal: boneyardSkillBook,
+    page,
+    peer,
+    send: false,
+  }))
   const boneyardSkillBookHeldTick = host.state().tick
   await boneyardSkillBook.getByRole('button', { name: 'Close skills' }).click()
   await boneyardSkillBook.waitFor({ state: 'detached' })
@@ -597,6 +659,14 @@ try {
   const boneyardSelector = page.getByRole('dialog', { name: 'Select Primary Attack' })
   await boneyardSelector.waitFor()
   await page.locator('.hud-skill-selector-stage[data-renderer-state="ready"]').waitFor()
+  chatModalReceipts.push(await assertChatOverModal({
+    focusRestored: true,
+    label: 'Boneyard compact skill selector',
+    modal: boneyardSelector,
+    page,
+    peer,
+    send: false,
+  }))
   const boneyardSelectorHeldTick = host.state().tick
   await page.keyboard.press('Escape')
   await boneyardSelector.waitFor({ state: 'detached' })
@@ -630,6 +700,15 @@ try {
     await canvasFrame(page, '.boneyard-world-canvas'),
     heldBoneyardOwnerFrame,
   )
+  chatModalReceipts.push(await assertChatOverModal({
+    focusRestored: true,
+    label: 'Boneyard Pause Menu',
+    modal: boneyardOwner,
+    page,
+    peer,
+    screenshotPath: screenshots.chatBoneyardPause,
+    send: true,
+  }))
   const peerSawBoneyardResume = nextRawMessage(peer.socket, (message) => (
     message.type === 'server-gameplay-pause' && message.pause === null
   ))
@@ -674,6 +753,14 @@ try {
     await page.locator('.boneyard-scene').getAttribute('data-presentation-paused'),
     'true',
   )
+  chatModalReceipts.push(await assertChatOverModal({
+    focusRestored: false,
+    label: 'peer Boneyard Pause wait',
+    modal: boneyardWaiting,
+    page,
+    peer,
+    send: false,
+  }))
 
   peer.socket.close(1000, 'pause owner left')
   await boneyardWaiting.waitFor({ state: 'detached' })
@@ -707,17 +794,22 @@ try {
   )
 
   assert.deepEqual(errors, [])
+  assert.deepEqual(failedResponses, [])
   process.stdout.write(`${JSON.stringify({
+    browserVersion: browser.version(),
     boneyardResumeTick: host.state().tick,
+    chatModalReceipts,
+    failedResponses,
     heldBoneyardOwnerTick: heldBoneyardOwner.tick,
     heldBoneyardPeerTick: heldBoneyardPeer.tick,
     heldRestartTick,
     liveHubPauseEndTick: liveHubPause.after.tick,
     liveHubPauseStartTick: liveHubPause.before.tick,
     screenshots,
+    status: 'ok',
   })}\n`)
 } catch (error) {
-  process.stderr.write(`${JSON.stringify({ errors })}\n`)
+  process.stderr.write(`${JSON.stringify({ errors, failedResponses })}\n`)
   throw error
 } finally {
   peer?.socket.close()
@@ -725,6 +817,67 @@ try {
   await browser.close()
   await host.close()
   await vite.close()
+}
+
+async function assertChatOverModal({
+  focusRestored,
+  label,
+  modal,
+  page,
+  peer,
+  screenshotPath = null,
+  send,
+}) {
+  const modalHandle = await modal.elementHandle()
+  assert.ok(modalHandle, `${label} has no retained element`)
+  const inputOwner = modal.locator(
+    'xpath=ancestor-or-self::*[@data-input-suspended][1]',
+  )
+  const chat = page.getByLabel('Game chat')
+  await page.keyboard.press('t')
+  await chat.locator('xpath=self::*[@data-chat-open="true"]').waitFor()
+  await inputOwner.locator('xpath=self::*[@data-input-suspended="true"]').waitFor()
+  assert.equal(await inputOwner.evaluate(node => node.inert), true)
+  const input = chat.getByRole('textbox', { name: 'Chat message' })
+  await input.fill('')
+  await input.pressSequentially('ik123wasd')
+  await input.press('ArrowLeft')
+  if (screenshotPath) await page.screenshot({ path: screenshotPath })
+  await input.press('Escape')
+  await chat.locator('xpath=self::*[@data-chat-open="false"]').waitFor()
+  await inputOwner.locator('xpath=self::*[@data-input-suspended="false"]').waitFor()
+  assert.equal(await modalHandle.evaluate(node => node.isConnected), true)
+  assert.equal(await inputOwner.evaluate(node => node.inert), false)
+  if (focusRestored) {
+    await page.waitForFunction((node) => node.contains(document.activeElement), modalHandle)
+  }
+
+  let sequence = null
+  if (send) {
+    const text = `Chat over ${label}`
+    const delivered = nextRawMessage(peer.socket, (message) => (
+      message.type === 'server-chat' && message.text === text
+    ))
+    await page.keyboard.press('t')
+    await chat.locator('xpath=self::*[@data-chat-open="true"]').waitFor()
+    await inputOwner.locator('xpath=self::*[@data-input-suspended="true"]').waitFor()
+    await input.fill(text)
+    await input.press('Enter')
+    await chat.locator('xpath=self::*[@data-chat-open="false"]').waitFor()
+    const message = await delivered
+    assert.equal(message.type, 'server-chat')
+    assert.equal(message.sender.playerId, host.hostPlayerId())
+    sequence = message.sequence
+    await chat.locator('[data-message-channel="party"]', { hasText: text }).waitFor()
+    await inputOwner.locator('xpath=self::*[@data-input-suspended="false"]').waitFor()
+    assert.equal(await modalHandle.evaluate(node => node.isConnected), true)
+  }
+  return {
+    escapeClosedOnlyChat: true,
+    label,
+    modalRetained: true,
+    sentSequence: sequence,
+  }
 }
 
 async function activateHubPlayer(page, playerId) {

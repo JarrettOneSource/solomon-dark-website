@@ -1428,6 +1428,25 @@ test('Boneyard pause holds the complete world and only its owner can resume', as
   assert.equal(JSON.stringify(host.state().world), heldWorld)
   assert.equal(JSON.stringify(gameSimulationPlayerRecords(host.state())), heldPlayers)
 
+  const pausedChatA = nextMessage(first.socket, (message) => (
+    message.type === 'server-chat' && message.text === 'Chat remains live while paused'
+  ))
+  const pausedChatB = nextMessage(second.socket, (message) => (
+    message.type === 'server-chat' && message.text === 'Chat remains live while paused'
+  ))
+  second.socket.send(encodeGameMessage({
+    type: 'client-chat',
+    channel: 'party',
+    text: 'Chat remains live while paused',
+  }))
+  const [chatA, chatB] = await Promise.all([pausedChatA, pausedChatB])
+  assert.equal(chatA.type, 'server-chat')
+  assert.equal(chatB.type, 'server-chat')
+  assert.equal(chatA.sender.playerId, second.welcome.playerId)
+  assert.equal(host.state().tick, heldTick)
+  assert.equal(JSON.stringify(host.state().world), heldWorld)
+  assert.equal(JSON.stringify(gameSimulationPlayerRecords(host.state())), heldPlayers)
+
   first.socket.send(encodeGameMessage({ type: 'client-gameplay-pause', paused: false }))
   await new Promise((resolve) => setTimeout(resolve, 60))
   assert.equal(host.state().tick, heldTick)
@@ -1883,6 +1902,19 @@ test('game host pauses a leveling player and authoritatively books the offered s
   await new Promise((resolve) => setTimeout(resolve, 25))
   client.socket.off('message', observePause)
   assert.equal(gameplayPauseMessages, 0)
+
+  const pickerChat = nextMessage(client.socket, (message) => (
+    message.type === 'server-chat' && message.text === 'Choosing a skill'
+  ))
+  client.socket.send(encodeGameMessage({
+    type: 'client-chat',
+    channel: 'party',
+    text: 'Choosing a skill',
+  }))
+  const deliveredPickerChat = await pickerChat
+  assert.equal(deliveredPickerChat.type, 'server-chat')
+  assert.equal(deliveredPickerChat.sender.playerId, playerId)
+  assert.equal(host.state().tick, client.welcome.snapshot.tick)
 
   client.socket.send(encodeGameMessage({
     type: 'client-input',

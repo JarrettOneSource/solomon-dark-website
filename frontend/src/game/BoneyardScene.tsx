@@ -121,10 +121,12 @@ interface BoneyardSceneProps {
   audio: GameAudioDirector
   belt: PlayerBeltComponent
   boneyard: LoadedBoneyard
+  chatInputActive: boolean
   getPingMs: () => number | null
   initialSnapshot: GameSnapshot
   inputBlocked: boolean
   inventoryRequestSequence: number
+  modalDisabled: boolean
   modAssets: readonly GameModAsset[]
   modCatalog: readonly ModConsumableCatalogEntry[]
   levelUpPresentationId: number | null
@@ -180,10 +182,12 @@ export default function BoneyardScene({
   audio,
   belt,
   boneyard: loaded,
+  chatInputActive,
   getPingMs,
   initialSnapshot,
   inputBlocked,
   inventoryRequestSequence,
+  modalDisabled,
   modAssets,
   modCatalog,
   levelUpPresentationId,
@@ -1125,8 +1129,9 @@ export default function BoneyardScene({
               audio={audio}
               belt={liveBelt}
               config={boneyardInitialSnapshot.players[playerId]!.config}
-              disabled={inputBlocked || tutorialAccess?.inventory === false || run.phase !== 'active'}
+              disabled={modalDisabled || tutorialAccess?.inventory === false || run.phase !== 'active'}
               economy={economy}
+              inputSuspended={chatInputActive}
               inventoryKeyCode={settings.controls.openInventory}
               menuKeyCode={settings.controls.openMenu}
               modAssets={modAssets}

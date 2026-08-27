@@ -26,6 +26,8 @@ const revealScreenshotPath = process.env.SDR_SKILL_PICKER_REVEAL_SMOKE_SCREENSHO
   || screenshotPath.replace(/\.png$/i, '-reveal.png')
 const boneyardScreenshotPath = process.env.SDR_SKILL_PICKER_BONEYARD_SMOKE_SCREENSHOT
   || screenshotPath.replace(/\.png$/i, '-boneyard.png')
+const chatScreenshotPath = process.env.SDR_SKILL_PICKER_CHAT_SMOKE_SCREENSHOT
+  || screenshotPath.replace(/\.png$/i, '-chat.png')
 const credential = randomBytes(32).toString('base64url')
 const pageErrors = []
 const consoleErrors = []
@@ -211,6 +213,52 @@ try {
     { height: pickerRenderer.height, width: pickerRenderer.width },
     { height: 900, width: 1600 },
   )
+
+  const chat = page.getByLabel('Game chat')
+  const pickerOfferSequence = Number(await picker.locator('.skill-picker-stage').getAttribute(
+    'data-offer-sequence',
+  ))
+  const pickerHeldTick = host.state().tick
+  await page.keyboard.press('t')
+  await chat.locator('xpath=self::*[@data-chat-open="true"]').waitFor()
+  await picker.locator('xpath=self::*[@data-input-suspended="true"]').waitFor()
+  assert.equal(await picker.evaluate(node => node.inert), true)
+  const chatInput = chat.getByRole('textbox', { name: 'Chat message' })
+  await chatInput.fill('')
+  await chatInput.pressSequentially('ik123wasd')
+  await chatInput.press('ArrowLeft')
+  await page.screenshot({ path: chatScreenshotPath })
+  await chatInput.press('Escape')
+  await chat.locator('xpath=self::*[@data-chat-open="false"]').waitFor()
+  await picker.locator('xpath=self::*[@data-input-suspended="false"]').waitFor()
+  assert.equal(await picker.count(), 1)
+  assert.equal(await picker.evaluate(node => node.inert), false)
+  assert.equal(
+    Number(await picker.locator('.skill-picker-stage').getAttribute('data-offer-sequence')),
+    pickerOfferSequence,
+  )
+  assert.equal(host.state().tick, pickerHeldTick)
+
+  await page.keyboard.press('t')
+  await chat.locator('xpath=self::*[@data-chat-open="true"]').waitFor()
+  await chatInput.fill('Chat over the Skill Picker')
+  await chatInput.press('Enter')
+  await chat.locator('xpath=self::*[@data-chat-open="false"]').waitFor()
+  await chat.locator('[data-message-channel="party"]', {
+    hasText: 'Chat over the Skill Picker',
+  }).waitFor()
+  await picker.locator('xpath=self::*[@data-input-suspended="false"]').waitFor()
+  assert.equal(await picker.count(), 1)
+  assert.equal(host.state().tick, pickerHeldTick)
+  await page.waitForFunction(() => (
+    document.querySelector('.skill-picker-action') === document.activeElement
+  ))
+  const chatPickerReceipt = {
+    messageDelivered: true,
+    offerSequence: pickerOfferSequence,
+    pickerRetained: true,
+    tick: pickerHeldTick,
+  }
 
   const actions = picker.locator('.skill-picker-action')
   assert.equal(await actions.count(), 3)
@@ -472,7 +520,7 @@ try {
   const boneyardRevealReceiptPromise = observeNextPickerReveal(page, 'Boneyard')
   Object.assign(host.state(), boneyardLevelUp)
   const boneyardPicker = page.getByRole('dialog', { name: /Select a skill/ })
-  await page.getByRole('button', { name: /Use health potion/ }).click()
+  await page.locator('.hub-hud-quickbar-slot[data-entry-kind="health-potion"]').click()
   await boneyardPicker.waitFor({ timeout: 30_000 })
   const boneyardRevealReceipt = await boneyardRevealReceiptPromise
   const boneyardEarlyRevealObserved = boneyardRevealReceipt.earlyRevealObserved
@@ -507,6 +555,16 @@ try {
     enemyCount: 1,
     renderer: 'pixi-webgl',
   })
+  const boneyardPickerHeldTick = host.state().tick
+  await page.keyboard.press('t')
+  await chat.locator('xpath=self::*[@data-chat-open="true"]').waitFor()
+  await boneyardPicker.locator('xpath=self::*[@data-input-suspended="true"]').waitFor()
+  await chatInput.fill('ik123wasd')
+  await chatInput.press('Escape')
+  await chat.locator('xpath=self::*[@data-chat-open="false"]').waitFor()
+  await boneyardPicker.locator('xpath=self::*[@data-input-suspended="false"]').waitFor()
+  assert.equal(await boneyardPicker.count(), 1)
+  assert.equal(host.state().tick, boneyardPickerHeldTick)
   await page.screenshot({ path: boneyardScreenshotPath })
 
   assert.deepEqual(pageErrors, [])
@@ -518,6 +576,9 @@ try {
     boneyardBackgroundReceipt,
     boneyardEarlyRevealObserved,
     boneyardPickerAudioReceipt,
+    boneyardPickerHeldTick,
+    chatPickerReceipt,
+    chatScreenshotPath,
     boneyardPresentationReceipt,
     boneyardRevealAlphas,
     boneyardScreenshotPath,

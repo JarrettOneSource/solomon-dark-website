@@ -102,10 +102,12 @@ interface HubSceneProps {
   audio: GameAudioDirector
   belt: PlayerBeltComponent
   boneyards: readonly BoneyardChoice[]
+  chatInputActive: boolean
   getPingMs: () => number | null
   initialSnapshot: GameSnapshot
   inputBlocked: boolean
   inventoryRequestSequence: number
+  modalDisabled: boolean
   modAssets: readonly GameModAsset[]
   levelUpPresentationId: number | null
   nativeUiStageStyle: CSSProperties
@@ -159,10 +161,12 @@ export default function HubScene({
   audio,
   belt,
   boneyards,
+  chatInputActive,
   getPingMs,
   initialSnapshot,
   inputBlocked,
   inventoryRequestSequence,
+  modalDisabled,
   modAssets,
   levelUpPresentationId,
   nativeUiStageStyle,
@@ -884,8 +888,9 @@ export default function HubScene({
           audio={audio}
           belt={liveBelt}
           config={hubInitialSnapshot.players[playerId]!.config}
-          disabled={inputBlocked || pickerOpen}
+          disabled={modalDisabled || pickerOpen}
           economy={economy}
+          inputSuspended={chatInputActive}
           inventoryKeyCode={settings.controls.openInventory}
           menuKeyCode={settings.controls.openMenu}
           memorial={memorial}
