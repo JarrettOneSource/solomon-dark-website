@@ -51398,7 +51398,7 @@ browser party capability.
   per purchase (at most twice), and raises capacity 3 -> 6 -> 9. Common apply
   still sets ownership byte 27; only duplicate-list rejection is bypassed. The
   web authority, protocol, save, Hall
-  projection, and stock bridge must retain that exact list. Protocol 85 owns
+  projection, and stock bridge must retain that exact list. Protocol 86 owns
   the ordered/repeated projection; schema 17 owns it directly, while schemas
   1..16 migrate the older sorted ordinary set by appending their recorded
   Tonic count.

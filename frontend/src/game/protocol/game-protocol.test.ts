@@ -1573,8 +1573,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v85 carries concentration quickbar bindings and complete retained gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 85)
+test('protocol v86 carries concentration quickbar bindings and complete retained gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 86)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),

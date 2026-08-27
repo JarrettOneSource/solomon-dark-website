@@ -244,7 +244,7 @@ while stock export reports any web-only maximum-vital bonus. The host carries th
 attachment per participant through resume, checkpoints, Game Over profile
 archival, and wizard retirement without interpreting it. Schemas 1..16 migrate
 with `nativeSource = null`.
-Protocol 85 changes the existing Hagatha selector projection from a sorted
+Protocol 86 changes the existing Hagatha selector projection from a sorted
 unique set to the retail ordered outcome vector. Ordinary selectors remain
 unique; selector 27 may repeat twice, and its count must match
 `tonicPurchases` and capacity 3/6/9. This is a protocol break because an older
