@@ -105,6 +105,7 @@ run_all() {
     npm --prefix frontend run test:hagatha
     npm --prefix frontend run test:library
     npm --prefix frontend run test:loot
+    npm --prefix frontend run test:arena-render
     npm --prefix frontend run test:boneyard
     npm --prefix frontend run test:hud-skill-selector
     npm --prefix frontend run test:ml-bot
