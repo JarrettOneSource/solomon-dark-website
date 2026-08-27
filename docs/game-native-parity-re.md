@@ -54881,4 +54881,82 @@ No member is `blocked-by-platform` and no authored row remains unextracted.
 
 ### Implementation validation receipt
 
-- Pending implementation and exact Mac/browser receipts.
+- `boneyard-world.ts` now exports one authoritative per-player movement-epoch
+  result from the same `planPlayerCharacterTick` branch that owns translation
+  and dynamic contacts. `player-staff-combat-system.ts` rejects automatic Staff
+  admission before inspecting either native contact source unless that epoch is
+  active. The ordered hostile-result path, nonhostile suppression, and
+  facing-qualified zero-result fallback remain unchanged inside the gate.
+- `native-tutorial.ts` no longer acknowledges from pre-step raw input.
+  `game-simulation.ts` commits the boolean after Boneyard movement only when the
+  authenticated input is nonzero and that same tick produced an admitted
+  movement epoch. Forced Tutorial velocity, sealed input, idle recurrence,
+  stage ownership, protocol 84, and the current schema-18 continuation shape
+  retain their existing owners.
+- The exact College spline/card production code required no retiming.
+  `native-college-intro.test.ts` now drains its full authoritative timeline:
+  record 7 through tick 769, record 9 beginning tick 770, cursor clamp at tick
+  962, and continued uncover brightening afterward. The previously dormant
+  file is registered in the canonical Boneyard group, so these six College
+  contracts now run on every complete gate.
+- Regression coverage also pins stationary Staff silence, moving fallback,
+  moving collision admission, the natural Boneyard repeat edge, held Tutorial
+  movement, authenticated movement-copy completion, forced-epoch rejection,
+  every existing hostile/contact sibling, protocol/save round trips, and the
+  unmodified downstream action/contact system. The complete Mac Boneyard group
+  passed `1,662/1,662`; the exact title timeline is canonical test 212, the
+  stationary Staff unit is test 203, and the Tutorial integration movement
+  edge is test 14.
+- Exact local/Mac candidates are Website
+  `604b13d78a25d7f2b19679eb03788e2f3bd30e15` (tree
+  `910a6c7c6d69b5385d70285ea2596d6f03ebad64`) on base `ced3632a`, and Mod
+  Loader `464decab2d7fb94befadf2598eb3c4697866a4e0` (tree
+  `1172b6ac9cae1035382a0abb35775cce6d957619`) on base `4b44b9fa`. Changed-file
+  blob-manifest SHA-256 values match across machines:
+  `d671c673249d20aaa49c12a0ca96996d8280c9de98e6792d58c0e5c6e4db22b5`
+  for Website and
+  `73d2dd83fb894797c7a05dc66b590b20b1ac0fd42b584f8d0cf11157f5935487`
+  for Mod Loader.
+- The exact Mod Loader candidate passed the portable static-RE gate
+  `518/518`; log SHA-256 is
+  `ea9f278ec6f494ae41a3c126fbb5f57bd3cf1045ea7fd19248fb1b892f405389`.
+  The exact Website candidate passed
+  `/opt/homebrew/bin/bash ./scripts/validate.sh`: backend build with zero
+  warnings/errors, `26/26` Website/backend contracts, formatting, lint,
+  generated checks, every registered frontend/runtime/desktop group,
+  production frontend and game-host builds, bundle policy, and media/CSP
+  policy. Production entry `Game-kvLg2eUg.js` is `252,041` raw / `76,538`
+  gzip bytes under `524,288 / 134,144`; gate-log SHA-256 is
+  `6c9edcd73ea6e5709d498559910d5bd956ab6742bc06f84e80ea8fab1d1798d0`.
+- Mac Chrome `151.0.7922.174` completed the stock desktop journey. The opening
+  W/A/S/D copy survived 50 idle authority ticks and disappeared only after the
+  real movement epoch. Tutorial lesson 11 produced no action during the
+  stationary facing dwell; movement then created action/contact `3/4` at
+  distance `43.030097004371214` versus legal
+  `43.030097004398705`, reduced target HP `2 -> 1`, and kept mana `100`.
+  After the Tutorial terminal/black handoff, Title 7 was visible at cursor
+  `0.19760000053793192`, Title 9 at `4.180800011381507`, and the sequence
+  continued through Office, Create, and returned Courtyard. Page, console, and
+  failed-response arrays were empty.
+- The touch/coarse-pointer journey repeated the 50-tick idle movement-copy
+  dwell, acknowledged only the left-joystick movement, and used that same
+  joystick to prove stationary Staff silence followed by action/contact `2/3`
+  at distance `44.593816979202984` versus legal
+  `44.59381697922945`, HP `2 -> 1`, mana `100`. It observed Title 7 at cursor
+  `0.19240000052377582` and Title 9 at `4.186000011395663`, then completed the
+  same College lifecycle with empty page, console, and failed-response arrays.
+- Browser log SHA-256 values are
+  `00ee4abcffc967cf56fc800e05ac5d87cf85dabb8c7032583b8694cabaf6e31a`
+  (desktop) and
+  `19aeda9963a7f77f4663db3db2a52d68733ab4836461f4430561233921f87f46`
+  (mobile). Reviewed opening/Staff/card evidence is retained under Mac
+  `/Users/jarrett/codex-acceptance/tutorial-input-intro-parity-20260827-root/evidence/`
+  and local `/home/user/.codex-evidence/tutorial-input-intro-parity-20260827-root/`.
+  Representative SHA-256 values are `5ea8783e...70089a` (desktop opening),
+  `be19f437...daf6b` (desktop Staff), `32df5a5f...f39d` (mobile opening),
+  `400a76ad...05b2` (mobile Staff), `f5e8e6ac...b6114` (Raptisoft), and
+  `533ac045...ba89` (Solomon).
+- No browser-platform exception or material unknown remains. All task-owned
+  runtime/browser processes exited. Publication, deployment, production
+  cutover, and service restart were not requested; both isolated local branches
+  and both detached Mac acceptance worktrees remain retained for handoff.
