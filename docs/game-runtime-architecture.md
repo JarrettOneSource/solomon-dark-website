@@ -159,7 +159,10 @@ every living peer. Ordered snapshots publish that one mutation; there is no
 client respawn command or parallel vitals-correction authority.
 The skill-book column also owns first-learned public-row order, the selected
 primary, two concentration slots and their replacement cursor, plus the eight
-secondary intent slots. Inventory, SkillScreen, and the compact selected-HUD
+secondary intent slots. Every fresh generation ranks all eight native root rows
+at one, stores only the selected element/discipline roots as offer owners, and
+keeps only the starting primary/secondary pair in learned display order.
+Inventory, SkillScreen, and the compact selected-HUD
 selector are shared by Hub and Boneyard; scenes request the participant-owned
 surface but never clone its state. Protocol 36 introduced strict belt, primary,
 and general concentration intents. Protocol 63 added a distinct addressed A/B

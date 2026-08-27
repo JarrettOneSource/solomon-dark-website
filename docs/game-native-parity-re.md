@@ -52114,6 +52114,7 @@ No member is blocked by the browser platform.
 | Retail boundary | unmodified Beta `0.72.5` `SolomonDark.exe`, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred image base `0x00400000`; `native-player-chat-boundary.md` | Retail still has no player-authored text-chat surface. Chat close/send behavior is Website-owned, while native modal input priority remains the protected sibling rule. | high |
 | Current chat causal trace | Website `f7e0b244` (unchanged in rebased base `8826abcf`); `GameChat.tsx` `openFromKeyboard`, input-only `handleInputKey`, `submit`, and `onChatMessage` | Global capture opens chat but has no open-window Escape branch. Only the focused `<input>` closes on Escape, successful submit clears the draft without closing, and closing before the authoritative own echo would currently count that echo as unread. | high |
 | Fresh static lifecycle xrefs | canonical read-only Ghidra replica; finalizer `0x005D0290`, starter `0x005CFA80`, startup `0x005D07D0`, Create tick `0x0058A820`, start owner `0x005D2380` | `0x005D0290` has exactly two callers (`0x0058A96D`, `0x005D0840`) and calls starter construction after the selected element/discipline grants. `0x005CFA80` has exactly two callers (`0x005D0756`, `0x005D24FF`) and creates Hat, Robe, Staff, and two Potions only while `Game+0x86` is clear. | high |
+| Fresh root-grant helper | `ActorProgression_Grant 0x00660320` plus finalizer's ordered calls `0,2,1,3,4,6,5,7` | Every call increments that addressed row's permanent rank and clamps it to the row maximum. Fresh native construction therefore gives all eight root rows permanent rank 1, while only the selected element/discipline roots govern offers and only the starting pair belongs to learned display order. The 2026-08-14 ledger sentence claiming only selected roots receive rank is superseded. | high |
 | Fresh static destruction trace | `Game` ctor/dtor `0x005CC800` / `0x005CD3A0`, deleting wrapper `0x005CFA60`; Game Over tick/archive `0x005CF4F0` / `0x005C9670` | A new native `Game` zero-initializes its selection/start flags and component owners. Destruction unregisters/destroys all six regions, auxiliary owners, inventory/progression containers, and clears the global Game pointer. `0x005C9670` only archives the completed run; it is not character destruction. | high |
 | Starter-color branch | `0x005CFA80`, selected-primary rows `8/16/24/32/40`, College override `DAT_00B3BCA0`, three color draws and mix helper `0x0040FC60`; `native-session-flow.md` | Ordinary Create finalization selects the new element before first starter construction, so its new Hat/Robe use that selected family. The one-shot College path constructs green garments before Create, sets `Game+0x86`, and intentionally preserves them through later confirmation. | high |
 | Current player-generation trace | `enterPostRunLoadout`, `gameSimulationDurableProfileEconomy`, `confirmGameSimulationLoadout`, `replacePlayerLoadout`; current Aug 26 contracts | Completed Game Over already discards carried active items, creates starter inventory, and confirmation rebuilds level/XP, the skill/stat books, runtime, selections, offers, and quickbar with a newer progression revision. The missing branch is a new-selection starter appearance plus a newer economy revision. | high |
@@ -52239,13 +52240,20 @@ named product differences from retail's front-end/profile lineage.
   learned/selected/runtime fields rather than adding a client UI clear. Stable
   `playerId`/ECS row identity is allowed; old component objects and revisions
   are not.
+- The all-15 green regression exposed an older shared-constructor omission:
+  `createPlayerSkillBook` ranked only the selected element and discipline
+  roots. Fresh `0x00660320` decompilation proves every ordered root call writes
+  permanent rank 1. Correct that shared constructor for initial, Tutorial,
+  post-run, solo, and multiplayer generations at once, while keeping
+  `learnedSkillOrder` limited to the displayed starting pair so SkillScreen
+  does not invent seven unrelated pages.
 
 ### Confidence and open questions
 
 - Confirmed: chat focus gap and submit state; unread-own-echo neighbor; exact
   native finalizer/starter caller sets; Game ctor/dtor lifetime; ordinary versus
-  College color ownership; all 15 starting skill tuples; current fresh-skill,
-  starter-inventory, and durable-profile owners.
+  College color ownership; all 15 starting skill tuples; all-eight-root rank
+  writes; current fresh-skill, starter-inventory, and durable-profile owners.
 - Inferred: the Website generation seed is the deterministic host substitute
   for retail's process-global color draw position. This is an existing browser
   authority policy, not a newly claimed native RNG identity.
