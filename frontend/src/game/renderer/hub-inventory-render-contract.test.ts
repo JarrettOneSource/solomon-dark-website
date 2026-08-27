@@ -84,6 +84,10 @@ const inventoryCss = readFileSync(new URL('../hub-inventory.css', import.meta.ur
 const mainScene = readFileSync(new URL('../MainMenuScene.tsx', import.meta.url), 'utf8')
 const hubScene = readFileSync(new URL('../HubScene.tsx', import.meta.url), 'utf8')
 const boneyardScene = readFileSync(new URL('../BoneyardScene.tsx', import.meta.url), 'utf8')
+const inventoryRenderer = readFileSync(
+  new URL('./hub-inventory-renderer.ts', import.meta.url),
+  'utf8',
+)
 
 const AUTHORED_EQUIPMENT_DESCRIPTIONS: Readonly<Record<number, string>> = {
   29: 'An amulet, apparently forged by Conchiphus Obfuscate himself.  The runes read "Interferenal."',
@@ -130,6 +134,14 @@ test('every inventory and trader modal consumes the shell fixed-stage projection
     /\.hub-native-ui-stage\s*\{[^}]*width:\s*1600px;[^}]*height:\s*900px;/s,
   )
   assert.match(inventoryComponent, /closest\('\.hub-native-ui-stage'\)/)
+})
+
+test('Inventory preloads the complete shared element VFX texture membership', () => {
+  assert.match(inventoryRenderer, /\.\.\.Object\.values\(elementVfx\.common\)/)
+  assert.match(inventoryRenderer, /\.\.\.Object\.values\(elementVfx\.frames\)/)
+  assert.match(inventoryRenderer, /elementVfx\.special\.aura/)
+  assert.match(inventoryRenderer, /\.\.\.elementVfx\.special\.steam/)
+  assert.match(inventoryRenderer, /createNativeElementVfxTextures/)
 })
 
 test('stock inventory owns the fixed 1600 by 900 stage and all 88 authored cells', () => {

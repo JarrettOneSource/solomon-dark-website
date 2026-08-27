@@ -247,6 +247,8 @@ export async function createHubInventoryRenderer(
         skillPicker.fontsAtlas,
         ...Object.values(elementVfx.common),
         ...Object.values(elementVfx.frames),
+        elementVfx.special.aura,
+        ...elementVfx.special.steam,
         ...PLAYER_CHARACTER_ATLAS_SOURCES,
       ]),
       loadModPresentationTextures(modAssets),

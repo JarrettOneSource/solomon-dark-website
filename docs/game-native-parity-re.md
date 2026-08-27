@@ -50635,3 +50635,16 @@ the Hub/Boneyard texture-owner seam translates the eleven packed combat URLs
 to atlas/record keys before load and lookup. Staff Steam `2002..2007` and all
 other non-packed rows remain ordinary URLs, preserving the newly landed Staff
 program without widening atlas brightness semantics.
+
+The physical Tutorial Inventory rerun then reproduced the reported softlock at
+stage 10. The DOM dialog exists, but reports `Native inventory renderer
+unavailable`, owns no inventory canvas, and leaves gameplay paused/input
+blocked. The owning exception is a complete-membership mismatch introduced by
+the selected-primary Staff-orb closure: `createNativeElementVfxTextures` now
+materializes ordinary element rows plus the Staff-only aura and six Steam rows,
+while `createHubInventoryRenderer` preloads only `elementVfx.common` and
+`elementVfx.frames`. This is shared by Tutorial/ordinary Inventory and every
+trader preview; it is not a Tutorial controller fault. The inventory renderer
+must preload `elementVfx.special.aura` and every `elementVfx.special.steam`
+member before constructing the shared VFX texture bank. No fallback or
+Tutorial-only bypass is permitted.
