@@ -32,7 +32,10 @@ import { NATIVE_ACTOR_SEPARATION_EPSILON } from '../src/game/core-kernels/actor-
 import { GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS } from '../src/game/core-kernels/game-run.ts'
 import { createNativeRng } from '../src/game/core-kernels/native-rng.ts'
 import { resetNativeSecondaryWorld } from '../src/game/core-kernels/native-secondary-abilities.ts'
-import { PLAYER_CHARACTER_RADIUS } from '../src/game/core-kernels/player-character.ts'
+import {
+  PLAYER_CHARACTER_RADIUS,
+  createIdlePlayerPrimaryCast,
+} from '../src/game/core-kernels/player-character.ts'
 import { nativeCollegePathHeadingIndex } from '../src/game/core-kernels/native-college-intro.ts'
 import {
   NATIVE_TUTORIAL_CAMERA_LOCK_SETTLE_TICKS,
@@ -416,6 +419,7 @@ async function captureTutorialAcidRain(host, page, screenshotPath) {
       {
         ...getPlayerCharacter(state, playerId),
         position: { x: 1_025, y: 1_350 },
+        primaryCast: createIdlePlayerPrimaryCast(),
         velocity: { x: 0, y: 0 },
       },
     ),
@@ -445,7 +449,34 @@ async function captureTutorialAcidRain(host, page, screenshotPath) {
       y: bounds.top + frame.playerScreenY,
     }
   })
-  await page.mouse.click(target.x, target.y, { button: 'right' })
+  await page.evaluate(({ x, y }) => {
+    const surface = document.querySelector('.boneyard-world-renderer')
+    if (!(surface instanceof HTMLElement)) {
+      throw new Error('Tutorial Boneyard input surface is unavailable')
+    }
+    surface.dispatchEvent(new MouseEvent('mousedown', {
+      bubbles: true,
+      button: 2,
+      cancelable: true,
+      clientX: x,
+      clientY: y,
+    }))
+  }, target)
+  const inputDeadline = Date.now() + 2_000
+  while (Date.now() < inputDeadline) {
+    const player = host.state().secondaryAbilities.players[playerId]
+    if (player?.heldSlot === 0 || (player?.castSequence ?? 0) > castSequence) break
+    await page.waitForTimeout(10)
+  }
+  await page.evaluate(({ x, y }) => {
+    window.dispatchEvent(new MouseEvent('mouseup', {
+      bubbles: true,
+      button: 2,
+      cancelable: true,
+      clientX: x,
+      clientY: y,
+    }))
+  }, target)
 
   const deadline = Date.now() + 10_000
   let rain = null
@@ -460,6 +491,32 @@ async function captureTutorialAcidRain(host, page, screenshotPath) {
       && (state.secondaryAbilities.players[playerId]?.castSequence ?? 0) > castSequence
     ) break
     await page.waitForTimeout(10)
+  }
+  if (!rain) {
+    const browserState = await page.evaluate(({ x, y }) => {
+      const scene = document.querySelector('.boneyard-scene')
+      const surface = document.querySelector('.boneyard-world-renderer')
+      const hit = document.elementFromPoint(x, y)
+      return {
+        gameplayInputBlocked: scene?.getAttribute('data-gameplay-input-blocked'),
+        hitClass: hit instanceof Element ? hit.className : null,
+        rendererState: scene?.getAttribute('data-renderer-state'),
+        surfaceBounds: surface?.getBoundingClientRect().toJSON(),
+        tutorialStage: scene?.getAttribute('data-tutorial-stage'),
+      }
+    }, target)
+    process.stderr.write(`${JSON.stringify({
+      acidRainCastFailure: {
+        belt: getPlayerBelt(state, playerId),
+        browserState,
+        input: state.inputs?.[playerId] ?? null,
+        player: state.secondaryAbilities.players[playerId] ?? null,
+        progression: getPlayerProgression(state, playerId),
+        run: state.run,
+        tick: state.tick,
+        tutorial: state.world.tutorial,
+      },
+    }, null, 2)}\n`)
   }
   assert.ok(rain, 'Tutorial stage 5 did not accept Acid Rain')
   assert.equal(state.world.kind, 'boneyard')
@@ -491,6 +548,7 @@ async function captureTutorialAcidRain(host, page, screenshotPath) {
   const receipt = {
     actorKinds: frame.actorKinds,
     ageTicks: rain.ageTicks,
+    castOwner: 'browser-gameplay-input',
     requestedAgeTicks: acidComparisonAge,
     constructorPhase: rain.rotationRadians,
     groundPosition: { ...rain.position },

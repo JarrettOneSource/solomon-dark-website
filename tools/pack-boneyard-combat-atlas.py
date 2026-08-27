@@ -1,233 +1,180 @@
 #!/usr/bin/env python3
-"""Pack exact BadGuys and Demon records into bounded runtime atlas pages."""
+"""Reconstruct native BadGuys and Demon atlas pages from exact record crops."""
 
 from __future__ import annotations
 
 import argparse
 import hashlib
-import io
 import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from PIL import Image, ImageChops
+from PIL import Image
 
 
 PAGE_SIZE = 2048
 PAGE_PREFIX = "boneyard-combat-atlas"
-SOURCE_DIRECTORIES = ("badguys", "demon")
+ATLAS_SPECS = (
+    ("BadGuys", "badguys.json"),
+    ("Demon", "demon.json"),
+)
 EXPECTED_SOURCE_COUNT = 2625
 EXPECTED_PAGE_COUNT = 2
+EXPECTED_PAGE_SHA256 = (
+    "af5717b37c81306d515eed6d9f8717fa97bd1c63b9530a7079738c457c97443e",
+    "0a6feca43b7f1a35f09d43494a1c794c7962d555e52b13703439b72085529ae4",
+)
 
 
 @dataclass(frozen=True)
-class SourceRecord:
+class NativeFrame:
+    atlas: str
+    entry: int
     height: int
-    rectangle: int | None
-    trim_x: int
-    trim_y: int
+    page: int
+    path: Path
     width: int
-
-
-@dataclass
-class PackedRectangle:
-    image: Image.Image
-    page: int = -1
-    x: int = -1
-    y: int = -1
-
-
-@dataclass
-class Shelf:
-    height: int
-    used_width: int
+    x: int
     y: int
 
 
-def source_paths(assets_directory: Path) -> list[Path]:
-    return sorted(
-        path
-        for directory in SOURCE_DIRECTORIES
-        for path in (assets_directory / directory).glob("*.png")
-    )
+def source_key(frame: NativeFrame) -> str:
+    return f"boneyard-combat:{frame.atlas}:{frame.entry}"
 
 
-def source_key(path: Path) -> str:
-    atlas = {"badguys": "BadGuys", "demon": "Demon"}.get(path.parent.name)
-    if atlas is None:
-        raise SystemExit(f"unknown Boneyard combat atlas directory: {path.parent.name}")
-    return f"boneyard-combat:{atlas}:{int(path.stem)}"
+def build_native_pages(
+    root: Path,
+) -> tuple[list[NativeFrame], list[Image.Image]]:
+    assets_directory = root / "frontend" / "src" / "assets" / "game" / "boneyard"
+    manifest_directory = root / "frontend" / "src" / "editor" / "manifest"
+    frames: list[NativeFrame] = []
+    pages: list[Image.Image] = []
 
+    for page_index, (atlas, manifest_name) in enumerate(ATLAS_SPECS):
+        manifest = json.loads((manifest_directory / manifest_name).read_text())
+        if manifest.get("atlas") != atlas:
+            raise SystemExit(f"native atlas manifest identity drifted: {manifest_name}")
+        page_size = manifest.get("pngSize")
+        if not isinstance(page_size, dict):
+            raise SystemExit(f"native atlas page size is absent: {manifest_name}")
+        width = page_size.get("w")
+        height = page_size.get("h")
+        if not isinstance(width, int) or not isinstance(height, int):
+            raise SystemExit(f"native atlas page size is invalid: {manifest_name}")
+        if width > PAGE_SIZE or height > PAGE_SIZE:
+            raise SystemExit(f"native atlas exceeds {PAGE_SIZE}px: {atlas} {width}x{height}")
 
-def collect_sources(
-    paths: list[Path],
-) -> tuple[dict[Path, SourceRecord], list[PackedRectangle]]:
-    sources: dict[Path, SourceRecord] = {}
-    rectangles: list[PackedRectangle] = []
-    unique: dict[tuple[tuple[int, int], bytes], list[int]] = {}
+        page = Image.new("RGBA", (width, height))
+        pixels = page.load()
+        covered = bytearray(width * height)
+        entries = manifest.get("entries")
+        if not isinstance(entries, list):
+            raise SystemExit(f"native atlas entries are absent: {manifest_name}")
 
-    for path in paths:
-        image = Image.open(path).convert("RGBA")
-        bounds = exact_pixel_bounds(image)
-        if bounds is None:
-            sources[path] = SourceRecord(image.height, None, 0, 0, image.width)
-            continue
-        cropped = image.crop(bounds)
-        pixels = cropped.tobytes()
-        key = (cropped.size, hashlib.sha256(pixels).digest())
-        rectangle_index = None
-        for candidate in unique.get(key, []):
-            if rectangles[candidate].image.tobytes() == pixels:
-                rectangle_index = candidate
-                break
-        if rectangle_index is None:
-            rectangle_index = len(rectangles)
-            rectangles.append(PackedRectangle(cropped))
-            unique.setdefault(key, []).append(rectangle_index)
-        sources[path] = SourceRecord(
-            image.height,
-            rectangle_index,
-            bounds[0],
-            bounds[1],
-            image.width,
-        )
+        for entry in entries:
+            if not isinstance(entry, dict) or entry.get("empty"):
+                continue
+            entry_id = entry.get("id")
+            file_name = entry.get("file")
+            rectangle = entry.get("rect")
+            if (
+                not isinstance(entry_id, int)
+                or not isinstance(file_name, str)
+                or not isinstance(rectangle, dict)
+            ):
+                raise SystemExit(f"native atlas entry is malformed: {atlas}:{entry_id}")
+            x = rectangle.get("x")
+            y = rectangle.get("y")
+            frame_width = rectangle.get("w")
+            frame_height = rectangle.get("h")
+            if not all(isinstance(value, int) for value in (x, y, frame_width, frame_height)):
+                raise SystemExit(f"native atlas rectangle is malformed: {atlas}:{entry_id}")
+            assert isinstance(x, int)
+            assert isinstance(y, int)
+            assert isinstance(frame_width, int)
+            assert isinstance(frame_height, int)
+            if (
+                x < 0
+                or y < 0
+                or frame_width < 1
+                or frame_height < 1
+                or x + frame_width > width
+                or y + frame_height > height
+            ):
+                raise SystemExit(f"native atlas rectangle is out of bounds: {atlas}:{entry_id}")
 
-    return sources, rectangles
+            path = assets_directory / file_name
+            with Image.open(path) as source:
+                image = source.convert("RGBA")
+            if image.size != (frame_width, frame_height):
+                raise SystemExit(
+                    f"native record crop geometry drifted: {atlas}:{entry_id} "
+                    f"{image.width}x{image.height} != {frame_width}x{frame_height}"
+                )
 
+            frame_pixels = image.load()
+            for local_y in range(frame_height):
+                page_y = y + local_y
+                row = page_y * width
+                for local_x in range(frame_width):
+                    page_x = x + local_x
+                    index = row + page_x
+                    pixel = frame_pixels[local_x, local_y]
+                    if covered[index] and pixels[page_x, page_y] != pixel:
+                        raise SystemExit(
+                            f"overlapping native records disagree: {atlas}:{entry_id} "
+                            f"at {page_x},{page_y}"
+                        )
+                    pixels[page_x, page_y] = pixel
+                    covered[index] = 1
 
-def exact_pixel_bounds(image: Image.Image) -> tuple[int, int, int, int] | None:
-    red, green, blue, alpha = image.split()
-    color = ImageChops.lighter(red, green)
-    color = ImageChops.lighter(color, blue)
-    return ImageChops.lighter(color, alpha).getbbox()
+            frames.append(NativeFrame(
+                atlas=atlas,
+                entry=entry_id,
+                height=frame_height,
+                page=page_index,
+                path=path,
+                width=frame_width,
+                x=x,
+                y=y,
+            ))
+        pages.append(page)
 
-
-def pack_rectangles(rectangles: list[PackedRectangle]) -> list[Image.Image]:
-    shelves_by_page: list[list[Shelf]] = []
-    page_extents: list[list[int]] = []
-    order = sorted(
-        range(len(rectangles)),
-        key=lambda index: (
-            -rectangles[index].image.height,
-            -rectangles[index].image.width,
-            index,
-        ),
-    )
-
-    for rectangle_index in order:
-        rectangle = rectangles[rectangle_index]
-        padded_width = rectangle.image.width + 2
-        padded_height = rectangle.image.height + 2
-        if padded_width > PAGE_SIZE or padded_height > PAGE_SIZE:
-            raise SystemExit(
-                f"Boneyard combat visual exceeds {PAGE_SIZE}px atlas page: "
-                f"{rectangle.image.width}x{rectangle.image.height}"
-            )
-
-        placed = False
-        for page_index, shelves in enumerate(shelves_by_page):
-            for shelf in shelves:
-                if (
-                    padded_height <= shelf.height
-                    and shelf.used_width + padded_width <= PAGE_SIZE
-                ):
-                    rectangle.page = page_index
-                    rectangle.x = shelf.used_width + 1
-                    rectangle.y = shelf.y + 1
-                    shelf.used_width += padded_width
-                    placed = True
-                    break
-            if placed:
-                break
-            used_height = sum(shelf.height for shelf in shelves)
-            if used_height + padded_height <= PAGE_SIZE:
-                shelves.append(Shelf(padded_height, padded_width, used_height))
-                rectangle.page = page_index
-                rectangle.x = 1
-                rectangle.y = used_height + 1
-                placed = True
-                break
-
-        if not placed:
-            rectangle.page = len(shelves_by_page)
-            rectangle.x = 1
-            rectangle.y = 1
-            shelves_by_page.append([Shelf(padded_height, padded_width, 0)])
-            page_extents.append([0, 0])
-
-        extent = page_extents[rectangle.page]
-        extent[0] = max(extent[0], rectangle.x + rectangle.image.width + 1)
-        extent[1] = max(extent[1], rectangle.y + rectangle.image.height + 1)
-
-    pages = [Image.new("RGBA", tuple(extent)) for extent in page_extents]
-    for rectangle in rectangles:
-        pages[rectangle.page].paste(rectangle.image, (rectangle.x, rectangle.y))
-    return pages
+    frames.sort(key=lambda frame: (frame.atlas, frame.entry))
+    return frames, pages
 
 
 def verify_reconstruction(
-    paths: list[Path],
-    sources: dict[Path, SourceRecord],
-    rectangles: list[PackedRectangle],
+    frames: list[NativeFrame],
     pages: list[Image.Image],
 ) -> None:
-    for path in paths:
-        expected = Image.open(path).convert("RGBA")
-        source = sources[path]
-        actual = Image.new("RGBA", (source.width, source.height))
-        if source.rectangle is not None:
-            rectangle = rectangles[source.rectangle]
-            crop = pages[rectangle.page].crop((
-                rectangle.x,
-                rectangle.y,
-                rectangle.x + rectangle.image.width,
-                rectangle.y + rectangle.image.height,
-            ))
-            actual.paste(crop, (source.trim_x, source.trim_y))
+    for frame in frames:
+        with Image.open(frame.path) as source:
+            expected = source.convert("RGBA")
+        actual = pages[frame.page].crop((
+            frame.x,
+            frame.y,
+            frame.x + frame.width,
+            frame.y + frame.height,
+        ))
         if actual.tobytes() != expected.tobytes():
-            raise SystemExit(f"packed Boneyard combat record differs: {path}")
+            raise SystemExit(
+                f"native page record differs after reconstruction: {frame.atlas}:{frame.entry}"
+            )
 
 
-def png_bytes(image: Image.Image) -> bytes:
-    output = io.BytesIO()
-    image.save(output, "PNG", optimize=True, compress_level=9)
-    return output.getvalue()
-
-
-def generated_module(
-    assets_directory: Path,
-    paths: list[Path],
-    sources: dict[Path, SourceRecord],
-    rectangles: list[PackedRectangle],
-    pages: list[Image.Image],
-) -> bytes:
+def generated_module(frames: list[NativeFrame], pages: list[Image.Image]) -> bytes:
     page_imports = "\n".join(
         f"import page{index} from '../../assets/game/{PAGE_PREFIX}-{index}.png'"
         for index in range(len(pages))
     )
     page_values = ", ".join(f"page{index}" for index in range(len(pages)))
-    rows = []
-    for index, path in enumerate(paths):
-        source = sources[path]
-        if source.rectangle is None:
-            packed = None
-        else:
-            rectangle = rectangles[source.rectangle]
-            packed = [
-                rectangle.page,
-                rectangle.x,
-                rectangle.y,
-                rectangle.image.width,
-                rectangle.image.height,
-                source.width,
-                source.height,
-                source.trim_x,
-                source.trim_y,
-            ]
-        rows.append(
-            f"  [{json.dumps(source_key(path))}, "
-            f"{json.dumps(packed, separators=(',', ':'))}]"
-        )
+    rows = [
+        f"  [{json.dumps(source_key(frame))}, "
+        f"[{frame.page},{frame.x},{frame.y},{frame.width},{frame.height},"
+        f"{frame.width},{frame.height},0,0]]"
+        for frame in frames
+    ]
     page_dimensions = [[page.width, page.height] for page in pages]
     decoded_bytes = sum(page.width * page.height * 4 for page in pages)
     source = f"""// Generated by tools/pack-boneyard-combat-atlas.py. Do not edit.
@@ -245,13 +192,15 @@ export type BoneyardCombatPackedFrame = readonly [
   trimY: number,
 ] | null
 
+export const BONEYARD_COMBAT_ATLAS_LAYOUT = 'native-pages' as const
 export const BONEYARD_COMBAT_ATLAS_MAX_PAGE_SIZE = {PAGE_SIZE}
 export const BONEYARD_COMBAT_ATLAS_DECODED_BYTES = {decoded_bytes}
-export const BONEYARD_COMBAT_ATLAS_SOURCE_COUNT = {len(paths)}
-export const BONEYARD_COMBAT_ATLAS_EMPTY_SOURCE_COUNT = {sum(record.rectangle is None for record in sources.values())}
-export const BONEYARD_COMBAT_ATLAS_PACKED_RECTANGLE_COUNT = {len(rectangles)}
-export const BONEYARD_COMBAT_ATLAS_PACKED_RGBA_BYTES = {sum(rectangle.image.width * rectangle.image.height * 4 for rectangle in rectangles)}
+export const BONEYARD_COMBAT_ATLAS_SOURCE_COUNT = {len(frames)}
+export const BONEYARD_COMBAT_ATLAS_EMPTY_SOURCE_COUNT = 0
+export const BONEYARD_COMBAT_ATLAS_PACKED_RECTANGLE_COUNT = {len(frames)}
+export const BONEYARD_COMBAT_ATLAS_PACKED_RGBA_BYTES = {sum(frame.width * frame.height * 4 for frame in frames)}
 export const BONEYARD_COMBAT_ATLAS_PAGE_DIMENSIONS = {json.dumps(page_dimensions, separators=(',', ':'))} as const
+export const BONEYARD_COMBAT_ATLAS_PAGE_SHA256 = {json.dumps(EXPECTED_PAGE_SHA256, separators=(',', ':'))} as const
 export const BONEYARD_COMBAT_ATLAS_SOURCES = [{page_values}] as const
 export const BONEYARD_COMBAT_ATLAS_FRAMES: ReadonlyMap<string, BoneyardCombatPackedFrame> = new Map([
 {',\n'.join(rows)}
@@ -263,21 +212,39 @@ export const BONEYARD_COMBAT_ATLAS_FRAMES: ReadonlyMap<string, BoneyardCombatPac
 def write_or_check(path: Path, expected: bytes, check: bool) -> None:
     if check:
         if not path.is_file() or path.read_bytes() != expected:
-            raise SystemExit(f"generated Boneyard combat atlas is stale: {path}")
+            raise SystemExit(f"generated native Boneyard atlas is stale: {path}")
         return
     path.write_bytes(expected)
 
 
-def write_or_check_page(path: Path, page: Image.Image, check: bool) -> None:
-    if check:
-        if not path.is_file():
-            raise SystemExit(f"generated Boneyard combat atlas is stale: {path}")
-        with Image.open(path) as source:
-            committed = source.convert("RGBA")
-        if committed.size != page.size or committed.tobytes() != page.tobytes():
-            raise SystemExit(f"generated Boneyard combat atlas is stale: {path}")
-        return
-    path.write_bytes(png_bytes(page))
+def verify_native_page_asset(
+    path: Path,
+    expected_page: Image.Image,
+    page_index: int,
+    frames: list[NativeFrame],
+) -> None:
+    if not path.is_file():
+        raise SystemExit(f"pinned native Boneyard atlas page is absent: {path}")
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    if digest != EXPECTED_PAGE_SHA256[page_index]:
+        raise SystemExit(f"pinned native Boneyard atlas page hash drifted: {path}")
+    with Image.open(path) as source:
+        committed = source.convert("RGBA")
+    if committed.size != expected_page.size:
+        raise SystemExit(f"pinned native Boneyard atlas page geometry drifted: {path}")
+    for frame in (frame for frame in frames if frame.page == page_index):
+        actual = committed.crop((
+            frame.x,
+            frame.y,
+            frame.x + frame.width,
+            frame.y + frame.height,
+        ))
+        with Image.open(frame.path) as source:
+            expected = source.convert("RGBA")
+        if actual.tobytes() != expected.tobytes():
+            raise SystemExit(
+                f"pinned native page record differs: {frame.atlas}:{frame.entry}"
+            )
 
 
 def main() -> None:
@@ -287,7 +254,6 @@ def main() -> None:
 
     root = Path(__file__).resolve().parents[1]
     game_assets = root / "frontend" / "src" / "assets" / "game"
-    assets_directory = game_assets / "boneyard"
     module_path = (
         root
         / "frontend"
@@ -296,19 +262,16 @@ def main() -> None:
         / "renderer"
         / "boneyard-combat-atlas.generated.ts"
     )
-    paths = source_paths(assets_directory)
-    if len(paths) != EXPECTED_SOURCE_COUNT:
+    frames, pages = build_native_pages(root)
+    if len(frames) != EXPECTED_SOURCE_COUNT:
         raise SystemExit(
-            f"expected {EXPECTED_SOURCE_COUNT} Boneyard combat sources, found {len(paths)}"
+            f"expected {EXPECTED_SOURCE_COUNT} native Boneyard records, found {len(frames)}"
         )
-    sources, rectangles = collect_sources(paths)
-    pages = pack_rectangles(rectangles)
-    if EXPECTED_PAGE_COUNT is not None and len(pages) != EXPECTED_PAGE_COUNT:
+    if len(pages) != EXPECTED_PAGE_COUNT:
         raise SystemExit(
-            f"Boneyard combat visuals require {len(pages)} pages; "
-            f"expected {EXPECTED_PAGE_COUNT}"
+            f"native Boneyard art requires {len(pages)} pages; expected {EXPECTED_PAGE_COUNT}"
         )
-    verify_reconstruction(paths, sources, rectangles, pages)
+    verify_reconstruction(frames, pages)
 
     expected_page_names = {
         f"{PAGE_PREFIX}-{index}.png" for index in range(len(pages))
@@ -316,32 +279,20 @@ def main() -> None:
     existing_page_names = {
         path.name for path in game_assets.glob(f"{PAGE_PREFIX}-*.png")
     }
-    if args.check and existing_page_names != expected_page_names:
-        raise SystemExit("generated Boneyard combat atlas page membership is stale")
-    if not args.check:
-        for obsolete in sorted(existing_page_names - expected_page_names):
-            (game_assets / obsolete).unlink()
+    if existing_page_names != expected_page_names:
+        raise SystemExit("pinned native Boneyard atlas page membership is stale")
 
     for index, page in enumerate(pages):
-        write_or_check_page(
+        verify_native_page_asset(
             game_assets / f"{PAGE_PREFIX}-{index}.png",
             page,
-            args.check,
+            index,
+            frames,
         )
-    write_or_check(
-        module_path,
-        generated_module(
-            assets_directory,
-            paths,
-            sources,
-            rectangles,
-            pages,
-        ),
-        args.check,
-    )
+    write_or_check(module_path, generated_module(frames, pages), args.check)
     print(
-        f"Packed {len(paths)} Boneyard combat sources into "
-        f"{len(pages)} bounded pages ({len(rectangles)} unique crops)."
+        f"Reconstructed {len(frames)} native Boneyard records on "
+        f"{len(pages)} original-layout pages."
     )
 
 

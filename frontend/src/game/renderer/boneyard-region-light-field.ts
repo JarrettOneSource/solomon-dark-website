@@ -49,9 +49,11 @@ export class BoneyardRegionLightField {
     this.glyphRef = glyphRef
     this.sourceContainer.eventMode = 'none'
     this.renderTexture = RenderTexture.create({
+      alphaMode: 'no-premultiply-alpha',
       dynamic: true,
       height: target.logicalSide,
       resolution: target.renderResolution,
+      scaleMode: 'linear',
       width: target.logicalSide,
     })
     this.logicalSide = target.logicalSide

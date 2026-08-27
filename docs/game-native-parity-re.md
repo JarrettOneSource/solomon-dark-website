@@ -53263,3 +53263,52 @@ unknowns in this boundary.
   full-density Acid field; do not regress the shared-gradient memory/performance
   closure.
 - Publication and deployment remain separate and unrequested.
+
+### Implementation validation receipt
+
+- `native-arena-render-pipeline.ts` now owns the Boneyard renderer instance's
+  default batch, non-batched Graphics, non-batched Mesh, and particle shader
+  families. Each path preserves raw texture RGB, effective vertex RGB, and
+  alpha until it executes the recovered `0.65` formula before Pixi selects the
+  matching premultiplied or unpremultiplied normal/additive blend. The custom
+  Building mesh uses the same fragment contract. Pipeline teardown is
+  instance-local and idempotent; fixed Hub/menu renderers are unchanged.
+- Arena pages and static residents now upload without alpha premultiplication
+  and sample linearly. BadGuys and Demon use their original `2048x2048` and
+  `512x512` retail pages, with exact SHA-256 values
+  `af5717b37c81306d515eed6d9f8717fa97bd1c63b9530a7079738c457c97443e`
+  and `0a6feca43b7f1a35f09d43494a1c794c7962d555e52b13703439b72085529ae4`.
+  The packer verifies all 2,625 record rectangles against tracked crops and
+  will not regenerate a different page oracle.
+- The `brightness(1.12)` Canvas/Buffer lane and its helper/test are deleted;
+  runtime/editor static sampling is linear; Acid/Storm rain uses true
+  four-corner vertex colors; Region, Storm, and Leviathan targets use the
+  native alpha/sample contract; and the player aperture is restored to
+  `.2375..25` with no browser scale.
+- Mac Chrome `151.0.7922.174` on arm64 macOS `26.6.2` executed the built
+  production Acid journey in WebGL2. It committed real skill `72`, damaged the
+  exact-edge target, presented cloud/drop/splash/residue membership, reached
+  174 actors and 222 primitives, and recorded empty page, console, and failed
+  response arrays. Its three-second steady sample measured `16.7 ms` p95,
+  `16.8 ms` p99, `83.3 ms` maximum, and one `87 ms` Long Task. Browser-log
+  SHA-256 is
+  `3f6229b88bdecddbb984baeee7ec0253de79daab8bcb503b1d71d43d89daba51`.
+- The real Tutorial fixture then used browser gameplay input at requested age
+  `60`, reached stage `6`, and retained the exact three cloud members plus the
+  one DeadHawg-4 underlay. Visual review against the retained stock oracle
+  confirms the former neon/hard web field is replaced by the predicted softer
+  gray-green cloud and streak palette. Page, console, and response arrays were
+  empty; capture SHA-256 is
+  `e2f8d9a6208c9f87d5d375fe1276e5e64b0deb0a4fb4cceae513b9068a7f7caa`,
+  and browser-log SHA-256 is
+  `349cb6689d0bfd3f4c26e3ce45a48c1a3348210825f762492eb35d49ff6d33bb`.
+- Production sibling journeys passed Call Leviathan (18 composite depth
+  samples, up to six members) and Magic Storm (166 actors/167 primitives),
+  both with empty browser errors. The Building WebGL2 fixture passed all four
+  Building variants and all 21 Monument variants with zero base/roof color
+  mismatches. Their log SHA-256 values are
+  `4d04440362e2196bc8b9ddcbecdc1f947d242a79d8f29155be735763ede4442d`
+  and `b9273bb750d46e82383baeded0941f3d7222c781b270512362253f9a0e78671d`.
+- Mod Loader's complete Mac static RE suite passes `517/517`, including the
+  registered shader/frame boundary, layout-address, and caller-catalog
+  contracts. No deployment or production cutover was performed.

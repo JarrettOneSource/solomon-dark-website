@@ -101,6 +101,7 @@ try {
     }
     const snapshotAt = (tick, position) => ({
       hostPlayerId: 'local',
+      materializingPlayerIds: [],
       modEffects: [],
       players: {
         local: {
@@ -176,6 +177,7 @@ try {
         mageLightningPulses: [],
         maggots: [],
         runId,
+        tutorial: null,
         waves: null,
       },
     })

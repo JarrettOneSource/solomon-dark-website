@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
@@ -28,10 +29,7 @@ import {
   NativeEnemyWorldFeedbackPresentation,
   nativeEnemyWorldFeedbackTransform,
 } from './native-enemy-world-feedback.ts'
-import {
-  WEB_DIRECT_ENVIRONMENT_LIGHT_SCALE,
-  nativeDirectEnvironmentLightAlpha,
-} from './boneyard-environment-light-plan.ts'
+import { nativeDirectEnvironmentLightAlpha } from './boneyard-environment-light-plan.ts'
 import {
   NATIVE_SPECTATOR_HUD_CONTRACT,
   nativeSpectatorHudLayout,
@@ -75,6 +73,10 @@ const buildingSurfaceView = readFileSync(
 )
 const boneyardTextures = readFileSync(
   new URL('./boneyard-textures.ts', import.meta.url),
+  'utf8',
+)
+const nativeArenaRenderPipeline = readFileSync(
+  new URL('./native-arena-render-pipeline.ts', import.meta.url),
   'utf8',
 )
 const boneyardCombatAtlas = readFileSync(
@@ -125,7 +127,7 @@ test('Gate record 7 uses the recovered four-corner consumer in game and editor',
   assert.doesNotMatch(boneyardRenderer, /this\.gateLeaf\.position\.set\(leaf\.p0/)
   assert.match(
     editorRenderer,
-    /drawGateLeafArt\(ctx, FENCE_ART\.gateLeaf, leaf, cam, w, h, filterLift\)/,
+    /drawGateLeafArt\(ctx, FENCE_ART\.gateLeaf, leaf, cam, w, h\)/,
   )
   assert.doesNotMatch(editorRenderer, /plantArt\(ctx, FENCE_ART\.gateLeaf, leaf\.p0/)
 })
@@ -143,8 +145,10 @@ test('world-weather streaks share one particle batch and alpha-ramp texture', ()
   assert.doesNotMatch(weatherView, /sprite\.texture\s*=/)
 })
 
-test('static Boneyard residents retain RGBA buffers instead of Canvas2D backing stores', () => {
+test('static Boneyard residents keep native unpremultiplied linear pixels', () => {
   assert.match(boneyardRenderer, /new BufferImageSource\(\{[\s\S]*?format: 'rgba8unorm'/)
+  assert.match(boneyardRenderer, /alphaMode: 'no-premultiply-alpha'/)
+  assert.match(boneyardRenderer, /scaleMode: 'linear'/)
   assert.match(boneyardRenderer, /resource: source\.pixels/)
   assert.match(boneyardRenderer, /resident\.pixels = EMPTY_RESIDENT_PIXELS/)
   assert.match(boneyardRenderer, /releaseCanvas\(canvas\)/)
@@ -160,18 +164,20 @@ test('static Boneyard residents retain RGBA buffers instead of Canvas2D backing 
   assert.doesNotMatch(boneyardRenderer, /sourceCanvas:/)
   assert.doesNotMatch(boneyardRenderer, /Texture\.from\(canvas/)
   assert.doesNotMatch(boneyardRenderer, /documentNodeCanvas\(bounds\.w, bounds\.h\)/)
-  assert.match(editorRenderer, /const filterLift = mode === 'runtime-base'/)
-  assert.match(editorRenderer, /drawSprite\(ctx, item\.drawable, cam, cssW, cssH, true, true\)/)
-  assert.match(boneyardTextures, /const liftedScratch = document\.createElement\('canvas'\)/)
-  assert.match(boneyardTextures, /new Uint8ClampedArray\(\s*context\.getImageData/s)
-  assert.match(boneyardTextures, /new BufferImageSource\(\{[\s\S]*?format: 'rgba8unorm'/)
-  assert.doesNotMatch(boneyardTextures, /liftedSpriteSource/)
+  assert.doesNotMatch(editorRenderer, /filterLift|brightness\(1\.12\)/)
+  assert.match(editorRenderer, /ctx\.imageSmoothingEnabled = true/)
+  assert.match(boneyardTextures, /nativeArenaTextureFromImage/)
+  assert.doesNotMatch(boneyardTextures, /createElement\('canvas'\)|BufferImageSource/)
 })
 
-test('BadGuys and Demon records share two exact brightness-lifted pages', () => {
+test('BadGuys and Demon records retain the two exact native atlas pages', () => {
   assert.match(
     boneyardCombatAtlasGenerated,
-    /BONEYARD_COMBAT_ATLAS_DECODED_BYTES = 17776640/,
+    /BONEYARD_COMBAT_ATLAS_LAYOUT = 'native-pages'/,
+  )
+  assert.match(
+    boneyardCombatAtlasGenerated,
+    /BONEYARD_COMBAT_ATLAS_DECODED_BYTES = 17825792/,
   )
   assert.match(
     boneyardCombatAtlasGenerated,
@@ -183,31 +189,42 @@ test('BadGuys and Demon records share two exact brightness-lifted pages', () => 
   )
   assert.match(
     boneyardCombatAtlasGenerated,
-    /BONEYARD_COMBAT_ATLAS_PACKED_RECTANGLE_COUNT = 2624/,
+    /BONEYARD_COMBAT_ATLAS_PACKED_RECTANGLE_COUNT = 2625/,
   )
   assert.match(
     boneyardCombatAtlasGenerated,
-    /BONEYARD_COMBAT_ATLAS_PACKED_RGBA_BYTES = 14958156/,
+    /BONEYARD_COMBAT_ATLAS_PACKED_RGBA_BYTES = 15013700/,
   )
   assert.match(
     boneyardCombatAtlasGenerated,
-    /BONEYARD_COMBAT_ATLAS_PAGE_DIMENSIONS = \[\[2048,2048\],\[2048,122\]\]/,
+    /BONEYARD_COMBAT_ATLAS_PAGE_DIMENSIONS = \[\[2048,2048\],\[512,512\]\]/,
+  )
+  assert.match(
+    boneyardCombatAtlasGenerated,
+    /\["boneyard-combat:BadGuys:78", \[0,255,220,136,135,136,135,0,0\]\]/,
   )
   assert.match(
     boneyardCombatAtlasGenerated,
     /BONEYARD_COMBAT_ATLAS_SOURCES = \[page0, page1\]/,
   )
-  for (const [page, width, height] of [[0, 2048, 2048], [1, 2048, 122]]) {
+  const expectedPages = [
+    [0, 2048, 2048, 'af5717b37c81306d515eed6d9f8717fa97bd1c63b9530a7079738c457c97443e'],
+    [1, 512, 512, '0a6feca43b7f1a35f09d43494a1c794c7962d555e52b13703439b72085529ae4'],
+  ] as const
+  for (const [page, width, height, expectedSha256] of expectedPages) {
     const png = readFileSync(new URL(
       `../../assets/game/boneyard-combat-atlas-${page}.png`,
       import.meta.url,
     ))
     assert.equal(png.readUInt32BE(16), width)
     assert.equal(png.readUInt32BE(20), height)
+    assert.equal(createHash('sha256').update(png).digest('hex'), expectedSha256)
   }
   assert.match(boneyardCombatAtlasPacker, /EXPECTED_SOURCE_COUNT = 2625/)
   assert.match(boneyardCombatAtlasPacker, /EXPECTED_PAGE_COUNT = 2/)
+  assert.match(boneyardCombatAtlasPacker, /EXPECTED_PAGE_SHA256/)
   assert.match(boneyardCombatAtlasPacker, /verify_reconstruction\(/)
+  assert.match(boneyardCombatAtlasPacker, /verify_native_page_asset\(/)
   assert.match(
     boneyardCombatAtlasPacker,
     /actual\.tobytes\(\) != expected\.tobytes\(\)/,
@@ -219,7 +236,7 @@ test('Boneyard maps logical combat URLs to shared pages and tears frames down fi
   assert.match(boneyardTextures, /\.\.\.BONEYARD_COMBAT_ATLAS_SOURCES/)
   assert.match(
     boneyardTextures,
-    /liftedSourceSet\.has\(source\) \|\| combatPageSources\.has\(source\)/,
+    /combatPageSources\.has\(source\) \? 'repeat' : 'clamp-to-edge'/,
   )
   assert.match(boneyardTextures, /createBoneyardCombatAtlas\(texture\)/)
   assert.match(
@@ -248,29 +265,12 @@ test('Boneyard maps logical combat URLs to shared pages and tears frames down fi
   assert.match(boneyardTextures, /base\[boneyardCombatAssetSource\(source\)\]/)
 })
 
-test('secondary rain streaks share exactly two world-owned immutable gradients', () => {
-  assert.equal(secondaryWorldView.match(/new FillGradient\(/g)?.length, 1)
-  assert.match(
-    secondaryWorldView,
-    /acid: nativeSecondaryGradientFill\(NATIVE_SECONDARY_RAINDROP_GRADIENTS\.acid\)/,
-  )
-  assert.match(
-    secondaryWorldView,
-    /storm: nativeSecondaryGradientFill\(NATIVE_SECONDARY_RAINDROP_GRADIENTS\.storm\)/,
-  )
-  assert.match(
-    secondaryWorldView,
-    /private readonly gradientFills: NativeSecondaryGradientFills/,
-  )
-  assert.match(
-    secondaryWorldView,
-    /gradientFills: NativeSecondaryGradientFills,/,
-  )
-  assert.match(secondaryWorldView, /this\.gradientFills = gradientFills/)
-  assert.match(secondaryWorldView, /this\.gradientFills\.acid\.destroy\(\)/)
-  assert.match(secondaryWorldView, /this\.gradientFills\.storm\.destroy\(\)/)
-  assert.doesNotMatch(secondaryWorldView, /gradientFills: FillGradient\[\]/)
-  assert.doesNotMatch(secondaryWorldView, /fill\.destroy\(\)/)
+test('secondary rain streaks use true four-corner native vertex colors', () => {
+  assert.doesNotMatch(secondaryWorldView, /FillGradient/)
+  assert.match(secondaryWorldView, /texture: Texture\.WHITE/)
+  assert.match(secondaryWorldView, /setNativeArenaVertexColors\(mesh, new Uint32Array/)
+  assert.match(secondaryWorldView, /nativeArenaPackedColor\(draw\.topColor, draw\.topAlpha\)/)
+  assert.match(secondaryWorldView, /nativeArenaPackedColor\(draw\.bottomColor, draw\.bottomAlpha\)/)
 })
 
 test('Acid Rain keeps ground residue outside its world-sorted cloud proxy', () => {
@@ -288,13 +288,24 @@ test('Acid Rain keeps ground residue outside its world-sorted cloud proxy', () =
   assert.match(boneyardRenderer, /layer\.lane === 'pre-world-queue'\s*\? 0\.5/)
 })
 
-test('secondary rain paints native top-to-bottom filled quads instead of path-directed strokes', () => {
+test('secondary rain paints native top-to-bottom vertex quads instead of Canvas gradients', () => {
   assert.match(
     secondaryWorldView,
-    /\.rect\(draw\.topLeft\.x, draw\.topLeft\.y, draw\.width, draw\.height\)/,
+    /draw\.topLeft\.x \+ draw\.width, draw\.topLeft\.y \+ draw\.height/,
   )
-  assert.match(secondaryWorldView, /\.fill\(fill\)/)
-  assert.doesNotMatch(secondaryWorldView, /\.stroke\(\{ cap: 'butt', fill, width: draw\.width \}\)/)
+  assert.doesNotMatch(secondaryWorldView, /\.fill\(fill\)|new FillGradient/)
+})
+
+test('Arena entry installs the native fragment shader across every Pixi primitive owner', () => {
+  assert.match(boneyardRenderer, /installNativeArenaRenderPipeline\(application\.renderer\)/)
+  assert.match(boneyardRenderer, /arenaSaturation = 'native-fragment-0\.65'/)
+  assert.match(nativeArenaRenderPipeline, /class NativeArenaBatcher extends DefaultBatcher/)
+  assert.match(nativeArenaRenderPipeline, /createNativeArenaGraphicsShader/)
+  assert.match(nativeArenaRenderPipeline, /createNativeArenaMeshShader/)
+  assert.match(nativeArenaRenderPipeline, /createNativeArenaUnpremultipliedParticleShader/)
+  assert.match(weatherView, /shader: createNativeArenaUnpremultipliedParticleShader\(\)/)
+  assert.match(weatherView, /alphaMode: 'no-premultiply-alpha'/)
+  assert.match(buildingSurfaceView, /NATIVE_ARENA_UNPREMULTIPLIED_SATURATION_BIT_GL/)
 })
 
 test('world-weather splash and streak painters are separate light-boundary roots', () => {
@@ -409,11 +420,10 @@ test('mode one and two add bounded player light without masking later Region sou
   )
 })
 
-test('environment player-light plan applies the requested web brightness scale', () => {
-  assert.equal(WEB_DIRECT_ENVIRONMENT_LIGHT_SCALE, 0.14)
+test('environment player-light plan retains the native grayscale aperture', () => {
   for (let frame = 0; frame < 360; frame += 1) {
     const direct = nativeDirectEnvironmentLightAlpha(frame, frame % 4)
-    assert.ok(direct >= 0.03325 && direct <= 0.035)
+    assert.ok(direct >= 0.2375 && direct <= 0.25)
   }
 })
 

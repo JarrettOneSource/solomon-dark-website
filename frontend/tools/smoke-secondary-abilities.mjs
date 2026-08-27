@@ -486,6 +486,7 @@ try {
           ))
       }, undefined, { timeout: 5_000 })
     }
+    let framePacing = null
     let playerPresentation = null
     if (contract.skillId === 46 || contract.skillId === 54) {
       playerPresentation = await waitForPlayerPresentation(
@@ -613,6 +614,10 @@ try {
 
     const screenshotPath = `${screenshotRoot}/${String(contract.skillId).padStart(2, '0')}-${slug(contract.name)}.png`
     await page.screenshot({ path: screenshotPath })
+    if (contract.skillId === 72) {
+      await page.waitForTimeout(500)
+      framePacing = await captureFramePacing(page, 3_000)
+    }
     await waitForAudio(page, audioStart, proof.audio)
     if (contract.skillId === 48) {
       await waitForAudioCount(page, audioStart, proof.audio, 2)
@@ -678,6 +683,7 @@ try {
       combatProof,
       eventCues: events.flatMap(({ cue }) => cue === null ? [] : [cue]),
       flashObserved,
+      framePacing,
       id: contract.skillId,
       kinds: [...new Set(samples.flatMap(({ kinds }) => kinds))].sort(),
       maximumActorCount: Math.max(...samples.map(({ actorCount }) => actorCount)),
@@ -1950,6 +1956,46 @@ async function blockedSecondaryReceipt(page, canvas, host, playerId, contract) {
     name: contract.name,
     position,
     screenshotPath,
+  }
+}
+
+async function captureFramePacing(page, durationMs) {
+  const sample = await page.evaluate((duration) => new Promise((resolve) => {
+    const frameGaps = []
+    const longTasks = []
+    const startedAt = performance.now()
+    let previousFrame = startedAt
+    const observer = new PerformanceObserver((list) => {
+      for (const entry of list.getEntries()) longTasks.push(entry.duration)
+    })
+    observer.observe({ type: 'longtask' })
+    const frame = (now) => {
+      frameGaps.push(now - previousFrame)
+      previousFrame = now
+      if (now - startedAt < duration) {
+        requestAnimationFrame(frame)
+        return
+      }
+      observer.disconnect()
+      resolve({ frameGaps, longTasks })
+    }
+    requestAnimationFrame(frame)
+  }), durationMs)
+  assert.ok(sample.frameGaps.length >= 120, 'Acid Rain frame pacing sample was too short')
+  const sorted = [...sample.frameGaps].sort((left, right) => left - right)
+  const percentile = (fraction) => sorted[
+    Math.min(sorted.length - 1, Math.ceil(sorted.length * fraction) - 1)
+  ]
+  const round = (value) => Math.round(value * 1_000) / 1_000
+  return {
+    durationMs,
+    frameCount: sorted.length,
+    maximumFrameMs: round(sorted.at(-1)),
+    p95FrameMs: round(percentile(0.95)),
+    p99FrameMs: round(percentile(0.99)),
+    longTaskCount: sample.longTasks.length,
+    longestTaskMs: round(Math.max(0, ...sample.longTasks)),
+    longTaskTotalMs: round(sample.longTasks.reduce((total, value) => total + value, 0)),
   }
 }
 

@@ -16,6 +16,9 @@ import {
   nativeBuildingMeshGrid,
   writeNativeBuildingVertexColors,
 } from './boneyard-static-surface-lighting.ts'
+import {
+  NATIVE_ARENA_UNPREMULTIPLIED_SATURATION_BIT_GL,
+} from './native-arena-render-pipeline.ts'
 
 export interface NativeBuildingSurfaceMesh {
   readonly colors: Uint8Array
@@ -25,7 +28,13 @@ export interface NativeBuildingSurfaceMesh {
 }
 
 const NATIVE_BUILDING_SURFACE_PROGRAM = compileHighShaderGlProgram({
-  bits: [colorBitGl, localUniformBitGl, textureBitGl, roundPixelsBitGl],
+  bits: [
+    colorBitGl,
+    localUniformBitGl,
+    textureBitGl,
+    roundPixelsBitGl,
+    NATIVE_ARENA_UNPREMULTIPLIED_SATURATION_BIT_GL,
+  ],
   name: 'native-building-surface',
 })
 

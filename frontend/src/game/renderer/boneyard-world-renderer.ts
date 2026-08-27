@@ -226,6 +226,10 @@ import {
 import { NativeWorldSpeechLayer } from './native-world-speech.ts'
 import { NativeBoneyardWeatherView } from './native-boneyard-weather-view.ts'
 import {
+  installNativeArenaRenderPipeline,
+  type NativeArenaRenderPipeline,
+} from './native-arena-render-pipeline.ts'
+import {
   createNativeBuildingSurfaceMesh,
   type NativeBuildingSurfaceMesh,
 } from './boneyard-building-surface-view.ts'
@@ -577,6 +581,15 @@ export async function createBoneyardWorldRenderer(
     throw error
   }
   application.stop()
+  let arenaRenderPipeline: NativeArenaRenderPipeline
+  try {
+    arenaRenderPipeline = installNativeArenaRenderPipeline(application.renderer)
+  } catch (error) {
+    application.destroy({ removeView: true })
+    destroyBoneyardWorldTextures(textures)
+    modTextures.destroy()
+    throw error
+  }
 
   const document = editorDocument(options.boneyard)
   const world = new Container({ isRenderGroup: true, label: 'boneyard-world' })
@@ -603,6 +616,7 @@ export async function createBoneyardWorldRenderer(
     worldNameplates.destroy()
     worldSpeech.destroy()
     world.destroy({ children: true })
+    arenaRenderPipeline.destroy()
     application.destroy({ removeView: true })
     destroyBoneyardWorldTextures(textures)
     modTextures.destroy()
@@ -653,6 +667,8 @@ export async function createBoneyardWorldRenderer(
   canvas.className = 'boneyard-world-canvas'
   canvas.setAttribute('aria-hidden', 'true')
   canvas.dataset.gameRenderer = 'pixi-webgl'
+  canvas.dataset.arenaSaturation = 'native-fragment-0.65'
+  canvas.dataset.arenaTextureAlpha = 'mixed-native-unpremultiplied'
   canvas.dataset.buildingLighting = 'native-elevated-vertex-grid'
   canvas.dataset.buildingLightingGrid = NATIVE_BROWSER_ENHANCED_EFFECTS ? '3x3' : '2x2'
   canvas.dataset.complexShadows = 'native-indexed-owner-mesh'
@@ -1404,6 +1420,7 @@ export async function createBoneyardWorldRenderer(
       world.destroy({ children: true })
       destroyBoneyardWorldTextures(textures)
       modTextures.destroy()
+      arenaRenderPipeline.destroy()
       application.destroy({ removeView: true })
       canvas.remove()
     },
@@ -3663,11 +3680,11 @@ function buildingSurfaceResidentTexture(
 function residentPixelTexture(source: BoneyardStaticPixelRegion): Texture {
   return new Texture({
     source: new BufferImageSource({
-      alphaMode: 'premultiply-alpha-on-upload',
+      alphaMode: 'no-premultiply-alpha',
       format: 'rgba8unorm',
       height: source.height,
       resource: source.pixels,
-      scaleMode: 'nearest',
+      scaleMode: 'linear',
       width: source.width,
     }),
   })

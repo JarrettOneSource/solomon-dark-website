@@ -15,6 +15,7 @@ import {
   NativeBoneyardWeather,
 } from '../core-kernels/native-boneyard-weather.ts'
 import type { NativeBoneyardWeatherLightingOrder } from './boneyard-lighting.ts'
+import { createNativeArenaUnpremultipliedParticleShader } from './native-arena-render-pipeline.ts'
 
 const WEATHER_STREAK_RAMP_HEIGHT = 256
 
@@ -50,6 +51,7 @@ export class NativeBoneyardWeatherView {
         position: true,
         vertex: true,
       },
+      shader: createNativeArenaUnpremultipliedParticleShader(),
       texture: this.dropTexture,
     })
     this.dropContainer.label = 'native-boneyard-weather-streaks'
@@ -168,7 +170,7 @@ function weatherStreakRampTexture(): Texture {
   return new Texture({
     label: 'native-boneyard-weather-streak-ramp',
     source: new BufferImageSource({
-      alphaMode: 'premultiply-alpha-on-upload',
+      alphaMode: 'no-premultiply-alpha',
       height: WEATHER_STREAK_RAMP_HEIGHT,
       label: 'native-boneyard-weather-streak-ramp-source',
       resource: nativeBoneyardWeatherStreakRampPixels(),
