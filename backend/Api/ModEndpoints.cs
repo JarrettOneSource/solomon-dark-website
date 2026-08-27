@@ -226,12 +226,14 @@ public static class ModEndpoints
     {
         try
         {
-            var content = await contentService.ResolveAsync(
+            var resolution = await contentService.ResolveAsync(
                 TokenService.GetUserId(context.User),
                 cancellationToken: cancellationToken);
+            var content = resolution.Content;
             return Results.Ok(new
             {
                 content.ManifestSha256,
+                disabledMods = resolution.DisabledMods,
                 mods = content.Mods.Select(mod => new
                 {
                     mod.Id,

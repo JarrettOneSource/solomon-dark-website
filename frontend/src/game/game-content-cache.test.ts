@@ -2,7 +2,11 @@ import assert from 'node:assert/strict'
 import { createHash, webcrypto } from 'node:crypto'
 import test from 'node:test'
 
-import { gameContentUrl, prefetchGameContent } from './game-content-cache.ts'
+import {
+  GameModContentLoadError,
+  gameContentUrl,
+  prefetchGameContent,
+} from './game-content-cache.ts'
 
 const bytes = new TextEncoder().encode('verified mod pixels')
 const asset = {
@@ -50,10 +54,18 @@ test('content cache rejects a hash mismatch without storing it', async () => {
       } as unknown as Cache
     },
   }
-  await assert.rejects(() => prefetchGameContent([{ ...asset, sha256: '0'.repeat(64) }], undefined, {
-    cacheStorage,
-    request: async () => new Response(bytes),
-    subtle: webcrypto.subtle,
-  }), /failed verification/)
+  let failure: unknown
+  try {
+    await prefetchGameContent([{ ...asset, sha256: '0'.repeat(64) }], undefined, {
+      cacheStorage,
+      request: async () => new Response(bytes),
+      subtle: webcrypto.subtle,
+    })
+  } catch (error) {
+    failure = error
+  }
+  assert.ok(failure instanceof GameModContentLoadError)
+  assert.match(failure.message, /failed verification/)
+  assert.equal(failure.modId, asset.modId)
   assert.equal(stored.size, 0)
 })

@@ -15,6 +15,16 @@ interface GameContentCacheOptions {
 
 const CACHE_NAME = 'solomon-dark-game-content-v1'
 
+export class GameModContentLoadError extends Error {
+  readonly modId: string
+
+  constructor(modId: string, message: string) {
+    super(message)
+    this.name = 'GameModContentLoadError'
+    this.modId = modId
+  }
+}
+
 export async function prefetchGameContent(
   assets: readonly GameModAsset[],
   onProgress: (progress: GameContentDownloadProgress) => void = () => {},
@@ -32,7 +42,15 @@ export async function prefetchGameContent(
     const url = gameContentUrl(asset)
     const cached = await cache?.match(url)
     if (cached) {
-      const bytes = new Uint8Array(await cached.arrayBuffer())
+      let bytes: Uint8Array<ArrayBuffer>
+      try {
+        bytes = new Uint8Array(await cached.arrayBuffer())
+      } catch {
+        throw new GameModContentLoadError(
+          asset.modId,
+          `Could not read cached content for ${asset.modId}:${asset.path}.`,
+        )
+      }
       if (bytes.length === asset.byteLength && await sha256(bytes, subtle) === asset.sha256) {
         completedBytes += bytes.length
         onProgress({ active: asset, completedBytes, totalBytes })
@@ -40,13 +58,25 @@ export async function prefetchGameContent(
       }
       await cache?.delete(url)
     }
-    const response = await request(url, {
-      cache: 'force-cache',
-      credentials: 'same-origin',
-      signal: options.signal,
-    })
+    let response: Response
+    try {
+      response = await request(url, {
+        cache: 'force-cache',
+        credentials: 'same-origin',
+        signal: options.signal,
+      })
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') throw error
+      throw new GameModContentLoadError(
+        asset.modId,
+        `Could not download ${asset.modId}:${asset.path}.`,
+      )
+    }
     if (!response.ok || !response.body) {
-      throw new Error(`Could not download ${asset.modId}:${asset.path}.`)
+      throw new GameModContentLoadError(
+        asset.modId,
+        `Could not download ${asset.modId}:${asset.path}.`,
+      )
     }
     const bytes = await readResponse(
       response,
@@ -57,7 +87,10 @@ export async function prefetchGameContent(
       options.signal,
     )
     if (bytes.length !== asset.byteLength || await sha256(bytes, subtle) !== asset.sha256) {
-      throw new Error(`Downloaded content failed verification: ${asset.modId}:${asset.path}.`)
+      throw new GameModContentLoadError(
+        asset.modId,
+        `Downloaded content failed verification: ${asset.modId}:${asset.path}.`,
+      )
     }
     await cache?.put(url, new Response(bytes, {
       headers: {
@@ -92,7 +125,12 @@ async function readResponse(
     if (done) break
     chunks.push(value)
     received += value.length
-    if (received > asset.byteLength) throw new Error(`Downloaded content is too large: ${asset.path}.`)
+    if (received > asset.byteLength) {
+      throw new GameModContentLoadError(
+        asset.modId,
+        `Downloaded content is too large: ${asset.modId}:${asset.path}.`,
+      )
+    }
     onProgress({
       active: asset,
       completedBytes: completedBefore + received,
@@ -120,7 +158,10 @@ function uniqueAssets(assets: readonly GameModAsset[]): readonly GameModAsset[] 
   for (const asset of assets) {
     const existing = seen.get(asset.sha256)
     if (existing && existing.byteLength !== asset.byteLength) {
-      throw new Error(`Content identity has conflicting sizes: ${asset.sha256}.`)
+      throw new GameModContentLoadError(
+        asset.modId,
+        `Content identity has conflicting sizes: ${asset.sha256}.`,
+      )
     }
     seen.set(asset.sha256, existing ?? asset)
   }

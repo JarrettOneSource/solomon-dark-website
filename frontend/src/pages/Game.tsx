@@ -36,7 +36,12 @@ import type {
 import NativeLoader from '../game/NativeLoader'
 import GameRuntimeError from '../game/GameRuntimeError.tsx'
 import { useAuth } from '../lib/auth'
-import { api, getToken, type ActiveWebMod } from '../lib/api.ts'
+import {
+  api,
+  getToken,
+  type ActiveWebMod,
+  type DisabledWebMod,
+} from '../lib/api.ts'
 import { GameSaveCoordinator } from '../game/save/game-save-coordinator.ts'
 import {
   createCloudGameSaveStore,
@@ -80,6 +85,7 @@ export default function Game() {
   const [saveDetection, setSaveDetection] = useState<BrowserSaveDetection>('loading')
   const [modsReady, setModsReady] = useState(false)
   const [activeMods, setActiveMods] = useState<readonly ActiveWebMod[]>([])
+  const [modLoadError, setModLoadError] = useState<string | null>(null)
   const [profileSave, setProfileSave] = useState<GameProfileSave | null>(null)
   const [resumeSave, setResumeSave] = useState<ResumableGameSave | null>(null)
   const [deploymentRestart, setDeploymentRestart] = useState<DeploymentRestartState | null>(null)
@@ -183,10 +189,12 @@ export default function Game() {
   const refreshActiveMods = useCallback(async (): Promise<readonly ActiveWebMod[]> => {
     if (!user) {
       setActiveMods([])
+      setModLoadError(null)
       return []
     }
     const content = await api.mods.subscriptions.active()
     setActiveMods(content.mods)
+    setModLoadError(disabledModMessage(content.disabledMods))
     return content.mods
   }, [user])
 
@@ -201,7 +209,8 @@ export default function Game() {
           'asset-load-failed',
         )
         diagnostics.error('mods.load_failed', failure.message, failure.stack)
-        setFatal(failure)
+        setActiveMods([])
+        setModLoadError(`Mods could not be loaded. The main menu opened without them: ${failure.message}`)
       }
     }).finally(() => {
       if (!cancelled) setModsReady(true)
@@ -462,6 +471,7 @@ export default function Game() {
               displayName={displayName}
               initialScreen="root"
               loadGlobalHallOfFame={loadGlobalHallOfFame}
+              modLoadError={modLoadError}
               onCancelCreate={cancelCreate}
               onKillWizard={killWizard}
               onSaveCheckpoint={persistCheckpoint}
@@ -499,4 +509,10 @@ function highestLocalWave(): number | null {
     .map(({ wave }) => wave)
     .filter((wave) => wave > 0)
   return waves.length === 0 ? null : Math.max(...waves)
+}
+
+function disabledModMessage(mods: readonly DisabledWebMod[]): string | null {
+  if (mods.length === 0) return null
+  const errors = mods.map(mod => mod.error).join(' ')
+  return `${mods.length === 1 ? 'Mod disabled' : 'Mods disabled'}: ${errors}`
 }

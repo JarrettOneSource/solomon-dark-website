@@ -1408,8 +1408,11 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             "/api/mods/active",
             headers=authorization,
         )
-        self.assertEqual(status, 409, missing_dependency)
-        self.assertIn("tests.web-dependency", missing_dependency["error"])
+        self.assertEqual(status, 200, missing_dependency)
+        self.assertEqual(missing_dependency["mods"], [])
+        self.assertEqual(len(missing_dependency["disabledMods"]), 1)
+        self.assertEqual(missing_dependency["disabledMods"][0]["slug"], combined["slug"])
+        self.assertIn("tests.web-dependency", missing_dependency["disabledMods"][0]["error"])
 
         status, _ = self.request(
             "PUT",
@@ -1417,6 +1420,13 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             headers=authorization,
         )
         self.assertEqual(status, 201)
+        status, enabled = self.request(
+            "PATCH",
+            f"/api/mods/{combined['slug']}/subscription",
+            headers=authorization,
+            json_body={"enabled": True},
+        )
+        self.assertEqual(status, 200, enabled)
         status, active = self.request("GET", "/api/mods/active", headers=authorization)
         self.assertEqual(status, 200, active)
         self.assertEqual(
@@ -1451,7 +1461,9 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             "/api/mods/active",
             headers=authorization,
         )
-        self.assertEqual(status, 409, missing_dependency)
+        self.assertEqual(status, 200, missing_dependency)
+        self.assertEqual(missing_dependency["mods"], [])
+        self.assertEqual(missing_dependency["disabledMods"][0]["slug"], combined["slug"])
 
         status, second = self.request(
             "POST",
@@ -1499,6 +1511,99 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         )
         self.assertEqual(status, 400, rejected)
         self.assertIn("Web-port overlays", rejected["error"])
+
+    def test_invalid_stored_package_is_disabled_without_blocking_game_startup(self) -> None:
+        manifest = {
+            "id": "tests.invalid-after-publish",
+            "name": "Invalid After Publish",
+            "version": "1.0.0",
+            "runtime": {
+                "apiVersion": "1.0.0",
+                "entryScript": "scripts/main.lua",
+            },
+        }
+        valid_archive = package(
+            {"scripts/main.lua": b"return sd.mod({api = '1.0.0'})\n"},
+            manifest,
+        )
+        status, created = self.upload(
+            "Invalid After Publish",
+            "1.0.0",
+            valid_archive,
+        )
+        self.assertEqual(status, 201, created)
+        authorization = {"Authorization": f"Bearer {self.token}"}
+        status, subscribed = self.request(
+            "PUT",
+            f"/api/mods/{created['slug']}/subscription",
+            headers=authorization,
+        )
+        self.assertEqual(status, 201, subscribed)
+
+        database_path = Path(self.temp.name) / "sdr.db"
+        with sqlite3.connect(database_path) as database:
+            file_name = database.execute(
+                "SELECT FileName FROM ModVersions WHERE ModId = ?",
+                (created["id"],),
+            ).fetchone()[0]
+        package_path = Path(self.temp.name) / "uploads" / "mods" / file_name
+        invalid_archive = package(
+            {"scripts/main.lua": b"return sd.mod({api = '1.0.0'})\n"},
+            {
+                **manifest,
+                "runtime": {
+                    **manifest["runtime"],
+                    "removedContractField": True,
+                },
+            },
+        )
+        package_path.write_bytes(invalid_archive)
+        try:
+            status, active = self.request(
+                "GET",
+                "/api/mods/active",
+                headers=authorization,
+            )
+            self.assertEqual(status, 200, active)
+            self.assertEqual(active["mods"], [])
+            self.assertEqual(
+                active["disabledMods"],
+                [{
+                    "name": "Invalid After Publish",
+                    "slug": created["slug"],
+                    "error": (
+                        "Invalid After Publish has an incompatible package: "
+                        "manifest.json contains fields that are not part of the package contract."
+                    ),
+                }],
+            )
+
+            status, subscriptions = self.request(
+                "GET",
+                "/api/mods/subscriptions",
+                headers=authorization,
+            )
+            self.assertEqual(status, 200, subscriptions)
+            recovered = next(
+                item for item in subscriptions["items"]
+                if item["mod"]["slug"] == created["slug"]
+            )
+            self.assertFalse(recovered["enabled"])
+
+            status, active = self.request(
+                "GET",
+                "/api/mods/active",
+                headers=authorization,
+            )
+            self.assertEqual(status, 200, active)
+            self.assertEqual(active["disabledMods"], [])
+        finally:
+            package_path.write_bytes(valid_archive)
+            self.request(
+                "DELETE",
+                f"/api/mods/{created['slug']}/subscription",
+                headers=authorization,
+            )
 
     def test_upload_rejects_unsafe_or_inconsistent_packages(self) -> None:
         native_manifest = {

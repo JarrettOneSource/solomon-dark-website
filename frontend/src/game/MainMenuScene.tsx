@@ -99,6 +99,7 @@ import {
   type PartyJoinResolution,
 } from '../lib/api.ts'
 import {
+  GameModContentLoadError,
   prefetchGameContent,
   type GameContentDownloadProgress,
 } from './game-content-cache.ts'
@@ -349,6 +350,7 @@ interface MainMenuSceneProps {
   developerAccess: boolean
   initialScreen?: 'create' | 'root'
   loadGlobalHallOfFame: (board: HallOfFameBoard) => Promise<readonly HallOfFameEntry[]>
+  modLoadError: string | null
   onCancelCreate: () => Promise<void>
   onKillWizard: () => Promise<void>
   onSaveCheckpoint: (checkpoint: GameSaveCheckpoint) => void
@@ -372,6 +374,7 @@ export default function MainMenuScene({
   displayName,
   initialScreen = 'root',
   loadGlobalHallOfFame,
+  modLoadError,
   onCancelCreate,
   onKillWizard,
   onSaveCheckpoint,
@@ -434,7 +437,7 @@ export default function MainMenuScene({
   const [preparing, setPreparing] = useState(false)
   const [connecting, setConnecting] = useState(false)
   const [leaving, setLeaving] = useState(false)
-  const [connectionError, setConnectionError] = useState<string | null>(null)
+  const [connectionError, setConnectionError] = useState<string | null>(modLoadError)
   const [hoveredTitleAction, setHoveredTitleAction] = useState<TitleMenuAction | null>(null)
   const [pressedTitleAction, setPressedTitleAction] = useState<TitleMenuAction | null>(null)
   const [settingsContext, setSettingsContext] = useState<GameSettingsContext | null>(null)
@@ -453,6 +456,10 @@ export default function MainMenuScene({
     kind: 'global-hub',
   })
   const [routingBusy, setRoutingBusy] = useState(false)
+
+  useEffect(() => {
+    if (modLoadError) setConnectionError(modLoadError)
+  }, [modLoadError])
   const [contentProgress, setContentProgress] = useState<GameContentDownloadProgress | null>(null)
   const [cheatCollegePrompt, setCheatCollegePrompt] = useState(false)
   const [gameSettings, setLocalGameSettings] = useState(readGameSettings)
@@ -1021,12 +1028,36 @@ export default function MainMenuScene({
     }
   }
 
+  const prefetchSubscribedModContent = async (mods: readonly {
+    assets: ActiveWebMod['assets']
+    id: string
+    name: string
+    slug: string
+  }[]): Promise<void> => {
+    try {
+      await prefetchGameContent(mods.flatMap(mod => mod.assets), setContentProgress)
+    } catch (error) {
+      if (!(error instanceof GameModContentLoadError) || !accountUsername) throw error
+      const failedMod = mods.find(mod => mod.id === error.modId)
+      if (!failedMod) throw error
+      try {
+        await api.mods.subscriptions.setEnabled(failedMod.slug, false)
+        await refreshActiveMods()
+      } catch {
+        throw new Error(`${error.message} The mod could not be disabled automatically.`)
+      }
+      throw new Error(
+        `${failedMod.name} was disabled because its content could not be loaded or verified.`,
+      )
+    }
+  }
+
   const continueLocal = async () => {
     if (routingBusy) return
     setRoutingBusy(true)
     setContentProgress(null)
     try {
-      await prefetchGameContent(activeMods.flatMap(mod => mod.assets), setContentProgress)
+      await prefetchSubscribedModContent(activeMods)
       requestNewGameCreate({ kind: 'private-college' })
     } catch (error) {
       setConnectionError(error instanceof Error ? error.message : 'Mod content could not be prepared.')
@@ -1099,10 +1130,7 @@ export default function MainMenuScene({
           await api.mods.subscriptions.sync(partyConsent.target.content.mods)
           await refreshActiveMods()
         }
-        await prefetchGameContent(
-          partyConsent.target.content.mods.flatMap(mod => mod.assets),
-          setContentProgress,
-        )
+        await prefetchSubscribedModContent(partyConsent.target.content.mods)
       }
       const admission = { kind: 'party', intentId: partyConsent.intentId } as const
       if (collegeIntroPending) await startCollegeIntro(admission)
@@ -1155,7 +1183,7 @@ export default function MainMenuScene({
     beginLoading(flow, 'connecting_transport')
     try {
       if (activeMods.length > 0) {
-        await prefetchGameContent(activeMods.flatMap(mod => mod.assets), setContentProgress)
+        await prefetchSubscribedModContent(activeMods)
       }
       await prepareGame({
         fallback: resumeSave.integrity === 'local-only'

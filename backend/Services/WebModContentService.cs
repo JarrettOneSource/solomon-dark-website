@@ -31,9 +31,18 @@ public sealed record WebSessionContent(
     string ManifestSha256,
     IReadOnlyList<WebResolvedMod> Mods);
 
+public sealed record WebDisabledMod(string Name, string Slug, string Error);
+
+public sealed record WebModContentResolution(
+    WebSessionContent Content,
+    IReadOnlyList<WebDisabledMod> DisabledMods);
+
 public sealed class WebModContentException(string message) : Exception(message);
 
-public sealed class WebModContentService(AppDb db, StorageService storage)
+public sealed class WebModContentService(
+    AppDb db,
+    StorageService storage,
+    ILogger<WebModContentService> logger)
 {
     public const int MaxActiveMods = 128;
     public const int MaxActiveLuaMods = 8;
@@ -44,38 +53,154 @@ public sealed class WebModContentService(AppDb db, StorageService storage)
     private const int MaxPackageFilesBytes = 32 * 1024 * 1024;
     private const int MaxProvisionedContentBytes = 32 * 1024 * 1024;
 
-    public async Task<WebSessionContent> ResolveAsync(
+    public async Task<WebModContentResolution> ResolveAsync(
         int? userId,
         bool recordDownloads = false,
         CancellationToken cancellationToken = default)
     {
         if (userId is null)
         {
-            return new WebSessionContent(new string('0', 64), []);
+            return new WebModContentResolution(
+                new WebSessionContent(new string('0', 64), []),
+                []);
         }
 
-        var subscriptions = await db.ModSubscriptions.AsNoTracking()
+        var subscriptions = await db.ModSubscriptions
             .Where(subscription => subscription.UserId == userId && subscription.Enabled)
             .Include(subscription => subscription.Mod)
                 .ThenInclude(mod => mod.Versions)
             .AsSplitQuery()
+            .OrderBy(subscription => subscription.Id)
             .ToArrayAsync(cancellationToken);
-        if (subscriptions.Length > MaxActiveMods)
+        var disabled = new List<WebDisabledMod>();
+        var subscriptionsByModId = subscriptions.ToDictionary(
+            subscription => subscription.ModId);
+
+        foreach (var subscription in subscriptions.Skip(MaxActiveMods))
         {
-            throw new WebModContentException($"At most {MaxActiveMods} mods may be active at once.");
+            Disable(
+                subscription,
+                $"{subscription.Mod.Name} was disabled because at most {MaxActiveMods} mods may be active at once.",
+                disabled);
         }
 
-        var loaded = new List<LoadedPackage>(subscriptions.Length);
-        foreach (var subscription in subscriptions)
+        var loaded = new List<LoadedPackage>(Math.Min(subscriptions.Length, MaxActiveMods));
+        foreach (var subscription in subscriptions.Take(MaxActiveMods))
         {
-            loaded.Add(await LoadPackageAsync(subscription.Mod, cancellationToken));
+            try
+            {
+                loaded.Add(await LoadPackageAsync(subscription.Mod, cancellationToken));
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception exception) when (IsPackageLoadFailure(exception))
+            {
+                var error = exception is WebModContentException
+                    ? exception.Message
+                    : $"{subscription.Mod.Name} could not load its stored package.";
+                Disable(subscription, error, disabled);
+                logger.LogWarning(
+                    exception,
+                    "Disabled invalid active mod {ModId} ({ModSlug}).",
+                    subscription.ModId,
+                    subscription.Mod.Slug);
+            }
         }
-        if (loaded.Count(package => package.EntryScript is not null) > MaxActiveLuaMods)
+
+        var duplicateIds = loaded
+            .GroupBy(package => package.Id, StringComparer.OrdinalIgnoreCase)
+            .SelectMany(group => group.Skip(1))
+            .ToArray();
+        foreach (var package in duplicateIds)
         {
-            throw new WebModContentException(
-                $"At most {MaxActiveLuaMods} Lua mods may be active at once.");
+            Disable(
+                subscriptionsByModId[package.ModId],
+                $"{package.Name} was disabled because another active mod uses package id {package.Id}.",
+                disabled);
         }
-        var ordered = DependencyOrder(loaded);
+        loaded.RemoveAll(package => duplicateIds.Contains(package));
+
+        IReadOnlyList<LoadedPackage> ordered;
+        while (true)
+        {
+            var packageIds = loaded
+                .Select(package => package.Id)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var missingDependencies = loaded
+                .Select(package => new
+                {
+                    Package = package,
+                    Missing = package.RequiredMods.FirstOrDefault(required => !packageIds.Contains(required))
+                })
+                .Where(candidate => candidate.Missing is not null)
+                .ToArray();
+            if (missingDependencies.Length > 0)
+            {
+                foreach (var candidate in missingDependencies)
+                {
+                    Disable(
+                        subscriptionsByModId[candidate.Package.ModId],
+                        $"{candidate.Package.Name} requires {candidate.Missing}. Subscribe to and enable it first.",
+                        disabled);
+                }
+                loaded.RemoveAll(package => missingDependencies.Any(candidate =>
+                    candidate.Package.ModId == package.ModId));
+                continue;
+            }
+
+            var dependencyOrder = DependencyOrder(loaded);
+            if (dependencyOrder.Rejected.Count > 0)
+            {
+                foreach (var package in dependencyOrder.Rejected)
+                {
+                    Disable(
+                        subscriptionsByModId[package.ModId],
+                        $"{package.Name} was disabled because its active mod dependency graph is invalid.",
+                        disabled);
+                }
+                loaded.RemoveAll(package => dependencyOrder.Rejected.Contains(package));
+                continue;
+            }
+
+            var luaOverflow = dependencyOrder.Ordered
+                .Where(package => package.EntryScript is not null)
+                .Skip(MaxActiveLuaMods)
+                .ToArray();
+            if (luaOverflow.Length > 0)
+            {
+                foreach (var package in luaOverflow)
+                {
+                    Disable(
+                        subscriptionsByModId[package.ModId],
+                        $"{package.Name} was disabled because at most {MaxActiveLuaMods} Lua mods may be active at once.",
+                        disabled);
+                }
+                loaded.RemoveAll(package => luaOverflow.Contains(package));
+                continue;
+            }
+
+            var totalBytes = dependencyOrder.Ordered.Sum(PackageByteCount);
+            if (totalBytes > MaxProvisionedContentBytes)
+            {
+                var package = dependencyOrder.Ordered[^1];
+                Disable(
+                    subscriptionsByModId[package.ModId],
+                    $"{package.Name} was disabled because the active mod set is too large for one web game session.",
+                    disabled);
+                loaded.Remove(package);
+                continue;
+            }
+
+            ordered = dependencyOrder.Ordered;
+            break;
+        }
+
+        if (disabled.Count > 0)
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
         if (recordDownloads && ordered.Count > 0)
         {
             var modIds = ordered.Select(package => package.ModId).ToArray();
@@ -101,16 +226,6 @@ public sealed class WebModContentService(AppDb db, StorageService storage)
                 .Where(download => download.DownloadedAtUtc < downloadedAtUtc.AddDays(-180))
                 .ExecuteDeleteAsync(cancellationToken);
         }
-        var totalBytes = ordered.Sum(package =>
-            Encoding.UTF8.GetByteCount(package.EntryScript ?? string.Empty) +
-            package.Boneyards.Sum(boneyard => boneyard.ByteCount) +
-            package.Files.Sum(file => file.ByteCount));
-        if (totalBytes > MaxProvisionedContentBytes)
-        {
-            throw new WebModContentException(
-                "The active mod set is too large for one web game session.");
-        }
-
         var resolved = new List<WebResolvedMod>(ordered.Count);
         foreach (var package in ordered)
         {
@@ -142,8 +257,40 @@ public sealed class WebModContentService(AppDb db, StorageService storage)
                     Convert.ToBase64String(boneyard.Bytes))).ToArray(),
                 files));
         }
-        return new WebSessionContent(ManifestSha256(resolved), resolved);
+        return new WebModContentResolution(
+            new WebSessionContent(ManifestSha256(resolved), resolved),
+            disabled);
     }
+
+    private static void Disable(
+        ModSubscription subscription,
+        string error,
+        ICollection<WebDisabledMod> disabled)
+    {
+        if (!subscription.Enabled)
+        {
+            return;
+        }
+        subscription.Enabled = false;
+        subscription.UpdatedAtUtc = DateTime.UtcNow;
+        disabled.Add(new WebDisabledMod(subscription.Mod.Name, subscription.Mod.Slug, error));
+    }
+
+    private static bool IsPackageLoadFailure(Exception exception) => exception is
+        WebModContentException or
+        IOException or
+        UnauthorizedAccessException or
+        JsonException or
+        DecoderFallbackException or
+        InvalidDataException or
+        InvalidOperationException or
+        KeyNotFoundException or
+        ArgumentException;
+
+    private static int PackageByteCount(LoadedPackage package) =>
+        Encoding.UTF8.GetByteCount(package.EntryScript ?? string.Empty) +
+        package.Boneyards.Sum(boneyard => boneyard.ByteCount) +
+        package.Files.Sum(file => file.ByteCount);
 
     private async Task<LoadedPackage> LoadPackageAsync(
         Mod mod,
@@ -360,27 +507,9 @@ public sealed class WebModContentService(AppDb db, StorageService storage)
         return null;
     }
 
-    private static IReadOnlyList<LoadedPackage> DependencyOrder(
+    private static DependencyOrderResult DependencyOrder(
         IReadOnlyList<LoadedPackage> packages)
     {
-        var byId = new Dictionary<string, LoadedPackage>(StringComparer.OrdinalIgnoreCase);
-        foreach (var package in packages)
-        {
-            if (!byId.TryAdd(package.Id, package))
-            {
-                throw new WebModContentException($"The active mod id is duplicated: {package.Id}");
-            }
-        }
-        foreach (var package in packages)
-        {
-            var missing = package.RequiredMods.FirstOrDefault(required => !byId.ContainsKey(required));
-            if (missing is not null)
-            {
-                throw new WebModContentException(
-                    $"{package.Name} requires {missing}. Subscribe to and enable it first.");
-            }
-        }
-
         var emitted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var ordered = new List<LoadedPackage>(packages.Count);
         while (ordered.Count < packages.Count)
@@ -393,12 +522,14 @@ public sealed class WebModContentService(AppDb db, StorageService storage)
                 .FirstOrDefault();
             if (next is null)
             {
-                throw new WebModContentException("The active mod dependency graph contains a cycle.");
+                return new DependencyOrderResult(
+                    ordered,
+                    packages.Where(package => !emitted.Contains(package.Id)).ToArray());
             }
             emitted.Add(next.Id);
             ordered.Add(next);
         }
-        return ordered;
+        return new DependencyOrderResult(ordered, []);
     }
 
     private static string ManifestSha256(IReadOnlyList<WebResolvedMod> mods)
@@ -437,4 +568,8 @@ public sealed class WebModContentService(AppDb db, StorageService storage)
         string? EntryScript,
         IReadOnlyList<LoadedBoneyard> Boneyards,
         IReadOnlyList<LoadedPackageFile> Files);
+
+    private sealed record DependencyOrderResult(
+        IReadOnlyList<LoadedPackage> Ordered,
+        IReadOnlyList<LoadedPackage> Rejected);
 }

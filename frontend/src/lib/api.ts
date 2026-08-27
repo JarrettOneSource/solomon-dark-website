@@ -93,7 +93,14 @@ export interface ActiveWebMod {
   boneyardCount: number
 }
 
+export interface DisabledWebMod {
+  error: string
+  name: string
+  slug: string
+}
+
 export interface ActiveWebModSet {
+  disabledMods: DisabledWebMod[]
   manifestSha256: string
   mods: ActiveWebMod[]
 }

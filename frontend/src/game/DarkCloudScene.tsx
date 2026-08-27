@@ -36,6 +36,7 @@ import {
 } from './party-directory.ts'
 import { usePartyJoinActions } from './party-join.ts'
 import {
+  GameModContentLoadError,
   prefetchGameContent,
   type GameContentDownloadProgress,
 } from './game-content-cache.ts'
@@ -233,7 +234,24 @@ export default function DarkCloudScene({
             setDownloadProgress,
           )
         } catch (error) {
-          setDownloadError(message(error, 'The mod is enabled, but its game content was not cached.'))
+          const loadFailure = error instanceof GameModContentLoadError ? error : null
+          const failedMod = loadFailure
+            ? activeMods.find(active => active.id === loadFailure.modId)
+            : null
+          if (!loadFailure || !failedMod) {
+            setDownloadError(message(error, 'The mod is enabled, but its game content was not cached.'))
+          } else {
+            try {
+              await api.mods.subscriptions.setEnabled(failedMod.slug, false)
+              await onSubscriptionsChanged()
+              await load()
+              setDownloadError(
+                `${failedMod.name} was disabled because its content could not be loaded or verified.`,
+              )
+            } catch {
+              setDownloadError(`${loadFailure.message} The mod could not be disabled automatically.`)
+            }
+          }
         } finally {
           setDownloadProgress(null)
         }

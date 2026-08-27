@@ -185,12 +185,12 @@ public static class GameSessionEndpoints
         try
         {
             var userId = TokenService.GetUserId(context.User);
-            var content = await contentService.ResolveAsync(
+            var resolution = await contentService.ResolveAsync(
                 userId,
                 recordDownloads: true,
                 cancellationToken: cancellationToken);
             var endpoint = await provisioner.ProvisionAsync(
-                content,
+                resolution.Content,
                 userId,
                 developerAccess.Allows(userId),
                 cancellationToken);
@@ -239,10 +239,11 @@ public static class GameSessionEndpoints
         try
         {
             var userId = TokenService.GetUserId(context.User);
-            var content = await contentService.ResolveAsync(
+            var resolution = await contentService.ResolveAsync(
                 userId,
                 recordDownloads: true,
                 cancellationToken: cancellationToken);
+            var content = resolution.Content;
             if (content.Mods.Count > 0)
             {
                 return Results.Conflict(new
@@ -384,14 +385,14 @@ public static class GameSessionEndpoints
         try
         {
             var userId = TokenService.GetUserId(context.User);
-            var content = await contentService.ResolveAsync(
+            var resolution = await contentService.ResolveAsync(
                 userId,
                 recordDownloads: false,
                 cancellationToken: cancellationToken);
             var endpoint = await provisioner.RejoinPartyAsync(
                 request.Token ?? string.Empty,
                 request.Save ?? string.Empty,
-                content,
+                resolution.Content,
                 userId,
                 developerAccess.Allows(userId),
                 cancellationToken);

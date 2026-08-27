@@ -112,3 +112,12 @@ test('Dark Cloud Esc menu is the native gameplay pause menu', () => {
   assert.match(game, /const \{ user, loading: authLoading, logout \} = useAuth\(\)/)
   assert.match(game, /onSignOut=\{logout\}/)
 })
+
+test('invalid subscribed mods recover into an actionable main-menu error', () => {
+  assert.match(game, /setModLoadError\(disabledModMessage\(content\.disabledMods\)\)/)
+  assert.match(game, /setActiveMods\(\[\]\)\n\s+setModLoadError\(`Mods could not be loaded\. The main menu opened without them:/)
+  assert.match(game, /modLoadError=\{modLoadError\}/)
+  assert.match(menu, /useState<string \| null>\(modLoadError\)/)
+  assert.match(menu, /if \(modLoadError\) setConnectionError\(modLoadError\)/)
+  assert.match(menu, /className="main-menu-runtime-status" role=\{connectionError \? 'alert' : 'status'\}/)
+})
