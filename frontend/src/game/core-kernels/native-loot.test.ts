@@ -496,10 +496,10 @@ test('drains all eighteen Goodie rows without reproducing allocator garbage', ()
     sharedRng: createNativeRng(2_000 + selector),
   }))
   rows.slice(0, 4).forEach((row) => {
-    assert.deepEqual(row.items.map(({ nativeSubtype }) => nativeSubtype), [0, 0, 0, 0, 0])
+    assert.deepEqual(row.items.map(({ nativeSubtype, quantity }) => [nativeSubtype, quantity]), [[0, 5]])
   })
   rows.slice(4, 8).forEach((row) => {
-    assert.deepEqual(row.items.map(({ nativeSubtype }) => nativeSubtype), [1, 1, 1, 1, 1, 1])
+    assert.deepEqual(row.items.map(({ nativeSubtype, quantity }) => [nativeSubtype, quantity]), [[1, 6]])
   })
   rows.slice(8, 10).forEach((row) => assert.ok(row.items.length === 2 || row.items.length === 3))
   assert.equal(rows[10]!.items.length, 1)
@@ -510,7 +510,45 @@ test('drains all eighteen Goodie rows without reproducing allocator garbage', ()
   rows.slice(13, 17).forEach((row) => {
     assert.ok(row.gold === 500 || row.gold === 800 || row.gold === 1_100)
   })
-  assert.deepEqual(rows[17]!.items.map(({ nativeSubtype }) => nativeSubtype), [5, 0, 1, 4, 2, 2])
+  assert.deepEqual(rows[17]!.items.map(({ nativeSubtype, quantity }) => (
+    [nativeSubtype, quantity]
+  )), [[5, 1], [0, 1], [1, 1], [4, 1], [2, 2]])
+})
+
+test('Goodie forced insertion stacks Potion nodes while retaining native UID consumption', () => {
+  const healthIds = createNativeLootItemIds(100)
+  const health = resolveNativeGoodieContents({
+    advancedUnlocks: new Array<boolean>(8).fill(false),
+    itemIds: healthIds,
+    ownedRecipeIndexes: [],
+    playerLevel: 12,
+    selector: 0,
+    sharedRng: createNativeRng(2_000),
+  })
+  assert.deepEqual(health.items.map(({ id, nativeSubtype, quantity }) => (
+    [id, nativeSubtype, quantity]
+  )), [[100, 0, 5]])
+  assert.equal(healthIds.peek(), 105)
+
+  const mixedIds = createNativeLootItemIds(300)
+  const mixed = resolveNativeGoodieContents({
+    advancedUnlocks: new Array<boolean>(8).fill(false),
+    itemIds: mixedIds,
+    ownedRecipeIndexes: [],
+    playerLevel: 12,
+    selector: 17,
+    sharedRng: createNativeRng(2_017),
+  })
+  assert.deepEqual(mixed.items.map(({ id, nativeSubtype, quantity }) => (
+    [id, nativeSubtype, quantity]
+  )), [
+    [303, 5, 1],
+    [304, 0, 1],
+    [305, 1, 1],
+    [306, 4, 1],
+    [307, 2, 2],
+  ])
+  assert.equal(mixedIds.peek(), 309)
 })
 
 function input(overrides: Partial<NativeLootSelectionInput>): NativeLootSelectionInput {

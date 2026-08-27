@@ -45,6 +45,7 @@ import {
   HUB_NATIVE_UI_SURFACES,
   HUB_PRIMARY_SPELL_PANE,
   HUB_ROBE_REMOVAL_MSGBOX,
+  HUB_SACK_PAGE_TRANSITION,
   HUB_SHOP_GRID,
   HUB_SHOP_PANEL,
   HUB_STOREGRID_SELECTED_RECORDS,
@@ -75,6 +76,7 @@ import {
   hubInventorySlotPosition,
   hubShopSlotPosition,
   hubShopSlideOffset,
+  hubSackPageOffsets,
   hubUnforgeResultLayout,
   hubUnforgeTargetTint,
 } from './hub-inventory-render-contract.ts'
@@ -165,6 +167,51 @@ test('stock inventory owns the fixed 1600 by 900 stage and all 88 authored cells
   assert.deepEqual(hubInventoryEquipmentSlotRects('robe', true), [[1301, 223, 72, 108]])
 })
 
+test('Item_Sack pages traverse the fixed stage in exact discrete native ticks', () => {
+  assert.deepEqual(HUB_SACK_PAGE_TRANSITION, {
+    nativeTickMs: 10,
+    pixelsPerTick: 10,
+    stageWidth: 1600,
+    ticks: 160,
+  })
+  assert.deepEqual(hubSackPageOffsets('open', 1_000, 1_000), {
+    incomingX: 1_600,
+    outgoingX: 0,
+    settled: false,
+    ticks: 0,
+  })
+  assert.deepEqual(hubSackPageOffsets('open', 1_000, 1_010), {
+    incomingX: 1_590,
+    outgoingX: -10,
+    settled: false,
+    ticks: 1,
+  })
+  assert.deepEqual(hubSackPageOffsets('open', 1_000, 2_599), {
+    incomingX: 10,
+    outgoingX: -1_590,
+    settled: false,
+    ticks: 159,
+  })
+  assert.deepEqual(hubSackPageOffsets('open', 1_000, 2_600), {
+    incomingX: 0,
+    outgoingX: -1_600,
+    settled: true,
+    ticks: 160,
+  })
+  assert.deepEqual(hubSackPageOffsets('back', 1_000, 1_010), {
+    incomingX: -1_590,
+    outgoingX: 10,
+    settled: false,
+    ticks: 1,
+  })
+  assert.deepEqual(hubSackPageOffsets('back', 1_000, 2_600), {
+    incomingX: 0,
+    outgoingX: 1_600,
+    settled: true,
+    ticks: 160,
+  })
+})
+
 test('DyeClothing retains stock relative geometry and discrete update timing', () => {
   const rendererSource = readFileSync(new URL('./hub-inventory-renderer.ts', import.meta.url), 'utf8')
   assert.deepEqual(HUB_DYE_CLOTHING, {
@@ -240,6 +287,26 @@ test('stock inventory owns native ItemInfo, drag, double activation, and protect
     description: 'Restores your health to maximum',
     instruction: 'Double-click to drink',
     title: 'Health Potion',
+  })
+  const sack = {
+    ...item,
+    contents: [{ ...item, id: 3, quantity: 5 }],
+    iconRecords: [70],
+    id: 2,
+    kind: 'sack',
+    name: 'Sack',
+    nativeSubtype: 0,
+    nativeTypeId: 7008,
+  } as const
+  assert.deepEqual(hubInventoryItemInfoText(sack), {
+    description: 'Contains 1 item',
+    instruction: null,
+    title: 'Sack',
+  })
+  assert.deepEqual(hubInventoryItemInfoText({ ...sack, contents: undefined }), {
+    description: 'Currently empty',
+    instruction: null,
+    title: 'Sack',
   })
   assert.equal(HUB_HAT_REMOVAL_MSGBOX.title, 'A WIZARD WOULD NEVER REMOVE HIS HAT!')
   assert.match(HUB_HAT_REMOVAL_MSGBOX.body, /jaunty angle/)
@@ -929,6 +996,23 @@ test('visible hub inventory presentation is owned by the native WebGL renderer',
   assert.match(source, /gesture: 'double-activation'/)
   assert.match(source, /gesture: 'drag'/)
   assert.match(source, /function InventoryActions[\s\S]*activateSource/)
+  assert.match(
+    source,
+    /item\.kind === 'sack'[\s\S]*item\.nativeTypeId === 7008[\s\S]*onOpenSack\(item\.id\)/,
+  )
+  assert.match(source, /inventoryItemsAtSackPath\(economy\.backpack, sackPath\)/)
+  assert.match(source, /data-native-sack-path=\{sackPath\.join\('\/'\)\}/)
+  assert.match(source, /audio\.playSound\('backpack-open'\)/)
+  assert.match(source, /audio\.playSound\('backpack-close'\)/)
+  assert.doesNotMatch(source, /type: 'open-sack'/)
+  assert.match(rendererSource, /native-sack-page-outgoing/)
+  assert.match(rendererSource, /native-sack-page-incoming/)
+  assert.match(rendererSource, /hubSackPageOffsets\(/)
+  assert.match(source, /const projectedStorage = economy\.storage[\s\S]*?parentSackId: null/)
+  assert.match(
+    rendererSource,
+    /addStoreGrid\(\s*context,\s*overlay,\s*model\.economy\.storage,\s*model,\s*'storage'/,
+  )
   assert.doesNotMatch(source, /direction: 'to-storage'[^}]*gesture: 'double-activation'/s)
   assert.match(source, /audio\.playSound\('backpack-close'\)/)
   assert.match(source, /audio\.playSound\('distort-reality', \{ playbackRate: feedback\.dowsingPitch \}\)/)

@@ -471,6 +471,13 @@ test('Goodie activation owns exact phases 100/200 and materializes at 250', () =
   assert.equal(stepped.store.actors.length, 1)
   assert.equal(stepped.store.actors[0]?.kind, 'sack')
   assert.equal(stepped.store.actors[0]?.item?.nativeTypeId, 7008)
+  assert.deepEqual(
+    stepped.store.actors[0]?.item?.contents?.map(({ id, nativeSubtype, quantity }) => (
+      [id, nativeSubtype, quantity]
+    )),
+    [[1, 0, 5]],
+  )
+  assert.equal(stepped.store.nextItemId, 7)
 })
 
 test('proximity alone never activates a locked Goodie without an explicit interaction action', () => {

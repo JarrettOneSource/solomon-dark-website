@@ -603,11 +603,26 @@ export function resolveNativeGoodieContents(
   }
   let rng = input.sharedRng
   const items: NativeLootItem[] = []
+  const insertItem = (item: NativeLootItem) => {
+    if (item.nativeTypeId === 7001) {
+      const stackIndex = items.findIndex((candidate) => (
+        candidate.nativeTypeId === 7001 && candidate.nativeSubtype === item.nativeSubtype
+      ))
+      if (stackIndex >= 0) {
+        items[stackIndex] = {
+          ...items[stackIndex]!,
+          quantity: items[stackIndex]!.quantity + item.quantity,
+        }
+        return
+      }
+    }
+    items.push(item)
+  }
   let gold = 0
   if (input.selector <= 3) {
-    for (let index = 0; index < 5; index += 1) items.push(potionItem(input.itemIds, 0))
+    for (let index = 0; index < 5; index += 1) insertItem(potionItem(input.itemIds, 0))
   } else if (input.selector <= 7) {
-    for (let index = 0; index < 6; index += 1) items.push(potionItem(input.itemIds, 1))
+    for (let index = 0; index < 6; index += 1) insertItem(potionItem(input.itemIds, 1))
   } else if (input.selector <= 9) {
     const third = drawNativeInteger(rng, 2)
     rng = third.state
@@ -622,7 +637,7 @@ export function resolveNativeGoodieContents(
         input.advancedUnlocks,
       )
       rng = generated.sharedRng
-      items.push(generated.item)
+      insertItem(generated.item)
     }
   } else if (input.selector === 10) {
     const selected = selectDefinitionItem(
@@ -634,20 +649,21 @@ export function resolveNativeGoodieContents(
       input.ownedRecipeIndexes,
     )
     rng = selected.sharedRng
-    if (selected.item) items.push(selected.item)
+    if (selected.item) insertItem(selected.item)
   } else if (input.selector <= 12) {
     for (let index = 0; index < 3; index += 1) {
       const subtype = drawNativeInteger(rng, 2)
       rng = subtype.state
-      items.push(miscItem(input.itemIds, subtype.value + 2))
+      insertItem(miscItem(input.itemIds, subtype.value + 2))
     }
   } else if (input.selector <= 16) {
     const amount = drawNativeInteger(rng, 3)
     rng = amount.state
     gold = amount.value * 300 + 500
   } else {
+    for (let index = 0; index < 3; index += 1) input.itemIds.next()
     for (const subtype of [5, 0, 1, 4, 2, 2]) {
-      items.push(potionItem(input.itemIds, subtype))
+      insertItem(potionItem(input.itemIds, subtype))
     }
   }
   return {

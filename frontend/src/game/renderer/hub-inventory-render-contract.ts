@@ -47,6 +47,45 @@ export const HUB_INVENTORY_INTERACTION = {
   selectionTint: 0x00c020,
 } as const
 
+export const HUB_SACK_PAGE_TRANSITION = {
+  nativeTickMs: 10,
+  pixelsPerTick: 10,
+  stageWidth: 1_600,
+  ticks: 160,
+} as const
+
+export type HubSackPageDirection = 'back' | 'open'
+
+export function hubSackPageOffsets(
+  direction: HubSackPageDirection,
+  startedAtMs: number,
+  nowMs: number,
+): {
+  readonly incomingX: number
+  readonly outgoingX: number
+  readonly settled: boolean
+  readonly ticks: number
+} {
+  const ticks = Math.min(
+    HUB_SACK_PAGE_TRANSITION.ticks,
+    Math.max(0, Math.floor((nowMs - startedAtMs) / HUB_SACK_PAGE_TRANSITION.nativeTickMs)),
+  )
+  const travel = ticks * HUB_SACK_PAGE_TRANSITION.pixelsPerTick
+  return direction === 'open'
+    ? {
+        incomingX: HUB_SACK_PAGE_TRANSITION.stageWidth - travel,
+        outgoingX: travel === 0 ? 0 : -travel,
+        settled: ticks === HUB_SACK_PAGE_TRANSITION.ticks,
+        ticks,
+      }
+    : {
+        incomingX: -HUB_SACK_PAGE_TRANSITION.stageWidth + travel,
+        outgoingX: travel,
+        settled: ticks === HUB_SACK_PAGE_TRANSITION.ticks,
+        ticks,
+      }
+}
+
 /**
  * Fixed-stage projection of the stock DyeClothing overlay. The executable
  * recovers the relative 3x3-bank geometry, 40/50 spacing, item split, and

@@ -474,6 +474,7 @@ test('pins DyeClothing confirmation to the untouched stock dye stream', () => {
 test('pins every inventory and trader transaction cue to its untouched stock WAV', () => {
   for (const [cue, filename] of [
     ['backpack-close', 'backpack-close.wav'],
+    ['backpack-open', 'backpack-open.wav'],
     ['bad-action', 'bad-action.wav'],
     ['distort-reality', 'distort-reality.wav'],
     ['drop-coins', 'drop-coins.wav'],
@@ -491,6 +492,7 @@ test('pins every inventory and trader transaction cue to its untouched stock WAV
     )
   }
   assert.equal(NATIVE_SOUND_MANIFEST['backpack-close'].registryOffset, 0xc8)
+  assert.equal(NATIVE_SOUND_MANIFEST['backpack-open'].registryOffset, 0xf4)
   assert.equal(NATIVE_SOUND_MANIFEST['bad-action'].registryOffset, 0x120)
   assert.equal(NATIVE_SOUND_MANIFEST['distort-reality'].registryOffset, 0x40c)
   assert.equal(NATIVE_SOUND_MANIFEST['drop-coins'].registryOffset, 0x464)

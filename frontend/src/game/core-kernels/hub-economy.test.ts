@@ -49,10 +49,12 @@ import {
   nativeDyeMixedColor,
   nativeDyeMixedTint,
   inventoryDyeableClothingItems,
+  inventoryItemsAtSackPath,
   nativeInventoryItemCanUnforge,
   nativeUnforgeOutcomeText,
   restockFomentius,
   projectInventoryItems,
+  reconcileInventorySackPath,
   reconcileHubEconomyModPackages,
   reforgeModEquipment,
   transferInventoryItem,
@@ -1011,6 +1013,33 @@ test('native inventory projection is depth-first and sack relinking preserves on
   const sameOwner = moveInventoryItem(rooted.state, inner.id, outer.id)
   assert.equal(sameOwner.reason, 'invalid-target')
   assert.strictEqual(sameOwner.state, rooted.state)
+})
+
+test('InventoryScreen resolves only the direct children of its active Sack root', () => {
+  const base = createHubEconomy(1)
+  const potion = { ...base.backpack[0]!, id: 30_001, quantity: 5 }
+  const empty = nativeTestSack(30_002)
+  const implicitEmpty = { ...nativeTestSack(30_006), contents: undefined }
+  const inner = nativeTestSack(30_003, [potion, empty])
+  const outer = nativeTestSack(30_004, [inner])
+  const sibling = nativeTestSack(30_005)
+  const backpack = [outer, sibling, implicitEmpty]
+
+  assert.strictEqual(inventoryItemsAtSackPath(backpack, []), backpack)
+  assert.strictEqual(inventoryItemsAtSackPath(backpack, [outer.id]), outer.contents)
+  assert.strictEqual(inventoryItemsAtSackPath(backpack, [outer.id, inner.id]), inner.contents)
+  assert.strictEqual(
+    inventoryItemsAtSackPath(backpack, [outer.id, inner.id, empty.id]),
+    empty.contents,
+  )
+  assert.equal(inventoryItemsAtSackPath(backpack, [inner.id]), null)
+  assert.equal(inventoryItemsAtSackPath(backpack, [outer.id, 999_999]), null)
+  assert.deepEqual(inventoryItemsAtSackPath(backpack, [implicitEmpty.id]), [])
+  assert.deepEqual(
+    reconcileInventorySackPath(backpack, [outer.id, inner.id, empty.id, 999_999]),
+    [outer.id, inner.id, empty.id],
+  )
+  assert.deepEqual(reconcileInventorySackPath(backpack, [outer.id, sibling.id]), [outer.id])
 })
 
 test('sack relinking honors participant child and root replication bounds', () => {

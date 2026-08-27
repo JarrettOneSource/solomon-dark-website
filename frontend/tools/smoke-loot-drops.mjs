@@ -20,7 +20,10 @@ import {
 } from '../src/game/core-kernels/native-loot.ts'
 import { createNativeRng } from '../src/game/core-kernels/native-rng.ts'
 import {
+  activateBoneyardGoodie,
+  createBoneyardLootStore,
   spawnBoneyardLootSpecs,
+  stepBoneyardLootStore,
 } from '../src/game/core-server/boneyard-loot-store.ts'
 import {
   getPlayerCharacter,
@@ -273,6 +276,12 @@ try {
   const collectedPath = join(screenshotRoot, 'loot-families-collected.png')
   const collectedScreenshot = await page.screenshot({ path: collectedPath })
   assert.ok(collectedScreenshot.byteLength > 20_000)
+  const goodieSack = await proveGoodieSackOpening({
+    host,
+    page,
+    playerId,
+    position: point(center, 0, 250),
+  })
   const terminalFade = await proveTerminalBonusFade({
     guestPage,
     guestPlayerId,
@@ -299,9 +308,9 @@ try {
   assert.equal(audio['drop-coins'], 1)
   assert.equal(audio['drop-potion'], 1)
   assert.equal(audio['pickup-coin'], 1)
-  assert.equal(audio['pickup-bag'], 3)
+  assert.equal(audio['pickup-bag'], 4)
   assert.equal(audio['goto-orb'], 2)
-  assert.equal(audio['drop-bag-1'] + audio['drop-bag-2'], 2)
+  assert.equal(audio['drop-bag-1'] + audio['drop-bag-2'], 3)
   const contention = await proveCanonicalPickupContention({
     guestPage,
     guestPlayerId,
@@ -337,6 +346,7 @@ try {
       },
     },
     failedResponses,
+    goodieSack,
     messages: {
       gold: goldMessage,
       potion: potionMessage,
@@ -355,7 +365,7 @@ try {
       position: actor.position,
       source: actor.source,
     })),
-    screenshots: [visualPath, collectedPath],
+    screenshots: [visualPath, collectedPath, goodieSack.screenshot],
     terminalFade,
     useBuiltFrontend,
   }, null, 2)}\n`)
@@ -366,7 +376,130 @@ try {
     guestContext.close(),
   ])
   await browser.close()
+  await new Promise((resolve) => setImmediate(resolve))
   await vite.close()
+}
+
+async function proveGoodieSackOpening({ host, page, playerId, position }) {
+  const state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
+  movePlayer(host, playerId, point(position, 500, 500))
+  const beforeIds = new Set(getPlayerEconomy(state, playerId).backpack.map(({ id }) => id))
+  let goodie = createBoneyardLootStore('browser-goodie-sack', [{
+    eid: 'browser-goodie-sack',
+    position,
+    rewardSeed: 0,
+    subtype: 0,
+  }])
+  goodie = {
+    ...goodie,
+    nextItemId: state.world.loot.nextItemId,
+  }
+  goodie = activateBoneyardGoodie(goodie, 'browser-goodie-sack')
+  goodie = stepBoneyardLootStore(goodie, {
+    participants: [],
+    placement: NATIVE_LOOT_OPEN_PLACEMENT,
+    tick: 0,
+  }).store
+  const materialized = stepBoneyardLootStore(goodie, {
+    participants: [],
+    placement: NATIVE_LOOT_OPEN_PLACEMENT,
+    tick: 249,
+  }).store
+  const proofActor = materialized.actors[0]
+  assert.equal(proofActor?.kind, 'sack')
+  assert.equal(proofActor?.source, 'goodie')
+  assert.deepEqual(proofActor?.item?.contents?.map(({ nativeSubtype, quantity }) => (
+    [nativeSubtype, quantity]
+  )), [[0, 5]])
+  const spawned = spawnBoneyardLootSpecs({
+    ...state.world.loot,
+    nextItemId: materialized.nextItemId,
+  }, [{
+    activationDelayTicks: 0,
+    id: 0,
+    item: proofActor.item,
+    kind: 'sack',
+    nativeTypeId: 2013,
+    phase: 0,
+    position,
+    source: 'goodie',
+  }], state.tick)
+  assert.equal(spawned.rejectedCount, 0)
+  const actor = spawned.store.actors.at(-1)
+  assert.ok(actor)
+  Object.assign(state, { world: { ...state.world, loot: spawned.store } })
+  await waitForLootCount(page, 1)
+  await waitUntil(() => settled(host, new Set([actor.id])), 'Goodie Sack did not settle')
+  movePlayer(host, playerId, position)
+  await waitForPickup(host, actor.id)
+
+  let collected = null
+  await waitUntil(() => {
+    collected = getPlayerEconomy(host.state(), playerId).backpack.find(({ id }) => !beforeIds.has(id))
+      ?? null
+    return collected?.kind === 'sack'
+  }, 'Goodie Sack did not enter the authoritative backpack')
+  assert.ok(collected)
+  assert.deepEqual(collected.contents?.map(({ nativeSubtype, quantity }) => (
+    [nativeSubtype, quantity]
+  )), [[0, 5]])
+
+  await page.getByRole('button', { name: /Open inventory/ }).click()
+  const inventory = page.getByRole('dialog', { name: 'Inventory' })
+  await inventory.waitFor()
+  await inventory.locator('.hub-inventory-native-canvas[data-native-reveal="settled"]').waitFor()
+  const sack = inventory.locator(
+    `[data-inventory-owner="backpack"][data-inventory-item-id="${collected.id}"]`,
+  )
+  const childId = collected.contents[0].id
+  assert.equal(await inventory.locator(`[data-inventory-item-id="${childId}"]`).count(), 0)
+  const beforeOpen = await soundCount(page, 'backpack-open.wav')
+  const beforeClose = await soundCount(page, 'backpack-close.wav')
+  const repetitions = 5
+  const screenshot = join(screenshotRoot, 'goodie-sack-open.png')
+  for (let index = 0; index < repetitions; index += 1) {
+    await doubleActivate(page, sack)
+    await waitForSackNavigation(inventory, String(collected.id))
+    const child = inventory.locator(
+      `[data-inventory-owner="backpack"][data-inventory-item-id="${childId}"]`,
+    )
+    await child.locator('xpath=self::*[@aria-label="Health Potion, quantity 5"]').waitFor()
+    assert.equal(await inventory.locator('[data-inventory-owner="backpack"]').count(), 1)
+    if (index === 0) await page.screenshot({ path: screenshot })
+    await inventory.locator('[data-inventory-resume="true"]').click()
+    await waitForSackNavigation(inventory, '')
+    await sack.waitFor()
+  }
+  assert.equal(await soundCount(page, 'backpack-open.wav'), beforeOpen + repetitions)
+  assert.equal(await soundCount(page, 'backpack-close.wav'), beforeClose + repetitions)
+  await inventory.locator('[data-inventory-resume="true"]').click()
+  await inventory.waitFor({ state: 'detached' })
+  return {
+    childId,
+    openCycles: repetitions,
+    sackId: collected.id,
+    screenshot,
+    stackQuantity: collected.contents[0].quantity,
+  }
+}
+
+async function waitForSackNavigation(inventory, path) {
+  await inventory.locator(`xpath=self::*[@data-native-sack-path="${path}"]`).waitFor()
+  await inventory.locator('xpath=self::*[@data-native-sack-transition=""]').waitFor({ timeout: 5_000 })
+}
+
+async function doubleActivate(page, target) {
+  const box = await target.boundingBox()
+  assert.ok(box, 'Sack activation target has no browser geometry')
+  await page.mouse.dblclick(box.x + box.width / 2, box.y + box.height / 2)
+}
+
+async function soundCount(page, filename) {
+  return page.evaluate((source) => window.__sdrAudioEvents.filter((event) => (
+    (event.type === 'buffer-start' || event.type === 'play')
+    && window.__sdrAudioSourceMatches(event.src, source)
+  )).length, filename)
 }
 
 async function enterHub(page, baseUrl, element) {

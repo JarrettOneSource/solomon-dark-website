@@ -20,11 +20,13 @@ import {
   HAGATHA_PERKS,
   MAX_NATIVE_DYE_SELECTIONS,
   findInventoryItem,
+  inventoryItemsAtSackPath,
   nativeDyeMixedTint,
   inventoryDyeableClothingItems,
   nativeInventoryItemCanUnforge,
   nativeUnforgeOutcomeText,
   projectInventoryItems,
+  reconcileInventorySackPath,
   type EquipmentSlot,
   type HubInventoryAction,
   type HubInventoryItem,
@@ -91,6 +93,7 @@ import {
   type HubInventoryRenderer,
   type HubInventoryRendererModel,
   type HubInventoryRendererNotice,
+  type HubInventorySackTransitionModel,
   type HubInventorySelectionModel,
   type HubServiceInspectionModel,
 } from './renderer/hub-inventory-renderer.ts'
@@ -108,6 +111,7 @@ import {
   HUB_NATIVE_UI_TIMING,
   HUB_NPC_SELECTOR,
   HUB_ROBE_REMOVAL_MSGBOX,
+  HUB_SACK_PAGE_TRANSITION,
   HUB_UNFORGE_CONFIRMATION,
   HUB_UNFORGE_RESULT,
   HUB_UNFORGE_TARGET,
@@ -252,6 +256,9 @@ export default function HubInventoryUi({
 }: HubInventoryUiProps) {
   const failureSequenceRef = useRef(economy.npc.boast.failureSequence)
   const [npcNotebox, setNpcNotebox] = useState<string | null>(null)
+  const [inventorySackPath, setInventorySackPath] = useState<readonly number[]>([])
+  const [inventorySackTransition, setInventorySackTransition] =
+    useState<HubInventorySackTransitionModel | null>(null)
   const nearestInteraction = useMemo(
     () => disabled || transitionActive || !interactionsEnabled
       ? null
@@ -275,8 +282,78 @@ export default function HubInventoryUi({
       && economy.dowsingOffers.length > 0) {
       onAction({ type: 'close-dowsing' })
     }
+    setInventorySackPath([])
+    setInventorySackTransition(null)
     onSurfaceChange(null)
   }, [economy.dowsingOffers.length, onAction, onSurfaceChange, surface])
+
+  const openInventorySack = useCallback((sackId: number) => {
+    if (inventorySackTransition !== null) return
+    const current = inventoryItemsAtSackPath(economy.backpack, inventorySackPath)
+    const sack = current?.find((item) => (
+      item.id === sackId
+      && item.kind === 'sack'
+      && item.nativeTypeId === 7008
+    ))
+    if (!sack) return
+    const toPath = [...inventorySackPath, sack.id]
+    const startedAtMs = performance.now()
+    setInventorySackTransition({
+      direction: 'open',
+      fromPath: inventorySackPath,
+      startedAtMs,
+      toPath,
+    })
+    setInventorySackPath(toPath)
+    audio.playSound('backpack-open')
+  }, [audio, economy.backpack, inventorySackPath, inventorySackTransition])
+
+  const returnFromInventorySack = useCallback((): boolean => {
+    if (inventorySackTransition !== null) return true
+    if (inventorySackPath.length === 0) return false
+    const toPath = inventorySackPath.slice(0, -1)
+    const startedAtMs = performance.now()
+    setInventorySackTransition({
+      direction: 'back',
+      fromPath: inventorySackPath,
+      startedAtMs,
+      toPath,
+    })
+    setInventorySackPath(toPath)
+    audio.playSound('backpack-close')
+    return true
+  }, [audio, inventorySackPath, inventorySackTransition])
+
+  const inventoryBackOrClose = useCallback(() => {
+    if (returnFromInventorySack()) return
+    audio.playSound('open-panel')
+    closeSurface()
+  }, [audio, closeSurface, returnFromInventorySack])
+
+  useEffect(() => {
+    const inventoryOwnerActive = surface?.kind === 'inventory' || surface?.kind === 'service'
+    if (!inventoryOwnerActive) {
+      if (inventorySackPath.length > 0) setInventorySackPath([])
+      if (inventorySackTransition !== null) setInventorySackTransition(null)
+      return
+    }
+    const reconciled = reconcileInventorySackPath(economy.backpack, inventorySackPath)
+    if (reconciled.length !== inventorySackPath.length) {
+      setInventorySackPath(reconciled)
+      setInventorySackTransition(null)
+    }
+  }, [economy.backpack, inventorySackPath, inventorySackTransition, surface])
+
+  useEffect(() => {
+    if (inventorySackTransition === null) return
+    const durationMs = HUB_SACK_PAGE_TRANSITION.ticks * HUB_SACK_PAGE_TRANSITION.nativeTickMs
+    const timeout = window.setTimeout(() => {
+      setInventorySackTransition((current) => (
+        current?.startedAtMs === inventorySackTransition.startedAtMs ? null : current
+      ))
+    }, Math.max(0, inventorySackTransition.startedAtMs + durationMs - performance.now()))
+    return () => window.clearTimeout(timeout)
+  }, [inventorySackTransition])
 
   const openWorldDialogue = useCallback((interaction: HubInteractionId) => {
     const acknowledgement = hubNpcHintAcknowledgementAction(interaction, economy.npc.helpFlags)
@@ -318,8 +395,9 @@ export default function HubInventoryUi({
         if (surface.kind === 'dialogue' && event.code === menuKeyCode) return
         event.preventDefault()
         event.stopImmediatePropagation()
-        if (surface.kind !== 'dialogue') audio.playSound('open-panel')
-        closeSurface()
+        if (surface.kind === 'inventory' || surface.kind === 'service') {
+          inventoryBackOrClose()
+        } else closeSurface()
         return
       }
       if (!surface && !disabled && !transitionActive && event.code === inventoryKeyCode) {
@@ -336,9 +414,9 @@ export default function HubInventoryUi({
     window.addEventListener('keydown', keyDown, { capture: true })
     return () => window.removeEventListener('keydown', keyDown, { capture: true })
   }, [
-    audio,
     closeSurface,
     disabled,
+    inventoryBackOrClose,
     inventoryKeyCode,
     menuKeyCode,
     nearestInteraction,
@@ -380,9 +458,13 @@ export default function HubInventoryUi({
       memorial={memorial}
       onAction={onAction}
       onClose={closeSurface}
+      onInventoryBack={inventoryBackOrClose}
+      onOpenSack={openInventorySack}
       onNotebox={setNpcNotebox}
       onSurfaceChange={onSurfaceChange}
       progression={progression}
+      sackPath={inventorySackPath}
+      sackTransition={inventorySackTransition}
       skorchaDismissalIndex={skorchaDismissalIndex}
       style={nativeUiStageStyle}
       surface={surface}
@@ -414,9 +496,13 @@ function NativeHubSurface({
   memorial,
   onAction,
   onClose,
+  onInventoryBack,
   onNotebox,
+  onOpenSack,
   onSurfaceChange,
   progression,
+  sackPath,
+  sackTransition,
   skorchaDismissalIndex,
   style,
   surface,
@@ -430,9 +516,13 @@ function NativeHubSurface({
   memorial: HubMemorialState | null
   onAction: (action: HubInventoryAction) => void
   onClose: () => void
+  onInventoryBack: () => void
   onNotebox: (text: string) => void
+  onOpenSack: (sackId: number) => void
   onSurfaceChange: (surface: HubUiSurface) => void
   progression: ProtocolPlayerProgression
+  sackPath: readonly number[]
+  sackTransition: HubInventorySackTransitionModel | null
   skorchaDismissalIndex: number
   style: CSSProperties
   surface: Exclude<HubUiSurface, null>
@@ -616,6 +706,11 @@ function NativeHubSurface({
   }, [dyeModal])
 
   useEffect(() => {
+    setInventorySelection(null)
+    setInventoryDrag(null)
+  }, [sackPath])
+
+  useEffect(() => {
     if (!dyeModal || dyeModal.pending || dyeModal.closingAtMs !== null) return
     const dye = findInventoryItem(economy.backpack, dyeModal.dyeItemId)
     if (!dye || dye.kind !== 'dye' || dye.nativeTypeId !== 7012 || dye.nativeSubtype !== 0) {
@@ -731,6 +826,8 @@ function NativeHubSurface({
       notice,
       pressedControl,
       progression,
+      sackPath,
+      sackTransition,
       selection: inventorySelection,
     }
     if (surface.kind === 'dialogue') return {
@@ -755,6 +852,8 @@ function NativeHubSurface({
       notice,
       pressedControl,
       progression,
+      sackPath,
+      sackTransition,
       selectedItemId: serviceSelection?.id ?? null,
       selectedOwner: serviceSelection?.owner ?? null,
       trader: surface.trader,
@@ -770,6 +869,8 @@ function NativeHubSurface({
     pendingNpcSelection,
     pressedControl,
     progression,
+    sackPath,
+    sackTransition,
     serviceFocusInspection,
     serviceHoverInspection,
     serviceSelection,
@@ -937,6 +1038,8 @@ function NativeHubSurface({
         data-native-inventory-dragging={inventoryDrag
           ? `${inventoryDrag.owner}:${inventoryDrag.equipmentSlot ?? inventoryDrag.itemId}`
           : ''}
+        data-native-sack-path={sackPath.join('/')}
+        data-native-sack-transition={sackTransition?.direction ?? ''}
         data-native-dye-modal={dyeModal
           ? `${dyeModal.targetItemId === null ? 'mix' : 'layer'}:${dyeModal.closingAtMs === null ? 'open' : 'closing'}`
           : ''}
@@ -1087,6 +1190,7 @@ function NativeHubSurface({
                   && action.type !== 'unforge') audio.playSound('click')
                 onAction(action)
               }}
+              onOpenSack={onOpenSack}
               onClose={() => {
                 audio.playSound('open-panel')
                 onClose()
@@ -1106,6 +1210,8 @@ function NativeHubSurface({
               onNotice={setNotice}
               onOpenDye={openDye}
               onPressedControl={setPressedControl}
+              sackPath={sackPath}
+              transitionLocked={sackTransition !== null}
               onSelect={setServiceSelection}
             />
           ) : (
@@ -1120,10 +1226,13 @@ function NativeHubSurface({
               onDragMove={(point) => rendererRef.current?.moveDrag(point)}
               onNotice={setNotice}
               onOpenDye={openDye}
+              onOpenSack={onOpenSack}
               onSelect={(next) => {
                 audio.playSound('click')
                 setInventorySelection(next)
               }}
+              sackPath={sackPath}
+              transitionLocked={sackTransition !== null}
             />
           )}
           {semanticTooltip ? (
@@ -1133,12 +1242,9 @@ function NativeHubSurface({
             <NativeAction
               data={{ 'data-inventory-resume': 'true' }}
               gameBack
-              label="Close inventory"
+              label={sackPath.length > 0 ? 'Return to parent inventory' : 'Close inventory'}
               rect={inventoryResumeRect}
-              onClick={() => {
-                audio.playSound('open-panel')
-                onClose()
-              }}
+              onClick={onInventoryBack}
             />
           ) : surface.kind !== 'inventory' ? (
             <button
@@ -1332,10 +1438,13 @@ function ServiceActions({
   onHoverInspection,
   onNotice,
   onOpenDye,
+  onOpenSack,
   onPressedControl,
   onSelect,
   selection,
+  sackPath,
   trader,
+  transitionLocked,
 }: {
   economy: ProtocolPlayerEconomy
   inventorySelection: HubInventorySelectionModel | null
@@ -1351,10 +1460,13 @@ function ServiceActions({
   onHoverInspection: (inspection: HubServiceInspectionModel | null) => void
   onNotice: (notice: HubInventoryUiNotice) => void
   onOpenDye: (dyeItemId: number) => void
+  onOpenSack: (sackId: number) => void
   onPressedControl: (control: HubInventoryPressedControl) => void
   onSelect: (selection: HubServiceSelection | null) => void
   selection: HubServiceSelection | null
+  sackPath: readonly number[]
   trader: HubTraderId
+  transitionLocked: boolean
 }) {
   const storageDropRect = [
     HUB_SHOP_GRID.left,
@@ -1373,7 +1485,10 @@ function ServiceActions({
       onDragMove={onDragMove}
       onNotice={onNotice}
       onOpenDye={onOpenDye}
+      onOpenSack={onOpenSack}
       onSelect={onInventorySelect}
+      sackPath={sackPath}
+      transitionLocked={transitionLocked}
     />
   )
 
@@ -1560,8 +1675,9 @@ function InventoryShopStorageActions({
 }) {
   const pressRef = useRef<StoragePointerPress | null>(null)
   const lastActivationRef = useRef<StorageActivation | null>(null)
-  const projectedStorage = projectInventoryItems(economy.storage)
+  const projectedStorage = economy.storage
     .slice(0, HUB_SHOP_GRID.retainedCapacity)
+    .map((item) => ({ depth: 0, item, parentSackId: null }))
 
   const clearStorageSelection = () => {
     pressRef.current = null
@@ -1903,9 +2019,12 @@ function InventoryActions({
   onDragMove,
   onNotice,
   onOpenDye,
+  onOpenSack,
   onSelect,
   selection,
+  sackPath,
   storageDropRect = null,
+  transitionLocked,
 }: {
   companion?: boolean
   economy: ProtocolPlayerEconomy
@@ -1914,13 +2033,21 @@ function InventoryActions({
   onDragMove: (point: { readonly x: number; readonly y: number }) => void
   onNotice: (notice: HubInventoryUiNotice) => void
   onOpenDye: (dyeItemId: number) => void
+  onOpenSack: (sackId: number) => void
   onSelect: (selection: HubInventorySelectionModel | null) => void
   selection: HubInventorySelectionModel | null
+  sackPath: readonly number[]
   storageDropRect?: readonly [number, number, number, number] | null
+  transitionLocked: boolean
 }) {
   const thirdRingUnlocked = economy.ownedPerkSelectors.includes(19)
-  const projectedBackpack = projectInventoryItems(economy.backpack)
-    .slice(0, HUB_INVENTORY_GRID.capacity)
+  const activeRoot = inventoryItemsAtSackPath(economy.backpack, sackPath) ?? economy.backpack
+  const parentSackId = sackPath.at(-1) ?? null
+  const projectedBackpack = activeRoot.slice(0, HUB_INVENTORY_GRID.capacity).map((item) => ({
+    depth: sackPath.length,
+    item,
+    parentSackId,
+  }))
   const pressRef = useRef<InventoryPointerPress | null>(null)
   const equipmentClickRef = useRef<InventoryEquipmentClickPress | null>(null)
   const lastActivationRef = useRef<InventoryActivation | null>(null)
@@ -1950,6 +2077,7 @@ function InventoryActions({
     && selection.equipmentSlot === source.equipmentSlot
 
   const activateSource = (source: InventoryPointerSource) => {
+    if (transitionLocked) return
     if (source.owner === 'equipment') {
       if (source.equipmentSlot === 'hat') {
         onNotice(HUB_HAT_REMOVAL_MSGBOX)
@@ -1964,6 +2092,10 @@ function InventoryActions({
     }
     const item = findInventoryItem(economy.backpack, source.itemId)
     if (!item) return
+    if (item.kind === 'sack' && item.nativeTypeId === 7008) {
+      onOpenSack(item.id)
+      return
+    }
     if (item.nativeTypeId === 7001) {
       onAction({ type: 'consume', itemId: item.id })
       return
@@ -1984,6 +2116,7 @@ function InventoryActions({
   const beginPointer = (source: InventoryPointerSource) => (
     event: ReactPointerEvent<HTMLButtonElement>,
   ) => {
+    if (transitionLocked) return
     if (event.button !== 0) return
     event.preventDefault()
     event.stopPropagation()
@@ -2015,6 +2148,7 @@ function InventoryActions({
     slot: EquipmentSlot,
     source: InventoryPointerSource | null,
   ) => (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (transitionLocked) return
     if (event.button !== 0) return
     if (selectedBackpackItem?.equipmentType) {
       event.preventDefault()
@@ -2039,6 +2173,7 @@ function InventoryActions({
   }
 
   const movePointer = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (transitionLocked) return
     const equipmentClick = equipmentClickRef.current
     if (equipmentClick?.pointerId === event.pointerId) {
       const point = pointerStagePosition(event)
@@ -2068,6 +2203,7 @@ function InventoryActions({
   }
 
   const finishPointer = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (transitionLocked) return
     const equipmentClick = equipmentClickRef.current
     if (equipmentClick?.pointerId === event.pointerId) {
       event.preventDefault()
@@ -2101,6 +2237,7 @@ function InventoryActions({
         onAction,
         onNotice,
         companion,
+        sackPath,
         storageDropRect,
       )
       return
@@ -2130,6 +2267,7 @@ function InventoryActions({
   const keyboardSelect = (source: InventoryPointerSource) => (
     event: ReactKeyboardEvent<HTMLButtonElement>,
   ) => {
+    if (transitionLocked) return
     if (event.key !== 'Enter' && event.key !== ' ') return
     event.preventDefault()
     const nowMs = performance.now()
@@ -2146,6 +2284,7 @@ function InventoryActions({
     slot: EquipmentSlot,
     source: InventoryPointerSource | null,
   ) => (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+    if (transitionLocked) return
     if (event.key !== 'Enter' && event.key !== ' ') return
     if (selectedBackpackItem?.equipmentType) {
       event.preventDefault()
@@ -2166,6 +2305,7 @@ function InventoryActions({
       <NativeAction
         data={{ 'data-inventory-empty-space': 'true' }}
         label="Deselect inventory item"
+        disabled={transitionLocked}
         rect={[0, 0, HUB_NATIVE_UI_SIZE.width, HUB_NATIVE_UI_SIZE.height]}
         tabIndex={-1}
         onClick={clearInventorySelection}
@@ -2189,6 +2329,7 @@ function InventoryActions({
                 'data-selected': selection?.id === item.id && selection.owner === 'backpack' ? 'true' : 'false',
               }}
               label={`${item.name}, quantity ${item.quantity}`}
+              disabled={transitionLocked}
               rect={[position.x, position.y, HUB_INVENTORY_GRID.cellSize, HUB_INVENTORY_GRID.cellSize]}
               onKeyDown={keyboardSelect(source)}
               onPointerCancel={cancelPointer}
@@ -2222,6 +2363,7 @@ function InventoryActions({
                 : 'false',
             }}
             label={`${EQUIPMENT_SLOT_LABELS[slot]}${item ? `, ${item.name}` : ', empty'}`}
+            disabled={transitionLocked}
             rect={rect}
             onKeyDown={keyboardEquipmentSlot(slot, source)}
             onPointerCancel={cancelPointer}
@@ -2295,12 +2437,14 @@ function dropInventorySource(
   onAction: (action: HubInventoryAction) => void,
   onNotice: (notice: HubInventoryUiNotice) => void,
   companion: boolean,
+  sackPath: readonly number[],
   storageDropRect: readonly [number, number, number, number] | null,
 ): void {
   if (source.owner === 'backpack') {
     const projected = projectInventoryItems(economy.backpack)
-      .slice(0, HUB_INVENTORY_GRID.capacity)
     const sourceEntry = projected.find(({ item }) => item.id === source.itemId)
+    const activeRoot = inventoryItemsAtSackPath(economy.backpack, sackPath) ?? economy.backpack
+    const visibleItems = activeRoot.slice(0, HUB_INVENTORY_GRID.capacity)
     const item = sourceEntry?.item ?? null
     if (!item) return
     if (pointInRect(point, HUB_UNFORGE_TARGET.rect)) {
@@ -2323,7 +2467,7 @@ function dropInventorySource(
       onAction({ type: 'equip', itemId: item.id, slot })
       return
     }
-    const destinationSack = projected.find(({ item: candidate }, index) => {
+    const destinationSack = visibleItems.find((candidate, index) => {
       if (candidate.nativeTypeId !== 7008) return false
       const position = hubInventorySlotPosition(index)
       return pointInRect(point, [
@@ -2332,7 +2476,7 @@ function dropInventorySource(
         HUB_INVENTORY_GRID.cellSize,
         HUB_INVENTORY_GRID.cellSize,
       ])
-    })?.item ?? null
+    }) ?? null
     if (destinationSack) {
       onAction({
         type: 'move-inventory-item',

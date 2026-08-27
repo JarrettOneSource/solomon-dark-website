@@ -995,6 +995,42 @@ export function projectInventoryItems(
   return projected
 }
 
+export function inventoryItemsAtSackPath(
+  source: readonly HubInventoryItem[],
+  sackPath: readonly number[],
+): readonly HubInventoryItem[] | null {
+  let current = source
+  for (const sackId of sackPath) {
+    const sack = current.find((item) => (
+      item.id === sackId
+      && item.kind === 'sack'
+      && item.nativeTypeId === 7008
+    ))
+    if (!sack) return null
+    current = sack.contents ?? []
+  }
+  return current
+}
+
+export function reconcileInventorySackPath(
+  source: readonly HubInventoryItem[],
+  sackPath: readonly number[],
+): readonly number[] {
+  let current = source
+  const reconciled: number[] = []
+  for (const sackId of sackPath) {
+    const sack = current.find((item) => (
+      item.id === sackId
+      && item.kind === 'sack'
+      && item.nativeTypeId === 7008
+    ))
+    if (!sack) break
+    reconciled.push(sackId)
+    current = sack.contents ?? []
+  }
+  return reconciled
+}
+
 export function findInventoryItem(
   source: readonly HubInventoryItem[],
   itemId: number,

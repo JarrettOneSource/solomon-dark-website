@@ -199,8 +199,9 @@ test('shares each native modal slide with its Tutorial anchors and leaves at clo
   )
   assert.match(
     inventory,
-    /<NativeAction[\s\S]*?data-inventory-resume[\s\S]*?gameBack[\s\S]*?audio\.playSound\('open-panel'\)[\s\S]*?onClose\(\)/,
+    /<NativeAction[\s\S]*?data-inventory-resume[\s\S]*?gameBack[\s\S]*?onClick=\{onInventoryBack\}/,
   )
+  assert.match(inventory, /const inventoryBackOrClose[\s\S]*?audio\.playSound\('open-panel'\)[\s\S]*?closeSurface\(\)/)
   assert.match(inventory, /surface\.kind !== 'inventory'[\s\S]*?Close \{label\}/)
   assert.match(skillBook, /setNativeModalSlideProgress\('skills', progress\)/)
   assert.match(

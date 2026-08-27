@@ -105,6 +105,10 @@ try {
   const inventory = page.getByRole('dialog', { name: 'Inventory' })
   await inventory.waitFor({ timeout: 10_000 })
   await inventory.locator('.hub-inventory-native-canvas[data-native-reveal="settled"]').waitFor()
+  const sackAudioBefore = {
+    close: await inventorySoundCount(page, 'backpack-close.wav'),
+    open: await inventorySoundCount(page, 'backpack-open.wav'),
+  }
 
   const item = (id) => inventory.locator(`[data-inventory-item-id="${id}"]`)
   const backpackItem = (id) => inventory.locator(
@@ -156,31 +160,53 @@ try {
   await page.screenshot({ path: `${screenshotRoot}-inventory-equip-interactions.png` })
 
   assert.equal(await item(IDS.rootKey).getAttribute('data-parent-sack-id'), '')
-  assert.equal(
-    await item(IDS.movableKey).getAttribute('data-parent-sack-id'),
-    String(IDS.sourceSack),
-  )
+  assert.equal(await item(IDS.movableKey).count(), 0)
+
+  await openSack(page, inventory, item(IDS.destinationSack), IDS.destinationSack)
+  assert.equal(await inventory.locator('[data-inventory-owner="backpack"]').count(), 0)
+  await returnFromSack(inventory, '')
 
   await dragTo(page, item(IDS.rootKey), item(IDS.sourceSack))
-  await waitForParent(item(IDS.rootKey), IDS.sourceSack)
+  await item(IDS.rootKey).waitFor({ state: 'detached' })
+
+  await openSack(page, inventory, item(IDS.sourceSack), IDS.sourceSack)
+  await waitForParent(item(IDS.movableKey), IDS.sourceSack)
+  await dragToStagePoint(page, inventory, item(IDS.movableKey), { x: 1_200, y: 750 })
+  await item(IDS.movableKey).waitFor({ state: 'detached' })
+  await dragToStagePoint(page, inventory, item(IDS.movableSack), { x: 1_200, y: 750 })
+  await item(IDS.movableSack).waitFor({ state: 'detached' })
+  await returnFromSack(inventory, '')
+
   await dragTo(page, item(IDS.movableKey), item(IDS.destinationSack))
-  await waitForParent(item(IDS.movableKey), IDS.destinationSack)
+  await item(IDS.movableKey).waitFor({ state: 'detached' })
   await dragTo(page, item(IDS.movableSack), item(IDS.destinationSack))
+  await item(IDS.movableSack).waitFor({ state: 'detached' })
+
+  await openSack(page, inventory, item(IDS.destinationSack), IDS.destinationSack)
+  await waitForParent(item(IDS.movableKey), IDS.destinationSack)
   await waitForParent(item(IDS.movableSack), IDS.destinationSack)
+  await openSack(page, inventory, item(IDS.movableSack), IDS.movableSack, [IDS.destinationSack])
   assert.equal(
     await item(IDS.movableSackKey).getAttribute('data-parent-sack-id'),
     String(IDS.movableSack),
   )
+  await returnFromSack(inventory, String(IDS.destinationSack))
   await dragToStagePoint(page, inventory, item(IDS.movableKey), { x: 1_200, y: 750 })
+  await item(IDS.movableKey).waitFor({ state: 'detached' })
+  await returnFromSack(inventory, '')
   await waitForParent(item(IDS.movableKey), null)
 
   await dragTo(page, item(IDS.mergePotion), item(IDS.mergeSack))
   await item(IDS.mergePotion).waitFor({ state: 'detached' })
+  await openSack(page, inventory, item(IDS.mergeSack), IDS.mergeSack)
   await item(IDS.mergeStack)
     .locator('xpath=self::*[@aria-label="Health Potion, quantity 5"]')
     .waitFor()
   await page.screenshot({ path: `${screenshotRoot}-sack-movement.png` })
+  await returnFromSack(inventory, '')
 
+  await openSack(page, inventory, item(IDS.dyeCarrier), IDS.dyeCarrier)
+  await openSack(page, inventory, item(IDS.dyeInnerSack), IDS.dyeInnerSack, [IDS.dyeCarrier])
   const dyeOne = item(IDS.dyeOne)
   await doubleActivate(page, dyeOne)
   await waitForDyePhase(inventory, 'mix')
@@ -256,6 +282,8 @@ try {
   await doubleActivate(page, item(IDS.target))
   await waitForSavedEconomy(page, (economy) => economy.equipment.robe?.id === IDS.target)
   await page.screenshot({ path: `${screenshotRoot}-dyed-robe-inventory.png` })
+  await returnFromSack(inventory, String(IDS.dyeCarrier))
+  await returnFromSack(inventory, '')
   await page.keyboard.press('i')
   await inventory.waitFor({ state: 'detached' })
   await page.locator('.hub-scene[data-gameplay-input-blocked="false"]').waitFor()
@@ -278,26 +306,36 @@ try {
   const storageSack = storage.locator(
     `[data-inventory-owner="storage"][data-inventory-item-id="${IDS.storageSack}"]`,
   )
+  assert.equal(await storageKey.count(), 0)
   await storageSack.click()
   await storageSack.locator('xpath=self::*[@data-selected="true"]').waitFor()
   await page.screenshot({ path: `${screenshotRoot}-take-click-again.png` })
   await storage.locator('[data-store-empty-slot]').first().click()
   assert.equal(await storage.locator('[data-inventory-owner="storage"][data-selected="true"]').count(), 0)
-  assert.equal(await storageKey.getAttribute('data-inventory-depth'), '1')
-  assert.equal(
-    await storageKey.getAttribute('data-parent-sack-id'),
-    String(IDS.storageSack),
+  await doubleActivate(page, storageSack)
+  await storageSack.waitFor({ state: 'detached' })
+  const backpackStorageSack = storage.locator(
+    `[data-inventory-owner="backpack"][data-inventory-item-id="${IDS.storageSack}"]`,
   )
-  await doubleActivate(page, storageKey)
-  await storageKey.waitFor({ state: 'detached' })
-  await storage.locator(`[data-inventory-owner="backpack"][data-inventory-item-id="${IDS.storageKey}"]`)
-    .waitFor()
+  await backpackStorageSack.waitFor()
   await waitForSavedEconomy(page, (economy) => (
     flatten(economy.backpack).some(({ id }) => id === IDS.storageKey)
-    && flatten(economy.storage).every(({ id }) => id !== IDS.storageKey)
-    && flatten(economy.storage).some(({ id }) => id === IDS.storageSack)
+    && flatten(economy.backpack).some(({ id }) => id === IDS.storageSack)
+    && flatten(economy.storage).every(({ id }) => id !== IDS.storageSack)
   ))
+  await openSack(page, storage, backpackStorageSack, IDS.storageSack)
+  const backpackStorageKey = storage.locator(
+    `[data-inventory-owner="backpack"][data-inventory-item-id="${IDS.storageKey}"]`,
+  )
+  await backpackStorageKey.waitFor()
+  assert.equal(await backpackStorageKey.getAttribute('data-parent-sack-id'), String(IDS.storageSack))
   await page.screenshot({ path: `${screenshotRoot}-luthacus-recursive-storage.png` })
+
+  const sackAudio = {
+    close: await inventorySoundCount(page, 'backpack-close.wav') - sackAudioBefore.close,
+    open: await inventorySoundCount(page, 'backpack-open.wav') - sackAudioBefore.open,
+  }
+  assert.deepEqual(sackAudio, { close: 8, open: 8 })
 
   assert.deepEqual(pageErrors, [])
   assert.deepEqual(consoleErrors, [])
@@ -308,6 +346,7 @@ try {
     dyedTarget: dyedTarget.iconTints,
     failedResponses,
     pageErrors,
+    sackAudio,
     screenshots: [
       `${screenshotRoot}-inventory-equip-interactions.png`,
       `${screenshotRoot}-sack-movement.png`,
@@ -392,6 +431,7 @@ function createSeededSave() {
       clickRingOne,
       clickRingTwo,
     ],
+    collegeIntroPending: false,
     nextItemId: 50_000,
     storage: [storageSack],
   }
@@ -420,7 +460,23 @@ function createSeededSave() {
     mods: [],
     modState: {},
     playerId: SAVE_PLAYER_ID,
-    state: { ...initial, playerEntities: positionedEntities },
+    state: {
+      ...initial,
+      playerEntities: positionedEntities,
+      world: initial.world.kind === 'hub'
+        ? {
+            ...initial.world,
+            participants: Object.fromEntries(Object.entries(initial.world.participants).map(
+              ([playerId, participant]) => [playerId, {
+                ...participant,
+                collegeIntro: null,
+                region: 'courtyard',
+                transition: null,
+              }],
+            )),
+          }
+        : initial.world,
+    },
   })
   return {
     initialStoredTints: target.iconTints,
@@ -530,6 +586,23 @@ async function doubleActivate(targetPage, target) {
   await targetPage.mouse.dblclick(box.x + box.width / 2, box.y + box.height / 2)
 }
 
+async function openSack(targetPage, inventory, target, sackId, parentPath = []) {
+  await doubleActivate(targetPage, target)
+  const path = [...parentPath, sackId].join('/')
+  await inventory.locator(`xpath=self::*[@data-native-sack-path="${path}"]`).waitFor()
+  await inventory.locator('xpath=self::*[@data-native-sack-transition=""]').waitFor({
+    timeout: 5_000,
+  })
+}
+
+async function returnFromSack(inventory, path) {
+  await inventory.locator('[data-inventory-resume="true"]').click()
+  await inventory.locator(`xpath=self::*[@data-native-sack-path="${path}"]`).waitFor()
+  await inventory.locator('xpath=self::*[@data-native-sack-transition=""]').waitFor({
+    timeout: 5_000,
+  })
+}
+
 async function waitForParent(target, parentSackId) {
   await target.locator(`xpath=self::*[@data-parent-sack-id="${parentSackId ?? ''}"]`).waitFor()
 }
@@ -554,6 +627,13 @@ async function dyeAudioCount(targetPage) {
     (event.type === 'buffer-start' || event.type === 'play')
     && window.__sdrAudioSourceMatches(event.src, 'dye.wav')
   )).length)
+}
+
+async function inventorySoundCount(targetPage, source) {
+  return targetPage.evaluate((filename) => window.__sdrAudioEvents.filter((event) => (
+    (event.type === 'buffer-start' || event.type === 'play')
+    && window.__sdrAudioSourceMatches(event.src, filename)
+  )).length, source)
 }
 
 async function savedTarget(targetPage, itemId) {

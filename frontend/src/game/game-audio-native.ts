@@ -33,6 +33,7 @@ export type GameMusicCue =
 export type GameSoundCue =
   | BoneyardSolomonDigCue
   | 'backpack-close'
+  | 'backpack-open'
   | 'bad-action'
   | 'acid-sizzle'
   | 'banshee-die'
@@ -225,6 +226,11 @@ export const NATIVE_SOUND_MANIFEST = {
     registryOffset: 0xc8,
     sourceName: 'sounds\\backpack_close',
     sourceSha256: '32fa4ca58d0fe1eb967bb50f20dffc0edb98b25ca74c719edc2b70b9e4312319',
+  },
+  'backpack-open': {
+    registryOffset: 0xf4,
+    sourceName: 'sounds\\backpack_open',
+    sourceSha256: '8193adb7284d9c14c9045b7b9aaace7b17baa7f75eb8e77e82cb2ee2c572c81b',
   },
   'bad-action': {
     registryOffset: 0x120,

@@ -22,6 +22,7 @@ import chooseElement from '../assets/game/audio/sfx/choose-element.wav'
 import bansheeDie from '../assets/game/audio/sfx/banshee-die.wav'
 import boneCrack from '../assets/game/audio/sfx/bone-crack.wav'
 import backpackClose from '../assets/game/audio/sfx/backpack-close.wav'
+import backpackOpen from '../assets/game/audio/sfx/backpack-open.wav'
 import badAction from '../assets/game/audio/sfx/bad-action.wav'
 import click from '../assets/game/audio/sfx/click.wav'
 import concentrate from '../assets/game/audio/sfx/concentrate.wav'
@@ -212,6 +213,7 @@ export const GAME_AUDIO_SOURCES = {
   },
   sounds: {
     'backpack-close': backpackClose,
+    'backpack-open': backpackOpen,
     'bad-action': badAction,
     'acid-sizzle': acidSizzle,
     'banshee-die': bansheeDie,

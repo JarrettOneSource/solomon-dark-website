@@ -10,6 +10,7 @@ import {
   DOWSING_EQUIPMENT_RECIPES,
   NATIVE_DYE_SWATCHES,
   findInventoryItem,
+  inventoryItemsAtSackPath,
   nativeDyeMixedTint,
   inventoryDyeableClothingItems,
   projectInventoryItems,
@@ -111,11 +112,13 @@ import {
   hubNativeUiReveal,
   hubOwnedPerkSlotRect,
   hubShopSlideOffset,
+  hubSackPageOffsets,
   hubShopSlotPosition,
   hubUnforgeResultLayout,
   hubUnforgeTargetTint,
   type HubTooltipLine,
   type HubTooltipOptions,
+  type HubSackPageDirection,
 } from './hub-inventory-render-contract.ts'
 import { NativeElementVfxView } from './native-element-vfx-view.ts'
 import {
@@ -155,6 +158,13 @@ export interface HubInventoryDragModel {
   readonly pointer: { readonly x: number; readonly y: number }
 }
 
+export interface HubInventorySackTransitionModel {
+  readonly direction: HubSackPageDirection
+  readonly fromPath: readonly number[]
+  readonly startedAtMs: number
+  readonly toPath: readonly number[]
+}
+
 export interface HubInventoryDyeModalModel {
   readonly closingAtMs: number | null
   readonly dyeItemId: number
@@ -188,6 +198,8 @@ export type HubInventoryRendererModel =
       readonly notice: HubInventoryRendererNotice | null
       readonly pressedControl: HubInventoryPressedControl
       readonly progression: ProtocolPlayerProgression
+      readonly sackPath: readonly number[]
+      readonly sackTransition: HubInventorySackTransitionModel | null
       readonly selection: HubInventorySelectionModel | null
     }
   | {
@@ -210,6 +222,8 @@ export type HubInventoryRendererModel =
       readonly notice: HubInventoryRendererNotice | null
       readonly pressedControl: HubInventoryPressedControl
       readonly progression: ProtocolPlayerProgression
+      readonly sackPath: readonly number[]
+      readonly sackTransition: HubInventorySackTransitionModel | null
       readonly inventorySelection: HubInventorySelectionModel | null
       readonly inspection: HubServiceInspectionModel | null
       readonly selectedItemId: number | null
@@ -286,6 +300,7 @@ export async function createHubInventoryRenderer(
   let playerPreviewVfx: NativeElementVfxView | null = null
   let inventoryDragger: Container | null = null
   let inventoryItemInfo: Container | null = null
+  let inventorySackPages: InventorySackPages | null = null
   let modalHud: Container | null = null
   let unforgeTarget: Sprite | null = null
   let previousNoticeTitle: string | null = null
@@ -360,6 +375,20 @@ export async function createHubInventoryRenderer(
             child.alpha = 0.15 + (Math.sin(nowMs / 90) + 1) * 0.15
           }
         }
+      }
+      if (inventorySackPages) {
+        const offsets = hubSackPageOffsets(
+          inventorySackPages.transition.direction,
+          inventorySackPages.transition.startedAtMs,
+          nowMs,
+        )
+        inventorySackPages.incoming.x = offsets.incomingX
+        inventorySackPages.outgoing.x = offsets.outgoingX
+        gpu.canvas.dataset.nativeSackPageState = offsets.settled ? 'settled' : 'moving'
+        gpu.canvas.dataset.nativeSackPageTicks = `${offsets.ticks}`
+      } else {
+        delete gpu.canvas.dataset.nativeSackPageState
+        delete gpu.canvas.dataset.nativeSackPageTicks
       }
       if (unforgeTarget) {
         const tint = hubUnforgeTargetTint(nowMs / 10)
@@ -460,6 +489,7 @@ export async function createHubInventoryRenderer(
       playerPreviewVfx = null
       inventoryDragger = null
       inventoryItemInfo = null
+      inventorySackPages = null
       modalHud = null
       unforgeTarget = null
       surface.removeChildren().forEach((child) => child.destroy({ children: true }))
@@ -468,6 +498,7 @@ export async function createHubInventoryRenderer(
         playerPreviewVfx = inventory.playerPreview
         inventoryDragger = inventory.dragger
         inventoryItemInfo = inventory.itemInfo
+        inventorySackPages = inventory.sackPages
         modalHud = inventory.modalHud
       }
       else if (model.kind === 'dialogue') chatRenderState = buildDialogue(context, surface, model)
@@ -476,6 +507,7 @@ export async function createHubInventoryRenderer(
         serviceOverlay = service.overlay
         inventoryDragger = service.dragger
         inventoryItemInfo = service.itemInfo
+        inventorySackPages = service.sackPages
         modalHud = service.modalHud
         dowsingFieldTiles = serviceOverlay.children.filter(
           (child): child is Sprite => child instanceof Sprite && child.label === 'native-dowsing-field',
@@ -496,6 +528,15 @@ export async function createHubInventoryRenderer(
           nextNotice,
           model.kind !== 'dialogue' && model.pressedControl === 'message-primary',
         )
+      }
+      if (inventorySackPages) {
+        const offsets = hubSackPageOffsets(
+          inventorySackPages.transition.direction,
+          inventorySackPages.transition.startedAtMs,
+          performance.now(),
+        )
+        inventorySackPages.incoming.x = offsets.incomingX
+        inventorySackPages.outgoing.x = offsets.outgoingX
       }
       application.renderer.render(application.stage)
     },
@@ -519,6 +560,13 @@ interface InventoryBuildState {
   readonly itemInfo: Container | null
   readonly modalHud: Container
   readonly playerPreview: NativeElementVfxView | null
+  readonly sackPages: InventorySackPages | null
+}
+
+interface InventorySackPages {
+  readonly incoming: Container
+  readonly outgoing: Container
+  readonly transition: HubInventorySackTransitionModel
 }
 
 function buildInventory(
@@ -531,6 +579,8 @@ function buildInventory(
     readonly dragging?: HubInventoryDragModel | null
     readonly leftPane?: 'hagatha' | 'stats'
     readonly progression: ProtocolPlayerProgression
+    readonly sackPath: readonly number[]
+    readonly sackTransition: HubInventorySackTransitionModel | null
     readonly selection?: HubInventorySelectionModel | null
   },
 ): InventoryBuildState {
@@ -538,8 +588,8 @@ function buildInventory(
   const companion = model.companion ?? false
   const dragging = model.dragging ?? null
   const selection = model.selection ?? null
-  const projectedBackpack = projectInventoryItems(economy.backpack)
-    .slice(0, HUB_INVENTORY_GRID.capacity)
+  const visibleBackpack = inventoryItemsAtSackPath(economy.backpack, model.sackPath)
+    ?? economy.backpack
   const leftShift = companion ? 53 : 0
   const background = new Graphics().rect(0, 0, 1600, 900).fill({ color: 0x000000 })
   layer.addChild(background)
@@ -557,38 +607,49 @@ function buildInventory(
   addBackpackFrame(context, layer)
   addBitmapText(context, layer, 'BACKPACK', 'menu', 800, 489, { tint: 0xaaa2a6 })
 
-  for (let index = 0; index < HUB_INVENTORY_GRID.capacity; index += 1) {
-    const position = hubInventorySlotPosition(index)
-    const slot = addAtlasSprite(context, layer, 'Inventory', 10, position.x, position.y)
-    slot.alpha = HUB_INVENTORY_GRID.slotAlpha
-    const item = projectedBackpack[index]?.item
-    if (!item) continue
-    const held = dragging?.owner === 'backpack' && item.id === dragging.itemId
-    if (!held) addClippedItemIcon(
+  let sackPages: InventorySackPages | null = null
+  if (model.sackTransition) {
+    const outgoing = new Container()
+    const incoming = new Container()
+    outgoing.label = 'native-sack-page-outgoing'
+    incoming.label = 'native-sack-page-incoming'
+    addInventoryGridPage(
       context,
-      layer,
-      item,
-      position.x + 36,
-      position.y + 36,
+      outgoing,
+      inventoryItemsAtSackPath(economy.backpack, model.sackTransition.fromPath) ?? [],
+      null,
+      null,
       model.config.element,
-      [position.x, position.y, HUB_INVENTORY_GRID.cellSize, HUB_INVENTORY_GRID.cellSize],
     )
-    if (!held && item.quantity > 1) {
-      addBitmapText(context, layer, `${item.quantity}`, 'medium', position.x + 61, position.y + 54, {
-        align: 'center',
-        tint: 0xf4e5b4,
-      })
-    }
-    if (item.id === selection?.id && selection.owner === 'backpack') {
-      addInventorySelection(layer, position.x, position.y, HUB_INVENTORY_GRID.cellSize, HUB_INVENTORY_GRID.cellSize)
-    }
+    addInventoryGridPage(
+      context,
+      incoming,
+      inventoryItemsAtSackPath(economy.backpack, model.sackTransition.toPath) ?? [],
+      selection,
+      null,
+      model.config.element,
+    )
+    layer.addChild(outgoing, incoming)
+    sackPages = { incoming, outgoing, transition: model.sackTransition }
+  } else {
+    const page = new Container()
+    page.label = 'native-sack-page-current'
+    addInventoryGridPage(
+      context,
+      page,
+      visibleBackpack,
+      selection,
+      dragging,
+      model.config.element,
+    )
+    layer.addChild(page)
   }
 
   addGold(context, layer, economy.gold)
   const modalHud = addBelt(
     context,
     layer,
-    projectedBackpack.map(({ item }) => item),
+    projectInventoryItems(economy.backpack).map(({ item }) => item),
     model.config.element,
   )
   const unforgeTarget = addCenteredAtlasSprite(
@@ -635,7 +696,9 @@ function buildInventory(
   }
 
   const selected = selection ? inventoryItemForSelection(economy, selection) : null
-  const selectedCenter = selection ? inventorySelectionCenter(economy, selection, companion) : null
+  const selectedCenter = selection
+    ? inventorySelectionCenter(economy, selection, companion, model.sackPath)
+    : null
   const itemInfo = selected && selectedCenter && !dragging
     ? addInventoryItemInfo(
         context,
@@ -653,7 +716,50 @@ function buildInventory(
   const dragger = dragging
     ? addInventoryDragger(context, layer, inventoryItemForDrag(economy, dragging), dragging, model.config.element)
     : null
-  return { dragger, itemInfo, modalHud, playerPreview }
+  return { dragger, itemInfo, modalHud, playerPreview, sackPages }
+}
+
+function addInventoryGridPage(
+  context: RenderContext,
+  layer: Container,
+  source: readonly HubInventoryItem[],
+  selection: HubInventorySelectionModel | null,
+  dragging: HubInventoryDragModel | null,
+  element: WizardElement,
+): void {
+  const items = source.slice(0, HUB_INVENTORY_GRID.capacity)
+  for (let index = 0; index < HUB_INVENTORY_GRID.capacity; index += 1) {
+    const position = hubInventorySlotPosition(index)
+    const slot = addAtlasSprite(context, layer, 'Inventory', 10, position.x, position.y)
+    slot.alpha = HUB_INVENTORY_GRID.slotAlpha
+    const item = items[index]
+    if (!item) continue
+    const held = dragging?.owner === 'backpack' && item.id === dragging.itemId
+    if (!held) addClippedItemIcon(
+      context,
+      layer,
+      item,
+      position.x + 36,
+      position.y + 36,
+      element,
+      [position.x, position.y, HUB_INVENTORY_GRID.cellSize, HUB_INVENTORY_GRID.cellSize],
+    )
+    if (!held && item.quantity > 1) {
+      addBitmapText(context, layer, `${item.quantity}`, 'medium', position.x + 61, position.y + 54, {
+        align: 'center',
+        tint: 0xf4e5b4,
+      })
+    }
+    if (item.id === selection?.id && selection.owner === 'backpack') {
+      addInventorySelection(
+        layer,
+        position.x,
+        position.y,
+        HUB_INVENTORY_GRID.cellSize,
+        HUB_INVENTORY_GRID.cellSize,
+      )
+    }
+  }
 }
 
 function addInventorySidePanel(
@@ -1062,6 +1168,7 @@ function buildService(
   readonly itemInfo: Container | null
   readonly modalHud: Container
   readonly overlay: Container
+  readonly sackPages: InventorySackPages | null
 } {
   const inventory = buildInventory(context, layer, {
     companion: true,
@@ -1070,6 +1177,8 @@ function buildService(
     dragging: model.dragging,
     leftPane: model.trader === 'hagatha' ? 'hagatha' : 'stats',
     progression: model.progression,
+    sackPath: model.sackPath,
+    sackTransition: model.sackTransition,
     selection: model.inventorySelection,
   })
   const overlay = new Container()
@@ -1104,6 +1213,7 @@ function buildService(
       itemInfo: inventory.itemInfo,
       modalHud: inventory.modalHud,
       overlay,
+      sackPages: inventory.sackPages,
     }
   }
 
@@ -1111,7 +1221,7 @@ function buildService(
     addStoreGrid(
       context,
       overlay,
-      projectInventoryItems(model.economy.storage).map(({ item }) => item),
+      model.economy.storage,
       model,
       'storage',
     )
@@ -1128,6 +1238,7 @@ function buildService(
     itemInfo: inventory.itemInfo,
     modalHud: inventory.modalHud,
     overlay,
+    sackPages: inventory.sackPages,
   }
 }
 
@@ -2010,9 +2121,11 @@ function inventorySelectionCenter(
   economy: ProtocolPlayerEconomy,
   selection: HubInventorySelectionModel,
   companion: boolean,
+  sackPath: readonly number[],
 ): { readonly x: number; readonly y: number } | null {
   if (selection.owner === 'backpack') {
-    const index = projectInventoryItems(economy.backpack).findIndex(({ item }) => item.id === selection.id)
+    const visible = inventoryItemsAtSackPath(economy.backpack, sackPath) ?? economy.backpack
+    const index = visible.findIndex((item) => item.id === selection.id)
     if (index < 0) return null
     const position = hubInventorySlotPosition(index)
     return { x: position.x + 36, y: position.y + 36 }

@@ -45,6 +45,7 @@ const SOURCES = {
   },
   sounds: {
     'backpack-close': 'backpack-close.wav',
+    'backpack-open': 'backpack-open.wav',
     'bad-action': 'bad-action.wav',
     'acid-sizzle': 'acid-sizzle.wav',
     'banshee-die': 'banshee.wav',
