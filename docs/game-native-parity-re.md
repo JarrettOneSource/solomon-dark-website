@@ -53779,4 +53779,56 @@ inferable from a stale client document.
 
 ### Implementation validation receipt
 
-- Pending implementation and exact-candidate Mac/browser proof.
+- Protocol 91 adds `party-rejoin-wait`. Every ordinary active-run checkpoint is
+  bound to the host's immutable current revision, while deployment retains its
+  explicit target override. Empty authority retirement now reports a seedable
+  suspension to the supervisor; Game Over/Hub/loadout remains terminal. The
+  first valid recovery restores the signed ordered roster but waits only on
+  humans actually connecting/materializing, so later former members resolve the
+  live run and cannot replay their browser world over it. Repeated suspension
+  and private-session reprovisioning use the same owner.
+- Detaching the last living actor while a dead human remains installs one
+  required-member hold before actor removal/all-dead arbitration. A current
+  pause owner may still release its own pause without bypassing that hold. The
+  returning actor plus current renderers start the existing three-second grace;
+  no held wall time becomes fixed ticks.
+- ALLY rows now paint red death and dim/striped disconnect layers over the whole
+  card. Visible text is `DISCONNECTED` while transport is absent and `DEAD` for
+  a connected dead actor. Explicit roster connection state outranks a stale
+  same-tick actor cache; snapshot config/vitals remain preferred only while the
+  roster says the member is connected. Golem and local-player membership are
+  unchanged.
+- The validated pre-receipt runtime candidate is commit
+  `81ef227bc647d610a551524be816feb641f05547`
+  over `6fcfdd6f8e60f8c58a811eabdc1f3c811cdeddd1`, tree
+  `7599d78801d0202fa31b17627799b4f05b28a770`. All 17 changed files were
+  byte-identical in the local worktree and detached Mac worktree
+  `/Users/jarrett/codex-acceptance/party-run-rejoin-publish-20260827/Website`.
+  The canonical Mac gate passed 26 backend contracts, lint/type/generated and
+  formatting checks, `310/310` save/prerequisite tests, `1,651/1,651` broad
+  Boneyard/host/supervisor tests, `74/74` party tests, `77/77` ML tests, every
+  remaining frontend/desktop group, production frontend/game-host builds, and
+  media policy. `Game-B60YTKvZ.js` is `479,137` raw / `134,116` gzip against
+  `524,288` / `134,144`; gate-log SHA-256 is
+  `e8669eea735b62608538de2d5abf0d13c3d9b1a38439258ba448c22b177081f0`.
+- Mac Chrome `151.0.7922.174`/WebGL completed the exact shared-Hub journey on
+  run `0ab2fe79250a2a594a1648747816e526`: tick `1006` held, then resumed at
+  `1045`; catch-up sequences were `[4,6,8,10,12,14,16,18]`; save revision
+  advanced `2 -> 23`. The private-College journey used run
+  `492febf255586c86ccd95eb3fca97d7e`: tick `965` held, resumed at `1003`,
+  resolved `[2,4,6]`, and advanced `2 -> 18`. Both visibly showed whole-card
+  `DISCONNECTED`, the centered `Waiting for players to rejoin` hold, immediate
+  alive reconnect, and `DISCONNECTED -> DEAD` for the returning dead leader.
+  Page, console, failed-response, failed-request, and host-error arrays were
+  empty in both runs. Browser-log SHA-256 values are
+  `e83faa2f35bc38abec26fdbdddff2986f4d5bbdd55bfd33f30c3e041aeb86549`
+  and `c6562c37cd41949657c3156b615fc860aee06715eeef27f3f9419177d70936a7`.
+- Reviewed shared waiting/dead frames have SHA-256
+  `2ee7e3251d8ea4ffc03d0658ef2f7200b2faf81f5981574725c7b6189c8becf8`
+  and `bfe79a6810a6bc7847efe8b247918794a696f92afd10e38adf43086745e67e09`;
+  private equivalents are
+  `1da6094f863570a59eaac11c0b4b3a2437aea011a08ff64f33c817577ca6a66a`
+  and `1cc5ed2f556c9fb7c94733e7ec40c8e486cc7b78ec53e58a63748d218c14d5bf`.
+  They are retained beside the final Mac worktree under `evidence-global/` and
+  `evidence-private/`. No browser-platform member is blocked beyond a process
+  killed before its latest checkpoint can persist. No deployment was performed.
