@@ -55,7 +55,7 @@ export interface PortableGameWizardState {
   readonly cheatDeathEnabled: boolean
   readonly currentHealth: number
   readonly currentMana: number
-  readonly concentrationSkillIds: readonly (number | null)[]
+  readonly concentrationSkillIds: readonly [number | null, number | null]
   readonly deferredSkillChoices: number
   readonly disciplineRoot: number
   readonly elementRoot: number
@@ -534,7 +534,7 @@ export async function parsePortableGameProfile(document: string): Promise<Portab
       cheatDeathEnabled: boolean(wizard.cheatDeathEnabled, 'portable cheat-death state'),
       concentrationSkillIds: nullableIntegers(
         wizard.concentrationSkillIds, 2, 8, 79, 'portable concentrations',
-      ),
+      ) as readonly [number | null, number | null],
       currentHealth: finite(wizard.currentHealth, 0, 1_000_000, 'portable current health'),
       currentMana: finite(wizard.currentMana, 0, 1_000_000, 'portable current mana'),
       deferredSkillChoices: integer(wizard.deferredSkillChoices, 0, 1_000, 'portable deferred choices'),

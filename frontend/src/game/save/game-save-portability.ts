@@ -67,11 +67,11 @@ const DISCIPLINE_BY_ROOT: Readonly<Record<number, WizardDiscipline>> = Object.fr
   7: 'arcane',
 })
 const STARTING_SKILLS: Readonly<Record<WizardElement, readonly [number, number]>> = Object.freeze({
-  air: Object.freeze([24, 27]),
-  earth: Object.freeze([40, 45]),
-  ether: Object.freeze([8, 11]),
-  fire: Object.freeze([16, 21]),
-  water: Object.freeze([32, 35]),
+  air: Object.freeze([24, 27] as const),
+  earth: Object.freeze([40, 45] as const),
+  ether: Object.freeze([8, 11] as const),
+  fire: Object.freeze([16, 21] as const),
+  water: Object.freeze([32, 35] as const),
 })
 
 export interface PortableImportResult {
@@ -471,7 +471,7 @@ export async function createPortableGameProfileFromWebSave(
       concentrationSkillIds: Object.freeze([
         skillRuntime.concentrationSkillIdA,
         skillRuntime.concentrationSkillIdB,
-      ]),
+      ] as const),
       currentHealth: progression.currentHealth,
       currentMana: progression.currentMana,
       deferredSkillChoices: progression.deferredSkillChoices,
