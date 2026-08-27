@@ -39,6 +39,7 @@ import {
   HUB_INVENTORY_INTERACTION,
   HUB_EQUIPMENT_SINK_RENDER,
   HUB_ITEM_ICON_TRANSFORMS,
+  HUB_MODAL_HUD_CONTROLS,
   HUB_NATIVE_LABELED_CONTROL,
   HUB_NATIVE_UI_TIMING,
   HUB_NATIVE_UI_SIZE,
@@ -213,6 +214,42 @@ test('Item_Sack pages traverse the fixed stage in exact discrete native ticks', 
     settled: true,
     ticks: 160,
   })
+})
+
+test('InventoryScreen paints the Game-owned backpack return control at every Sack depth', () => {
+  assert.deepEqual(HUB_MODAL_HUD_CONTROLS, {
+    backpack: {
+      label: 'native-inventory-resume-control',
+      record: 47,
+    },
+    shadowOffset: [5, 5],
+    shadowTint: 0x000000,
+    tome: {
+      label: 'native-skill-book-control',
+      record: 48,
+    },
+  })
+  assert.deepEqual(nativeAssetsJson.atlases.UI.records['47']?.logicalSize, [58, 62])
+  assert.deepEqual(nativeAssetsJson.atlases.UI.records['48']?.logicalSize, [58, 62])
+  assert.match(inventoryRenderer, /function addModalHudControls\(/)
+  assert.match(
+    inventoryRenderer,
+    /const shadow = addCenteredAtlasSprite[\s\S]*shadow\.tint = HUB_MODAL_HUD_CONTROLS\.shadowTint[\s\S]*const base = addCenteredAtlasSprite/,
+  )
+  assert.match(inventoryRenderer, /shadow\.label = `\$\{control\.label\}-shadow`/)
+  assert.match(inventoryRenderer, /base\.label = control\.label/)
+  assert.match(
+    inventoryRenderer,
+    /addModalHudControls\(context, hudLayer, hud\)[\s\S]*hud\.belt\.forEach/,
+  )
+  assert.match(
+    inventoryComponent,
+    /const inventoryResumeProgress = surface\.kind === 'inventory' \? modalSlides\.inventory : 1[\s\S]*nativeHudModalSlideLayout\([\s\S]*inventoryResumeProgress[\s\S]*\)\.backpack/,
+  )
+  assert.doesNotMatch(
+    inventoryRenderer,
+    /\[47, backpackCenter\.x \+ 5, backpackCenter\.y \+ 5\][\s\S]*\[47, backpackCenter\.x, backpackCenter\.y\]/,
+  )
 })
 
 test('DyeClothing retains stock relative geometry and discrete update timing', () => {

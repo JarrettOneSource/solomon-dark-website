@@ -32,6 +32,12 @@ const chromePath = process.env.SDR_CHROME_PATH || (process.platform === 'darwin'
   : '/usr/bin/google-chrome')
 const screenshotRoot = process.env.SDR_SACKS_DYES_SCREENSHOT_ROOT
   || '/tmp/solomon-dark-sacks-dyes'
+const hasTouch = booleanEnvironment('SDR_SACKS_DYES_HAS_TOUCH', false)
+const returnControlOnly = booleanEnvironment('SDR_SACKS_DYES_RETURN_ONLY', false)
+const viewport = Object.freeze({
+  height: positiveIntegerEnvironment('SDR_SACKS_DYES_VIEWPORT_HEIGHT', 900),
+  width: positiveIntegerEnvironment('SDR_SACKS_DYES_VIEWPORT_WIDTH', 1_600),
+})
 await mkdir(dirname(screenshotRoot), { recursive: true })
 const SAVE_PLAYER_ID = 'sacks-dyes-owner'
 const CHARACTER = {
@@ -60,6 +66,7 @@ const IDS = Object.freeze({
   target: 40_009,
 })
 const ALL_SWATCH_ROWS = Object.freeze(NATIVE_DYE_SWATCHES.map((_, index) => index))
+const resumeControlReceipts = []
 const seeded = createSeededSave()
 const staticServer = await startStaticClientServer({
   root: fileURLToPath(new URL('../../backend/wwwroot/', import.meta.url)),
@@ -76,7 +83,7 @@ const browser = await chromium.launch({
   executablePath: chromePath,
   headless: true,
 })
-const page = await browser.newPage({ viewport: { height: 900, width: 1_600 } })
+const page = await browser.newPage({ hasTouch, viewport })
 const consoleErrors = []
 const failedResponses = []
 const pageErrors = []
@@ -105,6 +112,36 @@ try {
   const inventory = page.getByRole('dialog', { name: 'Inventory' })
   await inventory.waitFor({ timeout: 10_000 })
   await inventory.locator('.hub-inventory-native-canvas[data-native-reveal="settled"]').waitFor()
+  resumeControlReceipts.push(await inventoryResumeControlReceipt(inventory, ''))
+  if (returnControlOnly) {
+    const item = (id) => inventory.locator(`[data-inventory-item-id="${id}"]`)
+    await openSack(page, inventory, item(IDS.destinationSack), IDS.destinationSack)
+    await page.screenshot({ path: `${screenshotRoot}-empty-sack.png` })
+    await returnFromSack(inventory, '')
+    await openSack(page, inventory, item(IDS.sourceSack), IDS.sourceSack)
+    await page.screenshot({ path: `${screenshotRoot}-filled-sack.png` })
+    await openSack(page, inventory, item(IDS.movableSack), IDS.movableSack, [IDS.sourceSack])
+    await page.screenshot({ path: `${screenshotRoot}-nested-sack.png` })
+    await returnFromSack(inventory, String(IDS.sourceSack))
+    await returnFromSack(inventory, '')
+    assert.deepEqual(pageErrors, [])
+    assert.deepEqual(consoleErrors, [])
+    assert.deepEqual(failedResponses, [])
+    process.stdout.write(`${JSON.stringify({
+      consoleErrors,
+      failedResponses,
+      hasTouch,
+      pageErrors,
+      resumeControls: resumeControlReceipts,
+      screenshots: [
+        `${screenshotRoot}-empty-sack.png`,
+        `${screenshotRoot}-filled-sack.png`,
+        `${screenshotRoot}-nested-sack.png`,
+      ],
+      status: 'ok',
+      viewport,
+    }, null, 2)}\n`)
+  } else {
   const sackAudioBefore = {
     close: await inventorySoundCount(page, 'backpack-close.wav'),
     open: await inventorySoundCount(page, 'backpack-open.wav'),
@@ -447,7 +484,9 @@ try {
     consoleErrors,
     dyedTarget: dyedTarget.iconTints,
     failedResponses,
+    hasTouch,
     pageErrors,
+    resumeControls: resumeControlReceipts,
     sackAudio,
     screenshots: [
       `${screenshotRoot}-inventory-equip-interactions.png`,
@@ -469,7 +508,9 @@ try {
     ],
     status: 'ok',
     swatches: ALL_SWATCH_ROWS,
+    viewport,
   }, null, 2)}\n`)
+  }
 } finally {
   await browser.close()
   await gameHost.close()
@@ -703,6 +744,7 @@ async function openSack(targetPage, inventory, target, sackId, parentPath = []) 
   await inventory.locator('xpath=self::*[@data-native-sack-transition=""]').waitFor({
     timeout: 5_000,
   })
+  resumeControlReceipts.push(await inventoryResumeControlReceipt(inventory, path))
 }
 
 async function returnFromSack(inventory, path) {
@@ -711,6 +753,82 @@ async function returnFromSack(inventory, path) {
   await inventory.locator('xpath=self::*[@data-native-sack-transition=""]').waitFor({
     timeout: 5_000,
   })
+  if (await inventory.locator('[data-inventory-resume="true"]').count() > 0) {
+    resumeControlReceipts.push(await inventoryResumeControlReceipt(inventory, path))
+  } else {
+    assert.equal(path, '', 'Only a companion service root may omit the inventory return control')
+  }
+}
+
+async function inventoryResumeControlReceipt(inventory, path) {
+  const stage = await inventory.boundingBox()
+  assert.ok(stage, `Inventory stage has no browser geometry at Sack path ${path}`)
+  const action = inventory.locator('[data-inventory-resume="true"]')
+  const control = await action.boundingBox()
+  assert.ok(control, `Inventory return control has no browser geometry at Sack path ${path}`)
+  const logical = await action.evaluate((element) => ({
+    height: Number.parseFloat(element.style.height),
+    left: Number.parseFloat(element.style.left),
+    top: Number.parseFloat(element.style.top),
+    width: Number.parseFloat(element.style.width),
+  }))
+  assert.deepEqual(logical, { height: 62, left: 730.5, top: 840, width: 58 })
+  const scale = stage.width / 1_600
+  assert.ok(Math.abs(stage.height / 900 - scale) < 0.001)
+  const expected = {
+    height: 62 * scale,
+    width: 58 * scale,
+    x: stage.x + 730.5 * scale,
+    y: stage.y + 840 * scale,
+  }
+  const revealProgress = await inventory.locator('.hub-inventory-native-canvas')
+    .getAttribute('data-native-reveal-progress')
+  assert.equal(revealProgress, '1')
+  assert.ok(Math.abs(control.height - expected.height) <= 1)
+  assert.ok(Math.abs(control.width - expected.width) <= 1)
+  const overlapWidth = Math.max(
+    0,
+    Math.min(control.x + control.width, expected.x + expected.width)
+      - Math.max(control.x, expected.x),
+  )
+  const overlapHeight = Math.max(
+    0,
+    Math.min(control.y + control.height, expected.y + expected.height)
+      - Math.max(control.y, expected.y),
+  )
+  const overlapRatio = overlapWidth * overlapHeight / (expected.width * expected.height)
+  assert.ok(overlapRatio >= 0.9, (
+    `Inventory return hit box does not cover the visible UI-47 base at Sack path ${path}: `
+      + `${overlapRatio}`
+  ))
+  return {
+    height: Number(control.height.toFixed(3)),
+    logical,
+    overlapRatio: Number(overlapRatio.toFixed(4)),
+    path,
+    revealProgress: Number(revealProgress),
+    width: Number(control.width.toFixed(3)),
+    x: Number(control.x.toFixed(3)),
+    y: Number(control.y.toFixed(3)),
+  }
+}
+
+function positiveIntegerEnvironment(name, fallback) {
+  const value = process.env[name]
+  if (value === undefined) return fallback
+  const parsed = Number(value)
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    throw new RangeError(`${name} must be a positive integer`)
+  }
+  return parsed
+}
+
+function booleanEnvironment(name, fallback) {
+  const value = process.env[name]
+  if (value === undefined) return fallback
+  if (value === '0') return false
+  if (value === '1') return true
+  throw new RangeError(`${name} must be 0 or 1`)
 }
 
 async function waitForParent(target, parentSackId) {

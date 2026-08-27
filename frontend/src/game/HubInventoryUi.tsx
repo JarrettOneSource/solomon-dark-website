@@ -606,10 +606,11 @@ function NativeHubSurface({
     nativeModalSlideProgressSnapshot,
     initialNativeModalSlideProgressSnapshot,
   )
+  const inventoryResumeProgress = surface.kind === 'inventory' ? modalSlides.inventory : 1
   const inventoryResumeControl = nativeHudModalSlideLayout(
     NATIVE_HUD_BACKBUFFER.width,
     NATIVE_HUD_BACKBUFFER.height,
-    modalSlides.inventory,
+    inventoryResumeProgress,
   ).backpack
   const inventoryResumeRect = [
     inventoryResumeControl.x,

@@ -201,7 +201,7 @@ test('shares each native modal slide with its Tutorial anchors and leaves at clo
   assert.match(inventory, /useSyncExternalStore\([\s\S]*?nativeModalSlideProgressSnapshot/)
   assert.match(
     inventory,
-    /nativeHudModalSlideLayout\([\s\S]*?modalSlides\.inventory[\s\S]*?\.backpack/,
+    /const inventoryResumeProgress = surface\.kind === 'inventory' \? modalSlides\.inventory : 1[\s\S]*?nativeHudModalSlideLayout\([\s\S]*?inventoryResumeProgress[\s\S]*?\.backpack/,
   )
   assert.match(
     inventory,

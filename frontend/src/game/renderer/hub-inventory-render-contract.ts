@@ -54,6 +54,19 @@ export const HUB_SACK_PAGE_TRANSITION = {
   ticks: 160,
 } as const
 
+export const HUB_MODAL_HUD_CONTROLS = {
+  backpack: {
+    label: 'native-inventory-resume-control',
+    record: 47,
+  },
+  shadowOffset: [5, 5] as const,
+  shadowTint: 0x000000,
+  tome: {
+    label: 'native-skill-book-control',
+    record: 48,
+  },
+} as const
+
 export type HubSackPageDirection = 'back' | 'open'
 
 export function hubSackPageOffsets(

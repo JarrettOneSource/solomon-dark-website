@@ -46,6 +46,7 @@ import {
   nativeHudModalSlideLayout,
   nativeHudModalSlideOffset,
   nativeHudRectCenter,
+  type NativeHudControlLayout,
 } from '../native-hud-layout.ts'
 import { playerCharacterStaffIsFront, playerCharacterStaffOrbOffset } from '../player-character-presentation.ts'
 import type { ProtocolPlayerEconomy, ProtocolPlayerProgression } from '../protocol/game-state.ts'
@@ -90,6 +91,7 @@ import {
   HUB_INVENTORY_GRID,
   HUB_INVENTORY_INTERACTION,
   HUB_ITEM_ICON_TRANSFORMS,
+  HUB_MODAL_HUD_CONTROLS,
   HUB_NATIVE_UI_TIMING,
   HUB_NATIVE_UI_SIZE,
   HUB_NPC_SELECTOR,
@@ -1035,6 +1037,7 @@ function addBelt(
     NATIVE_HUD_BACKBUFFER.height,
     0,
   )
+  addModalHudControls(context, hudLayer, hud)
   hud.belt.forEach((slot, index) => {
     const { x, y } = nativeHudRectCenter(slot)
     addCenteredAtlasSprite(context, hudLayer, 'UI', 2, x, y)
@@ -1063,17 +1066,32 @@ function addBelt(
     })
   })
   addCenteredAtlasSprite(context, layer, 'UI', 82, 800.5, 872)
-  const backpackCenter = nativeHudRectCenter(hud.backpack)
-  const tomeCenter = nativeHudRectCenter(hud.tome)
-  for (const [record, x, y] of [
-    [47, backpackCenter.x + 5, backpackCenter.y + 5],
-    [47, backpackCenter.x, backpackCenter.y],
-    [48, tomeCenter.x + 5, tomeCenter.y + 5],
-    [48, tomeCenter.x, tomeCenter.y],
-  ] as const) {
-    addCenteredAtlasSprite(context, hudLayer, 'UI', record, x, y)
-  }
   return hudLayer
+}
+
+function addModalHudControls(
+  context: RenderContext,
+  layer: Container,
+  hud: NativeHudControlLayout,
+): void {
+  for (const [control, rect] of [
+    [HUB_MODAL_HUD_CONTROLS.backpack, hud.backpack],
+    [HUB_MODAL_HUD_CONTROLS.tome, hud.tome],
+  ] as const) {
+    const center = nativeHudRectCenter(rect)
+    const shadow = addCenteredAtlasSprite(
+      context,
+      layer,
+      'UI',
+      control.record,
+      center.x + HUB_MODAL_HUD_CONTROLS.shadowOffset[0],
+      center.y + HUB_MODAL_HUD_CONTROLS.shadowOffset[1],
+    )
+    shadow.label = `${control.label}-shadow`
+    shadow.tint = HUB_MODAL_HUD_CONTROLS.shadowTint
+    const base = addCenteredAtlasSprite(context, layer, 'UI', control.record, center.x, center.y)
+    base.label = control.label
+  }
 }
 
 function buildDialogue(
