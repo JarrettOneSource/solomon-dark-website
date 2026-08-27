@@ -216,7 +216,7 @@ async function runScenario(scenario) {
     const playerId = host.state().playerEntities.identities[0].playerId
     grantTutorialAmulet(host, playerId)
 
-    // Stage 10: the inventory modal with the starter potions in the first backpack cells.
+    // Stage 10: Tutorial activation has stripped the starter potions, so the amulet is cell zero.
     forceTutorialState(host, { ...INTRO_CLEARED, inventoryOpened: false, stage: 9, stageTicks: 0 })
     await page.locator('.tutorial-overlay[data-stage="9"]').waitFor({ timeout: 15_000 })
     await page.locator('[data-tutorial-pointer="inventory"]').waitFor({ timeout: 15_000 })

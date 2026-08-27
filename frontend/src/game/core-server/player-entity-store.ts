@@ -63,6 +63,7 @@ import {
   consumeWizardKey,
   creditLootGold,
   createHubEconomy,
+  discardInventoryItem,
   NATIVE_LOOT_BACKPACK_REPLICATION_LIMIT,
   insertLootInventoryItem,
   hubEconomyInventoryIsValid,
@@ -543,12 +544,22 @@ export function preparePlayerEntityTutorialLoadout(
     weldBuildId: null,
     weldComponentRanks: null,
   }
+  let economy = source.economies[index]!
+  for (const subtype of [0, 1] as const) {
+    const potion = firstNativePotion(economy, subtype)
+    if (potion === null) continue
+    const discarded = discardInventoryItem(economy, potion.id)
+    if (!discarded.accepted) {
+      throw new Error(`Tutorial starter potion ${subtype} could not be removed`)
+    }
+    economy = discarded.state
+  }
   return replacePlayerSkillState(
     source,
     index,
     skillBook,
     source.skillRuntimes[index]!,
-    source.economies[index]!,
+    economy,
   )
 }
 

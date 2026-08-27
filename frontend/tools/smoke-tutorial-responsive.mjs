@@ -243,14 +243,18 @@ async function runScenario(scenario) {
     const groundDrop = scenario.name === 'stock'
       ? await exerciseTutorialGroundDrop(host, page, screenshotRoot)
       : null
-    forceTutorialState(host, {
-      introActive: false,
-      introBlend: 1,
-      introDelayTicksRemaining: 0,
-      introFade: 0,
-      introMovementTicksRemaining: 0,
-      stage: 18,
-      stageTicks: 0,
+    configureTutorialFixture(host, {
+      combatEnabled: true,
+      position: { x: 1025, y: 800 },
+      tutorial: {
+        active: true,
+        damageProtection: false,
+        stage: 18,
+        stageTicks: 0,
+        waveOrdinal: 5,
+        waveSpawnCursor: 0,
+        waveTicks: 0,
+      },
     })
     await page.locator('.tutorial-overlay[data-stage="18"]').waitFor({ timeout: 15_000 })
     const potionBindings = await page.locator('.hub-hud').evaluate((hud) => ({
@@ -286,6 +290,9 @@ async function runScenario(scenario) {
       return pointer instanceof HTMLElement && getComputedStyle(pointer).opacity === '1'
     }, undefined, { timeout: 10_000 })
     await page.screenshot({ path: vitalsScreenshot })
+    const healthPotionGate = scenario.name === 'stock'
+      ? await exerciseTutorialHealthPotionGate(host, page, screenshotRoot)
+      : null
     const spawnDomain = scenario.name === 'stock'
       ? await exerciseTutorialSpawnDomain(host, page, screenshotRoot)
       : null
@@ -310,6 +317,7 @@ async function runScenario(scenario) {
       acidRain,
       failedResponses,
       groundDrop,
+      healthPotionGate,
       initial,
       moved,
       pageErrors,
@@ -704,8 +712,9 @@ async function exerciseTutorialGroundDrop(host, page, screenshotPath) {
   const playerId = host.hostPlayerId()
   assert.ok(playerId)
   const player = getPlayerCharacter(state, playerId)
-  const healthPotion = getPlayerEconomy(state, playerId).backpack.find(
-    ({ kind }) => kind === 'health-potion',
+  assert.equal(getPlayerEconomy(state, playerId).backpack.length, 0)
+  const healthPotion = state.world.tutorialProfileEconomy?.backpack.find(
+    ({ nativeSubtype, nativeTypeId }) => nativeTypeId === 7001 && nativeSubtype === 0,
   )
   assert.ok(healthPotion)
   const spawned = spawnBoneyardCustomLootItems(
@@ -761,6 +770,38 @@ async function exerciseTutorialGroundDrop(host, page, screenshotPath) {
     groundTextCount: 0,
     notification: await notification.getAttribute('aria-label'),
     pointerOnlyScreenshot: `${screenshotPath}-ground-health-potion-pointer-only.png`,
+  }
+}
+
+async function exerciseTutorialHealthPotionGate(host, page, screenshotPath) {
+  const state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
+  assert.equal(state.world.tutorial?.stage, 18)
+  const playerId = host.hostPlayerId()
+  assert.ok(playerId)
+  const before = getPlayerEconomy(state, playerId).backpack
+  assert.equal(before.filter(({ nativeSubtype, nativeTypeId }) => (
+    nativeTypeId === 7001 && nativeSubtype === 0
+  )).reduce((total, item) => total + item.quantity, 0), 1)
+  assert.equal(before.some(({ nativeSubtype, nativeTypeId }) => (
+    nativeTypeId === 7001 && nativeSubtype === 1
+  )), false)
+
+  await page.locator('.hub-hud-potion-button-red').click()
+  const survive = page.locator('.tutorial-overlay[data-stage="19"]')
+  await survive.waitFor({ timeout: 15_000 })
+  assert.match(await survive.locator('.tutorial-instruction .sr-only').innerText(), /^SURVIVE\b/)
+  const after = getPlayerEconomy(host.state(), playerId).backpack
+  assert.equal(after.some(({ nativeSubtype, nativeTypeId }) => (
+    nativeTypeId === 7001 && nativeSubtype === 0
+  )), false)
+  const screenshot = `${screenshotPath}-first-health-potion-survive.png`
+  await page.screenshot({ path: screenshot })
+  return {
+    healthPotionCountAfter: 0,
+    healthPotionCountBefore: 1,
+    screenshot,
+    stage: 19,
   }
 }
 

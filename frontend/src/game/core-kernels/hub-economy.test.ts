@@ -29,6 +29,7 @@ import {
   creditLootGold,
   createEquipmentInventoryItem,
   createHubEconomy,
+  discardInventoryItem,
   dyeInventoryClothing,
   dowse,
   economyHasWizardKey,
@@ -381,6 +382,32 @@ test('native potion use decrements one stacked object and destroys the empty sta
 
   const equipment = consumeInventoryItem(initial, initial.equipment.hat!.id)
   assert.equal(equipment.reason, 'item-not-found')
+})
+
+test('inventory discard removes one whole nested object and preserves its siblings', () => {
+  const initial = createHubEconomy(1)
+  const health = {
+    ...initial.backpack.find(({ kind }) => kind === 'health-potion')!,
+    id: 9_001,
+    quantity: 3,
+  }
+  const mana = {
+    ...initial.backpack.find(({ kind }) => kind === 'mana-potion')!,
+    id: 9_002,
+  }
+  const sack = nativeTestSack(9_003, [health, mana])
+  const source = { ...initial, backpack: [sack] }
+
+  const discarded = discardInventoryItem(source, health.id)
+  assert.equal(discarded.accepted, true)
+  assert.equal(findInventoryItem(discarded.state.backpack, health.id), null)
+  assert.strictEqual(findInventoryItem(discarded.state.backpack, mana.id), mana)
+  assert.equal(findInventoryItem(discarded.state.backpack, sack.id)?.contents?.length, 1)
+
+  const absent = discardInventoryItem(discarded.state, health.id)
+  assert.equal(absent.accepted, false)
+  assert.equal(absent.reason, 'item-not-found')
+  assert.strictEqual(absent.state, discarded.state)
 })
 
 test('a post-run Fomentius restock advances native entropy without resetting the ledger', () => {

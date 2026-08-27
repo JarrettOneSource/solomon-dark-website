@@ -658,7 +658,7 @@ test('current schema resumes the complete stock Tutorial controller and exact le
   )
   assert.equal(encoded.profile.economy.backpack.length, 2)
   assert.deepEqual(
-    encoded.continuation.simulation.playerEntities.economies[0].backpack[2],
+    encoded.continuation.simulation.playerEntities.economies[0].backpack[0],
     { ...nativeTutorialAmuletItem(), id: tutorialEconomy.nextItemId },
   )
   const retired = JSON.parse(retireGameSaveWizard(document))
@@ -674,7 +674,7 @@ test('current schema resumes the complete stock Tutorial controller and exact le
   assert.equal(restored.loadedBoneyard?.sourceSha256, '97802f2ca45d9bc6f90a497e7c12a55926298161e191fa70eee5e666b90106ed')
   assert.equal(restored.state.world.kind, 'boneyard')
   assert.deepEqual(
-    restored.state.playerEntities.economies[0]?.backpack[2],
+    restored.state.playerEntities.economies[0]?.backpack[0],
     { ...nativeTutorialAmuletItem(), id: tutorialEconomy.nextItemId },
   )
   if (restored.state.world.kind !== 'boneyard') throw new Error('expected Tutorial')

@@ -42,6 +42,11 @@ test('enters the stock Tutorial as a solo authored encounter with its native loa
   assert.equal(state.world.encounter?.tutorialDialogueTicks, 3_054)
   assert.equal(state.world.tutorialProfileEconomy?.collegeIntroPending, true)
   assert.equal(state.world.tutorialProfileEconomy?.tutorialPending, true)
+  assert.deepEqual(getPlayerEconomy(state, 'owner').backpack, [])
+  assert.deepEqual(
+    state.world.tutorialProfileEconomy?.backpack.map(({ name }) => name),
+    ['Health Potion', 'Mana Potion'],
+  )
   assert.deepEqual(state.secondaryAbilities.actors.map((actor) => ({
     damage: actor.damage,
     kind: actor.kind,
@@ -75,6 +80,61 @@ test('enters the stock Tutorial as a solo authored encounter with its native loa
   }, 'owner')
   assert.equal(completedProfile.collegeIntroPending, true)
   assert.equal(completedProfile.tutorialPending, false)
+})
+
+test('one authored Health Potion drink clears stage 18 and starts survival', () => {
+  const loaded = materializeStockTutorial(Buffer.alloc(16, 41))
+  let state = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loaded)
+  if (state.world.kind !== 'boneyard' || !state.world.tutorial) {
+    throw new Error('expected Tutorial controller')
+  }
+  const authoredHealthPotion = state.world.tutorialProfileEconomy?.backpack.find((item) => (
+    item.nativeTypeId === 7001 && item.nativeSubtype === 0
+  ))
+  assert.ok(authoredHealthPotion)
+  const inserted = insertPlayerEntityLootItem(
+    state.playerEntities,
+    'owner',
+    authoredHealthPotion,
+  )
+  assert.equal(inserted.accepted, true)
+  state = {
+    ...state,
+    playerEntities: inserted.store,
+    world: {
+      ...state.world,
+      tutorial: {
+        ...state.world.tutorial,
+        introActive: false,
+        introBlend: 1,
+        introDelayTicksRemaining: 0,
+        introFade: 0,
+        introMovementTicksRemaining: 0,
+        stage: 18,
+      },
+    },
+  }
+
+  state = stepGameSimulationTick(state, {})
+  assert.equal(state.world.kind === 'boneyard' ? state.world.tutorial?.stage : null, 18)
+  const potion = getPlayerEconomy(state, 'owner').backpack.find((item) => (
+    item.nativeTypeId === 7001 && item.nativeSubtype === 0
+  ))
+  assert.ok(potion)
+  assert.equal(potion.quantity, 1)
+
+  const consumed = applyGameSimulationHubAction(state, 'owner', {
+    type: 'consume',
+    itemId: potion.id,
+  })
+  assert.equal(consumed.accepted, true)
+  assert.equal(getPlayerEconomy(consumed.state, 'owner').backpack.some((item) => (
+    item.nativeTypeId === 7001 && item.nativeSubtype === 0
+  )), false)
+
+  state = stepGameSimulationTick(consumed.state, {})
+  assert.equal(state.world.kind === 'boneyard' ? state.world.tutorial?.stage : null, 19)
+  assert.equal(state.world.kind === 'boneyard' ? state.world.tutorial?.waveOrdinal : null, 6)
 })
 
 test('Tutorial Game Over starts the title walk and auto-opens the story Office dialogue before Create', () => {

@@ -1185,6 +1185,17 @@ export function consumeInventoryItem(
   })
 }
 
+export function discardInventoryItem(
+  source: HubEconomyState,
+  itemId: number,
+): HubEconomyResult {
+  if (!hubEconomyInventoryIsValid(source)) return rejected(source, 'invalid-inventory')
+  const backpack = removeInventoryTreeItem(source.backpack, itemId, null)?.items
+  return backpack
+    ? accepted({ ...source, backpack })
+    : rejected(source, 'item-not-found')
+}
+
 export function readInventorySkillBook(
   source: HubEconomyState,
   itemId: number,
