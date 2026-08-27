@@ -103,6 +103,7 @@ interface HubSceneProps {
   belt: PlayerBeltComponent
   boneyards: readonly BoneyardChoice[]
   chatInputActive: boolean
+  gameplayHudHidden: boolean
   getPingMs: () => number | null
   initialSnapshot: GameSnapshot
   inputBlocked: boolean
@@ -147,6 +148,7 @@ interface HubSceneProps {
 }
 
 type RendererState = 'loading' | 'ready'
+const EMPTY_WORLD_SPEECHES: readonly GameWorldSpeech[] = Object.freeze([])
 const HUB_TEACHER_POSITION = { x: 576.5, y: 710.5 } as const
 const HUB_REGION_ACCESSIBILITY: Readonly<Record<HubRegionId, string>> = {
   courtyard: 'College courtyard. Move with the configured keys, a controller, or the touch joystick.',
@@ -162,6 +164,7 @@ export default function HubScene({
   belt,
   boneyards,
   chatInputActive,
+  gameplayHudHidden,
   getPingMs,
   initialSnapshot,
   inputBlocked,
@@ -216,6 +219,7 @@ export default function HubScene({
   const rendererRef = useRef<HubWorldRenderer | null>(null)
   const inputRef = useRef<BrowserGameplayInput | null>(null)
   const inputBlockedRef = useRef(inputBlocked)
+  const gameplayHudHiddenRef = useRef(gameplayHudHidden)
   const settingsRef = useRef(settings)
   const modalOpenRef = useRef(false)
   const levelUpPresentationIdRef = useRef(levelUpPresentationId)
@@ -223,6 +227,7 @@ export default function HubScene({
   const onReadyRef = useRef(onReady)
   const controllerActionsRef = useRef({ boneyards, onOpenSkills, onPauseRequest, onStartMatch })
   inputBlockedRef.current = inputBlocked
+  gameplayHudHiddenRef.current = gameplayHudHidden
   settingsRef.current = settings
   levelUpPresentationIdRef.current = levelUpPresentationId
   onLoadingErrorRef.current = onLoadingError
@@ -241,6 +246,8 @@ export default function HubScene({
   const [pickerOpen, setPickerOpen] = useState(false)
   const [controllerQuickbarSlot, setControllerQuickbarSlot] = useState<number | undefined>()
   const [hubUiSurface, setHubUiSurface] = useState<HubUiSurface>(null)
+  const hubUiSurfaceRef = useRef<HubUiSurface>(hubUiSurface)
+  hubUiSurfaceRef.current = hubUiSurface
   const [npcNoteboxOpen, setNpcNoteboxOpen] = useState(false)
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null)
   const [selectedGold, setSelectedGold] = useState<number | null>(null)
@@ -328,10 +335,12 @@ export default function HubScene({
   // The same gate as the OPEN MENU keydown below, published for the stage skull.
   const menuAvailable = !inputBlocked && !modalOpen && !transitionActive
   useEffect(() => {
-    onMenuAvailabilityChange?.(collegeIntro
-      ? 'hidden'
-      : menuAvailable ? 'available' : 'inert')
-  }, [collegeIntro, menuAvailable, onMenuAvailabilityChange])
+    if (gameplayHudHidden) {
+      onMenuAvailabilityChange?.('hidden')
+      return
+    }
+    onMenuAvailabilityChange?.(menuAvailable ? 'available' : 'inert')
+  }, [gameplayHudHidden, menuAvailable, onMenuAvailabilityChange])
 
   useEffect(() => () => onMenuAvailabilityChange?.('inert'), [onMenuAvailabilityChange])
 
@@ -342,10 +351,10 @@ export default function HubScene({
   useEffect(() => {
     if (inventoryRequestRef.current === inventoryRequestSequence) return
     inventoryRequestRef.current = inventoryRequestSequence
-    if (!inputBlocked && !pickerOpen && !transitionActive) {
+    if (!gameplayHudHidden && !inputBlocked && !pickerOpen && !transitionActive) {
       setHubUiSurface({ kind: 'inventory' })
     }
-  }, [inputBlocked, inventoryRequestSequence, pickerOpen, transitionActive])
+  }, [gameplayHudHidden, inputBlocked, inventoryRequestSequence, pickerOpen, transitionActive])
 
   useLayoutEffect(() => {
     const scene = sceneRef.current
@@ -380,7 +389,8 @@ export default function HubScene({
   useEffect(() => {
     const openSkills = (event: KeyboardEvent) => {
       if (
-        inputBlocked
+        gameplayHudHidden
+        || inputBlocked
         || pickerOpen
         || transitionActive
         || event.code !== settings.controls.openSkills
@@ -396,12 +406,13 @@ export default function HubScene({
     }
     window.addEventListener('keydown', openSkills, { capture: true })
     return () => window.removeEventListener('keydown', openSkills, { capture: true })
-  }, [inputBlocked, onOpenSkills, pickerOpen, settings.controls.openSkills, transitionActive])
+  }, [gameplayHudHidden, inputBlocked, onOpenSkills, pickerOpen, settings.controls.openSkills, transitionActive])
 
   useEffect(() => {
     const openPause = (event: KeyboardEvent) => {
       if (
-        inputBlocked
+        gameplayHudHidden
+        || inputBlocked
         || modalOpen
         || transitionActive
         || event.code !== settings.controls.openMenu
@@ -416,17 +427,22 @@ export default function HubScene({
     }
     window.addEventListener('keydown', openPause)
     return () => window.removeEventListener('keydown', openPause)
-  }, [inputBlocked, modalOpen, onPauseRequest, settings.controls.openMenu, transitionActive])
+  }, [gameplayHudHidden, inputBlocked, modalOpen, onPauseRequest, settings.controls.openMenu, transitionActive])
 
   useLayoutEffect(() => {
     rendererRef.current?.setLevelUpPresentation(levelUpPresentationId)
   }, [levelUpPresentationId])
 
   useLayoutEffect(() => {
+    rendererRef.current?.setGameplayHudHidden(gameplayHudHidden)
+  }, [gameplayHudHidden, rendererState])
+
+  useLayoutEffect(() => {
     rendererRef.current?.setUiSurface(
-      hubUiSurface?.kind ?? (modalOpen || inputBlocked ? 'modal' : null),
+      gameplayHudHidden ? 'modal' : hubUiSurface?.kind
+        ?? (modalOpen || inputBlocked ? 'modal' : null),
     )
-  }, [hubUiSurface?.kind, inputBlocked, modalOpen, rendererState])
+  }, [gameplayHudHidden, hubUiSurface?.kind, inputBlocked, modalOpen, rendererState])
 
   useEffect(() => {
     const footstepAudio = new PlayerFootstepAudioSynchronizer(
@@ -511,8 +527,14 @@ export default function HubScene({
     let cancelled = false
     let stopPresentationLoop: (() => void) | null = null
     let previousTeacherSeconds = hubInitialSnapshot.tick / 100
+    const publishInput = (nextInput: PlayerCharacterInput) => onInput(
+      gameplayHudHiddenRef.current
+        ? { ...nextInput, cast: { primary: false, quickbar: null } }
+        : nextInput,
+    )
     const input = createBrowserGameplayInput({
       claimQuickbarPress: (slot) => {
+        if (gameplayHudHiddenRef.current) return true
         const entry = samplePresentation().players[playerId]?.belt[slot] ?? null
         if (entry === null || entry.kind === 'skill') return false
         onHubAction({ slot, type: 'activate-belt-slot' })
@@ -527,20 +549,23 @@ export default function HubScene({
         const player = snapshot.players[playerId]
         if (!participant || !player || participant.transition) return
         if (action === 'inventory') {
+          if (gameplayHudHiddenRef.current) return
           setHubUiSurface({ kind: 'inventory' })
           return
         }
         if (action === 'skills') {
+          if (gameplayHudHiddenRef.current) return
           setHubUiSurface(null)
           callbacks.onOpenSkills()
           return
         }
         if (action === 'pause') {
+          if (gameplayHudHiddenRef.current) return
           callbacks.onPauseRequest()
           return
         }
         const nearbyPlayer = nearestHubPlayer(snapshot, playerId)
-        if (nearbyPlayer) {
+        if (!gameplayHudHiddenRef.current && nearbyPlayer) {
           setSelectedGold(snapshot.players[nearbyPlayer]?.economy.gold ?? null)
           setSelectedPlayerId(nearbyPlayer)
           return
@@ -558,6 +583,7 @@ export default function HubScene({
           setHubUiSurface({ interaction, kind: 'dialogue', source: 'world' })
           return
         }
+        if (gameplayHudHiddenRef.current) return
         if (snapshot.hostPlayerId !== playerId) return
         if (callbacks.boneyards.length === 1) {
           callbacks.onStartMatch(callbacks.boneyards[0]!.id)
@@ -569,7 +595,7 @@ export default function HubScene({
         if (!present) setControllerQuickbarSlot(undefined)
       },
       onGamepadQuickbarSelection: setControllerQuickbarSlot,
-      onInput,
+      onInput: publishInput,
       primaryCastingEnabled: false,
       viewportWidth: () => viewportRef.current.width,
       projectDirection: (direction) => {
@@ -630,6 +656,7 @@ export default function HubScene({
     setRendererError(null)
 
     void createHubWorldRenderer({
+      gameplayHudHidden: gameplayHudHiddenRef.current,
       initialSnapshot: hubInitialSnapshot,
       modAssets,
       playerId,
@@ -641,15 +668,22 @@ export default function HubScene({
         return
       }
       rendererRef.current = renderer
+      renderer.setGameplayHudHidden(gameplayHudHiddenRef.current)
       renderer.setLevelUpPresentation(levelUpPresentationIdRef.current)
-      renderer.setWorldSpeeches(worldSpeechesRef.current)
+      renderer.setUiSurface(
+        gameplayHudHiddenRef.current ? 'modal' : hubUiSurfaceRef.current?.kind
+          ?? (modalOpenRef.current || inputBlockedRef.current ? 'modal' : null),
+      )
+      renderer.setWorldSpeeches(
+        gameplayHudHiddenRef.current ? EMPTY_WORLD_SPEECHES : worldSpeechesRef.current,
+      )
       host.replaceChildren(renderer.canvas)
       renderer.resize(viewportRef.current)
       setRendererState('ready')
       onReadyRef.current()
       input.setBlocked(inputBlockedRef.current || modalOpenRef.current)
       stopPresentationLoop = startGamePresentationLoop((now) => {
-        onInput(input.sample().input)
+        publishInput(input.sample().input)
         const snapshot = samplePresentation(now)
         const teacherSeconds = snapshot.tick / 100
         for (const releaseIndex of hubTeacherReleasesBetween(
@@ -665,7 +699,9 @@ export default function HubScene({
           }
         }
         previousTeacherSeconds = teacherSeconds
-        renderer.setWorldSpeeches(worldSpeechesRef.current)
+        renderer.setWorldSpeeches(
+          gameplayHudHiddenRef.current ? EMPTY_WORLD_SPEECHES : worldSpeechesRef.current,
+        )
         renderer.render(snapshot)
       })
     }).catch((error: unknown) => {
@@ -689,7 +725,7 @@ export default function HubScene({
 
   const isHost = hostPlayerId === playerId
   const beginMatch = () => {
-    if (!isHost || inputBlocked || pickerOpen || transitionActive) return
+    if (gameplayHudHidden || !isHost || inputBlocked || pickerOpen || transitionActive) return
     if (boneyards.length === 1) {
       onStartMatch(boneyards[0].id)
       return
@@ -735,7 +771,7 @@ export default function HubScene({
     )
     if (!point) return
     const selectedPlayer = selectHubPlayerAtPoint(snapshot, playerId, point)
-    if (selectedPlayer) {
+    if (!gameplayHudHidden && selectedPlayer) {
       event.preventDefault()
       event.stopPropagation()
       setSelectedGold(snapshot.players[selectedPlayer]?.economy.gold ?? null)
@@ -780,6 +816,7 @@ export default function HubScene({
       data-discipline={localPlayer?.config.discipline ?? 'arcane'}
       data-element={element}
       data-gameplay-input-blocked={inputBlocked || modalOpen || rendererState !== 'ready'}
+      data-gameplay-hud={gameplayHudHidden ? 'hidden' : 'visible'}
       data-presentation-paused={false}
       data-hub-region={currentRegion}
       data-hub-ui-surface={hubUiSurface?.kind ?? 'none'}
@@ -822,12 +859,12 @@ export default function HubScene({
           mapLabel="Enter the Boneyard"
           mapTransitionActive={transitionActive}
           onInventoryClick={() => {
-            if (!inputBlocked && !pickerOpen && !transitionActive) {
+            if (!gameplayHudHidden && !inputBlocked && !pickerOpen && !transitionActive) {
               setHubUiSurface({ kind: 'inventory' })
             }
           }}
           onHubShortcutClick={(interaction) => {
-            if (inputBlocked || pickerOpen || transitionActive) return
+            if (gameplayHudHidden || inputBlocked || pickerOpen || transitionActive) return
             const shortcut = HUB_HUD_SHORTCUTS.find((entry) => entry.interaction === interaction)
             if (!shortcut) return
             audio.playSound('click')
@@ -843,7 +880,7 @@ export default function HubScene({
             if (!input) return
             const entry = samplePresentation().players[playerId]?.belt[slot] ?? null
             if (pressed && entry !== null && entry.kind !== 'skill') {
-              if (!inputBlocked && !pickerOpen && !transitionActive) {
+              if (!gameplayHudHidden && !inputBlocked && !pickerOpen && !transitionActive) {
                 onHubAction({ slot, type: 'activate-belt-slot' })
               }
               return
@@ -864,14 +901,14 @@ export default function HubScene({
             audio.playSound('poof')
           } : undefined}
           onSkillBindingClick={(binding) => {
-            if (!inputBlocked && !pickerOpen && !transitionActive) {
+            if (!gameplayHudHidden && !inputBlocked && !pickerOpen && !transitionActive) {
               setHubUiSurface(null)
               onOpenSkillSelector(binding)
             }
           }}
           partyRoster={partyState?.partyRoster}
           onSkillsClick={() => {
-            if (!inputBlocked && !pickerOpen && !transitionActive) {
+            if (!gameplayHudHidden && !inputBlocked && !pickerOpen && !transitionActive) {
               setHubUiSurface(null)
               onOpenSkills()
             }
@@ -892,6 +929,7 @@ export default function HubScene({
           economy={economy}
           inputSuspended={chatInputActive}
           inventoryKeyCode={settings.controls.openInventory}
+          inventoryEnabled={!gameplayHudHidden}
           menuKeyCode={settings.controls.openMenu}
           memorial={memorial}
           modAssets={modAssets}

@@ -13,6 +13,7 @@ import {
   HUB_REGION_DEFINITIONS,
   clipHubRegionSegment,
   createHubCollegeIntroParticipantState,
+  createHubParticipantState,
   firstHubRegionLineObstruction,
   hubIncomingPlacement,
   hubPortalAt,
@@ -23,6 +24,7 @@ import {
   type HubParticipantState,
   type HubRegionId,
 } from '../core-kernels/hub-regions.ts'
+import { hubCollegeAdmissionPreLoadout } from '../core-kernels/college-admission-lifecycle.ts'
 import {
   NATIVE_COLLEGE_COURTYARD_PATH,
   NATIVE_COLLEGE_TITLE_CURSOR_STEP,
@@ -182,6 +184,39 @@ test('every shared Hub scripted plan declares movement-owned facing', () => {
   const plan = planHubScriptedMovement(player, { x: 40, y: 20 }, 1)
   assert.equal(plan.face, true)
   assert.equal(plan.movementActive, true)
+})
+
+test('College admission stays pre-loadout until the confirmed Office return', () => {
+  const fresh = createHubParticipantState()
+  assert.equal(hubCollegeAdmissionPreLoadout(fresh, true), true)
+  assert.equal(hubCollegeAdmissionPreLoadout(undefined, true), true)
+  assert.equal(hubCollegeAdmissionPreLoadout(fresh, false), false)
+
+  const loadout: HubParticipantState = {
+    collegeIntro: null,
+    region: 'courtyard',
+    transition: {
+      alpha: 1,
+      destination: 'courtyard',
+      phase: 'college-loadout',
+      scriptedSpeed: 1,
+      scriptedTarget: { x: 952.5, y: 157.5 },
+      sourceRegion: 'office',
+    },
+  }
+  assert.equal(hubCollegeAdmissionPreLoadout(loadout, true), true)
+  assert.equal(hubCollegeAdmissionPreLoadout({
+    ...loadout,
+    transition: { ...loadout.transition!, phase: 'incoming' },
+  }, true), false)
+  assert.equal(hubCollegeAdmissionPreLoadout({
+    ...loadout,
+    transition: {
+      ...loadout.transition!,
+      phase: 'incoming',
+      sourceRegion: 'library',
+    },
+  }, true), true)
 })
 
 test('encodes the recovered College room graph, bounds, and ordinary portal constants', () => {

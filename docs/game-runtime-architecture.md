@@ -658,21 +658,39 @@ again until an explicit operator reinstall or a different `main` commit.
   holding peers. No elapsed disconnect time becomes simulation catch-up. New
   Party-ID/public/invite-only members remain excluded from an active run.
 - A fresh normal wizard has one participant-local College admission before
-  Create and ordinary Courtyard control. The host holds the unselected player
-  at Office `(512,562)` and alpha one until that client's real Hub renderer
-  acknowledges readiness; only then does the 100-tick incoming reveal begin.
-  Ordinary Office movement and the conditional story Archchancellor/Polisher
-  dialogue are then live. Physical contact with the normal south exit starts
-  the existing outgoing transition; exact black opens Create and freezes the
-  covered Courtyard handoff. Element/Discipline confirmation resumes the
-  existing Courtyard incoming kernel. Tutorial entry does not consume this
-  owner; Tutorial completion enters it before any retained loadout. Other Hub
-  participants and rooms keep ticking, while run-start and non-Office service
-  mutations from the admitting participant remain sealed. Exact Courtyard
-  loadout confirmation clears both durable onboarding bits and emits the owner
-  completion edge before the ordinary incoming reveal. An interruption before
-  confirmation resumes the College obligation; an interruption after it can
-  never re-arm Tutorial or College behavior.
+  Create and ordinary Courtyard control. The host holds the authoritative
+  ten-point Courtyard walk until that client's real Hub renderer acknowledges
+  readiness, then advances both native title cards, the covered Office switch,
+  the seven-point Office approach, and automatic `ARCH_INTRO_0`. Acknowledging
+  that dialogue releases forced movement; physical contact with the normal
+  south exit starts the existing outgoing transition, and exact black enters
+  the `college-loadout` wait and opens Create. Element/Discipline confirmation
+  alone changes that wait to the Office-to-Courtyard `incoming` transition.
+  Tutorial entry does not consume this owner; Tutorial completion enters it
+  before any retained loadout. Other Hub participants and rooms keep ticking,
+  while run-start and non-Office service mutations from the admitting
+  participant remain sealed. Loadout confirmation atomically replaces the
+  College appearance with the selected starter appearance, clears both durable
+  onboarding bits, emits the owner completion edge, and changes the covered
+  wait to the ordinary incoming reveal. Save schemas retain the exact partial
+  admission program, acknowledged Office state, covered loadout wait, or
+  completed incoming transition, so refresh resumes the correct side of that
+  boundary without replaying or skipping it. An interruption before
+  confirmation resumes the obligation; after confirmation neither Tutorial nor
+  College can re-arm.
+- College presentation chrome is a consumer of that authoritative lifecycle,
+  not a timeout or component-mount heuristic. While the local scene is Hub and
+  pre-loadout predicate is true, gameplay HUD, party, chat, menu, mod panels,
+  fullscreen chrome, world UI markers, remote nameplates, activity badges, and
+  speech bubbles stay suppressed. That predicate requires
+  `collegeIntroPending`, except that the exact post-confirmation
+  Office-to-Courtyard `incoming` transition is always released; this both
+  follows the current atomic bit clear and safely classifies an already-saved
+  continuation from the earlier settlement-clear schema. Create owns the
+  visible screen at the covered loadout wait. On coarse pointers, the touch
+  locomotion control returns after the forced program/dialogue ends because the
+  manual Office exit otherwise has no browser input surface; the rest of the
+  chrome remains suppressed until Create.
 - Player-character movement uses a two-phase shared kernel: first plan native
   intent/velocity, then let the active world resolve collision, then commit the
   resolved position plus native heading/gait state. Hub and Boneyard geometry

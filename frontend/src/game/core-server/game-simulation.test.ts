@@ -9,6 +9,7 @@ import {
   GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS,
 } from '../core-kernels/game-run.ts'
 import { NATIVE_HALL_OF_FAME_SCORE } from '../core-kernels/hall-of-fame-score.ts'
+import { hubCollegeAdmissionPreLoadout } from '../core-kernels/college-admission-lifecycle.ts'
 import { NATIVE_SECONDARY_ABILITY_IDS } from '../core-kernels/native-secondary-ability-contract.ts'
 import {
   NATIVE_WELD_BUILDS,
@@ -196,6 +197,10 @@ test('loadout confirmation consumes onboarding before the ordinary Courtyard ret
   const initialStarterTint = getPlayerEconomy(state, 'owner').equipment.hat?.iconTints
   assert.ok(initialStarterTint)
   assert.deepEqual(getPlayerEconomy(state, 'owner').equipment.robe?.iconTints, initialStarterTint)
+  assert.equal(hubCollegeAdmissionPreLoadout(
+    ownerParticipant(),
+    getPlayerEconomy(state, 'owner').collegeIntroPending,
+  ), true)
 
   state = armGameSimulationCollegeIntro(state, 'owner')
   assert.equal(ownerParticipant()?.region, 'courtyard')
@@ -219,6 +224,10 @@ test('loadout confirmation consumes onboarding before the ordinary Courtyard ret
   assert.equal(ownerParticipant()?.collegeIntro?.phase, 'arch-dialogue')
   assert.equal(getPlayerEconomy(state, 'owner').collegeIntroPending, true)
   assert.equal(getPlayerEconomy(state, 'owner').revision, initialRevision)
+  assert.equal(hubCollegeAdmissionPreLoadout(
+    ownerParticipant(),
+    getPlayerEconomy(state, 'owner').collegeIntroPending,
+  ), true)
 
   const acknowledged = applyGameSimulationHubAction(state, 'owner', {
     type: 'acknowledge-college-intro-dialogue',
@@ -227,6 +236,10 @@ test('loadout confirmation consumes onboarding before the ordinary Courtyard ret
   state = acknowledged.state
   assert.equal(ownerParticipant()?.collegeIntro, null)
   assert.strictEqual(armGameSimulationCollegeIntro(state, 'owner'), state)
+  assert.equal(hubCollegeAdmissionPreLoadout(
+    ownerParticipant(),
+    getPlayerEconomy(state, 'owner').collegeIntroPending,
+  ), true)
 
   state = {
     ...state,
@@ -242,11 +255,19 @@ test('loadout confirmation consumes onboarding before the ordinary Courtyard ret
   }
   state = stepGameSimulationTick(state, {})
   assert.equal(ownerParticipant()?.transition?.phase, 'outgoing')
+  assert.equal(hubCollegeAdmissionPreLoadout(
+    ownerParticipant(),
+    getPlayerEconomy(state, 'owner').collegeIntroPending,
+  ), true)
   for (let tick = 0; tick < 101; tick += 1) state = stepGameSimulationTick(state, {})
   assert.equal(ownerParticipant()?.region, 'courtyard')
   assert.equal(ownerParticipant()?.transition?.phase, 'college-loadout')
   assert.deepEqual(getPlayerCharacter(state, 'owner').position, { x: 952.5, y: 67.5 })
   assert.equal(getPlayerEconomy(state, 'owner').collegeIntroPending, true)
+  assert.equal(hubCollegeAdmissionPreLoadout(
+    ownerParticipant(),
+    getPlayerEconomy(state, 'owner').collegeIntroPending,
+  ), true)
 
   const confirmed = confirmGameSimulationLoadout(state, 'owner', {
     discipline: 'body',
@@ -274,6 +295,10 @@ test('loadout confirmation consumes onboarding before the ordinary Courtyard ret
   assert.equal(getPlayerEconomy(state, 'owner').tutorialPending, false)
   assert.equal(getPlayerEconomy(state, 'owner').revision, initialRevision + 2)
   assert.strictEqual(armGameSimulationCollegeIntro(state, 'owner'), state)
+  assert.equal(hubCollegeAdmissionPreLoadout(
+    ownerParticipant(),
+    getPlayerEconomy(state, 'owner').collegeIntroPending,
+  ), false)
 
   for (let ticks = 0; ownerParticipant()?.transition && ticks < 200; ticks += 1) {
     state = stepGameSimulationTick(state, {})
@@ -283,6 +308,10 @@ test('loadout confirmation consumes onboarding before the ordinary Courtyard ret
   assert.equal(getPlayerEconomy(state, 'owner').collegeIntroPending, false)
   assert.equal(getPlayerEconomy(state, 'owner').revision, initialRevision + 2)
   assert.strictEqual(armGameSimulationCollegeIntro(state, 'owner'), state)
+  assert.equal(hubCollegeAdmissionPreLoadout(
+    ownerParticipant(),
+    getPlayerEconomy(state, 'owner').collegeIntroPending,
+  ), false)
 })
 
 test('declining the Tutorial atomically consumes both fresh onboarding obligations', () => {
@@ -296,6 +325,10 @@ test('declining the Tutorial atomically consumes both fresh onboarding obligatio
   assert.equal(economy.tutorialPending, false)
   assert.equal(economy.collegeIntroPending, false)
   assert.equal(economy.revision, initialEconomy.revision + 1)
+  assert.equal(hubCollegeAdmissionPreLoadout(
+    declined.world.kind === 'hub' ? declined.world.participants.owner : undefined,
+    economy.collegeIntroPending,
+  ), false)
   assert.strictEqual(armGameSimulationCollegeIntro(declined, 'owner'), declined)
   assert.strictEqual(declineGameSimulationTutorial(declined, 'owner'), declined)
 

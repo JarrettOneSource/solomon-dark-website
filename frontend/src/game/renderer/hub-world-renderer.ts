@@ -128,6 +128,7 @@ export interface HubWorldRenderer {
   destroy(): void
   render(snapshot: HubPresentationFrame): void
   resize(viewport: GameViewportLayout, devicePixelRatio?: number): void
+  setGameplayHudHidden(hidden: boolean): void
   setLevelUpPresentation(presentationId: number | null): void
   setSettings(settings: HubWorldPresentationSettings): void
   setUiSurface(surface: HubNpcMarkerSurface): void
@@ -141,6 +142,7 @@ export type HubWorldPresentationSettings = Pick<
 
 interface HubWorldRendererOptions {
   devicePixelRatio?: number
+  gameplayHudHidden?: boolean
   initialSnapshot: HubPresentationFrame
   modAssets?: readonly GameModAsset[]
   now?: () => number
@@ -250,9 +252,11 @@ export async function createHubWorldRenderer(
   fadeCover.eventMode = 'none'
   application.stage.addChild(fadeCover)
   const canvas = application.canvas as HTMLCanvasElement
+  let gameplayHudHidden = options.gameplayHudHidden === true
   canvas.className = 'hub-world-canvas'
   canvas.setAttribute('aria-hidden', 'true')
   canvas.dataset.gameRenderer = 'pixi-webgl'
+  canvas.dataset.gameplayHudHidden = `${gameplayHudHidden}`
   canvas.dataset.staticCulling = 'none'
   canvas.dataset.studentCulling = 'instrumentation-only'
   canvas.dataset.textureSources = JSON.stringify(textures.assetSources)
@@ -676,11 +680,11 @@ export async function createHubWorldRenderer(
           includePlayer: (playerId) => (
             snapshot.world.participants[playerId]?.region === participant.region
           ),
-          renderable: true,
+          renderable: !gameplayHudHidden,
         },
       )
       const activityDiagnostics = playerActivities.update(
-        deriveHubPlayerActivityItems(
+        gameplayHudHidden ? [] : deriveHubPlayerActivityItems(
           snapshot.players,
           snapshot.world.participants,
           participant.region,
@@ -707,7 +711,7 @@ export async function createHubWorldRenderer(
           includePlayer: (playerId) => (
             snapshot.world.participants[playerId]?.region === participant.region
           ),
-          renderable: true,
+          renderable: !gameplayHudHidden,
         },
       )
       canvas.dataset.worldSpeechActiveCount = `${worldSpeechDiagnostics.activeCount}`
@@ -716,6 +720,7 @@ export async function createHubWorldRenderer(
       canvas.dataset.worldSpeechMaximumAlpha = `${worldSpeechDiagnostics.maximumAlpha}`
       canvas.dataset.worldSpeechPlayerIds = worldSpeechDiagnostics.playerIds.join(',')
       canvas.dataset.worldSpeechSequences = worldSpeechDiagnostics.sequences.join(',')
+      canvas.dataset.worldUiRenderable = `${!gameplayHudHidden}`
       secondaryScreenFlash.alpha = screenOverlay?.alpha ?? 0
       secondaryScreenFlash.tint = screenOverlay?.color ?? 0xffffff
       secondaryScreenFlash.visible = screenOverlay !== null
@@ -786,6 +791,11 @@ export async function createHubWorldRenderer(
         ? 'none'
         : `${armedLevelUpPresentationId}`
       canvas.dataset.levelUpDynamicSuppressed = 'false'
+    },
+    setGameplayHudHidden(hidden) {
+      if (destroyed) return
+      gameplayHudHidden = hidden
+      canvas.dataset.gameplayHudHidden = `${hidden}`
     },
     setSettings(settings) {
       if (destroyed) return

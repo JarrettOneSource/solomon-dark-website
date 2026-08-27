@@ -1265,12 +1265,16 @@ async function exerciseTutorialCollegeAdmission(host, page, screenshotPath) {
   const title7 = await collegeTitleReceipt(page)
   assert.ok(title7.cursor >= 0 && title7.cursor <= NATIVE_COLLEGE_TITLE_SWITCH_CURSOR)
   const title7Wizard = await collegeWizardReceipt(host, page)
+  const title7Chrome = await collegeAdmissionChromeReceipt(page)
+  assertCollegeAdmissionChromeHidden(title7Chrome, false, 'Title 7')
   assertCollegeWizardReceipt(title7Wizard, 'Title 7')
   await page.screenshot({ path: `${screenshotPath}-raptisoft-presents.png` })
   await waitForVisibleCollegeTitle(page, 9)
   const title9 = await collegeTitleReceipt(page)
   assert.ok(title9.cursor > NATIVE_COLLEGE_TITLE_SWITCH_CURSOR && title9.cursor <= 5)
   const title9Wizard = await collegeWizardReceipt(host, page)
+  const title9Chrome = await collegeAdmissionChromeReceipt(page)
+  assertCollegeAdmissionChromeHidden(title9Chrome, false, 'Title 9')
   assertCollegeWizardReceipt(title9Wizard, 'Title 9')
   const blockerTraversal = collegeBlockerTraversalReceipt(host, playerId, collisionBlockers)
   await page.screenshot({ path: `${screenshotPath}-solomon-dark-title.png` })
@@ -1284,6 +1288,8 @@ async function exerciseTutorialCollegeAdmission(host, page, screenshotPath) {
   assert.equal(await office.getAttribute('data-hub-ui-surface'), 'dialogue')
   assert.equal(await office.getAttribute('data-college-intro'), 'arch-dialogue')
   assert.equal(await page.getByRole('dialog', { name: 'Talking to The Polisher' }).count(), 0)
+  const dialogueChrome = await collegeAdmissionChromeReceipt(page)
+  assertCollegeAdmissionChromeHidden(dialogueChrome, false, 'Arch dialogue')
   const automaticVoices = await page.evaluate((fromIndex) => window.__sdrAudioEvents
     .slice(fromIndex)
     .filter(({ src, type }) => type === 'buffer-start'
@@ -1309,6 +1315,25 @@ async function exerciseTutorialCollegeAdmission(host, page, screenshotPath) {
   const acknowledgedSave = await waitForLocalCollegeSave(page, playerId, null)
   assert.equal(acknowledgedSave.starterTint, title9Wizard.primaryTint)
   await dialog.waitFor({ state: 'hidden', timeout: 15_000 })
+  const acknowledgedChrome = await collegeAdmissionChromeReceipt(page)
+  assertCollegeAdmissionChromeHidden(acknowledgedChrome, true, 'acknowledged Office')
+
+  await page.reload({ timeout: 90_000, waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 180_000 })
+  await page.evaluate(() => window.__sdrRestoreAudioPreload?.())
+  await page.getByRole('button', { name: 'Play' }).click()
+  await page.getByRole('button', { name: 'Last game' }).click()
+  const restoredOffice = page.locator(
+    '.hub-scene[data-hub-region="office"][data-gameplay-hud="hidden"]',
+  )
+  await restoredOffice.waitFor({ timeout: 90_000 })
+  await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 90_000 })
+  assert.equal(await restoredOffice.getAttribute('data-college-intro'), null)
+  assert.equal(await page.getByRole('dialog', { name: 'Talking to The Archchancellor' }).count(), 0)
+  const restoredOfficeChrome = await collegeAdmissionChromeReceipt(page)
+  assertCollegeAdmissionChromeHidden(restoredOfficeChrome, true, 'restored acknowledged Office')
+  const restoredOfficeScreenshot = `${screenshotPath}-tutorial-college-restored-office.png`
+  await page.screenshot({ path: restoredOfficeScreenshot })
 
   const create = page.locator('.create-menu-scene[data-motion-settled="true"]')
   await moveHubAxis(page, 'a', 'playerX', 300, 'at-most')
@@ -1320,6 +1345,9 @@ async function exerciseTutorialCollegeAdmission(host, page, screenshotPath) {
   } finally {
     await page.keyboard.up('s')
   }
+  const createChrome = await collegeAdmissionChromeReceipt(page)
+  assert.equal(createChrome.chatMounted, true)
+  assert.equal(createChrome.sceneGate, null)
   await page.screenshot({ path: `${screenshotPath}-tutorial-college-create.png` })
   await page.getByRole('button', { name: /air/i }).click()
   await page.locator('.create-menu-disciplines[data-visible="true"]').waitFor({
@@ -1335,6 +1363,12 @@ async function exerciseTutorialCollegeAdmission(host, page, screenshotPath) {
     return canvas?.getAttribute('data-hub-region') === 'courtyard'
       && canvas?.getAttribute('data-transition-phase') === 'none'
   }, undefined, { timeout: 30_000 })
+  const returnedHubChrome = await collegeAdmissionChromeReceipt(page)
+  assert.equal(returnedHubChrome.sceneGate, 'visible')
+  assert.equal(returnedHubChrome.gameHudVisible, true)
+  assert.equal(returnedHubChrome.chatMounted, true)
+  assert.equal(returnedHubChrome.markerSurface, 'none')
+  assert.equal(returnedHubChrome.worldUiRenderable, 'true')
   const resetState = host.state()
   const resetEconomy = getPlayerEconomy(resetState, playerId)
   const resetProgression = getPlayerProgression(resetState, playerId)
@@ -1406,6 +1440,16 @@ async function exerciseTutorialCollegeAdmission(host, page, screenshotPath) {
     blockerTraversal,
     completionBoundary,
     completionSave,
+    chrome: {
+      acknowledgedOffice: acknowledgedChrome,
+      create: createChrome,
+      dialogue: dialogueChrome,
+      restoredOffice: restoredOfficeChrome,
+      restoredOfficeScreenshot,
+      returnedHub: returnedHubChrome,
+      title7: title7Chrome,
+      title9: title9Chrome,
+    },
     createAfterManualExit: true,
     facing,
     officePlayerPosition: getPlayerCharacter(state, playerId).position,
@@ -1418,6 +1462,60 @@ async function exerciseTutorialCollegeAdmission(host, page, screenshotPath) {
     title9,
     title9Wizard,
   }
+}
+
+async function collegeAdmissionChromeReceipt(page) {
+  return page.evaluate(() => {
+    const visible = (selector) => {
+      const element = document.querySelector(selector)
+      if (!(element instanceof HTMLElement)) return false
+      const style = getComputedStyle(element)
+      const bounds = element.getBoundingClientRect()
+      return style.display !== 'none'
+        && style.visibility !== 'hidden'
+        && Number(style.opacity) > 0
+        && bounds.width > 0
+        && bounds.height > 0
+    }
+    const scene = document.querySelector('.hub-scene')
+    const canvas = document.querySelector('.hub-world-canvas')
+    return {
+      chatMounted: document.querySelector('.game-chat') !== null,
+      coarse: matchMedia('(hover: none) and (pointer: coarse)').matches,
+      fullscreenMounted: document.querySelector('.game-fullscreen-control') !== null,
+      gameHudVisible: visible('.hub-hud'),
+      joystickVisible: visible('.game-touch-joystick-movement'),
+      markerSurface: canvas?.getAttribute('data-npc-marker-surface') ?? null,
+      menuMounted: document.querySelector('.game-menu-skull') !== null,
+      modUiCount: document.querySelectorAll('.mod-minimap, .mod-panels, .mod-scene-overlay').length,
+      npcDirectionalHintCount: canvas?.getAttribute('data-npc-directional-hint-count') ?? null,
+      npcMarkerIds: canvas?.getAttribute('data-npc-marker-ids') ?? null,
+      npcWalkToTalkVisible: canvas?.getAttribute('data-npc-walk-to-talk-visible') ?? null,
+      partyVisible: visible('.hub-party-panel'),
+      sceneGate: scene?.getAttribute('data-gameplay-hud') ?? null,
+      worldUiRenderable: canvas?.getAttribute('data-world-ui-renderable') ?? null,
+    }
+  })
+}
+
+function assertCollegeAdmissionChromeHidden(receipt, manualExit, label) {
+  assert.equal(receipt.sceneGate, 'hidden', `${label} scene gate`)
+  assert.equal(receipt.gameHudVisible, false, `${label} gameplay HUD`)
+  assert.equal(receipt.partyVisible, false, `${label} party panel`)
+  assert.equal(receipt.chatMounted, false, `${label} chat`)
+  assert.equal(receipt.menuMounted, false, `${label} menu skull`)
+  assert.equal(receipt.fullscreenMounted, false, `${label} fullscreen`)
+  assert.equal(receipt.modUiCount, 0, `${label} mod UI`)
+  assert.equal(receipt.markerSurface, 'modal', `${label} world markers`)
+  assert.equal(receipt.npcDirectionalHintCount, '0', `${label} directional hints`)
+  assert.equal(receipt.npcMarkerIds, '', `${label} NPC markers`)
+  assert.equal(receipt.npcWalkToTalkVisible, 'false', `${label} onboarding prompt`)
+  assert.equal(receipt.worldUiRenderable, 'false', `${label} world UI`)
+  assert.equal(
+    receipt.joystickVisible,
+    manualExit && receipt.coarse,
+    `${label} touch locomotion exception`,
+  )
 }
 
 async function startCollegeFacingSampler(page) {
@@ -1578,13 +1676,20 @@ async function verifyRestoredCollegeCollision(host, playerId) {
   assert.equal(live.world.participants[playerId]?.transition, null)
   const localPosition = { x: 1_000, y: 500 }
   const blockerPosition = { x: 1_040, y: 500 }
-  let next = {
-    ...live,
+  let next = live.playerEntities.identities.some(
+    ({ playerId: id }) => id === COLLEGE_BLOCKER_PLAYER_ID,
+  ) ? live : addPlayerCharacter(live, COLLEGE_BLOCKER_PLAYER_ID, {
+    discipline: 'mind',
+    displayName: 'Blocker',
+    element: 'water',
+  })
+  next = {
+    ...next,
     playerEntities: replacePlayerCharacter(
-      live.playerEntities,
+      next.playerEntities,
       playerId,
       {
-        ...getPlayerCharacter(live, playerId),
+        ...getPlayerCharacter(next, playerId),
         position: localPosition,
         velocity: { x: 0, y: 0 },
       },

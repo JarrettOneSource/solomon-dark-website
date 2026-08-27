@@ -33,6 +33,7 @@ import {
   type GameAudioScene,
 } from './game-audio-native.ts'
 import type { GameRunPhase } from './core-kernels/game-run.ts'
+import { hubCollegeAdmissionPreLoadout } from './core-kernels/college-admission-lifecycle.ts'
 import type { GameConnectionStage } from './engine.ts'
 import GameAccountName from './GameAccountName.tsx'
 import GameFullscreenButton from './GameFullscreenButton.tsx'
@@ -832,6 +833,13 @@ export default function MainMenuScene({
     && runtimeSnapshot.world.participants[session.playerId]?.transition?.phase
       === 'college-loadout',
   )
+  const collegeAdmissionHudHidden = screen === 'hub'
+    && session !== null
+    && runtimeSnapshot?.world.kind === 'hub'
+    && hubCollegeAdmissionPreLoadout(
+      runtimeSnapshot.world.participants[session.playerId],
+      runtimeSnapshot.players[session.playerId]?.economy.collegeIntroPending === true,
+    )
   useEffect(() => {
     if (!session || !runtimeSnapshot) return
     if (collegeLoadoutActive) {
@@ -1556,7 +1564,8 @@ export default function MainMenuScene({
 
   useEffect(() => {
     if (
-      loading !== null
+      collegeAdmissionHudHidden
+      || loading !== null
       || levelUpModalActive
       || gameplayResumeGrace !== null
       || (gameplayPause !== null && !ownsModalPause)
@@ -1564,8 +1573,12 @@ export default function MainMenuScene({
       setSkillBookOpen(false)
       setHudSkillSelector(null)
       setInventoryScreenOpen(false)
+      if (collegeAdmissionHudHidden) {
+        setChatOpen(false)
+        setHubPauseMenuOpen(false)
+      }
     }
-  }, [gameplayPause, gameplayResumeGrace, levelUpModalActive, loading, ownsModalPause])
+  }, [collegeAdmissionHudHidden, gameplayPause, gameplayResumeGrace, levelUpModalActive, loading, ownsModalPause])
   useEffect(() => {
     if (!session) return
     if (desiredModalPauseSource !== null) {
@@ -1847,6 +1860,7 @@ export default function MainMenuScene({
               belt={runtimeSnapshot.players[session.playerId]!.belt}
               boneyards={session.boneyards}
               chatInputActive={chatOpen}
+              gameplayHudHidden={collegeAdmissionHudHidden}
               getPingMs={session.getPingMs}
               inputBlocked={sceneInputBlocked}
               inventoryRequestSequence={inventoryRequestSequence}
@@ -1900,6 +1914,7 @@ export default function MainMenuScene({
           </Suspense>
         ) : null}
 
+        {!collegeAdmissionHudHidden && <>
         {session && runtimeSnapshot ? (
           <Suspense fallback={null}>
             <ModMinimap session={session} />
@@ -2068,6 +2083,7 @@ export default function MainMenuScene({
               settings={gameSettings}
             />
           ) : null}
+        </>}
 
         {(preparing || leaving || connectionError) && (
           <div className="main-menu-runtime-status" role={connectionError ? 'alert' : 'status'}>
@@ -2192,7 +2208,11 @@ export default function MainMenuScene({
             scene="dark-cloud"
             stage={stageRef}
           />
-        ) : screen === 'hub' && session && runtimeSnapshot && runtimeRunPhase !== 'game-over' ? (
+        ) : !collegeAdmissionHudHidden
+          && screen === 'hub'
+          && session
+          && runtimeSnapshot
+          && runtimeRunPhase !== 'game-over' ? (
           <GameMenuSkull
             availability={sceneMenuAvailability}
             frameScale={gameUiScale(gameSettings) * fixedViewport.displayScale}
@@ -2206,7 +2226,7 @@ export default function MainMenuScene({
       <div className="game-orientation-hint" role="status">
         Rotate your device to landscape to enter the College.
       </div>
-      <GameFullscreenButton />
+      {!collegeAdmissionHudHidden && <GameFullscreenButton />}
     </div>
   )
 }

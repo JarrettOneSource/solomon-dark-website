@@ -65,7 +65,7 @@ test('one stage skull: back out of the open modal first, else the scene menu beh
   assert.match(hub, /const menuAvailable = !inputBlocked && !modalOpen && !transitionActive/)
   assert.match(
     hub,
-    /onMenuAvailabilityChange\?\.\(collegeIntro\s*\? 'hidden'\s*: menuAvailable \? 'available' : 'inert'\)/,
+    /gameplayHudHidden[\s\S]*?onMenuAvailabilityChange\?\.\('hidden'\)[\s\S]*?menuAvailable \? 'available' : 'inert'/,
   )
   assert.match(boneyard, /const menuAvailable = !sceneInputBlocked && run\.phase === 'active'/)
   // Stock paints no skull until the tutorial unlocks the combat HUD (nativeTutorialHudAccess

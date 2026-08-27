@@ -19,8 +19,9 @@
   transform: translate(-50%, -50%);
 }
 
-.hub-scene[data-college-intro] .hub-hud,
-.hub-scene[data-college-intro] .hub-party-panel,
-.hub-scene[data-college-intro] .touch-joystick {
+.hub-scene[data-gameplay-hud='hidden'] .hub-hud,
+.hub-scene[data-gameplay-hud='hidden'] .hub-party-panel,
+.hub-scene[data-gameplay-hud='hidden'] .game-interact-prompt,
+.hub-scene[data-college-intro] .game-touch-joystick {
   display: none;
 }

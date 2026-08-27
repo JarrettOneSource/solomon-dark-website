@@ -29,6 +29,54 @@ test('declining the offer stays at title and routes the next new wizard through 
   assert.match(startHub, /connectSession\([\s\S]*?tutorialDeclined/)
 })
 
+test('projects the complete pre-Create College chrome gate from authoritative lifecycle state', () => {
+  const menu = source('./MainMenuScene.tsx')
+  const hub = source('./HubScene.tsx')
+  const hubRenderer = source('./renderer/hub-world-renderer.ts')
+  const inventory = source('./HubInventoryUi.tsx')
+  const css = source('./college-intro.css')
+
+  assert.match(menu, /hubCollegeAdmissionPreLoadout\(/)
+  assert.match(menu, /const collegeAdmissionHudHidden = screen === 'hub'[\s\S]*?hubCollegeAdmissionPreLoadout/)
+  assert.match(menu, /gameplayHudHidden=\{collegeAdmissionHudHidden\}/)
+  const chromeStart = menu.indexOf('{!collegeAdmissionHudHidden && <>')
+  const chromeEnd = menu.indexOf('{(preparing || leaving || connectionError)', chromeStart)
+  assert.ok(chromeStart >= 0 && chromeEnd > chromeStart)
+  const chrome = menu.slice(chromeStart, chromeEnd)
+  for (const member of [
+    'ModMinimap',
+    'ModPanels',
+    'ModSceneOverlay',
+    'GameChat',
+    'SkillBook',
+    'HudSkillSelector',
+    'SkillPicker',
+    'GameplayResumeCountdown',
+    'GameplayPauseMenu',
+    'GameSettingsDialog',
+  ]) {
+    assert.match(chrome, new RegExp(`<${member}`), member)
+  }
+  assert.match(menu, /!collegeAdmissionHudHidden[\s\S]{0,300}<GameMenuSkull/)
+  assert.match(menu, /!collegeAdmissionHudHidden && <GameFullscreenButton \/>/)
+  assert.match(hub, /data-gameplay-hud=\{gameplayHudHidden \? 'hidden' : 'visible'\}/)
+  assert.match(hub, /gameplayHudHidden \? 'modal' : hubUiSurface\?\.kind/)
+  assert.match(hub, /gameplayHudHidden[\s\S]*?onMenuAvailabilityChange\?\.\('hidden'\)/)
+  assert.match(hub, /gameplayHudHidden[\s\S]*?event\.code !== settings\.controls\.openSkills/)
+  assert.match(hub, /gameplayHudHidden[\s\S]*?event\.code !== settings\.controls\.openMenu/)
+  assert.match(hub, /gameplayHudHiddenRef\.current[\s\S]*?cast: \{ primary: false, quickbar: null \}/)
+  assert.match(hub, /setWorldSpeeches\([\s\S]*?gameplayHudHiddenRef\.current \? EMPTY_WORLD_SPEECHES : worldSpeechesRef\.current/)
+  assert.match(hub, /setGameplayHudHidden\(gameplayHudHidden\)/)
+  assert.match(hub, /gameplayHudHidden: gameplayHudHiddenRef\.current/)
+  assert.match(hubRenderer, /renderable: !gameplayHudHidden/)
+  assert.match(hubRenderer, /gameplayHudHidden \? \[\] : deriveHubPlayerActivityItems/)
+  assert.match(inventory, /inventoryEnabled/)
+  assert.match(css, /\[data-gameplay-hud='hidden'\][\s\S]*?\.hub-hud/)
+  assert.match(css, /\[data-gameplay-hud='hidden'\][\s\S]*?\.hub-party-panel/)
+  assert.match(css, /\[data-college-intro\][\s\S]*?\.game-touch-joystick/)
+  assert.doesNotMatch(css, /(?:^|[,\s])\.touch-joystick\b/m)
+})
+
 test('renders exact stock UI records for the prelude and blinking lesson pointer', () => {
   const prelude = source('./TutorialPrelude.tsx')
   const overlay = source('./TutorialOverlay.tsx')

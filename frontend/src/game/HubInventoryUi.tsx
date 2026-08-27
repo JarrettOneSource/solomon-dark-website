@@ -222,6 +222,7 @@ interface HubInventoryUiProps {
   disabled: boolean
   economy: ProtocolPlayerEconomy
   inputSuspended: boolean
+  inventoryEnabled?: boolean
   inventoryKeyCode: string
   menuKeyCode: string
   memorial?: HubMemorialState | null
@@ -250,6 +251,7 @@ export default function HubInventoryUi({
   disabled,
   economy,
   inputSuspended,
+  inventoryEnabled = true,
   inventoryKeyCode,
   menuKeyCode,
   memorial = null,
@@ -418,7 +420,13 @@ export default function HubInventoryUi({
         } else closeSurface()
         return
       }
-      if (!surface && !disabled && !transitionActive && event.code === inventoryKeyCode) {
+      if (
+        !surface
+        && inventoryEnabled
+        && !disabled
+        && !transitionActive
+        && event.code === inventoryKeyCode
+      ) {
         event.preventDefault()
         event.stopImmediatePropagation()
         onSurfaceChange({ kind: 'inventory' })
@@ -435,6 +443,7 @@ export default function HubInventoryUi({
     closeSurface,
     disabled,
     inventoryBackOrClose,
+    inventoryEnabled,
     inventoryKeyCode,
     inputSuspended,
     menuKeyCode,

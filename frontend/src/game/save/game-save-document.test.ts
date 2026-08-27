@@ -22,6 +22,7 @@ import {
   type HubInventoryItem,
 } from '../core-kernels/hub-economy.ts'
 import { HUB_SPAWN } from '../core-kernels/hub-math.ts'
+import { hubCollegeAdmissionPreLoadout } from '../core-kernels/college-admission-lifecycle.ts'
 import { archiveHubMemorialPortrait } from '../core-kernels/hub-memorial.ts'
 import {
   NATIVE_TUTORIAL_CAMERA_LOCK_SETTLE_TICKS,
@@ -281,10 +282,61 @@ test('schema 16 resumes every College admission phase and its exact player posit
   const restoredAcknowledged = assertResumed(acknowledged.state)
   assert.equal(participant(restoredAcknowledged)?.collegeIntro, null)
   assert.equal(participant(restoredAcknowledged)?.region, 'office')
+  assert.equal(hubCollegeAdmissionPreLoadout(
+    participant(restoredAcknowledged) ?? undefined,
+    getPlayerEconomy(restoredAcknowledged, 'owner').collegeIntroPending,
+  ), true)
   assert.strictEqual(
     armGameSimulationCollegeIntro(restoredAcknowledged, 'owner'),
     restoredAcknowledged,
   )
+  if (restoredAcknowledged.world.kind !== 'hub') throw new Error('expected restored Hub')
+  const collegeLoadout = assertResumed({
+    ...restoredAcknowledged,
+    world: {
+      ...restoredAcknowledged.world,
+      participants: {
+        ...restoredAcknowledged.world.participants,
+        owner: {
+          collegeIntro: null,
+          region: 'courtyard',
+          transition: {
+            alpha: 1,
+            destination: 'courtyard',
+            phase: 'college-loadout',
+            scriptedSpeed: 1,
+            scriptedTarget: { x: 952.5, y: 157.5 },
+            sourceRegion: 'office',
+          },
+        },
+      },
+    },
+  })
+  assert.equal(hubCollegeAdmissionPreLoadout(
+    participant(collegeLoadout) ?? undefined,
+    getPlayerEconomy(collegeLoadout, 'owner').collegeIntroPending,
+  ), true)
+  if (collegeLoadout.world.kind !== 'hub') throw new Error('expected restored Hub')
+  const returnedIncoming = assertResumed({
+    ...collegeLoadout,
+    world: {
+      ...collegeLoadout.world,
+      participants: {
+        ...collegeLoadout.world.participants,
+        owner: {
+          ...collegeLoadout.world.participants.owner!,
+          transition: {
+            ...collegeLoadout.world.participants.owner!.transition!,
+            phase: 'incoming',
+          },
+        },
+      },
+    },
+  })
+  assert.equal(hubCollegeAdmissionPreLoadout(
+    participant(returnedIncoming) ?? undefined,
+    getPlayerEconomy(returnedIncoming, 'owner').collegeIntroPending,
+  ), false)
 })
 
 test('a client-held save cannot fork the process-owned shared memorial', () => {
