@@ -555,6 +555,18 @@ test('Hub combat seal preserves movement and primary selection while rejecting e
       `weld ${buildId} crossed the Hub combat seal`,
     )
   }
+  for (const skillId of [57, 58, 59, 60, 61, 62, 63, 65, 66, 67, 68, 69, 70, 71]) {
+    assert.deepEqual(
+      sealPlayerCombatInput(source, [skillId, null, null, null, null, null, null, null]),
+      {
+        aim: null,
+        cast: { primary: false, quickbar: 0 },
+        movement: { x: 1, y: -1 },
+        viewportWidth: 1_600,
+      },
+      `concentration ${skillId} did not cross the Hub selection seal`,
+    )
+  }
   for (const skillId of NATIVE_SECONDARY_ABILITY_IDS) {
     assert.deepEqual(
       sealPlayerCombatInput(source, [skillId, null, null, null, null, null, null, null]),
@@ -3554,6 +3566,79 @@ test('a primary quickbar edge selects the learned primary before cast authority 
   assert.equal(getPlayerSkillBook(state).skillQuickbar[7], 16)
   assert.equal(getPlayerCharacter(state).primaryCast.selectedPrimaryId, 16)
 })
+
+test('concentration quickbar edges fill and alternate the authoritative A/B selection', () => {
+  const input = (slot: number | null) => ({
+    aim: null,
+    cast: { primary: false, quickbar: slot },
+    movement: { x: 0, y: 0 },
+    viewportWidth: 1_600,
+  })
+  let state = createGameSimulation()
+  for (const skillId of [57, 58, 59]) {
+    state = withPlayerSkillRank(state, 'local-player', skillId, 1)
+    const bound = bindGameSimulationPlayerSkillQuickbar(
+      state,
+      'local-player',
+      skillId,
+      skillId - 52,
+    )
+    assert.ok(bound)
+    state = bound
+  }
+
+  state = stepGameSimulationTick(state, { 'local-player': input(5) })
+  assert.deepEqual(selectedConcentrations(state), [57, null, 'a'])
+  state = stepGameSimulationTick(state, { 'local-player': input(null) })
+  state = stepGameSimulationTick(state, { 'local-player': input(6) })
+  assert.deepEqual(selectedConcentrations(state), [58, null, 'a'])
+
+  state = {
+    ...state,
+    playerEntities: replacePlayerEconomy(
+      state.playerEntities,
+      'local-player',
+      {
+        ...getPlayerEconomy(state),
+        ownedPerkSelectors: [21],
+      },
+    ),
+  }
+  state = stepGameSimulationTick(state, { 'local-player': input(null) })
+  state = stepGameSimulationTick(state, { 'local-player': input(5) })
+  assert.deepEqual(selectedConcentrations(state), [58, 57, 'a'])
+  state = stepGameSimulationTick(state, { 'local-player': input(null) })
+  state = stepGameSimulationTick(state, { 'local-player': input(7) })
+  assert.deepEqual(selectedConcentrations(state), [59, 57, 'b'])
+
+  const index = state.playerEntities.identities.findIndex(({ playerId }) => (
+    playerId === 'local-player'
+  ))
+  const progressions = [...state.playerEntities.progressions]
+  progressions[index] = {
+    ...progressions[index]!,
+    mindChugTicksRemaining: 10,
+  }
+  state = {
+    ...state,
+    playerEntities: {
+      ...state.playerEntities,
+      progressions: Object.freeze(progressions),
+    },
+  }
+  state = stepGameSimulationTick(state, { 'local-player': input(null) })
+  state = stepGameSimulationTick(state, { 'local-player': input(6) })
+  assert.deepEqual(selectedConcentrations(state), [59, 57, 'b'])
+})
+
+function selectedConcentrations(state: GameSimulationState) {
+  const runtime = playerSkillRuntimeAt(state.playerEntities, 'local-player')!
+  return [
+    runtime.concentrationSkillIdA,
+    runtime.concentrationSkillIdB,
+    runtime.nextConcentrationReplacementSlot,
+  ] as const
+}
 
 function withRottenZombieAtPlayer(state: GameSimulationState): GameSimulationState {
   if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')

@@ -224,7 +224,10 @@ import {
   NATIVE_SECONDARY_ABILITY_IDS,
   type NativeSecondaryAbilityId,
 } from '../core-kernels/native-secondary-ability-contract.ts'
-import { nativeSkillCategory } from '../core-kernels/player-progression.ts'
+import {
+  isNativeSkillQuickbarSkill,
+  nativeSkillCategory,
+} from '../core-kernels/player-progression.ts'
 import {
   BOUNDED_ENEMY_COLD_SLOW_TICKS,
   NATIVE_WRAITH_DAZZLE_TICKS,
@@ -364,7 +367,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 84
+export const GAME_PROTOCOL_VERSION = 85
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -1199,8 +1202,7 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
       ? null
       : nonnegativeInteger(value.skillId, 'skillId')
     const slot = nonnegativeInteger(value.slot, 'slot')
-    const category = skillId === null ? null : nativeSkillCategory(skillId)
-    if (skillId !== null && category !== 1 && category !== 2) {
+    if (skillId !== null && !isNativeSkillQuickbarSkill(skillId)) {
       throw new GameProtocolError('skillId is not a native quickbar skill')
     }
     if (slot > 7) throw new GameProtocolError('slot is out of range')
@@ -3775,8 +3777,7 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
     .map((entry, index) => {
       if (entry === null) return null
       const skillId = nonnegativeInteger(entry, `${field}.skillQuickbar[${index}]`)
-      const category = nativeSkillCategory(skillId)
-      if (category !== 1 && category !== 2) {
+      if (!isNativeSkillQuickbarSkill(skillId)) {
         throw new GameProtocolError(`${field}.skillQuickbar[${index}] is not a quickbar skill`)
       }
       if ((learnedSkills.find(([id]) => id === skillId)?.[1] ?? 0) < 1) {

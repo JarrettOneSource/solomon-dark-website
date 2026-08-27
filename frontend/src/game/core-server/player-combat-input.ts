@@ -7,7 +7,8 @@ export function sealPlayerCombatInput(
 ): PlayerCharacterInput {
   const requestedSlot = input.cast.quickbar
   const selectedSkill = requestedSlot === null ? null : quickbar[requestedSlot] ?? null
-  const safeSlot = selectedSkill !== null && nativeSkillCategory(selectedSkill) === 1
+  const selectedCategory = selectedSkill === null ? null : nativeSkillCategory(selectedSkill)
+  const safeSlot = selectedCategory === 1 || selectedCategory === 3
     ? requestedSlot
     : null
   if (!input.cast.primary && input.cast.quickbar === safeSlot && input.aim === null) return input

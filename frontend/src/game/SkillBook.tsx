@@ -429,6 +429,7 @@ function SkillBookEntry({
   selected: boolean
 }) {
   const draggable = row.category === 1 || row.category === 2
+    || row.category === 3
   const selectable = row.category === 1
     || (row.category === 3 && !selected && !concentrationLocked)
   const pressRef = useRef<{

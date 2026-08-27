@@ -61,15 +61,24 @@ test('binding overwrites only the destination and preserves native duplicates', 
   assert.throws(() => bindPlayerSkillQuickbar(learned, 48, 8), /slot/)
 })
 
-test('quickbar accepts learned primaries and primary selection is independent of a learned weld', () => {
+test('quickbar accepts learned primaries and concentrations while rejecting passives', () => {
   const initial = createPlayerSkillBook(ETHER_ARCANE)
   const bound = bindPlayerSkillQuickbar(initial, 8, 1)
   assert.deepEqual(bound.skillQuickbar, [11, 8, null, null, null, null, null, null])
   assert.throws(() => bindPlayerSkillQuickbar(initial, 16, 1), /not learned/)
 
   const concentration = withLearnedRank(initial, 57, 1)
-  assert.throws(() => bindPlayerSkillQuickbar(concentration, 57, 1), /quickbar skill/)
+  const concentrated = bindPlayerSkillQuickbar(concentration, 57, 1)
+  assert.deepEqual(concentrated.skillQuickbar, [11, 57, null, null, null, null, null, null])
+  assert.deepEqual(
+    bindPlayerSkillQuickbar(concentrated, 57, 7).skillQuickbar,
+    [11, 57, null, null, null, null, null, 57],
+  )
+  assert.throws(() => bindPlayerSkillQuickbar(initial, 0, 1), /quickbar skill/)
+})
 
+test('primary selection is independent of a learned weld', () => {
+  const initial = createPlayerSkillBook(ETHER_ARCANE)
   const welded = {
     ...withLearnedRank(initial, 52, 1),
     weldBuildId: 1000,

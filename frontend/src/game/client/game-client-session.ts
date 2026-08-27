@@ -52,7 +52,10 @@ import type {
   PartyVisibility,
   PlayerSocialProfile,
 } from '../protocol/party-state.ts'
-import { nativeSkillCategory } from '../core-kernels/player-progression.ts'
+import {
+  isNativeSkillQuickbarSkill,
+  nativeSkillCategory,
+} from '../core-kernels/player-progression.ts'
 import type { NativeTutorialSurfaceAction } from '../core-kernels/native-tutorial.ts'
 import type { GameTransport } from './game-transport.ts'
 import {
@@ -628,12 +631,11 @@ export function connectGameClientSession(
       bindSkillQuickbar(skillId, slot) {
         if (!welcome || !snapshot || destroyed) return
         const progression = snapshot.players[welcome.playerId]?.progression
-        const category = skillId === null ? null : nativeSkillCategory(skillId)
         if (
           !Number.isInteger(slot)
           || slot < 0
           || slot > 7
-          || (skillId !== null && category !== 1 && category !== 2)
+          || (skillId !== null && !isNativeSkillQuickbarSkill(skillId))
           || (skillId !== null
             && (progression?.learnedSkills.find(([id]) => id === skillId)?.[1] ?? 0) < 1)
         ) throw new Error('The quickbar skill is unavailable.')

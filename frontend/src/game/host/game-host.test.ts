@@ -2036,6 +2036,16 @@ test('Boneyard host authorizes HUD concentration replacement only for the addres
     source: 'skill-book',
   }))
   await skillBookPause
+  const concentrationBound = nextMessage(client.socket, (message) => (
+    message.type === 'server-snapshot'
+    && message.snapshot.players[playerId].progression.skillQuickbar[7] === 57
+  ))
+  client.socket.send(encodeGameMessage({
+    type: 'client-skill-quickbar-bind',
+    skillId: 57,
+    slot: 7,
+  }))
+  await concentrationBound
   client.socket.send(encodeGameMessage({
     type: 'client-select-concentration-slot',
     skillId: 57,

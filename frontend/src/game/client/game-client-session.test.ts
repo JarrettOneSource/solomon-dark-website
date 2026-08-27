@@ -1092,7 +1092,12 @@ test('client submits native quickbar bindings and primary selection against lear
     slot: 0,
   })
   assert.throws(() => session.selectConcentrationSlot(57, 1), /unavailable/)
-  assert.throws(() => session.bindSkillQuickbar(57, 1), /unavailable/)
+  session.bindSkillQuickbar(57, 1)
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-skill-quickbar-bind',
+    skillId: 57,
+    slot: 1,
+  })
   assert.throws(() => session.selectPrimarySkill(16), /unavailable/)
   session.destroy()
 })

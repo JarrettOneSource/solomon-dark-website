@@ -234,6 +234,14 @@ nullable host-authenticated account username and final Hall-owned run summary:
 elapsed ticks, wave, level, kills, awesomeness, and optional awesomest kill.
 Those are bounded authority facts for Painting inspection, not a second
 leaderboard or presentation-side score calculation.
+Protocol 83 adds the authoritative resume-grace projection and readiness edge
+described below. Protocol 84 adds the Tutorial movement acknowledgement and
+consistent camera-lock clocks described below. Protocol 85 broadens the
+existing nullable eight-slot skill quickbar value from permanently learned
+categories 1/2 to categories 1/2/3.
+Category 3 consumes a rising slot edge through the existing general
+concentration owner; it does not become a secondary cast or change automatic
+category-1/2 hotbar population.
 The compact selector
 uses its own `skill-selector` pause source only in an active Boneyard, so the
 host cannot accept an addressed HUD mutation from a full SkillScreen pause (or

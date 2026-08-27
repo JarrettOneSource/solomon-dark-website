@@ -119,6 +119,11 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
   })), { type: 'client-skill-quickbar-bind', skillId: 8, slot: 7 })
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
     type: 'client-skill-quickbar-bind',
+    skillId: 57,
+    slot: 6,
+  })), { type: 'client-skill-quickbar-bind', skillId: 57, slot: 6 })
+  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
+    type: 'client-skill-quickbar-bind',
     skillId: null,
     slot: 7,
   })), { type: 'client-skill-quickbar-bind', skillId: null, slot: 7 })
@@ -1539,8 +1544,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v84 carries Web Lua wearables, onboarding admission, observer mode, Hub activity, NPC state, Goodie actions, tutorial fields/state, Hagatha runtime, Imp effects, save intent, selected skills, sacks, dyes, and gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 84)
+test('protocol v85 carries concentration quickbar bindings and retained gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 85)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -2221,6 +2226,16 @@ test('protocol validates active primary and concentration selections against eff
       decoded.frame.players['player-1']!.progression.concentrationSkillIds,
       [skillId, null],
     )
+  }
+
+  for (const skillId of concentrationSkillIds) {
+    const quickbar = JSON.parse(JSON.stringify(baseFrame))
+    quickbar.players['player-1'].progression.learnedSkills.push([skillId, 1, 1])
+    quickbar.players['player-1'].progression.learnedSkillOrder.push(skillId)
+    quickbar.players['player-1'].progression.skillQuickbar[7] = skillId
+    const decoded = decodeServerGameMessage(JSON.stringify(message(quickbar)))
+    assert.equal(decoded.type, 'server-snapshot')
+    assert.equal(decoded.frame.players['player-1']!.progression.skillQuickbar[7], skillId)
   }
 
   for (const skillId of [8, 16, 24, 32, 40]) {

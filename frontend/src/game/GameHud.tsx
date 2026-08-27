@@ -362,6 +362,7 @@ export default function GameHud({
       ) : null}
 
       <SkillQuickbar
+        concentrationSkillIds={quickbarHud.concentrationSkillIds}
         controls={controls}
         controllerQuickbarSlot={controllerQuickbarSlot}
         displayScale={viewport.displayScale}

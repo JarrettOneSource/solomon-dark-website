@@ -257,6 +257,36 @@ try {
   }))
   const fireball = book.getByRole('button', { name: /Fireball, rank 1/ })
   await fireball.waitFor({ timeout: 10_000 })
+  const channelMana = book.getByRole('button', { name: /Channel Mana, rank 1/ })
+  const meditation = book.getByRole('button', { name: /Meditation, rank 1/ })
+  const battleMage = book.getByRole('button', { name: /Battle Mage, rank 1/ })
+  const concentrationDrags = []
+  for (const [source, skillId, slot, label] of [
+    [channelMana, 57, 1, 'Channel Mana'],
+    [meditation, 58, 5, 'Meditation'],
+    [battleMage, 59, 6, 'Battle Mage'],
+  ]) {
+    concentrationDrags.push(await dragSkillToPaintedBeltEdge(
+      page,
+      book,
+      source,
+      slot,
+      `${screenshotRoot}-concentration-${skillId}-drag.png`,
+    ))
+    await book.getByRole('button', {
+      name: new RegExp(`Quickbar ${slot + 1}, ${label}`),
+    }).waitFor({ timeout: 10_000 })
+    await waitForSavedQuickbar(page, playerId, slot, skillId)
+  }
+  const fireballDrag = await dragSkillToPaintedBeltEdge(
+    page,
+    book,
+    fireball,
+    7,
+    `${screenshotRoot}-fireball-drag.png`,
+  )
+  await book.getByRole('button', { name: /Quickbar 8, Fireball/ }).waitFor({ timeout: 10_000 })
+  await waitForSavedQuickbar(page, playerId, 7, 16)
   await fireball.click()
   await page.getByRole('img', { name: 'Fireball primary spell' }).waitFor({ timeout: 10_000 })
   const hubFireOrb = await waitForOrbProgram(
@@ -265,11 +295,11 @@ try {
     playerId,
     16,
   )
-  await book.getByRole('button', { name: /Channel Mana, rank 1/ }).click()
+  await channelMana.click()
   await book.locator(
     '.skill-book-entry-action[data-skill-id="57"][aria-pressed="true"]',
   ).waitFor({ timeout: 10_000 })
-  await book.getByRole('button', { name: /Meditation, rank 1/ }).click()
+  await meditation.click()
   await book.locator(
     '.skill-book-entry-action[data-skill-id="58"][aria-pressed="true"]',
   ).waitFor({ timeout: 10_000 })
@@ -280,6 +310,11 @@ try {
   await page.keyboard.press('Escape')
   await book.waitFor({ state: 'detached', timeout: 5_000 })
   await hubScene.locator('xpath=self::*[@data-gameplay-input-blocked="false"]').waitFor()
+
+  await page.keyboard.press('Digit2')
+  await page.getByRole('img', { name: 'Magic Missile primary spell' }).waitFor({ timeout: 10_000 })
+  await page.keyboard.press('Digit7')
+  await page.getByRole('img', { name: 'Fireball primary spell' }).waitFor({ timeout: 10_000 })
 
   const primaryAction = page.getByRole('button', {
     name: 'Select primary attack, current Fireball',
@@ -376,6 +411,17 @@ try {
   await assertGameSoundMuted(page, false)
   await page.screenshot({ path: `${screenshotRoot}-hud-selectors.png` })
 
+  await page.keyboard.press('Digit5')
+  await page.getByRole('button', {
+    name: 'Select concentration A, current Meditation',
+  }).waitFor({ timeout: 10_000 })
+  await page.keyboard.press('Digit6')
+  await page.getByRole('button', {
+    name: 'Select concentration B, current Battle Mage',
+  }).waitFor({ timeout: 10_000 })
+  assert.deepEqual(currentConcentrations(host, playerId), [58, 59])
+  await page.screenshot({ path: `${screenshotRoot}-hub-hotbar-key-swaps.png` })
+
   await page.getByRole('button', {
     name: 'Select primary attack, current Magic Missile',
   }).click()
@@ -392,6 +438,15 @@ try {
   if (await picker.count()) await picker.getByRole('button').first().click()
   const boneyardScene = page.locator('.boneyard-scene[data-renderer-state="ready"]')
   await boneyardScene.waitFor({ timeout: 90_000 })
+  await boneyardScene.locator('xpath=self::*[@data-gameplay-input-blocked="false"]').waitFor({
+    timeout: 15_000,
+  })
+  await page.keyboard.press('Digit1')
+  await page.getByRole('button', {
+    name: 'Select concentration A, current Channel Mana',
+  }).waitFor({ timeout: 10_000 })
+  assert.deepEqual(currentConcentrations(host, playerId), [57, 59])
+  await page.screenshot({ path: `${screenshotRoot}-boneyard-hotbar-key-swap.png` })
   const boneyardEtherOrb = await waitForOrbProgram(
     page,
     '.boneyard-world-canvas',
@@ -468,7 +523,7 @@ try {
   assert.deepEqual([
     selectedState.playerEntities.skillRuntimes[selectedIndex].concentrationSkillIdA,
     selectedState.playerEntities.skillRuntimes[selectedIndex].concentrationSkillIdB,
-  ], [59, 57])
+  ], [57, 59])
   assert.equal(getPlayerCharacter(selectedState, playerId).config.element, 'ether')
   assert.deepEqual(pageErrors, [])
   assert.deepEqual(networkErrors, [])
@@ -476,9 +531,11 @@ try {
   process.stdout.write(`${JSON.stringify({
     boneyardSelector: true,
     consoleErrors,
+    concentrationDrags,
     duplicateSecondary: true,
-    hudConcentrationA: 59,
-    hudConcentrationB: 57,
+    fireballDrag,
+    hotbarConcentrationA: 57,
+    hotbarConcentrationB: 59,
     hudSelectorCancel: true,
     hudSelectorWebGl2: true,
     mixedQuickbar: true,
@@ -489,8 +546,8 @@ try {
       hubFire: hubFireOrb,
       hubRestoredEther: hubRestoredEtherOrb,
     },
-      paintedDrag,
-      pullOff,
+    paintedDrag,
+    pullOff,
     networkErrors,
     pageErrors,
     sealMotion: {
@@ -498,12 +555,12 @@ try {
       hub: hubSealMotion,
       reopenedTick: reopenedSealTick,
     },
-      selectorAudio: {
-        dragAudio,
+    selectorAudio: {
+      dragAudio,
       concentrationSelectionAudio,
       primaryOpenAudio,
-        primarySelectionAudio,
-        pullOffAudio,
+      primarySelectionAudio,
+      pullOffAudio,
     },
     primarySelection: 'Fireball after Boneyard selector',
     screenshots: [
@@ -512,7 +569,9 @@ try {
       `${screenshotRoot}-mixed-quickbar.png`,
       `${screenshotRoot}-hud-primary-selector.png`,
       `${screenshotRoot}-hud-selectors.png`,
+      `${screenshotRoot}-hub-hotbar-key-swaps.png`,
       `${screenshotRoot}-boneyard-selector.png`,
+      `${screenshotRoot}-boneyard-hotbar-key-swap.png`,
       `${screenshotRoot}-hub-ether-orb.png`,
       `${screenshotRoot}-boneyard-fire-orb.png`,
     ],
@@ -521,6 +580,14 @@ try {
   await browser.close()
   await host.close()
   await vite.close()
+}
+
+function currentConcentrations(host, playerId) {
+  const state = host.state()
+  const index = state.playerEntities.identities.findIndex(({ playerId: id }) => id === playerId)
+  assert.notEqual(index, -1)
+  const runtime = state.playerEntities.skillRuntimes[index]
+  return [runtime.concentrationSkillIdA, runtime.concentrationSkillIdB]
 }
 
 async function enterCreateAfterCollegeAdmission(page, host) {

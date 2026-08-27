@@ -29,6 +29,12 @@ test('Hub pointer quickbar disables category-2 actions while retaining primary s
   assert.match(component, /aria-disabled=\{combatDisabled \|\| undefined\}/)
 })
 
+test('concentration bindings use the ordinary slot input and selected-state treatment', () => {
+  assert.match(component, /const concentration = skillId !== null && nativeSkillCategory\(skillId\) === 3/)
+  assert.match(component, /concentration && concentrationSkillIds\.includes\(skillId\)/)
+  assert.match(component, /onInput\?\.\(slot, true\)/)
+})
+
 test('live populated BeltButtons use the same scaled strict pull-off owner', () => {
   assert.match(component, /inputScale=\{displayScale \* uiScale\}/)
   assert.match(component, /nativeBeltPullOffStarted\(/)

@@ -47,6 +47,7 @@ const ATLAS_WIDTH = 1024
 const ATLAS_HEIGHT = 512
 
 interface SkillQuickbarProps {
+  concentrationSkillIds: readonly [number | null, number | null]
   controls: GameControlBindings
   controllerQuickbarSlot?: number
   displayScale: number
@@ -63,6 +64,7 @@ interface SkillQuickbarProps {
 }
 
 export default function SkillQuickbar({
+  concentrationSkillIds,
   controls,
   controllerQuickbarSlot,
   displayScale,
@@ -85,6 +87,7 @@ export default function SkillQuickbar({
       {NATIVE_SKILL_QUICKBAR_SLOT_OFFSETS.map((offset, slot) => (
         <SkillQuickbarSlot
           bindingCode={controls[`belt${slot + 1}` as GameBindingAction]}
+          concentrationSkillIds={concentrationSkillIds}
           controllerSelected={controllerQuickbarSlot === slot}
           inputScale={displayScale * uiScale}
           key={slot}
@@ -105,6 +108,7 @@ export default function SkillQuickbar({
 
 function SkillQuickbarSlot({
   bindingCode,
+  concentrationSkillIds,
   controllerSelected,
   inputScale,
   mobilePlacement,
@@ -118,6 +122,7 @@ function SkillQuickbarSlot({
   slot,
 }: {
   bindingCode: string
+  concentrationSkillIds: SkillQuickbarProps['concentrationSkillIds']
   controllerSelected: boolean
   inputScale: number
   mobilePlacement: ReturnType<typeof mobileQuickbarSlotPlacement>
@@ -139,6 +144,7 @@ function SkillQuickbarSlot({
   const [burstSequence, setBurstSequence] = useState<number | null>(null)
   const skill = skillId === null ? undefined : NATIVE_SKILL_CATALOG[skillId]
   const secondary = skillId !== null && nativeSkillCategory(skillId) === 2
+  const concentration = skillId !== null && nativeSkillCategory(skillId) === 3
   const combatDisabled = mode === 'hub' && secondary
   const { capacity, remaining } = !secondary
     ? { capacity: 0, remaining: 0 }
@@ -153,6 +159,7 @@ function SkillQuickbarSlot({
     : `key ${bindingLabel}`
   const active = skillId !== null && (
     skillId === selectedPrimarySkillId
+    || (concentration && concentrationSkillIds.includes(skillId))
     || secondaryAbilityActive(skillId, playerState)
   )
   const label = skill === undefined

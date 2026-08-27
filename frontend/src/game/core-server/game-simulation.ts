@@ -2801,10 +2801,20 @@ function finishGameSimulationTick(
     if (slot === null) continue
     const skillBook = playerSkillBookAt(playerEntities, playerId)
     const skillId = skillBook?.skillQuickbar[slot] ?? null
-    if (skillId !== null && nativeSkillCategory(skillId) === 1) {
+    const category = skillId === null ? null : nativeSkillCategory(skillId)
+    if (skillId !== null && category === 1) {
       playerEntities = selectPlayerEntityPrimarySkill(playerEntities, playerId, skillId)
-    } else if (skillId !== null && nativeSkillCategory(skillId) === 2) {
+    } else if (skillId !== null && category === 2) {
       playerEntities = failPlayerEntityBoast(playerEntities, playerId, 'secondary-cast')
+    } else if (
+      skillId !== null
+      && category === 3
+      && slot !== (secondaryAbilities.players[playerId]?.heldSlot ?? null)
+      && (playerProgressionAt(playerEntities, playerId)?.mindChugTicksRemaining ?? 0) === 0
+      && (skillBook?.permanentRanks[skillId] ?? 0) > 0
+      && (skillBook?.effectiveRanks[skillId] ?? 0) > 0
+    ) {
+      playerEntities = selectPlayerEntityConcentrationSkill(playerEntities, playerId, skillId)
     }
   }
   const secondaryResult = stepNativeSecondaryAbilities({

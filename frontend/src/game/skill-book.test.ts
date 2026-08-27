@@ -233,6 +233,10 @@ test('renderer owns the complete stock root, page-wide panels, row frames, and H
   assert.match(component, /setPointerCapture/)
   assert.match(component, /event\.pointerType === 'mouse'/)
   assert.match(component, /onHover\(row\.id\)/)
+  assert.match(
+    component,
+    /const draggable = row\.category === 1 \|\| row\.category === 2\s*\|\| row\.category === 3/,
+  )
   assert.match(component, /progression\.skillQuickbar/)
   assert.match(component, /onSelectConcentration/)
   assert.match(component, /style=\{\{[\s\S]*?left: belt\.x[\s\S]*?top: belt\.y/)

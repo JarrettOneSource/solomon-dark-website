@@ -30,6 +30,10 @@ export const RETAIL_BONEYARD_EXPERIENCE_RECIPE_SCALAR = 0.425
 export const NATIVE_DAMAGE_X4_POTION_TICKS = 6_000
 export const NATIVE_MIND_CHUG_TICKS = 6_000
 export const NATIVE_ANTIDOTE_IMMUNITY_TICKS = 1_000
+export const NATIVE_CONCENTRATION_SKILL_IDS = [
+  57, 58, 59, 60, 61, 62, 63,
+  65, 66, 67, 68, 69, 70, 71,
+] as const
 
 export const NATIVE_LEVEL_THRESHOLDS = [
   0, 90, 160, 275, 390, 520, 650, 800, 1060, 1300, 1600, 2000, 2400,
@@ -85,7 +89,11 @@ export interface NativePrimarySkillRankStats {
 }
 
 export type NativePlayerPrimarySkillId = 8 | 16 | 24 | 32 | 40 | 52
-export type NativeSkillQuickbarId = NativePlayerPrimarySkillId | NativeSecondaryAbilityId
+export type NativeConcentrationSkillId = typeof NATIVE_CONCENTRATION_SKILL_IDS[number]
+export type NativeSkillQuickbarId =
+  | NativePlayerPrimarySkillId
+  | NativeSecondaryAbilityId
+  | NativeConcentrationSkillId
 
 export type PlayerSkillQuickbar = readonly [
   NativeSkillQuickbarId | null,
@@ -340,6 +348,11 @@ export function nativeSkillCategory(skillId: number): number | null {
   return RULES[skillId]?.category ?? null
 }
 
+export function isNativeSkillQuickbarSkill(skillId: number): skillId is NativeSkillQuickbarId {
+  const category = nativeSkillCategory(skillId)
+  return category === 1 || category === 2 || category === 3
+}
+
 export function nativeSkillRoot(skillId: number): number | null {
   return RULES[skillId]?.root ?? (skillId === 80 ? 0 : null)
 }
@@ -407,7 +420,7 @@ export function bindPlayerSkillQuickbar(
   if (!Number.isInteger(slot) || slot < 0 || slot >= 8) {
     throw new RangeError(`skill quickbar slot ${slot} is outside 0..7`)
   }
-  if (skillId !== null && nativeSkillCategory(skillId) !== 1 && nativeSkillCategory(skillId) !== 2) {
+  if (skillId !== null && !isNativeSkillQuickbarSkill(skillId)) {
     throw new RangeError(`skill ${skillId} is not a native quickbar skill`)
   }
   if (skillId !== null && (skillBook.permanentRanks[skillId] ?? 0) < 1) {
