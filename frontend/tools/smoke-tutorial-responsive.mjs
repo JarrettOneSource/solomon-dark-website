@@ -26,6 +26,8 @@ import {
 } from '../src/game/core-server/boneyard-collision.ts'
 import { NATIVE_ACTOR_SEPARATION_EPSILON } from '../src/game/core-kernels/actor-physics.ts'
 import { GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS } from '../src/game/core-kernels/game-run.ts'
+import { createNativeRng } from '../src/game/core-kernels/native-rng.ts'
+import { resetNativeSecondaryWorld } from '../src/game/core-kernels/native-secondary-abilities.ts'
 import { PLAYER_CHARACTER_RADIUS } from '../src/game/core-kernels/player-character.ts'
 import { nativeCollegePathHeadingIndex } from '../src/game/core-kernels/native-college-intro.ts'
 import {
@@ -53,6 +55,11 @@ import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
 
 const screenshotRoot = process.env.SDR_TUTORIAL_RESPONSIVE_SCREENSHOT_ROOT
   || '/tmp/solomon-dark-tutorial-responsive'
+const acidComparisonCapture = process.env.SDR_TUTORIAL_ACID_COMPARISON === '1'
+const acidComparisonRngSeed = process.env.SDR_TUTORIAL_ACID_RNG_SEED === undefined
+  ? null
+  : Number(process.env.SDR_TUTORIAL_ACID_RNG_SEED)
+const acidComparisonAge = Number(process.env.SDR_TUTORIAL_ACID_AGE ?? 60)
 const chromePath = process.env.SDR_CHROME_PATH || (process.platform === 'darwin'
   ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
   : '/usr/bin/google-chrome')
@@ -95,6 +102,15 @@ const scenarios = requestedScenario
   ? allScenarios.filter(({ name }) => name === requestedScenario)
   : allScenarios
 assert.ok(scenarios.length > 0, `unknown Tutorial responsive scenario: ${requestedScenario}`)
+if (acidComparisonCapture) {
+  assert.deepEqual(scenarios.map(({ name }) => name), ['stock'])
+  assert.ok(
+    acidComparisonRngSeed === null
+      || (Number.isInteger(acidComparisonRngSeed) && acidComparisonRngSeed >= 0),
+  )
+  assert.ok(Number.isInteger(acidComparisonAge) && acidComparisonAge >= 1
+    && acidComparisonAge <= 1_500)
+}
 
 const staticServer = await startStaticClientServer({
   root: fileURLToPath(new URL('../../backend/wwwroot/', import.meta.url)),
@@ -221,6 +237,9 @@ async function runScenario(scenario) {
     close(moved.targetY - initial.targetY, -25 * uiScale, 0.1, `${scenario.name} moved y`)
 
     await page.screenshot({ path: scenario.screenshot })
+    const acidRain = acidComparisonCapture
+      ? await captureTutorialAcidRain(host, page, screenshotRoot)
+      : null
     const groundDrop = scenario.name === 'stock'
       ? await exerciseTutorialGroundDrop(host, page, screenshotRoot)
       : null
@@ -288,6 +307,7 @@ async function runScenario(scenario) {
     return {
       consoleErrors,
       collegeAdmission,
+      acidRain,
       failedResponses,
       groundDrop,
       initial,
@@ -355,6 +375,113 @@ async function waitForRestoredTutorial(host) {
     tutorial: state.world.kind === 'boneyard' ? state.world.tutorial : null,
     world: state.world.kind,
   })}`)
+}
+
+async function captureTutorialAcidRain(host, page, screenshotPath) {
+  let state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
+  assert.equal(state.world.tutorial?.stage, 5)
+  const playerId = host.hostPlayerId()
+  assert.ok(playerId)
+  const skillBook = getPlayerSkillBook(state, playerId)
+  assert.equal(skillBook.permanentRanks[72], 1)
+  assert.equal(skillBook.skillQuickbar[0], 72)
+  Object.assign(state, {
+    playerEntities: replacePlayerCharacter(
+      state.playerEntities,
+      playerId,
+      {
+        ...getPlayerCharacter(state, playerId),
+        position: { x: 1_025, y: 1_350 },
+        velocity: { x: 0, y: 0 },
+      },
+    ),
+    secondaryAbilities: acidComparisonRngSeed === null
+      ? state.secondaryAbilities
+      : {
+          ...state.secondaryAbilities,
+          rng: createNativeRng(acidComparisonRngSeed),
+        },
+    world: {
+      ...state.world,
+      encounter: state.world.encounter
+        ? { ...state.world.encounter, phase: 'gone', runEventId: 1 }
+        : null,
+    },
+  })
+  await page.waitForTimeout(30)
+  state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
+  const castSequence = state.secondaryAbilities.players[playerId]?.castSequence ?? 0
+  const canvas = page.locator('.boneyard-world-canvas[data-game-renderer="pixi-webgl"]')
+  const target = await canvas.evaluate((node) => {
+    const bounds = node.getBoundingClientRect()
+    const frame = node.__sdrBoneyardFrame
+    return {
+      x: bounds.left + Math.min(bounds.width - 40, frame.playerScreenX + 280),
+      y: bounds.top + frame.playerScreenY,
+    }
+  })
+  await page.mouse.click(target.x, target.y, { button: 'right' })
+
+  const deadline = Date.now() + 10_000
+  let rain = null
+  while (Date.now() < deadline) {
+    state = host.state()
+    rain = state.secondaryAbilities.actors.find(({ kind, ownerId }) => (
+      kind === 'acid-rain' && ownerId === playerId
+    )) ?? null
+    if (
+      rain
+      && rain.ageTicks >= acidComparisonAge
+      && (state.secondaryAbilities.players[playerId]?.castSequence ?? 0) > castSequence
+    ) break
+    await page.waitForTimeout(10)
+  }
+  assert.ok(rain, 'Tutorial stage 5 did not accept Acid Rain')
+  assert.equal(state.world.kind, 'boneyard')
+  assert.equal(state.world.tutorial?.stage, 6)
+  await page.waitForFunction(() => {
+    const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
+    return frame?.secondaryAbilityKinds.includes('acid-rain')
+      && frame.secondaryAbilityKinds.includes('acid-drop')
+      && frame.secondaryAbilityKinds.includes('acid-splash')
+  }, undefined, { timeout: 10_000 })
+  const frame = await canvas.evaluate((node) => {
+    const current = node.__sdrBoneyardFrame
+    return {
+      actorKinds: [...current.secondaryAbilityKinds],
+      rain: current.secondaryAbilitySamples.find(({ kind }) => kind === 'acid-rain'),
+      tick: current.tick,
+    }
+  })
+  assert.deepEqual(frame.rain?.mainDrawMembers, [
+    'BadGuys:78:normal',
+    'BadGuys:78:add',
+    'BadGuys:10:add',
+  ])
+  assert.deepEqual(frame.rain?.mainDrawOffsetsY, [-175, -175, -225])
+  assert.equal(frame.rain?.underlayPrimitiveCount, 1)
+  assert.deepEqual(frame.rain?.underlayDrawMembers, ['DeadHawg:4:normal'])
+  const output = `${screenshotPath}-stock-acid-rain.png`
+  await page.screenshot({ path: output })
+  const receipt = {
+    actorKinds: frame.actorKinds,
+    ageTicks: rain.ageTicks,
+    requestedAgeTicks: acidComparisonAge,
+    constructorPhase: rain.rotationRadians,
+    groundPosition: { ...rain.position },
+    rain: frame.rain,
+    screenshot: output,
+    seededRng: acidComparisonRngSeed,
+    stage: state.world.tutorial.stage,
+    target,
+    tick: frame.tick,
+  }
+  Object.assign(state, {
+    secondaryAbilities: resetNativeSecondaryWorld(state.secondaryAbilities),
+  })
+  return receipt
 }
 
 async function exerciseTutorialStaffMelee(host, page, screenshotPath) {

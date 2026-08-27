@@ -70,13 +70,13 @@ export interface NativeSecondaryMeshDraw {
 }
 
 export interface NativeSecondaryGradientDraw {
-  readonly end: Vector2
-  readonly endAlpha: number
-  readonly endColor: number
+  readonly bottomAlpha: number
+  readonly bottomColor: number
+  readonly height: number
   readonly role: string
-  readonly start: Vector2
-  readonly startAlpha: number
-  readonly startColor: number
+  readonly topAlpha: number
+  readonly topColor: number
+  readonly topLeft: Vector2
   readonly width: number
 }
 
@@ -650,7 +650,7 @@ export function nativeSecondaryPresentationPlan(
     case 'storm-drop':
       return actor.phase < 0
         ? plan([], 'zanim', 0, [], [raindropGradient(actor, false)])
-        : plan([draw('BadGuys', 0, {
+        : plan([draw('BadGuys', 63, {
             alpha: Math.max(0, 1 - actor.scale * actor.scale),
             role: 'storm-raindrop-ground',
             scaleX: actor.scale,
@@ -917,15 +917,24 @@ export function nativeSecondaryPresentationPlan(
       const fieldScale = Math.fround(actor.scale)
       const cloudAlpha = Math.max(0, Math.min(1, Math.fround(actor.phase)))
       const constructorPhase = Math.fround(actor.rotationRadians)
-      const age = Math.fround(presentationFrame)
+      const age = Math.fround(actor.ageTicks)
       const firstScaleX = Math.fround(fieldScale * 5)
       const secondBaseScale = Math.fround(Math.fround(fieldScale * Math.fround(3.75)) * 2)
       const cloudDraws: NativeSecondarySpriteDraw[] = cloudAlpha > 0 ? [
-        draw('BadGuys', 10, {
+        draw('BadGuys', 78, {
+          alpha: Math.fround(cloudAlpha * Math.fround(0.75)),
+          offset: { x: 0, y: -175 },
+          role: 'acid-rain-cloud-mottled-source-over',
+          rotationRadians: Math.fround(Math.fround(age * Math.fround(0.03125)) * constructorPhase) * Math.PI / 180,
+          scaleX: firstScaleX,
+          scaleY: Math.fround(firstScaleX * Math.fround(0.8)),
+          tint: 0x698c52,
+        }),
+        draw('BadGuys', 78, {
           alpha: Math.fround(cloudAlpha * Math.fround(0.75)),
           blend: 'add',
           offset: { x: 0, y: -175 },
-          role: 'acid-rain-cloud-additive',
+          role: 'acid-rain-cloud-mottled-additive',
           rotationRadians: Math.fround(Math.fround(age * Math.fround(0.03125)) * constructorPhase) * Math.PI / 180,
           scaleX: firstScaleX,
           scaleY: Math.fround(firstScaleX * Math.fround(0.8)),
@@ -933,8 +942,9 @@ export function nativeSecondaryPresentationPlan(
         }),
         draw('BadGuys', 10, {
           alpha: cloudAlpha,
+          blend: 'add',
           offset: { x: 0, y: Math.fround(-175 + fieldScale * -50) },
-          role: 'acid-rain-cloud-source-over',
+          role: 'acid-rain-cloud-circle-additive',
           rotationRadians: Math.fround(age * Math.fround(-0.5)) * Math.PI / 180,
           scaleX: Math.fround(secondBaseScale * constructorPhase),
           scaleY: Math.fround(secondBaseScale * Math.fround(0.8)),
@@ -943,7 +953,7 @@ export function nativeSecondaryPresentationPlan(
       ] : []
       const underlayDraws: NativeSecondarySpriteDraw[] = []
       if (actor.alpha > 0) {
-        underlayDraws.push(draw('BadGuys', 10, {
+        underlayDraws.push(draw('DeadHawg', 4, {
           alpha: Math.max(0, Math.min(1, actor.alpha)),
           role: 'acid-rain-ground-residue',
           scaleX: 4.5,
@@ -961,13 +971,13 @@ export function nativeSecondaryPresentationPlan(
       return actor.phase < 0
         ? plan([draw('BadGuys', 0, {
             alpha: 0.25,
-            offset: { x: 0, y: actor.phase },
+            offset: { x: 0, y: 0 },
             role: 'acid-raindrop-falling',
             scaleX: 1,
             scaleY: 1,
             tint: 0xb3f2bf,
           })], 'zanim', 0, [], [raindropGradient(actor, true)])
-        : plan([draw('BadGuys', 0, {
+        : plan([draw('BadGuys', 63, {
             alpha: Math.max(0, 1 - actor.scale * actor.scale),
             role: 'acid-raindrop-ground',
             scaleX: actor.scale,
@@ -1640,13 +1650,13 @@ function raindropGradient(
   acid: boolean,
 ): NativeSecondaryGradientDraw {
   return {
-    end: { x: 0, y: actor.phase - actor.quantity },
-    endAlpha: 0,
-    endColor: 0x66f2ff,
+    bottomAlpha: 0.5,
+    bottomColor: acid ? 0xb3f2bf : 0xccf2ff,
+    height: actor.quantity,
     role: acid ? 'acid-raindrop-streak' : 'storm-raindrop-streak',
-    start: { x: 0, y: actor.phase },
-    startAlpha: acid ? 1 : 0.5,
-    startColor: acid ? 0xb3f2bf : 0xccf2ff,
+    topAlpha: 0,
+    topColor: acid ? 0x66f280 : 0x66f2ff,
+    topLeft: { x: acid ? -1 : 0, y: actor.phase },
     width: acid ? 3 : 2,
   }
 }

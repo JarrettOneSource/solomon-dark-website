@@ -1869,6 +1869,93 @@ test('one-shot casts retain accepted facing against movement through projectile 
   }
 })
 
+test('a continued one-shot hold captures moved aim for the next Ether and Fire action', () => {
+  for (const element of ['ether', 'fire'] as const) {
+    let state = simulation(element)
+    const heldInput = (directionX: -1 | 1): PlayerCharacterInput => {
+      const player = getPlayerCharacter(state, PLAYER_ID)
+      return {
+        ...createIdlePlayerCharacterInput(),
+        aim: {
+          x: player.position.x + directionX * 200,
+          y: player.position.y - 25 / INTEGRATION_VIEW_SCALE,
+        },
+        cast: { primary: true, quickbar: null },
+      }
+    }
+
+    state = stepGameSimulationTick(state, { [PLAYER_ID]: heldInput(-1) })
+    const firstCastSequence = getPlayerCharacter(state, PLAYER_ID).primaryCast.castSequence
+    const firstEmissionSequence = getPlayerCharacter(state, PLAYER_ID).primaryCast.emissionSequence
+    let guard = 0
+    while (
+      getPlayerCharacter(state, PLAYER_ID).primaryCast.emissionSequence === firstEmissionSequence
+      && guard < 100
+    ) {
+      state = stepGameSimulationTick(state, { [PLAYER_ID]: heldInput(-1) })
+      guard += 1
+    }
+    const firstProjectile = state.primarySpells.projectiles.at(-1)
+    assert.ok(firstProjectile)
+    assert.ok(firstProjectile.velocity.x < 0, `${element}: first emission must travel left`)
+
+    guard = 0
+    while (
+      getPlayerCharacter(state, PLAYER_ID).primaryCast.castSequence === firstCastSequence
+      && guard < 150
+    ) {
+      state = stepGameSimulationTick(state, { [PLAYER_ID]: heldInput(1) })
+      guard += 1
+    }
+    const retargeted = getPlayerCharacter(state, PLAYER_ID)
+    assert.equal(retargeted.primaryCast.castSequence, firstCastSequence + 1)
+    assert.deepEqual(retargeted.primaryCast.aimDirection, { x: 1, y: 0 })
+    assert.equal(retargeted.headingIndex, 6)
+
+    const secondEmissionSequence = retargeted.primaryCast.emissionSequence
+    guard = 0
+    while (
+      getPlayerCharacter(state, PLAYER_ID).primaryCast.emissionSequence === secondEmissionSequence
+      && guard < 100
+    ) {
+      state = stepGameSimulationTick(state, { [PLAYER_ID]: heldInput(1) })
+      guard += 1
+    }
+    const secondProjectile = state.primarySpells.projectiles.at(-1)
+    assert.ok(secondProjectile)
+    assert.ok(secondProjectile.velocity.x > 0, `${element}: successor emission must travel right`)
+  }
+})
+
+test('Air and Water consume moved world aim during the same held channel', () => {
+  for (const element of ['air', 'water'] as const) {
+    let state = simulation(element)
+    const heldInput = (directionX: -1 | 1): PlayerCharacterInput => {
+      const player = getPlayerCharacter(state, PLAYER_ID)
+      return {
+        ...createIdlePlayerCharacterInput(),
+        aim: {
+          x: player.position.x + directionX * 200,
+          y: player.position.y - 25 / INTEGRATION_VIEW_SCALE,
+        },
+        cast: { primary: true, quickbar: null },
+      }
+    }
+
+    state = stepGameSimulationTick(state, { [PLAYER_ID]: heldInput(-1) })
+    const initial = getPlayerCharacter(state, PLAYER_ID)
+    assert.deepEqual(initial.primaryCast.aimDirection, { x: -1, y: 0 })
+    assert.equal(initial.primaryCast.channelActive, true)
+    assert.equal(initial.headingIndex, 18)
+
+    state = stepGameSimulationTick(state, { [PLAYER_ID]: heldInput(1) })
+    const retargeted = getPlayerCharacter(state, PLAYER_ID)
+    assert.deepEqual(retargeted.primaryCast.aimDirection, { x: 1, y: 0 })
+    assert.equal(retargeted.primaryCast.channelActive, true)
+    assert.equal(retargeted.headingIndex, 6)
+  }
+})
+
 test('Air emits one presentation record per held tick for the five-tick contact fade', () => {
   let state = step(simulation('air'), true)
   let player = getPlayerCharacter(state, PLAYER_ID)

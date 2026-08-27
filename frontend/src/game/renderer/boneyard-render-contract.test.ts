@@ -133,6 +133,15 @@ test('Acid Rain keeps ground residue outside its world-sorted cloud proxy', () =
   assert.match(boneyardRenderer, /layer\.lane === 'pre-world-queue'\s*\? 0\.5/)
 })
 
+test('secondary rain paints native top-to-bottom filled quads instead of path-directed strokes', () => {
+  assert.match(
+    secondaryWorldView,
+    /\.rect\(draw\.topLeft\.x, draw\.topLeft\.y, draw\.width, draw\.height\)/,
+  )
+  assert.match(secondaryWorldView, /\.fill\(fill\)/)
+  assert.doesNotMatch(secondaryWorldView, /\.stroke\(\{ cap: 'butt', fill, width: draw\.width \}\)/)
+})
+
 test('world-weather splash and streak painters are separate light-boundary roots', () => {
   assert.match(weatherView, /root\.addChild\(this\.splashContainer, this\.dropContainer\)/)
   assert.doesNotMatch(

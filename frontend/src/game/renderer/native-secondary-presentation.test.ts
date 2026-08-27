@@ -1237,24 +1237,24 @@ test('Storm and Acid falling drops use the exact native gradient streaks', () =>
     scale: Math.fround(0.1),
   }
   assert.deepEqual(nativeSecondaryPresentationPlan(drop).gradients, [{
-    end: { x: 0, y: -159 },
-    endAlpha: 0,
-    endColor: 0x66f2ff,
+    bottomAlpha: 0.5,
+    bottomColor: 0xccf2ff,
+    height: 4,
     role: 'storm-raindrop-streak',
-    start: { x: 0, y: -155 },
-    startAlpha: 0.5,
-    startColor: 0xccf2ff,
+    topAlpha: 0,
+    topColor: 0x66f2ff,
+    topLeft: { x: 0, y: -155 },
     width: 2,
   }])
   const acid = nativeSecondaryPresentationPlan({ ...drop, kind: 'acid-drop', skillId: 72 })
   assert.deepEqual(acid.gradients, [{
-    end: { x: 0, y: -159 },
-    endAlpha: 0,
-    endColor: 0x66f2ff,
+    bottomAlpha: 0.5,
+    bottomColor: 0xb3f2bf,
+    height: 4,
     role: 'acid-raindrop-streak',
-    start: { x: 0, y: -155 },
-    startAlpha: 1,
-    startColor: 0xb3f2bf,
+    topAlpha: 0,
+    topColor: 0x66f280,
+    topLeft: { x: -1, y: -155 },
     width: 3,
   }])
   assert.deepEqual({
@@ -1265,12 +1265,27 @@ test('Storm and Acid falling drops use the exact native gradient streaks', () =>
   }, {
     alpha: 0.25,
     entry: 0,
-    offset: { x: 0, y: -155 },
+    offset: { x: 0, y: 0 },
     tint: 0xb3f2bf,
   })
+
+  const landedStorm = nativeSecondaryPresentationPlan({ ...drop, phase: 0, scale: 0.5 })
+  const landedAcid = nativeSecondaryPresentationPlan({
+    ...drop,
+    kind: 'acid-drop',
+    phase: 0,
+    scale: 0.5,
+    skillId: 72,
+  })
+  assert.deepEqual(landedStorm.draws.map(({ alpha, atlas, entry, tint }) => ({
+    alpha, atlas, entry, tint,
+  })), [{ alpha: 0.75, atlas: 'BadGuys', entry: 63, tint: 0xccffff }])
+  assert.deepEqual(landedAcid.draws.map(({ alpha, atlas, entry, tint }) => ({
+    alpha, atlas, entry, tint,
+  })), [{ alpha: 0.75, atlas: 'BadGuys', entry: 63, tint: 0xccffcc }])
 })
 
-test('Acid Rain splits its overhead cloud proxy from the pre-world ground residue', () => {
+test('Acid Rain uses fixed-tick actor age for its cloud and splits out ground residue', () => {
   const source = {
     ...actor('acid-rain'),
     ageTicks: 80,
@@ -1279,11 +1294,12 @@ test('Acid Rain splits its overhead cloud proxy from the pre-world ground residu
     rotationRadians: 0.4,
     scale: 0.5,
   }
-  const plan = nativeSecondaryPresentationPlan(source, 80)
+  const plan = nativeSecondaryPresentationPlan(source, 987)
   assert.equal(plan.sortBias, 0)
   assert.equal(plan.worldY, source.position.y + 350)
   assert.deepEqual(plan.draws.map((draw) => ({
     alpha: draw.alpha,
+    atlas: draw.atlas,
     blend: draw.blend,
     entry: draw.entry,
     offset: draw.offset,
@@ -1295,10 +1311,23 @@ test('Acid Rain splits its overhead cloud proxy from the pre-world ground residu
   })), [
     {
       alpha: 0.6000000238418579,
-      blend: 'add',
-      entry: 10,
+      atlas: 'BadGuys',
+      blend: 'normal',
+      entry: 78,
       offset: { x: 0, y: -175 },
-      role: 'acid-rain-cloud-additive',
+      role: 'acid-rain-cloud-mottled-source-over',
+      rotationRadians: Math.PI / 180,
+      scaleX: 2.5,
+      scaleY: 2,
+      tint: 0x698c52,
+    },
+    {
+      alpha: 0.6000000238418579,
+      atlas: 'BadGuys',
+      blend: 'add',
+      entry: 78,
+      offset: { x: 0, y: -175 },
+      role: 'acid-rain-cloud-mottled-additive',
       rotationRadians: Math.PI / 180,
       scaleX: 2.5,
       scaleY: 2,
@@ -1306,10 +1335,11 @@ test('Acid Rain splits its overhead cloud proxy from the pre-world ground residu
     },
     {
       alpha: 0.800000011920929,
-      blend: 'normal',
+      atlas: 'BadGuys',
+      blend: 'add',
       entry: 10,
       offset: { x: 0, y: -200 },
-      role: 'acid-rain-cloud-source-over',
+      role: 'acid-rain-cloud-circle-additive',
       rotationRadians: -40 * Math.PI / 180,
       scaleX: 1.5,
       scaleY: 3,
@@ -1318,6 +1348,7 @@ test('Acid Rain splits its overhead cloud proxy from the pre-world ground residu
   ])
   assert.deepEqual(plan.underlayDraws.map((draw) => ({
     alpha: draw.alpha,
+    atlas: draw.atlas,
     blend: draw.blend,
     entry: draw.entry,
     offset: draw.offset,
@@ -1329,8 +1360,9 @@ test('Acid Rain splits its overhead cloud proxy from the pre-world ground residu
   })), [
     {
       alpha: 0.625,
+      atlas: 'DeadHawg',
       blend: 'normal',
-      entry: 10,
+      entry: 4,
       offset: { x: 0, y: 0 },
       role: 'acid-rain-ground-residue',
       rotationRadians: 0,
@@ -1339,10 +1371,10 @@ test('Acid Rain splits its overhead cloud proxy from the pre-world ground residu
       tint: 0x0d1a0d,
     },
   ])
-  const noResidue = nativeSecondaryPresentationPlan({ ...source, alpha: 0 }, 80)
-  assert.equal(noResidue.draws.length, 2)
+  const noResidue = nativeSecondaryPresentationPlan({ ...source, alpha: 0 }, 987)
+  assert.equal(noResidue.draws.length, 3)
   assert.equal(noResidue.underlayDraws.length, 0)
-  const residueOnly = nativeSecondaryPresentationPlan({ ...source, phase: 0 }, 80)
+  const residueOnly = nativeSecondaryPresentationPlan({ ...source, phase: 0 }, 987)
   assert.equal(residueOnly.draws.length, 0)
   assert.equal(residueOnly.underlayDraws.length, 1)
 })

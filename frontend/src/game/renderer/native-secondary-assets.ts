@@ -28,6 +28,7 @@ const files = import.meta.glob([
   '../../assets/game/boneyard/badguys/0055.png',
   '../../assets/game/boneyard/badguys/0058.png',
   '../../assets/game/boneyard/badguys/0062.png',
+  '../../assets/game/boneyard/badguys/0063.png',
   '../../assets/game/boneyard/badguys/0068.png',
   '../../assets/game/boneyard/badguys/0072.png',
   '../../assets/game/boneyard/badguys/0074.png',
@@ -55,6 +56,7 @@ const files = import.meta.glob([
   '../../assets/game/boneyard/badguys/200[8-9].png',
   '../../assets/game/boneyard/badguys/2010.png',
   '../../assets/game/boneyard/deadhawg/002.png',
+  '../../assets/game/boneyard/deadhawg/004.png',
   '../../assets/game/boneyard/deadhawg/00[5-6].png',
   '../../assets/game/boneyard/deadhawg/01[6-8].png',
   '../../assets/game/boneyard/deadhawg/04[6-9].png',
@@ -84,13 +86,13 @@ export const NATIVE_SECONDARY_SPECIAL_ASSET_SOURCES = Object.freeze({
 })
 
 const BADGUYS_ENTRIES = Object.freeze([
-  0, 7, 10, 11, 15, 16, 17, 22, 36, 38, 39, 40, 45, 48, 49, 51, 53, 55, 58, 62, 68, 72, 74, 75, 78, 84, 85, 86, 88, 90,
+  0, 7, 10, 11, 15, 16, 17, 22, 36, 38, 39, 40, 45, 48, 49, 51, 53, 55, 58, 62, 63, 68, 72, 74, 75, 78, 84, 85, 86, 88, 90,
   ...range(110, 112), ...range(158, 167), ...range(238, 250),
   ...range(251, 254), ...range(267, 270),
   ...range(333, 400), ...range(2008, 2010),
 ])
 const DEADHAWG_ENTRIES = Object.freeze([
-  2, 5, 6, 16, 17, 18, ...range(46, 87), 114, 121, ...range(177, 179), ...range(200, 207),
+  2, 4, 5, 6, 16, 17, 18, ...range(46, 87), 114, 121, ...range(177, 179), ...range(200, 207),
 ])
 const CLOTHES_ENTRIES = Object.freeze([2])
 const GOLEM_ENTRIES = Object.freeze(range(1, 208).filter((entry) => {

@@ -42,11 +42,14 @@ const requestedSkillIds = (process.env.SDR_SECONDARY_ABILITY_ID || '')
   .filter(Boolean)
   .map(Number)
 const requestedScene = process.env.SDR_SECONDARY_ABILITY_SCENE || 'hub'
+const comparisonCapture = process.env.SDR_SECONDARY_ABILITY_COMPARISON_CAPTURE === '1'
+const retainNativeViewport = process.env.SDR_SECONDARY_ABILITY_NATIVE_VIEWPORT === '1'
 const cooldownOnly = process.env.SDR_SECONDARY_COOLDOWN_ONLY === '1'
 const singleGolemCapture = process.env.SDR_SECONDARY_GOLEM_SINGLE === '1'
 const golemCooldownTiming = process.env.SDR_SECONDARY_GOLEM_COOLDOWN_TIMING === '1'
 const statusEffectAcceptance = process.env.SDR_STATUS_EFFECT_ACCEPTANCE === '1'
 assert.ok(requestedScene === 'hub' || requestedScene === 'boneyard')
+if (comparisonCapture) assert.equal(retainNativeViewport, true)
 if (statusEffectAcceptance) assert.equal(requestedScene, 'boneyard')
 
 const PROOFS = Object.freeze({
@@ -228,7 +231,7 @@ try {
         boneyardEnemyBaseline,
       )
     : null
-  await page.setViewportSize({ width: 800, height: 450 })
+  if (!retainNativeViewport) await page.setViewportSize({ width: 800, height: 450 })
   await page.waitForTimeout(250)
 
   const selectedContracts = requestedSkillIds.length === 0
@@ -1264,11 +1267,20 @@ function assertReportedPresentation(state, playerId, skillId, samples) {
       assert.ok(rendered.every(({ worldY }) => worldY === rain.position.y + 350))
       assert.ok(withResidue.every(({ underlayDepth }) => underlayDepth === 0.5))
       assert.ok(withResidue.every(({ depth, underlayDepth }) => depth > underlayDepth))
-      assert.ok(rendered.every(({ mainDrawOffsetsY }) => (
-        mainDrawOffsetsY.length === 2
+      assert.ok(rendered.every(({ mainDrawMembers, mainDrawOffsetsY }) => (
+        mainDrawMembers.join('|') === [
+          'BadGuys:78:normal',
+          'BadGuys:78:add',
+          'BadGuys:10:add',
+        ].join('|')
+          && mainDrawOffsetsY.length === 3
           && mainDrawOffsetsY[0] === -175
-          && mainDrawOffsetsY[1] <= -175
-          && mainDrawOffsetsY[1] >= -225
+          && mainDrawOffsetsY[1] === -175
+          && mainDrawOffsetsY[2] <= -175
+          && mainDrawOffsetsY[2] >= -225
+      )))
+      assert.ok(withResidue.every(({ underlayDrawMembers }) => (
+        underlayDrawMembers.join('|') === 'DeadHawg:4:normal'
       )))
       assert.ok(samples.some(({ kinds }) => kinds.includes('acid-drop')))
       assert.ok(samples.some(({ kinds }) => kinds.includes('acid-splash')))
@@ -1278,7 +1290,9 @@ function assertReportedPresentation(state, playerId, skillId, samples) {
           Math.max(...rendered.flatMap(({ mainDrawOffsetsY }) => mainDrawOffsetsY)),
         ],
         cloudProxyWorldY: rain.position.y + 350,
+        cloudSpriteMembers: rendered[0].mainDrawMembers,
         groundResidueDepth: 0.5,
+        groundResidueMembers: withResidue[0].underlayDrawMembers,
         groundResiduePrimitives: 1,
       }
     }
@@ -1408,10 +1422,12 @@ async function abilityCastTarget(canvas, host, playerId, skillId, scene) {
       || left.id - right.id
     ))[0]
   assert.ok(enemy)
-  const position = {
-    x: playerPosition.x,
-    y: playerPosition.y + (skillId === 27 ? 100 : -50),
-  }
+  const position = comparisonCapture && skillId === 72
+    ? { x: playerPosition.x + 200, y: playerPosition.y }
+    : {
+        x: playerPosition.x,
+        y: playerPosition.y + (skillId === 27 ? 100 : -50),
+      }
   const enemies = {
     ...state.world.enemies,
     actors: state.world.enemies.actors.map((actor) => {

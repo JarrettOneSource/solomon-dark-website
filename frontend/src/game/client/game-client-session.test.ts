@@ -1134,7 +1134,7 @@ test('client submits the exact Sorceror action for the current offer only', asyn
   session.destroy()
 })
 
-test('client schedules every cast-level transition on a distinct fixed tick', async () => {
+test('client coalesces held aim updates but schedules every cast-level transition separately', async () => {
   const transport = new MemoryTransport()
   const connecting = connectGameClientSession({
     character: CHARACTER,
@@ -1169,7 +1169,19 @@ test('client schedules every cast-level transition on a distinct fixed tick', as
   const pressed = decodeClientGameMessage(transport.sent.at(-1)!)
   assert.equal(pressed.type, 'client-input')
 
-  session.sendInput(gameplayInput({ x: 0, y: 0 }, { x: 110, y: 210 }))
+  session.sendInput(gameplayInput({ x: 0, y: 0 }, { x: 110, y: 210 }, true))
+  const retargeted = decodeClientGameMessage(transport.sent.at(-1)!)
+  assert.equal(retargeted.type, 'client-input')
+  if (pressed.type !== 'client-input' || retargeted.type !== 'client-input') {
+    assert.fail('expected held client input messages')
+  }
+  assert.equal(retargeted.targetTick, pressed.targetTick)
+  assert.deepEqual(
+    retargeted.input,
+    gameplayInput({ x: 0, y: 0 }, { x: 110, y: 210 }, true),
+  )
+
+  session.sendInput(gameplayInput({ x: 0, y: 0 }, { x: 120, y: 220 }))
   const released = decodeClientGameMessage(transport.sent.at(-1)!)
   assert.equal(released.type, 'client-input')
   if (pressed.type !== 'client-input' || released.type !== 'client-input') {
@@ -1177,15 +1189,15 @@ test('client schedules every cast-level transition on a distinct fixed tick', as
   }
   assert.equal(released.targetTick, pressed.targetTick + 1)
 
-  session.sendInput(gameplayInput({ x: 0, y: 0 }, { x: 120, y: 220 }))
+  session.sendInput(gameplayInput({ x: 0, y: 0 }, { x: 130, y: 230 }))
   const moved = decodeClientGameMessage(transport.sent.at(-1)!)
   assert.equal(moved.type, 'client-input')
   if (moved.type !== 'client-input') assert.fail('expected client input message')
   assert.equal(moved.targetTick, released.targetTick)
-  assert.deepEqual(moved.input, gameplayInput({ x: 0, y: 0 }, { x: 120, y: 220 }))
+  assert.deepEqual(moved.input, gameplayInput({ x: 0, y: 0 }, { x: 130, y: 230 }))
 
   const messageCount = transport.sent.length
-  session.sendInput(gameplayInput({ x: 0, y: 0 }, { x: 120, y: 220 }))
+  session.sendInput(gameplayInput({ x: 0, y: 0 }, { x: 130, y: 230 }))
   assert.equal(transport.sent.length, messageCount)
   session.destroy()
 })

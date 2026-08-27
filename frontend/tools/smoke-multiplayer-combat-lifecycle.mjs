@@ -57,6 +57,7 @@ const screenshotRoot = process.env.SDR_GAME_MULTIPLAYER_COMBAT_SCREENSHOT_ROOT |
 const deathGameOverOnly = process.argv.includes('--death-game-over-only')
 const featureOnly = process.argv.includes('--feature-only')
 const levelUpOnly = process.argv.includes('--level-up-only')
+const playerReportOnly = process.argv.includes('--player-report-only')
 const requireAllDeathFrames = process.argv.includes('--require-all-death-frames')
 const deathAnimationScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-death-animation.png`
 const firstDeathScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-first-death.png`
@@ -65,7 +66,9 @@ const enemyShieldScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-en
 const enemyShieldBreakScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-enemy-shield-break.png`
 const gameOverScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-game-over.png`
 const levelUpScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-level-up.png`
+const guestLevelUpScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-level-up-guest.png`
 const levelUpWaitingScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-level-up-waiting.png`
+const pointerTrackingScreenshotPath = `${screenshotRoot}/solomon-dark-player-report-pointer-tracking.png`
 const loadoutScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-loadout.png`
 const returnedHubScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-returned-hub.png`
 const browserOptions = {
@@ -167,6 +170,8 @@ try {
   assert.equal(hostInitial.playerCount, 2)
   assert.equal(guestInitial.playerCount, 2)
 
+  let pointerTracking = null
+
   let deathSetup = null
   if (deathGameOverOnly) {
     await pulseMovement(hostPage, ['a'], 750)
@@ -199,13 +204,32 @@ try {
     )
     approach = await walkToSolomon(guestPage, guestScene, loadedBoneyard.scene)
     assert.notEqual(approach.phase, 'digging')
-    const casterOpeningEvasion = startSurvivorEvasion(guestPage, combatNavigation)
-    const peerEvasion = startSurvivorEvasion(hostPage, combatNavigation)
+    let casterOpeningEvasion = startSurvivorEvasion(guestPage, combatNavigation)
+    let peerEvasion = startSurvivorEvasion(hostPage, combatNavigation)
     try {
       await Promise.all([
         waitForFirstEnemy(hostPage),
         waitForFirstEnemy(guestPage),
       ])
+      if (playerReportOnly) {
+        await Promise.all([
+          casterOpeningEvasion.stop(),
+          peerEvasion.stop(),
+        ])
+        await Promise.all([
+          guestPage.waitForTimeout(250),
+          hostPage.waitForTimeout(250),
+        ])
+        pointerTracking = await proveHeldPointerTracking({
+          guestPage,
+          guestPlayerId: guestHub.localPlayerId,
+          host,
+          hostPage,
+          hostPlayerId: hostHub.localPlayerId,
+        })
+        casterOpeningEvasion = startSurvivorEvasion(guestPage, combatNavigation)
+        peerEvasion = startSurvivorEvasion(hostPage, combatNavigation)
+      }
       progressionAndEffects = await proveSharedLevelUpAndEnemyEffects({
         casterOpeningEvasion,
         guestPage,
@@ -213,7 +237,7 @@ try {
         host,
         hostPage,
         hostPlayerId: hostHub.localPlayerId,
-        levelUpOnly,
+        levelUpOnly: levelUpOnly || playerReportOnly,
         peerEvasion,
       })
     } finally {
@@ -224,7 +248,7 @@ try {
     }
   }
 
-  if (featureOnly || levelUpOnly) {
+  if (featureOnly || levelUpOnly || playerReportOnly) {
     assert.deepEqual(errors, {
       guest: { console: [], page: [] },
       host: { console: [], page: [] },
@@ -237,6 +261,7 @@ try {
       enemyShieldScreenshotPath,
       errors,
       gateCrossing,
+      guestLevelUpScreenshotPath,
       levelUpScreenshotPath,
       levelUpWaitingScreenshotPath,
       participants: {
@@ -245,7 +270,13 @@ try {
         runId: hostInitial.runId,
       },
       progressionAndEffects,
-      scope: levelUpOnly ? 'multiplayer-level-up' : 'enemy-hit-death-xp',
+      pointerTracking,
+      pointerTrackingScreenshotPath,
+      scope: playerReportOnly
+        ? 'player-report'
+        : levelUpOnly
+          ? 'multiplayer-level-up'
+          : 'enemy-hit-death-xp',
       status: 'ok',
     })}\n`)
     break smokeFlow
@@ -452,6 +483,339 @@ function postGameOverResetReceipt(state, playerId) {
   }
 }
 
+async function proveHeldPointerTracking({
+  guestPage,
+  guestPlayerId,
+  host,
+  hostPage,
+  hostPlayerId,
+}) {
+  const hostCanvas = hostPage.locator('.boneyard-world-canvas[data-game-renderer="pixi-webgl"]')
+  await hostPage.bringToFront()
+  await installNativePointerRayProbe(hostPage)
+  const hostPoints = await horizontalAimPoints(hostCanvas)
+  let fireRetargetPoint = null
+  const fireBaseline = primaryCastReceipt(host, hostPlayerId)
+  const fireProjectileBaselineId = latestOwnedPrimaryActorId(host, hostPlayerId, 'fire')
+  await hostPage.mouse.move(hostPoints.left.x, hostPoints.left.y)
+  const fireInitialPoint = await nativePointerRayReceipt(hostPage)
+  await hostPage.mouse.down({ button: 'left' })
+  let fireFirstEmission
+  let fireFirstProjectile
+  let fireSecondAcceptance
+  let fireSecondEmission
+  let fireSecondProjectile
+  try {
+    fireFirstEmission = await waitForPrimaryCast(
+      host,
+      hostPlayerId,
+      (cast) => cast.emissionSequence > fireBaseline.emissionSequence,
+      'Fire did not emit toward the initial held pointer',
+    )
+    assertNativeAimDirection(
+      fireFirstEmission.aimDirection,
+      fireInitialPoint.expectedDirection,
+      'initial Fire character aim',
+    )
+    fireFirstProjectile = await waitForOwnedPrimaryActor(
+      host,
+      hostPlayerId,
+      'fire',
+      fireProjectileBaselineId,
+      'Fire did not create its initial cursor-directed projectile',
+    )
+    assertNativeAimDirection(
+      fireFirstProjectile.direction,
+      fireInitialPoint.expectedDirection,
+      'initial Fire projectile direction',
+    )
+    const requestedRetargetPoint = (await horizontalAimPoints(hostCanvas)).right
+    await hostPage.mouse.move(requestedRetargetPoint.x, requestedRetargetPoint.y)
+    fireRetargetPoint = await nativePointerRayReceipt(hostPage)
+    fireSecondAcceptance = await waitForPrimaryCast(
+      host,
+      hostPlayerId,
+      (cast) => (
+        cast.castSequence >= fireBaseline.castSequence + 2
+        && cast.aimDirection.x > 0
+      ),
+      'held Fire did not capture the moved pointer for its next cast',
+    )
+    assertNativeAimDirection(
+      fireSecondAcceptance.aimDirection,
+      fireRetargetPoint.expectedDirection,
+      'retargeted Fire character aim',
+    )
+    fireSecondEmission = await waitForPrimaryCast(
+      host,
+      hostPlayerId,
+      (cast) => cast.emissionSequence >= fireBaseline.emissionSequence + 2,
+      'held Fire did not emit its retargeted successor',
+    )
+    assertNativeAimDirection(
+      fireSecondEmission.aimDirection,
+      fireRetargetPoint.expectedDirection,
+      'retargeted Fire emission aim',
+    )
+    fireSecondProjectile = await waitForOwnedPrimaryActor(
+      host,
+      hostPlayerId,
+      'fire',
+      fireFirstProjectile.id,
+      'held Fire did not create its retargeted successor projectile',
+    )
+    assertNativeAimDirection(
+      fireSecondProjectile.direction,
+      fireRetargetPoint.expectedDirection,
+      'retargeted Fire projectile direction',
+    )
+  } finally {
+    await hostPage.mouse.up({ button: 'left' })
+  }
+  const fireReleased = await waitForPrimaryCast(
+    host,
+    hostPlayerId,
+    (cast) => !cast.held,
+    'Fire primary remained held after mouse release',
+  )
+
+  const guestCanvas = guestPage.locator('.boneyard-world-canvas[data-game-renderer="pixi-webgl"]')
+  await guestPage.bringToFront()
+  await installNativePointerRayProbe(guestPage)
+  const guestPoints = await horizontalAimPoints(guestCanvas)
+  let airRetargetPoint = null
+  const airTransientBaselineId = latestOwnedPrimaryActorId(host, guestPlayerId, 'air')
+  await guestPage.mouse.move(guestPoints.left.x, guestPoints.left.y)
+  const airInitialPoint = await nativePointerRayReceipt(guestPage)
+  await guestPage.mouse.down({ button: 'left' })
+  let airLeft
+  let airLeftEmission
+  let airRight
+  let airRightEmission
+  try {
+    airLeft = await waitForPrimaryCast(
+      host,
+      guestPlayerId,
+      (cast) => cast.channelActive && cast.aimDirection.x < 0,
+      'Air did not acquire the initial held pointer',
+    )
+    assertNativeAimDirection(
+      airLeft.aimDirection,
+      airInitialPoint.expectedDirection,
+      'initial Air character aim',
+    )
+    airLeftEmission = await waitForOwnedPrimaryActor(
+      host,
+      guestPlayerId,
+      'air',
+      airTransientBaselineId,
+      'Air did not create its initial cursor-directed channel actor',
+    )
+    assertNativeAimDirection(
+      airLeftEmission.direction,
+      airInitialPoint.expectedDirection,
+      'initial Air channel direction',
+    )
+    const requestedRetargetPoint = (await horizontalAimPoints(guestCanvas)).right
+    await guestPage.mouse.move(requestedRetargetPoint.x, requestedRetargetPoint.y)
+    airRetargetPoint = await nativePointerRayReceipt(guestPage)
+    airRight = await waitForPrimaryCast(
+      host,
+      guestPlayerId,
+      (cast) => cast.channelActive && cast.aimDirection.x > 0,
+      'held Air did not follow the moved pointer',
+    )
+    assertNativeAimDirection(
+      airRight.aimDirection,
+      airRetargetPoint.expectedDirection,
+      'retargeted Air character aim',
+    )
+    airRightEmission = await waitForOwnedPrimaryActor(
+      host,
+      guestPlayerId,
+      'air',
+      airLeftEmission.id,
+      'held Air did not create its retargeted channel actor',
+    )
+    assertNativeAimDirection(
+      airRightEmission.direction,
+      airRetargetPoint.expectedDirection,
+      'retargeted Air channel direction',
+    )
+    await guestPage.screenshot({ path: pointerTrackingScreenshotPath })
+  } finally {
+    await guestPage.mouse.up({ button: 'left' })
+  }
+  const airReleased = await waitForPrimaryCast(
+    host,
+    guestPlayerId,
+    (cast) => !cast.held && !cast.channelActive,
+    'Air primary remained active after mouse release',
+  )
+
+  return {
+    air: {
+      left: airLeft,
+      leftEmission: airLeftEmission,
+      points: { left: airInitialPoint, right: airRetargetPoint },
+      released: airReleased,
+      right: airRight,
+      rightEmission: airRightEmission,
+    },
+    fire: {
+      baseline: fireBaseline,
+      firstEmission: fireFirstEmission,
+      firstProjectile: fireFirstProjectile,
+      points: { left: fireInitialPoint, right: fireRetargetPoint },
+      released: fireReleased,
+      secondAcceptance: fireSecondAcceptance,
+      secondEmission: fireSecondEmission,
+      secondProjectile: fireSecondProjectile,
+    },
+  }
+}
+
+async function horizontalAimPoints(canvas) {
+  const [bounds, frame] = await Promise.all([
+    canvas.boundingBox(),
+    canvas.evaluate((node) => structuredClone(node.__sdrBoneyardFrame)),
+  ])
+  assert.ok(bounds, 'expected a Boneyard canvas for held-pointer tracking')
+  const point = (requestedLogicalX, requestedLogicalY) => {
+    const logicalX = Math.max(40, Math.min(1_560, requestedLogicalX))
+    const logicalY = Math.max(40, Math.min(860, requestedLogicalY))
+    const delta = {
+      x: logicalX - frame.playerScreenX,
+      y: logicalY - frame.playerScreenY + NATIVE_POINTER_AIM_ANCHOR_Y_PIXELS,
+    }
+    const length = Math.hypot(delta.x, delta.y)
+    assert.ok(length > 0)
+    return {
+      expectedDirection: {
+        x: delta.x / length,
+        y: delta.y / length,
+      },
+      logical: { x: logicalX, y: logicalY },
+      worldAim: {
+        x: frame.cameraX - 800 / frame.cameraZoom + logicalX / frame.cameraZoom,
+        y: frame.cameraY - 450 / frame.cameraZoom + logicalY / frame.cameraZoom,
+      },
+      x: bounds.x + logicalX / 1_600 * bounds.width,
+      y: bounds.y + logicalY / 900 * bounds.height,
+    }
+  }
+  return {
+    left: point(frame.playerScreenX - 280, frame.playerScreenY - 160),
+    right: point(frame.playerScreenX + 240, frame.playerScreenY + 125),
+  }
+}
+
+async function installNativePointerRayProbe(page) {
+  await page.evaluate((anchorY) => {
+    window.__sdrPlayerReportPointerRay = null
+    window.addEventListener('mousemove', (event) => {
+      const canvas = document.querySelector(
+        '.boneyard-world-canvas[data-game-renderer="pixi-webgl"]',
+      )
+      const frame = canvas?.__sdrBoneyardFrame
+      if (!(canvas instanceof HTMLCanvasElement) || !frame) return
+      const bounds = canvas.getBoundingClientRect()
+      const logical = {
+        x: (event.clientX - bounds.left) * 1_600 / bounds.width,
+        y: (event.clientY - bounds.top) * 900 / bounds.height,
+      }
+      const delta = {
+        x: logical.x - frame.playerScreenX,
+        y: logical.y - frame.playerScreenY + anchorY,
+      }
+      const length = Math.hypot(delta.x, delta.y)
+      if (!(length > 0)) return
+      window.__sdrPlayerReportPointerRay = {
+        camera: { x: frame.cameraX, y: frame.cameraY, zoom: frame.cameraZoom },
+        client: { x: event.clientX, y: event.clientY },
+        expectedDirection: { x: delta.x / length, y: delta.y / length },
+        logical,
+        player: { x: frame.playerX, y: frame.playerY },
+        playerScreen: { x: frame.playerScreenX, y: frame.playerScreenY },
+        worldAim: {
+          x: frame.cameraX - 800 / frame.cameraZoom + logical.x / frame.cameraZoom,
+          y: frame.cameraY - 450 / frame.cameraZoom + logical.y / frame.cameraZoom,
+        },
+      }
+    }, true)
+  }, NATIVE_POINTER_AIM_ANCHOR_Y_PIXELS)
+}
+
+async function nativePointerRayReceipt(page) {
+  const receipt = await page.evaluate(() => structuredClone(
+    window.__sdrPlayerReportPointerRay,
+  ))
+  assert.ok(receipt, 'browser did not capture the live pointer ray')
+  return receipt
+}
+
+function assertNativeAimDirection(actual, expected, label) {
+  const error = Math.max(
+    Math.abs(actual.x - expected.x),
+    Math.abs(actual.y - expected.y),
+  )
+  assert.ok(
+    error <= 0.001,
+    `${label} missed the cursor ray by ${error}: ${JSON.stringify({ actual, expected })}`,
+  )
+}
+
+function latestOwnedPrimaryActorId(host, ownerId, kind) {
+  return Math.max(0, ...[
+    ...host.state().primarySpells.projectiles,
+    ...host.state().primarySpells.transients,
+  ].filter((actor) => actor.ownerId === ownerId && actor.kind === kind)
+    .map(({ id }) => id))
+}
+
+async function waitForOwnedPrimaryActor(host, ownerId, kind, afterId, message) {
+  const deadline = Date.now() + 10_000
+  while (Date.now() < deadline) {
+    const actor = [...host.state().primarySpells.projectiles,
+      ...host.state().primarySpells.transients]
+      .filter((candidate) => (
+        candidate.ownerId === ownerId
+        && candidate.kind === kind
+        && candidate.id > afterId
+      ))
+      .sort((left, right) => right.id - left.id)[0]
+    if (actor && 'direction' in actor) {
+      return { direction: { ...actor.direction }, id: actor.id }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+  throw new Error(message)
+}
+
+function primaryCastReceipt(host, playerId) {
+  const player = getPlayerCharacter(host.state(), playerId)
+  return {
+    aimDirection: { ...player.primaryCast.aimDirection },
+    castSequence: player.primaryCast.castSequence,
+    channelActive: player.primaryCast.channelActive,
+    emissionSequence: player.primaryCast.emissionSequence,
+    headingIndex: player.headingIndex,
+    held: player.primaryCast.held,
+    tick: host.state().tick,
+  }
+}
+
+async function waitForPrimaryCast(host, playerId, predicate, message, timeoutMs = 10_000) {
+  const deadline = Date.now() + timeoutMs
+  let receipt = primaryCastReceipt(host, playerId)
+  while (Date.now() < deadline) {
+    receipt = primaryCastReceipt(host, playerId)
+    if (predicate(receipt)) return receipt
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+  throw new Error(`${message}: ${JSON.stringify(receipt)}`)
+}
+
 function captureErrors(page) {
   const errors = { console: [], page: [] }
   const failedResources = new Set()
@@ -529,6 +893,12 @@ async function boneyardFrame(page) {
   ))
 }
 
+async function quickbarLabelsUnderPicker(page) {
+  return page.locator('.hub-hud-quickbar-slot[data-populated="true"]').evaluateAll((slots) => (
+    slots.map((slot) => slot.getAttribute('aria-label') ?? '')
+  ))
+}
+
 async function proveSharedLevelUpAndEnemyEffects({
   casterOpeningEvasion,
   guestPage,
@@ -595,14 +965,36 @@ async function proveSharedLevelUpAndEnemyEffects({
   const expectedLeveledPercent = (106 - 90) / (160 - 90) * 100
   assert.ok(Math.abs(leveledMeters.guest.value - expectedLeveledPercent) < 1e-9)
   assert.ok(Math.abs(leveledMeters.host.value - expectedLeveledPercent) < 1e-9)
+  await Promise.all([guestPage, hostPage].map((page) => page.waitForFunction(() => (
+    document.querySelector('.skill-picker-stage')?.getAttribute('data-picker-phase') === 'settled'
+  ), undefined, { timeout: 15_000 })))
 
   const optionSets = {
     guest: await pickerSkillIds(guestPicker),
     host: await pickerSkillIds(hostPicker),
   }
+  const wireOptionSets = {
+    guest: progressions.guest.pendingOffer?.options.map(({ skillId }) => skillId) ?? [],
+    host: progressions.host.pendingOffer?.options.map(({ skillId }) => skillId) ?? [],
+  }
   assert.equal(optionSets.guest.length, 3)
   assert.equal(optionSets.host.length, 3)
+  assert.deepEqual(optionSets, wireOptionSets)
   assert.notDeepEqual(optionSets.guest, optionSets.host)
+  assert.equal(optionSets.guest.includes(10), false)
+  assert.equal(optionSets.host.includes(10), false)
+  const quickbarLabels = {
+    guest: await quickbarLabelsUnderPicker(guestPage),
+    host: await quickbarLabelsUnderPicker(hostPage),
+  }
+  assert.deepEqual(
+    quickbarLabels.guest.map((label) => label.split(',')[0]),
+    ['Magic Storm'],
+  )
+  assert.deepEqual(
+    quickbarLabels.host.map((label) => label.split(',')[0]),
+    ['Ring of Fire'],
+  )
 
   const [hostTerminalFrame, guestTerminalFrame] = await Promise.all([
     boneyardFrame(hostPage),
@@ -618,7 +1010,10 @@ async function proveSharedLevelUpAndEnemyEffects({
   assert.ok(hostEffects.some(({ entry }) => entry === 86), 'expected the native Unbind star')
   assert.ok(hostEffects.some(({ entry }) => entry >= 1819 && entry <= 1822))
   assert.equal(new Set(hostEffects.map(({ id }) => id)).size, hostEffects.length)
-  await hostPage.screenshot({ path: levelUpScreenshotPath })
+  await Promise.all([
+    guestPage.screenshot({ path: guestLevelUpScreenshotPath }),
+    hostPage.screenshot({ path: levelUpScreenshotPath }),
+  ])
 
   const frozenTick = host.state().tick
   const frozenWorld = host.state().world
@@ -715,6 +1110,7 @@ async function proveSharedLevelUpAndEnemyEffects({
       },
       leveledMeters,
       optionSets,
+      quickbarLabels,
       ownerActorId,
       retainedEffectCount: hostEffects.length,
     }

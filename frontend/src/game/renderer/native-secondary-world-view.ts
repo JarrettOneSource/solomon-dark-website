@@ -70,10 +70,12 @@ export interface NativeSecondaryDiagnosticSample {
   readonly depth: number
   readonly id: number
   readonly kind: NativeSecondaryActorState['kind']
+  readonly mainDrawMembers: readonly string[]
   readonly mainDrawOffsetsY: readonly number[]
   readonly primitiveCount: number
   readonly sortBias: number
   readonly underlayDepth: number | null
+  readonly underlayDrawMembers: readonly string[]
   readonly underlayPrimitiveCount: number
   readonly worldX: number
   readonly worldY: number
@@ -276,12 +278,18 @@ class NativeSecondaryActorView {
       depth: this.container.zIndex,
       id,
       kind: this.currentKind,
+      mainDrawMembers: this.plan.draws.map(({ atlas, blend, entry }) => (
+        `${atlas}:${entry}:${blend}`
+      )),
       mainDrawOffsetsY: this.plan.draws.map(({ offset }) => offset.y),
       primitiveCount: this.primitiveCount,
       sortBias: this.plan.sortBias,
       underlayDepth: this.plan.underlayDraws.length > 0
         ? this.underlayContainer?.zIndex ?? null
         : null,
+      underlayDrawMembers: this.plan.underlayDraws.map(({ atlas, blend, entry }) => (
+        `${atlas}:${entry}:${blend}`
+      )),
       underlayPrimitiveCount: this.plan.underlayDraws.length,
       worldX: this.plan.root.x,
       worldY: this.plan.worldY,
@@ -378,8 +386,8 @@ class NativeSecondaryActorView {
   private addGradient(draw: NativeSecondaryGradientDraw): void {
     const fill = new FillGradient({
       colorStops: [
-        { color: colorWithAlpha(draw.startColor, draw.startAlpha), offset: 0 },
-        { color: colorWithAlpha(draw.endColor, draw.endAlpha), offset: 1 },
+        { color: colorWithAlpha(draw.topColor, draw.topAlpha), offset: 0 },
+        { color: colorWithAlpha(draw.bottomColor, draw.bottomAlpha), offset: 1 },
       ],
       end: { x: 0, y: 1 },
       start: { x: 0, y: 0 },
@@ -562,9 +570,8 @@ function applyGradient(
 ): void {
   graphic.label = draw.role
   graphic.clear()
-    .moveTo(draw.start.x, draw.start.y)
-    .lineTo(draw.end.x, draw.end.y)
-    .stroke({ cap: 'butt', fill, width: draw.width })
+    .rect(draw.topLeft.x, draw.topLeft.y, draw.width, draw.height)
+    .fill(fill)
 }
 
 function colorWithAlpha(color: number, alpha: number): string {

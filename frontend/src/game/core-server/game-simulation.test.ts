@@ -1325,6 +1325,55 @@ test('a shared level milestone freezes every gameplay clock until the fixed coho
   assert.equal(state.tick, frozenTick + 1)
 })
 
+test('shared milestones keep More Missiles private to the participant who knows Magic Missile', () => {
+  let state = createGameSimulation({
+    air: { discipline: 'arcane', displayName: 'Air', element: 'air' },
+    ether: { discipline: 'arcane', displayName: 'Ether', element: 'ether' },
+  })
+  const progressions = [...state.playerEntities.progressions]
+  for (const playerId of ['air', 'ether']) {
+    const index = state.playerEntities.identities.findIndex(({ playerId: id }) => id === playerId)
+    progressions[index] = {
+      ...progressions[index]!,
+      forcedOfferSkillIds: Object.freeze([10]),
+    }
+  }
+  state = {
+    ...state,
+    playerEntities: {
+      ...state.playerEntities,
+      progressions: Object.freeze(progressions),
+    },
+  }
+
+  state = grantGameSimulationPlayerExperience(state, 'ether', 91)
+  const airOffer = getPlayerProgression(state, 'air').pendingOffer
+  const etherOffer = getPlayerProgression(state, 'ether').pendingOffer
+  assert.ok(airOffer)
+  assert.ok(etherOffer)
+  assert.equal(airOffer.options.some(({ skillId }) => skillId === 10), false)
+  const moreMissilesIndex = etherOffer.options.findIndex(({ skillId }) => skillId === 10)
+  assert.notEqual(moreMissilesIndex, -1)
+
+  assert.equal(selectGameSimulationPlayerSkill(state, 'air', {
+    choiceIndex: moreMissilesIndex,
+    offerSequence: etherOffer.sequence,
+    skillId: 10,
+  }), null)
+  assert.equal(getPlayerSkillBook(state, 'air').permanentRanks[10], 0)
+  assert.equal(getPlayerSkillBook(state, 'ether').permanentRanks[10], 0)
+
+  const selected = selectGameSimulationPlayerSkill(state, 'ether', {
+    choiceIndex: moreMissilesIndex,
+    offerSequence: etherOffer.sequence,
+    skillId: 10,
+  })
+  assert.ok(selected)
+  assert.equal(getPlayerSkillBook(selected, 'air').permanentRanks[10], 0)
+  assert.equal(getPlayerSkillBook(selected, 'ether').permanentRanks[10], 1)
+  assert.deepEqual(selected.levelUpBarrier?.pendingPlayerIds, ['air'])
+})
+
 test('Mindblowing Ring triggers only for the credited source and retains its unstepped birth actors', () => {
   let state = createGameSimulation({
     first: { discipline: 'arcane', displayName: 'First', element: 'ether' },
