@@ -53840,7 +53840,6 @@ inferable from a stale client document.
   They are retained beside the final Mac worktree under `evidence-global/` and
   `evidence-private/`. No browser-platform member is blocked beyond a process
   killed before its latest checkpoint can persist. No deployment was performed.
-
 ## 2026-08-27 — InventoryScreen Sack return-control presentation closure
 
 ### Reported smell and parity question
@@ -58236,7 +58235,6 @@ brightness in the Website.
 - Browser constraints, inferred implementation facts, and remaining in-system
   omissions: none. Publication, remote verification, deployment, and cleanup
   remain separate receipts; deployment is not in this task's scope.
-
 ## 2026-08-28 — Welded-primary inclusive presentation endpoints
 
 ### Reported smell and parity question
@@ -59065,3 +59063,148 @@ not require an update.
   omissions: none. This final addendum is the sole post-final-gate tracked
   edit; source and test bytes are unchanged from the validated tree.
   Publication and deployment were not requested and were not performed.
+## 2026-08-27 — Complete stock renderer and game-wide VFX reflection reopening
+
+### Reported smell and parity question
+
+- Reported web behavior: Acid Rain improved after recovering the Arena shader,
+  but minor visual mismatches remain scattered through the current VFX. The
+  earlier work explicitly stopped at the Arena/Boneyard pixel interval.
+- Stock behavior to recover: the entire executable frame-to-pixel pipeline —
+  application/surface scheduling, every primitive and state program, every
+  shader and render target, all texture/sampler/alpha behavior, and every
+  downstream scene/class consumer — then use that model to audit the complete
+  Website presentation rather than tune isolated effects.
+- Reproduction inputs/scenes: Loader, Title, Create, Courtyard and all private
+  rooms, gameplay HUD/pickers/inventory, generated Arena/Tutorial, editor;
+  player/enemy/loot/weather/status/death VFX; all primary/weld/secondary
+  families; nested Region/Storm/Leviathan targets; desktop and mobile branches.
+- Falsifiers: a raw D3D painter outside the catalog, an unlisted shader or
+  state writer, any Website `screen`/blur/brightness approximation without a
+  native selector, premultiplied RGB reaching native multiply, a VFX member
+  missing from the reflection capture, or a browser capture with errors or a
+  visible stock disagreement reopens this system.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Instructions | retail `SolomonDark.exe` 0.72.5, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`; preferred base `0x00400000`; canonical Ghidra 12.0.3 replicas | 101 named pipeline targets, 4,009 xrefs, 562 callers, 404 selector writes, 129 device-global refs in 44 shared/device functions | high |
+| Durable native catalogs | Mod Loader `native-full-render-pipeline.md`, `native-full-render-pipeline-xrefs.json`, `native-full-render-pipeline-membership.json`; complete class and atlas catalogs | 1,038 class relations, 451 atlas relations, 524 render-class rows, and 147 data/vtable xrefs all have dispositions; no scene/VFX class bypasses Graphics | high |
+| Raw shader/data | `0x0043FD80`, `0x00B401F4`, `0x00B401F8`; embedded HLSL at `0x007DDB38/0x007DDCD8` | only Arena saturation is reachable; blur remains constructor-zero/unwritten and actually accumulates 24 taps divided by 20; no game vertex shader | high |
+| Renderer dependency | pinned PixiJS `8.19.0`, `mapWebGLBlendModesToPixi` | Pixi multiply is `DST_COLOR, ONE_MINUS_SRC_ALPHA`; native selector two is `ZERO, SRC_COLOR`. Default `Texture.from(image)` uploads premultiplied data, while retail pages are unpremultiplied | high |
+| Current web source | `game-webgl.ts`, Hub/Boneyard renderer roots, `hub-teacher.ts`, `hub-world-scene.ts`, `player-staff-vfx-presentation.ts` at task base `e8ceddae` | Arena shader coverage is present, but non-Arena multiply, Teacher `screen` composition/timing, and Staff Smoke blend contradict the newly complete shared contract | high |
+
+### System boundary and membership inventory
+
+Native system: the complete retail rendering system from `App_RenderFrame
+0x0040D230` through Graphics/D3D state and `Present 0x00440B40`, including all
+registered render classes and every Website consumer of their pixels.
+
+The machine catalogs own every native function/class row. This table owns the
+complete web-family join; “by this correction” is the required final
+disposition and is not a completion claim until the receipt below is filled.
+
+| Member family and complete web membership | Native source | Required disposition | Proof contract |
+| --- | --- | --- | --- |
+| App/Graphics lifecycle, WebGL creation, resize, frame/reset/teardown | `0x0040D230/2C0/310/350`, Graphics `0x0041C780..0x00421600` | `exact-ported` by shared pipeline correction | renderer-state unit contract plus every scene journey |
+| all stock atlas/loose-image uploads and subtextures | `0x00420140`, `0x00440F70`; 28 atlases/12 loose images | `exact-ported` as unpremultiplied linear sources; mod images remain `out-of-system` | source alpha/sample diagnostics |
+| all 13 quad/mesh/line primitives and sprite/text entry points | native full-pipeline primitive group | `verified-already-at-parity` for geometry; exact vertex-color paths retained | render-contract membership assertions |
+| normal source-over members | selector `0`; 147 literal plus register-restored writes | `verified-already-at-parity` after shared texture representation cutover | class/VFX plans and screenshots |
+| additive members: every cataloged Anim additive family, player/enemy spell glows, weather streaks, loot glows, seals and level-up art | selector `1`; 150 literal writes plus exact dynamic writers | `exact-ported`; Staff Smoke/`Anim_SmokePuff` is reopened from normal to additive | per-member blend inventory and VFX captures |
+| multiply members: Region light target, College Statue/aura, Arena late multiply lanes, Inventory/HUD members | selector `2`; 14 exact writes | `exact-ported` through native `ZERO/SRCCOLOR`, never Pixi standard multiply | pixel equation test and Region/Hub/Inventory captures |
+| Arena saturation and every nested Arena target | `0x0046ECA9..0x00470A76`, `0x00B401F4` | `verified-already-at-parity`; remains Arena-only | Acid/Storm/Leviathan/Building journeys |
+| compiled blur capability | `0x00B401F8`, helper `0x00442AF0`, zero writers | `out-of-system` because unreachable retail code | absence contract; no web blur/bloom substitution |
+| Loader, Title, Create, dialogs, settings, controls, Dark Cloud, Hall/GameOver | registered CPU surfaces and menu render roots | `verified-already-at-parity`; focus/accessibility-only CSS is `out-of-system` | stock layout replays and browser captures |
+| Courtyard, Mortuary, Library, StoreRoom, Office fixed worlds | fixed Region render roots | `verified-already-at-parity` except shared multiply/source correction | Hub-room journey and visual reflection |
+| Hub NPC/ambient VFX: seals, fountain, statue, traders, students, Astronomer, Teacher, Skorcha | exact Hub class renderers and child Anim classes | `exact-ported`; Teacher child program/timing/blends reopened | deterministic Teacher member assertions and Hub capture |
+| HUD, belt, cooldowns, notifications, skill/inventory/book/picker overlays | `0x00512060`, `0x005D2520`, registered UI surfaces | `verified-already-at-parity` except shared multiply/source correction | HUD/inventory/picker journeys |
+| Arena underlay, terrain, roads, scenery, gates, lanterns, trees, overlays, shadows, lighting, weather | Arena/queue/scenery catalogs | `verified-already-at-parity`; Tree/Lantern anonymous rows now identified | Boneyard render contract and stock draw-list replay |
+| players, equipment, staff/orb, hit/death, level-up, nameplate/speech | Player/Wizard/Anim catalogs | `exact-ported`; Staff Smoke blend correction applies to Knockback/Critical | primary/staff/death/level-up captures |
+| Skeleton, Archer, Mage, Imp/Green/GoodImp, Zombie, Wraith, Demon, Coffin/Maggot and every child effect | enemy and full state-write catalogs | `verified-already-at-parity`; dynamic aura blends are instruction-closed | enemy animation/projectile/death journey |
+| Arrow, Firebolt, GuidedMissile, DemonBomb, PoisonPool and every impact/child | enemy projectile catalog | `verified-already-at-parity` | projectile-effect journey |
+| five primaries and ten welded primaries, all persistent/impact/child actors | primary/weld catalogs and class-state programs | `verified-already-at-parity` pending reflection sweep | all-build deterministic capture set |
+| every secondary/advanced member in `native-secondary-ability-catalog.json`, including Acid, Storm, Leviathan, Golem, Comet, Magic Circle/Trap/Shield and nested children | secondary catalog plus complete renderer membership | `verified-already-at-parity` pending reflection sweep | all-secondary deterministic capture set |
+| Orb, Gold, Sack, Bonus, potion/powerup/item drops and pickup children | loot/reward renderers | `verified-already-at-parity` | loot journey and blend inventory |
+| screen flashes, darkness, camera feedback and world shake | Region feedback plus camera `0x0063EEB0/0x0046F100..0x0046F276` | `verified-already-at-parity`; deterministic local-player pulse retained | camera/flash capture with settings gate |
+| Bonedit and portrait/offscreen capture | `0x004D5F40`, `0x005BED10` | `verified-already-at-parity` for active Website editor; portrait capture is `out-of-system` for `/game` | editor screenshot/contract |
+| Website chat, party, diagnostics, mod panels/minimap/custom VFX | no retail member | `out-of-system` with separate browser/mod ownership | must not alter stock pixels when inactive |
+
+There is no `blocked-by-platform` row. WebGL2 can express every active native
+shader, primitive, sampler, target, and blend equation.
+
+### Native ownership thread
+
+- Owner and construction: `MyApp` embeds Graphics at `+0x1D0`; the application
+  object manager schedules registered surfaces. Arena adds its world queue but
+  concrete actors still enter shared Graphics.
+- State representation: request/current pairs flush before blend, texture
+  color, saturation, blur, address, filter, transform, clip, texture, or target
+  changes. The frame reset returns to normal blend, textured modulation,
+  unpremultiplied page samples, linear filtering, wrap, identity transforms,
+  and no pixel shader.
+- Downstream: every menu/world/HUD/editor/portrait primitive reaches one of
+  `DrawPrimitiveUP` or `DrawIndexedPrimitiveUP`; the 129 direct device refs
+  contain no scene painter bypass.
+- Entry/teardown: device reset restores resources and fixed state centrally;
+  scene/render-target teardown must not leave selector or shader state behind.
+
+### Recovered behavioral contract and immediate falsifiers
+
+- Native multiply is `destination.rgb *= source.rgb`; source alpha does not
+  soften the RGB multiply. Pixi's standard multiply is therefore not parity.
+- Retail image RGB is not premultiplied. Normal/additive can be represented
+  equivalently only with matching NPM blend modes; multiply requires raw RGB.
+- Teacher type 5008 uses the 100 Hz game clock. Cast releases after the native
+  timer crosses 20 (`0.075` per tick), not a 60 Hz browser clock. Release
+  `0x00505560` creates normal Anim_Fade records 15/82/81 and an additive
+  Anim_SpriteArray over BadGuys `1823..1833`; no screen blend exists.
+- Teacher core is fixed scale `(6,4)`, alpha `1`, loss `.1`; flare scale is
+  `[1,1.1]`, alpha `1`, loss `.0075`; column alpha is `2`, loss `.04`; the
+  additive 11-frame child has scale `[1.5,2]`, frame step
+  `.75*(1+Float(.2))`, alpha loss `.02*(1+same draw)`, and one random mirror.
+- `Anim_SmokePuff::Render 0x00449840` is additive around its shared draw.
+  The earlier Staff ledger's “normal-blend SmokePuff” statement is falsified
+  and must die in the Staff implementation and tests.
+
+### Confidence and open questions
+
+- Confirmed: complete native target/xref/class/atlas/state membership; shader
+  reachability; blend equations; Teacher and SmokePuff instruction programs.
+- Inferred: none used to justify implementation.
+- Unknown: none in native pipeline membership. Browser capture reflection may
+  still reveal a web consumer violating a confirmed row; each such observation
+  becomes a new concrete residual task rather than a tuned exception.
+
+### Web implementation consequence
+
+- Put unpremultiplied stock texture creation and exact native multiply state in
+  one shared WebGL module used by every game renderer.
+- Keep Arena saturation in its existing Arena-only deep module.
+- Replace Teacher's normalized piecewise/screen composite with its exact
+  100-Hz child programs and per-child normal/additive blend.
+- Correct Staff Smoke through the shared native class rule, not a one-off
+  color tweak.
+- Remove only falsified presentation paths. Browser accessibility focus/chat
+  effects and opt-in mod rendering remain separate and inactive in stock
+  captures.
+
+### Validation contract
+
+- Focused tests: source alpha and native blend-map equations; full renderer
+  membership; Teacher tick/member/RNG ranges; Staff Smoke and all sibling
+  Staff members; absence of stock `screen`/blur paths.
+- Browser: built Mac WebGL2 captures for every scene family and deterministic
+  primary/secondary/enemy/loot/weather/status/death galleries; empty page,
+  console, and failed-response arrays.
+- Reflection: inspect the complete capture set at native viewport against
+  retained stock frames, exact stock assets, and recovered formulas. Record and
+  execute every discrepancy, then repeat the sweep until it yields zero
+  actionable residuals.
+- Performance: measure p95/p99/max gaps and long tasks for dense Arena VFX;
+  average FPS alone is not acceptance.
+
+### Implementation validation receipt
+
+- Pending implementation and Mac/browser reflection. Publication and
+  deployment are unrequested and remain separate.
