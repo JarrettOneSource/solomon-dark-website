@@ -10,7 +10,7 @@ public static class WebGameSaveInspector
 {
     public const int FormatVersion = 17;
     private static readonly int[] LegacyFormatVersions = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
-    public const int MaxDocumentBytes = 8 * 1024 * 1024;
+    public const int MaxDocumentBytes = 16 * 1024 * 1024;
     private const int MaxNodes = 250_000;
 
     public static WebGameSaveInspection Inspect(string? document)
@@ -23,7 +23,7 @@ public static class WebGameSaveInspector
         var bytes = Encoding.UTF8.GetBytes(document);
         if (bytes.Length > MaxDocumentBytes)
         {
-            throw new InvalidDataException("Browser game saves may not exceed 8 MiB.");
+            throw new InvalidDataException("Browser game saves may not exceed 16 MiB.");
         }
 
         JsonDocument parsed;

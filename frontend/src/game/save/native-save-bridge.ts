@@ -21,6 +21,10 @@ export const NATIVE_FIRST_MIX_COUNT = 30
 export const NATIVE_SOURCE_ATTACHMENT_MAX_BYTES = 8 * 1024 * 1024
 
 const GAMESTATE_ROOT_CHILD_COUNT = 8
+const NATIVE_BINDING_COUNT = 24
+const NATIVE_BELT_SLOT_COUNT = 8
+const NATIVE_BELT_EMPTY_TYPE = 7000
+const NATIVE_BELT_SKILL_TYPE = 7015
 const encoder = new TextEncoder()
 const decoder = new TextDecoder('utf-8', { fatal: true })
 
@@ -66,6 +70,7 @@ export interface NativeWizardProgression {
   readonly maximumMana: number
   readonly meditationIdleDelay: number
   readonly name: string
+  readonly nextConcentrationSlot: 0 | 1
   readonly offerSeed: number
   readonly offensiveDamageFlat: number
   readonly pendingSkillChoices: number
@@ -76,6 +81,9 @@ export interface NativeWizardProgression {
   readonly nextThreshold: number
   readonly rows: readonly NativeProgressionRow[]
   readonly randomBoastActive: boolean
+  readonly selectedPrimarySkillId: number
+  readonly concentrationSkillIds: readonly [number | null, number | null]
+  readonly skillQuickbar: readonly (number | null)[]
   readonly startingPrimary: number
   readonly startingSecondary: number
   readonly weldEffect: number
@@ -116,6 +124,7 @@ export interface NativeWizardPatch {
   readonly maximumMana: number
   readonly meditationIdleDelay: number
   readonly name: string
+  readonly nextConcentrationSlot: 0 | 1
   readonly nextThreshold: number
   readonly offerSeed: number
   readonly offensiveDamageFlat: number
@@ -125,6 +134,9 @@ export interface NativeWizardPatch {
   readonly permanentRanks: readonly number[]
   readonly poisonImmunityTicks: number
   readonly previousThreshold: number
+  readonly selectedPrimarySkillId: number
+  readonly concentrationSkillIds: readonly [number | null, number | null]
+  readonly skillQuickbar: readonly (number | null)[]
   readonly startingPrimary: number
   readonly startingSecondary: number
   readonly weldEffect: number
@@ -191,6 +203,20 @@ class PayloadReader {
   f32(field: string): number {
     const value = this.take(4, field)
     return new DataView(value.buffer, value.byteOffset, 4).getFloat32(0, true)
+  }
+
+  string(field: string): string {
+    const length = this.u32(`${field} length`)
+    if (length === 0) return ''
+    const value = this.take(length, field)
+    if (value[value.byteLength - 1] !== 0) {
+      throw new NativeSaveFormatError(`${this.claim} ${field} is not NUL-terminated`)
+    }
+    try {
+      return decoder.decode(value.subarray(0, -1))
+    } catch {
+      throw new NativeSaveFormatError(`${this.claim} ${field} is not UTF-8`)
+    }
   }
 
   i32s(count: number, field: string): number[] {
@@ -426,7 +452,7 @@ interface LocalWizardNode {
   readonly headerA: number
   readonly headerB: number
   readonly progressionNode: NativeChunkNode
-  readonly trailingValue: number
+  readonly selectedPrimarySkillId: number
   readonly wizardNode: NativeChunkNode
 }
 
@@ -457,7 +483,7 @@ function localWizardNode(buffer: NativeSyncBuffer): LocalWizardNode & { readonly
     throw new NativeSaveFormatError('native wizard name is not UTF-8')
   }
   if (!name) throw new NativeSaveFormatError('native wizard name is empty')
-  const trailingValue = header.i32('trailing value')
+  const selectedPrimarySkillId = header.i32('selected primary skill')
   header.finish()
   return {
     buffer,
@@ -465,20 +491,217 @@ function localWizardNode(buffer: NativeSyncBuffer): LocalWizardNode & { readonly
     headerB,
     name,
     progressionNode: wizardNode.children[0]!,
-    trailingValue,
+    selectedPrimarySkillId,
     wizardNode,
   }
+}
+
+interface NativeBindingState {
+  readonly integerOffset: number
+  readonly node: NativeChunkNode
+  readonly values: readonly number[]
+}
+
+function decodeNativeBindingState(root: NativeChunkNode): NativeBindingState {
+  const owner = root.children[1]
+  const node = owner?.children[0]
+  if (!owner || !node) throw new NativeSaveFormatError('native binding state is absent')
+  const reader = new PayloadReader(node.payload, 'native binding state')
+  const booleanCount = reader.u32('boolean count')
+  if (booleanCount > node.payload.byteLength - reader.offset) {
+    throw new NativeSaveFormatError('native binding boolean count is impossible')
+  }
+  for (let index = 0; index < booleanCount; index += 1) {
+    reader.boolean(`boolean ${index}`)
+  }
+  const integerCount = reader.u32('integer count')
+  if (integerCount !== NATIVE_BINDING_COUNT) {
+    throw new NativeSaveFormatError(
+      `native binding state has ${integerCount} integers; expected ${NATIVE_BINDING_COUNT}`,
+    )
+  }
+  const integerOffset = reader.offset
+  const values = reader.i32s(integerCount, 'integer')
+  const floatCount = reader.u32('float count')
+  reader.f32s(floatCount, 'float')
+  const stringCount = reader.u32('String count')
+  if (stringCount > Math.floor((node.payload.byteLength - reader.offset) / 4)) {
+    throw new NativeSaveFormatError('native binding String count is impossible')
+  }
+  for (let index = 0; index < stringCount; index += 1) reader.string(`String ${index}`)
+  for (const kind of ['vector2', 'range'] as const) {
+    const count = reader.u32(`${kind} count`)
+    if (count > Math.floor((node.payload.byteLength - reader.offset) / 8)) {
+      throw new NativeSaveFormatError(`native binding ${kind} count is impossible`)
+    }
+    reader.skip(count * 8, kind)
+  }
+  reader.finish()
+  return Object.freeze({ integerOffset, node, values: Object.freeze(values) })
+}
+
+interface NativeBeltEntry {
+  readonly end: number
+  readonly id: number
+  readonly start: number
+  readonly type: number
+}
+
+function decodeNativeBelt(root: NativeChunkNode): {
+  readonly entries: readonly NativeBeltEntry[]
+  readonly skillQuickbar: readonly (number | null)[]
+} {
+  const reader = new PayloadReader(root.payload, 'native BeltButton state')
+  const entries: NativeBeltEntry[] = []
+  const skillQuickbar: Array<number | null> = []
+  for (let slot = 0; slot < NATIVE_BELT_SLOT_COUNT; slot += 1) {
+    const start = reader.offset
+    const type = reader.i32(`slot ${slot} type`)
+    const id = reader.i32(`slot ${slot} id`)
+    reader.boolean(`slot ${slot} flag`)
+    reader.string(`slot ${slot} label`)
+    reader.i32(`slot ${slot} trailing value`)
+    const end = reader.offset
+    if (type === NATIVE_BELT_SKILL_TYPE && (id < 8 || id > 79)) {
+      throw new NativeSaveFormatError(`native BeltButton slot ${slot} has invalid skill ${id}`)
+    }
+    entries.push(Object.freeze({ end, id, start, type }))
+    skillQuickbar.push(type === NATIVE_BELT_SKILL_TYPE ? id : null)
+  }
+  reader.finish()
+  return Object.freeze({
+    entries: Object.freeze(entries),
+    skillQuickbar: Object.freeze(skillQuickbar),
+  })
+}
+
+function nullableNativeBinding(value: number, claim: string): number | null {
+  if (value === -1) return null
+  if (!Number.isSafeInteger(value) || value < 8 || value > 80) {
+    throw new NativeSaveFormatError(`${claim} ${value} is invalid`)
+  }
+  return value
+}
+
+interface NativeGameFooterState {
+  readonly concentrationCursorOffset: number
+  readonly nextConcentrationSlot: 0 | 1
+  readonly node: NativeChunkNode
+}
+
+function decodeNativeGameFooter(root: NativeChunkNode): NativeGameFooterState {
+  const node = root.children[7]
+  if (!node) throw new NativeSaveFormatError('native Game footer is absent')
+  const reader = new PayloadReader(node.payload, 'native Game footer')
+  reader.u8('global selector byte')
+  const concentrationCursorOffset = reader.offset
+  const cursor = reader.i32('concentration replacement cursor')
+  if (cursor !== 0 && cursor !== 1) {
+    throw new NativeSaveFormatError(`native concentration replacement cursor ${cursor} is invalid`)
+  }
+  reader.string('profile label A')
+  reader.string('profile label B')
+  reader.f32('presentation scalar')
+  reader.finish()
+  return Object.freeze({
+    concentrationCursorOffset,
+    nextConcentrationSlot: cursor,
+    node,
+  })
+}
+
+function canonicalNativeBeltEntry(type: number, id: number): Uint8Array {
+  return concat([
+    i32Bytes(type),
+    i32Bytes(id),
+    Uint8Array.of(0),
+    nativeStringBytes(''),
+    i32Bytes(0),
+  ])
+}
+
+function patchNativeSelections(
+  root: NativeChunkNode,
+  patch: NativeWizardPatch,
+): NativeChunkNode {
+  if (
+    !Number.isSafeInteger(patch.selectedPrimarySkillId)
+    || patch.selectedPrimarySkillId < 8
+    || patch.selectedPrimarySkillId > 79
+    || patch.concentrationSkillIds.length !== 2
+    || patch.concentrationSkillIds.some(value => (
+      value !== null && (!Number.isSafeInteger(value) || value < 8 || value > 79)
+    ))
+    || patch.skillQuickbar.length !== NATIVE_BELT_SLOT_COUNT
+    || (patch.nextConcentrationSlot !== 0 && patch.nextConcentrationSlot !== 1)
+    || patch.skillQuickbar.some(value => (
+      value !== null && (!Number.isSafeInteger(value) || value < 8 || value > 79)
+    ))
+  ) throw new NativeSaveFormatError('native selection patch is invalid')
+
+  const bindings = decodeNativeBindingState(root)
+  const bindingPayload = bindings.node.payload.slice()
+  setI32(bindingPayload, bindings.integerOffset + 12 * 4, patch.selectedPrimarySkillId)
+  setI32(bindingPayload, bindings.integerOffset + 16 * 4, patch.concentrationSkillIds[0] ?? -1)
+  setI32(bindingPayload, bindings.integerOffset + 20 * 4, patch.concentrationSkillIds[1] ?? -1)
+  const bindingOwner = root.children[1]!
+  const nextBindingOwner = replaceNativeNodeChild(bindingOwner, 0, Object.freeze({
+    ...bindings.node,
+    payload: bindingPayload,
+  }))
+  let nextRoot = replaceNativeNodeChild(root, 1, nextBindingOwner)
+
+  const belt = decodeNativeBelt(nextRoot)
+  const beltParts: Uint8Array[] = []
+  for (let slot = 0; slot < NATIVE_BELT_SLOT_COUNT; slot += 1) {
+    const value = patch.skillQuickbar[slot]
+    const base = belt.entries[slot]!
+    if (value !== null) {
+      beltParts.push(canonicalNativeBeltEntry(NATIVE_BELT_SKILL_TYPE, value))
+    } else if (base.type === NATIVE_BELT_SKILL_TYPE) {
+      beltParts.push(canonicalNativeBeltEntry(NATIVE_BELT_EMPTY_TYPE, 0))
+    } else {
+      beltParts.push(nextRoot.payload.slice(base.start, base.end))
+    }
+  }
+  nextRoot = Object.freeze({ ...nextRoot, payload: concat(beltParts) })
+  const footer = decodeNativeGameFooter(nextRoot)
+  const footerPayload = footer.node.payload.slice()
+  setI32(footerPayload, footer.concentrationCursorOffset, patch.nextConcentrationSlot)
+  nextRoot = replaceNativeNodeChild(nextRoot, 7, Object.freeze({
+    ...footer.node,
+    payload: footerPayload,
+  }))
+  return nextRoot
 }
 
 export function decodeNativeGamestateWizard(bytes: Uint8Array): NativeWizardProgression {
   const local = localWizardNode(parseNativeSyncBuffer(bytes))
   const decoded = decodeProgressionNode(local.progressionNode)
   const extension = decodeWizardExtension(local.wizardNode.children[1]!)
+  const bindings = decodeNativeBindingState(local.buffer.root)
+  const selectedPrimarySkillId = nullableNativeBinding(
+    bindings.values[12]!,
+    'native selected primary',
+  )
+  if (selectedPrimarySkillId === null || selectedPrimarySkillId !== local.selectedPrimarySkillId) {
+    throw new NativeSaveFormatError('native local-wizard selected primary bindings disagree')
+  }
+  const concentrationSkillIds = Object.freeze([
+    nullableNativeBinding(bindings.values[16]!, 'native concentration A'),
+    nullableNativeBinding(bindings.values[20]!, 'native concentration B'),
+  ]) as readonly [number | null, number | null]
+  const belt = decodeNativeBelt(local.buffer.root)
+  const footer = decodeNativeGameFooter(local.buffer.root)
   return Object.freeze({
     ...decoded.progression,
+    concentrationSkillIds,
     firewalkerActive: extension.firewalkerActive,
     meditationIdleDelay: extension.meditationIdleDelay,
     name: local.name,
+    nextConcentrationSlot: footer.nextConcentrationSlot,
+    selectedPrimarySkillId,
+    skillQuickbar: belt.skillQuickbar,
     weldEffect: extension.weldEffect,
   })
 }
@@ -853,7 +1076,7 @@ export function patchNativeGamestate(
     i32Bytes(local.headerB),
     u32Bytes(name.byteLength),
     name,
-    i32Bytes(local.trailingValue),
+    i32Bytes(patch.selectedPrimarySkillId),
   ])
   const wizardChildren = [...local.wizardNode.children]
   wizardChildren[0] = progressionNode
@@ -864,6 +1087,7 @@ export function patchNativeGamestate(
     payload: header,
   })
   let root = replaceNativeNodeChild(local.buffer.root, 0, wizardNode)
+  root = patchNativeSelections(root, patch)
   root = replaceNativeNodeChild(root, 5, portableGameState(
     gameNode,
     patchedBoast,

@@ -278,6 +278,54 @@ test('ordered Hagatha outcomes and repeated Tonic membership survive stock-web-s
   )
 })
 
+test('selected primary, concentrations, replacement cursor, and skill Belt survive stock-web-stock', async () => {
+  const base = await createPortableGameProfileFromNative(
+    darkdata,
+    gamestate,
+    fixture.expected.runName,
+  )
+  const ranks = [...base.wizard.permanentRanks]
+  ranks[8] = 1
+  ranks[57] = 1
+  const nativeSelections = patchNativeGamestate(gamestate, {
+    ...base.wizard,
+    concentrationSkillIds: [57, null],
+    learnedOrder: [...base.wizard.learnedOrder, 8, 57],
+    nextConcentrationSlot: 1,
+    permanentRanks: ranks,
+    selectedPrimarySkillId: 8,
+    skillQuickbar: [21, 8, null, null, null, null, null, null],
+  })
+  const decodedNative = decodeNativeGamestateWizard(nativeSelections)
+  assert.equal(decodedNative.selectedPrimarySkillId, 8)
+  assert.deepEqual(decodedNative.concentrationSkillIds, [57, null])
+  assert.equal(decodedNative.nextConcentrationSlot, 1)
+  assert.deepEqual(decodedNative.skillQuickbar, [21, 8, null, null, null, null, null, null])
+
+  const portable = await createPortableGameProfileFromNative(
+    darkdata,
+    nativeSelections,
+    fixture.expected.runName,
+  )
+  const imported = createWebGameSaveFromPortableProfile(portable)
+  const restored = restoreGameSaveDocument(imported.document)
+  const book = restored.state.playerEntities.skillBooks[0]!
+  const runtime = restored.state.playerEntities.skillRuntimes[0]!
+  assert.equal(book.primarySkillId, 8)
+  assert.deepEqual(book.skillQuickbar, [21, 8, null, null, null, null, null, null])
+  assert.equal(runtime.concentrationSkillIdA, 57)
+  assert.equal(runtime.nextConcentrationReplacementSlot, 'b')
+
+  const exported = await exportWebGameSaveToNativeArchive(imported.document)
+  const roundTrip = decodeNativeGamestateWizard(
+    (await readNativeSaveArchive(exported.archive)).gamestate,
+  )
+  assert.equal(roundTrip.selectedPrimarySkillId, 8)
+  assert.deepEqual(roundTrip.concentrationSkillIds, [57, null])
+  assert.equal(roundTrip.nextConcentrationSlot, 1)
+  assert.deepEqual(roundTrip.skillQuickbar, [21, 8, null, null, null, null, null, null])
+})
+
 test('native patching changes mapped state and leaves structural siblings round-trippable', async () => {
   const portable = await createPortableGameProfileFromNative(
     darkdata,
@@ -448,6 +496,39 @@ test('web export preserves the native source through schema 17 and returns stock
   )
 })
 
+test('a fresh web wizard exports through the controlled native Hub template', async () => {
+  const document = createGameSaveDocument({
+    integrity: 'local-only',
+    loadedBoneyard: null,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state: createGameSimulation({
+      owner: { discipline: 'mind', displayName: 'WEBNATUS', element: 'fire' },
+    }),
+  })
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input) => {
+    assert.equal(String(input), '/game/native/portable-profile-template.json')
+    return new Response(JSON.stringify(fixture), {
+      headers: { 'content-type': 'application/json' },
+      status: 200,
+    })
+  }
+  try {
+    const exported = await exportWebGameSaveToNativeArchive(document)
+    const archive = await readNativeSaveArchive(exported.archive)
+    const wizard = decodeNativeGamestateWizard(archive.gamestate)
+    assert.equal(wizard.name, 'WEBNATUS')
+    assert.equal(wizard.elementRoot, 1)
+    assert.equal(wizard.disciplineRoot, 6)
+    assert.equal(wizard.selectedPrimarySkillId, 16)
+    assert.deepEqual(wizard.skillQuickbar, [21, null, null, null, null, null, null, null])
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
 test('fresh web class books grant all eight stock root rows without changing class identity', () => {
   const book = createPlayerSkillBook({
     discipline: 'mind',
@@ -459,20 +540,32 @@ test('fresh web class books grant all eight stock root rows without changing cla
   assert.equal(book.disciplineRoot, 6)
 })
 
-test('web disk projection preserves Firewalker and clears non-disk toggle and concentration siblings', () => {
+test('web disk projection preserves Firewalker and Game-persisted concentration while clearing live-only toggles', () => {
   const base = createGameSimulation({
     owner: { discipline: 'mind', displayName: 'Disk', element: 'fire' },
   })
   const runtime = base.playerEntities.skillRuntimes[0]!
+  const book = base.playerEntities.skillBooks[0]!
+  const permanentRanks = [...book.permanentRanks]
+  const effectiveRanks = [...book.effectiveRanks]
+  permanentRanks[57] = 1
+  effectiveRanks[57] = 1
   const state = {
     ...base,
     playerEntities: {
       ...base.playerEntities,
+      skillBooks: [{
+        ...book,
+        effectiveRanks,
+        learnedSkillOrder: [...book.learnedSkillOrder, 57],
+        permanentRanks,
+      }],
       skillRuntimes: [{
         ...runtime,
         concentrationSkillIdA: 57,
-        concentrationSkillIdB: 58,
+        concentrationSkillIdB: null,
         mindstarActive: true,
+        nextConcentrationReplacementSlot: 'b' as const,
       }],
     },
     secondaryAbilities: {
@@ -499,14 +592,17 @@ test('web disk projection preserves Firewalker and clears non-disk toggle and co
   const encoded = JSON.parse(document)
   const savedRuntime = encoded.continuation.simulation.playerEntities.skillRuntimes[0]
   const savedSecondary = encoded.continuation.simulation.secondaryAbilities.players.owner
-  assert.equal(savedRuntime.concentrationSkillIdA, null)
+  assert.equal(savedRuntime.concentrationSkillIdA, 57)
   assert.equal(savedRuntime.concentrationSkillIdB, null)
+  assert.equal(savedRuntime.nextConcentrationReplacementSlot, 'b')
   assert.equal(savedRuntime.mindstarActive, false)
   assert.equal(savedSecondary.firewalker, true)
   assert.equal(savedSecondary.mindstar, false)
   assert.equal(savedSecondary.regenerate, false)
   assert.equal(savedSecondary.reservedMana, 50)
   const restored = restoreGameSaveDocument(document)
+  assert.equal(restored.state.playerEntities.skillRuntimes[0]?.concentrationSkillIdA, 57)
+  assert.equal(restored.state.playerEntities.skillRuntimes[0]?.nextConcentrationReplacementSlot, 'b')
   assert.equal(restored.state.secondaryAbilities.players.owner?.firewalker, true)
   assert.equal(restored.state.secondaryAbilities.players.owner?.mindstar, false)
   assert.equal(restored.state.secondaryAbilities.players.owner?.regenerate, false)

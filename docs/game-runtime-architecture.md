@@ -973,10 +973,13 @@ attestation, so it does not make a loaded lineage globally rankable.
 
 The normalized web continuation deliberately rebuilds disk-owned skill state
 at its save boundary. All eight native root rows are rank one. Permanent ranks,
-offer ownership, Hagatha state, and Firewalker survive; Mindstar, Regenerate,
-concentration selections, Mind Chug, and active cast/selector presentation are
-not retail disk members and reset before encoding/restoring a disk-style
-checkpoint. This disk projection never mutates the live authoritative state.
+offer ownership, Hagatha state, Firewalker, selected primary, concentration
+A/B plus replacement cursor, and eight skill Belt bindings survive. Mindstar,
+Regenerate, Mind Chug, Plane Orb hold, and active cast presentation are not
+retail disk members and reset before encoding/restoring a disk-style
+checkpoint. The active synthetic Weld build is also absent from retail disk;
+learned row 52 survives but selected/belted Weld is warned and reset by the
+stock bridge. This disk projection never mutates the live authoritative state.
 
 ## Rendering boundary
 

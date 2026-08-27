@@ -9,6 +9,7 @@ import {
   decodeNativeGamestateWizard,
   type NativeGameBoastState,
 } from './native-save-bridge.ts'
+import { nativeSkillCategory } from '../core-kernels/player-progression.ts'
 import { NativeSaveFormatError } from './native-save-codec.ts'
 
 export const PORTABLE_GAME_PROFILE_FORMAT = 'solomon-dark-portable-profile'
@@ -54,6 +55,7 @@ export interface PortableGameWizardState {
   readonly cheatDeathEnabled: boolean
   readonly currentHealth: number
   readonly currentMana: number
+  readonly concentrationSkillIds: readonly (number | null)[]
   readonly deferredSkillChoices: number
   readonly disciplineRoot: number
   readonly elementRoot: number
@@ -68,6 +70,7 @@ export interface PortableGameWizardState {
   readonly maximumMana: number
   readonly meditationIdleDelay: number
   readonly name: string
+  readonly nextConcentrationSlot: 0 | 1
   readonly nextThreshold: number
   readonly offerSeed: number
   readonly offensiveDamageFlat: number
@@ -77,6 +80,8 @@ export interface PortableGameWizardState {
   readonly permanentRanks: readonly number[]
   readonly poisonImmunityTicks: number
   readonly previousThreshold: number
+  readonly selectedPrimarySkillId: number
+  readonly skillQuickbar: readonly (number | null)[]
   readonly startingPrimary: number
   readonly startingSecondary: number
   readonly weldEffect: number
@@ -217,6 +222,12 @@ export async function createPortableGameProfileFromNative(
       'Machinimbus purchase-only unlocks are not stored by retail; only already learned advanced rows can cross.',
       'Serendipity and Reverie active-until-hurt flags are not retail disk members and start inactive after import.',
       'Retail omits Unforge base HP/MP bonuses; import rebuilds maximum vitals and preserves only the saved current/max ratios.',
+      ...(wizard.selectedPrimarySkillId === 52 || wizard.skillQuickbar.includes(52)
+        ? ['Retail omits the active synthetic Weld build; selected or belted Spell Welding cannot be reconstructed after disk load.']
+        : []),
+      ...(wizard.selectedPrimarySkillId === 80
+        ? ['Plane Orb is a live Planewalker override and resets in the settled portable Hub.']
+        : []),
       'The portable wizard starts in a settled Hub; in-flight native Arena and Region objects remain in the native attachment.',
       ...(retainedFiles.length > 0
         ? [`${retainedFiles.length} opaque native slot file(s) will be retained for stock export but are not web authority.`]
@@ -231,6 +242,7 @@ export async function createPortableGameProfileFromNative(
       cheatDeathEnabled: wizard.cheatDeathEnabled,
       currentHealth: wizard.currentHealth,
       currentMana: wizard.currentMana,
+      concentrationSkillIds: wizard.concentrationSkillIds,
       deferredSkillChoices: wizard.deferredSkillChoices,
       disciplineRoot: wizard.disciplineRoot,
       elementRoot: wizard.elementRoot,
@@ -245,6 +257,7 @@ export async function createPortableGameProfileFromNative(
       maximumMana: wizard.maximumMana,
       meditationIdleDelay: wizard.meditationIdleDelay,
       name: wizard.name,
+      nextConcentrationSlot: wizard.nextConcentrationSlot,
       nextThreshold: wizard.nextThreshold,
       offerSeed: wizard.offerSeed,
       offensiveDamageFlat: wizard.offensiveDamageFlat,
@@ -254,6 +267,8 @@ export async function createPortableGameProfileFromNative(
       permanentRanks: Object.freeze(ranks),
       poisonImmunityTicks: wizard.poisonImmunityTicks,
       previousThreshold: wizard.previousThreshold,
+      selectedPrimarySkillId: wizard.selectedPrimarySkillId,
+      skillQuickbar: wizard.skillQuickbar,
       startingPrimary: wizard.startingPrimary,
       startingSecondary: wizard.startingSecondary,
       weldEffect: wizard.weldEffect,
@@ -319,6 +334,21 @@ function integers(
     throw new NativeSaveFormatError(`${claim} contains duplicates`)
   }
   return Object.freeze(result)
+}
+
+function nullableIntegers(
+  value: unknown,
+  count: number,
+  minimum: number,
+  maximum: number,
+  claim: string,
+): readonly (number | null)[] {
+  if (!Array.isArray(value) || value.length !== count) {
+    throw new NativeSaveFormatError(`${claim} must contain ${count} entries`)
+  }
+  return Object.freeze(value.map((entry, index) => entry === null
+    ? null
+    : integer(entry, minimum, maximum, `${claim}[${index}]`)))
 }
 
 function hagathaOutcomes(value: unknown): readonly number[] {
@@ -448,13 +478,15 @@ export async function parsePortableGameProfile(document: string): Promise<Portab
 
   const wizard = record(root.wizard, 'portable wizard')
   onlyKeys(wizard, [
-    'advancedUnlocks', 'cheatDeathCharges', 'cheatDeathEnabled', 'currentHealth',
-    'currentMana', 'deferredSkillChoices', 'disciplineRoot', 'elementRoot', 'experience',
+    'advancedUnlocks', 'cheatDeathCharges', 'cheatDeathEnabled', 'concentrationSkillIds',
+    'currentHealth', 'currentMana', 'deferredSkillChoices', 'disciplineRoot', 'elementRoot', 'experience',
     'experienceBonus', 'firewalkerActive', 'hagathaOwnership', 'learnedOrder', 'level',
     'manaCostReduction', 'maximumHealth', 'maximumMana', 'meditationIdleDelay', 'name',
+    'nextConcentrationSlot',
     'nextThreshold', 'offerSeed', 'offensiveDamageFlat', 'pendingSkillChoices',
     'perkCapacity', 'perkSelectors', 'permanentRanks', 'poisonImmunityTicks',
-    'previousThreshold', 'startingPrimary', 'startingSecondary', 'weldEffect',
+    'previousThreshold', 'selectedPrimarySkillId', 'skillQuickbar', 'startingPrimary',
+    'startingSecondary', 'weldEffect',
   ], 'portable wizard')
   if (
     typeof wizard.name !== 'string'
@@ -500,6 +532,9 @@ export async function parsePortableGameProfile(document: string): Promise<Portab
       advancedUnlocks: booleans(wizard.advancedUnlocks, 8, 'portable advanced unlocks'),
       cheatDeathCharges: integer(wizard.cheatDeathCharges, 0, 1_000, 'portable cheat-death charges'),
       cheatDeathEnabled: boolean(wizard.cheatDeathEnabled, 'portable cheat-death state'),
+      concentrationSkillIds: nullableIntegers(
+        wizard.concentrationSkillIds, 2, 8, 79, 'portable concentrations',
+      ),
       currentHealth: finite(wizard.currentHealth, 0, 1_000_000, 'portable current health'),
       currentMana: finite(wizard.currentMana, 0, 1_000_000, 'portable current mana'),
       deferredSkillChoices: integer(wizard.deferredSkillChoices, 0, 1_000, 'portable deferred choices'),
@@ -518,6 +553,9 @@ export async function parsePortableGameProfile(document: string): Promise<Portab
       maximumMana: finite(wizard.maximumMana, 1, 1_000_000, 'portable maximum mana'),
       meditationIdleDelay: integer(wizard.meditationIdleDelay, -1, 10_000_000, 'portable Meditation delay'),
       name: wizard.name,
+      nextConcentrationSlot: integer(
+        wizard.nextConcentrationSlot, 0, 1, 'portable concentration cursor',
+      ) as 0 | 1,
       nextThreshold: finite(wizard.nextThreshold, 0, 10_000_000, 'portable next threshold'),
       offerSeed: integer(wizard.offerSeed, 0, 999_999, 'portable offer seed'),
       offensiveDamageFlat: finite(wizard.offensiveDamageFlat, -1_000_000, 1_000_000, 'portable damage flat'),
@@ -533,6 +571,10 @@ export async function parsePortableGameProfile(document: string): Promise<Portab
       ),
       poisonImmunityTicks: integer(wizard.poisonImmunityTicks, 0, 10_000_000, 'portable poison immunity'),
       previousThreshold: finite(wizard.previousThreshold, 0, 10_000_000, 'portable previous threshold'),
+      selectedPrimarySkillId: integer(
+        wizard.selectedPrimarySkillId, 8, 80, 'portable selected primary',
+      ),
+      skillQuickbar: nullableIntegers(wizard.skillQuickbar, 8, 8, 79, 'portable quickbar'),
       startingPrimary: integer(wizard.startingPrimary, 8, 79, 'portable starting primary'),
       startingSecondary: integer(wizard.startingSecondary, 8, 79, 'portable starting secondary'),
       weldEffect: finite(wizard.weldEffect, 0, 1_000_000, 'portable weld effect'),
@@ -543,6 +585,24 @@ export async function parsePortableGameProfile(document: string): Promise<Portab
     || result.wizard.currentMana > result.wizard.maximumMana
     || result.wizard.learnedOrder.some(id => result.wizard.permanentRanks[id] === 0)
   ) throw new NativeSaveFormatError('portable wizard progression is internally inconsistent')
+  if (
+    (result.wizard.selectedPrimarySkillId !== 80
+      && nativeSkillCategory(result.wizard.selectedPrimarySkillId) !== 1)
+    || result.wizard.concentrationSkillIds.some(skillId => (
+      skillId !== null && nativeSkillCategory(skillId) !== 3
+    ))
+    || (
+      result.wizard.concentrationSkillIds[0] !== null
+      && result.wizard.concentrationSkillIds[0] === result.wizard.concentrationSkillIds[1]
+    )
+    || (result.wizard.concentrationSkillIds[1] !== null
+      && !result.wizard.perkSelectors.includes(21))
+    || result.wizard.skillQuickbar.some(skillId => (
+      skillId !== null
+      && nativeSkillCategory(skillId) !== 1
+      && nativeSkillCategory(skillId) !== 2
+    ))
+  ) throw new NativeSaveFormatError('portable selected-skill state is invalid')
   const tonicPurchases = result.wizard.perkSelectors.filter(selector => selector === 27).length
   const ordinaryPerks = new Set(result.wizard.perkSelectors.filter(selector => selector !== 27))
   if (

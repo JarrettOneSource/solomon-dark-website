@@ -13,6 +13,7 @@ import {
   GAME_PROTOCOL_NAME,
   GAME_WEBSOCKET_MAX_PAYLOAD_BYTES,
 } from '../protocol/game-protocol.ts'
+import { MAX_WEB_GAME_SAVE_BYTES } from '../save/game-save-contract.ts'
 import type { HubMemorialState } from '../core-kernels/hub-memorial.ts'
 import { createBoneyardCatalog, type BoneyardCatalog } from './boneyard-catalog.ts'
 import {
@@ -691,7 +692,8 @@ export async function startGameSessionSupervisor(
     try {
       const body = await readJsonObject(request)
       const token = normalizePartyRejoinToken(body.token)
-      if (typeof body.save !== 'string' || Buffer.byteLength(body.save, 'utf8') > 8 * 1024 * 1024) {
+      if (typeof body.save !== 'string'
+        || Buffer.byteLength(body.save, 'utf8') > MAX_WEB_GAME_SAVE_BYTES) {
         throw new Error('party recovery save is invalid')
       }
       const requestedAdmission = await materializeGameAdmission(body, options.luaWasmPath)

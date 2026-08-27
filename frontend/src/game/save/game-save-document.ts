@@ -343,7 +343,13 @@ function diskPlayerStoreProjection(
   const skillBooks: PlayerSkillBookComponent[] = []
   const skillRuntimes: PlayerSkillRuntimeComponent[] = []
   for (let index = 0; index < source.skillBooks.length; index += 1) {
-    const refreshed = createPlayerSkillRuntime(
+    const refreshed = refreshPlayerSkillRuntime(
+      {
+        ...source.skillRuntimes[index]!,
+        meditationActivityRampTicks: 0,
+        meditationIdleElapsedTicks: 0,
+        mindstarActive: false,
+      },
       source.skillBooks[index]!,
       source.statBooks[index]!,
       source.economies[index]!,
@@ -642,12 +648,9 @@ function normalizePlayerStore(
     if (persistedRuntimes) {
       runtime = {
         ...(persistedRuntimes[index] as PlayerSkillRuntimeComponent),
-        concentrationSkillIdA: null,
-        concentrationSkillIdB: null,
         meditationActivityRampTicks: 0,
         meditationIdleElapsedTicks: 0,
         mindstarActive: false,
-        nextConcentrationReplacementSlot: 'a',
       }
     } else {
       const created = createPlayerSkillRuntime(skillBook, statBook, economy)

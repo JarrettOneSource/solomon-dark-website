@@ -15,7 +15,7 @@ export const LEGACY_WEB_GAME_SAVE_SCHEMA_VERSIONS = [
   1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
 ] as const
 export const WEB_GAME_SAVE_SLOT = 0
-export const MAX_WEB_GAME_SAVE_BYTES = 8 * 1024 * 1024
+export const MAX_WEB_GAME_SAVE_BYTES = 16 * 1024 * 1024
 /** Accommodates the 32-level Sack wire bound plus the complete save-document envelope. */
 export const MAX_WEB_GAME_SAVE_JSON_DEPTH = 80
 export const MAX_WEB_GAME_SAVE_JSON_NODES = 250_000

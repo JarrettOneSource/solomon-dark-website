@@ -51341,14 +51341,18 @@ archival, and portable semantic projection into or out of the web authority.
 | permanent/effective rows 0..82 | progression table, disk `0x0065EE80` | exact-ported from permanent ranks; effective ranks rebuilt | every row/cap/rank bound asserted |
 | Unforge max-HP/max-MP base bonuses | mutations at progression `+0x6C/+0x78`; omitted by `0x0065EE80`; post-load refresh `0x0065F9A0` | out-of-system for pure retail persistence; stock import rebuilds maxima and preserves saved vital ratios; stock export warns | web bonuses remain web-durable but cannot survive an unmodified retail process restart |
 | learned/visible order | progression `+0x850/+0x854` | exact-ported | Hall/SkillScreen tie order retained |
-| selected element/discipline/starting spells | `+0x82C/+0x830/+0x86C/+0x870` | exact-ported | class and action defaults survive |
+| selected element/discipline/starting spells | `+0x82C/+0x830/+0x86C/+0x870` | exact-ported | immutable class/action defaults survive independently from live selection |
+| selected primary | local-wizard trailing `i32` plus Game binding 12 | exact-ported for pure rows; temporary Plane Orb resets; selected Weld resets because its synthetic build is not a disk member | both duplicated native values must agree; learned pure selection survives stock-web-stock |
+| concentration A/B and replacement cursor | Game bindings 16/20; Game `+0x1C24` | exact-ported for materially learned rows | A/B uniqueness, Split Mind B, next A/B replacement owner, and stock-web-stock state survive |
+| eight BeltButton slots | Game root payload; type 7015 skill rows plus non-skill entries | exact-ported for skill entries; non-skill members exact-preserved | skill order/duplicates/removal survive; potions/items remain byte-identical unless a web skill intentionally replaces that slot |
+| active synthetic Weld build | progression `+0x844`; omitted between serialized `+0x840` and `+0x848` | out-of-system for retail disk portability | learned row 52 survives; selected/belted Weld warns and resets to the creation primary for stock/web settled import |
 | offer seed, pending/deferred choices | `+0x834`, `+0x44/+0x48` | exact-ported | deterministic next offer and queued-choice count |
 | Hagatha ordered outcome list/ownership/capacity | `+0x7C0/+0x7C4`, `+0x7CC[50]`, `+0x800`; producer `0x0066EF70` | exact-ported | purchase order survives; ordinary selectors are unique; repeatable selector 27 Tonic appears up to twice and remains visible in the list; ownership flags and 3/6/9 capacity agree |
 | selected Boast lifecycle | Game serializer `0x005CE3D0`; `Gameplay+0x1D44/+0x1D48/+0x1D80/+0x1D81`; progression random flag `+0x2D` | exact-ported | selected ID and authored statement, one-shot failure, success, ID-3 random-choice byte, score/eulogy state, and stock-web-stock bytes agree; local XP gate `+0x2C` remains true |
 | Serendipity/Reverie active-until-hurt bytes | progression `+0x73C/+0x73D`; purchase producer `0x0066EF70` | out-of-system for stock disk portability; clear on stock import like retail disk restore | ownership persists, but consumed one-shot effects are never resurrected by import |
 | Firewalker active state | wizard disk override `0x00663AE0`, `+0x8DC` | exact-ported | native import/export and web resume preserve it |
 | Mindstar/Regenerate active state | network serializer `0x0067C830`, no disk member | out-of-system for stock disk portability; web resume resets these nonpersisted toggles | explicit negative disk and reset tests |
-| concentration A/B, Mind Chug, active casts/UI | no disk member in recovered serializers | out-of-system for portable wizard projection | import starts a settled Hub with no replayed transient |
+| Mind Chug and active casts/UI | no durable disk member in recovered serializers | out-of-system for portable wizard projection | import starts a settled Hub with no replayed transient |
 | Machinimbus purchase-only bytes 72..79 | `0x00B3BDD8..DF` | out-of-system for pure retail persistence; learned rows infer availability | purchased-only warning; learned advanced rows survive |
 | native selected story path/unlock bitmap | Game `+0x1BD8/+0x1CDC` | out-of-system for web world projection; stock export normalizes the selected path to portable stock Survival while preserving the unlock bitmap | no invented Website/story-map mapping; exported path has no machine-local absolute prefix |
 | active native Hub/Arena object graph | `gamestate.sav` and Region caches | out-of-system for semantic cross-engine projection; source bytes preserved | import starts a fresh web Hub; export patches a validated native base/template |
@@ -51476,6 +51480,10 @@ browser party capability.
 - Correct launcher routing and Wine mirror ownership, then set `Game.Resume`
   only when one exported run is unambiguous and an existing valid selector is
   unavailable.
+- Add Save Manager `Import Save ZIP` for the browser-generated launcher
+  archive. It runs the existing manifest/hash/path validator, preserves strict
+  source-slot matching for cloud restore, and uses the explicitly selected
+  local slot for manual import before normal Resume materialization.
 - Account slot I and title Settings -> Save Transfer expose explicit import
   preview/replace and stock export over the same cloud-or-IndexedDB save
   coordinator. No implicit retail-install scan, credential import, silent

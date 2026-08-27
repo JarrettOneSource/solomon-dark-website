@@ -14,6 +14,7 @@ import {
 import {
   createPlayerSkillRuntime,
   playerSkillDerivedStats,
+  setPlayerConcentrationSlot,
 } from '../core-kernels/player-skill-runtime.ts'
 import type {
   PlayerCharacterConfig,
@@ -114,29 +115,24 @@ function importedSkillBook(
   const advancedUnlocks = profile.wizard.advancedUnlocks.map((unlocked, index) => (
     unlocked || (permanentRanks[index + 72] ?? 0) > 0
   ))
-  const firstPrimary = learnedOrder.find(skillId => (
-    (permanentRanks[skillId] ?? 0) > 0 && nativeSkillCategory(skillId) === 1
-  ))
+  const selectedPrimary = profile.wizard.selectedPrimarySkillId
   const primarySkillId = (
-    firstPrimary === 8
-    || firstPrimary === 16
-    || firstPrimary === 24
-    || firstPrimary === 32
-    || firstPrimary === 40
-  ) ? firstPrimary : base.primarySkillId
-  const firstSecondary = learnedOrder.find(skillId => (
-    (permanentRanks[skillId] ?? 0) > 0 && nativeSkillCategory(skillId) === 2
-  )) ?? profile.wizard.startingSecondary
-  const skillQuickbar = Object.freeze([
-    firstSecondary,
-    null,
-    null,
-    null,
-    null,
-    null,
-    null,
-    null,
-  ]) as PlayerSkillQuickbar
+    selectedPrimary === 8
+    || selectedPrimary === 16
+    || selectedPrimary === 24
+    || selectedPrimary === 32
+    || selectedPrimary === 40
+  ) && (permanentRanks[selectedPrimary] ?? 0) > 0
+    ? selectedPrimary
+    : base.primarySkillId
+  const skillQuickbar = Object.freeze(profile.wizard.skillQuickbar.map(skillId => (
+    skillId !== null
+    && skillId !== 52
+    && (permanentRanks[skillId] ?? 0) > 0
+    && (nativeSkillCategory(skillId) === 1 || nativeSkillCategory(skillId) === 2)
+      ? skillId
+      : null
+  ))) as PlayerSkillQuickbar
   return Object.freeze({
     ...base,
     advancedUnlocks: Object.freeze(advancedUnlocks),
@@ -208,7 +204,34 @@ function importPortableState(
     ...createNativeHagathaRuntimeState(),
     cheatDeathCharges: profile.wizard.cheatDeathCharges,
   })
-  const skillState = createPlayerSkillRuntime(skillBook, statBook, importedEconomy)
+  let skillState = createPlayerSkillRuntime(skillBook, statBook, importedEconomy)
+  for (const slot of [0, 1] as const) {
+    const skillId = profile.wizard.concentrationSkillIds[slot]
+    if (
+      skillId !== null
+      && (skillBook.permanentRanks[skillId] ?? 0) > 0
+      && nativeSkillCategory(skillId) === 3
+      && (slot === 0 || importedEconomy.ownedPerkSelectors.includes(21))
+    ) {
+      skillState = setPlayerConcentrationSlot(
+        skillState.runtime,
+        skillState.skillBook,
+        statBook,
+        importedEconomy,
+        skillId,
+        slot,
+      )
+    }
+  }
+  skillState = Object.freeze({
+    ...skillState,
+    runtime: Object.freeze({
+      ...skillState.runtime,
+      nextConcentrationReplacementSlot: profile.wizard.nextConcentrationSlot === 0
+        ? 'a'
+        : 'b',
+    }),
+  })
   const derived = playerSkillDerivedStats(
     skillState.runtime,
     skillState.skillBook,
@@ -292,6 +315,8 @@ export function createWebGameSaveFromPortableProfile(
   const character = portableCharacter(profile)
   const playerId = `native-${profile.nativeSource.gamestateSha256.slice(0, 24)}`
   const state = importPortableState(profile, playerId, character)
+  const importedBook = state.playerEntities.skillBooks[0]!
+  const importedRuntime = state.playerEntities.skillRuntimes[0]!
   const warnings = [
     ...profile.warnings,
     ...(profile.profile.nativeStorage.payloadLength !== 4
@@ -302,6 +327,21 @@ export function createWebGameSaveFromPortableProfile(
       unlocked && profile.wizard.permanentRanks[index + 72] === 0
     ))
       ? ['Purchased-but-unlearned advanced spells are a web retention extension and cannot be reconstructed from retail disk bytes.']
+      : []),
+    ...(importedBook.primarySkillId !== profile.wizard.selectedPrimarySkillId
+      ? ['Stock selected a transient Plane Orb or a Weld whose build identity is not on disk; web play starts on the creation-element primary.']
+      : []),
+    ...(profile.wizard.skillQuickbar.some((skillId, slot) => (
+      skillId !== importedBook.skillQuickbar[slot]
+    ))
+      ? ['Native Belt entries that depend on an unpersisted Weld build or non-durable effective rank remain in the native attachment but are unavailable in web play.']
+      : []),
+    ...(profile.wizard.concentrationSkillIds.some((skillId, slot) => (
+      skillId !== (slot === 0
+        ? importedRuntime.concentrationSkillIdA
+        : importedRuntime.concentrationSkillIdB)
+    ))
+      ? ['Native concentrations backed only by non-materialized equipment state reset during web import.']
       : []),
   ]
   return Object.freeze({
@@ -397,6 +437,9 @@ export async function createPortableGameProfileFromWebSave(
       || profile.economy.unforgeBonuses.maximumMana !== 0
       ? ['Web Unforge maximum-health/maximum-mana base bonuses have no retail disk fields and reset after stock reload.']
       : []),
+    ...(skillBook.primarySkillId === 52 || skillBook.skillQuickbar.includes(52)
+      ? ['Retail does not serialize the active synthetic Weld build ID; selected or belted Spell Welding resets to the creation-element primary on stock export.']
+      : []),
   ]
   const portableSeed: PortableGameProfile = Object.freeze({
     ...base,
@@ -424,6 +467,10 @@ export async function createPortableGameProfileFromWebSave(
       cheatDeathEnabled: profile.economy.ownedPerkSelectors.includes(
         NATIVE_HAGATHA_SELECTORS.cheatDeath,
       ),
+      concentrationSkillIds: Object.freeze([
+        skillRuntime.concentrationSkillIdA,
+        skillRuntime.concentrationSkillIdB,
+      ]),
       currentHealth: progression.currentHealth,
       currentMana: progression.currentMana,
       deferredSkillChoices: progression.deferredSkillChoices,
@@ -440,6 +487,7 @@ export async function createPortableGameProfileFromWebSave(
       maximumMana: progression.maximumMana,
       meditationIdleDelay: derived.meditationIdleDelayTicks,
       name: character.displayName,
+      nextConcentrationSlot: skillRuntime.nextConcentrationReplacementSlot === 'a' ? 0 : 1,
       nextThreshold: progression.nextThreshold,
       offerSeed: progression.offerSeed,
       offensiveDamageFlat: profile.economy.unforgeBonuses.offensiveDamage,
@@ -449,6 +497,12 @@ export async function createPortableGameProfileFromWebSave(
       permanentRanks: Object.freeze([...skillBook.permanentRanks]),
       poisonImmunityTicks: progression.poisonImmunityTicksRemaining,
       previousThreshold: progression.previousThreshold,
+      selectedPrimarySkillId: skillBook.primarySkillId === 52
+        ? startingPrimary
+        : skillBook.primarySkillId,
+      skillQuickbar: Object.freeze(skillBook.skillQuickbar.map(skillId => (
+        skillId === 52 ? null : skillId
+      ))),
       startingPrimary,
       startingSecondary,
       weldEffect: skillRuntime.equipmentModifiers.weldEffect,
