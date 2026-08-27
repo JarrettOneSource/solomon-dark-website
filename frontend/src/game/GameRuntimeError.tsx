@@ -79,6 +79,15 @@ export default function GameRuntimeError({
           </details>
         )}
         <div className="game-runtime-error-actions">
+          {!disconnected && (
+            <button
+              type="button"
+              className="btn btn-stone"
+              onClick={() => window.location.reload()}
+            >
+              Main menu
+            </button>
+          )}
           <button
             type="button"
             className="btn btn-gold"
