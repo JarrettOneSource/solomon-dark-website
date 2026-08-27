@@ -20,6 +20,7 @@ import {
   createBoneyardCombatAtlas,
   type BoneyardCombatAtlas,
 } from './boneyard-combat-atlas.ts'
+import { boneyardCombatAssetSource } from './boneyard-combat-asset-source.ts'
 
 const ACTOR_FRAME_SIZE = 170
 const ACTOR_HEADINGS = 24
@@ -100,7 +101,7 @@ export async function loadHubWorldTextures(): Promise<HubWorldTextures> {
   const loaded = await loadGameTextureEntries(sources)
   const base = Object.fromEntries(loaded) as Record<string, Texture>
   const texture = (source: string) => {
-    const result = base[source]
+    const result = base[boneyardCombatAssetSource(source)]
     if (!result) throw new Error(`Hub texture was not loaded: ${source}`)
     return result
   }
@@ -173,7 +174,10 @@ export async function loadHubWorldTextures(): Promise<HubWorldTextures> {
 }
 
 function hubRequestedAssetSources(): readonly string[] {
-  return [...playerWorldAssetSources(), boneyard.levelUpSparkle]
+  return [
+    ...playerWorldAssetSources(),
+    boneyardCombatAssetSource(boneyard.levelUpSparkle),
+  ]
 }
 
 /** Sources selected only by later ambient animation branches. */

@@ -35,6 +35,7 @@ import {
   NATIVE_WELD_DEADHAWG_SPRITES,
   NATIVE_WELD_SPRITES,
 } from './primary-spell-weld-native.ts'
+import { boneyardCombatAssetSource } from './boneyard-combat-asset-source.ts'
 
 const ACTOR_HEADINGS = 24
 const ACTOR_WALK_FRAMES = 5
@@ -167,7 +168,7 @@ export interface PlayerWorldTextures {
 }
 
 export function playerWorldAssetSources(): string[] {
-  return collectAssetSources({
+  return [...new Set(collectAssetSources({
     elementVfx,
     fontAtlas: hub.hud.fontAtlas,
     fireActors: {
@@ -190,12 +191,15 @@ export function playerWorldAssetSources(): string[] {
       )),
     },
     secondary: NATIVE_SECONDARY_ASSET_SOURCES,
-  })
+  }).map(boneyardCombatAssetSource))]
 }
 
 export function createPlayerWorldTextures(
-  texture: (source: string) => Texture,
+  resolveTexture: (source: string) => Texture,
 ): PlayerWorldTextures {
+  const texture = (source: string): Texture => (
+    resolveTexture(boneyardCombatAssetSource(source))
+  )
   const playerCharacterAtlas = createPlayerCharacterAtlas(texture)
   const playerTextures = (element: WizardElement): PlayerActorTextureFrames => ({
     death: playerCharacterAtlas.grid(

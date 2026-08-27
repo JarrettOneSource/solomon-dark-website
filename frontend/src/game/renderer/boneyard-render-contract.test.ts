@@ -87,6 +87,10 @@ const boneyardCombatAtlasPacker = readFileSync(
   new URL('../../../../tools/pack-boneyard-combat-atlas.py', import.meta.url),
   'utf8',
 )
+const boneyardCombatAssetSource = readFileSync(
+  new URL('./boneyard-combat-asset-source.ts', import.meta.url),
+  'utf8',
+)
 const playerTextures = readFileSync(
   new URL('./world-player-textures.ts', import.meta.url),
   'utf8',
@@ -228,6 +232,18 @@ test('Boneyard maps logical combat URLs to shared pages and tears frames down fi
   assert.match(boneyardCombatAtlas, /orig: new Rectangle\(0, 0, logicalWidth, logicalHeight\)/)
   assert.match(boneyardCombatAtlas, /trim: new Rectangle\(trimX, trimY, width, height\)/)
   assert.match(boneyardCombatAtlas, /for \(const frame of frames\.values\(\)\) frame\.destroy\(false\)/)
+  assert.doesNotMatch(sharedAssets, /boneyardCombatAtlasSource/)
+  assert.match(
+    sharedAssets,
+    /import primarySpellEarthAura from '\.\.\/assets\/game\/boneyard\/badguys\/0015\.png'/,
+  )
+  assert.match(
+    boneyardCombatAssetSource,
+    /\[primarySpells\.earth\.aura, boneyardCombatAtlasSource\('BadGuys', 15\)\]/,
+  )
+  assert.match(playerTextures, /collectAssetSources\([\s\S]*?\.map\(boneyardCombatAssetSource\)/)
+  assert.match(playerTextures, /resolveTexture\(boneyardCombatAssetSource\(source\)\)/)
+  assert.match(boneyardTextures, /base\[boneyardCombatAssetSource\(source\)\]/)
 })
 
 test('secondary rain streaks share exactly two world-owned immutable gradients', () => {

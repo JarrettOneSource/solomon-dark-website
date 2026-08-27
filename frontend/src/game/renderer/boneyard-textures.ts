@@ -24,6 +24,7 @@ import {
   createBoneyardCombatAtlas,
   type BoneyardCombatAtlas,
 } from './boneyard-combat-atlas.ts'
+import { boneyardCombatAssetSource } from './boneyard-combat-asset-source.ts'
 
 export interface BoneyardWorldTextures extends PlayerWorldTextures {
   assetSources: readonly string[]
@@ -75,7 +76,7 @@ export async function loadBoneyardWorldTextures(): Promise<BoneyardWorldTextures
     ...NATIVE_LOOT_ASSET_SOURCES,
     boneyard.graveDirt,
     boneyard.lantern,
-    boneyard.levelUpSparkle,
+    boneyardCombatAssetSource(boneyard.levelUpSparkle),
     boneyard.solomonDig,
     boneyard.solomonFlydirt,
     solomonEncounterSource,
@@ -102,7 +103,7 @@ export async function loadBoneyardWorldTextures(): Promise<BoneyardWorldTextures
   }
   const base = Object.fromEntries(loaded) as Record<string, Texture>
   const texture = (source: string): Texture => {
-    const result = base[source]
+    const result = base[boneyardCombatAssetSource(source)]
     if (!result) throw new Error(`Boneyard texture was not loaded: ${source}`)
     return result
   }

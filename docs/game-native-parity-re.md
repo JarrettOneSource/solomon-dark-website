@@ -50623,3 +50623,15 @@ all frames; only the DVT-triggered Safari chrome transition exposes the
 manually painted UI buffer. That instrumentation edge is not evidence that the
 reported world-light clock still advances, and it does not justify a permanent
 buffer or removal of native picker animation.
+
+Rebase integration with current main `dd845ddc` exposed a separate source-key
+boundary. The selected-primary Staff-orb closure makes record 15 part of the
+global `elementVfx` manifest, which Create preloads with ordinary browser image
+URLs. Mapping that global value directly to `boneyard-combat:BadGuys:15`
+caused the exact Mac browser error
+`could not load game asset: boneyard-combat:BadGuys:15` before Create settled.
+Global/Create manifests now retain their reviewable original PNG URLs. Only
+the Hub/Boneyard texture-owner seam translates the eleven packed combat URLs
+to atlas/record keys before load and lookup. Staff Steam `2002..2007` and all
+other non-packed rows remain ordinary URLs, preserving the newly landed Staff
+program without widening atlas brightness semantics.
