@@ -52767,5 +52767,43 @@ No member is `blocked-by-platform`.
 
 ### Implementation validation receipt
 
-- Pending implementation and exact Mac validation. No parity, publication, or
-  deployment claim is made by this pre-code entry.
+- Exact pre-receipt Website candidate
+  `97c61453a2ca658f1d82da6ae35bf60b62ca3e0c` and its clean detached Mac
+  worktree passed `/opt/homebrew/bin/bash ./scripts/validate.sh`: backend build
+  and integration contracts, strict formatting/lint, every registered frontend
+  and desktop group, production build, media/CSP policy, and bundle budget.
+  `Game-CbUO5vZy.js` is 477,914 raw / 133,665 gzip bytes against limits
+  524,288 / 134,144. Validation stdout SHA-256 is
+  `032de9249e0d79628093b540f2e42d0259c00fc49f567d1c3891c70800a0a510`.
+- Exact Mod Loader candidate `b03a26d648fbec08adbb7b12430b413016112a42`
+  passed all 513/513 portable static RE contracts on Homebrew Python after the
+  new `binary-layout.ini` provenance hash was reconciled. Stdout SHA-256 is
+  `23ac2b28e7d6502bc4fd3fa6121d132a6ac105fc56c699618907e30777e4b0d1`.
+- Mac Chrome 151 / WebGL2 completed the production Sack/Dye/belt journey in
+  standalone College Inventory, Hagatha, Luthacus, Fomentius, Shlorio, and an
+  active Boneyard. Filled/nested roots, game-back, root-relative movement,
+  recursive Luthacus storage, exact-UID item bind/activation/pull-off, and the
+  Inventory-pause authority path passed. Page, console, and failed-response
+  arrays are empty; the exact audio census is 12 `backpack_close` and 18 shared
+  `backpack_open` requests. Receipt SHA-256 is
+  `5d5cb893e8e48df2b666e16b57eadb73376462f93a99508c2af68a365237d6c5`.
+  Reviewed College item-belt, child-Sack, and Boneyard item-belt frame hashes
+  are `bd83f30a...999932`, `04967dc4...db248`, and
+  `c7786f84...cc19e`.
+- The production Teleport positive control moved the authoritative actor from
+  `(938.5399780273438,1761.4599609375)` to
+  `(674.4675903320312,1475.3670654296875)`, emitted two bursts and two ordered
+  `teleport` events, debited mana from 100 to 90.4 after observed regeneration,
+  and committed the 6,000-tick private / 150-tick common cooldowns. Its receipt
+  and reviewed flash-frame SHA-256 values are `ee5b2da2...dc24a` and
+  `6474a9a2...00c34`; page, console, and response error arrays are empty.
+- The matching College control retained position `(950.64,164.04)`, mana 100,
+  actor/event counters, and audio while exposing the disabled Teleport label.
+  Receipt and reviewed frame SHA-256 values are `fb4cfc3c...08b09` and
+  `2f8c683a...438d`. The same production pass caught and closed the missing
+  service-child game-back action and updated both long journeys to wait for the
+  protocol-88 mutual-start readiness owner before attempting Boneyard input.
+- Evidence is retained under Mac
+  `/Users/jarrett/codex-evidence/inventory-belt-teleport-20260827-rebased/`.
+  The receipt update changes documentation only. No production deployment was
+  performed.
