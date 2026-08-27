@@ -51518,4 +51518,40 @@ browser party capability.
 
 ### Implementation validation receipt
 
-- Pending implementation and Mac/browser/native proof in this recursive pass.
+- The clean rebased Website candidate passed
+  `/opt/homebrew/bin/bash ./scripts/validate.sh` on the Mac mini: backend build
+  and integration contracts, formatting, frontend lint/boundaries/generated
+  assets, every frontend and desktop suite, production frontend/game-host
+  builds, bundle budget, and production media policy all exited zero.
+- Real Mac Chrome exercised both storage owners. Anonymous IndexedDB and an
+  authenticated cloud account each imported the controlled stock archive,
+  previewed POMPONIUS as level 1 Fire/Arcane with 500 gold, wrote revision 1,
+  resumed through Last Game, persisted revision 2, exported, reloaded, and
+  resumed again. Both downloaded 28,619-byte archives with SHA-256
+  `c70859cdb52e709a7e586bde542b200f9dc4c9f32c10bc7f7fa0528e5eb176c8`;
+  page/console errors were empty after the standard Vite-only deployment
+  manifest route was fulfilled.
+- The exact final Mod Loader candidate passed `510/510` registered static RE
+  contracts and its managed Windows build on the Mac. That Mac-built x86
+  contract executable then passed every launcher contract on Windows plus the
+  real browser-produced archive import, including manifest/hash validation,
+  destination-slot materialization, and native Resume selection.
+- The task-owned Windows stage used the exact retail EXE SHA-256
+  `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`,
+  all 40 discovered mods disabled, and the browser ZIP as its selected save.
+  Stock exposed `RESUME LAST GAME`, loaded POMPONIUS into the Hub, and showed
+  Fireball plus Ring of Fire on its native Skills screen. An ordinary close
+  rewrote a valid 26,897-byte gamestate with SHA-256
+  `0c6d19652ede0e6794b49de40c5d1eb8694f87cf195375d06f35a61dd979bbc9`.
+- That retail rewrite exposed two adjacent variants now closed in both codecs:
+  the null-Boast statement may become the one-byte `0x01` sentinel, and a
+  first-process control-scheme/Create path may emit root rows `0..7` at rank
+  zero while retaining the authoritative Fire/Arcane roots and starter spells.
+  Strict decoding accepts only the proved sentinel; web import reconstructs
+  all eight class roots at rank 1 and keeps public learned order scoped to rows
+  `8..79`.
+- The iPhone was reported available again, but this Mac has neither the full
+  Xcode `devicectl`/`xctrace` utilities nor a libimobiledevice/Appium bridge, so
+  no physical-iPhone automation receipt is claimed. That optional device proof
+  is separate from the completed real-Chrome, Windows-launcher, and retail
+  compatibility gates. No production deployment was performed.
