@@ -80,12 +80,16 @@ export function derivePlayerAllyHudRows(
     .filter(({ playerId }) => playerId !== localPlayerId)
     .sort((left, right) => left.playerId.localeCompare(right.playerId))
     .map((retained) => {
-      const player = players[retained.playerId]
+      const snapshotPlayer = players[retained.playerId]
+      const connected = partyRoster === undefined
+        ? snapshotPlayer !== undefined
+        : retained.connected
+      const player = connected ? snapshotPlayer : undefined
       const currentHealth = player?.progression.currentHealth ?? retained.currentHealth
       const maximumHealth = player?.progression.maximumHealth ?? retained.maximumHealth
       const lifeState = player?.progression.lifeState ?? retained.lifeState
       return {
-        connected: player ? true : retained.connected,
+        connected,
         dead: lifeState !== 'alive' || currentHealth <= 0,
         healthRatio: clampAllyHudHealthRatio(
           currentHealth / maximumHealth,

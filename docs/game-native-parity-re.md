@@ -53712,6 +53712,15 @@ inferable from a stale client document.
   orthogonal; visible label precedence is disconnected over dead. Both tints
   attach to the row root, not the bar, and status text is presentation-only.
 
+### Nearby-system findings
+
+- Disconnect publishes a snapshot and party roster at the same authoritative
+  tick. The shell may retain the prior same-tick scene snapshot, so an explicit
+  roster row with `connected=false` must outrank a stale actor still present in
+  the presentation cache. Snapshot vitals/config remain preferred only while
+  the roster says that member is connected. This is presentation arbitration,
+  not a second transport owner.
+
 ### Confidence and open questions
 
 - Confirmed: current final-retirement/test contract, null ordinary target

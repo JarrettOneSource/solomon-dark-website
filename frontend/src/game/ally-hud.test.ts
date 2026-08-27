@@ -118,6 +118,41 @@ test('ally HUD retains disconnected members and composes disconnect with death',
   ])
 })
 
+test('explicit disconnect outranks a stale same-tick actor snapshot', () => {
+  const staleRemote = player('Remote')
+  const rows = derivePlayerAllyHudRows({
+    local: player('Local'),
+    remote: staleRemote,
+  }, 'local', [
+    {
+      connected: true,
+      currentHealth: 50,
+      displayName: 'Local',
+      element: 'ether',
+      lifeState: 'alive',
+      maximumHealth: 50,
+      playerId: 'local',
+    },
+    {
+      connected: false,
+      currentHealth: 0,
+      displayName: 'Remote',
+      element: 'fire',
+      lifeState: 'spectating',
+      maximumHealth: 75,
+      playerId: 'remote',
+    },
+  ])
+
+  assert.deepEqual(rows, [{
+    connected: false,
+    dead: true,
+    healthRatio: 0,
+    id: 'remote',
+    identity: { kind: 'player', displayName: 'Remote', element: 'fire' },
+  }])
+})
+
 test('ally HUD derives exact nonlocal party identities in stable player order', () => {
   const rows = derivePlayerAllyHudRows({
     'player-3': player('Vibia'),
