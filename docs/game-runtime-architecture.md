@@ -119,7 +119,7 @@ The source tree owns four distinct modules:
 
 The authoritative session owns players in one dense ECS outside any particular
 world. Stable player-entity IDs index separate identity, character-config,
-locomotion, primary-cast, progression, skill-book, and stat-book component
+locomotion, primary-cast, progression, skill-book, stat-book, and belt component
 stores. A whole
 `PlayerCharacterState` is only a short-lived system or protocol projection; it
 is not a second authoritative player record. The active world owns spawn
@@ -131,7 +131,7 @@ slice while retaining the same player entity, progression books, selected
 concentrations, and A/B replacement cursor. Post-run loadout reconstruction
 is a stronger, separate generation boundary: after Game Over, each validated
 Create confirmation replaces level/XP, skill/stat books, runtime, offers,
-selected skills, advanced unlocks, and quickbar with the selected native fresh
+selected skills, advanced unlocks, and belt with the selected native fresh
 loadout while preserving only durable profile/Hagatha state. It also advances
 component revisions so a client cannot reuse the completed Game Over
 generation's inventory or skill projection. Ordinary post-run confirmation
@@ -158,10 +158,14 @@ entity ID, death epoch, heading, progression, books, inventory, equipment, and
 every living peer. Ordered snapshots publish that one mutation; there is no
 client respawn command or parallel vitals-correction authority.
 The skill-book column also owns first-learned public-row order, the selected
-primary, two concentration slots and their replacement cursor, plus the eight
-secondary intent slots. Every fresh generation ranks all eight native root rows
-at one, stores only the selected element/discipline roots as offer owners, and
-keeps only the starting primary/secondary pair in learned display order.
+primary, two concentration slots and their replacement cursor. A separate
+player-belt column owns the eight heterogeneous Game/BeltButton entries: empty,
+skill, recursive Health/Mana potion alias, or exact native item identity.
+Inventory and skill-book mutations are sibling producers into that belt; input,
+HUD/modal presentation, refresh, snapshots, and save restore are consumers.
+Every fresh generation ranks all eight native root rows at one, stores only the
+selected element/discipline roots as offer owners, and keeps only the starting
+primary/secondary pair in learned display order.
 Inventory, SkillScreen, and the compact selected-HUD
 selector are shared by Hub and Boneyard; scenes request the participant-owned
 surface but never clone its state. Protocol 36 introduced strict belt, primary,
@@ -275,6 +279,17 @@ categories 1/2 to categories 1/2/3.
 Category 3 consumes a rising slot edge through the existing general
 concentration owner; it does not become a secondary cast or change automatic
 category-1/2 hotbar population.
+Protocol 86 replaces that incomplete skill-only snapshot member with the
+separate eight-entry belt component. Stock categories 1/2 and the disclosed
+category-3 Website extension use skill entries; subtype-0/1 potions normalize
+to recursive Health/Mana aliases; every other stock-bindable item retains its
+native type and exact participant-owned item ID. One addressed bind replaces
+one entry, refresh clears a disappeared exact item or unlearned skill, and all
+keyboard/mouse/touch/controller producers resolve the same current entry.
+Inventory Sack browse paths remain client-local UI state and therefore do not
+cross protocol 86. Save schema 17 persists the belt separately from the skill
+book. Schema 16 and earlier nullable skill arrays migrate to skill entries and
+seed the two potion aliases only where historical slots 3/4 are empty.
 The compact selector
 uses its own `skill-selector` pause source only in an active Boneyard, so the
 host cannot accept an addressed HUD mutation from a full SkillScreen pause (or
@@ -1031,7 +1046,7 @@ There is one composed client, not one DOM client and one canvas client.
   absent profile leaves the adaptive coarse-pointer HUD rules authoritative;
   a valid complete profile projects normalized centre, uniform scale, and
   rotation variables onto the existing skull, diagnostics, two joysticks,
-  eight semantic quickbar slots, inventory/tome/XP, and potion owners only
+  eight semantic belt slots, inventory/tome/XP, and potion presentations only
   under a coarse pointer. The Settings editor drafts transforms on a zoomable
   silver page and commits one versioned local record. It does not create new
   controls, cross the protocol, change tutorial/scene gates, or own input
