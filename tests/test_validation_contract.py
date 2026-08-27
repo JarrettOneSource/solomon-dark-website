@@ -228,6 +228,42 @@ class ValidationContractTests(unittest.TestCase):
         self.assertNotIn("SDR_GAME_REVISION", deploy)
         self.assertNotIn("ml-bot-policy-v5-selected.sdml", nfo_readme)
 
+    def test_main_deployment_owns_game_systemd_unit(self) -> None:
+        deploy = (ROOT / "ops/local-ci/deploy-main.sh").read_text()
+        unit = (ROOT / "ops/nfo/solomon-dark-game.service").read_text()
+
+        self.assertIn(
+            "Environment=SDR_GAME_MEMORIAL_PATH=/var/lib/solomon-dark-game/"
+            "memoratorium.json",
+            unit,
+        )
+        self.assertIn("StateDirectory=solomon-dark-game", unit)
+        self.assertIn("ops/nfo/solomon-dark-game.service", deploy)
+        self.assertGreaterEqual(deploy.count("Deploy/solomon-dark-game.service"), 3)
+        self.assertIn("target_game_unit_checksum", deploy)
+        self.assertIn("remote_game_unit_checksum", deploy)
+        self.assertIn("install_game_unit", deploy)
+        self.assertIn("restore_game_unit", deploy)
+        self.assertIn("systemctl daemon-reload", deploy)
+
+        release_swap = deploy.rindex('mv -- "$stage" "$live"')
+        unit_cutover = deploy.rindex("\ninstall_game_unit\n")
+        services_start = deploy.rindex(
+            "systemctl start solomon-dark-game.service solomon-dark-revived.service"
+        )
+        self.assertLess(release_swap, unit_cutover)
+        self.assertLess(unit_cutover, services_start)
+
+        rollback = deploy[
+            deploy.index("rollback_release() {") : deploy.index("trap cleanup_upload EXIT")
+        ]
+        self.assertLess(
+            rollback.index("restore_game_unit"),
+            rollback.index(
+                "systemctl start solomon-dark-game.service solomon-dark-revived.service"
+            ),
+        )
+
     def test_main_deployment_self_updates_and_suppresses_failed_candidates(self) -> None:
         deploy = (ROOT / "ops/local-ci/deploy-main.sh").read_text()
         install = (ROOT / "ops/local-ci/install.sh").read_text()

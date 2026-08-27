@@ -11,8 +11,10 @@ scp_command="${SDR_DEPLOY_SCP_COMMAND:-/usr/bin/scp}"
 ssh_identity="${SDR_DEPLOY_SSH_IDENTITY:-$HOME/.ssh/id_ed25519_nfoservers_root}"
 public_url="${SDR_DEPLOY_PUBLIC_URL:-https://solomondarker.com}"
 caddy_source_path="ops/nfo/solomon-dark-revived.caddy"
+game_unit_source_path="ops/nfo/solomon-dark-game.service"
 worker_artifact_path="Deploy/solomon-dark-main-deploy"
 remote_caddy_site="/etc/caddy/sites/solomon-dark-revived.caddy"
+remote_game_unit="/etc/systemd/system/solomon-dark-game.service"
 ssh_options=(
     -o BatchMode=yes
     -o ConnectTimeout=15
@@ -106,6 +108,11 @@ remote_caddy_checksum() {
         "if test -r '$remote_caddy_site'; then sha256sum '$remote_caddy_site' | awk '{print \$1}'; else printf 'missing\n'; fi"
 }
 
+remote_game_unit_checksum() {
+    "$ssh_command" "${ssh_options[@]}" "$remote_host" \
+        "if test -r '$remote_game_unit'; then sha256sum '$remote_game_unit' | awk '{print \$1}'; else printf 'missing\n'; fi"
+}
+
 record_failed_target() {
     failed_target_temp="$state_root/.failed-target.$$"
     printf '%s %s\n' "$target_sha" "$(date --iso-8601=seconds)" >"$failed_target_temp"
@@ -169,14 +176,23 @@ target_caddy_checksum="$(
 )"
 [[ "$target_caddy_checksum" =~ ^[0-9a-f]{64}$ ]] ||
     fail "origin/main did not contain a valid Caddy site configuration"
+target_game_unit_checksum="$(
+    git --git-dir="$mirror" show "$target_sha:$game_unit_source_path" |
+        sha256sum |
+        awk '{print $1}'
+)"
+[[ "$target_game_unit_checksum" =~ ^[0-9a-f]{64}$ ]] ||
+    fail "origin/main did not contain a valid game systemd unit"
 short_sha="${target_sha:0:12}"
 artifact="$artifact_root/$target_sha.tar.gz"
 checksum_file="$artifact.sha256"
 
 deployed_sha="$(remote_deployed_sha)"
 live_caddy_checksum="$(remote_caddy_checksum)"
+live_game_unit_checksum="$(remote_game_unit_checksum)"
 if [[ "$deployed_sha" == "$target_sha" &&
-    "$live_caddy_checksum" == "$target_caddy_checksum" ]]; then
+    "$live_caddy_checksum" == "$target_caddy_checksum" &&
+    "$live_game_unit_checksum" == "$target_game_unit_checksum" ]]; then
     [[ ! -f "$artifact" ]] || unlink -- "$artifact"
     [[ ! -f "$checksum_file" ]] || unlink -- "$checksum_file"
     [[ ! -f "$failed_target_file" ]] || unlink -- "$failed_target_file"
@@ -184,7 +200,7 @@ if [[ "$deployed_sha" == "$target_sha" &&
     exit 0
 fi
 if [[ "$deployed_sha" == "$target_sha" ]]; then
-    log "Production runtime is current but its Caddy site configuration drifted"
+    log "Production runtime is current but its service configuration drifted"
 fi
 if [[ -f "$failed_target_file" ]]; then
     read -r failed_target_sha _ <"$failed_target_file"
@@ -245,12 +261,16 @@ if [[ -z "$artifact_checksum" ]]; then
     install -D -m 0644 \
         "$source_checkout/$caddy_source_path" \
         "$publish_dir/Deploy/solomon-dark-revived.caddy"
+    install -D -m 0644 \
+        "$source_checkout/$game_unit_source_path" \
+        "$publish_dir/Deploy/solomon-dark-game.service"
     install -D -m 0700 \
         "$source_checkout/ops/local-ci/deploy-main.sh" \
         "$publish_dir/$worker_artifact_path"
 
     for required_file in \
         Deploy/solomon-dark-main-deploy \
+        Deploy/solomon-dark-game.service \
         Deploy/solomon-dark-revived.caddy \
         Server.dll \
         GameHost/game-session-supervisor.mjs \
@@ -292,8 +312,10 @@ fi
 
 deployed_sha="$(remote_deployed_sha)"
 live_caddy_checksum="$(remote_caddy_checksum)"
+live_game_unit_checksum="$(remote_game_unit_checksum)"
 if [[ "$deployed_sha" == "$target_sha" &&
-    "$live_caddy_checksum" == "$target_caddy_checksum" ]]; then
+    "$live_caddy_checksum" == "$target_caddy_checksum" &&
+    "$live_game_unit_checksum" == "$target_game_unit_checksum" ]]; then
     unlink -- "$artifact" "$checksum_file"
     log "Production reached $target_sha while this run was building"
     exit 0
@@ -305,12 +327,13 @@ log "Uploading validated release $target_sha"
 "$scp_command" "${ssh_options[@]}" -q "$artifact" "$remote_host:$remote_upload"
 
 if "$ssh_command" "${ssh_options[@]}" "$remote_host" \
-    "bash -s -- '$target_sha' '$artifact_checksum' '$remote_upload'" <<'REMOTE_DEPLOY'
+    "bash -s -- '$target_sha' '$artifact_checksum' '$remote_upload' '$target_game_unit_checksum'" <<'REMOTE_DEPLOY'
 set -Eeuo pipefail
 
 target_sha="$1"
 expected_checksum="$2"
 artifact="$3"
+expected_game_unit_checksum="$4"
 short_sha="${target_sha:0:12}"
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 live=/opt/solomon-dark-revived
@@ -324,6 +347,10 @@ caddy_candidate="/etc/caddy/sites/.solomon-dark-revived.$short_sha-$timestamp.ca
 caddy_next="${caddy_site}.next"
 caddy_backup=""
 caddy_changed=0
+game_unit=/etc/systemd/system/solomon-dark-game.service
+game_unit_next="${game_unit}.next"
+game_unit_backup=""
+game_unit_changed=0
 game_env=/etc/solomon-dark-game.env
 game_env_next="${game_env}.next"
 game_env_backup=""
@@ -409,6 +436,32 @@ restore_game_checkpoint_path() {
     game_env_changed=0
 }
 
+restore_game_unit() {
+    if (( game_unit_changed == 0 )); then
+        return
+    fi
+    [[ -n "$game_unit_backup" && -f "$game_unit_backup" ]]
+    install -o root -g root -m 0644 -- "$game_unit_backup" "$game_unit_next"
+    mv -- "$game_unit_next" "$game_unit"
+    systemctl daemon-reload
+    game_unit_changed=0
+}
+
+install_game_unit() {
+    local candidate="$live/Deploy/solomon-dark-game.service"
+    if cmp --silent "$candidate" "$game_unit"; then
+        return
+    fi
+
+    install -d -m 0700 "$backup_dir"
+    game_unit_backup="$backup_dir/solomon-dark-game.service"
+    install -o root -g root -m 0644 -- "$game_unit" "$game_unit_backup"
+    install -o root -g root -m 0644 -- "$candidate" "$game_unit_next"
+    game_unit_changed=1
+    mv -- "$game_unit_next" "$game_unit"
+    systemctl daemon-reload
+}
+
 restore_caddy_config() {
     if (( caddy_changed == 0 )); then
         return
@@ -450,6 +503,7 @@ cleanup_upload() {
     [[ ! -f "$artifact" ]] || unlink -- "$artifact"
     [[ ! -f "$caddy_candidate" ]] || unlink -- "$caddy_candidate"
     [[ ! -f "$caddy_next" ]] || unlink -- "$caddy_next"
+    [[ ! -f "$game_unit_next" ]] || unlink -- "$game_unit_next"
     [[ ! -f "$game_env_next" ]] || unlink -- "$game_env_next"
     if (( website_stopped == 1 && rollback_needed == 0 )); then
         systemctl start solomon-dark-revived.service || true
@@ -478,6 +532,7 @@ rollback_release() {
         fi
     fi
     restore_game_checkpoint_path || true
+    restore_game_unit || true
     restore_caddy_config || true
     if (( rollback_needed == 1 )); then
         systemctl start solomon-dark-game.service solomon-dark-revived.service || true
@@ -501,7 +556,12 @@ chmod 0644 "$caddy_candidate"
 caddy validate --config "$caddy_candidate" --adapter caddyfile >/dev/null
 
 current_sha="$(tr -d '\r\n' <"$live/DEPLOYED_GIT_SHA")"
-if [[ "$current_sha" == "$target_sha" ]]; then
+current_game_unit_checksum="missing"
+if [[ -r "$game_unit" ]]; then
+    current_game_unit_checksum="$(sha256sum "$game_unit" | awk '{print $1}')"
+fi
+if [[ "$current_sha" == "$target_sha" &&
+    "$current_game_unit_checksum" == "$expected_game_unit_checksum" ]]; then
     install_caddy_config
     [[ "$(sha256sum "$caddy_site" | awk '{print $1}')" == \
         "$(sha256sum "$caddy_candidate" | awk '{print $1}')" ]]
@@ -514,6 +574,7 @@ fi
 mkdir -- "$stage"
 tar --extract --gzip --file "$artifact" --directory "$stage"
 for required_file in \
+    Deploy/solomon-dark-game.service \
     Deploy/solomon-dark-revived.caddy \
     Server.dll \
     GameHost/game-session-supervisor.mjs \
@@ -526,6 +587,9 @@ for required_file in \
     [[ -f "$stage/$required_file" ]]
 done
 [[ "$(tr -d '\r\n' <"$stage/DEPLOYED_GIT_SHA")" == "$target_sha" ]]
+[[ "$(sha256sum "$stage/Deploy/solomon-dark-game.service" | awk '{print $1}')" == \
+    "$expected_game_unit_checksum" ]]
+systemd-analyze verify "$stage/Deploy/solomon-dark-game.service"
 chown -R root:root "$stage"
 chmod -R u=rwX,go=rX "$stage"
 
@@ -543,6 +607,7 @@ rollback_needed=1
 mv -- "$stage" "$live"
 stage=""
 install_game_checkpoint_path
+install_game_unit
 install_caddy_config
 systemctl start solomon-dark-game.service solomon-dark-revived.service
 website_stopped=0
@@ -573,15 +638,18 @@ fi
 [[ "$(tr -d '\r\n' <"$live/DEPLOYED_GIT_SHA")" == "$target_sha" ]]
 grep --fixed-strings --line-regexp --quiet \
     "SDR_GAME_ML_BOT_CHECKPOINT=$game_checkpoint" "$game_env"
+[[ "$(sha256sum "$game_unit" | awk '{print $1}')" == \
+    "$expected_game_unit_checksum" ]]
 [[ "$(sha256sum "$caddy_site" | awk '{print $1}')" == \
     "$(sha256sum "$caddy_candidate" | awk '{print $1}')" ]]
 
 rollback_needed=0
 caddy_changed=0
 game_env_changed=0
-printf 'Deployed %s\nRollback: %s\nDatabase backup: %s/sdr.db\nCaddy backup: %s\nGame env backup: %s\n' \
+game_unit_changed=0
+printf 'Deployed %s\nRollback: %s\nDatabase backup: %s/sdr.db\nCaddy backup: %s\nGame unit backup: %s\nGame env backup: %s\n' \
     "$target_sha" "$rollback" "$backup_dir" "${caddy_backup:-unchanged}" \
-    "${game_env_backup:-unchanged}"
+    "${game_unit_backup:-unchanged}" "${game_env_backup:-unchanged}"
 REMOTE_DEPLOY
 then
     deploy_exit=0
@@ -602,6 +670,9 @@ live_sha="$(remote_deployed_sha)"
 live_caddy_checksum="$(remote_caddy_checksum)"
 [[ "$live_caddy_checksum" == "$target_caddy_checksum" ]] ||
     fail "production Caddy site does not match origin/main after deploying $target_sha"
+live_game_unit_checksum="$(remote_game_unit_checksum)"
+[[ "$live_game_unit_checksum" == "$target_game_unit_checksum" ]] ||
+    fail "production game unit does not match origin/main after deploying $target_sha"
 curl --fail --silent --show-error --retry 10 --retry-all-errors \
     --retry-delay 1 "$public_url/game" >/dev/null
 public_deployment="$(curl --fail --silent --show-error --retry 10 --retry-all-errors \

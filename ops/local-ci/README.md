@@ -2,9 +2,9 @@
 
 This worker polls `origin/main` from its own bare mirror, validates the exact
 commit with `./scripts/validate.sh`, publishes an immutable release archive,
-and deploys it to NFO. The archive includes the checked-in Caddy site, whose
-live checksum is reconciled even when the runtime commit is already current.
-It never reads or modifies a developer checkout.
+and deploys it to NFO. The archive includes the checked-in Caddy site and game
+systemd unit, whose live checksums are reconciled even when the runtime commit
+is already current. It never reads or modifies a developer checkout.
 
 The cutover is fail-closed: a changed `main` is not deployed until validation
 passes, the SQLite database is backed up and checked, and an unhealthy release
@@ -14,8 +14,11 @@ publish one final checkpoint per connected player, wait up to the bounded save
 grace for cloud/IndexedDB acknowledgements, and disconnect players with the
 `game updating` reason before restarting the Website and game units. Changed
 Caddy configuration is validated before installation, reloaded gracefully, and
-restored with a failed release. Successful cutovers retain the previous release,
-database backup, and any replaced Caddy site on NFO.
+restored with a failed release. The game unit is verified, backed up, installed,
+and daemon-reloaded before the candidate starts; rollback restores and reloads
+the prior unit before restarting the prior release. Successful cutovers retain
+the previous release, database backup, and any replaced Caddy site or game unit
+on NFO.
 
 The release also publishes `/deployment.json`. Connected players see the custom
 update surface while saving and reload only when that manifest identifies the

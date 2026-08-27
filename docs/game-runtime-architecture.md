@@ -435,10 +435,13 @@ The machine-local worker is itself a validated release member. When its packaged
 copy changes, the current worker installs that copy only after the complete gate
 has passed, discards the artifact built under the older worker, and exits before
 remote cutover. The replacement worker then validates and packages the commit
-again. A failed remote candidate is terminal for automatic attempts at that SHA:
-the worker captures candidate unit status and bounded journal tails, rolls back,
-records the failed target, and does not drain players again until an explicit
-operator reinstall or a different `main` commit.
+again. The release also owns the exact game systemd unit: its checksum
+participates in current-state detection, the candidate is verified and backed
+up before daemon-reload and start, and rollback restores the prior unit before
+the prior release restarts. A failed remote candidate is terminal for automatic
+attempts at that SHA: the worker captures candidate unit status and bounded
+journal tails, rolls back, records the failed target, and does not drain players
+again until an explicit operator reinstall or a different `main` commit.
 
 ## Authority and time
 

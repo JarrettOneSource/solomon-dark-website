@@ -23,10 +23,15 @@ SDR_GAME_DEPLOYMENT_SAVE_TIMEOUT_SECONDS=30
 SDR_GAME_UNCLAIMED_TIMEOUT_SECONDS=120
 SDR_GAME_LOG_LEVEL=info
 SDR_GAME_ML_BOT_CHECKPOINT=/opt/solomon-dark-revived/GameHost/ml-bot-policy-v7-selected.sdml
-SDR_GAME_MEMORIAL_PATH=/var/lib/solomon-dark-game/memoratorium.json
 SDR_RUNTIME_EVENT_ENDPOINT=http://127.0.0.1:5220/api/internal/runtime-events
 SDR_RUNTIME_EVENT_SECRET=<a separate random 32-byte base64url value>
 ```
+
+The checked-in game unit owns the fixed
+`SDR_GAME_MEMORIAL_PATH=/var/lib/solomon-dark-game/memoratorium.json` value and
+uses `StateDirectory=solomon-dark-game` to create its writable directory before
+the supervisor starts. Do not duplicate that non-secret machine path in the
+protected environment file.
 
 During a versioned checkpoint cutover, the deployment worker backs up this
 protected environment file, atomically installs the selected checkpoint path
@@ -97,11 +102,12 @@ disconnect reason and may explicitly send the bounded in-memory client log to
 the website. Those reports use the private diagnostic-log archive rather than
 public uploads.
 
-The guarded main deployment worker packages the checked-in Caddy site beside
-the runtime. It compares the live site hash even when the deployed Git SHA is
-already current, validates a candidate before an atomic install, retains the
-prior site in the release backup, and gracefully reloads Caddy. Any later
-release failure restores and reloads that backup. The active-session guard
+The guarded main deployment worker packages the checked-in Caddy site and game
+systemd unit beside the runtime. It compares both live hashes even when the
+deployed Git SHA is already current, validates each candidate before an atomic
+install, retains the prior files in the release backup, gracefully reloads
+Caddy, and daemon-reloads systemd before the candidate starts. Any later
+release failure restores and reloads both backups. The active-session guard
 is replaced by an authenticated deployment drain for runtime cutover: the
 supervisor rejects new admissions, freezes every host, publishes a final
 owner-only checkpoint to every connected player, waits for bounded browser
