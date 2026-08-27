@@ -88,6 +88,7 @@ async function runAnonymousJourney(browser) {
     await page.reload({ waitUntil: 'domcontentloaded' })
     await waitForTitle(page)
     await resumeLastGame(page)
+    await page.waitForTimeout(2_500)
     await page.screenshot({
       path: `${screenshotRoot}/solomon-dark-native-save-anonymous.png`,
     })
@@ -152,6 +153,7 @@ async function runCloudJourney(browser, token) {
     await page.getByText(new RegExp(`revision ${persisted.revision}`)).waitFor({ timeout: 30_000 })
     await openGameTitle(page)
     await resumeLastGame(page)
+    await page.waitForTimeout(2_500)
     await page.screenshot({
       path: `${screenshotRoot}/solomon-dark-native-save-cloud.png`,
     })
