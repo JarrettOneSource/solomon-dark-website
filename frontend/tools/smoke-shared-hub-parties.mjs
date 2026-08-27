@@ -13,6 +13,7 @@ const gatewayUrl = process.env.SDR_SHARED_HUB_GATEWAY_URL?.trim()
 const publicWebSocketOrigin = process.env.SDR_SHARED_HUB_PUBLIC_ORIGIN?.trim()
 const pointerMode = process.env.SDR_SHARED_HUB_POINTER_MODE?.trim() || 'mobile'
 const evidenceRoot = process.env.SDR_SHARED_HUB_EVIDENCE_DIR?.trim()
+const chatLifecycleOnly = process.argv.includes('--chat-lifecycle-only')
 if (Boolean(gatewayUrl) !== Boolean(publicWebSocketOrigin)) {
   throw new Error('SDR_SHARED_HUB_GATEWAY_URL and SDR_SHARED_HUB_PUBLIC_ORIGIN must be set together')
 }
@@ -31,7 +32,7 @@ const consoleErrors = []
 const failedResponses = []
 const unexpectedRequestFailures = []
 
-try {
+smokeFlow: try {
   if (evidenceRoot) await mkdir(evidenceRoot, { recursive: true })
   const host = await enterRawHub('Basil', 'earth')
   const hostBefore = await host.next((message) => (
@@ -97,6 +98,46 @@ try {
     hostSawChatClear,
   ])
   assert.equal(await first.page.locator('.gameplay-pause-menu').count(), 0)
+
+  const lifecycleMessage = 'Aurelia lifecycle hello'
+  const hostLifecycleChat = host.next((message) => (
+    message.type === 'server-chat' && message.text === lifecycleMessage
+  ), 'host lifecycle chat')
+  await first.page.keyboard.press('t')
+  await chat.locator('xpath=self::*[@data-chat-open="true"]').waitFor()
+  const lifecycleInput = chat.getByRole('textbox', { name: 'Chat message' })
+  const lifecycleUnreadBefore = await chatUnreadTotal(chat)
+  await lifecycleInput.fill(lifecycleMessage)
+  await lifecycleInput.press('Enter')
+  await chat.locator('xpath=self::*[@data-chat-open="false"]').waitFor()
+  const deliveredLifecycleMessage = await hostLifecycleChat
+  await chat.locator('[data-message-channel="global"]', {
+    hasText: lifecycleMessage,
+  }).waitFor()
+  assert.equal(await chatUnreadTotal(chat), lifecycleUnreadBefore)
+  assert.equal(await first.page.locator('.gameplay-pause-menu').count(), 0)
+  if (chatLifecycleOnly) {
+    const chatLifecycleEvidencePath = evidenceRoot
+      ? join(evidenceRoot, 'chat-lifecycle-closed-after-send.png')
+      : null
+    if (chatLifecycleEvidencePath) await first.page.screenshot({ path: chatLifecycleEvidencePath })
+    assert.deepEqual({ consoleErrors, failedResponses, pageErrors, unexpectedRequestFailures }, {
+      consoleErrors: [],
+      failedResponses: [],
+      pageErrors: [],
+      unexpectedRequestFailures: [],
+    })
+    process.stdout.write(`${JSON.stringify({
+      browserVersion: browser.version(),
+      chatLifecycleEvidencePath,
+      messageSequence: deliveredLifecycleMessage.sequence,
+      status: 'ok',
+      submitClosed: true,
+      unfocusedEscapeClosed: true,
+      unreadAfterOwnEcho: lifecycleUnreadBefore,
+    })}\n`)
+    break smokeFlow
+  }
 
   const hostSawSettingsOccupied = host.next((message) => (
     message.type === 'server-snapshot'
