@@ -134,7 +134,13 @@ Create confirmation replaces level/XP, skill/stat books, runtime, offers,
 selected skills, advanced unlocks, and quickbar with the selected native fresh
 loadout while preserving only durable profile/Hagatha state. It also advances
 component revisions so a client cannot reuse the completed Game Over
-generation's inventory or skill projection.
+generation's inventory or skill projection. Ordinary post-run confirmation
+also derives the new starter Hat/Robe appearance from that confirmation's
+fresh generation seed and selected element, then advances the economy revision
+before publication. The one-shot post-Tutorial College branch is deliberately
+different: College constructs its green starter garments before Create, so its
+confirmation preserves those authored item colors while replacing the fresh
+skill generation.
 Connected-run death likewise stays on that player entity. Dying and spectating
 do not reset that participant's progression, skill book, or economy; only the
 completed all-dead Game Over route and later Create confirmation establish the

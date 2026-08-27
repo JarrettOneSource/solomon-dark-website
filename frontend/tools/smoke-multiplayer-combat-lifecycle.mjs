@@ -10,6 +10,8 @@ import { solomonContactContains } from '../src/game/core-kernels/boneyard-encoun
 import { BONEYARD_GATE_INITIAL_SWAY } from '../src/game/core-kernels/boneyard-gate.ts'
 import { PLAYER_CHARACTER_RADIUS } from '../src/game/core-kernels/player-character.ts'
 import { PLAYER_DEATH_PRESENTATION_MAXIMUM_HELD_TICK } from '../src/game/core-kernels/player-combat.ts'
+import { createNativeRng } from '../src/game/core-kernels/native-rng.ts'
+import { rollNativeStarterEquipmentAppearance } from '../src/game/core-kernels/native-starter-equipment.ts'
 import {
   PRIMARY_CAST_ACTION_END_TICK,
   PRIMARY_SPELL_FIRE_COLLISION_RADIUS,
@@ -19,7 +21,10 @@ import {
   firstBoneyardPathBlockProgress,
   resolveBoneyardMovement,
 } from '../src/game/core-server/boneyard-collision.ts'
-import { damagePlayerEntity } from '../src/game/core-server/player-entity-store.ts'
+import {
+  damagePlayerEntity,
+  playerSkillRuntimeAt,
+} from '../src/game/core-server/player-entity-store.ts'
 import {
   getPlayerCharacter,
   getPlayerEconomy,
@@ -384,19 +389,37 @@ try {
     guest: postGameOverResetReceipt(returnedState, guestHub.localPlayerId),
     host: postGameOverResetReceipt(returnedState, hostHub.localPlayerId),
   }
+  assert.equal(
+    returnToHub.hostMaterialTint,
+    getPlayerEconomy(returnedState, hostHub.localPlayerId).equipment.robe?.iconTints?.[0],
+  )
+  assert.equal(
+    returnToHub.guestMaterialTint,
+    getPlayerEconomy(returnedState, guestHub.localPlayerId).equipment.robe?.iconTints?.[0],
+  )
   assert.deepEqual(returnedResets.host, {
     backpack: ['Health Potion', 'Mana Potion'],
+    clothingMatchesSelectedElement: true,
+    concentrations: [null, null],
+    equipment: ['Hat', 'Robe', 'Staff'],
     experience: 0,
+    learnedSkillIds: [0, 1, 2, 3, 4, 5, 6, 7, 32, 35],
     level: 1,
     primarySkillId: 32,
+    quickbar: [35, null, null, null, null, null, null, null],
     secondarySkillId: 35,
     storageCount: 0,
   })
   assert.deepEqual(returnedResets.guest, {
     backpack: ['Health Potion', 'Mana Potion'],
+    clothingMatchesSelectedElement: true,
+    concentrations: [null, null],
+    equipment: ['Hat', 'Robe', 'Staff'],
     experience: 0,
+    learnedSkillIds: [0, 1, 2, 3, 4, 5, 6, 7, 40, 45],
     level: 1,
     primarySkillId: 40,
+    quickbar: [45, null, null, null, null, null, null, null],
     secondarySkillId: 45,
     storageCount: 0,
   })
@@ -478,14 +501,35 @@ try {
 }
 
 function postGameOverResetReceipt(state, playerId) {
+  const character = getPlayerCharacter(state, playerId)
   const economy = getPlayerEconomy(state, playerId)
   const progression = getPlayerProgression(state, playerId)
   const skillBook = getPlayerSkillBook(state, playerId)
+  const runtime = playerSkillRuntimeAt(state.playerEntities, playerId)
+  assert.ok(runtime)
+  const appearance = rollNativeStarterEquipmentAppearance(
+    createNativeRng(progression.offerSeed),
+    character.config.element,
+  )
+  const expectedTints = [appearance.primaryTint, appearance.secondaryTint]
+  assert.deepEqual(economy.equipment.hat?.iconTints, expectedTints)
+  assert.deepEqual(economy.equipment.robe?.iconTints, expectedTints)
   return {
     backpack: economy.backpack.map(item => item.name),
+    clothingMatchesSelectedElement: true,
+    concentrations: [runtime.concentrationSkillIdA, runtime.concentrationSkillIdB],
+    equipment: [
+      economy.equipment.hat?.name,
+      economy.equipment.robe?.name,
+      economy.equipment.weapon?.name,
+    ],
     experience: progression.experience,
+    learnedSkillIds: skillBook.permanentRanks.flatMap((rank, skillId) => (
+      rank === 0 ? [] : [skillId]
+    )),
     level: progression.level,
     primarySkillId: skillBook.primarySkillId,
+    quickbar: skillBook.skillQuickbar,
     secondarySkillId: skillBook.skillQuickbar[0],
     storageCount: economy.storage.length,
   }
@@ -2331,6 +2375,39 @@ async function returnBothPlayersToHub(hostPage, guestPage) {
   assert.equal(await hostPage.locator('.hub-scene').getAttribute('data-discipline'), 'mind')
   assert.equal(await guestPage.locator('.hub-scene').getAttribute('data-element'), 'earth')
   assert.equal(await guestPage.locator('.hub-scene').getAttribute('data-discipline'), 'body')
+  assert.match(
+    await hostPage.locator('.hub-hud-quickbar-slot[data-slot="0"]').getAttribute('aria-label'),
+    /^Ring of Ice, /,
+  )
+  assert.match(
+    await guestPage.locator('.hub-hud-quickbar-slot[data-slot="0"]').getAttribute('aria-label'),
+    /^Raise Golem, /,
+  )
+  await Promise.all([
+    hostPage.getByRole('button', { name: 'Open skills' }).click(),
+    guestPage.getByRole('button', { name: 'Open skills' }).click(),
+  ])
+  const hostSkills = hostPage.getByRole('dialog', { name: 'Skills' })
+  const guestSkills = guestPage.getByRole('dialog', { name: 'Skills' })
+  await Promise.all([hostSkills.waitFor(), guestSkills.waitFor()])
+  await Promise.all([
+    hostSkills.getByRole('button', { name: /Frost Jet, rank 1/ }).waitFor(),
+    hostSkills.getByRole('button', { name: /Ring of Ice, rank 1/ }).waitFor(),
+    guestSkills.getByRole('button', { name: /Boulder, rank 1/ }).waitFor(),
+    guestSkills.getByRole('button', { name: /Raise Golem, rank 1/ }).waitFor(),
+  ])
+  assert.equal(await hostSkills.getByRole('button', { name: /Fireball, rank/ }).count(), 0)
+  assert.equal(await hostSkills.getByRole('button', { name: /Ring of Fire, rank/ }).count(), 0)
+  assert.equal(await guestSkills.getByRole('button', { name: /Lightning, rank/ }).count(), 0)
+  assert.equal(await guestSkills.getByRole('button', { name: /Magic Storm, rank/ }).count(), 0)
+  await Promise.all([
+    hostSkills.getByRole('button', { name: 'Close skills' }).click(),
+    guestSkills.getByRole('button', { name: 'Close skills' }).click(),
+  ])
+  await Promise.all([
+    hostSkills.waitFor({ state: 'detached' }),
+    guestSkills.waitFor({ state: 'detached' }),
+  ])
   await hostPage.screenshot({ path: returnedHubScreenshotPath })
   return {
     exitFade: {
@@ -2340,8 +2417,10 @@ async function returnBothPlayersToHub(hostPage, guestPage) {
     },
     gameOverPresentation,
     guestLoadoutCanConfirm: true,
+    guestMaterialTint: guestHub.playerMaterialTint,
     guestPlayerId: guestHub.localPlayerId,
     hostLoadoutCanConfirm: true,
+    hostMaterialTint: hostHub.playerMaterialTint,
     hostPlayerId: hostHub.localPlayerId,
     playerCount: hostHub.playerCount,
   }

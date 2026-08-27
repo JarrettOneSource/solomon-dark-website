@@ -18,6 +18,7 @@ import {
   isGameChatFaded,
   nextGameChatChannel,
   reconcileGameChatChannel,
+  shouldIncrementGameChatUnread,
   GAME_CHAT_INACTIVITY_HOLD_MS,
   type GameChatWorldKind,
 } from './game-chat.ts'
@@ -102,6 +103,14 @@ export default function GameChat({
     setNowMs(activityAtMs)
   }, [])
 
+  const closeChat = useCallback(() => {
+    setOpen(false)
+    markActivity()
+    window.requestAnimationFrame(() => {
+      if (!openRef.current) openButtonRef.current?.focus({ preventScroll: true })
+    })
+  }, [markActivity])
+
   const filteredMessages = messages.filter(message => message.channel === channel)
   const visibleMessages = open
     ? filteredMessages
@@ -136,7 +145,12 @@ export default function GameChat({
           && draftRef.current.length > 0
         ) ? current : partner)
       }
-      if (!openRef.current || channelRef.current !== message.channel) {
+      if (shouldIncrementGameChatUnread(
+        message,
+        session.playerId,
+        openRef.current,
+        channelRef.current,
+      )) {
         setUnread(current => ({
           ...current,
           [message.channel]: Math.min(99, current[message.channel] + 1),
@@ -147,6 +161,7 @@ export default function GameChat({
     })
     const removeRejection = session.onChatRejected((rejection) => {
       setStatus(gameChatRejectionText(rejection))
+      setOpen(true)
       markActivity()
     })
     return () => {
@@ -249,10 +264,17 @@ export default function GameChat({
   }, [channel, messages, open])
 
   useEffect(() => {
-    const openFromKeyboard = (event: globalThis.KeyboardEvent) => {
+    const handleWindowKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (!disabled && openRef.current) {
+        if (event.key === 'Escape') {
+          event.preventDefault()
+          event.stopImmediatePropagation()
+          closeChat()
+        }
+        return
+      }
       if (
         disabled
-        || openRef.current
         || event.code !== openKeyCode
         || event.repeat
         || event.altKey
@@ -269,9 +291,9 @@ export default function GameChat({
       setStatus(null)
       markActivity()
     }
-    window.addEventListener('keydown', openFromKeyboard, { capture: true })
-    return () => window.removeEventListener('keydown', openFromKeyboard, { capture: true })
-  }, [disabled, markActivity, openKeyCode])
+    window.addEventListener('keydown', handleWindowKeyDown, { capture: true })
+    return () => window.removeEventListener('keydown', handleWindowKeyDown, { capture: true })
+  }, [closeChat, disabled, markActivity, openKeyCode])
 
   const chooseChannel = (next: GameChatChannel) => {
     manuallySelectedChannelRef.current = true
@@ -281,12 +303,6 @@ export default function GameChat({
     setStatus(null)
     markActivity()
     inputRef.current?.focus({ preventScroll: true })
-  }
-
-  const closeChat = () => {
-    setOpen(false)
-    markActivity()
-    window.requestAnimationFrame(() => openButtonRef.current?.focus({ preventScroll: true }))
   }
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
@@ -304,16 +320,10 @@ export default function GameChat({
     }
     setDraft('')
     setStatus(null)
-    markActivity()
+    closeChat()
   }
 
   const handleInputKey = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Escape') {
-      event.preventDefault()
-      event.stopPropagation()
-      closeChat()
-      return
-    }
     if (event.key === 'Tab') {
       event.preventDefault()
       event.stopPropagation()
@@ -343,6 +353,7 @@ export default function GameChat({
       data-chat-channels={channels.join(',')}
       data-chat-faded={faded}
       data-chat-open={open}
+      data-chat-unread-total={totalUnread}
       data-whisper-target={whisperTarget?.playerId}
       hidden={disabled}
       onPointerDown={event => event.stopPropagation()}

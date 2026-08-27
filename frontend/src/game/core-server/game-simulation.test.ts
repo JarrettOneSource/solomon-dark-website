@@ -42,6 +42,7 @@ import {
   drawNativeFloat,
   drawNativeInteger,
 } from '../core-kernels/native-rng.ts'
+import { rollNativeStarterEquipmentAppearance } from '../core-kernels/native-starter-equipment.ts'
 import {
   createNativeSecondaryPlayerState,
   NATIVE_SECONDARY_CONSTRUCTOR_COOLDOWN_TICKS,
@@ -3496,6 +3497,10 @@ test('one dead player spectates until all-dead Game Over returns the session thr
     ])
     assert.deepEqual(economy.storage, [])
   }
+  const loadoutEconomyRevisions = Object.fromEntries(['first', 'second'].map(playerId => [
+    playerId,
+    getPlayerEconomy(loadout, playerId).revision,
+  ]))
 
   const firstReady = confirmGameSimulationLoadout(loadout, 'first', {
     discipline: 'body',
@@ -3523,6 +3528,23 @@ test('one dead player spectates until all-dead Game Over returns the session thr
   assert.equal(getPlayerSkillBook(hub, 'second').permanentRanks[63], 0)
   assert.equal(getPlayerProgression(hub, 'first').level, 1)
   assert.equal(getPlayerProgression(hub, 'first').experience, 0)
+  for (const [playerId, element] of [
+    ['first', 'air'],
+    ['second', 'water'],
+  ] as const) {
+    const economy = getPlayerEconomy(hub, playerId)
+    const progression = getPlayerProgression(hub, playerId)
+    const appearance = rollNativeStarterEquipmentAppearance(
+      createNativeRng(progression.offerSeed),
+      element,
+    )
+    assert.ok(economy.revision > loadoutEconomyRevisions[playerId]!)
+    assert.deepEqual(economy.equipment.hat?.iconTints, [
+      appearance.primaryTint,
+      appearance.secondaryTint,
+    ])
+    assert.deepEqual(economy.equipment.robe?.iconTints, economy.equipment.hat?.iconTints)
+  }
   assert.equal(getPlayerProgression(hub, 'second').level, 1)
   assert.equal(getPlayerProgression(hub, 'second').experience, 0)
   const secondRun = enterBoneyardWorld(hub, combatBoneyard('clean-second-run'))

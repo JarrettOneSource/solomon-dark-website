@@ -11,6 +11,7 @@ import {
 } from '../core-kernels/player-combat.ts'
 import { buyFomentiusItem, projectInventoryItems } from '../core-kernels/hub-economy.ts'
 import { createNativeRng } from '../core-kernels/native-rng.ts'
+import { rollNativeStarterEquipmentAppearance } from '../core-kernels/native-starter-equipment.ts'
 import {
   playerLightDriveActive,
 } from '../core-kernels/player-lighting.ts'
@@ -130,7 +131,18 @@ test('post-Game-Over loadout replacement creates fresh skills while preserving d
       skillQuickbar: [51, null, null, null, null, null, null, null],
     }],
   }
-  const economy = store.economies[0]!
+  const sourceEconomy = store.economies[0]!
+  const oldTints = [0x123456, 0x654321] as const
+  const economy = {
+    ...sourceEconomy,
+    equipment: {
+      ...sourceEconomy.equipment,
+      hat: { ...sourceEconomy.equipment.hat!, iconTints: oldTints },
+      robe: { ...sourceEconomy.equipment.robe!, iconTints: oldTints },
+    },
+    revision: 11,
+  }
+  store = { ...store, economies: [economy] }
   const nextConfig = {
     discipline: 'body',
     displayName: 'Reborn',
@@ -141,9 +153,27 @@ test('post-Game-Over loadout replacement creates fresh skills while preserving d
     'first',
     createPlayerCharacter(nextConfig, { x: 30, y: 40 }),
     123_456,
+    { starterAppearanceOwner: 'air' },
   )
+  const appearance = rollNativeStarterEquipmentAppearance(createNativeRng(123_456), 'air')
   assert.deepEqual(replaced.configs[0], nextConfig)
-  assert.strictEqual(replaced.economies[0], economy)
+  assert.notStrictEqual(replaced.economies[0], economy)
+  assert.equal(replaced.economies[0]!.revision, 12)
+  assert.deepEqual(replaced.economies[0]!.equipment.hat?.iconTints, [
+    appearance.primaryTint,
+    appearance.secondaryTint,
+  ])
+  assert.deepEqual(
+    replaced.economies[0]!.equipment.robe?.iconTints,
+    replaced.economies[0]!.equipment.hat?.iconTints,
+  )
+  assert.strictEqual(replaced.economies[0]!.backpack, economy.backpack)
+  assert.strictEqual(replaced.economies[0]!.equipment.weapon, economy.equipment.weapon)
+  assert.strictEqual(replaced.economies[0]!.fomentiusStock, economy.fomentiusStock)
+  assert.strictEqual(replaced.economies[0]!.npc, economy.npc)
+  assert.strictEqual(replaced.economies[0]!.ownedPerkSelectors, economy.ownedPerkSelectors)
+  assert.strictEqual(replaced.economies[0]!.storage, economy.storage)
+  assert.strictEqual(replaced.economies[0]!.unforgeBonuses, economy.unforgeBonuses)
   assert.equal(replaced.progressions[0]!.level, 1)
   assert.equal(replaced.progressions[0]!.experience, 0)
   assert.equal(replaced.progressions[0]!.offerSeed, 123_456)
@@ -159,6 +189,117 @@ test('post-Game-Over loadout replacement creates fresh skills while preserving d
   assert.equal(replaced.skillRuntimes[0]!.concentrationSkillIdA, null)
   assert.equal(replaced.skillRuntimes[0]!.concentrationSkillIdB, null)
   assert.deepEqual(playerCharacterAt(replaced, 'first')?.position, { x: 30, y: 40 })
+})
+
+test('College Create confirmation preserves its one-shot pre-Create clothing colors', () => {
+  let store = addPlayerEntity(
+    createPlayerEntityStore(),
+    'first',
+    FIRST,
+    createPlayerCharacter(FIRST, { x: 10, y: 20 }),
+    10,
+  )
+  const sourceEconomy = store.economies[0]!
+  const collegeTints = [0x456745, 0xffffff] as const
+  const collegeEconomy = {
+    ...sourceEconomy,
+    equipment: {
+      ...sourceEconomy.equipment,
+      hat: { ...sourceEconomy.equipment.hat!, iconTints: collegeTints },
+      robe: { ...sourceEconomy.equipment.robe!, iconTints: collegeTints },
+    },
+  }
+  store = { ...store, economies: [collegeEconomy] }
+  const replaced = replacePlayerLoadout(
+    store,
+    'first',
+    createPlayerCharacter({ ...FIRST, element: 'water' }, { x: 30, y: 40 }),
+    123_456,
+  )
+  assert.strictEqual(replaced.economies[0], collegeEconomy)
+  assert.deepEqual(replaced.economies[0]!.equipment.hat?.iconTints, collegeTints)
+  assert.deepEqual(replaced.economies[0]!.equipment.robe?.iconTints, collegeTints)
+  assert.equal(replaced.skillBooks[0]!.primarySkillId, 32)
+  assert.equal(replaced.skillBooks[0]!.skillQuickbar[0], 35)
+})
+
+test('all fifteen post-Game-Over Create choices build a fresh complete generation', () => {
+  const elementRows = {
+    air: [2, 24, 27],
+    earth: [4, 40, 45],
+    ether: [0, 8, 11],
+    fire: [1, 16, 21],
+    water: [3, 32, 35],
+  } as const
+  const disciplineRoots = {
+    arcane: 7,
+    body: 5,
+    mind: 6,
+  } as const
+  let store = addPlayerEntity(
+    createPlayerEntityStore(),
+    'first',
+    FIRST,
+    createPlayerCharacter(FIRST, { x: 10, y: 20 }),
+    10,
+  )
+  let generation = 0
+  for (const element of ['ether', 'fire', 'air', 'water', 'earth'] as const) {
+    const [elementRoot, primarySkillId, secondarySkillId] = elementRows[element]
+    for (const discipline of ['arcane', 'body', 'mind'] as const) {
+      const disciplineRoot = disciplineRoots[discipline]
+      generation += 1
+      const offerSeed = 100_000 + generation
+      const config = {
+        discipline,
+        displayName: `Generation ${generation}`,
+        element,
+      }
+      store = replacePlayerLoadout(
+        store,
+        'first',
+        createPlayerCharacter(config, { x: generation, y: generation + 1 }),
+        offerSeed,
+        { starterAppearanceOwner: element },
+      )
+      const book = store.skillBooks[0]!
+      const progression = store.progressions[0]!
+      const runtime = store.skillRuntimes[0]!
+      const appearance = rollNativeStarterEquipmentAppearance(
+        createNativeRng(offerSeed),
+        element,
+      )
+      const learnedRanks = book.permanentRanks.flatMap((rank, skillId) => (
+        rank === 0 ? [] : [[skillId, rank] as const]
+      ))
+      assert.deepEqual(learnedRanks, [
+        ...Array.from({ length: 8 }, (_, skillId) => [skillId, 1] as const),
+        [primarySkillId, 1],
+        [secondarySkillId, 1],
+      ])
+      assert.equal(book.elementRoot, elementRoot)
+      assert.equal(book.disciplineRoot, disciplineRoot)
+      assert.equal(book.primarySkillId, primarySkillId)
+      assert.deepEqual(book.skillQuickbar, [
+        secondarySkillId, null, null, null, null, null, null, null,
+      ])
+      assert.equal(book.advancedUnlocks.some(Boolean), false)
+      assert.equal(progression.level, 1)
+      assert.equal(progression.experience, 0)
+      assert.equal(progression.pendingOffer, null)
+      assert.deepEqual(progression.pendingLevels, [])
+      assert.equal(runtime.concentrationSkillIdA, null)
+      assert.equal(runtime.concentrationSkillIdB, null)
+      assert.deepEqual(store.economies[0]!.equipment.hat?.iconTints, [
+        appearance.primaryTint,
+        appearance.secondaryTint,
+      ])
+      assert.deepEqual(
+        store.economies[0]!.equipment.robe?.iconTints,
+        store.economies[0]!.equipment.hat?.iconTints,
+      )
+    }
+  }
 })
 
 test('learned primary effects follow the selected pure row, not creation element or Weld', () => {

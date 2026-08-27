@@ -1225,6 +1225,7 @@ export function confirmGameSimulationLoadout(
       playerId,
       createPlayerCharacter(config, player.position),
       offerSeed.value,
+      { starterAppearanceOwner: config.element },
     ),
     run,
   }

@@ -13,6 +13,7 @@ import {
   isGameChatFaded,
   nextGameChatChannel,
   reconcileGameChatChannel,
+  shouldIncrementGameChatUnread,
 } from './game-chat.ts'
 
 const singleton = partyState(['player-1'])
@@ -118,6 +119,24 @@ test('chat rejections provide concise channel and retry feedback', () => {
   }), 'That wizard is no longer connected.')
 })
 
+test('closed chat counts only remote messages as unread', () => {
+  const own = {
+    channel: 'global',
+    sender: { displayName: 'Helvidius', playerId: 'player-1' },
+    sequence: 1,
+    text: 'sent and closed',
+  } as const
+  const remote = {
+    ...own,
+    sender: { displayName: 'Daria', playerId: 'player-2' },
+    sequence: 2,
+  } as const
+  assert.equal(shouldIncrementGameChatUnread(own, 'player-1', false, 'global'), false)
+  assert.equal(shouldIncrementGameChatUnread(remote, 'player-1', false, 'global'), true)
+  assert.equal(shouldIncrementGameChatUnread(remote, 'player-1', true, 'global'), false)
+  assert.equal(shouldIncrementGameChatUnread(remote, 'player-1', true, 'party'), true)
+})
+
 test('chat UI owns its configured key, real text focus, Tab channels, fade, and local gameplay exclusion', () => {
   assert.match(component, /event\.code !== openKeyCode/)
   assert.match(component, /<input/)
@@ -133,6 +152,25 @@ test('chat UI owns its configured key, real text focus, Tab channels, fade, and 
   assert.match(mainMenu, /openKeyCode=\{gameSettings\.controls\.openChat\}/)
   assert.match(hubScene, /event\.code !== settings\.controls\.openSkills/)
   assert.match(boneyardScene, /event\.code !== settings\.controls\.openSkills/)
+})
+
+test('the open chat window owns Escape independent of focus and closes on accepted submit', () => {
+  assert.match(
+    component,
+    /openRef\.current[\s\S]*event\.key === 'Escape'[\s\S]*stopImmediatePropagation\(\)[\s\S]*closeChat\(\)/,
+  )
+  assert.doesNotMatch(
+    component,
+    /const handleInputKey[\s\S]*event\.key === 'Escape'/,
+  )
+  assert.match(
+    component,
+    /const submit[\s\S]*session\.sendChatMessage\([\s\S]*closeChat\(\)/,
+  )
+  assert.match(
+    component,
+    /onChatRejected[\s\S]*setOpen\(true\)/,
+  )
 })
 
 test('whisper UX runs from the Player Card into a dedicated chat thread', () => {

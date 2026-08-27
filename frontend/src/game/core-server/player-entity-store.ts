@@ -2,6 +2,7 @@ import {
   type PlayerCharacterConfig,
   type PlayerPrimaryCastState,
   type PlayerCharacterState,
+  type WizardElement,
   resetPlayerPrimaryCast,
 } from '../core-kernels/player-character.ts'
 import {
@@ -11,7 +12,7 @@ import {
 } from '../core-kernels/player-lighting.ts'
 import type { NativeLightProviderRegistration } from '../core-kernels/native-light-provider-order.ts'
 import { nativeEquipmentHasFeature } from '../core-kernels/native-equipment-effects.ts'
-import type { NativeRngState } from '../core-kernels/native-rng.ts'
+import { createNativeRng, type NativeRngState } from '../core-kernels/native-rng.ts'
 import {
   coldSlowPlayer,
   dazzlePlayer,
@@ -64,6 +65,7 @@ import {
   creditLootGold,
   createHubEconomy,
   discardInventoryItem,
+  applyNativeStarterEquipmentAppearance,
   NATIVE_LOOT_BACKPACK_REPLICATION_LIMIT,
   insertLootInventoryItem,
   hubEconomyInventoryIsValid,
@@ -72,6 +74,7 @@ import {
   type HubInventoryItem,
   type HubEconomyState,
 } from '../core-kernels/hub-economy.ts'
+import { rollNativeStarterEquipmentAppearance } from '../core-kernels/native-starter-equipment.ts'
 import {
   NATIVE_HAGATHA_LAST_WORD_DEATH_TICK,
   NATIVE_HAGATHA_SELECTORS,
@@ -744,10 +747,23 @@ export function replacePlayerLoadout(
   playerId: string,
   character: PlayerCharacterState,
   offerSeed: number,
+  options: Readonly<{ starterAppearanceOwner?: WizardElement }> = {},
 ): PlayerEntityStore {
   const index = playerEntityIndex(source, playerId)
   if (index < 0) return source
-  const economy = source.economies[index]!
+  const previousEconomy = source.economies[index]!
+  const economy = options.starterAppearanceOwner === undefined
+    ? previousEconomy
+    : {
+        ...applyNativeStarterEquipmentAppearance(
+          previousEconomy,
+          rollNativeStarterEquipmentAppearance(
+            createNativeRng(offerSeed),
+            options.starterAppearanceOwner,
+          ),
+        ),
+        revision: previousEconomy.revision + 1,
+      }
   const statBook = playerStatBook()
   const skillState = createPlayerSkillRuntime(
     createPlayerSkillBook(character.config),
@@ -781,11 +797,13 @@ export function replacePlayerLoadout(
     ),
   )
   const configs = [...source.configs]
+  const economies = [...source.economies]
   const progressions = [...source.progressions]
   const skillBooks = [...source.skillBooks]
   const skillRuntimes = [...source.skillRuntimes]
   const statBooks = [...source.statBooks]
   configs[index] = Object.freeze({ ...character.config })
+  economies[index] = economy
   progressions[index] = progression
   skillBooks[index] = skillState.skillBook
   skillRuntimes[index] = skillState.runtime
@@ -793,6 +811,7 @@ export function replacePlayerLoadout(
   return {
     ...replacePlayerCharacter(source, playerId, character),
     configs,
+    economies,
     progressions,
     skillBooks,
     skillRuntimes,

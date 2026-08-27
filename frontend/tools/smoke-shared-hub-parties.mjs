@@ -81,16 +81,22 @@ try {
   if (chatSingletonTabEvidencePath) {
     await first.page.screenshot({ path: chatSingletonTabEvidencePath })
   }
+  await chat.getByRole('button', { name: 'Send' }).focus()
+  assert.equal(
+    await singletonChatInput.evaluate(node => document.activeElement === node),
+    false,
+  )
   const hostSawChatClear = host.next((message) => (
     message.type === 'server-snapshot'
     && message.frame.world.kind === 'hub'
     && message.frame.world.participants[first.playerId]?.activity === null
   ), 'browser chat activity clear')
-  await singletonChatInput.press('Escape')
+  await first.page.keyboard.press('Escape')
   await Promise.all([
     chat.locator('xpath=self::*[@data-chat-open="false"]').waitFor(),
     hostSawChatClear,
   ])
+  assert.equal(await first.page.locator('.gameplay-pause-menu').count(), 0)
 
   const hostSawSettingsOccupied = host.next((message) => (
     message.type === 'server-snapshot'
@@ -217,8 +223,10 @@ try {
   assert.equal(await chat.getAttribute('data-whisper-target'), outsider.playerId)
   const whisperInput = chat.getByRole('textbox', { name: 'Chat message' })
   const ownWhisperSoundBefore = await socialSoundCount(first.page, 1.1)
+  const ownWhisperUnreadBefore = await chatUnreadTotal(chat)
   await whisperInput.fill('Aurelia private hello')
   await whisperInput.press('Enter')
+  await chat.locator('xpath=self::*[@data-chat-open="false"]').waitFor()
   const whisperMessage = await outsiderWhisper
   assert.equal(whisperMessage.channel, 'whisper')
   assert.deepEqual(whisperMessage.sender, {
@@ -233,16 +241,21 @@ try {
     hasText: 'Aurelia private hello',
   }).waitFor()
   await waitForSocialSoundCount(first.page, 1.1, ownWhisperSoundBefore + 1)
+  assert.equal(await chatUnreadTotal(chat), ownWhisperUnreadBefore)
   await first.page.waitForTimeout(100)
   assert.equal(host.chatMessages.length, hostMessageCountBeforeWhisper)
   assert.equal(member.chatMessages.length, memberMessageCountBeforeWhisper)
 
   const incomingWhisperSoundBefore = await socialSoundCount(first.page, 1.1)
+  const incomingWhisperUnreadBefore = await chatUnreadTotal(chat)
   outsider.sendChat('whisper', 'Daria private reply', first.playerId)
   await chat.locator('[data-message-channel="whisper"]', {
     hasText: 'Daria private reply',
   }).waitFor()
   await waitForSocialSoundCount(first.page, 1.1, incomingWhisperSoundBefore + 1)
+  assert.ok(await chatUnreadTotal(chat) > incomingWhisperUnreadBefore)
+  await first.page.keyboard.press('t')
+  await chat.locator('xpath=self::*[@data-chat-open="true"]').waitFor()
   assert.equal(await chat.getAttribute('data-whisper-target'), outsider.playerId)
   const chatWhisperEvidencePath = evidenceRoot
     ? join(evidenceRoot, 'chat-hub-whisper.png')
@@ -285,8 +298,10 @@ try {
     message.type === 'server-chat' && message.text === 'Aurelia party hello'
   ), 'member party chat')
   const ownPartySoundBefore = await socialSoundCount(first.page, 1.1)
+  const ownPartyUnreadBefore = await chatUnreadTotal(chat)
   await chatInput.fill('Aurelia party hello')
   await chatInput.press('Enter')
+  await chat.locator('xpath=self::*[@data-chat-open="false"]').waitFor()
   const [hostPartyMessage, memberPartyMessage] = await Promise.all([
     hostPartyChat,
     memberPartyChat,
@@ -297,6 +312,7 @@ try {
     hasText: 'Aurelia party hello',
   }).waitFor()
   await waitForSocialSoundCount(first.page, 1.1, ownPartySoundBefore + 1)
+  assert.equal(await chatUnreadTotal(chat), ownPartyUnreadBefore)
   const hubCanvas = first.page.locator('.hub-world-canvas')
   const hubOwnSpeech = await waitForWorldSpeech(
     hubCanvas,
@@ -310,7 +326,9 @@ try {
     false,
   )
 
-  await chatInput.press('Tab')
+  await first.page.keyboard.press('t')
+  await chat.locator('xpath=self::*[@data-chat-open="true"]').waitFor()
+  await chat.getByRole('textbox', { name: 'Chat message' }).press('Tab')
   assert.equal(await chat.getAttribute('data-chat-channel'), 'global')
   const hostGlobalChat = host.next((message) => (
     message.type === 'server-chat' && message.text === 'Aurelia global hello'
@@ -322,8 +340,11 @@ try {
     message.type === 'server-chat' && message.text === 'Aurelia global hello'
   ), 'outsider global chat')
   const ownGlobalSoundBefore = await socialSoundCount(first.page, 1.1)
-  await chatInput.fill('Aurelia global hello')
-  await chatInput.press('Enter')
+  const ownGlobalUnreadBefore = await chatUnreadTotal(chat)
+  const globalChatInput = chat.getByRole('textbox', { name: 'Chat message' })
+  await globalChatInput.fill('Aurelia global hello')
+  await globalChatInput.press('Enter')
+  await chat.locator('xpath=self::*[@data-chat-open="false"]').waitFor()
   const globalChatMessages = await Promise.all([
     hostGlobalChat,
     memberGlobalChat,
@@ -332,13 +353,16 @@ try {
   assert.equal(new Set(globalChatMessages.map(message => message.sequence)).size, 1)
   assert.equal(globalChatMessages.every(message => message.channel === 'global'), true)
   await waitForSocialSoundCount(first.page, 1.1, ownGlobalSoundBefore + 1)
+  assert.equal(await chatUnreadTotal(chat), ownGlobalUnreadBefore)
 
   const hostReply = 'Basil global reply'
   const incomingGlobalSoundBefore = await socialSoundCount(first.page, 1.1)
+  const incomingGlobalUnreadBefore = await chatUnreadTotal(chat)
   host.sendChat('global', hostReply)
   const hostReplyEntry = chat.locator('[data-message-channel="global"]', { hasText: hostReply })
   await hostReplyEntry.waitFor()
   await waitForSocialSoundCount(first.page, 1.1, incomingGlobalSoundBefore + 1)
+  assert.ok(await chatUnreadTotal(chat) > incomingGlobalUnreadBefore)
   const hostReplySequence = Number(await hostReplyEntry.getAttribute('data-message-sequence'))
   const hubRemoteSpeech = await waitForWorldSpeech(hubCanvas, host.playerId, hostReplySequence)
   assert.equal(hubRemoteSpeech.alpha, 1)
@@ -349,8 +373,10 @@ try {
     await first.page.screenshot({ path: chatHubWorldSpeechEvidencePath })
   }
   const chatHubEvidencePath = evidenceRoot ? join(evidenceRoot, 'chat-hub-global.png') : null
+  await first.page.keyboard.press('t')
+  await chat.locator('xpath=self::*[@data-chat-open="true"]').waitFor()
   if (chatHubEvidencePath) await first.page.screenshot({ path: chatHubEvidencePath })
-  await chatInput.press('Escape')
+  await first.page.keyboard.press('Escape')
   await chat.locator('xpath=self::*[@data-chat-open="false"]').waitFor()
   const hubFadingSpeech = await waitForWorldSpeechAlpha(
     hubCanvas,
@@ -502,14 +528,17 @@ try {
   ), 'member run chat')
   const outsiderMessageCountBeforeRunChat = outsider.chatMessages.length
   const ownRunChatSoundBefore = await socialSoundCount(first.page, 1.1)
+  const ownRunChatUnreadBefore = await chatUnreadTotal(chat)
   await runChatInput.fill('Party run hello')
   await runChatInput.press('Enter')
+  await chat.locator('xpath=self::*[@data-chat-open="false"]').waitFor()
   await Promise.all([hostRunChat, memberRunChat])
   const runChatEntry = chat.locator('[data-message-channel="party"]', {
     hasText: 'Party run hello',
   })
   await runChatEntry.waitFor()
   await waitForSocialSoundCount(first.page, 1.1, ownRunChatSoundBefore + 1)
+  assert.equal(await chatUnreadTotal(chat), ownRunChatUnreadBefore)
   const runChatSequence = Number(await runChatEntry.getAttribute('data-message-sequence'))
   const boneyardOwnSpeech = await waitForWorldSpeech(
     boneyardCanvas,
@@ -519,15 +548,18 @@ try {
   assert.equal(boneyardOwnSpeech.alpha, 1)
   await first.page.waitForTimeout(100)
   assert.equal(outsider.chatMessages.length, outsiderMessageCountBeforeRunChat)
-  await runChatInput.press('Tab')
+  await first.page.keyboard.press('t')
+  await chat.locator('xpath=self::*[@data-chat-open="true"]').waitFor()
+  const reopenedRunChatInput = chat.getByRole('textbox', { name: 'Chat message' })
+  await reopenedRunChatInput.press('Tab')
   assert.equal(await chat.getAttribute('data-chat-channel'), 'whisper')
-  await runChatInput.press('Tab')
+  await reopenedRunChatInput.press('Tab')
   assert.equal(await chat.getAttribute('data-chat-channel'), 'party')
   const chatBoneyardEvidencePath = evidenceRoot
     ? join(evidenceRoot, 'chat-boneyard-party.png')
     : null
   if (chatBoneyardEvidencePath) await first.page.screenshot({ path: chatBoneyardEvidencePath })
-  await runChatInput.press('Escape')
+  await reopenedRunChatInput.press('Escape')
 
   const outsiderBefore = await outsiderHub
   const outsiderX = outsiderBefore.frame.players[outsider.playerId].position.x
@@ -885,6 +917,10 @@ async function waitForPartySize(page, size) {
   await page.waitForFunction((expected) => (
     document.querySelectorAll('[data-party-member]').length === expected
   ), size, { timeout: 15_000 })
+}
+
+async function chatUnreadTotal(chat) {
+  return Number(await chat.getAttribute('data-chat-unread-total'))
 }
 
 async function soundCount(page, sourceFragment) {

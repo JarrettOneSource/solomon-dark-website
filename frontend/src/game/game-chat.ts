@@ -59,6 +59,16 @@ export function appendGameChatMessage(
   return [...messages, message].slice(-GAME_CHAT_HISTORY_LIMIT)
 }
 
+export function shouldIncrementGameChatUnread(
+  message: GameChatMessage,
+  localPlayerId: string,
+  open: boolean,
+  currentChannel: GameChatChannel,
+): boolean {
+  return message.sender.playerId !== localPlayerId
+    && (!open || currentChannel !== message.channel)
+}
+
 export function isGameChatFaded(
   open: boolean,
   lastActivityAtMs: number,
