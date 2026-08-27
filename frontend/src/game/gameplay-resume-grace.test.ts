@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 import {
@@ -33,4 +34,15 @@ test('presents exactly 3, 2, 1 without claiming authority over expiry', () => {
   assert.equal(gameplayResumeGraceSeconds(grace, 2_000), 1)
   assert.equal(gameplayResumeGraceSeconds(grace, 3_000), 1)
   assert.equal(gameplayResumeGraceSeconds({ ...grace, remainingMs: null }, 0), null)
+})
+
+test('presents pending mutual readiness before the authoritative countdown', () => {
+  const component = readFileSync(
+    new URL('./GameplayResumeCountdown.tsx', import.meta.url),
+    'utf8',
+  )
+  assert.match(component, /Waiting on players \.\.\./)
+  assert.match(component, /data-gameplay-resume-grace-phase=/)
+  assert.match(component, /seconds === null \? 'waiting' : 'countdown'/)
+  assert.doesNotMatch(component, /if \(seconds === null\) return null/)
 })

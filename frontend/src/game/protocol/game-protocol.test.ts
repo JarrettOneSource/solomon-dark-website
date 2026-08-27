@@ -47,6 +47,7 @@ import { materializeStockTutorial } from '../host/boneyard-catalog.ts'
 import {
   EMPTY_CONTENT_MANIFEST_SHA256,
   GAME_CHAT_MAX_TEXT_CODE_UNITS,
+  GAMEPLAY_RESUME_GRACE_REASONS,
   GAME_PROTOCOL_VERSION,
   MAX_LUA_CONSOLE_CODE_LENGTH,
   PLAYER_CHARACTER_KERNEL_VERSION,
@@ -1584,8 +1585,18 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v86 carries concentration quickbar bindings and complete retained gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 86)
+test('protocol v87 carries mutual game-start readiness and complete retained gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 87)
+  assert.deepEqual(GAMEPLAY_RESUME_GRACE_REASONS, [
+    'game-rejoined',
+    'game-restarted',
+    'game-started',
+    'inventory-closed',
+    'pause-menu-closed',
+    'skill-book-closed',
+    'skill-picker-closed',
+    'skill-selector-closed',
+  ])
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),

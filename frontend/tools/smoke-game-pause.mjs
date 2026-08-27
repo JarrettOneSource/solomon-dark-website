@@ -23,6 +23,8 @@ import { PAUSE_MENU_ACTION_BOUNDS } from '../src/game/pause-menu-contract.ts'
 const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
 const credential = randomBytes(32).toString('base64url')
 const screenshots = {
+  boneyardLoadingWaiting: process.env.SDR_GAME_LOADING_WAITING_SCREENSHOT
+    || '/tmp/solomon-dark-loading-waiting.png',
   boneyardWaiting: process.env.SDR_GAME_PAUSE_BONEYARD_SCREENSHOT
     || '/tmp/solomon-dark-pause-boneyard-waiting.png',
   hubOwner: process.env.SDR_GAME_PAUSE_OWNER_SCREENSHOT
@@ -509,11 +511,49 @@ try {
   const peerLoaded = nextRawMessage(peer.socket, (message) => (
     message.type === 'server-boneyard-loaded'
   ))
+  const peerLoadingGrace = nextRawMessage(peer.socket, (message) => (
+    message.type === 'server-gameplay-resume-grace'
+    && message.grace?.reason === 'game-started'
+    && message.grace.remainingMs === null
+  ))
+  const latePeerLoadingGrace = nextRawMessage(latePeer.socket, (message) => (
+    message.type === 'server-gameplay-resume-grace'
+    && message.grace?.reason === 'game-started'
+    && message.grace.remainingMs === null
+  ))
   await page.getByRole('button', { name: 'Enter the Boneyard' }).click()
   await Promise.all([
     peerLoaded,
     page.locator('.boneyard-scene[data-renderer-state="ready"]').waitFor({ timeout: 90_000 }),
   ])
+  const pendingLoadingGrace = await peerLoadingGrace
+  const pendingLatePeerLoadingGrace = await latePeerLoadingGrace
+  assert.equal(pendingLoadingGrace.type, 'server-gameplay-resume-grace')
+  assert.equal(pendingLatePeerLoadingGrace.type, 'server-gameplay-resume-grace')
+  assert.equal(
+    pendingLatePeerLoadingGrace.grace.sequence,
+    pendingLoadingGrace.grace.sequence,
+  )
+  const loadingWaiting = page.locator(
+    '.gameplay-resume-countdown-overlay'
+    + '[data-gameplay-resume-grace-reason="game-started"]'
+    + '[data-gameplay-resume-grace-phase="waiting"]',
+  )
+  await loadingWaiting.waitFor()
+  assert.match(await loadingWaiting.textContent() ?? '', /Waiting on players \.\.\./)
+  const loadingHeldTick = host.state().tick
+  await page.waitForTimeout(250)
+  assert.equal(host.state().tick, loadingHeldTick)
+  await page.screenshot({ path: screenshots.boneyardLoadingWaiting })
+  peer.socket.send(encodeGameMessage({
+    type: 'client-resume-grace-ready',
+    sequence: pendingLoadingGrace.grace.sequence,
+  }))
+  latePeer.socket.send(encodeGameMessage({
+    type: 'client-resume-grace-ready',
+    sequence: pendingLatePeerLoadingGrace.grace.sequence,
+  }))
+  await assertResumeCountdown(page, loadingHeldTick, 'game-started')
 
   await page.setViewportSize({ height: 1080, width: 2560 })
   const largeBoneyard = page.locator('.boneyard-scene')

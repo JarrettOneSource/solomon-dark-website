@@ -1,6 +1,7 @@
 import type { Camera } from '../../editor/render.ts'
 import type { Vec2 } from '../../editor/model.ts'
 import type { GameRunPhase } from '../core-kernels/game-run.ts'
+import type { BoneyardWaveDirectorPhase } from '../core-kernels/boneyard-wave-director.ts'
 import {
   PLAYER_DEATH_FRAME_THREE_TICK,
   type PlayerLifeState,
@@ -56,6 +57,27 @@ export interface BoneyardSpectatorCameraSnapshot {
   }>
 }
 
+export interface BoneyardSpectatorStatusSnapshot extends BoneyardSpectatorCameraSnapshot {
+  readonly world: Readonly<{
+    enemies: readonly unknown[]
+    kind: 'boneyard'
+    maggots: readonly unknown[]
+    waves: Readonly<{
+      pendingSpawnBudget: number
+      phase: BoneyardWaveDirectorPhase
+      waveOrdinal: number
+    }> | null
+  }>
+}
+
+export function isBoneyardSpectatorStatusSnapshot(
+  snapshot: BoneyardSpectatorCameraSnapshot & Readonly<{
+    world: Readonly<{ kind: string }>
+  }>,
+): snapshot is BoneyardSpectatorStatusSnapshot {
+  return snapshot.world.kind === 'boneyard'
+}
+
 export interface BoneyardSpectatorCameraState {
   readonly runId: string | null
   readonly targetPlayerId: string | null
@@ -81,11 +103,16 @@ export function boneyardPlayerSortBias(player: Readonly<{
 
 export interface BoneyardSpectatorStatusPresentation {
   readonly accessibleLabel: string
+  readonly activeEnemyCount: number
   readonly displayText: string
+  readonly incomingEnemyCount: number
   readonly instruction: string | null
+  readonly respawnText: string
   readonly runId: string
   readonly targetPlayerId: string | null
   readonly title: string
+  readonly waveOrdinal: number | null
+  readonly wavePhase: BoneyardWaveDirectorPhase | null
 }
 
 export const INITIAL_BONEYARD_SPECTATOR_CAMERA_STATE: BoneyardSpectatorCameraState = {
@@ -165,7 +192,7 @@ export function boneyardCameraFocus(
 }
 
 export function boneyardSpectatorStatus(
-  snapshot: BoneyardSpectatorCameraSnapshot,
+  snapshot: BoneyardSpectatorStatusSnapshot,
   localPlayerId: string,
   spectator: BoneyardSpectatorCameraState,
 ): BoneyardSpectatorStatusPresentation | null {
@@ -181,25 +208,26 @@ export function boneyardSpectatorStatus(
   const targetName = targetPlayerId === null
     ? null
     : snapshot.players[targetPlayerId]?.config.displayName ?? null
-  if (targetName === null) {
-    const title = 'Spectating - waiting for an alive player'
-    return {
-      accessibleLabel: `${title}.`,
-      displayText: title,
-      instruction: null,
-      runId,
-      targetPlayerId: null,
-      title,
-    }
-  }
-  const title = `Spectating ${targetName}`
+  const title = targetName === null
+    ? 'Spectating - waiting for an alive player'
+    : `Spectating ${targetName}`
+  const instruction = targetName === null ? null : 'Left / Right click: next player'
+  const respawn = boneyardSpectatorRespawnStatus(snapshot)
+  const targetLabel = instruction === null
+    ? `${title}.`
+    : `${title}. Left or right click to select the next player.`
   return {
-    accessibleLabel: `${title}. Left or right click to select the next player.`,
-    displayText: `${title}  |  Left / Right click: next player`,
-    instruction: 'Left / Right click: next player',
+    accessibleLabel: `${targetLabel} ${respawn.accessibleLabel}`,
+    activeEnemyCount: respawn.activeEnemyCount,
+    displayText: instruction === null ? title : `${title}  |  ${instruction}`,
+    incomingEnemyCount: respawn.incomingEnemyCount,
+    instruction,
+    respawnText: respawn.text,
     runId,
-    targetPlayerId,
+    targetPlayerId: targetName === null ? null : targetPlayerId,
     title,
+    waveOrdinal: respawn.waveOrdinal,
+    wavePhase: respawn.wavePhase,
   }
 }
 
@@ -211,12 +239,57 @@ export function boneyardSpectatorStatusesEqual(
     left !== null
     && right !== null
     && left.accessibleLabel === right.accessibleLabel
+    && left.activeEnemyCount === right.activeEnemyCount
     && left.displayText === right.displayText
+    && left.incomingEnemyCount === right.incomingEnemyCount
     && left.instruction === right.instruction
+    && left.respawnText === right.respawnText
     && left.runId === right.runId
     && left.targetPlayerId === right.targetPlayerId
     && left.title === right.title
+    && left.waveOrdinal === right.waveOrdinal
+    && left.wavePhase === right.wavePhase
   )
+}
+
+function boneyardSpectatorRespawnStatus(
+  snapshot: BoneyardSpectatorStatusSnapshot,
+): Readonly<{
+  accessibleLabel: string
+  activeEnemyCount: number
+  incomingEnemyCount: number
+  text: string
+  waveOrdinal: number | null
+  wavePhase: BoneyardWaveDirectorPhase | null
+}> {
+  const activeEnemyCount = snapshot.world.enemies.length + snapshot.world.maggots.length
+  const waves = snapshot.world.waves
+  if (waves === null) {
+    return {
+      accessibleLabel: `Respawn is waiting for the next wave. ${enemyCountLabel(activeEnemyCount, 'active')}.`,
+      activeEnemyCount,
+      incomingEnemyCount: 0,
+      text: `RESPAWN: WAITING FOR NEXT WAVE  |  ${activeEnemyCount} ACTIVE`,
+      waveOrdinal: null,
+      wavePhase: null,
+    }
+  }
+  const waveLabel = waves.waveOrdinal === 0 ? 'OPENING' : `WAVE ${waves.waveOrdinal}`
+  const accessibleWaveLabel = waves.waveOrdinal === 0
+    ? 'The opening wave'
+    : `Wave ${waves.waveOrdinal}`
+  return {
+    accessibleLabel: `Respawn at the next wave. ${accessibleWaveLabel} has ${enemyCountLabel(activeEnemyCount, 'active')} and ${enemyCountLabel(waves.pendingSpawnBudget, 'incoming')}.`,
+    activeEnemyCount,
+    incomingEnemyCount: waves.pendingSpawnBudget,
+    text: `RESPAWN NEXT WAVE  |  ${waveLabel}  |  ${activeEnemyCount} ACTIVE + ${waves.pendingSpawnBudget} INCOMING`,
+    waveOrdinal: waves.waveOrdinal,
+    wavePhase: waves.phase,
+  }
+}
+
+function enemyCountLabel(count: number, state: 'active' | 'incoming'): string {
+  return `${count} ${state} ${count === 1 ? 'enemy' : 'enemies'}`
 }
 
 export function boneyardCamera(

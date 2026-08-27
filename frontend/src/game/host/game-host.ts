@@ -420,6 +420,7 @@ type SharedGameplayPauseScope = { readonly partyId: string }
 interface HostGameplayResumeGrace {
   readonly readyPlayerIds: Set<PlayerId>
   readonly reason: GameplayResumeGraceReason
+  readonly requiredPlayerIds: Set<PlayerId>
   readonly sequence: number
   readonly waitingPlayerIds: Set<PlayerId>
   deadlineMs: number | null
@@ -1674,17 +1675,21 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         > | null =
           connectedState.world.kind === 'boneyard'
           && connectedState.run.phase === 'active'
-          && message.saveIntent === 'resume'
-            ? rejoinedParty || replacedClient !== null
-              ? 'game-rejoined'
-              : 'game-restarted'
+            ? message.saveIntent === 'resume'
+              ? rejoinedParty || replacedClient !== null
+                ? 'game-rejoined'
+                : 'game-restarted'
+              : 'game-rejoined'
             : null
         const beganResumeGrace = resumeGraceReason !== null
-          && beginRejoinResumeGrace(
+          && beginRunLoadingResumeGrace(
             playerId,
             resumeGraceReason,
             stagedPartyRejoin?.partyId ?? connectedParty?.id ?? null,
             false,
+            authenticated.partyRecoverySeed && partyRecoveryClaim
+              ? partyRecoveryClaim.partyRoster.map(({ playerId }) => playerId)
+              : [],
           )
         if (!stagedPartyRejoin) {
           armPartyRejoinSlotsForState(
@@ -2831,6 +2836,12 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         loadedBoneyard = selected
         const previousState = state
         state = enterBoneyardWorld(state, selected)
+        const beganLoadingGrace = beginRunLoadingResumeGrace(
+          client.playerId,
+          'game-started',
+          null,
+          false,
+        )
         armPartyRejoinSlotsForState(privateParties?.parties[0]?.id ?? null, state)
         logGameActivity(previousState, state, selected, null)
         taintIneligibleClientRuns()
@@ -2845,6 +2856,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         broadcast({ type: 'server-boneyard-loaded', boneyard: selected })
         if (privateParties) broadcastPartyState()
         broadcastSnapshot()
+        if (beganLoadingGrace) broadcastGameplayResumeGrace()
         publishSaveCheckpoint('boneyard-entry')
         return
       }
@@ -2908,11 +2920,18 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         }
         loadedBoneyard = selected
         state = enterBoneyardWorld(state, selected)
+        const beganLoadingGrace = beginRunLoadingResumeGrace(
+          client.playerId,
+          'game-started',
+          null,
+          false,
+        )
         armPartyRejoinSlotsForState(privateParties?.parties[0]?.id ?? null, state)
         stopAllClientInputs()
         broadcast({ type: 'server-boneyard-loaded', boneyard: selected })
         if (privateParties) broadcastPartyState()
         broadcastSnapshot()
+        if (beganLoadingGrace) broadcastGameplayResumeGrace()
         publishSaveCheckpoint('tutorial-entry')
         return
       }
@@ -5623,11 +5642,15 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     return sequence
   }
 
-  function beginRejoinResumeGrace(
+  function beginRunLoadingResumeGrace(
     playerId: PlayerId,
-    reason: Extract<GameplayResumeGraceReason, 'game-rejoined' | 'game-restarted'>,
+    reason: Extract<
+      GameplayResumeGraceReason,
+      'game-rejoined' | 'game-restarted' | 'game-started'
+    >,
     partyId: string | null,
     announce = true,
+    requiredPlayerIds: readonly PlayerId[] = [],
   ): boolean {
     const scope = sharedWorlds
       ? partyId
@@ -5649,19 +5672,24 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       ? sharedGameplayResumeGraces.get(scope!.partyId) ?? null
       : gameplayResumeGrace
     const pendingExisting = existing?.deadlineMs === null ? existing : null
+    const waitingPlayerIds = new Set(pendingExisting?.waitingPlayerIds ?? [])
+    for (const connectedPlayerId of connectedMaterializedHumanPlayerIds(activeState)) {
+      waitingPlayerIds.add(connectedPlayerId)
+    }
+    waitingPlayerIds.add(playerId)
+    const required = new Set(pendingExisting?.requiredPlayerIds ?? [])
+    for (const requiredPlayerId of requiredPlayerIds) {
+      required.add(requiredPlayerId)
+      waitingPlayerIds.add(requiredPlayerId)
+    }
     const grace: HostGameplayResumeGrace = {
       deadlineMs: null,
-      readyPlayerIds: pendingExisting
-        ? new Set(pendingExisting.readyPlayerIds)
-        : new Set(),
+      readyPlayerIds: new Set(),
       reason,
+      requiredPlayerIds: required,
       sequence: nextResumeGraceSequence(),
-      waitingPlayerIds: pendingExisting
-        ? new Set(pendingExisting.waitingPlayerIds)
-        : new Set(),
+      waitingPlayerIds,
     }
-    grace.waitingPlayerIds.add(playerId)
-    grace.readyPlayerIds.delete(playerId)
     setGameplayResumeGrace(scope, grace)
     stopResumeGraceInputs(scope)
     if (!sharedWorlds) resetNextTickDeadline()
@@ -5695,6 +5723,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         : performance.now() + GAMEPLAY_RESUME_GRACE_DURATION_MS,
       readyPlayerIds: new Set(),
       reason,
+      requiredPlayerIds: new Set(),
       sequence: nextResumeGraceSequence(),
       waitingPlayerIds: new Set(waitsForPickerClose ? [playerId] : []),
     }
@@ -5707,17 +5736,22 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   }
 
   function connectedMaterializedHumanCount(activeState: GameSimulationState): number {
-    if (activeState.world.kind !== 'boneyard') return 0
-    const activeRunId = activeState.world.runId
-    return [...clients.values()].filter(client => {
-      if (client.partyRejoinSlot) return false
-      const candidate = stateForPlayer(client.playerId)
-      return candidate.world.kind === 'boneyard'
-        && candidate.world.runId === activeRunId
-        && candidate.playerEntities.identities.some(
-          identity => identity.playerId === client.playerId,
-        )
-    }).length
+    return connectedMaterializedHumanPlayerIds(activeState).length
+  }
+
+  function connectedMaterializedHumanPlayerIds(
+    activeState: GameSimulationState,
+  ): PlayerId[] {
+    if (activeState.world.kind !== 'boneyard') return []
+    const materializedPlayerIds = new Set(
+      activeState.playerEntities.identities.map(({ playerId }) => playerId),
+    )
+    return [...clients.values()].flatMap(client => {
+      if (client.partyRejoinSlot) return []
+      return materializedPlayerIds.has(client.playerId)
+        ? [client.playerId]
+        : []
+    })
   }
 
   function acknowledgeResumeGraceReady(client: HostClient, sequence: number): void {
@@ -5778,6 +5812,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     const scope = sharedWorlds ? knownScope : null
     const grace = gameplayResumeGraceRecord(scope)
     if (!grace || grace.deadlineMs !== null) return
+    if (grace.requiredPlayerIds.has(playerId)) {
+      grace.readyPlayerIds.delete(playerId)
+      return
+    }
     const removed = grace.waitingPlayerIds.delete(playerId)
     grace.readyPlayerIds.delete(playerId)
     if (!removed) return
@@ -5794,18 +5832,20 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   function expireGameplayResumeGraces(now: number): void {
     let changed = false
     if (!sharedWorlds) {
-      if (
-        gameplayResumeGrace !== null
-        && gameplayResumeGrace.deadlineMs !== null
-        && now >= gameplayResumeGrace.deadlineMs
-      ) {
-        const expired = gameplayResumeGrace
+      if (gameplayResumeGrace !== null) {
+        const deadlineExpired = gameplayResumeGrace.deadlineMs !== null
+          && now >= gameplayResumeGrace.deadlineMs
+        const retired = state.world.kind !== 'boneyard' || state.run.phase !== 'active'
+        if (!deadlineExpired && !retired) return
+        const completed = gameplayResumeGrace
         gameplayResumeGrace = null
         stopAllClientInputs()
         resetNextTickDeadline()
         broadcastGameplayResumeGrace()
-        logGameplayResumeGrace('completed', expired, null)
-        changed = true
+        if (deadlineExpired && !retired) {
+          logGameplayResumeGrace('completed', completed, null)
+        }
+        changed = deadlineExpired
       }
     } else {
       for (const [partyId, grace] of sharedGameplayResumeGraces) {
@@ -5818,8 +5858,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         sharedGameplayResumeGraces.delete(partyId)
         stopPartyInputs(partyId)
         broadcastGameplayResumeGrace(undefined, { partyId })
-        if (expired) logGameplayResumeGrace('completed', grace, { partyId })
-        changed = true
+        if (expired && !retired) {
+          logGameplayResumeGrace('completed', grace, { partyId })
+          changed = true
+        }
       }
     }
     if (changed) broadcastSnapshot()
@@ -6210,6 +6252,12 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       sharedWorlds = started.state
       state = sharedWorlds.hub
       const run = sharedWorlds.runs.find(candidate => candidate.partyId === party.id)!
+      const beganLoadingGrace = beginRunLoadingResumeGrace(
+        leaderPlayerId,
+        'game-started',
+        party.id,
+        false,
+      )
       armPartyRejoinSlotsForState(party.id, run.state)
       logGameActivity(before, run.state, selected, party.id)
       scope.pendingEvents.push(...deriveWebLuaEvents(
@@ -6229,6 +6277,12 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       })
       broadcastPartyState()
       broadcastSnapshot()
+      if (beganLoadingGrace) {
+        broadcastGameplayResumeGrace(
+          leaderPlayerId,
+          sharedGameplayPauseScopeForParty(party.id),
+        )
+      }
       publishSaveCheckpoint('boneyard-entry')
     } catch (error) {
       logGameServerEvent(

@@ -101,6 +101,7 @@ import {
   boneyardResidentIsVisible,
   boneyardSpectatorCameraState,
   boneyardSpectatorStatus,
+  isBoneyardSpectatorStatusSnapshot,
   boneyardStaticTiles,
   boneyardVisibleWorldBounds,
   type BoneyardSpectatorCameraState,
@@ -1407,7 +1408,7 @@ export async function createBoneyardWorldRenderer(
       canvas.remove()
     },
     spectatorStatus(snapshot) {
-      if (destroyed) return null
+      if (destroyed || !isBoneyardSpectatorStatusSnapshot(snapshot)) return null
       cameraFocusFor(snapshot)
       return boneyardSpectatorStatus(snapshot, options.playerId, spectatorCamera)
     },

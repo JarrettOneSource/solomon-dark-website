@@ -206,6 +206,16 @@ try {
 
   const leaderLoaded = leader.next(message => message.type === 'server-boneyard-loaded')
   const memberLoaded = member.next(message => message.type === 'server-boneyard-loaded')
+  const leaderInitialGrace = leader.next(message => (
+    message.type === 'server-gameplay-resume-grace'
+    && message.grace?.reason === 'game-started'
+    && message.grace.remainingMs === null
+  ))
+  const memberInitialGrace = member.next(message => (
+    message.type === 'server-gameplay-resume-grace'
+    && message.grace?.reason === 'game-started'
+    && message.grace.remainingMs === null
+  ))
   leader.startMatch('default-random')
   await waitForHost(() => host.runCount() === 1, 'shared run start')
   const boneyard = page.locator('.boneyard-scene[data-renderer-state="ready"]')
@@ -214,6 +224,26 @@ try {
   const runId = await boneyard.getAttribute('data-run-id')
   assert.equal(runId, leaderRun.boneyard.runId)
   assert.equal(runId, memberRun.boneyard.runId)
+  const [leaderStart, memberStart] = await Promise.all([
+    leaderInitialGrace,
+    memberInitialGrace,
+  ])
+  const initialWaiting = page.locator(
+    '.gameplay-resume-countdown-overlay'
+    + '[data-gameplay-resume-grace-reason="game-started"]'
+    + '[data-gameplay-resume-grace-phase="waiting"]',
+  )
+  await initialWaiting.waitFor()
+  const initialHeldTick = host.playerState(leader.playerId).tick
+  await new Promise(resolve => setTimeout(resolve, 200))
+  assert.equal(host.playerState(leader.playerId).tick, initialHeldTick)
+  leader.readyResumeGrace(leaderStart.grace.sequence)
+  member.readyResumeGrace(memberStart.grace.sequence)
+  await initialWaiting.waitFor({ state: 'detached', timeout: 10_000 })
+  await waitForHost(
+    () => host.playerState(leader.playerId).tick > initialHeldTick,
+    'initial all-player grace',
+  )
 
   const savedRun = await waitForLocalSave(page, record => (
     typeof JSON.parse(record?.document ?? 'null')?.continuation?.summary?.partyRejoinToken
@@ -273,8 +303,8 @@ try {
   assert.ok(stacked)
   Object.assign(stacked, grantGameSimulationPlayerExperience(stacked, leader.playerId, 1_000))
   await waitForHost(() => host.playerState(leader.playerId)?.levelUpBarrier !== null, 'stacked peers')
-  await resolveAllOffers(leader)
-  await resolveAllOffers(member)
+  await resolveAllOffers(leader, false)
+  await resolveAllOffers(member, false)
   await waitForHost(() => host.playerState(leader.playerId)?.levelUpBarrier === null, 'stacked peers done')
 
   const leaderState = host.playerState(leader.playerId)
@@ -388,6 +418,18 @@ try {
     await countdown.getAttribute('data-gameplay-resume-grace-reason'),
     'game-rejoined',
   )
+  assert.equal(
+    await countdown.getAttribute('data-gameplay-resume-grace-phase'),
+    'waiting',
+  )
+  assert.match(await countdown.textContent() ?? '', /Waiting on players \.\.\./)
+  await new Promise(resolve => setTimeout(resolve, 200))
+  assert.equal(host.playerState(browserPlayerId)?.tick, heldTick)
+  const rejoinSequence = Number(
+    await countdown.getAttribute('data-gameplay-resume-grace-sequence'),
+  )
+  assert.ok(Number.isSafeInteger(rejoinSequence) && rejoinSequence > 0)
+  member.readyResumeGrace(rejoinSequence)
   for (const seconds of [3, 2, 1]) {
     await page.locator(
       `.gameplay-resume-countdown-overlay[data-gameplay-resume-grace-seconds="${seconds}"]`,
@@ -552,7 +594,7 @@ async function enterRawPlayer(displayName, element) {
   return client
 }
 
-async function resolveAllOffers(client) {
+async function resolveAllOffers(client, acknowledgeSkillPickerGrace = true) {
   while (true) {
     const active = host.playerState(client.playerId)
     if (!active) throw new Error(`host lost ${client.playerId}`)
@@ -562,9 +604,10 @@ async function resolveAllOffers(client) {
     const finalCohortChoice = progression.pendingLevels.length === 1
       && active.levelUpBarrier?.pendingPlayerIds.length === 1
       && active.levelUpBarrier.pendingPlayerIds[0] === client.playerId
-    const pendingGrace = finalCohortChoice
+    const pendingGrace = acknowledgeSkillPickerGrace && finalCohortChoice
       ? client.next(message => (
           message.type === 'server-gameplay-resume-grace'
+          && message.grace?.reason === 'skill-picker-closed'
           && message.grace?.remainingMs === null
         ))
       : null
@@ -612,7 +655,13 @@ function messageQueue(socket, label) {
       waiter.timeout = setTimeout(() => {
         const index = waiters.indexOf(waiter)
         if (index >= 0) waiters.splice(index, 1)
-        reject(new Error(`timed out waiting for raw host message from ${label}`))
+        reject(new Error(
+          `timed out waiting for raw host message from ${label}; bufferedTail=${buffered.slice(-64).map(message => (
+            message.type === 'server-gameplay-resume-grace'
+              ? `${message.type}:${message.grace?.reason ?? 'none'}:${message.grace?.remainingMs ?? 'pending'}`
+              : message.type
+          )).join(',')}`,
+        ))
       }, 30_000)
       waiters.push(waiter)
     })

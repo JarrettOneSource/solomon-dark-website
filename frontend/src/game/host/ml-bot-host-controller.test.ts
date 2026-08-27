@@ -258,11 +258,29 @@ test('developer Lua summons repeatable inert participants that accept a real par
   assert.deepEqual(joined.state.party.memberPlayerIds, [welcome.playerId, botPlayerIds[0]])
 
   const loaded = nextMessage(socket, message => message.type === 'server-boneyard-loaded')
+  const pendingReady = nextMessage(socket, message => (
+    message.type === 'server-gameplay-resume-grace'
+    && message.grace !== null
+    && message.grace.reason === 'game-started'
+    && message.grace.remainingMs === null
+  ))
   socket.send(encodeGameMessage({
     type: 'client-start-match',
     boneyardId: welcome.boneyards[0]!.id,
   }))
   await loaded
+  const grace = await pendingReady
+  assert.equal(grace.type, 'server-gameplay-resume-grace')
+  const pendingGrace = grace.grace
+  assert.ok(pendingGrace)
+  const gameplayReady = nextMessage(socket, message => (
+    message.type === 'server-gameplay-resume-grace' && message.grace === null
+  ))
+  socket.send(encodeGameMessage({
+    type: 'client-resume-grace-ready',
+    sequence: pendingGrace.sequence,
+  }))
+  await gameplayReady
   await waitFor(() => host.playerState(welcome.playerId)?.world.kind === 'boneyard')
   const carried = host.playerState(botPlayerIds[0]!)
   assert.ok(carried)

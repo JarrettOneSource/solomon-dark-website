@@ -189,6 +189,12 @@
   pointer-events: none;
 }
 
+.boneyard-spectator-respawn-status {
+  position: absolute;
+  overflow: visible;
+  pointer-events: none;
+}
+
 .boneyard-spectator-status-native-sprite,
 .boneyard-spectator-status-rail,
 .boneyard-spectator-status-rail-segment {

@@ -1282,6 +1282,79 @@ test('every crafted Hub gameplay-pause source is rejected without suspending the
   assert.deepEqual(pauseMessages, [])
 })
 
+test('initial multiplayer Boneyard waits for every renderer before starting grace', async (context) => {
+  const host = await startGameHost({
+    authentication: SHARED_AUTHENTICATION,
+    snapshotRate: 100,
+  })
+  context.after(() => host.close())
+  const first = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
+  const second = await join(host.address.url, 'test-secret', SECOND_CHARACTER)
+  context.after(() => first.socket.close())
+  context.after(() => second.socket.close())
+
+  const loadedFirst = nextMessage(first.socket, message => (
+    message.type === 'server-boneyard-loaded'
+  ))
+  const loadedSecond = nextMessage(second.socket, message => (
+    message.type === 'server-boneyard-loaded'
+  ))
+  const pendingFirst = nextMessage(first.socket, message => (
+    message.type === 'server-gameplay-resume-grace'
+    && message.grace !== null
+    && message.grace.reason === 'game-started'
+    && message.grace.remainingMs === null
+  ))
+  const pendingSecond = nextMessage(second.socket, message => (
+    message.type === 'server-gameplay-resume-grace'
+    && message.grace !== null
+    && message.grace.reason === 'game-started'
+    && message.grace.remainingMs === null
+  ))
+  first.socket.send(encodeGameMessage({
+    type: 'client-start-match',
+    boneyardId: 'default-random',
+  }))
+  await Promise.all([loadedFirst, loadedSecond])
+  const [firstGrace, secondGrace] = await Promise.all([pendingFirst, pendingSecond])
+  assert.equal(firstGrace.type, 'server-gameplay-resume-grace')
+  assert.equal(secondGrace.type, 'server-gameplay-resume-grace')
+  assert.equal(firstGrace.grace?.sequence, secondGrace.grace?.sequence)
+
+  const heldTick = host.state().tick
+  await new Promise(resolve => setTimeout(resolve, 80))
+  assert.equal(host.state().tick, heldTick)
+  first.socket.send(encodeGameMessage({
+    type: 'client-resume-grace-ready',
+    sequence: firstGrace.grace!.sequence,
+  }))
+  await new Promise(resolve => setTimeout(resolve, 80))
+  assert.equal(host.state().tick, heldTick)
+
+  const countingFirst = nextMessage(first.socket, message => (
+    message.type === 'server-gameplay-resume-grace'
+    && message.grace !== null
+    && message.grace.sequence === firstGrace.grace?.sequence
+    && message.grace.remainingMs !== null
+  ))
+  const countingSecond = nextMessage(second.socket, message => (
+    message.type === 'server-gameplay-resume-grace'
+    && message.grace !== null
+    && message.grace.sequence === secondGrace.grace?.sequence
+    && message.grace.remainingMs !== null
+  ))
+  second.socket.send(encodeGameMessage({
+    type: 'client-resume-grace-ready',
+    sequence: secondGrace.grace!.sequence,
+  }))
+  const [startedFirst, startedSecond] = await Promise.all([countingFirst, countingSecond])
+  assert.equal(startedFirst.type, 'server-gameplay-resume-grace')
+  assert.equal(startedSecond.type, 'server-gameplay-resume-grace')
+  assert.ok((startedFirst.grace?.remainingMs ?? 0) > 2_900)
+  await new Promise(resolve => setTimeout(resolve, 80))
+  assert.equal(host.state().tick, heldTick)
+})
+
 test('Boneyard pause holds the complete world and only its owner can resume', async (context) => {
   const logs: GameServerLogEntry[] = []
   const runtimeEvents: string[] = []
@@ -1299,11 +1372,15 @@ test('Boneyard pause holds the complete world and only its owner can resume', as
 
   const loadedA = nextMessage(first.socket, (message) => message.type === 'server-boneyard-loaded')
   const loadedB = nextMessage(second.socket, (message) => message.type === 'server-boneyard-loaded')
+  const initialReady = completeInitialGameplayReadiness([first.socket, second.socket])
   first.socket.send(encodeGameMessage({
     type: 'client-start-match',
     boneyardId: 'default-random',
   }))
   await Promise.all([loadedA, loadedB])
+  await initialReady
+  logs.length = 0
+  runtimeEvents.length = 0
   assert.equal(host.state().world.kind, 'boneyard')
 
   const pausedA = nextMessage(first.socket, (message) => (
@@ -1392,11 +1469,13 @@ test('solo gameplay menu release resumes immediately without grace', async (cont
     client.socket,
     message => message.type === 'server-boneyard-loaded',
   )
+  const initialReady = completeInitialGameplayReadiness([client.socket])
   client.socket.send(encodeGameMessage({
     type: 'client-start-match',
     boneyardId: 'default-random',
   }))
   await loaded
+  await initialReady
   const paused = nextMessage(client.socket, message => (
     message.type === 'server-gameplay-pause' && message.pause !== null
   ))
@@ -1799,11 +1878,13 @@ test('multiplayer SkillPicker starts one grace only after the final choice', asy
   const loadedSecond = nextMessage(second.socket, message => (
     message.type === 'server-boneyard-loaded'
   ))
+  const initialReady = completeInitialGameplayReadiness([first.socket, second.socket])
   first.socket.send(encodeGameMessage({
     type: 'client-start-match',
     boneyardId: 'default-random',
   }))
   await Promise.all([loadedFirst, loadedSecond])
+  await initialReady
   const active = host.state()
   Object.assign(active, grantGameSimulationPlayerExperience(
     active,
@@ -2021,11 +2102,13 @@ test('Boneyard host authorizes HUD concentration replacement only for the addres
   const loaded = nextMessage(client.socket, (message) => (
     message.type === 'server-boneyard-loaded'
   ))
+  const initialReady = completeInitialGameplayReadiness([client.socket])
   client.socket.send(encodeGameMessage({
     type: 'client-start-match',
     boneyardId: 'default-random',
   }))
   await loaded
+  await initialReady
   assert.equal(host.state().world.kind, 'boneyard')
 
   const skillBookPause = nextMessage(client.socket, (message) => (
@@ -2994,8 +3077,10 @@ test('a valid same-tab resume replaces only the live Tutorial transport and rota
   const loadedMessage = nextMessage(first.socket, message => (
     message.type === 'server-boneyard-loaded'
   ))
+  const initialReady = completeInitialGameplayReadiness([first.socket])
   first.socket.send(encodeGameMessage({ type: 'client-start-tutorial' }))
   const loaded = await loadedMessage
+  await initialReady
   assert.equal(loaded.type, 'server-boneyard-loaded')
   await waitFor(() => host.playerState(first.welcome.playerId)?.world.kind === 'boneyard')
   const savedState = host.playerState(first.welcome.playerId)
@@ -3348,6 +3433,10 @@ test('saved party member catches up detached while the live party run continues'
     type: 'client-resume-grace-ready',
     sequence: welcome.gameplayResumeGrace!.sequence,
   }))
+  leader.socket.send(encodeGameMessage({
+    type: 'client-resume-grace-ready',
+    sequence: welcome.gameplayResumeGrace!.sequence,
+  }))
 
   const heldTick = host.playerState(leader.welcome.playerId)!.tick
   await new Promise(resolve => setTimeout(resolve, 60))
@@ -3614,11 +3703,13 @@ test('host retains the profile and removes only the continuation on Game Over', 
     message.type === 'server-snapshot'
     && message.snapshot.run.phase === 'active'
   ))
+  const initialReady = completeInitialGameplayReadiness([client.socket])
   client.socket.send(encodeGameMessage({
     type: 'client-start-match',
     boneyardId: 'default-random',
   }))
   await active
+  await initialReady
 
   const profiled = nextMessage(client.socket, (message) => (
     message.type === 'server-save-checkpoint'
@@ -3665,11 +3756,13 @@ test('host returns the same multiplayer session from Game Over through loadout t
     && message.snapshot.run.phase === 'active'
     && message.snapshot.world.kind === 'boneyard'
   ))
+  const initialReady = completeInitialGameplayReadiness([first.socket, second.socket])
   first.socket.send(encodeGameMessage({
     type: 'client-start-match',
     boneyardId: 'default-random',
   }))
   const [loaded, active] = await Promise.all([loadedMessage, activeMessage])
+  await initialReady
   assert.equal(loaded.type, 'server-boneyard-loaded')
   assert.equal(active.type, 'server-snapshot')
   const runId = loaded.boneyard.runId
@@ -4026,11 +4119,13 @@ test('host lazily executes bounded Lua for authority and applies semantic comman
   const loadedMessage = nextMessage(authority.socket, (message) => (
     message.type === 'server-boneyard-loaded'
   ))
+  const initialReady = completeInitialGameplayReadiness([authority.socket, guest.socket])
   authority.socket.send(encodeGameMessage({
     type: 'client-start-match',
     boneyardId: 'default-random',
   }))
   const loaded = await loadedMessage
+  await initialReady
   assert.equal(loaded.type, 'server-boneyard-loaded')
   assert.equal(loaded.boneyard.seed, `0000002a${'00'.repeat(12)}`)
 
@@ -4163,6 +4258,7 @@ async function startDetachedPartyRun(context: TestContext) {
   ))
   const loadedLeader = nextMessage(leader.socket, message => message.type === 'server-boneyard-loaded')
   const loadedMember = nextMessage(member.socket, message => message.type === 'server-boneyard-loaded')
+  const initialReady = completeInitialGameplayReadiness([leader.socket, member.socket])
   leader.socket.send(encodeGameMessage({
     type: 'client-start-match',
     boneyardId: 'default-random',
@@ -4172,6 +4268,7 @@ async function startDetachedPartyRun(context: TestContext) {
     loadedMember,
     memberRunSave,
   ])
+  await initialReady
   if (leaderRun.type !== 'server-boneyard-loaded') assert.fail('expected leader Boneyard')
   if (memberRun.type !== 'server-boneyard-loaded') assert.fail('expected member Boneyard')
   if (checkpoint.type !== 'server-save-checkpoint') assert.fail('expected member checkpoint')
@@ -4207,6 +4304,30 @@ async function join(
   const welcome = await nextMessage(socket, (message) => message.type === 'server-welcome')
   assert.equal(welcome.type, 'server-welcome')
   return { socket, welcome }
+}
+
+async function completeInitialGameplayReadiness(
+  sockets: readonly WebSocket[],
+): Promise<void> {
+  const pending = await Promise.all(sockets.map(socket => nextMessage(socket, message => (
+    message.type === 'server-gameplay-resume-grace'
+    && message.grace !== null
+    && message.grace.reason === 'game-started'
+    && message.grace.remainingMs === null
+  ))))
+  const completed = sockets.map(socket => nextMessage(socket, message => (
+    message.type === 'server-gameplay-resume-grace' && message.grace === null
+  )))
+  for (const [index, message] of pending.entries()) {
+    if (message.type !== 'server-gameplay-resume-grace' || message.grace === null) {
+      throw new Error('expected pending initial gameplay readiness')
+    }
+    sockets[index]!.send(encodeGameMessage({
+      type: 'client-resume-grace-ready',
+      sequence: message.grace.sequence,
+    }))
+  }
+  await Promise.all(completed)
 }
 
 async function openSavedRunSocket(
@@ -4367,11 +4488,15 @@ async function completeLeaderboardScenario(
       socket.send(encodeGameMessage({ type: 'client-ready-college-intro' }))
     }
     const loaded = nextMessage(socket, message => message.type === 'server-boneyard-loaded')
+    const initialReady = scenario.beforeArchive
+      ? completeInitialGameplayReadiness([socket])
+      : null
     socket.send(encodeGameMessage({
       type: 'client-start-match',
       boneyardId: 'default-random',
     }))
     await loaded
+    if (initialReady) await initialReady
     await scenario.beforeArchive?.(socket)
     const archived = nextMessage(socket, message => (
       message.type === 'server-snapshot'

@@ -16,6 +16,7 @@ export const NATIVE_SPECTATOR_HUD_CONTRACT = Object.freeze({
     NATIVE_UI_MESSAGE.verticalEdgeRecord,
     ...NATIVE_UI_MESSAGE.cornerRecords,
   ]),
+  respawnPanelGap: 8,
   surface: Object.freeze({ height: 0.075, width: 0.60, x: 0.20, y: 0.055 }),
   textOffset: Object.freeze({ x: 18, y: 20 }),
   tint: 0xffe68c,

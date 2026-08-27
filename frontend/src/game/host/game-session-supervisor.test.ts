@@ -1002,6 +1002,8 @@ test('first returning nonleader recovers the updated party run under the origina
     assert.fail('expected recovered Boneyard')
   }
   assert.equal(recoveredMember.welcome.snapshot.world.runId, memberRun.boneyard.runId)
+  assert.equal(recoveredMember.welcome.gameplayResumeGrace?.reason, 'game-restarted')
+  assert.equal(recoveredMember.welcome.gameplayResumeGrace?.remainingMs, null)
   const memberRecoveredParty = await recoveredMember.next(message => (
     message.type === 'server-party-state'
     && message.state.party.memberPlayerIds.length === 2
@@ -1018,6 +1020,21 @@ test('first returning nonleader recovers the updated party run under the origina
       { connected: true, playerId: member.welcome.playerId },
     ],
   )
+  let countdownStartedBeforeLeader = false
+  const observeEarlyCountdown = (data: WebSocket.RawData) => {
+    const message = decodeServerGameMessage(data.toString())
+    if (
+      message.type === 'server-gameplay-resume-grace'
+      && message.grace?.remainingMs !== null
+    ) countdownStartedBeforeLeader = true
+  }
+  recoveredMember.socket.on('message', observeEarlyCountdown)
+  recoveredMember.socket.send(encodeGameMessage({
+    type: 'client-resume-grace-ready',
+    sequence: recoveredMember.welcome.gameplayResumeGrace!.sequence,
+  }))
+  await new Promise(resolve => setTimeout(resolve, 100))
+  assert.equal(countdownStartedBeforeLeader, false)
 
   const recoveredLeader = await joinSaved(
     replacement.address.url,
@@ -1031,6 +1048,39 @@ test('first returning nonleader recovers the updated party run under the origina
     assert.fail('expected recovered Boneyard')
   }
   assert.equal(recoveredLeader.welcome.snapshot.world.runId, memberRun.boneyard.runId)
+  assert.equal(recoveredLeader.welcome.gameplayResumeGrace?.reason, 'game-rejoined')
+  assert.equal(recoveredLeader.welcome.gameplayResumeGrace?.remainingMs, null)
+  const refreshedMemberGrace = await recoveredMember.next(message => (
+    message.type === 'server-gameplay-resume-grace'
+    && message.grace?.remainingMs === null
+    && message.grace.sequence === recoveredLeader.welcome.gameplayResumeGrace?.sequence
+  ))
+  assert.equal(refreshedMemberGrace.type, 'server-gameplay-resume-grace')
+  const memberCounting = recoveredMember.next(message => (
+    message.type === 'server-gameplay-resume-grace'
+    && message.grace?.remainingMs !== null
+    && message.grace.sequence === recoveredLeader.welcome.gameplayResumeGrace?.sequence
+  ))
+  const leaderCounting = recoveredLeader.next(message => (
+    message.type === 'server-gameplay-resume-grace'
+    && message.grace?.remainingMs !== null
+    && message.grace.sequence === recoveredLeader.welcome.gameplayResumeGrace?.sequence
+  ))
+  recoveredMember.socket.send(encodeGameMessage({
+    type: 'client-resume-grace-ready',
+    sequence: recoveredLeader.welcome.gameplayResumeGrace!.sequence,
+  }))
+  await new Promise(resolve => setTimeout(resolve, 100))
+  assert.equal(countdownStartedBeforeLeader, false)
+  recoveredLeader.socket.send(encodeGameMessage({
+    type: 'client-resume-grace-ready',
+    sequence: recoveredLeader.welcome.gameplayResumeGrace!.sequence,
+  }))
+  const [memberGrace, leaderGrace] = await Promise.all([memberCounting, leaderCounting])
+  assert.equal(memberGrace.type, 'server-gameplay-resume-grace')
+  assert.equal(leaderGrace.type, 'server-gameplay-resume-grace')
+  assert.ok((memberGrace.grace?.remainingMs ?? 0) > 2_900)
+  recoveredMember.socket.off('message', observeEarlyCountdown)
   const recoveredParty = await recoveredLeader.next(message => (
     message.type === 'server-party-state'
     && message.state.party.memberPlayerIds.length === 2

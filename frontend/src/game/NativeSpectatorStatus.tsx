@@ -46,6 +46,47 @@ export default function NativeSpectatorStatus({
         width: layout.surface.width,
       }}
     >
+      <NativePanelChrome layout={layout} />
+      <NativeBitmapText
+        className="boneyard-spectator-status-text"
+        font={NATIVE_SPECTATOR_HUD_CONTRACT.font}
+        style={{ left: layout.text.x, position: 'absolute', top: layout.text.y }}
+        text={status.displayText}
+        tint={NATIVE_SPECTATOR_HUD_CONTRACT.tint}
+      />
+      <div
+        className="boneyard-spectator-respawn-status"
+        data-active-enemy-count={status.activeEnemyCount}
+        data-incoming-enemy-count={status.incomingEnemyCount}
+        data-respawn-text={status.respawnText}
+        data-wave-ordinal={status.waveOrdinal ?? ''}
+        data-wave-phase={status.wavePhase ?? ''}
+        aria-hidden
+        style={{
+          height: layout.surface.height,
+          left: 0,
+          top: layout.surface.height + NATIVE_SPECTATOR_HUD_CONTRACT.respawnPanelGap,
+          width: layout.surface.width,
+        }}
+      >
+        <NativePanelChrome layout={layout} />
+        <NativeBitmapText
+          className="boneyard-spectator-status-text"
+          font={NATIVE_SPECTATOR_HUD_CONTRACT.font}
+          style={{ left: layout.text.x, position: 'absolute', top: layout.text.y }}
+          text={status.respawnText}
+          tint={NATIVE_SPECTATOR_HUD_CONTRACT.tint}
+        />
+      </div>
+    </div>
+  )
+}
+
+function NativePanelChrome({ layout }: Readonly<{
+  layout: ReturnType<typeof nativeSpectatorHudLayout>
+}>) {
+  return (
+    <>
       {layout.horizontalRails.map((rail, index) => (
         <NativeAtlasStrip
           key={`horizontal:${index}`}
@@ -73,14 +114,7 @@ export default function NativeSpectatorStatus({
           />
         )
       })}
-      <NativeBitmapText
-        className="boneyard-spectator-status-text"
-        font={NATIVE_SPECTATOR_HUD_CONTRACT.font}
-        style={{ left: layout.text.x, position: 'absolute', top: layout.text.y }}
-        text={status.displayText}
-        tint={NATIVE_SPECTATOR_HUD_CONTRACT.tint}
-      />
-    </div>
+    </>
   )
 }
 

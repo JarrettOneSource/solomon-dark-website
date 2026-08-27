@@ -64,7 +64,26 @@ test('owns both requested transitions through destination renderer readiness', (
     mainScene,
     /onReady=\{\(\) => \{\s*session\.readyCollegeIntro\(\)\s*finishHubLoading\(\)\s*\}\}/,
   )
-  assert.match(mainScene, /onReady=\{finishBoneyardLoading\}/)
+  assert.match(
+    mainScene,
+    /const \[readyBoneyardRunId, setReadyBoneyardRunId\] = useState<string \| null>\(null\)/,
+  )
+  assert.match(
+    mainScene,
+    /const finishBoneyardLoading = useCallback\([\s\S]*\(runId: string\) => \{[\s\S]*setReadyBoneyardRunId\(runId\)[\s\S]*finishLoading\('boneyard'\)/,
+  )
+  assert.match(
+    mainScene,
+    /onReady=\{\(\) => finishBoneyardLoading\(loadedBoneyard\.runId\)\}/,
+  )
+  assert.match(
+    mainScene,
+    /readyBoneyardRunId !== runtimeSnapshot\.world\.runId/,
+  )
+  assert.doesNotMatch(
+    mainScene,
+    /gameplayResumeGrace\.remainingMs !== null[\s\S]{0,180}loading !== null/,
+  )
   assert.doesNotMatch(mainScene, /Opening the Boneyard/)
   assert.doesNotMatch(mainScene, /transitionTo\('hub'\)/)
 })

@@ -160,6 +160,14 @@ try {
     waitForBoneyard(hostPage),
     waitForBoneyard(guestPage),
   ])
+  await Promise.all([hostPage, guestPage].map(async page => {
+    const initialGrace = page.locator(
+      '.gameplay-resume-countdown-overlay'
+      + '[data-gameplay-resume-grace-reason="game-started"]',
+    )
+    await initialGrace.waitFor({ timeout: 30_000 })
+    await initialGrace.waitFor({ state: 'detached', timeout: 30_000 })
+  }))
   const [hostInitial, guestInitial] = await Promise.all([
     boneyardFrame(hostPage),
     boneyardFrame(guestPage),
@@ -2058,10 +2066,24 @@ async function spectatorStatusReceipt(page, frame, targetPlayerId) {
     text,
     `Spectating ${target.displayName}  |  Left / Right click: next player`,
   )
+  const respawn = status.locator('.boneyard-spectator-respawn-status')
+  const activeEnemyCount = Number(await respawn.getAttribute('data-active-enemy-count'))
+  const incomingEnemyCount = Number(await respawn.getAttribute('data-incoming-enemy-count'))
+  const respawnText = await respawn.getAttribute('data-respawn-text')
+  const waveOrdinalValue = await respawn.getAttribute('data-wave-ordinal')
+  assert.ok(Number.isSafeInteger(activeEnemyCount) && activeEnemyCount >= 0)
+  assert.ok(Number.isSafeInteger(incomingEnemyCount) && incomingEnemyCount >= 0)
+  assert.match(respawnText ?? '', /^RESPAWN(?: NEXT WAVE|: WAITING FOR NEXT WAVE)/)
   const accessibleLabel = await status.getAttribute('aria-label')
+  const enemyLabel = (count, state) => (
+    `${count} ${state} ${count === 1 ? 'enemy' : 'enemies'}`
+  )
+  const respawnLabel = waveOrdinalValue === ''
+    ? `Respawn is waiting for the next wave. ${enemyLabel(activeEnemyCount, 'active')}.`
+    : `Respawn at the next wave. ${Number(waveOrdinalValue) === 0 ? 'The opening wave' : `Wave ${waveOrdinalValue}`} has ${enemyLabel(activeEnemyCount, 'active')} and ${enemyLabel(incomingEnemyCount, 'incoming')}.`
   assert.equal(
     accessibleLabel,
-    `Spectating ${target.displayName}. Left or right click to select the next player.`,
+    `Spectating ${target.displayName}. Left or right click to select the next player. ${respawnLabel}`,
   )
   assert.equal(await status.getAttribute('data-native-font'), 'Fonts.93-184')
   assert.equal(
@@ -2083,7 +2105,17 @@ async function spectatorStatusReceipt(page, frame, targetPlayerId) {
   assert.ok(Math.abs((bounds.y - canvasBounds.y) / canvasBounds.height - 0.055) < 0.002)
   assert.ok(Math.abs(bounds.width / canvasBounds.width - 0.60) < 0.002)
   assert.ok(Math.abs(bounds.height / canvasBounds.height - 0.075) < 0.002)
-  return { accessibleLabel, bounds, records, targetPlayerId, text }
+  return {
+    accessibleLabel,
+    activeEnemyCount,
+    bounds,
+    incomingEnemyCount,
+    records,
+    respawnText,
+    targetPlayerId,
+    text,
+    waveOrdinal: waveOrdinalValue === '' ? null : Number(waveOrdinalValue),
+  }
 }
 
 async function driveSurvivorToGameOver(page) {

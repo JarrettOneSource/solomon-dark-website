@@ -27,25 +27,28 @@ export default function GameplayResumeCountdown({
     })
   }, [grace])
 
-  if (seconds === null) return null
+  const phase = seconds === null ? 'waiting' : 'countdown'
 
   return (
     <div
       className="gameplay-resume-countdown-overlay"
+      data-gameplay-resume-grace-phase={phase}
       data-gameplay-resume-grace-reason={grace.reason}
       data-gameplay-resume-grace-remaining-ms={grace.remainingMs}
       data-gameplay-resume-grace-sequence={grace.sequence}
       data-gameplay-resume-grace-seconds={seconds}
       role="status"
-      aria-live="assertive"
+      aria-live={seconds === null ? 'polite' : 'assertive'}
       aria-atomic="true"
     >
       <div className="main-menu-native-stage gameplay-resume-countdown-stage" style={style}>
         <div className="gameplay-resume-countdown-panel">
           <span className="gameplay-resume-countdown-label">
-            RESUMING IN
+            {seconds === null ? 'Waiting on players ...' : 'RESUMING IN'}
           </span>
-          <strong className="gameplay-resume-countdown-value">{seconds}</strong>
+          {seconds === null ? null : (
+            <strong className="gameplay-resume-countdown-value">{seconds}</strong>
+          )}
         </div>
       </div>
     </div>

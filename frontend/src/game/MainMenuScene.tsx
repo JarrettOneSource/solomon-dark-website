@@ -420,6 +420,7 @@ export default function MainMenuScene({
   const [gameplaySettingsOpen, setGameplaySettingsOpen] = useState(false)
   const activeBoneyardRunRef = useRef<string | null>(null)
   const loadedBoneyardRunRef = useRef<string | null>(null)
+  const [readyBoneyardRunId, setReadyBoneyardRunId] = useState<string | null>(null)
   const levelUpPickerPresentationRef = useRef<number | null>(null)
   const levelUpSoundBarrierRef = useRef<number | null>(null)
   const [levelUpPickerClosing, setLevelUpPickerClosing] = useState(false)
@@ -506,7 +507,10 @@ export default function MainMenuScene({
     [beginLoading],
   )
   const finishBoneyardLoading = useCallback(
-    () => finishLoading('boneyard'),
+    (runId: string) => {
+      setReadyBoneyardRunId(runId)
+      finishLoading('boneyard')
+    },
     [finishLoading],
   )
   const cancelHubLoading = useCallback(() => cancelLoading('hub'), [cancelLoading])
@@ -644,6 +648,7 @@ export default function MainMenuScene({
       ? initialSnapshot.world.runId
       : null
     loadedBoneyardRunRef.current = initialBoneyard?.runId ?? null
+    setReadyBoneyardRunId(null)
     setRuntimeSnapshot(initialSnapshot)
     setRuntimeRunPhase(initialSnapshot.run.phase)
     setRuntimeAudioScene(gameplayAudioScene(initialSnapshot))
@@ -698,6 +703,7 @@ export default function MainMenuScene({
       if (snapshot.world.kind === 'boneyard') {
         const enteringRun = activeBoneyardRunRef.current !== snapshot.world.runId
         activeBoneyardRunRef.current = snapshot.world.runId
+        if (enteringRun) setReadyBoneyardRunId(null)
         if (loadingRef.current?.flow === 'boneyard') {
           advanceLoading('materializing_participants')
         } else if (enteringRun) {
@@ -705,6 +711,7 @@ export default function MainMenuScene({
         }
       } else {
         activeBoneyardRunRef.current = null
+        setReadyBoneyardRunId(null)
         if (loadingRef.current?.flow === 'hub') {
           advanceLoading('materializing_participants')
         }
@@ -720,6 +727,7 @@ export default function MainMenuScene({
     const removeBoneyard = session.onBoneyard((nextBoneyard) => {
       const enteringRun = loadedBoneyardRunRef.current !== nextBoneyard.runId
       loadedBoneyardRunRef.current = nextBoneyard.runId
+      if (enteringRun) setReadyBoneyardRunId(null)
       setLoadedBoneyard(nextBoneyard)
       if (loadingRef.current?.flow === 'boneyard') {
         advanceLoading('reading_boneyard')
@@ -1362,6 +1370,7 @@ export default function MainMenuScene({
     setRuntimeProgression(null)
     setRuntimeAudioScene(null)
     setLoadedBoneyard(null)
+    setReadyBoneyardRunId(null)
     setGameplayPause(null)
     setGameplayResumeGrace(null)
     setHubPauseMenuOpen(false)
@@ -1527,11 +1536,18 @@ export default function MainMenuScene({
     if (
       !gameplayResumeGrace
       || gameplayResumeGrace.remainingMs !== null
-      || loading !== null
       || levelUpModalActive
+      || runtimeSnapshot?.world.kind !== 'boneyard'
+      || readyBoneyardRunId !== runtimeSnapshot.world.runId
     ) return
     session?.readyResumeGrace()
-  }, [gameplayResumeGrace, levelUpModalActive, loading, session])
+  }, [
+    gameplayResumeGrace,
+    levelUpModalActive,
+    readyBoneyardRunId,
+    runtimeSnapshot,
+    session,
+  ])
   useEffect(() => {
     if (levelUpBarrierId === null) {
       levelUpSoundBarrierRef.current = null
@@ -1743,7 +1759,7 @@ export default function MainMenuScene({
               onOpenSkills={openSkillBook}
               onUnassignQuickbarSkill={(slot) => session.bindSkillQuickbar(null, slot)}
               onPauseRequest={requestGameplayPause}
-              onReady={finishBoneyardLoading}
+              onReady={() => finishBoneyardLoading(loadedBoneyard.runId)}
               partyRoster={partyState?.partyRoster}
               progression={runtimeProgression ?? runtimeSnapshot.players[session.playerId]!.progression}
               presentationPaused={gameplayPause !== null || gameplayResumeGrace !== null}

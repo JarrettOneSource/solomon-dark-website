@@ -15,11 +15,13 @@ import {
   boneyardResidentIsVisible,
   boneyardSpectatorCameraState,
   boneyardSpectatorStatus,
+  boneyardSpectatorStatusesEqual,
   boneyardStaticTiles,
   boneyardVisibleWorldBounds,
   boneyardWorldPosition,
   type BoneyardSpectatorCameraSnapshot,
   type BoneyardSpectatorCameraState,
+  type BoneyardSpectatorStatusSnapshot,
 } from './boneyard-render-contract.ts'
 import {
   NATIVE_ENEMY_WORLD_FEEDBACK,
@@ -600,12 +602,17 @@ test('spectator follow starts after local death presentation and uses the first 
     { playerId: 'alpha', position: { x: 420, y: 430 } },
   )
   assert.deepEqual(boneyardSpectatorStatus(spectating, 'local', following), {
-    accessibleLabel: 'Spectating Alpha. Left or right click to select the next player.',
+    accessibleLabel: 'Spectating Alpha. Left or right click to select the next player. Respawn at the next wave. Wave 7 has 3 active enemies and 4 incoming enemies.',
+    activeEnemyCount: 3,
     displayText: 'Spectating Alpha  |  Left / Right click: next player',
+    incomingEnemyCount: 4,
     instruction: 'Left / Right click: next player',
+    respawnText: 'RESPAWN NEXT WAVE  |  WAVE 7  |  3 ACTIVE + 4 INCOMING',
     runId: 'run-1',
     targetPlayerId: 'alpha',
     title: 'Spectating Alpha',
+    waveOrdinal: 7,
+    wavePhase: 'spawning',
   })
 })
 
@@ -680,13 +687,74 @@ test('spectator cycling wraps living peers and lifecycle barriers clear camera a
   }, ['local'])
   state = boneyardSpectatorCameraState(waiting, 'local', state)
   assert.deepEqual(boneyardSpectatorStatus(waiting, 'local', state), {
-    accessibleLabel: 'Spectating - waiting for an alive player.',
+    accessibleLabel: 'Spectating - waiting for an alive player. Respawn at the next wave. Wave 7 has 3 active enemies and 4 incoming enemies.',
+    activeEnemyCount: 3,
     displayText: 'Spectating - waiting for an alive player',
+    incomingEnemyCount: 4,
     instruction: null,
+    respawnText: 'RESPAWN NEXT WAVE  |  WAVE 7  |  3 ACTIVE + 4 INCOMING',
     runId: 'run-1',
     targetPlayerId: null,
     title: 'Spectating - waiting for an alive player',
+    waveOrdinal: 7,
+    wavePhase: 'spawning',
   })
+})
+
+test('spectator respawn progress uses active actors, Maggots, and scheduled spawns', () => {
+  const state: BoneyardSpectatorCameraState = {
+    runId: 'run-1',
+    targetPlayerId: 'alpha',
+  }
+  const opening = spectatorSnapshot({
+    alpha: spectatorPlayer('Alpha', 'alive', 420, 430),
+    local: spectatorPlayer('Local', 'spectating', 120, 130),
+  }, ['alpha', 'local'], {
+    activeEnemies: 0,
+    incomingEnemies: 1,
+    maggots: 0,
+    waveOrdinal: 0,
+  })
+  const openingStatus = boneyardSpectatorStatus(opening, 'local', state)
+  assert.equal(
+    openingStatus?.respawnText,
+    'RESPAWN NEXT WAVE  |  OPENING  |  0 ACTIVE + 1 INCOMING',
+  )
+  assert.equal(openingStatus?.waveOrdinal, 0)
+
+  const active = spectatorSnapshot({
+    alpha: spectatorPlayer('Alpha', 'alive', 420, 430),
+    local: spectatorPlayer('Local', 'spectating', 120, 130),
+  }, ['alpha', 'local'], {
+    activeEnemies: 2,
+    incomingEnemies: 0,
+    maggots: 1,
+    waveOrdinal: 8,
+  })
+  const activeStatus = boneyardSpectatorStatus(active, 'local', state)
+  assert.equal(activeStatus?.activeEnemyCount, 3)
+  assert.equal(activeStatus?.incomingEnemyCount, 0)
+  assert.equal(
+    activeStatus?.respawnText,
+    'RESPAWN NEXT WAVE  |  WAVE 8  |  3 ACTIVE + 0 INCOMING',
+  )
+  assert.equal(boneyardSpectatorStatusesEqual(openingStatus, activeStatus), false)
+
+  const noWave = spectatorSnapshot({
+    alpha: spectatorPlayer('Alpha', 'alive', 420, 430),
+    local: spectatorPlayer('Local', 'spectating', 120, 130),
+  }, ['alpha', 'local'], {
+    activeEnemies: 1,
+    maggots: 0,
+    waves: false,
+  })
+  const noWaveStatus = boneyardSpectatorStatus(noWave, 'local', state)
+  assert.equal(noWaveStatus?.waveOrdinal, null)
+  assert.equal(noWaveStatus?.wavePhase, null)
+  assert.equal(
+    noWaveStatus?.respawnText,
+    'RESPAWN: WAITING FOR NEXT WAVE  |  1 ACTIVE',
+  )
 })
 
 test('spectator status is an atomic accessible product surface', () => {
@@ -697,6 +765,10 @@ test('spectator status is an atomic accessible product surface', () => {
   assert.match(nativeSpectatorStatus, /role="status"/)
   assert.match(nativeSpectatorStatus, /aria-live="polite"/)
   assert.match(nativeSpectatorStatus, /aria-label=\{status\.accessibleLabel\}/)
+  assert.match(nativeSpectatorStatus, /className="boneyard-spectator-respawn-status"/)
+  assert.match(nativeSpectatorStatus, /data-active-enemy-count=\{status\.activeEnemyCount\}/)
+  assert.match(nativeSpectatorStatus, /data-incoming-enemy-count=\{status\.incomingEnemyCount\}/)
+  assert.match(nativeSpectatorStatus, /text=\{status\.respawnText\}/)
   assert.match(nativeSpectatorStatus, /font=\{NATIVE_SPECTATOR_HUD_CONTRACT\.font\}/)
   assert.match(nativeSpectatorStatus, /NATIVE_SPECTATOR_HUD_CONTRACT\.panelRecords/)
   assert.doesNotMatch(boneyardStyles, /font: 20px 'IM FELL English'/)
@@ -709,6 +781,7 @@ test('spectator status uses the MP product panel, font, tint, and normalized geo
   )
   assert.equal(NATIVE_SPECTATOR_HUD_CONTRACT.font, 'medium')
   assert.equal(NATIVE_SPECTATOR_HUD_CONTRACT.tint, 0xffe68c)
+  assert.equal(NATIVE_SPECTATOR_HUD_CONTRACT.respawnPanelGap, 8)
   assert.deepEqual(NATIVE_SPECTATOR_HUD_CONTRACT.textOffset, { x: 18, y: 20 })
 
   const layout = nativeSpectatorHudLayout({ height: 900, width: 1_600 })
@@ -963,13 +1036,34 @@ function spectatorPlayer(
 function spectatorSnapshot(
   players: BoneyardSpectatorCameraSnapshot['players'],
   eligiblePlayerIds: readonly string[],
-): BoneyardSpectatorCameraSnapshot {
+  progress: Readonly<{
+    activeEnemies?: number
+    incomingEnemies?: number
+    maggots?: number
+    waveOrdinal?: number
+    waves?: boolean
+  }> = {},
+): BoneyardSpectatorStatusSnapshot {
+  const activeEnemies = progress.activeEnemies ?? 2
+  const incomingEnemies = progress.incomingEnemies ?? 4
+  const maggots = progress.maggots ?? 1
+  const waveOrdinal = progress.waveOrdinal ?? 7
   return {
     players,
     run: {
       eligiblePlayerIds,
       phase: 'active',
       runId: 'run-1',
+    },
+    world: {
+      enemies: Array.from({ length: activeEnemies }, () => ({})),
+      kind: 'boneyard',
+      maggots: Array.from({ length: maggots }, () => ({})),
+      waves: progress.waves === false ? null : {
+        pendingSpawnBudget: incomingEnemies,
+        phase: 'spawning',
+        waveOrdinal,
+      },
     },
   }
 }
