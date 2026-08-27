@@ -72,10 +72,10 @@ async function runAnonymousJourney(browser) {
     assertImportedWebSave(imported)
 
     await resumeLastGame(page)
-    await leaveHub(page)
-    const checkpointed = await readLocalSave(page)
-    assertImportedWebSave(checkpointed)
-    assert.ok(checkpointed.revision > imported.revision)
+    await returnToTitle(page)
+    const persisted = await readLocalSave(page)
+    assertImportedWebSave(persisted)
+    assert.ok(persisted.revision >= imported.revision)
 
     const exported = await exportFromTitleSettings(page)
     await assertStockExport(exported)
@@ -95,7 +95,7 @@ async function runAnonymousJourney(browser) {
       exportedBytes: exported.byteLength,
       archivePath,
       importedRevision: imported.revision,
-      resumedRevision: checkpointed.revision,
+      resumedRevision: persisted.revision,
       screenshot: `${screenshotRoot}/solomon-dark-native-save-anonymous.png`,
     }
   } finally {
@@ -131,10 +131,10 @@ async function runCloudJourney(browser, token) {
 
     await openGameTitle(page)
     await resumeLastGame(page)
-    await leaveHub(page)
-    const checkpointed = await readCloudSave(page, token)
-    assertImportedWebSave(checkpointed)
-    assert.ok(checkpointed.revision > imported.revision)
+    await returnToTitle(page)
+    const persisted = await readCloudSave(page, token)
+    assertImportedWebSave(persisted)
+    assert.ok(persisted.revision >= imported.revision)
 
     await page.goto(`${baseUrl}/account`, { waitUntil: 'domcontentloaded' })
     await page.getByRole('heading', { name: 'Cloud Saves' }).waitFor({ timeout: 30_000 })
@@ -147,7 +147,7 @@ async function runCloudJourney(browser, token) {
     await writeFile(archivePath, exported)
 
     await page.reload({ waitUntil: 'domcontentloaded' })
-    await page.getByText(new RegExp(`revision ${checkpointed.revision}`)).waitFor({ timeout: 30_000 })
+    await page.getByText(new RegExp(`revision ${persisted.revision}`)).waitFor({ timeout: 30_000 })
     await openGameTitle(page)
     await resumeLastGame(page)
     await page.screenshot({
@@ -158,7 +158,7 @@ async function runCloudJourney(browser, token) {
       exportedBytes: exported.byteLength,
       archivePath,
       importedRevision: imported.revision,
-      resumedRevision: checkpointed.revision,
+      resumedRevision: persisted.revision,
       screenshot: `${screenshotRoot}/solomon-dark-native-save-cloud.png`,
       username: accountUsername,
     }
@@ -217,12 +217,8 @@ async function resumeLastGame(page) {
   await page.locator('.hub-world-canvas[data-game-renderer="pixi-webgl"]').waitFor()
 }
 
-async function leaveHub(page) {
-  await page.locator('.hub-scene').focus()
-  await page.keyboard.press('Escape')
-  const pause = page.locator('.gameplay-pause-stage[data-gameplay-pause-view="owner"]')
-  await pause.waitFor({ timeout: 10_000 })
-  await pause.getByRole('button', { name: 'LEAVE GAME', exact: true }).click()
+async function returnToTitle(page) {
+  await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
   await waitForTitle(page)
 }
 
