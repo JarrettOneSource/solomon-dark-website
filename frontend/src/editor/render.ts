@@ -113,6 +113,11 @@ export const STAGE_TEXTURES: string[] = [
   ...FENCE_POST_ART.flatMap((ref) => (ref ? [ref.src] : [])),
 ]
 
+export const NATIVE_BONEYARD_POST_ROAD_TEXTURES: readonly string[] = [
+  ...TERRAIN_TEXTURES,
+  FENCE_GRATE_TEXTURE,
+]
+
 interface SpriteDrawable {
   sel: SelEntry
   img: HTMLImageElement | null
@@ -628,6 +633,35 @@ export function drawNativeBoneyardBase(
     { selected: EMPTY_SET, hover: null, showGrid: false },
     skip.size > 0 ? skip : undefined,
     true,
+    gateOverrideMap(gateLeaves),
+    'runtime-base',
+  )
+}
+
+export function drawNativeBoneyardPostRoadBase(
+  ctx: CanvasRenderingContext2D,
+  cssW: number,
+  cssH: number,
+  cam: Camera,
+  doc: EditorDoc,
+  gateLeaves: readonly NativeGateLeafOverride[] = [],
+  skip: ReadonlySet<string> = EMPTY_SET,
+) {
+  ctx.clearRect(0, 0, cssW, cssH)
+  ctx.imageSmoothingEnabled = cam.zoom < 1
+  const view = visibleWorld(cam, cssW, cssH, 256)
+  for (const terrain of doc.terrain) {
+    if (skip.has(`terrain:${terrain.eid}`)) continue
+    if (terrain.points && terrain.points.length >= 2 && !lineInView(terrain.points, view)) continue
+    drawTerrain(ctx, terrain, cam, cssW, cssH, false, false)
+  }
+  paintPlacementPasses(
+    ctx,
+    doc,
+    cam,
+    cssW,
+    cssH,
+    skip.size > 0 ? { skip } : undefined,
     gateOverrideMap(gateLeaves),
     'runtime-base',
   )

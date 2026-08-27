@@ -18,6 +18,11 @@ export interface NativeStarterEquipmentAppearance {
   readonly secondaryTint: number
 }
 
+export const NATIVE_TUTORIAL_EQUIPMENT_APPEARANCE = Object.freeze({
+  primaryTint: 0xc4915e,
+  secondaryTint: 0xffffff,
+})
+
 const NATIVE_STARTER_JITTER_MAXIMUM = Math.fround(0.1)
 const NATIVE_STARTER_LUMINANCE_MIX = Math.fround(0.800000011920929)
 const NATIVE_STARTER_CHANNEL_MIX = Math.fround(0.19999998807907104)

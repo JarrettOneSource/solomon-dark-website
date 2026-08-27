@@ -644,7 +644,7 @@ test('global Hub rejects modded and cheats-on admissions before player ownership
   assert.equal(host.capacityParticipantCount(), 0)
 })
 
-test('a requested fresh College admission is authoritative through Office and checkpoints once settled', async (context) => {
+test('College confirmation checkpoints completion before the ordinary Courtyard return', async (context) => {
   const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
   context.after(() => host.close())
   const client = await join(
@@ -727,13 +727,14 @@ test('a requested fresh College admission is authoritative through Office and ch
     loadout.snapshot.players[client.welcome.playerId].position,
     { x: 952.5, y: 67.5 },
   )
-  client.socket.send(encodeGameMessage({
-    type: 'client-confirm-loadout',
-    discipline: 'body',
-    displayName: 'Reborn',
-    element: 'air',
-  }))
-
+  const completedMessage = nextMessage(client.socket, (message) => (
+    message.type === 'server-snapshot'
+    && message.snapshot.world.kind === 'hub'
+    && message.snapshot.world.participants[client.welcome.playerId]?.transition?.phase
+      === 'incoming'
+    && message.snapshot.players[client.welcome.playerId].economy.collegeIntroPending === false
+    && message.snapshot.players[client.welcome.playerId].economy.tutorialPending === false
+  ))
   const settledMessage = nextMessage(client.socket, (message) => (
     message.type === 'server-snapshot'
     && message.snapshot.world.kind === 'hub'
@@ -744,7 +745,18 @@ test('a requested fresh College admission is authoritative through Office and ch
     message.type === 'server-save-checkpoint'
     && restoreGameSaveProfile(message.save).economy.collegeIntroPending === false
   ))
-  const [settled, checkpoint] = await Promise.all([settledMessage, checkpointMessage])
+  client.socket.send(encodeGameMessage({
+    type: 'client-confirm-loadout',
+    discipline: 'body',
+    displayName: 'Reborn',
+    element: 'air',
+  }))
+  const [completed, settled, checkpoint] = await Promise.all([
+    completedMessage,
+    settledMessage,
+    checkpointMessage,
+  ])
+  assert.equal(completed.type, 'server-snapshot')
   assert.equal(settled.type, 'server-snapshot')
   assert.deepEqual(
     settled.snapshot.players[client.welcome.playerId].position,

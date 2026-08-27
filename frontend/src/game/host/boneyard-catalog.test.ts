@@ -51,6 +51,11 @@ test('native default bank contains distinct exact materializations and Solomon D
     assert.equal(dig.ticksPerFrame, 5)
     assert.equal('recipes' in template.scene, false)
     assert.equal('timeline' in template.scene, false)
+    assert.ok(template.scene.roads.every((road) => (
+      Number.isInteger(road.linkMask) && road.linkMask >= 0 && road.linkMask <= 3
+    )))
+    assert.ok(template.scene.roads.some((road) => road.linkMask === 2))
+    assert.ok(template.scene.roads.some((road) => road.linkMask === 1))
   }
 
   const loaded = materializeBoneyard(

@@ -38,6 +38,7 @@ export interface BoneyardSprite {
 
 export interface BoneyardRoad {
   eid: string
+  linkMask: 0 | 1 | 2 | 3
   typeId: number
   points: readonly BoneyardPoint[]
   style?: number

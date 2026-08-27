@@ -19,12 +19,12 @@ import {
 import { NATIVE, type EditorDoc, type SpriteRef, type Vec2 } from '../../editor/model.ts'
 import type { MainLayer, ObjectSpriteLayer } from '../../editor/native-render-plan.ts'
 import {
-  drawNativeBoneyardBase,
   drawNativeBoneyardForegroundBand,
   drawNativeBoneyardMainBand,
+  drawNativeBoneyardPostRoadBase,
+  NATIVE_BONEYARD_POST_ROAD_TEXTURES,
   nativeBoneyardForegroundLayers,
   nativeBoneyardMainLayers,
-  STAGE_TEXTURES,
   type Camera,
 } from '../../editor/render.ts'
 import {
@@ -112,6 +112,10 @@ import {
   loadBoneyardWorldTextures,
   type BoneyardWorldTextures,
 } from './boneyard-textures.ts'
+import {
+  NativeBoneyardSurfaceView,
+  type NativeBoneyardSurfaceTextures,
+} from './native-boneyard-surface-view.ts'
 import {
   NATIVE_REGION_LIGHT_COMPOSITE_Z_INDEX,
   NativeBoneyardLightIndex,
@@ -385,6 +389,7 @@ interface BoneyardRendererFrameDiagnostics {
   solomonDirtX: number
   solomonDirtY: number
   solomonFrame: number
+  solomonGraveMarkPassCount: number
   staticLayerCount: number
   staticPaintCount: number
   tick: number
@@ -492,6 +497,7 @@ interface StaticWorldBuild {
   retiredStaticSourceCount: number
   shadowCasters: readonly BoneyardComplexShadowStaticCaster[]
   staticPaintCount: number
+  surface: NativeBoneyardSurfaceView
   treeInputs: readonly NativeTreeOcclusionInput[]
   treeResidents: ReadonlyMap<string, TreeResidents>
 }
@@ -603,7 +609,11 @@ export async function createBoneyardWorldRenderer(
   try {
     staticWorld = await buildStaticWorld(
       document,
+      options.boneyard.scene,
       world,
+      {
+        roads: textures.roads,
+      },
       options.initialSnapshot.world.kind === 'boneyard'
         ? options.initialSnapshot.world.arenaTransition?.combatBounds
           ?? (options.initialSnapshot.world.tutorial === null
@@ -669,6 +679,7 @@ export async function createBoneyardWorldRenderer(
   canvas.dataset.gameRenderer = 'pixi-webgl'
   canvas.dataset.arenaSaturation = 'native-fragment-0.65'
   canvas.dataset.arenaTextureAlpha = 'mixed-native-unpremultiplied'
+  canvas.dataset.arenaBaseRenderer = 'opaque-black-clear+native-layout'
   canvas.dataset.buildingLighting = 'native-elevated-vertex-grid'
   canvas.dataset.buildingLightingGrid = NATIVE_BROWSER_ENHANCED_EFFECTS ? '3x3' : '2x2'
   canvas.dataset.complexShadows = 'native-indexed-owner-mesh'
@@ -678,6 +689,11 @@ export async function createBoneyardWorldRenderer(
   canvas.dataset.regionLightComposite = 'multiply-pre-main'
   canvas.dataset.regionLightEntry = 'DeadHawg:18'
   canvas.dataset.regionLighting = 'native-region-field+object-scalar'
+  canvas.dataset.roadActiveMeshCount = `${staticWorld.surface.activeRoadMeshCount}`
+  canvas.dataset.roadIndexCount = `${staticWorld.surface.roadIndexCount}`
+  canvas.dataset.roadMeshCount = `${staticWorld.surface.roadMeshCount}`
+  canvas.dataset.roadRenderer = 'native-indexed-owner-mesh'
+  canvas.dataset.roadVertexCount = `${staticWorld.surface.roadVertexCount}`
   canvas.dataset.staticCulling = 'exact-world-bounds'
   canvas.dataset.staticOffCameraCleanup = 'pending'
   canvas.dataset.staticPaintCount = `${staticWorld.staticPaintCount}`
@@ -804,6 +820,7 @@ export async function createBoneyardWorldRenderer(
     solomonDirtX: Number.NaN,
     solomonDirtY: Number.NaN,
     solomonFrame: 0,
+    solomonGraveMarkPassCount: 0,
     staticLayerCount: mainLayers.length,
     staticPaintCount: staticWorld.staticPaintCount,
     tick: options.initialSnapshot.tick,
@@ -1287,6 +1304,7 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.solomonDirtX = solomonDirt?.state.position.x ?? Number.NaN
       frameDiagnostics.solomonDirtY = solomonDirt?.state.position.y ?? Number.NaN
       frameDiagnostics.solomonFrame = scene.solomonFrame
+      frameDiagnostics.solomonGraveMarkPassCount = scene.solomonGraveMarkPassCount
       frameDiagnostics.tick = snapshot.tick
       frameDiagnostics.treeAlphaMismatchCount = painter.treeAlphaMismatchCount
       frameDiagnostics.treeCount = painter.treeCount
@@ -1298,6 +1316,7 @@ export async function createBoneyardWorldRenderer(
       canvas.dataset.staticOffCameraCleanup = currentStaticWorld.offCameraCleanupApplied
         ? 'applied'
         : 'pending'
+      canvas.dataset.roadActiveMeshCount = `${currentStaticWorld.surface.activeRoadMeshCount}`
       frameDiagnostics.weatherDropCount = scene.weatherDropCount
       frameDiagnostics.weatherMode = scene.weatherMode
       frameDiagnostics.weatherSplashCount = scene.weatherSplashCount
@@ -1341,6 +1360,7 @@ export async function createBoneyardWorldRenderer(
       canvas.dataset.worldShakeX = `${worldShake.x}`
       canvas.dataset.worldShakeY = `${worldShake.y}`
       canvas.dataset.secondaryScreenFlashAlpha = `${screenOverlay?.alpha ?? 0}`
+      canvas.dataset.solomonGraveMarkPassCount = `${scene.solomonGraveMarkPassCount}`
       canvas.dataset.weatherDropCount = `${scene.weatherDropCount}`
       canvas.dataset.weatherMode = `${scene.weatherMode}`
       canvas.dataset.weatherSplashCount = `${scene.weatherSplashCount}`
@@ -1415,6 +1435,7 @@ export async function createBoneyardWorldRenderer(
       scene.destroy()
       regionLightField.destroy()
       secondaryScreenFlash.destroy()
+      staticWorld?.surface.destroy()
       for (const resident of staticWorld?.residents ?? []) destroyResidentTexture(resident)
       staticWorld = null
       world.destroy({ children: true })
@@ -2376,13 +2397,6 @@ class BoneyardDynamicScene {
       })
     }
     if (dig) {
-      dynamicLayers.push({
-        id: 'solomon-grave',
-        queueFamily: 'ordinary-dynamic',
-        worldY: dig.position.y,
-        sortBias: 0,
-        sourceOrder: dynamicLayers.length,
-      })
       if (snapshot.world.encounter?.phase !== 'gone') {
         dynamicLayers.push({
           id: 'solomon-actor',
@@ -2554,7 +2568,6 @@ class BoneyardDynamicScene {
         positionedDynamics.get(`maggot:${maggot.id}`)?.zIndex ?? 1,
       )
     }
-    this.solomon?.setGraveDepth(positionedDynamics.get('solomon-grave')?.zIndex ?? 1)
     this.solomon?.setActorDepth(positionedDynamics.get('solomon-actor')?.zIndex ?? 1)
     this.solomon?.setLanternDepth(positionedDynamics.get('lantern')?.zIndex ?? 1)
     this.foreground.zIndex = order.foregroundZIndex
@@ -2761,6 +2774,10 @@ class BoneyardDynamicScene {
     return this.solomon?.frame ?? 0
   }
 
+  get solomonGraveMarkPassCount(): number {
+    return this.solomon?.graveMarkPassCount ?? 0
+  }
+
   get solomonDirtCount(): number {
     return this.solomon?.dirtCount ?? 0
   }
@@ -2806,11 +2823,10 @@ class BoneyardSolomonView {
   private readonly dirtRoot = new Container({ label: 'solomon-flydirt' })
   private readonly dirtViews = new Map<number, BoneyardSolomonDirtView>()
   private readonly digState: SolomonDigState
-  private readonly graveDirt: Sprite
+  private readonly graveMark: Sprite
   private readonly lantern: Sprite
   private readonly mouth: Sprite
   private readonly root: Container
-  private readonly shadow: Sprite
   private readonly textures: BoneyardWorldTextures
   private currentFrame = 2
   private lastDigEventId: number | null = null
@@ -2824,11 +2840,6 @@ class BoneyardSolomonView {
     this.root = root
     this.textures = textures
     this.digState = state
-    this.graveDirt = new Sprite(textures.graveDirt)
-    this.graveDirt.position.set(
-      state.gravePosition.x - 16,
-      state.gravePosition.y + 105,
-    )
     this.lantern = new Sprite(textures.lantern)
     this.lantern.position.set(
       state.lanternPosition.x - 14.5,
@@ -2840,22 +2851,23 @@ class BoneyardSolomonView {
     this.mouth.anchor.set(0.5)
     this.mouth.zIndex = 1
     this.mouth.visible = false
-    this.dirtRoot.zIndex = 2
-    this.shadow = plantedSprite(
-      textures.solomonShadow,
+    this.graveMark = plantedSprite(
+      textures.solomonGraveMark,
       requiredSpriteRef(13),
       { x: -10, y: -113 },
     )
+    this.graveMark.zIndex = 2
+    this.dirtRoot.zIndex = 3
     this.actorRoot.position.set(state.position.x, state.position.y)
     this.actorRoot.sortableChildren = true
     this.actorRoot.addChild(
-      this.shadow,
       this.body,
       this.mouth,
+      this.graveMark,
       this.clipMask,
       this.dirtRoot,
     )
-    root.addChild(this.graveDirt, this.actorRoot, this.lantern)
+    root.addChild(this.actorRoot, this.lantern)
   }
 
   update(encounter: BoneyardSolomonSnapshot | null, tick: number): void {
@@ -2874,7 +2886,7 @@ class BoneyardSolomonView {
       this.mouth.mask = null
       this.clipMask.clear()
       this.mouth.visible = false
-      this.shadow.visible = true
+      this.graveMark.visible = true
       return
     }
     this.updateDirt(encounter, tick)
@@ -2899,7 +2911,7 @@ class BoneyardSolomonView {
       this.body.mask = this.clipMask
       this.mouth.mask = this.clipMask
     }
-    this.shadow.visible = visual.shadowVisible
+    this.graveMark.visible = visual.graveMarkVisible
     if (visual.bodyBank === 'dig') {
       this.body.texture = this.textures.solomonDig[visual.bodyPose]
     } else if (visual.bodyBank === 'dialogue') {
@@ -2925,6 +2937,10 @@ class BoneyardSolomonView {
     return this.dirtViews.size * NATIVE_SOLOMON_DIRT_DRAW_PASSES
   }
 
+  get graveMarkPassCount(): number {
+    return Number(this.actorRoot.visible && this.graveMark.visible)
+  }
+
   get dirt(): Readonly<{
     eventId: number
     state: NativeSolomonDirtState
@@ -2945,16 +2961,13 @@ class BoneyardSolomonView {
     this.actorRoot.renderable = renderable
   }
 
-  setGraveDepth(depth: number): void {
-    this.graveDirt.zIndex = depth
-  }
-
   setLanternDepth(depth: number): void {
     this.lantern.zIndex = depth
   }
 
   setLighting(lighting: NativeSolomonSetPieceLighting): void {
     this.body.tint = lighting.digRootTint
+    this.graveMark.tint = lighting.digRootTint
     this.dirtRoot.tint = lighting.dirtTint
     this.mouth.tint = lighting.digRootTint
     this.lantern.tint = lighting.lanternTint
@@ -2962,8 +2975,7 @@ class BoneyardSolomonView {
 
   destroy(): void {
     this.clearDirt()
-    this.root.removeChild(this.graveDirt, this.actorRoot, this.lantern)
-    this.graveDirt.destroy()
+    this.root.removeChild(this.actorRoot, this.lantern)
     this.actorRoot.destroy({ children: true })
     this.lantern.destroy()
   }
@@ -3180,7 +3192,9 @@ function drawGateLines(graphics: Graphics, leaf: NativeGateLeaf): void {
 
 async function buildStaticWorld(
   document: EditorDoc,
+  scene: LoadedBoneyard['scene'],
   root: Container,
+  surfaceTextures: NativeBoneyardSurfaceTextures,
   cleanupBounds: Readonly<BoneyardBounds> | null,
 ): Promise<StaticWorldBuild> {
   const base = new Container({ label: 'boneyard-base' })
@@ -3201,6 +3215,7 @@ async function buildStaticWorld(
   const treeInputs: NativeTreeOcclusionInput[] = []
   const treeResidents = new Map<string, TreeResidents>()
   const residentScratch = documentNodeCanvas(0, 0)
+  const surface = new NativeBoneyardSurfaceView(base, scene, surfaceTextures)
   let staticPaintCount = 0
   let fullBaseResidents: ResidentTexture[] = []
   let cleanupPlan: ReturnType<typeof boneyardOffCameraCleanupPlan> | null = null
@@ -3208,9 +3223,9 @@ async function buildStaticWorld(
     fullBaseResidents = await buildTiledStaticLayer(
       document,
       base,
-      false,
+      true,
       (context, width, height, camera) => {
-        drawNativeBoneyardBase(context, width, height, camera, document)
+        drawNativeBoneyardPostRoadBase(context, width, height, camera, document)
         staticPaintCount += 1
       },
     )
@@ -3338,10 +3353,12 @@ async function buildStaticWorld(
       )
     }
   } catch (error) {
+    surface.destroy()
     for (const resident of residents) destroyResidentTexture(resident)
     throw error
   }
   if (buildingResidents.size !== buildingMainResidents.size) {
+    surface.destroy()
     for (const resident of residents) destroyResidentTexture(resident)
     throw new Error('A native Building main resident has no roof resident.')
   }
@@ -3353,6 +3370,7 @@ async function buildStaticWorld(
         || cleanupPlan === null
       ) return
       repaintCleanedBase(document, fullBaseResidents, cleanupPlan.retiredSourceKeys)
+      surface.applyOffCameraCleanup(cleanupPlan.retiredSourceKeys)
       let retiredStaticResidentCount = 0
       const retainedResidents = activeResidents.filter((resident) => {
         const retired = resident.cleanupSourceKey !== null
@@ -3380,6 +3398,7 @@ async function buildStaticWorld(
     retiredStaticSourceCount: 0,
     shadowCasters,
     staticPaintCount,
+    surface,
     treeInputs,
     treeResidents,
   }
@@ -3394,12 +3413,12 @@ function repaintCleanedBase(
   const canvas = documentNodeCanvas(0, 0)
   for (const resident of residents) {
     resizeCanvas(canvas, resident.w, resident.h)
-    const context = canvas.getContext('2d', { alpha: false })
+    const context = canvas.getContext('2d', { alpha: true })
     if (context === null) {
       throw new Error('Boneyard cleanup base could not reacquire Canvas2D.')
     }
     try {
-      drawNativeBoneyardBase(
+      drawNativeBoneyardPostRoadBase(
         context,
         resident.w,
         resident.h,
@@ -3754,7 +3773,10 @@ function editorDocument(loaded: LoadedBoneyard): EditorDoc {
 }
 
 async function loadStaticPainterImages(): Promise<void> {
-  await Promise.all([...new Set([...BONEYARD_SPRITE_SOURCES, ...STAGE_TEXTURES])]
+  await Promise.all([...new Set([
+    ...BONEYARD_SPRITE_SOURCES,
+    ...NATIVE_BONEYARD_POST_ROAD_TEXTURES,
+  ])]
     .map(loadStaticPainterImage))
 }
 

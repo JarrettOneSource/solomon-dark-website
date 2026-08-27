@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import { NATIVE_TUTORIAL_EQUIPMENT_APPEARANCE } from './native-starter-equipment.ts'
+
 import {
   NATIVE_TUTORIAL_AMULET_DESCRIPTION,
   NATIVE_TUTORIAL_AMULET_IDENTITY,
@@ -165,6 +167,13 @@ test('locks the complete stock Tutorial authored membership', () => {
     ...amulet,
     nativeEffects: [{ kind: 2, magnitude: 9, operator: 2, target: 0 }],
   }), false)
+})
+
+test('keeps Sirmin tan while the independent Ether Staff effect remains purple', () => {
+  assert.deepEqual(NATIVE_TUTORIAL_EQUIPMENT_APPEARANCE, {
+    primaryTint: 0xc4915e,
+    secondaryTint: 0xffffff,
+  })
 })
 
 test('starts the exact two five-skeleton opening groups when Solomon runs', () => {

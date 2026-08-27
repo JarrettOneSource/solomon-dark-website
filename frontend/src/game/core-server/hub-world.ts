@@ -115,6 +115,49 @@ interface RegionPhysicsBody extends ActorPhysicsBody {
   region: HubRegionId
 }
 
+interface HubActorPairMember {
+  readonly id: string
+  readonly region: HubRegionId
+}
+
+export function hubParticipantOnboardingCollisionBypassActive(
+  participant: Readonly<HubParticipantState>,
+  collegeIntroPending: boolean,
+): boolean {
+  if (!collegeIntroPending) return false
+  if (participant.collegeIntro !== null) return true
+  if (participant.region === 'office') return true
+  return participant.transition?.phase === 'college-loadout'
+}
+
+export function hubDynamicActorPairCollides(
+  mover: Readonly<HubActorPairMember>,
+  other: Readonly<HubActorPairMember>,
+  onboardingPlayerIds: ReadonlySet<string>,
+  collegeIntroPendingPlayerIds: ReadonlySet<string> | null,
+): boolean {
+  if (mover.region !== other.region) return false
+  if (mover.id === 'story-office-polisher' || other.id === 'story-office-polisher') {
+    const playerBody = mover.id.startsWith('player-') ? mover : other
+    if (!playerBody.id.startsWith('player-')) return false
+    return collegeIntroPendingPlayerIds?.has(playerBody.id.slice('player-'.length)) === true
+  }
+  const onboardingBody = mover.id.startsWith('player-')
+      && onboardingPlayerIds.has(mover.id.slice('player-'.length))
+    ? mover
+    : other.id.startsWith('player-')
+      && onboardingPlayerIds.has(other.id.slice('player-'.length))
+      ? other
+      : null
+  if (onboardingBody !== null) {
+    const counterpart = onboardingBody === mover ? other : mover
+    if (counterpart.id.startsWith('player-') || counterpart.id.startsWith('student-')) {
+      return false
+    }
+  }
+  return true
+}
+
 function fixedActor(
   id: string,
   region: HubRegionId,
@@ -397,6 +440,14 @@ export function stepHubWorldTick(
     ))
   }
   for (const body of bodies) bodyRegions.set(body.id, body.region)
+  const onboardingCollisionBypassPlayerIds = new Set(
+    Object.entries(participants).flatMap(([playerId, participant]) => (
+      hubParticipantOnboardingCollisionBypassActive(
+        participant,
+        collegeIntroPendingPlayerIds?.has(playerId) === true,
+      ) ? [playerId] : []
+    )),
+  )
 
   let collisionRngState = world.collisionRngState
   const moveStatic = (
@@ -434,15 +485,12 @@ export function stepHubWorldTick(
         return moveStatic(region, position, delta, radius)
       },
     },
-    (mover, other) => {
-      if (mover.id === 'story-office-polisher' || other.id === 'story-office-polisher') {
-        const playerBody = mover.id.startsWith('player-') ? mover : other
-        if (!playerBody.id.startsWith('player-')) return false
-        return collegeIntroPendingPlayerIds?.has(playerBody.id.slice('player-'.length))
-          === true
-      }
-      return bodyRegions.get(mover.id) === bodyRegions.get(other.id)
-    },
+    (mover, other) => hubDynamicActorPairCollides(
+      { id: mover.id, region: bodyRegions.get(mover.id)! },
+      { id: other.id, region: bodyRegions.get(other.id)! },
+      onboardingCollisionBypassPlayerIds,
+      collegeIntroPendingPlayerIds,
+    ),
     runtime.actorGrid,
   )
   const positions = runtime.positions

@@ -251,7 +251,6 @@ import animSolomonDig from '../assets/game/anim-solomon-dig.png'
 import solomonFlydirt from '../assets/game/solomon-flydirt.png'
 import boneyardDarknessRadial from '../assets/game/boneyard/deadhawg/009.png'
 import boneyardDarknessAperture from '../assets/game/boneyard/deadhawg/018.png'
-import boneyardGraveDirt from '../assets/game/boneyard/deadhawg/013.png'
 import boneyardLantern from '../assets/game/boneyard/badguys/0034.png'
 import boneyardLevelUpSparkle from '../assets/game/boneyard/badguys/0073.png'
 import solomonStand from '../assets/game/solomon-stand.png'
@@ -764,7 +763,6 @@ export const gameSettings = {
 export const boneyard = {
   darknessAperture: boneyardDarknessAperture,
   darknessRadial: boneyardDarknessRadial,
-  graveDirt: boneyardGraveDirt,
   lantern: boneyardLantern,
   levelUpSparkle: boneyardLevelUpSparkle,
   solomonDig: animSolomonDig,

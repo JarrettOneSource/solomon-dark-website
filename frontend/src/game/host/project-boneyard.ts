@@ -36,10 +36,7 @@ export function projectBoneyard(doc: BoneyardDoc): BoneyardScene {
     sprites: doc.sprites.map((sprite) => compact(sprite, [
       'eid', 'atlasEntry', 'deadHawgEntry', 'pos', 's0', 's1', 's2', 'flags',
     ])),
-    roads: doc.roads.map((road) => compact(road, [
-      'eid', 'typeId', 'points', 'style', 'startWidthScale', 'endWidthScale',
-      'quad',
-    ])),
+    roads: doc.roads.map(projectRoad),
     fences: doc.fences.map(projectFence),
     terrain: doc.terrain.map((terrain) => compact(terrain, [
       'eid', 'pos', 'points', 'style', 'entry',
@@ -47,6 +44,19 @@ export function projectBoneyard(doc: BoneyardDoc): BoneyardScene {
     solomonDig: null,
   } as unknown as BoneyardScene
   return materializeOpeningSolomonSetPiece(scene)
+}
+
+function projectRoad(road: BoneyardDoc['roads'][number]): Record<string, unknown> {
+  return compact({
+    ...road,
+    linkMask: (
+      (road.previousUid !== undefined && road.previousUid !== 0xffffffff ? 1 : 0)
+      | (road.nextUid !== undefined && road.nextUid !== 0xffffffff ? 2 : 0)
+    ),
+  }, [
+    'eid', 'typeId', 'points', 'style', 'startWidthScale', 'endWidthScale',
+    'quad', 'linkMask',
+  ])
 }
 
 function projectFence(fence: BoneyardDoc['fences'][number]): Record<string, unknown> {

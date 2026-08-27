@@ -12,7 +12,7 @@ export interface BoneyardSolomonVisualState {
   nativeBodyRecord: number
   nativeMouthRecord: number | null
   offsetY: number
-  shadowVisible: boolean
+  graveMarkVisible: boolean
   visible: boolean
 }
 
@@ -49,7 +49,7 @@ export function boneyardSolomonVisualState(
       nativeBodyRecord: DIG_RECORD + bodyPose,
       nativeMouthRecord: null,
       offsetY: encounter.digBodyOffsetY,
-      shadowVisible: true,
+      graveMarkVisible: true,
       visible: true,
     }
   }
@@ -67,7 +67,7 @@ export function boneyardSolomonVisualState(
         + encounter.mouthPose * DIRECTION_COUNT
         + direction,
       offsetY: encounter.transitionOffsetY + encounter.motion,
-      shadowVisible: true,
+      graveMarkVisible: true,
       visible: true,
     }
   }
@@ -96,7 +96,7 @@ export function boneyardSolomonVisualState(
     nativeBodyRecord: WALK_RECORD + direction,
     nativeMouthRecord: null,
     offsetY: 0,
-    shadowVisible: false,
+    graveMarkVisible: false,
     visible: false,
   }
 }
@@ -116,7 +116,7 @@ function walkVisual(
     nativeBodyRecord: WALK_RECORD + bodyPose * DIRECTION_COUNT + direction,
     nativeMouthRecord: null,
     offsetY,
-    shadowVisible: false,
+    graveMarkVisible: false,
     visible: true,
   }
 }

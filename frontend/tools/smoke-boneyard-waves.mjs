@@ -130,6 +130,7 @@ try {
   assert.equal(initial.wavePhase, 'dormant')
   assert.equal(initial.liveEnemies, 0)
   assert.equal(initialFrame.offCameraCleanupApplied, false)
+  assert.equal(initialFrame.solomonGraveMarkPassCount, 1)
   assert.equal(initialFrame.retiredStaticResidentCount, 0)
   assert.equal(initialFrame.retiredStaticSourceCount, 0)
   const loadedBoneyard = await waitForWireValue(
@@ -141,6 +142,7 @@ try {
   )
   assert.ok(loadedBoneyard?.scene?.solomonDig, 'expected the loaded Solomon Dig scene')
   assert.equal(loadedBoneyard.seed, expectedBoneyardSeed)
+  const surface = await boneyardSurfaceReceipt(page, loadedBoneyard.scene)
   const digAudio = await captureSolomonDigAudio(page)
   const combatNavigation = {
     bounds: loadedBoneyard.scene.bounds,
@@ -172,6 +174,8 @@ try {
   await installSolomonSpeakingProbe(page)
   const approach = await walkToSolomon(page, scene, loadedBoneyard.scene)
   assert.notEqual(approach.phase, 'digging')
+  const speakingGraveMarkPassCount = (await boneyardFrame(page)).solomonGraveMarkPassCount
+  assert.equal(speakingGraveMarkPassCount, 1)
   const digAudioEventIdAtContact = Number(
     await scene.getAttribute('data-solomon-dig-audio-event-id'),
   )
@@ -211,6 +215,7 @@ try {
   for (const key of escapeKeys) await page.keyboard.down(key)
   let opening
   let runEdge
+  let runEdgeGraveMarkPassCount
   try {
     await page.waitForFunction(() => (
       Number(document.querySelector('.boneyard-scene')
@@ -218,6 +223,8 @@ try {
     ), undefined, { timeout: 15_000 })
     runEdge = await encounterReceipt(scene)
     assert.ok(runEdge.phase === 'escaping' || runEdge.phase === 'gone')
+    runEdgeGraveMarkPassCount = (await boneyardFrame(page)).solomonGraveMarkPassCount
+    assert.equal(runEdgeGraveMarkPassCount, 0)
     assert.equal(runEdge.combatEnabled, true)
     await page.screenshot({ path: screenshotPath })
     await page.waitForFunction((requiredLiveEnemies) => {
@@ -305,12 +312,16 @@ try {
       chillArrowScreenshotPath,
       retiredEntryScreenshotPath,
       runCombatAdmission,
+      initialGraveMarkPassCount: initialFrame.solomonGraveMarkPassCount,
+      speakingGraveMarkPassCount,
+      runEdgeGraveMarkPassCount,
       speakingCombatAdmission,
       screenshotPath: staffMeleeOnly
         ? staffMeleeScreenshotPath
         : chillArrowOnly ? chillArrowScreenshotPath : combatScreenshotPath,
       staffMelee,
       status: 'ok',
+      surface,
       wire: wireSummary(wire),
     })}\n`)
   } else {
@@ -474,6 +485,7 @@ try {
     speakingCombatAdmission,
     speakingScreenshotPath,
     status: 'ok',
+    surface,
     taunt,
   })}\n`)
   }
@@ -1994,6 +2006,27 @@ async function boneyardFrame(page) {
   ))
 }
 
+async function boneyardSurfaceReceipt(page, scene) {
+  const receipt = await page.locator('.boneyard-world-canvas').evaluate((node) => ({
+    activeRoadMeshCount: Number(node.dataset.roadActiveMeshCount),
+    arenaBaseRenderer: node.dataset.arenaBaseRenderer,
+    roadIndexCount: Number(node.dataset.roadIndexCount),
+    roadMeshCount: Number(node.dataset.roadMeshCount),
+    roadRenderer: node.dataset.roadRenderer,
+    roadVertexCount: Number(node.dataset.roadVertexCount),
+  }))
+  assert.equal(receipt.arenaBaseRenderer, 'opaque-black-clear+native-layout')
+  assert.equal(receipt.roadRenderer, 'native-indexed-owner-mesh')
+  assert.equal(receipt.roadMeshCount, scene.roads.length)
+  assert.equal(receipt.roadVertexCount, scene.roads.length * 8)
+  assert.equal(receipt.roadIndexCount, scene.roads.length * 18)
+  assert.ok(receipt.activeRoadMeshCount > 0 && receipt.activeRoadMeshCount <= scene.roads.length)
+  assert.ok(scene.roads.every((road) => (
+    Number.isInteger(road.linkMask) && road.linkMask >= 0 && road.linkMask <= 3
+  )))
+  return receipt
+}
+
 async function waitForRenderedDeathSequence(page) {
   await page.waitForFunction(() => {
     const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
@@ -2150,6 +2183,12 @@ async function enterBoneyard(page) {
   await page.getByRole('button', { name: 'Enter the Boneyard' }).click()
   await page.locator('.boneyard-scene[data-renderer-state="ready"]')
     .waitFor({ timeout: 90_000 })
+  await page.waitForFunction(() => {
+    const scene = document.querySelector('.boneyard-scene')
+    const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
+    return frame?.runPhase === 'active'
+      && scene?.getAttribute('data-solomon-phase') === 'digging'
+  }, undefined, { timeout: 90_000 })
 }
 
 async function enterCreateAfterCollegeOffice(page) {

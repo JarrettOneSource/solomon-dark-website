@@ -186,7 +186,7 @@ test('native provider registration is lane-local and stable across grouped colle
   ])
 })
 
-test('a pending first wizard consumes the College intro only after the Courtyard settles', () => {
+test('loadout confirmation consumes onboarding before the ordinary Courtyard return', () => {
   let state = createGameSimulation({ owner: DEFAULT_PLAYER_CHARACTER_CONFIG })
   const ownerParticipant = () => {
     if (state.world.kind !== 'hub') throw new Error('expected Hub world')
@@ -257,7 +257,23 @@ test('a pending first wizard consumes the College intro only after the Courtyard
   state = confirmed
   assert.equal(ownerParticipant()?.transition?.phase, 'incoming')
   assert.equal(getPlayerCharacter(state, 'owner').config.displayName, 'Reborn')
-  assert.deepEqual(getPlayerEconomy(state, 'owner').equipment.hat?.iconTints, collegeStarterTint)
+  const selectedAppearance = rollNativeStarterEquipmentAppearance(
+    createNativeRng(getPlayerProgression(state, 'owner').offerSeed),
+    'air',
+  )
+  assert.deepEqual(getPlayerEconomy(state, 'owner').equipment.hat?.iconTints, [
+    selectedAppearance.primaryTint,
+    selectedAppearance.secondaryTint,
+  ])
+  assert.deepEqual(
+    getPlayerEconomy(state, 'owner').equipment.robe?.iconTints,
+    getPlayerEconomy(state, 'owner').equipment.hat?.iconTints,
+  )
+  assert.notDeepEqual(getPlayerEconomy(state, 'owner').equipment.hat?.iconTints, collegeStarterTint)
+  assert.equal(getPlayerEconomy(state, 'owner').collegeIntroPending, false)
+  assert.equal(getPlayerEconomy(state, 'owner').tutorialPending, false)
+  assert.equal(getPlayerEconomy(state, 'owner').revision, initialRevision + 2)
+  assert.strictEqual(armGameSimulationCollegeIntro(state, 'owner'), state)
 
   for (let ticks = 0; ownerParticipant()?.transition && ticks < 200; ticks += 1) {
     state = stepGameSimulationTick(state, {})
@@ -265,7 +281,7 @@ test('a pending first wizard consumes the College intro only after the Courtyard
   assert.equal(ownerParticipant()?.transition, null)
   assert.deepEqual(getPlayerCharacter(state, 'owner').position, { x: 952.5, y: 157.5 })
   assert.equal(getPlayerEconomy(state, 'owner').collegeIntroPending, false)
-  assert.equal(getPlayerEconomy(state, 'owner').revision, initialRevision + 1)
+  assert.equal(getPlayerEconomy(state, 'owner').revision, initialRevision + 2)
   assert.strictEqual(armGameSimulationCollegeIntro(state, 'owner'), state)
 })
 

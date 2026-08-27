@@ -1615,8 +1615,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v92 carries party-rejoin waiting, online preferences, match chat, heterogeneous belts, and retained gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 92)
+test('protocol v93 carries party-rejoin waiting, online preferences, match chat, heterogeneous belts, and retained gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 93)
   assert.deepEqual(GAMEPLAY_RESUME_GRACE_REASONS, [
     'game-rejoined',
     'game-restarted',
@@ -4492,7 +4492,15 @@ test('loaded Boneyard round-trips scene identity, geometry, and Solomon Dig', ()
         spawn: { x: 200, y: 150, facingDeg: 180 },
         objects: [],
         sprites: [],
-        roads: [],
+        roads: [{
+          eid: 'linked-road',
+          endWidthScale: 0.75,
+          linkMask: 2 as const,
+          points: [{ x: 10, y: 20 }, { x: 30, y: 40 }],
+          startWidthScale: 1.25,
+          style: 2,
+          typeId: 3004,
+        }],
         fences: [{
           eid: 'entry-gate',
           points: [{ x: 100, y: 300 }, { x: 300, y: 300 }],
@@ -4513,6 +4521,14 @@ test('loaded Boneyard round-trips scene identity, geometry, and Solomon Dig', ()
     },
   }
   assert.deepEqual(decodeServerGameMessage(encodeGameMessage(message)), message)
+  const missingRoadLink = structuredClone(message) as unknown as {
+    boneyard: { scene: { roads: Array<Record<string, unknown>> } }
+  }
+  delete missingRoadLink.boneyard.scene.roads[0]!.linkMask
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(missingRoadLink)),
+    /linkMask/,
+  )
 
   const snapshot = createGameSnapshot(
     enterBoneyardWorld(

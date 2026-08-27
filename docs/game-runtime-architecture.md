@@ -669,9 +669,10 @@ again until an explicit operator reinstall or a different `main` commit.
   owner; Tutorial completion enters it before any retained loadout. Other Hub
   participants and rooms keep ticking, while run-start and non-Office service
   mutations from the admitting participant remain sealed. Exact Courtyard
-  settlement clears the durable pending bit and
-  emits an owner checkpoint; an interrupted intro restarts from Office rather
-  than reviving its serialized partial room transition.
+  loadout confirmation clears both durable onboarding bits and emits the owner
+  completion edge before the ordinary incoming reveal. An interruption before
+  confirmation resumes the College obligation; an interruption after it can
+  never re-arm Tutorial or College behavior.
 - Player-character movement uses a two-phase shared kernel: first plan native
   intent/velocity, then let the active world resolve collision, then commit the
   resolved position plus native heading/gait state. Hub and Boneyard geometry
@@ -1141,6 +1142,15 @@ There is one composed client, not one DOM client and one canvas client.
   actors; camera motion transforms them and display frames update only their
   depths. Neither path reruns the Canvas2D native painter at the `20 Hz`
   snapshot cadence.
+  The native surface prefix no longer enters those Canvas tiles: the Pixi
+  target supplies the opaque-black Arena clear and one scene-owned GPU surface
+  submits source-ordered indexed Road meshes first. Road textures stay wrapped
+  and linear with native world UVs and per-vertex edge/link alpha. A transparent
+  post-Road tile bank then owns Terrain and the remaining pre-main placement
+  passes. This keeps the Region-light composite boundary unchanged while
+  removing the former captured ground tile and outlined Canvas road quads. The
+  explicitly withdrawn DeadHawg-20/21 ring/oval overlay remains outside this
+  runtime change rather than entering through a refuted source-over material.
   Players, Solomon Dig, and moving gate leaves remain dynamic GPU residents.
   Loot actors and Goodie phases are also dynamic GPU residents in the recovered
   effective-Y queue. Gold/Orb pickup fades reuse the world effect lane; the

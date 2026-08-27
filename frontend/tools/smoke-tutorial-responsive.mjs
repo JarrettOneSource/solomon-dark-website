@@ -7,6 +7,7 @@ import { chromium } from 'playwright-core'
 import { startStaticClientServer } from '../desktop/static-client-server.mjs'
 
 import {
+  addPlayerCharacter,
   createGameSimulation,
   enterBoneyardWorld,
   getPlayerBelt,
@@ -32,12 +33,19 @@ import { actorHeadingFromVector, actorHeadingIndex } from '../src/game/core-kern
 import { NATIVE_ACTOR_SEPARATION_EPSILON } from '../src/game/core-kernels/actor-physics.ts'
 import { GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS } from '../src/game/core-kernels/game-run.ts'
 import { createNativeRng } from '../src/game/core-kernels/native-rng.ts'
+import {
+  NATIVE_TUTORIAL_EQUIPMENT_APPEARANCE,
+  rollNativeStarterEquipmentAppearance,
+} from '../src/game/core-kernels/native-starter-equipment.ts'
 import { resetNativeSecondaryWorld } from '../src/game/core-kernels/native-secondary-abilities.ts'
 import {
   PLAYER_CHARACTER_RADIUS,
   createIdlePlayerPrimaryCast,
 } from '../src/game/core-kernels/player-character.ts'
-import { nativeCollegePathHeadingIndex } from '../src/game/core-kernels/native-college-intro.ts'
+import {
+  nativeCollegePathHeadingIndex,
+  nativeCollegePathTarget,
+} from '../src/game/core-kernels/native-college-intro.ts'
 import {
   NATIVE_TUTORIAL_CAMERA_LOCK_SETTLE_TICKS,
   NATIVE_TUTORIAL_CAMERA_TARGET,
@@ -72,6 +80,7 @@ const acidComparisonAge = Number(process.env.SDR_TUTORIAL_ACID_AGE ?? 60)
 const chromePath = process.env.SDR_CHROME_PATH || (process.platform === 'darwin'
   ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
   : '/usr/bin/google-chrome')
+const COLLEGE_BLOCKER_PLAYER_ID = 'college-path-blocker'
 const allScenarios = [
   {
     coarse: false,
@@ -236,6 +245,7 @@ async function runScenario(scenario) {
     await pointer.waitFor({ timeout: 15_000 })
     const initial = await measureStageFive(page)
     assertStageFiveReceipt(initial, scenario)
+    const surface = await tutorialSurfaceReceipt(host, page)
 
     await page.locator('[data-tutorial-anchor="secondary-slot"]').evaluate((slot) => {
       slot.style.transform = 'translate(80px, -25px)'
@@ -348,6 +358,7 @@ async function runScenario(scenario) {
       screenshot: scenario.screenshot,
       spawnDomain,
       staffMelee,
+      surface,
       vitals,
       vitalsScreenshot,
       fixtureSha256: fixture.record.sha256,
@@ -403,6 +414,50 @@ async function waitForRestoredTutorial(host) {
     tutorial: state.world.kind === 'boneyard' ? state.world.tutorial : null,
     world: state.world.kind,
   })}`)
+}
+
+async function tutorialSurfaceReceipt(host, page) {
+  await page.waitForFunction(() => {
+    const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
+    return frame?.playerElementEffectPrimaryId === 8 && frame.orbSpriteCount > 0
+  }, undefined, { timeout: 15_000 })
+  const playerId = host.hostPlayerId()
+  assert.ok(playerId)
+  const state = host.state()
+  const expected = NATIVE_TUTORIAL_EQUIPMENT_APPEARANCE
+  const economy = getPlayerEconomy(state, playerId)
+  assert.deepEqual(economy.equipment.hat?.iconTints, [
+    expected.primaryTint,
+    expected.secondaryTint,
+  ])
+  assert.deepEqual(economy.equipment.robe?.iconTints, economy.equipment.hat?.iconTints)
+  const receipt = await page.locator('.boneyard-world-canvas').evaluate((node) => ({
+    arenaBaseRenderer: node.dataset.arenaBaseRenderer,
+    orbSpriteCount: node.__sdrBoneyardFrame.orbSpriteCount,
+    primaryElementEffectId: node.__sdrBoneyardFrame.playerElementEffectPrimaryId,
+    roadActiveMeshCount: Number(node.dataset.roadActiveMeshCount),
+    roadIndexCount: Number(node.dataset.roadIndexCount),
+    roadMeshCount: Number(node.dataset.roadMeshCount),
+    roadRenderer: node.dataset.roadRenderer,
+    roadVertexCount: Number(node.dataset.roadVertexCount),
+  }))
+  assert.deepEqual(receipt, {
+    arenaBaseRenderer: 'opaque-black-clear+native-layout',
+    orbSpriteCount: receipt.orbSpriteCount,
+    primaryElementEffectId: 8,
+    roadActiveMeshCount: receipt.roadActiveMeshCount,
+    roadIndexCount: 53 * 18,
+    roadMeshCount: 53,
+    roadRenderer: 'native-indexed-owner-mesh',
+    roadVertexCount: 53 * 8,
+  })
+  assert.ok(receipt.orbSpriteCount > 0)
+  assert.ok(receipt.roadActiveMeshCount > 0 && receipt.roadActiveMeshCount <= receipt.roadMeshCount)
+  return {
+    ...receipt,
+    primaryTint: expected.primaryTint,
+    secondaryTint: expected.secondaryTint,
+  }
 }
 
 async function captureTutorialAcidRain(host, page, screenshotPath) {
@@ -1142,6 +1197,8 @@ function ensureTutorialHealthPotion(host) {
 
 async function exerciseTutorialCollegeAdmission(host, page, screenshotPath) {
   const collegeAudioEventIndex = await page.evaluate(() => window.__sdrAudioEvents.length)
+  const playerId = host.hostPlayerId()
+  assert.ok(playerId)
   const tutorial = host.state()
   assert.equal(tutorial.world.kind, 'boneyard')
   assert.ok(tutorial.world.tutorial)
@@ -1161,6 +1218,7 @@ async function exerciseTutorialCollegeAdmission(host, page, screenshotPath) {
   await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 90_000 })
   assert.equal(await page.locator('.create-menu-scene').count(), 0)
   await startCollegeFacingSampler(page)
+  const collisionBlockers = installCollegeCollisionBlockers(host, playerId)
   const academyMusic = await waitForCollegeAcademyMusic(page, collegeAudioEventIndex)
   await waitForVisibleCollegeTitle(page, 7)
   const title7 = await collegeTitleReceipt(page)
@@ -1171,6 +1229,7 @@ async function exerciseTutorialCollegeAdmission(host, page, screenshotPath) {
   const title9 = await collegeTitleReceipt(page)
   const title9Wizard = await collegeWizardReceipt(host, page)
   assertCollegeWizardReceipt(title9Wizard, 'Title 9')
+  const blockerTraversal = collegeBlockerTraversalReceipt(host, playerId, collisionBlockers)
   await page.screenshot({ path: `${screenshotPath}-solomon-dark-title.png` })
 
   const office = page.locator('.hub-scene[data-hub-region="office"]')
@@ -1194,8 +1253,6 @@ async function exerciseTutorialCollegeAdmission(host, page, screenshotPath) {
   ), automaticVoices[0]))
   await page.screenshot({ path: `${screenshotPath}-tutorial-college-office.png` })
 
-  const playerId = host.hostPlayerId()
-  assert.ok(playerId)
   const state = host.state()
   assert.equal(state.world.kind, 'hub')
   assert.equal(getPlayerEconomy(state, playerId).tutorialPending, false)
@@ -1226,6 +1283,8 @@ async function exerciseTutorialCollegeAdmission(host, page, screenshotPath) {
     timeout: 15_000,
   })
   await page.locator('.create-menu-discipline-body').click()
+  const completionBoundary = await waitForConfirmedCollegeLoadout(host, playerId)
+  const completionSave = await waitForLocalOnboardingCompletion(page, playerId)
   const returnedHub = page.locator('.hub-scene[data-renderer-state="ready"]')
   await returnedHub.waitFor({ timeout: 90_000 })
   await page.waitForFunction(() => {
@@ -1237,6 +1296,10 @@ async function exerciseTutorialCollegeAdmission(host, page, screenshotPath) {
   const resetEconomy = getPlayerEconomy(resetState, playerId)
   const resetProgression = getPlayerProgression(resetState, playerId)
   const resetSkills = getPlayerSkillBook(resetState, playerId)
+  const resetAppearance = rollNativeStarterEquipmentAppearance(
+    createNativeRng(resetProgression.offerSeed),
+    'air',
+  )
   assert.equal(resetProgression.level, 1)
   assert.equal(resetProgression.experience, 0)
   assert.equal(resetSkills.permanentRanks[72], 0)
@@ -1251,7 +1314,21 @@ async function exerciseTutorialCollegeAdmission(host, page, screenshotPath) {
     'Health Potion',
     'Mana Potion',
   ])
+  assert.deepEqual(resetEconomy.equipment.hat?.iconTints, [
+    resetAppearance.primaryTint,
+    resetAppearance.secondaryTint,
+  ])
+  assert.deepEqual(resetEconomy.equipment.robe?.iconTints, resetEconomy.equipment.hat?.iconTints)
+  assert.notEqual(resetAppearance.primaryTint, title9Wizard.primaryTint)
   assert.deepEqual(resetEconomy.storage, [])
+  const resetWizard = await page.locator('.hub-world-canvas').evaluate((node) => ({
+    materialTint: node.__sdrHubFrame.playerMaterialTint,
+    primaryElementEffectId: node.__sdrHubFrame.playerElementEffectPrimaryId,
+  }))
+  assert.deepEqual(resetWizard, {
+    materialTint: resetAppearance.primaryTint,
+    primaryElementEffectId: 24,
+  })
 
   await page.getByRole('button', { name: /Open inventory/ }).click()
   const inventory = page.getByRole('dialog', { name: 'Inventory' })
@@ -1269,11 +1346,13 @@ async function exerciseTutorialCollegeAdmission(host, page, screenshotPath) {
   assert.equal(await skillsDialog.locator('[data-skill-id="27"]').count(), 1)
   await page.screenshot({ path: `${screenshotPath}-tutorial-reset-skills.png` })
   await skillsDialog.getByRole('button', { name: 'Close skills' }).click()
+  const restoredCollision = await verifyRestoredCollegeCollision(host, playerId)
   const resetReceipt = {
     backpack: resetEconomy.backpack.map(item => item.name),
     level: resetProgression.level,
     learnedTutorialAcidRainRank: resetSkills.permanentRanks[72],
     selectedPrimary: resetSkills.primarySkillId,
+    selectedPrimaryTint: resetAppearance.primaryTint,
     storageCount: resetEconomy.storage.length,
   }
   return {
@@ -1281,11 +1360,15 @@ async function exerciseTutorialCollegeAdmission(host, page, screenshotPath) {
     academyMusic,
     autoDialogue: true,
     automaticVoices,
+    blockerTraversal,
+    completionBoundary,
+    completionSave,
     createAfterManualExit: true,
     facing,
     officePlayerPosition: getPlayerCharacter(state, playerId).position,
     regionSequence: ['courtyard', 'office', 'create', 'courtyard'],
     resetReceipt,
+    restoredCollision,
     storyOffice: true,
     title7,
     title7Wizard,
@@ -1362,6 +1445,134 @@ function assertCollegeFacingSamples(samples) {
     movingByRegion,
     sampledFrames: samples.length,
   }
+}
+
+function installCollegeCollisionBlockers(host, playerId) {
+  const live = host.state()
+  assert.equal(live.world.kind, 'hub')
+  const participant = live.world.participants[playerId]
+  assert.ok(participant?.collegeIntro?.phase === 'courtyard-walk')
+  const player = getPlayerCharacter(live, playerId)
+  const target = nativeCollegePathTarget(
+    participant.collegeIntro.phase,
+    participant.collegeIntro.pathCursor,
+    player.position,
+  ).target
+  const dx = target.x - player.position.x
+  const dy = target.y - player.position.y
+  const length = Math.hypot(dx, dy)
+  assert.ok(length > 0)
+  const direction = { x: dx / length, y: dy / length }
+  const position = {
+    x: player.position.x + direction.x * 35,
+    y: player.position.y + direction.y * 35,
+  }
+  let next = addPlayerCharacter(live, COLLEGE_BLOCKER_PLAYER_ID, {
+    discipline: 'mind',
+    displayName: 'Blocker',
+    element: 'water',
+  })
+  next = {
+    ...next,
+    playerEntities: replacePlayerCharacter(
+      next.playerEntities,
+      COLLEGE_BLOCKER_PLAYER_ID,
+      {
+        ...getPlayerCharacter(next, COLLEGE_BLOCKER_PLAYER_ID),
+        position,
+        velocity: { x: 0, y: 0 },
+      },
+    ),
+  }
+  assert.equal(next.world.kind, 'hub')
+  const students = next.world.studentPopulation.store.states()
+  assert.ok(students[0])
+  next.world.studentPopulation.store.replaceOrderedStates([
+    {
+      ...students[0],
+      currentSpeed: 0,
+      desiredSpeed: 0,
+      position: { x: position.x + direction.x * 4, y: position.y + direction.y * 4 },
+      wander: { x: 0, y: 0 },
+    },
+    ...students.slice(1),
+  ])
+  Object.assign(live, next)
+  return {
+    direction,
+    initialPathCursor: participant.collegeIntro.pathCursor,
+    position,
+    studentId: students[0].id,
+  }
+}
+
+function collegeBlockerTraversalReceipt(host, playerId, blockers) {
+  const state = host.state()
+  assert.equal(state.world.kind, 'hub')
+  const participant = state.world.participants[playerId]
+  assert.ok(participant?.collegeIntro)
+  const player = getPlayerCharacter(state, playerId)
+  const delta = {
+    x: player.position.x - blockers.position.x,
+    y: player.position.y - blockers.position.y,
+  }
+  const signedDistance = delta.x * blockers.direction.x + delta.y * blockers.direction.y
+  assert.ok(signedDistance > 50, `College walker did not pass blockers: ${signedDistance}`)
+  assert.ok(participant.collegeIntro.pathCursor > blockers.initialPathCursor)
+  return {
+    blockerPlayerId: COLLEGE_BLOCKER_PLAYER_ID,
+    blockerPosition: blockers.position,
+    pathCursor: participant.collegeIntro.pathCursor,
+    signedDistance,
+    studentId: blockers.studentId,
+  }
+}
+
+async function verifyRestoredCollegeCollision(host, playerId) {
+  const live = host.state()
+  assert.equal(live.world.kind, 'hub')
+  assert.equal(live.world.participants[playerId]?.collegeIntro, null)
+  assert.equal(live.world.participants[playerId]?.transition, null)
+  const localPosition = { x: 1_000, y: 500 }
+  const blockerPosition = { x: 1_040, y: 500 }
+  let next = {
+    ...live,
+    playerEntities: replacePlayerCharacter(
+      live.playerEntities,
+      playerId,
+      {
+        ...getPlayerCharacter(live, playerId),
+        position: localPosition,
+        velocity: { x: 0, y: 0 },
+      },
+    ),
+  }
+  next = {
+    ...next,
+    playerEntities: replacePlayerCharacter(
+      next.playerEntities,
+      COLLEGE_BLOCKER_PLAYER_ID,
+      {
+        ...getPlayerCharacter(next, COLLEGE_BLOCKER_PLAYER_ID),
+        position: blockerPosition,
+        velocity: { x: 0, y: 0 },
+      },
+    ),
+  }
+  const beforeTick = next.tick
+  Object.assign(live, next)
+  const deadline = performance.now() + 5_000
+  let distance = 40
+  while (performance.now() < deadline) {
+    const current = host.state()
+    const local = getPlayerCharacter(current, playerId).position
+    const blocker = getPlayerCharacter(current, COLLEGE_BLOCKER_PLAYER_ID).position
+    distance = Math.hypot(local.x - blocker.x, local.y - blocker.y)
+    if (current.tick > beforeTick && distance > 40) break
+    await new Promise(resolve => setTimeout(resolve, 10))
+  }
+  assert.ok(distance > 40, `ordinary collision did not resume after loadout: ${distance}`)
+  return { beforeDistance: 40, resolvedDistance: distance }
 }
 
 async function waitForCollegeAcademyMusic(page, fromEventIndex) {
@@ -1506,6 +1717,31 @@ async function waitForHostCollegeState(host, playerId, phase) {
   throw new Error(`timed out waiting for College state ${phase}`)
 }
 
+async function waitForConfirmedCollegeLoadout(host, playerId) {
+  const deadline = performance.now() + 15_000
+  while (performance.now() < deadline) {
+    const state = host.state()
+    const economy = getPlayerEconomy(state, playerId)
+    const participant = state.world.kind === 'hub'
+      ? state.world.participants[playerId]
+      : null
+    if (
+      participant?.transition?.phase === 'incoming'
+      && participant.collegeIntro === null
+      && economy.collegeIntroPending === false
+      && economy.tutorialPending === false
+    ) {
+      return {
+        collegeIntroPending: economy.collegeIntroPending,
+        transitionPhase: participant.transition.phase,
+        tutorialPending: economy.tutorialPending,
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25))
+  }
+  throw new Error('loadout confirmation did not atomically end onboarding')
+}
+
 async function waitForLocalCollegeSave(page, playerId, phase) {
   const deadline = performance.now() + 20_000
   let lastReceipt = null
@@ -1542,6 +1778,37 @@ async function waitForLocalCollegeSave(page, playerId, phase) {
   }
   throw new Error(
     `timed out waiting for saved College state ${phase}: ${JSON.stringify(lastReceipt)}`,
+  )
+}
+
+async function waitForLocalOnboardingCompletion(page, playerId) {
+  const deadline = performance.now() + 20_000
+  let lastReceipt = null
+  while (performance.now() < deadline) {
+    const record = await readLocalSaveRecord(page)
+    if (record?.document) {
+      try {
+        const restored = restoreGameSaveDocument(record.document)
+        const economy = getPlayerEconomy(restored.state, playerId)
+        lastReceipt = {
+          collegeIntroPending: economy.collegeIntroPending,
+          revision: record.revision,
+          schemaVersion: record.formatVersion,
+          tutorialPending: economy.tutorialPending,
+        }
+        if (!economy.collegeIntroPending && !economy.tutorialPending) return lastReceipt
+      } catch (error) {
+        lastReceipt = {
+          error: error instanceof Error ? error.message : String(error),
+          revision: record.revision,
+          schemaVersion: record.formatVersion,
+        }
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  }
+  throw new Error(
+    `timed out waiting for saved onboarding completion: ${JSON.stringify(lastReceipt)}`,
   )
 }
 

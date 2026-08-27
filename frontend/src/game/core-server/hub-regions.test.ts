@@ -47,9 +47,72 @@ import {
 import {
   HUB_FIXED_ACTOR_COLLISION_LAYOUT,
   createHubWorld,
+  hubDynamicActorPairCollides,
+  hubParticipantOnboardingCollisionBypassActive,
   stepHubWorldTick,
   type HubWorldState,
 } from './hub-world.ts'
+
+test('onboarding ignores only player and Student dynamic pairs in both mover orders', () => {
+  const onboarding = new Set(['sirmin'])
+  const pending = new Set(['sirmin'])
+  const sirmin = { id: 'player-sirmin', region: 'courtyard' as const }
+  const peer = { id: 'player-peer', region: 'courtyard' as const }
+  const student = { id: 'student-7', region: 'courtyard' as const }
+  const teacher = { id: 'teacher', region: 'courtyard' as const }
+
+  assert.equal(hubDynamicActorPairCollides(sirmin, peer, onboarding, pending), false)
+  assert.equal(hubDynamicActorPairCollides(peer, sirmin, onboarding, pending), false)
+  assert.equal(hubDynamicActorPairCollides(sirmin, student, onboarding, pending), false)
+  assert.equal(hubDynamicActorPairCollides(student, sirmin, onboarding, pending), false)
+  assert.equal(hubDynamicActorPairCollides(peer, student, onboarding, pending), true)
+  assert.equal(hubDynamicActorPairCollides(sirmin, teacher, onboarding, pending), true)
+  assert.equal(hubDynamicActorPairCollides(
+    sirmin,
+    { ...peer, region: 'office' },
+    onboarding,
+    pending,
+  ), false)
+})
+
+test('loadout confirmation ends the onboarding collision exemption before Courtyard settle', () => {
+  const walking = createHubCollegeIntroParticipantState()
+  assert.equal(hubParticipantOnboardingCollisionBypassActive(walking, true), true)
+  assert.equal(hubParticipantOnboardingCollisionBypassActive({
+    collegeIntro: null,
+    region: 'office',
+    transition: null,
+  }, true), true)
+  assert.equal(hubParticipantOnboardingCollisionBypassActive({
+    collegeIntro: null,
+    region: 'courtyard',
+    transition: {
+      alpha: 1,
+      destination: 'courtyard',
+      phase: 'college-loadout',
+      scriptedSpeed: 1,
+      scriptedTarget: { x: 952.5, y: 157.5 },
+      sourceRegion: 'office',
+    },
+  }, true), true)
+  assert.equal(hubParticipantOnboardingCollisionBypassActive({
+    collegeIntro: null,
+    region: 'courtyard',
+    transition: {
+      alpha: 1,
+      destination: 'courtyard',
+      phase: 'incoming',
+      scriptedSpeed: 1,
+      scriptedTarget: { x: 952.5, y: 157.5 },
+      sourceRegion: 'office',
+    },
+  }, true), false)
+  assert.equal(hubParticipantOnboardingCollisionBypassActive({
+    collegeIntro: null,
+    region: 'courtyard',
+    transition: null,
+  }, false), false)
+})
 
 test('solid-spell capsules use the complete Hub segment path, not endpoint occupancy', () => {
   const wall = { x1: 100, y1: 0, x2: 100, y2: 200 }

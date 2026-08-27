@@ -82,7 +82,10 @@ import {
   type HubInventoryItem,
   type HubEconomyState,
 } from '../core-kernels/hub-economy.ts'
-import { rollNativeStarterEquipmentAppearance } from '../core-kernels/native-starter-equipment.ts'
+import {
+  NATIVE_TUTORIAL_EQUIPMENT_APPEARANCE,
+  rollNativeStarterEquipmentAppearance,
+} from '../core-kernels/native-starter-equipment.ts'
 import {
   NATIVE_HAGATHA_LAST_WORD_DEATH_TICK,
   NATIVE_HAGATHA_SELECTORS,
@@ -601,6 +604,10 @@ export function preparePlayerEntityTutorialLoadout(
     }
     economy = discarded.state
   }
+  economy = applyNativeStarterEquipmentAppearance(
+    economy,
+    NATIVE_TUTORIAL_EQUIPMENT_APPEARANCE,
+  )
   const replaced = replacePlayerSkillState(
     source,
     index,

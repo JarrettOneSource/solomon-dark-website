@@ -79,6 +79,14 @@ const nativeArenaRenderPipeline = readFileSync(
   new URL('./native-arena-render-pipeline.ts', import.meta.url),
   'utf8',
 )
+const nativeBoneyardSurface = readFileSync(
+  new URL('./native-boneyard-surface.ts', import.meta.url),
+  'utf8',
+)
+const nativeBoneyardSurfaceView = readFileSync(
+  new URL('./native-boneyard-surface-view.ts', import.meta.url),
+  'utf8',
+)
 const boneyardCombatAtlas = readFileSync(
   new URL('./boneyard-combat-atlas.ts', import.meta.url),
   'utf8',
@@ -95,6 +103,39 @@ const boneyardCombatAssetSource = readFileSync(
   new URL('./boneyard-combat-asset-source.ts', import.meta.url),
   'utf8',
 )
+
+test('Solomon owns exactly one co-rooted record-13 pass after body and mouth', () => {
+  assert.doesNotMatch(boneyardRenderer, /graveDirt|solomon-grave|setGraveDepth/)
+  assert.match(
+    boneyardRenderer,
+    /this\.actorRoot\.addChild\([\s\S]*?this\.body,[\s\S]*?this\.mouth,[\s\S]*?this\.graveMark,[\s\S]*?this\.dirtRoot/,
+  )
+  assert.match(boneyardRenderer, /this\.graveMark\.tint = lighting\.digRootTint/)
+  assert.match(boneyardRenderer, /this\.graveMark\.visible = visual\.graveMarkVisible/)
+  assert.match(boneyardRenderer, /solomonGraveMarkPassCount/)
+})
+
+test('runtime ground uses the black clear and exact Road owner before the post-Road canvas', () => {
+  assert.match(boneyardRenderer, /new NativeBoneyardSurfaceView\(base, scene, surfaceTextures\)/)
+  assert.match(boneyardRenderer, /drawNativeBoneyardPostRoadBase/)
+  assert.doesNotMatch(boneyardRenderer, /drawNativeBoneyardBase/)
+  assert.doesNotMatch(boneyardRenderer, /STAGE_TEXTURES/)
+  assert.match(boneyardRenderer, /arenaBaseRenderer = 'opaque-black-clear\+native-layout'/)
+  assert.match(boneyardRenderer, /roadRenderer = 'native-indexed-owner-mesh'/)
+  assert.match(nativeBoneyardSurface, /sourceVertexCount: 18/)
+  assert.match(
+    nativeBoneyardSurface,
+    /Math\.fround\(\s*Math\.fround\(item\.y \/ program\.textureSize\) \/ program\.verticalUvScale/,
+  )
+  assert.doesNotMatch(nativeBoneyardSurfaceView, /Graphics|stroke|arc\(/)
+  assert.match(nativeBoneyardSurfaceView, /MeshGeometry/)
+  assert.match(nativeBoneyardSurfaceView, /format: 'unorm8x4'/)
+  assert.match(nativeBoneyardSurfaceView, /NATIVE_ARENA_UNPREMULTIPLIED_SATURATION_BIT_GL/)
+  assert.doesNotMatch(nativeBoneyardSurfaceView, /nativeArenaFieldPlan|native-arena-field/)
+  assert.doesNotMatch(boneyardTextures, /arenaField20Source|arenaField21Source/)
+  assert.doesNotMatch(boneyardTextures, /arena-ground|GROUND_TEXTURE/)
+  assert.match(boneyardTextures, /road\.source\.addressMode = 'repeat'/)
+})
 const playerTextures = readFileSync(
   new URL('./world-player-textures.ts', import.meta.url),
   'utf8',
@@ -959,6 +1000,7 @@ test('off-camera cleanup uses strict visual overlap and never retires Fence reco
     roads: [
       {
         eid: 'crossing-road',
+        linkMask: 0,
         points: [{ x: -10, y: 110 }, { x: 110, y: 110 }],
         quad: [
           { x: -10, y: 90 }, { x: 110, y: 90 },
@@ -968,6 +1010,7 @@ test('off-camera cleanup uses strict visual overlap and never retires Fence reco
       },
       {
         eid: 'edge-road',
+        linkMask: 0,
         points: [{ x: 10, y: 110 }, { x: 90, y: 110 }],
         quad: [
           { x: 10, y: 100 }, { x: 90, y: 100 },

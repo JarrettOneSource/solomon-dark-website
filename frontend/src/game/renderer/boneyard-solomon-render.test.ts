@@ -52,14 +52,14 @@ test('pins the registration-preserving stock Solomon sheets and Flydirt glyph', 
     createHash('sha256').update(sheet).digest('hex'),
     '0db33945b1acf6e86832f942ad82679c1bc15e7ddd4fc7a633cd5d7b08d6e0ab',
   )
-  const shadow = readFileSync(new URL(
+  const graveMark = readFileSync(new URL(
     '../../assets/game/boneyard/deadhawg/013.png',
     import.meta.url,
   ))
-  assert.equal(shadow.readUInt32BE(16), 46)
-  assert.equal(shadow.readUInt32BE(20), 10)
+  assert.equal(graveMark.readUInt32BE(16), 46)
+  assert.equal(graveMark.readUInt32BE(20), 10)
   assert.equal(
-    createHash('sha256').update(shadow).digest('hex'),
+    createHash('sha256').update(graveMark).digest('hex'),
     'f3542e9d1b3621fdecd6f68baedf2d4f3c80762bd21ca7aa9fbb66e530db309c',
   )
   const dirt = readFileSync(new URL(
@@ -80,7 +80,8 @@ test('keeps Flydirt in Solomon child-manager order after body and mouth', () => 
     import.meta.url,
   ), 'utf8')
   assert.match(source, /this\.mouth\.zIndex = 1/)
-  assert.match(source, /this\.dirtRoot\.zIndex = 2/)
+  assert.match(source, /this\.graveMark\.zIndex = 2/)
+  assert.match(source, /this\.dirtRoot\.zIndex = 3/)
   assert.match(source, /this\.dirtRoot\.tint = lighting\.dirtTint/)
 })
 
@@ -98,7 +99,7 @@ test('selects exact native dig, dialogue body, and mouth records', () => {
   assert.equal(digging.nativeBodyRecord, 19)
   assert.equal(digging.nativeMouthRecord, null)
   assert.equal(digging.offsetY, 7.5)
-  assert.equal(digging.shadowVisible, true)
+  assert.equal(digging.graveMarkVisible, true)
 
   const dialogue = boneyardSolomonVisualState({
     ...ENCOUNTER,
@@ -144,7 +145,7 @@ test('holds the dialogue body aloft, then selects walk pose zero during retreat'
   assert.equal(retreat.nativeBodyRecord, 99)
   assert.equal(retreat.offsetY, -14)
   assert.equal(retreat.clipBottomWorldY, DIG.position.y)
-  assert.equal(retreat.shadowVisible, false)
+  assert.equal(retreat.graveMarkVisible, false)
 
   const descending = boneyardSolomonVisualState({
     ...ENCOUNTER,

@@ -384,7 +384,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 92
+export const GAME_PROTOCOL_VERSION = 93
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -4277,7 +4277,10 @@ function boneyardLine(
         'eid', 'typeId', 'points', 'style', 'segmentCode',
         'startPostVariant', 'endPostVariant',
       ]
-    : ['eid', 'typeId', 'points', 'style', 'startWidthScale', 'endWidthScale', 'quad'])
+    : [
+        'eid', 'typeId', 'points', 'style', 'startWidthScale', 'endWidthScale',
+        'quad', 'linkMask',
+      ])
   const common = {
     eid: limitedString(source.eid, `${field}.eid`, 128),
     typeId: integer(source.typeId, `${field}.typeId`),
@@ -4296,6 +4299,7 @@ function boneyardLine(
   }
   return {
     ...common,
+    linkMask: integerWithin(source.linkMask, `${field}.linkMask`, 0, 3) as BoneyardRoad['linkMask'],
     ...optionalNumberField(source, field, 'startWidthScale', optionalFinite),
     ...optionalNumberField(source, field, 'endWidthScale', optionalFinite),
     ...(source.quad === undefined

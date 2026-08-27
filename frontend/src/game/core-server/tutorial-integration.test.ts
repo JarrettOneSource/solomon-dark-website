@@ -2,6 +2,11 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { createIdlePlayerCharacterInput } from '../core-kernels/player-character.ts'
+import { createNativeRng } from '../core-kernels/native-rng.ts'
+import {
+  NATIVE_TUTORIAL_EQUIPMENT_APPEARANCE,
+  rollNativeStarterEquipmentAppearance,
+} from '../core-kernels/native-starter-equipment.ts'
 import { GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS } from '../core-kernels/game-run.ts'
 import { nativeTutorialAmuletItem } from '../core-kernels/native-tutorial.ts'
 import { materializeStockTutorial } from '../host/boneyard-catalog.ts'
@@ -44,6 +49,15 @@ test('enters the stock Tutorial as a solo authored encounter with its native loa
   assert.equal(state.world.tutorialProfileEconomy?.collegeIntroPending, true)
   assert.equal(state.world.tutorialProfileEconomy?.tutorialPending, true)
   assert.deepEqual(getPlayerEconomy(state, 'owner').backpack, [])
+  const tutorialAppearance = NATIVE_TUTORIAL_EQUIPMENT_APPEARANCE
+  assert.deepEqual(getPlayerEconomy(state, 'owner').equipment.hat?.iconTints, [
+    tutorialAppearance.primaryTint,
+    tutorialAppearance.secondaryTint,
+  ])
+  assert.deepEqual(
+    getPlayerEconomy(state, 'owner').equipment.robe?.iconTints,
+    getPlayerEconomy(state, 'owner').equipment.hat?.iconTints,
+  )
   assert.deepEqual(
     state.world.tutorialProfileEconomy?.backpack.map(({ name }) => name),
     ['Health Potion', 'Mana Potion'],
@@ -264,6 +278,10 @@ test('Tutorial death discards its items and skills when Create confirms the new 
   const progression = getPlayerProgression(confirmed, 'owner')
   const skills = getPlayerSkillBook(confirmed, 'owner')
   const economy = getPlayerEconomy(confirmed, 'owner')
+  const appearance = rollNativeStarterEquipmentAppearance(
+    createNativeRng(progression.offerSeed),
+    'air',
+  )
   assert.equal(progression.level, 1)
   assert.equal(progression.experience, 0)
   assert.equal(progression.pendingOffer, null)
@@ -279,6 +297,13 @@ test('Tutorial death discards its items and skills when Create confirms the new 
     'Health Potion',
     'Mana Potion',
   ])
+  assert.deepEqual(economy.equipment.hat?.iconTints, [
+    appearance.primaryTint,
+    appearance.secondaryTint,
+  ])
+  assert.deepEqual(economy.equipment.robe?.iconTints, economy.equipment.hat?.iconTints)
+  assert.equal(economy.collegeIntroPending, false)
+  assert.equal(economy.tutorialPending, false)
   assert.deepEqual(economy.storage, [])
 })
 

@@ -92,6 +92,20 @@ test('projects explicit Fencepost selectors and omits the native sentinel', () =
   assert.equal('endPostVariant' in projected, false)
 })
 
+test('projects process-local Road links as stable endpoint semantics', () => {
+  const document = parseBoneyard(readFileSync(storyFixture))
+  const projected = projectBoneyard(document)
+  assert.equal(projected.roads.length, document.roads.length)
+  projected.roads.forEach((road, index) => {
+    const source = document.roads[index]!
+    assert.equal(
+      road.linkMask,
+      (source.previousUid !== undefined && source.previousUid !== 0xffffffff ? 1 : 0)
+      | (source.nextUid !== undefined && source.nextUid !== 0xffffffff ? 2 : 0),
+    )
+  })
+})
+
 test('projects only Demon raw FireBurst death layers into the direct post-world owner', () => {
   const effect: BoneyardEnemyDeathEffect = {
     ageTicks: 0,

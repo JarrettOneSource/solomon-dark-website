@@ -2,14 +2,17 @@ import type {
   BoneyardBounds,
   BoneyardObject,
   BoneyardPoint,
-  BoneyardRoad,
   BoneyardSprite,
   BoneyardTerrain,
 } from '../core-kernels/boneyard.ts'
 
 export interface BoneyardOffCameraCleanupSources {
   readonly objects: readonly BoneyardObject[]
-  readonly roads: readonly BoneyardRoad[]
+  readonly roads: readonly Readonly<{
+    eid: string
+    points: readonly BoneyardPoint[]
+    quad?: readonly BoneyardPoint[]
+  }>[]
   readonly sprites: readonly BoneyardSprite[]
   readonly terrain: readonly BoneyardTerrain[]
 }

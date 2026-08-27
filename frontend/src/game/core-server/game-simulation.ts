@@ -1211,14 +1211,27 @@ export function confirmGameSimulationLoadout(
     const world = confirmHubCollegeIntroLoadout(state.world, playerId)
     if (world !== state.world) {
       const offerSeed = drawNativePlayerCreationOfferSeed(state.gameRng)
+      const selectedEntities = replacePlayerLoadout(
+        state.playerEntities,
+        playerId,
+        createPlayerCharacter(config, player.position),
+        offerSeed.seed,
+        { starterAppearanceOwner: config.element },
+      )
+      const selectedEconomy = playerEconomyAt(selectedEntities, playerId)
+      if (!selectedEconomy) throw new Error(`College loadout lost profile owner ${playerId}`)
       return {
         ...state,
         gameRng: offerSeed.rng,
-        playerEntities: replacePlayerLoadout(
-          state.playerEntities,
+        playerEntities: replacePlayerEconomy(
+          selectedEntities,
           playerId,
-          createPlayerCharacter(config, player.position),
-          offerSeed.seed,
+          {
+            ...selectedEconomy,
+            collegeIntroPending: false,
+            revision: selectedEconomy.revision + 1,
+            tutorialPending: false,
+          },
         ),
         world,
       }

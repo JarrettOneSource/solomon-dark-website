@@ -2,6 +2,7 @@ import type { Texture } from 'pixi.js'
 
 import solomonEncounterSource from '../../assets/game/anim-solomon-encounter.png'
 import { spriteRefFor } from '../../editor/assets.ts'
+import { ROAD_TEXTURES } from '../../editor/textures.ts'
 import { boneyard } from '../../lib/assets.ts'
 import { loadGameTextureEntries } from './game-webgl.ts'
 import {
@@ -31,15 +32,15 @@ export interface BoneyardWorldTextures extends PlayerWorldTextures {
   assetSources: readonly string[]
   base: Readonly<Record<string, Texture>>
   combatAtlas: BoneyardCombatAtlas
-  graveDirt: Texture
   lantern: Texture
   levelUpSparkle: Texture
   regionLightGlyph: Texture
+  roads: readonly Texture[]
   solomonDialogueBody: readonly Texture[]
   solomonDialogueMouth: readonly (readonly Texture[])[]
   solomonDig: readonly Texture[]
   solomonFlydirt: Texture
-  solomonShadow: Texture
+  solomonGraveMark: Texture
   solomonWalk: readonly (readonly Texture[])[]
   weatherSplash: Texture
 }
@@ -55,8 +56,8 @@ export async function loadBoneyardWorldTextures(): Promise<BoneyardWorldTextures
     return ref ? [ref.src] : []
   })
   fenceSources.push(regionLightRef.src)
-  const solomonShadowSource = spriteRefFor('DeadHawg', 13)?.src
-  if (!solomonShadowSource) {
+  const solomonGraveMarkSource = spriteRefFor('DeadHawg', 13)?.src
+  if (!solomonGraveMarkSource) {
     throw new Error('Boneyard DeadHawg record 13 is unavailable.')
   }
   const weatherSplashSource = spriteRefFor('DeadHawg', 24)?.src
@@ -68,13 +69,13 @@ export async function loadBoneyardWorldTextures(): Promise<BoneyardWorldTextures
     ...fenceSources,
     ...NATIVE_ENEMY_ASSET_SOURCES,
     ...NATIVE_LOOT_ASSET_SOURCES,
-    boneyard.graveDirt,
     boneyard.lantern,
     boneyardCombatAssetSource(boneyard.levelUpSparkle),
     boneyard.solomonDig,
     boneyard.solomonFlydirt,
+    ...ROAD_TEXTURES,
     solomonEncounterSource,
-    solomonShadowSource,
+    solomonGraveMarkSource,
     weatherSplashSource,
   ])]
   const packedSources = requestedSources.filter(boneyardCombatAtlasSourceIsPacked)
@@ -110,21 +111,23 @@ export async function loadBoneyardWorldTextures(): Promise<BoneyardWorldTextures
     200,
     200,
   )
+  const roads = ROAD_TEXTURES.map(texture)
+  for (const road of roads) road.source.addressMode = 'repeat'
 
   return {
     ...createPlayerWorldTextures(texture),
     assetSources: sources,
     base,
     combatAtlas,
-    graveDirt: texture(boneyard.graveDirt),
     lantern: texture(boneyard.lantern),
     levelUpSparkle: texture(boneyard.levelUpSparkle),
     regionLightGlyph: texture(regionLightRef.src),
+    roads,
     solomonDialogueBody: solomonEncounter[0],
     solomonDialogueMouth: solomonEncounter.slice(1, 4),
     solomonDig: stripFrames(texture(boneyard.solomonDig), 18, 200, 200, 'horizontal'),
     solomonFlydirt: texture(boneyard.solomonFlydirt),
-    solomonShadow: texture(solomonShadowSource),
+    solomonGraveMark: texture(solomonGraveMarkSource),
     solomonWalk: solomonEncounter.slice(4, 10),
     weatherSplash: texture(weatherSplashSource),
   }
