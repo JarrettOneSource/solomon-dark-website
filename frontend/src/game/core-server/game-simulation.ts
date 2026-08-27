@@ -288,6 +288,7 @@ import {
   NATIVE_TUTORIAL_FIRES,
   nativeTutorialCameraLockSafetyClear,
   nativeTutorialForcedVelocity,
+  nativeTutorialHostileScenePaused,
   nativeTutorialHudAccess,
   stepNativeTutorial,
   type NativeTutorialSurfaceAction,
@@ -2053,6 +2054,8 @@ export function stepGameSimulationTick(
         const tutorialProgression = getPlayerProgression(state, tutorialPlayerId)
         const tutorialEconomy = getPlayerEconomy(state, tutorialPlayerId)
         const tutorialSecondary = state.secondaryAbilities.players[tutorialPlayerId]
+        const tutorialInput = activeInputs[tutorialPlayerId]
+          ?? createIdlePlayerCharacterInput()
         const tutorial = stepNativeTutorial(boneyardWorld.tutorial, {
           acidRainCastSequence: tutorialSecondary?.castSequence ?? 0,
           acidRainLastSkillId: tutorialSecondary?.lastSkillId ?? null,
@@ -2084,6 +2087,8 @@ export function stepGameSimulationTick(
           maximumHealth: tutorialProgression.maximumHealth,
           playerActionIdle: !tutorialPlayer.primaryCast.held
             && (tutorialSecondary?.staffCastTicksRemaining ?? 0) === 0,
+          playerMovementActive: tutorialInput.movement.x !== 0
+            || tutorialInput.movement.y !== 0,
           playerPosition: tutorialPlayer.position,
           primaryCastSequence: tutorialPlayer.primaryCast.castSequence,
           solomonPhase: boneyardWorld.encounter?.phase ?? null,
@@ -2166,6 +2171,8 @@ export function stepGameSimulationTick(
           })),
         [...tutorialSpawnIntents, ...(options.enemySpawnIntents ?? [])],
         options.extensions?.createLootItems,
+        boneyardWorld.tutorial !== null
+          && nativeTutorialHostileScenePaused(boneyardWorld.tutorial),
       )
       return finishGameSimulationTick(
         state,

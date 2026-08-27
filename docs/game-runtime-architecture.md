@@ -223,6 +223,9 @@ Save schema 15 persists that College state and the participant's exact Hub
 region, transition, and position. Schemas 1..14 retain their versioned shapes;
 a schema-13/14 legacy direct-Office admission migrates to the complete
 Courtyard sequence, while ordinary legacy Hub continuations remain settled.
+Save schema 16 adds the Tutorial's movement-instruction acknowledgement;
+schemas 1..15 normalize it false. It changes no Tutorial stage, player
+position, or forced-intro motion.
 The host applies
 either skill selection only to the authenticated
 participant before publishing a new progression revision.
@@ -899,9 +902,9 @@ lineage. A replacement-process recovery may do the same only after the stable
 secret verifies the exact normalized document and target deployment revision;
 the original run ID keeps Hall submission idempotent. The run's independent
   taint remains authoritative. Local Hall history remains available. Save schemas
-12 through 15 carry durable `global-clean` or `local-only` integrity, explicit
+12 through 16 carry durable `global-clean` or `local-only` integrity, explicit
 active-run state, and the nullable active-party rejoin capability. Schemas 13
-through 15 also carry the one-shot College-admission pending bit; schemas 1 through 3
+through 16 also carry the one-shot College-admission pending bit; schemas 1 through 3
 migrate conservatively to `local-only`, schema 4 preserves its authored
 integrity, schema 5 migrates its prior envelope, and schemas 6 through 9 preserve
 their authored integrity and active-run summary. Schema 9 additionally retains
@@ -910,7 +913,8 @@ through 9 carry no live rejoin capability. Schema 10 adds that capability;
 schema 11 adds the native NPC help rows; schema 12 upgrades the capability to a
 revision-bound signed claim; schema 13 adds the College-admission bit; schema 14
 adds Web Lua wearable identity; schema 15 adds resumable College participant
-state and exact Hub continuation geometry. Each
+state and exact Hub continuation geometry; schema 16 adds the Tutorial
+movement-copy acknowledgement. Each
 participant receives an
 authoritative profile/continuation checkpoint, and Game Over removes only that
 participant's current-wizard continuation.
@@ -1707,3 +1711,20 @@ held input again; standalone resets its next-tick wall-clock deadline, while a
 shared run rejoins the already-live scheduler on its next ordinary edge. No
 elapsed wall time becomes catch-up simulation. The visible countdown overlay
 exists only after readiness and is presentation-only; it never owns expiry.
+
+## Tutorial opening guidance and selective hostile hold
+
+Protocol 84 extends the strict Tutorial snapshot with one host-owned
+`movementInstructionAcknowledged` boolean. Only a nonzero authenticated player
+movement input can set it; the stock forced-intro velocity cannot. Save schema
+16 persists that fact, while schemas 1 through 15 normalize it false.
+
+The Tutorial's requested first-combat hold is not gameplay pause or resume
+grace. While the active controller is at stage 2, the hostile store accepts the
+authored opening spawn intents and advances its `lastStepTick`, but preserves
+existing hostile actors, Maggots, projectiles, effects, death lanes, and RNG.
+Player movement, primary-cast simulation, Tutorial/narration clocks, UI, and
+the application pointer clock remain live. The first accepted primary cast
+advances the controller to stage 3 on the next 100-Hz tick; hostile simulation
+then resumes with no elapsed-time replay. This remains a solo Tutorial rule and
+adds no party-wide pause message or scheduler hold.

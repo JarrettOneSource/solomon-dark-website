@@ -67,6 +67,17 @@ export function boneyardDigIndicatorLayout(
   }
 }
 
+export function boneyardTutorialDigIndicatorLayout(
+  playerScreen: Vec2,
+  digScreen: Vec2,
+  viewport?: Pick<GameViewportLayout, 'height' | 'width'>,
+): BoneyardDigIndicatorLayout {
+  const layout = boneyardDigIndicatorLayout(playerScreen, digScreen, viewport)
+  return layout.placement === 'edge' && layout.y < 230
+    ? { ...layout, y: 230 }
+    : layout
+}
+
 function insideHudSafeArea(point: Vec2, right: number, bottom: number): boolean {
   return point.x >= HUD_SAFE_LEFT
     && point.x <= right

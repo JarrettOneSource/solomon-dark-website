@@ -832,6 +832,7 @@ export interface BoneyardEnemyStoreStepContext {
   readonly arenaScalars?: Partial<BoneyardEnemyArenaScalars>
   readonly clipSpellSegment?: ClipBoneyardEnemySpellSegment
   readonly firstProjectileWorldContact: FirstBoneyardEnemyProjectileWorldContact
+  readonly paused?: boolean
   readonly players: BoneyardEnemyTargets
   readonly registerLightProvider?: RegisterNativeLightProvider
   readonly registerProjectileLightProvider?: RegisterNativeLightProvider
@@ -1648,6 +1649,7 @@ export function stepBoneyardEnemyStore(
   if (context.tick <= source.lastStepTick) {
     throw new RangeError('enemy store ticks must advance monotonically')
   }
+  if (context.paused) return stepPausedBoneyardEnemyStore(source, context)
   const standaloneLightProviderOrder = createNativeLightProviderOrder(
     standaloneEnemyLightProviderOrderState(source),
   )
@@ -1729,6 +1731,63 @@ export function stepBoneyardEnemyStore(
     work.actors.length + work.maggots.length,
   )
   work.actors.push(...materializeSpawnIntents(work, context, spawnIntents))
+  return finishBoneyardEnemyStoreStep(work, context.tick)
+}
+
+function stepPausedBoneyardEnemyStore(
+  source: BoneyardEnemyStore,
+  context: BoneyardEnemyStoreStepContext,
+): BoneyardEnemyStoreStepResult {
+  const standaloneLightProviderOrder = createNativeLightProviderOrder(
+    standaloneEnemyLightProviderOrderState(source),
+  )
+  const work: WorkingStep = {
+    actors: [...source.actors],
+    deathEffects: [...source.deathEffects],
+    events: [],
+    headFacingRngState: source.headFacingRngState,
+    impActorCount: source.actors.filter(({ config }) => config.enemyToken === 'IMP').length,
+    locomotionRngState: source.locomotionRngState,
+    mageLightningPulses: [...source.mageLightningPulses],
+    maggots: [...source.maggots],
+    nextActorId: source.nextActorId,
+    nextDeathEpoch: source.nextDeathEpoch,
+    nextDeathEffectId: source.nextDeathEffectId,
+    nextEventId: source.nextEventId,
+    nextMageLightningPulseId: source.nextMageLightningPulseId,
+    nextNativeCellBindingOrder: source.nextNativeCellBindingOrder,
+    nextNativeRegistrationOrder: source.nextNativeRegistrationOrder,
+    nextProjectileId: source.nextProjectileId,
+    nextProjectileEffectId: source.nextProjectileEffectId,
+    nextSyntheticSpawnIntentId: source.nextSyntheticSpawnIntentId,
+    pathStatusFactors: new Map(),
+    playerDamage: [],
+    playerKnockbacks: [],
+    projectiles: [...source.projectiles],
+    projectileEffects: [...source.projectileEffects],
+    registerLightProvider: context.registerLightProvider
+      ?? standaloneLightProviderOrder.register,
+    registerProjectileLightProvider: context.registerProjectileLightProvider
+      ?? context.registerLightProvider
+      ?? standaloneLightProviderOrder.register,
+    retired: [],
+    rewards: [],
+    rngState: source.rngState,
+    steeringRngState: source.steeringRngState,
+    spawnedActorIds: [],
+  }
+  const spawnIntents = context.resolveSpawnIntents(
+    work.actors.length + work.maggots.length,
+  )
+  work.actors.push(...materializeSpawnIntents(work, context, spawnIntents))
+  work.events = []
+  return finishBoneyardEnemyStoreStep(work, context.tick)
+}
+
+function finishBoneyardEnemyStoreStep(
+  work: WorkingStep,
+  tick: number,
+): BoneyardEnemyStoreStepResult {
   return {
     events: Object.freeze(work.events),
     playerDamage: Object.freeze(work.playerDamage),
@@ -1740,7 +1799,7 @@ export function stepBoneyardEnemyStore(
       actors: work.actors,
       deathEffects: work.deathEffects,
       headFacingRngState: work.headFacingRngState,
-      lastStepTick: context.tick,
+      lastStepTick: tick,
       locomotionRngState: work.locomotionRngState,
       mageLightningPulses: work.mageLightningPulses,
       maggots: work.maggots,

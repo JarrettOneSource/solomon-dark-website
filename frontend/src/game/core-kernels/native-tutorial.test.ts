@@ -25,6 +25,7 @@ import {
   nativeTutorialEnemyCameraPositionIsAllowed,
   nativeTutorialEnemySpawnPositionIsAllowed,
   nativeTutorialForcedVelocity,
+  nativeTutorialHostileScenePaused,
   nativeTutorialHudAccess,
   nativeTutorialInstructionBaselines,
   nativeTutorialAmuletIdentityMatches,
@@ -48,6 +49,7 @@ const BASE_INPUT: NativeTutorialTickInput = {
   levelUpPending: false,
   maximumHealth: 100,
   playerActionIdle: true,
+  playerMovementActive: false,
   playerPosition: { x: 1025, y: 2070.0703125 },
   primaryCastSequence: 0,
   solomonPhase: null,
@@ -182,17 +184,83 @@ test('starts the exact two five-skeleton opening groups when Solomon runs', () =
     `${position.x},${position.y}`
   ))).size, 10)
 
-  const transientInstruction = stepNativeTutorial(result.state, {
+  const heldInstruction = stepNativeTutorial(result.state, {
     ...BASE_INPUT,
     enemyCount: 10,
     solomonPhase: 'escaping',
     solomonRunEventId: 1,
     tick: 2,
   })
-  assert.equal(transientInstruction.state.stage, 3)
-  assert.equal(nativeTutorialPresentation(transientInstruction.state, {
-    inventory: 'I', potion: '1', secondary: 'Right Mouse', skills: 'K',
-  }).heading, null)
+  assert.equal(heldInstruction.state.stage, 2)
+  assert.equal(nativeTutorialHostileScenePaused(heldInstruction.state), true)
+  assert.equal(nativeTutorialPresentation(heldInstruction.state, {
+    inventory: 'I', moveDown: 'S', moveLeft: 'A', moveRight: 'D', moveUp: 'W',
+    potion: '1', secondary: 'Right Mouse', skills: 'K',
+  }, 'desktop').heading, 'POINT AND CLICK YOUR MOUSE\nTO THROW MAGIC MISSILES')
+
+  const released = stepNativeTutorial(heldInstruction.state, {
+    ...BASE_INPUT,
+    enemyCount: 10,
+    primaryCastSequence: 1,
+    solomonPhase: 'escaping',
+    solomonRunEventId: 1,
+    tick: 3,
+  })
+  assert.equal(released.state.stage, 3)
+  assert.equal(nativeTutorialHostileScenePaused(released.state), false)
+  assert.equal(nativeTutorialPresentation(released.state, {
+    inventory: 'I', moveDown: 'S', moveLeft: 'A', moveRight: 'D', moveUp: 'W',
+    potion: '1', secondary: 'Right Mouse', skills: 'K',
+  }, 'desktop').heading, null)
+})
+
+test('movement copy follows configured desktop keys or the mobile joystick and hides only on user input', () => {
+  const ready = afterIntro(createNativeTutorialState(
+    BASE_INPUT.playerPosition,
+    0,
+    'tutorial-movement-copy',
+  ))
+  const bindings = {
+    inventory: 'I',
+    moveDown: 'Down',
+    moveLeft: 'Left',
+    moveRight: 'Right',
+    moveUp: 'Up',
+    potion: '3',
+    secondary: 'Right Mouse',
+    skills: 'K',
+  }
+  assert.deepEqual(nativeTutorialPresentation(ready, bindings, 'desktop'), {
+    heading: 'USE YOUR KEYBOARD\nTO MOVE THE WIZARD',
+    hud: { combat: false, inventory: false, quickbar: false, skills: false, spell: false },
+    subheading: 'Move with Up, Left, Down, and Right',
+  })
+  assert.deepEqual(nativeTutorialPresentation(ready, bindings, 'mobile'), {
+    heading: 'USE THE LEFT JOYSTICK\nTO MOVE THE WIZARD',
+    hud: { combat: false, inventory: false, quickbar: false, skills: false, spell: false },
+    subheading: 'Find and confront Solomon Dark',
+  })
+  const forcedMotion = stepNativeTutorial(ready, {
+    ...BASE_INPUT,
+    playerMovementActive: false,
+    playerPosition: { x: BASE_INPUT.playerPosition.x, y: BASE_INPUT.playerPosition.y - 50 },
+  })
+  assert.equal(forcedMotion.state.movementInstructionAcknowledged, false)
+  assert.notEqual(nativeTutorialPresentation(forcedMotion.state, bindings, 'desktop').heading, null)
+
+  const moved = stepNativeTutorial(forcedMotion.state, {
+    ...BASE_INPUT,
+    playerMovementActive: true,
+    playerPosition: forcedMotion.state.movementAnchor,
+    tick: 2,
+  })
+  assert.equal(moved.state.stage, 0)
+  assert.equal(moved.state.movementInstructionAcknowledged, true)
+  assert.deepEqual(nativeTutorialPresentation(moved.state, bindings, 'desktop'), {
+    heading: null,
+    hud: { combat: false, inventory: false, quickbar: false, skills: false, spell: false },
+    subheading: null,
+  })
 })
 
 test('shares only the Three Archers final placement while retaining fresh raw draws', () => {
@@ -419,22 +487,25 @@ test('projects every stock teaching gate from the controller stage', () => {
     spell: false,
   })
   const ready = afterIntro(initial)
-  const bindings = { inventory: 'I', potion: '1', secondary: 'Right Mouse', skills: 'K' }
+  const bindings = {
+    inventory: 'I', moveDown: 'S', moveLeft: 'A', moveRight: 'D', moveUp: 'W',
+    potion: '1', secondary: 'Right Mouse', skills: 'K',
+  }
   assert.equal(
-    nativeTutorialPresentation(ready, bindings).heading,
+    nativeTutorialPresentation(ready, bindings, 'desktop').heading,
     'USE YOUR KEYBOARD\nTO MOVE THE WIZARD',
   )
-  assert.deepEqual(nativeTutorialPresentation({ ...ready, stage: 8 }, bindings), {
+  assert.deepEqual(nativeTutorialPresentation({ ...ready, stage: 8 }, bindings, 'desktop'), {
     heading: null,
     hud: { combat: false, inventory: false, quickbar: true, skills: false, spell: true },
     subheading: null,
   })
-  assert.deepEqual(nativeTutorialPresentation({ ...ready, stage: 9 }, bindings), {
+  assert.deepEqual(nativeTutorialPresentation({ ...ready, stage: 9 }, bindings, 'desktop'), {
     heading: 'ACCESS YOUR INVENTORY',
     hud: { combat: false, inventory: true, quickbar: true, skills: false, spell: true },
     subheading: "Click here or press 'I' to open the inventory screen",
   })
-  assert.deepEqual(nativeTutorialPresentation({ ...ready, stage: 10 }, bindings), {
+  assert.deepEqual(nativeTutorialPresentation({ ...ready, stage: 10 }, bindings, 'desktop'), {
     heading: null,
     hud: { combat: false, inventory: true, quickbar: true, skills: false, spell: true },
     subheading: null,

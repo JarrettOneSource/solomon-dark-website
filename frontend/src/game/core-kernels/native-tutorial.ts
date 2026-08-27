@@ -156,6 +156,7 @@ export interface NativeTutorialState {
   readonly inventorySeen: boolean
   readonly itemDropArmed: boolean
   readonly movementAnchor: Readonly<BoneyardPoint>
+  readonly movementInstructionAcknowledged: boolean
   readonly narration: NativeTutorialNarrationState
   readonly nextSpawnIntentId: number
   readonly primaryCastSequenceAtStart: number
@@ -188,6 +189,7 @@ export interface NativeTutorialTickInput {
   readonly levelUpPending: boolean
   readonly maximumHealth: number
   readonly playerActionIdle: boolean
+  readonly playerMovementActive: boolean
   readonly playerPosition: Readonly<BoneyardPoint>
   readonly primaryCastSequence: number
   readonly solomonPhase: BoneyardSolomonPhase | null
@@ -214,6 +216,19 @@ export interface NativeTutorialPresentation {
   readonly heading: string | null
   readonly hud: NativeTutorialHudAccess
   readonly subheading: string | null
+}
+
+export type NativeTutorialInputMode = 'desktop' | 'mobile'
+
+export interface NativeTutorialBindingLabels {
+  readonly inventory: string
+  readonly moveDown: string
+  readonly moveLeft: string
+  readonly moveRight: string
+  readonly moveUp: string
+  readonly potion: string
+  readonly secondary: string
+  readonly skills: string
 }
 
 export interface NativeTutorialInstructionBaselines {
@@ -385,6 +400,7 @@ export function createNativeTutorialState(
       x: Math.fround(playerPosition.x + 50),
       y: Math.fround(playerPosition.y - 100),
     }),
+    movementInstructionAcknowledged: false,
     narration: emptyNarration(),
     nextSpawnIntentId: 1,
     primaryCastSequenceAtStart: primaryCastSequence,
@@ -542,6 +558,9 @@ export function stepNativeTutorial(
     })
   }
   let state = tickBaseState(safeSource, input)
+  if (state.stage === 0 && input.playerMovementActive) {
+    state = { ...state, movementInstructionAcknowledged: true }
+  }
   let grantExperience = 0
   let forceOfferSkillIds: readonly number[] | null = null
 
@@ -591,10 +610,9 @@ export function stepNativeTutorial(
             dialogueArmed: false,
           }
         }
-        if (
-          input.primaryCastSequence > state.primaryCastSequenceAtStart
-          || input.enemyCount > 5
-        ) state = enterStage(state, 3)
+        if (input.primaryCastSequence > state.primaryCastSequenceAtStart) {
+          state = enterStage(state, 3)
+        }
         break
       case 3:
         if (input.enemyCount === 0) {
@@ -711,13 +729,33 @@ export function stepNativeTutorial(
 
 export function nativeTutorialPresentation(
   state: NativeTutorialState,
-  bindings: Readonly<{ inventory: string; potion: string; secondary: string; skills: string }>,
+  bindings: NativeTutorialBindingLabels,
+  inputMode: NativeTutorialInputMode,
 ): NativeTutorialPresentation {
   const access = nativeTutorialHudAccess(state)
   if (state.introActive) return present(null, null, access)
   switch (state.stage) {
-    case 0: return present('USE YOUR KEYBOARD\nTO MOVE THE WIZARD', 'Find and confront Solomon Dark', access)
-    case 2: return present('POINT AND CLICK YOUR MOUSE\nTO THROW MAGIC MISSILES', 'Defeat all evil emanations', access)
+    case 0:
+      if (state.movementInstructionAcknowledged) return present(null, null, access)
+      return inputMode === 'mobile'
+        ? present(
+            'USE THE LEFT JOYSTICK\nTO MOVE THE WIZARD',
+            'Find and confront Solomon Dark',
+            access,
+          )
+        : present(
+            'USE YOUR KEYBOARD\nTO MOVE THE WIZARD',
+            `Move with ${bindings.moveUp}, ${bindings.moveLeft}, ${bindings.moveDown}, and ${bindings.moveRight}`,
+            access,
+          )
+    case 2:
+      return present(
+        inputMode === 'mobile'
+          ? 'USE THE RIGHT JOYSTICK\nTO THROW MAGIC MISSILES'
+          : 'POINT AND CLICK YOUR MOUSE\nTO THROW MAGIC MISSILES',
+        'Defeat all evil emanations',
+        access,
+      )
     case 5: return present('A SECONDARY SPELL IS READY', `Click here or press '${bindings.secondary}' to cast 'ACID RAIN'`, access)
     case 9: return present('ACCESS YOUR INVENTORY', `Click here or press '${bindings.inventory}' to open the inventory screen`, access)
     case 11: return present('WALK INTO ENEMIES TO CLUB THEM', 'This requires an equipped staff', access)
@@ -726,6 +764,10 @@ export function nativeTutorialPresentation(
     case 19: return present(state.active ? 'SURVIVE' : null, null, access)
     default: return present(null, null, access)
   }
+}
+
+export function nativeTutorialHostileScenePaused(state: NativeTutorialState): boolean {
+  return state.active && !state.introActive && state.stage === 2
 }
 
 export function nativeTutorialInstructionBaselines(

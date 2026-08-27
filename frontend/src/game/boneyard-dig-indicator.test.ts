@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import {
   boneyardDigIndicatorLayout,
+  boneyardTutorialDigIndicatorLayout,
 } from './boneyard-dig-indicator.ts'
 
 test('pins an off-screen cardinal target to the HUD-safe edge', () => {
@@ -77,6 +78,21 @@ test('expands the safe perimeter with a browser-sized logical viewport', () => {
       rotationDeg: 90,
       x: 800,
       y: 880,
+    },
+  )
+})
+
+test('keeps the Tutorial edge arrow below its opening instruction block', () => {
+  assert.deepEqual(
+    boneyardTutorialDigIndicatorLayout(
+      { x: 800, y: 450 },
+      { x: 800, y: -1_000 },
+    ),
+    {
+      placement: 'edge',
+      rotationDeg: -90,
+      x: 800,
+      y: 230,
     },
   )
 })

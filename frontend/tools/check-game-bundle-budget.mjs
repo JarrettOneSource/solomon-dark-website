@@ -18,7 +18,7 @@ const source = await readFile(new URL(entryFiles[0], assetRoot))
 const gzipBytes = gzipSync(source).byteLength
 const rawBytes = source.byteLength
 const maximumRawBytes = 512 * 1024
-// Protocol 80 and save schema 15 add the resumable Courtyard/Office admission owner.
+// Protocol 84 and save schema 16 add the persisted Tutorial movement acknowledgement.
 // Keep the route ceiling in whole-KiB steps while retaining the independent 512 KiB raw cap.
 const maximumGzipBytes = 131 * 1024
 

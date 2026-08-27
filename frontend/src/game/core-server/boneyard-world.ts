@@ -362,6 +362,7 @@ export function stepBoneyardWorldTick(
     actorSeed: number
     enemyToken: BoneyardWaveEnemyToken
   }>) => readonly HubInventoryItem[],
+  hostileScenePaused = false,
 ): BoneyardWorldTickResult {
   let arenaTransition = world.arenaTransition === null
     ? null
@@ -479,10 +480,9 @@ export function stepBoneyardWorldTick(
       commitPlayerCharacterTick(player, plan, position),
     ]
   }))
-  const collisionResolvedEnemies = commitBoneyardEnemyCollisionPositions(
-    world.enemies,
-    resolvedPositions,
-  )
+  const collisionResolvedEnemies = hostileScenePaused
+    ? world.enemies
+    : commitBoneyardEnemyCollisionPositions(world.enemies, resolvedPositions)
   const livingPlayers = Object.fromEntries(Object.entries(nextPlayers).filter(([playerId]) => {
     const combat = playerCombat[playerId]
     return combat?.alive === true && combat.eligible
@@ -620,6 +620,7 @@ export function stepBoneyardWorldTick(
         radius,
       )
     ),
+    paused: hostileScenePaused,
     players: Object.fromEntries([
       ...Object.entries(nextPlayers).map(([playerId, player]) => {
         const combat = playerCombat[playerId]

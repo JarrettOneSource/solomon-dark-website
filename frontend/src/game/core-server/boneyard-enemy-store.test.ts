@@ -163,6 +163,52 @@ test('a UIDGroup placement cache reuses only its first final root', () => {
   ])
 })
 
+test('a paused hostile tick materializes authored spawns without advancing existing enemy state', () => {
+  const spawned = stepBoneyardEnemyStore(createBoneyardEnemyStore('tutorial-pause'), {
+    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    players: FAR_PLAYERS,
+    resolveMovement: DIRECT_MOVEMENT,
+    resolveSpawnIntents: () => [intent('SKELETON', 1, { x: 0, y: 0 })],
+    tick: 0,
+  })
+  const existing = structuredClone(spawned.store.actors[0])
+  const held = stepBoneyardEnemyStore(spawned.store, {
+    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    paused: true,
+    players: FAR_PLAYERS,
+    resolveMovement: DIRECT_MOVEMENT,
+    resolveSpawnIntents: () => [intent('SKELETON', 2, { x: 50, y: 0 })],
+    tick: 50,
+  })
+  assert.deepEqual(held.store.actors[0], existing)
+  assert.equal(held.store.actors.length, 2)
+  assert.equal(held.store.lastStepTick, 50)
+  assert.deepEqual(held.events, [])
+  assert.deepEqual(held.playerDamage, [])
+  assert.deepEqual(held.playerKnockbacks, [])
+  assert.deepEqual(held.rewards, [])
+  assert.deepEqual(held.spawnedActorIds, [2])
+
+  const heldAgain = stepBoneyardEnemyStore(held.store, {
+    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    paused: true,
+    players: FAR_PLAYERS,
+    resolveMovement: DIRECT_MOVEMENT,
+    resolveSpawnIntents: () => [],
+    tick: 100,
+  })
+  assert.deepEqual(heldAgain.store, { ...held.store, lastStepTick: 100 })
+
+  const released = stepBoneyardEnemyStore(heldAgain.store, {
+    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    players: FAR_PLAYERS,
+    resolveMovement: DIRECT_MOVEMENT,
+    resolveSpawnIntents: () => [],
+    tick: 101,
+  })
+  assert.notDeepEqual(released.store.actors, heldAgain.store.actors)
+})
+
 test('Badguy Hurricane cooldown is constructor-randomized, target-owned, and drops ten per tick', () => {
   const spawned = spawnOne('hurricane-cooldown', 'SKELETON', { x: 0, y: 0 }, FAR_PLAYERS)
   const initial = spawned.store.actors[0]!.hurricaneContactCooldown

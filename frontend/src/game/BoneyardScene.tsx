@@ -10,6 +10,7 @@ import { worldToScreen, type Camera } from '../editor/render.ts'
 import { boneyard, nativeGameOver } from '../lib/assets.ts'
 import {
   boneyardDigIndicatorLayout,
+  boneyardTutorialDigIndicatorLayout,
   SOLOMON_DIG_HOTKEY_CODE,
 } from './boneyard-dig-indicator.ts'
 import { BoneyardEnemyAmbientAudioSynchronizer } from './boneyard-enemy-ambient-audio.ts'
@@ -22,7 +23,11 @@ import {
   isBoneyardPlayerCombatEnabled,
 } from './core-kernels/boneyard-encounter.ts'
 import { actorHeadingVector } from './core-kernels/actor-heading.ts'
-import { nativeTutorialHudAccess, type NativeTutorialState } from './core-kernels/native-tutorial.ts'
+import {
+  nativeTutorialHostileScenePaused,
+  nativeTutorialHudAccess,
+  type NativeTutorialState,
+} from './core-kernels/native-tutorial.ts'
 import type { HubInventoryAction } from './core-kernels/hub-economy.ts'
 import { nearestBoneyardGoodie } from './core-kernels/boneyard-goodie-interaction.ts'
 import type { PlayerCharacterInput } from './core-kernels/player-character.ts'
@@ -216,6 +221,12 @@ export default function BoneyardScene({
   )
   const tutorialAccess = tutorial ? nativeTutorialHudAccess(tutorial) : null
   const [tutorialWorldTarget, setTutorialWorldTarget] = useState<Readonly<{
+    x: number
+    y: number
+  }> | null>(null)
+  const [tutorialSolomonPointer, setTutorialSolomonPointer] = useState<Readonly<{
+    toX: number
+    toY: number
     x: number
     y: number
   }> | null>(null)
@@ -736,6 +747,54 @@ export default function BoneyardScene({
           setTutorialWorldTarget((current) => (
             current?.x === target?.x && current?.y === target?.y ? current : target
           ))
+          const tutorialPlayer = snapshot.players[playerId]
+          const encounter = snapshot.world.encounter
+          let solomonPointer: Readonly<{
+            toX: number
+            toY: number
+            x: number
+            y: number
+          }> | null = null
+          if (
+            tutorialState
+            && !tutorialState.introActive
+            && tutorialState.stage <= 1
+            && encounter?.phase === 'digging'
+            && tutorialPlayer
+            && digPosition
+          ) {
+            const playerScreen = worldToScreen(
+              tutorialPlayer.position,
+              camera,
+              viewportRef.current.width,
+              viewportRef.current.height,
+            )
+            const digScreen = worldToScreen(
+              digPosition,
+              camera,
+              viewportRef.current.width,
+              viewportRef.current.height,
+            )
+            const layout = boneyardTutorialDigIndicatorLayout(
+              playerScreen,
+              digScreen,
+              viewportRef.current,
+            )
+            solomonPointer = {
+              toX: digScreen.x,
+              toY: digScreen.y,
+              x: layout.x,
+              y: layout.y,
+            }
+          }
+          setTutorialSolomonPointer((current) => (
+            current?.x === solomonPointer?.x
+            && current?.y === solomonPointer?.y
+            && current?.toX === solomonPointer?.toX
+            && current?.toY === solomonPointer?.toY
+              ? current
+              : solomonPointer
+          ))
         }
         if (snapshot.run.phase === 'game-over') {
           setRun((current) => (
@@ -913,6 +972,8 @@ export default function BoneyardScene({
   const discipline = localPlayer?.config.discipline ?? 'arcane'
   const gateLeaves = boneyardInitialSnapshot.world.gateLeaves
   const digIndicatorVisible = Boolean(!tutorial && dig && digIndicatorRunId === loaded.runId)
+  const tutorialScenePaused = tutorial !== null
+    && nativeTutorialHostileScenePaused(tutorial)
   const configuredCameraZoom = cameraZoomForFov(
     BONEYARD_CAMERA_ZOOM,
     settings.cameraFovPercent,
@@ -937,6 +998,7 @@ export default function BoneyardScene({
       data-renderer-state={rendererError ? 'error' : rendererState}
       data-run-id={loaded.runId}
       data-tutorial-stage={tutorial?.stage}
+      data-tutorial-scene-paused={tutorialScenePaused}
       data-viewport-height={viewport.height}
       data-viewport-scale={viewport.displayScale}
       data-viewport-width={viewport.width}
@@ -970,6 +1032,7 @@ export default function BoneyardScene({
               <TutorialOverlay
                 audio={audio}
                 controls={settings.controls}
+                solomonPointer={tutorialSolomonPointer}
                 state={tutorial}
                 viewport={viewport}
                 worldTarget={tutorialWorldTarget}

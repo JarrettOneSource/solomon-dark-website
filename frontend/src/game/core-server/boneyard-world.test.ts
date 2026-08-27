@@ -1178,6 +1178,7 @@ test('every Tutorial opening enemy materializes on the combat side of the entran
       levelUpPending: false,
       maximumHealth: 100,
       playerActionIdle: true,
+      playerMovementActive: false,
       playerPosition,
       primaryCastSequence: 0,
       solomonPhase: 'escaping',

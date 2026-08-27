@@ -14,7 +14,10 @@ import {
   getPlayerProgression,
   getPlayerSkillBook,
 } from '../src/game/core-server/game-simulation.ts'
-import { replacePlayerCharacter } from '../src/game/core-server/player-entity-store.ts'
+import {
+  insertPlayerEntityLootItem,
+  replacePlayerCharacter,
+} from '../src/game/core-server/player-entity-store.ts'
 import { createBoneyardEnemyStore } from '../src/game/core-server/boneyard-enemy-store.ts'
 import {
   removeBoneyardLootActors,
@@ -207,6 +210,13 @@ async function runScenario(scenario) {
     close(prelude.recordCenterY, prelude.overlayCenterY, 0.6, `${scenario.name} prelude y`)
     await page.screenshot({ path: scenario.preludeScreenshot })
 
+    const openingGuidance = await exerciseTutorialOpeningGuidance(
+      host,
+      page,
+      scenario,
+      screenshotRoot,
+    )
+
     forceTutorialState(host, {
       introActive: false,
       introBlend: 1,
@@ -243,6 +253,7 @@ async function runScenario(scenario) {
     const groundDrop = scenario.name === 'stock'
       ? await exerciseTutorialGroundDrop(host, page, screenshotRoot)
       : null
+    ensureTutorialHealthPotion(host)
     configureTutorialFixture(host, {
       combatEnabled: true,
       position: { x: 1025, y: 800 },
@@ -320,6 +331,7 @@ async function runScenario(scenario) {
       healthPotionGate,
       initial,
       moved,
+      openingGuidance,
       pageErrors,
       potionBindings,
       prelude,
@@ -705,6 +717,235 @@ function forceTutorialState(host, patch) {
   })
 }
 
+async function exerciseTutorialOpeningGuidance(host, page, scenario, screenshotPath) {
+  forceTutorialState(host, {
+    introActive: false,
+    introBlend: 1,
+    introDelayTicksRemaining: 0,
+    introFade: 0,
+    introMovementTicksRemaining: 0,
+    movementInstructionAcknowledged: false,
+    stage: 0,
+    stageTicks: 0,
+  })
+  const openingOverlay = page.locator('.tutorial-overlay[data-stage="0"]')
+  await openingOverlay.waitFor({ timeout: 15_000 })
+  const instruction = openingOverlay.locator('.tutorial-instruction .sr-only')
+  const instructionText = (await instruction.innerText()).replaceAll(/\s+/g, ' ').trim()
+  if (scenario.coarse) {
+    assert.match(instructionText, /USE THE LEFT JOYSTICK TO MOVE THE WIZARD/)
+    await page.getByRole('region', { name: 'Movement joystick' }).waitFor()
+    await page.getByRole('region', { name: 'Primary attack joystick' }).waitFor()
+  } else {
+    assert.match(instructionText, /USE YOUR KEYBOARD TO MOVE THE WIZARD/)
+    assert.match(instructionText, /Move with W, A, S, and D/)
+  }
+  const solomonPointer = page.locator('[data-tutorial-pointer="solomon-dig"]')
+  await solomonPointer.waitFor({ timeout: 15_000 })
+  await waitForVisibleTutorialPointer(page, 'solomon-dig')
+  const pointerReceipt = await solomonPointer.evaluate((pointer) => ({
+    targetX: Number(pointer.dataset.targetX),
+    targetY: Number(pointer.dataset.targetY),
+    x: Number(pointer.dataset.x),
+    y: Number(pointer.dataset.y),
+  }))
+  assert.ok(Object.values(pointerReceipt).every(Number.isFinite))
+  const openingScreenshot = `${screenshotPath}-${scenario.name}-opening-guidance.png`
+  await page.screenshot({ path: openingScreenshot })
+
+  if (scenario.coarse) {
+    await holdTutorialJoystick(page, 'movement', { x: 0, y: -1 })
+  } else {
+    await page.keyboard.down('w')
+    try {
+      await waitForTutorialHostState(host, (state) => (
+        state.movementInstructionAcknowledged === true
+      ), 'movement acknowledgement')
+    } finally {
+      await page.keyboard.up('w')
+    }
+  }
+  await waitForTutorialHostState(host, (state) => (
+    state.movementInstructionAcknowledged === true
+  ), 'movement acknowledgement')
+  await page.waitForFunction(() => (
+    document.querySelector('.tutorial-overlay[data-stage="0"] .tutorial-instruction') === null
+  ))
+  assert.equal(await solomonPointer.count(), 1)
+
+  let state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
+  assert.ok(state.world.encounter)
+  const playerId = state.playerEntities.identities[0]?.playerId
+  assert.ok(playerId)
+  const character = getPlayerCharacter(state, playerId)
+  Object.assign(state, {
+    ...state,
+    playerEntities: replacePlayerCharacter(state.playerEntities, playerId, {
+      ...character,
+      position: { ...state.world.encounter.position },
+      velocity: { x: 0, y: 0 },
+    }),
+    world: {
+      ...state.world,
+      encounter: {
+        ...state.world.encounter,
+        digPhase: state.world.encounter.digFrameProgram.length - 1,
+      },
+    },
+  })
+  await waitForTutorialEncounter(host, (phase) => phase !== 'digging', 'Solomon contact')
+  await solomonPointer.waitFor({ state: 'detached', timeout: 15_000 })
+
+  const configuredTick = configureTutorialFixture(host, {
+    combatEnabled: false,
+    position: { x: 1025, y: 1350 },
+    tutorial: {
+      active: true,
+      dialogueArmed: true,
+      stage: 1,
+      stageTicks: 0,
+      waveOrdinal: 0,
+      waveSpawnCursor: 0,
+      waveTicks: 0,
+    },
+  })
+  state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
+  assert.ok(state.world.encounter)
+  Object.assign(state, {
+    ...state,
+    world: {
+      ...state.world,
+      encounter: { ...state.world.encounter, phase: 'escaping', runEventId: 1 },
+    },
+  })
+  await waitForTutorialHostState(host, (tutorial, simulation) => (
+    simulation.tick > configuredTick
+      && tutorial.stage === 2
+      && simulation.world.kind === 'boneyard'
+      && simulation.world.enemies.actors.length === 10
+  ), 'opening Skeleton hold')
+  await page.locator('.boneyard-scene[data-tutorial-scene-paused="true"]').waitFor({
+    timeout: 15_000,
+  })
+  const castInstruction = page.locator(
+    '.tutorial-overlay[data-stage="2"] .tutorial-instruction .sr-only',
+  )
+  const castText = (await castInstruction.innerText()).replaceAll(/\s+/g, ' ').trim()
+  assert.match(
+    castText,
+    scenario.coarse
+      ? /USE THE RIGHT JOYSTICK TO THROW MAGIC MISSILES/
+      : /POINT AND CLICK YOUR MOUSE TO THROW MAGIC MISSILES/,
+  )
+  state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
+  const heldTick = state.tick
+  const heldEnemies = tutorialHostileSnapshot(state.world.enemies)
+  await waitForHostTick(host, heldTick + 25)
+  state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
+  assert.deepEqual(tutorialHostileSnapshot(state.world.enemies), heldEnemies)
+  const castSequenceBefore = getPlayerCharacter(state, playerId).primaryCast.castSequence
+  const castHoldScreenshot = `${screenshotPath}-${scenario.name}-cast-hold.png`
+  await page.screenshot({ path: castHoldScreenshot })
+
+  if (scenario.coarse) {
+    await holdTutorialJoystick(page, 'primary', { x: 1, y: 0 })
+  } else {
+    const frame = await page.locator('.boneyard-native-frame').boundingBox()
+    assert.ok(frame)
+    await page.mouse.move(frame.x + frame.width * 0.65, frame.y + frame.height * 0.45)
+    await page.mouse.down()
+    await page.waitForTimeout(100)
+    await page.mouse.up()
+  }
+  await waitForTutorialHostState(host, (tutorial, simulation) => (
+    tutorial.stage === 3
+      && getPlayerCharacter(simulation, playerId).primaryCast.castSequence > castSequenceBefore
+  ), 'primary-cast release')
+  await page.locator('.boneyard-scene[data-tutorial-scene-paused="false"]').waitFor({
+    timeout: 15_000,
+  })
+  await page.locator('.tutorial-overlay[data-stage="3"]').waitFor({ timeout: 15_000 })
+  assert.equal(await page.locator(
+    '.tutorial-overlay[data-stage="3"] .tutorial-instruction',
+  ).count(), 0)
+  state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
+
+  return {
+    castHoldScreenshot,
+    castSequenceAfter: getPlayerCharacter(state, playerId).primaryCast.castSequence,
+    castSequenceBefore,
+    castText,
+    enemyCount: state.world.enemies.actors.length,
+    instructionText,
+    openingScreenshot,
+    pointerReceipt,
+    stageAfterCast: state.world.tutorial?.stage,
+  }
+}
+
+async function holdTutorialJoystick(page, lane, direction) {
+  const joystick = page.locator(`[data-joystick="${lane}"]`)
+  const bounds = await joystick.boundingBox()
+  assert.ok(bounds)
+  const center = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }
+  await page.mouse.move(
+    center.x + direction.x * bounds.width * 0.25,
+    center.y + direction.y * bounds.height * 0.25,
+  )
+  await page.mouse.down()
+  await page.waitForTimeout(100)
+  await page.mouse.up()
+}
+
+function tutorialHostileSnapshot(enemies) {
+  return structuredClone({
+    actors: enemies.actors,
+    deathEffects: enemies.deathEffects,
+    headFacingRngState: enemies.headFacingRngState,
+    locomotionRngState: enemies.locomotionRngState,
+    mageLightningPulses: enemies.mageLightningPulses,
+    maggots: enemies.maggots,
+    projectileEffects: enemies.projectileEffects,
+    projectiles: enemies.projectiles,
+    rngState: enemies.rngState,
+    steeringRngState: enemies.steeringRngState,
+  })
+}
+
+async function waitForTutorialHostState(host, predicate, label) {
+  const deadline = Date.now() + 15_000
+  while (Date.now() < deadline) {
+    const state = host.state()
+    const tutorial = state.world.kind === 'boneyard' ? state.world.tutorial : null
+    if (tutorial && predicate(tutorial, state)) return
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+  throw new Error(`Tutorial host did not reach ${label}`)
+}
+
+async function waitForTutorialEncounter(host, predicate, label) {
+  const deadline = Date.now() + 15_000
+  while (Date.now() < deadline) {
+    const state = host.state()
+    const phase = state.world.kind === 'boneyard' ? state.world.encounter?.phase : null
+    if (phase && predicate(phase)) return phase
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+  throw new Error(`Tutorial encounter did not reach ${label}`)
+}
+
+async function waitForVisibleTutorialPointer(page, anchor) {
+  await page.waitForFunction((value) => {
+    const pointer = document.querySelector(`[data-tutorial-pointer="${value}"]`)
+    return pointer instanceof HTMLElement && getComputedStyle(pointer).opacity === '1'
+  }, anchor, { timeout: 10_000 })
+}
+
 async function exerciseTutorialGroundDrop(host, page, screenshotPath) {
   const state = host.state()
   assert.equal(state.world.kind, 'boneyard')
@@ -803,6 +1044,23 @@ async function exerciseTutorialHealthPotionGate(host, page, screenshotPath) {
     screenshot,
     stage: 19,
   }
+}
+
+function ensureTutorialHealthPotion(host) {
+  const state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
+  const playerId = host.hostPlayerId()
+  assert.ok(playerId)
+  if (getPlayerEconomy(state, playerId).backpack.some(({ nativeSubtype, nativeTypeId }) => (
+    nativeTypeId === 7001 && nativeSubtype === 0
+  ))) return
+  const healthPotion = state.world.tutorialProfileEconomy?.backpack.find(
+    ({ nativeSubtype, nativeTypeId }) => nativeTypeId === 7001 && nativeSubtype === 0,
+  )
+  assert.ok(healthPotion)
+  const inserted = insertPlayerEntityLootItem(state.playerEntities, playerId, healthPotion)
+  assert.equal(inserted.accepted, true)
+  state.playerEntities = inserted.store
 }
 
 async function exerciseTutorialCollegeAdmission(host, page, screenshotPath) {

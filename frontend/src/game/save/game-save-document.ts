@@ -767,11 +767,22 @@ function normalizeWorld(
           : state.cameraLockTriggered === true
             ? NATIVE_TUTORIAL_CAMERA_LOCK_SETTLE_TICKS
             : 0
+        if (
+          sourceSchemaVersion >= 16
+          && typeof state.movementInstructionAcknowledged !== 'boolean'
+        ) {
+          throw new Error(
+            'game save Tutorial movementInstructionAcknowledged must be boolean',
+          )
+        }
         return {
           ...state,
           cameraLockAgeTicks: 'cameraLockAgeTicks' in state
             ? state.cameraLockAgeTicks
             : legacyCameraAge,
+          movementInstructionAcknowledged: sourceSchemaVersion < 16
+            ? state.movementInstructionAcknowledged === true
+            : state.movementInstructionAcknowledged,
           selectedSkillHudAcknowledged: state.selectedSkillHudAcknowledged === true,
         }
       })()

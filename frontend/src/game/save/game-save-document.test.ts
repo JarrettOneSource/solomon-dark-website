@@ -86,7 +86,7 @@ test('host save documents round-trip the complete owner state and revive Hub run
     state,
   })
   const encoded = JSON.parse(document) as Record<string, unknown>
-  assert.equal(encoded.schemaVersion, 15)
+  assert.equal(encoded.schemaVersion, 16)
   assert.deepEqual(encoded.mods, MODS)
   assert.deepEqual(encoded.modState, MOD_STATE)
   assert.equal(encoded.integrity, 'local-only')
@@ -645,8 +645,12 @@ test('current schema resumes the complete stock Tutorial controller and exact le
     state,
   })
   const encoded = JSON.parse(document)
-  assert.equal(encoded.schemaVersion, 15)
+  assert.equal(encoded.schemaVersion, 16)
   assert.equal(encoded.continuation.simulation.world.tutorial.stage, 0)
+  assert.equal(
+    encoded.continuation.simulation.world.tutorial.movementInstructionAcknowledged,
+    false,
+  )
   assert.equal(
     encoded.continuation.simulation.world.tutorial.selectedSkillHudAcknowledged,
     false,
@@ -685,6 +689,21 @@ test('current schema resumes the complete stock Tutorial controller and exact le
   assert.equal(restored.state.world.waves, null)
   assert.equal(restored.state.world.arenaTransition, null)
 
+  const missingCurrentMovement = structuredClone(encoded)
+  delete missingCurrentMovement.continuation.simulation.world.tutorial
+    .movementInstructionAcknowledged
+  assert.throws(
+    () => restoreGameSaveDocument(JSON.stringify(missingCurrentMovement)),
+    /movementInstructionAcknowledged must be boolean/,
+  )
+  const malformedCurrentMovement = structuredClone(encoded)
+  malformedCurrentMovement.continuation.simulation.world.tutorial
+    .movementInstructionAcknowledged = 1
+  assert.throws(
+    () => restoreGameSaveDocument(JSON.stringify(malformedCurrentMovement)),
+    /movementInstructionAcknowledged must be boolean/,
+  )
+
   const legacy = structuredClone(encoded)
   legacy.schemaVersion = 8
   delete legacy.continuation.summary.partyRejoinToken
@@ -708,6 +727,7 @@ test('current schema resumes the complete stock Tutorial controller and exact le
       ...state.world,
       tutorial: {
         ...state.world.tutorial!,
+        movementInstructionAcknowledged: true,
         selectedSkillHudAcknowledged: true,
       },
     },
@@ -725,6 +745,24 @@ test('current schema resumes the complete stock Tutorial controller and exact le
       ? acknowledged.state.world.tutorial?.selectedSkillHudAcknowledged
       : null,
     true,
+  )
+  assert.equal(
+    acknowledged.state.world.kind === 'boneyard'
+      ? acknowledged.state.world.tutorial?.movementInstructionAcknowledged
+      : null,
+    true,
+  )
+
+  const priorSchemaFifteen = structuredClone(encoded)
+  priorSchemaFifteen.schemaVersion = 15
+  delete priorSchemaFifteen.continuation.simulation.world.tutorial
+    .movementInstructionAcknowledged
+  const migratedMovement = restoreGameSaveDocument(JSON.stringify(priorSchemaFifteen))
+  assert.equal(
+    migratedMovement.state.world.kind === 'boneyard'
+      ? migratedMovement.state.world.tutorial?.movementInstructionAcknowledged
+      : null,
+    false,
   )
 
   const priorSchemaSeven = structuredClone(encoded)

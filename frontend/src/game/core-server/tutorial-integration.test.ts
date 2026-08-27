@@ -318,6 +318,94 @@ test('holds the controller for the exact 475-tick intro and gates Acid Rain unti
   assert.equal(state.secondaryAbilities.players.owner?.lastSkillId, 72)
 })
 
+test('holds the ten opening Skeletons without catch-up until the owner casts one primary spell', () => {
+  const loaded = materializeStockTutorial(Buffer.alloc(16, 43))
+  let state = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loaded)
+  assert.equal(state.world.kind, 'boneyard')
+  if (state.world.kind !== 'boneyard' || !state.world.tutorial || !state.world.encounter) {
+    throw new Error('expected Tutorial controller and Solomon encounter')
+  }
+  state = {
+    ...state,
+    world: {
+      ...state.world,
+      encounter: {
+        ...state.world.encounter,
+        phase: 'escaping',
+        runEventId: 1,
+      },
+      tutorial: {
+        ...state.world.tutorial,
+        introActive: false,
+        introBlend: 1,
+        introDelayTicksRemaining: 0,
+        introFade: 0,
+        introMovementTicksRemaining: 0,
+        stage: 1,
+      },
+    },
+  }
+  state = stepGameSimulationTick(state, {})
+  assert.equal(state.world.kind, 'boneyard')
+  if (state.world.kind !== 'boneyard' || !state.world.tutorial) {
+    throw new Error('expected Tutorial stage 2')
+  }
+  assert.equal(state.world.tutorial.stage, 2)
+  assert.equal(state.world.enemies.actors.length, 10)
+  const frozen = {
+    actors: structuredClone(state.world.enemies.actors),
+    deathEffects: structuredClone(state.world.enemies.deathEffects),
+    headFacingRngState: state.world.enemies.headFacingRngState,
+    locomotionRngState: state.world.enemies.locomotionRngState,
+    mageLightningPulses: structuredClone(state.world.enemies.mageLightningPulses),
+    maggots: structuredClone(state.world.enemies.maggots),
+    projectileEffects: structuredClone(state.world.enemies.projectileEffects),
+    projectiles: structuredClone(state.world.enemies.projectiles),
+    rngState: state.world.enemies.rngState,
+    steeringRngState: state.world.enemies.steeringRngState,
+  }
+  const firstHeldEnemyTick = state.world.enemies.lastStepTick
+  for (let tick = 0; tick < 50; tick += 1) state = stepGameSimulationTick(state, {})
+  assert.equal(state.world.kind, 'boneyard')
+  if (state.world.kind !== 'boneyard' || !state.world.tutorial) {
+    throw new Error('expected held Tutorial stage 2')
+  }
+  assert.equal(state.world.tutorial.stage, 2)
+  assert.equal(state.world.enemies.lastStepTick, firstHeldEnemyTick + 50)
+  assert.deepEqual({
+    actors: state.world.enemies.actors,
+    deathEffects: state.world.enemies.deathEffects,
+    headFacingRngState: state.world.enemies.headFacingRngState,
+    locomotionRngState: state.world.enemies.locomotionRngState,
+    mageLightningPulses: state.world.enemies.mageLightningPulses,
+    maggots: state.world.enemies.maggots,
+    projectileEffects: state.world.enemies.projectileEffects,
+    projectiles: state.world.enemies.projectiles,
+    rngState: state.world.enemies.rngState,
+    steeringRngState: state.world.enemies.steeringRngState,
+  }, frozen)
+
+  const cast = {
+    ...createIdlePlayerCharacterInput(),
+    aim: { x: 1_025, y: 1_170 },
+    cast: { primary: true, quickbar: null },
+  }
+  state = stepGameSimulationTick(state, { owner: cast })
+  assert.equal(state.world.kind, 'boneyard')
+  if (state.world.kind !== 'boneyard' || !state.world.tutorial) {
+    throw new Error('expected cast-admitted Tutorial stage 2')
+  }
+  assert.equal(state.world.tutorial.stage, 2)
+  assert.ok(getPlayerCharacter(state, 'owner').primaryCast.castSequence > 0)
+  state = stepGameSimulationTick(state, {})
+  assert.equal(state.world.kind, 'boneyard')
+  if (state.world.kind !== 'boneyard' || !state.world.tutorial) {
+    throw new Error('expected released Tutorial stage 3')
+  }
+  assert.equal(state.world.tutorial.stage, 3)
+  assert.notDeepEqual(state.world.enemies.actors, frozen.actors)
+})
+
 test('authorizes only the solo Tutorial owner to acknowledge a selected-HUD selector', () => {
   const loaded = materializeStockTutorial(Buffer.alloc(16, 31))
   let state = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loaded)

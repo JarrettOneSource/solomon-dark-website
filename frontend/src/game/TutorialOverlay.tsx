@@ -51,6 +51,12 @@ const TUTORIAL_GOLD = 0xd9ba70
 interface TutorialOverlayProps {
   readonly audio: GameAudioDirector
   readonly controls: GameControlBindings
+  readonly solomonPointer: Readonly<{
+    toX: number
+    toY: number
+    x: number
+    y: number
+  }> | null
   readonly state: NativeTutorialState
   readonly viewport: Readonly<{ height: number; width: number }>
   readonly worldTarget: Readonly<{ x: number; y: number }> | null
@@ -59,12 +65,14 @@ interface TutorialOverlayProps {
 export default function TutorialOverlay({
   audio,
   controls,
+  solomonPointer,
   state,
   viewport,
   worldTarget,
 }: TutorialOverlayProps) {
   const overlayRef = useRef<HTMLDivElement>(null)
   const lastNarrationEventId = useRef(0)
+  const coarsePointer = useCoarsePointer()
   const pointerBlink = useTutorialPointerBlink()
   const hudAnchors = useTutorialHudAnchors(overlayRef, state.stage, viewport)
   const hudPointers = nativeTutorialHudPointerPlans(state.stage, hudAnchors)
@@ -77,10 +85,14 @@ export default function TutorialOverlay({
     : null
   const presentation = nativeTutorialPresentation(state, {
     inventory: gameBindingLabel(controls.openInventory),
+    moveDown: gameBindingLabel(controls.moveDown),
+    moveLeft: gameBindingLabel(controls.moveLeft),
+    moveRight: gameBindingLabel(controls.moveRight),
+    moveUp: gameBindingLabel(controls.moveUp),
     potion: gameBindingLabel(controls.belt4),
     secondary: gameBindingLabel(controls.belt1),
     skills: gameBindingLabel(controls.openSkills),
-  })
+  }, coarsePointer ? 'mobile' : 'desktop')
   const narration = state.narration.current
   const instructionBaselines = tutorialHudInstructionBaselines(
     state.stage,
@@ -190,6 +202,13 @@ export default function TutorialOverlay({
           visible={pointer.blink ? pointerBlink : true}
         />
       ))}
+      {!state.introActive && solomonPointer ? (
+        <TutorialPointer
+          anchor="solomon-dig"
+          {...solomonPointer}
+          visible={pointerBlink}
+        />
+      ) : null}
       {(state.stage === 8 || state.stage === 17) && worldPointerTarget ? (
         <TutorialPointer
           anchor="world-sack"
@@ -347,6 +366,7 @@ function TutorialPointer({
   readonly anchor?:
     | TutorialHudAnchorAttribute
     | 'selected-skills'
+    | 'solomon-dig'
     | 'world-sack'
     | `modal-${TutorialModalPointerId}`
   readonly scale?: number

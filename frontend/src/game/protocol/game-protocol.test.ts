@@ -1539,8 +1539,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v83 carries Web Lua wearables, onboarding admission, observer mode, Hub activity, NPC state, Goodie actions, tutorial fields/state, Hagatha runtime, Imp effects, save intent, selected skills, sacks, dyes, and gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 83)
+test('protocol v84 carries Web Lua wearables, onboarding admission, observer mode, Hub activity, NPC state, Goodie actions, tutorial fields/state, Hagatha runtime, Imp effects, save intent, selected skills, sacks, dyes, and gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 84)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -1691,7 +1691,7 @@ test('protocol v83 carries Web Lua wearables, onboarding admission, observer mod
   )
 })
 
-test('protocol v80 carries consistent persistent Tutorial camera-lock clocks', () => {
+test('protocol v84 carries the movement acknowledgement and consistent Tutorial camera-lock clocks', () => {
   const entered = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
     materializeStockTutorial(Buffer.alloc(16, 73)),
@@ -1708,6 +1708,7 @@ test('protocol v80 carries consistent persistent Tutorial camera-lock clocks', (
         cameraLockAgeTicks: 50,
         cameraLockTriggered: true,
         cameraLockTicksRemaining: 250,
+        movementInstructionAcknowledged: true,
       },
     },
   }
@@ -1723,6 +1724,19 @@ test('protocol v80 carries consistent persistent Tutorial camera-lock clocks', (
     type: 'server-snapshot' as const,
   }
   assert.deepEqual(decodeServerGameMessage(encodeGameMessage(message)), message)
+
+  const missingMovementAcknowledgement = JSON.parse(encodeGameMessage(message))
+  delete missingMovementAcknowledgement.frame.world.tutorial.movementInstructionAcknowledged
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(missingMovementAcknowledgement)),
+    /movementInstructionAcknowledged must be boolean/,
+  )
+  const malformedMovementAcknowledgement = JSON.parse(encodeGameMessage(message))
+  malformedMovementAcknowledgement.frame.world.tutorial.movementInstructionAcknowledged = 1
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(malformedMovementAcknowledgement)),
+    /movementInstructionAcknowledged must be boolean/,
+  )
 
   const missingAge = JSON.parse(encodeGameMessage(message))
   delete missingAge.frame.world.tutorial.cameraLockAgeTicks

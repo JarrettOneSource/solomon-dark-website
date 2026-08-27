@@ -65,6 +65,32 @@ test('renders exact stock UI records for the prelude and blinking lesson pointer
   assert.match(menu, /screen === 'tutorial-prelude'[\s\S]*?\? 'boneyard'/)
 })
 
+test('guides the opening interaction and switches movement and casting copy by input surface', () => {
+  const boneyard = source('./BoneyardScene.tsx')
+  const overlay = source('./TutorialOverlay.tsx')
+  assert.match(overlay, /const coarsePointer = useCoarsePointer\(\)/)
+  for (const [label, binding] of [
+    ['moveDown', 'controls.moveDown'],
+    ['moveLeft', 'controls.moveLeft'],
+    ['moveRight', 'controls.moveRight'],
+    ['moveUp', 'controls.moveUp'],
+  ]) {
+    assert.match(
+      overlay,
+      new RegExp(`${label}: gameBindingLabel\\(${binding.replace('.', '\\\.')}\\)`),
+    )
+  }
+  assert.match(overlay, /coarsePointer \? 'mobile' : 'desktop'/)
+  assert.match(
+    boneyard,
+    /tutorialState\.stage <= 1[\s\S]*?encounter\?\.phase === 'digging'[\s\S]*?boneyardTutorialDigIndicatorLayout/,
+  )
+  assert.match(boneyard, /solomonPointer=\{tutorialSolomonPointer\}/)
+  assert.match(overlay, /!state\.introActive[\s\S]*?solomonPointer[\s\S]*?anchor="solomon-dig"/)
+  assert.match(overlay, /anchor="solomon-dig"[\s\S]*?visible=\{pointerBlink\}/)
+  assert.match(boneyard, /data-tutorial-scene-paused=\{tutorialScenePaused\}/)
+})
+
 test('uses the stock MsgBox offer and common-gold teaching family', () => {
   const css = source('./tutorial.css')
   const overlay = source('./TutorialOverlay.tsx')

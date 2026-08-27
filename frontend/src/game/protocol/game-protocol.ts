@@ -364,7 +364,7 @@ export {
   normalizeGameChatText,
 } from './game-chat.ts'
 
-export const GAME_PROTOCOL_VERSION = 83
+export const GAME_PROTOCOL_VERSION = 84
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
@@ -9679,6 +9679,7 @@ function nativeTutorialState(value: unknown, field: string): NativeTutorialState
     'inventorySeen',
     'itemDropArmed',
     'movementAnchor',
+    'movementInstructionAcknowledged',
     'narration',
     'nextSpawnIntentId',
     'primaryCastSequenceAtStart',
@@ -9832,6 +9833,10 @@ function nativeTutorialState(value: unknown, field: string): NativeTutorialState
     inventorySeen: boolean(source.inventorySeen, `${field}.inventorySeen`),
     itemDropArmed: boolean(source.itemDropArmed, `${field}.itemDropArmed`),
     movementAnchor: boneyardPoint(source.movementAnchor, `${field}.movementAnchor`),
+    movementInstructionAcknowledged: boolean(
+      source.movementInstructionAcknowledged,
+      `${field}.movementInstructionAcknowledged`,
+    ),
     narration: { current, nextEventId, pending, ticksRemaining },
     nextSpawnIntentId: positiveInteger(source.nextSpawnIntentId, `${field}.nextSpawnIntentId`),
     primaryCastSequenceAtStart: nonnegativeInteger(
